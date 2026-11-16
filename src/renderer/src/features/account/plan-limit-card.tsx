@@ -4,6 +4,7 @@ import { PlanRings } from '@renderer/components/plan-rings'
 import { HoverCard, HoverCardContent, HoverCardTrigger } from '@renderer/components/ui/hover-card'
 import { PlanPart } from '@renderer/features/session/composer/usage'
 import { ringStroke } from '@renderer/features/usage/plan-cards'
+import { planAmount, planBalance } from '@renderer/lib/format'
 import { LIMIT_TEXT } from '@renderer/lib/plan-limit'
 import { cn } from '@renderer/lib/utils'
 import { useHostName, useWindowHost } from '@renderer/stores/window-host'
@@ -49,8 +50,19 @@ export function PlanLimitCard({ card, onOpen }: { card: PlanCard; onOpen: () => 
 }
 
 function CardFace({ card }: { card: PlanCard }) {
-  const { t } = useTranslation(['sidebar', 'composer', 'common'])
+  const { t } = useTranslation(['sidebar', 'composer', 'common', 'usage'])
   const count = card.windows.length
+  const amounts = card.windows.flatMap((window) => {
+    if (!window.amount) return []
+    const unit =
+      window.amount.unit === 'credits'
+        ? t('usage:limits.units.credits')
+        : window.amount.unit === 'requests'
+          ? t('usage:limits.units.premiumRequests')
+          : window.amount.unit
+    const amount = planAmount(window.amount.used, window.amount.total, window.amount.unit, unit)
+    return [{ id: window.id, amount }]
+  })
   return (
     <>
       <span className="flex h-4 min-w-0 items-center gap-1.25">
@@ -62,16 +74,20 @@ function CardFace({ card }: { card: PlanCard }) {
           </span>
         )}
       </span>
-      <span className="mt-1.75 flex items-center gap-2.25">
-        <PlanRings
-          rings={card.windows.map((w) => ({ id: w.id, percent: w.percent, level: w.level }))}
-          size={36}
-          {...(count > 3
-            ? ringStroke(count, 36)
-            : { stroke: count > 2 ? 3.5 : count > 1 ? 4 : 4.5, gap: count > 2 ? 1.5 : 2 })}
-          track="neutral"
-          className="size-9"
-        />
+      <span className="mt-1.75 flex min-w-0 items-center gap-2.25">
+        {count > 0 ? (
+          <PlanRings
+            rings={card.windows.map((w) => ({ id: w.id, percent: w.percent, level: w.level }))}
+            size={36}
+            {...(count > 3
+              ? ringStroke(count, 36)
+              : { stroke: count > 2 ? 3.5 : count > 1 ? 4 : 4.5, gap: count > 2 ? 1.5 : 2 })}
+            track="neutral"
+            className="size-9"
+          />
+        ) : (
+          <span aria-hidden className="size-9 shrink-0 rounded-full border border-border-soft" />
+        )}
         <span className="flex min-w-0 flex-1 flex-col gap-px">
           {[...card.windows].reverse().map((w) => {
             const name = w.model
@@ -79,30 +95,59 @@ function CardFace({ card }: { card: PlanCard }) {
               : t(`common:planWindow.${w.window}`)
             const short = w.model ?? t(`composer:usage.shortWindow.${w.window}`)
             return (
-              <span
-                key={w.id}
-                className="flex justify-between gap-1 text-caption leading-3.25 whitespace-nowrap"
-              >
-                <span aria-hidden className="min-w-0 truncate text-tertiary">
-                  {short}
-                </span>
-                <span
-                  aria-hidden
-                  className={cn(
-                    'tabular shrink-0',
-                    w.level === 'ok' ? 'text-primary' : LIMIT_TEXT[w.level],
-                  )}
-                >
-                  {w.percent}%
-                </span>
-                <span className="sr-only">
-                  {t('sidebar:account.limitUsed', { window: name, percent: w.percent })}
+              <span key={w.id} className="flex min-w-0 flex-col gap-px">
+                <span className="flex justify-between gap-1 text-caption leading-3.25 whitespace-nowrap">
+                  <span aria-hidden className="min-w-0 truncate text-tertiary">
+                    {short}
+                  </span>
+                  <span
+                    aria-hidden
+                    className={cn(
+                      'tabular shrink-0',
+                      w.level === 'ok' ? 'text-primary' : LIMIT_TEXT[w.level],
+                    )}
+                  >
+                    {w.percent}%
+                  </span>
+                  <span className="sr-only">
+                    {t('sidebar:account.limitUsed', { window: name, percent: w.percent })}
+                  </span>
                 </span>
               </span>
             )
           })}
         </span>
       </span>
+      {amounts.map(({ id, amount }) => (
+        <span
+          key={id}
+          className="-mt-px min-w-0 truncate text-badge leading-3.25 text-tertiary tabular whitespace-nowrap"
+          title={amount}
+        >
+          {amount}
+        </span>
+      ))}
+      {card.balances.map((balance) => (
+        <span
+          key={`${balance.label}/${balance.currency}`}
+          className="-mt-px flex min-w-0 justify-between gap-0 text-badge leading-3.25 tracking-tight whitespace-nowrap"
+        >
+          <span className="min-w-0 truncate text-tertiary">
+            {balance.label === 'Prepaid balance' ? t('usage:limits.prepaidBalance') : balance.label}
+          </span>
+          <span className="shrink-0 text-primary tabular">
+            {planBalance(
+              balance.amount,
+              balance.currency,
+              balance.currency === 'credits'
+                ? t('usage:limits.units.credits')
+                : balance.currency === 'requests'
+                  ? t('usage:limits.units.premiumRequests')
+                  : balance.currency,
+            )}
+          </span>
+        </span>
+      ))}
     </>
   )
 }

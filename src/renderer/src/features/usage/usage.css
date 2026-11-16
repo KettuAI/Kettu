@@ -324,6 +324,11 @@
   gap: 3px;
   min-width: 0;
 }
+.k-u-plan__window {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
 .k-u-plan__line {
   display: flex;
   align-items: baseline;
@@ -350,6 +355,34 @@
 }
 .k-u-plan__line b[data-level='bad'] {
   color: var(--plan-bad-text);
+}
+.k-u-plan__amount {
+  overflow: hidden;
+  font-size: 12px;
+  line-height: 16px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--faint);
+}
+.k-u-plan__balance {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  min-width: 0;
+  font-size: 13px;
+  line-height: 20px;
+}
+.k-u-plan__balance > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--muted);
+}
+.k-u-plan__balance > b {
+  flex: none;
+  font-weight: 500;
+  white-space: nowrap;
+  color: var(--strong);
 }
 /* The reset time shows on the line once the card is wide enough, else on hover */
 .k-u-plan__line small {

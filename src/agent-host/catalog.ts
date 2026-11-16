@@ -3,7 +3,7 @@
 
 import { stat } from 'node:fs/promises'
 import path from 'node:path'
-import type { InstalledCli } from '@shared/agent-host'
+import type { InstalledCli, LimitsReason } from '@shared/agent-host'
 import type { NodeRuntime } from '@shared/host-control'
 import type { Platform } from '@shared/platform'
 import type { HostSettings } from '@shared/settings'
@@ -146,6 +146,7 @@ export interface AgentDefinition {
   startupNote?: true
   /** Pushes `_auth/status_update` as it starts, naming its account. */
   reportsAccount?: boolean
+  limitsReason?: LimitsReason
   /**
    * Its agent sign-in methods that send their page as a URL elicitation, which opens on the client
    * that asked, so a paired device may run them.

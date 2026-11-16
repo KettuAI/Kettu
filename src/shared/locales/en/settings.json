@@ -660,6 +660,12 @@
     "notReported": "Not reported",
     "planLimits": "Plan limits",
     "usageNotReported": "{{name}} does not report plan usage.",
+    "usageReasons": {
+      "vendor-disallows": "Google does not allow other apps to read it.",
+      "harness-does-not-offer": "This agent does not offer a plan usage read.",
+      "administrator-managed": "An administrator manages this plan usage.",
+      "model-provider-managed": "Your model provider manages this plan usage."
+    },
     "spend": {
       "group": "Spend",
       "month": "This month",

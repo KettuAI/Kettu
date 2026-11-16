@@ -1,4 +1,4 @@
-import type { AgentStatus, PlanLimit } from '@shared/agent-host'
+import type { AgentStatus, PlanLimit, ProviderBalance } from '@shared/agent-host'
 import type { AgentId } from '@shared/thread'
 import { joinPlanTier, planTier } from '@renderer/features/account/model'
 import { planName } from '@renderer/features/tray/model'
@@ -102,6 +102,7 @@ export interface UsageCard {
   /** The plan without the brand its mark shows, such as "Ultra"; null when unknown. */
   tier: string | null
   rings: CardRing[]
+  balances?: ProviderBalance[]
   state: CardState
   /** When its windows were last read; null when they never were. */
   readAt: number | null
@@ -134,7 +135,10 @@ export function usageCards(
     for (const agent of agents) {
       const place = { hostId, agentId: agent.id, agentName: agent.name }
       const providers = (agent.providers ?? []).filter(
-        (provider) => (provider.usage?.limits.length ?? 0) > 0 || provider.usage?.state === 'error',
+        (provider) =>
+          (provider.usage?.limits.length ?? 0) > 0 ||
+          (provider.usage?.balances.length ?? 0) > 0 ||
+          provider.usage?.state === 'error',
       )
       if (agent.harnessId === 'opencode' && providers.length > 0) {
         for (const provider of providers) {
@@ -149,6 +153,7 @@ export function usageCards(
             plan: provider.name,
             tier: null,
             rings,
+            balances: provider.usage!.balances,
             state:
               provider.usage!.state === 'error' ? 'failed' : rings.length > 0 ? 'ready' : 'notYet',
             readAt: readAtOf(limits),
@@ -159,9 +164,10 @@ export function usageCards(
       }
       const account = accountKey(agent)
       const limits = newestLimits(readings, agent)
-      const shown = limits.length > 0 || usedHere.includes(agent.id)
+      const balances = agent.balances ?? []
+      const shown = limits.length > 0 || balances.length > 0 || usedHere.includes(agent.id)
       if (!shown) continue
-      if (limits.length === 0 && !agent.capabilities.reports) {
+      if (limits.length === 0 && balances.length === 0 && !agent.capabilities.reports) {
         if (!unreported.some((other) => other.name === agent.name)) unreported.push(agent)
         continue
       }
@@ -183,6 +189,7 @@ export function usageCards(
         plan: signedIn ? joinPlanTier(signedIn.label, signedIn.tier) : null,
         tier: planTier(agent.account),
         rings,
+        balances,
         state:
           read === 'failed'
             ? 'failed'

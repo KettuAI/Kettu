@@ -4,6 +4,7 @@ export const AUGGIE: AgentDefinition = {
   id: 'auggie',
   name: 'Auggie CLI',
   registryId: 'auggie',
+  reportsAccount: true,
   launch: {
     kind: 'package',
     package: '@augmentcode/auggie',
