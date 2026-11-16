@@ -3,9 +3,13 @@
 // per session, so an adapter only ever holds the session its own process has.
 //
 // Run as `<node> <router> <node> <adapter entry>`: the words after the router are the command line
-// of every child. It imports Node's built-ins only, so its bundle is one file.
+// of every child. With `--folder-per-session` first, each session's child starts in the folder the
+// session names, for a program that works in the folder it started in whatever the session says.
+// It imports Node's built-ins only, so its bundle is one file.
 
 import { spawn, type ChildProcess } from 'node:child_process'
+import { statSync } from 'node:fs'
+import path from 'node:path'
 import { createInterface } from 'node:readline'
 
 type JsonRpcId = string | number
@@ -93,6 +97,24 @@ function takeService(params: unknown): { params: unknown; env: Record<string, st
   return { params: forward, env: { [SERVICE_URL]: url, [SERVICE_TOKEN]: token } }
 }
 
+/** The flag that starts each session's child in the session's folder. */
+const FOLDER_PER_SESSION = '--folder-per-session'
+
+/** The absolute folder a `session/new`, `session/load` or `session/resume` names, or null. */
+function folderOf(params: unknown): string | null {
+  if (typeof params !== 'object' || params === null) return null
+  const cwd = (params as { cwd?: unknown }).cwd
+  return typeof cwd === 'string' && path.isAbsolute(cwd) ? cwd : null
+}
+
+function isFolder(file: string): boolean {
+  try {
+    return statSync(file).isDirectory()
+  } catch {
+    return false
+  }
+}
+
 /** The `sessionId` a message names, or null. */
 function sessionIdOf(params: unknown): string | null {
   if (typeof params !== 'object' || params === null) return null
@@ -141,6 +163,7 @@ function waitFor(check: () => boolean, ms: number): Promise<boolean> {
 export class SessionRouter {
   private readonly childCommand: string
   private readonly childArgs: string[]
+  private readonly folderPerSession: boolean
   private readonly children = new Set<Child>()
   /** Each live session's child, by the session id it opened. */
   private readonly sessions = new Map<string, Child>()
@@ -152,9 +175,10 @@ export class SessionRouter {
   private stopping = false
   private stopped = false
 
-  constructor(command: string, args: string[]) {
+  constructor(command: string, args: string[], options: { folderPerSession?: boolean } = {}) {
     this.childCommand = command
     this.childArgs = args
+    this.folderPerSession = options.folderPerSession ?? false
   }
 
   start(): void {
@@ -188,7 +212,9 @@ export class SessionRouter {
         return this.sendResult(id, withClose(answer.result))
       }
       if (method === 'session/new') return await this.newSession(id, params)
-      if (method === 'session/load') return await this.loadSession(id, params)
+      if (method === 'session/load' || method === 'session/resume') {
+        return await this.loadSession(id, method, params)
+      }
       if (method === 'session/close') return this.closeSession(id, params)
       if (method === 'session/delete') return await this.deleteSession(id, params)
       const sessionId = sessionIdOf(params)
@@ -237,7 +263,7 @@ export class SessionRouter {
     let child: Child | null = null
     try {
       const taken = takeService(params)
-      child = await this.startSessionChild(taken.env)
+      child = await this.startSessionChild(taken.env, params)
       const answer = await this.request(child, 'session/new', taken.params)
       if (answer.error) {
         this.endChild(child)
@@ -259,12 +285,16 @@ export class SessionRouter {
     }
   }
 
-  private async loadSession(id: JsonRpcId, params: unknown): Promise<void> {
+  private async loadSession(
+    id: JsonRpcId,
+    method: 'session/load' | 'session/resume',
+    params: unknown,
+  ): Promise<void> {
     const sessionId = sessionIdOf(params)
     if (sessionId === null) {
       return this.sendError(id, {
         code: INVALID_PARAMS,
-        message: 'session/load names no session',
+        message: `${method} names no session`,
       })
     }
     let child: Child | null = null
@@ -275,8 +305,8 @@ export class SessionRouter {
         await this.endChildAndWait(existing, REPLACE_KILL_MS)
       }
       const taken = takeService(params)
-      child = await this.startSessionChild(taken.env)
-      const answer = await this.request(child, 'session/load', taken.params)
+      child = await this.startSessionChild(taken.env, params)
+      const answer = await this.request(child, method, taken.params)
       if (answer.error) {
         this.endChild(child)
         return this.sendError(id, answer.error)
@@ -321,11 +351,20 @@ export class SessionRouter {
 
   /**
    * A child for a session, initialized with the parameters the host gave the control child, with
-   * `env` added to its environment.
+   * `env` added to its environment, and started in the session's folder when the router was asked.
    */
-  private async startSessionChild(env: Record<string, string>): Promise<Child> {
+  private async startSessionChild(env: Record<string, string>, params: unknown): Promise<Child> {
     if (this.initializeParams === null) throw new Error('The router is not initialized')
-    const child = this.spawnChild(env)
+    let cwd: string | undefined
+    if (this.folderPerSession) {
+      const folder = folderOf(params)
+      // A missing folder fails the request; spawning in it would end every session as a crash.
+      if (folder === null || !isFolder(folder)) {
+        throw new Error(`The session's folder ${folder ?? '(none)'} does not exist`)
+      }
+      cwd = folder
+    }
+    const child = this.spawnChild(env, cwd)
     const answer = await this.request(child, 'initialize', this.initializeParams)
     if (answer.error) {
       this.endChild(child)
@@ -336,14 +375,19 @@ export class SessionRouter {
 
   // Child processes.
 
-  private spawnChild(env: Record<string, string> = {}): Child {
+  private spawnChild(env: Record<string, string> = {}, cwd = process.cwd()): Child {
     const { command, args } = this.spawnWords(this.childCommand, this.childArgs)
     // A session's service reaches its own child only, never one inherited from the router's.
     const base = { ...process.env }
     delete base[SERVICE_URL]
     delete base[SERVICE_TOKEN]
+    // The runtime the router runs on may be Electron as Node.js; a program of another kind must
+    // not pass that on to the commands it runs.
+    if (path.resolve(this.childCommand) !== path.resolve(process.execPath)) {
+      delete base.ELECTRON_RUN_AS_NODE
+    }
     const proc = spawn(command, args, {
-      cwd: process.cwd(),
+      cwd,
       env: { ...base, ...env },
       stdio: ['pipe', 'pipe', 'pipe'],
       shell: this.childShell,
@@ -533,10 +577,14 @@ function parse(line: string): RpcMessage | null {
   }
 }
 
-// The host starts this file as `<node> <router> <node> <adapter entry>`; it is never imported.
-const command = process.argv[2]
+// The host starts this file as `<node> <router> [--folder-per-session] <command> <args>`; it is
+// never imported.
+const words = process.argv.slice(2)
+const folderPerSession = words[0] === FOLDER_PER_SESSION
+if (folderPerSession) words.shift()
+const command = words[0]
 if (!command) {
   process.stderr.write('session-router: no agent command line\n')
   process.exit(1)
 }
-new SessionRouter(command, process.argv.slice(3)).start()
+new SessionRouter(command, words.slice(1), { folderPerSession }).start()

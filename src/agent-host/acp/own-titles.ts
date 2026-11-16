@@ -15,6 +15,8 @@ const OWN_TITLES: ReadonlyMap<string, OwnTitlesRow> = new Map([
   ['fake-agent', { since: '0.1.0', kind: 'sent' }],
   // OpenCode 2.0.32 titles a root session but sends no update for it, only `session/list`.
   ['OpenCode', { since: '2.0.32', kind: 'listed' }],
+  // agy 1.5.9 sends `session_info_update` with the title it gives a prompted session.
+  ['Antigravity ACP Server', { since: '1.5.9', kind: 'sent' }],
 ])
 
 /**

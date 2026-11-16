@@ -666,7 +666,8 @@
       "harness-does-not-offer": "This agent does not offer a plan usage read.",
       "administrator-managed": "An administrator manages this plan usage.",
       "model-provider-managed": "Your model provider manages this plan usage.",
-      "not-yet-supported": "Kettu does not read this agent's plan usage yet."
+      "not-yet-supported": "Kettu does not read this agent's plan usage yet.",
+      "console-managed": "With this sign-in, its usage is in Google AI Studio or Google Cloud."
     },
     "spend": {
       "group": "Spend",
@@ -1021,6 +1022,16 @@
         "reset": "Use the defaults",
         "readFailed": "Couldn’t read the workflow settings"
       }
+    },
+    "personalPlan": {
+      "title": "About using {{agent}} with a personal Google plan",
+      "body": "Google’s <terms>terms</terms> limit using third-party apps with personal Google AI plans. Kettu runs only Google’s own Antigravity CLI over ACP and never touches your sign-in. To avoid any risk, sign in with a Gemini API key or Gemini Enterprise.",
+      "dismiss": "Got it"
+    },
+    "signOutShared": {
+      "title": "Sign out of {{name}}?",
+      "body": "{{name}} shares its sign-in with the Antigravity app and CLI, so they are signed out too.",
+      "confirm": "Sign out"
     }
   },
   "about": {

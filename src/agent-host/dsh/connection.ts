@@ -313,6 +313,10 @@ export class DshConnection implements AgentConnection {
     return false
   }
 
+  get unpromptedSessions(): boolean {
+    return this.hiddenSessions
+  }
+
   private get hooks(): ConnectionHooks {
     return this.context.hooks
   }

@@ -456,6 +456,12 @@ export interface AgentConnection {
    * agent's history. Known once `initialize` has answered.
    */
   readonly hiddenSessions: boolean
+  /**
+   * Whether it can open sessions for Kettu's own use that are only read and never prompted, such
+   * as for the agent menu's options, and remove those without a trace. True wherever
+   * `hiddenSessions` is.
+   */
+  readonly unpromptedSessions: boolean
   /** Removes such a session and drops its late updates; failures go to `log` while it is open. */
   removeHidden(sessionId: string, log: (message: string) => void): Promise<void>
 

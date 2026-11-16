@@ -75,6 +75,9 @@ import {
 import { satisfiesNode, type ConfigFolder, type NodeProbe } from './shell-env'
 import { compareVersions } from './versions'
 
+/** The router's flag that starts each session's process in the session's folder. */
+export const FOLDER_PER_SESSION = '--folder-per-session'
+
 export type LaunchKind =
   // Installed from npm into the data directory and run on the user's Node.js. With `perSession`,
   // through the session router, which gives each session an adapter process of its own. `args`
@@ -91,7 +94,9 @@ export type LaunchKind =
       args?: string[]
       env?: Record<string, string>
     }
-  | { kind: 'binary'; command: string; args: string[] }
+  // With `perSession`, through the session router, which starts each session's process in the
+  // session's own folder, for a program that runs everything in the folder it started in.
+  | { kind: 'binary'; command: string; args: string[]; perSession?: true }
   // Run as `uvx <package>==<version> <args>`, which installs the package on first use.
   | { kind: 'uvx'; package: string; version: string; args: string[] }
   // A script run with Electron's own Node.js, so it needs no Node.js on the machine.
@@ -170,6 +175,18 @@ export interface AgentDefinition {
   mcpConfig?: { project: string; listCommand?: string }
   /** What Kettu knows of the models it lists, for an agent that picks who does a workflow step. */
   modelNotes?: readonly ModelNote[]
+  /**
+   * Shares its sign-in and session history with the vendor's own apps, so signing out and deleting
+   * a session say what reaches them (agy 1.5.9 and the Antigravity app).
+   */
+  sharesSignIn?: true
+  /**
+   * A sign-in method that reads a key Kettu keeps from `variable`: shown as a key, and run once the
+   * key is set, since the agent switches to the key only through `authenticate`.
+   */
+  keySignIn?: { method: string; variable: string }
+  /** Its sign-in runs the program itself in a terminal, in place of the declared `replaces`. */
+  terminalSignIn?: { replaces: readonly string[] }
 }
 
 /**
@@ -566,6 +583,31 @@ function binaryDetection(
   }
 }
 
+/**
+ * A per-session binary agent, run as `<node> <router> --folder-per-session <program> <args>`: the
+ * router runs on the node runtime and starts each session's program in the session's folder.
+ */
+function routedDetection(
+  program: string,
+  args: string[],
+  ctx: Pick<DetectContext, 'nodeRuntime' | 'sessionRouterPath'>,
+  display: CommandWords,
+  env: Record<string, string>,
+): Detection {
+  const runtime = ctx.nodeRuntime
+  return {
+    state: 'available',
+    spec: {
+      command: runtime.command,
+      args: [ctx.sessionRouterPath!, FOLDER_PER_SESSION, program, ...args],
+      env: { ...runtime.env, ...env },
+      shell: false,
+      display: { ...display, env },
+    },
+    adapter: null,
+  }
+}
+
 type PackageLaunch = Extract<LaunchKind, { kind: 'package' }>
 
 /** The installs of a package agent, newest first: those at or above the pin, and one below it. */
@@ -836,7 +878,7 @@ export async function detectAgent(def: AgentDefinition, ctx: DetectContext): Pro
             ...(launch.kind === 'package' ? launch.env : {}),
             ...requiresEnv,
             ...passed.env,
-            [def.cli.variable]: passed.installed.path,
+            ...(def.cli.variable ? { [def.cli.variable]: passed.installed.path } : {}),
           }
           if (launch.library) {
             return { ...librarySpec(install.entry, env), cli: passed.installed.path }
@@ -895,6 +937,12 @@ export async function detectAgent(def: AgentDefinition, ctx: DetectContext): Pro
         const { installed, env: cliEnv } = result.found
         const program = installed.path
         const runEnv = { ...env, ...cliEnv }
+        if (launch.perSession && ctx.sessionRouterPath) {
+          return {
+            ...routedDetection(program, launch.args, ctx, display, runEnv),
+            cli: installed,
+          }
+        }
         return {
           ...binaryDetection(program, launch.args, ctx.platform, display, runEnv),
           cli: installed,

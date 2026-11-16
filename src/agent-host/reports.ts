@@ -27,7 +27,10 @@ export interface Report {
 export interface LimitsReport extends Report {
   /** The limits and balances in one message of the report; null for a message that is not it. */
   parse(markdown: string, now: number): VendorUsage | null
-  /** The only version of the agent the report was checked on, as it names it in `initialize`. */
+  /**
+   * The version of the agent the report was checked on, as it names it in `initialize`; it is
+   * read on that version and newer ones, and a reply it cannot read is a failed read.
+   */
   version?: string
 }
 

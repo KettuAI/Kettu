@@ -435,18 +435,15 @@ export function configLocations(
       ]
     }
     case 'antigravity': {
-      // The ACP server's folder, from Google's gateway docs; GEMINI_HOME moves the whole tree.
-      const moved = variable('GEMINI_HOME')
-      const base = moved ?? p.join(home, '.gemini')
-      const folder = p.join(base, 'antigravity-acp')
+      // agy 1.5.9's data folder, and the instructions it reads for every project.
+      const base = p.join(home, '.gemini')
       return [
-        { id: 'folder', candidates: [folder], env: moved ? 'GEMINI_HOME' : null },
-        { id: 'settings', candidates: [p.join(folder, 'settings.json')], env: null },
+        { id: 'folder', candidates: [p.join(base, 'antigravity-cli')], env: null },
         {
           id: 'instructions',
-          candidates: [p.join(base, 'AGENTS.md'), p.join(base, 'config', 'AGENTS.md')],
+          candidates: [p.join(base, 'GEMINI.md'), p.join(base, 'AGENTS.md')],
           env: null,
-          fallback: p.join(base, 'AGENTS.md'),
+          fallback: p.join(base, 'GEMINI.md'),
         },
       ]
     }

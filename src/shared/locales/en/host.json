@@ -181,12 +181,14 @@
     "monthly": "Monthly",
     "annual": "Annual",
     "overage": "Extra usage",
-    "weeklyOf": "Weekly · {{model}}"
+    "weeklyOf": "Weekly · {{model}}",
+    "fiveHourOf": "5-hour · {{model}}"
   },
   "planWindowInText": {
     "seven_day_opus": "Opus weekly",
     "seven_day_sonnet": "Sonnet weekly",
-    "weeklyOf": "{{model}} weekly"
+    "weeklyOf": "{{model}} weekly",
+    "fiveHourOf": "{{model}} 5-hour"
   },
   "agent": {
     "stoppedBeforeAnswer": "The agent stopped before it answered",
@@ -263,6 +265,7 @@
     "requiresOutdated": "{{agent}} needs {{command}} {{required}} or later; {{installed}} is installed. {{hint}}",
     "requiresFailed": "{{agent}} could not read the version of {{command}}: {{reason}} {{hint}}",
     "scriptMissing": "{{script}} does not exist.",
+    "antigravityInstallNotice": "The official installer puts agy in ~/.local/bin and adds it to PATH in your shell configuration files.",
     "hermesInstallNotice": "The official installer adds ~/.local/bin to PATH in your shell configuration files. ACP is included; browser and computer-use components are skipped.",
     "hint": {
       "node": "Install Node.js from nodejs.org, then reload the environment in Settings.",
@@ -276,6 +279,7 @@
       "goose": "Install goose, or choose its binary in Settings › Harnesses.",
       "kilo": "Install Kilo Code, or choose its binary in Settings › Harnesses.",
       "omp": "Install OMP with `bun install -g @oh-my-pi/pi-coding-agent` or its installer at omp.sh.",
+      "antigravity": "Install the Antigravity CLI in Settings › Harnesses on macOS or Linux. On Windows, run irm https://antigravity.google/cli/install.ps1 | iex in PowerShell.",
       "hermes": "Install Hermes Agent in Settings › Harnesses on macOS or Linux. On Windows, follow the official guide for WSL2.",
       "muse": "Install Muse Code from dev.meta.ai, or choose its binary in Settings › Harnesses.",
       "codewhale": "Install CodeWhale with the installer at codewhale.net, or choose its binary in Settings › Harnesses.",

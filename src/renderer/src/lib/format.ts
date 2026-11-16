@@ -166,9 +166,12 @@ export function timeLeft(ms: number): string {
 export function limitLabel(limit: Pick<PlanLimit, 'window' | 'label'>): string {
   const key = `planWindow.${limit.window}`
   if (i18n.exists(key)) return i18n.t(key as 'planWindow.five_hour')
-  // Claude Code names a weekly limit per model, "Weekly · Fable", in English.
+  // Claude Code names a weekly limit per model, "Weekly · Fable", and Antigravity both its
+  // windows per model group, "5-hour · Gemini Models", in English.
   const weekly = /^Weekly · (.+)$/.exec(limit.label)
-  return weekly ? i18n.t('planWindow.weeklyOf', { model: weekly[1] }) : limit.label
+  if (weekly) return i18n.t('planWindow.weeklyOf', { model: weekly[1] })
+  const fiveHour = /^5-hour · (.+)$/.exec(limit.label)
+  return fiveHour ? i18n.t('planWindow.fiveHourOf', { model: fiveHour[1] }) : limit.label
 }
 
 /**
@@ -178,10 +181,13 @@ export function limitLabel(limit: Pick<PlanLimit, 'window' | 'label'>): string {
 export function limitPhrase(limit: Pick<PlanLimit, 'window' | 'label'>): string {
   const key = `planWindowInText.${limit.window}`
   if (i18n.exists(key)) return i18n.t(key as 'planWindowInText.seven_day_opus')
-  const weekly = i18n.exists(`planWindow.${limit.window}`)
-    ? null
-    : /^Weekly · (.+)$/.exec(limit.label)
-  return weekly ? i18n.t('planWindowInText.weeklyOf', { model: weekly[1] }) : limitLabel(limit)
+  const known = i18n.exists(`planWindow.${limit.window}`)
+  const weekly = known ? null : /^Weekly · (.+)$/.exec(limit.label)
+  if (weekly) return i18n.t('planWindowInText.weeklyOf', { model: weekly[1] })
+  const fiveHour = known ? null : /^5-hour · (.+)$/.exec(limit.label)
+  return fiveHour
+    ? i18n.t('planWindowInText.fiveHourOf', { model: fiveHour[1] })
+    : limitLabel(limit)
 }
 
 /** A count compactly, for figures, readouts and legends: "980", "1.2K", "41.7B". */

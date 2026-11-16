@@ -52,6 +52,7 @@ export function PlanLimitCard({ card, onOpen }: { card: PlanCard; onOpen: () => 
 function CardFace({ card }: { card: PlanCard }) {
   const { t } = useTranslation(['sidebar', 'composer', 'common', 'usage'])
   const count = card.windows.length
+  const groups = card.windows.some((w) => w.model !== null && w.window === 'five_hour')
   const amounts = card.windows.flatMap((window) => {
     if (!window.amount) return []
     const unit =
@@ -91,9 +92,19 @@ function CardFace({ card }: { card: PlanCard }) {
         <span className="flex min-w-0 flex-1 flex-col gap-px">
           {[...card.windows].reverse().map((w) => {
             const name = w.model
-              ? t('common:planWindow.weeklyOf', { model: w.model })
+              ? t(
+                  w.window === 'five_hour'
+                    ? 'common:planWindow.fiveHourOf'
+                    : 'common:planWindow.weeklyOf',
+                  { model: w.model },
+                )
               : t(`common:planWindow.${w.window}`)
-            const short = w.model ?? t(`composer:usage.shortWindow.${w.window}`)
+            // Model groups have windows of two lengths each, so their lines name the length too.
+            const short = !w.model
+              ? t(`composer:usage.shortWindow.${w.window}`)
+              : groups
+                ? `${t(`composer:usage.shortWindow.${w.window}`)} ${w.model}`
+                : w.model
             return (
               <span key={w.id} className="flex min-w-0 flex-col gap-px">
                 <span className="flex justify-between gap-1 text-caption leading-3.25 whitespace-nowrap">

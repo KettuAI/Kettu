@@ -156,6 +156,7 @@
     "lastRead": "Last read {{ago}}",
     "backIn": "Back in {{time}}",
     "weeklyOf": "7d · {{model}}",
+    "fiveHourOf": "5h · {{model}}",
     "short": {
       "minutes": "{{count}}m",
       "hours": "{{count}}h",

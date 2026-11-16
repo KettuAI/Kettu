@@ -151,6 +151,7 @@
     "lastRead": "上次读取：{{ago}}",
     "backIn": "{{time}}后恢复",
     "weeklyOf": "7 天 · {{model}}",
+    "fiveHourOf": "5 小时 · {{model}}",
     "short": {
       "minutes": "{{count}} 分钟",
       "hours": "{{count}} 小时",

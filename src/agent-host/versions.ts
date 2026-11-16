@@ -57,6 +57,26 @@ export function compareVersions(a: string, b: string): number {
   )
 }
 
+/**
+ * Whether `version` is `checked` or newer. A version that is not semver, such as Junie's
+ * `26.10.27 (3893.5)`, compares by its numbers in order; with none, only the same text holds.
+ */
+export function versionAtLeast(version: string | null | undefined, checked: string): boolean {
+  if (!version) return false
+  if (version === checked) return true
+  if (isVersion(version) && isVersion(checked)) return compareVersions(version, checked) >= 0
+  const numbers = (text: string): number[] => (text.match(/\d+/g) ?? []).map(Number)
+  const a = numbers(version)
+  const b = numbers(checked)
+  if (a.length === 0 || b.length === 0) return false
+  for (let i = 0; i < Math.max(a.length, b.length); i++) {
+    const x = a[i] ?? 0
+    const y = b[i] ?? 0
+    if (x !== y) return x > y
+  }
+  return true
+}
+
 /** The newest version in what `npm view --json` printed: one string, or an array of them. */
 export function highestVersion(value: unknown): string | null {
   const candidates = Array.isArray(value) ? value : [value]

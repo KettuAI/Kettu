@@ -105,6 +105,7 @@ import {
   SettingSwitch,
   Skel,
 } from './controls'
+import { PersonalPlanText } from '@renderer/features/agents/personal-plan-notice'
 import { ClaudeSettingsRows } from './claude-settings-rows'
 import { PlaceRow } from './places'
 import {
@@ -121,6 +122,7 @@ import {
   GroupLabel,
   ItemPageHeader,
   ItemRow,
+  Notice,
   RowFrame,
   RowGroup,
   RowLine,
@@ -853,6 +855,8 @@ function AgentPageBody({ status }: { status: AgentStatus }) {
   const reading = useAgentReads(status, { force: status.signIn === 'required' })
   const refreshAccount = useRefresh()
   const [accountError, setAccountError] = useState<string | null>(null)
+  const [signingOut, setSigningOut] = useState(false)
+  const signOut = () => act(() => request('agents.logout', { agentId: status.id }))
   const running = status.state === 'ready'
   const providerMode = status.providers !== undefined
   const terminalSignIn = status.authMethods.find((m) => m.type === 'terminal' && m.command)
@@ -952,6 +956,11 @@ function AgentPageBody({ status }: { status: AgentStatus }) {
                 {accountError}
               </p>
             )}
+            {status.personalSignIn && (
+              <Notice variant="info" title={t('agents.personalPlan.title', { agent: status.name })}>
+                <PersonalPlanText />
+              </Notice>
+            )}
             <RowGroup>
               {/* A subscription's label is its plan; the other kinds name how the agent signs in. */}
               <Fact
@@ -986,7 +995,7 @@ function AgentPageBody({ status }: { status: AgentStatus }) {
                     <SetButton
                       variant="ghost"
                       disabled={busy}
-                      onClick={() => act(() => request('agents.logout', { agentId: status.id }))}
+                      onClick={() => (status.sharesSignIn ? setSigningOut(true) : signOut())}
                     >
                       {t('agents.signOut')}
                     </SetButton>
@@ -1032,6 +1041,31 @@ function AgentPageBody({ status }: { status: AgentStatus }) {
 
         <DangerGroup status={status} />
       </div>
+      {/* Signing out of an agent that shares its sign-in signs its vendor's own apps out too. */}
+      <AlertDialog open={signingOut} onOpenChange={setSigningOut}>
+        <AlertDialogContent className={CONFIRM}>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {t('agents.signOutShared.title', { name: status.name })}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {t('agents.signOutShared.body', { name: status.name })}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{t('common:actions.cancel')}</AlertDialogCancel>
+            <AlertDialogAction
+              variant="destructive"
+              onClick={() => {
+                setSigningOut(false)
+                signOut()
+              }}
+            >
+              {t('agents.signOutShared.confirm')}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }
