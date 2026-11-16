@@ -134,11 +134,9 @@ export function usageCards(
     const usedHere = used[hostId ?? ''] ?? []
     for (const agent of agents) {
       const place = { hostId, agentId: agent.id, agentName: agent.name }
+      // A provider with only a balance, such as DeepSeek's, shows it in Settings, not as a card.
       const providers = (agent.providers ?? []).filter(
-        (provider) =>
-          (provider.usage?.limits.length ?? 0) > 0 ||
-          (provider.usage?.balances.length ?? 0) > 0 ||
-          provider.usage?.state === 'error',
+        (provider) => (provider.usage?.limits.length ?? 0) > 0 || provider.usage?.state === 'error',
       )
       if (agent.harnessId === 'opencode' && providers.length > 0) {
         for (const provider of providers) {

@@ -141,8 +141,9 @@ export function planCards(accounts: readonly AccountAgent[], now: number): PlanC
       return (agent.providers ?? []).flatMap((provider) => {
         const limits = provider.usage?.limits ?? []
         const windows = cardWindows(limits, now)
+        // A provider with only a balance, such as DeepSeek's, shows it in Settings, not as a card.
+        if (windows.length === 0) return []
         const balances = provider.usage?.balances ?? []
-        if (windows.length === 0 && balances.length === 0) return []
         return [
           {
             key: `${key}:${provider.id}`,
