@@ -1,0 +1,867 @@
+[
+  {
+    "sessionUpdate": "tool_call",
+    "toolCallId": "call_9529563985410560674",
+    "name": "run_command",
+    "args": {
+      "CommandLine": "echo hi",
+      "WaitMsBeforeAsync": 5000,
+      "toolSummary": "Echo hi"
+    },
+    "status": "in_progress",
+    "kind": "execute",
+    "title": "echo hi",
+    "rawInput": {
+      "CommandLine": "echo hi",
+      "WaitMsBeforeAsync": 5000,
+      "toolSummary": "Echo hi"
+    }
+  },
+  {
+    "sessionUpdate": "tool_call_update",
+    "toolCallId": "call_9529563985410560674",
+    "name": "run_command",
+    "args": {
+      "CommandLine": "echo hi",
+      "WaitMsBeforeAsync": 5000,
+      "toolSummary": "Echo hi"
+    },
+    "status": "pending",
+    "kind": "execute",
+    "title": "echo hi",
+    "rawInput": {
+      "CommandLine": "echo hi",
+      "WaitMsBeforeAsync": 5000,
+      "toolSummary": "Echo hi"
+    }
+  },
+  {
+    "sessionUpdate": "tool_call_update",
+    "toolCallId": "call_9529563985410560674",
+    "name": "run_command",
+    "args": {
+      "CommandLine": "echo hi",
+      "WaitMsBeforeAsync": 5000,
+      "toolSummary": "Echo hi"
+    },
+    "status": "in_progress",
+    "kind": "execute",
+    "title": "echo hi",
+    "rawInput": {
+      "CommandLine": "echo hi",
+      "WaitMsBeforeAsync": 5000,
+      "toolSummary": "Echo hi"
+    }
+  },
+  {
+    "sessionUpdate": "tool_call_update",
+    "toolCallId": "call_9529563985410560674",
+    "name": "run_command",
+    "args": {
+      "CommandLine": "echo hi",
+      "WaitMsBeforeAsync": 5000,
+      "toolSummary": "Echo hi"
+    },
+    "status": "completed",
+    "kind": "execute",
+    "title": "echo hi",
+    "rawInput": {
+      "CommandLine": "echo hi",
+      "WaitMsBeforeAsync": 5000,
+      "toolSummary": "Echo hi"
+    },
+    "rawOutput": {
+      "output": "Created At: 2026-11-16T10:54:47-08:00\nCompleted At: 2026-11-16T10:54:47-08:00\nCommand exited with code 0.\n\nCommand output:\nhi\r\n",
+      "exit_code": 0
+    },
+    "content": [
+      {
+        "type": "content",
+        "content": {
+          "type": "text",
+          "text": "Created At: 2026-11-16T10:54:47-08:00\nCompleted At: 2026-11-16T10:54:47-08:00\nCommand exited with code 0.\n\nCommand output:\nhi\r\n"
+        }
+      }
+    ]
+  },
+  {
+    "sessionUpdate": "tool_call",
+    "toolCallId": "call_15785170165186166339",
+    "name": "read_file",
+    "args": {
+      "Path": "/tmp/agy-probe/ws4/README.md"
+    },
+    "status": "in_progress",
+    "kind": "read",
+    "title": "File README.md",
+    "locations": [
+      {
+        "path": "/tmp/agy-probe/ws4/README.md"
+      }
+    ],
+    "rawInput": {
+      "Path": "/tmp/agy-probe/ws4/README.md"
+    }
+  },
+  {
+    "sessionUpdate": "tool_call_update",
+    "toolCallId": "call_15785170165186166339",
+    "name": "read_file",
+    "args": {
+      "Path": "/tmp/agy-probe/ws4/README.md"
+    },
+    "status": "completed",
+    "kind": "read",
+    "title": "File README.md",
+    "locations": [
+      {
+        "path": "/tmp/agy-probe/ws4/README.md"
+      }
+    ],
+    "rawInput": {
+      "Path": "/tmp/agy-probe/ws4/README.md"
+    }
+  },
+  {
+    "sessionUpdate": "tool_call",
+    "toolCallId": "call_1611881002424410472",
+    "name": "run_command",
+    "args": {
+      "CommandLine": "grep -rn \"hello\" .",
+      "WaitMsBeforeAsync": 5000,
+      "toolSummary": "Search for hello"
+    },
+    "status": "in_progress",
+    "kind": "execute",
+    "title": "grep -rn \"hello\" .",
+    "rawInput": {
+      "CommandLine": "grep -rn \"hello\" .",
+      "WaitMsBeforeAsync": 5000,
+      "toolSummary": "Search for hello"
+    }
+  },
+  {
+    "sessionUpdate": "tool_call_update",
+    "toolCallId": "call_1611881002424410472",
+    "name": "run_command",
+    "args": {
+      "CommandLine": "grep -rn \"hello\" .",
+      "WaitMsBeforeAsync": 5000,
+      "toolSummary": "Search for hello"
+    },
+    "status": "pending",
+    "kind": "execute",
+    "title": "grep -rn \"hello\" .",
+    "rawInput": {
+      "CommandLine": "grep -rn \"hello\" .",
+      "WaitMsBeforeAsync": 5000,
+      "toolSummary": "Search for hello"
+    }
+  },
+  {
+    "sessionUpdate": "tool_call_update",
+    "toolCallId": "call_1611881002424410472",
+    "name": "run_command",
+    "args": {
+      "CommandLine": "grep -rn \"hello\" .",
+      "WaitMsBeforeAsync": 5000,
+      "toolSummary": "Search for hello"
+    },
+    "status": "in_progress",
+    "kind": "execute",
+    "title": "grep -rn \"hello\" .",
+    "rawInput": {
+      "CommandLine": "grep -rn \"hello\" .",
+      "WaitMsBeforeAsync": 5000,
+      "toolSummary": "Search for hello"
+    }
+  },
+  {
+    "sessionUpdate": "tool_call_update",
+    "toolCallId": "call_1611881002424410472",
+    "name": "run_command",
+    "args": {
+      "CommandLine": "grep -rn \"hello\" .",
+      "WaitMsBeforeAsync": 5000,
+      "toolSummary": "Search for hello"
+    },
+    "status": "completed",
+    "kind": "execute",
+    "title": "grep -rn \"hello\" .",
+    "rawInput": {
+      "CommandLine": "grep -rn \"hello\" .",
+      "WaitMsBeforeAsync": 5000,
+      "toolSummary": "Search for hello"
+    },
+    "rawOutput": {
+      "output": "Created At: 2026-11-16T10:54:55-08:00\nCompleted At: 2026-11-16T10:54:55-08:00\nCommand exited with code 0.\n\nCommand output:\n./README.md:2:hello world\r\n",
+      "exit_code": 0
+    },
+    "content": [
+      {
+        "type": "content",
+        "content": {
+          "type": "text",
+          "text": "Created At: 2026-11-16T10:54:55-08:00\nCompleted At: 2026-11-16T10:54:55-08:00\nCommand exited with code 0.\n\nCommand output:\n./README.md:2:hello world\r\n"
+        }
+      }
+    ]
+  },
+  {
+    "sessionUpdate": "tool_call",
+    "toolCallId": "call_10248428645423188058",
+    "name": "edit_file",
+    "args": {
+      "Path": "/tmp/agy-probe/ws4/README.md",
+      "Replacement": "goodbye",
+      "Target": "hello"
+    },
+    "status": "in_progress",
+    "kind": "edit",
+    "title": "File README.md",
+    "locations": [
+      {
+        "path": "/tmp/agy-probe/ws4/README.md"
+      }
+    ],
+    "rawInput": {
+      "Path": "/tmp/agy-probe/ws4/README.md",
+      "Replacement": "goodbye",
+      "Target": "hello"
+    }
+  },
+  {
+    "sessionUpdate": "tool_call_update",
+    "toolCallId": "call_10248428645423188058",
+    "name": "edit_file",
+    "args": {
+      "Path": "/tmp/agy-probe/ws4/README.md",
+      "Replacement": "goodbye",
+      "Target": "hello"
+    },
+    "status": "pending",
+    "kind": "edit",
+    "title": "File ../../../private/tmp/agy-probe/ws4/README.md",
+    "locations": [
+      {
+        "path": "/private/tmp/agy-probe/ws4/README.md"
+      }
+    ],
+    "rawInput": {
+      "Path": "/tmp/agy-probe/ws4/README.md",
+      "Replacement": "goodbye",
+      "Target": "hello"
+    }
+  },
+  {
+    "sessionUpdate": "tool_call_update",
+    "toolCallId": "call_10248428645423188058",
+    "name": "edit_file",
+    "args": {
+      "Path": "/tmp/agy-probe/ws4/README.md",
+      "Replacement": "goodbye",
+      "Target": "hello"
+    },
+    "status": "in_progress",
+    "kind": "edit",
+    "title": "File README.md",
+    "locations": [
+      {
+        "path": "/tmp/agy-probe/ws4/README.md"
+      }
+    ],
+    "rawInput": {
+      "Path": "/tmp/agy-probe/ws4/README.md",
+      "Replacement": "goodbye",
+      "Target": "hello"
+    }
+  },
+  {
+    "sessionUpdate": "tool_call_update",
+    "toolCallId": "call_10248428645423188058",
+    "name": "edit_file",
+    "args": {
+      "Path": "/tmp/agy-probe/ws4/README.md",
+      "Replacement": "goodbye",
+      "Target": "hello"
+    },
+    "status": "completed",
+    "kind": "edit",
+    "title": "File README.md",
+    "locations": [
+      {
+        "path": "/tmp/agy-probe/ws4/README.md"
+      }
+    ],
+    "rawInput": {
+      "Path": "/tmp/agy-probe/ws4/README.md",
+      "Replacement": "goodbye",
+      "Target": "hello"
+    },
+    "rawOutput": {},
+    "content": [
+      {
+        "type": "diff",
+        "path": "/tmp/agy-probe/ws4/README.md",
+        "newText": "# probe\ngoodbye world\n",
+        "oldText": "# probe\nhello world\n"
+      }
+    ]
+  },
+  {
+    "sessionUpdate": "tool_call",
+    "toolCallId": "call_5931978718582603312",
+    "name": "run_command",
+    "args": {
+      "CommandLine": "ls /nonexistent-kettu",
+      "WaitMsBeforeAsync": 5000,
+      "toolSummary": "List nonexistent directory"
+    },
+    "status": "in_progress",
+    "kind": "execute",
+    "title": "ls /nonexistent-kettu",
+    "rawInput": {
+      "CommandLine": "ls /nonexistent-kettu",
+      "WaitMsBeforeAsync": 5000,
+      "toolSummary": "List nonexistent directory"
+    }
+  },
+  {
+    "sessionUpdate": "tool_call_update",
+    "toolCallId": "call_5931978718582603312",
+    "name": "run_command",
+    "args": {
+      "CommandLine": "ls /nonexistent-kettu",
+      "WaitMsBeforeAsync": 5000,
+      "toolSummary": "List nonexistent directory"
+    },
+    "status": "pending",
+    "kind": "execute",
+    "title": "ls /nonexistent-kettu",
+    "rawInput": {
+      "CommandLine": "ls /nonexistent-kettu",
+      "WaitMsBeforeAsync": 5000,
+      "toolSummary": "List nonexistent directory"
+    }
+  },
+  {
+    "sessionUpdate": "tool_call_update",
+    "toolCallId": "call_5931978718582603312",
+    "name": "run_command",
+    "args": {
+      "CommandLine": "ls /nonexistent-kettu",
+      "WaitMsBeforeAsync": 5000,
+      "toolSummary": "List nonexistent directory"
+    },
+    "status": "in_progress",
+    "kind": "execute",
+    "title": "ls /nonexistent-kettu",
+    "rawInput": {
+      "CommandLine": "ls /nonexistent-kettu",
+      "WaitMsBeforeAsync": 5000,
+      "toolSummary": "List nonexistent directory"
+    }
+  },
+  {
+    "sessionUpdate": "tool_call_update",
+    "toolCallId": "call_5931978718582603312",
+    "name": "run_command",
+    "args": {
+      "CommandLine": "ls /nonexistent-kettu",
+      "WaitMsBeforeAsync": 5000,
+      "toolSummary": "List nonexistent directory"
+    },
+    "status": "completed",
+    "kind": "execute",
+    "title": "ls /nonexistent-kettu",
+    "rawInput": {
+      "CommandLine": "ls /nonexistent-kettu",
+      "WaitMsBeforeAsync": 5000,
+      "toolSummary": "List nonexistent directory"
+    },
+    "rawOutput": {
+      "output": "Created At: 2026-11-16T11:01:25-08:00\nCompleted At: 2026-11-16T11:01:25-08:00\nCommand exited with code 1.\n\nCommand output:\nls: /nonexistent-kettu: No such file or directory\r\n",
+      "exit_code": 1
+    },
+    "content": [
+      {
+        "type": "content",
+        "content": {
+          "type": "text",
+          "text": "Created At: 2026-11-16T11:01:25-08:00\nCompleted At: 2026-11-16T11:01:25-08:00\nCommand exited with code 1.\n\nCommand output:\nls: /nonexistent-kettu: No such file or directory\r\n"
+        }
+      }
+    ]
+  },
+  {
+    "sessionUpdate": "tool_call",
+    "toolCallId": "call_11903952809624676542",
+    "name": "run_command",
+    "args": {
+      "CommandLine": "true",
+      "WaitMsBeforeAsync": 5000,
+      "toolSummary": "Run true command"
+    },
+    "status": "in_progress",
+    "kind": "execute",
+    "title": "true",
+    "rawInput": {
+      "CommandLine": "true",
+      "WaitMsBeforeAsync": 5000,
+      "toolSummary": "Run true command"
+    }
+  },
+  {
+    "sessionUpdate": "tool_call_update",
+    "toolCallId": "call_11903952809624676542",
+    "name": "run_command",
+    "args": {
+      "CommandLine": "true",
+      "WaitMsBeforeAsync": 5000,
+      "toolSummary": "Run true command"
+    },
+    "status": "pending",
+    "kind": "execute",
+    "title": "true",
+    "rawInput": {
+      "CommandLine": "true",
+      "WaitMsBeforeAsync": 5000,
+      "toolSummary": "Run true command"
+    }
+  },
+  {
+    "sessionUpdate": "tool_call_update",
+    "toolCallId": "call_11903952809624676542",
+    "name": "run_command",
+    "args": {
+      "CommandLine": "true",
+      "WaitMsBeforeAsync": 5000,
+      "toolSummary": "Run true command"
+    },
+    "status": "in_progress",
+    "kind": "execute",
+    "title": "true",
+    "rawInput": {
+      "CommandLine": "true",
+      "WaitMsBeforeAsync": 5000,
+      "toolSummary": "Run true command"
+    }
+  },
+  {
+    "sessionUpdate": "tool_call_update",
+    "toolCallId": "call_11903952809624676542",
+    "name": "run_command",
+    "args": {
+      "CommandLine": "true",
+      "WaitMsBeforeAsync": 5000,
+      "toolSummary": "Run true command"
+    },
+    "status": "completed",
+    "kind": "execute",
+    "title": "true",
+    "rawInput": {
+      "CommandLine": "true",
+      "WaitMsBeforeAsync": 5000,
+      "toolSummary": "Run true command"
+    },
+    "rawOutput": {
+      "output": "Created At: 2026-11-16T11:01:29-08:00\nCompleted At: 2026-11-16T11:01:29-08:00\nCommand exited with code 0.\n\nNo output from the command.",
+      "exit_code": 0
+    },
+    "content": [
+      {
+        "type": "content",
+        "content": {
+          "type": "text",
+          "text": "Created At: 2026-11-16T11:01:29-08:00\nCompleted At: 2026-11-16T11:01:29-08:00\nCommand exited with code 0.\n\nNo output from the command."
+        }
+      }
+    ]
+  },
+  {
+    "sessionUpdate": "tool_call",
+    "toolCallId": "call_5640843247609038226",
+    "name": "read_file",
+    "args": {
+      "Path": "/tmp/agy-probe"
+    },
+    "status": "in_progress",
+    "kind": "read",
+    "title": "File .",
+    "locations": [
+      {
+        "path": "/tmp/agy-probe"
+      }
+    ],
+    "rawInput": {
+      "Path": "/tmp/agy-probe"
+    }
+  },
+  {
+    "sessionUpdate": "tool_call_update",
+    "toolCallId": "call_5640843247609038226",
+    "name": "read_file",
+    "args": {
+      "Path": "/tmp/agy-probe"
+    },
+    "status": "failed",
+    "kind": "read",
+    "title": "File .",
+    "locations": [
+      {
+        "path": "/tmp/agy-probe"
+      }
+    ],
+    "rawInput": {
+      "Path": "/tmp/agy-probe"
+    }
+  },
+  {
+    "sessionUpdate": "tool_call",
+    "toolCallId": "call_8124273656393842741",
+    "name": "write_file",
+    "args": {
+      "Content": "x",
+      "Path": "/tmp/agy-probe/notes.txt"
+    },
+    "status": "in_progress",
+    "kind": "edit",
+    "title": "File notes.txt",
+    "locations": [
+      {
+        "path": "/tmp/agy-probe/notes.txt"
+      }
+    ],
+    "rawInput": {
+      "Content": "x",
+      "Path": "/tmp/agy-probe/notes.txt"
+    }
+  },
+  {
+    "sessionUpdate": "tool_call_update",
+    "toolCallId": "call_8124273656393842741",
+    "name": "write_file",
+    "args": {
+      "Content": "x",
+      "Path": "/tmp/agy-probe/notes.txt"
+    },
+    "status": "pending",
+    "kind": "edit",
+    "title": "File ../../private/tmp/agy-probe/notes.txt",
+    "locations": [
+      {
+        "path": "/private/tmp/agy-probe/notes.txt"
+      }
+    ],
+    "rawInput": {
+      "Content": "x",
+      "Path": "/tmp/agy-probe/notes.txt"
+    }
+  },
+  {
+    "sessionUpdate": "tool_call_update",
+    "toolCallId": "call_8124273656393842741",
+    "name": "write_file",
+    "args": {
+      "Content": "x",
+      "Path": "/tmp/agy-probe/notes.txt"
+    },
+    "status": "in_progress",
+    "kind": "edit",
+    "title": "File notes.txt",
+    "locations": [
+      {
+        "path": "/tmp/agy-probe/notes.txt"
+      }
+    ],
+    "rawInput": {
+      "Content": "x",
+      "Path": "/tmp/agy-probe/notes.txt"
+    }
+  },
+  {
+    "sessionUpdate": "tool_call_update",
+    "toolCallId": "call_8124273656393842741",
+    "name": "write_file",
+    "args": {
+      "Content": "x",
+      "Path": "/tmp/agy-probe/notes.txt"
+    },
+    "status": "completed",
+    "kind": "edit",
+    "title": "File notes.txt",
+    "locations": [
+      {
+        "path": "/tmp/agy-probe/notes.txt"
+      }
+    ],
+    "rawInput": {
+      "Content": "x",
+      "Path": "/tmp/agy-probe/notes.txt"
+    },
+    "rawOutput": {},
+    "content": [
+      {
+        "type": "diff",
+        "path": "/tmp/agy-probe/notes.txt",
+        "newText": "x"
+      }
+    ]
+  },
+  {
+    "sessionUpdate": "tool_call",
+    "toolCallId": "call_1748951000870840191",
+    "name": "mcp_kettu_set_plan",
+    "args": {
+      "steps": [
+        {
+          "content": "A",
+          "status": "in_progress"
+        },
+        {
+          "content": "B",
+          "status": "pending"
+        }
+      ],
+      "toolSummary": "Set plan"
+    },
+    "status": "in_progress",
+    "kind": "other",
+    "title": "Run mcp_kettu_set_plan",
+    "rawInput": {
+      "steps": [
+        {
+          "content": "A",
+          "status": "in_progress"
+        },
+        {
+          "content": "B",
+          "status": "pending"
+        }
+      ],
+      "toolSummary": "Set plan"
+    }
+  },
+  {
+    "sessionUpdate": "tool_call_update",
+    "toolCallId": "call_1748951000870840191",
+    "name": "mcp_kettu_set_plan",
+    "args": {
+      "steps": [
+        {
+          "content": "A",
+          "status": "in_progress"
+        },
+        {
+          "content": "B",
+          "status": "pending"
+        }
+      ],
+      "toolSummary": "Set plan"
+    },
+    "status": "pending",
+    "kind": "other",
+    "title": "Run mcp_kettu_set_plan",
+    "rawInput": {
+      "steps": [
+        {
+          "content": "A",
+          "status": "in_progress"
+        },
+        {
+          "content": "B",
+          "status": "pending"
+        }
+      ],
+      "toolSummary": "Set plan"
+    }
+  },
+  {
+    "sessionUpdate": "tool_call_update",
+    "toolCallId": "call_1748951000870840191",
+    "name": "mcp_kettu_set_plan",
+    "args": {
+      "steps": [
+        {
+          "content": "A",
+          "status": "in_progress"
+        },
+        {
+          "content": "B",
+          "status": "pending"
+        }
+      ],
+      "toolSummary": "Set plan"
+    },
+    "status": "in_progress",
+    "kind": "other",
+    "title": "Run mcp_kettu_set_plan",
+    "rawInput": {
+      "steps": [
+        {
+          "content": "A",
+          "status": "in_progress"
+        },
+        {
+          "content": "B",
+          "status": "pending"
+        }
+      ],
+      "toolSummary": "Set plan"
+    }
+  },
+  {
+    "sessionUpdate": "tool_call_update",
+    "toolCallId": "call_1748951000870840191",
+    "name": "mcp_kettu_set_plan",
+    "args": {
+      "steps": [
+        {
+          "content": "A",
+          "status": "in_progress"
+        },
+        {
+          "content": "B",
+          "status": "pending"
+        }
+      ],
+      "toolSummary": "Set plan"
+    },
+    "status": "completed",
+    "kind": "other",
+    "title": "Run mcp_kettu_set_plan",
+    "rawInput": {
+      "steps": [
+        {
+          "content": "A",
+          "status": "in_progress"
+        },
+        {
+          "content": "B",
+          "status": "pending"
+        }
+      ],
+      "toolSummary": "Set plan"
+    }
+  },
+  {
+    "sessionUpdate": "tool_call",
+    "toolCallId": "call_11262555015812703435",
+    "name": "mcp_kettu_remember",
+    "args": {
+      "text": "probe",
+      "toolSummary": "Save probe memory"
+    },
+    "status": "in_progress",
+    "kind": "other",
+    "title": "Run mcp_kettu_remember",
+    "rawInput": {
+      "text": "probe",
+      "toolSummary": "Save probe memory"
+    }
+  },
+  {
+    "sessionUpdate": "tool_call_update",
+    "toolCallId": "call_11262555015812703435",
+    "name": "mcp_kettu_remember",
+    "args": {
+      "text": "probe",
+      "toolSummary": "Save probe memory"
+    },
+    "status": "pending",
+    "kind": "other",
+    "title": "Run mcp_kettu_remember",
+    "rawInput": {
+      "text": "probe",
+      "toolSummary": "Save probe memory"
+    }
+  },
+  {
+    "sessionUpdate": "tool_call_update",
+    "toolCallId": "call_11262555015812703435",
+    "name": "mcp_kettu_remember",
+    "args": {
+      "text": "probe",
+      "toolSummary": "Save probe memory"
+    },
+    "status": "in_progress",
+    "kind": "other",
+    "title": "Run mcp_kettu_remember",
+    "rawInput": {
+      "text": "probe",
+      "toolSummary": "Save probe memory"
+    }
+  },
+  {
+    "sessionUpdate": "tool_call_update",
+    "toolCallId": "call_11262555015812703435",
+    "name": "mcp_kettu_remember",
+    "args": {
+      "text": "probe",
+      "toolSummary": "Save probe memory"
+    },
+    "status": "failed",
+    "kind": "other",
+    "title": "Run mcp_kettu_remember",
+    "rawInput": {
+      "text": "probe",
+      "toolSummary": "Save probe memory"
+    }
+  },
+  {
+    "sessionUpdate": "tool_call",
+    "toolCallId": "call_8666465540504123530",
+    "name": "mcp_kettu_list_sessions",
+    "args": {
+      "toolSummary": "List sessions"
+    },
+    "status": "in_progress",
+    "kind": "other",
+    "title": "Run mcp_kettu_list_sessions",
+    "rawInput": {
+      "toolSummary": "List sessions"
+    }
+  },
+  {
+    "sessionUpdate": "tool_call_update",
+    "toolCallId": "call_8666465540504123530",
+    "name": "mcp_kettu_list_sessions",
+    "args": {
+      "toolSummary": "List sessions"
+    },
+    "status": "pending",
+    "kind": "other",
+    "title": "Run mcp_kettu_list_sessions",
+    "rawInput": {
+      "toolSummary": "List sessions"
+    }
+  },
+  {
+    "sessionUpdate": "tool_call_update",
+    "toolCallId": "call_8666465540504123530",
+    "name": "mcp_kettu_list_sessions",
+    "args": {
+      "toolSummary": "List sessions"
+    },
+    "status": "in_progress",
+    "kind": "other",
+    "title": "Run mcp_kettu_list_sessions",
+    "rawInput": {
+      "toolSummary": "List sessions"
+    }
+  },
+  {
+    "sessionUpdate": "tool_call_update",
+    "toolCallId": "call_8666465540504123530",
+    "name": "mcp_kettu_list_sessions",
+    "args": {
+      "toolSummary": "List sessions"
+    },
+    "status": "completed",
+    "kind": "other",
+    "title": "Run mcp_kettu_list_sessions",
+    "rawInput": {
+      "toolSummary": "List sessions"
+    }
+  }
+]

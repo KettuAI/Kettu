@@ -49,12 +49,14 @@
     "monthly": "每月",
     "annual": "每年",
     "overage": "额外用量",
-    "weeklyOf": "每周 · {{model}}"
+    "weeklyOf": "每周 · {{model}}",
+    "fiveHourOf": "5 小时 · {{model}}"
   },
   "planWindowInText": {
     "seven_day_opus": "Opus 每周",
     "seven_day_sonnet": "Sonnet 每周",
-    "weeklyOf": "{{model}} 每周"
+    "weeklyOf": "{{model}} 每周",
+    "fiveHourOf": "{{model}} 5 小时"
   },
   "fileManager": {
     "mac": "访达",

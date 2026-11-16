@@ -19,6 +19,7 @@ import { StepSentBack } from '@renderer/features/tasks/step-crumb'
 import { useScrollbarGutter } from '@renderer/hooks/use-scrollbar-gutter'
 import { errorMessage, host } from '@renderer/lib/host'
 import { isMac } from '@renderer/lib/platform'
+import { PersonalPlanFirstUse } from '@renderer/features/agents/personal-plan-notice'
 import { agentName, agentsOn, useAgentsStore } from '@renderer/stores/agents'
 import { ensureFiles, ensureFreshFiles } from '@renderer/stores/files'
 import { isAway, useOtherHost } from '@renderer/stores/hosts'
@@ -74,6 +75,7 @@ function SessionBody({ summary }: { summary: SessionSummary }) {
   const agentRemoved = useAgentsStore(
     (s) => agentsOn(s, hostId).byId[summary.agentId]?.registered === false,
   )
+  const agentStatus = useAgentsStore((s) => agentsOn(s, hostId).byId[summary.agentId])
   const agentOff = useAgentsStore(
     (s) => agentsOn(s, hostId).byId[summary.agentId]?.disabled === true,
   )
@@ -234,6 +236,7 @@ function SessionBody({ summary }: { summary: SessionSummary }) {
                     </AlertAction>
                   </Alert>
                 )}
+                <PersonalPlanFirstUse status={agentStatus} />
                 {agentRemoved && (
                   <Alert variant="warning">
                     <HugeiconsIcon icon={AlertCircleIcon} strokeWidth={1.9} aria-hidden />

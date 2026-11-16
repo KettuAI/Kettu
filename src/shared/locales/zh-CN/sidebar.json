@@ -180,7 +180,8 @@
     "archivedCount_other": "已归档 {{count}} 个会话",
     "archivedSome": "{{total}} 个会话中已归档 {{done}} 个。{{error}}",
     "deleteCount": "删除 {{count}} 个…",
-    "moreFor": "{{title}} 的更多操作"
+    "moreFor": "{{title}} 的更多操作",
+    "deleteKeepsAppCopy": "{{agent}} 自己保留的那份，Kettu 删不掉。"
   },
   "work": {
     "turn": "当前这一轮",

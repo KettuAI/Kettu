@@ -2,7 +2,8 @@
 // sign-in state and the AgentStatus every port sees. A harness's detection, installs and updates
 // are shared by its agents: its default agent and those added with folders of their own.
 
-import { mkdir, realpath, rm } from 'node:fs/promises'
+import { execFile } from 'node:child_process'
+import { mkdir, readFile, realpath, rm } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import type {
@@ -32,6 +33,12 @@ import { readQoderUsage } from './vendor-usage/qoder'
 import { storedSignInReader } from './vendor-usage/readers'
 import { readerOpen, type StoredSignInReader } from './vendor-usage/stored-sign-in'
 import type { VendorUsage } from './vendor-usage/common'
+import {
+  ANTIGRAVITY_PLAN_SIGN_INS,
+  antigravityAuthStateFile,
+  antigravitySignInMethod,
+} from './vendor-usage/antigravity'
+import { readAntigravityUsage } from './antigravity-usage'
 import type { AgentProcess, NodeRuntime } from '@shared/host-control'
 import type { Platform } from '@shared/platform'
 import { agentColor, type AddedAgent, type HostSettings } from '@shared/settings'
@@ -130,7 +137,7 @@ import { TextRing } from './ring'
 import { allowedLimit, mergeReadLimits, planWindow } from './session-updates'
 import type { EnvironmentService } from './shell-env'
 import type { AgentsFile, AgentUpdatesFile, RememberedInit } from './storage'
-import { compareVersions } from './versions'
+import { compareVersions, versionAtLeast } from './versions'
 
 /** The process a process driver speaks over. */
 export interface LaunchedAgent extends AgentRun {
@@ -379,6 +386,10 @@ class Slot {
   progress = new TextRing(8 * 1024)
   /** Stops the sign-in in progress; the agent is not stopped for being idle while it runs. */
   signInAbort: AbortController | null = null
+  /** The key of its `keySignIn` changed, so its next start signs in with it. */
+  keySignInPending = false
+  /** The method a `sharesSignIn` agent is signed in with, as its own files name it; null unknown. */
+  signInMethod: string | null = null
   idleTimer: ReturnType<typeof setTimeout> | null = null
   progressTimer: ReturnType<typeof setTimeout> | null = null
   lastStatus = ''
@@ -654,9 +665,10 @@ export class AgentManager {
     h.requiresVersion =
       effective.state === 'available' ? (effective.requires?.version ?? null) : null
     // A binary agent's own version is asked in the background, so detection never waits for it.
+    // A routed program's launch command is the runtime the router runs on, not the program.
     const program =
       h.def.launch.kind === 'binary' && effective.state === 'available'
-        ? (effective.spec?.command ?? null)
+        ? (effective.cli?.path ?? effective.spec?.command ?? null)
         : null
     if (program !== h.binaryProgram) {
       h.binaryProgram = program
@@ -981,6 +993,8 @@ export class AgentManager {
           diagnostics.log('warn', `${slot.name}: auth/status failed: ${(error as Error).message}`)
         }
       }
+      await this.signInWithKey(slot, connection, init, env)
+      void this.readSignInMethod(slot)
       diagnostics.event(agentId, 'ready', init.version ?? undefined)
       this.emit(slot)
       return runtime
@@ -2506,7 +2520,9 @@ export class AgentManager {
       !!slot &&
       (slot.def.id === 'opencode' ||
         limitsReport(slot.def.id) !== null ||
-        ['grok', 'mistral-vibe', 'copilot', 'qoder', 'kilo', 'auggie'].includes(slot.def.id) ||
+        ['grok', 'mistral-vibe', 'copilot', 'qoder', 'kilo', 'auggie', 'antigravity'].includes(
+          slot.def.id,
+        ) ||
         storedSignInReader(slot.def.id) !== null ||
         this.driver(slot).reads?.limits === true)
     )
@@ -2522,12 +2538,13 @@ export class AgentManager {
   private async readLimits(slot: Slot): Promise<void> {
     const stored = storedSignInReader(slot.def.id)
     if (stored) return this.readWithStoredSignIn(slot, stored)
+    if (slot.def.id === 'antigravity') return this.readAntigravityLimits(slot)
     const runtime = await this.ensureReady(slot.id)
     const { connection } = runtime
     if (connection.request && ['grok', 'mistral-vibe'].includes(slot.def.id)) {
       const now = Date.now()
       const version = runtime.init.version ?? slot.h.binaryVersion
-      if (slot.def.id === 'grok' && version !== '1.0.72') return
+      if (slot.def.id === 'grok' && !versionAtLeast(version, '1.0.72')) return
       if (slot.def.id === 'mistral-vibe' && (!version || compareVersions(version, '3.1.0') < 0))
         return
       let hiddenSession: string | null = null
@@ -2557,9 +2574,9 @@ export class AgentManager {
     }
     if (['copilot', 'qoder', 'kilo', 'auggie'].includes(slot.def.id)) {
       const version = runtime.init.version ?? slot.h.binaryVersion
-      if (slot.def.id === 'copilot' && version !== '1.0.112') return
-      if (slot.def.id === 'qoder' && version !== '1.1.89') return
-      if (slot.def.id === 'auggie' && version !== '0.36.0') return
+      if (slot.def.id === 'copilot' && !versionAtLeast(version, '1.0.112')) return
+      if (slot.def.id === 'qoder' && !versionAtLeast(version, '1.1.89')) return
+      if (slot.def.id === 'auggie' && !versionAtLeast(version, '0.36.0')) return
       if (slot.def.id === 'kilo' && (!version || compareVersions(version, '7.8.28') < 0)) return
       const command = this.display(slot)
       const env = { ...this.deps.env.agentEnv(slot.id), ...command.env } as NodeJS.ProcessEnv
@@ -2583,7 +2600,7 @@ export class AgentManager {
     const report = limitsReport(slot.def.id)
     if (!connection.readLimits && report) {
       const version = runtime.init.version ?? slot.h.binaryVersion
-      if (report.version !== undefined && version !== report.version) return
+      if (report.version !== undefined && !versionAtLeast(version, report.version)) return
       const read = await this.reportLimits(slot, runtime, report)
       if (read) this.applyVendorUsage(slot, read.usage, read.now)
       return
@@ -2628,6 +2645,54 @@ export class AgentManager {
       throw this.limitsError(slot, error)
     }
     this.applyVendorUsage(slot, usage, now)
+  }
+
+  /**
+   * Google Antigravity's quota groups, through the registry's server, which runs on its own and
+   * needs no agy process. An API key sign-in has none to read.
+   */
+  private async readAntigravityLimits(slot: Slot): Promise<void> {
+    const method = await this.readSignInMethod(slot)
+    if (!method || !ANTIGRAVITY_PLAN_SIGN_INS.includes(method)) return
+    const base = this.deps.env.agentEnv(slot.id)
+    const env = (this.deps.launchEnv?.(slot.id, base) ?? base) as NodeJS.ProcessEnv
+    const now = Date.now()
+    let usage: VendorUsage
+    try {
+      usage = await readAntigravityUsage(
+        {
+          adaptersDir: this.deps.adaptersDir,
+          reportsDir: this.deps.reportsDir,
+          platform: this.deps.platform,
+          arch: process.arch,
+          appVersion: this.deps.appVersion,
+          env,
+          signIn: method,
+          systemProxy: () => systemProxySettings(),
+          timeoutMs: 60_000,
+          log: (message) => this.deps.diagnostics.log('warn', `${slot.name}: ${message}`),
+        },
+        now,
+      )
+    } catch (error) {
+      throw agentError(error)
+    }
+    this.applyVendorUsage(slot, usage, now)
+  }
+
+  /**
+   * The method a `sharesSignIn` agent is signed in with, read again from its own files; it may
+   * have changed outside Kettu, in its terminal sign-in or its app.
+   */
+  private async readSignInMethod(slot: Slot): Promise<string | null> {
+    if (slot.def.id !== 'antigravity') return null
+    const text = await readFile(antigravityAuthStateFile(os.homedir()), 'utf8').catch(() => '')
+    const method = antigravitySignInMethod(text)
+    if (method !== slot.signInMethod) {
+      slot.signInMethod = method
+      this.emit(slot)
+    }
+    return method
   }
 
   private applyVendorUsage(slot: Slot, usage: VendorUsage, now: number): void {
@@ -2720,7 +2785,7 @@ export class AgentManager {
     await slot.limitsRun?.catch(() => {})
     if (slot.signIn === 'required') return
     const runtime = this.runtime(agentId)
-    if (!runtime?.connection.hiddenSessions) return
+    if (!runtime?.connection.unpromptedSessions) return
     try {
       await this.readInHiddenSession(slot, runtime, log, folder)
     } catch (error) {
@@ -2744,7 +2809,7 @@ export class AgentManager {
     const slot = this.slot(agentId)
     const runtime = await this.ensureReady(agentId)
     await slot.limitsRun?.catch(() => {})
-    if (slot.signIn === 'required' || !runtime.connection.hiddenSessions) return
+    if (slot.signIn === 'required' || !runtime.connection.unpromptedSessions) return
     const log = (message: string): void =>
       this.deps.diagnostics.log('warn', `${slot.name}: ${message}`)
     let read: boolean
@@ -3106,6 +3171,7 @@ export class AgentManager {
     slot.signIn = 'signed-in'
     this.emit(slot)
     this.hooks.signedIn(agentId)
+    void this.readSignInMethod(slot)
   }
 
   /** Stops the agent's sign-in in progress, whose `authenticate` then rejects. */
@@ -3128,6 +3194,7 @@ export class AgentManager {
     slot.account = null
     slot.limits.clear()
     this.emit(slot)
+    void this.readSignInMethod(slot)
   }
 
   // Status.
@@ -3205,7 +3272,39 @@ export class AgentManager {
 
   async agentEnvChanged(agentId: AgentId): Promise<void> {
     const slot = this.registeredSlot(agentId)
+    const key = slot.def.keySignIn
+    slot.keySignInPending =
+      key !== undefined && this.deps.envKeyIsSet?.(agentId, key.variable) === true
     await this.credentialsChanged(slot)
+  }
+
+  /**
+   * Signs in with the key Kettu keeps once it changed: the agent reads it from its environment
+   * only when asked to sign in with it. A failure is logged and leaves the sign-in to the user.
+   */
+  private async signInWithKey(
+    slot: Slot,
+    connection: AgentConnection,
+    init: AgentInit,
+    env: Env,
+  ): Promise<void> {
+    const key = slot.def.keySignIn
+    if (!key || !slot.keySignInPending) return
+    if (!getEnv(env, key.variable, this.deps.platform)) return
+    if (!init.authMethods.some((method) => method.id === key.method)) return
+    slot.keySignInPending = false
+    try {
+      await connection.authenticate(key.method, {
+        openLink: () => {},
+        signal: AbortSignal.timeout(this.timings.initializeMs),
+      })
+      slot.signIn = 'signed-in'
+    } catch (error) {
+      this.deps.diagnostics.log(
+        'warn',
+        `${slot.name}: signing in with its key failed: ${(error as Error).message}`,
+      )
+    }
   }
 
   // Claude Code's common settings.
@@ -3362,6 +3461,12 @@ export class AgentManager {
   status(agentId: AgentId): AgentStatus {
     const slot = this.slot(agentId)
     const { h } = slot
+    // Signed in with an API key or a cloud project, an Antigravity agent has no plan to read.
+    const consoleSignIn =
+      slot.def.id === 'antigravity' &&
+      slot.signInMethod !== null &&
+      !ANTIGRAVITY_PLAN_SIGN_INS.includes(slot.signInMethod)
+    const limitsReason = consoleSignIn ? 'console-managed' : slot.def.limitsReason
     const platform = this.deps.platform
     const display = this.display(slot)
     const init = slot.init
@@ -3393,6 +3498,37 @@ export class AgentManager {
         ? { command: this.signInCommand(slot, display, method, folderEnv) }
         : {}),
     }))
+    const { keySignIn, terminalSignIn } = slot.def
+    if (keySignIn) {
+      const method = authMethods.find((item) => item.id === keySignIn.method)
+      if (method) {
+        method.type = 'env'
+        method.envVars = [
+          {
+            name: keySignIn.variable,
+            optional: false,
+            set: this.deps.envKeyIsSet?.(agentId, keySignIn.variable) ?? false,
+          },
+        ]
+      }
+    }
+    if (terminalSignIn && this.has(agentId)) {
+      const replaced = authMethods.filter((item) => terminalSignIn.replaces.includes(item.id))
+      // agy 1.5.9 declares its terminal sign-in itself to a client that runs one; it goes first.
+      const own = authMethods.find((item) => item.type === 'terminal')
+      const kept = authMethods.filter((item) => !replaced.includes(item) && item !== own)
+      const terminal: AgentAuthMethod | null =
+        own ??
+        (replaced.length > 0
+          ? {
+              id: `${slot.def.id}-terminal-login`,
+              name: replaced.map((item) => item.name).join(' / '),
+              type: 'terminal',
+              command: formatCommand({ ...display, args: [] }, platform),
+            }
+          : null)
+      authMethods.splice(0, authMethods.length, ...(terminal ? [terminal] : []), ...kept)
+    }
     if (slot.def.id === 'qwen' && this.has(agentId)) {
       authMethods.push({
         id: 'qwen-terminal-login',
@@ -3466,7 +3602,9 @@ export class AgentManager {
         : {}),
       ...(slot.def.id === 'deepseek' ? { balance: slot.balance } : {}),
       ...(slot.balances.length ? { balances: slot.balances } : {}),
-      ...(slot.def.limitsReason ? { limitsReason: slot.def.limitsReason } : {}),
+      ...(limitsReason ? { limitsReason } : {}),
+      ...(slot.def.sharesSignIn ? { sharesSignIn: true } : {}),
+      ...(slot.signInMethod === 'oauth-personal' ? { personalSignIn: true } : {}),
       limits: [...slot.limits.values()],
       ...(slot.limitsError ? { limitsError: slot.limitsError } : {}),
       detail: slot.detail ?? h.adapterNote,
@@ -3524,7 +3662,7 @@ export class AgentManager {
         forkSession: capabilities?.forkSession ?? false,
         forkAtMessage: capabilities?.forkAtMessage ?? false,
         steering: capabilities?.steering ?? false,
-        reports: this.hasLimits(slot.id),
+        reports: this.hasLimits(slot.id) && !consoleSignIn,
         context: this.hasContext(slot.id),
         liveContext: this.driver(slot).reads?.context === true,
         account:
@@ -3729,4 +3867,13 @@ export function agentError(error: unknown): HostError {
     }
   }
   return new HostError('internal', (error as Error)?.message ?? String(error))
+}
+
+/** What `scutil --proxy` prints: macOS's system proxy; null when it cannot run. */
+function systemProxySettings(): Promise<string | null> {
+  return new Promise((resolve) => {
+    execFile('/usr/sbin/scutil', ['--proxy'], { timeout: 5_000 }, (error, stdout) =>
+      resolve(error ? null : stdout),
+    )
+  })
 }

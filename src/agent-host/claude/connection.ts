@@ -492,6 +492,10 @@ export class ClaudeConnection implements AgentConnection {
     return true
   }
 
+  get unpromptedSessions(): boolean {
+    return this.hiddenSessions
+  }
+
   close(): void {
     if (this.done) return
     this.done = true

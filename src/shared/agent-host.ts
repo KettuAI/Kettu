@@ -155,6 +155,11 @@ export interface PlanLimit {
   state: 'ok' | 'warning' | 'reached' // from `status`: allowed, allowed_warning, rejected
   observedAt: number
   amount?: { used: number; total: number; unit: string }
+  /**
+   * The models a group's window counts, by the names the agent gives them, such as Antigravity's
+   * "Gemini 3.8 Flash"; absent for a window that counts the whole plan.
+   */
+  models?: string[]
 }
 
 export type LimitsReason =
@@ -163,6 +168,8 @@ export type LimitsReason =
   | 'administrator-managed'
   | 'model-provider-managed'
   | 'not-yet-supported'
+  // Signed in with an API key or a cloud project, whose use the provider's console shows.
+  | 'console-managed'
 
 export interface ProviderBalance {
   label: string
@@ -321,6 +328,10 @@ export interface AgentStatus {
   balance?: AgentProvider['usage']
   balances?: ProviderBalance[]
   limitsReason?: LimitsReason
+  /** Its sign-in and session history are shared with the vendor's own apps (Antigravity). */
+  sharesSignIn?: boolean
+  /** Signed in with a personal account on a plan whose terms limit third-party apps. */
+  personalSignIn?: boolean
   limits: PlanLimit[] // subscription windows, see plan limits in the session model
   limitsError?: string // why the last limits read failed, until one succeeds; `limits` stay
   detail: string | null // install hint or error message

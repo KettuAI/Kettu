@@ -111,6 +111,8 @@ describe('side questions', () => {
     expect(sideRoute('pi')).toBe('hidden')
     expect(sideRoute('deepseek')).toBe('none')
     expect(sideRoute('auggie')).toBe('none')
+    // agy's hidden sessions may only be opened and read, never asked anything.
+    expect(sideRoute('antigravity')).toBe('none')
   })
 
   it('carry only answered questions, newest last, with their quotes', () => {

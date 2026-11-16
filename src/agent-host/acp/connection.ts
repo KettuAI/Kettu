@@ -45,7 +45,8 @@ import {
   type SignInClient,
 } from '../connection'
 import type { AgentTransport, MessageTransport } from '../driver'
-import { isStopReason } from '../session-updates'
+import { isStopReason, type MapperContext, type MapperOutput } from '../session-updates'
+import { compareVersions } from '../versions'
 import { ANTIGRAVITY_TIER_VERSION, antigravityTier } from '../vendor-usage/antigravity'
 import {
   KNOWN_UPDATES,
@@ -58,8 +59,15 @@ import {
   mapSessionUpdate,
   mapTokenTotals,
 } from './mapper'
+import { agyAllowOnce, agyAutoAllowed, fromAgy } from './agy-tools'
 import { forkPointMeta, forksAtMessage } from './fork-point'
-import { DELETE_AGAIN_MS, hiddenRemoval, sessionMeta, type Removal } from './hidden-sessions'
+import {
+  DELETE_AGAIN_MS,
+  hiddenRemoval,
+  promptsHidden,
+  sessionMeta,
+  type Removal,
+} from './hidden-sessions'
 import { ownTitles } from './own-titles'
 import { DELEGATED_SIGN_IN, delegatedSignInStart, requestUrlElicitation } from './sign-in'
 
@@ -163,6 +171,18 @@ function namedCommand(meta: AuthMethodMeta | null | undefined): {
   if (typeof named !== 'object' || named === null) return null
   if (typeof named.command !== 'string' || named.command === '') return null
   return { command: named.command, args: stringList(named.args) }
+}
+
+// Agents that take HTTP MCP servers in `session/new` without declaring `mcpCapabilities`, from
+// the version checked: agy 1.5.9 discovers, initializes and lists tools with the given headers.
+const UNDECLARED_HTTP: Partial<Record<AgentId, string>> = {
+  antigravity: '1.5.9',
+}
+
+function takesHttpUndeclared(agentId: AgentId | undefined, init: InitializeResponse): boolean {
+  const since = agentId ? UNDECLARED_HTTP[agentId] : undefined
+  const version = init.agentInfo?.version
+  return since !== undefined && typeof version === 'string' && compareVersions(version, since) >= 0
 }
 
 /** One of `init.authMethods`, reading the metadata forms agents publish a terminal sign-in in. */
@@ -278,6 +298,10 @@ export class AcpConnection implements AgentConnection {
   private readonly pendingStartup = new Map<string, string>()
   /** How its hidden sessions go, once `initialize` has answered. */
   private removal: Removal | null = null
+  /** Hidden sessions an agent keeps once prompted: open to read, never to prompt. */
+  private readonly unprompted = new Set<string>()
+  /** agy's names for the tools each session's MCP servers run without asking. */
+  private readonly autoAllowed = new Map<string, ReadonlySet<string>>()
   /** The version the agent named in `initialize`. */
   private version: string | null = null
   /** The sign-in in progress, which the next `authenticate` written out runs for. */
@@ -300,7 +324,19 @@ export class AcpConnection implements AgentConnection {
           hooks.log('warn', `Permission request for unknown session ${ctx.params.sessionId}`)
           return { outcome: { outcome: 'cancelled' } }
         }
-        const { entryId, output } = mapPermissionToolCall(ctx.params.toolCall, target.context())
+        if (this.agy) {
+          // agy asks for every MCP tool; Kettu's own run without asking, as Claude Code's do.
+          const optionId = agyAllowOnce(
+            ctx.params.toolCall,
+            ctx.params.options,
+            this.autoAllowed.get(ctx.params.sessionId),
+          )
+          if (optionId) return { outcome: { outcome: 'selected', optionId } }
+        }
+        const toolCall = this.agy
+          ? (fromAgy(ctx.params.toolCall, true) ?? ctx.params.toolCall)
+          : ctx.params.toolCall
+        const { entryId, output } = mapPermissionToolCall(toolCall, target.context())
         const answer = await target.requestPermission(
           {
             toolCallId: ctx.params.toolCall.toolCallId,
@@ -400,12 +436,33 @@ export class AcpConnection implements AgentConnection {
     return { readable, writable }
   }
 
+  private allowWithoutAsking(sessionId: string, options: SessionOptions): void {
+    if (this.agy) this.autoAllowed.set(sessionId, agyAutoAllowed(options.mcpServers))
+  }
+
+  /** Whether the agent is agy, whose tool calls take a shape of their own. */
+  private get agy(): boolean {
+    return this.hooks.agentId === 'antigravity'
+  }
+
+  private map(update: SessionUpdate, ctx: MapperContext): MapperOutput {
+    if (
+      !this.agy ||
+      (update.sessionUpdate !== 'tool_call' && update.sessionUpdate !== 'tool_call_update')
+    ) {
+      return mapSessionUpdate(update, ctx)
+    }
+    const shown = ctx.thread.byId[`t:${update.toolCallId}`] !== undefined
+    const call = fromAgy(update, shown)
+    return call ? mapSessionUpdate(call, ctx) : { patches: [], effects: [] }
+  }
+
   private deliver(sessionId: string, update: SessionUpdate): void {
     if (this.dropStartup(sessionId, update)) return
     this.learnChild(sessionId, update)
     const target = this.targets.get(sessionId)
     if (target) {
-      target.apply(mapSessionUpdate(update, target.context()))
+      target.apply(this.map(update, target.context()))
       return
     }
     const collector = this.collectors.get(sessionId)
@@ -479,7 +536,7 @@ export class AcpConnection implements AgentConnection {
     this.pending.delete(sessionId)
     for (const update of early.updates) {
       if (!this.dropStartup(sessionId, update)) {
-        target.apply(mapSessionUpdate(update, target.context()))
+        target.apply(this.map(update, target.context()))
       }
     }
   }
@@ -585,7 +642,8 @@ export class AcpConnection implements AgentConnection {
         steering:
           (init._meta as { steering?: { supported?: unknown } } | null | undefined)?.steering
             ?.supported === true,
-        mcpHttp: caps.mcpCapabilities?.http === true,
+        mcpHttp:
+          caps.mcpCapabilities?.http === true || takesHttpUndeclared(this.hooks.agentId, init),
         mcpSse: caps.mcpCapabilities?.sse === true,
         // Every ACP agent takes stdio servers; the others it declares.
         mcpStdio: true,
@@ -625,6 +683,8 @@ export class AcpConnection implements AgentConnection {
       }),
     )
     this.readPlan(response._meta)
+    this.allowWithoutAsking(response.sessionId, options)
+    if (options.hidden && !promptsHidden(this.removal)) this.unprompted.add(response.sessionId)
     // pi-acp 0.0.34 repeats the startup note its answer carries as the session's first message.
     const startup = (response._meta as { piAcp?: { startupInfo?: unknown } } | null | undefined)
       ?.piAcp?.startupInfo
@@ -652,6 +712,7 @@ export class AcpConnection implements AgentConnection {
       }),
     )
     this.readPlan(response._meta)
+    this.allowWithoutAsking(sessionId, options)
     return { config: this.config(response.configOptions, response.modes) }
   }
 
@@ -670,6 +731,7 @@ export class AcpConnection implements AgentConnection {
       }),
     )
     this.readPlan(response._meta)
+    this.allowWithoutAsking(sessionId, options)
     return { config: this.config(response.configOptions, response.modes) }
   }
 
@@ -693,6 +755,7 @@ export class AcpConnection implements AgentConnection {
         ...(forkMeta ? { _meta: forkMeta } : {}),
       }),
     )
+    this.allowWithoutAsking(response.sessionId, options)
     return {
       sessionId: response.sessionId,
       config: this.config(response.configOptions, response.modes),
@@ -701,12 +764,14 @@ export class AcpConnection implements AgentConnection {
 
   async closeSession(sessionId: string): Promise<void> {
     await this.call(() => this.connection.agent.request(methods.agent.session.close, { sessionId }))
+    this.autoAllowed.delete(sessionId)
   }
 
   async deleteSession(sessionId: string): Promise<void> {
     await this.call(() =>
       this.connection.agent.request(methods.agent.session.delete, { sessionId }),
     )
+    this.autoAllowed.delete(sessionId)
   }
 
   async listSessions(
@@ -731,6 +796,10 @@ export class AcpConnection implements AgentConnection {
   }
 
   async prompt(sessionId: string, prompt: readonly PromptBlock[]): Promise<PromptResult> {
+    // Prompted, it would stay in the agent's history after its removal.
+    if (this.unprompted.has(sessionId)) {
+      throw new Error(`${this.hooks.name ?? 'The agent'}'s hidden sessions are never prompted`)
+    }
     // The note comes before a session's first prompt; a message after it is the agent's own.
     this.pendingStartup.delete(sessionId)
     const response = await this.call(() =>
@@ -862,7 +931,8 @@ export class AcpConnection implements AgentConnection {
 
   /** Google Antigravity names its plan in the `_meta` of its sign-in's and sessions' answers. */
   private readPlan(meta: unknown): void {
-    if (this.hooks.agentId !== 'antigravity' || this.version !== ANTIGRAVITY_TIER_VERSION) return
+    if (this.hooks.agentId !== 'antigravity') return
+    if (this.version === null || compareVersions(this.version, ANTIGRAVITY_TIER_VERSION) < 0) return
     const plan = antigravityTier(meta)
     if (plan) this.hooks.account({ kind: 'account', label: plan, email: null })
   }
@@ -877,17 +947,22 @@ export class AcpConnection implements AgentConnection {
   }
 
   get hiddenSessions(): boolean {
+    return promptsHidden(this.removal)
+  }
+
+  get unpromptedSessions(): boolean {
     return this.removal !== null
   }
 
   async removeHidden(sessionId: string, log: (message: string) => void): Promise<void> {
     this.unregister(sessionId)
+    this.unprompted.delete(sessionId)
     const removal = this.removal
     if (!removal) return
     const failed = (error: unknown): void => {
       if (!this.isClosed) log((error as Error).message)
     }
-    if (removal === 'close') {
+    if (removal === 'close' || removal === 'close-unprompted') {
       await this.closeSession(sessionId).catch(failed)
       return
     }

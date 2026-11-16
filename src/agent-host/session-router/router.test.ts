@@ -2,7 +2,7 @@
 // process alone, as variables, and never the adapter itself in the request.
 
 import { spawn, type ChildProcess } from 'node:child_process'
-import { mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, realpath, rm, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { createInterface } from 'node:readline'
@@ -17,10 +17,11 @@ const env = () => ({
   url: process.env.KETTU_MCP_URL ?? null,
   token: process.env.KETTU_MCP_TOKEN ?? null,
 })
+const where = () => ({ cwd: process.cwd(), electron: process.env.ELECTRON_RUN_AS_NODE ?? null })
 createInterface({ input: process.stdin }).on('line', (line) => {
   const message = JSON.parse(line)
   if (message.id === undefined) return
-  const seen = { params: message.params, env: env() }
+  const seen = { params: message.params, env: env(), ...where() }
   const result =
     message.method === 'session/new'
       ? { sessionId: 'session-' + process.pid, _meta: seen }
@@ -34,6 +35,8 @@ createInterface({ input: process.stdin }).on('line', (line) => {
 interface Seen {
   params: Record<string, unknown>
   env: { url: string | null; token: string | null }
+  cwd: string
+  electron: string | null
 }
 
 const dirs: string[] = []
@@ -47,21 +50,38 @@ afterEach(async () => {
   await Promise.all(dirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })))
 })
 
-async function startRouter() {
-  const dir = await mkdtemp(path.join(os.tmpdir(), 'kettu-router-'))
+async function startRouter(options: { folderPerSession?: boolean } = {}) {
+  const dir = await realpath(await mkdtemp(path.join(os.tmpdir(), 'kettu-router-')))
   dirs.push(dir)
   const child = path.join(dir, 'adapter.mjs')
   await writeFile(child, CHILD)
-  const router = spawn(process.execPath, [ROUTER, process.execPath, child], {
+  // A copy of the runtime under another name stands for a program of another kind.
+  const program = path.join(dir, 'program')
+  await writeFile(program, `#!/bin/sh\nexec "${process.execPath}" "$@"\n`, { mode: 0o755 })
+  const words = options.folderPerSession
+    ? ['--folder-per-session', program, child]
+    : [process.execPath, child]
+  const router = spawn(process.execPath, [ROUTER, ...words], {
+    cwd: dir,
     // A service the router itself inherited goes to no child.
-    env: { ...process.env, KETTU_MCP_URL: 'http://inherited', KETTU_MCP_TOKEN: 'inherited' },
+    env: {
+      ...process.env,
+      KETTU_MCP_URL: 'http://inherited',
+      KETTU_MCP_TOKEN: 'inherited',
+      ELECTRON_RUN_AS_NODE: '1',
+    },
     stdio: ['pipe', 'pipe', 'inherit'],
   })
   routers.push(router)
   const waiting = new Map<number, (result: { _meta: Seen }) => void>()
   createInterface({ input: router.stdout! }).on('line', (line) => {
-    const message = JSON.parse(line) as { id?: number; result?: { _meta: Seen } }
-    if (message.id !== undefined) waiting.get(message.id)?.(message.result!)
+    const message = JSON.parse(line) as {
+      id?: number
+      result?: { _meta: Seen }
+      error?: { message: string }
+    }
+    if (message.id === undefined) return
+    waiting.get(message.id)?.(message.result ?? { _meta: { error: message.error } as never })
   })
   let next = 1
   const request = (method: string, params: unknown) =>
@@ -70,7 +90,7 @@ async function startRouter() {
       waiting.set(id, resolve)
       router.stdin!.write(`${JSON.stringify({ jsonrpc: '2.0', id, method, params })}\n`)
     })
-  return { request }
+  return { request, dir }
 }
 
 describe('the session router', () => {
@@ -116,5 +136,49 @@ describe('the session router', () => {
     })
     expect(opened._meta.env).toEqual({ url: null, token: null })
     expect(opened._meta.params).toEqual({ cwd: '/repo', mcpServers: [] })
+  })
+
+  it.skipIf(process.platform === 'win32')(
+    "starts each session's process in its folder, for new, load and resume",
+    async () => {
+      const { request, dir } = await startRouter({ folderPerSession: true })
+      const control = await request('initialize', { protocolVersion: 1 })
+      expect(control._meta.cwd).toBe(dir)
+      const first = path.join(dir, 'first')
+      const second = path.join(dir, 'second')
+      await mkdir(first)
+      await mkdir(second)
+
+      const opened = await request('session/new', { cwd: first, mcpServers: [] })
+      expect(opened._meta.cwd).toBe(first)
+      // The runtime's switch to Node.js is not passed on to a program of another kind.
+      expect(opened._meta.electron).toBeNull()
+      const later = await request('session/prompt', { sessionId: opened.sessionId, prompt: [] })
+      expect(later._meta.cwd).toBe(first)
+
+      const loaded = await request('session/load', { sessionId: 'a', cwd: second, mcpServers: [] })
+      expect(loaded._meta.cwd).toBe(second)
+      const resumed = await request('session/resume', { sessionId: 'b', cwd: second })
+      expect(resumed._meta.cwd).toBe(second)
+      expect(resumed._meta.params).toEqual({ sessionId: 'b', cwd: second })
+      const afterResume = await request('session/prompt', { sessionId: 'b', prompt: [] })
+      expect(afterResume._meta.cwd).toBe(second)
+
+      const missing = await request('session/new', {
+        cwd: path.join(dir, 'gone'),
+        mcpServers: [],
+      })
+      expect(missing.sessionId).toBeUndefined()
+      // The failed request ended nothing else.
+      const still = await request('session/prompt', { sessionId: opened.sessionId, prompt: [] })
+      expect(still._meta.cwd).toBe(first)
+    },
+  )
+
+  it('keeps the runtime switch for a child that is the runtime itself', async () => {
+    const { request } = await startRouter()
+    await request('initialize', { protocolVersion: 1 })
+    const opened = await request('session/new', { cwd: '/repo', mcpServers: [] })
+    expect(opened._meta.electron).toBe('1')
   })
 })

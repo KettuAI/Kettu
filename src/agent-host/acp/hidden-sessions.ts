@@ -4,13 +4,16 @@
 import type { HarnessId } from '@shared/agents'
 import type { AgentId } from '@shared/thread'
 import type { AgentInit, SessionOptions } from '../connection'
+import { compareVersions } from '../versions'
 import { JUNIE_USAGE_VERSION } from '../vendor-usage/junie'
 
 /**
  * How a hidden session is removed so that none of the agent's history keeps it: `session/delete`,
  * once more after a while as claude-agent-acp needs (DELETE_AGAIN_MS), or `session/close`.
+ * `close-unprompted` is a close that leaves no trace only for a session never prompted, so such a
+ * session may only be opened and read, as the agent menu's options are.
  */
-export type Removal = 'delete' | 'delete-again' | 'close'
+export type Removal = 'delete' | 'delete-again' | 'close' | 'close-unprompted'
 
 // Each agent's removal, as checked against its own history. An agent not listed opens no hidden
 // session, so Kettu leaves nothing in a history nobody checked.
@@ -20,21 +23,29 @@ const REMOVALS: Partial<Record<AgentId, Removal>> = {
   pi: 'delete',
   // Closes the session, then drops it from its session index and deletes its folder.
   junie: 'delete',
+  // agy lists a prompted session after its close, and one only opened not at all (1.5.9).
+  antigravity: 'close-unprompted',
   // The fake agent removes a session as claude-agent-acp 0.94 did, which its tests keep.
   'fake-agent': 'delete-again',
 }
 
 /**
- * Whether agents of this harness may open hidden sessions at all, as far as Kettu knows before one
- * starts; a version that was not checked still opens none once it reports itself.
+ * Whether agents of this harness may open hidden sessions to ask something, as far as Kettu knows
+ * before one starts; a version that was not checked still opens none once it reports itself. One
+ * whose hidden sessions are only opened and read takes the way of an agent without them.
  */
 export function removesHiddenSessions(harness: HarnessId): boolean {
-  return REMOVALS[harness] !== undefined
+  return promptsHidden(REMOVALS[harness] ?? null)
 }
 
 // The removals checked on one version alone, as the agent names it in `initialize`.
 const REMOVAL_VERSIONS: Partial<Record<AgentId, string>> = {
   junie: JUNIE_USAGE_VERSION,
+}
+
+// The removals checked on a version that later ones keep.
+const REMOVALS_SINCE: Partial<Record<AgentId, string>> = {
+  antigravity: '1.5.9',
 }
 
 /**
@@ -52,8 +63,16 @@ export function hiddenRemoval(
   if (!agentId || !removal) return null
   const checked = REMOVAL_VERSIONS[agentId]
   if (checked !== undefined && version !== checked) return null
+  const since = REMOVALS_SINCE[agentId]
+  if (since !== undefined && (version === null || compareVersions(version, since) < 0)) return null
   const { closeSession, deleteSession } = capabilities
-  return (removal === 'close' ? closeSession : deleteSession) ? removal : null
+  const closes = removal === 'close' || removal === 'close-unprompted'
+  return (closes ? closeSession : deleteSession) ? removal : null
+}
+
+/** Whether a hidden session removed so may be prompted, rather than only opened and read. */
+export function promptsHidden(removal: Removal | null): boolean {
+  return removal !== null && removal !== 'close-unprompted'
 }
 
 // claude-agent-acp 0.94 deletes the transcript without waiting for Claude Code to exit, and

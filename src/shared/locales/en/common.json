@@ -50,12 +50,14 @@
     "monthly": "Monthly",
     "annual": "Annual",
     "overage": "Extra usage",
-    "weeklyOf": "Weekly · {{model}}"
+    "weeklyOf": "Weekly · {{model}}",
+    "fiveHourOf": "5-hour · {{model}}"
   },
   "planWindowInText": {
     "seven_day_opus": "Opus weekly",
     "seven_day_sonnet": "Sonnet weekly",
-    "weeklyOf": "{{model}} weekly"
+    "weeklyOf": "{{model}} weekly",
+    "fiveHourOf": "{{model}} 5-hour"
   },
   "fileManager": {
     "mac": "Finder",

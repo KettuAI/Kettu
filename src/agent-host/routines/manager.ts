@@ -1130,9 +1130,12 @@ function windowName(limit: PlanLimit): string {
   for (const key of [`planWindowInText.${limit.window}`, `planWindow.${limit.window}`]) {
     if (hasMessage(key)) return (t as (key: string) => string)(key)
   }
-  // Claude Code names a weekly limit per model, "Weekly · Fable", in English.
+  // Claude Code names a weekly limit per model, "Weekly · Fable", and Antigravity both its
+  // windows per model group, in English.
   const weekly = /^Weekly · (.+)$/.exec(limit.label)
-  return weekly ? t('planWindowInText.weeklyOf', { model: weekly[1]! }) : limit.label
+  if (weekly) return t('planWindowInText.weeklyOf', { model: weekly[1]! })
+  const fiveHour = /^5-hour · (.+)$/.exec(limit.label)
+  return fiveHour ? t('planWindowInText.fiveHourOf', { model: fiveHour[1]! }) : limit.label
 }
 
 const DAY = 24 * 60 * 60_000

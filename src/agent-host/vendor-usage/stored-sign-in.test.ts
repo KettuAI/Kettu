@@ -89,22 +89,15 @@ describe('askVendor', () => {
 })
 
 describe('readerOpen', () => {
-  it('opens only on the checked version, or later ones when the reader allows it', () => {
-    const exact = { version: '2.6.2', read: vi.fn() }
-    expect(readerOpen(exact, '2.6.2')).toBe(true)
-    expect(readerOpen(exact, '2.6.3')).toBe(false)
-    expect(readerOpen(exact, null)).toBe(false)
-    const later = { version: '3000.11.228', orLater: true as const, read: vi.fn() }
-    expect(readerOpen(later, '3000.12.1')).toBe(true)
-    expect(readerOpen(later, '3000.11.200')).toBe(false)
-  })
-
-  it('opens on a run of checked versions and no further', () => {
-    const run = { version: '0.7.0', through: '0.7.7', read: vi.fn() }
-    expect(readerOpen(run, '0.7.0')).toBe(true)
-    expect(readerOpen(run, '0.7.4')).toBe(true)
-    expect(readerOpen(run, '0.7.7')).toBe(true)
-    expect(readerOpen(run, '0.7.8')).toBe(false)
-    expect(readerOpen(run, '0.2.7')).toBe(false)
+  it('opens on the checked version and later ones', () => {
+    const reader = { version: '2.6.2', read: vi.fn() }
+    expect(readerOpen(reader, '2.6.2')).toBe(true)
+    expect(readerOpen(reader, '2.6.3')).toBe(true)
+    expect(readerOpen(reader, '3.0.0')).toBe(true)
+    expect(readerOpen(reader, '2.6.1')).toBe(false)
+    expect(readerOpen(reader, null)).toBe(false)
+    const devin = { version: '3000.11.228', read: vi.fn() }
+    expect(readerOpen(devin, '3000.12.1')).toBe(true)
+    expect(readerOpen(devin, '3000.11.200')).toBe(false)
   })
 })

@@ -1,5 +1,6 @@
-// The Claude Code or Codex CLI the user installed, the only one that runs: found on PATH, resolved
-// to a file that starts without a shell, asked its version and held against the oldest that runs.
+// The CLI the user installed (Claude Code's, Codex's, Antigravity's `agy`), the only one that runs:
+// found on PATH, resolved to a file that starts without a shell, asked its version and held against
+// the oldest that runs.
 
 import { open, readFile, realpath, stat } from 'node:fs/promises'
 import os from 'node:os'
@@ -49,8 +50,16 @@ export interface ResolvedCli {
 export interface AdapterCli {
   /** The command the user's CLI answers to on PATH. */
   command: string
-  /** The variable that names the program, which the user's environment may set to decide alone. */
-  variable: string
+  /**
+   * The variable that names the program, which the user's environment may set to decide alone;
+   * none for a CLI whose vendor has no such variable.
+   */
+  variable?: string
+  /**
+   * Where its vendor's installer puts it, looked in when PATH has no such command, as for an
+   * install the shell profiles add to PATH only in new shells.
+   */
+  installedAt?(env: Env, platform: Platform): string[]
   /**
    * The SDK pins one CLI version exactly, so the CLI version an update check finds for a new SDK
    * is also the oldest that SDK runs.
@@ -158,6 +167,27 @@ export const CODEX_CLI: AdapterCli = {
   },
 }
 
+// The Antigravity CLI's own ACP mode, `agy acp`. Its installer puts `agy` in `~/.local/bin`, or in
+// `%LOCALAPPDATA%\agy\bin` on Windows, and adds that folder to PATH in the shell profiles.
+export const AGY_CLI: AdapterCli = {
+  command: 'agy',
+  pinsVersion: false,
+  // The version whose ACP mode was checked: session folders, sign-in, options and MCP.
+  oldest: '1.5.9',
+  resolve: async (found, platform, files) => {
+    const file = await startable(found, platform, files)
+    return file && (platform !== 'win32' || isWindowsProgram(file)) ? { path: file, env: {} } : null
+  },
+  installedAt: (env, platform) => {
+    if (platform === 'win32') {
+      const local = getEnv(env, 'LOCALAPPDATA', platform)
+      return local ? [path.win32.join(local, 'agy', 'bin', 'agy')] : []
+    }
+    const home = getEnv(env, 'HOME', platform) ?? os.homedir()
+    return [path.posix.join(home, '.local', 'bin', 'agy')]
+  },
+}
+
 export type CliVersion = { version: string } | { error: string }
 export type CliProbe = (program: string, env: Env) => Promise<CliVersion>
 
@@ -262,13 +292,17 @@ export async function findInstalledCli(
   cli: AdapterCli,
   ctx: FindCliContext,
 ): Promise<FoundCli | null> {
-  const named = getEnv(ctx.env, cli.variable, ctx.platform)?.trim()
-  if (named) {
+  const named = cli.variable ? getEnv(ctx.env, cli.variable, ctx.platform)?.trim() : undefined
+  if (cli.variable && named) {
     // A `.cmd` would need a shell to ask; the adapter still runs it as it likes.
     const answer = needsShell(named, ctx.platform) ? null : await ctx.probe(named, ctx.env)
     return { installed: answered({ path: named, variable: cli.variable }, answer), env: {} }
   }
-  const found = await findCommand(cli.command, ctx)
+  let found = await findCommand(cli.command, ctx)
+  for (const file of found ? [] : (cli.installedAt?.(ctx.env, ctx.platform) ?? [])) {
+    found = await findCommand(file, ctx)
+    if (found) break
+  }
   if (!found) return null
   const resolved = await cli.resolve(found, ctx.platform, ctx.files)
   if (!resolved) {

@@ -192,7 +192,8 @@
     "archivedCount_other": "Archived {{count}} sessions",
     "archivedSome": "Archived {{done}} of {{total}} sessions. {{error}}",
     "deleteCount": "Delete {{count}}…",
-    "moreFor": "More for {{title}}"
+    "moreFor": "More for {{title}}",
+    "deleteKeepsAppCopy": "{{agent}} keeps its own copy, which Kettu can’t delete."
   },
   "work": {
     "turn": "Current turn",

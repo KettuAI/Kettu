@@ -929,6 +929,10 @@ function limitOf(value: unknown): PlanLimit | null {
     isString(value.amount.unit)
       ? { used: value.amount.used, total: value.amount.total, unit: value.amount.unit }
       : undefined
+  const models =
+    Array.isArray(value.models) && value.models.length > 0 && value.models.every(isString)
+      ? value.models.slice(0, 32)
+      : undefined
   return {
     window: value.window,
     label: value.label,
@@ -937,6 +941,7 @@ function limitOf(value: unknown): PlanLimit | null {
     state: value.state as PlanLimit['state'],
     observedAt: value.observedAt,
     ...(amount ? { amount } : {}),
+    ...(models ? { models } : {}),
   }
 }
 

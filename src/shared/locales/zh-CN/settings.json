@@ -662,7 +662,8 @@
       "harness-does-not-offer": "此 Agent 未提供套餐用量读取方式。",
       "administrator-managed": "套餐用量由管理员管理。",
       "model-provider-managed": "套餐用量由你的模型服务商管理。",
-      "not-yet-supported": "Kettu 暂时还不能读取这个 Agent 的套餐用量。"
+      "not-yet-supported": "Kettu 暂时还不能读取这个 Agent 的套餐用量。",
+      "console-managed": "用这种方式登录时，用量在 Google AI Studio 或 Google Cloud 里查看。"
     },
     "spend": {
       "group": "花费",
@@ -1012,6 +1013,16 @@
         "reset": "恢复默认",
         "readFailed": "无法读取工作流设置"
       }
+    },
+    "personalPlan": {
+      "title": "用个人 Google 套餐使用 {{agent}}",
+      "body": "Google 的<terms>条款</terms>限制个人 Google AI 套餐配合第三方应用使用。Kettu 只通过 ACP 运行 Google 自己的 Antigravity CLI，不接触你的登录凭据。想完全避免风险，请用 Gemini API key 或 Gemini Enterprise 登录。",
+      "dismiss": "知道了"
+    },
+    "signOutShared": {
+      "title": "退出 {{name}} 的登录？",
+      "body": "{{name}} 和 Antigravity 应用、CLI 共用一份登录，它们也会一起退出。",
+      "confirm": "退出登录"
     }
   },
   "about": {

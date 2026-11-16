@@ -354,6 +354,10 @@ function useShortWindow(): (limit: CardRing['limit']) => string {
       const model = /^Weekly · (.+)$/.exec(limit.label)?.[1] ?? limitLabel(limit)
       return t('usage:limits.weeklyOf', { model })
     }
+    if (limit.window.startsWith('five_hour_')) {
+      const model = /^5-hour · (.+)$/.exec(limit.label)?.[1] ?? limitLabel(limit)
+      return t('usage:limits.fiveHourOf', { model })
+    }
     if (i18n.exists(known)) return t(known as 'composer:usage.shortWindow.five_hour')
     const counted = /^(\d+)_(minute|hour|day)$/.exec(limit.window)
     if (counted) {

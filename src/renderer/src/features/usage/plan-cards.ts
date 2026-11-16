@@ -19,7 +19,9 @@ const DAY = 24 * HOUR
 
 /** How long a plan window runs, which orders the rings; null when its id does not say. */
 export function windowLength(window: string): number | null {
-  if (window === 'five_hour' || window === 'rolling') return 5 * HOUR
+  if (window === 'five_hour' || window === 'rolling' || window.startsWith('five_hour_')) {
+    return 5 * HOUR
+  }
   if (window === 'seven_day' || window === 'weekly' || window.startsWith('seven_day_')) {
     return 7 * DAY
   }
@@ -30,8 +32,12 @@ export function windowLength(window: string): number | null {
   return Number(counted[1]) * { minute: MINUTE, hour: HOUR, day: DAY }[counted[2]!]!
 }
 
-/** A window that counts one model, such as Claude Code's weekly Fable window. */
-const perModel = (window: string): boolean => window.startsWith('seven_day_')
+/**
+ * A window that counts one model or model group, such as Claude Code's weekly Fable window or
+ * Antigravity's 5-hour window for its Gemini models.
+ */
+const perModel = (window: string): boolean =>
+  window.startsWith('seven_day_') || window.startsWith('five_hour_')
 
 export interface CardRing {
   limit: PlanLimit

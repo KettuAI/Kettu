@@ -1080,6 +1080,13 @@ export function DeleteSessionDialog({
       s.worktree && hasLiveWorktree(s) ? [[s.worktree.path, s.worktree.branch] as const] : [],
     ),
   )
+  // An agent that shares its history with its vendor's app keeps its own copy there.
+  const sharedWith = useAgentsStore(
+    (s) =>
+      targets
+        .map((target) => agentsOn(s, hostOfSession(target)).byId[target.agentId])
+        .find((status) => status?.sharesSignIn)?.harnessName ?? null,
+  )
   // Archive keeps what it archives; a sub-session goes with its parent.
   const canArchive = targets.length > 0 && targets.every((s) => s.parentId === null)
   const remove = async () => {
@@ -1153,6 +1160,7 @@ export function DeleteSessionDialog({
             : several
               ? t('row.deleteBodyCount')
               : t('row.deleteBody')}
+          {sharedWith && ` ${t('row.deleteKeepsAppCopy', { agent: sharedWith })}`}
         </AlertDialogDescription>
         <AlertDialogFooter className="pt-1">
           {canArchive && (

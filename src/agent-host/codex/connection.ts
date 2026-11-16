@@ -1888,6 +1888,10 @@ export class CodexConnection implements AgentConnection {
     return this.initialized
   }
 
+  get unpromptedSessions(): boolean {
+    return this.hiddenSessions
+  }
+
   async removeHidden(sessionId: string, log: (message: string) => void): Promise<void> {
     this.unregister(sessionId)
     const record = this.threads.get(sessionId)

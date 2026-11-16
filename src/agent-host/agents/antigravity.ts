@@ -1,54 +1,31 @@
 import type { AgentDefinition } from '../catalog'
+import { AGY_CLI } from '../installed-cli'
 
-// The registry's archive of the ACP server, 1.4.3, checked on 2026-10-28. The Linux builds take
-// an empty `--uid` argument.
+// The user's own Antigravity CLI in its ACP mode, checked on agy 1.5.9. It runs every command in
+// the folder it started in, whatever folder a session names, so each session gets a process of its
+// own started in its folder.
 export const ANTIGRAVITY: AgentDefinition = {
   id: 'antigravity',
-  limitsReason: 'harness-does-not-offer',
   name: 'Google Antigravity',
   registryId: 'antigravity-acp',
-  launch: { kind: 'binary', command: 'agy_acp_server', args: [] },
+  launch: { kind: 'binary', command: 'agy', args: ['acp'], perSession: true },
   install: {
-    hint: 'detect.hint.archive',
-    url: 'https://antigravity.google/docs',
+    hint: 'detect.hint.antigravity',
+    url: 'https://antigravity.google/docs/cli/acp',
+    notice: 'detect.antigravityInstallNotice',
   },
   installs: {
-    archive: {
-      version: '1.4.3',
-      entries: {
-        'darwin-aarch64': {
-          url: 'https://dl.google.com/agy-extensions/releases/macos/agy-acp-server-1.4.3-darwin-arm64.zip',
-          sha256: 'c57db0a9b8b712daa9c3c17cdb990a61842ea569f279e8bd79d7aa85a303b20b',
-          cmd: './agy_acp_server.par',
-        },
-        'darwin-x86_64': {
-          url: 'https://dl.google.com/agy-extensions/releases/macos/agy-acp-server-1.4.3-darwin-x86_64.zip',
-          sha256: '9392dbbdad7f0663dbfb5a0bf641297b0cf80d2ee9cd2d49a616bbbc7378731d',
-          cmd: './agy_acp_server.par',
-        },
-        'linux-x86_64': {
-          url: 'https://dl.google.com/agy-extensions/releases/linux/agy-acp-server-1.4.3-linux-x86_64.zip',
-          sha256: '0634ce5306ba92c932945455e7a83fda78e2d99c33fa8aa6ee0566206a382714',
-          cmd: './agy_acp_server.par',
-          args: ['--uid='],
-        },
-        'linux-aarch64': {
-          url: 'https://dl.google.com/agy-extensions/releases/linux/agy-acp-server-1.4.3-linux-arm64.zip',
-          sha256: '05c153443b0b1175151c760eeddea538950bc9843e317d54786a1f03670182bc',
-          cmd: './agy_acp_server.par',
-          args: ['--uid='],
-        },
-        'windows-x86_64': {
-          url: 'https://dl.google.com/agy-extensions/releases/windows/agy-acp-server-1.4.3-windows-x86_64.zip',
-          sha256: '54c2e16378d9a4952e1da70e355f3c33c4f284308d6de48ab3e6e34a127bd325',
-          cmd: './agy_acp_server.exe',
-        },
-        'windows-aarch64': {
-          url: 'https://dl.google.com/agy-extensions/releases/windows/agy-acp-server-1.4.3-windows-arm64.zip',
-          sha256: 'fcd46431ad33d3b510ce0b98fe7b43d095bd8b3f1c363ee2d57faa7ee981c7bb',
-          cmd: './agy_acp_server.exe',
-        },
-      },
-    },
+    script: 'https://antigravity.google/cli/install.sh',
+    scriptBin: ['.local', 'bin'],
+    scriptHome: ['.local', 'bin'],
+    selfUpdate: ['update'],
+    order: ['script'],
   },
+  cli: AGY_CLI,
+  sharesSignIn: true,
+  // `authenticate` with this method switches agy to the key in its environment; the key alone
+  // does not (agy 1.5.9).
+  keySignIn: { method: 'gemini-api-key', variable: 'GEMINI_API_KEY' },
+  // Google and Gemini Enterprise sign in through agy's own terminal sign-in.
+  terminalSignIn: { replaces: ['oauth-personal', 'oauth-business'] },
 }
