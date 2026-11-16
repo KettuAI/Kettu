@@ -22,6 +22,8 @@ export interface StoredSignInReader {
   version: string
   /** Later versions too, for a harness the user installs and updates themselves. */
   orLater?: true
+  /** The last of the versions from `version` on, each of which was checked as well. */
+  through?: string
   read(place: SignInPlace): Promise<VendorUsage>
 }
 
@@ -138,5 +140,11 @@ export function readerOpen(
   version: string | null | undefined,
 ): boolean {
   if (!version) return false
-  return reader.orLater ? compareVersions(version, reader.version) >= 0 : version === reader.version
+  if (reader.orLater) return compareVersions(version, reader.version) >= 0
+  if (reader.through) {
+    return (
+      compareVersions(version, reader.version) >= 0 && compareVersions(version, reader.through) <= 0
+    )
+  }
+  return version === reader.version
 }

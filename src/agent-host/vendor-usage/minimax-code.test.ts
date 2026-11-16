@@ -3,6 +3,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { parseMiniMaxRemains, readMiniMaxCodeUsage } from './minimax-code'
+import { UsageReadError } from './stored-sign-in'
 
 const SECRET = 'minimax-secret-123'
 const NOW = 1_763_000_000_000
@@ -75,18 +76,80 @@ describe('reading with MiniMax Code stored sign-in', () => {
     expect(JSON.stringify(usage)).not.toContain(SECRET)
   })
 
-  it('sends the account sign-in to MiniMax Code own plan endpoint', async () => {
-    const auth = path.join(dir, 'cli-auth', 'prod', 'cn')
+  const signIn = async (region: 'cn' | 'en') => {
+    const auth = path.join(dir, 'cli-auth', 'prod', region)
     await mkdir(auth, { recursive: true })
     await writeFile(
       path.join(auth, 'local-runtime.auth.json'),
       JSON.stringify({ version: 1, auth: { accessToken: SECRET } }),
     )
+  }
+
+  it('signs the account request as MiniMax Code 0.7 does', async () => {
+    await signIn('cn')
     const fetch = answer(REMAINS)
     await read(fetch)
     const [url, init] = fetch.mock.calls[0] as unknown as [string, RequestInit]
-    expect(url).toBe('https://www.minimaxi.com/v1/api/openplatform/coding_plan/remains')
-    expect((init.headers as Record<string, string>).token).toBe(SECRET)
+    expect(url).toBe(
+      'https://www.minimaxi.com/v1/api/openplatform/coding_plan/remains?business=Agent&device_platform=mcode',
+    )
+    const headers = init.headers as Record<string, string>
+    expect(headers.authorization).toBe(`Bearer ${SECRET}`)
+    expect(headers.token).toBeUndefined()
+  })
+
+  it('asks the international endpoint for an account of that region', async () => {
+    await signIn('en')
+    const fetch = answer(REMAINS)
+    await read(fetch, { MAVIS_REGION: 'en' })
+    const [url] = fetch.mock.calls[0] as unknown as [string]
+    expect(new URL(url).origin).toBe('https://platform.minimax.io')
+  })
+
+  it('reads the windows from a reply shaped as MiniMax Code 0.7 reads it', async () => {
+    await signIn('cn')
+    // 0.7 takes the first pool for the 5-hour and weekly windows, and meters video apart.
+    const reply = {
+      model_remains: [
+        {
+          model_name: 'MiniMax-M2',
+          current_interval_status: 1,
+          current_interval_remaining_percent: 64,
+          end_time: 1_763_008_000_000,
+          current_weekly_status: 1,
+          current_weekly_remaining_percent: 85,
+          weekly_end_time: 1_763_104_800_000,
+        },
+        {
+          model_name: 'video',
+          current_interval_total_count: 10,
+          current_interval_usage_count: 4,
+          end_time: 1_763_008_000_000,
+        },
+      ],
+      base_resp: { status_code: 0, status_msg: 'success' },
+    }
+    const usage = await read(answer(reply))
+    expect(usage.limits.map((l) => [l.window, l.usedPercent, l.resetsAt])).toEqual([
+      ['five_hour', 36, 1_763_008_000_000],
+      ['weekly', 15, 1_763_104_800_000],
+    ])
+  })
+
+  it('never puts the account token into an error', async () => {
+    await signIn('cn')
+    const replies = [
+      new Response(JSON.stringify({ error: `bad token ${SECRET}` }), { status: 401 }),
+      new Response(`upstream failed for ${SECRET}`, { status: 500 }),
+      new Response(`not json ${SECRET}`),
+      new Response(JSON.stringify({ base_resp: { status_code: 1004, status_msg: SECRET } })),
+    ]
+    for (const reply of replies) {
+      const error = await read(vi.fn(async () => reply)).catch((e: unknown) => e)
+      expect(error).toBeInstanceOf(UsageReadError)
+      expect(String(error)).not.toContain(SECRET)
+      expect(JSON.stringify(error)).not.toContain(SECRET)
+    }
   })
 
   it('fails without sending anything when it is not signed in', async () => {

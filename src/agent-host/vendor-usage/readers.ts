@@ -12,7 +12,7 @@ import type { StoredSignInReader } from './stored-sign-in'
  */
 const READERS: Partial<Record<HarnessId, StoredSignInReader>> = {
   kimi: { version: '2.6.2', read: readKimiCodeUsage },
-  minimax: { version: '0.2.7', read: readMiniMaxCodeUsage },
+  minimax: { version: '0.7.0', through: '0.7.7', read: readMiniMaxCodeUsage },
   droid: { version: '0.251.0', read: readFactoryLimits },
   cline: { version: '3.0.74', read: readClineUsage },
   // Devin runs the user's own program, which updates itself.

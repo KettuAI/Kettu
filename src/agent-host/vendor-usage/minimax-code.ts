@@ -1,4 +1,4 @@
-// MiniMax Code's plan usage (0.2.7): an API key asks MiniMax's documented
+// MiniMax Code's plan usage (0.7.0 to 0.7.7): an API key asks MiniMax's documented
 // `/v1/token_plan/remains`, the account sign-in the `coding_plan/remains` MiniMax Code asks
 // itself; both answer the same 5-hour and weekly windows. OpenCode's MiniMax plans read the first.
 // The reply's reading follows Magpie,
@@ -25,6 +25,9 @@ const ACCOUNT_ORIGINS = {
   cn: 'https://www.minimaxi.com',
   en: 'https://platform.minimax.io',
 } as const
+/** The account's plan request as MiniMax Code 0.7 sends it, with a Bearer token. */
+const ACCOUNT_REMAINS =
+  '/v1/api/openplatform/coding_plan/remains?business=Agent&device_platform=mcode'
 
 export const MINIMAX_CODE_ORIGINS = [
   ...Object.values(KEY_ORIGINS),
@@ -95,8 +98,8 @@ async function storedKey(dataDir: string): Promise<{ key: string; region: 'cn' |
 /**
  * Reads the plan usage with what MiniMax Code keeps in its data folder (`MINIMAX_DATA_DIR`, else
  * `~/.minimax`): the API key in `config.yaml` first, else the account sign-in under `cli-auth`.
- * MiniMax Code also names the account's workspace, which it looks up with a further request that
- * is not a listed endpoint, so the account's read goes without it.
+ * MiniMax Code also names the account's workspace in `X-Group-Id`, which it looks up with a further
+ * request that is not a listed endpoint, so the account's read goes without it.
  */
 export async function readMiniMaxCodeUsage(place: SignInPlace): Promise<VendorUsage> {
   const dataDir =
@@ -126,8 +129,8 @@ export async function readMiniMaxCodeUsage(place: SignInPlace): Promise<VendorUs
       {
         vendor: VENDOR,
         origins: MINIMAX_CODE_ORIGINS,
-        url: `${ACCOUNT_ORIGINS[region]}/v1/api/openplatform/coding_plan/remains`,
-        headers: { token },
+        url: `${ACCOUNT_ORIGINS[region]}${ACCOUNT_REMAINS}`,
+        headers: { authorization: `Bearer ${token}` },
       },
       place,
     )
