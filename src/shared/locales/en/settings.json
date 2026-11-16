@@ -664,7 +664,8 @@
       "vendor-disallows": "Google does not allow other apps to read it.",
       "harness-does-not-offer": "This agent does not offer a plan usage read.",
       "administrator-managed": "An administrator manages this plan usage.",
-      "model-provider-managed": "Your model provider manages this plan usage."
+      "model-provider-managed": "Your model provider manages this plan usage.",
+      "not-yet-supported": "Kettu does not read this agent's plan usage yet."
     },
     "spend": {
       "group": "Spend",

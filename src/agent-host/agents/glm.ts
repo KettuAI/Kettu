@@ -2,6 +2,7 @@ import type { AgentDefinition } from '../catalog'
 
 export const GLM: AgentDefinition = {
   id: 'glm',
+  limitsReason: 'not-yet-supported',
   name: 'GLM Agent',
   registryId: 'glm-acp-agent',
   launch: { kind: 'package', package: 'glm-acp-agent', version: '1.16.0' },

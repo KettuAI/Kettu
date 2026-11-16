@@ -2,6 +2,7 @@ import type { AgentDefinition } from '../catalog'
 
 export const OMP: AgentDefinition = {
   id: 'omp',
+  limitsReason: 'not-yet-supported',
   name: 'OMP',
   registryId: 'omp',
   launch: { kind: 'binary', command: 'omp', args: ['acp'] },

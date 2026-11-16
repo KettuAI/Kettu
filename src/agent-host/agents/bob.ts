@@ -2,6 +2,7 @@ import type { AgentDefinition } from '../catalog'
 
 export const BOB: AgentDefinition = {
   id: 'bob',
+  limitsReason: 'not-yet-supported',
   name: 'Bob',
   registryId: 'bob',
   launch: { kind: 'package', package: '@ibm/bob', version: '2.0.9', args: ['acp'] },

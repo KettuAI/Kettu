@@ -2,6 +2,7 @@ import type { AgentDefinition } from '../catalog'
 
 export const CODEBUDDY: AgentDefinition = {
   id: 'codebuddy',
+  limitsReason: 'harness-does-not-offer',
   name: 'Codebuddy Code',
   registryId: 'codebuddy-code',
   launch: {

@@ -15,6 +15,7 @@ function entry(platform: string, executable: string, sha256: string) {
 
 export const POOLSIDE: AgentDefinition = {
   id: 'poolside',
+  limitsReason: 'harness-does-not-offer',
   name: 'Poolside',
   registryId: 'poolside',
   launch: { kind: 'binary', command: 'pool', args: ['acp'] },

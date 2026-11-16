@@ -17,6 +17,7 @@ function entry(platform: string, executable: string) {
 
 export const CORTEX_CODE: AgentDefinition = {
   id: 'cortex-code',
+  limitsReason: 'administrator-managed',
   name: 'Cortex Code',
   registryId: 'cortex-code',
   launch: { kind: 'binary', command: 'cortex', args: ['acp', 'serve'] },

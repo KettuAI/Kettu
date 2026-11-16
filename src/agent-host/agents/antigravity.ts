@@ -4,6 +4,7 @@ import type { AgentDefinition } from '../catalog'
 // an empty `--uid` argument.
 export const ANTIGRAVITY: AgentDefinition = {
   id: 'antigravity',
+  limitsReason: 'harness-does-not-offer',
   name: 'Google Antigravity',
   registryId: 'antigravity-acp',
   launch: { kind: 'binary', command: 'agy_acp_server', args: [] },

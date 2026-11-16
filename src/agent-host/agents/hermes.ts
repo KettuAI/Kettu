@@ -2,6 +2,7 @@ import type { AgentDefinition } from '../catalog'
 
 export const HERMES: AgentDefinition = {
   id: 'hermes',
+  limitsReason: 'not-yet-supported',
   name: 'Hermes Agent',
   registryId: 'hermes-agent',
   launch: { kind: 'binary', command: 'hermes', args: ['acp'] },
