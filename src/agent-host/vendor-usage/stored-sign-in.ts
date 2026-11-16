@@ -5,7 +5,7 @@
 import { readFile } from 'node:fs/promises'
 import type { Platform } from '@shared/platform'
 import { getEnv, type Env } from '../find-command'
-import { compareVersions } from '../versions'
+import { versionAtLeast } from '../versions'
 import { readBody, type VendorUsage } from './common'
 
 /** Where a read looks for the harness's sign-in, and how it asks. */
@@ -18,12 +18,11 @@ export interface SignInPlace {
 }
 
 export interface StoredSignInReader {
-  /** The harness version whose sign-in location and reply were checked. */
+  /**
+   * The harness version whose sign-in location and reply were checked. Later versions read too,
+   * and a reply one of them changed fails the read.
+   */
   version: string
-  /** Later versions too, for a harness the user installs and updates themselves. */
-  orLater?: true
-  /** The last of the versions from `version` on, each of which was checked as well. */
-  through?: string
   read(place: SignInPlace): Promise<VendorUsage>
 }
 
@@ -134,17 +133,10 @@ export async function askVendor(request: VendorRequest, place: SignInPlace): Pro
   }
 }
 
-/** Whether a reader is open for this harness version. */
+/** Whether a reader is open for this harness version: the checked one or a later one. */
 export function readerOpen(
   reader: StoredSignInReader,
   version: string | null | undefined,
 ): boolean {
-  if (!version) return false
-  if (reader.orLater) return compareVersions(version, reader.version) >= 0
-  if (reader.through) {
-    return (
-      compareVersions(version, reader.version) >= 0 && compareVersions(version, reader.through) <= 0
-    )
-  }
-  return version === reader.version
+  return versionAtLeast(version, reader.version)
 }

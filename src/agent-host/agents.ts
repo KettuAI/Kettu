@@ -2544,7 +2544,7 @@ export class AgentManager {
     if (connection.request && ['grok', 'mistral-vibe'].includes(slot.def.id)) {
       const now = Date.now()
       const version = runtime.init.version ?? slot.h.binaryVersion
-      if (slot.def.id === 'grok' && version !== '1.0.72') return
+      if (slot.def.id === 'grok' && !versionAtLeast(version, '1.0.72')) return
       if (slot.def.id === 'mistral-vibe' && (!version || compareVersions(version, '3.1.0') < 0))
         return
       let hiddenSession: string | null = null
@@ -2574,9 +2574,9 @@ export class AgentManager {
     }
     if (['copilot', 'qoder', 'kilo', 'auggie'].includes(slot.def.id)) {
       const version = runtime.init.version ?? slot.h.binaryVersion
-      if (slot.def.id === 'copilot' && version !== '1.0.112') return
-      if (slot.def.id === 'qoder' && version !== '1.1.89') return
-      if (slot.def.id === 'auggie' && version !== '0.36.0') return
+      if (slot.def.id === 'copilot' && !versionAtLeast(version, '1.0.112')) return
+      if (slot.def.id === 'qoder' && !versionAtLeast(version, '1.1.89')) return
+      if (slot.def.id === 'auggie' && !versionAtLeast(version, '0.36.0')) return
       if (slot.def.id === 'kilo' && (!version || compareVersions(version, '7.8.28') < 0)) return
       const command = this.display(slot)
       const env = { ...this.deps.env.agentEnv(slot.id), ...command.env } as NodeJS.ProcessEnv
