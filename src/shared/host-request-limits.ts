@@ -112,6 +112,7 @@ export const HOST_REQUEST_LIMITS: Readonly<Record<HostMethod, number | null>> = 
   'sessions.show': HOST_MS,
   'sessions.prompt': AGENT_MS,
   'sessions.cancel': AGENT_MS,
+  'sessions.runningWork': HOST_MS,
   'sessions.stopTask': AGENT_MS,
   'sessions.taskOutput': AGENT_MS,
   'sessions.retry': AGENT_MS,

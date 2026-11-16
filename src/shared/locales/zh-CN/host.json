@@ -65,6 +65,13 @@
     },
     "turnFailed": "本轮对话失败",
     "archivedByAgent": "{{agent}} 已归档此会话",
+    "notArchivedByAgent": {
+      "title": "{{agent}} 没有归档此会话",
+      "description": "它要求这一轮结束后归档，但这一轮留下了仍在运行的工作：{{work}}。"
+    },
+    "scheduledJobs_other": "{{count}} 个定时任务",
+    "backgroundWork": "后台任务",
+    "listSeparator": "、",
     "reportsPaused": {
       "title": "子会话的回报已暂停",
       "description": "自你上一条消息以来，回报已唤醒这个会话 {{count}} 次。发一条消息即可恢复。"

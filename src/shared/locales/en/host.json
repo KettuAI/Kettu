@@ -65,6 +65,14 @@
     },
     "turnFailed": "The turn failed",
     "archivedByAgent": "{{agent}} archived this session",
+    "notArchivedByAgent": {
+      "title": "{{agent}} did not archive this session",
+      "description": "It asked to once its turn ended, but the turn left work running: {{work}}."
+    },
+    "scheduledJobs_one": "{{count}} scheduled job",
+    "scheduledJobs_other": "{{count}} scheduled jobs",
+    "backgroundWork": "background work",
+    "listSeparator": ", ",
     "reportsPaused": {
       "title": "Reports from started sessions are paused",
       "description": "{{count}} reports woke this session since your last message. Send a message to let them through again."

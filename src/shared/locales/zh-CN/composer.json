@@ -56,7 +56,10 @@
     "strip": "从下一条消息起由 {{agent}} 接手，前面的对话会带过去。",
     "summarize": "先总结再接着做",
     "summarizeHint": "{{agent}} 先读完前面的对话写一份总结再接着做，用的是它自己的额度。",
-    "undo": "撤销"
+    "undo": "撤销",
+    "stopTitle": "停止后台工作并换成 {{agent}}？",
+    "stopBody": "这些在 {{current}} 里运行，换 Agent 时会停止：",
+    "stopConfirm": "停止并切换"
   },
   "outOfCredit": {
     "modelTitle": "{{model}} 余额不足",

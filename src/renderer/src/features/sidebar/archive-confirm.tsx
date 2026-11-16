@@ -1,4 +1,4 @@
-import { Trans, useTranslation } from 'react-i18next'
+import { useTranslation } from 'react-i18next'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -10,6 +10,7 @@ import {
   AlertDialogTitle,
 } from '@renderer/components/ui/alert-dialog'
 import { useArchiveQuestion } from './archive-confirm-model'
+import { RunningWorkList } from './running-work-list'
 
 /** The question `confirmArchive` asks, mounted once for the window. */
 export function ArchiveConfirmDialog() {
@@ -21,21 +22,13 @@ export function ArchiveConfirmDialog() {
   }
   return (
     <AlertDialog open={!!question} onOpenChange={(open) => !open && answer(false)}>
-      <AlertDialogContent>
+      <AlertDialogContent className="gap-0 px-5.5 pt-5 pb-4.5 data-[size=default]:sm:max-w-[440px]">
         <AlertDialogHeader>
-          <AlertDialogTitle>
-            {t('row.archiveRunningTitle', { count: question?.sessions ?? 1 })}
-          </AlertDialogTitle>
-          <AlertDialogDescription>
-            <Trans
-              t={t}
-              i18nKey="row.archiveRunningBody"
-              values={{ commands: question?.commands.join(', ') ?? '' }}
-              components={{ command: <span className="font-mono text-xs text-primary" /> }}
-            />
-          </AlertDialogDescription>
+          <AlertDialogTitle>{t('row.archiveRunningTitle')}</AlertDialogTitle>
+          <AlertDialogDescription>{t('row.archiveRunningBody')}</AlertDialogDescription>
         </AlertDialogHeader>
-        <AlertDialogFooter>
+        <RunningWorkList items={question?.items ?? []} className="mt-3.5" />
+        <AlertDialogFooter className="mt-4.5">
           <AlertDialogCancel>{t('common:actions.cancel')}</AlertDialogCancel>
           <AlertDialogAction variant="destructive" onClick={() => answer(true)}>
             {t('row.archiveRunningConfirm')}

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { ComputerTerminal01Icon } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
+import type { BackgroundWork } from '@shared/host-control'
 import type { QuitRequest } from '@shared/ipc'
 import { AgentMark } from '@renderer/components/agents/agent-mark'
 import {
@@ -18,10 +19,19 @@ import { RingSpinner, Spinner } from '@renderer/components/ui/spinner'
 import { FileTypeIcon } from '@renderer/features/files/file-type-icon'
 import { folderOf, nameOf } from '@renderer/features/files/paths'
 import { runningFor } from '@renderer/lib/format'
+import { i18n } from '@renderer/lib/i18n'
 import { saveAll } from '@renderer/stores/files'
 import { sessionTitle } from '@renderer/stores/sessions'
 import { useSettingsStore } from '@renderer/stores/settings'
 import { Glyph } from '@renderer/features/shell/glyph'
+
+/** What a session runs beside a turn, which the quit stops too: its names, then its jobs. */
+function backgroundText(work: BackgroundWork): string {
+  const parts = [...work.commands, ...work.tasks, ...work.subagents]
+  if (work.scheduled > 0) parts.push(i18n.t('updates:quit.scheduled', { count: work.scheduled }))
+  if (work.unnamed) parts.push(i18n.t('updates:quit.backgroundWork'))
+  return parts.join(i18n.t('updates:quit.workSeparator'))
+}
 
 /**
  * Main asks before a quit or an update restart would stop agents or terminal commands, or would
@@ -105,7 +115,7 @@ export function QuitConfirm() {
           )}
         </AlertDialogHeader>
         {busy && (
-          <ul className="mt-3.5 flex flex-col text-ui">
+          <ul className="mt-3.5 flex min-w-0 flex-col text-ui">
             {sessions.map((s) => (
               <li
                 key={s.sessionId}
@@ -113,11 +123,17 @@ export function QuitConfirm() {
               >
                 <AgentMark agent={s.agentId} size={16} />
                 <span className="min-w-0 flex-1 truncate">{sessionTitle(s)}</span>
-                {s.turnStartedAt !== null && (
+                {s.turnStartedAt !== null ? (
                   <span className="flex shrink-0 items-center gap-2 text-small text-tertiary tabular">
                     <RingSpinner aria-hidden />
                     {runningFor(now - s.turnStartedAt)}
                   </span>
+                ) : (
+                  s.background && (
+                    <span className="max-w-1/2 min-w-0 truncate text-small text-tertiary">
+                      {t('quit.background', { work: backgroundText(s.background) })}
+                    </span>
+                  )
                 )}
               </li>
             ))}

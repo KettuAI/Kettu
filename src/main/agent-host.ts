@@ -32,6 +32,7 @@ import type {
   ArtifactBrief,
   ArtifactContentResult,
   ArtifactExportResult,
+  BackgroundWork,
   BusyCounts,
   BusySession,
   ComputerControlAction,
@@ -293,12 +294,27 @@ function isMediaGrant(value: unknown): value is MediaGrantRecord {
 
 function isBusySession(value: unknown): value is BusySession {
   if (typeof value !== 'object' || value === null) return false
-  const { sessionId, agentId, title, turnStartedAt } = value as Record<string, unknown>
+  const { sessionId, agentId, title, turnStartedAt, background } = value as Record<string, unknown>
   return (
     typeof sessionId === 'string' &&
     typeof agentId === 'string' &&
     (title === null || typeof title === 'string') &&
-    (turnStartedAt === null || Number.isFinite(turnStartedAt))
+    (turnStartedAt === null || Number.isFinite(turnStartedAt)) &&
+    (background === null || isBackgroundWork(background))
+  )
+}
+
+function isBackgroundWork(value: unknown): value is BackgroundWork {
+  if (typeof value !== 'object' || value === null) return false
+  const { commands, tasks, subagents, scheduled, unnamed } = value as Record<string, unknown>
+  const names = (list: unknown) =>
+    Array.isArray(list) && list.every((name) => typeof name === 'string')
+  return (
+    names(commands) &&
+    names(tasks) &&
+    names(subagents) &&
+    Number.isInteger(scheduled) &&
+    typeof unnamed === 'boolean'
   )
 }
 

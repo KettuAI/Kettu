@@ -33,6 +33,22 @@ export interface BusySession {
   agentId: AgentId
   title: string | null
   turnStartedAt: number | null // when its running turn started, for how long it has run
+  /** What it runs beside a turn, which quitting stops too; null when nothing. */
+  background: BackgroundWork | null
+}
+
+/** What a session's agent runs beside a turn, which ending the agent stops with it. */
+export interface BackgroundWork {
+  /** Background commands, by what the agent said they do or their command. */
+  commands: string[]
+  /** Other background tasks, such as monitors, by what the agent said they do. */
+  tasks: string[]
+  /** Its subagents that run or wait for the user, by what they were started for. */
+  subagents: string[]
+  /** Jobs that wake the session later, such as cron and /loop wakeups. */
+  scheduled: number
+  /** The agent said work runs on in the background without naming it. */
+  unnamed: boolean
 }
 
 /** Sessions whose turn is running, and how many of them wait for the user to approve something. */
