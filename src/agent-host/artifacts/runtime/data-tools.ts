@@ -82,6 +82,16 @@ export const DATA_TOOLS: Tool[] = [
             type: 'array',
             minItems: 3,
             maxItems: 3,
+            // Gemini refuses an array schema without `items`, which fails every request of a
+            // session that is handed this tool (agy 1.5.9).
+            items: {
+              anyOf: [
+                { type: 'string' },
+                { type: 'number' },
+                { type: 'boolean' },
+                { type: 'null' },
+              ],
+            },
             description: 'A field (dotted for nested ones), one of == != < <= > >=, and a value.',
           },
         },
