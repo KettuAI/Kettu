@@ -45,7 +45,7 @@ import {
   type SignInClient,
 } from '../connection'
 import type { AgentTransport, MessageTransport } from '../driver'
-import { isStopReason } from '../session-updates'
+import { isStopReason, type MapperContext, type MapperOutput } from '../session-updates'
 import { compareVersions } from '../versions'
 import { ANTIGRAVITY_TIER_VERSION, antigravityTier } from '../vendor-usage/antigravity'
 import {
@@ -59,6 +59,7 @@ import {
   mapSessionUpdate,
   mapTokenTotals,
 } from './mapper'
+import { fromAgy } from './agy-tools'
 import { forkPointMeta, forksAtMessage } from './fork-point'
 import {
   DELETE_AGAIN_MS,
@@ -321,7 +322,8 @@ export class AcpConnection implements AgentConnection {
           hooks.log('warn', `Permission request for unknown session ${ctx.params.sessionId}`)
           return { outcome: { outcome: 'cancelled' } }
         }
-        const { entryId, output } = mapPermissionToolCall(ctx.params.toolCall, target.context())
+        const toolCall = this.agy ? fromAgy(ctx.params.toolCall) : ctx.params.toolCall
+        const { entryId, output } = mapPermissionToolCall(toolCall, target.context())
         const answer = await target.requestPermission(
           {
             toolCallId: ctx.params.toolCall.toolCallId,
@@ -421,12 +423,27 @@ export class AcpConnection implements AgentConnection {
     return { readable, writable }
   }
 
+  /** Whether the agent is agy, whose tool calls take a shape of their own. */
+  private get agy(): boolean {
+    return this.hooks.agentId === 'antigravity'
+  }
+
+  private map(update: SessionUpdate, ctx: MapperContext): MapperOutput {
+    if (
+      !this.agy ||
+      (update.sessionUpdate !== 'tool_call' && update.sessionUpdate !== 'tool_call_update')
+    ) {
+      return mapSessionUpdate(update, ctx)
+    }
+    return mapSessionUpdate(fromAgy(update), ctx)
+  }
+
   private deliver(sessionId: string, update: SessionUpdate): void {
     if (this.dropStartup(sessionId, update)) return
     this.learnChild(sessionId, update)
     const target = this.targets.get(sessionId)
     if (target) {
-      target.apply(mapSessionUpdate(update, target.context()))
+      target.apply(this.map(update, target.context()))
       return
     }
     const collector = this.collectors.get(sessionId)
@@ -500,7 +517,7 @@ export class AcpConnection implements AgentConnection {
     this.pending.delete(sessionId)
     for (const update of early.updates) {
       if (!this.dropStartup(sessionId, update)) {
-        target.apply(mapSessionUpdate(update, target.context()))
+        target.apply(this.map(update, target.context()))
       }
     }
   }

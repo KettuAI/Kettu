@@ -1,14 +1,31 @@
-// agy 1.5.9's ACP mode as Kettu reads it: what it takes without declaring, its plan, its titles and
-// its hidden sessions, which may be opened and closed but never prompted.
+// agy 1.5.9's ACP mode as Kettu reads it: what it takes without declaring, its plan, its titles,
+// its tool calls and its hidden sessions, which may be opened and closed but never prompted.
 
-import { agent, methods } from '@agentclientprotocol/sdk/unstable'
+import {
+  agent,
+  methods,
+  type AgentContext,
+  type SessionUpdate,
+} from '@agentclientprotocol/sdk/unstable'
 import { describe, expect, it } from 'vitest'
-import type { ConnectionHooks } from '../connection'
+import {
+  applyPatches,
+  threadEntries,
+  threadFromSnapshot,
+  type ThreadEntry,
+  type ThreadState,
+} from '@shared/thread'
+import type { ConnectionHooks, SessionTarget } from '../connection'
+import { newTurnScope } from '../session-updates'
 import { AcpConnection, inProcessTransport } from './connection'
+import recorded from './fixtures/agy-tools.json'
 
 const TIER = { name: 'Google AI Pro', id: 'g1-pro-tier', upgradeUri: 'https://example.com' }
 
-function connect(version: string) {
+function connect(
+  version: string,
+  turn?: (client: AgentContext, sessionId: string) => Promise<void>,
+) {
   const prompted: string[] = []
   const closed: string[] = []
   const accounts: string[] = []
@@ -29,8 +46,9 @@ function connect(version: string) {
       sessionId: `s-${++next}`,
       _meta: { antigravity: { tier: TIER } },
     }))
-    .onRequest(methods.agent.session.prompt, (ctx) => {
+    .onRequest(methods.agent.session.prompt, async (ctx) => {
       prompted.push(ctx.params.sessionId)
+      await turn?.(ctx.client, ctx.params.sessionId)
       return { stopReason: 'end_turn' as const }
     })
     .onRequest(methods.agent.session.close, (ctx) => {
@@ -50,6 +68,151 @@ function connect(version: string) {
   })
   return { connection, prompted, closed, accounts }
 }
+
+/** A session's thread, with every permission request allowed once. */
+function threadTarget() {
+  let thread: ThreadState = threadFromSnapshot({
+    session: {
+      id: 's',
+      agentId: 'antigravity',
+      projectPath: '/tmp/agy-probe',
+      acpSessionId: 's-1',
+      status: 'running',
+      title: null,
+      config: [],
+      commands: [],
+      usage: null,
+      error: null,
+      turnStartedAt: null,
+      turnStartUsed: null,
+      createdAt: 0,
+      updatedAt: 0,
+      parentId: null,
+      origin: 'user',
+      subagent: null,
+      routine: null,
+      queue: [],
+      queuePaused: false,
+    },
+    entries: [],
+    seq: 0,
+  })
+  let n = 0
+  const scope = newTurnScope()
+  const target: SessionTarget = {
+    context: () => ({
+      thread,
+      replaying: false,
+      cancelling: false,
+      scope,
+      now: 5_000,
+      nextId: () => `e:${++n}`,
+      sessionIdFor: () => null,
+    }),
+    apply: (output) => {
+      thread = applyPatches(thread, output.patches)
+    },
+    requestPermission: async (request) => {
+      target.apply(request.output)
+      return { optionId: 'allow' }
+    },
+    send: () => {},
+    startMode: () => null,
+  }
+  return { target, entries: (): ThreadEntry[] => threadEntries(thread) }
+}
+
+const update = (sessionId: string, value: unknown) => ({
+  sessionId,
+  update: value as SessionUpdate,
+})
+
+describe("agy's tool calls", () => {
+  it('show commands, their output, files and diffs', async () => {
+    const { connection } = connect('1.5.9', async (client, sessionId) => {
+      for (const value of recorded) {
+        await client.notify(methods.client.session.update, update(sessionId, value))
+      }
+    })
+    await connection.initialize('1.0.0')
+    const { sessionId } = await connection.newSession('/tmp/agy-probe')
+    const { target, entries } = threadTarget()
+    connection.register(sessionId, target)
+    await connection.prompt(sessionId, [{ type: 'text', text: 'go' }])
+
+    const rows = entries().map((entry) => {
+      if (entry.kind !== 'tool') return entry.kind
+      const { title, toolKind, status, content, locations, rawInput, description } = entry
+      return { title, toolKind, status, content, locations, rawInput, description }
+    })
+    expect(rows).toEqual([
+      {
+        title: 'echo hi',
+        toolKind: 'execute',
+        status: 'completed',
+        content: [{ type: 'markdown', markdown: '```\nhi\n```' }],
+        locations: [],
+        rawInput: 'echo hi',
+        description: 'Echo hi',
+      },
+      {
+        title: 'File README.md',
+        toolKind: 'read',
+        status: 'completed',
+        content: [],
+        locations: [{ path: '/tmp/agy-probe/ws4/README.md' }],
+        rawInput: '{\n  "Path": "/tmp/agy-probe/ws4/README.md"\n}',
+        description: undefined,
+      },
+      {
+        title: 'grep -rn "hello" .',
+        toolKind: 'execute',
+        status: 'completed',
+        content: [{ type: 'markdown', markdown: '```\n./README.md:2:hello world\n```' }],
+        locations: [],
+        rawInput: 'grep -rn "hello" .',
+        description: 'Search for hello',
+      },
+      expect.objectContaining({
+        title: 'File README.md',
+        toolKind: 'edit',
+        status: 'completed',
+        content: [
+          {
+            type: 'diff',
+            path: '/tmp/agy-probe/ws4/README.md',
+            oldText: '# probe\nhello world\n',
+            newText: '# probe\ngoodbye world\n',
+          },
+        ],
+      }),
+      // A command that exits non-zero fails, as Claude Code's and Codex's do.
+      expect.objectContaining({
+        title: 'ls /nonexistent-kettu',
+        status: 'failed',
+        content: [
+          {
+            type: 'markdown',
+            markdown: '```\nls: /nonexistent-kettu: No such file or directory\n```',
+          },
+        ],
+        rawInput: 'ls /nonexistent-kettu',
+      }),
+      expect.objectContaining({
+        title: 'true',
+        status: 'completed',
+        content: [],
+        rawInput: 'true',
+      }),
+      expect.objectContaining({ title: 'File .', toolKind: 'read', status: 'failed' }),
+      expect.objectContaining({ title: 'File notes.txt', toolKind: 'edit', status: 'completed' }),
+      expect.objectContaining({ title: 'Run mcp_kettu_set_plan', status: 'completed' }),
+      expect.objectContaining({ title: 'Run mcp_kettu_remember', status: 'failed' }),
+      expect.objectContaining({ title: 'Run mcp_kettu_list_sessions', status: 'completed' }),
+    ])
+    connection.close()
+  })
+})
 
 describe("agy's ACP mode", () => {
   it('takes HTTP MCP servers, titles its sessions and names its plan from 1.5.9', async () => {
