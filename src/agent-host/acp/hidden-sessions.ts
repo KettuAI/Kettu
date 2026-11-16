@@ -30,11 +30,12 @@ const REMOVALS: Partial<Record<AgentId, Removal>> = {
 }
 
 /**
- * Whether agents of this harness may open hidden sessions at all, as far as Kettu knows before one
- * starts; a version that was not checked still opens none once it reports itself.
+ * Whether agents of this harness may open hidden sessions to ask something, as far as Kettu knows
+ * before one starts; a version that was not checked still opens none once it reports itself. One
+ * whose hidden sessions are only opened and read takes the way of an agent without them.
  */
 export function removesHiddenSessions(harness: HarnessId): boolean {
-  return REMOVALS[harness] !== undefined
+  return promptsHidden(REMOVALS[harness] ?? null)
 }
 
 // The removals checked on one version alone, as the agent names it in `initialize`.
