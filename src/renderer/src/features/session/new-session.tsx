@@ -516,7 +516,7 @@ function DraftComposer({
   return (
     <>
       {noAgent && guide && <AgentGuide statuses={guide} />}
-      <PersonalPlanFirstUse status={status} />
+      <PersonalPlanFirstUse status={status} className="kettu-plan-notice" />
       <div className="ui-as-start__composer kettu-composer" data-variant="new">
         <ChatComposer
           field={

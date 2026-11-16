@@ -8,6 +8,7 @@ import { HugeiconsIcon } from '@hugeicons/react'
 import type { AgentStatus } from '@shared/agent-host'
 import { Alert, AlertAction, AlertDescription, AlertTitle } from '@renderer/components/ui/alert'
 import { Button } from '@renderer/components/ui/button'
+import { cn } from '@renderer/lib/utils'
 import { readJson, writeJson } from '@renderer/lib/storage'
 
 const TERMS = 'https://antigravity.google/terms'
@@ -28,7 +29,13 @@ export function PersonalPlanText() {
 }
 
 /** The notice the first time a personally signed-in Antigravity is picked or used; dismissed for good. */
-export function PersonalPlanFirstUse({ status }: { status: AgentStatus | undefined }) {
+export function PersonalPlanFirstUse({
+  status,
+  className,
+}: {
+  status: AgentStatus | undefined
+  className?: string
+}) {
   const { t } = useTranslation(['settings', 'common'])
   const [dismissed, setDismissed] = useState(() => readJson<unknown>(DISMISSED_KEY, false) === true)
   if (dismissed || !status?.personalSignIn) return null
@@ -37,7 +44,7 @@ export function PersonalPlanFirstUse({ status }: { status: AgentStatus | undefin
     setDismissed(true)
   }
   return (
-    <Alert variant="info" className="has-data-[slot=alert-action]:pr-24">
+    <Alert variant="info" className={cn('has-data-[slot=alert-action]:pr-24', className)}>
       <HugeiconsIcon icon={AlertCircleIcon} strokeWidth={1.9} aria-hidden />
       <AlertTitle>{t('agents.personalPlan.title', { agent: status.name })}</AlertTitle>
       <AlertDescription>
