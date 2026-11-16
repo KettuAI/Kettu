@@ -898,6 +898,7 @@ export class AgentHost {
           this.artifacts.stopUsing(sessionId)
           this.computer?.turnEnded(sessionId)
           this.browserTurnEnded(sessionId)
+          this.marketTools.turnEnded(sessionId)
           if (this.deviceTurns.delete(sessionId)) {
             this.options.send({ type: 'host:device-turn-ended', sessionId })
           }

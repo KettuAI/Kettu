@@ -6,6 +6,7 @@
 import path from 'node:path'
 import type { CallToolResult, Tool } from '@modelcontextprotocol/sdk/types.js'
 import type { PublishPlan } from '@shared/agent-host'
+import { CONTROL_WAIT_MS } from '@shared/control'
 import {
   LISTING_NOTES_CHARS,
   VERSION,
@@ -29,10 +30,12 @@ import {
   type PublishOrigin,
   type PublishVisibility,
 } from '@shared/market-publish'
+import type { Platform } from '@shared/platform'
 import type { MarketPublishAsk, MarketPublishChange, MarketPublishOutcome } from '@shared/thread'
 import type { Caller } from '../artifacts/tools'
 import { HostError } from '../errors'
 import { t } from '../i18n'
+import { pathKey } from '../paths'
 import { checkFolder, type CheckedFile, type FolderCheck } from './publish-check'
 import type { NewDraft, PublishedVersion } from './publish-drafts'
 
@@ -55,7 +58,9 @@ export const MARKET_INSTRUCTIONS =
   'The marketplace_* tools publish the user’s own skills, workflows, plugins and MCP servers to the Kettu ' +
   'Marketplace. Publish only when the user asks. Check a folder with marketplace_check and fix ' +
   'what it reports before marketplace_publish; every publish and unlisting waits for the user to ' +
-  'confirm it in this session.'
+  'confirm it in a card in this session. A call returns within a minute; while the user has not ' +
+  'answered, call the same tool again with the same folder or listing, which keeps waiting on ' +
+  'the same card.'
 
 export const MARKET_TOOLS: Tool[] = [
   {
@@ -93,12 +98,14 @@ export const MARKET_TOOLS: Tool[] = [
     description:
       'Publishes a folder to the Kettu Marketplace, as a new listing or as a new version of one ' +
       'the user published. Check it with marketplace_check first. The user confirms every ' +
-      'publish in a card in this session, and this call waits for their answer, up to 10 ' +
-      'minutes; nothing is uploaded until they press Publish. If they choose Not now or do not ' +
-      'answer, nothing is uploaded and it is kept as a draft they can publish later: do not call ' +
-      'it again unless they ask. Plugins and MCP servers take the version in their manifest; a ' +
-      'skill or a workflow gets 1.0.0 first, then the next patch version unless you pass one. ' +
-      'For a new version, write short notes on what changed.',
+      'publish in a card in this session, which waits up to 10 minutes; nothing is uploaded ' +
+      'until they press Publish. This call returns within a minute: if it says the user has not ' +
+      'answered yet, call it again with the same path, which shows no second card and returns ' +
+      'what became of this one, even when they answered between calls. If they choose Not now or ' +
+      'do not answer, nothing is uploaded and it is kept as a draft they can publish later: do ' +
+      'not publish it again unless they ask. Plugins and MCP servers take the version in their ' +
+      'manifest; a skill or a workflow gets 1.0.0 first, then the next patch version unless you ' +
+      'pass one. For a new version, write short notes on what changed.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -149,8 +156,10 @@ export const MARKET_TOOLS: Tool[] = [
     description:
       'Takes a listing the user published out of the Kettu Marketplace: it is no longer listed ' +
       'and gets no new installs, while people who have it keep it and its updates. The user ' +
-      'confirms it in a card in this session, and this call waits for their answer, up to 10 ' +
-      'minutes.',
+      'confirms it in a card in this session, which waits up to 10 minutes. This call returns ' +
+      'within a minute: if it says the user has not answered yet, call it again with the same ' +
+      'listing, which shows no second card and returns what became of this one, even when they ' +
+      'answered between calls.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -213,6 +222,20 @@ export interface MarketToolsDeps {
   agentOf(sessionId: string): string | null
   sessionTitle(sessionId: string): string | null | undefined
   home: string
+}
+
+/**
+ * A card a call opened and what follows its answer. It outlives the call, so the agent's next call
+ * for the same folder or listing picks it up, until one gets its result or the turn ends.
+ */
+interface CardJob {
+  action: 'publish' | 'unlist'
+  /** What a call names it by: a publish's folder key, an unlisting's listing id and names. */
+  refs: string[]
+  /** The item's name, as a call that returns before the answer says it. */
+  name: string
+  confirmed: boolean
+  result: Promise<CallToolResult>
 }
 
 type Code = 'invalid' | 'signed_out' | 'not_found' | 'not_ready' | 'refused'
@@ -352,6 +375,9 @@ function numbered(kind: PublishKind | null | undefined): boolean {
 }
 
 export class MarketTools {
+  /** The cards calls opened, by session. */
+  private readonly jobs = new Map<string, CardJob[]>()
+
   constructor(private readonly deps: MarketToolsDeps) {}
 
   /** Whether the host is signed in to a Kettu account with Kettu's services on, which lists them. */
@@ -359,8 +385,18 @@ export class MarketTools {
     return this.deps.account() !== null
   }
 
+  /**
+   * The session's turn ended: no call of it comes back for what its cards became, and a later
+   * turn's call for the same folder or listing asks again.
+   */
+  turnEnded(sessionId: string): void {
+    this.jobs.delete(sessionId)
+  }
+
   /** Serves a call; a refusal becomes a tool error whose text says why. */
   async call(caller: Caller, name: string, input: unknown): Promise<CallToolResult> {
+    // Before the harness's own limit for one tool call, from when the call came in.
+    const deadline = Date.now() + CONTROL_WAIT_MS
     try {
       if (!this.deps.account()) {
         throw new Refusal(
@@ -373,12 +409,12 @@ export class MarketTools {
         case MARKET_CHECK:
           return await this.check(caller, input)
         case MARKET_PUBLISH:
-          return await this.publish(caller, input)
+          return await this.publish(caller, input, deadline)
         case MARKET_MINE:
           fields(input ?? {}, [])
           return await this.mine()
         case MARKET_UNLIST:
-          return await this.unlist(caller, input)
+          return await this.unlist(caller, input, deadline)
         default:
           throw new Error(`Unknown tool ${name}`)
       }
@@ -668,11 +704,15 @@ export class MarketTools {
     }
   }
 
-  private async publish(caller: Caller, input: unknown): Promise<CallToolResult> {
+  private async publish(caller: Caller, input: unknown, deadline: number): Promise<CallToolResult> {
     const args = parsePublishInput(input)
     const base = this.where(caller)
-    const plan = await this.plan(path.resolve(base, args.path), base, args.version)
-    const { check, listing } = plan
+    const target = path.resolve(base, args.path)
+    const ref = pathKey(target, process.platform as Platform)
+    const waiting = this.jobOf(caller.sessionId, 'publish', ref)
+    if (waiting) return this.follow(caller.sessionId, waiting, deadline)
+    const plan = await this.plan(target, base, args.version)
+    const { check } = plan
     if (plan.problems.length > 0 || !check.kind || !check.slug || !check.name || !plan.version) {
       throw new Refusal(
         'not_ready',
@@ -687,9 +727,26 @@ export class MarketTools {
       )
     }
     const ask = await this.askOf(plan, args.visibility, args.notes)
+    // Another call for the same folder may have opened its card while this one checked it.
+    const opened = this.jobOf(caller.sessionId, 'publish', ref)
+    if (opened) return this.follow(caller.sessionId, opened, deadline)
     const asked = ask ? this.deps.ask(caller.sessionId, ask) : null
     if (!asked) throw new Refusal('not_found', 'This session is not open, so it shows no card.')
-    const answer = await asked.answer
+    const job = this.open(caller.sessionId, 'publish', [ref], check.name, asked.answer, (answer) =>
+      this.answered(caller, plan, args, asked.entryId, answer),
+    )
+    return this.follow(caller.sessionId, job, deadline)
+  }
+
+  /** Uploads what the user confirmed, or keeps it as a draft. */
+  private async answered(
+    caller: Caller,
+    plan: Plan,
+    args: ReturnType<typeof parsePublishInput>,
+    entryId: string,
+    answer: MarketAnswer,
+  ): Promise<CallToolResult> {
+    const { listing } = plan
     const manifest = this.manifestOf(plan, args.visibility, args.notes, this.from(caller.sessionId))
     const draft = (error: string | null, problems: MarketProblem[] = []) =>
       this.keepDraft(plan, manifest, {
@@ -726,7 +783,7 @@ export class MarketTools {
       if (!(error instanceof MarketCallError)) throw error
       const message = serviceText(error.failure)
       const problems = error.failure.problems ?? []
-      this.deps.settle(caller.sessionId, asked.entryId, { kind: 'failed', message, problems })
+      this.deps.settle(caller.sessionId, entryId, { kind: 'failed', message, problems })
       await draft(message, problems)
       throw new Refusal(
         'refused',
@@ -737,11 +794,11 @@ export class MarketTools {
         problems,
       )
     }
-    this.deps.settle(caller.sessionId, asked.entryId, {
+    this.deps.settle(caller.sessionId, entryId, {
       kind: 'published',
       listingId: published.id,
       handle: published.handle,
-      version: plan.version,
+      version: manifest.version,
     })
     const who =
       published.visibility === 'public'
@@ -992,9 +1049,11 @@ export class MarketTools {
     }
   }
 
-  private async unlist(caller: Caller, input: unknown): Promise<CallToolResult> {
+  private async unlist(caller: Caller, input: unknown, deadline: number): Promise<CallToolResult> {
     const o = fields(input, ['listing'])
     const ref = text(o, 'listing', LISTING_REF_CHARS, true)!
+    const waiting = this.jobOf(caller.sessionId, 'unlist', ref)
+    if (waiting) return this.follow(caller.sessionId, waiting, deadline)
     const mine = await this.deps.call({ kind: 'mine' })
     const listing =
       mine.listings.find(
@@ -1006,6 +1065,9 @@ export class MarketTools {
         `The user has no listing ${ref}. Call marketplace_mine for them.`,
       )
     }
+    // Another call, perhaps naming it another way, may have opened its card meanwhile.
+    const opened = this.jobOf(caller.sessionId, 'unlist', listing.id)
+    if (opened) return this.follow(caller.sessionId, opened, deadline)
     if (listing.visibility === 'unlisted') {
       throw new Refusal('refused', `${listingName(listing)} is unlisted already.`)
     }
@@ -1034,7 +1096,25 @@ export class MarketTools {
       publisher: null,
     })
     if (!asked) throw new Refusal('not_found', 'This session is not open, so it shows no card.')
-    const answer = await asked.answer
+    const refs = [listing.id, listingName(listing), `${listing.handle}/${listing.slug}`]
+    const job = this.open(
+      caller.sessionId,
+      'unlist',
+      refs,
+      listingName(listing),
+      asked.answer,
+      (answer) => this.unlistAnswered(caller, listing, asked.entryId, answer),
+    )
+    return this.follow(caller.sessionId, job, deadline)
+  }
+
+  /** Unlists what the user confirmed. */
+  private async unlistAnswered(
+    caller: Caller,
+    listing: MineListing,
+    entryId: string,
+    answer: MarketAnswer,
+  ): Promise<CallToolResult> {
     if (answer.decision !== 'confirm') {
       return {
         content: [
@@ -1054,10 +1134,10 @@ export class MarketTools {
     } catch (error) {
       if (!(error instanceof MarketCallError)) throw error
       const message = serviceText(error.failure)
-      this.deps.settle(caller.sessionId, asked.entryId, { kind: 'failed', message, problems: [] })
+      this.deps.settle(caller.sessionId, entryId, { kind: 'failed', message, problems: [] })
       throw new Refusal('refused', `The Kettu Marketplace did not unlist it: ${message}`)
     }
-    this.deps.settle(caller.sessionId, asked.entryId, { kind: 'unlisted' })
+    this.deps.settle(caller.sessionId, entryId, { kind: 'unlisted' })
     this.deps.changed()
     return {
       content: [
@@ -1068,6 +1148,77 @@ export class MarketTools {
       ],
       structuredContent: { unlisted: true, listing: listingName(listing) },
     }
+  }
+
+  private jobOf(sessionId: string, action: CardJob['action'], ref: string): CardJob | null {
+    return (
+      this.jobs.get(sessionId)?.find((job) => job.action === action && job.refs.includes(ref)) ??
+      null
+    )
+  }
+
+  /** Follows a card past the call that opened it: what comes of its answer waits for a call. */
+  private open(
+    sessionId: string,
+    action: CardJob['action'],
+    refs: string[],
+    name: string,
+    answer: Promise<MarketAnswer>,
+    then: (answer: MarketAnswer) => Promise<CallToolResult>,
+  ): CardJob {
+    const job: CardJob = { action, refs, name, confirmed: false, result: null! }
+    job.result = answer.then((given) => {
+      job.confirmed = given.decision === 'confirm'
+      return then(given)
+    })
+    // A failure no call waits for is still handed to the next one.
+    job.result.catch(() => {})
+    this.jobs.set(sessionId, [...(this.jobs.get(sessionId) ?? []), job])
+    return job
+  }
+
+  /** The card's outcome once it has one, or by the deadline that the user has not answered yet. */
+  private async follow(sessionId: string, job: CardJob, deadline: number): Promise<CallToolResult> {
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const late = new Promise<null>((resolve) => {
+      timer = setTimeout(() => resolve(null), Math.max(0, deadline - Date.now()))
+    })
+    try {
+      const result = await Promise.race([job.result, late])
+      if (result === null) return stillWaiting(job)
+      this.done(sessionId, job)
+      return result
+    } catch (error) {
+      this.done(sessionId, job)
+      throw error
+    } finally {
+      clearTimeout(timer)
+    }
+  }
+
+  private done(sessionId: string, job: CardJob): void {
+    const left = (this.jobs.get(sessionId) ?? []).filter((other) => other !== job)
+    if (left.length > 0) this.jobs.set(sessionId, left)
+    else this.jobs.delete(sessionId)
+  }
+}
+
+/** A call that returns before the card's outcome, for the agent to call again. */
+function stillWaiting(job: CardJob): CallToolResult {
+  const publish = job.action === 'publish'
+  const again = publish
+    ? 'Call marketplace_publish again with the same path'
+    : 'Call marketplace_unlist again with the same listing'
+  const text = job.confirmed
+    ? publish
+      ? `The user pressed Publish and ${job.name} is uploading. ${again} for the outcome.`
+      : `The user confirmed, and ${job.name} is being unlisted. ${again} for the outcome.`
+    : publish
+      ? `The user has not answered the card to publish ${job.name} yet, and nothing was uploaded. ${again} to keep waiting on the same card; it shows no second one.`
+      : `The user has not answered the card to unlist ${job.name} yet, and it stays listed. ${again} to keep waiting on the same card; it shows no second one.`
+  return {
+    content: [{ type: 'text', text }],
+    structuredContent: { waiting: true, confirmed: job.confirmed },
   }
 }
 

@@ -1,7 +1,8 @@
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { CONTROL_WAIT_MS } from '@shared/control'
 import type {
   MarketAccount,
   MarketCall,
@@ -325,6 +326,103 @@ describe('marketplace_unlist', () => {
       { kind: 'update', id: 'abcdefgh23', change: { visibility: 'unlisted' } },
     ])
     expect(h.outcomes).toEqual([{ kind: 'unlisted' }])
+  })
+})
+
+describe('a card the user has not answered within one call', () => {
+  // The clock moves with real time, so the folder checks and polls still run.
+  beforeEach(() => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+  })
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  const publishCall = (h: Harness) =>
+    h.tools.call(caller(), MARKET_PUBLISH, { path: 'skills/changelog-writer' })
+
+  /** A first call that returned before the user answered its card. */
+  async function waitedOnce(h: Harness): Promise<void> {
+    const first = publishCall(h)
+    await asked(h)
+    await vi.advanceTimersByTimeAsync(CONTROL_WAIT_MS)
+    expect((await first).structuredContent).toEqual({ waiting: true, confirmed: false })
+  }
+
+  it('returns before the harness’s 60 s limit, leaving the card and uploading nothing', async () => {
+    const h = harness()
+    const started = Date.now()
+    let returned = 0
+    const call = publishCall(h).then((result) => {
+      returned = Date.now()
+      return result
+    })
+    await asked(h)
+    await vi.advanceTimersByTimeAsync(60_000)
+    const result = await call
+    expect(returned - started).toBeLessThan(60_000)
+    expect(result.isError).toBeUndefined()
+    expect(result.structuredContent).toEqual({ waiting: true, confirmed: false })
+    expect(uploads(h)).toEqual([])
+    expect(h.drafts).toEqual([])
+    expect(h.outcomes).toEqual([])
+  })
+
+  it('attaches a repeated call for the same folder to the waiting card', async () => {
+    const h = harness()
+    await waitedOnce(h)
+    const again = h.tools.call(caller(), MARKET_PUBLISH, {
+      path: path.join(root, 'skills', 'changelog-writer'),
+    })
+    h.answer({ decision: 'confirm', visibility: null, notes: null })
+    const result = await again
+    expect(result.structuredContent).toMatchObject({ published: true, version: '1.0.0' })
+    expect(h.asks).toHaveLength(1)
+    expect(uploads(h)).toHaveLength(1)
+  })
+
+  it('hands an answer that came between calls to the next call', async () => {
+    const h = harness()
+    await waitedOnce(h)
+    h.answer({ decision: 'confirm', visibility: null, notes: null })
+    await vi.waitFor(() => expect(h.outcomes).toHaveLength(1))
+    const result = await publishCall(h)
+    expect(result.structuredContent).toMatchObject({ published: true, version: '1.0.0' })
+    expect(h.asks).toHaveLength(1)
+    expect(uploads(h)).toHaveLength(1)
+  })
+
+  it('attaches a repeated unlisting by the listing’s other name to the same card', async () => {
+    const h = harness(
+      {
+        publisher: { handle: 'amigoer', since: 'x' },
+        listings: [listing()],
+        storage: { bytes: 0, limit: 1 },
+      },
+      () => listing({ visibility: 'unlisted' }),
+    )
+    const first = h.tools.call(caller(), MARKET_UNLIST, { listing: 'abcdefgh23' })
+    await asked(h)
+    await vi.advanceTimersByTimeAsync(CONTROL_WAIT_MS)
+    expect((await first).structuredContent).toEqual({ waiting: true, confirmed: false })
+    const again = h.tools.call(caller(), MARKET_UNLIST, { listing: '@amigoer/changelog-writer' })
+    h.answer({ decision: 'confirm', visibility: null, notes: null })
+    expect((await again).structuredContent).toEqual({
+      unlisted: true,
+      listing: '@amigoer/changelog-writer',
+    })
+    expect(h.asks).toHaveLength(1)
+    expect(h.calls.filter((c) => c.kind === 'update')).toHaveLength(1)
+  })
+
+  it('asks again in a later turn instead of handing over what the last one left', async () => {
+    const h = harness()
+    await waitedOnce(h)
+    h.tools.turnEnded('s1')
+    h.answer({ decision: 'ended' })
+    await vi.waitFor(() => expect(h.drafts).toHaveLength(1))
+    void publishCall(h)
+    await vi.waitFor(() => expect(h.asks).toHaveLength(2))
   })
 })
 
