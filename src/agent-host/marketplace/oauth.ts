@@ -590,22 +590,46 @@ async function accountOf(issuer: string, token: string, fetcher: Fetch): Promise
   }
 }
 
+/** A renewal the service refused, or a sign-in with nothing to renew with: it must be done again. */
+export class RenewalRefused extends Error {}
+
+// The token endpoint's errors that say nothing about the refresh token, so it is tried again later.
+const PASSING_ERRORS: ReadonlySet<string> = new Set([
+  'server_error',
+  'temporarily_unavailable',
+  'too_many_requests',
+])
+
 /**
- * New tokens from the sign-in's refresh token; throws when there is none or the service refuses,
- * which leaves the sign-in to be done again.
+ * New tokens from the sign-in's refresh token. Throws `RenewalRefused` when there is none or the
+ * service refuses it; any other failure, such as the service or its metadata not answering, is
+ * worth trying again.
  */
 export async function renew(sign: SignIn, fetcher: Fetch, now: () => number): Promise<SignIn> {
   const refresh = sign.tokens?.refresh
   if (!refresh || !sign.issuer || !sign.client)
-    throw new Error('The token expired and cannot be renewed')
+    throw new RenewalRefused('The token expired and cannot be renewed')
   const sdk = await loadAuth()
   const metadata = await sdk.discoverAuthorizationServerMetadata(sign.issuer, { fetchFn: fetcher })
-  const tokens = await sdk.refreshAuthorization(sign.issuer, {
-    ...(metadata ? { metadata } : {}),
-    clientInformation: sign.client,
-    refreshToken: refresh,
-    ...(sign.resource ? { resource: new URL(sign.resource) } : {}),
-    fetchFn: fetcher,
-  })
+  // Without it the SDK would guess the token endpoint; every sign-in had metadata when it was made.
+  if (!metadata) throw new Error('The authorization server metadata could not be read')
+  let tokens: OAuthTokens
+  try {
+    tokens = await sdk.refreshAuthorization(sign.issuer, {
+      metadata,
+      clientInformation: sign.client,
+      refreshToken: refresh,
+      ...(sign.resource ? { resource: new URL(sign.resource) } : {}),
+      fetchFn: fetcher,
+    })
+  } catch (error) {
+    const { message, errorCode } = error as { message?: string; errorCode?: unknown }
+    if (typeof errorCode === 'string' && !PASSING_ERRORS.has(errorCode)) {
+      throw new RenewalRefused(
+        `The service refused to renew the token: ${errorCode}${message ? ` (${message})` : ''}`,
+      )
+    }
+    throw error
+  }
   return { ...sign, savedAt: now(), tokens: keptTokens(tokens, now()) }
 }
