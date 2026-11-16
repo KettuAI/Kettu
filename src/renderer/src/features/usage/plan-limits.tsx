@@ -157,7 +157,11 @@ function PlanCard({ card, named, now }: { card: UsageCard; named: boolean; now: 
   const balanceRows = (card.balances ?? []).map((balance) => (
     <span key={`${balance.label}/${balance.currency}`} className="k-u-plan__balance">
       <span>
-        {balance.label === 'Prepaid balance' ? t('limits.prepaidBalance') : balance.label}
+        {balance.label === 'Prepaid balance'
+          ? t('limits.prepaidBalance')
+          : balance.label === 'Extra usage'
+            ? t('limits.extraUsage')
+            : balance.label}
       </span>
       <b>
         {planBalance(

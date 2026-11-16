@@ -29,6 +29,8 @@ import { readAuggieAccount } from './vendor-usage/auggie'
 import { readCopilotQuota } from './vendor-usage/copilot'
 import { readKiloProfile } from './vendor-usage/kilo'
 import { readQoderUsage } from './vendor-usage/qoder'
+import { storedSignInReader } from './vendor-usage/readers'
+import { readerOpen, type StoredSignInReader } from './vendor-usage/stored-sign-in'
 import type { VendorUsage } from './vendor-usage/common'
 import type { AgentProcess, NodeRuntime } from '@shared/host-control'
 import type { Platform } from '@shared/platform'
@@ -2483,6 +2485,7 @@ export class AgentManager {
       (slot.def.id === 'opencode' ||
         limitsReport(slot.def.id) !== null ||
         ['grok', 'mistral-vibe', 'copilot', 'qoder', 'kilo', 'auggie'].includes(slot.def.id) ||
+        storedSignInReader(slot.def.id) !== null ||
         this.driver(slot).reads?.limits === true)
     )
   }
@@ -2495,6 +2498,8 @@ export class AgentManager {
 
   /** The limits from the connection when it reads them, else from the agent's report. */
   private async readLimits(slot: Slot): Promise<void> {
+    const stored = storedSignInReader(slot.def.id)
+    if (stored) return this.readWithStoredSignIn(slot, stored)
     const runtime = await this.ensureReady(slot.id)
     const { connection } = runtime
     if (connection.request && ['grok', 'mistral-vibe'].includes(slot.def.id)) {
@@ -2574,6 +2579,32 @@ export class AgentManager {
     slot.limits.clear()
     for (const limit of merged) slot.limits.set(limit.window, limit)
     this.emit(slot)
+  }
+
+  /**
+   * Reads the plan limits with the sign-in the harness keeps, which needs no agent running, at the
+   * version a start runs: the running one's, else the installed package's or program's.
+   */
+  private async readWithStoredSignIn(slot: Slot, reader: StoredSignInReader): Promise<void> {
+    const detection = slot.h.detection
+    const adapter = detection?.state === 'available' ? detection.adapter : null
+    const version =
+      slot.init?.version ??
+      (adapter ? (adapter.current?.version ?? adapter.version) : slot.h.binaryVersion)
+    if (!readerOpen(reader, version)) return
+    const now = Date.now()
+    let usage: VendorUsage
+    try {
+      usage = await reader.read({
+        env: this.deps.env.agentEnv(slot.id),
+        home: os.homedir(),
+        platform: this.deps.platform,
+        now,
+      })
+    } catch (error) {
+      throw this.limitsError(slot, error)
+    }
+    this.applyVendorUsage(slot, usage, now)
   }
 
   private applyVendorUsage(slot: Slot, usage: VendorUsage, now: number): void {

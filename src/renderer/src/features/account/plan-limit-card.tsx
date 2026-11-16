@@ -133,7 +133,11 @@ function CardFace({ card }: { card: PlanCard }) {
           className="-mt-px flex min-w-0 justify-between gap-0 text-badge leading-3.25 tracking-tight whitespace-nowrap"
         >
           <span className="min-w-0 truncate text-tertiary">
-            {balance.label === 'Prepaid balance' ? t('usage:limits.prepaidBalance') : balance.label}
+            {balance.label === 'Prepaid balance'
+              ? t('usage:limits.prepaidBalance')
+              : balance.label === 'Extra usage'
+                ? t('usage:limits.extraUsage')
+                : balance.label}
           </span>
           <span className="shrink-0 text-primary tabular">
             {planBalance(
