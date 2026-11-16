@@ -1,5 +1,11 @@
 import { lazy, Suspense, useEffect, useRef, useState, type ReactNode } from 'react'
-import { useDefaultLayout } from 'react-resizable-panels'
+import {
+  useDefaultLayout,
+  useGroupRef,
+  usePanelRef,
+  type Layout,
+  type LayoutChangedMeta,
+} from 'react-resizable-panels'
 import { onAppEvent } from '@renderer/app/events'
 import {
   ResizableHandle,
@@ -31,16 +37,18 @@ const BrowserPane = lazy(() =>
   })),
 )
 
+// The content and every pane share one minimum width.
+const MIN_WIDTH = 360
 // Each pane is a panel of its own, so each keeps the width the user gives it. The terminal keeps
 // the id it had when it was the only pane.
-const PANE_SIZE = { defaultSize: '480px', minSize: '360px', maxSize: '760px' } as const
+const PANE_SIZE = { defaultSize: '480px', minSize: MIN_WIDTH } as const
 const PANES = {
   terminal: { id: 'side-panel', ...PANE_SIZE },
   files: { id: 'side-panel-files', ...PANE_SIZE },
-  artifact: { id: 'side-panel-artifact', defaultSize: '560px', minSize: '360px' },
+  artifact: { id: 'side-panel-artifact', defaultSize: '560px', minSize: MIN_WIDTH },
   browser: { id: 'side-panel-browser', ...PANE_SIZE },
   devices: { id: 'side-panel-devices', ...PANE_SIZE },
-  computer: { id: 'side-panel-computer', defaultSize: '540px', minSize: '360px' },
+  computer: { id: 'side-panel-computer', defaultSize: '540px', minSize: MIN_WIDTH },
 } as const
 
 // As long as App Shell's columns take to glide.
@@ -85,6 +93,7 @@ function usePaneGlide(panel: string | null, pane: SidePane | undefined) {
  * session's in its project, holding the terminal, the files, the browser or, opened from the
  * thread, an artifact. Opening or closing it glides the content's edge as App Shell's work area
  * does. Maximized, the panel covers the whole area while the layout underneath keeps its sizes.
+ * Dragging the edge past the content's minimum folds the content away and maximizes the panel.
  */
 export function SidePanelArea({
   projectPath,
@@ -115,6 +124,36 @@ export function SidePanelArea({
     storage: layoutStorage,
     onlySaveAfterUserInteractions: true,
   })
+  const groupRef = useGroupRef()
+  const contentRef = usePanelRef()
+  const paneRef = usePanelRef()
+  // The layout before the drag that folds the content, which Restore brings back.
+  const settled = useRef<Layout | null>(null)
+  const [folded, setFolded] = useState(false)
+  // Layout changes made here wait a frame, out of the library's own callback.
+  const onLayoutChanged = (next: Layout, meta: LayoutChangedMeta) => {
+    if (!contentRef.current?.isCollapsed()) {
+      settled.current = next
+      layout.onLayoutChanged(next, meta)
+      return
+    }
+    if (meta.isUserInteraction) {
+      const back = settled.current
+      useViewStore.setState({ sidePaneMaximized: true })
+      requestAnimationFrame(() => {
+        if (back) groupRef.current?.setLayout(back)
+        else contentRef.current?.expand()
+      })
+      return
+    }
+    // A narrower window folds it too. While both still fit, the pane gives way instead; otherwise
+    // it unfolds once the window grows again.
+    requestAnimationFrame(() => {
+      if ((paneRef.current?.getSize().inPixels ?? 0) >= MIN_WIDTH * 2) {
+        contentRef.current?.resize(MIN_WIDTH)
+      }
+    })
+  }
   const previous = useRef({ panel: panel ?? '', open })
   // Stays set for a second run of one open, so that run still starts a tab instead of closing.
   const opening = useRef(false)
@@ -162,16 +201,28 @@ export function SidePanelArea({
   return (
     <ResizablePanelGroup
       orientation="horizontal"
+      groupRef={groupRef}
       defaultLayout={layout.defaultLayout}
-      onLayoutChanged={layout.onLayoutChanged}
+      onLayoutChanged={onLayoutChanged}
       className="kettu-pane-area relative"
       data-glide={glide ?? undefined}
       style={SHEET_PANEL}
     >
-      <ResizablePanel id="content" minSize="360px" className="min-w-0" style={SHEET_PANEL}>
-        {/* Under the maximized panel the content keeps its state but is not rendered, and its
-            sheet's edge gives way to the panel's. */}
-        <div inert={maximized} className={cn('h-full', maximized && '[content-visibility:hidden]')}>
+      <ResizablePanel
+        id="content"
+        panelRef={contentRef}
+        minSize={MIN_WIDTH}
+        collapsible
+        onResize={(size) => setFolded(size.inPixels === 0)}
+        className="min-w-0"
+        style={SHEET_PANEL}
+      >
+        {/* Under the maximized panel, or folded away, the content keeps its state but is not
+            rendered, and its sheet's edge gives way to the panel's. */}
+        <div
+          inert={maximized || folded}
+          className={cn('h-full', (maximized || folded) && '[content-visibility:hidden]')}
+        >
           {children}
         </div>
       </ResizablePanel>
@@ -186,6 +237,7 @@ export function SidePanelArea({
           />
           <ResizablePanel
             key={held}
+            panelRef={paneRef}
             {...PANES[held]}
             groupResizeBehavior="preserve-pixel-size"
             className="min-w-0"
