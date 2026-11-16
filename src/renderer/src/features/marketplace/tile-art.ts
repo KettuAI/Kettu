@@ -41,7 +41,7 @@ import {
 } from '@hugeicons/core-free-icons'
 import type { IconSvgElement } from '@hugeicons/react'
 import type { PluginHarness } from '@shared/marketplace'
-import type { WorkflowSource } from '@shared/workflow'
+import type { WireWorkflowEntry } from '@shared/workflow'
 import { KETTU_PLUGINS, kettuId, type CommunityItem } from '@shared/market-community'
 import { brandMark, type Mark } from './brand-marks'
 import { pluginName } from './model'
@@ -58,7 +58,7 @@ export type TileSubject =
       marks?: boolean
     }
   | { kind: 'skill'; name: string }
-  | { kind: 'workflow'; id: string; source: WorkflowSource }
+  | { kind: 'workflow'; id: string; source: WireWorkflowEntry['source'] }
 
 export type TileSize = 'small' | 'row' | 'big'
 
@@ -83,7 +83,10 @@ export const pluginSubject = (plugin: {
 
 export const skillSubject = (name: string): TileSubject => ({ kind: 'skill', name })
 
-export const workflowSubject = (workflow: { id: string; source: WorkflowSource }): TileSubject => ({
+export const workflowSubject = (workflow: {
+  id: string
+  source: WireWorkflowEntry['source']
+}): TileSubject => ({
   kind: 'workflow',
   id: workflow.id,
   source: workflow.source,
@@ -174,8 +177,9 @@ const CATEGORIES: [RegExp, IconSvgElement][] = [
   [/develop|engineer|code/, CodeIcon],
 ]
 
-// The user's workflows, colored by how they came.
-const WORKFLOW_COLOR: Record<WorkflowSource, string> = {
+// The user's workflows, colored by how they came; an older host's own as the community's.
+const WORKFLOW_COLOR: Record<WireWorkflowEntry['source'], string> = {
+  official: 'var(--tile-teal)',
   github: 'var(--tile-sky)',
   file: 'var(--tile-slate)',
   agent: 'var(--tile-cyan)',

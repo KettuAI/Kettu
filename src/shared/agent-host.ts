@@ -101,7 +101,7 @@ import type { AgentColor } from './settings'
 import type {
   SessionTaskRef,
   WorkflowAddSource,
-  WorkflowEntry,
+  WireWorkflowEntry,
   WorkflowSettings,
   WorkflowSettingsChange,
   StepPick,
@@ -827,7 +827,7 @@ export interface HostContract {
   }
   // Downloads a workflow listing's current version, checks every file and the workflow, and writes
   // it into the workflow library unapproved, in place of the version it has of the listing.
-  'market.addCommunityWorkflow': { params: { id: string }; result: WorkflowEntry }
+  'market.addCommunityWorkflow': { params: { id: string }; result: WireWorkflowEntry }
   'market.reportCommunity': { params: { id: string; message: string }; result: void }
   // A server listing's MCP bundle, in two steps: prepare downloads, checks and stages it and says
   // what it runs and asks for, running nothing; commit moves it into place with the values its
@@ -907,25 +907,25 @@ export interface HostContract {
   }
   // The routine's page is shown: its ended runs count as seen.
   'routines.markSeen': { params: { routineId: string }; result: void }
-  // Workflows: the user's library. See workflow.
-  'workflows.list': { params: void; result: WorkflowEntry[] }
+  // Workflows: the user's library. See workflow; an older host also sends the ones it shipped with.
+  'workflows.list': { params: void; result: WireWorkflowEntry[] }
   'workflows.read': {
     params: { workflowId: string }
-    result: { entry: WorkflowEntry; text: string | null }
+    result: { entry: WireWorkflowEntry; text: string | null }
   }
   // Unapproved until `workflows.approve` names the hash the user was shown.
-  'workflows.add': { params: WorkflowAddSource; result: WorkflowEntry }
+  'workflows.add': { params: WorkflowAddSource; result: WireWorkflowEntry }
   // Reads a GitHub workflow again; a changed file waits for approval again.
   'workflows.update': {
     params: { workflowId: string }
-    result: { entry: WorkflowEntry; changed: boolean }
+    result: { entry: WireWorkflowEntry; changed: boolean }
   }
-  'workflows.approve': { params: { workflowId: string; hash: string }; result: WorkflowEntry }
+  'workflows.approve': { params: { workflowId: string; hash: string }; result: WireWorkflowEntry }
   'workflows.remove': { params: { workflowId: string }; result: void }
   // Who does a step for every task of the workflow; null goes back to Auto.
   'workflows.pin': {
     params: { workflowId: string; stepId: string; pick: StepPick | null }
-    result: WorkflowEntry
+    result: WireWorkflowEntry
   }
   'workflows.settings': { params: void; result: WorkflowSettings }
   'workflows.setSettings': { params: WorkflowSettingsChange; result: WorkflowSettings }

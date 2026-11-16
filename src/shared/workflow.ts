@@ -138,16 +138,41 @@ export interface WorkflowEntry {
   /** SHA-256 of the file as read, hex; what an approval names. */
   hash: string
   origin: WorkflowOrigin | null
-  /** The file on the host; null from an older host for a workflow it shipped with. */
-  file: string | null
+  /** The file on the host. */
+  file: string
   addedAt: number | null
   /** Who does each step for every task of this workflow, by step id; Auto for the rest. */
   pins: Record<string, StepPick>
 }
 
-/** A workflow is usable for a new task: it reads, has no problem and is approved. */
-export function usableWorkflow(entry: WorkflowEntry): boolean {
-  return entry.workflow !== null && entry.problems.length === 0 && entry.approval === 'approved'
+/**
+ * Wire-only: the source and approval a host before v0.1.2 sends for the workflows it shipped with,
+ * which start tasks without approval and have no file. No host sends it now; clients still read it
+ * so they keep working with such a host.
+ */
+export const LEGACY_OFFICIAL = 'official'
+export type LegacyOfficial = typeof LEGACY_OFFICIAL
+
+/** A workflow entry as a client reads it from a host of any version. */
+export interface WireWorkflowEntry extends Omit<WorkflowEntry, 'source' | 'approval' | 'file'> {
+  source: WorkflowSource | LegacyOfficial
+  approval: WorkflowApproval | LegacyOfficial
+  /** Null for a workflow an older host shipped with. */
+  file: string | null
+}
+
+/**
+ * A workflow is usable for a new task: it reads, has no problem and is approved, or shipped with an
+ * older host.
+ */
+export function usableWorkflow(
+  entry: Pick<WireWorkflowEntry, 'workflow' | 'problems' | 'approval'>,
+): boolean {
+  return (
+    entry.workflow !== null &&
+    entry.problems.length === 0 &&
+    (entry.approval === 'approved' || entry.approval === LEGACY_OFFICIAL)
+  )
 }
 
 export interface WorkflowSettings {

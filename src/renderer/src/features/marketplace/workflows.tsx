@@ -12,7 +12,7 @@ import {
 } from 'react'
 import { File02Icon, GithubIcon } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
-import type { WorkflowEntry } from '@shared/workflow'
+import type { WireWorkflowEntry } from '@shared/workflow'
 import { EmptyState, Icon } from '@renderer/components/affect/app-shell'
 import { Button } from '@renderer/components/affect/button'
 import { Dialog, DialogClose } from '@renderer/components/ui/dialog'
@@ -45,6 +45,7 @@ import {
   flowLine,
   githubRepo,
   isWorkflowFileUrl,
+  kettuPublisher,
   listingOrigin,
   workflowGroup,
   workflowMatches,
@@ -60,13 +61,14 @@ import { PlainTile } from './tiles'
  * Who a workflow comes from, after its name: a publisher of the Kettu Marketplace, with the Kettu
  * mark for Kettu's own, a repository's owner, a file, an agent or you.
  */
-export function WorkflowByline({ entry }: { entry: WorkflowEntry }) {
+export function WorkflowByline({ entry }: { entry: WireWorkflowEntry }) {
   const { t } = useTranslation('marketplace')
   const origin = entry.origin
-  if (origin?.kind === 'community' && origin.official) {
+  const kettu = kettuPublisher(entry)
+  if (kettu) {
     return (
       <>
-        <span className="k-workflow-by">{origin.handle}</span>
+        <span className="k-workflow-by">{kettu}</span>
         <KettuMark />
       </>
     )
@@ -99,7 +101,7 @@ export function WorkflowStateBadge({ state }: { state: Exclude<WorkflowState, 'r
 }
 
 /** A row's line: the steps in order, or why the file does not read. */
-function rowLine(entry: WorkflowEntry, locale: string): string | null {
+function rowLine(entry: WireWorkflowEntry, locale: string): string | null {
   if (entry.workflow) return flowLine(entry.workflow, locale)
   return entry.problems[0]?.message ?? null
 }
@@ -110,7 +112,7 @@ export function WorkflowRow({
   showKind = false,
   fresh,
 }: {
-  entry: WorkflowEntry
+  entry: WireWorkflowEntry
   tab: MarketplaceTab
   showKind?: boolean
   fresh?: boolean
@@ -160,7 +162,7 @@ export function WorkflowUpdateButton({
   size,
   version,
 }: {
-  entry: WorkflowEntry
+  entry: WireWorkflowEntry
   name: string
   tab: MarketplaceTab
   size?: 'md'

@@ -5,7 +5,7 @@ import { useShallow } from 'zustand/react/shallow'
 import { StarLine } from '@renderer/features/github-star/star-prompts'
 import type { Project, SessionSummary, StartNotice } from '@shared/agent-host'
 import type { AgentId, SlashCommand, UserContent } from '@shared/thread'
-import { usableWorkflow, type Workflow, type WorkflowEntry } from '@shared/workflow'
+import { usableWorkflow, type Workflow, type WireWorkflowEntry } from '@shared/workflow'
 import { limitsForModel } from '@shared/plan-limits'
 import { startNewSession } from '@renderer/app/actions'
 import { AgentMark } from '@renderer/components/agents/agent-mark'
@@ -331,7 +331,7 @@ function DraftComposer({
   // A workflow no longer usable, or not read yet, leaves Chat chosen.
   const workflow = chosenWorkflow
     ? workflows.entries.find(
-        (entry): entry is WorkflowEntry & { workflow: Workflow } =>
+        (entry): entry is WireWorkflowEntry & { workflow: Workflow } =>
           entry.id === chosenWorkflow && usableWorkflow(entry),
       )
     : undefined
@@ -382,7 +382,7 @@ function DraftComposer({
   useEffect(() => onInput(holdsMessage), [holdsMessage, onInput])
 
   // With a workflow the message starts a task, its first step on the tray's agent and options.
-  const startTask = async (entry: WorkflowEntry, options: Record<string, string | boolean>) => {
+  const startTask = async (entry: WireWorkflowEntry, options: Record<string, string | boolean>) => {
     if (!agentId || !taskProject) return
     const taken = box.take()
     const base = gitStatus ? currentBase(gitStatus) : null

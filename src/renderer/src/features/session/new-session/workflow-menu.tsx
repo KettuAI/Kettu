@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Message01Icon, Store01Icon } from '@hugeicons/core-free-icons'
 import { Trans, useTranslation } from 'react-i18next'
-import type { Workflow, WorkflowEntry } from '@shared/workflow'
+import type { Workflow, WireWorkflowEntry } from '@shared/workflow'
 import type { AgentId } from '@shared/thread'
 import {
   DropdownMenu,
@@ -57,7 +57,7 @@ export function WorkflowMenu({
   const chosen = workflowId ? entries.find((entry) => entry.id === workflowId) : undefined
   const usable =
     chosen?.workflow && workflowBlocked(chosen) === null
-      ? (chosen as WorkflowEntry & { workflow: Workflow })
+      ? (chosen as WireWorkflowEntry & { workflow: Workflow })
       : undefined
 
   return (
@@ -159,17 +159,10 @@ export function WorkflowMenu({
             </>
           )}
           <DropdownMenuSeparator />
-          {none ? (
-            <DropdownMenuItem onClick={() => openMarketplace({ tab: 'workflow' })}>
-              <MenuGlyph icon={Store01Icon} />
-              {t('newSession.workflow.addFromMarketplace')}
-            </DropdownMenuItem>
-          ) : (
-            <DropdownMenuItem onClick={() => openMarketplace()}>
-              <MenuGlyph icon={Store01Icon} />
-              {t('newSession.workflow.findMore')}
-            </DropdownMenuItem>
-          )}
+          <DropdownMenuItem onClick={() => openMarketplace({ tab: 'workflow' })}>
+            <MenuGlyph icon={Store01Icon} />
+            {none ? t('newSession.workflow.addFromMarketplace') : t('newSession.workflow.findMore')}
+          </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
       {usable && (

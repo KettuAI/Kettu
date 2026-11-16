@@ -2,7 +2,7 @@
 // Settings show. Read on demand and again when the host says the library changed.
 
 import { create } from 'zustand'
-import type { WorkflowEntry, WorkflowSettings } from '@shared/workflow'
+import type { WireWorkflowEntry, WorkflowSettings } from '@shared/workflow'
 import { errorMessage, hostAt } from '@renderer/lib/host'
 
 /** A host's key in the store: its id, or '' for this computer. */
@@ -11,7 +11,7 @@ export function workflowsKey(hostId: string | null): string {
 }
 
 interface HostWorkflows {
-  entries: WorkflowEntry[]
+  entries: WireWorkflowEntry[]
   settings: WorkflowSettings | null
   loaded: boolean
   error: string | null

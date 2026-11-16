@@ -19,9 +19,10 @@ import {
 } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
 import {
+  LEGACY_OFFICIAL,
   stepName,
   type Workflow,
-  type WorkflowEntry,
+  type WireWorkflowEntry,
   type WorkflowStep,
   type StepPick,
 } from '@shared/workflow'
@@ -55,6 +56,7 @@ import {
   flowLine,
   githubPage,
   githubRepo,
+  kettuPublisher,
   listingOrigin,
   missingTools,
   outcomeTarget,
@@ -121,6 +123,7 @@ export function WorkflowListing({
   const workflow = entry.workflow
   const state = workflowState(entry)
   const listed = listingOrigin(entry)
+  const kettu = kettuPublisher(entry)
   const name = workflowName(entry, locale)
   const description = workflowDescription(entry, locale)
   const related = entries
@@ -136,13 +139,16 @@ export function WorkflowListing({
             <KindTag kind="workflow" />
           </span>
           <span className="k-mkt-head__pub">
-            {listed ? (
+            {kettu ? (
+              <>
+                {kettu}
+                <KettuMark />
+                <span className="k-mkt-head__trust">{t('listing.official')}</span>
+              </>
+            ) : listed ? (
               <>
                 {listed.handle}
-                {listed.official && <KettuMark />}
-                <span className="k-mkt-head__trust">
-                  {listed.official ? t('listing.official') : t('community.trust')}
-                </span>
+                <span className="k-mkt-head__trust">{t('community.trust')}</span>
               </>
             ) : (
               <>
@@ -207,7 +213,7 @@ function HeadUpdate({
   name,
   tab,
 }: {
-  entry: WorkflowEntry
+  entry: WireWorkflowEntry
   name: string
   tab: MarketplaceTab
 }) {
@@ -222,7 +228,7 @@ function WorkflowMenu({
   name,
   onRemoved,
 }: {
-  entry: WorkflowEntry
+  entry: WireWorkflowEntry
   name: string
   onRemoved: () => void
 }) {
@@ -230,6 +236,8 @@ function WorkflowMenu({
   const scope = useHostScope()
   const [removing, setRemoving] = useState(false)
   const [checking, setChecking] = useState(false)
+  // An older host's own workflows are neither removed nor updated.
+  if (entry.source === LEGACY_OFFICIAL) return null
   const check = async () => {
     setChecking(true)
     try {
@@ -298,7 +306,7 @@ function RemoveDialog({
   onOpenChange,
   onRemoved,
 }: {
-  entry: WorkflowEntry
+  entry: WireWorkflowEntry
   name: string
   open: boolean
   onOpenChange: (open: boolean) => void
@@ -363,7 +371,7 @@ function Approval({
   name,
   onRemoved,
 }: {
-  entry: WorkflowEntry
+  entry: WireWorkflowEntry
   name: string
   onRemoved: () => void
 }) {
@@ -509,7 +517,7 @@ function FileText({ text }: { text: string | null }) {
 }
 
 /** What the file has wrong, each where the host found it. */
-function Problems({ entry }: { entry: WorkflowEntry }) {
+function Problems({ entry }: { entry: WireWorkflowEntry }) {
   const { t, i18n } = useTranslation('marketplace')
   const where = (at: string): string | null => {
     if (!at) return null
@@ -536,21 +544,23 @@ function Problems({ entry }: { entry: WorkflowEntry }) {
   )
 }
 
-function Facts({ entry }: { entry: WorkflowEntry }) {
+function Facts({ entry }: { entry: WireWorkflowEntry }) {
   const { t } = useTranslation('marketplace')
   const workflow = entry.workflow
   const origin = entry.origin
   const yours = workflow ? workflow.steps.filter(waitsForYou).length : 0
   const from =
-    origin?.kind === 'community'
-      ? t('community.source')
-      : origin?.kind === 'github'
-        ? (githubRepo(origin.url) ?? 'GitHub')
-        : origin?.kind === 'file'
-          ? origin.name
-          : origin?.kind === 'agent'
-            ? t('workflow.from.agent', { agent: agentName(origin.agentId) })
-            : t('workflow.from.you')
+    entry.source === LEGACY_OFFICIAL
+      ? t('community.kettu')
+      : origin?.kind === 'community'
+        ? t('community.source')
+        : origin?.kind === 'github'
+          ? (githubRepo(origin.url) ?? 'GitHub')
+          : origin?.kind === 'file'
+            ? origin.name
+            : origin?.kind === 'agent'
+              ? t('workflow.from.agent', { agent: agentName(origin.agentId) })
+              : t('workflow.from.you')
   const backs = workflow ? workflow.steps.flatMap((step) => backArrowsOf(workflow, step)) : []
   return (
     <div className="k-mkt-facts k-workflow-facts">
@@ -670,7 +680,7 @@ function Flow({ workflow }: { workflow: Workflow }) {
 }
 
 /** Each step: what it does and where its outcomes go, the words for whoever picks, who does it. */
-function Steps({ entry, workflow }: { entry: WorkflowEntry; workflow: Workflow }) {
+function Steps({ entry, workflow }: { entry: WireWorkflowEntry; workflow: Workflow }) {
   const { t } = useTranslation('marketplace')
   return (
     <section>
@@ -714,7 +724,7 @@ function StepRow({
   step,
   first,
 }: {
-  entry: WorkflowEntry
+  entry: WireWorkflowEntry
   workflow: Workflow
   step: WorkflowStep
   first: boolean
@@ -830,7 +840,7 @@ function PinLabel({ pick }: { pick: StepPick }) {
  * Who does an agent step for every task of this workflow: Auto, or an agent, model and effort the user
  * pinned with the agent menu, whose values are kept here rather than in New session's picks.
  */
-function StepPin({ entry, step }: { entry: WorkflowEntry; step: WorkflowStep }) {
+function StepPin({ entry, step }: { entry: WireWorkflowEntry; step: WorkflowStep }) {
   const { t, i18n } = useTranslation('marketplace')
   const scope = useHostScope()
   const { hostId } = scope
@@ -1001,7 +1011,7 @@ function Needs({ workflow, pending }: { workflow: Workflow; pending: boolean }) 
 }
 
 /** The workflow's file, shown when asked for, or at once when it does not read. */
-function FileSection({ entry, open: openAtFirst }: { entry: WorkflowEntry; open: boolean }) {
+function FileSection({ entry, open: openAtFirst }: { entry: WireWorkflowEntry; open: boolean }) {
   const { t } = useTranslation(['marketplace', 'common'])
   const [open, setOpen] = useState(openAtFirst)
   const { read, error, retry } = useWorkflowFile(entry.id, entry.hash, open)
@@ -1035,10 +1045,11 @@ function FileSection({ entry, open: openAtFirst }: { entry: WorkflowEntry; open:
   )
 }
 
-function Side({ entry, workflow }: { entry: WorkflowEntry; workflow: Workflow | null }) {
+function Side({ entry, workflow }: { entry: WireWorkflowEntry; workflow: Workflow | null }) {
   const { t, i18n } = useTranslation('marketplace')
   const [reporting, setReporting] = useState(false)
   const origin = entry.origin
+  const kettu = kettuPublisher(entry)
   const tools = workflow ? workflowTools(workflow) : null
   const session = useSessionsStore((s) =>
     origin?.kind === 'agent' ? (s.byId[origin.sessionId] ?? null) : null,
@@ -1049,11 +1060,13 @@ function Side({ entry, workflow }: { entry: WorkflowEntry; workflow: Workflow | 
       <dl>
         <dt>{t('listing.side.publisher')}</dt>
         <dd>
-          {origin?.kind === 'community' ? (
+          {kettu ? (
             <>
-              {origin.handle}
-              {origin.official && <KettuMark />}
+              {kettu}
+              <KettuMark />
             </>
+          ) : origin?.kind === 'community' ? (
+            origin.handle
           ) : origin?.kind === 'github' ? (
             (githubRepo(origin.url)?.split('/')[0] ?? 'GitHub')
           ) : (

@@ -6,7 +6,7 @@ import {
   stepName,
   usableWorkflow,
   type Workflow,
-  type WorkflowEntry,
+  type WireWorkflowEntry,
   type WorkflowStep,
   type StepPick,
 } from '@shared/workflow'
@@ -98,7 +98,7 @@ export function pickNames(
 }
 
 /** A workflow's name in the interface's language. */
-export function workflowName(entry: WorkflowEntry): string {
+export function workflowName(entry: WireWorkflowEntry): string {
   return entry.workflow?.locales[i18n.language]?.name ?? entry.name
 }
 
@@ -119,7 +119,7 @@ export function stepChain(workflow: Workflow): string {
 
 /** Why a workflow cannot start a task, or null for one that can. */
 export function workflowBlocked(
-  entry: WorkflowEntry,
+  entry: WireWorkflowEntry,
 ): 'approval' | 'changed' | 'unreadable' | null {
   if (entry.workflow === null || entry.problems.length > 0) return 'unreadable'
   if (usableWorkflow(entry)) return null

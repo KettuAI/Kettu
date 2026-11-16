@@ -1,7 +1,7 @@
 // The workflow library's reads and changes the Marketplace makes: reading it again, adding a workflow
 // from a .yaml file picked on this computer, and adding or updating one from the Kettu Marketplace.
 
-import { WORKFLOW_FILE_BYTES, type WorkflowEntry } from '@shared/workflow'
+import { WORKFLOW_FILE_BYTES, type WireWorkflowEntry } from '@shared/workflow'
 import { toast } from '@renderer/components/ui/toast'
 import { errorMessage } from '@renderer/lib/host'
 import { i18n } from '@renderer/lib/i18n'
@@ -22,7 +22,7 @@ export function useWorkflows() {
 }
 
 /** The library's workflow of a Kettu Marketplace listing; null while it has none. */
-export function useListingWorkflow(listingId: string): WorkflowEntry | null {
+export function useListingWorkflow(listingId: string): WireWorkflowEntry | null {
   const { entries } = useWorkflows()
   return entries.find((entry) => listingOrigin(entry)?.listingId === listingId) ?? null
 }
@@ -31,7 +31,7 @@ export function useListingWorkflow(listingId: string): WorkflowEntry | null {
  * Where a workflow from the Kettu Marketplace stands with its listing: the newer version it offers,
  * or one that replaces a withdrawn version, and whether it was taken down.
  */
-export function useWorkflowStanding(entry: WorkflowEntry): {
+export function useWorkflowStanding(entry: WireWorkflowEntry): {
   update: string | null
   takenDown: boolean
 } {
@@ -112,7 +112,7 @@ function pickWorkflowFile(): Promise<File | null> {
 }
 
 /** Shows the workflow just added, read again first so its page finds it. */
-export async function showAdded(scope: HostScope, entry: WorkflowEntry): Promise<void> {
+export async function showAdded(scope: HostScope, entry: WireWorkflowEntry): Promise<void> {
   await retryWorkflows(scope)
   openMarketplace({ item: itemKey({ kind: 'workflow', id: entry.id }), tab: 'workflow' })
 }

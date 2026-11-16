@@ -4,12 +4,13 @@
 import type { AgentOptions } from '@shared/agent-host'
 import { harnessOf } from '@shared/agents'
 import {
+  LEGACY_OFFICIAL,
   WORKFLOW_FILE_BYTES,
   isBackArrow,
   workflowText,
   stepName,
   type Workflow,
-  type WorkflowEntry,
+  type WireWorkflowEntry,
   type WorkflowOutcome,
   type WorkflowStep,
   type StepPick,
@@ -26,7 +27,7 @@ import { matchesText } from './model'
  */
 export type WorkflowState = 'ready' | 'pending' | 'changed' | 'problems' | 'unreadable'
 
-export function workflowState(entry: WorkflowEntry): WorkflowState {
+export function workflowState(entry: WireWorkflowEntry): WorkflowState {
   if (!entry.workflow) return 'unreadable'
   if (entry.approval === 'pending') return 'pending'
   if (entry.approval === 'changed') return 'changed'
@@ -35,30 +36,42 @@ export function workflowState(entry: WorkflowEntry): WorkflowState {
 }
 
 /** Whether the user still has to approve it, the only state Approve clears. */
-export function awaitsApproval(entry: WorkflowEntry): boolean {
+export function awaitsApproval(entry: WireWorkflowEntry): boolean {
   return entry.approval === 'pending' || entry.approval === 'changed'
 }
 
-/** The directory's groups: the Kettu Marketplace's, the files the user added, and theirs or an agent's. */
+/**
+ * The directory's groups: the Kettu Marketplace's, with those an older host shipped with, the files
+ * the user added, and theirs or an agent's.
+ */
 export type WorkflowGroup = 'community' | 'added' | 'yours'
 
-export function workflowGroup(entry: WorkflowEntry): WorkflowGroup {
-  if (entry.source === 'community') return 'community'
+export function workflowGroup(entry: WireWorkflowEntry): WorkflowGroup {
+  if (entry.source === 'community' || entry.source === LEGACY_OFFICIAL) return 'community'
   return entry.source === 'github' || entry.source === 'file' ? 'added' : 'yours'
+}
+
+/**
+ * The publisher named with the Kettu mark: Kettu's own on the Kettu Marketplace, or Kettu for a
+ * workflow an older host shipped with; null for any other.
+ */
+export function kettuPublisher(entry: WireWorkflowEntry): string | null {
+  if (entry.source === LEGACY_OFFICIAL) return i18n.t('marketplace:community.kettu')
+  return entry.origin?.kind === 'community' && entry.origin.official ? entry.origin.handle : null
 }
 
 /** The listing of the Kettu Marketplace a workflow came from; null for any other. */
 export function listingOrigin(
-  entry: WorkflowEntry,
-): Extract<WorkflowEntry['origin'], { kind: 'community' }> | null {
+  entry: WireWorkflowEntry,
+): Extract<WireWorkflowEntry['origin'], { kind: 'community' }> | null {
   return entry.origin?.kind === 'community' ? entry.origin : null
 }
 
-export function workflowName(entry: WorkflowEntry, locale: string): string {
+export function workflowName(entry: WireWorkflowEntry, locale: string): string {
   return entry.workflow ? workflowText(entry.workflow, locale).name : entry.name
 }
 
-export function workflowDescription(entry: WorkflowEntry, locale: string): string | null {
+export function workflowDescription(entry: WireWorkflowEntry, locale: string): string | null {
   return entry.workflow ? workflowText(entry.workflow, locale).description.trim() || null : null
 }
 
@@ -93,7 +106,7 @@ export function flowLine(workflow: Workflow, locale: string): string {
     .join(' → ')
 }
 
-export function workflowMatches(entry: WorkflowEntry, query: string, locale: string): boolean {
+export function workflowMatches(entry: WireWorkflowEntry, query: string, locale: string): boolean {
   return matchesText(
     [
       workflowName(entry, locale),
@@ -138,7 +151,7 @@ export function workflowTools(workflow: Workflow): { mcp: string[]; skills: stri
 }
 
 /** The MCP servers and Skills its steps name that the host does not have, from its problems. */
-export function missingTools(entry: WorkflowEntry): string[] {
+export function missingTools(entry: WireWorkflowEntry): string[] {
   const names = new Set<string>()
   for (const problem of entry.problems) {
     const at = /^steps\[(\d+)\]\.tools\.(mcp|skills)\[(\d+)\]$/.exec(problem.at)
