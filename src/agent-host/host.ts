@@ -2479,6 +2479,11 @@ export class AgentHost {
       'sessions.stopTask': ({ sessionId, taskId }) => sessions.stopTask(sessionId, taskId),
       'sessions.taskOutput': ({ sessionId, taskId }) => sessions.taskOutput(sessionId, taskId),
       'sessions.retry': ({ sessionId }, { portId }) => sessions.retry(sessionId, portId),
+      'sessions.sideAsk': ({ sessionId, question, quote, agentId }) =>
+        sessions.sideAsk(sessionId, question, quote ?? null, agentId ?? null),
+      'sessions.sideStop': ({ sessionId }) => sessions.sideStop(sessionId),
+      'sessions.sideClear': ({ sessionId, undo }) => sessions.sideClear(sessionId, undo === true),
+      'sessions.sideAgents': ({ sessionId }) => ({ agents: sessions.sideAgents(sessionId) }),
       'sessions.fork': ({ sessionId, entryId, worktree }) =>
         sessions.fork(sessionId, entryId, worktree),
       'worktrees.inspect': ({ sessionId }) =>

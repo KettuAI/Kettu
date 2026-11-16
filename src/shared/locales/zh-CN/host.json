@@ -17,6 +17,14 @@
     "noBackgroundTasks": "{{agent}} 不提供后台任务",
     "noBackgroundTask": "这个后台任务不在会话中",
     "backgroundTaskEnded": "这个后台任务已结束",
+    "side": {
+      "subagent": "子 Agent 没有侧聊",
+      "archived": "先恢复这个会话，才能在旁边问",
+      "busy": "上一个侧聊问题还没答完",
+      "pickAgent": "{{agent}} 不能侧聊，请选一个 Agent 来答",
+      "cannotAnswer": "{{agent}} 不能替别的会话回答侧聊",
+      "noAnswer": "{{agent}} 没有答上这个问题"
+    },
     "cannotLoad": "{{agent}} 不支持加载或恢复会话",
     "cannotSteer": "{{agent}} 不支持在对话进行中接收消息",
     "cannotFork": "{{agent}} 不支持分叉会话",

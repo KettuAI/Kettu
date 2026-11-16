@@ -16,6 +16,7 @@ import type { LaunchSpec } from '../catalog'
 import { CLAUDE_CODE } from '../catalog'
 import {
   AgentRequestError,
+  SideQuestionUnsupported,
   type PermissionAnswer,
   type PermissionRequest,
   type SessionTarget,
@@ -3289,6 +3290,45 @@ describe('background tasks', () => {
     const read = await s.connection.taskOutput!(sessionId, 'b1')
     expect(read).toEqual({ output: 'x'.repeat(8192), truncated: true })
     expect(query.calls).toContainEqual({ method: 'getTaskOutput', args: ['b1'] })
+    query.finish()
+    await turn
+  })
+
+  it('asks its own query a side question, with the earlier ones as history', async () => {
+    const { s, sessionId, query, turn } = await open()
+    const texts: string[] = []
+    const events = { text: (answer: string) => texts.push(answer), step: () => {} }
+    await expect(
+      s.connection.sideQuestion!(
+        sessionId,
+        { question: 'Why?', history: [], running: null },
+        events,
+        new AbortController().signal,
+      ),
+    ).rejects.toBeInstanceOf(SideQuestionUnsupported)
+    s.sdk.sideAnswer = { response: 'Because.', synthetic: false }
+    const answer = await s.connection.sideQuestion!(
+      sessionId,
+      { question: 'And then?', history: [{ question: 'Why?', answer: 'Because.' }], running: null },
+      events,
+      new AbortController().signal,
+    )
+    expect(answer).toEqual({ text: 'Because.', synthetic: false })
+    expect(texts).toEqual(['Because.'])
+    expect(query.calls).toContainEqual({
+      method: 'askSideQuestion',
+      args: ['And then?', [{ question: 'Why?', response: 'Because.' }]],
+    })
+    s.sdk.sideAnswer = { response: '(No answer available.)', synthetic: true }
+    expect(
+      await s.connection.sideQuestion!(
+        sessionId,
+        { question: 'Hm?', history: [], running: null },
+        events,
+        new AbortController().signal,
+      ),
+    ).toEqual({ text: '(No answer available.)', synthetic: true })
+    expect(texts).toEqual(['Because.'])
     query.finish()
     await turn
   })

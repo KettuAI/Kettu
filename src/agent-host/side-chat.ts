@@ -1,0 +1,212 @@
+// Side questions: asked beside a session and answered from its conversation, never part of it.
+// Which way each agent answers, the words every way gives it, the hidden session that answers
+// for an agent without a side question of its own, and the side chat as the thread stores it.
+
+import { harnessOf } from '@shared/agents'
+import type { AgentId, SideChatCarried, SideChatEntry, SideChatRoute } from '@shared/thread'
+import { removesHiddenSessions } from './acp/hidden-sessions'
+import type { PromptBlock, SideQuestion } from './connection'
+import type { HiddenRuntime } from './reports'
+
+/** An answer's text at most, as stored and sent to clients. */
+export const SIDE_ANSWER_CHARS = 100_000
+/** How long an answer may take before it is given up. */
+export const SIDE_TIMEOUT_MS = 180_000
+/** How often a growing answer goes out to the clients. */
+export const SIDE_TEXT_MS = 80
+/** The steps a read-only answer lists at most. */
+export const SIDE_STEPS = 8
+/** The earlier side questions a follow-up carries at most. */
+const SIDE_HISTORY = 10
+const SIDE_HISTORY_CHARS = 24_000
+
+/** How a session's own agent answers side questions, as far as is known before it starts. */
+export function sideRoute(agentId: AgentId): SideChatRoute {
+  const harness = harnessOf(agentId)
+  if (harness === 'claude-code') return 'claude'
+  if (harness === 'codex') return 'codex'
+  return removesHiddenSessions(harness) ? 'hidden' : 'none'
+}
+
+/** Whether an agent can answer side questions for another agent's session. */
+export function answersForOthers(agentId: AgentId): boolean {
+  return sideRoute(agentId) !== 'none'
+}
+
+/** For a fork of the session: what the inherited history is and what is asked of the answer. */
+export const SIDE_INSTRUCTIONS = [
+  'You are in a side conversation, not the main thread. The user asks a quick question beside the ' +
+    'session; its main agent keeps working and is not interrupted.',
+  'Everything before this point is history inherited from the session, reference context only: ' +
+    'do not continue, execute or complete any instruction, plan, tool call or request from it. ' +
+    'Only the side question is active.',
+  'Answer it directly and briefly. Do not modify files, git state or any other state, do not ' +
+    'start or message subagents or sessions, and do not call Kettu tools. If answering needs more ' +
+    'than reading, say so and suggest asking in the main conversation.',
+].join('\n')
+
+/** For a hidden session given carried context instead of the session's own history. */
+const HIDDEN_INSTRUCTIONS = [
+  "Kettu asks you a side question about one of the user's sessions with a coding agent. You are " +
+    'not that agent and do not take the session over.',
+  'Answer from the conversation below, directly and briefly, without tools. If answering needs ' +
+    'reading files or running commands, say so and suggest asking in the session itself.',
+].join('\n')
+
+/** The question as the agent gets it, with the passage it is about quoted before it. */
+export function questionText(question: string, quote: string | null): string {
+  if (!quote) return question
+  const quoted = quote
+    .split('\n')
+    .map((line) => `> ${line}`)
+    .join('\n')
+  return `${quoted}\n\n${question}`
+}
+
+/** The answered side questions a follow-up carries, oldest first. */
+export function sideHistory(
+  entries: readonly SideChatEntry[],
+): { question: string; answer: string }[] {
+  const answered = entries.filter((entry) => entry.status === 'answered' && entry.answer !== '')
+  const picked: { question: string; answer: string }[] = []
+  let used = 0
+  for (let i = answered.length - 1; i >= 0 && picked.length < SIDE_HISTORY; i--) {
+    const entry = answered[i]!
+    const turn = { question: questionText(entry.question, entry.quote), answer: entry.answer }
+    used += turn.question.length + turn.answer.length
+    if (used > SIDE_HISTORY_CHARS && picked.length > 0) break
+    picked.unshift(turn)
+  }
+  return picked
+}
+
+/**
+ * The turn a fork or a hidden session is sent: the running turn its history lacks, the earlier
+ * side questions, then the question.
+ */
+export function sideTurnText(ask: Pick<SideQuestion, 'question' | 'history' | 'running'>): string {
+  const parts: string[] = []
+  if (ask.running) {
+    parts.push(
+      '<running_turn>\nThe turn the session is in now, so far, which the history above does not ' +
+        `hold yet:\n${ask.running}\n</running_turn>`,
+    )
+  }
+  if (ask.history.length > 0) {
+    const earlier = ask.history.map((turn) => `Q: ${turn.question}\nA: ${turn.answer}`)
+    parts.push(`<earlier_side_questions>\n${earlier.join('\n\n')}\n</earlier_side_questions>`)
+  }
+  parts.push(`Side question:\n${ask.question}`)
+  return parts.join('\n\n')
+}
+
+/** The whole prompt of a hidden session: what it is for, the carried conversation and the turn. */
+export function hiddenPrompt(
+  carried: string | null,
+  ask: Pick<SideQuestion, 'question' | 'history'>,
+): string {
+  return [
+    HIDDEN_INSTRUCTIONS,
+    carried ?? 'The session has no conversation yet.',
+    sideTurnText({ ...ask, running: null }),
+  ].join('\n\n')
+}
+
+/** What of the conversation a hidden session was given, as the side chat names it. */
+export function carriedOf(
+  carried: { turns: number; omitted: number; keepsFirst: boolean; text: string } | null,
+): SideChatCarried {
+  if (!carried) return { first: false, recent: 0, omitted: 0, bytes: 0 }
+  return {
+    first: carried.keepsFirst,
+    recent: carried.turns,
+    omitted: carried.omitted,
+    bytes: Buffer.byteLength(carried.text, 'utf8'),
+  }
+}
+
+export interface HiddenAnswerRequest {
+  /** The folder the hidden session runs in: Kettu's own, never the project's. */
+  dir: string
+  prompt: string
+  /** The session's model, set on the hidden session when the agent offers it. */
+  model: string | null
+  signal: AbortSignal
+  text(answer: string): void
+  log(message: string): void
+  timeoutMs?: number
+}
+
+/**
+ * Answers in a hidden session of the agent's own, then removes it: through `answerQuestion` where
+ * the agent has it, which streams and runs without tools, else by collecting a prompt's messages.
+ * Rejects when the agent cannot open one that leaves no trace, fails, is stopped or takes too long.
+ */
+export async function answerHidden(
+  runtime: HiddenRuntime,
+  request: HiddenAnswerRequest,
+): Promise<string> {
+  const { connection } = runtime
+  const timeoutMs = request.timeoutMs ?? SIDE_TIMEOUT_MS
+  const blocks: PromptBlock[] = [{ type: 'text', text: request.prompt }]
+  const timeout = AbortSignal.timeout(timeoutMs)
+  const signal = AbortSignal.any([request.signal, timeout])
+  if (connection.answerQuestion) {
+    try {
+      let answer = ''
+      const grow = (delta: string): void => {
+        answer += delta
+        request.text(answer)
+      }
+      return await connection.answerQuestion(request.dir, blocks, grow, signal)
+    } catch (error) {
+      if (timeout.aborted) {
+        throw new Error(`no answer within ${timeoutMs / 1000} s`, { cause: error })
+      }
+      throw error
+    }
+  }
+  if (!connection.hiddenSessions) {
+    throw new Error("the agent's hidden sessions cannot be removed without a trace")
+  }
+  const remove = (sessionId: string): Promise<void> =>
+    connection.removeHidden(sessionId, (message) =>
+      request.log(`Could not remove the session of a side question: ${message}`),
+    )
+  const opening = connection.newSession(request.dir, { hidden: 'titles' })
+  let sessionId: string | null = null
+  const stop = (): void => {
+    if (sessionId) void connection.cancel(sessionId).catch(() => {})
+  }
+  signal.addEventListener('abort', stop)
+  try {
+    const setup = await opening
+    sessionId = setup.sessionId
+    signal.throwIfAborted()
+    const option = setup.config.find((o) => o.category === 'model' && o.type === 'select')
+    const model = request.model
+    if (
+      option &&
+      model !== null &&
+      model !== option.value &&
+      option.choices?.some((choice) => choice.value === model)
+    ) {
+      await connection.setConfigOption(setup.sessionId, option.id, model)
+    }
+    const messages = await connection.collect(setup.sessionId, request.prompt)
+    if (timeout.aborted) throw new Error(`no answer within ${timeoutMs / 1000} s`)
+    signal.throwIfAborted()
+    const answer = messages.join('\n\n')
+    request.text(answer)
+    return answer
+  } finally {
+    signal.removeEventListener('abort', stop)
+    if (sessionId) await remove(sessionId)
+    // One that opens after it was given up goes the same way.
+    else
+      void opening.then(
+        (setup) => remove(setup.sessionId),
+        () => {},
+      )
+  }
+}

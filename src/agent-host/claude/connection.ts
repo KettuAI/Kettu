@@ -15,6 +15,7 @@ import type { ConfigOption, PendingElicitation, TokenTotals, ToolEntry } from '@
 import {
   AgentRequestError,
   optionAnswer,
+  SideQuestionUnsupported,
   type AgentConnection,
   type AgentInit,
   type FolderHooks,
@@ -29,6 +30,9 @@ import {
   type SessionOptions,
   type SessionSetup,
   type SessionTarget,
+  type SideAnswer,
+  type SideAnswerEvents,
+  type SideQuestion,
 } from '../connection'
 import type { HostedContext } from '../driver'
 import { formFields, isWebUrl } from '../elicitation'
@@ -1738,6 +1742,28 @@ export class ClaudeConnection implements AgentConnection {
       output: cut ? output.slice(-TASK_OUTPUT_LIMIT) : output,
       truncated: cut || read.truncated === true,
     }
+  }
+
+  async sideQuestion(
+    sessionId: string,
+    ask: SideQuestion,
+    events: SideAnswerEvents,
+    signal: AbortSignal,
+  ): Promise<SideAnswer> {
+    const session = await this.ready(sessionId)
+    const query = session.query
+    if (!query) throw new AgentRequestError('agent_error', 'Claude Code is not running')
+    if (!query.askSideQuestion) throw new SideQuestionUnsupported()
+    this.context.hooks.traffic('out', { method: 'askSideQuestion', sessionId })
+    const history = ask.history.map((turn) => ({ question: turn.question, response: turn.answer }))
+    const answer = await query.askSideQuestion(ask.question, {
+      ...(history.length > 0 ? { history } : {}),
+      signal,
+    })
+    if (!answer || typeof answer.response !== 'string') return { text: '', synthetic: true }
+    if (answer.synthetic) return { text: answer.response, synthetic: true }
+    events.text(answer.response)
+    return { text: answer.response, synthetic: false }
   }
 
   // Options.

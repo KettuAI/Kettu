@@ -189,6 +189,17 @@ export class FakeQuery implements Query {
     return this.sdk.taskOutput
   }
 
+  get askSideQuestion() {
+    if (this.sdk.sideAnswer === undefined) return undefined
+    return async (
+      question: string,
+      options?: { history?: { question: string; response: string }[]; signal?: AbortSignal },
+    ) => {
+      this.record('askSideQuestion', question, options?.history ?? null)
+      return this.sdk.sideAnswer ?? null
+    }
+  }
+
   async setMcpServers(servers: Record<string, McpServerConfig>): Promise<McpSetServersResult> {
     this.record('setMcpServers', servers)
     return { added: Object.keys(servers), removed: [], errors: {} }
@@ -254,6 +265,8 @@ export class FakeClaudeSdk implements ClaudeSdk {
   generatedTitle: string | null = null
   /** What a query's `getTaskOutput` answers. */
   taskOutput = { output: '', total_bytes: 0, truncated: false }
+  /** What a query's `askSideQuestion` answers; undefined for an SDK without it. */
+  sideAnswer: { response: string; synthetic: boolean } | null | undefined = undefined
   context: ContextUsageAnswer = {
     categories: [
       { name: 'System prompt', tokens: 3000 },

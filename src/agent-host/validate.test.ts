@@ -80,6 +80,31 @@ describe('createValidators', () => {
     }
   })
 
+  it('takes a side question, its quote and the agent picked to answer it', () => {
+    expect(posix['sessions.sideAsk']({ sessionId: 's', question: 'Why?', other: 1 })).toEqual({
+      sessionId: 's',
+      question: 'Why?',
+    })
+    expect(
+      posix['sessions.sideAsk']({
+        sessionId: 's',
+        question: 'Why?',
+        quote: 'This line',
+        agentId: 'claude-code',
+      }),
+    ).toEqual({ sessionId: 's', question: 'Why?', quote: 'This line', agentId: 'claude-code' })
+    rejects(() => posix['sessions.sideAsk']({ sessionId: 's', question: '  \n ' }))
+    rejects(() => posix['sessions.sideAsk']({ sessionId: 's', question: 'x'.repeat(32_001) }))
+    rejects(() => posix['sessions.sideAsk']({ sessionId: 's', question: 'Why?', quote: '' }))
+    rejects(() => posix['sessions.sideAsk']({ sessionId: 's', question: 'Why?', agentId: 'nope!' }))
+    expect(posix['sessions.sideClear']({ sessionId: 's', undo: true })).toEqual({
+      sessionId: 's',
+      undo: true,
+    })
+    expect(posix['sessions.sideClear']({ sessionId: 's', undo: false })).toEqual({ sessionId: 's' })
+    rejects(() => posix['sessions.sideClear']({ sessionId: 's', undo: 'yes' }))
+  })
+
   it('takes only the two Claude Code settings, each with a value of its own kind', () => {
     const window = { setting: 'autoCompactWindow', model: 'claude-sonnet-5-5', value: 200000 }
     expect(

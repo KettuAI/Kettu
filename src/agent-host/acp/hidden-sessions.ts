@@ -1,6 +1,7 @@
 // What Kettu's session options mean on each ACP adapter: the `_meta` a session opens with, and
 // how a session Kettu opened for itself is removed so that none of the agent's history keeps it.
 
+import type { HarnessId } from '@shared/agents'
 import type { AgentId } from '@shared/thread'
 import type { AgentInit, SessionOptions } from '../connection'
 import { JUNIE_USAGE_VERSION } from '../vendor-usage/junie'
@@ -21,6 +22,14 @@ const REMOVALS: Partial<Record<AgentId, Removal>> = {
   junie: 'delete',
   // The fake agent removes a session as claude-agent-acp 0.94 did, which its tests keep.
   'fake-agent': 'delete-again',
+}
+
+/**
+ * Whether agents of this harness may open hidden sessions at all, as far as Kettu knows before one
+ * starts; a version that was not checked still opens none once it reports itself.
+ */
+export function removesHiddenSessions(harness: HarnessId): boolean {
+  return REMOVALS[harness] !== undefined
 }
 
 // The removals checked on one version alone, as the agent names it in `initialize`.

@@ -5,7 +5,7 @@
 import os from 'node:os'
 import type { AgentAccount, PlanLimit } from '@shared/agent-host'
 import type { Platform } from '@shared/platform'
-import type { ConfigOption, PermissionOption, TokenTotals } from '@shared/thread'
+import type { ConfigOption, PermissionOption, SideChatStep, TokenTotals } from '@shared/thread'
 import {
   programFailure,
   runProgram,
@@ -16,6 +16,7 @@ import type { LaunchSpec } from '../catalog'
 import {
   AgentRequestError,
   optionAnswer,
+  SideQuestionUnsupported,
   type AgentConnection,
   type AgentInit,
   type AuthMethodInfo,
@@ -31,12 +32,16 @@ import {
   type SessionOptions,
   type SessionSetup,
   type SessionTarget,
+  type SideAnswer,
+  type SideAnswerEvents,
+  type SideQuestion,
 } from '../connection'
 import type { AgentTransport } from '../driver'
 import type { Env } from '../find-command'
 import { t } from '../i18n'
 import { planMarkdown } from '../plan-revision'
 import { mergeConfig, type MapperEffect, type MapperOutput } from '../session-updates'
+import { SIDE_INSTRUCTIONS, sideTurnText } from '../side-chat'
 import { mapAccount, mapRateLimits } from './account'
 import {
   commandApproval,
@@ -281,6 +286,27 @@ function codexServer(server: McpServer): JsonValue | null {
           ),
         }
       : {}),
+  }
+}
+
+/** What a side question's read-only fork looked at, as the side chat lists it. */
+export function sideStep(item: ThreadItem): SideChatStep | null {
+  switch (item.type) {
+    case 'commandExecution': {
+      const action = item.commandActions[0]
+      if (action?.type === 'read') return { kind: 'read', title: action.name }
+      if (action?.type === 'search')
+        return { kind: 'search', title: action.query ?? action.command }
+      if (action?.type === 'listFiles')
+        return { kind: 'read', title: action.path ?? action.command }
+      return { kind: 'run', title: item.command }
+    }
+    case 'webSearch':
+      return { kind: 'search', title: item.query }
+    case 'mcpToolCall':
+      return { kind: 'other', title: `${item.server} ${item.tool}` }
+    default:
+      return null
   }
 }
 
@@ -808,6 +834,99 @@ export class CodexConnection implements AgentConnection {
     const byText = same[point.occurrence - 1]
     if (byText) return byText.turnId
     throw new AgentRequestError('agent_error', t('codex.noForkPoint'))
+  }
+
+  /**
+   * Answers a side question in an ephemeral fork of the thread through its last ended turn, read
+   * only, with every approval declined: the fork keeps the session's tools and instructions, so its
+   * prompt starts as the session's does and reads its cache. A thread whose first turn still runs
+   * has no turn to fork at.
+   */
+  async sideQuestion(
+    sessionId: string,
+    ask: SideQuestion,
+    events: SideAnswerEvents,
+    signal: AbortSignal,
+  ): Promise<SideAnswer> {
+    await this.requireSignIn()
+    const parent = this.threads.get(sessionId)
+    if (!parent?.cwd) throw new AgentRequestError('agent_error', 'The Codex session is not open')
+    const cwd = parent.cwd
+    const busy = parent.running !== null || parent.prompting !== null
+    const lastTurnId = await this.lastEndedTurn(sessionId)
+    if (busy && lastTurnId === null) {
+      throw new SideQuestionUnsupported('The first turn of the Codex session still runs')
+    }
+    signal.throwIfAborted()
+    const source = parent.known ? parent.settings : undefined
+    const options = ask.options ?? {}
+    // Without auto-allowed tools every tool call asks, and a thread without a target declines it.
+    const servers = (options.mcpServers ?? []).map((server) =>
+      server.type === 'stdio' ? server : { ...server, autoAllow: [] },
+    )
+    const own = developerInstructions(options).developerInstructions
+    this.hooks.traffic('out', { method: 'sideQuestion', sessionId })
+    const response = await this.call<ThreadResponse>('thread/fork', {
+      threadId: sessionId,
+      ...(lastTurnId ? { lastTurnId } : {}),
+      cwd,
+      approvalPolicy: 'never',
+      sandbox: 'read-only',
+      ...(source ? { model: source.model } : {}),
+      config: sessionConfig(cwd, { ...options, mcpServers: servers }),
+      developerInstructions: own ? `${own}\n\n${SIDE_INSTRUCTIONS}` : SIDE_INSTRUCTIONS,
+      ephemeral: true,
+      excludeTurns: true,
+    })
+    const record = await this.record(response.thread.id, cwd, response, true, source)
+    record.prompted = true
+    const threadId = record.id
+    const done: string[] = []
+    let current = ''
+    const answer = (): string => [...done, ...(current ? [current] : [])].join('\n\n')
+    this.pending.delete(threadId)
+    this.collectors.set(threadId, ({ method, params }) => {
+      const p = params as { item?: ThreadItem; delta?: unknown }
+      if (method === 'item/agentMessage/delta' && typeof p.delta === 'string') {
+        current += p.delta
+        events.text(answer())
+      } else if (method === 'item/completed' && p.item?.type === 'agentMessage') {
+        current = ''
+        if (p.item.text !== '') done.push(p.item.text)
+        events.text(answer())
+      } else if (method === 'item/started' && p.item) {
+        const step = sideStep(p.item)
+        if (step) events.step(step)
+      }
+    })
+    const stop = (): void => void this.cancel(threadId).catch(() => {})
+    signal.addEventListener('abort', stop)
+    try {
+      const result = await this.prompt(threadId, [{ type: 'text', text: sideTurnText(ask) }])
+      return {
+        text: answer(),
+        synthetic: false,
+        tokens: result.tokens,
+        model: record.settings.model || null,
+      }
+    } finally {
+      signal.removeEventListener('abort', stop)
+      this.collectors.delete(threadId)
+      await this.removeHidden(threadId, (message) =>
+        this.hooks.ignored(threadId, `side question fork not removed: ${message}`),
+      )
+    }
+  }
+
+  /** The newest turn of the thread that is not running, or null for a thread with none. */
+  private async lastEndedTurn(threadId: string): Promise<string | null> {
+    const page = await this.call<{ data: { id: string; status: string }[] }>('thread/turns/list', {
+      threadId,
+      limit: 2,
+      sortDirection: 'desc',
+      itemsView: 'notLoaded',
+    })
+    return page.data.find((turn) => turn.status !== 'inProgress')?.id ?? null
   }
 
   async closeSession(sessionId: string): Promise<void> {

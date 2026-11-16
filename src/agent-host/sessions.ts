@@ -22,6 +22,7 @@ import {
   type SessionOutputs,
   type SessionPullRequest,
   type SessionSummary,
+  type SideChatAgent,
   type StartNotice,
 } from '@shared/agent-host'
 import { LOCALES } from '@shared/locale'
@@ -101,6 +102,8 @@ import {
   type ProjectHooksEntry,
   type ProjectMcpDecision,
   type ProjectMcpEntry,
+  type SideChatEntry,
+  type SideChatView,
   type ThreadEntry,
   type ThreadState,
   type TokenTotals,
@@ -150,6 +153,7 @@ import { carryMode, lostValues, lostValuesNotice, type LostValue } from './confi
 import {
   AgentRequestError,
   promptBlocks,
+  SideQuestionUnsupported,
   type AgentConnection,
   type ForkPoint,
   type McpServer,
@@ -164,6 +168,9 @@ import {
   type SessionMemory,
   type SessionOptions,
   type SessionTarget,
+  type SideAnswer,
+  type SideAnswerEvents,
+  type SideQuestion,
 } from './connection'
 import type { Diagnostics } from './diagnostics'
 import { answeredFields, checkedValues } from './elicitation'
@@ -216,6 +223,7 @@ import type { PrepareState, SetupLog, WorktreeManager } from './worktrees/manage
 import { BranchNaming } from './worktrees/naming'
 import {
   carriedContext,
+  renderTurns,
   threadTurns,
   type CarriedContext,
   type RenderedTurn,
@@ -231,6 +239,19 @@ import {
   type WorktreeRecord,
 } from './storage'
 import { SUMMARY_RETRY_MS, writeTitles } from './outline-titles'
+import {
+  SIDE_ANSWER_CHARS,
+  SIDE_STEPS,
+  SIDE_TEXT_MS,
+  answerHidden,
+  answersForOthers,
+  carriedOf,
+  hiddenPrompt,
+  questionText,
+  sideHistory,
+  sideRoute,
+} from './side-chat'
+import { SIDE_ENTRIES, type StoredSideChat } from './threads/side-chat'
 import { listedTitle, titleMessageText, writeBranchSlug, writeSessionTitle } from './session-titles'
 import {
   addTokenTotals,
@@ -982,6 +1003,10 @@ export class SessionManager {
   private readonly lastSummaries = new Map<string, string>()
   /** `/context` reports running, by session id. */
   private readonly contextRuns = new Map<string, Promise<ContextBreakdown | null>>()
+  /** The side question each session is answering, stopped through its controller. */
+  private readonly sideRuns = new Map<string, AbortController>()
+  /** What the last clear of each session's side chat emptied, for its undo. */
+  private readonly sideCleared = new Map<string, SideChatEntry[]>()
   /** Sessions whose outline titles are being written, and when the last failed for others. */
   private readonly titling = new Set<string>()
   private readonly summaryFailedAt = new Map<string, number>()
@@ -2611,6 +2636,7 @@ export class SessionManager {
             commands: page.session.commands,
             usage: page.session.usage,
             ...storedContext(page.session.context),
+            ...storedSide(view, page.session.sideChat),
           }
         : view,
       entries: page ? page.entries.map(settled) : [],
@@ -2907,6 +2933,9 @@ export class SessionManager {
       queue: record.queue ?? [],
       // A queue from before a close or a restart waits until the user resumes it.
       queuePaused: (record.queue?.length ?? 0) > 0,
+      ...(record.origin === 'subagent'
+        ? {}
+        : { sideChat: { route: sideRoute(record.agentId), answerAgent: null, entries: [] } }),
     }
   }
 
@@ -5179,6 +5208,7 @@ export class SessionManager {
     if (live.scheduled > 0) return 'scheduled'
     if (waitingCount(live) > 0) return 'waiting'
     if (this.contextRuns.has(live.id)) return 'context'
+    if (this.sideRuns.has(live.id)) return 'side question'
     const [first] = this.workingSubagents(live)
     if (first) return first.waiting ? 'subagent waiting' : 'subagent'
     return null
@@ -5571,7 +5601,7 @@ export class SessionManager {
       live.nextPos = Math.max(live.nextPos, pos + 1)
       live.counter = Math.max(live.counter, idNumber(entry.id))
     }
-    const { config, commands, usage, context } = stored.session
+    const { config, commands, usage, context, sideChat } = stored.session
     live.thread = {
       session: {
         ...live.thread.session,
@@ -5579,6 +5609,7 @@ export class SessionManager {
         commands,
         usage,
         ...storedContext(context),
+        ...storedSide(live.thread.session, sideChat),
       },
       order,
       byId,
@@ -6261,6 +6292,10 @@ export class SessionManager {
       background: undefined,
       // Speed is the old agent's model; the new one may not be timed at all.
       speed: undefined,
+      // The side chat stays; the new agent answers it its own way.
+      ...(live.thread.session.sideChat
+        ? { sideChat: { ...live.thread.session.sideChat, route: sideRoute(agentId) } }
+        : {}),
       status: 'closed',
       error: null,
     })
@@ -7865,6 +7900,314 @@ export class SessionManager {
     }
   }
 
+  // Side questions.
+
+  /** The session's side chat; null for a subagent, which has none. */
+  private sideOf(live: Live): SideChatView | null {
+    if (live.record.origin === 'subagent') return null
+    return (
+      live.thread.session.sideChat ?? {
+        route: sideRoute(live.record.agentId),
+        answerAgent: null,
+        entries: [],
+      }
+    )
+  }
+
+  private setSide(live: Live, side: SideChatView): void {
+    this.update(live, { sideChat: { ...side, route: sideRoute(live.record.agentId) } })
+  }
+
+  private sideEntry(live: Live, entryId: string): SideChatEntry | null {
+    return this.sideOf(live)?.entries.find((entry) => entry.id === entryId) ?? null
+  }
+
+  /** Changes one side question; nothing once a clear took it away. */
+  private patchSideEntry(live: Live, entryId: string, changes: Partial<SideChatEntry>): void {
+    const side = this.sideOf(live)
+    if (!side?.entries.some((entry) => entry.id === entryId)) return
+    const entries = side.entries.map((entry) =>
+      entry.id === entryId ? { ...entry, ...changes } : entry,
+    )
+    this.setSide(live, { ...side, entries })
+  }
+
+  /**
+   * Asks a side question and answers it beside the session: the request returns once it is
+   * asked, the answer arrives in `sideChat` patches. `agentId` picks the agent that answers for a
+   * session whose own agent cannot, and the session keeps it.
+   */
+  async sideAsk(
+    sessionId: string,
+    question: string,
+    quote: string | null,
+    agentId: AgentId | null,
+  ): Promise<void> {
+    const record = this.recordOf(sessionId)
+    if (record.origin === 'subagent') throw new HostError('restricted', t('session.side.subagent'))
+    if (record.archivedAt !== undefined) {
+      throw new HostError('restricted', t('session.side.archived'))
+    }
+    if (this.sideRuns.has(sessionId)) throw new HostError('busy', t('session.side.busy'))
+    const own = sideRoute(record.agentId)
+    const borrowed = agentId !== null && agentId !== record.agentId
+    if (borrowed && !this.sideAgents(sessionId).some((agent) => agent.agentId === agentId)) {
+      throw new HostError(
+        'agent_unavailable',
+        t('session.side.cannotAnswer', { agent: this.deps.agents.name(agentId) }),
+      )
+    }
+    const live = await this.revive(sessionId)
+    // Another request may have started one while the session came back.
+    if (this.sideRuns.has(sessionId)) throw new HostError('busy', t('session.side.busy'))
+    const side = this.sideOf(live)!
+    const answerAgent = borrowed ? agentId : side.answerAgent
+    const answering = borrowed || own === 'none' ? answerAgent : record.agentId
+    if (answering === null) {
+      throw new HostError(
+        'agent_unavailable',
+        t('session.side.pickAgent', { agent: this.deps.agents.name(record.agentId) }),
+      )
+    }
+    this.deps.agents.assertEnabled(answering)
+    const entry: SideChatEntry = {
+      id: randomUUID(),
+      question,
+      quote,
+      agentId: answering,
+      route: answering === record.agentId && own !== 'none' ? own : 'hidden',
+      status: 'answering',
+      answer: '',
+      steps: [],
+      carried: null,
+      error: null,
+      askedAt: this.now(),
+      answeredAt: null,
+    }
+    this.sideCleared.delete(sessionId)
+    const entries = [...side.entries, entry].slice(-SIDE_ENTRIES)
+    this.setSide(live, { ...side, answerAgent, entries })
+    const controller = new AbortController()
+    this.sideRuns.set(sessionId, controller)
+    void this.answerSide(live, entry, controller.signal).finally(() => {
+      if (this.sideRuns.get(sessionId) === controller) this.sideRuns.delete(sessionId)
+      this.refreshRelease(live)
+    })
+  }
+
+  private async answerSide(live: Live, entry: SideChatEntry, signal: AbortSignal): Promise<void> {
+    const earlier = (this.sideOf(live)?.entries ?? []).filter((item) => item.id !== entry.id)
+    const ask = {
+      question: questionText(entry.question, entry.quote),
+      history: sideHistory(earlier),
+    }
+    let shown = ''
+    let timer: ReturnType<typeof setTimeout> | null = null
+    const showText = (): void => {
+      timer = null
+      this.patchSideEntry(live, entry.id, { answer: cutAnswer(shown) })
+    }
+    const events: SideAnswerEvents = {
+      text: (answer) => {
+        shown = answer
+        timer ??= setTimeout(showText, SIDE_TEXT_MS)
+      },
+      step: (step) => {
+        const steps = this.sideEntry(live, entry.id)?.steps
+        if (steps && steps.length < SIDE_STEPS) {
+          this.patchSideEntry(live, entry.id, { steps: [...steps, step] })
+        }
+      },
+    }
+    const ended = (changes: Partial<SideChatEntry>): void => {
+      if (timer) clearTimeout(timer)
+      this.patchSideEntry(live, entry.id, { ...changes, answeredAt: this.now() })
+    }
+    try {
+      const result = await this.sideAnswer(live, entry, ask, events, signal)
+      if (signal.aborted) {
+        ended({ status: 'stopped', answer: cutAnswer(shown) })
+      } else if (result.synthetic || result.text.trim() === '') {
+        const agent = this.deps.agents.name(entry.agentId)
+        ended({ status: 'failed', answer: '', error: t('session.side.noAnswer', { agent }) })
+      } else {
+        ended({ status: 'answered', answer: cutAnswer(result.text), error: null })
+        this.recordSideUsage(live, entry, result)
+      }
+    } catch (error) {
+      if (signal.aborted) {
+        ended({ status: 'stopped', answer: cutAnswer(shown) })
+        return
+      }
+      ended({ status: 'failed', error: agentError(error).message })
+      this.deps.diagnostics.log(
+        'warn',
+        `The side question of ${live.id} failed: ${(error as Error).message}`,
+      )
+    }
+  }
+
+  /** Answers the agent's own way where it has one, else in a hidden session given the context. */
+  private async sideAnswer(
+    live: Live,
+    entry: SideChatEntry,
+    ask: Pick<SideQuestion, 'question' | 'history'>,
+    events: SideAnswerEvents,
+    signal: AbortSignal,
+  ): Promise<SideAnswer> {
+    if (entry.route === 'claude' || entry.route === 'codex') {
+      try {
+        return await this.sideOwn(live, entry.route, ask, events, signal)
+      } catch (error) {
+        if (!(error instanceof SideQuestionUnsupported)) throw error
+        this.deps.diagnostics.log(
+          'info',
+          `The side question of ${live.id} goes to a hidden session: ${error.message}`,
+        )
+        this.patchSideEntry(live, entry.id, { route: 'hidden' })
+      }
+    }
+    return this.sideHidden(live, entry, ask, events, signal)
+  }
+
+  private async sideOwn(
+    live: Live,
+    route: 'claude' | 'codex',
+    ask: Pick<SideQuestion, 'question' | 'history'>,
+    events: SideAnswerEvents,
+    signal: AbortSignal,
+  ): Promise<SideAnswer> {
+    // A closed session attaches first, as a message would make it.
+    try {
+      await this.attachClosed(live)
+    } catch (error) {
+      throw agentError(error)
+    }
+    const runtime = await this.deps.agents.ensureReady(live.record.agentId)
+    const { connection } = runtime
+    if (!connection.sideQuestion) throw new SideQuestionUnsupported()
+    const { status } = live.thread.session
+    const running = status === 'running' || status === 'awaiting_permission'
+    // A fork of Codex's thread ends at its last finished turn, so it is told the running one, and
+    // keeps the session's tools so that its prompt starts as the session's and reads its cache.
+    const codex = route === 'codex'
+    const options = codex ? await this.attachOptions(live.id, live.record, runtime) : undefined
+    return connection.sideQuestion(
+      live.record.acpSessionId,
+      {
+        ...ask,
+        running: codex && running ? this.runningTurnText(live) : null,
+        ...(options ? { options } : {}),
+      },
+      events,
+      signal,
+    )
+  }
+
+  /** The running turn so far, as carried context renders a turn. */
+  private runningTurnText(live: Live): string | null {
+    const name = (agentId: AgentId): string => this.deps.agents.name(agentId)
+    const turns = threadTurns(threadEntries(live.thread), this.firstAgentOf(live.record), name)
+    const last = turns[turns.length - 1]
+    return last ? renderTurns([last], name) : null
+  }
+
+  private async sideHidden(
+    live: Live,
+    entry: SideChatEntry,
+    ask: Pick<SideQuestion, 'question' | 'history'>,
+    events: SideAnswerEvents,
+    signal: AbortSignal,
+  ): Promise<SideAnswer> {
+    const runtime = await this.deps.agents.ensureReady(entry.agentId)
+    const carried = carriedContext(threadEntries(live.thread), {
+      firstAgent: this.firstAgentOf(live.record),
+      agentName: (agentId) => this.deps.agents.name(agentId),
+      side: true,
+    })
+    this.patchSideEntry(live, entry.id, { carried: carriedOf(carried) })
+    // Kettu's own folder, never the project's: an agent without permissions could change it.
+    await mkdir(this.deps.reportsDir, { recursive: true })
+    const text = await answerHidden(runtime, {
+      dir: this.deps.reportsDir,
+      prompt: hiddenPrompt(carried?.text ?? null, ask),
+      model: entry.agentId === live.record.agentId ? modelOf(live.thread.session.config) : null,
+      signal,
+      text: events.text,
+      log: (message) => this.deps.diagnostics.log('warn', message),
+    })
+    return { text, synthetic: false }
+  }
+
+  private recordSideUsage(live: Live, entry: SideChatEntry, result: SideAnswer): void {
+    if (!result.tokens || !this.deps.usage) return
+    this.deps.usage.record(
+      recordRows({
+        sessionId: live.id,
+        acpSessionId: live.record.acpSessionId,
+        agentId: entry.agentId,
+        project: live.record.projectPath,
+        turnEntryId: `side-${entry.id}`,
+        at: this.now(),
+        tokens: result.tokens,
+        models: result.model ? [{ model: result.model, tokens: result.tokens }] : [],
+        model: result.model ?? null,
+      }),
+    )
+  }
+
+  /** Stops the side question being answered; its question stays, marked stopped. */
+  sideStop(sessionId: string): void {
+    this.recordOf(sessionId)
+    this.sideRuns.get(sessionId)?.abort()
+  }
+
+  /** Empties the side chat, or with `undo` puts back what the last clear emptied. */
+  async sideClear(sessionId: string, undo: boolean): Promise<void> {
+    const record = this.recordOf(sessionId)
+    if (record.origin === 'subagent') return
+    if (!undo) this.sideRuns.get(sessionId)?.abort()
+    const live = await this.revive(sessionId)
+    const side = this.sideOf(live)!
+    if (undo) {
+      const cleared = this.sideCleared.get(sessionId)
+      if (!cleared) return
+      this.sideCleared.delete(sessionId)
+      this.setSide(live, { ...side, entries: [...cleared, ...side.entries].slice(-SIDE_ENTRIES) })
+      return
+    }
+    if (side.entries.length === 0) return
+    this.sideCleared.set(
+      sessionId,
+      side.entries.map((entry) =>
+        entry.status === 'answering' ? { ...entry, status: 'stopped' } : entry,
+      ),
+    )
+    this.setSide(live, { ...side, entries: [] })
+  }
+
+  /** The agents of this host that can answer side questions for the session's agent. */
+  sideAgents(sessionId: string): SideChatAgent[] {
+    const record = this.recordOf(sessionId)
+    return this.deps.agents
+      .ids()
+      .filter(
+        (agentId) =>
+          agentId !== record.agentId &&
+          !this.deps.agents.isDisabled(agentId) &&
+          answersForOthers(agentId),
+      )
+      .map((agentId) => ({ agentId, name: this.deps.agents.name(agentId) }))
+  }
+
+  /** Stops what the sessions' side questions run and drops what is kept for them. */
+  private endSide(ids: readonly string[], forget: boolean): void {
+    for (const id of ids) {
+      this.sideRuns.get(id)?.abort()
+      if (forget) this.sideCleared.delete(id)
+    }
+  }
+
   // Permissions.
 
   /** The `allow_once` option the run's scope allows, or null when the request waits. */
@@ -9171,6 +9514,10 @@ export class SessionManager {
    * their threads first; the others are on their way out of the index.
    */
   private async closeAll(records: readonly SessionRecord[], kept: boolean): Promise<void> {
+    this.endSide(
+      records.map((record) => record.id),
+      false,
+    )
     for (const record of records) {
       const live = this.live.get(record.id)
       if (!live) continue
@@ -9287,6 +9634,7 @@ export class SessionManager {
   }
 
   private forget(sessionId: string, portIds?: readonly string[]): void {
+    this.endSide([sessionId], true)
     const record = this.live.get(sessionId)?.record ?? this.records.get(sessionId)
     const known = this.records.delete(sessionId) || this.lastSummaries.has(sessionId)
     this.lastSummaries.delete(sessionId)
@@ -9650,6 +9998,20 @@ export function unknownSession(error: AgentRequestError): boolean {
 }
 
 /** A breakdown stored with the session as its context report, until a read replaces it. */
+/** The stored side chat on a view that has one; its route follows the session's agent. */
+function storedSide(
+  view: SessionView,
+  stored: StoredSideChat | null,
+): Pick<SessionView, 'sideChat'> {
+  if (!view.sideChat || !stored) return {}
+  return {
+    sideChat: { ...view.sideChat, answerAgent: stored.answerAgent, entries: stored.entries },
+  }
+}
+
+const cutAnswer = (text: string): string =>
+  text.length > SIDE_ANSWER_CHARS ? text.slice(0, SIDE_ANSWER_CHARS) : text
+
 function storedContext(breakdown: ContextBreakdown | null): Pick<SessionView, 'context'> {
   if (!breakdown) return {}
   const key = `${breakdown.used}/${breakdown.size}`

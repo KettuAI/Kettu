@@ -416,6 +416,12 @@ export interface UsageAnswer {
   } | null
 }
 
+export interface SideQuestionAnswer {
+  response: string
+  /** Set when Claude Code wrote a note in place of an answer. */
+  synthetic: boolean
+}
+
 export interface Query extends AsyncIterable<SdkMessage> {
   interrupt(): Promise<void>
   setPermissionMode(mode: PermissionMode): Promise<void>
@@ -441,6 +447,15 @@ export interface Query extends AsyncIterable<SdkMessage> {
   generateSessionTitle?(description: string, options: { persist: boolean }): Promise<string | null>
   /** Stores a title this query generated. Present beside `generateSessionTitle` in the pinned SDK. */
   renameSession?(title: string, sessionId?: string): Promise<void>
+  /**
+   * Claude Code's `/btw`: answers from the whole conversation, the running turn included, with no
+   * tools and nothing kept in the transcript. Null when there was nothing to answer. Present in
+   * the SDK Kettu pins, though not in its published types.
+   */
+  askSideQuestion?(
+    question: string,
+    options?: { history?: { question: string; response: string }[]; signal?: AbortSignal },
+  ): Promise<SideQuestionAnswer | null>
   usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET?(options: {
     skipBehaviors?: boolean
   }): Promise<UsageAnswer>
