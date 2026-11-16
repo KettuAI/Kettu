@@ -45,6 +45,7 @@ function listing(over: Partial<MarketListing> = {}): MarketListing {
     kind: 'skill',
     description: 'One line per change.',
     visibility: 'public',
+    official: false,
     version: '1.0.0',
     versions: ['1.0.0'],
     installs: 12,
@@ -63,6 +64,7 @@ function mineListing(over: Partial<MineListing> = {}): MineListing {
     kind: 'skill',
     description: 'My notes.',
     visibility: 'private',
+    official: false,
     current: '1.0.0',
     versions: [],
     installs: { total: 0, week: 0, days: [] },
@@ -642,6 +644,7 @@ steps:
           version: '1.0.0',
           handle: 'amigoer',
           slug: 'release-notes',
+          official: false,
         },
         addedAt: expect.any(Number) as number,
         approved: null,
@@ -709,14 +712,23 @@ steps:
       expect(await written()).toEqual([])
     })
 
-    it('refuses a workflow named like an official one, and a listing without workflow.yaml', async () => {
+    it('installs a workflow by the name of one Kettu once shipped, under the id it had', async () => {
       const lib = await workflowLibrary()
-      const clash = published({
+      const f = published({
+        listings: { abcdefgh23: workflowListing({ handle: 'kettu-labs', official: true }) },
         files: { 'workflow.yaml': WORKFLOW.replace('Release notes', 'Fix a bug') },
       })
-      await expect(
-        service(clash, { workflows: lib }).installWorkflow('abcdefgh23'),
-      ).rejects.toMatchObject({ code: 'conflict' })
+      const entry = await service(f, { workflows: lib }).installWorkflow('abcdefgh23')
+      expect(entry).toMatchObject({
+        id: 'fix-a-bug',
+        source: 'community',
+        approval: 'pending',
+        origin: { handle: 'kettu-labs', official: true },
+      })
+    })
+
+    it('refuses a listing without workflow.yaml', async () => {
+      const lib = await workflowLibrary()
       const none = published({ files: { 'README.md': '# Release notes\n' } })
       await expect(service(none, { workflows: lib }).installWorkflow('abcdefgh23')).rejects.toThrow(
         /workflow\.yaml/,

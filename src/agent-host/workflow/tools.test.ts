@@ -5,15 +5,15 @@ import { WorkflowTools } from './tools'
 
 const ENTRY = {
   id: 'feature-development',
-  source: 'official',
+  source: 'community',
   name: 'Feature development',
   workflow: { description: 'Build a feature', steps: [] },
   problems: [],
-  approval: 'official',
+  approval: 'approved',
   hash: 'h',
   origin: null,
-  file: null,
-  addedAt: null,
+  file: '/w/feature-development.yaml',
+  addedAt: 1,
   pins: {},
 } as unknown as WorkflowEntry
 

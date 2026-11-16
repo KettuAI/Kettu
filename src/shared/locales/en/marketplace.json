@@ -189,6 +189,7 @@
     "skills": "Skills",
     "noSkills": "Kettu keeps no skills yet. Install one from Skills.",
     "noServers": "Kettu keeps no MCP servers yet. Install one from MCP servers.",
+    "noWorkflows": "Kettu has no workflows yet. Add one from Workflows.",
     "own": "From your agents",
     "ownNote": "The skills and MCP servers each agent keeps itself. Kettu shows them; change them in the agent.",
     "mcpConfig": "MCP configuration",
@@ -441,7 +442,6 @@
   "workflow": {
     "intro": "A workflow is a flowchart that has several agents carry out one piece of work. Who does each step is picked when it starts, by the agent handing off to it, unless you pin one. The workflows you can use show up in New session, and agents can suggest them in a conversation.",
     "by": {
-      "kettu": "Kettu",
       "github": "{{owner}} · Community",
       "file": "From a file",
       "agent": "Made by an agent",
@@ -462,7 +462,6 @@
       "unreadable": "Its file doesn’t read as a workflow."
     },
     "groups": {
-      "official": "Official",
       "added": "Added from GitHub",
       "addedOrFile": "Added from GitHub or a file",
       "yours": "Yours",
@@ -474,7 +473,6 @@
     "missingTitle": "This workflow isn’t here",
     "missingText": "It may have been deleted.",
     "related": {
-      "official": "More official workflows",
       "added": "More workflows you added",
       "yours": "More of yours",
       "community": "More from the community"
@@ -544,7 +542,6 @@
       "unreadable": "The file doesn’t read as a workflow"
     },
     "from": {
-      "official": "Kettu’s workflows",
       "agent": "Made by {{agent}}",
       "you": "Written by you"
     },
@@ -642,6 +639,7 @@
     "takenDownKept": "{{name}} was taken down from the Kettu Marketplace. What you installed stays until you remove it, without updates.",
     "byYou": "{{handle}} · you",
     "trust": "Community",
+    "kettu": "Kettu",
     "source": "Kettu Marketplace",
     "onlyMe": "Only me",
     "cannotRun": "Kettu can’t run this MCP server: it names no package or https remote that Kettu runs.",

@@ -80,6 +80,7 @@ function listing(version = '1.0.0'): MarketListing {
     kind: 'mcp-server',
     description: 'Echo.',
     visibility: 'public',
+    official: false,
     version,
     versions: [version],
     installs: 1,

@@ -144,6 +144,7 @@ function listingBase(value: unknown, what: string) {
       description: text(fields.description) ?? '',
       ...optionalText('about', fields.about),
       visibility,
+      official: fields.official === true,
     },
   }
 }

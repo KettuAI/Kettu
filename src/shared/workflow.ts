@@ -94,21 +94,29 @@ export interface WorkflowProblem {
 
 // The library.
 
-/** Official workflows ship with Kettu; the rest are the user's, by how they came. */
-export type WorkflowSource = 'official' | 'github' | 'file' | 'agent' | 'user' | 'community'
+/** How a workflow came into the user's library. */
+export type WorkflowSource = 'github' | 'file' | 'agent' | 'user' | 'community'
 
 export type WorkflowOrigin =
   | { kind: 'github'; url: string } // the file's page or raw URL as given
   | { kind: 'file'; name: string } // the file name the user picked
   | { kind: 'agent'; sessionId: string; agentId: AgentId }
-  // A listing of the Kettu Marketplace and the version installed.
-  | { kind: 'community'; listingId: string; version: string; handle: string; slug: string }
+  // A listing of the Kettu Marketplace and the version installed; `official` when Kettu's own
+  // publisher published it.
+  | {
+      kind: 'community'
+      listingId: string
+      version: string
+      handle: string
+      slug: string
+      official: boolean
+    }
 
 /**
- * Whether a workflow may start tasks: an official one always; one of the library only while its
- * content is the one the user approved. `changed` was approved, then changed.
+ * Whether a workflow may start tasks: only while its content is the one the user approved.
+ * `changed` was approved, then changed.
  */
-export type WorkflowApproval = 'official' | 'approved' | 'pending' | 'changed'
+export type WorkflowApproval = 'approved' | 'pending' | 'changed'
 
 /** Who does a step: an agent with its model and effort; null ones leave the agent's own. */
 export interface StepPick {
@@ -130,19 +138,40 @@ export interface WorkflowEntry {
   /** SHA-256 of the file as read, hex; what an approval names. */
   hash: string
   origin: WorkflowOrigin | null
-  /** The file on the host; null for an official workflow. */
-  file: string | null
+  /** The file on the host. */
+  file: string
   addedAt: number | null
   /** Who does each step for every task of this workflow, by step id; Auto for the rest. */
   pins: Record<string, StepPick>
 }
 
-/** A workflow is usable for a new task: it reads, has no problem and is approved. */
-export function usableWorkflow(entry: WorkflowEntry): boolean {
+/**
+ * Wire-only: the source and approval a host before v0.1.2 sends for the workflows it shipped with,
+ * which start tasks without approval and have no file. No host sends it now; clients still read it
+ * so they keep working with such a host.
+ */
+export const LEGACY_OFFICIAL = 'official'
+export type LegacyOfficial = typeof LEGACY_OFFICIAL
+
+/** A workflow entry as a client reads it from a host of any version. */
+export interface WireWorkflowEntry extends Omit<WorkflowEntry, 'source' | 'approval' | 'file'> {
+  source: WorkflowSource | LegacyOfficial
+  approval: WorkflowApproval | LegacyOfficial
+  /** Null for a workflow an older host shipped with. */
+  file: string | null
+}
+
+/**
+ * A workflow is usable for a new task: it reads, has no problem and is approved, or shipped with an
+ * older host.
+ */
+export function usableWorkflow(
+  entry: Pick<WireWorkflowEntry, 'workflow' | 'problems' | 'approval'>,
+): boolean {
   return (
     entry.workflow !== null &&
     entry.problems.length === 0 &&
-    (entry.approval === 'official' || entry.approval === 'approved')
+    (entry.approval === 'approved' || entry.approval === LEGACY_OFFICIAL)
   )
 }
 

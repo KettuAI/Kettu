@@ -93,6 +93,8 @@ export interface MineListing {
   description: string
   about?: string
   visibility: ListingVisibility
+  /** Published by Kettu's own publisher. */
+  official: boolean
   /** The version installs get. */
   current: string | null
   versions: MineVersion[]
@@ -120,6 +122,8 @@ export interface MarketListing {
   description: string
   about?: string
   visibility: ListingVisibility
+  /** Published by Kettu's own publisher. */
+  official: boolean
   version: string
   versions: string[]
   adds?: PublishAdds[]

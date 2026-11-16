@@ -1,4 +1,4 @@
-// Workflows in the Marketplace's directory: their rows, the workflow tab's four groups, their section on
+// Workflows in the Marketplace's directory: their rows, the workflow tab's three groups, their section on
 // Installed, and adding one from a GitHub file or a .yaml file. They come from the host's workflow
 // library, not the catalogs, but for the Community group's listings not added yet.
 
@@ -12,7 +12,7 @@ import {
 } from 'react'
 import { File02Icon, GithubIcon } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
-import type { WorkflowEntry } from '@shared/workflow'
+import type { WireWorkflowEntry } from '@shared/workflow'
 import { EmptyState, Icon } from '@renderer/components/affect/app-shell'
 import { Button } from '@renderer/components/affect/button'
 import { Dialog, DialogClose } from '@renderer/components/ui/dialog'
@@ -40,11 +40,12 @@ import {
   useWorkflowStanding,
   useWorkflows,
 } from './workflow-actions'
-import { InstalledCheck, ItemRow, KindTag, QuietNote, SkeletonRows } from './rows'
+import { InstalledCheck, ItemRow, KettuMark, KindTag, QuietNote, SkeletonRows } from './rows'
 import {
   flowLine,
   githubRepo,
   isWorkflowFileUrl,
+  kettuPublisher,
   listingOrigin,
   workflowGroup,
   workflowMatches,
@@ -57,24 +58,31 @@ import { workflowSubject } from './tile-art'
 import { PlainTile } from './tiles'
 
 /**
- * Who a workflow comes from, after its name: Kettu, a publisher of the Kettu Marketplace, a
- * repository's owner, a file, an agent or you.
+ * Who a workflow comes from, after its name: a publisher of the Kettu Marketplace, with the Kettu
+ * mark for Kettu's own, a repository's owner, a file, an agent or you.
  */
-export function WorkflowByline({ entry }: { entry: WorkflowEntry }) {
+export function WorkflowByline({ entry }: { entry: WireWorkflowEntry }) {
   const { t } = useTranslation('marketplace')
   const origin = entry.origin
+  const kettu = kettuPublisher(entry)
+  if (kettu) {
+    return (
+      <>
+        <span className="k-workflow-by">{kettu}</span>
+        <KettuMark />
+      </>
+    )
+  }
   const text =
-    entry.source === 'official'
-      ? t('workflow.by.kettu')
-      : origin?.kind === 'community'
-        ? t('workflow.by.community', { handle: origin.handle })
-        : origin?.kind === 'github'
-          ? t('workflow.by.github', { owner: githubRepo(origin.url)?.split('/')[0] ?? 'GitHub' })
-          : entry.source === 'file'
-            ? t('workflow.by.file')
-            : entry.source === 'agent'
-              ? t('workflow.by.agent')
-              : t('workflow.by.you')
+    origin?.kind === 'community'
+      ? t('workflow.by.community', { handle: origin.handle })
+      : origin?.kind === 'github'
+        ? t('workflow.by.github', { owner: githubRepo(origin.url)?.split('/')[0] ?? 'GitHub' })
+        : entry.source === 'file'
+          ? t('workflow.by.file')
+          : entry.source === 'agent'
+            ? t('workflow.by.agent')
+            : t('workflow.by.you')
   return <span className="k-workflow-by">{text}</span>
 }
 
@@ -93,7 +101,7 @@ export function WorkflowStateBadge({ state }: { state: Exclude<WorkflowState, 'r
 }
 
 /** A row's line: the steps in order, or why the file does not read. */
-function rowLine(entry: WorkflowEntry, locale: string): string | null {
+function rowLine(entry: WireWorkflowEntry, locale: string): string | null {
   if (entry.workflow) return flowLine(entry.workflow, locale)
   return entry.problems[0]?.message ?? null
 }
@@ -104,7 +112,7 @@ export function WorkflowRow({
   showKind = false,
   fresh,
 }: {
-  entry: WorkflowEntry
+  entry: WireWorkflowEntry
   tab: MarketplaceTab
   showKind?: boolean
   fresh?: boolean
@@ -154,7 +162,7 @@ export function WorkflowUpdateButton({
   size,
   version,
 }: {
-  entry: WorkflowEntry
+  entry: WireWorkflowEntry
   name: string
   tab: MarketplaceTab
   size?: 'md'
@@ -184,10 +192,10 @@ export function WorkflowUpdateButton({
   )
 }
 
-const GROUPS: readonly WorkflowGroup[] = ['official', 'community', 'added', 'yours']
+const GROUPS: readonly WorkflowGroup[] = ['community', 'added', 'yours']
 
 /**
- * The workflow tab: what a workflow is, then Official, Community, Added from GitHub and Yours.
+ * The workflow tab: what a workflow is, then Community, Added from GitHub and Yours.
  * `community` is the Community group, drawn by the directory since it pages through the Kettu
  * Marketplace; null when it has nothing to show for the query.
  */
@@ -298,7 +306,7 @@ function AddWorkflowRow({ onAdd }: { onAdd: () => void }) {
   )
 }
 
-/** Installed's workflow section: every workflow the host keeps, Kettu's own with them. */
+/** Installed's workflow section: every workflow the host keeps. */
 export function InstalledWorkflows({ query, index }: { query: string; index: number }) {
   const { t } = useTranslation('marketplace')
   const scope = useHostScope()
@@ -318,6 +326,8 @@ export function InstalledWorkflows({ query, index }: { query: string; index: num
         <QuietNote action={<RetryButton onRetry={() => retryWorkflows(scope)} />}>
           {t('workflow.readFailed', { error })}
         </QuietNote>
+      ) : entries.length === 0 ? (
+        <p className="k-mkt-section-note">{t('installed.noWorkflows')}</p>
       ) : (
         <div className="ui-as-int-grid">
           {shown.map((entry) => (

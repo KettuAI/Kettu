@@ -8,6 +8,7 @@ import {
 } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
 import {
+  LEGACY_OFFICIAL,
   usableWorkflow,
   type CheckLine,
   type CheckNext,
@@ -538,7 +539,7 @@ function SavedCard({
     ? 'pending'
     : !library
       ? 'removed'
-      : library.approval === 'approved' || library.approval === 'official'
+      : library.approval === 'approved' || library.approval === LEGACY_OFFICIAL
         ? 'approved'
         : library.approval === 'changed'
           ? 'changed'

@@ -577,6 +577,7 @@
         "unreadable": "读不出来"
       },
       "findMore": "在 Marketplace 里找更多工作流…",
+      "addFromMarketplace": "去 Marketplace 添加一个工作流",
       "worktreeHint": "需求在自己的 worktree 和分支上进行。",
       "worktreeNote": "需求在自己的 worktree 里进行，从 <base>{{base}}</base> 切出新分支，发出时由 Kettu 起名。",
       "textOnly": "需求只能是文字：去掉附件后再发出。",

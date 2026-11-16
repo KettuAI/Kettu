@@ -74,18 +74,27 @@ describe('the workflow library', () => {
     await expect(lib.resolve(added.id)).rejects.toMatchObject({ code: 'restricted' })
   })
 
-  it('refuses a workflow named like an official one, and never removes an official one', async () => {
+  it('ships no workflows, and takes the names of those Kettu once shipped like any other', async () => {
     const { lib } = library()
     await lib.load()
-    const clash = await lib.create(TEXT.replace('Quick fix', 'Feature development'), {
+    expect(await lib.list()).toEqual([])
+    const created = await lib.create(TEXT.replace('Quick fix', 'Feature development'), {
       sessionId: 's1',
       agentId: 'claude-code',
     })
-    expect(clash).toEqual({
-      problems: [{ at: 'name', message: 'an official workflow is named "Feature development"' }],
-    })
-    await expect(lib.remove('feature-development')).rejects.toMatchObject({ code: 'restricted' })
-    expect((await lib.resolve('feature-development')).source).toBe('official')
+    expect(created).toMatchObject({ id: 'feature-development', source: 'agent', problems: [] })
+    const origin = {
+      kind: 'community',
+      listingId: 'abcdefgh23',
+      version: '1.0.0',
+      handle: 'kettu-labs',
+      slug: 'fix-a-bug',
+      official: true,
+    } as const
+    const { entry } = await lib.installListing(TEXT.replace('Quick fix', 'Fix a bug'), origin)
+    expect(entry).toMatchObject({ id: 'fix-a-bug', source: 'community', problems: [], origin })
+    await lib.remove('feature-development')
+    expect((await lib.list()).map((e) => e.id)).toEqual(['fix-a-bug'])
   })
 
   it('lets Auto pick subscriptions and not API keys unless the user says so', async () => {
@@ -112,14 +121,21 @@ describe('the workflow library', () => {
     const file = parseWorkflowsFile({
       entries: {
         'release-notes': record,
+        'kettu-own': { ...record, origin: { ...origin, official: true } },
         'no-version': { ...record, origin: { ...origin, version: 'latest' } },
         'bad-listing': { ...record, origin: { ...origin, listingId: '../x' } },
         'as-github': { ...record, source: 'github' },
         'no-listing': { ...record, origin: null },
       },
     })
-    expect(file).toMatchObject({ entries: { 'release-notes': record } })
-    expect(Object.keys((file as WorkflowsFile).entries)).toEqual(['release-notes'])
+    // A record kept before listings said whether Kettu published them reads as not Kettu's.
+    expect(file).toMatchObject({
+      entries: {
+        'release-notes': { ...record, origin: { ...origin, official: false } },
+        'kettu-own': { origin: { official: true } },
+      },
+    })
+    expect(Object.keys((file as WorkflowsFile).entries)).toEqual(['release-notes', 'kettu-own'])
   })
 
   it('takes only GitHub file addresses', () => {

@@ -1,7 +1,7 @@
 import { useMemo } from 'react'
 import { SparklesIcon, Tick02Icon, UserIcon } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
-import type { Pace, Workflow, WorkflowEntry } from '@shared/workflow'
+import type { Pace, Workflow, WireWorkflowEntry } from '@shared/workflow'
 import type { AgentId } from '@shared/thread'
 import { AgentMark } from '@renderer/components/agents/agent-mark'
 import {
@@ -71,7 +71,7 @@ export function WorkflowPreview({
   firstAgentId,
   pace,
 }: {
-  entry: WorkflowEntry & { workflow: Workflow }
+  entry: WireWorkflowEntry & { workflow: Workflow }
   hostId: string | null
   firstAgentId: AgentId | null
   pace: Pace

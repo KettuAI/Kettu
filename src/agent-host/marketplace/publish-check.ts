@@ -21,7 +21,6 @@ import {
   type PublishKind,
 } from '@shared/market-publish'
 import { parseWorkflow } from '../workflow/format'
-import { officialNamed } from '../workflow/library'
 import { frontmatter } from './frontmatter'
 import { catalogServer } from './registry'
 import { SKILL_NAME } from './skills'
@@ -351,8 +350,8 @@ export function utf8(data: Buffer): string | null {
 }
 
 /**
- * A workflow, read by the library's own parser: any problem it finds, or an official workflow's
- * name, keeps it from being published. Its README is the listing's text.
+ * A workflow, read by the library's own parser: any problem it finds keeps it from being
+ * published. Its README is the listing's text.
  */
 function readWorkflow(check: FolderCheck, file: CheckedFile): void {
   const source = utf8(file.data)
@@ -371,13 +370,6 @@ function readWorkflow(check: FolderCheck, file: CheckedFile): void {
     return
   }
   const { workflow } = read
-  const official = officialNamed(workflow.name)
-  if (official) {
-    check.problems.push({
-      path: WORKFLOW_FILE,
-      message: `An official workflow is named "${official}". Give this one another name.`,
-    })
-  }
   const slug = toHandle(workflow.name)
   if (HANDLE.test(slug)) check.slug = slug
   else {

@@ -77,7 +77,7 @@ import { usePublishedStore } from './published-hooks'
 import { publishedItem } from './published-keys'
 import { ReportDialog } from './report-dialog'
 import { InstallRow } from './plugins'
-import { AddControl, ItemRow, KindTag, QuietNote, type ItemKind } from './rows'
+import { AddControl, ItemRow, KettuMark, KindTag, QuietNote, type ItemKind } from './rows'
 import { KeptSkillControls } from './skills'
 import { communitySubject } from './tile-art'
 import { ItemTile } from './tiles'
@@ -96,12 +96,13 @@ const KIND = {
 // The agents that do a workflow's steps.
 const STEP_AGENTS = ['claude-code', 'codex'] as const satisfies readonly AgentId[]
 
-/** The kind, then who published it. */
+/** The kind, then who published it, with the Kettu mark for Kettu's own publisher. */
 function CommunityTag({ item, showKind }: { item: CommunityItem; showKind: boolean }) {
   return (
     <>
       {showKind && <KindTag kind={KIND[item.kind]} harness={item.harness} />}
       <span className="k-mkt-publisher">{item.handle}</span>
+      {item.official && <KettuMark />}
     </>
   )
 }
@@ -727,7 +728,10 @@ function Listed({
             {listing.mine && !preview
               ? t('community.byYou', { handle: listing.handle })
               : listing.handle}
-            <span className="k-mkt-head__trust">{t('community.trust')}</span>
+            {listing.official && <KettuMark />}
+            <span className="k-mkt-head__trust">
+              {listing.official ? t('listing.official') : t('community.trust')}
+            </span>
           </span>
           {listing.description && <span className="k-mkt-head__line">{listing.description}</span>}
         </span>
@@ -763,9 +767,12 @@ function Listed({
         <aside className="k-mkt-side">
           <dl>
             <dt>{t('listing.side.publisher')}</dt>
-            <dd>{listing.handle}</dd>
+            <dd>
+              {listing.handle}
+              {listing.official && <KettuMark />}
+            </dd>
             <dt>{t('community.side.trust')}</dt>
-            <dd>{t('community.trust')}</dd>
+            <dd>{listing.official ? t('listing.official') : t('community.trust')}</dd>
             <dt>{t('plugin.facts.installs')}</dt>
             <dd>
               {listing.visibility === 'private' ? t('community.onlyMe') : count(listing.installs)}

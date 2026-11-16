@@ -39,6 +39,8 @@ export interface CommunityItem {
   harness?: PublishHarness
   description: string
   visibility: ListingVisibility
+  /** Published by Kettu's own publisher. */
+  official: boolean
   version: string | null
   /** Null for an Only me listing, whose installs are not counted for anyone to see. */
   installs: number | null

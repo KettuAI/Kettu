@@ -214,6 +214,22 @@ describe('MarketApi directory', () => {
     expect(url.searchParams.get('cursor')).toBe('a+b/c=')
     expect([...url.searchParams.keys()].sort()).toEqual(['cursor', 'kind', 'q'])
   })
+
+  it('marks only a listing the service says is Kettu’s own as official', async () => {
+    const item = { ...LISTING, version: '1.0.0', versions: ['1.0.0'], installs: 3 }
+    const items = [
+      { ...item, handle: 'kettu-labs', official: true },
+      { ...item, handle: 'kettu-lab', official: 'yes' },
+      item,
+    ]
+    const { fetch } = fake(() => json(200, { items, next: null }))
+    const directory = await api(fetch).directory({})
+    expect(directory.items.map((l) => [l.handle, l.official])).toEqual([
+      ['kettu-labs', true],
+      ['kettu-lab', false],
+      ['amigoer', false],
+    ])
+  })
 })
 
 describe('runMarketCall', () => {

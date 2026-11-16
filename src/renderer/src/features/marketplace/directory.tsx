@@ -25,7 +25,7 @@ import type {
   SkillTrust,
 } from '@shared/marketplace'
 import { displayTitle } from '@shared/marketplace'
-import type { WorkflowEntry } from '@shared/workflow'
+import type { WireWorkflowEntry } from '@shared/workflow'
 import type { CommunityItem } from '@shared/market-community'
 import type { PublishKind } from '@shared/market-publish'
 import {
@@ -82,7 +82,7 @@ import {
   SkeletonSection,
 } from './rows'
 import { SkillRow } from './skills'
-import { workflowMatches, workflowName } from './workflow-model'
+import { workflowGroup, workflowMatches, workflowName } from './workflow-model'
 import { addWorkflowFromFile, retryWorkflows, useWorkflows } from './workflow-actions'
 import { AddWorkflowDialog, WorkflowRow, WorkflowSections } from './workflows'
 import {
@@ -119,7 +119,13 @@ type Entry =
   | { kind: 'mcp'; key: string; title: string; subject: TileSubject; server: CatalogServer }
   | { kind: 'plugin'; key: string; title: string; subject: TileSubject; plugin: CatalogPlugin }
   | { kind: 'skill'; key: string; title: string; subject: TileSubject; skill: CatalogSkill }
-  | { kind: 'workflow'; key: string; title: string; subject: TileSubject; workflow: WorkflowEntry }
+  | {
+      kind: 'workflow'
+      key: string
+      title: string
+      subject: TileSubject
+      workflow: WireWorkflowEntry
+    }
   | { kind: 'community'; key: string; title: string; subject: TileSubject; item: CommunityItem }
 
 interface Section {
@@ -164,7 +170,7 @@ const skillEntry = (skill: CatalogSkill): Entry => ({
   skill,
 })
 
-const workflowEntry = (workflow: WorkflowEntry): Entry => ({
+const workflowEntry = (workflow: WireWorkflowEntry): Entry => ({
   kind: 'workflow',
   key: itemKey({ kind: 'workflow', id: workflow.id }),
   title: workflowName(workflow, currentLocale()),
@@ -196,7 +202,7 @@ interface Sources {
   pluginsPending: boolean
   skills: MarketSkills | null
   skillsPending: boolean
-  workflows: WorkflowEntry[]
+  workflows: WireWorkflowEntry[]
   workflowsPending: boolean
   search: MarketSearchState | null
   communityPages: Record<string, CommunityPages>
@@ -311,9 +317,9 @@ function communitySections(
 }
 
 /**
- * The workflow tab's Community group: the workflows this host added from it and the account's own
- * Only me listings first, then the rest by installs, a page at a time; null when a search finds
- * nothing in it.
+ * The workflow tab's Community group: the workflows this host added from it or, an older host,
+ * shipped with, and the account's own Only me listings first, then the rest by installs, a page at a
+ * time; null when a search finds nothing in it.
  */
 function workflowCommunity(
   src: Sources,
@@ -323,7 +329,7 @@ function workflowCommunity(
   const title = t('sections.community')
   const locale = currentLocale()
   const added = src.workflows.filter(
-    (entry) => entry.source === 'community' && workflowMatches(entry, query, locale),
+    (entry) => workflowGroup(entry) === 'community' && workflowMatches(entry, query, locale),
   )
   const listings = new Set(
     added.flatMap((entry) => (entry.origin?.kind === 'community' ? [entry.origin.listingId] : [])),
@@ -364,7 +370,7 @@ function WorkflowTab({ query }: { query: string }) {
       <Notes tab="workflow" registry={null} query={query} />
       <WorkflowSections
         query={query}
-        community={section && <SectionView tab="workflow" section={section} index={1} />}
+        community={section && <SectionView tab="workflow" section={section} index={0} />}
       />
     </>
   )
