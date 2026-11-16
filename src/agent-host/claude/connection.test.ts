@@ -2284,6 +2284,24 @@ describe('sessions', () => {
     expect(s.sdk.calls.map((call) => call.method)).not.toContain('deleteSession')
   })
 
+  it("reads plan limits signed in as the user's Claude Code is, with nothing else of theirs", async () => {
+    const s = await setup()
+    s.sdk.settings = {
+      env: { ANTHROPIC_BASE_URL: 'http://127.0.0.1:3425', ANTHROPIC_AUTH_TOKEN: 'token' },
+      apiKeyHelper: '/usr/local/bin/key',
+      hooks: { Stop: [] },
+      enabledPlugins: { tools: true },
+    }
+    await s.connection.newSession('/repo', { hidden: 'limits' })
+    const query = s.sdk.last
+    expect(query.options.settingSources).toEqual([])
+    expect(query.options.settings).toEqual({
+      disableAllHooks: true,
+      env: { ANTHROPIC_BASE_URL: 'http://127.0.0.1:3425', ANTHROPIC_AUTH_TOKEN: 'token' },
+      apiKeyHelper: '/usr/local/bin/key',
+    })
+  })
+
   it('collects the text of a hidden turn', async () => {
     const s = await setup()
     const { sessionId } = await s.connection.newSession('/repo', { hidden: 'titles' })
