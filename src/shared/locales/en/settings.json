@@ -1057,7 +1057,7 @@
     "advanced": "Network proxy, diagnostics and the data Kettu keeps on this computer.",
     "advanced_web": "Network proxy, diagnostics and the data Kettu keeps on {{host}}.",
     "about": "Kettu’s version and updates.",
-    "archived": "Off the sidebar but kept. Restore one to put it back in its project.",
+    "archived": "Off the sidebar but kept. Restore one to put it back where it was.",
     "artifacts": "Pages ask before they read project files or ask your agent. Pages that only keep their own data don’t ask.",
     "sharing": "Publish artifacts to links, on Kettu or through your own Cloudflare account; choose who can open a page on Kettu.",
     "remote": "Use this computer’s sessions from Kettu on an iPhone, an iPad or another computer.",
