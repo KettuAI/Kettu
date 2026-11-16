@@ -143,6 +143,7 @@ import { ProjectHooksAnswers } from './project-hooks'
 import { ProjectMcpAnswers } from './project-mcp'
 import { Projects } from './projects'
 import { claudeCacheTtl, type CacheTtlReader } from './prompt-cache'
+import { IdleRelease } from './idle-release'
 import { PortHub, type Handlers, type RequestContext } from './rpc'
 import { Attachments, toArrayBuffer } from './attachments'
 import { RoutinesManager, type RoutineTimings } from './routines/manager'
@@ -364,6 +365,8 @@ export class AgentHost {
   /** The agent processes and what they leave behind, until seen gone. */
   private readonly trees: AgentTrees
   readonly sessions: SessionManager
+  /** When idle Claude Code sessions let their agent go, by the setting and the system's memory. */
+  private readonly idleRelease: IdleRelease
   /** The saved routines and the lifecycle of their runs. */
   readonly routines: RoutinesManager
   /** The user's workflow library. */
@@ -848,6 +851,15 @@ export class AgentHost {
         this.git?.branchPullRequests(projectPath).has(branch) ?? false,
       log,
     })
+    this.idleRelease = new IdleRelease({
+      platform,
+      settings: () => this.settings.idleSessions,
+      log: (level, message) => this.diagnostics.log(level, message),
+      changed: () => {
+        this.sessions.idleRulesChanged()
+        this.hub.broadcast({ type: 'idleRelease.changed', state: this.idleRelease.state() })
+      },
+    })
     this.sessions = new SessionManager({
       platform,
       agents: this.agents,
@@ -922,6 +934,7 @@ export class AgentHost {
           },
           log,
         }),
+      idleRelease: this.idleRelease,
       diagnostics: this.diagnostics,
       git: () => this.git,
       options: this.agentOptions,
@@ -1178,6 +1191,7 @@ export class AgentHost {
     void host.sessions.checkWorktrees()
     host.usage.start()
     host.artifacts.start()
+    host.idleRelease.start()
     options.send({ type: 'host:service-port', port: host.artifactService.listeningPort })
     options.send({ type: 'host:ready' })
     void host.trees.stopLeftovers()
@@ -1362,6 +1376,9 @@ export class AgentHost {
     }
     this.env.setConfigFolders(configFolders(this.catalog, next))
     this.startModesChanged(previous, next)
+    if (JSON.stringify(previous.idleSessions) !== JSON.stringify(next.idleSessions)) {
+      this.idleRelease.notify()
+    }
     this.marketChanged(previous.marketplace.mcp, this.marketKeys)
     if (JSON.stringify(previous.marketplace.mcp) !== JSON.stringify(next.marketplace.mcp)) {
       void this.marketBundles.sweep()
@@ -2117,6 +2134,7 @@ export class AgentHost {
     this.stopping ??= (async () => {
       await this.routines.shutdown()
       this.sessions.shutdown()
+      this.idleRelease.stop()
       this.usage.stop()
       this.artifacts.stop()
       this.execRunner.killAll()
@@ -2457,6 +2475,7 @@ export class AgentHost {
       'sessions.attachEarly': ({ sessionId }) => sessions.attachEarly(sessionId),
       'sessions.cancel': ({ sessionId }) => sessions.cancel(sessionId),
       'sessions.runningWork': ({ sessionIds }) => ({ sessions: sessions.runningWork(sessionIds) }),
+      'sessions.idleRelease': () => this.idleRelease.state(),
       'sessions.stopTask': ({ sessionId, taskId }) => sessions.stopTask(sessionId, taskId),
       'sessions.taskOutput': ({ sessionId, taskId }) => sessions.taskOutput(sessionId, taskId),
       'sessions.retry': ({ sessionId }, { portId }) => sessions.retry(sessionId, portId),

@@ -691,8 +691,49 @@ describe('a turn', () => {
       size: 1_000_000,
       cost: { amount: 0.25, currency: 'USD' },
     })
-    expect(target.effects).toContainEqual({ kind: 'request' })
+    expect(target.effects).toContainEqual({ kind: 'request', cache: { read: 1000, written: 0 } })
     expect(s.sdk.last.inputs[0]!.message.content).toEqual([{ type: 'text', text: 'Hi' }])
+  })
+
+  it('says what each main-thread request read from the prompt cache and wrote to it', async () => {
+    s.sdk.script = (query) => {
+      query.running()
+      query.emit(
+        stream(query, {
+          type: 'message_start',
+          message: {
+            id: 'msg_1',
+            usage: {
+              input_tokens: 2,
+              cache_read_input_tokens: 41_321,
+              cache_creation_input_tokens: 206_599,
+            },
+          },
+        }),
+        // A subagent's request renews no cache of the session's own thread.
+        {
+          ...stream(query, {
+            type: 'message_start',
+            message: {
+              id: 'msg_2',
+              usage: {
+                input_tokens: 9,
+                cache_read_input_tokens: 5,
+                cache_creation_input_tokens: 7,
+              },
+            },
+          }),
+          parent_tool_use_id: 'toolu_1',
+        } as SdkMessage,
+        stream(query, { type: 'message_start', message: { id: 'msg_3' } }),
+      )
+      query.finish()
+    }
+    await s.connection.prompt(sessionId, [{ type: 'text', text: 'Hi' }])
+    expect(target.effects.filter((effect) => effect.kind === 'request')).toEqual([
+      { kind: 'request', cache: { read: 41_321, written: 206_599 } },
+      { kind: 'request' },
+    ])
   })
 
   it('ends a reply when its text block ends, while the turn goes on', async () => {
@@ -921,6 +962,18 @@ describe('a turn', () => {
         tokens: { total: 11, input: 10, output: 1, thought: null, cacheRead: 0, cacheWrite: 0 },
       },
     ])
+  })
+
+  it('names the Claude Code version a session opens and resumes on, when it says', async () => {
+    s.sdk.init = { ...s.sdk.init, claude_code_version: '2.1.325' }
+    expect((await s.connection.newSession('/repo')).harnessVersion).toBe('2.1.325')
+    expect((await s.connection.resumeSession('old-session', '/repo')).harnessVersion).toBe(
+      '2.1.325',
+    )
+    s.sdk.init = { ...s.sdk.init, claude_code_version: undefined }
+    expect((await s.connection.resumeSession('older-session', '/repo')).harnessVersion).toBe(
+      undefined,
+    )
   })
 
   it("takes the first result after a resume as the history's totals", async () => {

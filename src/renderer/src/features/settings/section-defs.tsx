@@ -50,6 +50,7 @@ import { useHostScope } from '@renderer/stores/host-scope'
 import { useUpdatesStore } from '@renderer/stores/updates'
 import { openAgentSettings, openHarnessSettings, openSettingsItem } from '@renderer/stores/view'
 import { AboutHero, AutomaticUpdates, DownloadSource, NoUpdates, UpdateRow } from './about-section'
+import { useIdleSessionRows } from './idle-sessions'
 import { useWorkflowRows } from './workflow-settings'
 import {
   AgentListItem,
@@ -640,6 +641,7 @@ export function useAgentsSection(): SectionDef {
   const { useAgentsStore } = useHostScope()
   const en = english()
   const agents = useAgentsStore(useShallow((s) => usableAgents(s.order, s.byId)))
+  const idleRows = useIdleSessionRows()
   const workflowRows = useWorkflowRows()
   // The footer goes under the list, so the workflow groups after it keep their own notes.
   const list: GroupDef =
@@ -701,6 +703,7 @@ export function useAgentsSection(): SectionDef {
               render: () => null,
             },
           ]),
+      ...idleRows,
       ...workflowRows,
     ],
     itemPage: (agentId) => <AgentPage agentId={agentId as AgentId} />,

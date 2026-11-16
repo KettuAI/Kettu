@@ -59,6 +59,12 @@ export type SubagentState =
   | { kind: 'unknown' }
   | { kind: 'cleared' }
 
+/** What a request read from its prompt cache and wrote to it, in tokens. */
+export interface RequestCache {
+  read: number
+  written: number
+}
+
 export type MapperEffect =
   | {
       kind: 'subagent'
@@ -100,8 +106,9 @@ export type MapperEffect =
   | { kind: 'agentTurn'; phase: 'joined' }
   | { kind: 'agentTurn'; phase: 'ended'; result: PromptResult }
   | { kind: 'agentTurn'; phase: 'failed'; error: unknown }
-  // The session's own thread sent a request to its model, which renews its prompt cache.
-  | { kind: 'request' }
+  // The session's own thread sent a request to its model, which renews its prompt cache, with what
+  // it read from and wrote to that cache when the agent says.
+  | { kind: 'request'; cache?: RequestCache }
   // An image replayed by `session/load`, whose bytes the session keeps in its thread store.
   | {
       kind: 'replayImage'

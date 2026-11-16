@@ -2,8 +2,10 @@ import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { splitSettingsPatch } from '@shared/remote/host-admin'
+import { DEFAULT_SETTINGS } from '@shared/settings'
 import { SettingsStore } from './settings'
-import { validateSettingsPatch } from './settings-schema'
+import { hostSettings, mergeSettings, validateSettingsPatch } from './settings-schema'
 
 let dir: string
 
@@ -169,6 +171,81 @@ describe('where worktrees go', () => {
     for (const bad of ['relative', '', 3, `${root}\0x`]) {
       expect(() => validateSettingsPatch({ git: { worktreeRoot: bad } })).toThrow()
     }
+  })
+})
+
+describe('when idle sessions let their agent go', () => {
+  it('releases by memory until the user picks, with Custom at 5 and 30 minutes and no limit', async () => {
+    const store = await SettingsStore.load(dir)
+    expect(store.get().idleSessions).toEqual({
+      release: 'auto',
+      outOfView: 5,
+      inView: 30,
+      limit: null,
+    })
+    expect(hostSettings(store.get(), 'en').idleSessions).toEqual(store.get().idleSessions)
+  })
+
+  it('takes only the listed modes, minutes and limits in a change', () => {
+    for (const release of ['auto', 'custom', 'never']) {
+      expect(validateSettingsPatch({ idleSessions: { release } })).toEqual({
+        idleSessions: { release },
+      })
+    }
+    for (const outOfView of [1, 5, 15, 30, 60]) {
+      expect(() => validateSettingsPatch({ idleSessions: { outOfView } })).not.toThrow()
+    }
+    for (const inView of [5, 15, 30, 60]) {
+      expect(() => validateSettingsPatch({ idleSessions: { inView } })).not.toThrow()
+    }
+    for (const limit of [null, 1, 2, 3, 5]) {
+      expect(() => validateSettingsPatch({ idleSessions: { limit } })).not.toThrow()
+    }
+    for (const bad of [
+      { release: 'always' },
+      { release: null },
+      { outOfView: 0 },
+      { outOfView: 2 },
+      { outOfView: '5' },
+      { outOfView: 120 },
+      { inView: 1 },
+      { inView: 45 },
+      { limit: 0 },
+      { limit: 4 },
+      { limit: 'none' },
+      { limit: 1.5 },
+      { other: true },
+    ]) {
+      expect(() => validateSettingsPatch({ idleSessions: bad })).toThrow()
+    }
+    expect(() => validateSettingsPatch({ idleSessions: 'never' })).toThrow()
+  })
+
+  it('merges a change key by key and keeps it the host’s', () => {
+    const before = structuredClone(DEFAULT_SETTINGS)
+    const patch = validateSettingsPatch({ idleSessions: { release: 'custom', limit: 2 } })
+    expect(mergeSettings(before, patch).idleSessions).toEqual({
+      release: 'custom',
+      outOfView: 5,
+      inView: 30,
+      limit: 2,
+    })
+    expect(splitSettingsPatch(patch)).toEqual({ host: patch, client: null })
+  })
+
+  it('keeps the valid values of a stored section and drops the rest', async () => {
+    await save({
+      version: 1,
+      idleSessions: { release: 'custom', outOfView: 60, inView: 7, limit: 3, extra: 1 },
+    })
+    expect((await SettingsStore.load(dir)).get().idleSessions).toEqual({
+      release: 'custom',
+      outOfView: 60,
+      inView: 30,
+      limit: 3,
+    })
+    await save({ version: 1, idleSessions: 'never' })
+    expect((await SettingsStore.load(dir)).get().idleSessions.release).toBe('auto')
   })
 })
 

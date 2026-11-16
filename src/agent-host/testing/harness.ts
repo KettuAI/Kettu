@@ -331,6 +331,7 @@ export async function startTestHost(options: TestHostOptions = {}): Promise<Test
       mcp: DEFAULT_SETTINGS.mcp,
       marketplace: DEFAULT_SETTINGS.marketplace,
       startModes: DEFAULT_SETTINGS.startModes,
+      idleSessions: DEFAULT_SETTINGS.idleSessions,
       usage: { fromComputer: false },
       sessionTitles: true,
       initialSetupDone: true,

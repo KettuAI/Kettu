@@ -1655,6 +1655,7 @@ export function createValidators(platform: Platform): Validators {
         sessionIds: o.sessionIds.map((value) => sessionId({ sessionId: value })),
       }
     },
+    'sessions.idleRelease': none,
     'sessions.stopTask': (params) => {
       const o = fields(params)
       return { sessionId: sessionId(o), taskId: string(o, 'taskId', ID_CHARS) }

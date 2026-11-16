@@ -378,10 +378,19 @@ export class ClaudeMapper {
     return out
   }
 
-  /** The main thread's request to its model: its context so far, and a renewed cache. */
+  /**
+   * The main thread's request to its model: its context so far, and a renewed cache, with what it
+   * read from that cache and wrote to it, by which a resume is checked.
+   */
   private request(
     ctx: MapperContext,
-    usage: { input_tokens?: number | null; cache_read_input_tokens?: number | null } | undefined,
+    usage:
+      | {
+          input_tokens?: number | null
+          cache_read_input_tokens?: number | null
+          cache_creation_input_tokens?: number | null
+        }
+      | undefined,
   ): MapperOutput {
     const out = output()
     if (ctx.replaying) return out
@@ -407,7 +416,14 @@ export class ClaudeMapper {
         },
       },
     })
-    if (counts) out.effects.push({ kind: 'request' })
+    if (!counts) return out
+    const read = usage?.cache_read_input_tokens
+    const written = usage?.cache_creation_input_tokens
+    out.effects.push(
+      typeof read === 'number' || typeof written === 'number'
+        ? { kind: 'request', cache: { read: read ?? 0, written: written ?? 0 } }
+        : { kind: 'request' },
+    )
     return out
   }
 

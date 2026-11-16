@@ -952,6 +952,47 @@
     },
     "signInCopied": "当前没有打开项目，已复制登录命令。",
     "signInCopyFailed": "当前没有打开项目，也无法复制登录命令。",
+    "idle": {
+      "group": "空闲会话",
+      "keywords": "空闲 释放 内存 进程 prompt cache Claude Code",
+      "release": {
+        "name": "释放空闲会话的 Agent",
+        "description": "释放会结束空闲会话的 Agent 进程来省内存，下次发消息时接回，第一句回复会晚几秒。在跑工作的会话不受影响。现在用于 Claude Code。",
+        "auto": "自动",
+        "custom": "自定义",
+        "never": "不释放"
+      },
+      "auto": {
+        "plenty": "现在内存充足：离开前台 {{outOfView}}、在前台空闲 {{inView}}后释放。",
+        "plentyLimit": "现在内存充足：离开前台 {{outOfView}}、在前台空闲 {{inView}}后释放，空闲进程最多 {{limit}} 个。",
+        "tight": "现在内存偏紧：离开前台 {{outOfView}}、在前台空闲 {{inView}}后释放。",
+        "tightLimit": "现在内存偏紧：离开前台 {{outOfView}}、在前台空闲 {{inView}}后释放，空闲进程最多 {{limit}} 个。",
+        "unknown": "读不到内存状态：离开前台 {{outOfView}}、在前台空闲 {{inView}}后释放。",
+        "critical": "现在内存紧张：空闲的会话立刻释放。",
+        "noneKept": "这台电脑内存少：空闲的会话立刻释放。"
+      },
+      "outOfView": {
+        "name": "离开前台后",
+        "description": "不在屏幕上的会话空闲多久后释放。"
+      },
+      "inView": {
+        "name": "在前台时",
+        "description": "屏幕上的会话空闲多久后释放。"
+      },
+      "limit": {
+        "name": "最多保留的空闲进程",
+        "description": "超过时先释放最久没用的会话。",
+        "none": "不限"
+      },
+      "cacheNote": "两个时长都不超过会话的 prompt cache 过期：过期后下一轮本来就要重新写入缓存。",
+      "never": "空闲的会话一直留着 Agent，只在归档、删除、换 Agent 和退出时结束。",
+      "minutes_other": "{{count}} 分钟",
+      "hours_other": "{{count}} 小时",
+      "fallback": {
+        "title": "Claude Code {{version}} 接回后 prompt cache 连续失效",
+        "body": "在这个版本上接回的会话连续两次从 prompt cache 读到的不到上下文的一半。所以现在空闲会话在缓存过期前不释放，不按下面的设置；Claude Code 更新到别的版本后恢复。内存紧张时仍然释放。"
+      }
+    },
     "workflow": {
       "group": "工作流",
       "keywords": "工作流 建议 Auto 选人 步骤 需求 流程",

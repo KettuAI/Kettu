@@ -1,4 +1,5 @@
 import type { ComputerUseSettings } from './computer-use'
+import type { IdleSessionsSettings } from './idle-release'
 import type { LanguageSetting, Locale } from './locale'
 import type { MarketServer, MarketSkill } from './marketplace'
 import type { DirectAddress } from './remote/protocol'
@@ -86,6 +87,8 @@ export interface SettingsFile {
   marketplace: { mcp: MarketServer[]; skills: MarketSkill[] }
   // The permission mode each agent's new sessions start in; an agent with none starts as its own.
   startModes: Partial<Record<AgentId, string>>
+  // When idle Claude Code sessions let their agent go; outOfView and inView in minutes.
+  idleSessions: IdleSessionsSettings
   // source: where updates come from; GitHub only never reaches Kettu's download service.
   updates: { automatic: 'download' | 'restart' | 'notify' | 'off'; source: 'auto' | 'github' }
   privacy: { hideAccount: boolean } // kept so older files still parse; loading turns it off
@@ -225,6 +228,7 @@ export const DEFAULT_SETTINGS: SettingsFile = {
   mcp: { kettu: { off: [] } },
   marketplace: { mcp: [], skills: [] },
   startModes: {},
+  idleSessions: { release: 'auto', outOfView: 5, inView: 30, limit: null },
   updates: { automatic: 'download', source: 'auto' },
   privacy: { hideAccount: false },
   diagnostics: { verboseUntil: null },
@@ -278,6 +282,7 @@ export interface SettingsPatch {
   marketplace?: { mcp?: MarketServer[]; skills?: MarketSkill[] } // each list is replaced whole
   disabledAgents?: AgentId[] // replaced whole
   startModes?: Partial<Record<AgentId, string | null>> // merged by agent; null clears one
+  idleSessions?: Partial<SettingsFile['idleSessions']>
   updates?: Partial<SettingsFile['updates']>
   privacy?: Partial<SettingsFile['privacy']>
   diagnostics?: Partial<SettingsFile['diagnostics']>
@@ -308,6 +313,7 @@ export interface HostSettings {
   mcp: SettingsFile['mcp']
   marketplace: SettingsFile['marketplace']
   startModes: SettingsFile['startModes']
+  idleSessions: SettingsFile['idleSessions']
   usage: { fromComputer: boolean }
   sessionTitles: boolean // write a title for a session its agent leaves untitled
   defaultAgent: AgentId | null // the agent new sessions start with, which answers artifacts' questions

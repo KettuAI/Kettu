@@ -21,6 +21,12 @@ import {
   ZOOM_LEVELS,
 } from '@shared/settings'
 import { isComputerApp, isStopShortcut } from '@shared/computer-use'
+import {
+  IDLE_LIMITS,
+  IDLE_RELEASE_MODES,
+  IN_VIEW_MINUTES,
+  OUT_OF_VIEW_MINUTES,
+} from '@shared/idle-release'
 import { LANGUAGE_SETTINGS, resolveLocale, type Locale } from '@shared/locale'
 import {
   catalogSkillId,
@@ -183,6 +189,12 @@ const SECTION_FIELDS = {
   privacy: { hideAccount: isBoolean },
   diagnostics: { verboseUntil: isVerboseUntil },
   usage: { fromComputer: isBoolean, sidebar: oneOf('today', 'cost', 'limit', 'off') },
+  idleSessions: {
+    release: oneOf(...IDLE_RELEASE_MODES),
+    outOfView: oneOf(...OUT_OF_VIEW_MINUTES),
+    inView: oneOf(...IN_VIEW_MINUTES),
+    limit: oneOf(...IDLE_LIMITS),
+  },
   computerUse: {
     enabled: isBoolean,
     allowedApps: isComputerApps,
@@ -1463,6 +1475,7 @@ export function hostSettings(settings: SettingsFile, systemLocale: Locale): Host
     mcp: structuredClone(settings.mcp),
     marketplace: structuredClone(settings.marketplace),
     startModes: { ...settings.startModes },
+    idleSessions: { ...settings.idleSessions },
     usage: { fromComputer: settings.usage.fromComputer },
     sessionTitles: settings.general.sessionTitles,
     defaultAgent: settings.general.defaultAgent,
@@ -1493,6 +1506,7 @@ const HOST_SECTIONS: ReadonlySet<SettingsSection> = new Set([
   'mcp',
   'marketplace',
   'startModes',
+  'idleSessions',
   'usage',
   'computerUse',
 ])

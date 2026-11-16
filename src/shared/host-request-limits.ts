@@ -114,6 +114,7 @@ export const HOST_REQUEST_LIMITS: Readonly<Record<HostMethod, number | null>> = 
   'sessions.attachEarly': AGENT_MS,
   'sessions.cancel': AGENT_MS,
   'sessions.runningWork': HOST_MS,
+  'sessions.idleRelease': HOST_MS,
   'sessions.stopTask': AGENT_MS,
   'sessions.taskOutput': AGENT_MS,
   'sessions.retry': AGENT_MS,
