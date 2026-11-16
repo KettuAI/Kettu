@@ -87,6 +87,11 @@ export type MapperEffect =
     }
   // Work the agent runs on after its tool call ended, such as a command in the background.
   | { kind: 'background' }
+  // Whether that work still runs, for an agent that says when it ends. `listed`: the agent sent its
+  // full list of background tasks, background subagents among them, so that list alone decides.
+  | { kind: 'backgroundRunning'; running: boolean; listed: boolean }
+  // How many jobs the agent scheduled to wake the session later, such as cron and /loop wakeups.
+  | { kind: 'scheduled'; jobs: number }
   // The commands and monitors the agent has running or has ended since, replacing the last list.
   | { kind: 'tasks'; tasks: BackgroundTaskView[] }
   // A turn the agent started between the host's own, as when such a command ended. A prompt that

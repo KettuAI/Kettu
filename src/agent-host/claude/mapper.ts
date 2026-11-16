@@ -190,6 +190,12 @@ export class ClaudeMapper {
   private readonly background = new Map<string, BackgroundTaskView>()
   /** Commands still blocking their tool call, which join `background` once they move there. */
   private readonly foreground = new Map<string, BackgroundTaskView>()
+  /** Background work still running, background subagents among it, by task id; ambient left out. */
+  private readonly working = new Set<string>()
+  /** Claude Code sent its full list of background tasks since its process started. */
+  private listed = false
+  /** What the session was last told about `working`; null before anything ran. */
+  private told: { running: boolean; listed: boolean } | null = null
   private compacting: string | null = null
   /** In a replay: the subagents its history started, whose own histories follow. */
   readonly replayed: ReplayedSubagent[] = []
@@ -533,7 +539,8 @@ export class ClaudeMapper {
       out.patches.push({ op: 'entry.update', id, changes })
       return out
     }
-    if (complete && !ctx.replaying && startsBackgroundWork(name, block.input)) {
+    // Once Claude Code lists its background work, the list says when this command runs.
+    if (complete && !ctx.replaying && !this.listed && startsBackgroundWork(name, block.input)) {
       out.effects.push({ kind: 'background' })
     }
     const entry: ToolEntry = {
@@ -940,6 +947,12 @@ export class ClaudeMapper {
   private taskStarted(message: SystemMessage): Delivery[] {
     const taskId = typeof message.task_id === 'string' ? message.task_id : null
     if (!taskId) return []
+    const work =
+      message.is_backgrounded === true &&
+      message.ambient !== true &&
+      message.skip_transcript !== true
+        ? this.workStarted(taskId)
+        : []
     const subagent =
       message.task_type === 'local_agent' || typeof message.subagent_type === 'string'
     if (!subagent) {
@@ -949,6 +962,7 @@ export class ClaudeMapper {
           map: () => ({ patches: [], effects: [{ kind: 'background' }] }),
         },
         ...this.backgroundStarted(message, taskId),
+        ...work,
       ]
     }
     const toolUseId = typeof message.tool_use_id === 'string' ? message.tool_use_id : null
@@ -995,7 +1009,13 @@ export class ClaudeMapper {
         },
       })
     }
-    return deliveries
+    return [...deliveries, ...work]
+  }
+
+  /** A task Claude Code started in the background, or moved there: work that still runs. */
+  private workStarted(taskId: string): Delivery[] {
+    this.working.add(taskId)
+    return this.workChanged()
   }
 
   private taskNotification(message: SystemMessage): Delivery[] {
@@ -1009,13 +1029,14 @@ export class ClaudeMapper {
       summary,
       typeof usage.duration_ms === 'number' ? usage.duration_ms : null,
     )
+    const work = this.workEnded(taskId)
     switch (message.status) {
       case 'completed':
-        return [...this.end(taskId, 'end_turn'), ...board]
+        return [...this.end(taskId, 'end_turn'), ...board, ...work]
       case 'stopped':
-        return [...this.end(taskId, 'cancelled'), ...board]
+        return [...this.end(taskId, 'cancelled'), ...board, ...work]
       default:
-        return [...this.end(taskId, 'error', summary), ...board]
+        return [...this.end(taskId, 'error', summary), ...board, ...work]
     }
   }
 
@@ -1025,19 +1046,24 @@ export class ClaudeMapper {
     const patch = inputOf(message.patch)
     if (!taskId) return []
     const endTime = typeof patch.end_time === 'number' ? patch.end_time : null
-    const backgrounded = patch.is_backgrounded === true ? this.backgroundMoved(taskId) : []
+    const backgrounded =
+      patch.is_backgrounded === true
+        ? [...this.backgroundMoved(taskId), ...this.workStarted(taskId)]
+        : []
     switch (patch.status) {
       case 'completed':
         return [
           ...backgrounded,
           ...this.end(taskId, 'end_turn'),
           ...this.backgroundEnded(taskId, 'completed', '', null, endTime),
+          ...this.workEnded(taskId),
         ]
       case 'killed':
         return [
           ...backgrounded,
           ...this.end(taskId, 'cancelled'),
           ...this.backgroundEnded(taskId, 'stopped', '', null, endTime),
+          ...this.workEnded(taskId),
         ]
       case 'failed': {
         const error = typeof patch.error === 'string' ? patch.error : ''
@@ -1045,6 +1071,7 @@ export class ClaudeMapper {
           ...backgrounded,
           ...this.end(taskId, 'error', error),
           ...this.backgroundEnded(taskId, 'failed', error, null, endTime),
+          ...this.workEnded(taskId),
         ]
       }
       default:
@@ -1121,11 +1148,14 @@ export class ClaudeMapper {
     if (!Array.isArray(message.tasks)) return []
     const live = new Set<string>()
     let changed = false
+    this.listed = true
+    this.working.clear()
     for (const item of message.tasks) {
       const entry = inputOf(item)
       const id = typeof entry.task_id === 'string' ? entry.task_id : null
       if (id === null) continue
       live.add(id)
+      if (entry.ambient !== true) this.working.add(id)
       if (entry.ambient === true) {
         changed = this.background.delete(id) || changed
         this.foreground.delete(id)
@@ -1157,7 +1187,38 @@ export class ClaudeMapper {
       this.background.set(id, { ...task, status: 'completed', endedAt: now })
       changed = true
     }
-    return changed ? this.backgroundDelivery() : []
+    return [...(changed ? this.backgroundDelivery() : []), ...this.workChanged()]
+  }
+
+  /**
+   * Tells the session whether background work still runs, when that changed. Claude Code's full
+   * list decides once it sent one; before that, as from a Claude Code that sends none, the starts
+   * and ends of backgrounded tasks do.
+   */
+  private workChanged(again = false): Delivery[] {
+    const now = { running: this.working.size > 0, listed: this.listed }
+    if (!again) {
+      if (this.told?.running === now.running && this.told.listed === now.listed) return []
+      if (this.told === null && !now.running && !now.listed) return []
+    }
+    this.told = now
+    const effect: MapperEffect = { kind: 'backgroundRunning', ...now }
+    return [{ sessionId: this.sessionId, map: () => ({ patches: [], effects: [effect] }) }]
+  }
+
+  /**
+   * The work still running as a turn ends, said again even when unchanged: a command the turn put
+   * in the background may never have started, as when its permission was denied. Not from a
+   * Claude Code that has reported no task at all, which may be one that never reports them.
+   */
+  workSettled(): Delivery[] {
+    if (!this.listed && this.told === null) return []
+    return this.workChanged(true)
+  }
+
+  /** A task that ended leaves the work still running. */
+  private workEnded(taskId: string): Delivery[] {
+    return this.working.delete(taskId) ? this.workChanged() : []
   }
 
   /** A listed task ended; one that ended already only learns how, from a later report. */
@@ -1208,9 +1269,24 @@ export class ClaudeMapper {
   /** The query that ran the tasks ended, and its Claude Code process with them. */
   endBackground(): Delivery[] {
     this.foreground.clear()
-    if (this.background.size === 0) return []
+    this.working.clear()
+    this.listed = false
+    const wasRunning = this.told?.running === true
+    this.told = null
+    const work: Delivery[] = wasRunning
+      ? [
+          {
+            sessionId: this.sessionId,
+            map: () => ({
+              patches: [],
+              effects: [{ kind: 'backgroundRunning', running: false, listed: false }],
+            }),
+          },
+        ]
+      : []
+    if (this.background.size === 0) return work
     this.background.clear()
-    return this.backgroundDelivery()
+    return [...this.backgroundDelivery(), ...work]
   }
 
   /** Ends a running subagent, once: its first terminal message says how. */
