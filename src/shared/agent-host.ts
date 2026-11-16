@@ -329,6 +329,9 @@ export interface AgentStatus {
   launchCommand: string // as shown in Settings › Agents, quoted for the platform
   binaryOverride: string | null // the program picked in Settings, if any
   binaryCommand: string | null // the command a binary agent's launch runs; null for the others
+  // Where that program was found: on PATH, the one picked in Settings or Kettu's install; null
+  // while none was, and for the others.
+  binaryPath?: string | null
   update: AgentUpdate | null // from the last update check; null when up to date or unchecked
   updateCheckedAt: number | null // when that check finished; always null for binary agents
   updateSkipped: boolean // the user dismissed this update in the sidebar's notice
