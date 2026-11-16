@@ -8,7 +8,7 @@ import { newTurnScope, type MapperContext, type MapperEffect } from '../session-
 import { commandFacts, diffHunks, fenced, stripShellPrefix, ThreadMapper } from './mapper'
 
 function run(
-  notifications: [string, unknown][],
+  notifications: [string, unknown, number?][],
   options: { replaying?: boolean; title?: string } = {},
 ) {
   let thread: ThreadState = threadFromSnapshot({
@@ -43,7 +43,8 @@ function run(
   let n = 0
   let now = 1_000
   const unknown: string[] = []
-  for (const [method, params] of notifications) {
+  for (const [method, params, time] of notifications) {
+    if (time !== undefined) now = time
     const ctx: MapperContext = {
       thread,
       replaying: options.replaying ?? false,
@@ -67,6 +68,59 @@ function run(
 const at = { threadId: 'thread-1', turnId: 'turn-1' }
 const started = (item: unknown): [string, unknown] => ['item/started', { ...at, item }]
 const completed = (item: unknown): [string, unknown] => ['item/completed', { ...at, item }]
+
+describe('output speed', () => {
+  const usage = (output: number, reasoning = 0, time?: number): [string, unknown, number?] => {
+    const last = {
+      totalTokens: 1_000 + output,
+      inputTokens: output === 0 ? 0 : 1_000,
+      cachedInputTokens: 0,
+      cacheWriteInputTokens: 0,
+      outputTokens: output,
+      reasoningOutputTokens: reasoning,
+    }
+    const tokenUsage = { total: last, last, modelContextWindow: 200_000 }
+    return ['thread/tokenUsage/updated', { ...at, tokenUsage }, time]
+  }
+  const command = {
+    type: 'commandExecution',
+    id: 'x',
+    command: 'ls',
+    cwd: '/p',
+    status: 'completed',
+    commandActions: [],
+    aggregatedOutput: '',
+    exitCode: 0,
+  }
+
+  it('times streamed output from its first delta, and hidden reasoning from the request going out', () => {
+    const user = { type: 'userMessage', id: 'u', content: [] }
+    const { thread } = run([
+      [...completed(user), 1_000],
+      ['item/agentMessage/delta', { ...at, itemId: 'm', delta: 'Hi' }, 4_000],
+      usage(300, 0, 6_000),
+      [...completed(command), 8_000],
+      ['item/agentMessage/delta', { ...at, itemId: 'm2', delta: 'Done' }, 15_000],
+      usage(1_000, 700, 18_000),
+      // A compaction counts nothing.
+      usage(0, 0, 19_000),
+    ])
+    expect(thread.session.speed).toEqual({
+      last: { tokens: 1_000, ms: 10_000, approx: true, firstTokenMs: null },
+      recent: [
+        { rate: 150, approx: false },
+        { rate: 100, approx: true },
+      ],
+      turn: { since: null, tokens: 1_300, ms: 12_000, requests: 2, approx: 1 },
+      session: { tokens: 1_300, ms: 12_000, requests: 2, approx: 1 },
+    })
+  })
+
+  it('times nothing in a replay', () => {
+    const { thread } = run([usage(300, 0, 6_000)], { replaying: true })
+    expect(thread.session.speed).toBeUndefined()
+  })
+})
 
 describe('commands', () => {
   it('strips the shell Codex runs a command in', () => {

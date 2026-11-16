@@ -5868,6 +5868,8 @@ export class SessionManager {
       context: undefined,
       // The new agent says whether it reports background tasks once it attaches.
       background: undefined,
+      // Speed is the old agent's model; the new one may not be timed at all.
+      speed: undefined,
       status: 'closed',
       error: null,
     })

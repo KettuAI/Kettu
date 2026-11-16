@@ -123,6 +123,25 @@
       "leftLine": "剩余 <time>{{time}}</time> · 已缓存 {{tokens}} tokens",
       "leftLineAbout": "约剩 <time>{{time}}</time> · 已缓存 {{tokens}} tokens"
     },
+    "speed": {
+      "title": "输出速度",
+      "unit": "tok/s",
+      "about": "约 ",
+      "rate": "{{rate}} tok/s",
+      "rateApprox": "约 {{rate}} tok/s",
+      "button": "输出速度：每秒 {{rate}} tokens",
+      "buttonApprox": "输出速度：约每秒 {{rate}} tokens",
+      "lastRequest": "最近一次请求 · {{tokens}} tokens，用时 {{seconds}} 秒",
+      "lastRequestSent": "最近一次请求 · {{tokens}} tokens，从发出算用时 {{seconds}} 秒",
+      "recent_other": "最近 {{count}} 次请求",
+      "firstToken": "首 token",
+      "seconds": "{{seconds}} 秒",
+      "turn": "本轮",
+      "session": "本会话",
+      "average_other": "{{rate}} tok/s · {{count}} 次请求",
+      "averageApprox_other": "约 {{rate}} tok/s · {{count}} 次请求",
+      "explain": "输出的 tokens（含思考）除以它们到达这台电脑所用的时间。回复一次性到达时（经过某些代理，或 Agent 本身如此），时间从请求发出算起、含等待，速度前标「约」。"
+    },
     "contextShort": "上下文 {{percent}}%",
     "window": {
       "free": "剩余 {{n}}",

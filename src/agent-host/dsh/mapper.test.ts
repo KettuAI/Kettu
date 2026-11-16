@@ -8,7 +8,7 @@ import type { SessionEvent } from './protocol'
 
 const CWD = '/work/app'
 
-function run(events: [string, unknown][]) {
+function run(events: [string, unknown, number?][]) {
   let thread: ThreadState = threadFromSnapshot({
     session: {
       id: 's',
@@ -40,13 +40,13 @@ function run(events: [string, unknown][]) {
   const effects: MapperEffect[] = []
   const unknown: string[] = []
   let n = 0
-  events.forEach(([type, data], seq) => {
+  events.forEach(([type, data, time], seq) => {
     const ctx: MapperContext = {
       thread,
       replaying: false,
       cancelling: false,
       scope,
-      now: 1_000 + seq,
+      now: time ?? 1_000 + seq,
       nextId: () => `e:${++n}`,
       sessionIdFor: () => null,
     }
@@ -91,6 +91,27 @@ const result = (callId: string, text: string, extra: Record<string, unknown> = {
       ...(extra.error ? { error: extra.error } : {}),
     },
   ] as [string, unknown]
+
+describe('dsh output speed', () => {
+  it('times each whole message from when its request went out', () => {
+    const usage = (outputTokens: number) => ({ inputTokens: 1_000, outputTokens })
+    const { thread } = run([
+      ['turn/start', { turn: 1 }, 1_000],
+      [...assistant('a', [{ type: 'text', text: 'Reading.' }], usage(200)), 5_000],
+      [...result('c1', 'ok'), 7_000],
+      [...assistant('b', [{ type: 'text', text: 'Done.' }], usage(600)), 11_000],
+    ])
+    expect(thread.session.speed).toEqual({
+      last: { tokens: 600, ms: 4_000, approx: true, firstTokenMs: null },
+      recent: [
+        { rate: 50, approx: true },
+        { rate: 150, approx: true },
+      ],
+      turn: { since: null, tokens: 800, ms: 8_000, requests: 2, approx: 2 },
+      session: { tokens: 800, ms: 8_000, requests: 2, approx: 2 },
+    })
+  })
+})
 
 describe('dsh mapper', () => {
   it('shows a committed message as its thought and its reply', () => {

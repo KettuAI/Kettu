@@ -23,6 +23,7 @@ function makeFormatters(locale: string) {
     full: new Intl.DateTimeFormat(locale, { dateStyle: 'medium', timeStyle: 'short' }),
     compact: new Intl.NumberFormat(locale, { notation: 'compact', maximumFractionDigits: 1 }),
     integer: new Intl.NumberFormat(locale, { maximumFractionDigits: 0 }),
+    tenths: new Intl.NumberFormat(locale, { maximumFractionDigits: 1 }),
     percent: new Intl.NumberFormat(locale, { style: 'percent', maximumFractionDigits: 1 }),
     usdCents: new Intl.NumberFormat(locale, {
       style: 'currency',
@@ -196,6 +197,11 @@ export function tokens(n: number): string {
 /** US dollars, with cents under $100: "$4.20", "$1,234". */
 export function usd(amount: number): string {
   return (amount < 100 ? format().usdCents : format().usdWhole).format(amount)
+}
+
+/** A rate or a time, whole from 10 up and to a tenth below: "82", "7.8". */
+export function measure(n: number): string {
+  return (n >= 10 ? format().integer : format().tenths).format(n)
 }
 
 /** A count in full, for tables and tooltips: "35,317,988,871". */

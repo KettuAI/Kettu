@@ -296,6 +296,8 @@ export interface StreamEvent {
     index?: number
     content_block?: ContentBlock
     delta?: { type: string; text?: string; thinking?: string }
+    /** On `message_delta`: the message's usage so far, its output tokens final. */
+    usage?: ApiUsage
   }
   parent_tool_use_id: string | null
   agent_id?: string

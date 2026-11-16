@@ -127,6 +127,28 @@
       "leftLine": "<time>{{time}}</time> left · {{tokens}} tokens cached",
       "leftLineAbout": "About <time>{{time}}</time> left · {{tokens}} tokens cached"
     },
+    "speed": {
+      "title": "Output speed",
+      "unit": "tok/s",
+      "about": "~",
+      "rate": "{{rate}} tok/s",
+      "rateApprox": "~{{rate}} tok/s",
+      "button": "Output speed: {{rate}} tokens a second",
+      "buttonApprox": "Output speed: about {{rate}} tokens a second",
+      "lastRequest": "Last request · {{tokens}} tokens in {{seconds}} s",
+      "lastRequestSent": "Last request · {{tokens}} tokens, {{seconds}} s from sending it",
+      "recent_one": "Last request",
+      "recent_other": "Last {{count}} requests",
+      "firstToken": "First token",
+      "seconds": "{{seconds}} s",
+      "turn": "This turn",
+      "session": "This session",
+      "average_one": "{{rate}} tok/s · {{count}} request",
+      "average_other": "{{rate}} tok/s · {{count}} requests",
+      "averageApprox_one": "~{{rate}} tok/s · {{count}} request",
+      "averageApprox_other": "~{{rate}} tok/s · {{count}} requests",
+      "explain": "Output tokens, thinking included, over the time they took to arrive on this computer. A reply that arrives all at once, through some proxies or from some agents, is timed from sending its request, waiting included, and marked ~."
+    },
     "contextShort": "{{percent}}% context",
     "window": {
       "free": "{{n}} free",
