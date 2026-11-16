@@ -3447,10 +3447,16 @@ export class SessionManager {
 
   /** Keeps the lifetime already known when the transcript names none. */
   private async readCacheTtl(live: Live): Promise<void> {
-    const { agentId, acpSessionId } = live.record
+    const { agentId, acpSessionId, configDir } = live.record
     let ttl: number | null
     try {
-      ttl = (await this.deps.cacheTtl?.(agentId, workDir(live.record), acpSessionId)) ?? null
+      ttl =
+        (await this.deps.cacheTtl?.(
+          agentId,
+          workDir(live.record),
+          acpSessionId,
+          configDir ?? null,
+        )) ?? null
     } catch (error) {
       this.deps.diagnostics.log(
         'warn',
