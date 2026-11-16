@@ -163,6 +163,7 @@
     },
     "windowUsed": "{{window}}: {{percent}}% used.",
     "prepaidBalance": "Prepaid balance",
+    "extraUsage": "Extra usage",
     "units": {
       "credits": "credits",
       "premiumRequests": "premium requests"

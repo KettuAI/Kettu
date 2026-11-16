@@ -17,6 +17,15 @@ export function number(value: unknown): number | null {
   return typeof parsed === 'number' && Number.isFinite(parsed) ? parsed : null
 }
 
+/** Unix seconds, Unix milliseconds or an RFC 3339 string, as milliseconds. */
+export function time(value: unknown): number | null {
+  const parsed = number(value)
+  if (parsed !== null) return parsed > 0 ? (parsed < 1e12 ? parsed * 1000 : parsed) : null
+  if (typeof value !== 'string') return null
+  const at = Date.parse(value)
+  return Number.isFinite(at) ? at : null
+}
+
 export function amountLimit(
   window: string,
   label: string,
@@ -57,4 +66,34 @@ export function percentLimit(
 
 export function balance(label: string, amount: number, currency: string): ProviderBalance {
   return { label, amount, currency }
+}
+
+/** A response's text, refused past `maxBytes` without reading the rest. */
+export async function readBody(response: Response, maxBytes = 64 * 1024): Promise<string> {
+  const length = Number(response.headers.get('content-length'))
+  if (Number.isFinite(length) && length > maxBytes) throw new Error('too large')
+  if (!response.body) {
+    const text = await response.text()
+    if (Buffer.byteLength(text) > maxBytes) throw new Error('too large')
+    return text
+  }
+  const reader = response.body.getReader()
+  const chunks: Uint8Array[] = []
+  let size = 0
+  try {
+    for (;;) {
+      const { done, value } = await reader.read()
+      if (done) break
+      if (!value) continue
+      size += value.byteLength
+      if (size > maxBytes) {
+        await reader.cancel().catch(() => {})
+        throw new Error('too large')
+      }
+      chunks.push(value)
+    }
+  } finally {
+    reader.releaseLock()
+  }
+  return new TextDecoder().decode(Buffer.concat(chunks))
 }

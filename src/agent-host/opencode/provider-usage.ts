@@ -2,6 +2,9 @@
 // vendors whose keys it stores. Secrets stay in the request headers and never reach a result.
 
 import type { AgentProvider, PlanLimit, ProviderBalance } from '@shared/agent-host'
+import { readBody } from '../vendor-usage/common'
+import { parseKimiCodeUsage } from '../vendor-usage/kimi-code'
+import { parseMiniMaxRemains } from '../vendor-usage/minimax-code'
 
 export const USAGE_ERROR = 'Usage could not be read.'
 
@@ -275,50 +278,16 @@ function glmEndpoint(host: string): Endpoint {
   }
 }
 
-function usedFrom(limitValue: unknown, usedValue: unknown, remainingValue: unknown): number | null {
-  const total = num(limitValue)
-  if (total === null || total <= 0) return null
-  const used =
-    num(usedValue) ?? (num(remainingValue) === null ? null : total - num(remainingValue)!)
-  return used === null ? null : percent((used / total) * 100)
-}
-
 function kimiEndpoint(host: string): Endpoint {
   return {
     url: `https://${host}/coding/v1/usages`,
     headers: bearer,
     parse(body, now) {
-      const root = record(body)
-      if (!root) return null
-      const limits: PlanLimit[] = []
-      for (const item of list(root.limits) ?? []) {
-        const row = record(item)
-        const detail = record(row?.detail)
-        if (!detail) continue
-        const used = usedFrom(detail.limit, detail.used, detail.remaining)
-        if (used === null) continue
-        const window = record(row?.window)
-        const duration = num(window?.duration)
-        const unit = text(window?.timeUnit)
-        const fiveHour = duration === 300 && unit === 'TIME_UNIT_MINUTE'
-        limits.push(
-          limit(
-            fiveHour ? 'five_hour' : `kimi_${duration ?? 'other'}`,
-            fiveHour ? '5-hour' : 'Usage',
-            used,
-            instant(detail.resetTime),
-            now,
-          ),
-        )
-      }
-      const weekly = record(root.usage)
-      if (weekly) {
-        const used = usedFrom(weekly.limit, weekly.used, weekly.remaining)
-        if (used !== null) {
-          limits.push(limit('seven_day', 'Weekly', used, instant(weekly.resetTime), now))
-        }
-      }
-      return limits.length > 0 ? readyUsage(now, limits) : unsupportedUsage(now)
+      const usage = parseKimiCodeUsage(body, now)
+      if (!usage) return null
+      return usage.limits.length > 0 || usage.balances.length > 0
+        ? readyUsage(now, usage.limits, usage.balances)
+        : unsupportedUsage(now)
     },
   }
 }
@@ -328,46 +297,8 @@ function minimaxEndpoint(host: string): Endpoint {
     url: `https://${host}/v1/token_plan/remains`,
     headers: bearer,
     parse(body, now) {
-      const root = record(body)
-      if (!root) return null
-      const base = record(root.base_resp)
-      const code = base ? num(base.status_code) : null
-      if (code !== null && code !== 0) return null
-      const remains = list(root.model_remains)
-      if (!remains) return null
-      const rows = remains.flatMap((item) => {
-        const row = record(item)
-        return row ? [row] : []
-      })
-      // The text/coding pool drives the bars; the video pool has its own windows.
-      const general = rows.find((row) => row.model_name === 'general')
-      if (!general) return failedUsage(now)
-      const limits: PlanLimit[] = []
-      const remaining = num(general.current_interval_remaining_percent)
-      if (remaining !== null) {
-        limits.push(
-          limit(
-            'five_hour',
-            '5-hour',
-            percent(100 - remaining) ?? 0,
-            instant(general.end_time),
-            now,
-          ),
-        )
-      }
-      const weeklyRemaining = num(general.current_weekly_remaining_percent)
-      if (weeklyRemaining !== null) {
-        limits.push(
-          limit(
-            'weekly',
-            'Weekly',
-            percent(100 - weeklyRemaining) ?? 0,
-            instant(general.weekly_end_time),
-            now,
-          ),
-        )
-      }
-      return limits.length > 0 ? readyUsage(now, limits) : failedUsage(now)
+      const usage = parseMiniMaxRemains(body, now)
+      return usage ? readyUsage(now, usage.limits) : null
     },
   }
 }
@@ -392,37 +323,7 @@ export function hasUsageEndpoint(providerId: string): boolean {
   return Object.hasOwn(ENDPOINTS, providerId)
 }
 
-const MAX_BYTES = 64 * 1024
 const DEFAULT_TIMEOUT = 8_000
-
-async function readBody(response: Response): Promise<string> {
-  const length = Number(response.headers.get('content-length'))
-  if (Number.isFinite(length) && length > MAX_BYTES) throw new Error('too large')
-  if (!response.body) {
-    const text = await response.text()
-    if (Buffer.byteLength(text) > MAX_BYTES) throw new Error('too large')
-    return text
-  }
-  const reader = response.body.getReader()
-  const chunks: Uint8Array[] = []
-  let size = 0
-  try {
-    for (;;) {
-      const { done, value } = await reader.read()
-      if (done) break
-      if (!value) continue
-      size += value.byteLength
-      if (size > MAX_BYTES) {
-        await reader.cancel().catch(() => {})
-        throw new Error('too large')
-      }
-      chunks.push(value)
-    }
-  } finally {
-    reader.releaseLock()
-  }
-  return new TextDecoder().decode(Buffer.concat(chunks))
-}
 
 export interface UsageQuery {
   providerId: string

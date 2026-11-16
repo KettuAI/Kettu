@@ -158,6 +158,7 @@
     },
     "windowUsed": "{{window}}：已用 {{percent}}%。",
     "prepaidBalance": "预付余额",
+    "extraUsage": "额外用量",
     "units": {
       "credits": "积分",
       "premiumRequests": "高级请求"
