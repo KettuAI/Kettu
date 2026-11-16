@@ -28,6 +28,7 @@ export type ShortcutAction =
   | 'sendNow'
   | 'newLine'
   | 'focusComposer'
+  | 'sideChat'
   | 'addFiles'
   | 'toggleTerminal'
   | 'newTerminal'
@@ -69,6 +70,7 @@ export function shortcutList(sendKey: 'enter' | 'mod-enter'): Shortcut[] {
     },
     { group: 'composer', action: 'newLine', keys: sendKey === 'enter' ? 'Shift+Enter' : 'Enter' },
     { group: 'composer', action: 'focusComposer', keys: 'Mod+L' },
+    { group: 'composer', action: 'sideChat', keys: 'Mod+J' },
     { group: 'composer', action: 'addFiles', keys: 'Mod+U' },
     { group: 'terminal', action: 'toggleTerminal', keys: 'Ctrl+`' },
     { group: 'terminal', action: 'newTerminal', keys: 'Ctrl+Shift+`' },

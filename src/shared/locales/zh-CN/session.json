@@ -817,7 +817,8 @@
     "button": "回复",
     "placeholder": "回复 {{agent}}…",
     "send": "发送回复",
-    "quote": "引用的文字"
+    "quote": "引用的文字",
+    "side": "侧聊"
   },
   "planCard": {
     "label": "计划",
@@ -1151,5 +1152,70 @@
       "ended": "这一轮先结束了",
       "interrupted": "Marketplace 回复之前 Kettu 停止了"
     }
+  },
+  "sideChat": {
+    "title": "侧聊",
+    "note": {
+      "claude": "不进对话 · 不用工具",
+      "codex": "不进对话 · 只读，不问授权",
+      "hidden": "不进对话 · 临时会话，用完即删",
+      "other": "由 {{agent}} 回答 · 临时会话"
+    },
+    "empty": {
+      "title": "问 {{agent}} 一句",
+      "claudeSees": "看得到这个会话到现在的对话，连正在跑的这一轮",
+      "codexSees": "看得到上一轮结束为止的对话，正在跑的这一轮 Kettu 附上文字",
+      "noInterrupt": "不打断它，问答也不进对话",
+      "claudeTools": "不用工具；要查文件、跑命令，请在主对话里说",
+      "codexTools": "能读文件、跑只读命令，不改东西、不问授权",
+      "claudeCost": "用这个会话的额度、和主会话共用缓存；Claude Code 不单独报侧聊的用量，用量页里没有这部分",
+      "codexCost": "用这个会话的额度、和主会话共用缓存",
+      "hiddenHow": "{{agent}} 没有自带的侧问，Kettu 开一个用完即删的临时会话来答",
+      "hiddenCarried": "带上最近的对话，最多约 16k token，早前的工具输出会截掉",
+      "hiddenCost": "和主会话不共用缓存，第一问要全价付这段对话、慢几秒，追问会便宜下来"
+    },
+    "pick": {
+      "title": "{{agent}} 还不能侧聊",
+      "why": "它开的临时会话现在删不干净，会留在它自己的会话历史里。可以换一个 Agent 来答，Kettu 带上这个会话最近的对话。",
+      "before": "由",
+      "after": "来答",
+      "cost": "花的是 {{agent}} 的额度；带上的对话最多约 16k token。",
+      "ask": "用 {{agent}} 问",
+      "none": "这台电脑上没有能侧聊的 Agent。",
+      "change": "换一个 Agent 来答"
+    },
+    "answering": "正在回答…",
+    "stop": "停止",
+    "stopped": "已停止",
+    "retry": "重试",
+    "quote": "引用到输入框",
+    "copy": "复制",
+    "copied": "已复制",
+    "carried_other": "带上了第一条请求和最近 {{count}} 轮 · 约 {{tokens}}k token",
+    "carriedAll_other": "带上了全部 {{count}} 轮对话 · 约 {{tokens}}k token",
+    "carriedNone": "会话还没有对话",
+    "step": {
+      "read": "读了 {{title}}",
+      "search": "搜索了 {{title}}",
+      "run": "跑了 {{title}}",
+      "other": "{{title}}"
+    },
+    "placeholder": {
+      "first": "问一句…",
+      "more": "追问…"
+    },
+    "hint": {
+      "keys": "{{send}} 问 · Esc 回到对话",
+      "close": "{{keys}} 收起"
+    },
+    "clear": "清空",
+    "cleared": "已清空侧聊",
+    "undo": "撤销",
+    "close": "关闭",
+    "send": "问",
+    "quoted": "引用的段落",
+    "removeQuote": "去掉引用",
+    "seconds": "{{n}} 秒",
+    "by": "由 {{agent}} 回答"
   }
 }

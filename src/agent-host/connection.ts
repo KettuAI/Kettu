@@ -16,6 +16,7 @@ import type {
   PendingPermission,
   PendingQuestion,
   QuestionAnswer,
+  SideChatStep,
   StopReason,
   TokenTotals,
   UserContent,
@@ -160,6 +161,44 @@ export class AgentRequestError extends Error {
   ) {
     super(message)
     this.name = 'AgentRequestError'
+  }
+}
+
+/** A side question as a connection answers it. */
+export interface SideQuestion {
+  /** The question, with the passage it is about quoted before it. */
+  question: string
+  /** The earlier questions and answers of the same side chat, oldest first. */
+  history: readonly { question: string; answer: string }[]
+  /** The running turn so far, for an agent whose answer cannot see it otherwise. */
+  running: string | null
+  /**
+   * The options the session opened with, for a fork that keeps its tools so that its prompt
+   * stays the session's and reads its cache.
+   */
+  options?: SessionOptions
+}
+
+export interface SideAnswerEvents {
+  /** The whole answer so far, each time it grows. */
+  text(answer: string): void
+  step(step: SideChatStep): void
+}
+
+export interface SideAnswer {
+  text: string
+  /** True when the agent gave a note in place of an answer. */
+  synthetic: boolean
+  /** What answering it took, where the agent reports it. */
+  tokens?: TokenTotals | null
+  model?: string | null
+}
+
+/** The agent's version has no side question of its own, so another way must answer. */
+export class SideQuestionUnsupported extends Error {
+  constructor(message = 'This version of the agent has no side questions') {
+    super(message)
+    this.name = 'SideQuestionUnsupported'
   }
 }
 
@@ -389,6 +428,17 @@ export interface AgentConnection {
   stopTask?(sessionId: string, taskId: string): Promise<void>
   /** The end of a background task's output, at most 8 KiB. */
   taskOutput?(sessionId: string, taskId: string): Promise<{ output: string; truncated: boolean }>
+  /**
+   * Answers a side question from the session's own conversation, beside its turn and without
+   * adding to it. Absent where the agent has no side question of its own; rejects with
+   * `SideQuestionUnsupported` where this version lacks it.
+   */
+  sideQuestion?(
+    sessionId: string,
+    ask: SideQuestion,
+    events: SideAnswerEvents,
+    signal: AbortSignal,
+  ): Promise<SideAnswer>
   /**
    * Adds earlier messages to the history the session's model sees, ahead of its next turn. False
    * where this agent's version takes none, and the host sends them with the prompt instead.

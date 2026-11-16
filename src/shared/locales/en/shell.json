@@ -7,7 +7,8 @@
     "browser": "Browser",
     "devices": "Mobile devices",
     "closePane": "Close pane",
-    "leaveSession": "Leave session"
+    "leaveSession": "Leave session",
+    "sideChat": "Side chat"
   },
   "hostBanner": {
     "restarting": "Restarting the agent host. Your sessions come back by themselves.",
@@ -56,7 +57,8 @@
       "sessions": "Sessions",
       "composer": "Composer",
       "terminal": "Terminal"
-    }
+    },
+    "sideChat": "Open, focus or hide the side chat"
   },
   "topBar": {
     "showSidebar": "Show sidebar",

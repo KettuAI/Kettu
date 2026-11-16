@@ -8,6 +8,8 @@ import { errorMessage, host } from '@renderer/lib/host'
 import { isMod } from '@renderer/lib/platform'
 import { cn } from '@renderer/lib/utils'
 import { useSettingsStore } from '@renderer/stores/settings'
+import { openSideChat } from '@renderer/stores/side-chat'
+import { useThreadsStore } from '@renderer/stores/threads'
 import { SendButton } from './composer/send-button'
 import { replyMessage } from './entries/reply-quote'
 
@@ -86,6 +88,16 @@ export function ReplyToSelection({
     setWriting(false)
     if (!keepAnswer) setAnswer('')
     setError(null)
+  }
+
+  // A sub-agent's page has no side chat.
+  const sideOn = useThreadsStore((s) => !!s.replicas[sessionId]?.state?.session.sideChat)
+  const askAside = () => {
+    if (!passage) return
+    const text = passage.text
+    window.getSelection()?.removeAllRanges()
+    close()
+    openSideChat(sessionId, text)
   }
 
   const startWriting = () => {
@@ -264,15 +276,27 @@ export function ReplyToSelection({
             )}
           </>
         ) : (
-          <Button
-            variant="ghost"
-            className="ks-reply-pill"
-            // The click must not take focus, which would drop the selection it quotes.
-            onMouseDown={(event) => event.preventDefault()}
-            onClick={startWriting}
-          >
-            {t('reply.button')}
-          </Button>
+          <div className="ks-reply-pills">
+            <Button
+              variant="ghost"
+              className="ks-reply-pill"
+              // The click must not take focus, which would drop the selection it quotes.
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={startWriting}
+            >
+              {t('reply.button')}
+            </Button>
+            {sideOn && (
+              <Button
+                variant="ghost"
+                className="ks-reply-pill"
+                onMouseDown={(event) => event.preventDefault()}
+                onClick={askAside}
+              >
+                {t('reply.side')}
+              </Button>
+            )}
+          </div>
         )}
       </PopoverContent>
     </Popover>

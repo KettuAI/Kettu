@@ -1594,7 +1594,11 @@
   font-weight: 500;
 }
 
-/* Reply to a selected passage: an ink pill above it. */
+/* Reply to a selected passage, or ask about it in the side chat: ink pills above it. */
+.ks-reply-pills {
+  display: flex;
+  gap: 4px;
+}
 .ks-reply-pop {
   padding: 0;
   border: 0;

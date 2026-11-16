@@ -1,6 +1,7 @@
 import { useState, type ReactNode } from 'react'
 import type { IconSvgElement } from '@hugeicons/react'
 import {
+  BubbleChatQuestionIcon,
   Cancel01Icon,
   ComputerIcon,
   ComputerTerminal01Icon,
@@ -42,10 +43,12 @@ import {
   panelSession,
   shownPanel,
   toggleBoard,
+  toggleSideChat,
   toggleSidePane,
   useViewStore,
   type SidePane,
 } from '@renderer/stores/view'
+import { openSideChat } from '@renderer/stores/side-chat'
 import { PaneIcon } from './panel-button'
 import { NoDrag } from './top-bar'
 
@@ -137,6 +140,7 @@ export function HeaderTools({
         />
       )}
       {board && sessionId && <BoardToggle sessionId={sessionId} />}
+      {board && sessionId && <SideChatToggle sessionId={sessionId} />}
       {computer && (
         <PaneToggle
           panel={panel}
@@ -279,6 +283,27 @@ function BoardToggle({ sessionId }: { sessionId: string }) {
           className={activity.needs > 0 ? 'kp-bar-dot kp-bar-dot--needs' : 'kp-bar-dot'}
         />
       )}
+    </BarButton>
+  )
+}
+
+/** The side chat, which takes the board's place at the right of the thread. */
+function SideChatToggle({ sessionId }: { sessionId: string }) {
+  const { t } = useTranslation('shell')
+  const context = usePane()
+  const open = useViewStore((s) => !!s.sideChatOpen[sessionId])
+  return (
+    <BarButton
+      label={t('headerTools.sideChat')}
+      shortcut="Mod+J"
+      pressed={open}
+      onClick={() => {
+        if (context && !context.focused) focusPane(context.paneId)
+        if (open && (!context || context.focused)) toggleSideChat(sessionId, false)
+        else openSideChat(sessionId)
+      }}
+    >
+      <PaneIcon icon={BubbleChatQuestionIcon} size={16} />
     </BarButton>
   )
 }

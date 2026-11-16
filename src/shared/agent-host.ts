@@ -589,6 +589,12 @@ export interface RunningWork extends BackgroundWork {
   waiting: number
 }
 
+/** An agent that can answer side questions for a session whose own agent cannot. */
+export interface SideChatAgent {
+  agentId: AgentId
+  name: string
+}
+
 /** How far a session's latest plan got, as its summary carries it. */
 export interface PlanProgress {
   done: number
@@ -1046,6 +1052,18 @@ export interface HostContract {
     result: { output: string; truncated: boolean }
   }
   'sessions.retry': { params: { sessionId: string }; result: void }
+  // Asks a side question, answered beside the session; the answer arrives in `sideChat` patches.
+  // `agentId` picks the agent that answers for a session whose own agent cannot, and is kept.
+  'sessions.sideAsk': {
+    params: { sessionId: string; question: string; quote?: string; agentId?: AgentId }
+    result: void
+  }
+  // Stops the side question being answered.
+  'sessions.sideStop': { params: { sessionId: string }; result: void }
+  // Empties the side chat, or with `undo` brings back what the last clear emptied.
+  'sessions.sideClear': { params: { sessionId: string; undo?: boolean }; result: void }
+  // The agents on this host that can answer side questions for a session whose own cannot.
+  'sessions.sideAgents': { params: { sessionId: string }; result: { agents: SideChatAgent[] } }
   // `entryId`: a reply's agent message, to fork the session up to its turn; see the session model.
   // A fork of a session in a worktree gets its own, from the source's branch, unless `same`.
   'sessions.fork': {
@@ -1605,6 +1623,10 @@ export const HOST_METHODS = [
   'sessions.idleRelease',
   'sessions.stopTask',
   'sessions.taskOutput',
+  'sessions.sideAsk',
+  'sessions.sideStop',
+  'sessions.sideClear',
+  'sessions.sideAgents',
   'sessions.retry',
   'sessions.fork',
   'worktrees.inspect',

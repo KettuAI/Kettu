@@ -9,12 +9,14 @@ import {
   applyPatches,
   threadEntries,
   threadFromSnapshot,
+  type SideChatStep,
   type ThreadEntry,
   type ThreadState,
 } from '@shared/thread'
 import type { ProgramOptions, ProgramRun } from '../adapter-install'
 import {
   AgentRequestError,
+  SideQuestionUnsupported,
   type ConnectionHooks,
   type PermissionAnswer,
   type PermissionRequest,
@@ -23,6 +25,7 @@ import {
 import { TextRing } from '../ring'
 import { newTurnScope, type MapperEffect } from '../session-updates'
 import { FakeAppServer, FakeRpcError, threadResponse, turn } from '../testing/fake-app-server'
+import { SIDE_INSTRUCTIONS } from '../side-chat'
 import { CodexConnection } from './connection'
 
 const SPEC = {
@@ -1427,6 +1430,105 @@ describe('hidden sessions', () => {
       turn: turn('turn-1', 'completed'),
     })
     expect(await collected).toEqual(['A title'])
+  })
+})
+
+describe('side questions', () => {
+  const turns = (...list: { id: string; status: string }[]) => ({
+    data: list,
+    nextCursor: null,
+    backwardsCursor: null,
+  })
+
+  it('forks the thread at its last ended turn, read only, with its tools but none auto-allowed', async () => {
+    const { server, connection } = await connect()
+    const opened = await connection.newSession('/project')
+    server.on('thread/turns/list', () =>
+      turns({ id: 'turn-9', status: 'inProgress' }, { id: 'turn-8', status: 'completed' }),
+    )
+    const texts: string[] = []
+    const steps: SideChatStep[] = []
+    const asking = connection.sideQuestion!(
+      opened.sessionId,
+      {
+        question: 'Why?',
+        history: [{ question: 'What?', answer: 'That.' }],
+        running: '[Turn 9, the user]\nFix the cleanup',
+        options: {
+          mcpServers: [
+            {
+              type: 'http',
+              name: 'kettu',
+              url: 'http://127.0.0.1:1/mcp',
+              headers: [],
+              autoAllow: ['set_plan'],
+              prompt: 'Kettu tools.',
+            },
+          ],
+        },
+      },
+      { text: (answer) => texts.push(answer), step: (step) => steps.push(step) },
+      new AbortController().signal,
+    )
+    await until(() => server.sent('turn/start').length === 1)
+    const fork = server.sent('thread/fork')[0] as {
+      config: { mcp_servers: Record<string, Record<string, unknown>> }
+      developerInstructions: string
+    }
+    expect(fork).toMatchObject({
+      threadId: opened.sessionId,
+      lastTurnId: 'turn-8',
+      approvalPolicy: 'never',
+      sandbox: 'read-only',
+      ephemeral: true,
+    })
+    expect(fork.config.mcp_servers.kettu).not.toHaveProperty('tools')
+    expect(fork.developerInstructions).toBe(`Kettu tools.\n\n${SIDE_INSTRUCTIONS}`)
+    const start = server.sent('turn/start')[0] as { threadId: string }
+    expect(JSON.stringify(start)).toContain('Fix the cleanup')
+    expect(JSON.stringify(start)).toContain('Q: What?')
+    const at = { threadId: start.threadId, turnId: 'turn-1' }
+    server.notify('item/started', {
+      ...at,
+      item: {
+        type: 'commandExecution',
+        id: 'c',
+        command: 'rg cleanup',
+        cwd: '/project',
+        status: 'inProgress',
+        commandActions: [{ type: 'search', command: 'rg cleanup', query: 'cleanup', path: null }],
+        aggregatedOutput: null,
+        exitCode: null,
+      },
+    })
+    server.notify('item/agentMessage/delta', { ...at, itemId: 'm', delta: 'Be' })
+    server.notify('item/agentMessage/delta', { ...at, itemId: 'm', delta: 'cause.' })
+    server.notify('item/completed', {
+      ...at,
+      item: { type: 'agentMessage', id: 'm', text: 'Because.', phase: null },
+    })
+    server.notify('turn/completed', { threadId: start.threadId, turn: turn('turn-1', 'completed') })
+    expect(await asking).toMatchObject({ text: 'Because.', synthetic: false })
+    expect(texts).toEqual(['Be', 'Because.', 'Because.'])
+    expect(steps).toEqual([{ kind: 'search', title: 'cleanup' }])
+    expect(server.sent('thread/unsubscribe')).toContainEqual({ threadId: start.threadId })
+  })
+
+  it('has no turn to fork at while the first turn runs', async () => {
+    const { server, connection } = await connect()
+    const opened = await connection.newSession('/project')
+    server.on('thread/turns/list', () => turns({ id: 'turn-1', status: 'inProgress' }))
+    void connection.prompt(opened.sessionId, [{ type: 'text', text: 'go' }]).catch(() => {})
+    await until(() => server.sent('turn/start').length === 1)
+    await expect(
+      connection.sideQuestion!(
+        opened.sessionId,
+        { question: 'Why?', history: [], running: null },
+        { text: () => {}, step: () => {} },
+        new AbortController().signal,
+      ),
+    ).rejects.toBeInstanceOf(SideQuestionUnsupported)
+    expect(server.sent('thread/fork')).toEqual([])
   })
 })
 

@@ -6,6 +6,7 @@ import { isMac, isMod, platform } from '@renderer/lib/platform'
 import { useProjectsStore } from '@renderer/stores/projects'
 import { awayHosts, sidebarHosts } from '@renderer/stores/hosts'
 import { useSessionsStore, visibleOrder } from '@renderer/stores/sessions'
+import { toggleSideChatFocus } from '@renderer/stores/side-chat'
 import { useTasksStore } from '@renderer/stores/tasks'
 import { useSettingsStore } from '@renderer/stores/settings'
 import {
@@ -144,6 +145,15 @@ export function useKeyboardShortcuts(): void {
         return run(event, () =>
           emitAppEvent({ kind: inTerminal ? 'ask-selection' : 'focus-composer' }),
         )
+      }
+      // The side chat of the session in focus; a sub-agent's page has none.
+      if (key === 'j' && !event.shiftKey && view.main.kind === 'session' && !view.settings.open) {
+        const { sessionId } = view.main
+        const origin = useSessionsStore.getState().byId[sessionId]?.origin
+        if (origin !== undefined && origin !== 'subagent') {
+          const inside = !!(document.activeElement as HTMLElement | null)?.closest('.kc-rail')
+          return run(event, () => toggleSideChatFocus(sessionId, inside))
+        }
       }
       if (
         event.shiftKey &&

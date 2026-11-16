@@ -849,7 +849,8 @@
     "button": "Reply",
     "placeholder": "Reply to {{agent}}…",
     "send": "Send reply",
-    "quote": "Quoted text"
+    "quote": "Quoted text",
+    "side": "Side chat"
   },
   "planCard": {
     "label": "Plan",
@@ -1198,5 +1199,72 @@
       "ended": "The turn ended first",
       "interrupted": "Kettu stopped before the Marketplace answered"
     }
+  },
+  "sideChat": {
+    "title": "Side chat",
+    "note": {
+      "claude": "Not in the conversation · no tools",
+      "codex": "Not in the conversation · read only, no approvals",
+      "hidden": "Not in the conversation · temporary session, removed after",
+      "other": "Answered by {{agent}} · temporary session"
+    },
+    "empty": {
+      "title": "Ask {{agent}}",
+      "claudeSees": "Sees this session's conversation so far, the running turn included",
+      "codexSees": "Sees the conversation up to the last finished turn; Kettu adds the running turn's text",
+      "noInterrupt": "Does not interrupt it, and nothing enters the conversation",
+      "claudeTools": "No tools; to read files or run commands, ask in the main conversation",
+      "codexTools": "Can read files and run read-only commands; changes nothing and asks for no approval",
+      "claudeCost": "Uses this session's plan and its prompt cache; Claude Code does not report side chat usage, so the Usage page leaves it out",
+      "codexCost": "Uses this session's plan and shares its prompt cache",
+      "hiddenHow": "{{agent}} has no side question of its own: Kettu opens a temporary session to answer and removes it after",
+      "hiddenCarried": "It gets the latest conversation, about 16k tokens at most; earlier tool output is cut",
+      "hiddenCost": "It shares no cache with the session: the first question pays for that conversation in full and takes a few seconds; follow-ups get cheaper"
+    },
+    "pick": {
+      "title": "{{agent}} cannot side chat yet",
+      "why": "Its temporary sessions are not removed cleanly and would stay in its own history. Another agent can answer, given this session's latest conversation.",
+      "before": "Answer with",
+      "after": "",
+      "cost": "Uses {{agent}}'s plan; the conversation carried is about 16k tokens at most.",
+      "ask": "Ask with {{agent}}",
+      "none": "No agent on this computer can answer side questions.",
+      "change": "Answer with another agent"
+    },
+    "answering": "Answering…",
+    "stop": "Stop",
+    "stopped": "Stopped",
+    "retry": "Retry",
+    "quote": "Quote in composer",
+    "copy": "Copy",
+    "copied": "Copied",
+    "carried_one": "Carried the first request and the latest turn · about {{tokens}}k tokens",
+    "carried_other": "Carried the first request and the latest {{count}} turns · about {{tokens}}k tokens",
+    "carriedAll_one": "Carried the whole conversation, 1 turn · about {{tokens}}k tokens",
+    "carriedAll_other": "Carried the whole conversation, {{count}} turns · about {{tokens}}k tokens",
+    "carriedNone": "The session has no conversation yet",
+    "step": {
+      "read": "Read {{title}}",
+      "search": "Searched {{title}}",
+      "run": "Ran {{title}}",
+      "other": "{{title}}"
+    },
+    "placeholder": {
+      "first": "Ask a question…",
+      "more": "Ask a follow-up…"
+    },
+    "hint": {
+      "keys": "{{send}} asks · Esc back to the conversation",
+      "close": "{{keys}} hides"
+    },
+    "clear": "Clear",
+    "cleared": "Side chat cleared",
+    "undo": "Undo",
+    "close": "Close",
+    "send": "Ask",
+    "quoted": "Quoted passage",
+    "removeQuote": "Remove the quote",
+    "seconds": "{{n}} s",
+    "by": "Answered by {{agent}}"
   }
 }

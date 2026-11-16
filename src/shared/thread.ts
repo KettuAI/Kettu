@@ -88,6 +88,57 @@ export interface SessionView {
   background?: BackgroundTaskView[]
   /** Ephemeral: how fast the model writes, for an agent whose stream times its requests. */
   speed?: OutputSpeed
+  /** Questions asked beside the session, never part of its conversation. Absent for subagents. */
+  sideChat?: SideChatView
+}
+
+/**
+ * How a session's side questions are answered: Claude Code's own side question, which sees the
+ * whole conversation with the running turn; an ephemeral fork of the Codex thread through its last
+ * finished turn; a hidden session of the same agent given carried context; or, for an agent whose
+ * hidden sessions are not removed cleanly, a hidden session of another agent the user picks.
+ */
+export type SideChatRoute = 'claude' | 'codex' | 'hidden' | 'none'
+
+export interface SideChatView {
+  route: SideChatRoute
+  /** The agent the user picked to answer for a session whose route is `none`. */
+  answerAgent: AgentId | null
+  entries: SideChatEntry[]
+}
+
+export interface SideChatEntry {
+  id: string
+  question: string
+  /** A passage of a reply the question is about. */
+  quote: string | null
+  /** The agent that answers it, which is another one for a session whose route is `none`. */
+  agentId: AgentId
+  route: Exclude<SideChatRoute, 'none'>
+  status: 'answering' | 'answered' | 'failed' | 'stopped'
+  /** Markdown; grows while a streamed answer arrives. */
+  answer: string
+  /** What a read-only answer looked at first. */
+  steps: SideChatStep[]
+  /** For an answer from a hidden session: how much of the conversation it was given. */
+  carried: SideChatCarried | null
+  error: string | null
+  askedAt: number
+  answeredAt: number | null
+}
+
+export interface SideChatStep {
+  kind: 'read' | 'search' | 'run' | 'other'
+  title: string
+}
+
+export interface SideChatCarried {
+  /** Whether the first request was kept, and how many of the newest turns. */
+  first: boolean
+  recent: number
+  omitted: number
+  /** The carried text's UTF-8 bytes, about its tokens. */
+  bytes: number
 }
 
 /** A command or monitor an agent runs beside its turn, as the session board lists it. */

@@ -2,6 +2,7 @@
 // and the content refs that large images are moved out of.
 
 import type { SessionOutputs } from '@shared/agent-host'
+import { parseSideChat, type StoredSideChat } from './side-chat'
 import type { ContextBreakdown } from '@shared/context'
 import type {
   AgentId,
@@ -35,6 +36,8 @@ export type StoredSession = Pick<
 > & {
   /** The last context breakdown read, so a closed session shows it without asking its agent. */
   context: ContextBreakdown | null
+  /** The questions asked beside the session, never part of its conversation. */
+  sideChat: StoredSideChat | null
 }
 
 export const EMPTY_SESSION: StoredSession = {
@@ -44,11 +47,23 @@ export const EMPTY_SESSION: StoredSession = {
   usage: null,
   subagent: null,
   context: null,
+  sideChat: null,
 }
 
 export function storedSession(view: SessionView): StoredSession {
-  const { title, config, commands, usage, subagent } = view
-  return { title, config, commands, usage, subagent, context: view.context?.breakdown ?? null }
+  const { title, config, commands, usage, subagent, sideChat } = view
+  return {
+    title,
+    config,
+    commands,
+    usage,
+    subagent,
+    context: view.context?.breakdown ?? null,
+    sideChat:
+      sideChat && (sideChat.entries.length > 0 || sideChat.answerAgent !== null)
+        ? { answerAgent: sideChat.answerAgent, entries: sideChat.entries }
+        : null,
+  }
 }
 
 /** Whether a `session.update` changes what is stored of the session. */
@@ -59,6 +74,7 @@ export function changesStored(changes: Partial<SessionView>): boolean {
     'commands' in changes ||
     'usage' in changes ||
     'subagent' in changes ||
+    'sideChat' in changes ||
     // A read that starts or fails keeps the breakdown it had.
     ('context' in changes && !changes.context?.loading && !changes.context?.error)
   )
@@ -119,6 +135,8 @@ export function parseStoredSession(value: unknown): StoredSession | null {
     subagent: value.subagent as SubagentInfo | null,
     // Absent from sessions stored before it was kept; only a cache, so a damaged one is dropped.
     context: isBreakdown(value.context) ? value.context : null,
+    // Absent from sessions stored before side questions; damaged entries are dropped one by one.
+    sideChat: parseSideChat(value.sideChat),
   }
 }
 

@@ -191,6 +191,8 @@ interface ViewStore {
   sidePaneMaximized: boolean
   /** The sessions whose board is open at the right of their thread. */
   boardOpen: Record<string, true>
+  /** The sessions whose side chat is open there instead; a session shows one of the two. */
+  sideChatOpen: Record<string, true>
   /** How the Artifacts page groups and sorts, for the whole app. */
   artifactsView: { group: ArtifactGrouping; sort: ArtifactSort }
 }
@@ -206,6 +208,7 @@ interface Persisted {
   /** Per panel; the per-project `sidePane` of earlier versions is not read. */
   sidePanes?: Record<string, SidePane>
   boardOpen?: Record<string, true>
+  sideChatOpen?: Record<string, true>
   /** One pane per column, the pane in focus; read back as the split a restart opens. */
   layout?: unknown
   /** Under a new name since the page went flat: every run saved the old grouping as it was. */
@@ -242,6 +245,7 @@ export const useViewStore = create<ViewStore>()(() => ({
   sideArtifact: {},
   sidePaneMaximized: false,
   boardOpen: saved.boardOpen ?? {},
+  sideChatOpen: saved.sideChatOpen ?? {},
   artifactsView: {
     group: oneOf(GROUPINGS, saved.artifactsDisplay?.group, 'none'),
     sort: oneOf(SORTS, saved.artifactsDisplay?.sort, 'recent'),
@@ -272,6 +276,9 @@ useViewStore.subscribe((state) => {
           .slice(-REMEMBERED_PANELS),
       ),
       boardOpen: Object.fromEntries(Object.entries(state.boardOpen).slice(-REMEMBERED_PANELS)),
+      sideChatOpen: Object.fromEntries(
+        Object.entries(state.sideChatOpen).slice(-REMEMBERED_PANELS),
+      ),
       layout: saveLayout(state.layout),
       artifactsDisplay: state.artifactsView,
     }
@@ -880,13 +887,31 @@ export function toggleSidePane(panel: string, pane: SidePane, open?: boolean): v
 
 /** Opens or closes a session's board, which sits at the right of its thread. */
 export function toggleBoard(sessionId: string, open?: boolean): void {
+  toggleRail('boardOpen', 'sideChatOpen', sessionId, open)
+}
+
+/** Opens or closes a session's side chat, in the place of its board. */
+export function toggleSideChat(sessionId: string, open?: boolean): void {
+  toggleRail('sideChatOpen', 'boardOpen', sessionId, open)
+}
+
+/** The column at the right of a session's thread shows one of the two; opening one closes the other. */
+function toggleRail(
+  key: 'boardOpen' | 'sideChatOpen',
+  other: 'boardOpen' | 'sideChatOpen',
+  sessionId: string,
+  open?: boolean,
+): void {
   useViewStore.setState((s) => {
-    const shown = !!s.boardOpen[sessionId]
+    const shown = !!s[key][sessionId]
     if ((open ?? !shown) === shown) return s
-    const next = { ...s.boardOpen }
+    const next = { ...s[key] }
     if (shown) delete next[sessionId]
     else next[sessionId] = true
-    return { boardOpen: next }
+    if (shown || !s[other][sessionId]) return { [key]: next }
+    const rest = { ...s[other] }
+    delete rest[sessionId]
+    return { [key]: next, [other]: rest }
   })
 }
 

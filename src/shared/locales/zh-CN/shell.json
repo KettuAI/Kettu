@@ -7,7 +7,8 @@
     "browser": "浏览器",
     "devices": "移动设备",
     "closePane": "关闭窗格",
-    "leaveSession": "离开会话"
+    "leaveSession": "离开会话",
+    "sideChat": "侧聊"
   },
   "hostBanner": {
     "restarting": "正在重启 Agent 后台进程，会话会自动恢复。",
@@ -56,7 +57,8 @@
       "sessions": "会话",
       "composer": "输入框",
       "terminal": "终端"
-    }
+    },
+    "sideChat": "打开、聚焦或收起侧聊"
   },
   "topBar": {
     "showSidebar": "显示侧边栏",

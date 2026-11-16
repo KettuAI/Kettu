@@ -106,6 +106,9 @@ const ACP_ID_CHARS = 1_024
 // Windows extended-length paths go up to 32,767 characters.
 const PATH_CHARS = 32_767
 const TEXT_CHARS = 4_096
+// A side question and the passage it quotes, which a hidden session gets with carried context.
+const SIDE_QUESTION_CHARS = 32_000
+const SIDE_QUOTE_CHARS = 16_000
 const URL_CHARS = 2_048
 const PROMPT_ITEMS = 1_000
 // Sessions with a draft, which the one-time removal keeps.
@@ -1665,6 +1668,27 @@ export function createValidators(platform: Platform): Validators {
       return { sessionId: sessionId(o), taskId: string(o, 'taskId', ID_CHARS) }
     },
     'sessions.retry': session,
+    'sessions.sideAsk': (params) => {
+      const o = fields(params)
+      const question = string(o, 'question', SIDE_QUESTION_CHARS)
+      if (question.trim() === '') throw invalidParams('question must not be blank')
+      const quote = optionalString(o, 'quote', SIDE_QUOTE_CHARS)
+      return {
+        sessionId: sessionId(o),
+        question,
+        ...(quote === undefined ? {} : { quote }),
+        ...(o.agentId === undefined ? {} : { agentId: agentId(o) }),
+      }
+    },
+    'sessions.sideStop': session,
+    'sessions.sideClear': (params) => {
+      const o = fields(params)
+      if (o.undo !== undefined && typeof o.undo !== 'boolean') {
+        throw invalidParams('undo must be a boolean')
+      }
+      return { sessionId: sessionId(o), ...(o.undo === true ? { undo: true } : {}) }
+    },
+    'sessions.sideAgents': session,
     'sessions.fork': (params) => {
       const o = fields(params)
       const entryId = optionalString(o, 'entryId', ACP_ID_CHARS)
