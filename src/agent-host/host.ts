@@ -593,6 +593,8 @@ export class AgentHost {
         return (await this.appServer(agentId))<SkillsListResponse>('skills/list', { cwds: [home] })
       },
       kettu: (id) => this.marketCommunity.download(id, 'skill'),
+      ownSkills: () => this.artifactService.guideFlags,
+      kettuOn: (agentId) => !this.settings.mcp.kettu.off.includes(agentId),
     })
     this.trees = new AgentTrees({
       file: agentProcessesFile(options.userDataPath, log),
@@ -907,6 +909,8 @@ export class AgentHost {
           this.computer?.forget(sessionId)
           this.browserSites.delete(sessionId)
         },
+        guide: (agentId) =>
+          this.artifactService.guidePrompt(this.marketSkills.takesSkills(agentId)),
         turnEnded: (sessionId) => {
           this.artifacts.stopUsing(sessionId)
           this.computer?.turnEnded(sessionId)
@@ -920,7 +924,7 @@ export class AgentHost {
           }
         },
       },
-      skills: (agentId) => this.marketSkills.sessionOptions(agentId),
+      skills: (agentId, kettu) => this.marketSkills.sessionOptions(agentId, kettu),
       memory: this.memory,
       usage: this.usage,
       cacheTtl:
@@ -1407,6 +1411,16 @@ export class AgentHost {
     if (JSON.stringify(before) !== JSON.stringify(this.marketAccount)) {
       this.hub.broadcast({ type: 'market.publishedChanged' })
     }
+    if ((before === null) !== (this.marketAccount === null)) void this.ownSkillsChanged()
+  }
+
+  /**
+   * A feature that decides Kettu's own skills and guide was turned on or off: Claude Code's
+   * plugins follow, and the prepared sessions, which started with the old ones, are replaced.
+   */
+  private async ownSkillsChanged(): Promise<void> {
+    await this.marketSkills.sync()
+    this.sessions.libraryChanged(() => true)
   }
 
   /** Makes a Marketplace API call through main or the daemon, which hold the access token. */
@@ -2536,7 +2550,9 @@ export class AgentHost {
       },
       'workflows.settings': () => this.workflowSettings(),
       'workflows.setSettings': (change) => {
+        const suggested = this.workflowLibrary.suggest
         this.workflowLibrary.setSettings(change)
+        if (this.workflowLibrary.suggest !== suggested) void this.ownSkillsChanged()
         this.tasks.recheck()
         return this.workflowSettings()
       },

@@ -353,6 +353,37 @@ describe("Kettu's memory in a replay", () => {
     ])
   })
 
+  it("leaves Kettu's guide sent ahead of a prompt out of its user message, with or without memory", () => {
+    const guide = '<kettu-guide>\nYou are working in Kettu.\n</kettu-guide>'
+    const { entries } = run(
+      [
+        {
+          sessionUpdate: 'user_message_chunk',
+          content: { type: 'text', text: `${guide}\n\n${index}\n\nFix the build` },
+        },
+        text('Done'),
+        {
+          sessionUpdate: 'user_message_chunk',
+          messageId: 'u2',
+          content: { type: 'text', text: `${guide}\n\n` },
+        },
+        {
+          sessionUpdate: 'user_message_chunk',
+          messageId: 'u2',
+          content: { type: 'text', text: 'And the tests' },
+        },
+        text('Done too'),
+        { sessionUpdate: 'user_message_chunk', content: { type: 'text', text: `Quote ${guide}` } },
+      ],
+      { replaying: true },
+    )
+    expect(entries.filter((e) => e.kind === 'user').map((e) => e.content)).toEqual([
+      [{ type: 'text', text: 'Fix the build' }],
+      [{ type: 'text', text: 'And the tests' }],
+      [{ type: 'text', text: `Quote ${guide}` }],
+    ])
+  })
+
   it("holds back Kettu's memory writes, whose row the host adds, unless they fail", () => {
     const call = (id: string, tool: string): SessionUpdate => ({
       sessionUpdate: 'tool_call',

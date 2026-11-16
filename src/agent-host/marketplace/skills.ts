@@ -1,7 +1,7 @@
 // The Marketplace's skills: the catalog of the skill repositories the app lists, each unpacked into
 // the host's data and checked again a day on; the skills Kettu keeps on the host, copied from that
-// catalog, a GitHub folder or a local one; what each agent is handed at a session's start; and the
-// skills the agents have of their own, read only.
+// catalog, a GitHub folder or a local one; what each agent is handed at a session's start, Kettu's
+// own skills with them; and the skills the agents have of their own, read only.
 
 import { createHash, randomUUID } from 'node:crypto'
 import {
@@ -37,6 +37,8 @@ import type { SkillsListResponse } from '../codex/protocol'
 import type { SessionOptions } from '../connection'
 import { HostError } from '../errors'
 import type { Env } from '../find-command'
+import { kettuSkills, type GuideFlags } from '../guide/guide'
+import { kettuSkillDirs, kettuSkillRoots, writeKettuSkills } from '../guide/skill-files'
 import { t } from '../i18n'
 import { JsonFile, type LogFn } from '../storage'
 import { kettuId } from '@shared/market-community'
@@ -83,6 +85,8 @@ const MAX_PATH = 512
 const MAX_LICENSE = 512
 const MAX_TOOLS = 64
 const MAX_TOOL = 200
+/** The harnesses that take skill folders Kettu hands them. */
+const SKILL_HARNESSES: ReadonlySet<string> = new Set(['claude-code', 'codex', 'opencode'])
 
 /** A repository's copy as last unpacked: its skills at one commit. */
 export interface RepositoryCopy {
@@ -234,6 +238,20 @@ function sameName(kept: readonly MarketSkill[], id: string, name: string): Marke
   return kept.find((skill) => skill.name === name && skill.id !== id) ?? null
 }
 
+/** A plugin's links by name: `first` as named, then `rest`, a taken name numbered from 2. */
+function linkNames(
+  first: readonly [string, string][],
+  rest: readonly [string, string][],
+): Map<string, string> {
+  const wanted = new Map(first)
+  for (const [name, target] of rest) {
+    let link = name
+    for (let n = 2; wanted.has(link); n++) link = `${name}-${n}`
+    wanted.set(link, target)
+  }
+  return wanted
+}
+
 /**
  * OpenCode's environment with Kettu's skill folders added to `OPENCODE_CONFIG_CONTENT`, the
  * configuration it reads beside the user's files; the user's own value keeps what it says.
@@ -282,6 +300,13 @@ export interface SkillsDeps {
   codexSkills(agentId: AgentId): Promise<SkillsListResponse | null>
   /** A skill listing of the Kettu Marketplace, its current version downloaded and checked. */
   kettu(id: string): Promise<{ listing: MarketListing; files: DownloadedFile[] }>
+  /**
+   * The features that decide which of Kettu's own skills an agent that reaches Kettu's server is
+   * handed; without it, none.
+   */
+  ownSkills?(): GuideFlags
+  /** Whether Kettu's server is on for the agent, as a process of it that starts now takes it. */
+  kettuOn?(agentId: AgentId): boolean
   /** The catalog's repositories; the app's list when not given. */
   repositories?: readonly SkillRepositorySpec[]
   fetch?: typeof fetch
@@ -306,8 +331,12 @@ export class MarketSkillsService {
   private readonly failures = new Map<string, string>()
   /** The kept skills' folders on disk, by folder name. */
   private present = new Set<string>()
-  /** Each agent's generated Claude Code plugin. */
+  /** Each Claude Code agent's generated plugin of the Marketplace's skills. */
   private readonly plugins = new Map<AgentId, string>()
+  /** The same with Kettu's own skills, for a session that reaches Kettu's server. */
+  private readonly kettuPlugins = new Map<AgentId, string>()
+  /** The Claude Code agents whose plugins are written. */
+  private readonly written = new Set<AgentId>()
   private syncing: Promise<void> = Promise.resolve()
   private readonly now: () => number
 
@@ -321,6 +350,11 @@ export class MarketSkillsService {
 
   private get store(): string {
     return path.join(this.root, 'skills')
+  }
+
+  /** Where Kettu's own skills are kept. */
+  private get kettuRoot(): string {
+    return path.join(this.root, 'kettu-skills')
   }
 
   private get specs(): readonly SkillRepositorySpec[] {
@@ -348,7 +382,11 @@ export class MarketSkillsService {
     const error =
       failed.length === 0 ? null : failed.map((r) => `${r.id}: ${r.error ?? ''}`).join('; ')
     const stale = states.some((state) => state.stale || !state.read)
-    return { catalog, own, error, ...(cached && { stale }), repositories }
+    const flags = this.deps.ownSkills?.()
+    const builtIn = flags
+      ? kettuSkills(flags).map(({ name, description }) => ({ name, description }))
+      : []
+    return { catalog, own, error, ...(cached && { stale }), repositories, builtIn }
   }
 
   /** One repository of the catalog, read as `skills` reads each. */
@@ -411,12 +449,35 @@ export class MarketSkillsService {
       .map((skill) => path.join(this.store, skillFolder(skill.id)))
   }
 
-  /** What an attach of the agent's session gets: skill folders for Codex, a plugin for Claude Code. */
-  sessionOptions(agentId: AgentId): Pick<SessionOptions, 'skillRoots' | 'localPlugins'> {
+  /** Kettu's own skill roots, for an agent that reaches Kettu's server. */
+  private kettuRoots(): string[] {
+    const flags = this.deps.ownSkills?.()
+    return flags ? kettuSkillRoots(this.kettuRoot, flags) : []
+  }
+
+  /** Whether the agent takes the skill folders Kettu hands it. */
+  takesSkills(agentId: AgentId): boolean {
+    return SKILL_HARNESSES.has(harnessOf(agentId))
+  }
+
+  /**
+   * What an attach of the agent's session gets: skill folders for Codex, a plugin for Claude Code;
+   * with Kettu's own skills when `kettu`, the session reaching Kettu's server. Waits for a sync
+   * under way, so the first sessions after a start get what it writes.
+   */
+  async sessionOptions(
+    agentId: AgentId,
+    kettu: boolean,
+  ): Promise<Pick<SessionOptions, 'skillRoots' | 'localPlugins'>> {
+    await this.syncing
     const harness = harnessOf(agentId)
-    if (harness === 'codex') return { skillRoots: this.roots(agentId) }
+    if (harness === 'codex') {
+      return { skillRoots: [...(kettu ? this.kettuRoots() : []), ...this.roots(agentId)] }
+    }
     if (harness === 'claude-code') {
-      const plugin = this.plugins.get(agentId)
+      // An agent added since the last sync, as one found on a first start is.
+      if (!this.written.has(agentId)) await this.queued(() => this.writePlugins(agentId))
+      const plugin = (kettu ? this.kettuPlugins : this.plugins).get(agentId)
       return plugin ? { localPlugins: [plugin] } : {}
     }
     return {}
@@ -424,20 +485,22 @@ export class MarketSkillsService {
 
   /** OpenCode's environment as its process starts, with the agent's skill folders. */
   launchEnv(agentId: AgentId, env: Env): Env {
-    return harnessOf(agentId) === 'opencode'
-      ? opencodeEnv(env, this.roots(agentId), this.deps.log)
-      : env
+    if (harnessOf(agentId) !== 'opencode') return env
+    const own = this.deps.kettuOn?.(agentId) ? this.kettuRoots() : []
+    return opencodeEnv(env, [...own, ...this.roots(agentId)], this.deps.log)
   }
 
   /**
-   * Brings the disk in line with the settings: the folders of skills that left them go after the
-   * grace, and each Claude Code agent's plugin links the skills it gets. One sync runs at a time.
+   * Brings the disk in line with the settings: Kettu's own skills are written for this version,
+   * the folders of skills that left the settings go after the grace, and each Claude Code agent's
+   * plugins link the skills it gets. One sync runs at a time.
    */
   sync(): Promise<void> {
-    this.syncing = this.syncing.then(
-      () => this.syncNow(),
-      () => this.syncNow(),
-    )
+    return this.queued(() => this.syncNow())
+  }
+
+  private queued(run: () => Promise<void>): Promise<void> {
+    this.syncing = this.syncing.then(run, run)
     return this.syncing
   }
 
@@ -446,6 +509,13 @@ export class MarketSkillsService {
   }
 
   private async syncNow(): Promise<void> {
+    if (this.deps.ownSkills) {
+      try {
+        await writeKettuSkills(this.kettuRoot)
+      } catch (error) {
+        this.deps.log('warn', `Could not write Kettu's own skills: ${(error as Error).message}`)
+      }
+    }
     try {
       await mkdir(this.store, { recursive: true })
       const entries = await readdir(this.store, { withFileTypes: true })
@@ -467,7 +537,7 @@ export class MarketSkillsService {
           .filter((name) => kept.has(name) && !name.startsWith(PARTIAL)),
       )
       for (const agentId of this.deps.agents()) {
-        if (harnessOf(agentId) === 'claude-code') await this.writeClaudePlugin(agentId)
+        if (harnessOf(agentId) === 'claude-code') await this.writeClaudePlugins(agentId)
       }
     } catch (error) {
       this.deps.log(
@@ -477,27 +547,56 @@ export class MarketSkillsService {
     }
   }
 
+  /** The agent's plugins, written outside a sync; a failure leaves its sessions without them. */
+  private async writePlugins(agentId: AgentId): Promise<void> {
+    try {
+      await this.writeClaudePlugins(agentId)
+    } catch (error) {
+      this.deps.log('warn', `Could not write ${agentId}'s skills: ${(error as Error).message}`)
+    }
+  }
+
   /**
-   * The agent's plugin of Kettu's skills: `.claude-plugin/plugin.json` and a link in `skills/` to
-   * each skill it gets, junctions on Windows. None when it gets no skill.
+   * The agent's two plugins: one of the Marketplace's skills it gets, and one with Kettu's own
+   * skills first, for a session that reaches Kettu's server. Both are named `kettu`.
    */
-  private async writeClaudePlugin(agentId: AgentId): Promise<void> {
-    const folder = path.join(this.root, 'claude', skillFolder(agentId))
-    const wanted = new Map<string, string>()
+  private async writeClaudePlugins(agentId: AgentId): Promise<void> {
+    const market: [string, string][] = []
     for (const skill of this.deps.settings()) {
       const dir = skillFolder(skill.id)
       if (!skillFor(skill, agentId) || !this.present.has(dir)) continue
-      let name = skill.name
-      for (let n = 2; wanted.has(name); n++) name = `${skill.name}-${n}`
-      wanted.set(name, path.join(this.store, dir, skill.name))
+      market.push([skill.name, path.join(this.store, dir, skill.name)])
     }
+    const folder = path.join(this.root, 'claude', skillFolder(agentId))
+    await this.writeClaudePlugin(this.plugins, agentId, folder, linkNames([], market))
+    const own = this.deps.ownSkills?.()
+    const first = own ? [...kettuSkillDirs(this.kettuRoot, own)] : []
+    await this.writeClaudePlugin(
+      this.kettuPlugins,
+      agentId,
+      `${folder}-kettu`,
+      linkNames(first, market),
+    )
+    this.written.add(agentId)
+  }
+
+  /**
+   * A plugin of skills: `.claude-plugin/plugin.json` and a link in `skills/` to each skill it
+   * holds, junctions on Windows. None when it holds no skill.
+   */
+  private async writeClaudePlugin(
+    plugins: Map<AgentId, string>,
+    agentId: AgentId,
+    folder: string,
+    wanted: Map<string, string>,
+  ): Promise<void> {
     if (wanted.size === 0) {
-      this.plugins.delete(agentId)
+      plugins.delete(agentId)
       await rm(folder, { recursive: true, force: true })
       return
     }
     await mkdir(path.join(folder, '.claude-plugin'), { recursive: true })
-    const manifest = `${JSON.stringify({ name: 'kettu', description: 'Skills Kettu adds from its Marketplace', version: '1.0.0' }, null, 2)}\n`
+    const manifest = `${JSON.stringify({ name: 'kettu', description: "Kettu's skills", version: '1.0.0' }, null, 2)}\n`
     await writeFile(path.join(folder, '.claude-plugin', 'plugin.json'), manifest)
     const links = path.join(folder, 'skills')
     await mkdir(links, { recursive: true })
@@ -517,7 +616,7 @@ export class MarketSkillsService {
         this.deps.platform === 'win32' ? 'junction' : 'dir',
       )
     }
-    this.plugins.set(agentId, folder)
+    plugins.set(agentId, folder)
   }
 
   private async addFromCatalog(id: string): Promise<MarketSkill> {
@@ -781,8 +880,10 @@ export class MarketSkillsService {
       case 'codex': {
         const response = await this.deps.codexSkills(agentId)
         if (!response) return []
-        const store = path.resolve(this.store) + path.sep
-        return codexOwnSkills(response, agentId, (file) => path.resolve(file).startsWith(store))
+        const kept = [this.store, this.kettuRoot].map((dir) => path.resolve(dir) + path.sep)
+        return codexOwnSkills(response, agentId, (file) =>
+          kept.some((dir) => path.resolve(file).startsWith(dir)),
+        )
       }
       case 'claude-code':
         return config ? readSkillFolders(agentId, [path.join(config, 'skills')], 1) : []

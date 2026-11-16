@@ -54,14 +54,6 @@ const LISTING_REF_CHARS = 80
 const COMPARE_FILES = 40
 const COMPARE_BYTES = 256 * 1024
 
-export const MARKET_INSTRUCTIONS =
-  'The marketplace_* tools publish the user’s own skills, workflows, plugins and MCP servers to the Kettu ' +
-  'Marketplace. Publish only when the user asks. Check a folder with marketplace_check and fix ' +
-  'what it reports before marketplace_publish; every publish and unlisting waits for the user to ' +
-  'confirm it in a card in this session. A call returns within a minute; while the user has not ' +
-  'answered, call the same tool again with the same folder or listing, which keeps waiting on ' +
-  'the same card.'
-
 export const MARKET_TOOLS: Tool[] = [
   {
     name: MARKET_CHECK,

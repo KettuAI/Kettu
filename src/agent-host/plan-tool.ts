@@ -30,8 +30,6 @@ const PLAN_GUIDANCE =
   'plan is stale. Skip plans for one-step tasks. Use this tool or a built-in plan tool, never ' +
   'both. Subagents must not call this tool.'
 
-export const PLAN_INSTRUCTIONS = `Use ${PLAN_TOOL} to show task progress. ${PLAN_GUIDANCE}`
-
 export const PLAN_PROMPT =
   `Use the \`${PLAN_TOOL}\` tool of the \`${SERVICE_NAME}\` MCP server to show task progress. ` +
   PLAN_GUIDANCE

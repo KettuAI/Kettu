@@ -21,8 +21,6 @@ const REPORT_GUIDANCE =
   'Leave out secrets, and quote only the lines of code or conversation the report needs. ' +
   'The report waits in the thread for the user to send it; nothing is sent by this call.'
 
-export const REPORT_INSTRUCTIONS = `${REPORT_TOOL} drafts a problem report for the Kettu team. ${REPORT_GUIDANCE}`
-
 export const REPORT_TOOLS: Tool[] = [
   {
     name: REPORT_TOOL,

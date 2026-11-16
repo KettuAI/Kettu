@@ -39,15 +39,6 @@ export function isMemoryToolName(name: string): boolean {
   return (MEMORY_TOOL_NAMES as readonly string[]).includes(name)
 }
 
-export const MEMORY_INSTRUCTIONS =
-  `Kettu keeps memory across sessions and agents, and the session starts with its index. ` +
-  `${READ_MEMORY_TOOL} reads an entry in full and ${LIST_MEMORIES_TOOL} lists them all. Save ` +
-  `what will help a later session with ${REMEMBER_TOOL}, one fact per entry: the user's ` +
-  'preferences and corrections, and decisions and facts about the project its files do not ' +
-  `show. Prefer ${UPDATE_MEMORY_TOOL} to a near copy, and ${FORGET_MEMORY_TOOL} what turned out ` +
-  'wrong. Project memory is the default; global memory is only about the user, and the user ' +
-  'approves each global write. Never save secrets or what the repository already records.'
-
 const LAYER = {
   type: 'string',
   enum: ['project', 'global'],
