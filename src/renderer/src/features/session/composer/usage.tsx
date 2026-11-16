@@ -472,16 +472,16 @@ function ContextPart({
     ? rows
         .filter((row) => row.part.kind !== 'free')
         .map((row) => {
-          // Skills get a page of their own, so their row lists none of them.
-          const skills = SKILLS.test(row.name)
-          const list = skills ? undefined : listOf(row.name)
+          const list = listOf(row.name)
           const paths = MEMORY_FILES.test(row.name)
+          // A skill's source is the agent's own key, such as `syncedSkills`; a plugin's skill
+          // already names its plugin.
+          const bare = SKILLS.test(row.name)
           return {
             id: row.name,
             label: row.name,
             tokens: row.tokens,
             locked: true,
-            ...(skills ? { link: true } : {}),
             ...(row.part.kind === 'buffer'
               ? { color: 'var(--composer-faint)', reserved: true }
               : {}),
@@ -491,7 +491,7 @@ function ContextPart({
                     id: String(index),
                     label: paths
                       ? middlePath(item.name)
-                      : item.detail
+                      : item.detail && !bare
                         ? `${item.name} · ${item.detail}`
                         : item.name,
                     tokens: parseTokens(item.tokens),
@@ -503,8 +503,7 @@ function ContextPart({
         })
     : [{ id: 'used', label: t('usage.context.used'), tokens: usage.used, locked: true }]
   const unlisted = lists.filter(
-    (l) =>
-      !SKILLS.test(l.name) && !rows?.some((r) => r.name.toLowerCase() === l.name.toLowerCase()),
+    (l) => !rows?.some((r) => r.name.toLowerCase() === l.name.toLowerCase()),
   )
   return (
     <>
