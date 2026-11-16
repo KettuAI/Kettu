@@ -89,7 +89,19 @@
       "openInTerminal": "Open in terminal",
       "showIn": "Show in {{name}}",
       "showArchived": "Show archived",
-      "worktreeSettings": "Worktree settings…"
+      "worktreeSettings": "Worktree settings…",
+      "remove": "Remove project…"
+    },
+    "remove": {
+      "title": "Remove {{name}}?",
+      "sessions_one": "Its session leaves Kettu.",
+      "sessions_other": "Its {{count}} sessions leave Kettu.",
+      "noSessions": "It has no sessions in Kettu.",
+      "running_one": "The one running now stops.",
+      "running_other": "The {{count}} running now stop.",
+      "folderStays": "The folder and its files stay on this computer.",
+      "separator": " ",
+      "confirm": "Remove"
     }
   },
   "prs": {

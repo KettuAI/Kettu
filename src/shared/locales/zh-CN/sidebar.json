@@ -87,7 +87,17 @@
       "openInTerminal": "在终端中打开",
       "showIn": "在{{name}}中显示",
       "showArchived": "显示已归档",
-      "worktreeSettings": "Worktree 设置…"
+      "worktreeSettings": "Worktree 设置…",
+      "remove": "移除项目…"
+    },
+    "remove": {
+      "title": "移除 {{name}}？",
+      "sessions_other": "它的 {{count}} 个会话会从 Kettu 里去掉。",
+      "noSessions": "它在 Kettu 里没有会话。",
+      "running_other": "正在运行的 {{count}} 个会先停下。",
+      "folderStays": "文件夹和里面的文件会留在这台电脑上。",
+      "separator": "",
+      "confirm": "移除"
     }
   },
   "prs": {
