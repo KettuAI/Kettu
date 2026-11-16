@@ -816,6 +816,17 @@ describe('attachments', () => {
   })
 })
 
+describe('attaching a session while the user types', () => {
+  it('takes the session id alone, so nothing can be sent with it', () => {
+    expect(posix['sessions.attachEarly']({ sessionId: 's', content: [] })).toEqual({
+      sessionId: 's',
+    })
+    rejects(() => posix['sessions.attachEarly']({}))
+    rejects(() => posix['sessions.attachEarly']({ sessionId: 1 }))
+    rejects(() => posix['sessions.attachEarly']({ sessionId: 'x'.repeat(257) }))
+  })
+})
+
 describe('comment and direct edit requests', () => {
   const id = 'art_01J9Z3K4V5W6X7Y8Z9A0B1C2D3'
   const anchor = {

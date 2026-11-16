@@ -64,6 +64,23 @@ import { limitsForModel } from '@shared/plan-limits'
 const valuesOf = (config: readonly ConfigOption[]): Record<string, string | boolean> =>
   Object.fromEntries(config.map((o) => [o.id, o.value]))
 
+/** How soon a session's composers ask its host again to attach it as the user types. */
+const ATTACH_AGAIN_MS = 60_000
+const attachAsked = new Map<string, number>()
+
+/**
+ * Asks the host to attach a session whose agent was let go, as the user starts writing to it, so
+ * the message need not wait for the agent to start. The host does it only for an agent that gains
+ * from it, and lets the agent go again when no message follows.
+ */
+function attachWhileTyping(sessionId: string): void {
+  const now = Date.now()
+  if (now - (attachAsked.get(sessionId) ?? -Infinity) < ATTACH_AGAIN_MS) return
+  attachAsked.set(sessionId, now)
+  // The send attaches it all the same, and says what failed.
+  host('sessions.attachEarly', { sessionId }).catch(() => {})
+}
+
 /**
  * The session's composer on affectUI's Chat Composer: the white card with **+**, the permission
  * mode, the model menu and Send over the text, and the gray tray under it: the host, the project
@@ -165,6 +182,13 @@ export function Composer({
   const blockedBy = useBoxText(box, (text) => attachmentsBlock(attachments, text)?.message ?? null)
   const blocked = blockedBy === null ? null : attachmentsBlock(attachments, box.source.text)
   const { canSend, canQueue } = can(holdsMessage, blocked)
+  // Starting a message, not opening the session with a draft in it, attaches a closed session.
+  const held = useRef(holdsMessage)
+  useEffect(() => {
+    const began = holdsMessage && !held.current
+    held.current = holdsMessage
+    if (began && status === 'closed' && !pending && !mustSwitch) attachWhileTyping(sessionId)
+  }, [holdsMessage, status, pending, mustSwitch, sessionId])
   // The message as a key comes, from the editor itself, which a render may not have caught up with.
   const live = () => {
     const text = box.editor.current?.text() ?? box.source.text

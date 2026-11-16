@@ -611,6 +611,8 @@ interface Live {
   checkpointTimer: ReturnType<typeof setTimeout> | null
   /** Something was sent or set since it went live; one only opened to read is let go sooner. */
   used: boolean
+  /** It attached as the user started typing, before anything was sent. */
+  typed: boolean
   /** A new session's first message, in its thread already, to send once the session has started. */
   first: {
     content: UserContent[]
@@ -2928,6 +2930,7 @@ export class SessionManager {
       keeper: null,
       checkpointTimer: null,
       used: false,
+      typed: false,
       first: null,
       heldFirst: null,
       queuedBy: new Map(),
@@ -5268,7 +5271,8 @@ export class SessionManager {
   /** Stores the session's thread, closes its agent's session and its subagents, and drops it. */
   private release(live: Live, why: string): void {
     if (this.releasing.has(live.id)) return
-    this.deps.diagnostics.event(live.record.agentId, 'session released', `${live.id}: ${why}`)
+    const reason = why === 'unused' && live.typed ? 'typed, nothing sent' : why
+    this.deps.diagnostics.event(live.record.agentId, 'session released', `${live.id}: ${reason}`)
     const run = this.closeAll([...this.descendants(live.id, 'subagent'), live.record], true)
       .catch((error: unknown) => {
         this.deps.diagnostics.log(
@@ -5873,6 +5877,39 @@ export class SessionManager {
     live.used = true
     const now = this.now()
     this.startTurn(live, content, now, this.addPrompt(live, content, now, from, device), portId)
+  }
+
+  /**
+   * The user started typing in the session: a Claude Code session whose agent was let go attaches
+   * now, as a send would, so the message need not wait for the agent to start. Nothing is sent and
+   * the session stays unused, so its agent is let go again when no message follows.
+   */
+  async attachEarly(sessionId: string): Promise<void> {
+    const record = this.recordOf(sessionId)
+    if (this.stopped || record.origin === 'subagent' || this.isArchived(record)) return
+    if (harnessOf(record.agentId) !== 'claude-code') return
+    // A worktree that is not there yet, or no longer, is the send's to make or refuse.
+    if (record.worktree && this.worktreeSummary(record.worktree).state !== 'ready') return
+    if (!this.attachable(this.live.get(sessionId))) return
+    this.assertRegistered(sessionId)
+    const live = await this.revive(sessionId)
+    // A send or a setting got to it first and attaches it itself.
+    if (!this.attachable(live)) return
+    live.typed = true
+    try {
+      await this.attachClosed(live)
+    } catch (error) {
+      throw agentError(error)
+    }
+  }
+
+  /** Whether a session is let go, or live without its agent, and no attach of it runs. */
+  private attachable(live: Live | undefined): boolean {
+    if (!live) return true
+    if (live.prepared || live.closing || live.connection || live.attaching || live.opening) {
+      return false
+    }
+    return live.thread.session.status === 'closed'
   }
 
   /**

@@ -1029,6 +1029,9 @@ export interface HostContract {
   // The sessions a port shows in front, none for a page; a turn that ends out of view is unread.
   'sessions.show': { params: { sessionIds: string[] }; result: void }
   'sessions.prompt': { params: { sessionId: string; content: UserContent[] }; result: void }
+  // The user started typing in it: a Claude Code session whose agent was let go attaches now, so
+  // the message need not wait for its start. Nothing is sent; unused, it is let go again.
+  'sessions.attachEarly': { params: { sessionId: string }; result: void }
   'sessions.cancel': { params: { sessionId: string }; result: void }
   // What ending these sessions and their sub-sessions would stop, for the ones with any.
   'sessions.runningWork': { params: { sessionIds: string[] }; result: { sessions: RunningWork[] } }
@@ -1593,6 +1596,7 @@ export const HOST_METHODS = [
   'sessions.unwatch',
   'sessions.show',
   'sessions.prompt',
+  'sessions.attachEarly',
   'sessions.cancel',
   'sessions.runningWork',
   'sessions.stopTask',
