@@ -119,6 +119,10 @@ win:
     - '!node_modules/node-pty/prebuilds/darwin-*{,/**/*}'
 nsis:
   artifactName: ${productName}-${version}-${arch}-setup.${ext}
+  # The assisted installer, so people can pick the folder; updates skip its pages and install in
+  # place. The install mode page stays, defaulting to the current user.
+  oneClick: false
+  allowToChangeInstallationDirectory: true
   shortcutName: ${productName}
   uninstallDisplayName: ${productName}
 
