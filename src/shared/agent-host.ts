@@ -321,6 +321,7 @@ export interface AgentStatus {
   balances?: ProviderBalance[]
   limitsReason?: LimitsReason
   limits: PlanLimit[] // subscription windows, see plan limits in the session model
+  limitsError?: string // why the last limits read failed, until one succeeds; `limits` stay
   detail: string | null // install hint or error message
   installUrl: string | null
   installNotice?: string | null // the vendor installer's effects, shown before installation

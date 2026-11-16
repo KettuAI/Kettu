@@ -371,6 +371,8 @@ class Slot {
   remembered = ''
   limitsRun: Promise<void> | null = null
   limitsReadAt = 0
+  /** Why the last limits read failed; null once one succeeds. */
+  limitsError: string | null = null
   optionsRun: Promise<void> | null = null
   /** The removal of the hidden session that read the options, once its `session/new` answered. */
   optionsRemoval: Promise<void> | null = null
@@ -2449,10 +2451,28 @@ export class AgentManager {
     if (!force && slot.signIn === 'required') return
     if (slot.limitsRun) return slot.limitsRun
     if (!force && Date.now() - slot.limitsReadAt < this.timings.limitsMs) return
-    slot.limitsRun = this.limitedRead(slot, this.readLimits(slot)).finally(() => {
-      slot.limitsRun = null
-    })
+    slot.limitsRun = this.limitedRead(slot, this.readLimits(slot))
+      .then(
+        () => this.limitsReadEnded(slot, null),
+        (error: unknown) => {
+          this.limitsReadEnded(slot, agentError(error).message)
+          throw error
+        },
+      )
+      .finally(() => {
+        slot.limitsRun = null
+      })
     return slot.limitsRun
+  }
+
+  /**
+   * Keeps how the last limits read ended, so a page tells a failed read from an agent that reports
+   * no limits; the limits read before stay as they were.
+   */
+  private limitsReadEnded(slot: Slot, error: string | null): void {
+    if (slot.limitsError === error) return
+    slot.limitsError = error
+    this.emit(slot)
   }
 
   /**
@@ -2575,6 +2595,7 @@ export class AgentManager {
     }
     const now = Date.now()
     slot.limitsReadAt = now
+    slot.limitsError = null
     const merged = mergeReadLimits([...slot.limits.values()], limits, now)
     slot.limits.clear()
     for (const limit of merged) slot.limits.set(limit.window, limit)
@@ -2615,6 +2636,7 @@ export class AgentManager {
         : { kind: 'account', label: usage.tier, email: null }
     }
     slot.limitsReadAt = now
+    slot.limitsError = null
     slot.limits = new Map(
       mergeReadLimits([...slot.limits.values()], usage.limits, now).map((item) => [
         item.window,
@@ -3256,6 +3278,7 @@ export class AgentManager {
     slot.account = null
     slot.limits.clear()
     slot.limitsReadAt = 0
+    slot.limitsError = null
     slot.signIn = 'unknown'
     if (slot.runtime && this.hooks.liveSessions(slot.id) === 0) await this.stopProcess(slot)
     this.emit(slot)
@@ -3437,6 +3460,7 @@ export class AgentManager {
       ...(slot.balances.length ? { balances: slot.balances } : {}),
       ...(slot.def.limitsReason ? { limitsReason: slot.def.limitsReason } : {}),
       limits: [...slot.limits.values()],
+      ...(slot.limitsError ? { limitsError: slot.limitsError } : {}),
       detail: slot.detail ?? h.adapterNote,
       installNotice: slot.def.install.notice ? t(slot.def.install.notice) : null,
       installUrl:

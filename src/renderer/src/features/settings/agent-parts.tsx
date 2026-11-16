@@ -300,6 +300,8 @@ export function UsageGroup({
   const limitsReason = status.limitsReason
     ? t(`agents.usageReasons.${status.limitsReason}` as 'agents.usageReasons.vendor-disallows')
     : null
+  // A read this page asked for, else the host's record of the last read, whoever asked for it.
+  const readError = error ?? refreshError ?? status.limitsError ?? null
   const actions =
     limits.length > 0 && limitsReadable(status) ? (
       <>
@@ -353,10 +355,10 @@ export function UsageGroup({
         <p className="k-reading">{limitsReason}</p>
       ) : reading && status.capabilities.reports ? (
         <p className="k-reading">{t('agents.readingUsage')}</p>
-      ) : limitsReadable(status) && !running ? (
+      ) : limitsReadable(status) && (!running || readError) ? (
         <RowGroup>
           <RowFrame text={<RowText name={t('agents.planLimits')} />}>
-            <ControlError error={error} />
+            <ControlError error={readError} />
             <SetButton
               loading={busy}
               onClick={() =>
@@ -370,9 +372,9 @@ export function UsageGroup({
       ) : (
         <p className="k-reading">{t('agents.usageNotReported', { name: status.name })}</p>
       )}
-      {(error ?? refreshError) && limits.length > 0 && (
+      {readError && limits.length > 0 && (
         <p className="ui-sg-hint k-error" data-wrap="">
-          {error ?? refreshError}
+          {readError}
         </p>
       )}
     </section>
