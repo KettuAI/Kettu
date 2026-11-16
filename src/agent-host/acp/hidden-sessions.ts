@@ -3,6 +3,7 @@
 
 import type { AgentId } from '@shared/thread'
 import type { AgentInit, SessionOptions } from '../connection'
+import { JUNIE_USAGE_VERSION } from '../vendor-usage/junie'
 
 /**
  * How a hidden session is removed so that none of the agent's history keeps it: `session/delete`,
@@ -16,21 +17,32 @@ const REMOVALS: Partial<Record<AgentId, Removal>> = {
   opencode: 'delete',
   // The session router turns the delete into ending the session's adapter process, then deleting.
   pi: 'delete',
+  // Closes the session, then drops it from its session index and deletes its folder.
+  junie: 'delete',
   // The fake agent removes a session as claude-agent-acp 0.94 did, which its tests keep.
   'fake-agent': 'delete-again',
 }
 
+// The removals checked on one version alone, as the agent names it in `initialize`.
+const REMOVAL_VERSIONS: Partial<Record<AgentId, string>> = {
+  junie: JUNIE_USAGE_VERSION,
+}
+
 /**
  * How the agent's hidden sessions are removed, or null when it may open none: it was not checked,
- * or it does not offer the request its removal needs. There is no fallback to the other request,
- * which can leave a trace (OpenCode's close keeps the session listed).
+ * at least not on this version, or it does not offer the request its removal needs. There is no
+ * fallback to the other request, which can leave a trace (OpenCode's close keeps the session
+ * listed).
  */
 export function hiddenRemoval(
   agentId: AgentId | undefined,
   capabilities: Pick<AgentInit['capabilities'], 'closeSession' | 'deleteSession'>,
+  version: string | null = null,
 ): Removal | null {
   const removal = agentId ? REMOVALS[agentId] : undefined
-  if (!removal) return null
+  if (!agentId || !removal) return null
+  const checked = REMOVAL_VERSIONS[agentId]
+  if (checked !== undefined && version !== checked) return null
   const { closeSession, deleteSession } = capabilities
   return (removal === 'close' ? closeSession : deleteSession) ? removal : null
 }

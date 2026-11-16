@@ -46,6 +46,7 @@ import {
 } from '../connection'
 import type { AgentTransport, MessageTransport } from '../driver'
 import { isStopReason } from '../session-updates'
+import { ANTIGRAVITY_TIER_VERSION, antigravityTier } from '../vendor-usage/antigravity'
 import {
   KNOWN_UPDATES,
   mapAuthStatus,
@@ -277,6 +278,8 @@ export class AcpConnection implements AgentConnection {
   private readonly pendingStartup = new Map<string, string>()
   /** How its hidden sessions go, once `initialize` has answered. */
   private removal: Removal | null = null
+  /** The version the agent named in `initialize`. */
+  private version: string | null = null
   /** The sign-in in progress, which the next `authenticate` written out runs for. */
   private signIn: SignInClient | null = null
   /** The sign-in each `authenticate` in flight runs for, by its JSON-RPC id as a string. */
@@ -595,7 +598,8 @@ export class AcpConnection implements AgentConnection {
       authMethods: (init.authMethods ?? []).map(authMethod),
       raw: init.agentCapabilities ?? null,
     }
-    this.removal = hiddenRemoval(this.hooks.agentId, result.capabilities)
+    this.version = result.version
+    this.removal = hiddenRemoval(this.hooks.agentId, result.capabilities, result.version)
     return result
   }
 
@@ -620,6 +624,7 @@ export class AcpConnection implements AgentConnection {
         ...(meta ? { _meta: meta } : {}),
       }),
     )
+    this.readPlan(response._meta)
     // pi-acp 0.0.34 repeats the startup note its answer carries as the session's first message.
     const startup = (response._meta as { piAcp?: { startupInfo?: unknown } } | null | undefined)
       ?.piAcp?.startupInfo
@@ -646,6 +651,7 @@ export class AcpConnection implements AgentConnection {
         ...(meta ? { _meta: meta } : {}),
       }),
     )
+    this.readPlan(response._meta)
     return { config: this.config(response.configOptions, response.modes) }
   }
 
@@ -663,6 +669,7 @@ export class AcpConnection implements AgentConnection {
         ...(meta ? { _meta: meta } : {}),
       }),
     )
+    this.readPlan(response._meta)
     return { config: this.config(response.configOptions, response.modes) }
   }
 
@@ -823,7 +830,7 @@ export class AcpConnection implements AgentConnection {
     this.signIn = client ?? null
     try {
       if (methodId !== DELEGATED_SIGN_IN || !client) {
-        await request()
+        this.readPlan((await request())._meta)
         return
       }
       // Mistral Vibe: `start` answers with the page and an attempt; `complete` waits for the
@@ -851,6 +858,13 @@ export class AcpConnection implements AgentConnection {
     }
     this.hooks.authState?.(status.state)
     if (status.account) this.hooks.account(status.account)
+  }
+
+  /** Google Antigravity names its plan in the `_meta` of its sign-in's and sessions' answers. */
+  private readPlan(meta: unknown): void {
+    if (this.hooks.agentId !== 'antigravity' || this.version !== ANTIGRAVITY_TIER_VERSION) return
+    const plan = antigravityTier(meta)
+    if (plan) this.hooks.account({ kind: 'account', label: plan, email: null })
   }
 
   async logout(): Promise<void> {

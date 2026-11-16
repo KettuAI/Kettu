@@ -1,15 +1,16 @@
 // Reports from an agent's own commands, for what its connection does not answer itself and ACP
-// has no request for: the fake agent's `/usage` and `/context`, in the format claude-agent-acp 0.94
-// gave Claude Code's. Each runs in a hidden session that Kettu makes for it and removes afterwards,
-// so it shows in no thread and stays in none of the agent's history. Both run in the agent itself,
-// without a model call of their own.
+// has no request for: Junie's `/usage`, and the fake agent's `/usage` and `/context` in the format
+// claude-agent-acp 0.94 gave Claude Code's. Each runs in a hidden session that Kettu makes for it
+// and removes afterwards, so it shows in no thread and stays in none of the agent's history. Each
+// runs in the agent itself, without a model call of its own.
 
-import type { PlanLimit } from '@shared/agent-host'
 import type { AgentId } from '@shared/thread'
 import { parseUsageReport } from './acp/claude-reports'
 import type { AgentConnection } from './connection'
 import { HostError } from './errors'
 import { t } from './i18n'
+import type { VendorUsage } from './vendor-usage/common'
+import { JUNIE_USAGE_VERSION, parseJunieUsage } from './vendor-usage/junie'
 
 export const REPORT_TIMEOUT_MS = 60_000
 
@@ -24,13 +25,22 @@ export interface Report {
 
 /** The command whose report names an agent's plan limits, and how to read that report. */
 export interface LimitsReport extends Report {
-  /** The limits in one message of the report; null for a message that is not the report. */
-  parse(markdown: string, now: number): PlanLimit[] | null
+  /** The limits and balances in one message of the report; null for a message that is not it. */
+  parse(markdown: string, now: number): VendorUsage | null
+  /** The only version of the agent the report was checked on, as it names it in `initialize`. */
+  version?: string
 }
 
-const CLAUDE_USAGE: LimitsReport = { command: '/usage', parse: parseUsageReport }
+const CLAUDE_USAGE: LimitsReport = {
+  command: '/usage',
+  parse: (markdown, now) => {
+    const limits = parseUsageReport(markdown, now)
+    return limits && { limits, balances: [] }
+  },
+}
 
 const LIMITS_REPORTS: Partial<Record<AgentId, LimitsReport>> = {
+  junie: { command: '/usage', parse: parseJunieUsage, version: JUNIE_USAGE_VERSION },
   'fake-agent': CLAUDE_USAGE,
 }
 

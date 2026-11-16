@@ -2554,24 +2554,22 @@ export class AgentManager {
       return
     }
     const report = limitsReport(slot.def.id)
-    let limits: PlanLimit[]
-    let now: number
-    if (connection.readLimits) {
-      try {
-        limits = await connection.readLimits()
-      } catch (error) {
-        throw this.limitsError(slot, error)
-      }
-      now = Date.now()
-      slot.limitsReadAt = now
-    } else if (report) {
+    if (!connection.readLimits && report) {
+      const version = runtime.init.version ?? slot.h.binaryVersion
+      if (report.version !== undefined && version !== report.version) return
       const read = await this.reportLimits(slot, runtime, report)
-      if (!read) return
-      limits = read.limits
-      now = read.now
-    } else {
+      if (read) this.applyVendorUsage(slot, read.usage, read.now)
       return
     }
+    if (!connection.readLimits) return
+    let limits: PlanLimit[]
+    try {
+      limits = await connection.readLimits()
+    } catch (error) {
+      throw this.limitsError(slot, error)
+    }
+    const now = Date.now()
+    slot.limitsReadAt = now
     const merged = mergeReadLimits([...slot.limits.values()], limits, now)
     slot.limits.clear()
     for (const limit of merged) slot.limits.set(limit.window, limit)
@@ -2600,7 +2598,7 @@ export class AgentManager {
     slot: Slot,
     runtime: AgentRuntime,
     report: LimitsReport,
-  ): Promise<{ limits: PlanLimit[]; now: number } | null> {
+  ): Promise<{ usage: VendorUsage; now: number } | null> {
     const dir = this.deps.reportsDir
     await mkdir(dir, { recursive: true })
     const log = (message: string): void => this.deps.diagnostics.log('warn', message)
@@ -2622,14 +2620,14 @@ export class AgentManager {
     }
     const now = Date.now()
     slot.limitsReadAt = now
-    const limits = messages
+    const usage = messages
       .map((text) => report.parse(text, now))
       .findLast((parsed) => parsed !== null)
-    if (!limits) {
+    if (!usage) {
       log(`${slot.name}: ${report.command} gave no report Kettu can read`)
       return null
     }
-    return { limits, now }
+    return { usage, now }
   }
 
   private limitsError(slot: Slot, error: unknown): HostError {
