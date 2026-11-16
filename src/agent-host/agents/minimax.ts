@@ -4,8 +4,10 @@ export const MINIMAX: AgentDefinition = {
   id: 'minimax',
   name: 'MiniMax Code',
   registryId: 'minimax-code',
-  launch: { kind: 'package', package: '@minimax-ai/code', version: '0.2.7', args: ['acp'] },
-  // The package allows 22.19 up to 22.x or 24 up to 26; detection reads the lower bound.
-  requiresNode: '>=22.19',
-  install: { hint: 'detect.hint.node', url: 'https://nodejs.org/en/download' },
+  // Every version needs better-sqlite3's binding, built only by its install script, so Kettu runs
+  // the user's own `mcode` instead of a script-free install of its own.
+  launch: { kind: 'binary', command: 'mcode', args: ['acp'] },
+  install: { hint: 'detect.hint.minimax', url: 'https://agent.minimax.io' },
+  // The command its README lists, checked on 2026-11-15.
+  installs: { npm: '@minimax-ai/code' },
 }

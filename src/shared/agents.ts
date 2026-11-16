@@ -120,6 +120,7 @@ export const USER_PROGRAM_HARNESSES: readonly HarnessId[] = [
   'codex',
   'opencode',
   'pi',
+  'minimax',
   'cursor',
   'kimi',
   'amp',

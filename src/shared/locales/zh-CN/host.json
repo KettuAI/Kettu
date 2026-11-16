@@ -250,6 +250,7 @@
       "uv": "请从 docs.astral.sh/uv 安装 uv，然后在设置中点击「重新加载环境」。",
       "opencode": "请安装 OpenCode，或在「设置 › Harness」中选择它的程序。",
       "pi": "请用 `npm install -g --ignore-scripts @earendil-works/pi-coding-agent` 或 pi.dev 上的安装程序安装 pi。",
+      "minimax": "请在「设置 › Harness」中安装 MiniMax Code，或在那里选择它的程序。",
       "cursor": "请安装 Cursor，或在「设置 › Harness」中选择它的程序。",
       "kimi": "请用「安装」按钮安装 Kimi Code。",
       "amp": "请安装 Amp，或在「设置 › Harness」中选择它的程序。",
