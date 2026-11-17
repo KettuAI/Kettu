@@ -46,7 +46,7 @@ import { cn } from '@renderer/lib/utils'
 import { splitIntoChunks } from './chunks'
 import { codeThemeInput, useCodeThemes, type CodeThemes } from './code-themes'
 import { localImageTarget, pictureRun, spacedImages } from './local-images'
-import { localTarget } from './local-links'
+import { INCOMPLETE_LINK, localTarget, unopenedTarget } from './local-links'
 import { bareReferenceNumber } from './github-refs'
 import { remarkPlugins } from './remark'
 import { BlockCode } from './code-frame'
@@ -85,9 +85,6 @@ const DefaultImage = defaultComponents.img
 const DefaultParagraph = defaultComponents.p
 const DefaultListItem = defaultComponents.li
 
-// Streamdown's href for a link still streaming in, drawn as a link that opens nothing.
-const INCOMPLETE_LINK = 'streamdown:incomplete-link'
-
 function isWebLink(href: string): boolean {
   const protocol = URL.parse(href)?.protocol
   return protocol === 'http:' || protocol === 'https:'
@@ -113,6 +110,9 @@ export function Link(props: ComponentProps<'a'> & ExtraProps) {
   if (own) return <AgentFileLink file={own} />
   // Any other local path has nowhere to go, and main opens nothing but web links.
   if (local !== null) return <span title={local}>{props.children}</span>
+  const unopened = unopenedTarget(raw)
+  if (unopened !== null) return <span title={unopened}>{props.children}</span>
+  // A link still streaming in, drawn as a link that opens nothing.
   if (raw === INCOMPLETE_LINK) return <span className="thread-link">{props.children}</span>
   const bare = bareReferenceNumber(raw)
   if (bare !== null) return <BareReference number={bare}>{props.children}</BareReference>
