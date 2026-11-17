@@ -31,11 +31,14 @@ import { ToolCard } from './tool-card'
 export const Entry = memo(function Entry({
   sessionId,
   entryId,
+  endId,
   projectPath,
   agentName,
 }: {
   sessionId: string
   entryId: string
+  /** A message's turn end, when the turn got no reply. */
+  endId?: string
   projectPath: string
   agentName: string
 }) {
@@ -43,7 +46,7 @@ export const Entry = memo(function Entry({
   const props = { sessionId, entryId }
   switch (kind) {
     case 'user':
-      return <UserEntry {...props} />
+      return <UserEntry {...props} endId={endId} />
     case 'agent':
       return <AgentEntry {...props} />
     case 'thought':

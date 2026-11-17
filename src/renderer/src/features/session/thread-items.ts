@@ -93,6 +93,8 @@ export type Item =
       turnStart: boolean
       /** Its character in the signature. */
       char: string
+      /** The turn end of a message that got no reply, which its row under the bubble shows. */
+      endId?: string
     }
   | { key: string; type: 'group'; ids: string[] }
   // The work between messages, two or more steps or a lone tool call or thought, folded into one
@@ -144,13 +146,16 @@ export function buildItems(order: string[], signature: string, live = false): It
     // Compactions in a row read as one divider: the latest stands for them all.
     if (signature[i] === 'p' && signature[i + 1] === 'p') continue
     const id = order[i]!
+    const endId = signature[i] === 'u' && signature[i + 1] === 'e' ? order[i + 1] : undefined
     items.push({
       key: id,
       type: 'entry',
       id,
       turnStart: signature[i] === 'u',
       char: signature[i] ?? 'o',
+      endId,
     })
+    if (endId) i++
     const closing = after.get(i)
     if (closing) items.push(closing)
   }
@@ -204,6 +209,8 @@ const TABLE_FOOT_PX = 36
 const DIAGRAM_PX = 220
 // A reply's actions, and its changes card: the head, a row per file up to three, then one more.
 const FOOTER_PX = 24
+// The line a reply's footer adds for a turn that did not end on its own.
+const ENDING_PX = 24
 const CHANGES_HEAD_PX = 62
 const CHANGE_ROW_PX = 36
 const SHOWN_CHANGES = 3
@@ -284,9 +291,11 @@ export function estimateOf(item: Item, byId: Record<string, ThreadEntry> | undef
   if (item.type === 'group' || item.type === 'status') return 24
   if (item.type === 'reply') {
     const files = byId ? changedFiles(item.toolIds, byId) : 0
-    if (files === 0) return FOOTER_PX
+    const end = item.endId ? byId?.[item.endId] : undefined
+    const ending = end?.kind === 'turn_end' && end.stopReason !== 'end_turn' ? ENDING_PX : 0
+    if (files === 0) return FOOTER_PX + ending
     const rows = Math.min(files, SHOWN_CHANGES) + (files > SHOWN_CHANGES ? 1 : 0)
-    return FOOTER_PX + CHANGES_HEAD_PX + rows * CHANGE_ROW_PX
+    return FOOTER_PX + ending + CHANGES_HEAD_PX + rows * CHANGE_ROW_PX
   }
   switch (item.char) {
     // One line of bubble and the row under it: the time, Copy and the steered label.

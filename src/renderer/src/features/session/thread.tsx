@@ -560,6 +560,7 @@ export const Thread = memo(function Thread({
                     <Entry
                       sessionId={sessionId}
                       entryId={item.id}
+                      endId={item.endId}
                       projectPath={projectPath}
                       agentName={agentName}
                     />

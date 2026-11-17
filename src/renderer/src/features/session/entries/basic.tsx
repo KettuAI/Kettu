@@ -47,6 +47,7 @@ import { OutOfCreditEnd } from './out-of-credit'
 import { splitLinks } from './text-links'
 import { UserActions } from './message-actions'
 import { ReplyRunChip } from './reply-run-chip'
+import { TurnEndTag } from './turn-end-tag'
 import { RefChip, SentAttachments, UserContentView } from './user-content'
 
 export interface EntryProps {
@@ -54,9 +55,14 @@ export interface EntryProps {
   entryId: string
 }
 
-export const UserEntry = memo(function UserEntry({ sessionId, entryId }: EntryProps) {
+export const UserEntry = memo(function UserEntry({
+  sessionId,
+  entryId,
+  endId,
+}: EntryProps & { endId?: string }) {
   const { t } = useTranslation('session')
   const entry = useEntry(sessionId, entryId, 'user')
+  const end = useEntry(sessionId, endId ?? '', 'turn_end')
   const animation = useEntryAnimation(sessionId, entryId)
   const routine = useSessionsStore((s) => s.byId[sessionId]?.routine ?? null)
   // The prompt of a routine's run is the thread's very first entry, once its first page is here.
@@ -99,7 +105,7 @@ export const UserEntry = memo(function UserEntry({ sessionId, entryId }: EntryPr
         </span>
       )}
       {first && routine && <RoutineSent routine={routine} />}
-      <UserActions content={entry.content} at={entry.at} steered={entry.steered} />
+      <UserActions content={entry.content} at={entry.at} steered={entry.steered} end={end} />
     </div>
   )
 })
@@ -375,6 +381,15 @@ export const TurnEndEntry = memo(function TurnEndEntry({ sessionId, entryId }: E
   const entry = useEntry(sessionId, entryId, 'turn_end')
   const animation = useEntryAnimation(sessionId, entryId)
   if (!entry) return null
+  if (entry.stopReason !== 'end_turn') {
+    return (
+      <TurnEndTag
+        stopReason={entry.stopReason}
+        durationMs={entry.durationMs}
+        className={animation}
+      />
+    )
+  }
   return (
     <Marker className={cn('text-xs tabular', animation)}>
       <MarkerContent>{stopReasonText(entry.stopReason, entry.durationMs)}</MarkerContent>
