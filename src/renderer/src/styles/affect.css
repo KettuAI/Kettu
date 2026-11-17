@@ -4521,6 +4521,34 @@ li[data-row-exit='dust'] > * {
 .kettu-composer > .ui-ccc {
   max-width: none;
 }
+/* A message started on an expired prompt cache: a pop over the composer's top edge, at the right,
+   over the end of the thread so nothing moves. */
+.kettu-cache-notice {
+  position: absolute;
+  right: 8px;
+  bottom: calc(100% + 10px);
+  z-index: 2;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  width: min(330px, calc(100% - 16px));
+  padding: 12px 8px 12px 14px;
+  border-radius: 12px;
+  background: var(--composer-card);
+  box-shadow: var(--composer-pop-shadow);
+  color: var(--composer-ink);
+  font-size: 13px;
+  line-height: 20px;
+}
+.kettu-cache-notice b {
+  font-weight: 600;
+}
+.kettu-cache-notice p {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--composer-muted);
+}
 /* Kettu's editor in the Chat Composer's type: the size of the message it sends, its caret blue. */
 .kettu-prompt .cm-editor {
   color: var(--ui-ccc-strong);

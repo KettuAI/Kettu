@@ -55,6 +55,7 @@ import { nextChoice, nextMode } from './modes'
 import { OutOfCreditStrip } from './out-of-credit-strip'
 import { useAddMenu } from './add-menu'
 import { PromptBox } from './prompt-box'
+import { CACHE_NOTICE_MIN_TOKENS, CacheNotice } from './cache-notice'
 import { QueueButton, SendButton, StopButton } from './send-button'
 import { SessionPlace } from './session-place'
 import { SwitchConfirm } from './switch-confirm'
@@ -494,6 +495,19 @@ export function Composer({
   const cache = cacheExpiry(session, agent?.account ?? null)
   const timed = cache?.expiresAt != null ? cache : null
   const cachePhase = useCachePhase(knownExpiry(cache))
+  // The cache write the notice was closed for, so it stays closed until the next one expires.
+  const [noticeClosedFor, setNoticeClosedFor] = useState<number | null>(null)
+  const reread = session.usage?.used ?? 0
+  const cacheNoticeShown =
+    timed !== null &&
+    cachePhase === 'expired' &&
+    holdsMessage &&
+    !running &&
+    !starting &&
+    pending === null &&
+    !mustSwitch &&
+    reread >= CACHE_NOTICE_MIN_TOKENS &&
+    noticeClosedFor !== timed.lastRequestAt
   // Claude Code's model, effort and fast mode are part of what its cache was written for.
   const cacheNote =
     harnessOf(session.agentId) === 'claude-code' &&
@@ -540,6 +554,16 @@ export function Composer({
       className="kettu-composer"
       data-starting={starting || undefined}
     >
+      <AnimatePresence initial={false}>
+        {cacheNoticeShown && (
+          <CacheNotice
+            key="cache-notice"
+            estimate={timed.estimate}
+            used={reread}
+            onDismiss={() => setNoticeClosedFor(timed.lastRequestAt)}
+          />
+        )}
+      </AnimatePresence>
       <ChatComposer
         field={
           <PromptBox
