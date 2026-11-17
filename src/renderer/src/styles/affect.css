@@ -4748,6 +4748,28 @@ li[data-row-exit='dust'] > * {
     white-space: nowrap;
   }
 }
+/* Narrower still, the tray gives up in order: the branch's name, the context's word, the speed, and
+   last the host, project and branch. */
+@container kettu-tray (inline-size < 480px) {
+  .kettu-branch__name {
+    display: none;
+  }
+}
+@container kettu-tray (inline-size < 440px) {
+  .kettu-tray-meter__word {
+    display: none;
+  }
+}
+@container kettu-tray (inline-size < 380px) {
+  .kettu-tray-link--speed {
+    display: none;
+  }
+}
+@container kettu-tray (inline-size < 300px) {
+  .kettu-tray__group--place {
+    display: none;
+  }
+}
 .kettu-tray__group:empty {
   display: none;
 }

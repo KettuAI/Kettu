@@ -680,7 +680,7 @@ export function Composer({
         foot={
           <div className="ui-as-composer__tray kettu-tray">
             <TrayStyles />
-            <span className="kettu-tray__group">
+            <span className="kettu-tray__group kettu-tray__group--place">
               <SessionPlace sessionId={sessionId} projectPath={session.projectPath} />
               <BranchTrayLink projectPath={folder} />
             </span>
