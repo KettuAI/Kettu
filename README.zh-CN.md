@@ -140,10 +140,11 @@ curl -fsSL https://kettu.sh/install | sh
 
 ```sh
 docker run -d --name kettu -p 4567:4567 -v kettu:/home/node -v ~/code:/workspace ghcr.io/kettuai/kettu
+docker exec kettu kettu direct add <服务器地址>:4567
 docker exec -it kettu kettu pair
 ```
 
-`kettu pair` 会显示添加设备的配对码。请保留 `kettu` 卷：设备配对的主机身份就存在里面。更新时拉取新镜像，再重新运行容器。
+容器只知道自己的地址，所以用 `direct add` 把服务器的地址告诉设备。`kettu pair` 会显示添加设备的配对码。请保留 `kettu` 卷：设备配对的主机身份就存在里面。更新时拉取新镜像，再重新运行容器。
 
 ## 支持的 Agent
 

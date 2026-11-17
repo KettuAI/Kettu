@@ -140,10 +140,11 @@ Or in Docker (amd64 and Arm), which keeps Kettu's data in the `kettu` volume and
 
 ```sh
 docker run -d --name kettu -p 4567:4567 -v kettu:/home/node -v ~/code:/workspace ghcr.io/kettuai/kettu
+docker exec kettu kettu direct add <your-server-address>:4567
 docker exec -it kettu kettu pair
 ```
 
-`kettu pair` shows the code that adds a device. Keep the `kettu` volume: it holds the identity your devices paired with. To update, pull the new image and run the container again.
+The container only knows its own address, so `direct add` gives devices your server's. `kettu pair` shows the code that adds a device. Keep the `kettu` volume: it holds the identity your devices paired with. To update, pull the new image and run the container again.
 
 ## Agents
 
