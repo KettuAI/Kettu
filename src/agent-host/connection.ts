@@ -35,6 +35,11 @@ export interface PermissionRequest {
   plan?: string
   /** An MCP server's request: a form, answered with its values, or a page to open. */
   elicitation?: PendingElicitation
+  /**
+   * The agent does not wait for the answer, so its turn goes on or ends and the card stays until
+   * the user answers it or the session closes.
+   */
+  nonBlocking?: true
 }
 
 /** `note` is set only for an option that takes one, and only when the user wrote something. */
@@ -60,9 +65,10 @@ export interface SessionTarget {
   /**
    * Sends `text` as the user's own message, such as the note that sends a plan back: at once when
    * the session can start a turn, else behind its queue. With `approval`, the message is the
-   * answer a card already shows, such as a plan's approval, which the thread does not draw.
+   * answer a card already shows, such as a plan's approval, which the thread does not draw. With
+   * `now`, a running turn takes it as it takes a steered message instead of after it ends.
    */
-  send(text: string, options?: { approval?: true }): void
+  send(text: string, options?: { approval?: true; now?: true }): void
   /** The permission mode the settings start the agent's new sessions in, or null for none. */
   startMode(): string | null
   /**

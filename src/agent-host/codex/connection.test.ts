@@ -109,6 +109,7 @@ function threadTarget(
   const requests: { request: PermissionRequest; signal: AbortSignal }[] = []
   const sent: string[] = []
   const approvals: string[] = []
+  const sentNow: string[] = []
   const state = { replaying: false }
   const target: SessionTarget = {
     context: () => ({
@@ -132,6 +133,7 @@ function threadTarget(
     send: (text, options) => {
       sent.push(text)
       if (options?.approval) approvals.push(text)
+      if (options?.now) sentNow.push(text)
     },
     startMode: () => null,
   }
@@ -142,6 +144,7 @@ function threadTarget(
     requests,
     sent,
     approvals,
+    sentNow,
     entries: (): ThreadEntry[] => threadEntries(thread),
     entry: (id: string) => thread.byId[id],
     thread: () => thread,
@@ -1050,6 +1053,124 @@ describe('approvals', () => {
     })
     expect(await answer).toEqual({ permissions, scope: 'turn' })
     expect(t.entry('t:perm-1')).toMatchObject({ toolKind: 'other' })
+  })
+})
+
+describe('a question Codex asks without waiting', () => {
+  const asyncMessage = (id: string, questions: unknown) => ({
+    type: 'agentMessage',
+    id,
+    text: 'Which one?',
+    phase: 'final_answer',
+    delivery: 'async',
+    questions,
+  })
+  const at = { threadId: 'thread-1', turnId: 'turn-1' }
+
+  it('asks it in the question card and answers it into the running turn', async () => {
+    const { server, connection } = await connect()
+    await connection.newSession('/project')
+    const t = threadTarget(() => ({ answers: [{ question: 0, choices: [1] }] }))
+    connection.register('thread-1', t.target)
+    server.notify('item/completed', {
+      ...at,
+      item: asyncMessage('call_1', [{ title: 'Which one?', options: ['A', 'B'] }]),
+    })
+    await until(() => t.sent.length > 0)
+    expect(t.requests).toHaveLength(1)
+    expect(t.requests[0]!.request).toMatchObject({
+      toolEntryId: 't:call_1',
+      nonBlocking: true,
+      questions: [
+        {
+          question: 'Which one?',
+          multiSelect: false,
+          allowsText: true,
+          options: [{ label: 'A' }, { label: 'B' }],
+        },
+      ],
+    })
+    expect(t.entry('t:call_1')).toMatchObject({
+      kind: 'tool',
+      status: 'completed',
+      question: 'Which one?',
+    })
+    expect(t.entries().some((entry) => entry.kind === 'agent')).toBe(false)
+    expect(t.sentNow).toEqual(t.approvals)
+    expect(t.sent).toEqual([
+      '<send_user_message_question_reply>\n' +
+        '[{"questionItemId":"[\\"request_user_input_async\\",\\"call_1\\",0]","question":"Which one?","answer":"B"}]\n' +
+        '</send_user_message_question_reply>',
+    ])
+  })
+
+  it('sends the words the user wrote for a question without choices', async () => {
+    const { server, connection } = await connect()
+    await connection.newSession('/project')
+    const t = threadTarget(() => ({ answers: [{ question: 0, choices: [], text: 'Soon' }] }))
+    connection.register('thread-1', t.target)
+    server.notify('item/completed', {
+      ...at,
+      item: asyncMessage('call_2', [{ title: 'When?', options: null }]),
+    })
+    await until(() => t.sent.length > 0)
+    expect(t.requests[0]!.request.questions?.[0]).toMatchObject({ options: [], allowsText: true })
+    expect(JSON.parse(t.sent[0]!.split('\n')[1]!)).toEqual([
+      {
+        questionItemId: '["request_user_input_async","call_2",0]',
+        question: 'When?',
+        answer: 'Soon',
+      },
+    ])
+  })
+
+  it('answers only the questions the user answered', async () => {
+    const { server, connection } = await connect()
+    await connection.newSession('/project')
+    const t = threadTarget(() => ({ answers: [{ question: 1, choices: [0] }] }))
+    connection.register('thread-1', t.target)
+    server.notify('item/completed', {
+      ...at,
+      item: asyncMessage('call_3', [
+        { title: 'First?', options: ['x'] },
+        { title: 'Second?', options: ['y', 'z'] },
+      ]),
+    })
+    await until(() => t.sent.length > 0)
+    expect(JSON.parse(t.sent[0]!.split('\n')[1]!)).toEqual([
+      {
+        questionItemId: '["request_user_input_async","call_3",1]',
+        question: 'Second?',
+        answer: 'y',
+      },
+    ])
+  })
+
+  it('asks once for an item that starts and completes, and sends nothing when skipped', async () => {
+    const { server, connection } = await connect()
+    await connection.newSession('/project')
+    const t = threadTarget(() => 'cancelled')
+    connection.register('thread-1', t.target)
+    const item = asyncMessage('call_4', [{ title: 'Which one?', options: ['A'] }])
+    server.notify('item/started', { ...at, item })
+    server.notify('item/completed', { ...at, item })
+    await until(() => t.requests.length > 0)
+    await tick()
+    expect(t.requests).toHaveLength(1)
+    expect(t.sent).toEqual([])
+  })
+
+  it('shows an asynchronous message with no question as a message', async () => {
+    const { server, connection } = await connect()
+    await connection.newSession('/project')
+    const t = threadTarget()
+    connection.register('thread-1', t.target)
+    server.notify('item/completed', { ...at, item: asyncMessage('call_5', null) })
+    await tick()
+    expect(t.requests).toHaveLength(0)
+    expect(t.entries().find((entry) => entry.kind === 'agent')).toMatchObject({
+      markdown: 'Which one?',
+    })
   })
 })
 

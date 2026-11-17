@@ -16,6 +16,7 @@ import { replayedBlock } from '../acp/mapper'
 import { hasMessage, t } from '../i18n'
 import { planMarkdown, planRevision } from '../plan-revision'
 import { isRowlessCall, isRowWhenFailed } from '../plan-tool'
+import { ANSWERS_OPTION } from '../question-answers'
 import { parseReplayedText } from '../replayed-content'
 import { SERVICE_NAME } from '../service-name'
 import { workflowToolStructured } from '../workflow/tools'
@@ -31,6 +32,13 @@ import {
   type MapperEffect,
   type MapperOutput,
 } from '../session-updates'
+import {
+  isAsyncQuestion,
+  parseReply,
+  questionsMarkdown,
+  type AsyncQuestionItem,
+  type QuestionReply,
+} from './async-questions'
 import type {
   CommandAction,
   FileUpdateChange,
@@ -352,7 +360,8 @@ export class ThreadMapper {
         if (ctx.replaying && done) this.userMessage(ctx, out, item)
         break
       case 'agentMessage':
-        this.message(ctx, out, item.id, item.text, done)
+        if (isAsyncQuestion(item)) this.askedQuestion(ctx, out, item)
+        else this.message(ctx, out, item.id, item.text, done)
         break
       case 'plan':
         this.proposedPlan(ctx, out, item.id, item.text, done)
@@ -469,11 +478,60 @@ export class ThreadMapper {
 
   private userMessage(ctx: MapperContext, out: MapperOutput, item: Item<'userMessage'>): void {
     ctx.scope.planId = null
+    const replies = parseReply(
+      item.content.flatMap((input) => (input.type === 'text' ? [input.text] : [])).join(''),
+    )
+    if (replies) {
+      this.answeredQuestions(ctx, out, replies)
+      return
+    }
     const id = messageEntryId(ctx, 'user', item.id) ?? ctx.nextId()
     let content: UserContent[] = []
     for (const input of item.content)
       content = [...content, ...replayedInput(input, id, content, out)]
     addEntry(ctx, out, { kind: 'user', id, content })
+  }
+
+  /** A question the agent asked without waiting: a finished step, which a card may answer. */
+  private askedQuestion(ctx: MapperContext, out: MapperOutput, item: AsyncQuestionItem): void {
+    const first = item.questions[0]!.title
+    this.tool(ctx, out, item.id, {
+      title: first,
+      toolKind: 'other',
+      status: 'completed',
+      question: first,
+      content: [{ type: 'markdown', markdown: questionsMarkdown(item.questions) }],
+    })
+  }
+
+  /** The reply to questions is no message of the user's; it settles the steps that asked them. */
+  private answeredQuestions(
+    ctx: MapperContext,
+    out: MapperOutput,
+    replies: readonly QuestionReply[],
+  ): void {
+    const byItem = new Map<string, QuestionReply[]>()
+    for (const reply of replies)
+      byItem.set(reply.itemId, [...(byItem.get(reply.itemId) ?? []), reply])
+    for (const [itemId, answers] of byItem) {
+      const id = `t:${itemId}`
+      if (ctx.thread.byId[id]?.kind !== 'tool') continue
+      out.patches.push({
+        op: 'entry.update',
+        id,
+        changes: {
+          permissionResult: {
+            optionId: ANSWERS_OPTION,
+            kind: 'allow_once',
+            questions: answers.map(({ question, answer }) => ({
+              question,
+              answered: true,
+              answer,
+            })),
+          },
+        },
+      })
+    }
   }
 
   private message(

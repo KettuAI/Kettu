@@ -581,6 +581,8 @@ interface PendingRequest {
   elicitation?: PendingElicitation
   /** Raised while no turn ran, as a plan Codex proposes once its turn has ended. */
   outsideTurn: boolean
+  /** The agent waits for nothing: the request outlasts its turn and never holds the session. */
+  nonBlocking: boolean
   answer(answer: PermissionAnswer): void
 }
 
@@ -3042,7 +3044,7 @@ export class SessionManager {
       }),
       apply: (output) => this.applyOutput(live, output),
       requestPermission: (request, signal) => this.requestPermission(live, request, signal),
-      send: (text, options) => this.sendForUser(live, text, options?.approval),
+      send: (text, options) => this.sendForUser(live, text, options),
       startMode: () => startModeIn(this.deps.settings(), record.agentId) ?? null,
       readAgentFile: (file) => this.deps.agentFile?.(record.id, file) ?? Promise.resolve(null),
       readProjectFile: (file) => this.deps.projectFile?.(record.id, file) ?? Promise.resolve(null),
@@ -7530,7 +7532,7 @@ export class SessionManager {
     this.deps.diagnostics.turnEnded(live.record.agentId, [live.id, live.record.acpSessionId])
     this.reportTurn(live, turn, stopReason)
     this.closeOpenEntries(live)
-    this.clearPermissions(live, 'cancelled')
+    this.clearPermissions(live, 'cancelled', true)
     const byAgent = live.archiveAfterTurn
     if (byAgent !== null) {
       live.archiveAfterTurn = null
@@ -8017,7 +8019,7 @@ export class SessionManager {
       throw agentError(error)
     }
     // The protocol requires pending requests of a cancelled turn to be answered `cancelled`.
-    this.clearPermissions(live, 'cancelled')
+    this.clearPermissions(live, 'cancelled', true)
     if (live.thread.session.status === 'awaiting_permission')
       this.update(live, { status: 'running' })
     this.touch(live.id)
@@ -8519,7 +8521,8 @@ export class SessionManager {
         ...(request.questions ? { questions: request.questions } : {}),
         plan: plan !== null,
         ...(elicitation ? { elicitation } : {}),
-        outsideTurn: live.turn === null,
+        outsideTurn: live.turn === null && !request.nonBlocking,
+        nonBlocking: request.nonBlocking === true,
         answer: (answer) => {
           signal.removeEventListener('abort', onAbort)
           resolve(answer)
@@ -8558,7 +8561,7 @@ export class SessionManager {
         },
       ])
       const status = live.thread.session.status
-      if (status === 'running' || status === 'ready')
+      if (!request.nonBlocking && (status === 'running' || status === 'ready'))
         this.update(live, { status: 'awaiting_permission' })
       this.touch(live.id)
       this.updateBadge()
@@ -8620,9 +8623,17 @@ export class SessionManager {
     this.updateBadge()
   }
 
-  /** Settles every pending request; after an exit the answer goes nowhere, but frees the handler. */
-  private clearPermissions(live: Live, result: 'cancelled' | 'withdrawn'): void {
+  /**
+   * Settles every pending request; after an exit the answer goes nowhere, but frees the handler.
+   * `keepNonBlocking` leaves the requests no turn waits on, which a turn's end does not end.
+   */
+  private clearPermissions(
+    live: Live,
+    result: 'cancelled' | 'withdrawn',
+    keepNonBlocking = false,
+  ): void {
     for (const [requestId, pending] of [...live.permissions]) {
+      if (keepNonBlocking && pending.nonBlocking) continue
       this.settlePermission(live, requestId, result)
       pending.answer('cancelled')
     }
@@ -8670,7 +8681,8 @@ export class SessionManager {
 
   /** Once no request or new site waits for the user, the session goes back to its turn or rests. */
   private stopWaiting(live: Live): void {
-    if (waitingCount(live) > 0) return
+    const nonBlocking = [...live.permissions.values()].filter((p) => p.nonBlocking).length
+    if (waitingCount(live) - nonBlocking > 0) return
     if (live.thread.session.status !== 'awaiting_permission') return
     this.update(live, { status: live.turn || live.childRunning ? 'running' : 'ready' })
   }
@@ -8760,10 +8772,12 @@ export class SessionManager {
   /**
    * A message the agent's connection sends as the user's own, such as the note that sends a plan
    * back: at once when the session can start a turn, ahead of a waiting queue since it is the
-   * answer the user just gave; behind the queue while a turn runs.
+   * answer the user just gave; behind the queue while a turn runs, unless `now` sends it into
+   * that turn, as an answer an agent waits for must be.
    */
-  private sendForUser(live: Live, text: string, approval?: true): void {
+  private sendForUser(live: Live, text: string, options?: { approval?: true; now?: true }): void {
     if (this.live.get(live.id) !== live || live.closing) return
+    const approval = options?.approval
     const content: UserContent[] = [{ type: 'text', text }]
     const { status, queue } = live.thread.session
     if (canSend(status)) {
@@ -8774,14 +8788,18 @@ export class SessionManager {
       this.deps.diagnostics.log('warn', `Session ${live.id} could not take a message: ${status}`)
       return
     }
-    this.update(live, {
-      queue: [
-        ...queue,
-        { id: randomUUID(), content, at: this.now(), ...(approval ? { approval } : {}) },
-      ],
-    })
+    const item = { id: randomUUID(), content, at: this.now(), ...(approval ? { approval } : {}) }
+    this.update(live, { queue: [...queue, item] })
     this.persist(live)
     this.touch(live.id)
+    if (!options?.now) return
+    // A turn that cannot take it leaves the message in the queue, which goes when the turn ends.
+    this.steerItem(live, item.id).catch((error: unknown) => {
+      this.deps.diagnostics.log(
+        'warn',
+        `Session ${live.id} kept a message queued: ${String(error)}`,
+      )
+    })
   }
 
   // Config options.

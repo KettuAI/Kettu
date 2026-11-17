@@ -16,6 +16,7 @@ import { formFields, isWebUrl } from '../elicitation'
 import { t } from '../i18n'
 import { answerWords } from '../question-answers'
 import type { MapperContext, MapperOutput } from '../session-updates'
+import { replyText, type AsyncQuestionItem, type QuestionReply } from './async-questions'
 import { commandFacts, type ThreadMapper } from './mapper'
 import type {
   AdditionalPermissions,
@@ -364,6 +365,84 @@ export function userInputApproval(
         if (words.length > 0) given[question.id] = { answers: words }
       }
       return { answers: given }
+    },
+  }
+}
+
+/** A question Codex asks without waiting, and the message that answers it. */
+export interface AsyncApproval {
+  request: PermissionRequest
+  /** The reply to send for the user's answer; null when nothing was answered. */
+  reply(answer: PermissionAnswer): string | null
+}
+
+/**
+ * The questions of `request_user_input_async` as a question card that outlasts the turn, since
+ * Codex waits for nothing: the user may write an answer to any of them.
+ */
+export function asyncQuestionApproval(
+  item: AsyncQuestionItem,
+  mapper: ThreadMapper,
+  ctx: MapperContext,
+): AsyncApproval {
+  const asked = item.questions
+  const first = asked[0]!
+  const out = output()
+  const entryId = mapper.tool(ctx, out, item.id, {
+    title: first.title,
+    toolKind: 'other',
+    status: 'completed',
+    question: first.title,
+  })
+  const questions: PendingQuestion[] = asked.map((question) => ({
+    header: '',
+    question: question.title,
+    multiSelect: false,
+    options: (question.options ?? []).map((label) => ({ label })),
+    allowsText: true,
+    secret: false,
+  }))
+  const choices = first.options ?? []
+  const options: Option[] = [
+    ...choices.map((label, index) => ({
+      id: `answer:${index}`,
+      name: label,
+      kind: 'allow_once' as const,
+    })),
+    { id: 'other', name: t('question.other'), kind: 'reject_once' },
+  ]
+  return {
+    request: {
+      toolCallId: item.id,
+      toolEntryId: entryId,
+      output: out,
+      options,
+      questions,
+      nonBlocking: true,
+    },
+    reply: (answer) => {
+      if (answer === 'cancelled') return null
+      const given: QuestionReply[] = []
+      if ('answers' in answer) {
+        for (const picked of answer.answers) {
+          const question = questions[picked.question]
+          const words = question ? answerWords(question, picked) : []
+          if (question && words.length > 0) {
+            given.push({
+              itemId: item.id,
+              index: picked.question,
+              question: question.question,
+              answer: words.join(', '),
+            })
+          }
+        }
+      } else if ('optionId' in answer && answer.optionId.startsWith('answer:')) {
+        const label = choices[Number(answer.optionId.slice('answer:'.length))]
+        if (label !== undefined) {
+          given.push({ itemId: item.id, index: 0, question: first.title, answer: label })
+        }
+      }
+      return given.length > 0 ? replyText(given) : null
     },
   }
 }

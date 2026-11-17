@@ -252,10 +252,24 @@ interface ItemTimes {
   completedAtMs?: number | null
 }
 
+/** A question of `request_user_input_async`; no options means the user writes the answer. */
+export interface AsyncUserInputQuestion {
+  title: string
+  options: string[] | null
+}
+
 export type ThreadItem = ItemTimes &
   (
     | { type: 'userMessage'; id: string; content: UserInput[] }
-    | { type: 'agentMessage'; id: string; text: string; phase: string | null }
+    | {
+        type: 'agentMessage'
+        id: string
+        text: string
+        phase: string | null
+        /** `async` for a message the agent sent without ending its turn, such as a question. */
+        delivery?: 'async' | null
+        questions?: AsyncUserInputQuestion[] | null
+      }
     | { type: 'plan'; id: string; text: string }
     | { type: 'reasoning'; id: string; summary: string[]; content: string[] }
     | {
