@@ -11,6 +11,7 @@ import {
   type Candidate,
   type IndexLog,
   SearchIndex,
+  type SessionMatch,
   type Snippet,
   type SnippetPick,
 } from './index'
@@ -18,6 +19,13 @@ import {
 export interface SearchAnswer {
   candidates: Candidate[]
   /** The index is still being built, so the answer may be partial. */
+  indexing: BuildProgress | null
+}
+
+export interface FindAnswer {
+  matches: SessionMatch[]
+  /** There are more matches than were kept, the oldest being left out. */
+  capped: boolean
   indexing: BuildProgress | null
 }
 
@@ -40,6 +48,17 @@ export class IndexReads {
     } catch (error) {
       this.failed(error)
       return { candidates: [], indexing: this.unbuilt() }
+    }
+  }
+
+  findIn(sessionId: string, words: readonly string[], limit: number): FindAnswer {
+    const index = this.index()
+    if (!index) return { matches: [], capped: false, indexing: this.unbuilt() }
+    try {
+      return { ...index.findIn(sessionId, words, limit), indexing: index.build() }
+    } catch (error) {
+      this.failed(error)
+      return { matches: [], capped: false, indexing: this.unbuilt() }
     }
   }
 

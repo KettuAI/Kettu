@@ -44,6 +44,7 @@
     "focusPane": "Go to pane 1–9",
     "answerPermission": "Answer a request",
     "cancelTurn": "Stop",
+    "findInSession": "Find in the session",
     "send": "Send",
     "sendNow": "Send now while running",
     "newLine": "New line",

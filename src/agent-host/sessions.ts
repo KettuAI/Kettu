@@ -24,6 +24,7 @@ import {
   type SessionOutputs,
   type SessionPullRequest,
   type SearchIndexing,
+  type SessionFindMatch,
   type SessionSummary,
   type SideChatAgent,
   type StartNotice,
@@ -753,6 +754,8 @@ const TITLE_LENGTH = 60
 const LISTED_SESSIONS = 1_000
 // The sessions a search of the conversations returns, the most recently changed first.
 const SEARCH_SESSIONS = 100
+// The messages a find in one session lists, the newest when it has more.
+const FIND_MESSAGES = 500
 // Requests whose answerer a session remembers, so a late answer hears where it was answered.
 const ANSWERS_KEPT = 50
 
@@ -2905,6 +2908,26 @@ export class SessionManager {
       ]
     })
     return { hits, indexing }
+  }
+
+  /**
+   * The messages of one session that hold every word of `query`, oldest first. A live session
+   * writes its pending entries first, so a reply that has just ended is found.
+   */
+  async find(
+    sessionId: string,
+    query: string,
+  ): Promise<{ matches: SessionFindMatch[]; capped: boolean; indexing: SearchIndexing | null }> {
+    const words = queryWords(query)
+    const threads = this.deps.threads
+    if (!longEnough(words) || !threads) return { matches: [], capped: false, indexing: null }
+    const live = this.live.get(sessionId)
+    if (!live && !this.records.has(sessionId)) {
+      return { matches: [], capped: false, indexing: null }
+    }
+    if (live) this.checkpoint(live)
+    const { matches, capped, indexing } = await threads.find(sessionId, words, FIND_MESSAGES)
+    return { matches, capped, indexing }
   }
 
   /** Whether a session list shows the session: not a sub-agent's, not archived with its tree. */

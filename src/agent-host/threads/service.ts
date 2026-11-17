@@ -109,6 +109,9 @@ function run(
     case 'search':
       if (!reads) throw new ThreadDbError('The search index is not open', 'unavailable')
       return reads.find(request.words)
+    case 'find':
+      if (!reads) throw new ThreadDbError('The search index is not open', 'unavailable')
+      return reads.findIn(request.sessionId, request.words, request.limit)
     case 'snippets':
       if (!reads) throw new ThreadDbError('The search index is not open', 'unavailable')
       return reads.snippets(request.words, request.picks)

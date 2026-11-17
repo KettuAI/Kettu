@@ -141,6 +141,20 @@ export function useKeyboardShortcuts(): void {
       ) {
         return run(event, () => emitAppEvent({ kind: 'add-attachments' }))
       }
+      // Finding in the session on screen; the Files pane's editor, a terminal and the browser keep
+      // the key when they were used last, and Settings has its own search.
+      if (
+        key === 'f' &&
+        !event.shiftKey &&
+        !editing &&
+        !inTerminal &&
+        view.main.kind === 'session' &&
+        !view.settings.open &&
+        !usedPane() &&
+        !layerOpen()
+      ) {
+        return run(event, () => emitAppEvent({ kind: 'find-in-session' }))
+      }
       if (
         key === 'a' &&
         event.shiftKey &&

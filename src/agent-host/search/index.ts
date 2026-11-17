@@ -77,6 +77,13 @@ export interface Snippet extends SnippetPick {
   snippet: string
 }
 
+/** A message of one session that holds every word of a search. */
+export interface SessionMatch {
+  pos: number
+  entryId: string
+  role: 'user' | 'agent'
+}
+
 /** How far a build of the whole index has come: sessions done of the sessions it started with. */
 export interface BuildProgress {
   done: number
@@ -369,6 +376,35 @@ export class SearchIndex {
       matches: Number(row.matches),
       updatedAt: Number(row.updated_at),
     }))
+  }
+
+  /**
+   * The messages of one session that hold every one of `words`, which are folded, oldest first.
+   * A session holds a few hundred thousand characters at most, so its rows are scanned with
+   * `instr` instead of finding the words in the whole index first. With more than `limit`
+   * messages the newest are kept and `capped` is true.
+   */
+  findIn(
+    sessionId: string,
+    words: readonly string[],
+    limit: number,
+  ): { matches: SessionMatch[]; capped: boolean } {
+    if (words.length === 0) return { matches: [], capped: false }
+    const conditions = words.map(() => 'instr(folded, ?) > 0').join(' AND ')
+    const rows = this.sql(
+      `SELECT pos, entry_id, role FROM message
+       WHERE session_id = ? AND ${conditions} ORDER BY pos DESC LIMIT ?`,
+    ).all(sessionId, ...words, limit + 1)
+    const capped = rows.length > limit
+    const matches = rows
+      .slice(0, limit)
+      .map((row: Row): SessionMatch => ({
+        pos: Number(row.pos),
+        entryId: String(row.entry_id),
+        role: row.role === 'user' ? 'user' : 'agent',
+      }))
+      .reverse()
+    return { matches, capped }
   }
 
   /** The text around the first of `words` in each of the messages picked. */

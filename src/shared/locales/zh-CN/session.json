@@ -642,6 +642,17 @@
     "announceApproval": "{{agent}} 需要你的授权",
     "announceFinished": "{{agent}} 已完成"
   },
+  "find": {
+    "placeholder": "在会话中查找",
+    "previous": "上一条（Shift+Enter）",
+    "next": "下一条（Enter）",
+    "close": "关闭（Esc）",
+    "none": "无结果",
+    "failed": "查找失败",
+    "short": "至少输入 2 个字",
+    "indexing": "正在为对话建立索引，结果可能不全",
+    "unsupported": "这台主机还不能在会话中查找"
+  },
   "thread": {
     "label": "对话",
     "olderFailed": "无法加载更早的消息",

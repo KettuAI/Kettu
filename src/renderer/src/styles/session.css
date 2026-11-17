@@ -826,6 +826,83 @@
     animation: none;
   }
 }
+/* The find bar over the thread's top right, and the words it marks in the messages. */
+.ks-find {
+  position: absolute;
+  top: 12px;
+  right: 24px;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+  animation: ks-find-in var(--duration-fast) var(--ease-standard) both;
+}
+.ks-find__bar {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  height: 36px;
+  padding: 0 6px 0 11px;
+  border-radius: var(--radius-xl);
+  background: var(--popover);
+  color: var(--popover-foreground);
+  box-shadow: var(--menu-ring);
+}
+.ks-find__bar > svg:first-child {
+  margin-right: 6px;
+}
+.ks-find__input {
+  width: 200px;
+  min-width: 0;
+  background: transparent;
+  font-size: var(--text-control);
+  line-height: var(--text-control--line-height);
+  outline: none;
+}
+.ks-find__input::placeholder {
+  color: var(--text-placeholder);
+}
+.ks-find__count {
+  display: inline-flex;
+  min-width: 3.5rem;
+  align-items: center;
+  justify-content: flex-end;
+  padding-right: 4px;
+  color: var(--muted-foreground);
+  font-size: var(--text-hint);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.ks-find__count[data-state='none'],
+.ks-find__count[data-state='failed'] {
+  color: var(--danger);
+}
+.ks-find__note {
+  max-width: 280px;
+  padding: 0 4px;
+  color: var(--muted-foreground);
+  font-size: var(--text-hint);
+  line-height: var(--text-hint--line-height);
+  text-align: right;
+}
+@keyframes ks-find-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ks-find {
+    animation: none;
+  }
+}
+::highlight(find-match) {
+  background-color: var(--mark);
+}
+::highlight(find-current) {
+  background-color: color-mix(in srgb, var(--attention-dot) 45%, transparent);
+}
 @keyframes ks-step-draw {
   from {
     transform: scaleY(0);

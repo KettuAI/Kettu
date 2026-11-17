@@ -24,6 +24,7 @@ export type ShortcutAction =
   | 'focusPane'
   | 'answerPermission'
   | 'cancelTurn'
+  | 'findInSession'
   | 'send'
   | 'sendNow'
   | 'newLine'
@@ -63,6 +64,7 @@ export function shortcutList(sendKey: 'enter' | 'mod-enter'): Shortcut[] {
     { group: 'sessions', action: 'focusPane', keys: 'Mod+1-9' },
     { group: 'sessions', action: 'answerPermission', keys: '1-9' },
     { group: 'sessions', action: 'cancelTurn', keys: 'Esc' },
+    { group: 'sessions', action: 'findInSession', keys: 'Mod+F' },
     { group: 'composer', action: 'send', keys: sendKey === 'enter' ? 'Enter' : 'Mod+Enter' },
     {
       group: 'composer',

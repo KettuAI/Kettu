@@ -8,7 +8,7 @@ import type { ArtifactCall, ArtifactCallName, ArtifactCalls } from '../artifacts
 import type { RuntimeCall, RuntimeCallName, RuntimeCalls } from '../artifacts/runtime/calls'
 import type { RoutineCall, RoutineCallName, RoutineCalls } from '../routines/calls'
 import type { TaskCall, TaskCallName, TaskCalls } from '../workflow/model'
-import type { SearchAnswer } from '../search/reads'
+import type { FindAnswer, SearchAnswer } from '../search/reads'
 import type { Snippet, SnippetPick } from '../search/index'
 import type { LogFn } from '../storage'
 import type {
@@ -375,6 +375,11 @@ export class ThreadStore {
   /** The sessions with a message that holds every word, most recently changed first. */
   search(words: readonly string[]): Promise<SearchAnswer> {
     return this.readAll({ op: 'search', words: [...words] })
+  }
+
+  /** The messages of one session that hold every word, oldest first, newest `limit` at most. */
+  find(sessionId: string, words: readonly string[], limit: number): Promise<FindAnswer> {
+    return this.read({ op: 'find', sessionId, words: [...words], limit }, sessionId)
   }
 
   /** The text around the first word in each message picked. */

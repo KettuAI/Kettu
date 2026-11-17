@@ -28,6 +28,7 @@ import { Entry } from './entries/entry'
 import { ReplyFooter } from './entries/message-actions'
 import { RunGroup } from './entries/run-group'
 import { ToolGroup } from './entries/tool-group'
+import { FindInSession } from './find/find-in-session'
 import { JumpToLatest } from './jump-to-latest'
 import { MessageOutline } from './outline/message-outline'
 import { RevealTarget } from './outline/reveal-target'
@@ -582,6 +583,13 @@ export const Thread = memo(function Thread({
         <OlderLoading sessionId={sessionId} />
         <MessageOutline sessionId={sessionId} viewport={viewport} content={content} jumps={jumps} />
         <RevealTarget sessionId={sessionId} viewport={viewport} content={content} jumps={jumps} />
+        <FindInSession
+          key={sessionId}
+          sessionId={sessionId}
+          viewport={viewport}
+          content={content}
+          jumps={jumps}
+        />
       </MessageScroller>
       {returnTo && (returnShown || returnLost) && (
         <ReturnTo

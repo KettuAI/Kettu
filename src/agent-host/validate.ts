@@ -1661,6 +1661,10 @@ export function createValidators(platform: Platform): Validators {
     'sessions.requests': session,
     'sessions.outline': session,
     'sessions.search': (params) => ({ query: string(fields(params), 'query', SEARCH_QUERY_CHARS) }),
+    'sessions.find': (params) => {
+      const o = fields(params)
+      return { sessionId: sessionId(o), query: string(o, 'query', SEARCH_QUERY_CHARS) }
+    },
     'sessions.outputs': session,
     'sessions.outlineTitles': session,
     'sessions.watch': session,
