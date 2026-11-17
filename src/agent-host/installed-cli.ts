@@ -188,6 +188,22 @@ export const AGY_CLI: AdapterCli = {
   },
 }
 
+// OpenCode 2, which Kettu reads providers and accounts from through its native API; OpenCode 1
+// has none of it. The oldest is the version that was checked. The program runs as found, a `.cmd`
+// shim on Windows included, since Kettu starts it through the shell as it always did.
+export const OPENCODE_CLI: AdapterCli = {
+  command: 'opencode',
+  pinsVersion: false,
+  oldest: '2.0.32',
+  resolve: async (found) => ({ path: found, env: {} }),
+  // Its install script adds the folder to PATH in the shell profiles, which only new shells read.
+  installedAt: (env, platform) => {
+    if (platform === 'win32') return []
+    const home = getEnv(env, 'HOME', platform) ?? os.homedir()
+    return [path.posix.join(home, '.opencode', 'bin', 'opencode')]
+  },
+}
+
 export type CliVersion = { version: string } | { error: string }
 export type CliProbe = (program: string, env: Env) => Promise<CliVersion>
 

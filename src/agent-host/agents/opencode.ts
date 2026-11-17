@@ -1,4 +1,5 @@
 import type { AgentDefinition } from '../catalog'
+import { OPENCODE_CLI } from '../installed-cli'
 
 export const OPENCODE: AgentDefinition = {
   id: 'opencode',
@@ -11,13 +12,18 @@ export const OPENCODE: AgentDefinition = {
   mcpConfig: { project: 'opencode.json' },
   install: {
     hint: 'detect.hint.opencode',
-    url: 'https://opencode.ai/docs/',
+    url: 'https://opencode.ai/v2/docs/',
+    notice: 'detect.opencodeInstallNotice',
   },
-  // The routes https://opencode.ai/docs lists for OpenCode 1, checked on 2026-10-22.
+  // The routes https://opencode.ai/v2/docs lists for OpenCode 2, checked on 2026-11-17. The
+  // plain `opencode` formula, `opencode.ai/install` and `opencode-ai` all install OpenCode 1.
   installs: {
-    brew: 'anomalyco/tap/opencode',
-    script: 'https://opencode.ai/install',
+    brew: 'anomalyco/tap/opencode-v2',
+    script: 'https://opencode.ai/v2/install',
     scriptBin: ['.opencode', 'bin'],
-    npm: 'opencode-ai',
+    // OpenCode 1's script installs here too, and running this script again replaces it.
+    scriptHome: ['.opencode', 'bin'],
+    npm: '@opencode/cli',
   },
+  cli: OPENCODE_CLI,
 }
