@@ -195,10 +195,15 @@ function assistant(query: FakeQuery, id: string, content: unknown[], extra = {})
   } as SdkMessage
 }
 
-function toolResult(query: FakeQuery, id: string, content: string): SdkMessage {
+function toolResult(query: FakeQuery, id: string, content: string, failed = false): SdkMessage {
   return {
     type: 'user',
-    message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: id, content }] },
+    message: {
+      role: 'user',
+      content: [
+        { type: 'tool_result', tool_use_id: id, content, ...(failed ? { is_error: true } : {}) },
+      ],
+    },
     parent_tool_use_id: null,
     session_id: query.sessionId,
   } as SdkMessage
@@ -3572,6 +3577,111 @@ describe('background tasks', () => {
     query.finish()
     await turn
     expect(kinds().at(-1)).toBe('none')
+  })
+
+  // What the host believes after these effects: work runs on beside the turn, or none does.
+  const worked = (target: Target) =>
+    target.effects.reduce(
+      (now, effect) =>
+        effect.kind === 'background'
+          ? true
+          : effect.kind === 'backgroundRunning'
+            ? effect.running
+            : now,
+      false,
+    )
+
+  it('counts no command that runs in the foreground as background work', async () => {
+    const { target, query, turn } = await open()
+    // Claude Code reports a foreground command that takes a few seconds, and sends no list.
+    query.emit(
+      system(query, {
+        subtype: 'task_started',
+        task_id: 'fg-1',
+        description: 'Sleep for 9 seconds',
+        task_type: 'local_bash',
+        is_backgrounded: false,
+      }),
+      system(query, {
+        subtype: 'task_notification',
+        task_id: 'fg-1',
+        status: 'completed',
+        summary: 'done',
+        output_file: '',
+      }),
+    )
+    await settle()
+    query.finish()
+    await turn
+    expect(worked(target)).toBe(false)
+  })
+
+  it('counts no ambient task as background work', async () => {
+    const { target, query, turn } = await open()
+    query.emit(
+      system(query, {
+        subtype: 'task_started',
+        task_id: 'ambient-1',
+        description: 'Watch',
+        task_type: 'local_bash',
+        ambient: true,
+      }),
+    )
+    await settle()
+    query.finish()
+    await turn
+    expect(worked(target)).toBe(false)
+  })
+
+  it('still counts a task from a Claude Code that does not say where it runs', async () => {
+    const { target, query, turn } = await open()
+    query.emit(
+      system(query, {
+        subtype: 'task_started',
+        task_id: 'old-1',
+        description: 'Serve',
+        task_type: 'local_bash',
+      }),
+    )
+    await settle()
+    query.finish()
+    await turn
+    expect(worked(target)).toBe(true)
+  })
+
+  const backgroundCommand = (query: FakeQuery, id: string) =>
+    assistant(query, `msg_${id}`, [
+      {
+        type: 'tool_use',
+        id,
+        name: 'Bash',
+        input: { command: 'sleep 60', run_in_background: true },
+      },
+    ])
+
+  it('takes back a background command that was refused, as nothing started', async () => {
+    const { target, query, turn } = await open()
+    query.emit(backgroundCommand(query, 'toolu_d'))
+    await settle()
+    expect(worked(target)).toBe(true)
+    query.emit(toolResult(query, 'toolu_d', 'Permission to use Bash has been denied.', true))
+    await settle()
+    expect(worked(target)).toBe(false)
+    query.finish()
+    await turn
+    expect(worked(target)).toBe(false)
+  })
+
+  it('keeps the background commands that started when another one was refused', async () => {
+    const { target, query, turn } = await open()
+    query.emit(backgroundCommand(query, 'toolu_e'), backgroundCommand(query, 'toolu_f'))
+    await settle()
+    query.emit(toolResult(query, 'toolu_e', 'Command running in background with ID: e.'))
+    query.emit(toolResult(query, 'toolu_f', 'Permission to use Bash has been denied.', true))
+    await settle()
+    query.finish()
+    await turn
+    expect(worked(target)).toBe(true)
   })
 
   it('reads the scheduled jobs that will wake the session from its Stop hook', async () => {

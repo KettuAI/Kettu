@@ -203,6 +203,11 @@ export class ClaudeMapper {
   private readonly foreground = new Map<string, BackgroundTaskView>()
   /** Background work still running, background subagents among it, by task id; ambient left out. */
   private readonly working = new Set<string>()
+  /**
+   * Work counted as background on its start alone, by tool call or task id, which nothing says the
+   * end of: a command that began beside its turn, for a Claude Code that sends no list.
+   */
+  private readonly unreported = new Set<string>()
   /** Claude Code sent its full list of background tasks since its process started. */
   private listed = false
   /** What the session was last told about `working`; null before anything ran. */
@@ -631,6 +636,7 @@ export class ClaudeMapper {
     }
     // Once Claude Code lists its background work, the list says when this command runs.
     if (complete && !ctx.replaying && !this.listed && startsBackgroundWork(name, block.input)) {
+      this.unreported.add(block.id)
       out.effects.push({ kind: 'background' })
     }
     const entry: ToolEntry = {
@@ -695,6 +701,12 @@ export class ClaudeMapper {
     structured: unknown,
   ): MapperOutput {
     const out = output()
+    if (block.is_error === true && this.unreported.delete(block.tool_use_id)) {
+      // A refused command started nothing; the list or an end would say so if Claude Code sent one.
+      if (this.unreported.size === 0 && this.working.size === 0 && this.told === null) {
+        out.effects.push({ kind: 'backgroundRunning', running: false, listed: this.listed })
+      }
+    }
     const tool = this.tools.get(block.tool_use_id)
     const name = tool?.name ?? ''
     if (PLAN_TOOLS.has(name)) {
@@ -1040,23 +1052,24 @@ export class ClaudeMapper {
   private taskStarted(message: SystemMessage): Delivery[] {
     const taskId = typeof message.task_id === 'string' ? message.task_id : null
     if (!taskId) return []
-    const work =
-      message.is_backgrounded === true &&
-      message.ambient !== true &&
-      message.skip_transcript !== true
-        ? this.workStarted(taskId)
-        : []
+    const counts = message.ambient !== true && message.skip_transcript !== true
+    const work = counts && message.is_backgrounded === true ? this.workStarted(taskId) : []
     const subagent =
       message.task_type === 'local_agent' || typeof message.subagent_type === 'string'
     if (!subagent) {
-      return [
-        {
-          sessionId: this.sessionId,
-          map: () => ({ patches: [], effects: [{ kind: 'background' }] }),
-        },
-        ...this.backgroundStarted(message, taskId),
-        ...work,
-      ]
+      // A command that still blocks its call is no background work, and sends no list or end that
+      // would take it back; one moved there later is counted by its update.
+      if (counts && message.is_backgrounded === undefined) this.unreported.add(taskId)
+      const started: Delivery[] =
+        counts && message.is_backgrounded !== false
+          ? [
+              {
+                sessionId: this.sessionId,
+                map: () => ({ patches: [], effects: [{ kind: 'background' }] }),
+              },
+            ]
+          : []
+      return [...started, ...this.backgroundStarted(message, taskId), ...work]
     }
     const toolUseId = typeof message.tool_use_id === 'string' ? message.tool_use_id : null
     if (toolUseId) this.subagents.set(toolUseId, taskId)
@@ -1363,6 +1376,7 @@ export class ClaudeMapper {
   endBackground(): Delivery[] {
     this.foreground.clear()
     this.working.clear()
+    this.unreported.clear()
     this.listed = false
     const wasRunning = this.told?.running === true
     this.told = null
