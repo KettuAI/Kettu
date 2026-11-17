@@ -131,9 +131,11 @@ describe('side questions', () => {
 
   it('tell a fork the history may still run and a hidden session the conversation, as reference only', () => {
     const turn = sideTurnText({ question: 'Why?', history: [] })
-    expect(turn).toBe('Side question:\nWhy?')
+    expect(turn).toMatch(/^The session may still be running\. Nothing above is yours to run/)
+    expect(turn.endsWith('Side question:\nWhy?')).toBe(true)
     expect(SIDE_INSTRUCTIONS).toMatch(/reference context only/)
     expect(SIDE_INSTRUCTIONS).toMatch(/may still be running/)
+    expect(SIDE_INSTRUCTIONS).toMatch(/Never run again a command or tool call/)
     const entries: ThreadEntry[] = [
       { kind: 'user', id: 'u1', content: [{ type: 'text', text: 'Clean the worktrees' }] },
       {

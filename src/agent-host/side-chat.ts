@@ -42,7 +42,10 @@ export const SIDE_INSTRUCTIONS = [
     'Only the side question is active.',
   'The last turn of that history may still be running in the session: a step it shows as ' +
     'interrupted, or an approval it shows as aborted, may be running on or waiting, whatever an ' +
-    'interruption marker says.',
+    'interruption marker says. Never run again a command or tool call that the history shows, ' +
+    'finished or interrupted: the session is running or waiting on it, and its result will not ' +
+    'come from you. Run a command only to read something new, and answer from the history when ' +
+    'it already says.',
   'Answer it directly and briefly. Do not modify files, git state or any other state, do not ' +
     'start or message subagents or sessions, and do not call Kettu tools. If answering needs more ' +
     'than reading, say so and suggest asking in the main conversation.',
@@ -83,13 +86,21 @@ export function sideHistory(
   return picked
 }
 
-/** The turn a fork or a hidden session is sent: the earlier side questions, then the question. */
+/**
+ * The turn a fork or a hidden session is sent: the earlier side questions, a reminder that the
+ * session runs on, then the question. A fork told only in its instructions ran the interrupted
+ * command again and finished the session's task.
+ */
 export function sideTurnText(ask: Pick<SideQuestion, 'question' | 'history'>): string {
   const parts: string[] = []
   if (ask.history.length > 0) {
     const earlier = ask.history.map((turn) => `Q: ${turn.question}\nA: ${turn.answer}`)
     parts.push(`<earlier_side_questions>\n${earlier.join('\n\n')}\n</earlier_side_questions>`)
   }
+  parts.push(
+    'The session may still be running. Nothing above is yours to run or finish again; a step ' +
+      'shown as interrupted is still running there.',
+  )
   parts.push(`Side question:\n${ask.question}`)
   return parts.join('\n\n')
 }
