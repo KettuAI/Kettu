@@ -1,0 +1,115 @@
+[
+  {
+    "sessionUpdate": "tool_call",
+    "toolCallId": "call_5e7f656c99f44e598d882fe6",
+    "name": "execute",
+    "title": "execute",
+    "kind": "other",
+    "status": "pending",
+    "locations": [],
+    "rawInput": {}
+  },
+  {
+    "sessionUpdate": "tool_call_update",
+    "toolCallId": "call_5e7f656c99f44e598d882fe6",
+    "status": "in_progress",
+    "kind": "other",
+    "title": "execute",
+    "locations": [],
+    "rawInput": {
+      "code": "throw new Error('boom from probe')"
+    }
+  },
+  {
+    "sessionUpdate": "tool_call_update",
+    "toolCallId": "call_5e7f656c99f44e598d882fe6",
+    "status": "completed",
+    "locations": [],
+    "content": [
+      {
+        "type": "content",
+        "content": {
+          "type": "text",
+          "text": "Error: boom from probe"
+        }
+      }
+    ],
+    "rawOutput": {
+      "metadata": {
+        "toolCalls": [],
+        "error": true,
+        "truncated": false
+      }
+    }
+  },
+  {
+    "sessionUpdate": "tool_call",
+    "toolCallId": "call_00_ET_3S1xAYBvBBN3oMs3dznM1763",
+    "name": "execute",
+    "title": "execute",
+    "kind": "other",
+    "status": "pending",
+    "locations": [],
+    "rawInput": {}
+  },
+  {
+    "sessionUpdate": "tool_call_update",
+    "toolCallId": "call_00_ET_3S1xAYBvBBN3oMs3dznM1763",
+    "status": "in_progress",
+    "kind": "other",
+    "title": "execute",
+    "locations": [],
+    "rawInput": {
+      "code": "await tools.kettu.list_sessions({}); throw new Error('after list')"
+    }
+  },
+  {
+    "sessionUpdate": "tool_call_update",
+    "toolCallId": "call_00_ET_3S1xAYBvBBN3oMs3dznM1763",
+    "status": "in_progress",
+    "kind": "other",
+    "title": "execute",
+    "locations": [],
+    "rawInput": {
+      "code": "await tools.kettu.list_sessions({}); throw new Error('after list')"
+    }
+  },
+  {
+    "sessionUpdate": "tool_call_update",
+    "toolCallId": "call_00_ET_3S1xAYBvBBN3oMs3dznM1763",
+    "status": "in_progress",
+    "kind": "other",
+    "title": "execute",
+    "locations": [],
+    "rawInput": {
+      "code": "await tools.kettu.list_sessions({}); throw new Error('after list')"
+    }
+  },
+  {
+    "sessionUpdate": "tool_call_update",
+    "toolCallId": "call_00_ET_3S1xAYBvBBN3oMs3dznM1763",
+    "status": "completed",
+    "locations": [],
+    "content": [
+      {
+        "type": "content",
+        "content": {
+          "type": "text",
+          "text": "Error: after list"
+        }
+      }
+    ],
+    "rawOutput": {
+      "metadata": {
+        "toolCalls": [
+          {
+            "tool": "kettu.list_sessions",
+            "status": "completed"
+          }
+        ],
+        "error": true,
+        "truncated": false
+      }
+    }
+  }
+]

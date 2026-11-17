@@ -14,6 +14,7 @@ import type { SessionTarget } from '../connection'
 import { newTurnScope } from '../session-updates'
 import { AcpConnection, inProcessTransport } from './connection'
 import opencodeCalls from './fixtures/opencode-kettu-tools.json'
+import opencodeErrors from './fixtures/opencode-script-errors.json'
 import piCalls from './fixtures/pi-kettu-tools.json'
 
 /** A permission request the agent sends for a call, in place of an update. */
@@ -145,8 +146,8 @@ describe("OpenCode's Kettu calls", () => {
     expect(tools(entries)).toEqual([
       // OpenCode's own resource listing.
       { id: 't:call_dca3fded7eb34b94a8122d2a', title: 'execute', status: 'completed' },
-      // A memory write that failed wrote nothing, so its script keeps the row.
-      { id: 't:call_00_ET_h0GlZLyDZ8fzusvyTSA06300', title: 'execute', status: 'completed' },
+      // A memory write that failed wrote nothing, so its script keeps the row, failed as it threw.
+      { id: 't:call_00_ET_h0GlZLyDZ8fzusvyTSA06300', title: 'execute', status: 'failed' },
       // A script that also lists the sessions.
       { id: 't:call_00_QYgqMYloexdcQH1YVCTn0546', title: 'execute', status: 'completed' },
     ])
@@ -157,6 +158,29 @@ describe("OpenCode's Kettu calls", () => {
     expect(tools(entries)).toHaveLength(5)
   })
 })
+
+describe("OpenCode's scripts that threw", () => {
+  it('fail, with the error they threw, though OpenCode ends them as completed', async () => {
+    const entries = await rows({ name: 'OpenCode', version: '2.0.32' }, opencodeErrors)
+    expect(
+      entries.flatMap((entry) =>
+        entry.kind === 'tool' ? [{ id: entry.id, status: entry.status, text: textOf(entry) }] : [],
+      ),
+    ).toEqual([
+      { id: 't:call_5e7f656c99f44e598d882fe6', status: 'failed', text: 'Error: boom from probe' },
+      // It threw after a call of Kettu's that went through.
+      { id: 't:call_00_ET_3S1xAYBvBBN3oMs3dznM1763', status: 'failed', text: 'Error: after list' },
+    ])
+  })
+})
+
+/** The text a tool row shows. */
+function textOf(entry: ThreadEntry): string {
+  if (entry.kind !== 'tool') return ''
+  return entry.content
+    .map((item) => (item.type === 'markdown' ? item.markdown : JSON.stringify(item)))
+    .join('\n')
+}
 
 describe("Pi's Kettu calls", () => {
   it('hide a memory write that succeeded and keep one that failed', async () => {
