@@ -14,6 +14,7 @@ export type HarnessId =
   | 'glm'
   | 'nova'
   | 'qoder'
+  | 'qoder-cn'
   | 'sigit'
   | 'agoragentic'
   | 'autohand'
@@ -64,6 +65,7 @@ export const HARNESS_IDS: readonly HarnessId[] = [
   'glm',
   'nova',
   'qoder',
+  'qoder-cn',
   'sigit',
   'agoragentic',
   'autohand',

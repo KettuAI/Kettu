@@ -10,7 +10,7 @@
 [![Release](https://img.shields.io/github/v/release/KettuAI/Kettu?include_prereleases&label=release&style=flat-square&labelColor=3f3f46&color=fa5615)](https://github.com/KettuAI/Kettu/releases/latest)
 [![Downloads](https://img.shields.io/github/downloads/KettuAI/Kettu/total?label=downloads&style=flat-square&labelColor=3f3f46&color=15803d)](https://github.com/KettuAI/Kettu/releases)
 [![Platforms](https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux%20%7C%20iOS%20%7C%20Web-2563eb?style=flat-square&labelColor=3f3f46)](#install)
-[![Agents](https://img.shields.io/badge/agents-47-0f766e?style=flat-square&labelColor=3f3f46)](#agents)
+[![Agents](https://img.shields.io/badge/agents-48-0f766e?style=flat-square&labelColor=3f3f46)](#agents)
 [![License](https://img.shields.io/github/license/KettuAI/Kettu?style=flat-square&labelColor=3f3f46&color=71717a)](./LICENSE)
 [![LINUX DO](https://img.shields.io/badge/LINUX-DO-ffb003?style=flat-square&labelColor=3f3f46)](https://linux.do)
 
@@ -46,7 +46,7 @@ All your coding agents, side by side in one window that looks good and feels rig
 
 ### Agents and sessions
 
-- **47 agents**: Claude Code, Codex, OpenCode, Pi and more, with your own installs, accounts and settings. Turn one off without losing its sessions.
+- **48 agents**: Claude Code, Codex, OpenCode, Pi and more, with your own installs, accounts and settings. Turn one off without losing its sessions.
 - **Side by side**: run sessions in parallel and split the window into up to nine panes. The sidebar shows which one is working, which one is waiting for you and which one is done.
 - **One-key approvals**: when an agent wants to run a command or change a file, see what it touches, then allow or deny it with one key.
 - **Question cards**: an agent's questions in one card, answered one by one and sent together.
@@ -149,7 +149,7 @@ The container only knows its own address, so `direct add` gives devices your ser
 ## Agents
 
 <details>
-<summary><b>All 47 agents</b></summary>
+<summary><b>All 48 agents</b></summary>
 
 |                                                                     |                                                                             |                                                       |                                                                                     |
 | ------------------------------------------------------------------- | --------------------------------------------------------------------------- | ----------------------------------------------------- | ----------------------------------------------------------------------------------- |
@@ -164,7 +164,7 @@ The container only knows its own address, so `direct add` gives devices your ser
 | [CodeWhale](https://codewhale.net)                                  | [Bob](https://bob.ibm.com)                                                  | [MiniMax Code](https://agent.minimax.io)              | [Harn](https://harnlang.com)                                                        |
 | [Kimchi](https://kimchi.dev)                                        | [Google Antigravity](https://antigravity.google)                            | [Devin](https://docs.devin.ai/cli)                    | [Cortex Code](https://docs.snowflake.com/en/user-guide/cortex-code/cortex-code-cli) |
 | [Corust Agent](https://corust.ai)                                   | [crow-cli](https://github.com/crow-cli/crow-cli)                            | [Junie](https://junie.jetbrains.com)                  | [Mistral Vibe](https://github.com/mistralai/mistral-vibe)                           |
-| [Poolside](https://poolside.ai)                                     | [Stakpak](https://stakpak.dev)                                              | [VT Code](https://github.com/vinhnx/VTCode)           |                                                                                     |
+| [Poolside](https://poolside.ai)                                     | [Stakpak](https://stakpak.dev)                                              | [VT Code](https://github.com/vinhnx/VTCode)           | [Qoder CN](https://qoder.cn)                                                        |
 
 </details>
 

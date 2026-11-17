@@ -2800,9 +2800,16 @@ export class AgentManager {
       !!slot &&
       (slot.def.id === 'opencode' ||
         limitsReport(slot.def.id) !== null ||
-        ['grok', 'mistral-vibe', 'copilot', 'qoder', 'kilo', 'auggie', 'antigravity'].includes(
-          slot.def.id,
-        ) ||
+        [
+          'grok',
+          'mistral-vibe',
+          'copilot',
+          'qoder',
+          'qoder-cn',
+          'kilo',
+          'auggie',
+          'antigravity',
+        ].includes(slot.def.id) ||
         storedSignInReader(slot.def.id) !== null ||
         this.driver(slot).reads?.limits === true)
     )
@@ -2852,10 +2859,10 @@ export class AgentManager {
       this.applyVendorUsage(slot, usage, now)
       return
     }
-    if (['copilot', 'qoder', 'kilo', 'auggie'].includes(slot.def.id)) {
+    if (['copilot', 'qoder', 'qoder-cn', 'kilo', 'auggie'].includes(slot.def.id)) {
       const version = runtime.init.version ?? slot.h.binaryVersion
       if (slot.def.id === 'copilot' && !versionAtLeast(version, '1.0.112')) return
-      if (slot.def.id === 'qoder' && !versionAtLeast(version, '1.1.89')) return
+      if (['qoder', 'qoder-cn'].includes(slot.def.id) && !versionAtLeast(version, '1.1.89')) return
       if (slot.def.id === 'auggie' && !versionAtLeast(version, '0.36.0')) return
       if (slot.def.id === 'kilo' && (!version || compareVersions(version, '7.8.28') < 0)) return
       const command = this.display(slot)
@@ -2865,7 +2872,7 @@ export class AgentManager {
       let usage: VendorUsage | null
       if (slot.def.id === 'copilot') {
         usage = await readCopilotQuota(command.command, [...args, '--stdio'], env, now)
-      } else if (slot.def.id === 'qoder') {
+      } else if (slot.def.id === 'qoder' || slot.def.id === 'qoder-cn') {
         usage = await readQoderUsage(command.command, [...args, '--sdk'], env, now)
       } else if (slot.def.id === 'kilo') {
         usage = await readKiloProfile(command.command, args, env)
