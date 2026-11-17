@@ -145,6 +145,8 @@ export type ChatComposerProps = {
   start?: ReactNode;
   /** Why the plus button can't be used right now; it is disabled while set */
   addDisabled?: string;
+  /** A new value opens the plus menu, e.g. a counter a shortcut adds one to; closing it returns the focus to your field */
+  addRequest?: number;
   labels?: Partial<ComposerLabels>;
 };
 
@@ -236,6 +238,7 @@ export function ChatComposer({
   send: ownSend,
   start,
   addDisabled,
+  addRequest = 0,
   labels: ownLabels,
 }: ChatComposerProps) {
   const labels = { ...defaultLabels, ...ownLabels };
@@ -276,11 +279,25 @@ export function ChatComposer({
   ].join(" ");
   // One menu at a time: the plus menu, the approval modes, the models, the folders or the apps
   const [menu, setMenu] = useState<Menu | null>(null);
-  const toggleMenu = (which: Menu) => setMenu((open) => (open === which ? null : which));
+  // The plus menu a shortcut opened hands the focus back to the field, not to its button
+  const [addByRequest, setAddByRequest] = useState(false);
+  const toggleMenu = (which: Menu) => {
+    setAddByRequest(false);
+    setMenu((open) => (open === which ? null : which));
+  };
+  const [seenAddRequest, setSeenAddRequest] = useState(addRequest);
+  if (addRequest !== seenAddRequest) {
+    setSeenAddRequest(addRequest);
+    if (!addDisabled) {
+      setMenu("add");
+      setAddByRequest(true);
+    }
+  }
   // Arrow Down or Up on a menu's button opens it, like Enter and Space
   const openOnArrow = (which: Menu) => (e: KeyboardEvent<HTMLButtonElement>) => {
     if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
     e.preventDefault();
+    setAddByRequest(false);
     setMenu(which);
   };
   const [recording, setRecording] = useState(false);
@@ -343,6 +360,13 @@ export function ChatComposer({
     approvalButton.current?.focus();
   };
 
+  // After the plus menu: the field when a shortcut opened it, else its button
+  const leaveAdd = () => {
+    setAddByRequest(false);
+    if (addByRequest && field) onFieldFocus?.();
+    else addButton.current?.focus();
+  };
+
   const pickAdd = (id: string) => {
     setMenu(null);
     if (id === "plan") {
@@ -352,7 +376,7 @@ export function ChatComposer({
     onAttach?.(id);
     // "Work in a folder" opens the folder picker in the last row
     if (id === "folder" && folders.length > 0 && !foot) return setMenu("folder");
-    addButton.current?.focus();
+    leaveAdd();
   };
 
   // In the model menu a switch flips and "More models" opens in place; only a model closes the menu
@@ -470,7 +494,9 @@ export function ChatComposer({
   const mode: ComposerMode | undefined = approvalModes.find((m) => m.id === approval) ?? approvalModes[0];
   const closeMenu = (button: RefObject<HTMLButtonElement | null>) => (refocus: boolean) => {
     setMenu(null);
-    if (refocus) button.current?.focus();
+    if (!refocus) setAddByRequest(false);
+    else if (button === addButton) leaveAdd();
+    else button.current?.focus();
   };
 
   return (

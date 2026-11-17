@@ -141,6 +141,15 @@ export function useKeyboardShortcuts(): void {
       ) {
         return run(event, () => emitAppEvent({ kind: 'add-attachments' }))
       }
+      if (
+        key === 'a' &&
+        event.shiftKey &&
+        !editing &&
+        sessionsShown(view.main) &&
+        !view.settings.open
+      ) {
+        return run(event, () => emitAppEvent({ kind: 'open-add-menu' }))
+      }
       if (key === 'l' && !event.shiftKey) {
         return run(event, () =>
           emitAppEvent({ kind: inTerminal ? 'ask-selection' : 'focus-composer' }),

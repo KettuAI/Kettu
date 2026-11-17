@@ -13,8 +13,8 @@ import { formatShortcut, isWeb } from '@renderer/lib/platform'
 import { useBrowserStore } from '@renderer/stores/browser'
 import { shownSidePane, useViewStore } from '@renderer/stores/view'
 import { Glyph } from '@renderer/features/shell/glyph'
-import { insertAt } from './mentions'
-import { useBoxText, type PromptBoxState } from './use-prompt-box'
+import { insertSign } from './mentions'
+import type { PromptBoxState } from './use-prompt-box'
 
 /**
  * **+**: adds files, photos or a folder through the system dialog, a screenshot of the session's
@@ -45,7 +45,6 @@ export function useAddMenu({
     (s) =>
       shownSidePane(s) === 'browser' && s.main.kind === 'session' && s.main.sessionId === sessionId,
   )
-  const emptyDraft = useBoxText(box, (text) => text === '')
   const atMost = full ? t('attachments.atMost') : undefined
   const shot = full
     ? t('attachments.atMost')
@@ -106,8 +105,6 @@ export function useAddMenu({
                 label: t('attachments.slashCommands'),
                 icon: <Glyph icon={CommandLineIcon} />,
                 shortcut: '/',
-                description: emptyDraft ? undefined : t('attachments.slashNeedsEmpty'),
-                disabled: !emptyDraft,
               },
             ]
           : []),
@@ -128,17 +125,18 @@ export function useAddMenu({
         ]
       : []),
   ]
-  const startMention = () => {
+  /** Types `sign` at the caret, as a word of its own, which opens its list. */
+  const startWord = (sign: '@' | '/') => {
     const current = editor.current?.text() ?? source.text
     const { from, to } = editor.current?.selection() ?? { from: current.length, to: current.length }
-    const next = insertAt(current, from, to)
+    const next = insertSign(current, from, to, sign)
     update(next.text, next.caret)
   }
   const onAttach = (id: string) => {
     if (id === 'files' || id === 'folder') box.pick(id)
     else if (id === 'screenshot') box.screenshot()
-    else if (id === 'mention') startMention()
-    else if (id === 'commands') update('/')
+    else if (id === 'mention') startWord('@')
+    else if (id === 'commands') startWord('/')
     else if (id === 'side-chat') onSideChat?.()
     // The menu hands the focus back to its button; the text takes it after that.
     if (id === 'mention' || id === 'commands') requestAnimationFrame(() => box.focus())

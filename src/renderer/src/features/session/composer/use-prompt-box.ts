@@ -108,7 +108,8 @@ export function usePromptBox({
   const { t } = useTranslation('composer')
   const [source] = useState(() => new BoxText(readDraft(draft)))
   const [error, setError] = useState<string | null>(null)
-  const [slashDismissed, setSlashDismissed] = useState(false)
+  // Each Mod+Shift+A for this composer asks the plus menu to open once more.
+  const [addRequest, setAddRequest] = useState(0)
   const editor = useRef<ComposerEditorHandle>(null)
   const {
     position: historyPosition,
@@ -123,7 +124,6 @@ export function usePromptBox({
     onRecall: (next) => {
       source.set(next, null)
       editor.current?.setText(next)
-      setSlashDismissed(true)
       setError(null)
     },
     onError: () => setError(t('prompt.historyFailed')),
@@ -182,6 +182,7 @@ export function usePromptBox({
   }
   const onEvent = useEffectEvent((event: AppEvent) => {
     if (event.kind === 'add-attachments' && focused.current) pick('files')
+    if (event.kind === 'open-add-menu' && focused.current) setAddRequest((n) => n + 1)
     if (event.kind === 'drop-attachments' && event.draft === draft && !disabled) {
       onActivity?.()
       attachFiles(draft, event.files, hostId).then(limitError, (e: unknown) =>
@@ -250,7 +251,6 @@ export function usePromptBox({
     source.set(next, source.caret)
     writeDraft(draft, next)
     onActivity?.()
-    if (!next.startsWith('/')) setSlashDismissed(false)
   }
   /** Puts `next` in the box with the caret at `at`, the end by default. */
   const update = (next: string, at = next.length) => {
@@ -327,8 +327,7 @@ export function usePromptBox({
     moveHistory,
     leaveHistory,
     // For the view.
-    slashDismissed,
-    setSlashDismissed,
+    addRequest,
     setCaret: (caret: number | null) => source.set(source.text, caret),
     full,
     remote,

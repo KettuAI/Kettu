@@ -30,6 +30,7 @@ export type ShortcutAction =
   | 'focusComposer'
   | 'sideChat'
   | 'addFiles'
+  | 'addMenu'
   | 'toggleTerminal'
   | 'newTerminal'
   | 'askSelection'
@@ -72,6 +73,7 @@ export function shortcutList(sendKey: 'enter' | 'mod-enter'): Shortcut[] {
     { group: 'composer', action: 'focusComposer', keys: 'Mod+L' },
     { group: 'composer', action: 'sideChat', keys: 'Mod+J' },
     { group: 'composer', action: 'addFiles', keys: 'Mod+U' },
+    { group: 'composer', action: 'addMenu', keys: 'Mod+Shift+A' },
     { group: 'terminal', action: 'toggleTerminal', keys: 'Ctrl+`' },
     { group: 'terminal', action: 'newTerminal', keys: 'Ctrl+Shift+`' },
     { group: 'terminal', action: 'askSelection', keys: 'Mod+L' },

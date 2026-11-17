@@ -207,7 +207,6 @@
     "sentLinkedFolder": "Sent as a link to the folder",
     "dropTitle": "Drop to attach",
     "dropHint": "Images, files and folders · up to {{count}} at once",
-    "slashNeedsEmpty": "In an empty message",
     "notOnDisk": "It isn't a file on disk, so it can't be attached.",
     "theAgent": "The agent",
     "folderOtherHost": "A folder on this computer can't go to a session on another host. Attach the files in it instead.",

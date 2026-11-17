@@ -42,12 +42,14 @@ export interface ChipContext {
   resolve: (token: string) => MentionTarget | null
 }
 
-// A full-width at sign is what some input methods type for `@`. A mention ends at a space or at
-// CJK punctuation, which a path seldom holds; CJK letters stay, as a file may be named in them.
+// A full-width at sign is what some input methods type for `@`. A mention starts at a space, the
+// start or text without spaces such as Chinese, as typing it does (`startsWord`), and ends at a
+// space or at CJK punctuation, which a path seldom holds; CJK letters stay, as a file may be named
+// in them.
 const MENTION =
-  /(^|\s)[@＠]([^\s\u3000-\u303f\uff01-\uff0f\uff1a-\uff20\uff3b-\uff40\uff5b-\uff65]+)/g
+  /(^|\s|\P{ASCII})[@＠]([^\s\u3000-\u303f\uff01-\uff0f\uff1a-\uff20\uff3b-\uff40\uff5b-\uff65]+)/gu
 const MENTION_AT_END =
-  /(^|\s)[@＠][^\s\u3000-\u303f\uff01-\uff0f\uff1a-\uff20\uff3b-\uff40\uff5b-\uff65]*$/
+  /(^|\s|\P{ASCII})[@＠][^\s\u3000-\u303f\uff01-\uff0f\uff1a-\uff20\uff3b-\uff40\uff5b-\uff65]*$/u
 
 /** Where the mention that runs to the end of `before` starts, at its `@`; -1 for none. */
 export function mentionEndingAt(before: string): number {

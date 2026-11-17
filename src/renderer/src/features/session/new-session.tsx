@@ -545,6 +545,7 @@ function DraftComposer({
           addSections={add.sections}
           onAttach={add.onAttach}
           addDisabled={add.disabled}
+          addRequest={box.addRequest}
           {...modeControl}
           models={[]}
           modelSlot={
