@@ -4588,18 +4588,13 @@ li[data-row-exit='dust'] > * {
 .kettu-option__chevron {
   color: var(--ui-ccc-faint);
 }
-/* Send in the fox once there is something to send; Stop stays in the composer's ink. */
+/* Send in the primary button's tint once there is something to send; Stop stays in ink. */
 .ui-ccc__send.kettu-send:not(:disabled, [data-stop]) {
-  background: var(--send) !important;
-  color: var(--on-fill);
-  box-shadow: var(--send-shadow);
+  background: var(--primary-from) !important;
+  color: var(--primary-foreground);
 }
 .ui-ccc__send.kettu-send:not(:disabled, [data-stop]):hover {
-  background: var(--send-hover) !important;
-}
-.ui-ccc__send.kettu-send:not(:disabled, [data-stop]):active {
-  background: var(--send-active) !important;
-  box-shadow: none;
+  background: var(--primary-hover-from) !important;
 }
 /* Send outside a composer, as a reply to a passage: the Chat Composer's button on its own. */
 .kettu-send:not(.ui-ccc .kettu-send) {

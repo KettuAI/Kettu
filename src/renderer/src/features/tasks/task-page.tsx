@@ -374,7 +374,7 @@ function NotesComposer({
           send={
             <button
               type="button"
-              className="ui-ccc__send"
+              className="ui-ccc__send kettu-send"
               aria-label={t('composer.send')}
               title={t('composer.send')}
               disabled={off || sending || !text.trim()}
