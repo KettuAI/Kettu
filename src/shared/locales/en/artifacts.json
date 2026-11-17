@@ -202,7 +202,13 @@
     "sideLabel": "History and comments",
     "previewOnly": {
       "title": "Live pages open on your computer",
-      "body": "In the browser, an artifact shows its preview. Its live page opens in Kettu on the computer, or in the web client the computer serves on its own network."
+      "body": "In the browser, an artifact shows its preview. Its live page opens in Kettu on the computer, or in the web client the computer serves on its own network.",
+      "sharedTitle": "Open the live page in your browser",
+      "published": "This view shows its preview. The published page opens on Kettu, in a new tab.",
+      "unpublished": "This view shows its preview. Publish the artifact to open its page on Kettu, in a new tab.",
+      "older": "The published page shows version {{published}}; the latest is version {{latest}}.",
+      "open": "Open published page",
+      "publish": "Publish to open"
     }
   },
   "canvas": {

@@ -252,7 +252,7 @@ export default function ArtifactViewer({ id, history }: { id: string; history: b
 
   let body: React.ReactNode
   if (states.error === 'previewOnly') {
-    body = <PreviewOnly summary={summary ?? null} />
+    body = <PreviewOnly id={id} title={title} summary={summary ?? null} />
   } else if (states.error === 'missing') {
     // Trying again reads the same missing files; an earlier version may still have its own.
     body = (
