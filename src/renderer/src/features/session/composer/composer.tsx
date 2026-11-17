@@ -286,9 +286,10 @@ export function Composer({
   const focused = usePane()?.focused ?? true
   const ready = status === 'ready'
   useEffect(() => {
-    if (!focused || starting) return
+    // A phone raises its keyboard only when the box is tapped.
+    if (!focused || starting || phone) return
     if (document.activeElement === document.body) box.editor.current?.focus()
-  }, [starting, ready, focused, box.editor])
+  }, [starting, ready, focused, box.editor, phone])
 
   // Both go through the host's queue, which sends at once when the session is free; a message
   // that hands the session to another agent goes as that agent's first turn.

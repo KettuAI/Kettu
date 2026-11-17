@@ -17,6 +17,11 @@ export function useNarrowWindow(): boolean {
 /** A phone's width, as the `phone` variant in globals.css; the desktop window is never this narrow. */
 export const PHONE_WINDOW = '(max-width: 719px)'
 
+/** Whether the window is a phone's width now, for code outside rendering. */
+export function isPhoneWindow(): boolean {
+  return window.matchMedia(PHONE_WINDOW).matches
+}
+
 function subscribePhone(onChange: () => void): () => void {
   const list = window.matchMedia(PHONE_WINDOW)
   list.addEventListener('change', onChange)
@@ -25,5 +30,5 @@ function subscribePhone(onChange: () => void): () => void {
 
 /** Whether the window is a phone's width, where each surface is laid out for a phone. */
 export function usePhoneWindow(): boolean {
-  return useSyncExternalStore(subscribePhone, () => window.matchMedia(PHONE_WINDOW).matches)
+  return useSyncExternalStore(subscribePhone, isPhoneWindow)
 }

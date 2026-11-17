@@ -210,7 +210,7 @@
 /* iOS zooms the page into a field whose text is under 16 px. */
 @media (max-width: 719px) {
   :root :is(input:not([type='checkbox'], [type='radio'], [type='range']), textarea, select),
-  :root .cm-content {
+  :root .cm-editor .cm-content {
     font-size: 16px;
   }
   :root .k-time {
