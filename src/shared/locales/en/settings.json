@@ -1796,6 +1796,7 @@
     "installedWith": "Your own · {{method}}",
     "programSdk": "Your own, which the SDK runs.",
     "programOwn": "Your own, which Kettu runs.",
+    "programKettu": "Installed by Kettu, in Kettu’s data folder.",
     "packageGroup": "Installed by Kettu",
     "sdkLine": "{{version}} · in Kettu’s data folder, without the CLI",
     "adapterLine": "{{version}} · in Kettu’s data folder",

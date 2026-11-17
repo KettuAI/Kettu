@@ -1368,6 +1368,8 @@ export class AgentManager {
     const program = removeProgram ? this.programUninstall(h) : null
     for (const slot of this.agentsOf(h)) await this.stopProcess(slot)
     await rm(path.join(this.deps.adaptersDir, h.def.id), { recursive: true, force: true })
+    // What the stopped processes reported belongs to the install that is gone.
+    for (const slot of this.agentsOf(h)) slot.init = null
     this.deps.diagnostics.event(h.def.id, 'uninstall', 'removed what Kettu installed')
     h.latest = null
     h.skipped = null
@@ -3794,7 +3796,7 @@ export class AgentManager {
     const detection = h.detection
     const adapter = detection?.state === 'available' ? detection.adapter : null
     const update = this.updateOf(h)
-    const release = this.release(h)
+    const installed = detection?.state === 'available' ? detection.release : undefined
     const harnessSettings = this.deps.settings().agents[slot.def.id]
     const color = slot.added ? agentColor(this.deps.settings().addedAgents, slot.id) : null
     const cliVersion = this.cliUpdateVersion(h)
@@ -3818,9 +3820,10 @@ export class AgentManager {
           : null,
       state: slot.state,
       // For an agent with a `requires` program its own version is the one shown, never the adapter's.
+      // Kettu's own install names its release when the program reports no version of its own.
       version: slot.def.requires
         ? (h.requiresVersion ?? h.binaryVersion ?? null)
-        : (init?.version ?? h.binaryVersion ?? null),
+        : (init?.version ?? h.binaryVersion ?? installed?.version ?? null),
       package:
         launch.kind === 'package'
           ? {
@@ -3831,7 +3834,9 @@ export class AgentManager {
               ...(launch.library ? { isSdk: true as const } : {}),
             }
           : null,
-      release: release ? { version: release.version } : null,
+      release: installed
+        ? { version: installed.version, registry: this.release(h) !== null }
+        : null,
       signIn: slot.signIn,
       authMethods,
       canLogout: capabilities?.logout ?? false,
