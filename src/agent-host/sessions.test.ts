@@ -133,7 +133,7 @@ describe('importing a session from a terminal', () => {
     )
   })
 
-  it('copies one a terminal has open when asked to fork, and reads the copy', async () => {
+  it('copies one a terminal has open when asked to fork, with the settings of the original', async () => {
     const asked: string[] = []
     const copied: string[] = []
     const { sessions } = manager(
@@ -160,7 +160,7 @@ describe('importing a session from a terminal', () => {
       fork: true,
     })
     expect(copied).toEqual(['cli-1'])
-    expect(asked).toEqual(['copy-1'])
+    expect(asked).toEqual(['cli-1'])
     await vi.waitFor(async () =>
       expect((await index())?.sessions[0]).toMatchObject({ acpSessionId: 'copy-1' }),
     )

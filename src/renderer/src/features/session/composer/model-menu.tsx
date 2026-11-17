@@ -48,6 +48,7 @@ export function ModelMenu({
   limits,
   source,
   actions,
+  cacheNote = null,
 }: {
   agentId: AgentId
   /** The host the agent is on, null for this computer. */
@@ -65,6 +66,8 @@ export function ModelMenu({
   source: string | null
   /** Rows after the switches, such as Switch agent. */
   actions?: PickerAction[]
+  /** What a change of model, effort or fast mode would cost while the prompt cache is warm. */
+  cacheNote?: string | null
 }) {
   const { t } = useTranslation('composer')
   const now = useNow()
@@ -171,7 +174,16 @@ export function ModelMenu({
           const option = switches.find((o) => o.id === id)
           if (option) flips.pick(option, on)
         }}
-        note={note || undefined}
+        note={
+          cacheNote ? (
+            <>
+              {note && <span className="block truncate">{note}</span>}
+              <span className="block truncate">{cacheNote}</span>
+            </>
+          ) : (
+            note || undefined
+          )
+        }
         moreNote={source ? t('controls.modelsFrom', { source }) : undefined}
         open={open}
         onOpenChange={onOpenChange}

@@ -228,7 +228,12 @@
       "hours": "{{count}} h ago",
       "days": "{{count}} d ago",
       "weeks": "{{count}} w ago"
-    }
+    },
+    "held": "Open in a terminal",
+    "heldTip": "Exit it in the terminal first, or fork a copy.",
+    "cacheLeft_one": "Cache {{count}} min left",
+    "cacheLeft_other": "Cache {{count}} min left",
+    "fork": "Fork a copy"
   },
   "indicator": {
     "waiting_one": "Waiting for you, {{count}} request",

@@ -14,7 +14,6 @@ import {
   type AttachmentBytes,
   type ContextBreakdown,
   type ImportableSession,
-  type OutsideSession,
   type OutlineEntry,
   type OutlineTitle,
   type PlanProgress,
@@ -752,9 +751,6 @@ const MINUTE = 60_000
 const CACHE_TTL_MS = 5 * MINUTE
 /** A session used outside Kettu longer ago than this has no cache left worth carrying over. */
 const OUTSIDE_WINDOW_MS = 60 * MINUTE
-/** At most this many of a project's newest sessions outside Kettu are looked at, and shown. */
-const OUTSIDE_LISTED = 10
-const OUTSIDE_SHOWN = 3
 
 /** When the session's prompt cache expires, from its main thread's latest request, if any. */
 function cacheExpiresAt(live: Live): number | null {
@@ -10041,81 +10037,6 @@ export class SessionManager {
     return states
   }
 
-  /**
-   * The Claude Code sessions of these projects that were used outside Kettu, as in a terminal, in
-   * the last hour and are not Kettu's, newest first, a few per project. Only what the agents list
-   * and the ends of their transcripts are read; nothing is kept.
-   */
-  async listOutside(projectPaths: readonly string[]): Promise<OutsideSession[]> {
-    if (!this.deps.outside) return []
-    // Only agents that run or can start at once, so looking never detects or installs anything.
-    const agents = this.deps.agents
-      .ids()
-      .filter(
-        (id) =>
-          harnessOf(id) === 'claude-code' &&
-          !this.deps.agents.isDisabled(id) &&
-          ['available', 'starting', 'ready'].includes(this.deps.agents.status(id).state),
-      )
-    const runtimes = (
-      await Promise.all(
-        agents.map(async (agentId) => {
-          const runtime = await this.deps.agents.ensureReady(agentId).catch(() => null)
-          return runtime?.connection.listOutside ? { agentId, runtime } : null
-        }),
-      )
-    ).filter((item) => item !== null)
-    const known = new Set(this.deps.projects.list().map((project) => project.path))
-    const found: OutsideSession[] = []
-    await Promise.all(
-      projectPaths
-        .filter((projectPath) => known.has(projectPath))
-        .map(async (projectPath) => {
-          const shown: OutsideSession[] = []
-          for (const { agentId, runtime } of runtimes) {
-            let listed: ListedSession[]
-            try {
-              listed = (await runtime.connection.listOutside?.(projectPath, OUTSIDE_LISTED)) ?? []
-            } catch (error) {
-              this.deps.diagnostics.log(
-                'warn',
-                `${agentId} could not list the sessions of ${projectPath}: ${agentError(error).message}`,
-              )
-              continue
-            }
-            const recent = listed.filter(
-              (item) =>
-                item.updatedAt !== null &&
-                this.isRecent(item.updatedAt) &&
-                this.findByAcp(agentId, item.sessionId) === undefined &&
-                !this.takenEarlier(agentId, item.sessionId),
-            )
-            const states = await this.outsideStates(
-              agentId,
-              projectPath,
-              recent.map((item) => item.sessionId),
-            )
-            for (const item of recent) {
-              const state = states.get(item.sessionId)
-              this.remember(agentId, item)
-              shown.push({
-                agentId,
-                projectPath,
-                acpSessionId: item.sessionId,
-                title: item.title,
-                updatedAt: item.updatedAt!,
-                cache: state?.cache ?? null,
-                held: state?.held ?? false,
-              })
-            }
-          }
-          shown.sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt))
-          found.push(...shown.slice(0, OUTSIDE_SHOWN))
-        }),
-    )
-    return found.sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt))
-  }
-
   /** Keeps a listed session's title and time for its import. */
   private remember(agentId: AgentId, item: ListedSession): void {
     const key = `${agentId}\n${item.sessionId}`
@@ -10160,10 +10081,10 @@ export class SessionManager {
     } else if (claude) {
       await this.refuseHeld(params.agentId, acpSessionId, configDir)
     }
-    // A copy has the original's history, so its last request is the original's.
+    // Read from the original: a copy has its history but not its settings rows.
     const last = claude
       ? await this.deps.outside
-          ?.lastRequest(params.agentId, projectPath, acpSessionId, configDir)
+          ?.lastRequest(params.agentId, projectPath, params.acpSessionId, configDir)
           .catch(() => null)
       : null
     await this.deps.projects.add(projectPath)

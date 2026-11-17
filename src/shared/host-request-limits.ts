@@ -99,7 +99,6 @@ export const HOST_REQUEST_LIMITS: Readonly<Record<HostMethod, number | null>> = 
   'sessions.prepare': AGENT_MS,
   'sessions.discard': HOST_MS,
   'sessions.import': AGENT_MS,
-  'sessions.outside': AGENT_MS,
   'sessions.open': AGENT_MS,
   'sessions.snapshot': HOST_MS,
   'sessions.page': HOST_MS,

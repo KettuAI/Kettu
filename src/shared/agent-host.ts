@@ -671,17 +671,6 @@ export interface ImportableSession {
   held?: boolean
 }
 
-/** A Claude Code session of a project that was used outside Kettu in the last hour, to carry on. */
-export interface OutsideSession {
-  agentId: AgentId
-  projectPath: string
-  acpSessionId: string
-  title: string | null
-  updatedAt: string
-  cache: PromptCache | null
-  held: boolean
-}
-
 export interface TrafficRecord {
   at: number
   direction: 'in' | 'out'
@@ -1039,11 +1028,6 @@ export interface HostContract {
   'sessions.import': {
     params: { agentId: AgentId; projectPath: string; acpSessionId: string; fork?: boolean }
     result: SessionSummary
-  }
-  // The Claude Code sessions of these projects used outside Kettu in the last hour, newest first.
-  'sessions.outside': {
-    params: { projectPaths: string[] }
-    result: { sessions: OutsideSession[] }
   }
   'sessions.open': {
     params: { sessionId: string }
@@ -1671,7 +1655,6 @@ export const HOST_METHODS = [
   'sessions.prepare',
   'sessions.discard',
   'sessions.import',
-  'sessions.outside',
   'sessions.open',
   'sessions.snapshot',
   'sessions.page',

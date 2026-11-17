@@ -67,17 +67,7 @@ describe('createValidators', () => {
     )
   })
 
-  it('takes absolute project paths for sessions outside Kettu and a fork only when asked', () => {
-    expect(posix['sessions.outside']({ projectPaths: ['/a', '/b', '/a'], other: 1 })).toEqual({
-      projectPaths: ['/a', '/b'],
-    })
-    expect(posix['sessions.outside']({ projectPaths: [] })).toEqual({ projectPaths: [] })
-    rejects(() => posix['sessions.outside']({}))
-    rejects(() => posix['sessions.outside']({ projectPaths: ['relative'] }))
-    rejects(() => posix['sessions.outside']({ projectPaths: ['/a\0'] }))
-    rejects(() =>
-      posix['sessions.outside']({ projectPaths: Array.from({ length: 201 }, (_, i) => `/${i}`) }),
-    )
+  it('takes a fork for an import only when asked', () => {
     const base = { agentId: 'claude-code', projectPath: '/p', acpSessionId: 'id' }
     expect(posix['sessions.import']({ ...base, fork: true })).toEqual({ ...base, fork: true })
     expect(posix['sessions.import']({ ...base, fork: 'yes' })).toEqual(base)

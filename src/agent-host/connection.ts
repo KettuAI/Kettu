@@ -414,11 +414,6 @@ export interface AgentConnection {
     cwd: string,
     cursor: string | null,
   ): Promise<{ sessions: ListedSession[]; nextCursor: string | null }>
-  /**
-   * The newest sessions of `cwd` alone that were started outside any SDK host, such as in a
-   * terminal, at most `limit`.
-   */
-  listOutside?(cwd: string, limit: number): Promise<ListedSession[]>
   /** A copy of a session under a new id, written from the original without opening it. */
   copySession?(sessionId: string, cwd: string): Promise<string>
 

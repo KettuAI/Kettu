@@ -109,7 +109,6 @@ import type {
   QueryOptions,
   ResultMessage,
   SdkMessage,
-  SessionInfo,
   SettingSource,
   SlashCommandInfo,
   StoredMessage,
@@ -283,18 +282,6 @@ interface Session {
 interface Pending {
   at: number
   items: Delivery[]
-}
-
-/** A listed session as the host lists them; one without a folder of its own is in `cwd`. */
-function listedOf(info: SessionInfo, cwd: string): ListedSession {
-  return {
-    sessionId: info.sessionId,
-    title: info.customTitle ?? info.summary ?? null,
-    updatedAt: Number.isFinite(info.lastModified)
-      ? new Date(info.lastModified).toISOString()
-      : null,
-    cwd: info.cwd ?? cwd,
-  }
 }
 
 function setupOf(session: Session): SessionSetup {
@@ -815,17 +802,16 @@ export class ClaudeConnection implements AgentConnection {
       sdk.listSessions({ dir: cwd, limit: LIST_PAGE, offset }),
     )
     return {
-      sessions: infos.map((info) => listedOf(info, cwd)),
+      sessions: infos.map((info) => ({
+        sessionId: info.sessionId,
+        title: info.customTitle ?? info.summary ?? null,
+        updatedAt: Number.isFinite(info.lastModified)
+          ? new Date(info.lastModified).toISOString()
+          : null,
+        cwd: info.cwd ?? cwd,
+      })),
       nextCursor: infos.length === LIST_PAGE ? String(offset + LIST_PAGE) : null,
     }
-  }
-
-  async listOutside(cwd: string, limit: number): Promise<ListedSession[]> {
-    const sdk = this.requireSdk()
-    const infos = await this.withConfigDir(() =>
-      sdk.listSessions({ dir: cwd, limit, includeWorktrees: false, includeProgrammatic: false }),
-    )
-    return infos.map((info) => listedOf(info, cwd))
   }
 
   async copySession(sessionId: string, cwd: string): Promise<string> {

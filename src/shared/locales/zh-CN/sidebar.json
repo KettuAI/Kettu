@@ -214,7 +214,11 @@
       "hours": "{{count}} 小时前",
       "days": "{{count}} 天前",
       "weeks": "{{count}} 周前"
-    }
+    },
+    "held": "终端里开着",
+    "heldTip": "先在终端里退出，或者分叉一份",
+    "cacheLeft_other": "缓存还剩 {{count}} 分钟",
+    "fork": "分叉一份"
   },
   "indicator": {
     "waiting_other": "等待你处理，{{count}} 个授权请求",

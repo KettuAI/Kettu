@@ -2670,23 +2670,8 @@ describe('sessions', () => {
     expect(s.sdk.calls.find((call) => call.method === 'deleteSession')?.args[0]).toBe('a')
   })
 
-  it("lists only the folder's own sessions that no SDK host started, and copies one unopened", async () => {
+  it('copies a session under a new id without opening it', async () => {
     const s = await setup()
-    s.sdk.infos.set('t', { sessionId: 't', summary: 'From a terminal', lastModified: 7 })
-    expect(await s.connection.listOutside!('/repo', 10)).toEqual([
-      {
-        sessionId: 't',
-        title: 'From a terminal',
-        updatedAt: new Date(7).toISOString(),
-        cwd: '/repo',
-      },
-    ])
-    expect(s.sdk.calls.find((call) => call.method === 'listSessions')?.args[0]).toEqual({
-      dir: '/repo',
-      limit: 10,
-      includeWorktrees: false,
-      includeProgrammatic: false,
-    })
     expect(await s.connection.copySession!('t', '/repo')).toBe('fork-of-t')
     expect(s.sdk.calls.find((call) => call.method === 'forkSession')?.args).toEqual([
       't',

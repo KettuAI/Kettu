@@ -2515,9 +2515,6 @@ export class AgentHost {
       'sessions.prepare': (params, { portId }) => sessions.prepare(params, portId),
       'sessions.discard': ({ sessionId }) => sessions.discard(sessionId),
       'sessions.import': (params) => sessions.importSession(params),
-      'sessions.outside': async ({ projectPaths }) => ({
-        sessions: await sessions.listOutside(projectPaths),
-      }),
       'sessions.open': async ({ sessionId }, { device }) =>
         digestsFor(device, await sessions.open(sessionId, imagesFor(device))),
       'sessions.snapshot': async ({ sessionId, from }, { device }) =>

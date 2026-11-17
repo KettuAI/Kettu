@@ -48,7 +48,8 @@
     "varies": "Varies",
     "noModels": "No models available",
     "noModelMatch": "No models match",
-    "chooseModel": "Choose a model"
+    "chooseModel": "Choose a model",
+    "cacheChange": "A change here rewrites ~{{tokens}} cached tokens"
   },
   "switchAgent": {
     "menu": "Switch agent…",

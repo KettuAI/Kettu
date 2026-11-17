@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
 import type { Project } from '@shared/agent-host'
-import type { AgentId } from '@shared/thread'
+import type { AgentId, PromptCache } from '@shared/thread'
 import { AgentMark } from '@renderer/components/agents/agent-mark'
 import { Button } from '@renderer/components/ui/button'
 import { Checkbox } from '@renderer/components/ui/checkbox'
@@ -17,10 +17,12 @@ import { Skeleton } from '@renderer/components/ui/skeleton'
 import { Spinner } from '@renderer/components/ui/spinner'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@renderer/components/ui/tabs'
 import { readiness } from '@renderer/features/agents/readiness'
+import { useCacheLeft } from '@renderer/features/prompt-cache/cache-phase'
 import { errorMessage, host } from '@renderer/lib/host'
 import { cn } from '@renderer/lib/utils'
 import { usableAgents, useAgentsStore } from '@renderer/stores/agents'
 import { useSessionsStore } from '@renderer/stores/sessions'
+import { openSession } from '@renderer/stores/view'
 import {
   allSelected,
   type AgentList,
@@ -176,6 +178,29 @@ export function ImportSessionsDialog({
     if (failures.length === 0) onOpenChange(false)
   }
 
+  // A session a terminal still has open is not attached; a copy of it is imported and opened.
+  const forkSession = async (agentId: AgentId, acpSessionId: string) => {
+    const key = importKey(agentId, acpSessionId)
+    setBusy(key)
+    setRunning(true)
+    try {
+      const summary = await host('sessions.import', {
+        agentId,
+        projectPath: project.path,
+        acpSessionId,
+        fork: true,
+      })
+      useSessionsStore.getState().upsert(summary)
+      onOpenChange(false)
+      openSession(summary.id, summary.projectPath)
+    } catch (error) {
+      setFailed((f) => ({ ...f, [key]: errorMessage(error) }))
+    } finally {
+      setBusy(null)
+      setRunning(false)
+    }
+  }
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
@@ -229,6 +254,7 @@ export function ImportSessionsDialog({
                 locked={running}
                 onSelect={(key, on) => setSelected((s) => withKeys(s, [key], on))}
                 onMore={(cursor) => loadMore(shown, cursor)}
+                onFork={(acpSessionId) => void forkSession(shown, acpSessionId)}
               />
             </TabsContent>
           </Tabs>
@@ -278,6 +304,7 @@ function SessionList({
   locked,
   onSelect,
   onMore,
+  onFork,
 }: {
   agentId: AgentId
   list: AgentList | undefined
@@ -287,6 +314,7 @@ function SessionList({
   locked: boolean
   onSelect: (key: string, on: boolean) => void
   onMore: (cursor: string) => void
+  onFork: (acpSessionId: string) => void
 }) {
   const { t } = useTranslation(['sidebar', 'common'])
   if (list?.error) return <p className="py-2 text-ui text-danger">{list.error}</p>
@@ -311,17 +339,20 @@ function SessionList({
         const key = importKey(agentId, s.acpSessionId)
         const failure = failed[key]
         const meta = [
-          s.imported ? t('import.imported') : null,
+          s.imported ? t('import.imported') : s.held ? t('import.held') : null,
           s.updatedAt ? sessionAgo(Date.parse(s.updatedAt)) : null,
         ]
           .filter(Boolean)
           .join(' · ')
         return (
           <li key={s.acpSessionId}>
-            <label className="flex h-10 items-center gap-2.5 border-b border-subtle px-1">
+            <label
+              className="flex h-10 items-center gap-2.5 border-b border-subtle px-1"
+              title={s.held && !s.imported ? t('import.heldTip') : undefined}
+            >
               <Checkbox
                 checked={s.imported || selected.has(key)}
-                disabled={s.imported || locked}
+                disabled={s.imported || (s.held ?? false) || locked}
                 className="data-disabled:opacity-40"
                 onCheckedChange={(on) => onSelect(key, on)}
               />
@@ -342,9 +373,28 @@ function SessionList({
               {busy === key ? (
                 <Spinner className="size-3.5 text-tertiary" />
               ) : (
-                meta && (
-                  <span className="text-meta whitespace-nowrap text-tertiary tabular">{meta}</span>
-                )
+                <>
+                  {!s.imported && !s.held && s.cache?.ttl ? <CacheLeft cache={s.cache} /> : null}
+                  {meta && (
+                    <span className="text-meta whitespace-nowrap text-tertiary tabular">
+                      {meta}
+                    </span>
+                  )}
+                  {s.held && !s.imported && (
+                    <Button
+                      variant="ghost"
+                      size="xs"
+                      disabled={locked}
+                      onClick={(event) => {
+                        // Inside the row's label, a click would also reach its checkbox.
+                        event.preventDefault()
+                        onFork(s.acpSessionId)
+                      }}
+                    >
+                      {t('import.fork')}
+                    </Button>
+                  )}
+                </>
               )}
             </label>
           </li>
@@ -365,5 +415,18 @@ function SessionList({
         </li>
       ) : null}
     </ul>
+  )
+}
+
+/** The time left on a listed session's prompt cache, while it lasts. */
+function CacheLeft({ cache }: { cache: PromptCache }) {
+  const { t } = useTranslation('sidebar')
+  const expiresAt = cache.ttl ? cache.lastRequestAt + cache.ttl : null
+  const minutes = useCacheLeft(expiresAt, (left) => Math.ceil(left / 60_000))
+  if (!minutes) return null
+  return (
+    <span className="text-meta whitespace-nowrap text-tertiary tabular">
+      {t('import.cacheLeft', { count: minutes })} ·
+    </span>
   )
 }
