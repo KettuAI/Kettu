@@ -332,6 +332,25 @@ export interface SessionRecord {
    * carries them.
    */
   memorySentTo?: string
+  /**
+   * How its agent's own session last ran outside Kettu, as in a terminal: its first attach here
+   * takes the same values, so the prompt cache that run left still matches; cleared once taken.
+   */
+  outside?: OutsideValues
+  /**
+   * Its agent's own session recorded its instructions outside Kettu, which it then keeps: Kettu's
+   * guide and memory go ahead of its prompts instead.
+   */
+  instructionsAhead?: true
+}
+
+/** The values of the last request a session made outside Kettu, as its agent recorded them. */
+export interface OutsideValues {
+  /** The model id, with a context suffix such as `[1m]`. */
+  model?: string
+  effort?: string
+  fast?: boolean
+  mode?: string
 }
 
 /** What a session's new agent is to be given with its first turn, kept until that turn goes. */
@@ -685,6 +704,18 @@ function earlierOf(value: unknown): { earlier?: EarlierAgent[] } {
   return earlier.length > 0 ? { earlier } : {}
 }
 
+function outsideOf(value: unknown): { outside?: OutsideValues } {
+  if (!isRecord(value)) return {}
+  const text = (field: unknown): field is string => isString(field) && field !== ''
+  const outside: OutsideValues = {
+    ...(text(value.model) ? { model: value.model } : {}),
+    ...(text(value.effort) ? { effort: value.effort } : {}),
+    ...(typeof value.fast === 'boolean' ? { fast: value.fast } : {}),
+    ...(text(value.mode) ? { mode: value.mode } : {}),
+  }
+  return Object.keys(outside).length > 0 ? { outside } : {}
+}
+
 function carryOf(value: unknown): { carry?: PendingCarry } {
   if (
     !isRecord(value) ||
@@ -845,6 +876,8 @@ export function parseSessionsFile(data: Record<string, unknown>): SessionsFile |
       ...(isString(item.memorySentTo) && item.memorySentTo !== ''
         ? { memorySentTo: item.memorySentTo }
         : {}),
+      ...outsideOf(item.outside),
+      ...(item.instructionsAhead === true ? { instructionsAhead: true as const } : {}),
     })
   }
   return {

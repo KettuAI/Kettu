@@ -74,13 +74,15 @@ function ttlOf(line: Buffer): number | null {
 }
 
 /**
- * The lifetime of the latest cache write in a transcript, read backwards from its end, at most
- * `limit` bytes, so a long session costs no more than a short one.
+ * Visits a transcript's lines from its end backwards, at most `limit` bytes, until `visit` says it
+ * has what it wants, so a long session costs no more than a short one. A line cut at the limit is
+ * never visited.
  */
-export async function readCacheTtl(
+export async function scanBackwards(
   file: string,
+  visit: (line: Buffer) => boolean,
   { limit = TAIL_LIMIT, chunk = CHUNK }: { limit?: number; chunk?: number } = {},
-): Promise<number | null> {
+): Promise<void> {
   const handle = await open(file, 'r')
   try {
     const { size } = await handle.stat()
@@ -97,18 +99,34 @@ export async function readCacheTtl(
       while (stop > 0) {
         const newline = data.lastIndexOf(NEWLINE, stop - 1)
         if (newline === -1) break
-        const ttl = ttlOf(data.subarray(newline + 1, stop))
-        if (ttl !== null) return ttl
+        if (visit(data.subarray(newline + 1, stop))) return
         stop = newline
       }
       rest = data.subarray(0, stop)
       end = start
     }
     // Whole only when it is the file's first line; otherwise it was cut at the limit.
-    return floor === 0 ? ttlOf(rest) : null
+    if (floor === 0) visit(rest)
   } finally {
     await handle.close()
   }
+}
+
+/** The lifetime of the latest cache write in a transcript, read backwards from its end. */
+export async function readCacheTtl(
+  file: string,
+  options: { limit?: number; chunk?: number } = {},
+): Promise<number | null> {
+  let found: number | null = null
+  await scanBackwards(
+    file,
+    (line) => {
+      found = ttlOf(line)
+      return found !== null
+    },
+    options,
+  )
+  return found
 }
 
 /** The 32-bit string hash Claude Code names long project folders with. */

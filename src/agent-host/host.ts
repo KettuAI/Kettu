@@ -143,6 +143,7 @@ import { processControl, type ProcessControl } from './process-tree'
 import { ProjectHooksAnswers } from './project-hooks'
 import { ProjectMcpAnswers } from './project-mcp'
 import { Projects } from './projects'
+import { claudeOutside, type OutsideReader } from './outside-sessions'
 import { claudeCacheTtl, type CacheTtlReader } from './prompt-cache'
 import { IdleRelease } from './idle-release'
 import { PortHub, type Handlers, type RequestContext } from './rpc'
@@ -292,6 +293,8 @@ export interface HostOptions {
   homeDir?: string
   /** Reads a session's prompt cache lifetime; Claude Code's transcripts by default. */
   cacheTtl?: CacheTtlReader
+  /** Reads Claude Code sessions run outside Kettu; tests pass their own. */
+  outside?: OutsideReader
   /** The desktop app's computer use; the daemon has none. */
   computer?: ComputerHostOptions | null
 }
@@ -942,6 +945,17 @@ export class AgentHost {
       cacheTtl:
         options.cacheTtl ??
         claudeCacheTtl({
+          platform,
+          home: options.homeDir ?? os.homedir(),
+          env: async () => {
+            await this.env.ready()
+            return this.env.agentEnv('claude-code')
+          },
+          log,
+        }),
+      outside:
+        options.outside ??
+        claudeOutside({
           platform,
           home: options.homeDir ?? os.homedir(),
           env: async () => {
@@ -2501,6 +2515,9 @@ export class AgentHost {
       'sessions.prepare': (params, { portId }) => sessions.prepare(params, portId),
       'sessions.discard': ({ sessionId }) => sessions.discard(sessionId),
       'sessions.import': (params) => sessions.importSession(params),
+      'sessions.outside': async ({ projectPaths }) => ({
+        sessions: await sessions.listOutside(projectPaths),
+      }),
       'sessions.open': async ({ sessionId }, { device }) =>
         digestsFor(device, await sessions.open(sessionId, imagesFor(device))),
       'sessions.snapshot': async ({ sessionId, from }, { device }) =>

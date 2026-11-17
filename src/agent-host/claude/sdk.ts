@@ -487,7 +487,14 @@ export interface ResolvedSettings {
 /** The SDK's module, as its entry exports it. */
 export interface ClaudeSdk {
   query(params: { prompt: AsyncIterable<UserInput>; options: QueryOptions }): Query
-  listSessions(options: { dir: string; limit?: number; offset?: number }): Promise<SessionInfo[]>
+  listSessions(options: {
+    dir: string
+    limit?: number
+    offset?: number
+    includeWorktrees?: boolean
+    /** False leaves out the sessions SDK hosts and daemons started. */
+    includeProgrammatic?: boolean
+  }): Promise<SessionInfo[]>
   getSessionInfo(sessionId: string, options: { dir: string }): Promise<SessionInfo | undefined>
   getSessionMessages(sessionId: string, options: { dir: string }): Promise<StoredMessage[]>
   getSubagentMessages(

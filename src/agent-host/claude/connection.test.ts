@@ -385,6 +385,28 @@ describe('the Claude Agent SDK driver', () => {
     expect(connection.ownInstructions).toBe(true)
   })
 
+  it("leaves the system prompt Claude Code's own for a session whose guide goes ahead", async () => {
+    const { sdk, connection } = await setup()
+    const kettu = {
+      type: 'http' as const,
+      name: 'kettu',
+      url: 'http://127.0.0.1:9/mcp',
+      headers: [],
+      prompt: 'Plan first.',
+    }
+    await connection.resumeSession('from-terminal', '/repo', {
+      mcpServers: [kettu],
+      memory: { text: 'Memory index.' },
+      promptAhead: true,
+    })
+    expect(sdk.last.options.systemPrompt).toEqual({ type: 'preset', preset: 'claude_code' })
+    expect(sdk.last.options).toMatchObject({
+      resume: 'from-terminal',
+      mcpServers: { kettu: expect.objectContaining({ url: 'http://127.0.0.1:9/mcp' }) },
+      env: expect.objectContaining({ CLAUDE_CODE_DISABLE_AUTO_MEMORY: '1' }),
+    })
+  })
+
   it('keeps a server that holds a key off the command line and adds it once the query starts', async () => {
     const { sdk, connection } = await setup()
     await connection.newSession('/repo', {
@@ -2646,6 +2668,31 @@ describe('sessions', () => {
     })
     await s.connection.deleteSession('a')
     expect(s.sdk.calls.find((call) => call.method === 'deleteSession')?.args[0]).toBe('a')
+  })
+
+  it("lists only the folder's own sessions that no SDK host started, and copies one unopened", async () => {
+    const s = await setup()
+    s.sdk.infos.set('t', { sessionId: 't', summary: 'From a terminal', lastModified: 7 })
+    expect(await s.connection.listOutside!('/repo', 10)).toEqual([
+      {
+        sessionId: 't',
+        title: 'From a terminal',
+        updatedAt: new Date(7).toISOString(),
+        cwd: '/repo',
+      },
+    ])
+    expect(s.sdk.calls.find((call) => call.method === 'listSessions')?.args[0]).toEqual({
+      dir: '/repo',
+      limit: 10,
+      includeWorktrees: false,
+      includeProgrammatic: false,
+    })
+    expect(await s.connection.copySession!('t', '/repo')).toBe('fork-of-t')
+    expect(s.sdk.calls.find((call) => call.method === 'forkSession')?.args).toEqual([
+      't',
+      { dir: '/repo' },
+    ])
+    expect(s.sdk.queries).toHaveLength(0)
   })
 })
 

@@ -14,6 +14,7 @@ import {
   type AttachmentBytes,
   type ContextBreakdown,
   type ImportableSession,
+  type OutsideSession,
   type OutlineEntry,
   type OutlineTitle,
   type PlanProgress,
@@ -80,6 +81,7 @@ import {
   type PendingQuestion,
   type PermissionOption,
   type PlanEntry,
+  type PromptCache,
   type ProblemReportEntry,
   type ProblemReportOutcome,
   type PlanItem,
@@ -166,6 +168,7 @@ import {
   type ProjectMcpGate,
   type PromptBlock,
   type KettuService,
+  type ListedSession,
   type SessionMemory,
   type SessionOptions,
   type SessionTarget,
@@ -195,6 +198,7 @@ import { isOutOfCredit } from './out-of-credit'
 import { planRevision } from './plan-revision'
 import { watchSettings, type PreparedRecords, type WatchTarget } from './prepared'
 import type { Projects } from './projects'
+import type { LastRequest, OutsideReader } from './outside-sessions'
 import type { CacheTtlReader } from './prompt-cache'
 import { missedCache, type IdleRelease } from './idle-release'
 import {
@@ -233,6 +237,7 @@ import {
   MAX_SESSION_PULL_REQUESTS,
   type EarlierAgent,
   type JsonFile,
+  type OutsideValues,
   type PendingCarry,
   type ReturnedFile,
   type SessionRecord,
@@ -458,6 +463,11 @@ export interface SessionManagerDeps {
   }
   /** Reads how long a session's prompt cache lasts from the agent's own transcript. */
   cacheTtl?: CacheTtlReader
+  /**
+   * Reads how a Claude Code session last ran outside Kettu and whether a process there still has
+   * it open; without it a session is imported and attached unchecked.
+   */
+  outside?: OutsideReader
   /** When idle Claude Code sessions let their agent go; without it they follow `timings`. */
   idleRelease?: IdleRelease
   /** The attachments drafts and queued prompts hold; without it a prompt carries none. */
@@ -740,6 +750,11 @@ function originKey(owner: string, requestId: number): string {
 const MINUTE = 60_000
 /** How long a prompt cache lasts when the agent's own records do not say. */
 const CACHE_TTL_MS = 5 * MINUTE
+/** A session used outside Kettu longer ago than this has no cache left worth carrying over. */
+const OUTSIDE_WINDOW_MS = 60 * MINUTE
+/** At most this many of a project's newest sessions outside Kettu are looked at, and shown. */
+const OUTSIDE_LISTED = 10
+const OUTSIDE_SHOWN = 3
 
 /** When the session's prompt cache expires, from its main thread's latest request, if any. */
 function cacheExpiresAt(live: Live): number | null {
@@ -916,6 +931,60 @@ function entryHolds(entry: ThreadEntry, text: string): boolean {
     return entry.content.some((part) => part.type === 'text' && part.text.includes(text))
   }
   return false
+}
+
+/** The values a session's last request outside Kettu ran with, to take on its first attach. */
+function outsideValuesOf(last: LastRequest): OutsideValues | null {
+  const values: OutsideValues = {
+    ...(last.model ? { model: last.model } : {}),
+    ...(last.effort ? { effort: last.effort } : {}),
+    ...(last.fast !== null ? { fast: last.fast } : {}),
+    ...(last.mode ? { mode: last.mode } : {}),
+  }
+  return Object.keys(values).length > 0 ? values : null
+}
+
+/** The choice of a Claude Code model option that runs the model `id` names, suffix and all. */
+function claudeModelChoice(option: ConfigOption, id: string): string | null {
+  const choices = option.choices ?? []
+  const named = (value: string | undefined): boolean =>
+    value !== undefined && value.toLowerCase() === id.toLowerCase()
+  const current = choices.find((choice) => choice.value === option.value)
+  if (current && (named(current.modelId) || named(current.value))) return current.value
+  return (
+    choices.find((choice) => named(choice.modelId))?.value ??
+    choices.find((choice) => named(choice.value))?.value ??
+    null
+  )
+}
+
+/**
+ * The option values that make a Claude Code session's next request like its last one outside
+ * Kettu: the model it named, its effort and fast mode, and its mode unless that was full access,
+ * which is never taken.
+ */
+function outsideOptionValues(
+  config: readonly ConfigOption[],
+  outside: OutsideValues,
+): { values: Record<string, string | boolean>; fullAccess: boolean } {
+  const values: Record<string, string | boolean> = {}
+  const option = (id: string): ConfigOption | undefined => config.find((o) => o.id === id)
+  const model = option(CLAUDE_OPTION_IDS.model)
+  const modelValue = model && outside.model ? claudeModelChoice(model, outside.model) : null
+  if (modelValue !== null) values[CLAUDE_OPTION_IDS.model] = modelValue
+  const effort = option(CLAUDE_OPTION_IDS.effort)
+  if (effort && outside.effort && isValueOf(effort, outside.effort)) {
+    values[CLAUDE_OPTION_IDS.effort] = outside.effort
+  }
+  if (option(CLAUDE_OPTION_IDS.fast) && outside.fast !== undefined) {
+    values[CLAUDE_OPTION_IDS.fast] = outside.fast
+  }
+  const fullAccess = outside.mode === 'bypassPermissions'
+  const mode = option(CLAUDE_OPTION_IDS.mode)
+  if (mode && outside.mode && !fullAccess && isValueOf(mode, outside.mode)) {
+    values[CLAUDE_OPTION_IDS.mode] = outside.mode
+  }
+  return { values, fullAccess }
 }
 
 function agentValues(config: readonly ConfigOption[]): Record<string, string | boolean> {
@@ -3099,6 +3168,7 @@ export class SessionManager {
       ...(projectHooks ? { projectHooks } : {}),
       ...(memory ? { memory } : {}),
       ...(kettuService ? { kettuService } : {}),
+      ...(record.instructionsAhead ? { promptAhead: true } : {}),
     }
   }
 
@@ -4896,6 +4966,53 @@ export class SessionManager {
     return run
   }
 
+  /**
+   * A session imported from outside Kettu shows the prompt cache its last request there left, since
+   * a replay never says when the latest request was.
+   */
+  private seedCache(live: Live): void {
+    const usage = live.thread.session.usage
+    const cache = live.record.cache
+    if (!usage || usage.cache || !cache) return
+    this.update(live, { usage: { ...usage, cache } })
+  }
+
+  /**
+   * A session's first attach after it ran outside Kettu takes the model, effort, fast mode and mode
+   * of its last request there, so the prompt cache that request left still matches. Full access is
+   * not taken, which the thread says.
+   */
+  private async takeOutside(live: Live, connection: AgentConnection): Promise<void> {
+    const outside = live.record.outside
+    if (!outside || harnessOf(live.record.agentId) !== 'claude-code') return
+    delete live.record.outside
+    this.saveIndex()
+    const { values, fullAccess } = outsideOptionValues(live.thread.session.config, outside)
+    const config = await this.applyStartOptions(live, connection, values, {
+      restore: true,
+      stop: () => live.closing || this.live.get(live.id) !== live || connection.isClosed,
+      resend: resentOnResume(live.record.agentId, values),
+    })
+    if (!fullAccess) return
+    const mode = config.find((option) => option.id === CLAUDE_OPTION_IDS.mode)
+    const name =
+      mode?.choices?.find((choice) => choice.value === mode.value)?.name ??
+      String(mode?.value ?? '')
+    this.emit(live, [
+      {
+        op: 'entry.add',
+        entry: {
+          kind: 'notice',
+          id: this.nextId(live),
+          severity: 'info',
+          title: t('notice.fullAccessNotCarried.title'),
+          description: t('notice.fullAccessNotCarried.description', { mode: name }),
+          after: agentEntryBefore(live.thread),
+        },
+      },
+    ])
+  }
+
   /** `session/load`, replaying the history, or `session/resume` for an agent without it. */
   private async reconnect(live: Live): Promise<void> {
     this.update(live, { status: 'starting', error: null })
@@ -4926,6 +5043,11 @@ export class SessionManager {
         { action: 'load' },
       )
     }
+    try {
+      await this.refuseHeld(live.record.agentId, acpSessionId, live.record.configDir ?? null)
+    } catch (error) {
+      throw this.failStart(live, error, { action: useLoad ? 'load' : 'resume' })
+    }
     const attach = await this.attachOptions(live.id, live.record, runtime)
     this.attach(live, connection)
     try {
@@ -4940,9 +5062,12 @@ export class SessionManager {
         }
         this.finishReplay(live, true)
         this.opened(live, setup.config)
+        this.seedCache(live)
+        await this.takeOutside(live, connection)
       } else {
         const setup = await connection.resumeSession(acpSessionId, projectPath, attach)
         this.opened(live, setup.config)
+        await this.takeOutside(live, connection)
         if (live.thread.order.length === 0) {
           this.emit(live, [
             {
@@ -5671,6 +5796,7 @@ export class SessionManager {
     // A released session is marked closed on the connection; what the agent sends before the
     // session attaches waits for it instead of being dropped.
     if (record.acpSessionId !== '') connection.reopen(record.acpSessionId)
+    await this.refuseHeld(record.agentId, record.acpSessionId, record.configDir ?? null)
     let config: ConfigOption[]
     let version: string | undefined
     let resumed = false
@@ -5744,6 +5870,7 @@ export class SessionManager {
     this.attach(live, connection)
     this.attachedOn(live, version, resumed)
     this.opened(live, config)
+    await this.takeOutside(live, connection)
     for (const child of this.descendants(live.id, 'subagent')) {
       const childLive = this.live.get(child.id)
       if (!childLive) continue
@@ -6423,15 +6550,18 @@ export class SessionManager {
    */
   private async aheadText(live: Live, connection: AgentConnection): Promise<string | null> {
     const { record } = live
-    if (connection.ownInstructions || record.memorySentTo === record.acpSessionId) return null
+    const own = connection.ownInstructions && !record.instructionsAhead
+    if (own || record.memorySentTo === record.acpSessionId) return null
     const runtime = this.deps.agents.runtime(record.agentId)
-    const tools =
-      this.kettuServers(live.id, record, runtime).length > 0 ||
-      this.kettuService(live.id, record, runtime) !== null
-    const guide =
-      tools && this.deps.mcp
-        ? `<kettu-guide>\n${this.deps.mcp.guide(record.agentId)}\n</kettu-guide>`
-        : null
+    const servers = this.kettuServers(live.id, record, runtime)
+    const tools = servers.length > 0 || this.kettuService(live.id, record, runtime) !== null
+    // What the session's own instructions would hold, the plan paragraph with the guide.
+    const text = record.instructionsAhead
+      ? servers
+          .flatMap((server) => (server.type === 'stdio' ? [] : (server.prompt ?? [])))
+          .join('\n\n')
+      : (this.deps.mcp?.guide(record.agentId) ?? '')
+    const guide = tools && this.deps.mcp && text ? `<kettu-guide>\n${text}\n</kettu-guide>` : null
     const memory = (await this.memoryFor(live.id, record, tools))?.text ?? null
     const ahead = [guide, memory].filter((text): text is string => text !== null)
     return ahead.length > 0 ? ahead.join('\n\n') : null
@@ -9850,24 +9980,149 @@ export class SessionManager {
     } catch (error) {
       throw agentError(error)
     }
-    for (const item of page.sessions) {
-      const key = `${agentId}\n${item.sessionId}`
-      this.listed.delete(key)
-      this.listed.set(key, { title: item.title, updatedAt: item.updatedAt })
-      if (this.listed.size > LISTED_SESSIONS) {
-        this.listed.delete(this.listed.keys().next().value!)
-      }
-    }
+    for (const item of page.sessions) this.remember(agentId, item)
+    const recent = await this.outsideStates(
+      agentId,
+      canonical,
+      page.sessions.filter((item) => this.isRecent(item.updatedAt)).map((item) => item.sessionId),
+    )
     return {
-      sessions: page.sessions.map((item) => ({
-        acpSessionId: item.sessionId,
-        title: item.title,
-        updatedAt: item.updatedAt,
-        imported:
-          this.findByAcp(agentId, item.sessionId) !== undefined ||
-          this.takenEarlier(agentId, item.sessionId),
-      })),
+      sessions: page.sessions.map((item) => {
+        const state = recent.get(item.sessionId)
+        return {
+          acpSessionId: item.sessionId,
+          title: item.title,
+          updatedAt: item.updatedAt,
+          imported:
+            this.findByAcp(agentId, item.sessionId) !== undefined ||
+            this.takenEarlier(agentId, item.sessionId),
+          ...(state ? { cache: state.cache, held: state.held } : {}),
+        }
+      }),
       nextCursor: page.nextCursor,
+    }
+  }
+
+  /** Whether a listed session changed recently enough to have a prompt cache left. */
+  private isRecent(updatedAt: string | null): boolean {
+    const at = updatedAt ? Date.parse(updatedAt) : NaN
+    return Number.isFinite(at) && this.now() - at < OUTSIDE_WINDOW_MS
+  }
+
+  /**
+   * For Claude Code sessions of `cwd`, the cache their last request left and whether a process
+   * outside Kettu still has them open; nothing for another agent's.
+   */
+  private async outsideStates(
+    agentId: AgentId,
+    cwd: string,
+    ids: readonly string[],
+  ): Promise<Map<string, { cache: PromptCache | null; held: boolean; last: LastRequest | null }>> {
+    const reader = this.deps.outside
+    const states = new Map<
+      string,
+      { cache: PromptCache | null; held: boolean; last: LastRequest | null }
+    >()
+    if (!reader || harnessOf(agentId) !== 'claude-code') return states
+    const configDir = this.deps.agents.runningConfig(agentId)?.chosen ?? null
+    await Promise.all(
+      ids.map(async (id) => {
+        const [last, holder] = await Promise.all([
+          reader.lastRequest(agentId, cwd, id, configDir).catch(() => null),
+          reader.holder(agentId, id, configDir).catch(() => null),
+        ])
+        states.set(id, {
+          cache: last ? { lastRequestAt: last.at, ttl: last.ttl } : null,
+          held: holder !== null,
+          last,
+        })
+      }),
+    )
+    return states
+  }
+
+  /**
+   * The Claude Code sessions of these projects that were used outside Kettu, as in a terminal, in
+   * the last hour and are not Kettu's, newest first, a few per project. Only what the agents list
+   * and the ends of their transcripts are read; nothing is kept.
+   */
+  async listOutside(projectPaths: readonly string[]): Promise<OutsideSession[]> {
+    if (!this.deps.outside) return []
+    // Only agents that run or can start at once, so looking never detects or installs anything.
+    const agents = this.deps.agents
+      .ids()
+      .filter(
+        (id) =>
+          harnessOf(id) === 'claude-code' &&
+          !this.deps.agents.isDisabled(id) &&
+          ['available', 'starting', 'ready'].includes(this.deps.agents.status(id).state),
+      )
+    const runtimes = (
+      await Promise.all(
+        agents.map(async (agentId) => {
+          const runtime = await this.deps.agents.ensureReady(agentId).catch(() => null)
+          return runtime?.connection.listOutside ? { agentId, runtime } : null
+        }),
+      )
+    ).filter((item) => item !== null)
+    const known = new Set(this.deps.projects.list().map((project) => project.path))
+    const found: OutsideSession[] = []
+    await Promise.all(
+      projectPaths
+        .filter((projectPath) => known.has(projectPath))
+        .map(async (projectPath) => {
+          const shown: OutsideSession[] = []
+          for (const { agentId, runtime } of runtimes) {
+            let listed: ListedSession[]
+            try {
+              listed = (await runtime.connection.listOutside?.(projectPath, OUTSIDE_LISTED)) ?? []
+            } catch (error) {
+              this.deps.diagnostics.log(
+                'warn',
+                `${agentId} could not list the sessions of ${projectPath}: ${agentError(error).message}`,
+              )
+              continue
+            }
+            const recent = listed.filter(
+              (item) =>
+                item.updatedAt !== null &&
+                this.isRecent(item.updatedAt) &&
+                this.findByAcp(agentId, item.sessionId) === undefined &&
+                !this.takenEarlier(agentId, item.sessionId),
+            )
+            const states = await this.outsideStates(
+              agentId,
+              projectPath,
+              recent.map((item) => item.sessionId),
+            )
+            for (const item of recent) {
+              const state = states.get(item.sessionId)
+              this.remember(agentId, item)
+              shown.push({
+                agentId,
+                projectPath,
+                acpSessionId: item.sessionId,
+                title: item.title,
+                updatedAt: item.updatedAt!,
+                cache: state?.cache ?? null,
+                held: state?.held ?? false,
+              })
+            }
+          }
+          shown.sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt))
+          found.push(...shown.slice(0, OUTSIDE_SHOWN))
+        }),
+    )
+    return found.sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt))
+  }
+
+  /** Keeps a listed session's title and time for its import. */
+  private remember(agentId: AgentId, item: ListedSession): void {
+    const key = `${agentId}\n${item.sessionId}`
+    this.listed.delete(key)
+    this.listed.set(key, { title: item.title, updatedAt: item.updatedAt })
+    if (this.listed.size > LISTED_SESSIONS) {
+      this.listed.delete(this.listed.keys().next().value!)
     }
   }
 
@@ -9875,24 +10130,51 @@ export class SessionManager {
     agentId: AgentId
     projectPath: string
     acpSessionId: string
+    fork?: boolean
   }): Promise<SessionSummary> {
     if (!this.deps.agents.has(params.agentId))
       throw invalidParams(`Unknown agent ${params.agentId}`)
     this.deps.agents.assertEnabled(params.agentId)
     const projectPath = await this.deps.projects.resolveDirectory(params.projectPath)
     const existing = this.findByAcp(params.agentId, params.acpSessionId)
-    if (existing) return this.summary(existing.id)
-    if (this.takenEarlier(params.agentId, params.acpSessionId)) {
+    if (existing && !params.fork) return this.summary(existing.id)
+    if (this.takenEarlier(params.agentId, params.acpSessionId) && !params.fork) {
       throw new HostError('busy', t('session.alreadyInSession'))
     }
+    const claude = harnessOf(params.agentId) === 'claude-code'
+    const configDir = this.deps.agents.runningConfig(params.agentId)?.chosen ?? null
+    let acpSessionId = params.acpSessionId
+    if (params.fork) {
+      const runtime = await this.deps.agents.ensureReady(params.agentId)
+      if (!runtime.connection.copySession) {
+        throw new HostError(
+          'agent_unavailable',
+          t('session.cannotFork', { agent: this.deps.agents.name(params.agentId) }),
+        )
+      }
+      try {
+        acpSessionId = await runtime.connection.copySession(params.acpSessionId, projectPath)
+      } catch (error) {
+        throw agentError(error)
+      }
+    } else if (claude) {
+      await this.refuseHeld(params.agentId, acpSessionId, configDir)
+    }
+    // A copy has the original's history, so its last request is the original's.
+    const last = claude
+      ? await this.deps.outside
+          ?.lastRequest(params.agentId, projectPath, acpSessionId, configDir)
+          .catch(() => null)
+      : null
     await this.deps.projects.add(projectPath)
     const listed = this.listed.get(`${params.agentId}\n${params.acpSessionId}`)
     const now = this.now()
     const updatedAt = listed?.updatedAt ? Date.parse(listed.updatedAt) : NaN
+    const outside = last ? outsideValuesOf(last) : null
     const record: SessionRecord = {
       id: randomUUID(),
       agentId: params.agentId,
-      acpSessionId: params.acpSessionId,
+      acpSessionId,
       projectPath,
       title: listed?.title ?? null,
       ...(listed?.title ? { titleSource: 'agent' as const } : {}),
@@ -9903,6 +10185,10 @@ export class SessionManager {
       origin: 'user',
       description: null,
       branch: null,
+      ...(last ? { cache: { lastRequestAt: last.at, ttl: last.ttl } } : {}),
+      ...(outside ? { outside } : {}),
+      // Claude Code keeps the instructions it recorded outside Kettu, which have nothing of Kettu's.
+      ...(claude ? { instructionsAhead: true as const } : {}),
     }
     this.stampConfig(record)
     this.records.set(record.id, record)
@@ -9910,6 +10196,22 @@ export class SessionManager {
     this.writeIndexNow()
     this.touch(record.id)
     return this.summary(record.id)
+  }
+
+  /**
+   * Refuses a Claude Code session that a process outside Kettu, as in a terminal, has open: two
+   * processes writing one transcript tangle it.
+   */
+  private async refuseHeld(
+    agentId: AgentId,
+    acpSessionId: string,
+    configDir: string | null,
+  ): Promise<void> {
+    if (!this.deps.outside || acpSessionId === '' || harnessOf(agentId) !== 'claude-code') return
+    const holder = await this.deps.outside
+      .holder(agentId, acpSessionId, configDir)
+      .catch(() => null)
+    if (holder) throw new HostError('busy', t('session.heldOutside'))
   }
 
   // Git.

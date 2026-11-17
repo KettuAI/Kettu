@@ -327,6 +327,24 @@ const WATCHED_REFERENCES = 100
 // The files of one commit or discard, at most as many as a request should carry.
 const GIT_PATHS = 1_000
 
+/** At most this many projects are asked for their sessions outside Kettu at once. */
+const OUTSIDE_PROJECTS = 200
+
+function projectPaths(o: Fields, key: string, platform: Platform): string[] {
+  const value = o[key]
+  if (!Array.isArray(value) || value.length > OUTSIDE_PROJECTS) {
+    throw invalidParams(`${key} must be an array of at most ${OUTSIDE_PROJECTS} paths`)
+  }
+  return [
+    ...new Set(
+      value.map((item: unknown, index) => {
+        const at = `${key}[${index}]`
+        return absolutePath({ [at]: item }, at, platform)
+      }),
+    ),
+  ]
+}
+
 function gitPaths(o: Fields, key: string): string[] {
   const value = o[key]
   if (!Array.isArray(value) || value.length === 0 || value.length > GIT_PATHS) {
@@ -1620,8 +1638,12 @@ export function createValidators(platform: Platform): Validators {
         agentId: agentId(o),
         projectPath: absolutePath(o, 'projectPath', platform),
         acpSessionId: string(o, 'acpSessionId', ACP_ID_CHARS),
+        ...(o.fork === true ? { fork: true } : {}),
       }
     },
+    'sessions.outside': (params) => ({
+      projectPaths: projectPaths(fields(params), 'projectPaths', platform),
+    }),
     'sessions.open': session,
     'sessions.snapshot': (params) => {
       const o = fields(params)

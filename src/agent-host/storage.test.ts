@@ -421,6 +421,25 @@ describe('the host files', () => {
     }
   })
 
+  it('keeps how a session last ran outside Kettu, and drops what does not read', () => {
+    const taken = {
+      ...session,
+      outside: { model: 'claude-opus-5-5[1m]', effort: 'xhigh', fast: false, mode: 'auto' },
+      instructionsAhead: true,
+    }
+    expect(parseSessionsFile({ sessions: [taken] })).toEqual({ version: 1, sessions: [taken] })
+    expect(
+      parseSessionsFile({
+        sessions: [
+          { ...session, outside: { model: '', effort: 3, fast: 'no' }, instructionsAhead: 1 },
+        ],
+      }),
+    ).toEqual({ version: 1, sessions: [session] })
+    expect(
+      parseSessionsFile({ sessions: [{ ...session, outside: { effort: 'high', extra: 'x' } }] }),
+    ).toEqual({ version: 1, sessions: [{ ...session, outside: { effort: 'high' } }] })
+  })
+
   it("keeps a project's worktree settings key by key", () => {
     const project = { path: '/repo', name: 'repo', addedAt: 1, lastOpenedAt: 2 }
     const worktree = {

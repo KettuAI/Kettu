@@ -109,6 +109,7 @@ import type {
   QueryOptions,
   ResultMessage,
   SdkMessage,
+  SessionInfo,
   SettingSource,
   SlashCommandInfo,
   StoredMessage,
@@ -282,6 +283,18 @@ interface Session {
 interface Pending {
   at: number
   items: Delivery[]
+}
+
+/** A listed session as the host lists them; one without a folder of its own is in `cwd`. */
+function listedOf(info: SessionInfo, cwd: string): ListedSession {
+  return {
+    sessionId: info.sessionId,
+    title: info.customTitle ?? info.summary ?? null,
+    updatedAt: Number.isFinite(info.lastModified)
+      ? new Date(info.lastModified).toISOString()
+      : null,
+    cwd: info.cwd ?? cwd,
+  }
 }
 
 function setupOf(session: Session): SessionSetup {
@@ -802,16 +815,23 @@ export class ClaudeConnection implements AgentConnection {
       sdk.listSessions({ dir: cwd, limit: LIST_PAGE, offset }),
     )
     return {
-      sessions: infos.map((info) => ({
-        sessionId: info.sessionId,
-        title: info.customTitle ?? info.summary ?? null,
-        updatedAt: Number.isFinite(info.lastModified)
-          ? new Date(info.lastModified).toISOString()
-          : null,
-        cwd: info.cwd ?? cwd,
-      })),
+      sessions: infos.map((info) => listedOf(info, cwd)),
       nextCursor: infos.length === LIST_PAGE ? String(offset + LIST_PAGE) : null,
     }
+  }
+
+  async listOutside(cwd: string, limit: number): Promise<ListedSession[]> {
+    const sdk = this.requireSdk()
+    const infos = await this.withConfigDir(() =>
+      sdk.listSessions({ dir: cwd, limit, includeWorktrees: false, includeProgrammatic: false }),
+    )
+    return infos.map((info) => listedOf(info, cwd))
+  }
+
+  async copySession(sessionId: string, cwd: string): Promise<string> {
+    const sdk = this.requireSdk()
+    const forked = await this.withConfigDir(() => sdk.forkSession(sessionId, { dir: cwd }))
+    return forked.sessionId
   }
 
   async removeHidden(sessionId: string): Promise<void> {
@@ -940,10 +960,12 @@ export class ClaudeConnection implements AgentConnection {
     const plugins = bare
       ? []
       : (options.localPlugins ?? []).map((folder) => ({ type: 'local' as const, path: folder }))
-    const prompts = [
-      ...servers.flatMap((server) => (server.type === 'stdio' ? [] : (server.prompt ?? []))),
-      ...(options.memory ? [options.memory.text] : []),
-    ]
+    const prompts = options.promptAhead
+      ? []
+      : [
+          ...servers.flatMap((server) => (server.type === 'stdio' ? [] : (server.prompt ?? []))),
+          ...(options.memory ? [options.memory.text] : []),
+        ]
     const queryOptions: QueryOptions = {
       cwd,
       env: {

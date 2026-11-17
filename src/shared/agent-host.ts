@@ -665,6 +665,21 @@ export interface ImportableSession {
   title: string | null
   updatedAt: string | null
   imported: boolean // already in the session index
+  /** Its prompt cache as its last request left it, for a Claude Code session used in the last hour. */
+  cache?: PromptCache | null
+  /** A Claude Code process outside Kettu, such as a terminal, still has it open. */
+  held?: boolean
+}
+
+/** A Claude Code session of a project that was used outside Kettu in the last hour, to carry on. */
+export interface OutsideSession {
+  agentId: AgentId
+  projectPath: string
+  acpSessionId: string
+  title: string | null
+  updatedAt: string
+  cache: PromptCache | null
+  held: boolean
 }
 
 export interface TrafficRecord {
@@ -1020,9 +1035,15 @@ export interface HostContract {
     result: SessionSummary
   }
   'sessions.discard': { params: { sessionId: string }; result: void }
+  // `fork`: a copy of the session is imported instead, for one another program still has open.
   'sessions.import': {
-    params: { agentId: AgentId; projectPath: string; acpSessionId: string }
+    params: { agentId: AgentId; projectPath: string; acpSessionId: string; fork?: boolean }
     result: SessionSummary
+  }
+  // The Claude Code sessions of these projects used outside Kettu in the last hour, newest first.
+  'sessions.outside': {
+    params: { projectPaths: string[] }
+    result: { sessions: OutsideSession[] }
   }
   'sessions.open': {
     params: { sessionId: string }
@@ -1650,6 +1671,7 @@ export const HOST_METHODS = [
   'sessions.prepare',
   'sessions.discard',
   'sessions.import',
+  'sessions.outside',
   'sessions.open',
   'sessions.snapshot',
   'sessions.page',
