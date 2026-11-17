@@ -185,9 +185,6 @@ export function planCards(accounts: readonly AccountAgent[], now: number): PlanC
   })
 }
 
-/** Two rows of cards at most, so the popover stays within the window. */
-const MAX_CARDS = 4
-
 const LEVEL_RANK: Record<LimitLevel, number> = { ok: 0, warn: 1, bad: 2 }
 const windowRank = (w: CardWindow): number => LEVEL_RANK[w.level] * 1000 + w.percent
 
@@ -213,16 +210,20 @@ export function currentCard(cards: readonly PlanCard[], key: string): PlanCard |
 }
 
 /**
- * The cards the popover shows and how many more there are: the current account's first, then the
- * others tightest first, so a hidden card is never the one that needs attention.
+ * The cards the popover lists: the current account's first, then the others tightest first, so the
+ * one that needs attention is never far down.
  */
-export function popoverCards(
-  cards: readonly PlanCard[],
-  current: PlanCard | null,
-): { shown: PlanCard[]; more: number } {
+export function popoverCards(cards: readonly PlanCard[], current: PlanCard | null): PlanCard[] {
   const others = cards.filter((card) => card !== current).sort((a, b) => cardRank(b) - cardRank(a))
-  const ordered = current ? [current, ...others] : others
-  return { shown: ordered.slice(0, MAX_CARDS), more: Math.max(0, ordered.length - MAX_CARDS) }
+  return current ? [current, ...others] : others
+}
+
+/**
+ * Whether a card's windows are per model group, two lengths each, as Antigravity's are: their
+ * names are too long for half a row, so the card takes the whole row.
+ */
+export function hasModelGroups(card: PlanCard): boolean {
+  return card.windows.some((w) => w.model !== null && w.window === 'five_hour')
 }
 
 /** The host choice the menu checks: one host by its filter value, or null for every host. */

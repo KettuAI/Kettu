@@ -8,7 +8,7 @@ import { planAmount, planBalance } from '@renderer/lib/format'
 import { LIMIT_TEXT } from '@renderer/lib/plan-limit'
 import { cn } from '@renderer/lib/utils'
 import { useHostName, useWindowHost } from '@renderer/stores/window-host'
-import type { PlanCard } from './model'
+import { hasModelGroups, type PlanCard } from './model'
 
 /**
  * An account's plan windows: its rings and, from the outer ring in, each window's figure. It
@@ -27,7 +27,10 @@ export function PlanLimitCard({ card, onOpen }: { card: PlanCard; onOpen: () => 
           <button
             type="button"
             onClick={onOpen}
-            className="kettu-plan-card min-w-0 rounded-tile outline-none select-none"
+            className={cn(
+              'kettu-plan-card min-w-0 rounded-tile outline-none select-none',
+              hasModelGroups(card) && 'col-span-2',
+            )}
           />
         }
       >
@@ -52,7 +55,7 @@ export function PlanLimitCard({ card, onOpen }: { card: PlanCard; onOpen: () => 
 function CardFace({ card }: { card: PlanCard }) {
   const { t } = useTranslation(['sidebar', 'composer', 'common', 'usage'])
   const count = card.windows.length
-  const groups = card.windows.some((w) => w.model !== null && w.window === 'five_hour')
+  const groups = hasModelGroups(card)
   const amounts = card.windows.flatMap((window) => {
     if (!window.amount) return []
     const unit =
@@ -100,11 +103,11 @@ function CardFace({ card }: { card: PlanCard }) {
                 )
               : t(`common:planWindow.${w.window}`)
             // Model groups have windows of two lengths each, so their lines name the length and
-            // the group's initial, which fit the card; the full names are in its details.
+            // the group, without the "Models" every group of Antigravity's ends in.
             const short = !w.model
               ? t(`composer:usage.shortWindow.${w.window}`)
               : groups
-                ? `${t(`composer:usage.shortWindow.${w.window}`)} ${w.model.charAt(0).toUpperCase()}`
+                ? `${t(`composer:usage.shortWindow.${w.window}`)} ${w.model.replace(/\s+models?$/i, '')}`
                 : w.model
             return (
               <span key={w.id} className="flex min-w-0 flex-col gap-px">

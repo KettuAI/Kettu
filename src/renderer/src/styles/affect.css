@@ -609,9 +609,13 @@ li[data-row-exit='dust'] > * {
   white-space: nowrap;
   text-overflow: ellipsis;
 }
-/* The cards lie on an inset panel, darker than the card in both modes. */
+/* The cards lie on an inset panel, darker than the card in both modes; with many accounts it
+   scrolls inside the window, Open Usage staying in reach under it. */
 .kettu-plan-pop__well {
+  max-height: min(480px, calc(100vh - 200px));
   padding: 4px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
   border-radius: 10px;
   background: var(--menu-well);
 }
@@ -632,7 +636,6 @@ li[data-row-exit='dust'] > * {
     0 0 0 1.5px var(--focus-ring-color),
     var(--elevation-card);
 }
-.kettu-plan-pop__more,
 .kettu-plan-pop__row {
   display: flex;
   align-items: center;
@@ -642,18 +645,6 @@ li[data-row-exit='dust'] > * {
   outline: none;
   cursor: default;
   transition: background-color 140ms ease;
-}
-.kettu-plan-pop__more {
-  justify-content: center;
-  gap: 4px;
-  height: 26px;
-  margin-top: 4px;
-  font-size: 12px;
-  color: var(--text-secondary);
-}
-.kettu-plan-pop__count {
-  color: var(--text-tertiary);
-  font-variant-numeric: tabular-nums;
 }
 .kettu-plan-pop__row {
   gap: 10px;
@@ -665,7 +656,6 @@ li[data-row-exit='dust'] > * {
 .kettu-plan-pop__row > :is(.hgi, svg) {
   color: var(--icon-default);
 }
-.kettu-plan-pop__more:is(:hover, :focus-visible),
 .kettu-plan-pop__row:is(:hover, :focus-visible) {
   background: var(--bg-selected);
 }
