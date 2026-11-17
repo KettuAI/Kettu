@@ -92,6 +92,31 @@ export function fromAgy<T extends acp.ToolCallUpdate>(update: T): T {
   return update
 }
 
+/**
+ * agy's `edit_file` request with the whole file in place of the snippet it names: agy's request
+ * carries its `Target` and `Replacement` as the diff, which shows with wrong line numbers and a
+ * changed last line, while the finished call carries the whole file's. `read` gives the file's
+ * text; a file that cannot be read, or has the target not exactly once, leaves the snippet.
+ */
+export async function inWholeFile<T extends acp.ToolCallUpdate>(
+  update: T,
+  read: (path: string) => Promise<string | null>,
+): Promise<T> {
+  if (toolName(update) !== 'edit_file') return update
+  const input = record(update.rawInput)
+  const { Path: file, Target: target, Replacement: replacement } = input ?? {}
+  if (typeof file !== 'string' || typeof target !== 'string' || typeof replacement !== 'string') {
+    return update
+  }
+  if (target === '') return update
+  const text = await read(file)
+  if (text === null) return update
+  const at = text.indexOf(target)
+  if (at < 0 || text.indexOf(target, at + 1) >= 0) return update
+  const edited = text.slice(0, at) + replacement + text.slice(at + target.length)
+  return { ...update, content: [{ type: 'diff', path: file, oldText: text, newText: edited }] }
+}
+
 /** Calls on agy's own files that show no row, per turn, for their updates that name no file. */
 const ownFileCalls = new WeakMap<TurnScope, Set<string>>()
 

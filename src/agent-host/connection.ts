@@ -70,6 +70,11 @@ export interface SessionTarget {
    * null when it cannot be read there.
    */
   readAgentFile?(path: string): Promise<string | null>
+  /**
+   * The text of a file in the folder the session works in, read as the Files pane reads one; null
+   * when it lies elsewhere, is not there or is not text.
+   */
+  readProjectFile?(path: string): Promise<string | null>
 }
 
 export interface ConnectionHooks {

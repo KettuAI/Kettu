@@ -162,6 +162,7 @@ import { createWorktreeGit } from './worktrees/git'
 import { WorktreeManager } from './worktrees/manager'
 import { ComputerDriver, probePermissions } from './computer/driver'
 import { ComputerUse } from './computer/service'
+import { SessionFiles } from './session-files'
 import { SessionManager, type SessionTimings } from './sessions'
 import { EnvironmentService, type EnvironmentServiceDeps } from './shell-env'
 import {
@@ -406,6 +407,7 @@ export class AgentHost {
   private readonly execRunner: ExecRunner
   private readonly files: FilesService
   private readonly agentFiles: AgentFiles
+  private readonly sessionFiles: SessionFiles
   /** Grants for the media a thread names and the Files pane opens, which main serves. */
   private readonly media: MediaService
   private gitUnsubscribe: (() => void)[] = []
@@ -499,6 +501,12 @@ export class AgentHost {
       homeDir: options.homeDir ?? os.homedir(),
       session: (sessionId) => this.sessions.agentSession(sessionId),
       read: (real, shown) => this.files.readAllowed(real, shown),
+    })
+    this.sessionFiles = new SessionFiles({
+      platform,
+      folder: (sessionId) => this.sessions.workFolder(sessionId),
+      read: (folder, relative) =>
+        this.filesCall(folder, (root) => this.files.read(root, relative, true)),
     })
     this.deviceAccess = new DeviceAccessStore(options.userDataPath, log)
     this.publishDrafts = new PublishDrafts(options.userDataPath, log)
@@ -898,6 +906,11 @@ export class AgentHost {
             return null
           },
         ),
+      projectFile: (sessionId, file) =>
+        this.sessionFiles.text(sessionId, file).catch((error: unknown) => {
+          log('warn', `Could not read ${file}: ${(error as Error).message}`)
+          return null
+        }),
       reportsDir: path.join(options.userDataPath, 'agent-reports'),
       attachments: this.attachments,
       mcp: {

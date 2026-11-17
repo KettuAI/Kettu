@@ -453,6 +453,11 @@ export interface SessionManagerDeps {
    * null when it cannot be read. Without it no such file is read.
    */
   agentFile?(sessionId: string, path: string): Promise<string | null>
+  /**
+   * The text of a file in the folder a session works in, read as the Files pane reads one; null
+   * when it cannot be read there. Without it no such file is read.
+   */
+  projectFile?(sessionId: string, path: string): Promise<string | null>
   /** The empty folder the hidden sessions for the outline's titles run in. */
   reportsDir: string
   diagnostics: Diagnostics
@@ -3040,6 +3045,7 @@ export class SessionManager {
       send: (text, options) => this.sendForUser(live, text, options?.approval),
       startMode: () => startModeIn(this.deps.settings(), record.agentId) ?? null,
       readAgentFile: (file) => this.deps.agentFile?.(record.id, file) ?? Promise.resolve(null),
+      readProjectFile: (file) => this.deps.projectFile?.(record.id, file) ?? Promise.resolve(null),
     }
     const live: Live = {
       id: record.id,
@@ -8982,6 +8988,16 @@ export class SessionManager {
   /** The session's agent now, null for a session Kettu does not hold. */
   sessionAgent(sessionId: string): AgentId | null {
     return (this.live.get(sessionId)?.record ?? this.records.get(sessionId))?.agentId ?? null
+  }
+
+  /** The folder the session works in, its worktree or its project; null for one Kettu does not hold. */
+  workFolder(sessionId: string): string | null {
+    const record = this.live.get(sessionId)?.record ?? this.records.get(sessionId)
+    if (!record) return null
+    const { worktree } = record
+    return worktree && worktree.path !== '' && worktree.removed === undefined
+      ? worktree.path
+      : record.projectPath
   }
 
   /** The session's agent now and that agent's own id of it, null for a session Kettu does not hold. */

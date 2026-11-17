@@ -97,7 +97,7 @@ import {
   withFullAccess,
 } from './agy-access'
 import { systemPromptMeta, takesSystemPromptAppend } from './agy-prompt'
-import { agyAllowOnce, agyAutoAllowed, fromAgy, onAgyOwnFiles } from './agy-tools'
+import { agyAllowOnce, agyAutoAllowed, fromAgy, inWholeFile, onAgyOwnFiles } from './agy-tools'
 import { fromCodeMode } from './code-mode'
 import { forkPointMeta, forksAtMessage } from './fork-point'
 import {
@@ -420,7 +420,12 @@ export class AcpConnection implements AgentConnection {
           )
           if (optionId) return { outcome: { outcome: 'selected', optionId } }
         }
-        const shaped = this.agy ? fromAgy(ctx.params.toolCall) : ctx.params.toolCall
+        const shaped = this.agy
+          ? await inWholeFile(
+              fromAgy(ctx.params.toolCall),
+              (file) => target.readProjectFile?.(file) ?? Promise.resolve(null),
+            )
+          : ctx.params.toolCall
         const context = target.context()
         const toolCall = askedCall(shaped, this.naming, context)
         const { entryId, output } = mapPermissionToolCall(toolCall, context)
