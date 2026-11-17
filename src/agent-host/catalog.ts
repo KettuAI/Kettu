@@ -8,7 +8,7 @@ import type { NodeRuntime } from '@shared/host-control'
 import type { Platform } from '@shared/platform'
 import type { HostSettings } from '@shared/settings'
 import { harnessOf, type AgentId, type HarnessId } from '@shared/thread'
-import { compareInstalls, listInstalled, type InstalledAdapter } from './adapter-install'
+import { listInstalled, type InstalledAdapter } from './adapter-install'
 import { PI_COMMAND_VARIABLE, PI_EXTENSION_VARIABLE, piLauncher } from './pi/launcher'
 import { AGORAGENTIC } from './agents/agoragentic'
 import { AMP } from './agents/amp'
@@ -59,12 +59,7 @@ import { QWEN } from './agents/qwen'
 import { SIGIT } from './agents/sigit'
 import { STAKPAK } from './agents/stakpak'
 import { VTCODE } from './agents/vtcode'
-import {
-  archivesFromPin,
-  listArchiveInstalls,
-  programPath,
-  type InstalledArchive,
-} from './archive-install'
+import { listArchiveInstalls, programPath, type InstalledArchive } from './archive-install'
 import type { BinaryInstalls } from './binary-install'
 import type { AdapterLookup } from './codex-binary'
 import { findCommand, needsShell, type Env } from './find-command'
@@ -78,6 +73,7 @@ import {
   type CliProbe,
   type FoundCli,
 } from './installed-cli'
+import { orderInstalls, type VersionChoice } from './harness-versions'
 import { satisfiesNode, type ConfigFolder, type NodeProbe } from './shell-env'
 import { readUvxVersion } from './uvx-install'
 import { compareVersions } from './versions'
@@ -91,14 +87,21 @@ export type LaunchKind =
   // Installed from npm into the data directory and run on the user's Node.js. With `perSession`,
   // through the session router, which gives each session an adapter process of its own. `args`
   // turns on its ACP mode, and `env` keeps its variables to its own launches. A `library` is
-  // not run: its driver loads its entry module into the agent host.
+  // not run: its driver loads its entry module into the agent host. Its version comes from the
+  // Registry or the bundled versions, never from here.
   | {
       kind: 'package'
       package: string
-      version: string
       perSession?: true
       library?: true
-      /** The versions an update may move to, as an npm range; any newer one when not given. */
+      /**
+       * Not in the Registry as Kettu installs it: the bundled version is the oldest that runs, and
+       * npm's newer ones are offered as updates.
+       */
+      fromVendor?: true
+      /** The oldest version the mapping accepts; the Registry's older ones are not used. */
+      minimum?: string
+      /** With `fromVendor`, the versions an update may move to, as an npm range. */
       updates?: string
       args?: string[]
       env?: Record<string, string>
@@ -108,7 +111,7 @@ export type LaunchKind =
   // with `sessionFlag` added for a session Kettu asks for it, once the program's help lists it.
   | { kind: 'binary'; command: string; args: string[]; perSession?: true; sessionFlag?: string }
   // Run as `uvx <package>==<version> <args>`, which installs the package on first use.
-  | { kind: 'uvx'; package: string; version: string; args: string[] }
+  | { kind: 'uvx'; package: string; args: string[]; minimum?: string }
   // A script run with Electron's own Node.js, so it needs no Node.js on the machine.
   | { kind: 'node-script'; script: string }
 
@@ -399,29 +402,36 @@ export interface LaunchSpec {
   cli?: string
   /** It runs Kettu's extension, which takes Kettu's MCP service from each session's environment. */
   kettuExtension?: true
+  /** The version of Kettu's own install it runs: a package, a release archive or a uvx package. */
+  version?: string
 }
 
 /** Kettu's own files an agent runs, such as Pi's extension, beside the installs and no install. */
 const EXTENSIONS_FOLDER = '.extensions'
 
-/** Where a package agent's pinned version lives once installed, before detection says more. */
-export function packageDir(adaptersDir: string, def: AgentDefinition): string | null {
+/** Where a package agent's version lives once installed, before detection says more. */
+export function packageDir(
+  adaptersDir: string,
+  def: AgentDefinition,
+  version: string,
+): string | null {
   const { launch } = def
   if (launch.kind !== 'package') return null
-  return path.join(adaptersDir, def.id, launch.version, 'node_modules', launch.package)
+  return path.join(adaptersDir, def.id, version, 'node_modules', launch.package)
 }
 
-/** How the launch reads to the user, before or after detection. */
+/** How the launch reads to the user, before or after detection, at the version a start wants. */
 export function displayCommand(
   def: AgentDefinition,
   nodeRuntime: NodeRuntime,
   binaryOverride: string | null,
   adaptersDir: string,
   sessionRouterPath: string | null = null,
+  version: string | null = null,
 ): CommandWords {
   switch (def.launch.kind) {
     case 'package': {
-      const entry = packageDir(adaptersDir, def) ?? ''
+      const entry = version ? (packageDir(adaptersDir, def, version) ?? '') : def.launch.package
       if (def.launch.library)
         return { command: entry, args: [], env: { ...def.env, ...def.launch.env } }
       // A per-session agent reads as the router's own command line.
@@ -438,7 +448,10 @@ export function displayCommand(
     case 'uvx':
       return {
         command: 'uvx',
-        args: [`${def.launch.package}==${def.launch.version}`, ...def.launch.args],
+        args: [
+          version ? `${def.launch.package}==${version}` : def.launch.package,
+          ...def.launch.args,
+        ],
         env: { ...def.env },
       }
     case 'node-script':
@@ -450,20 +463,26 @@ export function displayCommand(
   }
 }
 
-/** What a package agent has installed, and what it needs to install the pinned version. */
+/** What a package agent has installed, and what it needs to install the version it wants. */
 export interface AdapterPlan {
   package: string
-  /** The pinned version, the oldest that runs; the first start installs it. */
+  /** The version a start wants (see `VersionChoice`); the first start installs it. */
   version: string
-  /** Whether an install of the pinned version or a newer one exists. */
+  /** Whether an install a start runs exists. */
   installed: boolean
-  /** The install a start runs: the newest version from the pin up, the latest install on a tie. */
+  /**
+   * The install a start runs: the wanted version, else the one that ran before or the newest;
+   * for a vendor's package, the newest from the bundled version up.
+   */
   current: InstalledAdapter | null
   /** Null only for an agent whose package is its CLI, which needs Node.js just to install. */
   node: string | null
   nodeVersion: string | null
   npm: string | null
-  /** The newest install below the pin, run when the pinned one cannot be installed. */
+  /**
+   * For a vendor's own package, the newest install below its floor, which runs when the floor
+   * cannot be installed.
+   */
   fallback: { version: string; dir: string; spec: LaunchSpec } | null
 }
 
@@ -573,6 +592,8 @@ export interface DetectContext {
   node: NodeProbe
   /** `<userData>/agents`, where package agents and release archives are installed. */
   adaptersDir: string
+  /** Which version of Kettu's own install a start runs; null for a harness Kettu never installs. */
+  versions: VersionChoice | null
   /** The session router every per-session agent launches through; null in a test without one. */
   sessionRouterPath?: string | null
   isExecutable(file: string): Promise<boolean>
@@ -596,13 +617,17 @@ async function isFile(file: string): Promise<boolean> {
   }
 }
 
-/** A binary agent whose program was found, from PATH, the chosen binary or Kettu's install. */
+/**
+ * A binary agent whose program was found, from PATH, the chosen binary or Kettu's install, which
+ * names its `version`.
+ */
 function binaryDetection(
   command: string,
   args: string[],
   platform: Platform,
   display: CommandWords,
   env: Record<string, string>,
+  version?: string,
 ): Extract<Detection, { state: 'available' }> {
   return {
     state: 'available',
@@ -612,6 +637,7 @@ function binaryDetection(
       env,
       shell: needsShell(command, platform),
       display: { ...display, env },
+      ...(version ? { version } : {}),
     },
     adapter: null,
   }
@@ -645,24 +671,18 @@ function routedDetection(
 
 type PackageLaunch = Extract<LaunchKind, { kind: 'package' }>
 
-/** The installs of a package agent, newest first: those at or above the pin, and one below it. */
+/** The installs of a package agent a start may run, the first it runs, and one below a floor. */
 async function packageInstalls(
   def: AgentDefinition,
   launch: PackageLaunch,
+  choice: VersionChoice,
   ctx: DetectContext,
 ): Promise<{ atPin: InstalledAdapter[]; other: InstalledAdapter | null }> {
-  const installed = (
-    await (ctx.installed ?? ((id, name) => listInstalled(ctx.adaptersDir, id, name)))(
-      def.id,
-      launch.package,
-    )
-  ).toSorted((a, b) => compareInstalls(b, a))
-  const fromPin = (adapter: InstalledAdapter): number =>
-    compareVersions(adapter.version, launch.version)
-  return {
-    atPin: installed.filter((adapter) => fromPin(adapter) >= 0),
-    other: installed.find((adapter) => fromPin(adapter) < 0) ?? null,
-  }
+  const installed = await (
+    ctx.installed ?? ((id, name) => listInstalled(ctx.adaptersDir, id, name))
+  )(def.id, launch.package)
+  const { runs, below } = orderInstalls(installed, choice)
+  return { atPin: runs, other: below }
 }
 
 /**
@@ -673,6 +693,7 @@ async function packageInstalls(
 async function installForCli(
   cli: AdapterCli,
   launch: PackageLaunch,
+  wanted: string,
   installs: { atPin: InstalledAdapter[]; other: InstalledAdapter | null },
   found: InstalledCli,
   files: CliFiles,
@@ -694,7 +715,7 @@ async function installForCli(
       return { current: install, minimum }
     }
   }
-  const pinned = installs.atPin.find((install) => install.version === launch.version)
+  const pinned = installs.atPin.find((install) => install.version === wanted)
   return { current: null, minimum: pinned ? await minimumOf(pinned) : undefined }
 }
 
@@ -768,19 +789,23 @@ function checkUserCli(
 
 /** Finds what an agent needs without starting it, so it can run at startup and on demand. */
 export async function detectAgent(def: AgentDefinition, ctx: DetectContext): Promise<Detection> {
+  const choice = ctx.versions
   const display = displayCommand(
     def,
     ctx.nodeRuntime,
     ctx.binaryOverride,
     ctx.adaptersDir,
     ctx.sessionRouterPath ?? null,
+    choice?.wanted ?? null,
   )
   const launch = def.launch
   switch (launch.kind) {
     case 'package': {
       const { nodePath, nodeVersion, npmPath } = ctx.node
       const { library } = launch
-      const installs = await packageInstalls(def, launch, ctx)
+      if (!choice)
+        return { state: 'not-installed', detail: t('detect.noVersion', { agent: def.name }) }
+      const installs = await packageInstalls(def, launch, choice, ctx)
       const { other } = installs
       let current: InstalledAdapter | null = installs.atPin[0] ?? null
       const files = ctx.cliFiles ?? CLI_FILES
@@ -789,7 +814,14 @@ export async function detectAgent(def: AgentDefinition, ctx: DetectContext): Pro
       if (def.cli) {
         const found = await findUserCli(def, def.cli, ctx)
         if ('missing' in found) return found.missing
-        const runs = await installForCli(def.cli, launch, installs, found.found.installed, files)
+        const runs = await installForCli(
+          def.cli,
+          launch,
+          choice.wanted,
+          installs,
+          found.found.installed,
+          files,
+        )
         current = runs.current
         const result = checkUserCli(def, def.cli, found.found, runs.minimum)
         if ('missing' in result) return result.missing
@@ -907,6 +939,10 @@ export async function detectAgent(def: AgentDefinition, ctx: DetectContext): Pro
       // A program the environment names reaches the adapter by itself.
       const passed = cli && !cli.installed.variable ? cli : null
       const specFor = async (install: InstalledAdapter): Promise<LaunchSpec | null> => {
+        const spec = await launchFor(install)
+        return spec && { ...spec, version: install.version }
+      }
+      const launchFor = async (install: InstalledAdapter): Promise<LaunchSpec | null> => {
         if (passed && def.cli) {
           const env = {
             ...def.env,
@@ -948,7 +984,7 @@ export async function detectAgent(def: AgentDefinition, ctx: DetectContext): Pro
         spec,
         adapter: {
           package: launch.package,
-          version: launch.version,
+          version: choice.wanted,
           installed: !!current,
           current: current ?? null,
           node: nodePath,
@@ -995,20 +1031,20 @@ export async function detectAgent(def: AgentDefinition, ctx: DetectContext): Pro
       const program = await findCommand(launch.command, ctx)
       if (program) return binaryDetection(program, launch.args, ctx.platform, display, env)
       // The user's own copy wins, so their sign-in and configuration stay; without one,
-      // Kettu's archive install runs: an update when one runs, else the version before it.
-      const archive = def.installs?.archive
-      if (archive) {
+      // Kettu's archive install runs: the version wanted, else the one that ran before.
+      if (def.installs?.archive && choice) {
         const installs = await (
           ctx.installedArchives ?? ((id) => listArchiveInstalls(ctx.adaptersDir, id))
         )(def.id)
-        for (const installed of archivesFromPin(installs, archive.version)) {
+        for (const installed of orderInstalls(installs, choice).runs) {
           try {
             const command = programPath(installed.dir, installed.cmd, ctx.platform)
             if (!(await ctx.isExecutable(command))) continue
             const display = { command, args: installed.args, env }
+            const { version, dir } = installed
             return {
-              ...binaryDetection(command, installed.args, ctx.platform, display, env),
-              release: { version: installed.version, dir: installed.dir },
+              ...binaryDetection(command, installed.args, ctx.platform, display, env, version),
+              release: { version, dir },
             }
           } catch {
             // A record whose command leaves the install folder is no install.
@@ -1028,12 +1064,17 @@ export async function detectAgent(def: AgentDefinition, ctx: DetectContext): Pro
           detail: t('detect.commandMissing', { command: 'uvx', hint: t(def.install.hint) }),
         }
       }
-      // An update runs while it is newer than the pin, which a later Kettu may move past it.
-      const updated = await (ctx.uvxVersion ?? ((id) => readUvxVersion(ctx.adaptersDir, id)))(
+      if (!choice)
+        return { state: 'not-installed', detail: t('detect.noVersion', { agent: def.name }) }
+      // uv keeps what it fetched, so the version recorded runs, else the one that ran before;
+      // with neither, the wanted one, which uvx fetches as it starts.
+      const fetched = await (ctx.uvxVersion ?? ((id) => readUvxVersion(ctx.adaptersDir, id)))(
         def.id,
       )
-      const version =
-        updated && compareVersions(updated, launch.version) > 0 ? updated : launch.version
+      const known = [fetched, choice.ran].flatMap((v, at) =>
+        v ? [{ version: v, installedAt: -at }] : [],
+      )
+      const version = orderInstalls(known, choice).runs[0]?.version ?? choice.wanted
       const args = [`${launch.package}==${version}`, ...launch.args]
       return {
         state: 'available',
@@ -1043,6 +1084,7 @@ export async function detectAgent(def: AgentDefinition, ctx: DetectContext): Pro
           env: { ...def.env },
           shell: needsShell(program, ctx.platform),
           display: { ...display, args },
+          version,
         },
         adapter: null,
         release: { version, dir: null },

@@ -5,7 +5,7 @@ export const GEMINI: AgentDefinition = {
   limitsReason: 'vendor-disallows',
   name: 'Gemini CLI',
   registryId: 'gemini',
-  launch: { kind: 'package', package: '@google/gemini-cli', version: '0.66.0', args: ['--acp'] },
+  launch: { kind: 'package', package: '@google/gemini-cli', args: ['--acp'] },
   requiresNode: '>=22',
   install: { hint: 'detect.hint.node', url: 'https://nodejs.org/en/download' },
   // Since 2026-06-18 Google serves personal accounts in Antigravity; Gemini CLI 0.66.0 passes on

@@ -6,7 +6,7 @@ export const PI: AgentDefinition = {
   name: 'Pi',
   registryId: 'pi-acp',
   // pi-acp keeps one live session per process, so every session gets an adapter process of its own.
-  launch: { kind: 'package', package: 'pi-acp', version: '0.0.34', perSession: true },
+  launch: { kind: 'package', package: 'pi-acp', perSession: true },
   requiresNode: '>=22',
   // From pi 1.0.0 Kettu's extension gives its sessions Kettu's memory tools over Pi's own MCP.
   requires: { command: 'pi', minimum: '0.81.0', variable: 'PI_ACP_PI_COMMAND', extension: '1.0.0' },

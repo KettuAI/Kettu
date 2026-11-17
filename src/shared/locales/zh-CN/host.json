@@ -266,6 +266,7 @@
     }
   },
   "detect": {
+    "noVersion": "没有适合这台电脑的 {{agent}} 版本，所以无法安装。",
     "nodeMissing": "{{agent}} 需要 Node.js，但在 PATH 中找不到 node。",
     "nodeToInstall": "{{agent}} 首次使用时通过 npm 安装，这需要 Node.js，但在 PATH 中找不到 node。",
     "nodeOutdated": "{{agent}} 需要 Node.js {{required}} 或更高版本，当前安装的是 {{installed}}。",

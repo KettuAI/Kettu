@@ -5,13 +5,13 @@ import type { AddressInfo } from 'node:net'
 import path from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import {
-  archivesFromPin,
   installArchive,
   listArchiveInstalls,
-  removeOlderArchives,
+  removeStaleArchives,
   type InstalledArchive,
 } from './archive-install'
 import { detectAgent, type AgentDefinition, type DetectContext } from './catalog'
+import { orderInstalls, type VersionChoice } from './harness-versions'
 import { tempFolder } from './testing/temp'
 
 const PROGRAM = '#!/bin/sh\necho tool\n'
@@ -58,7 +58,7 @@ const archive = (version: string, installedAt: number): InstalledArchive => ({
 })
 
 describe('an update from a registry archive', () => {
-  it('installs beside the current version, and the newer one runs', async () => {
+  it('installs beside the current version, which a start runs once it is wanted', async () => {
     const root = await tempFolder('kettu-archive-')
     await installed(root, '1.0.0', 1)
     const url = await serve(PROGRAM)
@@ -76,7 +76,9 @@ describe('an update from a registry archive', () => {
     expect(update.version).toBe('1.1.0')
     const installs = await listArchiveInstalls(root, 'harn')
     expect(installs.map((install) => install.version).sort()).toEqual(['1.0.0', '1.1.0'])
-    expect(archivesFromPin(installs, '1.0.0')[0]?.version).toBe('1.1.0')
+    expect(orderInstalls(installs, { wanted: '1.1.0', ran: '1.0.0' }).runs[0]?.version).toBe(
+      '1.1.0',
+    )
   })
 
   it('installs nothing when the download does not match the hash, and the current one stays', async () => {
@@ -103,16 +105,40 @@ describe('an update from a registry archive', () => {
 })
 
 describe('the archive install a start runs', () => {
-  it('is the newest from the pin up, the latest install on a tie', () => {
+  const versions = (installs: InstalledArchive[], choice: VersionChoice): string[] =>
+    orderInstalls(installs, choice).runs.map((install) => install.version)
+
+  it('is the version wanted, then the one that ran, then the newest', () => {
     const installs = [archive('1.2.0', 1), archive('0.9.0', 2), archive('1.0.0', 3)]
-    expect(archivesFromPin(installs, '1.0.0').map((install) => install.version)).toEqual([
-      '1.2.0',
+    expect(versions(installs, { wanted: '1.0.0', ran: '0.9.0' })).toEqual([
       '1.0.0',
+      '0.9.0',
+      '1.2.0',
     ])
-    const again = { ...archive('1.2.0', 9), dir: '/kettu/harnesses/harn/again' }
-    expect(archivesFromPin([...installs, again], '1.0.0')[0]?.dir).toBe(again.dir)
-    // A pin Kettu moved past every install leaves none to run.
-    expect(archivesFromPin(installs, '2.0.0')).toEqual([])
+    expect(versions(installs, { wanted: '2.0.0', ran: '0.9.0' })[0]).toBe('0.9.0')
+    const again = { ...archive('1.0.0', 9), dir: '/kettu/harnesses/harn/again' }
+    expect(orderInstalls([...installs, again], { wanted: '1.0.0' }).runs[0]?.dir).toBe(again.dir)
+  })
+
+  it('follows a downgrade to an older version that is installed', () => {
+    const installs = [archive('1.0.0', 1), archive('1.1.0', 2)]
+    expect(versions(installs, { wanted: '1.0.0', ran: '1.1.0' })[0]).toBe('1.0.0')
+  })
+
+  it('never runs a version that failed to start, or one below the catalog minimum', () => {
+    const installs = [archive('0.9.0', 1), archive('1.0.0', 2), archive('1.1.0', 3)]
+    expect(versions(installs, { wanted: '1.1.0', failed: '1.1.0', ran: '1.0.0' })).toEqual([
+      '1.0.0',
+      '0.9.0',
+    ])
+    expect(versions(installs, { wanted: '1.1.0', minimum: '1.0.0' })).toEqual(['1.1.0', '1.0.0'])
+  })
+
+  it('runs a vendor release from the bundled version up, the newest first', () => {
+    const installs = [archive('1.2.0', 1), archive('0.9.0', 2), archive('1.0.0', 3)]
+    const { runs, below } = orderInstalls(installs, { wanted: '1.0.0', floor: true })
+    expect(runs.map((install) => install.version)).toEqual(['1.2.0', '1.0.0'])
+    expect(below?.version).toBe('0.9.0')
   })
 
   const def: AgentDefinition = {
@@ -121,7 +147,7 @@ describe('the archive install a start runs', () => {
     registryId: 'harn',
     launch: { kind: 'binary', command: 'harn', args: ['serve', 'acp'] },
     install: { hint: 'detect.hint.archive', url: 'https://harnlang.com' },
-    installs: { archive: { version: '1.0.0', entries: {} } },
+    installs: { archive: {} },
   }
 
   const context = (
@@ -134,11 +160,12 @@ describe('the archive install a start runs', () => {
     binaryOverride: null,
     node: { nodeVersion: null, npmPath: null, nodePath: null },
     adaptersDir: '/kettu/harnesses',
+    versions: { wanted: '1.1.0', ran: '1.0.0' },
     isExecutable: async (file) => executable(file),
     installedArchives: async () => installs,
   })
 
-  it('runs an update Kettu installed, and names the release it runs', async () => {
+  it('runs the wanted version Kettu installed, and names the release it runs', async () => {
     const installs = [archive('1.0.0', 1), archive('1.1.0', 2)]
     const found = await detectAgent(
       def,
@@ -146,7 +173,7 @@ describe('the archive install a start runs', () => {
     )
     expect(found).toMatchObject({
       state: 'available',
-      spec: { command: '/kettu/harnesses/harn/1.1.0/tool' },
+      spec: { command: '/kettu/harnesses/harn/1.1.0/tool', version: '1.1.0' },
       release: { version: '1.1.0', dir: '/kettu/harnesses/harn/1.1.0' },
     })
   })
@@ -172,16 +199,18 @@ describe('the archive install a start runs', () => {
 })
 
 describe('the archive installs an update replaces', () => {
-  it('removes the older ones once the newer runs, and keeps the rest', async () => {
+  it('keeps the one before the version that runs to fall back to, and removes the older', async () => {
     const root = await tempFolder('kettu-archive-')
-    await installed(root, '1.0.0', 1)
-    const keep = await installed(root, '1.1.0', 2)
-    await installed(root, '1.2.0', 3)
+    await installed(root, '0.9.0', 1)
+    await installed(root, '1.0.0', 2)
+    const keep = await installed(root, '1.1.0', 3)
+    await installed(root, '1.2.0', 4)
     await mkdir(path.join(root, 'harn', '.extensions'))
     const [current] = (await listArchiveInstalls(root, 'harn')).filter((i) => i.dir === keep)
-    expect(await removeOlderArchives(root, 'harn', current!)).toEqual(['1.0.0'])
+    expect(await removeStaleArchives(root, 'harn', current!)).toEqual(['0.9.0'])
     expect((await readdir(path.join(root, 'harn'))).sort()).toEqual([
       '.extensions',
+      '1.0.0',
       '1.1.0',
       '1.2.0',
     ])

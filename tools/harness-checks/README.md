@@ -6,7 +6,7 @@ The checks load Kettu's own catalog, installers and version order from the sourc
 
 ## Which versions
 
-- **In range:** the versions the catalog's range accepts: the Claude Agent SDK's and DeepSeek Harness's update ranges, Codex from the oldest version the mapping is written against, Qoder CN and Muse Code from the version the catalog names. npm decides what an npm range matches, as the app's updates do.
+- **In range:** the versions the catalog's range accepts: the Claude Agent SDK's and DeepSeek Harness's update ranges, Codex from the oldest version the mapping is written against, Qoder CN and Muse Code from the version Kettu bundles for them. npm decides what an npm range matches, as the app's updates do.
 - **Published 6 hours ago:** a version is checked once it was published at least 6 hours before the run, so npm has every platform package of it. Muse Code's channel gives no publish time, so its versions count from the run that first saw them.
 - **New:** newer than every version checked before, at most 3 of a harness in a run, the newest first. A harness checked for the first time gets only its newest version.
 - **Again:** a version whose one check so far failed is checked again in the next run, so a passing retry clears it and a second failure in a row marks it broken.

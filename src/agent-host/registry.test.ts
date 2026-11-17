@@ -1,7 +1,6 @@
 import { createServer, type Server } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import { afterEach, describe, expect, it } from 'vitest'
-import { decideUpdate } from './agent-updates'
 import type { AgentDefinition } from './catalog'
 import {
   fetchRegistry,
@@ -73,6 +72,30 @@ const LISTING = {
     },
     { id: 'renamed', version: '2.0.0', distribution: { uvx: { package: 'other-tool==2.0.0' } } },
     {
+      id: 'gemini',
+      version: '0.68.0',
+      distribution: { npx: { package: '@google/gemini-cli@0.68.0', args: ['--acp'] } },
+    },
+    {
+      id: 'swapped',
+      version: '1.0.0',
+      distribution: { npx: { package: '@someone-else/gemini-cli@1.0.0' } },
+    },
+    {
+      id: 'npm-shell',
+      version: '1.0.0',
+      distribution: { npx: { package: '@google/gemini-cli@1.0.0 && rm -rf ~' } },
+    },
+    {
+      id: 'odd-hash',
+      version: '1.0.0',
+      distribution: {
+        binary: {
+          'darwin-aarch64': { archive: `${RELEASE}/a.tar.gz`, cmd: './a', sha256: 'not-a-hash' },
+        },
+      },
+    },
+    {
       id: 'shell-version',
       version: '2.0.0',
       distribution: { uvx: { package: 'fast-agent-acp==2.0.0; rm -rf ~' } },
@@ -91,23 +114,29 @@ type Def = Pick<AgentDefinition, 'registryId' | 'launch' | 'installs'>
 const binary = (registryId: string): Def => ({
   registryId,
   launch: { kind: 'binary', command: 'harn', args: ['serve', 'acp'] },
-  installs: { archive: { version: '0.10.180', entries: {} } },
+  installs: { archive: {} },
 })
 
 const uvx = (registryId: string, pkg = 'fast-agent-acp'): Def => ({
   registryId,
-  launch: { kind: 'uvx', package: pkg, version: '0.10.1', args: ['-x'] },
+  launch: { kind: 'uvx', package: pkg, args: ['-x'] },
+})
+
+const npm = (registryId: string): Def => ({
+  registryId,
+  launch: { kind: 'package', package: '@google/gemini-cli', args: ['--acp'] },
 })
 
 describe('which harnesses follow the registry', () => {
-  it('follows it for registry archives and uvx packages only', () => {
+  it('follows it for its npm packages, uvx packages and archives, not the vendor own', () => {
     expect(followsRegistry(binary('harn'))).toBe(true)
     expect(followsRegistry(uvx('fast-agent'))).toBe(true)
+    expect(followsRegistry(npm('gemini'))).toBe(true)
     expect(
       followsRegistry({
         registryId: 'muse',
         launch: { kind: 'binary', command: 'muse', args: ['acp'] },
-        installs: { archive: { version: '1.0.0', entries: {}, fromVendor: true } },
+        installs: { archive: { fromVendor: true } },
       }),
     ).toBe(false)
     expect(
@@ -119,8 +148,8 @@ describe('which harnesses follow the registry', () => {
     ).toBe(false)
     expect(
       followsRegistry({
-        registryId: 'gemini',
-        launch: { kind: 'package', package: '@google/gemini-cli', version: '0.68.0' },
+        registryId: 'claude-acp',
+        launch: { kind: 'package', package: '@anthropic-ai/claude-agent-sdk', fromVendor: true },
       }),
     ).toBe(false)
   })
@@ -148,6 +177,23 @@ describe('the latest release the registry lists', () => {
   it('offers nothing without a SHA-256 to check the download against', () => {
     expect(registryRelease(agents(), binary('harn'), 'win32', 'x64')).toHaveProperty('reason')
     expect(registryRelease(agents(), binary('harn'), 'linux', 'arm64')).toHaveProperty('reason')
+  })
+
+  it('gives a first install an archive without a SHA-256, never one with a broken hash', () => {
+    const first = { unhashed: true }
+    const found = registryRelease(agents(), binary('harn'), 'win32', 'x64', first)
+    expect(found).toMatchObject({
+      kind: 'archive',
+      version: '0.10.201',
+      entry: { cmd: 'harn.exe' },
+    })
+    expect(found).not.toHaveProperty('entry.sha256')
+    expect(registryRelease(agents(), binary('harn'), 'linux', 'arm64', first)).toHaveProperty(
+      'reason',
+    )
+    expect(registryRelease(agents(), binary('odd-hash'), 'darwin', 'arm64', first)).toHaveProperty(
+      'reason',
+    )
   })
 
   it('offers nothing for a platform the registry does not list', () => {
@@ -188,27 +234,24 @@ describe('the latest release the registry lists', () => {
     )
   })
 
+  it('reads an npm package at the version it names', () => {
+    expect(registryRelease(agents(), npm('gemini'), 'darwin', 'arm64')).toEqual({
+      kind: 'package',
+      version: '0.68.0',
+    })
+  })
+
+  it('offers nothing when the npm entry names another package or an odd version', () => {
+    expect(registryRelease(agents(), npm('swapped'), 'darwin', 'arm64')).toHaveProperty('reason')
+    expect(registryRelease(agents(), npm('npm-shell'), 'darwin', 'arm64')).toHaveProperty('reason')
+    expect(registryRelease(agents(), npm('fast-agent'), 'darwin', 'arm64')).toHaveProperty('reason')
+  })
+
   it('offers nothing of another kind than the harness runs', () => {
     expect(registryRelease(agents(), binary('fast-agent'), 'darwin', 'arm64')).toHaveProperty(
       'reason',
     )
     expect(registryRelease(agents(), uvx('harn'), 'darwin', 'arm64')).toHaveProperty('reason')
-  })
-})
-
-describe('the update a registry release offers', () => {
-  const offered = (latest: string, running: string) =>
-    decideUpdate(
-      { adapterVersion: latest, cliVersion: null },
-      { version: running, cliVersion: null },
-    )
-
-  it('offers a newer version than the one that runs, and nothing else', () => {
-    expect(offered('4020.10.0', '3893.5.0')?.adapterVersion).toBe('4020.10.0')
-    expect(offered('2026.11.13', '2026.10.22')?.adapterVersion).toBe('2026.11.13')
-    expect(offered('0.10.201', '0.10.201')).toBeNull()
-    // Kettu pins a newer version than the registry lists when the listed one is broken.
-    expect(offered('0.1.44', '0.1.45')).toBeNull()
   })
 })
 

@@ -5,6 +5,6 @@ export const SIGIT: AgentDefinition = {
   limitsReason: 'model-provider-managed',
   name: 'siGit Code',
   registryId: 'sigit',
-  launch: { kind: 'package', package: '@smbcloud/sigit', version: '1.7.5' },
+  launch: { kind: 'package', package: '@smbcloud/sigit' },
   install: { hint: 'detect.hint.node', url: 'https://nodejs.org/en/download' },
 }

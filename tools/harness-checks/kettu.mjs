@@ -17,6 +17,7 @@ const MODULES = {
   'src/agent-host/shell-env.ts': ['satisfiesNode'],
   'src/agent-host/versions.ts': ['compareVersions', 'versionAtLeast'],
   'src/agent-host/dsh/options.ts': ['DEFAULT_MODEL', 'DEFAULT_EFFORT'],
+  'src/agent-host/harness-versions.ts': ['BUNDLED'],
 }
 
 /** The modules above, as one object. */
@@ -45,22 +46,24 @@ export async function loadKettu() {
  * The npm range of a harness's versions that Kettu's mapping accepts: the update range where the
  * catalog gives one, else from its oldest version on, else any.
  */
-export function rangeOf(def) {
+export function rangeOf(def, kettu) {
   const { launch } = def
   if (typeof launch.updates === 'string') return launch.updates
-  const oldest = oldestOf(def)
+  const oldest = oldestOf(def, kettu)
   return oldest ? `>=${oldest}` : '*'
 }
 
-/** The oldest version the catalog names for a harness, or null when it names none. */
-export function oldestOf(def) {
-  const { launch } = def
+/**
+ * The oldest version the catalog names for a harness, else the version Kettu bundles for one the
+ * Registry does not list, which is the oldest that runs; null when there is neither.
+ */
+export function oldestOf(def, kettu) {
   const named = [
     def.cli?.oldest,
     def.minimum,
-    launch.minimum,
-    launch.version,
-    def.installs?.archive?.version,
+    def.launch.minimum,
+    def.installs?.archive?.minimum,
+    kettu?.BUNDLED.kettu.get(def.id)?.version,
   ]
   return named.find((version) => typeof version === 'string') ?? null
 }

@@ -31,7 +31,7 @@ export const muse = {
   async versions(def, kettu) {
     channel ??= readChannel()
     const { version } = await channel
-    const oldest = oldestOf(def)
+    const oldest = oldestOf(def, kettu)
     const inRange = (candidate) => !oldest || kettu.versionAtLeast(candidate, oldest)
     return { versions: inRange(version) ? [{ version, publishedAt: null }] : [], inRange }
   },

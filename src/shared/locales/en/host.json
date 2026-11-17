@@ -269,6 +269,7 @@
     }
   },
   "detect": {
+    "noVersion": "No version of {{agent}} fits this computer, so it cannot be installed.",
     "nodeMissing": "{{agent}} runs on Node.js, and node was not found on PATH.",
     "nodeToInstall": "{{agent}} is installed with npm on first use, which needs Node.js, and node was not found on PATH.",
     "nodeOutdated": "{{agent}} needs Node.js {{required}} or later; {{installed}} is installed.",

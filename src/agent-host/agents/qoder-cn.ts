@@ -9,7 +9,7 @@ export const QODER_CN: AgentDefinition = {
   launch: {
     kind: 'package',
     package: '@qodercn-ai/qoderclicn',
-    version: '1.1.90',
+    fromVendor: true,
     args: ['--acp'],
   },
   requiresNode: '>=20',
