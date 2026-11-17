@@ -46,8 +46,9 @@ jobs:
         env:
           BRANCH: ${{ github.ref_name }}
         run: |
-          id="$(gh run list --workflow harness-checks.yml --branch "$BRANCH" --status success \
-            --limit 1 --json databaseId --jq '.[0].databaseId // empty')"
+          workflow="$(gh api "repos/$GH_REPO/actions/runs/$GITHUB_RUN_ID" --jq .workflow_id)"
+          id="$(gh api "repos/$GH_REPO/actions/workflows/$workflow/runs" -X GET \
+            -f branch="$BRANCH" -f status=success -f per_page=1 --jq '.workflow_runs[0].id // empty')"
           if [ -z "$id" ]; then
             echo "No earlier successful run; starting afresh."
             exit 0
