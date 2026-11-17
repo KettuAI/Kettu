@@ -25,7 +25,13 @@ import type {
   PlanLimit,
   ProviderBalance,
 } from '@shared/agent-host'
-import { parseGrokBilling } from './vendor-usage/grok'
+import {
+  GROK_CACHED_SIGN_IN,
+  GROK_READS_VERSION,
+  parseGrokAuthInfo,
+  parseGrokBilling,
+  type GrokSignIn,
+} from './vendor-usage/grok'
 import { parseMistralAccount } from './vendor-usage/mistral-vibe'
 import { readAuggieAccount } from './vendor-usage/auggie'
 import { readCopilotQuota } from './vendor-usage/copilot'
@@ -473,6 +479,21 @@ function rememberedEntry(slot: Slot): AgentsFile['agents'][AgentId] | null {
         ...(signIn ? { signIn } : {}),
       }
     : null
+}
+
+/**
+ * The version that runs: the handshake's, else the program's, else the installed package's, since
+ * a package harness has no program to ask and Grok names none in its handshake.
+ */
+function runningVersion(slot: Slot): string | null {
+  const detection = slot.h.detection
+  const adapter = detection?.state === 'available' ? detection.adapter : null
+  return (
+    slot.init?.version ??
+    slot.h.binaryVersion ??
+    (adapter?.current ?? adapter?.fallback)?.version ??
+    null
+  )
 }
 
 /**
@@ -1035,6 +1056,14 @@ export class AgentManager {
         } catch (error) {
           diagnostics.log('warn', `${slot.name}: auth/status failed: ${(error as Error).message}`)
         }
+      }
+      if (slot.def.id === 'grok') {
+        await this.readGrokSignIn(slot, connection, false).catch((error: unknown) => {
+          diagnostics.log(
+            'warn',
+            `${slot.name}: its sign-in read failed: ${(error as Error).message}`,
+          )
+        })
       }
       await this.signInWithKey(slot, connection, init, env)
       void this.readSignInMethod(slot)
@@ -2662,14 +2691,17 @@ export class AgentManager {
   private setAccount(slot: Slot, account: AgentAccount): void {
     const wasRequired = slot.signIn === 'required'
     const before = slot.account
+    // Grok's sign-in names no plan: the one its billing gave the same account stays.
+    const named =
+      account.label || before?.kind !== account.kind || before.email !== account.email
+        ? account
+        : { ...account, label: before.label }
     const same =
-      before?.kind === account.kind &&
-      before.label === account.label &&
-      before.email === account.email
-    slot.account = same && before.tier ? { ...account, tier: before.tier } : account
+      before?.kind === named.kind && before.label === named.label && before.email === named.email
+    slot.account = same && before.tier ? { ...named, tier: before.tier } : named
     // A gateway has no plan: windows kept from a sign-in before it would show as its limits.
-    if (account.kind === 'gateway') slot.limits.clear()
-    slot.signIn = account.kind === 'none' ? 'required' : 'signed-in'
+    if (named.kind === 'gateway') slot.limits.clear()
+    slot.signIn = named.kind === 'none' ? 'required' : 'signed-in'
     this.emit(slot)
     if (wasRequired && slot.signIn === 'signed-in') this.hooks.signedIn(slot.id)
     if (slot.def.id === 'claude-code' && account.kind === 'account') {
@@ -2759,7 +2791,7 @@ export class AgentManager {
     if (!force && slot.signIn === 'required') return
     if (slot.limitsRun) return slot.limitsRun
     if (!force && Date.now() - slot.limitsReadAt < this.timings.limitsMs) return
-    slot.limitsRun = this.limitedRead(slot, this.readLimits(slot))
+    slot.limitsRun = this.limitedRead(slot, this.readLimits(slot, force))
       .then(
         () => this.limitsReadEnded(slot, null),
         (error: unknown) => {
@@ -2834,38 +2866,26 @@ export class AgentManager {
   }
 
   /** The limits from the connection when it reads them, else from the agent's report. */
-  private async readLimits(slot: Slot): Promise<void> {
+  private async readLimits(slot: Slot, force = false): Promise<void> {
     const stored = storedSignInReader(slot.def.id)
     if (stored) return this.readWithStoredSignIn(slot, stored)
     if (slot.def.id === 'antigravity') return this.readAntigravityLimits(slot)
     const runtime = await this.ensureReady(slot.id)
     const { connection } = runtime
-    if (connection.request && ['grok', 'mistral-vibe'].includes(slot.def.id)) {
+    if (slot.def.id === 'grok') return this.readGrokLimits(slot, runtime, force)
+    if (connection.request && slot.def.id === 'mistral-vibe') {
       const now = Date.now()
       const version = runtime.init.version ?? slot.h.binaryVersion
-      if (slot.def.id === 'grok' && !versionAtLeast(version, '1.0.72')) return
-      if (slot.def.id === 'mistral-vibe' && (!version || compareVersions(version, '3.1.0') < 0))
-        return
+      if (!version || compareVersions(version, '3.1.0') < 0) return
       let hiddenSession: string | null = null
       let reply: unknown
       try {
-        if (slot.def.id === 'grok' && slot.signIn !== 'required') {
-          const cached = runtime.init.authMethods.find((method) => method.id === 'grok.com')
-          if (cached?.type === 'agent') await connection.authenticate?.(cached.id)
-        }
-        if (slot.def.id === 'mistral-vibe') {
-          hiddenSession = (await connection.newSession(os.homedir(), { hidden: 'limits' }))
-            .sessionId
-        }
-        reply = await connection.request<unknown>(
-          slot.def.id === 'grok' ? '_x.ai/billing' : 'account/read',
-          hiddenSession ? { sessionId: hiddenSession } : {},
-        )
+        hiddenSession = (await connection.newSession(os.homedir(), { hidden: 'limits' })).sessionId
+        reply = await connection.request<unknown>('account/read', { sessionId: hiddenSession })
       } finally {
         if (hiddenSession) await connection.closeSession(hiddenSession).catch(() => {})
       }
-      const usage =
-        slot.def.id === 'grok' ? parseGrokBilling(reply, now) : parseMistralAccount(reply, now)
+      const usage = parseMistralAccount(reply, now)
       if (!usage)
         throw this.limitsError(slot, new Error('The vendor returned an unknown usage reply'))
       this.applyVendorUsage(slot, usage, now)
@@ -3036,6 +3056,65 @@ export class AgentManager {
       this.emit(slot)
     }
     return method
+  }
+
+  /**
+   * Grok's sign-in from its own `x.ai/auth/info`, which answers without signing in. A running Grok
+   * never sees a sign-in made in a terminal, so `reload` has it load the cached token first; null
+   * when the reply cannot be read.
+   */
+  private async readGrokSignIn(
+    slot: Slot,
+    connection: AgentConnection,
+    reload: boolean,
+  ): Promise<GrokSignIn | null> {
+    const request = connection.request?.bind(connection)
+    if (!request || !versionAtLeast(runningVersion(slot), GROK_READS_VERSION)) return null
+    const ask = async () => parseGrokAuthInfo(await request<unknown>('_x.ai/auth/info', {}))
+    let signIn = await ask()
+    if (reload && signIn?.state === 'unauthenticated') {
+      // Without a cached token it ends within seconds and opens no browser (1.0.88).
+      await connection.authenticate(GROK_CACHED_SIGN_IN).catch(() => {})
+      signIn = await ask()
+    }
+    if (!signIn)
+      this.deps.diagnostics.ignored(slot.id, null, 'x.ai/auth/info with an unknown shape')
+    else if (signIn.account) this.setAccount(slot, signIn.account)
+    else this.signedOut(slot)
+    return signIn
+  }
+
+  /** Grok's plan from `x.ai/billing`, read only while it is signed in. */
+  private async readGrokLimits(slot: Slot, runtime: AgentRuntime, force: boolean): Promise<void> {
+    const { connection } = runtime
+    if (!connection.request || !versionAtLeast(runningVersion(slot), GROK_READS_VERSION)) return
+    const signIn = await this.readGrokSignIn(slot, connection, force)
+    if (signIn?.state === 'unauthenticated') return
+    const now = Date.now()
+    let reply: unknown
+    try {
+      reply = await connection.request<unknown>('_x.ai/billing', {})
+    } catch (error) {
+      if (error instanceof AgentRequestError && error.kind === 'auth_required') {
+        this.signedOut(slot)
+        return
+      }
+      throw error
+    }
+    const usage = parseGrokBilling(reply, now)
+    if (!usage)
+      throw this.limitsError(slot, new Error('The vendor returned an unknown usage reply'))
+    this.applyVendorUsage(slot, usage, now)
+    if (slot.signIn !== 'signed-in') this.signedIn(slot.id)
+  }
+
+  /** The agent says it is signed out: its account and the plan it read are gone. */
+  private signedOut(slot: Slot): void {
+    slot.signIn = 'required'
+    slot.account = null
+    slot.limits.clear()
+    slot.balances = []
+    this.emit(slot)
   }
 
   private applyVendorUsage(slot: Slot, usage: VendorUsage, now: number): void {
@@ -3864,10 +3943,15 @@ export class AgentManager {
     const declared = signsInWithKeyOnly(agentId) ? [] : (init?.authMethods ?? [])
     // Mistral Vibe offers its browser sign-in twice, under one name, once the client takes its page.
     const delegates = declared.some((method) => method.id === DELEGATED_SIGN_IN)
-    const shown = declared.filter((method) => !delegates || method.id !== 'browser-auth')
+    const shown = declared.filter(
+      (method) =>
+        (!delegates || method.id !== 'browser-auth') &&
+        !(slot.def.id === 'grok' && method.id === GROK_CACHED_SIGN_IN),
+    )
     const authMethods: AgentAuthMethod[] = shown.map((method) => ({
       id: method.id,
-      name: method.name,
+      // Grok names its browser sign-in just "Grok"; its description says what the button does.
+      name: slot.def.id === 'grok' && method.description ? method.description : method.name,
       ...(method.description ? { description: method.description } : {}),
       type: method.type,
       ...(method.type === 'agent' && handsOverPage(slot.def, method.id) ? { delegated: true } : {}),
@@ -3920,6 +4004,26 @@ export class AgentManager {
         name: 'Sign in with a subscription',
         type: 'terminal',
         command: formatCommand({ ...display, args: [] }, platform),
+      })
+    }
+    if (slot.def.id === 'grok' && this.has(agentId)) {
+      // Its browser sign-in opens on this computer; a device code also signs in from elsewhere.
+      const launched = slot.def.launch.kind === 'package' ? (slot.def.launch.args ?? []) : []
+      authMethods.push({
+        id: 'grok-device-login',
+        name: 'Sign in with a device code',
+        type: 'terminal',
+        command: formatCommand(
+          {
+            ...display,
+            args: [
+              ...display.args.slice(0, display.args.length - launched.length),
+              'login',
+              '--device-auth',
+            ],
+          },
+          platform,
+        ),
       })
     }
     if (slot.def.id === 'kilo') {

@@ -1,0 +1,18 @@
+{
+  "methodId": "cached_token",
+  "email": "user@example.com",
+  "firstName": "User",
+  "lastName": null,
+  "profileImageUrl": "https://example.com/avatar.png",
+  "teamId": "00000000-0000-0000-0000-000000000000",
+  "teamName": null,
+  "teamRole": null,
+  "organizationId": null,
+  "organizationName": null,
+  "organizationRole": null,
+  "principalType": "User",
+  "principalId": "00000000-0000-0000-0000-000000000001",
+  "userBlockedReason": null,
+  "teamBlockedReasons": [],
+  "codingDataRetentionOptOut": true
+}
