@@ -44,7 +44,8 @@
     "cancelled": "已取消",
     "maxTokens": "已达到 token 上限而停止",
     "maxTurnRequests": "已达到请求次数上限而停止",
-    "refusal": "Agent 拒绝了请求"
+    "refusal": "Agent 拒绝了请求",
+    "withTime": "{{reason}} · {{time}}"
   },
   "tool": {
     "verb": {

@@ -118,6 +118,19 @@
 .ks-user__meta:focus-within {
   opacity: 1;
 }
+/* A message whose turn ended with no reply: the ending stands flush with the bubble's edge, the
+   time and Copy left of it. */
+.ks-user__foot {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  max-width: 100%;
+  margin-top: -4px;
+}
+.ks-user__foot > .ks-user__meta {
+  margin: 0;
+}
 /* A turn's item clips 10px past its box, so a tip centered on a button at the column's edge is
    cut off. It starts at the button's edge instead; translate cancels the tip's own -50%. */
 .ks-user__meta .ui-mac__tip {

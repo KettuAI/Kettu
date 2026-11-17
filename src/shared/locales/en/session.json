@@ -54,7 +54,8 @@
     "cancelled": "Cancelled",
     "maxTokens": "Stopped at the token limit",
     "maxTurnRequests": "Stopped at the request limit",
-    "refusal": "Declined"
+    "refusal": "Declined",
+    "withTime": "{{reason}} · {{time}}"
   },
   "tool": {
     "verb": {

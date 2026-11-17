@@ -3,7 +3,7 @@ import { ArrowTurnDownIcon } from '@hugeicons/core-free-icons'
 import { HugeiconsIcon } from '@hugeicons/react'
 import { useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
-import type { UserContent } from '@shared/thread'
+import type { StopReason, UserContent } from '@shared/thread'
 import { forkSession } from '@renderer/app/actions'
 import { MessageActions } from '@renderer/components/affect/message-actions'
 import { ForkIcon } from '@renderer/components/fork-icon'
@@ -18,7 +18,8 @@ import { useThreadsStore } from '@renderer/stores/threads'
 import { useReplyHover } from '../reply-hover'
 import { useEntry, useEntryAnimation } from '../use-thread'
 import { ChangesCard } from './changes-card'
-import { forkBlocked, forkEntry, stopReasonText } from './helpers'
+import { forkBlocked, forkEntry } from './helpers'
+import { TurnEndTag } from './turn-end-tag'
 
 function Ago({ at }: { at: number }) {
   useTranslation()
@@ -56,14 +57,17 @@ export function UserActions({
   content,
   at,
   steered,
+  end,
 }: {
   content: UserContent[]
   at?: number
   steered?: boolean
+  /** How the turn ended, when it got no reply: it stands in this row, the actions left of it. */
+  end?: { stopReason: StopReason; durationMs: number }
 }) {
   const { t } = useTranslation('session')
   const labels = useCopyLabels(t('userActions.copyMessage'))
-  return (
+  const meta = (
     <span className="ks-user__meta">
       {steered && (
         <span className="inline-flex shrink-0 items-center gap-1">
@@ -86,11 +90,18 @@ export function UserActions({
       />
     </span>
   )
+  if (!end) return meta
+  return (
+    <span className="ks-user__foot">
+      {meta}
+      <TurnEndTag stopReason={end.stopReason} durationMs={end.durationMs} />
+    </span>
+  )
 }
 
 /**
- * Under a turn's reply: the files the turn changed, then Copy for the turn's messages, Fork where
- * the agent can fork from it, how the turn ended when it did not end on its own and when the reply
+ * Under a turn's reply: the files the turn changed, how the turn ended when it did not end on its
+ * own, then Copy for the turn's messages, Fork where the agent can fork from it and when the reply
  * came. The actions show while the pointer is over the reply.
  */
 export const ReplyFooter = memo(
@@ -176,20 +187,22 @@ export const ReplyFooter = memo(
         ? t('replyFooter.forkNotReady')
         : t('replyFooter.fork')
 
-    // A turn that ended on its own says how long it took in its folded work's row.
-    const ending =
-      end && end.stopReason !== 'end_turn' ? stopReasonText(end.stopReason, end.durationMs) : null
     const when =
-      ending || at !== undefined ? (
+      at !== undefined ? (
         <span className="flex min-w-0 items-center gap-1.5 truncate tabular">
-          {ending && <span>{ending}</span>}
-          {ending && at !== undefined && <span aria-hidden>·</span>}
-          {at !== undefined && (ending ? <Ago at={at} /> : <Came at={at} />)}
+          <Came at={at} />
         </span>
       ) : undefined
     return (
       <>
         <ChangesCard sessionId={sessionId} projectPath={projectPath} toolIds={toolIds} />
+        {end && end.stopReason !== 'end_turn' && (
+          <TurnEndTag
+            stopReason={end.stopReason}
+            durationMs={end.durationMs}
+            className={animation}
+          />
+        )}
         <div
           className={cn('ks-reply-foot', animation)}
           data-shown={hovered || forking ? '' : undefined}
