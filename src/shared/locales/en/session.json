@@ -703,7 +703,8 @@
     },
     "outline": {
       "label_one": "Outline, {{count}} message",
-      "label_other": "Outline, {{count}} messages"
+      "label_other": "Outline, {{count}} messages",
+      "noText": "No text"
     },
     "jump": {
       "label": "Jump to latest",

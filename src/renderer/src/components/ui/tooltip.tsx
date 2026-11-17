@@ -37,13 +37,14 @@ function TooltipContent({
   align = 'center',
   alignOffset = 0,
   anchor,
+  positionerClassName,
   children,
   ...props
 }: TooltipPrimitive.Popup.Props &
   Pick<
     TooltipPrimitive.Positioner.Props,
     'align' | 'alignOffset' | 'anchor' | 'side' | 'sideOffset'
-  >) {
+  > & { positionerClassName?: string }) {
   return (
     <TooltipPrimitive.Portal>
       <TooltipPrimitive.Positioner
@@ -53,7 +54,7 @@ function TooltipContent({
         side={side}
         sideOffset={sideOffset}
         collisionPadding={hasBand ? CLEAR_OF_BAND : undefined}
-        className="isolate z-50"
+        className={cn('isolate z-50', positionerClassName)}
       >
         <TooltipPrimitive.Popup
           data-slot="tooltip-content"

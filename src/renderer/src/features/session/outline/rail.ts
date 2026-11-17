@@ -1,12 +1,36 @@
 // The rail's geometry and the reading position, apart from React so they can be tested.
 
 const DASH_HEIGHT = 2
-const DASH_GAP = 4
+// The dashes' pitch at rest, and while the pointer is on the rail, where each is a row to hover.
+export const REST_PITCH = 5
+export const OPEN_PITCH = 10
 
-/** How many dashes the rail draws: one per message while they fit in half the viewport's height. */
+/** How many dashes the rail draws: one per message while the open rail fits in half the viewport. */
 export function dashCount(messages: number, viewportHeight: number): number {
-  const fit = Math.floor((viewportHeight / 2 + DASH_GAP) / (DASH_HEIGHT + DASH_GAP))
+  const fit = Math.floor((viewportHeight / 2 + OPEN_PITCH - DASH_HEIGHT) / OPEN_PITCH)
   return Math.max(0, Math.min(messages, Math.max(1, fit)))
+}
+
+/**
+ * A dash's center below the rail's middle: packed at rest, and spread around `anchor` while open,
+ * so the dash the pointer came in on stays under it.
+ */
+export function dashOffset(index: number, dashes: number, anchor: number | null): number {
+  const rest = (i: number): number => (i - (dashes - 1) / 2) * REST_PITCH
+  return anchor === null ? rest(index) : rest(anchor) + (index - anchor) * OPEN_PITCH
+}
+
+const clamp = (value: number, max: number): number => Math.min(max, Math.max(0, value))
+
+/** The dash nearest `y` below the rail's middle, at rest. */
+export function restDashAt(y: number, dashes: number): number {
+  return clamp(Math.round(y / REST_PITCH + (dashes - 1) / 2), dashes - 1)
+}
+
+/** The message at `y` below the rail's middle while it is open around `anchor`. */
+export function messageAt(y: number, messages: number, dashes: number, anchor: number): number {
+  const top = dashOffset(0, dashes, anchor) - OPEN_PITCH / 2
+  return clamp(Math.floor(((y - top) / (dashes * OPEN_PITCH)) * messages), messages - 1)
 }
 
 /** The dash a message falls under when `dashes` dashes stand for `messages` messages evenly. */
