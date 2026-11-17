@@ -17,6 +17,8 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@renderer/components/ui/dropdown-menu'
+import { GlideHighlight } from '@renderer/components/glide-highlight'
+import { HoverCard, HoverCardContent } from '@renderer/components/ui/hover-card'
 import { Spinner } from '@renderer/components/ui/spinner'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
 import type { ThreadJumps } from '../thread'
@@ -59,6 +61,13 @@ function useRailBox(
 const PREVIEW_AFTER_MS = 80
 // How long after the preview opens it is in place and may glide between dashes.
 const GLIDE_AFTER_MS = 60
+// Resting on one message this long opens the full list beside the rail.
+const LIST_AFTER_MS = 500
+// How long the list stays once the pointer has left both it and the rail.
+const LIST_CLOSE_MS = 220
+// The list's rows have a fixed height, so the pointed row can be placed beside its dash at once.
+const LIST_ROW = 32
+const LIST_PAD = 5
 // How long the rail stays open after the pointer leaves, so leaving it by a pixel does not fold it.
 const FOLD_AFTER_MS = 160
 // Dash lengths: at rest, under the pointer and stepping down beside it, and while open.
@@ -124,10 +133,6 @@ export const MessageOutline = memo(function MessageOutline({
     if (next) opened()
   }
 
-  const jump = (row: OutlineRow): void => {
-    void jumpTo({ entryId: row.entryId, pos: row.pos }, { onRevealed: () => setOpen(false) })
-  }
-
   // The list opens scrolled to the reading position. A keyboard opening highlights its first row,
   // which is moved to the reading position; a pointer that comes in later highlights what it is on.
   const popup = useRef<HTMLDivElement | null>(null)
@@ -164,10 +169,19 @@ export const MessageOutline = memo(function MessageOutline({
   const [previewing, setPreviewing] = useState(false)
   const previewTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   const foldTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+  // The full list, opened by resting on a message or leaving towards its preview. Its place stays
+  // after it closes, so it fades out where it was.
+  const [listOpen, setListOpen] = useState(false)
+  const [place, setPlace] = useState<ListPlace | null>(null)
+  const list = useRef<HTMLDivElement | null>(null)
+  const previewBox = useRef<HTMLDivElement | null>(null)
+  const onRail = useRef(false)
+  const listTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+  const closeTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   useEffect(
     () => () => {
-      clearTimeout(previewTimer.current)
-      clearTimeout(foldTimer.current)
+      for (const timer of [previewTimer, foldTimer, listTimer, closeTimer])
+        clearTimeout(timer.current)
     },
     [],
   )
@@ -175,12 +189,55 @@ export const MessageOutline = memo(function MessageOutline({
   const ids = useId()
   // The preview glides from dash to dash only once it is in place, or it would glide in from a corner.
   const [glide, setGlide] = useState(false)
-  const previewOpen = previewing && at !== null
+  const previewOpen = previewing && at !== null && !listOpen
   useEffect(() => {
     if (!previewOpen) return
     const timer = setTimeout(() => setGlide(true), GLIDE_AFTER_MS)
     return () => clearTimeout(timer)
   }, [previewOpen])
+
+  useLayoutEffect(() => {
+    if (listOpen && place && list.current) list.current.scrollTop = place.scroll
+  }, [listOpen, place])
+  // Pointing along the rail keeps the pointed row in sight; in the list the row is under the pointer.
+  useEffect(() => {
+    const view = list.current
+    if (!listOpen || at === null || !view || !onRail.current) return
+    const top = LIST_PAD + at * LIST_ROW
+    if (top - LIST_PAD < view.scrollTop) view.scrollTop = top - LIST_PAD
+    else if (top + LIST_ROW + LIST_PAD > view.scrollTop + view.clientHeight)
+      view.scrollTop = top + LIST_ROW + LIST_PAD - view.clientHeight
+  }, [listOpen, at])
+
+  const fold = (): void => {
+    clearTimeout(previewTimer.current)
+    clearTimeout(listTimer.current)
+    setAt(null)
+    setPreviewing(false)
+    setGlide(false)
+    foldTimer.current = setTimeout(() => setAnchor(null), FOLD_AFTER_MS)
+  }
+  const closeList = (): void => {
+    clearTimeout(closeTimer.current)
+    setListOpen(false)
+    if (!onRail.current) fold()
+  }
+  const leaveList = (): void => {
+    clearTimeout(closeTimer.current)
+    closeTimer.current = setTimeout(closeList, LIST_CLOSE_MS)
+  }
+
+  const jump = (row: OutlineRow): void => {
+    void jumpTo(
+      { entryId: row.entryId, pos: row.pos },
+      {
+        onRevealed: () => {
+          setOpen(false)
+          closeList()
+        },
+      },
+    )
+  }
 
   if (rows.length < 2 || !room || height === 0) return null
   const dashes = dashCount(rows.length, height)
@@ -190,15 +247,35 @@ export const MessageOutline = memo(function MessageOutline({
   const spread = anchor !== null
   const restHeight = dashOffset(dashes - 1, dashes, null) - dashOffset(0, dashes, null)
 
+  const maxList = Math.round(height * 0.6)
+  // Opens the list with the row of `index` level with its dash, scrolled as little as that needs.
+  const openList = (index: number): void => {
+    const dash = document.getElementById(`${ids}-${dashOf(index, rows.length, dashes)}`)
+    if (!dash) return
+    const total = 2 * LIST_PAD + rows.length * LIST_ROW
+    const visible = Math.min(total, maxList)
+    const center = LIST_PAD + index * LIST_ROW + LIST_ROW / 2
+    const scroll = Math.min(Math.max(0, center - visible / 2), total - visible)
+    clearTimeout(listTimer.current)
+    setPlace({ dash, offset: dash.offsetHeight / 2 - (center - scroll), scroll })
+    setListOpen(true)
+  }
+
   const below = (clientY: number): number =>
     clientY - (rail.current?.getBoundingClientRect().top ?? 0)
   const point = (clientY: number, around: number): void => {
     const next = messageAt(below(clientY), rows.length, dashes, around)
+    if (next !== at && !listOpen) {
+      clearTimeout(listTimer.current)
+      listTimer.current = setTimeout(() => openList(next), LIST_AFTER_MS)
+    }
     setAt(next)
     setShown(next)
   }
   const onPointerEnter = (event: ReactPointerEvent): void => {
+    onRail.current = true
     clearTimeout(foldTimer.current)
+    clearTimeout(closeTimer.current)
     const around = anchor ?? restDashAt(below(event.clientY), dashes)
     setAnchor(around)
     point(event.clientY, around)
@@ -212,12 +289,18 @@ export const MessageOutline = memo(function MessageOutline({
   const onPointerMove = (event: ReactPointerEvent): void => {
     if (anchor !== null) point(event.clientY, anchor)
   }
-  const onPointerLeave = (): void => {
+  const onPointerLeave = (event: ReactPointerEvent): void => {
+    onRail.current = false
+    // Leaving to the right across the preview's height heads onto the preview, so the list opens.
+    const right = rail.current?.getBoundingClientRect().right ?? Infinity
+    const box = previewBox.current?.getBoundingClientRect()
+    const towards =
+      !!box && event.clientX >= right - 1 && event.clientY >= box.top && event.clientY <= box.bottom
+    if (!listOpen && previewOpen && at !== null && towards) openList(at)
+    else if (!listOpen) return fold()
     clearTimeout(previewTimer.current)
-    setAt(null)
-    setPreviewing(false)
-    setGlide(false)
-    foldTimer.current = setTimeout(() => setAnchor(null), FOLD_AFTER_MS)
+    clearTimeout(listTimer.current)
+    leaveList()
   }
 
   return (
@@ -293,6 +376,7 @@ export const MessageOutline = memo(function MessageOutline({
         triggerId={`${ids}-${dashOf(Math.min(shown, rows.length - 1), rows.length, dashes)}`}
       >
         <TooltipContent
+          ref={previewBox}
           side="right"
           sideOffset={2}
           positionerClassName={glide ? 'ks-outline__glide' : undefined}
@@ -310,9 +394,59 @@ export const MessageOutline = memo(function MessageOutline({
           )}
         </TooltipContent>
       </Tooltip>
+      <HoverCard
+        open={listOpen}
+        onOpenChange={(next) => {
+          if (!next) closeList()
+        }}
+      >
+        <HoverCardContent
+          ref={list}
+          anchor={place?.dash}
+          side="right"
+          align="start"
+          alignOffset={place?.offset ?? 0}
+          sideOffset={4}
+          className="relative w-70 overflow-y-auto p-1.25"
+          style={{ maxHeight: maxList }}
+          onPointerEnter={() => clearTimeout(closeTimer.current)}
+          onPointerLeave={leaveList}
+        >
+          <GlideHighlight />
+          {rows.map((row, i) => (
+            <button
+              key={row.entryId}
+              type="button"
+              tabIndex={-1}
+              data-highlighted={i === at || undefined}
+              data-reading={i === readingIndex || undefined}
+              className="ks-outline__item relative flex h-8 w-full cursor-default items-center gap-2.5 rounded-lg text-left outline-hidden select-none"
+              onPointerEnter={() => {
+                setAt(i)
+                setShown(i)
+              }}
+              onClick={() => jump(row)}
+            >
+              <span className="min-w-0 flex-1 truncate">
+                {row.label || t('thread.outline.noText')}
+              </span>
+              {waiting === row.entryId && (
+                <Spinner className="size-3.5 shrink-0 text-muted-foreground" />
+              )}
+            </button>
+          ))}
+        </HoverCardContent>
+      </HoverCard>
     </>
   )
 })
+
+/** Where the list opens: beside `dash`, shifted by `offset` and scrolled to `scroll`. */
+interface ListPlace {
+  dash: HTMLElement
+  offset: number
+  scroll: number
+}
 
 function OutlineItem({
   label,
