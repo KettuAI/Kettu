@@ -464,7 +464,7 @@ function AddAgentDialog({
             <SettingsField label={t('agents.add.harness')}>
               <SettingSelect
                 label={t('agents.add.harness')}
-                className="w-full"
+                className="k-select--full"
                 value={chosen?.harnessId ?? harness}
                 options={harnesses.map((h) => ({
                   value: h.harnessId,
