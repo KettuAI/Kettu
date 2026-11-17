@@ -2,7 +2,12 @@
 
 import { Tooltip as TooltipPrimitive } from '@base-ui/react/tooltip'
 import { cn } from 'cn'
+import { hasBand } from '@renderer/lib/platform'
 import { useOverlayRoot } from '@renderer/stores/overlays'
+
+// The window's own controls lie over the top band on Windows and Linux, above any page content, so
+// a tooltip keeps out of it: the band is --title-bar high, and the rest stays at Base UI's 5.
+const CLEAR_OF_BAND = { top: 40, right: 5, bottom: 5, left: 5 }
 
 function TooltipProvider({ delay = 0, ...props }: TooltipPrimitive.Provider.Props) {
   return <TooltipPrimitive.Provider data-slot="tooltip-provider" delay={delay} {...props} />
@@ -47,6 +52,7 @@ function TooltipContent({
         anchor={anchor}
         side={side}
         sideOffset={sideOffset}
+        collisionPadding={hasBand ? CLEAR_OF_BAND : undefined}
         className="isolate z-50"
       >
         <TooltipPrimitive.Popup
