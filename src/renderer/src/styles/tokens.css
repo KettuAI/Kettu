@@ -1692,15 +1692,6 @@
     var(--primary-hover-from),
     var(--primary-hover-to)
   );
-  /* Hover darkens the send button on the light page and lightens it on the dark one; a press
-     darkens it in both. */
-  --send-hover: light-dark(
-    color-mix(in srgb, var(--send) 92%, black),
-    color-mix(in srgb, var(--send) 92%, white)
-  );
-  --send-active: color-mix(in srgb, var(--send) 86%, black);
-  --send-shadow: 0 1px 2px
-    light-dark(color-mix(in srgb, var(--send-active) 28%, transparent), transparent);
   /* A session using the computer: the solid label on the composer, darkened so its white text
      reads at 5:1, and the fox line of the label that waits for an app's answer. */
   --computer-line: color-mix(in srgb, var(--send) 42%, transparent);

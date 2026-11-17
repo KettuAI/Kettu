@@ -17,8 +17,8 @@ import { DESCRIBED_ROW, ItemText } from './menu-parts'
 const HOLD_MS = 450
 
 /**
- * Send, as the Chat Composer draws it: a round 28 px button, the fox once there is something to
- * send and quiet gray while there is not.
+ * Send, as the Chat Composer draws it: a round 28 px button, in the primary button's tint once
+ * there is something to send and quiet gray while there is not.
  */
 export function SendButton({
   disabled,
