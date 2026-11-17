@@ -30,6 +30,7 @@ import {
   type StreamdownProps,
 } from 'streamdown'
 import { githubIssueUrl } from '@shared/git'
+import { Kbd } from '@renderer/components/ui/kbd'
 import { AgentFileLink, FileLink } from '@renderer/features/files/file-link'
 import { ProjectPathContext, useAgentFileRef, useFileRef } from '@renderer/features/files/file-refs'
 import { useProjectRepository } from '@renderer/features/git/gh-reference-data'
@@ -259,6 +260,15 @@ function Emphasis({ children, className }: ComponentProps<'em'> & ExtraProps) {
   )
 }
 
+/** A key from `<kbd>`, as the interface draws its shortcuts, sized to the prose. */
+function Key({ children }: ComponentProps<'kbd'> & ExtraProps) {
+  return (
+    <Kbd className="pointer-events-auto h-auto min-h-[1.5em] min-w-[1.5em] px-[0.45em] text-[0.8667em] select-text">
+      {children}
+    </Kbd>
+  )
+}
+
 const components: Components = {
   a: Link,
   img: MarkdownImage,
@@ -270,6 +280,7 @@ const components: Components = {
   inlineCode: InlineCode,
   input: TaskCheckbox,
   em: Emphasis,
+  kbd: Key,
 }
 
 // The alerts are marked after the sanitizer, which would drop the mark.
