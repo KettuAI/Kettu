@@ -29,6 +29,8 @@ export interface FakeSessionState {
   ultracode: boolean
   /** The MCP servers of its latest `session/new`, `load`, `resume` or `fork`. */
   mcpServers: McpServer[]
+  /** What its `session/new` added to the system prompt, with `FAKE_AGENT_SYSTEM_PROMPT`. */
+  systemPrompt: string | null
 }
 
 export interface Turn {

@@ -77,3 +77,63 @@ it('hands memory turned on in a session with its next prompt, and the guide agai
   expect(next).toMatch(/^Your last message was: <kettu-guide>/)
   expect(next.endsWith('</kettu-memory>\n\nagain')).toBe(true)
 })
+
+// The fake agent as agy 1.5.9, which takes a new session's system prompt addition.
+const AGY = {
+  fakeAs: ['antigravity' as const],
+  agentEnv: { FAKE_AGENT_VERSION: '1.5.9', FAKE_AGENT_SYSTEM_PROMPT: '1' },
+}
+
+/** Sends a prompt and waits for its turn to end, for one with no reply of its own. */
+async function finish(port: TestPort, sessionId: string, text: string): Promise<void> {
+  const ends = () => port.entries(sessionId).filter((entry) => entry.kind === 'turn_end').length
+  const before = ends()
+  await port.request('sessions.prompt', { sessionId, content: [{ type: 'text', text }] })
+  await port.until(() => ends() > before && port.summary(sessionId)?.status === 'ready')
+}
+
+it("puts Kettu's guide and memory in a new agy session's system prompt, and sends them no more", async () => {
+  host = await startTestHost(AGY)
+  const window = host.connect()
+  const { id } = await window.request('sessions.create', {
+    agentId: 'antigravity',
+    projectPath: host.project,
+  })
+  await window.open(id)
+  await window.untilStatus(id, 'ready')
+
+  const prompt = await reply(window, id, '/instructions')
+  expect(prompt).toMatch(/^<kettu-guide>\n[^<]*read_kettu_guide/)
+  expect(prompt).toContain('<kettu-memory>')
+  await reply(window, id, 'hello')
+  expect(await reply(window, id, '/recall')).toBe('Your last message was: hello')
+  // A compacted context keeps the system prompt, so nothing goes ahead of the next prompt.
+  await finish(window, id, '/compact')
+  await reply(window, id, 'again')
+  expect(await reply(window, id, '/recall')).toBe('Your last message was: again')
+})
+
+it('still sends the guide and memory ahead of an agy session it did not create, and again after compaction', async () => {
+  host = await startTestHost(AGY)
+  const window = host.connect()
+  // A session of agy's own history, from the Antigravity app or CLI: no system prompt addition.
+  const { id } = await window.request('sessions.import', {
+    agentId: 'antigravity',
+    projectPath: host.project,
+    acpSessionId: 'history-3',
+  })
+  await window.open(id)
+  await window.untilStatus(id, 'ready')
+
+  await reply(window, id, 'hello')
+  const first = await reply(window, id, '/recall')
+  expect(first).toMatch(/^Your last message was: <kettu-guide>\n[^<]*read_kettu_guide/)
+  expect(first.endsWith('</kettu-memory>\n\nhello')).toBe(true)
+  expect(await reply(window, id, '/recall')).toBe('Your last message was: /recall')
+
+  await finish(window, id, '/compact')
+  await reply(window, id, 'again')
+  const next = await reply(window, id, '/recall')
+  expect(next).toMatch(/^Your last message was: <kettu-guide>/)
+  expect(next.endsWith('</kettu-memory>\n\nagain')).toBe(true)
+})

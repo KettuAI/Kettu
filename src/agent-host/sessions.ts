@@ -3150,7 +3150,8 @@ export class SessionManager {
    * What an attach of the session hands its agent: the Marketplace's skills, Kettu's own with them
    * while the session reaches Kettu's server, the MCP servers, the artifacts service to an agent
    * that takes MCP over HTTP while Kettu's server is on for it, then the Marketplace's servers
-   * meant for its agent, and Kettu's memory while it is on.
+   * meant for its agent, and Kettu's memory while it is on. An agent that adds to its system
+   * prompt when a session starts gets the guide and memory as one text.
    */
   private async attachOptions(
     sessionId: string,
@@ -3164,6 +3165,12 @@ export class SessionManager {
     const reached = own.length > 0 || kettuService !== null
     const skills = (await this.deps.skills?.(record.agentId, reached)) ?? {}
     const memory = await this.memoryFor(sessionId, record, reached)
+    const append = runtime?.connection.systemPromptAppend
+      ? kettuAhead(
+          reached ? (this.deps.mcp?.guide(record.agentId) ?? null) : null,
+          memory?.text ?? null,
+        )
+      : null
     return {
       mcpServers: [...own, ...this.libraryServers(sessionId, record, runtime, own)],
       ...skills,
@@ -3172,6 +3179,7 @@ export class SessionManager {
       ...(memory ? { memory } : {}),
       ...(kettuService ? { kettuService } : {}),
       ...(record.instructionsAhead ? { promptAhead: true } : {}),
+      ...(append ? { systemPromptAppend: append } : {}),
     }
   }
 
@@ -4365,11 +4373,10 @@ export class SessionManager {
     void this.removeLeftovers(runtime)
     if (gone()) throw removedWhileStarting()
     let setup
+    let attach: SessionOptions
     try {
-      setup = await runtime.connection.newSession(
-        workDir(live.record),
-        await this.attachOptions(live.id, live.record, runtime),
-      )
+      attach = await this.attachOptions(live.id, live.record, runtime)
+      setup = await runtime.connection.newSession(workDir(live.record), attach)
     } catch (error) {
       if (gone()) throw removedWhileStarting()
       const mapped = agentError(error)
@@ -4387,6 +4394,7 @@ export class SessionManager {
       throw removedWhileStarting()
     }
     live.record.acpSessionId = setup.sessionId
+    this.noteSystemPrompt(live.record, attach, setup.sessionId)
     this.stampConfig(live.record)
     this.attach(live, runtime.connection)
     this.attachedOn(live, setup.harnessVersion, false)
@@ -4543,11 +4551,10 @@ export class SessionManager {
     }
     if (gone()) throw removedWhileStarting()
     let setup
+    let attach: SessionOptions
     try {
-      setup = await runtime.connection.newSession(
-        await this.cwdOf(live),
-        await this.attachOptions(live.id, live.record, runtime),
-      )
+      attach = await this.attachOptions(live.id, live.record, runtime)
+      setup = await runtime.connection.newSession(await this.cwdOf(live), attach)
     } catch (error) {
       // Its failure, such as the agent's exit, no longer belongs to a session that went meanwhile.
       if (gone()) throw removedWhileStarting()
@@ -4566,6 +4573,7 @@ export class SessionManager {
       // The quit ran while `session/new` was pending: the message waits in its queue and the
       // session goes into the index and the thread store as the quit closes them.
       live.record.acpSessionId = setup.sessionId
+      this.noteSystemPrompt(live.record, attach, setup.sessionId)
       this.update(live, {
         acpSessionId: setup.sessionId,
         config: chosenConfig(setup.config, live.startValues),
@@ -4577,6 +4585,7 @@ export class SessionManager {
       return
     }
     live.record.acpSessionId = setup.sessionId
+    this.noteSystemPrompt(live.record, attach, setup.sessionId)
     this.stampConfig(live.record)
     this.attach(live, runtime.connection)
     this.attachedOn(live, setup.harnessVersion, false)
@@ -6015,6 +6024,11 @@ export class SessionManager {
     })
   }
 
+  /** Notes that the agent's new session got Kettu's guide and memory in its system prompt. */
+  private noteSystemPrompt(record: SessionRecord, attach: SessionOptions, sessionId: string): void {
+    if (attach.systemPromptAppend) record.systemPromptSentTo = sessionId
+  }
+
   /** Notes the configuration folder picked for the agent a session was just made in. */
   private stampConfig(record: SessionRecord): void {
     const chosen = this.deps.agents.runningConfig(record.agentId)?.chosen ?? null
@@ -6030,6 +6044,7 @@ export class SessionManager {
   ): Promise<ConfigOption[]> {
     const setup = await connection.newSession(await this.cwdOf(live), attach)
     live.record.acpSessionId = setup.sessionId
+    this.noteSystemPrompt(live.record, attach, setup.sessionId)
     this.stampConfig(live.record)
     live.rewrite = true
     this.update(live, { acpSessionId: setup.sessionId })
@@ -6555,6 +6570,8 @@ export class SessionManager {
     const { record } = live
     const own = connection.ownInstructions && !record.instructionsAhead
     if (own || record.memorySentTo === record.acpSessionId) return null
+    // Its creation carried them in its system prompt, which it keeps through a compaction.
+    if (record.systemPromptSentTo === record.acpSessionId) return null
     const runtime = this.deps.agents.runtime(record.agentId)
     const servers = this.kettuServers(live.id, record, runtime)
     const tools = servers.length > 0 || this.kettuService(live.id, record, runtime) !== null
@@ -6564,10 +6581,8 @@ export class SessionManager {
           .flatMap((server) => (server.type === 'stdio' ? [] : (server.prompt ?? [])))
           .join('\n\n')
       : (this.deps.mcp?.guide(record.agentId) ?? '')
-    const guide = tools && this.deps.mcp && text ? `<kettu-guide>\n${text}\n</kettu-guide>` : null
     const memory = (await this.memoryFor(live.id, record, tools))?.text ?? null
-    const ahead = [guide, memory].filter((text): text is string => text !== null)
-    return ahead.length > 0 ? ahead.join('\n\n') : null
+    return kettuAhead(tools && this.deps.mcp && text ? text : null, memory)
   }
 
   /** The agent that had the session before any takeover. */
@@ -10291,6 +10306,14 @@ const UNUSABLE_STATES: ReadonlySet<AgentStatus['state']> = new Set([
   'node-missing',
   'node-outdated',
 ])
+
+/** Kettu's guide, marked as such, then its memory; null when there is neither. */
+function kettuAhead(guide: string | null, memory: string | null): string | null {
+  const parts = [guide ? `<kettu-guide>\n${guide}\n</kettu-guide>` : null, memory].filter(
+    (part): part is string => part !== null,
+  )
+  return parts.length > 0 ? parts.join('\n\n') : null
+}
 
 const cutAnswer = (text: string): string =>
   text.length > SIDE_ANSWER_CHARS ? text.slice(0, SIDE_ANSWER_CHARS) : text

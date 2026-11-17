@@ -333,6 +333,11 @@ export interface SessionRecord {
    */
   memorySentTo?: string
   /**
+   * The agent's own session whose creation carried Kettu's guide and memory in its system prompt,
+   * which that session keeps: nothing of theirs goes ahead of its prompts.
+   */
+  systemPromptSentTo?: string
+  /**
    * How its agent's own session last ran outside Kettu, as in a terminal: its first attach here
    * takes the same values, so the prompt cache that run left still matches; cleared once taken.
    */
@@ -875,6 +880,9 @@ export function parseSessionsFile(data: Record<string, unknown>): SessionsFile |
       ...agentWorktreeOf(item.agentWorktree),
       ...(isString(item.memorySentTo) && item.memorySentTo !== ''
         ? { memorySentTo: item.memorySentTo }
+        : {}),
+      ...(isString(item.systemPromptSentTo) && item.systemPromptSentTo !== ''
+        ? { systemPromptSentTo: item.systemPromptSentTo }
         : {}),
       ...outsideOf(item.outside),
       ...(item.instructionsAhead === true ? { instructionsAhead: true as const } : {}),

@@ -37,8 +37,10 @@ function connect(
   version: string,
   turn?: (client: AgentContext, sessionId: string) => Promise<void>,
   tiers: (typeof TIER | null)[] = [],
+  declared = true,
 ) {
   const prompted: string[] = []
+  const opened: { method: string; meta: unknown }[] = []
   const closed: string[] = []
   const accounts: string[] = []
   const signIns: (string | null)[] = []
@@ -51,14 +53,25 @@ function connect(
         loadSession: true,
         sessionCapabilities: { resume: {}, close: {}, load: {}, list: {} },
         auth: { logout: {} },
-        _meta: { antigravity: { tier: true, systemPrompt: { append: true } } },
+        _meta: {
+          antigravity: { tier: true, ...(declared ? { systemPrompt: { append: true } } : {}) },
+        },
       },
       agentInfo: { name: 'Antigravity ACP Server', version },
       authMethods: [{ id: 'oauth-personal', name: 'Log in with Google' }],
     }))
-    .onRequest(methods.agent.session.new, () => {
+    .onRequest(methods.agent.session.new, (ctx) => {
+      opened.push({ method: 'new', meta: ctx.params._meta })
       const tier = tiers.length > 0 ? tiers.shift()! : TIER
       return { sessionId: `s-${++next}`, _meta: tier ? { antigravity: { tier } } : {} }
+    })
+    .onRequest(methods.agent.session.load, (ctx) => {
+      opened.push({ method: 'load', meta: ctx.params._meta })
+      return {}
+    })
+    .onRequest(methods.agent.session.resume, (ctx) => {
+      opened.push({ method: 'resume', meta: ctx.params._meta })
+      return {}
     })
     .onRequest(methods.agent.session.prompt, async (ctx) => {
       prompted.push(ctx.params.sessionId)
@@ -86,7 +99,7 @@ function connect(
     agentId: 'antigravity',
     name: 'Google Antigravity',
   })
-  return { connection, prompted, closed, accounts, signIns, configs }
+  return { connection, prompted, closed, accounts, signIns, configs, opened }
 }
 
 /** A session's thread, with every permission request allowed once. */
@@ -819,5 +832,49 @@ describe("agy's full access", () => {
     expect(mode.value).toBe(FULL)
     expect(mode.choices!.at(-1)!.value).toBe(FULL)
     connection.close()
+  })
+})
+
+describe("agy's system prompt", () => {
+  const GUIDE = '<kettu-guide>\nYou are working in Kettu.\n</kettu-guide>'
+
+  it('takes the guide and memory in its new session, not ahead of a prompt', async () => {
+    const { connection, opened } = connect('1.5.9')
+    await connection.initialize('1.0.0')
+    expect(connection.systemPromptAppend).toBe(true)
+    await connection.newSession('/repo', { systemPromptAppend: GUIDE })
+    expect(opened).toEqual([
+      { method: 'new', meta: { antigravity: { systemPrompt: { append: GUIDE } } } },
+    ])
+    connection.close()
+  })
+
+  it('sends nothing when the host has no text, and keeps the session as it is on load and resume', async () => {
+    const { connection, opened } = connect('1.5.9')
+    await connection.initialize('1.0.0')
+    await connection.newSession('/repo')
+    // agy stores it with the session, so the session's later opens pass it no more.
+    await connection.loadSession('s-1', '/repo', { systemPromptAppend: GUIDE })
+    await connection.resumeSession('s-1', '/repo', { systemPromptAppend: GUIDE })
+    expect(opened).toEqual([
+      { method: 'new', meta: undefined },
+      { method: 'load', meta: undefined },
+      { method: 'resume', meta: undefined },
+    ])
+    connection.close()
+  })
+
+  it('stays unused before 1.5.9 and where agy does not declare it', async () => {
+    for (const [version, declared] of [
+      ['1.5.8', true],
+      ['1.5.9', false],
+    ] as const) {
+      const { connection, opened } = connect(version, undefined, [], declared)
+      await connection.initialize('1.0.0')
+      expect(connection.systemPromptAppend).toBe(false)
+      await connection.newSession('/repo', { systemPromptAppend: GUIDE })
+      expect(opened).toEqual([{ method: 'new', meta: undefined }])
+      connection.close()
+    }
   })
 })
