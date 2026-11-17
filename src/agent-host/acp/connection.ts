@@ -1063,7 +1063,7 @@ export class AcpConnection implements AgentConnection {
         // The build still runs, in Plan mode, which asks before each change as Default does.
         this.hooks.log('warn', `Could not switch agy to ${mode}: ${(error as Error).message}`)
       }
-      target.send(approved(plan.file))
+      target.send(approved(plan.file), { approval: true })
     } else if (picked.optionId === KEEP_PLANNING && picked.note) {
       target.send(picked.note)
     }

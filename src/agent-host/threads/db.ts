@@ -424,7 +424,8 @@ function prepareAll(db: DatabaseSync) {
           WHERE json_extract(part.value, '$.type') = 'ref') AS names
       FROM entries e LEFT JOIN outline_titles t ON t.session_id = e.session_id AND t.pos = e.pos
       WHERE e.session_id = ?1 AND e.kind = 'user'
-        AND json_extract(e.json, '$.from') IS NULL ORDER BY e.pos`),
+        AND json_extract(e.json, '$.from') IS NULL
+        AND json_extract(e.json, '$.approval') IS NULL ORDER BY e.pos`),
     // What a session made, latest first, for its card in the sidebar.
     artifactWrites: sql(`
       SELECT json_extract(json, '$.artifactId') AS id, json_extract(json, '$.title') AS title,

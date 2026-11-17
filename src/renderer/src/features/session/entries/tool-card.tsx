@@ -77,7 +77,7 @@ export const ToolCard = memo(function ToolCard({
   if (entry.planVersion !== undefined) {
     return (
       <div ref={ref} className={cn('min-w-0', animation)}>
-        <PlanSettled entry={entry} />
+        <PlanSettled sessionId={sessionId} entry={entry} />
       </div>
     )
   }

@@ -2885,7 +2885,7 @@ export class SessionManager {
     for (const id of current.thread.order) {
       const entry = current.thread.byId[id]
       const pos = current.positions.get(id)
-      if (entry?.kind !== 'user' || entry.from || pos === undefined) continue
+      if (entry?.kind !== 'user' || entry.from || entry.approval || pos === undefined) continue
       rows.push({
         pos,
         entryId: id,
@@ -3037,7 +3037,7 @@ export class SessionManager {
       }),
       apply: (output) => this.applyOutput(live, output),
       requestPermission: (request, signal) => this.requestPermission(live, request, signal),
-      send: (text) => this.sendForUser(live, text),
+      send: (text, options) => this.sendForUser(live, text, options?.approval),
       startMode: () => startModeIn(this.deps.settings(), record.agentId) ?? null,
       readAgentFile: (file) => this.deps.agentFile?.(record.id, file) ?? Promise.resolve(null),
     }
@@ -6300,10 +6300,12 @@ export class SessionManager {
     from?: FromSession,
     portId?: string,
     device?: FromDevice,
+    approval?: true,
   ): void {
     live.used = true
     const now = this.now()
-    this.startTurn(live, content, now, this.addPrompt(live, content, now, from, device), portId)
+    const entryId = this.addPrompt(live, content, now, from, device, approval)
+    this.startTurn(live, content, now, entryId, portId)
   }
 
   /**
@@ -6605,6 +6607,7 @@ export class SessionManager {
     now: number,
     from?: FromSession,
     device?: FromDevice,
+    approval?: true,
   ): string {
     const entryId = this.nextId(live)
     this.emit(live, [
@@ -6617,6 +6620,7 @@ export class SessionManager {
           at: now,
           ...(from ? { from } : {}),
           ...(device ? { device } : {}),
+          ...(approval ? { approval } : {}),
         },
       },
     ])
@@ -6910,6 +6914,7 @@ export class SessionManager {
           steered: true,
           ...(item.from ? { from: item.from } : {}),
           ...(item.device ? { device: item.device } : {}),
+          ...(item.approval ? { approval: item.approval } : {}),
         },
       },
     ])
@@ -6983,7 +6988,7 @@ export class SessionManager {
     this.update(live, { queue: rest, ...(rest.length === 0 ? { queuePaused: false } : {}) })
     const queuedBy = live.queuedBy.get(next.id)
     live.queuedBy.delete(next.id)
-    this.sendPrompt(live, next.content, next.from, queuedBy, next.device)
+    this.sendPrompt(live, next.content, next.from, queuedBy, next.device, next.approval)
   }
 
   private pauseQueue(live: Live): void {
@@ -8740,19 +8745,24 @@ export class SessionManager {
    * back: at once when the session can start a turn, ahead of a waiting queue since it is the
    * answer the user just gave; behind the queue while a turn runs.
    */
-  private sendForUser(live: Live, text: string): void {
+  private sendForUser(live: Live, text: string, approval?: true): void {
     if (this.live.get(live.id) !== live || live.closing) return
     const content: UserContent[] = [{ type: 'text', text }]
     const { status, queue } = live.thread.session
     if (canSend(status)) {
-      this.sendPrompt(live, content)
+      this.sendPrompt(live, content, undefined, undefined, undefined, approval)
       return
     }
     if (status !== 'running' && status !== 'awaiting_permission') {
       this.deps.diagnostics.log('warn', `Session ${live.id} could not take a message: ${status}`)
       return
     }
-    this.update(live, { queue: [...queue, { id: randomUUID(), content, at: this.now() }] })
+    this.update(live, {
+      queue: [
+        ...queue,
+        { id: randomUUID(), content, at: this.now(), ...(approval ? { approval } : {}) },
+      ],
+    })
     this.persist(live)
     this.touch(live.id)
   }

@@ -444,6 +444,12 @@ describe('the thread database', () => {
         content: [{ type: 'text', text: 'Check the result' }],
         device: { id: 'phone', name: 'Phone' },
       },
+      {
+        kind: 'user',
+        id: 'approved',
+        content: [{ type: 'text', text: 'Implement the plan.' }],
+        approval: true,
+      },
       { kind: 'session_message', id: 'sm', senderId: 'sender', content: [] },
     ]
     db.write('s1', { head, entries: entries.map((entry, pos) => ({ pos, entry })) })

@@ -59,9 +59,10 @@ export interface SessionTarget {
   requestPermission(request: PermissionRequest, signal: AbortSignal): Promise<PermissionAnswer>
   /**
    * Sends `text` as the user's own message, such as the note that sends a plan back: at once when
-   * the session can start a turn, else behind its queue.
+   * the session can start a turn, else behind its queue. With `approval`, the message is the
+   * answer a card already shows, such as a plan's approval, which the thread does not draw.
    */
-  send(text: string): void
+  send(text: string, options?: { approval?: true }): void
   /** The permission mode the settings start the agent's new sessions in, or null for none. */
   startMode(): string | null
   /**
