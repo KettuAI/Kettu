@@ -26,7 +26,8 @@ const where = () => ({ cwd: process.cwd(), electron: process.env.ELECTRON_RUN_AS
 createInterface({ input: process.stdin }).on('line', (line) => {
   const message = JSON.parse(line)
   if (message.id === undefined) return
-  const seen = { params: message.params, env: env(), args: process.argv.slice(2), ...where() }
+  const scope = process.env.KETTU_MODEL_SCOPE_FILE ?? null
+  const seen = { params: message.params, env: env(), scope, args: process.argv.slice(2), ...where() }
   const result =
     message.method === 'session/new'
       ? { sessionId: 'session-' + process.pid, _meta: seen }
@@ -41,6 +42,7 @@ interface Seen {
   params: Record<string, unknown>
   args: string[]
   env: { url: string | null; token: string | null }
+  scope: string | null
   cwd: string
   electron: string | null
 }
@@ -77,6 +79,7 @@ async function startRouter(
       ...process.env,
       KETTU_MCP_URL: 'http://inherited',
       KETTU_MCP_TOKEN: 'inherited',
+      KETTU_MODEL_SCOPE_FILE: '/inherited/scope.json',
       ELECTRON_RUN_AS_NODE: '1',
       AGENT_HELP: options.help ?? '',
     },
@@ -138,6 +141,37 @@ describe('the session router', () => {
     // A later request of the first session still reaches its process, which kept its own.
     const later = await request('session/set_mode', { sessionId: opened.sessionId, modeId: 'x' })
     expect(later._meta.env).toEqual(service)
+  })
+
+  it("gives a session's model scope file to its own process only, out of the request", async () => {
+    const { request } = await startRouter()
+    const control = await request('initialize', { protocolVersion: 1 })
+    expect(control._meta.scope).toBeNull()
+
+    const file = '/tmp/kettu-model-scope-x/one.json'
+    const opened = await request('session/new', {
+      cwd: '/repo',
+      mcpServers: [],
+      _meta: { 'sh.kettu/model-scope': file, 'sh.kettu/mcp': { url: 'http://s', token: 't' } },
+    })
+    expect(opened._meta.scope).toBe(file)
+    expect(opened._meta.env).toEqual({ url: 'http://s', token: 't' })
+    expect(opened._meta.params).toEqual({ cwd: '/repo', mcpServers: [] })
+
+    const plain = await request('session/new', { cwd: '/repo', mcpServers: [] })
+    expect(plain._meta.scope).toBeNull()
+
+    // Only an absolute path reaches the process; the request loses it either way.
+    const relative = await request('session/new', {
+      cwd: '/repo',
+      mcpServers: [],
+      _meta: { 'sh.kettu/model-scope': 'scope.json' },
+    })
+    expect(relative._meta.scope).toBeNull()
+    expect(relative._meta.params).toEqual({ cwd: '/repo', mcpServers: [] })
+
+    const later = await request('session/set_mode', { sessionId: opened.sessionId, modeId: 'x' })
+    expect(later._meta.scope).toBe(file)
   })
 
   it('passes no variables for a service it cannot use, and still strips it', async () => {
