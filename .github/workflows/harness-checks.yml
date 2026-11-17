@@ -1,0 +1,77 @@
+name: Harness checks
+
+# Once a day, the new versions of the harnesses Kettu installs or drives that the ACP Registry
+# does not check: each goes as far as it can without signing in, and the results are this run's
+# harness-checks artifact, as tools/harness-checks/README.md describes. Apart from pull request CI.
+on:
+  schedule:
+    - cron: '23 5 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: harness-checks-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  check:
+    name: Check new harness versions
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    permissions:
+      contents: read
+      # Reads the previous run's results and opens an issue for a version that failed twice.
+      actions: read
+      issues: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+      # Only the tools the checks load from the repository: TypeScript, Vite and Prettier.
+      - run: pnpm install --frozen-lockfile --ignore-scripts
+      # The last successful run's results on this branch, which say what was checked and failed
+      # before. Without one, or once it has expired, the run starts afresh.
+      - name: Read the previous results
+        env:
+          BRANCH: ${{ github.ref_name }}
+        run: |
+          workflow="$(gh api "repos/$GH_REPO/actions/runs/$GITHUB_RUN_ID" --jq .workflow_id)"
+          id="$(gh api "repos/$GH_REPO/actions/workflows/$workflow/runs" -X GET \
+            -f branch="$BRANCH" -f status=success -f per_page=1 --jq '.workflow_runs[0].id // empty')"
+          if [ -z "$id" ]; then
+            echo "No earlier successful run; starting afresh."
+            exit 0
+          fi
+          live="$(gh api "repos/$GH_REPO/actions/runs/$id/artifacts" \
+            --jq '[.artifacts[] | select(.name == "harness-checks" and (.expired | not))] | length')"
+          if [ "$live" = 0 ]; then
+            echo "Run $id kept no results; starting afresh."
+            exit 0
+          fi
+          gh run download "$id" --name harness-checks --dir previous
+          echo "Read the results of run $id."
+      - name: Check
+        run: node tools/harness-checks/check.mjs --previous previous/harness-checks.json --out harness-checks.json
+      - uses: actions/upload-artifact@v7
+        with:
+          name: harness-checks
+          path: harness-checks.json
+          if-no-files-found: error
+          retention-days: 90
+      # Issues come only from main's runs; elsewhere the step says what it would open.
+      - name: Report versions that failed twice
+        continue-on-error: true
+        env:
+          DRY_RUN: ${{ github.ref != 'refs/heads/main' && '--dry-run' || '' }}
+        run: node tools/harness-checks/report.mjs harness-checks.json $DRY_RUN
