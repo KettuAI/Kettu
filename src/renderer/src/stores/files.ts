@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import type { EditorState, Text } from '@codemirror/state'
 import type { EditorView } from '@codemirror/view'
+import type { AgentId } from '@shared/agents'
 import type { FileContent } from '@shared/files'
 import type { FileDiff } from '@shared/git'
 import { errorCode, errorMessage, host } from '@renderer/lib/host'
@@ -16,7 +17,10 @@ export interface ProjectFiles {
 }
 
 export interface OpenFile {
+  /** Relative to the project, or absolute for a file of the session agent's own folder. */
   path: string
+  /** For a file of that folder, the session it belongs to, read through it and never written. */
+  agent?: { sessionId: string; agentId: AgentId }
   /** The line to show and mark, from a reference such as `src/x.ts:12`. */
   line: number | null
   /** Counts requests to show `line`, so the editor jumps once per request, not on every visit. */
@@ -85,6 +89,8 @@ interface FilesStore {
   pending: Record<string, PendingClose>
   /** By project, the diff that covers the open file until it is closed. */
   diffs: Record<string, DiffView>
+  /** By `agentFolderKey`, the folder a session's agent keeps its own files in, null for none. */
+  agentFolders: Record<string, string | null>
 }
 
 export const useFilesStore = create<FilesStore>()(() => ({
@@ -94,7 +100,27 @@ export const useFilesStore = create<FilesStore>()(() => ({
   svgSource: false,
   pending: {},
   diffs: {},
+  agentFolders: {},
 }))
+
+/** A session's agent folder is asked for again when the session moves to another agent. */
+export const agentFolderKey = (sessionId: string, agentId: AgentId): string =>
+  `${sessionId}\0${agentId}`
+
+const askedFolders = new Set<string>()
+
+/** Asks the session's host once for its agent's own folder, which `agentFolders` then holds. */
+export function ensureAgentFolder(sessionId: string, agentId: AgentId): void {
+  const key = agentFolderKey(sessionId, agentId)
+  if (askedFolders.has(key)) return
+  askedFolders.add(key)
+  host('files.agentFolder', { sessionId }).then(
+    (folder) =>
+      useFilesStore.setState((s) => ({ agentFolders: { ...s.agentFolders, [key]: folder } })),
+    // Asked again by the next reply that names a file outside the project.
+    () => askedFolders.delete(key),
+  )
+}
 
 /**
  * Each open file's editor state, which the editor keeps current, so edits and their undo history
@@ -241,7 +267,7 @@ export function openFile(
   projectPath: string,
   path: string,
   line: number | null = null,
-  options: { preview?: boolean } = {},
+  options: { preview?: boolean; agent?: OpenFile['agent'] } = {},
 ): void {
   showSidePane(projectPath, 'files')
   closeDiff(projectPath)
@@ -263,7 +289,11 @@ export function openFile(
     void readOpenFile(projectPath, path)
     return
   }
-  const added: OpenFile = { ...fresh(path, line, null), preview: !!options.preview }
+  const added: OpenFile = {
+    ...fresh(path, line, null),
+    preview: !!options.preview,
+    ...(options.agent && { agent: options.agent }),
+  }
   const files = tabs ? [...tabs.files] : []
   const replaced = options.preview ? files.findIndex((file) => file.preview) : -1
   if (replaced >= 0) {
@@ -404,13 +434,17 @@ const readsSource = (path: string) => isSvgFile(path) && useFilesStore.getState(
  * so a clip goes on playing, unless `renew` asks for the fresh grant.
  */
 async function readOpenFile(projectPath: string, path: string, renew = false): Promise<void> {
-  if (!findFile(projectPath, path)) return
-  const asText = readsSource(path)
+  const file = findFile(projectPath, path)
+  if (!file) return
+  const { agent } = file
+  const asText = !agent && readsSource(path)
   try {
-    const content = await host('files.read', { projectPath, path, ...(asText && { asText }) })
+    const content = agent
+      ? await host('files.readAgentFile', { sessionId: agent.sessionId, path })
+      : await host('files.read', { projectPath, path, ...(asText && { asText }) })
     update(projectPath, path, (now) => {
       // The choice of an SVG's picture or source changed meanwhile, and its own read follows.
-      if (readsSource(path) !== asText) return {}
+      if (!now.agent && readsSource(path) !== asText) return {}
       const buffer = getBuffer(projectPath, path)
       if (!renew && sameMedia(now.content, content)) return { error: null }
       // An SVG's picture has no text to set the edits against; they wait for its source.
@@ -454,7 +488,7 @@ export function renewOpenFile(projectPath: string, path: string): void {
 export async function saveFile(projectPath: string, path: string): Promise<boolean> {
   const file = findFile(projectPath, path)
   const buffer = getBuffer(projectPath, path)
-  if (!file?.dirty || !buffer) return true
+  if (!file?.dirty || !buffer || file.agent) return true
   if (file.saving) return false
   const doc = buffer.state.doc
   const text = buffer.state.sliceDoc()

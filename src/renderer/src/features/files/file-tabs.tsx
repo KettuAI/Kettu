@@ -2,8 +2,11 @@ import { useEffect, useRef } from 'react'
 import { DragDropProvider, type DragEndEvent } from '@dnd-kit/react'
 import { isSortable, useSortable } from '@dnd-kit/react/sortable'
 import { useTranslation } from 'react-i18next'
+import { AgentMark } from '@renderer/components/agents/agent-mark'
 import { tabSensors } from '@renderer/components/tab-sensors'
 import { PaneTabClose } from '@renderer/features/shell/panel-button'
+import { hostOfPath } from '@renderer/lib/host-paths'
+import { agentName } from '@renderer/stores/agents'
 import { closeFile, keepTab, moveTab, type OpenFile } from '@renderer/stores/files'
 import { FileTypeIcon } from './file-type-icon'
 import { folderOf, nameOf } from './paths'
@@ -76,6 +79,9 @@ function FileTab({
   const tab = useRef<HTMLButtonElement | null>(null)
   const { ref, handleRef, isDragging } = useSortable({ id: file.path, index })
   const name = nameOf(file.path)
+  const hostId = hostOfPath(projectPath)
+  // A file of the agent's own folder carries the agent's mark, and says whose it is.
+  const owner = file.agent ? agentName(file.agent.agentId, hostId) : null
 
   // A full strip scrolls; a tab selected out of sight, such as one a reference opens, comes into view.
   useEffect(() => {
@@ -98,13 +104,17 @@ function FileTab({
         type="button"
         role="tab"
         aria-selected={selected}
-        title={file.path}
+        title={owner ? `${file.path}\n${t('tabs.agentFile', { agent: owner })}` : file.path}
         onClick={onSelect}
         onDoubleClick={() => keepTab(projectPath, file.path)}
         onAuxClick={(event) => event.button === 1 && closeFile(projectPath, file.path)}
         className="kp-tab__btn"
       >
-        <FileTypeIcon path={file.path} className="size-3.5 shrink-0" />
+        {file.agent ? (
+          <AgentMark agent={file.agent.agentId} hostId={hostId} size={14} dot={null} />
+        ) : (
+          <FileTypeIcon path={file.path} className="size-3.5 shrink-0" />
+        )}
         <span className="kp-tab__name">
           {name}
           {folder && <span className="kp-tab__note"> {folder}</span>}

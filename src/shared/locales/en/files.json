@@ -59,11 +59,13 @@
     "reload": "Reload",
     "keepMine": "Keep mine",
     "saveFailed": "Couldn't save: {{message}}",
-    "readOnly": "Read-only: this file isn't valid UTF-8, so saving it could change its bytes."
+    "readOnly": "Read-only: this file isn't valid UTF-8, so saving it could change its bytes.",
+    "agentFile": "Read-only: {{agent}} keeps this file for the session. It isn't part of the project."
   },
   "tabs": {
     "label": "Open files",
-    "close": "Close {{name}}"
+    "close": "Close {{name}}",
+    "agentFile": "{{agent}}'s file, read-only"
   },
   "link": {
     "open": "Open {{target}}"

@@ -590,6 +590,30 @@ describe('createValidators', () => {
     rejects(() => authorize({ projectPath: '/p', path: 'a.png', sessionId: '' }))
     rejects(() => authorize({ projectPath: '/p', path: 'a\0b.png' }))
 
+    // An agent's own file names its session; the host decides whether it lies in its folder.
+    const folder = posix['files.agentFolder']
+    expect(folder({ sessionId: 's', extra: 1 })).toEqual({ sessionId: 's' })
+    rejects(() => folder({}))
+    rejects(() => folder({ sessionId: '' }))
+    rejects(() => folder({ sessionId: 3 }))
+    const own = posix['files.readAgentFile']
+    expect(own({ sessionId: 's', path: '/Users/me/.gemini/plan.md', extra: 1 })).toEqual({
+      sessionId: 's',
+      path: '/Users/me/.gemini/plan.md',
+    })
+    rejects(() => own({ sessionId: 's', path: 'plan.md' }))
+    rejects(() => own({ sessionId: 's', path: '' }))
+    rejects(() => own({ sessionId: 's', path: '/a\0b.md' }))
+    rejects(() => own({ sessionId: 's', path: `/${'x'.repeat(32_768)}` }))
+    rejects(() => own({ sessionId: 's', path: 'file:///Users/me/plan.md' }))
+    rejects(() => own({ path: '/a.md' }))
+    rejects(() => own({ sessionId: '', path: '/a.md' }))
+    rejects(() => windows['files.readAgentFile']({ sessionId: 's', path: '\\Users\\plan.md' }))
+    expect(windows['files.readAgentFile']({ sessionId: 's', path: 'C:\\a\\plan.md' })).toEqual({
+      sessionId: 's',
+      path: 'C:\\a\\plan.md',
+    })
+
     const search = posix['files.search']
     expect(search({ projectPath: '/p', query: 'needle', extra: 1 })).toEqual({
       projectPath: '/p',

@@ -62,6 +62,7 @@ import {
 } from '@shared/market-publish'
 import { HARNESSES_FOLDER, KETTU_HOME_FOLDER, PLUGINS_FOLDER } from '@shared/storage'
 import type { AgentId, DigestedThreadEntry, FromDevice, ThreadEntry } from '@shared/thread'
+import { AgentFiles } from './agent-files'
 import { agentOptionsFile, AgentOptionsStore, startModeIn } from './agent-options'
 import { listedModels } from './claude/user-settings'
 import { STOP_TIMINGS } from './agent-process'
@@ -401,6 +402,7 @@ export class AgentHost {
   /** Runs git for the project's files, with the agent environment. */
   private readonly execRunner: ExecRunner
   private readonly files: FilesService
+  private readonly agentFiles: AgentFiles
   /** Grants for the media a thread names and the Files pane opens, which main serves. */
   private readonly media: MediaService
   private gitUnsubscribe: (() => void)[] = []
@@ -484,6 +486,12 @@ export class AgentHost {
       platform,
       media: (real, info) => this.media.grantFile(real, info, null),
       describeMedia: (real, info) => this.media.describe(real, info),
+    })
+    this.agentFiles = new AgentFiles({
+      platform,
+      homeDir: options.homeDir ?? os.homedir(),
+      session: (sessionId) => this.sessions.agentSession(sessionId),
+      read: (real, shown) => this.files.readAllowed(real, shown),
     })
     this.deviceAccess = new DeviceAccessStore(options.userDataPath, log)
     this.publishDrafts = new PublishDrafts(options.userDataPath, log)
@@ -2687,6 +2695,8 @@ export class AgentHost {
         this.filesCall(projectPath, (root) => this.files.read(root, path, asText, device !== null)),
       'files.search': ({ projectPath, query }) =>
         this.filesCall(projectPath, (root) => this.files.search(root, query)),
+      'files.agentFolder': ({ sessionId }) => this.agentFiles.folder(sessionId),
+      'files.readAgentFile': ({ sessionId, path }) => this.agentFiles.read(sessionId, path),
       'files.write': ({ projectPath, path, text, version }) =>
         this.filesCall(projectPath, (root) => this.files.write(root, path, text, version)),
       'media.open': async ({ projectPath, path, sessionId }) => {

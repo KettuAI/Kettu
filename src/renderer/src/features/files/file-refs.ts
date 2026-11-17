@@ -1,6 +1,9 @@
-import { createContext, useContext } from 'react'
+import { createContext, useContext, useEffect } from 'react'
+import type { AgentId } from '@shared/agents'
 import { relativePath } from '@renderer/lib/format'
-import { useFilesStore } from '@renderer/stores/files'
+import { SessionIdContext } from '@renderer/features/session/media/grants'
+import { agentFolderKey, ensureAgentFolder, useFilesStore } from '@renderer/stores/files'
+import { useSessionsStore } from '@renderer/stores/sessions'
 
 /** The project of the thread being shown, for telling which references in it name its files. */
 export const ProjectPathContext = createContext<string | null>(null)
@@ -70,4 +73,46 @@ export function useFileRef(text: string | null): (FileRef & { projectPath: strin
     (s) => !!ref && !!projectPath && !!s.byProject[projectPath]?.known.has(ref.path),
   )
   return known && ref && projectPath ? { ...ref, projectPath } : null
+}
+
+/** A file the session's agent keeps in its own folder, outside the project, as a reply links it. */
+export interface AgentFileRef {
+  /** Absolute on the agent's host, with `/` between segments. */
+  path: string
+  line: number | null
+  projectPath: string
+  sessionId: string
+  agentId: AgentId
+}
+
+const ABSOLUTE = /^(?:\/|[a-z]:[\\/])/i
+
+/**
+ * A reference's absolute path when it lies in `folder`, the session agent's own, else null. Only
+ * an absolute path or a `file:` URI names one; the host checks where it really is.
+ */
+export function agentFileRef(text: string, folder: string): FileRef | null {
+  const value = text.trim()
+  const uri = FILE_URI.test(value)
+  if (!uri && !ABSOLUTE.test(value)) return null
+  // With `/` on every host, which Windows takes too, so the name is the part after the last one.
+  const root = folder.replace(/\\/g, '/').replace(/\/+$/, '')
+  const ref = parseFileRef(uri ? value : value.replace(/\\/g, '/'), root)
+  return ref && { path: `${root}/${ref.path}`, line: ref.line }
+}
+
+/** The reference when it names a file of the shown session's agent's own folder, else null. */
+export function useAgentFileRef(text: string | null): AgentFileRef | null {
+  const projectPath = useContext(ProjectPathContext)
+  const sessionId = useContext(SessionIdContext)
+  const agentId = useSessionsStore((s) => (sessionId ? s.byId[sessionId]?.agentId : null) ?? null)
+  const named = !!text && (FILE_URI.test(text.trim()) || ABSOLUTE.test(text.trim()))
+  const key = named && sessionId && agentId ? agentFolderKey(sessionId, agentId) : null
+  const folder = useFilesStore((s) => (key ? s.agentFolders[key] : undefined))
+  useEffect(() => {
+    if (key && folder === undefined) ensureAgentFolder(sessionId!, agentId!)
+  }, [key, folder, sessionId, agentId])
+  if (!folder || !text || !projectPath || !sessionId || !agentId) return null
+  const ref = agentFileRef(text, folder)
+  return ref && { ...ref, projectPath, sessionId, agentId }
 }

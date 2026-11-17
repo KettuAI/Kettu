@@ -1269,6 +1269,11 @@ export interface HostContract {
     deviceResult: DeviceFileContent
   }
   'files.search': { params: { projectPath: string; query: string }; result: FileSearch }
+  // The folder where the session's agent keeps files of its own outside the project, such as agy's
+  // Plan mode plan; null when it keeps none.
+  'files.agentFolder': { params: { sessionId: string }; result: string | null }
+  // A file of that folder, by its absolute path; read-only and never media.
+  'files.readAgentFile': { params: { sessionId: string; path: string }; result: FileContent }
   // A null `version` overwrites whatever the file holds.
   'files.write': {
     params: { projectPath: string; path: string; text: string; version: string | null }
@@ -1738,6 +1743,8 @@ export const HOST_METHODS = [
   'files.list',
   'files.read',
   'files.search',
+  'files.agentFolder',
+  'files.readAgentFile',
   'files.write',
   'media.open',
   'media.authorize',

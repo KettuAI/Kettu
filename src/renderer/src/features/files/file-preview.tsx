@@ -24,6 +24,7 @@ import { imageSurface } from '@renderer/features/session/media/surface'
 import { ZoomControls, type ZoomLevel } from '@renderer/features/session/media/zoom-controls'
 import type { Size } from '@renderer/features/session/media/zoom'
 import { toast } from '@renderer/components/ui/toast'
+import { agentName } from '@renderer/stores/agents'
 import {
   closeFile,
   discardEdits,
@@ -209,6 +210,14 @@ function Notes({ projectPath, file }: { projectPath: string; file: OpenFile }) {
       </Bar>
     )
   }
+  if (file.agent) {
+    const agent = agentName(file.agent.agentId, hostOfPath(projectPath))
+    return (
+      <Bar tone="muted">
+        <span className="min-w-0 flex-1">{t('preview.agentFile', { agent })}</span>
+      </Bar>
+    )
+  }
   if (file.content?.kind === 'text' && !file.content.editable) {
     return (
       <Bar tone="muted">
@@ -246,8 +255,9 @@ function NextStep({
 /** Editors and the file manager reach files on this computer only. */
 const isLocal = (projectPath: string): boolean => !isWeb && hostOfPath(projectPath) === null
 
-/** The file's own path on this computer, from its path in the project. */
+/** The file's own path on this computer, from its path in the project; an agent's is absolute. */
 function pathOnDisk(projectPath: string, path: string): string {
+  if (/^(?:\/|[a-z]:[\\/])/i.test(path)) return path
   const sep = isWindows ? '\\' : '/'
   return `${projectPath.replace(/[\\/]+$/, '')}${sep}${path.split('/').join(sep)}`
 }
