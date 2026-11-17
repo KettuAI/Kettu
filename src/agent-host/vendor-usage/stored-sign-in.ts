@@ -15,6 +15,8 @@ export interface SignInPlace {
   platform: Platform
   now: number
   fetch?: typeof globalThis.fetch
+  /** Runs the harness so it renews its own token; Kettu never refreshes one itself. */
+  renew?: () => Promise<void>
 }
 
 export interface StoredSignInReader {

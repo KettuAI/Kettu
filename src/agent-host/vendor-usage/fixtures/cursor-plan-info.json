@@ -1,0 +1,25 @@
+{
+  "planInfo": {
+    "planName": "Free",
+    "price": "Free",
+    "billingCycleEnd": "1796243965363",
+    "includedUsagePeriod": "INCLUDED_USAGE_PERIOD_WEEKLY",
+    "includedUsageResetsAt": "1795523203231"
+  },
+  "nextUpgrade": {
+    "tier": "premium",
+    "name": "Premium",
+    "includedAmountCents": 4615,
+    "description": "Cursor, Grok Bot, Grok, and X in one plan, with more coding usage.",
+    "dashboardAction": {
+      "action": "xaiCommercePaywall",
+      "args": {
+        "tier": "premium",
+        "entrypoint": "plan_info",
+        "sku": "sku_iFHd43ge7daR"
+      }
+    },
+    "includedUsagePeriod": "INCLUDED_USAGE_PERIOD_WEEKLY"
+  },
+  "isMerged": true
+}

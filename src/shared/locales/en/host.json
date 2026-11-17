@@ -209,6 +209,7 @@
     "signInCancelled": "The sign-in to {{agent}} was cancelled.",
     "geminiAccountMoved": "Gemini CLI no longer takes personal Google accounts: Google moved them to Google Antigravity. Use this account in Google Antigravity; Gemini CLI still works with Gemini Code Assist Standard or Enterprise and with paid Gemini API or Vertex AI keys.",
     "noOptions": "{{agent}} gave no models within {{seconds}} s",
+    "keychainRefused": "Kettu was not allowed to read {{agent}}’s sign-in from the keychain, so its usage is not shown. It asks again in 10 minutes.",
     "noLimits": "{{agent}} gave no plan limits within {{seconds}} s",
     "unreadableLimits": "Kettu could not find plan limits in {{agent}}'s {{command}} reply",
     "antigravitySignedOut": "{{agent}} is signed out. Sign in again in a terminal to read its plan limits.",
