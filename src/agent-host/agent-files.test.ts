@@ -51,6 +51,7 @@ describe('AgentFiles', () => {
       platform,
       media: async () => null,
       describeMedia: async () => null,
+      trash: async () => {},
     })
   const service = () =>
     new AgentFiles({
