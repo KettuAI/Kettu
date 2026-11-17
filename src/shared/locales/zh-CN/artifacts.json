@@ -197,7 +197,13 @@
     "sideLabel": "历史与评论",
     "previewOnly": {
       "title": "实时页面在电脑上打开",
-      "body": "在浏览器里，artifact 显示它的预览图。实时页面在电脑上的 Kettu 里打开，或在电脑自己的网络里打开它提供的网页版。"
+      "body": "在浏览器里，artifact 显示它的预览图。实时页面在电脑上的 Kettu 里打开，或在电脑自己的网络里打开它提供的网页版。",
+      "sharedTitle": "在浏览器中打开实时页面",
+      "published": "这里显示预览图。已发布的页面在 Kettu 上用新标签页打开。",
+      "unpublished": "这里显示预览图。发布这个 artifact 后，可在 Kettu 上用新标签页打开它的页面。",
+      "older": "已发布的页面是版本 {{published}}，最新是版本 {{latest}}。",
+      "open": "打开已发布页面",
+      "publish": "发布后打开"
     }
   },
   "canvas": {
