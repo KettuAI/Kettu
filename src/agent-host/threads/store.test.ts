@@ -120,3 +120,15 @@ it('reads what a write of the same session sent before it stored', async () => {
   void store.write('s1', change('u0', 'u1'))
   expect((await store.page('s1'))?.entries.map((e) => e.id)).toEqual(['u0', 'u1'])
 })
+
+it('searches the messages written before it, and keeps answering reads while it scans', async () => {
+  const store = open((data) => inThreadWorker(data))
+  await store.ready
+  void store.write('s1', change('find me', 'other'))
+  void store.write('s2', change('nothing'))
+  const hits = store.search(['find'])
+  expect((await store.page('s2'))?.entries.map((e) => e.id)).toEqual(['nothing'])
+  expect((await hits).map((hit) => [hit.sessionId, hit.entryId, hit.role])).toEqual([
+    ['s1', 'find me', 'user'],
+  ])
+})

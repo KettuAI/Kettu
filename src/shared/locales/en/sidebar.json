@@ -21,6 +21,7 @@
     "scope": {
       "all": "All",
       "sessions": "Sessions",
+      "conversations": "Conversations",
       "artifacts": "Artifacts",
       "routines": "Routines",
       "projects": "Projects",
@@ -29,6 +30,7 @@
     "group": {
       "recent": "Recent",
       "session": "Sessions",
+      "conversation": "In conversations",
       "artifact": "Artifacts",
       "routine": "Routines",
       "project": "Projects",
@@ -53,17 +55,25 @@
     "results_one": "{{count}} result",
     "results_other": "{{count}} results",
     "noMatch": "No results for “{{query}}”",
-    "searchedAll": "Searched sessions, artifacts, routines, projects and settings.",
+    "noConversation": "No conversation mentions “{{query}}”",
+    "searchedAll": "Searched sessions, conversations, artifacts, routines, projects and settings.",
     "searchedScope": "Searched {{scope}} only. Press Tab to search more.",
     "none": {
       "all": "Nothing here yet.",
       "sessions": "No sessions yet.",
+      "conversations": "Search what was said in your sessions.",
       "artifacts": "No artifacts yet.",
       "routines": "No routines yet.",
       "projects": "No projects yet.",
       "settings": "Nothing here."
     },
     "loading": "Loading…",
+    "searching": "Searching conversations…",
+    "minChars": "Type at least 2 characters to search conversations.",
+    "failed": "Could not search conversations",
+    "hostsAway": "Offline, not searched: {{hosts}}",
+    "hostsFailed_one": "{{count}} computer could not be searched",
+    "hostsFailed_other": "{{count}} computers could not be searched",
     "hint": {
       "navigate": "Navigate",
       "open": "Open",
@@ -71,6 +81,7 @@
     },
     "latest": {
       "sessions": "Latest sessions",
+      "conversations": "Conversations",
       "artifacts": "Latest artifacts",
       "routines": "Latest routines",
       "projects": "Latest projects",

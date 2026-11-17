@@ -30,6 +30,7 @@ import { RunGroup } from './entries/run-group'
 import { ToolGroup } from './entries/tool-group'
 import { JumpToLatest } from './jump-to-latest'
 import { MessageOutline } from './outline/message-outline'
+import { RevealTarget } from './outline/reveal-target'
 import { hoverReply } from './reply-hover'
 import { ReplyToSelection } from './reply-selection'
 import { SubSessionStart } from './subagent/sub-session-start'
@@ -580,6 +581,7 @@ export const Thread = memo(function Thread({
         <JumpToLatest sessionId={sessionId} working={working} />
         <OlderLoading sessionId={sessionId} />
         <MessageOutline sessionId={sessionId} viewport={viewport} content={content} jumps={jumps} />
+        <RevealTarget sessionId={sessionId} viewport={viewport} content={content} jumps={jumps} />
       </MessageScroller>
       {returnTo && (returnShown || returnLost) && (
         <ReturnTo

@@ -29,10 +29,13 @@ import {
   type CommandGroup,
 } from '@renderer/components/affect/command-menu'
 import { AgentMark } from '@renderer/components/agents/agent-mark'
+import { Button } from '@renderer/components/ui/button'
 import { Dialog } from '@renderer/components/ui/dialog'
+import { Skeleton } from '@renderer/components/ui/skeleton'
 import type { ArtifactKind } from '@renderer/features/artifacts/model'
 import { keyCaps } from '@renderer/features/shell/shortcuts'
 import { artifactListShown, useArtifactsStore } from '@renderer/stores/artifacts'
+import { revealMessage } from '@renderer/stores/reveal'
 import { useRoutinesStore } from '@renderer/stores/routines'
 import {
   openArtifact,
@@ -57,7 +60,8 @@ import {
   type SearchEntry,
   type SearchScope,
 } from './search-model'
-import { useSearchEntries } from './use-search-entries'
+import { useConversationHits } from './use-conversation-hits'
+import { useConversationEntries, useSearchEntries } from './use-search-entries'
 
 /**
  * Search over the window, from the sidebar's field or Mod+K: sessions, artifacts, routines,
@@ -123,6 +127,10 @@ function openEntry(entry: SearchEntry): void {
     case 'session':
       openSession(entry.sessionId, entry.projectPath)
       break
+    case 'conversation':
+      revealMessage({ sessionId: entry.sessionId, entryId: entry.entryId, pos: entry.pos })
+      openSession(entry.sessionId, entry.projectPath)
+      break
     case 'artifact':
       openArtifact(entry.artifactId)
       break
@@ -143,6 +151,7 @@ function openEntry(entry: SearchEntry): void {
 
 const SCOPE_OF_KIND: Partial<Record<ResultGroup['key'], Exclude<SearchScope, 'all'>>> = {
   session: 'sessions',
+  conversation: 'conversations',
   artifact: 'artifacts',
   routine: 'routines',
   project: 'projects',
@@ -153,10 +162,13 @@ const SCOPE_OF_KIND: Partial<Record<ResultGroup['key'], Exclude<SearchScope, 'al
 const SHOW_ALL = 'scope:'
 
 function SearchPalette() {
-  const { t } = useTranslation('sidebar')
-  const entries = useSearchEntries()
+  const { t } = useTranslation(['sidebar', 'common'])
+  const found = useSearchEntries()
   const [query, setQuery] = useState('')
   const [scope, setScope] = useState<SearchScope>('all')
+  const conversations = useConversationHits(query)
+  const said = useConversationEntries(conversations.hits)
+  const entries = useMemo(() => [...found, ...said], [found, said])
   const results = useMemo(() => runSearch(entries, query, scope), [entries, query, scope])
   const byKey = useMemo(() => new Map(entries.map((entry) => [entry.key, entry])), [entries])
   const trimmed = query.trim()
@@ -206,14 +218,41 @@ function SearchPalette() {
     count: id === 'all' ? undefined : results.counts[id],
   }))
 
+  const asksConversations = scope === 'conversations' || scope === 'all'
   const empty: ReactNode =
     scope === 'artifacts' && !artifactsLoaded ? (
       <div className="kettu-search-empty">
         <span>{t('search.loading')}</span>
       </div>
+    ) : asksConversations && conversations.searching ? (
+      <div className="kettu-search-empty" role="status">
+        {scope === 'conversations' ? (
+          <ConversationSkeleton />
+        ) : (
+          <span>{t('search.searching')}</span>
+        )}
+      </div>
+    ) : asksConversations && conversations.failures.length > 0 ? (
+      <div className="kettu-search-empty" role="alert">
+        <b>{t('search.failed')}</b>
+        <span title={conversations.failures[0]}>{conversations.failures[0]}</span>
+        <Button size="xs" variant="outline" className="mx-auto" onClick={conversations.retry}>
+          {t('common:actions.retry')}
+        </Button>
+      </div>
+    ) : scope === 'conversations' && (!trimmed || conversations.short) ? (
+      <div className="kettu-search-empty">
+        <b>{t(trimmed ? 'search.minChars' : 'search.none.conversations')}</b>
+      </div>
     ) : (
       <div className="kettu-search-empty">
-        <b>{trimmed ? t('search.noMatch', { query: trimmed }) : t(`search.none.${scope}`)}</b>
+        <b>
+          {trimmed
+            ? t(scope === 'conversations' ? 'search.noConversation' : 'search.noMatch', {
+                query: trimmed,
+              })
+            : t(`search.none.${scope}`)}
+        </b>
         {trimmed && (
           <span>
             {scope === 'all'
@@ -223,6 +262,15 @@ function SearchPalette() {
         )}
       </div>
     )
+
+  // What the conversation search could not reach, under the results.
+  const notes = [
+    conversations.away.length > 0 &&
+      t('search.hostsAway', { hosts: conversations.away.join(', ') }),
+    conversations.failures.length > 0 &&
+      conversations.hits.length > 0 &&
+      t('search.hostsFailed', { count: conversations.failures.length }),
+  ].filter(Boolean)
 
   return (
     <CommandMenu
@@ -241,6 +289,11 @@ function SearchPalette() {
       mark={mark}
       hints={
         <>
+          {notes.map((note) => (
+            <span key={String(note)} className="kettu-search-note">
+              {note}
+            </span>
+          ))}
           <span>
             <kbd>↑</kbd>
             <kbd>↓</kbd> {t('search.hint.navigate')}
@@ -299,6 +352,12 @@ function commandOf(entry: SearchEntry): Command {
         ...base,
         logo: <AgentMark agent={entry.agentId} size={16} hostId={entry.hostId} />,
       }
+    case 'conversation':
+      return {
+        ...base,
+        logo: <AgentMark agent={entry.agentId} size={16} hostId={entry.hostId} />,
+        detail: entry.snippet,
+      }
     case 'project':
       return { ...base, logo: <FolderClosedMark /> }
     case 'artifact':
@@ -314,4 +373,21 @@ function commandOf(entry: SearchEntry): Command {
         keys: entry.shortcut ? keyCaps(entry.shortcut) : undefined,
       }
   }
+}
+
+/** Rows where the sessions found by what was said will be, while the hosts search. */
+function ConversationSkeleton() {
+  return (
+    <div className="kettu-search-skeleton" aria-hidden>
+      {[0, 1, 2].map((row) => (
+        <div key={row} className="kettu-search-skeleton__row">
+          <Skeleton className="size-4 rounded-full" />
+          <div className="grid min-w-0 flex-1 gap-1.5">
+            <Skeleton className="h-3 w-2/5" />
+            <Skeleton className="h-3 w-4/5" />
+          </div>
+        </div>
+      ))}
+    </div>
+  )
 }

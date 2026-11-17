@@ -1,10 +1,12 @@
 // What Search can find and how a query narrows it: entries, matching, groups and limits.
 
+import { fold, foldText, queryWords } from '@shared/search-fold'
 import type { AgentId } from '@shared/thread'
 import type { ArtifactKind } from '@renderer/features/artifacts/model'
 import type { SettingsSection } from '@renderer/stores/view'
 
-export type SearchKind = 'session' | 'artifact' | 'routine' | 'project' | 'section' | 'action'
+export type SearchKind =
+  'session' | 'conversation' | 'artifact' | 'routine' | 'project' | 'section' | 'action'
 
 export type SearchAction =
   | 'newSession'
@@ -31,11 +33,13 @@ export const SEARCH_ACTIONS: readonly SearchAction[] = [
   'starKettu',
 ]
 
-export type SearchScope = 'all' | 'sessions' | 'artifacts' | 'routines' | 'projects' | 'settings'
+export type SearchScope =
+  'all' | 'sessions' | 'conversations' | 'artifacts' | 'routines' | 'projects' | 'settings'
 
 export const SCOPES: readonly SearchScope[] = [
   'all',
   'sessions',
+  'conversations',
   'artifacts',
   'routines',
   'projects',
@@ -44,6 +48,7 @@ export const SCOPES: readonly SearchScope[] = [
 
 const SCOPE_KIND: Record<Exclude<SearchScope, 'all'>, SearchKind> = {
   sessions: 'session',
+  conversations: 'conversation',
   artifacts: 'artifact',
   routines: 'routine',
   projects: 'project',
@@ -53,6 +58,7 @@ const SCOPE_KIND: Record<Exclude<SearchScope, 'all'>, SearchKind> = {
 /** The order of the groups while All shows matches. */
 const GROUP_ORDER: readonly SearchKind[] = [
   'session',
+  'conversation',
   'artifact',
   'routine',
   'project',
@@ -94,6 +100,17 @@ export type SearchEntry = EntryBase &
         agentId: AgentId
         hostId: string | null
       }
+    | {
+        /** A session found by what was said in it; the host matched it, not the haystack. */
+        kind: 'conversation'
+        sessionId: string
+        projectPath: string
+        agentId: AgentId
+        hostId: string | null
+        entryId: string
+        pos: number
+        snippet: string
+      }
     | { kind: 'artifact'; artifactId: string; artifactKind: ArtifactKind }
     | { kind: 'routine'; routineId: string }
     | { kind: 'project'; path: string }
@@ -116,41 +133,6 @@ export interface SearchResults {
   counts: Record<SearchScope, number>
   /** The folded words of the query, for marking. */
   words: string[]
-}
-
-interface Folded {
-  text: string
-  /** For each character of `text`, where it starts in the original; one more for the end. */
-  from: number[]
-}
-
-function foldChar(char: string): string {
-  return char.normalize('NFD').replace(/\p{M}/gu, '').toLocaleLowerCase()
-}
-
-/** The text without case and accents, remembering where each character came from. */
-function fold(text: string): Folded {
-  let folded = ''
-  const from: number[] = []
-  let at = 0
-  for (const char of text) {
-    const next = foldChar(char)
-    for (let i = 0; i < next.length; i++) from.push(at)
-    folded += next
-    at += char.length
-  }
-  from.push(at)
-  return { text: folded, from }
-}
-
-/** The text as matching reads it: no case, no accents. */
-export function foldText(text: string): string {
-  return fold(text).text
-}
-
-/** The words of a query, folded. */
-export function queryWords(query: string): string[] {
-  return foldText(query).split(/\s+/).filter(Boolean)
 }
 
 /** The text that matching reads for an entry: its title, meta and anything else it is found by. */
@@ -185,8 +167,8 @@ function byRecency(a: SearchEntry, b: SearchEntry): number {
 }
 
 /**
- * What Search shows for a query in a scope. Every word must match, ignoring case and accents.
- * Matches come most recent first. An empty query lists Recent and the actions in All, and the
+ * What Search shows for a query in a scope. Every word must match, ignoring case and accents,
+ * except for conversations, which the host has matched already. Matches come most recent first. An empty query lists Recent and the actions in All, and the
  * latest few of a scope; All groups a query's matches by kind, a few each, and a scope lists more.
  */
 export function runSearch(
@@ -198,7 +180,10 @@ export function runSearch(
   const found =
     words.length === 0
       ? entries
-      : entries.filter((entry) => words.every((word) => entry.haystack.includes(word)))
+      : entries.filter(
+          (entry) =>
+            entry.kind === 'conversation' || words.every((word) => entry.haystack.includes(word)),
+        )
 
   const byKind = new Map<SearchKind, SearchEntry[]>()
   for (const entry of found) {
@@ -211,6 +196,7 @@ export function runSearch(
   const counts: Record<SearchScope, number> = {
     all: found.length,
     sessions: byKind.get('session')?.length ?? 0,
+    conversations: byKind.get('conversation')?.length ?? 0,
     artifacts: byKind.get('artifact')?.length ?? 0,
     routines: byKind.get('routine')?.length ?? 0,
     projects: byKind.get('project')?.length ?? 0,

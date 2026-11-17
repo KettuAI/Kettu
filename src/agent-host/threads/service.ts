@@ -34,6 +34,10 @@ export function startThreadService(
       })
       return
     }
+    if (request.op === 'search') {
+      searchInSteps(db, request.id, request.words, reply)
+      return
+    }
     try {
       reply({ type: 'result', id: request.id, value: run(db, request) })
     } catch (error) {
@@ -51,6 +55,26 @@ export function startThreadService(
       reply({ type: 'recovered' })
     }
   }
+}
+
+/** Answers a search a few messages at a time, between the worker's other requests. */
+function searchInSteps(
+  db: ThreadDb,
+  id: number,
+  words: readonly string[],
+  reply: (message: ThreadReply) => void,
+): void {
+  const steps = db.searchSteps(words)
+  const next = (): void => {
+    try {
+      const step = steps.next()
+      if (step.done) reply({ type: 'result', id, value: step.value })
+      else setImmediate(next)
+    } catch (error) {
+      reply({ type: 'error', id, message: (error as Error).message, code: null })
+    }
+  }
+  next()
 }
 
 function run(db: ThreadDb, request: ThreadRequest): unknown {
@@ -75,6 +99,9 @@ function run(db: ThreadDb, request: ThreadRequest): unknown {
       return db.mentions(request.sessionId, request.text)
     case 'outline':
       return db.outline(request.sessionId)
+    // The handler answers a search in steps; this is its plain form.
+    case 'search':
+      return db.search(request.words)
     case 'outputs':
       return db.outputs(request.sessionId)
     case 'setOutlineTitles':

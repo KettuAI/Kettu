@@ -1,7 +1,7 @@
 import { useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
-import type { SessionSummary } from '@shared/agent-host'
+import type { ConversationHit, SessionSummary } from '@shared/agent-host'
 import { artifactKind, recency } from '@renderer/features/artifacts/model'
 import { scheduleWords } from '@renderer/features/routines/model'
 import { shortcutList, type ShortcutAction } from '@renderer/features/shell/shortcuts'
@@ -95,26 +95,42 @@ function useProjectName(): (path: string | null) => string {
   }, [projects, noProject])
 }
 
-function useSessionEntries(): SearchEntry[] {
+/** A session's project, host and branch as a row names them, the host only when hosts are mixed. */
+function useSessionLine(): (summary: SessionSummary) => {
+  title: string
+  project: string
+  host: string | null
+  meta: string
+} {
   const { t } = useTranslation('sidebar')
-  const byId = useSessionsStore((s) => s.byId)
   const projectName = useProjectName()
   const others = useOtherHosts()
   const thisComputer = t('hosts.thisComputer')
   const unknown = t('hosts.unknown')
   const only = useOnlyHost()
-
   return useMemo(() => {
     const hostName = (id: string | null) =>
       id === null ? thisComputer : (others.find((host) => host.id === id)?.name ?? unknown)
+    return (summary) => {
+      const project = projectName(summary.scratch ? null : summary.projectPath)
+      const host = others.length > 0 && only === undefined ? hostName(hostOfSession(summary)) : null
+      const meta = [project, host, summary.branch].filter(Boolean).join(' · ')
+      return { title: sessionTitle(summary), project, host, meta }
+    }
+  }, [projectName, others, thisComputer, unknown, only])
+}
+
+function useSessionEntries(): SearchEntry[] {
+  const byId = useSessionsStore((s) => s.byId)
+  const lineOf = useSessionLine()
+  const only = useOnlyHost()
+
+  return useMemo(() => {
     return Object.values(byId)
       .filter((summary) => findable(summary, byId) && onHost(only, hostOfSession(summary)))
       .map((summary): SearchEntry => {
+        const { title, project, host, meta } = lineOf(summary)
         const hostId = hostOfSession(summary)
-        const title = sessionTitle(summary)
-        const project = projectName(summary.scratch ? null : summary.projectPath)
-        const host = others.length > 0 && only === undefined ? hostName(hostId) : null
-        const meta = [project, host, summary.branch].filter(Boolean).join(' · ')
         return {
           kind: 'session',
           key: `session:${summary.id}`,
@@ -129,7 +145,40 @@ function useSessionEntries(): SearchEntry[] {
           hostId,
         }
       })
-  }, [byId, projectName, others, thisComputer, unknown, only])
+  }, [byId, lineOf, only])
+}
+
+/** The sessions the hosts found by what was said in them, as Search's rows. */
+export function useConversationEntries(hits: readonly ConversationHit[]): SearchEntry[] {
+  const byId = useSessionsStore((s) => s.byId)
+  const lineOf = useSessionLine()
+  return useMemo(
+    () =>
+      hits.flatMap((hit): SearchEntry[] => {
+        const summary = byId[hit.sessionId]
+        if (!summary || !findable(summary, byId)) return []
+        const { title, meta } = lineOf(summary)
+        return [
+          {
+            kind: 'conversation',
+            key: `conversation:${hit.sessionId}`,
+            title,
+            meta,
+            trailing: shortAgo(summary.updatedAt),
+            haystack: '',
+            at: summary.updatedAt,
+            sessionId: summary.id,
+            projectPath: summary.projectPath,
+            agentId: summary.agentId,
+            hostId: hostOfSession(summary),
+            entryId: hit.entryId,
+            pos: hit.pos,
+            snippet: hit.snippet,
+          },
+        ]
+      }),
+    [hits, byId, lineOf],
+  )
 }
 
 function useArtifactEntries(): SearchEntry[] {

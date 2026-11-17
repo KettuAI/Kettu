@@ -14,36 +14,16 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@renderer/components/ui/dropdown-menu'
-import { useMessageScroller } from '@renderer/components/ui/message-scroller'
 import { Spinner } from '@renderer/components/ui/spinner'
-import { prefersReducedMotion } from '@renderer/stores/settings'
-import { loadThrough, useThreadsStore } from '@renderer/stores/threads'
 import type { ThreadJumps } from '../thread'
 import { dashCount, dashOf, ReadingTracker } from './rail'
+import { useJumpToMessage } from './use-jump'
 import { useOutline, type OutlineRow } from './use-outline'
 
 // Less room than this between the viewport's edge and the column's text hides the rail.
 const ROOM_PX = 40
-// A row shows the spinner only for a jump that waits this long for its pages.
-const SPINNER_AFTER_MS = 200
-
 // A first row focused this soon after opening was focused by the keyboard opening.
 const KEYBOARD_FOCUS_MS = 500
-// How many times a jump's scroll is set right before it is left as it is.
-const SETTLE_PASSES = 3
-// A scroll that sends no scrollend, as one already in place, is taken as ended after this.
-const SCROLL_END_MS = 1500
-
-const scrollEnd = (view: HTMLElement): Promise<void> =>
-  new Promise((resolve) => {
-    const done = (): void => {
-      clearTimeout(timer)
-      view.removeEventListener('scrollend', done)
-      resolve()
-    }
-    const timer = setTimeout(done, SCROLL_END_MS)
-    view.addEventListener('scrollend', done)
-  })
 
 /** The viewport's height, and whether the column leaves the rail its room. */
 function useRailBox(
@@ -89,7 +69,7 @@ export const MessageOutline = memo(function MessageOutline({
   const { t } = useTranslation('session')
   const { rows, opened } = useOutline(sessionId)
   const { height, room } = useRailBox(viewport, content)
-  const { scrollToMessage } = useMessageScroller()
+  const { jumpTo, waiting } = useJumpToMessage(sessionId, viewport, content, jumps)
 
   const [tracker] = useState(() => new ReadingTracker())
   useEffect(() => {
@@ -109,88 +89,14 @@ export const MessageOutline = memo(function MessageOutline({
   )
 
   const [open, setOpen] = useState(false)
-  // The row whose pages a jump waits for, once it has waited long enough to say so.
-  const [waiting, setWaiting] = useState<string | null>(null)
-  const jumping = useRef(0)
-  useEffect(
-    () => () => {
-      jumping.current++
-    },
-    [],
-  )
 
   const onOpenChange = (next: boolean): void => {
     setOpen(next)
     if (next) opened()
   }
 
-  const jump = async (row: OutlineRow): Promise<void> => {
-    const view = viewport.current
-    const column = content.current
-    if (!view || !column) return
-    const id = ++jumping.current
-    const current = (): boolean => jumping.current === id
-    const timer = setTimeout(() => {
-      if (current()) setWaiting(row.entryId)
-    }, SPINNER_AFTER_MS)
-    try {
-      const replica = useThreadsStore.getState().replicas[sessionId]
-      const loaded = replica?.state?.byId[row.entryId] !== undefined
-      if (!loaded && !(await loadThrough(sessionId, row.pos ?? 0))) return
-      if (!current()) return
-      await jumps.reveal(row.entryId)
-    } finally {
-      clearTimeout(timer)
-      if (current()) setWaiting(null)
-    }
-    if (!current()) return
-    setOpen(false)
-    jumps.hold(true)
-    try {
-      await settle(view, column, row.entryId, current)
-    } finally {
-      if (current()) jumps.hold(false)
-    }
-  }
-
-  /**
-   * Scrolls the target to its place and keeps it there: items above it keep an estimated height
-   * until they render, so a long smooth scroll can land off, and is set right once it ends. A
-   * scroll of the reader's own ends it.
-   */
-  const settle = async (
-    view: HTMLElement,
-    column: HTMLElement,
-    target: string,
-    current: () => boolean,
-  ): Promise<void> => {
-    // An item's own top spacing keeps the message under the top fade.
-    const place = (behavior: ScrollBehavior): void => {
-      scrollToMessage(target, { align: 'start', behavior })
-    }
-    const off = (): boolean => {
-      const element = column.querySelector(`[data-message-id="${CSS.escape(target)}"]`)
-      if (!element) return false
-      const inset = Number.parseFloat(getComputedStyle(column).paddingTop) || 0
-      const top = element.getBoundingClientRect().top - view.getBoundingClientRect().top
-      return Math.abs(top - inset) > 1
-    }
-    let reader = false
-    const intent = (): void => {
-      reader = true
-    }
-    const events = ['wheel', 'touchmove', 'pointerdown', 'keydown'] as const
-    for (const name of events) view.addEventListener(name, intent, { passive: true })
-    try {
-      place(prefersReducedMotion() ? 'auto' : 'smooth')
-      for (let pass = 0; pass < SETTLE_PASSES && off(); pass++) {
-        await scrollEnd(view)
-        if (reader || !current()) return
-        if (off()) place('auto')
-      }
-    } finally {
-      for (const name of events) view.removeEventListener(name, intent)
-    }
+  const jump = (row: OutlineRow): void => {
+    void jumpTo({ entryId: row.entryId, pos: row.pos }, { onRevealed: () => setOpen(false) })
   }
 
   // The list opens scrolled to the reading position. A keyboard opening highlights its first row,
@@ -255,7 +161,7 @@ export const MessageOutline = memo(function MessageOutline({
             label={row.label}
             reading={i === readingIndex}
             waiting={waiting === row.entryId}
-            onJump={() => void jump(row)}
+            onJump={() => jump(row)}
           />
         ))}
       </DropdownMenuContent>

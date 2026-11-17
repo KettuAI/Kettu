@@ -710,6 +710,24 @@ li[data-row-exit='dust'] > * {
   width: 16px;
   height: 16px;
 }
+/* A row with a second line, the passage a match was found in, grows to hold it. */
+.kettu-search .ui-cmc__item[data-detail] {
+  height: auto;
+  min-height: 52px;
+  padding-block: 8px;
+}
+.kettu-search .ui-cmc__text:has(.ui-cmc__detail) {
+  flex-wrap: wrap;
+  row-gap: 2px;
+}
+.kettu-search .ui-cmc__detail {
+  flex: 0 0 100%;
+  overflow: hidden;
+  color: var(--ui-cmc-muted);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 /* The name keeps its room; the line after it gives way first. */
 .kettu-search .ui-cmc__name {
   flex-shrink: 0;
@@ -724,6 +742,21 @@ li[data-row-exit='dust'] > * {
   padding: 28px 16px 32px;
   text-align: center;
   font-size: 12.5px;
+  color: var(--ui-cmc-muted);
+}
+.kettu-search-skeleton {
+  display: grid;
+  gap: 14px;
+  padding: 4px 8px;
+  text-align: start;
+}
+.kettu-search-skeleton__row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.kettu-search-note {
+  margin-inline-end: auto;
   color: var(--ui-cmc-muted);
 }
 .kettu-search-empty b {

@@ -2547,6 +2547,7 @@ export class AgentHost {
       'sessions.requests': ({ sessionId }, { device }) =>
         sessions.requests(sessionId, imagesFor(device)),
       'sessions.outline': ({ sessionId }) => sessions.outline(sessionId),
+      'sessions.search': ({ query }) => sessions.search(query),
       'sessions.outputs': ({ sessionId }) => sessions.outputs(sessionId),
       'sessions.outlineTitles': ({ sessionId }) => sessions.outlineTitles(sessionId),
       'sessions.watch': ({ sessionId }, { portId }) => sessions.watch(sessionId, portId),

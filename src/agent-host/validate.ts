@@ -120,6 +120,8 @@ const SHOWN_SESSIONS = 9
 // The Marketplace's search, which the registry matches against server names.
 const MARKET_QUERY_MIN = 3
 const MARKET_QUERY_MAX = 100
+// What a search of the conversations takes: a few words.
+const SEARCH_QUERY_CHARS = 200
 // What a bundle's install form sends for its arguments: values by user_config key.
 const BUNDLE_VALUES = 64
 const BUNDLE_KEY = /^[A-Za-z_][A-Za-z0-9_-]{0,63}$/
@@ -1645,6 +1647,7 @@ export function createValidators(platform: Platform): Validators {
     },
     'sessions.requests': session,
     'sessions.outline': session,
+    'sessions.search': (params) => ({ query: string(fields(params), 'query', SEARCH_QUERY_CHARS) }),
     'sessions.outputs': session,
     'sessions.outlineTitles': session,
     'sessions.watch': session,

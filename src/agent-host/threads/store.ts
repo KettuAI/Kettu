@@ -2,7 +2,7 @@
 // SQLite file, so no query runs on the event loop that streams the sessions.
 
 import type { Worker } from 'node:worker_threads'
-import type { OutlineTitle } from '@shared/agent-host'
+import type { ConversationHit, OutlineTitle } from '@shared/agent-host'
 import type { ArtifactState } from '@shared/artifacts'
 import type { ArtifactCall, ArtifactCallName, ArtifactCalls } from '../artifacts/model'
 import type { RuntimeCall, RuntimeCallName, RuntimeCalls } from '../artifacts/runtime/calls'
@@ -289,7 +289,20 @@ export class ThreadStore {
 
   /** A read of a session, by the reader after the session's writes in flight. */
   private read<T>(request: Request, sessionId: string): Promise<T> {
-    const writes = this.writes.get(sessionId)
+    return this.readAfter(request, this.writes.get(sessionId))
+  }
+
+  /** A read of every session, by the reader after all the writes in flight. */
+  private readAll<T>(request: Request): Promise<T> {
+    const writes = new Set<Promise<unknown>>()
+    for (const pending of this.writes.values()) for (const write of pending) writes.add(write)
+    return this.readAfter(request, writes)
+  }
+
+  private readAfter<T>(
+    request: Request,
+    writes: ReadonlySet<Promise<unknown>> | undefined,
+  ): Promise<T> {
     const read = async (): Promise<T> => {
       if (writes) await Promise.allSettled([...writes])
       const reader = this.reader
@@ -355,6 +368,11 @@ export class ThreadStore {
   /** Whether an agent or user entry of the stored thread holds `text`. */
   mentions(sessionId: string, text: string): Promise<boolean> {
     return this.read({ op: 'mentions', sessionId, text }, sessionId)
+  }
+
+  /** The latest message of each session that holds every word, most recently updated first. */
+  search(words: readonly string[]): Promise<ConversationHit[]> {
+    return this.readAll({ op: 'search', words: [...words] })
   }
 
   /** The user messages of the stored thread, with their titles; null when it has none. */

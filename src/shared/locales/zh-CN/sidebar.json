@@ -21,6 +21,7 @@
     "scope": {
       "all": "全部",
       "sessions": "会话",
+      "conversations": "对话",
       "artifacts": "Artifacts",
       "routines": "例程",
       "projects": "项目",
@@ -29,6 +30,7 @@
     "group": {
       "recent": "最近",
       "session": "会话",
+      "conversation": "在对话中",
       "artifact": "Artifacts",
       "routine": "例程",
       "project": "项目",
@@ -51,17 +53,24 @@
     "sessionCount_other": "{{count}} 个会话",
     "results_other": "{{count}} 个结果",
     "noMatch": "没有结果匹配“{{query}}”",
-    "searchedAll": "搜了会话、Artifacts、例程、项目和设置。",
+    "noConversation": "没有对话提到“{{query}}”",
+    "searchedAll": "搜了会话、对话、Artifacts、例程、项目和设置。",
     "searchedScope": "只搜了{{scope}}，按 Tab 搜更多。",
     "none": {
       "all": "这里还没有内容。",
       "sessions": "还没有会话。",
+      "conversations": "搜索会话里说过的话。",
       "artifacts": "还没有 Artifacts。",
       "routines": "还没有例程。",
       "projects": "还没有项目。",
       "settings": "这里没有内容。"
     },
     "loading": "正在加载…",
+    "searching": "正在搜索对话…",
+    "minChars": "至少输入 2 个字才搜对话。",
+    "failed": "没能搜索对话",
+    "hostsAway": "离线，没有搜：{{hosts}}",
+    "hostsFailed_other": "{{count}} 台电脑没能搜",
     "hint": {
       "navigate": "导航",
       "open": "打开",
@@ -69,6 +78,7 @@
     },
     "latest": {
       "sessions": "最近的会话",
+      "conversations": "对话",
       "artifacts": "最近的 Artifacts",
       "routines": "最近的例程",
       "projects": "最近的项目",
