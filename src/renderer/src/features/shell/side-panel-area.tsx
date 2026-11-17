@@ -25,6 +25,7 @@ import {
 import { useTerminalAllowed } from '@renderer/stores/hosts'
 import { prefersReducedMotion } from '@renderer/stores/settings'
 import { toggleTerminal, useViewStore, type SidePane } from '@renderer/stores/view'
+import { usePhoneWindow } from './narrow'
 import { SHEET, SHEET_PANEL } from './sheet'
 
 const FilesPanel = lazy(() => import('@renderer/features/files/files-panel'))
@@ -115,7 +116,9 @@ export function SidePanelArea({
     return shown === 'terminal' && terminal ? shown : undefined
   })
   const artifactId = useViewStore((s) => (panel ? s.sideArtifact[panel] : undefined))
-  const maximized = useViewStore((s) => s.sidePaneMaximized) && !!pane
+  // A phone has no room beside the thread: a pane always covers the whole area there.
+  const phone = usePhoneWindow()
+  const maximized = (useViewStore((s) => s.sidePaneMaximized) || phone) && !!pane
   const open = pane === 'terminal'
   const { held, glide } = usePaneGlide(panel, pane)
   const layout = useDefaultLayout({

@@ -69,6 +69,7 @@ import { useBoxText, usePromptBox } from './use-prompt-box'
 import { useSessionFolder } from '@renderer/lib/session-folder'
 import { firstWaiting, pressWaitingCard } from '../waiting-card'
 import { limitsForModel } from '@shared/plan-limits'
+import { usePhoneWindow } from '@renderer/features/shell/narrow'
 
 const valuesOf = (config: readonly ConfigOption[]): Record<string, string | boolean> =>
   Object.fromEntries(config.map((o) => [o.id, o.value]))
@@ -149,6 +150,8 @@ export function Composer({
   const readings = usePlanReadings()
   const limits = agent ? newestLimits(readings, agent) : undefined
   const steering = !!agent?.capabilities.steering
+  // A phone has no keys to name.
+  const phone = usePhoneWindow()
   const [modelMenuOpen, setModelMenuOpen] = useState(false)
   const [configError, setConfigError] = useState<string | null>(null)
   const outOfCredit = useOutOfCredit(sessionId)
@@ -487,9 +490,11 @@ export function Composer({
           : !running && rejected
             ? t('prompt.placeholder.denied', { agent: agentName })
             : running
-              ? steering
-                ? t('prompt.placeholder.running', { keys: steerKeys(sendKey) })
-                : t('prompt.placeholder.runningQueue')
+              ? phone
+                ? t('prompt.placeholder.runningTouch')
+                : steering
+                  ? t('prompt.placeholder.running', { keys: steerKeys(sendKey) })
+                  : t('prompt.placeholder.runningQueue')
               : t('prompt.placeholder.ask', { agent: agentName })
 
   const cache = cacheExpiry(session, agent?.account ?? null)

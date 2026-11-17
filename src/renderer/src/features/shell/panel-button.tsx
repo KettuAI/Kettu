@@ -13,6 +13,7 @@ import { CornerControlsSpace } from '@renderer/features/shell/top-bar'
 import { hasBand } from '@renderer/lib/platform'
 import { cn } from '@renderer/lib/utils'
 import { toggleSidePane, useViewStore, type SidePane } from '@renderer/stores/view'
+import { usePhoneWindow } from './narrow'
 import { SHEET } from './sheet'
 
 /** A hugeicons glyph at the shell's stroke. */
@@ -129,20 +130,24 @@ export function PaneHead({
   children?: ReactNode
 }) {
   const { t } = useTranslation('common')
-  // On macOS, maximized with the sidebar collapsed, the head is the window's top left corner.
-  const cornered = useViewStore((s) => s.sidebarCollapsed) && maximized && !hasBand
+  // On macOS, maximized with the sidebar collapsed, the head is the window's top left corner; on a
+  // phone a pane is always maximized and the corner always holds the sidebar's toggle.
+  const phone = usePhoneWindow()
+  const cornered = (useViewStore((s) => s.sidebarCollapsed) || phone) && maximized && !hasBand
   return (
     <div className={cn('kp-head app-region-drag', cornered && 'kp-head--cornered')}>
       {cornered && <CornerControlsSpace className="mr-1" />}
       <div className="kp-head__main">{children}</div>
       <div className="kp-head__tools app-region-no-drag">
         {tools}
-        <PanelButton
-          label={maximized ? t('pane.restore') : t('pane.maximize')}
-          onClick={() => useViewStore.setState({ sidePaneMaximized: !maximized })}
-        >
-          <PaneIcon icon={maximized ? ArrowShrink01Icon : ArrowExpand01Icon} />
-        </PanelButton>
+        {!phone && (
+          <PanelButton
+            label={maximized ? t('pane.restore') : t('pane.maximize')}
+            onClick={() => useViewStore.setState({ sidePaneMaximized: !maximized })}
+          >
+            <PaneIcon icon={maximized ? ArrowShrink01Icon : ArrowExpand01Icon} />
+          </PanelButton>
+        )}
         <PanelButton
           label={t('pane.collapse')}
           onClick={() => {

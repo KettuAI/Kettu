@@ -9,6 +9,7 @@
       "denied": "Tell {{agent}} what to do differently",
       "running": "Queue a message · {{keys}} sends it into this turn · Esc stops",
       "runningQueue": "Queue a message · Esc stops",
+      "runningTouch": "Queue a message",
       "pickAgent": "Pick an agent to carry on with…"
     },
     "stop": "Stop",

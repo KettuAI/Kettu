@@ -57,6 +57,7 @@ import { FileTabs } from './file-tabs'
 import { FileTypeIcon } from './file-type-icon'
 import { UnsavedPrompt } from './unsaved-prompt'
 import { folderOf, nameOf, rankPaths, type PathMatch } from './paths'
+import { usePhoneWindow } from '@renderer/features/shell/narrow'
 import { VirtualRows } from './virtual-rows'
 
 const SEARCH_DELAY_MS = 250
@@ -148,6 +149,66 @@ function FilesPane({ projectPath, panel, maximized }: FilesPanelProps) {
   const shownTab =
     !diff || (diff.ref === null && diff.projectFile === open?.path) ? (open?.path ?? null) : null
 
+  // A phone shows the list or the open file, not both: opening a file or a change shows it, and
+  // the tree's button brings the list back over it.
+  const phone = usePhoneWindow()
+  const opened = diff ? `diff:${diff.path}` : (open?.path ?? null)
+  const [phoneList, setPhoneList] = useState(opened === null)
+  const [seenOpened, setSeenOpened] = useState(opened)
+  if (opened !== seenOpened) {
+    setSeenOpened(opened)
+    setPhoneList(opened === null)
+  }
+
+  const treeList =
+    mode === 'changes' ? (
+      <ChangesList projectPath={projectPath} changes={changes} openPath={open?.path} />
+    ) : (
+      <Browser
+        projectPath={projectPath}
+        panel={panel}
+        columnKey={columnKey}
+        query={query}
+        openPath={open?.path}
+        changes={changes.byPath}
+        local={local}
+        edit={edit}
+        onEdit={setEdit}
+        collapsed={collapsed}
+      />
+    )
+  const preview = (
+    <section className="kp-doc" aria-label={t('tabs.label')}>
+      {!!tabs?.files.length && (
+        <div className="kp-doc__tabs">
+          <FileTabs
+            projectPath={projectPath}
+            files={tabs.files}
+            active={shownTab}
+            onSelect={(path) => {
+              if (path !== shownTab) closeDiff(projectPath)
+              activateTab(projectPath, path)
+            }}
+          />
+        </div>
+      )}
+      {diff ? (
+        <DiffPreview projectPath={projectPath} diff={diff} />
+      ) : (
+        <FilePreview
+          projectPath={projectPath}
+          file={open}
+          changes={changes.byPath}
+          onShowDiff={
+            open && changes.byPath.has(open.path)
+              ? () => showChange(projectPath, changes, open.path, false)
+              : undefined
+          }
+        />
+      )}
+    </section>
+  )
+
   return (
     <PaneSheet
       pane="files"
@@ -212,11 +273,13 @@ function FilesPane({ projectPath, panel, maximized }: FilesPanelProps) {
       >
         {!bare && (
           <PanelButton
-            label={treeShown ? t('panel.hideTree') : t('panel.showTree')}
-            pressed={treeShown}
-            onClick={() =>
-              tree.current?.isCollapsed() ? tree.current.expand() : tree.current?.collapse()
-            }
+            label={(phone ? phoneList : treeShown) ? t('panel.hideTree') : t('panel.showTree')}
+            pressed={phone ? phoneList : treeShown}
+            onClick={() => {
+              if (phone) setPhoneList(!phoneList || opened === null)
+              else if (tree.current?.isCollapsed()) tree.current.expand()
+              else tree.current?.collapse()
+            }}
           >
             <PaneIcon icon={SidebarLeftIcon} />
           </PanelButton>
@@ -263,6 +326,8 @@ function FilesPane({ projectPath, panel, maximized }: FilesPanelProps) {
             title={t('panel.emptyTitle')}
             text={t('panel.emptyDescription')}
           />
+        ) : phone ? (
+          <div className="flex min-h-0 flex-1 flex-col">{phoneList ? treeList : preview}</div>
         ) : (
           <ResizablePanelGroup
             orientation="horizontal"
@@ -280,54 +345,11 @@ function FilesPane({ projectPath, panel, maximized }: FilesPanelProps) {
               onResize={(size) => setTreeShown(size.inPixels > 0)}
               className="min-w-0"
             >
-              {mode === 'changes' ? (
-                <ChangesList projectPath={projectPath} changes={changes} openPath={open?.path} />
-              ) : (
-                <Browser
-                  projectPath={projectPath}
-                  panel={panel}
-                  columnKey={columnKey}
-                  query={query}
-                  openPath={open?.path}
-                  changes={changes.byPath}
-                  local={local}
-                  edit={edit}
-                  onEdit={setEdit}
-                  collapsed={collapsed}
-                />
-              )}
+              {treeList}
             </ResizablePanel>
             <ResizableHandle className="kp-resizer kp-files-handle" />
             <ResizablePanel id="files-preview" minSize="200px" className="min-w-0">
-              <section className="kp-doc" aria-label={t('tabs.label')}>
-                {!!tabs?.files.length && (
-                  <div className="kp-doc__tabs">
-                    <FileTabs
-                      projectPath={projectPath}
-                      files={tabs.files}
-                      active={shownTab}
-                      onSelect={(path) => {
-                        if (path !== shownTab) closeDiff(projectPath)
-                        activateTab(projectPath, path)
-                      }}
-                    />
-                  </div>
-                )}
-                {diff ? (
-                  <DiffPreview projectPath={projectPath} diff={diff} />
-                ) : (
-                  <FilePreview
-                    projectPath={projectPath}
-                    file={open}
-                    changes={changes.byPath}
-                    onShowDiff={
-                      open && changes.byPath.has(open.path)
-                        ? () => showChange(projectPath, changes, open.path, false)
-                        : undefined
-                    }
-                  />
-                )}
-              </section>
+              {preview}
             </ResizablePanel>
           </ResizablePanelGroup>
         )}

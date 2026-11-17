@@ -19,6 +19,7 @@ import { useNow } from '@renderer/lib/use-now'
 import { Glyph } from '@renderer/features/shell/glyph'
 import { levelsOf, splitName, type SelectOption } from './levels'
 import { mainModels, shownValue, splitModels } from './model-list'
+import { usePhoneWindow } from '@renderer/features/shell/narrow'
 import { modelRating } from './model-ratings'
 import { isSelect } from './options'
 import { useSelectPick, useSwitchPicks, type Select } from './use-pick'
@@ -69,6 +70,8 @@ export function ModelMenu({
   /** What a change of model, effort or fast mode would cost while the prompt cache is warm. */
   cacheNote?: string | null
 }) {
+  // A phone has no number keys to pick a model with.
+  const phone = usePhoneWindow()
   const { t } = useTranslation('composer')
   const now = useNow()
   const model = config.find((o): o is SelectOption => o.category === 'model' && isSelect(o))
@@ -160,7 +163,7 @@ export function ModelMenu({
         heading={agentName}
         models={models}
         more={more}
-        keys
+        keys={!phone}
         value={checked}
         onChange={pickModel}
         efforts={efforts}
