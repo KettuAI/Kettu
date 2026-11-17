@@ -173,6 +173,7 @@ import {
   projectHooksFile,
   projectMcpFile,
   registryListingFile,
+  harnessManifestFile,
   returnedFile,
   routinesFile,
   sessionsFile,
@@ -180,6 +181,7 @@ import {
   type AgentUpdatesFile,
   type JsonFile,
   type RegistryListingFile,
+  type HarnessManifestFile,
 } from './storage'
 import { GitHubStar, gitHubStarFile } from './github-star'
 import { digestEntries } from './threads/digest'
@@ -300,6 +302,8 @@ export interface HostOptions {
   outside?: OutsideReader
   /** The desktop app's computer use; the daemon has none. */
   computer?: ComputerHostOptions | null
+  /** What the host's requests to Kettu's download service say they are: the app or the daemon. */
+  userAgent?: string
 }
 
 /** What the desktop app gives the host for computer use. */
@@ -365,6 +369,7 @@ export class AgentHost {
   /** What the last update check found, so a found update shows after a restart. */
   private readonly updates: JsonFile<AgentUpdatesFile>
   private readonly registryListing: JsonFile<RegistryListingFile>
+  private readonly harnessManifest: JsonFile<HarnessManifestFile>
   private readonly star: GitHubStar
   /** Each agent's config options from its last new session, for New session. */
   private readonly agentOptions: AgentOptionsStore
@@ -530,6 +535,7 @@ export class AgentHost {
     this.remembered = agentsFile(options.userDataPath, log)
     this.updates = agentUpdatesFile(options.userDataPath, log)
     this.registryListing = registryListingFile(options.userDataPath, log)
+    this.harnessManifest = harnessManifestFile(options.userDataPath, log)
     this.star = new GitHubStar({
       file: gitHubStarFile(options.userDataPath, log),
       git: () => this.git,
@@ -855,6 +861,8 @@ export class AgentHost {
       remember: (file) => this.remembered.save(file),
       rememberUpdates: (file) => this.updates.save(file),
       rememberRegistry: (file) => this.registryListing.save(file),
+      rememberManifest: (file) => this.harnessManifest.save(file),
+      ...(options.userAgent ? { userAgent: options.userAgent } : {}),
       launchEnv: (agentId, env) => ({
         ...this.marketSkills.launchEnv(agentId, env),
         ...(this.agentEnvKeys[agentId] ?? {}),
@@ -1221,13 +1229,14 @@ export class AgentHost {
       (message) => writeLog('warn', 'host', message),
     )
     const host = new AgentHost(options)
-    const [, , , remembered, updates, listing] = await Promise.all([
+    const [, , , remembered, updates, listing, manifest] = await Promise.all([
       host.scratch.ready(),
       host.projects.load(),
       host.sessions.load(),
       host.remembered.load(),
       host.updates.load(),
       host.registryListing.load(),
+      host.harnessManifest.load(),
       host.trees.load(),
       host.agentOptions.load(),
       host.preparedRecords.load(),
@@ -1241,6 +1250,7 @@ export class AgentHost {
     await host.tasks.load()
     host.agents.restore(remembered)
     host.agents.restoreRegistry(listing)
+    host.agents.restoreManifest(manifest)
     host.agents.restoreUpdates(updates)
     void host.moveLocalMarketplaces()
     host.routines.start()
@@ -2246,6 +2256,7 @@ export class AgentHost {
         this.remembered.flush(),
         this.updates.flush(),
         this.registryListing.flush(),
+        this.harnessManifest.flush(),
         this.star.flush(),
         this.trees.close(),
         this.agentOptions.flush(),

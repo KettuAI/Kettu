@@ -2,7 +2,7 @@
 
 import { mkdir, open, readFile, rename, rm } from 'node:fs/promises'
 import path from 'node:path'
-import type { AgentAccount, AgentUpdate, PlanLimit } from '@shared/agent-host'
+import type { AgentAccount, AgentUpdate, PlanLimit, VersionMoveReason } from '@shared/agent-host'
 import { GITHUB_PULL_REQUEST_URL, type ProjectWorktreeSettings } from '@shared/git'
 import type { SessionTaskRef } from '@shared/workflow'
 import {
@@ -446,13 +446,31 @@ export interface AgentUpdatesFile {
         /** A new version that failed to start in place of the one before it, and why. */
         failed?: { version: string; reason: string }
         /**
-         * The last move automatic updates made and when; `withdrawn` when it went to an older
-         * version than the one it had, which the Registry no longer lists.
+         * The last move automatic updates made, when and why; `withdrawn` when it went to an older
+         * version than the one it had. Files written before `reason` moved only for the Registry.
          */
-        moved?: { from: string; to: string; at: number; withdrawn: boolean }
+        moved?: {
+          from: string
+          to: string
+          at: number
+          withdrawn: boolean
+          reason?: VersionMoveReason
+        }
       }
     >
   >
+}
+
+/**
+ * Kettu's harness compatibility manifest as last read, in the envelope it came in, so it is
+ * verified again before it is used; empty while none was.
+ */
+export interface HarnessManifestFile {
+  version: 1
+  /** When it was last read; 0 while none was. */
+  readAt: number
+  payload: string
+  signature: string
 }
 
 /** The ACP Registry's listing as last read, cut to what Kettu reads, for a start offline. */
@@ -589,6 +607,7 @@ export const PROJECT_HOOKS_VERSION = 1
 export const AGENT_PROCESSES_VERSION = 1
 export const AGENT_UPDATES_VERSION = 1
 export const REGISTRY_LISTING_VERSION = 1
+export const HARNESS_MANIFEST_VERSION = 1
 export const ROUTINES_VERSION = 1
 // No older formats exist yet; each future version adds its step here, with a test.
 export const ROUTINES_MIGRATIONS: Readonly<Record<number, Migration>> = {}
@@ -601,6 +620,7 @@ export const PROJECT_HOOKS_MIGRATIONS: Readonly<Record<number, Migration>> = {}
 export const AGENT_PROCESSES_MIGRATIONS: Readonly<Record<number, Migration>> = {}
 export const AGENT_UPDATES_MIGRATIONS: Readonly<Record<number, Migration>> = {}
 export const REGISTRY_LISTING_MIGRATIONS: Readonly<Record<number, Migration>> = {}
+export const HARNESS_MANIFEST_MIGRATIONS: Readonly<Record<number, Migration>> = {}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -1137,9 +1157,34 @@ function parseRunVersions(entry: Record<string, unknown>): RunVersions {
     isVersion(moved.to) &&
     isTime(moved.at) &&
     typeof moved.withdrawn === 'boolean'
-      ? { moved: { from: moved.from, to: moved.to, at: moved.at, withdrawn: moved.withdrawn } }
+      ? {
+          moved: {
+            from: moved.from,
+            to: moved.to,
+            at: moved.at,
+            withdrawn: moved.withdrawn,
+            ...(isMoveReason(moved.reason) ? { reason: moved.reason } : {}),
+          },
+        }
       : {}),
   }
+}
+
+const MOVE_REASONS: readonly string[] = ['registry', 'manifest', 'broken', 'bundled']
+
+function isMoveReason(value: unknown): value is VersionMoveReason {
+  return typeof value === 'string' && MOVE_REASONS.includes(value)
+}
+
+/** The kept manifest; its signature is checked where it is used, as a live one's is. */
+export function parseHarnessManifestFile(
+  data: Record<string, unknown>,
+): HarnessManifestFile | string {
+  if (!isTime(data.readAt)) return 'readAt is not a time'
+  if (typeof data.payload !== 'string' || typeof data.signature !== 'string') {
+    return 'it holds no signed manifest'
+  }
+  return { version: 1, readAt: data.readAt, payload: data.payload, signature: data.signature }
 }
 
 /** The cached listing; the entries are checked as they are read, like the live listing's. */
@@ -1291,6 +1336,20 @@ export function registryListingFile(
     migrations: REGISTRY_LISTING_MIGRATIONS,
     parse: parseRegistryListingFile,
     empty: () => ({ version: 1, readAt: 0, agents: [] }),
+    log,
+  })
+}
+
+export function harnessManifestFile(
+  userDataPath: string,
+  log: LogFn,
+): JsonFile<HarnessManifestFile> {
+  return new JsonFile<HarnessManifestFile>({
+    file: path.join(userDataPath, 'state', 'harness-manifest.json'),
+    version: HARNESS_MANIFEST_VERSION,
+    migrations: HARNESS_MANIFEST_MIGRATIONS,
+    parse: parseHarnessManifestFile,
+    empty: () => ({ version: 1, readAt: 0, payload: '', signature: '' }),
     log,
   })
 }

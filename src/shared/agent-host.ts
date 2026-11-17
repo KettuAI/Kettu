@@ -284,6 +284,13 @@ export interface AgentTask {
   error: string | null // why it failed, in the user's terms
 }
 
+/**
+ * Why Kettu's own install of a harness moved to another version: the ACP Registry lists it, Kettu's
+ * compatibility manifest recommends it, the manifest says the one before does not work, or this
+ * build of Kettu bundles it.
+ */
+export type VersionMoveReason = 'registry' | 'manifest' | 'broken' | 'bundled'
+
 /** The user's own Claude Code or Codex, the only CLI a start runs. */
 export interface AgentCli {
   command: string // looked up on PATH, such as claude
@@ -380,14 +387,32 @@ export interface AgentStatus {
   update: AgentUpdate | null // from the last update check; null when up to date or unchecked
   // When that check finished; null for a binary agent unless Kettu installed it from the registry
   updateCheckedAt: number | null
-  // How Kettu's own install of a harness the ACP Registry lists follows it: whether it updates by
-  // itself, its last move and when (`withdrawn` when it went back to an older version, which the
-  // Registry lists in place of the newer one), and whether the update on offer goes back to an
-  // older version. Null for the other harnesses, and absent on older hosts.
+  // How Kettu's own install of a harness follows the version it is given, from the ACP Registry or
+  // Kettu's compatibility manifest (`follows`): whether it updates by itself, its last move, when
+  // and why (`withdrawn` when it went back to an older version), and whether the update on offer
+  // goes back to an older version, and why. Null for the other harnesses, and absent on older
+  // hosts; `follows` and the reasons are absent on older hosts too.
   automatic?: {
     on: boolean
-    moved: { from: string; to: string; at: number; withdrawn: boolean } | null
+    moved: {
+      from: string
+      to: string
+      at: number
+      withdrawn: boolean
+      reason?: VersionMoveReason
+    } | null
     back: boolean
+    backReason?: VersionMoveReason
+    follows?: 'registry' | 'kettu'
+  } | null
+  // The user's own program is a version Kettu's compatibility manifest says does not work:
+  // `broken` when it names it, else it is outside `supported`; `recommended` is the version Kettu
+  // checked last. Null when it is fine or not known, and absent on older hosts.
+  versionWarning?: {
+    version: string
+    broken: boolean
+    supported: string | null
+    recommended: string | null
   } | null
   // A new version of Kettu's own install that failed to start, why, and the version that runs in
   // its place; null when none did, and absent on older hosts.

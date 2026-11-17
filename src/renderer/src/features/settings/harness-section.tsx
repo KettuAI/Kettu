@@ -13,7 +13,12 @@ import {
 } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
-import type { AgentInstallMethod, AgentStatus, AgentTask } from '@shared/agent-host'
+import type {
+  AgentInstallMethod,
+  AgentStatus,
+  AgentTask,
+  VersionMoveReason,
+} from '@shared/agent-host'
 import type { HarnessId } from '@shared/thread'
 import { AgentTile } from '@renderer/components/agents/agent-mark'
 import { Icon } from '@renderer/components/affect/app-shell'
@@ -644,6 +649,7 @@ function HarnessPageBody({ status }: { status: AgentStatus }) {
 
         {status.movedAccounts && <MovedAccountsNotice status={status} />}
         {status.failedVersion && <FailedVersionNotice status={status} />}
+        {status.versionWarning && <VersionWarningNotice status={status} />}
         <TaskNotice status={status} installed={installed} />
         {r.kind === 'failed' && !status.task && (
           <Notice
@@ -862,7 +868,9 @@ function VersionGroup({ status }: { status: AgentStatus }) {
       {next
         ? t('agents.update.released', { version: next })
         : status.update && status.automatic?.back
-          ? t('harnesses.switchBack.line', { version: status.update.adapterVersion })
+          ? t(SWITCH_BACK_LINE[status.automatic.backReason ?? 'registry'], {
+              version: status.update.adapterVersion,
+            })
           : status.update
             ? t(
                 status.package?.isSdk
@@ -923,9 +931,25 @@ function VersionGroup({ status }: { status: AgentStatus }) {
   )
 }
 
+/** What says why a harness went back to an older version, by what withdrew the one it had. */
+const WENT_BACK = {
+  registry: 'harnesses.autoUpdate.wentBack',
+  broken: 'harnesses.autoUpdate.wentBackBroken',
+  manifest: 'harnesses.autoUpdate.wentBackManifest',
+  bundled: 'harnesses.autoUpdate.wentBackBundled',
+} as const satisfies Record<VersionMoveReason, string>
+
+const SWITCH_BACK_LINE = {
+  registry: 'harnesses.switchBack.line',
+  broken: 'harnesses.switchBack.lineBroken',
+  manifest: 'harnesses.switchBack.lineManifest',
+  bundled: 'harnesses.switchBack.lineBundled',
+} as const satisfies Record<VersionMoveReason, string>
+
 /**
- * The switch for Kettu's own install of a harness the ACP Registry lists to follow it by itself,
- * and the last move it made: an update, or a switch back after a withdrawal, and why.
+ * The switch for Kettu's own install of a harness to follow its target by itself, from the ACP
+ * Registry or Kettu's checks, and the last move it made: an update, or a switch back after a
+ * withdrawal, and why.
  */
 function AutomaticUpdatesRow({ status }: { status: AgentStatus }) {
   const { t } = useTranslation('settings')
@@ -935,15 +959,19 @@ function AutomaticUpdatesRow({ status }: { status: AgentStatus }) {
   if (!automatic) return null
   const { moved } = automatic
   const ago = moved ? mediumAgo(moved.at, now) : ''
+  const kettu = automatic.follows === 'kettu'
   const line = !automatic.on
-    ? t('harnesses.autoUpdate.off')
+    ? t(kettu ? 'harnesses.autoUpdate.offKettu' : 'harnesses.autoUpdate.off')
     : moved
-      ? t(moved.withdrawn ? 'harnesses.autoUpdate.wentBack' : 'harnesses.autoUpdate.updated', {
-          from: moved.from,
-          to: moved.to,
-          ago,
-        })
-      : t('harnesses.autoUpdate.on')
+      ? t(
+          moved.withdrawn ? WENT_BACK[moved.reason ?? 'registry'] : 'harnesses.autoUpdate.updated',
+          {
+            from: moved.from,
+            to: moved.to,
+            ago,
+          },
+        )
+      : t(kettu ? 'harnesses.autoUpdate.onKettu' : 'harnesses.autoUpdate.on')
   return (
     <RowFrame text={<RowText name={t('harnesses.autoUpdate.name')} description={line} />}>
       <ControlError error={error} />
@@ -971,6 +999,54 @@ function FailedVersionNotice({ status }: { status: AgentStatus }) {
       {failed.runs
         ? t('harnesses.failedVersion.body', { version: failed.version, runs: failed.runs })
         : t('harnesses.failedVersion.bodyNone', { version: failed.version })}
+    </Notice>
+  )
+}
+
+/**
+ * The user's own program is a version Kettu's checks say does not work: what to change it to, and
+ * the update that does when there is one. Kettu never installs a chosen version of it.
+ */
+function VersionWarningNotice({ status }: { status: AgentStatus }) {
+  const { useAgentsStore } = useHostScope()
+  const { t } = useTranslation('settings')
+  const warning = status.versionWarning
+  if (!warning) return null
+  const name = status.harnessName
+  const update = status.cli?.update ?? null
+  const busy = status.task?.state === 'running'
+  return (
+    <Notice
+      variant="warning"
+      title={
+        warning.broken || !warning.supported
+          ? t('harnesses.versionWarning.brokenTitle', { name, version: warning.version })
+          : t('harnesses.versionWarning.unsupportedTitle', {
+              name,
+              version: warning.version,
+              supported: warning.supported,
+            })
+      }
+      action={
+        update && !busy ? (
+          <SetButton
+            variant="primary"
+            onClick={() => startCliUpdate(useAgentsStore, status.harnessId)}
+          >
+            {t('harnesses.updateTo', { version: update.version })}
+          </SetButton>
+        ) : undefined
+      }
+      more={update ? <CommandLine command={update.command} /> : undefined}
+    >
+      {update
+        ? t('harnesses.versionWarning.bodyUpdate', { update: update.version })
+        : warning.recommended
+          ? t('harnesses.versionWarning.bodyRecommended', {
+              name,
+              recommended: warning.recommended,
+            })
+          : t('harnesses.versionWarning.bodyOther', { name })}
     </Notice>
   )
 }
@@ -1029,7 +1105,8 @@ function TaskNotice({ status, installed }: { status: AgentStatus; installed: boo
     )
   }
   const minimum = cliOutdated(status)
-  if (cliUpdate) {
+  // The notice about a version that does not work offers the update itself.
+  if (cliUpdate && !status.versionWarning) {
     const outdated = minimum !== null
     return (
       <Notice
@@ -1079,17 +1156,28 @@ function TaskNotice({ status, installed }: { status: AgentStatus; installed: boo
   if (status.update && status.automatic?.back) {
     const current = status.release?.version ?? status.package?.version ?? version ?? ''
     const to = status.update.adapterVersion
+    const reason = status.automatic.backReason ?? 'registry'
     return (
       <Notice
         variant="warning"
-        title={t('harnesses.switchBack.title', { name, current })}
+        title={t(
+          reason === 'registry'
+            ? 'harnesses.switchBack.title'
+            : reason === 'broken'
+              ? 'harnesses.switchBack.titleBroken'
+              : 'harnesses.switchBack.titleKettu',
+          { name, current },
+        )}
         action={
           <SetButton variant="primary" onClick={() => startUpdate(useAgentsStore, harness)}>
             {t('harnesses.switchBack.button', { version: to })}
           </SetButton>
         }
       >
-        {t('harnesses.switchBack.body', { name, version: to })}
+        {t(reason === 'registry' ? 'harnesses.switchBack.body' : 'harnesses.switchBack.bodyKettu', {
+          name,
+          version: to,
+        })}
       </Notice>
     )
   }

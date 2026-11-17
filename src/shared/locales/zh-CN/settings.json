@@ -1818,18 +1818,36 @@
       "on": "在后台安装 ACP Registry 列出的版本。正在运行的会话不受影响，下次启动时使用新版本。",
       "off": "停在当前版本，ACP Registry 列出新版本时提示更新。",
       "updated": "{{ago}}从 {{from}} 更新到 {{to}}",
-      "wentBack": "{{ago}}从 {{from}} 换回 {{to}}：ACP Registry 撤回了 {{from}}"
+      "wentBack": "{{ago}}从 {{from}} 换回 {{to}}：ACP Registry 撤回了 {{from}}",
+      "onKettu": "在后台安装 Kettu 检查后推荐的版本。正在运行的会话不受影响，下次启动时使用新版本。",
+      "offKettu": "停在当前版本，Kettu 检查后推荐新版本时提示更新。",
+      "wentBackBroken": "{{ago}}从 {{from}} 换回 {{to}}：Kettu 检查发现 {{from}} 和这个版本的 Kettu 不能一起用",
+      "wentBackManifest": "{{ago}}从 {{from}} 换回 {{to}}：Kettu 检查后推荐 {{to}}",
+      "wentBackBundled": "{{ago}}从 {{from}} 换回 {{to}}：这个版本的 Kettu 自带的是 {{to}}"
     },
     "switchBack": {
       "line": "ACP Registry 现在列出的是 {{version}}",
       "title": "ACP Registry 撤回了 {{name}} {{current}}",
       "body": "它现在列出的是 {{version}}。换回时，如果没留着这个版本，就装在当前版本旁边：正在运行的会话不受影响，{{name}} 下次启动时使用它。",
-      "button": "换回 {{version}}"
+      "button": "换回 {{version}}",
+      "lineBroken": "Kettu 检查后推荐用 {{version}} 替换这个版本",
+      "lineManifest": "Kettu 检查后现在推荐 {{version}}",
+      "lineBundled": "这个版本的 Kettu 自带的是 {{version}}",
+      "titleBroken": "{{name}} {{current}} 和这个版本的 Kettu 不能一起用",
+      "titleKettu": "Kettu 撤回了 {{name}} {{current}}",
+      "bodyKettu": "Kettu 现在推荐 {{version}}。换回时，如果没留着这个版本，就装在当前版本旁边：正在运行的会话不受影响，{{name}} 下次启动时使用它。"
     },
     "failedVersion": {
       "title": "{{name}} {{version}} 没能启动",
       "body": "Kettu 已退回 {{runs}}，不会再自动安装 {{version}}。",
       "bodyNone": "Kettu 不会再自动安装 {{version}}。"
+    },
+    "versionWarning": {
+      "brokenTitle": "{{name}} {{version}} 和 Kettu 不能一起用",
+      "unsupportedTitle": "{{name}} {{version}} 不在 Kettu 能用的版本里（{{supported}}）",
+      "bodyUpdate": "Kettu 检查发现这个版本有问题，更新到 {{update}} 就能解决。",
+      "bodyRecommended": "Kettu 检查通过的是 {{recommended}}。按你安装 {{name}} 的方式装这个版本，再重新检测。",
+      "bodyOther": "按你安装 {{name}} 的方式换一个版本，再重新检测。"
     },
     "removedLine": "已从 Kettu 卸载",
     "movedAccounts": {

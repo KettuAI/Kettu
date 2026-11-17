@@ -201,8 +201,11 @@ export interface RegistryFetchOptions {
   url?: string
 }
 
-/** The body, refused once it grows past what a listing can be. */
-async function readLimited(response: Response): Promise<string | null> {
+/** The body, refused once it grows past `maxBytes`, what a listing can be by default. */
+export async function readLimited(
+  response: Response,
+  maxBytes = MAX_BYTES,
+): Promise<string | null> {
   if (!response.body) return null
   const reader = response.body.getReader()
   const chunks: Uint8Array[] = []
@@ -211,7 +214,7 @@ async function readLimited(response: Response): Promise<string | null> {
     const { done, value } = await reader.read()
     if (done) break
     size += value.byteLength
-    if (size > MAX_BYTES) {
+    if (size > maxBytes) {
       await reader.cancel()
       return null
     }

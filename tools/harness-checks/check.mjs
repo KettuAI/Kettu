@@ -9,6 +9,7 @@ import { mkdir, mkdtemp, readFile, rename, rm, writeFile } from 'node:fs/promise
 import os from 'node:os'
 import path from 'node:path'
 import { parseArgs } from 'node:util'
+import { autohand } from './autohand.mjs'
 import { claudeCode } from './claude-code.mjs'
 import { codex } from './codex.mjs'
 import { expect, Log } from './common.mjs'
@@ -17,7 +18,7 @@ import { loadKettu, ROOT } from './kettu.mjs'
 import { muse } from './muse.mjs'
 import { qoderCn } from './qoder-cn.mjs'
 
-export const HARNESSES = [claudeCode, codex, deepseek, qoderCn, muse]
+export const HARNESSES = [claudeCode, codex, deepseek, qoderCn, autohand, muse]
 
 /** How long after publishing a version waits, so npm has every platform package of it. */
 const WAIT_MS = 6 * 60 * 60_000

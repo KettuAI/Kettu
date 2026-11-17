@@ -72,6 +72,6 @@ export function listedInstalled(status: AgentStatus): boolean {
  */
 export function showsCurrent(status: AgentStatus): boolean {
   if (status.uninstalled || !hasProgram(status) || awaitsPackage(status)) return false
-  if (cliOutdated(status) !== null) return false
+  if (cliOutdated(status) !== null || status.versionWarning) return false
   return status.updateCheckedAt !== null || status.cli !== null
 }

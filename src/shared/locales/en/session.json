@@ -520,7 +520,11 @@
       "moreModels": "More models ({{number}})",
       "noMatch": "No matching agents or models",
       "checking": "Checking {{agent}}'s models…",
-      "prepareFailed": "{{agent}} could not open a session: {{error}}"
+      "prepareFailed": "{{agent}} could not open a session: {{error}}",
+      "versionBroken": "Kettu's checks found your {{command}} {{version}} does not work with it.",
+      "versionUnsupported": "Your {{command}} {{version}} is outside the versions Kettu works with ({{supported}}).",
+      "versionOnHost": "Change {{agent}} on {{host}} to a version Kettu works with.",
+      "howToChange": "How to change…"
     },
     "startNotice": {
       "model": {
@@ -570,6 +574,8 @@
       "signedOut": "Signed out · sign in to use",
       "failed": "Failed to start",
       "needsUpdate": "Too old · click to update",
+      "versionBroken": "{{version}} does not work with Kettu",
+      "versionUnsupported": "{{version}} is outside the versions Kettu works with",
       "limitUsed": "{{percent}}% of {{limit}} limit",
       "limitReached": "{{limit}} limit reached",
       "manage": "Manage agents…"

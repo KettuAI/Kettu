@@ -1837,18 +1837,36 @@
       "on": "Installs the version the ACP Registry lists in the background. Running sessions keep going, and the next start uses it.",
       "off": "Stays on the version it runs, and offers each new version the ACP Registry lists.",
       "updated": "Updated from {{from}} to {{to}} {{ago}}",
-      "wentBack": "Went back from {{from}} to {{to}} {{ago}}: the ACP Registry withdrew {{from}}"
+      "wentBack": "Went back from {{from}} to {{to}} {{ago}}: the ACP Registry withdrew {{from}}",
+      "onKettu": "Installs the version Kettu's checks recommend in the background. Running sessions keep going, and the next start uses it.",
+      "offKettu": "Stays on the version it runs, and offers each new version Kettu's checks recommend.",
+      "wentBackBroken": "Went back from {{from}} to {{to}} {{ago}}: Kettu's checks found {{from}} does not work with this version of Kettu",
+      "wentBackManifest": "Went back from {{from}} to {{to}} {{ago}}: Kettu's checks recommend {{to}}",
+      "wentBackBundled": "Went back from {{from}} to {{to}} {{ago}}: this version of Kettu comes with {{to}}"
     },
     "switchBack": {
       "line": "The ACP Registry lists {{version}} now",
       "title": "The ACP Registry withdrew {{name}} {{current}}",
       "body": "It lists {{version}} now. Switching back installs it next to the current version unless it is still there: running sessions keep going, and {{name}} uses it from its next start.",
-      "button": "Switch back to {{version}}"
+      "button": "Switch back to {{version}}",
+      "lineBroken": "Kettu's checks recommend {{version}} in place of this version",
+      "lineManifest": "Kettu's checks recommend {{version}} now",
+      "lineBundled": "This version of Kettu comes with {{version}}",
+      "titleBroken": "{{name}} {{current}} does not work with this version of Kettu",
+      "titleKettu": "Kettu withdrew {{name}} {{current}}",
+      "bodyKettu": "Kettu recommends {{version}} now. Switching back installs it next to the current version unless it is still there: running sessions keep going, and {{name}} uses it from its next start."
     },
     "failedVersion": {
       "title": "{{name}} {{version}} did not start",
       "body": "Kettu went back to {{runs}} and will not install {{version}} by itself again.",
       "bodyNone": "Kettu will not install {{version}} by itself again."
+    },
+    "versionWarning": {
+      "brokenTitle": "{{name}} {{version}} does not work with Kettu",
+      "unsupportedTitle": "{{name}} {{version}} is outside the versions Kettu works with ({{supported}})",
+      "bodyUpdate": "Kettu's checks found a problem with this version. Updating to {{update}} fixes it.",
+      "bodyRecommended": "Kettu's checks passed {{recommended}}. Install that version the way you installed {{name}}, then detect again.",
+      "bodyOther": "Install another version the way you installed {{name}}, then detect again."
     },
     "removedLine": "Removed from Kettu",
     "movedAccounts": {
