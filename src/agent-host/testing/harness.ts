@@ -38,6 +38,7 @@ import type { SessionTimings } from '../sessions'
 import type { RoutineTimings } from '../routines/manager'
 import type { RoutineClock } from '../routines/scheduler'
 import type { LogReader } from '../usage/model'
+import type { FakeAppServer } from './fake-app-server'
 import { tempFolder } from './temp'
 import { inThreadWorker } from './thread-worker'
 import { inUsageWorker } from './usage-worker'
@@ -114,6 +115,30 @@ export function inProcessLauncher(module: FakeAgentModule, env: Env = {}): InPro
     },
   }
   return launcher
+}
+
+/** Gives Codex a scripted app-server in place of a process, and every other agent the base launcher. */
+function appServerLauncher(base: AgentLauncher, server: FakeAppServer): AgentLauncher {
+  return {
+    launch: (def, spec, env, output) => {
+      if (def.id !== 'codex') return base.launch(def, spec, env, output)
+      const exited = new Promise<ExitInfo>(() => {})
+      return {
+        pid: null,
+        startedAt: Date.now(),
+        transport: server.transport,
+        exited,
+        hasExited: false,
+        stop: async () => {
+          server.close()
+          return { code: 0, signal: null }
+        },
+        kill: async () => {
+          server.close()
+        },
+      }
+    },
+  }
 }
 
 type Waiter = { check: () => boolean; resolve: () => void }
@@ -277,6 +302,8 @@ export interface TestHostOptions {
    * `router` false, as one process for all their sessions, to show what the router is for.
    */
   fakeThroughRouter?: { agentIds: AgentId[]; oneSession?: boolean; router?: boolean }
+  /** A scripted `codex app-server` that Codex runs against, with Codex enabled and found. */
+  fakeAppServer?: FakeAppServer
   /** Drivers over the built-in ones, by protocol. */
   drivers?: HostOptions['drivers']
   /** The thread worker, the service in the test's own thread unless given. */
@@ -300,7 +327,8 @@ export async function startTestHost(options: TestHostOptions = {}): Promise<Test
   const project = options.projectDir ?? path.join(dir, 'project')
   await mkdir(project, { recursive: true })
   const module = await loadFakeAgent()
-  const launcher = options.launcher ?? inProcessLauncher(module, options.agentEnv)
+  const base = options.launcher ?? inProcessLauncher(module, options.agentEnv)
+  const launcher = options.fakeAppServer ? appServerLauncher(base, options.fakeAppServer) : base
   const sent: HostToMain[] = []
   // The fake agent speaks ACP under every id it runs as.
   const protocols: HostOptions['protocols'] = Object.fromEntries(
@@ -320,6 +348,7 @@ export async function startTestHost(options: TestHostOptions = {}): Promise<Test
       agents: Object.fromEntries(
         [
           'fake-agent',
+          ...(options.fakeAppServer ? ['codex'] : []),
           ...(options.fakeAs ?? []),
           ...(options.fakeThroughRouter?.agentIds ?? []),
         ].map((id) => [id, { enabled: true }]),
@@ -356,6 +385,14 @@ export async function startTestHost(options: TestHostOptions = {}): Promise<Test
     probeNode: async () => ({ nodeVersion: null, npmPath: null, nodePath: null }),
     detect: async (def, ctx) => {
       if (def.id === 'fake-agent') return detectAgent(def, ctx)
+      if (def.id === 'codex' && options.fakeAppServer) {
+        const display = { command: 'codex', args: ['app-server'], env: {} }
+        return {
+          state: 'available',
+          spec: { command: 'codex', args: ['app-server'], env: {}, shell: false, display },
+          adapter: null,
+        }
+      }
       if (options.fakeThroughRouter?.agentIds.includes(def.id)) {
         const flags = options.fakeThroughRouter.oneSession ? ['--one-session'] : []
         const router = options.fakeThroughRouter.router !== false

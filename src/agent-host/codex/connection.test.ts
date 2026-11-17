@@ -255,6 +255,8 @@ describe('sessions', () => {
       sandbox: 'workspace-write',
       config: {
         projects: { '/project': { trust_level: 'trusted' } },
+        features: { default_mode_request_user_input: true },
+        suppress_unstable_features_warning: true,
         mcp_servers: {
           kettu: {
             url: 'http://127.0.0.1:9/mcp',
@@ -293,7 +295,7 @@ describe('sessions', () => {
     }
     const memory = { text: 'Memory index.' }
     const memoryOff = {
-      features: { memories: false },
+      features: { default_mode_request_user_input: true, memories: false },
       memories: { use_memories: false, generate_memories: false },
     }
     const opened = await connection.newSession('/project', { mcpServers: [kettu], memory })
@@ -311,9 +313,26 @@ describe('sessions', () => {
     await connection.newSession('/project', { mcpServers: [kettu] })
     const without = server.sent('thread/start')[2] as { config: Record<string, unknown> }
     expect(without).toMatchObject({ developerInstructions: 'Plan first.' })
-    expect(without.config).not.toHaveProperty('features')
+    expect(without.config).toMatchObject({ features: { default_mode_request_user_input: true } })
+    expect(without.config.features).not.toHaveProperty('memories')
     expect(without.config).not.toHaveProperty('memories')
     expect(connection.ownInstructions).toBe(true)
+  })
+
+  it('turns on the question tool in Default mode without its warning on every thread', async () => {
+    const { server, connection } = await connect()
+    const opened = await connection.newSession('/project')
+    await connection.resumeSession('thread-7', '/project', {})
+    await connection.forkSession(opened.sessionId, '/project', {})
+    for (const method of ['thread/start', 'thread/resume', 'thread/fork']) {
+      // The thread's own `features` table replaces the command line's, so the flag rides in it.
+      expect(server.sent(method)[0]).toMatchObject({
+        config: {
+          features: { default_mode_request_user_input: true },
+          suppress_unstable_features_warning: true,
+        },
+      })
+    }
   })
 
   it('sets the Marketplace’s skill folders on app-server before a thread starts, once while unchanged', async () => {

@@ -6930,7 +6930,18 @@ export class SessionManager {
     this.update(live, { queue: queue.filter((i) => i.id !== itemId) })
     this.persist(live)
     this.touch(live.id)
+    this.skipQuestions(live)
     return true
+  }
+
+  /**
+   * Skips the questions that wait for an answer once a message went into the turn: the agent holds
+   * the turn on them and would not read the message, which is the user's answer in words.
+   */
+  private skipQuestions(live: Live): void {
+    for (const [requestId, pending] of [...live.permissions]) {
+      if (pending.questions) this.respond(live.id, requestId, { answers: [] })
+    }
   }
 
   /**
