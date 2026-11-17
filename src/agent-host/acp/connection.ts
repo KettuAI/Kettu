@@ -75,6 +75,7 @@ import {
   mapSessionUpdate,
   mapTokenTotals,
 } from './mapper'
+import { compactsAgy, sentCompact } from './agy-compact'
 import {
   approved,
   buildMode,
@@ -958,7 +959,25 @@ export class AcpConnection implements AgentConnection {
       models: mapModelUsage(response._meta),
     }
     if (planning && result.stopReason === 'end_turn') await this.showPlan(sessionId)
+    if (this.agy && result.stopReason === 'end_turn' && compactsAgy(this.version)) {
+      if (sentCompact(prompt)) this.showCompaction(sessionId)
+    }
     return result
+  }
+
+  /** The divider for a compaction agy ran without saying so, as the entry every agent gets. */
+  private showCompaction(sessionId: string): void {
+    const target = this.targets.get(sessionId)
+    if (!target) return
+    const ctx = target.context()
+    const out: MapperOutput = { patches: [], effects: [] }
+    addEntry(ctx, out, {
+      kind: 'compaction',
+      id: `c:${ctx.nextId()}`,
+      status: 'completed',
+      summary: '',
+    })
+    target.apply(out)
   }
 
   /** Notes a call of agy's that writes the session's plan, once it has written it. */
