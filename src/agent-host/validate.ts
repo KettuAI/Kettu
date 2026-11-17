@@ -288,6 +288,22 @@ function relativePath(o: Fields, key: string, platform: Platform): string {
   return value
 }
 
+// The rows a file operation takes at once, as many as a selection in the tree may hold.
+const FILE_OPERATION_PATHS = 10_000
+
+function relativePaths(o: Fields, key: string, platform: Platform): string[] {
+  const value = o[key]
+  if (!Array.isArray(value) || value.length === 0 || value.length > FILE_OPERATION_PATHS) {
+    throw invalidParams(`${key} must be a list of 1 to ${FILE_OPERATION_PATHS} paths`)
+  }
+  return value.map((_, index) => relativePath(value as unknown as Fields, String(index), platform))
+}
+
+/** A folder of the project, relative to it; '' is the project's own. */
+function relativeFolder(o: Fields, key: string, platform: Platform): string {
+  return o[key] === '' ? '' : relativePath(o, key, platform)
+}
+
 /** A commit id, full or abbreviated. */
 function objectId(o: Fields, key: string): string {
   const value = string(o, key, 64)
@@ -2137,6 +2153,41 @@ export function createValidators(platform: Platform): Validators {
         path: relativePath(o, 'path', platform),
         text: o.text,
         version: o.version === null ? null : string(o, 'version', ID_CHARS),
+      }
+    },
+    'files.create': (params) => {
+      const o = fields(params)
+      if (o.kind !== 'file' && o.kind !== 'folder')
+        throw invalidParams('kind must be file or folder')
+      return {
+        projectPath: absolutePath(o, 'projectPath', platform),
+        path: relativePath(o, 'path', platform),
+        kind: o.kind,
+      }
+    },
+    'files.rename': (params) => {
+      const o = fields(params)
+      return {
+        projectPath: absolutePath(o, 'projectPath', platform),
+        from: relativePath(o, 'from', platform),
+        to: relativePath(o, 'to', platform),
+      }
+    },
+    'files.copy': (params) => {
+      const o = fields(params)
+      return {
+        projectPath: absolutePath(o, 'projectPath', platform),
+        paths: relativePaths(o, 'paths', platform),
+        folder: relativeFolder(o, 'folder', platform),
+      }
+    },
+    'files.delete': (params) => {
+      const o = fields(params)
+      const permanently = optionalFlag(o, 'permanently')
+      return {
+        projectPath: absolutePath(o, 'projectPath', platform),
+        paths: relativePaths(o, 'paths', platform),
+        ...(permanently === undefined ? {} : { permanently }),
       }
     },
     'artifacts.list': (params) => {

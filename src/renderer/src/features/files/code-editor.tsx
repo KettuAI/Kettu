@@ -268,7 +268,8 @@ function createBuffer(
     EditorView.updateListener.of((update) => {
       buffer.state = update.state
       if (!update.docChanged || update.transactions.some((tr) => tr.annotation(fromDisk))) return
-      setDirty(projectPath, path, !update.state.doc.eq(buffer.base))
+      // The buffer's path, which follows the file when it is renamed or moved.
+      setDirty(projectPath, buffer.path, !update.state.doc.eq(buffer.base))
     }),
   ]
   buffer.state = EditorState.create({ doc: content.text, extensions })

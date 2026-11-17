@@ -643,6 +643,50 @@ describe('createValidators', () => {
       write({ projectPath: '/p', path: 'a.ts', text: 'x'.repeat(1024 * 1024 + 1), version: null }),
     )
   })
+
+  it('checks the paths of file operations', () => {
+    const create = posix['files.create']
+    expect(create({ projectPath: '/p', path: 'a/b.ts', kind: 'file', extra: 1 })).toEqual({
+      projectPath: '/p',
+      path: 'a/b.ts',
+      kind: 'file',
+    })
+    rejects(() => create({ projectPath: '/p', path: 'a', kind: 'link' }))
+    rejects(() => create({ projectPath: '/p', path: '/etc/x', kind: 'file' }))
+    rejects(() => create({ projectPath: 'p', path: 'a', kind: 'file' }))
+    rejects(() => windows['files.create']({ projectPath: 'C:\\p', path: 'D:\\x', kind: 'file' }))
+
+    const rename = posix['files.rename']
+    expect(rename({ projectPath: '/p', from: 'a', to: 'b/a' })).toEqual({
+      projectPath: '/p',
+      from: 'a',
+      to: 'b/a',
+    })
+    rejects(() => rename({ projectPath: '/p', from: 'a', to: '/b' }))
+    rejects(() => rename({ projectPath: '/p', from: 'a\0', to: 'b' }))
+    rejects(() => rename({ projectPath: '/p', from: 'a' }))
+
+    const copy = posix['files.copy']
+    expect(copy({ projectPath: '/p', paths: ['a', 'b/c'], folder: '' })).toEqual({
+      projectPath: '/p',
+      paths: ['a', 'b/c'],
+      folder: '',
+    })
+    rejects(() => copy({ projectPath: '/p', paths: [], folder: '' }))
+    rejects(() => copy({ projectPath: '/p', paths: ['/a'], folder: '' }))
+    rejects(() => copy({ projectPath: '/p', paths: ['a'], folder: '/tmp' }))
+    rejects(() => copy({ projectPath: '/p', paths: 'a', folder: '' }))
+
+    const remove = posix['files.delete']
+    expect(remove({ projectPath: '/p', paths: ['a'] })).toEqual({ projectPath: '/p', paths: ['a'] })
+    expect(remove({ projectPath: '/p', paths: ['a'], permanently: true })).toMatchObject({
+      permanently: true,
+    })
+    rejects(() => remove({ projectPath: '/p', paths: ['a'], permanently: 'yes' }))
+    rejects(() => remove({ projectPath: '/p', paths: [1] }))
+    rejects(() => remove({ projectPath: '/p', paths: ['/'] }))
+    rejects(() => remove({ projectPath: '/p', paths: Array(10_001).fill('a') }))
+  })
 })
 
 describe('routine requests', () => {

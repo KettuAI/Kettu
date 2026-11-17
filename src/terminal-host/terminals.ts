@@ -215,6 +215,13 @@ export class TerminalManager {
     if (!project) {
       throw new TerminalError('restricted', 'Terminals open only in a known project folder')
     }
+    const cwd =
+      params.folder === undefined
+        ? project.cwd
+        : await this.options.projects.folderIn(project, params.folder)
+    if (cwd === null) {
+      throw new TerminalError('restricted', 'Terminals open only in a folder of their project')
+    }
     const shell = await resolveShell(
       this.options.platform,
       this.options.env,
@@ -235,7 +242,7 @@ export class TerminalManager {
         control: { kind: 'idle' },
         waiting: null,
       },
-      cwd: project.cwd,
+      cwd,
       shell,
       cols: params.cols,
       rows: params.rows,

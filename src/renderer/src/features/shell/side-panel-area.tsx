@@ -186,6 +186,9 @@ export function SidePanelArea({
         } else if (event.kind === 'run-in-terminal' && event.panel === panel) {
           toggleTerminal(panel, true)
           void createTerminal(projectPath, panel, undefined, { text: event.command, run: false })
+        } else if (event.kind === 'open-terminal' && event.panel === panel) {
+          toggleTerminal(panel, true)
+          void createTerminal(projectPath, panel, undefined, { folder: event.folder })
         } else if (event.kind === 'sign-in-terminal' && event.panel === panel) {
           toggleTerminal(panel, true)
           void createTerminal(projectPath, panel, undefined, {

@@ -3,7 +3,19 @@
 
 import { createHash, randomBytes } from 'node:crypto'
 import type { Stats } from 'node:fs'
-import { open, readdir, realpath, rename, stat, unlink, type FileHandle } from 'node:fs/promises'
+import {
+  cp,
+  lstat,
+  mkdir,
+  open,
+  readdir,
+  realpath,
+  rename,
+  rm,
+  stat,
+  unlink,
+  type FileHandle,
+} from 'node:fs/promises'
 import path from 'node:path'
 import {
   FILE_LIST_LIMIT,
@@ -32,6 +44,10 @@ export interface FilesLimits {
   scanFiles: number
   /** Directory levels below the project the walk reads. */
   depth: number
+  /** Empty folders the list names. */
+  folders: number
+  /** Entries read on disk to find empty folders among the ones git names untracked. */
+  folderScan: number
 }
 
 const DEFAULT_LIMITS: FilesLimits = {
@@ -41,6 +57,8 @@ const DEFAULT_LIMITS: FilesLimits = {
   matchChars: FILE_MATCH_CHARS,
   scanFiles: 5_000,
   depth: 20,
+  folders: 5_000,
+  folderScan: 20_000,
 }
 
 const GIT_MAX_BUFFER = 64 * 1024 * 1024
@@ -49,6 +67,10 @@ const BINARY_PROBE_BYTES = 8_000
 const SCAN_BATCH = 16
 const SKIPPED_DIRECTORIES: ReadonlySet<string> = new Set(['.git', 'node_modules'])
 const EMPTY_SEARCH: FileSearch = { matches: [], truncated: false }
+// Copies named after a taken name: `name copy.ext`, then `name copy 2.ext` and on.
+const COPY_NAMES = 1_000
+// Folders one `git check-ignore` is asked about, short of any command line's limit.
+const IGNORE_BATCH = 100
 
 export interface FilesServiceDeps {
   /** Runs git; it must give git the agent environment. */
@@ -58,6 +80,8 @@ export interface FilesServiceDeps {
   media(real: string, info: Stats): Promise<MediaGrant | null>
   /** The same file described as media for a paired device, granting nothing. */
   describeMedia(real: string, info: Stats): Promise<Omit<MediaFile, 'path'> | null>
+  /** Moves these absolute paths to the system's trash; throws when it could not. */
+  trash(paths: string[]): Promise<void>
   /** Replaces the default limits, for tests. */
   limits?: Partial<FilesLimits>
 }
@@ -146,6 +170,26 @@ function parseGrep(output: string, limit: number, chars: number): FileSearch {
   return { matches, truncated: false }
 }
 
+/** The name of the `n`th copy of `name`: `a copy.ts`, `a copy 2.ts`; a folder keeps no extension. */
+export function copyName(name: string, n: number, folder: boolean): string {
+  const dot = folder ? -1 : name.lastIndexOf('.')
+  // A leading dot starts a name such as `.env`, not an extension.
+  const [stem, extension] = dot > 0 ? [name.slice(0, dot), name.slice(dot)] : [name, '']
+  return `${stem} copy${n > 1 ? ` ${n}` : ''}${extension}`
+}
+
+const nameOf = (relative: string): string => relative.slice(relative.lastIndexOf('/') + 1)
+
+const folderOf = (relative: string): string => {
+  const slash = relative.lastIndexOf('/')
+  return slash < 0 ? '' : relative.slice(0, slash)
+}
+
+const isGone = (error: unknown): boolean => {
+  const code = (error as NodeJS.ErrnoException | undefined)?.code
+  return code === 'ENOENT' || code === 'ENOTDIR'
+}
+
 export class FilesService {
   private readonly limits: FilesLimits
   private readonly paths: path.PlatformPath
@@ -157,20 +201,104 @@ export class FilesService {
 
   /** The files under `root`, relative and sorted. `root` is a canonical project path. */
   async list(root: string): Promise<FileList> {
-    const [listed, deleted] = await Promise.all([
+    const [listed, deleted, untracked] = await Promise.all([
       this.git(root, ['ls-files', '-z', '--cached', '--others', '--exclude-standard']),
       this.git(root, ['ls-files', '-z', '--deleted']),
+      // Untracked folders, each once as `name/` however much it holds, where empty ones may be.
+      this.git(root, ['ls-files', '-z', '--others', '--directory', '--exclude-standard']),
     ])
     const files = gitOutput('git ls-files', listed)
     const gone = gitOutput('git ls-files --deleted', deleted)
-    if (files === null || gone === null) return this.walk(root, this.limits.list)
+    const folders = gitOutput('git ls-files --directory', untracked)
+    if (files === null || gone === null || folders === null) {
+      return this.walk(root, this.limits.list)
+    }
     const missing = new Set(gone.split('\0'))
     // A nested repository is listed as a folder, with a trailing slash.
     const paths = sortedUnique(
       files.split('\0').filter((p) => p !== '' && !p.endsWith('/') && !missing.has(p)),
     )
-    if (paths.length <= this.limits.list) return { paths, truncated: false }
-    return { paths: paths.slice(0, this.limits.list), truncated: true }
+    // A folder whose tracked files are all gone from disk is no untracked folder to git.
+    const emptied = this.foldersWithout(gone.split('\0'), paths)
+    const empty = await this.emptyFolders(root, [...folders.split('\0'), ...emptied])
+    if (paths.length <= this.limits.list) return { paths, folders: empty, truncated: false }
+    return { paths: paths.slice(0, this.limits.list), folders: empty, truncated: true }
+  }
+
+  /**
+   * The outermost folders above the `deleted` paths that hold none of the sorted `paths`, as
+   * `name/`, where what was deleted may have left empty folders.
+   */
+  private foldersWithout(deleted: string[], paths: readonly string[]): string[] {
+    const folders = new Set<string>()
+    for (const path of deleted) {
+      for (let slash = path.indexOf('/'); slash > 0; slash = path.indexOf('/', slash + 1)) {
+        const folder = path.slice(0, slash + 1)
+        if (this.holdsListed(paths, folder)) continue
+        folders.add(folder)
+        break
+      }
+    }
+    return [...folders]
+  }
+
+  /** Whether a path of the sorted `paths` starts with `prefix`. */
+  private holdsListed(paths: readonly string[], prefix: string): boolean {
+    let low = 0
+    let high = paths.length
+    while (low < high) {
+      const mid = (low + high) >>> 1
+      if (paths[mid]! < prefix) low = mid + 1
+      else high = mid
+    }
+    return paths[low]?.startsWith(prefix) ?? false
+  }
+
+  /**
+   * The folders empty on disk under git's untracked `candidates`, leaving out what git ignores
+   * and nested repositories, whose files the list leaves out too.
+   */
+  private async emptyFolders(root: string, candidates: string[]): Promise<string[]> {
+    const found: string[] = []
+    let budget = this.limits.folderScan
+    const full = () => budget <= 0 || found.length >= this.limits.folders
+    const scan = async (folder: string, depth: number): Promise<void> => {
+      let entries
+      try {
+        entries = await readdir(this.paths.join(root, folder), { withFileTypes: true })
+      } catch {
+        return
+      }
+      budget -= entries.length
+      if (entries.length === 0) {
+        found.push(folder)
+        return
+      }
+      if (depth >= this.limits.depth || entries.some((entry) => entry.name === '.git')) return
+      for (const entry of entries) {
+        if (full()) return
+        if (entry.isDirectory() && !SKIPPED_DIRECTORIES.has(entry.name)) {
+          await scan(`${folder}/${entry.name}`, depth + 1)
+        }
+      }
+    }
+    for (const candidate of candidates) {
+      if (full()) break
+      const folder = candidate.endsWith('/') ? candidate.slice(0, -1) : ''
+      if (folder !== '') await scan(folder, folder.split('/').length)
+    }
+    const ignored = new Set<string>()
+    for (let from = 0; from < found.length; from += IGNORE_BATCH) {
+      const batch = found.slice(from, from + IGNORE_BATCH)
+      // `-z` takes only `--stdin`, so paths come one a line; one git cannot check is left out.
+      const result = await this.git(root, ['check-ignore', '--', ...batch])
+      if (result.failure !== null || (result.code !== 0 && result.code !== 1)) {
+        for (const folder of batch) ignored.add(folder)
+        continue
+      }
+      for (const line of result.stdout.split('\n')) ignored.add(line.replace(/\/$/, ''))
+    }
+    return sortedUnique(found.filter((folder) => !ignored.has(folder)))
   }
 
   /**
@@ -277,6 +405,100 @@ export class FilesService {
     return { version: versionOf(bytes), size: bytes.length }
   }
 
+  /** A new empty file or folder at `relativePath`, with the folders above it made when missing. */
+  async create(root: string, relativePath: string, kind: 'file' | 'folder'): Promise<void> {
+    const relative = this.editable(relativePath)
+    const parent = await this.makeFolders(root, folderOf(relative))
+    const target = this.paths.join(parent, nameOf(relative))
+    try {
+      if (kind === 'folder') await mkdir(target)
+      else await (await open(target, 'wx', 0o666)).close()
+    } catch (error) {
+      throw this.taken(error, relative)
+    }
+  }
+
+  /**
+   * Moves the entry at `from` to `to`: a link itself, never what it points to. A name that only
+   * changes case is the same entry on a file system that ignores case, and is renamed.
+   */
+  async rename(root: string, from: string, to: string): Promise<void> {
+    const source = this.editable(from)
+    const target = this.editable(to)
+    if (source === target) return
+    const real = await this.entry(root, source)
+    const info = await this.entryStat(real, source)
+    if (info.isDirectory() && target.startsWith(`${source}/`)) {
+      throw invalidParams(`${source} cannot move into itself`)
+    }
+    const parent = await this.makeFolders(root, folderOf(target))
+    if (info.isDirectory() && this.within(real, parent)) {
+      throw invalidParams(`${source} cannot move into itself`)
+    }
+    const destination = this.paths.join(parent, nameOf(target))
+    const there = await lstat(destination).catch((error: unknown) => {
+      if (isGone(error)) return null
+      throw error
+    })
+    // Only a change of case finds the entry itself there; another name of a hard link does not.
+    const itself =
+      there !== null &&
+      there.ino === info.ino &&
+      there.dev === info.dev &&
+      nameOf(source).toLowerCase() === nameOf(target).toLowerCase()
+    if (there && !itself) throw new HostError('conflict', `${target} already exists`)
+    await rename(real, destination)
+  }
+
+  /**
+   * Copies each of `relativePaths` into `folder` ('' for the project's own), naming a copy whose
+   * name is taken there `name copy.ext`. Links are copied as links. The copies' paths, in order.
+   */
+  async copy(root: string, relativePaths: string[], folder: string): Promise<string[]> {
+    const into = this.normalizeFolder(folder)
+    if (into.split('/').includes('.git')) throw invalidParams(`${into} is inside .git`)
+    const parent = await this.folder(root, into)
+    const copies: string[] = []
+    for (const relativePath of relativePaths) {
+      const source = this.editable(relativePath)
+      const real = await this.entry(root, source)
+      const info = await this.entryStat(real, source)
+      if (info.isDirectory() && this.within(real, parent)) {
+        throw invalidParams(`${source} cannot be copied into itself`)
+      }
+      const name = await this.freeName(parent, nameOf(source), info.isDirectory())
+      await cp(real, this.paths.join(parent, name), {
+        recursive: true,
+        errorOnExist: true,
+        force: false,
+        verbatimSymlinks: true,
+      })
+      copies.push(into === '' ? name : `${into}/${name}`)
+    }
+    return copies
+  }
+
+  /** Moves each entry to the system's trash, or removes it for good; one already gone is skipped. */
+  async delete(root: string, relativePaths: string[], permanently: boolean): Promise<void> {
+    const entries: string[] = []
+    for (const relativePath of relativePaths) {
+      const relative = this.editable(relativePath)
+      let real: string
+      try {
+        real = await this.entry(root, relative)
+        await lstat(real)
+      } catch (error) {
+        if (error instanceof HostError && error.code === 'not_found') continue
+        if (isGone(error)) continue
+        throw error
+      }
+      entries.push(real)
+    }
+    if (entries.length === 0) return
+    if (!permanently) return this.deps.trash(entries)
+    for (const real of entries) await rm(real, { recursive: true, force: true })
+  }
+
   /** Lines that contain `query`, ignoring case. The query is literal text, not a pattern. */
   async search(root: string, query: string): Promise<FileSearch> {
     if (query === '') throw invalidParams('query must not be empty')
@@ -320,6 +542,12 @@ export class FilesService {
   /** Breadth-first, so a cut at the limit keeps the shallow files. */
   private async walk(root: string, limit: number): Promise<FileList> {
     const paths: string[] = []
+    const folders: string[] = []
+    const result = (truncated: boolean): FileList => ({
+      paths: sortedUnique(paths),
+      folders: sortedUnique(folders),
+      truncated,
+    })
     let level = ['']
     for (let depth = 0; level.length > 0 && depth <= this.limits.depth; depth++) {
       const next: string[] = []
@@ -332,6 +560,9 @@ export class FilesService {
           if (directory === '') throw this.fsError(error, root)
           continue
         }
+        if (entries.length === 0 && directory !== '' && folders.length < this.limits.folders) {
+          folders.push(directory)
+        }
         for (const entry of entries) {
           const relative = directory === '' ? entry.name : `${directory}/${entry.name}`
           if (entry.isDirectory()) {
@@ -342,13 +573,13 @@ export class FilesService {
           const isFile =
             entry.isFile() || (entry.isSymbolicLink() && (await this.linksToFile(root, relative)))
           if (!isFile) continue
-          if (paths.length >= limit) return { paths: sortedUnique(paths), truncated: true }
+          if (paths.length >= limit) return result(true)
           paths.push(relative)
         }
       }
       level = next
     }
-    return { paths: sortedUnique(paths), truncated: false }
+    return result(false)
   }
 
   private async linksToFile(root: string, relative: string): Promise<boolean> {
@@ -421,6 +652,101 @@ export class FilesService {
     }
     if (segments.length === 0) throw invalidParams('path must name a file')
     return segments.join('/')
+  }
+
+  /** A path an operation may change: not the project itself and nothing in `.git`. */
+  private editable(value: string): string {
+    const relative = this.normalize(value)
+    if (relative.split('/').includes('.git')) throw invalidParams(`${relative} is inside .git`)
+    return relative
+  }
+
+  /** A folder's path as `normalize` gives it, with '' for the project's own. */
+  private normalizeFolder(value: string): string {
+    return value === '' || value === '.' ? '' : this.normalize(value)
+  }
+
+  /** The real path of a folder of the project, '' for the project itself. */
+  private async folder(root: string, relative: string): Promise<string> {
+    const real =
+      relative === '' ? await this.realRoot(root) : await this.resolveInside(root, relative)
+    const info = await stat(real).catch((error: unknown) => {
+      throw this.fsError(error, relative)
+    })
+    if (!info.isDirectory()) throw invalidParams(`${relative} is not a folder`)
+    return real
+  }
+
+  private async realRoot(root: string): Promise<string> {
+    try {
+      return await realpath(root)
+    } catch (error) {
+      throw this.fsError(error, root)
+    }
+  }
+
+  /**
+   * Where the entry at `relative` is, without following a link at its end: its folder's real
+   * path, which must be in the project, and its own name.
+   */
+  private async entry(root: string, relative: string): Promise<string> {
+    return this.paths.join(await this.folder(root, folderOf(relative)), nameOf(relative))
+  }
+
+  private async entryStat(real: string, relative: string): Promise<Stats> {
+    try {
+      return await lstat(real)
+    } catch (error) {
+      throw this.fsError(error, relative)
+    }
+  }
+
+  /** The real path of `relative`, a folder of the project, making the folders that are missing. */
+  private async makeFolders(root: string, relative: string): Promise<string> {
+    const top = await this.realRoot(root)
+    let real = top
+    for (const segment of relative === '' ? [] : relative.split('/')) {
+      const next = this.paths.join(real, segment)
+      try {
+        await mkdir(next)
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException | undefined)?.code !== 'EEXIST') throw error
+      }
+      // What was there may be a link: it must lead to a folder in the project.
+      real = await realpath(next)
+      if (!this.within(top, real)) throw invalidParams(`${relative} is outside the project`)
+      if (!(await stat(real)).isDirectory()) throw invalidParams(`${relative} is not a folder`)
+    }
+    return real
+  }
+
+  /** `name`, or the first of its copy names that nothing in `folder` has. */
+  private async freeName(folder: string, name: string, isFolder: boolean): Promise<string> {
+    for (let n = 0; n <= COPY_NAMES; n++) {
+      const candidate = n === 0 ? name : copyName(name, n, isFolder)
+      try {
+        await lstat(this.paths.join(folder, candidate))
+      } catch (error) {
+        if (isGone(error)) return candidate
+        throw error
+      }
+    }
+    throw new HostError('conflict', `Too many copies of ${name}`)
+  }
+
+  /** Whether the real path `inner` is `outer` or inside it. */
+  private within(outer: string, inner: string): boolean {
+    const outerKey = pathKey(outer, this.deps.platform)
+    const innerKey = pathKey(inner, this.deps.platform)
+    const prefix = outerKey.endsWith(this.paths.sep) ? outerKey : outerKey + this.paths.sep
+    return innerKey === outerKey || innerKey.startsWith(prefix)
+  }
+
+  private taken(error: unknown, relative: string): Error {
+    if ((error as NodeJS.ErrnoException | undefined)?.code === 'EEXIST') {
+      return new HostError('conflict', `${relative} already exists`)
+    }
+    return error instanceof Error ? error : new Error(String(error))
   }
 
   /** The real path of `relative` under `root`; a symbolic link must not lead out of `root`. */

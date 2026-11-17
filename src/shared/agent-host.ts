@@ -1281,6 +1281,26 @@ export interface HostContract {
     params: { projectPath: string; path: string; text: string; version: string | null }
     result: FileWritten
   }
+  // A new empty file or folder; the folders above it are made when missing. Never replaces one.
+  'files.create': {
+    params: { projectPath: string; path: string; kind: 'file' | 'folder' }
+    result: void
+  }
+  // Renames or moves a file or folder, a link itself rather than what it points to; the folders
+  // above `to` are made when missing. `conflict` when something is at `to` already.
+  'files.rename': { params: { projectPath: string; from: string; to: string }; result: void }
+  // Copies each into `folder` ('' is the project's), naming a copy `name copy.ext` when its name
+  // is taken there; the copies' paths, in order.
+  'files.copy': {
+    params: { projectPath: string; paths: string[]; folder: string }
+    result: string[]
+  }
+  // To the system's trash, or for good with `permanently`; what is gone already is skipped.
+  // `unavailable` when the host could not put them in a trash.
+  'files.delete': {
+    params: { projectPath: string; paths: string[]; permanently?: boolean }
+    result: void
+  }
   // `path` as the thread writes it: absolute, `~/`, a `file:` URI, or relative to `projectPath`,
   // the session's folder. `sessionId` lets a file outside it through when that thread names it.
   'media.open': {
@@ -1748,6 +1768,10 @@ export const HOST_METHODS = [
   'files.agentFolder',
   'files.readAgentFile',
   'files.write',
+  'files.create',
+  'files.rename',
+  'files.copy',
+  'files.delete',
   'media.open',
   'media.authorize',
   'usage.summary',

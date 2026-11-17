@@ -2042,9 +2042,59 @@ li[data-row-exit='dust'] > * {
   background: color-mix(in srgb, var(--bg-hover) 75%, transparent);
   color: var(--text-primary);
 }
-.kp-node[aria-current] {
+.kp-node[aria-current],
+.kp-node[data-chosen] {
   background: var(--bg-hover);
   color: var(--text-primary);
+}
+.kp-node[aria-current][data-chosen] {
+  background: var(--bg-selected);
+}
+/* Cut and waiting to be pasted. */
+.kp-node[data-cut] > :not(.kp-node__chev) {
+  opacity: 0.5;
+}
+/* The folder dragged rows would go into, and what is in it; the tree for the project's own. */
+.kp-node[data-drop],
+.kp-tree[data-drop] {
+  background: color-mix(in srgb, var(--focus) 8%, transparent);
+}
+.kp-tree__rows {
+  flex: 1;
+}
+.kp-node--edit {
+  position: relative;
+  overflow: visible;
+}
+.kp-node__input {
+  flex: 1;
+  min-width: 0;
+  height: 22px;
+  padding: 0 5px;
+  border-radius: 5px;
+  background: var(--bg-surface);
+  box-shadow: inset 0 0 0 1px var(--focus-ring-color);
+  font: inherit;
+  color: var(--text-primary);
+  outline: none;
+}
+.kp-node__input[aria-invalid] {
+  box-shadow: inset 0 0 0 1px var(--danger);
+}
+.kp-node__problem {
+  position: absolute;
+  top: calc(100% - 3px);
+  right: 6px;
+  left: 6px;
+  z-index: 1;
+  padding: 4px 7px;
+  border: var(--hairline) solid var(--danger-border);
+  border-radius: 6px;
+  background: var(--danger-tint);
+  font-size: 11.5px;
+  line-height: 16px;
+  color: var(--danger);
+  white-space: normal;
 }
 .kp-node > svg,
 .kp-node > img {

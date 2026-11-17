@@ -472,6 +472,8 @@ export async function loadTerminals(projectPath: string, panel?: string): Promis
 
 export interface CreateTerminalOptions extends Partial<TerminalCommand> {
   signInAgent?: string
+  /** Where the shell starts, a folder of the project relative to it. */
+  folder?: string
 }
 
 type Size = { cols: number; rows: number }
@@ -506,6 +508,7 @@ async function startTerminal(
   try {
     const info = await terminals('terminals.create', {
       projectPath,
+      ...(options?.folder ? { folder: options.folder } : {}),
       ...(sessionId ? { sessionId } : {}),
       cols: size.cols,
       rows: size.rows,
