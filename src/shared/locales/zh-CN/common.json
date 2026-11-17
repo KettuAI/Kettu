@@ -58,6 +58,11 @@
     "weeklyOf": "{{model}} 每周",
     "fiveHourOf": "{{model}} 5 小时"
   },
+  "planView": {
+    "label": "限额显示方式",
+    "used": "已用",
+    "left": "剩余"
+  },
   "fileManager": {
     "mac": "访达",
     "windows": "资源管理器",

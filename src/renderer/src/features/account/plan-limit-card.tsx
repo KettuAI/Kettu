@@ -4,8 +4,9 @@ import { PlanRings } from '@renderer/components/plan-rings'
 import { HoverCard, HoverCardContent, HoverCardTrigger } from '@renderer/components/ui/hover-card'
 import { PlanPart } from '@renderer/features/session/composer/usage'
 import { ringStroke } from '@renderer/features/usage/plan-cards'
+import { useLimitView } from '@renderer/hooks/use-limit-view'
 import { planAmount, planBalance } from '@renderer/lib/format'
-import { LIMIT_TEXT } from '@renderer/lib/plan-limit'
+import { LIMIT_TEXT, shownPercent } from '@renderer/lib/plan-limit'
 import { cn } from '@renderer/lib/utils'
 import { useHostName, useWindowHost } from '@renderer/stores/window-host'
 import { hasModelGroups, type PlanCard } from './model'
@@ -54,6 +55,7 @@ export function PlanLimitCard({ card, onOpen }: { card: PlanCard; onOpen: () => 
 
 function CardFace({ card }: { card: PlanCard }) {
   const { t } = useTranslation(['sidebar', 'composer', 'common', 'usage'])
+  const view = useLimitView()
   const count = card.windows.length
   const groups = hasModelGroups(card)
   const amounts = card.windows.flatMap((window) => {
@@ -81,7 +83,11 @@ function CardFace({ card }: { card: PlanCard }) {
       <span className="mt-1.75 flex min-w-0 items-center gap-2.25">
         {count > 0 ? (
           <PlanRings
-            rings={card.windows.map((w) => ({ id: w.id, percent: w.percent, level: w.level }))}
+            rings={card.windows.map((w) => ({
+              id: w.id,
+              percent: shownPercent(w.percent, view),
+              level: w.level,
+            }))}
             size={36}
             {...(count > 3
               ? ringStroke(count, 36)
@@ -122,10 +128,16 @@ function CardFace({ card }: { card: PlanCard }) {
                       w.level === 'ok' ? 'text-primary' : LIMIT_TEXT[w.level],
                     )}
                   >
-                    {w.percent}%
+                    {shownPercent(w.percent, view)}%
                   </span>
                   <span className="sr-only">
-                    {t('sidebar:account.limitUsed', { window: name, percent: w.percent })}
+                    {t(
+                      view === 'left' ? 'sidebar:account.limitLeft' : 'sidebar:account.limitUsed',
+                      {
+                        window: name,
+                        percent: shownPercent(w.percent, view),
+                      },
+                    )}
                   </span>
                 </span>
               </span>

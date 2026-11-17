@@ -3,10 +3,13 @@ import { Analytics01Icon, ArrowRight01Icon } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
 import type { AgentId } from '@shared/thread'
 import { Icon, Popover } from '@renderer/components/affect/app-shell'
+import { LimitViewSwitch } from '@renderer/components/plan-limit-view'
 import { PlanRings } from '@renderer/components/plan-rings'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
+import { useLimitView } from '@renderer/hooks/use-limit-view'
 import { errorMessage } from '@renderer/lib/host'
 import { hostOfPath } from '@renderer/lib/host-paths'
+import { shownPercent } from '@renderer/lib/plan-limit'
 import {
   accountAgents,
   accountCardKey,
@@ -107,6 +110,7 @@ export function PlanRing() {
   const { t } = useTranslation(['sidebar', 'composer'])
   const cards = planCards(useAccountsWithLimits(), useNow())
   const current = useCurrentAccount()
+  const view = useLimitView()
   const [open, setOpen] = useState(false)
   if (cards.length === 0) return null
 
@@ -114,12 +118,12 @@ export function PlanRing() {
   const tightest = card?.windows.length ? tightestWindow(card) : null
   const label =
     card && tightest
-      ? t('sidebar:account.ring', {
+      ? t(view === 'left' ? 'sidebar:account.ringLeft' : 'sidebar:account.ring', {
           account: card.name,
           window: tightest.model
             ? `${t(`composer:usage.shortWindow.${tightest.window}`)} ${tightest.model}`
             : t(`composer:usage.shortWindow.${tightest.window}`),
-          percent: tightest.percent,
+          percent: shownPercent(tightest.percent, view),
         })
       : current
         ? t('sidebar:account.ringNone', { agent: current.agentName })
@@ -149,7 +153,11 @@ export function PlanRing() {
           <PlanRings
             rings={[
               tightest
-                ? { id: tightest.id, percent: tightest.percent, level: tightest.level }
+                ? {
+                    id: tightest.id,
+                    percent: shownPercent(tightest.percent, view),
+                    level: tightest.level,
+                  }
                 : { id: 'none', percent: 0, level: 'ok' },
             ]}
             size={16}
@@ -168,6 +176,9 @@ export function PlanRing() {
   )
 }
 
+/** The popover's buttons that arrow keys step through: the cards and Open Usage. */
+const NAVIGABLE = 'button:not([role="radio"])'
+
 /** Every account's plan cards on an inset panel, the current one first, then Open Usage. */
 function PlanPopover({ currentKey, close }: { currentKey: string | null; close: () => void }) {
   const { t } = useTranslation('sidebar')
@@ -180,18 +191,19 @@ function PlanPopover({ currentKey, close }: { currentKey: string | null; close: 
   useEffect(() => readLimits(), [shownKey])
   const ref = useRef<HTMLDivElement>(null)
   useEffect(() => {
-    ref.current?.querySelector<HTMLElement>('button')?.focus({ preventScroll: true })
+    ref.current?.querySelector<HTMLElement>(NAVIGABLE)?.focus({ preventScroll: true })
   }, [])
 
   const open = () => {
     close()
     openUsage()
   }
-  // Arrow keys move through the cards and the rows under them, in order.
+  // Arrow keys move through the cards and the rows under them, in order; the Used / Left switch
+  // keeps its own arrow keys.
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     const step = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 }[event.key]
-    if (!step) return
-    const buttons = [...(ref.current?.querySelectorAll<HTMLElement>('button') ?? [])]
+    if (!step || (event.target as HTMLElement).closest('[role="radiogroup"]')) return
+    const buttons = [...(ref.current?.querySelectorAll<HTMLElement>(NAVIGABLE) ?? [])]
     const at = buttons.indexOf(document.activeElement as HTMLElement)
     const next = buttons[(at + step + buttons.length) % buttons.length]
     if (!next) return
@@ -212,6 +224,7 @@ function PlanPopover({ currentKey, close }: { currentKey: string | null; close: 
         <span className="kettu-plan-pop__host">
           {windowHost.kind === 'all' ? t('hosts.all') : hostName(windowHost.hostId)}
         </span>
+        <LimitViewSwitch />
       </div>
       <div className="kettu-plan-pop__well scroll-fade-y">
         <div className="grid grid-flow-dense grid-cols-2 gap-1">

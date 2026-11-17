@@ -30,9 +30,10 @@ import { joinPlanTier } from '@renderer/features/account/model'
 import { breakdownView, shownUsage } from '@renderer/features/session/composer/context-bar'
 import { PANEL } from '@renderer/features/session/entries/helpers'
 import { planReset, usageTone, type UsageTone } from '@renderer/features/sidebar/plan-usage'
+import { useLimitView } from '@renderer/hooks/use-limit-view'
 import { clockTime, countdown, fullTime, limitLabel, money, tokens } from '@renderer/lib/format'
 import { errorMessage, sessionHost } from '@renderer/lib/host'
-import { limitLevel } from '@renderer/lib/plan-limit'
+import { limitLevel, shownPercent } from '@renderer/lib/plan-limit'
 import { useNow } from '@renderer/lib/use-now'
 import { cn } from '@renderer/lib/utils'
 import { loadContext, refreshLimits, useUsageStore } from '@renderer/stores/usage'
@@ -709,6 +710,7 @@ export function PlanPart({
 }) {
   const { t } = useTranslation('composer')
   const now = useNow()
+  const view = useLimitView()
   const plan = account?.label ? joinPlanTier(account.label, account.tier) : null
   return (
     <div className="flex flex-col text-hint">
@@ -717,13 +719,12 @@ export function PlanPart({
       </div>
       {limits.map((limit) => {
         const level = limitLevel(limit)
+        const shown = shownPercent(Math.round(limit.usedPercent ?? 0), view)
         return (
           <div key={limit.window} className="mt-2 flex flex-col gap-1.25">
             <div className="flex text-secondary tabular">
               <span className="min-w-0 flex-1 truncate">{limitLabel(limit)}</span>
-              <span className="text-primary">
-                {limit.usedPercent === null ? '—' : `${Math.round(limit.usedPercent)}%`}
-              </span>
+              <span className="text-primary">{limit.usedPercent === null ? '—' : `${shown}%`}</span>
               {limit.resetsAt ? (
                 <Tooltip>
                   <TooltipTrigger
@@ -742,9 +743,11 @@ export function PlanPart({
               )}
             </div>
             <Progress
-              value={limit.usedPercent ?? 0}
+              value={limit.usedPercent === null ? 0 : shown}
               tone={`limit-${level}`}
-              aria-label={t('usage.limits.used', { limit: limitLabel(limit) })}
+              aria-label={t(view === 'left' ? 'usage.limits.left' : 'usage.limits.used', {
+                limit: limitLabel(limit),
+              })}
               className="**:data-[slot=progress-track]:bg-border-soft"
             />
           </div>

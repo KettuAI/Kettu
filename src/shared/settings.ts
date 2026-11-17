@@ -97,6 +97,7 @@ export interface SettingsFile {
   usage: {
     fromComputer: boolean // read the agents' own logs
     sidebar: 'today' | 'cost' | 'limit' | 'off' // what the sidebar's Usage row shows at its end
+    limits: 'used' | 'left' // plan limits as the share used or the share left
   }
   remote: {
     enabled: boolean // paired devices may connect to this computer; keeps Kettu in the background
@@ -232,7 +233,7 @@ export const DEFAULT_SETTINGS: SettingsFile = {
   updates: { automatic: 'download', source: 'auto' },
   privacy: { hideAccount: false },
   diagnostics: { verboseUntil: null },
-  usage: { fromComputer: false, sidebar: 'today' },
+  usage: { fromComputer: false, sidebar: 'today', limits: 'used' },
   remote: {
     enabled: false,
     name: null,

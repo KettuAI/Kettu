@@ -163,6 +163,7 @@
       "days": "{{count}}d"
     },
     "windowUsed": "{{window}}: {{percent}}% used.",
+    "windowLeft": "{{window}}: {{percent}}% left.",
     "prepaidBalance": "Prepaid balance",
     "extraUsage": "Extra usage",
     "units": {

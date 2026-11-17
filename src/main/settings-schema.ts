@@ -188,7 +188,11 @@ const SECTION_FIELDS = {
   },
   privacy: { hideAccount: isBoolean },
   diagnostics: { verboseUntil: isVerboseUntil },
-  usage: { fromComputer: isBoolean, sidebar: oneOf('today', 'cost', 'limit', 'off') },
+  usage: {
+    fromComputer: isBoolean,
+    sidebar: oneOf('today', 'cost', 'limit', 'off'),
+    limits: oneOf('used', 'left'),
+  },
   idleSessions: {
     release: oneOf(...IDLE_RELEASE_MODES),
     outOfView: oneOf(...OUT_OF_VIEW_MINUTES),
