@@ -247,18 +247,25 @@ function sandboxMode(policy: SandboxPolicy): SandboxMode {
 }
 
 /**
- * Per-session config Codex takes at start: the folder trusted, as codex-acp did, Kettu's MCP, and
- * with Kettu's memory Codex's own off, so it neither reads its memories nor makes them from it.
+ * Per-session config Codex takes at start: the folder trusted, as codex-acp did, Kettu's MCP, the
+ * question tool in Default mode, where Codex otherwise asks in plain text, and with Kettu's memory
+ * Codex's own off, so it neither reads its memories nor makes them from it.
  */
 function sessionConfig(cwd: string, options: SessionOptions): Record<string, JsonValue> {
-  const config: Record<string, JsonValue> = { projects: { [cwd]: { trust_level: 'trusted' } } }
+  const features: Record<string, JsonValue> = { default_mode_request_user_input: true }
+  const config: Record<string, JsonValue> = {
+    projects: { [cwd]: { trust_level: 'trusted' } },
+    features,
+    // Codex warns in the thread that an under-development feature is on.
+    suppress_unstable_features_warning: true,
+  }
   const entries = (options.mcpServers ?? []).flatMap((server) => {
     const entry = codexServer(server)
     return entry ? [[server.name.replace(/\s+/g, '_'), entry] as const] : []
   })
   if (entries.length > 0) config.mcp_servers = Object.fromEntries(entries)
   if (options.memory) {
-    config.features = { memories: false }
+    features.memories = false
     config.memories = { use_memories: false, generate_memories: false }
   }
   return config
