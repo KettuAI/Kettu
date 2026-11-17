@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest'
+import { isFullAccessMode } from '@shared/agents'
 import {
+  defaultMode,
+  modeRank,
   startableModes,
   startedCeiling,
   startedMode,
@@ -44,6 +47,29 @@ describe('the mode of a started session', () => {
     )
     const dsh = { harness: 'deepseek', mode: 'danger-full-access' } as const
     expect(started({ harness: 'claude-code', mode: 'auto' }, dsh)).toBe('workspace-write')
+    const agy = { harness: 'antigravity', mode: 'auto' } as const
+    expect(started({ harness: 'antigravity', mode: 'dangerously-skip-permissions' }, agy)).toBe(
+      'auto',
+    )
+    expect(
+      started({ harness: 'claude-code', mode: 'auto' }, agy, 'dangerously-skip-permissions'),
+    ).toBe('auto')
+  })
+
+  it("ranks agy's modes, with Kettu's full access over agy's flag as the widest", () => {
+    expect(isFullAccessMode('dangerously-skip-permissions')).toBe(true)
+    const ranks = ['default', 'plan', 'accept-edits', 'auto', 'dangerously-skip-permissions'].map(
+      (mode) => modeRank('antigravity', mode),
+    )
+    expect(ranks).toEqual([1, 1, 2, 3, 4])
+    expect(defaultMode('antigravity')).toBe('default')
+    expect(startableModes('antigravity', 3)).toEqual(['default', 'accept-edits', 'auto'])
+    // agy starts in Default, so a session it is given starts there whatever the starter's mode.
+    const agy = { harness: 'antigravity', mode: 'default' } as const
+    expect(started({ harness: 'claude-code', mode: 'auto' }, agy)).toBe('default')
+    const codex = { harness: 'codex', mode: 'agent' } as const
+    expect(started({ harness: 'antigravity', mode: 'accept-edits' }, codex)).toBe('workspace-write')
+    expect(started({ harness: 'antigravity', mode: 'plan' }, codex)).toBe('read-only')
   })
 
   it('counts planning and modes it does not know as asking', () => {
@@ -60,7 +86,7 @@ describe('the mode of a started session', () => {
     expect(started({ harness: 'claude-code', mode: 'auto' }, claude)).toBe('default')
     const dsh = { harness: 'deepseek', mode: 'workspace-write' } as const
     expect(started({ harness: 'claude-code', mode: 'auto' }, dsh, 'plan')).toBe('read-only')
-    for (const harness of ['claude-code', 'codex', 'deepseek'] as const) {
+    for (const harness of ['claude-code', 'codex', 'deepseek', 'antigravity'] as const) {
       for (const ceiling of [1, 2, 3] as ModeRank[]) {
         expect(startableModes(harness, ceiling)).not.toContain('plan')
       }

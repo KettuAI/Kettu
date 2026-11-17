@@ -3,7 +3,7 @@
 // starter's rank and the rank of the mode its agent would start in, never to full access, so a
 // session cannot do through one it starts what it could not do itself without asking.
 
-import type { HarnessId } from '@shared/agents'
+import { ANTIGRAVITY_FULL_ACCESS, type HarnessId } from '@shared/agents'
 import { availableModes, modeDescription, modeName } from './claude/config'
 import type { PermissionMode } from './claude/sdk'
 import { DEFAULT_MODE as CODEX_DEFAULT, MODES as CODEX_MODES, type ModeId } from './codex/config'
@@ -21,7 +21,18 @@ export type ModeRank = 1 | 2 | 3 | 4
 /** The widest rank a started session gets: full access never. */
 export const STARTED_MAX: ModeRank = 3
 
-export type RankedHarness = 'claude-code' | 'codex' | 'deepseek'
+export type RankedHarness = 'claude-code' | 'codex' | 'deepseek' | 'antigravity'
+
+// agy's own modes, then Kettu's full access over its `--dangerously-skip-permissions`.
+const AGY_MODES = ['default', 'accept-edits', 'auto', 'plan', ANTIGRAVITY_FULL_ACCESS] as const
+type AgyMode = (typeof AGY_MODES)[number]
+const AGY_KEYS: Record<AgyMode, 'default' | 'acceptEdits' | 'auto' | 'plan' | 'fullAccess'> = {
+  default: 'default',
+  'accept-edits': 'acceptEdits',
+  auto: 'auto',
+  plan: 'plan',
+  [ANTIGRAVITY_FULL_ACCESS]: 'fullAccess',
+}
 
 const RANKS: Record<RankedHarness, Readonly<Record<string, ModeRank>>> = {
   'claude-code': {
@@ -44,6 +55,13 @@ const RANKS: Record<RankedHarness, Readonly<Record<string, ModeRank>>> = {
     'workspace-write': 2,
     'danger-full-access': 4,
   } satisfies Record<DshMode, ModeRank>,
+  antigravity: {
+    default: 1,
+    plan: 1,
+    'accept-edits': 2,
+    auto: 3,
+    [ANTIGRAVITY_FULL_ACCESS]: 4,
+  } satisfies Record<AgyMode, ModeRank>,
 }
 
 // The modes each harness's mode menu offers, narrow to wide.
@@ -51,6 +69,7 @@ const OFFERED: Record<RankedHarness, readonly string[]> = {
   'claude-code': availableModes(true),
   codex: CODEX_MODES.map((mode) => mode.id),
   deepseek: DSH_MODES,
+  antigravity: AGY_MODES,
 }
 
 // A plan mode ends its turn waiting for the user to approve the plan.
@@ -122,6 +141,8 @@ export function defaultMode(harness: RankedHarness): string | null {
       return CODEX_DEFAULT
     case 'deepseek':
       return DSH_DEFAULT
+    case 'antigravity':
+      return 'default'
     case 'claude-code':
       return null
   }
@@ -150,6 +171,14 @@ export function modeLabel(harness: RankedHarness, mode: string): ModeLabel {
       return {
         name: tEnglish(`dsh.mode.${key}`),
         description: tEnglish(`dsh.mode.${key}Description`),
+      }
+    }
+    case 'antigravity': {
+      if (!Object.hasOwn(AGY_KEYS, mode)) return { name: mode, description: '' }
+      const key = AGY_KEYS[mode as AgyMode]
+      return {
+        name: tEnglish(`antigravity.mode.${key}.name`),
+        description: tEnglish(`antigravity.mode.${key}.description`),
       }
     }
   }

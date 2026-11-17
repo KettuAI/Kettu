@@ -371,6 +371,32 @@
   "antigravity": {
     "plan": {
       "title": "计划"
+    },
+    "mode": {
+      "default": {
+        "name": "默认",
+        "description": "改动和命令先问"
+      },
+      "acceptEdits": {
+        "name": "接受编辑",
+        "description": "工作区里的文件改动不问"
+      },
+      "auto": {
+        "name": "自动",
+        "description": "改动和安全的命令不问，不可撤回的操作先问"
+      },
+      "plan": {
+        "name": "计划",
+        "description": "先仔细计划再动手"
+      },
+      "fullAccess": {
+        "name": "完全访问",
+        "description": "什么都不问。两轮之间生效，会重启 agy"
+      }
+    },
+    "fullAccess": {
+      "enterFailed": "没能切换到完全访问",
+      "leaveFailed": "没能退出完全访问"
     }
   },
   "codex": {

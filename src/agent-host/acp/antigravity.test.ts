@@ -606,3 +606,218 @@ describe("agy's ACP mode", () => {
     connection.close()
   })
 })
+
+/**
+ * agy behind the session router, which names the session flag it found in `agy acp --help`: each
+ * `session/resume` starts the session's process again, at agy's own model and in Default, as agy
+ * 1.5.9 does. `turn` holds a prompt open until the test lets it end.
+ */
+function flaggedAgy(version: string, flag: string | null) {
+  const sent: { method: string; params: Record<string, unknown> }[] = []
+  let turn: Promise<void> = Promise.resolve()
+  let during: ((client: AgentContext, sessionId: string) => Promise<void>) | null = null
+  const values = { model: 'gemini', thought_level: 'high', mode: 'default' }
+  const options = () => [
+    {
+      id: 'model',
+      name: 'Model',
+      category: 'model',
+      type: 'select' as const,
+      currentValue: values.model,
+      options: [
+        { value: 'gemini', name: 'Gemini' },
+        { value: 'claude', name: 'Claude' },
+      ],
+    },
+    {
+      id: 'thought_level',
+      name: 'Thinking',
+      category: 'thought_level',
+      type: 'select' as const,
+      currentValue: values.thought_level,
+      options: [
+        { value: 'low', name: 'Low' },
+        { value: 'high', name: 'High' },
+      ],
+    },
+    agyModes(values.mode),
+  ]
+  const app = agent({ name: 'agy-test' })
+    .onRequest(methods.agent.initialize, () => ({
+      protocolVersion: 1,
+      agentCapabilities: { loadSession: true, sessionCapabilities: { resume: {}, close: {} } },
+      agentInfo: { name: 'Antigravity ACP Server', version },
+      authMethods: [],
+      ...(flag ? { _meta: { 'sh.kettu/session-flag': flag } } : {}),
+    }))
+    .onRequest(methods.agent.session.new, (ctx) => {
+      sent.push({ method: 'new', params: ctx.params as never })
+      return { sessionId: 's-1', configOptions: options() }
+    })
+    .onRequest(methods.agent.session.resume, (ctx) => {
+      sent.push({ method: 'resume', params: ctx.params as never })
+      Object.assign(values, { model: 'gemini', thought_level: 'high', mode: 'default' })
+      return { configOptions: options() }
+    })
+    .onRequest(methods.agent.session.setConfigOption, (ctx) => {
+      const { configId, value } = ctx.params as { configId: keyof typeof values; value: string }
+      sent.push({ method: `set ${configId}=${value}`, params: ctx.params as never })
+      values[configId] = value
+      return { configOptions: options() }
+    })
+    .onRequest(methods.agent.session.prompt, async (ctx) => {
+      sent.push({ method: 'prompt', params: ctx.params as never })
+      await during?.(ctx.client, ctx.params.sessionId)
+      await turn
+      return { stopReason: 'end_turn' as const }
+    })
+  const connection = AcpConnection.connect(inProcessTransport(app), {
+    traffic: () => {},
+    account: () => {},
+    ignored: () => {},
+    log: () => {},
+    agentId: 'antigravity',
+    name: 'Google Antigravity',
+  })
+  const hold = () => {
+    let release!: () => void
+    turn = new Promise((resolve) => (release = resolve))
+    return release
+  }
+  const send = (run: (client: AgentContext, sessionId: string) => Promise<void>) => {
+    during = run
+  }
+  return { connection, sent, hold, send, methods: () => sent.map((item) => item.method) }
+}
+
+const FULL = 'dangerously-skip-permissions'
+const MCP = [{ type: 'http' as const, name: 'kettu', url: 'http://127.0.0.1:1/mcp', headers: [] }]
+
+const valueOf = (config: { id: string; value: unknown }[], id: string) =>
+  config.find((option) => option.id === id)?.value
+
+describe("agy's full access", () => {
+  it("lists Full access after agy's modes only from 1.5.9 with the flag the router found", async () => {
+    for (const [version, flag, listed] of [
+      ['1.5.9', '--dangerously-skip-permissions', true],
+      ['1.5.9', null, false],
+      ['1.5.8', '--dangerously-skip-permissions', false],
+    ] as const) {
+      const { connection } = flaggedAgy(version, flag)
+      await connection.initialize('1.0.0')
+      const { config } = await connection.newSession('/repo')
+      const mode = config.find((option) => option.id === 'mode')!
+      const choices = mode.choices!.map((choice) => choice.value)
+      expect(choices).toEqual(
+        listed
+          ? ['default', 'accept-edits', 'auto', 'plan', FULL]
+          : ['default', 'accept-edits', 'auto', 'plan'],
+      )
+      if (listed) expect(mode.choices!.at(-1)!.name).toBe('Full access')
+      connection.close()
+    }
+  })
+
+  it("restarts the session's agy with the flag and back, keeping its values, in Default", async () => {
+    const agy = flaggedAgy('1.5.9', '--dangerously-skip-permissions')
+    const { connection, sent } = agy
+    await connection.initialize('1.0.0')
+    const { sessionId } = await connection.newSession('/repo', { mcpServers: MCP })
+    await connection.setConfigOption(sessionId, 'model', 'claude')
+    await connection.setConfigOption(sessionId, 'thought_level', 'low')
+    await connection.setConfigOption(sessionId, 'mode', 'plan')
+    sent.length = 0
+
+    const full = await connection.setConfigOption(sessionId, 'mode', FULL)
+    // Entering it leaves Plan mode: agy comes back in Default, which full access holds.
+    expect(agy.methods()).toEqual(['resume', 'set model=claude', 'set thought_level=low'])
+    const resume = sent[0]!.params
+    expect(resume).toMatchObject({ sessionId, cwd: '/repo' })
+    expect((resume.mcpServers as { name: string }[]).map((server) => server.name)).toEqual([
+      'kettu',
+    ])
+    expect((resume._meta as Record<string, unknown>)['sh.kettu/session-flag']).toBe(true)
+    expect([valueOf(full, 'model'), valueOf(full, 'thought_level'), valueOf(full, 'mode')]).toEqual(
+      ['claude', 'low', FULL],
+    )
+    sent.length = 0
+
+    const auto = await connection.setConfigOption(sessionId, 'mode', 'auto')
+    expect(agy.methods()).toEqual([
+      'resume',
+      'set model=claude',
+      'set thought_level=low',
+      'set mode=auto',
+    ])
+    expect(
+      (sent[0]!.params._meta as Record<string, unknown> | undefined)?.['sh.kettu/session-flag'],
+    ).toBeUndefined()
+    expect(valueOf(auto, 'mode')).toBe('auto')
+    expect(auto.find((option) => option.id === 'mode')!.choices!.at(-1)!.value).toBe(FULL)
+    connection.close()
+  })
+
+  it('switches only once the running turn ends, and a later choice replaces it', async () => {
+    const agy = flaggedAgy('1.5.9', '--dangerously-skip-permissions')
+    const { connection, sent } = agy
+    await connection.initialize('1.0.0')
+    const { sessionId } = await connection.newSession('/repo')
+    const { target } = threadTarget()
+    let config = await connection.setConfigOption(sessionId, 'mode', 'default')
+    target.apply({ patches: [{ op: 'session.update', changes: { config } }], effects: [] })
+    connection.register(sessionId, target)
+    sent.length = 0
+
+    let release = agy.hold()
+    let turn = connection.prompt(sessionId, [{ type: 'text', text: 'go' }])
+    await vi.waitFor(() => expect(agy.methods()).toEqual(['prompt']))
+    config = await connection.setConfigOption(sessionId, 'mode', FULL)
+    expect(valueOf(config, 'mode')).toBe('default')
+    expect(agy.methods()).toEqual(['prompt'])
+    release()
+    await turn
+    // The restart came before the turn's end reached the session.
+    expect(agy.methods()).toEqual(['prompt', 'resume'])
+    expect(valueOf(target.context().thread.session.config, 'mode')).toBe(FULL)
+    sent.length = 0
+
+    release = agy.hold()
+    turn = connection.prompt(sessionId, [{ type: 'text', text: 'go on' }])
+    await vi.waitFor(() => expect(agy.methods()).toEqual(['prompt']))
+    await connection.setConfigOption(sessionId, 'mode', 'accept-edits')
+    await connection.setConfigOption(sessionId, 'mode', FULL)
+    release()
+    await turn
+    // Back to where it was: nothing restarts.
+    expect(agy.methods()).toEqual(['prompt'])
+    expect(valueOf(target.context().thread.session.config, 'mode')).toBe(FULL)
+    connection.close()
+  })
+
+  it('keeps showing full access when agy reports its own mode', async () => {
+    const agy = flaggedAgy('1.5.9', '--dangerously-skip-permissions')
+    const { connection } = agy
+    await connection.initialize('1.0.0')
+    const { sessionId } = await connection.newSession('/repo')
+    const { target } = threadTarget()
+    const config = await connection.setConfigOption(sessionId, 'mode', FULL)
+    target.apply({ patches: [{ op: 'session.update', changes: { config } }], effects: [] })
+    connection.register(sessionId, target)
+    // What agy says of its mode while its process runs with the flag changes nothing shown.
+    agy.send(async (client, id) => {
+      await client.notify(
+        methods.client.session.update,
+        update(id, { sessionUpdate: 'current_mode_update', currentModeId: 'plan' }),
+      )
+      await client.notify(
+        methods.client.session.update,
+        update(id, { sessionUpdate: 'config_option_update', configOptions: [agyModes('default')] }),
+      )
+    })
+    await connection.prompt(sessionId, [{ type: 'text', text: 'go' }])
+    const mode = target.context().thread.session.config.find((option) => option.id === 'mode')!
+    expect(mode.value).toBe(FULL)
+    expect(mode.choices!.at(-1)!.value).toBe(FULL)
+    connection.close()
+  })
+})
