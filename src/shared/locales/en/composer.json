@@ -157,7 +157,7 @@
       "averageApprox_other": "~{{rate}} tok/s · {{count}} requests",
       "explain": "Output tokens, thinking included, over the time they took to arrive on this computer. A reply that arrives all at once, through some proxies or from some agents, is timed from sending its request, waiting included, and marked ~."
     },
-    "contextShort": "{{percent}}% context",
+    "contextShort": "{{percent}}% <word>context</word>",
     "window": {
       "free": "{{n}} free",
       "left": "{{n}} left",

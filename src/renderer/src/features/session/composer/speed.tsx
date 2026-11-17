@@ -27,7 +27,7 @@ export function SpeedButton({ speed }: { speed: OutputSpeed | undefined }) {
           <button
             type="button"
             aria-label={t(approx ? 'usage.speed.buttonApprox' : 'usage.speed.button', { rate })}
-            className="ui-as-tray-link kettu-tray-link--meter"
+            className="ui-as-tray-link kettu-tray-link--meter kettu-tray-link--speed"
           />
         }
       >

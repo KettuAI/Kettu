@@ -343,7 +343,12 @@ export function ContextButton({
             <MeterRing share={share} level={METER[tone]} />
             <span className="tabular">
               {read?.error && '≈'}
-              {t('usage.contextShort', { percent })}
+              <Trans
+                t={t}
+                i18nKey="usage.contextShort"
+                values={{ percent }}
+                components={{ word: <span className="kettu-tray-meter__word" /> }}
+              />
             </span>
           </>
         )}
