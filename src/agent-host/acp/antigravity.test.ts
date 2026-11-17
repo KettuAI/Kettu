@@ -8,7 +8,7 @@ import {
   type SessionUpdate,
   type ToolCallUpdate,
 } from '@agentclientprotocol/sdk/unstable'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import {
   applyPatches,
   threadEntries,
@@ -16,11 +16,19 @@ import {
   type ThreadEntry,
   type ThreadState,
 } from '@shared/thread'
-import type { ConnectionHooks, SessionTarget } from '../connection'
+import {
+  optionAnswer,
+  type ConnectionHooks,
+  type PermissionAnswer,
+  type PermissionRequest,
+  type SessionTarget,
+} from '../connection'
 import { newTurnScope } from '../session-updates'
 import { AcpConnection, inProcessTransport } from './connection'
+import { mapConfig } from './mapper'
 import requests from './fixtures/agy-permissions.json'
 import planned from './fixtures/agy-plan.json'
+import turns from './fixtures/agy-plan-turns.json'
 import recorded from './fixtures/agy-tools.json'
 
 const TIER = { name: 'Google AI Pro', id: 'g1-pro-tier', upgradeUri: 'https://example.com' }
@@ -34,6 +42,7 @@ function connect(
   const closed: string[] = []
   const accounts: string[] = []
   const signIns: (string | null)[] = []
+  const configs: { sessionId: string; configId: string; value: unknown }[] = []
   let next = 0
   const app = agent({ name: 'agy-test' })
     .onRequest(methods.agent.initialize, () => ({
@@ -60,6 +69,11 @@ function connect(
       closed.push(ctx.params.sessionId)
       return {}
     })
+    .onRequest(methods.agent.session.setConfigOption, (ctx) => {
+      const { sessionId, configId, value } = ctx.params
+      configs.push({ sessionId, configId, value })
+      return { configOptions: [agyModes(String(value))] }
+    })
   const hooks: ConnectionHooks = {
     traffic: () => {},
     account: (account) => accounts.push(account.label ?? ''),
@@ -72,7 +86,7 @@ function connect(
     agentId: 'antigravity',
     name: 'Google Antigravity',
   })
-  return { connection, prompted, closed, accounts, signIns }
+  return { connection, prompted, closed, accounts, signIns, configs }
 }
 
 /** A session's thread, with every permission request allowed once. */
@@ -276,6 +290,204 @@ describe("agy's Plan mode", () => {
       'git status && git log -n 5',
     ])
     connection.close()
+  })
+})
+
+/** agy's mode option as its `session/new` sends it, set to `mode`. */
+function agyModes(mode: string) {
+  return {
+    id: 'mode',
+    name: 'Mode',
+    category: 'mode',
+    type: 'select' as const,
+    currentValue: mode,
+    options: [
+      { value: 'default', name: 'Default', description: 'Ask before edits and commands.' },
+      { value: 'accept-edits', name: 'Accept edits', description: 'Approve file edits.' },
+      { value: 'auto', name: 'Auto', description: 'Approve edits and safe commands.' },
+      { value: 'plan', name: 'Plan', description: 'Plan carefully before executing a task.' },
+    ],
+  }
+}
+
+type Recorded = { update: unknown } | { ask: { toolCall: unknown; options: unknown } }
+const PLAN_TURNS = turns.turns as Recorded[][]
+
+/**
+ * agy in Plan mode playing the recorded turns in order, one a prompt: its plan, the plan it
+ * rewrote after a note, then the build with its walkthrough. Each file it writes is kept as on disk.
+ */
+function planSession(version: string, mode: string, answer: PermissionAnswer, from = 0) {
+  const files = new Map<string, string>()
+  const events: string[] = []
+  const queue = PLAN_TURNS.slice(from)
+  const agy = connect(version, async (client, sessionId) => {
+    for (const event of queue.shift() ?? []) {
+      const value = JSON.parse(JSON.stringify(event).replaceAll(turns.sessionId, sessionId))
+      if ('ask' in value) {
+        await client.request(methods.client.session.requestPermission, {
+          sessionId,
+          toolCall: value.ask.toolCall,
+          options: value.ask.options,
+        })
+        continue
+      }
+      const input = value.update.rawInput
+      if (value.update.status === 'completed' && typeof input?.Content === 'string') {
+        files.set(input.Path, input.Content)
+      }
+      await client.notify(methods.client.session.update, update(sessionId, value.update))
+    }
+  })
+  const base = threadTarget()
+  let thread: ThreadState = base.target.context().thread
+  thread = applyPatches(thread, [
+    { op: 'session.update', changes: { config: mapConfig([agyModes(mode)], null) } },
+  ])
+  const plans: PermissionRequest[] = []
+  const target: SessionTarget = {
+    ...base.target,
+    context: () => ({ ...base.target.context(), thread }),
+    apply: (output) => {
+      thread = applyPatches(thread, output.patches)
+    },
+    requestPermission: async (request) => {
+      target.apply(request.output)
+      if (request.plan === undefined) return { optionId: 'allow' }
+      plans.push(request)
+      const picked = optionAnswer(answer)
+      if (picked !== 'cancelled') {
+        const kind = request.options.find((option) => option.id === picked.optionId)!.kind
+        target.apply({
+          patches: [
+            {
+              op: 'entry.update',
+              id: request.toolEntryId,
+              changes: { permissionResult: { optionId: picked.optionId, kind } },
+            },
+          ],
+          effects: [],
+        })
+      }
+      return answer
+    },
+    send: (text) => events.push(`send ${text}`),
+    readAgentFile: async (file) => files.get(file) ?? null,
+  }
+  return {
+    ...agy,
+    target,
+    plans,
+    events,
+    files,
+    mode: () => thread.session.config.find((option) => option.id === 'mode')?.value,
+    entries: () => threadEntries(thread),
+  }
+}
+
+const PLAN_FILE = (sessionId: string) =>
+  `/Users/me/.gemini/antigravity-cli/brain/${sessionId}/implementation_plan.md`
+
+async function openPlanSession(session: ReturnType<typeof planSession>) {
+  await session.connection.initialize('1.0.0')
+  const { sessionId } = await session.connection.newSession('/tmp/agy-probe/plan')
+  session.connection.register(sessionId, session.target)
+  return sessionId
+}
+
+describe("agy's plans in Plan mode", () => {
+  it('end a Plan mode turn in a plan card with the plan file agy wrote', async () => {
+    const session = planSession('1.5.9', 'accept-edits', 'cancelled')
+    const sessionId = await openPlanSession(session)
+    // Entering Plan mode from Accept edits, which the card then builds in by default.
+    await session.connection.setConfigOption(sessionId, 'mode', 'plan')
+    session.target.apply({
+      patches: [{ op: 'session.update', changes: { config: mapConfig([agyModes('plan')], null) } }],
+      effects: [],
+    })
+    await session.connection.prompt(sessionId, [{ type: 'text', text: 'Add add(a, b)' }])
+
+    await vi.waitFor(() => expect(session.plans).toHaveLength(1))
+    const [request] = session.plans
+    const markdown = session.files.get(PLAN_FILE(sessionId))!
+    expect(markdown).toMatch(/^# Implementation Plan/)
+    expect(request!.plan).toBe(markdown)
+    expect(
+      request!.options.map(({ id, kind, preferred, note }) => ({ id, kind, preferred, note })),
+    ).toEqual([
+      { id: 'exit-plan-default', kind: 'allow_once', preferred: undefined, note: undefined },
+      { id: 'exit-plan-accept-edits', kind: 'allow_once', preferred: true, note: undefined },
+      { id: 'exit-plan-auto', kind: 'allow_once', preferred: undefined, note: undefined },
+      { id: 'keep_planning', kind: 'reject_once', preferred: undefined, note: true },
+    ])
+    expect(request!.options.slice(0, 3).map((option) => option.name)).toEqual([
+      'Default',
+      'Accept edits',
+      'Auto',
+    ])
+    const entry = session.entries().find((e) => e.id === request!.toolEntryId)
+    expect(entry).toMatchObject({
+      kind: 'tool',
+      planVersion: 1,
+      content: [{ type: 'markdown', markdown }],
+    })
+    // The card follows agy's reply, which asks for the review.
+    expect(session.entries().at(-1)?.id).toBe(request!.toolEntryId)
+    session.connection.close()
+  })
+
+  it('gives no card outside Plan mode, for a file not marked for review or before 1.5.9', async () => {
+    const outside = planSession('1.5.9', 'default', 'cancelled')
+    const a = await openPlanSession(outside)
+    await outside.connection.prompt(a, [{ type: 'text', text: 'go' }])
+
+    const walkthrough = planSession('1.5.9', 'plan', 'cancelled', 2)
+    const b = await openPlanSession(walkthrough)
+    await walkthrough.connection.prompt(b, [{ type: 'text', text: 'go' }])
+
+    const older = planSession('1.5.8', 'plan', 'cancelled')
+    const c = await openPlanSession(older)
+    await older.connection.prompt(c, [{ type: 'text', text: 'go' }])
+
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    expect(walkthrough.files.size).toBe(1)
+    for (const session of [outside, walkthrough, older]) {
+      expect(session.plans).toEqual([])
+      expect(session.entries().some((e) => e.kind === 'tool' && e.planVersion)).toBe(false)
+      session.connection.close()
+    }
+  })
+
+  it("builds in the chosen mode, then sends what agy's own terminal sends", async () => {
+    const session = planSession('1.5.9', 'plan', { optionId: 'exit-plan-auto' })
+    const sessionId = await openPlanSession(session)
+    await session.connection.prompt(sessionId, [{ type: 'text', text: 'Add add(a, b)' }])
+
+    await vi.waitFor(() => expect(session.events).toHaveLength(1))
+    expect(session.configs).toEqual([{ sessionId, configId: 'mode', value: 'auto' }])
+    expect(session.mode()).toBe('auto')
+    expect(session.events).toEqual(['send [Approved] implementation_plan.md'])
+    session.connection.close()
+  })
+
+  it('keeps planning in Plan mode with the note, and numbers the plan agy rewrites', async () => {
+    const note = 'Name it plus instead of add, and add a JSDoc comment.'
+    const session = planSession('1.5.9', 'plan', { optionId: 'keep_planning', note })
+    const sessionId = await openPlanSession(session)
+    await session.connection.prompt(sessionId, [{ type: 'text', text: 'Add add(a, b)' }])
+    await vi.waitFor(() => expect(session.events).toEqual([`send ${note}`]))
+    expect(session.configs).toEqual([])
+    expect(session.mode()).toBe('plan')
+
+    await session.connection.prompt(sessionId, [{ type: 'text', text: note }])
+    await vi.waitFor(() => expect(session.plans).toHaveLength(2))
+    const second = session.plans[1]!
+    expect(second.plan).toBe(session.files.get(PLAN_FILE(sessionId)))
+    expect(second.plan).toContain('plus')
+    expect(second.toolEntryId).not.toBe(session.plans[0]!.toolEntryId)
+    const entry = session.entries().find((e) => e.id === second.toolEntryId)
+    expect(entry).toMatchObject({ kind: 'tool', planVersion: 2 })
+    session.connection.close()
   })
 })
 

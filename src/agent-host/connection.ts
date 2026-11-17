@@ -64,6 +64,11 @@ export interface SessionTarget {
   send(text: string): void
   /** The permission mode the settings start the agent's new sessions in, or null for none. */
   startMode(): string | null
+  /**
+   * The text of a file the agent keeps for this session in its own folder, such as agy's plan;
+   * null when it cannot be read there.
+   */
+  readAgentFile?(path: string): Promise<string | null>
 }
 
 export interface ConnectionHooks {
