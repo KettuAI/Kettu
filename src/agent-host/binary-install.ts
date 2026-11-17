@@ -25,12 +25,15 @@ export interface ArchiveEntry {
   bare?: true
 }
 
-/** An agent's archives, one entry per `<platform>-<arch>`, and the version they belong to. */
-export interface ArchiveRelease {
-  version: string
-  entries: Record<string, ArchiveEntry>
+/**
+ * The release archive route. Its version and each platform's file come from the versions Kettu
+ * reads at run time, the Registry's or the bundled ones, never from the catalog.
+ */
+export interface ArchiveRoute {
   /** From the vendor's own release list rather than the registry's, so no update follows it. */
   fromVendor?: true
+  /** The oldest version the mapping accepts; the Registry's older ones are not used. */
+  minimum?: string
 }
 
 /** A harness's install routes, from its vendor's documentation or the registry. */
@@ -56,7 +59,7 @@ export interface BinaryInstalls {
   npm?: string
   /** The npm route skips the package's install scripts, as the vendor's own command does. */
   ignoreScripts?: true
-  archive?: ArchiveRelease
+  archive?: ArchiveRoute
   /** The routes in the vendor's order, the recommended first; archive, Homebrew, script, npm otherwise. */
   order?: AgentInstallMethod['id'][]
 }
@@ -74,15 +77,6 @@ export function archiveKey(platform: Platform, arch: string): string {
   const name = platform === 'win32' ? 'windows' : platform
   const machine = arch === 'arm64' ? 'aarch64' : arch === 'x64' ? 'x86_64' : arch
   return `${name}-${machine}`
-}
-
-/** The release's entry for a platform and architecture, when it ships one. */
-export function archiveEntry(
-  release: ArchiveRelease | undefined,
-  platform: Platform,
-  arch: string,
-): ArchiveEntry | null {
-  return release?.entries[archiveKey(platform, arch)] ?? null
 }
 
 /** The archive route's own fields, for the install Kettu downloads and extracts itself. */
@@ -107,14 +101,14 @@ export interface InstallPlan extends AgentInstallMethod {
 
 export interface PlanContext {
   platform: Platform
-  /** The machine's architecture, as Node.js names it (`arm64`, `x64`). */
-  arch: string
   env: Env
   /** npm as the Node.js probe found it. */
   npm: string | null
   /** `<userData>/agents`, where the archive route installs. */
   root: string
   agentId: AgentId
+  /** The archive a first install takes on this platform, at the version a start wants. */
+  archive?: { version: string; entry: ArchiveEntry } | null
   isExecutable(file: string): Promise<boolean>
 }
 
@@ -174,9 +168,9 @@ export async function installPlans(
 ): Promise<InstallPlan[]> {
   const { platform } = ctx
   const plans: InstallPlan[] = []
-  const release = installs.archive
-  const entry = archiveEntry(release, platform, ctx.arch)
-  if (release && entry) {
+  const release = installs.archive ? ctx.archive : null
+  if (release) {
+    const { entry } = release
     const p = platformPath(platform)
     const folder = p.join(ctx.root, ctx.agentId, release.version, p.dirname(entry.cmd))
     plans.push({

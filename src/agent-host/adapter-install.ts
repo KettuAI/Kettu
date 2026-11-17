@@ -8,6 +8,7 @@ import path from 'node:path'
 import type { Platform } from '@shared/platform'
 import { spawnArguments } from './agent-process'
 import { needsShell, type Env } from './find-command'
+import { staleInstalls } from './harness-versions'
 import { t } from './i18n'
 import { processControl, QUIT_REASON, type ProcessControl, type ToolOptions } from './process-tree'
 import { TextRing } from './ring'
@@ -142,25 +143,26 @@ export async function listInstalled(
 }
 
 /**
- * Deletes the installs older than `keep`, and directories that hold no complete install; returns
- * the directory names removed. A newer install, such as an update that finished meanwhile, stays.
+ * Deletes the installs `staleInstalls` names once `keep` runs, so the one before it stays to fall
+ * back to, and directories that hold no complete install; returns the directory names removed.
  */
-export async function removeOlderInstalls(
+export async function removeStaleInstalls(
   root: string,
   agentId: string,
   packageName: string,
   keep: InstalledAdapter,
 ): Promise<string[]> {
-  const names = (await installDirs(root, agentId)).filter(
-    (name) => path.join(root, agentId, name) !== keep.dir,
-  )
-  const older = await Promise.all(
-    names.map(async (name) => {
-      const install = await readInstall(path.join(root, agentId, name), packageName)
-      return !install || compareInstalls(install, keep) < 0 ? name : null
+  const found = await Promise.all(
+    (await installDirs(root, agentId)).map(async (name) => {
+      const dir = path.join(root, agentId, name)
+      return { name, dir, install: await readInstall(dir, packageName) }
     }),
   )
-  const removed = older.filter((name) => name !== null)
+  const installs = found.flatMap(({ install }) => (install ? [install] : []))
+  const stale = new Set(staleInstalls(installs, keep).map((install) => install.dir))
+  const removed = found
+    .filter(({ dir, install }) => (install ? stale.has(dir) : dir !== keep.dir))
+    .map(({ name }) => name)
   await Promise.all(
     removed.map((name) => rm(path.join(root, agentId, name), { recursive: true, force: true })),
   )

@@ -5,7 +5,7 @@ export const COPILOT: AgentDefinition = {
   name: 'GitHub Copilot',
   registryId: 'github-copilot-cli',
   reportsAccount: true,
-  launch: { kind: 'package', package: '@github/copilot', version: '1.0.112', args: ['--acp'] },
+  launch: { kind: 'package', package: '@github/copilot', args: ['--acp'] },
   requiresNode: '>=22',
   install: { hint: 'detect.hint.node', url: 'https://nodejs.org/en/download' },
 }

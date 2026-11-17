@@ -8,7 +8,6 @@ export const AGORAGENTIC: AgentDefinition = {
   launch: {
     kind: 'package',
     package: 'agoragentic-mcp',
-    version: '1.3.0',
     args: ['--acp'],
   },
   requiresNode: '>=18',

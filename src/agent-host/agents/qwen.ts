@@ -5,7 +5,7 @@ export const QWEN: AgentDefinition = {
   limitsReason: 'harness-does-not-offer',
   name: 'Qwen Code',
   registryId: 'qwen-code',
-  launch: { kind: 'package', package: '@qwen-code/qwen-code', version: '0.26.2', args: ['--acp'] },
+  launch: { kind: 'package', package: '@qwen-code/qwen-code', args: ['--acp'] },
   requiresNode: '>=22',
   install: { hint: 'detect.hint.node', url: 'https://nodejs.org/en/download' },
 }

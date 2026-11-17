@@ -20,8 +20,8 @@ import {
   removeTree,
   renameWithRetry,
 } from './adapter-install'
+import { staleInstalls } from './harness-versions'
 import { t } from './i18n'
-import { compareVersions } from './versions'
 
 const MIB = 1024 * 1024
 /** How many bytes a download grows between two progress lines. */
@@ -248,30 +248,17 @@ export async function listArchiveInstalls(
 }
 
 /**
- * The installs a start may run, the one it runs first: from the pinned version up, newest first,
- * the latest install on a tie. One below the pin, left from before Kettu moved it, runs no more.
+ * Deletes the installs `staleInstalls` names once `keep` runs, so the one before it stays to fall
+ * back to, and returns their folder names. Any folder that holds no install record stays.
  */
-export function archivesFromPin(installs: InstalledArchive[], pinned: string): InstalledArchive[] {
-  return installs
-    .filter((install) => compareVersions(install.version, pinned) >= 0)
-    .sort((a, b) => compareVersions(b.version, a.version) || b.installedAt - a.installedAt)
-}
-
-/**
- * Deletes the installs of versions older than `keep`, once it runs, and returns their folder
- * names. A newer one, such as an update that finished meanwhile, stays, and so does any folder
- * that holds no install record.
- */
-export async function removeOlderArchives(
+export async function removeStaleArchives(
   root: string,
   agentId: AgentId,
   keep: InstalledArchive,
 ): Promise<string[]> {
-  const older = (await listArchiveInstalls(root, agentId)).filter(
-    (install) => install.dir !== keep.dir && compareVersions(install.version, keep.version) < 0,
-  )
-  await Promise.all(older.map((install) => removeTree(install.dir)))
-  return older.map((install) => path.basename(install.dir))
+  const stale = staleInstalls(await listArchiveInstalls(root, agentId), keep)
+  await Promise.all(stale.map((install) => removeTree(install.dir)))
+  return stale.map((install) => path.basename(install.dir))
 }
 
 /**

@@ -61,6 +61,7 @@ export interface SettingsFile {
   }
   // Keyed by harness: the program picked for it, and its default agent's folder and visibility.
   // configDir: a folder picked before agents could be added, which the default agent keeps.
+  // autoUpdate: false when Kettu's own install no longer follows the Registry's versions by itself.
   agents: Partial<
     Record<
       HarnessId,
@@ -70,6 +71,7 @@ export interface SettingsFile {
         hidden?: true
         enabled?: boolean
         uninstalled?: true
+        autoUpdate?: false
       }
     >
   >
@@ -274,6 +276,7 @@ export interface SettingsPatch {
         hidden?: boolean
         enabled?: boolean
         uninstalled?: boolean
+        autoUpdate?: boolean
       }
     >
   >

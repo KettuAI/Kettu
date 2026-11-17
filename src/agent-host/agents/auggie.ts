@@ -8,7 +8,6 @@ export const AUGGIE: AgentDefinition = {
   launch: {
     kind: 'package',
     package: '@augmentcode/auggie',
-    version: '0.36.0',
     args: ['--acp'],
     // npm owns the installed version, so the CLI's own updater stays off.
     env: { AUGMENT_DISABLE_AUTO_UPDATE: '1' },

@@ -9,8 +9,8 @@ export const qoderCn = {
   id: 'qoder-cn',
   subject: (def) => def.name,
 
-  async versions(def) {
-    const versions = await npmVersions(def.launch.package, rangeOf(def))
+  async versions(def, kettu) {
+    const versions = await npmVersions(def.launch.package, rangeOf(def, kettu))
     const known = new Set(versions.map((entry) => entry.version))
     return { versions, inRange: (version) => known.has(version) }
   },

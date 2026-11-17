@@ -1813,6 +1813,24 @@
     "listSeparator": "、",
     "manageAgents": "在 Agent 里管理",
     "versionOut": "{{version}} 已发布",
+    "autoUpdate": {
+      "name": "自动更新",
+      "on": "在后台安装 ACP Registry 列出的版本。正在运行的会话不受影响，下次启动时使用新版本。",
+      "off": "停在当前版本，ACP Registry 列出新版本时提示更新。",
+      "updated": "{{ago}}从 {{from}} 更新到 {{to}}",
+      "wentBack": "{{ago}}从 {{from}} 换回 {{to}}：ACP Registry 撤回了 {{from}}"
+    },
+    "switchBack": {
+      "line": "ACP Registry 现在列出的是 {{version}}",
+      "title": "ACP Registry 撤回了 {{name}} {{current}}",
+      "body": "它现在列出的是 {{version}}。换回时，如果没留着这个版本，就装在当前版本旁边：正在运行的会话不受影响，{{name}} 下次启动时使用它。",
+      "button": "换回 {{version}}"
+    },
+    "failedVersion": {
+      "title": "{{name}} {{version}} 没能启动",
+      "body": "Kettu 已退回 {{runs}}，不会再自动安装 {{version}}。",
+      "bodyNone": "Kettu 不会再自动安装 {{version}}。"
+    },
     "removedLine": "已从 Kettu 卸载",
     "movedAccounts": {
       "title": "{{name}} 适合谁用",

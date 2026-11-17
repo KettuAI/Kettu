@@ -1832,6 +1832,24 @@
     "listSeparator": ", ",
     "manageAgents": "Manage in Agents",
     "versionOut": "{{version}} is out",
+    "autoUpdate": {
+      "name": "Automatic updates",
+      "on": "Installs the version the ACP Registry lists in the background. Running sessions keep going, and the next start uses it.",
+      "off": "Stays on the version it runs, and offers each new version the ACP Registry lists.",
+      "updated": "Updated from {{from}} to {{to}} {{ago}}",
+      "wentBack": "Went back from {{from}} to {{to}} {{ago}}: the ACP Registry withdrew {{from}}"
+    },
+    "switchBack": {
+      "line": "The ACP Registry lists {{version}} now",
+      "title": "The ACP Registry withdrew {{name}} {{current}}",
+      "body": "It lists {{version}} now. Switching back installs it next to the current version unless it is still there: running sessions keep going, and {{name}} uses it from its next start.",
+      "button": "Switch back to {{version}}"
+    },
+    "failedVersion": {
+      "title": "{{name}} {{version}} did not start",
+      "body": "Kettu went back to {{runs}} and will not install {{version}} by itself again.",
+      "bodyNone": "Kettu will not install {{version}} by itself again."
+    },
     "removedLine": "Removed from Kettu",
     "movedAccounts": {
       "title": "Who {{name}} is for",

@@ -3,7 +3,6 @@ import { installPlans, updatePlan, type BinaryInstalls, type PlanContext } from 
 
 const context: PlanContext = {
   platform: 'darwin',
-  arch: 'arm64',
   env: {},
   npm: '/usr/local/bin/npm',
   root: '/data/agents',

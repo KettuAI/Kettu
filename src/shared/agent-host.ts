@@ -334,9 +334,9 @@ export interface AgentStatus {
   // From `initialize`, a binary agent's `--version`, or the `requires` program's (Pi's `pi`); for
   // Kettu's own install of a program that reports none, the release it installed.
   version: string | null
-  // The adapter a start runs, the pin until one is installed; `isCli` for a package that is the
-  // agent's CLI itself, which runs with no adapter, and `isSdk` for the agent's SDK, which Kettu
-  // loads itself and which runs the agent's CLI.
+  // The adapter a start runs, the version it wants until one is installed; `isCli` for a package
+  // that is the agent's CLI itself, which runs with no adapter, and `isSdk` for the agent's SDK,
+  // which Kettu loads itself and which runs the agent's CLI.
   package: {
     name: string
     version: string
@@ -380,6 +380,18 @@ export interface AgentStatus {
   update: AgentUpdate | null // from the last update check; null when up to date or unchecked
   // When that check finished; null for a binary agent unless Kettu installed it from the registry
   updateCheckedAt: number | null
+  // How Kettu's own install of a harness the ACP Registry lists follows it: whether it updates by
+  // itself, its last move and when (`withdrawn` when it went back to an older version, which the
+  // Registry lists in place of the newer one), and whether the update on offer goes back to an
+  // older version. Null for the other harnesses, and absent on older hosts.
+  automatic?: {
+    on: boolean
+    moved: { from: string; to: string; at: number; withdrawn: boolean } | null
+    back: boolean
+  } | null
+  // A new version of Kettu's own install that failed to start, why, and the version that runs in
+  // its place; null when none did, and absent on older hosts.
+  failedVersion?: { version: string; reason: string; runs: string | null } | null
   updateSkipped: boolean // the user dismissed this update in the sidebar's notice
   task: AgentTask | null
   installMethods: AgentInstallMethod[] // a binary agent's ways to install; empty for the others

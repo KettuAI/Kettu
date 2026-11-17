@@ -4,7 +4,7 @@ export const KIMI: AgentDefinition = {
   id: 'kimi',
   name: 'Kimi Code',
   registryId: 'kimi-code',
-  launch: { kind: 'package', package: '@moonshot-ai/kimi-code', version: '2.6.2', args: ['acp'] },
+  launch: { kind: 'package', package: '@moonshot-ai/kimi-code', args: ['acp'] },
   requiresNode: '>=22.19.0',
   install: {
     hint: 'detect.hint.kimi',

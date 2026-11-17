@@ -1,6 +1,6 @@
-// The ACP Registry's listing, read when updates are checked: the latest release of each harness
-// Kettu installs from the registry's archives or runs with uvx. Only what the registry's schema
-// allows is taken, and an archive only with the SHA-256 its download is checked against.
+// The ACP Registry's listing, which the versions of the harnesses Kettu installs follow: the npm
+// packages, uvx packages and release archives it lists. Only what the registry's schema allows is
+// taken, and an update's archive only with the SHA-256 its download is checked against.
 
 import type { Platform } from '@shared/platform'
 import { archiveKey, type ArchiveEntry } from './binary-install'
@@ -23,25 +23,33 @@ const SHA256 = /^[0-9a-f]{64}$/i
 const ARCHIVE_FILE = /\.(?:zip|tar\.gz|tgz|tar\.bz2|tbz2)$/i
 /** A uvx package as the registry writes it: the name, then `==` or `@` and the version. */
 const UVX_PACKAGE = /^([A-Za-z0-9][A-Za-z0-9._-]*)(?:(?:==|@)(.+))?$/
+/** An npm package as the registry writes it: the name, with its scope, then `@` and the version. */
+const NPM_PACKAGE = /^((?:@[a-z0-9][a-z0-9._~-]*\/)?[a-z0-9][a-z0-9._~-]*)(?:@(.+))?$/
 
 /** The listing's agents by id, as the registry wrote them. */
 export type RegistryAgents = ReadonlyMap<string, unknown>
 
-/** A harness's latest release in the registry, as an update installs it. */
+/**
+ * A harness's release in the registry, as Kettu installs it. An archive's SHA-256 is missing only
+ * where a first install was asked for, which records the hash it measures instead.
+ */
 export type RegistryRelease =
-  | { kind: 'archive'; version: string; entry: ArchiveEntry & { sha256: string } }
+  | { kind: 'archive'; version: string; entry: ArchiveEntry }
   | { kind: 'uvx'; version: string }
+  | { kind: 'package'; version: string }
 
 type RegistryDef = Pick<AgentDefinition, 'registryId' | 'launch' | 'installs'>
 
 /**
- * Whether Kettu's own install of the harness comes from the registry, so its updates follow the
- * registry: a release archive, or a uvx package.
+ * Whether Kettu's own install of the harness comes from the registry, so its versions follow the
+ * registry: an npm package, a uvx package or a release archive, unless it is the vendor's own.
  */
 export function followsRegistry(def: RegistryDef): boolean {
-  if (def.launch.kind === 'uvx') return true
+  const { launch } = def
+  if (launch.kind === 'uvx') return true
+  if (launch.kind === 'package') return !launch.fromVendor
   const archive = def.installs?.archive
-  return def.launch.kind === 'binary' && !!archive && !archive.fromVendor
+  return launch.kind === 'binary' && !!archive && !archive.fromVendor
 }
 
 function isObject(value: unknown): value is Record<string, unknown> {
@@ -81,14 +89,15 @@ function fileName(url: string): string {
 }
 
 /**
- * The latest release the registry lists for the harness on this platform, or why it offers none,
- * in English for the diagnostics.
+ * The release the registry lists for the harness on this platform, or why it offers none, in
+ * English for the diagnostics. An archive without a SHA-256 passes only with `unhashed`.
  */
 export function registryRelease(
   agents: RegistryAgents,
   def: RegistryDef,
   platform: Platform,
   arch: string,
+  options: { unhashed?: boolean } = {},
 ): RegistryRelease | { reason: string } {
   const agent = agents.get(def.registryId)
   if (!isObject(agent)) return { reason: `the registry does not list ${def.registryId}` }
@@ -110,6 +119,19 @@ export function registryRelease(
     }
     return { kind: 'uvx', version: pinned }
   }
+  if (def.launch.kind === 'package') {
+    const npx = isObject(distribution.npx) ? distribution.npx : null
+    const match = typeof npx?.package === 'string' ? NPM_PACKAGE.exec(npx.package) : null
+    if (!match) return { reason: `the registry lists ${def.registryId} as no npm package` }
+    const [, name = '', pinned = version] = match
+    if (name !== def.launch.package) {
+      return { reason: `the registry lists ${def.registryId} as ${name}` }
+    }
+    if (!STABLE_VERSION.test(pinned)) {
+      return { reason: `the registry lists ${name} at no plain version` }
+    }
+    return { kind: 'package', version: pinned }
+  }
   if (def.launch.kind !== 'binary') {
     return { reason: `${def.registryId} is not installed from the registry` }
   }
@@ -122,7 +144,8 @@ export function registryRelease(
   if (typeof url !== 'string' || !isHttps(url)) {
     return { reason: `the ${key} archive is not downloaded over https` }
   }
-  if (typeof sha256 !== 'string' || !SHA256.test(sha256)) {
+  const hashed = typeof sha256 === 'string' && SHA256.test(sha256)
+  if (!hashed && (sha256 !== undefined || !options.unhashed)) {
     return { reason: `the registry gives no SHA-256 for the ${key} archive` }
   }
   if (typeof cmd !== 'string' || cmd === '' || !args) {
@@ -133,12 +156,42 @@ export function registryRelease(
     version,
     entry: {
       url,
-      sha256: sha256.toLowerCase(),
+      ...(hashed ? { sha256: sha256.toLowerCase() } : {}),
       cmd,
       args,
       ...(ARCHIVE_FILE.test(fileName(url)) ? {} : { bare: true as const }),
     },
   }
+}
+
+/**
+ * The listing cut to what Kettu reads of it, each agent's id, version and distribution, as Kettu
+ * keeps it on disk for a start without the network.
+ */
+export function listingEntries(agents: RegistryAgents): unknown[] {
+  const entries: unknown[] = []
+  for (const [id, agent] of agents) {
+    if (!isObject(agent)) continue
+    const source = isObject(agent.distribution) ? agent.distribution : {}
+    const distribution: Record<string, unknown> = {}
+    for (const kind of ['npx', 'uvx'] as const) {
+      const entry = source[kind]
+      if (isObject(entry) && typeof entry.package === 'string') {
+        distribution[kind] = { package: entry.package }
+      }
+    }
+    if (isObject(source.binary)) {
+      const binary: Record<string, unknown> = {}
+      for (const [key, target] of Object.entries(source.binary)) {
+        if (!isObject(target)) continue
+        const { archive, cmd, args, sha256 } = target
+        binary[key] = { archive, cmd, args, sha256 }
+      }
+      distribution.binary = binary
+    }
+    entries.push({ id, version: agent.version, distribution })
+  }
+  return entries
 }
 
 export interface RegistryFetchOptions {

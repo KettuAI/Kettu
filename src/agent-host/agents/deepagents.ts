@@ -5,6 +5,6 @@ export const DEEPAGENTS: AgentDefinition = {
   limitsReason: 'model-provider-managed',
   name: 'DeepAgents',
   registryId: 'deepagents',
-  launch: { kind: 'package', package: 'deepagents-acp', version: '0.1.7' },
+  launch: { kind: 'package', package: 'deepagents-acp' },
   install: { hint: 'detect.hint.node', url: 'https://nodejs.org/en/download' },
 }

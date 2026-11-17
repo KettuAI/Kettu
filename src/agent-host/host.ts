@@ -172,12 +172,14 @@ import {
   projectsFile,
   projectHooksFile,
   projectMcpFile,
+  registryListingFile,
   returnedFile,
   routinesFile,
   sessionsFile,
   type AgentsFile,
   type AgentUpdatesFile,
   type JsonFile,
+  type RegistryListingFile,
 } from './storage'
 import { GitHubStar, gitHubStarFile } from './github-star'
 import { digestEntries } from './threads/digest'
@@ -362,6 +364,7 @@ export class AgentHost {
   private readonly remembered: JsonFile<AgentsFile>
   /** What the last update check found, so a found update shows after a restart. */
   private readonly updates: JsonFile<AgentUpdatesFile>
+  private readonly registryListing: JsonFile<RegistryListingFile>
   private readonly star: GitHubStar
   /** Each agent's config options from its last new session, for New session. */
   private readonly agentOptions: AgentOptionsStore
@@ -526,6 +529,7 @@ export class AgentHost {
     this.scratch = new ScratchFolders(path.join(options.userDataPath, 'scratch'), platform)
     this.remembered = agentsFile(options.userDataPath, log)
     this.updates = agentUpdatesFile(options.userDataPath, log)
+    this.registryListing = registryListingFile(options.userDataPath, log)
     this.star = new GitHubStar({
       file: gitHubStarFile(options.userDataPath, log),
       git: () => this.git,
@@ -850,6 +854,7 @@ export class AgentHost {
       authCommands: (commands) => options.send({ type: 'host:auth-commands', commands }),
       remember: (file) => this.remembered.save(file),
       rememberUpdates: (file) => this.updates.save(file),
+      rememberRegistry: (file) => this.registryListing.save(file),
       launchEnv: (agentId, env) => ({
         ...this.marketSkills.launchEnv(agentId, env),
         ...(this.agentEnvKeys[agentId] ?? {}),
@@ -1216,12 +1221,13 @@ export class AgentHost {
       (message) => writeLog('warn', 'host', message),
     )
     const host = new AgentHost(options)
-    const [, , , remembered, updates] = await Promise.all([
+    const [, , , remembered, updates, listing] = await Promise.all([
       host.scratch.ready(),
       host.projects.load(),
       host.sessions.load(),
       host.remembered.load(),
       host.updates.load(),
+      host.registryListing.load(),
       host.trees.load(),
       host.agentOptions.load(),
       host.preparedRecords.load(),
@@ -1234,6 +1240,7 @@ export class AgentHost {
     // After the sessions, whose step sessions it messages when it resumes.
     await host.tasks.load()
     host.agents.restore(remembered)
+    host.agents.restoreRegistry(listing)
     host.agents.restoreUpdates(updates)
     void host.moveLocalMarketplaces()
     host.routines.start()
@@ -1250,6 +1257,7 @@ export class AgentHost {
     void host.agents.removeAntigravityUsageServer()
     void host.agents.detectAll().then(() => {
       host.agents.scheduleUpdateChecks()
+      host.agents.scheduleRegistryReads()
       host.firstStart()
     })
     return host
@@ -2237,6 +2245,7 @@ export class AgentHost {
         this.sessions.flush(),
         this.remembered.flush(),
         this.updates.flush(),
+        this.registryListing.flush(),
         this.star.flush(),
         this.trees.close(),
         this.agentOptions.flush(),

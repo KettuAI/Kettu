@@ -8,7 +8,6 @@ export const GROK: AgentDefinition = {
   launch: {
     kind: 'package',
     package: '@xai-official/grok',
-    version: '1.0.88',
     args: ['agent', 'stdio'],
   },
   requiresNode: '>=20',

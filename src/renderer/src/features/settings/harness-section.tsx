@@ -76,6 +76,7 @@ import {
   LinkButton,
   Pill,
   SetButton,
+  SettingSwitch,
   Spin,
 } from './controls'
 import { PathActions, PathLine } from './places'
@@ -99,6 +100,7 @@ import {
   RowText,
 } from './rows'
 import { environmentText } from './environment-text'
+import { useApply } from './use-apply'
 
 /** A check the user started counts as just done for this long, then it reads as "checked ago". */
 const JUST_CHECKED_MS = 60_000
@@ -641,6 +643,7 @@ function HarnessPageBody({ status }: { status: AgentStatus }) {
         )}
 
         {status.movedAccounts && <MovedAccountsNotice status={status} />}
+        {status.failedVersion && <FailedVersionNotice status={status} />}
         <TaskNotice status={status} installed={installed} />
         {r.kind === 'failed' && !status.task && (
           <Notice
@@ -858,20 +861,22 @@ function VersionGroup({ status }: { status: AgentStatus }) {
       )}
       {next
         ? t('agents.update.released', { version: next })
-        : status.update
-          ? t(
-              status.package?.isSdk
-                ? 'agents.update.sdkReleased'
-                : status.package
-                  ? 'agents.update.adapterReleased'
-                  : 'agents.update.released',
-              {
-                version: status.update.adapterVersion,
-              },
-            )
-          : current
-            ? t('agents.update.upToDate')
-            : null}
+        : status.update && status.automatic?.back
+          ? t('harnesses.switchBack.line', { version: status.update.adapterVersion })
+          : status.update
+            ? t(
+                status.package?.isSdk
+                  ? 'agents.update.sdkReleased'
+                  : status.package
+                    ? 'agents.update.adapterReleased'
+                    : 'agents.update.released',
+                {
+                  version: status.update.adapterVersion,
+                },
+              )
+            : current
+              ? t('agents.update.upToDate')
+              : null}
       <span>
         {stated && ' · '}
         {checkedAt
@@ -912,8 +917,61 @@ function VersionGroup({ status }: { status: AgentStatus }) {
             </SetButton>
           )}
         </RowFrame>
+        {status.automatic && <AutomaticUpdatesRow status={status} />}
       </RowGroup>
     </section>
+  )
+}
+
+/**
+ * The switch for Kettu's own install of a harness the ACP Registry lists to follow it by itself,
+ * and the last move it made: an update, or a switch back after a withdrawal, and why.
+ */
+function AutomaticUpdatesRow({ status }: { status: AgentStatus }) {
+  const { t } = useTranslation('settings')
+  const now = useNow()
+  const [apply, error] = useApply()
+  const automatic = status.automatic
+  if (!automatic) return null
+  const { moved } = automatic
+  const ago = moved ? mediumAgo(moved.at, now) : ''
+  const line = !automatic.on
+    ? t('harnesses.autoUpdate.off')
+    : moved
+      ? t(moved.withdrawn ? 'harnesses.autoUpdate.wentBack' : 'harnesses.autoUpdate.updated', {
+          from: moved.from,
+          to: moved.to,
+          ago,
+        })
+      : t('harnesses.autoUpdate.on')
+  return (
+    <RowFrame text={<RowText name={t('harnesses.autoUpdate.name')} description={line} />}>
+      <ControlError error={error} />
+      <SettingSwitch
+        label={t('harnesses.autoUpdate.name')}
+        checked={automatic.on}
+        onChange={(on) => apply({ agents: { [status.harnessId]: { autoUpdate: on } } })}
+      />
+    </RowFrame>
+  )
+}
+
+/** A new version that did not start, the version that runs in its place, and why. */
+function FailedVersionNotice({ status }: { status: AgentStatus }) {
+  const { t } = useTranslation('settings')
+  const failed = status.failedVersion
+  if (!failed) return null
+  const name = status.harnessName
+  return (
+    <Notice
+      variant="warning"
+      title={t('harnesses.failedVersion.title', { name, version: failed.version })}
+      more={<span data-selectable="">{failed.reason}</span>}
+    >
+      {failed.runs
+        ? t('harnesses.failedVersion.body', { version: failed.version, runs: failed.runs })
+        : t('harnesses.failedVersion.bodyNone', { version: failed.version })}
+    </Notice>
   )
 }
 
@@ -1015,6 +1073,23 @@ function TaskNotice({ status, installed }: { status: AgentStatus; installed: boo
         }
       >
         {t('harnesses.cliOutdatedManual', { name, current: version ?? '', minimum })}
+      </Notice>
+    )
+  }
+  if (status.update && status.automatic?.back) {
+    const current = status.release?.version ?? status.package?.version ?? version ?? ''
+    const to = status.update.adapterVersion
+    return (
+      <Notice
+        variant="warning"
+        title={t('harnesses.switchBack.title', { name, current })}
+        action={
+          <SetButton variant="primary" onClick={() => startUpdate(useAgentsStore, harness)}>
+            {t('harnesses.switchBack.button', { version: to })}
+          </SetButton>
+        }
+      >
+        {t('harnesses.switchBack.body', { name, version: to })}
       </Notice>
     )
   }
@@ -1332,7 +1407,9 @@ function PackageGroup({ status }: { status: AgentStatus }) {
               variant="primary"
               onClick={() => startUpdate(useAgentsStore, status.harnessId)}
             >
-              {t('harnesses.updateTo', { version: status.update.adapterVersion })}
+              {t(status.automatic?.back ? 'harnesses.switchBack.button' : 'harnesses.updateTo', {
+                version: status.update.adapterVersion,
+              })}
             </SetButton>
           )}
         </RowFrame>

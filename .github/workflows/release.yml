@@ -133,6 +133,10 @@ jobs:
       # A release prices with its day's list; a failed fetch keeps the committed snapshot and warns.
       - name: Update the price snapshot
         run: node tools/usage/update-prices.mjs --if-changed
+      # New installs start on the versions the ACP Registry lists that day; a failed read keeps
+      # the committed ones and warns.
+      - name: Update the harness versions
+        run: node tools/harnesses/update-versions.mjs
       # Computer use's driver for the runner's own platform and architecture, before the build
       # lists its license in the notices.
       - name: Fetch Cua Driver
