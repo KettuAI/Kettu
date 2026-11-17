@@ -8,18 +8,19 @@ interface MdNode {
 
 const SCHEME = /^[a-z][a-z\d+.-]*:/i
 const DRIVE = /^[a-z]:[\\/]/i
+const FILE_URI = /^file:/i
 const PREFIX = '#local:'
 
-/** Whether a link's URL is a local path, which `localLinks` marks. */
+/** Whether a link's URL is a local path or a `file:` URI, which `localLinks` marks. */
 export function isLocalLink(url: string): boolean {
   if (url === '' || url.startsWith('#') || url.startsWith('//')) return false
-  return !SCHEME.test(url) || DRIVE.test(url)
+  return !SCHEME.test(url) || DRIVE.test(url) || FILE_URI.test(url)
 }
 
 /**
- * Link hardening blocks a link to a relative path, rewrites `./x` as `/x`, and sanitizing drops
- * any attribute of our own, so a link to a local path carries its target in a fragment, the one
- * form both let through. `localTarget` reads it back.
+ * Link hardening blocks a link to a relative path or a `file:` URI, rewrites `./x` as `/x`, and
+ * sanitizing drops any attribute of our own, so a link to a local path carries its target in a
+ * fragment, the one form both let through. `localTarget` reads it back.
  */
 export function localLinks() {
   const visit = (node: MdNode): void => {

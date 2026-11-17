@@ -61,7 +61,7 @@ import {
   mapSessionUpdate,
   mapTokenTotals,
 } from './mapper'
-import { agyAllowOnce, agyAutoAllowed, fromAgy } from './agy-tools'
+import { agyAllowOnce, agyAutoAllowed, fromAgy, onAgyOwnFiles } from './agy-tools'
 import { forkPointMeta, forksAtMessage } from './fork-point'
 import {
   DELETE_AGAIN_MS,
@@ -456,6 +456,7 @@ export class AcpConnection implements AgentConnection {
     if (update.sessionUpdate !== 'tool_call' && update.sessionUpdate !== 'tool_call_update') {
       return mapSessionUpdate(update, ctx)
     }
+    if (this.agy && onAgyOwnFiles(update, ctx)) return { patches: [], effects: [] }
     const call = ownCall(this.agy ? fromAgy(update) : update, this.naming, ctx)
     return call ? mapSessionUpdate(call, ctx) : { patches: [], effects: [] }
   }

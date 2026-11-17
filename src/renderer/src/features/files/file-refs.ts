@@ -12,22 +12,41 @@ export interface FileRef {
 }
 
 const SCHEME = /^[a-z][a-z\d+.-]*:/i
+const FILE_URI = /^file:/i
 const LINE_SUFFIX = /^(.*?)(?::(\d+)(?::\d+)?|#L(\d+)(?:-L?\d+)?)$/
+
+/** The path a `file:` URI names on this computer; null for another host's or a malformed one. */
+function fileUriPath(uri: string): string | null {
+  const url = URL.parse(uri)
+  if (!url || (url.host !== '' && url.host !== 'localhost')) return null
+  try {
+    const path = decodeURIComponent(url.pathname) + url.hash
+    return /^\/[a-z]:\//i.test(path) ? path.slice(1) : path
+  } catch {
+    return null
+  }
+}
 
 /**
  * A file reference as replies write them: `src/x.ts`, `./src/x.ts:12`, `src/x.ts:12:5`,
- * `src/x.ts#L12`, or an absolute path inside the project. Whether the file exists is for the
- * caller to check against the project's files. Null for anything else, such as a URL.
+ * `src/x.ts#L12`, or an absolute path or a `file:` URI inside the project. Whether the file exists
+ * is for the caller to check against the project's files. Null for anything else, such as a URL.
  */
 export function parseFileRef(text: string, projectPath: string): FileRef | null {
   let value = text.trim()
   if (!value || /\s/.test(value) || value.startsWith('#') || value.startsWith('//')) return null
-  // A Windows drive path has a colon too, so only other schemes are URLs.
-  if (SCHEME.test(value) && !/^[a-z]:[\\/]/i.test(value)) return null
-  try {
-    value = decodeURI(value)
-  } catch {
-    return null
+  if (FILE_URI.test(value)) {
+    const path = fileUriPath(value)
+    if (path === null) return null
+    value = path
+  } else {
+    // A Windows drive path has a colon too, so only other schemes are URLs.
+    if (SCHEME.test(value) && !/^[a-z]:[\\/]/i.test(value)) return null
+    try {
+      value = decodeURI(value)
+    } catch {
+      return null
+    }
   }
   let line: number | null = null
   const suffix = LINE_SUFFIX.exec(value)

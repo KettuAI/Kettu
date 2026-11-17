@@ -20,6 +20,7 @@ import type { ConnectionHooks, SessionTarget } from '../connection'
 import { newTurnScope } from '../session-updates'
 import { AcpConnection, inProcessTransport } from './connection'
 import requests from './fixtures/agy-permissions.json'
+import planned from './fixtures/agy-plan.json'
 import recorded from './fixtures/agy-tools.json'
 
 const TIER = { name: 'Google AI Pro', id: 'g1-pro-tier', upgradeUri: 'https://example.com' }
@@ -211,8 +212,9 @@ describe("agy's tool calls", () => {
       expect.objectContaining({ title: 'File .', toolKind: 'read', status: 'failed' }),
       expect.objectContaining({ title: 'File notes.txt', toolKind: 'edit', status: 'completed' }),
       // The plan shows in the top bar; a memory write that failed wrote nothing, so it keeps a row.
+      // Kettu's tools take the names Claude Code gives them.
       expect.objectContaining({ title: 'mcp__kettu__remember', status: 'failed' }),
-      expect.objectContaining({ title: 'Run mcp_kettu_list_sessions', status: 'completed' }),
+      expect.objectContaining({ title: 'mcp__kettu__list_sessions', status: 'completed' }),
     ])
     connection.close()
   })
@@ -243,9 +245,32 @@ describe("agy's tool calls", () => {
     expect(entries()).toEqual([
       expect.objectContaining({
         kind: 'tool',
-        title: 'Run mcp_kettu_set_plan',
+        title: 'mcp__kettu__set_plan',
         status: 'completed',
       }),
+    ])
+    connection.close()
+  })
+})
+
+describe("agy's Plan mode", () => {
+  it('shows no row for the files agy keeps in its own folder, such as its plan', async () => {
+    const { connection } = connect('1.5.9', async (client, sessionId) => {
+      for (const value of planned) {
+        await client.notify(methods.client.session.update, update(sessionId, value))
+      }
+    })
+    await connection.initialize('1.0.0')
+    const { sessionId } = await connection.newSession('/tmp/agy-probe/plan')
+    const { target, entries } = threadTarget()
+    connection.register(sessionId, target)
+    await connection.prompt(sessionId, [{ type: 'text', text: 'go' }])
+
+    expect(entries().map((entry) => (entry.kind === 'tool' ? entry.title : entry.kind))).toEqual([
+      'mcp__kettu__list_sessions',
+      'ls -la',
+      'File README.md',
+      'git status && git log -n 5',
     ])
     connection.close()
   })
@@ -297,7 +322,7 @@ describe("agy's permission requests", () => {
     // Only the memory write outside the set and the command waited for the user.
     expect(asked).toEqual([remember!.toolCall.toolCallId, command.toolCallId])
     expect(entries().map((entry) => (entry.kind === 'tool' ? entry.title : entry.kind))).toEqual([
-      'Run mcp_kettu_list_sessions',
+      'mcp__kettu__list_sessions',
       'mcp__kettu__remember',
       'echo hi',
     ])

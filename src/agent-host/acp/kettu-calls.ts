@@ -109,13 +109,11 @@ function codeVerdict(call: acp.ToolCallUpdate): Verdict {
   return endedRowless(call) ? 'none' : 'row'
 }
 
-/** A row's call: agy's memory write under Claude Code's name for it. */
+/** A row's call: agy's call of Kettu's tool under Claude Code's name for it, not "Run <name>". */
 function titled<T extends acp.ToolCallUpdate>(call: T, naming: McpNaming): T {
   if (naming !== 'agy') return call
   const tool = ownTool(call, naming)
-  return tool !== null && isRowWhenFailed(SERVICE_NAME, tool)
-    ? { ...call, title: `${CLAUDE_PREFIX}${tool}` }
-    : call
+  return tool !== null ? { ...call, title: `${CLAUDE_PREFIX}${tool}` } : call
 }
 
 /** Calls that may show no row, held from their first update to their end, per turn. */
