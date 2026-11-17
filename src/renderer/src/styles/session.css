@@ -1757,15 +1757,16 @@
 .ks-outline__item[data-reading] {
   font-weight: 500;
 }
+/* A row with matches in the find's color, as its dash; the current match's turn in bold. */
 .ks-outline__item[data-hits] {
-  color: var(--thread-ink);
+  color: var(--attention);
 }
 .ks-outline__item[data-quiet]:not([data-highlighted]) {
   color: color-mix(in srgb, var(--thread-faint) 70%, transparent);
 }
 .ks-outline__hits {
   flex-shrink: 0;
-  color: var(--thread-muted);
+  opacity: 0.7;
   font-size: 11px;
   font-variant-numeric: tabular-nums;
 }
