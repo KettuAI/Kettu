@@ -306,7 +306,8 @@ export interface AgentStatus {
   // Whether Kettu handed this agent's harness an API key; null for a harness that takes none.
   apiKey: { set: boolean; providers: boolean } | null
   state: AgentState
-  // From `initialize`, a binary agent's `--version`, or the `requires` program's (Pi's `pi`).
+  // From `initialize`, a binary agent's `--version`, or the `requires` program's (Pi's `pi`); for
+  // Kettu's own install of a program that reports none, the release it installed.
   version: string | null
   // The adapter a start runs, the pin until one is installed; `isCli` for a package that is the
   // agent's CLI itself, which runs with no adapter, and `isSdk` for the agent's SDK, which Kettu
@@ -318,9 +319,10 @@ export interface AgentStatus {
     isCli?: true
     isSdk?: true
   } | null
-  // Kettu's install from the ACP Registry that a start runs, a release archive or a uvx package,
-  // whose updates the registry lists; null for the others, and absent on older hosts.
-  release?: { version: string } | null
+  // Kettu's own install that a start runs, a release archive or a uvx package, and its version;
+  // `registry` when the ACP Registry lists its updates. Null while the user's own program runs or
+  // nothing is installed, and absent on older hosts.
+  release?: { version: string; registry: boolean } | null
   signIn: 'unknown' | 'signed-in' | 'required'
   authMethods: AgentAuthMethod[]
   canLogout: boolean

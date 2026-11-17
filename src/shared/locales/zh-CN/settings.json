@@ -1777,6 +1777,7 @@
     "installedWith": "你自己装的 · {{method}}",
     "programSdk": "你自己装的，由 SDK 运行。",
     "programOwn": "你自己装的，由 Kettu 运行。",
+    "programKettu": "Kettu 装的，在 Kettu 的数据目录里。",
     "packageGroup": "Kettu 装的包",
     "sdkLine": "{{version}} · 装在 Kettu 的数据目录，不含 CLI",
     "adapterLine": "{{version}} · 装在 Kettu 的数据目录",

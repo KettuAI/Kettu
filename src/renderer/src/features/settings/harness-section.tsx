@@ -808,7 +808,8 @@ function VersionGroup({ status }: { status: AgentStatus }) {
   const now = useNow()
   const version = harnessVersion(status)
   const checkedAt = status.updateCheckedAt
-  const checks = !!status.package || !!status.cli || !!status.release || checkedAt !== null
+  const checks =
+    !!status.package || !!status.cli || !!status.release?.registry || checkedAt !== null
   const updating = status.task?.kind === 'update' && status.task.state === 'running'
   const next = status.cli?.update?.version ?? status.update?.cliVersion ?? null
   // A stale check does not make a missing program current, so it gets no green dot.
@@ -1192,7 +1193,9 @@ function ProgramGroup({ status }: { status: AgentStatus }) {
               ? t('harnesses.installedWith', { method: methodName(t, method) })
               : status.package?.isSdk
                 ? t('harnesses.programSdk')
-                : t('harnesses.programOwn')
+                : status.release
+                  ? t('harnesses.programKettu')
+                  : t('harnesses.programOwn')
           }
           control={
             status.binaryCommand && (
