@@ -35,6 +35,7 @@ import { Skeleton } from '@renderer/components/ui/skeleton'
 import type { ArtifactKind } from '@renderer/features/artifacts/model'
 import { keyCaps } from '@renderer/features/shell/shortcuts'
 import { artifactListShown, useArtifactsStore } from '@renderer/stores/artifacts'
+import { useOtherHosts } from '@renderer/stores/hosts'
 import { revealMessage } from '@renderer/stores/reveal'
 import { useRoutinesStore } from '@renderer/stores/routines'
 import {
@@ -167,6 +168,7 @@ function SearchPalette() {
   const [query, setQuery] = useState('')
   const [scope, setScope] = useState<SearchScope>('all')
   const conversations = useConversationHits(query)
+  const others = useOtherHosts()
   const said = useConversationEntries(conversations.hits)
   const entries = useMemo(() => [...found, ...said], [found, said])
   const results = useMemo(() => runSearch(entries, query, scope), [entries, query, scope])
@@ -219,18 +221,24 @@ function SearchPalette() {
   }))
 
   const asksConversations = scope === 'conversations' || scope === 'all'
+  const percent = conversations.indexing
+    ? Math.min(99, Math.floor((conversations.indexing.done / conversations.indexing.total) * 100))
+    : null
+  const indexingNote = percent === null ? null : t('search.indexing', { percent })
   const empty: ReactNode =
     scope === 'artifacts' && !artifactsLoaded ? (
       <div className="kettu-search-empty">
         <span>{t('search.loading')}</span>
       </div>
     ) : asksConversations && conversations.searching ? (
+      // A quick answer shows nothing in between; a slow one shows rows where the results will be.
       <div className="kettu-search-empty" role="status">
-        {scope === 'conversations' ? (
-          <ConversationSkeleton />
-        ) : (
-          <span>{t('search.searching')}</span>
-        )}
+        {conversations.slow &&
+          (scope === 'conversations' ? (
+            <ConversationSkeleton />
+          ) : (
+            <span>{t('search.searching')}</span>
+          ))}
       </div>
     ) : asksConversations && conversations.failures.length > 0 ? (
       <div className="kettu-search-empty" role="alert">
@@ -260,17 +268,33 @@ function SearchPalette() {
               : t('search.searchedScope', { scope: t(`search.scope.${scope}`) })}
           </span>
         )}
+        {indexingNote && asksConversations && <span>{indexingNote}</span>}
       </div>
     )
 
-  // What the conversation search could not reach, under the results.
+  // What the conversation search could not reach or has not finished, under the results.
+  const hostName = (hostId: string | null): string =>
+    hostId === null
+      ? t('hosts.thisComputer')
+      : (others.find((host) => host.id === hostId)?.name ?? t('hosts.unknown'))
   const notes = [
+    // The empty state says it already, in its own words.
+    results.groups.length === 0 && asksConversations ? null : indexingNote,
     conversations.away.length > 0 &&
       t('search.hostsAway', { hosts: conversations.away.join(', ') }),
+    conversations.waiting.length > 0 &&
+      t('search.hostsSlow', { hosts: conversations.waiting.map(hostName).join(', ') }),
     conversations.failures.length > 0 &&
       conversations.hits.length > 0 &&
       t('search.hostsFailed', { count: conversations.failures.length }),
   ].filter(Boolean)
+
+  // The count of what was found, for those who cannot see the list change.
+  const foundCount = results.counts.conversations
+  const announcement =
+    conversations.short || conversations.searching || !trimmed
+      ? ''
+      : t('search.announce', { count: foundCount })
 
   return (
     <CommandMenu
@@ -289,6 +313,9 @@ function SearchPalette() {
       mark={mark}
       hints={
         <>
+          <span className="sr-only" role="status">
+            {announcement}
+          </span>
           {notes.map((note) => (
             <span key={String(note)} className="kettu-search-note">
               {note}

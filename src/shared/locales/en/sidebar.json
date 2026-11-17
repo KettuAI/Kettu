@@ -86,7 +86,13 @@
       "routines": "Latest routines",
       "projects": "Latest projects",
       "settings": "All settings"
-    }
+    },
+    "matches_one": "{{count}} message",
+    "matches_other": "{{count}} messages",
+    "indexing": "Indexing conversations ({{percent}}%). What is built can be searched.",
+    "hostsSlow": "Still waiting for: {{hosts}}",
+    "announce_one": "{{count}} conversation found",
+    "announce_other": "{{count}} conversations found"
   },
   "project": {
     "missing": "Missing",
