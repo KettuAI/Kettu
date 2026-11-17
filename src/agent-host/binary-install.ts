@@ -29,6 +29,8 @@ export interface ArchiveEntry {
 export interface ArchiveRelease {
   version: string
   entries: Record<string, ArchiveEntry>
+  /** From the vendor's own release list rather than the registry's, so no update follows it. */
+  fromVendor?: true
 }
 
 /** A harness's install routes, from its vendor's documentation or the registry. */

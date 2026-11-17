@@ -808,7 +808,7 @@ function VersionGroup({ status }: { status: AgentStatus }) {
   const now = useNow()
   const version = harnessVersion(status)
   const checkedAt = status.updateCheckedAt
-  const checks = !!status.package || !!status.cli || checkedAt !== null
+  const checks = !!status.package || !!status.cli || !!status.release || checkedAt !== null
   const updating = status.task?.kind === 'update' && status.task.state === 'running'
   const next = status.cli?.update?.version ?? status.update?.cliVersion ?? null
   // A stale check does not make a missing program current, so it gets no green dot.
@@ -829,7 +829,11 @@ function VersionGroup({ status }: { status: AgentStatus }) {
         ? t('agents.update.released', { version: next })
         : status.update
           ? t(
-              status.package?.isSdk ? 'agents.update.sdkReleased' : 'agents.update.adapterReleased',
+              status.package?.isSdk
+                ? 'agents.update.sdkReleased'
+                : status.package
+                  ? 'agents.update.adapterReleased'
+                  : 'agents.update.released',
               {
                 version: status.update.adapterVersion,
               },
@@ -959,7 +963,8 @@ function TaskNotice({ status, installed }: { status: AgentStatus; installed: boo
   }
   if (status.update) {
     const adapter = adapterOnlyUpdate(status)
-    const cli = status.update.cliVersion
+    // A release from the registry is the harness itself, at the version the registry lists.
+    const cli = status.release ? status.update.adapterVersion : status.update.cliVersion
     return (
       <Notice
         variant="info"
@@ -993,7 +998,7 @@ function TaskNotice({ status, installed }: { status: AgentStatus; installed: boo
               },
             )
           : t('agents.update.noticeBody', {
-              current: version ?? status.package?.version ?? '',
+              current: status.release?.version ?? version ?? status.package?.version ?? '',
               name,
             })}
       </Notice>

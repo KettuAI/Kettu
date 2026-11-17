@@ -18,6 +18,7 @@ export const MUSE: AgentDefinition = {
   installs: {
     archive: {
       version: VERSION,
+      fromVendor: true,
       entries: {
         'darwin-aarch64': {
           url: `${RELEASE}muse-aarch64-macos`,

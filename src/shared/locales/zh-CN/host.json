@@ -226,6 +226,9 @@
       "offline": "无法连接 npm 仓库。",
       "timeout": "npm 没有在 {{seconds}} 秒内响应。",
       "noVersion": "npm 没有给出 {{package}} 的版本。",
+      "registryOffline": "无法连接 ACP Registry。",
+      "registryTimeout": "ACP Registry 没有在 {{seconds}} 秒内响应。",
+      "registryUnreadable": "无法读取 ACP Registry 的列表。",
       "stopped": "检查已停止。"
     },
     "binaryInstall": {

@@ -133,6 +133,18 @@ export function updateOffer(status: AgentStatus): AgentUpdateOffer | null {
     }
   }
   const { update } = status
+  // A release Kettu installed from the registry moves to the version the registry lists.
+  if (update && status.release) {
+    const { version } = status.release
+    return {
+      ...base,
+      from: version,
+      to: update.adapterVersion,
+      command: null,
+      method: null,
+      package: null,
+    }
+  }
   if (!update || !status.package) return null
   const current = cli ? (cli.installed?.version ?? null) : status.version
   // An update that brings no newer agent changes only the package, so it names the package's
