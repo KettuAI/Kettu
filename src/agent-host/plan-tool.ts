@@ -107,8 +107,8 @@ export function isClaudeRowlessCall(name: string): boolean {
   return name.startsWith(CLAUDE_PREFIX) && ROWLESS_TOOLS.has(name.slice(CLAUDE_PREFIX.length))
 }
 
-/** A call of one of those tools, as Codex names its MCP calls by server and tool. */
-export function isCodexRowlessCall(server: string, tool: string): boolean {
+/** A call of one of those tools, by its server and tool, as Codex and ACP agents' calls are read. */
+export function isRowlessCall(server: string, tool: string): boolean {
   return server === SERVICE_NAME && ROWLESS_TOOLS.has(tool)
 }
 
@@ -117,8 +117,8 @@ export function isClaudeRowWhenFailed(name: string): boolean {
   return name.startsWith(CLAUDE_PREFIX) && MEMORY_WRITE_TOOLS.has(name.slice(CLAUDE_PREFIX.length))
 }
 
-/** Of those calls, by Codex's server and tool, one that shows as a failed row when it fails. */
-export function isCodexRowWhenFailed(server: string, tool: string): boolean {
+/** Of those calls, by its server and tool, one that shows as a failed row when it fails. */
+export function isRowWhenFailed(server: string, tool: string): boolean {
   return server === SERVICE_NAME && MEMORY_WRITE_TOOLS.has(tool)
 }
 

@@ -1,0 +1,278 @@
+[
+  {
+    "sessionUpdate": "tool_call",
+    "toolCallId": "call_dca3fded7eb34b94a8122d2a",
+    "name": "execute",
+    "title": "execute",
+    "kind": "other",
+    "status": "pending",
+    "locations": [],
+    "rawInput": {}
+  },
+  {
+    "sessionUpdate": "tool_call_update",
+    "toolCallId": "call_dca3fded7eb34b94a8122d2a",
+    "status": "in_progress",
+    "kind": "other",
+    "title": "execute",
+    "locations": [],
+    "rawInput": {
+      "code": "return await tools.opencode.list_mcp_resources({});"
+    }
+  },
+  {
+    "sessionUpdate": "tool_call_update",
+    "toolCallId": "call_dca3fded7eb34b94a8122d2a",
+    "status": "completed",
+    "locations": [],
+    "content": [
+      {
+        "type": "content",
+        "content": {
+          "type": "text",
+          "text": "{\n  \"resources\": [],\n  \"templates\": []\n}"
+        }
+      }
+    ],
+    "rawOutput": {
+      "metadata": {
+        "toolCalls": [
+          {
+            "tool": "opencode.list_mcp_resources",
+            "status": "completed"
+          }
+        ],
+        "truncated": false
+      }
+    }
+  },
+  {
+    "sessionUpdate": "tool_call",
+    "toolCallId": "call_00_Rfb2HCPsQovrThZYwWxR7063",
+    "name": "execute",
+    "title": "execute",
+    "kind": "other",
+    "status": "pending",
+    "locations": [],
+    "rawInput": {}
+  },
+  {
+    "sessionUpdate": "tool_call_update",
+    "toolCallId": "call_00_Rfb2HCPsQovrThZYwWxR7063",
+    "status": "in_progress",
+    "kind": "other",
+    "title": "execute",
+    "locations": [],
+    "rawInput": {
+      "code": "return await tools.kettu.set_plan({ steps: [{ content: \"Check memory\", status: \"in_progress\" }] });"
+    }
+  },
+  {
+    "sessionUpdate": "tool_call_update",
+    "toolCallId": "call_00_Rfb2HCPsQovrThZYwWxR7063",
+    "status": "completed",
+    "locations": [],
+    "content": [
+      {
+        "type": "content",
+        "content": {
+          "type": "text",
+          "text": "ok: set_plan"
+        }
+      }
+    ],
+    "rawOutput": {
+      "metadata": {
+        "toolCalls": [
+          {
+            "tool": "kettu.set_plan",
+            "status": "completed",
+            "input": {
+              "steps": [
+                {
+                  "content": "Check memory",
+                  "status": "in_progress"
+                }
+              ]
+            }
+          }
+        ],
+        "truncated": false
+      }
+    }
+  },
+  {
+    "sessionUpdate": "tool_call",
+    "toolCallId": "call_00_ET_h0GlZLyDZ8fzusvyTSA06300",
+    "name": "execute",
+    "title": "execute",
+    "kind": "other",
+    "status": "pending",
+    "locations": [],
+    "rawInput": {}
+  },
+  {
+    "sessionUpdate": "tool_call_update",
+    "toolCallId": "call_00_ET_h0GlZLyDZ8fzusvyTSA06300",
+    "status": "in_progress",
+    "kind": "other",
+    "title": "execute",
+    "locations": [],
+    "rawInput": {
+      "code": "return await tools.kettu.remember({ title: \"fail\", text: \"x\" });"
+    }
+  },
+  {
+    "sessionUpdate": "tool_call_update",
+    "toolCallId": "call_00_ET_h0GlZLyDZ8fzusvyTSA06300",
+    "status": "completed",
+    "locations": [],
+    "content": [
+      {
+        "type": "content",
+        "content": {
+          "type": "text",
+          "text": "No memory fail"
+        }
+      }
+    ],
+    "rawOutput": {
+      "metadata": {
+        "toolCalls": [
+          {
+            "tool": "kettu.remember",
+            "status": "error",
+            "input": {
+              "title": "fail",
+              "text": "x"
+            }
+          }
+        ],
+        "error": true,
+        "truncated": false
+      }
+    }
+  },
+  {
+    "sessionUpdate": "tool_call",
+    "toolCallId": "call_00_o1KuvcCZcqthSKdlsTqB5757",
+    "name": "execute",
+    "title": "execute",
+    "kind": "other",
+    "status": "pending",
+    "locations": [],
+    "rawInput": {}
+  },
+  {
+    "sessionUpdate": "tool_call_update",
+    "toolCallId": "call_00_o1KuvcCZcqthSKdlsTqB5757",
+    "status": "in_progress",
+    "kind": "other",
+    "title": "execute",
+    "locations": [],
+    "rawInput": {
+      "code": "return await tools.kettu.remember({ title: \"ok\", text: \"y\" });"
+    }
+  },
+  {
+    "sessionUpdate": "tool_call_update",
+    "toolCallId": "call_00_o1KuvcCZcqthSKdlsTqB5757",
+    "status": "completed",
+    "locations": [],
+    "content": [
+      {
+        "type": "content",
+        "content": {
+          "type": "text",
+          "text": "ok: remember"
+        }
+      }
+    ],
+    "rawOutput": {
+      "metadata": {
+        "toolCalls": [
+          {
+            "tool": "kettu.remember",
+            "status": "completed",
+            "input": {
+              "title": "ok",
+              "text": "y"
+            }
+          }
+        ],
+        "truncated": false
+      }
+    }
+  },
+  {
+    "sessionUpdate": "tool_call",
+    "toolCallId": "call_00_QYgqMYloexdcQH1YVCTn0546",
+    "name": "execute",
+    "title": "execute",
+    "kind": "other",
+    "status": "pending",
+    "locations": [],
+    "rawInput": {}
+  },
+  {
+    "sessionUpdate": "tool_call_update",
+    "toolCallId": "call_00_QYgqMYloexdcQH1YVCTn0546",
+    "status": "in_progress",
+    "kind": "other",
+    "title": "execute",
+    "locations": [],
+    "rawInput": {
+      "code": "const plan = await tools.kettu.set_plan({\n  steps: [\n    { content: \"Read README\", status: \"in_progress\" },\n    { content: \"Reply\", status: \"pending\" },\n  ],\n});\nconst sessions = await tools.kettu.list_sessions();\nconst memory = await tools.kettu.remember({ title: \"probe\", text: \"probe memory\" });\nreturn { plan, sessions, memory };"
+    }
+  },
+  {
+    "sessionUpdate": "tool_call_update",
+    "toolCallId": "call_00_QYgqMYloexdcQH1YVCTn0546",
+    "status": "completed",
+    "locations": [],
+    "content": [
+      {
+        "type": "content",
+        "content": {
+          "type": "text",
+          "text": "{\n  \"plan\": \"ok: set_plan\",\n  \"sessions\": \"ok: list_sessions\",\n  \"memory\": \"ok: remember\"\n}"
+        }
+      }
+    ],
+    "rawOutput": {
+      "metadata": {
+        "toolCalls": [
+          {
+            "tool": "kettu.set_plan",
+            "status": "completed",
+            "input": {
+              "steps": [
+                {
+                  "content": "Read README",
+                  "status": "in_progress"
+                },
+                {
+                  "content": "Reply",
+                  "status": "pending"
+                }
+              ]
+            }
+          },
+          {
+            "tool": "kettu.list_sessions",
+            "status": "completed"
+          },
+          {
+            "tool": "kettu.remember",
+            "status": "completed",
+            "input": {
+              "title": "probe",
+              "text": "probe memory"
+            }
+          }
+        ],
+        "truncated": false
+      }
+    }
+  }
+]

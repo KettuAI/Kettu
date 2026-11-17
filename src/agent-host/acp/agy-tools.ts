@@ -5,11 +5,7 @@
 import type * as acp from '@agentclientprotocol/sdk/unstable'
 import { fenced } from '../codex/mapper'
 import type { McpServer } from '../connection'
-import { isClaudeRowlessCall, isClaudeRowWhenFailed } from '../plan-tool'
-import { SERVICE_NAME } from '../service-name'
 import { toLf } from '../session-updates'
-
-const KETTU_PREFIX = `mcp_${SERVICE_NAME}_`
 
 const RESULT = /^Created At: [^\n]*\nCompleted At: [^\n]*\nCommand exited with code (-?\d+)\.\n\n/
 const OUTPUT = 'Command output:\n'
@@ -85,19 +81,8 @@ function command(update: acp.ToolCallUpdate, line: string, summary: unknown): ac
   return shaped
 }
 
-/**
- * An agy tool call as the mapper reads it, or null for a call of Kettu's own that shows no row. A
- * memory write takes Claude Code's name for it, which the mapper holds until it fails or succeeds;
- * `shown` keeps a call whose row the thread already has, such as one that asked for permission.
- */
-export function fromAgy<T extends acp.ToolCallUpdate>(update: T, shown: boolean): T | null {
-  const name = toolName(update)
-  if (name?.startsWith(KETTU_PREFIX)) {
-    const claudeName = `mcp__${SERVICE_NAME}__${name.slice(KETTU_PREFIX.length)}`
-    if (isClaudeRowWhenFailed(claudeName)) return { ...update, title: claudeName }
-    if (isClaudeRowlessCall(claudeName) && !shown) return null
-    return update
-  }
+/** An agy tool call in the shape the mapper reads every agent's. */
+export function fromAgy<T extends acp.ToolCallUpdate>(update: T): T {
   const input = record(update.rawInput)
   if (typeof input?.CommandLine === 'string') {
     return command(update, input.CommandLine, input.toolSummary) as T

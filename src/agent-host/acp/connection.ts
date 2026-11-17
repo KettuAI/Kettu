@@ -70,6 +70,7 @@ import {
   sessionMeta,
   type Removal,
 } from './hidden-sessions'
+import { askedCall, mcpNaming, ownCall, type McpNaming } from './kettu-calls'
 import { ownTitles } from './own-titles'
 import { DELEGATED_SIGN_IN, delegatedSignInStart, requestUrlElicitation } from './sign-in'
 
@@ -308,6 +309,8 @@ export class AcpConnection implements AgentConnection {
   private readonly autoAllowed = new Map<string, ReadonlySet<string>>()
   /** The version the agent named in `initialize`. */
   private version: string | null = null
+  /** How the agent names the MCP tools it calls, once `initialize` has answered. */
+  private naming: McpNaming | null = null
   /** The sign-in in progress, which the next `authenticate` written out runs for. */
   private signIn: SignInClient | null = null
   /** The sign-in each `authenticate` in flight runs for, by its JSON-RPC id as a string. */
@@ -337,10 +340,10 @@ export class AcpConnection implements AgentConnection {
           )
           if (optionId) return { outcome: { outcome: 'selected', optionId } }
         }
-        const toolCall = this.agy
-          ? (fromAgy(ctx.params.toolCall, true) ?? ctx.params.toolCall)
-          : ctx.params.toolCall
-        const { entryId, output } = mapPermissionToolCall(toolCall, target.context())
+        const shaped = this.agy ? fromAgy(ctx.params.toolCall) : ctx.params.toolCall
+        const context = target.context()
+        const toolCall = askedCall(shaped, this.naming, context)
+        const { entryId, output } = mapPermissionToolCall(toolCall, context)
         const answer = await target.requestPermission(
           {
             toolCallId: ctx.params.toolCall.toolCallId,
@@ -450,14 +453,10 @@ export class AcpConnection implements AgentConnection {
   }
 
   private map(update: SessionUpdate, ctx: MapperContext): MapperOutput {
-    if (
-      !this.agy ||
-      (update.sessionUpdate !== 'tool_call' && update.sessionUpdate !== 'tool_call_update')
-    ) {
+    if (update.sessionUpdate !== 'tool_call' && update.sessionUpdate !== 'tool_call_update') {
       return mapSessionUpdate(update, ctx)
     }
-    const shown = ctx.thread.byId[`t:${update.toolCallId}`] !== undefined
-    const call = fromAgy(update, shown)
+    const call = ownCall(this.agy ? fromAgy(update) : update, this.naming, ctx)
     return call ? mapSessionUpdate(call, ctx) : { patches: [], effects: [] }
   }
 
@@ -669,6 +668,7 @@ export class AcpConnection implements AgentConnection {
       raw: init.agentCapabilities ?? null,
     }
     this.version = result.version
+    this.naming = mcpNaming(init.agentInfo)
     this.removal = hiddenRemoval(this.hooks.agentId, result.capabilities, result.version)
     return result
   }

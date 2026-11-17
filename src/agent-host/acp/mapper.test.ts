@@ -383,35 +383,6 @@ describe("Kettu's memory in a replay", () => {
       [{ type: 'text', text: `Quote ${guide}` }],
     ])
   })
-
-  it("holds back Kettu's memory writes, whose row the host adds, unless they fail", () => {
-    const call = (id: string, tool: string): SessionUpdate => ({
-      sessionUpdate: 'tool_call',
-      toolCallId: id,
-      title: `mcp__kettu__${tool}`,
-      kind: 'other',
-      status: 'in_progress',
-      rawInput: { title: 'Run tests with pnpm test' },
-    })
-    const { entries } = run([
-      call('c1', 'remember'),
-      { sessionUpdate: 'tool_call_update', toolCallId: 'c1', status: 'completed' },
-      call('c2', 'update_memory'),
-      {
-        sessionUpdate: 'tool_call_update',
-        toolCallId: 'c2',
-        status: 'failed',
-        content: [{ type: 'content', content: { type: 'text', text: 'No memory run-tests' } }],
-      },
-      call('c3', 'read_memory'),
-      { sessionUpdate: 'tool_call_update', toolCallId: 'c3', status: 'completed' },
-    ])
-    expect(entries.map((e) => [e.id, e.kind === 'tool' ? e.status : null])).toEqual([
-      ['t:c2', 'failed'],
-      ['t:c3', 'completed'],
-    ])
-    expect(entries[0]).toMatchObject({ title: 'mcp__kettu__update_memory', content: [{}] })
-  })
 })
 
 describe('replayed attachments', () => {
