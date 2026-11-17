@@ -719,6 +719,13 @@
     "alwaysHostSession": "Always open this site in the session browser",
     "openFailed": "Couldn’t open the link: {{error}}"
   },
+  "alert": {
+    "note": "Note",
+    "tip": "Tip",
+    "important": "Important",
+    "warning": "Warning",
+    "caution": "Caution"
+  },
   "svg": {
     "alt": "SVG image"
   },

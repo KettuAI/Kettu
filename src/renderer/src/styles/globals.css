@@ -1317,6 +1317,45 @@
     margin-bottom: 0;
   }
 
+  /* A GitHub alert is a quote whose bar and title take the alert's color (alert.tsx). */
+  & [data-alert] {
+    --alert-color: var(--primary-foreground);
+    margin-block: 0.9333em;
+    box-shadow: inset 2px 0 0 var(--alert-color);
+    padding: 2px 0 2px 14px;
+  }
+  & [data-alert='tip'] {
+    --alert-color: var(--success);
+  }
+  & [data-alert='important'] {
+    --alert-color: var(--merged);
+  }
+  & [data-alert='warning'] {
+    --alert-color: var(--warning);
+  }
+  & [data-alert='caution'] {
+    --alert-color: var(--danger);
+  }
+  & [data-alert-title] {
+    display: flex;
+    align-items: center;
+    gap: 0.4667em;
+    margin-bottom: 0.4em;
+    color: var(--alert-color);
+    font-family: var(--font-sans);
+    font-size: 0.9333em;
+    font-weight: 600;
+    line-height: 1.4;
+    & svg {
+      flex: none;
+      width: 1.1429em;
+      height: 1.1429em;
+    }
+  }
+  & [data-alert] > :last-child {
+    margin-bottom: 0;
+  }
+
   & [data-streamdown='horizontal-rule'] {
     margin-block: 1.3333em 0.9333em;
     border: 0;

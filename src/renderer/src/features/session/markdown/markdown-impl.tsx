@@ -22,10 +22,12 @@ import { HugeiconsIcon } from '@hugeicons/react'
 import {
   Block,
   defaultComponents,
+  defaultRehypePlugins,
   Streamdown,
   type BlockProps,
   type Components,
   type ExtraProps,
+  type StreamdownProps,
 } from 'streamdown'
 import { githubIssueUrl } from '@shared/git'
 import { AgentFileLink, FileLink } from '@renderer/features/files/file-link'
@@ -43,11 +45,14 @@ import {
 } from '@renderer/features/session/media/named'
 import { HAN } from '@renderer/lib/han'
 import { cn } from '@renderer/lib/utils'
+import { Blockquote } from './alert'
 import { splitIntoChunks } from './chunks'
 import { codeThemeInput, useCodeThemes, type CodeThemes } from './code-themes'
 import { localImageTarget, pictureRun, spacedImages } from './local-images'
 import { INCOMPLETE_LINK, localTarget, unopenedTarget } from './local-links'
+import { githubAlerts } from './github-alerts'
 import { bareReferenceNumber } from './github-refs'
+import { fenceInlineSvg } from './inline-svg'
 import { remarkPlugins } from './remark'
 import { BlockCode } from './code-frame'
 import { MarkdownTable } from './markdown-table'
@@ -260,11 +265,18 @@ const components: Components = {
   p: Paragraph,
   li: ListItem,
   table: Table,
+  blockquote: Blockquote,
   code: BlockCode,
   inlineCode: InlineCode,
   input: TaskCheckbox,
   em: Emphasis,
 }
+
+// The alerts are marked after the sanitizer, which would drop the mark.
+const rehypePlugins: NonNullable<StreamdownProps['rehypePlugins']> = [
+  ...Object.values(defaultRehypePlugins),
+  githubAlerts,
+]
 
 // The link component opens links itself (web-link.tsx), so Streamdown's own check stays off.
 const linkSafety = { enabled: false }
@@ -282,7 +294,8 @@ function useChunks(markdown: string): string[] {
 }
 
 /**
- * Agent prose. Raw HTML never renders. A long text renders in chunks (`chunks.ts`), so a streamed
+ * Agent prose. Raw HTML goes through the sanitizer, and an inline `<svg>` is first written as an
+ * `svg` code block (`inline-svg.ts`). A long text renders in chunks (`chunks.ts`), so a streamed
  * update re-renders, lays out and paints the live tail instead of the whole message. Streaming
  * mode splits each chunk into memoized blocks, and the mode never changes: static mode renders
  * one tree, so switching when a message finishes would rebuild all of it. Finishing only turns
@@ -298,7 +311,7 @@ function MarkdownImpl({
   // Finishing re-renders every code block and table to enable their controls; deferring it lets
   // React split that work across frames instead of blocking one.
   const live = useDeferredValue(streaming)
-  const chunks = useChunks(markdown)
+  const chunks = useChunks(useMemo(() => fenceInlineSvg(markdown, live), [markdown, live]))
   const [named] = useState(() => new NamedMedia())
   return (
     <div className={cn('markdown', className)}>
@@ -392,6 +405,7 @@ const Chunk = memo(function Chunk({
           skipHtml
           plugins={plugins}
           remarkPlugins={mergedRemarkPlugins}
+          rehypePlugins={rehypePlugins}
           components={mergedComponents}
           linkSafety={linkSafety}
           controls={controls}
