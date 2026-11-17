@@ -790,6 +790,18 @@
   border-width: calc(var(--scrollbar-inset) - 1px);
 }
 
+/* Windows and Linux: the page cannot dim the window's own controls, so a scrim starts under the
+   band they sit in, which leaves the band and the controls the same shade. */
+:root[data-client='desktop']:not([data-platform='darwin'])
+  :is(
+    .kettu-settings-scrim,
+    .kettu-search-scrim,
+    [data-slot='dialog-overlay'],
+    [data-slot='alert-dialog-overlay']
+  ) {
+  top: var(--title-bar);
+}
+
 /* One sweep of light across a surface, as when the highest reasoning level is chosen. */
 @keyframes sheen {
   from {
