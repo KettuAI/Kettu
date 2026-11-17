@@ -22,7 +22,6 @@ import type {
 } from '@shared/thread'
 import type { ModelTokens } from '../connection'
 import { currentLocale, t } from '../i18n'
-import { isClaudeRowWhenFailed } from '../plan-tool'
 import {
   appendContent,
   attachmentCount,
@@ -50,7 +49,6 @@ import {
   type MapperEffect,
   type MapperOutput,
   type SubagentState,
-  type TurnScope,
 } from '../session-updates'
 
 /** Every `sessionUpdate` the SDK's unstable v1 schema accepts; others never reach the SDK. */
@@ -471,37 +469,6 @@ function mapToolCall(ctx: MapperContext, out: Output, update: acp.ToolCallUpdate
   return id
 }
 
-/** Calls of Kettu's memory writes, by Claude Code's names as Pi uses them too, per turn. */
-const memoryWrites = new WeakMap<TurnScope, Map<string, acp.ToolCallUpdate>>()
-
-/**
- * Holds back a call of Kettu's memory writes, whose row the host adds once it succeeds; one that
- * failed wrote nothing, so it shows as a failed row. False for any other call.
- */
-function heldMemoryWrite(ctx: MapperContext, out: Output, update: acp.ToolCallUpdate): boolean {
-  let calls = memoryWrites.get(ctx.scope)
-  const held = calls?.get(update.toolCallId)
-  if (!held) {
-    if (update.title == null || !isClaudeRowWhenFailed(update.title)) return false
-    if (ctx.thread.byId[`t:${update.toolCallId}`]) return false
-  }
-  const given = Object.entries(update).filter(([, value]) => value != null)
-  const merged = { ...held, ...Object.fromEntries(given) } as acp.ToolCallUpdate
-  if (update.status === 'failed') {
-    calls?.delete(update.toolCallId)
-    mapToolCall(ctx, out, merged)
-  } else if (update.status === 'completed') {
-    calls?.delete(update.toolCallId)
-  } else {
-    if (!calls) {
-      calls = new Map()
-      memoryWrites.set(ctx.scope, calls)
-    }
-    calls.set(update.toolCallId, merged)
-  }
-  return true
-}
-
 function mapPlan(ctx: MapperContext, out: Output, plan: acp.Plan): void {
   const items: PlanItem[] = plan.entries.map((entry) => ({
     content: entry.content,
@@ -830,10 +797,8 @@ export function mapSessionUpdate(update: acp.SessionUpdate, ctx: MapperContext):
       mapMessageChunk(ctx, out, 'thought', update)
       break
     case 'tool_call':
-      if (!heldMemoryWrite(ctx, out, update)) mapToolCall(ctx, out, update)
-      break
     case 'tool_call_update':
-      if (!heldMemoryWrite(ctx, out, update)) mapToolCall(ctx, out, update)
+      mapToolCall(ctx, out, update)
       break
     case 'plan':
       mapPlan(ctx, out, update)

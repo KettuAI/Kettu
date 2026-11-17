@@ -15,7 +15,7 @@ import { addSpeedSample, latestTime, timeRequest } from '@shared/output-speed'
 import { replayedBlock } from '../acp/mapper'
 import { hasMessage, t } from '../i18n'
 import { planMarkdown, planRevision } from '../plan-revision'
-import { isCodexRowlessCall, isCodexRowWhenFailed } from '../plan-tool'
+import { isRowlessCall, isRowWhenFailed } from '../plan-tool'
 import { parseReplayedText } from '../replayed-content'
 import { SERVICE_NAME } from '../service-name'
 import { workflowToolStructured } from '../workflow/tools'
@@ -376,8 +376,8 @@ export class ThreadMapper {
         // The host wrote the plan, the report or the memory from the call itself, so the call
         // shows no row; a memory write that failed wrote nothing, so it shows as failed.
         if (
-          isCodexRowlessCall(item.server, item.tool) &&
-          !(done && item.status === 'failed' && isCodexRowWhenFailed(item.server, item.tool))
+          isRowlessCall(item.server, item.tool) &&
+          !(done && item.status === 'failed' && isRowWhenFailed(item.server, item.tool))
         ) {
           break
         }
