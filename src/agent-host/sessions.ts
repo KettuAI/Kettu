@@ -9389,8 +9389,13 @@ export class SessionManager {
     const entry = live.thread.byId[turn.entryId]
     if (entry?.kind !== 'user' || entry.from?.sessionId !== starterId) return
     if (entry.from.report === false) return
-    const text = reportText(this.agentName(live.id), live.id, stopReason)
-    const from: FromSession = { sessionId: live.id, title: this.toolName(live.id) }
+    const agent = this.agentName(live.id)
+    const text = reportText(agent, live.id, stopReason)
+    const from: FromSession = {
+      sessionId: live.id,
+      title: this.toolName(live.id),
+      ended: { agent, stopReason },
+    }
     queueMicrotask(() => {
       void this.deliverReport(starterId, text, from).catch((error: unknown) => {
         this.deps.diagnostics.log(

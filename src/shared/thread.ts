@@ -195,6 +195,11 @@ export interface FromSession {
   title: string
   /** The sender asked not to be told when the turn this message begins ends. */
   report?: false
+  /**
+   * Set on Kettu's report of a turn the receiver asked this session for: the agent's name and how
+   * the turn ended, null for a failure. The thread draws it from these, not from the message text.
+   */
+  ended?: { agent: string; stopReason: StopReason | null }
 }
 
 /** The paired device a message or answer came from, under the name the host lists it by. */

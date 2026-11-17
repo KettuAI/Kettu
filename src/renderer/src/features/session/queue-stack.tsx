@@ -16,6 +16,7 @@ import { agentsOn, useAgentsStore } from '@renderer/stores/agents'
 import { hostOfSession } from '@renderer/stores/sessions'
 import { restoreAttachments } from './composer/attachments'
 import { Glyph } from '@renderer/features/shell/glyph'
+import { reportSentence } from './entries/helpers'
 
 function promptText(item: QueuedPrompt): string {
   return item.content
@@ -273,7 +274,8 @@ export function QueueStack({
     >
       {queue.map((item, i) => {
         const p = place(i)
-        const text = promptText(item)
+        // A report is drawn from its fields, as in the thread, not from the sentence the agent gets.
+        const text = item.from?.ended ? reportSentence(item.from.ended) : promptText(item)
         const attachments = queuedAttachments(item).length
         return (
           <div
@@ -315,6 +317,11 @@ export function QueueStack({
             {item.device && (
               <span className="kettu-queue__from">
                 {t('queue.from', { device: item.device.name })}
+              </span>
+            )}
+            {item.from && (
+              <span className="kettu-queue__from">
+                {t('queue.fromSession', { title: item.from.title })}
               </span>
             )}
             {i === 0 && queuePaused && (
