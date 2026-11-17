@@ -3,8 +3,9 @@
 // for an agent without a side question of its own, and the side chat as the thread stores it.
 
 import { harnessOf } from '@shared/agents'
-import type { AgentId, SideChatCarried, SideChatEntry, SideChatRoute } from '@shared/thread'
+import type { AgentId, SideChatEntry, SideChatRoute, SideChatSaw } from '@shared/thread'
 import { removesHiddenSessions } from './acp/hidden-sessions'
+import type { CarriedContext } from './carried-context'
 import type { PromptBlock, SideQuestion } from './connection'
 import type { HiddenRuntime } from './reports'
 
@@ -17,7 +18,7 @@ export const SIDE_TEXT_MS = 80
 /** The steps a read-only answer lists at most. */
 export const SIDE_STEPS = 8
 /** The earlier side questions a follow-up carries at most. */
-const SIDE_HISTORY = 10
+const SIDE_HISTORY = 20
 const SIDE_HISTORY_CHARS = 24_000
 
 /** How a session's own agent answers side questions, as far as is known before it starts. */
@@ -117,17 +118,31 @@ export function hiddenPrompt(
   ].join('\n\n')
 }
 
-/** What of the conversation a hidden session was given, as the side chat names it. */
-export function carriedOf(
-  carried: { turns: number; omitted: number; keepsFirst: boolean; text: string } | null,
-): SideChatCarried {
-  if (!carried) return { first: false, recent: 0, omitted: 0, bytes: 0 }
+/** What an answer from the agent's own side question or fork saw: the whole conversation. */
+export function ownSaw(route: 'claude' | 'codex', compacted = 0): SideChatSaw {
   return {
-    first: carried.keepsFirst,
-    recent: carried.turns,
-    omitted: carried.omitted,
-    bytes: Buffer.byteLength(carried.text, 'utf8'),
+    source: route === 'claude' ? 'agent' : 'fork',
+    compacted,
+    copy: null,
+    fellBackFrom: null,
   }
+}
+
+/** What a hidden session was given of the conversation, as the side chat names it. */
+export function copySaw(
+  carried: CarriedContext | null,
+  fellBackFrom: SideChatSaw['fellBackFrom'],
+  compacted: number,
+): SideChatSaw {
+  const copy = carried
+    ? {
+        turns: carried.turns,
+        total: carried.total,
+        first: carried.keepsFirst,
+        bytes: Buffer.byteLength(carried.text, 'utf8'),
+      }
+    : { turns: 0, total: 0, first: false, bytes: 0 }
+  return { source: 'copy', compacted, copy, fellBackFrom }
 }
 
 export interface HiddenAnswerRequest {

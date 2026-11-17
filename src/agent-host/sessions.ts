@@ -109,6 +109,7 @@ import {
   type ProjectMcpDecision,
   type ProjectMcpEntry,
   type SideChatEntry,
+  type SideChatSaw,
   type SideChatView,
   type ThreadEntry,
   type ThreadState,
@@ -232,6 +233,8 @@ import type { PrepareState, SetupLog, WorktreeManager } from './worktrees/manage
 import { BranchNaming } from './worktrees/naming'
 import {
   carriedContext,
+  compactedTurns,
+  sideContext,
   threadTurns,
   type CarriedContext,
   type RenderedTurn,
@@ -254,8 +257,9 @@ import {
   SIDE_TEXT_MS,
   answerHidden,
   answersForOthers,
-  carriedOf,
+  copySaw,
   hiddenPrompt,
+  ownSaw,
   questionText,
   sideHistory,
   sideRoute,
@@ -8246,16 +8250,17 @@ export class SessionManager {
       )
     }
     this.deps.agents.assertEnabled(answering)
+    const route = answering === record.agentId && own !== 'none' ? own : 'hidden'
     const entry: SideChatEntry = {
       id: randomUUID(),
       question,
       quote,
       agentId: answering,
-      route: answering === record.agentId && own !== 'none' ? own : 'hidden',
+      route,
       status: 'answering',
       answer: '',
       steps: [],
-      carried: null,
+      saw: route === 'hidden' ? null : ownSaw(route, compactedTurns(threadEntries(live.thread))),
       error: null,
       askedAt: this.now(),
       answeredAt: null,
@@ -8340,10 +8345,11 @@ export class SessionManager {
           'info',
           `The side question of ${live.id} goes to a hidden session: ${error.message}`,
         )
-        this.patchSideEntry(live, entry.id, { route: 'hidden' })
+        this.patchSideEntry(live, entry.id, { route: 'hidden', saw: null })
+        return this.sideHidden(live, entry, ask, events, signal, entry.route)
       }
     }
-    return this.sideHidden(live, entry, ask, events, signal)
+    return this.sideHidden(live, entry, ask, events, signal, null)
   }
 
   private async sideOwn(
@@ -8380,20 +8386,25 @@ export class SessionManager {
     ask: Pick<SideQuestion, 'question' | 'history'>,
     events: SideAnswerEvents,
     signal: AbortSignal,
+    fellBackFrom: SideChatSaw['fellBackFrom'],
   ): Promise<SideAnswer> {
     const runtime = await this.deps.agents.ensureReady(entry.agentId)
-    const carried = carriedContext(threadEntries(live.thread), {
+    // The session's own window only counts when its own agent answers.
+    const own = entry.agentId === live.record.agentId
+    const carried = sideContext(threadEntries(live.thread), {
       firstAgent: this.firstAgentOf(live.record),
       agentName: (agentId) => this.deps.agents.name(agentId),
-      side: true,
+      ...(own && live.thread.session.usage?.size ? { window: live.thread.session.usage.size } : {}),
     })
-    this.patchSideEntry(live, entry.id, { carried: carriedOf(carried) })
+    this.patchSideEntry(live, entry.id, {
+      saw: copySaw(carried, fellBackFrom, compactedTurns(threadEntries(live.thread))),
+    })
     // Kettu's own folder, never the project's: an agent without permissions could change it.
     await mkdir(this.deps.reportsDir, { recursive: true })
     const text = await answerHidden(runtime, {
       dir: this.deps.reportsDir,
       prompt: hiddenPrompt(carried?.text ?? null, ask),
-      model: entry.agentId === live.record.agentId ? modelOf(live.thread.session.config) : null,
+      model: own ? modelOf(live.thread.session.config) : null,
       signal,
       text: events.text,
       log: (message) => this.deps.diagnostics.log('warn', message),

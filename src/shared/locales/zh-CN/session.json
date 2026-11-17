@@ -1198,7 +1198,7 @@
     },
     "empty": {
       "title": "问 {{agent}} 一句",
-      "claudeSees": "看得到这个会话到现在的对话，连正在跑的这一轮",
+      "claudeSees": "看得到这个会话到现在的全部对话，连正在跑的这一轮，只缺还在写的那条回复",
       "codexSees": "看得到这个会话到现在的全部对话，连正在跑的这一轮已做完的部分",
       "noInterrupt": "不打断它，问答也不进对话",
       "claudeTools": "不用工具；要查文件、跑命令，请在主对话里说",
@@ -1206,15 +1206,15 @@
       "claudeCost": "用这个会话的额度、和主会话共用缓存；Claude Code 不单独报侧聊的用量，用量页里没有这部分",
       "codexCost": "用这个会话的额度、和主会话共用缓存",
       "hiddenHow": "{{agent}} 没有自带的侧问，Kettu 开一个用完即删的临时会话来答",
-      "hiddenCarried": "带上最近的对话，最多约 16k token，早前的工具输出会截掉",
+      "hiddenCarried": "放得下模型的窗口就带上全部对话，放不下带第一条请求和最近的几轮，并写明带了多少",
       "hiddenCost": "和主会话不共用缓存，第一问要全价付这段对话、慢几秒，追问会便宜下来"
     },
     "pick": {
       "title": "{{agent}} 还不能侧聊",
-      "why": "它开的临时会话现在删不干净，会留在它自己的会话历史里。可以换一个 Agent 来答，Kettu 带上这个会话最近的对话。",
+      "why": "它开的临时会话现在删不干净，会留在它自己的会话历史里。可以换一个 Agent 来答，Kettu 带上这个会话的对话。",
       "before": "由",
       "after": "来答",
-      "cost": "花的是 {{agent}} 的额度；带上的对话最多约 16k token。",
+      "cost": "花的是 {{agent}} 的额度；放得下就带上全部对话，放不下带第一条请求和最近的几轮。",
       "ask": "用 {{agent}} 问",
       "none": "这台电脑上没有能侧聊的 Agent。",
       "change": "换一个 Agent 来答"
@@ -1226,9 +1226,19 @@
     "quote": "引用到输入框",
     "copy": "复制",
     "copied": "已复制",
-    "carried_other": "带上了第一条请求和最近 {{count}} 轮 · 约 {{tokens}}k token",
-    "carriedAll_other": "带上了全部 {{count}} 轮对话 · 约 {{tokens}}k token",
-    "carriedNone": "会话还没有对话",
+    "saw": {
+      "agent": "看到整段对话 · {{agent}} 自带的侧问",
+      "fork": "看到整段对话 · 临时分叉",
+      "agentCompacted": "看到的是 Agent 现在记得的对话 · {{agent}} 自带的侧问",
+      "forkCompacted": "看到的是 Agent 现在记得的对话 · 临时分叉",
+      "compacted_other": "Agent 压缩过上下文：前 {{count}} 轮只在它的摘要里",
+      "compactedNone": "Agent 压缩过上下文，之后还没有新的对话",
+      "copyAfter_other": "看到压缩之后的全部 {{count}} 轮对话 · 约 {{tokens}}k token · 临时会话",
+      "none": "会话还没有对话",
+      "copyAll_other": "看到全部 {{count}} 轮对话 · 约 {{tokens}}k token · 临时会话",
+      "copyPart_other": "看到第一条请求和最近 {{count}} 轮，共 {{total}} 轮 · 约 {{tokens}}k token · 临时会话",
+      "fellBack": "{{agent}} 自带的侧问用不了，改由临时会话来答"
+    },
     "step": {
       "read": "读了 {{title}}",
       "search": "搜索了 {{title}}",

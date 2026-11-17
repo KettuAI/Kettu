@@ -9,7 +9,7 @@ import {
   Search01Icon,
 } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
-import type { AgentId, SideChatEntry, SideChatView } from '@shared/thread'
+import type { AgentId, SideChatEntry, SideChatSaw, SideChatView } from '@shared/thread'
 import type { SideChatAgent } from '@shared/agent-host'
 import { emitAppEvent } from '@renderer/app/events'
 import { AgentMark } from '@renderer/components/agents/agent-mark'
@@ -424,7 +424,30 @@ function SideEntry({
   const seconds =
     entry.answeredAt !== null ? Math.max(0.1, (entry.answeredAt - entry.askedAt) / 1000) : null
   const step = entry.steps[0]
-  const carried = entry.carried
+  const saw = entry.saw
+  const sawLabel = (seen: SideChatSaw): string => {
+    const compacted = seen.compacted > 0
+    if (seen.source === 'agent') {
+      return t(compacted ? 'sideChat.saw.agentCompacted' : 'sideChat.saw.agent', {
+        agent: agentName(ownAgent, hostId),
+      })
+    }
+    if (seen.source === 'fork') {
+      return t(compacted ? 'sideChat.saw.forkCompacted' : 'sideChat.saw.fork')
+    }
+    const copy = seen.copy
+    if (!copy || copy.turns === 0) {
+      return t(compacted ? 'sideChat.saw.compactedNone' : 'sideChat.saw.none')
+    }
+    const tokens = Math.max(1, Math.round(copy.bytes / 1000))
+    if (copy.first) {
+      return t('sideChat.saw.copyPart', { count: copy.turns, total: copy.total, tokens })
+    }
+    return t(compacted ? 'sideChat.saw.copyAfter' : 'sideChat.saw.copyAll', {
+      count: copy.turns,
+      tokens,
+    })
+  }
 
   const copy = () => {
     void navigator.clipboard.writeText(entry.answer).then(() => {
@@ -460,20 +483,22 @@ function SideEntry({
           </span>
         </p>
       )}
-      {carried && entry.route === 'hidden' && (
+      {saw && (entry.status !== 'failed' || saw.source === 'copy') && (
         <p className="kc-meta">
           <PaneIcon icon={File01Icon} size={12} />
-          {carried.recent === 0
-            ? t('sideChat.carriedNone')
-            : carried.first
-              ? t('sideChat.carried', {
-                  count: carried.recent,
-                  tokens: Math.max(1, Math.round(carried.bytes / 1000)),
-                })
-              : t('sideChat.carriedAll', {
-                  count: carried.recent,
-                  tokens: Math.max(1, Math.round(carried.bytes / 1000)),
-                })}
+          {sawLabel(saw)}
+        </p>
+      )}
+      {saw && saw.compacted > 0 && saw.copy?.turns !== 0 && (
+        <p className="kc-meta">
+          <PaneIcon icon={File01Icon} size={12} />
+          {t('sideChat.saw.compacted', { count: saw.compacted })}
+        </p>
+      )}
+      {saw?.fellBackFrom && (
+        <p className="kc-meta">
+          <PaneIcon icon={File01Icon} size={12} />
+          {t('sideChat.saw.fellBack', { agent: agentName(ownAgent, hostId) })}
         </p>
       )}
       {entry.answer !== '' && (

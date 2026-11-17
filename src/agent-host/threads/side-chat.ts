@@ -1,7 +1,7 @@
 // The side chat as the thread stores it: what was asked beside a session and the agent picked to
 // answer for it. Read back with every damaged entry dropped on its own.
 
-import type { AgentId, SideChatCarried, SideChatEntry, SideChatStep } from '@shared/thread'
+import type { AgentId, SideChatEntry, SideChatSaw, SideChatStep } from '@shared/thread'
 
 /** The side questions a session keeps; older ones go. */
 export const SIDE_ENTRIES = 50
@@ -26,19 +26,56 @@ function stepOf(value: unknown): SideChatStep | null {
   return { kind: value.kind as SideChatStep['kind'], title: value.title }
 }
 
-function carriedOfStored(value: unknown): SideChatCarried | null {
+const SAW_SOURCES: ReadonlySet<unknown> = new Set(['agent', 'fork', 'copy'])
+const FELL_BACK: ReadonlySet<unknown> = new Set(['claude', 'codex'])
+
+const isCount = (n: unknown): n is number => typeof n === 'number' && Number.isFinite(n) && n >= 0
+
+function sawOfStored(value: unknown): SideChatSaw | null {
+  if (!isRecord(value) || !SAW_SOURCES.has(value.source)) return null
+  let copy: SideChatSaw['copy'] = null
+  if (value.copy !== null && value.copy !== undefined) {
+    const stored = value.copy
+    if (
+      !isRecord(stored) ||
+      typeof stored.first !== 'boolean' ||
+      !isCount(stored.turns) ||
+      !isCount(stored.total) ||
+      !isCount(stored.bytes)
+    ) {
+      return null
+    }
+    copy = { turns: stored.turns, total: stored.total, first: stored.first, bytes: stored.bytes }
+  }
+  if (value.source === 'copy' && copy === null) return null
+  return {
+    source: value.source as SideChatSaw['source'],
+    compacted: isCount(value.compacted) ? value.compacted : 0,
+    copy,
+    fellBackFrom: FELL_BACK.has(value.fellBackFrom)
+      ? (value.fellBackFrom as NonNullable<SideChatSaw['fellBackFrom']>)
+      : null,
+  }
+}
+
+// Entries stored before `saw` kept what a hidden session was given as `carried`.
+function sawOfLegacy(value: unknown): SideChatSaw | null {
   if (!isRecord(value)) return null
   const { first, recent, omitted, bytes } = value
-  if (typeof first !== 'boolean') return null
-  if (![recent, omitted, bytes].every((n) => typeof n === 'number' && Number.isFinite(n))) {
+  if (typeof first !== 'boolean' || !isCount(recent) || !isCount(omitted) || !isCount(bytes)) {
     return null
   }
-  return { first, recent: recent as number, omitted: omitted as number, bytes: bytes as number }
+  return {
+    source: 'copy',
+    compacted: 0,
+    copy: { turns: recent, total: recent + omitted, first, bytes },
+    fellBackFrom: null,
+  }
 }
 
 function entryOf(value: unknown): SideChatEntry | null {
   if (!isRecord(value)) return null
-  const { id, question, quote, agentId, route, status, answer, steps, carried, error } = value
+  const { id, question, quote, agentId, route, status, answer, steps, error } = value
   if (
     typeof id !== 'string' ||
     typeof question !== 'string' ||
@@ -63,7 +100,7 @@ function entryOf(value: unknown): SideChatEntry | null {
     status: status === 'answering' ? 'stopped' : (status as SideChatEntry['status']),
     answer,
     steps: Array.isArray(steps) ? steps.flatMap((step) => stepOf(step) ?? []) : [],
-    carried: carriedOfStored(carried),
+    saw: sawOfStored(value.saw) ?? sawOfLegacy(value.carried),
     error,
     askedAt: value.askedAt,
     answeredAt: value.answeredAt,
