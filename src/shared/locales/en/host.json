@@ -229,6 +229,9 @@
       "offline": "The npm registry could not be reached.",
       "timeout": "npm did not answer within {{seconds}} s.",
       "noVersion": "npm named no version of {{package}}.",
+      "registryOffline": "The ACP Registry could not be reached.",
+      "registryTimeout": "The ACP Registry did not answer within {{seconds}} s.",
+      "registryUnreadable": "The ACP Registry's listing could not be read.",
       "stopped": "The check was stopped."
     },
     "binaryInstall": {

@@ -59,6 +59,7 @@ import {
   readInstallFiles,
   removeInstall,
   removeOlderInstalls,
+  removeTree,
   runProgram,
   type InstalledAdapter,
   type InstallOptions,
@@ -83,6 +84,8 @@ import type { AgentTrees } from './agent-trees'
 import { decideUpdate, fetchLatest, type LatestOptions } from './agent-updates'
 import {
   installArchive,
+  listArchiveInstalls,
+  removeOlderArchives,
   type ArchiveInstallOptions,
   type InstalledArchive,
 } from './archive-install'
@@ -132,11 +135,20 @@ import { readProviderUsage, type ProviderUsage } from './opencode/provider-usage
 import { claudeJsonPath, readClaudeProfile } from './plan-tier'
 import { QUIT_REASON, type ToolOptions } from './process-tree'
 import { formatCommand } from './quote'
+import {
+  fetchRegistry,
+  followsRegistry,
+  registryRelease,
+  type RegistryAgents,
+  type RegistryFetchOptions,
+  type RegistryRelease,
+} from './registry'
 import { hasContextReport, limitsReport, runReport, type LimitsReport } from './reports'
 import { TextRing } from './ring'
 import { allowedLimit, mergeReadLimits, planWindow } from './session-updates'
 import type { EnvironmentService } from './shell-env'
 import type { AgentsFile, AgentUpdatesFile, RememberedInit } from './storage'
+import { uvxFetchArgs, writeUvxVersion } from './uvx-install'
 import { compareVersions, versionAtLeast } from './versions'
 
 /** The process a process driver speaks over. */
@@ -262,6 +274,8 @@ export interface AgentManagerDeps extends DriverOverrides {
   installArchive?(options: ArchiveInstallOptions): Promise<InstalledArchive>
   /** Asks npm for an adapter's newest version and the CLI it carries. */
   fetchLatest?(options: LatestOptions): Promise<AgentUpdate>
+  /** Reads the ACP Registry's listing, for the harnesses Kettu installed from it. */
+  fetchRegistry?(options: RegistryFetchOptions): Promise<RegistryAgents>
   /** Runs a binary agent's install route, and `npm prefix -g` after one. */
   runProgram?(options: ProgramOptions): Promise<ProgramRun>
   /** Asks the user's own Claude Code or Codex its version, in place of `cliVersions`. */
@@ -1267,7 +1281,12 @@ export class AgentManager {
     const { h } = slot
     const detection = h.detection
     const { launch } = h.def
-    if (detection?.state !== 'available' || launch.kind !== 'package') return
+    if (detection?.state !== 'available') return
+    if (detection.release?.dir) {
+      this.cleanUpArchives(slot, detection.release.dir)
+      return
+    }
+    if (launch.kind !== 'package') return
     const current = detection.adapter?.current
     if (!current || !detection.spec || slot.launchSpec !== detection.spec) return
     if (h.cleanedDir === current.dir) return
@@ -1285,6 +1304,37 @@ export class AgentManager {
           'warn',
           `${h.def.name}: could not remove older versions: ${(error as Error).message}`,
         ),
+    )
+  }
+
+  /**
+   * Once the archive install a start picks runs, the older versions go. A native program may still
+   * read files of its folder while it runs, so they stay while another agent of the harness runs
+   * another program, and are removed at a later start.
+   */
+  private cleanUpArchives(slot: Slot, dir: string): void {
+    const { h } = slot
+    const detection = h.detection
+    if (detection?.state !== 'available' || !detection.spec) return
+    if (slot.launchSpec !== detection.spec || h.cleanedDir === dir) return
+    const command = detection.spec.command
+    const others = this.agentsOf(h).some(
+      (agent) => agent.launched && agent.launchSpec?.command !== command,
+    )
+    if (others || this.agentsOf(h).some((agent) => this.givenUpRuns(agent))) return
+    h.cleanedDir = dir
+    void (async () => {
+      const keep = (await listArchiveInstalls(this.deps.adaptersDir, h.def.id)).find(
+        (install) => install.dir === dir,
+      )
+      if (!keep) return
+      const removed = await removeOlderArchives(this.deps.adaptersDir, h.def.id, keep)
+      if (removed.length > 0) this.deps.diagnostics.event(slot.id, 'removed', removed.join(', '))
+    })().catch((error: unknown) =>
+      this.deps.diagnostics.log(
+        'warn',
+        `${h.def.name}: could not remove older versions: ${(error as Error).message}`,
+      ),
     )
   }
 
@@ -1470,6 +1520,8 @@ export class AgentManager {
    * pin at least.
    */
   private updateOf(h: Harness): AgentUpdate | null {
+    const release = this.release(h)
+    if (release) return decideUpdate(h.latest, { version: release.version, cliVersion: null })
     const detection = h.detection
     const adapter = detection?.state === 'available' ? detection.adapter : null
     const running = adapter?.current ?? adapter?.fallback
@@ -1546,9 +1598,22 @@ export class AgentManager {
     }
   }
 
-  /** Kettu's own package for it, or the user's program, which npm publishes, is checked. */
+  /**
+   * Kettu's own package for it, the user's program, which npm publishes, or Kettu's install of a
+   * registry release is checked. A binary harness's archive counts only while it runs, since the
+   * user's own program keeps its own updates; before detection, it may.
+   */
   private checksUpdates(h: Harness): boolean {
-    return h.def.launch.kind === 'package' || !!h.def.installs?.npm
+    const { launch } = h.def
+    if (launch.kind === 'package' || launch.kind === 'uvx' || h.def.installs?.npm) return true
+    return followsRegistry(h.def) && (h.detection === null || !!this.release(h))
+  }
+
+  /** Kettu's install of the harness's registry release that a start runs; null for the others. */
+  private release(h: Harness): { version: string; dir: string | null } | null {
+    const detection = h.detection
+    if (!followsRegistry(h.def) || detection?.state !== 'available') return null
+    return detection.release ?? null
   }
 
   /**
@@ -1588,13 +1653,15 @@ export class AgentManager {
   }
 
   /**
-   * The harnesses a check can ask npm about: those with a package of Kettu's whose npm was found,
-   * and those whose user's program is installed, whose versions npm publishes too.
+   * The harnesses a check can ask about: those running Kettu's install of a registry release, which
+   * the registry lists, those with a package of Kettu's whose npm was found, and those whose
+   * user's program is installed, whose versions npm publishes too.
    */
   private checkable(): Harness[] {
     const npm = this.deps.env.nodeProbe().npmPath
     return [...this.harnesses.values()].filter((h) => {
       const detection = h.detection
+      if (this.release(h)) return true
       if (h.def.launch.kind === 'package') {
         return detection?.state === 'available' && !!detection.adapter?.npm
       }
@@ -1622,7 +1689,12 @@ export class AgentManager {
       this.updateAbort = abort
       const now = Date.now()
       const harnesses = this.checkable().filter((h) => all || this.checkDue(h) <= now)
-      const results = await Promise.all(harnesses.map((h) => this.checkHarness(h, abort.signal)))
+      // One read of the registry's listing serves every harness it is asked about.
+      let listing: Promise<RegistryAgents> | null = null
+      const registry = (): Promise<RegistryAgents> => (listing ??= this.readRegistry(abort.signal))
+      const results = await Promise.all(
+        harnesses.map((h) => this.checkHarness(h, abort.signal, registry)),
+      )
       return { checked: harnesses.length, failures: results.filter((r) => r !== null) }
     })().finally(() => {
       if (this.updateCheck !== run) return
@@ -1635,7 +1707,27 @@ export class AgentManager {
     return run
   }
 
-  private async checkHarness(h: Harness, signal: AbortSignal): Promise<string | null> {
+  private readRegistry(signal?: AbortSignal): Promise<RegistryAgents> {
+    return (this.deps.fetchRegistry ?? fetchRegistry)({
+      timeoutMs: this.timings.updateViewMs,
+      ...(signal ? { signal } : {}),
+    })
+  }
+
+  /** The release the registry lists for the harness on this computer, or why there is none. */
+  private registryReleaseOf(
+    h: Harness,
+    agents: RegistryAgents,
+  ): RegistryRelease | { reason: string } {
+    return registryRelease(agents, h.def, this.deps.platform, process.arch)
+  }
+
+  private async checkHarness(
+    h: Harness,
+    signal: AbortSignal,
+    registry: () => Promise<RegistryAgents>,
+  ): Promise<string | null> {
+    if (this.release(h)) return this.checkRegistry(h, registry)
     const { launch } = h.def
     const detection = h.detection
     const npm =
@@ -1688,6 +1780,40 @@ export class AgentManager {
     }
   }
 
+  /**
+   * Checks the registry's latest release of a harness Kettu installed from it. A release Kettu
+   * cannot install, such as an archive without a SHA-256, is no update.
+   */
+  private async checkRegistry(
+    h: Harness,
+    registry: () => Promise<RegistryAgents>,
+  ): Promise<string | null> {
+    try {
+      const found = this.registryReleaseOf(h, await registry())
+      if ('reason' in found) {
+        h.latest = null
+        this.deps.diagnostics.log(
+          'info',
+          `${h.def.name}: no update from the registry: ${found.reason}`,
+        )
+      } else {
+        h.latest = { adapterVersion: found.version, cliVersion: null }
+      }
+      h.checkedAt = Date.now()
+      h.attemptedAt = h.checkedAt
+      const result = 'reason' in found ? 'none' : `registry ${found.version}`
+      this.deps.diagnostics.event(h.def.id, 'update check', result)
+      this.emit(this.home(h))
+      return null
+    } catch (error) {
+      const message = (error as Error).message
+      this.deps.diagnostics.log('warn', `${h.def.name}: the update check failed: ${message}`)
+      h.attemptedAt = Date.now()
+      this.emit(this.home(h))
+      return message
+    }
+  }
+
   /** The user's check: resolves with the statuses, or rejects when no harness could be checked. */
   async checkUpdates(): Promise<AgentStatus[]> {
     const { checked, failures } = await this.runUpdateCheck(true)
@@ -1705,6 +1831,10 @@ export class AgentManager {
   async update(agentId: AgentId): Promise<void> {
     const { h } = this.slot(agentId)
     const { launch } = h.def
+    if (followsRegistry(h.def)) {
+      await this.detectAll()
+      return this.updateRelease(h)
+    }
     if (launch.kind !== 'package') {
       throw invalidParams(`${h.def.name} is not installed by Kettu`)
     }
@@ -1720,6 +1850,107 @@ export class AgentManager {
       (signal, onOutput) => this.installUpdate(h, update, signal, onOutput),
       (message) => t('agent.updateFailed', { agent: h.def.name, message }),
     )
+  }
+
+  /**
+   * Installs the registry's latest release beside the one that runs, which keeps running; a start
+   * after it runs the new one. An archive is installed only when its download matches the hash
+   * the registry gives, and a uvx package is recorded only once uv has fetched it, so a failure
+   * leaves the current version as it was.
+   */
+  private async updateRelease(h: Harness): Promise<void> {
+    const agent = h.def.name
+    const running = this.release(h)
+    if (!running || !this.updateOf(h)) throw invalidParams(t('agent.update.none', { agent }))
+    this.assertNoInstall(h)
+    const found = this.registryReleaseOf(h, await this.readRegistry())
+    if ('reason' in found || compareVersions(found.version, running.version) <= 0) {
+      if ('reason' in found) {
+        this.deps.diagnostics.log('info', `${agent}: no update from the registry: ${found.reason}`)
+      }
+      h.latest = 'reason' in found ? null : { adapterVersion: found.version, cliVersion: null }
+      this.emit(this.home(h))
+      throw invalidParams(t('agent.update.none', { agent }))
+    }
+    this.assertNoInstall(h)
+    const failure = (message: string): string => t('agent.updateFailed', { agent, message })
+    if (found.kind === 'archive') {
+      const { entry } = found
+      await this.runTask(
+        h,
+        'update',
+        entry.url,
+        async (signal, onOutput) => {
+          const { platform, diagnostics } = this.deps
+          const started = Date.now()
+          diagnostics.event(h.def.id, 'update', `${found.version} from ${entry.url}`)
+          const installed = await (this.deps.installArchive ?? installArchive)({
+            root: this.deps.adaptersDir,
+            agentId: h.def.id,
+            version: found.version,
+            url: entry.url,
+            sha256: entry.sha256,
+            cmd: entry.cmd,
+            ...(entry.args ? { args: entry.args } : {}),
+            ...(entry.bare ? { bare: true as const } : {}),
+            platform,
+            timeoutMs: this.timings.installMs,
+            signal,
+            onOutput,
+          })
+          diagnostics.event(
+            h.def.id,
+            'updated',
+            `${installed.version} in ${Date.now() - started} ms`,
+          )
+          await this.updated(h, found.version)
+          // One whose program cannot run goes, and the version before it runs on.
+          const runs = this.release(h)
+          if (runs && runs.dir !== installed.dir) {
+            await removeTree(installed.dir)
+            throw new Error(t('agent.binaryInstall.incomplete', { agent }))
+          }
+        },
+        failure,
+      )
+      return
+    }
+    const uvx = h.detection?.state === 'available' ? h.detection.spec?.command : null
+    if (!uvx || h.def.launch.kind !== 'uvx') throw invalidParams(t('agent.update.none', { agent }))
+    const args = uvxFetchArgs(h.def.launch.package, found.version)
+    const { platform } = this.deps
+    const command = formatCommand({ command: 'uvx', args }, platform)
+    await this.runTask(
+      h,
+      'update',
+      command,
+      async (signal, onOutput) => {
+        this.deps.diagnostics.event(h.def.id, 'update', command)
+        const timeoutMs = this.timings.installMs
+        const result = await (this.deps.runProgram ?? runProgram)({
+          program: uvx,
+          args,
+          cwd: os.homedir(),
+          env: this.deps.env.agentEnv(h.def.id),
+          platform,
+          timeoutMs,
+          signal,
+          onOutput,
+        })
+        const problem = programFailure('uvx', result, timeoutMs)
+        if (problem) throw new Error(problem)
+        await writeUvxVersion(this.deps.adaptersDir, h.def.id, found.version)
+        await this.updated(h, found.version)
+      },
+      failure,
+    )
+  }
+
+  /** Detects the harness again after its update, which is the latest found and no longer skipped. */
+  private async updated(h: Harness, version: string): Promise<void> {
+    await this.detect(h)
+    h.skipped = null
+    h.latest = { adapterVersion: version, cliVersion: null }
   }
 
   private packageUpdateCommand(h: Harness, update: AgentUpdate): string {
@@ -3563,6 +3794,7 @@ export class AgentManager {
     const detection = h.detection
     const adapter = detection?.state === 'available' ? detection.adapter : null
     const update = this.updateOf(h)
+    const release = this.release(h)
     const harnessSettings = this.deps.settings().agents[slot.def.id]
     const color = slot.added ? agentColor(this.deps.settings().addedAgents, slot.id) : null
     const cliVersion = this.cliUpdateVersion(h)
@@ -3599,6 +3831,7 @@ export class AgentManager {
               ...(launch.library ? { isSdk: true as const } : {}),
             }
           : null,
+      release: release ? { version: release.version } : null,
       signIn: slot.signIn,
       authMethods,
       canLogout: capabilities?.logout ?? false,

@@ -58,7 +58,12 @@ import { QWEN } from './agents/qwen'
 import { SIGIT } from './agents/sigit'
 import { STAKPAK } from './agents/stakpak'
 import { VTCODE } from './agents/vtcode'
-import { listArchiveInstalls, programPath, type InstalledArchive } from './archive-install'
+import {
+  archivesFromPin,
+  listArchiveInstalls,
+  programPath,
+  type InstalledArchive,
+} from './archive-install'
 import type { BinaryInstalls } from './binary-install'
 import type { AdapterLookup } from './codex-binary'
 import { findCommand, needsShell, type Env } from './find-command'
@@ -73,6 +78,7 @@ import {
   type FoundCli,
 } from './installed-cli'
 import { satisfiesNode, type ConfigFolder, type NodeProbe } from './shell-env'
+import { readUvxVersion } from './uvx-install'
 import { compareVersions } from './versions'
 
 /** The router's flag that starts each session's process in the session's folder. */
@@ -463,6 +469,11 @@ export type Detection =
       requires?: { program: string; version: string }
       /** The user's CLI that runs, for a harness with a `cli`. */
       cli?: InstalledCli
+      /**
+       * Kettu's own install of a registry release that a start runs: a release archive and its
+       * folder, or a uvx package's version, which uv keeps. Absent when the user's program runs.
+       */
+      release?: { version: string; dir: string | null }
     }
   | {
       state: 'not-installed' | 'node-missing' | 'node-outdated'
@@ -562,6 +573,8 @@ export interface DetectContext {
   installed?(agentId: AgentId, packageName: string): Promise<InstalledAdapter[]>
   /** The release archives Kettu has installed; read from disk when not given. */
   installedArchives?(agentId: AgentId): Promise<InstalledArchive[]>
+  /** The uvx version an update recorded; read from disk when not given. */
+  uvxVersion?(agentId: AgentId): Promise<string | null>
   /** Asks a CLI its version; without it, no installed CLI is looked for. */
   probeCli?: CliProbe
   cliFiles?: CliFiles
@@ -582,7 +595,7 @@ function binaryDetection(
   platform: Platform,
   display: CommandWords,
   env: Record<string, string>,
-): Detection {
+): Extract<Detection, { state: 'available' }> {
   return {
     state: 'available',
     spec: {
@@ -973,29 +986,20 @@ export async function detectAgent(def: AgentDefinition, ctx: DetectContext): Pro
       const program = await findCommand(launch.command, ctx)
       if (program) return binaryDetection(program, launch.args, ctx.platform, display, env)
       // The user's own copy wins, so their sign-in and configuration stay; without one,
-      // Kettu's archive install runs.
+      // Kettu's archive install runs: an update when one runs, else the version before it.
       const archive = def.installs?.archive
       if (archive) {
-        const installed = (
-          await (ctx.installedArchives ?? ((id) => listArchiveInstalls(ctx.adaptersDir, id)))(
-            def.id,
-          )
-        ).find((install) => install.version === archive.version)
-        if (installed) {
+        const installs = await (
+          ctx.installedArchives ?? ((id) => listArchiveInstalls(ctx.adaptersDir, id))
+        )(def.id)
+        for (const installed of archivesFromPin(installs, archive.version)) {
           try {
             const command = programPath(installed.dir, installed.cmd, ctx.platform)
-            if (await ctx.isExecutable(command)) {
-              return binaryDetection(
-                command,
-                installed.args,
-                ctx.platform,
-                {
-                  command,
-                  args: installed.args,
-                  env,
-                },
-                env,
-              )
+            if (!(await ctx.isExecutable(command))) continue
+            const display = { command, args: installed.args, env }
+            return {
+              ...binaryDetection(command, installed.args, ctx.platform, display, env),
+              release: { version: installed.version, dir: installed.dir },
             }
           } catch {
             // A record whose command leaves the install folder is no install.
@@ -1015,16 +1019,24 @@ export async function detectAgent(def: AgentDefinition, ctx: DetectContext): Pro
           detail: t('detect.commandMissing', { command: 'uvx', hint: t(def.install.hint) }),
         }
       }
+      // An update runs while it is newer than the pin, which a later Kettu may move past it.
+      const updated = await (ctx.uvxVersion ?? ((id) => readUvxVersion(ctx.adaptersDir, id)))(
+        def.id,
+      )
+      const version =
+        updated && compareVersions(updated, launch.version) > 0 ? updated : launch.version
+      const args = [`${launch.package}==${version}`, ...launch.args]
       return {
         state: 'available',
         spec: {
           command: program,
-          args: [`${launch.package}==${launch.version}`, ...launch.args],
+          args,
           env: { ...def.env },
           shell: needsShell(program, ctx.platform),
-          display,
+          display: { ...display, args },
         },
         adapter: null,
+        release: { version, dir: null },
       }
     }
     case 'node-script': {

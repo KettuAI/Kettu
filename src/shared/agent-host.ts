@@ -318,6 +318,9 @@ export interface AgentStatus {
     isCli?: true
     isSdk?: true
   } | null
+  // Kettu's install from the ACP Registry that a start runs, a release archive or a uvx package,
+  // whose updates the registry lists; null for the others, and absent on older hosts.
+  release?: { version: string } | null
   signIn: 'unknown' | 'signed-in' | 'required'
   authMethods: AgentAuthMethod[]
   canLogout: boolean
@@ -350,7 +353,8 @@ export interface AgentStatus {
   // while none was, and for the others.
   binaryPath?: string | null
   update: AgentUpdate | null // from the last update check; null when up to date or unchecked
-  updateCheckedAt: number | null // when that check finished; always null for binary agents
+  // When that check finished; null for a binary agent unless Kettu installed it from the registry
+  updateCheckedAt: number | null
   updateSkipped: boolean // the user dismissed this update in the sidebar's notice
   task: AgentTask | null
   installMethods: AgentInstallMethod[] // a binary agent's ways to install; empty for the others
