@@ -13,7 +13,15 @@ import {
 import { useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
 import type { AgentAccount, AgentStatus } from '@shared/agent-host'
-import { takesClaudeSettings, takesStartMode } from '@shared/agents'
+import {
+  CODEBUDDY_SITES,
+  KEY_ONLY_ADDED_HARNESSES,
+  signsInWithKeyOnly,
+  takesClaudeSettings,
+  takesCodebuddySettings,
+  takesStartMode,
+  type CodebuddySite,
+} from '@shared/agents'
 import {
   AGENT_COLORS,
   AGENT_NAME_CHARS,
@@ -113,6 +121,7 @@ import {
   Skel,
 } from './controls'
 import { ClaudeSettingsRows } from './claude-settings-rows'
+import { CodebuddySettingsRows } from './codebuddy-settings-rows'
 import { PlaceRow } from './places'
 import {
   DIALOG_FIELD,
@@ -370,6 +379,7 @@ function AddAgentDialog({
   const [folder, setFolder] = useState<'default' | 'new' | 'existing'>('default')
   const [picked, setPicked] = useState<string | null>(null)
   const [login, setLogin] = useState<Login>('terminal')
+  const [site, setSite] = useState<CodebuddySite>('international')
   const [key, setKey] = useState({ baseUrl: '', key: '', model: '' })
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -381,19 +391,23 @@ function AddAgentDialog({
   const trimmed = useDefault ? (chosen?.harnessName ?? '') : name.trim()
   const tooLong = [...trimmed].length > AGENT_NAME_CHARS
   const providers = chosen?.apiKey?.providers ?? false
+  // An added agent of such a harness has no other sign-in, and picks the site its key is from.
+  const keyOnly = !useDefault && !!chosen && KEY_ONLY_ADDED_HARNESSES.includes(chosen.harnessId)
+  const loginMode: Login = keyOnly ? 'api-key' : login
   const valid =
     !!chosen &&
     trimmed.length > 0 &&
     !tooLong &&
     (useDefault || multiple) &&
     (selectedFolder !== 'existing' || picked !== null) &&
-    (useDefault || login === 'terminal' || key.key.trim().length > 0)
+    (useDefault || loginMode === 'terminal' || key.key.trim().length > 0)
 
   const reset = (): void => {
     setName('')
     setFolder('default')
     setPicked(null)
     setLogin('terminal')
+    setSite('international')
     setKey({ baseUrl: '', key: '', model: '' })
     setError(null)
     setBusy(false)
@@ -430,7 +444,10 @@ function AddAgentDialog({
         })
       }
       await listed(useAgentsStore, id)
-      if (!useDefault && login === 'api-key') {
+      if (keyOnly) {
+        await request('agents.setCodebuddySite', { agentId: id, change: { site } })
+      }
+      if (!useDefault && loginMode === 'api-key') {
         await request('agents.setApiKey', {
           agentId: id,
           key: key.key.trim(),
@@ -551,35 +568,56 @@ function AddAgentDialog({
                 )}
               </RadioGroup>
             </SettingsField>
+            {keyOnly && (
+              <SettingsField label={t('agents.add.site')} hint={t('agents.add.siteHint')}>
+                <SettingSelect
+                  label={t('agents.add.site')}
+                  className="k-select--full"
+                  value={site}
+                  options={CODEBUDDY_SITES.map((value) => ({
+                    value,
+                    label: t(`agents.codebuddy.site.${value}`),
+                  }))}
+                  onChange={setSite}
+                />
+              </SettingsField>
+            )}
             {!useDefault && (
-              <SettingsField label={t('agents.add.login')}>
+              <SettingsField
+                label={t('agents.add.login')}
+                hint={keyOnly && t('agents.keyOnly.note', { name: chosen?.harnessName ?? '' })}
+              >
                 <RadioGroup
                   aria-label={t('agents.add.login')}
-                  value={login}
+                  value={loginMode}
                   onValueChange={(next) => setLogin(next as Login)}
                   className="kettu-sd__choices"
                 >
-                  <Choice
-                    value="terminal"
-                    checked={login === 'terminal'}
-                    title={t('agents.add.loginTerminal')}
-                    description={t('agents.add.loginTerminalHint', {
-                      name: chosen?.harnessName ?? '',
-                    })}
-                  />
+                  {!keyOnly && (
+                    <Choice
+                      value="terminal"
+                      checked={loginMode === 'terminal'}
+                      title={t('agents.add.loginTerminal')}
+                      description={t('agents.add.loginTerminalHint', {
+                        name: chosen?.harnessName ?? '',
+                      })}
+                    />
+                  )}
                   <Choice
                     value="api-key"
-                    checked={login === 'api-key'}
+                    checked={loginMode === 'api-key'}
                     title={t('agents.add.loginKey')}
                     description={t(
                       providers
                         ? 'agents.add.loginKeyHint'
                         : chosen?.harnessId === 'deepseek'
                           ? 'agents.add.loginKeyHintDeepSeek'
-                          : 'agents.add.loginKeyHintOpenAi',
+                          : chosen?.harnessId === 'codebuddy'
+                            ? 'agents.add.loginKeyHintCodebuddy'
+                            : 'agents.add.loginKeyHintOpenAi',
                     )}
                     extra={
-                      login === 'api-key' &&
+                      loginMode === 'api-key' &&
                       chosen && <ApiKeyFields status={chosen} value={key} onChange={setKey} />
                     }
                   />
@@ -693,9 +731,14 @@ function ApiKeyFields({
         </>
       )}
       <p className="kettu-sd__hint">
-        {t(providers ? 'agents.key.noteClaude' : 'agents.key.noteCodex', {
-          command: status.cli?.command ?? '',
-        })}
+        {t(
+          providers
+            ? 'agents.key.noteClaude'
+            : status.harnessId === 'codebuddy'
+              ? 'agents.key.noteCodebuddy'
+              : 'agents.key.noteCodex',
+          { command: status.cli?.command ?? '' },
+        )}
       </p>
     </div>
   )
@@ -906,6 +949,11 @@ function AgentPageBody({ status }: { status: AgentStatus }) {
           </p>
         )}
         {status.movedAccounts?.refused && <MovedAccountsNotice status={status} />}
+        {signsInWithKeyOnly(status.id) && (
+          <p className="ui-sg-hint" data-wrap="">
+            {t('agents.keyOnly.note', { name: status.harnessName })}
+          </p>
+        )}
         {!providerMode && r.kind === 'sign-in' && status.authMethods.length > 0 && (
           <div>
             <SignInNotice
@@ -1167,7 +1215,9 @@ function ApiKeyRow({ status }: { status: AgentStatus }) {
                     ? 'agents.key.notSet'
                     : status.harnessId === 'deepseek'
                       ? 'agents.key.notSetDeepSeek'
-                      : 'agents.key.notSetOpenAi',
+                      : status.harnessId === 'codebuddy'
+                        ? 'agents.key.notSetCodebuddy'
+                        : 'agents.key.notSetOpenAi',
                 )
           }
         />
@@ -1236,10 +1286,12 @@ function ApiKeyDialog({
         <form className="contents" onSubmit={(event) => void submit(event)}>
           <SettingsDialogHeader title={t('agents.key.title', { name: status.name })}>
             {status.isDefault &&
-              t('agents.key.defaultWarning', {
-                name: status.harnessName,
-                command: status.cli?.command ?? '',
-              })}
+              (status.cli?.command
+                ? t('agents.key.defaultWarning', {
+                    name: status.harnessName,
+                    command: status.cli.command,
+                  })
+                : t('agents.key.defaultWarningShared', { name: status.harnessName }))}
           </SettingsDialogHeader>
           <SettingsDialogBody>
             <ApiKeyFields status={status} value={value} onChange={setValue} />
@@ -1285,6 +1337,9 @@ function ConfigurationGroup({ status }: { status: AgentStatus }) {
         </RowFrame>
         {takesStartMode(status.id) && <StartModeRow key={status.id} status={status} />}
         {takesClaudeSettings(status.id) && <ClaudeSettingsRows key={status.id} status={status} />}
+        {takesCodebuddySettings(status.id) && (
+          <CodebuddySettingsRows key={status.id} status={status} />
+        )}
         {/* The Marketplace shows this computer's servers only. */}
         {hostId === null && (
           <RowFrame

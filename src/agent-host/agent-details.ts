@@ -134,7 +134,7 @@ export function configLocations(
       )
     }
     case 'codebuddy': {
-      const moved = variable('CODEBUDDY_CONFIG_DIR')
+      const moved = chosen ?? variable('CODEBUDDY_CONFIG_DIR')
       const folder = moved ?? p.join(home, '.codebuddy')
       return layout(
         folder,

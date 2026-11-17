@@ -2413,6 +2413,8 @@ export class AgentHost {
       'agents.claudeSettings': ({ agentId }) =>
         agents.claudeSettings(agentId, listedModels(this.agentOptions.get(agentId)?.config)),
       'agents.setClaudeSetting': ({ agentId, change }) => agents.setClaudeSetting(agentId, change),
+      'agents.codebuddySettings': ({ agentId }) => agents.codebuddySettings(agentId),
+      'agents.setCodebuddySite': ({ agentId, change }) => agents.setCodebuddySite(agentId, change),
       'agents.refreshAccount': ({ agentId, force }) => agents.refreshAccount(agentId, { force }),
       'agents.options': () => this.agentOptions.list().map((o) => this.withStartMode(o)),
       'mcp.status': () => this.mcpStatus(),

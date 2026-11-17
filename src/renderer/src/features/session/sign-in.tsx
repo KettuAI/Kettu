@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import {
   ComputerTerminal01Icon,
   Key01Icon,
@@ -8,6 +8,7 @@ import {
 import { HugeiconsIcon } from '@hugeicons/react'
 import { useTranslation } from 'react-i18next'
 import type { AgentAuthMethod } from '@shared/agent-host'
+import { signsInWithKeyOnly } from '@shared/agents'
 import type { AgentId } from '@shared/thread'
 import { emitAppEvent, onAppEvent } from '@renderer/app/events'
 import { AgentTile } from '@renderer/components/agents/agent-mark'
@@ -52,10 +53,27 @@ export function SignIn({
   onRetry: () => void
 }) {
   const { t } = useTranslation(['session', 'common'])
-  const methods = useAgentsStore(
+  const declared = useAgentsStore(
     (s) => agentsOn(s, hostId).byId[agentId]?.authMethods ?? NO_METHODS,
   )
   const name = agentName(agentId, hostId)
+  // An agent that signs in only with its key declares no method; its key is set on its page.
+  const keyOnly = signsInWithKeyOnly(agentId)
+  const methods = useMemo<AgentAuthMethod[]>(
+    () =>
+      keyOnly
+        ? [
+            {
+              id: 'api-key',
+              name: t('signIn.apiKey'),
+              description: t('signIn.keyOnly', { agent: name }),
+              type: 'env',
+              envVars: [],
+            },
+          ]
+        : declared,
+    [keyOnly, declared, name, t],
+  )
   const [busy, setBusy] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const page = useSignInPage(hostId, agentId)
