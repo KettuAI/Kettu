@@ -1723,29 +1723,13 @@
 .ks-outline[data-open] > .ks-outline__keys {
   outline-color: transparent;
 }
-.ks-outline__preview {
-  max-width: 280px;
-  gap: 8px;
-}
-.ks-outline__count {
-  flex-shrink: 0;
-  font-variant-numeric: tabular-nums;
-  opacity: 0.55;
-}
-/* From dash to dash the preview glides instead of jumping. */
-.ks-outline__glide {
-  transition:
-    top 140ms var(--ease-out-quint),
-    transform 140ms var(--ease-out-quint);
-}
 @media (prefers-reduced-motion: reduce) {
   .ks-outline__row,
-  .ks-outline__dash,
-  .ks-outline__glide {
+  .ks-outline__dash {
     transition: none;
   }
 }
-:root[data-reduce-motion='always'] :is(.ks-outline__row, .ks-outline__dash, .ks-outline__glide) {
+:root[data-reduce-motion='always'] :is(.ks-outline__row, .ks-outline__dash) {
   transition: none;
 }
 .ks-outline__item {
