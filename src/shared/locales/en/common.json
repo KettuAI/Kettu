@@ -59,6 +59,11 @@
     "weeklyOf": "{{model}} weekly",
     "fiveHourOf": "{{model}} 5-hour"
   },
+  "planView": {
+    "label": "Plan limit display",
+    "used": "Used",
+    "left": "Left"
+  },
   "fileManager": {
     "mac": "Finder",
     "windows": "Explorer",

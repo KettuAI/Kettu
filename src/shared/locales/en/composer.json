@@ -103,6 +103,7 @@
     "limits": {
       "plan": "Plan",
       "used": "{{limit}} used",
+      "left": "{{limit}} left",
       "resets": "Resets {{time}}",
       "updated": "Updated {{ago}}",
       "planOf": "Plan · {{plan}}",

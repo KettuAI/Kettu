@@ -158,6 +158,7 @@
       "days": "{{count}} 天"
     },
     "windowUsed": "{{window}}：已用 {{percent}}%。",
+    "windowLeft": "{{window}}：剩余 {{percent}}%。",
     "prepaidBalance": "预付余额",
     "extraUsage": "额外用量",
     "units": {

@@ -4,12 +4,15 @@ import { useTranslation } from 'react-i18next'
 import type { AgentId } from '@shared/thread'
 import { Icon } from '@renderer/components/affect/app-shell'
 import { AgentMark } from '@renderer/components/agents/agent-mark'
+import { LimitViewSwitch } from '@renderer/components/plan-limit-view'
 import { PlanRings } from '@renderer/components/plan-rings'
 import { HoverCard, HoverCardContent, HoverCardTrigger } from '@renderer/components/ui/hover-card'
 import { countdown, planReset } from '@renderer/features/sidebar/plan-usage'
+import { useLimitView } from '@renderer/hooks/use-limit-view'
 import { limitLabel, longAgo, planAmount, planBalance, shortAgo } from '@renderer/lib/format'
 import { errorMessage } from '@renderer/lib/host'
 import { currentLocale } from '@renderer/lib/i18n'
+import { shownPercent } from '@renderer/lib/plan-limit'
 import type { LimitWay } from '@renderer/lib/plan-readings'
 import { useNow } from '@renderer/lib/use-now'
 import { agentsOn, isInstalled, useAgentsStore, usePlanReadings } from '@renderer/stores/agents'
@@ -103,6 +106,7 @@ function HostPlanLimits({ used }: { used: Readonly<Record<string, readonly Agent
       <header className="k-u-sec__head">
         <h2 id="plan-limits-title">{t('limits.title')}</h2>
         {head.length > 0 && <span>{head.join(' · ')}</span>}
+        {cards.length > 0 && <LimitViewSwitch className="ml-auto" />}
       </header>
       {cards.length === 0 ? (
         <div className="k-u-card">
@@ -152,6 +156,7 @@ function PlanCard({ card, named, now }: { card: UsageCard; named: boolean; now: 
     return agent ? isInstalled(agent) : true
   })
   const failed = card.state === 'failed'
+  const view = useLimitView()
   const shortName = useShortWindow()
   const where = [...new Set(card.places.map((place) => hostName(place.hostId)))]
   const balanceRows = (card.balances ?? []).map((balance) => (
@@ -220,7 +225,7 @@ function PlanCard({ card, named, now }: { card: UsageCard; named: boolean; now: 
           <PlanRings
             rings={[...card.rings].reverse().map((ring) => ({
               id: ring.limit.window,
-              percent: ring.percent,
+              percent: shownPercent(ring.percent, view),
               level: ring.level,
             }))}
             size={RINGS}
@@ -247,11 +252,14 @@ function PlanCard({ card, named, now }: { card: UsageCard; named: boolean; now: 
                     <b aria-hidden className="k-num" data-level={ring.level}>
                       {ring.reached && ring.limit.resetsAt! > now
                         ? t('limits.backIn', { time: countdown(ring.limit.resetsAt! - now)! })
-                        : `${ring.percent}%`}
+                        : `${shownPercent(ring.percent, view)}%`}
                     </b>
                     {reset && <small aria-hidden>{reset}</small>}
                     <span className="sr-only">
-                      {t('limits.windowUsed', { window: name, percent: ring.percent })}
+                      {t(view === 'left' ? 'limits.windowLeft' : 'limits.windowUsed', {
+                        window: name,
+                        percent: shownPercent(ring.percent, view),
+                      })}
                       {reset && ` ${reset}`}
                     </span>
                   </span>
@@ -321,7 +329,7 @@ function PlanCard({ card, named, now }: { card: UsageCard; named: boolean; now: 
             <span key={ring.limit.window} className="contents">
               <span className="truncate text-tertiary">{limitLabel(ring.limit)}</span>
               <span className="text-right font-medium text-primary tabular-nums">
-                {ring.percent}%
+                {shownPercent(ring.percent, view)}%
               </span>
               <span className="text-right whitespace-nowrap text-secondary">
                 {ring.limit.resetsAt === null ? '' : planReset(ring.limit.resetsAt, now)}

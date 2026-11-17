@@ -103,6 +103,7 @@
     "limits": {
       "plan": "套餐",
       "used": "已使用：{{limit}}",
+      "left": "剩余：{{limit}}",
       "resets": "重置时间：{{time}}",
       "updated": "{{ago}}更新",
       "planOf": "套餐 · {{plan}}",

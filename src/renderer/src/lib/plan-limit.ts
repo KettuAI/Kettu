@@ -15,6 +15,14 @@ export function limitLevel(limit: Pick<PlanLimit, 'usedPercent' | 'state'>): Lim
   return 'ok'
 }
 
+/** Whether plan limits show the share used or the share left. */
+export type LimitView = 'used' | 'left'
+
+/** The percentage a window shows, from its whole percentage used; used and left add up to 100. */
+export function shownPercent(used: number, view: LimitView): number {
+  return view === 'left' ? Math.max(0, 100 - used) : used
+}
+
 /** A limit bar's fill at each level. */
 export const LIMIT_FILL: Record<LimitLevel, string> = {
   ok: 'bg-limit-ok',
