@@ -109,6 +109,7 @@ import {
 } from './hidden-sessions'
 import { askedCall, mcpNaming, ownCall, type McpNaming } from './kettu-calls'
 import { ownTitles } from './own-titles'
+import { selectQuestion } from './select-question'
 import { DELEGATED_SIGN_IN, delegatedSignInStart, requestUrlElicitation } from './sign-in'
 
 /** A message-level stream to an agent, from a process's stdio or an in-process agent. */
@@ -428,13 +429,14 @@ export class AcpConnection implements AgentConnection {
           : ctx.params.toolCall
         const context = target.context()
         const toolCall = askedCall(shaped, this.naming, context)
-        const { entryId, output } = mapPermissionToolCall(toolCall, context)
+        const select = selectQuestion(toolCall, ctx.params.options)
+        const { entryId, output } = mapPermissionToolCall(toolCall, context, select?.question)
         const answer = await target.requestPermission(
           {
             toolCallId: ctx.params.toolCall.toolCallId,
             toolEntryId: entryId,
             output,
-            options: mapPermissionOptions(ctx.params.options),
+            options: select?.options ?? mapPermissionOptions(ctx.params.options),
           },
           ctx.signal,
         )
