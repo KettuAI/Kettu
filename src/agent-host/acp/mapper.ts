@@ -429,7 +429,12 @@ function startsBackgroundWork(update: acp.ToolCallUpdate): boolean {
  * Applies a `tool_call` or `tool_call_update`: only the fields present change, and both
  * add the entry when it is new, since agents may announce a call twice or update it first.
  */
-function mapToolCall(ctx: MapperContext, out: Output, update: acp.ToolCallUpdate): string {
+function mapToolCall(
+  ctx: MapperContext,
+  out: Output,
+  update: acp.ToolCallUpdate,
+  question?: string,
+): string {
   const id = `t:${update.toolCallId}`
   const existing = ctx.thread.byId[id]
   const changes: Partial<Omit<ToolEntry, 'kind' | 'id'>> = {}
@@ -442,6 +447,7 @@ function mapToolCall(ctx: MapperContext, out: Output, update: acp.ToolCallUpdate
   if (raw !== undefined) changes.rawInput = raw
   const description = commandDescription(update.rawInput)
   if (description !== undefined) changes.description = description
+  if (question !== undefined) changes.question = question
   if (!ctx.replaying && startsBackgroundWork(update)) out.effects.push({ kind: 'background' })
 
   if (existing?.kind === 'tool') {
@@ -463,6 +469,7 @@ function mapToolCall(ctx: MapperContext, out: Output, update: acp.ToolCallUpdate
     permissionResult: null,
     ...(raw !== undefined ? { rawInput: raw } : {}),
     ...(description !== undefined ? { description } : {}),
+    ...(question !== undefined ? { question } : {}),
   }
   addEntry(ctx, out, entry)
   toolEffects(out, update.toolCallId, id, null, entry)
@@ -933,14 +940,15 @@ export function mapSessionUpdate(update: acp.SessionUpdate, ctx: MapperContext):
 
 /**
  * The tool entry a permission request belongs to, added first if the thread has not
- * seen that tool call.
+ * seen that tool call. A request that asks a question gives it, which the entry then carries.
  */
 export function mapPermissionToolCall(
   toolCall: acp.ToolCallUpdate,
   ctx: MapperContext,
+  question?: string,
 ): { entryId: string; output: MapperOutput } {
   const out = new Output()
-  const entryId = mapToolCall(ctx, out, toolCall)
+  const entryId = mapToolCall(ctx, out, toolCall, question)
   return { entryId, output: out }
 }
 
