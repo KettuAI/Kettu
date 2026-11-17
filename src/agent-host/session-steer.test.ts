@@ -10,8 +10,8 @@ afterEach(async () => {
 
 const PROMPT = 'ask me something'
 
-/** A Codex session whose turn waits on a question. */
-async function askedSession() {
+/** A Codex session with a turn that runs. */
+async function runningSession() {
   const server = new FakeAppServer()
   // The session also starts a hidden thread to title itself, so the turn is found by its text.
   const started: { threadId?: string; turnId?: string } = {}
@@ -36,6 +36,12 @@ async function askedSession() {
   })
   // The fake server is no port event, so the wait polls.
   await vi.waitFor(() => expect(started.turnId).toBeDefined())
+  return { server, window, id, started }
+}
+
+/** A Codex session whose turn waits on a question. */
+async function askedSession() {
+  const { server, window, id, started } = await runningSession()
   const asked = server.request('item/tool/requestUserInput', {
     ...started,
     itemId: 'ask-1',
@@ -73,4 +79,53 @@ it('skips a waiting question when a message is sent into the turn', async () => 
   await window.untilStatus(id, 'running')
   const ask = window.entries(id).find((entry) => entry.kind === 'tool' && entry.question)
   expect(ask).toMatchObject({ permissionResult: { kind: 'reject_once' } })
+})
+
+/** A Codex session whose turn goes on while a question it asked waits for the user. */
+async function asyncAskedSession() {
+  const { server, window, id, started } = await runningSession()
+  server.notify('item/completed', {
+    ...started,
+    item: {
+      type: 'agentMessage',
+      id: 'call-1',
+      text: 'Tabs or spaces?',
+      phase: 'final_answer',
+      delivery: 'async',
+      questions: [{ title: 'Tabs or spaces?', options: ['Tabs', 'Spaces'] }],
+    },
+  })
+  await window.untilEntry(id, (entry) => entry.kind === 'tool' && entry.permission !== null)
+  return { server, window, id }
+}
+
+it('keeps a question the turn does not wait for when a message is sent into it', async () => {
+  const { server, window, id } = await asyncAskedSession()
+  expect(window.summary(id)?.status).toBe('running')
+  const { itemId } = await window.request('sessions.queue', {
+    sessionId: id,
+    content: [{ type: 'text', text: 'pick tabs' }],
+  })
+  await window.request('sessions.steer', { sessionId: id, itemId: itemId! })
+
+  expect(server.sent('turn/steer')).toHaveLength(1)
+  const ask = window.entries(id).find((entry) => entry.kind === 'tool' && entry.question)
+  expect(ask).toMatchObject({ permission: { questions: [{ question: 'Tabs or spaces?' }] } })
+})
+
+it('answers a question the turn does not wait for into the running turn', async () => {
+  const { server, window, id } = await asyncAskedSession()
+  const ask = window.entries(id).find((entry) => entry.kind === 'tool' && entry.permission)
+  const requestId = ask?.kind === 'tool' ? ask.permission!.requestId : ''
+  await window.request('permissions.respond', {
+    sessionId: id,
+    requestId,
+    answers: [{ question: 0, choices: [1] }],
+  })
+
+  await vi.waitFor(() => expect(server.sent('turn/steer')).toHaveLength(1))
+  const input = (server.sent('turn/steer')[0]!.input as { text: string }[])[0]!
+  expect(input.text).toContain('<send_user_message_question_reply>')
+  expect(input.text).toContain('"answer":"Spaces"')
+  expect(window.thread(id).session.queue).toHaveLength(0)
 })

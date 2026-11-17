@@ -43,7 +43,9 @@ import { planMarkdown } from '../plan-revision'
 import { mergeConfig, type MapperEffect, type MapperOutput } from '../session-updates'
 import { SIDE_INSTRUCTIONS, sideTurnText } from '../side-chat'
 import { mapAccount, mapRateLimits } from './account'
+import { isAsyncQuestion, type AsyncQuestionItem } from './async-questions'
 import {
+  asyncQuestionApproval,
   commandApproval,
   elicitationApproval,
   fileChangeApproval,
@@ -368,6 +370,8 @@ interface ThreadRecord {
   watch: ((event: ThreadEvent) => void) | null
   /** The item of the plan the running turn proposed, which the user is asked about once it ends. */
   plan: string | null
+  /** The items of questions Codex asked without waiting, each asked of the user once. */
+  asked: Set<string>
 }
 
 function threadRecord(
@@ -386,6 +390,7 @@ function threadRecord(
     command: null,
     watch: null,
     plan: null,
+    asked: new Set(),
   }
 }
 
@@ -1147,7 +1152,32 @@ export class CodexConnection implements AgentConnection {
       }
     }
     if (!QUIET.has(method)) this.deliver(threadId, { method, params })
+    if (method === 'item/started' || method === 'item/completed') {
+      const item = p.item as ThreadItem
+      if (isAsyncQuestion(item)) void this.askAsync(threadId, item)
+    }
     if (method === 'turn/completed') this.turnCompleted(threadId, p.turn as Turn)
+  }
+
+  /**
+   * Asks the user a question Codex does not wait for, and sends the answer into the running turn,
+   * or as a turn of its own once none runs, as Codex's own client does.
+   */
+  private async askAsync(threadId: string, item: AsyncQuestionItem): Promise<void> {
+    const record = this.thread(threadId)
+    const target = this.targets.get(threadId)
+    if (!target || this.isClosed || record.asked.has(item.id)) return
+    record.asked.add(item.id)
+    const approval = asyncQuestionApproval(item, record.mapper, target.context())
+    let answer: PermissionAnswer
+    try {
+      // Nothing of Codex's waits on the answer; the host settles the request when it must.
+      answer = await target.requestPermission(approval.request, new AbortController().signal)
+    } catch {
+      return
+    }
+    const reply = approval.reply(answer)
+    if (reply !== null) target.send(reply, { approval: true, now: true })
   }
 
   private threadStarted(thread: Thread | undefined): void {

@@ -301,6 +301,93 @@ describe('the plan tool', () => {
   })
 })
 
+describe('a question asked without waiting', () => {
+  const asked = {
+    type: 'agentMessage',
+    id: 'call_1',
+    text: 'Keep the vault?',
+    phase: 'final_answer',
+    delivery: 'async',
+    questions: [{ title: 'Keep the vault?', options: ['Keep it', 'Delete it'] }],
+  }
+  const reply = (answer: string) => ({
+    type: 'userMessage',
+    id: 'u1',
+    content: [
+      {
+        type: 'text',
+        text:
+          '<send_user_message_question_reply>\n' +
+          JSON.stringify([
+            {
+              questionItemId: JSON.stringify(['request_user_input_async', 'call_1', 0]),
+              question: 'Keep the vault?',
+              answer,
+            },
+          ]) +
+          '\n</send_user_message_question_reply>',
+        text_elements: [],
+      },
+    ],
+  })
+
+  it('is a completed step that names the question, not an agent message', () => {
+    const { entries } = run([completed(asked)])
+    expect(entries).toHaveLength(1)
+    expect(entries[0]).toMatchObject({
+      kind: 'tool',
+      id: 't:call_1',
+      status: 'completed',
+      question: 'Keep the vault?',
+      permission: null,
+      permissionResult: null,
+    })
+  })
+
+  it('lists every question with its choices in the step', () => {
+    const { entries } = run([
+      completed({
+        ...asked,
+        questions: [
+          { title: 'Keep the vault?', options: ['Keep it', 'Delete it'] },
+          { title: 'Why?', options: null },
+        ],
+      }),
+    ])
+    const entry = entries[0]
+    expect(entry?.kind === 'tool' && entry.content).toEqual([
+      {
+        type: 'markdown',
+        markdown: '1. Keep the vault?\n   - Keep it\n   - Delete it\n2. Why?',
+      },
+    ])
+  })
+
+  it('marks the question answered on a replay and draws no message for the reply', () => {
+    const { entries } = run([completed(asked), completed(reply('Keep it'))], { replaying: true })
+    expect(entries.map((entry) => entry.kind)).toEqual(['tool'])
+    expect(entries[0]).toMatchObject({
+      permissionResult: {
+        kind: 'allow_once',
+        questions: [{ question: 'Keep the vault?', answered: true, answer: 'Keep it' }],
+      },
+    })
+  })
+
+  it('keeps a message that only looks like a reply', () => {
+    const lookalike = {
+      type: 'userMessage',
+      id: 'u2',
+      content: [
+        { type: 'text', text: '<send_user_message_question_reply>not json', text_elements: [] },
+      ],
+    }
+    expect(run([completed(lookalike)], { replaying: true }).entries.map((e) => e.kind)).toEqual([
+      'user',
+    ])
+  })
+})
+
 describe('other items', () => {
   it('maps plans, searches, MCP calls, compaction and a reroute', () => {
     const { entries } = run([
