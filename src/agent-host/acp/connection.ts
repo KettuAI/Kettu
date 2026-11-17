@@ -660,10 +660,6 @@ export class AcpConnection implements AgentConnection {
     return this.hooks.kettuExtension === true
   }
 
-  get ownInstructions(): boolean {
-    return this.appendsSystemPrompt
-  }
-
   get systemPromptAppend(): boolean {
     return this.appendsSystemPrompt
   }

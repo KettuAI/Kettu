@@ -4373,11 +4373,10 @@ export class SessionManager {
     void this.removeLeftovers(runtime)
     if (gone()) throw removedWhileStarting()
     let setup
+    let attach: SessionOptions
     try {
-      setup = await runtime.connection.newSession(
-        workDir(live.record),
-        await this.attachOptions(live.id, live.record, runtime),
-      )
+      attach = await this.attachOptions(live.id, live.record, runtime)
+      setup = await runtime.connection.newSession(workDir(live.record), attach)
     } catch (error) {
       if (gone()) throw removedWhileStarting()
       const mapped = agentError(error)
@@ -4395,6 +4394,7 @@ export class SessionManager {
       throw removedWhileStarting()
     }
     live.record.acpSessionId = setup.sessionId
+    this.noteSystemPrompt(live.record, attach, setup.sessionId)
     this.stampConfig(live.record)
     this.attach(live, runtime.connection)
     this.attachedOn(live, setup.harnessVersion, false)
@@ -4551,11 +4551,10 @@ export class SessionManager {
     }
     if (gone()) throw removedWhileStarting()
     let setup
+    let attach: SessionOptions
     try {
-      setup = await runtime.connection.newSession(
-        await this.cwdOf(live),
-        await this.attachOptions(live.id, live.record, runtime),
-      )
+      attach = await this.attachOptions(live.id, live.record, runtime)
+      setup = await runtime.connection.newSession(await this.cwdOf(live), attach)
     } catch (error) {
       // Its failure, such as the agent's exit, no longer belongs to a session that went meanwhile.
       if (gone()) throw removedWhileStarting()
@@ -4574,6 +4573,7 @@ export class SessionManager {
       // The quit ran while `session/new` was pending: the message waits in its queue and the
       // session goes into the index and the thread store as the quit closes them.
       live.record.acpSessionId = setup.sessionId
+      this.noteSystemPrompt(live.record, attach, setup.sessionId)
       this.update(live, {
         acpSessionId: setup.sessionId,
         config: chosenConfig(setup.config, live.startValues),
@@ -4585,6 +4585,7 @@ export class SessionManager {
       return
     }
     live.record.acpSessionId = setup.sessionId
+    this.noteSystemPrompt(live.record, attach, setup.sessionId)
     this.stampConfig(live.record)
     this.attach(live, runtime.connection)
     this.attachedOn(live, setup.harnessVersion, false)
@@ -6023,6 +6024,11 @@ export class SessionManager {
     })
   }
 
+  /** Notes that the agent's new session got Kettu's guide and memory in its system prompt. */
+  private noteSystemPrompt(record: SessionRecord, attach: SessionOptions, sessionId: string): void {
+    if (attach.systemPromptAppend) record.systemPromptSentTo = sessionId
+  }
+
   /** Notes the configuration folder picked for the agent a session was just made in. */
   private stampConfig(record: SessionRecord): void {
     const chosen = this.deps.agents.runningConfig(record.agentId)?.chosen ?? null
@@ -6038,6 +6044,7 @@ export class SessionManager {
   ): Promise<ConfigOption[]> {
     const setup = await connection.newSession(await this.cwdOf(live), attach)
     live.record.acpSessionId = setup.sessionId
+    this.noteSystemPrompt(live.record, attach, setup.sessionId)
     this.stampConfig(live.record)
     live.rewrite = true
     this.update(live, { acpSessionId: setup.sessionId })
@@ -6563,6 +6570,8 @@ export class SessionManager {
     const { record } = live
     const own = connection.ownInstructions && !record.instructionsAhead
     if (own || record.memorySentTo === record.acpSessionId) return null
+    // Its creation carried them in its system prompt, which it keeps through a compaction.
+    if (record.systemPromptSentTo === record.acpSessionId) return null
     const runtime = this.deps.agents.runtime(record.agentId)
     const servers = this.kettuServers(live.id, record, runtime)
     const tools = servers.length > 0 || this.kettuService(live.id, record, runtime) !== null

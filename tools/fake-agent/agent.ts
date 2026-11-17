@@ -84,6 +84,13 @@ interface FakeSession extends FakeSessionState {
 
 const HISTORY_LIMIT = 50_000
 
+/** The text of `_meta.antigravity.systemPrompt.append`, if the request carries one. */
+function systemPromptAppend(meta: unknown): string | null {
+  const append = (meta as { antigravity?: { systemPrompt?: { append?: unknown } } } | null)
+    ?.antigravity?.systemPrompt?.append
+  return typeof append === 'string' ? append : null
+}
+
 const MODES = [
   { id: 'ask', name: 'Ask', description: 'Asks before every edit' },
   { id: 'code', name: 'Code', description: 'Edits files without asking' },
@@ -140,6 +147,7 @@ export function createFakeAgent(options: FakeAgentOptions = {}): AgentApp {
   const legacyModes = env.FAKE_AGENT_LEGACY_MODES === '1'
   const forkConfig = env.FAKE_AGENT_FORK_CONFIG ?? 'keep'
   const resumeConfig = env.FAKE_AGENT_RESUME_CONFIG ?? 'keep'
+  const takesSystemPrompt = env.FAKE_AGENT_SYSTEM_PROMPT === '1'
   // Not scaled: it stands for an agent that is slow to take a setting, whatever the pace.
   const setConfigMs = Number(env.FAKE_AGENT_SET_CONFIG_MS ?? '') || 0
   const settled = (): Promise<void> | undefined =>
@@ -370,6 +378,7 @@ export function createFakeAgent(options: FakeAgentOptions = {}): AgentApp {
       largeHistory: id.startsWith('large-history') ? historyEntries(env) : historySize(id),
       signedOut: false,
       outOfCredit: false,
+      systemPrompt: null,
       ...DEFAULT_CONFIG,
       history: [],
       turnStarts: [],
@@ -621,6 +630,10 @@ export function createFakeAgent(options: FakeAgentOptions = {}): AgentApp {
           mcpCapabilities: { http: !without.has('mcp'), sse: false },
           sessionCapabilities: sessionCapabilities(),
           auth: { logout: {}, status: {} },
+          // Like agy's `_meta.antigravity.systemPrompt.append`, a new session's system prompt addition.
+          ...(takesSystemPrompt
+            ? { _meta: { antigravity: { systemPrompt: { append: true } } } }
+            : {}),
         },
         authMethods,
         agentInfo: {
@@ -672,6 +685,7 @@ export function createFakeAgent(options: FakeAgentOptions = {}): AgentApp {
       if (oneSession) endOthers()
       const session = newSession(nextId('fake'), ctx.params.cwd, ctx.params.mcpServers)
       Object.assign(session, projectDefaults(ctx.params.cwd))
+      if (takesSystemPrompt) session.systemPrompt = systemPromptAppend(ctx.params._meta)
       setTimeout(() => announceCommands(ctx.client, session.id), 0)
       return { sessionId: session.id, ...sessionSetup(session) }
     })

@@ -421,6 +421,17 @@ describe('the host files', () => {
     }
   })
 
+  it("keeps which agent session got Kettu's guide and memory in its system prompt", () => {
+    const sent = { ...session, systemPromptSentTo: 'acp-1' }
+    expect(parseSessionsFile({ sessions: [sent] })).toEqual({ version: 1, sessions: [sent] })
+    for (const systemPromptSentTo of ['', 3, null]) {
+      expect(parseSessionsFile({ sessions: [{ ...session, systemPromptSentTo }] })).toEqual({
+        version: 1,
+        sessions: [session],
+      })
+    }
+  })
+
   it('keeps how a session last ran outside Kettu, and drops what does not read', () => {
     const taken = {
       ...session,

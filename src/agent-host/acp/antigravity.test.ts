@@ -841,7 +841,7 @@ describe("agy's system prompt", () => {
   it('takes the guide and memory in its new session, not ahead of a prompt', async () => {
     const { connection, opened } = connect('1.5.9')
     await connection.initialize('1.0.0')
-    expect(connection.ownInstructions).toBe(true)
+    expect(connection.systemPromptAppend).toBe(true)
     await connection.newSession('/repo', { systemPromptAppend: GUIDE })
     expect(opened).toEqual([
       { method: 'new', meta: { antigravity: { systemPrompt: { append: GUIDE } } } },
@@ -871,7 +871,7 @@ describe("agy's system prompt", () => {
     ] as const) {
       const { connection, opened } = connect(version, undefined, [], declared)
       await connection.initialize('1.0.0')
-      expect(connection.ownInstructions).toBe(false)
+      expect(connection.systemPromptAppend).toBe(false)
       await connection.newSession('/repo', { systemPromptAppend: GUIDE })
       expect(opened).toEqual([{ method: 'new', meta: undefined }])
       connection.close()

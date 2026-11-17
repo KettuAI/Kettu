@@ -1318,6 +1318,13 @@ const recall: Scenario = async (turn) => {
   return 'end_turn'
 }
 
+/** What the session was started with in its system prompt, as agy's session/new takes it. */
+const instructions: Scenario = async (turn) => {
+  const text = turn.session.systemPrompt ?? 'No system prompt addition.'
+  await stream(turn, text, { chunks: [text], delayMs: 0, messageId: turn.messageId() })
+  return 'end_turn'
+}
+
 /** One line for each block besides text, so a test or a person can see what was sent. */
 const attachments: Scenario = async (turn) => {
   const lines = turn.prompt.flatMap((block) => {
@@ -1579,6 +1586,7 @@ export const SCENARIO_RUNNERS: Record<ScenarioName, Scenario> = {
   status,
   context,
   recall,
+  instructions,
   attachments,
   chinese,
   artifacts,

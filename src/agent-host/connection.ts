@@ -396,7 +396,7 @@ export interface AgentConnection {
   readonly ownInstructions?: boolean
   /**
    * Whether it takes `SessionOptions.systemPromptAppend` for a new session and keeps it out of
-   * the session's messages. Implies `ownInstructions`.
+   * the session's messages. Only a session created with it has the text; the host records which.
    */
   readonly systemPromptAppend?: boolean
   /**
