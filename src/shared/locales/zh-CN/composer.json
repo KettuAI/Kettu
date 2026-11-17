@@ -9,6 +9,7 @@
       "denied": "告诉 {{agent}} 改用什么做法",
       "running": "排队一条消息 · {{keys}} 插入这一轮 · Esc 停止",
       "runningQueue": "排队一条消息 · Esc 停止",
+      "runningTouch": "排队一条消息",
       "pickAgent": "选一个 Agent 接着做…"
     },
     "stop": "停止",

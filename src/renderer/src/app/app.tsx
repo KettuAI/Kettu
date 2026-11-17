@@ -82,7 +82,9 @@ export function App() {
               onAnimationEnd={(event) => {
                 if (event.animationName === 'kettu-arrive-main') setArriving(false)
               }}
-              className="absolute inset-0"
+              // On a phone the corner's controls, raised over the drawer, stay under what opens
+              // over the window.
+              className="absolute inset-0 phone:isolate"
             >
               {/* One drag scope for the sidebar and the main area: a session's row drags into
                   the split. */}
@@ -155,11 +157,17 @@ function Workbench() {
   const [initial] = useState(() => readJson(SIDEBAR_WIDTH, 0) || undefined)
   const save = useRef<ReturnType<typeof setTimeout>>(undefined)
   useEffect(() => () => clearTimeout(save.current), [])
-  // Opening a place from the drawer puts the drawer away, as App Shell's own nav does.
+  // Opening a place, Settings or Search from the drawer puts the drawer away, as App Shell's own
+  // nav does.
   useEffect(
     () =>
       useViewStore.subscribe((state, previous) => {
-        if (state.sidebarDrawer && state.main !== previous.main)
+        if (!state.sidebarDrawer) return
+        if (
+          state.main !== previous.main ||
+          (state.settings.open && !previous.settings.open) ||
+          (state.searchOpen && !previous.searchOpen)
+        )
           useViewStore.setState({ sidebarDrawer: false })
       }),
     [],

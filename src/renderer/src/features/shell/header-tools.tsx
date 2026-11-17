@@ -17,7 +17,10 @@ import type { SessionSummary } from '@shared/agent-host'
 import type { SessionView } from '@shared/thread'
 import {
   DropdownMenu,
+  DropdownMenuCheckboxItem,
   DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@renderer/components/ui/dropdown-menu'
 import { leaveSession } from '@renderer/app/actions'
@@ -49,6 +52,7 @@ import {
   type SidePane,
 } from '@renderer/stores/view'
 import { openSideChat } from '@renderer/stores/side-chat'
+import { usePhoneWindow } from './narrow'
 import { PaneIcon } from './panel-button'
 import { NoDrag } from './top-bar'
 
@@ -128,6 +132,28 @@ export function HeaderTools({
     ...(sessionId && devices ? (['devices'] as const) : []),
     'files',
   ]
+  const phone = usePhoneWindow()
+  if (phone) {
+    return (
+      <NoDrag className="kp-bar-tools">
+        {summary && onRename && onNewSubSession && (
+          <SessionMoreMenu
+            summary={summary}
+            session={session}
+            onRename={onRename}
+            onNewSubSession={onNewSubSession}
+            menu={menu}
+          />
+        )}
+        <PhonePanelMenu
+          panel={panel}
+          sessionId={board ? sessionId : null}
+          panes={available.filter((pane) => pane !== 'computer' && pane !== 'browser')}
+          dot={dot || deviceDot}
+        />
+      </NoDrag>
+    )
+  }
   return (
     <NoDrag className="kp-bar-tools">
       {summary && onRename && onNewSubSession && (
@@ -181,6 +207,112 @@ export function HeaderTools({
       <SidePanelButton panel={panel} available={available} />
       <ClosePaneButton />
     </NoDrag>
+  )
+}
+
+const PANE_ITEMS = {
+  terminal: { icon: ComputerTerminal01Icon, label: 'headerTools.terminal' },
+  devices: { icon: SmartPhone01Icon, label: 'headerTools.devices' },
+  files: { icon: File01Icon, label: 'headerTools.files' },
+} as const
+
+/**
+ * A phone's one button for what the bar's buttons open beside the thread, each over the whole
+ * screen there, with Leave session or Close pane after them.
+ */
+function PhonePanelMenu({
+  panel,
+  sessionId,
+  panes,
+  dot,
+}: {
+  panel: string
+  /** The session whose board and side chat it opens, or null where there are none. */
+  sessionId: string | null
+  panes: Pane[]
+  /** A pane has news. */
+  dot: boolean
+}) {
+  const { t } = useTranslation('shell')
+  const { t: tc } = useTranslation('common')
+  const pane = usePane()
+  const shownPane = useViewStore((s) => (shownPanel(s) === panel ? s.sidePane[panel] : undefined))
+  const boardOpen = useViewStore((s) => (sessionId ? !!s.boardOpen[sessionId] : false))
+  const chatOpen = useViewStore((s) => (sessionId ? !!s.sideChatOpen[sessionId] : false))
+  const activity = useBoardActivity(sessionId ?? '')
+  const busy = !!sessionId && !boardOpen && activity.running + activity.needs > 0
+  const view = pane?.view
+  const leave =
+    pane && !pane.split && view?.kind === 'session'
+      ? () => leaveSession(useSessionsStore.getState().byId[view.sessionId])
+      : null
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        render={<button type="button" aria-label={tc('pane.open')} className="kp-tool" />}
+      >
+        <PaneIcon icon={SidebarRightIcon} size={18} />
+        {(dot || busy) && (
+          <span
+            aria-hidden
+            className={activity.needs > 0 ? 'kp-bar-dot kp-bar-dot--needs' : 'kp-bar-dot'}
+          />
+        )}
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-56">
+        {sessionId && (
+          <>
+            <DropdownMenuCheckboxItem
+              closeOnClick
+              checked={boardOpen}
+              onCheckedChange={(open) => toggleBoard(sessionId, open)}
+            >
+              <PaneIcon icon={DashboardSquare02Icon} size={16} />
+              {t('headerTools.board')}
+            </DropdownMenuCheckboxItem>
+            <DropdownMenuCheckboxItem
+              closeOnClick
+              checked={chatOpen}
+              onCheckedChange={(open) =>
+                open ? openSideChat(sessionId) : toggleSideChat(sessionId, false)
+              }
+            >
+              <PaneIcon icon={BubbleChatQuestionIcon} size={16} />
+              {t('headerTools.sideChat')}
+            </DropdownMenuCheckboxItem>
+          </>
+        )}
+        {panes.map((id) => {
+          if (!(id in PANE_ITEMS)) return null
+          const item = PANE_ITEMS[id as keyof typeof PANE_ITEMS]
+          return (
+            <DropdownMenuCheckboxItem
+              closeOnClick
+              key={id}
+              checked={shownPane === id}
+              onCheckedChange={(open) => toggleSidePane(panel, id, open)}
+            >
+              <PaneIcon icon={item.icon} size={16} />
+              {t(item.label)}
+            </DropdownMenuCheckboxItem>
+          )
+        })}
+        {(leave || pane?.split) && <DropdownMenuSeparator />}
+        {pane?.split ? (
+          <DropdownMenuItem onClick={() => closeSplitPane(pane.paneId, pane.focused)}>
+            <PaneIcon icon={Cancel01Icon} size={16} />
+            {t('headerTools.closePane')}
+          </DropdownMenuItem>
+        ) : (
+          leave && (
+            <DropdownMenuItem onClick={leave}>
+              <PaneIcon icon={Cancel01Icon} size={16} />
+              {t('headerTools.leaveSession')}
+            </DropdownMenuItem>
+          )
+        )}
+      </DropdownMenuContent>
+    </DropdownMenu>
   )
 }
 

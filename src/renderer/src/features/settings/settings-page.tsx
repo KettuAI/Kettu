@@ -10,7 +10,12 @@ import {
   type RefObject,
 } from 'react'
 import { Dialog as DialogPrimitive } from '@base-ui/react/dialog'
-import { ArrowRight01Icon, Cancel01Icon, Search01Icon } from '@hugeicons/core-free-icons'
+import {
+  ArrowLeft01Icon,
+  ArrowRight01Icon,
+  Cancel01Icon,
+  Search01Icon,
+} from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
 import { popupOpen } from '@renderer/app/shortcuts'
 import { AgentMarkHost } from '@renderer/components/agents/agent-mark-host'
@@ -21,6 +26,7 @@ import { css as prefsCss } from '@renderer/components/affect/settings-preference
 import { css as securityCss } from '@renderer/components/affect/settings-security'
 import { Dialog, DialogPortal } from '@renderer/components/ui/dialog'
 import { Skeleton } from '@renderer/components/ui/skeleton'
+import { usePhoneWindow } from '@renderer/features/shell/narrow'
 import { useCloudOff } from '@renderer/lib/cloud'
 import { formatShortcut, isMod, isWeb } from '@renderer/lib/platform'
 import {
@@ -231,7 +237,11 @@ function SettingsLayout({
   const searching = needle.length > 0
   const hits = sections.map((s) => ({ ...s, rows: s.rows.filter((r) => matches(r, needle)) }))
   const hitCount = hits.reduce((sum, s) => sum + s.rows.length, 0)
-  const active = useViewStore((s) => s.settings.section) ?? 'general'
+  const shown = useViewStore((s) => s.settings.section)
+  const active = shown ?? 'general'
+  const phone = usePhoneWindow()
+  // A phone shows one screen at a time: the list, the search over it with its results, or a page.
+  const phoneView = searching ? 'results' : shown ? 'page' : 'list'
   const page = sections.find((s) => s.id === active) ?? sections[0]!
   const item = useViewStore((s) => (s.settings.section === active ? s.settings.item : null))
   const scroller = useRef<HTMLDivElement>(null)
@@ -308,10 +318,26 @@ function SettingsLayout({
   const waiting = scope.useSettingsStore((s) => !s.loaded) && hostPage && scope.hostId !== null
   return (
     <>
-      <nav aria-label={t('page.sections')} className="kettu-settings__nav">
-        <h2 id={titleId} className="kettu-settings__title">
-          {t('page.title')}
-        </h2>
+      <nav
+        aria-label={t('page.sections')}
+        data-phone-view={phoneView}
+        className="kettu-settings__nav"
+      >
+        <div className="kettu-settings__head">
+          <h2 id={titleId} className="kettu-settings__title">
+            {t('page.title')}
+          </h2>
+          {phone && (
+            <button
+              type="button"
+              className="ui-as-icon-btn"
+              aria-label={t('page.close')}
+              onClick={closeSettings}
+            >
+              <Icon icon={Cancel01Icon} size={18} />
+            </button>
+          )}
+        </div>
         <SettingsSearch value={query} onChange={setQuery} inputRef={search} />
         <div className="kettu-settings__list">
           {groups.map((group, i) => (
@@ -334,15 +360,36 @@ function SettingsLayout({
           ))}
         </div>
       </nav>
-      <div ref={scroller} className="kettu-settings__page">
-        <button
-          type="button"
-          className="ui-as-icon-btn kettu-settings__close"
-          aria-label={t('page.close')}
-          onClick={closeSettings}
-        >
-          <Icon icon={Cancel01Icon} size={16} />
-        </button>
+      <div ref={scroller} data-phone-view={phoneView} className="kettu-settings__page">
+        {phone && phoneView === 'page' ? (
+          <div className="kettu-settings__bar">
+            {/* Back to the list of sections, or from an item's page to its section, whose own way
+                back above its title the bar takes the place of. */}
+            <button type="button" onClick={settingsBack} className="k-back">
+              <Icon icon={ArrowLeft01Icon} size={16} />
+              {item ? page.title : t('page.title')}
+            </button>
+            <button
+              type="button"
+              className="ui-as-icon-btn"
+              aria-label={t('page.close')}
+              onClick={closeSettings}
+            >
+              <Icon icon={Cancel01Icon} size={18} />
+            </button>
+          </div>
+        ) : (
+          !phone && (
+            <button
+              type="button"
+              className="ui-as-icon-btn kettu-settings__close"
+              aria-label={t('page.close')}
+              onClick={closeSettings}
+            >
+              <Icon icon={Cancel01Icon} size={16} />
+            </button>
+          )
+        )}
         <FlashContext.Provider value={flash}>
           {/* A client's section shows this computer's own, whichever host the picker chose. */}
           <HostScopeContext.Provider value={hostPage ? scope : LOCAL_SCOPE}>

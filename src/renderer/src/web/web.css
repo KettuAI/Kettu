@@ -1,3 +1,4 @@
 /* The web build's root is src/renderer/web, so Tailwind finds the renderer's classes only here. */
 @import '../styles/globals.css';
+@import '../styles/phone.css';
 @source '..';

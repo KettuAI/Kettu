@@ -1,0 +1,247 @@
+/* The web client on a phone, below 720 px: the desktop's structure, each surface laid out for a
+   phone. Only the web build loads this sheet; the desktop window is never this narrow. Rules lead
+   with :root so they outrank the vendored sheets React mounts after this one. */
+
+@media (max-width: 719px) {
+  :root {
+    --sheet-inside-radius: 0px;
+    /* The corner keeps the sidebar toggle and Back, 8 px in; a head starts its content after
+       them (features/shell/top-bar.tsx). */
+    --corner-inset: 8px;
+    --corner-controls: calc(2 * 28px + 6px + 10px);
+  }
+  :root .kettu-frame .ui-as-corner {
+    top: env(safe-area-inset-top);
+    left: env(safe-area-inset-left);
+    gap: 0;
+    padding-left: 8px;
+  }
+  :root .ui-as-corner [data-history='forward'] {
+    display: none;
+  }
+  /* The main area fills the screen inside its safe areas, without the desk's frame. */
+  :root .kettu-frame.ui-as-app > .ui-as-main {
+    padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom)
+      env(safe-area-inset-left);
+  }
+  /* A tap answers with the control's own pressed look, not the browser's gray flash. */
+  :root {
+    -webkit-tap-highlight-color: transparent;
+  }
+  :root .kettu-frame.ui-as-app > .ui-as-side {
+    width: min(360px, calc(100% - 48px));
+    padding-top: calc(10px + env(safe-area-inset-top));
+    padding-bottom: calc(10px + env(safe-area-inset-bottom));
+    padding-left: calc(12px + env(safe-area-inset-left));
+  }
+}
+
+/* Settings: one screen at a time over the whole screen, the list of sections first; a section
+   opens over it with a way back (features/settings/settings-page.tsx). */
+@media (max-width: 719px) {
+  :root .kettu-settings.ui-as {
+    top: 0;
+    left: 0;
+    flex-direction: column;
+    width: 100%;
+    height: 100%;
+    padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom)
+      env(safe-area-inset-left);
+    translate: none;
+    border-radius: 0;
+    box-shadow: none;
+  }
+  :root .kettu-settings.ui-as[data-starting-style],
+  :root .kettu-settings.ui-as[data-ending-style] {
+    transform: translateY(24px);
+  }
+  :root .kettu-settings .kettu-settings__nav {
+    flex: 1;
+    width: auto;
+    min-height: 0;
+    padding: 8px 12px 12px;
+    background: var(--panel);
+    box-shadow: none;
+  }
+  :root .kettu-settings .kettu-settings__nav[data-phone-view='results'] {
+    flex: none;
+    padding-bottom: 0;
+  }
+  :root .kettu-settings .kettu-settings__nav[data-phone-view='results'] .kettu-settings__list,
+  :root .kettu-settings .kettu-settings__nav[data-phone-view='page'],
+  :root .kettu-settings .kettu-settings__page[data-phone-view='list'] {
+    display: none;
+  }
+  :root .kettu-settings .kettu-settings__head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    min-height: 44px;
+    margin-bottom: 4px;
+  }
+  :root .kettu-settings .kettu-settings__title {
+    padding: 0 4px;
+    font-family: var(--font-display);
+    font-size: 24px;
+    line-height: 30px;
+  }
+  :root .kettu-settings .kettu-settings__search {
+    height: 40px;
+    margin-bottom: 12px;
+  }
+  :root .kettu-settings .kettu-settings__search kbd {
+    display: none;
+  }
+  :root .kettu-settings .kettu-settings__group .ui-as-side__item {
+    height: 44px;
+    gap: 12px;
+    padding: 0 10px;
+    font-size: 16px;
+  }
+  :root .kettu-settings .kettu-settings__group .ui-as-side__item[aria-current='page'] {
+    background: none;
+  }
+  :root .kettu-settings .kettu-settings__page {
+    scrollbar-gutter: auto;
+  }
+  :root .kettu-settings .kettu-settings__bar {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    display: flex;
+    align-items: center;
+    min-height: 48px;
+    padding: 0 8px 0 4px;
+    background: var(--panel);
+  }
+  :root .kettu-settings .kettu-settings__bar > .ui-as-icon-btn {
+    margin-left: auto;
+  }
+  :root .kettu-settings .kettu-settings__bar > .k-back {
+    margin: 0;
+    font-size: 15px;
+  }
+  :root .kettu-settings .kettu-settings__body {
+    padding: 8px 16px 40px;
+  }
+  :root .kettu-settings .kettu-settings__body .k-back {
+    display: none;
+  }
+}
+
+/* Menus, popovers and lists stay inside the screen, and dialogs inside its height
+   (components/ui/dialog.tsx). */
+@media (max-width: 719px) {
+  :root
+    :is(
+      [data-slot='dropdown-menu-content'],
+      [data-slot='popover-content'],
+      [data-slot='select-content'],
+      [data-slot='combobox-content']
+    ) {
+    max-width: calc(100vw - 16px);
+  }
+}
+
+/* The board and the side chat cover the thread instead of standing beside it. */
+@media (max-width: 719px) {
+  :root :is(.kb-rail, .kc-rail) {
+    position: absolute;
+    inset: 0;
+    z-index: 20;
+    width: auto;
+    border-left: 0;
+    background: var(--bg-app);
+    box-shadow: none;
+  }
+}
+
+/* No keys to press on a phone: shortcut caps and the lines that only name keys go. */
+@media (max-width: 719px) {
+  :root
+    :is(
+      [data-slot='kbd'],
+      [data-slot='kbd-group'],
+      .ui-as-side__search kbd,
+      .ui-as-menu__kbd,
+      .ui-asw__kbd,
+      .ui-pmc__kbd,
+      .kc-hint
+    ) {
+    display: none;
+  }
+}
+
+/* Search: across the screen near its top, its list down to the keyboard's reach. */
+@media (max-width: 719px) {
+  :root .kettu-search-popup {
+    top: calc(8px + env(safe-area-inset-top));
+    width: calc(100vw - 16px);
+  }
+  :root .kettu-search .ui-cmc__list {
+    max-height: calc(100dvh - 200px - env(safe-area-inset-top));
+  }
+}
+
+/* Usage: the title on the head's first line, the range's controls on a second one that scrolls
+   sideways (features/usage/usage-page.tsx). */
+@media (max-width: 719px) {
+  :root .k-u__head {
+    flex-wrap: wrap;
+    height: auto;
+    padding-right: 0;
+    padding-bottom: 6px;
+  }
+  :root .k-u__lead {
+    flex: 1 0 100%;
+    height: 52px;
+  }
+  :root .k-u__actions {
+    flex: 1 0 100%;
+    overflow-x: auto;
+    padding: 2px 12px 2px 4px;
+    scrollbar-width: none;
+  }
+  :root .k-u__actions > * {
+    flex: none;
+  }
+}
+
+/* iOS zooms the page into a field whose text is under 16 px. */
+@media (max-width: 719px) {
+  :root :is(input:not([type='checkbox'], [type='radio'], [type='range']), textarea, select),
+  :root .cm-editor .cm-content {
+    font-size: 16px;
+  }
+  :root .k-time {
+    width: 120px;
+  }
+}
+
+/* Overview: the title, then its views on a line of their own; the views and the counts scroll
+   sideways (features/overview). */
+@media (max-width: 719px) {
+  :root .k-ov__head {
+    flex-wrap: wrap;
+    row-gap: 12px;
+  }
+  :root :is(.k-ov__tools, .k-ov-counts) {
+    flex: 1 0 100%;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  :root :is(.k-ov__tools, .k-ov-counts) > * {
+    flex: none;
+  }
+}
+
+/* An artifact's page: Back in the corner stands for the way back to the list, which leaves the bar
+   to the title (features/artifacts/artifact-viewer.tsx). */
+@media (max-width: 719px) {
+  :root .k-av__crumbs > :is(.k-av__back, i) {
+    display: none;
+  }
+  :root .k-av-dock__mode kbd {
+    display: none;
+  }
+}

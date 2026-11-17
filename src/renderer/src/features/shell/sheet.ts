@@ -11,13 +11,13 @@ export const ON_DESK =
   'relative before:pointer-events-none before:absolute before:inset-0 before:app-region-no-drag'
 
 /** A sheet laid on the desk: the main area, a page or a side pane, as App Shell's main panel. */
-export const SHEET = `${ON_DESK} overflow-clip rounded-card border border-(--border-subtle) bg-app`
+export const SHEET = `${ON_DESK} overflow-clip rounded-card border border-(--border-subtle) bg-app phone:rounded-none phone:border-0`
 
 /** The corners of a layer over a sheet's whole inside, flush with its rounded 1 px border. */
-export const SHEET_INSIDE = 'rounded-[calc(var(--radius-card)-1px)]'
+export const SHEET_INSIDE = 'rounded-[calc(var(--radius-card)-1px)] phone:rounded-none'
 
 /** The radius of those corners, for a style. */
-export const SHEET_INSIDE_RADIUS = 'calc(var(--radius-card) - 1px)'
+export const SHEET_INSIDE_RADIUS = 'var(--sheet-inside-radius)'
 
 /** The edge of the pane in focus in a split view. */
 export const SHEET_FOCUSED = 'border-(--border-strong)'

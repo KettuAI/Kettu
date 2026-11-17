@@ -77,6 +77,7 @@ function HistoryButton({ direction }: { direction: Direction }) {
                   type="button"
                   aria-label={label}
                   disabled={!enabled}
+                  data-history={direction}
                   className={TITLE_BUTTON}
                   onPointerDown={(event) => {
                     held.current = menu

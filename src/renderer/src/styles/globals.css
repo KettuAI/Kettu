@@ -42,6 +42,9 @@
 @source '../../../../node_modules/@streamdown/code/dist/*.js';
 
 @custom-variant dark (&:is([data-theme='dark'] *));
+/* A phone's width, where the web client lays each surface out for a phone (styles/phone.css). The
+   desktop window is never this narrow. */
+@custom-variant phone (@media (max-width: 719px));
 
 /* Reduce motion follows the OS, and Settings › Appearance can force it on. */
 @custom-variant motion-reduce {
@@ -419,6 +422,8 @@
   /* What such a bar keeps clear for the controls: the sidebar toggle, 8 px, Back and Forward 2 px
      apart, 28 px each, then 16 px before its own content. */
   --corner-controls: calc(3 * 28px + 8px + 2px + 16px);
+  /* The corners of a layer over a sheet's whole inside (features/shell/sheet.ts). */
+  --sheet-inside-radius: calc(var(--radius-card) - 1px);
   --scroll-fade-size: 28px;
   /* Windows only, where the app draws its scrollbars: a 4 px thumb in a 10 px gutter. */
   --scrollbar-size: 10px;

@@ -117,6 +117,7 @@ import { WorktreeMenu, WorktreeNote } from './new-session/worktree-menu'
 import { ParentLink } from './session-header'
 import { ColumnScroller } from './session-states'
 import { TurnDots } from './turn-dots'
+import { isPhoneWindow } from '@renderer/features/shell/narrow'
 
 /**
  * The New session screen, on affectUI's start screen: a greeting, then the Chat Composer with the
@@ -388,8 +389,9 @@ function DraftComposer({
     }
   }, [agentId, hostId, ready, agentsRead, signIn, cacheLoaded])
 
+  // A phone would raise its keyboard over half the screen before anything was asked of it.
   useEffect(() => {
-    editor.current?.focus()
+    if (!isPhoneWindow()) editor.current?.focus()
   }, [editor])
 
   useEffect(() => onInput(holdsMessage), [holdsMessage, onInput])

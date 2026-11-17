@@ -51,6 +51,7 @@ import {
 } from './use-artifact'
 import { useComments } from './use-comments'
 import { useVersions } from './use-versions'
+import { usePhoneWindow } from '@renderer/features/shell/narrow'
 import { VersionHistory } from './version-history'
 import {
   ArtifactSurface,
@@ -84,6 +85,7 @@ type Panel = 'history' | 'comments'
  */
 export default function ArtifactViewer({ id, history }: { id: string; history: boolean }) {
   const { t } = useTranslation(['artifacts', 'common'])
+  const phone = usePhoneWindow()
   const [picked, setPicked] = useState<number | null>(null)
   const [panel, setPanel] = useState<Panel | null>(history ? 'history' : null)
   const historyOpen = panel === 'history'
@@ -567,12 +569,15 @@ export default function ArtifactViewer({ id, history }: { id: string; history: b
                 }
               />
             )}
-            <BarButton
-              label={t('viewer.history')}
-              icon={Clock01Icon}
-              pressed={historyOpen}
-              onClick={toggleHistory}
-            />
+            {/* A phone keeps the bar for the title; the More menu has the history too. */}
+            {!phone && (
+              <BarButton
+                label={t('viewer.history')}
+                icon={Clock01Icon}
+                pressed={historyOpen}
+                onClick={toggleHistory}
+              />
+            )}
             {shown && shares && (
               <ShareButton
                 id={id}

@@ -13,6 +13,7 @@ import { formatShortcut, isWeb } from '@renderer/lib/platform'
 import { useBrowserStore } from '@renderer/stores/browser'
 import { shownSidePane, useViewStore } from '@renderer/stores/view'
 import { Glyph } from '@renderer/features/shell/glyph'
+import { usePhoneWindow } from '@renderer/features/shell/narrow'
 import { insertSign } from './mentions'
 import type { PromptBoxState } from './use-prompt-box'
 
@@ -34,6 +35,7 @@ export function useAddMenu({
   onSideChat?: () => void
 }): { sections: ComposerAddSection[]; onAttach: (id: string) => void; disabled?: string } {
   const { t } = useTranslation('composer')
+  const phone = usePhoneWindow()
   const { disabled, full, remote, source, editor, update, sessionId } = box
   const hasPage = useBrowserStore((s) => {
     const page = sessionId ? s.bySession[sessionId] : undefined
@@ -60,7 +62,7 @@ export function useAddMenu({
           id: 'files',
           label: t('attachments.addFiles'),
           icon: <Glyph icon={Attachment01Icon} />,
-          shortcut: formatShortcut('Mod+U'),
+          shortcut: phone ? undefined : formatShortcut('Mod+U'),
           description: atMost,
           disabled: full,
         },
