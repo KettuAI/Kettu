@@ -1,6 +1,7 @@
 import remarkBreaks from 'remark-breaks'
 import remarkMath from 'remark-math'
 import { defaultRemarkPlugins, type StreamdownProps } from 'streamdown'
+import { codexCitations } from './codex-citations'
 import { githubRefs } from './github-refs'
 import { localImages } from './local-images'
 import { localLinks } from './local-links'
@@ -13,6 +14,7 @@ export const remarkPlugins: NonNullable<StreamdownProps['remarkPlugins']> = [
   ...Object.values(defaultRemarkPlugins),
   [remarkMath, { singleDollarTextMath: false }],
   remarkBreaks,
+  codexCitations,
   localLinks,
   localImages,
   githubRefs,
