@@ -306,7 +306,10 @@ export function installMethodOf(
   }
   if (installs.scriptHome && under(p.join(ctx.home, ...installs.scriptHome))) return 'script'
   if (installs.npm && file.includes(`/node_modules/${installs.npm}/`)) return 'npm'
-  if ((installs.brew || installs.brewCask) && /\/(?:Cellar|Caskroom)\//.test(file)) return 'brew'
+  // A formula's keg is named for it, which tells OpenCode 2's formula from OpenCode 1's.
+  const formula = installs.brew?.split('/').pop()
+  if (formula && file.includes(`/Cellar/${formula}/`)) return 'brew'
+  if (installs.brewCask && file.includes('/Caskroom/')) return 'brew'
   if (installs.winget && file.includes('/winget/')) return 'winget'
   return null
 }

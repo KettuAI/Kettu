@@ -279,6 +279,7 @@
     "requiresFailed": "{{agent}} could not read the version of {{command}}: {{reason}} {{hint}}",
     "scriptMissing": "{{script}} does not exist.",
     "antigravityInstallNotice": "The official installer puts agy in ~/.local/bin and adds it to PATH in your shell configuration files.",
+    "opencodeInstallNotice": "Kettu runs OpenCode 2. OpenCode 1 uses the same command, so remove a Homebrew or npm copy of it before installing; the install script replaces it.",
     "geminiAudience": "Gemini CLI is for Gemini Code Assist Standard and Enterprise, Code Assist for GitHub, and paid Gemini API or Vertex AI keys. Since June 18, 2026, Google serves personal Google accounts, free or Google AI Pro and Ultra, in Google Antigravity.",
     "hermesInstallNotice": "The official installer adds ~/.local/bin to PATH in your shell configuration files. ACP is included; browser and computer-use components are skipped.",
     "hint": {
