@@ -114,6 +114,8 @@
       "title": "提示缓存",
       "expired": "已过期",
       "likelyExpired": "可能已过期",
+      "notice": "提示缓存已过期",
+      "noticeLikely": "提示缓存可能已过期",
       "about": "约 {{time}}",
       "costExpired": "下一条消息会按全价重新读取约 {{tokens}} token。",
       "ifExpired": "如果已过期，下一条消息会按全价重新读取约 {{tokens}} token。",

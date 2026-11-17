@@ -114,6 +114,8 @@
       "title": "Prompt cache",
       "expired": "Expired",
       "likelyExpired": "Probably expired",
+      "notice": "Prompt cache expired",
+      "noticeLikely": "Prompt cache probably expired",
       "about": "about {{time}}",
       "costExpired": "The next message reads about {{tokens}} tokens again at full price.",
       "ifExpired": "If it has expired, the next message reads about {{tokens}} tokens again at full price.",
