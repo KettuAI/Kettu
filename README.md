@@ -136,6 +136,15 @@ On a server or development machine ([docs](https://www.kettu.sh/docs/devices/dae
 curl -fsSL https://kettu.sh/install | sh
 ```
 
+Or in Docker (amd64 and Arm), which keeps Kettu's data in the `kettu` volume and your projects in `/workspace`:
+
+```sh
+docker run -d --name kettu -p 4567:4567 -v kettu:/home/node -v ~/code:/workspace ghcr.io/kettuai/kettu
+docker exec -it kettu kettu pair
+```
+
+`kettu pair` shows the code that adds a device. Keep the `kettu` volume: it holds the identity your devices paired with. To update, pull the new image and run the container again.
+
 ## Agents
 
 <details>

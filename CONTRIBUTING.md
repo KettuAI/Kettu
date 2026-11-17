@@ -50,6 +50,8 @@ A host signed in to a Kettu account notifies its paired iOS devices that ask for
 
 After `pnpm build`, `node tools/daemon/package.mjs --out dist/daemon` packages the daemon for this computer as a release does: the pinned Node.js, the daemon, the web client, node-pty as this checkout built it, and `bin/kettu`; `--node <folder>` takes an unpacked Node.js release instead of downloading it. `tools/daemon/install.sh`, which `https://kettu.sh/install` serves, installs a release's package from `https://download.kettu.sh`, or from GitHub's releases when that fails. `KETTU_RELEASES_URL` points it at one other place laid out as GitHub's releases instead, such as a `file://` folder whose `download/v<version>/` holds the package and `kettu-daemon-sha256sums.txt`, for `HOME=<folder> sh tools/daemon/install.sh --version <version> --no-service`; `kettu update` reads the same variable, from a server laid out that way.
 
+`tools/daemon/Dockerfile` builds the daemon's image from a published release's package, checked against its checksums: `docker build --build-arg VERSION=<version> -f tools/daemon/Dockerfile tools/daemon`, with `--build-arg RELEASES_URL=<place>` for a place other than GitHub's releases. `.github/workflows/docker.yml` does it when a release is published, for amd64 and arm64, runs the daemon in the amd64 image before pushing anything, and pushes to `ghcr.io/kettuai/kettu` as `<version>`, `<major>.<minor>` and, for the newest release, `latest`; run it by hand with a version to publish an earlier release again. The image sets `KETTU_DIRECT_PORT=4567`, which the daemon applies to its direct connections at every start; the daemon picks a random port otherwise.
+
 What is planned next is in the [roadmap](./ROADMAP.md).
 
 ## Project work

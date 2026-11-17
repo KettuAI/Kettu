@@ -2,8 +2,9 @@ name: Release
 
 # The gate before a release: the core tests pass once and every installer builds and packages on its
 # own runner. With a version, a run on main then uploads everything to a draft release of that
-# commit, and publishing the draft creates the tag. Without one it touches no release, which checks a
-# branch, or new macOS signing secrets before a release depends on them.
+# commit. Publishing the draft creates the tag and starts docker.yml, which pushes the daemon's
+# image. Without a version it touches no release, which checks a branch, or new macOS signing
+# secrets before a release depends on them.
 on:
   workflow_dispatch:
     inputs:

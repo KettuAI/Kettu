@@ -1,0 +1,111 @@
+name: Docker
+
+# Publishes the daemon's image to GitHub's container registry, ghcr.io/kettuai/kettu, from the
+# daemon packages of a release once it is published, so a draft release pushes nothing. Run it by
+# hand with a version to publish the image of an earlier release again, or after a failure.
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Published release to build the image from, such as 0.1.7
+        type: string
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: docker-${{ github.event.release.tag_name || format('v{0}', inputs.version) }}
+  cancel-in-progress: false
+
+jobs:
+  image:
+    name: Image
+    runs-on: ${{ vars.LINUX_RUNNER || 'ubuntu-24.04' }}
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          sparse-checkout: tools/daemon
+      - name: Choose the tags
+        id: version
+        env:
+          TAG: ${{ github.event.release.tag_name }}
+          INPUT: ${{ inputs.version }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version="${INPUT:-${TAG#v}}"
+          if ! [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "'$version' is not X.Y.Z" >&2
+            exit 1
+          fi
+          # An earlier release published again must not take latest back.
+          latest=false
+          if [ "$(gh api "repos/$GITHUB_REPOSITORY/releases/latest" --jq .tag_name)" = "v$version" ]; then
+            latest=true
+          fi
+          {
+            echo "version=$version"
+            echo "minor=${version%.*}"
+            echo "latest=$latest"
+          } >> "$GITHUB_OUTPUT"
+      - id: meta
+        uses: docker/metadata-action@v6
+        with:
+          images: ghcr.io/kettuai/kettu
+          flavor: latest=false
+          tags: |
+            type=raw,value=${{ steps.version.outputs.version }}
+            type=raw,value=${{ steps.version.outputs.minor }}
+            type=raw,value=latest,enable=${{ steps.version.outputs.latest }}
+          labels: |
+            org.opencontainers.image.title=Kettu daemon
+            org.opencontainers.image.description=Kettu's daemon: run your agents on this machine and reach them from Kettu on any device
+            org.opencontainers.image.licenses=AGPL-3.0-only
+      # The arm64 image builds under emulation, and only its package comes from the release.
+      - uses: docker/setup-qemu-action@v4
+        with:
+          platforms: arm64
+      - uses: docker/setup-buildx-action@v4
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      # Nothing is pushed unless the daemon starts in the image and listens on its port.
+      - name: Build the image for a check
+        uses: docker/build-push-action@v7
+        with:
+          context: tools/daemon
+          file: tools/daemon/Dockerfile
+          platforms: linux/amd64
+          build-args: VERSION=${{ steps.version.outputs.version }}
+          load: true
+          tags: kettu-check
+      - name: Check the daemon in the image
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          [ "$(docker run --rm kettu-check --version)" = "$VERSION" ]
+          docker run -d --name check kettu-check
+          for _ in $(seq 30); do
+            if docker exec check kettu status > /dev/null 2>&1; then break; fi
+            sleep 2
+          done
+          docker exec check kettu status
+          docker exec check kettu direct | grep -q 'listen on port 4567\.'
+          docker rm -f check
+      - name: Push the image
+        uses: docker/build-push-action@v7
+        with:
+          context: tools/daemon
+          file: tools/daemon/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          build-args: VERSION=${{ steps.version.outputs.version }}
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
