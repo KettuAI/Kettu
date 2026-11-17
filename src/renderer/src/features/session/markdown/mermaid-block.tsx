@@ -50,11 +50,13 @@ type Drawn = { url: string; width: number } | { error: string | null } | null
  * references. Mermaid sizes its SVG to its container, so the picture takes the size its view box
  * gives it instead.
  */
-function pictureOf(svg: string): { url: string; width: number } | null {
-  const root = new DOMParser().parseFromString(svg, 'image/svg+xml').documentElement
-  if (root.nodeName !== 'svg') return null
+function pictureOf(svg: string): { url: string; width: number } | { error: string } {
+  // Labels with a line break are HTML inside the SVG, with a bare `<br>` that XML parsing rejects,
+  // so it is read as HTML and written back as XML.
+  const root = new DOMParser().parseFromString(svg, 'text/html').body.querySelector('svg')
+  if (!root) return { error: 'The output holds no SVG.' }
   const [, , width, height] = (root.getAttribute('viewBox') ?? '').split(/[\s,]+/).map(Number)
-  if (!width || !height) return null
+  if (!width || !height) return { error: 'The SVG has no usable view box.' }
   root.setAttribute('width', String(width))
   root.setAttribute('height', String(height))
   root.removeAttribute('style')
@@ -91,8 +93,7 @@ export default function MermaidBlock(props: BlockProps) {
     mermaid.render(id, code).then(
       ({ svg }) => {
         if (!current) return
-        const picture = pictureOf(svg)
-        setDrawn(picture ?? { error: null })
+        setDrawn(pictureOf(svg))
       },
       (error: unknown) =>
         current && setDrawn({ error: error instanceof Error ? error.message : String(error) }),
