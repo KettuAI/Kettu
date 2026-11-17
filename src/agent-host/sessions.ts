@@ -3150,7 +3150,8 @@ export class SessionManager {
    * What an attach of the session hands its agent: the Marketplace's skills, Kettu's own with them
    * while the session reaches Kettu's server, the MCP servers, the artifacts service to an agent
    * that takes MCP over HTTP while Kettu's server is on for it, then the Marketplace's servers
-   * meant for its agent, and Kettu's memory while it is on.
+   * meant for its agent, and Kettu's memory while it is on. An agent that adds to its system
+   * prompt when a session starts gets the guide and memory as one text.
    */
   private async attachOptions(
     sessionId: string,
@@ -3164,6 +3165,12 @@ export class SessionManager {
     const reached = own.length > 0 || kettuService !== null
     const skills = (await this.deps.skills?.(record.agentId, reached)) ?? {}
     const memory = await this.memoryFor(sessionId, record, reached)
+    const append = runtime?.connection.systemPromptAppend
+      ? kettuAhead(
+          reached ? (this.deps.mcp?.guide(record.agentId) ?? null) : null,
+          memory?.text ?? null,
+        )
+      : null
     return {
       mcpServers: [...own, ...this.libraryServers(sessionId, record, runtime, own)],
       ...skills,
@@ -3172,6 +3179,7 @@ export class SessionManager {
       ...(memory ? { memory } : {}),
       ...(kettuService ? { kettuService } : {}),
       ...(record.instructionsAhead ? { promptAhead: true } : {}),
+      ...(append ? { systemPromptAppend: append } : {}),
     }
   }
 
@@ -6564,10 +6572,8 @@ export class SessionManager {
           .flatMap((server) => (server.type === 'stdio' ? [] : (server.prompt ?? [])))
           .join('\n\n')
       : (this.deps.mcp?.guide(record.agentId) ?? '')
-    const guide = tools && this.deps.mcp && text ? `<kettu-guide>\n${text}\n</kettu-guide>` : null
     const memory = (await this.memoryFor(live.id, record, tools))?.text ?? null
-    const ahead = [guide, memory].filter((text): text is string => text !== null)
-    return ahead.length > 0 ? ahead.join('\n\n') : null
+    return kettuAhead(tools && this.deps.mcp && text ? text : null, memory)
   }
 
   /** The agent that had the session before any takeover. */
@@ -10291,6 +10297,14 @@ const UNUSABLE_STATES: ReadonlySet<AgentStatus['state']> = new Set([
   'node-missing',
   'node-outdated',
 ])
+
+/** Kettu's guide, marked as such, then its memory; null when there is neither. */
+function kettuAhead(guide: string | null, memory: string | null): string | null {
+  const parts = [guide ? `<kettu-guide>\n${guide}\n</kettu-guide>` : null, memory].filter(
+    (part): part is string => part !== null,
+  )
+  return parts.length > 0 ? parts.join('\n\n') : null
+}
 
 const cutAnswer = (text: string): string =>
   text.length > SIDE_ANSWER_CHARS ? text.slice(0, SIDE_ANSWER_CHARS) : text

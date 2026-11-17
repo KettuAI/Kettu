@@ -95,6 +95,7 @@ import {
   restoreOrder,
   withFullAccess,
 } from './agy-access'
+import { systemPromptMeta, takesSystemPromptAppend } from './agy-prompt'
 import { agyAllowOnce, agyAutoAllowed, fromAgy, onAgyOwnFiles } from './agy-tools'
 import { fromCodeMode } from './code-mode'
 import { forkPointMeta, forksAtMessage } from './fork-point'
@@ -389,6 +390,8 @@ export class AcpConnection implements AgentConnection {
   private readonly agyBuildModes = new Map<string, string>()
   /** agy offers full access, once `initialize` has answered. */
   private fullAccess = false
+  /** agy takes a system prompt addition for a new session, once `initialize` has answered. */
+  private appendsSystemPrompt = false
   /** agy's sessions while it offers full access. */
   private readonly agyAccess = new Map<string, AgyAccess>()
 
@@ -657,6 +660,14 @@ export class AcpConnection implements AgentConnection {
     return this.hooks.kettuExtension === true
   }
 
+  get ownInstructions(): boolean {
+    return this.appendsSystemPrompt
+  }
+
+  get systemPromptAppend(): boolean {
+    return this.appendsSystemPrompt
+  }
+
   close(): void {
     this.connection.close()
     this.transport.close()
@@ -754,6 +765,7 @@ export class AcpConnection implements AgentConnection {
     }
     this.version = result.version
     this.fullAccess = this.agy && offersFullAccess(result.version, init._meta)
+    this.appendsSystemPrompt = this.agy && takesSystemPromptAppend(result.version, caps)
     this.naming = mcpNaming(init.agentInfo)
     this.removal = hiddenRemoval(this.hooks.agentId, result.capabilities, result.version)
     return result
@@ -772,7 +784,11 @@ export class AcpConnection implements AgentConnection {
   }
 
   async newSession(cwd: string, options: SessionOptions = {}): Promise<OpenedSession> {
-    const meta = this.startMeta(options)
+    const started = this.startMeta(options)
+    const meta =
+      this.appendsSystemPrompt && options.systemPromptAppend
+        ? { ...started, ...systemPromptMeta(options.systemPromptAppend) }
+        : started
     const response = await this.call(() =>
       this.connection.agent.request(methods.agent.session.new, {
         cwd,

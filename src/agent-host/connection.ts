@@ -328,6 +328,12 @@ export interface SessionOptions {
    * prompts, as for a session whose agent recorded its instructions outside Kettu.
    */
   promptAhead?: boolean
+  /**
+   * Kettu's guide and memory worded for an agent with `systemPromptAppend`, which adds them to the
+   * system prompt of a session it starts; the agent keeps them with the session, so only
+   * `newSession` takes it.
+   */
+  systemPromptAppend?: string
 }
 
 /** Kettu's memory as a session starts with it. */
@@ -388,6 +394,11 @@ export interface AgentConnection {
    * otherwise the host sends that text ahead of the session's first prompt.
    */
   readonly ownInstructions?: boolean
+  /**
+   * Whether it takes `SessionOptions.systemPromptAppend` for a new session and keeps it out of
+   * the session's messages. Implies `ownInstructions`.
+   */
+  readonly systemPromptAppend?: boolean
   /**
    * Whether the agent runs Kettu's extension, which reaches Kettu's MCP service with
    * `SessionOptions.kettuService` though the agent takes no MCP server over ACP (Pi).
