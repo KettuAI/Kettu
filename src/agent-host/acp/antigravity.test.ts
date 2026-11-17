@@ -26,6 +26,7 @@ import {
 import { newTurnScope } from '../session-updates'
 import { AcpConnection, inProcessTransport } from './connection'
 import { mapConfig } from './mapper'
+import edit from './fixtures/agy-edit-request.json'
 import requests from './fixtures/agy-permissions.json'
 import compacted from './fixtures/agy-compact.json'
 import planned from './fixtures/agy-plan.json'
@@ -104,8 +105,8 @@ function connect(
   return { connection, prompted, closed, accounts, signIns, configs, opened }
 }
 
-/** A session's thread, with every permission request allowed once. */
-function threadTarget() {
+/** A session's thread, with every permission request allowed once; `files` are the project's. */
+function threadTarget(files: Record<string, string> = {}) {
   let thread: ThreadState = threadFromSnapshot({
     session: {
       id: 's',
@@ -155,6 +156,7 @@ function threadTarget() {
     },
     send: () => {},
     startMode: () => null,
+    readProjectFile: async (file) => files[file] ?? null,
   }
   return {
     target,
@@ -625,6 +627,48 @@ describe("agy's permission requests", () => {
       'echo hi',
     ])
     connection.close()
+  })
+})
+
+describe("agy's edit requests", () => {
+  const file = edit.toolCall.content[0]!.path
+
+  /** The content of the card for agy's `edit_file` request, with `files` as the project's. */
+  async function cardDiff(files: Record<string, string>, toolCall: object = edit.toolCall) {
+    const { connection } = connect('1.5.9', async (client, sessionId) => {
+      const params = { sessionId, toolCall, options: edit.options } as never
+      await client.request(methods.client.session.requestPermission, params)
+    })
+    await connection.initialize('1.0.0')
+    const { sessionId } = await connection.newSession('/tmp/agy-probe/ws4')
+    const { target, entries } = threadTarget(files)
+    connection.register(sessionId, target)
+    await connection.prompt(sessionId, [{ type: 'text', text: 'go' }])
+    connection.close()
+    const entry = entries().find((e) => e.kind === 'tool')
+    return entry?.kind === 'tool' ? entry.content : null
+  }
+
+  it('draw the whole file, as the finished call does, not the snippet it replaces', async () => {
+    expect(await cardDiff({ [file]: edit.file })).toEqual([edit.finished])
+  })
+
+  it('draw the snippet when the file cannot be read, or lacks the target or has it twice', async () => {
+    const snippet = edit.toolCall.content
+    expect(await cardDiff({})).toEqual(snippet)
+    expect(await cardDiff({ [file]: 'line one\nline 3\n' })).toEqual(snippet)
+    expect(await cardDiff({ [file]: 'line three\nand line three\n' })).toEqual(snippet)
+  })
+
+  it('put the replacement in as written, whatever characters it holds', async () => {
+    const toolCall = {
+      ...edit.toolCall,
+      rawInput: { ...edit.toolCall.rawInput, Replacement: "$& $' $$ line three" },
+    }
+    const [diff] = (await cardDiff({ [file]: edit.file }, toolCall)) as { newText: string }[]
+    expect(diff!.newText).toBe(
+      "line one\nline two\n$& $' $$ line three\nline four\nline five\nline six\n",
+    )
   })
 })
 
