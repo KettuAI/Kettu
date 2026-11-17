@@ -6,6 +6,7 @@ import type { ThreadState } from '@shared/thread'
 import { toolStep } from '@renderer/features/session/entries/helpers'
 import { bestPaths } from '@renderer/features/files/paths'
 import { relativePath } from '@renderer/lib/format'
+import { startsWord } from './trigger'
 
 /** Rows the popover shows at most. */
 export const MENTION_LIMIT = 50
@@ -27,13 +28,18 @@ export interface MentionRow {
 // A full-width at sign is what some input methods type for `@`.
 const AT_SIGNS = '@\uFF20'
 
-/** The mention at the caret, when its word starts with `@`; null otherwise. */
+/**
+ * The mention at the caret: the nearest `@` before it in its word that starts a word, with what
+ * follows up to the caret; null otherwise.
+ */
 export function mentionAt(text: string, caret: number | null): Mention | null {
   if (caret === null || caret > text.length) return null
-  let start = caret
-  while (start > 0 && !/\s/.test(text[start - 1]!)) start--
-  if (start === caret || !AT_SIGNS.includes(text[start]!)) return null
-  return { start, query: text.slice(start + 1, caret) }
+  for (let at = caret - 1; at >= 0 && !/\s/.test(text[at]!); at--) {
+    if (AT_SIGNS.includes(text[at]!) && startsWord(text, at)) {
+      return { start: at, query: text.slice(at + 1, caret) }
+    }
+  }
+  return null
 }
 
 const folderCache = new WeakMap<readonly string[], string[]>()
@@ -128,11 +134,16 @@ export function replaceMention(
   return { text: next, caret: before.length + 1 }
 }
 
-/** The text with `@` put at the caret, at the start of a word, and the caret after it. */
-export function insertAt(text: string, from: number, to: number): { text: string; caret: number } {
+/** The text with `sign` put at the caret, at the start of a word, and the caret after it. */
+export function insertSign(
+  text: string,
+  from: number,
+  to: number,
+  sign: '@' | '/',
+): { text: string; caret: number } {
   const before = text.slice(0, from)
-  const sign = before === '' || /\s$/.test(before) ? '@' : ' @'
-  return { text: `${before}${sign}${text.slice(to)}`, caret: from + sign.length }
+  const typed = before === '' || /\s$/.test(before) ? sign : ` ${sign}`
+  return { text: `${before}${typed}${text.slice(to)}`, caret: from + typed.length }
 }
 
 /** What a key in the composer does while its popovers may be open. */

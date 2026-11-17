@@ -591,6 +591,7 @@ export function Composer({
         addSections={add.sections}
         onAttach={add.onAttach}
         addDisabled={add.disabled}
+        addRequest={box.addRequest}
         {...modeControl}
         start={
           !starting && leftOthers.map((o) => <OptionMenu key={o.id} option={o} onSelect={set} />)

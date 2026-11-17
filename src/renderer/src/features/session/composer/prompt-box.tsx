@@ -18,7 +18,7 @@ import {
   type MentionRow,
 } from './mentions'
 import { usePromptChips } from './prompt-chips'
-import { orderSlashMatches } from './slash'
+import { orderSlashMatches, placeCommand, slashAt } from './slash'
 import { useMentionList, type MentionList } from './use-mention-list'
 import { useBoxText, type PromptBoxState } from './use-prompt-box'
 
@@ -59,18 +59,9 @@ export function PromptBox({
   onKeyDown: (event: KeyboardEvent) => void
 }) {
   const { t } = useTranslation('composer')
-  const {
-    draft,
-    projectPath,
-    disabled,
-    source,
-    attachments,
-    update,
-    editor,
-    setCaret,
-    slashDismissed,
-    setSlashDismissed,
-  } = box
+  const { draft, projectPath, disabled, source, attachments, update, editor, setCaret } = box
+  // The `/` whose list Esc or leaving the box closed.
+  const [slashDismissed, setSlashDismissed] = useState<number | null>(null)
   // The `@` whose popover Esc or a click elsewhere closed.
   const [mentionDismissed, setMentionDismissed] = useState<number | null>(null)
   // While an input method composes: whether the mention popover was open when it started.
@@ -84,11 +75,18 @@ export function PromptBox({
   const listId = useId()
 
   // Read from the text as values, so a key or a caret move renders the box only when one changes.
-  const slashQuery = useBoxText(box, (text) =>
-    text.startsWith('/') && !/\s/.test(text) ? text.slice(1).toLowerCase() : null,
-  )
-  const slashMatches = slashQuery === null ? [] : orderSlashMatches(commands, slashQuery)
-  const slashOpen = slashQuery !== null && slashMatches.length > 0 && !slashDismissed
+  const slashKey = useBoxText(box, (text, caret) => {
+    const found = slashAt(text, caret)
+    return found ? `${found.start}:${found.query}` : null
+  })
+  const slash = useMemo(() => {
+    if (slashKey === null) return null
+    const colon = slashKey.indexOf(':')
+    return { start: Number(slashKey.slice(0, colon)), query: slashKey.slice(colon + 1) }
+  }, [slashKey])
+  if (slashDismissed !== null && slash?.start !== slashDismissed) setSlashDismissed(null)
+  const slashMatches = slash === null ? [] : orderSlashMatches(commands, slash.query)
+  const slashOpen = slash !== null && slashMatches.length > 0 && slash.start !== slashDismissed
 
   const mentionKey = useBoxText(box, (text, caret) => {
     const found = mentionAt(text, caret)
@@ -135,7 +133,7 @@ export function PromptBox({
   const rows: PopoverItem[] = showing === 'slash' ? slashMatches : listing ? listing.rows : []
   // A list opens, and a new query starts, on its first row.
   const listKey = slashOpen
-    ? `/${slashQuery}`
+    ? `/${slash.start}:${slash.query}`
     : mentionOpen
       ? `@${mention!.start}:${mention!.query}`
       : ''
@@ -155,13 +153,21 @@ export function PromptBox({
   const chooseItem = (item: PopoverItem | undefined) => {
     if (!item) return
     if (isMentionRow(item)) choose(item)
-    else update(`/${item.name} `)
+    else if (slash) {
+      const next = placeCommand(
+        source.text,
+        slash,
+        item.name,
+        commands.map((c) => c.name),
+      )
+      update(next.text, next.caret)
+    }
   }
   const highlightRow = (index: number) => {
     if (index !== active) setHighlight({ list: listKey, index })
   }
   const dismiss = () => {
-    if (slashOpen) setSlashDismissed(true)
+    if (slashOpen) setSlashDismissed(slash.start)
     if (mentionOpen && mention) setMentionDismissed(mention.start)
   }
   const [focused, setFocused] = useState(false)
