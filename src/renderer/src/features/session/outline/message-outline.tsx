@@ -154,6 +154,8 @@ export const MessageOutline = memo(function MessageOutline({
     () => (find ? findsByRow(rows, find.matches, find.currentId) : null),
     [rows, find],
   )
+  // The list marks the reader's row, or while a find is open the row of its current match.
+  const listReading = finds ? finds.current : readingIndex
 
   const [open, setOpen] = useState(false)
 
@@ -378,7 +380,7 @@ export const MessageOutline = memo(function MessageOutline({
               <OutlineItem
                 key={row.entryId}
                 label={row.label}
-                reading={i === readingIndex}
+                reading={i === listReading}
                 waiting={waiting === row.entryId}
                 hits={finds?.counts[i] ?? null}
                 onJump={() => choose(i)}
@@ -412,7 +414,7 @@ export const MessageOutline = memo(function MessageOutline({
               type="button"
               tabIndex={-1}
               data-highlighted={i === at || undefined}
-              data-reading={i === readingIndex || undefined}
+              data-reading={i === listReading || undefined}
               data-hits={finds && finds.counts[i]! > 0 ? '' : undefined}
               data-quiet={finds?.counts[i] === 0 || undefined}
               className="ks-outline__item relative flex h-8 w-full cursor-default items-center gap-2.5 rounded-lg text-left outline-hidden select-none"
