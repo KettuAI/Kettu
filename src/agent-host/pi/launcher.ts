@@ -16,14 +16,20 @@ export const PI_EXTENSION_VARIABLE = 'KETTU_PI_EXTENSION'
 /** A session's Kettu MCP service, as the session router gives its process; the extension's only. */
 export const SERVICE_URL_VARIABLE = 'KETTU_MCP_URL'
 export const SERVICE_TOKEN_VARIABLE = 'KETTU_MCP_TOKEN'
+/** The file a session's process writes Pi's model scope to, as the session router gives it. */
+export const MODEL_SCOPE_VARIABLE = 'KETTU_MODEL_SCOPE_FILE'
 
 /**
  * The extension: registers Kettu's MCP service with Pi's own MCP support, only the memory tools
- * reachable, and drops the variables so the commands Pi runs never inherit the token. Kept on
- * `globalThis` for a `/reload`, which loads the extension again in the same process. Without
- * `registerMcpServer` (pi before 1.0.0) it does nothing.
+ * reachable, and drops the variables so the commands Pi runs never inherit the token. Once the
+ * session starts it writes the models Pi scoped it to (`ctx.scopedModels`, as `provider/id`, none
+ * when Pi has no scope), once per process, for the model menu: pi-acp lists every signed-in model.
+ * Kept on `globalThis` for a `/reload`, which loads the extension again in the same process.
+ * Without `registerMcpServer` (pi before 1.0.0) it registers no tools.
  */
-export const PI_EXTENSION_SOURCE = `// Written by Kettu: gives Pi's Kettu sessions Kettu's memory tools.
+export const PI_EXTENSION_SOURCE = `// Written by Kettu: gives Pi's Kettu sessions Kettu's memory tools and model scope.
+import { writeFileSync } from 'node:fs'
+
 const TOOLS = ${JSON.stringify(MEMORY_TOOL_NAMES)}
 const HELD = Symbol.for('kettu.mcp')
 
@@ -32,10 +38,25 @@ export default function kettu(pi) {
   const held = globalThis[HELD] ?? {
     url: env.${SERVICE_URL_VARIABLE},
     token: env.${SERVICE_TOKEN_VARIABLE},
+    scopeFile: env.${MODEL_SCOPE_VARIABLE},
+    scopeWritten: false,
   }
   globalThis[HELD] = held
   delete env.${SERVICE_URL_VARIABLE}
   delete env.${SERVICE_TOKEN_VARIABLE}
+  delete env.${MODEL_SCOPE_VARIABLE}
+  if (held.scopeFile && typeof pi.on === 'function') {
+    pi.on('session_start', (_event, ctx) => {
+      if (held.scopeWritten || !Array.isArray(ctx?.scopedModels)) return
+      held.scopeWritten = true
+      const models = ctx.scopedModels.map((scoped) => scoped.model.provider + '/' + scoped.model.id)
+      try {
+        writeFileSync(held.scopeFile, JSON.stringify({ models }))
+      } catch (error) {
+        console.error('Kettu could not pass on the model scope: ' + error)
+      }
+    })
+  }
   if (!held.url || !held.token || typeof pi.registerMcpServer !== 'function') return
   try {
     pi.registerMcpServer(${JSON.stringify(SERVICE_NAME)}, {

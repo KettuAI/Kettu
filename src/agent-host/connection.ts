@@ -364,6 +364,12 @@ export interface KettuService {
  */
 export const KETTU_SERVICE_META = 'sh.kettu/mcp'
 
+/**
+ * Where ACP's `session/new` names the file Kettu's extension writes the session's model scope to;
+ * the session router takes it out into that session's process environment as well.
+ */
+export const MODEL_SCOPE_META = 'sh.kettu/model-scope'
+
 /** Decides which of the MCP servers a session's folder declares itself may start. */
 export interface ProjectMcpGate {
   /**

@@ -1,4 +1,5 @@
-// Kettu's extension for Pi: where a session's token goes, and which of Kettu's tools Pi reaches.
+// Kettu's extension for Pi: where a session's token goes, which of Kettu's tools Pi reaches, and
+// the model scope it passes on.
 
 import { mkdtemp, readFile, rm, stat } from 'node:fs/promises'
 import os from 'node:os'
@@ -15,6 +16,7 @@ afterEach(async () => {
   delete (globalThis as Record<symbol, unknown>)[HELD]
   delete process.env.KETTU_MCP_URL
   delete process.env.KETTU_MCP_TOKEN
+  delete process.env.KETTU_MODEL_SCOPE_FILE
   await Promise.all(dirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })))
 })
 
@@ -67,5 +69,46 @@ describe("Kettu's extension for Pi", () => {
     const registered: unknown[] = []
     extension({ registerMcpServer: (...args: unknown[]) => registered.push(args) })
     expect(registered).toEqual([])
+  })
+
+  it('writes the scope Pi resolved once the session starts, once, and takes the file out', async () => {
+    const { files, extension } = await written()
+    const file = path.join(path.dirname(files.extension), 'scope.json')
+    process.env.KETTU_MODEL_SCOPE_FILE = file
+    const handlers: Record<string, (event: unknown, ctx: unknown) => void> = {}
+    extension({
+      on: (event: string, handler: (event: unknown, ctx: unknown) => void) => {
+        handlers[event] = handler
+      },
+    })
+    expect(process.env.KETTU_MODEL_SCOPE_FILE).toBeUndefined()
+    const scoped = (provider: string, id: string) => ({ model: { provider, id, name: id } })
+    handlers.session_start!(
+      { reason: 'startup' },
+      { scopedModels: [scoped('kettutest', 'test-alpha'), scoped('deepseek', 'deepseek-flash')] },
+    )
+    expect(JSON.parse(await readFile(file, 'utf8'))).toEqual({
+      models: ['kettutest/test-alpha', 'deepseek/deepseek-flash'],
+    })
+    // A later start in the same process, as after a reload, writes nothing the host would not read.
+    await rm(file)
+    handlers.session_start!({ reason: 'new' }, { scopedModels: [] })
+    await expect(stat(file)).rejects.toThrow()
+  })
+
+  it('writes an empty scope for a Pi without one, and nothing for a Pi that gives none', async () => {
+    const { files, extension } = await written()
+    const file = path.join(path.dirname(files.extension), 'scope.json')
+    process.env.KETTU_MODEL_SCOPE_FILE = file
+    const handlers: Record<string, (event: unknown, ctx: unknown) => void> = {}
+    extension({
+      on: (event: string, handler: (event: unknown, ctx: unknown) => void) => {
+        handlers[event] = handler
+      },
+    })
+    handlers.session_start!({ reason: 'startup' }, {})
+    await expect(stat(file)).rejects.toThrow()
+    handlers.session_start!({ reason: 'startup' }, { scopedModels: [] })
+    expect(JSON.parse(await readFile(file, 'utf8'))).toEqual({ models: [] })
   })
 })
