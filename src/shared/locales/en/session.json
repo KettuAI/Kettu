@@ -663,6 +663,17 @@
     "announceApproval": "{{agent}} needs your approval",
     "announceFinished": "{{agent}} finished"
   },
+  "find": {
+    "placeholder": "Find in this session",
+    "previous": "Previous match (Shift+Enter)",
+    "next": "Next match (Enter)",
+    "close": "Close (Esc)",
+    "none": "No results",
+    "failed": "Search failed",
+    "short": "Type at least 2 characters",
+    "indexing": "Indexing conversations, results may be incomplete",
+    "unsupported": "This computer can't find in a session yet"
+  },
   "thread": {
     "label": "Thread",
     "olderFailed": "Couldn't load earlier messages",

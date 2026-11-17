@@ -13,6 +13,7 @@ export type AppEvent =
   | { kind: 'draft-written'; draft: string } // written from outside its composer, which reloads it
   | { kind: 'add-attachments' } // Mod+U: the composer's Add files or photos…
   | { kind: 'open-add-menu' } // Mod+Shift+A: the composer's plus menu
+  | { kind: 'find-in-session' } // Mod+F: the find bar of the session in focus
   | { kind: 'drop-attachments'; draft: string; files: File[] } // a session's id, or New session's draft
   // To the side panel `panel` names, a session's or New session's, once it shows.
   | { kind: 'run-in-terminal'; panel: string; command: string }

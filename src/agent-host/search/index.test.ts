@@ -60,6 +60,45 @@ describe.each([{ fts: true }, { fts: false }])('the search index (fts: $fts)', (
     index.close()
   })
 
+  it('lists the messages of one session that hold every word, oldest first', () => {
+    const index = open()
+    fill(index, 's1', 10, [
+      message(0, 'Fix the CAFÉ menu', 'user'),
+      message(1, 'Nothing here'),
+      message(2, 'The menu of the cafe is fixed'),
+      message(5, '搜索会话里的内容'),
+    ])
+    fill(index, 's2', 20, [message(0, 'another menu with a cafe')])
+    expect(index.findIn('s1', ['cafe', 'menu'], 10)).toEqual({
+      matches: [
+        { pos: 0, entryId: 'e0', role: 'user' },
+        { pos: 2, entryId: 'e2', role: 'agent' },
+      ],
+      capped: false,
+    })
+    // Words of one or two characters are found too, and another session's messages are not.
+    expect(index.findIn('s1', ['会话'], 10).matches.map((m) => m.pos)).toEqual([5])
+    expect(index.findIn('s1', ['cafe', 'thanks'], 10).matches).toEqual([])
+    expect(index.findIn('missing', ['cafe'], 10).matches).toEqual([])
+    expect(index.findIn('s1', [], 10)).toEqual({ matches: [], capped: false })
+    index.close()
+  })
+
+  it('keeps the newest matches of a session when there are more than the limit', () => {
+    const index = open()
+    fill(
+      index,
+      's1',
+      10,
+      Array.from({ length: 5 }, (_, pos) => message(pos, `same word ${pos}`)),
+    )
+    const found = index.findIn('s1', ['word'], 3)
+    expect(found.capped).toBe(true)
+    expect(found.matches.map((m) => m.pos)).toEqual([2, 3, 4])
+    expect(index.findIn('s1', ['word'], 5).capped).toBe(false)
+    index.close()
+  })
+
   it('finds short words and words of any script', () => {
     const index = open()
     fill(index, 's1', 10, [

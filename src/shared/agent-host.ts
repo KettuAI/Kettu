@@ -231,6 +231,13 @@ export interface ConversationHit {
   matches?: number
 }
 
+/** A message of one session that holds every word of a search in it. */
+export interface SessionFindMatch {
+  pos: number
+  entryId: string
+  role: 'user' | 'agent'
+}
+
 /** The search index is still being built: sessions done of those it started with. */
 export interface SearchIndexing {
   done: number
@@ -1101,6 +1108,13 @@ export interface HostContract {
     params: { query: string }
     result: { hits: ConversationHit[]; indexing?: SearchIndexing | null }
   }
+  // The messages of one session that hold every word of `query`, oldest first, for finding in the
+  // session on screen: user messages and replies as in `sessions.search`, at most 500, the
+  // newest when there are more (`capped`). Empty for a query of fewer than 2 characters.
+  'sessions.find': {
+    params: { sessionId: string; query: string }
+    result: { matches: SessionFindMatch[]; capped: boolean; indexing?: SearchIndexing | null }
+  }
   // What the session made, for its card in the sidebar; empty for a session without a thread.
   'sessions.outputs': { params: { sessionId: string }; result: SessionOutputs }
   // Summarizes the messages without a title; empty while a summary of the session runs.
@@ -1713,6 +1727,7 @@ export const HOST_METHODS = [
   'sessions.requests',
   'sessions.outline',
   'sessions.search',
+  'sessions.find',
   'sessions.outputs',
   'sessions.outlineTitles',
   'sessions.watch',
