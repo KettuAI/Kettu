@@ -19,6 +19,8 @@ export type Command = {
   label: string;
   /** Lighter text after the label, e.g. a person, a channel or a page */
   hint?: string;
+  /** A second line under the label, e.g. the passage a match was found in */
+  detail?: string;
   /** "logo" sits on a small white tile; "icon" is a plain glyph */
   icon?: ReactNode;
   logo?: ReactNode;
@@ -349,6 +351,7 @@ const Item = memo(function Item({ cmd, domId, selected, ran, mod, q, mark, on }:
       aria-selected={selected}
       data-ran={ran || undefined}
       className="ui-cmc__item"
+      data-detail={cmd.detail ? "" : undefined}
       tabIndex={-1}
       onMouseMove={() => on.current.move(cmd)}
       onClick={() => on.current.run(cmd)}
@@ -369,6 +372,11 @@ const Item = memo(function Item({ cmd, domId, selected, ran, mod, q, mark, on }:
         {cmd.hint && (
           <span className="ui-cmc__hint" dir="auto" title={cmd.hint}>
             {mark ? mark(cmd.hint) : <Highlight text={cmd.hint} query={q} />}
+          </span>
+        )}
+        {cmd.detail && (
+          <span className="ui-cmc__detail" dir="auto">
+            {mark ? mark(cmd.detail) : <Highlight text={cmd.detail} query={q} />}
           </span>
         )}
       </span>

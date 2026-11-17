@@ -61,6 +61,7 @@ export type ThreadRequest =
   | { id: number; op: 'blob'; sessionId: string; hash: string }
   | { id: number; op: 'mentions'; sessionId: string; text: string }
   | { id: number; op: 'outline'; sessionId: string }
+  | { id: number; op: 'search'; words: string[] }
   | { id: number; op: 'outputs'; sessionId: string }
   | { id: number; op: 'setOutlineTitles'; sessionId: string; titles: OutlineTitle[] }
   | { id: number; op: 'artifact'; call: ArtifactCall }

@@ -219,6 +219,16 @@ export interface OutlineTitle {
   title: string
 }
 
+/** The latest message of a session that holds every word of a search. */
+export interface ConversationHit {
+  sessionId: string
+  pos: number
+  entryId: string
+  role: 'user' | 'agent'
+  /** The message's text around the first match, on one line and cut at both ends. */
+  snippet: string
+}
+
 export type { ContextBreakdown, ContextList } from './context'
 
 export type AgentState =
@@ -1052,6 +1062,9 @@ export interface HostContract {
   // `permissionCount` counts. Empty for a closed session, where nothing waits.
   'sessions.requests': { params: { sessionId: string }; result: { entries: ThreadEntry[] } }
   'sessions.outline': { params: { sessionId: string }; result: { entries: OutlineEntry[] } }
+  // The sessions whose stored messages hold every word of `query`, most recently updated first,
+  // each with its latest such message. Empty for a query of fewer than 2 characters.
+  'sessions.search': { params: { query: string }; result: { hits: ConversationHit[] } }
   // What the session made, for its card in the sidebar; empty for a session without a thread.
   'sessions.outputs': { params: { sessionId: string }; result: SessionOutputs }
   // Summarizes the messages without a title; empty while a summary of the session runs.
@@ -1661,6 +1674,7 @@ export const HOST_METHODS = [
   'sessions.entry',
   'sessions.requests',
   'sessions.outline',
+  'sessions.search',
   'sessions.outputs',
   'sessions.outlineTitles',
   'sessions.watch',

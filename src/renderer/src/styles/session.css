@@ -805,6 +805,27 @@
     transform: translateY(4px);
   }
 }
+/* The message Search went to, marked for a moment; the item's top spacing stays unmarked. */
+.ks-thread__column > [data-message-id][data-found] {
+  border-radius: var(--radius-md);
+  background-clip: content-box;
+  background-color: var(--match);
+  animation: ks-found 1.8s var(--ease-standard) both;
+}
+@keyframes ks-found {
+  0%,
+  40% {
+    background-color: var(--match);
+  }
+  100% {
+    background-color: transparent;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ks-thread__column > [data-message-id][data-found] {
+    animation: none;
+  }
+}
 @keyframes ks-step-draw {
   from {
     transform: scaleY(0);

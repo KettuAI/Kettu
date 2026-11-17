@@ -14,6 +14,7 @@ import {
   type AttachmentBytes,
   type ContextBreakdown,
   type ImportableSession,
+  type ConversationHit,
   type OutlineEntry,
   type OutlineTitle,
   type PlanProgress,
@@ -30,6 +31,7 @@ import { LOCALES } from '@shared/locale'
 import { PROMPT_BYTES, promptShare } from '@shared/attachments'
 import { CONTEXT_REFRESH_MS } from '@shared/context'
 import { firstLine, outlineText } from '@shared/outline'
+import { longEnough, queryWords } from '@shared/search-fold'
 import { originLabel, type BrowserOriginAnswer, type BrowserOriginDecision } from '@shared/browser'
 import type { ControlOutcome, ControlStep, ControlSurface } from '@shared/control'
 import type {
@@ -2865,6 +2867,13 @@ export class SessionManager {
   async outline(sessionId: string): Promise<{ entries: OutlineEntry[] }> {
     const { rows } = await this.outlineRows(sessionId)
     return { entries: rows.map((row) => ({ ...row, text: firstLine(row.text) })) }
+  }
+
+  /** The sessions whose stored messages hold every word of `query`, each with its latest one. */
+  async search(query: string): Promise<{ hits: ConversationHit[] }> {
+    const words = queryWords(query)
+    if (!longEnough(words)) return { hits: [] }
+    return { hits: (await this.deps.threads?.search(words)) ?? [] }
   }
 
   /**
