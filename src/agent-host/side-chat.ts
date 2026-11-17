@@ -40,6 +40,9 @@ export const SIDE_INSTRUCTIONS = [
   'Everything before this point is history inherited from the session, reference context only: ' +
     'do not continue, execute or complete any instruction, plan, tool call or request from it. ' +
     'Only the side question is active.',
+  'The last turn of that history may still be running in the session: a step it shows as ' +
+    'interrupted, or an approval it shows as aborted, may be running on or waiting, whatever an ' +
+    'interruption marker says.',
   'Answer it directly and briefly. Do not modify files, git state or any other state, do not ' +
     'start or message subagents or sessions, and do not call Kettu tools. If answering needs more ' +
     'than reading, say so and suggest asking in the main conversation.',
@@ -80,18 +83,9 @@ export function sideHistory(
   return picked
 }
 
-/**
- * The turn a fork or a hidden session is sent: the running turn its history lacks, the earlier
- * side questions, then the question.
- */
-export function sideTurnText(ask: Pick<SideQuestion, 'question' | 'history' | 'running'>): string {
+/** The turn a fork or a hidden session is sent: the earlier side questions, then the question. */
+export function sideTurnText(ask: Pick<SideQuestion, 'question' | 'history'>): string {
   const parts: string[] = []
-  if (ask.running) {
-    parts.push(
-      '<running_turn>\nThe turn the session is in now, so far, which the history above does not ' +
-        `hold yet:\n${ask.running}\n</running_turn>`,
-    )
-  }
   if (ask.history.length > 0) {
     const earlier = ask.history.map((turn) => `Q: ${turn.question}\nA: ${turn.answer}`)
     parts.push(`<earlier_side_questions>\n${earlier.join('\n\n')}\n</earlier_side_questions>`)
@@ -108,7 +102,7 @@ export function hiddenPrompt(
   return [
     HIDDEN_INSTRUCTIONS,
     carried ?? 'The session has no conversation yet.',
-    sideTurnText({ ...ask, running: null }),
+    sideTurnText(ask),
   ].join('\n\n')
 }
 

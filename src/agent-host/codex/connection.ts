@@ -16,7 +16,6 @@ import type { LaunchSpec } from '../catalog'
 import {
   AgentRequestError,
   optionAnswer,
-  SideQuestionUnsupported,
   type AgentConnection,
   type AgentInit,
   type AuthMethodInfo,
@@ -849,10 +848,11 @@ export class CodexConnection implements AgentConnection {
   }
 
   /**
-   * Answers a side question in an ephemeral fork of the thread through its last ended turn, read
-   * only, with every approval declined: the fork keeps the session's tools and instructions, so its
-   * prompt starts as the session's does and reads its cache. A thread whose first turn still runs
-   * has no turn to fork at.
+   * Answers a side question in an ephemeral fork of the thread as it stands, read only, with every
+   * approval declined: the fork keeps the session's tools and instructions, so its prompt starts as
+   * the session's does and reads its cache. No last turn is named, which Codex forks as if the
+   * source had been interrupted now: a running turn's finished parts are in the fork, the source
+   * runs on.
    */
   async sideQuestion(
     sessionId: string,
@@ -864,11 +864,6 @@ export class CodexConnection implements AgentConnection {
     const parent = this.threads.get(sessionId)
     if (!parent?.cwd) throw new AgentRequestError('agent_error', 'The Codex session is not open')
     const cwd = parent.cwd
-    const busy = parent.running !== null || parent.prompting !== null
-    const lastTurnId = await this.lastEndedTurn(sessionId)
-    if (busy && lastTurnId === null) {
-      throw new SideQuestionUnsupported('The first turn of the Codex session still runs')
-    }
     signal.throwIfAborted()
     const source = parent.known ? parent.settings : undefined
     const options = ask.options ?? {}
@@ -880,7 +875,6 @@ export class CodexConnection implements AgentConnection {
     this.hooks.traffic('out', { method: 'sideQuestion', sessionId })
     const response = await this.call<ThreadResponse>('thread/fork', {
       threadId: sessionId,
-      ...(lastTurnId ? { lastTurnId } : {}),
       cwd,
       approvalPolicy: 'never',
       sandbox: 'read-only',
@@ -928,17 +922,6 @@ export class CodexConnection implements AgentConnection {
         this.hooks.ignored(threadId, `side question fork not removed: ${message}`),
       )
     }
-  }
-
-  /** The newest turn of the thread that is not running, or null for a thread with none. */
-  private async lastEndedTurn(threadId: string): Promise<string | null> {
-    const page = await this.call<{ data: { id: string; status: string }[] }>('thread/turns/list', {
-      threadId,
-      limit: 2,
-      sortDirection: 'desc',
-      itemsView: 'notLoaded',
-    })
-    return page.data.find((turn) => turn.status !== 'inProgress')?.id ?? null
   }
 
   async closeSession(sessionId: string): Promise<void> {
