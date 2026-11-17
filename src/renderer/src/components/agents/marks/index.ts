@@ -75,6 +75,7 @@ export const AGENT_MARKS: Record<HarnessId, AgentMarkModule> = {
   glm,
   nova,
   qoder,
+  'qoder-cn': qoder,
   qwen,
   sigit,
   agoragentic,

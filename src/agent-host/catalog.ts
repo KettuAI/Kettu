@@ -54,6 +54,7 @@ import { OPENCODE } from './agents/opencode'
 import { PI } from './agents/pi'
 import { POOLSIDE } from './agents/poolside'
 import { QODER } from './agents/qoder'
+import { QODER_CN } from './agents/qoder-cn'
 import { QWEN } from './agents/qwen'
 import { SIGIT } from './agents/sigit'
 import { STAKPAK } from './agents/stakpak'
@@ -291,6 +292,7 @@ export {
   PI,
   POOLSIDE,
   QODER,
+  QODER_CN,
   QWEN,
   SIGIT,
   STAKPAK,
@@ -313,6 +315,7 @@ export function buildCatalog(fakeAgentPath: string | null): AgentDefinition[] {
     GLM,
     NOVA,
     QODER,
+    QODER_CN,
     SIGIT,
     AGORAGENTIC,
     AUTOHAND,

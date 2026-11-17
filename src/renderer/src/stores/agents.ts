@@ -409,6 +409,7 @@ export const AGENT_NAMES: Record<HarnessId, string> = {
   glm: 'GLM Agent',
   nova: 'Nova',
   qoder: 'Qoder CLI',
+  'qoder-cn': 'Qoder CN',
   sigit: 'siGit Code',
   agoragentic: 'Agoragentic',
   autohand: 'Autohand Code',

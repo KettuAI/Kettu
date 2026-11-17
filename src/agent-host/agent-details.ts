@@ -210,6 +210,16 @@ export function configLocations(
         'AGENTS.md',
       )
     }
+    case 'qoder-cn': {
+      const moved = variable('QODERCN_CONFIG_DIR')
+      const folder = moved ?? p.join(home, '.qoder-cn')
+      return layout(
+        folder,
+        moved ? 'QODERCN_CONFIG_DIR' : null,
+        { id: 'settings', candidates: [p.join(folder, 'settings.json')], env: null },
+        'AGENTS.md',
+      )
+    }
     case 'sigit': {
       const moved = variable('SIGIT_CONFIG_DIR')
       const folder = moved ?? p.join(home, '.config', 'sigit')
