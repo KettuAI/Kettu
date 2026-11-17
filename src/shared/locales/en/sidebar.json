@@ -304,7 +304,6 @@
     "allHostsLine": "{{count}} hosts side by side",
     "addHost": "Add host…",
     "limits": "Plan limits",
-    "allLimits": "All plan limits",
     "limitUsed": "{{window}}: {{percent}}% used",
     "ring": "{{account}} · {{window}} {{percent}}% used",
     "ringNone": "{{agent}} reports no plan limits",

@@ -173,7 +173,7 @@ function PlanPopover({ currentKey, close }: { currentKey: string | null; close: 
   const { t } = useTranslation('sidebar')
   const cards = planCards(useAccountsWithLimits(), useNow())
   const current = cards.find((card) => card.key === currentKey) ?? null
-  const { shown, more } = popoverCards(cards, current)
+  const shown = popoverCards(cards, current)
   const windowHost = useWindowHost()
   const hostName = useHostName()
   const shownKey = windowHost.kind === 'all' ? '*' : (windowHost.hostId ?? '')
@@ -213,19 +213,12 @@ function PlanPopover({ currentKey, close }: { currentKey: string | null; close: 
           {windowHost.kind === 'all' ? t('hosts.all') : hostName(windowHost.hostId)}
         </span>
       </div>
-      <div className="kettu-plan-pop__well">
-        <div className="grid grid-cols-2 gap-1">
+      <div className="kettu-plan-pop__well scroll-fade-y">
+        <div className="grid grid-flow-dense grid-cols-2 gap-1">
           {shown.map((card) => (
             <PlanLimitCard key={card.key} card={card} onOpen={open} />
           ))}
         </div>
-        {more > 0 && (
-          <button type="button" onClick={open} className="kettu-plan-pop__more">
-            {t('account.allLimits')}
-            <span className="kettu-plan-pop__count">+{more}</span>
-            <Icon icon={ArrowRight01Icon} size={12} />
-          </button>
-        )}
       </div>
       <button type="button" onClick={open} className="kettu-plan-pop__row">
         <Icon icon={Analytics01Icon} size={16} />
