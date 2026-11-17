@@ -44,6 +44,7 @@ import {
 } from '../main/settings-schema'
 import { ControlError, type DeviceSummary, type HostName, type HostStatus } from './control'
 import { ForkedHost, type HostTimings } from './forked-host'
+import { daemonUserAgent } from './update'
 
 type Attention = Extract<HostToMain, { type: 'host:attention' }>
 type ReportParams = Omit<Extract<MainToHost, { type: 'host:report-request' }>, 'type' | 'requestId'>
@@ -217,6 +218,7 @@ export class Hosts {
         sessionRouterPath: bundle('session-router.cjs'),
         settings: hostSettings(options.settings(), options.systemLocale),
         socketPath: socketPath ?? undefined,
+        userAgent: daemonUserAgent(options.version, process.platform, process.arch),
       }),
       startMessages: () => [
         { type: 'host:market-keys', ...options.marketKeys() },

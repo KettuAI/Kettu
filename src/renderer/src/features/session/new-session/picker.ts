@@ -20,6 +20,19 @@ export function agentLine(
   limits = status.limits,
 ): { text: string; tone: LineTone } | null {
   const need = agentNeed(status)
+  // A version Kettu's checks say does not work comes before anything else it needs.
+  const warning = need === 'update' ? null : status.versionWarning
+  if (warning) {
+    return {
+      text: i18n.t(
+        warning.broken || !warning.supported
+          ? 'session:newSession.picker.versionBroken'
+          : 'session:newSession.picker.versionUnsupported',
+        { version: warning.version },
+      ),
+      tone: 'attention',
+    }
+  }
   if (need === 'sign-in')
     return { text: i18n.t('session:newSession.picker.signedOut'), tone: 'attention' }
   if (need === 'update') {

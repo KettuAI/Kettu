@@ -654,4 +654,20 @@ describe('the host files', () => {
     expect(parseAgentUpdatesFile({ agents: null })).toBe('agents is not an object')
     expect(agentUpdatesFile(dir, log).file).toBe(path.join(dir, 'state', 'agent-updates.json'))
   })
+
+  it('keeps why a version moved, and reads a reason it does not know as none', () => {
+    const moved = { from: '1.1.0', to: '1.0.0', at: 9_000, withdrawn: true }
+    const parsed = parseAgentUpdatesFile({
+      agents: {
+        gemini: { attemptedAt: null, moved: { ...moved, reason: 'broken' } },
+        kimi: { attemptedAt: null, moved: { ...moved, reason: 'someday' } },
+      },
+    })
+    expect(parsed).toMatchObject({
+      agents: { gemini: { moved: { ...moved, reason: 'broken' } }, kimi: { moved } },
+    })
+    expect(typeof parsed === 'string' ? null : parsed.agents.kimi?.moved).not.toHaveProperty(
+      'reason',
+    )
+  })
 })

@@ -366,6 +366,8 @@ export async function startTestHost(options: TestHostOptions = {}): Promise<Test
       initialSetupDone: true,
       defaultAgent: null,
       computerUse: DEFAULT_SETTINGS.computerUse,
+      // Tests never reach Kettu's download service.
+      downloadService: false,
     },
     baseEnv: { ...process.env, ...options.agentEnv },
     send: (message) => sent.push(structuredClone(message)),

@@ -501,7 +501,11 @@
       "moreModels": "更多模型 ({{number}})",
       "noMatch": "没有匹配的 Agent 或模型",
       "checking": "正在检查 {{agent}} 的模型…",
-      "prepareFailed": "{{agent}} 无法打开会话：{{error}}"
+      "prepareFailed": "{{agent}} 无法打开会话：{{error}}",
+      "versionBroken": "Kettu 检查发现你的 {{command}} {{version}} 和它不能一起用。",
+      "versionUnsupported": "你的 {{command}} {{version}} 不在 Kettu 能用的版本里（{{supported}}）。",
+      "versionOnHost": "在 {{host}} 上把 {{agent}} 换成 Kettu 能用的版本。",
+      "howToChange": "更换方法…"
     },
     "startNotice": {
       "model": {
@@ -551,6 +555,8 @@
       "signedOut": "已退出 · 登录后使用",
       "failed": "启动失败",
       "needsUpdate": "版本太旧 · 点击更新",
+      "versionBroken": "{{version}} 和 Kettu 不能一起用",
+      "versionUnsupported": "{{version}} 不在 Kettu 能用的版本里",
       "limitUsed": "已用 {{limit}}限额的 {{percent}}%",
       "limitReached": "已达 {{limit}}限额",
       "manage": "管理 Agent…"

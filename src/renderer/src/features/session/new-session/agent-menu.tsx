@@ -736,6 +736,10 @@ function Pane({
       notice = (
         <UpdateNotice status={status} hostId={hostId} hostLabel={hostLabel} onLeave={onLeave} />
       )
+    } else if (status.versionWarning) {
+      notice = (
+        <VersionNotice status={status} hostId={hostId} hostLabel={hostLabel} onLeave={onLeave} />
+      )
     } else if (need === 'setup') {
       notice = (
         <Notice
@@ -1054,6 +1058,77 @@ function UpdateNotice({
           t('newSession.agentMenu.updateTo', { version: update.version })
         ) : (
           t('newSession.agentMenu.howToUpdate')
+        )}
+      </Button>
+    </Notice>
+  )
+}
+
+/**
+ * The user's own program is a version Kettu's checks say does not work: its update when there is
+ * one, else the harness's page, which says what to change it to. Another host's program is
+ * changed on that host.
+ */
+function VersionNotice({
+  status,
+  hostId,
+  hostLabel,
+  onLeave,
+}: {
+  status: AgentStatus
+  hostId: string | null
+  hostLabel: string
+  onLeave: () => void
+}) {
+  const { t } = useTranslation('session')
+  const warning = status.versionWarning
+  if (!warning) return null
+  if (hostId !== null) {
+    return (
+      <Notice
+        text={t('newSession.agentMenu.versionOnHost', { agent: status.name, host: hostLabel })}
+        tone="warning"
+      />
+    )
+  }
+  const command = status.cli?.command ?? status.binaryCommand ?? status.harnessName
+  const update = status.cli?.update ?? null
+  const running = status.task?.kind === 'update' && status.task.state === 'running'
+  return (
+    <Notice
+      text={
+        warning.broken || !warning.supported
+          ? t('newSession.agentMenu.versionBroken', { command, version: warning.version })
+          : t('newSession.agentMenu.versionUnsupported', {
+              command,
+              version: warning.version,
+              supported: warning.supported,
+            })
+      }
+      tone="warning"
+    >
+      <Button
+        variant="outline"
+        size="xs"
+        disabled={running}
+        onClick={() => {
+          if (update) {
+            void useAgentsStore.getState().updateCli(status.id)
+            return
+          }
+          onLeave()
+          openHarnessSettings(status.harnessId)
+        }}
+      >
+        {running ? (
+          <>
+            <Spinner className="size-3" />
+            {t('newSession.agentMenu.updating')}
+          </>
+        ) : update ? (
+          t('newSession.agentMenu.updateTo', { version: update.version })
+        ) : (
+          t('newSession.agentMenu.howToChange')
         )}
       </Button>
     </Notice>

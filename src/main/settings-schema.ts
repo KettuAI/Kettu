@@ -1492,6 +1492,7 @@ export function hostSettings(settings: SettingsFile, systemLocale: Locale): Host
     sessionTitles: settings.general.sessionTitles,
     defaultAgent: settings.general.defaultAgent,
     computerUse: structuredClone(settings.computerUse),
+    downloadService: settings.cloud.enabled && settings.updates.source === 'auto',
   }
 }
 
@@ -1521,6 +1522,8 @@ const HOST_SECTIONS: ReadonlySet<SettingsSection> = new Set([
   'idleSessions',
   'usage',
   'computerUse',
+  'cloud',
+  'updates',
 ])
 
 /** Whether a change touches what the agent host is sent; a language change is checked apart. */

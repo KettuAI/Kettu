@@ -8,11 +8,13 @@ import type { ExitInfo } from './agent-process'
 import { AgentManager, type LaunchedAgent } from './agents'
 import type { AgentDefinition } from './catalog'
 import { Diagnostics } from './diagnostics'
+import type { SignedManifest } from './harness-manifest'
 import { parseBundled } from './harness-versions'
 import { parseRegistry, type RegistryAgents } from './registry'
 import { EnvironmentService } from './shell-env'
-import type { AgentUpdatesFile } from './storage'
+import type { AgentUpdatesFile, HarnessManifestFile } from './storage'
 import { inProcessLauncher, loadFakeAgent } from './testing/harness'
+import { manifestDocument, manifestSigner } from './testing/manifest'
 import { tempFolder } from './testing/temp'
 
 const PACKAGE = '@google/gemini-cli'
@@ -23,6 +25,20 @@ const DEF: AgentDefinition = {
   registryId: 'gemini',
   launch: { kind: 'package', package: PACKAGE, args: ['--acp'] },
   install: { hint: 'detect.hint.node', url: 'https://nodejs.org/en/download' },
+}
+
+/** The same package as a vendor's own, which the Registry does not list as Kettu installs it. */
+const VENDOR: AgentDefinition = {
+  ...DEF,
+  launch: { kind: 'package', package: PACKAGE, args: ['--acp'], fromVendor: true },
+}
+
+const signer = manifestSigner()
+const KETTU_VERSION = '0.1.9'
+
+/** A signed manifest for the harness, at `sequence`, with one rule for every Kettu version. */
+function manifest(sequence: number, rule: Record<string, unknown>): SignedManifest {
+  return signer.sign(manifestDocument(sequence, { gemini: [{ kettu: '*', ...rule }] }))
 }
 
 function listing(version: string): RegistryAgents {
@@ -64,12 +80,21 @@ function brokenRun(): LaunchedAgent {
 }
 
 interface Setup {
+  def?: AgentDefinition
   installed?: string[]
   ran?: string
   live?: string
   bundled?: string
   autoUpdate?: false
   broken?: string
+  /** The manifest the download service sends, signed or not. */
+  manifest?: unknown
+  /** The manifest kept from an earlier run. */
+  kept?: SignedManifest
+  /** The manifest the build bundles. */
+  bundledManifest?: SignedManifest
+  /** Local mode or GitHub only: the download service is not asked. */
+  noDownloads?: true
 }
 
 async function manager(setup: Setup) {
@@ -98,14 +123,19 @@ async function manager(setup: Setup) {
     sessionTitles: true,
     defaultAgent: null,
     computerUse: DEFAULT_SETTINGS.computerUse,
+    downloadService: !setup.noDownloads,
   }
+  const def = setup.def ?? DEF
+  const vendor = def.launch.kind === 'package' && !!def.launch.fromVendor
   const platform = process.platform === 'win32' ? 'win32' : process.platform
   const nodeRuntime = { command: process.execPath, env: {} }
+  let manifestReads = 0
+  let kept: HarnessManifestFile | null = null
   const agents = new AgentManager({
-    catalog: [DEF],
+    catalog: [def],
     platform,
     nodeRuntime,
-    appVersion: '0.0.0-test',
+    appVersion: KETTU_VERSION,
     env: new EnvironmentService({
       platform,
       nodeRuntime,
@@ -134,11 +164,26 @@ async function manager(setup: Setup) {
     reportsDir: path.join(root, 'reports'),
     adaptersDir: root,
     bundled: parseBundled({
-      registry: { agents: [...listing(setup.bundled ?? '1.0.0').values()] },
+      registry: vendor
+        ? { agents: [] }
+        : { agents: [...listing(setup.bundled ?? '1.0.0').values()] },
+      ...(vendor ? { kettu: { gemini: { version: setup.bundled ?? '1.0.0' } } } : {}),
+      ...(setup.bundledManifest ? { manifest: setup.bundledManifest } : {}),
     }),
     fetchRegistry: async () => {
       if (!setup.live) throw new Error('offline')
       return listing(setup.live)
+    },
+    manifestKeys: [signer.key],
+    fetchManifest: async () => {
+      manifestReads++
+      if (setup.manifest === undefined) throw new Error('offline')
+      return JSON.stringify(setup.manifest)
+    },
+    rememberManifest: (file) => (kept = file),
+    // A vendor's package asks npm for its updates, which these tests leave unanswered.
+    fetchLatest: async () => {
+      throw new Error('offline')
     },
     install: async (options: InstallOptions) => {
       installs.push(options.version)
@@ -149,6 +194,7 @@ async function manager(setup: Setup) {
     authCommands: () => {},
     rememberUpdates: (file) => (remembered = file),
   })
+  if (setup.kept) agents.restoreManifest({ version: 1, readAt: 1, ...setup.kept })
   if (setup.ran) {
     agents.restoreUpdates({
       version: 1,
@@ -170,6 +216,8 @@ async function manager(setup: Setup) {
     status,
     until,
     remembered: () => remembered,
+    manifestReads: () => manifestReads,
+    kept: () => kept,
     /** Starts the agent and stops it again; resolves to the version it ran. */
     async start(): Promise<string | undefined> {
       await agents.ensureReady('gemini')
@@ -259,5 +307,156 @@ describe('the version of a harness that follows the registry', () => {
     await m.agents.checkUpdates()
     expect(await m.start()).toBe('1.0.0')
     expect(m.installs).toEqual([])
+  })
+})
+
+describe("the version Kettu's compatibility manifest gives", () => {
+  it("moves a vendor's own package to the version it recommends, without a release", async () => {
+    const m = await manager({
+      def: VENDOR,
+      installed: ['1.0.0'],
+      ran: '1.0.0',
+      live: '1.0.0',
+      manifest: manifest(10, { recommended: '1.0.1' }),
+    })
+    expect(m.status().automatic).toBeNull()
+    await m.agents.checkUpdates()
+    await m.until(() => m.status().package?.version === '1.0.1')
+    expect(m.installs).toEqual(['1.0.1'])
+    expect(m.status().automatic).toMatchObject({
+      on: true,
+      follows: 'kettu',
+      moved: { from: '1.0.0', to: '1.0.1', withdrawn: false, reason: 'manifest' },
+    })
+    expect(m.kept()?.payload).toBe(manifest(10, { recommended: '1.0.1' }).payload)
+    expect(await m.start()).toBe('1.0.1')
+  })
+
+  it('switches a version it marks broken back on the next start, and says why', async () => {
+    const m = await manager({
+      installed: ['1.0.0', '1.1.0'],
+      ran: '1.1.0',
+      bundled: '1.1.0',
+      live: '1.1.0',
+      manifest: manifest(10, { recommended: '1.0.0', broken: ['1.1.0'] }),
+    })
+    await m.agents.checkUpdates()
+    expect(m.status().automatic?.moved).toMatchObject({
+      from: '1.1.0',
+      to: '1.0.0',
+      withdrawn: true,
+      reason: 'broken',
+    })
+    expect(await m.start()).toBe('1.0.0')
+    expect(m.installs).toEqual([])
+  })
+
+  it('tells a withdrawal from the version withdrawn once its target is installed', async () => {
+    const m = await manager({
+      installed: ['1.0.0', '1.2.0'],
+      ran: '1.2.0',
+      bundled: '1.2.0',
+      live: '1.2.0',
+      manifest: manifest(10, { recommended: '1.1.0', broken: ['1.2.0'] }),
+    })
+    await m.agents.checkUpdates()
+    await m.until(() => m.status().package?.version === '1.1.0')
+    expect(m.installs).toEqual(['1.1.0'])
+    expect(m.status().automatic?.moved).toMatchObject({
+      from: '1.2.0',
+      to: '1.1.0',
+      withdrawn: true,
+      reason: 'broken',
+    })
+    expect(await m.start()).toBe('1.1.0')
+  })
+
+  it('with automatic updates off offers the switch back, and says why', async () => {
+    const m = await manager({
+      installed: ['1.0.0', '1.1.0'],
+      ran: '1.1.0',
+      bundled: '1.1.0',
+      live: '1.1.0',
+      autoUpdate: false,
+      manifest: manifest(10, { recommended: '1.0.0', broken: ['>=1.1.0'] }),
+    })
+    await m.agents.checkUpdates()
+    expect(m.status().automatic).toMatchObject({ on: false, back: true, backReason: 'broken' })
+    expect(m.status().update).toEqual({ adapterVersion: '1.0.0', cliVersion: null })
+  })
+
+  it('ignores a manifest that is unsigned, signed by another key or older than the one kept', async () => {
+    const stranger = manifestSigner()
+    for (const sent of [
+      manifestDocument(10, { gemini: [{ kettu: '*', broken: ['1.1.0'] }] }),
+      stranger.sign(manifestDocument(10, { gemini: [{ kettu: '*', broken: ['1.1.0'] }] })),
+    ]) {
+      const m = await manager({
+        installed: ['1.0.0', '1.1.0'],
+        ran: '1.1.0',
+        live: '1.1.0',
+        manifest: sent,
+      })
+      await m.agents.checkUpdates()
+      expect(m.manifestReads()).toBe(1)
+      expect(m.kept()).toBeNull()
+      expect(await m.start()).toBe('1.1.0')
+    }
+    const older = await manager({
+      installed: ['1.0.0', '1.1.0'],
+      ran: '1.1.0',
+      live: '1.1.0',
+      kept: manifest(20, {}),
+      manifest: manifest(19, { broken: ['1.1.0'] }),
+    })
+    await older.agents.checkUpdates()
+    expect(older.kept()).toBeNull()
+    expect(await older.start()).toBe('1.1.0')
+  })
+
+  it('asks the download service nothing in Local mode or with GitHub only', async () => {
+    const m = await manager({
+      installed: ['1.0.0', '1.1.0'],
+      ran: '1.1.0',
+      live: '1.1.0',
+      noDownloads: true,
+      kept: manifest(20, { broken: ['1.1.0'] }),
+      manifest: manifest(21, { broken: ['1.1.0'] }),
+      bundledManifest: manifest(5, {}),
+    })
+    await m.agents.checkUpdates()
+    expect(m.manifestReads()).toBe(0)
+    // Only the bundled manifest is in force, so the kept one withdraws nothing.
+    expect(await m.start()).toBe('1.1.0')
+  })
+
+  it('records why a start went back for the bundled versions or the kept manifest', async () => {
+    const bundled = await manager({
+      installed: ['1.0.0', '1.1.0'],
+      ran: '1.1.0',
+      bundled: '1.0.0',
+    })
+    await bundled.agents.detectAll()
+    expect(bundled.status().automatic?.moved).toMatchObject({
+      from: '1.1.0',
+      to: '1.0.0',
+      withdrawn: true,
+      reason: 'bundled',
+    })
+    expect(bundled.remembered()?.agents.gemini?.moved?.reason).toBe('bundled')
+
+    const kept = await manager({
+      installed: ['1.0.0', '1.1.0'],
+      ran: '1.1.0',
+      bundled: '1.1.0',
+      bundledManifest: manifest(5, { broken: ['1.1.0'], recommended: '1.0.0' }),
+    })
+    await kept.agents.detectAll()
+    expect(kept.status().automatic?.moved).toMatchObject({
+      from: '1.1.0',
+      to: '1.0.0',
+      reason: 'broken',
+    })
+    expect(await kept.start()).toBe('1.0.0')
   })
 })

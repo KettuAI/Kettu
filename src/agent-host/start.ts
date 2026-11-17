@@ -57,6 +57,7 @@ export function startAgentHost(control: ControlChannel<MainToHost, HostToMain>):
       settings: message.settings,
       baseEnv: process.env,
       computer: message.computer ?? null,
+      ...(message.userAgent ? { userAgent: message.userAgent } : {}),
       send,
       git: (deps) => createGitService(deps),
       mirrorTraffic: !message.isPackaged && process.env.KETTU_ACP_LOG === '1',

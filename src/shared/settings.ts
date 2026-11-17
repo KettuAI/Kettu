@@ -323,6 +323,9 @@ export interface HostSettings {
   sessionTitles: boolean // write a title for a session its agent leaves untitled
   defaultAgent: AgentId | null // the agent new sessions start with, which answers artifacts' questions
   computerUse: ComputerUseSettings
+  // Kettu's download service may be asked, as for the harness compatibility manifest: off in
+  // Local mode and with GitHub only as the download source.
+  downloadService: boolean
 }
 
 /** The part of the settings the terminal host receives. */

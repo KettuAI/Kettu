@@ -24,6 +24,7 @@ import type {
   McpStatus,
   PlanLimit,
   ProviderBalance,
+  VersionMoveReason,
 } from '@shared/agent-host'
 import {
   GROK_CACHED_SIGN_IN,
@@ -151,11 +152,24 @@ import { driverOf, type DriverOverrides } from './drivers'
 import { HostError, invalidParams } from './errors'
 import { getEnv, isExecutableFile, type Env } from './find-command'
 import {
+  fetchManifest,
+  isBroken,
+  MANIFEST_KEYS,
+  parseManifest,
+  ruleFor,
+  usable,
+  verifyManifest,
+  type HarnessManifest,
+  type HarnessRule,
+  type ManifestFetchOptions,
+} from './harness-manifest'
+import {
+  acceptsVersion,
   BUNDLED,
   bundledRelease,
+  installsOwn,
   listedRelease,
   minimumOf,
-  inRange,
   targetRelease,
   type BundledVersions,
   type TargetRelease,
@@ -181,7 +195,13 @@ import { hasContextReport, limitsReport, runReport, type LimitsReport } from './
 import { TextRing } from './ring'
 import { allowedLimit, mergeReadLimits, planWindow } from './session-updates'
 import type { EnvironmentService } from './shell-env'
-import type { AgentsFile, AgentUpdatesFile, RegistryListingFile, RememberedInit } from './storage'
+import type {
+  AgentsFile,
+  AgentUpdatesFile,
+  HarnessManifestFile,
+  RegistryListingFile,
+  RememberedInit,
+} from './storage'
 import { readUvxVersion, uvxFetchArgs, writeUvxVersion } from './uvx-install'
 import { compareVersions, versionAtLeast } from './versions'
 
@@ -313,6 +333,12 @@ export interface AgentManagerDeps extends DriverOverrides {
   fetchLatest?(options: LatestOptions): Promise<AgentUpdate>
   /** Reads the ACP Registry's listing, whose versions the harnesses Kettu installs follow. */
   fetchRegistry?(options: RegistryFetchOptions): Promise<RegistryAgents>
+  /** Reads the body of Kettu's harness compatibility manifest from its download service. */
+  fetchManifest?(options: ManifestFetchOptions): Promise<string>
+  /** The keys the manifest's signature is checked against; the bundled ones by default. */
+  manifestKeys?: readonly string[]
+  /** What the manifest's requests say they are, which tells the service the app from the daemon. */
+  userAgent?: string
   /** The versions this build bundles; tests give their own. */
   bundled?: BundledVersions
   /** Runs a binary agent's install route, and `npm prefix -g` after one. */
@@ -335,6 +361,8 @@ export interface AgentManagerDeps extends DriverOverrides {
   rememberUpdates?(file: AgentUpdatesFile): void
   /** Keeps the Registry's listing as last read, for a start without the network. */
   rememberRegistry?(file: RegistryListingFile): void
+  /** Keeps the manifest as last read, for a start without the network. */
+  rememberManifest?(file: HarnessManifestFile): void
   /** The environment the agent's own process starts with, from the one it would have. */
   launchEnv?(agentId: AgentId, env: Env): Env
   envKeyIsSet?(agentId: AgentId, variable: string): boolean
@@ -367,8 +395,13 @@ class Harness {
   stay: string | null = null
   /** A new version that failed to start in place of the one before it, and why. */
   failed: { version: string; reason: string } | null = null
-  /** The last move automatic updates made, for the harness's page. */
-  moved: { from: string; to: string; at: number; withdrawn: boolean } | null = null
+  /** The last move automatic updates made, and why, for the harness's page. */
+  moved: Move | null = null
+  /**
+   * The user's CLI version the target's SDK needs, from npm, for a harness whose SDK pins its CLI;
+   * null for none.
+   */
+  targetCli: { version: string; cli: string | null } | null = null
   /** The automatic update installing in the background, apart from the user's tasks. */
   autoRun: Promise<void> | null = null
   autoAbort: AbortController | null = null
@@ -575,10 +608,10 @@ function updateEntry(h: Harness): AgentUpdatesFile['agents'][AgentId] {
   }
 }
 
-/** A move automatic updates made, now; `withdrawn` when it went to an older version. */
-function movedTo(from: string, to: string): NonNullable<Harness['moved']> {
-  return { from, to, at: Date.now(), withdrawn: compareVersions(to, from) < 0 }
-}
+type Move = NonNullable<NonNullable<AgentStatus['automatic']>['moved']>
+
+const sameVersion = (a: string, b: string | null | undefined): boolean =>
+  !!b && compareVersions(a, b) === 0
 
 /** Whether two updates name the same adapter and CLI versions. */
 function sameUpdate(a: AgentUpdate | null, b: AgentUpdate | null): boolean {
@@ -612,6 +645,11 @@ export class AgentManager {
   private listingRead: Promise<string | null> | null = null
   private listingReadAt: number | null = null
   private readonly bundled: BundledVersions
+  /** The manifest this build bundles, once verified; null when it bundles none. */
+  private readonly bundledManifest: HarnessManifest | null
+  /** The manifest as last read from the download service, live or from disk; null until one is. */
+  private readManifest: HarnessManifest | null = null
+  private manifestReadAt: number | null = null
   private limitsTimer: ReturnType<typeof setInterval> | null = null
   private stopped = false
   private readonly cliVersions: CliVersions
@@ -630,6 +668,16 @@ export class AgentManager {
   constructor(private readonly deps: AgentManagerDeps) {
     this.timings = { ...AGENT_TIMINGS, ...deps.timings }
     this.bundled = deps.bundled ?? BUNDLED
+    const bundledManifest = this.bundled.manifest
+      ? verifyManifest(this.bundled.manifest, 0, this.manifestKeys)
+      : null
+    if (bundledManifest && !bundledManifest.ok) {
+      deps.diagnostics.log(
+        'warn',
+        `The bundled harness manifest is not used: ${bundledManifest.reason}`,
+      )
+    }
+    this.bundledManifest = bundledManifest?.ok ? bundledManifest.manifest : null
     this.cliVersions = deps.cliVersions ?? new CliVersions({ platform: deps.platform })
     for (const def of deps.catalog) {
       const h = new Harness(def)
@@ -727,6 +775,7 @@ export class AgentManager {
     this.detected ??= (async () => {
       await this.deps.env.ready()
       await Promise.all([...this.harnesses.values()].map((h) => this.detect(h)))
+      this.noteStartMoves()
     })()
     return this.detected
   }
@@ -959,6 +1008,11 @@ export class AgentManager {
     )
     await Promise.all(changed.map((h) => this.detect(h)))
     for (const h of automatic) void this.autoUpdate(h)
+    // The manifest in force changes with whether the download service may be asked.
+    if (previous.downloadService !== next.downloadService) {
+      if (next.downloadService) void this.readListing()
+      else void this.followTargets()
+    }
     // A rename or a switch for Kettu's server shows in the status; the switch changes what a
     // start gets, and waits for the next one.
     for (const slot of this.slots.values()) this.emit(slot)
@@ -1698,48 +1752,116 @@ export class AgentManager {
 
   // Updates and installs the user asks for.
 
-  /** Whether the harness's versions follow the Registry and update by themselves, as by default. */
-  private automatic(h: Harness): boolean {
-    return followsRegistry(h.def) && this.deps.settings().agents[h.def.id]?.autoUpdate !== false
+  /** The keys the manifest's signature is checked against. */
+  private get manifestKeys(): readonly string[] {
+    return this.deps.manifestKeys ?? MANIFEST_KEYS
   }
 
-  /** The release a harness that follows the Registry moves to; null for the others. */
+  /**
+   * The manifest in force: the newer of the one read from the download service and the bundled
+   * one, or only the bundled one while the download service is not to be asked.
+   */
+  private manifest(): HarnessManifest | null {
+    const read = this.deps.settings().downloadService ? this.readManifest : null
+    const bundled = this.bundledManifest
+    if (!read || !bundled) return read ?? bundled
+    return read.sequence >= bundled.sequence ? read : bundled
+  }
+
+  /** The manifest's rule for the harness at this version of Kettu; null when it has none. */
+  private rule(h: Harness): HarnessRule | null {
+    return ruleFor(this.manifest(), h.def.id, this.deps.appVersion)
+  }
+
+  /**
+   * The rule for the user's own program: a harness that runs it as its program, whose versions the
+   * manifest names. A harness with a package of Kettu's, such as Claude Code's SDK beside the
+   * user's `claude`, has the package's versions there instead.
+   */
+  private programRule(h: Harness): HarnessRule | null {
+    const detection = h.detection
+    const own = detection?.state === 'available' && !!detection.release
+    return h.def.launch.kind === 'binary' && !own ? this.rule(h) : null
+  }
+
+  /**
+   * Whether Kettu's own install of the harness moves to a target version: it follows the Registry,
+   * or the manifest recommends a version of it. The others keep their bundled version and their
+   * vendor's updates.
+   */
+  private targeted(h: Harness): boolean {
+    return followsRegistry(h.def) || this.target(h) !== null
+  }
+
+  /** Whether the harness moves to its target and updates by itself, as by default. */
+  private automatic(h: Harness): boolean {
+    return this.targeted(h) && this.deps.settings().agents[h.def.id]?.autoUpdate !== false
+  }
+
+  /** The release the harness moves to; null for one that has no target. */
   private target(h: Harness): TargetRelease | null {
-    return targetRelease(h.def, this.listing, this.bundled, this.deps.platform, process.arch)
+    const { platform } = this.deps
+    return targetRelease(h.def, this.listing, this.bundled, platform, process.arch, this.rule(h))
+  }
+
+  /**
+   * Whether the user's CLI runs the SDK at `version`, for a harness whose SDK pins its CLI; null
+   * while that is not known, before detection or npm's answer. True for the other harnesses, for a
+   * CLI the environment names, which runs whatever its version, and for a version no newer than
+   * the one that ran, since an SDK's CLI grows with it.
+   */
+  private cliFits(h: Harness, version: string): boolean | null {
+    if (!h.def.cli?.pinsVersion) return true
+    if (h.ran && compareVersions(version, h.ran) <= 0) return true
+    if (!h.detection) return null
+    const mine = h.detection.cli
+    if (!mine?.version || mine.variable) return true
+    const known = h.targetCli && sameVersion(h.targetCli.version, version) ? h.targetCli : null
+    if (!known) return null
+    return !known.cli || compareVersions(mine.version, known.cli) >= 0
   }
 
   /**
    * Which installed version a start runs: the target, with automatic updates on; with them off,
-   * the version the user moved to or the one that ran last; for a vendor's own package or archive,
-   * the bundled version and up. Null for a harness Kettu never installs.
+   * the version the user moved to or the one that ran last; for a harness without a target, the
+   * bundled version and up. An SDK whose target needs a newer CLI than the user's runs as one
+   * without a target, and keeps the one that ran while that is not known. Null for a harness
+   * Kettu never installs.
    */
   private versionChoice(h: Harness): VersionChoice | null {
     const { def } = h
-    const { launch } = def
-    if (launch.kind === 'node-script') return null
-    if (launch.kind === 'binary' && !def.installs?.archive) return null
+    if (!installsOwn(def)) return null
     const minimum = minimumOf(def)
+    const rule = this.rule(h)
+    const accepted = (version: string): boolean =>
+      usable(rule, version) && acceptsVersion(def, this.bundled, version)
     const known = {
       ...(minimum ? { minimum } : {}),
       ...(h.failed ? { failed: h.failed.version } : {}),
       ...(h.ran ? { ran: h.ran } : {}),
+      refused: (version: string) => !accepted(version),
     }
-    if (!followsRegistry(def)) {
-      const bundled = bundledRelease(def, this.bundled, this.deps.platform, process.arch)
+    const bundled = bundledRelease(def, this.bundled, this.deps.platform, process.arch)
+    const target = this.target(h)
+    const fits = target ? this.cliFits(h, target.version) : true
+    if (!this.targeted(h) || fits === false) {
       return bundled ? { wanted: bundled.version, floor: true, ...known } : null
     }
-    const stays = this.automatic(h) ? [] : [h.stay, h.ran]
-    const wanted = [...stays, this.target(h)?.version].find(
-      (version): version is string => !!version && inRange(def, version),
+    // Until the user's CLI is known to run the target, the version that ran keeps running, unless
+    // the manifest withdrew it.
+    const kept = fits === null && h.ran && accepted(h.ran) ? [h.ran] : []
+    const stays = this.automatic(h) ? kept : [h.stay, h.ran]
+    const next = fits === true ? target?.version : undefined
+    const wanted = [...stays, next, bundled?.version].find(
+      (version): version is string => !!version && acceptsVersion(def, this.bundled, version),
     )
     return wanted ? { wanted, ...known } : null
   }
 
   /** The archive a first install of the harness takes on this platform. */
   private archiveToInstall(h: Harness): { version: string; entry: ArchiveEntry } | null {
-    const release = followsRegistry(h.def)
-      ? this.target(h)
-      : bundledRelease(h.def, this.bundled, this.deps.platform, process.arch)
+    const release =
+      this.target(h) ?? bundledRelease(h.def, this.bundled, this.deps.platform, process.arch)
     return release?.kind === 'archive' ? { version: release.version, entry: release.entry } : null
   }
 
@@ -1756,14 +1878,14 @@ export class AgentManager {
   }
 
   /**
-   * The update to offer. A harness that follows the Registry, with automatic updates off, is
-   * offered its target whenever it differs from the version a start runs, an older one too after
-   * a withdrawal. A vendor's package is offered what the last check found against the install a
-   * start runs, and one that runs an install below its floor, because the floor could not be
-   * installed, the floor at least.
+   * The update to offer. A harness with a target, with automatic updates off, is offered its
+   * target whenever it differs from the version a start runs, an older one too after a
+   * withdrawal. A vendor's package is offered what the last check found against the install a
+   * start runs, unless the manifest says it does not work, and one that runs an install below its
+   * floor, because the floor could not be installed, the floor at least.
    */
   private updateOf(h: Harness): AgentUpdate | null {
-    if (followsRegistry(h.def)) return this.targetUpdate(h)
+    if (this.targeted(h)) return this.targetUpdate(h)
     const detection = h.detection
     const adapter = detection?.state === 'available' ? detection.adapter : null
     const running = adapter?.current ?? adapter?.fallback
@@ -1772,10 +1894,11 @@ export class AgentManager {
       version: running.version,
       cliVersion: h.installedCli,
     })
-    // A version that failed to start is not offered again.
+    // A version that failed to start, or that the manifest says does not work, is not offered.
     if (offered && h.failed && compareVersions(offered.adapterVersion, h.failed.version) === 0) {
       offered = null
     }
+    if (offered && !usable(this.rule(h), offered.adapterVersion)) offered = null
     // Only a newer adapter is an update, and it comes without a CLI. One that needs a newer CLI
     // than the user's waits until theirs is updated, which updating the CLI does at once.
     if (offered && h.def.cli) {
@@ -1798,8 +1921,9 @@ export class AgentManager {
   }
 
   /**
-   * The target on offer to a harness that follows the Registry with automatic updates off. An
-   * archive without a SHA-256 to check it against, or a version that failed to start, is none.
+   * The target on offer to a harness with a target and automatic updates off. An archive without a
+   * SHA-256 to check it against, a version that failed to start, or an SDK that is not known to
+   * run on the user's CLI is none.
    */
   private targetUpdate(h: Harness): AgentUpdate | null {
     if (this.automatic(h)) return null
@@ -1808,6 +1932,7 @@ export class AgentManager {
     if (!running || !target || compareVersions(target.version, running) === 0) return null
     if (target.kind === 'archive' && !target.entry.sha256) return null
     if (h.failed && compareVersions(h.failed.version, target.version) === 0) return null
+    if (this.cliFits(h, target.version) !== true) return null
     return { adapterVersion: target.version, cliVersion: null }
   }
 
@@ -1834,9 +1959,27 @@ export class AgentManager {
   private cliUpdateVersion(h: Harness): string | null {
     const mine = this.userProgram(h)
     const problem = h.detection?.cli?.problem
+    // A newest version the manifest says does not work is not offered.
+    if (h.cliLatest && !usable(this.programRule(h), h.cliLatest)) return null
     if (problem?.kind === 'too-old') return h.cliLatest ?? problem.minimum
     if (!h.cliLatest || !mine?.version) return null
     return compareVersions(h.cliLatest, mine.version) > 0 ? h.cliLatest : null
+  }
+
+  /**
+   * The user's own program, when the manifest says its version does not work; null when it works,
+   * its version is not known, or Kettu's own install runs instead.
+   */
+  private versionWarning(h: Harness): AgentStatus['versionWarning'] {
+    const rule = this.programRule(h)
+    const version = this.userProgram(h)?.version
+    if (!rule || !version || usable(rule, version)) return null
+    return {
+      version,
+      broken: isBroken(rule, version),
+      supported: rule.supported ?? null,
+      recommended: rule.recommended ?? null,
+    }
   }
 
   /**
@@ -1855,8 +1998,8 @@ export class AgentManager {
       h.failed = entry.failed ?? null
       h.moved = entry.moved ?? null
       if (this.checksUpdates(h)) {
-        // A harness that follows the Registry is offered its target, never what npm named before.
-        h.latest = followsRegistry(h.def) ? null : entry.latest
+        // A harness with a target is offered it, never what npm named before.
+        h.latest = this.targeted(h) ? null : entry.latest
         h.cliLatest = entry.cli ?? null
         h.checkedAt = entry.checkedAt
         h.attemptedAt = entry.attemptedAt
@@ -1875,6 +2018,18 @@ export class AgentManager {
     this.listingReadAt = file.readAt
   }
 
+  /** The manifest as last read, verified again, so a start offline follows it. */
+  restoreManifest(file: HarnessManifestFile): void {
+    if (!file.payload) return
+    const result = verifyManifest(file, 0, this.manifestKeys)
+    if (!result.ok) {
+      this.deps.diagnostics.log('warn', `The kept harness manifest is not used: ${result.reason}`)
+      return
+    }
+    this.readManifest = result.manifest
+    this.manifestReadAt = file.readAt
+  }
+
   /**
    * Kettu's own package for it, the user's program, which npm publishes, or Kettu's install of a
    * registry release is checked. A binary harness's archive counts only while it runs, since the
@@ -1883,13 +2038,13 @@ export class AgentManager {
   private checksUpdates(h: Harness): boolean {
     const { launch } = h.def
     if (launch.kind === 'package' || launch.kind === 'uvx' || h.def.installs?.npm) return true
-    return followsRegistry(h.def) && (h.detection === null || !!this.release(h))
+    return this.targeted(h) && (h.detection === null || !!this.release(h))
   }
 
-  /** Kettu's install of the harness's registry release that a start runs; null for the others. */
+  /** Kettu's install of the harness's target release that a start runs; null for the others. */
   private release(h: Harness): { version: string; dir: string | null } | null {
     const detection = h.detection
-    if (!followsRegistry(h.def) || detection?.state !== 'available') return null
+    if (!this.targeted(h) || detection?.state !== 'available') return null
     return detection.release ?? null
   }
 
@@ -1958,15 +2113,15 @@ export class AgentManager {
   }
 
   /**
-   * The harnesses npm's check asks about: a vendor's own package of Kettu's whose npm was found,
-   * and those whose user's program is installed, whose versions npm publishes too. The others
-   * Kettu installs follow the Registry's listing.
+   * The harnesses npm's check asks about: a vendor's own package of Kettu's without a target whose
+   * npm was found, and those whose user's program is installed, whose versions npm publishes too.
+   * The others Kettu installs follow their target.
    */
   private checkable(): Harness[] {
     const npm = this.deps.env.nodeProbe().npmPath
     return [...this.harnesses.values()].filter((h) => {
       const detection = h.detection
-      if (h.def.launch.kind === 'package' && !followsRegistry(h.def)) {
+      if (h.def.launch.kind === 'package' && !this.targeted(h)) {
         return detection?.state === 'available' && !!detection.adapter?.npm
       }
       return !!npm && !!h.def.installs?.npm && !!this.userProgram(h)
@@ -2019,44 +2174,165 @@ export class AgentManager {
   }
 
   /**
-   * Reads the Registry's listing and keeps it, then moves each harness that follows it to its
-   * target. Never rejects: resolves to why the read failed, in the user's terms, or null; a
-   * failure keeps the listing read last.
+   * Reads the Registry's listing and the manifest and keeps them, then moves each harness to its
+   * target. Never rejects: resolves to why the Registry's read failed, in the user's terms, or
+   * null; a failure keeps what was read last, and the manifest's only shows in the log.
    */
   private readListing(signal?: AbortSignal): Promise<string | null> {
     this.listingRead ??= (async () => {
-      let agents: RegistryAgents
-      try {
-        agents = await this.readRegistry(signal)
-      } catch (error) {
-        const message = (error as Error).message
-        this.deps.diagnostics.log('warn', `The ACP Registry could not be read: ${message}`)
-        return message
-      }
-      this.listing = agents
-      this.listingReadAt = Date.now()
-      this.deps.rememberRegistry?.({
-        version: 1,
-        readAt: this.listingReadAt,
-        agents: listingEntries(agents),
-      })
-      if (!this.stopped) await this.followTargets()
-      return null
+      const [failure, manifest] = await Promise.all([
+        this.readRegistryListing(signal),
+        this.readManifestNow(signal),
+      ])
+      if ((failure === null || manifest) && !this.stopped) await this.followTargets()
+      return failure
     })().finally(() => {
       this.listingRead = null
     })
     return this.listingRead
   }
 
+  /** Reads the Registry's listing and keeps it; resolves to why it failed, or null. */
+  private async readRegistryListing(signal?: AbortSignal): Promise<string | null> {
+    let agents: RegistryAgents
+    try {
+      agents = await this.readRegistry(signal)
+    } catch (error) {
+      const message = (error as Error).message
+      this.deps.diagnostics.log('warn', `The ACP Registry could not be read: ${message}`)
+      return message
+    }
+    this.listing = agents
+    this.listingReadAt = Date.now()
+    this.deps.rememberRegistry?.({
+      version: 1,
+      readAt: this.listingReadAt,
+      agents: listingEntries(agents),
+    })
+    return null
+  }
+
   /**
-   * Moves each harness that follows the Registry to its target from its next start: at once when
-   * that version is installed, as the one before it is after a withdrawal, else once its automatic
-   * update has installed it. A version that failed to start is tried again only once the target
-   * moved on from it.
+   * Reads the manifest from the download service and keeps it, unless the service is not to be
+   * asked. One whose signature does not hold, or whose sequence is older than the one in force, is
+   * left. Resolves to whether the manifest changed.
+   */
+  private async readManifestNow(signal?: AbortSignal): Promise<boolean> {
+    if (!this.deps.settings().downloadService) return false
+    const { diagnostics } = this.deps
+    let body: string
+    try {
+      body = await (this.deps.fetchManifest ?? fetchManifest)({
+        timeoutMs: this.timings.updateViewMs,
+        ...(signal ? { signal } : {}),
+        ...(this.deps.userAgent ? { userAgent: this.deps.userAgent } : {}),
+      })
+    } catch (error) {
+      diagnostics.log('warn', `The harness manifest could not be read: ${(error as Error).message}`)
+      return false
+    }
+    const before = this.readManifest
+    const floor = Math.max(before?.sequence ?? 0, this.bundledManifest?.sequence ?? 0)
+    const result = parseManifest(body, floor, this.manifestKeys)
+    if (!result.ok) {
+      diagnostics.log('warn', `The harness manifest is not used: ${result.reason}`)
+      return false
+    }
+    this.readManifest = result.manifest
+    this.manifestReadAt = Date.now()
+    this.deps.rememberManifest?.({ version: 1, readAt: this.manifestReadAt, ...result.signed })
+    if (before?.sequence === result.manifest.sequence) return false
+    diagnostics.log('info', `Harness manifest ${result.manifest.sequence} is in force`)
+    return true
+  }
+
+  /** Why moving from `from` to the harness's target was right, for its page. */
+  private moveReason(h: Harness, from: string): VersionMoveReason {
+    if (!usable(this.rule(h), from)) return 'broken'
+    return this.target(h)?.source ?? 'bundled'
+  }
+
+  /**
+   * A move automatic updates made, now; `withdrawn` when it went to an older version. One that
+   * finishes a withdrawal, such as installing the target after a start ran an older install in
+   * its place, is told from the version withdrawn.
+   */
+  private movedTo(h: Harness, from: string, to: string): Move {
+    const before = h.moved
+    const finishes =
+      !!before?.withdrawn && sameVersion(before.to, from) && compareVersions(to, before.from) < 0
+    const start = finishes && before ? before.from : from
+    return {
+      from: start,
+      to,
+      at: Date.now(),
+      withdrawn: compareVersions(to, start) < 0,
+      reason: this.moveReason(h, start),
+    }
+  }
+
+  /**
+   * Notes the move the first detection made from the version that ran last, such as one a new
+   * release's bundled version or the kept manifest withdrew, so its page says why it changed.
+   */
+  private noteStartMoves(): void {
+    for (const h of this.harnesses.values()) {
+      const ran = h.ran
+      const now = this.ownVersion(h)
+      if (!ran || !now || sameVersion(now, ran) || !this.automatic(h)) continue
+      if (h.moved && sameVersion(h.moved.from, ran) && sameVersion(h.moved.to, now)) continue
+      h.moved = this.movedTo(h, ran, now)
+      this.emit(this.home(h))
+    }
+  }
+
+  /**
+   * Asks npm which CLI the target's SDK runs, for a harness whose SDK pins its CLI, once per
+   * target version; a failure is tried again at the next read.
+   */
+  private async learnTargetCli(h: Harness, signal?: AbortSignal): Promise<void> {
+    const { launch } = h.def
+    const source = CLI_VERSION_SOURCES[h.def.id]
+    const target = this.target(h)
+    if (!h.def.cli?.pinsVersion || !source || launch.kind !== 'package') return
+    if (target?.kind !== 'package') return
+    if (h.targetCli && sameVersion(h.targetCli.version, target.version)) return
+    const detection = h.detection
+    const npm =
+      (detection?.state === 'available' ? detection.adapter?.npm : null) ??
+      this.deps.env.nodeProbe().npmPath
+    if (!npm) return
+    try {
+      const found = await (this.deps.fetchLatest ?? fetchLatest)({
+        npm,
+        env: this.deps.env.agentEnv(h.def.id),
+        platform: this.deps.platform,
+        cwd: os.homedir(),
+        timeoutMs: this.timings.updateViewMs,
+        ...(signal ? { signal } : {}),
+        package: launch.package,
+        range: target.version,
+        cli: source,
+      })
+      h.targetCli = { version: target.version, cli: found.cliVersion }
+    } catch (error) {
+      const message = (error as Error).message
+      this.deps.diagnostics.log(
+        'warn',
+        `${h.def.name}: the CLI ${target.version} needs was not found: ${message}`,
+      )
+    }
+  }
+
+  /**
+   * Moves each harness Kettu installs to its target from its next start: at once when that version
+   * is installed, as the one before it is after a withdrawal, else once its automatic update has
+   * installed it. A version that failed to start is tried again only once the target moved on
+   * from it. The others show what the manifest says of the user's own program.
    */
   private async followTargets(): Promise<void> {
     const { diagnostics, platform } = this.deps
-    const following = [...this.harnesses.values()].filter((h) => followsRegistry(h.def))
+    const following = [...this.harnesses.values()].filter((h) => installsOwn(h.def))
     await Promise.all(
       following.map(async (h) => {
         const target = this.target(h)
@@ -2064,7 +2340,7 @@ export class AgentManager {
           h.failed = null
         }
         const before = this.ownVersion(h)
-        if (before && this.listing) {
+        if (before && this.listing && followsRegistry(h.def)) {
           const listed = listedRelease(h.def, this.listing, platform, process.arch)
           if ('reason' in listed) {
             diagnostics.log(
@@ -2073,23 +2349,25 @@ export class AgentManager {
             )
           }
         }
+        await this.learnTargetCli(h)
         await this.detect(h)
         const after = this.ownVersion(h)
         if (before && after && before !== after && this.automatic(h)) {
-          h.moved = movedTo(before, after)
+          h.moved = this.movedTo(h, before, after)
           this.emit(this.home(h))
         }
         // An install takes minutes, which a check waiting on this read does not wait for.
         void this.autoUpdate(h)
       }),
     )
+    for (const slot of this.slots.values()) this.emit(slot)
   }
 
   /**
-   * Installs the target beside the install a start runs, in the background, for a harness that
-   * follows the Registry with automatic updates on and at least one agent; the next start runs
-   * it, and running sessions keep theirs. A failure leaves the current install as it was, to try
-   * again at the next read.
+   * Installs the target beside the install a start runs, in the background, for a harness with a
+   * target, automatic updates on and at least one agent; the next start runs it, and running
+   * sessions keep theirs. An SDK waits until the user's CLI runs it. A failure leaves the current
+   * install as it was, to try again at the next read.
    */
   private async autoUpdate(h: Harness): Promise<void> {
     if (this.stopped || h.autoRun || !this.automatic(h)) return
@@ -2098,6 +2376,7 @@ export class AgentManager {
     const target = this.target(h)
     if (!running || !target || compareVersions(target.version, running) === 0) return
     if (h.failed && compareVersions(h.failed.version, target.version) === 0) return
+    if (this.cliFits(h, target.version) !== true) return
     const { diagnostics } = this.deps
     const note = (message: string): void => {
       if (h.autoNote === message) return
@@ -2111,6 +2390,8 @@ export class AgentManager {
     }
     const installing = this.agentsOf(h).some((slot) => slot.state === 'installing')
     if (h.task?.state === 'running' || h.installing || h.packageInstall || installing) return
+    // Installed but not run, such as one the user's CLI cannot run: installing it again would not.
+    if (await this.hasInstall(h, target.version)) return
     const abort = new AbortController()
     h.autoAbort = abort
     const run = (async () => {
@@ -2119,7 +2400,7 @@ export class AgentManager {
         await this.installTarget(h, target, abort.signal, (text) =>
           diagnostics.stderr(h.def.id, text),
         )
-        h.moved = movedTo(running, target.version)
+        h.moved = this.movedTo(h, running, target.version)
         h.autoNote = null
         await this.detect(h)
       } catch (error) {
@@ -2162,7 +2443,7 @@ export class AgentManager {
     const cliPackage = h.def.installs?.npm
     try {
       const [latest, cli] = await Promise.all([
-        launch.kind === 'package' && !followsRegistry(h.def)
+        launch.kind === 'package' && !this.targeted(h)
           ? fetch({
               ...options,
               package: launch.package,
@@ -2215,7 +2496,7 @@ export class AgentManager {
     const { h } = this.slot(agentId)
     const { launch } = h.def
     await this.detectAll()
-    if (followsRegistry(h.def)) return this.updateToTarget(h)
+    if (this.targeted(h)) return this.updateToTarget(h)
     if (launch.kind !== 'package') {
       throw invalidParams(`${h.def.name} is not installed by Kettu`)
     }
@@ -2484,13 +2765,15 @@ export class AgentManager {
         await this.detect(h)
         h.cliSkipped = null
         const update = this.updateOf(h)
-        if (update && h.def.cli && !this.stopped) {
+        if (update && h.def.cli && !this.stopped && !this.targeted(h)) {
           await this.installUpdate(h, update, signal, onOutput)
         }
       },
       (message) => t('agent.updateFailed', { agent: h.def.name, message }),
       h.cliMethod,
     )
+    // An SDK target that waited for a newer CLI may run on this one.
+    if (this.targeted(h)) void this.autoUpdate(h)
   }
 
   /** The update the user's program takes, the way it was installed; null when that is unknown. */
@@ -4552,6 +4835,7 @@ export class AgentManager {
       update,
       updateCheckedAt: this.checkedAt(h),
       automatic: this.automaticStatus(h),
+      versionWarning: this.versionWarning(h),
       failedVersion: h.failed
         ? { version: h.failed.version, reason: h.failed.reason, runs: this.ownVersion(h) }
         : null,
@@ -4609,28 +4893,33 @@ export class AgentManager {
   }
 
   /**
-   * When the harness's versions were last checked: npm's check, or for one that follows the
-   * Registry, the read of its listing; null for a harness whose own installer updates it.
+   * When the harness's versions were last checked: npm's check, or for one with a target, the
+   * last read of the Registry's listing or the manifest; null for a harness whose own installer
+   * updates it.
    */
   private checkedAt(h: Harness): number | null {
     if (!this.checksUpdates(h)) return null
-    const read = followsRegistry(h.def) ? this.listingReadAt : null
+    const reads = [this.listingReadAt, this.manifestReadAt].filter((at) => at !== null)
+    const read = this.targeted(h) && reads.length > 0 ? Math.max(...reads) : null
     if (read === null || h.checkedAt === null) return read ?? h.checkedAt
     return Math.max(read, h.checkedAt)
   }
 
-  /** How Kettu's own install follows the Registry, for its page; null for the other harnesses. */
+  /** How Kettu's own install follows its target, for its page; null for the other harnesses. */
   private automaticStatus(h: Harness): AgentStatus['automatic'] {
     // The user's own program, found in place of Kettu's archive, keeps its own updates.
     const theirs =
       h.def.launch.kind === 'binary' && h.detection?.state === 'available' && !this.release(h)
-    if (!followsRegistry(h.def) || theirs) return null
+    if (!this.targeted(h) || theirs) return null
     const update = this.targetUpdate(h)
     const running = this.ownVersion(h)
+    const back = !!update && !!running && compareVersions(update.adapterVersion, running) < 0
     return {
       on: this.automatic(h),
       moved: h.moved,
-      back: !!update && !!running && compareVersions(update.adapterVersion, running) < 0,
+      back,
+      ...(back && running ? { backReason: this.moveReason(h, running) } : {}),
+      follows: followsRegistry(h.def) ? 'registry' : 'kettu',
     }
   }
 

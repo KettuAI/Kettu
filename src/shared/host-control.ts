@@ -94,6 +94,8 @@ export type MainToHost =
       socketPath?: string
       // The desktop app's computer use: the driver it ships and Kettu's own process and app ids.
       computer?: { driverPath: string; selfPid: number; selfIds: string[] }
+      // What the host's requests to Kettu's download service say they are: the app or the daemon.
+      userAgent?: string
     }
   | { type: 'host:connect'; windowId: number } // the port travels in the transfer list
   // A paired device's session, which may do less than a window. In the desktop app the port
