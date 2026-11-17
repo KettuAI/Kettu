@@ -20,9 +20,10 @@ import type { SettingsStore } from './settings'
 import { agentName, SettingsError } from './settings-schema'
 
 /** The folder every harness that carries agents uses when nothing moves it, from the home folder. */
-const DEFAULT_FOLDERS: Partial<Record<HarnessId, string>> = {
-  'claude-code': '.claude',
-  codex: '.codex',
+const DEFAULT_FOLDERS: Partial<Record<HarnessId, { folder: string; name: string }>> = {
+  'claude-code': { folder: '.claude', name: 'Claude Code' },
+  codex: { folder: '.codex', name: 'Codex' },
+  codebuddy: { folder: '.codebuddy', name: 'Codebuddy Code' },
 }
 
 async function resolved(folder: string): Promise<string> {
@@ -158,13 +159,14 @@ export class AgentFolders {
         throw new SettingsError(t('agents.folderTaken', { agent: other.name }))
       }
     }
-    for (const [id, name] of Object.entries(DEFAULT_FOLDERS) as [HarnessId, string][]) {
+    for (const [id, { folder: home, name }] of Object.entries(DEFAULT_FOLDERS) as [
+      HarnessId,
+      { folder: string; name: string },
+    ][]) {
       const moved = current.agents[id]?.configDir
-      const own = moved ?? join(os.homedir(), name)
+      const own = moved ?? join(os.homedir(), home)
       if ((await resolved(own)) === wanted) {
-        throw new SettingsError(
-          t('agents.folderTaken', { agent: id === 'claude-code' ? 'Claude Code' : 'Codex' }),
-        )
+        throw new SettingsError(t('agents.folderTaken', { agent: name }))
       }
     }
     if (harness === 'claude-code' && wanted === (await resolved(this.root))) {

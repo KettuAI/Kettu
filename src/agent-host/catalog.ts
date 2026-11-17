@@ -143,6 +143,8 @@ export interface AgentDefinition {
   requires?: AgentRequires
   /** Variables every launch adds (pi-acp 0.0.34 reads PI_ACP_ENABLE_EMBEDDED_CONTEXT). */
   env?: Record<string, string>
+  /** Variables the launch of an added agent adds, which keep it apart from the default agent. */
+  addedEnv?: Record<string, string>
   install: { hint: HostKey; url: string; notice?: HostKey }
   /**
    * Its terminal sign-in runs the `requires` program alone, without the launch's variables

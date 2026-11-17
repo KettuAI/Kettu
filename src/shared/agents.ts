@@ -105,7 +105,18 @@ export const HARNESS_IDS: readonly HarnessId[] = [
 ]
 
 /** The harnesses that carry agents besides their default one: a variable moves their folder. */
-export const MULTI_AGENT_HARNESSES: readonly HarnessId[] = ['claude-code', 'codex', 'deepseek']
+export const MULTI_AGENT_HARNESSES: readonly HarnessId[] = [
+  'claude-code',
+  'codex',
+  'deepseek',
+  'codebuddy',
+]
+
+/**
+ * The harnesses whose added agents sign in only with an API key: their other sign-ins are kept for
+ * the whole computer, outside the agent's folder, so a second agent would share them.
+ */
+export const KEY_ONLY_ADDED_HARNESSES: readonly HarnessId[] = ['codebuddy']
 
 /**
  * Harnesses whose default agent is registered without being added. Only the fake agent, which
@@ -247,6 +258,36 @@ export const canonicalClaudeModel = (id: string): string =>
 export function takesClaudeSettings(id: AgentId): boolean {
   return harnessOf(id) === 'claude-code'
 }
+
+/** Whether the agent signs in only with an API key: an added agent of a harness that says so. */
+export function signsInWithKeyOnly(id: AgentId): boolean {
+  return !isDefaultAgent(id) && KEY_ONLY_ADDED_HARNESSES.includes(harnessOf(id))
+}
+
+/** Whether the agent's page edits which site Codebuddy Code talks to. */
+export function takesCodebuddySettings(id: AgentId): boolean {
+  return harnessOf(id) === 'codebuddy'
+}
+
+/** The variable of Codebuddy Code's settings `env` that picks its site. */
+export const CODEBUDDY_SITE_VARIABLE = 'CODEBUDDY_INTERNET_ENVIRONMENT'
+
+/** The sites Settings offers; enterprise, iOA and private deployments are set by hand. */
+export const CODEBUDDY_SITES = ['international', 'china'] as const
+export type CodebuddySite = (typeof CODEBUDDY_SITES)[number]
+
+/**
+ * What the variable holds for each site. The international one is written out, not left unset:
+ * an unset variable follows the computer's shared sign-in, which may be on the China site.
+ */
+export const CODEBUDDY_SITE_VALUES: Record<CodebuddySite, string> = {
+  international: 'external',
+  china: 'internal',
+}
+
+/** Shell variables that Codebuddy Code ranks above the settings Kettu writes. */
+export const CODEBUDDY_SHELL_OVERRIDES = ['CODEBUDDY_AUTH_TOKEN', 'WORKBUDDY_CONFIG_DIR'] as const
+export type CodebuddyShellOverride = (typeof CODEBUDDY_SHELL_OVERRIDES)[number]
 
 /** Agents in catalog order of their harness, each harness's default agent first. */
 export function sortAgentIds<T extends AgentId>(ids: Iterable<T>): T[] {

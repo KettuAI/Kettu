@@ -18,6 +18,8 @@ import type {
   AgentUpdate,
   ClaudeSettingChange,
   ClaudeSettings,
+  CodebuddySettings,
+  CodebuddySiteChange,
   InstalledCli,
   McpStatus,
   PlanLimit,
@@ -41,6 +43,7 @@ import {
   antigravitySignInMethod,
 } from './vendor-usage/antigravity'
 import { readAntigravityUsage } from './antigravity-usage'
+import { signsInWithKeyOnly } from '@shared/agents'
 import type { AgentProcess, NodeRuntime } from '@shared/host-control'
 import type { Platform } from '@shared/platform'
 import { agentColor, type AddedAgent, type HostSettings } from '@shared/settings'
@@ -91,7 +94,14 @@ import {
   type ArchiveInstallOptions,
   type InstalledArchive,
 } from './archive-install'
-import { checkApiKey, clearClaudeKey, writeClaudeKey, type ApiKeyInput } from './api-key'
+import {
+  checkApiKey,
+  clearClaudeKey,
+  clearCodebuddyKey,
+  writeClaudeKey,
+  writeCodebuddyKey,
+  type ApiKeyInput,
+} from './api-key'
 import {
   clearApiKey as clearDshKey,
   readApiKey as readDshKey,
@@ -99,6 +109,7 @@ import {
   writeApiKey as writeDshKey,
 } from './dsh/credentials'
 import { readClaudeSettings, writeClaudeSetting, type ListedModel } from './claude/user-settings'
+import { readCodebuddySite, shellOverrides, writeCodebuddySite } from './codebuddy/user-settings'
 import {
   installedFolder,
   installMethodOf,
@@ -970,7 +981,8 @@ export class AgentManager {
     slot.intentionalStop = false
     slot.launchSpec = spec
     const base = this.deps.env.agentEnv(agentId)
-    const env = this.deps.launchEnv?.(agentId, base) ?? base
+    const launchEnv = this.deps.launchEnv?.(agentId, base) ?? base
+    const env = slot.added && slot.def.addedEnv ? { ...launchEnv, ...slot.def.addedEnv } : launchEnv
     slot.launchConfig = this.configIn(slot, env)
     this.emit(slot)
     diagnostics.event(agentId, 'start', formatCommand(spec.display, this.deps.platform))
@@ -3570,9 +3582,9 @@ export class AgentManager {
   // API keys.
 
   /**
-   * Hands the harness an API key for this agent to keep: Claude Code's in its folder's
-   * settings.json, Codex's through `codex login --with-api-key`, DeepSeek Harness's in its
-   * `.credentials.yaml`. A process that runs keeps its
+   * Hands the harness an API key for this agent to keep: Claude Code's and Codebuddy Code's in
+   * their folder's settings.json, Codex's through `codex login --with-api-key`, DeepSeek
+   * Harness's in its `.credentials.yaml`. A process that runs keeps its
    * credentials until it stops, so an idle one is stopped and the next start uses the key.
    */
   async setApiKey(agentId: AgentId, input: ApiKeyInput): Promise<void> {
@@ -3585,6 +3597,8 @@ export class AgentManager {
       await this.runCodexLogin(slot, ['login', '--with-api-key'], checked.key)
     } else if (slot.def.id === 'deepseek') {
       await writeDshKey(this.dshFolder(slot), checked.key)
+    } else if (slot.def.id === 'codebuddy') {
+      await writeCodebuddyKey(this.settingsFile(slot), checked)
     } else {
       throw invalidParams(`${slot.def.name} takes no API key from Kettu`)
     }
@@ -3600,6 +3614,7 @@ export class AgentManager {
     if (slot.def.id === 'claude-code') await clearClaudeKey(this.settingsFile(slot))
     else if (slot.def.id === 'codex') await this.runCodexLogin(slot, ['logout'])
     else if (slot.def.id === 'deepseek') await clearDshKey(this.dshFolder(slot))
+    else if (slot.def.id === 'codebuddy') await clearCodebuddyKey(this.settingsFile(slot))
     else throw invalidParams(`${slot.def.name} takes no API key from Kettu`)
     this.deps.diagnostics.event(agentId, 'api key', 'cleared')
     slot.apiKey = false
@@ -3667,6 +3682,36 @@ export class AgentManager {
     const slot = this.registeredSlot(agentId)
     if (slot.def.id !== 'claude-code') {
       throw invalidParams(`${slot.def.name} has no settings Kettu edits`)
+    }
+    return slot
+  }
+
+  // Codebuddy Code's site.
+
+  /** A Codebuddy Code agent's site, from its settings file, and the shell variables over it. */
+  async codebuddySettings(agentId: AgentId): Promise<CodebuddySettings> {
+    const slot = this.codebuddySlot(agentId)
+    await this.detectAll()
+    const env = this.deps.env.agentEnv(slot.id)
+    return {
+      ...(await readCodebuddySite(this.settingsFile(slot))),
+      shellOverrides: shellOverrides((name) => getEnv(env, name, this.deps.platform)),
+    }
+  }
+
+  /** Writes the site into the settings file; the next start of the agent talks to it. */
+  async setCodebuddySite(agentId: AgentId, change: CodebuddySiteChange): Promise<void> {
+    const slot = this.codebuddySlot(agentId)
+    await this.detectAll()
+    await writeCodebuddySite(this.settingsFile(slot), change)
+    this.deps.diagnostics.event(agentId, 'codebuddy site', change.site)
+    await this.credentialsChanged(slot)
+  }
+
+  private codebuddySlot(agentId: AgentId): Slot {
+    const slot = this.registeredSlot(agentId)
+    if (slot.def.id !== 'codebuddy') {
+      throw invalidParams(`${slot.def.name} has no site Kettu edits`)
     }
     return slot
   }
@@ -3815,7 +3860,8 @@ export class AgentManager {
     const signInFolder = (active ?? config)?.chosen
     const folderEnv: Record<string, string> =
       signInFolder && slot.def.configVariable ? { [slot.def.configVariable]: signInFolder } : {}
-    const declared = init?.authMethods ?? []
+    // An added agent that signs in only with its key offers none of the agent's own methods.
+    const declared = signsInWithKeyOnly(agentId) ? [] : (init?.authMethods ?? [])
     // Mistral Vibe offers its browser sign-in twice, under one name, once the client takes its page.
     const delegates = declared.some((method) => method.id === DELEGATED_SIGN_IN)
     const shown = declared.filter((method) => !delegates || method.id !== 'browser-auth')
@@ -3912,7 +3958,10 @@ export class AgentManager {
       disabled: this.isDisabled(agentId),
       ...(color ? { color } : {}),
       apiKey:
-        slot.def.id === 'claude-code' || slot.def.id === 'codex' || slot.def.id === 'deepseek'
+        slot.def.id === 'claude-code' ||
+        slot.def.id === 'codex' ||
+        slot.def.id === 'deepseek' ||
+        slot.def.id === 'codebuddy'
           ? { set: slot.apiKey, providers: slot.def.id === 'claude-code' }
           : null,
       state: slot.state,

@@ -600,6 +600,8 @@
     "description": "{{agent}} 需要先登录才能启动。Kettu 不会获取你的凭据。",
     "descriptionWithKey": "{{agent}} 需要先登录才能启动。",
     "noMethods": "{{agent}} 没有说明登录方式。请在它自己的命令行中登录，然后重试。",
+    "apiKey": "API key",
+    "keyOnly": "{{agent}} 只能用 API key 登录。Codebuddy Code 的浏览器和微信登录整台电脑共用一份，加出来的 Agent 没有自己的登录。",
     "copyCommand": "复制命令",
     "inTerminal": "在终端中登录",
     "signedIn": "我已登录，重试",

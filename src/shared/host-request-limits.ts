@@ -41,6 +41,8 @@ export const HOST_REQUEST_LIMITS: Readonly<Record<HostMethod, number | null>> = 
   'agents.details': AGENT_MS,
   'agents.claudeSettings': HOST_MS,
   'agents.setClaudeSetting': HOST_MS,
+  'agents.codebuddySettings': HOST_MS,
+  'agents.setCodebuddySite': HOST_MS,
   'agents.refreshAccount': AGENT_MS,
   'agents.listSessions': AGENT_MS,
   'agents.options': HOST_MS,

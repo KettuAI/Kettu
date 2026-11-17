@@ -1,6 +1,7 @@
 // An API key the user gives an agent, handed to its harness to keep: written into the `env` of
-// Claude Code's settings.json in the agent's folder, or given to `codex login --with-api-key`.
-// Kettu keeps no copy and never reads one back; only the keys it writes are touched.
+// Claude Code's or Codebuddy Code's settings.json in the agent's folder, or given to
+// `codex login --with-api-key`. Kettu keeps no copy and never reads one back; only the keys it
+// writes are touched.
 
 import { isObject, readSettings, writeSettings } from './settings-file'
 
@@ -18,6 +19,9 @@ const CLAUDE_KEYS = [
   'ANTHROPIC_API_KEY',
   'ANTHROPIC_MODEL',
 ] as const
+
+// The variable Codebuddy Code reads its key from in its settings.json `env`.
+const CODEBUDDY_KEYS = ['CODEBUDDY_API_KEY'] as const
 
 const MAX_KEY_CHARS = 4096
 const MAX_URL_CHARS = 2048
@@ -72,11 +76,28 @@ export async function writeClaudeKey(file: string, input: ApiKeyInput): Promise<
 
 /** Removes the variables `writeClaudeKey` sets, and `env` too once nothing else is in it. */
 export async function clearClaudeKey(file: string): Promise<void> {
+  await clearEnvKeys(file, CLAUDE_KEYS)
+}
+
+/** Sets Codebuddy Code's key in the settings file, keeping everything else in it. */
+export async function writeCodebuddyKey(file: string, input: ApiKeyInput): Promise<void> {
+  const settings = await readSettings(file)
+  const env = isObject(settings.env) ? { ...settings.env } : {}
+  env.CODEBUDDY_API_KEY = input.key
+  await writeSettings(file, { ...settings, env })
+}
+
+/** Removes the variable `writeCodebuddyKey` sets, and `env` too once nothing else is in it. */
+export async function clearCodebuddyKey(file: string): Promise<void> {
+  await clearEnvKeys(file, CODEBUDDY_KEYS)
+}
+
+async function clearEnvKeys(file: string, names: readonly string[]): Promise<void> {
   const settings = await readSettings(file)
   if (!isObject(settings.env)) return
   const env = { ...settings.env }
-  if (!CLAUDE_KEYS.some((name) => name in env)) return
-  for (const name of CLAUDE_KEYS) delete env[name]
+  if (!names.some((name) => name in env)) return
+  for (const name of names) delete env[name]
   const next = { ...settings }
   if (Object.keys(env).length > 0) next.env = env
   else delete next.env

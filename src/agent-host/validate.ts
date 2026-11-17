@@ -1330,6 +1330,19 @@ export function createValidators(platform: Platform): Validators {
         },
       }
     },
+    'agents.codebuddySettings': agent,
+    'agents.setCodebuddySite': (params) => {
+      const o = fields(params)
+      const change = fields(o.change)
+      if (
+        change.site !== 'automatic' &&
+        change.site !== 'international' &&
+        change.site !== 'china'
+      ) {
+        throw invalidParams('change.site must be international, china or automatic')
+      }
+      return { agentId: agentId(o), change: { site: change.site } }
+    },
     'agents.refreshAccount': agentWithForce,
     'agents.options': none,
     'mcp.status': none,

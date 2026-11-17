@@ -1,6 +1,6 @@
 // The contract between the renderer and the agent host, over the agent host port.
 
-import type { PromptCacheTtl } from './agents'
+import type { CodebuddyShellOverride, CodebuddySite, PromptCacheTtl } from './agents'
 import type { DeviceAccessDecision } from './device-agent'
 import type { ArtifactConsentAsk, ArtifactConsentRow, RuntimeAnswer } from './artifact-capabilities'
 import type { ArtifactContent, ArtifactSession, ArtifactSummary, VersionSummary } from './artifacts'
@@ -450,6 +450,21 @@ export type ClaudeSettingChange =
   | { setting: 'autoCompactWindow'; model: string | null; value: number | null }
   | { setting: 'promptCacheTtl'; value: PromptCacheTtl | null }
 
+/** What a Codebuddy Code agent's page edits in its settings file, and what overrides it. */
+export interface CodebuddySettings {
+  /**
+   * The site the file names; `automatic` when it names none, so the agent follows its sign-in,
+   * and `other` for a deployment Settings does not offer, whose value is `otherSite`.
+   */
+  site: CodebuddySite | 'automatic' | 'other'
+  otherSite: string | null
+  /** Shell variables set where the agent runs that win over these settings. */
+  shellOverrides: CodebuddyShellOverride[]
+}
+
+/** The site to write; `automatic` removes the key. */
+export type CodebuddySiteChange = { site: CodebuddySite | 'automatic' }
+
 /** A place the agent reads its own configuration from, in the order Settings lists them. */
 export interface AgentConfigItem {
   id: 'folder' | 'settings' | 'instructions'
@@ -776,6 +791,14 @@ export interface HostContract {
   // Writes one of them into that file and nothing else in it.
   'agents.setClaudeSetting': {
     params: { agentId: AgentId; change: ClaudeSettingChange }
+    result: void
+  }
+  // A Codebuddy Code agent's site, read from its settings file, and what overrides it; rejects
+  // with the reason when the file cannot be read.
+  'agents.codebuddySettings': { params: { agentId: AgentId }; result: CodebuddySettings }
+  // Writes the site into that file and nothing else in it.
+  'agents.setCodebuddySite': {
+    params: { agentId: AgentId; change: CodebuddySiteChange }
     result: void
   }
   'agents.refreshAccount': { params: { agentId: AgentId; force?: boolean }; result: void }
@@ -1611,6 +1634,8 @@ export const HOST_METHODS = [
   'agents.details',
   'agents.claudeSettings',
   'agents.setClaudeSetting',
+  'agents.codebuddySettings',
+  'agents.setCodebuddySite',
   'agents.refreshAccount',
   'agents.listSessions',
   'agents.options',

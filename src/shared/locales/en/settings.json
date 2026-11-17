@@ -717,6 +717,24 @@
         "1h": "1 hour"
       }
     },
+    "keyOnly": {
+      "note": "This agent signs in only with an API key. {{name}} keeps its browser and WeChat sign-in for the whole computer, outside this agent’s folder, so a second agent would share that account."
+    },
+    "codebuddy": {
+      "site": {
+        "name": "Site",
+        "description": "Which Codebuddy service this agent talks to, codebuddy.ai or copilot.tencent.com. An API key must come from the same site. Automatic follows the account the agent signs in with. A change applies from the next start of the agent.",
+        "descriptionKey": "Which Codebuddy service this agent talks to, codebuddy.ai or copilot.tencent.com. Its API key must come from the same site. A change applies from the next start of the agent.",
+        "automatic": "Automatic",
+        "international": "International",
+        "china": "China",
+        "other": "Other: {{value}}"
+      },
+      "override": {
+        "CODEBUDDY_AUTH_TOKEN": "CODEBUDDY_AUTH_TOKEN is set in your shell, and Codebuddy Code uses it before any API key set here.",
+        "WORKBUDDY_CONFIG_DIR": "WORKBUDDY_CONFIG_DIR is set in your shell, and Codebuddy Code reads that folder instead of this agent’s own."
+      }
+    },
     "advanced": "Advanced",
     "readingAccount": "Reading the account…",
     "noAccount": "No account reported",
@@ -858,12 +876,15 @@
       "folderExistingHint": "Choose one to share its settings and sign-in.",
       "choose": "Choose…",
       "login": "Sign in",
+      "site": "Site",
+      "siteHint": "Codebuddy has an international site and a China site, and the API key must come from the one chosen here.",
       "loginTerminal": "In a terminal",
       "loginTerminalHint": "{{name}} signs in itself, with your plan.",
       "loginKey": "With an API key",
       "loginKeyHint": "Your own key and provider.",
       "loginKeyHintOpenAi": "An OpenAI API key.",
       "loginKeyHintDeepSeek": "A DeepSeek API key.",
+      "loginKeyHintCodebuddy": "An API key from the site above.",
       "submit": "Add agent"
     },
     "key": {
@@ -872,11 +893,13 @@
       "notSet": "Your own key and provider, in place of a sign-in.",
       "notSetOpenAi": "An OpenAI API key, in place of a sign-in.",
       "notSetDeepSeek": "A DeepSeek API key, in place of a sign-in.",
+      "notSetCodebuddy": "An API key from the Codebuddy site this agent uses, in place of a sign-in.",
       "setButton": "Set…",
       "replace": "Replace…",
       "clear": "Clear",
       "title": "API key for {{name}}",
       "defaultWarning": "This is the folder {{name}} uses in a terminal too, so your {{command}} there also switches to this key.",
+      "defaultWarningShared": "This is the folder {{name}} uses in a terminal too, so it also switches to this key there.",
       "save": "Save",
       "baseUrl": "Base URL",
       "baseUrlHint": "Leave it empty for Anthropic; for a gateway, the address it gives you.",
@@ -885,6 +908,7 @@
       "modelPlaceholder": "Optional; {{name}}’s default when empty",
       "noteClaude": "Claude Code keeps the key in the settings.json of this agent’s folder; Kettu keeps no copy and never reads it back. {{command}} in a terminal with this folder uses it too.",
       "noteCodex": "Codex keeps the key through its own codex login; Kettu keeps no copy. For another provider, set it up in this folder’s config.toml.",
+      "noteCodebuddy": "Codebuddy Code keeps the key in the settings.json of this agent’s folder; Kettu keeps no copy and never reads it back. Create the key on the site this agent uses: codebuddy.ai/profile/keys for International, copilot.tencent.com/profile for China.",
       "baseUrlOptional": "Base URL (optional)",
       "modelOptional": "Model (optional)",
       "envSet": "Set. Kettu keeps it and passes it only to {{name}} when it starts."

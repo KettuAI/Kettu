@@ -713,6 +713,24 @@
         "1h": "1 小时"
       }
     },
+    "keyOnly": {
+      "note": "这个 Agent 只能用 API key 登录。{{name}} 的浏览器和微信登录整台电脑共用一份，存在这个 Agent 的目录之外，再加一个 Agent 也是同一个账号。"
+    },
+    "codebuddy": {
+      "site": {
+        "name": "站点",
+        "description": "这个 Agent 连哪个 Codebuddy 服务，codebuddy.ai 还是 copilot.tencent.com。API key 必须来自同一个站点。自动是跟着 Agent 登录的账号走。改动从这个 Agent 下次启动起生效。",
+        "descriptionKey": "这个 Agent 连哪个 Codebuddy 服务，codebuddy.ai 还是 copilot.tencent.com。它的 API key 必须来自同一个站点。改动从这个 Agent 下次启动起生效。",
+        "automatic": "自动",
+        "international": "国际站",
+        "china": "国内站",
+        "other": "其他：{{value}}"
+      },
+      "override": {
+        "CODEBUDDY_AUTH_TOKEN": "你的 Shell 里设了 CODEBUDDY_AUTH_TOKEN，Codebuddy Code 会先用它，这里设的 API key 不起作用。",
+        "WORKBUDDY_CONFIG_DIR": "你的 Shell 里设了 WORKBUDDY_CONFIG_DIR，Codebuddy Code 读的是那个目录，不是这个 Agent 自己的。"
+      }
+    },
     "advanced": "高级",
     "readingAccount": "正在读取账号…",
     "noAccount": "未提供账号信息",
@@ -851,12 +869,15 @@
       "folderExistingHint": "选择一个，与它共用设置和登录。",
       "choose": "选择…",
       "login": "登录方式",
+      "site": "站点",
+      "siteHint": "Codebuddy 有国际站和国内站，API key 必须来自这里选的站点。",
       "loginTerminal": "在终端中",
       "loginTerminalHint": "{{name}} 自己登录，使用你的套餐。",
       "loginKey": "使用 API key",
       "loginKeyHint": "你自己的 key 和服务商。",
       "loginKeyHintOpenAi": "OpenAI 的 API key。",
       "loginKeyHintDeepSeek": "DeepSeek 的 API key。",
+      "loginKeyHintCodebuddy": "上面所选站点的 API key。",
       "submit": "添加 Agent"
     },
     "key": {
@@ -865,11 +886,13 @@
       "notSet": "用你自己的 key 和服务商，代替登录。",
       "notSetOpenAi": "用 OpenAI 的 API key 代替登录。",
       "notSetDeepSeek": "用 DeepSeek 的 API key 代替登录。",
+      "notSetCodebuddy": "用这个 Agent 所在站点的 API key 代替登录。",
       "setButton": "设置…",
       "replace": "重新填写…",
       "clear": "清除",
       "title": "{{name}} 的 API key",
       "defaultWarning": "这是终端里 {{name}} 也在用的目录，终端里的 {{command}} 也会改用这个 key。",
+      "defaultWarningShared": "这是终端里 {{name}} 也在用的目录，终端里也会改用这个 key。",
       "save": "保存",
       "baseUrl": "服务地址",
       "baseUrlHint": "留空就是 Anthropic 官方；第三方网关填它给的地址。",
@@ -878,6 +901,7 @@
       "modelPlaceholder": "可选，留空用 {{name}} 的默认",
       "noteClaude": "key 交给 Claude Code，存进这个 Agent 配置目录里的 settings.json；Kettu 不留副本，也不读回。终端里用这个目录运行 {{command}} 也能用。",
       "noteCodex": "key 经 Codex 自己的 codex login 保存；Kettu 不留副本。要接别的服务商，在这个目录的 config.toml 里自己配。",
+      "noteCodebuddy": "key 交给 Codebuddy Code，存进这个 Agent 配置目录里的 settings.json；Kettu 不留副本，也不读回。要在这个 Agent 用的站点上创建 key：国际站在 codebuddy.ai/profile/keys，国内站在 copilot.tencent.com/profile。",
       "baseUrlOptional": "Base URL（可选）",
       "modelOptional": "模型（可选）",
       "envSet": "已设置。Kettu 保存它，只在 {{name}} 启动时交给它。"

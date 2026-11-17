@@ -136,6 +136,27 @@ describe('createValidators', () => {
     rejects(() => posix['agents.setClaudeSetting']({ agentId: 'claude-code' }))
   })
 
+  it('takes only a site Settings offers for a Codebuddy Code agent', () => {
+    for (const site of ['international', 'china', 'automatic']) {
+      expect(
+        posix['agents.setCodebuddySite']({
+          agentId: 'codebuddy~work',
+          change: { site, x: 1 },
+        }),
+      ).toEqual({ agentId: 'codebuddy~work', change: { site } })
+    }
+    const bad = (change: unknown): void =>
+      rejects(() => posix['agents.setCodebuddySite']({ agentId: 'codebuddy', change }))
+    bad({ site: 'internal' })
+    bad({ site: 'ioa' })
+    bad({ site: 1 })
+    bad({})
+    rejects(() => posix['agents.setCodebuddySite']({ agentId: 'codebuddy' }))
+    expect(posix['agents.codebuddySettings']({ agentId: 'codebuddy~work' })).toEqual({
+      agentId: 'codebuddy~work',
+    })
+  })
+
   it('checks the connection methods: servers Kettu keeps and logins of Connect', () => {
     expect(posix['market.connect']({ serverId: 'app.linear/linear' })).toEqual({
       serverId: 'app.linear/linear',
