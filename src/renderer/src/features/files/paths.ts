@@ -101,8 +101,14 @@ export interface Folder {
   files: string[]
 }
 
-/** Each folder's direct children, folders and files apart, keyed by the folder's path ('' is the root). */
-export function indexFolders(paths: readonly string[]): Map<string, Folder> {
+/**
+ * Each folder's direct children, folders and files apart, keyed by the folder's path ('' is the
+ * root). `empty` names folders with nothing in them, which no file path gives.
+ */
+export function indexFolders(
+  paths: readonly string[],
+  empty: readonly string[] = [],
+): Map<string, Folder> {
   const index = new Map<string, Folder>([['', { folders: [], files: [] }]])
   const folder = (path: string): Folder => {
     let entry = index.get(path)
@@ -118,6 +124,7 @@ export function indexFolders(paths: readonly string[]): Map<string, Folder> {
     const slash = path.lastIndexOf('/')
     folder(slash < 0 ? '' : path.slice(0, slash)).files.push(path)
   }
+  for (const path of empty) if (path !== '') folder(path)
   const byName = (a: string, b: string) => {
     const x = nameOf(a).toLowerCase()
     const y = nameOf(b).toLowerCase()
@@ -170,4 +177,24 @@ export function foldersAbove(path: string): string[] {
     slash = path.indexOf('/', slash + 1)
   }
   return folders
+}
+
+/** `name` in `folder`, '' being the project's own. */
+export function joinPath(folder: string, name: string): string {
+  return folder === '' ? name : `${folder}/${name}`
+}
+
+/** Whether `path` is `folder` or lies inside it. */
+export function isWithin(path: string, folder: string): boolean {
+  return path === folder || path.startsWith(`${folder}/`)
+}
+
+/** The paths that no other of them holds, in their order: a folder stands for what is in it. */
+export function outermost(paths: readonly string[]): string[] {
+  return paths.filter((path) => !paths.some((other) => other !== path && isWithin(path, other)))
+}
+
+/** Where `path` is after `from` moved to `to`: itself when it is neither `from` nor inside it. */
+export function movedPath(path: string, from: string, to: string): string {
+  return isWithin(path, from) ? `${to}${path.slice(from.length)}` : path
 }

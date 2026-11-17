@@ -15,6 +15,8 @@ export type AppEvent =
   | { kind: 'drop-attachments'; draft: string; files: File[] } // a session's id, or New session's draft
   // To the side panel `panel` names, a session's or New session's, once it shows.
   | { kind: 'run-in-terminal'; panel: string; command: string }
+  // A new terminal starting in `folder`, relative to the side panel's project.
+  | { kind: 'open-terminal'; panel: string; folder: string }
   | { kind: 'sign-in-terminal'; panel: string; command: string; agentId: string }
   // The sign-in command's terminal exited, on the host `hostId` (null for this computer).
   | { kind: 'sign-in-finished'; agentId: string; hostId: string | null }

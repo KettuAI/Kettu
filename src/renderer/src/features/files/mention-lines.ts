@@ -4,7 +4,7 @@
 import { EditorView } from '@codemirror/view'
 import type { SelectedLineRange } from '@pierre/diffs'
 import { attachMention } from '@renderer/features/session/composer/attachments'
-import { focusedPane } from '@renderer/features/split/layout'
+import { allPanes, focusedPane } from '@renderer/features/split/layout'
 import { useViewStore } from '@renderer/stores/view'
 import { nameOf } from './paths'
 
@@ -24,6 +24,50 @@ export function mentionText(path: string, [start, end]: [number, number]): strin
 /** Why lines were not mentioned: no session in the focused pane, or its attachments are full. */
 export type MentionMiss = 'no-composer' | 'full'
 
+/** The composer's editor of the pane that shows the session, or null when none shows it. */
+function composerOf(sessionId: string): EditorView | null {
+  const { layout } = useViewStore.getState()
+  const pane = allPanes(layout).find(
+    (candidate) => candidate.view.kind === 'session' && candidate.view.sessionId === sessionId,
+  )
+  if (!pane) return null
+  const editor = document.querySelector<HTMLElement>(
+    `[data-split-pane="${CSS.escape(pane.id)}"] .cm-editor`,
+  )
+  return editor ? EditorView.findFromDOM(editor) : null
+}
+
+/** Types `text` at the caret, after a space when a word ends there, and focuses the composer. */
+function typeMention(view: EditorView, text: string): void {
+  const { from } = view.state.selection.main
+  const before = from > 0 ? view.state.sliceDoc(from - 1, from) : ''
+  view.dispatch(view.state.replaceSelection(`${before && !/\s/.test(before) ? ' ' : ''}${text} `), {
+    userEvent: 'input.type',
+    scrollIntoView: true,
+  })
+  view.focus()
+}
+
+/**
+ * Mentions files and folders of the project in the composer of the session `sessionId`, each
+ * attached as a chosen mention attaches it; null once they are there.
+ */
+export function mentionPaths(
+  sessionId: string,
+  projectPath: string,
+  entries: readonly { path: string; folder: boolean }[],
+): MentionMiss | null {
+  const view = composerOf(sessionId)
+  if (!view) return 'no-composer'
+  const names: string[] = []
+  for (const { path, folder } of entries) {
+    if (attachMention(sessionId, projectPath, path, folder) > 0) break
+    names.push(`@${nameOf(path)}${folder ? '/' : ''}`)
+  }
+  if (names.length > 0) typeMention(view, names.join(' '))
+  return names.length < entries.length ? 'full' : null
+}
+
 /** Puts the mention in the focused pane's composer; null once it is there. */
 export function mentionLines(
   projectPath: string,
@@ -39,13 +83,6 @@ export function mentionLines(
   const view = editor ? EditorView.findFromDOM(editor) : null
   if (!view) return 'no-composer'
   if (attachMention(pane.view.sessionId, projectPath, path, false) > 0) return 'full'
-  const { from } = view.state.selection.main
-  const before = from > 0 ? view.state.sliceDoc(from - 1, from) : ''
-  const text = `${before && !/\s/.test(before) ? ' ' : ''}${mentionText(path, lines)} `
-  view.dispatch(view.state.replaceSelection(text), {
-    userEvent: 'input.type',
-    scrollIntoView: true,
-  })
-  view.focus()
+  typeMention(view, mentionText(path, lines))
   return null
 }

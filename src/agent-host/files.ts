@@ -218,9 +218,40 @@ export class FilesService {
     const paths = sortedUnique(
       files.split('\0').filter((p) => p !== '' && !p.endsWith('/') && !missing.has(p)),
     )
-    const empty = await this.emptyFolders(root, folders.split('\0'))
+    // A folder whose tracked files are all gone from disk is no untracked folder to git.
+    const emptied = this.foldersWithout(gone.split('\0'), paths)
+    const empty = await this.emptyFolders(root, [...folders.split('\0'), ...emptied])
     if (paths.length <= this.limits.list) return { paths, folders: empty, truncated: false }
     return { paths: paths.slice(0, this.limits.list), folders: empty, truncated: true }
+  }
+
+  /**
+   * The outermost folders above the `deleted` paths that hold none of the sorted `paths`, as
+   * `name/`, where what was deleted may have left empty folders.
+   */
+  private foldersWithout(deleted: string[], paths: readonly string[]): string[] {
+    const folders = new Set<string>()
+    for (const path of deleted) {
+      for (let slash = path.indexOf('/'); slash > 0; slash = path.indexOf('/', slash + 1)) {
+        const folder = path.slice(0, slash + 1)
+        if (this.holdsListed(paths, folder)) continue
+        folders.add(folder)
+        break
+      }
+    }
+    return [...folders]
+  }
+
+  /** Whether a path of the sorted `paths` starts with `prefix`. */
+  private holdsListed(paths: readonly string[], prefix: string): boolean {
+    let low = 0
+    let high = paths.length
+    while (low < high) {
+      const mid = (low + high) >>> 1
+      if (paths[mid]! < prefix) low = mid + 1
+      else high = mid
+    }
+    return paths[low]?.startsWith(prefix) ?? false
   }
 
   /**
@@ -637,7 +668,8 @@ export class FilesService {
 
   /** The real path of a folder of the project, '' for the project itself. */
   private async folder(root: string, relative: string): Promise<string> {
-    const real = relative === '' ? await this.realRoot(root) : await this.resolveInside(root, relative)
+    const real =
+      relative === '' ? await this.realRoot(root) : await this.resolveInside(root, relative)
     const info = await stat(real).catch((error: unknown) => {
       throw this.fsError(error, relative)
     })

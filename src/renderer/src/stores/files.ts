@@ -5,15 +5,25 @@ import type { AgentId } from '@shared/agents'
 import type { FileContent } from '@shared/files'
 import type { FileDiff } from '@shared/git'
 import { errorCode, errorMessage, host } from '@renderer/lib/host'
+import { isWithin, movedPath } from '@renderer/features/files/paths'
 import { useGitStore } from './git'
 import { showSidePane } from './view'
 
 export interface ProjectFiles {
   paths: string[]
+  /** Folders with nothing in them, which no path in `paths` names. */
+  folders: string[]
   /** The same paths, for telling whether a reference in a reply names a file. */
   known: ReadonlySet<string>
   truncated: boolean
   error: string | null
+}
+
+/** Files and folders cut or copied in a project's tree, for pasting in the same project. */
+export interface FileClipboard {
+  projectPath: string
+  paths: string[]
+  cut: boolean
 }
 
 export interface OpenFile {
@@ -91,6 +101,7 @@ interface FilesStore {
   diffs: Record<string, DiffView>
   /** By `agentFolderKey`, the folder a session's agent keeps its own files in, null for none. */
   agentFolders: Record<string, string | null>
+  clipboard: FileClipboard | null
 }
 
 export const useFilesStore = create<FilesStore>()(() => ({
@@ -101,6 +112,7 @@ export const useFilesStore = create<FilesStore>()(() => ({
   pending: {},
   diffs: {},
   agentFolders: {},
+  clipboard: null,
 }))
 
 /** A session's agent folder is asked for again when the session moves to another agent. */
@@ -170,19 +182,20 @@ export function loadFiles(projectPath: string): Promise<void> {
   if (running) return running
   staleLists.delete(projectPath)
   const request = host('files.list', { projectPath })
-    .then(({ paths, truncated }): ProjectFiles => {
+    .then(({ paths, folders = [], truncated }): ProjectFiles => {
       // An unchanged list keeps its arrays, so nothing that indexes them works again.
       const before = useFilesStore.getState().byProject[projectPath]
       if (before && !before.error && before.truncated === truncated) {
-        if (samePaths(before.paths, paths)) return before
+        if (samePaths(before.paths, paths) && samePaths(before.folders, folders)) return before
       }
-      return { paths, known: new Set(paths), truncated, error: null }
+      return { paths, folders, known: new Set(paths), truncated, error: null }
     })
     .catch((error: unknown) => {
       // A failed refresh keeps the list it had.
       const before = useFilesStore.getState().byProject[projectPath]
       return {
         paths: before?.paths ?? [],
+        folders: before?.folders ?? [],
         known: before?.known ?? new Set<string>(),
         truncated: before?.truncated ?? false,
         error: errorMessage(error),
@@ -304,6 +317,53 @@ export function openFile(
   }
   setTabs(projectPath, { files, active: path })
   void readOpenFile(projectPath, path)
+}
+
+/**
+ * The tabs of files that moved follow them, with their edits, undo history and place: each move
+ * takes a file or a folder from `from` to `to`, and what was in a folder with it.
+ */
+export function followMoves(projectPath: string, moves: readonly { from: string; to: string }[]) {
+  const tabs = tabsOf(projectPath)
+  if (!tabs || moves.length === 0) return
+  const moved = (path: string) => {
+    const move = moves.find(({ from }) => isWithin(path, from))
+    return move ? movedPath(path, move.from, move.to) : path
+  }
+  if (!tabs.files.some((file) => moved(file.path) !== file.path)) return
+  for (const file of tabs.files) {
+    const to = moved(file.path)
+    const buffer = getBuffer(projectPath, file.path)
+    if (to === file.path || !buffer) continue
+    // The same buffer, which its editor state's listener writes to, under its new path.
+    dropBuffer(projectPath, file.path)
+    buffer.path = to
+    putBuffer(projectPath, buffer)
+  }
+  setTabs(projectPath, {
+    active: moved(tabs.active),
+    files: tabs.files.map((file) => {
+      const path = moved(file.path)
+      if (path === file.path) return file
+      return { ...file, path, content: file.content && { ...file.content, path } }
+    }),
+  })
+  const pending = useFilesStore.getState().pending[projectPath]
+  if (pending) setPending(projectPath, { path: moved(pending.path) })
+}
+
+/** The open files at or under `paths` that hold unsaved edits. */
+export function unsavedUnder(projectPath: string, paths: readonly string[]): string[] {
+  return (tabsOf(projectPath)?.files ?? [])
+    .filter((file) => file.dirty && paths.some((path) => isWithin(file.path, path)))
+    .map((file) => file.path)
+}
+
+/** Closes the tabs of files that were deleted, or were in a deleted folder, edits and all. */
+export function closeRemoved(projectPath: string, paths: readonly string[]): void {
+  for (const file of tabsOf(projectPath)?.files ?? []) {
+    if (paths.some((path) => isWithin(file.path, path))) closeNow(projectPath, file.path)
+  }
 }
 
 /** Shows another of the project's open files; one not read since it was left is read again. */

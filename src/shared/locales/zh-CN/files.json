@@ -132,5 +132,43 @@
     "discard": "丢弃",
     "discardFile": "丢弃 {{name}} 的更改",
     "discardPick": "选择一个文件来丢弃它的更改"
+  },
+  "tree": {
+    "newFile": "新建文件",
+    "newFolder": "新建文件夹",
+    "collapseAll": "折叠所有文件夹",
+    "newFileLabel": "新文件的名字",
+    "newFolderLabel": "新文件夹的名字",
+    "renameLabel": "{{name}} 的新名字",
+    "openTerminal": "在终端中打开",
+    "mention": "引用到对话",
+    "noComposer": "打开这个会话后才能在消息里引用文件",
+    "cut": "剪切",
+    "copy": "复制",
+    "paste": "粘贴",
+    "copyPath": "复制路径",
+    "copyRelativePath": "复制相对路径",
+    "copiedPath_other": "已复制 {{count}} 个路径",
+    "rename": "重命名",
+    "delete": "删除",
+    "items_other": "{{count}} 项",
+    "nameInvalid": "不能用这个名字。",
+    "nameTaken": "这里已经有“{{name}}”了，换个名字吧。",
+    "taken": "那里已经有同名的文件或文件夹。",
+    "failed": "没能修改文件：{{message}}",
+    "trash": {
+      "mac": "废纸篓",
+      "windows": "回收站",
+      "linux": "回收站"
+    },
+    "deleteOne": "删除“{{name}}”？",
+    "deleteMany": "删除这 {{count}} 项？",
+    "deleteForGoodOne": "永久删除“{{name}}”？",
+    "deleteForGoodMany": "永久删除这 {{count}} 项？",
+    "toTrash": "之后可以从{{trash}}里找回。",
+    "noTrash": "这台电脑上没法放进废纸篓，删除后无法撤销。",
+    "unsavedGo": "{{names}} 里没保存的修改会丢失。",
+    "moveToTrash": "移到{{trash}}",
+    "deleteForGood": "永久删除"
   }
 }

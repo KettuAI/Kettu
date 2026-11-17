@@ -2,7 +2,10 @@ import { useDeferredValue, useEffect, useMemo, useState, type ReactNode } from '
 import {
   ArrowRight01Icon,
   CodeIcon,
+  FileAddIcon,
   Folder01Icon,
+  FolderAddIcon,
+  MinusSignSquareIcon,
   Search01Icon,
   SidebarLeftIcon,
 } from '@hugeicons/core-free-icons'
@@ -45,59 +48,22 @@ import {
 import { openGitDialog, useGitStore } from '@renderer/stores/git'
 import { ChangeBadge } from './change-badge'
 import { useFileChanges, type FileChanges, type ProjectChange } from './changes'
+import { columnOf, saveColumn } from './column'
+import { FileTree, type TreeEdit } from './file-tree'
 import { DiffPreview } from './diff-preview'
 import { FilePreview } from './file-preview'
 import { openInEditor } from './open-in-editor'
 import { FileTabs } from './file-tabs'
 import { FileTypeIcon } from './file-type-icon'
 import { UnsavedPrompt } from './unsaved-prompt'
-import {
-  folderOf,
-  foldersAbove,
-  indexFolders,
-  nameOf,
-  rankPaths,
-  treeRows,
-  type PathMatch,
-} from './paths'
-import { VirtualRows, type RowKey } from './virtual-rows'
+import { folderOf, nameOf, rankPaths, type PathMatch } from './paths'
+import { VirtualRows } from './virtual-rows'
 
 const SEARCH_DELAY_MS = 250
 // A single click in a list opens the preview tab, which the next single click replaces.
 const PREVIEW = { preview: true }
 // A change's row: its name, its folder under it.
 const CHANGE_ROW = 40
-
-/** What the pane's left column shows, kept by side panel while another pane takes its place. */
-interface Column {
-  mode: 'changes' | 'all' | null
-  query: string
-  searching: boolean
-  expanded: ReadonlySet<string>
-  /** The open file the tree last opened its folders for. */
-  revealed: string | undefined
-  scroll: number
-}
-
-const columns = new Map<string, Column>()
-const NO_FOLDERS: ReadonlySet<string> = new Set()
-
-function columnOf(key: string): Column {
-  return (
-    columns.get(key) ?? {
-      mode: null,
-      query: '',
-      searching: false,
-      expanded: NO_FOLDERS,
-      revealed: undefined,
-      scroll: 0,
-    }
-  )
-}
-
-function saveColumn(key: string, change: Partial<Column>): void {
-  columns.set(key, { ...columnOf(key), ...change })
-}
 
 interface FilesPanelProps {
   projectPath: string
@@ -139,18 +105,31 @@ function FilesPane({ projectPath, panel, maximized }: FilesPanelProps) {
   const layout = useDefaultLayout({ id: 'files-pane', storage: layoutStorage })
   const tree = usePanelRef()
   const [treeShown, setTreeShown] = useState(true)
+  // A name typed in the tree for a new file or folder or a rename, and Collapse all's count.
+  const [edit, setEdit] = useState<TreeEdit | null>(null)
+  const [collapsed, setCollapsed] = useState(0)
   // A folder with no files yet, as a new scratch session's, has nothing to list or open, so the
-  // pane says so once, in its middle, instead of in each half.
-  const bare = useFilesStore((s) => {
-    const files = s.byProject[projectPath]
-    return (
-      !!files &&
-      !files.error &&
-      files.paths.length === 0 &&
-      !s.open[projectPath] &&
-      !s.diffs[projectPath]
-    )
-  })
+  // pane says so once, in its middle, instead of in each half, until a file is being made.
+  const bare =
+    useFilesStore((s) => {
+      const files = s.byProject[projectPath]
+      return (
+        !!files &&
+        !files.error &&
+        files.paths.length === 0 &&
+        files.folders.length === 0 &&
+        !s.open[projectPath] &&
+        !s.diffs[projectPath]
+      )
+    }) && edit === null
+  const listed = useFilesStore((s) => !!s.byProject[projectPath] && !s.byProject[projectPath].error)
+  // New file and New folder go into the project's folder, in the tree, shown for them.
+  const startNew = (type: 'file' | 'folder') => {
+    stopSearching()
+    setMode('all')
+    if (tree.current?.isCollapsed()) tree.current.expand()
+    setEdit({ kind: 'new', folder: '', type })
+  }
 
   // The list follows the files while the pane shows; window focus refreshes it through the git
   // status it brings.
@@ -188,6 +167,24 @@ function FilesPane({ projectPath, panel, maximized }: FilesPanelProps) {
         maximized={maximized}
         tools={
           <>
+            {listed && (mode === 'all' || bare) && (
+              <>
+                <PanelButton label={t('tree.newFile')} onClick={() => startNew('file')}>
+                  <PaneIcon icon={FileAddIcon} />
+                </PanelButton>
+                <PanelButton label={t('tree.newFolder')} onClick={() => startNew('folder')}>
+                  <PaneIcon icon={FolderAddIcon} />
+                </PanelButton>
+                {!bare && !searching && (
+                  <PanelButton
+                    label={t('tree.collapseAll')}
+                    onClick={() => setCollapsed((count) => count + 1)}
+                  >
+                    <PaneIcon icon={MinusSignSquareIcon} />
+                  </PanelButton>
+                )}
+              </>
+            )}
             {!bare && (
               <PanelButton
                 label={t('panel.findFile')}
@@ -288,10 +285,15 @@ function FilesPane({ projectPath, panel, maximized }: FilesPanelProps) {
               ) : (
                 <Browser
                   projectPath={projectPath}
+                  panel={panel}
                   columnKey={columnKey}
                   query={query}
                   openPath={open?.path}
                   changes={changes.byPath}
+                  local={local}
+                  edit={edit}
+                  onEdit={setEdit}
+                  collapsed={collapsed}
                 />
               )}
             </ResizablePanel>
@@ -509,18 +511,27 @@ function ChangesFoot({ projectPath, changes }: { projectPath: string; changes: F
 /** The tree, the filter's matches or the search's lines, by what is typed. */
 function Browser({
   projectPath,
+  panel,
   columnKey,
   query,
   openPath,
   changes,
+  local,
+  edit,
+  onEdit,
+  collapsed,
 }: {
   projectPath: string
+  panel: string
   columnKey: string
   query: string
   openPath: string | undefined
   changes: ReadonlyMap<string, ChangeStatus>
+  local: boolean
+  edit: TreeEdit | null
+  onEdit: (edit: TreeEdit | null) => void
+  collapsed: number
 }) {
-  const { t } = useTranslation('files')
   const files = useFilesStore((s) => s.byProject[projectPath])
   if (!files) return <LoadingRows />
   if (files.error && files.paths.length === 0) {
@@ -540,132 +551,19 @@ function Browser({
       />
     )
   }
-  if (files.paths.length === 0) return <Message>{t('browser.empty')}</Message>
   return (
-    <Tree
+    <FileTree
       projectPath={projectPath}
+      panel={panel}
       columnKey={columnKey}
-      paths={files.paths}
+      files={files}
       openPath={openPath}
       changes={changes}
+      local={local}
+      edit={edit}
+      onEdit={onEdit}
+      collapsed={collapsed}
     />
-  )
-}
-
-// A list's folders and files, worked out once while the list lives.
-const folderIndexes = new WeakMap<readonly string[], ReturnType<typeof indexFolders>>()
-
-function folderIndex(paths: readonly string[]): ReturnType<typeof indexFolders> {
-  let index = folderIndexes.get(paths)
-  if (!index) {
-    index = indexFolders(paths)
-    folderIndexes.set(paths, index)
-  }
-  return index
-}
-
-function Tree({
-  projectPath,
-  columnKey,
-  paths,
-  openPath,
-  changes,
-}: {
-  projectPath: string
-  columnKey: string
-  paths: string[]
-  openPath: string | undefined
-  changes: ReadonlyMap<string, ChangeStatus>
-}) {
-  const { t } = useTranslation('files')
-  const index = folderIndex(paths)
-  const [expanded, setExpanded] = useState(() => columnOf(columnKey).expanded)
-  // A file opened from the conversation shows in the tree, its folders opened.
-  const [revealed, setRevealed] = useState(() => columnOf(columnKey).revealed)
-  if (openPath !== revealed) {
-    setRevealed(openPath)
-    // An agent's own file, by its absolute path, is in no folder of the tree.
-    if (openPath && !/^(?:\/|[a-z]:[\\/])/i.test(openPath)) {
-      setExpanded(new Set([...expanded, ...foldersAbove(openPath)]))
-    }
-  }
-  const [initialScroll] = useState(() => columnOf(columnKey).scroll)
-  useEffect(() => saveColumn(columnKey, { expanded, revealed }), [columnKey, expanded, revealed])
-  const rows = useMemo(() => treeRows(index, expanded), [index, expanded])
-  const openIndex = openPath ? rows.findIndex((r) => r.path === openPath) : -1
-
-  const toggle = (folder: string, open = !expanded.has(folder)) => {
-    if (open === expanded.has(folder)) return
-    const next = new Set(expanded)
-    if (open) next.add(folder)
-    else next.delete(folder)
-    setExpanded(next)
-  }
-
-  // ArrowRight opens a folder, then goes into it; ArrowLeft closes it, then goes to its parent.
-  const onRowKey: RowKey = (i, event) => {
-    const row = rows[i]
-    if (!row) return null
-    if (event.key === 'ArrowRight') {
-      if (!row.folder) return null
-      if (!expanded.has(row.path)) {
-        toggle(row.path, true)
-        return i
-      }
-      return rows[i + 1]?.depth === row.depth + 1 ? i + 1 : i
-    }
-    if (event.key === 'ArrowLeft') {
-      if (row.folder && expanded.has(row.path)) {
-        toggle(row.path, false)
-        return i
-      }
-      const parent = folderOf(row.path)
-      const at = parent ? rows.findIndex((r) => r.path === parent) : -1
-      return at >= 0 ? at : i
-    }
-    return null
-  }
-
-  return (
-    <VirtualRows
-      count={rows.length}
-      scrollTo={openIndex < 0 ? null : openIndex}
-      className="kp-tree"
-      initialScroll={initialScroll}
-      onScrollTop={(scroll) => saveColumn(columnKey, { scroll })}
-      roving
-      onRowKey={onRowKey}
-      role="tree"
-      label={t('panel.title')}
-    >
-      {(i, tabIndex) => {
-        const row = rows[i]!
-        const isOpen = expanded.has(row.path)
-        const change = row.folder ? undefined : changes.get(row.path)
-        return (
-          <Row
-            key={row.path}
-            depth={row.depth}
-            folder={row.folder}
-            selected={row.path === openPath}
-            title={row.path}
-            tabIndex={tabIndex}
-            treeItem
-            aria-expanded={row.folder ? isOpen : undefined}
-            onClick={() =>
-              row.folder ? toggle(row.path) : openFile(projectPath, row.path, null, PREVIEW)
-            }
-            onDoubleClick={row.folder ? undefined : () => openFile(projectPath, row.path)}
-          >
-            <FileTypeIcon path={row.path} folder={row.folder} open={isOpen} className="size-4" />
-            <span className="kp-node__name">
-              <span>{nameOf(row.path)}</span>
-            </span>
-            {change && <ChangeBadge status={change} />}
-          </Row>
-        )
-      }}
-    </VirtualRows>
   )
 }
 

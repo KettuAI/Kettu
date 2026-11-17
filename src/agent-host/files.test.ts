@@ -1,4 +1,13 @@
-import { lstat, mkdir, readFile, readlink, realpath, symlink, writeFile } from 'node:fs/promises'
+import {
+  lstat,
+  mkdir,
+  readFile,
+  readlink,
+  realpath,
+  rm,
+  symlink,
+  writeFile,
+} from 'node:fs/promises'
 import path from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { copyName, FilesService } from './files'
@@ -178,6 +187,23 @@ describe('FilesService empty folders', () => {
     expect(await files.list(root)).toEqual({
       paths: ['.gitignore', 'src/main.ts'],
       folders: ['outer/inner', 'src/new'],
+      truncated: false,
+    })
+  })
+
+  it('lists a folder emptied of its tracked files', async () => {
+    const exec = createExec(() => process.env).exec
+    const { root, files } = await setup(exec)
+    const git = (...args: string[]) => exec('git', args, { cwd: root, timeoutMs: 10_000 })
+    await git('init', '-q')
+    await mkdir(path.join(root, 'docs/deep'), { recursive: true })
+    await writeFile(path.join(root, 'docs/deep/a.md'), '')
+    await writeFile(path.join(root, 'kept.md'), '')
+    await git('add', '-A')
+    await rm(path.join(root, 'docs/deep/a.md'))
+    expect(await files.list(root)).toEqual({
+      paths: ['kept.md'],
+      folders: ['docs/deep'],
       truncated: false,
     })
   })

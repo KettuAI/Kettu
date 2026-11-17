@@ -2157,7 +2157,8 @@ export function createValidators(platform: Platform): Validators {
     },
     'files.create': (params) => {
       const o = fields(params)
-      if (o.kind !== 'file' && o.kind !== 'folder') throw invalidParams('kind must be file or folder')
+      if (o.kind !== 'file' && o.kind !== 'folder')
+        throw invalidParams('kind must be file or folder')
       return {
         projectPath: absolutePath(o, 'projectPath', platform),
         path: relativePath(o, 'path', platform),
