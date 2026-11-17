@@ -4,7 +4,9 @@
     "howToInstall": "How to install",
     "needsNode": "Needs Node.js 22 or later.",
     "installNode": "Install Node.js",
-    "couldNotStart": "Could not start."
+    "couldNotStart": "Could not start.",
+    "outdated": "Older than Kettu needs; update it to use it.",
+    "update": "How to update"
   },
   "state": {
     "ready": "Ready",
@@ -12,6 +14,7 @@
     "installing": "Installing…",
     "starting": "Starting…",
     "failed": "Failed",
-    "notAvailable": "Not available"
+    "notAvailable": "Not available",
+    "needsUpdate": "Needs update"
   }
 }

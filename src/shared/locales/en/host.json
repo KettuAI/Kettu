@@ -225,6 +225,7 @@
     "stoppedTooOften_one": "{{detail}} It stopped {{count}} time in five minutes, so Kettu does not start it again until you retry.",
     "stoppedTooOften_other": "{{detail}} It stopped {{count}} times in five minutes, so Kettu does not start it again until you retry.",
     "installFailed": "{{agent}} could not be installed. {{message}}",
+    "sdkInstallFailed": "Found your {{command}}, but could not install the SDK that runs {{agent}}. {{message}}",
     "runningFallback": "Running {{fallback}}: {{version}} could not be installed. {{message}}",
     "installStopped": "The install was stopped.",
     "busyTask": "{{agent}} is already being installed or updated",

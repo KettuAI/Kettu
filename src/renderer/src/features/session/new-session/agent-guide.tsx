@@ -9,6 +9,7 @@ import { AgentTile } from '@renderer/components/agents/agent-mark'
 import { Button } from '@renderer/components/ui/button'
 import { RingSpinner } from '@renderer/components/ui/spinner'
 import { toast } from '@renderer/components/ui/toast'
+import { cliOutdated } from '@renderer/features/agents/readiness'
 import { InstallDialog } from '@renderer/features/settings/harness-section'
 import {
   addDefaultAgents,
@@ -89,6 +90,7 @@ function GuideRow({ status }: { status: AgentStatus }) {
   const failure = task?.state === 'failed' ? (task.error ?? ts('agents.install.failedTitle')) : null
   const reason = failure ?? taskError?.message ?? null
   const kind = installKind(status)
+  const minimum = cliOutdated(status)
   const install = () => {
     if (kind === 'program') setInstalling(true)
     else if (kind === 'package')
@@ -104,14 +106,28 @@ function GuideRow({ status }: { status: AgentStatus }) {
       <span className="kettu-guide__name">
         <b>{status.harnessName}</b>
         <small data-error={reason ? '' : undefined} title={reason ?? undefined}>
-          {reason ?? t(ABOUT[harness as GuideHarness])}
+          {reason ??
+            (minimum !== null
+              ? t('newSession.guide.outdated', {
+                  name: status.harnessName,
+                  current: status.cli?.installed?.version ?? '',
+                })
+              : t(ABOUT[harness as GuideHarness]))}
         </small>
       </span>
       {running ? (
         <span className="kettu-guide__busy">
           <RingSpinner />
-          {ts('agents.install.installing')}
+          {ts(task?.kind === 'update' ? 'agents.update.updating' : 'agents.install.installing')}
         </span>
+      ) : minimum !== null ? (
+        <Button
+          variant="outline"
+          size="xs"
+          onClick={() => void useAgentsStore.getState().updateCli(status.id)}
+        >
+          {ts(reason ? 'agents.update.failed' : 'agents.update.button')}
+        </Button>
       ) : hasProgram(status) ? (
         <span className="kettu-guide__busy">{t('newSession.guide.found')}</span>
       ) : (

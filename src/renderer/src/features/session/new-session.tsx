@@ -99,7 +99,13 @@ import {
 import { pickupSessions, pickupState } from './new-session/picker'
 import { AgentGuide } from './new-session/agent-guide'
 import { useGuideStatuses } from './new-session/guide-statuses'
-import { agentNeed, canStart, noAgentCanStart, startValues } from './new-session/start-options'
+import {
+  agentNeed,
+  canStart,
+  noAgentCanStart,
+  noAgentUntilUpdated,
+  startValues,
+} from './new-session/start-options'
 import { useStartConfig } from './new-session/use-start-config'
 import { openTask } from './new-session/open-task'
 import { chooseWorkflow, taskStarted, useWorkflowChoice } from './new-session/workflow-choice'
@@ -285,6 +291,13 @@ function DraftComposer({
       const { order, byId } = agentsOn(s, hostId)
       const usable = usableAgents(order, byId).filter((a) => !a.disabled)
       return usable.length === 0 ? [] : noAgentCanStart(usable)
+    }),
+  )
+  const waitingForUpdate = useAgentsStore(
+    useShallow((s) => {
+      if (hostId === null ? !s.loaded : !(hostId in s.hosts)) return []
+      const { order, byId } = agentsOn(s, hostId)
+      return noAgentUntilUpdated(usableAgents(order, byId).filter((a) => !a.disabled))
     }),
   )
   // This computer has no agent at all, not merely none that is on: the install guide shows.
@@ -659,7 +672,11 @@ function DraftComposer({
         )}
         {agentId && <StartNotices agentId={agentId} hostId={hostId} />}
         {waitingForNode && !(noAgent && guide) && (
-          <NoAgentLine waitingForNode={waitingForNode} hostId={hostId} />
+          <NoAgentLine
+            waitingForNode={waitingForNode}
+            waitingForUpdate={waitingForUpdate}
+            hostId={hostId}
+          />
         )}
       </div>
       {children}
@@ -725,9 +742,11 @@ function noticeText(
  */
 function NoAgentLine({
   waitingForNode,
+  waitingForUpdate,
   hostId,
 }: {
   waitingForNode: string[]
+  waitingForUpdate: string[]
   hostId: string | null
 }) {
   const { t } = useTranslation('session')
@@ -737,12 +756,21 @@ function NoAgentLine({
       ? t('newSession.noAgentOnHost', { host: hostLabel })
       : waitingForNode.length > 0
         ? t('newSession.noAgentNode', { agents: waitingForNode, count: waitingForNode.length })
-        : t('newSession.noAgent')
-  const noneYet = waitingForNode.length === 0
+        : waitingForUpdate.length > 0
+          ? t('newSession.noAgentUpdate', {
+              agents: waitingForUpdate,
+              count: waitingForUpdate.length,
+            })
+          : t('newSession.noAgent')
+  const updating = waitingForNode.length === 0 && waitingForUpdate.length > 0
+  const noneYet = waitingForNode.length === 0 && !updating
   return (
     <div className="flex min-w-0 items-center gap-2 px-2.75">
       <p
-        className={cn('truncate text-xs', noneYet ? 'text-secondary' : 'text-destructive')}
+        className={cn(
+          'truncate text-xs',
+          noneYet ? 'text-secondary' : updating ? 'text-warning' : 'text-destructive',
+        )}
         title={text}
       >
         {text}
@@ -754,7 +782,13 @@ function NoAgentLine({
           className="shrink-0"
           onClick={() => (noneYet ? openAgentSettings(null) : openHarnessSettings(null))}
         >
-          {t(noneYet ? 'newSession.addAgent' : 'newSession.installHarness')}
+          {t(
+            noneYet
+              ? 'newSession.addAgent'
+              : updating
+                ? 'newSession.updateHarness'
+                : 'newSession.installHarness',
+          )}
         </Button>
       )}
     </div>

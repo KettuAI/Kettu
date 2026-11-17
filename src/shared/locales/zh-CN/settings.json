@@ -1764,6 +1764,12 @@
       "cliBody": "Kettu 只用你自己装的 {{command}}，不带一份。按厂商文档里的一种方式装上它。"
     },
     "cliOutdated": "你的 {{name}} {{current}} 比 Kettu 要的旧，更新后才能用。",
+    "cliOutdatedTitle": "{{name}} 需要更新",
+    "cliOutdatedManual": "你的 {{name}} {{current}} 比 Kettu 要的旧（至少 {{minimum}}）。按你装它的方式更新，装好后再点“重新检测”。",
+    "needsUpdate": "需要更新",
+    "startFailedTitle": "{{name}} 没能启动",
+    "recheck": "重新检测",
+    "sdkOnFirstUse": "SDK 首次使用时安装",
     "cliUpdateBody": "你装的是 {{current}}。更新按你装 {{name}} 的方式运行，命令在下面。",
     "cliUpdateBodySdk": "你装的是 {{current}}。更新按你装 {{name}} 的方式运行，Claude Agent SDK 一并换成对应的版本；命令在下面。",
     "reinstall": "{{name}}",

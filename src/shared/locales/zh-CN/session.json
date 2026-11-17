@@ -463,6 +463,7 @@
     "noAgent": "没有可用的 Agent，先添加或启用一个再开始。",
     "noAgentOnHost": "{{host}} 上暂时没有可以启动的 Agent。",
     "noAgentNode_other": "暂时没有可以启动的 Agent：{{agents, list(style: narrow)}} 需要 Node.js 22 或更高版本。",
+    "noAgentUpdate_other": "暂时没有可以启动的 Agent：你的 {{agents, list(style: narrow)}} 版本比 Kettu 要的旧，更新后才能开始。",
     "setUpAgents": "设置 Agent…",
     "agentMenu": {
       "label": "Agent 和模型",
@@ -475,7 +476,12 @@
       "window": "{{limit}} {{used}}",
       "windowResets": "{{limit}} {{used}} · {{reset}}",
       "setsUpLong": "{{agent}} 会在首次使用时自动配置：Kettu 会为它安装适配器，适配器运行你的 {{command}}。",
-      "setsUpLongSdk": "{{agent}} 会在首次使用时自动配置：Kettu 会为它安装 SDK；SDK 不接受你的 {{command}} 版本时，还会下载一份 {{agent}}。",
+      "needsUpdate": "需要更新",
+      "updateLong": "你的 {{command}} {{current}} 比 Kettu 要的旧（至少 {{minimum}}），更新后才能用。",
+      "updateOnHost": "在 {{host}} 上更新 {{agent}} 后才能用。",
+      "updateTo": "更新到 {{version}}",
+      "updating": "正在更新…",
+      "howToUpdate": "更新方法…",
       "install": "安装…",
       "failedLong": "{{agent}} 启动失败。",
       "retry": "重试",
@@ -506,6 +512,7 @@
       "switchOn": "{{agent}} 启动时 {{option}} 为开启，而不是关闭。"
     },
     "installHarness": "安装 Harness…",
+    "updateHarness": "更新 Harness…",
     "thisComputer": "本机",
     "hostOffline": "离线",
     "hostNotConnected": "{{host}} 还没有连上",
@@ -535,6 +542,7 @@
       "noMatch": "没有匹配的 Agent",
       "signedOut": "已退出 · 登录后使用",
       "failed": "启动失败",
+      "needsUpdate": "版本太旧 · 点击更新",
       "limitUsed": "已用 {{limit}}限额的 {{percent}}%",
       "limitReached": "已达 {{limit}}限额",
       "manage": "管理 Agent…"
@@ -563,6 +571,7 @@
         "pi": "小巧、可扩展的终端 Agent。"
       },
       "found": "已在这台电脑上找到",
+      "outdated": "你的 {{name}} {{current}} 比 Kettu 要的旧，更新后才能用。",
       "redetect": "重新检测"
     },
     "workflow": {

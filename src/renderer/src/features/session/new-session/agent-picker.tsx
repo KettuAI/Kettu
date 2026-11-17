@@ -34,8 +34,8 @@ import {
   usePlanReadings,
 } from '@renderer/stores/agents'
 import { refreshLimits } from '@renderer/stores/usage'
-import { openAgentSettings } from '@renderer/stores/view'
-import { menuAgents } from './start-options'
+import { openAgentSettings, openHarnessSettings } from '@renderer/stores/view'
+import { agentNeed, menuAgents } from './start-options'
 import { agentLine, type LineTone } from './picker'
 import { refreshOnMenu } from './prepared'
 
@@ -67,7 +67,7 @@ export function AgentPicker({
   const statuses = useAgentsStore(
     useShallow((s) => {
       const { order, byId } = agentsOn(s, hostId)
-      return menuAgents(usableAgents(order, byId))
+      return menuAgents(usableAgents(order, byId), true)
     }),
   )
   // This computer's agents are read after launch: until then the list is loading, not empty.
@@ -100,8 +100,21 @@ export function AgentPicker({
         value={agentId}
         open={open}
         onOpenChange={onOpenChange}
-        onValueChange={(id: AgentId | null) => {
-          if (id) onChoose(id)
+        onValueChange={(id: AgentId | null, details) => {
+          if (!id) return
+          const status = byId.get(id)
+          // An agent whose own program is too old is not chosen: a click updates it.
+          if (status && agentNeed(status) === 'update') {
+            if (status.cli?.update) {
+              details.cancel()
+              void useAgentsStore.getState().updateCli(status.id)
+            } else {
+              setOpen(false)
+              openHarnessSettings(status.harnessId)
+            }
+            return
+          }
+          onChoose(id)
         }}
         itemToStringLabel={(id: AgentId) => agentName(id, hostId)}
         filter={(id: AgentId, query: string) => {
