@@ -1,6 +1,10 @@
 // The thread worker's work, apart from the worker itself so tests can run it in their own thread.
 
+import path from 'node:path'
 import type { ArtifactCall } from '../artifacts/model'
+import { INDEX_FILE, SearchIndex } from '../search/index'
+import { Indexer, type IndexerOptions } from '../search/indexer'
+import { IndexReads } from '../search/reads'
 import { ThreadDb, ThreadDbError } from './db'
 import type { ThreadReply, ThreadRequest, ThreadWorkerData } from './protocol'
 
@@ -12,6 +16,7 @@ export function startThreadService(
   { file, contentDir, reader }: ThreadWorkerData,
   reply: (message: ThreadReply) => void,
   now?: () => number,
+  indexing?: IndexerOptions,
 ): (request: ThreadRequest) => void {
   const log = (level: 'info' | 'warn' | 'error', message: string): void =>
     reply({ type: 'log', level, message })
@@ -22,6 +27,22 @@ export function startThreadService(
   } catch (error) {
     log('error', `Could not open the thread database: ${(error as Error).message}`)
     reply({ type: 'ready', status: 'unavailable' })
+  }
+  // The search index lives beside the database: the writer keeps it current, and each worker
+  // answers searches from it.
+  const indexFile = path.join(path.dirname(file), INDEX_FILE)
+  let indexer: Indexer | null = null
+  let reads: IndexReads | null = null
+  if (db) {
+    try {
+      if (!reader) {
+        indexer = new Indexer(db, SearchIndex.open(indexFile, log), indexFile, log, indexing)
+        indexer.start()
+      }
+      reads = new IndexReads(indexFile, db, log, indexer)
+    } catch (error) {
+      log('error', `Search is unavailable, its index did not open: ${(error as Error).message}`)
+    }
   }
   let recoveries = db?.recoveries ?? 0
   return (request) => {
@@ -34,12 +55,8 @@ export function startThreadService(
       })
       return
     }
-    if (request.op === 'search') {
-      searchInSteps(db, request.id, request.words, reply)
-      return
-    }
     try {
-      reply({ type: 'result', id: request.id, value: run(db, request) })
+      reply({ type: 'result', id: request.id, value: run(db, request, indexer, reads) })
     } catch (error) {
       const known = error instanceof ThreadDbError ? error : null
       reply({
@@ -52,32 +69,18 @@ export function startThreadService(
     }
     if (db.recoveries !== recoveries) {
       recoveries = db.recoveries
+      indexer?.recovered()
       reply({ type: 'recovered' })
     }
   }
 }
 
-/** Answers a search a few messages at a time, between the worker's other requests. */
-function searchInSteps(
+function run(
   db: ThreadDb,
-  id: number,
-  words: readonly string[],
-  reply: (message: ThreadReply) => void,
-): void {
-  const steps = db.searchSteps(words)
-  const next = (): void => {
-    try {
-      const step = steps.next()
-      if (step.done) reply({ type: 'result', id, value: step.value })
-      else setImmediate(next)
-    } catch (error) {
-      reply({ type: 'error', id, message: (error as Error).message, code: null })
-    }
-  }
-  next()
-}
-
-function run(db: ThreadDb, request: ThreadRequest): unknown {
+  request: ThreadRequest,
+  indexer: Indexer | null,
+  reads: IndexReads | null,
+): unknown {
   switch (request.op) {
     case 'page':
       return db.page(request.sessionId, request.before, request.from, request.images)
@@ -87,11 +90,15 @@ function run(db: ThreadDb, request: ThreadRequest): unknown {
       return db.entry(request.sessionId, request.entryId, request.images)
     case 'load':
       return db.load(request.sessionId)
-    case 'write':
+    case 'write': {
+      const before = indexer?.markBefore(request.sessionId) ?? null
       db.write(request.sessionId, request.change)
+      indexer?.written(request.sessionId, request.change, before)
       return null
+    }
     case 'remove':
       db.remove(request.sessionIds)
+      indexer?.removed(request.sessionIds)
       return null
     case 'blob':
       return db.blob(request.sessionId, request.hash)
@@ -99,9 +106,12 @@ function run(db: ThreadDb, request: ThreadRequest): unknown {
       return db.mentions(request.sessionId, request.text)
     case 'outline':
       return db.outline(request.sessionId)
-    // The handler answers a search in steps; this is its plain form.
     case 'search':
-      return db.search(request.words)
+      if (!reads) throw new ThreadDbError('The search index is not open', 'unavailable')
+      return reads.find(request.words)
+    case 'snippets':
+      if (!reads) throw new ThreadDbError('The search index is not open', 'unavailable')
+      return reads.snippets(request.words, request.picks)
     case 'outputs':
       return db.outputs(request.sessionId)
     case 'setOutlineTitles':
@@ -115,6 +125,8 @@ function run(db: ThreadDb, request: ThreadRequest): unknown {
     case 'runtime':
       return db.runtime(request.call)
     case 'close':
+      indexer?.stop()
+      reads?.close()
       db.close()
       return null
   }

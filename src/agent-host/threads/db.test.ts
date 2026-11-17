@@ -693,64 +693,6 @@ describe('the thread database', () => {
     db.close()
   })
 
-  it('finds the latest message of each session that holds every word', () => {
-    let clock = 0
-    const db = ThreadDb.open(
-      tempFile(),
-      () => {},
-      () => ++clock,
-    )
-    const say = (id: string, text: string, approval?: true): ThreadEntry => ({
-      kind: 'user',
-      id,
-      content: [{ type: 'text', text }],
-      ...(approval ? { approval } : {}),
-    })
-    const reply = (id: string, markdown: string): ThreadEntry => ({
-      kind: 'agent',
-      id,
-      markdown,
-      attachments: [],
-      streaming: false,
-    })
-    db.write('old', {
-      head,
-      entries: [
-        { pos: 0, entry: say('u0', 'Fix the CAFÉ menu') },
-        { pos: 1, entry: reply('a0', 'The menu of the cafe is fixed') },
-        { pos: 2, entry: say('u1', 'thanks, the menu looks right') },
-      ],
-    })
-    db.write('new', {
-      head,
-      entries: [
-        { pos: 0, entry: say('u0', '搜索会话里的内容') },
-        { pos: 1, entry: tool('menu of the cafe') },
-        { pos: 2, entry: say('u1', 'allow', true) },
-      ],
-    })
-    db.write('other', {
-      head,
-      entries: [{ pos: 0, entry: reply('a0', 'Nothing else about the topic') }],
-    })
-
-    // Case and accents fold, every word must be in one message, and the latest message wins.
-    const found = db.search(['cafe', 'menu'])
-    expect(found.map((hit) => [hit.sessionId, hit.entryId, hit.role])).toEqual([
-      ['old', 'a0', 'agent'],
-    ])
-    expect(found[0]!.snippet).toContain('menu of the cafe')
-    expect(db.search(['menu']).map((hit) => hit.entryId)).toEqual(['u1'])
-    // CJK matches without word breaks, and most recently updated sessions come first.
-    expect(db.search(['内容']).map((hit) => hit.sessionId)).toEqual(['new'])
-    expect(db.search(['the']).map((hit) => hit.sessionId)).toEqual(['other', 'old'])
-    // Tool output and the answer a card shows are no messages.
-    expect(db.search(['allow'])).toEqual([])
-    expect(db.search(['menu', '搜索'])).toEqual([])
-    expect(db.search([])).toEqual([])
-    db.close()
-  })
-
   it('removes threads with their images', () => {
     const file = tempFile()
     const db = open(file)

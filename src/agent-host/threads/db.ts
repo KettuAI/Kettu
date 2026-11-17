@@ -16,11 +16,10 @@ import {
 } from '@shared/artifact-comments'
 import { type ArtifactState, NO_SESSION } from '@shared/artifacts'
 import { type ArtifactTypeInfo, isArtifactTypeName } from '@shared/artifact-types'
-import type { ConversationHit, SessionOutputs } from '@shared/agent-host'
+import type { SessionOutputs } from '@shared/agent-host'
 import { githubReferenceFromLink } from '@shared/git'
 import { OUTLINE_TEXT } from '@shared/outline'
 import { isRoutineRun, type RoutineRun } from '@shared/routines'
-import { foldBulk } from '@shared/search-fold'
 import { isThreadEntry, type ThreadEntry } from '@shared/thread'
 import {
   contentHash,
@@ -38,6 +37,7 @@ import type {
 } from '../artifacts/model'
 import type { RuntimeCall } from '../artifacts/runtime/calls'
 import type { RoutineCall, RoutineCalls, RoutineRunStats } from '../routines/calls'
+import type { IndexedMessage } from '../search/messages'
 import { taskRecordOf, type TaskCall, type TaskCalls } from '../workflow/model'
 import {
   storedBlobs,
@@ -62,7 +62,6 @@ import {
   type ThreadWrite,
 } from './model'
 import type { ThreadDbStatus, ThreadErrorCode } from './protocol'
-import { snippetOf } from './search'
 import {
   declarationAt,
   prepareRuntime,
@@ -255,10 +254,6 @@ const SQLITE_CONSTRAINT = 19
 const SQLITE_NOTADB = 26
 // Above every position; SQLite compares it as a 64-bit integer.
 const END = Number.MAX_SAFE_INTEGER
-// How many sessions a search of the messages returns, the most recently updated first.
-const SEARCH_SESSIONS = 100
-// Messages a search reads before it lets the worker answer another request.
-const SEARCH_STEP = 500
 // What a session's card shows at most: the references it counts and the start of its last reply.
 const OUTPUT_REFERENCES = 50
 const OUTPUT_REPLY = 600
@@ -432,18 +427,21 @@ function prepareAll(db: DatabaseSync) {
       WHERE e.session_id = ?1 AND e.kind = 'user'
         AND json_extract(e.json, '$.from') IS NULL
         AND json_extract(e.json, '$.approval') IS NULL ORDER BY e.pos`),
-    // The text of every user message and agent reply, as a search reads it; an answer a card
-    // already shows is no message of the user's own.
-    messageTexts: sql(`
-      SELECT session_id, pos, entry_id, kind,
+    // The text of the user messages and agent replies in a range of positions, as the search
+    // index reads them; an answer a card already shows is no message of the user's own.
+    messagesIn: sql(`
+      SELECT pos, entry_id, kind,
         CASE kind WHEN 'agent' THEN json_extract(json, '$.markdown')
           ELSE (SELECT group_concat(json_extract(part.value, '$.text'), char(10))
             FROM json_each(entries.json, '$.content') AS part
             WHERE json_extract(part.value, '$.type') = 'text') END AS text
       FROM entries
-      WHERE kind IN ('user', 'agent') AND json_extract(json, '$.approval') IS NULL
-      ORDER BY session_id, pos`),
-    threadTimes: sql('SELECT session_id, updated_at FROM threads'),
+      WHERE session_id = ? AND pos >= ? AND pos < ? AND kind IN ('user', 'agent')
+        AND json_extract(json, '$.approval') IS NULL
+      ORDER BY pos`),
+    threadState: sql('SELECT next_pos, updated_at FROM threads WHERE session_id = ?'),
+    threadMarks: sql('SELECT session_id, updated_at FROM threads'),
+    storedThreads: sql('SELECT count(*) AS n FROM threads'),
     // What a session made, latest first, for its card in the sidebar.
     artifactWrites: sql(`
       SELECT json_extract(json, '$.artifactId') AS id, json_extract(json, '$.title') AS title,
@@ -995,62 +993,49 @@ export class ThreadDb {
     }, null)
   }
 
-  /**
-   * The latest message of each session that holds every one of `words`, which are folded; the
-   * most recently updated sessions first, at most `SEARCH_SESSIONS` of them.
-   */
-  search(words: readonly string[]): ConversationHit[] {
-    const steps = this.searchSteps(words)
-    for (;;) {
-      const step = steps.next()
-      if (step.done) return step.value
-    }
+  /** When each stored thread last changed, which the search index is kept in step with. */
+  threadMarks(): Map<string, number> {
+    return this.guard(
+      (sql) =>
+        new Map(
+          sql.threadMarks.all().map((row) => [String(row.session_id), Number(row.updated_at)]),
+        ),
+      new Map(),
+    )
+  }
+
+  /** The number of stored threads. */
+  threadCount(): number {
+    return this.guard((sql) => Number(sql.storedThreads.get()?.n ?? 0), 0)
+  }
+
+  /** Where a thread's entries end and when it last changed; null without a stored thread. */
+  threadState(sessionId: string): { nextPos: number; updatedAt: number } | null {
+    return this.guard((sql) => {
+      const row = sql.threadState.get(sessionId)
+      return row ? { nextPos: Number(row.next_pos), updatedAt: Number(row.updated_at) } : null
+    }, null)
   }
 
   /**
-   * `search` as steps: it yields after every `SEARCH_STEP` messages read, so a worker can answer
-   * other requests while a scan of a cold file goes on. It does not recover a damaged file; the
-   * next read of a thread does.
+   * The user messages and agent replies stored at positions from `from` up to `to`, for the
+   * search index. A reply is read as stored, still streaming or not.
    */
-  *searchSteps(words: readonly string[]): Generator<void, ConversationHit[]> {
-    const { sql } = this
-    if (!sql || words.length === 0) return []
-    const latest = new Map<string, { pos: number; entryId: string; user: boolean; text: string }>()
-    let read = 0
-    for (const row of sql.messageTexts.iterate()) {
-      const text = row.text
-      if (typeof text === 'string') {
-        const folded = foldBulk(text)
-        const sessionId = String(row.session_id)
-        const pos = Number(row.pos)
-        if (
-          words.every((word) => folded.includes(word)) &&
-          pos > (latest.get(sessionId)?.pos ?? -1)
-        ) {
-          latest.set(sessionId, {
-            pos,
-            entryId: String(row.entry_id),
-            user: row.kind === 'user',
-            text,
-          })
-        }
+  messagesIn(sessionId: string, from: number, to: number): IndexedMessage[] {
+    return this.guard((sql) => {
+      const out: IndexedMessage[] = []
+      for (const row of sql.messagesIn.all(sessionId, from, to)) {
+        const text = optionalText(row.text)?.trim()
+        if (!text) continue
+        out.push({
+          pos: Number(row.pos),
+          entryId: String(row.entry_id),
+          role: row.kind === 'user' ? 'user' : 'agent',
+          text,
+        })
       }
-      if (++read % SEARCH_STEP === 0) yield
-    }
-    const updated = new Map<string, number>()
-    for (const row of sql.threadTimes.all()) {
-      updated.set(String(row.session_id), Number(row.updated_at))
-    }
-    return [...latest]
-      .sort((a, b) => (updated.get(b[0]) ?? 0) - (updated.get(a[0]) ?? 0))
-      .slice(0, SEARCH_SESSIONS)
-      .map(([sessionId, hit]): ConversationHit => ({
-        sessionId,
-        pos: hit.pos,
-        entryId: hit.entryId,
-        role: hit.user ? 'user' : 'agent',
-        snippet: snippetOf(hit.text, foldBulk(hit.text), words[0]!),
-      }))
+      return out
+    }, [])
   }
 
   /** What the session made, from its stored thread; null without one. */

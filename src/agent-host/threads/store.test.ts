@@ -121,14 +121,17 @@ it('reads what a write of the same session sent before it stored', async () => {
   expect((await store.page('s1'))?.entries.map((e) => e.id)).toEqual(['u0', 'u1'])
 })
 
-it('searches the messages written before it, and keeps answering reads while it scans', async () => {
-  const store = open((data) => inThreadWorker(data))
+it('searches what was written through the reader, and reads the text around a match', async () => {
+  const store = open((data) => inThreadWorker(data, { startDelayMs: 0, sliceRestMs: 0 }))
   await store.ready
   void store.write('s1', change('find me', 'other'))
   void store.write('s2', change('nothing'))
-  const hits = store.search(['find'])
-  expect((await store.page('s2'))?.entries.map((e) => e.id)).toEqual(['nothing'])
-  expect((await hits).map((hit) => [hit.sessionId, hit.entryId, hit.role])).toEqual([
-    ['s1', 'find me', 'user'],
-  ])
+  let answer = await store.search(['find'])
+  for (let tries = 0; answer.candidates.length === 0 && tries < 50; tries++) {
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    answer = await store.search(['find'])
+  }
+  expect(answer.candidates.map((c) => [c.sessionId, c.pos, c.matches])).toEqual([['s1', 0, 1]])
+  const [snippet] = await store.snippets(['find'], [{ sessionId: 's1', pos: 0 }])
+  expect(snippet).toMatchObject({ entryId: 'find me', role: 'user', snippet: 'find me' })
 })

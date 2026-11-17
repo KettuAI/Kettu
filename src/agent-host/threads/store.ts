@@ -2,12 +2,14 @@
 // SQLite file, so no query runs on the event loop that streams the sessions.
 
 import type { Worker } from 'node:worker_threads'
-import type { ConversationHit, OutlineTitle } from '@shared/agent-host'
+import type { OutlineTitle } from '@shared/agent-host'
 import type { ArtifactState } from '@shared/artifacts'
 import type { ArtifactCall, ArtifactCallName, ArtifactCalls } from '../artifacts/model'
 import type { RuntimeCall, RuntimeCallName, RuntimeCalls } from '../artifacts/runtime/calls'
 import type { RoutineCall, RoutineCallName, RoutineCalls } from '../routines/calls'
 import type { TaskCall, TaskCallName, TaskCalls } from '../workflow/model'
+import type { SearchAnswer } from '../search/reads'
+import type { Snippet, SnippetPick } from '../search/index'
 import type { LogFn } from '../storage'
 import type {
   ImageMode,
@@ -370,9 +372,14 @@ export class ThreadStore {
     return this.read({ op: 'mentions', sessionId, text }, sessionId)
   }
 
-  /** The latest message of each session that holds every word, most recently updated first. */
-  search(words: readonly string[]): Promise<ConversationHit[]> {
+  /** The sessions with a message that holds every word, most recently changed first. */
+  search(words: readonly string[]): Promise<SearchAnswer> {
     return this.readAll({ op: 'search', words: [...words] })
+  }
+
+  /** The text around the first word in each message picked. */
+  snippets(words: readonly string[], picks: readonly SnippetPick[]): Promise<Snippet[]> {
+    return this.readAll({ op: 'snippets', words: [...words], picks: [...picks] })
   }
 
   /** The user messages of the stored thread, with their titles; null when it has none. */
