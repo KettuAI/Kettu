@@ -50,6 +50,7 @@ function sawOfStored(value: unknown): SideChatSaw | null {
   if (value.source === 'copy' && copy === null) return null
   return {
     source: value.source as SideChatSaw['source'],
+    compacted: isCount(value.compacted) ? value.compacted : 0,
     copy,
     fellBackFrom: FELL_BACK.has(value.fellBackFrom)
       ? (value.fellBackFrom as NonNullable<SideChatSaw['fellBackFrom']>)
@@ -66,6 +67,7 @@ function sawOfLegacy(value: unknown): SideChatSaw | null {
   }
   return {
     source: 'copy',
+    compacted: 0,
     copy: { turns: recent, total: recent + omitted, first, bytes },
     fellBackFrom: null,
   }

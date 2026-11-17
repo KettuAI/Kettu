@@ -426,15 +426,27 @@ function SideEntry({
   const step = entry.steps[0]
   const saw = entry.saw
   const sawLabel = (seen: SideChatSaw): string => {
-    if (seen.source === 'agent')
-      return t('sideChat.saw.agent', { agent: agentName(ownAgent, hostId) })
-    if (seen.source === 'fork') return t('sideChat.saw.fork')
+    const compacted = seen.compacted > 0
+    if (seen.source === 'agent') {
+      return t(compacted ? 'sideChat.saw.agentCompacted' : 'sideChat.saw.agent', {
+        agent: agentName(ownAgent, hostId),
+      })
+    }
+    if (seen.source === 'fork') {
+      return t(compacted ? 'sideChat.saw.forkCompacted' : 'sideChat.saw.fork')
+    }
     const copy = seen.copy
-    if (!copy || copy.turns === 0) return t('sideChat.saw.none')
+    if (!copy || copy.turns === 0) {
+      return t(compacted ? 'sideChat.saw.compactedNone' : 'sideChat.saw.none')
+    }
     const tokens = Math.max(1, Math.round(copy.bytes / 1000))
-    return copy.first
-      ? t('sideChat.saw.copyPart', { count: copy.turns, total: copy.total, tokens })
-      : t('sideChat.saw.copyAll', { count: copy.turns, tokens })
+    if (copy.first) {
+      return t('sideChat.saw.copyPart', { count: copy.turns, total: copy.total, tokens })
+    }
+    return t(compacted ? 'sideChat.saw.copyAfter' : 'sideChat.saw.copyAll', {
+      count: copy.turns,
+      tokens,
+    })
   }
 
   const copy = () => {
@@ -475,6 +487,12 @@ function SideEntry({
         <p className="kc-meta">
           <PaneIcon icon={File01Icon} size={12} />
           {sawLabel(saw)}
+        </p>
+      )}
+      {saw && saw.compacted > 0 && saw.copy?.turns !== 0 && (
+        <p className="kc-meta">
+          <PaneIcon icon={File01Icon} size={12} />
+          {t('sideChat.saw.compacted', { count: saw.compacted })}
         </p>
       )}
       {saw?.fellBackFrom && (

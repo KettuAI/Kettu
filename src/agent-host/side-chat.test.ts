@@ -80,6 +80,7 @@ describe('the stored side chat', () => {
   it('reads what an answer saw, and an entry stored with carried as a copy', () => {
     const copy: SideChatSaw = {
       source: 'copy',
+      compacted: 4,
       copy: { turns: 3, total: 9, first: true, bytes: 4_000 },
       fellBackFrom: 'claude',
     }
@@ -101,10 +102,11 @@ describe('the stored side chat', () => {
       null,
       {
         source: 'copy',
+        compacted: 0,
         copy: { turns: 4, total: 10, first: true, bytes: 9_000 },
         fellBackFrom: null,
       },
-      { source: 'fork', copy: null, fellBackFrom: null },
+      { source: 'fork', compacted: 0, copy: null, fellBackFrom: null },
     ])
   })
 
@@ -173,13 +175,16 @@ describe('side questions', () => {
       { kind: 'agent', id: 'm1', markdown: 'Done.', attachments: [], streaming: false },
     ]
     const carried = sideContext(entries, { firstAgent: 'claude-code', agentName: () => 'Claude' })
-    expect(copySaw(carried, 'codex')).toMatchObject({
+    expect(copySaw(carried, 'codex', 0)).toMatchObject({
       source: 'copy',
       copy: { turns: 1, total: 1, first: false },
       fellBackFrom: 'codex',
     })
-    expect(copySaw(null, null).copy).toEqual({ turns: 0, total: 0, first: false, bytes: 0 })
-    expect(ownSaw('claude').source).toBe('agent')
+    expect(copySaw(null, null, 3)).toMatchObject({
+      compacted: 3,
+      copy: { turns: 0, total: 0, first: false, bytes: 0 },
+    })
+    expect(ownSaw('claude', 2)).toMatchObject({ source: 'agent', compacted: 2 })
   })
 
   it('tell a fork the history may still run and a hidden session the conversation, as reference only', () => {

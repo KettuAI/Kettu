@@ -1229,6 +1229,11 @@
     "saw": {
       "agent": "看到整段对话 · {{agent}} 自带的侧问",
       "fork": "看到整段对话 · 临时分叉",
+      "agentCompacted": "看到的是 Agent 现在记得的对话 · {{agent}} 自带的侧问",
+      "forkCompacted": "看到的是 Agent 现在记得的对话 · 临时分叉",
+      "compacted_other": "Agent 压缩过上下文：前 {{count}} 轮只在它的摘要里",
+      "compactedNone": "Agent 压缩过上下文，之后还没有新的对话",
+      "copyAfter_other": "看到压缩之后的全部 {{count}} 轮对话 · 约 {{tokens}}k token · 临时会话",
       "none": "会话还没有对话",
       "copyAll_other": "看到全部 {{count}} 轮对话 · 约 {{tokens}}k token · 临时会话",
       "copyPart_other": "看到第一条请求和最近 {{count}} 轮，共 {{total}} 轮 · 约 {{tokens}}k token · 临时会话",

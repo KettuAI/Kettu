@@ -138,6 +138,8 @@ export interface SideChatStep {
  */
 export interface SideChatSaw {
   source: 'agent' | 'fork' | 'copy'
+  /** The turns the agent's compaction folded into a summary, which are not in what it saw. */
+  compacted: number
   /** For a copy: its turns of the conversation's, whether the first request stands apart, its size. */
   copy: { turns: number; total: number; first: boolean; bytes: number } | null
   /** The route tried first, when the answer fell back from it to another. */

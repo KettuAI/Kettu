@@ -119,14 +119,20 @@ export function hiddenPrompt(
 }
 
 /** What an answer from the agent's own side question or fork saw: the whole conversation. */
-export function ownSaw(route: 'claude' | 'codex'): SideChatSaw {
-  return { source: route === 'claude' ? 'agent' : 'fork', copy: null, fellBackFrom: null }
+export function ownSaw(route: 'claude' | 'codex', compacted = 0): SideChatSaw {
+  return {
+    source: route === 'claude' ? 'agent' : 'fork',
+    compacted,
+    copy: null,
+    fellBackFrom: null,
+  }
 }
 
 /** What a hidden session was given of the conversation, as the side chat names it. */
 export function copySaw(
   carried: CarriedContext | null,
   fellBackFrom: SideChatSaw['fellBackFrom'],
+  compacted: number,
 ): SideChatSaw {
   const copy = carried
     ? {
@@ -136,7 +142,7 @@ export function copySaw(
         bytes: Buffer.byteLength(carried.text, 'utf8'),
       }
     : { turns: 0, total: 0, first: false, bytes: 0 }
-  return { source: 'copy', copy, fellBackFrom }
+  return { source: 'copy', compacted, copy, fellBackFrom }
 }
 
 export interface HiddenAnswerRequest {

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { ThreadEntry } from '@shared/thread'
-import { carriedContext, sideContext } from './carried-context'
+import { carriedContext, compactedTurns, compactionPoint, sideContext } from './carried-context'
 
 const options = { firstAgent: 'claude-code' as const, agentName: () => 'Claude Code' }
 
@@ -16,6 +16,21 @@ const reply = (markdown: string): ThreadEntry => ({
   markdown,
   attachments: [],
   streaming: false,
+})
+const compaction = (): ThreadEntry => ({
+  kind: 'compaction',
+  id: `c${++counter}`,
+  status: 'completed',
+  summary: '',
+})
+const takeover = (): ThreadEntry => ({
+  kind: 'takeover',
+  id: `k${++counter}`,
+  agentId: 'codex',
+  turns: 0,
+  omitted: 0,
+  carried: '',
+  after: null,
 })
 const tool = (title: string, rawInput: string, result: string): ThreadEntry => ({
   kind: 'tool',
@@ -81,5 +96,93 @@ describe('the conversation a side question gets', () => {
 
   it('has nothing to carry for a session with no turn', () => {
     expect(sideContext([], options)).toBeNull()
+  })
+})
+
+describe('the conversation after an agent compacted its context', () => {
+  it('starts after a compaction the agent marked, which the next command turn leaves empty', () => {
+    const entries = [
+      user('Turn one'),
+      reply('OLD-REPLY'),
+      user('/compact'),
+      compaction(),
+      compaction(),
+      user('Turn three'),
+      reply('NEW-REPLY'),
+    ]
+    expect(compactionPoint(entries)).toEqual({ fromTurn: 3, after: null })
+    expect(compactedTurns(entries)).toBe(2)
+    const side = sideContext(entries, options)!
+    expect(side.before).toBe(2)
+    expect(side.text).toContain('NEW-REPLY')
+    expect(side.text).not.toContain('OLD-REPLY')
+    expect(side.header).toMatch(/compacted its own context before turn 3/)
+  })
+
+  it('starts at the turn whose reply is the summary, for an agent that writes it as a reply', () => {
+    const entries = [
+      user('Turn one'),
+      reply('OLD-REPLY'),
+      user('/compact'),
+      reply('SUMMARY-OF-IT-ALL'),
+      user('Turn three'),
+      reply('NEW-REPLY'),
+    ]
+    expect(compactionPoint(entries)).toEqual({ fromTurn: 2, after: null })
+    const side = sideContext(entries, options)!
+    expect(side.text).toContain('SUMMARY-OF-IT-ALL')
+    expect(side.text).toContain('NEW-REPLY')
+    expect(side.text).not.toContain('OLD-REPLY')
+  })
+
+  it('does not take a command that got no reply or a failed compaction for one', () => {
+    const failed: ThreadEntry = { kind: 'compaction', id: 'cf', status: 'failed', summary: 'boom' }
+    expect(compactionPoint([user('One'), reply('Two'), user('/compact')])).toBeNull()
+    expect(compactionPoint([user('One'), failed, user('Three')])).toBeNull()
+    expect(compactedTurns([user('One'), reply('Two')])).toBe(0)
+    const side = sideContext([user('One'), reply('OLD-REPLY'), user('/compact')], options)!
+    expect(side.text).toContain('OLD-REPLY')
+    expect(side.before).toBe(0)
+  })
+
+  it('keeps a turn compacted in the middle from its request, with what came after the compaction', () => {
+    const marker = compaction()
+    const entries = [
+      user('Turn one'),
+      reply('OLD-REPLY'),
+      user('The long task'),
+      reply('BEFORE-COMPACTION'),
+      marker,
+      reply('AFTER-COMPACTION'),
+    ]
+    expect(compactionPoint(entries)).toEqual({ fromTurn: 2, after: marker.id })
+    const side = sideContext(entries, options)!
+    expect(side.text).toContain('The long task')
+    expect(side.text).toContain('AFTER-COMPACTION')
+    expect(side.text).not.toContain('BEFORE-COMPACTION')
+    expect(side.text).not.toContain('OLD-REPLY')
+  })
+
+  it('goes by the latest compaction, and a takeover does not count as a turn', () => {
+    const entries = [
+      user('One'),
+      user('/compact'),
+      compaction(),
+      user('Three'),
+      takeover(),
+      user('Four'),
+      user('/compact'),
+      compaction(),
+      user('Six'),
+      reply('LAST'),
+    ]
+    expect(compactionPoint(entries)).toEqual({ fromTurn: 6, after: null })
+    expect(compactedTurns(entries)).toBe(5)
+  })
+
+  it('has nothing to carry when nothing came after the compaction', () => {
+    const entries = [user('One'), reply('Two'), user('/compact'), compaction()]
+    expect(compactedTurns(entries)).toBe(2)
+    expect(sideContext(entries, options)).toBeNull()
   })
 })

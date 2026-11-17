@@ -1278,6 +1278,13 @@
     "saw": {
       "agent": "Saw the whole conversation · {{agent}}'s own side question",
       "fork": "Saw the whole conversation · a temporary fork",
+      "agentCompacted": "Saw the conversation as the agent holds it · {{agent}}'s own side question",
+      "forkCompacted": "Saw the conversation as the agent holds it · a temporary fork",
+      "compacted_one": "The agent compacted its context: the first turn is only in its summary",
+      "compacted_other": "The agent compacted its context: the first {{count}} turns are only in its summary",
+      "compactedNone": "The agent compacted its context and nothing came after it",
+      "copyAfter_one": "Saw everything since the compaction, 1 turn · about {{tokens}}k tokens · temporary session",
+      "copyAfter_other": "Saw everything since the compaction, {{count}} turns · about {{tokens}}k tokens · temporary session",
       "none": "The session has no conversation yet",
       "copyAll_one": "Saw the whole conversation, 1 turn · about {{tokens}}k tokens · temporary session",
       "copyAll_other": "Saw the whole conversation, {{count}} turns · about {{tokens}}k tokens · temporary session",

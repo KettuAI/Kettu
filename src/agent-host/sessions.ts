@@ -233,6 +233,7 @@ import type { PrepareState, SetupLog, WorktreeManager } from './worktrees/manage
 import { BranchNaming } from './worktrees/naming'
 import {
   carriedContext,
+  compactedTurns,
   sideContext,
   threadTurns,
   type CarriedContext,
@@ -8259,7 +8260,7 @@ export class SessionManager {
       status: 'answering',
       answer: '',
       steps: [],
-      saw: route === 'hidden' ? null : ownSaw(route),
+      saw: route === 'hidden' ? null : ownSaw(route, compactedTurns(threadEntries(live.thread))),
       error: null,
       askedAt: this.now(),
       answeredAt: null,
@@ -8395,7 +8396,9 @@ export class SessionManager {
       agentName: (agentId) => this.deps.agents.name(agentId),
       ...(own && live.thread.session.usage?.size ? { window: live.thread.session.usage.size } : {}),
     })
-    this.patchSideEntry(live, entry.id, { saw: copySaw(carried, fellBackFrom) })
+    this.patchSideEntry(live, entry.id, {
+      saw: copySaw(carried, fellBackFrom, compactedTurns(threadEntries(live.thread))),
+    })
     // Kettu's own folder, never the project's: an agent without permissions could change it.
     await mkdir(this.deps.reportsDir, { recursive: true })
     const text = await answerHidden(runtime, {
