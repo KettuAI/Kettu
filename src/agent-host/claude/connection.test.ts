@@ -3444,7 +3444,7 @@ describe('background tasks', () => {
     await expect(
       s.connection.sideQuestion!(
         sessionId,
-        { question: 'Why?', history: [], running: null },
+        { question: 'Why?', history: [] },
         events,
         new AbortController().signal,
       ),
@@ -3452,7 +3452,7 @@ describe('background tasks', () => {
     s.sdk.sideAnswer = { response: 'Because.', synthetic: false }
     const answer = await s.connection.sideQuestion!(
       sessionId,
-      { question: 'And then?', history: [{ question: 'Why?', answer: 'Because.' }], running: null },
+      { question: 'And then?', history: [{ question: 'Why?', answer: 'Because.' }] },
       events,
       new AbortController().signal,
     )
@@ -3466,7 +3466,7 @@ describe('background tasks', () => {
     expect(
       await s.connection.sideQuestion!(
         sessionId,
-        { question: 'Hm?', history: [], running: null },
+        { question: 'Hm?', history: [] },
         events,
         new AbortController().signal,
       ),

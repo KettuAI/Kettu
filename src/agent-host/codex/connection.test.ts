@@ -16,7 +16,6 @@ import {
 import type { ProgramOptions, ProgramRun } from '../adapter-install'
 import {
   AgentRequestError,
-  SideQuestionUnsupported,
   type ConnectionHooks,
   type PermissionAnswer,
   type PermissionRequest,
@@ -1581,18 +1580,9 @@ describe('hidden sessions', () => {
 })
 
 describe('side questions', () => {
-  const turns = (...list: { id: string; status: string }[]) => ({
-    data: list,
-    nextCursor: null,
-    backwardsCursor: null,
-  })
-
-  it('forks the thread at its last ended turn, read only, with its tools but none auto-allowed', async () => {
+  it('forks the thread as it stands, read only, with its tools but none auto-allowed', async () => {
     const { server, connection } = await connect()
     const opened = await connection.newSession('/project')
-    server.on('thread/turns/list', () =>
-      turns({ id: 'turn-9', status: 'inProgress' }, { id: 'turn-8', status: 'completed' }),
-    )
     const texts: string[] = []
     const steps: SideChatStep[] = []
     const asking = connection.sideQuestion!(
@@ -1600,7 +1590,6 @@ describe('side questions', () => {
       {
         question: 'Why?',
         history: [{ question: 'What?', answer: 'That.' }],
-        running: '[Turn 9, the user]\nFix the cleanup',
         options: {
           mcpServers: [
             {
@@ -1624,15 +1613,16 @@ describe('side questions', () => {
     }
     expect(fork).toMatchObject({
       threadId: opened.sessionId,
-      lastTurnId: 'turn-8',
       approvalPolicy: 'never',
       sandbox: 'read-only',
       ephemeral: true,
     })
+    // Without a last turn Codex forks the history as it stands, a running turn's done parts too.
+    expect(fork).not.toHaveProperty('lastTurnId')
+    expect(server.sent('thread/turns/list')).toEqual([])
     expect(fork.config.mcp_servers.kettu).not.toHaveProperty('tools')
     expect(fork.developerInstructions).toBe(`Kettu tools.\n\n${SIDE_INSTRUCTIONS}`)
     const start = server.sent('turn/start')[0] as { threadId: string }
-    expect(JSON.stringify(start)).toContain('Fix the cleanup')
     expect(JSON.stringify(start)).toContain('Q: What?')
     const at = { threadId: start.threadId, turnId: 'turn-1' }
     server.notify('item/started', {
@@ -1661,21 +1651,29 @@ describe('side questions', () => {
     expect(server.sent('thread/unsubscribe')).toContainEqual({ threadId: start.threadId })
   })
 
-  it('has no turn to fork at while the first turn runs', async () => {
+  it('forks a thread whose first turn still runs, with no last turn named', async () => {
     const { server, connection } = await connect()
     const opened = await connection.newSession('/project')
-    server.on('thread/turns/list', () => turns({ id: 'turn-1', status: 'inProgress' }))
     void connection.prompt(opened.sessionId, [{ type: 'text', text: 'go' }]).catch(() => {})
     await until(() => server.sent('turn/start').length === 1)
-    await expect(
-      connection.sideQuestion!(
-        opened.sessionId,
-        { question: 'Why?', history: [], running: null },
-        { text: () => {}, step: () => {} },
-        new AbortController().signal,
-      ),
-    ).rejects.toBeInstanceOf(SideQuestionUnsupported)
-    expect(server.sent('thread/fork')).toEqual([])
+    const asking = connection.sideQuestion!(
+      opened.sessionId,
+      { question: 'Why?', history: [] },
+      { text: () => {}, step: () => {} },
+      new AbortController().signal,
+    )
+    await until(() => server.sent('turn/start').length === 2)
+    expect(server.sent('thread/fork')).toHaveLength(1)
+    expect(server.sent('thread/fork')[0]).not.toHaveProperty('lastTurnId')
+    const start = server.sent('turn/start')[1] as { threadId: string }
+    expect(start.threadId).not.toBe(opened.sessionId)
+    server.notify('item/completed', {
+      threadId: start.threadId,
+      turnId: 'turn-2',
+      item: { type: 'agentMessage', id: 'm', text: 'Because.', phase: null },
+    })
+    server.notify('turn/completed', { threadId: start.threadId, turn: turn('turn-2', 'completed') })
+    expect(await asking).toMatchObject({ text: 'Because.', synthetic: false })
   })
 })
 

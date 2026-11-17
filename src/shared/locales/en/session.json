@@ -1248,7 +1248,7 @@
     "empty": {
       "title": "Ask {{agent}}",
       "claudeSees": "Sees this session's conversation so far, the running turn included",
-      "codexSees": "Sees the conversation up to the last finished turn; Kettu adds the running turn's text",
+      "codexSees": "Sees the whole conversation so far, the finished parts of the running turn included",
       "noInterrupt": "Does not interrupt it, and nothing enters the conversation",
       "claudeTools": "No tools; to read files or run commands, ask in the main conversation",
       "codexTools": "Can read files and run read-only commands; changes nothing and asks for no approval",

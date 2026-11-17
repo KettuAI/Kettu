@@ -194,8 +194,6 @@ export interface SideQuestion {
   question: string
   /** The earlier questions and answers of the same side chat, oldest first. */
   history: readonly { question: string; answer: string }[]
-  /** The running turn so far, for an agent whose answer cannot see it otherwise. */
-  running: string | null
   /**
    * The options the session opened with, for a fork that keeps its tools so that its prompt
    * stays the session's and reads its cache.

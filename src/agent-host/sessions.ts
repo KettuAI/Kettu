@@ -232,7 +232,6 @@ import type { PrepareState, SetupLog, WorktreeManager } from './worktrees/manage
 import { BranchNaming } from './worktrees/naming'
 import {
   carriedContext,
-  renderTurns,
   threadTurns,
   type CarriedContext,
   type RenderedTurn,
@@ -8363,30 +8362,16 @@ export class SessionManager {
     const runtime = await this.deps.agents.ensureReady(live.record.agentId)
     const { connection } = runtime
     if (!connection.sideQuestion) throw new SideQuestionUnsupported()
-    const { status } = live.thread.session
-    const running = status === 'running' || status === 'awaiting_permission'
-    // A fork of Codex's thread ends at its last finished turn, so it is told the running one, and
-    // keeps the session's tools so that its prompt starts as the session's and reads its cache.
-    const codex = route === 'codex'
-    const options = codex ? await this.attachOptions(live.id, live.record, runtime) : undefined
+    // A fork of Codex's thread keeps the session's tools so that its prompt starts as the
+    // session's and reads its cache.
+    const options =
+      route === 'codex' ? await this.attachOptions(live.id, live.record, runtime) : undefined
     return connection.sideQuestion(
       live.record.acpSessionId,
-      {
-        ...ask,
-        running: codex && running ? this.runningTurnText(live) : null,
-        ...(options ? { options } : {}),
-      },
+      { ...ask, ...(options ? { options } : {}) },
       events,
       signal,
     )
-  }
-
-  /** The running turn so far, as carried context renders a turn. */
-  private runningTurnText(live: Live): string | null {
-    const name = (agentId: AgentId): string => this.deps.agents.name(agentId)
-    const turns = threadTurns(threadEntries(live.thread), this.firstAgentOf(live.record), name)
-    const last = turns[turns.length - 1]
-    return last ? renderTurns([last], name) : null
   }
 
   private async sideHidden(
