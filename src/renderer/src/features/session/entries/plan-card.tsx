@@ -9,13 +9,14 @@ import {
   RepeatIcon,
 } from '@hugeicons/core-free-icons'
 import { Trans, useTranslation } from 'react-i18next'
-import type { ToolEntry } from '@shared/thread'
+import type { ConfigOption, ToolEntry } from '@shared/thread'
 import { emitAppEvent } from '@renderer/app/events'
 import { Icon } from '@renderer/components/affect/app-shell'
 import { ApprovalCard } from '@renderer/components/affect/approval-card'
 import { SegmentedControl } from '@renderer/components/affect/segmented-control'
 import { toast } from '@renderer/components/ui/toast'
 import { cn } from '@renderer/lib/utils'
+import { useThreadsStore } from '@renderer/stores/threads'
 import { Clamp } from '../clamp'
 import { Markdown } from '../markdown'
 import { respondToPermission } from './helpers'
@@ -27,6 +28,16 @@ const BUILD_MODES: Record<string, string> = {
   'exit-plan-auto': 'auto',
   'exit-plan-accept-edits': 'acceptEdits',
   'exit-plan-default': 'default',
+}
+
+/** The name the session's mode list gives its plan mode, or null when it lists none. */
+function planModeName(config: readonly ConfigOption[] | undefined): string | null {
+  for (const option of config ?? []) {
+    if (option.category !== 'mode' || option.type !== 'select') continue
+    const choice = option.choices?.find((c) => c.value === 'plan')
+    if (choice) return choice.name
+  }
+  return null
 }
 
 /** The plan the entry holds: the request's, or once answered, the entry's own text. */
@@ -264,9 +275,12 @@ export function PlanCard({
  * A plan once answered, or one still on its way: a row that says what became of it, with the
  * plan under Show plan; an approval notes the mode it moved to, a plan sent back quotes the note.
  */
-export function PlanSettled({ entry }: { entry: ToolEntry }) {
+export function PlanSettled({ sessionId, entry }: { sessionId: string; entry: ToolEntry }) {
   const { t } = useTranslation('session')
   const [open, setOpen] = useState(false)
+  const planMode = useThreadsStore((s) =>
+    planModeName(s.replicas[sessionId]?.state?.session.config),
+  )
   const result = entry.permissionResult
   const markdown = planMarkdown(entry)
   const version = entry.planVersion ?? 1
@@ -336,7 +350,7 @@ export function PlanSettled({ entry }: { entry: ToolEntry }) {
             <Trans
               t={t}
               i18nKey="planCard.modeChanged"
-              values={{ mode }}
+              values={{ from: planMode ?? t('planCard.planMode'), mode }}
               components={{ b: <b /> }}
             />
           </span>

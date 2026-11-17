@@ -1269,7 +1269,7 @@ export class CodexConnection implements AgentConnection {
     if (picked === 'cancelled') return
     if (picked.optionId === PLAN_OPTION.implement) {
       await this.setCollaboration(record, 'default')
-      target.send(IMPLEMENT_PLAN)
+      target.send(IMPLEMENT_PLAN, { approval: true })
     } else if (picked.optionId === PLAN_OPTION.keepPlanning && picked.note) {
       target.send(picked.note)
     }

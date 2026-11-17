@@ -42,7 +42,7 @@ import {
   lastSent,
   replyKeys,
   signatureOf,
-  withoutPlans,
+  withoutHidden,
   type Item,
 } from './thread-items'
 
@@ -322,7 +322,7 @@ export const Thread = memo(function Thread({
   const allOrder = useThreadsStore((s) => s.replicas[sessionId]?.state?.order)
   const allSignature = useThreadsStore((s) => signatureOf(s.replicas[sessionId]?.state))
   const { order, signature } = useMemo(
-    () => withoutPlans(allOrder ?? [], allSignature),
+    () => withoutHidden(allOrder ?? [], allSignature),
     [allOrder, allSignature],
   )
   const items = useMemo(() => buildItems(order, signature, working), [order, signature, working])

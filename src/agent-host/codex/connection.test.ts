@@ -108,6 +108,7 @@ function threadTarget(
   const effects: MapperEffect[] = []
   const requests: { request: PermissionRequest; signal: AbortSignal }[] = []
   const sent: string[] = []
+  const approvals: string[] = []
   const state = { replaying: false }
   const target: SessionTarget = {
     context: () => ({
@@ -128,7 +129,10 @@ function threadTarget(
       target.apply(request.output)
       return answer(request)
     },
-    send: (text) => sent.push(text),
+    send: (text, options) => {
+      sent.push(text)
+      if (options?.approval) approvals.push(text)
+    },
     startMode: () => null,
   }
   return {
@@ -137,6 +141,7 @@ function threadTarget(
     effects,
     requests,
     sent,
+    approvals,
     entries: (): ThreadEntry[] => threadEntries(thread),
     entry: (id: string) => thread.byId[id],
     thread: () => thread,
@@ -1086,6 +1091,7 @@ describe('a plan', () => {
     const { t, connection, server } = await planTurn(() => ({ optionId: 'implement' }))
     await until(() => t.sent.length === 1)
     expect(t.sent).toEqual(['Implement the plan.'])
+    expect(t.approvals).toEqual(['Implement the plan.'])
     const prompt = connection.prompt('thread-1', [{ type: 'text', text: t.sent[0]! }])
     await until(() => server.sent('turn/start').length === 2)
     expect(server.sent('turn/start')[1]).toMatchObject({
@@ -1100,6 +1106,7 @@ describe('a plan', () => {
     const withNote = await planTurn(() => ({ optionId: 'keep_planning', note: 'Add tests' }))
     await until(() => withNote.t.sent.length === 1)
     expect(withNote.t.sent).toEqual(['Add tests'])
+    expect(withNote.t.approvals).toEqual([])
     const prompt = withNote.connection.prompt('thread-1', [{ type: 'text', text: 'Add tests' }])
     await until(() => withNote.server.sent('turn/start').length === 2)
     expect(withNote.server.sent('turn/start')[1]).toMatchObject({

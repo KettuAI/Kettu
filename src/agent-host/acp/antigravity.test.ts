@@ -320,6 +320,7 @@ const PLAN_TURNS = turns.turns as Recorded[][]
 function planSession(version: string, mode: string, answer: PermissionAnswer, from = 0) {
   const files = new Map<string, string>()
   const events: string[] = []
+  const approvals: string[] = []
   const queue = PLAN_TURNS.slice(from)
   const agy = connect(version, async (client, sessionId) => {
     for (const event of queue.shift() ?? []) {
@@ -371,7 +372,10 @@ function planSession(version: string, mode: string, answer: PermissionAnswer, fr
       }
       return answer
     },
-    send: (text) => events.push(`send ${text}`),
+    send: (text, options) => {
+      events.push(`send ${text}`)
+      if (options?.approval) approvals.push(text)
+    },
     readAgentFile: async (file) => files.get(file) ?? null,
   }
   return {
@@ -379,6 +383,7 @@ function planSession(version: string, mode: string, answer: PermissionAnswer, fr
     target,
     plans,
     events,
+    approvals,
     files,
     mode: () => thread.session.config.find((option) => option.id === 'mode')?.value,
     entries: () => threadEntries(thread),
@@ -467,6 +472,7 @@ describe("agy's plans in Plan mode", () => {
     expect(session.configs).toEqual([{ sessionId, configId: 'mode', value: 'auto' }])
     expect(session.mode()).toBe('auto')
     expect(session.events).toEqual(['send [Approved] implementation_plan.md'])
+    expect(session.approvals).toEqual(['[Approved] implementation_plan.md'])
     session.connection.close()
   })
 
@@ -476,6 +482,7 @@ describe("agy's plans in Plan mode", () => {
     const sessionId = await openPlanSession(session)
     await session.connection.prompt(sessionId, [{ type: 'text', text: 'Add add(a, b)' }])
     await vi.waitFor(() => expect(session.events).toEqual([`send ${note}`]))
+    expect(session.approvals).toEqual([])
     expect(session.configs).toEqual([])
     expect(session.mode()).toBe('plan')
 

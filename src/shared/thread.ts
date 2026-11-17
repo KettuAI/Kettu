@@ -180,6 +180,8 @@ export interface QueuedPrompt {
   from?: FromSession
   /** Set for a prompt a paired device queued. */
   device?: FromDevice
+  /** Set for a message Kettu sends as the answer a card already shows, such as a plan's approval. */
+  approval?: true
 }
 
 /** The session that started or messaged another one through the session tools. */
@@ -293,6 +295,11 @@ export type ThreadEntry =
       from?: FromSession
       /** Set for a message a paired device sent; the host's own windows send none. */
       device?: FromDevice
+      /**
+       * Set for a message Kettu sent as the answer a card already shows, such as a plan's approval:
+       * the agent got it, but it is no bubble and no message of the user's own.
+       */
+      approval?: true
     }
   | {
       kind: 'agent'

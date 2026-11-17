@@ -5,7 +5,8 @@ import { FOLDED_LINES, FOLD_OVER } from './markdown/code-meta'
 // One character per entry, so the thread re-renders only when its shape changes, not on every
 // streamed token: u user, s user message steered into a running turn, a agent, h thought, g
 // groupable lookup, t other tool, w tool waiting for permission, r tool whose request was answered,
-// p compaction, n plan, which the thread leaves out for the top bar, e turn end, m an agent's write
+// p compaction, n plan, which the thread leaves out for the top bar, v a message Kettu sent as a
+// card's answer, which the thread leaves out as the card shows it, e turn end, m an agent's write
 // to project memory, which folds as work, o anything else, which a new site's request, an agent's
 // question and a proposed write to global memory are: of their own, never folded into a run.
 export function signatureOf(state: ThreadState | null | undefined): string {
@@ -15,19 +16,22 @@ export function signatureOf(state: ThreadState | null | undefined): string {
   return signature
 }
 
-/** The entries and their signature without the plans, which only the top bar shows. */
-export function withoutPlans(
+/**
+ * The entries and their signature without the ones the thread does not draw: the plans, which
+ * only the top bar shows, and the messages Kettu sent as a card's answer.
+ */
+export function withoutHidden(
   order: string[],
   signature: string,
 ): { order: string[]; signature: string } {
-  if (!signature.includes('n')) return { order, signature }
-  const shown = order.filter((_, i) => signature[i] !== 'n')
-  return { order: shown, signature: signature.replaceAll('n', '') }
+  if (!/[nv]/.test(signature)) return { order, signature }
+  const shown = order.filter((_, i) => signature[i] !== 'n' && signature[i] !== 'v')
+  return { order: shown, signature: signature.replace(/[nv]/g, '') }
 }
 
 function charOf(entry: ThreadEntry | undefined): string {
   if (!entry) return 'o'
-  if (entry.kind === 'user') return entry.steered ? 's' : 'u'
+  if (entry.kind === 'user') return entry.approval ? 'v' : entry.steered ? 's' : 'u'
   if (entry.kind === 'agent') return 'a'
   if (entry.kind === 'turn_end') return 'e'
   if (entry.kind === 'thought') return 'h'
