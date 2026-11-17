@@ -1,0 +1,18 @@
+{
+  "methodId": null,
+  "email": null,
+  "firstName": null,
+  "lastName": null,
+  "profileImageUrl": null,
+  "teamId": null,
+  "teamName": null,
+  "teamRole": null,
+  "organizationId": null,
+  "organizationName": null,
+  "organizationRole": null,
+  "principalType": null,
+  "principalId": null,
+  "userBlockedReason": null,
+  "teamBlockedReasons": [],
+  "codingDataRetentionOptOut": true
+}
