@@ -443,6 +443,11 @@ export interface SessionManagerDeps {
   portDevice?(portId: string): PortDevice | null
   /** Where threads are stored; without it every session opens through its agent. */
   threads: ThreadStore | null
+  /**
+   * The text of a file a session's agent keeps for it, read only from that session's own folder;
+   * null when it cannot be read. Without it no such file is read.
+   */
+  agentFile?(sessionId: string, path: string): Promise<string | null>
   /** The empty folder the hidden sessions for the outline's titles run in. */
   reportsDir: string
   diagnostics: Diagnostics
@@ -2968,6 +2973,7 @@ export class SessionManager {
       requestPermission: (request, signal) => this.requestPermission(live, request, signal),
       send: (text) => this.sendForUser(live, text),
       startMode: () => startModeIn(this.deps.settings(), record.agentId) ?? null,
+      readAgentFile: (file) => this.deps.agentFile?.(record.id, file) ?? Promise.resolve(null),
     }
     const live: Live = {
       id: record.id,

@@ -366,6 +366,11 @@
     "unknownTool": "Unknown tool content",
     "toolCall": "Tool call"
   },
+  "antigravity": {
+    "plan": {
+      "title": "Plan"
+    }
+  },
   "codex": {
     "signInNeeded": "Sign in to Codex with `codex login` in a terminal",
     "turnFailed": "The turn failed",

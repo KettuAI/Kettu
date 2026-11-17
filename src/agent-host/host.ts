@@ -887,6 +887,14 @@ export class AgentHost {
       portOpen: (portId) => this.hub.has(portId),
       portDevice: (portId) => this.hub.deviceOf(portId),
       threads: this.threads,
+      agentFile: (sessionId, file) =>
+        this.agentFiles.read(sessionId, file).then(
+          (content) => (content.kind === 'text' ? content.text : null),
+          (error: unknown) => {
+            log('warn', `Could not read ${file}: ${(error as Error).message}`)
+            return null
+          },
+        ),
       reportsDir: path.join(options.userDataPath, 'agent-reports'),
       attachments: this.attachments,
       mcp: {

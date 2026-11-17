@@ -21,10 +21,11 @@ import {
   type ContentBlock,
   type InitializeResponse,
   type McpServer as AcpMcpServer,
+  type PromptResponse,
   type SessionUpdate,
   type Stream,
 } from '@agentclientprotocol/sdk/unstable'
-import type { AgentId, ConfigOption } from '@shared/thread'
+import type { AgentId, ConfigOption, PermissionOption } from '@shared/thread'
 import {
   KETTU_SERVICE_META,
   AgentRequestError,
@@ -37,6 +38,7 @@ import {
   type ListedSession,
   type McpServer,
   type OpenedSession,
+  type PermissionAnswer,
   type PromptBlock,
   type PromptResult,
   type SessionOptions,
@@ -47,7 +49,14 @@ import {
 import type { MovedAccounts } from '../catalog'
 import type { AgentTransport, MessageTransport } from '../driver'
 import { t } from '../i18n'
-import { isStopReason, type MapperContext, type MapperOutput } from '../session-updates'
+import { planRevision } from '../plan-revision'
+import {
+  addEntry,
+  isStopReason,
+  mergeConfig,
+  type MapperContext,
+  type MapperOutput,
+} from '../session-updates'
 import { compareVersions } from '../versions'
 import {
   ANTIGRAVITY_TIER_VERSION,
@@ -65,6 +74,17 @@ import {
   mapSessionUpdate,
   mapTokenTotals,
 } from './mapper'
+import {
+  approved,
+  buildMode,
+  currentMode,
+  KEEP_PLANNING,
+  MODE_OPTION,
+  PLAN_MODE,
+  planOptions,
+  plansAgy,
+  planWrite,
+} from './agy-plan'
 import { agyAllowOnce, agyAutoAllowed, fromAgy, onAgyOwnFiles } from './agy-tools'
 import { fromCodeMode } from './code-mode'
 import { forkPointMeta, forksAtMessage } from './fork-point'
@@ -241,6 +261,23 @@ const CHILD_SESSIONS = 1_000
 // Sessions Kettu closed: their late updates are dropped, not kept for a later register.
 const CLOSED_SESSIONS = 256
 
+/** agy's plan files in a session: the calls of this turn that write one, and what they wrote. */
+interface AgyPlans {
+  calls: Map<string, string>
+  written: { toolCallId: string; file: string } | null
+  /** The plan an earlier turn wrote, which a rewrite need not mark for review again. */
+  last: string | null
+}
+
+/** A plan agy wrote in a turn, as the entry that shows it. */
+interface AgyPlan {
+  entryId: string
+  toolCallId: string
+  file: string
+  markdown: string
+  options: PermissionOption[]
+}
+
 /** Kettu's prompt blocks as ACP content blocks. */
 function contentBlocks(prompt: readonly PromptBlock[]): ContentBlock[] {
   return prompt.map((block): ContentBlock => {
@@ -320,6 +357,12 @@ export class AcpConnection implements AgentConnection {
   private signIn: SignInClient | null = null
   /** The sign-in each `authenticate` in flight runs for, by its JSON-RPC id as a string. */
   private readonly signInRequests = new Map<string, SignInClient>()
+  /** Sessions with a prompt in flight. */
+  private readonly prompting = new Set<string>()
+  /** agy's plan files, by session. */
+  private readonly agyPlans = new Map<string, AgyPlans>()
+  /** The mode each agy session was in before it entered Plan mode, which a plan builds in. */
+  private readonly agyBuildModes = new Map<string, string>()
 
   private constructor(
     private readonly transport: AcpTransport,
@@ -476,6 +519,7 @@ export class AcpConnection implements AgentConnection {
     this.learnChild(sessionId, update)
     const target = this.targets.get(sessionId)
     if (target) {
+      this.notePlanWrite(sessionId, update)
       target.apply(this.map(update, target.context()))
       return
     }
@@ -560,6 +604,8 @@ export class AcpConnection implements AgentConnection {
     this.targets.delete(sessionId)
     this.pending.delete(sessionId)
     this.pendingStartup.delete(sessionId)
+    this.agyPlans.delete(sessionId)
+    this.agyBuildModes.delete(sessionId)
     this.unregistered.add(sessionId)
     if (this.unregistered.size > CLOSED_SESSIONS) {
       this.unregistered.delete(this.unregistered.values().next().value!)
@@ -825,16 +871,137 @@ export class AcpConnection implements AgentConnection {
     }
     // The note comes before a session's first prompt; a message after it is the agent's own.
     this.pendingStartup.delete(sessionId)
-    const response = await this.call(() =>
-      this.connection.agent.request(methods.agent.session.prompt, {
-        sessionId,
-        prompt: contentBlocks(prompt),
-      }),
-    )
-    return {
+    const planning = this.agy && plansAgy(this.version) && this.targets.has(sessionId)
+    if (planning) {
+      const plans = this.agyPlans.get(sessionId)
+      this.agyPlans.set(sessionId, { calls: new Map(), written: null, last: plans?.last ?? null })
+    }
+    this.prompting.add(sessionId)
+    let response: PromptResponse
+    try {
+      response = await this.call(() =>
+        this.connection.agent.request(methods.agent.session.prompt, {
+          sessionId,
+          prompt: contentBlocks(prompt),
+        }),
+      )
+    } finally {
+      this.prompting.delete(sessionId)
+    }
+    const result: PromptResult = {
       stopReason: isStopReason(response.stopReason) ? response.stopReason : 'end_turn',
       tokens: mapTokenTotals(response.usage),
       models: mapModelUsage(response._meta),
+    }
+    if (planning && result.stopReason === 'end_turn') await this.showPlan(sessionId)
+    return result
+  }
+
+  /** Notes a call of agy's that writes the session's plan, once it has written it. */
+  private notePlanWrite(sessionId: string, update: SessionUpdate): void {
+    if (update.sessionUpdate !== 'tool_call' && update.sessionUpdate !== 'tool_call_update') return
+    const plans = this.agyPlans.get(sessionId)
+    if (!plans || !this.prompting.has(sessionId)) return
+    const file = plans.calls.get(update.toolCallId) ?? planWrite(update, sessionId, plans.last)
+    if (file === null) return
+    plans.calls.set(update.toolCallId, file)
+    if (update.status === 'completed') plans.written = { toolCallId: update.toolCallId, file }
+  }
+
+  /**
+   * Ends a Plan mode turn that wrote agy's plan with the plan, read from agy's file, as an entry
+   * that the user is asked to approve once the turn is over.
+   */
+  private async showPlan(sessionId: string): Promise<void> {
+    const plans = this.agyPlans.get(sessionId)
+    const written = plans?.written
+    const target = this.targets.get(sessionId)
+    if (!plans || !written || !target?.readAgentFile) return
+    plans.last = written.file
+    const { config } = target.context().thread.session
+    if (currentMode(config) !== PLAN_MODE) return
+    const options = planOptions(config, [
+      this.agyBuildModes.get(sessionId) ?? null,
+      target.startMode(),
+    ])
+    if (!options) return
+    const markdown = await target.readAgentFile(written.file)
+    if (markdown === null || markdown.trim() === '' || this.targets.get(sessionId) !== target) {
+      return
+    }
+    const ctx = target.context()
+    // Its own entry: the call that wrote the file keeps its row when agy asked to write it.
+    const entryId = `t:${written.toolCallId}#plan`
+    const out: MapperOutput = { patches: [], effects: [] }
+    addEntry(ctx, out, {
+      kind: 'tool',
+      id: entryId,
+      title: t('antigravity.plan.title'),
+      toolKind: 'switch_mode',
+      status: 'completed',
+      content: [{ type: 'markdown', markdown }],
+      locations: [],
+      permission: null,
+      permissionResult: null,
+      planVersion: planRevision(ctx.thread, entryId).version,
+    })
+    target.apply(out)
+    const plan = { entryId, toolCallId: written.toolCallId, file: written.file, markdown, options }
+    // The host ends the turn once the prompt has answered.
+    setTimeout(() => void this.proposePlan(sessionId, target, plan), 0)
+  }
+
+  /**
+   * Asks the user about agy's plan: build in a mode, which switches to it and sends what agy's
+   * own terminal sends on approval, or keep planning in Plan mode with a note as the next message.
+   */
+  private async proposePlan(
+    sessionId: string,
+    target: SessionTarget,
+    plan: AgyPlan,
+  ): Promise<void> {
+    // A turn that started meanwhile means the user went on without answering.
+    if (this.targets.get(sessionId) !== target || this.isClosed || this.prompting.has(sessionId)) {
+      return
+    }
+    let answer: PermissionAnswer
+    try {
+      answer = await target.requestPermission(
+        {
+          toolCallId: plan.toolCallId,
+          toolEntryId: plan.entryId,
+          output: { patches: [], effects: [] },
+          options: plan.options,
+          plan: plan.markdown,
+        },
+        // Nothing of agy's waits on the answer; the host settles the request when it must.
+        new AbortController().signal,
+      )
+    } catch {
+      return
+    }
+    const picked = optionAnswer(answer)
+    if (picked === 'cancelled') return
+    const mode = buildMode(picked.optionId)
+    if (mode !== null) {
+      try {
+        const config = await this.setConfigOption(sessionId, MODE_OPTION, mode)
+        target.apply({
+          patches: [
+            {
+              op: 'session.update',
+              changes: { config: mergeConfig(target.context().thread.session.config, config) },
+            },
+          ],
+          effects: [],
+        })
+      } catch (error) {
+        // The build still runs, in Plan mode, which asks before each change as Default does.
+        this.hooks.log('warn', `Could not switch agy to ${mode}: ${(error as Error).message}`)
+      }
+      target.send(approved(plan.file))
+    } else if (picked.optionId === KEEP_PLANNING && picked.note) {
+      target.send(picked.note)
     }
   }
 
@@ -896,6 +1063,11 @@ export class AcpConnection implements AgentConnection {
     optionId: string,
     value: string | boolean,
   ): Promise<ConfigOption[]> {
+    if (this.agy && optionId === MODE_OPTION && value === PLAN_MODE) {
+      const config = this.targets.get(sessionId)?.context().thread.session.config ?? []
+      const mode = currentMode(config)
+      if (mode !== null && mode !== PLAN_MODE) this.agyBuildModes.set(sessionId, mode)
+    }
     const response = await this.call(() =>
       this.connection.agent.request(
         methods.agent.session.setConfigOption,
