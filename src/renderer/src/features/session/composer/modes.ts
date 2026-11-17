@@ -1,4 +1,4 @@
-// What a permission mode looks like in the composer, from the ids Claude Code and Codex give
+// What a permission mode looks like in the composer, from the ids Claude Code, Codex and agy give
 // their modes; any other agent's mode reads as one that asks.
 
 import {
@@ -27,6 +27,7 @@ const LOOKS: Record<string, ModeLook> = {
   'read-only': 'asks',
   'workspace-write': 'edits',
   acceptEdits: 'edits',
+  'accept-edits': 'edits',
   plan: 'plan',
   auto: 'auto',
   agent: 'auto',
