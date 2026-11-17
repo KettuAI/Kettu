@@ -83,6 +83,8 @@ import { compareVersions } from './versions'
 
 /** The router's flag that starts each session's process in the session's folder. */
 export const FOLDER_PER_SESSION = '--folder-per-session'
+/** The router's flag naming the flag a session's process may start with when Kettu asks. */
+const SESSION_FLAG = '--session-flag='
 
 export type LaunchKind =
   // Installed from npm into the data directory and run on the user's Node.js. With `perSession`,
@@ -101,8 +103,9 @@ export type LaunchKind =
       env?: Record<string, string>
     }
   // With `perSession`, through the session router, which starts each session's process in the
-  // session's own folder, for a program that runs everything in the folder it started in.
-  | { kind: 'binary'; command: string; args: string[]; perSession?: true }
+  // session's own folder, for a program that runs everything in the folder it started in, and
+  // with `sessionFlag` added for a session Kettu asks for it, once the program's help lists it.
+  | { kind: 'binary'; command: string; args: string[]; perSession?: true; sessionFlag?: string }
   // Run as `uvx <package>==<version> <args>`, which installs the package on first use.
   | { kind: 'uvx'; package: string; version: string; args: string[] }
   // A script run with Electron's own Node.js, so it needs no Node.js on the machine.
@@ -615,17 +618,18 @@ function binaryDetection(
  */
 function routedDetection(
   program: string,
-  args: string[],
+  launch: Extract<LaunchKind, { kind: 'binary' }>,
   ctx: Pick<DetectContext, 'nodeRuntime' | 'sessionRouterPath'>,
   display: CommandWords,
   env: Record<string, string>,
 ): Detection {
   const runtime = ctx.nodeRuntime
+  const flag = launch.sessionFlag ? [`${SESSION_FLAG}${launch.sessionFlag}`] : []
   return {
     state: 'available',
     spec: {
       command: runtime.command,
-      args: [ctx.sessionRouterPath!, FOLDER_PER_SESSION, program, ...args],
+      args: [ctx.sessionRouterPath!, FOLDER_PER_SESSION, ...flag, program, ...launch.args],
       env: { ...runtime.env, ...env },
       shell: false,
       display: { ...display, env },
@@ -965,7 +969,7 @@ export async function detectAgent(def: AgentDefinition, ctx: DetectContext): Pro
         const runEnv = { ...env, ...cliEnv }
         if (launch.perSession && ctx.sessionRouterPath) {
           return {
-            ...routedDetection(program, launch.args, ctx, display, runEnv),
+            ...routedDetection(program, launch, ctx, display, runEnv),
             cli: installed,
           }
         }

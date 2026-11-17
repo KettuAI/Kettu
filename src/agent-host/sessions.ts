@@ -122,6 +122,7 @@ import {
 } from './artifacts/entries'
 import { allowOnceOption, changedFiles, replySummary, requestText } from './attention'
 import type { MarketAnswer, MarketAsk } from './marketplace/publish-tools'
+import { MODE_OPTION as AGY_MODE_OPTION } from './acp/agy-plan'
 import { parseContextReport } from './acp/claude-reports'
 import {
   isValueOf,
@@ -10509,6 +10510,8 @@ function modeOptionId(agentId: AgentId): string | null {
       return CODEX_MODE_ID
     case 'deepseek':
       return DSH_CONFIG.mode
+    case 'antigravity':
+      return AGY_MODE_OPTION
     default:
       return null
   }

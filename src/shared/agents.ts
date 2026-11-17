@@ -180,11 +180,15 @@ export function addedAgentId(harness: HarnessId, name: string, taken: readonly s
 /** The harnesses whose agents take a start mode: the permission mode new sessions start in. */
 export const START_MODE_HARNESSES: readonly HarnessId[] = ['claude-code', 'codex', 'deepseek']
 
+/** Google Antigravity's full access, Kettu's mode for agy's `--dangerously-skip-permissions`. */
+export const ANTIGRAVITY_FULL_ACCESS = 'dangerously-skip-permissions'
+
 /** The permission modes that never ask, which no setting may start a session in. */
 export const FULL_ACCESS_MODES: readonly string[] = [
   'bypassPermissions',
   'agent-full-access',
   'danger-full-access',
+  ANTIGRAVITY_FULL_ACCESS,
 ]
 
 export function isFullAccessMode(value: string | undefined): boolean {

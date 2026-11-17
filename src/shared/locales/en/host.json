@@ -374,6 +374,32 @@
   "antigravity": {
     "plan": {
       "title": "Plan"
+    },
+    "mode": {
+      "default": {
+        "name": "Default",
+        "description": "Ask before edits and commands"
+      },
+      "acceptEdits": {
+        "name": "Accept edits",
+        "description": "Approve file edits in the workspace without asking"
+      },
+      "auto": {
+        "name": "Auto",
+        "description": "Approve edits and safe commands; ask before irreversible actions"
+      },
+      "plan": {
+        "name": "Plan",
+        "description": "Plan carefully before executing a task"
+      },
+      "fullAccess": {
+        "name": "Full access",
+        "description": "Never asks. Applies between turns, restarting agy"
+      }
+    },
+    "fullAccess": {
+      "enterFailed": "Could not switch to Full access",
+      "leaveFailed": "Could not leave Full access"
     }
   },
   "codex": {

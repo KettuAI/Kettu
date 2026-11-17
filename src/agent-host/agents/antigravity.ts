@@ -3,12 +3,18 @@ import { AGY_CLI } from '../installed-cli'
 
 // The user's own Antigravity CLI in its ACP mode, checked on agy 1.5.9. It runs every command in
 // the folder it started in, whatever folder a session names, so each session gets a process of its
-// own started in its folder.
+// own started in its folder. Full access starts a session's process with agy's own flag.
 export const ANTIGRAVITY: AgentDefinition = {
   id: 'antigravity',
   name: 'Google Antigravity',
   registryId: 'antigravity-acp',
-  launch: { kind: 'binary', command: 'agy', args: ['acp'], perSession: true },
+  launch: {
+    kind: 'binary',
+    command: 'agy',
+    args: ['acp'],
+    perSession: true,
+    sessionFlag: '--dangerously-skip-permissions',
+  },
   install: {
     hint: 'detect.hint.antigravity',
     url: 'https://antigravity.google/docs/cli/acp',

@@ -10,9 +10,14 @@ import { afterEach, describe, expect, it } from 'vitest'
 
 const ROUTER = path.resolve('src/agent-host/session-router/router.ts')
 
-// An adapter that answers with what it was sent and the service variables it started with.
+// An adapter that answers with what it was sent, its arguments and the service variables it
+// started with; with \`--help\` it prints \`AGENT_HELP\` and exits.
 const CHILD = `
 import { createInterface } from 'node:readline'
+if (process.argv.includes('--help')) {
+  process.stdout.write(process.env.AGENT_HELP ?? '')
+  process.exit(0)
+}
 const env = () => ({
   url: process.env.KETTU_MCP_URL ?? null,
   token: process.env.KETTU_MCP_TOKEN ?? null,
@@ -21,7 +26,7 @@ const where = () => ({ cwd: process.cwd(), electron: process.env.ELECTRON_RUN_AS
 createInterface({ input: process.stdin }).on('line', (line) => {
   const message = JSON.parse(line)
   if (message.id === undefined) return
-  const seen = { params: message.params, env: env(), ...where() }
+  const seen = { params: message.params, env: env(), args: process.argv.slice(2), ...where() }
   const result =
     message.method === 'session/new'
       ? { sessionId: 'session-' + process.pid, _meta: seen }
@@ -34,6 +39,7 @@ createInterface({ input: process.stdin }).on('line', (line) => {
 
 interface Seen {
   params: Record<string, unknown>
+  args: string[]
   env: { url: string | null; token: string | null }
   cwd: string
   electron: string | null
@@ -50,7 +56,9 @@ afterEach(async () => {
   await Promise.all(dirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })))
 })
 
-async function startRouter(options: { folderPerSession?: boolean } = {}) {
+async function startRouter(
+  options: { folderPerSession?: boolean; sessionFlag?: string; help?: string } = {},
+) {
   const dir = await realpath(await mkdtemp(path.join(os.tmpdir(), 'kettu-router-')))
   dirs.push(dir)
   const child = path.join(dir, 'adapter.mjs')
@@ -61,6 +69,7 @@ async function startRouter(options: { folderPerSession?: boolean } = {}) {
   const words = options.folderPerSession
     ? ['--folder-per-session', program, child]
     : [process.execPath, child]
+  if (options.sessionFlag) words.unshift(`--session-flag=${options.sessionFlag}`)
   const router = spawn(process.execPath, [ROUTER, ...words], {
     cwd: dir,
     // A service the router itself inherited goes to no child.
@@ -69,6 +78,7 @@ async function startRouter(options: { folderPerSession?: boolean } = {}) {
       KETTU_MCP_URL: 'http://inherited',
       KETTU_MCP_TOKEN: 'inherited',
       ELECTRON_RUN_AS_NODE: '1',
+      AGENT_HELP: options.help ?? '',
     },
     stdio: ['pipe', 'pipe', 'inherit'],
   })
@@ -79,6 +89,10 @@ async function startRouter(options: { folderPerSession?: boolean } = {}) {
       id?: number
       result?: { _meta: Seen }
       error?: { message: string }
+    }
+    if (message.error) {
+      waiting.get(message.id!)?.({ _meta: { error: message.error } } as never)
+      return
     }
     if (message.id === undefined) return
     waiting.get(message.id)?.(message.result ?? { _meta: { error: message.error } as never })
@@ -174,6 +188,66 @@ describe('the session router', () => {
       expect(still._meta.cwd).toBe(first)
     },
   )
+
+  it("starts a session's process with the session flag when asked, once its help lists it", async () => {
+    const help = 'Usage: agent acp [flags]\n  --dangerously-skip-permissions   Auto-approve all\n'
+    const { request } = await startRouter({ sessionFlag: '--dangerously-skip-permissions', help })
+    const control = await request('initialize', { protocolVersion: 1 })
+    expect(
+      (control as unknown as { _meta: Record<string, unknown> })._meta['sh.kettu/session-flag'],
+    ).toBe('--dangerously-skip-permissions')
+    expect(control._meta.args).not.toContain('--dangerously-skip-permissions')
+
+    const opened = await request('session/new', { cwd: '/repo', mcpServers: [] })
+    expect(opened._meta.args).not.toContain('--dangerously-skip-permissions')
+    const sessionId = opened.sessionId!
+
+    const flagged = await request('session/resume', {
+      sessionId,
+      cwd: '/repo',
+      mcpServers: [],
+      _meta: { 'sh.kettu/session-flag': true, other: 1 },
+    })
+    expect(flagged._meta.args).toContain('--dangerously-skip-permissions')
+    expect(flagged._meta.params).toEqual({
+      sessionId,
+      cwd: '/repo',
+      mcpServers: [],
+      _meta: { other: 1 },
+    })
+    const prompt = await request('session/prompt', { sessionId, prompt: [] })
+    expect(prompt._meta.args).toContain('--dangerously-skip-permissions')
+
+    const plain = await request('session/resume', { sessionId, cwd: '/repo', mcpServers: [] })
+    expect(plain._meta.args).not.toContain('--dangerously-skip-permissions')
+  })
+
+  it('refuses the session flag when its help does not list it or it was given none', async () => {
+    const unlisted = await startRouter({
+      sessionFlag: '--dangerously-skip-permissions',
+      help: 'Usage: agent acp\n  --dangerously-skip-permissions-later   Something else\n',
+    })
+    const control = await unlisted.request('initialize', { protocolVersion: 1 })
+    expect(
+      (control as unknown as { _meta: Record<string, unknown> })._meta['sh.kettu/session-flag'],
+    ).toBe(undefined)
+    const refused = await unlisted.request('session/resume', {
+      sessionId: 'a',
+      cwd: '/repo',
+      _meta: { 'sh.kettu/session-flag': true },
+    })
+    expect((refused._meta as unknown as { error?: unknown }).error).toBeDefined()
+
+    const none = await startRouter()
+    await none.request('initialize', { protocolVersion: 1 })
+    const alsoRefused = await none.request('session/new', {
+      cwd: '/repo',
+      mcpServers: [],
+      _meta: { 'sh.kettu/session-flag': true },
+    })
+    expect((alsoRefused._meta as unknown as { error?: unknown }).error).toBeDefined()
+    expect(alsoRefused.sessionId).toBeUndefined()
+  })
 
   it('keeps the runtime switch for a child that is the runtime itself', async () => {
     const { request } = await startRouter()
