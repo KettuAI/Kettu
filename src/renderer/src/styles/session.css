@@ -1709,8 +1709,21 @@
 .ks-outline__row[data-current] > .ks-outline__dash {
   background: var(--thread-muted);
 }
+/* While a find is open: the turns with matches in the find color, the current one deepest. */
+.ks-outline__row[data-quiet] > .ks-outline__dash {
+  background: color-mix(in srgb, var(--thread-line-strong) 60%, transparent);
+}
+.ks-outline__row[data-hits] > .ks-outline__dash {
+  background: color-mix(in srgb, var(--attention-dot) 60%, transparent);
+}
+.ks-outline__row[data-found] > .ks-outline__dash {
+  background: var(--attention-dot);
+}
 .ks-outline__row[data-pointed] > .ks-outline__dash {
   background: var(--thread-ink);
+}
+.ks-outline__row[data-hits][data-pointed] > .ks-outline__dash {
+  background: var(--attention-dot);
 }
 .ks-outline__keys {
   position: absolute;
@@ -1743,6 +1756,18 @@
 }
 .ks-outline__item[data-reading] {
   font-weight: 500;
+}
+.ks-outline__item[data-hits] {
+  color: var(--thread-ink);
+}
+.ks-outline__item[data-quiet]:not([data-highlighted]) {
+  color: color-mix(in srgb, var(--thread-faint) 70%, transparent);
+}
+.ks-outline__hits {
+  flex-shrink: 0;
+  color: var(--thread-muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
 }
 
 /* Reply to a selected passage, or ask about it in the side chat: one ink capsule above it. */

@@ -22,6 +22,7 @@ import { IconAction } from '@renderer/components/copy-action'
 import { Spinner } from '@renderer/components/ui/spinner'
 import { usePaneFocused } from '@renderer/features/split/pane-context'
 import { errorCode, errorMessage, host } from '@renderer/lib/host'
+import { showFind, useFindStore } from '@renderer/stores/find'
 import { useThreadsStore } from '@renderer/stores/threads'
 import { useJumpToMessage } from '../outline/use-jump'
 import type { ThreadJumps } from '../thread'
@@ -268,10 +269,27 @@ export function FindInSession({
     }
   }
 
-  const latest = useRef({ jumpTo, mark, reveal })
+  const latest = useRef({ jumpTo, mark, reveal, matches })
   useEffect(() => {
-    latest.current = { jumpTo, mark, reveal }
+    latest.current = { jumpTo, mark, reveal, matches }
   })
+
+  // The outline marks the matches while the bar is open, and may ask for one of them.
+  useEffect(() => {
+    showFind(sessionId, open && matches && matches.length > 0 ? { matches, currentId } : null)
+  }, [sessionId, open, matches, currentId])
+  useEffect(() => () => showFind(sessionId, null), [sessionId])
+  useEffect(() => {
+    // An ask from before this bar was mounted is not its own.
+    let seen = useFindStore.getState().asked[sessionId]?.nonce ?? 0
+    return useFindStore.subscribe((state) => {
+      const ask = state.asked[sessionId]
+      if (!ask || ask.nonce === seen) return
+      seen = ask.nonce
+      const match = latest.current.matches?.find((m) => m.entryId === ask.entryId)
+      if (match) go(match)
+    })
+  }, [sessionId, go])
 
   // Takes the thread to the match: loads and renders the message when it is not rendered yet.
   useEffect(() => {

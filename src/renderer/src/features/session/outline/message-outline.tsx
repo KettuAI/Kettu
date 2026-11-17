@@ -3,6 +3,7 @@ import {
   useEffect,
   useId,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
   useSyncExternalStore,
@@ -19,8 +20,17 @@ import {
 import { GlideHighlight } from '@renderer/components/glide-highlight'
 import { HoverCard, HoverCardContent } from '@renderer/components/ui/hover-card'
 import { Spinner } from '@renderer/components/ui/spinner'
+import { askFindMatch, useFindStore } from '@renderer/stores/find'
 import type { ThreadJumps } from '../thread'
-import { dashCount, dashOf, dashOffset, messageAt, ReadingTracker, restDashAt } from './rail'
+import {
+  dashCount,
+  dashOf,
+  dashOffset,
+  findsByRow,
+  messageAt,
+  ReadingTracker,
+  restDashAt,
+} from './rail'
 import { useJumpToMessage } from './use-jump'
 import { useOutline, type OutlineRow } from './use-outline'
 
@@ -70,10 +80,21 @@ const READING_LENGTH = 14
 const OPEN_LENGTHS = [20, 15, 12]
 const OPEN_LENGTH = 10
 const LONGEST = OPEN_LENGTHS[0]!
+// While a find is open, at rest: a dash by how many matches its turns hold, one, two or more.
+const FOUND_LENGTHS = [10, 14, 20]
+const QUIET_LENGTH = 5
 // The keyboard's focus ring reaches this far around the rail at rest.
 const KEYS_INSET = 6
 
-function dashLength(open: boolean, distance: number | null, reading: boolean): number {
+function dashLength(
+  open: boolean,
+  distance: number | null,
+  reading: boolean,
+  hits: number | null,
+): number {
+  if (!open && hits !== null) {
+    return hits === 0 ? QUIET_LENGTH : FOUND_LENGTHS[Math.min(hits, FOUND_LENGTHS.length) - 1]!
+  }
   const length = !open
     ? REST_LENGTH
     : distance === null
@@ -126,6 +147,12 @@ export const MessageOutline = memo(function MessageOutline({
   const readingIndex = Math.max(
     0,
     rows.findIndex((row) => row.entryId === reading),
+  )
+  // The open find bar's matches, which the rail maps out.
+  const find = useFindStore((s) => s.shown[sessionId])
+  const finds = useMemo(
+    () => (find ? findsByRow(rows, find.matches, find.currentId) : null),
+    [rows, find],
   )
 
   const [open, setOpen] = useState(false)
@@ -227,9 +254,26 @@ export const MessageOutline = memo(function MessageOutline({
     )
   }
 
+  // A turn with matches goes to its first one through the find bar, which then follows it.
+  const choose = (index: number): void => {
+    const match = finds?.first[index]
+    if (!match) return jump(rows[index]!)
+    askFindMatch(sessionId, match)
+    setOpen(false)
+    closeList()
+  }
+
   if (rows.length < 2 || !room || height === 0) return null
   const dashes = dashCount(rows.length, height)
-  const readingDash = dashOf(readingIndex, rows.length, dashes)
+  // While a find is open the current match stands for where the reader is.
+  const readingDash = finds ? -1 : dashOf(readingIndex, rows.length, dashes)
+  const dashHits = finds ? Array.from({ length: dashes }, () => 0) : null
+  if (finds && dashHits) {
+    finds.counts.forEach((count, i) => {
+      dashHits[dashOf(i, rows.length, dashes)]! += count
+    })
+  }
+  const foundDash = finds && finds.current >= 0 ? dashOf(finds.current, rows.length, dashes) : null
   const pointedDash = at === null ? null : dashOf(at, rows.length, dashes)
   const spread = anchor !== null
   const restHeight = dashOffset(dashes - 1, dashes, null) - dashOffset(0, dashes, null)
@@ -283,11 +327,12 @@ export const MessageOutline = memo(function MessageOutline({
         onPointerMove={onPointerMove}
         onPointerLeave={onPointerLeave}
         onClick={() => {
-          if (at !== null) jump(rows[at]!)
+          if (at !== null) choose(at)
         }}
       >
         {Array.from({ length: dashes }, (_, i) => {
           const distance = pointedDash === null ? null : Math.abs(i - pointedDash)
+          const hits = dashHits?.[i] ?? null
           return (
             <span
               key={i}
@@ -296,13 +341,16 @@ export const MessageOutline = memo(function MessageOutline({
               data-current={i === readingDash || undefined}
               data-pointed={distance === 0 || undefined}
               data-near={distance === 1 || undefined}
+              data-hits={hits ? Math.min(hits, FOUND_LENGTHS.length) : undefined}
+              data-quiet={hits === 0 || undefined}
+              data-found={i === foundDash || undefined}
               className="ks-outline__row"
               style={{ transform: `translateY(${dashOffset(i, dashes, anchor)}px)` }}
             >
               <span
                 className="ks-outline__dash"
                 style={{
-                  transform: `scaleX(${dashLength(spread, distance, i === readingDash) / LONGEST})`,
+                  transform: `scaleX(${dashLength(spread, distance, i === readingDash, hits) / LONGEST})`,
                 }}
               />
             </span>
@@ -332,7 +380,8 @@ export const MessageOutline = memo(function MessageOutline({
                 label={row.label}
                 reading={i === readingIndex}
                 waiting={waiting === row.entryId}
-                onJump={() => jump(row)}
+                hits={finds?.counts[i] ?? null}
+                onJump={() => choose(i)}
               />
             ))}
           </DropdownMenuContent>
@@ -364,16 +413,22 @@ export const MessageOutline = memo(function MessageOutline({
               tabIndex={-1}
               data-highlighted={i === at || undefined}
               data-reading={i === readingIndex || undefined}
+              data-hits={finds && finds.counts[i]! > 0 ? '' : undefined}
+              data-quiet={finds?.counts[i] === 0 || undefined}
               className="ks-outline__item relative flex h-8 w-full cursor-default items-center gap-2.5 rounded-lg text-left outline-hidden select-none"
               onPointerEnter={() => point(i)}
-              onClick={() => jump(row)}
+              onClick={() => choose(i)}
             >
               <span className="min-w-0 flex-1 truncate">
                 {row.label || t('thread.outline.noText')}
               </span>
-              {waiting === row.entryId && (
+              {waiting === row.entryId ? (
                 <Spinner className="size-3.5 shrink-0 text-muted-foreground" />
-              )}
+              ) : finds && finds.counts[i]! > 0 ? (
+                <span className="ks-outline__hits">
+                  {t('thread.outline.matches', { count: finds.counts[i] })}
+                </span>
+              ) : null}
             </button>
           ))}
         </HoverCardContent>
@@ -386,22 +441,32 @@ function OutlineItem({
   label,
   reading,
   waiting,
+  hits,
   onJump,
 }: {
   label: string
   reading: boolean
   waiting: boolean
+  /** How many matches of an open find the turn holds; null without one. */
+  hits: number | null
   onJump: () => void
 }) {
+  const { t } = useTranslation('session')
   return (
     <DropdownMenuItem
       closeOnClick={false}
       onClick={onJump}
       data-reading={reading || undefined}
+      data-hits={hits ? '' : undefined}
+      data-quiet={hits === 0 || undefined}
       className="ks-outline__item"
     >
       <span className="min-w-0 flex-1 truncate">{label}</span>
-      {waiting && <Spinner className="size-3.5 shrink-0 text-muted-foreground" />}
+      {waiting ? (
+        <Spinner className="size-3.5 shrink-0 text-muted-foreground" />
+      ) : hits ? (
+        <span className="ks-outline__hits">{t('thread.outline.matches', { count: hits })}</span>
+      ) : null}
     </DropdownMenuItem>
   )
 }
