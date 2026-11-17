@@ -109,6 +109,7 @@ import {
   type ProjectMcpDecision,
   type ProjectMcpEntry,
   type SideChatEntry,
+  type SideChatRoute,
   type SideChatSaw,
   type SideChatView,
   type ThreadEntry,
@@ -255,14 +256,17 @@ import {
   SIDE_ANSWER_CHARS,
   SIDE_STEPS,
   SIDE_TEXT_MS,
+  answerFork,
   answerHidden,
   answersForOthers,
   copySaw,
+  forkPrompt,
   hiddenPrompt,
   ownSaw,
   questionText,
   sideHistory,
   sideRoute,
+  sideRouteWith,
 } from './side-chat'
 import { SIDE_ENTRIES, type StoredSideChat } from './threads/side-chat'
 import { listedTitle, titleMessageText, writeBranchSlug, writeSessionTitle } from './session-titles'
@@ -3102,7 +3106,9 @@ export class SessionManager {
       queuePaused: (record.queue?.length ?? 0) > 0,
       ...(record.origin === 'subagent'
         ? {}
-        : { sideChat: { route: sideRoute(record.agentId), answerAgent: null, entries: [] } }),
+        : {
+            sideChat: { route: this.sideRouteOf(record.agentId), answerAgent: null, entries: [] },
+          }),
     }
   }
 
@@ -6549,7 +6555,7 @@ export class SessionManager {
       speed: undefined,
       // The side chat stays; the new agent answers it its own way.
       ...(live.thread.session.sideChat
-        ? { sideChat: { ...live.thread.session.sideChat, route: sideRoute(agentId) } }
+        ? { sideChat: { ...live.thread.session.sideChat, route: this.sideRouteOf(agentId) } }
         : {}),
       status: 'closed',
       error: null,
@@ -8182,12 +8188,20 @@ export class SessionManager {
 
   // Side questions.
 
+  /** How the agent answers side questions, by what it is known to do. */
+  private sideRouteOf(agentId: AgentId): SideChatRoute {
+    const capabilities = this.deps.agents.has(agentId)
+      ? this.deps.agents.status(agentId).capabilities
+      : null
+    return sideRouteWith(agentId, capabilities)
+  }
+
   /** The session's side chat; null for a subagent, which has none. */
   private sideOf(live: Live): SideChatView | null {
     if (live.record.origin === 'subagent') return null
     return (
       live.thread.session.sideChat ?? {
-        route: sideRoute(live.record.agentId),
+        route: this.sideRouteOf(live.record.agentId),
         answerAgent: null,
         entries: [],
       }
@@ -8195,7 +8209,7 @@ export class SessionManager {
   }
 
   private setSide(live: Live, side: SideChatView): void {
-    this.update(live, { sideChat: { ...side, route: sideRoute(live.record.agentId) } })
+    this.update(live, { sideChat: { ...side, route: this.sideRouteOf(live.record.agentId) } })
   }
 
   private sideEntry(live: Live, entryId: string): SideChatEntry | null {
@@ -8229,7 +8243,7 @@ export class SessionManager {
       throw new HostError('restricted', t('session.side.archived'))
     }
     if (this.sideRuns.has(sessionId)) throw new HostError('busy', t('session.side.busy'))
-    const own = sideRoute(record.agentId)
+    const own = this.sideRouteOf(record.agentId)
     const borrowed = agentId !== null && agentId !== record.agentId
     if (borrowed && !this.sideAgents(sessionId).some((agent) => agent.agentId === agentId)) {
       throw new HostError(
@@ -8260,7 +8274,8 @@ export class SessionManager {
       status: 'answering',
       answer: '',
       steps: [],
-      saw: route === 'hidden' ? null : ownSaw(route, compactedTurns(threadEntries(live.thread))),
+      saw:
+        route === 'hidden' ? null : ownSaw(route, null, compactedTurns(threadEntries(live.thread))),
       error: null,
       askedAt: this.now(),
       answeredAt: null,
@@ -8328,7 +8343,10 @@ export class SessionManager {
     }
   }
 
-  /** Answers the agent's own way where it has one, else in a hidden session given the context. */
+  /**
+   * Answers the agent's own way where it has one, then in a fork of the session, else in a hidden
+   * session given a text copy; the first that cannot says why the question moved on.
+   */
   private async sideAnswer(
     live: Live,
     entry: SideChatEntry,
@@ -8336,20 +8354,43 @@ export class SessionManager {
     events: SideAnswerEvents,
     signal: AbortSignal,
   ): Promise<SideAnswer> {
-    if (entry.route === 'claude' || entry.route === 'codex') {
+    let fellBackFrom: SideChatSaw['fellBackFrom'] = null
+    for (const way of await this.sideWays(live, entry)) {
       try {
-        return await this.sideOwn(live, entry.route, ask, events, signal)
+        if (way !== entry.route) {
+          this.patchSideEntry(live, entry.id, {
+            route: way,
+            saw: ownSaw(way, fellBackFrom, compactedTurns(threadEntries(live.thread))),
+          })
+        }
+        return way === 'fork'
+          ? await this.sideFork(live, ask, events, signal)
+          : await this.sideOwn(live, way, ask, events, signal)
       } catch (error) {
         if (!(error instanceof SideQuestionUnsupported)) throw error
         this.deps.diagnostics.log(
           'info',
-          `The side question of ${live.id} goes to a hidden session: ${error.message}`,
+          `The side question of ${live.id} cannot go ${way}: ${error.message}`,
         )
-        this.patchSideEntry(live, entry.id, { route: 'hidden', saw: null })
-        return this.sideHidden(live, entry, ask, events, signal, entry.route)
+        fellBackFrom ??= way
       }
     }
-    return this.sideHidden(live, entry, ask, events, signal, null)
+    this.patchSideEntry(live, entry.id, { route: 'hidden', saw: null })
+    return this.sideHidden(live, entry, ask, events, signal, fellBackFrom)
+  }
+
+  /** The agent's own ways to answer, best first; none for an agent given a text copy. */
+  private async sideWays(
+    live: Live,
+    entry: SideChatEntry,
+  ): Promise<('claude' | 'codex' | 'fork')[]> {
+    if (entry.route === 'claude') return ['claude', 'fork']
+    if (entry.route === 'codex') return ['codex']
+    if (entry.route === 'fork') return ['fork']
+    // An agent not known yet to fork may turn out to when it runs.
+    if (entry.agentId !== live.record.agentId || sideRoute(entry.agentId) !== 'hidden') return []
+    const runtime = await this.deps.agents.ensureReady(entry.agentId)
+    return runtime.init.capabilities.forkSession ? ['fork'] : []
   }
 
   private async sideOwn(
@@ -8378,6 +8419,35 @@ export class SessionManager {
       events,
       signal,
     )
+  }
+
+  /** Answers in a fork of the session that the agent makes and Kettu removes after. */
+  private async sideFork(
+    live: Live,
+    ask: Pick<SideQuestion, 'question' | 'history'>,
+    events: SideAnswerEvents,
+    signal: AbortSignal,
+  ): Promise<SideAnswer> {
+    // Not every agent forks a session it does not have open, so a closed one attaches first.
+    try {
+      await this.attachClosed(live)
+    } catch (error) {
+      throw agentError(error)
+    }
+    const runtime = await this.deps.agents.ensureReady(live.record.agentId)
+    if (!runtime.init.capabilities.forkSession) throw new SideQuestionUnsupported()
+    const { connection } = runtime
+    const text = await answerFork(runtime, {
+      // The session's folder: an agent forks a session only where it was made.
+      open: () =>
+        connection.forkSession(live.record.acpSessionId, workDir(live.record), { hidden: 'side' }),
+      model: modelOf(live.thread.session.config),
+      prompt: forkPrompt(ask),
+      signal,
+      text: events.text,
+      log: (message) => this.deps.diagnostics.log('warn', message),
+    })
+    return { text, synthetic: false }
   }
 
   private async sideHidden(

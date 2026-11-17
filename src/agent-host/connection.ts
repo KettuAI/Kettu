@@ -308,7 +308,7 @@ export interface PromptResult {
 }
 
 /** What Kettu opens a session no thread shows for. */
-export type HiddenPurpose = 'options' | 'limits' | 'context' | 'titles' | 'sample'
+export type HiddenPurpose = 'options' | 'limits' | 'context' | 'titles' | 'sample' | 'side'
 
 /** How a session is opened, loaded, resumed or forked. */
 export interface SessionOptions {

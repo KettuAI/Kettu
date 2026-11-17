@@ -1242,6 +1242,7 @@
     "note": {
       "claude": "Not in the conversation · no tools",
       "codex": "Not in the conversation · read only, no approvals",
+      "fork": "Not in the conversation · temporary fork, removed after",
       "hidden": "Not in the conversation · temporary session, removed after",
       "other": "Answered by {{agent}} · temporary session"
     },
@@ -1254,7 +1255,10 @@
       "codexTools": "Can read files and run read-only commands; changes nothing and asks for no approval",
       "claudeCost": "Uses this session's plan and its prompt cache; Claude Code does not report side chat usage, so the Usage page leaves it out",
       "codexCost": "Uses this session's plan and shares its prompt cache",
-      "hiddenHow": "{{agent}} has no side question of its own: Kettu opens a temporary session to answer and removes it after",
+      "forkHow": "{{agent}} forks this session to answer, and Kettu removes the fork after",
+      "forkSees": "Sees the whole conversation so far; a tool call still running may be missing",
+      "forkCost": "Shares part of the session's prompt cache; the fork takes a few seconds to open",
+      "hiddenHow": "{{agent}} has no side question or fork of its own: Kettu opens a temporary session to answer and removes it after",
       "hiddenCarried": "It gets the whole conversation when it fits the model's window, else the first request and the latest turns, and says which",
       "hiddenCost": "It shares no cache with the session: the first question pays for that conversation in full and takes a few seconds; follow-ups get cheaper"
     },
@@ -1290,7 +1294,8 @@
       "copyAll_other": "Saw the whole conversation, {{count}} turns · about {{tokens}}k tokens · temporary session",
       "copyPart_one": "Saw the first request and the latest turn, of {{total}} · about {{tokens}}k tokens · temporary session",
       "copyPart_other": "Saw the first request and the latest {{count}} of {{total}} turns · about {{tokens}}k tokens · temporary session",
-      "fellBack": "{{agent}}'s own side question was not available, so a temporary session answered"
+      "fellBackAgent": "{{agent}}'s own side question was not available, so a temporary session answered",
+      "fellBackFork": "{{agent}} could not fork the session, so a temporary session answered"
     },
     "step": {
       "read": "Read {{title}}",
