@@ -183,6 +183,8 @@ export interface ScenarioOptions {
   execute: boolean // artifacts: the calls run inside one tool call, as OpenCode's Code Mode runs them
   silent: boolean // error, crash: fails before writing anything
   summaries: boolean // reasoning: short summaries in place of the raw reasoning
+  // titles: a branch name is held until this file exists, FAKE_AGENT_BRANCH_NAME_GATE
+  branchNameGate: string | null
 }
 
 export interface ScenarioChoice {
@@ -294,6 +296,7 @@ export function chooseScenario(prompt: string, env: Env): ScenarioChoice {
     execute: flagValue(args, 'execute') !== undefined,
     silent: flagValue(args, 'silent') !== undefined,
     summaries: flagValue(args, 'summaries') !== undefined,
+    branchNameGate: env.FAKE_AGENT_BRANCH_NAME_GATE || null,
   }
   return { scenario, options, text }
 }
