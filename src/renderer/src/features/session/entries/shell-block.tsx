@@ -8,6 +8,7 @@ import { emitAppEvent } from '@renderer/app/events'
 import { ToolCallAction, ToolCallSection } from '@renderer/components/affect/tool-call-card'
 import { useTerminalAllowed } from '@renderer/stores/hosts'
 import { useSessionsStore } from '@renderer/stores/sessions'
+import { Clamp } from '../clamp'
 import { ansiRuns, exitOf, shellTail } from './shell'
 import { useToolCallLabels } from './tool-call-model'
 
@@ -20,6 +21,8 @@ const TONE = {
 
 // Past this the row cuts a command short, so its section shows it whole.
 const LONG_COMMAND = 60
+// Ten lines of the command; a longer one folds behind "Show all".
+const COMMAND_MAX_HEIGHT = 200
 
 export function Printed({ text }: { text: string }) {
   return ansiRuns(text).map((run, i) =>
@@ -66,7 +69,9 @@ export function ShellBlock({
     <div data-selectable="" className="ks-shell">
       {whole && (
         <ToolCallSection label={t('toolCall.section.command')} copy={command} labels={labels}>
-          <pre className="ks-shell-command">{command}</pre>
+          <Clamp maxHeight={COMMAND_MAX_HEIGHT} more={t('tool.showAll')}>
+            <pre className="ks-shell-command">{command}</pre>
+          </Clamp>
         </ToolCallSection>
       )}
       {(printed !== '' || failed) && (
