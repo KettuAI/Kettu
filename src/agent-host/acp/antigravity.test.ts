@@ -27,6 +27,7 @@ import { newTurnScope } from '../session-updates'
 import { AcpConnection, inProcessTransport } from './connection'
 import { mapConfig } from './mapper'
 import requests from './fixtures/agy-permissions.json'
+import compacted from './fixtures/agy-compact.json'
 import planned from './fixtures/agy-plan.json'
 import turns from './fixtures/agy-plan-turns.json'
 import recorded from './fixtures/agy-tools.json'
@@ -38,6 +39,7 @@ function connect(
   turn?: (client: AgentContext, sessionId: string) => Promise<void>,
   tiers: (typeof TIER | null)[] = [],
   declared = true,
+  stopReason: 'end_turn' | 'cancelled' = 'end_turn',
 ) {
   const prompted: string[] = []
   const opened: { method: string; meta: unknown }[] = []
@@ -76,7 +78,7 @@ function connect(
     .onRequest(methods.agent.session.prompt, async (ctx) => {
       prompted.push(ctx.params.sessionId)
       await turn?.(ctx.client, ctx.params.sessionId)
-      return { stopReason: 'end_turn' as const }
+      return { stopReason }
     })
     .onRequest(methods.agent.session.close, (ctx) => {
       closed.push(ctx.params.sessionId)
@@ -154,12 +156,73 @@ function threadTarget() {
     send: () => {},
     startMode: () => null,
   }
-  return { target, asked, entries: (): ThreadEntry[] => threadEntries(thread) }
+  return {
+    target,
+    asked,
+    entries: (): ThreadEntry[] => threadEntries(thread),
+    usage: () => thread.session.usage,
+  }
 }
 
 const update = (sessionId: string, value: unknown) => ({
   sessionId,
   update: value as SessionUpdate,
+})
+
+describe("agy's /compact", () => {
+  // agy 1.5.9 says nothing of a compaction over ACP: its turn is a usage_update and end_turn.
+  async function compactTurn(
+    version: string,
+    text: string,
+    stopReason: 'end_turn' | 'cancelled' = 'end_turn',
+  ) {
+    const { connection } = connect(
+      version,
+      async (client, sessionId) => {
+        for (const value of compacted.updates) {
+          await client.notify(methods.client.session.update, update(sessionId, value))
+        }
+      },
+      [],
+      true,
+      stopReason,
+    )
+    await connection.initialize('1.0.0')
+    const { sessionId } = await connection.newSession('/tmp/agy-probe')
+    const thread = threadTarget()
+    connection.register(sessionId, thread.target)
+    await connection.prompt(sessionId, [{ type: 'text', text }])
+    return thread
+  }
+  const dividers = (entries: ThreadEntry[]) =>
+    entries.filter((entry) => entry.kind === 'compaction')
+
+  it('adds the divider every agent gets when the turn that sent it ends', async () => {
+    const { entries, usage } = await compactTurn('1.5.9', compacted.prompt[0]!.text)
+    expect(dividers(entries())).toEqual([
+      { kind: 'compaction', id: expect.stringMatching(/^c:/), status: 'completed', summary: '' },
+    ])
+    // The ring follows agy's usage_update, as for any turn.
+    expect(usage()).toMatchObject({ used: 31_366, size: 1_048_576 })
+  })
+
+  it('does so with summarization instructions, which agy takes after the command', async () => {
+    const { entries } = await compactTurn('1.5.9', '/compact keep the open questions')
+    expect(dividers(entries())).toHaveLength(1)
+  })
+
+  it('adds none for another message, a command that only starts like it, or a turn that did not end', async () => {
+    for (const text of ['go on', 'run /compact now', '/compactor', '/plan']) {
+      expect(dividers((await compactTurn('1.5.9', text)).entries()), text).toEqual([])
+    }
+    const stopped = await compactTurn('1.5.9', '/compact', 'cancelled')
+    expect(dividers(stopped.entries())).toEqual([])
+  })
+
+  it('adds none on a version it was not checked on', async () => {
+    const { entries } = await compactTurn('1.5.8', '/compact')
+    expect(dividers(entries())).toEqual([])
+  })
 })
 
 describe("agy's tool calls", () => {

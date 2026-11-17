@@ -1,0 +1,4 @@
+{
+  "prompt": [{ "type": "text", "text": "/compact" }],
+  "updates": [{ "sessionUpdate": "usage_update", "used": 31366, "size": 1048576 }]
+}
