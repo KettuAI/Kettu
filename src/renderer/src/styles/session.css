@@ -1607,10 +1607,14 @@
   font-weight: 500;
 }
 
-/* Reply to a selected passage, or ask about it in the side chat: ink pills above it. */
+/* Reply to a selected passage, or ask about it in the side chat: one ink capsule above it. */
 .ks-reply-pills {
   display: flex;
-  gap: 4px;
+  align-items: center;
+  padding: 2px;
+  border-radius: 999px;
+  background: var(--thread-ink);
+  box-shadow: var(--thread-pill-shadow);
 }
 .ks-reply-pop {
   padding: 0;
@@ -1619,18 +1623,30 @@
   box-shadow: none;
 }
 .ks-reply-pill {
-  height: 26px;
+  height: 24px;
   padding: 0 10px;
   border-radius: 999px;
-  background: var(--thread-ink);
-  box-shadow: var(--thread-pill-shadow);
+  background: none;
   font-size: 12px;
   font-weight: 500;
   color: var(--bg-app);
 }
 .ks-reply-pill:hover {
-  background: var(--thread-ink);
+  background: color-mix(in srgb, var(--bg-app) 16%, transparent);
   color: var(--bg-app);
+}
+.ks-reply-pill + .ks-reply-pill {
+  position: relative;
+  margin-left: 1px;
+}
+.ks-reply-pill + .ks-reply-pill::before {
+  content: '';
+  position: absolute;
+  left: -1px;
+  top: 6px;
+  bottom: 6px;
+  width: 1px;
+  background: color-mix(in srgb, var(--bg-app) 28%, transparent);
 }
 
 /* A turn's changes: the count and the repository's actions, then a row per file. */
