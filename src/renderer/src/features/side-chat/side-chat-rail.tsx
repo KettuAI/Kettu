@@ -292,7 +292,9 @@ function EmptySide({
       ? ['claudeSees', 'noInterrupt', 'claudeTools', 'claudeCost']
       : route === 'codex'
         ? ['codexSees', 'noInterrupt', 'codexTools', 'codexCost']
-        : ['hiddenHow', 'hiddenCarried', 'hiddenCost', 'noInterrupt']
+        : route === 'fork'
+          ? ['forkHow', 'forkSees', 'forkCost', 'noInterrupt']
+          : ['hiddenHow', 'hiddenCarried', 'hiddenCost', 'noInterrupt']
   const name = agentName(agentId, hostId)
   return (
     <div className="kc-empty">
@@ -498,7 +500,14 @@ function SideEntry({
       {saw?.fellBackFrom && (
         <p className="kc-meta">
           <PaneIcon icon={File01Icon} size={12} />
-          {t('sideChat.saw.fellBack', { agent: agentName(ownAgent, hostId) })}
+          {t(
+            saw.fellBackFrom === 'claude'
+              ? 'sideChat.saw.fellBackAgent'
+              : 'sideChat.saw.fellBackFork',
+            {
+              agent: agentName(ownAgent, hostId),
+            },
+          )}
         </p>
       )}
       {entry.answer !== '' && (

@@ -1,18 +1,21 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import type { SessionView, SideChatEntry, SideChatSaw, ThreadEntry } from '@shared/thread'
 import { carriedContext, sideContext } from './carried-context'
 import {
+  answerFork,
   copySaw,
   hiddenPrompt,
   ownSaw,
   questionText,
   sideHistory,
   sideRoute,
+  sideRouteWith,
   sideTurnText,
   SIDE_INSTRUCTIONS,
 } from './side-chat'
 import { changesStored, parseStoredSession, storedSession } from './threads/model'
 import { parseSideChat, SIDE_ENTRIES } from './threads/side-chat'
+import { SideQuestionUnsupported, type AgentConnection } from './connection'
 
 function entry(id: string, fields: Partial<SideChatEntry> = {}): SideChatEntry {
   return {
@@ -150,6 +153,18 @@ describe('side questions', () => {
     expect(sideRoute('antigravity')).toBe('none')
   })
 
+  it('go to an agent that can fork its session through the fork, never past its own way', () => {
+    const forks = { forkSession: true }
+    expect(sideRouteWith('opencode', forks)).toBe('fork')
+    expect(sideRouteWith('opencode', { forkSession: false })).toBe('hidden')
+    expect(sideRouteWith('opencode', null)).toBe('hidden')
+    expect(sideRouteWith('pi', { forkSession: false })).toBe('hidden')
+    expect(sideRouteWith('claude-code', forks)).toBe('claude')
+    expect(sideRouteWith('codex', forks)).toBe('codex')
+    // A fork of a session whose hidden sessions leave a trace would leave one too.
+    expect(sideRouteWith('deepseek', forks)).toBe('none')
+  })
+
   it('carry only answered questions, newest last, with their quotes', () => {
     const history = sideHistory([
       entry('1', { quote: 'line one' }),
@@ -184,7 +199,7 @@ describe('side questions', () => {
       compacted: 3,
       copy: { turns: 0, total: 0, first: false, bytes: 0 },
     })
-    expect(ownSaw('claude', 2)).toMatchObject({ source: 'agent', compacted: 2 })
+    expect(ownSaw('claude', null, 2)).toMatchObject({ source: 'agent', compacted: 2 })
   })
 
   it('tell a fork the history may still run and a hidden session the conversation, as reference only', () => {
@@ -216,5 +231,115 @@ describe('side questions', () => {
     expect(prompt).toContain('Moved it to archive.')
     expect(prompt).toContain('without tools')
     expect(prompt.endsWith('Side question:\nWhy?')).toBe(true)
+  })
+})
+
+describe('a side question answered in a fork', () => {
+  const connect = (changes: Record<string, unknown> = {}, hang = false) => {
+    const calls: string[] = []
+    let release: (messages: string[]) => void = () => {}
+    const connection = {
+      hiddenSessions: true,
+      forkSession: vi.fn(async () => {
+        calls.push('fork')
+        return { sessionId: 'fork-1', config: [] }
+      }),
+      collect: vi.fn(async (_id: string, text: string) => {
+        calls.push(`collect:${text.length > 0}`)
+        if (hang) return new Promise<string[]>((resolve) => (release = resolve))
+        return ['First.', 'Second.']
+      }),
+      // A cancelled turn ends, as an agent's does.
+      cancel: vi.fn(async () => {
+        calls.push('cancel')
+        release([])
+      }),
+      removeHidden: vi.fn(async () => {
+        calls.push('remove')
+      }),
+      setConfigOption: vi.fn(async () => []),
+      ...changes,
+    }
+    return { calls, connection, runtime: { connection: connection as unknown as AgentConnection } }
+  }
+  const request = (open: () => Promise<{ sessionId: string; config: never[] }>) => ({
+    open,
+    model: null,
+    prompt: 'Why?',
+    signal: new AbortController().signal,
+    text: () => {},
+    log: () => {},
+  })
+
+  it('forks, asks and removes the fork, whatever the answer was', async () => {
+    const { calls, connection, runtime } = connect()
+    const grown: string[] = []
+    const answer = await answerFork(runtime, {
+      ...request(() => connection.forkSession() as never),
+      text: (text) => grown.push(text),
+    })
+    expect(answer).toBe('First.\n\nSecond.')
+    expect(grown).toEqual(['First.\n\nSecond.'])
+    expect(calls).toEqual(['fork', 'collect:true', 'remove'])
+
+    const failing = connect({
+      collect: vi.fn(async () => {
+        throw new Error('boom')
+      }),
+    })
+    await expect(
+      answerFork(
+        failing.runtime,
+        request(() => failing.connection.forkSession() as never),
+      ),
+    ).rejects.toThrow('boom')
+    expect(failing.calls).toEqual(['fork', 'remove'])
+  })
+
+  it('removes the fork of an answer that was stopped or took too long', async () => {
+    const stopped = new AbortController()
+    const slow = connect({}, true)
+    const asking = answerFork(slow.runtime, {
+      ...request(() => slow.connection.forkSession() as never),
+      signal: stopped.signal,
+    })
+    await vi.waitFor(() => expect(slow.connection.collect).toHaveBeenCalled())
+    stopped.abort()
+    await expect(asking).rejects.toThrow()
+    expect(slow.calls).toEqual(expect.arrayContaining(['fork', 'cancel', 'remove']))
+    expect(slow.calls.at(-1)).toBe('remove')
+
+    const late = connect({}, true)
+    await expect(
+      answerFork(late.runtime, {
+        ...request(() => late.connection.forkSession() as never),
+        timeoutMs: 20,
+      }),
+    ).rejects.toThrow(/no answer within/)
+    expect(late.calls.at(-1)).toBe('remove')
+  })
+
+  it('leaves it to another way when the agent cannot remove its hidden sessions or fork', async () => {
+    const keeps = connect({ hiddenSessions: false })
+    await expect(
+      answerFork(
+        keeps.runtime,
+        request(() => keeps.connection.forkSession() as never),
+      ),
+    ).rejects.toBeInstanceOf(SideQuestionUnsupported)
+    expect(keeps.calls).toEqual([])
+
+    const refuses = connect({
+      forkSession: vi.fn(async () => {
+        throw new Error('no such session')
+      }),
+    })
+    await expect(
+      answerFork(
+        refuses.runtime,
+        request(() => refuses.connection.forkSession() as never),
+      ),
+    ).rejects.toBeInstanceOf(SideQuestionUnsupported)
+    expect(refuses.calls).toEqual([])
   })
 })

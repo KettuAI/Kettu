@@ -98,7 +98,7 @@ export interface SessionView {
  * finished turn; a hidden session of the same agent given carried context; or, for an agent whose
  * hidden sessions are not removed cleanly, a hidden session of another agent the user picks.
  */
-export type SideChatRoute = 'claude' | 'codex' | 'hidden' | 'none'
+export type SideChatRoute = 'claude' | 'codex' | 'fork' | 'hidden' | 'none'
 
 export interface SideChatView {
   route: SideChatRoute
@@ -143,7 +143,7 @@ export interface SideChatSaw {
   /** For a copy: its turns of the conversation's, whether the first request stands apart, its size. */
   copy: { turns: number; total: number; first: boolean; bytes: number } | null
   /** The route tried first, when the answer fell back from it to another. */
-  fellBackFrom: 'claude' | 'codex' | null
+  fellBackFrom: 'claude' | 'codex' | 'fork' | null
 }
 
 /** A command or monitor an agent runs beside its turn, as the session board lists it. */

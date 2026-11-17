@@ -1193,6 +1193,7 @@
     "note": {
       "claude": "不进对话 · 不用工具",
       "codex": "不进对话 · 只读，不问授权",
+      "fork": "不进对话 · 临时分叉，用完即删",
       "hidden": "不进对话 · 临时会话，用完即删",
       "other": "由 {{agent}} 回答 · 临时会话"
     },
@@ -1205,7 +1206,10 @@
       "codexTools": "能读文件、跑只读命令，不改东西、不问授权",
       "claudeCost": "用这个会话的额度、和主会话共用缓存；Claude Code 不单独报侧聊的用量，用量页里没有这部分",
       "codexCost": "用这个会话的额度、和主会话共用缓存",
-      "hiddenHow": "{{agent}} 没有自带的侧问，Kettu 开一个用完即删的临时会话来答",
+      "forkHow": "{{agent}} 把这个会话分叉出一份来答，Kettu 答完就删掉这份分叉",
+      "forkSees": "看得到到现在的全部对话；还在跑的那个工具调用不一定带上",
+      "forkCost": "和主会话共用一部分缓存；开分叉要几秒",
+      "hiddenHow": "{{agent}} 没有自带的侧问和分叉，Kettu 开一个用完即删的临时会话来答",
       "hiddenCarried": "放得下模型的窗口就带上全部对话，放不下带第一条请求和最近的几轮，并写明带了多少",
       "hiddenCost": "和主会话不共用缓存，第一问要全价付这段对话、慢几秒，追问会便宜下来"
     },
@@ -1237,7 +1241,8 @@
       "none": "会话还没有对话",
       "copyAll_other": "看到全部 {{count}} 轮对话 · 约 {{tokens}}k token · 临时会话",
       "copyPart_other": "看到第一条请求和最近 {{count}} 轮，共 {{total}} 轮 · 约 {{tokens}}k token · 临时会话",
-      "fellBack": "{{agent}} 自带的侧问用不了，改由临时会话来答"
+      "fellBackAgent": "{{agent}} 自带的侧问用不了，改由临时会话来答",
+      "fellBackFork": "{{agent}} 分叉不了这个会话，改由临时会话来答"
     },
     "step": {
       "read": "读了 {{title}}",

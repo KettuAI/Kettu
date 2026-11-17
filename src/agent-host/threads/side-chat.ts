@@ -16,7 +16,7 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value)
 
 const STATUSES: ReadonlySet<unknown> = new Set(['answering', 'answered', 'failed', 'stopped'])
-const ROUTES: ReadonlySet<unknown> = new Set(['claude', 'codex', 'hidden'])
+const ROUTES: ReadonlySet<unknown> = new Set(['claude', 'codex', 'fork', 'hidden'])
 const STEP_KINDS: ReadonlySet<unknown> = new Set(['read', 'search', 'run', 'other'])
 
 function stepOf(value: unknown): SideChatStep | null {
@@ -27,7 +27,7 @@ function stepOf(value: unknown): SideChatStep | null {
 }
 
 const SAW_SOURCES: ReadonlySet<unknown> = new Set(['agent', 'fork', 'copy'])
-const FELL_BACK: ReadonlySet<unknown> = new Set(['claude', 'codex'])
+const FELL_BACK: ReadonlySet<unknown> = new Set(['claude', 'codex', 'fork'])
 
 const isCount = (n: unknown): n is number => typeof n === 'number' && Number.isFinite(n) && n >= 0
 
