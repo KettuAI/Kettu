@@ -7,8 +7,6 @@ on:
   schedule:
     - cron: '23 5 * * *'
   workflow_dispatch:
-  push:
-    branches: [ci/1794-harness-checks]
 
 permissions:
   contents: read
@@ -65,15 +63,6 @@ jobs:
           echo "Read the results of run $id."
       - name: Check
         run: node tools/harness-checks/check.mjs --previous previous/harness-checks.json --out harness-checks.json
-      - name: Check Muse Code at the channel's version
-        run: |
-          version="$(node -p "Object.keys(require('./harness-checks.json').seen.muse)[0]")"
-          node tools/harness-checks/check.mjs --previous harness-checks.json --only muse \
-            --version "$version" --out muse-check.json
-      - uses: actions/upload-artifact@v7
-        with:
-          name: muse-check
-          path: muse-check.json
       - uses: actions/upload-artifact@v7
         with:
           name: harness-checks
