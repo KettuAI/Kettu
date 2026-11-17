@@ -448,6 +448,9 @@ export class AgentHost {
   /** Marketplace API calls awaiting main's answer. */
   private readonly marketCalls = new Map<number, (answer: MarketCallAnswer) => void>()
   private nextMarketCall = 1
+  /** Trash calls awaiting main's answer: null once done, else why not. */
+  private readonly trashCalls = new Map<number, (error: string | null) => void>()
+  private nextTrashCall = 1
   /** What was put off or refused, to publish later. */
   private readonly publishDrafts: PublishDrafts
   /** The Marketplace tools of Kettu's MCP service. */
@@ -486,6 +489,7 @@ export class AgentHost {
       platform,
       media: (real, info) => this.media.grantFile(real, info, null),
       describeMedia: (real, info) => this.media.describe(real, info),
+      trash: (paths) => this.trash(paths),
     })
     this.agentFiles = new AgentFiles({
       platform,
@@ -1464,6 +1468,24 @@ export class AgentHost {
     }
   }
 
+  /** Moves the paths to the system's trash, which only main reaches; the daemon has none. */
+  private async trash(paths: string[]): Promise<void> {
+    const callId = this.nextTrashCall++
+    const error = await new Promise<string | null>((resolve) => {
+      this.trashCalls.set(callId, resolve)
+      this.options.send({ type: 'host:trash-call', callId, paths })
+    })
+    if (error !== null) throw new HostError('unavailable', error)
+  }
+
+  /** `trash-result`: main's or the daemon's answer to a trash call. */
+  trashResult(callId: number, error: string | null): void {
+    const resolve = this.trashCalls.get(callId)
+    if (!resolve) return
+    this.trashCalls.delete(callId)
+    resolve(error)
+  }
+
   /** `market-result`: main's or the daemon's answer to a Marketplace call. */
   marketResult(callId: number, answer: MarketCallAnswer): void {
     const resolve = this.marketCalls.get(callId)
@@ -2149,6 +2171,8 @@ export class AgentHost {
       })
     }
     this.marketCalls.clear()
+    for (const resolve of this.trashCalls.values()) resolve('Kettu stopped before it answered.')
+    this.trashCalls.clear()
   }
 
   /** Stops every agent with the documented sequence, flushes the state files, then reports. */
@@ -2699,6 +2723,14 @@ export class AgentHost {
       'files.readAgentFile': ({ sessionId, path }) => this.agentFiles.read(sessionId, path),
       'files.write': ({ projectPath, path, text, version }) =>
         this.filesCall(projectPath, (root) => this.files.write(root, path, text, version)),
+      'files.create': ({ projectPath, path, kind }) =>
+        this.filesCall(projectPath, (root) => this.files.create(root, path, kind)),
+      'files.rename': ({ projectPath, from, to }) =>
+        this.filesCall(projectPath, (root) => this.files.rename(root, from, to)),
+      'files.copy': ({ projectPath, paths, folder }) =>
+        this.filesCall(projectPath, (root) => this.files.copy(root, paths, folder)),
+      'files.delete': ({ projectPath, paths, permanently }) =>
+        this.filesCall(projectPath, (root) => this.files.delete(root, paths, permanently === true)),
       'media.open': async ({ projectPath, path, sessionId }) => {
         const root = await projects.resolveDirectory(projectPath)
         this.assertOpenFolder(root)

@@ -164,6 +164,8 @@ export type MainToHost =
   | { type: 'host:market-account'; account: MarketAccount | null }
   // The answer to a host:market-call.
   | { type: 'market-result'; callId: number; answer: MarketCallAnswer }
+  // The answer to a host:trash-call: null once every path is in the trash, else why one is not.
+  | { type: 'trash-result'; callId: number; error: string | null }
   // A browser call now waits for the user to answer a new origin, so its limit grows to that wait.
   | { type: 'host:browser-waiting'; callId: number; waiting: boolean }
   // A page waits for a new origin: the session's thread shows it, waiting for the user.
@@ -340,6 +342,8 @@ export type HostToMain =
   // A Marketplace API call, which main or the daemon makes with the account's access token;
   // answered by market-result.
   | { type: 'host:market-call'; callId: number; call: MarketCall }
+  // Absolute paths for the system's trash, which only main reaches; answered by trash-result.
+  | { type: 'host:trash-call'; callId: number; paths: string[] }
   // The artifacts service's port, which the browser's pages must never reach; null when it is down.
   | { type: 'host:service-port'; port: number | null }
   // A session's card allowed an app always: main keeps it in the settings, which come back.

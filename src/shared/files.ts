@@ -5,6 +5,8 @@ import type { MediaFile, MediaGrant } from './media'
 /** Paths are relative to the project's root, with `/` between segments on every platform. */
 export interface FileList {
   paths: string[]
+  /** Folders with nothing in them on disk, which no path in `paths` names. */
+  folders: string[]
   /** The project holds more files than FILE_LIST_LIMIT; the list stops there. */
   truncated: boolean
 }

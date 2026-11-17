@@ -37,6 +37,8 @@ export interface TerminalContract {
   'terminals.create': {
     params: {
       projectPath: string
+      // Where the shell starts, relative to the project: a folder inside it, never above.
+      folder?: string
       sessionId?: string
       cols: number
       rows: number

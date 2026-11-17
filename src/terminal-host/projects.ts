@@ -55,4 +55,22 @@ export class ProjectRegistry {
     }
     return (await this.known).get(pathKey(canonical, this.platform)) ?? null
   }
+
+  /**
+   * The canonical path of `folder`, relative to the project, when it is the project's folder or
+   * one inside it after links are followed; null otherwise or when it does not exist.
+   */
+  async folderIn(project: ProjectMatch, folder: string): Promise<string | null> {
+    const paths = this.platform === 'win32' ? win32 : posix
+    let canonical: string
+    try {
+      canonical = await this.canonicalize(paths.resolve(project.cwd, folder))
+    } catch {
+      return null
+    }
+    const top = pathKey(project.cwd, this.platform)
+    const key = pathKey(canonical, this.platform)
+    const prefix = top.endsWith(paths.sep) ? top : top + paths.sep
+    return key === top || key.startsWith(prefix) ? canonical : null
+  }
 }

@@ -48,6 +48,21 @@ function projectPath(params: Params): string {
   return value
 }
 
+/** A folder of the project, relative to it, which must not climb out of it. */
+function folder(params: Params): string {
+  const value = string(params, 'folder', MAX_PATH)
+  if (value.includes('\0')) throw new ValidationError('"folder" must not contain NUL')
+  if (
+    value.startsWith('/') ||
+    value.startsWith('\\') ||
+    /^[A-Za-z]:/.test(value) ||
+    value.split(/[\\/]/).includes('..')
+  ) {
+    throw new ValidationError('"folder" must be a path inside the project')
+  }
+  return value
+}
+
 function command(raw: unknown): TerminalCommand {
   const params = object(raw, ['text', 'run'])
   const text = string(params, 'text', MAX_COMMAND)
@@ -64,9 +79,10 @@ type Validators = { [M in TerminalMethod]: (raw: unknown) => TerminalParams<M> }
 
 export const validators: Validators = {
   'terminals.create': (raw) => {
-    const params = object(raw, ['projectPath', 'sessionId', 'cols', 'rows', 'command'])
+    const params = object(raw, ['projectPath', 'folder', 'sessionId', 'cols', 'rows', 'command'])
     return {
       projectPath: projectPath(params),
+      ...(params.folder === undefined ? {} : { folder: folder(params) }),
       ...(params.sessionId === undefined ? {} : { sessionId: string(params, 'sessionId', MAX_ID) }),
       cols: integer(params, 'cols', 1, MAX_SIZE),
       rows: integer(params, 'rows', 1, MAX_SIZE),

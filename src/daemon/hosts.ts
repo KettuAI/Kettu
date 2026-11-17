@@ -48,6 +48,8 @@ import { ForkedHost, type HostTimings } from './forked-host'
 type Attention = Extract<HostToMain, { type: 'host:attention' }>
 type ReportParams = Omit<Extract<MainToHost, { type: 'host:report-request' }>, 'type' | 'requestId'>
 
+// Under Node.js the host reaches no system trash, so a delete there asks to remove for good.
+const NO_TRASH = 'This computer has no trash that Kettu can use.'
 const log = createLogger('daemon')
 // What each host logs carries its own name, as in the app's log.
 const agentLog = createLogger('agent-host')
@@ -1001,6 +1003,11 @@ export class Hosts {
         break
       case 'host:market-call':
         if (Number.isSafeInteger(message.callId)) void this.marketCall(message.callId, message.call)
+        break
+      case 'host:trash-call':
+        if (Number.isSafeInteger(message.callId)) {
+          this.agent.post({ type: 'trash-result', callId: message.callId, error: NO_TRASH })
+        }
         break
       case 'host:browser-call':
         if (Number.isSafeInteger(message.callId)) {

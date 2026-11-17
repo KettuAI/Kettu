@@ -109,6 +109,14 @@ export function startAgentHost(control: ControlChannel<MainToHost, HostToMain>):
           withHost((h) => h.marketResult(message.callId, message.answer))
         }
         break
+      case 'trash-result':
+        if (
+          Number.isSafeInteger(message.callId) &&
+          (message.error === null || typeof message.error === 'string')
+        ) {
+          withHost((h) => h.trashResult(message.callId, message.error))
+        }
+        break
       case 'host:busy-request':
         withHost((h) => h.busy(message.requestId))
         break

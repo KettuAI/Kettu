@@ -19,6 +19,9 @@ describe('terminal request validators', () => {
     expect(
       validators['terminals.create']({ projectPath: '/p', sessionId: 's1', cols: 80, rows: 24 }),
     ).toEqual({ projectPath: '/p', sessionId: 's1', cols: 80, rows: 24 })
+    expect(
+      validators['terminals.create']({ projectPath: '/p', folder: 'src/a', cols: 80, rows: 24 }),
+    ).toEqual({ projectPath: '/p', folder: 'src/a', cols: 80, rows: 24 })
     expect(validators['terminals.assign']({ projectPath: '/p', sessionId: 's1' })).toEqual({
       projectPath: '/p',
       sessionId: 's1',
@@ -46,6 +49,11 @@ describe('terminal request validators', () => {
     ['terminals.create', { projectPath: '/p', cols: 80.5, rows: 24 }],
     ['terminals.create', { projectPath: '/p', cols: 80, rows: 24, shell: '/bin/sh' }],
     ['terminals.create', { projectPath: '/p\0', cols: 80, rows: 24 }],
+    ['terminals.create', { projectPath: '/p', folder: '../x', cols: 80, rows: 24 }],
+    ['terminals.create', { projectPath: '/p', folder: 'a/../..', cols: 80, rows: 24 }],
+    ['terminals.create', { projectPath: '/p', folder: '/etc', cols: 80, rows: 24 }],
+    ['terminals.create', { projectPath: '/p', folder: 'C:\\x', cols: 80, rows: 24 }],
+    ['terminals.create', { projectPath: '/p', folder: '', cols: 80, rows: 24 }],
     ['terminals.create', { projectPath: '/p', cols: 80, rows: 24, command: { text: 'x' } }],
     [
       'terminals.create',

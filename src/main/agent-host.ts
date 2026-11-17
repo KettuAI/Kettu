@@ -1,7 +1,7 @@
 import type { DeviceCall, DeviceCallAnswer } from '@shared/device-agent'
 import type { TerminalCall, TerminalCallAnswer } from '@shared/terminal-agent'
-import { join } from 'node:path'
-import { app, MessageChannelMain, type MessagePortMain, type WebContents } from 'electron'
+import { isAbsolute, join } from 'node:path'
+import { app, MessageChannelMain, shell, type MessagePortMain, type WebContents } from 'electron'
 import {
   errorAnswer,
   isLastAnswer,
@@ -69,6 +69,21 @@ import { createLogger } from './log'
 import { UtilityHost, type UtilityHostEvent, type UtilityHostState } from './utility-host'
 
 const log = createLogger('agent-host')
+
+/** Moves each absolute path to the system's trash, in turn; null once all are, else why not. */
+async function trashAll(paths: unknown): Promise<string | null> {
+  if (!Array.isArray(paths) || !paths.every((p) => typeof p === 'string' && isAbsolute(p))) {
+    return 'Not a list of absolute paths.'
+  }
+  for (const path of paths as string[]) {
+    try {
+      await shell.trashItem(path)
+    } catch (error) {
+      return error instanceof Error ? error.message : String(error)
+    }
+  }
+  return null
+}
 
 export interface AgentHostDeps {
   settings(): HostSettings
@@ -734,6 +749,14 @@ export class AgentHost {
                 error: { code: 'unavailable', message: 'This build has no device host.' },
               })
         ).then((answer) => this.host.post({ type: 'device-result', callId, answer }))
+        break
+      }
+      case 'host:trash-call': {
+        const { callId, paths } = message
+        if (!Number.isSafeInteger(callId)) break
+        void trashAll(paths).then((error) =>
+          this.host.post({ type: 'trash-result', callId, error }),
+        )
         break
       }
       case 'host:market-call': {

@@ -34,7 +34,11 @@ function host(modes: TtyModes | null = { echo: true, icanon: true }) {
   const ptys: FakePty[] = []
   const infos: TerminalInfo[] = []
   const handedBack: [string, number][] = []
-  const projects = new ProjectRegistry('darwin', async (path) => path)
+  const cwds: string[] = []
+  // `/work/app/out` is a link that leads out of the project.
+  const projects = new ProjectRegistry('darwin', async (path) =>
+    path.startsWith('/work/app/out') ? path.replace('/work/app/out', '/etc') : path,
+  )
   projects.set(['/work/app'])
   const manager = new TerminalManager({
     platform: 'darwin',
@@ -42,7 +46,8 @@ function host(modes: TtyModes | null = { echo: true, icanon: true }) {
     env: { SHELL: '/bin/zsh' },
     projects,
     findOnPath: async () => null,
-    loadPty: async () => () => {
+    loadPty: async () => (_file, _args, options) => {
+      cwds.push(options.cwd)
       const pty = new FakePty()
       ptys.push(pty)
       return pty
@@ -56,7 +61,7 @@ function host(modes: TtyModes | null = { echo: true, icanon: true }) {
     handedBack: (sessionId, ms) => handedBack.push([sessionId, ms]),
     ttyModes: async () => modes,
   })
-  return { manager, ptys, infos, handedBack }
+  return { manager, ptys, infos, handedBack, cwds }
 }
 
 /** Lets the shell print its prompt, after which a command waiting to be typed goes in. */
@@ -117,6 +122,18 @@ describe('terminals an agent starts', () => {
     const answer = await manager.agentCall({ ...RUN, folder: '/etc' })
     expect(answer).toMatchObject({ error: { code: 'restricted' } })
     expect(ptys).toHaveLength(0)
+  })
+
+  it('starts in a folder of its project, never one a link leads out to', async () => {
+    const { manager, cwds } = host()
+    const size = { projectPath: '/work/app', cols: 80, rows: 24 }
+    await manager.create('port', { ...size, folder: 'src/lib' })
+    await manager.create('port', size)
+    expect(cwds).toEqual(['/work/app/src/lib', '/work/app'])
+    await expect(manager.create('port', { ...size, folder: 'out/x' })).rejects.toMatchObject({
+      code: 'restricted',
+    })
+    expect(cwds).toHaveLength(2)
   })
 
   it('refuses a command with a newline or another control character', async () => {
