@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import type { SessionView, SideChatEntry, ThreadEntry } from '@shared/thread'
-import { carriedContext } from './carried-context'
+import type { SessionView, SideChatEntry, SideChatSaw, ThreadEntry } from '@shared/thread'
+import { carriedContext, sideContext } from './carried-context'
 import {
+  copySaw,
   hiddenPrompt,
+  ownSaw,
   questionText,
   sideHistory,
   sideRoute,
@@ -22,7 +24,7 @@ function entry(id: string, fields: Partial<SideChatEntry> = {}): SideChatEntry {
     status: 'answered',
     answer: `Answer ${id}`,
     steps: [],
-    carried: null,
+    saw: null,
     error: null,
     askedAt: 1,
     answeredAt: 2,
@@ -73,6 +75,37 @@ describe('the stored side chat', () => {
     const old = JSON.parse(JSON.stringify(storedSession(view()))) as Record<string, unknown>
     delete old.sideChat
     expect(parseStoredSession(old)?.sideChat).toBeNull()
+  })
+
+  it('reads what an answer saw, and an entry stored with carried as a copy', () => {
+    const copy: SideChatSaw = {
+      source: 'copy',
+      copy: { turns: 3, total: 9, first: true, bytes: 4_000 },
+      fellBackFrom: 'claude',
+    }
+    const parsed = parseSideChat({
+      answerAgent: null,
+      entries: [
+        entry('a', { route: 'hidden', saw: copy }),
+        { ...entry('b'), saw: { source: 'copy', copy: null, fellBackFrom: null } },
+        {
+          ...entry('c', { route: 'hidden' }),
+          saw: undefined,
+          carried: { first: true, recent: 4, omitted: 6, bytes: 9_000 },
+        },
+        entry('d', { saw: ownSaw('codex') }),
+      ],
+    })
+    expect(parsed?.entries.map((e) => e.saw)).toEqual([
+      copy,
+      null,
+      {
+        source: 'copy',
+        copy: { turns: 4, total: 10, first: true, bytes: 9_000 },
+        fellBackFrom: null,
+      },
+      { source: 'fork', copy: null, fellBackFrom: null },
+    ])
   })
 
   it('drops damaged entries on their own, keeps the newest and stops one cut off by a restart', () => {
@@ -127,6 +160,26 @@ describe('side questions', () => {
       { question: 'Question 4', answer: 'Answer 4' },
     ])
     expect(questionText('Why?', 'a\nb')).toBe('> a\n> b\n\nWhy?')
+  })
+
+  it('carry the newest 20 earlier questions, and say what a copy held', () => {
+    const many = Array.from({ length: 25 }, (_, i) => entry(String(i + 1)))
+    const history = sideHistory(many)
+    expect(history).toHaveLength(20)
+    expect(history.at(-1)).toMatchObject({ question: 'Question 25' })
+    expect(history[0]).toMatchObject({ question: 'Question 6' })
+    const entries: ThreadEntry[] = [
+      { kind: 'user', id: 'u1', content: [{ type: 'text', text: 'Clean the worktrees' }] },
+      { kind: 'agent', id: 'm1', markdown: 'Done.', attachments: [], streaming: false },
+    ]
+    const carried = sideContext(entries, { firstAgent: 'claude-code', agentName: () => 'Claude' })
+    expect(copySaw(carried, 'codex')).toMatchObject({
+      source: 'copy',
+      copy: { turns: 1, total: 1, first: false },
+      fellBackFrom: 'codex',
+    })
+    expect(copySaw(null, null).copy).toEqual({ turns: 0, total: 0, first: false, bytes: 0 })
+    expect(ownSaw('claude').source).toBe('agent')
   })
 
   it('tell a fork the history may still run and a hidden session the conversation, as reference only', () => {

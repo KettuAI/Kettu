@@ -16,6 +16,27 @@ const MESSAGE_BYTES = 6_000
 const TOOL_RESULT_BYTES = 300
 export const HISTORY_TOOL = 'read_session_history'
 
+/** How much of a tool call a turn shows: its input, and the head and tail of its result, in bytes. */
+export interface ToolDetail {
+  input: number
+  result: number
+  resultTail: number
+}
+
+/** What the agent switch carries: each call's title and the start of its result. */
+const SWITCH_DETAIL: ToolDetail = { input: 0, result: TOOL_RESULT_BYTES, resultTail: 0 }
+
+/** What a side question's text tries, richest first; the last keeps only each call's title. */
+const SIDE_DETAILS: readonly ToolDetail[] = [
+  { input: 4_000, result: 2_000, resultTail: 2_000 },
+  { input: 1_000, result: 600, resultTail: 400 },
+  { input: 300, result: 300, resultTail: 0 },
+  { input: 0, result: 0, resultTail: 0 },
+]
+const SIDE_MESSAGE_BYTES = 40_000
+/** The share of a side question's budget its latest turn may take, shown at the richest detail. */
+const SIDE_LATEST_SHARE = 0.3
+
 /** One turn as an agent reads it: the user's message and what the agent and Kettu did after it. */
 export interface RenderedTurn {
   /** 1-based, counted over the whole thread. */
@@ -35,6 +56,8 @@ export interface CarriedContext {
   /** Turns carried whole, and the earlier ones left out apart from the first request. */
   turns: number
   omitted: number
+  /** The turns there were to carry. */
+  total: number
   /** Whether the first request comes apart from the turns carried whole. */
   keepsFirst: boolean
 }
@@ -51,6 +74,12 @@ export interface CarryOptions {
   summarize?: boolean
   /** For a side question: the record is reference for one answer, not a session to take over. */
   side?: boolean
+  /** How much of each tool call goes in; the agent switch's thin default. */
+  detail?: ToolDetail
+  /** The latest turn's detail, where it is richer than the rest. */
+  latestDetail?: ToolDetail
+  /** One message's text at most. */
+  messageBytes?: number
 }
 
 /** The bytes the history may take: the budget, less what the window must keep free. */
@@ -117,25 +146,39 @@ function contentText(content: readonly UserContent[]): string {
     .join('')
 }
 
-/** What a tool call did, and the start of its result. */
-function toolLine(entry: Extract<ThreadEntry, { kind: 'tool' }>): string {
+/** The start of `text`, and its end where the detail asks for one. */
+function headTail(text: string, detail: ToolDetail): string {
+  if (detail.resultTail === 0) return cutStart(text, detail.result)
+  if (bytes(text) <= detail.result + detail.resultTail) return text
+  return `${cutStart(text, detail.result)}\n${cutEnd(text, detail.resultTail)}`
+}
+
+/** What a tool call did: its title and, as far as the detail goes, its input and result. */
+function toolLine(entry: Extract<ThreadEntry, { kind: 'tool' }>, detail: ToolDetail): string {
   const result = entry.content
     .map((item) =>
       item.type === 'markdown' ? item.markdown : item.type === 'diff' ? `edited ${item.path}` : '',
     )
     .filter((text) => text.trim() !== '')
     .join('\n')
-  const head = `[tool: ${entry.title} (${entry.status})]`
-  return result ? `${head}\n${cutStart(result.trim(), TOOL_RESULT_BYTES)}` : head
+  const lines = [`[tool: ${entry.title} (${entry.status})]`]
+  const input = entry.rawInput?.trim()
+  if (detail.input > 0 && input) lines.push(`input: ${cutStart(input, detail.input)}`)
+  if (detail.result > 0 && result) lines.push(headTail(result.trim(), detail))
+  return lines.join('\n')
 }
 
 /** An entry's line in the agent's half of its turn, or null for what the record leaves out. */
-function assistantLine(entry: ThreadEntry, name: (agentId: AgentId) => string): string | null {
+function assistantLine(
+  entry: ThreadEntry,
+  name: (agentId: AgentId) => string,
+  detail: ToolDetail,
+): string | null {
   switch (entry.kind) {
     case 'agent':
       return entry.markdown.trim() === '' ? null : entry.markdown
     case 'tool':
-      return toolLine(entry)
+      return toolLine(entry, detail)
     case 'user':
       // Sent into the running turn.
       return `[the user, during the turn]\n${contentText(entry.content)}`
@@ -176,6 +219,7 @@ export function threadTurns(
   entries: readonly ThreadEntry[],
   firstAgent: AgentId,
   agentName: (agentId: AgentId) => string,
+  detail: ToolDetail = SWITCH_DETAIL,
 ): RenderedTurn[] {
   const turns: RenderedTurn[] = []
   let agentId = firstAgent
@@ -202,7 +246,7 @@ export function threadTurns(
       continue
     }
     if (turns.length === 0) continue
-    const line = assistantLine(entry, agentName)
+    const line = assistantLine(entry, agentName, detail)
     if (line !== null) lines.push(line)
   }
   close()
@@ -222,15 +266,16 @@ function latestPlan(entries: readonly ThreadEntry[]): string | null {
 function turnMessages(
   turn: RenderedTurn,
   name: (agentId: AgentId) => string,
+  messageBytes = MESSAGE_BYTES,
 ): [HistoryMessage, HistoryMessage] {
   return [
     {
       role: 'user',
-      text: `[Turn ${turn.number}, the user]\n${cutStart(turn.user, MESSAGE_BYTES)}`,
+      text: `[Turn ${turn.number}, the user]\n${cutStart(turn.user, messageBytes)}`,
     },
     {
       role: 'assistant',
-      text: `[Turn ${turn.number}, ${name(turn.agentId)}]\n${cutEnd(turn.assistant || '[no reply]', MESSAGE_BYTES)}`,
+      text: `[Turn ${turn.number}, ${name(turn.agentId)}]\n${cutEnd(turn.assistant || '[no reply]', messageBytes)}`,
     },
   ]
 }
@@ -259,21 +304,31 @@ export function carriedContext(
   options: CarryOptions,
 ): CarriedContext | null {
   const name = options.agentName
-  const all = threadTurns(entries, options.firstAgent, name)
+  const all = threadTurns(entries, options.firstAgent, name, options.detail)
+  if (options.latestDetail && all.length > 0) {
+    const rich = threadTurns(entries, options.firstAgent, name, options.latestDetail)
+    all[all.length - 1] = rich[rich.length - 1]!
+  }
   const from = Math.max(1, options.fromTurn ?? 1)
   const turns = all.filter((turn) => turn.number >= from)
   if (turns.length === 0) return null
   const budget = historyBudget(options.window, options.budget)
+  const messageBytes = options.messageBytes ?? MESSAGE_BYTES
+  const newest = turns[turns.length - 1]!
+  const newestBytes = options.latestDetail
+    ? Math.max(messageBytes, Math.floor(budget * SIDE_LATEST_SHARE))
+    : messageBytes
+  const bytesOf = (turn: RenderedTurn): number => (turn === newest ? newestBytes : messageBytes)
   const plan = from === 1 ? latestPlan(entries) : null
   const planText = plan ? `\n\nThe plan as it last stood:\n${plan}` : ''
 
   const first = turns[0]!
   const picked: RenderedTurn[] = []
   // The first request always goes, so its room is kept before the latest turns are picked.
-  let used = bytes(planText) + (turns.length > 1 ? bytes(cutStart(first.user, MESSAGE_BYTES)) : 0)
+  let used = bytes(planText) + (turns.length > 1 ? bytes(cutStart(first.user, messageBytes)) : 0)
   for (let i = turns.length - 1; i >= 0; i--) {
     const turn = turns[i]!
-    const size = sizeOf(turnMessages(turn, name))
+    const size = sizeOf(turnMessages(turn, name, bytesOf(turn)))
     if (used + size > budget && picked.length > 0) break
     picked.unshift(turn)
     used += size
@@ -320,10 +375,10 @@ export function carriedContext(
   if (keepsFirst) {
     messages.push({
       role: 'user',
-      text: `[Turn ${first.number}, the user]\n${cutStart(first.user, MESSAGE_BYTES)}`,
+      text: `[Turn ${first.number}, the user]\n${cutStart(first.user, messageBytes)}`,
     })
   }
-  for (const turn of picked) messages.push(...turnMessages(turn, name))
+  for (const turn of picked) messages.push(...turnMessages(turn, name, bytesOf(turn)))
   const text = [
     '<earlier_conversation>',
     messages.map((m) => m.text).join('\n\n'),
@@ -335,8 +390,34 @@ export function carriedContext(
     text,
     turns: picked.length,
     omitted: turns.length - picked.length,
+    total: turns.length,
     keepsFirst,
   }
+}
+
+/**
+ * The conversation for a side question, which has no tool to read what is left out: every turn
+ * whole when it fits the window, with the tool output thinned until it does, and only when even the
+ * thinnest does not fit, the first request and the newest turns. The latest turn keeps the richest
+ * detail, since it is what the session is doing now.
+ */
+export function sideContext(
+  entries: readonly ThreadEntry[],
+  options: Pick<CarryOptions, 'firstAgent' | 'agentName' | 'window'>,
+): CarriedContext | null {
+  let carried: CarriedContext | null = null
+  for (const detail of SIDE_DETAILS) {
+    carried = carriedContext(entries, {
+      ...options,
+      side: true,
+      budget: Infinity,
+      detail,
+      latestDetail: SIDE_DETAILS[0]!,
+      messageBytes: SIDE_MESSAGE_BYTES,
+    })
+    if (carried === null || (carried.omitted === 0 && !carried.keepsFirst)) return carried
+  }
+  return carried
 }
 
 /** A page of the history tool: up to `limit` turns ending before `before`, newest last. */

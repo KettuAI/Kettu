@@ -120,8 +120,8 @@ export interface SideChatEntry {
   answer: string
   /** What a read-only answer looked at first. */
   steps: SideChatStep[]
-  /** For an answer from a hidden session: how much of the conversation it was given. */
-  carried: SideChatCarried | null
+  /** What the answer saw of the conversation, and how it got it. */
+  saw: SideChatSaw | null
   error: string | null
   askedAt: number
   answeredAt: number | null
@@ -132,13 +132,16 @@ export interface SideChatStep {
   title: string
 }
 
-export interface SideChatCarried {
-  /** Whether the first request was kept, and how many of the newest turns. */
-  first: boolean
-  recent: number
-  omitted: number
-  /** The carried text's UTF-8 bytes, about its tokens. */
-  bytes: number
+/**
+ * Where a side question's answer got the conversation: the agent's own side question, the agent's
+ * fork of the session, or a text copy Kettu built.
+ */
+export interface SideChatSaw {
+  source: 'agent' | 'fork' | 'copy'
+  /** For a copy: its turns of the conversation's, whether the first request stands apart, its size. */
+  copy: { turns: number; total: number; first: boolean; bytes: number } | null
+  /** The route tried first, when the answer fell back from it to another. */
+  fellBackFrom: 'claude' | 'codex' | null
 }
 
 /** A command or monitor an agent runs beside its turn, as the session board lists it. */
