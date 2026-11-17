@@ -152,3 +152,39 @@ export class ReadingTracker {
     return () => this.listeners.delete(listener)
   }
 }
+
+/** A find's matches by outline row: how many each row's turn holds, the first of them, and the row of the current one. */
+export interface RowFinds {
+  counts: number[]
+  first: (string | null)[]
+  current: number
+}
+
+/**
+ * Puts each match, oldest first, in the turn of the latest user message at or before it. A row the
+ * host has not listed yet has no position, so only a match in that message itself goes to it.
+ */
+export function findsByRow(
+  rows: readonly { entryId: string; pos: number | null }[],
+  matches: readonly { entryId: string; pos: number }[],
+  currentId: string | null,
+): RowFinds {
+  const counts = rows.map(() => 0)
+  const first: (string | null)[] = rows.map(() => null)
+  let current = -1
+  const own = new Map(rows.map((row, i) => [row.entryId, i]))
+  let row = -1
+  for (const match of matches) {
+    while (row + 1 < rows.length) {
+      const next = rows[row + 1]!.pos
+      if (next === null || next > match.pos) break
+      row++
+    }
+    const index = own.get(match.entryId) ?? row
+    if (index < 0) continue
+    counts[index]!++
+    first[index] ??= match.entryId
+    if (match.entryId === currentId) current = index
+  }
+  return { counts, first, current }
+}

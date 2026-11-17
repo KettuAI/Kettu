@@ -704,7 +704,9 @@
     "outline": {
       "label_one": "Outline, {{count}} message",
       "label_other": "Outline, {{count}} messages",
-      "noText": "No text"
+      "noText": "No text",
+      "matches_one": "{{count}} match",
+      "matches_other": "{{count}} matches"
     },
     "jump": {
       "label": "Jump to latest",
