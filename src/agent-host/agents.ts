@@ -1270,7 +1270,9 @@ export class AgentManager {
     } catch (error) {
       const message = (error as Error).message
       diagnostics.event(slot.id, 'install failed', message)
-      const text = t('agent.installFailed', { agent: h.def.name, message })
+      const text = withoutCli
+        ? t('agent.sdkInstallFailed', { agent: h.def.name, command: h.def.cli?.command, message })
+        : t('agent.installFailed', { agent: h.def.name, message })
       if (abort.signal.aborted) throw new InstallCancelled(text, { cause: error })
       if (adapter.fallback && request.fallback !== false) {
         h.adapterNote = t('agent.runningFallback', {

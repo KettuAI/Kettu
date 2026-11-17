@@ -1783,6 +1783,12 @@
       "cliBody": "Kettu runs your own {{command}}, and brings none. Install it one of the ways its maker documents."
     },
     "cliOutdated": "Your {{name}} {{current}} is older than Kettu needs; update it to use it.",
+    "cliOutdatedTitle": "{{name}} needs an update",
+    "cliOutdatedManual": "Your {{name}} {{current}} is older than Kettu needs (at least {{minimum}}). Update it the way you installed it, then check again.",
+    "needsUpdate": "Needs update",
+    "startFailedTitle": "{{name}} could not start",
+    "recheck": "Check again",
+    "sdkOnFirstUse": "SDK installs on first use",
     "cliUpdateBody": "You have {{current}}. The update runs the way you installed {{name}}; the command shows below.",
     "cliUpdateBodySdk": "You have {{current}}. The update runs the way you installed {{name}}, and moves Claude Agent SDK to the version that matches; the command shows below.",
     "reinstall": "{{name}}",

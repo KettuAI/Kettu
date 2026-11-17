@@ -37,7 +37,12 @@ import { Checkbox } from '@renderer/components/ui/checkbox'
 import { Dialog, DialogClose } from '@renderer/components/ui/dialog'
 import { RadioGroup, RadioGroupTile } from '@renderer/components/ui/radio-group'
 import { toast } from '@renderer/components/ui/toast'
-import { listedInstalled, readiness, showsCurrent } from '@renderer/features/agents/readiness'
+import {
+  cliOutdated,
+  listedInstalled,
+  readiness,
+  showsCurrent,
+} from '@renderer/features/agents/readiness'
 import { adapterOnlyUpdate } from '@renderer/features/agents/updates'
 import { PANEL } from '@renderer/features/session/entries/helpers'
 import { mediumAgo } from '@renderer/lib/format'
@@ -257,6 +262,8 @@ function HarnessState({ status }: { status: AgentStatus }) {
     )
   }
   if (updated) return <StateDot label={t('agents.update.done')} />
+  if (cliOutdated(status) !== null)
+    return <Pill tone="attention">{t('harnesses.needsUpdate')}</Pill>
   const kind = installKind(status)
   // The SDK installs itself on first use beside the user's CLI.
   if (kind === 'package' && status.package?.isSdk) return null
@@ -483,8 +490,13 @@ export function HarnessListItem({ status }: { status: AgentStatus }) {
       <span className="k-danger">{taskError.message}</span>
     ) : status.uninstalled ? (
       t('harnesses.removedLine')
+    ) : cliOutdated(status) !== null ? (
+      [version, t('harnesses.needsUpdate')].filter(Boolean).join(' · ')
     ) : awaitsPackage(status) && status.package?.isSdk ? (
       t('agents.installsOnFirstUse')
+    ) : kind === 'package' && status.package?.isSdk ? (
+      // Beside the user's own CLI the SDK installs itself on the first start.
+      [version, t('harnesses.sdkOnFirstUse')].filter(Boolean).join(' · ')
     ) : kind || awaitsPackage(status) ? (
       t('harnesses.groups.notInstalled')
     ) : r.kind === 'missing' || r.kind === 'failed' ? (
@@ -599,7 +611,8 @@ function HarnessPageBody({ status }: { status: AgentStatus }) {
   const environment = useAgentsStore((s) => s.environment)
   const [act, busy, error] = useAction()
   const r = readiness(status)
-  const installed = listedInstalled(status) || isInstalled(status)
+  const outdated = cliOutdated(status) !== null
+  const installed = listedInstalled(status) || isInstalled(status) || outdated
   const kind = installKind(status)
   return (
     <div>
@@ -611,7 +624,7 @@ function HarnessPageBody({ status }: { status: AgentStatus }) {
             {status.detail}
           </p>
         )}
-        {r.kind === 'missing' && !kind && (
+        {r.kind === 'missing' && !kind && !outdated && (
           <p className="ui-sg-hint" data-selectable="">
             {r.message}{' '}
             {r.url && (
@@ -629,6 +642,23 @@ function HarnessPageBody({ status }: { status: AgentStatus }) {
 
         {status.movedAccounts && <MovedAccountsNotice status={status} />}
         <TaskNotice status={status} installed={installed} />
+        {r.kind === 'failed' && !status.task && (
+          <Notice
+            variant="error"
+            title={t('harnesses.startFailedTitle', { name: status.harnessName })}
+            action={
+              <SetButton
+                variant="primary"
+                loading={busy}
+                onClick={() => act(() => request('agents.retry', { agentId: status.id }))}
+              >
+                {t('common:actions.retry')}
+              </SetButton>
+            }
+          >
+            <span data-selectable="">{r.message}</span>
+          </Notice>
+        )}
         {status.uninstalled && <UninstalledNotice status={status} />}
         {kind && <InstallNotice status={status} kind={kind} />}
 
@@ -894,6 +924,7 @@ function TaskNotice({ status, installed }: { status: AgentStatus; installed: boo
   const updated = useAgentsStore((s) => s.updated[status.id])
   const taskError = useAgentsStore((s) => s.taskErrors[status.id])
   const [doneSeen, setDoneSeen] = useState(false)
+  const [act, rechecking] = useAction()
   const name = status.harnessName
   const harness = status.harnessId
   // An install of a harness that is not installed shows in its install notice instead.
@@ -939,13 +970,18 @@ function TaskNotice({ status, installed }: { status: AgentStatus; installed: boo
       </Notice>
     )
   }
+  const minimum = cliOutdated(status)
   if (cliUpdate) {
-    const outdated = status.cli?.installed?.problem?.kind === 'too-old'
+    const outdated = minimum !== null
     return (
       <Notice
         variant={outdated ? 'warning' : 'info'}
         icon={outdated ? undefined : <Icon icon={Download04Icon} size={16} />}
-        title={t('agents.update.noticeTitle', { name, version: cliUpdate.version })}
+        title={
+          outdated
+            ? t('harnesses.cliOutdatedTitle', { name })
+            : t('agents.update.noticeTitle', { name, version: cliUpdate.version })
+        }
         action={
           <SetButton variant="primary" onClick={() => startCliUpdate(useAgentsStore, harness)}>
             {t('harnesses.updateTo', { version: cliUpdate.version })}
@@ -959,6 +995,26 @@ function TaskNotice({ status, installed }: { status: AgentStatus; installed: boo
               current: version ?? '',
               name,
             })}
+      </Notice>
+    )
+  }
+  // No update command is known, such as for a program installed some other way.
+  if (minimum !== null) {
+    return (
+      <Notice
+        variant="warning"
+        title={t('harnesses.cliOutdatedTitle', { name })}
+        action={
+          <SetButton
+            variant="primary"
+            loading={rechecking}
+            onClick={() => act(() => useAgentsStore.getState().reloadEnvironment())}
+          >
+            {t('harnesses.recheck')}
+          </SetButton>
+        }
+      >
+        {t('harnesses.cliOutdatedManual', { name, current: version ?? '', minimum })}
       </Notice>
     )
   }

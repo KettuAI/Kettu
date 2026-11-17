@@ -481,6 +481,8 @@
     "noAgentOnHost": "No agent can start on {{host}} yet.",
     "noAgentNode_one": "No agent can start yet: {{agents, list}} needs Node.js 22 or later.",
     "noAgentNode_other": "No agent can start yet: {{agents, list}} need Node.js 22 or later.",
+    "noAgentUpdate_one": "No agent can start yet: your {{agents, list}} is older than Kettu needs.",
+    "noAgentUpdate_other": "No agent can start yet: your {{agents, list}} are older than Kettu needs.",
     "setUpAgents": "Set up agents…",
     "agentMenu": {
       "label": "Agent and model",
@@ -493,7 +495,12 @@
       "window": "{{limit}} {{used}}",
       "windowResets": "{{limit}} {{used}} · {{reset}}",
       "setsUpLong": "{{agent}} sets up on first use: Kettu installs its adapter, which runs your {{command}}.",
-      "setsUpLongSdk": "{{agent}} sets up on first use: Kettu installs its SDK, and downloads {{agent}} too if the SDK does not accept the version of your {{command}}.",
+      "needsUpdate": "Needs update",
+      "updateLong": "Your {{command}} {{current}} is older than Kettu needs (at least {{minimum}}); update it to use it.",
+      "updateOnHost": "Update {{agent}} on {{host}} to use it.",
+      "updateTo": "Update to {{version}}",
+      "updating": "Updating…",
+      "howToUpdate": "How to update…",
       "install": "Install…",
       "failedLong": "{{agent}} failed to start.",
       "retry": "Retry",
@@ -524,6 +531,7 @@
       "switchOn": "{{agent}} starts with {{option}} on, not off."
     },
     "installHarness": "Install a harness…",
+    "updateHarness": "Update the harness…",
     "thisComputer": "This computer",
     "hostOffline": "Offline",
     "hostNotConnected": "{{host}} is not connected yet",
@@ -553,6 +561,7 @@
       "noMatch": "No matching agents",
       "signedOut": "Signed out · sign in to use",
       "failed": "Failed to start",
+      "needsUpdate": "Too old · click to update",
       "limitUsed": "{{percent}}% of {{limit}} limit",
       "limitReached": "{{limit}} limit reached",
       "manage": "Manage agents…"
@@ -581,6 +590,7 @@
         "pi": "A small, extensible terminal agent."
       },
       "found": "Found on this computer",
+      "outdated": "Your {{name}} {{current}} is older than Kettu needs; update it to use it.",
       "redetect": "Re-detect"
     },
     "workflow": {

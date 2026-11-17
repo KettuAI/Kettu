@@ -1,19 +1,22 @@
 import type { AgentOptions, AgentStatus } from '@shared/agent-host'
 import { isStartMode } from '@shared/agents'
 import { isConfigValue, type AgentId, type ConfigOption } from '@shared/thread'
-import { listedInstalled, readiness } from '@renderer/features/agents/readiness'
+import { cliOutdated, listedInstalled, readiness } from '@renderer/features/agents/readiness'
 import type { OptionValues } from '@renderer/stores/agent-options'
 
 /**
  * What an agent needs before New session can start it, by the checks Settings > Harnesses lists
  * it with. `adapter` is a package agent whose adapter is not installed yet, and `install` one
- * missing from the machine: neither can be chosen until Settings > Harnesses installs it. `setup`
- * is Claude Code with the user's own CLI but not yet the SDK: the user installed the agent, so it
- * can be chosen, and its first start installs the SDK.
+ * missing from the machine: neither can be chosen until Settings > Harnesses installs it. `update`
+ * is the user's own program, found but older than Kettu needs: it cannot start until it is
+ * updated. `setup` is an agent with the user's own program but not yet its adapter: the user
+ * installed the agent, so it can be chosen, and its first start installs the adapter.
  */
-export type AgentNeed = 'install' | 'installing' | 'failed' | 'adapter' | 'setup' | 'sign-in' | null
+export type AgentNeed =
+  'install' | 'update' | 'installing' | 'failed' | 'adapter' | 'setup' | 'sign-in' | null
 
 export function agentNeed(status: AgentStatus): AgentNeed {
+  if (cliOutdated(status) !== null) return 'update'
   const r = readiness(status)
   if (r.kind === 'missing') return 'install'
   if (r.kind === 'installing') return 'installing'
@@ -24,11 +27,16 @@ export function agentNeed(status: AgentStatus): AgentNeed {
   return r.kind === 'sign-in' ? 'sign-in' : null
 }
 
-/** Whether New session can start the agent, and so whether its menu lists it. */
-export function canStart(status: AgentStatus): boolean {
+/** Whether New session lists the agent in its menu, even when it cannot start yet. */
+function listable(status: AgentStatus): boolean {
   if (status.registered === false || status.disabled) return false
   const need = agentNeed(status)
   return need !== 'install' && need !== 'adapter'
+}
+
+/** Whether New session can start the agent. */
+export function canStart(status: AgentStatus): boolean {
+  return listable(status) && agentNeed(status) !== 'update'
 }
 
 /**
@@ -40,6 +48,12 @@ export function noAgentCanStart(statuses: AgentStatus[]): string[] | null {
   return statuses
     .filter((s) => s.state === 'node-missing' || s.state === 'node-outdated')
     .map((s) => s.name)
+}
+
+/** The names of the agents whose own program needs updating, while none can start. */
+export function noAgentUntilUpdated(statuses: AgentStatus[]): string[] {
+  if (statuses.some(canStart)) return []
+  return statuses.filter((s) => agentNeed(s) === 'update').map((s) => s.name)
 }
 
 // The categories whose last chosen values carry over to the next session, as the host keeps them.
@@ -249,9 +263,10 @@ export function menuGroups(
 /**
  * The agents New session can start, the installed first, each group in catalog order with each
  * harness's default agent first. Hidden default agents stay out, and the harnesses still to
- * install are installed in Settings > Harnesses, so the menu leaves them out too.
+ * install are installed in Settings > Harnesses, so the menu leaves them out too. With
+ * `updates`, an agent whose own program needs updating is listed as well, to offer the update.
  */
-export function menuAgents(statuses: AgentStatus[]): AgentStatus[] {
-  const listed = statuses.filter((s) => canStart(s) && !s.hidden)
+export function menuAgents(statuses: AgentStatus[], updates = false): AgentStatus[] {
+  const listed = statuses.filter((s) => (updates ? listable(s) : canStart(s)) && !s.hidden)
   return [...listed.filter(listedInstalled), ...listed.filter((s) => !listedInstalled(s))]
 }

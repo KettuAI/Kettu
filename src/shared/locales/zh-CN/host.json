@@ -222,6 +222,7 @@
     "exitedBeforeReady": "{{exit}}，未能就绪。",
     "stoppedTooOften_other": "{{detail}} 它在五分钟内停止了 {{count}} 次，在你重试之前 Kettu 不会再启动它。",
     "installFailed": "无法安装 {{agent}}。{{message}}",
+    "sdkInstallFailed": "已找到你的 {{command}}，但没能安装驱动 {{agent}} 的 SDK。{{message}}",
     "runningFallback": "正在使用 {{fallback}}：{{version}} 安装失败。{{message}}",
     "installStopped": "安装已停止。",
     "busyTask": "{{agent}} 正在安装或更新",

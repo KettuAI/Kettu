@@ -30,7 +30,7 @@ import { ConfigSwitchRow } from '@renderer/features/session/composer/config-swit
 import { ChoiceName, EffortSegments } from '@renderer/features/session/composer/control-row'
 import { levelsOf, splitName, type SelectOption } from '@renderer/features/session/composer/levels'
 import { shownChoice, shownValue } from '@renderer/features/session/composer/model-list'
-import { listedInstalled } from '@renderer/features/agents/readiness'
+import { cliOutdated, listedInstalled } from '@renderer/features/agents/readiness'
 import { Ring } from '@renderer/features/session/composer/usage'
 import { planReset, tightestLimit } from '@renderer/features/sidebar/plan-usage'
 import { limitLabel } from '@renderer/lib/format'
@@ -135,7 +135,9 @@ export function AgentMenu({
   const statuses = useAgentsStore(
     useShallow((s) => {
       const { order, byId } = agentsOn(s, hostId)
-      const listed = menuAgents(usableAgents(order, byId)).filter((status) => !only || only(status))
+      const listed = menuAgents(usableAgents(order, byId), true).filter(
+        (status) => !only || only(status),
+      )
       return modelOnly ? listed.filter((status) => status.id === agentId) : listed
     }),
   )
@@ -225,7 +227,7 @@ export function AgentMenu({
   useEffect(() => {
     // Only this computer's agents are read without a folder.
     if (!open || !folderless || hostId !== null || !shown || !loaded) return
-    if (shownNeed === 'sign-in' || shownNeed === 'failed') return
+    if (shownNeed === 'sign-in' || shownNeed === 'failed' || shownNeed === 'update') return
     void readFirstOptions(hostId, shown)
   }, [open, folderless, hostId, shown, loaded, shownNeed])
 
@@ -584,13 +586,15 @@ function RailRow({ status }: { status: AgentStatus }) {
   const trailing =
     need === 'setup'
       ? t('newSession.agentMenu.setsUp')
-      : need === 'installing'
-        ? t('newSession.agentMenu.installing')
-        : need === 'failed'
-          ? t('newSession.agentMenu.failed')
-          : need === 'sign-in'
-            ? t('newSession.agentMenu.signIn')
-            : null
+      : need === 'update'
+        ? t('newSession.agentMenu.needsUpdate')
+        : need === 'installing'
+          ? t('newSession.agentMenu.installing')
+          : need === 'failed'
+            ? t('newSession.agentMenu.failed')
+            : need === 'sign-in'
+              ? t('newSession.agentMenu.signIn')
+              : null
 
   return (
     <TabsTrigger
@@ -604,7 +608,7 @@ function RailRow({ status }: { status: AgentStatus }) {
         <span
           className={cn(
             'shrink-0 pl-2 text-xs',
-            need === 'sign-in'
+            need === 'sign-in' || need === 'update'
               ? 'text-warning'
               : need === 'failed'
                 ? 'text-danger'
@@ -728,15 +732,14 @@ function Pane({
   )
   let notice = null
   if (!searching) {
-    if (need === 'setup') {
+    if (need === 'update') {
+      notice = (
+        <UpdateNotice status={status} hostId={hostId} hostLabel={hostLabel} onLeave={onLeave} />
+      )
+    } else if (need === 'setup') {
       notice = (
         <Notice
-          text={t(
-            status.package?.isSdk
-              ? 'newSession.agentMenu.setsUpLongSdk'
-              : 'newSession.agentMenu.setsUpLong',
-            { agent: name, command: status.cli?.command },
-          )}
+          text={t('newSession.agentMenu.setsUpLong', { agent: name, command: status.cli?.command })}
           tone="neutral"
         >
           {hostId === null && install}
@@ -989,6 +992,74 @@ const NOTICE_TONE = {
  * A line about the shown agent above its models: on a tint by what it asks of you, with the action
  * that helps, or plain when it only says what comes next.
  */
+/**
+ * The user's own program is older than Kettu needs: updating it is the fix, which this runs the
+ * way the program was installed. Another host's program is updated on that host.
+ */
+function UpdateNotice({
+  status,
+  hostId,
+  hostLabel,
+  onLeave,
+}: {
+  status: AgentStatus
+  hostId: string | null
+  hostLabel: string
+  onLeave: () => void
+}) {
+  const { t } = useTranslation('session')
+  if (hostId !== null) {
+    return (
+      <Notice
+        text={t('newSession.agentMenu.updateOnHost', { agent: status.name, host: hostLabel })}
+        tone="warning"
+      />
+    )
+  }
+  const update = status.cli?.update ?? null
+  const task = status.task?.kind === 'update' ? status.task : null
+  const running = task?.state === 'running'
+  const failure = task?.state === 'failed' ? (task.error ?? null) : null
+  return (
+    <Notice
+      text={
+        failure ??
+        t('newSession.agentMenu.updateLong', {
+          command: status.cli?.command,
+          current: status.cli?.installed?.version ?? '',
+          minimum: cliOutdated(status) ?? '',
+        })
+      }
+      tone={failure ? 'danger' : 'warning'}
+    >
+      <Button
+        variant="outline"
+        size="xs"
+        disabled={running}
+        onClick={() => {
+          if (update) {
+            void useAgentsStore.getState().updateCli(status.id)
+            return
+          }
+          onLeave()
+          openHarnessSettings(status.harnessId)
+        }}
+      >
+        {running ? (
+          <>
+            <Spinner className="size-3" />
+            {t('newSession.agentMenu.updating')}
+          </>
+        ) : update ? (
+          t('newSession.agentMenu.updateTo', { version: update.version })
+        ) : (
+          t('newSession.agentMenu.howToUpdate')
+        )}
+      </Button>
+    </Notice>
+  )
+}
+
 function Notice({
   text,
   tone,

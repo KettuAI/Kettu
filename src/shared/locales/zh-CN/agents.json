@@ -4,7 +4,9 @@
     "howToInstall": "安装方法",
     "needsNode": "需要 Node.js 22 或更高版本。",
     "installNode": "安装 Node.js",
-    "couldNotStart": "无法启动。"
+    "couldNotStart": "无法启动。",
+    "outdated": "版本比 Kettu 要的旧，更新后才能用。",
+    "update": "更新方法"
   },
   "state": {
     "ready": "就绪",
@@ -12,6 +14,7 @@
     "installing": "正在安装…",
     "starting": "正在启动…",
     "failed": "失败",
-    "notAvailable": "不可用"
+    "notAvailable": "不可用",
+    "needsUpdate": "需要更新"
   }
 }

@@ -3,6 +3,7 @@
 import type { AgentInstallMethod, AgentStatus } from '@shared/agent-host'
 import type { SettingsFile, SettingsPatch } from '@shared/settings'
 import type { HarnessId } from '@shared/thread'
+import { cliOutdated } from '@renderer/features/agents/readiness'
 import { usableAgents, type AgentsStoreHook } from '@renderer/stores/agents'
 
 /** The harness's program is missing, so it installs by one of its vendor's routes. */
@@ -13,6 +14,8 @@ function programMissing(status: AgentStatus): boolean {
 export type InstallKind = 'program' | 'package' | 'setup'
 
 export function installKind(status: AgentStatus): InstallKind | null {
+  // The program is on the machine and only needs updating.
+  if (cliOutdated(status) !== null) return null
   if (programMissing(status) && status.installMethods.length > 0) return 'program'
   if (status.package && !status.package.installed && status.state === 'available') return 'package'
   if (['not-installed', 'node-missing', 'node-outdated'].includes(status.state)) return 'setup'

@@ -22,6 +22,13 @@ export function agentLine(
   const need = agentNeed(status)
   if (need === 'sign-in')
     return { text: i18n.t('session:newSession.picker.signedOut'), tone: 'attention' }
+  if (need === 'update') {
+    const task = status.task?.kind === 'update' ? status.task : null
+    if (task?.state === 'running')
+      return { text: i18n.t('session:newSession.agentMenu.updating'), tone: 'muted' }
+    if (task?.state === 'failed' && task.error) return { text: task.error, tone: 'danger' }
+    return { text: i18n.t('session:newSession.picker.needsUpdate'), tone: 'attention' }
+  }
   if (need === 'setup')
     return { text: i18n.t('session:newSession.agentMenu.setsUp'), tone: 'muted' }
   if (need === 'installing') {
