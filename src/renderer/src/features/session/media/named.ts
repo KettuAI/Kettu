@@ -47,6 +47,9 @@ function folderReference(text: string): string | null {
 /** Whether a media reference is a file's name alone, which says little of where the file is. */
 export const bareName = (path: string) => !/[\\/]/.test(path) && !FILE_URI.test(path)
 
+/** Whether a media reference is `/name`, a file in the root, as a site writes a path. */
+export const rootFile = (path: string) => /^\/[^/\\]+$/.test(path)
+
 /**
  * The media files a block names as it is read, in order, each once. A bare file name in inline
  * code is read in the folder that inline code named before it in the block, as in "saved in

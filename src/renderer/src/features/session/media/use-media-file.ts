@@ -4,14 +4,14 @@ import { ProjectPathContext } from '@renderer/features/files/file-refs'
 import { errorMessage } from '@renderer/lib/host'
 import { openViewer } from '@renderer/stores/viewer'
 import { EntryIdContext, openMedia, SessionIdContext } from './grants'
-import { bareName, NamedMediaContext } from './named'
+import { bareName, NamedMediaContext, rootFile } from './named'
 import { useNearView } from './near-view'
 import { fileKey, fileName } from './viewer-items'
 
 export type Shown =
   | { kind: 'asking' }
   | { kind: 'granted'; grant: MediaGrant }
-  | { kind: 'text' } // not allowed, not media or a bare name of no file: it stays as written
+  | { kind: 'text' } // not allowed, not media, or a bare name or `/name` of no file: as written
   | { kind: 'missing' }
   | { kind: 'unsupported'; grant: MediaGrant }
   | { kind: 'failed'; message: string }
@@ -49,8 +49,9 @@ export function useMediaFile(path: string, image: boolean, near: RefObject<Eleme
       (result) => {
         if (!current) return
         if (result.kind === 'granted') setShown({ kind: 'granted', grant: result.grant })
-        // A bare name that is no file may name none: it stays text, as a Markdown image cannot.
-        else if (result.kind === 'not_found' && (image || !bareName(path))) {
+        // A bare name or a `/name` that is no file may name none, as a site's path does: it stays
+        // text, as a Markdown image cannot.
+        else if (result.kind === 'not_found' && (image || !(bareName(path) || rootFile(path)))) {
           setShown({ kind: 'missing' })
         } else setShown({ kind: 'text' })
       },
