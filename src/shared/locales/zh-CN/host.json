@@ -204,6 +204,9 @@
     "noOptions": "{{agent}} 在 {{seconds}} 秒内没有给出模型",
     "noLimits": "{{agent}} 在 {{seconds}} 秒内没有给出套餐限额",
     "unreadableLimits": "Kettu 没能从 {{agent}} 的 {{command}} 回复里读出套餐限额",
+    "antigravitySignedOut": "{{agent}} 已登出。请在终端里重新登录，才能读取套餐限额。",
+    "antigravityLimitsFailed": "{{agent}} 没能读出套餐限额：{{error}}",
+    "antigravityNoPlan": "{{agent}} 没有报出 Google 套餐，所以没有可读的套餐限额。如果你用的是 Google 账号，请在终端里重新登录。",
     "initializeTimeout": "{{agent}} 没有在 {{seconds}} 秒内响应 initialize。",
     "exit": {
       "code": "{{agent}} 已退出，退出码 {{code}}",

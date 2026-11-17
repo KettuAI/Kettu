@@ -2,7 +2,6 @@
 // sign-in state and the AgentStatus every port sees. A harness's detection, installs and updates
 // are shared by its agents: its default agent and those added with folders of their own.
 
-import { execFile } from 'node:child_process'
 import { mkdir, readFile, realpath, rm } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
@@ -35,7 +34,10 @@ import { readerOpen, type StoredSignInReader } from './vendor-usage/stored-sign-
 import type { VendorUsage } from './vendor-usage/common'
 import {
   ANTIGRAVITY_PLAN_SIGN_INS,
+  ANTIGRAVITY_USAGE_VERSION,
   antigravityAuthStateFile,
+  antigravityLimitsRead,
+  antigravitySignIn,
   antigravitySignInMethod,
 } from './vendor-usage/antigravity'
 import { readAntigravityUsage } from './antigravity-usage'
@@ -402,8 +404,14 @@ class Slot {
   signInAbort: AbortController | null = null
   /** The key of its `keySignIn` changed, so its next start signs in with it. */
   keySignInPending = false
-  /** The method a `sharesSignIn` agent is signed in with, as its own files name it; null unknown. */
+  /** The method a `sharesSignIn` agent is signed in with, as it and its files show; null unknown. */
   signInMethod: string | null = null
+  /** The sign-in method the agent's last answer showed; null when it showed none, or none came. */
+  answeredSignIn: string | null = null
+  /** An answer of this run showed the agent's sign-in, or that it showed none. */
+  signInAnswered = false
+  /** The sign-in method the agent's own auth state file named when last read. */
+  signInFile: string | null = null
   /** It refused its account as one of its `movedAccounts`, until a sign-in or session succeeds. */
   accountRefused = false
   idleTimer: ReturnType<typeof setTimeout> | null = null
@@ -444,8 +452,15 @@ function rememberedEntry(slot: Slot): AgentsFile['agents'][AgentId] | null {
   const account = slot.account?.kind === 'none' ? null : slot.account
   const limits = [...slot.limits.values()]
   const init = slot.initRecord
-  return account || limits.length > 0 || init || slot.apiKey
-    ? { account, limits, ...(init ? { init } : {}), ...(slot.apiKey ? { apiKey: true } : {}) }
+  const signIn = slot.answeredSignIn
+  return account || limits.length > 0 || init || slot.apiKey || signIn
+    ? {
+        account,
+        limits,
+        ...(init ? { init } : {}),
+        ...(slot.apiKey ? { apiKey: true } : {}),
+        ...(signIn ? { signIn } : {}),
+      }
     : null
 }
 
@@ -1636,6 +1651,18 @@ export class AgentManager {
   }
 
   /**
+   * Removes the registry's ACP server Kettu once downloaded to read Google Antigravity's plan
+   * limits, with its session's record, from Kettu's own folder; agy reads them now.
+   */
+  async removeAntigravityUsageServer(): Promise<void> {
+    const folder = path.join(this.deps.adaptersDir, 'antigravity')
+    await rm(folder, { recursive: true, force: true }).catch((error: unknown) => {
+      const message = (error as Error).message
+      this.deps.diagnostics.log('warn', `could not remove ${folder}: ${message}`)
+    })
+  }
+
+  /**
    * Keeps the plan limits current while agents are in use, since rate-limit events rarely carry
    * the used share: only agents already running with a live session, so none starts or stays up
    * for it.
@@ -2588,6 +2615,17 @@ export class AgentManager {
         }
       },
       account: (account) => this.setAccount(slot, account),
+      signInShown: (method) => {
+        slot.answeredSignIn = method
+        slot.signInAnswered = true
+        // No session reports Google Antigravity's limits, so a Google sign-in it shows reads them.
+        if (antigravityLimitsRead(this.decideSignIn(slot)) !== 'read' || slot.limits.size > 0)
+          return
+        this.refreshLimits(slot.id).catch((error: unknown) => {
+          const message = (error as Error).message
+          this.deps.diagnostics.log('warn', `${slot.name}: the plan limits read failed: ${message}`)
+        })
+      },
       authState: (state) => {
         if (state === 'authenticated') slot.signIn = 'signed-in'
         else if (state === 'not_required') slot.signIn = 'signed-in'
@@ -2888,46 +2926,90 @@ export class AgentManager {
   }
 
   /**
-   * Google Antigravity's quota groups, through the registry's server, which runs on its own and
-   * needs no agy process. An API key sign-in has none to read.
+   * Google Antigravity's quota groups and G1 credits, from the user's `agy`, which needs no agy
+   * process running: only on a Google or Gemini Enterprise sign-in, since a signed-out agy answers
+   * by opening a browser to sign in. A sign-in Kettu does not know yet it asks agy for first.
    */
   private async readAntigravityLimits(slot: Slot): Promise<void> {
-    const method = await this.readSignInMethod(slot)
-    if (!method || !ANTIGRAVITY_PLAN_SIGN_INS.includes(method)) return
+    let method = await this.readSignInMethod(slot)
+    if ((method === null && !slot.signInAnswered) || slot.signIn === 'required') {
+      method = await this.askAntigravitySignIn(slot)
+    }
+    const read = antigravityLimitsRead(method)
+    if (read === 'none') return
+    if (read === 'unknown') {
+      throw new HostError('agent_error', t('agent.antigravityNoPlan', { agent: slot.name }))
+    }
+    const version = slot.init?.version ?? slot.h.binaryVersion
+    if (!versionAtLeast(version, ANTIGRAVITY_USAGE_VERSION)) return
+    const command = this.display(slot)
     const base = this.deps.env.agentEnv(slot.id)
-    const env = (this.deps.launchEnv?.(slot.id, base) ?? base) as NodeJS.ProcessEnv
+    const env = { ...(this.deps.launchEnv?.(slot.id, base) ?? base), ...command.env }
+    await mkdir(this.deps.reportsDir, { recursive: true })
     const now = Date.now()
     let usage: VendorUsage
     try {
       usage = await readAntigravityUsage(
         {
-          adaptersDir: this.deps.adaptersDir,
-          reportsDir: this.deps.reportsDir,
-          platform: this.deps.platform,
-          arch: process.arch,
-          appVersion: this.deps.appVersion,
+          name: slot.name,
+          program: command.command,
+          args: command.args.filter((arg) => arg !== 'acp'),
           env,
-          signIn: method,
-          systemProxy: () => systemProxySettings(),
-          timeoutMs: 60_000,
-          log: (message) => this.deps.diagnostics.log('warn', `${slot.name}: ${message}`),
+          cwd: this.deps.reportsDir,
+          platform: this.deps.platform,
+          timeoutMs: 30_000,
         },
         now,
       )
     } catch (error) {
-      throw agentError(error)
+      throw this.limitsError(slot, error)
     }
     this.applyVendorUsage(slot, usage, now)
   }
 
   /**
-   * The method a `sharesSignIn` agent is signed in with, read again from its own files; it may
-   * have changed outside Kettu, in its terminal sign-in or its app.
+   * Asks agy how it is signed in, never signing it in: its answer to a hidden session names its
+   * plan when signed in with Google, and refuses the session when signed out.
+   */
+  private async askAntigravitySignIn(slot: Slot): Promise<string | null> {
+    const runtime = await this.ensureReady(slot.id)
+    if (!runtime.connection.unpromptedSessions) return slot.signInMethod
+    const log = (message: string): void =>
+      this.deps.diagnostics.log('warn', `${slot.name}: ${message}`)
+    try {
+      if (await this.readInHiddenSession(slot, runtime, log, undefined)) this.signedIn(slot.id)
+    } catch (error) {
+      throw this.limitsError(slot, error)
+    }
+    if (slot.signIn === 'required') {
+      throw new HostError('auth_required', t('agent.antigravitySignedOut', { agent: slot.name }))
+    }
+    return slot.signInMethod
+  }
+
+  /**
+   * The method a `sharesSignIn` agent is signed in with, its own files read again; it may have
+   * changed outside Kettu, in its terminal sign-in or its app.
    */
   private async readSignInMethod(slot: Slot): Promise<string | null> {
     if (slot.def.id !== 'antigravity') return null
     const text = await readFile(antigravityAuthStateFile(os.homedir()), 'utf8').catch(() => '')
-    const method = antigravitySignInMethod(text)
+    slot.signInFile = antigravitySignInMethod(text)
+    return this.decideSignIn(slot)
+  }
+
+  /**
+   * Google Antigravity's sign-in from what agy showed and the key Kettu holds for it: agy writes
+   * its auth state file only when an ACP client calls `authenticate`, so a sign-in in its app or
+   * terminal leaves none.
+   */
+  private decideSignIn(slot: Slot): string | null {
+    const key = slot.def.keySignIn
+    const method = antigravitySignIn({
+      answered: slot.answeredSignIn,
+      file: slot.signInFile,
+      key: !!key && this.deps.envKeyIsSet?.(slot.id, key.variable) === true,
+    })
     if (method !== slot.signInMethod) {
       slot.signInMethod = method
       this.emit(slot)
@@ -3188,7 +3270,9 @@ export class AgentManager {
       slot.limits = new Map(kept.map((limit) => [limit.window, limit]))
       slot.initRecord = entry.init ?? null
       slot.apiKey = entry.apiKey === true
+      slot.answeredSignIn = entry.signIn ?? null
       slot.remembered = rememberedJson(slot)
+      if (slot.def.id === 'antigravity') this.decideSignIn(slot)
       this.emit(slot)
     }
   }
@@ -3435,6 +3519,7 @@ export class AgentManager {
     slot.signIn = 'required'
     slot.account = null
     slot.limits.clear()
+    slot.answeredSignIn = null
     this.emit(slot)
     void this.readSignInMethod(slot)
   }
@@ -3517,6 +3602,9 @@ export class AgentManager {
     const key = slot.def.keySignIn
     slot.keySignInPending =
       key !== undefined && this.deps.envKeyIsSet?.(agentId, key.variable) === true
+    // The next start signs in with the key, so a Google plan shown before no longer holds.
+    if (slot.keySignInPending) slot.answeredSignIn = null
+    if (slot.def.id === 'antigravity') this.decideSignIn(slot)
     await this.credentialsChanged(slot)
   }
 
@@ -4123,13 +4211,4 @@ export function agentError(error: unknown): HostError {
     }
   }
   return new HostError('internal', (error as Error)?.message ?? String(error))
-}
-
-/** What `scutil --proxy` prints: macOS's system proxy; null when it cannot run. */
-function systemProxySettings(): Promise<string | null> {
-  return new Promise((resolve) => {
-    execFile('/usr/sbin/scutil', ['--proxy'], { timeout: 5_000 }, (error, stdout) =>
-      resolve(error ? null : stdout),
-    )
-  })
 }

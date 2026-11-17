@@ -562,6 +562,26 @@ describe('the host files', () => {
     expect(agentsFile(dir, log).file).toBe(path.join(dir, 'state', 'agents.json'))
   })
 
+  it('keeps the sign-in an agent’s answers showed, and drops one that is not a method', () => {
+    const plan = { kind: 'account', label: 'Google AI Pro', email: null }
+    expect(
+      parseAgentsFile({
+        agents: {
+          antigravity: { account: plan, limits: [], signIn: 'oauth-personal' },
+          codex: { account: plan, limits: [], signIn: 'Not a method' },
+          gemini: { limits: [], signIn: 'oauth-personal' },
+        },
+      }),
+    ).toEqual({
+      version: 1,
+      agents: {
+        antigravity: { account: plan, limits: [], signIn: 'oauth-personal' },
+        codex: { account: plan, limits: [] },
+        gemini: { account: null, limits: [], signIn: 'oauth-personal' },
+      },
+    })
+  })
+
   it('drops the time the archived Codex report threads were removed, which nothing runs anymore', () => {
     expect(parseAgentsFile({ agents: {}, codexReportThreadsRemovedAt: 7 })).toEqual({
       version: 1,

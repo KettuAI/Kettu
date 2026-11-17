@@ -28,10 +28,12 @@ const TIER = { name: 'Google AI Pro', id: 'g1-pro-tier', upgradeUri: 'https://ex
 function connect(
   version: string,
   turn?: (client: AgentContext, sessionId: string) => Promise<void>,
+  tiers: (typeof TIER | null)[] = [],
 ) {
   const prompted: string[] = []
   const closed: string[] = []
   const accounts: string[] = []
+  const signIns: (string | null)[] = []
   let next = 0
   const app = agent({ name: 'agy-test' })
     .onRequest(methods.agent.initialize, () => ({
@@ -45,10 +47,10 @@ function connect(
       agentInfo: { name: 'Antigravity ACP Server', version },
       authMethods: [{ id: 'oauth-personal', name: 'Log in with Google' }],
     }))
-    .onRequest(methods.agent.session.new, () => ({
-      sessionId: `s-${++next}`,
-      _meta: { antigravity: { tier: TIER } },
-    }))
+    .onRequest(methods.agent.session.new, () => {
+      const tier = tiers.length > 0 ? tiers.shift()! : TIER
+      return { sessionId: `s-${++next}`, _meta: tier ? { antigravity: { tier } } : {} }
+    })
     .onRequest(methods.agent.session.prompt, async (ctx) => {
       prompted.push(ctx.params.sessionId)
       await turn?.(ctx.client, ctx.params.sessionId)
@@ -61,6 +63,7 @@ function connect(
   const hooks: ConnectionHooks = {
     traffic: () => {},
     account: (account) => accounts.push(account.label ?? ''),
+    signInShown: (method) => signIns.push(method),
     ignored: () => {},
     log: () => {},
   }
@@ -69,7 +72,7 @@ function connect(
     agentId: 'antigravity',
     name: 'Google Antigravity',
   })
-  return { connection, prompted, closed, accounts }
+  return { connection, prompted, closed, accounts, signIns }
 }
 
 /** A session's thread, with every permission request allowed once. */
@@ -341,14 +344,30 @@ describe("agy's ACP mode", () => {
     connection.close()
   })
 
+  it('shows the sign-in by the plan its answers name, whatever its auth state file says', async () => {
+    const { connection, signIns } = connect('1.5.9', undefined, [
+      TIER,
+      { ...TIER, name: 'Gemini Enterprise Standard', id: 'gcp-ge-standard-tier' },
+      null,
+    ])
+    await connection.initialize('1.0.0')
+    await connection.newSession('/repo')
+    await connection.newSession('/repo')
+    // An API key or a cloud project has no plan: the answer shows no sign-in of Google's.
+    await connection.newSession('/repo')
+    expect(signIns).toEqual(['oauth-personal', 'oauth-business', null])
+    connection.close()
+  })
+
   it('reads none of it on an earlier version', async () => {
-    const { connection, accounts } = connect('1.4.3')
+    const { connection, accounts, signIns } = connect('1.4.3')
     const init = await connection.initialize('1.0.0')
     expect(init.capabilities.mcpHttp).toBe(false)
     expect(init.capabilities.ownTitles).toBeNull()
     expect(connection.unpromptedSessions).toBe(false)
     await connection.newSession('/repo')
     expect(accounts).toEqual([])
+    expect(signIns).toEqual([])
     connection.close()
   })
 

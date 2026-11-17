@@ -2,29 +2,19 @@ import { describe, expect, it } from 'vitest'
 import { limitsForModel } from '@shared/plan-limits'
 import type { ConfigOption } from '@shared/thread'
 import {
+  antigravityLimitsRead,
+  antigravitySignIn,
   antigravitySignInMethod,
   antigravityTier,
-  namesProxy,
+  antigravityTierSignIn,
+  parseAntigravityCredits,
   parseAntigravityUsage,
-  systemProxyEnv,
+  replyError,
 } from './antigravity'
+import credits from './fixtures/agy-credits.json'
+import usage from './fixtures/agy-usage.json'
 
-const NOW = Date.UTC(2026, 10, 16, 18, 0)
-
-// agy_acp_server 1.5.0's answer to `/usage`, signed in with Google AI Pro.
-const USAGE = `### Session Usage
-- **Session total:** data not available yet
-
-### Quota Limits
-- **Gemini Models**
-  *(Models within this group: Gemini 3.8 Flash)*
-  - **Weekly Limit Remaining:** 99% remaining (resets Nov 23, 2026, 17:37 UTC)
-  - **Five Hour Limit Remaining:** 99% remaining (resets Nov 16, 2026, 22:37 UTC)
-- **Claude and GPT models**
-  *(Models within this group: Claude Sonnet 4.6, Claude Opus 4.6, GPT-OSS 120B)*
-  - **Weekly Limit Remaining:** 100% remaining (resets Nov 23, 2026, 17:41 UTC)
-  - **Five Hour Limit Remaining:** 0% remaining (resets Nov 16, 2026, 22:41 UTC)
-`
+const NOW = Date.UTC(2026, 10, 17, 3, 45)
 
 describe('Google Antigravity plan', () => {
   it('reads the plan named in an answer', () => {
@@ -43,6 +33,45 @@ describe('Google Antigravity plan', () => {
     expect(antigravityTier({ antigravity: { enabledTools: ['run_command'] } })).toBeNull()
   })
 
+  it('tells a personal Google plan from a business one by its id', () => {
+    const plan = (id: unknown) => ({ antigravity: { tier: { name: 'A plan', id } } })
+    // The ids agy 1.5.9 and the registry's server name: Google One's AI plans and the free tier
+    // are personal; Gemini Enterprise, Google Cloud and pay-as-you-go ones are not.
+    expect(antigravityTierSignIn(plan('g1-pro-tier'))).toBe('oauth-personal')
+    expect(antigravityTierSignIn(plan('g1-ultra-tier'))).toBe('oauth-personal')
+    expect(antigravityTierSignIn(plan('free-tier'))).toBe('oauth-personal')
+    expect(antigravityTierSignIn(plan('gcp-ge-standard-tier'))).toBe('oauth-business')
+    expect(antigravityTierSignIn(plan('gcp-ge-ultra-tier'))).toBe('oauth-business')
+    expect(antigravityTierSignIn(plan('gcp-enterprise-tier'))).toBe('oauth-business')
+    expect(antigravityTierSignIn(plan('business-paygo-tier'))).toBe('oauth-business')
+    expect(antigravityTierSignIn(plan('some-new-tier'))).toBeNull()
+    expect(antigravityTierSignIn(plan(7))).toBeNull()
+    expect(antigravityTierSignIn(undefined)).toBeNull()
+  })
+
+  it('takes the sign-in from agy’s plan, then Kettu’s key, then agy’s auth state', () => {
+    // agy names a plan only while signed in with Google, whatever signed it in before.
+    expect(
+      antigravitySignIn({ answered: 'oauth-personal', file: 'gemini-api-key', key: true }),
+    ).toBe('oauth-personal')
+    expect(antigravitySignIn({ answered: 'oauth-business', file: null, key: false })).toBe(
+      'oauth-business',
+    )
+    // No plan shown: Kettu's key is the sign-in Kettu gives agy, whatever the file kept.
+    expect(antigravitySignIn({ answered: null, file: 'oauth-personal', key: true })).toBe(
+      'gemini-api-key',
+    )
+    // The file holds the last `authenticate` of any ACP client; a sign-in in agy's app or
+    // terminal writes none.
+    expect(antigravitySignIn({ answered: null, file: 'oauth-personal', key: false })).toBe(
+      'oauth-personal',
+    )
+    expect(antigravitySignIn({ answered: null, file: 'agent-platform', key: false })).toBe(
+      'agent-platform',
+    )
+    expect(antigravitySignIn({ answered: null, file: null, key: false })).toBeNull()
+  })
+
   it('reads only the sign-in method from agy’s auth state', () => {
     expect(antigravitySignInMethod('{"methodId":"oauth-personal"}')).toBe('oauth-personal')
     expect(antigravitySignInMethod('{"methodId":"gemini-api-key","token":"x"}')).toBe(
@@ -55,67 +84,128 @@ describe('Google Antigravity plan', () => {
 })
 
 describe('Google Antigravity plan limits', () => {
+  // agy 1.5.9's `agy -p "/usage" --output-format json`, signed in with Google AI Pro.
   it('reads both windows of each model group', () => {
-    const usage = parseAntigravityUsage(USAGE, NOW)
-    expect(usage?.limits).toEqual([
-      {
-        window: 'seven_day_gemini_models',
-        label: 'Weekly · Gemini Models',
-        usedPercent: 1,
-        resetsAt: Date.UTC(2026, 10, 23, 17, 37),
-        state: 'ok',
-        observedAt: NOW,
-        models: ['Gemini 3.8 Flash'],
+    expect(parseAntigravityUsage(usage, NOW)).toEqual({
+      limits: [
+        {
+          window: 'seven_day_gemini_models',
+          label: 'Weekly · Gemini Models',
+          usedPercent: 100 - 0.9846937656402588 * 100,
+          resetsAt: Date.UTC(2026, 10, 23, 17, 37, 8),
+          state: 'ok',
+          observedAt: NOW,
+          models: ['Gemini 3.8 Flash'],
+        },
+        {
+          window: 'five_hour_gemini_models',
+          label: '5-hour · Gemini Models',
+          usedPercent: 100 - 0.9820148944854736 * 100,
+          resetsAt: Date.UTC(2026, 10, 17, 7, 35, 26),
+          state: 'ok',
+          observedAt: NOW,
+          models: ['Gemini 3.8 Flash'],
+        },
+        {
+          window: 'seven_day_claude_and_gpt_models',
+          label: 'Weekly · Claude and GPT models',
+          usedPercent: 0,
+          resetsAt: Date.UTC(2026, 10, 24, 3, 42, 21),
+          state: 'ok',
+          observedAt: NOW,
+          models: ['Claude Sonnet 4.6', 'Claude Opus 4.6', 'GPT-OSS 120B'],
+        },
+        {
+          window: 'five_hour_claude_and_gpt_models',
+          label: '5-hour · Claude and GPT models',
+          usedPercent: 0,
+          resetsAt: Date.UTC(2026, 10, 17, 8, 42, 21),
+          state: 'ok',
+          observedAt: NOW,
+          models: ['Claude Sonnet 4.6', 'Claude Opus 4.6', 'GPT-OSS 120B'],
+        },
+      ],
+      balances: [],
+    })
+  })
+
+  it('reads a used-up window as reached, and skips a window or value it does not know', () => {
+    const reply = {
+      status: 'SUCCESS',
+      command: {
+        name: 'usage',
+        data: {
+          groups: [
+            {
+              name: 'Gemini Models',
+              buckets: [
+                { window: '5h', remaining_fraction: 0, reset_time: '2026-11-17T07:35:26Z' },
+                { window: 'monthly', remaining_fraction: 0.5 },
+                { window: 'weekly', remaining_fraction: 'most' },
+                { window: 'weekly', remaining_fraction: 1.5 },
+                { window: 'weekly', remaining_fraction: 0.25 },
+              ],
+            },
+          ],
+        },
       },
+    }
+    expect(parseAntigravityUsage(reply, NOW)?.limits).toEqual([
       {
         window: 'five_hour_gemini_models',
         label: '5-hour · Gemini Models',
-        usedPercent: 1,
-        resetsAt: Date.UTC(2026, 10, 16, 22, 37),
-        state: 'ok',
-        observedAt: NOW,
-        models: ['Gemini 3.8 Flash'],
-      },
-      {
-        window: 'seven_day_claude_and_gpt_models',
-        label: 'Weekly · Claude and GPT models',
-        usedPercent: 0,
-        resetsAt: Date.UTC(2026, 10, 23, 17, 41),
-        state: 'ok',
-        observedAt: NOW,
-        models: ['Claude Sonnet 4.6', 'Claude Opus 4.6', 'GPT-OSS 120B'],
-      },
-      {
-        window: 'five_hour_claude_and_gpt_models',
-        label: '5-hour · Claude and GPT models',
         usedPercent: 100,
-        resetsAt: Date.UTC(2026, 10, 16, 22, 41),
+        resetsAt: Date.UTC(2026, 10, 17, 7, 35, 26),
         state: 'reached',
         observedAt: NOW,
-        models: ['Claude Sonnet 4.6', 'Claude Opus 4.6', 'GPT-OSS 120B'],
+      },
+      {
+        window: 'seven_day_gemini_models',
+        label: 'Weekly · Gemini Models',
+        usedPercent: 75,
+        resetsAt: null,
+        state: 'ok',
+        observedAt: NOW,
       },
     ])
   })
 
-  it('reads no limits as none, and a failed or other reply as nothing', () => {
-    expect(parseAntigravityUsage('### Quota Limits\n- No quota limits reported.\n', NOW)).toEqual({
-      limits: [],
-      balances: [],
+  it('reads no quota groups as no limits, and a failed or other reply as nothing', () => {
+    const empty = { status: 'SUCCESS', command: { name: 'usage', data: { groups: [] } } }
+    expect(parseAntigravityUsage(empty, NOW)).toEqual({ limits: [], balances: [] })
+    // Signed out, agy answers so once its browser sign-in is stopped.
+    const failed = {
+      conversation_id: '',
+      status: 'ERROR',
+      response: '',
+      error: 'authentication failed or timed out',
+      num_turns: 0,
+    }
+    expect(parseAntigravityUsage(failed, NOW)).toBeNull()
+    expect(replyError(failed)).toBe('authentication failed or timed out')
+    expect(replyError(usage)).toBeNull()
+    expect(parseAntigravityUsage(credits, NOW)).toBeNull()
+    expect(parseAntigravityUsage({ status: 'SUCCESS', response: 'Quota' }, NOW)).toBeNull()
+    expect(parseAntigravityUsage('not an object', NOW)).toBeNull()
+  })
+
+  it('reads the G1 credits left as a balance', () => {
+    expect(parseAntigravityCredits(credits)).toEqual({
+      label: 'G1 credits',
+      amount: 0,
+      currency: 'credits',
     })
-    expect(
-      parseAntigravityUsage('### Quota Limits\n- Unable to retrieve quota status (timeout)\n', NOW),
-    ).toBeNull()
-    expect(
-      parseAntigravityUsage(
-        '### Quota Limits\n- Not applicable for current authentication method.\n',
-        NOW,
-      ),
-    ).toBeNull()
-    expect(parseAntigravityUsage('Here is a summary of your usage.', NOW)).toBeNull()
+    const some = {
+      status: 'SUCCESS',
+      command: { name: 'credits', data: { remaining_credits: 250 } },
+    }
+    expect(parseAntigravityCredits(some)?.amount).toBe(250)
+    expect(parseAntigravityCredits(usage)).toBeNull()
+    expect(parseAntigravityCredits({ status: 'ERROR', error: 'x' })).toBeNull()
   })
 
   it('counts a session only against its own model’s group', () => {
-    const limits = parseAntigravityUsage(USAGE, NOW)!.limits
+    const limits = parseAntigravityUsage(usage, NOW)!.limits
     const model = (value: string): ConfigOption => ({
       id: 'model',
       name: 'Model',
@@ -142,45 +232,14 @@ describe('Google Antigravity plan limits', () => {
     // A model no group lists is held back by every window.
     expect(windows('gemini-4-preview')).toHaveLength(4)
   })
-})
 
-describe('the usage server’s proxy', () => {
-  const SCUTIL = `<dictionary> {
-  ExceptionsList : <array> {
-    0 : 127.0.0.1
-  }
-  HTTPEnable : 1
-  HTTPPort : 7897
-  HTTPProxy : 127.0.0.1
-  HTTPSEnable : 1
-  HTTPSPort : 7897
-  HTTPSProxy : 127.0.0.1
-  SOCKSEnable : 1
-  SOCKSPort : 7897
-  SOCKSProxy : 127.0.0.1
-}`
-
-  it('passes the system HTTP(S) proxy, never the SOCKS one', () => {
-    expect(systemProxyEnv(SCUTIL)).toEqual({
-      HTTP_PROXY: 'http://127.0.0.1:7897',
-      http_proxy: 'http://127.0.0.1:7897',
-      HTTPS_PROXY: 'http://127.0.0.1:7897',
-      https_proxy: 'http://127.0.0.1:7897',
-    })
-    const socksOnly = SCUTIL.replace(/HTTPS?Enable : 1/g, (line) => line.replace('1', '0'))
-    expect(systemProxyEnv(socksOnly)).toEqual({})
-  })
-
-  it('uses the one that is on for both, and refuses what is not a host and port', () => {
-    const httpsOnly = SCUTIL.replace('HTTPEnable : 1', 'HTTPEnable : 0')
-    expect(systemProxyEnv(httpsOnly).HTTP_PROXY).toBe('http://127.0.0.1:7897')
-    expect(systemProxyEnv(SCUTIL.replace(/HTTPS?Proxy : 127.0.0.1/g, 'x;rm -rf'))).toEqual({})
-    expect(systemProxyEnv(SCUTIL.replace(/HTTPS?Port : 7897/g, 'HTTPPort : 99999'))).toEqual({})
-  })
-
-  it('leaves an environment that names a proxy as it is', () => {
-    expect(namesProxy({ https_proxy: 'http://proxy:8080' })).toBe(true)
-    expect(namesProxy({ ALL_PROXY: 'socks5://127.0.0.1:1080' })).toBe(true)
-    expect(namesProxy({ HTTP_PROXY: ' ', PATH: '/usr/bin' })).toBe(false)
+  it('runs agy only on a Google sign-in, since a signed-out agy opens a browser to sign in', () => {
+    expect(antigravityLimitsRead('oauth-personal')).toBe('read')
+    expect(antigravityLimitsRead('oauth-business')).toBe('read')
+    // An API key or a cloud project has its usage in Google AI Studio or Google Cloud.
+    expect(antigravityLimitsRead('gemini-api-key')).toBe('none')
+    expect(antigravityLimitsRead('agent-platform')).toBe('none')
+    // Unknown: Kettu asks agy for its plan first, and never runs `/usage` blind.
+    expect(antigravityLimitsRead(null)).toBe('unknown')
   })
 })

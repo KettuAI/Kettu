@@ -1208,6 +1208,7 @@ export class AgentHost {
     options.send({ type: 'host:ready' })
     void host.trees.stopLeftovers()
     host.agents.startLimitReads()
+    void host.agents.removeAntigravityUsageServer()
     void host.agents.detectAll().then(() => {
       host.agents.scheduleUpdateChecks()
       host.firstStart()

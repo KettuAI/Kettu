@@ -5,72 +5,59 @@
 // `_meta.antigravity.tier` in `initialize`:
 // `{ antigravity: { tier: { name: 'Google AI Pro', id: 'g1-pro-tier', upgradeUri } } }`.
 //
-// The limits: agy has no `/usage` command, so it would send one to the model. The registry's ACP
-// server, `agy_acp_server`, answers `/usage` itself, without a model request, with the quota
-// groups of the signed-in account (1.5.0):
-//
-//   ### Quota Limits
-//   - **Gemini Models**
-//     *(Models within this group: Gemini 3.8 Flash)*
-//     - **Weekly Limit Remaining:** 99% remaining (resets Nov 23, 2026, 17:37 UTC)
-//     - **Five Hour Limit Remaining:** 99% remaining (resets Nov 16, 2026, 22:37 UTC)
+// The limits: `agy acp` has no `/usage` command, so it would send one to the model. agy's print
+// mode answers its read-only `/usage` and `/credits` itself, with its own sign-in, in no
+// conversation and with no model request (1.5.9): `agy -p "/usage" --output-format json` gives
+// `command.data.groups[]`, each `{ name, description: 'Models within this group: ...', buckets }`
+// with `{ window: 'weekly' | '5h', remaining_fraction, reset_time }`, and `/credits` gives
+// `command.data.remaining_credits`.
 
 import path from 'node:path'
-import type { PlanLimit } from '@shared/agent-host'
-import type { ArchiveRelease } from '../binary-install'
-import { object, percentLimit, type VendorUsage } from './common'
+import type { PlanLimit, ProviderBalance } from '@shared/agent-host'
+import { balance, number, object, percentLimit, time, type VendorUsage } from './common'
 
 /** The version the plan was checked on, as agy names it in `initialize`; later ones keep it. */
 export const ANTIGRAVITY_TIER_VERSION = '1.5.9'
 
+/** The version agy's `/usage` and `/credits` replies were checked on; later ones keep them. */
+export const ANTIGRAVITY_USAGE_VERSION = '1.5.9'
+
+const answerTier = (meta: unknown) => object(object(object(meta)?.antigravity)?.tier)
+
 /** The plan's name in an answer's `_meta`, or null when it names none. */
 export function antigravityTier(meta: unknown): string | null {
-  const tier = object(object(object(meta)?.antigravity)?.tier)
+  const tier = answerTier(meta)
   const name = typeof tier?.name === 'string' ? tier.name.trim() : ''
   return name || null
 }
 
-/** The registry's ACP server, run only to answer `/usage`; its Linux builds take an empty `--uid`. */
-export const ANTIGRAVITY_USAGE_SERVER: ArchiveRelease = {
-  version: '1.5.0',
-  entries: {
-    'darwin-aarch64': {
-      url: 'https://dl.google.com/agy-extensions/releases/macos/agy-acp-server-1.5.0-darwin-arm64.zip',
-      sha256: 'c82ecb4ef476bfc35cbe5b2745cdddef873b99c9f5bd7fd11e5ca1fc1667a3fc',
-      cmd: './agy_acp_server.par',
-    },
-    'darwin-x86_64': {
-      url: 'https://dl.google.com/agy-extensions/releases/macos/agy-acp-server-1.5.0-darwin-x86_64.zip',
-      sha256: '86a94e33b25d4a38ff30526ad844546860aa9ed98698498d9e87d30eb794426e',
-      cmd: './agy_acp_server.par',
-    },
-    'linux-x86_64': {
-      url: 'https://dl.google.com/agy-extensions/releases/linux/agy-acp-server-1.5.0-linux-x86_64.zip',
-      sha256: '36f373e8948edf1727b39c7d62b5722d6a4474bdfd72b04ad3d6def571808c9f',
-      cmd: './agy_acp_server.par',
-      args: ['--uid='],
-    },
-    'linux-aarch64': {
-      url: 'https://dl.google.com/agy-extensions/releases/linux/agy-acp-server-1.5.0-linux-arm64.zip',
-      sha256: '1e184f439477b54138e94440056b26a78c0a8075a8fd2ffda637ec31267c6459',
-      cmd: './agy_acp_server.par',
-      args: ['--uid='],
-    },
-    'windows-x86_64': {
-      url: 'https://dl.google.com/agy-extensions/releases/windows/agy-acp-server-1.5.0-windows-x86_64.zip',
-      sha256: '6163f6b59b381bae419652dbae167bc8cda0ef29d665c0ba8af3d8c7fddd8867',
-      cmd: './agy_acp_server.exe',
-    },
-    'windows-aarch64': {
-      url: 'https://dl.google.com/agy-extensions/releases/windows/agy-acp-server-1.5.0-windows-arm64.zip',
-      sha256: '340092b8af6dafc71eb15f4a8ec54b4d1f0bce16d1fa4d163b562c50b905f8f4',
-      cmd: './agy_acp_server.exe',
-    },
-  },
+/**
+ * The sign-in the plan in an answer's `_meta` shows, by its id: Google's personal plans (the free
+ * tier and Google One's `g1-` AI plans) or Gemini Enterprise and Google Cloud ones (`gcp-`,
+ * `business-`), the ids agy 1.5.9 knows. Null for an answer with no plan, which an API key or a
+ * cloud project gives, or with one of an id Kettu does not know.
+ */
+export function antigravityTierSignIn(meta: unknown): 'oauth-personal' | 'oauth-business' | null {
+  const id = answerTier(meta)?.id
+  if (typeof id !== 'string') return null
+  if (id === 'free-tier' || id.startsWith('g1-')) return 'oauth-personal'
+  if (id.startsWith('gcp-') || id.startsWith('business-')) return 'oauth-business'
+  return null
 }
 
-/** The sign-ins whose plan limits the usage server reads: Google and Gemini Enterprise. */
+/** The sign-ins agy reads plan limits for: Google and Gemini Enterprise. */
 export const ANTIGRAVITY_PLAN_SIGN_INS: readonly string[] = ['oauth-personal', 'oauth-business']
+
+/**
+ * What a plan limits read does for a sign-in: run agy's `/usage` on a Google or Gemini Enterprise
+ * sign-in; nothing on an API key or a cloud project, whose usage is in Google AI Studio or Google
+ * Cloud; and on one Kettu does not know, find it out first, since a signed-out agy answers
+ * `/usage` by opening a browser to sign in.
+ */
+export function antigravityLimitsRead(method: string | null): 'read' | 'none' | 'unknown' {
+  if (method === null) return 'unknown'
+  return ANTIGRAVITY_PLAN_SIGN_INS.includes(method) ? 'read' : 'none'
+}
 
 /** Where agy 1.5.9 keeps the sign-in method its ACP mode uses, under the home folder. */
 export function antigravityAuthStateFile(home: string): string {
@@ -91,21 +78,23 @@ export function antigravitySignInMethod(text: string): string | null {
   }
 }
 
-const WINDOWS: Readonly<Record<string, { window: string; label: string }>> = {
-  'five hour': { window: 'five_hour', label: '5-hour' },
-  weekly: { window: 'seven_day', label: 'Weekly' },
+/**
+ * The method agy is signed in with: the Google sign-in its last answer's plan showed, since agy
+ * names a plan only while signed in with Google; else Kettu's API key, which Kettu signs agy in
+ * with; else the method its auth state file names, which only an ACP client's `authenticate`
+ * writes. Null when none of them tells.
+ */
+export function antigravitySignIn(input: {
+  answered: string | null
+  file: string | null
+  key: boolean
+}): string | null {
+  return input.answered ?? (input.key ? 'gemini-api-key' : input.file)
 }
 
-const MONTHS = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec']
-
-/** `Nov 23, 2026, 17:37 UTC`, the server's `%b %d, %Y, %H:%M UTC`, as milliseconds. */
-function resetTime(text: string): number | null {
-  const match = /^([A-Za-z]{3}) (\d{1,2}), (\d{4}), (\d{1,2}):(\d{2}) UTC$/.exec(text.trim())
-  if (!match) return null
-  const month = MONTHS.indexOf(match[1]!.toLowerCase())
-  if (month < 0) return null
-  const at = Date.UTC(Number(match[3]), month, Number(match[2]), Number(match[4]), Number(match[5]))
-  return Number.isFinite(at) ? at : null
+const WINDOWS: Readonly<Record<string, { window: string; label: string }>> = {
+  '5h': { window: 'five_hour', label: '5-hour' },
+  weekly: { window: 'seven_day', label: 'Weekly' },
 }
 
 const slug = (name: string): string =>
@@ -115,99 +104,63 @@ const slug = (name: string): string =>
     .filter(Boolean)
     .join('_')
 
+/** The `command.data` of a successful print-mode reply to `command`; null for any other reply. */
+function commandData(reply: unknown, command: string): Record<string, unknown> | null {
+  const body = object(reply)
+  const ran = object(body?.command)
+  if (body?.status !== 'SUCCESS' || ran?.name !== command) return null
+  return object(ran.data)
+}
+
+/** The error of a failed print-mode reply, as agy words it; null for any other reply. */
+export function replyError(reply: unknown): string | null {
+  const body = object(reply)
+  if (body?.status !== 'ERROR') return null
+  return typeof body.error === 'string' && body.error.trim() ? body.error.trim() : 'failed'
+}
+
 /**
- * The quota groups' windows in the server's `/usage` reply, each window per group as
- * `five_hour_<group>` or `seven_day_<group>` with the group's models; null for a message that is
- * not that reply, or one that says the quota could not be read. A group reported with no window
- * Kettu knows gives none.
+ * The quota groups' windows in agy's `/usage` reply, each window per group as
+ * `five_hour_<group>` or `seven_day_<group>` with the group's models; null for a reply that is not
+ * a successful `/usage`. No groups is no limits; a window or value Kettu does not know gives none.
  */
-export function parseAntigravityUsage(markdown: string, now: number): VendorUsage | null {
-  const lines = markdown.split(/\r?\n/)
-  const start = lines.findIndex((line) => /^#+\s*Quota Limits\s*$/i.test(line.trim()))
-  if (start < 0) return null
+export function parseAntigravityUsage(reply: unknown, now: number): VendorUsage | null {
+  const data = commandData(reply, 'usage')
+  if (!data) return null
+  const groups = Array.isArray(data.groups) ? data.groups : []
   const limits: PlanLimit[] = []
-  let group: { name: string; models: string[] } | null = null
-  for (const raw of lines.slice(start + 1)) {
-    const line = raw.trimEnd()
-    if (/^#+\s/.test(line.trim())) break
-    if (/^-\s+(Unable to retrieve|Not applicable)/i.test(line.trim())) return null
-    const named = /^-\s+\*\*(.+?)\*\*\s*$/.exec(line)
-    if (named) {
-      group = { name: named[1]!.trim(), models: [] }
-      continue
+  for (const value of groups) {
+    const group = object(value)
+    const name = typeof group?.name === 'string' ? group.name.trim() : ''
+    if (!group || !name) continue
+    const listed =
+      typeof group.description === 'string'
+        ? /^Models within this group:\s*(.+)$/i.exec(group.description.trim())
+        : null
+    const models = (listed?.[1] ?? '')
+      .split(',')
+      .map((model) => model.trim())
+      .filter(Boolean)
+    for (const item of Array.isArray(group.buckets) ? group.buckets : []) {
+      const bucket = object(item)
+      const kind = typeof bucket?.window === 'string' ? WINDOWS[bucket.window] : undefined
+      const left = number(bucket?.remaining_fraction)
+      if (!kind || left === null || left < 0 || left > 1) continue
+      const limit = percentLimit(
+        `${kind.window}_${slug(name)}`,
+        `${kind.label} · ${name}`,
+        100 - left * 100,
+        now,
+        typeof bucket?.reset_time === 'string' ? time(bucket.reset_time) : null,
+      )
+      limits.push(models.length > 0 ? { ...limit, models: [...models] } : limit)
     }
-    if (!group) continue
-    const models = /^\s+\*\(Models within this group:\s*(.+?)\)\*\s*$/.exec(line)
-    if (models) {
-      group.models = models[1]!
-        .split(',')
-        .map((model) => model.trim())
-        .filter(Boolean)
-      continue
-    }
-    const value = /^\s+-\s+\*\*(.+?) Limit Remaining:\*\*\s*(.+)$/i.exec(line)
-    if (!value) continue
-    const kind = WINDOWS[value[1]!.trim().toLowerCase()]
-    const remaining = /^(\d+(?:\.\d+)?)% remaining(?:\s*\(resets (.+)\))?$/i.exec(value[2]!.trim())
-    if (!kind || !remaining) continue
-    const left = Math.max(0, Math.min(100, Number(remaining[1])))
-    const limit = percentLimit(
-      `${kind.window}_${slug(group.name)}`,
-      `${kind.label} · ${group.name}`,
-      100 - left,
-      now,
-      remaining[2] ? resetTime(remaining[2]) : null,
-    )
-    limits.push(group.models.length > 0 ? { ...limit, models: [...group.models] } : limit)
   }
   return { limits, balances: [] }
 }
 
-const PROXY_FIELDS = [
-  ['HTTPS', 'HTTPS_PROXY'],
-  ['HTTP', 'HTTP_PROXY'],
-] as const
-
-/**
- * The macOS system proxy, from what `scutil --proxy` prints, as the variables a program that
- * reads no system settings takes: each of the HTTP and HTTPS proxies that is on. A SOCKS proxy
- * alone gives none.
- */
-export function systemProxyEnv(scutil: string): Record<string, string> {
-  const fields = new Map<string, string>()
-  for (const line of scutil.split(/\r?\n/)) {
-    const match = /^\s*([A-Za-z]+)\s*:\s*(\S+)\s*$/.exec(line)
-    if (match) fields.set(match[1]!, match[2]!)
-  }
-  const env: Record<string, string> = {}
-  for (const [prefix, name] of PROXY_FIELDS) {
-    const host = fields.get(`${prefix}Proxy`)
-    const port = Number(fields.get(`${prefix}Port`))
-    if (fields.get(`${prefix}Enable`) !== '1' || !host || !/^[A-Za-z0-9.:[\]-]+$/.test(host)) {
-      continue
-    }
-    if (!Number.isInteger(port) || port <= 0 || port > 65535) continue
-    const url = `http://${host.includes(':') && !host.startsWith('[') ? `[${host}]` : host}:${port}`
-    env[name] = url
-    env[name.toLowerCase()] = url
-  }
-  // A program given one of them uses it for both kinds of request.
-  if (env.HTTPS_PROXY && !env.HTTP_PROXY) {
-    env.HTTP_PROXY = env.HTTPS_PROXY
-    env.http_proxy = env.HTTPS_PROXY
-  }
-  if (env.HTTP_PROXY && !env.HTTPS_PROXY) {
-    env.HTTPS_PROXY = env.HTTP_PROXY
-    env.https_proxy = env.HTTP_PROXY
-  }
-  return env
-}
-
-const PROXY_VARIABLES = ['HTTP_PROXY', 'HTTPS_PROXY', 'ALL_PROXY']
-
-/** Whether an environment names a proxy already, in either case. */
-export function namesProxy(env: Record<string, string | undefined>): boolean {
-  return Object.entries(env).some(
-    ([name, value]) => PROXY_VARIABLES.includes(name.toUpperCase()) && !!value?.trim(),
-  )
+/** The G1 credits left in agy's `/credits` reply; null for a reply that is not one. */
+export function parseAntigravityCredits(reply: unknown): ProviderBalance | null {
+  const left = number(commandData(reply, 'credits')?.remaining_credits)
+  return left === null || left < 0 ? null : balance('G1 credits', left, 'credits')
 }
