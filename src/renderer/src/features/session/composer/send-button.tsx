@@ -13,7 +13,7 @@ import { cn } from '@renderer/lib/utils'
 import { Glyph } from '@renderer/features/shell/glyph'
 import { DESCRIBED_ROW, ItemText } from './menu-parts'
 
-// Held this long, the Stop button offers to queue or send the message instead.
+// Held this long, the Send button offers Send now beside Queue it.
 const HOLD_MS = 450
 
 /**
@@ -66,39 +66,66 @@ function ArrowUpGlyph() {
   )
 }
 
+/** Stop while a turn runs and the box is empty, in ink; Esc does the same. */
+export function StopButton({ onStop }: { onStop: () => void }) {
+  const { t } = useTranslation('composer')
+  return (
+    <Tooltip>
+      <TooltipTrigger
+        render={
+          <button
+            type="button"
+            aria-label={t('prompt.stop')}
+            data-stop=""
+            onClick={onStop}
+            className="ui-ccc__send kettu-send"
+          />
+        }
+      >
+        <svg viewBox="0 0 16 16" aria-hidden>
+          <rect x="4" y="4" width="8" height="8" rx="1.6" fill="currentColor" />
+        </svg>
+      </TooltipTrigger>
+      <TooltipContent>
+        <Trans
+          t={t}
+          i18nKey="prompt.stopTooltip"
+          values={{ shortcut: 'Esc' }}
+          components={{ shortcut: <span className="opacity-60" /> }}
+        />
+      </TooltipContent>
+    </Tooltip>
+  )
+}
+
 /**
- * Stop while a turn runs, in ink. With a message in the box, holding it offers Queue it and, where
- * the agent takes messages into a running turn, Send now; the keys do the same without the menu.
+ * Send while a turn runs and the box holds a message: it queues the message. Where the agent takes
+ * messages into a running turn, holding it offers Send now; the keys do the same without the menu.
  */
-export function RunningButton({
-  holds,
+export function QueueButton({
   steering,
   queueKey,
   steerKey,
-  onStop,
   onQueue,
   onSteer,
 }: {
-  /** The box holds a message that can be queued. */
-  holds: boolean
   steering: boolean
   queueKey: string
   steerKey: string
-  onStop: () => void
   onQueue: () => void
   onSteer: () => void
 }) {
   const { t } = useTranslation('composer')
   const anchor = useRef<HTMLButtonElement>(null)
   const timer = useRef<number | undefined>(undefined)
-  // The press that opened the menu, whose click must not stop the turn.
+  // The press that opened the menu, whose click must not queue the message.
   const held = useRef(false)
   const [open, setOpen] = useState(false)
 
   const release = () => window.clearTimeout(timer.current)
   const press = (event: PointerEvent) => {
     held.current = false
-    if (!holds || event.button !== 0) return
+    if (!steering || event.button !== 0) return
     timer.current = window.setTimeout(() => {
       held.current = true
       setOpen(true)
@@ -113,28 +140,25 @@ export function RunningButton({
             <button
               ref={anchor}
               type="button"
-              aria-label={t('prompt.stop')}
-              data-stop=""
+              aria-label={t('prompt.send')}
               onPointerDown={press}
               onPointerUp={release}
               onPointerLeave={release}
               onClick={() => {
                 if (held.current) held.current = false
-                else onStop()
+                else onQueue()
               }}
               className="ui-ccc__send kettu-send"
             />
           }
         >
-          <svg viewBox="0 0 16 16" aria-hidden>
-            <rect x="4" y="4" width="8" height="8" rx="1.6" fill="currentColor" />
-          </svg>
+          <ArrowUpGlyph />
         </TooltipTrigger>
         <TooltipContent>
           <Trans
             t={t}
-            i18nKey={holds ? 'prompt.stopHoldTooltip' : 'prompt.stopTooltip'}
-            values={{ shortcut: 'Esc' }}
+            i18nKey={steering ? 'prompt.queueHoldTooltip' : 'prompt.queueTooltip'}
+            values={{ shortcut: formatShortcut(queueKey) }}
             components={{ shortcut: <span className="opacity-60" /> }}
           />
         </TooltipContent>
@@ -157,13 +181,11 @@ export function RunningButton({
               <ItemText name={t('prompt.queueIt')} description={t('prompt.queueItHint')} />
               <DropdownMenuShortcut>{formatShortcut(queueKey)}</DropdownMenuShortcut>
             </DropdownMenuItem>
-            {steering && (
-              <DropdownMenuItem className={DESCRIBED_ROW} onClick={onSteer}>
-                <Glyph icon={ArrowUp02Icon} />
-                <ItemText name={t('prompt.sendNow')} description={t('prompt.sendNowHint')} />
-                <DropdownMenuShortcut>{formatShortcut(steerKey)}</DropdownMenuShortcut>
-              </DropdownMenuItem>
-            )}
+            <DropdownMenuItem className={DESCRIBED_ROW} onClick={onSteer}>
+              <Glyph icon={ArrowUp02Icon} />
+              <ItemText name={t('prompt.sendNow')} description={t('prompt.sendNowHint')} />
+              <DropdownMenuShortcut>{formatShortcut(steerKey)}</DropdownMenuShortcut>
+            </DropdownMenuItem>
           </MenuPrimitive.Popup>
         </MenuPrimitive.Positioner>
       </MenuPrimitive.Portal>

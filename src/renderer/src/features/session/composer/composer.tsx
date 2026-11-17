@@ -55,7 +55,7 @@ import { nextChoice, nextMode } from './modes'
 import { OutOfCreditStrip } from './out-of-credit-strip'
 import { useAddMenu } from './add-menu'
 import { PromptBox } from './prompt-box'
-import { RunningButton, SendButton } from './send-button'
+import { QueueButton, SendButton, StopButton } from './send-button'
 import { SessionPlace } from './session-place'
 import { SwitchConfirm } from './switch-confirm'
 import { SwitchStrip } from './switch-strip'
@@ -504,27 +504,29 @@ export function Composer({
   const modelName = model
     ? (shownChoice(model.choices, String(model.value))?.name ?? String(model.value))
     : null
-  const sendControl = running ? (
-    <RunningButton
-      holds={canQueue}
-      steering={steering}
-      queueKey={queueKey}
-      steerKey={steerKey}
-      onStop={cancel}
-      onQueue={() => queue(false)}
-      onSteer={() => queue(true)}
-    />
-  ) : blocked && holdsMessage ? (
-    // A disabled button takes no pointer, so the tooltip says why from around it.
-    <Tooltip>
-      <TooltipTrigger render={<span key="send" className="kettu-send-wrap" />}>
-        <SendButton disabled label={t('prompt.send')} />
-      </TooltipTrigger>
-      <TooltipContent>{blocked.message}</TooltipContent>
-    </Tooltip>
-  ) : (
-    <SendButton key="send" disabled={!canSend} label={t('prompt.send')} onClick={() => send()} />
-  )
+  // While a turn runs, Stop shows with nothing written and Send, which queues, once a message is.
+  const sendControl =
+    running && !holdsMessage ? (
+      <StopButton onStop={cancel} />
+    ) : running && canQueue ? (
+      <QueueButton
+        steering={steering}
+        queueKey={queueKey}
+        steerKey={steerKey}
+        onQueue={() => queue(false)}
+        onSteer={() => queue(true)}
+      />
+    ) : blocked && holdsMessage ? (
+      // A disabled button takes no pointer, so the tooltip says why from around it.
+      <Tooltip>
+        <TooltipTrigger render={<span key="send" className="kettu-send-wrap" />}>
+          <SendButton disabled label={t('prompt.send')} />
+        </TooltipTrigger>
+        <TooltipContent>{blocked.message}</TooltipContent>
+      </Tooltip>
+    ) : (
+      <SendButton key="send" disabled={!canSend} label={t('prompt.send')} onClick={() => send()} />
+    )
   const shownError =
     error ??
     (blocked && !blocked.adding ? blocked.message : null) ??
