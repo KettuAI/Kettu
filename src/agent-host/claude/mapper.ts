@@ -2,6 +2,7 @@
 // patches and effects the ACP mapper produces. A message of a subagent goes to the subagent's
 // session, which Kettu shows as a session of its own; everything else to the session it came on.
 
+import path from 'node:path'
 import type {
   BackgroundTaskView,
   PlanItem,
@@ -224,6 +225,8 @@ export class ClaudeMapper {
     private readonly cwd: string,
     /** The context window Claude Code runs a model in, as far as it is known. */
     private readonly windowOf: (model: string) => number | null = () => null,
+    /** The folder Claude Code keeps its Plan mode plans in, outside the project; null if unknown. */
+    private readonly plans: string | null = null,
   ) {}
 
   /** The session a message belongs to: a subagent's, or this one. */
@@ -565,6 +568,17 @@ export class ClaudeMapper {
     return out
   }
 
+  /** Whether a write's input names a file in Claude Code's folder of plans. */
+  private isPlan(input: unknown): boolean {
+    const file = (input as { file_path?: unknown } | null)?.file_path
+    if (this.plans === null || typeof file !== 'string' || !path.isAbsolute(file)) return false
+    const key = (value: string) => (process.platform === 'win32' ? value.toLowerCase() : value)
+    const folder = key(path.resolve(this.plans))
+    return key(path.resolve(file)).startsWith(
+      folder.endsWith(path.sep) ? folder : folder + path.sep,
+    )
+  }
+
   /** A tool call as its input stands; `complete` once its input is whole. */
   private toolUse(
     ctx: MapperContext,
@@ -588,6 +602,12 @@ export class ClaudeMapper {
     }
     // A subagent shows as a session of its own, unless the call needs an answer first.
     if (SUBAGENT_TOOLS.has(name) && !asked) return out
+    // A plan Claude Code writes into its own folder is no change of the project, so it shows no
+    // row; in Plan mode a write's row waits for the path that tells.
+    if (FILE_WRITES.has(name) && !asked && !ctx.thread.byId[`t:${block.id}`]) {
+      if (!complete && planning(ctx)) return out
+      if (complete && this.isPlan(block.input)) return out
+    }
     const id = `t:${block.id}`
     const view = toolView(name, complete ? block.input : {}, this.cwd)
     const existing = ctx.thread.byId[id]
@@ -1489,6 +1509,16 @@ function modeChange(ctx: MapperContext, mode: string): MapperOutput {
 
 /** The option id of the permission mode, as the ACP adapter named it. */
 export const MODE_OPTION_ID = 'mode'
+
+/** Claude Code's tools that write a file. */
+const FILE_WRITES: ReadonlySet<string> = new Set(['Write', 'Edit', 'MultiEdit'])
+
+/** Whether the session is in Plan mode, where Claude Code writes only its plan. */
+function planning(ctx: MapperContext): boolean {
+  return ctx.thread.session.config.some(
+    (item) => item.id === MODE_OPTION_ID && item.value === 'plan',
+  )
+}
 
 /** The context window Claude Code's models have unless it says otherwise. */
 export const DEFAULT_CONTEXT_WINDOW = 200_000

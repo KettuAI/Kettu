@@ -518,6 +518,13 @@ export class ClaudeConnection implements AgentConnection {
     return { ...this.context.env, ...this.context.spec.env }
   }
 
+  /** Where Claude Code keeps its Plan mode plans: `plans` in its configuration folder. */
+  private plansFolder(): string {
+    const env = this.env
+    const home = env.HOME || env.USERPROFILE || os.homedir()
+    return path.join(env[CONFIG_DIR] || path.join(home, '.claude'), 'plans')
+  }
+
   async initialize(_appVersion: string, signal?: AbortSignal): Promise<AgentInit> {
     const entry = this.context.spec.command
     const loading = this.load(entry)
@@ -687,7 +694,7 @@ export class ClaudeConnection implements AgentConnection {
           `Could not read subagent ${child.taskId}: ${errorText(error)}`,
         )
       }
-      const mapper = new ClaudeMapper(child.taskId, cwd)
+      const mapper = new ClaudeMapper(child.taskId, cwd, undefined, this.plansFolder())
       const prompter = { parentId: sessionId, messageId: child.toolUseId }
       for (const delivery of mapper.replay(messages, prompter)) this.deliver(delivery, true)
     }
@@ -868,7 +875,7 @@ export class ClaudeConnection implements AgentConnection {
       options,
       query: null,
       input,
-      mapper: new ClaudeMapper(sessionId, cwd, windowOf),
+      mapper: new ClaudeMapper(sessionId, cwd, windowOf, this.plansFolder()),
       models: [],
       modes,
       choices: {

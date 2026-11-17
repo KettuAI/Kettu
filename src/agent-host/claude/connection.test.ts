@@ -195,6 +195,35 @@ function assistant(query: FakeQuery, id: string, content: unknown[], extra = {})
   } as SdkMessage
 }
 
+function toolResult(query: FakeQuery, id: string, content: string): SdkMessage {
+  return {
+    type: 'user',
+    message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: id, content }] },
+    parent_tool_use_id: null,
+    session_id: query.sessionId,
+  } as SdkMessage
+}
+
+/** Puts the session in Plan mode, as its mode option says. */
+function planning(target: Target): void {
+  const mode: ConfigOption = {
+    id: 'mode',
+    name: 'Mode',
+    category: 'mode',
+    type: 'select',
+    value: 'plan',
+    choices: [
+      { value: 'default', name: 'Default' },
+      { value: 'plan', name: 'Plan' },
+    ],
+  }
+  target.thread = threadFromSnapshot({
+    session: { ...baseSession, config: [mode] },
+    entries: [],
+    seq: 0,
+  })
+}
+
 function stream(query: FakeQuery, event: unknown, extra = {}): SdkMessage {
   return {
     type: 'stream_event',
@@ -1188,6 +1217,83 @@ describe('a turn', () => {
     }
     await s.connection.prompt(sessionId, [{ type: 'text', text: 'go' }])
     expect(target.entries()).toEqual([])
+  })
+
+  it('shows no row for the plan Claude Code writes in Plan mode into its own folder', async () => {
+    planning(target)
+    const plan = '/home/ada/.claude/plans/plan-how-to-add-lazy-hummingbird.md'
+    const write = (id: string, file: string) => ({
+      type: 'tool_use',
+      id,
+      name: 'Write',
+      input: { file_path: file, content: '# Plan' },
+    })
+    const edit = (id: string, file: string) => ({
+      type: 'tool_use',
+      id,
+      name: 'Edit',
+      input: { file_path: file, old_string: '# Plan', new_string: '# Plan\n\nKeep it short.' },
+    })
+    s.sdk.script = (query) => {
+      query.running()
+      query.emit(
+        stream(query, { type: 'message_start', message: { id: 'msg_1' } }),
+        stream(query, {
+          type: 'content_block_start',
+          content_block: { type: 'tool_use', id: 'toolu_w', name: 'Write', input: {} },
+        }),
+        assistant(query, 'msg_1', [write('toolu_w', plan)]),
+        toolResult(query, 'toolu_w', 'File created.'),
+        stream(query, { type: 'message_start', message: { id: 'msg_2' } }),
+        stream(query, {
+          type: 'content_block_start',
+          content_block: { type: 'tool_use', id: 'toolu_e', name: 'Edit', input: {} },
+        }),
+        assistant(query, 'msg_2', [edit('toolu_e', plan)]),
+        toolResult(query, 'toolu_e', 'File updated.'),
+        // A file of the project is no plan, though Plan mode keeps Claude Code from writing it.
+        assistant(query, 'msg_3', [write('toolu_x', '/repo/README.md')]),
+        toolResult(query, 'toolu_x', 'File created.'),
+      )
+      query.finish()
+    }
+    await s.connection.prompt(sessionId, [{ type: 'text', text: 'go' }])
+    expect(target.entries().map((entry) => entry.id)).toEqual(['t:toolu_x'])
+  })
+
+  it("finds the plans in the agent's own configuration folder", async () => {
+    s = await setup({ CLAUDE_CONFIG_DIR: '/home/ada/.kettu/agents/claude-code~work' })
+    target = new Target()
+    sessionId = (await s.connection.newSession('/repo')).sessionId
+    s.connection.register(sessionId, target)
+    planning(target)
+    s.sdk.script = (query) => {
+      query.running()
+      query.emit(
+        assistant(query, 'msg_1', [
+          {
+            type: 'tool_use',
+            id: 'toolu_w',
+            name: 'Write',
+            input: {
+              file_path: '/home/ada/.kettu/agents/claude-code~work/plans/a.md',
+              content: '# Plan',
+            },
+          },
+          {
+            type: 'tool_use',
+            id: 'toolu_x',
+            name: 'Write',
+            input: { file_path: '/home/ada/.claude/plans/b.md', content: '# Plan' },
+          },
+        ]),
+        toolResult(query, 'toolu_w', 'File created.'),
+        toolResult(query, 'toolu_x', 'File created.'),
+      )
+      query.finish()
+    }
+    await s.connection.prompt(sessionId, [{ type: 'text', text: 'go' }])
+    expect(target.entries().map((entry) => entry.id)).toEqual(['t:toolu_x'])
   })
 
   it('shows no row for a memory write, unless it failed and so wrote nothing', async () => {
