@@ -33,6 +33,7 @@ import {
   type GrokSignIn,
 } from './vendor-usage/grok'
 import { parseMistralAccount } from './vendor-usage/mistral-vibe'
+import { KeychainRefused, parseCursorAbout, type CursorSignIn } from './vendor-usage/cursor'
 import { readAuggieAccount } from './vendor-usage/auggie'
 import { readCopilotQuota } from './vendor-usage/copilot'
 import { readKiloProfile } from './vendor-usage/kilo'
@@ -2951,6 +2952,12 @@ export class AgentManager {
       slot.init?.version ??
       (adapter ? (adapter.current?.version ?? adapter.version) : slot.h.binaryVersion)
     if (!readerOpen(reader, version)) return
+    // A signed-out Cursor is told by its CLI, before any sign-in of its own is looked for.
+    if (
+      slot.def.id === 'cursor' &&
+      (await this.readCursorSignIn(slot))?.state === 'unauthenticated'
+    )
+      return
     const now = Date.now()
     let usage: VendorUsage
     try {
@@ -2959,11 +2966,48 @@ export class AgentManager {
         home: os.homedir(),
         platform: this.deps.platform,
         now,
+        ...(slot.def.id === 'cursor'
+          ? {
+              renew: async () => {
+                await this.runCursorCli(slot, ['status'])
+              },
+            }
+          : {}),
       })
     } catch (error) {
+      if (error instanceof KeychainRefused) {
+        throw new HostError('agent_error', t('agent.keychainRefused', { agent: slot.name }))
+      }
       throw this.limitsError(slot, error)
     }
     this.applyVendorUsage(slot, usage, now)
+  }
+
+  /** Runs the user's Cursor CLI with `args` in place of `acp`, with the agent's environment. */
+  private async runCursorCli(slot: Slot, args: string[]): Promise<ProgramRun> {
+    const command = this.display(slot)
+    return runProgram({
+      program: command.command,
+      args: [...command.args.filter((arg) => arg !== 'acp'), ...args],
+      cwd: os.homedir(),
+      env: { ...this.deps.env.agentEnv(slot.id), ...command.env },
+      platform: this.deps.platform,
+      timeoutMs: 20_000,
+    })
+  }
+
+  /** Cursor's sign-in, account and plan from its CLI's `about`; null when that cannot be read. */
+  private async readCursorSignIn(slot: Slot): Promise<CursorSignIn | null> {
+    const run = await this.runCursorCli(slot, ['about', '--format', 'json'])
+    const signIn = parseCursorAbout({
+      code: run.code,
+      stdout: run.stdout,
+      stderr: run.output.toString(),
+    })
+    if (!signIn) this.deps.diagnostics.ignored(slot.id, null, 'about with an unknown answer')
+    else if (signIn.account) this.setAccount(slot, signIn.account)
+    else this.signedOut(slot)
+    return signIn
   }
 
   /**
@@ -4022,6 +4066,18 @@ export class AgentManager {
               '--device-auth',
             ],
           },
+          platform,
+        ),
+      })
+    }
+    if (slot.def.id === 'cursor' && this.has(agentId)) {
+      // Its own method only uses a sign-in made with its CLI, which runs in a terminal.
+      authMethods.push({
+        id: 'cursor-terminal-login',
+        name: 'Sign in in a terminal',
+        type: 'terminal',
+        command: formatCommand(
+          { ...display, args: [...display.args.filter((arg) => arg !== 'acp'), 'login'] },
           platform,
         ),
       })

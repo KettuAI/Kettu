@@ -1,0 +1,13 @@
+{
+  "cliVersion": "2026.10.22-27dcf5f",
+  "latestStatus": "update_available",
+  "latestVersion": "2026.11.13-eacade1",
+  "model": "Auto",
+  "subscriptionTier": "Free",
+  "osPlatform": "darwin",
+  "osArch": "arm64",
+  "userEmail": "user@example.com",
+  "terminalProgram": "unknown",
+  "shell": "zsh",
+  "lastRequestId": null
+}
