@@ -13,6 +13,7 @@ const FAMILIES: [RegExp, ModelRating][] = [
   [/sonnet/i, { speed: 4, quality: 4, cost: 3 }],
   [/haiku/i, { speed: 5, quality: 3, cost: 1 }],
   [/\bsol\b|-sol\b/i, { speed: 2, quality: 5, cost: 4 }],
+  [/astra/i, { speed: 1, quality: 5, cost: 5 }],
   [/terra/i, { speed: 3, quality: 4, cost: 3 }],
   [/luna/i, { speed: 5, quality: 3, cost: 2 }],
   [/nano/i, { speed: 5, quality: 2, cost: 1 }],
