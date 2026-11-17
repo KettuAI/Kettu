@@ -69,6 +69,11 @@ export interface SessionTarget {
 export interface ConnectionHooks {
   traffic(direction: 'in' | 'out', message: unknown): void
   account(account: AgentAccount): void
+  /**
+   * The sign-in method an answer shows, for an agent that names it only that way, such as Google
+   * Antigravity by its plan; null when the answer shows none.
+   */
+  signInShown?(method: string | null): void
   authState?(state: 'authenticated' | 'unauthenticated' | 'not_required' | 'unknown'): void
   /** Something the agent sent that Kettu does not use. */
   ignored(sessionId: string | null, what: string): void

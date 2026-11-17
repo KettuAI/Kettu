@@ -49,7 +49,11 @@ import type { AgentTransport, MessageTransport } from '../driver'
 import { t } from '../i18n'
 import { isStopReason, type MapperContext, type MapperOutput } from '../session-updates'
 import { compareVersions } from '../versions'
-import { ANTIGRAVITY_TIER_VERSION, antigravityTier } from '../vendor-usage/antigravity'
+import {
+  ANTIGRAVITY_TIER_VERSION,
+  antigravityTier,
+  antigravityTierSignIn,
+} from '../vendor-usage/antigravity'
 import {
   KNOWN_UPDATES,
   mapAuthStatus,
@@ -948,12 +952,17 @@ export class AcpConnection implements AgentConnection {
     if (status.account) this.hooks.account(status.account)
   }
 
-  /** Google Antigravity names its plan in the `_meta` of its sign-in's and sessions' answers. */
+  /**
+   * Google Antigravity names its plan in the `_meta` of its sign-in's and sessions' answers while
+   * signed in with Google, and none on an API key or a cloud project; the plan's id shows which
+   * Google sign-in it is.
+   */
   private readPlan(meta: unknown): void {
     if (this.hooks.agentId !== 'antigravity') return
     if (this.version === null || compareVersions(this.version, ANTIGRAVITY_TIER_VERSION) < 0) return
     const plan = antigravityTier(meta)
     if (plan) this.hooks.account({ kind: 'account', label: plan, email: null })
+    this.hooks.signInShown?.(plan ? antigravityTierSignIn(meta) : null)
   }
 
   async logout(): Promise<void> {

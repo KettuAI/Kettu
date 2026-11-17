@@ -367,11 +367,20 @@ export interface SessionsFile {
  */
 export interface AgentsFile {
   version: 1
-  /** `apiKey`: Kettu handed the agent's harness an API key, which only it keeps. */
+  /**
+   * `apiKey`: Kettu handed the agent's harness an API key, which only it keeps. `signIn`: the
+   * sign-in method the agent's last answer showed, for one that names it only that way.
+   */
   agents: Partial<
     Record<
       AgentId,
-      { account: AgentAccount | null; limits: PlanLimit[]; init?: RememberedInit; apiKey?: true }
+      {
+        account: AgentAccount | null
+        limits: PlanLimit[]
+        init?: RememberedInit
+        apiKey?: true
+        signIn?: string
+      }
     >
   >
 }
@@ -958,8 +967,18 @@ export function parseAgentsFile(data: Record<string, unknown>): AgentsFile | str
     const account = accountOf(entry.account)
     const init = initOf(entry.init)
     const apiKey = entry.apiKey === true
-    if (account || limits.length > 0 || init || apiKey) {
-      agents[id] = { account, limits, ...(init ? { init } : {}), ...(apiKey ? { apiKey } : {}) }
+    const signIn =
+      typeof entry.signIn === 'string' && /^[a-z][a-z0-9-]{0,63}$/.test(entry.signIn)
+        ? entry.signIn
+        : null
+    if (account || limits.length > 0 || init || apiKey || signIn) {
+      agents[id] = {
+        account,
+        limits,
+        ...(init ? { init } : {}),
+        ...(apiKey ? { apiKey } : {}),
+        ...(signIn ? { signIn } : {}),
+      }
     }
   }
   return { version: 1, agents }

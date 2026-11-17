@@ -206,6 +206,9 @@
     "noOptions": "{{agent}} gave no models within {{seconds}} s",
     "noLimits": "{{agent}} gave no plan limits within {{seconds}} s",
     "unreadableLimits": "Kettu could not find plan limits in {{agent}}'s {{command}} reply",
+    "antigravitySignedOut": "{{agent}} is signed out. Sign in again in a terminal to read its plan limits.",
+    "antigravityLimitsFailed": "{{agent}} could not read its plan limits: {{error}}",
+    "antigravityNoPlan": "{{agent}} named no Google plan, so it has no plan limits to read. If you use it with a Google account, sign in again in a terminal.",
     "initializeTimeout": "{{agent}} did not answer initialize within {{seconds}} s.",
     "exit": {
       "code": "{{agent}} exited with code {{code}}",
