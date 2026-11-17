@@ -114,6 +114,8 @@ Options:
 Environment:
   KETTU_DAEMON_DATA            The data folder to use instead of the default
   KETTU_ACCOUNT_URL            The account service to sign in to instead of https://www.kettu.sh
+  KETTU_DIRECT_PORT            The port for direct connections, applied at every start; without
+                               it the first start picks one at random and keeps it
 
 Write an IPv6 address in brackets, as [fd00::1]:4567.
 kettu status and the direct, terminal and verbose commands exit with 3 when the daemon is not

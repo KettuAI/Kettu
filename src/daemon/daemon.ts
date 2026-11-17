@@ -22,7 +22,7 @@ import {
 } from '@shared/log/process-log'
 import { matchLocale } from '@shared/locale'
 import type { MarketAccount } from '@shared/market-publish'
-import { addressKey, MAX_OWN_ADDRESSES } from '@shared/remote/address'
+import { addressKey, MAX_OWN_ADDRESSES, parsePort } from '@shared/remote/address'
 import { PUSH_URL, PUSH_URL_ENV, pushUrlFrom } from '@shared/remote/push'
 import { RELAY_TOKENS_FEATURE, RELAY_URL, RELAY_URL_ENV, relayUrlFrom } from '@shared/remote/relay'
 import type { HostAdmin } from '../main/host-admin'
@@ -72,6 +72,9 @@ const log = createLogger('daemon')
 
 /** Set in the service's environment, so the daemon can say it runs as one. */
 export const SERVICE_ENV = 'KETTU_DAEMON_SERVICE'
+
+/** Names the direct connections' port at every start, in place of the one picked on the first. */
+export const DIRECT_PORT_ENV = 'KETTU_DIRECT_PORT'
 
 /** How long `kettu verbose on` keeps the detailed records on, as the app's switch. */
 const VERBOSE_MS = 24 * 60 * 60 * 1000
@@ -292,6 +295,16 @@ export async function startDaemon(options: DaemonOptions): Promise<RunningDaemon
     await chmod(options.controlSocket, 0o600)
     identity = await loadHostKey(options.dataPath, (message) => log.warn(message))
     settings = await SettingsStore.load(options.dataPath)
+    // A container publishes a port chosen before it starts, which a random one cannot be.
+    const wantedPort = options.env[DIRECT_PORT_ENV]?.trim()
+    if (wantedPort) {
+      const port = parsePort(wantedPort)
+      if (port === null) {
+        log.error(`${DIRECT_PORT_ENV} must be a port from 1024 to 65535; it is ignored`)
+      } else if (port !== settings.get().remote.direct.port) {
+        settings.update({ remote: { direct: { port } } })
+      }
+    }
     sshPort = await readSshPort(options.dataPath)
     // The daemon always serves devices; the first run picks the direct connections' port, which
     // hold on while the relay is not in use.

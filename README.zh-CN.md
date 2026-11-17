@@ -136,6 +136,15 @@
 curl -fsSL https://kettu.sh/install | sh
 ```
 
+也可以用 Docker（amd64 和 Arm）：Kettu 的数据放在 `kettu` 卷里，你的项目放在 `/workspace`：
+
+```sh
+docker run -d --name kettu -p 4567:4567 -v kettu:/home/node -v ~/code:/workspace ghcr.io/kettuai/kettu
+docker exec -it kettu kettu pair
+```
+
+`kettu pair` 会显示添加设备的配对码。请保留 `kettu` 卷：设备配对的主机身份就存在里面。更新时拉取新镜像，再重新运行容器。
+
 ## 支持的 Agent
 
 <details>
