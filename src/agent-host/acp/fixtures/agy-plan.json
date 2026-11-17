@@ -1,0 +1,336 @@
+[
+  {
+    "sessionUpdate": "tool_call",
+    "toolCallId": "call_15502284018206857498",
+    "name": "mcp_kettu_list_sessions",
+    "args": {
+      "toolSummary": "List Kettu sessions"
+    },
+    "status": "in_progress",
+    "kind": "other",
+    "title": "Run mcp_kettu_list_sessions",
+    "rawInput": {
+      "toolSummary": "List Kettu sessions"
+    }
+  },
+  {
+    "sessionUpdate": "tool_call_update",
+    "toolCallId": "call_15502284018206857498",
+    "name": "mcp_kettu_list_sessions",
+    "args": {
+      "toolSummary": "List Kettu sessions"
+    },
+    "status": "pending",
+    "kind": "other",
+    "title": "Run mcp_kettu_list_sessions",
+    "rawInput": {
+      "toolSummary": "List Kettu sessions"
+    }
+  },
+  {
+    "sessionUpdate": "tool_call_update",
+    "toolCallId": "call_15502284018206857498",
+    "name": "mcp_kettu_list_sessions",
+    "args": {
+      "toolSummary": "List Kettu sessions"
+    },
+    "status": "in_progress",
+    "kind": "other",
+    "title": "Run mcp_kettu_list_sessions",
+    "rawInput": {
+      "toolSummary": "List Kettu sessions"
+    }
+  },
+  {
+    "sessionUpdate": "tool_call_update",
+    "toolCallId": "call_15502284018206857498",
+    "name": "mcp_kettu_list_sessions",
+    "args": {
+      "toolSummary": "List Kettu sessions"
+    },
+    "status": "completed",
+    "kind": "other",
+    "title": "Run mcp_kettu_list_sessions",
+    "rawInput": {
+      "toolSummary": "List Kettu sessions"
+    }
+  },
+  {
+    "sessionUpdate": "tool_call",
+    "toolCallId": "call_15502284018206858929",
+    "name": "run_command",
+    "args": {
+      "CommandLine": "ls -la",
+      "WaitMsBeforeAsync": 5000,
+      "toolSummary": "List directory contents"
+    },
+    "status": "in_progress",
+    "kind": "execute",
+    "title": "ls -la",
+    "rawInput": {
+      "CommandLine": "ls -la",
+      "WaitMsBeforeAsync": 5000,
+      "toolSummary": "List directory contents"
+    }
+  },
+  {
+    "sessionUpdate": "tool_call_update",
+    "toolCallId": "call_15502284018206858929",
+    "name": "run_command",
+    "args": {
+      "CommandLine": "ls -la",
+      "WaitMsBeforeAsync": 5000,
+      "toolSummary": "List directory contents"
+    },
+    "status": "pending",
+    "kind": "execute",
+    "title": "ls -la",
+    "rawInput": {
+      "CommandLine": "ls -la",
+      "WaitMsBeforeAsync": 5000,
+      "toolSummary": "List directory contents"
+    }
+  },
+  {
+    "sessionUpdate": "tool_call_update",
+    "toolCallId": "call_15502284018206858929",
+    "name": "run_command",
+    "args": {
+      "CommandLine": "ls -la",
+      "WaitMsBeforeAsync": 5000,
+      "toolSummary": "List directory contents"
+    },
+    "status": "in_progress",
+    "kind": "execute",
+    "title": "ls -la",
+    "rawInput": {
+      "CommandLine": "ls -la",
+      "WaitMsBeforeAsync": 5000,
+      "toolSummary": "List directory contents"
+    }
+  },
+  {
+    "sessionUpdate": "tool_call_update",
+    "toolCallId": "call_15502284018206858929",
+    "name": "run_command",
+    "args": {
+      "CommandLine": "ls -la",
+      "WaitMsBeforeAsync": 5000,
+      "toolSummary": "List directory contents"
+    },
+    "status": "completed",
+    "kind": "execute",
+    "title": "ls -la",
+    "rawInput": {
+      "CommandLine": "ls -la",
+      "WaitMsBeforeAsync": 5000,
+      "toolSummary": "List directory contents"
+    },
+    "rawOutput": {
+      "output": "Created At: 2026-11-16T18:35:30-08:00\nCompleted At: 2026-11-16T18:35:30-08:00\nCommand exited with code 0.\n\nCommand output:\ntotal 8\r\ndrwxr-xr-x@ 4 me  wheel  128 Nov 16 18:34 .\r\ndrwxr-xr-x@ 4 me  wheel  128 Nov 16 18:35 ..\r\ndrwxr-xr-x@ 9 me  wheel  288 Nov 16 18:34 .git\r\n-rw-r--r--@ 1 me  wheel   25 Nov 16 18:34 README.md\r\n",
+      "exit_code": 0
+    },
+    "content": [
+      {
+        "type": "content",
+        "content": {
+          "type": "text",
+          "text": "Created At: 2026-11-16T18:35:30-08:00\nCompleted At: 2026-11-16T18:35:30-08:00\nCommand exited with code 0.\n\nCommand output:\ntotal 8\r\ndrwxr-xr-x@ 4 me  wheel  128 Nov 16 18:34 .\r\ndrwxr-xr-x@ 4 me  wheel  128 Nov 16 18:35 ..\r\ndrwxr-xr-x@ 9 me  wheel  288 Nov 16 18:34 .git\r\n-rw-r--r--@ 1 me  wheel   25 Nov 16 18:34 README.md\r\n"
+        }
+      }
+    ]
+  },
+  {
+    "sessionUpdate": "tool_call",
+    "toolCallId": "call_6836926084118927696",
+    "name": "read_file",
+    "args": {
+      "Path": "/tmp/agy-probe/plan/README.md"
+    },
+    "status": "in_progress",
+    "kind": "read",
+    "title": "File README.md",
+    "locations": [
+      {
+        "path": "/tmp/agy-probe/plan/README.md"
+      }
+    ],
+    "rawInput": {
+      "Path": "/tmp/agy-probe/plan/README.md"
+    }
+  },
+  {
+    "sessionUpdate": "tool_call_update",
+    "toolCallId": "call_6836926084118927696",
+    "name": "read_file",
+    "args": {
+      "Path": "/tmp/agy-probe/plan/README.md"
+    },
+    "status": "completed",
+    "kind": "read",
+    "title": "File README.md",
+    "locations": [
+      {
+        "path": "/tmp/agy-probe/plan/README.md"
+      }
+    ],
+    "rawInput": {
+      "Path": "/tmp/agy-probe/plan/README.md"
+    }
+  },
+  {
+    "sessionUpdate": "tool_call",
+    "toolCallId": "call_5504536041540685389",
+    "name": "run_command",
+    "args": {
+      "CommandLine": "git status && git log -n 5",
+      "WaitMsBeforeAsync": 5000,
+      "toolSummary": "Check git status and log"
+    },
+    "status": "in_progress",
+    "kind": "execute",
+    "title": "git status && git log -n 5",
+    "rawInput": {
+      "CommandLine": "git status && git log -n 5",
+      "WaitMsBeforeAsync": 5000,
+      "toolSummary": "Check git status and log"
+    }
+  },
+  {
+    "sessionUpdate": "tool_call_update",
+    "toolCallId": "call_5504536041540685389",
+    "name": "run_command",
+    "args": {
+      "CommandLine": "git status && git log -n 5",
+      "WaitMsBeforeAsync": 5000,
+      "toolSummary": "Check git status and log"
+    },
+    "status": "pending",
+    "kind": "execute",
+    "title": "git status && git log -n 5",
+    "rawInput": {
+      "CommandLine": "git status && git log -n 5",
+      "WaitMsBeforeAsync": 5000,
+      "toolSummary": "Check git status and log"
+    }
+  },
+  {
+    "sessionUpdate": "tool_call_update",
+    "toolCallId": "call_5504536041540685389",
+    "name": "run_command",
+    "args": {
+      "CommandLine": "git status && git log -n 5",
+      "WaitMsBeforeAsync": 5000,
+      "toolSummary": "Check git status and log"
+    },
+    "status": "in_progress",
+    "kind": "execute",
+    "title": "git status && git log -n 5",
+    "rawInput": {
+      "CommandLine": "git status && git log -n 5",
+      "WaitMsBeforeAsync": 5000,
+      "toolSummary": "Check git status and log"
+    }
+  },
+  {
+    "sessionUpdate": "tool_call_update",
+    "toolCallId": "call_5504536041540685389",
+    "name": "run_command",
+    "args": {
+      "CommandLine": "git status && git log -n 5",
+      "WaitMsBeforeAsync": 5000,
+      "toolSummary": "Check git status and log"
+    },
+    "status": "completed",
+    "kind": "execute",
+    "title": "git status && git log -n 5",
+    "rawInput": {
+      "CommandLine": "git status && git log -n 5",
+      "WaitMsBeforeAsync": 5000,
+      "toolSummary": "Check git status and log"
+    },
+    "rawOutput": {
+      "output": "Created At: 2026-11-16T18:35:36-08:00\nCompleted At: 2026-11-16T18:35:36-08:00\nCommand exited with code 128.\n\nCommand output:\nOn branch main\r\n\r\nNo commits yet\r\n\r\nUntracked files:\r\n  (use \"git add <file>...\" to include in what will be committed)\r\n\tREADME.md\r\n\r\nnothing added to commit but untracked files present (use \"git add\" to track)\r\nfatal: your current branch 'main' does not have any commits yet\r\n",
+      "exit_code": 128
+    },
+    "content": [
+      {
+        "type": "content",
+        "content": {
+          "type": "text",
+          "text": "Created At: 2026-11-16T18:35:36-08:00\nCompleted At: 2026-11-16T18:35:36-08:00\nCommand exited with code 128.\n\nCommand output:\nOn branch main\r\n\r\nNo commits yet\r\n\r\nUntracked files:\r\n  (use \"git add <file>...\" to include in what will be committed)\r\n\tREADME.md\r\n\r\nnothing added to commit but untracked files present (use \"git add\" to track)\r\nfatal: your current branch 'main' does not have any commits yet"
+        }
+      }
+    ]
+  },
+  {
+    "sessionUpdate": "tool_call",
+    "toolCallId": "call_667534298871492715",
+    "name": "write_file",
+    "args": {
+      "ArtifactMetadata": {
+        "RequestFeedback": true,
+        "Summary": "Plan for a short CONTRIBUTING.md",
+        "UserFacing": true
+      },
+      "Content": "# Plan: add CONTRIBUTING.md\n\nCreate [CONTRIBUTING.md](file:///tmp/agy-probe/plan/CONTRIBUTING.md).\n",
+      "Path": "/Users/me/.gemini/antigravity-cli/brain/6db867a9-67d4-46bb-863b-c31d09013402/contributing_plan.md"
+    },
+    "status": "in_progress",
+    "kind": "edit",
+    "title": "File ../../../Users/me/.gemini/antigravity-cli/brain/6db867a9-67d4-46bb-863b-c31d09013402/contributing_plan.md",
+    "locations": [
+      {
+        "path": "/Users/me/.gemini/antigravity-cli/brain/6db867a9-67d4-46bb-863b-c31d09013402/contributing_plan.md"
+      }
+    ],
+    "rawInput": {
+      "ArtifactMetadata": {
+        "RequestFeedback": true,
+        "Summary": "Plan for a short CONTRIBUTING.md",
+        "UserFacing": true
+      },
+      "Content": "# Plan: add CONTRIBUTING.md\n\nCreate [CONTRIBUTING.md](file:///tmp/agy-probe/plan/CONTRIBUTING.md).\n",
+      "Path": "/Users/me/.gemini/antigravity-cli/brain/6db867a9-67d4-46bb-863b-c31d09013402/contributing_plan.md"
+    }
+  },
+  {
+    "sessionUpdate": "tool_call_update",
+    "toolCallId": "call_667534298871492715",
+    "name": "write_file",
+    "args": {
+      "ArtifactMetadata": {
+        "RequestFeedback": true,
+        "Summary": "Plan for a short CONTRIBUTING.md",
+        "UserFacing": true
+      },
+      "Content": "# Plan: add CONTRIBUTING.md\n\nCreate [CONTRIBUTING.md](file:///tmp/agy-probe/plan/CONTRIBUTING.md).\n",
+      "Path": "/Users/me/.gemini/antigravity-cli/brain/6db867a9-67d4-46bb-863b-c31d09013402/contributing_plan.md"
+    },
+    "status": "completed",
+    "kind": "edit",
+    "title": "File ../../../Users/me/.gemini/antigravity-cli/brain/6db867a9-67d4-46bb-863b-c31d09013402/contributing_plan.md",
+    "locations": [
+      {
+        "path": "/Users/me/.gemini/antigravity-cli/brain/6db867a9-67d4-46bb-863b-c31d09013402/contributing_plan.md"
+      }
+    ],
+    "rawInput": {
+      "ArtifactMetadata": {
+        "RequestFeedback": true,
+        "Summary": "Plan for a short CONTRIBUTING.md",
+        "UserFacing": true
+      },
+      "Content": "# Plan: add CONTRIBUTING.md\n\nCreate [CONTRIBUTING.md](file:///tmp/agy-probe/plan/CONTRIBUTING.md).\n",
+      "Path": "/Users/me/.gemini/antigravity-cli/brain/6db867a9-67d4-46bb-863b-c31d09013402/contributing_plan.md"
+    },
+    "rawOutput": {},
+    "content": [
+      {
+        "type": "diff",
+        "path": "/Users/me/.gemini/antigravity-cli/brain/6db867a9-67d4-46bb-863b-c31d09013402/contributing_plan.md",
+        "newText": "# Plan: add CONTRIBUTING.md\n\nCreate [CONTRIBUTING.md](file:///tmp/agy-probe/plan/CONTRIBUTING.md).\n"
+      }
+    ]
+  }
+]

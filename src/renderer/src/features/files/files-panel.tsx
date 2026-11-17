@@ -584,7 +584,10 @@ function Tree({
   const [revealed, setRevealed] = useState(() => columnOf(columnKey).revealed)
   if (openPath !== revealed) {
     setRevealed(openPath)
-    if (openPath) setExpanded(new Set([...expanded, ...foldersAbove(openPath)]))
+    // An agent's own file, by its absolute path, is in no folder of the tree.
+    if (openPath && !/^(?:\/|[a-z]:[\\/])/i.test(openPath)) {
+      setExpanded(new Set([...expanded, ...foldersAbove(openPath)]))
+    }
   }
   const [initialScroll] = useState(() => columnOf(columnKey).scroll)
   useEffect(() => saveColumn(columnKey, { expanded, revealed }), [columnKey, expanded, revealed])

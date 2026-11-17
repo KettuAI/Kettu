@@ -2122,6 +2122,11 @@ export function createValidators(platform: Platform): Validators {
         query: string(o, 'query', TEXT_CHARS),
       }
     },
+    'files.agentFolder': session,
+    'files.readAgentFile': (params) => {
+      const o = fields(params)
+      return { sessionId: sessionId(o), path: absolutePath(o, 'path', platform) }
+    },
     'files.write': (params) => {
       const o = fields(params)
       // An empty file is text too, so `string` does not fit; the host checks the size in bytes.

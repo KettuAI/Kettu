@@ -10,7 +10,8 @@ export interface FileList {
 }
 
 export type FileContent =
-  // `version` is the SHA-256 of the bytes; `editable` is false when they are not valid UTF-8.
+  // `version` is the SHA-256 of the bytes; `editable` is false when they are not valid UTF-8, or
+  // the file is one an agent keeps for itself.
   | { kind: 'text'; path: string; size: number; text: string; version: string; editable: boolean }
   // Named as media and its first bytes say which kind: not read, but granted on the media scheme.
   | { kind: 'media'; path: string; grant: MediaGrant }

@@ -58,11 +58,13 @@
     "reload": "重新载入",
     "keepMine": "保留我的",
     "saveFailed": "无法保存：{{message}}",
-    "readOnly": "只读：这个文件不是有效的 UTF-8，保存可能改变它的字节。"
+    "readOnly": "只读：这个文件不是有效的 UTF-8，保存可能改变它的字节。",
+    "agentFile": "只读：这是 {{agent}} 为这个会话保存的文件，不属于项目。"
   },
   "tabs": {
     "label": "打开的文件",
-    "close": "关闭 {{name}}"
+    "close": "关闭 {{name}}",
+    "agentFile": "{{agent}} 的文件，只读"
   },
   "link": {
     "open": "打开 {{target}}"

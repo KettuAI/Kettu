@@ -28,8 +28,8 @@ import {
   type ExtraProps,
 } from 'streamdown'
 import { githubIssueUrl } from '@shared/git'
-import { FileLink } from '@renderer/features/files/file-link'
-import { ProjectPathContext, useFileRef } from '@renderer/features/files/file-refs'
+import { AgentFileLink, FileLink } from '@renderer/features/files/file-link'
+import { ProjectPathContext, useAgentFileRef, useFileRef } from '@renderer/features/files/file-refs'
 import { useProjectRepository } from '@renderer/features/git/gh-reference-data'
 import { ConfirmedLink } from '@renderer/features/session/link-confirm'
 import { SessionIdContext } from '@renderer/features/session/media/grants'
@@ -108,9 +108,10 @@ export function Link(props: ComponentProps<'a'> & ExtraProps) {
   const local = localTarget(raw)
   const href = local ?? raw
   const file = useFileRef(href)
+  const own = useAgentFileRef(local)
   if (file) return <FileLink file={file} />
-  // A local path that is not one of the project's files has nowhere to go, and main opens
-  // nothing but web links.
+  if (own) return <AgentFileLink file={own} />
+  // Any other local path has nowhere to go, and main opens nothing but web links.
   if (local !== null) return <span title={local}>{props.children}</span>
   if (raw === INCOMPLETE_LINK) return <span className="thread-link">{props.children}</span>
   const bare = bareReferenceNumber(raw)

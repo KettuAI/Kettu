@@ -201,13 +201,25 @@ export class FilesService {
       const grant = await this.deps.media(real, info)
       if (grant) return { kind: 'media', path: relative, grant }
     }
+    return this.content(real, relative, info)
+  }
+
+  /**
+   * The regular file at `real`, a real path the caller has allowed, read as `read` reads a file
+   * named as no media, under the name `shown`.
+   */
+  async readAllowed(real: string, shown: string): Promise<FileContent> {
+    return this.content(real, shown, await this.fileStat(real, shown))
+  }
+
+  private async content(real: string, shown: string, info: Stats): Promise<FileContent> {
     const { size } = info
     if (size > this.limits.read) {
-      return { kind: 'too-large', path: relative, size, limit: this.limits.read }
+      return { kind: 'too-large', path: shown, size, limit: this.limits.read }
     }
     const bytes = await this.readFile(real, size)
-    if (isBinary(bytes)) return { kind: 'binary', path: relative, size }
-    return { kind: 'text', path: relative, size, ...decode(bytes), version: versionOf(bytes) }
+    if (isBinary(bytes)) return { kind: 'binary', path: shown, size }
+    return { kind: 'text', path: shown, size, ...decode(bytes), version: versionOf(bytes) }
   }
 
   /**

@@ -1,15 +1,17 @@
 // agy's tool calls in the shape the ACP mapper reads every agent's. agy 1.5.9 sends its tool's own
 // name beside each call, a command's input as `{ CommandLine, toolSummary }`, its output under a
-// header of times and the exit code, and an MCP server's tool as `mcp_<server>_<tool>`.
+// header of times and the exit code, and an MCP server's tool as `mcp_<server>_<tool>`. It keeps
+// what it writes for itself, such as a Plan mode plan, in `~/.gemini/antigravity-cli/brain/`.
 
 import type * as acp from '@agentclientprotocol/sdk/unstable'
 import { fenced } from '../codex/mapper'
 import type { McpServer } from '../connection'
-import { toLf } from '../session-updates'
+import { toLf, type MapperContext, type TurnScope } from '../session-updates'
 
 const RESULT = /^Created At: [^\n]*\nCompleted At: [^\n]*\nCommand exited with code (-?\d+)\.\n\n/
 const OUTPUT = 'Command output:\n'
 const NO_OUTPUT = 'No output from the command.'
+const OWN_FOLDER = /(?:^|\/)\.gemini\/antigravity-cli\/brain\//
 
 function record(value: unknown): Record<string, unknown> | null {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -88,4 +90,25 @@ export function fromAgy<T extends acp.ToolCallUpdate>(update: T): T {
     return command(update, input.CommandLine, input.toolSummary) as T
   }
   return update
+}
+
+/** Calls on agy's own files that show no row, per turn, for their updates that name no file. */
+const ownFileCalls = new WeakMap<TurnScope, Set<string>>()
+
+/**
+ * Whether a call works only on files agy keeps for itself, which are agy's, not the project's: it
+ * shows no row and changes nothing in the project. A call whose row the thread has keeps it.
+ */
+export function onAgyOwnFiles(update: acp.ToolCallUpdate, ctx: MapperContext): boolean {
+  if (ctx.thread.byId[`t:${update.toolCallId}`]) return false
+  let calls = ownFileCalls.get(ctx.scope)
+  if (calls?.has(update.toolCallId)) return true
+  const paths = (update.locations ?? []).map((location) => location.path.replace(/\\/g, '/'))
+  if (paths.length === 0 || !paths.every((path) => OWN_FOLDER.test(path))) return false
+  if (!calls) {
+    calls = new Set()
+    ownFileCalls.set(ctx.scope, calls)
+  }
+  calls.add(update.toolCallId)
+  return true
 }
