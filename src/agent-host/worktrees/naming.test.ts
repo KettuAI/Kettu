@@ -1,8 +1,9 @@
 import { execFileSync } from 'node:child_process'
-import { readFile } from 'node:fs/promises'
+import { readFile, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { SessionSummary } from '@shared/agent-host'
+import type { Env } from '../find-command'
 import type { SessionsFile } from '../storage'
 import { startTestHost, type TestHost, type TestPort } from '../testing/harness'
 import { tempFolder } from '../testing/temp'
@@ -87,9 +88,9 @@ describe("a new session's worktree branch", () => {
     host = null
   })
 
-  async function start(): Promise<TestHost> {
+  async function start(agentEnv: Env = {}): Promise<TestHost> {
     // A folder of the test's own, so the session index outlives the host.
-    host = await startTestHost({ userDataPath: await tempFolder('kettu-host-') })
+    host = await startTestHost({ userDataPath: await tempFolder('kettu-host-'), agentEnv })
     const env = {
       ...process.env,
       GIT_AUTHOR_NAME: 't',
@@ -121,7 +122,9 @@ describe("a new session's worktree branch", () => {
     })
 
   it('takes the name the agent writes before the first message goes', async () => {
-    const { project, dir } = await start()
+    // The fake agent writes its name only once this file exists, so the session is created first.
+    const gate = path.join(await tempFolder('kettu-branch-gate-'), 'open')
+    const { project, dir } = await start({ FAKE_AGENT_BRANCH_NAME_GATE: gate })
     const window = host!.connect()
     const created = await window.request('sessions.create', {
       agentId: 'fake-agent',
@@ -131,6 +134,7 @@ describe("a new session's worktree branch", () => {
     })
     const folder = created.worktree!.path
     expect(created.worktree!.branch).toMatch(/^kettu\/session-[0-9a-f]{6}$/)
+    await writeFile(gate, '')
     await firstTurnDone(window, created.id)
     expect(window.summary(created.id)?.worktree?.branch).toBe('kettu/fake')
     expect(branchOf(folder)).toBe('kettu/fake')
