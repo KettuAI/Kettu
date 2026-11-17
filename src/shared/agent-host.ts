@@ -665,6 +665,10 @@ export interface ImportableSession {
   title: string | null
   updatedAt: string | null
   imported: boolean // already in the session index
+  /** Its prompt cache as its last request left it, for a Claude Code session used in the last hour. */
+  cache?: PromptCache | null
+  /** A Claude Code process outside Kettu, such as a terminal, still has it open. */
+  held?: boolean
 }
 
 export interface TrafficRecord {
@@ -1020,8 +1024,9 @@ export interface HostContract {
     result: SessionSummary
   }
   'sessions.discard': { params: { sessionId: string }; result: void }
+  // `fork`: a copy of the session is imported instead, for one another program still has open.
   'sessions.import': {
-    params: { agentId: AgentId; projectPath: string; acpSessionId: string }
+    params: { agentId: AgentId; projectPath: string; acpSessionId: string; fork?: boolean }
     result: SessionSummary
   }
   'sessions.open': {

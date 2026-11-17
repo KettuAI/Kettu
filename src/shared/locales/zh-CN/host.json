@@ -33,6 +33,7 @@
     "forkTitle": "{{title}}（分叉）",
     "forkTitleNumbered": "{{title}}（分叉 {{n}}）",
     "alreadyInSession": "这个会话已经属于 Kettu 里的一个会话",
+    "heldOutside": "这个会话还开在终端里。先在那边输入 /exit 再试，或者分叉一份在 Kettu 里接着做。",
     "cannotList": "{{agent}} 无法列出它的会话",
     "configBetweenTurns": "{{option}} 只能在两轮对话之间更改",
     "ultracodeDescription": "用于大型任务的动态工作流",
@@ -120,6 +121,10 @@
     "computerStopped": {
       "title": "已停止使用电脑",
       "description": "你发下一条消息后，Agent 才能再用。"
+    },
+    "fullAccessNotCarried": {
+      "title": "没有带上完全访问",
+      "description": "这个会话在 Kettu 外面是完全访问。Kettu 不以完全访问接上会话，这里改成了「{{mode}}」。"
     }
   },
   "attention": {

@@ -23,10 +23,13 @@ export function listed(list: AgentList | undefined): list is AgentList {
   return !!list && !list.error && !(list.loading && list.sessions.length === 0)
 }
 
-/** The keys of a list's sessions that are not in Kettu yet, in its order. */
+/**
+ * The keys of a list's sessions that are not in Kettu yet, in its order; one a terminal still has
+ * open is left out, since it cannot be attached.
+ */
 export function importableKeys(agentId: AgentId, list: AgentList | undefined): string[] {
   return (list?.sessions ?? [])
-    .filter((s) => !s.imported)
+    .filter((s) => !s.imported && !s.held)
     .map((s) => importKey(agentId, s.acpSessionId))
 }
 

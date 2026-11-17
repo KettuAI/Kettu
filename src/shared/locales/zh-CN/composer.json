@@ -48,7 +48,8 @@
     "varies": "不定",
     "noModels": "没有可用的模型",
     "noModelMatch": "没有匹配的模型",
-    "chooseModel": "选择模型"
+    "chooseModel": "选择模型",
+    "cacheChange": "在这里改动会重写约 {{tokens}} token 的 prompt cache"
   },
   "switchAgent": {
     "menu": "换 Agent…",

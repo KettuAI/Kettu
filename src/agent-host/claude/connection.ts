@@ -814,6 +814,12 @@ export class ClaudeConnection implements AgentConnection {
     }
   }
 
+  async copySession(sessionId: string, cwd: string): Promise<string> {
+    const sdk = this.requireSdk()
+    const forked = await this.withConfigDir(() => sdk.forkSession(sessionId, { dir: cwd }))
+    return forked.sessionId
+  }
+
   async removeHidden(sessionId: string): Promise<void> {
     await this.closeSession(sessionId)
     this.unregister(sessionId)
@@ -940,10 +946,12 @@ export class ClaudeConnection implements AgentConnection {
     const plugins = bare
       ? []
       : (options.localPlugins ?? []).map((folder) => ({ type: 'local' as const, path: folder }))
-    const prompts = [
-      ...servers.flatMap((server) => (server.type === 'stdio' ? [] : (server.prompt ?? []))),
-      ...(options.memory ? [options.memory.text] : []),
-    ]
+    const prompts = options.promptAhead
+      ? []
+      : [
+          ...servers.flatMap((server) => (server.type === 'stdio' ? [] : (server.prompt ?? []))),
+          ...(options.memory ? [options.memory.text] : []),
+        ]
     const queryOptions: QueryOptions = {
       cwd,
       env: {

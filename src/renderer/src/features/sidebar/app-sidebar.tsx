@@ -58,7 +58,6 @@ import { ImportSessionsDialog } from './import-sessions'
 import { InsecureCard } from './insecure-card'
 import { signInLabel, useNotices } from './notices'
 import { ProjectMenuItems } from './project-menu'
-import { visibleProjects } from './project-group'
 import { RemoveProjectDialog } from './remove-project'
 import { GroupRenameHints } from './rename-hints'
 import { RenameScope } from './rename-scope'
@@ -79,20 +78,10 @@ export function SidebarList() {
   const loaded = projectsLoaded && sessionsLoaded
   const loadError = useProjectsStore((s) => s.error)
   const sessionsError = useSessionsStore((s) => s.error)
-  // The list follows which projects show and its Tab stop; each group follows its own sessions.
+  // Every project stays listed, with sessions or without, until it is removed from its menu; the
+  // list follows its Tab stop, and each group follows its own sessions.
   const tasks = useTasksStore((s) => s.summaries)
-  const taskPaths = useTasksStore(
-    useShallow((s) => [
-      ...new Set(
-        Object.values(s.summaries)
-          .filter((task) => !task.pinnedAt && !task.archivedAt)
-          .map((task) => task.projectPath),
-      ),
-    ]),
-  )
-  const shownProjects = useSessionsStore(
-    useShallow((s) => visibleProjects(projects, s.byId, taskPaths)),
-  )
+  const shownProjects = projects
   const main = useViewStore((s) => s.main)
   const collapsedProjects = useViewStore((s) => s.collapsedProjects)
   const expandedParents = useViewStore((s) => s.expandedParents)

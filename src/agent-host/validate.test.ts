@@ -67,6 +67,12 @@ describe('createValidators', () => {
     )
   })
 
+  it('takes a fork for an import only when asked', () => {
+    const base = { agentId: 'claude-code', projectPath: '/p', acpSessionId: 'id' }
+    expect(posix['sessions.import']({ ...base, fork: true })).toEqual({ ...base, fork: true })
+    expect(posix['sessions.import']({ ...base, fork: 'yes' })).toEqual(base)
+  })
+
   it('takes a session and a bounded task id for a background task', () => {
     for (const method of ['sessions.stopTask', 'sessions.taskOutput'] as const) {
       expect(posix[method]({ sessionId: 's', taskId: 'b1', other: 1 })).toEqual({

@@ -390,6 +390,28 @@ describe('the Claude Agent SDK driver', () => {
     expect(connection.ownInstructions).toBe(true)
   })
 
+  it("leaves the system prompt Claude Code's own for a session whose guide goes ahead", async () => {
+    const { sdk, connection } = await setup()
+    const kettu = {
+      type: 'http' as const,
+      name: 'kettu',
+      url: 'http://127.0.0.1:9/mcp',
+      headers: [],
+      prompt: 'Plan first.',
+    }
+    await connection.resumeSession('from-terminal', '/repo', {
+      mcpServers: [kettu],
+      memory: { text: 'Memory index.' },
+      promptAhead: true,
+    })
+    expect(sdk.last.options.systemPrompt).toEqual({ type: 'preset', preset: 'claude_code' })
+    expect(sdk.last.options).toMatchObject({
+      resume: 'from-terminal',
+      mcpServers: { kettu: expect.objectContaining({ url: 'http://127.0.0.1:9/mcp' }) },
+      env: expect.objectContaining({ CLAUDE_CODE_DISABLE_AUTO_MEMORY: '1' }),
+    })
+  })
+
   it('keeps a server that holds a key off the command line and adds it once the query starts', async () => {
     const { sdk, connection } = await setup()
     await connection.newSession('/repo', {
@@ -2651,6 +2673,16 @@ describe('sessions', () => {
     })
     await s.connection.deleteSession('a')
     expect(s.sdk.calls.find((call) => call.method === 'deleteSession')?.args[0]).toBe('a')
+  })
+
+  it('copies a session under a new id without opening it', async () => {
+    const s = await setup()
+    expect(await s.connection.copySession!('t', '/repo')).toBe('fork-of-t')
+    expect(s.sdk.calls.find((call) => call.method === 'forkSession')?.args).toEqual([
+      't',
+      { dir: '/repo' },
+    ])
+    expect(s.sdk.queries).toHaveLength(0)
   })
 })
 

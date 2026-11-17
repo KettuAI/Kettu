@@ -4,6 +4,7 @@ import path from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { AgentManager } from './agents'
 import type { Diagnostics } from './diagnostics'
+import type { LastRequest, OutsideReader } from './outside-sessions'
 import type { Projects } from './projects'
 import type { ScratchFolders } from './scratch'
 import { SessionManager, type SessionEvents } from './sessions'
@@ -22,7 +23,10 @@ afterEach(async () => {
 const log = () => {}
 
 /** A manager over real index files in `dir`, with no agent, git or thread store behind it. */
-function manager(projects: Partial<Projects> = {}) {
+function manager(
+  projects: Partial<Projects> = {},
+  extra: { agents?: Record<string, unknown>; outside?: OutsideReader } = {},
+) {
   const added: string[] = []
   const deps = {
     platform: 'darwin',
@@ -31,6 +35,7 @@ function manager(projects: Partial<Projects> = {}) {
       assertEnabled: () => {},
       runningConfig: () => null,
       sessionsChanged: () => {},
+      ...extra.agents,
     } as unknown as AgentManager,
     projects: {
       list: () => [],
@@ -50,6 +55,7 @@ function manager(projects: Partial<Projects> = {}) {
     git: () => null,
     events: new Proxy({}, { get: () => () => {} }) as SessionEvents,
     settings: () => ({}) as never,
+    ...(extra.outside ? { outside: extra.outside } : {}),
   } satisfies ConstructorParameters<typeof SessionManager>[0]
   return { sessions: new SessionManager(deps), added }
 }
@@ -73,6 +79,90 @@ describe('the session index', () => {
     })
     await vi.waitFor(async () =>
       expect((await index())?.sessions.map((record) => record.id)).toEqual([summary.id]),
+    )
+  })
+})
+
+describe('importing a session from a terminal', () => {
+  const last: LastRequest = {
+    at: Date.parse('2026-11-16T10:00:00Z'),
+    ttl: 60 * 60_000,
+    model: 'claude-opus-5-5[1m]',
+    effort: 'xhigh',
+    fast: false,
+    mode: 'auto',
+    context: 120_000,
+  }
+  const reader = (held: boolean, asked: string[] = []): OutsideReader => ({
+    lastRequest: async (_agent, _cwd, id) => {
+      asked.push(id)
+      return last
+    },
+    holder: async () => (held ? { pid: 42, entrypoint: 'cli', busy: false } : null),
+  })
+
+  it('refuses one a terminal still has open, and keeps nothing of it', async () => {
+    const { sessions } = manager({}, { outside: reader(true) })
+    await sessions.load()
+    await expect(
+      sessions.importSession({
+        agentId: 'claude-code',
+        projectPath: '/repo',
+        acpSessionId: 'cli-1',
+      }),
+    ).rejects.toMatchObject({ code: 'busy' })
+    expect(sessions.list('/repo')).toEqual([])
+  })
+
+  it('keeps how its last request ran and its cache, and sends the guide ahead', async () => {
+    const { sessions } = manager({}, { outside: reader(false) })
+    await sessions.load()
+    const summary = await sessions.importSession({
+      agentId: 'claude-code',
+      projectPath: '/repo',
+      acpSessionId: 'cli-1',
+    })
+    expect(summary.cache).toEqual({ lastRequestAt: last.at, ttl: last.ttl })
+    await vi.waitFor(async () =>
+      expect((await index())?.sessions[0]).toMatchObject({
+        acpSessionId: 'cli-1',
+        cache: { lastRequestAt: last.at, ttl: last.ttl },
+        outside: { model: 'claude-opus-5-5[1m]', effort: 'xhigh', fast: false, mode: 'auto' },
+        instructionsAhead: true,
+      }),
+    )
+  })
+
+  it('copies one a terminal has open when asked to fork, with the settings of the original', async () => {
+    const asked: string[] = []
+    const copied: string[] = []
+    const { sessions } = manager(
+      {},
+      {
+        outside: reader(true, asked),
+        agents: {
+          ensureReady: async () => ({
+            connection: {
+              copySession: async (id: string) => {
+                copied.push(id)
+                return 'copy-1'
+              },
+            },
+          }),
+        },
+      },
+    )
+    await sessions.load()
+    await sessions.importSession({
+      agentId: 'claude-code',
+      projectPath: '/repo',
+      acpSessionId: 'cli-1',
+      fork: true,
+    })
+    expect(copied).toEqual(['cli-1'])
+    expect(asked).toEqual(['cli-1'])
+    await vi.waitFor(async () =>
+      expect((await index())?.sessions[0]).toMatchObject({ acpSessionId: 'copy-1' }),
     )
   })
 })

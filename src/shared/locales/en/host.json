@@ -33,6 +33,7 @@
     "forkTitle": "{{title}} (fork)",
     "forkTitleNumbered": "{{title}} (fork {{n}})",
     "alreadyInSession": "This session is already part of a Kettu session",
+    "heldOutside": "This session is still open in a terminal. Exit it there with /exit and try again, or fork a copy to carry on in Kettu.",
     "cannotList": "{{agent}} cannot list its sessions",
     "configBetweenTurns": "{{option}} changes between turns",
     "ultracodeDescription": "Dynamic workflows for substantial tasks",
@@ -121,6 +122,10 @@
     "computerStopped": {
       "title": "Stopped using the computer",
       "description": "Agents can use it again after your next message."
+    },
+    "fullAccessNotCarried": {
+      "title": "Full access was not carried over",
+      "description": "This session ran in full access outside Kettu. Kettu does not attach a session in it, so it is in {{mode}} here."
     }
   },
   "attention": {

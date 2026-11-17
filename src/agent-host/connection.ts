@@ -323,6 +323,11 @@ export interface SessionOptions {
    * extension in the agent; the session's own token, so its calls need not name the session.
    */
   kettuService?: KettuService
+  /**
+   * The session's own instructions get nothing of Kettu's: its guide and memory go ahead of its
+   * prompts, as for a session whose agent recorded its instructions outside Kettu.
+   */
+  promptAhead?: boolean
 }
 
 /** Kettu's memory as a session starts with it. */
@@ -414,6 +419,8 @@ export interface AgentConnection {
     cwd: string,
     cursor: string | null,
   ): Promise<{ sessions: ListedSession[]; nextCursor: string | null }>
+  /** A copy of a session under a new id, written from the original without opening it. */
+  copySession?(sessionId: string, cwd: string): Promise<string>
 
   /** Routes a session's updates to `target`, first replaying any that arrived early. */
   register(sessionId: string, target: SessionTarget): void

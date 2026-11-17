@@ -1620,6 +1620,7 @@ export function createValidators(platform: Platform): Validators {
         agentId: agentId(o),
         projectPath: absolutePath(o, 'projectPath', platform),
         acpSessionId: string(o, 'acpSessionId', ACP_ID_CHARS),
+        ...(o.fork === true ? { fork: true } : {}),
       }
     },
     'sessions.open': session,
