@@ -335,8 +335,6 @@ export interface AgentStatus {
   limitsReason?: LimitsReason
   /** Its sign-in and session history are shared with the vendor's own apps (Antigravity). */
   sharesSignIn?: boolean
-  /** Signed in with a personal account on a plan whose terms limit third-party apps. */
-  personalSignIn?: boolean
   /**
    * Accounts its vendor moved to another harness: that harness, who this one is still for, and
    * whether the agent refused its signed-in account as one of them (Gemini CLI to Antigravity).

@@ -5299,15 +5299,6 @@ li[data-row-exit='dust'] > * {
   text-overflow: ellipsis;
   color: var(--danger);
 }
-/* New session: the personal plan notice, as far below the greeting as the box would be. */
-.kettu-plan-notice {
-  margin-top: 30px;
-}
-@container ui-as (max-width: 600px) {
-  .kettu-plan-notice {
-    margin-top: 22px;
-  }
-}
 /* New session without an agent: the install guide. */
 .kettu-guide {
   display: flex;

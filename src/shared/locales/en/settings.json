@@ -1023,11 +1023,6 @@
         "readFailed": "Couldn’t read the workflow settings"
       }
     },
-    "personalPlan": {
-      "title": "About using {{agent}} with a personal Google plan",
-      "body": "Google’s <terms>terms</terms> limit using third-party apps with personal Google AI plans. Kettu runs only Google’s own Antigravity CLI over ACP and never touches your sign-in. To avoid any risk, sign in with a Gemini API key or Gemini Enterprise.",
-      "dismiss": "Got it"
-    },
     "signOutShared": {
       "title": "Sign out of {{name}}?",
       "body": "{{name}} shares its sign-in with the Antigravity app and CLI, so they are signed out too.",

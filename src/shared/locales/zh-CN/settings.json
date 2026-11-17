@@ -1014,11 +1014,6 @@
         "readFailed": "无法读取工作流设置"
       }
     },
-    "personalPlan": {
-      "title": "用个人 Google 套餐使用 {{agent}}",
-      "body": "Google 的<terms>条款</terms>限制个人 Google AI 套餐配合第三方应用使用。Kettu 只通过 ACP 运行 Google 自己的 Antigravity CLI，不接触你的登录凭据。想完全避免风险，请用 Gemini API key 或 Gemini Enterprise 登录。",
-      "dismiss": "知道了"
-    },
     "signOutShared": {
       "title": "退出 {{name}} 的登录？",
       "body": "{{name}} 和 Antigravity 应用、CLI 共用一份登录，它们也会一起退出。",

@@ -20,7 +20,6 @@ import { useScrollbarGutter } from '@renderer/hooks/use-scrollbar-gutter'
 import { errorMessage, host } from '@renderer/lib/host'
 import { isMac } from '@renderer/lib/platform'
 import { AccountMovedAlert } from '@renderer/features/agents/moved-accounts'
-import { PersonalPlanFirstUse } from '@renderer/features/agents/personal-plan-notice'
 import { agentName, agentsOn, useAgentsStore } from '@renderer/stores/agents'
 import { ensureFiles, ensureFreshFiles } from '@renderer/stores/files'
 import { isAway, useOtherHost } from '@renderer/stores/hosts'
@@ -261,7 +260,6 @@ function SessionBody({ summary }: { summary: SessionSummary }) {
                     </AlertAction>
                   </Alert>
                 )}
-                <PersonalPlanFirstUse status={agentStatus} />
                 {agentRemoved && (
                   <Alert variant="warning">
                     <HugeiconsIcon icon={AlertCircleIcon} strokeWidth={1.9} aria-hidden />

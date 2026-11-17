@@ -112,7 +112,6 @@ import {
   SettingSwitch,
   Skel,
 } from './controls'
-import { PersonalPlanText } from '@renderer/features/agents/personal-plan-notice'
 import { ClaudeSettingsRows } from './claude-settings-rows'
 import { PlaceRow } from './places'
 import {
@@ -129,7 +128,6 @@ import {
   GroupLabel,
   ItemPageHeader,
   ItemRow,
-  Notice,
   RowFrame,
   RowGroup,
   RowLine,
@@ -963,11 +961,6 @@ function AgentPageBody({ status }: { status: AgentStatus }) {
               <p className="ui-sg-hint k-error" data-wrap="">
                 {accountError}
               </p>
-            )}
-            {status.personalSignIn && (
-              <Notice variant="info" title={t('agents.personalPlan.title', { agent: status.name })}>
-                <PersonalPlanText />
-              </Notice>
             )}
             <RowGroup>
               {/* A subscription's label is its plan; the other kinds name how the agent signs in. */}

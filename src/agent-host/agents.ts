@@ -3939,7 +3939,6 @@ export class AgentManager {
       ...(slot.balances.length ? { balances: slot.balances } : {}),
       ...(limitsReason ? { limitsReason } : {}),
       ...(slot.def.sharesSignIn ? { sharesSignIn: true } : {}),
-      ...(slot.signInMethod === 'oauth-personal' ? { personalSignIn: true } : {}),
       ...(slot.def.movedAccounts
         ? {
             movedAccounts: {
