@@ -21,7 +21,12 @@
   }
   /* The main area fills the screen inside its safe areas, without the desk's frame. */
   :root .kettu-frame.ui-as-app > .ui-as-main {
-    padding: env(safe-area-inset-top) env(safe-area-inset-right) 0 env(safe-area-inset-left);
+    padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom)
+      env(safe-area-inset-left);
+  }
+  /* A tap answers with the control's own pressed look, not the browser's gray flash. */
+  :root {
+    -webkit-tap-highlight-color: transparent;
   }
   :root .kettu-frame.ui-as-app > .ui-as-side {
     width: min(360px, calc(100% - 48px));
@@ -208,6 +213,9 @@
   :root .cm-content {
     font-size: 16px;
   }
+  :root .k-time {
+    width: 120px;
+  }
 }
 
 /* Overview: the title, then its views on a line of their own; the views and the counts scroll
@@ -224,5 +232,16 @@
   }
   :root :is(.k-ov__tools, .k-ov-counts) > * {
     flex: none;
+  }
+}
+
+/* An artifact's page: Back in the corner stands for the way back to the list, which leaves the bar
+   to the title (features/artifacts/artifact-viewer.tsx). */
+@media (max-width: 719px) {
+  :root .k-av__crumbs > :is(.k-av__back, i) {
+    display: none;
+  }
+  :root .k-av-dock__mode kbd {
+    display: none;
   }
 }
