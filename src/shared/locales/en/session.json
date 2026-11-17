@@ -334,8 +334,14 @@
     "label": "Also open on {{names, list}}"
   },
   "userEntry": {
-    "from": "From {{title}}",
     "device": "Sent from {{device}}"
+  },
+  "sessionReport": {
+    "agent": "The session",
+    "finished": "{{agent}} finished",
+    "stopped": "{{agent}} was stopped",
+    "failed": "{{agent}} failed",
+    "failedWith": "{{agent}} failed · {{reason}}"
   },
   "sessionStarted": {
     "label": "Started <title>{{title}}</title>",
@@ -402,6 +408,7 @@
     "resume": "Resume",
     "attachment": "Attachment",
     "from": "From {{device}}",
+    "fromSession": "From {{title}}",
     "attachments_one": "{{count}} attachment",
     "attachments_other": "{{count}} attachments",
     "sendNow": "Send now",

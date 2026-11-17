@@ -47,6 +47,7 @@ import { OutOfCreditEnd } from './out-of-credit'
 import { splitLinks } from './text-links'
 import { UserActions } from './message-actions'
 import { ReplyRunChip } from './reply-run-chip'
+import { FromSessionCard, ReportLine } from './session-origin'
 import { TurnEndTag } from './turn-end-tag'
 import { RefChip, SentAttachments, UserContentView } from './user-content'
 
@@ -77,27 +78,33 @@ export const UserEntry = memo(function UserEntry({
   const rest = entry.content.filter((c) => c.type !== 'ref' || c.ref.kind !== 'attachment')
   const only = rest.length === 1 ? rest[0] : undefined
   const runNotice = only?.type === 'text' ? parseReplyRunNotice(only.text) : null
+  // Kettu's report of a turn another session ended is an event, not a message.
+  if (entry.from?.ended) {
+    return <ReportLine from={entry.from} ended={entry.from.ended} end={end} className={animation} />
+  }
   return (
-    <div className={cn('ks-user', animation)}>
+    <div className={cn('ks-user', entry.from && 'ks-user--agent', animation)}>
       {attachments.length > 0 && (
         <div className="flex w-full justify-end pb-1">
           <SentAttachments sessionId={sessionId} entryId={entryId} attachments={attachments} />
         </div>
       )}
       {/* A message of attachments alone has no bubble. */}
-      {rest.length > 0 && (
-        <div className="ks-user__bubble" data-run-notice={runNotice ? '' : undefined}>
-          {runNotice ? (
-            <ReplyRunChip terminalId={runNotice.terminalId} command={runNotice.command} />
-          ) : (
+      {rest.length > 0 &&
+        (entry.from ? (
+          // A prompt another session's agent sent is not the user's bubble.
+          <FromSessionCard from={entry.from}>
             <UserContentView content={rest} sessionId={sessionId} entryId={entryId} />
-          )}
-        </div>
-      )}
-      {/* A prompt another session's agent sent says whose it is, under the bubble. */}
-      {entry.from && (
-        <span className="ks-user__note">{t('userEntry.from', { title: entry.from.title })}</span>
-      )}
+          </FromSessionCard>
+        ) : (
+          <div className="ks-user__bubble" data-run-notice={runNotice ? '' : undefined}>
+            {runNotice ? (
+              <ReplyRunChip terminalId={runNotice.terminalId} command={runNotice.command} />
+            ) : (
+              <UserContentView content={rest} sessionId={sessionId} entryId={entryId} />
+            )}
+          </div>
+        ))}
       {/* A message from a paired device names it; the host's own windows send unmarked ones. */}
       {entry.device && (
         <span className="ks-user__note">

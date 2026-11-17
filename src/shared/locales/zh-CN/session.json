@@ -323,8 +323,14 @@
     "label": "{{names, list(style: narrow)}} 上也开着这个会话"
   },
   "userEntry": {
-    "from": "来自 {{title}}",
     "device": "从 {{device}} 发送"
+  },
+  "sessionReport": {
+    "agent": "该会话",
+    "finished": "{{agent}} 做完了",
+    "stopped": "{{agent}} 被停止了",
+    "failed": "{{agent}} 出错了",
+    "failedWith": "{{agent}} 出错了 · {{reason}}"
   },
   "sessionStarted": {
     "label": "已启动 <title>{{title}}</title>",
@@ -387,6 +393,7 @@
     "resume": "继续",
     "attachment": "附件",
     "from": "来自 {{device}}",
+    "fromSession": "来自 {{title}}",
     "attachments_other": "{{count}} 个附件",
     "sendNow": "立即发送",
     "steer": "立即插入当前对话",
