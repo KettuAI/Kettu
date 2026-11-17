@@ -150,6 +150,7 @@ function useSessionEntries(): SearchEntry[] {
 
 /** The sessions the hosts found by what was said in them, as Search's rows. */
 export function useConversationEntries(hits: readonly ConversationHit[]): SearchEntry[] {
+  const { t } = useTranslation('sidebar')
   const byId = useSessionsStore((s) => s.byId)
   const lineOf = useSessionLine()
   return useMemo(
@@ -158,12 +159,14 @@ export function useConversationEntries(hits: readonly ConversationHit[]): Search
         const summary = byId[hit.sessionId]
         if (!summary || !findable(summary, byId)) return []
         const { title, meta } = lineOf(summary)
+        const matches = hit.matches ?? 1
         return [
           {
             kind: 'conversation',
             key: `conversation:${hit.sessionId}`,
             title,
-            meta,
+            // The number of messages is told only when it is more than the one shown.
+            meta: matches > 1 ? `${meta} · ${t('search.matches', { count: matches })}` : meta,
             trailing: shortAgo(summary.updatedAt),
             haystack: '',
             at: summary.updatedAt,
@@ -177,7 +180,7 @@ export function useConversationEntries(hits: readonly ConversationHit[]): Search
           },
         ]
       }),
-    [hits, byId, lineOf],
+    [hits, byId, lineOf, t],
   )
 }
 

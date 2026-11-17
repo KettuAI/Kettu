@@ -755,8 +755,17 @@ li[data-row-exit='dust'] > * {
   align-items: center;
   gap: 10px;
 }
-.kettu-search-note {
-  margin-inline-end: auto;
+/* A note gives way to the key hints, cut with an ellipsis when the row is short. */
+.kettu-search .ui-cmc__hints > span {
+  flex: none;
+}
+.kettu-search .ui-cmc__hints > .kettu-search-note {
+  display: block;
+  flex: 1 1 0;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   color: var(--ui-cmc-muted);
 }
 .kettu-search-empty b {

@@ -83,7 +83,11 @@
       "routines": "最近的例程",
       "projects": "最近的项目",
       "settings": "全部设置"
-    }
+    },
+    "matches_other": "{{count}} 条消息",
+    "indexing": "正在为对话建立索引（{{percent}}%），已建好的部分可以搜。",
+    "hostsSlow": "还在等：{{hosts}}",
+    "announce_other": "找到 {{count}} 个会话"
   },
   "project": {
     "missing": "未找到",
