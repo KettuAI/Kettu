@@ -23,6 +23,7 @@ import {
   type SessionAttention,
   type SessionOutputs,
   type SessionPullRequest,
+  type SearchIndexing,
   type SessionSummary,
   type SideChatAgent,
   type StartNotice,
@@ -750,6 +751,8 @@ interface Live {
 const TITLE_LENGTH = 60
 // Titles from `session/list`, kept for an import that follows; bounded like every cache here.
 const LISTED_SESSIONS = 1_000
+// The sessions a search of the conversations returns, the most recently changed first.
+const SEARCH_SESSIONS = 100
 // Requests whose answerer a session remembers, so a late answer hears where it was answered.
 const ANSWERS_KEPT = 50
 
@@ -2871,11 +2874,50 @@ export class SessionManager {
     return { entries: rows.map((row) => ({ ...row, text: firstLine(row.text) })) }
   }
 
-  /** The sessions whose stored messages hold every word of `query`, each with its latest one. */
-  async search(query: string): Promise<{ hits: ConversationHit[] }> {
+  /**
+   * The sessions whose messages hold every word of `query`, each with its latest such message, as
+   * the index finds them. A session no session list shows is left out before the most recently
+   * changed `SEARCH_SESSIONS` are kept.
+   */
+  async search(
+    query: string,
+  ): Promise<{ hits: ConversationHit[]; indexing: SearchIndexing | null }> {
     const words = queryWords(query)
-    if (!longEnough(words)) return { hits: [] }
-    return { hits: (await this.deps.threads?.search(words)) ?? [] }
+    const threads = this.deps.threads
+    if (!longEnough(words) || !threads) return { hits: [], indexing: null }
+    const { candidates, indexing } = await threads.search(words)
+    const picks = candidates.filter((c) => this.searchable(c.sessionId)).slice(0, SEARCH_SESSIONS)
+    const found = new Map(
+      (await threads.snippets(words, picks)).map((snippet) => [snippet.sessionId, snippet]),
+    )
+    const hits = picks.flatMap((candidate): ConversationHit[] => {
+      const snippet = found.get(candidate.sessionId)
+      if (!snippet) return []
+      return [
+        {
+          sessionId: candidate.sessionId,
+          pos: candidate.pos,
+          entryId: snippet.entryId,
+          role: snippet.role,
+          snippet: snippet.snippet,
+          matches: candidate.matches,
+        },
+      ]
+    })
+    return { hits, indexing }
+  }
+
+  /** Whether a session list shows the session: not a sub-agent's, not archived with its tree. */
+  private searchable(sessionId: string): boolean {
+    const live = this.live.get(sessionId)
+    const record = live?.record ?? this.records.get(sessionId)
+    return (
+      record !== undefined &&
+      record.origin !== 'subagent' &&
+      !live?.prepared &&
+      !this.missing.has(sessionId) &&
+      !this.isArchived(record)
+    )
   }
 
   /**

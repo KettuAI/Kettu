@@ -227,6 +227,14 @@ export interface ConversationHit {
   role: 'user' | 'agent'
   /** The message's text around the first match, on one line and cut at both ends. */
   snippet: string
+  /** How many of the session's messages hold every word; absent from hosts before it was sent. */
+  matches?: number
+}
+
+/** The search index is still being built: sessions done of those it started with. */
+export interface SearchIndexing {
+  done: number
+  total: number
 }
 
 export type { ContextBreakdown, ContextList } from './context'
@@ -1085,9 +1093,14 @@ export interface HostContract {
   // `permissionCount` counts. Empty for a closed session, where nothing waits.
   'sessions.requests': { params: { sessionId: string }; result: { entries: ThreadEntry[] } }
   'sessions.outline': { params: { sessionId: string }; result: { entries: OutlineEntry[] } }
-  // The sessions whose stored messages hold every word of `query`, most recently updated first,
-  // each with its latest such message. Empty for a query of fewer than 2 characters.
-  'sessions.search': { params: { query: string }; result: { hits: ConversationHit[] } }
+  // The sessions whose messages hold every word of `query`, most recently updated first, each
+  // with its latest such message; the sessions a session list shows, at most 100. Empty for a
+  // query of fewer than 2 characters. `indexing` is present while the index is built, and the
+  // hits may then be fewer than there are.
+  'sessions.search': {
+    params: { query: string }
+    result: { hits: ConversationHit[]; indexing?: SearchIndexing | null }
+  }
   // What the session made, for its card in the sidebar; empty for a session without a thread.
   'sessions.outputs': { params: { sessionId: string }; result: SessionOutputs }
   // Summarizes the messages without a title; empty while a summary of the session runs.
