@@ -62,6 +62,7 @@ import {
   mapTokenTotals,
 } from './mapper'
 import { agyAllowOnce, agyAutoAllowed, fromAgy, onAgyOwnFiles } from './agy-tools'
+import { fromCodeMode } from './code-mode'
 import { forkPointMeta, forksAtMessage } from './fork-point'
 import {
   DELETE_AGAIN_MS,
@@ -457,7 +458,12 @@ export class AcpConnection implements AgentConnection {
       return mapSessionUpdate(update, ctx)
     }
     if (this.agy && onAgyOwnFiles(update, ctx)) return { patches: [], effects: [] }
-    const call = ownCall(this.agy ? fromAgy(update) : update, this.naming, ctx)
+    const shaped = this.agy
+      ? fromAgy(update)
+      : this.naming === 'code'
+        ? fromCodeMode(update)
+        : update
+    const call = ownCall(shaped, this.naming, ctx)
     return call ? mapSessionUpdate(call, ctx) : { patches: [], effects: [] }
   }
 
