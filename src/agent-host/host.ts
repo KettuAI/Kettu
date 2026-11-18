@@ -150,6 +150,7 @@ import { claudeCacheTtl, type CacheTtlReader } from './prompt-cache'
 import { claudeModelRequests } from './model-requests/claude'
 import { codexModelRequests } from './model-requests/codex'
 import { byHarness } from './model-requests/reader'
+import { AcpMessages, acpModelRequests } from './model-requests/acp-messages'
 import { IdleRelease } from './idle-release'
 import { PortHub, type Handlers, type RequestContext } from './rpc'
 import { Attachments, toArrayBuffer } from './attachments'
@@ -373,6 +374,8 @@ const REPLY_RUN_ERRORS: Record<TerminalCallErrorCode, PortErrorCode> = {
 
 export class AgentHost {
   readonly diagnostics: Diagnostics
+  /** What each ACP session sent and received since the host started, for the Requests pane. */
+  private readonly acpMessages = new AcpMessages()
   readonly env: EnvironmentService
   readonly projects: Projects
   readonly scratch: ScratchFolders
@@ -850,6 +853,7 @@ export class AgentHost {
       appVersion: options.appVersion,
       env: this.env,
       diagnostics: this.diagnostics,
+      acpMessages: this.acpMessages,
       launcher: options.launcher ?? processLauncher(platform),
       settings: () => this.settings,
       reportsDir: path.join(options.userDataPath, 'agent-reports'),
@@ -997,23 +1001,26 @@ export class AgentHost {
           },
           log,
         }),
-      modelRequests: byHarness({
-        'claude-code': claudeModelRequests({
-          platform,
-          home: options.homeDir ?? os.homedir(),
-          env: async () => {
-            await this.env.ready()
-            return this.env.agentEnv('claude-code')
-          },
-        }),
-        codex: codexModelRequests({
-          home: options.homeDir ?? os.homedir(),
-          env: async () => {
-            await this.env.ready()
-            return this.env.agentEnv('codex')
-          },
-        }),
-      }),
+      modelRequests: byHarness(
+        {
+          'claude-code': claudeModelRequests({
+            platform,
+            home: options.homeDir ?? os.homedir(),
+            env: async () => {
+              await this.env.ready()
+              return this.env.agentEnv('claude-code')
+            },
+          }),
+          codex: codexModelRequests({
+            home: options.homeDir ?? os.homedir(),
+            env: async () => {
+              await this.env.ready()
+              return this.env.agentEnv('codex')
+            },
+          }),
+        },
+        acpModelRequests(this.acpMessages),
+      ),
       outside:
         options.outside ??
         claudeOutside({

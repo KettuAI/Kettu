@@ -101,5 +101,23 @@
   "error": {
     "title": "读不到请求",
     "retry": "重试"
+  },
+  "acp": {
+    "note": "这个 Agent 走 ACP，只报每一轮，不报每次请求，也很少报 token。这里是 Kettu 这次启动以来和它收发的消息，更早的轮没有留下。",
+    "empty": "从现在起，Kettu 和这个 Agent 收发消息时，每一轮会列在这里。",
+    "turns": "轮",
+    "messages": "消息",
+    "tools": "工具",
+    "took": "用时",
+    "tokens": "Token",
+    "turn": "轮",
+    "sent": "发出",
+    "updates": "更新",
+    "groups_one": "消息 · {{count}}",
+    "groups_other": "消息 · {{count}}",
+    "grouped": "按种类归在一起",
+    "raw": "Kettu 收发的 JSON-RPC",
+    "summary_one": "{{count}} 轮 · Kettu 这次启动以来的消息",
+    "summary_other": "{{count}} 轮 · Kettu 这次启动以来的消息"
   }
 }

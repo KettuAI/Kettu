@@ -44,6 +44,8 @@ export interface RequestPart {
   /** Its size in UTF-8 bytes, when it has one worth showing. */
   bytes: number | null
   error?: boolean
+  /** How many messages the line stands for, where it groups several of one kind. */
+  count?: number
 }
 
 export interface RequestParam {

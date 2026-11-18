@@ -30,11 +30,12 @@ export interface ModelRequestsReader {
 /** The most Raw reads for one request, folded or not. */
 const RAW_LIMIT = 64 << 20
 
-/** Each harness's reader; a session of any other agent has none. */
+/** Each harness's reader, and `others` for the agents that have none of their own. */
 export function byHarness(
   readers: Partial<Record<HarnessId, ModelRequestsReader>>,
+  others: ModelRequestsReader | null = null,
 ): ModelRequestsReader {
-  const of = (target: RequestsTarget) => readers[harnessOf(target.agentId)] ?? null
+  const of = (target: RequestsTarget) => readers[harnessOf(target.agentId)] ?? others
   return {
     page: async (target, before) => (await of(target)?.page(target, before)) ?? null,
     summary: async (target) => (await of(target)?.summary(target)) ?? null,

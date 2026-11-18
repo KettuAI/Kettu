@@ -5,6 +5,9 @@ import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 're
 import {
   Alert02Icon,
   ArrowDown01Icon,
+  ArrowDownLeft01Icon,
+  ArrowUpRight01Icon,
+  InformationCircleIcon,
   ArrowRight01Icon,
   AttachmentIcon,
   Copy01Icon,
@@ -123,7 +126,7 @@ export default function RequestsPane({ panel, maximized }: { panel: string; maxi
       <PaneEmpty
         icon={<PaneIcon icon={REQUESTS_ICON} />}
         title={t('empty.title')}
-        text={t('empty.text')}
+        text={data.source === 'acp' ? t('acp.empty') : t('empty.text')}
       />
     )
   } else {
@@ -153,9 +156,11 @@ export default function RequestsPane({ panel, maximized }: { panel: string; maxi
           <b>{t('title')}</b>
           {count !== null && data.source && (
             <span>
-              {running
-                ? t('summaryLive', { count })
-                : t('summary', { count, source: t(`source.${data.source}`) })}
+              {data.source === 'acp'
+                ? t('acp.summary', { count })
+                : running
+                  ? t('summaryLive', { count })
+                  : t('summary', { count, source: t(`source.${data.source}`) })}
             </span>
           )}
         </span>
@@ -237,70 +242,230 @@ function RequestList({
 
   return (
     <div ref={scroller} className="kr-scroll">
-      <Totals
-        session={session}
-        source={source}
-        recorded={recorded}
-        costUsd={costUsd}
-        requests={requests}
-      />
-      {system && (
-        <SystemRow
+      {source === 'acp' && (
+        <AcpBody
           sessionId={sessionId}
-          system={system}
-          open={systemOpen}
-          onToggle={() => setSystemOpen(!systemOpen)}
+          turns={turns}
+          running={session?.status === 'running'}
+          openRequest={openRequest}
+          onToggle={(id) => setOpenRequest(openRequest === id ? null : id)}
         />
       )}
-      <div ref={sentinel} className="kr-older">
-        {more ? (loadingOlder ? t('loadingOlder') : t('older')) : t('start')}
-      </div>
-      {turns.map((turn) => {
-        const open = !isFolded(turn)
-        return (
-          <section key={turn.id} className="kr-turn">
-            <TurnHead
-              turn={turn}
-              index={turn.index ?? ordinals?.[turn.id] ?? null}
-              open={open}
-              running={turn.id === newest && session?.status === 'running'}
-              onToggle={() => setFolded({ ...folded, [turn.id]: open })}
+      {source !== 'acp' && (
+        <>
+          <Totals
+            session={session}
+            source={source}
+            recorded={recorded}
+            costUsd={costUsd}
+            requests={requests}
+          />
+          {system && (
+            <SystemRow
+              sessionId={sessionId}
+              system={system}
+              open={systemOpen}
+              onToggle={() => setSystemOpen(!systemOpen)}
             />
-            {open && (
-              <>
-                <div className="kr-cols" aria-hidden>
-                  <span />
-                  <span />
-                  <span>{t('cols.request')}</span>
-                  <span>{t('cols.input')}</span>
-                  <span>{t('cols.output')}</span>
-                  <span>{t('cols.cached')}</span>
-                  <span>{t('cols.took')}</span>
-                </div>
-                {turn.requests.map((request) => {
-                  const live =
-                    request.status === 'running' && session?.status === 'running'
-                      ? session.lastRequest
-                      : undefined
-                  return (
-                    <RequestRow
-                      key={request.id}
-                      sessionId={sessionId}
-                      source={source}
-                      request={request}
-                      live={live}
-                      open={openRequest === request.id}
-                      onToggle={() =>
-                        setOpenRequest(openRequest === request.id ? null : request.id)
-                      }
-                    />
-                  )
-                })}
-              </>
-            )}
-          </section>
+          )}
+          <div ref={sentinel} className="kr-older">
+            {more ? (loadingOlder ? t('loadingOlder') : t('older')) : t('start')}
+          </div>
+          {turns.map((turn) => {
+            const open = !isFolded(turn)
+            return (
+              <section key={turn.id} className="kr-turn">
+                <TurnHead
+                  turn={turn}
+                  index={turn.index ?? ordinals?.[turn.id] ?? null}
+                  open={open}
+                  running={turn.id === newest && session?.status === 'running'}
+                  onToggle={() => setFolded({ ...folded, [turn.id]: open })}
+                />
+                {open && (
+                  <>
+                    <div className="kr-cols" aria-hidden>
+                      <span />
+                      <span />
+                      <span>{t('cols.request')}</span>
+                      <span>{t('cols.input')}</span>
+                      <span>{t('cols.output')}</span>
+                      <span>{t('cols.cached')}</span>
+                      <span>{t('cols.took')}</span>
+                    </div>
+                    {turn.requests.map((request) => {
+                      const live =
+                        request.status === 'running' && session?.status === 'running'
+                          ? session.lastRequest
+                          : undefined
+                      return (
+                        <RequestRow
+                          key={request.id}
+                          sessionId={sessionId}
+                          source={source}
+                          request={request}
+                          live={live}
+                          open={openRequest === request.id}
+                          onToggle={() =>
+                            setOpenRequest(openRequest === request.id ? null : request.id)
+                          }
+                        />
+                      )
+                    })}
+                  </>
+                )}
+              </section>
+            )
+          })}
+        </>
+      )}
+    </div>
+  )
+}
+
+/**
+ * An ACP session: ACP reports each turn but not each request to the model, so a row is a turn,
+ * read from the messages Kettu exchanged since it started.
+ */
+function AcpBody({
+  sessionId,
+  turns,
+  running,
+  openRequest,
+  onToggle,
+}: {
+  sessionId: string
+  turns: RequestTurn[]
+  running: boolean
+  openRequest: string | null
+  onToggle: (id: string) => void
+}) {
+  const { t } = useTranslation('requests')
+  const rows = turns.flatMap((turn) => turn.requests.map((request) => ({ turn, request })))
+  const count = (parts: RequestPart[]) => parts.reduce((sum, p) => sum + (p.count ?? 1), 0)
+  const tools = (request: ModelRequest) =>
+    request.actions
+      .filter((a) => a.kind !== 'thinking' && a.kind !== 'reply')
+      .reduce((sum, a) => sum + a.count, 0)
+  const took = (request: ModelRequest) =>
+    request.sentAt !== null && request.endedAt !== null ? request.endedAt - request.sentAt : 0
+  const all = rows.map(({ request }) => request)
+  const spent = all.reduce((sum, r) => sum + took(r), 0)
+  const usedTokens = all.some((r) => inputTotal(r.tokens) !== null)
+    ? all.reduce((sum, r) => sum + (inputTotal(r.tokens) ?? 0) + (r.tokens.output ?? 0), 0)
+    : null
+  const cell = (label: string, value: ReactNode) => (
+    <div>
+      <small>{label}</small>
+      <b className="tabular">{value ?? '—'}</b>
+    </div>
+  )
+  return (
+    <>
+      <p className="kr-note">
+        <Glyph icon={InformationCircleIcon} size={14} />
+        {t('acp.note')}
+      </p>
+      <div className="kr-totals">
+        {cell(t('acp.turns'), exactCount(rows.length))}
+        {cell(t('acp.messages'), exactCount(all.reduce((sum, r) => sum + r.records, 0)))}
+        {cell(t('acp.tools'), exactCount(all.reduce((sum, r) => sum + tools(r), 0)))}
+        {cell(t('acp.took'), spent > 0 ? shortDuration(spent) : null)}
+        {cell(t('acp.tokens'), usedTokens === null ? null : tokens(usedTokens))}
+      </div>
+      <div className="kr-cols" aria-hidden>
+        <span />
+        <span />
+        <span>{t('acp.turn')}</span>
+        <span>{t('acp.sent')}</span>
+        <span>{t('acp.updates')}</span>
+        <span>{t('acp.tools')}</span>
+        <span>{t('cols.took')}</span>
+      </div>
+      {rows.map(({ turn, request }) => {
+        const open = openRequest === request.id
+        const live = request.status === 'running' && running
+        return (
+          <div key={request.id}>
+            <button
+              type="button"
+              className="kr-row"
+              data-open={open || undefined}
+              data-failed={request.status === 'failed' || undefined}
+              aria-expanded={open}
+              onClick={() => onToggle(request.id)}
+            >
+              {live ? (
+                <span className="kr-spin" aria-hidden />
+              ) : (
+                <Glyph icon={ArrowRight01Icon} size={12} className="kr-row__chev" />
+              )}
+              <span className="kr-row__time tabular">
+                {request.sentAt !== null ? secondsTime(request.sentAt) : ''}
+              </span>
+              <span className="kr-row__what">
+                {request.status === 'failed' && (
+                  <Glyph icon={Alert02Icon} size={13} className="kr-bad" />
+                )}
+                <span className="kr-row__words">{turn.prompt || t('turnEarlier')}</span>
+              </span>
+              <span className="kr-num tabular">{count(request.sent)}</span>
+              <span className="kr-num tabular">{count(request.received)}</span>
+              <span className="kr-num tabular">{tools(request)}</span>
+              <span className="kr-num tabular kr-faint">
+                {took(request) > 0 ? shortDuration(took(request)) : live ? '…' : '—'}
+              </span>
+            </button>
+            {open && <AcpDetail sessionId={sessionId} request={request} />}
+          </div>
         )
       })}
+    </>
+  )
+}
+
+function AcpDetail({ sessionId, request }: { sessionId: string; request: ModelRequest }) {
+  const { t } = useTranslation('requests')
+  const line = (part: RequestPart, dir: 'out' | 'in') => (
+    <Line
+      key={`${dir}-${part.label}`}
+      icon={dir === 'out' ? ArrowUpRight01Icon : ArrowDownLeft01Icon}
+      label={part.label}
+      text={part.preview}
+      size={part.count && part.count > 1 ? `×${part.count}` : null}
+      error={part.error}
+    />
+  )
+  const total = request.sent.length + request.received.length
+  return (
+    <div className="kr-detail">
+      {request.stop && (
+        <div className="kr-facts">
+          <span className="kr-fact">
+            {t('detail.stop')} <b>{request.stop}</b>
+          </span>
+        </div>
+      )}
+      {request.error && (
+        <p role="alert" className="kr-error">
+          <Glyph icon={Alert02Icon} size={13} />
+          {request.error}
+        </p>
+      )}
+      {inputTotal(request.tokens) !== null && <TokenSplit tokens={request.tokens} />}
+      <Section label={t('acp.groups', { count: request.records })} meta={t('acp.grouped')}>
+        {total === 0 ? (
+          <p className="kr-none">{t('detail.nothingReceived')}</p>
+        ) : (
+          <>
+            {request.sent.map((part) => line(part, 'out'))}
+            {request.received.map((part) => line(part, 'in'))}
+          </>
+        )}
+      </Section>
+      <Section label={t('detail.raw')} meta={t('acp.raw')}>
+        <RawJson key={request.raw} sessionId={sessionId} raw={request.raw} />
+      </Section>
     </div>
   )
 }
