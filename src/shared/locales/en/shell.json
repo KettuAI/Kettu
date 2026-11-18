@@ -8,7 +8,8 @@
     "devices": "Mobile devices",
     "closePane": "Close pane",
     "leaveSession": "Leave session",
-    "sideChat": "Side chat"
+    "sideChat": "Side chat",
+    "sideChatNews": "New answer"
   },
   "hostBanner": {
     "restarting": "Restarting the agent host. Your sessions come back by themselves.",

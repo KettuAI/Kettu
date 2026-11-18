@@ -51,7 +51,7 @@ import {
   useViewStore,
   type SidePane,
 } from '@renderer/stores/view'
-import { openSideChat } from '@renderer/stores/side-chat'
+import { openSideChat, useSideChatNews } from '@renderer/stores/side-chat'
 import { usePhoneWindow } from './narrow'
 import { PaneIcon } from './panel-button'
 import { NoDrag } from './top-bar'
@@ -241,6 +241,7 @@ function PhonePanelMenu({
   const chatOpen = useViewStore((s) => (sessionId ? !!s.sideChatOpen[sessionId] : false))
   const activity = useBoardActivity(sessionId ?? '')
   const busy = !!sessionId && !boardOpen && activity.running + activity.needs > 0
+  const chatNews = useSideChatNews(sessionId)
   const view = pane?.view
   const leave =
     pane && !pane.split && view?.kind === 'session'
@@ -252,7 +253,7 @@ function PhonePanelMenu({
         render={<button type="button" aria-label={tc('pane.open')} className="kp-tool" />}
       >
         <PaneIcon icon={SidebarRightIcon} size={18} />
-        {(dot || busy) && (
+        {(dot || busy || chatNews) && (
           <span
             aria-hidden
             className={activity.needs > 0 ? 'kp-bar-dot kp-bar-dot--needs' : 'kp-bar-dot'}
@@ -424,9 +425,14 @@ function SideChatToggle({ sessionId }: { sessionId: string }) {
   const { t } = useTranslation('shell')
   const context = usePane()
   const open = useViewStore((s) => !!s.sideChatOpen[sessionId])
+  const news = useSideChatNews(sessionId)
   return (
     <BarButton
-      label={t('headerTools.sideChat')}
+      label={
+        news
+          ? `${t('headerTools.sideChat')} · ${t('headerTools.sideChatNews')}`
+          : t('headerTools.sideChat')
+      }
       shortcut="Mod+J"
       pressed={open}
       onClick={() => {
@@ -436,6 +442,7 @@ function SideChatToggle({ sessionId }: { sessionId: string }) {
       }}
     >
       <PaneIcon icon={BubbleChatQuestionIcon} size={16} />
+      {news && <span aria-hidden className="kp-bar-dot" />}
     </BarButton>
   )
 }

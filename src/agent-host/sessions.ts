@@ -8318,6 +8318,15 @@ export class SessionManager {
     const ended = (changes: Partial<SideChatEntry>): void => {
       if (timer) clearTimeout(timer)
       this.patchSideEntry(live, entry.id, { ...changes, answeredAt: this.now() })
+      // An answer that ends out of sight leaves the session unread; a stopped or cleared one
+      // has nothing to show.
+      if (
+        changes.status !== 'stopped' &&
+        this.sideEntry(live, entry.id) &&
+        !this.inFront(live.id)
+      ) {
+        this.markUnread(live.id, true)
+      }
     }
     try {
       const result = await this.sideAnswer(live, entry, ask, events, signal)
