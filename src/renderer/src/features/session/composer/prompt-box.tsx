@@ -18,6 +18,7 @@ import {
   type MentionRow,
 } from './mentions'
 import { usePromptChips } from './prompt-chips'
+import { ResizeGrip } from './resize-grip'
 import { orderSlashMatches, placeCommand, slashAt } from './slash'
 import { useMentionList, type MentionList } from './use-mention-list'
 import { useBoxText, type PromptBoxState } from './use-prompt-box'
@@ -263,6 +264,7 @@ export function PromptBox({
   return (
     <>
       <div ref={group} className="kettu-prompt" data-disabled={disabled || undefined}>
+        <ResizeGrip editor={editor} />
         {top}
         <AttachmentTray
           draft={draft}

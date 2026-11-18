@@ -14,6 +14,7 @@ import {
 import { history, insertNewline, redo, standardKeymap, undo } from '@codemirror/commands'
 import { Annotation, Compartment, EditorState, Prec, type Extension } from '@codemirror/state'
 import { EditorView, keymap, placeholder as placeholderText } from '@codemirror/view'
+import { MAX_HEIGHT_SHARE, useComposerHeight } from '@renderer/stores/composer-height'
 import { chipHooks, chips, keepAsText, type ChipHooks } from './editor-chips'
 import { markdownPreview } from './markdown-preview'
 
@@ -34,6 +35,8 @@ export interface ComposerEditorHandle {
   chipElement(pos: number): HTMLElement | null
   /** Where the character at `pos` starts on screen, or null while it is not drawn. */
   leftOf(pos: number): number | null
+  /** The box's height now and the least it can take, in pixels. */
+  measure(): { height: number; least: number }
 }
 
 /** The list a popover shows, for the box's combobox attributes. */
@@ -63,8 +66,13 @@ function attributes(label: string, popover: PopoverAria | null): Extension {
 }
 
 // The box's type, as the thread's prose, and the Markdown styles of the thread's `.markdown`.
+// A height the user dragged to, `--box-height`, fixes the box; without one it grows with the text.
 const theme = EditorView.theme({
-  '&': { maxHeight: 'min(40svh, 24rem)', color: 'var(--text-primary)' },
+  '&': {
+    height: 'var(--box-height, auto)',
+    maxHeight: 'var(--box-height, min(40svh, 24rem))',
+    color: 'var(--text-primary)',
+  },
   '&.cm-focused': { outline: 'none' },
   '.cm-scroller': {
     overflow: 'auto',
@@ -73,7 +81,8 @@ const theme = EditorView.theme({
   },
   '.cm-content': {
     padding: 'var(--box-padding)',
-    minHeight: 'var(--box-min-height)',
+    // Fills a fixed box, so a press anywhere in it lands in the text.
+    minHeight: 'var(--box-height, var(--box-min-height))',
     fontSize: 'var(--prose-size)',
     caretColor: 'var(--control-on)',
     // Otherwise the content grows to its longest line, and the placeholder's 100% would be its
@@ -334,9 +343,21 @@ export function ComposerEditor({
         if (!editor) return null
         return editor.coordsAtPos(Math.min(pos, editor.state.doc.length), 1)?.left ?? null
       },
+      measure: () => {
+        const element = host.current
+        if (!element) return { height: 0, least: 0 }
+        // The least height is a CSS length of the theme's, so a hidden element resolves it.
+        const probe = document.createElement('div')
+        probe.style.cssText = `position:absolute;visibility:hidden;height:${element.style.getPropertyValue('--box-min-height')}`
+        element.appendChild(probe)
+        const least = probe.offsetHeight
+        probe.remove()
+        return { height: view.current?.dom.offsetHeight ?? 0, least }
+      },
     }),
     [],
   )
+  const fixed = useComposerHeight((s) => s.height)
 
   return (
     <div
@@ -347,6 +368,10 @@ export function ComposerEditor({
           '--box-padding': size.padding,
           '--box-min-height': size.minHeight,
           '--box-line-height': size.lineHeight,
+          // Capped for a window shorter than when it was dragged.
+          ...(fixed === null
+            ? {}
+            : { '--box-height': `min(${fixed}px, ${MAX_HEIGHT_SHARE * 100}svh)` }),
         } as CSSProperties
       }
     />

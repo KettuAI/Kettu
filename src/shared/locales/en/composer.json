@@ -248,6 +248,9 @@
     "clickToOpen": "Click to open",
     "backspaceRemoves": "{{key}} removes it"
   },
+  "resize": {
+    "label": "Resize the message box"
+  },
   "place": {
     "thisComputer": "This computer",
     "thisComputer_mac": "This Mac",
