@@ -5,7 +5,7 @@ import { AnimatePresence } from 'motion/react'
 import { Trans, useTranslation } from 'react-i18next'
 import { computerControl, stopShortcutText } from '@shared/computer-use'
 import type { AgentId, ComputerUseView } from '@shared/thread'
-import { ControlLabel } from '@renderer/components/control/control-label'
+import { ControlLabel, ControlLabelRow } from '@renderer/components/control/control-label'
 import { useControlAgent } from '@renderer/components/control/use-control-agent'
 import { Spinner } from '@renderer/components/ui/spinner'
 import { errorMessage, host } from '@renderer/lib/host'
@@ -102,47 +102,33 @@ export function ComputerLabel({
   let label = null
   if (view && stopping) {
     label = (
-      <div
+      <ControlLabelRow
         key="computer"
-        role="status"
-        className="ctl-label"
-        data-surface="computer"
-        data-control="agent"
-        style={{ borderTopLeftRadius: 12, borderTopRightRadius: 12 }}
-      >
-        <span className="ctl-label__in pr-3">
-          <Spinner className="size-3.5 shrink-0" />
-          <span className="ctl-label__text">{t('session:computerBar.stopping')}</span>
-        </span>
-      </div>
+        surface="computer"
+        kind="agent"
+        mark={<Spinner className="size-3.5" />}
+        text={t('session:computerBar.stopping')}
+      />
     )
   } else if (view && waiting) {
     label = (
-      <div
+      <ControlLabelRow
         key="computer"
-        role="status"
-        className="ctl-label"
-        data-surface="computer"
-        data-control="waiting"
-        style={{ borderTopLeftRadius: 12, borderTopRightRadius: 12 }}
-      >
-        <span className="ctl-label__in pr-3">
-          <HugeiconsIcon
-            icon={DashboardSquare01Icon}
-            strokeWidth={1.9}
-            aria-hidden
-            className="size-3.75 shrink-0"
+        surface="computer"
+        kind="waiting"
+        title={waiting}
+        mark={
+          <HugeiconsIcon icon={DashboardSquare01Icon} strokeWidth={1.9} className="size-3.75" />
+        }
+        text={
+          <Trans
+            t={t}
+            i18nKey="session:computerBar.waiting"
+            values={{ app: waiting }}
+            components={{ app: <b dir="auto" /> }}
           />
-          <span className="ctl-label__text">
-            <Trans
-              t={t}
-              i18nKey="session:computerBar.waiting"
-              values={{ app: waiting }}
-              components={{ app: <b dir="auto" /> }}
-            />
-          </span>
-        </span>
-      </div>
+        }
+      />
     )
   } else if (view && agent) {
     label = (

@@ -384,6 +384,7 @@ async function start(): Promise<void> {
   const routinesAwake = new RoutinesAwake()
   const terminalHost = new TerminalHost({
     settings: () => terminalSettings(settings.get()),
+    onReady: () => broadcast('terminals:ready', null),
     onHandedBack: (sessionId, ms) => hostRef.current?.terminalHandedBack(sessionId, ms),
   })
   const deviceHost = new DeviceHost({

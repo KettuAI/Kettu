@@ -15,6 +15,7 @@ const log = createLogger('terminal-host')
 
 export interface TerminalHostDeps {
   settings(): TerminalSettings
+  onReady?(): void
   /** The user handed back a terminal an agent's turn uses, after holding it for `durationMs`. */
   onHandedBack?(sessionId: string, durationMs: number): void
 }
@@ -55,7 +56,10 @@ export class TerminalHost {
       readyType: 'terminal-host:ready',
       stoppedType: 'terminal-host:stopped',
       onMessage: (message) => this.receive(message, deps),
-      onReady: () => this.flushPending(),
+      onReady: () => {
+        this.flushPending()
+        deps.onReady?.()
+      },
       onExit: () => {
         for (const resolve of this.busyRequests.values()) resolve([])
         this.busyRequests.clear()

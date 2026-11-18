@@ -1,6 +1,7 @@
 {
   "agent": "Agent",
   "label": {
+    "group": "工具控制",
     "agent": "{{agent}} 正在使用<b>{{target}}</b>",
     "you": "<b>你接管了{{held}}</b><i>·</i>{{agent}} 在等",
     "asks": {

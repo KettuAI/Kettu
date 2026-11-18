@@ -135,7 +135,7 @@ export class PortClient<Event> {
     }
   }
 
-  private connect(): void {
+  connect(): void {
     if (this.requested) return
     this.requested = true
     this.options.transport.requestPort()
