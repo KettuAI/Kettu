@@ -32,6 +32,7 @@ const FilesPanel = lazy(() => import('@renderer/features/files/files-panel'))
 const ArtifactPane = lazy(() => import('@renderer/features/artifacts/artifact-pane'))
 const DevicesPane = lazy(() => import('@renderer/features/devices/devices-pane'))
 const ComputerPane = lazy(() => import('@renderer/features/computer/computer-pane'))
+const RequestsPane = lazy(() => import('@renderer/features/requests/requests-pane'))
 const BrowserPane = lazy(() =>
   import('@renderer/features/browser/browser-pane').then((module) => ({
     default: module.BrowserPane,
@@ -50,6 +51,7 @@ const PANES = {
   browser: { id: 'side-panel-browser', ...PANE_SIZE },
   devices: { id: 'side-panel-devices', ...PANE_SIZE },
   computer: { id: 'side-panel-computer', defaultSize: '540px', minSize: MIN_WIDTH },
+  requests: { id: 'side-panel-requests', defaultSize: '560px', minSize: MIN_WIDTH },
 } as const
 
 // As long as App Shell's columns take to glide.
@@ -112,7 +114,15 @@ export function SidePanelArea({
   // connection, and its terminal while the host allows it.
   const pane = useViewStore((s) => {
     const shown = panel ? s.sidePane[panel] : undefined
-    if (!remote || shown === 'files' || shown === 'browser' || shown === 'artifact') return shown
+    if (
+      !remote ||
+      shown === 'files' ||
+      shown === 'browser' ||
+      shown === 'artifact' ||
+      shown === 'requests'
+    ) {
+      return shown
+    }
     return shown === 'terminal' && terminal ? shown : undefined
   })
   const artifactId = useViewStore((s) => (panel ? s.sideArtifact[panel] : undefined))
@@ -262,6 +272,8 @@ export function SidePanelArea({
                     <DevicesPane panel={panel} maximized={maximized} />
                   ) : held === 'computer' ? (
                     <ComputerPane panel={panel} maximized={maximized} />
+                  ) : held === 'requests' ? (
+                    <RequestsPane key={panel} panel={panel} maximized={maximized} />
                   ) : (
                     artifactId && (
                       <ArtifactPane

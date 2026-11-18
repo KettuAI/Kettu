@@ -325,7 +325,8 @@ export class ClaudeMapper {
           tokens: 0,
         }
         const usage = event.message?.usage
-        return [{ sessionId, map: (ctx) => this.request(ctx, usage) }]
+        const sentAt = this.lastSentAt
+        return [{ sessionId, map: (ctx) => this.request(ctx, usage, sentAt) }]
       }
       case 'content_block_start': {
         const block = event.content_block
@@ -399,6 +400,7 @@ export class ClaudeMapper {
           cache_creation_input_tokens?: number | null
         }
       | undefined,
+    sentAt: number | null = null,
   ): MapperOutput {
     const out = output()
     if (ctx.replaying) return out
@@ -422,6 +424,18 @@ export class ClaudeMapper {
               ? { cache: previous.cache }
               : {}),
         },
+        ...(counts && usage
+          ? {
+              lastRequest: {
+                at: latestTime(sentAt, ctx.thread.session.turnStartedAt) ?? ctx.now,
+                input: usage.input_tokens ?? null,
+                cacheRead: usage.cache_read_input_tokens ?? null,
+                cacheWrite: usage.cache_creation_input_tokens ?? null,
+                output: null,
+                ms: null,
+              },
+            }
+          : {}),
       },
     })
     if (!counts) return out
@@ -500,6 +514,9 @@ export class ClaudeMapper {
       if (model) this.subagentModels.set(sessionId, model)
       const window = model ? this.windowOf(model) : null
       deliveries.push({ sessionId, map: (ctx) => this.contextUsed(ctx, usage, window) })
+      if (sessionId === this.sessionId) {
+        deliveries.push({ sessionId, map: (ctx) => this.lastRequestInput(ctx, usage) })
+      }
     }
     return deliveries
   }
@@ -541,7 +558,41 @@ export class ClaudeMapper {
     const whole = timing.startTokens >= timing.tokens
     const sample = timeRequest(timing.tokens, sentAt, whole ? null : timing.startedAt, endedAt)
     const speed = sample && addSpeedSample(session.speed, sample, session.turnStartedAt)
-    if (speed) out.patches.push({ op: 'session.update', changes: { speed } })
+    const last = session.lastRequest
+    const lastRequest =
+      last && last.output === null
+        ? { ...last, output: timing.tokens, ms: endedAt - last.at }
+        : undefined
+    if (speed || lastRequest) {
+      out.patches.push({
+        op: 'session.update',
+        changes: { ...(speed ? { speed } : {}), ...(lastRequest ? { lastRequest } : {}) },
+      })
+    }
+    return out
+  }
+
+  /**
+   * The latest request's input as its response counts it: a provider that sends zeros when the
+   * request starts reports the real counts only here.
+   */
+  private lastRequestInput(
+    ctx: MapperContext,
+    usage: NonNullable<AssistantMessage['message']['usage']>,
+  ): MapperOutput {
+    const out = output()
+    const last = ctx.thread.session.lastRequest
+    if (!last || contextTokens(usage) === 0) return out
+    const input = usage.input_tokens ?? null
+    const cacheRead = usage.cache_read_input_tokens ?? null
+    const cacheWrite = usage.cache_creation_input_tokens ?? null
+    if (last.input === input && last.cacheRead === cacheRead && last.cacheWrite === cacheWrite) {
+      return out
+    }
+    out.patches.push({
+      op: 'session.update',
+      changes: { lastRequest: { ...last, input, cacheRead, cacheWrite } },
+    })
     return out
   }
 

@@ -147,6 +147,7 @@ import { ProjectMcpAnswers } from './project-mcp'
 import { Projects } from './projects'
 import { claudeOutside, type OutsideReader } from './outside-sessions'
 import { claudeCacheTtl, type CacheTtlReader } from './prompt-cache'
+import { claudeModelRequests } from './model-requests/claude'
 import { IdleRelease } from './idle-release'
 import { PortHub, type Handlers, type RequestContext } from './rpc'
 import { Attachments, toArrayBuffer } from './attachments'
@@ -994,6 +995,14 @@ export class AgentHost {
           },
           log,
         }),
+      modelRequests: claudeModelRequests({
+        platform,
+        home: options.homeDir ?? os.homedir(),
+        env: async () => {
+          await this.env.ready()
+          return this.env.agentEnv('claude-code')
+        },
+      }),
       outside:
         options.outside ??
         claudeOutside({
@@ -2604,6 +2613,12 @@ export class AgentHost {
       'sessions.requests': ({ sessionId }, { device }) =>
         sessions.requests(sessionId, imagesFor(device)),
       'sessions.outline': ({ sessionId }) => sessions.outline(sessionId),
+      'sessions.modelRequests': ({ sessionId, before }) =>
+        sessions.modelRequests(sessionId, before ?? null),
+      'sessions.modelRequestsOverview': ({ sessionId }) =>
+        sessions.modelRequestsOverview(sessionId),
+      'sessions.modelRequestRaw': ({ sessionId, raw, full }) =>
+        sessions.modelRequestRaw(sessionId, raw, full === true),
       'sessions.search': ({ query }) => sessions.search(query),
       'sessions.find': ({ sessionId, query }) => sessions.find(sessionId, query),
       'sessions.outputs': ({ sessionId }) => sessions.outputs(sessionId),

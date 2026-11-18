@@ -867,7 +867,22 @@ export class ThreadMapper {
         const sample = timeRequest(last.outputTokens, sentAt, streamed, ctx.now)
         const session = ctx.thread.session
         const speed = sample && addSpeedSample(session.speed, sample, session.turnStartedAt)
-        if (speed) out.patches.push({ op: 'session.update', changes: { speed } })
+        // Codex counts the cached and cache-written input in its input.
+        const lastRequest = {
+          at: sentAt ?? ctx.now,
+          input: Math.max(
+            0,
+            last.inputTokens - last.cachedInputTokens - last.cacheWriteInputTokens,
+          ),
+          cacheRead: last.cachedInputTokens,
+          cacheWrite: last.cacheWriteInputTokens,
+          output: last.outputTokens,
+          ms: sentAt === null ? null : ctx.now - sentAt,
+        }
+        out.patches.push({
+          op: 'session.update',
+          changes: { ...(speed ? { speed } : {}), lastRequest },
+        })
         return
       }
     }

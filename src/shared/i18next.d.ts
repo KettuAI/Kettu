@@ -21,6 +21,7 @@ import type overview from './locales/en/overview.json'
 import type routines from './locales/en/routines.json'
 import type session from './locales/en/session.json'
 import type settings from './locales/en/settings.json'
+import type requests from './locales/en/requests.json'
 import type shell from './locales/en/shell.json'
 import type sidebar from './locales/en/sidebar.json'
 import type star from './locales/en/star.json'
@@ -57,6 +58,7 @@ declare module 'i18next' {
       routines: typeof routines
       session: typeof session
       settings: typeof settings
+      requests: typeof requests
       shell: typeof shell
       sidebar: typeof sidebar
       star: typeof star

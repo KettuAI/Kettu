@@ -53,6 +53,8 @@ import {
   type SidePane,
 } from '@renderer/stores/view'
 import { openSideChat, useSideChatNews } from '@renderer/stores/side-chat'
+import { REQUESTS_ICON } from '@renderer/features/requests/icon'
+import { readsModelRequests } from '@renderer/features/requests/support'
 import { usePhoneWindow } from './narrow'
 import { PaneIcon } from './panel-button'
 import { NoDrag } from './top-bar'
@@ -126,11 +128,13 @@ export function HeaderTools({
   const browser = !isWeb && !!sessionId
   // The window an agent uses shows only on the computer whose apps it uses, while it uses them.
   const computer = !isWeb && !!session?.computer && !!summary && hostOfSession(summary) === null
+  const requests = !!sessionId && readsModelRequests(summary?.agentId)
   const available: Pane[] = [
     ...(computer ? (['computer'] as const) : []),
     ...(terminal ? (['terminal'] as const) : []),
     ...(browser ? (['browser'] as const) : []),
     ...(sessionId && devices ? (['devices'] as const) : []),
+    ...(requests ? (['requests'] as const) : []),
     'files',
   ]
   const phone = usePhoneWindow()
@@ -333,6 +337,7 @@ function useBarTools({
     dot: news.devices,
     held: deviceHeld,
   })
+  pane('requests', t('headerTools.requests'), REQUESTS_ICON, 8, { common: false })
   pane('files', t('headerTools.files'), File01Icon, 1, { common: true })
   const order: Tool['id'][] = [
     'board',
@@ -341,6 +346,7 @@ function useBarTools({
     'terminal',
     'browser',
     'devices',
+    'requests',
     'files',
   ]
   return tools.sort((a, b) => order.indexOf(a.id) - order.indexOf(b.id))
@@ -409,6 +415,7 @@ function dotClass(dot: 'news' | 'needs'): string {
 const PANE_ITEMS = {
   terminal: { icon: ComputerTerminal01Icon, label: 'headerTools.terminal' },
   devices: { icon: SmartPhone01Icon, label: 'headerTools.devices' },
+  requests: { icon: REQUESTS_ICON, label: 'headerTools.requests' },
   files: { icon: File01Icon, label: 'headerTools.files' },
 } as const
 

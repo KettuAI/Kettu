@@ -98,7 +98,9 @@
       "cacheRead": "Cache read",
       "cacheWrite": "Cache write",
       "ofUsed": "of context used",
-      "tokens": "{{tokens}} tokens"
+      "tokens": "{{tokens}} tokens",
+      "cacheHit": "Cache hit",
+      "cached": "{{percent}} cached"
     },
     "breakdown": {
       "loading": "Reading what fills the context",
@@ -173,7 +175,13 @@
       "share": "{{percent}}% of the context",
       "used": "{{used}} of {{cap}} tokens used, {{percent}} percent",
       "nothing": "Nothing listed"
-    }
+    },
+    "lastRequest": {
+      "title": "Last request",
+      "line": "{{input}} in · {{output}} out · {{hit}} cached",
+      "running": "running"
+    },
+    "everyRequest": "Every request"
   },
   "attachments": {
     "label": "Attachments",

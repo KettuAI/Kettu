@@ -1,0 +1,100 @@
+{
+  "title": "Requests",
+  "summary_one": "{{count}} request · read from {{source}}",
+  "summary_other": "{{count}} requests · read from {{source}}",
+  "summaryLive_one": "{{count}} request · live",
+  "summaryLive_other": "{{count}} requests · live",
+  "source": {
+    "claude": "Claude Code's session file",
+    "codex": "Codex's session file",
+    "opencode": "OpenCode",
+    "acp": "messages since Kettu started"
+  },
+  "totals": {
+    "requests": "Requests",
+    "input": "Input",
+    "cached": "Cached",
+    "output": "Output",
+    "cost": "Cost",
+    "api": "API",
+    "costHint": "The agent's own reckoning at API prices. A subscription is not charged this."
+  },
+  "system": {
+    "title": "System prompt and tools",
+    "line": "{{blocks}} blocks · {{chars}} chars · {{tools}} tools",
+    "changed_one": "changed once",
+    "changed_other": "changed {{count}} times",
+    "blocks_one": "System · {{count}} block",
+    "blocks_other": "System · {{count}} blocks",
+    "tools": "Tools · {{count}}",
+    "builtin": "Built-in",
+    "mcp": "MCP · {{name}}",
+    "chars": "{{chars}} chars",
+    "added": "+{{tools}} at {{time}}",
+    "removed": "−{{tools}} at {{time}}",
+    "raw": "the records Claude Code keeps for these"
+  },
+  "older": "Earlier turns load as you scroll up",
+  "loadingOlder": "Loading earlier turns…",
+  "start": "The session starts here",
+  "turn": "Turn {{index}}",
+  "turnEarlier": "Earlier turn",
+  "you": "You: {{text}}",
+  "turnMeta_one": "{{count}} request · {{time}}",
+  "turnMeta_other": "{{count}} requests · {{time}}",
+  "turnRunning": "running",
+  "cols": {
+    "request": "Request",
+    "input": "Input",
+    "output": "Output",
+    "cached": "Cached",
+    "took": "Took"
+  },
+  "action": {
+    "thinking": "Thinking",
+    "reply": "Reply"
+  },
+  "failed": "Failed",
+  "detail": {
+    "sent": "Sent this time",
+    "kept": "{{kept}} kept from the request before, {{added}} added",
+    "nothingSent": "Nothing new",
+    "received": "Received",
+    "nothingReceived": "Nothing yet",
+    "raw": "Raw",
+    "records_one": "{{count}} record from {{source}}",
+    "records_other": "{{count}} records from {{source}}",
+    "showFull": "Show in full",
+    "copy": "Copy JSON",
+    "copied": "Copied",
+    "reading": "Reading…",
+    "cacheRead": "Cache read",
+    "cacheWrite": "Cache write",
+    "input": "New input",
+    "output": "Output",
+    "thinking": "{{tokens}} thinking",
+    "stop": "stop",
+    "model": "model"
+  },
+  "part": {
+    "prompt": "You",
+    "tool-result": "Tool result",
+    "attachment": "Reminder",
+    "thinking": "Thinking",
+    "text": "Reply",
+    "tool-call": "Call",
+    "other": "Message"
+  },
+  "empty": {
+    "title": "No requests yet",
+    "text": "Each request to the model shows here once the session sends its first message."
+  },
+  "unavailable": {
+    "title": "Not available for this agent yet",
+    "text": "Kettu reads the requests of Claude Code sessions for now; other agents follow."
+  },
+  "error": {
+    "title": "Couldn't read the requests",
+    "retry": "Retry"
+  }
+}
