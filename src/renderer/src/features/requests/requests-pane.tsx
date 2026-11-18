@@ -135,6 +135,7 @@ export default function RequestsPane({ panel, maximized }: { panel: string; maxi
         turns={data.turns}
         system={data.overview?.system ?? null}
         recorded={data.overview?.tokens ?? null}
+        ordinals={data.overview?.turns ?? null}
         costUsd={data.overview?.costUsd ?? null}
         requests={count}
         more={data.more}
@@ -182,6 +183,7 @@ function RequestList({
   turns,
   system,
   recorded,
+  ordinals,
   costUsd,
   requests,
   more,
@@ -194,6 +196,7 @@ function RequestList({
   turns: RequestTurn[]
   system: RequestsSystem | null
   recorded: RequestTokens | null
+  ordinals: Record<string, number> | null
   costUsd: number | null
   requests: number | null
   more: boolean
@@ -234,7 +237,13 @@ function RequestList({
 
   return (
     <div ref={scroller} className="kr-scroll">
-      <Totals session={session} recorded={recorded} costUsd={costUsd} requests={requests} />
+      <Totals
+        session={session}
+        source={source}
+        recorded={recorded}
+        costUsd={costUsd}
+        requests={requests}
+      />
       {system && (
         <SystemRow
           sessionId={sessionId}
@@ -252,6 +261,7 @@ function RequestList({
           <section key={turn.id} className="kr-turn">
             <TurnHead
               turn={turn}
+              index={turn.index ?? ordinals?.[turn.id] ?? null}
               open={open}
               running={turn.id === newest && session?.status === 'running'}
               onToggle={() => setFolded({ ...folded, [turn.id]: open })}
@@ -315,11 +325,13 @@ function sessionTokens(
 
 function Totals({
   session,
+  source,
   recorded,
   costUsd,
   requests,
 }: {
   session: SessionView | undefined
+  source: RequestsSource
   recorded: RequestTokens | null
   costUsd: number | null
   requests: number | null
@@ -340,7 +352,9 @@ function Totals({
       {cell(t('totals.input'), input === null ? null : tokens(input))}
       {cell(t('totals.cached'), hit === null ? null : share(hit))}
       {cell(t('totals.output'), totals?.output == null ? null : tokens(totals.output))}
-      {costUsd !== null ? (
+      {source === 'codex' ? (
+        cell(t('totals.reasoning'), totals?.reasoning == null ? null : tokens(totals.reasoning))
+      ) : costUsd !== null ? (
         <Tooltip>
           <TooltipTrigger
             render={
@@ -373,6 +387,8 @@ function SystemRow({
   onToggle: () => void
 }) {
   const { t } = useTranslation('requests')
+  // Codex keeps its instructions, not a system prompt.
+  const instructions = system.kind === 'instructions'
   const chars = system.blocks.reduce((sum, block) => sum + block.chars, 0)
   return (
     <div className="kr-system" data-open={open || undefined}>
@@ -381,7 +397,7 @@ function SystemRow({
           <Glyph icon={Layers01Icon} size={14} />
         </span>
         <span className="kr-system__text">
-          <b>{t('system.title')}</b>
+          <b>{instructions ? t('system.instructions') : t('system.title')}</b>
           <small>
             {[
               t('system.line', {
@@ -399,7 +415,13 @@ function SystemRow({
       </button>
       {open && (
         <div className="kr-detail kr-detail--flat">
-          <Section label={t('system.blocks', { count: system.blocks.length })}>
+          <Section
+            label={
+              instructions
+                ? t('system.instructionBlocks', { count: system.blocks.length })
+                : t('system.blocks', { count: system.blocks.length })
+            }
+          >
             {system.blocks.map((block, i) => (
               <Line
                 key={i}
@@ -419,16 +441,21 @@ function SystemRow({
                 key={group.name}
                 icon={KIND_GLYPH.other}
                 label={
-                  group.name === 'builtin'
+                  group.kind === 'builtin'
                     ? t('system.builtin')
-                    : t('system.mcp', { name: group.name })
+                    : group.kind === 'mcp'
+                      ? t('system.mcp', { name: group.name })
+                      : group.name
                 }
                 text={group.tools.join(', ')}
                 size={String(group.tools.length)}
               />
             ))}
           </Section>
-          <Section label={t('detail.raw')} meta={t('system.raw')}>
+          <Section
+            label={t('detail.raw')}
+            meta={instructions ? t('system.codexRaw') : t('system.raw')}
+          >
             <RawJson sessionId={sessionId} raw="system" />
           </Section>
         </div>
@@ -452,11 +479,13 @@ function ToolChange({ change }: { change: RequestsSystem['changes'][number] }) {
 
 function TurnHead({
   turn,
+  index,
   open,
   running,
   onToggle,
 }: {
   turn: RequestTurn
+  index: number | null
   open: boolean
   running: boolean
   onToggle: () => void
@@ -472,7 +501,7 @@ function TurnHead({
       : ''
   return (
     <button type="button" className="kr-turn__head" aria-expanded={open} onClick={onToggle}>
-      <b>{turn.index !== null ? t('turn', { index: turn.index }) : t('turnEarlier')}</b>
+      <b>{index !== null ? t('turn', { index }) : t('turnEarlier')}</b>
       {turn.prompt && <span className="kr-turn__prompt">{t('you', { text: turn.prompt })}</span>}
       <span className="kr-turn__meta tabular">
         {t('turnMeta', { count: turn.requests.length, time })}

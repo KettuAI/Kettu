@@ -17,7 +17,8 @@
     "output": "输出",
     "cost": "费用",
     "api": "API",
-    "costHint": "Agent 自己按 API 价算的，订阅账号不按这个收费。"
+    "costHint": "Agent 自己按 API 价算的，订阅账号不按这个收费。",
+    "reasoning": "推理"
   },
   "system": {
     "title": "System prompt 和工具",
@@ -32,7 +33,11 @@
     "chars": "{{chars}} 字",
     "added": "{{time}} 加了 {{tools}}",
     "removed": "{{time}} 去掉 {{tools}}",
-    "raw": "Claude Code 为它们记的记录"
+    "raw": "Claude Code 为它们记的记录",
+    "instructions": "Instructions",
+    "codexRaw": "Codex 为它们记的记录",
+    "instructionBlocks_one": "Instructions · {{count}} 段",
+    "instructionBlocks_other": "Instructions · {{count}} 段"
   },
   "older": "往上滚动加载更早的轮",
   "loadingOlder": "正在加载更早的轮…",

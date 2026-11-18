@@ -17,7 +17,8 @@
     "output": "Output",
     "cost": "Cost",
     "api": "API",
-    "costHint": "The agent's own reckoning at API prices. A subscription is not charged this."
+    "costHint": "The agent's own reckoning at API prices. A subscription is not charged this.",
+    "reasoning": "Reasoning"
   },
   "system": {
     "title": "System prompt and tools",
@@ -32,7 +33,11 @@
     "chars": "{{chars}} chars",
     "added": "+{{tools}} at {{time}}",
     "removed": "−{{tools}} at {{time}}",
-    "raw": "the records Claude Code keeps for these"
+    "raw": "the records Claude Code keeps for these",
+    "instructions": "Instructions",
+    "codexRaw": "the records Codex keeps for these",
+    "instructionBlocks_one": "Instructions · {{count}}",
+    "instructionBlocks_other": "Instructions · {{count}}"
   },
   "older": "Earlier turns load as you scroll up",
   "loadingOlder": "Loading earlier turns…",

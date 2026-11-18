@@ -437,8 +437,8 @@ describe('reading a session file', () => {
     expect(summary.system).toMatchObject({
       blocks: [{ preview: 'You are Claude Code.', chars: 20 }],
       groups: [
-        { name: 'builtin', tools: ['Bash', 'Read'] },
-        { name: 'github', tools: ['get_pr'] },
+        { kind: 'builtin', name: 'builtin', tools: ['Bash', 'Read'] },
+        { kind: 'mcp', name: 'github', tools: ['get_pr'] },
       ],
       toolCount: 3,
       changes: [{ added: ['mcp__github__get_pr'], removed: [] }],

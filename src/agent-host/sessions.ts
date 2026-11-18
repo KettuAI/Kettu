@@ -207,7 +207,7 @@ import { watchSettings, type PreparedRecords, type WatchTarget } from './prepare
 import type { Projects } from './projects'
 import type { LastRequest, OutsideReader } from './outside-sessions'
 import type { CacheTtlReader } from './prompt-cache'
-import type { ModelRequestsReader, RequestsTarget } from './model-requests/claude'
+import type { ModelRequestsReader, RequestsTarget } from './model-requests/reader'
 import type {
   ModelRequestRaw,
   ModelRequestsOverview,
@@ -2920,8 +2920,7 @@ export class SessionManager {
 
   async modelRequestsOverview(sessionId: string): Promise<ModelRequestsOverview | null> {
     const target = this.requestsTarget(sessionId)
-    const summary = await this.deps.modelRequests?.summary(target)
-    return summary ? { source: 'claude', ...summary } : null
+    return (await this.deps.modelRequests?.summary(target)) ?? null
   }
 
   async modelRequestRaw(sessionId: string, raw: string, full: boolean): Promise<ModelRequestRaw> {

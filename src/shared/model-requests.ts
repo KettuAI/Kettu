@@ -95,7 +95,8 @@ export interface RequestsSystemBlock {
 }
 
 export interface RequestsToolGroup {
-  /** `builtin`, or the MCP server's name. */
+  /** The agent's own tools, an MCP server's, or another of the agent's groups. */
+  kind: 'builtin' | 'mcp' | 'other'
   name: string
   tools: string[]
 }
@@ -132,6 +133,8 @@ export interface ModelRequestsOverview {
   /** Every request's tokens added up, as the record holds them. */
   tokens: RequestTokens | null
   system: RequestsSystem | null
+  /** Each turn's place in the session by its id, for an agent whose pages do not say. */
+  turns: Record<string, number> | null
 }
 
 /** The agent's records for one request, or for the system prompt and tools. */
