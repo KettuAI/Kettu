@@ -298,6 +298,8 @@ export interface HostOptions {
   usageReaders?: readonly LogReader[]
   /** Where the agents' logs are looked for; the user's home by default. */
   homeDir?: string
+  /** Where harness packages are installed; `~/.kettu/harnesses` by default, which apps share. */
+  harnessesDir?: string
   /** Reads a session's prompt cache lifetime; Claude Code's transcripts by default. */
   cacheTtl?: CacheTtlReader
   /** Reads Claude Code sessions run outside Kettu; tests pass their own. */
@@ -348,6 +350,13 @@ async function moveHarnessInstalls(
       log(`Could not move ${legacy} to ${target}: ${(copyError as Error).message}`)
     }
   }
+}
+
+function harnessesFolder(options: HostOptions): string {
+  return (
+    options.harnessesDir ??
+    path.join(options.homeDir ?? os.homedir(), KETTU_HOME_FOLDER, HARNESSES_FOLDER)
+  )
 }
 
 const REPLY_RUN_ERRORS: Record<TerminalCallErrorCode, PortErrorCode> = {
@@ -830,11 +839,7 @@ export class AgentHost {
       status: (status) => this.hub.broadcast({ type: 'usage.status', status }),
       ...(options.usageTimings ? { timings: options.usageTimings } : {}),
     })
-    const adaptersDir = path.join(
-      options.homeDir ?? os.homedir(),
-      KETTU_HOME_FOLDER,
-      HARNESSES_FOLDER,
-    )
+    const adaptersDir = harnessesFolder(options)
     this.agents = new AgentManager({
       catalog,
       platform,
@@ -1227,7 +1232,7 @@ export class AgentHost {
   static async start(options: HostOptions): Promise<AgentHost> {
     await moveHarnessInstalls(
       path.join(options.userDataPath, 'agents'),
-      path.join(options.homeDir ?? os.homedir(), KETTU_HOME_FOLDER, HARNESSES_FOLDER),
+      harnessesFolder(options),
       (message) => writeLog('warn', 'host', message),
     )
     const host = new AgentHost(options)

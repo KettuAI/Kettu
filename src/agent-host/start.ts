@@ -2,6 +2,7 @@
 // host's out, and each client's port as it connects. index.ts runs it in Electron's utility
 // process, node-main.ts under Node.js.
 
+import { join } from 'node:path'
 import { Worker } from 'node:worker_threads'
 import type { HostEvent } from '@shared/agent-host'
 import { setLogLevel, setVerboseRecords, writeLog } from '@shared/log/process-log'
@@ -56,6 +57,8 @@ export function startAgentHost(control: ControlChannel<MainToHost, HostToMain>):
       sessionRouterPath: message.sessionRouterPath,
       settings: message.settings,
       baseEnv: process.env,
+      // A development run keeps its installs apart from the installed app's.
+      ...(message.isPackaged ? {} : { harnessesDir: join(message.userDataPath, 'harnesses') }),
       computer: message.computer ?? null,
       ...(message.userAgent ? { userAgent: message.userAgent } : {}),
       send,
