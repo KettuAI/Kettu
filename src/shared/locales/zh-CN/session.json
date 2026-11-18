@@ -656,6 +656,7 @@
     "restore": "恢复",
     "openAgents": "打开 Agents",
     "announceApproval": "{{agent}} 需要你的授权",
+    "announceQuestion": "{{agent}} 有问题要问你",
     "announceFinished": "{{agent}} 已完成"
   },
   "find": {
@@ -683,6 +684,7 @@
       "writing": "正在回复",
       "compacting": "正在压缩上下文",
       "approval": "等待你的授权",
+      "question": "等待你的回答",
       "working": "处理中"
     },
     "resume": "继续",

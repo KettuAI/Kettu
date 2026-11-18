@@ -10,7 +10,7 @@ import { TurnDots } from './turn-dots'
 import { askedStep, turnPhase, turnTokens, writingId } from './turn-phase'
 
 /** Phases in which the agent thinks or writes rather than works in the app it uses. */
-const QUIET_PHASES = new Set(['thinking', 'writing', 'compacting', 'approval'])
+const QUIET_PHASES = new Set(['thinking', 'writing', 'compacting', 'approval', 'question'])
 
 /** The time since `since` in whole seconds, ticking on its own so nothing around it re-renders. */
 function TurnClock({ since }: { since: number }) {
@@ -92,7 +92,12 @@ export const TurnStatus = memo(function TurnStatus({
   // The device or terminal the user holds, which the turn waits for.
   const holding = device.state === 'you' ? device.name : terminal
   const waiting =
-    phase === 'approval' || asked !== null || page === 'you' || appHeld || holding !== null
+    phase === 'approval' ||
+    phase === 'question' ||
+    asked !== null ||
+    page === 'you' ||
+    appHeld ||
+    holding !== null
   const text = asked
     ? t(`control:status.asks.${asked}`)
     : page === 'you'
