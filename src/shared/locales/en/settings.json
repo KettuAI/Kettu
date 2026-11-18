@@ -226,7 +226,8 @@
       "small": "Small",
       "default": "Default",
       "large": "Large",
-      "previewAgent": "Sure. I’ll read <code>settings-page.tsx</code> and the design doc first, then go page by page."
+      "previewLabel": "Preview",
+      "preview": "This is how replies and your messages read at this size. Inline code, like <code>settings.json</code>, looks like this."
     },
     "reduceMotion": {
       "name": "Reduce motion",

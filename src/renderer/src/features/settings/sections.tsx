@@ -390,11 +390,14 @@ export function TextSize({ label }: { label: ReactNode }) {
           onChange={(v) => apply({ appearance: { textSize: v } })}
         />
       </div>
+      <span aria-hidden className="k-preview-label">
+        {t('appearance.textSize.previewLabel')}
+      </span>
       {/* The thread's own prose rules, its inline code included. */}
       <p aria-hidden className="markdown k-inset text-prose">
         <Trans
           t={t}
-          i18nKey="appearance.textSize.previewAgent"
+          i18nKey="appearance.textSize.preview"
           components={{ code: <code data-streamdown="inline-code" /> }}
         />
       </p>

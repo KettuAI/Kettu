@@ -225,7 +225,8 @@
       "small": "小",
       "default": "默认",
       "large": "大",
-      "previewAgent": "好的。我先读一下 <code>settings-page.tsx</code> 和设计文档，再逐页给出方案。"
+      "previewLabel": "预览",
+      "preview": "回复和你发送的消息在这个字号下就是这样。行内代码，比如 <code>settings.json</code>，是这样显示的。"
     },
     "reduceMotion": {
       "name": "减弱动态效果",
