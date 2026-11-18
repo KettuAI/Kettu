@@ -55,6 +55,17 @@ export interface Instance {
 const instances = new Map<string, Promise<Instance>>()
 const ready = new Map<string, Instance>()
 
+let colorContext: CanvasRenderingContext2D | null | undefined
+
+/** xterm.js reads only hex and comma rgb(), so the canvas rewrites any color, keeping alpha. */
+function xtermColor(value: string): string {
+  if (!value || !CSS.supports('color', value)) return value
+  colorContext ??= document.createElement('canvas').getContext('2d')
+  if (!colorContext) return value
+  colorContext.fillStyle = value
+  return colorContext.fillStyle
+}
+
 function readTheme(): ITheme {
   const css = getComputedStyle(document.documentElement)
   const v = (name: string) => css.getPropertyValue(name).trim()
@@ -63,7 +74,7 @@ function readTheme(): ITheme {
     foreground: v('--terminal-foreground'),
     cursor: v('--terminal-cursor'),
     cursorAccent: v('--terminal-background'),
-    selectionBackground: v('--terminal-selection'),
+    selectionBackground: xtermColor(v('--terminal-selection')),
     black: v('--ansi-black'),
     red: v('--ansi-red'),
     green: v('--ansi-green'),
