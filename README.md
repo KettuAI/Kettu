@@ -174,6 +174,10 @@ Missing an agent you use? [Tell us](https://github.com/KettuAI/Kettu/issues/new/
 
 Open an [issue](https://github.com/KettuAI/Kettu/issues/new/choose) in any language, or send a report from **Help › Report a Problem…** in the app. Security problems go through [SECURITY.md](./SECURITY.md). To build Kettu yourself, see [CONTRIBUTING.md](./CONTRIBUTING.md).
 
+Chinese speakers can also join the WeChat group:
+
+<img src="./assets/group-qr.png" alt="QR code of the Kettu WeChat group" width="240">
+
 ## License
 
 [AGPL-3.0](./LICENSE).
