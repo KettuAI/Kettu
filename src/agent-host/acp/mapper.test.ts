@@ -926,6 +926,56 @@ describe('session-level updates', () => {
   })
 })
 
+describe("Kettu's memory in an agent's title", () => {
+  const index = '<kettu-memory>\nKettu keeps this memory.\n- [run] How to run\n</kettu-memory>'
+  const guide = '<kettu-guide>\nYou are working in Kettu.\n</kettu-guide>'
+  const titled = (title: string | null) =>
+    run(
+      [
+        { sessionUpdate: 'user_message_chunk', content: { type: 'text', text: 'Fix the build' } },
+        { sessionUpdate: 'session_info_update', title },
+      ],
+      { replaying: true },
+    )
+
+  it('is no title when it is the first message with what went ahead of it', () => {
+    for (const title of [
+      `${index}\n\nFix the build`,
+      `${guide}\n\n${index}\n\nFix the build`,
+      `${guide} ${index} Fix the build`,
+    ]) {
+      const { thread, effects } = titled(title)
+      expect(thread.session.title).toBeNull()
+      expect(effects).toEqual([])
+    }
+  })
+
+  it('is no title when it is only what went ahead of the message, or cut inside it', () => {
+    for (const title of [
+      '<kettu-memory>',
+      '<kettu-guide>',
+      '<kettu-memory> Kettu keeps this memory. - [run] How to run…',
+      `${guide}\n\n<kettu-memory>\nKettu keeps`,
+      index,
+    ]) {
+      const { thread, effects } = titled(title)
+      expect(thread.session.title).toBeNull()
+      expect(effects).toEqual([])
+    }
+  })
+
+  it("keeps the agent's own words after what went ahead of them", () => {
+    const { thread, effects } = titled(`${index}\n\nFix login`)
+    expect(thread.session.title).toBe('Fix login')
+    expect(effects).toEqual([{ kind: 'title', title: 'Fix login' }])
+  })
+
+  it('still takes a plain title and a cleared one', () => {
+    expect(titled('Fix the build errors').thread.session.title).toBe('Fix the build errors')
+    expect(titled(null).effects).toEqual([{ kind: 'title', title: null }])
+  })
+})
+
 describe('notices and compactions', () => {
   it('adds notices and shows unknown severities as info', () => {
     const { entries } = run([

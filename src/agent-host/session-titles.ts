@@ -5,7 +5,7 @@
 import type { UserContent } from '@shared/thread'
 import { writeTitles } from './outline-titles'
 import type { HiddenRuntime } from './reports'
-import { repeatsFirstMessage } from './session-updates'
+import { repeatsFirstMessage, titleWithoutAhead } from './session-updates'
 
 /** The message keeps this much of its text for the title's prompt. */
 export const TITLE_PROMPT_CHARS = 2_000
@@ -87,7 +87,7 @@ async function writeOne(
  */
 export function listedTitle(title: string | null, firstMessage: string | null): string | null {
   if (title === null) return null
-  const value = title.trim()
+  const value = titleWithoutAhead(title).trim()
   if (value === '' || UNTITLED.test(value)) return null
   if (repeatsFirstMessage(value, firstMessage)) return null
   return value

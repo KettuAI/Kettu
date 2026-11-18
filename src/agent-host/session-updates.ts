@@ -167,6 +167,34 @@ export function repeatsFirstMessage(title: string, message: string | null): bool
 }
 
 /**
+ * What Kettu sends ahead of a session's first prompt, its guide, its memory index or both, and
+ * the blank lines the host adds.
+ */
+const AHEAD =
+  /^\s*(?:<kettu-guide>[\s\S]*?<\/kettu-guide>(?:\r?\n){0,2}(?:<kettu-memory>[\s\S]*?<\/kettu-memory>(?:\r?\n){0,2})?|<kettu-memory>[\s\S]*?<\/kettu-memory>(?:\r?\n){0,2})/
+
+/** A replayed user message's text without what Kettu sent ahead of it. */
+export function withoutAhead(text: string): string {
+  return text.replace(AHEAD, '')
+}
+
+const AHEAD_TAG = /^\s*<kettu-(?:guide|memory)>/
+
+/**
+ * A title an agent made from the first prompt, without what Kettu sent ahead of it. Empty when
+ * nothing of the user's words is left: the title was only that, or cut inside it.
+ */
+export function titleWithoutAhead(title: string): string {
+  let text = title
+  while (AHEAD_TAG.test(text)) {
+    const rest = withoutAhead(text)
+    if (rest === text) return ''
+    text = rest
+  }
+  return text === title ? title : text.trim()
+}
+
+/**
  * A session's totals with one more turn in them. The adapters report each turn's own counts, though
  * ACP's schema calls them totals. A count no turn has reported yet stays null.
  */
