@@ -170,8 +170,12 @@ function UpdateStack({ entries, onOpen }: { entries: StackEntry[]; onOpen?: () =
                   className={cn(
                     'relative grid h-(--disc) shrink-0 place-items-center rounded-full bg-(--shell-card) motion-safe:transition-[margin-left,width,opacity,translate] motion-safe:duration-(--duration-slow) motion-safe:ease-standard',
                     folded
-                      ? 'w-0 overflow-hidden opacity-0 group-hover/card:ml-0.75 group-hover/card:w-(--disc) group-hover/card:overflow-visible group-hover/card:opacity-100'
-                      : cn('w-(--disc)', index > 0 && '-ml-2.25 group-hover/card:ml-0.75'),
+                      ? 'w-0 overflow-hidden opacity-0 group-hover/card:ml-0.75 group-focus-within/card:ml-0.75 group-hover/card:w-(--disc) group-focus-within/card:w-(--disc) group-hover/card:overflow-visible group-focus-within/card:overflow-visible group-hover/card:opacity-100 group-focus-within/card:opacity-100'
+                      : cn(
+                          'w-(--disc)',
+                          index > 0 &&
+                            '-ml-2.25 group-hover/card:ml-0.75 group-focus-within/card:ml-0.75',
+                        ),
                     'motion-safe:group-hover/card:hover:-translate-y-px',
                   )}
                 />
@@ -189,7 +193,7 @@ function UpdateStack({ entries, onOpen }: { entries: StackEntry[]; onOpen?: () =
         )
       })}
       {hidden > 0 && (
-        <span className="ml-0.75 max-w-6 overflow-hidden text-caption font-semibold text-(--shell-muted) tabular motion-safe:transition-[max-width,margin-left,opacity] motion-safe:duration-(--duration-slow) motion-safe:ease-standard group-hover/card:ml-0 group-hover/card:max-w-0 group-hover/card:opacity-0">
+        <span className="ml-0.75 max-w-6 overflow-hidden text-caption font-semibold text-(--shell-muted) tabular motion-safe:transition-[max-width,margin-left,opacity] motion-safe:duration-(--duration-slow) motion-safe:ease-standard group-hover/card:ml-0 group-focus-within/card:ml-0 group-hover/card:max-w-0 group-focus-within/card:max-w-0 group-hover/card:opacity-0 group-focus-within/card:opacity-0">
           +{hidden}
         </span>
       )}
@@ -263,7 +267,7 @@ function CardFrame({
           className={cn(
             'flex min-w-0 flex-1 flex-col',
             fades &&
-              'motion-safe:transition-opacity motion-safe:duration-(--duration-fast) group-hover/card:opacity-0',
+              'motion-safe:transition-opacity motion-safe:duration-(--duration-fast) group-focus-within/card:opacity-0 group-hover/card:opacity-0',
           )}
         >
           <span className="truncate text-control font-medium text-(--shell-ink)">{title}</span>
