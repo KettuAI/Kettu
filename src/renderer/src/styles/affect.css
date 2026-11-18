@@ -197,9 +197,10 @@
   display: block;
 }
 /* Collapsing hides the whole sidebar instead of the shell's rail of icons; the toggle, Back and
-   Forward stay in the top left corner, and the sheets run to the window's left edge. */
+   Forward stay in the top left corner, and the first column keeps the desk's gap on the sheets'
+   left, as on their other sides. */
 .ui-as-app[data-collapsed] {
-  --side-col: 0px;
+  --side-col: var(--frame-gap);
 }
 .ui-as-app[data-collapsed] > .ui-as-side {
   visibility: hidden;
@@ -219,7 +220,7 @@
 /* Collapsed, with the toggle pointed at (features/shell/sidebar-peek.ts): the sidebar floats over
    the page on its own layer and the columns stay as they are; the corner's controls stay over it. */
 .kettu-frame.ui-as-app[data-peek] {
-  --side-col: 0px;
+  --side-col: var(--frame-gap);
 }
 .kettu-frame.ui-as-app[data-peek] > .ui-as-side {
   position: absolute;
