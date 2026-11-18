@@ -38,6 +38,7 @@ import {
 } from '@shared/remote/paths'
 import {
   PAIR_HOST_TIMEOUT_MS,
+  sameSshAddress,
   type HostConnection,
   type RelayProblem,
   type HostPairingFailure,
@@ -45,6 +46,7 @@ import {
   type HostStatus,
   type KnownHost,
   type SshAddFailure,
+  type SshAddress,
   type SshRoute,
 } from '@shared/remote/hosts'
 import type { KeyPair } from '@shared/remote/noise'
@@ -647,7 +649,7 @@ class HostLink {
       : null
     const hello = { ...this.client.hello(), ...(resume ? { resume } : {}) }
     const route = host.ssh ?? null
-    const forward = route ? new SshForward(this.client.ssh, route.target) : null
+    const forward = route ? new SshForward(this.client.ssh, route) : null
     const relay = route ? null : this.relayRoute(host)
     const result = await dial({
       addresses: route ? [{ host: SSH_LOOPBACK, port: route.port }] : host.addresses,
@@ -998,7 +1000,7 @@ class HostLink {
   private async askPort(route: SshRoute): Promise<void> {
     this.askedPort = true
     const trying = (this.trying = new AbortController())
-    const setup = await this.client.sshSetup(route.target, null, trying.signal)
+    const setup = await this.client.sshSetup(route, null, trying.signal)
     if (this.trying !== trying) return
     this.trying = null
     const info = setup?.report.host
@@ -1605,7 +1607,7 @@ class SshAdding {
     readonly pairId: number,
   ) {}
 
-  async run(target: string, model: string): Promise<void> {
+  async run(address: SshAddress, model: string): Promise<void> {
     const { options } = this.client
     const wanted = options.client.version
     const device: SshDevice = {
@@ -1616,7 +1618,7 @@ class SshAdding {
       model: isDeviceModel(model) ? model : '',
     }
     this.say({ state: 'ssh', step: 'connecting' })
-    let setup = await this.setup(target, device)
+    let setup = await this.setup(address, device)
     if (!setup) return
     const unsupported = unsupportedSystem(setup.report.system)
     if (unsupported) return this.fail('ssh_unsupported', unsupported)
@@ -1627,13 +1629,13 @@ class SshAdding {
           ? { state: 'ssh', step: 'installing', version: wanted }
           : { state: 'ssh', step: 'updating', from: installed, to: wanted },
       )
-      const install = await this.ssh(target, this.client.installScript(wanted), INSTALL_TIMEOUT_MS)
+      const install = await this.ssh(address, this.client.installScript(wanted), INSTALL_TIMEOUT_MS)
       if (!install) return
       if (install.code !== 0) {
         return this.fail('ssh_install', lastLines(`${install.stdout}\n${install.stderr}`))
       }
       this.say({ state: 'ssh', step: 'adding' })
-      setup = await this.setup(target, device)
+      setup = await this.setup(address, device)
       if (!setup) return
     } else {
       // The login's run already recorded this computer, or found the daemon down.
@@ -1646,7 +1648,7 @@ class SshAdding {
       return this.fail('ssh_failed', lastLines(setup.run.stderr))
     }
     this.say({ state: 'ssh', step: 'opening' })
-    const forward = new SshForward(this.client.ssh, target)
+    const forward = new SshForward(this.client.ssh, address)
     const result = await dial({
       addresses: [{ host: SSH_LOOPBACK, port: info.port }],
       connect: forward.connect,
@@ -1669,7 +1671,7 @@ class SshAdding {
     this.session = session
     session.start(
       {
-        welcomed: (welcome) => void this.added(session, target, info, welcome),
+        welcomed: (welcome) => void this.added(session, address, info, welcome),
         addresses: () => {},
         renamed: () => {},
         hostRenamed: () => {},
@@ -1693,10 +1695,10 @@ class SshAdding {
 
   /** The setup script's run and report, or null once adding failed or ended. */
   private async setup(
-    target: string,
+    address: SshAddress,
     device: SshDevice,
   ): Promise<{ run: SshRun; report: SshSetupReport } | null> {
-    const run = await this.ssh(target, setupScript(device), SETUP_TIMEOUT_MS)
+    const run = await this.ssh(address, setupScript(device), SETUP_TIMEOUT_MS)
     if (!run) return null
     const report = parseSetupReport(run.stdout)
     // No POSIX shell answered, as on Windows.
@@ -1708,8 +1710,12 @@ class SshAdding {
   }
 
   /** A script's run once ssh got through, or null once adding failed for ssh or ended. */
-  private async ssh(target: string, script: string, timeoutMs: number): Promise<SshRun | null> {
-    const run = await runSsh(this.client.ssh, target, script, {
+  private async ssh(
+    address: SshAddress,
+    script: string,
+    timeoutMs: number,
+  ): Promise<SshRun | null> {
+    const run = await runSsh(this.client.ssh, address, script, {
       timeoutMs,
       signal: this.aborting.signal,
     })
@@ -1722,7 +1728,7 @@ class SshAdding {
 
   private async added(
     session: HostSession,
-    target: string,
+    address: SshAddress,
     info: SshHostInfo,
     welcome: Welcome,
   ): Promise<void> {
@@ -1735,7 +1741,7 @@ class SshAdding {
       version: welcome.host.version,
       addresses: [],
       deviceName: welcome.device.name,
-      ssh: { target, port: info.port },
+      ssh: { ...address, port: info.port },
     })
     if (!host) {
       this.client.options.log('warn', 'A host added over SSH could not be kept')
@@ -1744,7 +1750,9 @@ class SshAdding {
     }
     // The login reaches one daemon, so a host kept at this address is it before it reset its key.
     for (const kept of this.client.options.hosts.list()) {
-      if (kept.id !== host.id && kept.ssh?.target === target) await this.client.remove(kept.id)
+      if (kept.id !== host.id && kept.ssh && sameSshAddress(kept.ssh, address)) {
+        await this.client.remove(kept.id)
+      }
     }
     const status = this.client.adopt(host, session)
     if (this.done) return
@@ -1957,12 +1965,15 @@ export class HostClient {
     void pairing.run(payload, model)
   }
 
-  /** Adds the machine at an SSH address; its progress goes to `options.pairing` under `pairId`. */
-  addSsh(pairId: number, target: string, model: string): void {
+  /**
+   * Adds the machine at an SSH address; its progress goes to `options.pairing` under `pairId`.
+   * Several run at once, each under its own id.
+   */
+  addSsh(pairId: number, address: SshAddress, model: string): void {
     if (this.stopped || this.pairings.has(pairId)) return
     const adding = new SshAdding(this, pairId)
     this.pairings.set(pairId, adding)
-    void adding.run(target, model)
+    void adding.run(address, model)
   }
 
   closePairing(pairId: number): void {
@@ -2066,11 +2077,11 @@ export class HostClient {
 
   /** Runs the setup script on a machine: its run, and what it printed; null once aborted. */
   async sshSetup(
-    target: string,
+    address: SshAddress,
     device: SshDevice | null,
     signal: AbortSignal,
   ): Promise<{ run: SshRun; report: SshSetupReport } | null> {
-    const run = await runSsh(this.ssh, target, setupScript(device), {
+    const run = await runSsh(this.ssh, address, setupScript(device), {
       timeoutMs: SETUP_TIMEOUT_MS,
       signal,
     })

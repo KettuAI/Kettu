@@ -647,7 +647,7 @@ function AddAgentDialog({
 }
 
 /** One choice of a few as a tile, with what it does under it and anything it needs inside. */
-function Choice({
+export function Choice({
   value,
   checked,
   title,

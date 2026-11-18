@@ -56,7 +56,8 @@
     "installTheme": "Install Theme",
     "exportTheme": "Export Theme",
     "chooseAgentFolder": "Choose Agent Folder",
-    "chooseEditor": "Choose Editor"
+    "chooseEditor": "Choose Editor",
+    "chooseSshKey": "Choose SSH Key File"
   },
   "quit": {
     "titleQuit": "Quit {{name}}?",

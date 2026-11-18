@@ -361,7 +361,9 @@ export function webApi(link: HostLink, settings: WebSettings, context: WebHostCo
     hosts: {
       status: () => unsupported('connect to other hosts'),
       pair: () => unsupported('connect to other hosts'),
+      sshConfig: () => unsupported('connect to other hosts'),
       addSsh: () => unsupported('connect to other hosts'),
+      chooseKeyFile: () => unsupported('connect to other hosts'),
       closePairing: () => unsupported('connect to other hosts'),
       discover: () => unsupported('connect to other hosts'),
       pairDiscovered: () => unsupported('connect to other hosts'),

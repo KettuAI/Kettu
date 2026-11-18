@@ -4334,6 +4334,111 @@ li[data-row-exit='dust'] > * {
 .kettu-sd .kettu-sd__inline > .kettu-sd__input {
   flex: 1;
 }
+/* The SSH tab: the machines of the user's SSH config on a card that scrolls past seven or so,
+   each row's checkbox giving way to its state once Add takes it. */
+.kettu-sd .kettu-sd__machines-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 28px;
+}
+.kettu-sd .kettu-sd__machines {
+  display: flex;
+  max-height: 368px;
+  flex-direction: column;
+  margin: 0;
+  overflow-y: auto;
+  padding: 0 12px;
+  border-radius: 12px;
+  background: var(--card);
+  box-shadow: inset 0 0 0 0.5px var(--line-strong);
+  list-style: none;
+}
+.kettu-sd .kettu-sd__machine {
+  display: grid;
+  gap: 6px;
+  padding: 8px 0;
+}
+.kettu-sd .kettu-sd__machine + .kettu-sd__machine {
+  box-shadow: inset 0 0.5px 0 var(--line);
+}
+.kettu-sd .kettu-sd__machine-line {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 36px;
+}
+.kettu-sd .kettu-sd__machine-mark {
+  display: grid;
+  flex: none;
+  width: 16px;
+  place-items: center;
+  color: var(--muted);
+}
+.kettu-sd .kettu-sd__machine[data-state='added'] .kettu-sd__machine-mark {
+  color: var(--success);
+}
+.kettu-sd .kettu-sd__machine[data-state='failed'] .kettu-sd__machine-mark {
+  color: var(--danger);
+}
+.kettu-sd .kettu-sd__machine-text {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+}
+.kettu-sd label.kettu-sd__machine-text {
+  cursor: pointer;
+}
+.kettu-sd .kettu-sd__machine-text > .ui-sg-label {
+  flex: 1;
+}
+.kettu-sd .kettu-sd__machine-more {
+  padding: 0 0 4px 28px;
+}
+.kettu-sd .kettu-sd__machines-note {
+  margin: 0;
+  padding: 14px 12px;
+  border-radius: 12px;
+  background: var(--card);
+  box-shadow: inset 0 0 0 0.5px var(--line-strong);
+  font-size: 13px;
+  line-height: 18px;
+  color: var(--muted);
+}
+.kettu-sd .kettu-sd__machines-note.kettu-sd__error {
+  color: var(--danger);
+}
+.kettu-sd .k-skel.k-skel--check {
+  height: 16px;
+  border-radius: 4px;
+}
+.kettu-sd .kettu-sd__address-port {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 96px;
+  gap: 8px;
+}
+.kettu-sd .kettu-sd__output-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--muted);
+}
+.kettu-sd .kettu-sd__output-toggle:hover {
+  color: var(--ink);
+}
+.kettu-sd .kettu-sd__output-toggle > svg {
+  rotate: -90deg;
+  transition: rotate 200ms var(--ease);
+}
+.kettu-sd .kettu-sd__output-toggle[data-panel-open] > svg {
+  rotate: 0deg;
+}
+.kettu-sd .kettu-sd__output-body {
+  padding-top: 6px;
+}
 
 /* Remote access */
 :is(.kettu-settings, .kettu-sd) .ui-sg-label > .k-status {

@@ -33,6 +33,7 @@ import {
   parseHostStatus,
   type HostPairingState,
   type HostStatus,
+  type SshAddress,
 } from '@shared/remote/hosts'
 import { isPairingState, type PairingState } from '@shared/remote/pairing'
 import type { HostAdminEvent } from '@shared/remote/host-admin'
@@ -482,7 +483,7 @@ export class RemoteHost {
    * null when the device key cannot be read.
    */
   async addSshHost(
-    target: string,
+    address: SshAddress,
     model: string,
     listener: HostPairingListener,
   ): Promise<number | null> {
@@ -491,7 +492,7 @@ export class RemoteHost {
     this.hostPairings.set(pairId, listener)
     await this.reconcile()
     if (!this.hostPairings.has(pairId)) return pairId
-    if (!this.host?.post({ type: 'remote-host:add-ssh-host', pairId, target, model })) {
+    if (!this.host?.post({ type: 'remote-host:add-ssh-host', pairId, address, model })) {
       this.finishPairing(pairId, { state: 'failed', reason: 'ssh_failed' })
     }
     return pairId
