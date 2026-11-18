@@ -16,19 +16,27 @@ export interface MenuDeps {
 
 // A second Cmd+Q within this long quits; the first only shows a hint.
 const QUIT_PRESS_MS = 2000
-let lastQuitPress = 0
+let quitHintExpiresAt = 0
 
 /** Quits at once when the key press cannot be seen to be answered, else on the second press. */
 function quitFromMenu(event: Electron.KeyboardEvent): void {
   const window = currentWindow()
   const now = Date.now()
   const seen = !!window && window.isVisible() && !window.isMinimized()
-  if (!event.triggeredByAccelerator || !seen || now - lastQuitPress <= QUIT_PRESS_MS) {
+  const armed = now < quitHintExpiresAt
+  if (!event.triggeredByAccelerator || !seen || armed) {
+    if (seen && armed) {
+      sendEvent(window.webContents, 'app:command', { kind: 'quit-hint', countdown: null })
+    }
+    quitHintExpiresAt = 0
     app.quit()
     return
   }
-  lastQuitPress = now
-  sendEvent(window.webContents, 'app:command', { kind: 'quit-hint' })
+  quitHintExpiresAt = now + QUIT_PRESS_MS
+  sendEvent(window.webContents, 'app:command', {
+    kind: 'quit-hint',
+    countdown: { expiresAt: quitHintExpiresAt, duration: QUIT_PRESS_MS },
+  })
 }
 
 /** Sends a command to the current window only; without one there is nothing to act on. */
