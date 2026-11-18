@@ -264,7 +264,8 @@ struct AVCConfiguration {
     let compatibility = sps[2]
     let level = sps[3]
 
-    var record = Data([1, profile, compatibility, level, 0xFC | 3, 0xE0 | UInt8(sequenceSets.count)])
+    let header: [UInt8] = [1, profile, compatibility, level, 0xFC | 3, 0xE0 | UInt8(sequenceSets.count)]
+    var record = Data(header)
     for set in sequenceSets { record.appendWithLength(set) }
     record.append(UInt8(pictureSets.count))
     for set in pictureSets { record.appendWithLength(set) }
