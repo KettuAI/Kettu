@@ -3,12 +3,13 @@
 // limits and sign-in.
 
 import os from 'node:os'
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { AgentAccount } from '@shared/agent-host'
 import {
   applyPatches,
   threadEntries,
   threadFromSnapshot,
+  type ConfigOption,
   type SideChatStep,
   type ThreadEntry,
   type ThreadState,
@@ -23,7 +24,13 @@ import {
 } from '../connection'
 import { TextRing } from '../ring'
 import { newTurnScope, type MapperEffect } from '../session-updates'
-import { FakeAppServer, FakeRpcError, threadResponse, turn } from '../testing/fake-app-server'
+import {
+  FAKE_MODELS,
+  FakeAppServer,
+  FakeRpcError,
+  threadResponse,
+  turn,
+} from '../testing/fake-app-server'
 import { SIDE_INSTRUCTIONS } from '../side-chat'
 import { CodexConnection } from './connection'
 
@@ -284,6 +291,60 @@ describe('sessions', () => {
       'agent',
       'agent-full-access',
     ])
+  })
+
+  describe('models Codex lists while it runs', () => {
+    const nova = { ...FAKE_MODELS[1]!, id: 'gpt-6.2-nova', displayName: 'gpt-6.2-nova' }
+    const modelOption = (config: ConfigOption[]) => config.find((o) => o.id === 'model')
+    const valuesOf = (config: ConfigOption[]) => modelOption(config)?.choices?.map((c) => c.value)
+
+    afterEach(() => {
+      vi.useRealTimers()
+    })
+
+    it('lists a model added since in a read of the options, and takes a pick of it', async () => {
+      const { server, connection } = await connect()
+      const listed = [...FAKE_MODELS]
+      server.on('model/list', () => ({ data: listed, nextCursor: null }))
+      const first = await connection.newSession('/project')
+      expect(valuesOf(first.config)).toEqual(['gpt-6.1-sol', 'gpt-5.6-luna'])
+      listed.push(nova)
+      const read = await connection.newSession('/project', { hidden: 'options' })
+      expect(valuesOf(read.config)).toContain('gpt-6.2-nova')
+      const picked = await connection.setConfigOption(first.sessionId, 'model', 'gpt-6.2-nova')
+      expect(modelOption(picked)?.value).toBe('gpt-6.2-nova')
+    })
+
+    it('keeps the models it listed when a read of the options fails', async () => {
+      const { server, connection } = await connect()
+      const first = await connection.newSession('/project')
+      server.on('model/list', () => {
+        throw new FakeRpcError(-32603, 'offline')
+      })
+      const read = await connection.newSession('/project', { hidden: 'options' })
+      expect(valuesOf(read.config)).toEqual(valuesOf(first.config))
+    })
+
+    it('opens a thread without waiting for the list, and lists the new models after it', async () => {
+      vi.useFakeTimers({ toFake: ['Date'] })
+      const { server, connection } = await connect()
+      const first = await connection.newSession('/project')
+      let release = () => {}
+      const gate = new Promise<void>((resolve) => (release = resolve))
+      server.on('model/list', async () => {
+        await gate
+        return { data: [...FAKE_MODELS, nova], nextCursor: null }
+      })
+      vi.setSystemTime(Date.now() + 61_000)
+      const second = await connection.newSession('/project')
+      expect(valuesOf(second.config)).toEqual(valuesOf(first.config))
+      expect(server.sent('model/list')).toHaveLength(2)
+      release()
+      await vi.waitFor(async () => {
+        const next = await connection.newSession('/project')
+        expect(valuesOf(next.config)).toContain('gpt-6.2-nova')
+      })
+    })
   })
 
   it('hands Kettu’s memory over as developer instructions and turns Codex’s own memories off', async () => {
