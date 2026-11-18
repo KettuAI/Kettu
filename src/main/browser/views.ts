@@ -282,7 +282,8 @@ export class BrowserViews {
 
   /**
    * Destroys every tab of the session's browser. The session stays, so the next navigation starts
-   * a new tab; hiding still only takes the pages off screen.
+   * a new tab; hiding still only takes the pages off screen. The browser keeps whether the pane
+   * shows it and its frame, which the pane reports only when it mounts and its page appears.
    */
   close(sessionId: string): void {
     const browser = this.browsers.get(sessionId)
@@ -291,7 +292,6 @@ export class BrowserViews {
     browser.strip.clear()
     this.origins.close(sessionId)
     this.emit(browser)
-    this.browsers.delete(sessionId)
     this.deps.ended?.(sessionId)
     this.syncOverlay()
   }
@@ -996,7 +996,6 @@ export class BrowserViews {
     if (browser.strip.size === 0) {
       this.origins.close(tab.sessionId)
       this.emit(browser)
-      this.browsers.delete(tab.sessionId)
       this.deps.ended?.(tab.sessionId)
     } else {
       this.present(browser)
