@@ -17,7 +17,7 @@ import { isPortError } from '@shared/port-rpc'
 import type { PortDevice } from '@shared/remote/device'
 import { isHostAdminEvent, type HostAdminMethod } from '@shared/remote/host-admin'
 import { importKeyPair } from '@shared/remote/noise'
-import { parseSshTarget } from '@shared/remote/hosts'
+import { parseSshAddress } from '@shared/remote/hosts'
 import { parsePairingLink } from '@shared/remote/pairing'
 import { PUSH_URL } from '@shared/remote/push'
 import type { DiscoveredHosts } from '@shared/remote/discovery'
@@ -719,9 +719,9 @@ export function startRemoteHost(
       }
       case 'remote-host:add-ssh-host': {
         const { pairId, model } = message
-        const target = parseSshTarget(message.target)
+        const address = parseSshAddress(message.address)
         if (!Number.isSafeInteger(pairId)) break
-        if (!target) {
+        if (!address) {
           send({
             type: 'remote-host:host-pairing',
             pairId,
@@ -729,7 +729,7 @@ export function startRemoteHost(
           })
           break
         }
-        withClient((c) => c.addSsh(pairId, target, typeof model === 'string' ? model : ''))
+        withClient((c) => c.addSsh(pairId, address, typeof model === 'string' ? model : ''))
         break
       }
       case 'remote-host:discover': {

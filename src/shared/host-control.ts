@@ -17,7 +17,7 @@ import type { DeviceActivity } from './remote/activity'
 import type { NewDevice, PairedDevice, PortDevice } from './remote/device'
 import type { DiscoveredHosts, DiscoveryRequestEvent } from './remote/discovery'
 import type { HostAdminEvent, HostAdminMethod } from './remote/host-admin'
-import type { HostPairingState, HostStatus } from './remote/hosts'
+import type { HostPairingState, HostStatus, SshAddress } from './remote/hosts'
 import type { PairingState } from './remote/pairing'
 import type { DirectAddress } from './remote/protocol'
 import type { ReportBuildResult, ReportRequest } from './report'
@@ -527,8 +527,9 @@ export type MainToRemoteHost =
   // Pairs with the host of a pairing link, suggesting this computer's model; its progress comes
   // back as remote-host:host-pairing under the same id.
   | { type: 'remote-host:pair-host'; pairId: number; link: string; model: string }
-  // Adds the machine at an SSH address, the same way, and is closed as a pairing is.
-  | { type: 'remote-host:add-ssh-host'; pairId: number; target: string; model: string }
+  // Adds the machine at an SSH address, the same way, and is closed as a pairing is; several
+  // run at once under their own ids.
+  | { type: 'remote-host:add-ssh-host'; pairId: number; address: SshAddress; model: string }
   // Add host closed: the pairing connection ends, unless it was added.
   | { type: 'remote-host:pair-host-close'; pairId: number }
   // Renames this computer on a host it is connected to; the host's `renamed` answers.

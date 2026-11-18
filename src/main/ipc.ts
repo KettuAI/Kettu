@@ -1,3 +1,4 @@
+import { homedir } from 'node:os'
 import { isAbsolute, join } from 'node:path'
 import {
   app,
@@ -15,7 +16,8 @@ import { addressKey, parseDirectAddress } from '@shared/remote/address'
 import { DEVICE_ID } from '@shared/remote/device'
 import {
   MAX_HOST_ADDRESSES,
-  parseSshTarget,
+  parseIdentityFile,
+  parseSshAddress,
   type HostPairStart,
   type HostsStatus,
 } from '@shared/remote/hosts'
@@ -73,6 +75,7 @@ import { isRendererUrl, rendererPage } from './renderer'
 import type { TrayPanel } from './tray-panel'
 import type { SettingsStore } from './settings'
 import type { Sharing } from './sharing'
+import { listSshConfigHosts } from './ssh-config'
 import type { MarketKeys } from './market-keys'
 import { computerAppIcon, computerUseStatus, requestComputerPermission } from './computer-use'
 import { framesSettled, isRevoked } from './subframes'
@@ -836,11 +839,23 @@ export function registerIpcHandlers({
     const model = await computerModel()
     return pairFor(event.sender, (listener) => remoteHost.pairHost(link, model, listener))
   })
+  handle('hosts:ssh-config', 0, () => listSshConfigHosts({ known: remoteHost.hosts ?? [] }))
   handle('hosts:add-ssh', 1, async ({ event }, value): Promise<HostPairStart> => {
-    const target = parseSshTarget(value)
-    if (!target) return { kind: 'invalid' }
+    const address = parseSshAddress(value)
+    if (!address) return { kind: 'invalid' }
     const model = await computerModel()
-    return pairFor(event.sender, (listener) => remoteHost.addSshHost(target, model, listener))
+    return pairFor(event.sender, (listener) => remoteHost.addSshHost(address, model, listener))
+  })
+  handle('hosts:choose-key-file', 0, async ({ window }) => {
+    const options: Electron.OpenDialogOptions = {
+      title: t('dialogs.chooseSshKey'),
+      defaultPath: join(homedir(), '.ssh'),
+      properties: ['openFile', 'showHiddenFiles', 'dontAddToRecent'],
+    }
+    const result = window
+      ? await dialog.showOpenDialog(window, options)
+      : await dialog.showOpenDialog(options)
+    return result.canceled ? null : parseIdentityFile(result.filePaths[0])
   })
   // With Kettu's services off there is no relay to list the account's hosts.
   handle('hosts:discover', 0, () =>

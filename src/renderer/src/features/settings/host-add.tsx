@@ -9,24 +9,17 @@ import {
   type Ref,
   type RefObject,
 } from 'react'
-import { Alert02Icon, Tick02Icon } from '@hugeicons/core-free-icons'
 import { Trans, useTranslation } from 'react-i18next'
 import type { DiscoveredHost } from '@shared/remote/discovery'
-import {
-  parseSshTarget,
-  type HostPairingFailure,
-  type HostPairingState,
-  type HostStatus,
-  type SshAddFailure,
-  type SshStep,
-} from '@shared/remote/hosts'
+import type { HostPairingState, HostStatus, SshAddFailure, SshAddress } from '@shared/remote/hosts'
 import { parsePairingLink } from '@shared/remote/pairing'
-import { Icon } from '@renderer/components/affect/app-shell'
 import { Dialog, DialogClose } from '@renderer/components/ui/dialog'
 import { useCloudOff } from '@renderer/lib/cloud'
+import { openSettingsItem } from '@renderer/stores/view'
 import { Segmented, SetButton, Spin } from './controls'
 import { AccountHostsPicker, AccountPairFlow } from './host-account'
 import { Added } from './host-added'
+import { SshListBody, SshManualBody } from './host-add-ssh'
 import { closeRequest } from './pair-close'
 import {
   DIALOG_MONO_FIELD,
@@ -34,11 +27,10 @@ import {
   SettingsDialogContent,
   SettingsDialogFooter,
   SettingsDialogHeader,
-  SettingsField,
 } from './settings-dialog'
+import { useSshAdding, type AddHostFailure } from './ssh-adding'
 
-/** Why Add host shows no host: what pairing said, or what kept it from starting. */
-export type AddHostFailure = HostPairingFailure | 'self' | 'unavailable'
+export type { AddHostFailure } from './ssh-adding'
 
 /** Why a pasted link added no host. */
 type LinkFailure = Exclude<AddHostFailure, SshAddFailure>
@@ -50,30 +42,8 @@ export type AddHostStep =
   | { kind: 'failed'; reason: LinkFailure }
   | { kind: 'added'; host: HostStatus }
 
-/** How the machine is reached: a pairing link pasted, or an SSH address typed. */
+/** How the machine is reached: a pairing link pasted, or over SSH. */
 export type AddHostTab = 'link' | 'ssh'
-
-/** Adding over SSH: the steps it went through, the last one the current one. */
-export type SshAddStep =
-  | { kind: 'enter' }
-  | { kind: 'working'; steps: SshStep[] }
-  | { kind: 'failed'; steps: SshStep[]; reason: AddHostFailure; detail: string | null }
-  | { kind: 'added'; host: HostStatus }
-
-const stepsOf = (step: SshAddStep): SshStep[] =>
-  step.kind === 'working' || step.kind === 'failed' ? step.steps : []
-
-/** The step a pairing state names, without the state's own field. */
-function sshStep(state: Extract<HostPairingState, { state: 'ssh' }>): SshStep {
-  switch (state.step) {
-    case 'installing':
-      return { step: state.step, version: state.version }
-    case 'updating':
-      return { step: state.step, from: state.from, to: state.to }
-    default:
-      return { step: state.step }
-  }
-}
 
 const isComposing = (event: KeyboardEvent<HTMLInputElement>): boolean =>
   event.nativeEvent.isComposing || event.keyCode === 229
@@ -91,8 +61,8 @@ export function AddHostDialog({
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
-  /** Opens on the SSH tab with this address, for a machine added over SSH before. */
-  ssh?: string
+  /** Opens on the SSH tab's form with this address, for a machine added over SSH before. */
+  ssh?: SshAddress
   /** The host added, as the dialog closes on it. */
   onAdded?: (host: HostStatus) => void
 }) {
@@ -134,7 +104,7 @@ function AddHostFlow({
   onDone,
 }: {
   open: boolean
-  ssh?: string
+  ssh?: SshAddress
   pairingRef: RefObject<boolean>
   onDone: (added: HostStatus | null) => void
 }) {
@@ -145,17 +115,14 @@ function AddHostFlow({
   const [step, setStep] = useState<AddHostStep>({ kind: 'paste', invalid: false })
   const [draft, setDraft] = useState('')
   const [link, setLink] = useState('')
-  const [ssh, setSsh] = useState<SshAddStep>({ kind: 'enter' })
-  const [sshDraft, setSshDraft] = useState(sshTarget ?? '')
-  const [target, setTarget] = useState('')
-  // Each way has a pairing of its own, so switching tabs leaves the other one going.
+  // Each way has pairings of its own, so switching tabs leaves the other one going.
   const linkPairing = useRef<number | null>(null)
-  const sshPairing = useRef<number | null>(null)
   const linkAttempt = useRef(0)
-  const sshAttempt = useRef(0)
   // Progress of a pairing main has not named yet, as an event may beat the answer to pair().
   const early = useRef(new Map<number, HostPairingState[]>())
   const input = useRef<HTMLInputElement>(null)
+  const ssh = useSshAdding({ active: open && tab === 'ssh', prefill: sshTarget, early })
+  const { take: takeSsh, abandon: abandonSsh } = ssh
 
   const takeLink = (state: HostPairingState): void => {
     if (state.state === 'added' || state.state === 'failed') linkPairing.current = null
@@ -169,51 +136,33 @@ function AddHostFlow({
     }
   }
 
-  const takeSsh = (state: HostPairingState): void => {
-    if (state.state === 'added' || state.state === 'failed') sshPairing.current = null
-    if (state.state === 'added') setSsh({ kind: 'added', host: state.host })
-    else if (state.state === 'failed') {
-      const { reason } = state
-      const detail = state.detail ?? null
-      setSsh((now) => ({ kind: 'failed', steps: stepsOf(now), reason, detail }))
-    } else if (state.state === 'ssh') {
-      const next = sshStep(state)
-      setSsh((now) => ({ kind: 'working', steps: [...stepsOf(now), next] }))
-    }
-  }
-
   const closeLink = (): void => {
     const pairId = linkPairing.current
     linkPairing.current = null
     if (pairId !== null) void window.kettu.hosts.closePairing(pairId)
   }
 
-  const closeSsh = (): void => {
-    const pairId = sshPairing.current
-    sshPairing.current = null
-    if (pairId !== null) void window.kettu.hosts.closePairing(pairId)
-  }
-
   /** Add host closed: its pairings end, and an answer still on its way to main is let go. */
   const abandon = (): void => {
     linkAttempt.current++
-    sshAttempt.current++
     closeLink()
-    closeSsh()
+    abandonSsh()
   }
 
   useEffect(() => {
     if (!open) return
     const off = window.kettu.hosts.onPairing(({ pairId, pairing: state }) => {
       if (pairId === linkPairing.current) takeLink(state)
-      else if (pairId === sshPairing.current) takeSsh(state)
-      else early.current.set(pairId, [...(early.current.get(pairId) ?? []), state])
+      else if (!takeSsh(pairId, state)) {
+        early.current.set(pairId, [...(early.current.get(pairId) ?? []), state])
+      }
     })
     return () => {
       off()
       abandon()
     }
-    // One subscription for each opening; the handlers reach only refs and state setters.
+    // One subscription for each opening; the handlers reach only refs, state setters and the SSH
+    // tab's handlers, which last as long.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open])
 
@@ -251,33 +200,6 @@ function AddHostFlow({
     )
   }
 
-  const startSsh = (text: string): void => {
-    const parsed = parseSshTarget(text)
-    if (!parsed) return
-    closeSsh()
-    const run = ++sshAttempt.current
-    setTarget(parsed)
-    setSshDraft(parsed)
-    setSsh({ kind: 'working', steps: [] })
-    const failed = (reason: AddHostFailure): void =>
-      setSsh({ kind: 'failed', steps: [], reason, detail: null })
-    window.kettu.hosts.addSsh(parsed).then(
-      (started) => {
-        if (run !== sshAttempt.current) {
-          if (started.kind === 'pairing') void window.kettu.hosts.closePairing(started.pairId)
-          return
-        }
-        if (started.kind === 'invalid') return setSsh({ kind: 'enter' })
-        if (started.kind !== 'pairing') return failed(started.kind)
-        sshPairing.current = started.pairId
-        caughtUp(started.pairId, takeSsh)
-      },
-      () => {
-        if (run === sshAttempt.current) failed('ssh_failed')
-      },
-    )
-  }
-
   const again = (): void => {
     linkAttempt.current++
     setDraft('')
@@ -285,6 +207,11 @@ function AddHostFlow({
     // The field is back once this render is drawn.
     requestAnimationFrame(() => input.current?.focus())
   }
+
+  // While machines are being added over SSH, a click outside keeps the dialog.
+  useEffect(() => {
+    if (!account) pairingRef.current = ssh.busy
+  }, [account, ssh.busy, pairingRef])
 
   if (account && !cloudOff) {
     return (
@@ -300,7 +227,8 @@ function AddHostFlow({
     )
   }
 
-  const choosing = tab === 'ssh' ? ssh.kind === 'enter' : step.kind === 'paste'
+  const sshIdle = Object.keys(ssh.runs).length === 0 && ssh.manual.kind === 'enter'
+  const choosing = tab === 'ssh' ? sshIdle : step.kind === 'paste'
   const tabs = (
     <>
       {choosing && !cloudOff && (
@@ -316,20 +244,21 @@ function AddHostFlow({
   )
   return (
     <SettingsDialogContent>
-      {tab === 'ssh' || ssh.kind === 'added' ? (
-        <SshAddBody
-          step={ssh}
-          draft={sshDraft}
-          target={target}
+      {ssh.manual.kind === 'added' ? (
+        <Added
+          host={ssh.manual.host}
+          onDone={() => onDone(ssh.manual.kind === 'added' ? ssh.manual.host : null)}
+        />
+      ) : tab === 'ssh' && ssh.view === 'manual' ? (
+        <SshManualBody adding={ssh} tabs={tabs} />
+      ) : tab === 'ssh' ? (
+        <SshListBody
+          adding={ssh}
           tabs={tabs}
-          onDraft={(text) => {
-            setSshDraft(text)
-            // A changed address goes back to asking, without what the last try said.
-            if (ssh.kind === 'failed') setSsh({ kind: 'enter' })
+          onOpenHost={(id) => {
+            onDone(null)
+            openSettingsItem('hosts', id)
           }}
-          onSubmit={startSsh}
-          onRetry={() => startSsh(target)}
-          onDone={() => onDone(ssh.kind === 'added' ? ssh.host : null)}
         />
       ) : (
         <AddHostBody
@@ -499,237 +428,5 @@ export function AddHostBody({
         )}
       </SettingsDialogFooter>
     </>
-  )
-}
-
-/** The SSH tab's content in each step: the address, then each step and how it ended. */
-export function SshAddBody({
-  step,
-  draft,
-  target,
-  inputRef,
-  onDraft,
-  onSubmit,
-  onRetry,
-  onDone,
-  tabs,
-}: {
-  step: SshAddStep
-  draft: string
-  /** The address being added, or the last one tried. */
-  target: string
-  inputRef?: Ref<HTMLInputElement>
-  onDraft: (text: string) => void
-  onSubmit: (text: string) => void
-  onRetry: () => void
-  onDone: () => void
-  tabs?: ReactNode
-}) {
-  const { t } = useTranslation(['settings', 'common'])
-  const errorId = useId()
-  const fieldId = useId()
-  if (step.kind === 'added') return <Added host={step.host} onDone={onDone} />
-  const working = step.kind === 'working'
-  const failure = step.kind === 'failed' ? step : null
-  const valid = parseSshTarget(draft) !== null
-  const steps = stepsOf(step)
-  return (
-    <>
-      <SettingsDialogHeader title={t('hosts.add.title')} />
-      <SettingsDialogBody>
-        {tabs}
-        <SettingsField
-          label={t('hosts.add.ssh.label')}
-          htmlFor={fieldId}
-          hint={!failure && t('hosts.add.ssh.note')}
-        >
-          <div className="kettu-sd__inline">
-            <input
-              id={fieldId}
-              ref={inputRef}
-              value={working ? target : draft}
-              readOnly={working}
-              autoFocus
-              aria-describedby={failure ? errorId : undefined}
-              placeholder={t('hosts.add.ssh.placeholder')}
-              spellCheck={false}
-              autoComplete="off"
-              autoCapitalize="off"
-              className={DIALOG_MONO_FIELD}
-              onChange={(event) => onDraft(event.target.value)}
-              onKeyDown={(event) => {
-                if (working || isComposing(event) || event.key !== 'Enter') return
-                event.preventDefault()
-                if (valid) onSubmit(draft)
-              }}
-            />
-            {!failure && (
-              <SetButton
-                size="md"
-                variant="primary"
-                disabled={!valid || working}
-                onClick={() => onSubmit(draft)}
-              >
-                {t('hosts.add.ssh.connect')}
-              </SetButton>
-            )}
-          </div>
-        </SettingsField>
-        {steps.length > 0 && (
-          <SshProgress steps={steps} failed={failure !== null} target={target} />
-        )}
-        {failure && (
-          <SshFailure
-            id={errorId}
-            reason={failure.reason}
-            target={target}
-            detail={failure.detail}
-          />
-        )}
-      </SettingsDialogBody>
-      <SettingsDialogFooter>
-        {failure ? (
-          <>
-            <DialogClose render={<SetButton size="md" variant="ghost" />}>
-              {t('common:actions.close')}
-            </DialogClose>
-            <SetButton
-              size="md"
-              variant="primary"
-              disabled={!valid}
-              onClick={() => (draft.trim() === target ? onRetry() : onSubmit(draft))}
-            >
-              {t('hosts.add.retry')}
-            </SetButton>
-          </>
-        ) : (
-          <DialogClose render={<SetButton size="md" variant="ghost" />}>
-            {t('common:actions.cancel')}
-          </DialogClose>
-        )}
-      </SettingsDialogFooter>
-    </>
-  )
-}
-
-type StepState = 'done' | 'active' | 'failed' | 'pending'
-
-/**
- * Logging in, installing or updating once that turned out to be needed, adding this computer and
- * opening the channel: each done, under way, failed or still to come.
- */
-function SshProgress({
-  steps,
-  failed,
-  target,
-}: {
-  steps: SshStep[]
-  failed: boolean
-  target: string
-}) {
-  const { t } = useTranslation('settings')
-  const install = steps.find((s) => s.step === 'installing' || s.step === 'updating')
-  const items: { id: SshStep['step']; label: string; detail?: string }[] = [
-    { id: 'connecting', label: t('hosts.add.ssh.steps.connecting'), detail: target },
-    ...(install?.step === 'installing'
-      ? [
-          {
-            id: install.step,
-            label: t('hosts.add.ssh.steps.installing', install),
-            detail: t('hosts.add.ssh.steps.installingDetail'),
-          },
-        ]
-      : install?.step === 'updating'
-        ? [{ id: install.step, label: t('hosts.add.ssh.steps.updating', install) }]
-        : []),
-    { id: 'adding', label: t('hosts.add.ssh.steps.adding') },
-    { id: 'opening', label: t('hosts.add.ssh.steps.opening') },
-  ]
-  const at = items.findIndex((item) => item.id === steps.at(-1)?.step)
-  const stateAt = (index: number): StepState =>
-    index < at ? 'done' : index > at ? 'pending' : failed ? 'failed' : 'active'
-  return (
-    <ol aria-label={t('hosts.add.ssh.steps.label')} aria-live="polite" className="kettu-sd__steps">
-      {items.map((item, index) => {
-        const state = stateAt(index)
-        return (
-          <li
-            key={item.id}
-            aria-current={state === 'active' ? 'step' : undefined}
-            className="kettu-sd__step"
-            data-state={state}
-          >
-            <span aria-hidden className="kettu-sd__step-mark">
-              {state === 'done' && <Icon icon={Tick02Icon} size={14} />}
-              {state === 'active' && <span className="ui-ss-spinner" />}
-              {state === 'failed' && <Icon icon={Alert02Icon} size={14} />}
-              {state === 'pending' && <span className="kettu-sd__step-ring" />}
-            </span>
-            <span className="kettu-sd__step-text">
-              <span className="k-name">
-                {item.label}
-                {(state === 'done' || state === 'failed') && (
-                  <span className="sr-only"> {t(`hosts.add.ssh.steps.${state}`)}</span>
-                )}
-              </span>
-              {item.detail && <span className="k-name kettu-sd__hint">{item.detail}</span>}
-            </span>
-          </li>
-        )
-      })}
-    </ol>
-  )
-}
-
-type SshErrorKey = SshAddFailure extends `ssh_${infer K}` ? K : never
-
-/** Failures whose last lines of output say more than the sentence can. */
-const WITH_OUTPUT: ReadonlySet<AddHostFailure> = new Set([
-  'ssh_unreachable',
-  'ssh_install',
-  'ssh_failed',
-])
-
-/** Why adding over SSH failed, what to try, and the end of the output where it helps. */
-function SshFailure({
-  id,
-  reason,
-  target,
-  detail,
-}: {
-  id: string
-  reason: AddHostFailure
-  target: string
-  detail: string | null
-}) {
-  const { t } = useTranslation('settings')
-  let text: ReactNode
-  if (reason === 'unavailable') text = t('hosts.keyFailed')
-  else if (reason === 'ssh_unsupported') {
-    text = detail
-      ? t('hosts.add.ssh.errors.unsupported', { target, system: detail })
-      : t('hosts.add.ssh.errors.noShell', { target })
-  } else if (reason.startsWith('ssh_')) {
-    text = (
-      <Trans
-        t={t}
-        i18nKey={`hosts.add.ssh.errors.${reason.slice(4) as SshErrorKey}`}
-        values={{ target }}
-        components={{ code: <code className="k-code" /> }}
-      />
-    )
-  } else text = t(`hosts.add.${reason as Exclude<LinkFailure, 'unavailable'>}`)
-  const output = detail && WITH_OUTPUT.has(reason) ? detail : null
-  return (
-    <div id={id} role="alert" className="kettu-sd__stack">
-      <p className="kettu-sd__error" data-selectable="">
-        {text}
-      </p>
-      {output && (
-        <pre data-selectable="" aria-label={t('hosts.add.ssh.output')} className="kettu-sd__output">
-          {output}
-        </pre>
-      )}
-    </div>
   )
 }

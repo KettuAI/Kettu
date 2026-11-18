@@ -18,7 +18,13 @@ import type { Platform } from './platform'
 import type { DeviceActivity } from './remote/activity'
 import type { HostAdminMethod } from './remote/host-admin'
 import type { DiscoveredHosts, DiscoveryRequestEvent } from './remote/discovery'
-import type { HostPairingState, HostPairStart, HostsStatus } from './remote/hosts'
+import type {
+  HostPairingState,
+  HostPairStart,
+  HostsStatus,
+  SshAddress,
+  SshConfigHosts,
+} from './remote/hosts'
 import type { PairingState } from './remote/pairing'
 import type { DirectAddress } from './remote/protocol'
 import type { RemoteStatus } from './remote/status'
@@ -400,8 +406,13 @@ export interface IpcInvokeContract {
   'hosts:status': { args: []; result: HostsStatus }
   // Pairs with the host of a pasted link, its progress as `hosts:pairing` under the id.
   'hosts:pair': { args: [link: string]; result: HostPairStart }
-  // Adds the machine at an SSH address, its progress as `hosts:pairing` under the id.
-  'hosts:add-ssh': { args: [target: string]; result: HostPairStart }
+  // The machines of the user's SSH config Add host may add, read again on each call.
+  'hosts:ssh-config': { args: []; result: SshConfigHosts }
+  // Adds the machine at an SSH address, its progress as `hosts:pairing` under the id; several
+  // run at once.
+  'hosts:add-ssh': { args: [address: SshAddress]; result: HostPairStart }
+  // A key file for an SSH address typed by hand, from the system's file dialog: its path alone.
+  'hosts:choose-key-file': { args: []; result: string | null }
   'hosts:pair-close': { args: [pairId: number]; result: void }
   // The account's hosts on the relay that this computer may pair with: paired ones and itself left
   // out.
@@ -750,8 +761,12 @@ export interface KettuApi {
     status(): Promise<HostsStatus>
     /** Pairs with the host of a pasted link, unless it is no link or this computer's own. */
     pair(link: string): Promise<HostPairStart>
+    /** The machines of the user's SSH config, resolved by the system's ssh. */
+    sshConfig(): Promise<SshConfigHosts>
     /** Adds the machine at an SSH address over the system's ssh, unless it is no SSH address. */
-    addSsh(target: string): Promise<HostPairStart>
+    addSsh(address: SshAddress): Promise<HostPairStart>
+    /** A key file's path from the system's file dialog, or null when none was chosen. */
+    chooseKeyFile(): Promise<string | null>
     /** Add host closed: a pairing not yet added ends. */
     closePairing(pairId: number): Promise<void>
     /** The account's hosts this computer may pair with. */

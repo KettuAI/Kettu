@@ -3,7 +3,7 @@ import { Cancel01Icon } from '@hugeicons/core-free-icons'
 import { Trans, useTranslation } from 'react-i18next'
 import { addressKey, addressText, parseAddress } from '@shared/remote/address'
 import { DEVICE_NAME_CHARS } from '@shared/remote/device'
-import { MAX_HOST_ADDRESSES, type HostStatus } from '@shared/remote/hosts'
+import { MAX_HOST_ADDRESSES, type HostStatus, type SshAddress } from '@shared/remote/hosts'
 import type { DirectAddress } from '@shared/remote/protocol'
 import {
   AlertDialog,
@@ -48,11 +48,11 @@ export function HostPage({ id }: { id: string }) {
   const { t } = useTranslation('settings')
   const host = useHostsStore((s) => s.status?.hosts?.find((entry) => entry.id === id) ?? null)
   // Kept past the host: adding it over SSH again replaces it with one of a new id.
-  const [again, setAgain] = useState<{ ssh?: string } | null>(null)
+  const [again, setAgain] = useState<{ ssh?: SshAddress } | null>(null)
   return (
     <>
       {host ? (
-        <HostPageBody host={host} onAddAgain={() => setAgain({ ssh: host.ssh?.target })} />
+        <HostPageBody host={host} onAddAgain={() => setAgain({ ssh: host.ssh })} />
       ) : (
         <>
           <ItemPageHeader
