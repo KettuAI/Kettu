@@ -17,7 +17,7 @@ import { isPortError } from '@shared/port-rpc'
 import type { PortDevice } from '@shared/remote/device'
 import { isHostAdminEvent, type HostAdminMethod } from '@shared/remote/host-admin'
 import { importKeyPair } from '@shared/remote/noise'
-import { parseSshAddress } from '@shared/remote/hosts'
+import { parseSshAddress, parseSshManageAction, type SshManageResult } from '@shared/remote/hosts'
 import { parsePairingLink } from '@shared/remote/pairing'
 import { PUSH_URL } from '@shared/remote/push'
 import type { DiscoveredHosts } from '@shared/remote/discovery'
@@ -784,6 +784,24 @@ export function startRemoteHost(
       case 'remote-host:remove-host':
         if (typeof message.id === 'string') withClient((c) => c.remove(message.id))
         break
+      case 'remote-host:manage-ssh': {
+        const { requestId, id } = message
+        if (!Number.isSafeInteger(requestId)) break
+        const answer = (result: SshManageResult): void =>
+          send({ type: 'remote-host:ssh-managed', requestId, result })
+        const action = parseSshManageAction(message.action)
+        if (typeof id !== 'string' || !action) {
+          answer({ ok: false, reason: 'unknown_host' })
+          break
+        }
+        const started = withRunning(async () =>
+          answer(
+            client ? await client.manageSsh(id, action) : { ok: false, reason: 'unknown_host' },
+          ),
+        )
+        if (!started) answer({ ok: false, reason: 'unknown_host' })
+        break
+      }
       case 'remote-host:forward': {
         const { requestId, hostId, sessionId, forward } = message
         if (!Number.isSafeInteger(requestId)) break

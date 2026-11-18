@@ -2,7 +2,13 @@ import { create } from 'zustand'
 import { useShallow } from 'zustand/react/shallow'
 import type { Platform } from '@shared/platform'
 import type { DiscoveredHost, DiscoveredHosts } from '@shared/remote/discovery'
-import type { HostConnection, HostsStatus, HostStatus, SshRoute } from '@shared/remote/hosts'
+import type {
+  HostConnection,
+  HostsStatus,
+  HostStatus,
+  SshManageResult,
+  SshRoute,
+} from '@shared/remote/hosts'
 import { hostOfPath } from '@renderer/lib/host-paths'
 import { isWeb } from '@renderer/lib/platform'
 import { readJson, writeJson } from '@renderer/lib/storage'
@@ -30,7 +36,13 @@ interface HostsStore {
   discovered: DiscoveredHosts | null
   /** The account's host Connect was chosen for, while its pairing dialog is open. */
   connecting: DiscoveredHost | null
+  /** Updates of hosts added over SSH, by host id: under way to a version, or how one failed. */
+  sshUpdates: Record<string, SshUpdate>
 }
+
+export type SshUpdate =
+  | { state: 'updating'; version: string }
+  | { state: 'failed'; version: string; result: Extract<SshManageResult, { ok: false }> }
 
 const KEPT_KEY = 'hosts.known'
 
@@ -59,7 +71,33 @@ export const useHostsStore = create<HostsStore>()(() => ({
   kept: readKept(),
   discovered: null,
   connecting: null,
+  sshUpdates: {},
 }))
+
+const setSshUpdate = (id: string, update: SshUpdate | null): void =>
+  useHostsStore.setState((s) => {
+    const rest = Object.fromEntries(Object.entries(s.sshUpdates).filter(([key]) => key !== id))
+    return { sshUpdates: update ? { ...rest, [id]: update } : rest }
+  })
+
+/**
+ * Installs this computer's `version` on a host added over SSH, kept in the store so its page
+ * shows it however often it is left and opened again meanwhile.
+ */
+export async function updateSshHost(id: string, version: string): Promise<void> {
+  if (useHostsStore.getState().sshUpdates[id]?.state === 'updating') return
+  setSshUpdate(id, { state: 'updating', version })
+  let result: SshManageResult
+  try {
+    result = await window.kettu.hosts.updateSsh(id)
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error)
+    result = { ok: false, reason: 'ssh_failed', detail }
+  }
+  setSshUpdate(id, result.ok ? null : { state: 'failed', version, result })
+}
+
+export const dismissSshUpdate = (id: string): void => setSshUpdate(id, null)
 
 /** The other hosts, sorted by name: as reported, or as kept until they are. */
 export function otherHosts(state: HostsStore): OtherHost[] {

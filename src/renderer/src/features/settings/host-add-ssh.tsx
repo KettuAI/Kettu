@@ -36,6 +36,8 @@ import {
 import {
   draftAddress,
   draftProblems,
+  machineLine,
+  matchMachines,
   sshCommand,
   stepsOf,
   type AddHostFailure,
@@ -49,12 +51,6 @@ const FILTER_FROM = 8
 
 const isComposing = (event: KeyboardEvent<HTMLInputElement>): boolean =>
   event.nativeEvent.isComposing || event.keyCode === 229
-
-/** `user@hostname`, the port when it is not 22, and the jump hosts. */
-function machineLine(t: TFunction<'settings'>, host: SshConfigHost): string {
-  const at = `${host.user}@${host.hostname}${host.port === 22 ? '' : `:${host.port}`}`
-  return host.proxyJump ? `${at} · ${t('hosts.add.ssh.config.via', { jump: host.proxyJump })}` : at
-}
 
 /** The step a row is at, as the progress list names it. */
 function stepLabel(t: TFunction<'settings'>, step: SshStep | undefined): string {
@@ -91,15 +87,7 @@ export function SshListBody({
   const [query, setQuery] = useState('')
   const { config, checked, runs } = adding
   const hosts = useMemo(() => (config?.state === 'ok' ? config.hosts : []), [config])
-  const shown = useMemo(() => {
-    const words = query.trim().toLowerCase()
-    if (!words) return hosts
-    return hosts.filter((host) =>
-      [host.alias, host.user, host.hostname, host.proxyJump ?? ''].some((text) =>
-        text.toLowerCase().includes(words),
-      ),
-    )
-  }, [hosts, query])
+  const shown = useMemo(() => matchMachines(hosts, query), [hosts, query])
   const started = Object.keys(runs).length > 0
   const count = hosts.filter((host) => checked.has(host.alias)).length
   return (
@@ -133,8 +121,17 @@ export function SshListBody({
             config={config}
             shown={shown}
             query={query}
-            adding={adding}
-            onOpenHost={onOpenHost}
+            row={(host) => (
+              <MachineRow
+                key={host.alias}
+                host={host}
+                run={adding.runs[host.alias]}
+                checked={adding.checked.has(host.alias)}
+                onCheck={(on) => adding.setChecked(host.alias, on)}
+                onRetry={() => adding.retry(host.alias)}
+                onOpenHost={onOpenHost}
+              />
+            )}
           />
         </section>
         <p className="kettu-sd__hint">{t('hosts.add.ssh.note')}</p>
@@ -158,18 +155,16 @@ export function SshListBody({
 }
 
 /** The machines, or in their place loading, none, none matching or why the config is unread. */
-function MachineList({
+export function MachineList({
   config,
   shown,
   query,
-  adding,
-  onOpenHost,
+  row,
 }: {
   config: SshConfigHosts | null
   shown: SshConfigHost[]
   query: string
-  adding: SshAdding
-  onOpenHost: (id: string) => void
+  row: (host: SshConfigHost) => ReactNode
 }) {
   const { t } = useTranslation('settings')
   if (config === null) {
@@ -216,17 +211,7 @@ function MachineList({
   }
   return (
     <ul aria-label={t('hosts.add.ssh.config.label')} className="kettu-sd__machines">
-      {shown.map((host) => (
-        <MachineRow
-          key={host.alias}
-          host={host}
-          run={adding.runs[host.alias]}
-          checked={adding.checked.has(host.alias)}
-          onCheck={(on) => adding.setChecked(host.alias, on)}
-          onRetry={() => adding.retry(host.alias)}
-          onOpenHost={onOpenHost}
-        />
-      ))}
+      {shown.map(row)}
     </ul>
   )
 }
@@ -320,25 +305,32 @@ function MachineRow({
   )
 }
 
-/** A machine typed by hand: its address, port and how it signs in, then its progress. */
-export function SshManualBody({ adding, tabs }: { adding: SshAdding; tabs?: ReactNode }) {
-  const { t } = useTranslation(['settings', 'common'])
+/**
+ * The fields of a machine typed by hand: its address, the port and how it signs in. Enter in a
+ * field calls `onEnter` once the address is whole.
+ */
+export function SshAddressFields({
+  draft,
+  onChange,
+  working,
+  onEnter,
+}: {
+  draft: SshDraft
+  onChange: (draft: SshDraft) => void
+  working: boolean
+  onEnter: () => void
+}) {
+  const { t } = useTranslation('settings')
   const addressId = useId()
   const portId = useId()
   const keyId = useId()
   const errorId = useId()
-  const { draft, manual, manualAddress } = adding
-  const working = manual.kind === 'working'
-  const failure = manual.kind === 'failed' ? manual : null
   const problems = draftProblems(draft)
-  const address = draftAddress(draft)
-  const steps = stepsOf(manual)
-  const shownAddress = manualAddress ?? { target: draft.address.trim() }
-  const set = (patch: Partial<SshDraft>): void => adding.setDraft({ ...draft, ...patch })
+  const set = (patch: Partial<SshDraft>): void => onChange({ ...draft, ...patch })
   const submit = (event: KeyboardEvent<HTMLInputElement>): void => {
     if (working || isComposing(event) || event.key !== 'Enter') return
     event.preventDefault()
-    if (address) adding.startManual()
+    if (draftAddress(draft)) onEnter()
   }
   const choose = async (): Promise<void> => {
     const path = await window.kettu.hosts.chooseKeyFile()
@@ -346,103 +338,124 @@ export function SshManualBody({ adding, tabs }: { adding: SshAdding; tabs?: Reac
   }
   return (
     <>
+      <div className="kettu-sd__address-port">
+        <SettingsField label={t('hosts.add.ssh.manual.address')} htmlFor={addressId}>
+          <input
+            id={addressId}
+            value={draft.address}
+            readOnly={working}
+            autoFocus
+            aria-invalid={problems.address || undefined}
+            placeholder={t('hosts.add.ssh.placeholder')}
+            spellCheck={false}
+            autoComplete="off"
+            autoCapitalize="off"
+            className={DIALOG_MONO_FIELD}
+            onChange={(event) => set({ address: event.target.value })}
+            onKeyDown={submit}
+          />
+        </SettingsField>
+        <SettingsField label={t('hosts.add.ssh.manual.port')} htmlFor={portId}>
+          <input
+            id={portId}
+            value={draft.port}
+            readOnly={working}
+            inputMode="numeric"
+            aria-invalid={problems.port || undefined}
+            aria-describedby={problems.port ? errorId : undefined}
+            placeholder={t('hosts.add.ssh.manual.optional')}
+            spellCheck={false}
+            autoComplete="off"
+            className={DIALOG_MONO_FIELD}
+            onChange={(event) => set({ port: event.target.value })}
+            onKeyDown={submit}
+          />
+        </SettingsField>
+      </div>
+      {problems.port && (
+        <p id={errorId} role="alert" className="kettu-sd__error">
+          {t('hosts.add.ssh.manual.portInvalid')}
+        </p>
+      )}
+      <SettingsField label={t('hosts.add.ssh.manual.signIn')}>
+        <RadioGroup
+          aria-label={t('hosts.add.ssh.manual.signIn')}
+          value={draft.signIn}
+          disabled={working}
+          onValueChange={(next) => set({ signIn: next as SshDraft['signIn'] })}
+          className="kettu-sd__choices"
+        >
+          <Choice
+            value="agent"
+            checked={draft.signIn === 'agent'}
+            title={t('hosts.add.ssh.manual.agent')}
+            description={t('hosts.add.ssh.manual.agentHint')}
+          />
+          <Choice
+            value="key"
+            checked={draft.signIn === 'key'}
+            title={t('hosts.add.ssh.manual.key')}
+            description={t('hosts.add.ssh.manual.keyHint')}
+            extra={
+              draft.signIn === 'key' && (
+                <div className="kettu-sd__stack">
+                  <div className="kettu-sd__inline">
+                    <input
+                      id={keyId}
+                      value={draft.keyFile}
+                      readOnly={working}
+                      aria-label={t('hosts.add.ssh.manual.keyPath')}
+                      aria-invalid={problems.key || undefined}
+                      placeholder={t('hosts.add.ssh.manual.keyPlaceholder')}
+                      spellCheck={false}
+                      autoComplete="off"
+                      className={DIALOG_MONO_FIELD}
+                      onChange={(event) => set({ keyFile: event.target.value })}
+                      onKeyDown={submit}
+                    />
+                    <SetButton
+                      icon={<Icon icon={FolderOpenIcon} size={14} />}
+                      disabled={working}
+                      onClick={() => void choose()}
+                    >
+                      {t('hosts.add.ssh.manual.choose')}
+                    </SetButton>
+                  </div>
+                  {problems.key && (
+                    <p role="alert" className="kettu-sd__error">
+                      {t('hosts.add.ssh.manual.keyInvalid')}
+                    </p>
+                  )}
+                </div>
+              )
+            }
+          />
+        </RadioGroup>
+      </SettingsField>
+    </>
+  )
+}
+
+/** A machine typed by hand: its address, port and how it signs in, then its progress. */
+export function SshManualBody({ adding, tabs }: { adding: SshAdding; tabs?: ReactNode }) {
+  const { t } = useTranslation(['settings', 'common'])
+  const { draft, manual, manualAddress } = adding
+  const working = manual.kind === 'working'
+  const failure = manual.kind === 'failed' ? manual : null
+  const address = draftAddress(draft)
+  const steps = stepsOf(manual)
+  const shownAddress = manualAddress ?? { target: draft.address.trim() }
+  return (
+    <>
       <SettingsDialogHeader title={t('hosts.add.title')} />
       <SettingsDialogBody>
         {tabs}
-        <div className="kettu-sd__address-port">
-          <SettingsField label={t('hosts.add.ssh.manual.address')} htmlFor={addressId}>
-            <input
-              id={addressId}
-              value={draft.address}
-              readOnly={working}
-              autoFocus
-              aria-invalid={problems.address || undefined}
-              placeholder={t('hosts.add.ssh.placeholder')}
-              spellCheck={false}
-              autoComplete="off"
-              autoCapitalize="off"
-              className={DIALOG_MONO_FIELD}
-              onChange={(event) => set({ address: event.target.value })}
-              onKeyDown={submit}
-            />
-          </SettingsField>
-          <SettingsField label={t('hosts.add.ssh.manual.port')} htmlFor={portId}>
-            <input
-              id={portId}
-              value={draft.port}
-              readOnly={working}
-              inputMode="numeric"
-              aria-invalid={problems.port || undefined}
-              aria-describedby={problems.port ? errorId : undefined}
-              placeholder={t('hosts.add.ssh.manual.optional')}
-              spellCheck={false}
-              autoComplete="off"
-              className={DIALOG_MONO_FIELD}
-              onChange={(event) => set({ port: event.target.value })}
-              onKeyDown={submit}
-            />
-          </SettingsField>
-        </div>
-        {problems.port && (
-          <p id={errorId} role="alert" className="kettu-sd__error">
-            {t('hosts.add.ssh.manual.portInvalid')}
-          </p>
-        )}
-        <SettingsField label={t('hosts.add.ssh.manual.signIn')}>
-          <RadioGroup
-            aria-label={t('hosts.add.ssh.manual.signIn')}
-            value={draft.signIn}
-            disabled={working}
-            onValueChange={(next) => set({ signIn: next as SshDraft['signIn'] })}
-            className="kettu-sd__choices"
-          >
-            <Choice
-              value="agent"
-              checked={draft.signIn === 'agent'}
-              title={t('hosts.add.ssh.manual.agent')}
-              description={t('hosts.add.ssh.manual.agentHint')}
-            />
-            <Choice
-              value="key"
-              checked={draft.signIn === 'key'}
-              title={t('hosts.add.ssh.manual.key')}
-              description={t('hosts.add.ssh.manual.keyHint')}
-              extra={
-                draft.signIn === 'key' && (
-                  <div className="kettu-sd__stack">
-                    <div className="kettu-sd__inline">
-                      <input
-                        id={keyId}
-                        value={draft.keyFile}
-                        readOnly={working}
-                        aria-label={t('hosts.add.ssh.manual.keyPath')}
-                        aria-invalid={problems.key || undefined}
-                        placeholder={t('hosts.add.ssh.manual.keyPlaceholder')}
-                        spellCheck={false}
-                        autoComplete="off"
-                        className={DIALOG_MONO_FIELD}
-                        onChange={(event) => set({ keyFile: event.target.value })}
-                        onKeyDown={submit}
-                      />
-                      <SetButton
-                        icon={<Icon icon={FolderOpenIcon} size={14} />}
-                        disabled={working}
-                        onClick={() => void choose()}
-                      >
-                        {t('hosts.add.ssh.manual.choose')}
-                      </SetButton>
-                    </div>
-                    {problems.key && (
-                      <p role="alert" className="kettu-sd__error">
-                        {t('hosts.add.ssh.manual.keyInvalid')}
-                      </p>
-                    )}
-                  </div>
-                )
-              }
-            />
-          </RadioGroup>
-        </SettingsField>
+        <SshAddressFields
+          draft={draft}
+          onChange={adding.setDraft}
+          working={working}
+          onEnter={adding.startManual}
+        />
         {!failure && steps.length === 0 && (
           <p className="kettu-sd__hint">{t('hosts.add.ssh.note')}</p>
         )}

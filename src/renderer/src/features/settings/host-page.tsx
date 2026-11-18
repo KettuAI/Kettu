@@ -3,7 +3,12 @@ import { Cancel01Icon } from '@hugeicons/core-free-icons'
 import { Trans, useTranslation } from 'react-i18next'
 import { addressKey, addressText, parseAddress } from '@shared/remote/address'
 import { DEVICE_NAME_CHARS } from '@shared/remote/device'
-import { MAX_HOST_ADDRESSES, type HostStatus, type SshAddress } from '@shared/remote/hosts'
+import {
+  MAX_HOST_ADDRESSES,
+  type HostStatus,
+  type SshAddress,
+  type SshRoute,
+} from '@shared/remote/hosts'
 import type { DirectAddress } from '@shared/remote/protocol'
 import {
   AlertDialog,
@@ -22,6 +27,13 @@ import { openSettingsItem } from '@renderer/stores/view'
 import { Fact } from './agent-parts'
 import { CONFIRM, ControlError, DangerButton, IconAction, SetButton, SetInput } from './controls'
 import { AddHostDialog } from './host-add'
+import {
+  ChangeSshAddress,
+  KettuRow,
+  KettuUpdateFailure,
+  ReconnectNow,
+  RemoveSshHost,
+} from './host-ssh-manage'
 import { openHostSettings } from './host-sections'
 import { changeHost, platformName, routeName, routeText } from './host-text'
 import { HostState } from './hosts-section'
@@ -80,6 +92,8 @@ export function HostPage({ id }: { id: string }) {
 function HostPageBody({ host, onAddAgain }: { host: HostStatus; onAddAgain: () => void }) {
   const { t } = useTranslation('settings')
   const { name } = host
+  const version = useHostsStore((s) => s.status?.self.version ?? null)
+  const sshHost = host.ssh ? (host as HostStatus & { ssh: SshRoute }) : null
   return (
     <>
       <ItemPageHeader
@@ -102,31 +116,56 @@ function HostPageBody({ host, onAddAgain }: { host: HostStatus; onAddAgain: () =
         <section aria-label={t('hosts.page.connection')} className="k-group">
           <GroupLabel group={{ id: 'connection', label: t('hosts.page.connection') }} />
           <RowGroup>
-            {/* The SSH address has a row of its own. */}
-            <Fact name={t('hosts.page.route')}>
-              {host.ssh ? routeName(t, host) : routeText(t, host)}
-            </Fact>
-            {host.ssh ? (
-              <Fact name={t('hosts.page.sshTarget')} mono>
-                <span data-selectable="">{host.ssh.target}</span>
-              </Fact>
+            {sshHost ? (
+              // The SSH address has a row of its own, and so does Kettu's version there.
+              <>
+                <RowFrame
+                  text={<RowText name={t('hosts.page.route')} description={routeName(t, host)} />}
+                >
+                  <ReconnectNow host={sshHost} />
+                </RowFrame>
+                <RowFrame
+                  text={
+                    <RowText
+                      name={t('hosts.page.sshTarget')}
+                      description={
+                        <span data-selectable="" className="k-mono">
+                          {sshHost.ssh.sshPort === undefined
+                            ? sshHost.ssh.target
+                            : t('hosts.page.ssh.targetPort', {
+                                target: sshHost.ssh.target,
+                                port: sshHost.ssh.sshPort,
+                              })}
+                        </span>
+                      }
+                    />
+                  }
+                >
+                  <ChangeSshAddress host={sshHost} />
+                </RowFrame>
+                {version && <KettuRow host={sshHost} version={version} />}
+              </>
             ) : (
-              <RowFrame
-                text={
-                  <RowText
-                    name={t('hosts.page.addresses')}
-                    description={
-                      <span data-selectable="" className="k-mono">
-                        {host.addresses.map(addressText).join('　')}
-                      </span>
-                    }
-                  />
-                }
-              >
-                <EditAddresses host={host} />
-              </RowFrame>
+              <>
+                <Fact name={t('hosts.page.route')}>{routeText(t, host)}</Fact>
+                <RowFrame
+                  text={
+                    <RowText
+                      name={t('hosts.page.addresses')}
+                      description={
+                        <span data-selectable="" className="k-mono">
+                          {host.addresses.map(addressText).join('　')}
+                        </span>
+                      }
+                    />
+                  }
+                >
+                  <EditAddresses host={host} />
+                </RowFrame>
+              </>
             )}
           </RowGroup>
+          {sshHost && <KettuUpdateFailure host={sshHost} />}
           <GroupNote>
             {host.ssh
               ? t('hosts.page.sshNote', { name, target: host.ssh.target })
@@ -181,7 +220,11 @@ function HostPageBody({ host, onAddAgain }: { host: HostStatus; onAddAgain: () =
                 />
               }
             >
-              <RemoveHost host={host} />
+              {sshHost ? (
+                <RemoveSshHost host={sshHost} onRemoved={back} />
+              ) : (
+                <RemoveHost host={host} />
+              )}
             </RowFrame>
           </RowGroup>
         </section>

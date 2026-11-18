@@ -47,6 +47,9 @@ import {
   type KnownHost,
   type SshAddFailure,
   type SshAddress,
+  type SshManageAction,
+  type SshManageFailure,
+  type SshManageResult,
   type SshRoute,
 } from '@shared/remote/hosts'
 import type { KeyPair } from '@shared/remote/noise'
@@ -110,12 +113,14 @@ import {
   installRun,
   lastLines,
   parseSetupReport,
+  parseUninstallReport,
   runSsh,
   SETUP_TIMEOUT_MS,
   setupScript,
   SSH_LOOPBACK,
   SshForward,
   SYSTEM_SSH,
+  uninstallRun,
   unsupportedSystem,
   type SshDevice,
   type SshHostInfo,
@@ -556,6 +561,20 @@ class HostLink {
     void this.connect()
   }
 
+  /**
+   * Tries at once a host not connected, a try under way given up for a fresh one, and asks the
+   * daemon of a host added over SSH for its port again: after its route changed, Kettu there was
+   * updated, or the user asked. Settles once the try did.
+   */
+  async reconnectNow(): Promise<void> {
+    this.askedPort = false
+    if (this.closed || this.session) return
+    if (this.stoppedFor('removed', 'update_client')) return
+    this.failures = 0
+    this.cancel()
+    await this.connect()
+  }
+
   /** Takes a pairing's welcomed session in place of the one it had, if any. */
   adopt(session: HostSession): void {
     this.cancel()
@@ -668,7 +687,7 @@ class HostLink {
     this.trying = null
     if (result.kind === 'aborted') return
     if (result.kind !== 'open') {
-      if (route && this.mayAskPort(forward!.problem())) return void this.askPort(route)
+      if (route && this.mayAskPort(forward!.problem())) return this.askPort(route)
       const problem = result.kind === 'unreachable' ? result.relay : undefined
       return this.failed(problem ?? (typeof relay === 'string' ? relay : undefined))
     }
@@ -1007,7 +1026,7 @@ class HostLink {
     const host = this.host
     if (host?.ssh && info && info.publicKey === host.publicKey && info.port !== host.ssh.port) {
       this.client.options.hosts.update(this.id, { ssh: { ...host.ssh, port: info.port } })
-      return void this.connect()
+      return this.connect()
     }
     this.failed()
   }
@@ -1775,6 +1794,139 @@ class SshAdding {
   }
 }
 
+const failure = (reason: SshManageFailure, detail?: string): SshManageResult => ({
+  ok: false,
+  reason,
+  ...(detail ? { detail } : {}),
+})
+
+/** What an action ends with once the client stopped under it. */
+const STOPPED = failure('ssh_failed')
+
+/** Why a script's run failed for ssh itself, or null when ssh got through. */
+function sshFailure(run: SshRun): SshManageResult | null {
+  if (run.problem) return failure(SSH_FAILURES[run.problem], lastLines(run.stderr))
+  if (run.code === 255 || run.code === null) return failure('ssh_failed', lastLines(run.stderr))
+  return null
+}
+
+/**
+ * What the page of a host added over SSH does to it there: updating it to this computer's version
+ * as adding does, moving it to another address of the same machine, uninstalling it, and trying
+ * it now. Where the daemon there says its key, it must be the host's, so another machine at the
+ * address is never changed.
+ */
+class SshManaging {
+  constructor(
+    private readonly client: HostClient,
+    private readonly host: KnownHost,
+    private readonly route: SshRoute,
+    private readonly signal: AbortSignal,
+  ) {}
+
+  run(action: SshManageAction): Promise<SshManageResult> {
+    switch (action.kind) {
+      case 'update':
+        return this.update()
+      case 'address':
+        return this.move(action.address)
+      case 'uninstall':
+        return this.uninstall(action.data)
+      case 'reconnect':
+        return this.client.reconnect(this.host.id).then(() => ({ ok: true }))
+    }
+  }
+
+  private async update(): Promise<SshManageResult> {
+    const wanted = this.client.options.client.version
+    const setup = await this.setup(this.route)
+    if ('failed' in setup) return setup.failed
+    const { report } = setup
+    const unsupported = unsupportedSystem(report.system)
+    if (unsupported) return failure('ssh_unsupported', unsupported)
+    if (report.host && report.host.publicKey !== this.host.publicKey) return failure('other_host')
+    const installed = report.version
+    if (installed === null || compareVersions(installed, wanted) < 0) {
+      const install = await runSsh(this.client.ssh, this.route, this.client.installScript(wanted), {
+        timeoutMs: INSTALL_TIMEOUT_MS,
+        signal: this.signal,
+      })
+      if (!install) return STOPPED
+      const failed = sshFailure(install)
+      if (failed) return failed
+      if (install.code !== 0) {
+        return failure('ssh_install', lastLines(`${install.stdout}\n${install.stderr}`))
+      }
+    }
+    // The install restarted the daemon, whose session ends; a try failing meanwhile waits no more.
+    void this.client.reconnect(this.host.id)
+    return { ok: true }
+  }
+
+  private async move(address: SshAddress): Promise<SshManageResult> {
+    if (sameSshAddress(address, this.route) && address.identityFile === this.route.identityFile) {
+      return { ok: true }
+    }
+    const setup = await this.setup(address)
+    if ('failed' in setup) return setup.failed
+    const { report, run } = setup
+    const info = report.host
+    if (!info) {
+      // No Kettu at all there, so not this host's daemon.
+      if (report.version === null) return failure('other_host')
+      if (report.failed === NOT_RUNNING) return failure('ssh_not_running')
+      return failure('ssh_failed', lastLines(run.stderr))
+    }
+    if (info.publicKey !== this.host.publicKey) return failure('other_host')
+    const { hosts, changed } = this.client.options
+    if (!hosts.update(this.host.id, { ssh: { ...address, port: info.port } })) {
+      return failure('unknown_host')
+    }
+    changed()
+    // A session open on the old address reaches the same daemon and stays.
+    void this.client.reconnect(this.host.id)
+    return { ok: true }
+  }
+
+  private async uninstall(data: boolean): Promise<SshManageResult> {
+    // An open session proves the daemon at the address has the host's key.
+    if (!this.client.online(this.host.id)) {
+      const setup = await this.setup(this.route)
+      if ('failed' in setup) return setup.failed
+      const info = setup.report.host
+      if (info && info.publicKey !== this.host.publicKey) return failure('other_host')
+    }
+    const run = await runSsh(this.client.ssh, this.route, uninstallRun(data), {
+      timeoutMs: SETUP_TIMEOUT_MS,
+      signal: this.signal,
+    })
+    if (!run) return STOPPED
+    const failed = sshFailure(run)
+    if (failed) return failed
+    const report = parseUninstallReport(run.stdout)
+    if (run.code === 0 && report.done) {
+      await this.client.remove(this.host.id)
+      return { ok: true }
+    }
+    if (report.foreign) return failure('uninstall_foreign', report.foreign)
+    if (report.running) return failure('uninstall_running')
+    return failure('uninstall_failed', lastLines(`${run.stdout}\n${run.stderr}`))
+  }
+
+  /** The setup script's run at `address` without recording a device, once ssh got through. */
+  private async setup(
+    address: SshAddress,
+  ): Promise<{ failed: SshManageResult } | { run: SshRun; report: SshSetupReport }> {
+    const setup = await this.client.sshSetup(address, null, this.signal)
+    if (!setup) return { failed: STOPPED }
+    const failed = sshFailure(setup.run)
+    if (failed) return { failed }
+    // No POSIX shell answered, as on Windows.
+    if (!setup.report.system) return { failed: failure('ssh_unsupported') }
+    return setup
+  }
+}
+
 export class HostClient {
   readonly connect: Connect
   readonly timeoutMs: number
@@ -1784,6 +1936,8 @@ export class HostClient {
   readonly retryDelay: (failures: number) => number
   private readonly links = new Map<string, HostLink>()
   private readonly pairings = new Map<number, Pairing | SshAdding | DiscoveryPairing>()
+  /** The hosts an action of their page runs on, which stopping the client aborts. */
+  private readonly managing = new Map<string, AbortController>()
   private stopped = false
   private networkTimer: ReturnType<typeof setInterval> | null = null
   private network = ''
@@ -2088,6 +2242,29 @@ export class HostClient {
     return run && { run, report: parseSetupReport(run.stdout) }
   }
 
+  /** Runs an action of the page of a host added over SSH; one at a time for each host. */
+  async manageSsh(id: string, action: SshManageAction): Promise<SshManageResult> {
+    const host = this.options.hosts.get(id)
+    if (this.stopped || !host?.ssh) return failure('unknown_host')
+    if (this.managing.has(id)) return failure('busy')
+    const aborting = new AbortController()
+    this.managing.set(id, aborting)
+    try {
+      return await new SshManaging(this, host, host.ssh, aborting.signal).run(action)
+    } finally {
+      if (this.managing.get(id) === aborting) this.managing.delete(id)
+    }
+  }
+
+  /** Tries a host not connected at once; settles once the try did. */
+  reconnect(id: string): Promise<void> {
+    return this.links.get(id)?.reconnectNow() ?? Promise.resolve()
+  }
+
+  online(id: string): boolean {
+    return this.links.get(id)?.connection.state === 'online'
+  }
+
   /** Renames this computer on a host it is connected to; false when it is not. */
   rename(id: string, name: string): boolean {
     return this.links.get(id)?.rename(name) ?? false
@@ -2137,6 +2314,7 @@ export class HostClient {
     if (this.networkTimer) clearInterval(this.networkTimer)
     this.networkTimer = null
     for (const pairing of [...this.pairings.values()]) pairing.close()
+    for (const aborting of this.managing.values()) aborting.abort()
     for (const link of this.links.values()) link.close()
     this.links.clear()
     await this.options.hosts.flush()

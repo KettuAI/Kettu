@@ -24,6 +24,7 @@ import type {
   HostsStatus,
   SshAddress,
   SshConfigHosts,
+  SshManageResult,
 } from './remote/hosts'
 import type { PairingState } from './remote/pairing'
 import type { DirectAddress } from './remote/protocol'
@@ -432,6 +433,13 @@ export interface IpcInvokeContract {
   'hosts:remove': { args: [id: string]; result: 'unknown_host' | null }
   // Tries the hosts not connected now, without waiting for the next try.
   'hosts:retry': { args: []; result: void }
+  // A host added over SSH, from its page, over SSH: installs this computer's version there,
+  // moves it to another address of the same machine, tries it now, or uninstalls Kettu there and
+  // forgets it here.
+  'hosts:update-ssh': { args: [id: string]; result: SshManageResult }
+  'hosts:change-ssh': { args: [id: string, address: SshAddress]; result: SshManageResult }
+  'hosts:reconnect': { args: [id: string]; result: SshManageResult }
+  'hosts:uninstall': { args: [id: string, data: boolean]; result: SshManageResult }
   // The session's agent names the page's pill while a turn uses it.
   'browser:show': { args: [sessionId: string, agent: ControlAgent | null]; result: void }
   'browser:hide': { args: [sessionId: string]; result: void }
@@ -782,6 +790,14 @@ export interface KettuApi {
     remove(id: string): Promise<'unknown_host' | null>
     /** Tries the hosts not connected now, without waiting for the next try. */
     retry(): Promise<void>
+    /** Installs this computer's version on a host added over SSH, then connects to it again. */
+    updateSsh(id: string): Promise<SshManageResult>
+    /** Reaches a host added over SSH at another address, once it reaches the same daemon there. */
+    changeSsh(id: string, address: SshAddress): Promise<SshManageResult>
+    /** Tries a host added over SSH now; settles once the try did. */
+    reconnect(id: string): Promise<SshManageResult>
+    /** Uninstalls Kettu from a host added over SSH, its data too with `data`, then forgets it. */
+    uninstall(id: string, data: boolean): Promise<SshManageResult>
     onChanged(listener: (status: HostsStatus) => void): () => void
     onPairing(listener: (event: HostPairingEvent) => void): () => void
     /**

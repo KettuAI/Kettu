@@ -1453,6 +1453,54 @@
       "update_host": {
         "title": "要更新 {{name}} 上的 Kettu",
         "body": "{{name}} 上的 Kettu 太旧，读不懂这台电脑说的。在它上面更新 Kettu 后会自动连上。"
+      },
+      "kettu": {
+        "name": "Kettu",
+        "older": "{{version}}，比这台电脑旧",
+        "update": "更新到 {{version}}",
+        "updating": "正在经 SSH 更新到 {{version}}…",
+        "failedTitle": "没能把 {{name}} 上的 Kettu 更新到 {{version}}",
+        "confirmTitle": "把 {{name}} 上的 Kettu 更新到 {{version}}？",
+        "confirmBody": "更新要重启 {{name}} 上的 Kettu，下面这些正在那里运行，会被停掉：",
+        "confirm": "更新并重启"
+      },
+      "ssh": {
+        "reconnect": "立即重连",
+        "change": "修改…",
+        "targetPort": "{{target}} · 端口 {{port}}",
+        "changeTitle": "{{name}} 的 SSH 地址",
+        "changeBody": "Kettu 会经新地址登录，确认那里的 Kettu 就是 {{name}} 才换。",
+        "pickBody": "从你的 SSH 配置里挑一台；保存时 Kettu 会确认它连到的是 {{name}}。",
+        "fromConfig": "从 SSH 配置里挑…",
+        "use": "用这台",
+        "useAlias": "用 {{alias}}",
+        "current": "现在用的",
+        "checking": "正在登录 {{target}}，确认它连到的是 {{name}}…",
+        "otherAddress": "{{target}} 连到的是另一台机器，不是 {{name}}：那里的 Kettu 是另一个身份，或者根本没装。地址没有改；要用那台机器，请从添加主机加它。",
+        "otherHost": "{{target}} 现在连到的是另一台机器，不是 {{name}}，所以那里什么都没动。如果 {{name}} 换了地址，先修改它的 SSH 地址。",
+        "busy": "{{name}} 上正在做别的改动，等它做完再试。",
+        "terminal": "{{command}}，在 {{project}} 的终端里",
+        "failed": {
+          "update": "没能更新 {{name}} 上的 Kettu。",
+          "address": "没能登录 {{target}}，地址没有改。",
+          "reconnect": "连不上 {{name}}。",
+          "uninstall": "没能从 {{name}} 卸载 Kettu。"
+        }
+      },
+      "uninstall": {
+        "option": "同时从 {{name}} 卸载 Kettu",
+        "optionHint": "停掉并移除它的服务，删掉程序。Agent 自己的登录（比如 ~/.claude）和你的项目都不动。",
+        "data": "同时删掉它的会话和设置",
+        "dataHint": "删掉 {{name}} 上的 {{folder}} 和日志，也就是那里 Kettu 的会话、设置和身份。",
+        "body": "从 {{name}} 卸载 Kettu，这台电脑也不再记着它。和 {{name}} 配对的其他设备也连不上它了。",
+        "turns_one": "这一轮正在 {{name}} 上运行，会被停掉：",
+        "turns_other": "这些轮次正在 {{name}} 上运行，会被停掉：",
+        "confirm": "卸载并移除",
+        "working": "正在卸载…",
+        "removeOnly": "只移除，不卸载",
+        "foreign": "{{name}} 上的 {{path}} 不是 Kettu 的安装脚本装的，所以那里的 Kettu 没有动。",
+        "running": "{{name}} 上还有一个 Kettu daemon 在服务之外运行，比如用 kettu run 起的。它的服务已经移除；在那台机器上停掉这个 daemon 后再试。",
+        "failed": "没能从 {{name}} 卸载 Kettu。"
       }
     },
     "web": {
