@@ -93,11 +93,14 @@ jobs:
       matrix:
         # Each architecture builds on its own runner, so node-pty is compiled or picked for the
         # machine that tests it. The *_RUNNER repository variables, when set, replace GitHub's
-        # runners; Arm Windows keeps GitHub's. macOS is built for Apple silicon only.
+        # runners; Intel macOS and Arm Windows keep GitHub's.
         include:
           - os: ${{ vars.MACOS_RUNNER || 'macos-latest' }}
             target: --mac --arm64
             # Only a Developer ID signed build can replace itself; an ad-hoc one links to the release.
+            update_mode: ${{ needs.mac-signing.outputs.signed == 'true' && 'install' || 'link' }}
+          - os: macos-15-intel
+            target: --mac --x64
             update_mode: ${{ needs.mac-signing.outputs.signed == 'true' && 'install' || 'link' }}
           - os: ${{ vars.WINDOWS_RUNNER || 'windows-latest' }}
             target: --win --x64
@@ -144,8 +147,9 @@ jobs:
       - run: pnpm build
         env:
           MAIN_VITE_UPDATE_MODE: ${{ matrix.update_mode }}
+      # The daemon has no Intel macOS package; the Intel build ships the desktop app only.
       - name: Package the daemon
-        if: runner.os != 'Windows'
+        if: runner.os != 'Windows' && matrix.target != '--mac --x64'
         run: node tools/daemon/package.mjs --out daemon-package
       # The hosted web client is the same on every runner, so one of them builds it.
       - name: Package the hosted web client
@@ -245,7 +249,7 @@ jobs:
             dist/latest*.yml
           if-no-files-found: error
       # An artifact of its own, so the installers' keeps dist/ as its root.
-      - if: runner.os != 'Windows'
+      - if: runner.os != 'Windows' && matrix.target != '--mac --x64'
         uses: actions/upload-artifact@v7
         with:
           name: release-daemon-${{ matrix.os }}
@@ -315,13 +319,13 @@ jobs:
           # The hosted web client, with its checksum.
           cp artifacts/release-web/kettu-web.tar.gz artifacts/release-web/kettu-web-sha256sums.txt release/
           # A signed macOS build lists its zip next to its dmg and ships the zip's blockmap.
-          mac_files=1
+          mac_files=2
           if [ "$MAC_SIGNED" = true ]; then
             cp artifacts/*/*.zip artifacts/*/*-mac.zip.blockmap release/
-            mac_files=2
+            mac_files=4
           fi
-          # Each build wrote the update file for its own architecture. Windows clients read one file
-          # that lists both, so the file lists are joined; Linux has a file per architecture.
+          # Each build wrote the update file for its own architecture. macOS and Windows clients read
+          # one file that lists both, so the file lists are joined; Linux has a file per architecture.
           for feed in latest.yml:2 latest-mac.yml:$mac_files latest-linux.yml:1 latest-linux-arm64.yml:1; do
             name="${feed%:*}"
             yq eval-all '. as $item ireduce ({}; . *+ $item)' artifacts/*/"$name" > "release/$name"
