@@ -1253,6 +1253,8 @@ export interface HostContract {
     params: { sessionId: string; optionId: string; value: string | boolean }
     result: void
   }
+  // Lists the models the agent offers now in a session that listed them when it attached.
+  'sessions.refreshModels': { params: { sessionId: string }; result: void }
   // title null: back to the agent's title.
   'sessions.rename': { params: { sessionId: string; title: string | null }; result: void }
   'sessions.close': { params: { sessionId: string }; result: void }
@@ -1801,6 +1803,7 @@ export const HOST_METHODS = [
   'sessions.resumeQueue',
   'sessions.blob',
   'sessions.setConfigOption',
+  'sessions.refreshModels',
   'sessions.rename',
   'sessions.close',
   'sessions.pin',

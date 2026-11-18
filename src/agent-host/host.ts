@@ -2645,6 +2645,7 @@ export class AgentHost {
       'sessions.blob': ({ sessionId, hash }) => sessions.blob(sessionId, hash),
       'sessions.setConfigOption': ({ sessionId, optionId, value }) =>
         sessions.setConfigOption(sessionId, optionId, value),
+      'sessions.refreshModels': ({ sessionId }) => sessions.refreshModels(sessionId),
       'sessions.rename': ({ sessionId, title }) => sessions.rename(sessionId, title),
       'sessions.close': ({ sessionId }) => sessions.close(sessionId),
       'sessions.pin': ({ sessionId, pinned }) => sessions.pin(sessionId, pinned),

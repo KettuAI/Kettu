@@ -70,6 +70,8 @@ interface ForkPoint {
 }
 
 interface FakeSession extends FakeSessionState {
+  /** The models its folder's `.fake-agent.json` listed when the session last started or attached. */
+  moreModels: string[]
   history: Recorded[]
   turnStarts: number[] // where each prompt's records begin in `history`
   updatedAt: string
@@ -124,6 +126,23 @@ function projectDefaults(
     }
   } catch {
     return {}
+  }
+}
+
+/**
+ * The extra models of `.fake-agent.json`, read when a session starts or attaches as a real agent
+ * reads its model list: a session already running keeps the list it started with.
+ */
+function projectModels(cwd: string): string[] {
+  const file = join(cwd, '.fake-agent.json')
+  if (!existsSync(file)) return []
+  try {
+    const parsed = JSON.parse(readFileSync(file, 'utf8')) as { models?: unknown }
+    return Array.isArray(parsed.models)
+      ? parsed.models.filter((model): model is string => typeof model === 'string')
+      : []
+  } catch {
+    return []
   }
 }
 
@@ -297,6 +316,15 @@ export function createFakeAgent(options: FakeAgentOptions = {}): AgentApp {
               { value: 'deep', name: 'Fake Deep', description: 'Slow and thorough' },
             ],
           },
+          ...(session.moreModels.length > 0
+            ? [
+                {
+                  group: 'more',
+                  name: 'More',
+                  options: session.moreModels.map((value) => ({ value, name: value })),
+                },
+              ]
+            : []),
         ],
       },
       {
@@ -380,6 +408,7 @@ export function createFakeAgent(options: FakeAgentOptions = {}): AgentApp {
       outOfCredit: false,
       systemPrompt: null,
       ...DEFAULT_CONFIG,
+      moreModels: projectModels(cwd),
       history: [],
       turnStarts: [],
       updatedAt: new Date().toISOString(),
@@ -407,6 +436,7 @@ export function createFakeAgent(options: FakeAgentOptions = {}): AgentApp {
   const reopened = (session: FakeSession, mcpServers: McpServer[] = []): void => {
     // Like the real agents, it connects to the servers of the latest attach.
     session.mcpServers = mcpServers
+    session.moreModels = projectModels(session.cwd)
     if (resumeConfig === 'keep') return
     Object.assign(session, DEFAULT_CONFIG)
     if (resumeConfig === 'locked') lockedSessions.add(session.id)
@@ -863,7 +893,10 @@ export function createFakeAgent(options: FakeAgentOptions = {}): AgentApp {
           session.mode = value
           break
         case 'model':
-          if (typeof value !== 'string' || !['swift', 'balanced', 'deep'].includes(value)) {
+          if (
+            typeof value !== 'string' ||
+            !['swift', 'balanced', 'deep', ...session.moreModels].includes(value)
+          ) {
             throw RequestError.invalidParams(undefined, 'Unknown model')
           }
           session.model = value

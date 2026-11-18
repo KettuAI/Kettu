@@ -240,6 +240,33 @@ function withModels(
   })
 }
 
+/**
+ * `own` with the model lists `fresh` gives, each option keeping its value even when the agent no
+ * longer lists it, and the models it newly lists. Null when no list changed.
+ */
+export function withFreshModels(
+  own: readonly ConfigOption[],
+  fresh: readonly ConfigOption[],
+): { config: ConfigOption[]; added: string[] } | null {
+  const added: string[] = []
+  let changed = false
+  const config = own.map((option) => {
+    if (option.category !== 'model' || option.type !== 'select' || !option.choices) return option
+    const seen = fresh.find((o) => o.id === option.id && o.type === 'select')
+    if (!seen?.choices || seen.choices.length === 0) return option
+    const kept = seen.choices.some((c) => c.value === option.value)
+      ? []
+      : option.choices.filter((c) => c.value === option.value)
+    const choices = [...seen.choices, ...kept]
+    if (JSON.stringify(choices) === JSON.stringify(option.choices)) return option
+    const before = new Set(option.choices.map((c) => c.value))
+    added.push(...choices.filter((c) => !before.has(c.value)).map((c) => c.value))
+    changed = true
+    return { ...option, choices }
+  })
+  return changed ? { config, added } : null
+}
+
 function withLevels(
   levels: Record<string, ConfigOption>,
   config: readonly ConfigOption[],

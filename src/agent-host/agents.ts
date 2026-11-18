@@ -3879,29 +3879,48 @@ export class AgentManager {
    */
   readOptions(agentId: AgentId, folder?: string): Promise<void> {
     const slot = this.slot(agentId)
-    slot.optionsRun ??= this.openForOptions(slot, folder).finally(() => {
-      slot.optionsRun = null
-    })
+    slot.optionsRun ??= this.openForOptions(slot, folder)
+      .then(() => {})
+      .finally(() => {
+        slot.optionsRun = null
+      })
     return slot.optionsRun
   }
 
-  private async openForOptions(slot: Slot, folder: string | undefined): Promise<void> {
+  /**
+   * The config options a hidden session in `folder` reports now, starting the agent when it is
+   * not running. Null when it reads none unprompted, must sign in, answered nothing in time or
+   * failed; a failure is logged.
+   */
+  async readConfig(agentId: AgentId, folder: string): Promise<ConfigOption[] | null> {
+    if (this.isDisabled(agentId)) return null
+    const slot = this.slot(agentId)
+    await slot.optionsRun?.catch(() => {})
+    return this.openForOptions(slot, folder, true)
+  }
+
+  private async openForOptions(
+    slot: Slot,
+    folder: string | undefined,
+    start = false,
+  ): Promise<ConfigOption[] | null> {
     const agentId = slot.id
     const log = (message: string): void =>
       this.deps.diagnostics.log('warn', `${slot.name}: ${message}`)
     // A limits report running meanwhile reads them too.
     await slot.limitsRun?.catch(() => {})
-    if (slot.signIn === 'required') return
-    const runtime = this.runtime(agentId)
-    if (!runtime?.connection.unpromptedSessions) return
+    if (slot.signIn === 'required') return null
     try {
-      await this.readInHiddenSession(slot, runtime, log, folder)
+      const runtime = start ? await this.ensureReady(agentId) : this.runtime(agentId)
+      if (!runtime?.connection.unpromptedSessions) return null
+      return await this.readInHiddenSession(slot, runtime, log, folder)
     } catch (error) {
       if (error instanceof AgentRequestError && error.kind === 'auth_required') {
         this.authRequired(agentId)
-        return
+        return null
       }
       log(`could not read its options: ${agentError(error).message}`)
+      return null
     }
   }
 
@@ -3920,7 +3939,7 @@ export class AgentManager {
     if (slot.signIn === 'required' || !runtime.connection.unpromptedSessions) return
     const log = (message: string): void =>
       this.deps.diagnostics.log('warn', `${slot.name}: ${message}`)
-    let read: boolean
+    let read: ConfigOption[] | null
     try {
       read = await this.readInHiddenSession(slot, runtime, log, undefined)
     } catch (error) {
@@ -3942,15 +3961,15 @@ export class AgentManager {
   }
 
   /**
-   * `session/new` in the folder, bounded by `optionsMs`, then the session's removal. False when
-   * no answer came in time.
+   * `session/new` in the folder, bounded by `optionsMs`, then the session's removal. The options
+   * it answered with, or null when no answer came in time.
    */
   private async readInHiddenSession(
     slot: Slot,
     runtime: AgentRuntime,
     log: (message: string) => void,
     folder: string | undefined,
-  ): Promise<boolean> {
+  ): Promise<ConfigOption[] | null> {
     const agentId = slot.id
     const remove = (sessionId: string): Promise<void> =>
       runtime.connection.removeHidden(sessionId, (message) =>
@@ -3975,7 +3994,7 @@ export class AgentManager {
         (late) => remove(late.sessionId),
         () => {},
       )
-      return false
+      return null
     }
     try {
       if (setup.config.length > 0) this.hooks.optionsSeen(agentId, setup.config, dir)
@@ -3989,7 +4008,7 @@ export class AgentManager {
         slot.optionsRemoval = null
       }
     }
-    return true
+    return setup.config
   }
 
   /** Where the agent reads its configuration and which CLI its adapter runs, for its page. */
