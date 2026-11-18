@@ -243,6 +243,9 @@
     "clickToOpen": "点击打开",
     "backspaceRemoves": "{{key}} 移除"
   },
+  "resize": {
+    "label": "调整输入框高度"
+  },
   "place": {
     "thisComputer": "本机",
     "thisComputer_mac": "这台 Mac",

@@ -4659,6 +4659,38 @@ li[data-row-exit='dust'] > * {
 .kettu-prompt[data-disabled] {
   cursor: default;
 }
+/* The handle on the card's top edge: its padding and 4px above it, clear of the corners. It shows
+   a short bar while hovered, focused or dragged. */
+.kettu-prompt-grip {
+  position: absolute;
+  inset: -18px 10px auto;
+  z-index: 1;
+  height: 18px;
+  cursor: ns-resize;
+  touch-action: none;
+  outline: none;
+}
+.kettu-prompt-grip::after {
+  content: '';
+  position: absolute;
+  top: 9px;
+  left: 50%;
+  width: 32px;
+  height: 4px;
+  border-radius: 999px;
+  background: var(--composer-faint);
+  opacity: 0;
+  translate: -50% 0;
+  transition: opacity var(--duration-fast);
+}
+.kettu-prompt-grip:hover::after,
+.kettu-prompt-grip:focus-visible::after,
+.kettu-prompt-grip[data-dragging]::after {
+  opacity: 1;
+}
+.kettu-prompt-grip[data-dragging]::after {
+  background: var(--composer-muted);
+}
 .kettu-menu-keys {
   flex: none;
   font-size: 11px;
