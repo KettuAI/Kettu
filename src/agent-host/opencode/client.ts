@@ -18,6 +18,10 @@ import {
 
 const READ_TIMEOUT = 30_000
 const ACTION_TIMEOUT = 30_000
+const SESSION_ID = /^ses_[A-Za-z0-9]+$/
+const MESSAGE_ID = /^msg_[A-Za-z0-9]+$/
+// OpenCode's cursors are base64url.
+const CURSOR = /^[A-Za-z0-9_-]{1,1024}$/
 
 interface Integration {
   id: string
@@ -186,6 +190,37 @@ export class OpenCodeClient {
     this.fetchImpl = options.fetch ?? globalThis.fetch
     this.now = options.now ?? Date.now
     this.cwd = options.cwd ?? os.homedir()
+  }
+
+  /**
+   * A page of a session's messages, newest first: the first page, or the one before `cursor`.
+   * Null when OpenCode cannot answer.
+   */
+  async messages(
+    sessionId: string,
+    cursor: string | null,
+  ): Promise<{ messages: unknown[]; next: string | null } | null> {
+    if (!SESSION_ID.test(sessionId) || (cursor !== null && !CURSOR.test(cursor))) return null
+    const query = cursor === null ? '' : `?cursor=${cursor}`
+    const answer = await this.get(`/api/session/${sessionId}/message${query}`)
+    if (answer.kind !== 'ok') return null
+    const page = record(answer.value)
+    if (!Array.isArray(page?.data)) return null
+    return { messages: page.data, next: text(record(page.cursor)?.next) }
+  }
+
+  /** One message of a session whole; null when OpenCode cannot answer. */
+  async message(sessionId: string, messageId: string): Promise<unknown> {
+    if (!SESSION_ID.test(sessionId) || !MESSAGE_ID.test(messageId)) return null
+    const answer = await this.get(`/api/session/${sessionId}/message/${messageId}`)
+    return answer.kind === 'ok' ? (record(answer.value)?.data ?? null) : null
+  }
+
+  /** A session with its totals; null when OpenCode cannot answer. */
+  async session(sessionId: string): Promise<Record<string, unknown> | null> {
+    if (!SESSION_ID.test(sessionId)) return null
+    const answer = await this.get(`/api/session/${sessionId}`)
+    return answer.kind === 'ok' ? record(record(answer.value)?.data) : null
   }
 
   async providers(): Promise<AgentProvider[]> {

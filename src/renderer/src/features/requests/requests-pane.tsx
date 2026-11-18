@@ -48,7 +48,16 @@ import { foldLines } from '@renderer/features/session/markdown/code-meta'
 import { useSessionView } from '@renderer/features/session/use-thread'
 import { Glyph } from '@renderer/features/shell/glyph'
 import { PaneEmpty, PaneHead, PaneIcon, PaneSheet } from '@renderer/features/shell/panel-button'
-import { bytes, clockTime, exactCount, shortDuration, tokens, usd } from '@renderer/lib/format'
+import {
+  bytes,
+  clockTime,
+  daysBefore,
+  exactCount,
+  monthDay,
+  shortDuration,
+  tokens,
+  usd,
+} from '@renderer/lib/format'
 import { cn } from '@renderer/lib/utils'
 import { panelSession } from '@renderer/stores/view'
 import { REQUESTS_ICON } from './icon'
@@ -100,7 +109,12 @@ export default function RequestsPane({ panel, maximized }: { panel: string; maxi
   const session = useSessionView(sessionId)
   const data = useModelRequests(sessionId)
   const running = session?.status === 'running'
-  const count = data.overview?.requests ?? null
+  // An agent that does not count its requests has them all counted once every page is read.
+  const count =
+    data.overview?.requests ??
+    (data.overview && !data.more
+      ? data.turns.reduce((n, turn) => n + turn.requests.length, 0)
+      : null)
 
   let body: ReactNode
   if (data.available === false) {
@@ -666,7 +680,19 @@ function TurnHead({
       : ''
   return (
     <button type="button" className="kr-turn__head" aria-expanded={open} onClick={onToggle}>
-      <b>{index !== null ? t('turn', { index }) : t('turnEarlier')}</b>
+      <b>
+        {index !== null
+          ? t('turn', { index })
+          : // An agent that does not number its turns names one by when it began.
+            turn.prompt && start !== null
+            ? t('turnAt', {
+                time:
+                  daysBefore(start) === 0
+                    ? clockTime(start)
+                    : `${monthDay(start)} ${clockTime(start)}`,
+              })
+            : t('turnEarlier')}
+      </b>
       {turn.prompt && <span className="kr-turn__prompt">{t('you', { text: turn.prompt })}</span>}
       <span className="kr-turn__meta tabular">
         {t('turnMeta', { count: turn.requests.length, time })}

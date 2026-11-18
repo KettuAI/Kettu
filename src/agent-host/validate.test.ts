@@ -518,6 +518,28 @@ describe('createValidators', () => {
     ).toEqual({ agentId: 'codex', projectPath: '/p', cursor: '10' })
   })
 
+  it('takes only positions and records that a page of requests gave', () => {
+    const page = posix['sessions.modelRequests']
+    expect(page({ sessionId: 's', before: '1048576' })).toEqual({
+      sessionId: 's',
+      before: '1048576',
+    })
+    // OpenCode's cursor, base64url JSON.
+    const cursor = 'eyJpZCI6Im1zZ18xIiwib3JkZXIiOiJkZXNjIn0'
+    expect(page({ sessionId: 's', before: cursor })).toEqual({ sessionId: 's', before: cursor })
+    rejects(() => page({ sessionId: 's', before: '../x' }))
+    rejects(() => page({ sessionId: 's', before: 'a?b=1' }))
+    rejects(() => page({ sessionId: 's', before: 'a'.repeat(1025) }))
+
+    const raw = posix['sessions.modelRequestRaw']
+    for (const handle of ['system', '0-120,300-512', 'msg_1719e27e3001dJjIgtp6QtBkpk,msg_b2']) {
+      expect(raw({ sessionId: 's', raw: handle })).toEqual({ sessionId: 's', raw: handle })
+    }
+    for (const handle of ['msg_', 'msg_a/../b', '0-1,msg_a', 'ses_a', '/api/session/x']) {
+      rejects(() => raw({ sessionId: 's', raw: handle }))
+    }
+  })
+
   it('takes a forced plan limits read only as a flag', () => {
     const refresh = posix['agents.refreshLimits']
     expect(refresh({ agentId: 'codex' })).toEqual({ agentId: 'codex' })

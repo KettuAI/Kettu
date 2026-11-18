@@ -149,6 +149,7 @@ import { claudeOutside, type OutsideReader } from './outside-sessions'
 import { claudeCacheTtl, type CacheTtlReader } from './prompt-cache'
 import { claudeModelRequests } from './model-requests/claude'
 import { codexModelRequests } from './model-requests/codex'
+import { opencodeModelRequests } from './model-requests/opencode'
 import { byHarness } from './model-requests/reader'
 import { AcpMessages, acpModelRequests } from './model-requests/acp-messages'
 import { IdleRelease } from './idle-release'
@@ -1018,6 +1019,7 @@ export class AgentHost {
               return this.env.agentEnv('codex')
             },
           }),
+          opencode: opencodeModelRequests({ sessions: (agentId) => this.agents.openCode(agentId) }),
         },
         acpModelRequests(this.acpMessages),
       ),
