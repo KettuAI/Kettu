@@ -28,7 +28,7 @@ import { leaveSession } from '@renderer/app/actions'
 import { Kbd } from '@renderer/components/ui/kbd'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
 import { summaryParts } from '@renderer/features/board/board-model'
-import { useBoardActivity } from '@renderer/features/board/use-board-activity'
+import { useBoardActivity, useBoardNews } from '@renderer/features/board/use-board-activity'
 import { usePane } from '@renderer/features/split/pane-context'
 import {
   DeleteSessionDialog,
@@ -244,6 +244,7 @@ function useBarTools({
   const chatOpen = useViewStore((s) => (sessionId ? !!s.sideChatOpen[sessionId] : false))
   const activity = useBoardActivity(sessionId ?? '')
   const busy = activity.running + activity.needs > 0
+  const boardNews = useBoardNews(sessionId)
   const chatNews = useSideChatNews(sessionId)
   const tools: Tool[] = []
   // In a pane out of focus a button shows its tool there and never closes it.
@@ -256,7 +257,7 @@ function useBarTools({
       name: t('headerTools.board'),
       icon: DashboardSquare02Icon,
       open: boardOpen,
-      dot: !boardOpen && busy ? (activity.needs > 0 ? 'needs' : 'news') : undefined,
+      dot: boardNews,
       common: true,
       pinned: boardOpen || busy,
       rank: 4,
@@ -434,8 +435,7 @@ function PhonePanelMenu({
   const shownPane = useViewStore((s) => (shownPanel(s) === panel ? s.sidePane[panel] : undefined))
   const boardOpen = useViewStore((s) => (sessionId ? !!s.boardOpen[sessionId] : false))
   const chatOpen = useViewStore((s) => (sessionId ? !!s.sideChatOpen[sessionId] : false))
-  const activity = useBoardActivity(sessionId ?? '')
-  const busy = !!sessionId && !boardOpen && activity.running + activity.needs > 0
+  const boardNews = useBoardNews(sessionId)
   const chatNews = useSideChatNews(sessionId)
   const view = pane?.view
   const leave =
@@ -448,10 +448,10 @@ function PhonePanelMenu({
         render={<button type="button" aria-label={tc('pane.open')} className="kp-tool" />}
       >
         <PaneIcon icon={SidebarRightIcon} size={18} />
-        {(dot || busy || chatNews) && (
+        {(dot || boardNews || chatNews) && (
           <span
             aria-hidden
-            className={activity.needs > 0 ? 'kp-bar-dot kp-bar-dot--needs' : 'kp-bar-dot'}
+            className={boardNews === 'needs' ? 'kp-bar-dot kp-bar-dot--needs' : 'kp-bar-dot'}
           />
         )}
       </DropdownMenuTrigger>
