@@ -52,6 +52,7 @@ import {
 import { listedTasks, pinnedTasks, useTasksStore } from '@renderer/stores/tasks'
 import { openSettings, PINNED_GROUP, showAllRows, useViewStore } from '@renderer/stores/view'
 import { StarCard } from '@renderer/features/github-star/star-prompts'
+import { AddProjectButton } from './add-project'
 import { HostEmpty, HostHeading, NeedsYouGroup } from './host-groups'
 import { useHostLabel } from './host-label'
 import { ImportSessionsDialog } from './import-sessions'
@@ -163,7 +164,10 @@ export function SidebarList() {
           <>
             <PinnedGroup stop={stop} />
             <div className="ui-as-side__group" role="group" aria-label={t('nav.projects')}>
-              <span className="ui-as-side__label">{t('nav.projects')}</span>
+              <div className="ui-as-side__label kettu-projects-label">
+                <span>{t('nav.projects')}</span>
+                <AddProjectButton />
+              </div>
               {shownProjects.length === 0 && !scratch && (
                 <span className="ui-as-side__empty">{t('nav.empty')}</span>
               )}
@@ -219,7 +223,10 @@ function HostSection({
   const open = useViewStore((s) => !s.collapsedProjects[key])
   return (
     <section aria-label={useHostLabel(hostId)} className="ui-as-side__group">
-      <HostHeading hostId={hostId} open={open} stop={stop} onToggle={() => toggleGroup(key)} />
+      <div className="kettu-host-head">
+        <HostHeading hostId={hostId} open={open} stop={stop} onToggle={() => toggleGroup(key)} />
+        {!away && <AddProjectButton hostId={hostId} />}
+      </div>
       {open && (
         <>
           {own.map((project) => (

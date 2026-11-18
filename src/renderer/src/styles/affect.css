@@ -508,6 +508,37 @@ li[data-row-exit='dust'] > * {
   text-overflow: ellipsis;
   color: var(--muted);
 }
+/* Open project at the end of a group's title. The button's box hangs outside the title's line so the
+   title keeps its height, and its right edge lines up with the rows' tools. */
+.kettu-projects-label.ui-as-side__label,
+.kettu-host-head {
+  display: flex;
+  align-items: center;
+}
+.kettu-projects-label.ui-as-side__label {
+  justify-content: space-between;
+}
+.kettu-host-head {
+  margin: 16px 0 4px;
+}
+.kettu-side-list .ui-as-side__group > .kettu-host-head:first-child {
+  margin-top: 6px;
+}
+.kettu-host-head > .kettu-host-label {
+  flex: 1 1 0;
+  margin: 0;
+}
+.kettu-add-project {
+  flex: none;
+  margin: -4px -2px -4px 0;
+}
+.kettu-host-head > .kettu-add-project {
+  margin-right: 4px;
+}
+/* The collapsed rail shows a title as a short line only. */
+.ui-as-app[data-collapsed] .kettu-add-project {
+  display: none;
+}
 /* The account menu on Profile Menu (features/account/account-menu.tsx), as wide as the sidebar and
    at least 260 px. */
 .kettu-account .ui-pmc.kettu-account__card {
