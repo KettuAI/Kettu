@@ -9,6 +9,8 @@ import type { Projects } from './projects'
 import type { ScratchFolders } from './scratch'
 import { SessionManager, type SessionEvents } from './sessions'
 import { returnedFile, sessionsFile, type SessionRecord, type SessionsFile } from './storage'
+import type { StoredThread } from './threads/model'
+import type { ThreadStore } from './threads/store'
 
 let dir: string
 
@@ -25,7 +27,11 @@ const log = () => {}
 /** A manager over real index files in `dir`, with no agent, git or thread store behind it. */
 function manager(
   projects: Partial<Projects> = {},
-  extra: { agents?: Record<string, unknown>; outside?: OutsideReader } = {},
+  extra: {
+    agents?: Record<string, unknown>
+    outside?: OutsideReader
+    threads?: Partial<ThreadStore>
+  } = {},
 ) {
   const added: string[] = []
   const deps = {
@@ -35,6 +41,8 @@ function manager(
       assertEnabled: () => {},
       runningConfig: () => null,
       sessionsChanged: () => {},
+      restoreConfig: (_agentId: string, config: unknown[]) => config,
+      status: () => ({ capabilities: null }),
       ...extra.agents,
     } as unknown as AgentManager,
     projects: {
@@ -49,7 +57,7 @@ function manager(
     file: sessionsFile(dir, log),
     returned: returnedFile(dir, log),
     portOpen: () => false,
-    threads: null,
+    threads: (extra.threads ?? null) as ThreadStore | null,
     reportsDir: path.join(dir, 'reports'),
     diagnostics: { log: () => {} } as unknown as Diagnostics,
     git: () => null,
@@ -193,5 +201,65 @@ describe('restoring an archived session', () => {
     await sessions.load()
     await sessions.unarchive('s1')
     expect(added).toEqual(['/repo'])
+  })
+})
+
+describe('answering a problem report', () => {
+  const record: SessionRecord = {
+    id: 's1',
+    agentId: 'claude-code',
+    acpSessionId: 'acp-1',
+    projectPath: '/repo',
+    title: 'Fix the build',
+    createdAt: 1,
+    updatedAt: 2,
+    lastViewedAt: null,
+    parentId: null,
+    origin: 'user',
+    description: null,
+    branch: null,
+  }
+  const stored: StoredThread = {
+    head: { agentId: 'claude-code', acpSessionId: 'acp-1' },
+    session: {
+      title: null,
+      config: [],
+      commands: [],
+      usage: null,
+      subagent: null,
+      context: null,
+      sideChat: null,
+    },
+    entries: [
+      {
+        pos: 0,
+        entry: {
+          kind: 'problem_report',
+          id: 'e:1',
+          title: 'Crash',
+          details: 'It crashed',
+          error: null,
+          at: 1,
+          outcome: null,
+          after: null,
+        },
+      },
+    ],
+  }
+
+  it('revives a session that was released, so its card still takes the answer', async () => {
+    const store = sessionsFile(dir, log)
+    store.save({ version: 1, sessions: [record] })
+    await store.flush()
+    const { sessions } = manager(
+      {},
+      { threads: { load: async () => stored, write: async () => undefined } },
+    )
+    await sessions.load()
+    await sessions.answerReport('s1', 'e:1', { kind: 'skipped' })
+    const snapshot = await sessions.snapshot('s1')
+    expect(snapshot.entries.find((entry) => entry.id === 'e:1')).toMatchObject({
+      outcome: { kind: 'skipped' },
+    })
   })
 })

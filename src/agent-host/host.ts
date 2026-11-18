@@ -3004,9 +3004,8 @@ export class AgentHost {
       'sessions.answerProjectHooks': ({ sessionId, entryId, decision }, { device }) => {
         sessions.answerProjectHooks(sessionId, entryId, decision, fromDevice(device))
       },
-      'sessions.answerReport': ({ sessionId, entryId, outcome }, { device }) => {
-        sessions.answerReport(sessionId, entryId, outcome, fromDevice(device))
-      },
+      'sessions.answerReport': ({ sessionId, entryId, outcome }, { device }) =>
+        sessions.answerReport(sessionId, entryId, outcome, fromDevice(device)),
       'sessions.answerMemory': ({ sessionId, entryId, decision }, { device }) =>
         memoryCall(() => sessions.answerMemory(sessionId, entryId, decision, fromDevice(device))),
       'sessions.undoMemory': ({ sessionId, entryId }) =>

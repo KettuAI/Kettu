@@ -1607,16 +1607,16 @@ export class SessionManager {
   }
 
   /** What became of a drafted problem report, from the window or device that answered it first. */
-  answerReport(
+  async answerReport(
     sessionId: string,
     entryId: string,
     outcome: ProblemReportOutcome,
     device?: FromDevice,
-  ): void {
+  ): Promise<void> {
     this.recordOf(sessionId)
-    const live = this.live.get(sessionId)
-    const entry = live?.thread.byId[entryId]
-    if (!live || entry?.kind !== 'problem_report') throw notFound(`No report waits in ${entryId}`)
+    const live = await this.revive(sessionId)
+    const entry = live.thread.byId[entryId]
+    if (entry?.kind !== 'problem_report') throw notFound(`No report waits in ${entryId}`)
     if (entry.outcome !== null) {
       throw new HostError('not_found', `The report ${entryId} was already answered`, {
         reason: ALREADY_ANSWERED,
