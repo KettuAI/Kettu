@@ -21,6 +21,10 @@ export interface OnboardingState {
   step: OnboardingStep // where an unfinished onboarding resumes
 }
 
+/** What New session lists under the input: recent sessions, the latest artifacts, or nothing. */
+export const NEW_SESSION_LISTS = ['sessions', 'artifacts', 'off'] as const
+export type NewSessionList = (typeof NEW_SESSION_LISTS)[number]
+
 export interface SettingsFile {
   version: 1
   agentRegistrationVersion?: 1
@@ -32,6 +36,7 @@ export interface SettingsFile {
     defaultAgent: AgentId | null // null: pick one on the New session screen each time
     sendKey: 'enter' | 'mod-enter' // the other key inserts a newline
     restoreLastSession: boolean
+    newSessionList: NewSessionList // what New session lists under the input
     confirmQuitWhileRunning: boolean
     openAtLogin: boolean // start at login, so routines keep their schedule
     background: boolean // keep running with the tray icon after the last window closes
@@ -216,6 +221,7 @@ export const DEFAULT_SETTINGS: SettingsFile = {
     defaultAgent: null,
     sendKey: 'enter',
     restoreLastSession: true,
+    newSessionList: 'sessions',
     confirmQuitWhileRunning: true,
     openAtLogin: false,
     background: false,

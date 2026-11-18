@@ -13,6 +13,7 @@ import { originLabel } from '@shared/browser'
 import { LOCALES, LOCALE_NAMES, type LanguageSetting } from '@shared/locale'
 import {
   DEFAULT_SETTINGS,
+  NEW_SESSION_LISTS,
   ZOOM_LEVELS,
   stepZoom,
   type SettingsFile,
@@ -133,6 +134,26 @@ export function DefaultAgent() {
         value={value ?? 'ask'}
         options={options}
         onChange={(v) => apply({ general: { defaultAgent: v === 'ask' ? null : (v as AgentId) } })}
+      />
+    </>
+  )
+}
+
+export function NewSessionListChoice() {
+  const { t } = useTranslation('settings')
+  const value = useSettings().general.newSessionList
+  const [apply, error] = useApply()
+  return (
+    <>
+      <ControlError error={error} />
+      <SettingSelect
+        label={t('general.newSessionList.name')}
+        value={value}
+        options={NEW_SESSION_LISTS.map((list) => ({
+          value: list,
+          label: t(`general.newSessionList.${list}`),
+        }))}
+        onChange={(v) => apply({ general: { newSessionList: v } })}
       />
     </>
   )

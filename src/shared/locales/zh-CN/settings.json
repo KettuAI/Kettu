@@ -49,6 +49,14 @@
       "description": "新建会话时默认使用的 Agent。",
       "askEachTime": "每次询问"
     },
+    "newSessionList": {
+      "name": "新会话页输入框下面",
+      "description": "新建会话页在输入框下面列出什么。",
+      "keywords": "新会话 新建会话 首页 起始页 下面 列表 接着上次继续 最近的会话 artifact 隐藏 关闭 不显示",
+      "sessions": "接着上次继续",
+      "artifacts": "最近的 artifact",
+      "off": "不显示"
+    },
     "sendKey": {
       "name": "发送快捷键",
       "description": "另一个按键用于换行。",

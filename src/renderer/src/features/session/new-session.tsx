@@ -97,6 +97,7 @@ import {
   type GreetingPeriod,
 } from './new-session/greeting'
 import { pickupSessions, pickupState } from './new-session/picker'
+import { RecentArtifacts } from './new-session/recent-artifacts'
 import { AgentGuide } from './new-session/agent-guide'
 import { useGuideStatuses } from './new-session/guide-statuses'
 import {
@@ -122,8 +123,9 @@ import { isPhoneWindow } from '@renderer/features/shell/narrow'
 /**
  * The New session screen, on affectUI's start screen: a greeting, then the Chat Composer with the
  * permission mode, model and Send over the text and the project, the agent and the branch on its
- * tray, then the sessions to pick up. The session is created on the first send, which also sends
- * the message; opened for a sub-session, under its parent, in the parent's project.
+ * tray, then the list the user chose: sessions to pick up, the latest artifacts or nothing. The
+ * session is created on the first send, which also sends the message; opened for a sub-session,
+ * under its parent, in the parent's project.
  */
 export function NewSessionView({
   paneId,
@@ -197,7 +199,7 @@ export function NewSessionView({
             parent={parent}
             onInput={setHoldsMessage}
           >
-            <PickUp hidden={holdsMessage} />
+            <StartList hidden={holdsMessage} />
           </DraftComposer>
         </section>
       </ColumnScroller>
@@ -842,6 +844,14 @@ function BranchLabel({ projectPath }: { projectPath: string }) {
       </TooltipContent>
     </Tooltip>
   )
+}
+
+/** What the user chose to list under the input, or nothing. */
+function StartList({ hidden }: { hidden: boolean }) {
+  const list = useSettingsStore((s) => s.settings.general.newSessionList)
+  if (list === 'sessions') return <PickUp hidden={hidden} />
+  if (list === 'artifacts') return <RecentArtifacts hidden={hidden} />
+  return null
 }
 
 /**

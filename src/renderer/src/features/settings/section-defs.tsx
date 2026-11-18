@@ -134,6 +134,7 @@ import {
   GhTool,
   GitTool,
   Language,
+  NewSessionListChoice,
   NotificationPreview,
   NotificationSwitch,
   OpenAtLogin,
@@ -218,6 +219,15 @@ export function useGeneralSection(): SectionDef {
         description: t('general.defaultAgent.description'),
         group: sessions,
         render: () => <DefaultAgent />,
+      },
+      {
+        id: 'new-session-list',
+        name: t('general.newSessionList.name'),
+        english: en('general.newSessionList.name'),
+        description: t('general.newSessionList.description'),
+        keywords: t('general.newSessionList.keywords'),
+        group: sessions,
+        render: () => <NewSessionListChoice />,
       },
       {
         id: 'restore',
