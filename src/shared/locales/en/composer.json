@@ -109,6 +109,17 @@
       "stale": "Read before this turn",
       "refreshFailed": "Showing the last reading. The context will update automatically when it can be read again."
     },
+    "estimates": {
+      "skills": "Skill catalog",
+      "mcpServers": "MCP tool definitions",
+      "count": "≈ {{count}}",
+      "partial": "{{estimate}} (partial)",
+      "unavailable": "Unavailable",
+      "loading": "Reading skill and MCP definitions",
+      "readFailed": "Couldn't read skill and MCP definitions.",
+      "disconnected": "Definition estimates are available while the session is connected.",
+      "note": "Definition sizes are estimated. Actual context use depends on what Codex loads."
+    },
     "limits": {
       "plan": "Plan",
       "used": "{{limit}} used",

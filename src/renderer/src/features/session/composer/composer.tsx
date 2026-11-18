@@ -723,6 +723,7 @@ export function Composer({
                   reports={agent?.capabilities.context ?? false}
                   direct={agent?.capabilities.liveContext ?? false}
                   live={running && (agent?.capabilities.liveContext ?? false)}
+                  estimates={agent?.capabilities.contextEstimates}
                   usage={session.usage}
                   context={session.context}
                   limits={limits ?? []}

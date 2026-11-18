@@ -6,7 +6,7 @@ import { CodexConnection } from './connection'
 
 export const CODEX_DRIVER: ProcessDriver = {
   kind: 'process',
-  reads: { limits: true },
+  reads: { limits: true, contextEstimates: true },
   connect: (transport, { hooks, spec, env }) =>
     new CodexConnection(
       transport,

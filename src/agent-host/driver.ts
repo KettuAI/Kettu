@@ -31,6 +31,7 @@ export interface DirectReads {
   limits?: boolean
   /** Its connections have `readContext`. */
   context?: boolean
+  contextEstimates?: boolean
 }
 
 export interface DriverContext {

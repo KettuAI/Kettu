@@ -14,6 +14,16 @@ export interface ContextList {
   items: { name: string; detail: string | null; tokens: string }[]
 }
 
+export interface ContextDefinitionEstimate {
+  name: string
+  tokens: number | null
+}
+
+export interface ContextEstimates {
+  skills: ContextDefinitionEstimate[] | null
+  mcpServers: ContextDefinitionEstimate[] | null
+}
+
 /** The last successful snapshot and the state of its refresh, shared with every viewer. */
 export interface ContextReport {
   key: string

@@ -7,6 +7,7 @@ import type {
   PlanLimit,
   PromptCapabilities,
 } from '@shared/agent-host'
+import type { ContextEstimates } from '@shared/context'
 import type {
   ConfigOption,
   DeclaredHook,
@@ -535,4 +536,5 @@ export interface AgentConnection {
    * agent's report command in a hidden fork of the session.
    */
   readContext?(sessionId: string, cwd: string, options: SessionOptions): Promise<ContextBreakdown>
+  readContextEstimates?(sessionId: string, cwd: string): Promise<ContextEstimates>
 }

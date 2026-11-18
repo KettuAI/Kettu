@@ -241,6 +241,73 @@ describe('the handshake', () => {
   })
 })
 
+describe('context estimates', () => {
+  it('estimates enabled skills and the tool catalogs of the thread’s MCP servers', async () => {
+    const { server, connection } = await connect()
+    server.skills = [
+      { name: 'build', description: '构建', path: '/repo/build/SKILL.md', enabled: true },
+      { name: 'hidden', description: 'Unused', path: '/repo/hidden/SKILL.md', enabled: false },
+    ]
+    const connected = { runtimeStatus: 'connected', toolsError: null, authStatus: 'unsupported' }
+    server.on('mcpServerStatus/list', ({ cursor }) =>
+      cursor === null
+        ? {
+            nextCursor: 'next',
+            data: [
+              {
+                ...connected,
+                name: 'files',
+                tools: {
+                  mcp__files__read: {
+                    name: 'read',
+                    description: 'Read a file',
+                    inputSchema: { type: 'object', properties: { path: { type: 'string' } } },
+                    _meta: { annotation: 'Only for clients' },
+                  },
+                },
+              },
+            ],
+          }
+        : {
+            nextCursor: null,
+            data: [
+              { ...connected, name: 'empty', tools: {} },
+              { ...connected, name: 'disabled', runtimeStatus: 'disabled', tools: {} },
+              { ...connected, name: 'offline', toolsError: 'Discovery failed', tools: {} },
+            ],
+          },
+    )
+    const { sessionId } = await connection.newSession('/repo')
+
+    expect(await connection.readContextEstimates(sessionId, '/repo')).toEqual({
+      skills: [{ name: 'build', tokens: 12 }],
+      mcpServers: [
+        { name: 'files', tokens: 32 },
+        { name: 'empty', tokens: 0 },
+        { name: 'offline', tokens: null },
+      ],
+    })
+    expect(server.sent('skills/list').at(-1)).toEqual({ cwds: ['/repo'] })
+    expect(server.sent('mcpServerStatus/list')).toEqual([
+      { cursor: null, detail: 'toolsAndAuthOnly', threadId: sessionId },
+      { cursor: 'next', detail: 'toolsAndAuthOnly', threadId: sessionId },
+    ])
+    expect(server.sent('turn/start')).toEqual([])
+  })
+
+  it('keeps the skill estimate when the thread’s MCP catalog is unavailable', async () => {
+    const { server, connection } = await connect()
+    server.on('mcpServerStatus/list', () => {
+      throw new FakeRpcError(-32002, 'Thread not loaded')
+    })
+    expect(await connection.readContextEstimates('thread-1', '/repo')).toEqual({
+      skills: [],
+      mcpServers: null,
+    })
+    expect(server.sent('mcpServerStatus/list')).toHaveLength(1)
+  })
+})
+
 describe('sessions', () => {
   it('starts a thread with the default mode, trusting the folder and passing Kettu’s MCP server', async () => {
     const { server, connection } = await connect()

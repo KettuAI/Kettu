@@ -137,6 +137,7 @@ export const HOST_REQUEST_LIMITS: Readonly<Record<HostMethod, number | null>> = 
   'worktrees.setupLog': HOST_MS,
   'sessions.switchAgent': AGENT_MS,
   'sessions.context': AGENT_MS,
+  'sessions.contextEstimates': AGENT_MS,
   'sessions.queue': HOST_MS,
   'sessions.runCommand': AGENT_MS,
   'sessions.unqueue': HOST_MS,
