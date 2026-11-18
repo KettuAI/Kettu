@@ -148,6 +148,8 @@ import { Projects } from './projects'
 import { claudeOutside, type OutsideReader } from './outside-sessions'
 import { claudeCacheTtl, type CacheTtlReader } from './prompt-cache'
 import { claudeModelRequests } from './model-requests/claude'
+import { codexModelRequests } from './model-requests/codex'
+import { byHarness } from './model-requests/reader'
 import { IdleRelease } from './idle-release'
 import { PortHub, type Handlers, type RequestContext } from './rpc'
 import { Attachments, toArrayBuffer } from './attachments'
@@ -995,13 +997,22 @@ export class AgentHost {
           },
           log,
         }),
-      modelRequests: claudeModelRequests({
-        platform,
-        home: options.homeDir ?? os.homedir(),
-        env: async () => {
-          await this.env.ready()
-          return this.env.agentEnv('claude-code')
-        },
+      modelRequests: byHarness({
+        'claude-code': claudeModelRequests({
+          platform,
+          home: options.homeDir ?? os.homedir(),
+          env: async () => {
+            await this.env.ready()
+            return this.env.agentEnv('claude-code')
+          },
+        }),
+        codex: codexModelRequests({
+          home: options.homeDir ?? os.homedir(),
+          env: async () => {
+            await this.env.ready()
+            return this.env.agentEnv('codex')
+          },
+        }),
       }),
       outside:
         options.outside ??

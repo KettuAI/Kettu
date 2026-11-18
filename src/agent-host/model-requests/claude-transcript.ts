@@ -38,19 +38,20 @@ const PREVIEW_CHARS = 200
 
 type Rec = Record<string, unknown>
 
-const obj = (v: unknown): Rec | null =>
+export const obj = (v: unknown): Rec | null =>
   v && typeof v === 'object' && !Array.isArray(v) ? (v as Rec) : null
-const str = (v: unknown): string | null => (typeof v === 'string' ? v : null)
-const num = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) ? v : null)
-const arr = (v: unknown): unknown[] => (Array.isArray(v) ? v : [])
-const time = (v: unknown): number | null => {
+export const str = (v: unknown): string | null => (typeof v === 'string' ? v : null)
+export const num = (v: unknown): number | null =>
+  typeof v === 'number' && Number.isFinite(v) ? v : null
+export const arr = (v: unknown): unknown[] => (Array.isArray(v) ? v : [])
+export const time = (v: unknown): number | null => {
   const s = str(v)
   if (!s) return null
   const t = Date.parse(s)
   return Number.isNaN(t) ? null : t
 }
 
-function preview(text: string): string {
+export function preview(text: string): string {
   const line = text.replace(/\s+/g, ' ').trim()
   return line.length > PREVIEW_CHARS ? `${line.slice(0, PREVIEW_CHARS)}…` : line
 }
@@ -61,7 +62,7 @@ export function promptPreview(text: string): string {
   return preview((summary ?? text).replace(/<[^>]+>/g, ' '))
 }
 
-function textOf(content: unknown): string {
+export function textOf(content: unknown): string {
   if (typeof content === 'string') return content
   return arr(content)
     .map((block) => {
@@ -198,7 +199,7 @@ export function summarizeActions(
     .map(({ kind, label, count }) => ({ kind, label, count }))
 }
 
-function emptyTokens(): RequestTokens {
+export function emptyTokens(): RequestTokens {
   return {
     input: null,
     cacheRead: null,
@@ -471,7 +472,11 @@ export function summarizeShapes(
     list.push(mcp ? mcp[2] : name)
     groups.set(group, list)
   }
-  const toolGroups: RequestsToolGroup[] = [...groups].map(([name, tools]) => ({ name, tools }))
+  const toolGroups: RequestsToolGroup[] = [...groups].map(([name, tools]) => ({
+    kind: name === 'builtin' ? 'builtin' : 'mcp',
+    name,
+    tools,
+  }))
   toolGroups.sort((a, b) =>
     a.name === 'builtin' ? -1 : b.name === 'builtin' ? 1 : a.name.localeCompare(b.name),
   )

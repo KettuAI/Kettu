@@ -1,40 +1,28 @@
 // Reads a Claude Code session's requests from its session file, newest page first, read back
 // from the end so a long session costs no more than a short one.
 
-import { open, stat } from 'node:fs/promises'
+import { stat } from 'node:fs/promises'
 import path from 'node:path'
 import type { Platform } from '@shared/platform'
 import {
   REQUESTS_PAGE,
-  foldLongStrings,
-  type ModelRequestRaw,
-  type ModelRequestsPage,
+  type ModelRequestsOverview,
   type RequestTokens,
   type RequestsSystem,
 } from '@shared/model-requests'
-import { harnessOf, type AgentId } from '@shared/thread'
+import { harnessOf } from '@shared/thread'
 import { findClaudeTranscript } from '../prompt-cache'
 import { projectsFolder } from '../usage/readers/claude'
-import { eachLine, openLog } from '../usage/lines'
+import { eachLine, fileSource, openLog } from '../usage/lines'
+import { parseLines, readPageFrom, type PageRules, type RawLine } from './pages'
+import { foldAll, readRanges, type ModelRequestsReader, type RequestsTarget } from './reader'
 import {
   claudeTokens,
-  decodeRanges,
   isPrompt,
   parseClaudeTranscript,
   shapeTime,
   summarizeShapes,
-  type TranscriptLine,
 } from './claude-transcript'
-
-/** Which session file to read. */
-export interface RequestsTarget {
-  agentId: AgentId
-  cwd: string
-  acpSessionId: string
-  configDir: string | null
-  /** A sub-agent's parent, whose session folder keeps the sub-agent's file. */
-  parentAcpSessionId: string | null
-}
 
 /** What the whole file says beyond its pages: how many requests, the cost and the tools. */
 export interface FileSummary {
@@ -45,21 +33,8 @@ export interface FileSummary {
   system: RequestsSystem | null
 }
 
-export interface ModelRequestsReader {
-  /** Null when the agent keeps no session file Kettu can read. */
-  page(target: RequestsTarget, before: string | null): Promise<ModelRequestsPage | null>
-  summary(target: RequestsTarget): Promise<FileSummary | null>
-  raw(target: RequestsTarget, raw: string, full: boolean): Promise<ModelRequestRaw>
-}
-
-const CHUNK = 1 << 18
-/** How far back a page goes for the start of its first turn. */
-const TURN_LIMIT = 8 << 20
-/** The most Raw reads for one request, folded or not. */
-const RAW_LIMIT = 64 << 20
 const REMEMBERED = 200
 const SUBAGENT_ID = /^[A-Za-z0-9_-]+$/
-const NEWLINE = 0x0a
 
 const REQUEST_PREFIX = Buffer.from('{"type":"api-request","')
 const SHAPE_PREFIX = '{"type":"api-request-shape"'
@@ -81,97 +56,32 @@ function promptLine(line: Buffer): boolean {
   }
 }
 
-interface RawLine {
-  start: number
-  end: number
-  bytes: Buffer
+/** Claude Code's page: its `api-request` records, or in older files its responses. */
+function claudeRules(): PageRules {
+  let requests = 0
+  let responses = 0
+  return {
+    add(line) {
+      if (startsWith(line, REQUEST_PREFIX)) requests++
+      else if (line.indexOf(ASSISTANT) >= 0 && line.indexOf(STOP) >= 0) responses++
+    },
+    // A response is written over several lines, so they count only in files without request
+    // records, and twice over.
+    enough: () => requests >= REQUESTS_PAGE || (requests === 0 && responses >= REQUESTS_PAGE * 2),
+    turnStart: promptLine,
+    requestEnd: (line) => line.indexOf(ASSISTANT) >= 0,
+  }
 }
 
-/**
- * The lines of a page ending at `end`: at least `REQUESTS_PAGE` requests, back to the start of
- * the turn the earliest of them is in when that lies within `TURN_LIMIT`, else back to just after
- * the earliest response read, so no request is cut. `from` is where the page starts.
- */
+/** The lines of the page of a Claude Code session file that ends at `end`. */
 export async function readPage(
   file: string,
   end: number,
 ): Promise<{ lines: RawLine[]; from: number }> {
-  const handle = await open(file, 'r')
-  // Newest first while reading.
-  const lines: RawLine[] = []
-  const page = (from: number): { lines: RawLine[]; from: number } => ({
-    lines: lines.filter((line) => line.start >= from).reverse(),
-    from,
-  })
-  try {
-    let requests = 0
-    let responses = 0
-    let rest = Buffer.alloc(0)
-    let at = end
-    // Where enough requests were read, and the earliest place after a response since.
-    let enoughAt: number | null = null
-    let cut: number | null = null
-    while (at > 0) {
-      const start = Math.max(0, at - CHUNK)
-      const buffer = Buffer.alloc(at - start)
-      const { bytesRead } = await handle.read(buffer, 0, buffer.length, start)
-      const data = Buffer.concat([buffer.subarray(0, bytesRead), rest])
-      let stop = data.length
-      for (;;) {
-        const newline = data.lastIndexOf(NEWLINE, stop - 1)
-        if (newline === -1 && start > 0) break
-        const bytes = data.subarray(newline + 1, stop)
-        const begin = start + newline + 1
-        if (bytes.length > 0) {
-          const assistant = bytes.indexOf(ASSISTANT) >= 0
-          if (enoughAt !== null) {
-            if (promptLine(bytes)) {
-              lines.push({ start: begin, end: begin + bytes.length, bytes })
-              return page(begin)
-            }
-            if (assistant) cut = begin + bytes.length + 1
-            if (enoughAt - begin > TURN_LIMIT && cut !== null) return page(cut)
-          }
-          lines.push({ start: begin, end: begin + bytes.length, bytes })
-          if (startsWith(bytes, REQUEST_PREFIX)) requests++
-          else if (assistant && bytes.indexOf(STOP) >= 0) responses++
-          // A response is written over several lines, so they count only in files without request
-          // records, and twice over.
-          if (
-            enoughAt === null &&
-            (requests >= REQUESTS_PAGE || (requests === 0 && responses >= REQUESTS_PAGE * 2))
-          ) {
-            enoughAt = begin
-          }
-        }
-        if (newline === -1) break
-        stop = newline
-      }
-      rest = Buffer.from(data.subarray(0, stop))
-      at = start
-    }
-    return page(0)
-  } finally {
-    await handle.close()
-  }
+  const { size } = await stat(file)
+  return readPageFrom(fileSource(file, size), end, claudeRules())
 }
 
-function parseLines(lines: RawLine[]): TranscriptLine[] {
-  const out: TranscriptLine[] = []
-  for (const line of lines) {
-    try {
-      const record = JSON.parse(line.bytes.toString('utf8')) as unknown
-      if (record && typeof record === 'object' && !Array.isArray(record)) {
-        out.push({ start: line.start, end: line.end, record: record as Record<string, unknown> })
-      }
-    } catch {
-      // A line cut by a write in progress is read with the next page.
-    }
-  }
-  return out
-}
-
-/** What the whole file holds beyond a page, reading only the lines that start as these do. */
 /**
  * What the whole file holds beyond a page, reading only the lines that start as these do. In a
  * sub-agent's own file every line is a side chain, so `sidechain` counts them.
@@ -266,7 +176,10 @@ export function claudeModelRequests(deps: {
   env(): Promise<Record<string, string | undefined>>
 }): ModelRequestsReader {
   const found = new Map<string, string>()
-  const summaries = new Map<string, { size: number; mtimeMs: number; summary: FileSummary }>()
+  const summaries = new Map<
+    string,
+    { size: number; mtimeMs: number; summary: ModelRequestsOverview }
+  >()
 
   const fileOf = async (target: RequestsTarget): Promise<string | null> => {
     if (harnessOf(target.agentId) !== 'claude-code') return null
@@ -315,7 +228,11 @@ export function claudeModelRequests(deps: {
       const info = await stat(file)
       const known = summaries.get(file)
       if (known && known.size === info.size && known.mtimeMs === info.mtimeMs) return known.summary
-      const summary = await summarizeFile(file, !!target.parentAcpSessionId)
+      const summary: ModelRequestsOverview = {
+        source: 'claude',
+        turns: null,
+        ...(await summarizeFile(file, !!target.parentAcpSessionId)),
+      }
       summaries.delete(file)
       summaries.set(file, { size: info.size, mtimeMs: info.mtimeMs, summary })
       if (summaries.size > 20) summaries.delete(summaries.keys().next().value!)
@@ -325,41 +242,9 @@ export function claudeModelRequests(deps: {
     async raw(target, raw, full) {
       const file = await fileOf(target)
       if (!file) throw new Error('This session has no session file to read')
-      if (raw === 'system') {
-        return foldAll(await shapeRecords(file), full)
-      }
-      const ranges = decodeRanges(raw)
-      if (!ranges) throw new Error('Not a request of this session')
+      if (raw === 'system') return foldAll(await shapeRecords(file), full)
       const { size } = await stat(file)
-      let total = 0
-      for (const [start, end] of ranges) {
-        if (end > size) throw new Error('The session file changed; open the request again')
-        total += end - start
-      }
-      if (total > RAW_LIMIT) throw new Error('These records are too large to show')
-      const handle = await open(file, 'r')
-      try {
-        const records: unknown[] = []
-        for (const [start, end] of ranges) {
-          const buffer = Buffer.alloc(end - start)
-          await handle.read(buffer, 0, buffer.length, start)
-          records.push(JSON.parse(buffer.toString('utf8')))
-        }
-        return foldAll(records, full)
-      } catch (error) {
-        if (error instanceof SyntaxError) {
-          throw new Error('The session file changed; open the request again', { cause: error })
-        }
-        throw error
-      } finally {
-        await handle.close()
-      }
+      return readRanges(fileSource(file, size), raw, full)
     },
   }
-}
-
-function foldAll(records: unknown[], full: boolean): ModelRequestRaw {
-  if (full) return { records, folded: false }
-  const { value, folded } = foldLongStrings(records)
-  return { records: value as unknown[], folded }
 }
