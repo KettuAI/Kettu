@@ -5653,7 +5653,7 @@ li[data-row-exit='dust'] > * {
   color: var(--ui-ccc-ink);
 }
 /* The composer body's unlayered button reset beats the button's own padding utilities. */
-.kettu-switch [data-slot='button'] {
+:is(.kettu-credit, .kettu-switch) [data-slot='button'] {
   padding-inline: calc(var(--spacing) * 2);
 }
 /* New session's menus as AppShell's: rows in the quiet gray, the chosen one in ink. */
