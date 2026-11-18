@@ -82,19 +82,25 @@ export function useSiteIcon(url: string): string | null | undefined {
   return useSiteIconsStore((s) => iconFor(s.sites, url) ?? iconFor(s.linked, url))
 }
 
-const asked = new Set<string>()
+/** When each site's icon was last asked for. */
+const askedAt = new Map<string, number>()
+/** The least time before a site's icon is asked for again; main decides whether to load it. */
+const ASK_GAP_MS = 30_000
 
 /**
- * Asks once for a link's site icon when Kettu has none for it, so a link shows the site's icon
- * before its page has opened. The site stays unopened; main keeps to public sites.
+ * Asks for a link's site icon when Kettu has none for it, so a link shows the site's icon before
+ * its page has opened, and asks again, at most once per `ASK_GAP_MS`, for a link that shows
+ * without one, so a failed load is tried again. The site stays unopened; main keeps to public
+ * sites and to its own wait after a failure.
  */
 export function requestSiteIcon(url: string): void {
   const parsed = URL.parse(url)
   if (!parsed || (parsed.protocol !== 'http:' && parsed.protocol !== 'https:')) return
-  if (asked.has(parsed.origin)) return
+  const last = askedAt.get(parsed.origin)
+  if (last !== undefined && Date.now() - last < ASK_GAP_MS) return
   const { sites, linked } = useSiteIconsStore.getState()
   if (iconFor(sites, url) || iconFor(linked, url)) return
-  asked.add(parsed.origin)
+  askedAt.set(parsed.origin, Date.now())
   void window.kettu.browser.loadSiteIcon(url).catch(() => {})
 }
 

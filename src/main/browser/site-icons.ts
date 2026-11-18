@@ -19,6 +19,10 @@ export const MAX_ICON_BYTES = 16 * 1024
 export const MAX_SITES = 200
 /** The least time between two loads for one site, however often its page changes its icon. */
 export const LOAD_GAP_MS = 5_000
+/** The wait before a link's icon is asked for again after a failed load; it doubles each time. */
+const RETRY_BASE_MS = 30_000
+/** The longest that wait grows to. */
+const RETRY_MAX_MS = 10 * 60_000
 
 const TIMEOUT_MS = 10_000
 const WRITE_DELAY_MS = 2_000
@@ -36,6 +40,11 @@ interface Site {
   icon: string | null
   /** The address the icon came from, so a page naming it again does not load it again. */
   source: string | null
+}
+
+/** The wait before a link's icon is asked for again after `failures` failed loads in a row. */
+function retryDelay(failures: number): number {
+  return Math.min(RETRY_BASE_MS * 2 ** Math.max(failures - 1, 0), RETRY_MAX_MS)
 }
 
 /** A site's icon loads: the one in flight and the one waiting for the gap to pass. */
@@ -164,8 +173,10 @@ export class SiteIcons {
   /** Icons loaded for a link's site that the site was never opened for, by origin. */
   private readonly linked = new Map<string, string>()
   private readonly loading = new Map<string, Loading>()
-  /** Sites a link already asked an icon for, so one run asks each of them once. */
-  private readonly asked = new Set<string>()
+  /** Sites a link's icon is being loaded for. */
+  private readonly asking = new Set<string>()
+  /** Sites whose last load for a link failed: when, and how many in a row. */
+  private readonly failed = new Map<string, { at: number; count: number }>()
   private fileRead = false
   /** What was asked before the file was read, done in order once it is. */
   private readonly queued: (() => void)[] = []
@@ -218,10 +229,11 @@ export class SiteIcons {
   }
 
   /**
-   * A link in a reply has no icon for its site: loads it from Google's favicon service once per
-   * run, and sends it again to a window that asks later, without counting the site as opened,
-   * which the first-visit confirmation reads. Only the hosts `linkIconUrl` allows; the service
-   * answers a site it has no icon for with a 404, which leaves the link's globe.
+   * A link in a reply has no icon for its site: loads it from Google's favicon service, and sends
+   * it again to a window that asks later, without counting the site as opened, which the
+   * first-visit confirmation reads. A loaded icon is never loaded again; a failed load, such as
+   * the service answering a site it has no icon for with a 404, leaves the link's globe and is
+   * tried again once `retryDelay` has passed. Only the hosts `linkIconUrl` allows.
    */
   async link(url: string): Promise<void> {
     const source = linkIconUrl(url)
@@ -233,10 +245,17 @@ export class SiteIcons {
       this.deps.changed({ kind: 'link', origin, icon: linked })
       return
     }
-    if (this.asked.has(origin)) return
-    this.asked.add(origin)
+    if (this.asking.has(origin)) return
+    const failure = this.failed.get(origin)
+    if (failure && Date.now() - failure.at < retryDelay(failure.count)) return
+    this.asking.add(origin)
     const icon = await this.fetchIcon(source, new AbortController().signal)
-    if (icon === null) return
+    this.asking.delete(origin)
+    if (icon === null) {
+      this.failed.set(origin, { at: Date.now(), count: (failure?.count ?? 0) + 1 })
+      return
+    }
+    this.failed.delete(origin)
     this.linked.set(origin, icon)
     this.deps.changed({ kind: 'link', origin, icon })
   }
