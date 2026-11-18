@@ -74,11 +74,12 @@ export function initBrowser(): void {
     }
   })
   let known = new Set(Object.keys(useSessionsStore.getState().byId))
+  // Until this computer's sessions are read the store is empty, which would close every page.
   useSessionsStore.subscribe((state) => {
     const ids = Object.keys(state.byId)
     for (const id of known) if (!(id in state.byId)) useBrowserStore.getState().forget(id)
     known = new Set(ids)
-    window.kettu.browser.setSessions(ids)
+    if (state.loaded) window.kettu.browser.setSessions(ids)
   })
-  window.kettu.browser.setSessions([...known])
+  if (useSessionsStore.getState().loaded) window.kettu.browser.setSessions([...known])
 }
