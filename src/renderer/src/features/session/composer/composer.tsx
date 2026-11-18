@@ -52,6 +52,7 @@ import { levelsOf, type SelectOption } from './levels'
 import { shownChoice } from './model-list'
 import { ModelMenu } from './model-menu'
 import { nextChoice, nextMode } from './modes'
+import { HeldStrip } from './held-strip'
 import { OutOfCreditStrip } from './out-of-credit-strip'
 import { useAddMenu } from './add-menu'
 import { PromptBox } from './prompt-box'
@@ -179,8 +180,10 @@ export function Composer({
   const starting = status === 'starting'
   const running = status === 'running' || status === 'awaiting_permission'
   const awaiting = status === 'awaiting_permission'
+  // A terminal that has the session open writes to it, so nothing is sent until it lets go.
+  const heldOutside = session.heldOutside === true
   // A closed session attaches to its agent as the message goes.
-  const idle = status === 'ready' || status === 'closed'
+  const idle = (status === 'ready' || status === 'closed') && !heldOutside
   const folder = useSessionFolder(sessionId) ?? session.projectPath
   const box = usePromptBox({
     draft: sessionId,
@@ -206,8 +209,10 @@ export function Composer({
   useEffect(() => {
     const began = holdsMessage && !held.current
     held.current = holdsMessage
-    if (began && status === 'closed' && !pending && !mustSwitch) attachWhileTyping(sessionId)
-  }, [holdsMessage, status, pending, mustSwitch, sessionId])
+    if (began && status === 'closed' && !heldOutside && !pending && !mustSwitch) {
+      attachWhileTyping(sessionId)
+    }
+  }, [holdsMessage, status, heldOutside, pending, mustSwitch, sessionId])
   // The message as a key comes, from the editor itself, which a render may not have caught up with.
   const live = () => {
     const text = box.editor.current?.text() ?? box.source.text
@@ -606,6 +611,9 @@ export function Composer({
                       onSwitchModel={() => setModelMenuOpen(true)}
                     />
                   )}
+                </AnimatePresence>
+                <AnimatePresence initial={false}>
+                  {heldOutside && <HeldStrip key="held" />}
                 </AnimatePresence>
                 <AnimatePresence initial={false}>
                   {pending && (

@@ -99,6 +99,7 @@ describe('importing a session from a terminal', () => {
       return last
     },
     holder: async () => (held ? { pid: 42, entrypoint: 'cli', busy: false } : null),
+    tail: async () => null,
   })
 
   it('refuses one a terminal still has open, and keeps nothing of it', async () => {

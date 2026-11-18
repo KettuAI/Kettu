@@ -787,6 +787,8 @@ const MODELS_FRESH_MS = MINUTE
 const CACHE_TTL_MS = 5 * MINUTE
 /** A session used outside Kettu longer ago than this has no cache left worth carrying over. */
 const OUTSIDE_WINDOW_MS = 60 * MINUTE
+/** How often a shown Claude Code session is looked at for a program outside Kettu holding it. */
+const FOLLOW_MS = 3_000
 
 /** When the session's prompt cache expires, from its main thread's latest request, if any. */
 function cacheExpiresAt(live: Live): number | null {
@@ -1136,6 +1138,9 @@ export class SessionManager {
   private readonly idleReleased = new Set<string>()
   /** Transcript reads waiting to run, by session id. */
   private readonly cacheReads = new Map<string, ReturnType<typeof setTimeout>>()
+  /** Looks at the shown Claude Code sessions for a program outside Kettu that holds one. */
+  private followTimer: ReturnType<typeof setInterval> | null = null
+  private following = false
   private readonly timings: SessionTimings
   private readonly now: () => number
   private requestCounter = 0
@@ -4000,6 +4005,86 @@ export class SessionManager {
       if (this.inFront(live.id)) this.refreshContext(live)
       this.refreshRelease(live)
     }
+    this.followShown([...next].filter((id) => !previous?.has(id)))
+  }
+
+  /** The Claude Code sessions a port shows in front, which a program outside Kettu may share. */
+  private sharedShown(): string[] {
+    const ids = new Set<string>()
+    for (const shown of this.shown.values()) {
+      for (const id of shown) {
+        const record = this.records.get(id)
+        if (record && this.sharedOutside(record)) ids.add(id)
+      }
+    }
+    return [...ids]
+  }
+
+  /**
+   * Keeps an eye on the Claude Code sessions in front while any is: a pass looks for a program
+   * outside Kettu that holds one, and the sessions just shown also for what such a program wrote.
+   */
+  private followShown(entered: readonly string[]): void {
+    const shown = this.sharedShown()
+    if (shown.length === 0) {
+      if (this.followTimer) clearInterval(this.followTimer)
+      this.followTimer = null
+      return
+    }
+    this.followTimer ??= setInterval(() => void this.followPass(), FOLLOW_MS)
+    void this.followPass(new Set(entered))
+  }
+
+  private async followPass(entered: ReadonlySet<string> = new Set()): Promise<void> {
+    if (this.following || this.stopped) return
+    this.following = true
+    try {
+      for (const id of this.sharedShown()) {
+        await this.followOutside(id, entered.has(id)).catch((error: unknown) => {
+          this.deps.diagnostics.log(
+            'warn',
+            `Could not follow session ${id} outside Kettu: ${(error as Error).message}`,
+          )
+        })
+      }
+    } finally {
+      this.following = false
+    }
+  }
+
+  /**
+   * A shown session's side of sharing with a program outside Kettu. While one holds it, the
+   * session says so and lets its own agent go; once it lets go, or when the session is first
+   * shown, what it wrote comes into the thread.
+   */
+  private async followOutside(sessionId: string, entered: boolean): Promise<void> {
+    const record = this.records.get(sessionId)
+    if (!record) return
+    const live = this.live.get(sessionId)
+    const held = live?.thread.session.heldOutside === true
+    const holding = await this.heldBy(record)
+    if (holding && !held) {
+      if (live?.connection && this.holdReason(live) === null) {
+        // Its Claude Code holds a copy of the conversation the other program is about to change.
+        await this.closeAll([...this.descendants(live.id, 'subagent'), live.record], true)
+        await this.revive(sessionId)
+      } else if (live) {
+        this.update(live, { heldOutside: true })
+      } else {
+        await this.revive(sessionId)
+      }
+      return
+    }
+    if (holding) return
+    if (live && held) this.update(live, { heldOutside: false })
+    if (!entered && !held) return
+    if (!(await this.writtenOutside(record))) return
+    if (!live) {
+      await this.revive(sessionId)
+    } else if (this.holdReason(live) === null) {
+      await this.closeAll([...this.descendants(live.id, 'subagent'), live.record], true)
+      await this.revive(sessionId)
+    }
   }
 
   portClosed(portId: string): void {
@@ -5055,7 +5140,12 @@ export class SessionManager {
     const record = this.recordOf(sessionId)
     const page = await this.readPage(record, (store) => store.page(sessionId, null, null, images))
     if (this.live.has(sessionId) || !this.has(sessionId)) return this.open(sessionId, images)
-    if (page) return this.storedSnapshot(record, page)
+    if (page) {
+      // A program outside Kettu holds the session or wrote to it: it comes back through its revive.
+      if ((await this.outsideState(record)) === 'current') return this.storedSnapshot(record, page)
+      await this.revive(sessionId)
+      return this.snapshot(sessionId, undefined, images)
+    }
     if (record.origin === 'subagent' && record.parentId) {
       // A subagent's thread comes back with its parent's load, which replays the children.
       await this.open(record.parentId)
@@ -5177,6 +5267,7 @@ export class SessionManager {
         this.finishReplay(live, true)
         this.opened(live, setup.config)
         this.seedCache(live)
+        await this.noteOutsideTail(live.record)
         await this.takeOutside(live, connection)
       } else {
         const setup = await connection.resumeSession(acpSessionId, projectPath, attach)
@@ -5834,13 +5925,70 @@ export class SessionManager {
       await this.runOpening(live)
       return live
     }
+    const outside = await this.outsideState(record)
     tree.forEach((item, i) => {
       const stored = threads[i]
       if (stored && !this.live.has(item.id) && this.records.has(item.id)) {
         this.fill(this.makeLive(item, true, 'closed'), stored)
       }
     })
-    return this.live.get(sessionId)!
+    const live = this.live.get(sessionId)!
+    if (outside === 'held') {
+      this.update(live, { heldOutside: true })
+    } else if (outside === 'written') {
+      // The stored thread lacks what the outside program wrote: the agent's history replaces it.
+      await this.runOpening(live)
+    }
+    return live
+  }
+
+  /** Whether a program outside Kettu may share the session: a user's Claude Code session. */
+  private sharedOutside(record: SessionRecord): boolean {
+    return (
+      this.deps.outside !== undefined &&
+      harnessOf(record.agentId) === 'claude-code' &&
+      record.origin === 'user' &&
+      record.acpSessionId !== ''
+    )
+  }
+
+  /** Whether a program outside Kettu has the session open, such as a terminal. */
+  private async heldBy(record: SessionRecord): Promise<boolean> {
+    if (!this.sharedOutside(record)) return false
+    const holder = await this.deps
+      .outside!.holder(record.agentId, record.acpSessionId, record.configDir ?? null)
+      .catch(() => null)
+    return holder !== null
+  }
+
+  /** Whether a program outside Kettu wrote to the session since its thread last took that. */
+  private async writtenOutside(record: SessionRecord): Promise<boolean> {
+    if (!this.sharedOutside(record)) return false
+    const tail = await this.deps
+      .outside!.tail(record.agentId, workDir(record), record.acpSessionId, record.configDir ?? null)
+      .catch(() => null)
+    return tail?.outside === true && tail.uuid !== record.outsideTail
+  }
+
+  /**
+   * Where a Claude Code session stands against a program outside Kettu: `held` while one has it
+   * open, `written` once one wrote what the stored thread lacks, else `current`. A held session is
+   * not read, since its writer is not done.
+   */
+  private async outsideState(record: SessionRecord): Promise<'held' | 'written' | 'current'> {
+    if (await this.heldBy(record)) return 'held'
+    return (await this.writtenOutside(record)) ? 'written' : 'current'
+  }
+
+  /** Keeps the last message an outside program wrote that the thread now holds, after a replay. */
+  private async noteOutsideTail(record: SessionRecord): Promise<void> {
+    if (!this.deps.outside || harnessOf(record.agentId) !== 'claude-code') return
+    const tail = await this.deps.outside
+      .tail(record.agentId, workDir(record), record.acpSessionId, record.configDir ?? null)
+      .catch(() => null)
+    if (!tail?.outside || tail.uuid === record.outsideTail) return
+    record.outsideTail = tail.uuid
+    this.saveIndex()
   }
 
   /** Puts a stored thread, settled, into a session that just went live. */
@@ -10516,6 +10664,8 @@ export class SessionManager {
       this.checkpoint(live, { final: true })
     }
     for (const timer of this.cacheReads.values()) clearTimeout(timer)
+    if (this.followTimer) clearInterval(this.followTimer)
+    this.followTimer = null
     this.stopped = true
   }
 }

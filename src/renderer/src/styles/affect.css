@@ -5639,8 +5639,8 @@ li[data-row-exit='dust'] > * {
   place-items: center;
   width: 15px;
 }
-/* A provider out of credit, or another agent about to take over: a tinted note over the text,
-   inside the writing area. */
+/* A provider out of credit, another agent about to take over, or a terminal that holds the
+   session: a tinted note over the text, inside the writing area. */
 .kettu-credit,
 .kettu-switch {
   margin: -4px -6px 10px;
