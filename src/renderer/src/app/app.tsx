@@ -15,7 +15,13 @@ import { SplitDragProvider } from '@renderer/features/split/session-drag'
 import { MainArea } from '@renderer/features/shell/main-area'
 import { ShortcutsDialog } from '@renderer/features/shell/shortcuts-dialog'
 import { DebugRestartDialog } from '@renderer/features/shell/debug-mode'
-import { CornerControls, CornerDragHole, TitleBand } from '@renderer/features/shell/top-bar'
+import {
+  CornerControls,
+  CornerDragHole,
+  PeekDragHole,
+  TitleBand,
+} from '@renderer/features/shell/top-bar'
+import { useSidebarPeek } from '@renderer/features/shell/sidebar-peek'
 import { QuitConfirm } from '@renderer/features/updates/quit-confirm'
 import { UpdateDialog } from '@renderer/features/updates/update-dialog'
 import { useAccountShell } from '@renderer/features/account/account-row'
@@ -154,6 +160,9 @@ function Workbench() {
   const drawer = useViewStore((s) => s.sidebarDrawer)
   const nav = useSidebarNav()
   const account = useAccountShell()
+  const peek = useViewStore((s) => s.sidebarPeek)
+  const frame = useRef<HTMLDivElement>(null)
+  useSidebarPeek(frame)
   const [initial] = useState(() => readJson(SIDEBAR_WIDTH, 0) || undefined)
   const save = useRef<ReturnType<typeof setTimeout>>(undefined)
   useEffect(() => () => clearTimeout(save.current), [])
@@ -173,10 +182,14 @@ function Workbench() {
     [],
   )
   return (
-    <div className="relative h-full">
+    <div ref={frame} className="relative h-full">
       <TitleBand />
       <AppShell
-        className={cn('kettu-frame', hasBand && 'kettu-band')}
+        className={cn(
+          'kettu-frame',
+          hasBand && 'kettu-band',
+          peek === 'closing' && 'kettu-peek-out',
+        )}
         chrome="mac"
         lights={false}
         workspacePlacement="none"
@@ -191,6 +204,7 @@ function Workbench() {
         onCollapsedChange={(next) => useViewStore.setState({ sidebarCollapsed: next })}
         drawer={drawer}
         onDrawerChange={(open) => useViewStore.setState({ sidebarDrawer: open })}
+        peek={peek !== null}
         sidebarWidth={{ default: 272, min: 200, max: 400, initial }}
         onSidebarWidthChange={(width) => {
           clearTimeout(save.current)
@@ -208,6 +222,7 @@ function Workbench() {
         {MAIN_FRAME}
       </AppShell>
       <CornerDragHole />
+      {peek && <PeekDragHole />}
     </div>
   )
 }

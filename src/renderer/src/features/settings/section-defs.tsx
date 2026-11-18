@@ -146,6 +146,7 @@ import {
   ReportProblem,
   SendKey,
   ShellPicker,
+  SidebarHover,
   WebNotificationsNote,
   TextSize,
   WorktreeLocation,
@@ -366,6 +367,15 @@ export function useAppearanceSection(): SectionDef {
         group: scale,
         layout: 'bare',
         render: (text) => <TextSize label={text} />,
+      },
+      {
+        id: 'sidebar-hover',
+        name: t('appearance.sidebarHover.name'),
+        english: en('appearance.sidebarHover.name'),
+        description: t('appearance.sidebarHover.description'),
+        keywords: t('appearance.sidebarHover.keywords'),
+        group: group('sidebar', t('appearance.groups.sidebar')),
+        render: () => <SidebarHover label={t('appearance.sidebarHover.name')} />,
       },
       {
         id: 'reduce-motion',

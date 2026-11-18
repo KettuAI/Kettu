@@ -166,6 +166,11 @@ interface ViewStore {
   sidebarCollapsed: boolean
   /** The sidebar as a drawer over a narrow window, apart from its collapsed state. Not persisted. */
   sidebarDrawer: boolean
+  /**
+   * The collapsed sidebar floating over a wide window while the pointer is on its toggle or on it;
+   * `closing` while it fades out. Not persisted.
+   */
+  sidebarPeek: 'open' | 'closing' | null
   /** Groups the user collapsed, by path, `NO_PROJECT_GROUP` or `PINNED_GROUP`; open by default. */
   collapsedProjects: Record<string, true>
   /** The one host the sidebar lists, by id or `THIS_COMPUTER`; null lists every host. */
@@ -235,6 +240,7 @@ export const useViewStore = create<ViewStore>()(() => ({
   history: { back: [], forward: [] },
   sidebarCollapsed: saved.sidebarCollapsed ?? false,
   sidebarDrawer: false,
+  sidebarPeek: null,
   collapsedProjects: saved.collapsedProjects ?? {},
   hostFilter: typeof saved.hostFilter === 'string' ? saved.hostFilter : null,
   expandedParents: saved.expandedParents ?? {},

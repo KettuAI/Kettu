@@ -50,6 +50,7 @@ export interface SettingsFile {
     textSize: 'small' | 'default' | 'large' // the composer: 14, 15 or 16 px; thread prose a pixel less
     reduceMotion: 'system' | 'always'
     zoom: ZoomLevel // Chromium's page zoom of the whole window
+    sidebarHover: boolean // pointing at the toggle of a collapsed sidebar shows it over the page
   }
   notifications: {
     permission: boolean
@@ -214,6 +215,7 @@ export const DEFAULT_SETTINGS: SettingsFile = {
     textSize: 'default',
     reduceMotion: 'system',
     zoom: 1.1,
+    sidebarHover: true,
   },
   notifications: {
     permission: true,

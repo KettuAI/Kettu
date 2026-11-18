@@ -400,6 +400,21 @@ export function ReduceMotion() {
   )
 }
 
+export function SidebarHover({ label }: { label: string }) {
+  const checked = useSettings().appearance.sidebarHover
+  const [apply, error] = useApply()
+  return (
+    <>
+      <ControlError error={error} />
+      <SettingSwitch
+        label={label}
+        checked={checked}
+        onChange={(v) => apply({ appearance: { sidebarHover: v } })}
+      />
+    </>
+  )
+}
+
 // ---- Terminal
 
 export function ShellPicker() {
