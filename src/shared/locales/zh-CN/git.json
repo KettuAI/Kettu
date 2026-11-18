@@ -256,6 +256,8 @@
       "title": "提交到 {{branch}}",
       "message": "提交信息",
       "placeholder": "用一行说明改了什么\n\n为什么改",
+      "write": "用 AI 写提交信息",
+      "writing": "正在写提交信息…",
       "files": "文件",
       "filesChosen_one": "已选 {{chosen}} / {{count}} 个文件",
       "filesChosen_other": "已选 {{chosen}} / {{count}} 个文件",

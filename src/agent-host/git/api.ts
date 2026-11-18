@@ -15,6 +15,7 @@ import type {
   RepositoryVisibility,
 } from '@shared/git'
 import type { GitEntry, ToolKind } from '@shared/thread'
+import type { CommitContext } from './commit-context'
 import type { StarCheck } from './star'
 
 type DistributiveOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never
@@ -77,6 +78,11 @@ export interface GitServiceApi {
   ): Promise<PullRequest>
   commit(projectPath: string, oid: string): Promise<CommitDetails>
   changes(projectPath: string): Promise<ChangedFile[]>
+  /**
+   * What a commit message for the changed files at `paths` is written from; refuses a path that
+   * names no change, as `commitChanges` does.
+   */
+  commitContext(projectPath: string, paths: string[]): Promise<CommitContext>
   incoming(projectPath: string, from: 'upstream' | 'base'): Promise<LogCommit[]>
   fileDiff(
     projectPath: string,

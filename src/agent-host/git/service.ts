@@ -21,6 +21,7 @@ import { HostError } from '../errors'
 import { t } from '../i18n'
 import { readBranches, readRemoteBranches, readRemotes } from './branches'
 import { createCoalescer } from './coalesce'
+import { readCommitContext } from './commit-context'
 import { readChanges, readCommitDetails, readFileDiff, readIncoming } from './details'
 import { canChangeRepository, computeGitEvents, listNewCommits } from './events'
 import { CommandError, createExec, describeFailure, FETCH_TIMEOUT_MS, type Exec } from './exec'
@@ -1034,6 +1035,14 @@ export function createGitService(
       const status = await knownStatus(state)
       if (!status.repo) return []
       return (await readChanges(exec, state.projectPath, status.head.oid === null)).files
+    },
+
+    async commitContext(projectPath, paths) {
+      const state = projectFor(projectPath)
+      const status = await knownStatus(state)
+      if (!status.repo) throw new Error(t('git.notRepository'))
+      const files = await selectChanges(status, paths)
+      return readCommitContext(exec, status.repo.root, files, status.head.oid === null)
     },
 
     async incoming(projectPath, from) {

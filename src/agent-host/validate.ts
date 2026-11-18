@@ -1991,6 +1991,10 @@ export function createValidators(platform: Platform): Validators {
       return { projectPath: absolutePath(o, 'projectPath', platform), oid: objectId(o, 'oid') }
     },
     'git.changes': project,
+    'git.commitMessage': (params) => {
+      const o = fields(params)
+      return { projectPath: absolutePath(o, 'projectPath', platform), paths: gitPaths(o, 'paths') }
+    },
     'git.incoming': (params) => {
       const o = fields(params)
       if (o.from !== 'upstream' && o.from !== 'base')

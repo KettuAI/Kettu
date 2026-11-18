@@ -341,7 +341,9 @@
     "sameBranch": "The branch and the base are the same branch",
     "localUpstream": "The branch tracks a branch of this repository, so there is no remote to push to",
     "otherName": "The branch tracks {{upstream}}, which has another name; push it from the terminal",
-    "unknownRemote": "This repository has several remotes and none is set for this branch"
+    "unknownRemote": "This repository has several remotes and none is set for this branch",
+    "commitMessageNoAgent": "No agent is available to write the message; add one or turn one on in Settings",
+    "commitMessageFailed": "{{agent}} could not write the message: {{reason}}"
   },
   "permission": {
     "allowOnce": "Allow once",
