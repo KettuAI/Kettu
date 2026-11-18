@@ -228,9 +228,15 @@
       "always": "Always",
       "descriptionOther": "System follows your operating system. Always removes movement everywhere."
     },
+    "sidebarHover": {
+      "name": "Show the sidebar on hover",
+      "description": "With the sidebar collapsed, pointing at its button shows it over the page until the pointer leaves.",
+      "keywords": "sidebar collapse expand peek reveal hover"
+    },
     "groups": {
       "theme": "Theme",
       "scale": "Zoom and text",
+      "sidebar": "Sidebar",
       "motion": "Motion"
     },
     "zoom": {

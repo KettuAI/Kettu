@@ -216,6 +216,60 @@
 .ui-as-app[data-collapsed] > .ui-as-side-open:hover {
   background: var(--chip);
 }
+/* Collapsed, with the toggle pointed at (features/shell/sidebar-peek.ts): the sidebar floats over
+   the page on its own layer and the columns stay as they are; the corner's controls stay over it. */
+.kettu-frame.ui-as-app[data-peek] {
+  --side-col: 0px;
+}
+.kettu-frame.ui-as-app[data-peek] > .ui-as-side {
+  position: absolute;
+  z-index: 30;
+  inset-block: 0;
+  left: 0;
+  border-radius: 0 var(--radius-card) var(--radius-card) 0;
+  background: var(--bg-sidebar);
+  box-shadow:
+    0 0 0 var(--hairline) var(--border-subtle),
+    var(--elevation-dialog);
+  animation: kettu-peek-in 200ms var(--ease-out-quint) backwards;
+}
+/* Out of the grid, the sidebar no longer holds the first column, so the main area keeps the second. */
+.kettu-frame.ui-as-app[data-peek] > .ui-as-main {
+  grid-column: 2;
+}
+.kettu-frame.kettu-band.ui-as-app[data-peek] > .ui-as-side {
+  top: var(--title-bar);
+}
+.kettu-frame.ui-as-app[data-peek] > .ui-as-corner {
+  z-index: 51;
+}
+.kettu-frame.ui-as-app.kettu-peek-out[data-peek] > .ui-as-side {
+  opacity: 0;
+  translate: -8px 0;
+  transition:
+    opacity 160ms ease,
+    translate 160ms ease;
+}
+@keyframes kettu-peek-in {
+  from {
+    opacity: 0;
+    translate: -8px 0;
+  }
+}
+/* Reduce motion keeps the fade and drops the slide. */
+@keyframes kettu-peek-fade {
+  from {
+    opacity: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .kettu-frame.ui-as-app[data-peek] > .ui-as-side {
+    animation-name: kettu-peek-fade;
+  }
+}
+:root[data-reduce-motion='always'] .kettu-frame.ui-as-app[data-peek] > .ui-as-side {
+  animation-name: kettu-peek-fade;
+}
 .ui-as-side__group.ui-as-chats {
   display: none;
 }

@@ -236,6 +236,8 @@ export type AppShellProps = {
   /** The narrow screen's drawer, controlled; the shell still opens and closes it through onDrawerChange */
   drawer?: boolean;
   onDrawerChange?: (open: boolean) => void;
+  /** Collapsed on a wide screen: the sidebar floats over the page for now, and the columns stay as they are */
+  peek?: boolean;
   /** Called with the sidebar's width after a drag or a key, e.g. to keep it */
   onSidebarWidthChange?: (width: number) => void;
   /** Called by the search field and ⌘K in place of opening the built-in search */
@@ -302,6 +304,7 @@ export function AppShell({
   onCollapsedChange,
   drawer: drawerProp,
   onDrawerChange,
+  peek,
   onSidebarWidthChange,
   onSearch,
   corner,
@@ -598,7 +601,8 @@ export function AppShell({
       ref={root}
       className={["ui-as", "ui-as-app", className].filter(Boolean).join(" ")}
       style={{ "--side-w": `${sideW}px`, "--panel-w": `${paneW}px` } as CSSProperties}
-      data-collapsed={(collapsed && !narrow) || undefined}
+      data-collapsed={(collapsed && !narrow && !peek) || undefined}
+      data-peek={(collapsed && !narrow && peek) || undefined}
       data-chrome={chrome}
       data-drawer={(narrow && drawer) || undefined}
       data-panel={panel ? (paneOpen ? "open" : "closed") : undefined}

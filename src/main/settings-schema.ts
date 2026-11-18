@@ -172,6 +172,7 @@ const SECTION_FIELDS = {
     textSize: oneOf('small', 'default', 'large'),
     reduceMotion: oneOf('system', 'always'),
     zoom: oneOf(...ZOOM_LEVELS),
+    sidebarHover: isBoolean,
   },
   notifications: {
     permission: isBoolean,

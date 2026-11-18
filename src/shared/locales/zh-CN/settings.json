@@ -227,9 +227,15 @@
       "always": "始终",
       "descriptionOther": "“跟随系统”遵循操作系统的设置；“始终”会去掉所有动态效果。"
     },
+    "sidebarHover": {
+      "name": "悬停显示侧边栏",
+      "description": "收起侧边栏后，鼠标移到它的按钮上，侧边栏会浮在页面上方显示，鼠标移开后收回。",
+      "keywords": "侧边栏 收起 展开 悬停 悬浮 sidebar hover"
+    },
     "groups": {
       "theme": "主题",
       "scale": "缩放与文字",
+      "sidebar": "侧边栏",
       "motion": "动态效果"
     },
     "zoom": {
