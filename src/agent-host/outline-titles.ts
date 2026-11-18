@@ -101,25 +101,35 @@ export interface SummaryRequest {
   timeoutMs?: number
 }
 
+export interface SmallModelRequest {
+  /** The empty folder hidden sessions run in. */
+  dir: string
+  /** The session's model, for an agent that offers no small one. */
+  sessionModel: string | null
+  prompt: string
+  /** What the reply is for, in its log lines. */
+  name: string
+  log(message: string): void
+  timeoutMs?: number
+}
+
 /**
- * Asks the agent for the messages' titles in a hidden session of its own, then removes it.
- * Rejects when the agent cannot open one that leaves no trace, fails, takes longer than the
- * timeout or answers with nothing that parses.
+ * Asks the agent's small model one prompt in a hidden session of its own, then removes it, and
+ * gives the messages it answers with. Rejects when the agent cannot open one that leaves no
+ * trace, fails or takes longer than the timeout.
  */
-export async function writeTitles(
+export async function askSmallModel(
   runtime: HiddenRuntime,
-  request: SummaryRequest,
-): Promise<OutlineTitle[]> {
+  request: SmallModelRequest,
+): Promise<string[]> {
   const { connection } = runtime
   if (!connection.hiddenSessions) {
     throw new Error("the agent's hidden sessions cannot be removed without a trace")
   }
   const timeoutMs = request.timeoutMs ?? REPORT_TIMEOUT_MS
-  const name = request.name ?? 'the outline titles'
-  const { positions, prompt } = summaryPrompt(request.messages, request.cut, request.instruction)
   const remove = (sessionId: string): Promise<void> =>
     connection.removeHidden(sessionId, (message) =>
-      request.log(`Could not remove the session of ${name}: ${message}`),
+      request.log(`Could not remove the session of ${request.name}: ${message}`),
     )
   const opening = connection.newSession(request.dir, { hidden: 'titles' })
   let sessionId: string | null = null
@@ -132,10 +142,10 @@ export async function writeTitles(
     if (option && model !== null && model !== option.value) {
       await connection.setConfigOption(setup.sessionId, option.id, model)
     }
-    return connection.collect(setup.sessionId, prompt)
+    return connection.collect(setup.sessionId, request.prompt)
   }
   try {
-    const messages = await Promise.race([
+    return await Promise.race([
       work(),
       new Promise<never>((_, reject) => {
         timer = setTimeout(() => {
@@ -144,9 +154,6 @@ export async function writeTitles(
         }, timeoutMs)
       }),
     ])
-    const titles = parseTitles(messages.join('\n'), new Set(positions))
-    if (!titles) throw new Error('its reply holds no JSON object of titles')
-    return titles
   } finally {
     if (timer) clearTimeout(timer)
     if (sessionId) await remove(sessionId)
@@ -157,4 +164,27 @@ export async function writeTitles(
         () => {},
       )
   }
+}
+
+/**
+ * Asks the agent for the messages' titles in a hidden session of its own, then removes it.
+ * Rejects when the agent cannot open one that leaves no trace, fails, takes longer than the
+ * timeout or answers with nothing that parses.
+ */
+export async function writeTitles(
+  runtime: HiddenRuntime,
+  request: SummaryRequest,
+): Promise<OutlineTitle[]> {
+  const { positions, prompt } = summaryPrompt(request.messages, request.cut, request.instruction)
+  const messages = await askSmallModel(runtime, {
+    dir: request.dir,
+    sessionModel: request.sessionModel,
+    prompt,
+    name: request.name ?? 'the outline titles',
+    log: request.log,
+    ...(request.timeoutMs === undefined ? {} : { timeoutMs: request.timeoutMs }),
+  })
+  const titles = parseTitles(messages.join('\n'), new Set(positions))
+  if (!titles) throw new Error('its reply holds no JSON object of titles')
+  return titles
 }

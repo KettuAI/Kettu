@@ -191,6 +191,7 @@ export const HOST_REQUEST_LIMITS: Readonly<Record<HostMethod, number | null>> = 
   'git.createPullRequest': NONE,
   'git.commit': NONE,
   'git.changes': AGENT_MS,
+  'git.commitMessage': AGENT_MS,
   'git.incoming': AGENT_MS,
   'git.fileDiff': AGENT_MS,
   'git.branches': AGENT_MS,

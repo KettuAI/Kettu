@@ -258,6 +258,8 @@
       "title": "Commit to {{branch}}",
       "message": "Message",
       "placeholder": "What changed, in one line\n\nWhy it changed",
+      "write": "Write the message with AI",
+      "writing": "Writing the message…",
       "files": "Files",
       "filesChosen_one": "{{chosen}} of {{count}} file",
       "filesChosen_other": "{{chosen}} of {{count}} files",

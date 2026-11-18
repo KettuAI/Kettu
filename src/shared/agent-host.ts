@@ -1300,6 +1300,9 @@ export interface HostContract {
   }
   'git.commit': { params: { projectPath: string; oid: string }; result: CommitDetails }
   'git.changes': { params: { projectPath: string }; result: ChangedFile[] }
+  // A commit message for the files' working tree changes, paths as `git.commitChanges` takes them,
+  // written by the project's preferred agent from the diffs and the repository's recent commits.
+  'git.commitMessage': { params: { projectPath: string; paths: string[] }; result: string }
   'git.incoming': {
     params: { projectPath: string; from: 'upstream' | 'base' }
     result: LogCommit[]
@@ -1847,6 +1850,7 @@ export const HOST_METHODS = [
   'git.createPullRequest',
   'git.commit',
   'git.changes',
+  'git.commitMessage',
   'git.incoming',
   'git.fileDiff',
   'git.branches',

@@ -1,8 +1,17 @@
-import { useCallback, useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type FormEvent,
+  type ReactNode,
+} from 'react'
 import {
   ArrowLeft02Icon,
   GitBranchIcon,
   GlobalIcon,
+  SparklesIcon,
   SquareLock02Icon,
   Tick02Icon,
   Upload04Icon,
@@ -56,6 +65,7 @@ import {
 } from '@renderer/components/ui/select'
 import { Spinner } from '@renderer/components/ui/spinner'
 import { Textarea } from '@renderer/components/ui/textarea'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
 import { errorMessage, host } from '@renderer/lib/host'
 import { isMod } from '@renderer/lib/platform'
 import { cn } from '@renderer/lib/utils'
@@ -324,14 +334,41 @@ function CommitForm({
   }
   const [busy, setBusy] = useState<'commit' | 'push' | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [writing, setWriting] = useState(false)
+  const [writeError, setWriteError] = useState<string | null>(null)
+  const open = useRef(true)
+  useEffect(() => {
+    open.current = true
+    return () => {
+      open.current = false
+    }
+  }, [])
   const chosen = files.filter((file) => ticked?.has(file.path))
-  const ready = message.trim() !== '' && chosen.length > 0 && !busy
+  const ready = message.trim() !== '' && chosen.length > 0 && !busy && !writing
 
   const toggle = (path: string, on: boolean): void => {
     const next = new Set(ticked ?? [])
     if (on) next.add(path)
     else next.delete(path)
     setTicked(next)
+  }
+
+  // The agent writes the message from the chosen files; the box stays as it was if it cannot.
+  const write = async (): Promise<void> => {
+    if (writing || busy || chosen.length === 0) return
+    setWriting(true)
+    setWriteError(null)
+    try {
+      const written = await host('git.commitMessage', {
+        projectPath,
+        paths: chosen.map((file) => file.path),
+      })
+      if (open.current) setMessage(written)
+    } catch (failure) {
+      if (open.current) setWriteError(errorMessage(failure))
+    } finally {
+      if (open.current) setWriting(false)
+    }
   }
 
   const commit = async (andPush: boolean): Promise<void> => {
@@ -362,13 +399,44 @@ function CommitForm({
     >
       <Head>{t('dialog.commit.title', { branch: status.head.branch ?? 'HEAD' })}</Head>
       <Body>
-        <Label htmlFor="commit-message">{t('dialog.commit.message')}</Label>
+        <Label
+          htmlFor="commit-message"
+          action={
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon-xs"
+                    className="-my-1"
+                    aria-label={t('dialog.commit.write')}
+                    disabled={ticked === null || chosen.length === 0 || !!busy || writing}
+                    onClick={() => void write()}
+                  />
+                }
+              >
+                {writing ? (
+                  <Spinner className="size-3.5" />
+                ) : (
+                  <Glyph icon={SparklesIcon} size={14} />
+                )}
+              </TooltipTrigger>
+              <TooltipContent>
+                {writing ? t('dialog.commit.writing') : t('dialog.commit.write')}
+              </TooltipContent>
+            </Tooltip>
+          }
+        >
+          {t('dialog.commit.message')}
+        </Label>
         <Textarea
           id="commit-message"
           value={message}
           autoFocus
           rows={4}
-          placeholder={t('dialog.commit.placeholder')}
+          readOnly={writing}
+          placeholder={writing ? t('dialog.commit.writing') : t('dialog.commit.placeholder')}
           className="max-h-60 min-h-27.5 resize-none text-control leading-[1.55]"
           onChange={(event) => setMessage(event.target.value)}
           onKeyDown={(event) => {
@@ -379,6 +447,7 @@ function CommitForm({
             }
           }}
         />
+        {writeError !== null && <FailureText log={writeError} />}
         <Label>
           {ticked
             ? t('dialog.commit.filesChosen', { count: files.length, chosen: chosen.length })

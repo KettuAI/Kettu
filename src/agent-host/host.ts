@@ -106,6 +106,7 @@ import {
   type BrowserTarget,
 } from './device-browser'
 import { BrowserTurns } from './browser-turns'
+import { writeCommitMessage } from './commit-message'
 import { Diagnostics } from './diagnostics'
 import { HostError, invalidParams } from './errors'
 import { setLocale, t } from './i18n'
@@ -1902,6 +1903,16 @@ export class AgentHost {
    * without tools.
    */
   private async sampleAgent(project: string | null): Promise<SampleAgent | null> {
+    const agentId = this.preferredAgent(project)
+    if (agentId === null || !QUESTION_HARNESSES.has(harnessOf(agentId))) return null
+    return { id: agentId, name: this.agents.name(agentId) }
+  }
+
+  /**
+   * The agent Kettu asks on its own account about `project`, null for No project: the agent new
+   * sessions start with, else the one its latest session used; null when it is gone or off.
+   */
+  private preferredAgent(project: string | null): AgentId | null {
     let agentId = this.settings.defaultAgent
     if (agentId === null) {
       const sessions = project === null ? this.sessions.list() : this.sessions.list(project)
@@ -1909,8 +1920,29 @@ export class AgentHost {
     }
     if (agentId === null || !this.agents.has(agentId) || this.agents.isDisabled(agentId))
       return null
-    if (!QUESTION_HARNESSES.has(harnessOf(agentId))) return null
-    return { id: agentId, name: this.agents.name(agentId) }
+    return agentId
+  }
+
+  /** A commit message for the changed files at `paths`, from the project's preferred agent. */
+  private async commitMessage(projectPath: string, paths: string[]): Promise<string> {
+    const context = await this.gitProjectCall(projectPath, (g, p) => g.commitContext(p, paths))
+    const agentId = this.preferredAgent(projectPath)
+    if (agentId === null) throw new HostError('agent_error', t('git.commitMessageNoAgent'))
+    const agent = this.agents.name(agentId)
+    try {
+      const runtime = await this.agents.ensureReady(agentId)
+      const dir = path.join(this.options.userDataPath, 'agent-reports')
+      await mkdir(dir, { recursive: true })
+      return await writeCommitMessage(runtime, {
+        dir,
+        context,
+        log: (line) => this.diagnostics.log('warn', line),
+      })
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error)
+      this.diagnostics.log('warn', `${agent}: could not write a commit message: ${reason}`)
+      throw new HostError('agent_error', t('git.commitMessageFailed', { agent, reason }))
+    }
   }
 
   /** A page's question to the agent, in a hidden session with no tools in the reports' folder. */
@@ -2728,6 +2760,7 @@ export class AgentHost {
       'git.commit': ({ projectPath, oid }) =>
         this.gitProjectCall(projectPath, (g, p) => g.commit(p, oid)),
       'git.changes': ({ projectPath }) => this.gitProjectCall(projectPath, (g, p) => g.changes(p)),
+      'git.commitMessage': ({ projectPath, paths }) => this.commitMessage(projectPath, paths),
       'git.incoming': ({ projectPath, from }) =>
         this.gitProjectCall(projectPath, (g, p) => g.incoming(p, from)),
       'git.fileDiff': ({ projectPath, path, oldPath, ref }) =>

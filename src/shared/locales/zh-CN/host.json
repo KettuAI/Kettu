@@ -338,7 +338,9 @@
     "sameBranch": "此分支和目标分支是同一个分支",
     "localUpstream": "此分支跟踪的是本仓库的分支，没有可推送的远程仓库",
     "otherName": "此分支跟踪的是名称不同的 {{upstream}}，请在终端中推送",
-    "unknownRemote": "此仓库有多个远程仓库，且没有为此分支指定其中一个"
+    "unknownRemote": "此仓库有多个远程仓库，且没有为此分支指定其中一个",
+    "commitMessageNoAgent": "没有可用来写提交信息的 Agent，请先在设置里添加或开启一个",
+    "commitMessageFailed": "{{agent}} 没能写出提交信息：{{reason}}"
   },
   "permission": {
     "allowOnce": "允许一次",
