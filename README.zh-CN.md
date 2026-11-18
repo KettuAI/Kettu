@@ -174,6 +174,10 @@ docker exec -it kettu kettu pair
 
 欢迎提 [Issue](https://github.com/KettuAI/Kettu/issues/new/choose)，用什么语言都行；也可以在应用里用「帮助 › 报告问题…」发一份报告。安全问题请按 [SECURITY.md](./SECURITY.md) 报告。想自己构建，请看 [CONTRIBUTING.md](./CONTRIBUTING.md)。
 
+也欢迎扫码加入微信群：
+
+<img src="./assets/group-qr.png" alt="Kettu 微信群二维码" width="240">
+
 ## 许可证
 
 [AGPL-3.0](./LICENSE)。
