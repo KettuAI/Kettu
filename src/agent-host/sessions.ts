@@ -6751,6 +6751,7 @@ export class SessionManager {
       background: undefined,
       // Speed is the old agent's model; the new one may not be timed at all.
       speed: undefined,
+      lastRequest: undefined,
       // The side chat stays; the new agent answers it its own way.
       ...(live.thread.session.sideChat
         ? { sideChat: { ...live.thread.session.sideChat, route: this.sideRouteOf(agentId) } }

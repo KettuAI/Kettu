@@ -325,7 +325,8 @@ export class ClaudeMapper {
           tokens: 0,
         }
         const usage = event.message?.usage
-        return [{ sessionId, map: (ctx) => this.request(ctx, usage) }]
+        const sentAt = this.lastSentAt
+        return [{ sessionId, map: (ctx) => this.request(ctx, usage, sentAt) }]
       }
       case 'content_block_start': {
         const block = event.content_block
@@ -399,6 +400,7 @@ export class ClaudeMapper {
           cache_creation_input_tokens?: number | null
         }
       | undefined,
+    sentAt: number | null = null,
   ): MapperOutput {
     const out = output()
     if (ctx.replaying) return out
@@ -422,6 +424,18 @@ export class ClaudeMapper {
               ? { cache: previous.cache }
               : {}),
         },
+        ...(counts && usage
+          ? {
+              lastRequest: {
+                at: latestTime(sentAt, ctx.thread.session.turnStartedAt) ?? ctx.now,
+                input: usage.input_tokens ?? null,
+                cacheRead: usage.cache_read_input_tokens ?? null,
+                cacheWrite: usage.cache_creation_input_tokens ?? null,
+                output: null,
+                ms: null,
+              },
+            }
+          : {}),
       },
     })
     if (!counts) return out
@@ -541,7 +555,17 @@ export class ClaudeMapper {
     const whole = timing.startTokens >= timing.tokens
     const sample = timeRequest(timing.tokens, sentAt, whole ? null : timing.startedAt, endedAt)
     const speed = sample && addSpeedSample(session.speed, sample, session.turnStartedAt)
-    if (speed) out.patches.push({ op: 'session.update', changes: { speed } })
+    const last = session.lastRequest
+    const lastRequest =
+      last && last.output === null
+        ? { ...last, output: timing.tokens, ms: endedAt - last.at }
+        : undefined
+    if (speed || lastRequest) {
+      out.patches.push({
+        op: 'session.update',
+        changes: { ...(speed ? { speed } : {}), ...(lastRequest ? { lastRequest } : {}) },
+      })
+    }
     return out
   }
 

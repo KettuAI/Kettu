@@ -139,6 +139,18 @@ export interface ModelRequestRaw {
   folded: boolean
 }
 
+/** The main thread's latest request as the stream reported it, kept only while the session is open. */
+export interface LastRequest {
+  /** When it went out. */
+  at: number
+  input: number | null
+  cacheRead: number | null
+  cacheWrite: number | null
+  /** Null while it runs. */
+  output: number | null
+  ms: number | null
+}
+
 /** The share of all input that was read from the cache. */
 export function cacheHitShare(tokens: RequestTokens): number | null {
   if (tokens.cacheRead === null) return null

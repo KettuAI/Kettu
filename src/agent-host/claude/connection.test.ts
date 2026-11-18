@@ -920,6 +920,15 @@ describe('a turn', () => {
         turn: { since: 9_000, tokens: 200, ms: 2_000, requests: 1, approx: 0 },
         session: { tokens: 200, ms: 2_000, requests: 1, approx: 0 },
       })
+      // The latest request, from when it went out to its end.
+      expect(target.thread.session.lastRequest).toEqual({
+        at: 9_000,
+        input: null,
+        cacheRead: null,
+        cacheWrite: null,
+        output: 200,
+        ms: 3_000,
+      })
 
       await at(15_000, toolResult)
       // A subagent's request is its own, not the main thread's.

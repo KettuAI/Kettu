@@ -2,6 +2,7 @@
 // It never imports ACP types; only the mapper in src/agent-host/acp/ does.
 
 import { isAgentId, type AgentId } from './agents'
+import type { LastRequest } from './model-requests'
 import type { BrowserOriginAnswer } from './browser'
 import {
   isControlOutcome,
@@ -88,6 +89,8 @@ export interface SessionView {
   background?: BackgroundTaskView[]
   /** Ephemeral: how fast the model writes, for an agent whose stream times its requests. */
   speed?: OutputSpeed
+  /** Ephemeral: the main thread's latest request, for an agent whose stream counts its tokens. */
+  lastRequest?: LastRequest
   /** Questions asked beside the session, never part of its conversation. Absent for subagents. */
   sideChat?: SideChatView
   /** Ephemeral: a program outside Kettu, such as a terminal, has the agent's session open. */

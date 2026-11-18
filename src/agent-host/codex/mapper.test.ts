@@ -116,9 +116,37 @@ describe('output speed', () => {
     })
   })
 
+  it('keeps the latest request with its input split from what came from the cache', () => {
+    const last = {
+      totalTokens: 41_210,
+      inputTokens: 40_600,
+      cachedInputTokens: 36_000,
+      cacheWriteInputTokens: 2_000,
+      outputTokens: 610,
+      reasoningOutputTokens: 200,
+    }
+    const { thread } = run([
+      [...completed({ type: 'userMessage', id: 'u', content: [] }), 1_000],
+      [
+        'thread/tokenUsage/updated',
+        { ...at, tokenUsage: { total: last, last, modelContextWindow: 272_000 } },
+        7_000,
+      ],
+    ])
+    expect(thread.session.lastRequest).toEqual({
+      at: 1_000,
+      input: 2_600,
+      cacheRead: 36_000,
+      cacheWrite: 2_000,
+      output: 610,
+      ms: 6_000,
+    })
+  })
+
   it('times nothing in a replay', () => {
     const { thread } = run([usage(300, 0, 6_000)], { replaying: true })
     expect(thread.session.speed).toBeUndefined()
+    expect(thread.session.lastRequest).toBeUndefined()
   })
 })
 
