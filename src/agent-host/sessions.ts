@@ -207,6 +207,12 @@ import { watchSettings, type PreparedRecords, type WatchTarget } from './prepare
 import type { Projects } from './projects'
 import type { LastRequest, OutsideReader } from './outside-sessions'
 import type { CacheTtlReader } from './prompt-cache'
+import type { ModelRequestsReader, RequestsTarget } from './model-requests/claude'
+import type {
+  ModelRequestRaw,
+  ModelRequestsOverview,
+  ModelRequestsPage,
+} from '@shared/model-requests'
 import { missedCache, type IdleRelease } from './idle-release'
 import {
   REPORT_LIMIT,
@@ -485,6 +491,8 @@ export interface SessionManagerDeps {
   }
   /** Reads how long a session's prompt cache lasts from the agent's own transcript. */
   cacheTtl?: CacheTtlReader
+  /** Reads a session's requests to its model from the agent's own record of the session. */
+  modelRequests?: ModelRequestsReader
   /**
    * Reads how a Claude Code session last ran outside Kettu and whether a process there still has
    * it open; without it a session is imported and attached unchecked.
@@ -2887,6 +2895,36 @@ export class SessionManager {
       this.flushPatches(live)
       return { entries: waitingEntries(live) }
     })
+  }
+
+  // The requests to the model, read from the agent's own record when the Requests pane asks; none
+  // of it is kept or logged.
+
+  private requestsTarget(sessionId: string): RequestsTarget {
+    const record = this.recordOf(sessionId)
+    return {
+      agentId: record.agentId,
+      cwd: workDir(record),
+      acpSessionId: record.acpSessionId,
+      configDir: record.configDir ?? null,
+    }
+  }
+
+  async modelRequests(sessionId: string, before: string | null): Promise<ModelRequestsPage | null> {
+    const target = this.requestsTarget(sessionId)
+    return (await this.deps.modelRequests?.page(target, before)) ?? null
+  }
+
+  async modelRequestsOverview(sessionId: string): Promise<ModelRequestsOverview | null> {
+    const target = this.requestsTarget(sessionId)
+    const summary = await this.deps.modelRequests?.summary(target)
+    return summary ? { source: 'claude', ...summary } : null
+  }
+
+  async modelRequestRaw(sessionId: string, raw: string, full: boolean): Promise<ModelRequestRaw> {
+    const reader = this.deps.modelRequests
+    if (!reader) throw notFound(`Session ${sessionId} has no record of its requests to read`)
+    return reader.raw(this.requestsTarget(sessionId), raw, full)
   }
 
   // The message outline.

@@ -61,6 +61,7 @@ import type {
   CommunityListing,
 } from './market-community'
 import type { MediaAuthorization, MediaOpenResult } from './media'
+import type { ModelRequestRaw, ModelRequestsOverview, ModelRequestsPage } from './model-requests'
 import type {
   MemoryDecision,
   MemoryDraft,
@@ -1137,6 +1138,24 @@ export interface HostContract {
   // `permissionCount` counts. Empty for a closed session, where nothing waits.
   'sessions.requests': { params: { sessionId: string }; result: { entries: ThreadEntry[] } }
   'sessions.outline': { params: { sessionId: string }; result: { entries: OutlineEntry[] } }
+  // The session's requests to its model, read from the agent's own record of the session: the
+  // newest page, or the one before `before`. Null when Kettu cannot read this agent's record.
+  'sessions.modelRequests': {
+    params: { sessionId: string; before?: string }
+    result: ModelRequestsPage | null
+  }
+  // What the whole record holds beyond its pages: the request count, the cost the agent reckons
+  // and the system prompt and tools. Null as for `sessions.modelRequests`.
+  'sessions.modelRequestsOverview': {
+    params: { sessionId: string }
+    result: ModelRequestsOverview | null
+  }
+  // A request's records as the agent wrote them, `raw` naming them as a page gave it, or `system`
+  // for the system prompt and tools; long strings folded unless `full`.
+  'sessions.modelRequestRaw': {
+    params: { sessionId: string; raw: string; full?: boolean }
+    result: ModelRequestRaw
+  }
   // The sessions whose messages hold every word of `query`, most recently updated first, each
   // with its latest such message; the sessions a session list shows, at most 100. Empty for a
   // query of fewer than 2 characters. `indexing` is present while the index is built, and the
@@ -1771,6 +1790,9 @@ export const HOST_METHODS = [
   'sessions.entry',
   'sessions.requests',
   'sessions.outline',
+  'sessions.modelRequests',
+  'sessions.modelRequestsOverview',
+  'sessions.modelRequestRaw',
   'sessions.search',
   'sessions.find',
   'sessions.outputs',
