@@ -723,6 +723,9 @@
       "details": "Details",
       "copy": "Copy the message"
     },
+    "width": {
+      "label": "Resize the content width"
+    },
     "outline": {
       "label_one": "Outline, {{count}} message",
       "label_other": "Outline, {{count}} messages",
