@@ -97,7 +97,7 @@ export function linkParts(url: string): { host: string; path: string; local: boo
 const count = (text: string, char: string) => text.split(char).length - 1
 
 /** A link without what ends the sentence around it, or a bracket it did not open. */
-function trimLink(url: string): string {
+export function trimLink(url: string): string {
   let end = url.length
   for (;;) {
     const last = url[end - 1] ?? ''

@@ -4,6 +4,7 @@ import { defaultRemarkPlugins, type StreamdownProps } from 'streamdown'
 import { codexCitations } from './codex-citations'
 import { emojiShortcodes } from './emoji-shortcodes'
 import { githubRefs } from './github-refs'
+import { gluedLinks } from './glued-links'
 import { localImages } from './local-images'
 import { localLinks } from './local-links'
 
@@ -22,6 +23,7 @@ const defaults = Object.entries(defaultRemarkPlugins).map(
 // prices far more often than formulas.
 export const remarkPlugins: RemarkPlugins = [
   ...defaults,
+  gluedLinks,
   [remarkMath, { singleDollarTextMath: false }],
   remarkBreaks,
   emojiShortcodes,
