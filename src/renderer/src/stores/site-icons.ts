@@ -41,6 +41,7 @@ export function loadSiteIcons(): void {
   const early: SiteIconEvent[] = []
   let loaded = false
   window.kettu.browser.onSiteIcon((event) => {
+    if (event.kind === 'cleared') askedAt.clear()
     if (!loaded) early.push(event)
     else
       useSiteIconsStore.setState((s) => ({
