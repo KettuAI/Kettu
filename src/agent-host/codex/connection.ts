@@ -145,6 +145,8 @@ const GOAL_CONTINUATION = 'Continue working toward the active goal.'
 const IMPLEMENT_PLAN = 'Implement the plan.'
 const PLAN_OPTION = { implement: 'implement', keepPlanning: 'keep_planning' } as const
 const MCP_STARTUP_TIMEOUT_MS = 30_000
+// A thread opened after this long reads the models again, in the background.
+const MODELS_REREAD_MS = 60_000
 
 /** The kinds of thread `thread/list` names, as codex-acp listed them; subagents are left out. */
 const LISTED_SOURCES = ['cli', 'vscode', 'exec', 'appServer', 'unknown']
@@ -417,9 +419,10 @@ export class CodexConnection implements AgentConnection {
   private readonly collectors = new Map<string, (delivery: Delivery) => void>()
   /** Subagent threads, to the thread each runs under. */
   private readonly parents = new Map<string, string>()
-  private models: Promise<Model[]> | null = null
-  /** The models once listed, which each turn's service tier is read from. */
+  /** The models as last listed, which each turn's service tier is read from. */
   private knownModels: Model[] = []
+  private modelsReadAt: number | null = null
+  private modelsRead: Promise<Model[]> | null = null
   private initialized = false
   /** The skill folders last set on app-server, as JSON. */
   private skillRoots: string | null = null
@@ -630,14 +633,17 @@ export class CodexConnection implements AgentConnection {
 
   // Sessions.
 
+  /** The models Codex lists, as last read; the first call reads them. */
+  private listModels(): Promise<Model[]> {
+    return this.modelsReadAt === null ? this.readModels() : Promise.resolve(this.knownModels)
+  }
+
   /**
-   * The models Codex lists. Opening a thread reads them again, so models Codex adds while it runs
-   * show in the next session and in a session's refreshed menu; a turn or a pick reuses them. A
-   * failed read keeps the last list.
+   * Reads the models Codex lists. It takes seconds when Codex cannot reach its server, so only a
+   * read for the agent's options waits for it. A failed read keeps the last list.
    */
-  private listModels(again = false): Promise<Model[]> {
-    if (this.models && !again) return this.models
-    const read: Promise<Model[]> = (async () => {
+  private readModels(): Promise<Model[]> {
+    this.modelsRead ??= (async () => {
       const models: Model[] = []
       let cursor: string | null = null
       do {
@@ -649,14 +655,23 @@ export class CodexConnection implements AgentConnection {
         cursor = page.nextCursor
       } while (cursor)
       this.knownModels = models
+      this.modelsReadAt = Date.now()
       return models
-    })().catch((error: unknown) => {
-      if (this.models === read) this.models = null
-      this.hooks.log('warn', `Could not list Codex's models: ${(error as Error).message}`)
-      return this.knownModels
-    })
-    this.models = read
-    return read
+    })()
+      .catch((error: unknown) => {
+        this.hooks.log('warn', `Could not list Codex's models: ${(error as Error).message}`)
+        return this.knownModels
+      })
+      .finally(() => {
+        this.modelsRead = null
+      })
+    return this.modelsRead
+  }
+
+  /** Reads the models again in the background once the list held is old, for the next thread. */
+  private rereadModels(): void {
+    if (this.modelsReadAt === null || Date.now() - this.modelsReadAt < MODELS_REREAD_MS) return
+    void this.readModels()
   }
 
   private async record(
@@ -666,7 +681,8 @@ export class CodexConnection implements AgentConnection {
     hidden: boolean,
     base?: Settings,
   ): Promise<ThreadRecord> {
-    const models = await this.listModels(true)
+    const models = await this.listModels()
+    this.rereadModels()
     const modelId = base?.model ?? response.model
     const model = models.find((item) => item.id === modelId)
     const settings: Settings = base
@@ -698,6 +714,8 @@ export class CodexConnection implements AgentConnection {
 
   async newSession(cwd: string, options: SessionOptions = {}): Promise<OpenedSession> {
     await this.requireSignIn()
+    // A read of the agent's options has nobody waiting on it, so it lists what Codex offers now.
+    if (options.hidden === 'options') await this.readModels()
     const mode = modeOf(DEFAULT_MODE)!
     const hidden = options.hidden !== undefined
     await this.setSkillRoots(options.skillRoots)
