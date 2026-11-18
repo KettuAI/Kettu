@@ -96,6 +96,7 @@ export function SidebarList() {
     () => others.filter((host) => isAway(host.connection)).map((host) => host.id),
     [others],
   )
+  const scratch = useHasNoProjectSessions(null)
   // The list has one Tab stop, chosen from the store so a hidden shown row leaves it to a header.
   const stopKey = useSessionsStore((s) =>
     tabStopKey(
@@ -163,7 +164,7 @@ export function SidebarList() {
             <PinnedGroup stop={stop} />
             <div className="ui-as-side__group" role="group" aria-label={t('nav.projects')}>
               <span className="ui-as-side__label">{t('nav.projects')}</span>
-              {shownProjects.length === 0 && (
+              {shownProjects.length === 0 && !scratch && (
                 <span className="ui-as-side__empty">{t('nav.empty')}</span>
               )}
               {shownProjects.map((project) => (
@@ -190,6 +191,15 @@ export function SidebarList() {
   )
 }
 
+/** Whether `hostId` has a session started with No project that the list shows. */
+function useHasNoProjectSessions(hostId: string | null): boolean {
+  return useSessionsStore((s) =>
+    Object.values(s.byId).some(
+      (x) => x.scratch && listedOrigin(x) && !x.archivedAt && hostOfSession(x) === hostId,
+    ),
+  )
+}
+
 /** A host's heading, its projects' folders and its No project folder. */
 function HostSection({
   hostId,
@@ -204,11 +214,7 @@ function HostSection({
 }) {
   const away = isAway(useOtherHost(hostId)?.connection ?? null)
   const own = projects.filter((project) => hostOfPath(project.path) === hostId)
-  const scratch = useSessionsStore((s) =>
-    Object.values(s.byId).some(
-      (x) => x.scratch && listedOrigin(x) && !x.archivedAt && hostOfSession(x) === hostId,
-    ),
-  )
+  const scratch = useHasNoProjectSessions(hostId)
   const key = hostGroup(hostId)
   const open = useViewStore((s) => !s.collapsedProjects[key])
   return (
