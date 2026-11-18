@@ -17,9 +17,10 @@ const AWS_KEY = /\b(?:AKIA|ASIA)[0-9A-Z]{16}\b/g
 const JWT = /\beyJ[A-Za-z0-9_-]{8,}\.eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}/g
 const URL_PASSWORD = /\b([a-z][a-z0-9+.-]*:\/\/[^\s:/@"']+:)[^\s@/"']+@/gi
 // A name like api_key, token or password, then `=` or `:`, then its value. A quoted name is
-// matched with its closing quote, as in JSON.
+// matched with its closing quote, as in JSON. A value never starts an object or array, whose own
+// names are checked one by one, so masked JSON still parses.
 const NAMED_SECRET =
-  /\b([A-Za-z0-9_.-]*(?:api[_-]?key|secret|token|passw(?:or)?d|pwd|credential|private[_-]?key|access[_-]?key)[A-Za-z0-9_.-]*["']?\s*[:=]\s*["']?)([^\s"'&,;}\]]+)/gi
+  /\b([A-Za-z0-9_.-]*(?:api[_-]?key|secret|token|passw(?:or)?d|pwd|credential|private[_-]?key|access[_-]?key)[A-Za-z0-9_.-]*["']?\s*[:=]\s*["']?)([^\s"'&,;{}[\]]+)/gi
 // Values that a secret-like name may carry without being a secret: counts such as inputTokens.
 const PLAIN_VALUE = /^(?:\d+(?:\.\d+)?|true|false|null|undefined|none|\*+|<redacted>)$/i
 
