@@ -82,6 +82,7 @@ export interface SettingsFile {
   terminal: {
     shellPath?: string // picked in a native dialog; the platform default when absent
     fontSize: 12 | 13 | 14
+    fontFamily?: string // an installed face tried before the theme's code font
   }
   // worktreeRoot: where sessions' worktrees go; null puts them beside each project.
   git: { backgroundFetch: boolean; worktreeRoot: string | null }
@@ -132,6 +133,18 @@ export interface DirectSettings {
 /** Where a link opens: the system's default browser, or the session's page in Kettu's browser. */
 export type LinkDestination = 'browser' | 'session'
 export type OpenLinksIn = LinkDestination | 'ask'
+
+export const MAX_FONT_FAMILY_CHARS = 100
+
+/** One face name, safe to put in quotes in a CSS font stack: no quotes, separators or controls. */
+export function isFontFamilyName(value: string): boolean {
+  return (
+    value.length > 0 &&
+    value.length <= MAX_FONT_FAMILY_CHARS &&
+    value === value.trim() &&
+    !/[\p{Cc}"'`\\;,{}()<>]/u.test(value)
+  )
+}
 
 /** The most sites the "Always open" choice remembers. */
 export const MAX_LINK_SITES = 500
@@ -283,7 +296,11 @@ export interface SettingsPatch {
     >
   >
   proxy?: ProxySettings
-  terminal?: { shellPath?: null; fontSize?: SettingsFile['terminal']['fontSize'] }
+  terminal?: {
+    shellPath?: null
+    fontSize?: SettingsFile['terminal']['fontSize']
+    fontFamily?: string | null // null goes back to the theme's code font
+  }
   git?: Partial<SettingsFile['git']>
   mcp?: { kettu: { off: AgentId[] } } // the list is replaced whole
   marketplace?: { mcp?: MarketServer[]; skills?: MarketSkill[] } // each list is replaced whole

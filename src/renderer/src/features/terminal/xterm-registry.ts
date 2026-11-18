@@ -6,6 +6,7 @@ import { terminals } from '@renderer/lib/host'
 import { isMac, isMod } from '@renderer/lib/platform'
 import { useSettingsStore } from '@renderer/stores/settings'
 import { holdsTerminalInput, setSink, useTerminalsStore } from '@renderer/stores/terminals'
+import { terminalFontStack } from './font-stack'
 import { passesHeld } from './held-keys'
 import { onColorsChange } from '@renderer/stores/themes'
 
@@ -83,9 +84,9 @@ function readTheme(): ITheme {
 }
 
 function fontFamily(): string {
-  return (
+  const theme =
     getComputedStyle(document.documentElement).getPropertyValue('--font-mono').trim() || 'monospace'
-  )
+  return terminalFontStack(useSettingsStore.getState().settings.terminal.fontFamily, theme)
 }
 
 /** xterm.js measures its cells as a terminal opens, so the face must be loaded by then. */
@@ -100,29 +101,38 @@ async function loadFont(): Promise<void> {
 
 let watching = false
 
-/** Follows the colors, the font size and removed terminals for every instance. */
+/** A face must load before xterm.js measures it, so the instances follow once it has. */
+function syncFontFamily(): void {
+  void loadFont().then(() => {
+    const family = fontFamily()
+    for (const instance of ready.values()) {
+      if (instance.term.options.fontFamily === family) continue
+      instance.term.options.fontFamily = family
+      if (instance.visible) fitNow(instance)
+    }
+  })
+}
+
+/** Follows the colors, the font and removed terminals for every instance. */
 function watchOnce(): void {
   if (watching) return
   watching = true
   onColorsChange(() => {
     const theme = readTheme()
     for (const instance of ready.values()) instance.term.options.theme = theme
-    // A theme may name another face for code, which must load before xterm.js measures it.
-    const family = fontFamily()
-    void loadFont().then(() => {
-      for (const instance of ready.values()) {
-        if (instance.term.options.fontFamily === family) continue
-        instance.term.options.fontFamily = family
-        if (instance.visible) fitNow(instance)
-      }
-    })
+    // A theme may name another face for code.
+    syncFontFamily()
   })
   useSettingsStore.subscribe((state, previous) => {
     const size = state.settings.terminal.fontSize
-    if (size === previous.settings.terminal.fontSize) return
-    for (const instance of ready.values()) {
-      instance.term.options.fontSize = size
-      if (instance.visible) fitNow(instance)
+    if (size !== previous.settings.terminal.fontSize) {
+      for (const instance of ready.values()) {
+        instance.term.options.fontSize = size
+        if (instance.visible) fitNow(instance)
+      }
+    }
+    if (state.settings.terminal.fontFamily !== previous.settings.terminal.fontFamily) {
+      syncFontFamily()
     }
   })
   useTerminalsStore.subscribe((state, previous) => {

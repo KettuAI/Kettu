@@ -257,6 +257,17 @@
       "reset": "Reset",
       "choose": "Choose…"
     },
+    "fontFamily": {
+      "name": "Font",
+      "description": "A font installed on this computer, such as a Nerd Font for prompt icons. The theme’s code font fills in what it lacks.",
+      "keywords": "font family typeface nerd font monospace icons",
+      "default": "Theme’s code font",
+      "search": "Search or type a font name",
+      "use": "Use “{{name}}”",
+      "noMatch": "No monospace font matches.",
+      "loading": "Reading the installed fonts…",
+      "unavailable": "This browser cannot list fonts. Type a name to use it."
+    },
     "fontSize": {
       "name": "Font size",
       "description": "In pixels."
