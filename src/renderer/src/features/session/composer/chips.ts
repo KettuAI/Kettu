@@ -94,6 +94,27 @@ export function linkParts(url: string): { host: string; path: string; local: boo
   }
 }
 
+// About as much of an address as a chip's width shows in the interface face.
+const LINK_CHARS = 44
+
+/**
+ * A link's path as its chip writes it: whole when the address fits, else its last segments after
+ * `/…`, so the end that tells links apart, such as an issue number or a file name, stays.
+ */
+export function shortLinkPath(host: string, path: string): string {
+  if (host.length + path.length <= LINK_CHARS) return path
+  const end = path.search(/[?#]/)
+  const segments = (end < 0 ? path : path.slice(0, end)).split('/').slice(1)
+  let tail = (segments.pop() ?? '') + (end < 0 ? '' : path.slice(end))
+  while (segments.length > 0) {
+    const next = `${segments.at(-1)}/${tail}`
+    if (host.length + '/…/'.length + next.length > LINK_CHARS) break
+    tail = next
+    segments.pop()
+  }
+  return segments.length === 0 ? path : `/…/${tail}`
+}
+
 const count = (text: string, char: string) => text.split(char).length - 1
 
 /** A link without what ends the sentence around it, or a bracket it did not open. */

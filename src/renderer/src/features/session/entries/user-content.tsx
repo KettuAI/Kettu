@@ -246,7 +246,7 @@ function ChipText({
             aria-label={raw}
             title={chip.kind === 'link' ? chip.url : undefined}
             onClick={(event) => open(event.currentTarget)}
-            className="rounded-lg align-middle outline-none select-none focus-visible:focus-ring"
+            className="rounded-[7px] align-middle outline-none select-none focus-visible:focus-ring"
           >
             <ChipView chip={chip} surface />
           </button>

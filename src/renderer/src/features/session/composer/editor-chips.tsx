@@ -37,6 +37,8 @@ export interface ChipHooks extends ChipContext {
   onMentionDeleted?: (keys: readonly string[]) => void
   /** A range drawn as chosen besides the selection, as a link just pasted. */
   highlight?: { from: number; to: number } | null
+  /** The project a GitHub reference in a chip is short for. */
+  projectPath?: string | null
 }
 
 export const chipHooks = Facet.define<ChipHooks, ChipHooks | null>({
@@ -70,15 +72,25 @@ class ChipWidget extends WidgetType {
   constructor(
     readonly chip: Chip,
     readonly state: ChipState,
+    readonly projectPath: string | null,
   ) {
     super()
   }
   eq(other: ChipWidget): boolean {
-    return other.state === this.state && sameChip(other.chip, this.chip)
+    return (
+      other.state === this.state &&
+      other.projectPath === this.projectPath &&
+      sameChip(other.chip, this.chip)
+    )
   }
   private render(root: Root, view: EditorView) {
     root.render(
-      <RenderedChip chip={this.chip} state={this.state} onRendered={() => view.requestMeasure()} />,
+      <RenderedChip
+        chip={this.chip}
+        state={this.state}
+        projectPath={this.projectPath}
+        onRendered={() => view.requestMeasure()}
+      />,
     )
   }
   toDOM(view: EditorView): HTMLElement {
@@ -238,7 +250,9 @@ function draw(
     const state: ChipState =
       within(chip, selection) || within(chip, hooks.highlight ?? null) ? 'selected' : 'default'
     widgets.push(
-      Decoration.replace({ widget: new ChipWidget(chip, state) }).range(chip.from, chip.to),
+      Decoration.replace({
+        widget: new ChipWidget(chip, state, hooks.projectPath ?? null),
+      }).range(chip.from, chip.to),
     )
     chips.push(chip)
   }
