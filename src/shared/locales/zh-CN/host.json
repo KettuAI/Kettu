@@ -197,6 +197,8 @@
     "stoppedBeforeAnswer": "Agent 在回复前停止了",
     "failedToStart": "{{agent}} 启动失败",
     "notAvailable": "{{agent}} 不可用",
+    "cliGone": "{{path}} 不见了，可能是 {{agent}} 正在更新。{{reason}}",
+    "cliRestart": "{{agent}} 现在在 {{path}}，重启 Kettu 后才能使用。",
     "cannotInstall": "无法安装 {{agent}}",
     "busyInstalling": "{{agent}} 正在安装或启动",
     "closeSessionsFirst": "请先关闭使用 {{agent}} 的会话",

@@ -606,7 +606,7 @@ export class ClaudeConnection implements AgentConnection {
   }
 
   async logout(): Promise<void> {
-    const cli = this.requireCli()
+    const cli = await this.runnableCli()
     const child = this.context.spawn({ command: cli, args: ['auth', 'logout'], env: this.env })
     let stderr = ''
     child.stderr?.on('data', (chunk: Buffer) => (stderr += chunk.toString()))
@@ -635,6 +635,17 @@ export class ClaudeConnection implements AgentConnection {
       throw new AgentRequestError('agent_error', 'No Claude Code program was found for the SDK')
     }
     return this.cli
+  }
+
+  /**
+   * The CLI a new process starts from. The one found at `initialize` can go while the agent runs,
+   * as when an npm install of Claude Code is replaced, so the host is asked each time.
+   */
+  private async runnableCli(): Promise<string> {
+    const started = this.requireCli()
+    const cli = this.context.currentCli ? await this.context.currentCli(started) : started
+    this.cli = cli
+    return cli
   }
 
   /**
@@ -962,7 +973,7 @@ export class ClaudeConnection implements AgentConnection {
         // Kettu's memory stands in for Claude Code's own, which would load and write beside it.
         ...(options.memory ? { CLAUDE_CODE_DISABLE_AUTO_MEMORY: '1' } : {}),
       },
-      pathToClaudeCodeExecutable: this.requireCli(),
+      pathToClaudeCodeExecutable: await this.runnableCli(),
       spawnClaudeCodeProcess: (spawn) => {
         const child = this.context.spawn({
           command: spawn.command,
