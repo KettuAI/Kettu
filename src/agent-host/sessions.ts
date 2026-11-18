@@ -134,6 +134,7 @@ import {
   isValueOf,
   startModeIn,
   startOrder,
+  withFreshModels,
   type AgentOptionsStore,
   type ReplacedValue,
 } from './agent-options'
@@ -742,6 +743,11 @@ interface Live {
    * of the cache it read: the context it had before, in tokens.
    */
   resumeRead: { before: number; lastRequestAt: number; expiresAt: number } | null
+  /** When its model list was last read again, and the read running now. */
+  modelsReadAt: number | null
+  modelsRead: Promise<void> | null
+  /** The models a read again added to a list its agent process gave when it attached. */
+  refreshedModels: Set<string>
   contextTimer: ReturnType<typeof setTimeout> | null
   contextDueAt: number
   contextDirty: boolean
@@ -775,6 +781,8 @@ function originKey(owner: string, requestId: number): string {
 }
 
 const MINUTE = 60_000
+// A session's model list is read again when its menu opens, at most this often.
+const MODELS_FRESH_MS = MINUTE
 /** How long a prompt cache lasts when the agent's own records do not say. */
 const CACHE_TTL_MS = 5 * MINUTE
 /** A session used outside Kettu longer ago than this has no cache left worth carrying over. */
@@ -3206,6 +3214,9 @@ export class SessionManager {
       releaseTimer: null,
       harnessVersion: null,
       resumeRead: null,
+      modelsReadAt: null,
+      modelsRead: null,
+      refreshedModels: new Set(),
       contextTimer: null,
       contextDueAt: 0,
       contextDirty: false,
@@ -6074,6 +6085,7 @@ export class SessionManager {
   /** A loaded or resumed session's options, which New session also learns from. */
   private opened(live: Live, config: ConfigOption[]): void {
     const { agentId } = live.record
+    live.refreshedModels.clear()
     this.update(live, { config })
     this.deps.options?.opened(agentId, config)
   }
@@ -8965,7 +8977,7 @@ export class SessionManager {
     if (this.recordOf(sessionId).origin === 'subagent') {
       throw new HostError('restricted', t('session.subagent.noConfig'))
     }
-    const live = await this.revive(sessionId)
+    let live = await this.revive(sessionId)
     const status = live.thread.session.status
     if (!live.connection && status !== 'closed') throw busyError(status)
     const option = live.thread.session.config.find((o) => o.id === optionId)
@@ -8987,7 +8999,15 @@ export class SessionManager {
           ),
         })
       } else {
-        const config = await connection.setConfigOption(live.record.acpSessionId, optionId, value)
+        let config: ConfigOption[]
+        try {
+          config = await connection.setConfigOption(live.record.acpSessionId, optionId, value)
+        } catch (error) {
+          // A model its agent process did not list when it attached is new to that process.
+          if (!this.listedAfterAttach(live, option, value)) throw error
+          live = await this.attachAgain(live)
+          config = await live.connection!.setConfigOption(live.record.acpSessionId, optionId, value)
+        }
         const next = mergeConfig(live.thread.session.config, config)
         this.update(live, { config: next })
         this.deps.options?.chose(live.record.agentId, option, value, next)
@@ -9000,6 +9020,51 @@ export class SessionManager {
     } catch (error) {
       throw agentError(error)
     }
+  }
+
+  /**
+   * Lists the models the agent offers now in a session that listed them when it attached, or
+   * kept them when its agent was let go, read from a hidden session in its folder.
+   */
+  async refreshModels(sessionId: string): Promise<void> {
+    this.assertRegistered(sessionId)
+    if (this.recordOf(sessionId).origin === 'subagent') return
+    const live = await this.revive(sessionId)
+    if (live.prepared || live.closing) return
+    if (!live.connection && live.thread.session.status !== 'closed') return
+    if (live.modelsRead) return live.modelsRead
+    const readAt = live.modelsReadAt
+    if (readAt !== null && this.now() - readAt < MODELS_FRESH_MS) return
+    live.modelsRead = this.readModels(live).finally(() => {
+      live.modelsRead = null
+    })
+    return live.modelsRead
+  }
+
+  private async readModels(live: Live): Promise<void> {
+    const fresh = await this.deps.agents.readConfig(live.record.agentId, workDir(live.record))
+    live.modelsReadAt = this.now()
+    if (!fresh || live.closing || this.live.get(live.id) !== live) return
+    const read = withFreshModels(live.thread.session.config, fresh)
+    if (!read) return
+    for (const model of read.added) live.refreshedModels.add(model)
+    this.update(live, { config: read.config })
+  }
+
+  /** Whether `value` is a model that a read again added to what the session's process listed. */
+  private listedAfterAttach(live: Live, option: ConfigOption, value: string | boolean): boolean {
+    if (option.category !== 'model' || typeof value !== 'string') return false
+    // Letting the agent go ends a session that was never saved, and a turn's work with it.
+    return live.refreshedModels.has(value) && live.saved && this.holdReason(live) === null
+  }
+
+  /** Lets the session's agent go and attaches it again, which then lists what it offers now. */
+  private async attachAgain(live: Live): Promise<Live> {
+    this.release(live, 'models listed again')
+    await this.releasing.get(live.id)
+    const again = await this.revive(live.id)
+    await this.attachClosed(again)
+    return again
   }
 
   // Closing, deleting and importing.

@@ -142,6 +142,7 @@ export const HOST_REQUEST_LIMITS: Readonly<Record<HostMethod, number | null>> = 
   'sessions.resumeQueue': AGENT_MS,
   'sessions.blob': HOST_MS,
   'sessions.setConfigOption': AGENT_MS,
+  'sessions.refreshModels': AGENT_MS,
   'sessions.rename': AGENT_MS,
   'sessions.close': AGENT_MS,
   'sessions.pin': HOST_MS,

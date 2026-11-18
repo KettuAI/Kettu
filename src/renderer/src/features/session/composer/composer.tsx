@@ -153,6 +153,13 @@ export function Composer({
   // A phone has no keys to name.
   const phone = usePhoneWindow()
   const [modelMenuOpen, setModelMenuOpen] = useState(false)
+  // The models the agent offers may have changed since the session started.
+  useEffect(() => {
+    if (!modelMenuOpen) return
+    host('sessions.refreshModels', { sessionId }).catch((error: unknown) =>
+      console.warn(`Could not read the agent's models again: ${errorMessage(error)}`),
+    )
+  }, [modelMenuOpen, sessionId])
   const [configError, setConfigError] = useState<string | null>(null)
   const outOfCredit = useOutOfCredit(sessionId)
   const rejected = useThreadsStore((s) => endedOnRejection(s.replicas[sessionId]?.state))
