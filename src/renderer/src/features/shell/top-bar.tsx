@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef, useState, type ReactNode } from 'react'
+import { useLayoutEffect, useRef, useState, type ReactNode, type Ref } from 'react'
 import { SidebarLeftIcon } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
 import { Icon } from '@renderer/components/affect/app-shell'
@@ -106,8 +106,20 @@ export function CornerControlsSpace({ className }: { className?: string; divided
 }
 
 /** Something clickable inside the drag region. */
-export function NoDrag({ children, className }: { children: ReactNode; className?: string }) {
-  return <div className={cn('app-region-no-drag flex items-center', className)}>{children}</div>
+export function NoDrag({
+  children,
+  className,
+  ref,
+}: {
+  children: ReactNode
+  className?: string
+  ref?: Ref<HTMLDivElement>
+}) {
+  return (
+    <div ref={ref} className={cn('app-region-no-drag flex items-center', className)}>
+      {children}
+    </div>
+  )
 }
 
 export function SidebarToggle({ className }: { className?: string }) {
