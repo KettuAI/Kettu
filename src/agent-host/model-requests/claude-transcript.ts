@@ -55,6 +55,12 @@ function preview(text: string): string {
   return line.length > PREVIEW_CHARS ? `${line.slice(0, PREVIEW_CHARS)}…` : line
 }
 
+/** A prompt's first words; one Kettu or Claude Code wrote in tags, such as a task notification, by its summary. */
+export function promptPreview(text: string): string {
+  const summary = /<summary>([\s\S]*?)<\/summary>/.exec(text)?.[1]
+  return preview((summary ?? text).replace(/<[^>]+>/g, ' '))
+}
+
 function textOf(content: unknown): string {
   if (typeof content === 'string') return content
   return arr(content)
@@ -337,7 +343,7 @@ export function parseClaudeTranscript(lines: TranscriptLine[]): ParsedTranscript
         const id = str(r.promptId) ?? str(r.uuid) ?? `prompt:${line.start}`
         turn = ensureTurn(id)
         turn.index = num(obj(r.turnPosition)?.turnIndex)
-        turn.prompt = preview(textOf(obj(r.message)?.content))
+        turn.prompt = promptPreview(textOf(obj(r.message)?.content))
         turn.startedAt = time(r.timestamp)
       } else if (type === 'user' && !turn) {
         const promptId = str(r.promptId)
@@ -414,9 +420,11 @@ export function parseClaudeTranscript(lines: TranscriptLine[]): ParsedTranscript
           const input = obj(c.input)
           const action = toolAction(name, input)
           const json = input ? JSON.stringify(input) : ''
+          const mcp = /^mcp__(.+?)__(.+)$/.exec(name)
           b.request.received.push({
             kind: 'tool-call',
-            label: name,
+            // An MCP tool is named by its server, with the tool in the line.
+            label: mcp ? mcp[1] : name,
             preview: preview(action.label),
             bytes: utf8Length(json),
           })

@@ -2902,11 +2902,14 @@ export class SessionManager {
 
   private requestsTarget(sessionId: string): RequestsTarget {
     const record = this.recordOf(sessionId)
+    const parent =
+      record.origin === 'subagent' && record.parentId ? this.recordOf(record.parentId) : null
     return {
       agentId: record.agentId,
       cwd: workDir(record),
       acpSessionId: record.acpSessionId,
       configDir: record.configDir ?? null,
+      parentAcpSessionId: parent?.acpSessionId ?? null,
     }
   }
 

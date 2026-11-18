@@ -514,6 +514,9 @@ export class ClaudeMapper {
       if (model) this.subagentModels.set(sessionId, model)
       const window = model ? this.windowOf(model) : null
       deliveries.push({ sessionId, map: (ctx) => this.contextUsed(ctx, usage, window) })
+      if (sessionId === this.sessionId) {
+        deliveries.push({ sessionId, map: (ctx) => this.lastRequestInput(ctx, usage) })
+      }
     }
     return deliveries
   }
@@ -566,6 +569,30 @@ export class ClaudeMapper {
         changes: { ...(speed ? { speed } : {}), ...(lastRequest ? { lastRequest } : {}) },
       })
     }
+    return out
+  }
+
+  /**
+   * The latest request's input as its response counts it: a provider that sends zeros when the
+   * request starts reports the real counts only here.
+   */
+  private lastRequestInput(
+    ctx: MapperContext,
+    usage: NonNullable<AssistantMessage['message']['usage']>,
+  ): MapperOutput {
+    const out = output()
+    const last = ctx.thread.session.lastRequest
+    if (!last || contextTokens(usage) === 0) return out
+    const input = usage.input_tokens ?? null
+    const cacheRead = usage.cache_read_input_tokens ?? null
+    const cacheWrite = usage.cache_creation_input_tokens ?? null
+    if (last.input === input && last.cacheRead === cacheRead && last.cacheWrite === cacheWrite) {
+      return out
+    }
+    out.patches.push({
+      op: 'session.update',
+      changes: { lastRequest: { ...last, input, cacheRead, cacheWrite } },
+    })
     return out
   }
 

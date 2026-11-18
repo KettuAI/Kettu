@@ -2,12 +2,14 @@
 // from the end so a long session costs no more than a short one.
 
 import { open, stat } from 'node:fs/promises'
+import path from 'node:path'
 import type { Platform } from '@shared/platform'
 import {
   REQUESTS_PAGE,
   foldLongStrings,
   type ModelRequestRaw,
   type ModelRequestsPage,
+  type RequestTokens,
   type RequestsSystem,
 } from '@shared/model-requests'
 import { harnessOf, type AgentId } from '@shared/thread'
@@ -15,6 +17,7 @@ import { findClaudeTranscript } from '../prompt-cache'
 import { projectsFolder } from '../usage/readers/claude'
 import { eachLine, openLog } from '../usage/lines'
 import {
+  claudeTokens,
   decodeRanges,
   isPrompt,
   parseClaudeTranscript,
@@ -29,12 +32,16 @@ export interface RequestsTarget {
   cwd: string
   acpSessionId: string
   configDir: string | null
+  /** A sub-agent's parent, whose session folder keeps the sub-agent's file. */
+  parentAcpSessionId: string | null
 }
 
 /** What the whole file says beyond its pages: how many requests, the cost and the tools. */
 export interface FileSummary {
   requests: number | null
   costUsd: number | null
+  /** Every response's tokens added up, each response once. */
+  tokens: RequestTokens | null
   system: RequestsSystem | null
 }
 
@@ -51,6 +58,7 @@ const TURN_LIMIT = 8 << 20
 /** The most Raw reads for one request, folded or not. */
 const RAW_LIMIT = 64 << 20
 const REMEMBERED = 200
+const SUBAGENT_ID = /^[A-Za-z0-9_-]+$/
 const NEWLINE = 0x0a
 
 const REQUEST_PREFIX = Buffer.from('{"type":"api-request","')
@@ -127,7 +135,12 @@ export async function readPage(
           lines.push({ start: begin, end: begin + bytes.length, bytes })
           if (startsWith(bytes, REQUEST_PREFIX)) requests++
           else if (assistant && bytes.indexOf(STOP) >= 0) responses++
-          if (enoughAt === null && (requests >= REQUESTS_PAGE || responses >= REQUESTS_PAGE)) {
+          // A response is written over several lines, so they count only in files without request
+          // records, and twice over.
+          if (
+            enoughAt === null &&
+            (requests >= REQUESTS_PAGE || (requests === 0 && responses >= REQUESTS_PAGE * 2))
+          ) {
             enoughAt = begin
           }
         }
@@ -159,12 +172,32 @@ function parseLines(lines: RawLine[]): TranscriptLine[] {
 }
 
 /** What the whole file holds beyond a page, reading only the lines that start as these do. */
-export async function summarizeFile(file: string): Promise<FileSummary> {
+/**
+ * What the whole file holds beyond a page, reading only the lines that start as these do. In a
+ * sub-agent's own file every line is a side chain, so `sidechain` counts them.
+ */
+export async function summarizeFile(file: string, sidechain = false): Promise<FileSummary> {
   const log = await openLog(file)
   let requests = 0
   let responses = 0
   let cost: number | null = null
   const shapes: { at: number | null; shape: Record<string, unknown> }[] = []
+  const counted = new Set<string>()
+  let tokens: RequestTokens | null = null
+  const add = (usage: RequestTokens): void => {
+    const sum = (a: number | null, b: number | null) =>
+      a === null && b === null ? null : (a ?? 0) + (b ?? 0)
+    tokens = tokens
+      ? {
+          input: sum(tokens.input, usage.input),
+          cacheRead: sum(tokens.cacheRead, usage.cacheRead),
+          cacheWrite: sum(tokens.cacheWrite, usage.cacheWrite),
+          cacheWrite1h: sum(tokens.cacheWrite1h, usage.cacheWrite1h),
+          output: sum(tokens.output, usage.output),
+          reasoning: sum(tokens.reasoning, usage.reasoning),
+        }
+      : usage
+  }
   await eachLine(log.source, 0, (text) => {
     if (text.startsWith('{"type":"api-request","')) requests++
     else if (text.startsWith(SHAPE_PREFIX) || text.startsWith(COST_PREFIX)) {
@@ -182,11 +215,27 @@ export async function summarizeFile(file: string): Promise<FileSummary> {
       } catch {
         // A line being written is left for the next read.
       }
-    } else if (text.includes('"type":"assistant"') && text.includes('"stop_reason":"')) responses++
+    } else if (text.includes('"type":"assistant"')) {
+      if (text.includes('"stop_reason":"')) responses++
+      if (!text.includes('"usage"')) return
+      try {
+        const record = JSON.parse(text) as Record<string, unknown>
+        const message = record.message as Record<string, unknown> | undefined
+        const id = typeof message?.id === 'string' ? message.id : null
+        if (!message || !id || counted.has(id)) return
+        if (record.isSidechain === true && !sidechain) return
+        if (message.model === '<synthetic>') return
+        counted.add(id)
+        add(claudeTokens(message.usage as Record<string, unknown> | null))
+      } catch {
+        // A line being written is left for the next read.
+      }
+    }
   })
   return {
     requests: requests > 0 ? requests : responses > 0 ? responses : null,
     costUsd: cost,
+    tokens,
     system: summarizeShapes(shapes),
   }
 }
@@ -221,13 +270,29 @@ export function claudeModelRequests(deps: {
 
   const fileOf = async (target: RequestsTarget): Promise<string | null> => {
     if (harnessOf(target.agentId) !== 'claude-code') return null
-    const known = found.get(target.acpSessionId)
+    const key = `${target.parentAcpSessionId ?? ''}/${target.acpSessionId}`
+    const known = found.get(key)
     if (known && (await stat(known).catch(() => null))?.isFile()) return known
     const root = projectsFolder(await deps.env(), deps.home, deps.platform, target.configDir)
-    const file = await findClaudeTranscript(root, target.cwd, target.acpSessionId)
+    let file: string | null
+    if (!target.parentAcpSessionId) {
+      file = await findClaudeTranscript(root, target.cwd, target.acpSessionId)
+    } else {
+      // A sub-agent's file is in its parent's session folder, beside the parent's own file.
+      const parent = await findClaudeTranscript(root, target.cwd, target.parentAcpSessionId)
+      const child = SUBAGENT_ID.test(target.acpSessionId)
+        ? parent &&
+          path.join(
+            parent.replace(/\.jsonl$/, ''),
+            'subagents',
+            `agent-${target.acpSessionId}.jsonl`,
+          )
+        : null
+      file = child && (await stat(child).catch(() => null))?.isFile() ? child : null
+    }
     if (!file) return null
-    found.delete(target.acpSessionId)
-    found.set(target.acpSessionId, file)
+    found.delete(key)
+    found.set(key, file)
     if (found.size > REMEMBERED) found.delete(found.keys().next().value!)
     return file
   }
@@ -250,7 +315,7 @@ export function claudeModelRequests(deps: {
       const info = await stat(file)
       const known = summaries.get(file)
       if (known && known.size === info.size && known.mtimeMs === info.mtimeMs) return known.summary
-      const summary = await summarizeFile(file)
+      const summary = await summarizeFile(file, !!target.parentAcpSessionId)
       summaries.delete(file)
       summaries.set(file, { size: info.size, mtimeMs: info.mtimeMs, summary })
       if (summaries.size > 20) summaries.delete(summaries.keys().next().value!)

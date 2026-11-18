@@ -274,7 +274,7 @@ describe('reading a session file', () => {
   }
 
   /** Turns of `per` requests each, every request with one tool result sent after it. */
-  function turns(count: number, per: number): object[] {
+  function turns(count: number, per: number, linesPerResponse = 1): object[] {
     const out: object[] = []
     let n = 0
     for (let t = 1; t <= count; t++) {
@@ -282,14 +282,16 @@ describe('reading a session file', () => {
       for (let r = 0; r < per; r++) {
         n++
         out.push(apiRequest(`r${n}`, '2026-11-18T06:00:01.000Z'))
-        out.push(
-          assistant(
-            `r${n}`,
-            `msg_${n}`,
-            [{ type: 'tool_use', name: 'Read', input: {} }],
-            '2026-11-18T06:00:02.000Z',
-          ),
-        )
+        for (let line = 0; line < linesPerResponse; line++) {
+          out.push(
+            assistant(
+              `r${n}`,
+              `msg_${n}`,
+              [{ type: 'tool_use', name: 'Read', input: {} }],
+              '2026-11-18T06:00:02.000Z',
+            ),
+          )
+        }
         out.push(toolResult(`p${t}`, `result ${n}`, '2026-11-18T06:00:03.000Z'))
       }
     }
@@ -332,6 +334,20 @@ describe('reading a session file', () => {
     expect(seen).toEqual(Array.from({ length: 120 }, (_, i) => `r${i + 1}`))
   })
 
+  it('counts requests, not the several lines Claude Code writes a response in', async () => {
+    await write(turns(10, 10, 3))
+    const size = (await import('node:fs/promises').then((fs) => fs.stat(file))).size
+    const page = await readPage(file, size)
+    const requests = parseClaudeTranscript(
+      page.lines.map((l) => ({
+        start: l.start,
+        end: l.end,
+        record: JSON.parse(l.bytes.toString()),
+      })),
+    ).turns.flatMap((t) => t.requests)
+    expect(requests.length).toBeGreaterThanOrEqual(REQUESTS_PAGE)
+  })
+
   it('reads a request as the agent wrote it, with long strings folded unless asked whole', async () => {
     const long = 'x'.repeat(5000)
     await write([
@@ -345,6 +361,7 @@ describe('reading a session file', () => {
       cwd: '/repo',
       acpSessionId: SESSION,
       configDir: dir,
+      parentAcpSessionId: null,
     }
     const page = await reader.page(target, null)
     const request = page!.turns[0].requests[0]
@@ -357,6 +374,43 @@ describe('reading a session file', () => {
     const whole = await reader.raw(target, request.raw, true)
     expect(JSON.stringify(whole.records)).toContain(long)
     await expect(reader.raw(target, '0-999999999', false)).rejects.toThrow(/changed/)
+  })
+
+  it("reads a sub-agent's requests from its parent's session folder", async () => {
+    await write([prompt('p1', 1, 'Hi', '2026-11-18T06:00:00.000Z')])
+    const child = path.join(
+      path.dirname(file),
+      SESSION,
+      'subagents',
+      'agent-a10056f1cc55cec45.jsonl',
+    )
+    await import('node:fs/promises').then((fs) =>
+      fs.mkdir(path.dirname(child), { recursive: true }),
+    )
+    const sidechain = (record: object) => ({ ...record, isSidechain: true })
+    await writeFile(
+      child,
+      [
+        { ...prompt('s1', 1, 'Sweep old icons', '2026-11-18T06:00:01.000Z'), isSidechain: true },
+        sidechain(apiRequest('c1', '2026-11-18T06:00:02.000Z')),
+        sidechain(
+          assistant('c1', 'msg_c1', [{ type: 'text', text: 'Done.' }], '2026-11-18T06:00:03.000Z'),
+        ),
+      ]
+        .map((r) => JSON.stringify(r))
+        .join('\n') + '\n',
+    )
+    const reader = claudeModelRequests({ platform: 'darwin', home: dir, env: async () => ({}) })
+    const target = {
+      agentId: 'claude-code' as const,
+      cwd: '/repo',
+      acpSessionId: 'a10056f1cc55cec45',
+      configDir: dir,
+      parentAcpSessionId: SESSION,
+    }
+    const page = await reader.page(target, null)
+    expect(page!.turns[0].requests.map((r) => r.id)).toEqual(['c1'])
+    expect((await reader.summary(target))!.tokens).toMatchObject({ input: 12, output: 80 })
   })
 
   it('sums up the whole file: requests, the latest cost and how the tools changed', async () => {

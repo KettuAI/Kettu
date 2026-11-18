@@ -785,6 +785,44 @@ describe('a turn', () => {
     expect(s.sdk.last.inputs[0]!.message.content).toEqual([{ type: 'text', text: 'Hi' }])
   })
 
+  it('takes the latest request input from its response when its start counts none', async () => {
+    s.sdk.script = (query) => {
+      query.running()
+      query.emit(
+        stream(query, {
+          type: 'message_start',
+          message: {
+            id: 'msg_1',
+            usage: { input_tokens: 0, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 },
+          },
+        }),
+        assistant(query, 'msg_1', [{ type: 'text', text: 'a.txt' }], {
+          message: {
+            id: 'msg_1',
+            model: 'claude-opus-5',
+            content: [{ type: 'text', text: 'a.txt' }],
+            usage: {
+              input_tokens: 12,
+              cache_read_input_tokens: 900,
+              cache_creation_input_tokens: 40,
+              output_tokens: 7,
+            },
+          },
+        }),
+        stream(query, { type: 'message_delta', usage: { output_tokens: 7 } }),
+        stream(query, { type: 'message_stop' }),
+      )
+      query.finish()
+    }
+    await s.connection.prompt(sessionId, [{ type: 'text', text: 'Hi' }])
+    expect(target.thread.session.lastRequest).toMatchObject({
+      input: 12,
+      cacheRead: 900,
+      cacheWrite: 40,
+      output: 7,
+    })
+  })
+
   it('says what each main-thread request read from the prompt cache and wrote to it', async () => {
     s.sdk.script = (query) => {
       query.running()

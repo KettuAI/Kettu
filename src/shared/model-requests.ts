@@ -129,6 +129,8 @@ export interface ModelRequestsOverview {
   requests: number | null
   /** The agent's own reckoning at API prices, which a subscription is not charged. */
   costUsd: number | null
+  /** Every request's tokens added up, as the record holds them. */
+  tokens: RequestTokens | null
   system: RequestsSystem | null
 }
 
