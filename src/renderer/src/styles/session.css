@@ -2,7 +2,8 @@
 
 /* The session view: the thread's column, which the composer under it keeps to. */
 .ks-session {
-  --thread-column: calc(48 * var(--prose-size) + 8px);
+  /* The width the user dragged the column to, else the text size's. */
+  --thread-column: var(--thread-column-set, calc(48 * var(--prose-size) + 8px));
 }
 /* The thread sets its prose, tables and code on its own size; the column keeps the composer's. */
 .ks-thread {
@@ -11,6 +12,68 @@
 }
 .ks-thread__column {
   max-width: calc(var(--thread-column) + 64px);
+}
+
+/* The handles on the column's side edges, in the room the column's padding leaves: a small pill
+   that rises into view only while one is pointed at, focused or dragged. */
+.ks-width-grip {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  display: flex;
+  width: 14px;
+  align-items: center;
+  justify-content: center;
+  cursor: col-resize;
+  pointer-events: auto;
+  touch-action: none;
+  user-select: none;
+  outline: none;
+  &::before {
+    content: '';
+    width: 3px;
+    height: 40px;
+    border-radius: 2px;
+    background: var(--thread-faint);
+    opacity: 0;
+    transform: scaleY(0.6);
+    transition:
+      opacity 200ms var(--ease-standard),
+      transform 240ms var(--ease-out-quint),
+      background-color var(--duration-fast) var(--ease-standard);
+  }
+  /* A short wait before it shows, so a pointer only crossing the margin leaves no flicker. */
+  &:hover::before {
+    opacity: 0.5;
+    transform: none;
+    transition-delay: 90ms;
+  }
+  &:focus-visible::before {
+    opacity: 0.5;
+    transform: none;
+  }
+  &[data-dragging]::before {
+    background: var(--thread-muted);
+    opacity: 0.9;
+    transform: scale(1.33, 1.08);
+    transition-delay: 0ms;
+  }
+}
+.ks-width-grip[data-side='left'] {
+  left: 16px;
+  translate: -50% 0;
+}
+.ks-width-grip[data-side='right'] {
+  right: 16px;
+  translate: 50% 0;
+}
+@media (prefers-reduced-motion: reduce) {
+  .ks-width-grip::before {
+    transition: none;
+  }
+}
+:root[data-reduce-motion='always'] .ks-width-grip::before {
+  transition: none;
 }
 
 /* A message you sent: the gray bubble at the right, and under it on hover its time and Copy, the

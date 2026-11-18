@@ -53,6 +53,7 @@ import {
 import { SignIn } from './sign-in'
 import { SubagentBar } from './subagent-bar'
 import { Thread } from './thread'
+import { ThreadWidthGrips } from './thread-width-grips'
 import { awaitsAnswer } from './turn-phase'
 import { useSessionView } from './use-thread'
 import { firstWaiting, pressWaitingCard } from './waiting-card'
@@ -203,7 +204,12 @@ function SessionBody({ summary }: { summary: SessionSummary }) {
       </ColumnScroller>
     )
   } else {
-    body = <Thread sessionId={sessionId} projectPath={folder} agentName={name} working={running} />
+    body = (
+      <>
+        <Thread sessionId={sessionId} projectPath={folder} agentName={name} working={running} />
+        <ThreadWidthGrips gutter={gutter} />
+      </>
+    )
   }
 
   return (
