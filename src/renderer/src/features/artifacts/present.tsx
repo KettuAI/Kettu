@@ -13,10 +13,13 @@ import './viewer.css'
 
 const MARGIN = 48
 const BAR_ROOM = 72
+/** A page that fits whole only below this share of its readable width is long. */
+const LONG_PAGE = 0.5
 
 /**
  * Presenting: the pages one at a time filling the window, live and interactive, with the arrows
- * and Space to move and Esc to leave; a single page fills it alone. The viewer stays under it.
+ * and Space to move and Esc to leave; a single page fills it alone. A long page fills the width
+ * and scrolls. The viewer stays under it.
  */
 export function Presenter({
   url,
@@ -58,14 +61,21 @@ export function Presenter({
   const name = pages ? pageName(index) : title
 
   // A page as large as fits the window, larger than its size too; a single page is the window.
+  // A long page keeps the window's width, never past its own so a phone-wide one stays readable,
+  // in a frame as tall as the window, and scrolls inside it as in a browser.
   const box =
     size && page
       ? (() => {
-          const scale = Math.min(
-            (size.width - 2 * MARGIN) / page.width,
-            (size.height - MARGIN - BAR_ROOM) / page.height,
-          )
-          return { scale, width: page.width * scale, height: page.height * scale }
+          const room = size.height - MARGIN - BAR_ROOM
+          const fitWidth = (size.width - 2 * MARGIN) / page.width
+          const readable = Math.min(fitWidth, 1)
+          if (room / page.height < readable * LONG_PAGE) {
+            const width = page.width * readable
+            return { scale: readable, width, height: room, frameHeight: room / readable }
+          }
+          const scale = Math.min(fitWidth, room / page.height)
+          const width = page.width * scale
+          return { scale, width, height: page.height * scale, frameHeight: page.height }
         })()
       : null
 
@@ -109,7 +119,7 @@ export function Presenter({
                   referrerPolicy="no-referrer"
                   style={{
                     width: page.width,
-                    height: page.height,
+                    height: box.frameHeight,
                     transform: `scale(${box.scale})`,
                   }}
                   className="block origin-top-left border-0"
