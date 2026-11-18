@@ -101,5 +101,23 @@
   "error": {
     "title": "Couldn't read the requests",
     "retry": "Retry"
+  },
+  "acp": {
+    "note": "This agent speaks ACP, which reports each turn rather than each request to the model, and rarely any tokens. Kettu shows the messages it exchanged since it started; earlier turns are not kept.",
+    "empty": "Turns show here as Kettu exchanges messages with the agent, from now on.",
+    "turns": "Turns",
+    "messages": "Messages",
+    "tools": "Tools",
+    "took": "Took",
+    "tokens": "Tokens",
+    "turn": "Turn",
+    "sent": "Sent",
+    "updates": "Updates",
+    "groups_one": "Messages · {{count}}",
+    "groups_other": "Messages · {{count}}",
+    "grouped": "grouped by kind",
+    "raw": "JSON-RPC as Kettu exchanged it",
+    "summary_one": "{{count}} turn · messages since Kettu started",
+    "summary_other": "{{count}} turns · messages since Kettu started"
   }
 }
