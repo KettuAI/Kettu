@@ -17,7 +17,7 @@ In [v0.0.30](https://github.com/KettuAI/Kettu/releases/tag/v0.0.30):
 - Your sessions on your other devices over your own network: pairing, direct connections, another computer's Kettu, and development machines added over SSH with the daemon set up for you
 - The official cloud with a Kettu account: the relay that reaches your computers from any network, and the web client at app.kettu.sh
 - Problem reports sent from the app, light and dark modes, themes from a file or the online catalog, and English and Simplified Chinese
-- Builds for macOS on Apple silicon, signed and notarized by Apple, and for Windows and Linux on x64 and Arm, with updates that install when you choose
+- Builds for macOS on Apple silicon and Intel, signed and notarized by Apple, and for Windows and Linux on x64 and Arm, with updates that install when you choose
 
 ## v0.1.0: the desktop app complete
 

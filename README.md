@@ -122,7 +122,7 @@ All your coding agents, side by side in one window that looks good and feels rig
 
 Download from [Releases](https://github.com/KettuAI/Kettu/releases/latest):
 
-- **macOS** (Apple silicon): the `.dmg`
+- **macOS** (Apple silicon and Intel): the `.dmg` for your chip
 - **Windows** (x64 and Arm): the `setup.exe`. It is not signed yet, so when SmartScreen appears, choose **More info**, then **Run anyway**.
 - **Linux** (x64 and Arm): the `.AppImage`; make it executable and run it. It needs FUSE 2 (`libfuse2`, or `libfuse2t64` on Ubuntu 24.04 and later).
 

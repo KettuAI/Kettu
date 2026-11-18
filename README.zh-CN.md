@@ -122,7 +122,7 @@
 
 从 [Releases](https://github.com/KettuAI/Kettu/releases/latest) 下载：
 
-- **macOS**（Apple 芯片）：`.dmg`
+- **macOS**（Apple 芯片和 Intel）：对应芯片的 `.dmg`
 - **Windows**（x64 和 Arm）：`setup.exe`。还没有签名，SmartScreen 提示时点「更多信息」，再点「仍要运行」。
 - **Linux**（x64 和 Arm）：`.AppImage`，加上执行权限后运行；需要 FUSE 2（`libfuse2`，Ubuntu 24.04 起为 `libfuse2t64`）。
 
