@@ -7,7 +7,7 @@
   "source": {
     "claude": "Claude Code 的会话记录",
     "codex": "Codex 的会话记录",
-    "opencode": "OpenCode",
+    "opencode": "OpenCode 的会话记录",
     "acp": "Kettu 这次启动以来的消息"
   },
   "totals": {
@@ -44,6 +44,7 @@
   "start": "会话从这里开始",
   "turn": "第 {{index}} 轮",
   "turnEarlier": "更早的一轮",
+  "turnAt": "{{time}} 开始的一轮",
   "you": "你：{{text}}",
   "turnMeta_one": "{{count}} 次请求 · {{time}}",
   "turnMeta_other": "{{count}} 次请求 · {{time}}",
@@ -96,7 +97,7 @@
   },
   "unavailable": {
     "title": "这个 Agent 暂时看不了",
-    "text": "目前能读 Claude Code 会话的请求，别的 Agent 随后支持。"
+    "text": "Kettu 还读不了这个 Agent 的会话记录。"
   },
   "error": {
     "title": "读不到请求",

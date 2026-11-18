@@ -4191,6 +4191,12 @@ export class AgentManager {
     if (slot.signIn === 'signed-in') this.hooks.signedIn(slot.id)
   }
 
+  /** OpenCode's own client for an OpenCode agent, which reads its sessions; null for another. */
+  openCode(agentId: AgentId): OpenCodeClient | null {
+    const slot = this.slots.get(agentId)
+    return slot && harnessOf(agentId) === 'opencode' ? this.openCodeClient(slot) : null
+  }
+
   private openCodeClient(slot: Slot): OpenCodeClient {
     const display = this.display(slot)
     return new OpenCodeClient({

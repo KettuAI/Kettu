@@ -1673,16 +1673,21 @@ export function createValidators(platform: Platform): Validators {
     'sessions.outline': session,
     'sessions.modelRequests': (params) => {
       const o = fields(params)
-      const before = optionalString(o, 'before', 16)
-      if (before !== undefined && !/^\d+$/.test(before))
-        throw invalidParams('before must be digits')
+      // A byte offset into a session file, or OpenCode's base64url cursor.
+      const before = optionalString(o, 'before', 1024)
+      if (before !== undefined && !/^[A-Za-z0-9_-]+$/.test(before))
+        throw invalidParams('before must be a position a page gave')
       return { sessionId: sessionId(o), ...(before === undefined ? {} : { before }) }
     },
     'sessions.modelRequestsOverview': session,
     'sessions.modelRequestRaw': (params) => {
       const o = fields(params)
       const raw = string(o, 'raw', RAW_HANDLE_CHARS)
-      if (raw !== 'system' && !/^\d+-\d+(,\d+-\d+)*$/.test(raw)) {
+      if (
+        raw !== 'system' &&
+        !/^\d+-\d+(,\d+-\d+)*$/.test(raw) &&
+        !/^msg_[A-Za-z0-9]+(,msg_[A-Za-z0-9]+)*$/.test(raw)
+      ) {
         throw invalidParams('raw must name records of a page')
       }
       const full = optionalFlag(o, 'full')

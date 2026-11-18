@@ -44,6 +44,7 @@
   "start": "The session starts here",
   "turn": "Turn {{index}}",
   "turnEarlier": "Earlier turn",
+  "turnAt": "Turn at {{time}}",
   "you": "You: {{text}}",
   "turnMeta_one": "{{count}} request · {{time}}",
   "turnMeta_other": "{{count}} requests · {{time}}",
@@ -96,7 +97,7 @@
   },
   "unavailable": {
     "title": "Not available for this agent yet",
-    "text": "Kettu reads the requests of Claude Code sessions for now; other agents follow."
+    "text": "Kettu can't read this agent's record of its sessions yet."
   },
   "error": {
     "title": "Couldn't read the requests",
