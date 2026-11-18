@@ -1464,6 +1464,55 @@
       "update_host": {
         "title": "Update Kettu on {{name}}",
         "body": "Kettu on {{name}} is too old for this computer. It connects once Kettu there is updated."
+      },
+      "kettu": {
+        "name": "Kettu",
+        "older": "{{version}}, older than this computer",
+        "update": "Update to {{version}}",
+        "updating": "Updating to {{version}} over SSH…",
+        "failedTitle": "Could not update Kettu on {{name}} to {{version}}",
+        "confirmTitle": "Update Kettu on {{name}} to {{version}}?",
+        "confirmBody": "Updating restarts Kettu on {{name}}, which stops what runs there now:",
+        "confirm": "Update and restart"
+      },
+      "ssh": {
+        "reconnect": "Reconnect now",
+        "change": "Change…",
+        "targetPort": "{{target}} · port {{port}}",
+        "changeTitle": "SSH address of {{name}}",
+        "changeBody": "Kettu logs in at the new address first, and keeps it only when it reaches Kettu on {{name}} there.",
+        "pickBody": "Pick a machine of your SSH config; Kettu checks it reaches {{name}} when you save.",
+        "fromConfig": "Pick from SSH config…",
+        "backToForm": "Back to the address",
+        "use": "Use",
+        "useAlias": "Use {{alias}}",
+        "current": "Current",
+        "checking": "Logging in at {{target}} to check it reaches {{name}}…",
+        "otherAddress": "{{target}} reaches another machine, not {{name}}: Kettu there has another identity, or there is none. The address stays as it was; to use that machine too, add it from Add host.",
+        "otherHost": "{{target}} now reaches another machine, not {{name}}, so nothing was changed there. If {{name}} moved, change its SSH address first.",
+        "busy": "Something else is being changed on {{name}}. Try again once it is done.",
+        "terminal": "{{command}}, in a terminal of {{project}}",
+        "failed": {
+          "update": "Could not update Kettu on {{name}}.",
+          "address": "Could not log in at {{target}}. The address stays as it was.",
+          "reconnect": "Could not reach {{name}}.",
+          "uninstall": "Could not uninstall Kettu from {{name}}."
+        }
+      },
+      "uninstall": {
+        "option": "Also uninstall Kettu from {{name}}",
+        "optionHint": "Stops and removes its service and deletes the program. Agents’ own sign-ins, such as ~/.claude, and your projects stay.",
+        "data": "Also delete its sessions and settings",
+        "dataHint": "Deletes {{folder}} and the logs on {{name}}, with the sessions, settings and identity of Kettu there.",
+        "body": "Kettu is uninstalled from {{name}} and this computer forgets it. The other devices paired with {{name}} can no longer reach it either.",
+        "turns_one": "This turn runs on {{name}} and stops:",
+        "turns_other": "These turns run on {{name}} and stop:",
+        "confirm": "Uninstall and remove",
+        "working": "Uninstalling…",
+        "removeOnly": "Remove without uninstalling",
+        "foreign": "{{path}} on {{name}} was not installed by Kettu’s install script, so Kettu there was left as it is.",
+        "running": "A Kettu daemon still runs on {{name}} outside its service, as kettu run does. Its service was removed; stop that daemon there and try again.",
+        "failed": "Could not uninstall Kettu from {{name}}."
       }
     },
     "web": {

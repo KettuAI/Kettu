@@ -20,6 +20,8 @@ import {
   parseSshAddress,
   type HostPairStart,
   type HostsStatus,
+  type SshManageAction,
+  type SshManageResult,
 } from '@shared/remote/hosts'
 import { parsePairingLink } from '@shared/remote/pairing'
 import { isRelayHostId } from '@shared/remote/relay'
@@ -887,6 +889,19 @@ export function registerIpcHandlers({
     remoteHost.removeHost(hostIdArg(id)) ? null : 'unknown_host',
   )
   handle('hosts:retry', 0, () => remoteHost.resume())
+  const manageSsh = (id: unknown, action: SshManageAction): Promise<SshManageResult> =>
+    remoteHost.manageSshHost(hostIdArg(id), action)
+  handle('hosts:update-ssh', 1, (_, id) => manageSsh(id, { kind: 'update' }))
+  handle('hosts:change-ssh', 2, (_, id, value) => {
+    const address = parseSshAddress(value)
+    if (!address) throw new Error('"hosts:change-ssh" takes an SSH address')
+    return manageSsh(id, { kind: 'address', address })
+  })
+  handle('hosts:reconnect', 1, (_, id) => manageSsh(id, { kind: 'reconnect' }))
+  handle('hosts:uninstall', 2, (_, id, data) => {
+    if (typeof data !== 'boolean') throw new Error('"hosts:uninstall" takes whether to delete data')
+    return manageSsh(id, { kind: 'uninstall', data })
+  })
 
   handle('browser:show', 2, (_, id, agent) => browserViews.show(sessionId(id), controlAgent(agent)))
   handle('browser:hide', 1, (_, id) => browserViews.hide(sessionId(id)))

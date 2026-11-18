@@ -167,6 +167,78 @@ export type SshAddFailure =
   /** Anything else; the detail is the end of what ssh said. */
   | 'ssh_failed'
 
+/** What the page of a host added over SSH does to it over SSH. */
+export type SshManageAction =
+  /** Installs this computer's version there, as adding does, and connects again. */
+  | { kind: 'update' }
+  /** Reaches it at another address, once the daemon there has its key. */
+  | { kind: 'address'; address: SshAddress }
+  /** Uninstalls Kettu there, its sessions and settings too with `data`, then forgets it here. */
+  | { kind: 'uninstall'; data: boolean }
+  /** Tries it at once, not waiting for the next try; settles once the try did. */
+  | { kind: 'reconnect' }
+
+/** Why an action on a host added over SSH did not happen. */
+export type SshManageFailure =
+  | SshAddFailure
+  /** Not known here, or not added over SSH. */
+  | 'unknown_host'
+  /** Another action on it is under way. */
+  | 'busy'
+  /** The daemon at the address has another key, or there is none: it is another machine. */
+  | 'other_host'
+  /** The install script did not install `kettu` there, at `detail`, which was left alone. */
+  | 'uninstall_foreign'
+  /** A daemon runs there outside its service; only the service was removed. */
+  | 'uninstall_running'
+  /** The uninstall script failed; the detail is the end of its output. */
+  | 'uninstall_failed'
+
+export type SshManageResult =
+  { ok: true } | { ok: false; reason: SshManageFailure; detail?: string }
+
+const MANAGE_FAILURES: readonly string[] = [
+  'ssh_missing',
+  'ssh_unreachable',
+  'ssh_auth',
+  'ssh_host_unknown',
+  'ssh_host_changed',
+  'ssh_forwarding',
+  'ssh_unsupported',
+  'ssh_install',
+  'ssh_not_running',
+  'ssh_failed',
+  'unknown_host',
+  'busy',
+  'other_host',
+  'uninstall_foreign',
+  'uninstall_running',
+  'uninstall_failed',
+]
+
+/** An action's result as it crosses a process, or null when it is not one. */
+export function parseSshManageResult(value: unknown): SshManageResult | null {
+  if (typeof value !== 'object' || value === null) return null
+  const { ok, reason, detail } = value as Record<string, unknown>
+  if (ok === true) return { ok }
+  if (ok !== false || !MANAGE_FAILURES.includes(reason as string)) return null
+  const failed = { ok, reason: reason as SshManageFailure } as const
+  return typeof detail === 'string' && detail.length > 0
+    ? { ...failed, detail: detail.slice(-MAX_FAILURE_DETAIL) }
+    : failed
+}
+
+/** An action as it crosses a process, its address checked, or null when it is not one. */
+export function parseSshManageAction(value: unknown): SshManageAction | null {
+  if (typeof value !== 'object' || value === null) return null
+  const { kind, address, data } = value as Record<string, unknown>
+  if (kind === 'update' || kind === 'reconnect') return { kind }
+  if (kind === 'uninstall') return typeof data === 'boolean' ? { kind, data } : null
+  if (kind !== 'address') return null
+  const parsed = parseSshAddress(address)
+  return parsed ? { kind, address: parsed } : null
+}
+
 /** Why pasting a link added no host. */
 export type HostPairingFailure =
   /** The host ended the handshake: the code expired, was used, or a new one replaced it. */

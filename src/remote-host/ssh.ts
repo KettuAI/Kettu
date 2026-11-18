@@ -10,6 +10,7 @@ import type { Platform } from '@shared/platform'
 import type { DirectAddress } from '@shared/remote/protocol'
 import type { Transport } from '@shared/remote/transport'
 import installScript from '../../tools/daemon/install.sh?raw'
+import uninstallScript from '../../tools/daemon/uninstall.sh?raw'
 import { quotePosix } from '../agent-host/quote'
 import { RELEASES_ENV } from '../daemon/update'
 import { CLOSE_GRACE_MS } from './limits'
@@ -299,6 +300,38 @@ export function installRun(version: string, env: NodeJS.ProcessEnv = process.env
     ...(releases ? [`${RELEASES_ENV}=${quotePosix(releases)}`, `export ${RELEASES_ENV}`] : []),
     installScript,
   ].join('\n')
+}
+
+/**
+ * The uninstall script, with its output on one stream as the install's, deleting the daemon's data
+ * and logs too with `data`.
+ */
+export function uninstallRun(data: boolean): string {
+  return ['exec 2>&1', data ? 'set -- --data' : 'set --', uninstallScript].join('\n')
+}
+
+const UNINSTALL_MARK = 'kettu-uninstall'
+
+/** What the uninstall script printed of how it ended. */
+export interface UninstallReport {
+  /** It ran to its end. */
+  done: boolean
+  /** The `kettu` it left alone, as the install script did not install it. */
+  foreign: string | null
+  /** A daemon still ran outside the service, so only the service was removed. */
+  running: boolean
+}
+
+export function parseUninstallReport(stdout: string): UninstallReport {
+  const report: UninstallReport = { done: false, foreign: null, running: false }
+  for (const line of stdout.replace(/\r/g, '').split('\n')) {
+    if (!line.startsWith(`${UNINSTALL_MARK} `)) continue
+    const [field = '', ...rest] = line.slice(UNINSTALL_MARK.length + 1).split(' ')
+    if (field === 'done') report.done = true
+    else if (field === 'running') report.running = true
+    else if (field === 'foreign') report.foreign = rest.join(' ').slice(0, MAX_FAILURE_DETAIL)
+  }
+  return report
 }
 
 /**

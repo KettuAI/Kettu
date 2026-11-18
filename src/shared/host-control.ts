@@ -17,7 +17,13 @@ import type { DeviceActivity } from './remote/activity'
 import type { NewDevice, PairedDevice, PortDevice } from './remote/device'
 import type { DiscoveredHosts, DiscoveryRequestEvent } from './remote/discovery'
 import type { HostAdminEvent, HostAdminMethod } from './remote/host-admin'
-import type { HostPairingState, HostStatus, SshAddress } from './remote/hosts'
+import type {
+  HostPairingState,
+  HostStatus,
+  SshAddress,
+  SshManageAction,
+  SshManageResult,
+} from './remote/hosts'
 import type { PairingState } from './remote/pairing'
 import type { DirectAddress } from './remote/protocol'
 import type { ReportBuildResult, ReportRequest } from './report'
@@ -538,6 +544,9 @@ export type MainToRemoteHost =
   | { type: 'remote-host:host-addresses'; id: string; addresses: DirectAddress[] }
   // Forgets a host here; nothing changes on it.
   | { type: 'remote-host:remove-host'; id: string }
+  // An action of the page of a host added over SSH, run there over SSH; answered by
+  // remote-host:ssh-managed under the same id.
+  | { type: 'remote-host:manage-ssh'; requestId: number; id: string; action: SshManageAction }
   // A port on this computer's loopback that reaches a dev server on a host, for the page of the
   // host's session; answered by remote-host:forwarding under the same id.
   | {
@@ -657,6 +666,7 @@ export type RemoteHostToMain =
   | { type: 'remote-host:activity'; requestId: number; events: DeviceActivity[] }
   // The port remote-host:forward listens on, null when the host's session or the port is not there.
   | { type: 'remote-host:forwarding'; requestId: number; port: number | null }
+  | { type: 'remote-host:ssh-managed'; requestId: number; result: SshManageResult }
   // A call an owner's device makes of the host beyond its sessions; answered by
   // remote-host:admin-result.
   | {

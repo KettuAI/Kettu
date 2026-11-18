@@ -2,6 +2,7 @@
 // at most three at a time, and the form for a machine typed by hand.
 
 import { useEffect, useRef, useState, type RefObject } from 'react'
+import type { TFunction } from 'i18next'
 import {
   parseIdentityFile,
   parseSshPort,
@@ -10,9 +11,27 @@ import {
   type HostPairingState,
   type HostStatus,
   type SshAddress,
+  type SshConfigHost,
   type SshConfigHosts,
   type SshStep,
 } from '@shared/remote/hosts'
+
+/** `user@hostname`, the port when it is not 22, and the jump hosts. */
+export function machineLine(t: TFunction<'settings'>, host: SshConfigHost): string {
+  const at = `${host.user}@${host.hostname}${host.port === 22 ? '' : `:${host.port}`}`
+  return host.proxyJump ? `${at} · ${t('hosts.add.ssh.config.via', { jump: host.proxyJump })}` : at
+}
+
+/** The machines whose alias, user, host name or jump hosts hold what the filter says. */
+export function matchMachines(hosts: SshConfigHost[], query: string): SshConfigHost[] {
+  const words = query.trim().toLowerCase()
+  if (!words) return hosts
+  return hosts.filter((host) =>
+    [host.alias, host.user, host.hostname, host.proxyJump ?? ''].some((text) =>
+      text.toLowerCase().includes(words),
+    ),
+  )
+}
 
 /** Why Add host shows no host: what pairing said, or what kept it from starting. */
 export type AddHostFailure = HostPairingFailure | 'self' | 'unavailable'
@@ -53,7 +72,7 @@ export interface SshDraft {
   keyFile: string
 }
 
-const draftOf = (address?: SshAddress): SshDraft => ({
+export const draftOf = (address?: SshAddress): SshDraft => ({
   address: address?.target ?? '',
   port: address?.sshPort === undefined ? '' : String(address.sshPort),
   signIn: address?.identityFile ? 'key' : 'agent',
