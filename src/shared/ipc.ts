@@ -148,7 +148,7 @@ export type AppCommand =
   | { kind: 'go-forward' }
   | { kind: 'show-history' }
   /** The first Cmd+Q: say a second one quits. */
-  | { kind: 'quit-hint' }
+  | { kind: 'quit-hint'; countdown: { expiresAt: number; duration: number } | null }
   /** Cmd+W: the page closes the part used last, else the shown session, else the window. */
   | { kind: 'close'; browser?: true }
   /** Report a problem, from the Help menu or the end of a recording, with its span then. */

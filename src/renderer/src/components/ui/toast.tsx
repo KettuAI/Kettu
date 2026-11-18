@@ -19,6 +19,8 @@ export interface ToastOptions {
   icon?: IconSvgElement
   /** In ms; the default suits a message that is read once. */
   duration?: number
+  /** An absolute deadline in Unix milliseconds, even while hovered or focused. */
+  expiresAt?: number
 }
 
 // The toasts on screen, so the layer can tell the browser pane it is covered.
@@ -57,7 +59,7 @@ export function toast(
   action?: { label: string; onClick: () => void },
   options: ToastOptions = {},
 ) {
-  const { tone, icon, duration } = options
+  const { tone, icon, duration, expiresAt } = options
   const show =
     tone === 'success' ? affectToast.success : tone === 'info' ? affectToast.info : affectToast
   const mark =
@@ -71,11 +73,13 @@ export function toast(
     ) : icon ? (
       <HugeiconsIcon icon={icon} strokeWidth={1.9} aria-hidden className="size-3.75 text-icon" />
     ) : undefined
-  track((settings) => show(title, settings), {
+  const id = track((settings) => show(title, settings), {
     icon: mark,
     ...(duration !== undefined && { duration }),
+    ...(expiresAt !== undefined && { expiresAt }),
     ...(action && { action: actionOf(action), duration: 6000 }),
   })
+  return () => affectToast.dismiss(id)
 }
 
 /**

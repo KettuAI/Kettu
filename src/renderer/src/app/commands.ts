@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import { toast } from '@renderer/components/ui/toast'
 import { i18n } from '@renderer/lib/i18n'
 import { recordAction, watchNavigation } from '@renderer/lib/action-log'
@@ -26,6 +26,7 @@ export function useActionLog(): void {
 
 /** Commands from main: the app menu and notification clicks. */
 export function useAppCommands(): void {
+  const closeQuitHint = useRef<(() => void) | undefined>(undefined)
   useEffect(
     () =>
       window.kettu.app.onCommand((command) => {
@@ -65,9 +66,18 @@ export function useAppCommands(): void {
           case 'close':
             if (!closeCurrent(command.browser)) window.kettu.app.closeWindow()
             break
-          case 'quit-hint':
-            toast(i18n.t('updates:quit.pressAgain'), undefined, { tone: 'info', duration: 2000 })
+          case 'quit-hint': {
+            closeQuitHint.current?.()
+            const { countdown } = command
+            closeQuitHint.current =
+              countdown && countdown.expiresAt > Date.now()
+                ? toast(i18n.t('updates:quit.pressAgain'), undefined, {
+                    tone: 'info',
+                    ...countdown,
+                  })
+                : undefined
             break
+          }
           case 'confirm-debug-restart':
             confirmDebugRestart()
             break
