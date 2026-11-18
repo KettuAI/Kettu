@@ -22,6 +22,9 @@ const EMPTY: HostWorkflows = { entries: [], settings: null, loaded: false, error
 /** Hosts whose first read is under way, so a render does not start another. */
 const reading = new Set<string>()
 
+/** Each host's latest read, so an older one that answers late changes nothing. */
+const latest = new Map<string, number>()
+
 interface WorkflowsStore {
   byHost: Record<string, HostWorkflows>
   load(hostId: string | null): Promise<void>
@@ -33,15 +36,19 @@ export const useWorkflowsStore = create<WorkflowsStore>()((set, get) => ({
   byHost: {},
   async load(hostId) {
     const key = workflowsKey(hostId)
+    const read = (latest.get(key) ?? 0) + 1
+    latest.set(key, read)
     try {
       const [entries, settings] = await Promise.all([
         hostAt(hostId, 'workflows.list', undefined),
         hostAt(hostId, 'workflows.settings', undefined),
       ])
+      if (latest.get(key) !== read) return
       set((state) => ({
         byHost: { ...state.byHost, [key]: { entries, settings, loaded: true, error: null } },
       }))
     } catch (error) {
+      if (latest.get(key) !== read) return
       set((state) => ({
         byHost: {
           ...state.byHost,
