@@ -343,6 +343,11 @@ export interface SessionRecord {
    */
   outside?: OutsideValues
   /**
+   * The last message of its agent's own session that a program outside Kettu wrote and its thread
+   * already holds, so a thread is rebuilt only when that program wrote more.
+   */
+  outsideTail?: string
+  /**
    * Its agent's own session recorded its instructions outside Kettu, which it then keeps: Kettu's
    * guide and memory go ahead of its prompts instead.
    */
@@ -928,6 +933,9 @@ export function parseSessionsFile(data: Record<string, unknown>): SessionsFile |
         ? { systemPromptSentTo: item.systemPromptSentTo }
         : {}),
       ...outsideOf(item.outside),
+      ...(isString(item.outsideTail) && item.outsideTail !== ''
+        ? { outsideTail: item.outsideTail }
+        : {}),
       ...(item.instructionsAhead === true ? { instructionsAhead: true as const } : {}),
     })
   }

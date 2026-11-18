@@ -1,6 +1,7 @@
 // What Kettu reads about a Claude Code session another program had, such as a terminal: how its
-// last request was made, from the end of its own transcript, and whether a Claude Code process
-// outside an SDK host still has it open. Only settings and usage are read, never what was said.
+// last request was made, from the end of its own transcript, who wrote its last message, and
+// whether a Claude Code process outside an SDK host still has it open. Only settings, usage and
+// that writer are read, never what was said.
 
 import { readdir, readFile } from 'node:fs/promises'
 import path from 'node:path'
@@ -34,6 +35,13 @@ export interface SessionHolder {
   busy: boolean
 }
 
+/** The last message of a transcript's main thread. */
+export interface TranscriptTail {
+  uuid: string
+  /** A program outside an SDK host wrote it, such as a terminal. */
+  outside: boolean
+}
+
 /** `configDir`: the configuration folder the session belongs to, null for the default. */
 export interface OutsideReader {
   lastRequest(
@@ -47,6 +55,12 @@ export interface OutsideReader {
     acpSessionId: string,
     configDir: string | null,
   ): Promise<SessionHolder | null>
+  tail(
+    agentId: AgentId,
+    projectPath: string,
+    acpSessionId: string,
+    configDir: string | null,
+  ): Promise<TranscriptTail | null>
 }
 
 // Requests of the main thread; titles, summaries and subagents have sources of their own.
@@ -150,6 +164,45 @@ export async function readLastRequest(
   }
 }
 
+const MESSAGE_NEEDLES = ['"type":"user"', '"type":"assistant"']
+
+/**
+ * The last message of a transcript's main thread, read backwards from its end. `own` is the entry
+ * point Kettu's own Claude Code runs under when it is not an SDK one; null when the transcript has
+ * no message or its writer is not recorded.
+ */
+export async function readTail(
+  file: string,
+  own: string | null = null,
+  options: { limit?: number; chunk?: number } = {},
+): Promise<TranscriptTail | null> {
+  let found: TranscriptTail | null = null
+  await scanBackwards(
+    file,
+    (line) => {
+      if (!MESSAGE_NEEDLES.some((needle) => line.includes(needle))) return false
+      let json: unknown
+      try {
+        json = JSON.parse(line.toString('utf8'))
+      } catch {
+        return false
+      }
+      if (!isRecord(json) || json.isSidechain === true) return false
+      if (json.type !== 'user' && json.type !== 'assistant') return false
+      const uuid = stringOr(json.uuid)
+      if (!uuid) return false
+      const entrypoint = stringOr(json.entrypoint)
+      found = {
+        uuid,
+        outside: entrypoint !== null && !entrypoint.startsWith('sdk') && entrypoint !== own,
+      }
+      return true
+    },
+    options,
+  )
+  return found
+}
+
 /** Whether a process runs, as far as signal 0 can tell; one of another user's runs too. */
 function alive(pid: number): boolean {
   try {
@@ -214,6 +267,18 @@ export function claudeOutside(deps: {
       if (harnessOf(agentId) !== 'claude-code') return null
       const folder = path.join(path.dirname(await root(configDir)), 'sessions')
       return findHolder(folder, acpSessionId)
+    },
+    async tail(agentId, projectPath, acpSessionId, configDir) {
+      if (harnessOf(agentId) !== 'claude-code') return null
+      const file = await findClaudeTranscript(await root(configDir), projectPath, acpSessionId)
+      if (!file) return null
+      try {
+        const own = (await deps.env()).CLAUDE_CODE_ENTRYPOINT ?? null
+        return await readTail(file, own)
+      } catch (error) {
+        deps.log('warn', `Could not read ${file}: ${(error as Error).message}`)
+        return null
+      }
     },
   }
 }

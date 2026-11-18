@@ -65,6 +65,9 @@
     "stopBody": "这些在 {{current}} 里运行，换 Agent 时会停止：",
     "stopConfirm": "停止并切换"
   },
+  "heldOutside": {
+    "strip": "这个会话正开在终端里。在那边输入 /exit 退出后，它的对话会同步到这里。"
+  },
   "outOfCredit": {
     "modelTitle": "{{model}} 余额不足",
     "strip": "{{model}} 的服务商余额已用完。充值或换一个模型后继续。",

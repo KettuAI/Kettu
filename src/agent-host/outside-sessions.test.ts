@@ -2,7 +2,7 @@ import { mkdtemp, realpath, rm, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { findHolder, readLastRequest } from './outside-sessions'
+import { findHolder, readLastRequest, readTail } from './outside-sessions'
 
 const SESSION = '2fe6b9a7-d648-4721-8783-29cfccf98185'
 const HOUR = 60 * 60_000
@@ -137,6 +137,67 @@ describe('readLastRequest', () => {
     ]
     await expect(read(lines, { chunk: 64 })).resolves.toMatchObject({ effort: 'high' })
     await expect(read(lines, { chunk: 64, limit: 256 })).resolves.toBeNull()
+  })
+})
+
+describe('readTail', () => {
+  let folder: string
+
+  beforeEach(async () => {
+    folder = await realpath(await mkdtemp(path.join(os.tmpdir(), 'kettu-tail-')))
+  })
+
+  afterEach(async () => {
+    await rm(folder, { recursive: true, force: true })
+  })
+
+  async function read(lines: string[], own: string | null = null) {
+    const file = path.join(folder, `${SESSION}.jsonl`)
+    await writeFile(file, `${lines.join('\n')}\n`)
+    return readTail(file, own)
+  }
+
+  const message = (
+    type: 'user' | 'assistant',
+    uuid: string,
+    entrypoint?: string,
+    extra: Record<string, unknown> = {},
+  ): string => line({ type, uuid, ...(entrypoint ? { entrypoint } : {}), ...extra })
+
+  it('says a terminal wrote the last message of the main thread', async () => {
+    await expect(
+      read([
+        message('user', 'u1', 'sdk-ts'),
+        message('assistant', 'a1', 'sdk-ts'),
+        message('user', 'u2', 'cli'),
+        message('assistant', 'a2', 'cli'),
+        line({ type: 'last-prompt', lastPrompt: 'x' }),
+        message('assistant', 'side', 'sdk-ts', { isSidechain: true }),
+      ]),
+    ).resolves.toEqual({ uuid: 'a2', outside: true })
+  })
+
+  it('says Kettu wrote it when an SDK host did, or the entry point Kettu runs under', async () => {
+    await expect(
+      read([message('user', 'u1', 'cli'), message('assistant', 'a1', 'sdk-ts')]),
+    ).resolves.toEqual({
+      uuid: 'a1',
+      outside: false,
+    })
+    await expect(read([message('assistant', 'a1', 'company-app')], 'company-app')).resolves.toEqual(
+      {
+        uuid: 'a1',
+        outside: false,
+      },
+    )
+  })
+
+  it('does not say it for a message that records no writer, and has nothing without a message', async () => {
+    await expect(read([message('assistant', 'a1')])).resolves.toEqual({
+      uuid: 'a1',
+      outside: false,
+    })
+    await expect(read([line({ type: 'custom-title' }), 'not json'])).resolves.toBeNull()
   })
 })
 

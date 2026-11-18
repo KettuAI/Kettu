@@ -90,6 +90,8 @@ export interface SessionView {
   speed?: OutputSpeed
   /** Questions asked beside the session, never part of its conversation. Absent for subagents. */
   sideChat?: SideChatView
+  /** Ephemeral: a program outside Kettu, such as a terminal, has the agent's session open. */
+  heldOutside?: boolean
 }
 
 /**

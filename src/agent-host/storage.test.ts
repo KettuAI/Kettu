@@ -451,6 +451,17 @@ describe('the host files', () => {
     ).toEqual({ version: 1, sessions: [{ ...session, outside: { effort: 'high' } }] })
   })
 
+  it('keeps the last outside message its thread holds, and drops what does not read', () => {
+    const taken = { ...session, outsideTail: 'uuid-1' }
+    expect(parseSessionsFile({ sessions: [taken] })).toEqual({ version: 1, sessions: [taken] })
+    for (const outsideTail of ['', 3, null]) {
+      expect(parseSessionsFile({ sessions: [{ ...session, outsideTail }] })).toEqual({
+        version: 1,
+        sessions: [session],
+      })
+    }
+  })
+
   it("keeps a project's worktree settings key by key", () => {
     const project = { path: '/repo', name: 'repo', addedAt: 1, lastOpenedAt: 2 }
     const worktree = {

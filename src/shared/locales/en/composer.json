@@ -65,6 +65,9 @@
     "stopBody": "These run in {{current}} and stop when the session switches:",
     "stopConfirm": "Stop and switch"
   },
+  "heldOutside": {
+    "strip": "This session is open in a terminal. Exit it there with /exit, and its conversation shows up here."
+  },
   "outOfCredit": {
     "modelTitle": "{{model}} is out of credit",
     "strip": "The provider's balance for {{model}} ran out. Top up, or pick another model to keep going.",
