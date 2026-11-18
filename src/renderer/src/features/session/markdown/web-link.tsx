@@ -102,7 +102,9 @@ export function BrowserIcon({
  */
 function SiteTile({ url }: { url: string }) {
   const icon = useSiteIcon(url)
-  useEffect(() => requestSiteIcon(url), [url])
+  const unknown = icon === undefined
+  // Asks again when the icon goes, as it does when the browser's data is cleared.
+  useEffect(() => requestSiteIcon(url), [url, unknown])
   const tile =
     'relative -top-[1.5px] mr-1.5 inline-flex size-4 shrink-0 items-center justify-center overflow-hidden rounded-[3px] align-middle leading-none'
   if (isLocalLink(url)) {

@@ -266,6 +266,7 @@ export class SiteIcons {
       for (const loading of this.loading.values()) stop(loading)
       this.loading.clear()
       this.linked.clear()
+      this.failed.clear()
       this.sites.clear()
       this.deps.changed({ kind: 'cleared' })
       this.save()
