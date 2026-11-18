@@ -33,6 +33,8 @@ export interface ChipHooks extends ChipContext {
   onLinkPasted?: (from: number, to: number) => void
   /** The draft attachments the text's mentions stand for, by key, whenever that changes. */
   onMentioned?: (keys: ReadonlySet<string>) => void
+  /** The user deleted the last chip of these draft attachments whole, so they go with it. */
+  onMentionDeleted?: (keys: readonly string[]) => void
   /** A range drawn as chosen besides the selection, as a link just pasted. */
   highlight?: { from: number; to: number } | null
 }
@@ -191,6 +193,22 @@ function attachmentKeys(chips: readonly Chip[]): Set<string> {
   return keys
 }
 
+/** The attachments of the chips that the user's edit deleted or typed over in full. */
+function wholeChipsDeleted(update: ViewUpdate, chips: readonly Chip[]): Set<string> {
+  const keys = new Set<string>()
+  if (!update.transactions.some((tr) => tr.isUserEvent('delete') || tr.isUserEvent('input'))) {
+    return keys
+  }
+  update.changes.iterChangedRanges((fromA, toA) => {
+    for (const chip of chips) {
+      if ('attachmentKey' in chip && chip.attachmentKey && fromA <= chip.from && toA >= chip.to) {
+        keys.add(chip.attachmentKey)
+      }
+    }
+  })
+  return keys
+}
+
 function draw(
   view: EditorView,
   found: readonly Chip[],
@@ -293,9 +311,16 @@ const chipPlugin = ViewPlugin.fromClass(
       const before = update.startState.facet(chipHooks)
       // What resolves a chip changed, so every one is looked at again.
       const rescan = hooks?.commands !== before?.commands || hooks?.resolve !== before?.resolve
+      const deleted = update.docChanged ? wholeChipsDeleted(update, this.found) : null
       if (rescan) this.found = findAll(update.state)
       else if (update.docChanged) this.found = refind(this.found, update)
       if (rescan || update.docChanged) this.report(update.state)
+      // Another chip of the same attachment may stay, which keeps it.
+      const gone = deleted ? [...deleted].filter((key) => !this.keys.has(key)) : []
+      if (gone.length > 0 && hooks?.onMentionDeleted) {
+        const tell = hooks.onMentionDeleted
+        queueMicrotask(() => tell(gone))
+      }
       if (
         rescan ||
         update.docChanged ||
