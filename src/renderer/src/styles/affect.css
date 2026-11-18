@@ -2880,6 +2880,13 @@ li[data-row-exit='dust'] > * {
   line-height: 20px;
   color: var(--text);
 }
+:is(.kettu-settings, .kettu-sd) .k-preview-label {
+  display: block;
+  margin: 0 16px 6px;
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--muted);
+}
 /* Text size's preview: the thread's prose, which the inset's type would otherwise fix at 13 px. */
 :is(.kettu-settings, .kettu-sd) .k-inset.markdown {
   font-size: calc(var(--thread-prose-size) * var(--prose-scale));
