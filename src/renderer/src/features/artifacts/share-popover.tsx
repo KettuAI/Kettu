@@ -39,6 +39,7 @@ import { Spinner } from '@renderer/components/ui/spinner'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
 import { longAgo, storageBytes } from '@renderer/lib/format'
 import { useHostContext } from '@renderer/lib/host-features'
+import { SettingsStyles } from '@renderer/features/routines/kit'
 import { useCloudOffHere } from '@renderer/features/settings/use-cloud-off-here'
 import { useHostScope } from '@renderer/stores/host-scope'
 import { isWeb } from '@renderer/lib/platform'
@@ -515,6 +516,7 @@ function ShareButtonBody({ id, title, shown, head, open: asked, onOpenChange }: 
 
   return (
     <>
+      <SettingsStyles />
       <span className="ui-as-anchor k-share">
         {asked === undefined && (
           <>
