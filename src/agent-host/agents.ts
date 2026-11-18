@@ -4092,9 +4092,12 @@ export class AgentManager {
     if (this.isDisabled(agentId)) return
     if (slot.def.id === 'opencode') return this.refreshProviders(slot, options?.force === true)
     if (slot.def.id === 'deepseek') return this.refreshBalance(slot, options?.force === true)
-    if (!slot.def.reportsAccount) return
-    await this.detectAll()
     const force = options?.force === true
+    if (!slot.def.reportsAccount) {
+      if (force && slot.signIn === 'required') await this.checkSignIn(slot)
+      return
+    }
+    await this.detectAll()
     if (!force && slot.signIn === 'required') return
     if (!slot.runtime && (slot.h.detection?.state !== 'available' || !slot.h.detection.spec)) return
     try {
@@ -4105,6 +4108,29 @@ export class AgentManager {
       if (force && error instanceof HostError && error.code === 'auth_required') return
       throw error
     }
+  }
+
+  /**
+   * Asks a signed-out agent that reports no account whether it still is, in a hidden session: a
+   * sign-in made in its terminal or files, such as Pi's providers, tells Kettu nothing otherwise.
+   */
+  private async checkSignIn(slot: Slot): Promise<void> {
+    await this.detectAll()
+    if (!slot.runtime && (slot.h.detection?.state !== 'available' || !slot.h.detection.spec)) return
+    await slot.optionsRun?.catch(() => {})
+    const log = (message: string): void =>
+      this.deps.diagnostics.log('warn', `${slot.name}: ${message}`)
+    try {
+      const runtime = await this.ensureReady(slot.id)
+      if (!runtime.connection.unpromptedSessions) return
+      await this.readInHiddenSession(slot, runtime, log, undefined)
+    } catch (error) {
+      // Still signed out: the notice stays, and opening the page is not an error.
+      if (error instanceof AgentRequestError && error.kind === 'auth_required') return
+      if (error instanceof HostError && error.code === 'auth_required') return
+      throw agentError(error)
+    }
+    if (slot.signIn === 'signed-in') this.hooks.signedIn(slot.id)
   }
 
   private openCodeClient(slot: Slot): OpenCodeClient {
