@@ -33,6 +33,7 @@ import { relayUrl } from './hosted/config'
 import { downloadFile, mediaRequest, saveMedia, type SaveProgress } from './media'
 import { browserNotifications, notifyAttention, notifyTest } from './notifications'
 import type { WebSettings } from './settings'
+import { followTabFront, noteTabAttention } from './tab-attention'
 import { webReports } from './report'
 import { pickThemeFile, webThemes, type AdminCall } from './themes'
 
@@ -221,11 +222,14 @@ export function webApi(link: HostLink, settings: WebSettings, context: WebHostCo
 
   // What a notification's click opens, as main sends a window its menu's commands.
   const commands = new Set<(command: AppCommand) => void>()
+  const inFront = (): boolean => document.visibilityState === 'visible' && document.hasFocus()
+  followTabFront(inFront)
   adminEvent('attention', ({ attention }) => {
+    noteTabAttention(attention, { settings: () => settings.current(), inFront })
     notifyAttention(attention, {
       notifications: browserNotifications(),
       settings: () => settings.current(),
-      inFront: () => document.visibilityState === 'visible' && document.hasFocus(),
+      inFront,
       open: (command) => {
         window.focus()
         for (const listener of commands) listener(command)
