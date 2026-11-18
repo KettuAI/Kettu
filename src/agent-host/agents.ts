@@ -1268,6 +1268,47 @@ export class AgentManager {
   }
 
   /**
+   * A hosted agent's user CLI to start a process with: the one it started with while it is there,
+   * else the one detection finds again, so a CLI replaced or moved since needs no restart and
+   * stops none of the sessions that still run. Concurrent starts share one detection.
+   */
+  private currentCli(slot: Slot, spec: LaunchSpec): (started: string) => Promise<string> {
+    let finding: Promise<string> | null = null
+    return async (started) => {
+      if (await isExecutableFile(started, this.deps.platform)) return started
+      finding ??= this.findCliAgain(slot, spec, started).finally(() => (finding = null))
+      return finding
+    }
+  }
+
+  private async findCliAgain(slot: Slot, spec: LaunchSpec, gone: string): Promise<string> {
+    const { h } = slot
+    this.cliVersions.clear()
+    await this.detect(h)
+    const detection = h.detection
+    let reason: string
+    if (detection?.state === 'available') {
+      const found = detection.spec?.cli
+      // A CLI that needs another install of the SDK than the running one cannot be swapped in.
+      if (found && detection.spec?.command === spec.command) {
+        if (found !== gone) {
+          this.deps.diagnostics.event(slot.id, 'cli moved', `${gone} is gone; ${found} runs`)
+        }
+        return found
+      }
+      reason = found
+        ? t('agent.cliRestart', { agent: h.def.name, path: found })
+        : t('agent.notAvailable', { agent: slot.name })
+    } else {
+      reason = detection?.detail ?? t('agent.notAvailable', { agent: slot.name })
+    }
+    throw new AgentRequestError(
+      'agent_error',
+      t('agent.cliGone', { agent: h.def.name, path: gone, reason }),
+    )
+  }
+
+  /**
    * Starts the agent through its protocol's driver: over the stdio of the process the launcher
    * spawns, or as a run in the host whose processes are recorded and stopped as the agent's own.
    */
@@ -1294,7 +1335,13 @@ export class AgentManager {
     slot.launched = run
     let connection: AgentConnection
     try {
-      connection = driver.connect({ ...context, spec, env, spawn: run.spawn })
+      connection = driver.connect({
+        ...context,
+        spec,
+        env,
+        spawn: run.spawn,
+        currentCli: this.currentCli(slot, spec),
+      })
     } catch (error) {
       slot.launched = null
       throw error

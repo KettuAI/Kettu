@@ -199,6 +199,8 @@
     "stoppedBeforeAnswer": "The agent stopped before it answered",
     "failedToStart": "{{agent}} failed to start",
     "notAvailable": "{{agent}} is not available",
+    "cliGone": "{{path}} is gone, perhaps because {{agent}} is being updated. {{reason}}",
+    "cliRestart": "{{agent}} is now at {{path}}; restart Kettu to use it.",
     "cannotInstall": "{{agent}} cannot be installed",
     "busyInstalling": "{{agent}} is already being installed or started",
     "closeSessionsFirst": "Close the sessions that use {{agent}} first",
