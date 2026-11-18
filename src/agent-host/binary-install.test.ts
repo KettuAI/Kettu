@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { installPlans, updatePlan, type BinaryInstalls, type PlanContext } from './binary-install'
+import {
+  installPlans,
+  npmPrefixOf,
+  updatePlan,
+  type BinaryInstalls,
+  type PlanContext,
+} from './binary-install'
 
 const context: PlanContext = {
   platform: 'darwin',
@@ -57,5 +63,42 @@ describe('the npm route', () => {
     const installs: BinaryInstalls = { npm: 'vendor-pkg' }
     const [plan] = await installPlans(installs, context)
     expect(plan?.run?.args).not.toContain('--ignore-scripts')
+  })
+
+  it('updates the copy under the prefix the program was found in, whichever npm runs', async () => {
+    const installs: BinaryInstalls = { npm: '@vendor/cli' }
+    const update = await updatePlan(installs, 'npm', {
+      ...context,
+      program: '/Users/ann/.local/bin/cli',
+      npmPrefix: '/Users/ann/.local',
+    })
+    expect(update?.command).toBe('npm install -g --prefix /Users/ann/.local @vendor/cli@latest')
+    expect(update?.run?.program).toBe('/usr/local/bin/npm')
+    expect(update?.run?.args.slice(0, 5)).toEqual([
+      'install',
+      '-g',
+      '--prefix',
+      '/Users/ann/.local',
+      '@vendor/cli@latest',
+    ])
+  })
+
+  it('reads the npm prefix from where the package lives', () => {
+    const pkg = '@anthropic-ai/claude-code'
+    expect(
+      npmPrefixOf(
+        '/Users/ann/.local/lib/node_modules/@anthropic-ai/claude-code/bin/claude.exe',
+        pkg,
+        'darwin',
+      ),
+    ).toBe('/Users/ann/.local')
+    expect(
+      npmPrefixOf(
+        'C:\\Users\\Ann\\AppData\\Roaming\\npm\\node_modules\\@anthropic-ai\\claude-code\\bin\\claude.exe',
+        pkg,
+        'win32',
+      ),
+    ).toBe('C:\\Users\\Ann\\AppData\\Roaming\\npm')
+    expect(npmPrefixOf('/Users/ann/.local/share/claude/versions/2.1.326', pkg, 'darwin')).toBeNull()
   })
 })

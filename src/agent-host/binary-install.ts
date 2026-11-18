@@ -308,6 +308,26 @@ export function installMethodOf(
   return null
 }
 
+/**
+ * The npm prefix a global package's file was installed under: the folder above its
+ * `lib/node_modules`, or its `node_modules` on Windows. Null when the file is not in the package.
+ */
+export function npmPrefixOf(
+  realPath: string,
+  npmPackage: string,
+  platform: Platform,
+): string | null {
+  const p = platformPath(platform)
+  const windows = platform === 'win32'
+  const file = windows ? realPath.replaceAll('/', '\\') : realPath
+  const parts = [...(windows ? [] : ['lib']), 'node_modules', ...npmPackage.split('/')]
+  const marker = `${p.sep}${parts.join(p.sep)}${p.sep}`
+  const at = windows
+    ? file.toLowerCase().lastIndexOf(marker.toLowerCase())
+    : file.lastIndexOf(marker)
+  return at > 0 ? file.slice(0, at) : null
+}
+
 /** How a program is updated: the command shown, and what runs it, or null while its tool is missing. */
 export interface UpdatePlan {
   command: string
@@ -321,7 +341,11 @@ export interface UpdatePlan {
 export async function updatePlan(
   installs: BinaryInstalls,
   method: AgentInstallMethod['id'],
-  ctx: Pick<PlanContext, 'platform' | 'env' | 'npm' | 'isExecutable'> & { program: string },
+  ctx: Pick<PlanContext, 'platform' | 'env' | 'npm' | 'isExecutable'> & {
+    program: string
+    /** The npm prefix the program was installed under, which may not be the PATH npm's own. */
+    npmPrefix?: string | null
+  },
 ): Promise<UpdatePlan | null> {
   const { platform } = ctx
   switch (method) {
@@ -372,6 +396,7 @@ export async function updatePlan(
       const args = [
         'install',
         '-g',
+        ...(ctx.npmPrefix ? ['--prefix', ctx.npmPrefix] : []),
         ...(installs.ignoreScripts ? ['--ignore-scripts'] : []),
         `${installs.npm}@latest`,
       ]
