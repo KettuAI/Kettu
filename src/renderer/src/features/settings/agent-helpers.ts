@@ -7,6 +7,7 @@ import { isFullAccessMode, isStartMode } from '@shared/agents'
 import type { AgentId, HarnessId } from '@shared/thread'
 import { errorMessage } from '@renderer/lib/host'
 import { hostOfPath } from '@renderer/lib/host-paths'
+import { limitPercent, type LimitView } from '@renderer/lib/plan-limit'
 import { isInstalled } from '@renderer/stores/agents'
 import { useHostScope } from '@renderer/stores/host-scope'
 
@@ -96,8 +97,9 @@ export function currentLimits(limits: PlanLimit[], now: number): PlanLimit[] {
   return limits.filter((l) => l.resetsAt === null || l.resetsAt > now)
 }
 
-export function percent(limit: PlanLimit): string {
-  return limit.usedPercent === null ? '—' : `${Math.round(limit.usedPercent)}%`
+export function percent(limit: PlanLimit, view: LimitView): string {
+  const shown = limitPercent(limit, view)
+  return shown === null ? '—' : `${shown}%`
 }
 
 /** The harness's own version: the user's CLI it runs, or the program's, never Kettu's package. */

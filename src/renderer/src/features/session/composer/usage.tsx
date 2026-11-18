@@ -33,7 +33,7 @@ import { planReset, usageTone, type UsageTone } from '@renderer/features/sidebar
 import { useLimitView } from '@renderer/hooks/use-limit-view'
 import { clockTime, countdown, fullTime, limitLabel, money, tokens } from '@renderer/lib/format'
 import { errorMessage, sessionHost } from '@renderer/lib/host'
-import { limitLevel, shownPercent } from '@renderer/lib/plan-limit'
+import { limitLevel, limitPercent, shownPercent } from '@renderer/lib/plan-limit'
 import { useNow } from '@renderer/lib/use-now'
 import { cn } from '@renderer/lib/utils'
 import { loadContext, refreshLimits, useUsageStore } from '@renderer/stores/usage'
@@ -279,6 +279,7 @@ export function ContextButton({
   model: string | null
 }) {
   const { t } = useTranslation('composer')
+  const limitView = useLimitView()
   // The tray names a limit only from 70% on; below that it stays in the popover.
   const nearest = warningLimit(holding)
   const warning = nearest && limitLevel(nearest) !== 'ok' ? nearest : null
@@ -336,7 +337,7 @@ export function ContextButton({
             data-level={LIMIT_METER[limitLevel(warning)]}
           >
             {isShortWindow(warning.window) ? t(SHORT_WINDOW[warning.window]) : limitLabel(warning)}{' '}
-            {warning.usedPercent !== null && `${Math.round(warning.usedPercent)}%`}
+            {warning.usedPercent !== null && `${limitPercent(warning, limitView)}%`}
           </span>
         )}
         {usage && (

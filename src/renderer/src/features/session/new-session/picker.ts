@@ -4,6 +4,7 @@ import type { AgentStatus, SessionSummary } from '@shared/agent-host'
 import { tightestLimit } from '@renderer/features/sidebar/plan-usage'
 import { limitPhrase } from '@renderer/lib/format'
 import { i18n } from '@renderer/lib/i18n'
+import { limitPercent, type LimitView } from '@renderer/lib/plan-limit'
 import { hostOfSession } from '@renderer/stores/sessions'
 import { agentNeed } from './start-options'
 
@@ -18,6 +19,7 @@ export function agentLine(
   now = Date.now(),
   /** The account's newest reading, which may be another host's. */
   limits = status.limits,
+  view: LimitView = 'used',
 ): { text: string; tone: LineTone } | null {
   const need = agentNeed(status)
   // A version Kettu's checks say does not work comes before anything else it needs.
@@ -56,10 +58,12 @@ export function agentLine(
     parts.push(
       limit.usedPercent === null
         ? i18n.t('session:newSession.picker.limitReached', { limit: limitPhrase(limit) })
-        : i18n.t('session:newSession.picker.limitUsed', {
-            percent: Math.round(limit.usedPercent),
-            limit: limitPhrase(limit),
-          }),
+        : i18n.t(
+            view === 'left'
+              ? 'session:newSession.picker.limitLeft'
+              : 'session:newSession.picker.limitUsed',
+            { percent: limitPercent(limit, view), limit: limitPhrase(limit) },
+          ),
     )
   }
   return parts.length > 0 ? { text: parts.join(' · '), tone: 'muted' } : null

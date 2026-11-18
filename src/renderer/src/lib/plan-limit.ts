@@ -23,6 +23,14 @@ export function shownPercent(used: number, view: LimitView): number {
   return view === 'left' ? Math.max(0, 100 - used) : used
 }
 
+/** A window's percentage as the view shows it; null when the window reports none. */
+export function limitPercent(
+  limit: Pick<PlanLimit, 'usedPercent'>,
+  view: LimitView,
+): number | null {
+  return limit.usedPercent === null ? null : shownPercent(Math.round(limit.usedPercent), view)
+}
+
 /** A limit bar's fill at each level. */
 export const LIMIT_FILL: Record<LimitLevel, string> = {
   ok: 'bg-limit-ok',

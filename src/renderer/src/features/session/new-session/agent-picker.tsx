@@ -21,6 +21,7 @@ import { InputGroupAddon } from '@renderer/components/ui/input-group'
 import { Skeleton } from '@renderer/components/ui/skeleton'
 import { SettingsGlyph } from '@renderer/features/account/avatar'
 import { useHostLabel } from '@renderer/features/sidebar/host-label'
+import { useLimitView } from '@renderer/hooks/use-limit-view'
 import { errorMessage } from '@renderer/lib/host'
 import { newestLimits } from '@renderer/lib/plan-readings'
 import { useNow } from '@renderer/lib/use-now'
@@ -63,6 +64,7 @@ export function AgentPicker({
   const { t } = useTranslation('session')
   const hostLabel = useHostLabel(hostId)
   const now = useNow()
+  const limitView = useLimitView()
   const readings = usePlanReadings()
   const statuses = useAgentsStore(
     useShallow((s) => {
@@ -176,7 +178,7 @@ export function AgentPicker({
               {(id: AgentId) => {
                 const status = byId.get(id)
                 if (!status) return null
-                const line = agentLine(status, now, newestLimits(readings, status))
+                const line = agentLine(status, now, newestLimits(readings, status), limitView)
                 return (
                   <ComboboxItem
                     key={id}

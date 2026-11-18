@@ -5,7 +5,9 @@
     "todayCost": "今日 {{cost}}，按 API 价格估算",
     "costEstimate": "按 API 价格估算",
     "limit": "{{agent}}，{{limit}}：已用 {{percent}}",
-    "limitShort": "{{limit}}已用 {{percent}}"
+    "limitShort": "{{limit}}已用 {{percent}}",
+    "limitLeft": "{{agent}}，{{limit}}：剩余 {{percent}}",
+    "limitShortLeft": "{{limit}}剩余 {{percent}}"
   },
   "page": {
     "title": "用量",

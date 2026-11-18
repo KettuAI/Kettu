@@ -33,9 +33,10 @@ import { shownChoice, shownValue } from '@renderer/features/session/composer/mod
 import { cliOutdated, listedInstalled } from '@renderer/features/agents/readiness'
 import { Ring } from '@renderer/features/session/composer/usage'
 import { planReset, tightestLimit } from '@renderer/features/sidebar/plan-usage'
+import { useLimitView } from '@renderer/hooks/use-limit-view'
 import { limitLabel } from '@renderer/lib/format'
 import { errorMessage, hostAt } from '@renderer/lib/host'
-import { LIMIT_TEXT, limitLevel, type LimitLevel } from '@renderer/lib/plan-limit'
+import { LIMIT_TEXT, limitLevel, limitPercent, type LimitLevel } from '@renderer/lib/plan-limit'
 import { newestLimits } from '@renderer/lib/plan-readings'
 import { useNow } from '@renderer/lib/use-now'
 import { cn } from '@renderer/lib/utils'
@@ -633,10 +634,11 @@ const RING_TONE = {
 /** The tightest window's pie and percentage, with every window in the tooltip. */
 function UsageNote({ limits, now }: { limits: AgentStatus['limits']; now: number }) {
   const { t } = useTranslation('session')
+  const view = useLimitView()
   const limit = tightestLimit(limits, now)
   if (!limit) return null
   const level = limitLevel(limit)
-  const percent = limit.usedPercent === null ? null : Math.round(limit.usedPercent)
+  const percent = limitPercent(limit, view)
   const current = limits.filter((l) => l.resetsAt === null || l.resetsAt > now)
   return (
     <Tooltip>
@@ -650,18 +652,27 @@ function UsageNote({ limits, now }: { limits: AgentStatus['limits']; now: number
           />
         }
       >
-        <Ring share={(limit.usedPercent ?? 0) / 100} tone={RING_TONE[level]} className="size-3" />
+        <Ring share={(percent ?? 0) / 100} tone={RING_TONE[level]} className="size-3" />
         {percent === null ? '—' : `${percent}%`}
       </TooltipTrigger>
       <TooltipContent side="right" className="flex flex-col items-start gap-0.5">
         {current.map((l) => {
           const reset = l.resetsAt && l.resetsAt > now ? planReset(l.resetsAt, now) : null
-          const used = l.usedPercent === null ? '—' : `${Math.round(l.usedPercent)}%`
+          const shown = limitPercent(l, view)
+          const value =
+            shown === null
+              ? '—'
+              : t(
+                  view === 'left'
+                    ? 'newSession.agentMenu.valueLeft'
+                    : 'newSession.agentMenu.valueUsed',
+                  { percent: shown },
+                )
           return (
             <span key={l.window} className="tabular">
               {reset
-                ? t('newSession.agentMenu.windowResets', { limit: limitLabel(l), used, reset })
-                : t('newSession.agentMenu.window', { limit: limitLabel(l), used })}
+                ? t('newSession.agentMenu.windowResets', { limit: limitLabel(l), value, reset })
+                : t('newSession.agentMenu.window', { limit: limitLabel(l), value })}
             </span>
           )
         })}
