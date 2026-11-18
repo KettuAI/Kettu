@@ -26,9 +26,11 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@renderer/components/ui/alert-dialog'
+import { Button } from '@renderer/components/ui/button'
 import { Checkbox } from '@renderer/components/ui/checkbox'
 import { Dialog, DialogClose } from '@renderer/components/ui/dialog'
 import { errorMessage, hostAt, terminalsAt } from '@renderer/lib/host'
+import { cn } from '@renderer/lib/utils'
 import { dismissSshUpdate, updateSshHost, useHostsStore } from '@renderer/stores/hosts'
 import { Log } from './agent-parts'
 import { CONFIRM, DangerButton, FindField, SetButton } from './controls'
@@ -498,7 +500,7 @@ function ConfigPicker({
             icon={<Icon icon={ArrowLeft01Icon} size={14} />}
             onClick={onBack}
           >
-            {t('hosts.add.ssh.manual.back')}
+            {t('hosts.page.ssh.backToForm')}
           </SetButton>
         }
       >
@@ -662,6 +664,7 @@ export function RemoveSshHost({
             />
             {uninstall && (
               <Option
+                nested
                 checked={data}
                 disabled={busy !== null}
                 onChange={(on) => {
@@ -706,14 +709,14 @@ export function RemoveSshHost({
               {t('common:actions.cancel')}
             </AlertDialogCancel>
             {failed && (
-              <SetButton
-                size="md"
-                loading={busy === 'remove'}
+              <Button
+                variant="outline"
+                size="dialog"
                 disabled={busy !== null}
                 onClick={() => void removeHere()}
               >
                 {t('hosts.page.uninstall.removeOnly')}
-              </SetButton>
+              </Button>
             )}
             <AlertDialogAction
               variant="destructive"
@@ -722,9 +725,11 @@ export function RemoveSshHost({
             >
               {busy === 'uninstall'
                 ? t('hosts.page.uninstall.working')
-                : uninstall
-                  ? t('hosts.page.uninstall.confirm')
-                  : t('hosts.page.remove.confirm')}
+                : failed
+                  ? t('hosts.add.retry')
+                  : uninstall
+                    ? t('hosts.page.uninstall.confirm')
+                    : t('hosts.page.remove.confirm')}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -734,12 +739,15 @@ export function RemoveSshHost({
 }
 
 function Option({
+  nested,
   checked,
   disabled,
   onChange,
   title,
   hint,
 }: {
+  /** Drawn under the option it depends on. */
+  nested?: boolean
   checked: boolean
   disabled: boolean
   onChange: (on: boolean) => void
@@ -747,7 +755,12 @@ function Option({
   hint: string
 }) {
   return (
-    <label className="flex items-start gap-2.5 rounded-code bg-subtle px-3 py-2.5 text-left">
+    <label
+      className={cn(
+        'flex items-start gap-2.5 rounded-code bg-subtle px-3 py-2.5 text-left',
+        nested && 'ml-6',
+      )}
+    >
       <Checkbox
         checked={checked}
         disabled={disabled}
