@@ -408,6 +408,30 @@
       "leaveFailed": "Could not leave Full access"
     }
   },
+  "claude": {
+    "mode": {
+      "default": {
+        "name": "Ask before edits",
+        "description": "Asks before it changes a file or runs a command"
+      },
+      "acceptEdits": {
+        "name": "Accept edits",
+        "description": "Edits files freely; still asks before commands"
+      },
+      "plan": {
+        "name": "Plan only",
+        "description": "Reads and plans. Changes nothing"
+      },
+      "auto": {
+        "name": "Auto",
+        "description": "Claude handles permission decisions"
+      },
+      "bypassPermissions": {
+        "name": "Full access",
+        "description": "Never asks. Use it in a sandbox or a worktree"
+      }
+    }
+  },
   "codex": {
     "signInNeeded": "Sign in to Codex with `codex login` in a terminal",
     "turnFailed": "The turn failed",

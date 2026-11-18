@@ -17,38 +17,33 @@ export const OPTION_IDS = {
 export const DEFAULT_MODEL = 'default'
 export const DEFAULT_EFFORT = 'default'
 
-const MODES: { id: PermissionMode; name: string; description: string }[] = [
-  {
-    id: 'default',
-    name: 'Ask before edits',
-    description: 'Asks before it changes a file or runs a command',
-  },
-  {
-    id: 'acceptEdits',
-    name: 'Accept edits',
-    description: 'Edits files freely; still asks before commands',
-  },
-  { id: 'plan', name: 'Plan only', description: 'Reads and plans. Changes nothing' },
-  { id: 'auto', name: 'Auto', description: 'Claude handles permission decisions' },
-  {
-    id: 'bypassPermissions',
-    name: 'Full access',
-    description: 'Never asks. Use it in a sandbox or a worktree',
-  },
-]
+const MODES = [
+  'default',
+  'acceptEdits',
+  'plan',
+  'auto',
+  'bypassPermissions',
+] as const satisfies readonly PermissionMode[]
 
-export function modeName(mode: string): string {
-  return MODES.find((item) => item.id === mode)?.name ?? mode
+type KnownMode = (typeof MODES)[number]
+
+function known(mode: string): mode is KnownMode {
+  return (MODES as readonly string[]).includes(mode)
+}
+
+/** The mode's name in the host's language, or in English where `translate` is `tEnglish`. */
+export function modeName(mode: string, translate: typeof t = t): string {
+  return known(mode) ? translate(`claude.mode.${mode}.name`) : mode
 }
 
 /** What a mode does, as the mode menu says it. */
-export function modeDescription(mode: string): string | undefined {
-  return MODES.find((item) => item.id === mode)?.description
+export function modeDescription(mode: string, translate: typeof t = t): string | undefined {
+  return known(mode) ? translate(`claude.mode.${mode}.description`) : undefined
 }
 
 /** The modes a session offers; bypass only where Claude Code allows it. */
 export function availableModes(allowBypass: boolean): PermissionMode[] {
-  return MODES.map((mode) => mode.id).filter((id) => allowBypass || id !== 'bypassPermissions')
+  return MODES.filter((id) => allowBypass || id !== 'bypassPermissions')
 }
 
 export interface SessionChoices {
@@ -160,10 +155,10 @@ export function buildConfig(
       category: 'mode',
       type: 'select',
       value: choices.mode,
-      choices: MODES.filter((mode) => modes.includes(mode.id)).map((mode) => ({
-        value: mode.id,
-        name: mode.name,
-        description: mode.description,
+      choices: MODES.filter((mode) => modes.includes(mode)).map((mode) => ({
+        value: mode,
+        name: modeName(mode),
+        description: modeDescription(mode),
       })),
     },
   ]
