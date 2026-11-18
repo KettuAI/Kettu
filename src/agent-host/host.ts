@@ -136,6 +136,7 @@ import {
 import { findCommand, isExecutableFile, type Env } from './find-command'
 import type { GitServiceApi, GitServiceDeps } from './git/api'
 import { createExec, type ExecRunner } from './git/exec'
+import { GitRetains } from './git/retains'
 import type { SkillsListResponse } from './codex/protocol'
 import { completePath } from './path-completion'
 import { pathKey } from './paths'
@@ -421,7 +422,7 @@ export class AgentHost {
   private readonly media: MediaService
   private gitUnsubscribe: (() => void)[] = []
   /** Ports keeping a project's git status live, by path key. */
-  private readonly gitRetains = new Map<string, { path: string; ports: Set<string> }>()
+  private readonly gitRetains = new GitRetains()
   /** Browser calls awaiting main's answer, by the id the call was given. */
   private readonly browserCalls = new Map<number, (answer: BrowserCallAnswer) => void>()
   private readonly deviceCalls = new Map<number, (answer: DeviceCallAnswer) => void>()
@@ -1399,8 +1400,7 @@ export class AgentHost {
   }
 
   private sendToRetainers(projectPath: string, event: HostEvent): void {
-    const retained = this.gitRetains.get(pathKey(projectPath, this.options.platform))
-    if (retained) this.hub.send(retained.ports, event)
+    this.hub.send(this.gitRetains.ports(pathKey(projectPath, this.options.platform)), event)
   }
 
   private reportProcesses(processes: AgentProcess[]): void {
@@ -1422,9 +1422,7 @@ export class AgentHost {
     this.browserTurns.portClosed(portId)
     this.sessions.portClosed(portId)
     this.artifacts.portClosed(portId)
-    for (const [key, retained] of this.gitRetains) {
-      if (retained.ports.delete(portId) && retained.ports.size === 0) this.gitRetains.delete(key)
-    }
+    this.gitRetains.dropPort(portId)
     this.git?.releaseAll(portId)
   }
 
@@ -2721,32 +2719,24 @@ export class AgentHost {
               : { optionId: optionId!, ...(note === undefined ? {} : { note }) },
           fromDevice(device),
         ),
-      'git.status': async ({ projectPath }, { portId }) => {
+      'git.status': async ({ projectPath, watcher }, { portId }) => {
         const git = this.requireGit()
         const canonical = await this.gitProject(projectPath)
         await this.env.ready()
         if (!this.hub.has(portId)) return this.gitCall((g) => g.status(canonical))
         const key = pathKey(canonical, this.options.platform)
-        let retained = this.gitRetains.get(key)
-        if (!retained) {
-          retained = { path: canonical, ports: new Set() }
-          this.gitRetains.set(key, retained)
-        }
-        if (!retained.ports.has(portId)) {
-          retained.ports.add(portId)
+        if (this.gitRetains.add(key, canonical, portId, watcher ?? '')) {
           git.retain(canonical, portId)
         }
         return this.gitCall((g) => g.status(canonical))
       },
-      'git.unwatch': async ({ projectPath }, { portId }) => {
+      'git.unwatch': async ({ projectPath, watcher }, { portId }) => {
         const git = this.requireGit()
         // The folder may be gone by now; the retained entry still knows its canonical path.
         const canonical = await projects.resolveDirectory(projectPath).catch(() => projectPath)
         const key = pathKey(canonical, this.options.platform)
-        const retained = this.gitRetains.get(key)
-        if (!retained?.ports.delete(portId)) return
-        if (retained.ports.size === 0) this.gitRetains.delete(key)
-        git.release(retained.path, portId)
+        const path = this.gitRetains.remove(key, portId, watcher ?? '')
+        if (path !== null) git.release(path, portId)
       },
       'git.fetch': ({ projectPath }) => this.gitProjectCall(projectPath, (g, p) => g.fetch(p)),
       'git.pull': ({ projectPath }) => this.gitProjectCall(projectPath, (g, p) => g.pull(p)),

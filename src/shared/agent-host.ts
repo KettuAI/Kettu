@@ -1283,8 +1283,11 @@ export interface HostContract {
     }
     result: void
   }
-  'git.status': { params: { projectPath: string }; result: GitStatus }
-  'git.unwatch': { params: { projectPath: string }; result: void }
+  // Reading the status also keeps the project live on the connection, until `git.unwatch`. A
+  // client that watches a project from several screens gives each a `watcher` of its own, which
+  // `git.unwatch` names, so one screen leaving leaves the others watching.
+  'git.status': { params: { projectPath: string; watcher?: string }; result: GitStatus }
+  'git.unwatch': { params: { projectPath: string; watcher?: string }; result: void }
   'git.fetch': { params: { projectPath: string }; result: GitOperation }
   'git.pull': { params: { projectPath: string }; result: GitOperation }
   // Publishes the branch when it has no upstream.

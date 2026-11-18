@@ -1101,6 +1101,19 @@ describe('computer use requests', () => {
     rejects(() => posix['sessions.answerProjectHooks']({ sessionId: 's', decision: 'use' }))
   })
 
+  it('takes the screen a git watch belongs to', () => {
+    for (const method of ['git.status', 'git.unwatch'] as const) {
+      expect(posix[method]({ projectPath: '/p' })).toEqual({ projectPath: '/p' })
+      expect(posix[method]({ projectPath: '/p', watcher: 'files', extra: 1 })).toEqual({
+        projectPath: '/p',
+        watcher: 'files',
+      })
+      rejects(() => posix[method]({ projectPath: '/p', watcher: '' }))
+      rejects(() => posix[method]({ projectPath: '/p', watcher: 7 }))
+      rejects(() => posix[method]({ projectPath: '/p', watcher: 'x'.repeat(257) }))
+    }
+  })
+
   it('takes what became of a drafted problem report', () => {
     const sent = { kind: 'sent', reportId: 'R-7K2F' }
     expect(

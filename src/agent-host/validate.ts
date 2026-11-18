@@ -1194,6 +1194,14 @@ export function createValidators(platform: Platform): Validators {
   const project = (params: unknown): { projectPath: string } => ({
     projectPath: absolutePath(fields(params), 'projectPath', platform),
   })
+  const watching = (params: unknown): { projectPath: string; watcher?: string } => {
+    const o = fields(params)
+    const watcher = optionalString(o, 'watcher', ID_CHARS)
+    return {
+      projectPath: absolutePath(o, 'projectPath', platform),
+      ...(watcher === undefined ? {} : { watcher }),
+    }
+  }
   const folder = (params: unknown): { path: string } => ({
     path: absolutePath(fields(params), 'path', platform),
   })
@@ -1945,8 +1953,8 @@ export function createValidators(platform: Platform): Validators {
         ? { ...base, answers: questionAnswers(o.answers) }
         : { ...base, values: formValues(o.values) }
     },
-    'git.status': project,
-    'git.unwatch': project,
+    'git.status': watching,
+    'git.unwatch': watching,
     'git.fetch': project,
     'git.pull': project,
     'git.push': (params) => {
