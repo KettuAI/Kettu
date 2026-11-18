@@ -4748,8 +4748,9 @@ li[data-row-exit='dust'] > * {
     white-space: nowrap;
   }
 }
-/* Narrower still, the tray gives up in order: the branch's name, the context's word, the speed, and
-   last the host, project and branch. */
+/* Narrower still, the right side gives way and the host, project and branch stay: the branch's
+   name, the context's word, the speed, then the links tighten, the countdown loses its icon, the
+   context its percent and last the countdown itself. */
 @container kettu-tray (inline-size < 480px) {
   .kettu-branch__name {
     display: none;
@@ -4760,13 +4761,36 @@ li[data-row-exit='dust'] > * {
     display: none;
   }
 }
-@container kettu-tray (inline-size < 380px) {
+@container kettu-tray (inline-size < 420px) {
+  .kettu-tray-link--cache[data-expired] > .kettu-tray-cache__label {
+    display: none;
+  }
+}
+@container kettu-tray (inline-size < 410px) {
   .kettu-tray-link--speed {
     display: none;
   }
 }
+@container kettu-tray (inline-size < 340px) {
+  .kettu-tray .ui-as-tray-link {
+    padding-inline: 5px;
+  }
+  .kettu-tray .kettu-tray__group {
+    gap: 0;
+  }
+}
 @container kettu-tray (inline-size < 300px) {
-  .kettu-tray__group--place {
+  .kettu-tray-link--cache:not([data-expired]) > .kettu-tray-cache__icon {
+    display: none;
+  }
+}
+@container kettu-tray (inline-size < 270px) {
+  .kettu-tray-meter__percent {
+    display: none;
+  }
+}
+@container kettu-tray (inline-size < 230px) {
+  .kettu-tray-link--cache {
     display: none;
   }
 }
