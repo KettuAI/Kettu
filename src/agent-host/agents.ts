@@ -124,6 +124,7 @@ import {
   installedFolder,
   installMethodOf,
   installPlans,
+  npmPrefixOf,
   updatePlan,
   type ArchiveEntry,
   type InstallPlan,
@@ -2831,12 +2832,17 @@ export class AgentManager {
     const mine = this.userProgram(h)
     if (!installs || !mine || !h.cliMethod) return null
     const platform = this.deps.platform
+    const npmPrefix =
+      h.cliMethod === 'npm' && installs.npm
+        ? npmPrefixOf(await realpath(mine.path).catch(() => mine.path), installs.npm, platform)
+        : null
     return updatePlan(installs, h.cliMethod, {
       platform,
       env: this.deps.env.agentEnv(h.def.id),
       npm: this.deps.env.nodeProbe().npmPath,
       isExecutable: (file) => isExecutableFile(file, platform),
       program: mine.path,
+      npmPrefix,
     })
   }
 
