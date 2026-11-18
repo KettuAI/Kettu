@@ -1871,9 +1871,11 @@
   padding: 2px 4px 6px;
   font-size: 13px;
   color: var(--thread-ink);
+  container-type: inline-size;
 }
 .ks-changes__head b {
   font-weight: 500;
+  white-space: nowrap;
 }
 .ks-changes__counts {
   display: inline-flex;
@@ -1883,6 +1885,23 @@
   display: flex;
   gap: 6px;
   margin-left: auto;
+}
+.ks-changes__actions .ks-btn svg {
+  display: none;
+}
+/* In a narrow column the actions keep only their icons, so the head stays on one line. */
+@container (inline-size < 440px) {
+  .ks-changes__actions .ks-btn {
+    width: 26px;
+    padding: 0;
+    justify-content: center;
+  }
+  .ks-changes__actions .ks-btn svg {
+    display: block;
+  }
+  .ks-changes__actions .ks-btn__label {
+    display: none;
+  }
 }
 .ks-btn {
   height: 26px;

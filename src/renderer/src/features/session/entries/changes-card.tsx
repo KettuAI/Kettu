@@ -1,5 +1,5 @@
 import { memo, useMemo, useState } from 'react'
-import { ArrowDown01Icon } from '@hugeicons/core-free-icons'
+import { ArrowDown01Icon, GitPullRequestIcon, ViewIcon } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
 import { Icon } from '@renderer/components/affect/app-shell'
@@ -90,23 +90,33 @@ export const ChangesCard = memo(function ChangesCard({
 
   return (
     <section aria-label={t('changes.label')} className={cn('ks-changes', className)}>
-      {/* In a narrow column the buttons move under the count together. */}
+      {/* In a narrow column the buttons keep only their icons. */}
       <div className="ks-changes__head">
         <b>{t('changes.files', { count: changes.length })}</b>
         {totals && <Counts insertions={totals.insertions} deletions={totals.deletions} />}
         {(first || committable.length > 0) && (
           <span className="ks-changes__actions">
             {first && (
-              <Button variant="outline" className="ks-btn" onClick={first}>
-                {t('changes.review')}
+              <Button
+                variant="outline"
+                className="ks-btn"
+                aria-label={t('changes.review')}
+                title={t('changes.review')}
+                onClick={first}
+              >
+                <Icon icon={ViewIcon} size={14} />
+                <span className="ks-btn__label">{t('changes.review')}</span>
               </Button>
             )}
             {committable.length > 0 && (
               <Button
                 className="ks-btn ks-btn--solid"
+                aria-label={t('changes.commit')}
+                title={t('changes.commit')}
                 onClick={() => openGitDialog(projectPath, { kind: 'commit', paths: committable })}
               >
-                {t('changes.commit')}
+                <Icon icon={GitPullRequestIcon} size={14} />
+                <span className="ks-btn__label">{t('changes.commit')}</span>
               </Button>
             )}
           </span>
