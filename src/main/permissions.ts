@@ -1,10 +1,12 @@
 import type { Session, WebContents } from 'electron'
 
 // The only permissions the renderer uses: the clipboard buttons write text and the terminal's
-// paste reads it.
+// paste reads it, and the terminal font menu lists the installed fonts, whose names stay in the
+// window.
 const ALLOWED_PERMISSIONS: ReadonlySet<string> = new Set([
   'clipboard-read',
   'clipboard-sanitized-write',
+  'local-fonts',
 ])
 
 export interface PermissionContext {
@@ -16,11 +18,11 @@ export interface PermissionContext {
 }
 
 /**
- * Whether a web permission is granted: only the clipboard ones, and only to the app's own page,
- * in its main frame. Everything else, such as notifications, media and geolocation, is denied.
- * While an agent uses the computer (`capturing`), that page may also capture what is on screen,
- * never a camera or a microphone, for the pane that shows the agent's window; which window it
- * gets is the display media handler's choice.
+ * Whether a web permission is granted: only the clipboard ones and the installed fonts, and only
+ * to the app's own page, in its main frame. Everything else, such as notifications, media and
+ * geolocation, is denied. While an agent uses the computer (`capturing`), that page may also
+ * capture what is on screen, never a camera or a microphone, for the pane that shows the agent's
+ * window; which window it gets is the display media handler's choice.
  */
 export function isPermissionAllowed(
   permission: string,

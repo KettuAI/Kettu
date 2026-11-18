@@ -361,3 +361,47 @@ describe('items from the Kettu Marketplace in a patch', () => {
     ).toThrow()
   })
 })
+
+describe('the terminal font', () => {
+  it('uses the theme’s code font until a face is named', async () => {
+    const store = await SettingsStore.load(dir)
+    expect(store.get().terminal.fontFamily).toBeUndefined()
+  })
+
+  it('keeps a stored face and drops one that could break out of a font stack on load', async () => {
+    await save({ version: 1, terminal: { fontSize: 14, fontFamily: 'Maple Mono NF CN' } })
+    expect((await SettingsStore.load(dir)).get().terminal).toEqual({
+      fontSize: 14,
+      fontFamily: 'Maple Mono NF CN',
+    })
+    for (const bad of ['', ' padded ', 'A", evil', "A'; x", 'A\nB', 'a{b}', 7, 'x'.repeat(101)]) {
+      await save({ version: 1, terminal: { fontSize: 14, fontFamily: bad } })
+      expect((await SettingsStore.load(dir)).get().terminal).toEqual({ fontSize: 14 })
+    }
+  })
+
+  it('takes one face name or null in a change and refuses the rest', () => {
+    expect(validateSettingsPatch({ terminal: { fontFamily: 'Maple Mono NF CN' } })).toEqual({
+      terminal: { fontFamily: 'Maple Mono NF CN' },
+    })
+    expect(validateSettingsPatch({ terminal: { fontFamily: null } })).toEqual({
+      terminal: { fontFamily: null },
+    })
+    for (const bad of ['', ' padded ', 'A", evil', 'A, B', 'url(x)', 'A;B', 3]) {
+      expect(() => validateSettingsPatch({ terminal: { fontFamily: bad } })).toThrow()
+    }
+  })
+
+  it('sets the face in a change and clears it with null', () => {
+    const named = mergeSettings(DEFAULT_SETTINGS, { terminal: { fontFamily: 'Menlo' } })
+    expect(named.terminal.fontFamily).toBe('Menlo')
+    const cleared = mergeSettings(named, { terminal: { fontFamily: null } })
+    expect('fontFamily' in cleared.terminal).toBe(false)
+  })
+
+  it('stays with the window that draws the terminal, never on the host', () => {
+    const { host, client } = splitSettingsPatch({ terminal: { fontFamily: 'Menlo' } })
+    expect(host).toBeNull()
+    expect(client).toEqual({ terminal: { fontFamily: 'Menlo' } })
+  })
+})

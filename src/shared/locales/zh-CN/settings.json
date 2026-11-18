@@ -256,6 +256,17 @@
       "reset": "重置",
       "choose": "选择…"
     },
+    "fontFamily": {
+      "name": "字体",
+      "description": "这台电脑上已安装的字体，例如能显示提示符图标的 Nerd Font。所选字体缺少的字形由主题的代码字体补上。",
+      "keywords": "字体 font nerd font 等宽 图标",
+      "default": "主题的代码字体",
+      "search": "搜索或输入字体名",
+      "use": "使用“{{name}}”",
+      "noMatch": "没有匹配的等宽字体。",
+      "loading": "正在读取已安装的字体…",
+      "unavailable": "这个浏览器列不出字体，输入字体名即可使用。"
+    },
     "fontSize": {
       "name": "字号",
       "description": "单位：像素。"

@@ -70,6 +70,7 @@ import { CloudSwitchRow, OtherConnections } from './cloud-section'
 import { useCloudOffHere } from './use-cloud-off-here'
 import { useGitHubOnly } from './use-github-only'
 import { DebugModeRow } from './debug-mode'
+import { FontFamily } from './font-family'
 import { ConsentRow, ConsentsState } from './artifacts-section'
 import { EmptyCard, GroupNote } from './rows'
 import { BROUGHT_SHOWN, useBroughtSites } from './brought-sites'
@@ -793,6 +794,15 @@ export function useTerminalSection(): SectionDef {
           : t('terminal.shell.description'),
         group: group('shell', t('terminal.groups.shell')),
         render: () => <ShellPicker />,
+      },
+      {
+        id: 'font-family',
+        name: t('terminal.fontFamily.name'),
+        english: en('terminal.fontFamily.name'),
+        description: t('terminal.fontFamily.description'),
+        keywords: t('terminal.fontFamily.keywords'),
+        group: group('display', t('terminal.groups.display')),
+        render: () => <FontFamily label={t('terminal.fontFamily.name')} />,
       },
       {
         id: 'font-size',

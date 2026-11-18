@@ -6,7 +6,7 @@ const APP_URL = 'http://localhost:5173/'
 const isOwnUrl = (url: string | undefined): boolean => !!url?.startsWith('http://localhost:5173')
 const own = { url: APP_URL, isMainFrame: true }
 
-// Every permission name Electron 44 reports, other than the two the app uses.
+// Every permission name Electron 44 reports, other than the three the app uses.
 const DENIED = [
   'ar',
   'automatic-fullscreen',
@@ -23,7 +23,6 @@ const DENIED = [
   'hid',
   'idle-detection',
   'keyboardLock',
-  'local-fonts',
   'local-network',
   'local-network-access',
   'loopback-network',
@@ -55,9 +54,12 @@ const DENIED = [
 ]
 
 describe('isPermissionAllowed', () => {
-  it.each(['clipboard-read', 'clipboard-sanitized-write'])('grants %s to the app', (permission) => {
-    expect(isPermissionAllowed(permission, own, isOwnUrl)).toBe(true)
-  })
+  it.each(['clipboard-read', 'clipboard-sanitized-write', 'local-fonts'])(
+    'grants %s to the app',
+    (permission) => {
+      expect(isPermissionAllowed(permission, own, isOwnUrl)).toBe(true)
+    },
+  )
 
   it.each(DENIED)('denies %s', (permission) => {
     expect(isPermissionAllowed(permission, own, isOwnUrl)).toBe(false)
@@ -78,7 +80,12 @@ describe('isPermissionAllowed', () => {
 
   it('denies every permission to an artifact, in its frame or alone', () => {
     const artifact = 'kettu-artifact://0123456789abcdef0123456789/'
-    for (const permission of [...DENIED, 'clipboard-read', 'clipboard-sanitized-write']) {
+    for (const permission of [
+      ...DENIED,
+      'clipboard-read',
+      'clipboard-sanitized-write',
+      'local-fonts',
+    ]) {
       for (const isMainFrame of [false, true]) {
         const context = { url: artifact, isMainFrame }
         expect(isPermissionAllowed(permission, context, isOwnUrl)).toBe(false)
@@ -201,7 +208,12 @@ describe('restrictPermissions', () => {
     const artifact = 'kettu-artifact://0123456789abcdef0123456789/'
     const details = { isMainFrame: false, requestingUrl: artifact }
     const answers: boolean[] = []
-    for (const permission of [...DENIED, 'clipboard-read', 'clipboard-sanitized-write']) {
+    for (const permission of [
+      ...DENIED,
+      'clipboard-read',
+      'clipboard-sanitized-write',
+      'local-fonts',
+    ]) {
       request(webContents, permission, (granted: boolean) => answers.push(granted), details)
       answers.push(check(webContents, permission, artifact.slice(0, -1), details))
     }

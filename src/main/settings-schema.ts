@@ -8,6 +8,7 @@ import {
   AGENT_COLORS,
   isAgentColor,
   nextAgentColor,
+  isFontFamilyName,
   isLinkSite,
   MAX_LINK_SITES,
   ONBOARDING_STEPS,
@@ -264,6 +265,12 @@ function checkAgentIds(value: unknown, path: string): string | null {
     seen.add(id)
   }
   return null
+}
+
+function checkFontFamily(value: unknown, path: string): string | null {
+  return typeof value === 'string' && isFontFamilyName(value)
+    ? null
+    : `"${path}" must be one font name without quotes, separators or brackets`
 }
 
 function checkStoredPath(value: unknown, path: string): string | null {
@@ -928,6 +935,10 @@ export function validateSettingsPatch(raw: unknown): SettingsPatch {
         if (key === 'fontSize') {
           const problem = oneOf(...FONT_SIZES)(fieldValue, 'terminal.fontSize')
           if (problem) problems.push(problem)
+        } else if (key === 'fontFamily') {
+          const problem =
+            fieldValue === null ? null : checkFontFamily(fieldValue, 'terminal.fontFamily')
+          if (problem) problems.push(problem)
         } else if (key === 'shellPath') {
           if (fieldValue !== null) {
             problems.push(
@@ -1006,6 +1017,10 @@ export function mergeSettings(current: SettingsFile, patch: SettingsPatch): Sett
   }
   if (patch.terminal) {
     if (patch.terminal.fontSize !== undefined) next.terminal.fontSize = patch.terminal.fontSize
+    if (patch.terminal.fontFamily === null) delete next.terminal.fontFamily
+    else if (patch.terminal.fontFamily !== undefined) {
+      next.terminal.fontFamily = patch.terminal.fontFamily
+    }
     if (patch.terminal.shellPath === null) delete next.terminal.shellPath
   }
   if (patch.remote) {
@@ -1286,11 +1301,16 @@ export function parseSettingsFile(raw: unknown): LoadedSettings {
   if (raw.terminal !== undefined) {
     if (!isRecord(raw.terminal)) problems.push('"terminal" must be an object')
     else {
-      const { fontSize, shellPath } = raw.terminal
+      const { fontSize, fontFamily, shellPath } = raw.terminal
       if (fontSize !== undefined) {
         const problem = oneOf(...FONT_SIZES)(fontSize, 'terminal.fontSize')
         if (problem) problems.push(problem)
         else settings.terminal.fontSize = fontSize as SettingsFile['terminal']['fontSize']
+      }
+      if (fontFamily !== undefined) {
+        const problem = checkFontFamily(fontFamily, 'terminal.fontFamily')
+        if (problem) problems.push(problem)
+        else settings.terminal.fontFamily = fontFamily as string
       }
       if (shellPath !== undefined) {
         const problem = checkStoredPath(shellPath, 'terminal.shellPath')

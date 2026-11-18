@@ -36,6 +36,7 @@ import { Kbd } from '@renderer/components/ui/kbd'
 import { toast } from '@renderer/components/ui/toast'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
 import { forgetSite } from '@renderer/features/session/link-open'
+import { terminalFontStack } from '@renderer/features/terminal/font-stack'
 import { errorMessage } from '@renderer/lib/host'
 import { systemLocale } from '@renderer/lib/i18n'
 import { basename } from '@renderer/lib/format'
@@ -452,7 +453,7 @@ export function ShellPicker() {
 
 export function FontSize({ label }: { label: ReactNode }) {
   const { t } = useTranslation('settings')
-  const value = useSettings().terminal.fontSize
+  const { fontSize: value, fontFamily } = useSettings().terminal
   const [apply, error] = useApply()
   return (
     <>
@@ -470,7 +471,14 @@ export function FontSize({ label }: { label: ReactNode }) {
           onChange={(v) => apply({ terminal: { fontSize: v } })}
         />
       </div>
-      <div aria-hidden className="k-term" style={{ fontSize: value }}>
+      <div
+        aria-hidden
+        className="k-term"
+        style={{
+          fontSize: value,
+          fontFamily: fontFamily ? terminalFontStack(fontFamily, 'var(--code-face)') : undefined,
+        }}
+      >
         <div>
           <span className="k-term__path">~/code/kettu</span>{' '}
           <span className="k-term__branch">main</span> $ pnpm vitest run src/usage
@@ -479,6 +487,8 @@ export function FontSize({ label }: { label: ReactNode }) {
           <span className="k-term__ok">{'\u2713'}</span> 29 passed{' '}
           <span className="k-term__faint">(1.18s)</span>
         </div>
+        {/* Powerline branch, folder and code icons: boxes show when the face lacks them. */}
+        {fontFamily && <div className="k-term__faint">{'\ue0a0 \uf07b \uf121'}</div>}
       </div>
     </>
   )
