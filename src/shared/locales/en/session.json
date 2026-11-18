@@ -596,6 +596,10 @@
       "signIn": "Waiting for sign-in",
       "finished": "Finished {{ago}}"
     },
+    "artifacts": {
+      "title": "Latest artifacts",
+      "viewAll": "View all"
+    },
     "addAgent": "Add an agent…",
     "guide": {
       "title": "No agent yet",

@@ -577,6 +577,10 @@
       "signIn": "等待登录",
       "finished": "{{ago}}完成"
     },
+    "artifacts": {
+      "title": "最近的 artifact",
+      "viewAll": "查看全部"
+    },
     "addAgent": "添加 Agent…",
     "guide": {
       "title": "还没有 Agent",

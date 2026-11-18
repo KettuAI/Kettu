@@ -50,6 +50,14 @@
       "description": "Which agent New session starts with.",
       "askEachTime": "Ask each time"
     },
+    "newSessionList": {
+      "name": "Under the New session input",
+      "description": "What New session lists below the input.",
+      "keywords": "new session home start page below list recent sessions pick up where you left off artifacts hide nothing",
+      "sessions": "Pick up where you left off",
+      "artifacts": "Latest artifacts",
+      "off": "Nothing"
+    },
     "sendKey": {
       "name": "Send with",
       "description": "The other key adds a new line.",

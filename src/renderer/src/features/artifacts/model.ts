@@ -35,6 +35,17 @@ export function recency(artifact: ArtifactSummary, opened: OpenedTimes): number 
   return Math.max(opened[artifact.id] ?? 0, artifact.updatedAt)
 }
 
+/** The `count` artifacts the page's Recent order puts first. */
+export function latestArtifacts(
+  list: readonly ArtifactSummary[],
+  opened: OpenedTimes,
+  count: number,
+): ArtifactSummary[] {
+  return [...list]
+    .sort((a, b) => recency(b, opened) - recency(a, opened) || a.id.localeCompare(b.id))
+    .slice(0, count)
+}
+
 /** Opened times as stored, keeping only well-formed entries. */
 export function parseOpened(value: unknown): Record<string, number> {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) return {}
