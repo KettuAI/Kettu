@@ -405,6 +405,30 @@
       "leaveFailed": "没能退出完全访问"
     }
   },
+  "claude": {
+    "mode": {
+      "default": {
+        "name": "编辑前询问",
+        "description": "修改文件、运行命令前先询问"
+      },
+      "acceptEdits": {
+        "name": "接受编辑",
+        "description": "可直接修改文件；运行命令前仍会询问"
+      },
+      "plan": {
+        "name": "仅计划",
+        "description": "只读取和做计划，不做任何修改"
+      },
+      "auto": {
+        "name": "自动",
+        "description": "由 Claude 决定是否授权"
+      },
+      "bypassPermissions": {
+        "name": "完全访问",
+        "description": "从不询问。请在沙箱或 worktree 里使用"
+      }
+    }
+  },
   "codex": {
     "signInNeeded": "请在终端里运行 `codex login` 登录 Codex",
     "turnFailed": "这一轮失败了",

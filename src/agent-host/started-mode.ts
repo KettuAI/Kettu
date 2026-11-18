@@ -157,7 +157,10 @@ export interface ModeLabel {
 export function modeLabel(harness: RankedHarness, mode: string): ModeLabel {
   switch (harness) {
     case 'claude-code':
-      return { name: modeName(mode), description: modeDescription(mode) ?? '' }
+      return {
+        name: modeName(mode, tEnglish),
+        description: modeDescription(mode, tEnglish) ?? '',
+      }
     case 'codex':
       return CODEX_MODES.some((known) => known.id === mode)
         ? {

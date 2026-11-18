@@ -295,6 +295,28 @@ describe('permissionOptions', () => {
 describe("a plan's approval", () => {
   const modes = ['default', 'acceptEdits', 'plan', 'auto', 'bypassPermissions']
 
+  afterEach(() => {
+    setLocale('en')
+  })
+
+  it('names the modes in the language, with the ids unchanged', () => {
+    setLocale('zh-CN')
+    const options = planOptions(modes, 'acceptEdits')
+    expect(options.map((o) => [o.id, o.name])).toEqual([
+      [OPTION.exitPlanAuto, '自动'],
+      [OPTION.exitPlanAcceptEdits, '接受编辑'],
+      [OPTION.exitPlanDefault, '编辑前询问'],
+      [OPTION.reject, '继续规划'],
+    ])
+  })
+
+  it('names the mode an always-allow answer switches to in the language', () => {
+    setLocale('zh-CN')
+    expect(alwaysAllowName([{ type: 'setMode', mode: 'plan', destination: 'session' }])).toMatch(
+      /仅计划$/,
+    )
+  })
+
   it('offers the modes to build in as the mode menu names them, then Keep planning', () => {
     expect(planOptions(modes, 'acceptEdits')).toEqual([
       {
