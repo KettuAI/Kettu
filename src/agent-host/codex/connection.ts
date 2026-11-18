@@ -630,8 +630,14 @@ export class CodexConnection implements AgentConnection {
 
   // Sessions.
 
-  private listModels(): Promise<Model[]> {
-    this.models ??= (async () => {
+  /**
+   * The models Codex lists. Opening a thread reads them again, so models Codex adds while it runs
+   * show in the next session and in a session's refreshed menu; a turn or a pick reuses them. A
+   * failed read keeps the last list.
+   */
+  private listModels(again = false): Promise<Model[]> {
+    if (this.models && !again) return this.models
+    const read: Promise<Model[]> = (async () => {
       const models: Model[] = []
       let cursor: string | null = null
       do {
@@ -645,11 +651,12 @@ export class CodexConnection implements AgentConnection {
       this.knownModels = models
       return models
     })().catch((error: unknown) => {
-      this.models = null
+      if (this.models === read) this.models = null
       this.hooks.log('warn', `Could not list Codex's models: ${(error as Error).message}`)
-      return []
+      return this.knownModels
     })
-    return this.models
+    this.models = read
+    return read
   }
 
   private async record(
@@ -659,7 +666,7 @@ export class CodexConnection implements AgentConnection {
     hidden: boolean,
     base?: Settings,
   ): Promise<ThreadRecord> {
-    const models = await this.listModels()
+    const models = await this.listModels(true)
     const modelId = base?.model ?? response.model
     const model = models.find((item) => item.id === modelId)
     const settings: Settings = base

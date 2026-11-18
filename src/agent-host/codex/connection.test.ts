@@ -9,6 +9,7 @@ import {
   applyPatches,
   threadEntries,
   threadFromSnapshot,
+  type ConfigOption,
   type SideChatStep,
   type ThreadEntry,
   type ThreadState,
@@ -23,7 +24,13 @@ import {
 } from '../connection'
 import { TextRing } from '../ring'
 import { newTurnScope, type MapperEffect } from '../session-updates'
-import { FakeAppServer, FakeRpcError, threadResponse, turn } from '../testing/fake-app-server'
+import {
+  FAKE_MODELS,
+  FakeAppServer,
+  FakeRpcError,
+  threadResponse,
+  turn,
+} from '../testing/fake-app-server'
 import { SIDE_INSTRUCTIONS } from '../side-chat'
 import { CodexConnection } from './connection'
 
@@ -284,6 +291,35 @@ describe('sessions', () => {
       'agent',
       'agent-full-access',
     ])
+  })
+
+  it('lists the models Codex adds while it runs, and takes a pick of one', async () => {
+    const { server, connection } = await connect()
+    const listed = [...FAKE_MODELS]
+    server.on('model/list', () => ({ data: listed, nextCursor: null }))
+    const modelOption = (config: ConfigOption[]) => config.find((o) => o.id === 'model')
+    const first = await connection.newSession('/project')
+    expect(modelOption(first.config)?.choices?.map((c) => c.value)).toEqual([
+      'gpt-6.1-sol',
+      'gpt-5.6-luna',
+    ])
+    listed.push({ ...FAKE_MODELS[1]!, id: 'gpt-6.2-nova', displayName: 'gpt-6.2-nova' })
+    const second = await connection.newSession('/project')
+    expect(modelOption(second.config)?.choices?.map((c) => c.value)).toContain('gpt-6.2-nova')
+    const picked = await connection.setConfigOption(first.sessionId, 'model', 'gpt-6.2-nova')
+    expect(modelOption(picked)?.value).toBe('gpt-6.2-nova')
+  })
+
+  it('keeps the models it listed when listing them again fails', async () => {
+    const { server, connection } = await connect()
+    const first = await connection.newSession('/project')
+    server.on('model/list', () => {
+      throw new FakeRpcError(-32603, 'offline')
+    })
+    const second = await connection.newSession('/project')
+    expect(second.config.find((o) => o.id === 'model')?.choices).toEqual(
+      first.config.find((o) => o.id === 'model')?.choices,
+    )
   })
 
   it('hands Kettu’s memory over as developer instructions and turns Codex’s own memories off', async () => {
