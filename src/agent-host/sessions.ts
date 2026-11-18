@@ -31,7 +31,7 @@ import {
 } from '@shared/agent-host'
 import { LOCALES } from '@shared/locale'
 import { PROMPT_BYTES, promptShare } from '@shared/attachments'
-import { CONTEXT_REFRESH_MS } from '@shared/context'
+import { CONTEXT_REFRESH_MS, type ContextEstimates } from '@shared/context'
 import { firstLine, outlineText } from '@shared/outline'
 import { longEnough, queryWords } from '@shared/search-fold'
 import { originLabel, type BrowserOriginAnswer, type BrowserOriginDecision } from '@shared/browser'
@@ -1126,6 +1126,7 @@ export class SessionManager {
   private readonly lastSummaries = new Map<string, string>()
   /** `/context` reports running, by session id. */
   private readonly contextRuns = new Map<string, Promise<ContextBreakdown | null>>()
+  private readonly contextEstimateRuns = new WeakMap<Live, Promise<ContextEstimates | null>>()
   /** The side question each session is answering, stopped through its controller. */
   private readonly sideRuns = new Map<string, AbortController>()
   /** What the last clear of each session's side chat emptied, for its undo. */
@@ -6376,6 +6377,32 @@ export class SessionManager {
       // Updates after the replay wait for the session, which attaches once its values are set.
       connection.reopen(record.acpSessionId)
     }
+  }
+
+  contextEstimates(sessionId: string): Promise<ContextEstimates | null> {
+    const live = this.live.get(sessionId)
+    const connection = live?.connection
+    if (!live || !connection?.readContextEstimates || !this.contextCurrent(live)) {
+      return Promise.resolve(null)
+    }
+    const running = this.contextEstimateRuns.get(live)
+    if (running) return running
+    const { acpSessionId } = live.record
+    const read = connection
+      .readContextEstimates(acpSessionId, workDir(live.record))
+      .then((estimates) =>
+        this.contextCurrent(live) &&
+        live.connection === connection &&
+        live.record.acpSessionId === acpSessionId
+          ? estimates
+          : null,
+      )
+      .catch((error: unknown) => {
+        throw agentError(error)
+      })
+      .finally(() => this.contextEstimateRuns.delete(live))
+    this.contextEstimateRuns.set(live, read)
+    return read
   }
 
   // Prompt turns.

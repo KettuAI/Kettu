@@ -2652,6 +2652,7 @@ export class AgentHost {
       'sessions.switchAgent': (params, { portId, device }) =>
         sessions.switchAgent(params, portId, fromDevice(device)),
       'sessions.context': ({ sessionId }) => sessions.context(sessionId),
+      'sessions.contextEstimates': ({ sessionId }) => sessions.contextEstimates(sessionId),
       'sessions.queue': ({ sessionId, content }, { portId, device }) =>
         sessions.queue(sessionId, content, portId, fromDevice(device)),
       'sessions.runCommand': (params, { portId, device }) =>

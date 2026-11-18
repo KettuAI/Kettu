@@ -1798,6 +1798,7 @@ export function createValidators(platform: Platform): Validators {
       }
     },
     'sessions.context': session,
+    'sessions.contextEstimates': session,
     'sessions.queue': (params) => {
       const o = fields(params)
       return { sessionId: sessionId(o), content: promptContent(o.content) }

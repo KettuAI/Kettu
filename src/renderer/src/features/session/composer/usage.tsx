@@ -2,7 +2,12 @@ import { useEffect, useState } from 'react'
 import { ArrowRight01Icon, Timer02Icon } from '@hugeicons/core-free-icons'
 import { Trans, useTranslation } from 'react-i18next'
 import type { AgentAccount, ContextList, PlanLimit } from '@shared/agent-host'
-import { CONTEXT_REFRESH_MS, type ContextReport } from '@shared/context'
+import {
+  CONTEXT_REFRESH_MS,
+  type ContextDefinitionEstimate,
+  type ContextEstimates,
+  type ContextReport,
+} from '@shared/context'
 import {
   knownExpiry,
   type CacheExpiry,
@@ -32,7 +37,7 @@ import { PANEL } from '@renderer/features/session/entries/helpers'
 import { planReset, usageTone, type UsageTone } from '@renderer/features/sidebar/plan-usage'
 import { useLimitView } from '@renderer/hooks/use-limit-view'
 import { clockTime, countdown, fullTime, limitLabel, money, tokens } from '@renderer/lib/format'
-import { errorMessage, sessionHost } from '@renderer/lib/host'
+import { errorMessage, host, sessionHost } from '@renderer/lib/host'
 import { limitLevel, limitPercent, shownPercent } from '@renderer/lib/plan-limit'
 import { useNow } from '@renderer/lib/use-now'
 import { cn } from '@renderer/lib/utils'
@@ -254,6 +259,7 @@ export function ContextButton({
   reports,
   direct,
   live,
+  estimates,
   usage,
   context,
   limits,
@@ -273,6 +279,7 @@ export function ContextButton({
   direct: boolean
   /** Whether a running turn's context can be read through the agent's connection. */
   live: boolean
+  estimates?: boolean
   usage: SessionUsage | null
   context?: ContextReport
   limits: PlanLimit[]
@@ -381,6 +388,13 @@ export function ContextButton({
               report={read}
               managed={pushed !== undefined && direct}
               model={model}
+            />
+          )}
+          {shown && estimates && (
+            <ContextEstimatePart
+              key={`${sessionId}/${agentId}`}
+              sessionId={sessionId}
+              closed={closed}
             />
           )}
           {shown && <SessionLine usage={shown} />}
@@ -565,10 +579,13 @@ function ContextPart({
           {t(report?.error ? 'usage.breakdown.refreshFailed' : 'usage.breakdown.stale')}
         </p>
       )}
-      {view.kind === 'loading' && <BreakdownRows />}
+      {view.kind === 'loading' && <BreakdownRows label={t('usage.breakdown.loading')} />}
       {view.kind === 'error' && (
         <div className="kettu-ctx__pad">
-          <BreakdownError error={view.error} onRetry={retry} />
+          <BreakdownError
+            message={t('usage.breakdown.error', { error: view.error })}
+            onRetry={retry}
+          />
         </div>
       )}
       {view.kind === 'betweenTurns' && (
@@ -694,10 +711,9 @@ function PlanLimits({ limits, account }: { limits: PlanLimit[]; account: AgentAc
 }
 
 /** The skeleton rows while no breakdown is here, and the failure with its Retry at the end. */
-function BreakdownRows() {
-  const { t } = useTranslation('composer')
+function BreakdownRows({ label }: { label: string }) {
   return (
-    <div aria-label={t('usage.breakdown.loading')} className="kettu-ctx__pad flex flex-col">
+    <div aria-label={label} className="kettu-ctx__pad flex flex-col">
       {[4 / 5, 3 / 5, 2 / 3].map((width) => (
         <div key={width} className="flex h-6 items-center">
           <Skeleton className="h-3" style={{ width: `${width * 100}%` }} />
@@ -707,29 +723,42 @@ function BreakdownRows() {
   )
 }
 
-function BreakdownError({ error, onRetry }: { error: string; onRetry: () => void }) {
-  const { t } = useTranslation(['composer', 'common'])
+function BreakdownError({ message, onRetry }: { message: string; onRetry: () => void }) {
+  const { t } = useTranslation('common')
   return (
     <div className="flex items-start gap-2 text-small text-tertiary">
-      <p className="min-w-0 flex-1">{t('usage.breakdown.error', { error })}</p>
+      <p className="min-w-0 flex-1">{message}</p>
       <Button variant="outline" size="xs" onClick={onRetry} className="shrink-0">
-        {t('actions.retry', { ns: 'common' })}
+        {t('actions.retry')}
       </Button>
     </div>
   )
 }
 
-function ListPart({ list }: { list: ContextList }) {
+function ListPart({
+  list,
+  summary = String(list.items.length),
+}: {
+  list: ContextList
+  summary?: string
+}) {
+  const empty = list.items.length === 0
   return (
     <Collapsible>
-      <CollapsibleTrigger className="group/list -mx-2 flex h-6 w-[calc(100%+1rem)] items-center gap-1.5 rounded-md px-2 text-secondary outline-none transition-colors duration-(--duration-fast) hover:bg-hover focus-visible:bg-hover focus-ring">
+      <CollapsibleTrigger
+        disabled={empty}
+        className="group/list -mx-2 flex h-6 w-[calc(100%+1rem)] items-center gap-1.5 rounded-md px-2 text-secondary outline-none transition-colors duration-(--duration-fast) enabled:hover:bg-hover focus-visible:bg-hover focus-ring"
+      >
         <Glyph
           icon={ArrowRight01Icon}
           size={12}
-          className="shrink-0 text-tertiary transition-transform duration-(--duration-fast) group-data-panel-open/list:rotate-90 motion-reduce:transition-none"
+          className={cn(
+            'shrink-0 text-tertiary transition-transform duration-(--duration-fast) group-data-panel-open/list:rotate-90 motion-reduce:transition-none',
+            empty && 'invisible',
+          )}
         />
         <span className="min-w-0 flex-1 truncate text-left">{list.name}</span>
-        <span className="text-tertiary tabular">{list.items.length}</span>
+        <span className="text-tertiary tabular">{summary}</span>
       </CollapsibleTrigger>
       <CollapsibleContent className={PANEL}>
         <ul className="mb-1 grid max-h-40 grid-cols-[1fr_auto] gap-x-3 gap-y-0.5 overflow-y-auto pl-4.25 text-small tabular">
@@ -745,6 +774,96 @@ function ListPart({ list }: { list: ContextList }) {
         </ul>
       </CollapsibleContent>
     </Collapsible>
+  )
+}
+
+type EstimateReading = { estimates: ContextEstimates | null } | { error: string }
+
+function ContextEstimatePart({ sessionId, closed }: { sessionId: string; closed: boolean }) {
+  const { t } = useTranslation('composer')
+  const [reading, setReading] = useState<EstimateReading | null>(null)
+  const [attempt, setAttempt] = useState(0)
+
+  useEffect(() => {
+    if (closed) return
+    let current = true
+    host('sessions.contextEstimates', { sessionId }).then(
+      (estimates) => {
+        if (current) setReading({ estimates })
+      },
+      (error: unknown) => {
+        if (current) setReading({ error: errorMessage(error) })
+      },
+    )
+    return () => {
+      current = false
+    }
+  }, [attempt, closed, sessionId])
+
+  if (closed || (reading && 'estimates' in reading && !reading.estimates)) {
+    return <p className="kettu-ctx__note">{t('usage.estimates.disconnected')}</p>
+  }
+  if (!reading) return <BreakdownRows label={t('usage.estimates.loading')} />
+
+  const estimates = 'estimates' in reading ? reading.estimates : null
+  if (!estimates || (!estimates.skills && !estimates.mcpServers)) {
+    const message =
+      'error' in reading
+        ? t('usage.breakdown.error', { error: reading.error })
+        : t('usage.estimates.readFailed')
+    return (
+      <div className="kettu-ctx__pad">
+        <BreakdownError
+          message={message}
+          onRetry={() => {
+            setReading(null)
+            setAttempt((n) => n + 1)
+          }}
+        />
+      </div>
+    )
+  }
+  return (
+    <div className="kettu-ctx__pad">
+      <EstimateList name={t('usage.estimates.skills')} items={estimates.skills} />
+      <EstimateList name={t('usage.estimates.mcpServers')} items={estimates.mcpServers} />
+      <p className="pt-1 text-small text-tertiary">{t('usage.estimates.note')}</p>
+    </div>
+  )
+}
+
+function EstimateList({
+  name,
+  items,
+}: {
+  name: string
+  items: ContextDefinitionEstimate[] | null
+}) {
+  const { t } = useTranslation('composer')
+  const known = items?.map((item) => item.tokens).filter((count) => count !== null) ?? []
+  const total = known.reduce((sum, count) => sum + count, 0)
+  const estimate = (count: number | null): string => {
+    if (count === null) return t('usage.estimates.unavailable')
+    return count === 0 ? tokens(count) : t('usage.estimates.count', { count: tokens(count) })
+  }
+  const summary =
+    !items || (items.length > 0 && known.length === 0)
+      ? estimate(null)
+      : known.length < items.length
+        ? t('usage.estimates.partial', { estimate: estimate(total) })
+        : estimate(total)
+  return (
+    <ListPart
+      list={{
+        name,
+        items: (items ?? []).map((item) => ({
+          name: item.name,
+          detail: null,
+          tokens: estimate(item.tokens),
+        })),
+      }}
+      summary={summary}
+    />
   )
 }
 

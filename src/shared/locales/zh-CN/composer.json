@@ -109,6 +109,17 @@
       "stale": "本轮开始前读取",
       "refreshFailed": "当前显示上次读取的结果，读取恢复后会自动更新。"
     },
+    "estimates": {
+      "skills": "技能目录",
+      "mcpServers": "MCP 工具定义",
+      "count": "≈ {{count}}",
+      "partial": "{{estimate}}（部分）",
+      "unavailable": "暂无数据",
+      "loading": "正在读取技能和 MCP 定义",
+      "readFailed": "暂时无法读取技能和 MCP 定义。",
+      "disconnected": "会话连接后可查看定义的 token 估算。",
+      "note": "数字为定义的 token 估算，实际占用随 Codex 的加载情况变化。"
+    },
     "limits": {
       "plan": "套餐",
       "used": "已使用：{{limit}}",

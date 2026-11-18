@@ -18,7 +18,7 @@ import type {
 } from './browser'
 import type { ComputerAppDecision } from './computer-use'
 import type { ControlOutcome } from './control'
-import type { ContextBreakdown } from './context'
+import type { ContextBreakdown, ContextEstimates } from './context'
 import type { DeviceFileContent, FileContent, FileList, FileSearch, FileWritten } from './files'
 import type { ArtifactContentFile, BackgroundWork } from './host-control'
 import type { IdleReleaseState } from './idle-release'
@@ -440,6 +440,7 @@ export interface AgentStatus {
     reports: boolean // plan limits from its own report (`/usage`, `/status`)
     context: boolean // what fills the context from its own report (`/context`)
     liveContext: boolean // what fills the context from its connection through a running turn
+    contextEstimates?: boolean
     account: boolean // names its account through `_auth/status_update` as it starts
     authStatus?: boolean // supports ACP's draft `auth/status`
     mcpHttp: boolean | null // MCP servers over HTTP: from `initialize` or the one remembered
@@ -1248,6 +1249,7 @@ export interface HostContract {
     result: void
   }
   'sessions.context': { params: { sessionId: string }; result: ContextBreakdown | null }
+  'sessions.contextEstimates': { params: { sessionId: string }; result: ContextEstimates | null }
   'sessions.queue': {
     params: { sessionId: string; content: UserContent[] }
     result: { itemId: string | null } // null when it was sent at once
@@ -1820,6 +1822,7 @@ export const HOST_METHODS = [
   'worktrees.setupLog',
   'sessions.switchAgent',
   'sessions.context',
+  'sessions.contextEstimates',
   'sessions.queue',
   'sessions.runCommand',
   'sessions.unqueue',

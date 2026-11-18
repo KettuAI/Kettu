@@ -4,6 +4,7 @@
 
 import os from 'node:os'
 import type { AgentAccount, PlanLimit } from '@shared/agent-host'
+import type { ContextEstimates } from '@shared/context'
 import type { Platform } from '@shared/platform'
 import type { ConfigOption, PermissionOption, SideChatStep, TokenTotals } from '@shared/thread'
 import {
@@ -73,6 +74,7 @@ import {
   modeOf,
   type Settings,
 } from './config'
+import { estimateMcpServers, estimateSkills } from './context'
 import { childThreads, childTurnEffect, ThreadMapper } from './mapper'
 import {
   errorDetail,
@@ -1613,7 +1615,7 @@ export class CodexConnection implements AgentConnection {
     if (!record || record.hidden || record.cwd === null || this.parents.has(threadId)) return
     let skills: SkillMetadata[] = []
     try {
-      skills = await this.skills(record)
+      skills = await this.skills(record.cwd)
     } catch (error) {
       if (this.isClosed) return
       this.hooks.log('warn', `Could not list Codex's skills: ${(error as Error).message}`)
@@ -1626,12 +1628,23 @@ export class CodexConnection implements AgentConnection {
     target.apply({ patches: [{ op: 'session.update', changes: { commands } }], effects: [] })
   }
 
-  private async skills(record: ThreadRecord): Promise<SkillMetadata[]> {
+  private async skills(cwd: string | null): Promise<SkillMetadata[]> {
     const response = await this.call<SkillsListResponse>(
       'skills/list',
-      record.cwd === null ? {} : { cwds: [record.cwd] },
+      cwd === null ? {} : { cwds: [cwd] },
     )
     return response.data.flatMap((entry) => entry.skills)
+  }
+
+  async readContextEstimates(sessionId: string, cwd: string): Promise<ContextEstimates> {
+    const [skills, mcpServers] = await Promise.allSettled([
+      this.skills(cwd).then(estimateSkills),
+      this.mcpPages(sessionId).then(estimateMcpServers),
+    ])
+    return {
+      skills: skills.status === 'fulfilled' ? skills.value : null,
+      mcpServers: mcpServers.status === 'fulfilled' ? mcpServers.value : null,
+    }
   }
 
   private runCommand(record: ThreadRecord, { name, rest }: ParsedCommand): Promise<PromptResult> {
@@ -1669,7 +1682,7 @@ export class CodexConnection implements AgentConnection {
       case 'status':
         return this.answer(record, () => this.statusAnswer(record))
       case 'skills':
-        return this.answer(record, async () => skillsMessage(await this.skills(record)))
+        return this.answer(record, async () => skillsMessage(await this.skills(record.cwd)))
       case 'mcp':
         return this.answer(record, (signal) => this.mcpAnswer(record, rest, signal))
     }
