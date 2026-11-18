@@ -250,9 +250,9 @@ function MainFrame() {
     // A narrow window's sidebar is a drawer over the page, which does not move.
     if (!box || !inner || !wing.current || !app || !main || prefersReducedMotion()) return
     if (app.offsetWidth <= NARROW_FRAME) return
-    const side = parseFloat(app.style.getPropertyValue('--side-w')) || 0
-    const width =
-      app.clientWidth - (collapsed ? 0 : side) - parseFloat(getComputedStyle(main).paddingRight)
+    // The first column's width it glides to: the sidebar's, or the desk's gap once collapsed.
+    const side = parseFloat(getComputedStyle(app).getPropertyValue('--side-col')) || 0
+    const width = app.clientWidth - side - parseFloat(getComputedStyle(main).paddingRight)
     inner.style.width = `${width}px`
     // Over the sheets' rounded left edge, so the two meet as one sheet.
     wing.current.style.right = `${width - parseFloat(getComputedStyle(box).borderTopLeftRadius)}px`
