@@ -4,6 +4,7 @@
     "placeholder": {
       "starting": "正在启动 {{agent}}…",
       "awaiting": "等待你的授权",
+      "awaitingAnswer": "等待你的回答",
       "limitReached": "{{limit}}限额已用完 · {{time}} 重置",
       "ask": "回复 {{agent}}…",
       "denied": "告诉 {{agent}} 改用什么做法",

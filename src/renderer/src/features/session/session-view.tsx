@@ -53,6 +53,7 @@ import {
 import { SignIn } from './sign-in'
 import { SubagentBar } from './subagent-bar'
 import { Thread } from './thread'
+import { awaitsAnswer } from './turn-phase'
 import { useSessionView } from './use-thread'
 import { firstWaiting, pressWaitingCard } from './waiting-card'
 import { sessionFolder } from '@renderer/lib/session-folder'
@@ -398,30 +399,35 @@ function SessionBody({ summary }: { summary: SessionSummary }) {
   )
 }
 
-/** An aria-live region for permission requests and turn ends, which happen out of view. */
+/** An aria-live region for permission requests, questions and turn ends, which happen out of view. */
 function Announcer({ summary, name }: { summary: SessionSummary; name: string }) {
   const { t } = useTranslation('session')
-  const [event, setEvent] = useState<'approval' | 'finished' | null>(null)
+  const [event, setEvent] = useState<'approval' | 'question' | 'finished' | null>(null)
+  const asked = useThreadsStore((s) => awaitsAnswer(s.replicas[summary.id]?.state))
   const previous = useRef(summary)
   useEffect(() => {
     const before = previous.current
     previous.current = summary
     if (summary.permissionCount > before.permissionCount) {
-      setEvent('approval')
+      setEvent(asked ? 'question' : 'approval')
     } else if (
       (before.status === 'running' || before.status === 'awaiting_permission') &&
       summary.status === 'ready'
     ) {
       setEvent('finished')
     }
-  }, [summary])
+  }, [summary, asked])
+  // The thread can arrive after the summary that counted the request.
+  if (event === 'approval' && asked && summary.permissionCount > 0) setEvent('question')
   return (
     <div aria-live="polite" className="sr-only">
       {event === 'approval'
         ? t('view.announceApproval', { agent: name })
-        : event === 'finished'
-          ? t('view.announceFinished', { agent: name })
-          : ''}
+        : event === 'question'
+          ? t('view.announceQuestion', { agent: name })
+          : event === 'finished'
+            ? t('view.announceFinished', { agent: name })
+            : ''}
     </div>
   )
 }

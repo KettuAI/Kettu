@@ -40,7 +40,7 @@ import { useSettingsStore } from '@renderer/stores/settings'
 import { showSending, useThreadsStore } from '@renderer/stores/threads'
 import { useViewStore } from '@renderer/stores/view'
 import { askSide, openSideChat, sideQuestionOf } from '@renderer/stores/side-chat'
-import { endedOnRejection } from '../turn-phase'
+import { awaitsAnswer, endedOnRejection } from '../turn-phase'
 import { TrayStyles } from './affect-styles'
 import { attachmentContent, attachmentsBlock, type AttachmentsBlock } from './attachments'
 import { OptionMenu } from './control-row'
@@ -163,6 +163,7 @@ export function Composer({
   const [configError, setConfigError] = useState<string | null>(null)
   const outOfCredit = useOutOfCredit(sessionId)
   const rejected = useThreadsStore((s) => endedOnRejection(s.replicas[sessionId]?.state))
+  const asked = useThreadsStore((s) => awaitsAnswer(s.replicas[sessionId]?.state))
   // An element picked in the artifact beside this thread goes with the next message.
   const picked = useArtifactsStore((s) =>
     s.paneSelection?.projectPath === session.projectPath ? s.paneSelection : null,
@@ -489,7 +490,7 @@ export function Composer({
     : mustSwitch && !pending
       ? t('prompt.placeholder.pickAgent')
       : awaiting
-        ? t('prompt.placeholder.awaiting')
+        ? t(asked ? 'prompt.placeholder.awaitingAnswer' : 'prompt.placeholder.awaiting')
         : !running && reached?.resetsAt
           ? t('prompt.placeholder.limitReached', {
               limit: limitPhrase(reached),

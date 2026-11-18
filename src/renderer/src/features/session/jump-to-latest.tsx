@@ -95,7 +95,8 @@ export const JumpToLatest = memo(function JumpToLatest({
   if (unseen && !below) setUnseen(false)
 
   let mark: Mark = 'idle'
-  if (working) mark = phase === 'approval' ? 'waiting' : 'running'
+  const waiting = phase === 'approval' || phase === 'question'
+  if (working) mark = waiting ? 'waiting' : 'running'
   else if (unseen && ending.kind) mark = ending.kind
 
   let state: string | null = null
@@ -104,7 +105,7 @@ export const JumpToLatest = memo(function JumpToLatest({
     state = stopReasonText(ending.stopReason, ending.durationMs)
   else if (mark === 'failed') state = t('thread.jump.failed')
 
-  const styles = mark === 'running' && phase !== 'approval' ? turnDotStyles(phase) : null
+  const styles = mark === 'running' && !waiting ? turnDotStyles(phase) : null
 
   return (
     <Tooltip>

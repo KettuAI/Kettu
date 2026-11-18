@@ -677,6 +677,7 @@
     "restore": "Restore",
     "openAgents": "Open Agents",
     "announceApproval": "{{agent}} needs your approval",
+    "announceQuestion": "{{agent}} has a question for you",
     "announceFinished": "{{agent}} finished"
   },
   "find": {
@@ -709,6 +710,7 @@
       "writing": "Writing",
       "compacting": "Compacting context",
       "approval": "Waiting for your approval",
+      "question": "Waiting for your answer",
       "working": "Working"
     },
     "resume": "Resume",

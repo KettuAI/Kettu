@@ -1,7 +1,7 @@
 import type { CSSProperties } from 'react'
 import type { TurnPhase } from './turn-phase'
 
-export type RunningPhase = Exclude<TurnPhase['phase'], 'approval'>
+export type RunningPhase = Exclude<TurnPhase['phase'], 'approval' | 'question'>
 
 /** A dot's keyframes in globals.css, and where in the loop it starts, from 0 to 1. */
 interface Dot {

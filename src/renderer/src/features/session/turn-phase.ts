@@ -16,6 +16,7 @@ export interface TurnPhase {
     | 'writing'
     | 'compacting'
     | 'approval'
+    | 'question'
     | 'working'
   count: number
 }
@@ -54,7 +55,9 @@ const LOOKBACK = 64
  */
 export function turnPhase(state: ThreadState | null | undefined): TurnPhase {
   if (!state) return WORKING
-  if (state.session.status === 'awaiting_permission') return { phase: 'approval', count: 1 }
+  if (state.session.status === 'awaiting_permission') {
+    return { phase: awaitsAnswer(state) ? 'question' : 'approval', count: 1 }
+  }
   const { order, byId } = state
   const running: ToolEntry[] = []
   let tools = false
@@ -81,6 +84,24 @@ export function turnPhase(state: ThreadState | null | undefined): TurnPhase {
   const phase = running[0] && TOOL_PHASES[running[0].toolKind]
   if (!phase) return WORKING
   return { phase, count: running.filter((tool) => TOOL_PHASES[tool.toolKind] === phase).length }
+}
+
+/**
+ * Whether what the session waits on is a question to answer, not a permission, a plan or an MCP
+ * server's request to decide: every pending request is one, as the thread's cards tell them apart.
+ */
+export function awaitsAnswer(state: ThreadState | null | undefined): boolean {
+  if (!state) return false
+  const { order, byId } = state
+  let asked = false
+  for (let i = order.length - 1; i >= Math.max(0, order.length - LOOKBACK); i--) {
+    const entry = byId[order[i]!]
+    if (entry?.kind !== 'tool' || !entry.permission) continue
+    const { plan, elicitation, questions } = entry.permission
+    if (plan || elicitation || (!questions && entry.question === undefined)) return false
+    asked = true
+  }
+  return asked
 }
 
 /** The step the agent asked the user to do on a surface, while its card waits; else null. */
