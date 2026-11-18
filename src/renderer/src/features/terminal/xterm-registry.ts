@@ -324,8 +324,16 @@ function releaseWebgl(instance: Instance): void {
   webgl.canvas?.getContext('webgl2')?.getExtension('WEBGL_lose_context')?.loseContext()
 }
 
+/**
+ * The side panel glides its pane open and closed, and a terminal that fits on the way would tell
+ * its shell a width of a few columns. It fits once the glide ends.
+ */
+function isGliding(instance: Instance): boolean {
+  return instance.element.closest('.kettu-pane-area[data-glide]') !== null
+}
+
 export function fitNow(instance: Instance): void {
-  if (!instance.visible || !instance.element.isConnected) return
+  if (!instance.visible || !instance.element.isConnected || isGliding(instance)) return
   const dims = instance.fit.proposeDimensions()
   if (!dims || !Number.isFinite(dims.cols) || !Number.isFinite(dims.rows)) return
   const cols = Math.max(2, Math.min(1000, dims.cols))

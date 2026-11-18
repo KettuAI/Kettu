@@ -105,9 +105,14 @@ export function TerminalView({
       timer = setTimeout(() => fitNow(instance), 50)
     })
     observer.observe(el)
+    // The pane area marks its glide while it opens or closes, and no fit happens until it ends.
+    const area = el.closest('.kettu-pane-area')
+    const glide = new MutationObserver(() => fitNow(instance))
+    if (area) glide.observe(area, { attributes: true, attributeFilter: ['data-glide'] })
     return () => {
       clearTimeout(timer)
       observer.disconnect()
+      glide.disconnect()
     }
   }, [instance])
 
