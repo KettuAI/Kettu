@@ -197,8 +197,9 @@ export function usePromptChips({
       onMentioned: (keys) => handlers.current.onMentioned(keys),
       onMentionDeleted: (keys) => handlers.current.onMentionDeleted(keys),
       highlight: pasted,
+      projectPath,
     }),
-    [names, resolve, pasted],
+    [names, resolve, pasted, projectPath],
   )
 
   const keyDown = (event: KeyboardEvent): boolean => {

@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react'
 import { File01Icon, Folder01Icon, GlobalIcon } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
 import type { FileContent } from '@shared/files'
+import { githubReferenceFromLink } from '@shared/git'
+import { REFERENCE_CARD_CLASS, ReferenceCard } from '@renderer/features/git/gh-reference'
 import { bytes, fileUrlPath, relativePath } from '@renderer/lib/format'
 import { host } from '@renderer/lib/host'
 import { hostPlatform, isMac } from '@renderer/lib/platform'
@@ -32,6 +34,14 @@ export function ChipPreview({
   const thread = useSettingsStore((s) => s.settings.thread)
   if (chip.kind === 'command') return null
   if (chip.kind === 'link') {
+    const reference = githubReferenceFromLink(chip.url)
+    if (reference) {
+      return (
+        <div className={REFERENCE_CARD_CLASS}>
+          <ReferenceCard reference={reference} />
+        </div>
+      )
+    }
     return (
       <div className="flex w-75 flex-col gap-2 p-3">
         <div className="flex min-w-0 items-center gap-1.75 text-small text-tertiary">

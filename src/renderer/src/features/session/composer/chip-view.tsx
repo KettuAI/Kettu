@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect } from 'react'
+import { useEffect, useLayoutEffect, useMemo } from 'react'
 import {
   Alert02Icon,
   BrowserIcon,
@@ -6,18 +6,27 @@ import {
   Folder01Icon,
   GlobalIcon,
 } from '@hugeicons/core-free-icons'
+import { githubReferenceFromLink, type GitHubReference } from '@shared/git'
+import { ProjectPathContext } from '@renderer/features/files/file-refs'
+import { ReferenceIcon } from '@renderer/features/git/gh-reference'
+import {
+  shortReference,
+  useProjectRepository,
+  useReferenceData,
+} from '@renderer/features/git/gh-reference-data'
 import { cn } from '@renderer/lib/utils'
+import { loadReference } from '@renderer/stores/git'
 import { loadSiteIcons, useSiteIcon } from '@renderer/stores/site-icons'
-import type { Chip } from './chips'
+import { shortLinkPath, type Chip } from './chips'
 import { Glyph } from '@renderer/features/shell/glyph'
 
 /** How a chip stands: as typed, under the pointer, chosen in the text, or naming what is gone. */
 export type ChipState = 'default' | 'selected'
 
 /**
- * A chip as the composer and the thread draw it: 22 px high with 5 px corners and an icon that
- * says what it is. The command is no box: text in the control blue, without an icon. `surface`
- * is for a chip on a grey bubble, which it sets off in the card's white.
+ * A chip as the composer and the thread draw it: raised in the card's white with an icon that
+ * says what it is, 24 px high in the composer and 22 px in a sent message (`surface`), whose
+ * lines are tighter. The command is no box: text in the control blue, without an icon.
  */
 export function ChipView({
   chip,
@@ -33,17 +42,18 @@ export function ChipView({
     <span
       data-chip={chip.kind}
       className={cn(
-        'relative -top-px mx-px inline-flex h-5.5 max-w-65 items-center gap-1.25 rounded-lg pr-1.5 pl-1.25 align-middle text-ui leading-none whitespace-nowrap text-primary transition-[background-color,box-shadow] duration-(--duration-fast)',
+        'relative inline-flex items-center align-middle text-ui leading-none whitespace-nowrap text-primary transition-[background-color,box-shadow] duration-(--duration-fast)',
         chip.kind === 'command'
-          ? 'top-0 mx-0 h-auto px-0 font-medium text-control-on'
-          : missing
-            ? 'text-tertiary outline-1 -outline-offset-1 outline-border-strong outline-dashed'
-            : state === 'selected'
-              ? 'bg-control-on-tint shadow-[inset_0_0_0_1.5px_var(--control-on)]'
-              : cn(
-                  surface ? 'bg-surface' : 'bg-subtle',
-                  'shadow-[inset_0_0_0_var(--hairline)_var(--border-subtle)] hover:bg-selected hover:shadow-[inset_0_0_0_var(--hairline)_var(--border-default)]',
-                ),
+          ? 'max-w-65 gap-1.25 font-medium text-control-on'
+          : cn(
+              '-top-px mx-0.5 max-w-80 gap-1.5 rounded-[7px] pr-2 pl-1.5',
+              surface ? 'h-5.5' : 'h-6',
+              missing
+                ? 'text-tertiary outline-1 -outline-offset-1 outline-border-strong outline-dashed'
+                : state === 'selected'
+                  ? 'bg-[color-mix(in_srgb,var(--control-on)_6%,var(--bg-raised))] shadow-[0_0_0_1.5px_var(--control-on)]'
+                  : 'bg-raised shadow-[0_0_0_0.5px_var(--border-default),var(--elevation-raised)] hover:shadow-[0_0_0_0.5px_var(--border-strong),var(--elevation-raised)]',
+            ),
       )}
     >
       <ChipBody chip={chip} missing={missing} />
@@ -66,6 +76,43 @@ function SiteIcon({ url }: { url: string }) {
   )
 }
 
+/** A GitHub issue or pull request as the thread's reference: its state, number and title. */
+function ReferenceBody({ reference }: { reference: GitHubReference }) {
+  const { data } = useReferenceData(reference)
+  const repo = useProjectRepository()
+  useEffect(() => loadReference(reference), [reference])
+  const title = data?.kind === 'pull' ? data.pr.title : data?.issue.title
+  return (
+    <>
+      <ReferenceIcon kind={reference.kind} data={data} size={14} />
+      <span className="min-w-0 truncate">
+        <span className="font-medium">{shortReference(reference, repo)}</span>
+        {title && <span className="ml-1.5 text-tertiary">{title}</span>}
+      </span>
+    </>
+  )
+}
+
+function LinkBody({ chip }: { chip: Extract<Chip, { kind: 'link' }> }) {
+  const reference = useMemo(() => githubReferenceFromLink(chip.url), [chip.url])
+  if (reference) return <ReferenceBody reference={reference} />
+  return (
+    <>
+      {chip.local ? (
+        <span className="grid size-3.5 shrink-0 place-items-center rounded-sm bg-control-on-tint text-control-on">
+          <Glyph icon={BrowserIcon} className="size-2.25" />
+        </span>
+      ) : (
+        <SiteIcon url={chip.url} />
+      )}
+      <span className="min-w-0 truncate">
+        <span className="font-medium">{chip.host}</span>
+        <span className="text-secondary">{shortLinkPath(chip.host, chip.path)}</span>
+      </span>
+    </>
+  )
+}
+
 function ChipBody({ chip, missing }: { chip: Chip; missing: boolean }) {
   if (chip.kind === 'command') {
     return (
@@ -75,21 +122,7 @@ function ChipBody({ chip, missing }: { chip: Chip; missing: boolean }) {
       </span>
     )
   }
-  if (chip.kind === 'link') {
-    return (
-      <>
-        {chip.local ? (
-          <span className="grid size-3.5 shrink-0 place-items-center rounded-sm bg-control-on-tint text-control-on">
-            <Glyph icon={BrowserIcon} className="size-2.25" />
-          </span>
-        ) : (
-          <SiteIcon url={chip.url} />
-        )}
-        <span className="shrink-0 font-medium">{chip.host}</span>
-        {chip.path && <span className="min-w-0 truncate text-tertiary">{chip.path}</span>}
-      </>
-    )
-  }
+  if (chip.kind === 'link') return <LinkBody chip={chip} />
   return (
     <>
       {missing ? (
@@ -114,16 +147,25 @@ function ChipBody({ chip, missing }: { chip: Chip; missing: boolean }) {
   )
 }
 
-/** A chip drawn into the editor, which measures again once React has put it on the page. */
+/**
+ * A chip drawn into the editor, which measures again once React has put it on the page. It is
+ * a React root of its own, so it is told the project a GitHub reference is short for.
+ */
 export function RenderedChip({
   chip,
   state,
+  projectPath,
   onRendered,
 }: {
   chip: Chip
   state: ChipState
+  projectPath: string | null
   onRendered: () => void
 }) {
   useLayoutEffect(onRendered)
-  return <ChipView chip={chip} state={state} />
+  return (
+    <ProjectPathContext value={projectPath}>
+      <ChipView chip={chip} state={state} />
+    </ProjectPathContext>
+  )
 }
