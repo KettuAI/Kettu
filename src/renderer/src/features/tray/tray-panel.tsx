@@ -20,11 +20,12 @@ import { AgentMark } from '@renderer/components/agents/agent-mark'
 import { BrandIcon } from '@renderer/components/brand'
 import { TurnDots } from '@renderer/features/session/turn-dots'
 import { Glyph } from '@renderer/features/shell/glyph'
+import { useLimitView } from '@renderer/hooks/use-limit-view'
 import { useCloudOff } from '@renderer/lib/cloud'
 import { relativePath } from '@renderer/lib/format'
 import { i18n } from '@renderer/lib/i18n'
 import { glide } from '@renderer/lib/motion'
-import { LIMIT_FILL, limitLevel } from '@renderer/lib/plan-limit'
+import { LIMIT_FILL, limitLevel, shownPercent } from '@renderer/lib/plan-limit'
 import { useNow } from '@renderer/lib/use-now'
 import { cn } from '@renderer/lib/utils'
 import { useSettingsStore } from '@renderer/stores/settings'
@@ -578,6 +579,7 @@ function MenuRow({
 function Limits() {
   const { t } = useTranslation('tray')
   const agents = useTrayPanelStore((s) => s.agents)
+  const view = useLimitView()
   const now = useNow()
   const rows = limitRows(agents, now)
   if (rows.length === 0) return <div className="h-1.5" />
@@ -586,7 +588,7 @@ function Limits() {
       <Divider />
       <GroupLabel>{t('group.limits')}</GroupLabel>
       {rows.map(({ agent, plan, limit }) => {
-        const used = Math.round(limit.usedPercent ?? 0)
+        const shown = shownPercent(Math.round(limit.usedPercent ?? 0), view)
         return (
           <div key={agent.id} className="flex h-6 items-center gap-2 px-3.5">
             <AgentMark agent={agent.id} size={14} dot={agent.color ?? null} />
@@ -596,10 +598,10 @@ function Limits() {
             <span className="h-1 w-17.5 overflow-hidden rounded-full bg-border-soft">
               <span
                 className={cn('block h-full', LIMIT_FILL[limitLevel(limit)])}
-                style={{ width: `${Math.min(100, Math.max(0, used))}%` }}
+                style={{ width: `${Math.min(100, Math.max(0, shown))}%` }}
               />
             </span>
-            <span className="w-7.5 text-right text-caption text-primary tabular">{used}%</span>
+            <span className="w-7.5 text-right text-caption text-primary tabular">{shown}%</span>
           </div>
         )
       })}

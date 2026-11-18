@@ -46,6 +46,7 @@ import { agentLine } from '@renderer/features/session/new-session/picker'
 import { agentNeed } from '@renderer/features/session/new-session/start-options'
 import { SelfHostedMark } from '@renderer/features/settings/cloud-section'
 import { Language } from '@renderer/features/settings/sections'
+import { useLimitView } from '@renderer/hooks/use-limit-view'
 import { errorMessage } from '@renderer/lib/host'
 import { hasBand } from '@renderer/lib/platform'
 import { cancelSignIn, signIn, useAccountStore } from '@renderer/stores/account'
@@ -619,7 +620,8 @@ function Agents({
 function AgentRow({ status }: { status: AgentStatus }) {
   const { t } = useTranslation('onboarding')
   const ready = agentNeed(status) === null
-  const line = agentLine(status)
+  const view = useLimitView()
+  const line = agentLine(status, undefined, undefined, view)
   return (
     <li className="kob-agent">
       <span className="kob-agent__tile">

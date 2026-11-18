@@ -5,7 +5,9 @@
     "todayCost": "Today: {{cost}}, estimated at API prices",
     "costEstimate": "Estimated at API prices",
     "limit": "{{agent}}, {{limit}}: {{percent}} used",
-    "limitShort": "{{limit}} {{percent}} used"
+    "limitShort": "{{limit}} {{percent}} used",
+    "limitLeft": "{{agent}}, {{limit}}: {{percent}} left",
+    "limitShortLeft": "{{limit}} {{percent}} left"
   },
   "page": {
     "title": "Usage",

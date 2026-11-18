@@ -16,9 +16,10 @@ import { useRefresh } from '@renderer/components/refresh'
 import { planReset } from '@renderer/features/sidebar/plan-usage'
 import { addDays, dayOf, monthStartOf } from '@renderer/features/usage/model'
 import { limitLabel, mediumAgo, money } from '@renderer/lib/format'
+import { useLimitView } from '@renderer/hooks/use-limit-view'
 import { errorMessage } from '@renderer/lib/host'
 import { newestLimits } from '@renderer/lib/plan-readings'
-import { limitLevel } from '@renderer/lib/plan-limit'
+import { limitLevel, limitPercent } from '@renderer/lib/plan-limit'
 import { useNow } from '@renderer/lib/use-now'
 import { openSignInPage, usePlanReadings } from '@renderer/stores/agents'
 import { useHostScope } from '@renderer/stores/host-scope'
@@ -31,6 +32,7 @@ import { agentCost } from './spend'
 /** The window nearest its limit as a list row's end: its label and percent over a 4 px bar. */
 export function ListMeter({ limits }: { limits: PlanLimit[] }) {
   const { t } = useTranslation(['settings', 'composer'])
+  const view = useLimitView()
   const limit = limits.reduce((most, next) =>
     (next.usedPercent ?? 0) > (most.usedPercent ?? 0) ? next : most,
   )
@@ -38,10 +40,12 @@ export function ListMeter({ limits }: { limits: PlanLimit[] }) {
     <span className="k-end" title={limitLabel(limit)}>
       <span className="k-meter">{limitLabel(limit)}</span>
       <Meter
-        value={limit.usedPercent ?? 0}
+        value={limitPercent(limit, view) ?? 0}
         level={limitLevel(limit)}
-        text={percent(limit)}
-        label={t('composer:usage.limits.used', { limit: limitLabel(limit) })}
+        text={percent(limit, view)}
+        label={t(view === 'left' ? 'composer:usage.limits.left' : 'composer:usage.limits.used', {
+          limit: limitLabel(limit),
+        })}
       />
     </span>
   )
@@ -323,6 +327,7 @@ export function UsageGroup({
 }) {
   const { request } = useHostScope()
   const { t } = useTranslation(['settings', 'composer'])
+  const view = useLimitView()
   const now = useNow()
   const [act, busy, error] = useAction()
   const refresh = useRefresh()
@@ -375,10 +380,13 @@ export function UsageGroup({
               >
                 <Meter
                   long
-                  value={limit.usedPercent ?? 0}
+                  value={limitPercent(limit, view) ?? 0}
                   level={level}
-                  text={percent(limit)}
-                  label={t('composer:usage.limits.used', { limit: limitLabel(limit) })}
+                  text={percent(limit, view)}
+                  label={t(
+                    view === 'left' ? 'composer:usage.limits.left' : 'composer:usage.limits.used',
+                    { limit: limitLabel(limit) },
+                  )}
                 />
               </RowFrame>
             )
