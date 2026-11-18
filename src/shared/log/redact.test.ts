@@ -34,6 +34,28 @@ describe('createRedactor', () => {
     )
   })
 
+  it('leaves an object or array under a secret-like name to the names inside it', () => {
+    const json = JSON.stringify(
+      {
+        output_tokens_details: { thinking_tokens: 1379 },
+        apiKey: { set: false, providers: true },
+        tokens: [1, 2],
+        credentials: { api_key: 'abc123xyz' },
+      },
+      null,
+      2,
+    )
+    for (const text of [json, JSON.stringify(JSON.parse(json))]) {
+      const parsed = JSON.parse(redact(text)) as Record<string, unknown>
+      expect(parsed).toEqual({
+        output_tokens_details: { thinking_tokens: 1379 },
+        apiKey: { set: false, providers: true },
+        tokens: [1, 2],
+        credentials: { api_key: REDACTED },
+      })
+    }
+  })
+
   it('masks the password in a URL', () => {
     expect(redact('git clone https://ann:pa55word@example.com/repo.git')).toBe(
       `git clone https://ann:${REDACTED}@example.com/repo.git`,
