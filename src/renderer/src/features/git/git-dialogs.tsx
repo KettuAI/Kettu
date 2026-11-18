@@ -148,7 +148,8 @@ function GitDialogs({ status, returnFocus }: { status: GitStatus; returnFocus: R
 }
 
 // The git dialogs lay out their own padding: a title, the fields under it, the buttons apart.
-const SHEET = 'gap-0 p-0'
+// The column is capped to the dialog, or a long path in a row would widen it past the dialog.
+const SHEET = 'grid-cols-[minmax(0,1fr)] gap-0 p-0'
 const SHEET_100 = cn(SHEET, 'sm:max-w-100')
 const SHEET_115 = cn(SHEET, 'sm:max-w-115')
 const SHEET_120 = cn(SHEET, 'sm:max-w-120')
