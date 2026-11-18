@@ -5,6 +5,7 @@ import type { TerminalCommand, TerminalEvent, TerminalInfo } from '@shared/termi
 import { emitAppEvent } from '@renderer/app/events'
 import { errorMessage, terminalHost, terminals, terminalsAt } from '@renderer/lib/host'
 import { hostOfPath } from '@renderer/lib/host-paths'
+import { isWeb } from '@renderer/lib/platform'
 import {
   replyRunClosed,
   replyRunData,
@@ -163,7 +164,7 @@ export function terminalsOf(
 }
 
 /** Adds or updates a terminal as its host describes it. */
-function upsert(info: TerminalInfo): void {
+function upsert(info: TerminalInfo, announceArrival = true): void {
   // A host before terminals had sessions, owners, control or password prompts sends none of them.
   info = {
     ...info,
@@ -194,7 +195,9 @@ function upsert(info: TerminalInfo): void {
     }
   })
   if (!known && showOnArrival.delete(panel)) showTerminal(panel, info.id)
-  else if (!known && info.owner) agentTerminalArrived(panel, info.id, info.owner.sessionId)
+  else if (!known && info.owner && (announceArrival || info.control.kind !== 'idle')) {
+    agentTerminalArrived(panel, info.id, info.owner.sessionId)
+  }
   if (info.waiting === 'password' && before?.waiting !== 'password') passwordAsked(panel, info)
   replyRunInfo(info.id, info.busy, info.exitCode)
   const signIn = signIns.get(info.id)
@@ -449,7 +452,7 @@ export function initTerminals(): void {
     useTerminalsStore.setState({ connection })
     // This computer's terminal host gave up; other hosts' terminals go on.
     if (connection === 'failed') markStale((id) => terminalHost(id) === null)
-    if (connection === 'connected' && was !== 'connected' && was !== 'resuming') {
+    if (connection === 'connected' && was !== 'resuming' && (!isWeb || was !== 'connected')) {
       void reconcileTerminals()
     }
   })
@@ -689,12 +692,17 @@ function markStale(test: (id: string) => boolean): void {
   const ended: string[] = []
   useTerminalsStore.setState((s) => {
     let byId = s.byId
+    let controls = s.controls
     for (const [id, t] of Object.entries(s.byId)) {
       if (t.stale || !test(id)) continue
-      byId = { ...byId, [id]: { ...t, stale: true, busy: false, waiting: null } }
+      byId = {
+        ...byId,
+        [id]: { ...t, stale: true, busy: false, waiting: null, control: IDLE_CONTROL },
+      }
+      controls = withControl(controls, id, IDLE_CONTROL)
       ended.push(id)
     }
-    return byId === s.byId ? s : { byId }
+    return byId === s.byId ? s : { byId, controls }
   })
   for (const id of ended) replyRunClosed(id)
 }
@@ -732,14 +740,13 @@ export async function reattachTerminals(hostId: string): Promise<void> {
   }
 }
 
-/** After the terminal host restarted, marks the terminals it no longer has as stale. */
+/** After connecting to the terminal host, marks the terminals it no longer has as stale. */
 async function reconcileTerminals(): Promise<void> {
-  if (Object.keys(useTerminalsStore.getState().byId).length === 0) return
   try {
     const list = await terminals('terminals.list', {})
     const alive = new Set(list.map((t) => t.id))
     markStale((id) => terminalHost(id) === null && !alive.has(id))
-    for (const info of list) upsert(info)
+    for (const info of list) upsert(info, false)
   } catch (error) {
     setError(
       panelsOf(
@@ -797,8 +804,8 @@ function inheritTab(oldId: string, newId: string): void {
 }
 
 /**
- * The terminal an agent of the session started that its running turn uses, for the composer's
- * label and the status line: the one the user holds first; null when none is used.
+ * The terminal an agent of the session started that its running turn uses, for the status line:
+ * the one the user holds first; null when none is used.
  */
 export function terminalInUse(
   s: Pick<TerminalsStore, 'byId' | 'controls'>,
@@ -812,18 +819,4 @@ export function terminalInUse(
     found = { id, name: t.name ?? (t.title || t.shell), control }
   }
   return found
-}
-
-/** A terminal of the session whose program waits for the user's password, for the composer. */
-export function terminalAskingPassword(
-  s: Pick<TerminalsStore, 'byId'>,
-  sessionId: string,
-): { id: string; name: string } | null {
-  for (const t of Object.values(s.byId)) {
-    if (t.waiting !== 'password' || t.stale || (t.owner?.sessionId ?? t.sessionId) !== sessionId) {
-      continue
-    }
-    return { id: t.id, name: t.name ?? (t.title || t.shell) }
-  }
-  return null
 }

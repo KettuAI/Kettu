@@ -1,6 +1,7 @@
 {
   "agent": "The agent",
   "label": {
+    "group": "Tool controls",
     "agent": "{{agent}} is using <b>{{target}}</b>",
     "you": "<b>You took over {{held}}</b><i>·</i>{{agent}} is waiting",
     "asks": {

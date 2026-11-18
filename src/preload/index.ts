@@ -35,6 +35,12 @@ const terminals = new PortClient<TerminalEvent>({
   transport: hostTransport('terminal-host'),
   lazy: true,
 })
+subscribe('terminals:ready')(() => terminals.connect())
+void invoke('terminal-host:running')
+  .then((running) => {
+    if (running) terminals.connect()
+  })
+  .catch((error: unknown) => console.warn('Could not read terminal host status', error))
 
 const devices = new PortClient<DeviceEvent>({
   label: 'device host',

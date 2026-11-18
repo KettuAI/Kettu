@@ -535,6 +535,7 @@ export interface IpcEventContract {
   'browser:opened': { sessionId: string }
   /** A session's agent opened a mobile device, which the pane shows if the panel is free. */
   'devices:opened': { sessionId: string; deviceId: string }
+  'terminals:ready': null
   'browser:site-icon': SiteIconEvent
   /** The sites brought from other browsers changed. */
   'sign-ins:changed': BroughtSite[]

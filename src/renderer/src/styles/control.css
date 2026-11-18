@@ -1,44 +1,56 @@
 /* A surface an agent and the user share, the same on every surface: the label on the composer's top
    edge, the pill and the bubble on the surface, the agent's pointer and the light along its edge. */
 
-/* ---------- The label on the composer's top edge ---------- */
-/* It stands on the composer's line, which runs on under it: its own bottom edge is cut away. */
-.ctl-label {
+/* ---------- The labels on the composer's top edge ---------- */
+.ctl-labels {
   position: relative;
-  z-index: 20;
-  display: flex;
+  z-index: 1;
   align-self: center;
-  max-width: calc(100% - 24px);
-  height: 30px;
-  margin-bottom: -1px;
-  overflow: hidden;
+  inline-size: max-content;
+  max-inline-size: calc(100% - var(--spacing) * 6);
+  max-block-size: min(30dvh, calc(var(--row-height) * 4.5));
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border: var(--hairline) solid var(--border-strong);
+  border-block-end: 0;
+  border-radius: var(--radius-card) var(--radius-card) 0 0;
   background: var(--card);
-  box-shadow: 0 0 0 var(--hairline) var(--border-strong);
-  clip-path: inset(-14px -14px 1px -14px);
+}
+.ctl-labels:empty {
+  display: none;
+}
+.kettu-queue + .ctl-labels {
+  inline-size: 100%;
+}
+.ctl-label {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--spacing) * 2);
+  min-block-size: var(--row-height);
+  padding-block: var(--spacing);
+  padding-inline: calc(var(--spacing) * 3) calc(var(--spacing) * 2);
   font-size: var(--text-hint);
   line-height: var(--text-hint--line-height);
   color: var(--text-secondary);
-  white-space: nowrap;
+}
+.ctl-label + .ctl-label {
+  border-block-start: var(--hairline) solid var(--border-subtle);
 }
 .ctl-label[data-control='asks'] {
-  box-shadow:
-    0 0 0 var(--hairline) var(--border-strong),
-    0 0 0 3px var(--tone-amber-halo);
+  background: var(--tone-amber-fill);
 }
-.ctl-label__in {
+.ctl-label__actions {
   display: flex;
-  flex: 1;
-  min-width: 0;
-  align-items: center;
-  gap: 8px;
-  height: 100%;
-  padding: 0 3px 0 11px;
-  animation: ks-rise 280ms var(--ease-out-quint) both;
+  flex: none;
+  gap: var(--spacing);
 }
 .ctl-label__text {
+  flex: 1;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .ctl-label__text b {
   font-weight: var(--weight-medium);
@@ -53,15 +65,14 @@
   display: grid;
   flex: none;
   place-items: center;
-  color: var(--text-primary);
+  inline-size: var(--icon-size);
 }
-.ctl-label__mark[data-asks] {
+.ctl-label[data-control='asks'] .ctl-label__mark {
   color: var(--tone-amber);
 }
 /* The computer is the whole machine: while the agent has it the label is solid fox. */
 .ctl-label[data-surface='computer'][data-control='agent'] {
   background: var(--computer-label);
-  box-shadow: 0 -3px 12px -6px color-mix(in srgb, var(--computer-label) 50%, transparent);
   color: color-mix(in srgb, var(--on-fill) 86%, transparent);
 }
 .ctl-label[data-surface='computer'][data-control='agent'] .ctl-label__text b {
@@ -81,9 +92,7 @@
 .ctl-label[data-surface='computer'][data-control='agent'] [data-slot='button'][data-quiet]:hover {
   background: color-mix(in srgb, var(--on-fill) 14%, transparent);
 }
-/* A new app waits for the user's answer: the label is outlined in the fox and names it. */
 .ctl-label[data-surface='computer'][data-control='waiting'] {
-  box-shadow: 0 0 0 var(--hairline) var(--computer-line);
   color: var(--attention);
 }
 .ctl-label[data-surface='computer'][data-control='waiting'] .ctl-label__text b {
@@ -481,7 +490,6 @@
 @media (prefers-reduced-motion: reduce) {
   .ctl-light,
   .ctl-light *,
-  .ctl-label__in,
   .ctl-pill__in,
   .ctl-pill-nudge,
   .ctl-pill-nudge *,
@@ -500,7 +508,7 @@
   }
 }
 :root[data-reduce-motion='always'] {
-  & :is(.ctl-light, .ctl-light *, .ctl-label__in, .ctl-pill__in, .ctl-pill-nudge),
+  & :is(.ctl-light, .ctl-light *, .ctl-pill__in, .ctl-pill-nudge),
   & :is(.ctl-pill-nudge *, .ctl-bubble, .ctl-click, .ctl-pointer__ring) {
     animation: none !important;
   }

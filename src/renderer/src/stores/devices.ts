@@ -186,8 +186,8 @@ export function initDevices(): void {
 }
 
 /**
- * The device a turn of the session uses that the composer's label and the status line name: the
- * one the user holds first, then the one the agent acts on, then any; null when none is used.
+ * The device the status line names: the one the user holds first, then the one the agent acts on,
+ * then any device the turn uses; null when none is used.
  */
 export function deviceInUse(
   devices: DeviceInfo[],
