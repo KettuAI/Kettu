@@ -43,8 +43,10 @@ import {
   rawInputText,
   repeatsFirstMessage,
   SYNTHETIC_MODE_ID,
+  titleWithoutAhead,
   toLf,
   toolEffects,
+  withoutAhead,
   type MapperContext,
   type MapperEffect,
   type MapperOutput,
@@ -339,18 +341,6 @@ function mapMessageChunk(
     addEntry(ctx, out, { kind: 'thought', id, markdown: text, streaming })
     if (streaming) ctx.scope.thoughts.set(id, ctx.now)
   }
-}
-
-/**
- * What Kettu sends ahead of a session's first prompt, its guide, its memory index or both, and
- * the blank lines the host adds.
- */
-const AHEAD =
-  /^\s*(?:<kettu-guide>[\s\S]*?<\/kettu-guide>(?:\r?\n){0,2}(?:<kettu-memory>[\s\S]*?<\/kettu-memory>(?:\r?\n){0,2})?|<kettu-memory>[\s\S]*?<\/kettu-memory>(?:\r?\n){0,2})/
-
-/** A replayed user message's text without what Kettu sent ahead of it. */
-export function withoutAhead(text: string): string {
-  return text.replace(AHEAD, '')
 }
 
 function mapUserChunk(ctx: MapperContext, out: Output, chunk: acp.ContentChunk): void {
@@ -851,13 +841,17 @@ export function mapSessionUpdate(update: acp.SessionUpdate, ctx: MapperContext):
       const changes: { title?: string | null; updatedAt: number } = {
         updatedAt: parseTime(update.updatedAt, ctx.now),
       }
+      // An agent that titles a session from its prompt may quote what Kettu sent ahead of it.
+      const title =
+        typeof update.title === 'string' ? titleWithoutAhead(update.title) : update.title
       // A repeat of the first message is no title: the cut first line stays until the agent's own.
       if (
-        update.title !== undefined &&
-        (update.title === null || !repeatsFirstMessage(update.title, firstUserMessage(ctx.thread)))
+        title !== undefined &&
+        title !== '' &&
+        (title === null || !repeatsFirstMessage(title, firstUserMessage(ctx.thread)))
       ) {
-        changes.title = update.title
-        out.effects.push({ kind: 'title', title: update.title })
+        changes.title = title
+        out.effects.push({ kind: 'title', title })
       }
       out.patches.push({ op: 'session.update', changes })
       break
