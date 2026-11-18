@@ -598,12 +598,12 @@ function moveRowFocus(event: KeyboardEvent<HTMLDivElement>): void {
  */
 export function SidebarNotices() {
   const { signIn } = useNotices()
-  const { card, items } = useUpdates()
+  const { card, items, batch } = useUpdates()
   return (
     <>
       {isWeb && !window.isSecureContext && <InsecureCard />}
       {signIn.length > 0 && <SignInCard names={signIn} />}
-      {card && <UpdateCardView card={card} items={items} />}
+      {card && <UpdateCardView card={card} items={items} batch={batch} />}
       <StarCard blocked={(isWeb && !window.isSecureContext) || signIn.length > 0 || !!card} />
     </>
   )

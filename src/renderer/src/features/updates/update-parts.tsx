@@ -2,7 +2,7 @@ import type { ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { AgentId } from '@shared/thread'
 import { AgentMark } from '@renderer/components/agents/agent-mark'
-import { BrandIcon } from '@renderer/components/brand'
+import { BrandFox } from '@renderer/components/brand'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -15,41 +15,22 @@ import {
 } from '@renderer/components/ui/alert-dialog'
 import { Button, buttonVariants } from '@renderer/components/ui/button'
 import { appUpdateText, type AppUpdateNotice } from './app-updates'
-import type { UpdateItem } from './card-model'
 import { runningSessions, updateHarnessNow } from './harness-updates'
 import { CARD_BUTTON, runAppAction } from './update-actions'
 
-/** A mark's tile, whose corners keep the same share of it at every size: 6 px at 22. */
-function tileStyle(size: number) {
-  return { width: size, height: size, borderRadius: Math.round(size * 2.8) / 10 }
+/** A harness's mark, or Kettu's fox for `null`, drawn bare at `size`, without a tile. */
+export function UpdateMark({ agentId, size }: { agentId: AgentId | null; size: number }) {
+  if (agentId === null) {
+    return (
+      <span aria-hidden style={{ width: size, height: size }} className="flex shrink-0">
+        <BrandFox className="size-full" />
+      </span>
+    )
+  }
+  return <AgentMark agent={agentId} size={size} dot={null} />
 }
 
-export function KettuTile({ size }: { size: number }) {
-  return <BrandIcon size={size} />
-}
-
-/** A harness's mark on an opaque tile, so marks can overlap in a stack. */
-export function HarnessTile({ agentId, size }: { agentId: AgentId; size: number }) {
-  return (
-    <span
-      aria-hidden
-      style={tileStyle(size)}
-      className="grid shrink-0 place-items-center bg-(--shell-logo-bg) shadow-[inset_0_0_0_0.5px_var(--shell-line-strong)]"
-    >
-      <AgentMark agent={agentId} size={Math.round(size * 0.62)} />
-    </span>
-  )
-}
-
-export function ItemTile({ item, size }: { item: UpdateItem; size: number }) {
-  return item.kind === 'app' ? (
-    <KettuTile size={size} />
-  ) : (
-    <HarnessTile agentId={item.offer.agentId} size={size} />
-  )
-}
-
-/** A card's small button: Kettu's own action in ink, a harness's on the subtle fill. */
+/** A card's small button: its own action primary, a quiet one plain, others on the subtle fill. */
 export function CardButton({
   primary,
   quiet,

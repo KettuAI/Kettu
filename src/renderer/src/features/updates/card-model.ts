@@ -1,6 +1,7 @@
 import type { AgentStatus, SessionSummary } from '@shared/agent-host'
 import { harnessOf, type AgentId, type HarnessId } from '@shared/thread'
 import { i18n } from '@renderer/lib/i18n'
+import type { HarnessBatchEntry } from '@renderer/stores/updates'
 import type { AgentTaskErrors, AgentUpdateOffer, HarnessFailure, HarnessRun } from './agent-updates'
 import { harnessUpdates } from './agent-updates'
 import { appUpdateText, type AppUpdateNotice } from './app-updates'
@@ -29,6 +30,17 @@ export interface HarnessItem {
 
 export type UpdateItem = AppItem | HarnessItem
 
+/** Where one update of the batch the card follows is. */
+export type BatchState = 'queued' | 'installing' | 'waiting' | 'updated' | 'failed'
+
+/** One harness update of the batch, asked for together with Update all or one by one. */
+export interface BatchItem extends Omit<HarnessBatchEntry, 'ended'> {
+  state: BatchState
+  /** Its sessions running on this computer now, which it waits for. */
+  running: number
+  failure: HarnessFailure | null
+}
+
 /** What the sidebar's one update card shows; it never stacks a second card. */
 export type UpdateCard =
   | {
@@ -39,10 +51,16 @@ export type UpdateCard =
       /** The updates queued behind this one. */
       more: number
     }
-  | { kind: 'failed'; failure: HarnessFailure }
-  | { kind: 'waiting'; item: HarnessItem }
-  | { kind: 'one'; item: UpdateItem }
+  /** A batch with an update installing or queued; `run` is the one installing, once it reports. */
+  | { kind: 'batch'; items: BatchItem[]; run: HarnessRun | null }
+  /** `updated`: the others of its batch that installed. */
+  | { kind: 'failed'; failure: HarnessFailure; updated: number }
+  | { kind: 'waiting'; item: HarnessItem; batch: BatchItem[] }
+  /** `updated`: the harnesses a batch just installed, said under Kettu's own update. */
+  | { kind: 'one'; item: UpdateItem; updated: number }
   | { kind: 'several'; items: UpdateItem[] }
+  /** Every update of the batch installed, said for a moment. */
+  | { kind: 'done'; items: BatchItem[] }
 
 export interface UpdatesInput {
   app: AppUpdateNotice | null
@@ -52,6 +70,9 @@ export interface UpdatesInput {
   sessions: readonly Pick<SessionSummary, 'agentId' | 'status'>[]
   waiting: readonly AgentId[]
   queued: readonly AgentId[]
+  /** The update the queue runs now, before its agent reports the task. */
+  installing: AgentId | null
+  batch: readonly HarnessBatchEntry[]
 }
 
 /** The sessions of each harness with a turn running, which a harness update waits for. */
@@ -95,16 +116,52 @@ export function updateItems(input: UpdatesInput): UpdateItem[] {
   return [...app, ...harnesses]
 }
 
-/** The card: an update installing first, then one that failed, then those on offer. */
+/** The batch the card follows, each update where it is now. */
+export function updateBatch(input: UpdatesInput): BatchItem[] {
+  const { running, failures } = harnessUpdates(input.statuses, input.taskErrors)
+  return batchItems(input, running, failures)
+}
+
+function batchItems(
+  input: UpdatesInput,
+  running: HarnessRun | null,
+  failures: HarnessFailure[],
+): BatchItem[] {
+  const sessions = runningByHarness(input.sessions)
+  return input.batch.map(({ ended, ...entry }) => {
+    const id = entry.agentId
+    const failure = failures.find((f) => f.agentId === id) ?? null
+    let state: BatchState
+    if (running?.agentId === id || input.installing === id) state = 'installing'
+    else if (input.waiting.includes(id)) state = 'waiting'
+    else if (input.queued.includes(id)) state = 'queued'
+    else if (ended === 'failed' || (ended === null && failure)) state = 'failed'
+    else if (ended === 'updated') state = 'updated'
+    // Asked for, between the queue's steps.
+    else state = 'queued'
+    return { ...entry, state, running: sessions[harnessOf(id)] ?? 0, failure }
+  })
+}
+
+/**
+ * The card: an update installing first, then the batch the card follows until it has said how it
+ * ended, then those on offer.
+ */
 export function updateCard(input: UpdatesInput): UpdateCard | null {
-  const { running, failed } = harnessUpdates(input.statuses, input.taskErrors)
-  if (running) {
+  const { running, failed, failures } = harnessUpdates(input.statuses, input.taskErrors)
+  const batch = batchItems(input, running, failures)
+  const inBatch = (id: AgentId) => batch.some((item) => item.agentId === id)
+  // An update started elsewhere, such as on the harness's settings page.
+  if (running && !inBatch(running.agentId)) {
     return {
       kind: 'installing',
       run: { kind: 'harness', run: running },
       percent: null,
       more: input.queued.filter((id) => id !== running.agentId).length,
     }
+  }
+  if (batch.some((item) => item.state === 'installing' || item.state === 'queued')) {
+    return { kind: 'batch', items: batch, run: running }
   }
   const app = input.app
   if (app?.kind === 'downloading' || app?.kind === 'moving') {
@@ -115,18 +172,33 @@ export function updateCard(input: UpdatesInput): UpdateCard | null {
       more: input.queued.length,
     }
   }
-  if (failed) return { kind: 'failed', failure: failed }
-  const shown = updateItems(input).filter((item) => item.kind === 'app' || !item.skipped)
+  const updated = batch.filter((item) => item.state === 'updated').length
+  const failedItem = batch.find((item) => item.state === 'failed' && item.failure)
+  if (failedItem) return { kind: 'failed', failure: failedItem.failure!, updated }
+  if (failed) return { kind: 'failed', failure: failed, updated: 0 }
+  const items = updateItems(input)
+  const waiting = batch.find((item) => item.state === 'waiting')
+  const waitingItem = items.find(
+    (item): item is HarnessItem =>
+      item.kind === 'harness' && item.offer.agentId === waiting?.agentId,
+  )
+  if (waitingItem) return { kind: 'waiting', item: waitingItem, batch }
+  const shown = items.filter((item) => item.kind === 'app' || !item.skipped)
   // "Updated to" only says what happened, so it gives way to anything still to do.
-  const items =
-    shown.length > 1
-      ? shown.filter((item) => item.kind !== 'app' || item.notice.kind !== 'updated')
-      : shown
-  if (items.length === 0) return null
-  if (items.length > 1) return { kind: 'several', items }
-  const item = items[0]!
-  if (item.kind === 'harness' && item.waiting) return { kind: 'waiting', item }
-  return { kind: 'one', item }
+  const todo = shown.filter((item) => item.kind !== 'app' || item.notice.kind !== 'updated')
+  if (batch.length > 0 && updated === batch.length) {
+    // Kettu's own update is the batch's last step, as only it restarts.
+    if (todo.length === 1 && todo[0]!.kind === 'app') {
+      return { kind: 'one', item: todo[0]!, updated }
+    }
+    return { kind: 'done', items: batch }
+  }
+  const offered = shown.length > 1 ? todo : shown
+  if (offered.length === 0) return null
+  if (offered.length > 1) return { kind: 'several', items: offered }
+  const item = offered[0]!
+  if (item.kind === 'harness' && item.waiting) return { kind: 'waiting', item, batch }
+  return { kind: 'one', item, updated: 0 }
 }
 
 /** "2.4.1 → 2.5.0", the package's name first when the versions are its own. */
@@ -156,17 +228,27 @@ export function harnessRowNote(item: HarnessItem): string {
   return i18n.t('updates:review.background')
 }
 
-/** The subtitle of the several-updates card: "Kettu + 2 harnesses". */
+/** An update's name: Kettu, or the harness's. */
+export function itemName(item: UpdateItem): string {
+  return item.kind === 'app' ? 'Kettu' : item.offer.name
+}
+
+/** The subtitle of the several-updates card, their names: "Kettu, Claude Code, Codex". */
 export function severalNote(items: readonly UpdateItem[]): string {
-  const harnesses = items.filter((item) => item.kind === 'harness').length
-  return items.some((item) => item.kind === 'app')
-    ? i18n.t('updates:several.withKettu', { count: harnesses })
-    : i18n.t('updates:several.harnesses', { count: harnesses })
+  return items.map(itemName).join(i18n.t('sidebar:footer.listSeparator'))
 }
 
 /** The card's first line, its name, as the collapsed sidebar's toggle lists it. */
 export function updateCardLabel(card: UpdateCard): string {
   switch (card.kind) {
+    case 'batch': {
+      const now =
+        card.items.find((item) => item.state === 'installing') ??
+        card.items.find((item) => item.state === 'queued')
+      return i18n.t('updates:harness.installing', { name: now?.name ?? '' })
+    }
+    case 'done':
+      return i18n.t('updates:done.title')
     case 'installing':
       return card.run.kind === 'app'
         ? appUpdateText(card.run.notice).title

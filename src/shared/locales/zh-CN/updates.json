@@ -47,11 +47,20 @@
   },
   "several": {
     "title": "{{count}} 个更新",
-    "withKettu_one": "Kettu + {{count}} 个 Harness",
-    "withKettu_other": "Kettu + {{count}} 个 Harness",
-    "harnesses_one": "{{count}} 个 Harness",
-    "harnesses_other": "{{count}} 个 Harness",
-    "review": "查看"
+    "updateAll": "全部更新",
+    "details": "查看列表",
+    "skip": "跳过这些版本"
+  },
+  "batch": {
+    "of": "{{done}}/{{total}}",
+    "waits": "{{name}} 等会话结束",
+    "updated_one": "{{count}} 个 Harness 已更新",
+    "updated_other": "{{count}} 个 Harness 已更新",
+    "othersUpdated_one": "其余 {{count}} 个已更新",
+    "othersUpdated_other": "其余 {{count}} 个已更新"
+  },
+  "done": {
+    "title": "已全部更新"
   },
   "review": {
     "title": "更新",
@@ -62,7 +71,12 @@
     "skipped": "已跳过这个版本",
     "undo": "撤销",
     "note": "更新 Harness 不会重启 Kettu",
-    "updateAll": "更新全部 Harness"
+    "updateAll": "全部更新",
+    "skip": "跳过",
+    "updating": "正在更新…",
+    "updated": "已更新",
+    "updatedNote": "新会话会用新版本",
+    "failed": "失败"
   },
   "quit": {
     "titleUpdate": "重启以完成更新？",

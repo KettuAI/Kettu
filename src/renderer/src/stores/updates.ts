@@ -3,6 +3,15 @@ import type { AgentId } from '@shared/thread'
 import type { UpdateStatus } from '@shared/updates'
 import { readJson, writeJson } from '@renderer/lib/storage'
 
+/** A harness update asked for in the batch the update card follows, with how it ended so far. */
+export interface HarnessBatchEntry {
+  agentId: AgentId
+  name: string
+  from: string | null
+  to: string
+  ended: 'updated' | 'failed' | null
+}
+
 interface UpdatesStore {
   status: UpdateStatus | null
   /** Set for 4 s after a check the user started found nothing. */
@@ -15,6 +24,10 @@ interface UpdatesStore {
   harnessWaiting: AgentId[]
   /** Harness updates asked for that wait their turn behind the one installing. */
   harnessQueued: AgentId[]
+  /** The update the queue runs now, before its agent reports the task. */
+  harnessInstalling: AgentId | null
+  /** The harness updates asked for since the card last settled, in the order asked. */
+  harnessBatch: HarnessBatchEntry[]
   /** The update card was closed on updates still to do, so Settings shows a dot until opened. */
   settingsDot: boolean
 }
@@ -29,6 +42,8 @@ export const useUpdatesStore = create<UpdatesStore>()(() => ({
   dialogOpen: false,
   harnessWaiting: [],
   harnessQueued: [],
+  harnessInstalling: null,
+  harnessBatch: [],
   settingsDot: readJson<unknown>(SETTINGS_DOT_KEY, false) === true,
 }))
 
