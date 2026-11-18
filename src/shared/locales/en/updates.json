@@ -47,11 +47,20 @@
   },
   "several": {
     "title": "{{count}} updates",
-    "withKettu_one": "Kettu + {{count}} harness",
-    "withKettu_other": "Kettu + {{count}} harnesses",
-    "harnesses_one": "{{count}} harness",
-    "harnesses_other": "{{count}} harnesses",
-    "review": "Review"
+    "updateAll": "Update all",
+    "details": "Show the list",
+    "skip": "Skip these versions"
+  },
+  "batch": {
+    "of": "{{done}} of {{total}}",
+    "waits": "{{name}} waits for its session",
+    "updated_one": "{{count}} harness updated",
+    "updated_other": "{{count}} harnesses updated",
+    "othersUpdated_one": "{{count}} other updated",
+    "othersUpdated_other": "{{count}} others updated"
+  },
+  "done": {
+    "title": "All up to date"
   },
   "review": {
     "title": "Updates",
@@ -62,7 +71,12 @@
     "skipped": "Skipped this version",
     "undo": "Undo",
     "note": "Harness updates never restart Kettu",
-    "updateAll": "Update harnesses"
+    "updateAll": "Update all",
+    "skip": "Skip",
+    "updating": "Updating…",
+    "updated": "Updated",
+    "updatedNote": "New sessions use it",
+    "failed": "Failed"
   },
   "quit": {
     "titleUpdate": "Restart to update?",

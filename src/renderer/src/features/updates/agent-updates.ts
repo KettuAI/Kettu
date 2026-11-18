@@ -47,6 +47,8 @@ export interface HarnessFailure {
 export interface HarnessUpdates {
   running: HarnessRun | null
   failed: HarnessFailure | null
+  /** Every failed update, the first being `failed`. */
+  failures: HarnessFailure[]
   /** Those on offer, apart from the running and the failed one, the skipped ones too. */
   offers: { offer: AgentUpdateOffer; skipped: boolean }[]
 }
@@ -68,24 +70,24 @@ export function harnessUpdates(
           output: busy.task.progress,
         }
       : null
-  let failed: HarnessFailure | null = null
+  const failures: HarnessFailure[] = []
   for (const status of defaults) {
     const failure = failureOf(status, taskErrors[status.id])
     if (!failure) continue
-    failed = {
+    failures.push({
       agentId: status.id,
       harnessId: status.harnessId,
       name: status.harnessName,
       ...failure,
-    }
-    break
+    })
   }
+  const failed = failures[0] ?? null
   const offers = defaults.flatMap((status) => {
     if (status.id === running?.agentId || status.id === failed?.agentId) return []
     const offer = updateOffer(status)
     return offer ? [{ offer, skipped: status.updateSkipped }] : []
   })
-  return { running, failed, offers }
+  return { running, failed, failures, offers }
 }
 
 /** The route an offered update runs; the user's program comes first, as the harness page has it. */

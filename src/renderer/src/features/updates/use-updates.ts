@@ -5,7 +5,7 @@ import { usableAgents, useAgentsStore } from '@renderer/stores/agents'
 import { hostOfSession, useSessionsStore } from '@renderer/stores/sessions'
 import { useUpdatesStore } from '@renderer/stores/updates'
 import { appUpdateNotice } from './app-updates'
-import { updateCard, updateItems, type UpdatesInput } from './card-model'
+import { updateBatch, updateCard, updateItems, type UpdatesInput } from './card-model'
 
 /** What the update card and its review list show, from the updater, the agents and the sessions. */
 export function useUpdates() {
@@ -17,6 +17,8 @@ export function useUpdates() {
   const updatedSeen = useUpdatesStore((s) => s.updatedDismissed)
   const waiting = useUpdatesStore((s) => s.harnessWaiting)
   const queued = useUpdatesStore((s) => s.harnessQueued)
+  const installing = useUpdatesStore((s) => s.harnessInstalling)
+  const batch = useUpdatesStore((s) => s.harnessBatch)
   // Harness updates are this computer's, so only its sessions hold them.
   const sessions = useSessionsStore(
     useShallow((s) =>
@@ -32,8 +34,15 @@ export function useUpdates() {
     sessions,
     waiting,
     queued,
+    installing,
+    batch,
   }
-  return { input, card: updateCard(input), items: updateItems(input) }
+  return {
+    input,
+    card: updateCard(input),
+    items: updateItems(input),
+    batch: updateBatch(input),
+  }
 }
 
 type AgentStatusPair = Pick<SessionSummary, 'agentId' | 'status'>

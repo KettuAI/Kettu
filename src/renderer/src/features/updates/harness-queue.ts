@@ -5,6 +5,7 @@ export interface HarnessQueueState {
   waiting: AgentId[]
   /** Asked for, waiting their turn behind the update installing. */
   queued: AgentId[]
+  installing: AgentId | null
 }
 
 export interface HarnessQueueDeps {
@@ -77,7 +78,11 @@ export class HarnessQueue {
       this.unwatch()
       this.unwatch = null
     }
-    this.deps.changed({ waiting: [...this.waiting], queued: [...this.queued] })
+    this.deps.changed({
+      waiting: [...this.waiting],
+      queued: [...this.queued],
+      installing: this.installing,
+    })
   }
 
   private async drain(): Promise<void> {
@@ -98,6 +103,7 @@ export class HarnessQueue {
         console.warn(`Could not update ${next}`, error)
       } finally {
         this.installing = null
+        this.emit()
       }
     }
     this.emit()
