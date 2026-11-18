@@ -19,6 +19,7 @@ import { openViewer } from '@renderer/stores/viewer'
 import { openAttachmentPath } from '../attachments/open-attachment'
 import { draftKey } from '../media/viewer-items'
 import { ChipPreview } from './chip-preview'
+import { removeAttachment } from './attachments'
 import { ChipView } from './chip-view'
 import { mentionResolver, type Chip } from './chips'
 import type { ComposerEditorHandle } from './editor'
@@ -172,15 +173,19 @@ export function usePromptChips({
   // The editor redraws its chips when the context changes, so it changes only with what they
   // show; the handlers are read when they fire.
   const onLinkPasted = (from: number, to: number) => setPasted({ from, to })
-  // An attachment a chip stands for needs no tile; one whose chip goes shows its tile again.
+  // An attachment a chip stands for needs no tile. One whose chip the user deletes goes with it;
+  // one whose text changed some other way shows its tile again.
   const [hidden, setHidden] = useState(NO_KEYS)
   const onMentioned = (keys: ReadonlySet<string>) =>
     setHidden((shown) =>
       shown.size === keys.size && [...keys].every((key) => shown.has(key)) ? shown : keys,
     )
-  const handlers = useRef({ onHover, open, onLinkPasted, onMentioned })
+  const onMentionDeleted = (keys: readonly string[]) => {
+    for (const key of keys) removeAttachment(draft, key)
+  }
+  const handlers = useRef({ onHover, open, onLinkPasted, onMentioned, onMentionDeleted })
   useLayoutEffect(() => {
-    handlers.current = { onHover, open, onLinkPasted, onMentioned }
+    handlers.current = { onHover, open, onLinkPasted, onMentioned, onMentionDeleted }
   })
   const chipContext = useMemo<ChipHooks>(
     () => ({
@@ -190,6 +195,7 @@ export function usePromptChips({
       onOpen: (chip) => handlers.current.open(chip),
       onLinkPasted: (from, to) => handlers.current.onLinkPasted(from, to),
       onMentioned: (keys) => handlers.current.onMentioned(keys),
+      onMentionDeleted: (keys) => handlers.current.onMentionDeleted(keys),
       highlight: pasted,
     }),
     [names, resolve, pasted],
