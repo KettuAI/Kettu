@@ -10,7 +10,8 @@
     "leaveSession": "Leave session",
     "sideChat": "Side chat",
     "sideChatNews": "New answer",
-    "more": "More tools"
+    "more": "More tools",
+    "requests": "Requests"
   },
   "hostBanner": {
     "restarting": "Restarting the agent host. Your sessions come back by themselves.",

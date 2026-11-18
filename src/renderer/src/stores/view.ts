@@ -112,7 +112,8 @@ export const PINNED_GROUP = 'pinned'
 export const THIS_COMPUTER = 'this-computer'
 
 /** What the side panel shows; one pane at a time. An artifact's pane opens from the thread. */
-export type SidePane = 'terminal' | 'files' | 'browser' | 'devices' | 'computer' | 'artifact'
+export type SidePane =
+  'terminal' | 'files' | 'browser' | 'devices' | 'computer' | 'requests' | 'artifact'
 
 // No session id takes this form, so New session's panel in a project has a key of its own.
 const NEW_SESSION_PANEL = 'new-session:'

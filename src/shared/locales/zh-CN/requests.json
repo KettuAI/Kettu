@@ -1,0 +1,100 @@
+{
+  "title": "请求",
+  "summary_one": "{{count}} 次请求 · 读自 {{source}}",
+  "summary_other": "{{count}} 次请求 · 读自 {{source}}",
+  "summaryLive_one": "{{count}} 次请求 · 实时",
+  "summaryLive_other": "{{count}} 次请求 · 实时",
+  "source": {
+    "claude": "Claude Code 的会话记录",
+    "codex": "Codex 的会话记录",
+    "opencode": "OpenCode",
+    "acp": "Kettu 这次启动以来的消息"
+  },
+  "totals": {
+    "requests": "请求",
+    "input": "输入",
+    "cached": "缓存命中",
+    "output": "输出",
+    "cost": "费用",
+    "api": "API",
+    "costHint": "Agent 自己按 API 价算的，订阅账号不按这个收费。"
+  },
+  "system": {
+    "title": "System prompt 和工具",
+    "line": "{{blocks}} 段 · {{chars}} 字 · {{tools}} 个工具",
+    "changed_one": "变过 1 次",
+    "changed_other": "变过 {{count}} 次",
+    "blocks_one": "System · {{count}} 段",
+    "blocks_other": "System · {{count}} 段",
+    "tools": "工具 · {{count}}",
+    "builtin": "内置",
+    "mcp": "MCP · {{name}}",
+    "chars": "{{chars}} 字",
+    "added": "{{time}} 加了 {{tools}}",
+    "removed": "{{time}} 去掉 {{tools}}",
+    "raw": "Claude Code 为它们记的记录"
+  },
+  "older": "往上滚动加载更早的轮",
+  "loadingOlder": "正在加载更早的轮…",
+  "start": "会话从这里开始",
+  "turn": "第 {{index}} 轮",
+  "turnEarlier": "更早的一轮",
+  "you": "你：{{text}}",
+  "turnMeta_one": "{{count}} 次请求 · {{time}}",
+  "turnMeta_other": "{{count}} 次请求 · {{time}}",
+  "turnRunning": "进行中",
+  "cols": {
+    "request": "请求",
+    "input": "输入",
+    "output": "输出",
+    "cached": "缓存",
+    "took": "用时"
+  },
+  "action": {
+    "thinking": "思考",
+    "reply": "回复"
+  },
+  "failed": "失败",
+  "detail": {
+    "sent": "这次发出",
+    "kept": "上次请求留下 {{kept}} 条，新加 {{added}} 条",
+    "nothingSent": "没有新内容",
+    "received": "收到",
+    "nothingReceived": "还没有",
+    "raw": "原文",
+    "records_one": "{{source}}里的 {{count}} 条",
+    "records_other": "{{source}}里的 {{count}} 条",
+    "showFull": "显示全文",
+    "copy": "复制 JSON",
+    "copied": "已复制",
+    "reading": "正在读取…",
+    "cacheRead": "缓存读",
+    "cacheWrite": "缓存写",
+    "input": "新输入",
+    "output": "输出",
+    "thinking": "其中思考 {{tokens}}",
+    "stop": "停止原因",
+    "model": "模型"
+  },
+  "part": {
+    "prompt": "你",
+    "tool-result": "工具结果",
+    "attachment": "提醒",
+    "thinking": "思考",
+    "text": "回复",
+    "tool-call": "调用",
+    "other": "消息"
+  },
+  "empty": {
+    "title": "还没有请求",
+    "text": "会话发出第一条消息后，这里会列出每次请求。"
+  },
+  "unavailable": {
+    "title": "这个 Agent 暂时看不了",
+    "text": "目前能读 Claude Code 会话的请求，别的 Agent 随后支持。"
+  },
+  "error": {
+    "title": "读不到请求",
+    "retry": "重试"
+  }
+}

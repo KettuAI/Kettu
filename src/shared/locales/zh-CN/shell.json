@@ -10,7 +10,8 @@
     "leaveSession": "离开会话",
     "sideChat": "侧聊",
     "sideChatNews": "有新回答",
-    "more": "更多工具"
+    "more": "更多工具",
+    "requests": "请求"
   },
   "hostBanner": {
     "restarting": "正在重启 Agent 后台进程，会话会自动恢复。",

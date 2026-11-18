@@ -5300,6 +5300,19 @@ li[data-row-exit='dust'] > * {
 .kettu-ctx__session > :last-child {
   color: var(--composer-text);
 }
+.kettu-ctx__link {
+  width: 100%;
+  text-align: left;
+}
+.kettu-ctx__link:hover,
+.kettu-ctx__link:focus-visible {
+  background: var(--bg-hover);
+}
+.kettu-ctx__link-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
 .kettu-ctx__plan {
   display: flex;
   flex-direction: column;

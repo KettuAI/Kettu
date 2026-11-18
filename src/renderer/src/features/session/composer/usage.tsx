@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { ArrowRight01Icon, Timer02Icon } from '@hugeicons/core-free-icons'
 import { Trans, useTranslation } from 'react-i18next'
 import type { AgentAccount, ContextList, PlanLimit } from '@shared/agent-host'
@@ -37,6 +37,10 @@ import { limitLevel, limitPercent, shownPercent } from '@renderer/lib/plan-limit
 import { useNow } from '@renderer/lib/use-now'
 import { cn } from '@renderer/lib/utils'
 import { loadContext, refreshLimits, useUsageStore } from '@renderer/stores/usage'
+import { toggleSidePane } from '@renderer/stores/view'
+import { REQUESTS_ICON } from '@renderer/features/requests/icon'
+import { readsModelRequests } from '@renderer/features/requests/support'
+import { useSessionView } from '@renderer/features/session/use-thread'
 import { Glyph } from '@renderer/features/shell/glyph'
 
 const MINUTE = 60_000
@@ -280,6 +284,7 @@ export function ContextButton({
 }) {
   const { t } = useTranslation('composer')
   const limitView = useLimitView()
+  const [open, setOpen] = useState(false)
   // The tray names a limit only from 70% on; below that it stays in the popover.
   const nearest = warningLimit(holding)
   const warning = nearest && limitLevel(nearest) !== 'ok' ? nearest : null
@@ -302,8 +307,9 @@ export function ContextButton({
   const share = shown && shown.size > 0 ? shown.used / shown.size : 0
   const tone = contextTone(share)
   const percent = Math.round(share * 100)
-  const onOpenChange = (open: boolean) => {
-    if (!open) return
+  const onOpenChange = (next: boolean) => {
+    setOpen(next)
+    if (!next) return
     refreshLimits(agentId, sessionHost(sessionId)).catch((error: unknown) =>
       console.warn(`Could not read the plan limits: ${errorMessage(error)}`),
     )
@@ -315,7 +321,7 @@ export function ContextButton({
     }
   }
   return (
-    <Popover onOpenChange={onOpenChange}>
+    <Popover open={open} onOpenChange={onOpenChange}>
       <PopoverTrigger
         render={
           <button
@@ -378,6 +384,23 @@ export function ContextButton({
             />
           )}
           {shown && <SessionLine usage={shown} />}
+          <LastRequestLine sessionId={sessionId} />
+          {readsModelRequests(agentId) && (
+            <button
+              type="button"
+              className="kettu-ctx__session kettu-ctx__link"
+              onClick={() => {
+                setOpen(false)
+                toggleSidePane(sessionId, 'requests', true)
+              }}
+            >
+              <span className="kettu-ctx__link-name">
+                <Glyph icon={REQUESTS_ICON} size={14} />
+                {t('usage.everyRequest')}
+              </span>
+              <Glyph icon={ArrowRight01Icon} size={13} />
+            </button>
+          )}
           {subscribed && <PlanLimits limits={limits} account={account} />}
         </div>
       </PopoverContent>
@@ -567,8 +590,11 @@ function SessionLine({ usage }: { usage: SessionUsage }) {
   const { t } = useTranslation('composer')
   const totals = usage.tokens
   if (!totals && !usage.cost) return null
+  const input = totals ? totals.input + (totals.cacheRead ?? 0) + (totals.cacheWrite ?? 0) : 0
+  const hit = totals && totals.cacheRead !== null && input > 0 ? totals.cacheRead / input : null
   const parts = [
     totals && t('usage.context.tokens', { tokens: tokens(totals.total) }),
+    hit !== null && t('usage.context.cached', { percent: `${Math.round(hit * 100)}%` }),
     usage.cost && `≈ ${money(usage.cost.amount, usage.cost.currency)}`,
   ].filter(Boolean)
   const line = (
@@ -588,6 +614,12 @@ function SessionLine({ usage }: { usage: SessionUsage }) {
           <Total label={t('usage.context.reasoning')} value={totals.thought} />
           <Total label={t('usage.context.cacheRead')} value={totals.cacheRead} />
           <Total label={t('usage.context.cacheWrite')} value={totals.cacheWrite} />
+          {hit !== null && (
+            <>
+              <dt className="opacity-70">{t('usage.context.cacheHit')}</dt>
+              <dd className="text-right">{`${Math.round(hit * 100)}%`}</dd>
+            </>
+          )}
         </dl>
       </TooltipContent>
     </Tooltip>
@@ -769,6 +801,31 @@ export function PlanPart({
           </div>
         )
       })}
+    </div>
+  )
+}
+
+/** The main thread's latest request, as the stream reported it. */
+function LastRequestLine({ sessionId }: { sessionId: string }) {
+  const { t } = useTranslation('composer')
+  const last = useSessionView(sessionId)?.lastRequest
+  if (!last) return null
+  const input = (last.input ?? 0) + (last.cacheRead ?? 0) + (last.cacheWrite ?? 0)
+  const hit = last.cacheRead !== null && input > 0 ? last.cacheRead / input : null
+  const line =
+    last.output === null
+      ? t('usage.lastRequest.running')
+      : t('usage.lastRequest.line', {
+          input: tokens(input),
+          output: tokens(last.output),
+          hit: hit === null ? '—' : `${Math.round(hit * 100)}%`,
+        })
+  return (
+    <div className="kettu-ctx__session">
+      <span>{t('usage.lastRequest.title')}</span>
+      <span className="tabular" title={clockTime(last.at)}>
+        {line}
+      </span>
     </div>
   )
 }
