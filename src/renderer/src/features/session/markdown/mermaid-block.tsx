@@ -1,10 +1,19 @@
 import { useEffect, useId, useState } from 'react'
+import { SourceCodeIcon } from '@hugeicons/core-free-icons'
+import { HugeiconsIcon } from '@hugeicons/react'
 import { createMermaidPlugin } from '@streamdown/mermaid'
 import { useTranslation } from 'react-i18next'
 import { CodeBlock } from 'streamdown'
 import { useDark } from '@renderer/hooks/use-dark'
 import { useThemesStore } from '@renderer/stores/themes'
-import { BlockCopy, BlockFrame, BlockSpacer, PreviewSourceSwitch } from './block-frame'
+import {
+  BlockAction,
+  BlockCopy,
+  BlockFrame,
+  BlockPicture,
+  BlockSpacer,
+  PreviewSourceSwitch,
+} from './block-frame'
 import { CodeFrame, type BlockProps } from './code-frame'
 
 const plugin = createMermaidPlugin()
@@ -105,6 +114,23 @@ export default function MermaidBlock(props: BlockProps) {
 
   if (isIncomplete || !drawn) return <CodeFrame {...props} />
   const failed = 'error' in drawn
+  if (!failed && !source) {
+    return (
+      <BlockPicture
+        src={drawn.url}
+        width={drawn.width}
+        alt={t('block.diagram')}
+        actions={
+          <>
+            <BlockAction label={t('block.source')} onClick={() => setSource(true)}>
+              <HugeiconsIcon icon={SourceCodeIcon} strokeWidth={1.9} aria-hidden />
+            </BlockAction>
+            <BlockCopy text={code} label={t('block.copy')} />
+          </>
+        }
+      />
+    )
+  }
   return (
     <BlockFrame
       header={
@@ -127,20 +153,12 @@ export default function MermaidBlock(props: BlockProps) {
         </>
       }
     >
-      {failed || source ? (
-        <>
-          <CodeBlock code={code} language="mermaid" lineNumbers />
-          {failed && (
-            <p className="block-frame-error">
-              {t('block.diagramFailed')}
-              {drawn.error && ` ${drawn.error}`}
-            </p>
-          )}
-        </>
-      ) : (
-        <div className="block-frame-diagram">
-          <img src={drawn.url} width={drawn.width} alt={t('block.diagram')} decoding="async" />
-        </div>
+      <CodeBlock code={code} language="mermaid" lineNumbers />
+      {failed && (
+        <p className="block-frame-error">
+          {t('block.diagramFailed')}
+          {drawn.error && ` ${drawn.error}`}
+        </p>
       )}
     </BlockFrame>
   )
