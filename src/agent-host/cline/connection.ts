@@ -52,6 +52,8 @@ import {
 } from './protocol'
 
 const PENDING_EVENTS = 2_000
+/** Where Node.js keeps the SDK's compiled code, which halves a later start. */
+const COMPILE_CACHE = 'NODE_COMPILE_CACHE'
 /** Loading the SDK takes a few seconds the first time; past this it counts as not starting. */
 const HELLO_TIMEOUT_MS = 20_000
 const SHUTDOWN_WAIT_MS = 5_000
@@ -89,6 +91,11 @@ type Deferred = (ctx: MapperContext) => MapperOutput | null
 /** Where the installed `cline` package keeps the SDK, from the package's bin entry. */
 export function sdkEntry(binEntry: string): string {
   return path.join(path.dirname(binEntry), '..', '..', '@cline', 'sdk', 'dist', 'index.js')
+}
+
+/** A folder beside the install for Node.js's compile cache, removed with the install. */
+function compileCacheDir(binEntry: string): string {
+  return path.join(path.dirname(binEntry), '..', '..', '.cache', 'kettu-compile')
 }
 
 /** Kettu's prompt as Cline takes it: text, images as data URLs and files by path. */
@@ -255,16 +262,13 @@ export class ClineConnection implements AgentConnection {
     if (!nodeRuntime || !clineHostPath || !bin) {
       throw new ClineSdkUnavailable('Kettu has no process to run the SDK in')
     }
+    // What only starts the process is named to it, to keep from the commands the agent runs: an
+    // Electron app one of them starts would otherwise run as Node.js.
+    const own = { ...nodeRuntime.env, [COMPILE_CACHE]: compileCacheDir(bin) }
     const child = this.context.spawn({
       command: nodeRuntime.command,
-      args: [clineHostPath, sdkEntry(bin)],
-      env: {
-        ...env,
-        ...spec.env,
-        ...nodeRuntime.env,
-        // Node.js keeps the SDK's compiled code beside the install, which halves a later start.
-        NODE_COMPILE_CACHE: path.join(path.dirname(bin), '..', '..', '.cache', 'kettu-compile'),
-      },
+      args: [clineHostPath, sdkEntry(bin), ...Object.keys(own)],
+      env: { ...env, ...spec.env, ...own },
     })
     const { stream, close } = messageStream({
       kind: 'stdio',

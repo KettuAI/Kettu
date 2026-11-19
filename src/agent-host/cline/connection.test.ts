@@ -223,12 +223,19 @@ describe('Cline connection', () => {
     const { init, spawned, logs } = await started()
     expect(spawned[0]).toMatchObject({
       command: '/app/kettu',
+      // The variables that only start the process are named, for it to drop before the SDK loads.
       args: [
         '/app/out/cline-host.js',
         '/data/harnesses/cline/3.0.74/node_modules/@cline/sdk/dist/index.js',
+        'ELECTRON_RUN_AS_NODE',
+        'NODE_COMPILE_CACHE',
       ],
     })
-    expect(spawned[0]!.env).toMatchObject({ HOME: '/home/u', ELECTRON_RUN_AS_NODE: '1' })
+    expect(spawned[0]!.env).toMatchObject({
+      HOME: '/home/u',
+      ELECTRON_RUN_AS_NODE: '1',
+      NODE_COMPILE_CACHE: '/data/harnesses/cline/3.0.74/node_modules/.cache/kettu-compile',
+    })
     expect(init.capabilities).toMatchObject({
       resumeSession: true,
       loadSession: false,

@@ -1,6 +1,8 @@
 // The process that runs Cline's SDK for one Agent: started by the agent host as
-// `<node> <this file> <the SDK's entry module>`, it speaks JSON-RPC with it over stdio, one message
-// per line. It is never imported.
+// `<node> <this file> <the SDK's entry module> [<variable>...]`, it speaks JSON-RPC with it over
+// stdio, one message per line. The variables named are the ones that only started this process,
+// such as the one that makes Electron run as Node.js: they are dropped before the SDK loads, so no
+// command the agent runs inherits them. It is never imported.
 
 import { createInterface } from 'node:readline'
 import { pathToFileURL } from 'node:url'
@@ -30,8 +32,9 @@ function ask<T>(method: string, params: unknown): Promise<T> {
 }
 
 async function main(): Promise<void> {
-  const entry = process.argv[2]
+  const [entry, ...own] = process.argv.slice(2)
   if (!entry) throw new Error('No SDK entry module was given')
+  for (const name of own) delete process.env[name]
   const sdk = (await import(/* @vite-ignore */ pathToFileURL(entry).href)) as Sdk
   const host = new Host(sdk, {
     ask,
