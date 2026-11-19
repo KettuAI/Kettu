@@ -136,6 +136,8 @@ interface Session {
   running: boolean
   /** A Stop that came before the loop started, made once it does. */
   stopping: boolean
+  /** A prompt is on its way to OpenCode, which has not answered for it yet. */
+  sending: boolean
   /** Opened for Kettu itself: no thread shows it. */
   hidden: boolean
   /** Never made on the server: it only lists a folder's options. */
@@ -155,6 +157,17 @@ interface Session {
 }
 
 type Deferred = (ctx: MapperContext) => MapperOutput | null
+
+/**
+ * What became of a prompt: a turn of OpenCode's that ends it, or none, with the words a command
+ * answered in instead when it did.
+ */
+interface Sent {
+  turn: boolean
+  answer: string | null
+}
+
+const TURN: Sent = { turn: true, answer: null }
 
 interface PromptFile {
   uri: string
@@ -780,6 +793,7 @@ export class OpenCodeConnection implements AgentConnection {
       turn: null,
       running: false,
       stopping: false,
+      sending: false,
       hidden: options.hidden !== undefined,
       listed: false,
       requests: new Map(),
@@ -1154,12 +1168,26 @@ export class OpenCodeConnection implements AgentConnection {
     })
     const turn = session.turn!
     session.stopping = false
+    let sent: Sent
+    session.sending = true
     try {
-      await this.send(session, prompt, null)
+      sent = await this.send(session, prompt, null)
     } catch (error) {
       if (session.turn === turn && !session.running) session.turn = null
       else if (session.turn === turn) this.ownTurn(session, turn)
       throw error
+    } finally {
+      session.sending = false
+    }
+    if (sent.answer !== null && !session.hidden) {
+      const answer = sent.answer
+      this.deliver(sessionId, (ctx) => session.mapper.say(ctx, answer))
+    }
+    if (!sent.turn && session.turn === turn && !session.running) {
+      // Nothing of OpenCode's runs for the command, so no event will end its turn.
+      session.turn = null
+      session.stopping = false
+      return { stopReason: 'end_turn', tokens: null, models: [] }
     }
     return result
   }
@@ -1192,19 +1220,19 @@ export class OpenCodeConnection implements AgentConnection {
     session: Session,
     prompt: readonly PromptBlock[],
     delivery: 'steer' | null,
-  ): Promise<void> {
+  ): Promise<Sent> {
     const input = await promptInput(prompt)
     const route = `/api/session/${session.id}`
     const command = input.files.length === 0 ? parseCommand(input.text) : null
     if (command?.name === COMPACT) {
       await this.call('POST', `${route}/compact`, {})
-      return
+      return TURN
     }
     if (command) {
       const offer = await this.offer(session.cwd)
       if (offer.commands.some((item) => item.name === command.name)) {
-        await this.call('POST', `${route}/command`, { name: command.name, text: command.text })
-        return
+        const ran = await this.run(session, command)
+        if (ran) return ran
       }
     }
     const ahead = session.ahead
@@ -1237,6 +1265,45 @@ export class OpenCodeConnection implements AgentConnection {
         linked.map((file) => localPath(file.uri) ?? file.uri),
       )
       await this.call('POST', `${route}/prompt`, body(inline, named), shown(inline, named))
+    }
+    return TURN
+  }
+
+  /**
+   * Runs one of OpenCode's commands. Most start a turn, as a prompt does. One may also take
+   * effect without a turn, as clearing a goal does, or only answer in its own words, as it does
+   * when there is no goal to clear: OpenCode shows that as a notice, and nothing of it enters the
+   * session. Null for a command the folder no longer has, which then goes as the user's words.
+   */
+  private async run(
+    session: Session,
+    command: { name: string; text: string },
+  ): Promise<Sent | null> {
+    try {
+      await this.call('POST', `/api/session/${session.id}/command`, command)
+    } catch (error) {
+      const tag = ((error as AgentRequestError).data as { tag?: string } | undefined)?.tag
+      if (tag === 'CommandExecutionError') return { turn: false, answer: (error as Error).message }
+      if (tag === 'CommandNotFoundError') return null
+      throw error
+    }
+    return (await this.runsNothing(session)) ? { turn: false, answer: null } : TURN
+  }
+
+  /** Whether OpenCode has nothing to run for the session: no loop, and nothing in its inbox. */
+  private async runsNothing(session: Session): Promise<boolean> {
+    if (session.running) return false
+    try {
+      const [inbox, active] = await Promise.all([
+        this.api.request<{ data?: unknown[] }>('GET', `/api/session/${session.id}/inbox`),
+        this.api.request<{ data?: Record<string, unknown> }>('GET', '/api/session/active'),
+      ])
+      const waiting = (inbox?.data ?? []).length > 0
+      const runs = active?.data !== undefined && session.id in active.data
+      return !waiting && !runs && !session.running
+    } catch {
+      // A turn that does run then shows as one OpenCode started itself.
+      return true
     }
   }
 
@@ -1274,8 +1341,17 @@ export class OpenCodeConnection implements AgentConnection {
       'POST',
       `/api/session/${sessionId}/interrupt`,
     )
-    // A prompt OpenCode took but has not started yet is stopped once it starts.
-    if (answer?.interrupted !== true && session.turn && !session.running) session.stopping = true
+    if (answer?.interrupted === true || !session.turn || session.running) return
+    if (session.sending || !(await this.runsNothing(session))) {
+      // A prompt on its way, or one OpenCode took but has not started, is stopped once it starts.
+      session.stopping = true
+      return
+    }
+    // Nothing runs for the turn, so no event will end it.
+    const turn = session.turn
+    if (!turn || session.running) return
+    session.turn = null
+    turn.resolve({ stopReason: 'cancelled', tokens: turn.tokens, models: [] })
   }
 
   async setMode(sessionId: string, modeId: string): Promise<void> {

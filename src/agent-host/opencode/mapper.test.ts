@@ -404,6 +404,23 @@ describe('a request', () => {
   })
 })
 
+describe('a command’s own answer', () => {
+  it('reads as a reply of the agent’s, whole and timed', () => {
+    const thread = new TestThread()
+    thread.apply(new SessionMapper(CWD).say(thread.context(), 'No goal is set.'))
+    expect(thread.entries).toEqual([
+      {
+        kind: 'agent',
+        id: 'e:1',
+        markdown: 'No goal is set.',
+        attachments: [],
+        streaming: false,
+        at: 1_000,
+      },
+    ])
+  })
+})
+
 describe('ids and counts', () => {
   it('gives the replies of one assistant message entries of their own', () => {
     expect(textEntryId('msg_1', 0)).toBe('m:msg_1')

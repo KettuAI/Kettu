@@ -68,7 +68,7 @@ class FakeServer {
       data: this.info(path.split('/')[3]!),
     }))
     this.on('GET', /\/instructions\/entries$/, () => ({ data: [] }))
-    this.on('GET', /\/(permission|form)$/, () => ({ data: [] }))
+    this.on('GET', /\/(permission|form|inbox)$/, () => ({ data: [] }))
     this.on('GET', /\/message\?/, () => ({ data: [], cursor: {} }))
     this.on('POST', /\/interrupt$/, () => ({ interrupted: true }))
   }
@@ -472,6 +472,7 @@ describe('a turn', () => {
     const setup = await connect()
     const { id } = await session(setup)
     setup.server.on('POST', /\/interrupt$/, () => ({ interrupted: false }))
+    setup.server.on('GET', /\/inbox$/, () => ({ data: [{ id: 'msg_1', type: 'user' }] }))
     void setup.connection.prompt(id, text('hi')).catch(() => {})
     await settle()
     await setup.connection.cancel(id)
@@ -521,6 +522,121 @@ describe('a turn', () => {
     ])
     expect(parseCommand('/review')).toEqual({ name: 'review', text: '' })
     expect(parseCommand('a /review')).toBeNull()
+  })
+})
+
+describe('a command that starts no turn', () => {
+  const refuse = (setup: Setup, tag: string, message: string): void =>
+    setup.server.on('POST', /\/command$/, () => {
+      throw new ServerError(tag === 'CommandNotFoundError' ? 404 : 500, tag, message)
+    })
+
+  it('shows what the command answered as the reply, and ends its turn', async () => {
+    const setup = await connect()
+    const { id, thread } = await session(setup)
+    refuse(setup, 'CommandExecutionError', 'No goal is set.')
+    expect(await setup.connection.prompt(id, text('/review clear'))).toEqual({
+      stopReason: 'end_turn',
+      tokens: null,
+      models: [],
+    })
+    expect(thread.lines).toEqual(['agent No goal is set.'])
+    expect(thread.effects.filter((effect) => effect.kind === 'agentTurn')).toEqual([])
+    // The session takes its next prompt.
+    void setup.connection.prompt(id, text('hello')).catch(() => {})
+    await settle()
+    expect(setup.server.posts(/\/prompt$/)).toHaveLength(1)
+  })
+
+  it('ends the turn of a command that took effect without one', async () => {
+    const setup = await connect()
+    const { id, thread } = await session(setup)
+    expect((await setup.connection.prompt(id, text('/review clear'))).stopReason).toBe('end_turn')
+    expect(thread.lines).toEqual([])
+    expect(setup.server.sent.slice(-2).map((sent) => sent.path)).toEqual([
+      `/api/session/${id}/inbox`,
+      '/api/session/active',
+    ])
+  })
+
+  it('waits for the turn a command starts, also one that has not begun yet', async () => {
+    for (const waits of ['inbox', 'active'] as const) {
+      const setup = await connect()
+      const { id } = await session(setup)
+      if (waits === 'inbox') {
+        setup.server.on('GET', /\/inbox$/, () => ({ data: [{ id: 'msg_1', type: 'user' }] }))
+      } else {
+        setup.server.on('GET', /^\/api\/session\/active$/, () => ({ data: { [id]: {} } }))
+      }
+      let done = false
+      const turn = setup.connection.prompt(id, text('/review')).then((result) => {
+        done = true
+        return result
+      })
+      await new Promise((resolve) => setTimeout(resolve, 30))
+      expect(done).toBe(false)
+      setup.server.push(
+        { type: 'session.execution.started', data: { sessionID: id } },
+        { type: 'session.execution.succeeded', data: { sessionID: id } },
+      )
+      expect((await turn).stopReason).toBe('end_turn')
+    }
+  })
+
+  it('sends a command the folder no longer has as the user’s words', async () => {
+    const setup = await connect()
+    const { id } = await session(setup)
+    refuse(setup, 'CommandNotFoundError', 'Command not found: review')
+    void setup.connection.prompt(id, text('/review now')).catch(() => {})
+    await new Promise((resolve) => setTimeout(resolve, 30))
+    expect(setup.server.posts(/\/prompt$/).map((sent) => sent.body)).toEqual([
+      { text: '/review now' },
+    ])
+  })
+
+  it('fails the turn for any other failure of the command', async () => {
+    const setup = await connect()
+    const { id } = await session(setup)
+    refuse(setup, 'UnknownError', 'Unexpected server error.')
+    await expect(setup.connection.prompt(id, text('/review'))).rejects.toThrow(
+      'Unexpected server error.',
+    )
+  })
+
+  it('stops a prompt still on its way once OpenCode starts it', async () => {
+    const setup = await connect()
+    const { id } = await session(setup)
+    let admit = (): void => {}
+    setup.server.on(
+      'POST',
+      /\/prompt$/,
+      () => new Promise((resolve) => (admit = () => resolve({ data: {} }))),
+    )
+    setup.server.on('POST', /\/interrupt$/, () => ({ interrupted: false }))
+    const turn = setup.connection.prompt(id, text('hi'))
+    await settle()
+    await setup.connection.cancel(id)
+    admit()
+    await settle()
+    setup.server.on('POST', /\/interrupt$/, () => {
+      queueMicrotask(() =>
+        setup.server.push({ type: 'session.execution.interrupted', data: { sessionID: id } }),
+      )
+      return { interrupted: true }
+    })
+    setup.server.push({ type: 'session.execution.started', data: { sessionID: id } })
+    expect((await turn).stopReason).toBe('cancelled')
+    expect(setup.server.posts(/\/interrupt$/)).toHaveLength(2)
+  })
+
+  it('lets Stop end a turn nothing runs for', async () => {
+    const setup = await connect()
+    const { id } = await session(setup)
+    setup.server.on('POST', /\/interrupt$/, () => ({ interrupted: false }))
+    const turn = setup.connection.prompt(id, text('hi'))
+    await settle()
+    await setup.connection.cancel(id)
+    expect((await turn).stopReason).toBe('cancelled')
   })
 })
 
