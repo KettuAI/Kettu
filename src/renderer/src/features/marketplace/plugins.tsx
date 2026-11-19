@@ -43,22 +43,22 @@ import {
 } from './hooks'
 import { ListingFrame, ListingSkeleton, Missing, ExternalLink } from './parts'
 import { byInstalls, catalogPlugin, itemKey, pluginName, scopeLine } from './model'
-import { AddControl, ItemRow, KindTag, OfficialBadge } from './rows'
+import { AddControl, ItemRow, KindTag, OfficialBadge, Publisher } from './rows'
 import { pluginSubject } from './tile-art'
 import { ItemTile } from './tiles'
 
 export function PluginRow({
   plugin,
   tab,
-  showKind,
   fresh,
+  card,
 }: {
   plugin: CatalogPlugin
   tab: MarketplaceTab
-  showKind: boolean
   fresh?: boolean
+  card?: boolean
 }) {
-  const installsLabel = useInstallsLabel()
+  const installs = useInstallsLabel()(plugin.installs)
   const open = () =>
     openMarketplace({
       item: itemKey({ kind: 'plugin', harness: plugin.harness, id: plugin.id }),
@@ -68,9 +68,16 @@ export function PluginRow({
     <ItemRow
       title={plugin.title}
       subject={pluginSubject(plugin)}
-      tag={showKind ? <KindTag kind="plugin" harness={plugin.harness} /> : undefined}
-      line={[installsLabel(plugin.installs), plugin.description].filter(Boolean).join(' · ')}
+      meta={
+        <>
+          <KindTag kind="plugin" harness={plugin.harness} />
+          {plugin.publisher && <Publisher name={plugin.publisher} />}
+          {installs && <span>{installs}</span>}
+        </>
+      }
+      line={plugin.description || null}
       fresh={fresh}
+      card={card}
       onOpen={open}
       end={<PluginAddButton plugin={plugin} onOpen={open} />}
     />
@@ -374,7 +381,7 @@ export function PluginListing({
           <h2 className="ui-as-int-section__title">{t('listing.related')}</h2>
           <div className="ui-as-int-grid">
             {related.map((p) => (
-              <PluginRow key={p.id} plugin={p} tab={tab} showKind={false} />
+              <PluginRow key={p.id} plugin={p} tab={tab} />
             ))}
           </div>
         </section>

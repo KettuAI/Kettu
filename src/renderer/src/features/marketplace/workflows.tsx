@@ -12,7 +12,7 @@ import {
 } from 'react'
 import { File02Icon, GithubIcon } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
-import type { WireWorkflowEntry } from '@shared/workflow'
+import { stepName, type WireWorkflowEntry } from '@shared/workflow'
 import { EmptyState, Icon } from '@renderer/components/affect/app-shell'
 import { Button } from '@renderer/components/affect/button'
 import { Dialog, DialogClose } from '@renderer/components/ui/dialog'
@@ -40,13 +40,24 @@ import {
   useWorkflowStanding,
   useWorkflows,
 } from './workflow-actions'
-import { InstalledCheck, ItemRow, KettuMark, KindTag, QuietNote, SkeletonRows } from './rows'
 import {
-  flowLine,
+  InstalledCheck,
+  ItemRow,
+  KettuMark,
+  KindTag,
+  QuietNote,
+  SkeletonRows,
+  StepsCount,
+  StepsLine,
+} from './rows'
+import {
+  flowGroups,
   githubRepo,
   isWorkflowFileUrl,
   kettuPublisher,
   listingOrigin,
+  waitsForYou,
+  workflowDescription,
   workflowGroup,
   workflowMatches,
   workflowName,
@@ -100,27 +111,27 @@ export function WorkflowStateBadge({ state }: { state: Exclude<WorkflowState, 'r
   )
 }
 
-/** A row's line: the steps in order, or why the file does not read. */
-function rowLine(entry: WireWorkflowEntry, locale: string): string | null {
-  if (entry.workflow) return flowLine(entry.workflow, locale)
+/** The line of a workflow whose file does not read: why. */
+function rowLine(entry: WireWorkflowEntry): string | null {
   return entry.problems[0]?.message ?? null
 }
 
 export function WorkflowRow({
   entry,
   tab,
-  showKind = false,
   fresh,
+  card,
 }: {
   entry: WireWorkflowEntry
   tab: MarketplaceTab
-  showKind?: boolean
   fresh?: boolean
+  card?: boolean
 }) {
   const { t, i18n } = useTranslation('marketplace')
   const locale = i18n.language
   const name = workflowName(entry, locale)
   const state = workflowState(entry)
+  const workflow = entry.workflow
   const { update, takenDown } = useWorkflowStanding(entry)
   const open = () => openMarketplace({ item: itemKey({ kind: 'workflow', id: entry.id }), tab })
   const standing = update
@@ -132,14 +143,34 @@ export function WorkflowRow({
     <ItemRow
       title={name}
       subject={workflowSubject(entry)}
-      tag={
+      meta={
         <>
-          {showKind && <KindTag kind="workflow" />}
-          <WorkflowByline entry={entry} />
+          <KindTag kind="workflow" />
+          <span className="k-mkt-publisher">
+            <WorkflowByline entry={entry} />
+          </span>
+          {workflow && <StepsCount count={workflow.steps.length} />}
         </>
       }
-      line={[standing, rowLine(entry, locale)].filter(Boolean).join(' · ') || null}
+      line={
+        [standing, workflow ? workflowDescription(entry, locale) : rowLine(entry)]
+          .filter(Boolean)
+          .join(' · ') || null
+      }
+      extra={
+        workflow ? (
+          <StepsLine
+            names={flowGroups(workflow).map((group) =>
+              group.map((step) => stepName(workflow, step.id, locale)).join(' + '),
+            )}
+            waits={flowGroups(workflow)
+              .filter((group) => group.some(waitsForYou))
+              .map((group) => group.map((step) => stepName(workflow, step.id, locale)).join(' + '))}
+          />
+        ) : undefined
+      }
       fresh={fresh}
+      card={card}
       onOpen={open}
       end={
         update ? (

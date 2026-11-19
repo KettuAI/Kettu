@@ -1510,6 +1510,7 @@ export function createValidators(platform: Platform): Validators {
       }
     },
     'market.communityListing': (params) => ({ id: listingId(fields(params)) }),
+    'market.communityWorkflow': (params) => ({ id: listingId(fields(params)) }),
     'market.communityInstalled': (params) => {
       const refresh = optionalFlag(
         params === undefined || params === null ? {} : fields(params),

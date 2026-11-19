@@ -727,6 +727,59 @@ steps:
       })
     })
 
+    it('reads only workflow.yaml for a listing page, keeps nothing and counts no install', async () => {
+      const f = published()
+      const lib = await workflowLibrary()
+      const preview = await service(f, { workflows: lib }).workflow('abcdefgh23')
+      expect(preview).toMatchObject({
+        version: '1.0.0',
+        problem: null,
+        workflow: { name: 'Release notes', steps: [{ id: 'draft', youReview: true }] },
+      })
+      expect(f.calls.filter((call) => call.kind === 'file')).toEqual([
+        { kind: 'file', id: 'abcdefgh23', version: '1.0.0', path: 'workflow.yaml' },
+      ])
+      expect(f.calls.some((call) => call.kind === 'install')).toBe(false)
+      expect(await written()).toEqual([])
+      expect(await lib.list()).toEqual([])
+    })
+
+    it('shows no flow of a workflow.yaml whose SHA-256 does not match', async () => {
+      const f = published({ sent: { 'workflow.yaml': sha('something else') } })
+      await expect(service(f).workflow('abcdefgh23')).rejects.toThrow(/workflow\.yaml/)
+    })
+
+    it('says why a workflow.yaml the format refuses has no flow to show', async () => {
+      const f = published({
+        files: { 'workflow.yaml': WORKFLOW.replace('end: done', 'to: nowhere') },
+      })
+      expect(await service(f).workflow('abcdefgh23')).toMatchObject({
+        workflow: null,
+        problem: expect.stringMatching(/nowhere/) as string,
+      })
+    })
+
+    it('reads no file of a listing that is not a workflow', async () => {
+      const f = fake()
+      await expect(service(f).workflow('abcdefgh23')).rejects.toThrow()
+      expect(f.calls.some((call) => call.kind === 'file' || call.kind === 'version')).toBe(false)
+    })
+
+    it('lists a workflow with its steps and those that wait for you', async () => {
+      const f = published({
+        directory: [
+          workflowListing({
+            adds: [
+              { label: 'steps', items: ['Draft', 'Ship'] },
+              { label: 'waits', items: ['Draft'] },
+            ],
+          }),
+        ],
+      })
+      const page = await service(f).directory({}, true)
+      expect(page.items[0]).toMatchObject({ steps: ['Draft', 'Ship'], waits: ['Draft'] })
+    })
+
     it('refuses a listing without workflow.yaml', async () => {
       const lib = await workflowLibrary()
       const none = published({ files: { 'README.md': '# Release notes\n' } })

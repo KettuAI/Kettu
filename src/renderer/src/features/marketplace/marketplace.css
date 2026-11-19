@@ -28,9 +28,18 @@
 .k-mkt-scroll .ui-as-int-logo {
   color: var(--ink);
 }
-/* Tiles: 30 px in a row as Integrations draws them, 64 px on an item's page, 20 px in "and N more" */
+/* Tiles: 40 px in a row, 64 px on an item's page, 20 px in "and N more" */
 .k-mkt-tile {
   overflow: hidden;
+}
+.k-mkt-tile:not([data-size]) {
+  width: 40px;
+  height: 40px;
+  border-radius: 11px;
+}
+.k-mkt-tile:not([data-size]) svg {
+  width: 22px;
+  height: 22px;
 }
 .k-mkt-tile[data-size='big'] {
   width: 64px;
@@ -58,9 +67,9 @@
   transform: scale(var(--mark-scale, 1));
 }
 .k-mkt-tile__logo {
-  width: 22px;
-  height: 22px;
-  border-radius: 5px;
+  width: 28px;
+  height: 28px;
+  border-radius: 7px;
   object-fit: contain;
 }
 .k-mkt-tile[data-size='big'] .k-mkt-tile__logo {
@@ -77,9 +86,9 @@
 .k-mkt-scroll .k-mkt-tile[data-quiet] {
   color: var(--muted);
 }
-.k-mkt-tile[data-quiet] svg {
-  width: 16px;
-  height: 16px;
+.k-mkt-tile[data-quiet]:not([data-size]) svg {
+  width: 20px;
+  height: 20px;
 }
 .k-mkt-tile[data-size='small'][data-quiet] svg {
   width: 12px;
@@ -140,6 +149,15 @@
   line-height: 1;
   color: var(--muted);
 }
+/* In a row's facts the kind is plain words behind its glyph */
+.k-mkt-meta .k-mkt-kind {
+  height: auto;
+  padding: 0;
+  background: none;
+  font-size: inherit;
+  line-height: inherit;
+  color: var(--text);
+}
 .k-mkt-add .ui-as-menu {
   width: 264px;
 }
@@ -147,9 +165,9 @@
 /* Loading */
 .k-mkt-skeleton__tile {
   flex: none;
-  width: 30px;
-  height: 30px;
-  border-radius: 8px;
+  width: 40px;
+  height: 40px;
+  border-radius: 11px;
 }
 .k-mkt-skeleton__mark {
   flex: none;
@@ -536,8 +554,11 @@
   font-weight: 600;
   letter-spacing: -0.01em;
   color: var(--ink);
-  white-space: nowrap;
-  text-overflow: ellipsis;
+  /* A long name takes a second line before it is cut */
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow-wrap: anywhere;
 }
 .k-mkt-head__pub {
   display: flex;
@@ -759,7 +780,7 @@
 }
 .k-mkt-kettu-tile {
   flex: none;
-  border-radius: 8px;
+  border-radius: 11px;
 }
 .k-mkt-error {
   margin: 0;
@@ -1421,14 +1442,17 @@
   color: var(--faint);
 }
 
-/* The Kettu Marketplace: who published a row, after its kind, shrinking before the name does */
+/* Who publishes a row, in its facts: the first to shrink when the row is narrow */
 .k-mkt-publisher {
+  display: inline-flex;
   flex: 0 1 auto;
+  align-items: center;
+  gap: 3px;
+  min-width: 0;
+}
+.k-mkt-publisher > span:first-child {
   min-width: 0;
   overflow: hidden;
-  font-size: 12px;
-  font-weight: 400;
-  color: var(--faint);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -1493,4 +1517,519 @@
 .k-mkt-unlisted {
   justify-content: center;
   margin: 4px 0 24px;
+}
+
+/* A row: a 40 px tile, the name, its facts, and a line with room for two lines, so what tells
+   two items apart is not cut off. Its action sits level with the tile. */
+.k-mkt-scroll .ui-as-int-grid {
+  align-items: start;
+  row-gap: 2px;
+}
+.k-mkt-scroll .ui-as-int-row {
+  align-items: flex-start;
+  height: auto;
+  min-height: 60px;
+  padding: 10px 8px;
+}
+.k-mkt-scroll .ui-as-int-row__text {
+  gap: 2px;
+  align-content: start;
+  min-height: 40px;
+}
+.k-mkt-scroll .ui-as-int-row__name {
+  gap: 8px;
+  line-height: 20px;
+}
+.k-mkt-scroll .ui-as-int-row__desc {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.k-mkt-scroll .ui-as-int-row__desc[data-one] {
+  display: block;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.k-mkt-meta {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  overflow: hidden;
+  font-size: 12px;
+  line-height: 18px;
+  font-weight: 400;
+  white-space: nowrap;
+  color: var(--muted);
+  mask-image: linear-gradient(to right, black calc(100% - 20px), transparent);
+}
+.k-mkt-meta > * {
+  flex: none;
+}
+.k-mkt-meta > * + * {
+  position: relative;
+  margin-left: 6px;
+  padding-left: 9px;
+}
+.k-mkt-meta > * + *::before {
+  content: '\00b7';
+  position: absolute;
+  left: 0;
+  color: var(--faint);
+}
+.k-mkt-meta .k-workflow-by {
+  font-size: inherit;
+  color: inherit;
+}
+.k-mkt-row-end {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+}
+/* A workflow's steps in order under its line, which no other kind has */
+.k-mkt-steps {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  margin-top: 3px;
+  overflow: hidden;
+  font-size: 12px;
+  line-height: 18px;
+  font-weight: 400;
+  white-space: nowrap;
+  color: var(--text);
+  mask-image: linear-gradient(to right, black calc(100% - 28px), transparent);
+}
+.k-mkt-steps__step {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+}
+.k-mkt-steps__step > svg {
+  margin: 0 4px;
+  color: var(--faint);
+}
+.k-mkt-steps__step[data-you] > span {
+  color: var(--tone-amber);
+}
+
+/* A section's title, how many it holds and what else is said of it */
+.k-mkt-section-title {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+.k-mkt-section-title > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.k-mkt-section-title > small {
+  flex: none;
+  font-size: 12.5px;
+  font-weight: 400;
+  color: var(--faint);
+}
+.k-mkt-section-title__caption::before {
+  content: '\00b7';
+  margin-right: 8px;
+}
+
+/* Featured: cards, each with room for three lines of what it is */
+.k-mkt-scroll .k-mkt-cards {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  align-items: stretch;
+  margin-top: 14px;
+}
+.k-mkt-scroll .ui-as-int-row[data-card] {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas:
+    'tile end'
+    'text text';
+  align-content: start;
+  gap: 12px 10px;
+  min-height: 172px;
+  margin: 0;
+  padding: 16px;
+  border-radius: 16px;
+  background: var(--card);
+  box-shadow: var(--card-shadow);
+  transition: box-shadow 160ms ease;
+}
+.k-mkt-scroll .ui-as-int-row[data-card]:hover {
+  background: var(--card);
+  box-shadow:
+    0 0 0 1px var(--line-strong),
+    var(--shadow);
+}
+.ui-as-int-row[data-card] > .ui-as-int-logo,
+.ui-as-int-row[data-card] > .k-mkt-skeleton__tile {
+  grid-area: tile;
+}
+.ui-as-int-row[data-card] > .ui-as-int-row__text {
+  grid-area: text;
+  min-height: 0;
+}
+.ui-as-int-row[data-card] > .k-mkt-row-end {
+  position: relative;
+  z-index: 1;
+  grid-area: end;
+}
+.k-mkt-scroll .ui-as-int-row[data-card] .ui-as-int-row__desc {
+  margin-top: 4px;
+  -webkit-line-clamp: 3;
+}
+/* The whole card opens the listing; its action stays above */
+.ui-as-int-row[data-card] > .k-mkt-open::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 16px;
+}
+.ui-as-int-row[data-card] > .k-mkt-open:focus-visible {
+  outline: none;
+}
+.ui-as-int-row[data-card] > .k-mkt-open:focus-visible::after {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.ui-as-int-row[data-card].k-mkt-skeleton:hover {
+  box-shadow: var(--card-shadow);
+}
+@container ui-as-main (max-width: 980px) {
+  .k-mkt-scroll .k-mkt-cards {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@container ui-as-main (max-width: 560px) {
+  .k-mkt-scroll .k-mkt-cards {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .k-mkt-scroll .ui-as-int-row[data-card] {
+    min-height: 0;
+  }
+}
+
+/* A workflow's flow as a chart, read-only: steps in rows from the top, arrows back at the side */
+.k-flow-card {
+  padding: 16px 16px 12px;
+  border-radius: 14px;
+  background: var(--subtle);
+  box-shadow: inset 0 0 0 0.5px var(--line);
+}
+.k-flow-card + .k-workflow-flow {
+  margin-top: 10px;
+}
+.k-flow-skeleton {
+  width: 100%;
+  height: 240px;
+  border-radius: 10px;
+}
+.k-flow {
+  position: relative;
+  min-height: 96px;
+}
+.k-flow .react-flow__pane {
+  cursor: grab;
+}
+.k-flow .react-flow__pane.dragging {
+  cursor: grabbing;
+}
+.k-flow .react-flow__edge-path.k-flow__line {
+  fill: none;
+  stroke: var(--line-strong);
+  stroke-width: 1.4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.k-flow .react-flow__edge-path.k-flow__line[data-back] {
+  stroke-dasharray: 4 4;
+}
+.k-flow__head {
+  fill: none;
+  stroke: var(--line-strong);
+  stroke-width: 1.4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.k-flow__join {
+  fill: var(--line-strong);
+}
+.k-flow__label {
+  position: absolute;
+  max-width: 184px;
+  padding: 0 6px;
+  overflow: hidden;
+  border-radius: 5px;
+  background: var(--card);
+  box-shadow: var(--card-shadow);
+  font-size: 10.5px;
+  line-height: 16px;
+  font-weight: 500;
+  letter-spacing: 0.3px;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: var(--muted);
+  pointer-events: none;
+}
+.k-flow__step {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  height: 100%;
+  padding: 0 10px;
+  border-radius: 12px;
+  background: var(--card);
+  box-shadow: var(--card-shadow);
+}
+/* A step that is the person's: the amber edge that marks what waits for you */
+.k-flow__step[data-you] {
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--tone-amber) 45%, transparent),
+    var(--card-shadow);
+}
+.k-flow__who {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--agent-violet) 12%, transparent);
+  color: var(--agent-violet);
+}
+.k-flow__who[data-you] {
+  background: var(--tone-amber-fill);
+  color: var(--tone-amber);
+}
+.k-flow__text {
+  display: grid;
+  flex: 1;
+  gap: 1px;
+  min-width: 0;
+}
+.k-flow__text > b,
+.k-flow__text > small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.k-flow__text > b {
+  font-size: 13px;
+  line-height: 18px;
+  font-weight: 500;
+  color: var(--ink);
+}
+.k-flow__text > small {
+  font-size: 11.5px;
+  line-height: 16px;
+  color: var(--muted);
+}
+.k-flow__end {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+.k-flow__end > span {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--card);
+  box-shadow: var(--card-shadow);
+  color: var(--faint);
+}
+.k-flow__end[data-end='done'] > span {
+  color: var(--success);
+}
+.k-flow__end i {
+  width: 7px;
+  height: 7px;
+  border-radius: 2px;
+  background: currentColor;
+}
+.k-flow__end > small {
+  position: absolute;
+  top: calc(100% + 4px);
+  font-size: 10.5px;
+  font-weight: 500;
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: var(--muted);
+}
+.k-flow__zoom {
+  display: flex;
+  gap: 2px;
+  margin: 0;
+  padding: 2px;
+  border-radius: 9px;
+  background: var(--card);
+  box-shadow: var(--card-shadow);
+  transition: opacity 140ms ease;
+}
+/* A flow that shows whole needs its controls only once the pointer or the keyboard is on it */
+.k-flow__zoom[data-quiet] {
+  opacity: 0;
+}
+.k-flow:hover .k-flow__zoom[data-quiet],
+.k-flow__zoom[data-quiet]:focus-within {
+  opacity: 1;
+}
+.k-flow__zoom > button {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 7px;
+  color: var(--muted);
+}
+.k-flow__zoom > button:hover {
+  background: var(--hover);
+  color: var(--ink);
+}
+.k-flow__zoom > button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.k-flow-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 18px;
+  margin: 12px 0 0;
+  padding: 10px 0 0;
+  box-shadow: inset 0 0.5px 0 var(--line);
+  list-style: none;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--muted);
+}
+.k-flow-legend > li {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.k-flow-legend .k-flow__who {
+  width: 18px;
+  height: 18px;
+  border-radius: 5px;
+}
+.k-flow-legend__dash {
+  width: 18px;
+  height: 0;
+  border-top: 1.4px dashed var(--line-strong);
+}
+.k-workflow-h3__note {
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--faint);
+}
+
+/* The steps in words under the chart, and alone where no chart can be drawn */
+.k-flow-steps {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.k-flow-steps__step {
+  display: flex;
+  gap: 12px;
+  padding: 12px 14px;
+}
+.k-flow-steps__step + .k-flow-steps__step {
+  box-shadow: inset 0 0.5px 0 var(--line);
+}
+.k-flow-steps__n {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--chip);
+  font-size: 11px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+}
+.k-flow-steps__text {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+.k-flow-steps__name {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  min-height: 20px;
+}
+.k-flow-steps__name > b {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+.k-flow-steps__who {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.k-flow-steps__who > svg {
+  color: var(--agent-violet);
+}
+.k-flow-steps__who[data-you] > svg {
+  color: var(--tone-amber);
+}
+.k-flow-steps__text > small {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  font-size: 12.5px;
+  line-height: 18px;
+  color: var(--muted);
+}
+.k-flow-fallback {
+  display: grid;
+  gap: 10px;
+}
+.k-flow-fallback__note {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--frame);
+  font-size: 12.5px;
+  line-height: 18px;
+  color: var(--muted);
+}
+.k-flow-fallback__note > svg {
+  flex: none;
+  margin-top: 2px;
+}
+.k-flow-fallback__note > span {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.k-flow-fallback__note > button {
+  flex: none;
+  margin: -4px -6px -4px 0;
 }

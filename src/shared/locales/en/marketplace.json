@@ -52,7 +52,15 @@
     "mcp": "MCP servers",
     "workflow": "Workflows",
     "community": "Community",
-    "yours": "Yours"
+    "yours": "Yours",
+    "count_one": "{{count}} item",
+    "count_other": "{{count}} items",
+    "countOpen": "{{count}}+",
+    "trust": {
+      "official": "Official",
+      "verified": "Verified publisher",
+      "community": "Community"
+    }
   },
   "row": {
     "install": "Install",
@@ -611,7 +619,26 @@
       "sessionGone": "A session that is gone"
     },
     "newVersion": "New version {{version}}",
-    "communityEmpty": "Nothing here yet. Workflows people publish to the Kettu Marketplace show up here."
+    "communityEmpty": "Nothing here yet. Workflows people publish to the Kettu Marketplace show up here.",
+    "row": {
+      "steps_one": "{{count}} step",
+      "steps_other": "{{count}} steps",
+      "waitsHere": "Waits for you"
+    },
+    "diagram": {
+      "label": "Flow of {{name}}",
+      "agentStep": "Agent step",
+      "yourStep": "Your step",
+      "legendAgent": "An agent does it, picked when the step starts",
+      "legendYou": "Waits for you",
+      "legendBack": "Can send work back"
+    },
+    "preview": {
+      "listed": "The flow can’t be drawn here, so these are the step names its publisher listed, in order. Branches, parallel steps and what sends work back show once it is added.",
+      "none": "The flow can’t be drawn here, and this listing names no steps.",
+      "reason": "Why: {{reason}}",
+      "readOnly": "Read-only preview"
+    }
   },
   "community": {
     "skillNote": "Kettu downloads it from the Kettu Marketplace, checks every file, keeps it on this computer and hands it to these agents when a session starts.",

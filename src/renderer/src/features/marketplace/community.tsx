@@ -11,12 +11,11 @@ import {
   CodeIcon,
   CommandLineIcon,
   Flag02Icon,
-  Flowchart01Icon,
+  InformationCircleIcon,
   PlugSocketIcon,
   RefreshIcon,
   SparklesIcon,
   Tick02Icon,
-  UserCheck01Icon,
   ViewIcon,
 } from '@hugeicons/core-free-icons'
 import type { IconSvgElement } from '@hugeicons/react'
@@ -28,6 +27,7 @@ import {
   type BundleRef,
   type CommunityItem,
   type CommunityPlugin,
+  type CommunityWorkflow,
 } from '@shared/market-community'
 import type { MarketListing, PublishAdds, PublishKind } from '@shared/market-publish'
 import { displayTitle, type CatalogServer } from '@shared/marketplace'
@@ -41,6 +41,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui
 import { backTo } from '@renderer/app/history'
 import { Segmented, SettingSelect } from '@renderer/features/settings/controls'
 import { basename, count, mediumAgo } from '@renderer/lib/format'
+import { errorMessage } from '@renderer/lib/host'
 import { i18n } from '@renderer/lib/i18n'
 import { isWeb } from '@renderer/lib/platform'
 import { signIn, useAccountStore } from '@renderer/stores/account'
@@ -77,11 +78,22 @@ import { usePublishedStore } from './published-hooks'
 import { publishedItem } from './published-keys'
 import { ReportDialog } from './report-dialog'
 import { InstallRow } from './plugins'
-import { AddControl, ItemRow, KettuMark, KindTag, QuietNote, type ItemKind } from './rows'
+import {
+  AddControl,
+  ItemRow,
+  KettuMark,
+  KindTag,
+  Publisher,
+  QuietNote,
+  StepsCount,
+  StepsLine,
+  type ItemKind,
+} from './rows'
 import { KeptSkillControls } from './skills'
 import { communitySubject } from './tile-art'
 import { ItemTile } from './tiles'
 import { addCommunityWorkflow, useListingWorkflow } from './workflow-actions'
+import { FlowChart, FlowSkeleton, StepsOutline } from './workflow-flow'
 
 // Bound to the namespace only: each call reads the language shown at the time.
 const tm = i18n.getFixedT(null, 'marketplace')
@@ -96,37 +108,36 @@ const KIND = {
 // The agents that do a workflow's steps.
 const STEP_AGENTS = ['claude-code', 'codex'] as const satisfies readonly AgentId[]
 
-/** The kind, then who published it, with the Kettu mark for Kettu's own publisher. */
-function CommunityTag({ item, showKind }: { item: CommunityItem; showKind: boolean }) {
-  return (
-    <>
-      {showKind && <KindTag kind={KIND[item.kind]} harness={item.harness} />}
-      <span className="k-mkt-publisher">{item.handle}</span>
-      {item.official && <KettuMark />}
-    </>
-  )
-}
-
 export function CommunityRow({
   item,
   tab,
-  showKind,
   fresh,
+  card,
 }: {
   item: CommunityItem
   tab: MarketplaceTab
-  showKind: boolean
   fresh?: boolean
+  card?: boolean
 }) {
-  const installsLabel = useInstallsLabel()
+  const installs = useInstallsLabel()(item.installs)
   const open = () => openMarketplace({ item: itemKey({ kind: 'community', id: item.id }), tab })
+  const steps = item.kind === 'workflow' ? (item.steps ?? []) : []
   return (
     <ItemRow
       title={item.name}
       subject={communitySubject(item)}
-      tag={<CommunityTag item={item} showKind={showKind} />}
-      line={[installsLabel(item.installs), item.description].filter(Boolean).join(' · ')}
+      meta={
+        <>
+          <KindTag kind={KIND[item.kind]} harness={item.harness} />
+          <Publisher name={item.handle} kettu={item.official} />
+          {steps.length > 0 && <StepsCount count={steps.length} />}
+          {installs && <span>{installs}</span>}
+        </>
+      }
+      line={item.description || null}
+      extra={steps.length > 0 ? <StepsLine names={steps} waits={item.waits ?? []} /> : undefined}
       fresh={fresh}
+      card={card}
       onOpen={open}
       end={<CommunityAction item={item} tab={tab} onOpen={open} />}
     />
@@ -751,7 +762,7 @@ function Listed({
           {listing.about && <p className="k-mkt-about k-mkt-about--text">{listing.about}</p>}
           {listing.kind === 'plugin' && !preview && <PluginInstallsOf listing={listing} />}
           {listing.kind === 'workflow' ? (
-            <WorkflowAdds adds={listing.adds} />
+            <WorkflowFlow listing={listing} />
           ) : (
             <Adds adds={listing.adds} kind={listing.kind} installed={installed} />
           )}
@@ -849,7 +860,7 @@ function Related({ listing, tab }: { listing: MarketListing; tab: MarketplaceTab
       </h2>
       <div className="ui-as-int-grid">
         {shown.map((item) => (
-          <CommunityRow key={item.id} item={item} tab={tab} showKind />
+          <CommunityRow key={item.id} item={item} tab={tab} />
         ))}
       </div>
     </section>
@@ -953,42 +964,153 @@ function Adds({
   )
 }
 
+/** A workflow listing's flow as the host read it from its current version, or why it has none. */
+function useListingFlow(listing: MarketListing) {
+  const scope = useHostScope()
+  const [read, setRead] = useState<{
+    key: string
+    flow: CommunityWorkflow | null
+    error: string | null
+  } | null>(null)
+  const [attempt, setAttempt] = useState(0)
+  const { id, version } = listing
+  const key = `${id}|${version}|${attempt}`
+  useEffect(() => {
+    let live = true
+    scope
+      .request('market.communityWorkflow', { id })
+      .then((flow) => live && setRead({ key, flow, error: null }))
+      .catch(
+        (failure: unknown) => live && setRead({ key, flow: null, error: errorMessage(failure) }),
+      )
+    return () => {
+      live = false
+    }
+  }, [scope, id, key])
+  // An answer to an earlier listing, version or try is not this one's.
+  const current = read?.key === key ? read : null
+  return {
+    flow: current?.flow ?? null,
+    error: current?.error ?? null,
+    retry: () => setAttempt((n) => n + 1),
+  }
+}
+
 /**
- * What a workflow listing does, as the publisher's check listed it: its steps in order, those that
- * wait for you, and the MCP servers and Skills its steps name.
+ * What a workflow listing does, before it is added: its flow drawn from the version's own file,
+ * with each step in words under it. When the file cannot be read here, the step names its
+ * publisher's check listed, in order, and a line that says what they leave out.
  */
-function WorkflowAdds({ adds }: { adds: PublishAdds[] | undefined }) {
-  const { t } = useTranslation('marketplace')
-  const of = (label: string) => adds?.find((group) => group.label === label)?.items ?? []
-  const steps = of('steps')
-  const waits = of('waits')
+function WorkflowFlow({ listing }: { listing: MarketListing }) {
+  const { t } = useTranslation(['marketplace', 'common'])
+  const { flow, error, retry } = useListingFlow(listing)
+  const of = (label: string) => listing.adds?.find((group) => group.label === label)?.items ?? []
   const tools = [...of('servers'), ...of('skills')]
-  if (steps.length === 0) return null
-  const items: { icon: IconSvgElement; label: string; detail: string }[] = [
-    { icon: Flowchart01Icon, label: t('workflow.facts.steps'), detail: steps.join(' → ') },
-  ]
-  if (waits.length > 0) {
-    items.push({ icon: UserCheck01Icon, label: t('workflow.needs.wait'), detail: waits.join(', ') })
-  }
-  if (tools.length > 0) {
-    items.push({ icon: PlugSocketIcon, label: t('workflow.needs.tools'), detail: tools.join(', ') })
-  }
+  const workflow = flow?.workflow ?? null
+  const waiting = flow === null && error === null
   return (
-    <section>
-      <h3>{t('workflow.flow.title')}</h3>
-      <div className="k-mkt-list">
-        {items.map((item) => (
-          <div key={item.label} className="k-mkt-item">
-            <Icon icon={item.icon} size={15} />
-            <span>
-              <b>{item.label}</b>
-              <small>{item.detail}</small>
-            </span>
+    <>
+      <section>
+        <h3 className="k-workflow-h3">
+          {t('workflow.flow.title')}
+          {workflow && (
+            <small className="k-workflow-h3__note">{t('workflow.preview.readOnly')}</small>
+          )}
+        </h3>
+        {waiting ? (
+          <div className="k-flow-card" aria-busy>
+            <FlowSkeleton />
           </div>
-        ))}
-      </div>
-      {tools.length > 0 && <p className="k-mkt-section-note">{t('community.workflowTools')}</p>}
-    </section>
+        ) : workflow ? (
+          <FlowChart workflow={workflow} />
+        ) : (
+          <ListedSteps
+            steps={of('steps')}
+            waits={of('waits')}
+            reason={error ?? flow?.problem ?? ''}
+            retry={error ? retry : undefined}
+          />
+        )}
+      </section>
+      {workflow && (
+        <section>
+          <h3>{t('workflow.steps.title')}</h3>
+          <StepsOutline workflow={workflow} />
+        </section>
+      )}
+      {tools.length > 0 && (
+        <section>
+          <h3>{t('workflow.needs.tools')}</h3>
+          <div className="k-mkt-list">
+            <div className="k-mkt-item">
+              <Icon icon={PlugSocketIcon} size={15} />
+              <span>
+                <b className="k-mkt-mono">{tools.join(', ')}</b>
+                <small>{t('community.workflowTools')}</small>
+              </span>
+            </div>
+          </div>
+        </section>
+      )}
+    </>
+  )
+}
+
+/**
+ * The fallback for a flow that cannot be drawn: the step names in the order the listing gives
+ * them, those that wait for the user marked, and nothing the listing does not say.
+ */
+function ListedSteps({
+  steps,
+  waits,
+  reason,
+  retry,
+}: {
+  steps: string[]
+  waits: string[]
+  reason: string
+  retry?: () => void
+}) {
+  const { t } = useTranslation(['marketplace', 'common'])
+  return (
+    <div className="k-flow-fallback">
+      <p className="k-flow-fallback__note" role="status">
+        <Icon icon={InformationCircleIcon} size={14} />
+        <span>
+          {steps.length > 0 ? t('workflow.preview.listed') : t('workflow.preview.none')}{' '}
+          {reason && <span data-selectable="">{t('workflow.preview.reason', { reason })}</span>}
+        </span>
+        {retry && (
+          <Button
+            size="md"
+            variant="ghost"
+            icon={<Icon icon={RefreshIcon} size={14} />}
+            onClick={retry}
+          >
+            {t('common:actions.retry')}
+          </Button>
+        )}
+      </p>
+      {steps.length > 0 && (
+        <ol className="k-mkt-list k-flow-steps">
+          {steps.map((name, index) => (
+            <li key={index} className="k-flow-steps__step">
+              <span className="k-flow-steps__n" aria-hidden>
+                {index + 1}
+              </span>
+              <span className="k-flow-steps__text">
+                <span className="k-flow-steps__name">
+                  <b>{name}</b>
+                  {waits.includes(name) && (
+                    <span className="k-workflow-you">{t('workflow.row.waitsHere')}</span>
+                  )}
+                </span>
+              </span>
+            </li>
+          ))}
+        </ol>
+      )}
+    </div>
   )
 }
 

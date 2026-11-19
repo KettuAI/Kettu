@@ -75,6 +75,7 @@ export const HOST_REQUEST_LIMITS: Readonly<Record<HostMethod, number | null>> = 
   'market.discardPublishDraft': HOST_MS,
   'market.community': AGENT_MS,
   'market.communityListing': AGENT_MS,
+  'market.communityWorkflow': AGENT_MS,
   'market.communityInstalled': AGENT_MS,
   'market.installCommunityPlugin': NONE,
   'market.addCommunityWorkflow': NONE,

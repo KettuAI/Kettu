@@ -77,6 +77,7 @@ import {
   ItemRow,
   KindTag,
   MoreButton,
+  Publisher,
   QuietNote,
   SkeletonRow,
   SkeletonSection,
@@ -139,6 +140,10 @@ interface Section {
   note?: ReactNode
   /** The service's further pages, for a section read a page at a time. */
   more?: SectionMore
+  /** Drawn as cards, which have room for what a row cuts short. */
+  cards?: boolean
+  /** After the title, such as how far a publisher is trusted. */
+  caption?: string
 }
 
 interface SectionMore {
@@ -441,6 +446,7 @@ function allSections(src: Sources, t: TFunction<'marketplace'>): Section[] {
       title: t('sections.featured'),
       entries: featured,
       pending: pendingRows + (src.catalogPending ? 2 : 0),
+      cards: true,
     },
     {
       id: 'anthropic',
@@ -498,6 +504,7 @@ function pluginSections(src: Sources, t: TFunction<'marketplace'>): Section[] {
       title: t('sections.featured'),
       entries: plugins.filter((p) => p.featured).map(pluginEntry),
       pending: 0,
+      cards: true,
     },
     ...categories,
     ...communitySections(src, t, 'plugin'),
@@ -550,9 +557,11 @@ function skillSections(src: Sources, t: TFunction<'marketplace'>): Section[] {
           })}
         </QuietNote>
       )
+      const trust = (['official', 'verified', 'community'] as const)[rank({ skills, repositories })]
       return {
         id: `publisher-${publisher}`,
         title: t('sections.from', { publisher }),
+        ...(trust ? { caption: t(`sections.trust.${trust}`) } : {}),
         entries: skills.map(skillEntry),
         pending: repositories.some((r) => !r.read && r.error === null) ? 2 : 0,
         ...(failure && { note: failure }),
@@ -893,11 +902,24 @@ function SectionView({
   const key = `${tab}:${section.id}`
   const { useMarketplaceStore } = useHostScope()
   const extra = useMarketplaceStore((s) => s.more[key] ?? 0)
+  const more = section.more
   if (section.title === null) return <SkeletonSection rows={section.pending} />
+  const count = section.entries.length
+  const heading = (
+    <h2 className="ui-as-int-section__title k-mkt-section-title">
+      <span>{section.title}</span>
+      {count > 0 && (
+        <small aria-label={t('sections.count', { count })}>
+          {more?.next ? t('sections.countOpen', { count }) : count}
+        </small>
+      )}
+      {section.caption && <small className="k-mkt-section-title__caption">{section.caption}</small>}
+    </h2>
+  )
   if (section.note && section.entries.length === 0) {
     return (
       <section className="ui-as-int-section ui-as-rise" style={{ '--i': index } as CSSProperties}>
-        <h2 className="ui-as-int-section__title">{section.title}</h2>
+        {heading}
         {section.note}
       </section>
     )
@@ -905,7 +927,6 @@ function SectionView({
   const visible = SECTION_ROWS + extra
   const shown = section.entries.slice(0, visible)
   const rest = section.entries.slice(visible)
-  const more = section.more
   // Rows asked for that the service has yet to send.
   const awaited = more?.loading && rest.length === 0 && shown.length > SECTION_ROWS ? 2 : 0
   const showMore = () => {
@@ -916,14 +937,20 @@ function SectionView({
   }
   return (
     <section className="ui-as-int-section ui-as-rise" style={{ '--i': index } as CSSProperties}>
-      <h2 className="ui-as-int-section__title">{section.title}</h2>
-      <div className="ui-as-int-grid">
+      {heading}
+      <div className={section.cards ? 'ui-as-int-grid k-mkt-cards' : 'ui-as-int-grid'}>
         {shown.map((entry, i) => (
-          <EntryRow key={entry.key} entry={entry} tab={tab} fresh={i >= SECTION_ROWS} />
+          <EntryRow
+            key={entry.key}
+            entry={entry}
+            tab={tab}
+            fresh={i >= SECTION_ROWS}
+            card={section.cards}
+          />
         ))}
         {rest.length === 0 &&
           Array.from({ length: section.pending + awaited }, (_, i) => (
-            <SkeletonRow key={`pending-${i}`} />
+            <SkeletonRow key={`pending-${i}`} card={section.cards} />
           ))}
       </div>
       {section.note}
@@ -944,19 +971,28 @@ function SectionView({
   )
 }
 
-function EntryRow({ entry, tab, fresh }: { entry: Entry; tab: MarketplaceTab; fresh: boolean }) {
-  const showKind = tab === 'all'
+function EntryRow({
+  entry,
+  tab,
+  fresh,
+  card,
+}: {
+  entry: Entry
+  tab: MarketplaceTab
+  fresh: boolean
+  card?: boolean
+}) {
   if (entry.kind === 'community') {
-    return <CommunityRow item={entry.item} tab={tab} showKind={showKind} fresh={fresh} />
+    return <CommunityRow item={entry.item} tab={tab} fresh={fresh} card={card} />
   }
   if (entry.kind === 'plugin') {
-    return <PluginRow plugin={entry.plugin} tab={tab} showKind={showKind} fresh={fresh} />
+    return <PluginRow plugin={entry.plugin} tab={tab} fresh={fresh} card={card} />
   }
   if (entry.kind === 'skill') {
-    return <SkillRow skill={entry.skill} tab={tab} showKind={showKind} fresh={fresh} />
+    return <SkillRow skill={entry.skill} tab={tab} fresh={fresh} card={card} />
   }
   if (entry.kind === 'workflow') {
-    return <WorkflowRow entry={entry.workflow} tab={tab} showKind={showKind} fresh={fresh} />
+    return <WorkflowRow entry={entry.workflow} tab={tab} fresh={fresh} card={card} />
   }
   const server = entry.server
   const open = () => openMarketplace({ item: entry.key, tab })
@@ -964,9 +1000,15 @@ function EntryRow({ entry, tab, fresh }: { entry: Entry; tab: MarketplaceTab; fr
     <ItemRow
       title={server.title}
       subject={serverSubject(server)}
-      tag={showKind ? <KindTag kind="mcp" /> : undefined}
+      meta={
+        <>
+          <KindTag kind="mcp" />
+          {server.publisher && <Publisher name={server.publisher} />}
+        </>
+      }
       line={server.description || null}
       fresh={fresh}
+      card={card}
       onOpen={open}
       end={<AddButton server={server} onOpen={open} />}
     />

@@ -186,7 +186,7 @@ function KettuSection() {
           <div className="ui-as-int-grid">
             <ItemRow
               title={server.title}
-              icon={<BrandIcon size={30} className="k-mkt-kettu-tile" />}
+              icon={<BrandIcon size={40} className="k-mkt-kettu-tile" />}
               tag={<Pill>{t('kettu.builtIn')}</Pill>}
               line={[
                 server.running ? t('kettu.running') : t('kettu.notRunning'),
@@ -349,6 +349,19 @@ export function AgentSwitchRow({
   )
 }
 
+/** A kept item's state under its name: where it stands, who gets it, whether it is off. */
+function Facts({ facts }: { facts: (string | null | undefined)[] }) {
+  const shown = facts.filter((fact): fact is string => !!fact)
+  if (shown.length === 0) return null
+  return (
+    <>
+      {shown.map((fact) => (
+        <span key={fact}>{fact}</span>
+      ))}
+    </>
+  )
+}
+
 /** The servers Kettu keeps, from the registry or added by hand, matching the search. */
 function useKeptServers(query: string): { server: MarketServer; listing: Listing }[] {
   const scope = useHostScope()
@@ -375,20 +388,18 @@ function KeptRow({ server, listing }: { server: MarketServer; listing: Listing }
   const connectionText = useConnectionText()
   const agents = server.agents === 'all' ? null : server.agents
   const standing = useCommunityLine(server.id, server.version)
-  const line = [
+  const state = [
     standing,
     oauth ? connectionText(connection) : null,
     server.on ? null : t('installed.off'),
     agents ? t('installed.forAgents', { count: agents.length }) : null,
-    listing.description ?? specRuns(server.spec),
   ]
-    .filter(Boolean)
-    .join(' · ')
   return (
     <ItemRow
       title={listing.title}
-      subject={serverSubject(listing)}
-      line={line}
+      subject={serverSubject({ ...listing, spec: server.spec })}
+      meta={<Facts facts={[listing.publisher, ...state]} />}
+      line={listing.description ?? specRuns(server.spec)}
       onOpen={() => openMarketplace({ item: keptItemKey('mcp', server.id), tab: 'installed' })}
       end={
         oauth ? (
@@ -418,7 +429,7 @@ function BuiltinSkillRow({ skill }: { skill: BuiltinSkill }) {
   return (
     <ItemRow
       title={displayTitle(skill.name)}
-      icon={<BrandIcon size={30} className="k-mkt-kettu-tile" />}
+      icon={<BrandIcon size={40} className="k-mkt-kettu-tile" />}
       tag={<Pill>{t('kettu.builtIn')}</Pill>}
       line={skill.description}
     />
@@ -436,19 +447,17 @@ function KeptSkillRow({ skill }: { skill: MarketSkill }) {
   const { t } = useTranslation('marketplace')
   const scope = useHostScope()
   const standing = useCommunityLine(skill.id, skill.version)
-  const line = [
+  const state = [
     standing,
     skill.on ? null : t('installed.off'),
     skill.agents === 'all' ? null : t('installed.forAgents', { count: skill.agents.length }),
-    skill.description,
   ]
-    .filter(Boolean)
-    .join(' · ')
   return (
     <ItemRow
       title={displayTitle(skill.name)}
       subject={skillSubject(skill.name)}
-      line={line}
+      meta={<Facts facts={state} />}
+      line={skill.description || null}
       onOpen={() => openMarketplace({ item: keptItemKey('skill', skill.id), tab: 'installed' })}
       end={
         <SettingSwitch
@@ -571,20 +580,19 @@ function PluginRow({ plugin }: { plugin: InstalledPlugin }) {
     record ? kettuId(record.listingId) : '',
     record?.version ?? null,
   )
-  const line = [
+  const state = [
     standing,
     agentName(plugin.agentId),
     plugin.scope === 'user' ? null : scopeLine(plugin, t),
     plugin.version,
     plugin.enabled ? null : t('installed.off'),
   ]
-    .filter(Boolean)
-    .join(' · ')
   return (
     <ItemRow
       title={title}
       subject={pluginSubject({ ...plugin, category: entry?.category, marks: !record })}
-      line={line}
+      meta={<Facts facts={state} />}
+      line={entry?.description || null}
       onOpen={() =>
         openMarketplace({
           item: itemKey(
@@ -815,6 +823,7 @@ function PlaceRow({ place }: { place: McpStatus['places'][number] }) {
       }
       line={place.exists ? path : t('installed.notCreated', { path })}
       lineTitle={about}
+      oneLine
       end={place.exists ? <PlaceAction path={place.path} icon /> : undefined}
     />
   )
@@ -865,6 +874,7 @@ function MarketplaceRow({ market }: { market: PluginMarketplace }) {
         }
         line={[agentName(market.agentId), homeShort(market.source)].join(' · ')}
         lineTitle={market.source}
+        oneLine
         end={
           market.official ? (
             <small className="k-mkt-quiet">{t('installed.marketplaceKept')}</small>
