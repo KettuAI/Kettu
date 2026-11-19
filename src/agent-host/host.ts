@@ -2493,6 +2493,8 @@ export class AgentHost {
         await agents.readFirstOptions(agentId)
       },
       'agents.refreshLimits': ({ agentId, force }) => agents.refreshLimits(agentId, { force }),
+      'agents.spendReset': ({ agentId, creditId, requestId }) =>
+        agents.spendReset(agentId, creditId, requestId),
       'agents.details': ({ agentId }) => agents.details(agentId),
       'agents.claudeSettings': ({ agentId }) =>
         agents.claudeSettings(agentId, listedModels(this.agentOptions.get(agentId)?.config)),

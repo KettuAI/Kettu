@@ -559,6 +559,21 @@ describe('createValidators', () => {
     })
   })
 
+  it('takes a reset credit to spend only with a credit id and a UUID v4 request id', () => {
+    const spend = posix['agents.spendReset']
+    const requestId = '0b0e7a52-6d0c-4a6e-9a3b-0d6f6f0c2a11'
+    expect(spend({ agentId: 'codex', creditId: 'RateLimitResetCredit_abc-1', requestId })).toEqual({
+      agentId: 'codex',
+      creditId: 'RateLimitResetCredit_abc-1',
+      requestId,
+    })
+    rejects(() => spend({ agentId: 'codex', creditId: '../consume?x=1', requestId }))
+    rejects(() => spend({ agentId: 'codex', creditId: '', requestId }))
+    rejects(() => spend({ agentId: 'codex', creditId: 'a', requestId: 'again' }))
+    rejects(() => spend({ agentId: 'codex', creditId: 'a' }))
+    rejects(() => spend({ agentId: 'nobody', creditId: 'a', requestId }))
+  })
+
   it('checks a switch to another agent', () => {
     const switchAgent = posix['sessions.switchAgent']
     const content = [{ type: 'text', text: 'go on' }]

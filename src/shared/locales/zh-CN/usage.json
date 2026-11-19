@@ -330,5 +330,34 @@
       "turns": "{{share}} 的轮次发生在 {{from}}到{{to}}之间。",
       "cost": "{{share}} 的费用发生在 {{from}}到{{to}}之间。"
     }
+  },
+  "resets": {
+    "count_other": "{{count}} 张重置卡",
+    "until": "{{time}} 到期",
+    "never": "不会过期",
+    "neverTile": "不会过期",
+    "unknown": "到期时间未知",
+    "runsOut": "{{time}} 到期",
+    "use": "使用一张…",
+    "error": {
+      "sign-in-expired": "登录已过期，运行一次 Codex 让它续期。",
+      "details": "没能读到重置卡的到期时间。",
+      "failed": "没能读到重置卡，这里是上次读到的。"
+    },
+    "confirm": {
+      "title": "使用一张重置卡？",
+      "body": "{{account}} 的用量窗口会立即重新开始，此操作无法撤销。",
+      "one": "将使用 {{time}} 到期的那张。",
+      "oneNever": "将使用你持有的那张，它不会过期。",
+      "which": "要使用的重置卡",
+      "soonest": "最先到期",
+      "use": "使用重置卡"
+    },
+    "result": {
+      "reset": "已使用重置卡，{{account}} 的用量窗口已重新开始。",
+      "nothing_to_reset": "{{account}} 没有可重置的用量。",
+      "no_credit": "这张重置卡已不可用。",
+      "already_redeemed": "这张重置卡已经用过了。"
+    }
   }
 }

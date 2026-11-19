@@ -163,6 +163,23 @@ export interface PlanLimit {
   models?: string[]
 }
 
+/** The rate-limit reset credits an account holds: spending one restarts its windows at once. */
+export interface PlanResets {
+  count: number
+  /**
+   * Each credit and when it runs out, null for never: the soonest first, those that never run out
+   * last. Absent when only the number could be read, so the expiries are unknown.
+   */
+  each?: { id: string; until: number | null }[]
+  observedAt: number
+}
+
+/** Why the last read of the reset credits fell short: the sign-in, their details, or the read. */
+export type ResetsError = 'sign-in-expired' | 'details' | 'failed'
+
+/** The vendor's answer to spending a reset credit; only `reset` started the windows again. */
+export type ResetSpendCode = 'reset' | 'nothing_to_reset' | 'no_credit' | 'already_redeemed'
+
 export type LimitsReason =
   | 'vendor-disallows'
   | 'harness-does-not-offer'
@@ -375,6 +392,9 @@ export interface AgentStatus {
   movedAccounts?: { to: HarnessId; audience: string; refused: boolean }
   limits: PlanLimit[] // subscription windows, see plan limits in the session model
   limitsError?: string // why the last limits read failed, until one succeeds; `limits` stay
+  /** Codex's reset credits on a ChatGPT sign-in; absent when none were read or it holds none. */
+  resets?: PlanResets
+  resetsError?: ResetsError
   detail: string | null // install hint or error message
   installUrl: string | null
   installNotice?: string | null // the vendor installer's effects, shown before installation
@@ -839,6 +859,11 @@ export interface HostContract {
   // has a folder; rejects with the reason.
   'agents.readFirstOptions': { params: { agentId: AgentId }; result: void }
   'agents.refreshLimits': { params: { agentId: AgentId; force?: boolean }; result: void }
+  /** Spends one reset credit, which cannot be undone; `requestId` makes a retry spend no second. */
+  'agents.spendReset': {
+    params: { agentId: AgentId; creditId: string; requestId: string }
+    result: { code: ResetSpendCode }
+  }
   'agents.details': { params: { agentId: AgentId }; result: AgentDetails }
   // A Claude Code agent's auto-compact windows and prompt cache duration, read from its settings
   // file; rejects with the reason when the file cannot be read.
@@ -1726,6 +1751,7 @@ export const HOST_METHODS = [
   'agents.readOptions',
   'agents.readFirstOptions',
   'agents.refreshLimits',
+  'agents.spendReset',
   'agents.details',
   'agents.claudeSettings',
   'agents.setClaudeSetting',

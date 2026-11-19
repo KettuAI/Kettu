@@ -343,5 +343,35 @@
       "turns": "{{share}} of the turns ran between {{from}} and {{to}}.",
       "cost": "{{share}} of the cost fell between {{from}} and {{to}}."
     }
+  },
+  "resets": {
+    "count_one": "{{count}} reset",
+    "count_other": "{{count}} resets",
+    "until": "until {{time}}",
+    "never": "no expiry",
+    "neverTile": "No expiry",
+    "unknown": "expiry unknown",
+    "runsOut": "Runs out {{time}}",
+    "use": "Use one…",
+    "error": {
+      "sign-in-expired": "The sign-in has expired. Run Codex once so it renews it.",
+      "details": "Couldn’t read when the resets run out.",
+      "failed": "Couldn’t read the resets; these are from the last read."
+    },
+    "confirm": {
+      "title": "Use a rate-limit reset?",
+      "body": "This restarts the usage windows of {{account}} now. It can’t be undone.",
+      "one": "It uses the reset that runs out {{time}}.",
+      "oneNever": "It uses the reset you hold, which has no expiry.",
+      "which": "The reset to use",
+      "soonest": "runs out first",
+      "use": "Use reset"
+    },
+    "result": {
+      "reset": "Reset used: the usage windows of {{account}} started again.",
+      "nothing_to_reset": "{{account}} had nothing to reset.",
+      "no_credit": "That reset is no longer available.",
+      "already_redeemed": "That reset was already used."
+    }
   }
 }
