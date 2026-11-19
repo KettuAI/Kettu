@@ -65,6 +65,8 @@ export type ClineEvent =
       noticeType: 'recovery' | 'stop' | 'status'
       message: string
       reason?: string
+      /** A compaction's notices say here how far it is: `phase` started, completed or skipped. */
+      metadata?: Record<string, unknown>
     }
   | { type: 'done'; reason: string; text: string; iterations: number }
   | { type: 'error'; error: { message: string }; recoverable: boolean; iteration: number }
@@ -83,6 +85,7 @@ export interface ClineModel {
   id: string
   name: string
   description?: string
+  /** The input the model takes, less than its whole window where the catalog names both. */
   contextWindow?: number
   /** The model reasons when asked to. */
   reasoning: boolean

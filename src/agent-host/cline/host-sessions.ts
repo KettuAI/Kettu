@@ -35,6 +35,7 @@ import type {
   SdkCore,
   SdkMcpManager,
   SdkMessage,
+  SdkModelInfo,
   SdkProviderSettingsManager,
   SdkSessionEvent,
   SdkTool,
@@ -69,6 +70,16 @@ const AUTH_ERRORS = [
 ]
 /** OpenAI's limit on a function name, which Cline's own MCP tool names keep to. */
 const TOOL_NAME_LIMIT = 64
+
+/**
+ * The input a model takes, which Cline compacts against: a catalog that names it beside the whole
+ * window, the reply included, means the smaller.
+ */
+function inputWindow(info: SdkModelInfo): number | undefined {
+  const { contextWindow: window, maxInputTokens: input } = info
+  if (typeof input !== 'number') return typeof window === 'number' ? window : undefined
+  return typeof window === 'number' ? Math.min(input, window) : input
+}
 
 export class HostError extends Error {
   constructor(
@@ -204,14 +215,17 @@ export class Host {
 
   private async models(provider: string): Promise<ModelsResult> {
     const known = await this.sdk.Llms.getModelsForProvider(provider, { filter: 'chat' })
-    const models = Object.entries(known).map(([id, info]): ClineModel => ({
-      id,
-      name: info.name ?? id,
-      ...(info.description ? { description: info.description } : {}),
-      ...(typeof info.contextWindow === 'number' ? { contextWindow: info.contextWindow } : {}),
-      reasoning: info.capabilities?.includes('reasoning') === true,
-      images: info.capabilities?.includes('images') === true,
-    }))
+    const models = Object.entries(known).map(([id, info]): ClineModel => {
+      const window = inputWindow(info)
+      return {
+        id,
+        name: info.name ?? id,
+        ...(info.description ? { description: info.description } : {}),
+        ...(window === undefined ? {} : { contextWindow: window }),
+        reasoning: info.capabilities?.includes('reasoning') === true,
+        images: info.capabilities?.includes('images') === true,
+      }
+    })
     const ids = new Set(models.map((model) => model.id))
     const saved = this.settings.getProviderSettings(provider)?.model
     const preset = (await this.sdk.Llms.getProvider(provider).catch(() => undefined))
@@ -376,6 +390,7 @@ export class Host {
           enableAgentTeams: false,
           cwd: session.cwd,
           workspaceRoot: session.cwd,
+          compaction: this.compacts(),
           ...(tools.length > 0 ? { extraTools: tools } : {}),
         },
         ...(session.messages ? { initialMessages: session.messages } : {}),
@@ -391,6 +406,13 @@ export class Host {
     session.off = off
     session.messages = null
     return core
+  }
+
+  /** Whether a session compacts and how: the user's setting in Cline, read as its own CLI does. */
+  private compacts(): { enabled: boolean; strategy?: string } {
+    const mode = this.sdk.readCompactionModeGlobally()
+    if (mode === undefined) return { enabled: true }
+    return mode === 'off' ? { enabled: false } : { enabled: true, strategy: mode }
   }
 
   /** The compacted view of the carried conversation, when Cline keeps one for the session. */

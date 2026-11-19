@@ -14,7 +14,19 @@ type Wire = [string, unknown]
 type TurnName = keyof typeof recorded.turns
 
 /** Replays recorded turns as the connection feeds them: an approval announces its call's row. */
-function run(names: TurnName[], options: { window?: number; cancelling?: boolean } = {}) {
+function run(
+  names: TurnName[],
+  options: {
+    window?: number
+    cancelling?: boolean
+    /** How many of the last turn's messages arrive before it ends. */
+    take?: number
+    /** Other events in place of the last turn's own from `take` on. */
+    then?: ClineEvent[]
+    /** The turn ends after them, as when the user stops it. */
+    ended?: boolean
+  } = {},
+) {
   let thread: ThreadState = threadFromSnapshot({
     session: {
       id: 's',
@@ -48,18 +60,26 @@ function run(names: TurnName[], options: { window?: number; cancelling?: boolean
   const dropped: string[] = []
   let n = 0
   let now = 1_000
-  for (const name of names) {
+  const context = (): MapperContext => ({
+    thread,
+    replaying: false,
+    cancelling: options.cancelling === true,
+    scope,
+    now: (now += 10),
+    nextId: () => `e:${++n}`,
+    sessionIdFor: () => null,
+  })
+  for (const [index, name] of names.entries()) {
     mapper.turn()
-    for (const [kind, data] of recorded.turns[name].wire as Wire[]) {
-      const ctx: MapperContext = {
-        thread,
-        replaying: false,
-        cancelling: options.cancelling === true,
-        scope,
-        now: (now += 10),
-        nextId: () => `e:${++n}`,
-        sessionIdFor: () => null,
-      }
+    let wire = recorded.turns[name].wire as Wire[]
+    if (index === names.length - 1) {
+      wire = [
+        ...wire.slice(0, options.take),
+        ...(options.then ?? []).map((event): Wire => ['event', event]),
+      ]
+    }
+    for (const [kind, data] of wire) {
+      const ctx = context()
       if (kind === 'approval') {
         const ask = data as Omit<ApprovalParams, 'sessionId'>
         const out = mapper.announce(ask.toolCallId, ask.toolName, ask.input, ctx)
@@ -74,7 +94,18 @@ function run(names: TurnName[], options: { window?: number; cancelling?: boolean
       }
     }
   }
+  if (options.ended) {
+    const out = mapper.ended(context())
+    if (out) thread = applyPatches(thread, out.patches)
+  }
   return { thread, entries: threadEntries(thread), effects, dropped }
+}
+
+/** The notice of the recorded compaction that says it started, as another phase of it. */
+function compactionNotice(phase: string, message: string): ClineEvent {
+  const [, started] = (recorded.turns['real-compaction'].wire as Wire[])[1]!
+  const notice = started as Extract<ClineEvent, { type: 'notice' }>
+  return { ...notice, message, metadata: { ...notice.metadata, phase } }
 }
 
 describe('Cline mapper', () => {
@@ -236,6 +267,55 @@ describe('Cline mapper', () => {
     const requests = effects.filter((effect) => effect.kind === 'request')
     expect(requests).toHaveLength(4)
     expect(requests[1]).toMatchObject({ cache: { read: 7424, written: 0 } })
+  })
+
+  it('shows a compaction of a real model as one divider, before the reply it made room for', () => {
+    const { entries } = run(['real-compaction'])
+    expect(entries.map((entry) => entry.kind)).toEqual(['compaction', 'agent'])
+    expect(entries[0]).toMatchObject({ status: 'completed' })
+    expect(entries[1]).toMatchObject({ markdown: 'AMBER-FALCON-17' })
+  })
+
+  it('shows a compaction as running until Cline says it is done', () => {
+    // The request it makes room for waits on it, here for five seconds.
+    const { entries } = run(['real-compaction'], { take: 2 })
+    expect(entries).toMatchObject([{ kind: 'compaction', status: 'in_progress' }])
+  })
+
+  it('leaves a compaction the turn was stopped in as cancelled', () => {
+    const { entries } = run(['real-compaction'], { take: 2, ended: true })
+    expect(entries).toMatchObject([{ kind: 'compaction', status: 'cancelled' }])
+  })
+
+  it('says a compaction that folded nothing or broke off failed, and shows no budget notice', () => {
+    // None of these was recorded: they are the recorded notice with the message and phase the
+    // runtime's source gives them, and the error a failed request sends.
+    const skipped = run(['real-compaction'], {
+      take: 2,
+      then: [compactionNotice('skipped', 'auto-compaction-skipped')],
+    })
+    expect(skipped.entries).toMatchObject([{ kind: 'compaction', status: 'failed' }])
+    const adjusted = run(['real-compaction'], {
+      take: 3,
+      then: [
+        {
+          type: 'notice',
+          noticeType: 'status',
+          message: 'compaction-budget-adjusted',
+          reason: 'compaction_budget_emergency',
+          metadata: { kind: 'compaction_budget_emergency' },
+        },
+      ],
+    })
+    expect(adjusted.entries).toMatchObject([{ kind: 'compaction', status: 'completed' }])
+    const broken = run(['real-compaction'], {
+      take: 2,
+      then: [
+        { type: 'error', error: { message: 'fetch failed' }, recoverable: false, iteration: 1 },
+      ],
+      ended: true,
+    })
+    expect(broken.entries).toMatchObject([{ kind: 'compaction', status: 'failed' }])
   })
 
   it('keeps what streamed before a stop', () => {
