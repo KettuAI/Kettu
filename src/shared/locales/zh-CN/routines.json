@@ -80,7 +80,7 @@
     "onHost": "{{host}} · {{line}}"
   },
   "signal": {
-    "name": "例程，{{signal}}",
+    "name": "定时任务，{{signal}}",
     "waiting_one": "{{count}} 个运行在等待批准",
     "waiting_other": "{{count}} 个运行在等待批准",
     "failed": "一个运行失败",
