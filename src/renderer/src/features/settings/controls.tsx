@@ -336,10 +336,8 @@ export function SettingSelect<T extends string>({
   lead?: ReactNode
 }) {
   const chosen = options.find((o) => o.value === value)
-  const mark = chosen?.icon ?? lead
   return (
     <>
-      <SecurityStyles />
       <Dropdown
         align="end"
         items={options.map((o) => ({
@@ -363,14 +361,37 @@ export function SettingSelect<T extends string>({
             disabled={disabled}
             onClick={toggle}
           >
-            {mark && <span className="k-select__lead">{mark}</span>}
-            <span className={cn('k-select__value', chosen?.danger && 'text-danger')}>
-              {chosen?.label}
-            </span>
-            <Icon icon={ArrowDown01Icon} size={14} />
+            <SelectFace
+              mark={chosen?.icon ?? lead}
+              value={chosen?.label ?? ''}
+              danger={chosen?.danger}
+            />
           </button>
         )}
       />
+    </>
+  )
+}
+
+/**
+ * What SettingSelect's field shows: a mark, the value and the arrow, for the `ui-ss-select
+ * k-select` trigger of a menu SettingSelect cannot draw, such as one with submenus.
+ */
+export function SelectFace({
+  mark,
+  value,
+  danger,
+}: {
+  mark?: ReactNode
+  value: string
+  danger?: boolean
+}) {
+  return (
+    <>
+      <SecurityStyles />
+      {mark && <span className="k-select__lead">{mark}</span>}
+      <span className={cn('k-select__value', danger && 'text-danger')}>{value}</span>
+      <Icon icon={ArrowDown01Icon} size={14} />
     </>
   )
 }

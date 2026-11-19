@@ -113,6 +113,7 @@ import {
 } from './device-browser'
 import { BrowserTurns } from './browser-turns'
 import { writeCommitMessage } from './commit-message'
+import { lightTarget } from './light-model'
 import { reportDraftPrompt, writeReportDraft } from './report-draft'
 import { Diagnostics } from './diagnostics'
 import { HostError, invalidParams } from './errors'
@@ -1973,19 +1974,23 @@ export class AgentHost {
     return agentId
   }
 
-  /** A commit message for the changed files at `paths`, from the project's preferred agent. */
+  /**
+   * A commit message for the changed files at `paths`, from the project's preferred agent or the
+   * one the lightweight tasks' model is pinned to.
+   */
   private async commitMessage(projectPath: string, paths: string[]): Promise<string> {
     const context = await this.gitProjectCall(projectPath, (g, p) => g.commitContext(p, paths))
-    const agentId = this.preferredAgent(projectPath)
-    if (agentId === null) throw new HostError('agent_error', t('git.commitMessageNoAgent'))
-    const agent = this.agents.name(agentId)
+    const target = lightTarget(this.settings.lightModel, this.preferredAgent(projectPath), null)
+    if (target === null) throw new HostError('agent_error', t('git.commitMessageNoAgent'))
+    const agent = this.agents.name(target.agentId)
     try {
-      const runtime = await this.agents.ensureReady(agentId)
+      const runtime = await this.agents.ensureReady(target.agentId)
       const dir = path.join(this.options.userDataPath, 'agent-reports')
       await mkdir(dir, { recursive: true })
       return await writeCommitMessage(runtime, {
         dir,
         context,
+        model: target.model,
         log: (line) => this.diagnostics.log('warn', line),
       })
     } catch (error) {
@@ -1997,7 +2002,8 @@ export class AgentHost {
 
   /**
    * A draft of a problem report's description from the agent the report is about, else the one
-   * new sessions start with; null when Kettu observed nothing to write from.
+   * new sessions start with, unless the lightweight tasks' model is pinned to another; null when
+   * Kettu observed nothing to write from.
    */
   private async draftReport(
     params: HostParams<'agents.draftReport'>,
@@ -2025,15 +2031,19 @@ export class AgentHost {
       known && !this.agents.isDisabled(about)
         ? about
         : this.preferredAgent(session && !session.scratch ? session.projectPath : null)
-    if (agentId === null) throw new HostError('agent_error', t('report.draftNoAgent'))
-    const agent = this.agents.name(agentId)
+    // The session's model only for its own agent, which another agent may not offer.
+    const model = session && session.agentId === agentId ? session.model : null
+    const target = lightTarget(this.settings.lightModel, agentId, model)
+    if (target === null) throw new HostError('agent_error', t('report.draftNoAgent'))
+    const agent = this.agents.name(target.agentId)
     try {
-      const runtime = await this.agents.ensureReady(agentId)
+      const runtime = await this.agents.ensureReady(target.agentId)
       const dir = path.join(this.options.userDataPath, 'agent-reports')
       await mkdir(dir, { recursive: true })
       const draft = await writeReportDraft(runtime, {
         dir,
         prompt,
+        model: target.model,
         log: (line) => this.diagnostics.log('warn', line),
       })
       return { draft, agent }
@@ -2571,6 +2581,7 @@ export class AgentHost {
       'agents.setCodebuddySite': ({ agentId, change }) => agents.setCodebuddySite(agentId, change),
       'agents.refreshAccount': ({ agentId, force }) => agents.refreshAccount(agentId, { force }),
       'agents.options': () => this.agentOptions.list().map((o) => this.withStartMode(o)),
+      'agents.lightAgents': () => ({ agents: this.sessions.lightAgents() }),
       'agents.draftReport': (params) => this.draftReport(params),
       'mcp.status': () => this.mcpStatus(),
       'market.catalog': ({ refresh, cached }) =>

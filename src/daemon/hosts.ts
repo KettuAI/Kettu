@@ -544,7 +544,8 @@ export class Hosts {
   /** Passes a change of the settings to the hosts that read it, as main does. */
   settingsChanged(changed: ReadonlySet<SettingsSection>): void {
     const settings = this.settings()
-    // The agent host reads `general.sessionTitles` and the language, which `reachesHost` leaves.
+    // The agent host reads `general.sessionTitles`, `general.lightModel` and the language, which
+    // `reachesHost` leaves.
     if (reachesHost(changed) || changed.has('general')) {
       this.agent.post({
         type: 'host:settings',

@@ -24,15 +24,31 @@ const INSTRUCTION =
 const modelOption = (config: readonly ConfigOption[]): ConfigOption | undefined =>
   config.find((option) => option.category === 'model' && option.type === 'select')
 
-/** The first of the agent's models that is a small one, else the session's own model. */
-export function pickModel(
-  config: readonly ConfigOption[],
-  sessionModel: string | null,
-): string | null {
-  const small = modelOption(config)?.choices?.find(
+/**
+ * Which model a hidden session asks: the first of the agent's small models when `small`, else
+ * `model`, null keeping the agent's own. A `pinned` model is the user's pick, so an agent that no
+ * longer offers it fails the request rather than asking another.
+ */
+export interface ModelPick {
+  small: boolean
+  model: string | null
+  pinned?: boolean
+}
+
+/** The model the pick names among the agent's, null keeping the one the session opened with. */
+export function pickModel(config: readonly ConfigOption[], pick: ModelPick): string | null {
+  const choices = modelOption(config)?.choices ?? []
+  if (pick.pinned) {
+    if (!choices.some((choice) => choice.value === pick.model)) {
+      throw new Error(`it no longer offers the model ${pick.model ?? ''}`)
+    }
+    return pick.model
+  }
+  if (!pick.small) return pick.model
+  const small = choices.find(
     (choice) => SMALL_MODEL.test(choice.name) || SMALL_MODEL.test(choice.value),
   )
-  return small?.value ?? sessionModel
+  return small?.value ?? pick.model
 }
 
 /** The prompt for the newest SUMMARY_MESSAGES messages, each named by its position and cut short. */
@@ -85,8 +101,7 @@ export function parseTitles(reply: string, asked: ReadonlySet<number>): OutlineT
 export interface SummaryRequest {
   /** The empty folder hidden sessions run in. */
   dir: string
-  /** The session's model, for an agent that offers no small one. */
-  sessionModel: string | null
+  model: ModelPick
   messages: readonly { pos: number; text: string }[]
   /** Each message is cut to this many characters, 500 by default. */
   cut?: number
@@ -104,8 +119,7 @@ export interface SummaryRequest {
 export interface SmallModelRequest {
   /** The empty folder hidden sessions run in. */
   dir: string
-  /** The session's model, for an agent that offers no small one. */
-  sessionModel: string | null
+  model: ModelPick
   prompt: string
   /** What the reply is for, in its log lines. */
   name: string
@@ -114,9 +128,10 @@ export interface SmallModelRequest {
 }
 
 /**
- * Asks the agent's small model one prompt in a hidden session of its own, then removes it, and
- * gives the messages it answers with. Rejects when the agent cannot open one that leaves no
- * trace, fails or takes longer than the timeout.
+ * Asks the model the pick names, by default the agent's small one, one prompt in a hidden session
+ * of its own, then removes it, and gives the messages it answers with. Rejects when the agent
+ * cannot open one that leaves no trace, no longer offers a pinned model, fails or takes longer
+ * than the timeout.
  */
 export async function askSmallModel(
   runtime: HiddenRuntime,
@@ -138,7 +153,7 @@ export async function askSmallModel(
     const setup = await opening
     sessionId = setup.sessionId
     const option = modelOption(setup.config)
-    const model = pickModel(setup.config, request.sessionModel)
+    const model = pickModel(setup.config, request.model)
     if (option && model !== null && model !== option.value) {
       await connection.setConfigOption(setup.sessionId, option.id, model)
     }
@@ -178,7 +193,7 @@ export async function writeTitles(
   const { positions, prompt } = summaryPrompt(request.messages, request.cut, request.instruction)
   const messages = await askSmallModel(runtime, {
     dir: request.dir,
-    sessionModel: request.sessionModel,
+    model: request.model,
     prompt,
     name: request.name ?? 'the outline titles',
     log: request.log,

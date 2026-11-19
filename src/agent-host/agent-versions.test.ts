@@ -121,6 +121,7 @@ async function manager(setup: Setup) {
     idleSessions: DEFAULT_SETTINGS.idleSessions,
     usage: { fromComputer: false },
     sessionTitles: true,
+    lightModel: { mode: 'small' },
     defaultAgent: null,
     computerUse: DEFAULT_SETTINGS.computerUse,
     downloadService: !setup.noDownloads,

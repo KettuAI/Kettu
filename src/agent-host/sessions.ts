@@ -27,6 +27,7 @@ import {
   type SessionFindMatch,
   type SessionSummary,
   type SideChatAgent,
+  type LightAgent,
   type StartNotice,
 } from '@shared/agent-host'
 import { LOCALES } from '@shared/locale'
@@ -258,6 +259,7 @@ import {
   type WorktreeRecord,
 } from './storage'
 import { SUMMARY_RETRY_MS, writeTitles } from './outline-titles'
+import { lightTarget, type LightTarget } from './light-model'
 import {
   SIDE_ANSWER_CHARS,
   SIDE_STEPS,
@@ -3094,15 +3096,18 @@ export class SessionManager {
       return { titles: [] }
     }
     this.titling.add(sessionId)
+    let writer = record.agentId
     try {
       const { rows, model } = await this.outlineRows(sessionId)
       const untitled = rows.filter((row) => row.title === null && row.text.trim() !== '')
       if (untitled.length === 0) return { titles: [] }
-      const runtime = await this.deps.agents.ensureReady(record.agentId)
+      const target = lightTarget(this.deps.settings().lightModel, record.agentId, model)
+      writer = target.agentId
+      const runtime = await this.deps.agents.ensureReady(target.agentId)
       await mkdir(this.deps.reportsDir, { recursive: true })
       const titles = await writeTitles(runtime, {
         dir: this.deps.reportsDir,
-        sessionModel: model,
+        model: target.model,
         messages: untitled,
         log: (message) => this.deps.diagnostics.log('warn', message),
       })
@@ -3118,7 +3123,7 @@ export class SessionManager {
       this.summaryFailedAt.set(sessionId, this.now())
       this.deps.diagnostics.log(
         'warn',
-        `${this.deps.agents.name(record.agentId)}: could not title the outline of session ${sessionId}: ${(error as Error).message}`,
+        `${this.deps.agents.name(writer)}: could not title the outline of session ${sessionId}: ${(error as Error).message}`,
       )
       return { titles: [] }
     } finally {
@@ -4226,7 +4231,7 @@ export class SessionManager {
       worktree = await manager.create(projectPath, request)
       newWorktree = true
       if (prompt && !request.branch?.trim()) {
-        this.nameBranch(params.agentId, projectPath, worktree, prompt, request)
+        this.nameBranch(params.agentId, projectPath, worktree, prompt, request, params.options)
       }
     }
     const now = this.now()
@@ -7412,7 +7417,12 @@ export class SessionManager {
   /** Asks the agent's hidden session for a title and applies it, unless another came meanwhile. */
   private async writeTitle(live: Live, message: UserContent[]): Promise<void> {
     const { agentId } = live.record
-    const name = this.deps.agents.name(agentId)
+    const target = lightTarget(
+      this.deps.settings().lightModel,
+      agentId,
+      modelOf(live.thread.session.config),
+    )
+    const name = this.deps.agents.name(target.agentId)
     try {
       const runtime = await this.deps.agents.ensureReady(agentId)
       // Only an agent that titles none has Kettu pay for one.
@@ -7420,11 +7430,13 @@ export class SessionManager {
         live.titlePrompt = null
         return
       }
+      const writer =
+        target.agentId === agentId ? runtime : await this.deps.agents.ensureReady(target.agentId)
       // The reports folder holds every hidden session, made once for the first of them.
       await mkdir(this.deps.reportsDir, { recursive: true })
-      const title = await writeSessionTitle(runtime, {
+      const title = await writeSessionTitle(writer, {
         dir: this.deps.reportsDir,
-        sessionModel: modelOf(live.thread.session.config),
+        model: target.model,
         message,
         log: (line) => this.deps.diagnostics.log('warn', line),
       })
@@ -8746,11 +8758,18 @@ export class SessionManager {
   /** The agents of this host that can answer side questions for the session's agent. */
   sideAgents(sessionId: string): SideChatAgent[] {
     const record = this.recordOf(sessionId)
+    return this.lightAgents().filter((agent) => agent.agentId !== record.agentId)
+  }
+
+  /**
+   * The agents that may ask a prompt in a hidden session for others: on, added and installed, and
+   * able to remove such a session without a trace. Side questions and lightweight tasks take them.
+   */
+  lightAgents(): LightAgent[] {
     return this.deps.agents
       .ids()
       .filter(
         (agentId) =>
-          agentId !== record.agentId &&
           !this.deps.agents.isDisabled(agentId) &&
           answersForOthers(agentId) &&
           this.sideUsable(agentId),
@@ -9892,12 +9911,18 @@ export class SessionManager {
     worktree: WorktreeRecord,
     message: UserContent[],
     values: { type?: string; issue?: string },
+    picks: Record<string, string | boolean> = {},
   ): void {
     const manager = this.deps.worktrees
     if (!manager || !this.deps.settings().sessionTitles) return
     if (!manager.settings(projectPath).waitForSetup) return
     if (titleMessageText(message).trim() === '') return
-    const naming = new BranchNaming(this.writeBranchSlug(agentId, message))
+    const target = lightTarget(
+      this.deps.settings().lightModel,
+      agentId,
+      this.startModel(agentId, picks),
+    )
+    const naming = new BranchNaming(this.writeBranchSlug(target, message))
     const { type, issue } = values
     this.branchNames.set(pathKey(worktree.path, this.deps.platform), {
       naming,
@@ -9909,23 +9934,35 @@ export class SessionManager {
   }
 
   /** The slug the agent's hidden session writes for a branch, or null when it writes none. */
-  private async writeBranchSlug(agentId: AgentId, message: UserContent[]): Promise<string | null> {
+  private async writeBranchSlug(
+    target: LightTarget,
+    message: UserContent[],
+  ): Promise<string | null> {
     try {
-      const runtime = await this.deps.agents.ensureReady(agentId)
+      const runtime = await this.deps.agents.ensureReady(target.agentId)
       await mkdir(this.deps.reportsDir, { recursive: true })
       return await writeBranchSlug(runtime, {
         dir: this.deps.reportsDir,
-        sessionModel: null,
+        model: target.model,
         message,
         log: (line) => this.deps.diagnostics.log('warn', line),
       })
     } catch (error) {
       this.deps.diagnostics.log(
         'warn',
-        `${this.deps.agents.name(agentId)}: could not name a branch: ${(error as Error).message}`,
+        `${this.deps.agents.name(target.agentId)}: could not name a branch: ${(error as Error).message}`,
       )
       return null
     }
+  }
+
+  /** The model a new session of the agent starts on with New session's picks, as cached. */
+  private startModel(agentId: AgentId, picks: Record<string, string | boolean>): string | null {
+    const cached = this.deps.options?.get(agentId)
+    const option = cached?.config.find((o) => o.category === 'model' && o.type === 'select')
+    if (!cached || !option) return null
+    const value = picks[option.id] ?? cached.remembered[option.id] ?? option.value
+    return typeof value === 'string' ? value : null
   }
 
   /**

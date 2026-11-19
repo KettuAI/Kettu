@@ -205,6 +205,62 @@ describe('the mode new sessions start in', () => {
   })
 })
 
+describe('the model of lightweight tasks', () => {
+  const pinned = { mode: 'pinned', agentId: 'codex', model: 'gpt-5.5-mini' }
+
+  it('picks a small model until another is chosen, and keeps a valid choice on load', async () => {
+    expect((await SettingsStore.load(dir)).get().general.lightModel).toEqual({ mode: 'small' })
+    for (const choice of [{ mode: 'session' }, pinned]) {
+      await save({ version: 1, general: { lightModel: choice } })
+      expect((await SettingsStore.load(dir)).get().general.lightModel).toEqual(choice)
+    }
+  })
+
+  const bad = [
+    'small',
+    { mode: 'other' },
+    { mode: 'small', agentId: 'codex' },
+    { mode: 'pinned', agentId: 'codex' },
+    { mode: 'pinned', agentId: 'not an agent', model: 'm' },
+    { mode: 'pinned', agentId: 'codex', model: ' ' },
+    { mode: 'pinned', agentId: 'codex', model: 'm\0' },
+    { mode: 'pinned', agentId: 'codex', model: 'm'.repeat(201) },
+    { ...pinned, extra: true },
+  ]
+
+  it('drops anything else on load', async () => {
+    for (const choice of bad) {
+      await save({ version: 1, general: { lightModel: choice } })
+      expect((await SettingsStore.load(dir)).get().general.lightModel).toEqual({ mode: 'small' })
+    }
+  })
+
+  it('takes one of the three in a change, replaced whole, and refuses the rest', () => {
+    const patch = validateSettingsPatch({ general: { lightModel: pinned } })
+    const next = mergeSettings(DEFAULT_SETTINGS, patch)
+    expect(next.general.lightModel).toEqual(pinned)
+    const back = mergeSettings(
+      next,
+      validateSettingsPatch({ general: { lightModel: { mode: 'session' } } }),
+    )
+    expect(back.general.lightModel).toEqual({ mode: 'session' })
+    for (const choice of bad) {
+      expect(() => validateSettingsPatch({ general: { lightModel: choice } })).toThrow()
+    }
+  })
+
+  it('is kept by the host and reaches its agent host', () => {
+    expect(splitSettingsPatch({ general: { lightModel: { mode: 'session' } } })).toEqual({
+      host: { general: { lightModel: { mode: 'session' } } },
+      client: null,
+    })
+    const settings = mergeSettings(DEFAULT_SETTINGS, {
+      general: { lightModel: { mode: 'session' } },
+    })
+    expect(hostSettings(settings, 'en').lightModel).toEqual({ mode: 'session' })
+  })
+})
+
 describe('when idle sessions let their agent go', () => {
   it('releases by memory until the user picks, with Custom at 5 and 30 minutes and no limit', async () => {
     const store = await SettingsStore.load(dir)

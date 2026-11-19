@@ -367,6 +367,7 @@ export async function startTestHost(options: TestHostOptions = {}): Promise<Test
       idleSessions: DEFAULT_SETTINGS.idleSessions,
       usage: { fromComputer: false },
       sessionTitles: true,
+      lightModel: { mode: 'small' },
       initialSetupDone: true,
       defaultAgent: null,
       computerUse: DEFAULT_SETTINGS.computerUse,

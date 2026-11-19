@@ -10,6 +10,7 @@ import {
   nextAgentColor,
   isFontFamilyName,
   isLinkSite,
+  LIGHT_MODEL_CHARS,
   MAX_LINK_SITES,
   NEW_SESSION_LISTS,
   ONBOARDING_STEPS,
@@ -93,6 +94,22 @@ const isVerboseUntil: Check = (value, path) =>
 const isAgentChoice: Check = (value, path) =>
   value === null || isAgentId(value) ? null : `"${path}" must be an agent id or null`
 
+/** One of the three choices, a pinned one with an agent id and a model id and nothing else. */
+const isLightModel: Check = (value, path) => {
+  const problem = `"${path}" must be {"mode":"small"}, {"mode":"session"} or a pinned agent and model`
+  if (!isRecord(value)) return problem
+  const keys = Object.keys(value)
+  if (value.mode === 'small' || value.mode === 'session') return keys.length === 1 ? null : problem
+  if (value.mode !== 'pinned' || keys.length !== 3 || !isAgentId(value.agentId)) return problem
+  const { model } = value
+  return typeof model === 'string' &&
+    model.trim() !== '' &&
+    model.length <= LIGHT_MODEL_CHARS &&
+    !model.includes('\0')
+    ? null
+    : problem
+}
+
 const isHostName: Check = (value, path) =>
   value === null || isDeviceName(value)
     ? null
@@ -162,6 +179,7 @@ const SECTION_FIELDS = {
     openAtLogin: isBoolean,
     background: isBoolean,
     sessionTitles: isBoolean,
+    lightModel: isLightModel,
   },
   thread: {
     outlineSummaries: isBoolean,
@@ -1513,6 +1531,7 @@ export function hostSettings(settings: SettingsFile, systemLocale: Locale): Host
     idleSessions: { ...settings.idleSessions },
     usage: { fromComputer: settings.usage.fromComputer },
     sessionTitles: settings.general.sessionTitles,
+    lightModel: structuredClone(settings.general.lightModel),
     defaultAgent: settings.general.defaultAgent,
     computerUse: structuredClone(settings.computerUse),
     downloadService: settings.cloud.enabled && settings.updates.source === 'auto',

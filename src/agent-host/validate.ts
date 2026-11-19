@@ -1370,6 +1370,7 @@ export function createValidators(platform: Platform): Validators {
     },
     'agents.refreshAccount': agentWithForce,
     'agents.options': none,
+    'agents.lightAgents': none,
     'agents.draftReport': (params) => {
       const o = fields(params)
       const absent = (key: string): boolean => o[key] === null || o[key] === undefined
