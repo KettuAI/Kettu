@@ -1,0 +1,422 @@
+{
+  "tools": [
+    {
+      "id": "msg_1f48440f7001HjNFl7ejiAUsOR",
+      "time": {
+        "created": 1795103670840
+      },
+      "text": "Do exactly this with your file tools: (1) use the write tool to create veg.txt containing two lines: leek, kale. (2) use the edit tool to change kale to KALE. (3) run the shell command `echo acp-shell`. (4) use the grep tool to search for KALE. Then say done.",
+      "files": [],
+      "type": "user"
+    },
+    {
+      "id": "msg_1f4844278001ID9vh6hi6Hw5Um",
+      "time": {
+        "created": 1795103670979,
+        "completed": 1795103677315
+      },
+      "type": "assistant",
+      "model": {
+        "id": "deepseek-flash",
+        "providerID": "deepseek"
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "I'll do these in order."
+        },
+        {
+          "type": "tool",
+          "id": "call_8b77f7834e044acfa2b59153",
+          "name": "write",
+          "state": {
+            "status": "completed",
+            "input": {
+              "path": "/work/app/veg.txt",
+              "content": "leek\nkale\n"
+            },
+            "content": [
+              {
+                "type": "text",
+                "text": "Created file successfully: veg.txt"
+              }
+            ],
+            "metadata": {
+              "truncated": false
+            }
+          }
+        }
+      ],
+      "finish": "tool-calls",
+      "cost": 0,
+      "tokens": {
+        "input": 84,
+        "output": 76,
+        "reasoning": 0,
+        "cache": {
+          "read": 12672,
+          "write": 0
+        }
+      }
+    },
+    {
+      "id": "msg_1f4845c9f001PPNEpDrKoQJ5Ih",
+      "time": {
+        "created": 1795103677657,
+        "completed": 1795103683173
+      },
+      "type": "assistant",
+      "model": {
+        "id": "deepseek-flash",
+        "providerID": "deepseek"
+      },
+      "content": [
+        {
+          "type": "tool",
+          "id": "call_132f571ca73d46f5a2ddeed7",
+          "name": "edit",
+          "state": {
+            "status": "completed",
+            "input": {
+              "path": "/work/app/veg.txt",
+              "oldString": "kale",
+              "newString": "KALE"
+            },
+            "content": [
+              {
+                "type": "text",
+                "text": "Edited veg.txt (1 replacement)"
+              }
+            ],
+            "metadata": {
+              "files": [
+                {
+                  "file": "veg.txt",
+                  "patch": "Index: veg.txt\n===================================================================\n--- veg.txt\n+++ veg.txt\n@@ -1,2 +1,2 @@\n leek\n-kale\n+KALE\n",
+                  "status": "modified",
+                  "additions": 1,
+                  "deletions": 1
+                }
+              ],
+              "truncated": false
+            }
+          }
+        }
+      ],
+      "finish": "tool-calls",
+      "cost": 0,
+      "tokens": {
+        "input": 177,
+        "output": 85,
+        "reasoning": 0,
+        "cache": {
+          "read": 12672,
+          "write": 0
+        }
+      }
+    },
+    {
+      "id": "msg_1f484727c001Hp0IXJs8wImPk7",
+      "time": {
+        "created": 1795103683204,
+        "completed": 1795103686712
+      },
+      "type": "assistant",
+      "model": {
+        "id": "deepseek-flash",
+        "providerID": "deepseek"
+      },
+      "content": [
+        {
+          "type": "tool",
+          "id": "call_5550f45cafce476cb3e694af",
+          "name": "shell",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "echo acp-shell"
+            },
+            "content": [
+              {
+                "type": "text",
+                "text": "acp-shell\n"
+              }
+            ],
+            "metadata": {
+              "status": "completed",
+              "truncated": false,
+              "exit": 0
+            }
+          }
+        }
+      ],
+      "finish": "tool-calls",
+      "cost": 0,
+      "tokens": {
+        "input": 151,
+        "output": 41,
+        "reasoning": 0,
+        "cache": {
+          "read": 12800,
+          "write": 0
+        }
+      }
+    },
+    {
+      "id": "msg_1f484807400161iplDx3PONHW6",
+      "time": {
+        "created": 1795103687151,
+        "completed": 1795103690725
+      },
+      "type": "assistant",
+      "model": {
+        "id": "deepseek-flash",
+        "providerID": "deepseek"
+      },
+      "content": [
+        {
+          "type": "tool",
+          "id": "call_ba819bd667ae4c4f88bffafe",
+          "name": "grep",
+          "state": {
+            "status": "completed",
+            "input": {
+              "pattern": "KALE",
+              "path": "/work/app"
+            },
+            "content": [
+              {
+                "type": "text",
+                "text": "Found 1 matches\n/work/app/veg.txt:\n  Line 2: KALE\n"
+              }
+            ],
+            "metadata": {
+              "matches": 1,
+              "truncated": false
+            }
+          }
+        }
+      ],
+      "finish": "tool-calls",
+      "cost": 0,
+      "tokens": {
+        "input": 79,
+        "output": 64,
+        "reasoning": 0,
+        "cache": {
+          "read": 12928,
+          "write": 0
+        }
+      }
+    },
+    {
+      "id": "msg_1f48490060015q5OLOcYhij4wd",
+      "time": {
+        "created": 1795103690764,
+        "completed": 1795103695123
+      },
+      "type": "assistant",
+      "model": {
+        "id": "deepseek-flash",
+        "providerID": "deepseek"
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "完成：\n\n1. `write` 创建了 `veg.txt`，内容为两行：`leek`、`kale`。\n2. `edit` 把 `kale` 改成了 `KALE`。\n3. `shell` 运行 `echo acp-shell`，输出 `acp-shell`。\n4. `grep` 搜索 `KALE`，命中 `veg.txt` 第 2 行。\n\ndone."
+        }
+      ],
+      "finish": "stop",
+      "cost": 0,
+      "tokens": {
+        "input": 180,
+        "output": 99,
+        "reasoning": 0,
+        "cache": {
+          "read": 12928,
+          "write": 0
+        }
+      }
+    },
+    {
+      "id": "msg_1f484a133001WzShw3nN60mOXr",
+      "time": {
+        "created": 1795103695155
+      },
+      "type": "idle",
+      "outcome": "succeeded"
+    }
+  ],
+  "compact": [
+    {
+      "id": "msg_1f482e5af001aZff1Aed1ACq07",
+      "time": {
+        "created": 1795103581909
+      },
+      "text": "Remember: my favorite number is 4417. Reply OK.",
+      "type": "user"
+    },
+    {
+      "id": "msg_1f482e739001ZluWr3eufmnUD7",
+      "time": {
+        "created": 1795103582050,
+        "completed": 1795103585511
+      },
+      "type": "assistant",
+      "model": {
+        "id": "deepseek-flash",
+        "providerID": "deepseek"
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "OK"
+        }
+      ],
+      "finish": "stop",
+      "cost": 0,
+      "tokens": {
+        "input": 12441,
+        "output": 3,
+        "reasoning": 0,
+        "cache": {
+          "read": 256,
+          "write": 0
+        }
+      }
+    },
+    {
+      "id": "msg_1f482f508001IoGN0K2z9dQyfH",
+      "time": {
+        "created": 1795103585544
+      },
+      "type": "idle",
+      "outcome": "succeeded"
+    },
+    {
+      "id": "msg_1f482f5d7001M9MVJOf76BTlNW",
+      "time": {
+        "created": 1795103585955
+      },
+      "text": "And my favorite animal is the otter. Reply OK.",
+      "type": "user"
+    },
+    {
+      "id": "msg_1f482f6f7001hVnO1k959E2bid",
+      "time": {
+        "created": 1795103586059,
+        "completed": 1795103588336
+      },
+      "type": "assistant",
+      "model": {
+        "id": "deepseek-flash",
+        "providerID": "deepseek"
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "OK"
+        }
+      ],
+      "finish": "stop",
+      "cost": 0,
+      "tokens": {
+        "input": 43,
+        "output": 3,
+        "reasoning": 0,
+        "cache": {
+          "read": 12672,
+          "write": 0
+        }
+      }
+    },
+    {
+      "id": "msg_1f4830002001dHWseAJtB36Lh6",
+      "time": {
+        "created": 1795103588354
+      },
+      "type": "idle",
+      "outcome": "succeeded"
+    },
+    {
+      "type": "compaction",
+      "id": "msg_1f483001a001ZzbB2IITzjrpL9",
+      "metadata": {
+        "keepID": "msg_1f482f5d7001M9MVJOf76BTlNW"
+      },
+      "time": {
+        "created": 1795103588408
+      },
+      "status": "completed",
+      "reason": "manual",
+      "model": {
+        "id": "deepseek-flash",
+        "providerID": "deepseek"
+      },
+      "summary": "## Objective\n- Record the user's personal facts as they share them; no other task exists yet.\n\n## Requirements\n- Reply only with \"OK\" after each stated fact, as the user requested.\n\n## Decisions\n- (none)\n\n## Work State\n### Completed\n- Noted user's favorite number: 4417.\n- Noted user's favorite animal: otter.\n\n### Active\n- (none)\n\n### Blocked\n- (none)\n\n## Next Move\n1. Reply \"OK\" to any further facts the user shares, and recall the two above when relevant.\n\n## Relevant Files\n- (none)\n\n## Important Context\n- No code, files or repositories were touched; both exchanges were purely conversational.",
+      "cost": 0,
+      "tokens": {
+        "input": 614,
+        "output": 149,
+        "reasoning": 0,
+        "cache": {
+          "read": 12672,
+          "write": 0
+        }
+      }
+    },
+    {
+      "id": "msg_1f4831763001JfNg9ZFCzcZKQu",
+      "time": {
+        "created": 1795103594339
+      },
+      "type": "idle",
+      "outcome": "succeeded"
+    },
+    {
+      "id": "msg_1f4832325001L4Gai2ww6JJWrc",
+      "time": {
+        "created": 1795103597414
+      },
+      "text": "What is my favorite number and animal? Answer briefly.",
+      "type": "user"
+    },
+    {
+      "id": "msg_1f4832394001FdHHgNH7cVVG97",
+      "time": {
+        "created": 1795103597549,
+        "completed": 1795103600682
+      },
+      "type": "assistant",
+      "model": {
+        "id": "deepseek-flash",
+        "providerID": "deepseek"
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "Your favorite number is 4417, and your favorite animal is the otter."
+        }
+      ],
+      "finish": "stop",
+      "cost": 0,
+      "tokens": {
+        "input": 246,
+        "output": 19,
+        "reasoning": 0,
+        "cache": {
+          "read": 12672,
+          "write": 0
+        }
+      }
+    },
+    {
+      "id": "msg_1f483303d001zKsBEjfF90Qzzd",
+      "time": {
+        "created": 1795103600701
+      },
+      "type": "idle",
+      "outcome": "succeeded"
+    }
+  ]
+}

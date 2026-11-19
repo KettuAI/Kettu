@@ -692,6 +692,25 @@
       "max": "Max"
     }
   },
+  "opencode": {
+    "option": {
+      "model": "Model",
+      "effort": "Effort",
+      "mode": "Mode",
+      "defaultEffort": "Default"
+    },
+    "tool": {
+      "skill": "Load skill '{{name}}'",
+      "script": "Run script",
+      "call": "Tool call"
+    },
+    "notice": {
+      "retry": "The model request failed; retrying (attempt {{attempt}})"
+    },
+    "command": {
+      "compact": "Compact the session"
+    }
+  },
   "pi": {
     "tool": {
       "toolSearch": "Search tools for '{{query}}'",

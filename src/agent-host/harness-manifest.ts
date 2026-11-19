@@ -30,6 +30,8 @@ export interface HarnessRule {
   recommended?: string
   /** Versions and ranges that do not work. */
   broken: string[]
+  /** The versions whose preferred interface does not work, which run on the harness's other one. */
+  fallback?: string
   /** An archive's SHA-256 by `<platform>-<arch>`, as the ACP Registry keys its archives. */
   sha256: Record<string, string>
 }
@@ -69,8 +71,9 @@ const isRange = (value: unknown): value is string =>
  */
 function readRule(value: unknown): HarnessRule | null {
   if (!isRecord(value) || !isRange(value.kettu)) return null
-  const { supported, recommended, broken, sha256 } = value
+  const { supported, recommended, broken, sha256, fallback } = value
   if (supported !== undefined && !isRange(supported)) return null
+  if (fallback !== undefined && !isRange(fallback)) return null
   if (recommended !== undefined && !isVersion(recommended)) return null
   if (broken !== undefined) {
     if (!Array.isArray(broken)) return null
@@ -89,6 +92,7 @@ function readRule(value: unknown): HarnessRule | null {
     ...(supported !== undefined ? { supported } : {}),
     ...(recommended !== undefined ? { recommended } : {}),
     broken: (broken as string[] | undefined) ?? [],
+    ...(fallback !== undefined ? { fallback } : {}),
     sha256: hashes,
   }
 }
@@ -188,6 +192,11 @@ export function usable(rule: HarnessRule | null, version: string): boolean {
   if (!rule) return true
   if (isBroken(rule, version)) return false
   return rule.supported === undefined || satisfies(version, rule.supported, OPTIONS)
+}
+
+/** Whether the rule holds the version back from the harness's preferred interface. */
+export function heldBack(rule: HarnessRule | null, version: string): boolean {
+  return rule?.fallback !== undefined && satisfies(version, rule.fallback, OPTIONS)
 }
 
 /** Whether the version satisfies an npm range, pre-releases included. */

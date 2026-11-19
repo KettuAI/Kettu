@@ -75,7 +75,7 @@ function directVerdict(call: acp.ToolCallUpdate, naming: 'claude' | 'agy'): Verd
 }
 
 /** Whether code calls tools only as `tools.<server>.<tool>`, and only Kettu's rowless ones. */
-function callsOnlyRowless(code: string): boolean {
+export function callsOnlyRowless(code: string): boolean {
   let calls = 0
   for (const [, server, tool] of code.matchAll(TOOL_REFERENCE)) {
     if (!isRowlessCall(server!, tool!)) return false
@@ -84,10 +84,9 @@ function callsOnlyRowless(code: string): boolean {
   return calls > 0 && calls === (code.match(TOOLS_WORD)?.length ?? 0)
 }
 
-/** Whether a script that ended made only calls that show no row, as its result lists them. */
-function endedRowless(call: acp.ToolCallUpdate): boolean {
-  if (call.status !== 'completed') return false
-  const calls = record(record(call.rawOutput)?.metadata)?.toolCalls
+/** Whether the calls a script's result lists in its `metadata` all show no row. */
+export function listsOnlyRowless(metadata: unknown): boolean {
+  const calls = record(metadata)?.toolCalls
   if (!Array.isArray(calls) || calls.length === 0) return false
   return calls.every((item) => {
     const name = record(item)?.tool
@@ -97,6 +96,11 @@ function endedRowless(call: acp.ToolCallUpdate): boolean {
     if (dot < 0 || !isRowlessCall(server, tool)) return false
     return !(record(item)?.status === 'error' && isRowWhenFailed(server, tool))
   })
+}
+
+/** Whether a script that ended made only calls that show no row, as its result lists them. */
+function endedRowless(call: acp.ToolCallUpdate): boolean {
+  return call.status === 'completed' && listsOnlyRowless(record(call.rawOutput)?.metadata)
 }
 
 function codeVerdict(call: acp.ToolCallUpdate): Verdict {
