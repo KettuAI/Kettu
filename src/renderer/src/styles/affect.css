@@ -413,6 +413,14 @@
 .ui-as.ui-as .ui-as-side__item svg {
   color: inherit;
 }
+/* The menu at the sidebar's top: its rows stand 2 px apart, so a hovered row's fill never runs into
+   the current row's, and New session, an action, a little further from the pages under it. */
+.ui-as-side__nav > .ui-as-side__group:first-child {
+  gap: 2px;
+}
+.ui-as-side__nav > .ui-as-side__group:first-child > .ui-as-side__item:first-child {
+  margin-bottom: 4px;
+}
 .ui-as.ui-as .ui-as-side__label {
   font-size: 12px;
   font-weight: 600;

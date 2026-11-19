@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import {
   AiBrain01Icon,
-  Analytics01Icon,
   Archive01Icon,
+  ComputerTerminal01Icon,
   DashboardSquare02Icon,
   GitBranchIcon,
   Globe02Icon,
@@ -10,11 +10,11 @@ import {
   Notification01Icon,
   PackageIcon,
   PaintBoardIcon,
+  PieChartIcon,
   ServerStack02Icon,
   Setting07Icon,
   Settings02Icon,
   Share08Icon,
-  ComputerTerminal01Icon,
   UserCircleIcon,
   Wifi01Icon,
 } from '@hugeicons/core-free-icons'
@@ -651,7 +651,7 @@ export function useUsageSection(): SectionDef {
     id: 'usage',
     title: t('settings.title'),
     description: t('settings.description'),
-    icon: Analytics01Icon,
+    icon: PieChartIcon,
     rows,
   }
 }

@@ -11,6 +11,7 @@ import { dayOf } from '@renderer/features/usage/model'
 import { useLimitView } from '@renderer/hooks/use-limit-view'
 import { limitLabel, tokens } from '@renderer/lib/format'
 import { LIMIT_TEXT, limitLevel, limitPercent } from '@renderer/lib/plan-limit'
+import { formatShortcut } from '@renderer/lib/platform'
 import { accountAgents, type AccountAgent } from '@renderer/lib/plan-readings'
 import { useNow } from '@renderer/lib/use-now'
 import { cn } from '@renderer/lib/utils'
@@ -20,7 +21,7 @@ import { useShownHostAgents } from '@renderer/stores/window-host'
 import { tightestLimit } from './plan-usage'
 import { costText } from './usage-row'
 
-// The marks at the end of the sidebar menu's Routines and Usage rows.
+// What the sidebar menu's rows end with: New session's shortcut, and the Routines and Usage marks.
 
 /** The routines' strongest signal, as a session row draws its own; runs waiting are counted. */
 export function RoutineSignalMark({
@@ -32,7 +33,7 @@ export function RoutineSignalMark({
     return (
       <span
         aria-hidden
-        className="ml-auto inline-flex h-[18px] min-w-[18px] shrink-0 items-center justify-center rounded-full bg-attention px-[5px] text-meta font-semibold text-attention-foreground tabular"
+        className="ml-auto inline-flex h-4 min-w-4 shrink-0 items-center justify-center rounded-full bg-attention px-1 text-[11px] leading-none font-semibold text-attention-foreground tabular"
       >
         {signal.count}
       </span>
@@ -52,6 +53,15 @@ export function RoutineSignalMark({
 }
 
 const ROW_END = 'ml-auto shrink-0 text-[12px] font-normal text-(--faint) tabular-nums'
+
+/** A row's shortcut, a hint for the eye; the shortcut sheet lists it for everyone. */
+export function NavShortcut({ keys }: { keys: string }) {
+  return (
+    <span aria-hidden className={ROW_END}>
+      {formatShortcut(keys)}
+    </span>
+  )
+}
 
 export function TodayTokens() {
   const { t } = useTranslation('usage')

@@ -1,13 +1,13 @@
 import {
-  Analytics01Icon,
   BotIcon,
   DashboardSquare02Icon,
   FlowIcon,
+  KanbanIcon,
   PencilEdit02Icon,
-  RepeatIcon,
+  PieChartIcon,
   Settings01Icon,
   Store01Icon,
-  ViewIcon,
+  TimeScheduleIcon,
 } from '@hugeicons/core-free-icons'
 import { AgentMark } from '@renderer/components/agents/agent-mark'
 import { TaskRing } from '@renderer/features/tasks/task-ring'
@@ -48,12 +48,12 @@ function PageIcon({ place }: { place: HistoryPlace }) {
     case 'settings':
       return <Glyph icon={Settings01Icon} size={15} />
     case 'overview':
-      return <Glyph icon={ViewIcon} size={15} />
+      return <Glyph icon={KanbanIcon} size={15} />
     case 'usage':
-      return <Glyph icon={Analytics01Icon} size={15} />
+      return <Glyph icon={PieChartIcon} size={15} />
     case 'routines':
     case 'routine':
-      return <Glyph icon={RepeatIcon} size={15} />
+      return <Glyph icon={TimeScheduleIcon} size={15} />
     case 'artifacts':
     case 'artifact':
       return <Glyph icon={DashboardSquare02Icon} size={15} />

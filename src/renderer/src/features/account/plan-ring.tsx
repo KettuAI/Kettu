@@ -1,7 +1,7 @@
 import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent } from 'react'
 import { DragDropProvider, PointerSensor, type DragEndEvent } from '@dnd-kit/react'
 import { isSortable } from '@dnd-kit/react/sortable'
-import { Analytics01Icon, ArrowRight01Icon } from '@hugeicons/core-free-icons'
+import { ArrowRight01Icon, PieChartIcon } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
 import type { AgentId } from '@shared/thread'
 import { Icon, Popover } from '@renderer/components/affect/app-shell'
@@ -300,7 +300,7 @@ function PlanPopover({ currentKey, close }: { currentKey: string | null; close: 
         </DragDropProvider>
       </div>
       <button type="button" onClick={open} className="kettu-plan-pop__row">
-        <Icon icon={Analytics01Icon} size={16} />
+        <Icon icon={PieChartIcon} size={16} />
         <span className="min-w-0 flex-1 truncate">{t('account.openUsage')}</span>
         <Icon icon={ArrowRight01Icon} size={14} />
       </button>

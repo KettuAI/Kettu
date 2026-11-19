@@ -1,11 +1,11 @@
 import type { ReactNode } from 'react'
 import {
-  Analytics01Icon,
   DashboardSquare02Icon,
+  KanbanIcon,
   PencilEdit02Icon,
-  RepeatIcon,
+  PieChartIcon,
   Store01Icon,
-  ViewIcon,
+  TimeScheduleIcon,
 } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
 import { newSession } from '@renderer/app/actions'
@@ -23,12 +23,12 @@ import {
   openUsage,
   useViewStore,
 } from '@renderer/stores/view'
-import { RoutineSignalMark, TightestLimit, TodayCost, TodayTokens } from './nav-ends'
+import { NavShortcut, RoutineSignalMark, TightestLimit, TodayCost, TodayTokens } from './nav-ends'
 
 /**
  * The sidebar's menu for App Shell: New session, Overview, Artifacts, Routines, Marketplace and
- * Usage, with the row the main area shows marked, Overview's count of what is for the user, and
- * the Routines and Usage rows' marks at their ends.
+ * Usage, with the row the main area shows marked, and at the rows' ends New session's shortcut,
+ * Overview's count of what is for the user and the Routines and Usage rows' marks.
  */
 export function useSidebarNav(): Pick<AppShellProps, 'nav' | 'active' | 'onNavigate'> {
   const { t } = useTranslation('sidebar')
@@ -59,12 +59,12 @@ export function useSidebarNav(): Pick<AppShellProps, 'nav' | 'active' | 'onNavig
   const routineRun = useRoutineRunShown()
   const active = current ?? (routineRun ? 'routines' : null)
   const nav: ShellNavItem[] = [
-    { label: labels.newSession, icon: PencilEdit02Icon },
-    { label: labels.overview, icon: ViewIcon, count: forYou || undefined },
+    { label: labels.newSession, icon: PencilEdit02Icon, end: <NavShortcut keys="Mod+N" /> },
+    { label: labels.overview, icon: KanbanIcon, count: forYou || undefined },
     { label: labels.artifacts, icon: DashboardSquare02Icon },
-    { label: labels.routines, icon: RepeatIcon, end: routines.end, ariaLabel: routines.name },
+    { label: labels.routines, icon: TimeScheduleIcon, end: routines.end, ariaLabel: routines.name },
     { label: labels.marketplace, icon: Store01Icon },
-    { label: labels.usage, icon: Analytics01Icon, end: usageEnd },
+    { label: labels.usage, icon: PieChartIcon, end: usageEnd },
   ]
   return {
     nav,
