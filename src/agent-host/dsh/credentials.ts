@@ -2,7 +2,7 @@
 // signs in on, and the API key Kettu hands it to keep. Kettu keeps no copy; it writes only
 // `refs.DEEPSEEK_API_KEY` and leaves what else the file holds as it was.
 
-import { chmod, mkdir, readFile, rename, writeFile } from 'node:fs/promises'
+import { chmod, mkdir, readFile, rename, stat, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { isMap, parseDocument } from 'yaml'
@@ -63,6 +63,14 @@ export async function readProvider(env: Env, cwd?: string): Promise<Provider | n
   if (namesKey(await readText(path.join(home, '.env')))) return 'deepseek-official'
   if (cwd && namesKey(await readText(path.join(cwd, '.env')))) return 'deepseek-official'
   return null
+}
+
+/** When the credential file last changed, as when a route's key is set in dsh; 0 without one. */
+export async function credentialsStamp(env: Env): Promise<number> {
+  return stat(path.join(dshHome(env), FILE)).then(
+    (stats) => stats.mtimeMs,
+    () => 0,
+  )
 }
 
 /** The key the file holds, read for the one request that shows its balance and never kept. */

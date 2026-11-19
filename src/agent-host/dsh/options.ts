@@ -5,6 +5,7 @@
 import type { ConfigOption } from '@shared/thread'
 import { t } from '../i18n'
 import type { Provider } from './credentials'
+import type { ListedModel } from './listing'
 import type { Routes } from './routes'
 
 export const CONFIG = { mode: 'mode', model: 'model', effort: 'effort' } as const
@@ -60,11 +61,14 @@ export interface ModelChoice {
   efforts: readonly string[]
   /** The level a session starts it on; null when it has none. */
   effort: string | null
+  /** dsh's own names for its levels, shown for a level Kettu has no name for. */
+  effortNames?: Readonly<Record<string, string>>
 }
 
 /**
- * The models of the home's routes. DeepSeek's own need its sign-in, so a home that is not signed
- * in to DeepSeek lists them only when it has no other route, where they lead to the sign-in.
+ * The models the home's files name, which stand in until dsh's own list is read. DeepSeek's own
+ * need its sign-in, so a home that is not signed in to DeepSeek lists them only when it has no
+ * other route, where they lead to the sign-in.
  */
 export function modelChoices(routes: Routes, signedIn: Provider | null): ModelChoice[] {
   const choices: ModelChoice[] = []
@@ -121,6 +125,50 @@ export function modelChoices(routes: Routes, signedIn: Provider | null): ModelCh
   return choices
 }
 
+/**
+ * The models dsh lists itself, as the menu offers them: the same models under the same names as
+ * in dsh's own pickers. The models of the DeepSeek route the home is signed in on keep their bare
+ * ids, as sessions before stored them; every other model is named with its route.
+ */
+export function listedModelChoices(
+  listed: readonly ListedModel[],
+  routes: Routes,
+  signedIn: Provider | null,
+): ModelChoice[] {
+  const own: string = signedIn ?? 'deepseek-official'
+  const level = (id: string): string => (id === '' ? DEFAULT_LEVEL : id)
+  const choices: ModelChoice[] = []
+  for (const model of listed) {
+    const bare = model.provider === own
+    const value = bare ? model.model : `${model.provider}/${model.model}`
+    if (choices.some((choice) => choice.value === value)) continue
+    const efforts = model.efforts.map((effort) => level(effort.id))
+    const saved = routes.selection
+    const chosen =
+      saved?.effort && saved.provider === model.provider && saved.model === model.model
+        ? saved.effort
+        : null
+    choices.push({
+      value,
+      provider: model.provider,
+      model: model.model,
+      name: bare ? model.name : `${model.group}/${model.name}`,
+      group: model.group,
+      efforts,
+      effort:
+        chosen && efforts.includes(chosen)
+          ? chosen
+          : model.effort === null
+            ? null
+            : level(model.effort),
+      effortNames: Object.fromEntries(
+        model.efforts.map((effort) => [level(effort.id), effort.name]),
+      ),
+    })
+  }
+  return choices
+}
+
 /** The choice a route and model of dsh's stand for, such as the ones its events name. */
 export function choiceOf(
   choices: readonly ModelChoice[],
@@ -130,7 +178,7 @@ export function choiceOf(
   const own = DEEPSEEK_PROVIDERS.includes(provider)
   return choices.find(
     (choice) =>
-      choice.model === model && (own ? choice.provider === null : choice.provider === provider),
+      choice.model === model && (choice.provider === provider || (own && choice.provider === null)),
   )
 }
 
@@ -156,9 +204,9 @@ export const MODE_KEYS = {
   'danger-full-access': 'fullAccess',
 } as const
 
-function levelName(level: string): string {
+function levelName(level: string, model: ModelChoice): string {
   const named = NAMED_LEVELS.find((known) => known === level)
-  return named ? t(`dsh.effort.${named}`) : level
+  return named ? t(`dsh.effort.${named}`) : (model.effortNames?.[level] ?? level)
 }
 
 export function configOptions(choices: Choices, models: readonly ModelChoice[]): ConfigOption[] {
@@ -199,7 +247,7 @@ export function configOptions(choices: Choices, models: readonly ModelChoice[]):
       category: 'thought_level',
       type: 'select',
       value: choices.effort,
-      choices: model.efforts.map((effort) => ({ value: effort, name: levelName(effort) })),
+      choices: model.efforts.map((effort) => ({ value: effort, name: levelName(effort, model) })),
       idleOnly: true,
     })
   }
