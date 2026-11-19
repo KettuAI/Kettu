@@ -535,6 +535,7 @@ function Unavailable() {
           variant="secondary"
           onClick={() =>
             void openReport({
+              origin: 'usage',
               context: { sessionId: null, agentId: null, error: t('error.unavailable') },
             })
           }

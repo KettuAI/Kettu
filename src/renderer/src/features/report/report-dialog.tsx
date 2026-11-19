@@ -18,6 +18,7 @@ import {
   type ReportRequest,
   type ReportSubmitResult,
 } from '@shared/report'
+import type { AgentId } from '@shared/thread'
 import { SegmentedControl } from '@renderer/components/segmented-control'
 import { Button, buttonVariants } from '@renderer/components/ui/button'
 import { Checkbox } from '@renderer/components/ui/checkbox'
@@ -27,17 +28,23 @@ import { Textarea } from '@renderer/components/ui/textarea'
 import { toast } from '@renderer/components/ui/toast'
 import { recordAction } from '@renderer/lib/action-log'
 import { useCloudOff } from '@renderer/lib/cloud'
-import { errorMessage } from '@renderer/lib/host'
+import { errorMessage, hostAt } from '@renderer/lib/host'
 import { isWeb } from '@renderer/lib/platform'
 import { cn } from '@renderer/lib/utils'
 import { signIn, useAccountStore } from '@renderer/stores/account'
+import { agentName } from '@renderer/stores/agents'
 import { useOtherHost } from '@renderer/stores/hosts'
 import { closeReport, useReportStore, type ReportDialog as Opened } from '@renderer/stores/report'
 import { answerReportEntry, NOT_SUBMITTED, prepare, submit, type Bundle } from './report-flow'
+import { reportPrefill, type PrefillText } from './report-prefill'
 
 const SENSITIVE: ReadonlySet<ReportExtra> = new Set(['messages', 'verbose', 'dumps'])
 
 type Prepared = Bundle & { key: string }
+
+/** The agent's draft of the description: on its way, in the box, or not to be had. */
+type Draft =
+  { state: 'writing' } | { state: 'written'; agent: string | null } | { state: 'unavailable' }
 
 /** Report a problem: what happened, the range, the extras, a look at the files, then save. */
 export function ReportDialog() {
@@ -52,9 +59,62 @@ export function ReportDialog() {
 }
 
 function ReportForm({ dialog }: { dialog: Opened }) {
-  const { t } = useTranslation(['report', 'common'])
+  const { t, i18n } = useTranslation(['report', 'common'])
   const other = useOtherHost(dialog.hostId)
-  const [description, setDescription] = useState(dialog.description ?? '')
+  // A description that came with the dialog, such as an agent's own report, is left as it is.
+  const supplied = dialog.description !== undefined
+  const [prefill] = useState(() =>
+    supplied
+      ? ''
+      : reportPrefill(
+          {
+            origin: dialog.origin,
+            agent: dialog.context?.agentId
+              ? agentName(dialog.context.agentId as AgentId, dialog.hostId)
+              : null,
+            error: dialog.context?.error ?? null,
+          },
+          // The catalog types each key's own values, which a key picked at run time cannot name.
+          t as unknown as PrefillText,
+        ),
+  )
+  const [description, setDescription] = useState(dialog.description ?? prefill)
+  const [draft, setDraft] = useState<Draft | null>(supplied ? null : { state: 'writing' })
+  // Set once the user typed or used the text, after which no draft may replace it.
+  const settled = useRef(false)
+  const settle = (): void => {
+    settled.current = true
+    setDraft((now) => (now?.state === 'writing' ? null : now))
+  }
+  useEffect(() => {
+    if (supplied) return
+    let live = true
+    hostAt(dialog.hostId, 'agents.draftReport', {
+      origin: dialog.origin,
+      sessionId: dialog.context?.sessionId ?? null,
+      agentId: (dialog.context?.agentId ?? null) as AgentId | null,
+      error: dialog.context?.error ?? null,
+      language: i18n.language,
+    }).then(
+      (written) => {
+        if (!live || settled.current) return
+        if (written.draft === null) return setDraft(null)
+        setDescription(written.draft)
+        setDraft({ state: 'written', agent: written.agent })
+      },
+      (e: unknown) => {
+        console.warn('No draft of the report', e)
+        if (!live || settled.current) return
+        // With nothing filled in there is nothing to explain: the box is as it always was.
+        setDraft(prefill === '' ? null : { state: 'unavailable' })
+      },
+    )
+    return () => {
+      live = false
+    }
+    // Asked once, for the dialog as it opened.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
   const [range, setRange] = useState<ReportRange>(dialog.range)
   const [extras, setExtras] = useState<ReadonlySet<ReportExtra>>(() => new Set(dialog.extras))
   const [prepared, setPrepared] = useState<Prepared | null>(null)
@@ -110,6 +170,7 @@ function ReportForm({ dialog }: { dialog: Opened }) {
 
   const run = async (what: 'view' | 'save' | 'submit'): Promise<void> => {
     if (!ready || busy) return
+    settle()
     setBusy(what)
     setError(null)
     try {
@@ -186,9 +247,31 @@ function ReportForm({ dialog }: { dialog: Opened }) {
             maxLength={10_000}
             placeholder={t('whatPlaceholder')}
             className="max-h-50 min-h-20 resize-none text-control leading-[1.55]"
-            onChange={(e) => setDescription(e.target.value)}
+            onChange={(e) => {
+              settle()
+              setDraft(null)
+              setDescription(e.target.value)
+            }}
           />
-          {dialog.context && <p className="text-hint text-tertiary">{t('context')}</p>}
+          {(draft || dialog.context) && (
+            <p className="text-hint text-tertiary">
+              {draft && (
+                <span role="status">
+                  {draft.state === 'writing' && (
+                    <Spinner className="mr-1.5 inline size-3 align-[-0.125em]" />
+                  )}
+                  {draft.state === 'writing'
+                    ? t('draft.writing')
+                    : draft.state === 'unavailable'
+                      ? t('draft.unavailable')
+                      : draft.agent
+                        ? t('draft.written', { agent: draft.agent })
+                        : t('draft.writtenPlain')}{' '}
+                </span>
+              )}
+              {dialog.context && t('context')}
+            </p>
+          )}
         </Field>
         <Field label={t('range')}>
           <SegmentedControl

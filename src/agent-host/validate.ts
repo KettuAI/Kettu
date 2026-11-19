@@ -53,6 +53,7 @@ import {
   type WorktreeInspection,
 } from '@shared/git'
 import type { Platform } from '@shared/platform'
+import { REPORT_ERROR_MAX, REPORT_ORIGINS, type ReportOrigin } from '@shared/report'
 import {
   MAX_WORKFLOW_STEPS,
   PICK_REASON_CHARS,
@@ -1356,6 +1357,25 @@ export function createValidators(platform: Platform): Validators {
     },
     'agents.refreshAccount': agentWithForce,
     'agents.options': none,
+    'agents.draftReport': (params) => {
+      const o = fields(params)
+      const absent = (key: string): boolean => o[key] === null || o[key] === undefined
+      if (!absent('origin') && !(REPORT_ORIGINS as readonly unknown[]).includes(o.origin))
+        throw invalidParams('origin is not a place reports open from')
+      const error = o.error
+      if (!absent('error') && (typeof error !== 'string' || error.length > REPORT_ERROR_MAX))
+        throw invalidParams(`error must be text of at most ${REPORT_ERROR_MAX} characters`)
+      const language = string(o, 'language', 35)
+      if (!/^[A-Za-z0-9]+(?:-[A-Za-z0-9]+)*$/.test(language))
+        throw invalidParams('language must be a language tag')
+      return {
+        origin: absent('origin') ? null : (o.origin as ReportOrigin),
+        sessionId: absent('sessionId') ? null : sessionId(o),
+        agentId: absent('agentId') ? null : agentId(o),
+        error: absent('error') ? null : (error as string),
+        language,
+      }
+    },
     'mcp.status': none,
     'mcp.retry': none,
     'market.catalog': marketRead,

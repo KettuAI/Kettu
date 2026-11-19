@@ -18,6 +18,18 @@ export interface ReportContext {
   error: string | null
 }
 
+/** What the dialog was opened from, which a draft of the description starts from. */
+export const REPORT_ORIGINS = [
+  'turn',
+  'error',
+  'artifact',
+  'usage',
+  'host',
+  'crash',
+  'recording',
+] as const
+export type ReportOrigin = (typeof REPORT_ORIGINS)[number]
+
 export interface ReportRequest {
   description: string
   range: ReportRange
@@ -53,6 +65,8 @@ export type ReportFileView =
   | { kind: 'binary' }
 
 export const REPORT_DESCRIPTION_MAX = 10_000
+/** A description an agent drafts for the user keeps this many characters at most. */
+export const REPORT_DRAFT_MAX = 1_500
 /** The most a bundle may hold, which is also what the service takes. */
 export const REPORT_MAX_BYTES = 50 * 1024 * 1024
 /** The longest a recording of steps to reproduce runs before it stops by itself. */

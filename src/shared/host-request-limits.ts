@@ -46,6 +46,7 @@ export const HOST_REQUEST_LIMITS: Readonly<Record<HostMethod, number | null>> = 
   'agents.refreshAccount': AGENT_MS,
   'agents.listSessions': AGENT_MS,
   'agents.options': HOST_MS,
+  'agents.draftReport': AGENT_MS,
   'mcp.status': AGENT_MS,
   'mcp.retry': AGENT_MS,
   'market.catalog': AGENT_MS,

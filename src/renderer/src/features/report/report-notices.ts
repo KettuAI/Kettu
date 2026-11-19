@@ -15,7 +15,10 @@ export function useReportNotices(): void {
       noticeToast(
         t('crashNotice'),
         // The last run's start is all that is known of it; today covers the usual case.
-        { label: t('reportProblem'), onClick: () => void openReport({ range: { kind: 'today' } }) },
+        {
+          label: t('reportProblem'),
+          onClick: () => void openReport({ origin: 'crash', range: { kind: 'today' } }),
+        },
         () => void window.kettu.report.dismissCrashNotice(),
       )
     })

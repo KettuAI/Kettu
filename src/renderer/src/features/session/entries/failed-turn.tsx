@@ -53,6 +53,7 @@ export function FailedTurnActions({
         onRetry={retry}
         retrying={retrying}
         report={{ hostId, sessionId, ...(agentId ? { agentId } : {}) }}
+        origin="turn"
         error={error}
       />
       {failed && <p className="col-start-2 mt-1 text-small text-danger">{failed}</p>}

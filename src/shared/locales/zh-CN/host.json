@@ -800,5 +800,9 @@
   },
   "marketSkills": {
     "nameTaken": "已经添加过名为 {{name}} 的技能，来自 {{from}}。先移除那一个：同名的两个技能，Agent 只会保留一个。"
+  },
+  "report": {
+    "draftNoAgent": "没有可用来起草描述的 Agent",
+    "draftFailed": "{{agent}} 没能起草描述：{{reason}}"
   }
 }

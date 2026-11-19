@@ -90,6 +90,7 @@ import type {
 } from './git'
 import type { PortConnectionState } from './port-rpc'
 import type { PathCompletion } from './remote/host-admin'
+import type { ReportOrigin } from './report'
 import type {
   RoutineChanges,
   RoutineDraft,
@@ -862,6 +863,20 @@ export interface HostContract {
     result: { sessions: ImportableSession[]; nextCursor: string | null }
   }
   'agents.options': { params: void; result: AgentOptions[] }
+  // A draft of a problem report's description, written by the agent the report is about, else the
+  // one new sessions start with, from where the report was opened, the error and the host's recent
+  // warnings, with the name of the agent that wrote it; a null draft when there is neither an error nor a
+  // recent record to write from. `language` is the tag the user reads.
+  'agents.draftReport': {
+    params: {
+      origin: ReportOrigin | null
+      sessionId: string | null
+      agentId: AgentId | null
+      error: string | null
+      language: string
+    }
+    result: { draft: string | null; agent: string | null }
+  }
   // For Marketplace › Installed: Kettu's own server and each agent's own file.
   // Neither starts an agent, and neither reads an agent's configuration file.
   'mcp.status': { params: void; result: McpStatus }
@@ -1734,6 +1749,7 @@ export const HOST_METHODS = [
   'agents.refreshAccount',
   'agents.listSessions',
   'agents.options',
+  'agents.draftReport',
   'mcp.status',
   'mcp.retry',
   'market.catalog',

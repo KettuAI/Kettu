@@ -293,6 +293,11 @@ export class Diagnostics {
     return this.logRing.toArray()
   }
 
+  /** The agent's recent process events alone, which cost no parsing of its traffic. */
+  agentEvents(agentId: AgentId): AgentEvent[] {
+    return this.agents.get(agentId)?.events.toArray() ?? []
+  }
+
   agentRecords(agentId: AgentId): {
     traffic: TrafficRecord[]
     stderr: string
