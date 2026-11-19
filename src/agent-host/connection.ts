@@ -330,11 +330,6 @@ export interface SessionOptions {
    */
   memory?: SessionMemory
   /**
-   * Kettu's MCP service for an agent with `kettuExtension`, which takes it only through Kettu's
-   * extension in the agent; the session's own token, so its calls need not name the session.
-   */
-  kettuService?: KettuService
-  /**
    * The session's own instructions get nothing of Kettu's: its guide and memory go ahead of its
    * prompts, as for a session whose agent recorded its instructions outside Kettu.
    */
@@ -352,24 +347,6 @@ export interface SessionMemory {
   /** The index of both layers and how to use them, marked as reference data. */
   text: string
 }
-
-/** Where a session reaches Kettu's MCP service, and its bearer token there. */
-export interface KettuService {
-  url: string
-  token: string
-}
-
-/**
- * Where ACP's `session/new` and `session/load` carry a session's `KettuService` to the session
- * router, which takes it out into that session's process environment for Kettu's extension.
- */
-export const KETTU_SERVICE_META = 'sh.kettu/mcp'
-
-/**
- * Where ACP's `session/new` names the file Kettu's extension writes the session's model scope to;
- * the session router takes it out into that session's process environment as well.
- */
-export const MODEL_SCOPE_META = 'sh.kettu/model-scope'
 
 /** Decides which of the MCP servers a session's folder declares itself may start. */
 export interface ProjectMcpGate {
@@ -416,11 +393,6 @@ export interface AgentConnection {
    * the session's messages. Only a session created with it has the text; the host records which.
    */
   readonly systemPromptAppend?: boolean
-  /**
-   * Whether the agent runs Kettu's extension, which reaches Kettu's MCP service with
-   * `SessionOptions.kettuService` though the agent takes no MCP server over ACP (Pi).
-   */
-  readonly kettuExtension?: boolean
   readonly isClosed: boolean
   close(): void
 

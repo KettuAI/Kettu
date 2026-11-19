@@ -1,0 +1,895 @@
+[
+  {
+    "type": "agent_start"
+  },
+  {
+    "type": "turn_start"
+  },
+  {
+    "type": "message_start",
+    "message": {
+      "role": "user",
+      "content": [
+        {
+          "type": "text",
+          "text": "Read notes.txt with the read tool. Then use the edit tool to change 'hello' to 'hallo' in it. Then run `wc -l notes.txt` with bash. Then reply done."
+        }
+      ],
+      "timestamp": 1795103709660
+    }
+  },
+  {
+    "type": "message_end",
+    "message": {
+      "role": "user",
+      "content": [
+        {
+          "type": "text",
+          "text": "Read notes.txt with the read tool. Then use the edit tool to change 'hello' to 'hallo' in it. Then run `wc -l notes.txt` with bash. Then reply done."
+        }
+      ],
+      "timestamp": 1795103709660
+    }
+  },
+  {
+    "type": "message_start",
+    "message": {
+      "role": "assistant",
+      "content": [],
+      "api": "openai-completions",
+      "provider": "example",
+      "model": "small-model",
+      "usage": {
+        "input": 0,
+        "output": 0,
+        "cacheRead": 0,
+        "cacheWrite": 0,
+        "totalTokens": 0
+      },
+      "stopReason": "stop",
+      "timestamp": 1795103710080
+    }
+  },
+  {
+    "type": "message_update",
+    "assistantMessageEvent": {
+      "type": "toolcall_start",
+      "contentIndex": 0,
+      "partial": {
+        "role": "assistant",
+        "content": [
+          {
+            "type": "toolCall",
+            "id": "call_fad71085a8b04bcabba46c62",
+            "name": "read",
+            "arguments": {},
+            "partialArgs": "",
+            "streamIndex": 0
+          }
+        ],
+        "api": "openai-completions",
+        "provider": "example",
+        "model": "small-model",
+        "usage": {
+          "input": 0,
+          "output": 0,
+          "cacheRead": 0,
+          "cacheWrite": 0,
+          "totalTokens": 0,
+          "cost": {
+            "input": 0,
+            "output": 0,
+            "cacheRead": 0,
+            "cacheWrite": 0,
+            "total": 0
+          }
+        },
+        "stopReason": "stop",
+        "timestamp": 1795103710080,
+        "responseId": "resp",
+        "responseModel": "model"
+      }
+    }
+  },
+  {
+    "type": "message_update",
+    "assistantMessageEvent": {
+      "type": "toolcall_delta",
+      "contentIndex": 0,
+      "delta": ""
+    }
+  },
+  {
+    "type": "message_update",
+    "assistantMessageEvent": {
+      "type": "toolcall_delta",
+      "contentIndex": 0,
+      "delta": "{\"path\":\""
+    }
+  },
+  {
+    "type": "message_update",
+    "assistantMessageEvent": {
+      "type": "toolcall_delta",
+      "contentIndex": 0,
+      "delta": "notes"
+    }
+  },
+  {
+    "type": "message_update",
+    "assistantMessageEvent": {
+      "type": "toolcall_delta",
+      "contentIndex": 0,
+      "delta": ".txt"
+    }
+  },
+  {
+    "type": "message_update",
+    "assistantMessageEvent": {
+      "type": "toolcall_delta",
+      "contentIndex": 0,
+      "delta": "\""
+    }
+  },
+  {
+    "type": "message_update",
+    "assistantMessageEvent": {
+      "type": "toolcall_delta",
+      "contentIndex": 0,
+      "delta": "}"
+    }
+  },
+  {
+    "type": "message_update",
+    "assistantMessageEvent": {
+      "type": "toolcall_end",
+      "contentIndex": 0,
+      "toolCall": {
+        "type": "toolCall",
+        "id": "call_fad71085a8b04bcabba46c62",
+        "name": "read",
+        "arguments": {
+          "path": "notes.txt"
+        }
+      }
+    }
+  },
+  {
+    "type": "message_end",
+    "message": {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "toolCall",
+          "id": "call_fad71085a8b04bcabba46c62",
+          "name": "read",
+          "arguments": {
+            "path": "notes.txt"
+          }
+        }
+      ],
+      "api": "openai-completions",
+      "provider": "example",
+      "model": "small-model",
+      "usage": {
+        "input": 2667,
+        "output": 39,
+        "cacheRead": 0,
+        "cacheWrite": 0,
+        "reasoning": 0,
+        "totalTokens": 2706
+      },
+      "stopReason": "toolUse",
+      "timestamp": 1795103710080,
+      "responseId": "resp",
+      "responseModel": "model"
+    }
+  },
+  {
+    "type": "tool_execution_start",
+    "toolCallId": "call_fad71085a8b04bcabba46c62",
+    "toolName": "read",
+    "args": {
+      "path": "notes.txt"
+    }
+  },
+  {
+    "type": "tool_execution_end",
+    "toolCallId": "call_fad71085a8b04bcabba46c62",
+    "toolName": "read",
+    "result": {
+      "content": [
+        {
+          "type": "text",
+          "text": "hello from notes\nline two\n"
+        }
+      ]
+    },
+    "isError": false
+  },
+  {
+    "type": "message_start",
+    "message": {
+      "role": "toolResult",
+      "toolCallId": "call_fad71085a8b04bcabba46c62",
+      "toolName": "read",
+      "content": [
+        {
+          "type": "text",
+          "text": "hello from notes\nline two\n"
+        }
+      ],
+      "isError": false,
+      "timestamp": 1795103715768
+    }
+  },
+  {
+    "type": "message_end",
+    "message": {
+      "role": "toolResult",
+      "toolCallId": "call_fad71085a8b04bcabba46c62",
+      "toolName": "read",
+      "content": [
+        {
+          "type": "text",
+          "text": "hello from notes\nline two\n"
+        }
+      ],
+      "isError": false,
+      "timestamp": 1795103715768
+    }
+  },
+  {
+    "type": "turn_end"
+  },
+  {
+    "type": "turn_start"
+  },
+  {
+    "type": "message_start",
+    "message": {
+      "role": "assistant",
+      "content": [],
+      "api": "openai-completions",
+      "provider": "example",
+      "model": "small-model",
+      "usage": {
+        "input": 0,
+        "output": 0,
+        "cacheRead": 0,
+        "cacheWrite": 0,
+        "totalTokens": 0
+      },
+      "stopReason": "stop",
+      "timestamp": 1795103715774,
+      "responseId": "resp",
+      "responseModel": "model"
+    }
+  },
+  {
+    "type": "message_update",
+    "assistantMessageEvent": {
+      "type": "thinking_start",
+      "contentIndex": 0
+    }
+  },
+  {
+    "type": "message_update",
+    "assistantMessageEvent": {
+      "type": "thinking_delta",
+      "contentIndex": 0,
+      "delta": "Now"
+    }
+  },
+  {
+    "type": "message_update",
+    "assistantMessageEvent": {
+      "type": "thinking_delta",
+      "contentIndex": 0,
+      "delta": " edit."
+    }
+  },
+  {
+    "type": "message_update",
+    "assistantMessageEvent": {
+      "type": "toolcall_start",
+      "contentIndex": 1,
+      "partial": {
+        "role": "assistant",
+        "content": [
+          {
+            "type": "thinking",
+            "thinking": "Now edit.",
+            "thinkingSignature": "sig"
+          },
+          {
+            "type": "toolCall",
+            "id": "call_cad9bc36b5b64969b4100bcc",
+            "name": "edit",
+            "arguments": {},
+            "partialArgs": "",
+            "streamIndex": 0
+          }
+        ],
+        "api": "openai-completions",
+        "provider": "example",
+        "model": "small-model",
+        "usage": {
+          "input": 0,
+          "output": 0,
+          "cacheRead": 0,
+          "cacheWrite": 0,
+          "totalTokens": 0,
+          "cost": {
+            "input": 0,
+            "output": 0,
+            "cacheRead": 0,
+            "cacheWrite": 0,
+            "total": 0
+          }
+        },
+        "stopReason": "stop",
+        "timestamp": 1795103715774,
+        "responseId": "resp",
+        "responseModel": "model"
+      }
+    }
+  },
+  {
+    "type": "message_update",
+    "assistantMessageEvent": {
+      "type": "toolcall_delta",
+      "contentIndex": 1,
+      "delta": ""
+    }
+  },
+  {
+    "type": "message_update",
+    "assistantMessageEvent": {
+      "type": "toolcall_delta",
+      "contentIndex": 1,
+      "delta": "{\"path\":\""
+    }
+  },
+  {
+    "type": "message_update",
+    "assistantMessageEvent": {
+      "type": "toolcall_delta",
+      "contentIndex": 1,
+      "delta": "notes.txt"
+    }
+  },
+  {
+    "type": "message_update",
+    "assistantMessageEvent": {
+      "type": "toolcall_delta",
+      "contentIndex": 1,
+      "delta": "\""
+    }
+  },
+  {
+    "type": "message_update",
+    "assistantMessageEvent": {
+      "type": "toolcall_delta",
+      "contentIndex": 1,
+      "delta": ",\"edits\":"
+    }
+  },
+  {
+    "type": "message_update",
+    "assistantMessageEvent": {
+      "type": "toolcall_delta",
+      "contentIndex": 1,
+      "delta": "[{\"oldText\":\"hello\",\"newText\":\"hallo\"}]"
+    }
+  },
+  {
+    "type": "message_update",
+    "assistantMessageEvent": {
+      "type": "toolcall_delta",
+      "contentIndex": 1,
+      "delta": "}"
+    }
+  },
+  {
+    "type": "message_update",
+    "assistantMessageEvent": {
+      "type": "thinking_end",
+      "contentIndex": 0,
+      "content": "Now edit."
+    }
+  },
+  {
+    "type": "message_update",
+    "assistantMessageEvent": {
+      "type": "toolcall_end",
+      "contentIndex": 1,
+      "toolCall": {
+        "type": "toolCall",
+        "id": "call_cad9bc36b5b64969b4100bcc",
+        "name": "edit",
+        "arguments": {
+          "path": "notes.txt",
+          "edits": [
+            {
+              "oldText": "hello",
+              "newText": "hallo"
+            }
+          ]
+        }
+      }
+    }
+  },
+  {
+    "type": "message_end",
+    "message": {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "thinking",
+          "thinking": "Now edit.",
+          "thinkingSignature": "sig"
+        },
+        {
+          "type": "toolCall",
+          "id": "call_cad9bc36b5b64969b4100bcc",
+          "name": "edit",
+          "arguments": {
+            "path": "notes.txt",
+            "edits": [
+              {
+                "oldText": "hello",
+                "newText": "hallo"
+              }
+            ]
+          }
+        }
+      ],
+      "api": "openai-completions",
+      "provider": "example",
+      "model": "small-model",
+      "usage": {
+        "input": 165,
+        "output": 75,
+        "cacheRead": 2560,
+        "cacheWrite": 0,
+        "reasoning": 3,
+        "totalTokens": 2800
+      },
+      "stopReason": "toolUse",
+      "timestamp": 1795103715774,
+      "responseId": "resp",
+      "responseModel": "model"
+    }
+  },
+  {
+    "type": "tool_execution_start",
+    "toolCallId": "call_cad9bc36b5b64969b4100bcc",
+    "toolName": "edit",
+    "args": {
+      "path": "notes.txt",
+      "edits": [
+        {
+          "oldText": "hello",
+          "newText": "hallo"
+        }
+      ]
+    }
+  },
+  {
+    "type": "tool_execution_end",
+    "toolCallId": "call_cad9bc36b5b64969b4100bcc",
+    "toolName": "edit",
+    "result": {
+      "content": [
+        {
+          "type": "text",
+          "text": "Successfully replaced 1 block(s) in notes.txt."
+        }
+      ],
+      "details": {
+        "diff": "-1 hello from notes\n+1 hallo from notes\n 2 line two",
+        "patch": "--- notes.txt\n+++ notes.txt\n@@ -1,2 +1,2 @@\n-hello from notes\n+hallo from notes\n line two\n",
+        "firstChangedLine": 1
+      }
+    },
+    "isError": false
+  },
+  {
+    "type": "message_start",
+    "message": {
+      "role": "toolResult",
+      "toolCallId": "call_cad9bc36b5b64969b4100bcc",
+      "toolName": "edit",
+      "content": [
+        {
+          "type": "text",
+          "text": "Successfully replaced 1 block(s) in notes.txt."
+        }
+      ],
+      "details": {
+        "diff": "-1 hello from notes\n+1 hallo from notes\n 2 line two",
+        "patch": "--- notes.txt\n+++ notes.txt\n@@ -1,2 +1,2 @@\n-hello from notes\n+hallo from notes\n line two\n",
+        "firstChangedLine": 1
+      },
+      "isError": false,
+      "timestamp": 1795103718874
+    }
+  },
+  {
+    "type": "message_end",
+    "message": {
+      "role": "toolResult",
+      "toolCallId": "call_cad9bc36b5b64969b4100bcc",
+      "toolName": "edit",
+      "content": [
+        {
+          "type": "text",
+          "text": "Successfully replaced 1 block(s) in notes.txt."
+        }
+      ],
+      "details": {
+        "diff": "-1 hello from notes\n+1 hallo from notes\n 2 line two",
+        "patch": "--- notes.txt\n+++ notes.txt\n@@ -1,2 +1,2 @@\n-hello from notes\n+hallo from notes\n line two\n",
+        "firstChangedLine": 1
+      },
+      "isError": false,
+      "timestamp": 1795103718874
+    }
+  },
+  {
+    "type": "turn_end"
+  },
+  {
+    "type": "turn_start"
+  },
+  {
+    "type": "message_start",
+    "message": {
+      "role": "assistant",
+      "content": [],
+      "api": "openai-completions",
+      "provider": "example",
+      "model": "small-model",
+      "usage": {
+        "input": 0,
+        "output": 0,
+        "cacheRead": 0,
+        "cacheWrite": 0,
+        "totalTokens": 0
+      },
+      "stopReason": "stop",
+      "timestamp": 1795103718879,
+      "responseId": "resp",
+      "responseModel": "model"
+    }
+  },
+  {
+    "type": "message_update",
+    "assistantMessageEvent": {
+      "type": "toolcall_start",
+      "contentIndex": 0,
+      "partial": {
+        "role": "assistant",
+        "content": [
+          {
+            "type": "toolCall",
+            "id": "call_1352cc1c34d74c77a5b95027",
+            "name": "bash",
+            "arguments": {},
+            "partialArgs": "",
+            "streamIndex": 0
+          }
+        ],
+        "api": "openai-completions",
+        "provider": "example",
+        "model": "small-model",
+        "usage": {
+          "input": 0,
+          "output": 0,
+          "cacheRead": 0,
+          "cacheWrite": 0,
+          "totalTokens": 0,
+          "cost": {
+            "input": 0,
+            "output": 0,
+            "cacheRead": 0,
+            "cacheWrite": 0,
+            "total": 0
+          }
+        },
+        "stopReason": "stop",
+        "timestamp": 1795103718879,
+        "responseId": "resp",
+        "responseModel": "model"
+      }
+    }
+  },
+  {
+    "type": "message_update",
+    "assistantMessageEvent": {
+      "type": "toolcall_delta",
+      "contentIndex": 0,
+      "delta": ""
+    }
+  },
+  {
+    "type": "message_update",
+    "assistantMessageEvent": {
+      "type": "toolcall_delta",
+      "contentIndex": 0,
+      "delta": "{\"command\":\""
+    }
+  },
+  {
+    "type": "message_update",
+    "assistantMessageEvent": {
+      "type": "toolcall_delta",
+      "contentIndex": 0,
+      "delta": "wc"
+    }
+  },
+  {
+    "type": "message_update",
+    "assistantMessageEvent": {
+      "type": "toolcall_delta",
+      "contentIndex": 0,
+      "delta": " -l notes.txt"
+    }
+  },
+  {
+    "type": "message_update",
+    "assistantMessageEvent": {
+      "type": "toolcall_delta",
+      "contentIndex": 0,
+      "delta": "\""
+    }
+  },
+  {
+    "type": "message_update",
+    "assistantMessageEvent": {
+      "type": "toolcall_delta",
+      "contentIndex": 0,
+      "delta": "}"
+    }
+  },
+  {
+    "type": "message_update",
+    "assistantMessageEvent": {
+      "type": "toolcall_end",
+      "contentIndex": 0,
+      "toolCall": {
+        "type": "toolCall",
+        "id": "call_1352cc1c34d74c77a5b95027",
+        "name": "bash",
+        "arguments": {
+          "command": "wc -l notes.txt"
+        }
+      }
+    }
+  },
+  {
+    "type": "message_end",
+    "message": {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "toolCall",
+          "id": "call_1352cc1c34d74c77a5b95027",
+          "name": "bash",
+          "arguments": {
+            "command": "wc -l notes.txt"
+          }
+        }
+      ],
+      "api": "openai-completions",
+      "provider": "example",
+      "model": "small-model",
+      "usage": {
+        "input": 134,
+        "output": 42,
+        "cacheRead": 2688,
+        "cacheWrite": 0,
+        "reasoning": 0,
+        "totalTokens": 2864
+      },
+      "stopReason": "toolUse",
+      "timestamp": 1795103718879,
+      "responseId": "resp",
+      "responseModel": "model"
+    }
+  },
+  {
+    "type": "tool_execution_start",
+    "toolCallId": "call_1352cc1c34d74c77a5b95027",
+    "toolName": "bash",
+    "args": {
+      "command": "wc -l notes.txt"
+    }
+  },
+  {
+    "type": "tool_execution_update",
+    "toolCallId": "call_1352cc1c34d74c77a5b95027",
+    "toolName": "bash",
+    "args": {
+      "command": "wc -l notes.txt"
+    },
+    "partialResult": {
+      "content": []
+    }
+  },
+  {
+    "type": "tool_execution_update",
+    "toolCallId": "call_1352cc1c34d74c77a5b95027",
+    "toolName": "bash",
+    "args": {
+      "command": "wc -l notes.txt"
+    },
+    "partialResult": {
+      "content": [
+        {
+          "type": "text",
+          "text": "       2 notes.txt\n"
+        }
+      ],
+      "details": {}
+    }
+  },
+  {
+    "type": "tool_execution_end",
+    "toolCallId": "call_1352cc1c34d74c77a5b95027",
+    "toolName": "bash",
+    "result": {
+      "content": [
+        {
+          "type": "text",
+          "text": "       2 notes.txt\n"
+        }
+      ]
+    },
+    "isError": false
+  },
+  {
+    "type": "message_start",
+    "message": {
+      "role": "toolResult",
+      "toolCallId": "call_1352cc1c34d74c77a5b95027",
+      "toolName": "bash",
+      "content": [
+        {
+          "type": "text",
+          "text": "       2 notes.txt\n"
+        }
+      ],
+      "isError": false,
+      "timestamp": 1795103722541
+    }
+  },
+  {
+    "type": "message_end",
+    "message": {
+      "role": "toolResult",
+      "toolCallId": "call_1352cc1c34d74c77a5b95027",
+      "toolName": "bash",
+      "content": [
+        {
+          "type": "text",
+          "text": "       2 notes.txt\n"
+        }
+      ],
+      "isError": false,
+      "timestamp": 1795103722541
+    }
+  },
+  {
+    "type": "turn_end"
+  },
+  {
+    "type": "turn_start"
+  },
+  {
+    "type": "message_start",
+    "message": {
+      "role": "assistant",
+      "content": [],
+      "api": "openai-completions",
+      "provider": "example",
+      "model": "small-model",
+      "usage": {
+        "input": 0,
+        "output": 0,
+        "cacheRead": 0,
+        "cacheWrite": 0,
+        "totalTokens": 0
+      },
+      "stopReason": "stop",
+      "timestamp": 1795103722543,
+      "responseId": "resp",
+      "responseModel": "model"
+    }
+  },
+  {
+    "type": "message_update",
+    "assistantMessageEvent": {
+      "type": "text_start",
+      "contentIndex": 0
+    }
+  },
+  {
+    "type": "message_update",
+    "assistantMessageEvent": {
+      "type": "text_delta",
+      "contentIndex": 0,
+      "delta": "Done. `"
+    }
+  },
+  {
+    "type": "message_update",
+    "assistantMessageEvent": {
+      "type": "text_delta",
+      "contentIndex": 0,
+      "delta": "notes.txt` now reads \""
+    }
+  },
+  {
+    "type": "message_update",
+    "assistantMessageEvent": {
+      "type": "text_delta",
+      "contentIndex": 0,
+      "delta": "hallo from notes\" and"
+    }
+  },
+  {
+    "type": "message_update",
+    "assistantMessageEvent": {
+      "type": "text_delta",
+      "contentIndex": 0,
+      "delta": " has 2 lines."
+    }
+  },
+  {
+    "type": "message_update",
+    "assistantMessageEvent": {
+      "type": "text_end",
+      "contentIndex": 0,
+      "content": "Done. `notes.txt` now reads \"hallo from notes\" and has 2 lines."
+    }
+  },
+  {
+    "type": "message_end",
+    "message": {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "text",
+          "text": "Done. `notes.txt` now reads \"hallo from notes\" and has 2 lines."
+        }
+      ],
+      "api": "openai-completions",
+      "provider": "example",
+      "model": "small-model",
+      "usage": {
+        "input": 65,
+        "output": 22,
+        "cacheRead": 2816,
+        "cacheWrite": 0,
+        "reasoning": 0,
+        "totalTokens": 2903
+      },
+      "stopReason": "stop",
+      "timestamp": 1795103722543,
+      "responseId": "resp",
+      "responseModel": "model"
+    }
+  },
+  {
+    "type": "turn_end"
+  },
+  {
+    "type": "agent_end",
+    "willRetry": false
+  },
+  {
+    "type": "agent_settled"
+  }
+]

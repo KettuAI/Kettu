@@ -1,5 +1,5 @@
-// The session router as a process: a session's Kettu MCP service reaches that session's adapter
-// process alone, as variables, and never the adapter itself in the request.
+// The session router as a process: each session gets an adapter process of its own, started where
+// and with what the session asks.
 
 import { spawn, type ChildProcess } from 'node:child_process'
 import { mkdir, mkdtemp, realpath, rm, writeFile } from 'node:fs/promises'
@@ -10,24 +10,19 @@ import { afterEach, describe, expect, it } from 'vitest'
 
 const ROUTER = path.resolve('src/agent-host/session-router/router.ts')
 
-// An adapter that answers with what it was sent, its arguments and the service variables it
-// started with; with \`--help\` it prints \`AGENT_HELP\` and exits.
+// An adapter that answers with what it was sent, its arguments and where it started; with
+// \`--help\` it prints \`AGENT_HELP\` and exits.
 const CHILD = `
 import { createInterface } from 'node:readline'
 if (process.argv.includes('--help')) {
   process.stdout.write(process.env.AGENT_HELP ?? '')
   process.exit(0)
 }
-const env = () => ({
-  url: process.env.KETTU_MCP_URL ?? null,
-  token: process.env.KETTU_MCP_TOKEN ?? null,
-})
 const where = () => ({ cwd: process.cwd(), electron: process.env.ELECTRON_RUN_AS_NODE ?? null })
 createInterface({ input: process.stdin }).on('line', (line) => {
   const message = JSON.parse(line)
   if (message.id === undefined) return
-  const scope = process.env.KETTU_MODEL_SCOPE_FILE ?? null
-  const seen = { params: message.params, env: env(), scope, args: process.argv.slice(2), ...where() }
+  const seen = { params: message.params, args: process.argv.slice(2), ...where() }
   const result =
     message.method === 'session/new'
       ? { sessionId: 'session-' + process.pid, _meta: seen }
@@ -41,8 +36,6 @@ createInterface({ input: process.stdin }).on('line', (line) => {
 interface Seen {
   params: Record<string, unknown>
   args: string[]
-  env: { url: string | null; token: string | null }
-  scope: string | null
   cwd: string
   electron: string | null
 }
@@ -74,12 +67,8 @@ async function startRouter(
   if (options.sessionFlag) words.unshift(`--session-flag=${options.sessionFlag}`)
   const router = spawn(process.execPath, [ROUTER, ...words], {
     cwd: dir,
-    // A service the router itself inherited goes to no child.
     env: {
       ...process.env,
-      KETTU_MCP_URL: 'http://inherited',
-      KETTU_MCP_TOKEN: 'inherited',
-      KETTU_MODEL_SCOPE_FILE: '/inherited/scope.json',
       ELECTRON_RUN_AS_NODE: '1',
       AGENT_HELP: options.help ?? '',
     },
@@ -111,81 +100,6 @@ async function startRouter(
 }
 
 describe('the session router', () => {
-  it("gives a session's service to its own process only, out of the request", async () => {
-    const { request } = await startRouter()
-    const control = await request('initialize', { protocolVersion: 1 })
-    expect(control._meta.env).toEqual({ url: null, token: null })
-
-    const service = { url: 'http://127.0.0.1:4100/mcp', token: 'session-token' }
-    const opened = await request('session/new', {
-      cwd: '/repo',
-      mcpServers: [],
-      _meta: { 'sh.kettu/mcp': service, other: 1 },
-    })
-    expect(opened._meta.env).toEqual(service)
-    expect(opened._meta.params).toEqual({ cwd: '/repo', mcpServers: [], _meta: { other: 1 } })
-
-    const plain = await request('session/new', { cwd: '/repo', mcpServers: [] })
-    expect(plain._meta.env).toEqual({ url: null, token: null })
-    expect(plain._meta.params).toEqual({ cwd: '/repo', mcpServers: [] })
-
-    const loaded = await request('session/load', {
-      sessionId: 'earlier',
-      cwd: '/repo',
-      mcpServers: [],
-      _meta: { 'sh.kettu/mcp': { url: service.url, token: 'other-token' } },
-    })
-    expect(loaded._meta.env).toEqual({ url: service.url, token: 'other-token' })
-    expect(loaded._meta.params).toEqual({ sessionId: 'earlier', cwd: '/repo', mcpServers: [] })
-
-    // A later request of the first session still reaches its process, which kept its own.
-    const later = await request('session/set_mode', { sessionId: opened.sessionId, modeId: 'x' })
-    expect(later._meta.env).toEqual(service)
-  })
-
-  it("gives a session's model scope file to its own process only, out of the request", async () => {
-    const { request } = await startRouter()
-    const control = await request('initialize', { protocolVersion: 1 })
-    expect(control._meta.scope).toBeNull()
-
-    const file = '/tmp/kettu-model-scope-x/one.json'
-    const opened = await request('session/new', {
-      cwd: '/repo',
-      mcpServers: [],
-      _meta: { 'sh.kettu/model-scope': file, 'sh.kettu/mcp': { url: 'http://s', token: 't' } },
-    })
-    expect(opened._meta.scope).toBe(file)
-    expect(opened._meta.env).toEqual({ url: 'http://s', token: 't' })
-    expect(opened._meta.params).toEqual({ cwd: '/repo', mcpServers: [] })
-
-    const plain = await request('session/new', { cwd: '/repo', mcpServers: [] })
-    expect(plain._meta.scope).toBeNull()
-
-    // Only an absolute path reaches the process; the request loses it either way.
-    const relative = await request('session/new', {
-      cwd: '/repo',
-      mcpServers: [],
-      _meta: { 'sh.kettu/model-scope': 'scope.json' },
-    })
-    expect(relative._meta.scope).toBeNull()
-    expect(relative._meta.params).toEqual({ cwd: '/repo', mcpServers: [] })
-
-    const later = await request('session/set_mode', { sessionId: opened.sessionId, modeId: 'x' })
-    expect(later._meta.scope).toBe(file)
-  })
-
-  it('passes no variables for a service it cannot use, and still strips it', async () => {
-    const { request } = await startRouter()
-    await request('initialize', { protocolVersion: 1 })
-    const opened = await request('session/new', {
-      cwd: '/repo',
-      mcpServers: [],
-      _meta: { 'sh.kettu/mcp': { url: 'http://127.0.0.1:1/mcp', token: 'a\nb' } },
-    })
-    expect(opened._meta.env).toEqual({ url: null, token: null })
-    expect(opened._meta.params).toEqual({ cwd: '/repo', mcpServers: [] })
-  })
-
   it.skipIf(process.platform === 'win32')(
     "starts each session's process in its folder, for new, load and resume",
     async () => {

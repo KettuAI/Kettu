@@ -1,0 +1,334 @@
+[
+  {
+    "type": "agent_start"
+  },
+  {
+    "type": "turn_start"
+  },
+  {
+    "type": "message_start",
+    "message": {
+      "role": "user",
+      "content": [
+        {
+          "type": "text",
+          "text": "Run `sleep 30` with bash, then say done."
+        }
+      ],
+      "timestamp": 1795103066637
+    }
+  },
+  {
+    "type": "message_end",
+    "message": {
+      "role": "user",
+      "content": [
+        {
+          "type": "text",
+          "text": "Run `sleep 30` with bash, then say done."
+        }
+      ],
+      "timestamp": 1795103066637
+    }
+  },
+  {
+    "type": "message_start",
+    "message": {
+      "role": "assistant",
+      "content": [],
+      "api": "openai-responses",
+      "provider": "example",
+      "model": "reasoning-model",
+      "usage": {
+        "input": 0,
+        "output": 0,
+        "cacheRead": 0,
+        "cacheWrite": 0,
+        "totalTokens": 0
+      },
+      "stopReason": "pending",
+      "timestamp": 1795103066725
+    }
+  },
+  {
+    "type": "message_update",
+    "assistantMessageEvent": {
+      "type": "toolcall_start",
+      "contentIndex": 0,
+      "id": "call_77cbfdd4f9d54c3e8edfbae22c16c1fd",
+      "toolName": "bash"
+    }
+  },
+  {
+    "type": "message_update",
+    "assistantMessageEvent": {
+      "type": "toolcall_delta",
+      "contentIndex": 0,
+      "delta": "{\""
+    }
+  },
+  {
+    "type": "message_update",
+    "assistantMessageEvent": {
+      "type": "toolcall_delta",
+      "contentIndex": 0,
+      "delta": "command"
+    }
+  },
+  {
+    "type": "message_update",
+    "assistantMessageEvent": {
+      "type": "toolcall_delta",
+      "contentIndex": 0,
+      "delta": "\":\""
+    }
+  },
+  {
+    "type": "message_update",
+    "assistantMessageEvent": {
+      "type": "toolcall_delta",
+      "contentIndex": 0,
+      "delta": "sleep"
+    }
+  },
+  {
+    "type": "message_update",
+    "assistantMessageEvent": {
+      "type": "toolcall_delta",
+      "contentIndex": 0,
+      "delta": " "
+    }
+  },
+  {
+    "type": "message_update",
+    "assistantMessageEvent": {
+      "type": "toolcall_delta",
+      "contentIndex": 0,
+      "delta": "30"
+    }
+  },
+  {
+    "type": "message_update",
+    "assistantMessageEvent": {
+      "type": "toolcall_delta",
+      "contentIndex": 0,
+      "delta": "\",\""
+    }
+  },
+  {
+    "type": "message_update",
+    "assistantMessageEvent": {
+      "type": "toolcall_delta",
+      "contentIndex": 0,
+      "delta": "timeout"
+    }
+  },
+  {
+    "type": "message_update",
+    "assistantMessageEvent": {
+      "type": "toolcall_delta",
+      "contentIndex": 0,
+      "delta": "\":"
+    }
+  },
+  {
+    "type": "message_update",
+    "assistantMessageEvent": {
+      "type": "toolcall_delta",
+      "contentIndex": 0,
+      "delta": "40"
+    }
+  },
+  {
+    "type": "message_update",
+    "assistantMessageEvent": {
+      "type": "toolcall_delta",
+      "contentIndex": 0,
+      "delta": "}"
+    }
+  },
+  {
+    "type": "message_update",
+    "assistantMessageEvent": {
+      "type": "toolcall_end",
+      "contentIndex": 0,
+      "toolCall": {
+        "type": "toolCall",
+        "id": "call_77cbfdd4f9d54c3e8edfbae22c16c1fd",
+        "name": "bash",
+        "arguments": {
+          "command": "sleep 30",
+          "timeout": 40
+        }
+      }
+    }
+  },
+  {
+    "type": "message_end",
+    "message": {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "toolCall",
+          "id": "call_77cbfdd4f9d54c3e8edfbae22c16c1fd",
+          "name": "bash",
+          "arguments": {
+            "command": "sleep 30",
+            "timeout": 40
+          }
+        }
+      ],
+      "api": "openai-responses",
+      "provider": "example",
+      "model": "reasoning-model",
+      "usage": {
+        "input": 143,
+        "output": 24,
+        "cacheRead": 6016,
+        "cacheWrite": 0,
+        "reasoning": 0,
+        "totalTokens": 6183
+      },
+      "stopReason": "toolUse",
+      "timestamp": 1795103066725,
+      "responseId": "resp",
+      "rawStopReason": "completed",
+      "durationMs": 2287,
+      "thinkingLevel": "low"
+    }
+  },
+  {
+    "type": "tool_execution_start",
+    "toolCallId": "call_77cbfdd4f9d54c3e8edfbae22c16c1fd",
+    "toolName": "bash",
+    "args": {
+      "command": "sleep 30",
+      "timeout": 40
+    }
+  },
+  {
+    "type": "tool_execution_update",
+    "toolCallId": "call_77cbfdd4f9d54c3e8edfbae22c16c1fd",
+    "toolName": "bash",
+    "args": {
+      "command": "sleep 30",
+      "timeout": 40
+    },
+    "partialResult": {
+      "content": []
+    }
+  },
+  {
+    "type": "tool_execution_end",
+    "toolCallId": "call_77cbfdd4f9d54c3e8edfbae22c16c1fd",
+    "toolName": "bash",
+    "result": {
+      "content": [
+        {
+          "type": "text",
+          "text": "Command aborted"
+        }
+      ],
+      "details": {}
+    },
+    "isError": true,
+    "durationMs": 1188
+  },
+  {
+    "type": "message_start",
+    "message": {
+      "role": "toolResult",
+      "toolCallId": "call_77cbfdd4f9d54c3e8edfbae22c16c1fd",
+      "toolName": "bash",
+      "content": [
+        {
+          "type": "text",
+          "text": "Command aborted"
+        }
+      ],
+      "details": {},
+      "isError": true,
+      "durationMs": 1188,
+      "timestamp": 1795103070576
+    }
+  },
+  {
+    "type": "message_end",
+    "message": {
+      "role": "toolResult",
+      "toolCallId": "call_77cbfdd4f9d54c3e8edfbae22c16c1fd",
+      "toolName": "bash",
+      "content": [
+        {
+          "type": "text",
+          "text": "Command aborted"
+        }
+      ],
+      "details": {},
+      "isError": true,
+      "durationMs": 1188,
+      "timestamp": 1795103070576
+    }
+  },
+  {
+    "type": "turn_end"
+  },
+  {
+    "type": "turn_start"
+  },
+  {
+    "type": "message_start",
+    "message": {
+      "role": "assistant",
+      "content": [],
+      "api": "openai-responses",
+      "provider": "example",
+      "model": "reasoning-model",
+      "usage": {
+        "input": 0,
+        "output": 0,
+        "cacheRead": 0,
+        "cacheWrite": 0,
+        "totalTokens": 0
+      },
+      "stopReason": "aborted",
+      "errorMessage": "This operation was aborted",
+      "timestamp": 1795103070602,
+      "durationMs": 0,
+      "thinkingLevel": "low"
+    }
+  },
+  {
+    "type": "message_end",
+    "message": {
+      "role": "assistant",
+      "content": [],
+      "api": "openai-responses",
+      "provider": "example",
+      "model": "reasoning-model",
+      "usage": {
+        "input": 0,
+        "output": 0,
+        "cacheRead": 0,
+        "cacheWrite": 0,
+        "totalTokens": 0
+      },
+      "stopReason": "aborted",
+      "errorMessage": "This operation was aborted",
+      "timestamp": 1795103070602,
+      "durationMs": 0,
+      "thinkingLevel": "low"
+    }
+  },
+  {
+    "type": "turn_end"
+  },
+  {
+    "type": "agent_end",
+    "willRetry": false
+  },
+  {
+    "type": "agent_settled",
+    "aborted": true
+  }
+]

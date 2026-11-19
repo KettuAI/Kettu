@@ -280,9 +280,6 @@
     "npmMissing": "{{agent}} is installed with npm on first use, and npm was not found on PATH. {{hint}}",
     "programUnusable": "The program chosen for {{agent}} ({{path}}) cannot be run.",
     "commandMissing": "{{command}} was not found on PATH. {{hint}}",
-    "requiresMissing": "{{agent}} runs the pi program, and {{command}} was not found on PATH. {{hint}}",
-    "requiresOutdated": "{{agent}} needs {{command}} {{required}} or later; {{installed}} is installed. {{hint}}",
-    "requiresFailed": "{{agent}} could not read the version of {{command}}: {{reason}} {{hint}}",
     "scriptMissing": "{{script}} does not exist.",
     "antigravityInstallNotice": "The official installer puts agy in ~/.local/bin and adds it to PATH in your shell configuration files.",
     "opencodeInstallNotice": "Kettu runs OpenCode 2. OpenCode 1 uses the same command, so remove a Homebrew or npm copy of it before installing; the install script replaces it.",
@@ -693,6 +690,96 @@
       "high": "High",
       "xhigh": "Extra high",
       "max": "Max"
+    }
+  },
+  "pi": {
+    "tool": {
+      "toolSearch": "Search tools for '{{query}}'",
+      "toolSearchAll": "Search tools",
+      "script": "Run script"
+    },
+    "notice": {
+      "extensionError": "An extension of Pi failed"
+    },
+    "auth": {
+      "terminal": "Launch pi in the terminal",
+      "terminalDescription": "Start pi in a terminal and use /login to add an API key or sign in to a provider",
+      "required": "Configure an API key or log in with an OAuth provider."
+    },
+    "start": {
+      "failed": "Pi exited before it answered",
+      "failedWith": "Pi exited before it answered: {{reason}}"
+    },
+    "fork": {
+      "noReply": "Pi does not have that reply in the session",
+      "cancelled": "An extension of Pi cancelled the fork"
+    },
+    "session": {
+      "notFound": "Pi has no session {{id}}",
+      "id": "**Session:** `{{value}}`",
+      "file": "**Session file:** `{{value}}`",
+      "messages": "**Messages:** {{value}}",
+      "cost": "**Cost:** {{value}}",
+      "tokens": "**Tokens:** {{value}}",
+      "input": "{{value}} input",
+      "output": "{{value}} output",
+      "cacheRead": "{{value}} cache read",
+      "cacheWrite": "{{value}} cache write",
+      "total": "{{value}} total"
+    },
+    "command": {
+      "compact": {
+        "description": "Manually compact the session context",
+        "hint": "optional custom instructions"
+      },
+      "autocompact": {
+        "description": "Toggle automatic context compaction",
+        "hint": "on|off|toggle"
+      },
+      "export": {
+        "description": "Export session to an HTML file in the session's folder"
+      },
+      "session": {
+        "description": "Show session stats (messages, tokens, cost, session file)"
+      },
+      "name": {
+        "description": "Set session display name",
+        "hint": "<name>"
+      },
+      "steering": {
+        "description": "Get or set how pi delivers steering messages",
+        "hint": "all | one-at-a-time"
+      },
+      "follow-up": {
+        "description": "Get or set how pi delivers follow-up messages",
+        "hint": "all | one-at-a-time"
+      },
+      "changelog": {
+        "description": "Show pi's changelog"
+      }
+    },
+    "autocompact": {
+      "on": "Auto-compaction enabled.",
+      "off": "Auto-compaction disabled."
+    },
+    "export": {
+      "nothing": "Nothing to export yet. Send a prompt first.",
+      "noPath": "Pi named no file for the export",
+      "done": "Session exported:"
+    },
+    "name": {
+      "usage": "Usage: /name <name>",
+      "done": "Session name set: {{name}}"
+    },
+    "queue": {
+      "steering": "Steering mode",
+      "followUp": "Follow-up mode",
+      "mode": "{{label}}: {{mode}}",
+      "usage": "Usage: /{{name}} all | /{{name}} one-at-a-time",
+      "set": "{{label}} set to: {{mode}}"
+    },
+    "changelog": {
+      "missing": "Changelog not found: pi's package could not be located."
     }
   },
   "question": {

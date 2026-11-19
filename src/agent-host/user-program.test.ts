@@ -31,16 +31,6 @@ describe('the user program a first start counts', () => {
     expect(userProgramFound(adapter, tooOld, KETTU)).toBe(true)
   })
 
-  it('counts the program an adapter runs', () => {
-    const pi: Detection = {
-      state: 'available',
-      spec: null,
-      adapter: null,
-      requires: { program: '/usr/local/bin/pi', version: '0.81.0' },
-    }
-    expect(userProgramFound(adapter, pi, KETTU)).toBe(true)
-  })
-
   it('counts a binary outside the folder Kettu installs into', () => {
     const found: Detection = {
       state: 'available',

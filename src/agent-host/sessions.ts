@@ -174,7 +174,6 @@ import {
   type ProjectHooksGate,
   type ProjectMcpGate,
   type PromptBlock,
-  type KettuService,
   type ListedSession,
   type SessionMemory,
   type SessionOptions,
@@ -3309,8 +3308,7 @@ export class SessionManager {
     const projectMcp = this.projectMcpGate(sessionId)
     const projectHooks = this.projectHooksGate(sessionId)
     const own = this.kettuServers(sessionId, record, runtime)
-    const kettuService = this.kettuService(sessionId, record, runtime)
-    const reached = own.length > 0 || kettuService !== null
+    const reached = own.length > 0
     const skills = (await this.deps.skills?.(record.agentId, reached)) ?? {}
     const memory = await this.memoryFor(sessionId, record, reached)
     const append = runtime?.connection.systemPromptAppend
@@ -3325,7 +3323,6 @@ export class SessionManager {
       ...(projectMcp ? { projectMcp } : {}),
       ...(projectHooks ? { projectHooks } : {}),
       ...(memory ? { memory } : {}),
-      ...(kettuService ? { kettuService } : {}),
       ...(record.instructionsAhead ? { promptAhead: true } : {}),
       ...(append ? { systemPromptAppend: append } : {}),
     }
@@ -3552,26 +3549,6 @@ export class SessionManager {
     return runtime.init.capabilities.mcpHttp && runtime.kettu
       ? this.deps.mcp.servers(sessionId, record, runtime.connection)
       : []
-  }
-
-  /**
-   * Kettu's MCP service for an agent that reaches it only through Kettu's extension, as Pi does,
-   * while Kettu's server is on for it: the URL and token of the session's own server.
-   */
-  private kettuService(
-    sessionId: string,
-    record: SessionRecord,
-    runtime: AgentRuntime | null | undefined,
-  ): KettuService | null {
-    if (!this.deps.mcp || !runtime?.kettu || !runtime.connection.kettuExtension) return null
-    if (runtime.init.capabilities.mcpHttp) return null
-    for (const server of this.deps.mcp.servers(sessionId, record, runtime.connection)) {
-      if (server.type !== 'http') continue
-      const header = server.headers.find((h) => h.name.toLowerCase() === 'authorization')
-      const token = /^Bearer (\S+)$/.exec(header?.value ?? '')?.[1]
-      if (token) return { url: server.url, token }
-    }
-    return null
   }
 
   private libraryServers(
@@ -6895,7 +6872,7 @@ export class SessionManager {
     if (record.systemPromptSentTo === record.acpSessionId) return null
     const runtime = this.deps.agents.runtime(record.agentId)
     const servers = this.kettuServers(live.id, record, runtime)
-    const tools = servers.length > 0 || this.kettuService(live.id, record, runtime) !== null
+    const tools = servers.length > 0
     // What the session's own instructions would hold, the plan paragraph with the guide.
     const text = record.instructionsAhead
       ? servers

@@ -5,7 +5,6 @@
 import type { AgentId } from '@shared/thread'
 import type { TrafficRecord } from '@shared/agent-host'
 import { sideLog, verboseRecords, writeLog, type SideLog } from '@shared/log/process-log'
-import { KETTU_SERVICE_META } from './connection'
 import { Ring, TextRing } from './ring'
 
 export const TRAFFIC_MESSAGES = 2_000
@@ -126,14 +125,6 @@ function redacted(message: unknown): unknown {
       ]),
     )
     masked = { ...masked, config: { ...config, mcp_servers: servers } }
-  }
-  const meta = params._meta
-  const service = isRecord(meta) ? meta[KETTU_SERVICE_META] : undefined
-  if (isRecord(meta) && isRecord(service)) {
-    masked = {
-      ...masked,
-      _meta: { ...meta, [KETTU_SERVICE_META]: { ...service, token: REDACTED } },
-    }
   }
   return masked === params ? message : { ...message, params: masked }
 }

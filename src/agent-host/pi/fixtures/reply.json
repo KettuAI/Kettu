@@ -1,0 +1,117 @@
+[
+  {
+    "type": "agent_start"
+  },
+  {
+    "type": "turn_start"
+  },
+  {
+    "type": "message_start",
+    "message": {
+      "role": "user",
+      "content": [
+        {
+          "type": "text",
+          "text": "Reply with exactly: pong"
+        }
+      ],
+      "timestamp": 1795102903349
+    }
+  },
+  {
+    "type": "message_end",
+    "message": {
+      "role": "user",
+      "content": [
+        {
+          "type": "text",
+          "text": "Reply with exactly: pong"
+        }
+      ],
+      "timestamp": 1795102903349
+    }
+  },
+  {
+    "type": "message_start",
+    "message": {
+      "role": "assistant",
+      "content": [],
+      "api": "openai-completions",
+      "provider": "example",
+      "model": "small-model",
+      "usage": {
+        "input": 0,
+        "output": 0,
+        "cacheRead": 0,
+        "cacheWrite": 0,
+        "totalTokens": 0
+      },
+      "stopReason": "pending",
+      "timestamp": 1795102903400
+    }
+  },
+  {
+    "type": "message_update",
+    "assistantMessageEvent": {
+      "type": "text_start",
+      "contentIndex": 0
+    }
+  },
+  {
+    "type": "message_update",
+    "assistantMessageEvent": {
+      "type": "text_delta",
+      "contentIndex": 0,
+      "delta": "pong"
+    }
+  },
+  {
+    "type": "message_update",
+    "assistantMessageEvent": {
+      "type": "text_end",
+      "contentIndex": 0,
+      "content": "pong"
+    }
+  },
+  {
+    "type": "message_end",
+    "message": {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "text",
+          "text": "pong"
+        }
+      ],
+      "api": "openai-completions",
+      "provider": "example",
+      "model": "small-model",
+      "usage": {
+        "input": 2956,
+        "output": 4,
+        "cacheRead": 256,
+        "cacheWrite": 0,
+        "reasoning": 0,
+        "totalTokens": 3216
+      },
+      "stopReason": "stop",
+      "timestamp": 1795102903400,
+      "responseId": "resp",
+      "responseModel": "model",
+      "rawStopReason": "stop",
+      "durationMs": 3217,
+      "thinkingLevel": "high"
+    }
+  },
+  {
+    "type": "turn_end"
+  },
+  {
+    "type": "agent_end",
+    "willRetry": false
+  },
+  {
+    "type": "agent_settled",
+    "aborted": false
+  }
+]

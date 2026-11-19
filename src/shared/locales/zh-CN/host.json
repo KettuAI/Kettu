@@ -277,9 +277,6 @@
     "npmMissing": "{{agent}} 会在首次使用时通过 npm 安装，但在 PATH 中找不到 npm。{{hint}}",
     "programUnusable": "为 {{agent}} 选择的程序（{{path}}）无法运行。",
     "commandMissing": "在 PATH 中找不到 {{command}}。{{hint}}",
-    "requiresMissing": "{{agent}} 需要运行 pi 程序，但在 PATH 中找不到 {{command}}。{{hint}}",
-    "requiresOutdated": "{{agent}} 需要 {{command}} {{required}} 或更高版本，当前安装的是 {{installed}}。{{hint}}",
-    "requiresFailed": "{{agent}} 无法读取 {{command}} 的版本：{{reason}} {{hint}}",
     "scriptMissing": "{{script}} 不存在。",
     "antigravityInstallNotice": "官方安装程序会把 agy 装到 ~/.local/bin，并在你的 Shell 配置文件里把它加入 PATH。",
     "opencodeInstallNotice": "Kettu 运行的是 OpenCode 2。OpenCode 1 用同一个命令，所以安装前请先卸载用 Homebrew 或 npm 装的 OpenCode 1；用安装脚本装会直接替换它。",
@@ -689,6 +686,96 @@
       "high": "高",
       "xhigh": "很高",
       "max": "最高"
+    }
+  },
+  "pi": {
+    "tool": {
+      "toolSearch": "搜索工具 '{{query}}'",
+      "toolSearchAll": "搜索工具",
+      "script": "运行脚本"
+    },
+    "notice": {
+      "extensionError": "Pi 的一个扩展出错了"
+    },
+    "auth": {
+      "terminal": "在终端里启动 pi",
+      "terminalDescription": "在终端里启动 pi，用 /login 添加 API key 或登录模型供应商",
+      "required": "请配置 API key，或用 OAuth 登录一个模型供应商。"
+    },
+    "start": {
+      "failed": "Pi 还没应答就退出了",
+      "failedWith": "Pi 还没应答就退出了：{{reason}}"
+    },
+    "fork": {
+      "noReply": "Pi 的会话里没有这条回复",
+      "cancelled": "Pi 的一个扩展取消了这次复制"
+    },
+    "session": {
+      "notFound": "Pi 没有会话 {{id}}",
+      "id": "**会话：** `{{value}}`",
+      "file": "**会话文件：** `{{value}}`",
+      "messages": "**消息数：** {{value}}",
+      "cost": "**费用：** {{value}}",
+      "tokens": "**Token：** {{value}}",
+      "input": "输入 {{value}}",
+      "output": "输出 {{value}}",
+      "cacheRead": "缓存读取 {{value}}",
+      "cacheWrite": "缓存写入 {{value}}",
+      "total": "合计 {{value}}"
+    },
+    "command": {
+      "compact": {
+        "description": "手动压缩会话的上下文",
+        "hint": "可选的自定义说明"
+      },
+      "autocompact": {
+        "description": "开关自动压缩上下文",
+        "hint": "on|off|toggle"
+      },
+      "export": {
+        "description": "把会话导出成 HTML 文件，放在会话的文件夹里"
+      },
+      "session": {
+        "description": "显示会话统计（消息、token、费用、会话文件）"
+      },
+      "name": {
+        "description": "设置会话的显示名称",
+        "hint": "<名称>"
+      },
+      "steering": {
+        "description": "查看或设置 pi 投递 steering 消息的方式",
+        "hint": "all | one-at-a-time"
+      },
+      "follow-up": {
+        "description": "查看或设置 pi 投递 follow-up 消息的方式",
+        "hint": "all | one-at-a-time"
+      },
+      "changelog": {
+        "description": "显示 pi 的更新日志"
+      }
+    },
+    "autocompact": {
+      "on": "已开启自动压缩。",
+      "off": "已关闭自动压缩。"
+    },
+    "export": {
+      "nothing": "还没有可导出的内容，请先发一条消息。",
+      "noPath": "Pi 没有给出导出的文件",
+      "done": "会话已导出："
+    },
+    "name": {
+      "usage": "用法：/name <名称>",
+      "done": "会话名称已设为：{{name}}"
+    },
+    "queue": {
+      "steering": "Steering 模式",
+      "followUp": "Follow-up 模式",
+      "mode": "{{label}}：{{mode}}",
+      "usage": "用法：/{{name}} all | /{{name}} one-at-a-time",
+      "set": "{{label}}已设为：{{mode}}"
+    },
+    "changelog": {
+      "missing": "找不到更新日志：无法定位 pi 的安装包。"
     }
   },
   "question": {

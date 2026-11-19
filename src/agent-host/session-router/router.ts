@@ -1,6 +1,6 @@
-// A small ACP router for an adapter that keeps one live session per process, as pi-acp 0.0.34
-// does: it speaks ACP on its stdio and runs one adapter process for the control requests and one
-// per session, so an adapter only ever holds the session its own process has.
+// A small ACP router for an adapter that keeps one live session per process: it speaks ACP on its
+// stdio and runs one adapter process for the control requests and one per session, so an adapter
+// only ever holds the session its own process has.
 //
 // Run as `<node> <router> <node> <adapter entry>`: the words after the router are the command line
 // of every child. With `--folder-per-session` first, each session's child starts in the folder the
@@ -68,71 +68,6 @@ const CMD_UNSAFE = /[\s&|<>()^"%!,;=]/
 
 function quoteCmd(arg: string): string {
   return arg !== '' && !CMD_UNSAFE.test(arg) ? arg : `"${arg.replace(/"/g, '""')}"`
-}
-
-// Where `session/new` and `session/load` name a session's Kettu MCP service, as
-// `KETTU_SERVICE_META` in the host's connection contract.
-const SERVICE_META = 'sh.kettu/mcp'
-// The variables Kettu's extension in the agent reads it from (`SERVICE_URL_VARIABLE` and
-// `SERVICE_TOKEN_VARIABLE`); this file imports nothing of Kettu's.
-const SERVICE_URL = 'KETTU_MCP_URL'
-const SERVICE_TOKEN = 'KETTU_MCP_TOKEN'
-const ENV_VALUE = /^[^\0\r\n]{1,2048}$/
-
-/**
- * Takes the session's Kettu MCP service out of a `session/new` or `session/load`: the request to
- * pass on without it, and the variables that session's child alone starts with.
- */
-function takeService(params: unknown): { params: unknown; env: Record<string, string> } {
-  if (typeof params !== 'object' || params === null) return { params, env: {} }
-  const meta = (params as { _meta?: unknown })._meta
-  if (typeof meta !== 'object' || meta === null || !(SERVICE_META in meta)) {
-    return { params, env: {} }
-  }
-  const { [SERVICE_META]: service, ...rest } = meta as Record<string, unknown>
-  const forward: Record<string, unknown> = { ...(params as Record<string, unknown>) }
-  if (Object.keys(rest).length > 0) forward._meta = rest
-  else delete forward._meta
-  const { url, token } = (typeof service === 'object' && service !== null ? service : {}) as {
-    url?: unknown
-    token?: unknown
-  }
-  if (typeof url !== 'string' || typeof token !== 'string') return { params: forward, env: {} }
-  if (!ENV_VALUE.test(url) || !ENV_VALUE.test(token)) return { params: forward, env: {} }
-  return { params: forward, env: { [SERVICE_URL]: url, [SERVICE_TOKEN]: token } }
-}
-
-// Where `session/new` and `session/load` name the file a session's model scope is written to, as
-// `MODEL_SCOPE_META` in the host's connection contract, and the variable Kettu's extension in the
-// agent reads it from (`MODEL_SCOPE_VARIABLE`).
-const MODEL_SCOPE_META = 'sh.kettu/model-scope'
-const MODEL_SCOPE_FILE = 'KETTU_MODEL_SCOPE_FILE'
-
-/**
- * Takes the session's model scope file out of a request: the request to pass on without it, and
- * the variable that session's child alone starts with.
- */
-function takeScope(params: unknown): { params: unknown; env: Record<string, string> } {
-  if (typeof params !== 'object' || params === null) return { params, env: {} }
-  const meta = (params as { _meta?: unknown })._meta
-  if (typeof meta !== 'object' || meta === null || !(MODEL_SCOPE_META in meta)) {
-    return { params, env: {} }
-  }
-  const { [MODEL_SCOPE_META]: file, ...rest } = meta as Record<string, unknown>
-  const forward: Record<string, unknown> = { ...(params as Record<string, unknown>) }
-  if (Object.keys(rest).length > 0) forward._meta = rest
-  else delete forward._meta
-  if (typeof file !== 'string' || !ENV_VALUE.test(file) || !path.isAbsolute(file)) {
-    return { params: forward, env: {} }
-  }
-  return { params: forward, env: { [MODEL_SCOPE_FILE]: file } }
-}
-
-/** What a request that starts a session's child passes on, and the variables the child gets. */
-function takeSessionMeta(params: unknown): { params: unknown; env: Record<string, string> } {
-  const service = takeService(params)
-  const scope = takeScope(service.params)
-  return { params: scope.params, env: { ...service.env, ...scope.env } }
 }
 
 /** The flag that starts each session's child in the session's folder. */
@@ -351,9 +286,8 @@ export class SessionRouter {
     let child: Child | null = null
     try {
       const flag = takeFlag(params)
-      const taken = takeSessionMeta(flag.params)
-      child = await this.startSessionChild(taken.env, params, await this.flagFor(flag.flagged))
-      const answer = await this.request(child, 'session/new', taken.params)
+      child = await this.startSessionChild(params, await this.flagFor(flag.flagged))
+      const answer = await this.request(child, 'session/new', flag.params)
       if (answer.error) {
         this.endChild(child)
         return this.sendError(id, answer.error)
@@ -396,9 +330,8 @@ export class SessionRouter {
         this.sessions.delete(sessionId)
         await this.endChildAndWait(existing, REPLACE_KILL_MS)
       }
-      const taken = takeSessionMeta(flag.params)
-      child = await this.startSessionChild(taken.env, params, extra)
-      const answer = await this.request(child, method, taken.params)
+      child = await this.startSessionChild(params, extra)
+      const answer = await this.request(child, method, flag.params)
       if (answer.error) {
         this.endChild(child)
         return this.sendError(id, answer.error)
@@ -489,14 +422,9 @@ export class SessionRouter {
 
   /**
    * A child for a session, initialized with the parameters the host gave the control child, with
-   * `env` added to its environment and `extra` to its arguments, and started in the session's
-   * folder when the router was asked.
+   * `extra` added to its arguments, and started in the session's folder when the router was asked.
    */
-  private async startSessionChild(
-    env: Record<string, string>,
-    params: unknown,
-    extra: string[] = [],
-  ): Promise<Child> {
+  private async startSessionChild(params: unknown, extra: string[] = []): Promise<Child> {
     if (this.initializeParams === null) throw new Error('The router is not initialized')
     let cwd: string | undefined
     if (this.folderPerSession) {
@@ -507,7 +435,7 @@ export class SessionRouter {
       }
       cwd = folder
     }
-    const child = this.spawnChild(env, cwd, extra)
+    const child = this.spawnChild(cwd, extra)
     const answer = await this.request(child, 'initialize', this.initializeParams)
     if (answer.error) {
       this.endChild(child)
@@ -518,30 +446,22 @@ export class SessionRouter {
 
   // Child processes.
 
-  /** A child's environment: the router's, without what must reach no child, with `env` added. */
-  private childEnv(env: Record<string, string> = {}): NodeJS.ProcessEnv {
-    // A session's service and scope file reach its own child only, never ones the router inherited.
+  /** A child's environment: the router's, without what must reach no child. */
+  private childEnv(): NodeJS.ProcessEnv {
     const base = { ...process.env }
-    delete base[SERVICE_URL]
-    delete base[SERVICE_TOKEN]
-    delete base[MODEL_SCOPE_FILE]
     // The runtime the router runs on may be Electron as Node.js; a program of another kind must
     // not pass that on to the commands it runs.
     if (path.resolve(this.childCommand) !== path.resolve(process.execPath)) {
       delete base.ELECTRON_RUN_AS_NODE
     }
-    return { ...base, ...env }
+    return base
   }
 
-  private spawnChild(
-    env: Record<string, string> = {},
-    cwd = process.cwd(),
-    extra: string[] = [],
-  ): Child {
+  private spawnChild(cwd = process.cwd(), extra: string[] = []): Child {
     const { command, args } = this.spawnWords(this.childCommand, [...this.childArgs, ...extra])
     const proc = spawn(command, args, {
       cwd,
-      env: this.childEnv(env),
+      env: this.childEnv(),
       stdio: ['pipe', 'pipe', 'pipe'],
       shell: this.childShell,
       windowsHide: true,
