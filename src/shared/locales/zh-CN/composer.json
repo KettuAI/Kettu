@@ -98,8 +98,7 @@
       "cacheWrite": "缓存写入",
       "ofUsed": "上下文已用",
       "tokens": "{{tokens}} tokens",
-      "cacheHit": "缓存命中",
-      "cached": "缓存命中 {{percent}}"
+      "cacheHit": "缓存命中"
     },
     "breakdown": {
       "loading": "正在读取上下文明细",
@@ -110,15 +109,17 @@
       "subagent": "明细不可用：子 Agent 只报告上下文总量"
     },
     "estimates": {
+      "title": "可加载的定义",
+      "tag": "估算",
       "skills": "技能目录",
       "mcpServers": "MCP 工具定义",
       "count": "≈ {{count}}",
-      "partial": "{{estimate}}（部分）",
+      "partial": "部分",
       "unavailable": "暂无数据",
       "loading": "正在读取技能和 MCP 定义",
       "readFailed": "暂时无法读取技能和 MCP 定义。",
       "disconnected": "会话连接后可查看定义的 token 估算。",
-      "note": "数字为定义的 token 估算，实际占用随 Codex 的加载情况变化。"
+      "note": "这是 Codex 可加载内容的大小，不是上面上下文的组成部分。"
     },
     "limits": {
       "plan": "套餐",
@@ -182,7 +183,6 @@
     },
     "lastRequest": {
       "title": "上次请求",
-      "line": "输入 {{input}} · 输出 {{output}} · 缓存命中 {{hit}}",
       "running": "进行中"
     },
     "everyRequest": "每次请求"

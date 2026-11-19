@@ -5322,25 +5322,177 @@ li[data-row-exit='dust'] > * {
 .kettu-ctx__pad {
   padding: 0 14px 10px;
 }
-.kettu-ctx__session {
+/* What the agent can load, by estimate: a section of its own, so its sizes do not read as parts
+   of the measured total. Its rows follow the Context Window's: 26px, the name at the same inset. */
+.kettu-ctx__defs {
+  display: flex;
+  flex-direction: column;
+  padding: 10px 14px 8px;
+  border-top: 0.5px solid var(--composer-line);
+}
+.kettu-ctx__defs-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 4px;
+  font-weight: 500;
+  color: var(--composer-strong);
+}
+.kettu-ctx__tag {
+  flex: none;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 5px;
+  background: var(--composer-chip-hover);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 18px;
+  color: var(--composer-muted);
+}
+.kettu-ctx__defs-note {
+  margin: 2px 0 0;
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--composer-muted);
+}
+.kettu-ctx__def {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: calc(100% + 16px);
+  height: 26px;
+  margin: 0 -8px;
+  padding: 0 8px;
+  border-radius: 6px;
+  outline: none;
+  text-align: left;
+  transition: background-color var(--duration-fast);
+}
+.kettu-ctx__def:enabled:hover {
+  background: var(--bg-hover);
+}
+.kettu-ctx__def:focus-visible,
+.kettu-ctx__link:focus-visible {
+  outline: 1.5px solid var(--focus-ring-color);
+  outline-offset: -1.5px;
+}
+/* An outline where a measured part has its color: an estimate fills no cell of the grid. */
+.kettu-ctx__def-swatch {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  margin-right: 2px;
+  border: 1px dashed var(--composer-muted);
+  border-radius: 2px;
+}
+.kettu-ctx__def-name {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  color: var(--composer-ink);
+}
+.kettu-ctx__def-name > svg {
+  color: var(--composer-muted);
+}
+.kettu-ctx__def-value {
+  flex: none;
+  color: var(--composer-muted);
+}
+.kettu-ctx__def-items {
+  display: flex;
+  flex-direction: column;
+  max-height: calc(6 * 22px);
+  margin: 0 0 4px;
+  padding: 0 0 0 18px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  font-size: 12px;
+  line-height: 16px;
+}
+.kettu-ctx__def-items > li {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  height: 22px;
+  color: var(--composer-text);
+}
+.kettu-ctx__def-items > li > :last-child {
+  flex: none;
+  color: var(--composer-muted);
+}
+/* The session's tokens and the last request's: a name and total, then the same three columns
+   under each, so input, output and cache hit line up between the two. */
+.kettu-ctx__usage {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 9px 14px 10px;
+  border-top: 0.5px solid var(--composer-line);
+}
+/* A total too long to sit beside its name drops under it, still at the right edge. */
+.kettu-ctx__block-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0 12px;
+  color: var(--composer-ink);
+}
+.kettu-ctx__block-head > :first-child {
+  white-space: nowrap;
+}
+.kettu-ctx__block-head > :last-child {
+  margin-left: auto;
+  text-align: right;
+  color: var(--composer-text);
+}
+.kettu-ctx__figures {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0 12px;
+  margin: 1px 0 0;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--composer-muted);
+}
+/* A figure too long for its column stacks under its name instead of being cut. */
+.kettu-ctx__figures > div {
+  display: flex;
+  flex-wrap: wrap;
+  align-content: flex-start;
+  gap: 0 5px;
+  min-width: 0;
+}
+.kettu-ctx__figures > div:last-child {
+  justify-content: flex-end;
+  text-align: right;
+}
+.kettu-ctx__figures dd {
+  margin: 0;
+  color: var(--composer-text);
+}
+.kettu-ctx__link {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+  width: 100%;
   height: 36px;
   padding: 0 14px;
   border-top: 0.5px solid var(--composer-line);
-  color: var(--composer-ink);
-}
-.kettu-ctx__session > :last-child {
-  color: var(--composer-text);
-}
-.kettu-ctx__link {
-  width: 100%;
   text-align: left;
+  color: var(--composer-ink);
+  transition: background-color var(--duration-fast);
 }
-.kettu-ctx__link:hover,
-.kettu-ctx__link:focus-visible {
+.kettu-ctx__link > :last-child {
+  color: var(--composer-muted);
+}
+.kettu-ctx__link:hover {
   background: var(--bg-hover);
 }
 .kettu-ctx__link-name {
