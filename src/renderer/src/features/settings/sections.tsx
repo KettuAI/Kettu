@@ -1,4 +1,12 @@
-import { useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useRef,
+  useState,
+  type KeyboardEvent,
+  type ReactNode,
+} from 'react'
 import {
   Copy01Icon,
   Globe02Icon,
@@ -16,10 +24,12 @@ import {
   NEW_SESSION_LISTS,
   ZOOM_LEVELS,
   stepZoom,
+  type LightModel,
   type SettingsFile,
   type ZoomStep,
 } from '@shared/settings'
-import type { AgentId } from '@shared/thread'
+import type { AgentOptions, LightAgent } from '@shared/agent-host'
+import type { AgentId, ConfigOption } from '@shared/thread'
 import { AgentMark } from '@renderer/components/agents/agent-mark'
 import { Icon } from '@renderer/components/affect/app-shell'
 import { BrandIcon } from '@renderer/components/brand'
@@ -33,6 +43,20 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@renderer/components/ui/alert-dialog'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
+  DropdownMenuTrigger,
+} from '@renderer/components/ui/dropdown-menu'
 import { Kbd } from '@renderer/components/ui/kbd'
 import { toast } from '@renderer/components/ui/toast'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
@@ -43,7 +67,9 @@ import { systemLocale } from '@renderer/lib/i18n'
 import { basename } from '@renderer/lib/format'
 import { formatShortcut, hostPlatform, isMac, isWeb, isWindows } from '@renderer/lib/platform'
 import { useAppInfo } from '@renderer/lib/use-app-info'
-import { isInstalled, usableAgents, useAgentsStore } from '@renderer/stores/agents'
+import { readFirstOptions } from '@renderer/features/session/new-session/prepared'
+import { agentKey, optionsOn, useAgentOptionsStore } from '@renderer/stores/agent-options'
+import { agentName, isInstalled, usableAgents, useAgentsStore } from '@renderer/stores/agents'
 import { useHostScope } from '@renderer/stores/host-scope'
 import { useOtherHost } from '@renderer/stores/hosts'
 import { homeStart } from '@renderer/web/host-path'
@@ -65,6 +91,7 @@ import {
   Segmented,
   SetButton,
   SetInput,
+  SelectFace,
   SettingSelect,
   SettingSwitch,
   Skel,
@@ -179,6 +206,166 @@ export function GeneralSwitch({
         disabled={disabled}
         onChange={(v) => apply({ general: { [field]: v } })}
       />
+    </>
+  )
+}
+
+/** An agent's models as last read, each listed once, in the agent's groups. */
+function modelGroups(
+  options: AgentOptions | undefined,
+): { group: string | null; models: ModelChoice[] }[] {
+  const option = options?.config.find((o) => o.category === 'model' && o.type === 'select')
+  const choices = (option?.choices ?? []).filter((choice) => choice.shownAs === undefined)
+  const groups: { group: string | null; models: ModelChoice[] }[] = []
+  for (const choice of choices) {
+    const group = choice.group ?? null
+    const last = groups.at(-1)
+    if (last && last.group === group) last.models.push(choice)
+    else groups.push({ group, models: [choice] })
+  }
+  return groups
+}
+
+type ModelChoice = NonNullable<ConfigOption['choices']>[number]
+
+/** The name the agent lists a model by, as last read. */
+function modelName(options: AgentOptions | undefined, model: string): string | null {
+  const option = options?.config.find((o) => o.category === 'model' && o.type === 'select')
+  return option?.choices?.find((choice) => choice.value === model)?.name ?? null
+}
+
+/** A pinned choice as one radio value: the agent and the model, which no model id holds. */
+const pinnedValue = (agentId: AgentId, model: string) => `${agentId}\0${model}`
+
+/** The model Kettu's own requests ask: a small one, the session's, or one agent's pinned model. */
+export function LightModelChoice({ label }: { label: string }) {
+  const { t } = useTranslation('settings')
+  const { hostId, request } = useHostScope()
+  // A host older than the setting has none, and works as its default.
+  const value: LightModel = useSettings().general.lightModel ?? DEFAULT_SETTINGS.general.lightModel
+  const options = useAgentOptionsStore((s) => optionsOn(s, hostId))
+  const firstReads = useAgentOptionsStore((s) => s.firstReads)
+  const [agents, setAgents] = useState<LightAgent[] | null>(null)
+  const [apply, error] = useApply()
+  // The agents' models are read only once the menu opens, since a first read starts an agent.
+  const load = useCallback(
+    (models: boolean) => {
+      void request('agents.lightAgents', undefined).then(
+        ({ agents: list }) => {
+          setAgents(list)
+          if (models) for (const agent of list) void readFirstOptions(hostId, agent.agentId)
+        },
+        () => setAgents([]),
+      )
+    },
+    [hostId, request],
+  )
+  useEffect(() => load(false), [load])
+  const pinned = value.mode === 'pinned' ? value : null
+  const current = pinned ? pinnedValue(pinned.agentId, pinned.model) : value.mode
+  const shown = pinned
+    ? `${agentName(pinned.agentId, hostId)} · ${modelName(options[pinned.agentId], pinned.model) ?? pinned.model}`
+    : t(`general.lightModel.${value.mode}`)
+  const unavailable =
+    pinned && agents !== null && !agents.some((agent) => agent.agentId === pinned.agentId)
+      ? t('general.lightModel.unavailable', { agent: agentName(pinned.agentId, hostId) })
+      : null
+  const choose = (next: LightModel) => {
+    if (JSON.stringify(next) !== JSON.stringify(value)) apply({ general: { lightModel: next } })
+  }
+  return (
+    <>
+      <ControlError error={error ?? unavailable} />
+      <DropdownMenu onOpenChange={(open) => open && load(true)}>
+        <DropdownMenuTrigger className="ui-ss-select k-select" aria-label={label}>
+          <SelectFace
+            mark={pinned ? <AgentMark agent={pinned.agentId} hostId={hostId} /> : undefined}
+            value={shown}
+          />
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="w-64">
+          <DropdownMenuRadioGroup
+            value={current}
+            onValueChange={(mode: 'small' | 'session') => choose({ mode })}
+          >
+            {(['small', 'session'] as const).map((mode) => (
+              <DropdownMenuRadioItem key={mode} value={mode}>
+                <span className="flex min-w-0 flex-col">
+                  <span>{t(`general.lightModel.${mode}`)}</span>
+                  <span className="text-hint text-tertiary">
+                    {t(`general.lightModel.${mode}Hint`)}
+                  </span>
+                </span>
+              </DropdownMenuRadioItem>
+            ))}
+          </DropdownMenuRadioGroup>
+          {(agents === null || agents.length > 0) && (
+            <>
+              <DropdownMenuSeparator />
+              <DropdownMenuGroup>
+                <DropdownMenuLabel>{t('general.lightModel.pinned')}</DropdownMenuLabel>
+                {agents === null && (
+                  <DropdownMenuItem disabled>{t('general.lightModel.reading')}</DropdownMenuItem>
+                )}
+                {agents?.map((agent) => {
+                  const groups = modelGroups(options[agent.agentId])
+                  const mark = <AgentMark agent={agent.agentId} size={15} hostId={hostId} />
+                  if (groups.length === 0) {
+                    const reading = firstReads[agentKey(hostId, agent.agentId)]?.reading === true
+                    return (
+                      <DropdownMenuItem key={agent.agentId} disabled>
+                        {mark}
+                        <span className="min-w-0 flex-1 truncate">{agent.name}</span>
+                        <span className="shrink-0 pl-4 text-hint text-tertiary">
+                          {t(
+                            reading ? 'general.lightModel.reading' : 'general.lightModel.noModels',
+                          )}
+                        </span>
+                      </DropdownMenuItem>
+                    )
+                  }
+                  return (
+                    <DropdownMenuSub key={agent.agentId}>
+                      <DropdownMenuSubTrigger>
+                        {mark}
+                        <span className="min-w-0 flex-1 truncate">{agent.name}</span>
+                      </DropdownMenuSubTrigger>
+                      <DropdownMenuSubContent className="max-w-80">
+                        <DropdownMenuRadioGroup
+                          value={current}
+                          onValueChange={(picked: string) =>
+                            choose({
+                              mode: 'pinned',
+                              agentId: agent.agentId,
+                              model: picked.slice(agent.agentId.length + 1),
+                            })
+                          }
+                        >
+                          {groups.map(({ group, models }) => (
+                            <DropdownMenuGroup key={group ?? ''}>
+                              {group !== null && groups.length > 1 && (
+                                <DropdownMenuLabel>{group}</DropdownMenuLabel>
+                              )}
+                              {models.map((model) => (
+                                <DropdownMenuRadioItem
+                                  key={model.value}
+                                  value={pinnedValue(agent.agentId, model.value)}
+                                >
+                                  <span className="min-w-0 truncate">{model.name}</span>
+                                </DropdownMenuRadioItem>
+                              ))}
+                            </DropdownMenuGroup>
+                          ))}
+                        </DropdownMenuRadioGroup>
+                      </DropdownMenuSubContent>
+                    </DropdownMenuSub>
+                  )
+                })}
+              </DropdownMenuGroup>
+            </>
+          )}
+        </DropdownMenuContent>
+      </DropdownMenu>
     </>
   )
 }

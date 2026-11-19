@@ -3,7 +3,7 @@
 
 import type { ChangedFile } from '@shared/git'
 import type { CommitContext } from './git/commit-context'
-import { askSmallModel } from './outline-titles'
+import { askSmallModel, type ModelPick } from './outline-titles'
 import type { HiddenRuntime } from './reports'
 
 /** A reply's message keeps this many characters at most. */
@@ -85,6 +85,7 @@ export interface CommitMessageRequest {
   /** The empty folder hidden sessions run in. */
   dir: string
   context: CommitContext
+  model: ModelPick
   log(message: string): void
   timeoutMs?: number
 }
@@ -100,7 +101,7 @@ export async function writeCommitMessage(
 ): Promise<string> {
   const reply = await askSmallModel(runtime, {
     dir: request.dir,
-    sessionModel: null,
+    model: request.model,
     prompt: commitMessagePrompt(request.context),
     name: 'the commit message',
     log: request.log,

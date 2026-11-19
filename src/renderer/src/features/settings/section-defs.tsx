@@ -131,6 +131,7 @@ import {
   DefaultAgent,
   FontSize,
   GeneralSwitch,
+  LightModelChoice,
   GhTool,
   GitTool,
   Language,
@@ -260,6 +261,15 @@ export function useGeneralSection(): SectionDef {
         render: () => (
           <GeneralSwitch field="sessionTitles" label={t('general.sessionTitles.name')} />
         ),
+      },
+      {
+        id: 'light-model',
+        name: t('general.lightModel.name'),
+        english: en('general.lightModel.name'),
+        description: t('general.lightModel.description'),
+        keywords: t('general.lightModel.keywords'),
+        group: sessions,
+        render: () => <LightModelChoice label={t('general.lightModel.name')} />,
       },
       {
         id: 'background',

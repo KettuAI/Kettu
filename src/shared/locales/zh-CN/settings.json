@@ -76,6 +76,19 @@
       "description": "由小模型为每个会话命名一次，会用掉少量智能体的套餐额度。",
       "keywords": "标题 命名 会话 模型 额度 title name session"
     },
+    "lightModel": {
+      "name": "轻量任务的模型",
+      "description": "用来写标题、分支名、提交信息和问题报告草稿，用掉这个智能体的套餐额度。",
+      "keywords": "模型 小模型 标题 分支 大纲 提交信息 问题报告 额度 model small title branch outline commit",
+      "small": "自动选小模型",
+      "smallHint": "会话智能体的小模型",
+      "session": "跟随会话",
+      "sessionHint": "会话的智能体和它选的模型",
+      "pinned": "指定模型",
+      "reading": "正在读取模型…",
+      "noModels": "还没读到模型",
+      "unavailable": "{{agent}} 现在用不了"
+    },
     "background": {
       "name": "在后台运行",
       "descriptionMac": "关闭窗口后，会话和定时任务在菜单栏中继续运行。",

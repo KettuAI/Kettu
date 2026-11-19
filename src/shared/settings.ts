@@ -25,6 +25,17 @@ export interface OnboardingState {
 export const NEW_SESSION_LISTS = ['sessions', 'artifacts', 'off'] as const
 export type NewSessionList = (typeof NEW_SESSION_LISTS)[number]
 
+/**
+ * The model the requests Kettu makes itself ask: session titles, branch names, outline titles,
+ * commit messages and problem report drafts. `small`: a small model of the task's agent, else the
+ * session's; `session`: the session's agent and model; `pinned`: one agent and model for all.
+ */
+export type LightModel =
+  { mode: 'small' } | { mode: 'session' } | { mode: 'pinned'; agentId: AgentId; model: string }
+
+/** A pinned model's id at most, in characters. */
+export const LIGHT_MODEL_CHARS = 200
+
 export interface SettingsFile {
   version: 1
   agentRegistrationVersion?: 1
@@ -41,6 +52,7 @@ export interface SettingsFile {
     openAtLogin: boolean // start at login, so routines keep their schedule
     background: boolean // keep running with the tray icon after the last window closes
     sessionTitles: boolean // a small model titles a session its agent leaves untitled
+    lightModel: LightModel // replaced whole
   }
   thread: {
     outlineSummaries: boolean // a small model titles the outline's messages
@@ -226,6 +238,7 @@ export const DEFAULT_SETTINGS: SettingsFile = {
     openAtLogin: false,
     background: false,
     sessionTitles: true,
+    lightModel: { mode: 'small' },
   },
   thread: { outlineSummaries: true, confirmLinks: true, openLinksIn: 'browser', alwaysOpenIn: {} },
   appearance: {
@@ -346,6 +359,7 @@ export interface HostSettings {
   idleSessions: SettingsFile['idleSessions']
   usage: { fromComputer: boolean }
   sessionTitles: boolean // write a title for a session its agent leaves untitled
+  lightModel: LightModel // which model Kettu's own requests ask
   defaultAgent: AgentId | null // the agent new sessions start with, which answers artifacts' questions
   computerUse: ComputerUseSettings
   // Kettu's download service may be asked, as for the harness compatibility manifest: off in

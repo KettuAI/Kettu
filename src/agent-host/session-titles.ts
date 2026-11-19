@@ -3,7 +3,7 @@
 // worktree's branch is named the same way.
 
 import type { UserContent } from '@shared/thread'
-import { writeTitles } from './outline-titles'
+import { writeTitles, type ModelPick } from './outline-titles'
 import type { HiddenRuntime } from './reports'
 import { repeatsFirstMessage, titleWithoutAhead } from './session-updates'
 
@@ -21,8 +21,7 @@ const BRANCH_INSTRUCTION =
 export interface SessionTitleRequest {
   /** The empty folder hidden sessions run in. */
   dir: string
-  /** The session's model, for an agent that offers no small one. */
-  sessionModel: string | null
+  model: ModelPick
   message: readonly UserContent[]
   log(message: string): void
   timeoutMs?: number
@@ -68,7 +67,7 @@ async function writeOne(
 ): Promise<string> {
   const titles = await writeTitles(runtime, {
     dir: request.dir,
-    sessionModel: request.sessionModel,
+    model: request.model,
     messages: [{ pos: 0, text: titleMessageText(request.message) }],
     cut: TITLE_PROMPT_CHARS,
     name,

@@ -77,6 +77,19 @@
       "description": "A small model names each session once. Uses a little of the agent’s plan.",
       "keywords": "title name session model credits"
     },
+    "lightModel": {
+      "name": "Model for lightweight tasks",
+      "description": "Writes titles, branch names, commit messages and report drafts, on that agent’s plan.",
+      "keywords": "model small title branch outline commit report credits plan",
+      "small": "Pick a small model",
+      "smallHint": "A small model of the session’s agent",
+      "session": "Same as the session",
+      "sessionHint": "The session’s agent and model",
+      "pinned": "A specific model",
+      "reading": "Reading models…",
+      "noModels": "No models read yet",
+      "unavailable": "{{agent}} is unavailable"
+    },
     "background": {
       "name": "Run in the background",
       "descriptionMac": "Keeps sessions and routines running in the menu bar after you close the window.",

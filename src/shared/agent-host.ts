@@ -717,6 +717,12 @@ export interface SideChatAgent {
   name: string
 }
 
+/** An agent the lightweight tasks' model may be pinned to: one that can ask in a hidden session. */
+export interface LightAgent {
+  agentId: AgentId
+  name: string
+}
+
 /** How far a session's latest plan got, as its summary carries it. */
 export interface PlanProgress {
   done: number
@@ -889,6 +895,8 @@ export interface HostContract {
     result: { sessions: ImportableSession[]; nextCursor: string | null }
   }
   'agents.options': { params: void; result: AgentOptions[] }
+  // The agents the lightweight tasks' model may be pinned to; older hosts lack it.
+  'agents.lightAgents': { params: void; result: { agents: LightAgent[] } }
   // A draft of a problem report's description, written by the agent the report is about, else the
   // one new sessions start with, from where the report was opened, the error and the host's recent
   // warnings, with the name of the agent that wrote it; a null draft when there is neither an error nor a
@@ -1779,6 +1787,7 @@ export const HOST_METHODS = [
   'agents.refreshAccount',
   'agents.listSessions',
   'agents.options',
+  'agents.lightAgents',
   'agents.draftReport',
   'mcp.status',
   'mcp.retry',

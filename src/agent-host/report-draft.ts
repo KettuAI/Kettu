@@ -4,7 +4,7 @@
 
 import { REPORT_DRAFT_MAX, REPORT_ERROR_MAX, type ReportOrigin } from '@shared/report'
 import type { AgentEvent, LogEntry } from './diagnostics'
-import { askSmallModel } from './outline-titles'
+import { askSmallModel, type ModelPick } from './outline-titles'
 import type { HiddenRuntime } from './reports'
 
 /** Records older than this say nothing about what the user reports now. */
@@ -136,6 +136,7 @@ export interface ReportDraftRequest {
   /** The empty folder hidden sessions run in. */
   dir: string
   prompt: string
+  model: ModelPick
   log(message: string): void
   timeoutMs?: number
 }
@@ -151,7 +152,7 @@ export async function writeReportDraft(
 ): Promise<string | null> {
   const reply = await askSmallModel(runtime, {
     dir: request.dir,
-    sessionModel: null,
+    model: request.model,
     prompt: request.prompt,
     name: 'the problem report draft',
     log: request.log,

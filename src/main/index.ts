@@ -927,7 +927,8 @@ async function start(): Promise<void> {
       installMenu(menuDeps)
       tray.updateMenu()
     }
-    // The agent host reads `general.sessionTitles`, which `reachesHost` cannot single out.
+    // The agent host reads `general.sessionTitles` and `general.lightModel`, which `reachesHost`
+    // cannot single out.
     if (reachesHost(changed) || localeChanged || changed.has('general')) {
       agentHost.pushSettings(hostSettings(next, systemLocale))
     }
