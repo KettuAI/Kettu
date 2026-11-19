@@ -869,7 +869,15 @@
     "copied": "Copied",
     "saveAs": "Save as…",
     "previous": "Previous",
-    "next": "Next"
+    "next": "Next",
+    "zoomLevel": "Zoom {{percent}}%. {{action}}",
+    "positionOf": "{{number}} of {{count}}",
+    "saved": "Saved",
+    "copyFailed": "Couldn't copy the image.",
+    "saveFailed": "Couldn't save the file.",
+    "showFailed": "Couldn't show the file.",
+    "unavailable": "This image can't be shown",
+    "unavailableVideo": "This video can't be played"
   },
   "host": {
     "away": "{{name}} is not connected",

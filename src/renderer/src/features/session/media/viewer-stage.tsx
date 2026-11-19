@@ -1,6 +1,10 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { animate, motion, useIsPresent } from 'motion/react'
+import { ImageNotFound01Icon, RefreshIcon } from '@hugeicons/core-free-icons'
+import { useTranslation } from 'react-i18next'
+import { Button } from '@renderer/components/ui/button'
 import { Spinner } from '@renderer/components/ui/spinner'
+import { PaneIcon } from '@renderer/features/shell/panel-button'
 import { cn } from '@renderer/lib/utils'
 import { prefersReducedMotion } from '@renderer/stores/settings'
 import { DEFAULT_PICTURE_SIZE, usePictureZoom, type PictureControls } from './picture-zoom'
@@ -12,7 +16,7 @@ import { FIT_MARGIN, type Size } from './zoom'
 export type Shown =
   | { state: 'loading' }
   | { state: 'ready'; kind: 'image' | 'video'; src: string; mimeType: string }
-  | { state: 'failed'; message: string }
+  | { state: 'failed'; message: string; video?: boolean }
 
 /** What the bar shows of the item: its pixels and, for a picture, its zoom and fit. */
 export interface ItemView {
@@ -59,6 +63,7 @@ export function StageItem({
   onView,
   onBackground,
   onFailed,
+  onRetry,
   onControls,
   onVideoReady,
 }: {
@@ -76,10 +81,13 @@ export function StageItem({
   onBackground: () => void
   /** The picture or clip failed to load; null when its format cannot show here. */
   onFailed: (message: string | null) => void
+  /** Asks for the item's source again, from where it says it cannot show. */
+  onRetry: () => void
   /** The picture's controls once it shows, and null when it no longer does. */
   onControls: (key: string, controls: PictureControls | null) => void
   onVideoReady: (element: HTMLVideoElement) => void
 }) {
+  const { t } = useTranslation(['session', 'common'])
   const present = useIsPresent()
   const root = useRef<HTMLDivElement>(null)
   const layer = useRef<HTMLDivElement>(null)
@@ -319,14 +327,30 @@ export function StageItem({
           ))}
       </div>
       {shown.state === 'loading' || (shown.state === 'ready' && !natural) ? (
-        <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-          <Spinner className="size-5 animate-in text-muted-foreground fade-in fill-mode-both delay-200 duration-(--duration-fast)" />
+        <div className="pointer-events-none absolute inset-0 flex animate-in flex-col items-center justify-center gap-3 text-muted-foreground fade-in fill-mode-both delay-200 duration-(--duration-fast)">
+          <Spinner className="size-5" />
+          <p aria-hidden className="text-meta">
+            {t('common:loading')}
+          </p>
         </div>
       ) : shown.state === 'failed' ? (
-        <div className="pointer-events-none absolute inset-0 flex items-center justify-center px-12">
-          <p className="max-w-md text-center text-ui break-words text-muted-foreground">
-            {shown.message}
+        <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-1.5 px-12 text-center">
+          <PaneIcon icon={ImageNotFound01Icon} size={28} className="mb-1.5 text-tertiary" />
+          <p className="text-ui font-medium">
+            {t(shown.video ? 'viewer.unavailableVideo' : 'viewer.unavailable')}
           </p>
+          <p className="max-w-md text-meta break-words text-muted-foreground">{shown.message}</p>
+          <Button
+            variant="outline"
+            size="sm"
+            className="pointer-events-auto mt-2.5"
+            // A press here is not one on the scrim, which would close the viewer.
+            onPointerDown={(event) => event.stopPropagation()}
+            onClick={onRetry}
+          >
+            <PaneIcon icon={RefreshIcon} size={14} />
+            {t('common:actions.retry')}
+          </Button>
         </div>
       ) : null}
     </motion.div>

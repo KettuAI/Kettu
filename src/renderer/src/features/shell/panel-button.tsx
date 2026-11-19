@@ -43,6 +43,7 @@ export function PanelButton({
   shortcut,
   pressed,
   disabled,
+  unavailable,
   size = 'icon-sm',
   className,
   onClick,
@@ -52,6 +53,8 @@ export function PanelButton({
   shortcut?: string
   pressed?: boolean
   disabled?: boolean
+  /** Dimmed and without effect, yet still focusable, so the keyboard's focus stays on it. */
+  unavailable?: boolean
   /** 28 px, or 24 px where a row is short. */
   size?: 'icon-xs' | 'icon-sm'
   className?: string
@@ -67,7 +70,8 @@ export function PanelButton({
             aria-label={label}
             aria-pressed={pressed}
             disabled={disabled}
-            onClick={onClick}
+            aria-disabled={unavailable || undefined}
+            onClick={unavailable ? undefined : onClick}
             className={cn(
               'kp-tool app-region-no-drag',
               size === 'icon-xs' && 'kp-tool--sm',

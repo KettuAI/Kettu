@@ -2,19 +2,20 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { Dialog as DialogPrimitive } from '@base-ui/react/dialog'
 import { AnimatePresence, motion } from 'motion/react'
 import {
+  Alert02Icon,
   ArrowLeft01Icon,
   ArrowRight01Icon,
   Cancel01Icon,
   Copy01Icon,
-  FileDownloadIcon,
-  Folder01Icon,
+  Download01Icon,
+  FolderOpenIcon,
   Tick02Icon,
 } from '@hugeicons/core-free-icons'
-import { HugeiconsIcon } from '@hugeicons/react'
 import { useTranslation } from 'react-i18next'
 import { mediaKindOfName, type CarriedMedia } from '@shared/media'
 import { Dialog, DialogPortal, DialogTitle } from '@renderer/components/ui/dialog'
-import { PanelButton } from '@renderer/features/shell/panel-button'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
+import { PaneIcon, PanelButton } from '@renderer/features/shell/panel-button'
 import { bytes as formatBytes, fileUrlPath, relativePath } from '@renderer/lib/format'
 import { errorMessage, host } from '@renderer/lib/host'
 import { hostOfPath } from '@renderer/lib/host-paths'
@@ -66,6 +67,21 @@ type Source =
 // Main decodes these when it copies a picture; any other is drawn here and handed over as PNG.
 const MAIN_DECODES = new Set(['image/png', 'image/jpeg'])
 const COPIED_MS = 1500
+const SAVED_MS = 2500
+
+/** What the last action came to, said over the stage: a save that went through, or a failure. */
+interface Notice {
+  tone: 'done' | 'failed'
+  text: string
+  /** What the system said of a failure. */
+  detail?: string
+}
+
+/** A file name's stem and its extension, which stays whole when the name is cut short. */
+function nameParts(name: string): [string, string] {
+  const dot = name.lastIndexOf('.')
+  return dot > 0 && name.length - dot <= 8 ? [name.slice(0, dot), name.slice(dot)] : [name, '']
+}
 
 /** The media viewer: one for the window, open while a request is. */
 export function MediaViewer() {
@@ -126,8 +142,9 @@ async function fileSource(path: string, request: ViewerRequest, fresh: boolean):
 }
 
 /**
- * The viewer over the window: the bar, and the stage with the item and the step buttons. It holds
- * the session's images and videos in thread order and the draft's images after them.
+ * The viewer over the window: the bar with the item's name and what is done with its file, and the
+ * stage with the item and, under it, the steps and the zoom. It holds the session's images and
+ * videos in thread order and the draft's images after them.
  */
 function ViewerLayer({ request, closing }: { request: ViewerRequest; closing: boolean }) {
   const { t } = useTranslation(['session', 'common'])
@@ -301,10 +318,22 @@ function ViewerLayer({ request, closing }: { request: ViewerRequest; closing: bo
     if (closing) handBack(true)
   }, [closing])
 
-  const [error, setError] = useState<string | null>(null)
+  const [notice, setNotice] = useState<Notice | null>(null)
+  const noticeTimer = useRef<ReturnType<typeof setTimeout>>(undefined)
   const [copied, setCopied] = useState(false)
   const copiedTimer = useRef<ReturnType<typeof setTimeout>>(undefined)
-  useEffect(() => () => clearTimeout(copiedTimer.current), [])
+  useEffect(
+    () => () => {
+      clearTimeout(copiedTimer.current)
+      clearTimeout(noticeTimer.current)
+    },
+    [],
+  )
+  const say = (next: Notice | null) => {
+    clearTimeout(noticeTimer.current)
+    setNotice(next)
+    if (next?.tone === 'done') noticeTimer.current = setTimeout(() => setNotice(null), SAVED_MS)
+  }
 
   const stepTo = (at: number) => {
     const next = shown[Math.max(0, Math.min(shown.length - 1, at))]
@@ -314,7 +343,7 @@ function ViewerLayer({ request, closing }: { request: ViewerRequest; closing: bo
     setStepped(true)
     setCurrent(next)
     setView({ pixels: null, zoom: null })
-    setError(null)
+    say(null)
     setCopied(false)
   }
 
@@ -333,13 +362,13 @@ function ViewerLayer({ request, closing }: { request: ViewerRequest; closing: bo
     if (!ready || !bytes) throw new Error('The picture is not here yet')
     return { bytes, mimeType: ready.mimeType, name }
   }
-  const run = (action: () => Promise<unknown>) => {
-    setError(null)
-    action().catch((e: unknown) => setError(errorMessage(e)))
+  const run = (failure: string, action: () => Promise<unknown>) => {
+    say(null)
+    action().catch((e: unknown) => say({ tone: 'failed', text: failure, detail: errorMessage(e) }))
   }
   const copy = () => {
     if (!ready || !isPicture) return
-    run(async () => {
+    run(t('viewer.copyFailed'), async () => {
       const media = ready.url ?? carried()
       if (MAIN_DECODES.has(ready.mimeType)) {
         await window.kettu.media.copyImage(media)
@@ -368,7 +397,13 @@ function ViewerLayer({ request, closing }: { request: ViewerRequest; closing: bo
     })
   }
   const save = () => {
-    if (ready) run(() => window.kettu.media.saveAs(ready.url ?? carried()))
+    if (!ready) return
+    run(t('viewer.saveFailed'), async () => {
+      // False when the save dialog was cancelled, which needs no word.
+      if (await window.kettu.media.saveAs(ready.url ?? carried())) {
+        say({ tone: 'done', text: t('viewer.saved') })
+      }
+    })
   }
 
   // A project file opens in the Files pane, which the viewer then uncovers; any other file shows
@@ -391,7 +426,7 @@ function ViewerLayer({ request, closing }: { request: ViewerRequest; closing: bo
   })()
   const show = () => {
     if (!showFile) return
-    run(async () => {
+    run(t('viewer.showFailed'), async () => {
       await showFile.show()
       if (showFile.inFiles) closeViewer()
     })
@@ -399,10 +434,15 @@ function ViewerLayer({ request, closing }: { request: ViewerRequest; closing: bo
 
   const onKeyDown = (event: React.KeyboardEvent) => {
     if (event.defaultPrevented || event.nativeEvent.isComposing || closing) return
-    if (isMod(event) && !event.shiftKey && !event.altKey && event.key.toLowerCase() === 'c') {
-      if (!isPicture) return
-      event.preventDefault()
-      copy()
+    if (isMod(event) && !event.shiftKey && !event.altKey) {
+      const key = event.key.toLowerCase()
+      if (key === 'c' && isPicture) {
+        event.preventDefault()
+        copy()
+      } else if (key === 's' && ready) {
+        event.preventDefault()
+        save()
+      }
       return
     }
     // A clip's controls keep their own keys while they have focus.
@@ -424,18 +464,15 @@ function ViewerLayer({ request, closing }: { request: ViewerRequest; closing: bo
     event.preventDefault()
   }
 
-  const unsupported = t(
-    (ready?.kind ?? mediaKindOfName(name)) === 'video'
-      ? 'media.unsupportedVideo'
-      : 'media.unsupported',
-  )
+  const video = (ready?.kind ?? mediaKindOfName(name)) === 'video'
+  const unsupported = t(video ? 'media.unsupportedVideo' : 'media.unsupported')
   const stageShown: Shown =
     source.state === 'ready'
       ? { state: 'ready', kind: source.kind, src: source.src, mimeType: source.mimeType }
       : source.state === 'failed'
-        ? source
+        ? { ...source, video }
         : source.state === 'gone'
-          ? { state: 'failed', message: unsupported }
+          ? { state: 'failed', message: unsupported, video }
           : { state: 'loading' }
   const failed = (message: string | null) => {
     // A file whose grant main dropped fails to load; a fresh grant tells that apart.
@@ -451,11 +488,35 @@ function ViewerLayer({ request, closing }: { request: ViewerRequest; closing: bo
     setSource(key, { state: 'failed', message: message ?? unsupported })
   }
 
+  // Asked for by hand, a file takes a fresh grant and any other source is read again.
+  const retry = () => {
+    const key = item.key
+    say(null)
+    if (item.source.kind === 'file') {
+      setSource(key, { state: 'loading' })
+      fileSource(item.source.path, request, true).then(
+        (found) => setSource(key, found),
+        (e: unknown) => setSource(key, { state: 'failed', message: errorMessage(e) }),
+      )
+      return
+    }
+    asked.current.delete(key)
+    setSources((map) => {
+      const next = new Map(map)
+      next.delete(key)
+      return next
+    })
+  }
+
   const zoom = isPicture ? view.zoom : null
   const facts = [
     view.pixels ? `${view.pixels.width} × ${view.pixels.height}` : null,
     ready?.size != null ? formatBytes(ready.size) : null,
-  ].filter(Boolean)
+  ]
+    .filter(Boolean)
+    .join(' · ')
+  const [stem, extension] = nameParts(name)
+  const several = shown.length > 1 && index >= 0
   const fade = { duration: 0.2 }
 
   return (
@@ -474,6 +535,7 @@ function ViewerLayer({ request, closing }: { request: ViewerRequest; closing: bo
         // The bar and its buttons read on the dark scrim in either theme.
         data-theme="dark"
         data-overlay-layer=""
+        data-media-viewer=""
         initialFocus={stage}
         onKeyDown={onKeyDown}
         className="fixed inset-0 z-50 flex flex-col text-foreground outline-none app-region-no-drag"
@@ -485,69 +547,80 @@ function ViewerLayer({ request, closing }: { request: ViewerRequest; closing: bo
           // Level with the window controls: on macOS its controls sit below the gap above the
           // sheets, as the sidebar header's do; elsewhere it is as tall as the band.
           className={cn(
-            'flex shrink-0 items-center gap-1 pr-2.5 pl-5 app-region-drag',
+            'flex shrink-0 items-center gap-3 pr-2.5 pl-5 app-region-drag',
             hasBand
               ? 'h-(--title-bar) pr-[calc(100vw-env(titlebar-area-x,0px)-env(titlebar-area-width,100vw)+10px)]'
               : 'h-top-bar pl-[calc(36px+var(--traffic-lights))]',
           )}
         >
-          <DialogTitle className="min-w-0 truncate font-sans text-ui leading-normal font-medium">
-            {name}
-          </DialogTitle>
-          {facts.length > 0 && (
-            <span className="ml-1 shrink-0 text-meta text-tertiary tabular">
-              {facts.join(' · ')}
-            </span>
-          )}
-          <span className="ml-1 shrink-0 text-meta text-tertiary tabular">
-            {t('viewer.position', { number: index + 1, count: shown.length })}
-          </span>
-          {error && <span className="ml-1 min-w-0 truncate text-meta text-danger">{error}</span>}
-          <span className="flex-1" />
-          {zoom && <ZoomControls zoom={zoom} controls={picture} />}
-          {isPicture && (
+          {/* The name gives way first and keeps its extension; the facts leave a narrow bar and
+              stay in the name's tooltip. */}
+          <div className="@container flex min-w-0 flex-1 items-baseline gap-2.5">
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <DialogTitle className="flex min-w-0 font-sans text-ui leading-normal font-medium app-region-no-drag" />
+                }
+              >
+                <span className="truncate">{stem}</span>
+                {extension && <span className="shrink-0">{extension}</span>}
+              </TooltipTrigger>
+              <TooltipContent side="bottom" align="start" className="max-w-md break-all">
+                <span className="flex flex-col gap-0.5">
+                  {name}
+                  {facts && <span className="text-background/60 tabular">{facts}</span>}
+                </span>
+              </TooltipContent>
+            </Tooltip>
+            {facts && (
+              <span className="hidden shrink-0 text-meta whitespace-nowrap text-tertiary tabular @xs:inline">
+                {facts}
+              </span>
+            )}
+          </div>
+          <div className="flex shrink-0 items-center gap-0.5">
+            {isPicture && (
+              <PanelButton
+                label={copied ? t('viewer.copied') : t('viewer.copy')}
+                shortcut={formatShortcut('Mod+C')}
+                onClick={copy}
+              >
+                {copied ? (
+                  <PaneIcon
+                    icon={Tick02Icon}
+                    size={16}
+                    className="animate-in text-foreground animation-duration-(--duration-fast) fade-in zoom-in-75"
+                  />
+                ) : (
+                  <PaneIcon icon={Copy01Icon} size={16} />
+                )}
+              </PanelButton>
+            )}
             <PanelButton
-              size="icon-sm"
-              label={copied ? t('viewer.copied') : t('viewer.copy')}
-              shortcut={formatShortcut('Mod+C')}
-              onClick={copy}
+              label={t('viewer.saveAs')}
+              shortcut={formatShortcut('Mod+S')}
+              disabled={!ready}
+              onClick={save}
             >
-              {copied ? (
-                <HugeiconsIcon
-                  icon={Tick02Icon}
-                  strokeWidth={1.9}
-                  aria-hidden
-                  className="animate-in text-icon animation-duration-(--duration-fast) fade-in zoom-in-75"
-                />
-              ) : (
-                <HugeiconsIcon icon={Copy01Icon} strokeWidth={1.9} aria-hidden />
-              )}
+              <PaneIcon icon={Download01Icon} size={16} />
             </PanelButton>
-          )}
-          <PanelButton size="icon-sm" label={t('viewer.saveAs')} disabled={!ready} onClick={save}>
-            <HugeiconsIcon icon={FileDownloadIcon} strokeWidth={1.9} aria-hidden />
-          </PanelButton>
-          {showFile && (
-            <PanelButton
-              size="icon-sm"
-              label={
-                showFile.inFiles
-                  ? t('media.showInFiles')
-                  : t('media.showIn', { name: fileManagerName() })
-              }
-              onClick={show}
-            >
-              <HugeiconsIcon icon={Folder01Icon} strokeWidth={1.9} aria-hidden />
+            {showFile && (
+              <PanelButton
+                label={
+                  showFile.inFiles
+                    ? t('media.showInFiles')
+                    : t('media.showIn', { name: fileManagerName() })
+                }
+                onClick={show}
+              >
+                <PaneIcon icon={FolderOpenIcon} size={16} />
+              </PanelButton>
+            )}
+            <span aria-hidden className="mx-1.5 h-4 w-px shrink-0 bg-border" />
+            <PanelButton label={t('common:actions.close')} shortcut="Esc" onClick={closeViewer}>
+              <PaneIcon icon={Cancel01Icon} size={16} />
             </PanelButton>
-          )}
-          <PanelButton
-            size="icon-sm"
-            label={t('common:actions.close')}
-            shortcut="Esc"
-            onClick={closeViewer}
-          >
-            <HugeiconsIcon icon={Cancel01Icon} strokeWidth={1.9} aria-hidden />
-          </PanelButton>
+          </div>
         </motion.div>
         <div
           ref={observeStage}
@@ -568,57 +641,84 @@ function ViewerLayer({ request, closing }: { request: ViewerRequest; closing: bo
               onView={onView}
               onBackground={closeViewer}
               onFailed={failed}
+              onRetry={retry}
               onControls={onControls}
               onVideoReady={(element) => takeOver(item.key, element)}
             />
           </AnimatePresence>
-          {index > 0 && (
-            <StepButton
-              side="start"
-              label={t('viewer.previous')}
-              leaving={closing}
-              onClick={() => stepTo(index - 1)}
-            />
-          )}
-          {index >= 0 && index < shown.length - 1 && (
-            <StepButton
-              side="end"
-              label={t('viewer.next')}
-              leaving={closing}
-              onClick={() => stepTo(index + 1)}
-            />
-          )}
+          {/* Under the item, in the room its fit leaves: what the last action came to, then the
+              steps and the zoom. */}
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: closing ? 0 : 1 }}
+            transition={fade}
+            className={cn(
+              'pointer-events-none absolute inset-x-0 bottom-1.5 z-10 flex flex-col items-center gap-2 px-3',
+              closing && '*:pointer-events-none',
+            )}
+          >
+            {notice && (
+              <div
+                role={notice.tone === 'failed' ? 'alert' : 'status'}
+                className="pointer-events-auto flex max-w-xl items-start gap-1.5 rounded-lg bg-popover py-1.5 pr-3 pl-2.5 text-meta text-popover-foreground shadow-md ring-1 ring-border animate-in animation-duration-(--duration-fast) fade-in"
+              >
+                <PaneIcon
+                  icon={notice.tone === 'failed' ? Alert02Icon : Tick02Icon}
+                  size={14}
+                  className={cn('mt-px', notice.tone === 'failed' && 'text-danger')}
+                />
+                <span className="line-clamp-2 min-w-0 break-words">
+                  {notice.text}
+                  {notice.detail && <span className="text-muted-foreground"> {notice.detail}</span>}
+                </span>
+              </div>
+            )}
+            {(several || zoom) && (
+              <div
+                role="toolbar"
+                className="pointer-events-auto flex h-9 items-center gap-0.5 rounded-xl bg-popover px-1 shadow-md ring-1 ring-border"
+              >
+                {several && (
+                  <>
+                    <PanelButton
+                      label={t('viewer.previous')}
+                      shortcut="←"
+                      unavailable={index === 0}
+                      onClick={() => stepTo(index - 1)}
+                    >
+                      <PaneIcon icon={ArrowLeft01Icon} size={16} />
+                    </PanelButton>
+                    <span
+                      aria-label={t('viewer.positionOf', {
+                        number: index + 1,
+                        count: shown.length,
+                      })}
+                      className="min-w-11 px-1 text-center text-meta whitespace-nowrap tabular"
+                    >
+                      {t('viewer.position', { number: index + 1, count: shown.length })}
+                    </span>
+                    <PanelButton
+                      label={t('viewer.next')}
+                      shortcut="→"
+                      unavailable={index === shown.length - 1}
+                      onClick={() => stepTo(index + 1)}
+                    >
+                      <PaneIcon icon={ArrowRight01Icon} size={16} />
+                    </PanelButton>
+                  </>
+                )}
+                {several && zoom && (
+                  <span aria-hidden className="mx-1.5 h-4 w-px shrink-0 bg-border" />
+                )}
+                {zoom && <ZoomControls zoom={zoom} controls={picture} />}
+              </div>
+            )}
+          </motion.div>
+          <span aria-live="polite" className="sr-only">
+            {copied ? t('viewer.copied') : ''}
+          </span>
         </div>
       </DialogPrimitive.Popup>
     </DialogPortal>
-  )
-}
-
-/** Previous or Next at the stage's edge, shown on hover and focus; it fades as the viewer closes. */
-function StepButton({
-  side,
-  label,
-  leaving,
-  onClick,
-}: {
-  side: 'start' | 'end'
-  label: string
-  leaving: boolean
-  onClick: () => void
-}) {
-  const glyph = side === 'start' ? ArrowLeft01Icon : ArrowRight01Icon
-  return (
-    <button
-      type="button"
-      aria-label={label}
-      onClick={onClick}
-      className={cn(
-        'absolute top-1/2 z-10 grid size-8 -translate-y-1/2 place-items-center rounded-full bg-popover text-popover-foreground opacity-0 shadow-md transition-opacity duration-(--duration-fast) group-hover/stage:opacity-100 focus-visible:opacity-100 focus-ring',
-        side === 'start' ? 'left-3' : 'right-3',
-        leaving && 'pointer-events-none opacity-0!',
-      )}
-    >
-      <HugeiconsIcon icon={glyph} strokeWidth={1.9} aria-hidden className="size-4" />
-    </button>
   )
 }
