@@ -3,7 +3,7 @@
 
 import { useEffect, useState } from 'react'
 import type { AgentOptions, AgentStatus, PlanLimit, SessionSummary } from '@shared/agent-host'
-import { isFullAccessMode, isStartMode } from '@shared/agents'
+import { isStartMode } from '@shared/agents'
 import type { AgentId, HarnessId } from '@shared/thread'
 import { errorMessage } from '@renderer/lib/host'
 import { hostOfPath } from '@renderer/lib/host-paths'
@@ -128,7 +128,7 @@ export interface StartModeChoice {
 export interface StartModeView {
   /** `unused`: the agent's modes are not known yet; `failed`: reading them failed. */
   state: 'loading' | 'unused' | 'failed' | 'ready'
-  /** The modes after the "follow" choice, the stored one among them, full access left out. */
+  /** The modes after the "follow" choice, the stored one among them. */
   choices: StartModeChoice[]
   /** The stored mode, or `FOLLOW_AGENT`. */
   value: string
@@ -161,9 +161,11 @@ export function startModeView(input: {
   )
   // A provisional entry has the model's options alone, so no mode counts as unused.
   if (!option) return stay(failed && !entry ? 'failed' : 'unused')
-  const choices = (option.choices ?? [])
-    .filter((choice) => !isFullAccessMode(choice.value))
-    .map((choice): StartModeChoice => ({ value: choice.value, name: choice.name, offered: true }))
+  const choices = (option.choices ?? []).map((choice): StartModeChoice => ({
+    value: choice.value,
+    name: choice.name,
+    offered: true,
+  }))
   if (kept !== null && !choices.some((choice) => choice.value === kept)) {
     choices.push({ value: kept, name: kept, offered: false })
   }

@@ -713,7 +713,7 @@
     "noConfig": "No configuration files to show.",
     "startMode": {
       "name": "Mode for new sessions",
-      "description": "The permission mode a new session starts in, whatever a project’s own settings say. Full access can’t be chosen here.",
+      "description": "The permission mode a new session starts in, whatever a project’s own settings say. Sessions an agent starts never get Full access.",
       "follow": {
         "claude-code": "Follow Claude Code",
         "codex": "Follow Codex (Auto review)",
