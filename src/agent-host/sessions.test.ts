@@ -204,6 +204,87 @@ describe('restoring an archived session', () => {
   })
 })
 
+describe('archiving a session without its sub-sessions', () => {
+  const record = (id: string, parentId: string | null, extra: Partial<SessionRecord> = {}) =>
+    ({
+      id,
+      agentId: 'claude-code',
+      acpSessionId: `acp-${id}`,
+      projectPath: '/repo',
+      title: id,
+      createdAt: 1,
+      updatedAt: 2,
+      lastViewedAt: null,
+      parentId,
+      origin: 'user',
+      description: null,
+      branch: null,
+      ...extra,
+    }) satisfies SessionRecord
+
+  async function loaded(records: SessionRecord[]) {
+    const store = sessionsFile(dir, log)
+    store.save({ version: 1, sessions: records })
+    await store.flush()
+    const { sessions } = manager()
+    await sessions.load()
+    return sessions
+  }
+
+  const tree = () => [
+    record('p', null, { pinnedAt: 1 }),
+    // A subagent of the session, and a sub-session under it, which is the session's too.
+    record('a', 'p', { origin: 'subagent' }),
+    record('c1', 'p'),
+    record('c2', 'a'),
+    record('g', 'c1'),
+    record('gone', 'p', { archivedAt: 1 }),
+  ]
+
+  it('leaves its sub-sessions in the list on their own, and its subagents with it', async () => {
+    const sessions = await loaded(tree())
+    await sessions.archive('p', false)
+    expect(sessions.summary('p')).toMatchObject({ archivedAt: expect.any(Number), pinnedAt: null })
+    expect(sessions.summary('a').parentId).toBe('p')
+    expect(sessions.summary('c1')).toMatchObject({ parentId: null, archivedAt: null })
+    expect(sessions.summary('c2')).toMatchObject({ parentId: null, archivedAt: null })
+    expect(sessions.summary('g').parentId).toBe('c1')
+    expect(sessions.summary('gone').parentId).toBe('p')
+    await sessions.flush()
+    const left = (await index())?.sessions.find((item) => item.id === 'p')?.leftSubSessions
+    expect(left?.toSorted()).toEqual(['c1', 'c2'])
+  })
+
+  it('puts them back under it when restored after a restart, unpinned, unless gone', async () => {
+    const before = await loaded(tree())
+    await before.archive('p', false)
+    before.pin('c1', true)
+    await before.delete('c2')
+    await before.flush()
+    const { sessions } = manager()
+    await sessions.load()
+    await sessions.unarchive('p')
+    expect(sessions.summary('p').archivedAt).toBeNull()
+    expect(sessions.summary('c1')).toMatchObject({ parentId: 'p', pinnedAt: null })
+    expect(sessions.has('c2')).toBe(false)
+    await sessions.flush()
+    expect(
+      (await index())?.sessions.find((item) => item.id === 'p')?.leftSubSessions,
+    ).toBeUndefined()
+  })
+
+  it('archives the whole tree by default', async () => {
+    const sessions = await loaded(tree())
+    await sessions.archive('p')
+    expect(sessions.summary('c1').parentId).toBe('p')
+    expect(sessions.summary('c2').parentId).toBe('a')
+    await sessions.flush()
+    expect(
+      (await index())?.sessions.find((item) => item.id === 'p')?.leftSubSessions,
+    ).toBeUndefined()
+  })
+})
+
 describe('answering a problem report', () => {
   const record: SessionRecord = {
     id: 's1',

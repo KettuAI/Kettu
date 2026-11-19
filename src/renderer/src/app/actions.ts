@@ -34,6 +34,7 @@ import { useProjectsStore } from '@renderer/stores/projects'
 import {
   hostOfSession,
   isScratchFolder,
+  listedSubSessions,
   sessionArchived,
   useSessionsStore,
 } from '@renderer/stores/sessions'
@@ -380,15 +381,20 @@ export async function pinSession(sessionId: string, pinned: boolean): Promise<vo
   await host('sessions.pin', { sessionId, pinned })
 }
 
-/** Closes the session with its sub-sessions and takes it off the list; Settings lists it. */
-export async function archiveSession(sessionId: string): Promise<void> {
-  const summary = useSessionsStore.getState().byId[sessionId]
-  const archived = [sessionId, ...descendantIds(sessionId)]
+/**
+ * Closes the session with its sub-sessions, or without them when `subSessions` is false, leaving
+ * them in the list on their own, and takes it off the list; Settings lists it.
+ */
+export async function archiveSession(sessionId: string, subSessions = true): Promise<void> {
+  const { byId } = useSessionsStore.getState()
+  const summary = byId[sessionId]
+  const left = subSessions ? [] : listedSubSessions(byId, sessionId).map((s) => s.id)
+  const archived = archivedWith([sessionId], subSessions)
   // Its row leaves at once, and its view with it; the host closes it behind, and a failure brings
   // it back.
-  const settle = useSessionsStore.getState().archiveNow(sessionId)
+  const settle = useSessionsStore.getState().archiveNow(sessionId, left)
   try {
-    await host('sessions.archive', { sessionId })
+    await host('sessions.archive', subSessions ? { sessionId } : { sessionId, subSessions })
   } catch (error) {
     settle(false)
     throw error
@@ -545,6 +551,21 @@ function leftTheList(byId: Record<string, SessionSummary>, id: string): boolean 
 /** All sessions under a session, for the confirmation that names how many go with it. */
 export function descendantCount(sessionId: string): number {
   return descendantIds(sessionId).length
+}
+
+/** A session and every session under it. */
+export function treeIds(sessionId: string): string[] {
+  return [sessionId, ...descendantIds(sessionId)]
+}
+
+/** What archiving these sessions closes: all of their trees, or without the sub-sessions left. */
+export function archivedWith(sessionIds: readonly string[], subSessions: boolean): string[] {
+  const { byId } = useSessionsStore.getState()
+  return sessionIds.flatMap((id) => {
+    const left = subSessions ? [] : listedSubSessions(byId, id).map((s) => s.id)
+    const staying = new Set(left.flatMap((child) => [child, ...descendantIds(child)]))
+    return [id, ...descendantIds(id)].filter((item) => !staying.has(item))
+  })
 }
 
 /**

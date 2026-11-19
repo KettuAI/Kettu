@@ -2750,7 +2750,8 @@ export class AgentHost {
       'sessions.rename': ({ sessionId, title }) => sessions.rename(sessionId, title),
       'sessions.close': ({ sessionId }) => sessions.close(sessionId),
       'sessions.pin': ({ sessionId, pinned }) => sessions.pin(sessionId, pinned),
-      'sessions.archive': ({ sessionId }) => sessions.archive(sessionId),
+      'sessions.archive': ({ sessionId, subSessions }) =>
+        sessions.archive(sessionId, subSessions ?? true),
       'sessions.unarchive': ({ sessionId }) => sessions.unarchive(sessionId),
       'sessions.markUnread': ({ sessionId, unread }) => sessions.markUnread(sessionId, unread),
       'sessions.delete': async ({ sessionId }) => {

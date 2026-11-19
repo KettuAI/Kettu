@@ -1326,7 +1326,11 @@ export interface HostContract {
   'sessions.rename': { params: { sessionId: string; title: string | null }; result: void }
   'sessions.close': { params: { sessionId: string }; result: void }
   'sessions.pin': { params: { sessionId: string; pinned: boolean }; result: void }
-  'sessions.archive': { params: { sessionId: string }; result: void }
+  /**
+   * `subSessions: false` archives the session alone, its sub-sessions staying in the list on their
+   * own until it is restored; without it, its whole tree is archived.
+   */
+  'sessions.archive': { params: { sessionId: string; subSessions?: boolean }; result: void }
   'sessions.unarchive': { params: { sessionId: string }; result: void }
   // unread false: seen, as showing it would mark it.
   'sessions.markUnread': { params: { sessionId: string; unread: boolean }; result: void }

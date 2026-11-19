@@ -73,6 +73,16 @@ describe('createValidators', () => {
     expect(posix['sessions.import']({ ...base, fork: 'yes' })).toEqual(base)
   })
 
+  it('archives a whole tree unless asked, as a boolean, to leave the sub-sessions', () => {
+    const archive = posix['sessions.archive']
+    expect(archive({ sessionId: 's' })).toEqual({ sessionId: 's' })
+    expect(archive({ sessionId: 's', subSessions: false })).toEqual({
+      sessionId: 's',
+      subSessions: false,
+    })
+    rejects(() => archive({ sessionId: 's', subSessions: 'false' }))
+  })
+
   it('takes a session and a bounded task id for a background task', () => {
     for (const method of ['sessions.stopTask', 'sessions.taskOutput'] as const) {
       expect(posix[method]({ sessionId: 's', taskId: 'b1', other: 1 })).toEqual({

@@ -308,6 +308,21 @@ describe('the host files', () => {
     })
   })
 
+  it('keeps the sub-sessions a session archived alone left in the list', () => {
+    const archived: SessionRecord = { ...session, archivedAt: 3, leftSubSessions: ['c1', 'c2'] }
+    expect(parseSessionsFile({ sessions: [archived] })).toEqual({
+      version: 1,
+      sessions: [archived],
+    })
+    expect(
+      parseSessionsFile({ sessions: [{ ...archived, leftSubSessions: ['c1', '', 4, 'c1'] }] }),
+    ).toEqual({ version: 1, sessions: [{ ...archived, leftSubSessions: ['c1'] }] })
+    expect(parseSessionsFile({ sessions: [{ ...archived, leftSubSessions: 'c1' }] })).toEqual({
+      version: 1,
+      sessions: [{ ...session, archivedAt: 3 }],
+    })
+  })
+
   it('keeps the agents that had a session before its current one', () => {
     const switched: SessionRecord = {
       ...session,
