@@ -106,7 +106,7 @@
       "betweenTurns": "上下文明细仅在两轮对话之间显示",
       "stale": "本轮开始前读取",
       "refreshFailed": "当前显示上次读取的结果，读取恢复后会自动更新。",
-      "subagent": "明细不可用：子 Agent 只报告上下文总量"
+      "subagent": "明细不可用：子智能体只报告上下文总量"
     },
     "estimates": {
       "title": "可加载的定义",
