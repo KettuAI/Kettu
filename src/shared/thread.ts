@@ -240,6 +240,8 @@ export interface SubagentInfo {
   canCancel: boolean // the child's `capabilities.cancel`
   stateKnown: boolean // false after an `unknown` state, until a known one arrives
   stopReason: string | null // from the last `idle` state
+  /** The model id of the child's latest request, which can differ from its parent's model. */
+  model?: string
 }
 
 export interface ConfigOption {

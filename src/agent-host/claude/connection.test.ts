@@ -3170,6 +3170,17 @@ describe('subagents', () => {
   async function subagentsOn(s: Awaited<ReturnType<typeof setup>>, models: string[]) {
     const parent = new Target()
     const children = models.map(() => new Target())
+    for (const child of children) {
+      child.thread = threadFromSnapshot({
+        session: {
+          ...baseSession,
+          origin: 'subagent',
+          subagent: { description: null, canCancel: true, stateKnown: true, stopReason: null },
+        },
+        entries: [],
+        seq: 0,
+      })
+    }
     const { sessionId } = await s.connection.newSession('/repo')
     s.connection.register(sessionId, parent)
     children.forEach((child, i) => s.connection.register(`task-${i + 1}`, child))
@@ -3237,6 +3248,29 @@ describe('subagents', () => {
     ])
     expect(children[0]!.thread.session.usage).toMatchObject({ used: 10_012, size: 500_000 })
     expect(children[1]!.thread.session.usage).toMatchObject({ used: 12_012, size: 150_000 })
+    query().finish()
+    await turn
+  })
+
+  it("names the model each subagent ran on, apart from its parent's model", async () => {
+    const s = await setup()
+    const { parent, children, query, turn } = await subagentsOn(s, [
+      'claude-sonnet-5-5',
+      'claude-haiku-5-5',
+    ])
+    expect(children[0]!.thread.session.subagent).toMatchObject({ model: 'claude-sonnet-5-5' })
+    expect(children[1]!.thread.session.subagent).toMatchObject({ model: 'claude-haiku-5-5' })
+    expect(parent.thread.session.subagent).toBeNull()
+    // Claude Code's own messages name no model.
+    query().emit(
+      assistant(query(), 'msg_x', [{ type: 'text', text: 'Stopped' }], {
+        message: { id: 'msg_x', model: '<synthetic>', content: [] },
+        parent_tool_use_id: 'toolu_1',
+        agent_id: 'task-1',
+      }),
+    )
+    await settle()
+    expect(children[0]!.thread.session.subagent).toMatchObject({ model: 'claude-sonnet-5-5' })
     query().finish()
     await turn
   })

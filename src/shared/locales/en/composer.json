@@ -107,7 +107,8 @@
       "error": "Couldn't break the context down: {{error}}",
       "betweenTurns": "What fills the context shows between turns",
       "stale": "Read before this turn",
-      "refreshFailed": "Showing the last reading. The context will update automatically when it can be read again."
+      "refreshFailed": "Showing the last reading. The context will update automatically when it can be read again.",
+      "subagent": "Breakdown unavailable: only a sub-agent's total is reported"
     },
     "estimates": {
       "skills": "Skill catalog",
