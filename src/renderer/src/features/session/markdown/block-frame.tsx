@@ -24,6 +24,22 @@ export function BlockFrame({
   )
 }
 
+/**
+ * A picture drawn from a block, an SVG or a diagram: bare in the prose at its own size, with the
+ * block's actions in a small toolbar at its corner that shows on hover and keyboard focus.
+ */
+export function BlockPicture({
+  actions,
+  ...props
+}: ComponentProps<'img'> & { actions: ReactNode }) {
+  return (
+    <div data-block-frame="" className="block-picture">
+      <img decoding="async" {...props} />
+      <div className="block-picture-actions">{actions}</div>
+    </div>
+  )
+}
+
 /** Pushes what follows it to the header's right end. */
 export function BlockSpacer() {
   return <span aria-hidden className="flex-1" />

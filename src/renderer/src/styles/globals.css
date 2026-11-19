@@ -1658,39 +1658,37 @@
   color: var(--danger);
   font-size: 12px;
 }
-/* An SVG on a checkerboard, so its transparent parts show. */
-.block-frame-checker {
-  display: flex;
-  justify-content: center;
-  padding: 12px 16px;
-  background-color: var(--bg-surface);
-  background-image:
-    linear-gradient(45deg, var(--bg-subtle) 25%, transparent 25%),
-    linear-gradient(-45deg, var(--bg-subtle) 25%, transparent 25%),
-    linear-gradient(45deg, transparent 75%, var(--bg-subtle) 75%),
-    linear-gradient(-45deg, transparent 75%, var(--bg-subtle) 75%);
-  background-position:
-    0 0,
-    0 6px,
-    6px -6px,
-    -6px 0;
-  background-size: 12px 12px;
-  & img {
+/* An SVG or a diagram, bare in the prose at its own size; its actions show at its corner. */
+.block-picture {
+  position: relative;
+  width: fit-content;
+  max-width: 100%;
+  & > img {
     display: block;
     max-width: 100%;
     height: auto;
   }
 }
-.block-frame-diagram {
+.block-picture-actions {
+  position: absolute;
+  top: 6px;
+  right: 6px;
   display: flex;
-  justify-content: center;
-  overflow-x: auto;
-  padding: 16px 14px 10px;
-  background: var(--bg-surface);
-  & img {
-    display: block;
-    max-width: 100%;
-    height: auto;
+  gap: 2px;
+  padding: 2px;
+  border-radius: calc(var(--radius-tile) + 2px);
+  background: var(--thread-card);
+  box-shadow: var(--thread-card-shadow);
+  opacity: 0;
+  transition: opacity var(--duration-fast);
+}
+.block-picture:hover > .block-picture-actions,
+.block-picture:focus-within > .block-picture-actions {
+  opacity: 1;
+}
+@media (hover: none) {
+  .block-picture-actions {
+    opacity: 1;
   }
 }
 /* Streamdown's code block inside the frame: only its highlighted body, with the line numbers in
