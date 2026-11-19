@@ -6,9 +6,8 @@
       "awaiting": "Waiting for your approval",
       "awaitingAnswer": "Waiting for your answer",
       "limitReached": "{{limit}} limit reached · resets {{time}}",
-      "ask": "Reply to {{agent}}…",
-      "denied": "Tell {{agent}} what to do differently",
-      "running": "Queue a message · {{keys}} sends it into this turn · Esc stops",
+      "ask": "Reply…",
+      "denied": "Say what to do differently",
       "runningQueue": "Queue a message · Esc stops",
       "runningTouch": "Queue a message",
       "pickAgent": "Pick an agent to carry on with…"
