@@ -1562,7 +1562,7 @@
   font-weight: 400;
   white-space: nowrap;
   color: var(--muted);
-  mask-image: linear-gradient(to right, #000 calc(100% - 20px), transparent);
+  mask-image: linear-gradient(to right, black calc(100% - 20px), transparent);
 }
 .k-mkt-meta > * {
   flex: none;
@@ -1601,7 +1601,7 @@
   font-weight: 400;
   white-space: nowrap;
   color: var(--text);
-  mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent);
+  mask-image: linear-gradient(to right, black calc(100% - 28px), transparent);
 }
 .k-mkt-steps__step {
   display: inline-flex;
