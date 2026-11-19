@@ -444,6 +444,8 @@ class Harness {
   binaryVersion: string | null = null
   /** The program `binaryVersion` was read from, so an answer for another one is dropped. */
   binaryProgram: string | null = null
+  /** The `--version` question that fills `binaryVersion`, while or once it is asked. */
+  binaryVersionAsked: Promise<void> | null = null
   /** The `--version` failure already logged, so a repeated detection logs it once. */
   binaryVersionFailure: string | null = null
   /** The program's install routes, found at detection. */
@@ -861,6 +863,7 @@ export class AgentManager {
       h.binaryProgram = program
       h.binaryVersion = null
       h.binaryVersionFailure = null
+      h.binaryVersionAsked = null
     }
     for (const slot of this.agentsOf(h)) {
       // A running, installing, failed or recovering agent keeps its lifecycle state.
@@ -871,7 +874,7 @@ export class AgentManager {
       }
     }
     this.emit(this.home(h))
-    if (program) void this.askBinaryVersion(h, program, env)
+    if (program) h.binaryVersionAsked = this.askBinaryVersion(h, program, env)
   }
 
   /** How the user's own CLI, or a binary harness's program, was installed. */
@@ -1213,6 +1216,11 @@ export class AgentManager {
   private async launch(slot: Slot, spec: LaunchSpec): Promise<AgentRuntime> {
     const { diagnostics } = this.deps
     const agentId = slot.id
+    // A program picked in Settings is asked its version in the background, and a driver that
+    // goes by the version would take one not answered yet for the oldest.
+    if (this.driver(slot).kind === 'hosted' && !slot.h.detection?.cli) {
+      await slot.h.binaryVersionAsked
+    }
     this.registeredSlot(agentId)
     this.assertEnabled(agentId)
     if (this.stopped) throw new Error(`${slot.name} was not started: the host is stopping.`)
@@ -1389,7 +1397,7 @@ export class AgentManager {
         env,
         spawn: run.spawn,
         currentCli: this.currentCli(slot, spec),
-        cliVersion: slot.h.detection?.cli?.version ?? null,
+        cliVersion: slot.h.detection?.cli?.version ?? slot.h.binaryVersion,
         kettuDir: path.join(this.deps.adaptersDir, EXTENSIONS_FOLDER, slot.def.id),
         nodeRuntime: this.deps.nodeRuntime,
         clineHostPath: this.deps.clineHostPath ?? null,
