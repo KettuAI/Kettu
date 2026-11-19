@@ -17,7 +17,7 @@ import { BranchTrayLink } from '@renderer/features/git/git-status'
 import { limitPhrase, resetTime, tokens } from '@renderer/lib/format'
 import { errorMessage, host } from '@renderer/lib/host'
 import { newestLimits } from '@renderer/lib/plan-readings'
-import { isMac, isMod } from '@renderer/lib/platform'
+import { isMod } from '@renderer/lib/platform'
 import { selectionPrompt } from '@renderer/features/artifacts/anchors'
 import { SelectionChip } from '@renderer/features/artifacts/selection-chip'
 import { usePane } from '@renderer/features/split/pane-context'
@@ -502,14 +502,10 @@ export function Composer({
               time: resetTime(reached.resetsAt),
             })
           : !running && rejected
-            ? t('prompt.placeholder.denied', { agent: agentName })
+            ? t('prompt.placeholder.denied')
             : running
-              ? phone
-                ? t('prompt.placeholder.runningTouch')
-                : steering
-                  ? t('prompt.placeholder.running', { keys: steerKeys(sendKey) })
-                  : t('prompt.placeholder.runningQueue')
-              : t('prompt.placeholder.ask', { agent: agentName })
+              ? t(phone ? 'prompt.placeholder.runningTouch' : 'prompt.placeholder.runningQueue')
+              : t('prompt.placeholder.ask')
 
   const cache = cacheExpiry(session, agent?.account ?? null)
   const timed = cache?.expiresAt != null ? cache : null
@@ -747,10 +743,4 @@ export function Composer({
       />
     </div>
   )
-}
-
-/** The keys that send a message into the running turn, as the placeholder names them. */
-function steerKeys(sendKey: string): string {
-  if (isMac) return sendKey === 'enter' ? '⌘↩' : '⇧⌘↩'
-  return sendKey === 'enter' ? 'Ctrl+Enter' : 'Ctrl+Shift+Enter'
 }
