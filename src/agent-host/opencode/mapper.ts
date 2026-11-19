@@ -484,6 +484,20 @@ export class SessionMapper {
     return out
   }
 
+  /** A message Kettu writes as the agent's: what a command answered without a turn. */
+  say(ctx: MapperContext, markdown: string): MapperOutput {
+    const out = output()
+    addEntry(ctx, out, {
+      kind: 'agent',
+      id: ctx.nextId(),
+      markdown,
+      attachments: [],
+      streaming: false,
+      at: ctx.now,
+    })
+    return out
+  }
+
   /**
    * Maps one stored message: each part becomes its entry, or brings the entry the thread has up
    * to what the message holds. The caller applies each message's output before mapping the next.
