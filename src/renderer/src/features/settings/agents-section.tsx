@@ -15,6 +15,7 @@ import { useShallow } from 'zustand/react/shallow'
 import type { AgentAccount, AgentStatus } from '@shared/agent-host'
 import {
   CODEBUDDY_SITES,
+  isFullAccessMode,
   KEY_ONLY_ADDED_HARNESSES,
   signsInWithKeyOnly,
   takesClaudeSettings,
@@ -1426,6 +1427,7 @@ function StartModeRow({ status }: { status: AgentStatus }) {
                 label: choice.offered
                   ? choice.name
                   : t('agents.startMode.unoffered', { mode: choice.name }),
+                danger: isFullAccessMode(choice.value),
               })),
             ]}
             onChange={(next) =>
