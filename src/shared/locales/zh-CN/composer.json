@@ -239,6 +239,10 @@
   "history": {
     "label": "历史"
   },
+  "slash": {
+    "loading": "正在列出命令…",
+    "chooseProject": "选择一个项目后才能列出命令"
+  },
   "mentions": {
     "used": "本会话用过",
     "toSearch_other": "输入以搜索 {{count, number}} 个文件及其文件夹",

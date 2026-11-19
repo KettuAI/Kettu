@@ -133,6 +133,7 @@ import type {
   MarketPublishAsk,
   SessionSnapshot,
   SessionStatus,
+  SlashCommand,
   ThreadEntry,
   UserContent,
 } from './thread'
@@ -761,9 +762,14 @@ export interface StartNotice {
   actual: string | boolean | null // null when the session has no such option
 }
 
-/** What only a prepared session carries: New session shows its options before the first message. */
+/**
+ * What only a prepared session carries: New session shows its options and slash commands before
+ * the first message.
+ */
 export interface PreparedInfo {
   config: ConfigOption[]
+  /** The slash commands its agent reported; absent from older hosts. */
+  commands?: SlashCommand[]
   notices: StartNotice[]
   openedAt: number
 }

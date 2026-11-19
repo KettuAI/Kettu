@@ -1407,6 +1407,7 @@ export class SessionManager {
         ? {
             prepared: {
               config: session?.config ?? [],
+              commands: session?.commands ?? [],
               notices: live.prepared.notices,
               openedAt: live.prepared.openedAt,
             },

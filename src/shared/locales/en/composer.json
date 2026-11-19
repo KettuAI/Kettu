@@ -247,6 +247,10 @@
   "history": {
     "label": "History"
   },
+  "slash": {
+    "loading": "Listing commands…",
+    "chooseProject": "Choose a project to list its commands"
+  },
   "mentions": {
     "used": "Used in this session",
     "toSearch_one": "Type to search {{count, number}} file and its folders",
