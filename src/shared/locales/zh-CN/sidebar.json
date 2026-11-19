@@ -212,12 +212,12 @@
   },
   "import": {
     "title": "将会话导入 {{project}}",
-    "description": "Agent 在这个文件夹下已有的会话，比如在终端里开的。",
-    "noAgents": "没有可以列出会话的 Agent。",
+    "description": "智能体在这个文件夹下已有的会话，比如在终端里开的。",
+    "noAgents": "没有可以列出会话的智能体。",
     "noSessions": "{{agent}} 在这个文件夹下没有会话。",
     "import": "导入",
     "showMore": "显示更早的会话",
-    "agents": "Agent",
+    "agents": "智能体",
     "imported": "已导入",
     "selectAll": "全选 {{count}} 个",
     "selectShown": "选中已显示的 {{count}} 个",
@@ -230,7 +230,7 @@
     "sourceEmpty": "没有会话",
     "selectedNone": "还没有选会话",
     "selected_other": "已选 {{count}} 个会话",
-    "selectedAcross": "已选 {{count}} 个会话，来自 {{sources}} 个 Agent",
+    "selectedAcross": "已选 {{count}} 个会话，来自 {{sources}} 个智能体",
     "importCount_other": "导入 {{count}} 个会话",
     "importing": "正在导入…",
     "ago": {
@@ -240,10 +240,10 @@
       "days": "{{count}} 天前",
       "weeks": "{{count}} 周前"
     },
-    "held": "终端里开着",
-    "heldTip": "先在终端里退出，或者分叉一份",
+    "held": "正在终端里使用",
+    "heldTip": "先在终端里退出，或者复制一份",
     "cacheLeft_other": "缓存还剩 {{count}} 分钟",
-    "fork": "分叉一份"
+    "fork": "复制一份"
   },
   "indicator": {
     "waiting_other": "等待你处理，{{count}} 个授权请求",
