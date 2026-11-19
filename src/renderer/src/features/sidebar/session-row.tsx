@@ -49,7 +49,7 @@ import { isReturning, rowVariants } from './row-exit'
 import { rowStatus } from './row-status'
 import { cacheGone, useGoneLabel, useSessionCache } from './session-cache'
 import { SessionCard } from './session-card'
-import { SessionIndicator } from './session-indicator'
+import { RowEnd, SessionIndicator } from './session-indicator'
 import {
   DeleteSessionDialog,
   MultiSessionMenuItems,
@@ -279,12 +279,14 @@ export const SessionRow = memo(function SessionRow({
         </span>
       )}
       {gone && <span className="sr-only">{gone}</span>}
-      {showHost && hostName && (
-        <span className="kettu-row-end max-w-24 shrink-0 truncate text-[12px] font-normal text-(--faint)">
-          {hostName}
-        </span>
-      )}
-      {!away && <SessionIndicator status={status} expiring={expiring} className="kettu-row-end" />}
+      <RowEnd>
+        {showHost && hostName && (
+          <span className="max-w-24 truncate text-[12px] font-normal text-(--faint)">
+            {hostName}
+          </span>
+        )}
+        {!away && <SessionIndicator status={status} expiring={expiring} />}
+      </RowEnd>
     </button>
   )
 

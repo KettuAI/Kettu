@@ -53,7 +53,7 @@ import { useRenameHints } from './rename-scope'
 import { isReturning, rowVariants } from './row-exit'
 import { SessionCard } from './session-card'
 import { useSessionCache } from './session-cache'
-import { SessionIndicator } from './session-indicator'
+import { RowEnd, SessionIndicator } from './session-indicator'
 import { sessionPullRequests } from './session-prs'
 import { INDENT_PAD, NESTED_STEP, ROW_PAD, TreeLine } from './session-row'
 import { PullRequestsBadge } from './pr-badge'
@@ -194,12 +194,14 @@ export const TaskRow = memo(function TaskRow({
           {t('progress', progress)}
         </span>
       )}
-      {showHost && hostName && (
-        <span className="kettu-row-end max-w-24 shrink-0 truncate text-[12px] font-normal text-(--faint)">
-          {hostName}
-        </span>
-      )}
-      {!away && <SessionIndicator status={status} expiring={null} className="kettu-row-end" />}
+      <RowEnd>
+        {showHost && hostName && (
+          <span className="max-w-24 truncate text-[12px] font-normal text-(--faint)">
+            {hostName}
+          </span>
+        )}
+        {!away && <SessionIndicator status={status} expiring={null} />}
+      </RowEnd>
     </button>
   )
 
