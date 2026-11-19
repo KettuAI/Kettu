@@ -25,7 +25,7 @@
     "startSpeaking": "开始朗读",
     "stopSpeaking": "停止朗读",
     "view": "显示",
-    "toggleSidebar": "显示/隐藏侧边栏",
+    "toggleSidebar": "显示或隐藏侧边栏",
     "resetZoom": "重置缩放",
     "zoomIn": "放大",
     "zoomOut": "缩小",
@@ -46,7 +46,7 @@
   },
   "dialogs": {
     "openProject": "打开项目",
-    "chooseAgentProgram": "选择 Agent 程序",
+    "chooseAgentProgram": "选择智能体程序",
     "chooseShell": "选择 Shell",
     "saveReport": "保存问题报告",
     "saveReportWarning": "报告请自己留着：贴进公开的 GitHub issue 的文件谁都能下载。",
@@ -55,7 +55,7 @@
     "addFolder": "添加文件夹",
     "installTheme": "安装主题",
     "exportTheme": "导出主题",
-    "chooseAgentFolder": "选择 Agent 的配置目录",
+    "chooseAgentFolder": "选择智能体的配置目录",
     "chooseEditor": "选择编辑器",
     "chooseSshKey": "选择 SSH 密钥文件"
   },
@@ -86,14 +86,14 @@
   },
   "notifications": {
     "testTitle": "Kettu",
-    "testBody": "通知已开启。Agent 需要你时，会这样提醒你。",
+    "testBody": "通知已开启。智能体需要你时，会这样提醒你。",
     "allowOnce": "允许一次",
     "open": "打开",
     "discoveryTitle": "有设备请求添加",
     "discoveryBody": "{{name}} 登录了你的 Kettu 账号，请求添加为这台电脑的设备。"
   },
   "attachments": {
-    "hostDown": "Agent 后台进程没有运行，请等它重启后再试。"
+    "hostDown": "智能体后台进程没有运行，请等它重启后再试。"
   },
   "tray": {
     "noneRunning": "没有正在运行的会话",

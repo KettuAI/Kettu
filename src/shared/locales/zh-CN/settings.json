@@ -2,7 +2,7 @@
   "sections": {
     "general": "通用",
     "appearance": "外观",
-    "agents": "Agent",
+    "agents": "智能体",
     "terminal": "终端",
     "git": "Git",
     "notifications": "通知",
@@ -10,13 +10,13 @@
     "advanced": "高级",
     "about": "关于",
     "archived": "已归档会话",
-    "artifacts": "Artifacts",
+    "artifacts": "产物",
     "sharing": "分享",
     "remote": "远程访问",
     "browser": "浏览器",
     "harnesses": "Harness",
     "memory": "记忆",
-    "hosts": "主机",
+    "hosts": "电脑",
     "devices": "移动设备",
     "computer-use": "Computer use"
   },
@@ -40,21 +40,21 @@
   "general": {
     "language": {
       "name": "语言",
-      "description": "菜单、设置和 Kettu 自身的提示。Agent 仍用你写给它的语言回复。",
+      "description": "菜单、设置和 Kettu 自身的提示。智能体仍用你写给它的语言回复。",
       "keywords": "语言 中文 英文 翻译 language locale chinese english",
       "systemNamed": "跟随系统（{{name}}）"
     },
     "defaultAgent": {
-      "name": "默认 Agent",
-      "description": "新建会话时默认使用的 Agent。",
+      "name": "默认智能体",
+      "description": "新建会话时默认使用的智能体。",
       "askEachTime": "每次询问"
     },
     "newSessionList": {
       "name": "新会话页输入框下面",
       "description": "新建会话页在输入框下面列出什么。",
-      "keywords": "新会话 新建会话 首页 起始页 下面 列表 接着上次继续 最近的会话 artifact 隐藏 关闭 不显示",
+      "keywords": "新会话 新建会话 首页 起始页 下面 列表 接着上次继续 最近的会话 产物 artifact 隐藏 关闭 不显示",
       "sessions": "接着上次继续",
-      "artifacts": "最近的 artifact",
+      "artifacts": "最近的产物",
       "off": "不显示"
     },
     "sendKey": {
@@ -69,27 +69,27 @@
     "confirmQuit": {
       "name": "退出前先询问",
       "keywords": "退出 确认 quit confirm",
-      "description": "仅在 Agent 或终端命令仍在运行时。"
+      "description": "仅在智能体或终端命令仍在运行时。"
     },
     "sessionTitles": {
       "name": "为新会话生成标题",
-      "description": "由小模型为每个会话命名一次，会用掉少量 Agent 的套餐额度。",
+      "description": "由小模型为每个会话命名一次，会用掉少量智能体的套餐额度。",
       "keywords": "标题 命名 会话 模型 额度 title name session"
     },
     "background": {
       "name": "在后台运行",
-      "descriptionMac": "关闭窗口后，会话和例程在菜单栏中继续运行。",
-      "descriptionWindows": "关闭窗口后，会话和例程在通知区域中继续运行。",
-      "descriptionLinux": "关闭窗口后，会话和例程在系统托盘中继续运行。",
+      "descriptionMac": "关闭窗口后，会话和定时任务在菜单栏中继续运行。",
+      "descriptionWindows": "关闭窗口后，会话和定时任务在通知区域中继续运行。",
+      "descriptionLinux": "关闭窗口后，会话和定时任务在系统托盘中继续运行。",
       "keywords": "后台 托盘 菜单栏 通知区域 关闭 窗口 继续运行 background tray menu bar close window",
       "lockedByRemote": "远程访问开启时保持开启。"
     },
     "openAtLogin": {
       "name": "登录时打开",
-      "description": "例程只在 Kettu 打开时运行。",
+      "description": "定时任务只在 Kettu 打开时运行。",
       "approval": "请在“系统设置”>“通用”>“登录项”中允许 Kettu。",
       "unavailable": "仅在已安装的应用中可用。",
-      "keywords": "登录 启动 开机 例程 login startup launch routine"
+      "keywords": "登录 启动 开机 定时任务 login startup launch routine"
     },
     "outlineSummaries": {
       "name": "在大纲中总结消息",
@@ -102,12 +102,12 @@
       "keywords": "Kettu 云服务 账号 登录 中继 推送 通知 网页版 分享 发布 问题报告 本地 自建 kettu cloud account relay push web sharing local self-hosted",
       "signedIn": "已登录 {{email}}。",
       "signedOut": "还没登录。",
-      "off": "已关闭：不连 Kettu 的服务器，设备经你自己的网络连这台电脑，artifact 发布到你自己的 Cloudflare。",
+      "off": "已关闭：不连 Kettu 的服务器，设备经你自己的网络连这台电脑，产物发布到你自己的 Cloudflare。",
       "offTitle": "关闭 Kettu 云服务？",
       "offBody": "这台电脑上的功能都照常。",
       "offSignOut": "会在这台电脑上退出 {{email}}。",
       "offDevices": "设备只能经你自己的网络连这台电脑：Wi-Fi、Tailscale 或 SSH。",
-      "offSharing": "新的 artifact 不再发布到 Kettu，已经发布的页面留在线上，到 kettu.sh 取消发布。",
+      "offSharing": "新的产物不再发布到 Kettu，已经发布的页面留在线上，到 kettu.sh 取消发布。",
       "offConfirm": "关闭"
     },
     "others": {
@@ -120,7 +120,7 @@
           "source": "GitHub"
         },
         "installs": {
-          "name": "Agent 和 Marketplace 的安装",
+          "name": "智能体和市场的安装",
           "source": "npm 和各发布者"
         },
         "siteIcons": {
@@ -128,7 +128,7 @@
           "source": "Google"
         },
         "agents": {
-          "name": "你的 Agent",
+          "name": "你的智能体",
           "source": "它们自己的服务商"
         }
       }
@@ -294,7 +294,7 @@
     },
     "gh": {
       "name": "GitHub CLI",
-      "description": "通过 gh 查看 Pull Request 及其检查结果。",
+      "description": "通过 gh 查看 PR 及其检查结果。",
       "keywords": "命令行 gh github pull request pr",
       "install": "安装 GitHub CLI",
       "signedOut": "未登录",
@@ -308,9 +308,9 @@
       "description": "每 5 分钟一次，让领先和落后的提交数保持最新。"
     },
     "worktreeRoot": {
-      "name": "Worktree 存放位置",
-      "description": "这台主机上会话的新 worktree 放在哪里。",
-      "keywords": "worktree 文件夹 位置 分支",
+      "name": "工作树存放位置",
+      "description": "这台电脑上会话的新工作树放在哪里。",
+      "keywords": "工作树 worktree 文件夹 位置 分支",
       "nextToProject": "放在每个项目旁边",
       "choose": "选择…",
       "reset": "重置"
@@ -318,27 +318,27 @@
     "groups": {
       "tools": "工具",
       "sync": "同步",
-      "worktrees": "Worktree"
+      "worktrees": "工作树"
     }
   },
   "notifications": {
     "permission": {
       "name": "需要授权",
-      "description": "Agent 正在等你允许某项操作。",
+      "description": "智能体正在等你允许某项操作。",
       "keywords": "授权 permission"
     },
     "turnEnded": {
       "name": "本轮对话已完成",
-      "description": "Agent 已完成，正在等你的下一条消息。"
+      "description": "智能体已完成，正在等你的下一条消息。"
     },
     "routines": {
-      "name": "例程运行",
+      "name": "定时任务运行",
       "description": "一次运行结束，或因接近套餐限制而暂停。",
-      "keywords": "例程 计划 后台"
+      "keywords": "定时任务 计划 后台"
     },
     "error": {
       "name": "错误",
-      "description": "会话出错或 Agent 停止。"
+      "description": "会话出错或智能体停止。"
     },
     "sound": {
       "name": "播放提示音",
@@ -407,8 +407,8 @@
     },
     "storage": {
       "name": "云端存储",
-      "description": "账号放在 Kettu 上的东西，比如发布的 artifact。",
-      "keywords": "存储 空间 容量 云端 artifact 发布",
+      "description": "账号放在 Kettu 上的东西，比如发布的产物。",
+      "keywords": "存储 空间 容量 云端 产物 artifact 发布",
       "used": "{{used}} / {{limit}}"
     },
     "points": {
@@ -429,7 +429,7 @@
       "paused": "已暂停",
       "canceled": "已结束"
     },
-    "note": "会话、Agent 以及在你自己网络上的远程访问都无需账号。登录后可以用 Kettu 的云服务：中继、把 artifact 发布到 Kettu、提交问题报告。",
+    "note": "会话、智能体以及在你自己网络上的远程访问都无需账号。登录后可以用 Kettu 的云服务：中继、把产物发布到 Kettu、提交问题报告。",
     "clear": {
       "button": "退出并清除…",
       "title": "退出登录并清除这个浏览器里的数据？",
@@ -462,13 +462,13 @@
     },
     "groups": {
       "signIns": "登录状态",
-      "links": "Agent 给出的链接",
+      "links": "智能体给出的链接",
       "siteData": "站点数据",
       "allowedSites": "始终允许"
     },
     "openLinksIn": {
       "name": "链接打开方式",
-      "description": "Agent 回复中的链接在哪里打开。按住 {{mod}} 点击则用另一种方式。本地地址始终在会话浏览器中打开。",
+      "description": "智能体回复中的链接在哪里打开。按住 {{mod}} 点击则用另一种方式。本地地址始终在会话浏览器中打开。",
       "keywords": "链接 网址 浏览器 打开 默认 会话 link url browser open default session",
       "defaultBrowser": "默认浏览器",
       "session": "会话浏览器",
@@ -489,7 +489,7 @@
     },
     "allowedSites": {
       "name": "始终允许的站点",
-      "description": "各项目允许 Agent 无需询问即可打开的站点。",
+      "description": "各项目允许智能体无需询问即可打开的站点。",
       "keywords": "浏览器 站点 来源 允许 始终 权限 browser sites origins allow always permissions",
       "empty": "尚未有始终允许的站点。",
       "readFailed": "无法读取允许的站点",
@@ -497,7 +497,7 @@
       "removed": "已移除 {{origin}}",
       "removeFailed": "无法移除 {{origin}}：{{reason}}",
       "in": "在 {{projects}} 中允许",
-      "note": "Agent 无需询问即可打开这些站点。在站点卡片上选择“此项目始终允许”时，站点会添加到这里。"
+      "note": "智能体无需询问即可打开这些站点。在站点卡片上选择“此项目始终允许”时，站点会添加到这里。"
     }
   },
   "computer": {
@@ -507,13 +507,13 @@
       "allowedApps": "始终允许"
     },
     "enabled": {
-      "name": "允许 Agent 使用这台电脑",
-      "description": "在你从这台电脑发出的回合里，Agent 可以读取应用的窗口，并在后台点击和输入。每个应用在一个会话里第一次使用前都会先问你。",
+      "name": "允许智能体使用这台电脑",
+      "description": "在你从这台电脑发出的回合里，智能体可以读取应用的窗口，并在后台点击和输入。每个应用在一个会话里第一次使用前都会先问你。",
       "keywords": "computer use 电脑 桌面 应用 屏幕 鼠标 键盘 辅助功能 自动化"
     },
     "pauseOnUse": {
       "name": "你用同一个应用时暂停",
-      "description": "你在 Agent 正在用的应用里点击或按键时就算接管，Agent 会等着；交还后它接着做。",
+      "description": "你在智能体正在用的应用里点击或按键时就算接管，智能体会等着；交还后它接着做。",
       "keywords": "暂停 接管 点击 同一个应用 电脑 computer use"
     },
     "stopShortcut": {
@@ -527,7 +527,7 @@
       "invalid": "用 Ctrl、Alt、Shift 中的两个或更多，加一个键。"
     },
     "blocked": "密码管理器、终端、系统设置、浏览器和 Kettu 自己永远不会被使用。网页请在 Kettu 的浏览器里打开。",
-    "noDriver": "这个版本没有带 Cua Driver，Agent 无法使用电脑。在开发目录里运行 pnpm fetch:cua-driver。",
+    "noDriver": "这个版本没有带 Cua Driver，智能体无法使用电脑。在开发目录里运行 pnpm fetch:cua-driver。",
     "accessibility": {
       "name": "辅助功能",
       "description": "让 Kettu 读取应用的窗口，并在里面点击和输入。"
@@ -566,7 +566,7 @@
   "advanced": {
     "proxy": {
       "name": "代理",
-      "description": "用于 Agent、npx 和更新。",
+      "description": "用于智能体、npx 和更新。",
       "keywords": "代理 网络 proxy http https network",
       "useEnvironment": "使用环境变量",
       "custom": "自定义",
@@ -595,7 +595,7 @@
     },
     "detailedRecords": {
       "name": "详细记录",
-      "description": "连同和 Agent 来往的完整消息一起记下：提示词、代码和工具输出，也包括 Agent 读过的密钥。24 小时后自动关闭。",
+      "description": "连同和智能体来往的完整消息一起记下：提示词、代码和工具输出，也包括智能体读过的密钥。24 小时后自动关闭。",
       "keywords": "详细 调试 日志 verbose debug",
       "left_other": "还剩 {{count}} 小时",
       "delete": "删除记录",
@@ -615,7 +615,7 @@
       "copy": "复制 {{name}}",
       "confirm": {
         "title": "以调试模式重启？",
-        "body": "在下次重启之前，Kettu 会在这台电脑上打开调试端口。这些端口没有任何认证：这台电脑上的任何程序，包括会话里的 Agent，都能操控 Kettu、替你回答授权请求，也能连上内置浏览器里登录着的网站。",
+        "body": "在下次重启之前，Kettu 会在这台电脑上打开调试端口。这些端口没有任何认证：这台电脑上的任何程序，包括会话里的智能体，都能操控 Kettu、替你回答授权请求，也能连上内置浏览器里登录着的网站。",
         "action": "以调试模式重启"
       }
     },
@@ -627,11 +627,11 @@
     },
     "removeSessions": {
       "name": "从 Kettu 中移除所有会话",
-      "description": "清空列表。Agent 自己的对话记录会保留。",
+      "description": "清空列表。智能体自己的对话记录会保留。",
       "keywords": "删除 清除 清空 delete clear",
       "button": "移除所有会话…",
       "dialogTitle_other": "从 Kettu 中移除全部 {{count}} 个会话？",
-      "dialogDescription": "侧边栏将变为空白。Agent 会保留各自的对话记录，之后可以在侧边栏中项目的菜单里重新导入这些会话。",
+      "dialogDescription": "侧边栏将变为空白。智能体会保留各自的对话记录，之后可以在侧边栏中项目的菜单里重新导入这些会话。",
       "confirm": "全部移除",
       "removed": "已从 Kettu 中移除所有会话"
     },
@@ -685,17 +685,17 @@
     "usageAfterSignIn": "{{name}} 登录后，套餐用量会显示在这里。",
     "usageReasons": {
       "vendor-disallows": "Google 不允许其他应用读取此用量。",
-      "harness-does-not-offer": "此 Agent 未提供套餐用量读取方式。",
+      "harness-does-not-offer": "此智能体未提供套餐用量读取方式。",
       "administrator-managed": "套餐用量由管理员管理。",
       "model-provider-managed": "套餐用量由你的模型服务商管理。",
-      "not-yet-supported": "Kettu 暂时还不能读取这个 Agent 的套餐用量。",
+      "not-yet-supported": "Kettu 暂时还不能读取这个智能体的套餐用量。",
       "console-managed": "用这种方式登录时，用量在 Google AI Studio 或 Google Cloud 里查看。"
     },
     "spend": {
       "group": "花费",
       "month": "本月",
       "description": "{{name}} 不为 API key 报告套餐额度。这里是 Kettu 统计的、它发出的请求。",
-      "descriptionProviders": "Kettu 本月通过这个 Agent 发出的用量，按 Kettu 自己的记录统计。",
+      "descriptionProviders": "Kettu 本月通过这个智能体发出的用量，按 Kettu 自己的记录统计。",
       "unpriced": "无价格"
     },
     "configuration": "配置",
@@ -715,9 +715,9 @@
         "codex": "跟随 Codex（自动审查）",
         "deepseek": "跟随 DeepSeek Harness"
       },
-      "unused": "这个 Agent 用过之后才能选择。",
+      "unused": "这个智能体用过之后才能选择。",
       "unoffered": "{{mode}}（已不再提供）",
-      "readFailed": "读取这个 Agent 的模式失败。"
+      "readFailed": "读取这个智能体的模式失败。"
     },
     "claudeSettings": {
       "auto": "Auto",
@@ -740,13 +740,13 @@
       }
     },
     "keyOnly": {
-      "note": "这个 Agent 只能用 API key 登录。{{name}} 的浏览器和微信登录整台电脑共用一份，存在这个 Agent 的目录之外，再加一个 Agent 也是同一个账号。"
+      "note": "这个智能体只能用 API key 登录。{{name}} 的浏览器和微信登录整台电脑共用一份，存在这个智能体的目录之外，再加一个智能体也是同一个账号。"
     },
     "codebuddy": {
       "site": {
         "name": "站点",
-        "description": "这个 Agent 连哪个 Codebuddy 服务，codebuddy.ai 还是 copilot.tencent.com。API key 必须来自同一个站点。自动是跟着 Agent 登录的账号走。改动从这个 Agent 下次启动起生效。",
-        "descriptionKey": "这个 Agent 连哪个 Codebuddy 服务，codebuddy.ai 还是 copilot.tencent.com。它的 API key 必须来自同一个站点。改动从这个 Agent 下次启动起生效。",
+        "description": "这个智能体连哪个 Codebuddy 服务，codebuddy.ai 还是 copilot.tencent.com。API key 必须来自同一个站点。自动是跟着智能体登录的账号走。改动从这个智能体下次启动起生效。",
+        "descriptionKey": "这个智能体连哪个 Codebuddy 服务，codebuddy.ai 还是 copilot.tencent.com。它的 API key 必须来自同一个站点。改动从这个智能体下次启动起生效。",
         "automatic": "自动",
         "international": "国际站",
         "china": "国内站",
@@ -754,7 +754,7 @@
       },
       "override": {
         "CODEBUDDY_AUTH_TOKEN": "你的 Shell 里设了 CODEBUDDY_AUTH_TOKEN，Codebuddy Code 会先用它，这里设的 API key 不起作用。",
-        "WORKBUDDY_CONFIG_DIR": "你的 Shell 里设了 WORKBUDDY_CONFIG_DIR，Codebuddy Code 读的是那个目录，不是这个 Agent 自己的。"
+        "WORKBUDDY_CONFIG_DIR": "你的 Shell 里设了 WORKBUDDY_CONFIG_DIR，Codebuddy Code 读的是那个目录，不是这个智能体自己的。"
       }
     },
     "advanced": "高级",
@@ -831,13 +831,13 @@
     "default": "默认",
     "footerBefore": "要用别的程序，先到 ",
     "footerAfter": " 里安装。",
-    "registrationNote": "首次启动时找到的 Harness，以及你在 Kettu 里安装的 Harness，Kettu 会各添加一个 Agent。别的，比如之后在终端里装的程序，请在这里自己添加。移除的 Agent 不会自己加回来。",
+    "registrationNote": "首次启动时找到的 Harness，以及你在 Kettu 里安装的 Harness，Kettu 会各添加一个智能体。别的，比如之后在终端里装的程序，请在这里自己添加。移除的智能体不会自己加回来。",
     "onHarness": "运行于 {{harness}}",
     "openHarness": "到 Harness 里打开 {{harness}}",
     "mcpServers": {
       "name": "MCP 服务器",
-      "description": "Kettu 自带的服务器，以及你安装的服务器。在 Marketplace 中管理。",
-      "open": "打开 Marketplace"
+      "description": "Kettu 自带的服务器，以及你安装的服务器。在市场中管理。",
+      "open": "打开市场"
     },
     "openHarnessButton": "打开",
     "harness": "Harness",
@@ -845,17 +845,17 @@
     "signInRowHint": "由 Harness 自己在终端里登录，Kettu 不经手凭据。",
     "signInAgain": "在终端中重新登录",
     "empty": {
-      "title": "还没有 Agent",
-      "description": "添加第一个 Agent 开始使用。如果它的 Harness 还没安装，Kettu 会先帮你安装。",
+      "title": "还没有智能体",
+      "description": "添加第一个智能体开始使用。如果它的 Harness 还没安装，Kettu 会先帮你安装。",
       "installed": "已经有可用的 Harness。选择一个，沿用现有的配置，或创建独立的配置。",
       "keywords": "空 首次 设置 Harness 安装 添加"
     },
     "remove": {
-      "name": "移除 Agent",
+      "name": "移除智能体",
       "description": "它的会话会留着，但不能再继续。",
       "button": "移除",
       "title": "移除 {{name}}？",
-      "body": "它的会话仍留在列表里，标明 Agent 已移除，不能再继续。",
+      "body": "它的会话仍留在列表里，标明智能体已移除，不能再继续。",
       "trash": "把它的配置目录移到废纸篓",
       "trashHint": "这个目录是 Kettu 新建的，里面有它的登录凭据和 Harness 的会话记录。",
       "keepsFolder": "它的配置目录是你选的，原样保留。",
@@ -865,22 +865,22 @@
     "turnedOff": "已停用",
     "enable": {
       "name": "启用",
-      "on": "可以在新会话和 Routine 里选它。",
-      "off": "已停用：不会启动，也不在选 Agent 的地方列出；会话、登录和配置都留着。",
+      "on": "可以在新会话和定时任务里选它。",
+      "off": "已停用：不会启动，也不在选智能体的地方列出；会话、登录和配置都留着。",
       "switch": "启用 {{name}}",
       "confirmTitle": "停用 {{name}}？",
-      "confirmBody_other": "这个 Agent 有 {{count}} 个会话正在运行回合，停用会停掉这些回合。",
+      "confirmBody_other": "这个智能体有 {{count}} 个会话正在运行回合，停用会停掉这些回合。",
       "confirm": "停用"
     },
     "rename": {
       "button": "改名",
-      "title": "给 Agent 改名",
+      "title": "给智能体改名",
       "save": "保存"
     },
     "add": {
-      "button": "添加 Agent",
+      "button": "添加智能体",
       "keywords": "新建 账号 配置目录 API key",
-      "title": "添加 Agent",
+      "title": "添加智能体",
       "description": "选择一个 Harness 和配置。已经在用的登录可以继续使用。",
       "harness": "Harness",
       "name": "名字",
@@ -904,7 +904,7 @@
       "loginKeyHintOpenAi": "OpenAI 的 API key。",
       "loginKeyHintDeepSeek": "DeepSeek 的 API key。",
       "loginKeyHintCodebuddy": "上面所选站点的 API key。",
-      "submit": "添加 Agent"
+      "submit": "添加智能体"
     },
     "key": {
       "row": "API key",
@@ -912,7 +912,7 @@
       "notSet": "用你自己的 key 和服务商，代替登录。",
       "notSetOpenAi": "用 OpenAI 的 API key 代替登录。",
       "notSetDeepSeek": "用 DeepSeek 的 API key 代替登录。",
-      "notSetCodebuddy": "用这个 Agent 所在站点的 API key 代替登录。",
+      "notSetCodebuddy": "用这个智能体所在站点的 API key 代替登录。",
       "setButton": "设置…",
       "replace": "重新填写…",
       "clear": "清除",
@@ -925,9 +925,9 @@
       "key": "API key",
       "model": "模型",
       "modelPlaceholder": "可选，留空用 {{name}} 的默认",
-      "noteClaude": "key 交给 Claude Code，存进这个 Agent 配置目录里的 settings.json；Kettu 不留副本，也不读回。终端里用这个目录运行 {{command}} 也能用。",
+      "noteClaude": "key 交给 Claude Code，存进这个智能体配置目录里的 settings.json；Kettu 不留副本，也不读回。终端里用这个目录运行 {{command}} 也能用。",
       "noteCodex": "key 经 Codex 自己的 codex login 保存；Kettu 不留副本。要接别的服务商，在这个目录的 config.toml 里自己配。",
-      "noteCodebuddy": "key 交给 Codebuddy Code，存进这个 Agent 配置目录里的 settings.json；Kettu 不留副本，也不读回。要在这个 Agent 用的站点上创建 key：国际站在 codebuddy.ai/profile/keys，国内站在 copilot.tencent.com/profile。",
+      "noteCodebuddy": "key 交给 Codebuddy Code，存进这个智能体配置目录里的 settings.json；Kettu 不留副本，也不读回。要在这个智能体用的站点上创建 key：国际站在 codebuddy.ai/profile/keys，国内站在 copilot.tencent.com/profile。",
       "baseUrlOptional": "Base URL（可选）",
       "modelOptional": "模型（可选）",
       "envSet": "已设置。Kettu 保存它，只在 {{name}} 启动时交给它。"
@@ -1007,8 +1007,8 @@
       "group": "空闲会话",
       "keywords": "空闲 释放 内存 进程 prompt cache Claude Code",
       "release": {
-        "name": "释放空闲会话的 Agent",
-        "description": "释放会结束空闲会话的 Agent 进程来省内存，下次发消息时接回，第一句回复会晚几秒。在跑工作的会话不受影响。现在用于 Claude Code。",
+        "name": "释放空闲会话的智能体",
+        "description": "释放会结束空闲会话的智能体进程来省内存，下次发消息时接回，第一句回复会晚几秒。在跑工作的会话不受影响。现在用于 Claude Code。",
         "auto": "自动",
         "custom": "自定义",
         "never": "不释放"
@@ -1036,7 +1036,7 @@
         "none": "不限"
       },
       "cacheNote": "两个时长都不超过会话的 prompt cache 过期：过期后下一轮本来就要重新写入缓存。",
-      "never": "空闲的会话一直留着 Agent，只在归档、删除、换 Agent 和退出时结束。",
+      "never": "空闲的会话一直留着智能体，只在归档、删除、换智能体和退出时结束。",
       "minutes_other": "{{count}} 分钟",
       "hours_other": "{{count}} 小时",
       "fallback": {
@@ -1048,14 +1048,14 @@
       "group": "工作流",
       "keywords": "工作流 建议 Auto 选人 步骤 需求 流程",
       "suggest": {
-        "name": "Agent 能建议工作流",
-        "description": "在普通会话里，Agent 觉得这件事需要工作流时会提出来，你确认后才开始。关掉后，Agent 看不到这个功能。"
+        "name": "智能体能建议工作流",
+        "description": "在普通会话里，智能体觉得这件事需要工作流时会提出来，你确认后才开始。关掉后，智能体看不到这个功能。"
       },
       "auto": {
-        "group": "Auto 能选的 Agent",
-        "note": "步骤是 Auto 时，交棒给它的 Agent 从这些里选一个，连同模型和推理强度。你仍可以在 Marketplace 里工作流的页面上把其中任何一个固定到某一步。",
-        "apiKeys": "只有 Claude Code 和 Codex 的 Agent 能做步骤，所以别的 Agent 不在这里。用 API key 登录的 Agent 默认关着，因为它做的每一步都按 token 付费。",
-        "noneTitle": "没有 Claude Code 或 Codex 的 Agent",
+        "group": "Auto 能选的智能体",
+        "note": "步骤是 Auto 时，交棒给它的智能体从这些里选一个，连同模型和推理强度。你仍可以在市场里工作流的页面上把其中任何一个固定到某一步。",
+        "apiKeys": "只有 Claude Code 和 Codex 的智能体能做步骤，所以别的智能体不在这里。用 API key 登录的智能体默认关着，因为它做的每一步都按 token 付费。",
+        "noneTitle": "没有 Claude Code 或 Codex 的智能体",
         "noneHint": "步骤由 Claude Code 和 Codex 来做。添加其中一个，Auto 才能选它。",
         "rowName": "Auto 能选 {{agent}}",
         "switch": "Auto 能选 {{agent}}",
@@ -1137,30 +1137,30 @@
   "pages": {
     "general": "语言、输入方式，以及新会话和启动时的行为。",
     "appearance": "主题、颜色模式、缩放和文字大小。改动立即生效。",
-    "notifications": "Agent 需要你或完成时，Kettu 如何通知你。",
-    "notifications_web": "{{host}} 上的 Agent 需要你或完成时，这个页面如何通知你。",
+    "notifications": "智能体需要你或完成时，Kettu 如何通知你。",
+    "notifications_web": "{{host}} 上的智能体需要你或完成时，这个页面如何通知你。",
     "account": "你的 Kettu 账号，用于 Kettu 的云服务。",
-    "agents": "Agent 用一个 Harness 和一份账号配置运行。首次启动时找到的 Harness，以及你在 Kettu 里安装的 Harness，Kettu 会各添加一个 Agent；其他的，你需要哪个就添加哪个。",
-    "agents_web": "{{host}} 上的 Agent 用那里的一个 Harness 和一份账号配置运行。{{host}} 首次启动时找到的 Harness，以及你在它上面安装的 Harness，Kettu 会各添加一个 Agent；其他的，你需要哪个就添加哪个。",
+    "agents": "智能体用一个 Harness 和一份账号配置运行。首次启动时找到的 Harness，以及你在 Kettu 里安装的 Harness，Kettu 会各添加一个智能体；其他的，你需要哪个就添加哪个。",
+    "agents_web": "{{host}} 上的智能体用那里的一个 Harness 和一份账号配置运行。{{host}} 首次启动时找到的 Harness，以及你在它上面安装的 Harness，Kettu 会各添加一个智能体；其他的，你需要哪个就添加哪个。",
     "terminal": "侧边面板的终端运行哪个 shell，以及它的外观。",
-    "git": "顶栏的分支与更改、Pull Request 和它的检查结果，都靠下面两个工具。",
+    "git": "顶栏的分支与更改、PR 和它的检查结果，都靠下面两个工具。",
     "advanced": "网络代理、诊断信息，以及 Kettu 保存在这台电脑上的数据。",
     "advanced_web": "网络代理、诊断信息，以及 Kettu 保存在 {{host}} 上的数据。",
     "about": "Kettu 的版本和更新。",
     "archived": "从侧边栏移走但仍保留。恢复后回到原来的位置。",
-    "artifacts": "页面要读取项目文件或向你的 Agent 提问时会先问你。只保存自己数据的页面不会问。",
-    "sharing": "把 artifact 发布为链接，发布到 Kettu 或你自己的 Cloudflare 账号；发布到 Kettu 的可以选择谁能打开。",
+    "artifacts": "页面要读取项目文件或向你的智能体提问时会先问你。只保存自己数据的页面不会问。",
+    "sharing": "把产物发布为链接，发布到 Kettu 或你自己的 Cloudflare 账号；发布到 Kettu 的可以选择谁能打开。",
     "remote": "在 iPhone、iPad 或另一台电脑上的 Kettu 里使用这台电脑的会话。",
     "remote_web": "在 iPhone、iPad 或另一台电脑上的 Kettu 里使用 {{host}} 的会话。",
-    "browser": "登录状态、Agent 给出的链接在哪里打开，以及它们可以使用的网站。",
-    "browserWeb": "Agent 回复中的链接会在新标签页中打开。",
-    "harnesses": "Agent 跑在上面的程序：Claude Code、Codex 等。Kettu 会替你安装和更新它们。",
-    "memory": "Agent 记下的关于你和各个项目的事，存在这台电脑上，交给每个 Agent。",
-    "memory_web": "Agent 记下的关于你和各个项目的事，存在 {{host}} 上，交给那里的每个 Agent。",
+    "browser": "登录状态、智能体给出的链接在哪里打开，以及它们可以使用的网站。",
+    "browserWeb": "智能体回复中的链接会在新标签页中打开。",
+    "harnesses": "智能体跑在上面的程序：Claude Code、Codex 等。Kettu 会替你安装和更新它们。",
+    "memory": "智能体记下的关于你和各个项目的事，存在这台电脑上，交给每个智能体。",
+    "memory_web": "智能体记下的关于你和各个项目的事，存在 {{host}} 上，交给那里的每个智能体。",
     "hosts": "这台电脑连接的、运行 Kettu 的其他电脑。它们的会话会显示在侧边栏中。",
-    "hostsWeb": "这个页面连着的电脑。会话、项目和 Agent 都在那台电脑上，这里只管这个浏览器怎么连它。",
-    "devices": "Agent 不用先问就能使用的模拟器和手机。",
-    "computer-use": "让 Agent 读取并操作这台电脑上的桌面应用，同一时间只用一个应用、只给一个会话。"
+    "hostsWeb": "这个页面连着的电脑。会话、项目和智能体都在那台电脑上，这里只管这个浏览器怎么连它。",
+    "devices": "智能体不用先问就能使用的模拟器和手机。",
+    "computer-use": "让智能体读取并操作这台电脑上的桌面应用，同一时间只用一个应用、只给一个会话。"
   },
   "archived": {
     "description": "{{project}} · {{when}}归档",
@@ -1177,18 +1177,18 @@
   },
   "artifacts": {
     "group": "页面权限",
-    "keywords": "artifact 页面 权限 同意 文件 Agent 收回 允许",
+    "keywords": "产物 artifact 页面 权限 同意 文件 智能体 Agent 收回 允许",
     "files": "读取文件",
     "sample": "询问 {{agent}}",
-    "yourAgent": "你的 Agent",
-    "noProject": "无项目",
+    "yourAgent": "你的智能体",
+    "noProject": "不属于项目",
     "revoke": "收回",
     "revoked": "已收回“{{title}}”的权限",
     "loading": "正在读取权限",
     "loadFailed": "没能读取权限：{{error}}",
     "retry": "重试",
     "emptyTitle": "没有页面权限",
-    "emptyHint": "页面请求读取项目文件或向你的 Agent 提问、你允许后，会列在这里。"
+    "emptyHint": "页面请求读取项目文件或向你的智能体提问、你允许后，会列在这里。"
   },
   "sharing": {
     "groups": {
@@ -1198,18 +1198,18 @@
     },
     "auto": {
       "name": "默认私有发布",
-      "description": "新建的 artifact 会以私有方式发布到 Kettu，发布到 Kettu 的每个页面都会跟着 artifact 的最新版本更新。私有页面只有你登录自己的 Kettu 账号才能打开。",
+      "description": "新建的产物会以私有方式发布到 Kettu，发布到 Kettu 的每个页面都会跟着产物的最新版本更新。私有页面只有你登录自己的 Kettu 账号才能打开。",
       "keywords": "分享 发布 自动 私有 默认 同步 最新版本 kettu",
-      "blockedFull_other": "有 {{count}} 个 artifact 没有发布：云端存储已满。",
-      "blockedLarge_other": "有 {{count}} 个 artifact 没有发布：太大了。"
+      "blockedFull_other": "有 {{count}} 个产物没有发布：云端存储已满。",
+      "blockedLarge_other": "有 {{count}} 个产物没有发布：太大了。"
     },
     "kettu": {
       "name": "Kettu 账号",
-      "description": "用这台电脑登录的 Kettu 账号把 artifact 发布到 Kettu。",
-      "description_web": "用 {{host}} 登录的 Kettu 账号把 artifact 发布到 Kettu。",
+      "description": "用这台电脑登录的 Kettu 账号把产物发布到 Kettu。",
+      "description_web": "用 {{host}} 登录的 Kettu 账号把产物发布到 Kettu。",
       "keywords": "分享 发布 链接 kettu 账号 云端存储",
-      "signedOut": "登录 Kettu 账号后即可把 artifact 发布到 Kettu。",
-      "signedOut_web": "在 {{host}} 上登录 Kettu 账号后即可把 artifact 发布到 Kettu。",
+      "signedOut": "登录 Kettu 账号后即可把产物发布到 Kettu。",
+      "signedOut_web": "在 {{host}} 上登录 Kettu 账号后即可把产物发布到 Kettu。",
       "signIn": "登录",
       "signedIn": "已登录",
       "storage": "云端存储",
@@ -1219,7 +1219,7 @@
     },
     "account": {
       "name": "Cloudflare 账号",
-      "description": "通过你自己的 Cloudflare 账号发布 artifact。粘贴 API token 后，Kettu 会找到它能访问的账号。",
+      "description": "通过你自己的 Cloudflare 账号发布产物。粘贴 API token 后，Kettu 会找到它能访问的账号。",
       "keywords": "分享 发布 链接 cloudflare workers token 账号",
       "token": "API token",
       "tokenPlaceholder": "粘贴 token",
@@ -1250,7 +1250,7 @@
       "unpublishTitle": "要取消发布“{{title}}”吗？",
       "unpublished": "已取消发布",
       "otherAccount": "此页面是用另一个 Cloudflare 账号发布的。连接该账号后才能修改。",
-      "empty": "还没有发布任何 artifact。",
+      "empty": "还没有发布任何产物。",
       "copyLink": "复制链接",
       "copied": "链接已复制",
       "where": {
@@ -1265,7 +1265,7 @@
     },
     "none": {
       "title": "分享要用桌面应用",
-      "body": "发布 artifact 由 Kettu 桌面应用来做，而 {{host}} 上运行的 Kettu 不带桌面应用。"
+      "body": "发布产物由 Kettu 桌面应用来做，而 {{host}} 上运行的 Kettu 不带桌面应用。"
     }
   },
   "hosts": {
@@ -1303,38 +1303,38 @@
       "update_host": "要更新它上面的 Kettu",
       "relay": {
         "unreachable": "离线 · 连不上 Kettu 中继",
-        "wrong_account": "离线 · 要用主机主人的账号登录",
+        "wrong_account": "离线 · 要用那台电脑主人的账号登录",
         "signed_out": "离线 · 登录后在哪都连得上"
       }
     },
     "note": "要从手机或其他电脑访问这台电脑，请在<link>远程访问</link>中添加设备。",
-    "plainTextKey": "这台电脑连别的主机用的密钥存在只有当前用户能读的文件里，因为系统没有钥匙串。",
-    "keyFailed": "系统没能解开这台电脑连别的主机用的密钥，所以连不了别的主机。",
+    "plainTextKey": "这台电脑连别的电脑用的密钥存在只有当前用户能读的文件里，因为系统没有钥匙串。",
+    "keyFailed": "系统没能解开这台电脑连别的电脑用的密钥，所以连不了别的电脑。",
     "add": {
-      "button": "添加主机…",
-      "title": "添加主机",
-      "hint": "在那台主机的 Kettu 里打开 设置 › 远程访问 › 添加设备，或在开发机上运行 <code>kettu pair</code>，把显示的链接粘贴到这里。",
+      "button": "添加电脑…",
+      "title": "添加电脑",
+      "hint": "在那台电脑的 Kettu 里打开 设置 › 远程访问 › 添加设备，或在开发机上运行 <code>kettu pair</code>，把显示的链接粘贴到这里。",
       "label": "配对链接",
       "placeholder": "https://kettu.sh/pair#…",
       "add": "添加",
       "connecting": "正在连接…",
-      "waiting": "等主机确认…",
-      "confirmTitle": "在那台主机上确认",
-      "confirmBody": "已连上，正在等主机那边点添加。确认之后才算添加，别人拿到这个链接也连不进来。",
+      "waiting": "等那台电脑确认…",
+      "confirmTitle": "在那台电脑上确认",
+      "confirmBody": "已连上，正在等那台电脑上点添加。确认之后才算添加，别人拿到这个链接也连不进来。",
       "invalid": "这不是 Kettu 的配对链接，或者没复制完整。",
-      "void": "这个配对码已经失效：过期了、用过了，或者主机换了新码。在主机上点添加设备，换一个新码再粘贴。",
-      "rejected": "主机那边没有添加这台电脑。",
-      "unreachable": "15 秒内没连上主机。确认两台电脑在同一网络或同一个 VPN 里、主机开着远程访问；用的是你给主机加的地址时，确认端口转发还在。",
-      "wrong_account": "Kettu 中继只把登录着主机账号的电脑接到主机上。在这里登录主机所用的账号后再试。",
-      "signed_out": "这个配对码要经 Kettu 中继连主机，需要 Kettu 账号。先在设置 › 账号里登录，再试一次。",
+      "void": "这个配对码已经失效：过期了、用过了，或者那台电脑换了新码。在那台电脑上点添加设备，换一个新码再粘贴。",
+      "rejected": "那台电脑没有添加这台电脑。",
+      "unreachable": "15 秒内没连上那台电脑。确认两台电脑在同一网络或同一个 VPN 里、那台电脑开着远程访问；用的是你给它加的地址时，确认端口转发还在。",
+      "wrong_account": "Kettu 中继只把登录着同一个账号的电脑接到那台电脑上。在这里登录那台电脑所用的账号后再试。",
+      "signed_out": "这个配对码要经 Kettu 中继连那台电脑，需要 Kettu 账号。先在设置 › 账号里登录，再试一次。",
       "self": "这是本机自己的配对码。要让别的设备连这台电脑，在那台设备上扫码或粘贴。",
-      "update_client": "这台电脑的 Kettu 太旧，连不了这台主机。更新 Kettu 后再试。",
-      "update_host": "那台主机上的 Kettu 太旧，这台电脑连不了。在主机上更新 Kettu 后再试。",
+      "update_client": "这台电脑的 Kettu 太旧，连不了那台电脑。更新 Kettu 后再试。",
+      "update_host": "那台电脑上的 Kettu 太旧，这台电脑连不了。在那台电脑上更新 Kettu 后再试。",
       "retry": "重试",
       "newLink": "粘贴新链接",
       "added": "已添加 {{name}}",
       "nameLabel": "这台电脑在 {{name}} 上的名字",
-      "nameHint": "{{name}} 的设备列表里显示这个名字，以后在 设置 › 主机 › {{name}} 里改。",
+      "nameHint": "{{name}} 的设备列表里显示这个名字，以后在 设置 › 电脑 › {{name}} 里改。",
       "done": "完成",
       "tabs": {
         "label": "怎么连",
@@ -1383,7 +1383,7 @@
           "via": "经 {{jump}}",
           "pick": "添加 {{alias}}",
           "added": "已添加",
-          "openHost": "在 设置 › 主机 里打开 {{alias}}",
+          "openHost": "在 设置 › 电脑 里打开 {{alias}}",
           "waiting": "等待中",
           "addCount": "添加 {{count}} 台"
         },
@@ -1412,7 +1412,7 @@
     },
     "page": {
       "added": "{{date}} 添加",
-      "gone": "这台主机已经不在列表里了。",
+      "gone": "这台电脑已经不在列表里了。",
       "connection": "连接",
       "route": "怎么连",
       "addresses": "地址",
@@ -1426,7 +1426,7 @@
       "nameOffline": "{{name}} 的设备列表里显示这个名字，它在线时才能改。",
       "settings": {
         "name": "{{name}} 的设置",
-        "description": "Agent、Harness、用量、终端、远程访问这些属于 {{name}}，在设置左边的“主机的设置”里选它；只有主人能改。",
+        "description": "智能体、Harness、用量、终端、远程访问这些属于 {{name}}，在设置左边的“电脑的设置”里选它；只有主人能改。",
         "open": "打开 {{name}} 的设置"
       },
       "editTitle": "{{name}} 的地址",
@@ -1477,7 +1477,7 @@
         "useAlias": "用 {{alias}}",
         "current": "现在用的",
         "checking": "正在登录 {{target}}，确认它连到的是 {{name}}…",
-        "otherAddress": "{{target}} 连到的是另一台机器，不是 {{name}}：那里的 Kettu 是另一个身份，或者根本没装。地址没有改；要用那台机器，请从添加主机加它。",
+        "otherAddress": "{{target}} 连到的是另一台机器，不是 {{name}}：那里的 Kettu 是另一个身份，或者根本没装。地址没有改；要用那台机器，请从添加电脑加它。",
         "otherHost": "{{target}} 现在连到的是另一台机器，不是 {{name}}，所以那里什么都没动。如果 {{name}} 换了地址，先修改它的 SSH 地址。",
         "busy": "{{name}} 上正在做别的改动，等它做完再试。",
         "terminal": "{{command}}，在 {{project}} 的终端里",
@@ -1490,7 +1490,7 @@
       },
       "uninstall": {
         "option": "同时从 {{name}} 卸载 Kettu",
-        "optionHint": "停掉并移除它的服务，删掉程序。Agent 自己的登录（比如 ~/.claude）和你的项目都不动。",
+        "optionHint": "停掉并移除它的服务，删掉程序。智能体自己的登录（比如 ~/.claude）和你的项目都不动。",
         "data": "同时删掉它的会话和设置",
         "dataHint": "删掉 {{name}} 上的 {{folder}} 和日志，也就是那里 Kettu 的会话、设置和身份。",
         "body": "从 {{name}} 卸载 Kettu，这台电脑也不再记着它。和 {{name}} 配对的其他设备也连不上它了。",
@@ -1596,13 +1596,13 @@
     },
     "hostName": {
       "name": "这台电脑的名字",
-      "name_web": "主机的名字",
+      "name_web": "电脑的名字",
       "description": "你的设备上显示的这台电脑的名字。"
     },
     "devices": {
       "group": "设备",
       "emptyTitle": "还没有设备",
-      "emptyHint": "用 iPhone 或 iPad 上的 Kettu 扫码，或者在另一台电脑的 Kettu 里打开 设置 › 主机 › 添加主机…，粘贴链接。",
+      "emptyHint": "用 iPhone 或 iPad 上的 Kettu 扫码，或者在另一台电脑的 Kettu 里打开 设置 › 电脑 › 添加电脑…，粘贴链接。",
       "add": "添加设备…",
       "addOff": "打开远程访问后才能添加设备。",
       "online": "在线",
@@ -1675,7 +1675,7 @@
     "pair": {
       "title": "添加设备",
       "scan": "用 iPhone 或 iPad 上的 Kettu 扫这个码。",
-      "otherComputer": "在另一台电脑上，打开 设置 › 主机 › 添加主机 并粘贴链接。",
+      "otherComputer": "在另一台电脑上，打开 设置 › 电脑 › 添加电脑 并粘贴链接。",
       "target": "打开方式",
       "targets": {
         "app": "App",
@@ -1803,7 +1803,7 @@
     "other": {
       "offBody": "所有设备马上断开，这台电脑也一样。要等 {{host}} 上再打开远程访问才会重新连上。",
       "resetBody": "这台电脑也是其中之一，之后要重新添加到 {{host}}。",
-      "portBody": "这台电脑也用旧端口连 {{host}}，可能会断开；没再连上的话，到 设置 › 主机 里 {{host}} 的页上改地址。"
+      "portBody": "这台电脑也用旧端口连 {{host}}，可能会断开；没再连上的话，到 设置 › 电脑 里 {{host}} 的页上改地址。"
     },
     "groups": {
       "permissions": "权限",
@@ -1878,7 +1878,7 @@
       "winget": "WinGet"
     },
     "updateTo": "更新到 {{version}}",
-    "agentCount_other": "{{count}} 个 Agent",
+    "agentCount_other": "{{count}} 个智能体",
     "missingLine": "未安装。点“安装”查看 {{name}} 官方文档里的安装方式。",
     "install": {
       "title": "安装 {{name}}",
@@ -1920,7 +1920,7 @@
     "programNote": "就是 {{name}} 本身，Kettu 用你的 Node.js 运行它。",
     "usedBy": "在用它的",
     "listSeparator": "、",
-    "manageAgents": "在 Agent 里管理",
+    "manageAgents": "在智能体里管理",
     "versionOut": "{{version}} 已发布",
     "autoUpdate": {
       "name": "自动更新",
@@ -1969,7 +1969,7 @@
       "description": "删除 Kettu 为它安装的包；你自己的程序、登录和配置都保留。",
       "button": "卸载…",
       "title": "卸载 {{name}}？",
-      "body": "Kettu 会删除为 {{name}} 安装的包，并移除你在这里添加的 Agent；正在运行的回合会停止。它们的会话仍保留、能查看。你自己的程序、登录和配置目录都不动。",
+      "body": "Kettu 会删除为 {{name}} 安装的包，并移除你在这里添加的智能体；正在运行的回合会停止。它们的会话仍保留、能查看。你自己的程序、登录和配置目录都不动。",
       "program": "同时用这条命令卸载程序",
       "installAgain": "重新安装后即可使用；配置和会话都保留着。"
     }
@@ -1978,8 +1978,8 @@
     "keywords": "记忆 记住 忘掉 笔记 偏好 全局 项目 memory remember forget notes global project",
     "switch": {
       "name": "使用记忆",
-      "on": "打开时，每个 Agent 开会话都会拿到记忆，也能往里记。在 Kettu 的会话里，Harness 自己的记忆会关掉。",
-      "off": "已关上：各 Agent 回到自己原来的记忆，由各自的 Harness 保存。",
+      "on": "打开时，每个智能体开会话都会拿到记忆，也能往里记。在 Kettu 的会话里，Harness 自己的记忆会关掉。",
+      "off": "已关上：各智能体回到自己原来的记忆，由各自的 Harness 保存。",
       "keywords": "记忆 打开 关闭 自动记忆 memory auto memory"
     },
     "global": {
@@ -1995,24 +1995,24 @@
     "add": "添加",
     "empty": {
       "globalTitle": "全局记忆里还没有内容",
-      "globalHint": "Agent 会在工作中记下关于你的事，记之前会先问你。你也可以自己添加。",
+      "globalHint": "智能体会在工作中记下关于你的事，记之前会先问你。你也可以自己添加。",
       "projectTitle": "还没有记下 {{project}} 的事",
-      "projectHint": "Agent 会在工作中记下怎么运行它、踩过的坑和做过的决定。你也可以自己添加。",
+      "projectHint": "智能体会在工作中记下怎么运行它、踩过的坑和做过的决定。你也可以自己添加。",
       "noProjectsTitle": "还没有项目",
-      "noProjectsHint": "打开项目后，Agent 会在工作中记下关于它的事。"
+      "noProjectsHint": "打开项目后，智能体会在工作中记下关于它的事。"
     },
     "loading": "正在读取记忆",
     "loadFailed": "没能读取记忆：{{error}}",
     "retry": "重试",
     "import": {
-      "agents_other": "{{count}} 个 Agent",
+      "agents_other": "{{count}} 个智能体",
       "found_other": "在 {{agents}} 里找到 {{count}} 条记忆",
-      "foundSome_other": "在 Agent 自己的记忆里找到 {{count}} 条",
-      "hint": "把它们导入 Kettu 的记忆，每个 Agent 都能用上。原来的记忆保持不变。",
+      "foundSome_other": "在智能体自己的记忆里找到 {{count}} 条",
+      "hint": "把它们导入 Kettu 的记忆，每个智能体都能用上。原来的记忆保持不变。",
       "button": "导入…",
-      "title": "导入 Agent 的记忆",
-      "body": "这些是各 Agent 自己记下的、关于 Kettu 里已有项目的事。每条会放进它所属项目的记忆，原来的保持不变。",
-      "sources": "按 Agent 和项目",
+      "title": "导入智能体的记忆",
+      "body": "这些是各智能体自己记下的、关于 Kettu 里已有项目的事。每条会放进它所属项目的记忆，原来的保持不变。",
+      "sources": "按智能体和项目",
       "source": "{{agent}} · {{project}}",
       "entries_other": "{{count}} 条",
       "aboutYou": "关于你本人的",
@@ -2020,7 +2020,7 @@
       "putGlobal": "放进全局",
       "import": "导入",
       "nothing": "没有要导入的了。",
-      "scanFailed": "没能读取 Agent 的记忆：{{error}}",
+      "scanFailed": "没能读取智能体的记忆：{{error}}",
       "imported_other": "导入了 {{count}} 条",
       "importedSkipped_other": "导入了 {{count}} 条，跳过了 {{skipped}} 条重复的"
     },
@@ -2035,7 +2035,7 @@
       "remove": {
         "button": "删除…",
         "title": "删除“{{title}}”？",
-        "body": "它会从 Kettu 的记忆里删掉，Agent 之后不会再拿到它。",
+        "body": "它会从 Kettu 的记忆里删掉，智能体之后不会再拿到它。",
         "confirm": "删除",
         "done": "已删除"
       },
@@ -2051,7 +2051,7 @@
       "description": "摘要",
       "body": "正文",
       "save": "保存",
-      "descriptionPlaceholder": "一行摘要，Agent 在记忆列表里看到的就是它",
+      "descriptionPlaceholder": "一行摘要，智能体在记忆列表里看到的就是它",
       "bodyPlaceholder": "用 Markdown 写。一条只写一件事，并写明为什么。",
       "markdown": "Markdown",
       "keys": "Esc 取消 · {{mod}}Enter 保存"
@@ -2076,11 +2076,11 @@
     },
     "allowed": {
       "name": "始终允许的设备",
-      "description": "Agent 使用这些设备前不再询问。移除后，下一次使用时会重新询问。",
+      "description": "智能体使用这些设备前不再询问。移除后，下一次使用时会重新询问。",
       "keywords": "模拟器 真机 iphone android 手机 允许",
-      "none": "还没有始终允许的设备。Agent 询问时选“始终允许这台设备”即可。",
+      "none": "还没有始终允许的设备。智能体询问时选“始终允许这台设备”即可。",
       "loading": "正在读取…",
-      "notFound": "现在不在这台主机上",
+      "notFound": "现在不在这台电脑上",
       "remove": "移除"
     }
   }

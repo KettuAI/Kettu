@@ -13,7 +13,7 @@
     "step": "{{task}} 的步骤：{{step}}"
   },
   "card": {
-    "agents": "Agent",
+    "agents": "智能体",
     "branch": "分支",
     "lastActivity": "最近的动静"
   },
@@ -24,7 +24,7 @@
     "yourTurn": "轮到你",
     "asking": "等你回答",
     "blocked": "开不了工",
-    "needsYou": "需要你",
+    "needsYou": "等你处理",
     "failed": "卡住了",
     "waiting": "等待中"
   },
@@ -38,11 +38,11 @@
     "cancel": "取消需求…",
     "cancelTitle": "取消“{{title}}”？",
     "cancelBody": "正在做的步骤会停下。它们的会话留着，做过什么还能看。",
-    "cancelBodyBranch": "正在做的步骤会停下。它们的会话、需求的 worktree 和分支都留着。",
+    "cancelBodyBranch": "正在做的步骤会停下。它们的会话、需求的工作树和分支都留着。",
     "cancelConfirm": "取消需求",
     "keepRunning": "继续做",
     "deleteBody": "需求和它各步骤的会话删除后无法恢复。归档会保留它们。",
-    "deleteBodyBranch": "需求和它各步骤的会话删除后无法恢复。分支 {{branch}} 和它的 worktree 会留着。",
+    "deleteBodyBranch": "需求和它各步骤的会话删除后无法恢复。分支 {{branch}} 和它的工作树会留着。",
     "renameTitle": "重命名需求",
     "archived": "已归档“{{title}}”"
   },
@@ -76,7 +76,7 @@
     "view": "视图",
     "timeline": "Timeline",
     "flowchart": "Flowchart",
-    "needsYou": "需要你",
+    "needsYou": "等你处理",
     "stuck": "卡住了",
     "unavailable": "打不开这条需求",
     "hostAway": "它所在的电脑没有连上，连上后会再显示。",
@@ -125,7 +125,7 @@
   "blocked": {
     "title": "{{step}} 开不了工",
     "limit": "{{agent}} 的套餐额度用完了。",
-    "limitAt": "{{agent}} 的套餐额度用完了。到 {{time}} 自动开始，除非你固定别的 Agent。",
+    "limitAt": "{{agent}} 的套餐额度用完了。到 {{time}} 自动开始，除非你固定别的智能体。",
     "disabled": "{{agent}} 已关闭。",
     "removed": "{{agent}} 已被移除。",
     "harness": "{{agent}} 不能做步骤，只有 Claude Code 和 Codex 能做。",
@@ -133,10 +133,10 @@
     "effort": "{{agent}} 不再提供固定时选的推理强度。",
     "no_kettu": "{{agent}} 没有 Kettu 的工具，步骤要用它上报。",
     "not_ready": "{{agent}} 还没准备好。",
-    "noAgent": "没有允许 Auto 选的 Agent。去 设置 › Agent 打开一个，或者固定一个。",
-    "noPicker": "没有步骤交棒给它，需要你固定一个 Agent。",
+    "noAgent": "没有允许 Auto 选的智能体。到「设置 › 智能体」里打开一个，或者固定一个。",
+    "noPicker": "没有步骤交棒给它，需要你固定一个智能体。",
     "picking": "它在等前一步选人。",
-    "pin": "固定别的 Agent…"
+    "pin": "固定别的智能体…"
   },
   "stuckTitle": "{{step}} 卡住了",
   "stuck": {
@@ -150,19 +150,19 @@
   },
   "merge": {
     "title": "结束时需求的分支没能合并",
-    "body_one": "{{count}} 个文件有冲突。在需求的 worktree 里解决后重试。",
-    "body_other": "{{count}} 个文件有冲突。在需求的 worktree 里解决后重试。"
+    "body_one": "{{count}} 个文件有冲突。在需求的工作树里解决后重试。",
+    "body_other": "{{count}} 个文件有冲突。在需求的工作树里解决后重试。"
   },
   "retry": {
     "button": "重试",
-    "notePlaceholder": "给这一步 Agent 的说明（可选）"
+    "notePlaceholder": "给这一步智能体的说明（可选）"
   },
   "pin": {
     "open": "为这条需求固定…",
     "change": "更改固定…",
     "confirm": "为这条需求固定",
     "auto": "改回 Auto",
-    "onlySteps": "只有 Claude Code 和 Codex 的 Agent 能做步骤。"
+    "onlySteps": "只有 Claude Code 和 Codex 的智能体能做步骤。"
   },
   "flow": {
     "auto": "Auto",
@@ -178,7 +178,7 @@
       "dropped": "不值得做"
     },
     "kind": {
-      "agent": "Agent",
+      "agent": "智能体",
       "review": "审查",
       "auto": "Auto",
       "you": "你"

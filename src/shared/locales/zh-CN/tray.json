@@ -5,14 +5,14 @@
   "openKettu": "打开 Kettu",
   "quit": "退出",
   "headline": {
-    "needsYou": "{{count}} 个需要你",
+    "needsYou": "{{count}} 个等你处理",
     "running": "{{count}} 个正在运行",
     "finished": "{{count}} 个已完成",
     "quiet": "一切安静"
   },
   "lastSession": "{{host}} · 上次会话：{{ago}}",
   "group": {
-    "needsYou": "需要你",
+    "needsYou": "等你处理",
     "running": "正在运行",
     "finished": "已完成",
     "recent": "最近",
@@ -22,7 +22,7 @@
   "back": "返回",
   "untitled": "新会话",
   "working": "正在处理",
-  "routine": "例行任务",
+  "routine": "定时任务",
   "elapsedMinutes": "{{count}} 分钟",
   "elapsedHours": "{{h}} 小时 {{m}} 分钟",
   "doneAgo": "{{ago}}完成",
@@ -30,7 +30,7 @@
   "files_other": "{{count}} 个文件",
   "status": {
     "running": "正在运行",
-    "needsYou": "需要你",
+    "needsYou": "等你处理",
     "unread": "还没看过",
     "failed": "失败",
     "done": "已完成"

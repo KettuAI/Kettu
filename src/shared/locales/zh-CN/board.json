@@ -8,16 +8,16 @@
   "sections": {
     "now": "进行中",
     "earlier": "已结束",
-    "artifacts": "Artifacts"
+    "artifacts": "产物"
   },
   "earlier": {
-    "subagents": "子 Agent",
+    "subagents": "子智能体",
     "commands": "命令",
     "failed_other": "{{count}} 个失败"
   },
   "empty": {
     "title": "这里还没有内容",
-    "text": "子 Agent、后台命令和这个会话写下的 Artifacts 会出现在这里。"
+    "text": "子智能体、后台命令和这个会话写下的产物会出现在这里。"
   },
   "status": {
     "failed": "失败",

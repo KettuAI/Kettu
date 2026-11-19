@@ -17,7 +17,7 @@
     "output": "输出",
     "cost": "费用",
     "api": "API",
-    "costHint": "Agent 自己按 API 价算的，订阅账号不按这个收费。",
+    "costHint": "智能体自己按 API 价算的，订阅账号不按这个收费。",
     "reasoning": "推理"
   },
   "system": {
@@ -96,16 +96,16 @@
     "text": "会话发出第一条消息后，这里会列出每次请求。"
   },
   "unavailable": {
-    "title": "这个 Agent 暂时看不了",
-    "text": "Kettu 还读不了这个 Agent 的会话记录。"
+    "title": "这个智能体暂时看不了",
+    "text": "Kettu 还读不了这个智能体的会话记录。"
   },
   "error": {
     "title": "读不到请求",
     "retry": "重试"
   },
   "acp": {
-    "note": "这个 Agent 走 ACP，只报每一轮，不报每次请求，也很少报 token。这里是 Kettu 这次启动以来和它收发的消息，更早的轮没有留下。",
-    "empty": "从现在起，Kettu 和这个 Agent 收发消息时，每一轮会列在这里。",
+    "note": "这个智能体走 ACP，只报每一轮，不报每次请求，也很少报 token。这里是 Kettu 这次启动以来和它收发的消息，更早的轮没有留下。",
+    "empty": "从现在起，Kettu 和这个智能体收发消息时，每一轮会列在这里。",
     "turns": "轮",
     "messages": "消息",
     "tools": "工具",

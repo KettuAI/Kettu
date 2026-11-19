@@ -125,7 +125,7 @@
   },
   "changes": {
     "emptyTitle": "没有未提交的更改",
-    "emptyDescription": "Agent 或你改动的文件会显示在这里。",
+    "emptyDescription": "智能体或你改动的文件会显示在这里。",
     "files_one": "{{count}} 个文件",
     "files_other": "{{count}} 个文件",
     "commit": "提交…",

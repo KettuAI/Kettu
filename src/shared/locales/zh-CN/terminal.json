@@ -26,7 +26,7 @@
   },
   "view": {
     "askAgent": "询问 {{agent}}",
-    "askGeneric": "询问 Agent",
+    "askGeneric": "询问智能体",
     "paste": "粘贴",
     "selectAll": "全选",
     "clear": "清屏",

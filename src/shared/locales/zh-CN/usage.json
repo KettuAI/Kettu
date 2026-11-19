@@ -17,7 +17,7 @@
     "sync": "立即同步",
     "syncAction": "同步",
     "syncFailed": "同步失败",
-    "agents": "Agent",
+    "agents": "智能体",
     "allShort": "全部",
     "metric": "统计指标",
     "range": "时间范围",
@@ -37,7 +37,7 @@
       "365": "1 年",
       "all": "全部"
     },
-    "allHosts": "全部主机",
+    "allHosts": "全部电脑",
     "scope": "来源",
     "scopes": {
       "computer": "本机",
@@ -45,14 +45,14 @@
       "computer_web": "{{host}}",
       "kettu": "仅 Kettu"
     },
-    "importing": "正在读取 Agent 的日志：{{done}} / {{total}}",
+    "importing": "正在读取智能体的日志：{{done}} / {{total}}",
     "importingFrom": "{{agents}}，{{date}} 以来的日志。读完后页面就会填满。",
     "importingAgents": "{{agents}}。日志读完后，页面就会填满。",
     "importingNote": "日志读完后，页面就会填满。",
     "loading": "正在载入用量",
-    "allAgents": "全部 Agent",
+    "allAgents": "全部智能体",
     "scopeNotes": {
-      "computer": "Kettu 和各 Agent 自己的日志",
+      "computer": "Kettu 和各智能体自己的日志",
       "kettu": "只算 Kettu 运行的轮次"
     }
   },
@@ -100,7 +100,7 @@
     "withSaved": "{{line}}{{saved}}",
     "fromCache": "{{share}} 来自 prompt cache",
     "savedLine": "{{line}} · 按 API 价格<b>约省 {{cost}}</b>",
-    "totalAll": "{{range}} · 全部 Agent",
+    "totalAll": "{{range}} · 全部智能体",
     "totalOne": "{{range}} · {{agent}}",
     "noSplit": {
       "requests": "请求数不按 token 类型拆分。把统计指标切换到 Token 或费用即可查看。",
@@ -134,15 +134,15 @@
     "agent": "{{agent}} {{tokens}}",
     "agentCount": "{{agent}} {{value}}",
     "agentCost": "{{agent}} {{cost}}",
-    "legend": "图表中显示的 Agent",
-    "keepOne": "图表中至少保留一个 Agent",
+    "legend": "图表中显示的智能体",
+    "keepOne": "图表中至少保留一个智能体",
     "plot": "{{title}}，用方向键逐个查看数值",
-    "footer": "每个 Agent 一条线 · {{range}}",
+    "footer": "每个智能体一条线 · {{range}}",
     "footerOne": "{{agent}} · {{range}}"
   },
   "limits": {
     "title": "套餐限额",
-    "none": "还没有 Agent 报告套餐限额。用 Claude 或 ChatGPT 订阅登录的账号会显示在这里。",
+    "none": "还没有智能体报告套餐限额。用 Claude 或 ChatGPT 订阅登录的账号会显示在这里。",
     "read": "{{ago}}读取",
     "notReported_other": "{{name}} 不提供套餐用量。",
     "notYet": "还没有报告套餐用量。",
@@ -207,15 +207,15 @@
     "groups": {
       "model": "模型",
       "project": "项目",
-      "agent": "Agent"
+      "agent": "智能体"
     },
     "others": {
       "model_other": "其他 {{count}} 个模型",
       "project_other": "其他 {{count}} 个项目",
-      "agent_other": "其他 {{count}} 个 Agent"
+      "agent_other": "其他 {{count}} 个智能体"
     },
     "unknownModel": "未知模型",
-    "noProject": "无项目",
+    "noProject": "不属于项目",
     "units": {
       "tokens": "token",
       "requests": "次请求",
@@ -229,8 +229,8 @@
   "noPrice": "无价格",
   "empty": {
     "title": "还没有用量",
-    "description": "从现在起，Kettu 会记下它运行的每一轮对话的 token。要算上安装前和在终端里的使用，可以从本机的 Agent 日志统计。",
-    "description_web": "从现在起，Kettu 会记下它运行的每一轮对话的 token。要算上安装前和在终端里的使用，可以从 {{host}} 上的 Agent 日志统计。",
+    "description": "从现在起，Kettu 会记下它运行的每一轮对话的 token。要算上安装前和在终端里的使用，可以从本机的智能体日志统计。",
+    "description_web": "从现在起，Kettu 会记下它运行的每一轮对话的 token。要算上安装前和在终端里的使用，可以从 {{host}} 上的智能体日志统计。",
     "fromComputer": "统计本机用量",
     "fromComputer_web": "统计 {{host}} 上的用量",
     "waiting": "从现在起，Kettu 会记下它运行的每一轮对话的 token。"
@@ -294,7 +294,7 @@
     "reimport": {
       "button": "重新导入…",
       "title": "重新导入 {{agent}} 的日志？",
-      "description": "Kettu 会清除从 {{agent}} 导入的数据，然后重新读取它的日志。Agent 已经从日志中删除的历史无法恢复。",
+      "description": "Kettu 会清除从 {{agent}} 导入的数据，然后重新读取它的日志。智能体已经从日志中删除的历史无法恢复。",
       "confirm": "重新导入"
     },
     "sidebar": {
@@ -307,7 +307,7 @@
     },
     "clear": {
       "name": "清除 Kettu 的记录",
-      "description": "删除 Kettu 自己统计的数据。Agent 自己的日志不受影响。",
+      "description": "删除 Kettu 自己统计的数据。智能体自己的日志不受影响。",
       "button": "清除…",
       "title": "清除 Kettu 的用量记录？",
       "confirm": "清除记录"

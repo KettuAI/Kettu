@@ -18,22 +18,22 @@
     "noBackgroundTask": "这个后台任务不在会话中",
     "backgroundTaskEnded": "这个后台任务已结束",
     "side": {
-      "subagent": "子 Agent 没有侧聊",
+      "subagent": "子智能体没有侧聊",
       "archived": "先恢复这个会话，才能在旁边问",
       "busy": "上一个侧聊问题还没答完",
-      "pickAgent": "{{agent}} 不能侧聊，请选一个 Agent 来答",
+      "pickAgent": "{{agent}} 不能侧聊，请选一个智能体来答",
       "cannotAnswer": "{{agent}} 不能替别的会话回答侧聊",
       "noAnswer": "{{agent}} 没有答上这个问题"
     },
     "cannotLoad": "{{agent}} 不支持加载或恢复会话",
     "cannotSteer": "{{agent}} 不支持在对话进行中接收消息",
-    "cannotFork": "{{agent}} 不支持分叉会话",
-    "cannotForkAt": "{{agent}} 只能从最新一条回复分叉",
-    "noForkPoint": "无法从这条回复分叉",
-    "forkTitle": "{{title}}（分叉）",
-    "forkTitleNumbered": "{{title}}（分叉 {{n}}）",
+    "cannotFork": "{{agent}} 不支持复制会话",
+    "cannotForkAt": "{{agent}} 只能从最新一条回复另开会话",
+    "noForkPoint": "无法从这条回复另开会话",
+    "forkTitle": "{{title}}（副本）",
+    "forkTitleNumbered": "{{title}}（副本 {{n}}）",
     "alreadyInSession": "这个会话已经属于 Kettu 里的一个会话",
-    "heldOutside": "这个会话还开在终端里。先在那边输入 /exit 再试，或者分叉一份在 Kettu 里接着做。",
+    "heldOutside": "这个会话还开在终端里。先在那边输入 /exit 再试，或者复制一份在 Kettu 里接着做。",
     "cannotList": "{{agent}} 无法列出它的会话",
     "configBetweenTurns": "{{option}} 只能在两轮对话之间更改",
     "ultracodeDescription": "用于大型任务的动态工作流",
@@ -42,20 +42,20 @@
     "attachmentMissing": "有一个附件已不可用，请移除后重新添加。",
     "attachmentUnreadable": "Kettu 无法读取 {{name}}。",
     "attachmentDenied": "Kettu 没有读取 {{name}} 的权限。",
-    "otherConfigFolder": "这个会话是在配置目录 {{path}} 下开始的，它的 Agent 已不再使用这个目录，所以无法在这里继续。",
+    "otherConfigFolder": "这个会话是在配置目录 {{path}} 下开始的，它的智能体已不再使用这个目录，所以无法在这里继续。",
     "topLevelOnly": "只有顶层会话可以置顶或归档",
     "archived": "这个会话已归档",
-    "worktreeGone": "这个会话的 worktree 和分支都已删除，不能再继续对话。",
-    "worktreeInterrupted": "worktree 的准备被中断了。可以重新运行，或者跳过直接继续。",
+    "worktreeGone": "这个会话的工作树和分支都已删除，不能再继续对话。",
+    "worktreeInterrupted": "工作树的准备被中断了。可以重新运行，或者跳过直接继续。",
     "untitled": "未命名会话",
     "subagent": {
-      "noPrompt": "子 Agent 会话从父会话接收指令",
-      "noFork": "子 Agent 会话不能分叉",
-      "noCancel": "该 Agent 不允许取消这个子 Agent",
-      "noConfig": "子 Agent 会话不能单独配置",
-      "closesWithParent": "子 Agent 会话随父会话一起关闭",
-      "deletedWithParent": "子 Agent 会话随父会话一起删除",
-      "failed": "子 Agent 运行失败"
+      "noPrompt": "子智能体会话从父会话接收指令",
+      "noFork": "子智能体会话不能复制",
+      "noCancel": "该智能体不允许取消这个子智能体",
+      "noConfig": "子智能体会话不能单独配置",
+      "closesWithParent": "子智能体会话随父会话一起关闭",
+      "deletedWithParent": "子智能体会话随父会话一起删除",
+      "failed": "子智能体运行失败"
     }
   },
   "notice": {
@@ -78,7 +78,7 @@
       "title": "{{agent}} 没有归档此会话",
       "description": "它要求这一轮结束后归档，但这一轮留下了仍在运行的工作：{{work}}。"
     },
-    "scheduledJobs_other": "{{count}} 个定时任务",
+    "scheduledJobs_other": "{{count}} 个定时唤醒",
     "backgroundWork": "后台任务",
     "listSeparator": "、",
     "reportsPaused": {
@@ -94,13 +94,13 @@
     },
     "cancelUnconfirmed": {
       "title": "{{agent}} 没有确认取消",
-      "description": "Kettu 已在 {{seconds}} 秒后结束本轮对话，Agent 可能仍在后台完成工作。"
+      "description": "Kettu 已在 {{seconds}} 秒后结束本轮对话，智能体可能仍在后台完成工作。"
     },
     "lostValues": {
       "fork": {
-        "title": "这个分叉没能沿用全部设置",
-        "missing": "这个分叉没有 {{option}} 选项，无法使用 {{wanted}}。",
-        "cannotTurnOn": "这个分叉没有 {{option}} 选项，无法开启。"
+        "title": "这个副本没能沿用全部设置",
+        "missing": "这个副本没有 {{option}} 选项，无法使用 {{wanted}}。",
+        "cannotTurnOn": "这个副本没有 {{option}} 选项，无法开启。"
       },
       "session": {
         "title": "这个会话没能保留全部设置",
@@ -120,7 +120,7 @@
     },
     "computerStopped": {
       "title": "已停止使用电脑",
-      "description": "你发下一条消息后，Agent 才能再用。"
+      "description": "你发下一条消息后，智能体才能再用。"
     },
     "fullAccessNotCarried": {
       "title": "没有带上完全访问",
@@ -145,7 +145,7 @@
       "cancelled": "已取消",
       "max_tokens": "已达到 token 上限而停止",
       "max_turn_requests": "已达到请求次数上限而停止",
-      "refusal": "Agent 拒绝了请求"
+      "refusal": "智能体拒绝了请求"
     },
     "wantsToRun": "想运行 {{command}}",
     "wantsToEdit": "想修改 {{target}}",
@@ -155,22 +155,22 @@
     "asks": "在问：{{question}}",
     "done": "{{title}} · 已完成",
     "withChanges_other": "{{text}}改动了 {{count}} 个文件。",
-    "marketPublish": "想把 {{name}} 发布到 Kettu 的 Marketplace",
-    "marketUnlist": "想把 {{name}} 从 Kettu 的 Marketplace 下架"
+    "marketPublish": "想把 {{name}} 发布到 Kettu 市场",
+    "marketUnlist": "想把 {{name}} 从 Kettu 市场下架"
   },
   "routines": {
-    "busy": "此例程已经有一个运行正在工作",
+    "busy": "此定时任务已经有一个运行正在工作",
     "stopping": "Kettu 正在退出",
     "noRun": "没有这个运行",
-    "notFound": "没有这个例程",
-    "unnamed": "例程",
+    "notFound": "没有这个定时任务",
+    "unnamed": "定时任务",
     "ended": "已完成",
     "failed": "{{name}} 失败了",
     "timedOut": "运行达到了时间上限",
     "needsApproval": "{{name}} 需要批准",
     "noScopeMode": "{{agent}} 没有提供符合这组权限的模式",
     "modeFailed": "{{agent}} 无法设置符合这组权限的模式",
-    "pausedTitle": "{{agent}} 的例程已暂停",
+    "pausedTitle": "{{agent}} 的定时任务已暂停",
     "pausedUsed": "{{limit}}限额已用 {{percent}}% · {{time}} 重置",
     "pausedReached": "{{limit}}限额已用完 · {{time}} 重置",
     "pausedUsedNoReset": "{{limit}}限额已用 {{percent}}%",
@@ -194,7 +194,7 @@
     "fiveHourOf": "{{model}} 5 小时"
   },
   "agent": {
-    "stoppedBeforeAnswer": "Agent 在回复前停止了",
+    "stoppedBeforeAnswer": "智能体在回复前停止了",
     "failedToStart": "{{agent}} 启动失败",
     "notAvailable": "{{agent}} 不可用",
     "cliGone": "{{path}} 不见了，可能是 {{agent}} 正在更新。{{reason}}",
@@ -204,7 +204,7 @@
     "closeSessionsFirst": "请先关闭使用 {{agent}} 的会话",
     "stillRunning": "{{agent}} 未能停止，仍在运行，请等它退出后再试",
     "noLogout": "{{agent}} 不支持退出登录",
-    "keyInSettings": "{{method}} 要在设置 › Agent 里 {{agent}} 的页面上填写",
+    "keyInSettings": "{{method}} 要在设置 › 智能体里 {{agent}} 的页面上填写",
     "signInOnComputer": "{{agent}} 在它所在的电脑上打开浏览器登录，请到那台电脑上登录。",
     "signInCancelled": "{{agent}} 的登录已取消。",
     "geminiAccountMoved": "Gemini CLI 不再支持个人 Google 账号：Google 已把它们转到 Google Antigravity。这个账号请在 Google Antigravity 里使用；Gemini CLI 仍可用于 Gemini Code Assist Standard 或 Enterprise，以及付费的 Gemini API 或 Vertex AI key。",
@@ -263,8 +263,8 @@
     },
     "reportTimeout": "{{command}} 没有在 {{seconds}} 秒内完成",
     "unreadableReport": "{{agent}} 的 {{command}} 没有返回 Kettu 能读取的报告",
-    "removed": "这个 Agent 已删除，这个会话无法继续。",
-    "disabled": "{{agent}} 已停用。到设置 › Agent 里启用后才能使用。",
+    "removed": "这个智能体已删除，这个会话无法继续。",
+    "disabled": "{{agent}} 已停用。到设置 › 智能体里启用后才能使用。",
     "uninstall": {
       "busy": "{{agent}} 正在安装或更新，等它完成后才能卸载。"
     }
@@ -317,7 +317,7 @@
   },
   "environment": {
     "inherited": "Kettu 启动后对 PATH 的修改要在重启后才生效。",
-    "fallback": "无法读取 {{shell}} 的环境（{{error}}），Agent 将使用 Kettu 启动时的环境。"
+    "fallback": "无法读取 {{shell}} 的环境（{{error}}），智能体将使用 Kettu 启动时的环境。"
   },
   "git": {
     "notReady": "Git 暂不可用",
@@ -343,7 +343,7 @@
     "localUpstream": "此分支跟踪的是本仓库的分支，没有可推送的远程仓库",
     "otherName": "此分支跟踪的是名称不同的 {{upstream}}，请在终端中推送",
     "unknownRemote": "此仓库有多个远程仓库，且没有为此分支指定其中一个",
-    "commitMessageNoAgent": "没有可用来写提交信息的 Agent，请先在设置里添加或开启一个",
+    "commitMessageNoAgent": "没有可用来写提交信息的智能体，请先在设置里添加或开启一个",
     "commitMessageFailed": "{{agent}} 没能写出提交信息：{{reason}}"
   },
   "permission": {
@@ -429,7 +429,7 @@
       },
       "bypassPermissions": {
         "name": "完全访问",
-        "description": "从不询问。请在沙箱或 worktree 里使用"
+        "description": "从不询问。请在沙箱或工作树里使用"
       }
     }
   },
@@ -535,11 +535,11 @@
       "viewImage": "查看图片 '{{path}}'",
       "generateImage": "生成图片",
       "agent": {
-        "spawnAgent": "启动子 Agent",
-        "sendInput": "给子 Agent 发消息",
-        "resumeAgent": "恢复子 Agent",
-        "wait": "等待子 Agent",
-        "closeAgent": "关闭子 Agent"
+        "spawnAgent": "启动子智能体",
+        "sendInput": "给子智能体发消息",
+        "resumeAgent": "恢复子智能体",
+        "wait": "等待子智能体",
+        "closeAgent": "关闭子智能体"
       }
     },
     "notice": {
@@ -656,7 +656,7 @@
       "approve": "批准并退出计划模式"
     },
     "subagent": {
-      "failed": "子 Agent 结束：{{reason}}"
+      "failed": "子智能体结束：{{reason}}"
     },
     "auth": {
       "account": "DeepSeek 账号",
@@ -712,7 +712,7 @@
     "notFound": "没有这个 工作流",
     "changedSinceShown": "这个 工作流 在你看过之后改了，请再看一遍再批准。",
     "invalid": "这个 工作流 有问题，要先改好",
-    "noSuchStep": "这个 工作流 里没有这一步，或者这一步不是 Agent 做的",
+    "noSuchStep": "这个工作流里没有这一步，或者这一步不是智能体做的",
     "notGithub": "请给出 GitHub 上一个文件的地址",
     "notFromGithub": "只有从 GitHub 加的 工作流 才能更新",
     "tooLarge": "工作流 文件超过了 256 KB",
@@ -733,7 +733,7 @@
     "stillRunning": "先取消这个需求，再删除",
     "noteEmpty": "备注不能为空",
     "cannotPin": "这一步已经开始了，现在不能固定",
-    "needsYou": "{{title}} 需要你",
+    "needsYou": "{{title}} 等你处理",
     "needsYouBody": "{{step}} · {{workflow}}",
     "done": "{{title}} 做完了",
     "dropped": "{{title}} 结束了，没有做",
@@ -747,7 +747,7 @@
     "failure": {
       "signed_out": "登录 Kettu 账号并打开 Kettu 云服务后才能发布。",
       "unauthorized": "请重新登录 Kettu 账号后再发布。",
-      "network": "连不上 Kettu 的 Marketplace。检查网络后再试一次。",
+      "network": "连不上 Kettu 市场。检查网络后再试一次。",
       "unreadable": "读不到你发布的内容。",
       "storage_full": "云端存储已满，只有你能看到的条目算在里面。",
       "too_many_listings": "这个账号的条目数已经到上限了。",
@@ -757,24 +757,24 @@
       "taken_down": "它已被 Kettu 下架，不能再发新版本。",
       "version_exists": "这个版本已经发布过了。提高版本号后再试。",
       "no_publisher": "先定一个发布者名。",
-      "not_found": "它已经不在 Kettu 的 Marketplace 里了。",
-      "check_failed": "没有通过 Kettu Marketplace 的检查。",
+      "not_found": "它已经不在 Kettu 市场里了。",
+      "check_failed": "没有通过 Kettu 市场的检查。",
       "conflict": "同时有别的改动，再试一次。"
     }
   },
   "marketCommunity": {
-    "signedOut": "登录 Kettu 账号并开着 Kettu 的服务，才能从 Kettu 的 Marketplace 安装。",
-    "takenDown": "它已从 Kettu 的 Marketplace 下架。",
-    "gone": "Kettu 的 Marketplace 里已经没有它了。",
+    "signedOut": "登录 Kettu 账号并开着 Kettu 的服务，才能从 Kettu 市场安装。",
+    "takenDown": "它已从 Kettu 市场下架。",
+    "gone": "Kettu 市场里已经没有它了。",
     "withdrawn": "发布者撤回了这个版本。再试一次会拿到当前版本。",
-    "failed": "连不上 Kettu 的 Marketplace：{{reason}}",
-    "mismatch": "{{path}} 和 Kettu 的 Marketplace 给的校验值对不上，所以什么都没装。",
-    "badPath": "Kettu 的 Marketplace 给了一个 Kettu 不会写入的文件 {{path}}，所以什么都没装。",
+    "failed": "连不上 Kettu 市场：{{reason}}",
+    "mismatch": "{{path}} 和 Kettu 市场给的校验值对不上，所以什么都没装。",
+    "badPath": "Kettu 市场给了一个 Kettu 不会写入的文件 {{path}}，所以什么都没装。",
     "tooLarge": "这个版本超过了一个版本的大小上限，所以什么都没装。",
     "otherKind": "这一项是另一种东西。",
-    "otherHarness": "这个插件是给另一种 Agent 的。",
+    "otherHarness": "这个插件是给另一种智能体的。",
     "noManifest": "这个插件没有带名字的 {{file}}，装不了。",
-    "nameTaken": "已经装了 Kettu 的 Marketplace 里另一个叫 {{name}} 的插件（{{other}}）。先卸载它。",
+    "nameTaken": "已经装了 Kettu 市场里另一个叫 {{name}} 的插件（{{other}}）。先卸载它。",
     "noWorkflow": "这一项没有 UTF-8 文本的 workflow.yaml，所以什么都没装。"
   },
   "marketBundle": {
@@ -806,10 +806,10 @@
     "changed": "下载时这个条目有了新版本，请再点一次安装。"
   },
   "marketSkills": {
-    "nameTaken": "已经添加过名为 {{name}} 的技能，来自 {{from}}。先移除那一个：同名的两个技能，Agent 只会保留一个。"
+    "nameTaken": "已经添加过名为 {{name}} 的技能，来自 {{from}}。先移除那一个：同名的两个技能，智能体只会保留一个。"
   },
   "report": {
-    "draftNoAgent": "没有可用来起草描述的 Agent",
+    "draftNoAgent": "没有可用来起草描述的智能体",
     "draftFailed": "{{agent}} 没能起草描述：{{reason}}"
   }
 }

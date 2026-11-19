@@ -1,6 +1,6 @@
 {
   "title": "总览",
-  "description_other": "{{count}} 个任务和会话有需要你看的内容",
+  "description_other": "{{count}} 个需求和会话有需要你看的内容",
   "separator": " · ",
   "noPlan": "没有 Plan",
   "nothingYet": "还没有",
@@ -39,7 +39,7 @@
     "stopped": "失败或卡住"
   },
   "columns": {
-    "name": "任务或会话",
+    "name": "需求或会话",
     "steps": "步骤",
     "now": "现状",
     "output": "产出"
@@ -61,13 +61,13 @@
   "detail": {
     "outputs": "可以收的",
     "pullRequest": "Pull request",
-    "artifact": "Artifact",
+    "artifact": "产物",
     "subSessions": "子会话",
-    "openTask": "打开任务",
+    "openTask": "打开需求",
     "openSession": "打开会话"
   },
   "empty": {
     "title": "一切安静",
-    "text": "任务和会话在运行、等你、停下，或完成后有你没看过的内容时，会出现在这里。"
+    "text": "需求和会话在运行、等你、停下，或完成后有你没看过的内容时，会出现在这里。"
   }
 }

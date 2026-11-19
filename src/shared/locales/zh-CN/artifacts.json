@@ -1,7 +1,7 @@
 {
   "page": {
-    "title": "Artifacts",
-    "ask": "让 Agent 做一份",
+    "title": "产物",
+    "ask": "让智能体做一份",
     "kinds": {
       "document": "文档",
       "slides": "幻灯片",
@@ -21,8 +21,8 @@
       "canvas": "做一个多页的画布 artifact："
     },
     "filterMenu": "筛选：{{value}}",
-    "agent": "Agent",
-    "anyAgent": "任意 Agent",
+    "agent": "智能体",
+    "anyAgent": "任意智能体",
     "filterBoth": "{{agent}} · {{project}}",
     "kind": "类型",
     "allKinds": "全部",
@@ -45,19 +45,19 @@
       "updated": "最近更新",
       "name": "名称"
     },
-    "loading": "正在加载 Artifact",
-    "filter": "搜索 Artifacts",
+    "loading": "正在加载产物",
+    "filter": "搜索产物",
     "clearFilter": "清除筛选",
     "clearFilters": "清除筛选",
-    "noProject": "无项目",
+    "noProject": "不属于项目",
     "deletedSession": "已删除的会话",
     "openSession": "打开会话",
-    "emptyTitle": "还没有 Artifact",
-    "emptyDescription": "点下面的类型让 Agent 做一份，或在任何会话里让它做；做好的会按最近打开排在这里。",
-    "noMatch": "没有匹配的 Artifact",
-    "errorTitle": "无法加载 Artifact",
-    "errorDescription": "{{error}} 你的 Artifact 仍安全地保存在这台电脑上。",
-    "errorDescription_web": "{{error}} 你的 Artifact 仍安全地保存在 {{host}} 上。",
+    "emptyTitle": "还没有产物",
+    "emptyDescription": "点下面的类型让智能体做一份，或在任何会话里让它做；做好的会按最近打开排在这里。",
+    "noMatch": "没有匹配的产物",
+    "errorTitle": "无法加载产物",
+    "errorDescription": "{{error}} 你的产物仍安全地保存在这台电脑上。",
+    "errorDescription_web": "{{error}} 你的产物仍安全地保存在 {{host}} 上。",
     "imported": "导入的",
     "import": "导入 HTML 文件或文件夹",
     "importEllipsis": "导入 HTML 文件或文件夹…",
@@ -69,29 +69,29 @@
     "importInto": "导入到",
     "importFailedTitle": "无法导入",
     "importFailed": {
-      "too_large": "超出了一个 artifact 的上限：每个文件 20 MiB，合计 64 MiB。",
-      "too_many": "文件超过 256 个，超出了一个 artifact 的上限。",
-      "no_index": "文件夹里既没有 index.html（artifact 打开时的页面），也没有 canvas.json（画布文档）。",
+      "too_large": "超出了一个产物的上限：每个文件 20 MiB，合计 64 MiB。",
+      "too_many": "文件超过 256 个，超出了一个产物的上限。",
+      "no_index": "文件夹里既没有 index.html（产物打开时的页面），也没有 canvas.json（画布文档）。",
       "bad_canvas": "它的 canvas.json 不是 Kettu 读得懂的画布文档，或者写到了文件夹里没有的页面文件。",
-      "bad_name": "里面有文件的名字 artifact 不能用：带有 : 或 ? 这类字符、以 _kettu 开头，或两个名字只差大小写。",
+      "bad_name": "里面有产物不能用的文件名：带有 : 或 ? 这类字符、以 _kettu 开头，或两个名字只差大小写。",
       "not_utf8": "其中的 HTML 不是 UTF-8 文本。",
       "unreadable": "无法读取。",
-      "unavailable": "Agent host 暂时无法接收，请稍后再试。",
+      "unavailable": "智能体后台进程暂时无法接收，请稍后再试。",
       "failed": "出了点问题，请重试。"
     },
     "dismiss": "关闭",
     "recentlyDeleted": "最近删除",
-    "backToArtifacts": "返回 Artifacts",
-    "deletedDescription": "删除的 artifact 会在这里保留 30 天，之后它和它的所有版本都会被永久移除。",
+    "backToArtifacts": "返回产物",
+    "deletedDescription": "删除的产物会在这里保留 30 天，之后它和它的所有版本都会被永久移除。",
     "nothingDeleted": "最近删除中没有内容",
-    "description": "Agent 在各个项目里做的文档、幻灯片、网页和画布。",
-    "descriptionOn": "Agent 在 {{host}} 上各个项目里做的文档、幻灯片、网页和画布。",
-    "descriptionThisMac": "Agent 在这台 Mac 上各个项目里做的文档、幻灯片、网页和画布。",
-    "descriptionThisComputer": "Agent 在这台电脑上各个项目里做的文档、幻灯片、网页和画布。",
-    "descriptionAll": "Agent 在所有主机上各个项目里做的文档、幻灯片、网页和画布。",
+    "description": "智能体在各个项目里做的文档、幻灯片、网页和画布。",
+    "descriptionOn": "智能体在 {{host}} 上各个项目里做的文档、幻灯片、网页和画布。",
+    "descriptionThisMac": "智能体在这台 Mac 上各个项目里做的文档、幻灯片、网页和画布。",
+    "descriptionThisComputer": "智能体在这台电脑上各个项目里做的文档、幻灯片、网页和画布。",
+    "descriptionAll": "智能体在所有电脑上各个项目里做的文档、幻灯片、网页和画布。",
     "filterLabel": "筛选",
-    "noMatchQuery": "没有与“{{query}}”匹配的 Artifact。",
-    "noMatchFilters": "没有符合这些筛选条件的 Artifact。",
+    "noMatchQuery": "没有与“{{query}}”匹配的产物。",
+    "noMatchFilters": "没有符合这些筛选条件的产物。",
     "importShort": "导入",
     "askNotes": {
       "document": "报告、方案或笔记，可导出为 Word 和 Markdown。",
@@ -142,7 +142,7 @@
     "undo": "撤销"
   },
   "dialog": {
-    "renameTitle": "重命名 artifact",
+    "renameTitle": "重命名产物",
     "title": "标题",
     "titleTooLong": "标题不能超过 {{count}} 个字符。",
     "rename": "重命名",
@@ -166,14 +166,14 @@
     "dismiss": "关闭",
     "stoppedTitle": "页面已停止",
     "stoppedDescription": "它的进程已结束。重新加载即可再次显示。",
-    "errorTitle": "无法打开此 Artifact",
+    "errorTitle": "无法打开此产物",
     "missingTitle": "这个版本的文件不见了",
     "reportProblem": "报告问题",
     "retry": "重试",
     "more": "更多",
     "error": {
       "notFound": "它已不在 Kettu 中。",
-      "unavailable": "Agent host 暂时无法显示它，请稍后再试。",
+      "unavailable": "智能体后台进程暂时无法显示它，请稍后再试。",
       "failed": "出了点问题，请重试。",
       "missing": "Kettu 找不到这个版本保存时的文件，较早的版本可能还能打开。"
     },
@@ -181,26 +181,26 @@
     "restoreVersion": "恢复这个版本",
     "inTrash": "在最近删除中",
     "daysLeft_other": " · 剩 {{count}} 天",
-    "goneTitle": "这个 artifact 已被删除",
+    "goneTitle": "这个产物已被删除",
     "goneDescription": "它会在最近删除中保留 30 天。",
-    "editingLabel": "{{session}} 正在编辑这个 artifact。打开会话",
-    "readingLabel": "{{session}} 正在读取这个 artifact。打开会话",
+    "editingLabel": "{{session}} 正在编辑这个产物。打开会话",
+    "readingLabel": "{{session}} 正在读取这个产物。打开会话",
     "stateEditing": "编辑中",
     "stateReading": "读取中",
-    "using": "正在使用这个 artifact",
+    "using": "正在使用这个产物",
     "moreSessions_other": "还有 {{count}} 个会话",
     "places_other": "在 {{count}} 处打开",
-    "placesTip_other": "这个 artifact 在 Kettu 中的 {{count}} 处打开",
+    "placesTip_other": "这个产物在 Kettu 中的 {{count}} 处打开",
     "history": "历史",
     "versionChip": "版本 {{version}}，历史",
     "present": "演示",
     "sideLabel": "历史与评论",
     "previewOnly": {
       "title": "实时页面在电脑上打开",
-      "body": "在浏览器里，artifact 显示它的预览图。实时页面在电脑上的 Kettu 里打开，或在电脑自己的网络里打开它提供的网页版。",
+      "body": "在浏览器里，产物显示它的预览图。实时页面在电脑上的 Kettu 里打开，或在电脑自己的网络里打开它提供的网页版。",
       "sharedTitle": "在浏览器中打开实时页面",
       "published": "这里显示预览图。已发布的页面在 Kettu 上用新标签页打开。",
-      "unpublished": "这里显示预览图。发布这个 artifact 后，可在 Kettu 上用新标签页打开它的页面。",
+      "unpublished": "这里显示预览图。发布这个产物后，可在 Kettu 上用新标签页打开它的页面。",
       "older": "已发布的页面是版本 {{published}}，最新是版本 {{latest}}。",
       "open": "打开已发布页面",
       "publish": "发布后打开"
@@ -237,7 +237,7 @@
   "share": {
     "open": "分享",
     "loading": "正在检查分享状态…",
-    "unpublished": "将此 artifact 发布为链接，并选择谁能打开。",
+    "unpublished": "将此产物发布为链接，并选择谁能打开。",
     "publishTo": "发布到",
     "who": "谁能打开",
     "access": {
@@ -285,7 +285,7 @@
     "unpublish": "取消发布",
     "unpublishAsk": "取消发布…",
     "unpublishTitle": "取消发布“{{title}}”？",
-    "unpublishDescription": "拿到链接的人将无法再打开它。这个 artifact 仍会保留在这里。",
+    "unpublishDescription": "拿到链接的人将无法再打开它。这个产物仍会保留在这里。",
     "cancel": "取消",
     "tryAgain": "重试",
     "noAccountPublished": "连接发布此页面的 Cloudflare 账号后才能修改。",
@@ -307,7 +307,7 @@
       "rate_limited": "短时间内发布次数太多。请过几分钟再试。",
       "encryption": "系统无法加密 API token，因此没有保存。",
       "not_found": "该页面已不在线上。请重新发布。",
-      "unavailable": "Agent host 未响应。请稍后再试。",
+      "unavailable": "智能体后台进程未响应。请稍后再试。",
       "failed": "出了点问题，请重试。"
     },
     "button": "分享",
@@ -315,8 +315,8 @@
     "autoFollows": "自动跟着最新版本更新。",
     "autoSkipped": "没有自动发布。",
     "autoNotice": {
-      "title": "把新建的 artifact 发布到你的 Kettu 账号？",
-      "body": "Kettu 会把每个新建的 artifact 以私有方式发布到你的 Kettu 账号，只有你登录后能打开，并占用云端存储。发布到 Kettu 的页面会跟着 artifact 的最新版本更新，包括你改成访问码或公开的页面。你可以随时在设置 › 分享里改。",
+      "title": "把新建的产物发布到你的 Kettu 账号？",
+      "body": "Kettu 会把每个新建的产物以私有方式发布到你的 Kettu 账号，只有你登录后能打开，并占用云端存储。发布到 Kettu 的页面会跟着产物的最新版本更新，包括你改成访问码或公开的页面。你可以随时在设置 › 分享里改。",
       "continue": "继续",
       "turnOff": "关闭"
     },
@@ -375,7 +375,7 @@
     "autosave": "改动会自动保存成新版本，历史里能恢复到之前的。",
     "scripted": "这个元素由页面的脚本生成，只能评论。",
     "earlier": "只有最新版本能编辑。",
-    "deleted": "恢复这个 artifact 后才能编辑。",
+    "deleted": "恢复这个产物后才能编辑。",
     "conflict": "保存前来了新版本，所以没有保存。在新版本上重新选中这个元素再改。",
     "text": "文字",
     "color": "颜色",
@@ -413,10 +413,10 @@
   },
   "consent": {
     "filesTitle": "允许“{{title}}”读取 {{project}} 里的文件？",
-    "filesBody": "页面能读取这个项目里的任何文件，但不能修改，也不能把它们发到别处。随时可以在 设置 › Artifacts 里收回。",
+    "filesBody": "页面能读取这个项目里的任何文件，但不能修改，也不能把它们发到别处。随时可以在 设置 › 产物 里收回。",
     "sampleTitle": "允许“{{title}}”向 {{agent}} 提问？",
     "sampleBody": "每个问题都在一个没有任何工具的隐藏会话里回答：不能读取或修改文件，也不能运行命令。它用的是你自己的 {{agent}} 额度，同时最多两个问题。",
-    "yourAgent": "你的 Agent",
+    "yourAgent": "你的智能体",
     "allow": "允许",
     "deny": "不允许",
     "failed": "没能保存你的选择：{{error}}"
@@ -519,20 +519,20 @@
     },
     "page": {
       "blank": "新画框",
-      "blankHint": "Agent 画好之前是空的",
+      "blankHint": "智能体画好之前是空的",
       "drawing": "{{agent}} 正在画这个画框",
       "newName": "画框 {{number}}",
-      "ask": "交给 Agent",
+      "ask": "交给智能体",
       "tweak": "调节"
     },
     "note": {
       "text": "文字",
       "doneBy": "{{agent}} 已处理",
       "by": "{{who}}",
-      "agent": "Agent"
+      "agent": "智能体"
     },
     "selection": {
-      "handOff": "交给 Agent",
+      "handOff": "交给智能体",
       "count": "已选 {{count}} 项"
     },
     "agent": {
@@ -552,7 +552,7 @@
     "device": {
       "you": "你",
       "looking": "在看「{{page}}」",
-      "here": "在这个 artifact 里",
+      "here": "在这个产物里",
       "host": "这台电脑"
     },
     "visitors": {
@@ -562,21 +562,21 @@
     },
     "empty": {
       "title": "这个页面还没有画框",
-      "body": "用画框工具拉一个空白画框，或者让 Agent 来画。画框画好后在这里排版、标注，再交给 Agent 改。",
+      "body": "用画框工具拉一个空白画框，或者让智能体来画。画框画好后在这里排版、标注，再交给智能体改。",
       "pageTool": "画框工具",
-      "ask": "让 Agent 画一个画框"
+      "ask": "让智能体画一个画框"
     },
     "legacy": "这是旧格式的画布：你在上面第一次改动时，会拆成每个画框一个文件，写成新版本。",
     "zoom": "缩放",
     "undo": "撤销",
     "redo": "重做",
     "handOffPrompt": "照这些画框上的标注改，别的地方不动。",
-    "handedOff": "已交给 Agent",
-    "handOffFailed": "没能交给 Agent。{{error}}",
+    "handedOff": "已交给智能体",
+    "handOffFailed": "没能交给智能体。{{error}}",
     "legacySplit": "在画布上编辑",
     "tweaks": {
       "empty": "这一页的画框还没有可调节的参数。",
-      "hint": "可以让 Agent 加上，比如主题、强调色或密度。"
+      "hint": "可以让智能体加上，比如主题、强调色或密度。"
     },
     "side": {
       "props": "属性",

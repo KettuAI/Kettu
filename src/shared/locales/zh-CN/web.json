@@ -42,20 +42,20 @@
       "description": "输入 {{host}} 上一个文件夹的路径。"
     },
     "agentFolder": {
-      "title": "选择 Agent 的配置目录",
-      "description": "输入 {{host}} 上 Agent 配置目录的路径。"
+      "title": "选择智能体的配置目录",
+      "description": "输入 {{host}} 上智能体配置目录的路径。"
     },
     "shell": {
       "title": "选择 Shell",
       "description": "输入 {{host}} 上 Shell 程序的路径。"
     },
     "agentProgram": {
-      "title": "选择 Agent 程序",
-      "description": "输入 {{host}} 上 Agent 程序的路径。"
+      "title": "选择智能体程序",
+      "description": "输入 {{host}} 上智能体程序的路径。"
     },
     "worktreeRoot": {
-      "title": "选择 worktree 的存放位置",
-      "description": "输入 {{host}} 上存放新 worktree 的文件夹路径。"
+      "title": "选择工作树的存放位置",
+      "description": "输入 {{host}} 上存放新工作树的文件夹路径。"
     },
     "label": "{{host}} 上的路径",
     "start": "输入完整路径，或以 ~ 开头表示你的主目录。",
@@ -72,7 +72,7 @@
   },
   "notifications": {
     "testTitle": "Kettu",
-    "testBody": "通知已打开。这个页面开着时，需要你的 Agent 会这样找到你。",
+    "testBody": "通知已打开。这个页面开着时，需要你的智能体会这样找到你。",
     "openOnly": "这个页面要在浏览器里开着才有通知，放在后台标签页也行；关掉的页面收不到。",
     "insecure": "浏览器只给 https 或 localhost 上的页面发通知。经 SSH 隧道用 localhost 打开这个页面，或者用 HTTPS（比如 Tailscale 的）打开，才收得到。",
     "denied": "这个浏览器屏蔽了这个页面的通知。在浏览器里这个网站的设置中允许后再试。"

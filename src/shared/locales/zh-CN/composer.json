@@ -10,7 +10,7 @@
       "denied": "说说改用什么做法",
       "runningQueue": "排队一条消息 · Esc 停止",
       "runningTouch": "排队一条消息",
-      "pickAgent": "选一个 Agent 接着做…"
+      "pickAgent": "选一个智能体接着做…"
     },
     "stop": "停止",
     "send": "发送",
@@ -34,9 +34,9 @@
     "searchModels": "搜索模型",
     "cyclesModes": "切换模式",
     "effort": "思考强度",
-    "followsAgent": "跟随 Agent 设置",
-    "followsAgentOn": "跟随 Agent 设置 · 开",
-    "followsAgentOff": "跟随 Agent 设置 · 关",
+    "followsAgent": "跟随智能体设置",
+    "followsAgentOn": "跟随智能体设置 · 开",
+    "followsAgentOff": "跟随智能体设置 · 关",
     "modelsFrom": "来自 {{source}}",
     "optionValue": "{{name}}：{{value}}",
     "permissionMode": "权限模式",
@@ -55,14 +55,14 @@
     "cacheChange": "在这里改动会重写约 {{tokens}} token 的 prompt cache"
   },
   "switchAgent": {
-    "menu": "换 Agent…",
+    "menu": "换智能体…",
     "betweenTurns": "在两轮之间才能换",
     "strip": "从下一条消息起由 {{agent}} 接手，前面的对话会带过去。",
     "summarize": "先总结再接着做",
     "summarizeHint": "{{agent}} 先读完前面的对话写一份总结再接着做，用的是它自己的额度。",
     "undo": "撤销",
     "stopTitle": "停止后台工作并换成 {{agent}}？",
-    "stopBody": "这些在 {{current}} 里运行，换 Agent 时会停止：",
+    "stopBody": "这些在 {{current}} 里运行，换智能体时会停止：",
     "stopConfirm": "停止并切换"
   },
   "heldOutside": {
@@ -107,7 +107,7 @@
       "betweenTurns": "上下文明细仅在两轮对话之间显示",
       "stale": "本轮开始前读取",
       "refreshFailed": "当前显示上次读取的结果，读取恢复后会自动更新。",
-      "subagent": "明细不可用：子 Agent 只报告上下文总量"
+      "subagent": "明细不可用：子智能体只报告上下文总量"
     },
     "estimates": {
       "skills": "技能目录",
@@ -130,11 +130,11 @@
       "title": "套餐限额"
     },
     "cache": {
-      "title": "提示缓存",
+      "title": "提示词缓存",
       "expired": "已过期",
       "likelyExpired": "可能已过期",
-      "notice": "提示缓存已过期",
-      "noticeLikely": "提示缓存可能已过期",
+      "notice": "提示词缓存已过期",
+      "noticeLikely": "提示词缓存可能已过期",
       "about": "约 {{time}}",
       "costExpired": "下一条消息会按全价重新读取约 {{tokens}} token。",
       "ifExpired": "如果已过期，下一条消息会按全价重新读取约 {{tokens}} token。",
@@ -167,7 +167,7 @@
       "session": "本会话",
       "average_other": "{{rate}} tok/s · {{count}} 次请求",
       "averageApprox_other": "约 {{rate}} tok/s · {{count}} 次请求",
-      "explain": "输出的 tokens（含思考）除以它们到达这台电脑所用的时间。回复一次性到达时（经过某些代理，或 Agent 本身如此），时间从请求发出算起、含等待，速度前标「约」。"
+      "explain": "输出的 tokens（含思考）除以它们到达这台电脑所用的时间。回复一次性到达时（经过某些代理，或智能体本身如此），时间从请求发出算起、含等待，速度前标「约」。"
     },
     "contextShort": "<word>上下文</word> {{percent}}%",
     "window": {
@@ -229,9 +229,9 @@
     "dropTitle": "松手即可添加",
     "dropHint": "图片、文件和文件夹 · 一次最多 {{count}} 个",
     "notOnDisk": "它不是磁盘上的文件，无法添加。",
-    "theAgent": "Agent",
-    "folderOtherHost": "这台电脑上的文件夹不能发到另一台主机上的会话，请改为添加里面的文件。",
-    "tooLargeOtherHost": "超过 {{limit}}，太大，无法发到另一台主机。",
+    "theAgent": "智能体",
+    "folderOtherHost": "这台电脑上的文件夹不能发到另一台电脑上的会话，请改为添加里面的文件。",
+    "tooLargeOtherHost": "超过 {{limit}}，太大，无法发到另一台电脑。",
     "sideChat": "侧聊",
     "btw": "侧聊：问一句，不打断这一轮，也不进对话",
     "sideNoAttachments": "侧聊不带附件"
@@ -257,7 +257,7 @@
     "opensInBrowser": "在你的浏览器中打开",
     "sentAsLink": "以链接发送",
     "missing": "这个文件已无法读取",
-    "folderSent": "Agent 收到的是目录结构，而不是每个文件",
+    "folderSent": "智能体收到的是目录结构，而不是每个文件",
     "lines": "第 {{lines}} 行",
     "clickToOpen": "点击打开",
     "backspaceRemoves": "{{key}} 移除"
@@ -268,7 +268,7 @@
   "place": {
     "thisComputer": "本机",
     "thisComputer_mac": "这台 Mac",
-    "unknownHost": "另一台主机",
-    "noProject": "无项目"
+    "unknownHost": "另一台电脑",
+    "noProject": "不属于项目"
   }
 }
