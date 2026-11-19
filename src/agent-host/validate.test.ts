@@ -504,6 +504,14 @@ describe('createValidators', () => {
     rejects(() => windows['sessions.create']({ agentId: 'codex', projectPath: 'app' }))
   })
 
+  it('requires an absolute project path and an explicit boolean for pinning', () => {
+    const pin = posix['projects.pin']
+    expect(pin({ path: '/repo', pinned: false })).toEqual({ path: '/repo', pinned: false })
+    rejects(() => pin({ path: 'repo', pinned: true }))
+    rejects(() => pin({ path: '/repo', pinned: 'true' }))
+    rejects(() => pin({ path: '/repo' }))
+  })
+
   it('keeps optional fields out when absent', () => {
     expect(
       posix['sessions.create']({ agentId: 'codex', projectPath: '/p', parentId: undefined }),

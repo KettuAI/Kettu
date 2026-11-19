@@ -268,6 +268,7 @@ export interface ProjectRecord {
   name: string
   addedAt: number
   lastOpenedAt: number
+  pinnedAt?: number
   worktree?: Partial<ProjectWorktreeSettings> // only what differs from the defaults
 }
 
@@ -657,6 +658,7 @@ export function parseProjectsFile(data: Record<string, unknown>): ProjectsFile |
       name: item.name,
       addedAt: item.addedAt,
       lastOpenedAt: item.lastOpenedAt,
+      ...(isTime(item.pinnedAt) ? { pinnedAt: item.pinnedAt } : {}),
       ...projectWorktreeOf(item.worktree),
     })
   }

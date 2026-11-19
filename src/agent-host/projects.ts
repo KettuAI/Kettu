@@ -56,6 +56,7 @@ export class Projects {
         name: record.name,
         missing: this.missing.get(this.key(record.path)) ?? false,
         lastOpenedAt: record.lastOpenedAt,
+        pinnedAt: record.pinnedAt ?? null,
       }))
   }
 
@@ -147,6 +148,13 @@ export class Projects {
 
   touch(record: ProjectRecord): void {
     record.lastOpenedAt = this.now()
+    this.changed()
+  }
+
+  pin(record: ProjectRecord, pinned: boolean): void {
+    if (pinned === (record.pinnedAt !== undefined)) return
+    if (pinned) record.pinnedAt = this.now()
+    else delete record.pinnedAt
     this.changed()
   }
 

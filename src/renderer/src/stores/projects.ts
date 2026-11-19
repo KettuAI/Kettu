@@ -27,6 +27,15 @@ export function withHostProjects(
   return hostId === null ? [...replacing, ...others] : [...others, ...replacing]
 }
 
+export function pinnedProjects(
+  projects: readonly Project[],
+  hosts: readonly (string | null)[] = [null],
+): Project[] {
+  return projects
+    .filter((project) => project.pinnedAt != null && hosts.includes(hostOfPath(project.path)))
+    .sort((a, b) => (a.pinnedAt ?? 0) - (b.pinnedAt ?? 0) || a.path.localeCompare(b.path))
+}
+
 export const useProjectsStore = create<ProjectsStore>()((set) => ({
   projects: [],
   loaded: false,

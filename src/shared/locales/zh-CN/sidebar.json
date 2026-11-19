@@ -99,6 +99,8 @@
     "importSessions": "导入会话…",
     "menu": {
       "newSession": "新建会话",
+      "pin": "置顶项目",
+      "unpin": "取消置顶项目",
       "openInTerminal": "在终端中打开",
       "showIn": "在{{name}}中显示",
       "showArchived": "显示已归档",

@@ -607,6 +607,7 @@ export interface Project {
   name: string
   missing: boolean // the folder no longer exists
   lastOpenedAt: number
+  pinnedAt?: number | null // absent on hosts that do not support project pins
 }
 
 export type SessionAttention = 'none' | 'permission' | 'unread' | 'error'
@@ -995,6 +996,7 @@ export interface HostContract {
   'projects.add': { params: { path: string }; result: Project }
   'projects.remove': { params: { path: string }; result: void }
   'projects.touch': { params: { path: string }; result: void }
+  'projects.pin': { params: { path: string; pinned: boolean }; result: void }
   // How the project names and prepares its sessions' worktrees.
   'projects.worktreeSettings': { params: { path: string }; result: ProjectWorktreeSettings }
   // A device needs the owner's leave to use the terminal to change these, as they run a command.
@@ -1778,6 +1780,7 @@ export const HOST_METHODS = [
   'projects.add',
   'projects.remove',
   'projects.touch',
+  'projects.pin',
   'projects.worktreeSettings',
   'projects.setWorktreeSettings',
   'paths.complete',

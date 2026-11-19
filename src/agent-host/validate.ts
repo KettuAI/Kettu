@@ -1586,6 +1586,10 @@ export function createValidators(platform: Platform): Validators {
     'projects.add': folder,
     'projects.remove': folder,
     'projects.touch': folder,
+    'projects.pin': (params) => {
+      const o = fields(params)
+      return { path: absolutePath(o, 'path', platform), pinned: flag(o, 'pinned') }
+    },
     'projects.worktreeSettings': folder,
     'projects.setWorktreeSettings': (params) => {
       const o = fields(params)
