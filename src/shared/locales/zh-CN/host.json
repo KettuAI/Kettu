@@ -211,6 +211,8 @@
     "noOptions": "{{agent}} 在 {{seconds}} 秒内没有给出模型",
     "keychainRefused": "没有授权 Kettu 从钥匙串读取 {{agent}} 的登录，所以暂时读不到用量，10 分钟后会再问一次。",
     "noLimits": "{{agent}} 在 {{seconds}} 秒内没有给出套餐限额",
+    "noResets": "{{agent}} 的这个登录没有可用的重置卡",
+    "resetSignInExpired": "{{agent}} 的登录已过期，没有使用重置卡。请先运行一次让它续期，再重试。",
     "unreadableLimits": "Kettu 没能从 {{agent}} 的 {{command}} 回复里读出套餐限额",
     "antigravitySignedOut": "{{agent}} 已登出。请在终端里重新登录，才能读取套餐限额。",
     "antigravityLimitsFailed": "{{agent}} 没能读出套餐限额：{{error}}",

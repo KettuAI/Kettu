@@ -1313,6 +1313,19 @@ export function createValidators(platform: Platform): Validators {
     },
     'agents.readFirstOptions': agent,
     'agents.refreshLimits': agentWithForce,
+    'agents.spendReset': (params) => {
+      const o = fields(params)
+      const creditId = string(o, 'creditId', ID_CHARS)
+      if (!/^[\w-]+$/.test(creditId)) throw invalidParams('creditId is not a credit id')
+      const requestId = string(o, 'requestId', ID_CHARS)
+      // The vendor's idempotency key is a UUID v4, so a retry carries the same one.
+      if (
+        !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(requestId)
+      ) {
+        throw invalidParams('requestId must be a UUID v4')
+      }
+      return { agentId: agentId(o), creditId, requestId }
+    },
     'agents.details': agent,
     'agents.claudeSettings': agent,
     'agents.setClaudeSetting': (params) => {

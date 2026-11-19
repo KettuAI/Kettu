@@ -213,6 +213,8 @@
     "noOptions": "{{agent}} gave no models within {{seconds}} s",
     "keychainRefused": "Kettu was not allowed to read {{agent}}’s sign-in from the keychain, so its usage is not shown. It asks again in 10 minutes.",
     "noLimits": "{{agent}} gave no plan limits within {{seconds}} s",
+    "noResets": "{{agent}} has no reset to use on this sign-in",
+    "resetSignInExpired": "{{agent}}’s sign-in has expired, so nothing was used. Run it once so it renews its sign-in, then try again.",
     "unreadableLimits": "Kettu could not find plan limits in {{agent}}'s {{command}} reply",
     "antigravitySignedOut": "{{agent}} is signed out. Sign in again in a terminal to read its plan limits.",
     "antigravityLimitsFailed": "{{agent}} could not read its plan limits: {{error}}",

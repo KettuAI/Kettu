@@ -23,7 +23,10 @@ import type {
   InstalledCli,
   McpStatus,
   PlanLimit,
+  PlanResets,
   ProviderBalance,
+  ResetsError,
+  ResetSpendCode,
   VersionMoveReason,
 } from '@shared/agent-host'
 import {
@@ -40,7 +43,13 @@ import { readCopilotQuota } from './vendor-usage/copilot'
 import { readKiloProfile } from './vendor-usage/kilo'
 import { readQoderUsage } from './vendor-usage/qoder'
 import { storedSignInReader } from './vendor-usage/readers'
-import { readerOpen, type StoredSignInReader } from './vendor-usage/stored-sign-in'
+import { readerOpen, UsageReadError, type StoredSignInReader } from './vendor-usage/stored-sign-in'
+import {
+  CODEX_RESETS_VERSION,
+  readCodexResets,
+  spendCodexReset,
+  type CodexPlace,
+} from './vendor-usage/codex'
 import type { VendorUsage } from './vendor-usage/common'
 import {
   ANTIGRAVITY_PLAN_SIGN_INS,
@@ -485,6 +494,12 @@ class Slot {
   limitsReadAt = 0
   /** Why the last limits read failed; null once one succeeds. */
   limitsError: string | null = null
+  /** Codex's reset credits as last read; null while it holds none or none were read. */
+  resets: PlanResets | null = null
+  resetsError: ResetsError | null = null
+  resetsRun: Promise<void> | null = null
+  resetsReadAt = 0
+  resetsRetry: ReturnType<typeof setTimeout> | null = null
   optionsRun: Promise<void> | null = null
   /** The removal of the hidden session that read the options, once its `session/new` answered. */
   optionsRemoval: Promise<void> | null = null
@@ -3313,6 +3328,10 @@ export class AgentManager {
     this.registryTimer = null
     if (this.limitsTimer) clearInterval(this.limitsTimer)
     this.limitsTimer = null
+    for (const slot of this.slots.values()) {
+      if (slot.resetsRetry) clearTimeout(slot.resetsRetry)
+      slot.resetsRetry = null
+    }
     this.updateAbort?.abort(QUIT_REASON)
     const slots = [...this.slots.values()]
     const harnesses = [...this.harnesses.values()]
@@ -3639,6 +3658,104 @@ export class AgentManager {
     slot.limits.clear()
     for (const limit of merged) slot.limits.set(limit.window, limit)
     this.emit(slot)
+    // The windows do not wait for the reset credits, which arrive in a status of their own.
+    if (slot.def.id === 'codex') void this.readResets(slot)
+  }
+
+  /** Where Codex keeps its ChatGPT sign-in; null for another agent or an unchecked version. */
+  private codexPlace(slot: Slot): CodexPlace | null {
+    if (slot.def.id !== 'codex' || slot.account?.kind !== 'account') return null
+    const version = slot.init?.version ?? slot.h.binaryVersion
+    const folder = this.configFolder(slot.id)
+    if (!folder || !version || !versionAtLeast(version, CODEX_RESETS_VERSION)) return null
+    if (!/^[\w.+-]+$/.test(version)) return null
+    return {
+      env: this.deps.env.agentEnv(slot.id),
+      home: os.homedir(),
+      platform: this.deps.platform,
+      now: Date.now(),
+      folder,
+      version,
+    }
+  }
+
+  /**
+   * Reads Codex's reset credits with the windows, never twice within `RESETS_GAP_MS` however
+   * often a refresh is pressed. Never rejects: what fell short is kept for the status.
+   */
+  private readResets(slot: Slot, retried = false): Promise<void> {
+    if (slot.resetsRun) return slot.resetsRun
+    if (Date.now() - slot.resetsReadAt < RESETS_GAP_MS) return Promise.resolve()
+    slot.resetsRun = this.resetsRead(slot, retried).finally(() => {
+      slot.resetsRun = null
+    })
+    return slot.resetsRun
+  }
+
+  private async resetsRead(slot: Slot, retried: boolean): Promise<void> {
+    if (slot.resetsRetry) clearTimeout(slot.resetsRetry)
+    slot.resetsRetry = null
+    const place = this.codexPlace(slot)
+    let resets = place ? slot.resets : null
+    let error: ResetsError | null = null
+    if (place) {
+      slot.resetsReadAt = place.now
+      try {
+        const read = await readCodexResets(place)
+        resets = read && read.resets.count > 0 ? read.resets : null
+        if (read && read.details !== 'read') {
+          error = read.details === 'failed' ? 'details' : read.details
+        }
+      } catch (failed) {
+        const status = failed instanceof UsageReadError ? failed.status : undefined
+        // A failed count read is told only where credits were shown, or the sign-in ran out.
+        error = status === 401 ? 'sign-in-expired' : resets ? 'failed' : null
+        const message = failed instanceof Error ? failed.message : String(failed)
+        this.deps.diagnostics.log('warn', `${slot.name}: the reset credits read failed: ${message}`)
+      }
+    }
+    // The expiries are tried again sooner than the next regular read, once.
+    if (!retried && !this.stopped && (error === 'details' || error === 'failed')) {
+      slot.resetsRetry = setTimeout(() => {
+        slot.resetsRetry = null
+        void this.readResets(slot, true)
+      }, RESETS_RETRY_MS)
+      slot.resetsRetry.unref?.()
+    }
+    if (JSON.stringify(slot.resets) === JSON.stringify(resets) && slot.resetsError === error) {
+      return
+    }
+    slot.resets = resets
+    slot.resetsError = error
+    this.emit(slot)
+  }
+
+  /**
+   * Spends one of Codex's reset credits, which cannot be undone, then reads the windows and the
+   * credits again: both changed with it, so neither is edited here.
+   */
+  async spendReset(
+    agentId: AgentId,
+    creditId: string,
+    requestId: string,
+  ): Promise<{ code: ResetSpendCode }> {
+    const slot = this.registeredSlot(agentId)
+    const place = this.codexPlace(slot)
+    if (!place) throw new HostError('agent_error', t('agent.noResets', { agent: slot.name }))
+    let code: ResetSpendCode
+    try {
+      code = await spendCodexReset(place, creditId, requestId)
+    } catch (error) {
+      if (error instanceof UsageReadError && error.status === 401) {
+        throw new HostError('agent_error', t('agent.resetSignInExpired', { agent: slot.name }))
+      }
+      throw agentError(error)
+    }
+    await slot.resetsRun?.catch(() => {})
+    slot.resetsReadAt = 0
+    await this.refreshLimits(agentId, { force: true }).catch(() => {})
+    await this.readResets(slot)
+    return { code }
   }
 
   /**
@@ -3858,6 +3975,8 @@ export class AgentManager {
     slot.account = null
     slot.limits.clear()
     slot.balances = []
+    slot.resets = null
+    slot.resetsError = null
     this.emit(slot)
   }
 
@@ -4646,6 +4765,9 @@ export class AgentManager {
     slot.limits.clear()
     slot.limitsReadAt = 0
     slot.limitsError = null
+    slot.resets = null
+    slot.resetsError = null
+    slot.resetsReadAt = 0
     slot.signIn = 'unknown'
     if (slot.runtime && this.hooks.liveSessions(slot.id) === 0) await this.stopProcess(slot)
     this.emit(slot)
@@ -4924,6 +5046,8 @@ export class AgentManager {
         : {}),
       limits: [...slot.limits.values()],
       ...(slot.limitsError ? { limitsError: slot.limitsError } : {}),
+      ...(slot.resets ? { resets: slot.resets } : {}),
+      ...(slot.resetsError ? { resetsError: slot.resetsError } : {}),
       detail: slot.detail ?? h.adapterNote,
       installNotice: slot.def.install.notice ? t(slot.def.install.notice) : null,
       installUrl:
@@ -5187,6 +5311,10 @@ export class AgentManager {
 // A stop waits this long at most for a hidden session's removal, well under the 6 s main gives
 // the host to stop on quit; removing takes milliseconds unless the agent hangs.
 const REMOVAL_WAIT_MS = 1_000
+/** The reset credits are not asked for twice within this, however a read was started. */
+const RESETS_GAP_MS = 5_000
+/** How soon a read that fell short of the credits' expiries is tried again. */
+const RESETS_RETRY_MS = 20_000
 
 /** Waits for `promise`, which never rejects, for at most `ms`. */
 function settledWithin(promise: Promise<void>, ms: number): Promise<void> {

@@ -78,6 +78,8 @@ export interface VendorRequest {
   method?: 'GET' | 'POST'
   headers: Record<string, string>
   body?: string
+  /** How long the vendor may take, when a read is worth less than the default wait. */
+  timeoutMs?: number
 }
 
 /**
@@ -96,7 +98,7 @@ export async function askVendor(request: VendorRequest, place: SignInPlace): Pro
     throw new UsageReadError(`${vendor}'s usage endpoint is not listed`)
   }
   const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS)
+  const timer = setTimeout(() => controller.abort(), request.timeoutMs ?? TIMEOUT_MS)
   let response: Response
   try {
     response = await (place.fetch ?? globalThis.fetch)(url.href, {

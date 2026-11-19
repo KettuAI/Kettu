@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { ArrowDown01Icon, Clock01Icon } from '@hugeicons/core-free-icons'
+import { ArrowDown01Icon, ArrowReloadHorizontalIcon, Clock01Icon } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
 import type { AgentId } from '@shared/thread'
 import { Icon } from '@renderer/components/affect/app-shell'
@@ -9,7 +9,14 @@ import { PlanRings } from '@renderer/components/plan-rings'
 import { HoverCard, HoverCardContent, HoverCardTrigger } from '@renderer/components/ui/hover-card'
 import { countdown, planReset } from '@renderer/features/sidebar/plan-usage'
 import { useLimitView } from '@renderer/hooks/use-limit-view'
-import { limitLabel, longAgo, planAmount, planBalance, shortAgo } from '@renderer/lib/format'
+import {
+  limitLabel,
+  longAgo,
+  monthDayTime,
+  planAmount,
+  planBalance,
+  shortAgo,
+} from '@renderer/lib/format'
 import { errorMessage } from '@renderer/lib/host'
 import { currentLocale } from '@renderer/lib/i18n'
 import { shownPercent } from '@renderer/lib/plan-limit'
@@ -31,6 +38,7 @@ import {
   type LimitRead,
   type UsageCard,
 } from './plan-cards'
+import { SpendResetDialog } from './spend-reset'
 
 const RINGS = 72
 /** A reading this old says on its card how long ago it was taken. */
@@ -156,6 +164,8 @@ function PlanCard({ card, named, now }: { card: UsageCard; named: boolean; now: 
     return agent ? isInstalled(agent) : true
   })
   const failed = card.state === 'failed'
+  const [spending, setSpending] = useState(false)
+  const resets = card.resets
   const view = useLimitView()
   const shortName = useShortWindow()
   const where = [...new Set(card.places.map((place) => hostName(place.hostId)))]
@@ -285,6 +295,39 @@ function PlanCard({ card, named, now }: { card: UsageCard; named: boolean; now: 
           </div>
         </div>
       )}
+      {resets && (
+        <div className="k-u-plan__resets">
+          {resets.count > 0 && (
+            <span className="k-u-plan__reset">
+              <Icon icon={ArrowReloadHorizontalIcon} size={13} />
+              <span>
+                <b>{t('resets.count', { count: resets.count })}</b>
+                {' · '}
+                {resets.each === null
+                  ? t('resets.unknown')
+                  : resets.each[0]!.until === null
+                    ? t('resets.never')
+                    : t('resets.until', { time: monthDayTime(resets.each[0]!.until) })}
+              </span>
+              {resets.each !== null && (
+                <button
+                  type="button"
+                  className="k-u-plan__use"
+                  onClick={(event) => {
+                    event.stopPropagation()
+                    setSpending(true)
+                  }}
+                >
+                  {t('resets.use')}
+                </button>
+              )}
+            </span>
+          )}
+          {resets.error && (
+            <span className="k-u-plan__last">{t(`resets.error.${resets.error}`)}</span>
+          )}
+        </div>
+      )}
       {named && (
         <footer className="k-u-plan__foot">
           <span className="k-u-plan__where">{where.join(' · ')}</span>
@@ -292,6 +335,14 @@ function PlanCard({ card, named, now }: { card: UsageCard; named: boolean; now: 
         </footer>
       )}
     </>
+  )
+  const dialog = spending && resets?.each && resets.each.length > 0 && (
+    <SpendResetDialog
+      account={card.email ?? card.name}
+      resets={resets}
+      each={resets.each}
+      onClose={() => setSpending(false)}
+    />
   )
   if (card.rings.length === 0) {
     return (
@@ -301,53 +352,69 @@ function PlanCard({ card, named, now }: { card: UsageCard; named: boolean; now: 
         data-failed={failed || undefined}
       >
         {face}
+        {dialog}
       </article>
     )
   }
   return (
-    <HoverCard>
-      <HoverCardTrigger
-        delay={150}
-        closeDelay={100}
-        render={
-          <article
-            tabIndex={0}
-            aria-label={card.plan ? `${card.name}, ${card.plan}` : card.name}
-            className="k-u-card k-u-plan"
-            data-failed={failed || undefined}
-          />
-        }
-      >
-        {face}
-      </HoverCardTrigger>
-      <HoverCardContent side="bottom" align="start" sideOffset={6} className="w-72">
-        <div className="grid grid-cols-[minmax(0,1fr)_auto_auto] items-baseline gap-x-3 gap-y-1.5 text-hint">
-          <span className="col-span-3 truncate font-medium text-primary">
-            {card.plan ? `${card.name} · ${card.plan}` : card.name}
-          </span>
-          {card.rings.map((ring) => (
-            <span key={ring.limit.window} className="contents">
-              <span className="truncate text-tertiary">{limitLabel(ring.limit)}</span>
-              <span className="text-right font-medium text-primary tabular-nums">
-                {shownPercent(ring.percent, view)}%
-              </span>
-              <span className="text-right whitespace-nowrap text-secondary">
-                {ring.limit.resetsAt === null ? '' : planReset(ring.limit.resetsAt, now)}
-              </span>
+    <>
+      {dialog}
+      <HoverCard>
+        <HoverCardTrigger
+          delay={150}
+          closeDelay={100}
+          render={
+            <article
+              tabIndex={0}
+              aria-label={card.plan ? `${card.name}, ${card.plan}` : card.name}
+              className="k-u-card k-u-plan"
+              data-failed={failed || undefined}
+            />
+          }
+        >
+          {face}
+        </HoverCardTrigger>
+        <HoverCardContent side="bottom" align="start" sideOffset={6} className="w-72">
+          <div className="grid grid-cols-[minmax(0,1fr)_auto_auto] items-baseline gap-x-3 gap-y-1.5 text-hint">
+            <span className="col-span-3 truncate font-medium text-primary">
+              {card.plan ? `${card.name} · ${card.plan}` : card.name}
             </span>
-          ))}
-          {card.places.length > 1 &&
-            card.places.map((place) => (
-              <span
-                key={`${place.hostId ?? ''}/${place.agentId}`}
-                className="col-span-3 truncate text-tertiary"
-              >
-                {`${hostName(place.hostId)} · ${place.agentName}`}
+            {card.rings.map((ring) => (
+              <span key={ring.limit.window} className="contents">
+                <span className="truncate text-tertiary">{limitLabel(ring.limit)}</span>
+                <span className="text-right font-medium text-primary tabular-nums">
+                  {shownPercent(ring.percent, view)}%
+                </span>
+                <span className="text-right whitespace-nowrap text-secondary">
+                  {ring.limit.resetsAt === null ? '' : planReset(ring.limit.resetsAt, now)}
+                </span>
               </span>
             ))}
-        </div>
-      </HoverCardContent>
-    </HoverCard>
+            {resets?.each?.map((credit, index) => (
+              <span key={credit.id} className="contents">
+                <span className="col-span-2 truncate text-tertiary">
+                  {index === 0 ? t('resets.count', { count: resets.count }) : ''}
+                </span>
+                <span className="text-right whitespace-nowrap text-secondary">
+                  {credit.until === null
+                    ? t('resets.never')
+                    : t('resets.until', { time: monthDayTime(credit.until) })}
+                </span>
+              </span>
+            ))}
+            {card.places.length > 1 &&
+              card.places.map((place) => (
+                <span
+                  key={`${place.hostId ?? ''}/${place.agentId}`}
+                  className="col-span-3 truncate text-tertiary"
+                >
+                  {`${hostName(place.hostId)} · ${place.agentName}`}
+                </span>
+              ))}
+          </div>
+        </HoverCardContent>
+      </HoverCard>
+    </>
   )
 }
 
