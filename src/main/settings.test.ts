@@ -182,6 +182,29 @@ describe('where worktrees go', () => {
   })
 })
 
+describe('the mode new sessions start in', () => {
+  const modes = {
+    'claude-code': 'bypassPermissions',
+    codex: 'agent-full-access',
+    deepseek: 'danger-full-access',
+  }
+
+  it('keeps any mode the user chose on load, full access included', async () => {
+    await save({ version: 1, startModes: { ...modes, opencode: 'build' } })
+    expect((await SettingsStore.load(dir)).get().startModes).toEqual(modes)
+  })
+
+  it('takes full access in a change, and refuses an agent that takes no mode', () => {
+    expect(validateSettingsPatch({ startModes: modes })).toEqual({ startModes: modes })
+    expect(validateSettingsPatch({ startModes: { codex: null } })).toEqual({
+      startModes: { codex: null },
+    })
+    for (const bad of [{ opencode: 'build' }, { codex: '' }, { codex: 7 }]) {
+      expect(() => validateSettingsPatch({ startModes: bad })).toThrow()
+    }
+  })
+})
+
 describe('when idle sessions let their agent go', () => {
   it('releases by memory until the user picks, with Custom at 5 and 30 minutes and no limit', async () => {
     const store = await SettingsStore.load(dir)

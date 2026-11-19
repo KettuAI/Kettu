@@ -1,6 +1,6 @@
 // Pure validation and merging of settings.json and of the renderer's patches.
 
-import { isStartMode, takesStartMode } from '@shared/agents'
+import { isStartMode, START_MODE_CHARS, takesStartMode } from '@shared/agents'
 import {
   AGENT_NAME_CHARS,
   CONFIG_VARIABLES,
@@ -781,7 +781,7 @@ function checkStartModes(value: unknown, path: string): string | null {
     if (!isAgentId(id)) return `"${path}.${id}" is not an agent id`
     if (!takesStartMode(id)) return `"${path}.${id}" is an agent that takes no start mode`
     if (mode !== null && !isStartMode(id, mode)) {
-      return `"${path}.${id}" must be a mode that does not give full access, or null`
+      return `"${path}.${id}" must be a mode id of 1 to ${START_MODE_CHARS} characters, or null`
     }
   }
   return null

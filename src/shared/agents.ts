@@ -196,7 +196,7 @@ export const START_MODE_HARNESSES: readonly HarnessId[] = ['claude-code', 'codex
 /** Google Antigravity's full access, Kettu's mode for agy's `--dangerously-skip-permissions`. */
 export const ANTIGRAVITY_FULL_ACCESS = 'dangerously-skip-permissions'
 
-/** The permission modes that never ask, which no setting may start a session in. */
+/** The permission modes that never ask. */
 export const FULL_ACCESS_MODES: readonly string[] = [
   'bypassPermissions',
   'agent-full-access',
@@ -215,14 +215,13 @@ export function takesStartMode(id: AgentId): boolean {
   return START_MODE_HARNESSES.includes(harnessOf(id))
 }
 
-/** Whether `value` can be the agent's start mode: any mode id but one that gives full access. */
+/** Whether `value` can be the agent's start mode: any mode id, full access included. */
 export function isStartMode(id: AgentId, value: unknown): value is string {
   return (
     takesStartMode(id) &&
     typeof value === 'string' &&
     value.length > 0 &&
-    value.length <= START_MODE_CHARS &&
-    !isFullAccessMode(value)
+    value.length <= START_MODE_CHARS
   )
 }
 
