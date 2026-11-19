@@ -2,6 +2,7 @@ import { useId, useLayoutEffect, useMemo, useRef, useState, type ReactNode } fro
 import { Popover } from '@base-ui/react/popover'
 import { useTranslation } from 'react-i18next'
 import type { AgentId, SlashCommand } from '@shared/thread'
+import { Spinner } from '@renderer/components/ui/spinner'
 import { cn } from '@renderer/lib/utils'
 import { TextDialog, type TextDialogTarget } from '../attachments/text-dialog'
 import { AttachmentTray } from './attachment-tray'
@@ -29,6 +30,9 @@ import { useBoxText, type PromptBoxState } from './use-prompt-box'
 
 type PopoverItem = SlashCommand | MentionRow
 
+/** Why there are no commands to list yet: none reported so far, or no project chosen. */
+export type SlashNote = 'loading' | 'chooseProject'
+
 const isMentionRow = (item: PopoverItem): item is MentionRow => 'positions' in item
 
 /** The prompt box: what shows on its top edge, the attachments, then the text and its popovers. */
@@ -38,6 +42,7 @@ export function PromptBox({
   hostId,
   agentName,
   commands,
+  commandsNote = null,
   placeholder,
   label,
   size,
@@ -50,6 +55,8 @@ export function PromptBox({
   hostId: string | null
   agentName: string
   commands: SlashCommand[]
+  /** Said in the slash list while it has no commands, which then shows only this line. */
+  commandsNote?: SlashNote | null
   placeholder: string
   label: string
   /** The text's least height, its padding and its line height, as CSS lengths. */
@@ -88,6 +95,13 @@ export function PromptBox({
   if (slashDismissed !== null && slash?.start !== slashDismissed) setSlashDismissed(null)
   const slashMatches = slash === null ? [] : orderSlashMatches(commands, slash.query)
   const slashOpen = slash !== null && slashMatches.length > 0 && slash.start !== slashDismissed
+  // Only a `/` that starts the text, so a path typed later in a sentence opens nothing.
+  const slashNote =
+    slash?.start === 0 && commands.length === 0 && slashDismissed !== 0 ? commandsNote : null
+  // The line it last said, kept so the popup fades out as it was.
+  const [noteShown, setNoteShown] = useState<SlashNote | null>(null)
+  if (slashNote !== null && slashNote !== noteShown) setNoteShown(slashNote)
+  if (slashOpen && noteShown !== null) setNoteShown(null)
 
   const mentionKey = useBoxText(box, (text, caret) => {
     const found = mentionAt(text, caret)
@@ -111,7 +125,7 @@ export function PromptBox({
       mentions.rows.length > 0 ||
       (mention!.query !== '' && !filesReady))
   // What the popup shows, kept after it closes so it fades out as it was.
-  const showing = slashOpen ? 'slash' : mentionOpen ? mentions : popover
+  const showing = slashOpen || slashNote ? 'slash' : mentionOpen ? mentions : popover
   if (showing !== popover) setPopover(showing)
   // The mention list starts at its `@`, over the box, and stays there while it fades out.
   const [atStart, setAtStart] = useState(0)
@@ -130,7 +144,7 @@ export function PromptBox({
     [atStart, editor],
   )
   const listing = typeof showing === 'object' ? showing : null
-  const open = slashOpen || mentionOpen
+  const open = slashOpen || slashNote !== null || mentionOpen
   const rows: PopoverItem[] = showing === 'slash' ? slashMatches : listing ? listing.rows : []
   // A list opens, and a new query starts, on its first row.
   const listKey = slashOpen
@@ -168,7 +182,7 @@ export function PromptBox({
     if (index !== active) setHighlight({ list: listKey, index })
   }
   const dismiss = () => {
-    if (slashOpen) setSlashDismissed(slash.start)
+    if (slash && (slashOpen || slashNote)) setSlashDismissed(slash.start)
     if (mentionOpen && mention) setMentionDismissed(mention.start)
   }
   const [focused, setFocused] = useState(false)
@@ -215,7 +229,7 @@ export function PromptBox({
       setHighlight({ list: listKey, index: moveHighlight(active, rows.length, event.key) })
       return true
     }
-    if (handling === 'popover' && event.key === 'Escape') {
+    if (event.key === 'Escape' && (handling === 'popover' || (slashNote && !modified))) {
       dismiss()
       return true
     }
@@ -310,6 +324,9 @@ export function PromptBox({
             side="top"
             align="start"
             sideOffset={6}
+            // Shorter over the box rather than flipped under it, where it would hide Send: New
+            // session's box can sit high with little room above.
+            collisionAvoidance={{ side: 'none' }}
             className="isolate z-50 outline-none"
           >
             <Popover.Popup
@@ -371,6 +388,18 @@ export function PromptBox({
                 )}
               </div>
               {listing && <MentionFooter list={listing} />}
+              {showing === 'slash' && rows.length === 0 && noteShown && (
+                <p className="shrink-0 px-3 pt-1 pb-1.5 text-small text-tertiary">
+                  {noteShown === 'loading' ? (
+                    <span className="flex items-center gap-2">
+                      <Spinner className="size-3.5" />
+                      {t('slash.loading')}
+                    </span>
+                  ) : (
+                    t('slash.chooseProject')
+                  )}
+                </p>
+              )}
             </Popover.Popup>
           </Popover.Positioner>
         </Popover.Portal>
