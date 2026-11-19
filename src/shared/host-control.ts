@@ -95,6 +95,8 @@ export type MainToHost =
       usageWorkerPath: string // the usage worker's bundle, built the same way
       // The session router's bundle, which a per-session agent's process runs under the user's Node.js.
       sessionRouterPath: string
+      // The bundle of the process that runs Cline's SDK, which runs on `nodeRuntime`.
+      clineHostPath: string
       settings: HostSettings
       // Under Node.js, the local socket the host takes its ports on; the desktop app hands them over.
       socketPath?: string

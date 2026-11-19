@@ -55,6 +55,7 @@ import { reportBuildResult, type ReportBuildResult } from '@shared/report'
 import type { HostSettings } from '@shared/settings'
 import agentHostPath from '../agent-host/index?modulePath'
 // The host's own bundle is built without electron-vite's worker plugin, so main builds this one.
+import clineHostPath from '../agent-host/cline/cline-host?modulePath'
 import sessionRouterPath from '../agent-host/session-router/router?modulePath'
 import threadWorkerPath from '../agent-host/threads/worker?modulePath'
 import usageWorkerPath from '../agent-host/usage/worker?modulePath'
@@ -380,6 +381,7 @@ export class AgentHost {
         usageWorkerPath,
         // The router runs on the user's Node.js, which cannot read inside app.asar.
         sessionRouterPath: unpackedPath(sessionRouterPath),
+        clineHostPath,
         settings: deps.settings(),
         computer: computerHostOptions(),
         userAgent: updaterUserAgent(app.getVersion(), process.platform, process.arch),

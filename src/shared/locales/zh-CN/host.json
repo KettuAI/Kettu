@@ -797,6 +797,32 @@
       "missing": "找不到更新日志：无法定位 pi 的安装包。"
     }
   },
+  "cline": {
+    "mode": {
+      "name": "模式",
+      "plan": "计划",
+      "planDescription": "只探索和规划，不改文件",
+      "act": "执行",
+      "actDescription": "修改文件并运行命令"
+    },
+    "model": "模型",
+    "provider": {
+      "name": "供应商",
+      "description": "Cline 通过它调用模型"
+    },
+    "autoApprove": {
+      "name": "自动批准工具",
+      "description": "所有工具调用都不再询问"
+    },
+    "thinking": {
+      "name": "思考",
+      "off": "关",
+      "on": "开"
+    },
+    "permission": {
+      "allowAlways": "本会话始终允许"
+    }
+  },
   "question": {
     "other": "其他回答…"
   },

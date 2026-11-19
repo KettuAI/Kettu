@@ -1,6 +1,7 @@
 // Which interface an agent starts on when its harness has one of its own beside its protocol.
 
 import { afterEach, describe, expect, it } from 'vitest'
+import { CLINE } from './agents/cline'
 import { OPENCODE } from './agents/opencode'
 import type { AgentConnection } from './connection'
 import { driverOf, preferredProtocol, protocolFor } from './drivers'
@@ -44,6 +45,40 @@ describe('a start over the preferred interface', () => {
   afterEach(async () => {
     await host?.stop()
     host = null
+  })
+
+  it('goes by the version of Kettu’s own install for a harness it installs from npm', async () => {
+    expect(preferredProtocol(CLINE, '3.0.74', null, null)).toBe('cline-sdk')
+    expect(preferredProtocol(CLINE, '3.0.73', null, null)).toBeNull()
+    expect(preferredProtocol(CLINE, '3.1.0', null, null)).toBeNull()
+
+    let tries = 0
+    const failing: HostedDriver = {
+      kind: 'hosted',
+      connect: () => {
+        tries++
+        return {
+          closed: new Promise<void>(() => {}),
+          isClosed: false,
+          close: () => {},
+          initialize: () => Promise.reject(new Error('its SDK did not load')),
+        } as unknown as AgentConnection
+      },
+    }
+    host = await startTestHost({
+      fakeAs: ['cline'],
+      installedVersions: { cline: '3.0.74' },
+      drivers: { 'cline-sdk': failing },
+    })
+    const window = host.connect()
+    const { id } = await window.request('sessions.create', {
+      agentId: 'cline',
+      projectPath: host.project,
+    })
+    await window.open(id)
+    await window.untilStatus(id, 'ready')
+    // The launch named a version the SDK was checked on, so the start tried it first.
+    expect(tries).toBe(1)
   })
 
   it('falls back to the harness’s protocol when it fails, and the session opens all the same', async () => {

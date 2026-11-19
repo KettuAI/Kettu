@@ -216,6 +216,7 @@ export class Hosts {
         threadWorkerPath: bundle('thread-worker.cjs'),
         usageWorkerPath: bundle('usage-worker.cjs'),
         sessionRouterPath: bundle('session-router.cjs'),
+        clineHostPath: bundle('cline-host.cjs'),
         settings: hostSettings(options.settings(), options.systemLocale),
         socketPath: socketPath ?? undefined,
         userAgent: daemonUserAgent(options.version, process.platform, process.arch),

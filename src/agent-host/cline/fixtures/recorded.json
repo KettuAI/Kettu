@@ -1,0 +1,2595 @@
+{
+  "hello": {
+    "core": "0.2.0",
+    "providers": [
+      {
+        "id": "openai-compatible",
+        "name": "OpenAI Compatible",
+        "ready": true,
+        "oauth": false
+      },
+      {
+        "id": "cline",
+        "name": "Cline Usage-Billing",
+        "ready": false,
+        "oauth": true
+      },
+      {
+        "id": "cline-pass",
+        "name": "ClinePass",
+        "ready": false,
+        "oauth": true
+      },
+      {
+        "id": "openai-codex",
+        "name": "OpenAI ChatGPT Subscription",
+        "ready": false,
+        "oauth": true
+      }
+    ],
+    "provider": "openai-compatible"
+  },
+  "opened": {
+    "stored": false,
+    "settings": {
+      "provider": "openai-compatible",
+      "model": "gpt-4o",
+      "mode": "act",
+      "thinking": false,
+      "autoApprove": false
+    },
+    "providers": [
+      {
+        "id": "openai-compatible",
+        "name": "OpenAI Compatible",
+        "ready": true,
+        "oauth": false
+      },
+      {
+        "id": "cline",
+        "name": "Cline Usage-Billing",
+        "ready": false,
+        "oauth": true
+      },
+      {
+        "id": "cline-pass",
+        "name": "ClinePass",
+        "ready": false,
+        "oauth": true
+      },
+      {
+        "id": "openai-codex",
+        "name": "OpenAI ChatGPT Subscription",
+        "ready": false,
+        "oauth": true
+      }
+    ],
+    "models": [
+      {
+        "id": "gpt-4o",
+        "name": "gpt-4o",
+        "contextWindow": 128000,
+        "reasoning": false,
+        "images": true
+      }
+    ]
+  },
+  "turns": {
+    "think": {
+      "wire": [
+        [
+          "event",
+          {
+            "type": "iteration_start",
+            "iteration": 1
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_start",
+            "contentType": "reasoning",
+            "reasoning": "Let me think about it. ",
+            "redacted": false
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_start",
+            "contentType": "reasoning",
+            "reasoning": "Done thinking.",
+            "redacted": false
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_start",
+            "contentType": "text",
+            "text": "Thought it t"
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_start",
+            "contentType": "text",
+            "text": "hrough."
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "usage",
+            "inputTokens": 1201,
+            "outputTokens": 30,
+            "totalInputTokens": 1201,
+            "totalOutputTokens": 30,
+            "totalCost": 0
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_end",
+            "contentType": "text",
+            "text": "Thought it through."
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_end",
+            "contentType": "reasoning",
+            "reasoning": "Let me think about it. Done thinking."
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "iteration_end",
+            "iteration": 1,
+            "hadToolCalls": false,
+            "toolCallCount": 0
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "done",
+            "reason": "completed",
+            "text": "Thought it through.",
+            "iterations": 1,
+            "usage": {
+              "inputTokens": 1201,
+              "outputTokens": 30,
+              "totalCost": 0
+            }
+          }
+        ]
+      ],
+      "result": {
+        "finishReason": "completed",
+        "model": "gpt-4o",
+        "usage": {
+          "inputTokens": 1201,
+          "outputTokens": 30,
+          "cacheReadTokens": 0,
+          "cacheWriteTokens": 0,
+          "cost": 0
+        }
+      }
+    },
+    "read": {
+      "wire": [
+        [
+          "event",
+          {
+            "type": "iteration_start",
+            "iteration": 1
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_start",
+            "contentType": "text",
+            "text": "Reading. "
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "usage",
+            "inputTokens": 1202,
+            "outputTokens": 30,
+            "totalInputTokens": 1202,
+            "totalOutputTokens": 30,
+            "totalCost": 0
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_end",
+            "contentType": "text",
+            "text": "Reading. "
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_start",
+            "contentType": "tool",
+            "toolName": "read_files",
+            "toolCallId": "call_2",
+            "input": {
+              "files": [
+                {
+                  "path": "/work/app/hello.txt"
+                }
+              ]
+            }
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_end",
+            "contentType": "tool",
+            "toolName": "read_files",
+            "toolCallId": "call_2",
+            "output": [
+              {
+                "query": "/work/app/hello.txt",
+                "result": "1 | hello file\n2 | second line",
+                "success": true
+              }
+            ],
+            "durationMs": 8
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "iteration_end",
+            "iteration": 1,
+            "hadToolCalls": true,
+            "toolCallCount": 1
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "iteration_start",
+            "iteration": 2
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_start",
+            "contentType": "text",
+            "text": "Done with re"
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_start",
+            "contentType": "text",
+            "text": "ad."
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "usage",
+            "inputTokens": 1203,
+            "outputTokens": 30,
+            "totalInputTokens": 2405,
+            "totalOutputTokens": 60,
+            "totalCost": 0
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_end",
+            "contentType": "text",
+            "text": "Done with read."
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "iteration_end",
+            "iteration": 2,
+            "hadToolCalls": false,
+            "toolCallCount": 0
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "done",
+            "reason": "completed",
+            "text": "Done with read.",
+            "iterations": 2,
+            "usage": {
+              "inputTokens": 2405,
+              "outputTokens": 60,
+              "totalCost": 0
+            }
+          }
+        ]
+      ],
+      "result": {
+        "finishReason": "completed",
+        "model": "gpt-4o",
+        "usage": {
+          "inputTokens": 2405,
+          "outputTokens": 60,
+          "cacheReadTokens": 0,
+          "cacheWriteTokens": 0,
+          "cost": 0
+        }
+      }
+    },
+    "shell": {
+      "wire": [
+        [
+          "event",
+          {
+            "type": "iteration_start",
+            "iteration": 1
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "usage",
+            "inputTokens": 1204,
+            "outputTokens": 30,
+            "totalInputTokens": 1204,
+            "totalOutputTokens": 30,
+            "totalCost": 0
+          }
+        ],
+        [
+          "approval",
+          {
+            "toolCallId": "call_4",
+            "toolName": "run_commands",
+            "input": {
+              "commands": ["echo probe-shell && ls"]
+            }
+          }
+        ],
+        [
+          "answer",
+          {
+            "approved": true,
+            "always": true
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_start",
+            "contentType": "tool",
+            "toolName": "run_commands",
+            "toolCallId": "call_4",
+            "input": {
+              "commands": ["echo probe-shell && ls"]
+            }
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_update",
+            "contentType": "tool",
+            "toolName": "run_commands",
+            "toolCallId": "call_4",
+            "update": {
+              "stream": "stdout",
+              "chunk": "",
+              "executionId": "70db464c-dbc8-4b2d-87cf-a194f2ad1e49",
+              "detachable": false,
+              "commandIndex": 0,
+              "query": "echo probe-shell && ls"
+            }
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_update",
+            "contentType": "tool",
+            "toolName": "run_commands",
+            "toolCallId": "call_4",
+            "update": {
+              "stream": "stdout",
+              "chunk": "probe-shell\nhello.txt\n",
+              "executionId": "70db464c-dbc8-4b2d-87cf-a194f2ad1e49",
+              "detachable": false,
+              "commandIndex": 0,
+              "query": "echo probe-shell && ls"
+            }
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_end",
+            "contentType": "tool",
+            "toolName": "run_commands",
+            "toolCallId": "call_4",
+            "output": [
+              {
+                "query": "echo probe-shell && ls",
+                "result": "probe-shell\nhello.txt\n",
+                "success": true
+              }
+            ],
+            "durationMs": 102
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "iteration_end",
+            "iteration": 1,
+            "hadToolCalls": true,
+            "toolCallCount": 1
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "iteration_start",
+            "iteration": 2
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_start",
+            "contentType": "text",
+            "text": "Done with sh"
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_start",
+            "contentType": "text",
+            "text": "ell."
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "usage",
+            "inputTokens": 1205,
+            "outputTokens": 30,
+            "totalInputTokens": 2409,
+            "totalOutputTokens": 60,
+            "totalCost": 0
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_end",
+            "contentType": "text",
+            "text": "Done with shell."
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "iteration_end",
+            "iteration": 2,
+            "hadToolCalls": false,
+            "toolCallCount": 0
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "done",
+            "reason": "completed",
+            "text": "Done with shell.",
+            "iterations": 2,
+            "usage": {
+              "inputTokens": 2409,
+              "outputTokens": 60,
+              "totalCost": 0
+            }
+          }
+        ]
+      ],
+      "result": {
+        "finishReason": "completed",
+        "model": "gpt-4o",
+        "usage": {
+          "inputTokens": 2409,
+          "outputTokens": 60,
+          "cacheReadTokens": 0,
+          "cacheWriteTokens": 0,
+          "cost": 0
+        }
+      }
+    },
+    "shell-allowed": {
+      "wire": [
+        [
+          "event",
+          {
+            "type": "iteration_start",
+            "iteration": 1
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "usage",
+            "inputTokens": 1206,
+            "outputTokens": 30,
+            "totalInputTokens": 1206,
+            "totalOutputTokens": 30,
+            "totalCost": 0
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_start",
+            "contentType": "tool",
+            "toolName": "run_commands",
+            "toolCallId": "call_6",
+            "input": {
+              "commands": ["echo deny-me"]
+            }
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_update",
+            "contentType": "tool",
+            "toolName": "run_commands",
+            "toolCallId": "call_6",
+            "update": {
+              "stream": "stdout",
+              "chunk": "",
+              "executionId": "1f6d9622-a01d-4ac2-8552-4b3518867a52",
+              "detachable": false,
+              "commandIndex": 0,
+              "query": "echo deny-me"
+            }
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_update",
+            "contentType": "tool",
+            "toolName": "run_commands",
+            "toolCallId": "call_6",
+            "update": {
+              "stream": "stdout",
+              "chunk": "deny-me\n",
+              "executionId": "1f6d9622-a01d-4ac2-8552-4b3518867a52",
+              "detachable": false,
+              "commandIndex": 0,
+              "query": "echo deny-me"
+            }
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_end",
+            "contentType": "tool",
+            "toolName": "run_commands",
+            "toolCallId": "call_6",
+            "output": [
+              {
+                "query": "echo deny-me",
+                "result": "deny-me\n",
+                "success": true
+              }
+            ],
+            "durationMs": 27
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "iteration_end",
+            "iteration": 1,
+            "hadToolCalls": true,
+            "toolCallCount": 1
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "iteration_start",
+            "iteration": 2
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_start",
+            "contentType": "text",
+            "text": "Done with de"
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_start",
+            "contentType": "text",
+            "text": "nyshell."
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "usage",
+            "inputTokens": 1207,
+            "outputTokens": 30,
+            "totalInputTokens": 2413,
+            "totalOutputTokens": 60,
+            "totalCost": 0
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_end",
+            "contentType": "text",
+            "text": "Done with denyshell."
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "iteration_end",
+            "iteration": 2,
+            "hadToolCalls": false,
+            "toolCallCount": 0
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "done",
+            "reason": "completed",
+            "text": "Done with denyshell.",
+            "iterations": 2,
+            "usage": {
+              "inputTokens": 2413,
+              "outputTokens": 60,
+              "totalCost": 0
+            }
+          }
+        ]
+      ],
+      "result": {
+        "finishReason": "completed",
+        "model": "gpt-4o",
+        "usage": {
+          "inputTokens": 2413,
+          "outputTokens": 60,
+          "cacheReadTokens": 0,
+          "cacheWriteTokens": 0,
+          "cost": 0
+        }
+      }
+    },
+    "shell-denied": {
+      "wire": [
+        [
+          "event",
+          {
+            "type": "iteration_start",
+            "iteration": 1
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "usage",
+            "inputTokens": 1220,
+            "outputTokens": 30,
+            "totalInputTokens": 1220,
+            "totalOutputTokens": 30,
+            "totalCost": 0
+          }
+        ],
+        [
+          "approval",
+          {
+            "toolCallId": "call_20",
+            "toolName": "run_commands",
+            "input": {
+              "commands": ["echo deny-me"]
+            }
+          }
+        ],
+        [
+          "answer",
+          {
+            "approved": false,
+            "always": true
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_start",
+            "contentType": "tool",
+            "toolName": "run_commands",
+            "toolCallId": "call_20",
+            "input": {
+              "commands": ["echo deny-me"]
+            }
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_end",
+            "contentType": "tool",
+            "toolName": "run_commands",
+            "toolCallId": "call_20",
+            "output": {
+              "error": "This tool call was rejected by the user and not executed. -- NOT a tool or system failure. Clarify with user before proceeding."
+            },
+            "error": "{\"error\":\"This tool call was rejected by the user and not executed. -- NOT a tool or system failure. Clarify with user before proceeding.\"}",
+            "durationMs": 1
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "iteration_end",
+            "iteration": 1,
+            "hadToolCalls": true,
+            "toolCallCount": 1
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "error",
+            "error": {
+              "message": "1 tool call(s) failed: [run_commands] {\"error\":\"This tool call was rejected by the user and not executed. -- NOT a tool or system failure. Clarify with user before proceeding.\"}"
+            },
+            "recoverable": true,
+            "iteration": 1
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "iteration_start",
+            "iteration": 2
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_start",
+            "contentType": "text",
+            "text": "Done with de"
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_start",
+            "contentType": "text",
+            "text": "nyshell."
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "usage",
+            "inputTokens": 1221,
+            "outputTokens": 30,
+            "totalInputTokens": 2441,
+            "totalOutputTokens": 60,
+            "totalCost": 0
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_end",
+            "contentType": "text",
+            "text": "Done with denyshell."
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "iteration_end",
+            "iteration": 2,
+            "hadToolCalls": false,
+            "toolCallCount": 0
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "done",
+            "reason": "completed",
+            "text": "Done with denyshell.",
+            "iterations": 2,
+            "usage": {
+              "inputTokens": 2441,
+              "outputTokens": 60,
+              "totalCost": 0
+            }
+          }
+        ]
+      ],
+      "result": {
+        "finishReason": "completed",
+        "model": "gpt-4o",
+        "usage": {
+          "inputTokens": 2441,
+          "outputTokens": 60,
+          "cacheReadTokens": 0,
+          "cacheWriteTokens": 0,
+          "cost": 0
+        }
+      }
+    },
+    "edit": {
+      "wire": [
+        [
+          "event",
+          {
+            "type": "iteration_start",
+            "iteration": 1
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "usage",
+            "inputTokens": 1208,
+            "outputTokens": 30,
+            "totalInputTokens": 1208,
+            "totalOutputTokens": 30,
+            "totalCost": 0
+          }
+        ],
+        [
+          "approval",
+          {
+            "toolCallId": "call_8",
+            "toolName": "apply_patch",
+            "input": {
+              "input": "*** Begin Patch\n*** Add File: /work/app/made.txt\n+made by probe\n+line two\n*** End Patch"
+            }
+          }
+        ],
+        [
+          "answer",
+          {
+            "approved": true,
+            "always": false
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_start",
+            "contentType": "tool",
+            "toolName": "apply_patch",
+            "toolCallId": "call_8",
+            "input": {
+              "input": "*** Begin Patch\n*** Add File: /work/app/made.txt\n+made by probe\n+line two\n*** End Patch"
+            }
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_end",
+            "contentType": "tool",
+            "toolName": "apply_patch",
+            "toolCallId": "call_8",
+            "output": {
+              "query": "apply_patch",
+              "result": "Successfully applied patch to the following files:\n/work/app/made.txt",
+              "success": true
+            },
+            "durationMs": 4
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "iteration_end",
+            "iteration": 1,
+            "hadToolCalls": true,
+            "toolCallCount": 1
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "iteration_start",
+            "iteration": 2
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_start",
+            "contentType": "text",
+            "text": "Done with ed"
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_start",
+            "contentType": "text",
+            "text": "it."
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "usage",
+            "inputTokens": 1209,
+            "outputTokens": 30,
+            "totalInputTokens": 2417,
+            "totalOutputTokens": 60,
+            "totalCost": 0
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_end",
+            "contentType": "text",
+            "text": "Done with edit."
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "iteration_end",
+            "iteration": 2,
+            "hadToolCalls": false,
+            "toolCallCount": 0
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "done",
+            "reason": "completed",
+            "text": "Done with edit.",
+            "iterations": 2,
+            "usage": {
+              "inputTokens": 2417,
+              "outputTokens": 60,
+              "totalCost": 0
+            }
+          }
+        ]
+      ],
+      "result": {
+        "finishReason": "completed",
+        "model": "gpt-4o",
+        "usage": {
+          "inputTokens": 2417,
+          "outputTokens": 60,
+          "cacheReadTokens": 0,
+          "cacheWriteTokens": 0,
+          "cost": 0
+        }
+      }
+    },
+    "edit-second": {
+      "wire": [
+        [
+          "event",
+          {
+            "type": "iteration_start",
+            "iteration": 1
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "usage",
+            "inputTokens": 1210,
+            "outputTokens": 30,
+            "totalInputTokens": 1210,
+            "totalOutputTokens": 30,
+            "totalCost": 0
+          }
+        ],
+        [
+          "approval",
+          {
+            "toolCallId": "call_10",
+            "toolName": "apply_patch",
+            "input": {
+              "input": "*** Begin Patch\n*** Update File: /work/app/made.txt\n@@\n-made by probe\n+changed by probe\n line two\n*** End Patch"
+            }
+          }
+        ],
+        [
+          "answer",
+          {
+            "approved": true,
+            "always": false
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_start",
+            "contentType": "tool",
+            "toolName": "apply_patch",
+            "toolCallId": "call_10",
+            "input": {
+              "input": "*** Begin Patch\n*** Update File: /work/app/made.txt\n@@\n-made by probe\n+changed by probe\n line two\n*** End Patch"
+            }
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_end",
+            "contentType": "tool",
+            "toolName": "apply_patch",
+            "toolCallId": "call_10",
+            "output": {
+              "query": "apply_patch",
+              "result": "Successfully applied patch to the following files:\n/work/app/made.txt",
+              "success": true
+            },
+            "durationMs": 3
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "iteration_end",
+            "iteration": 1,
+            "hadToolCalls": true,
+            "toolCallCount": 1
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "iteration_start",
+            "iteration": 2
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_start",
+            "contentType": "text",
+            "text": "Done with ed"
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_start",
+            "contentType": "text",
+            "text": "it."
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "usage",
+            "inputTokens": 1211,
+            "outputTokens": 30,
+            "totalInputTokens": 2421,
+            "totalOutputTokens": 60,
+            "totalCost": 0
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_end",
+            "contentType": "text",
+            "text": "Done with edit."
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "iteration_end",
+            "iteration": 2,
+            "hadToolCalls": false,
+            "toolCallCount": 0
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "done",
+            "reason": "completed",
+            "text": "Done with edit.",
+            "iterations": 2,
+            "usage": {
+              "inputTokens": 2421,
+              "outputTokens": 60,
+              "totalCost": 0
+            }
+          }
+        ]
+      ],
+      "result": {
+        "finishReason": "completed",
+        "model": "gpt-4o",
+        "usage": {
+          "inputTokens": 2421,
+          "outputTokens": 60,
+          "cacheReadTokens": 0,
+          "cacheWriteTokens": 0,
+          "cost": 0
+        }
+      }
+    },
+    "ask": {
+      "wire": [
+        [
+          "event",
+          {
+            "type": "iteration_start",
+            "iteration": 1
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "usage",
+            "inputTokens": 1212,
+            "outputTokens": 30,
+            "totalInputTokens": 1212,
+            "totalOutputTokens": 30,
+            "totalCost": 0
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_start",
+            "contentType": "tool",
+            "toolName": "ask_question",
+            "toolCallId": "call_12",
+            "input": {
+              "question": "Which color?",
+              "options": ["Red", "Blue"]
+            }
+          }
+        ],
+        [
+          "question",
+          {
+            "toolCallId": "call_12",
+            "question": "Which color?",
+            "options": ["Red", "Blue"]
+          }
+        ],
+        [
+          "answer",
+          {
+            "answer": "Blue"
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_end",
+            "contentType": "tool",
+            "toolName": "ask_question",
+            "toolCallId": "call_12",
+            "output": "Blue",
+            "durationMs": 2
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "iteration_end",
+            "iteration": 1,
+            "hadToolCalls": true,
+            "toolCallCount": 1
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "iteration_start",
+            "iteration": 2
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_start",
+            "contentType": "text",
+            "text": "Hello from t"
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_start",
+            "contentType": "text",
+            "text": "he fake mode"
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_start",
+            "contentType": "text",
+            "text": "l. **Bold** "
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_start",
+            "contentType": "text",
+            "text": "text."
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "usage",
+            "inputTokens": 1213,
+            "outputTokens": 30,
+            "totalInputTokens": 2425,
+            "totalOutputTokens": 60,
+            "totalCost": 0
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_end",
+            "contentType": "text",
+            "text": "Hello from the fake model. **Bold** text."
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "iteration_end",
+            "iteration": 2,
+            "hadToolCalls": false,
+            "toolCallCount": 0
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "done",
+            "reason": "completed",
+            "text": "Hello from the fake model. **Bold** text.",
+            "iterations": 2,
+            "usage": {
+              "inputTokens": 2425,
+              "outputTokens": 60,
+              "totalCost": 0
+            }
+          }
+        ]
+      ],
+      "result": {
+        "finishReason": "completed",
+        "model": "gpt-4o",
+        "usage": {
+          "inputTokens": 2425,
+          "outputTokens": 60,
+          "cacheReadTokens": 0,
+          "cacheWriteTokens": 0,
+          "cost": 0
+        }
+      }
+    },
+    "sub": {
+      "wire": [
+        [
+          "event",
+          {
+            "type": "iteration_start",
+            "iteration": 1
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "usage",
+            "inputTokens": 1214,
+            "outputTokens": 30,
+            "totalInputTokens": 1214,
+            "totalOutputTokens": 30,
+            "totalCost": 0
+          }
+        ],
+        [
+          "approval",
+          {
+            "toolCallId": "call_14",
+            "toolName": "spawn_agent",
+            "input": {
+              "task": "KP hello from sub",
+              "systemPrompt": "You are a sub agent."
+            }
+          }
+        ],
+        [
+          "answer",
+          {
+            "approved": true,
+            "always": false
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_start",
+            "contentType": "tool",
+            "toolName": "spawn_agent",
+            "toolCallId": "call_14",
+            "input": {
+              "task": "KP hello from sub",
+              "systemPrompt": "You are a sub agent."
+            }
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "iteration_start",
+            "iteration": 1
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_start",
+            "contentType": "text",
+            "text": "Hello from t"
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_start",
+            "contentType": "text",
+            "text": "he fake mode"
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_start",
+            "contentType": "text",
+            "text": "l. **Bold** "
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_start",
+            "contentType": "text",
+            "text": "text."
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "usage",
+            "inputTokens": 1215,
+            "outputTokens": 30,
+            "totalInputTokens": 1215,
+            "totalOutputTokens": 30,
+            "totalCost": 0
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_end",
+            "contentType": "text",
+            "text": "Hello from the fake model. **Bold** text."
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "iteration_end",
+            "iteration": 1,
+            "hadToolCalls": false,
+            "toolCallCount": 0
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "done",
+            "reason": "completed",
+            "text": "Hello from the fake model. **Bold** text.",
+            "iterations": 1,
+            "usage": {
+              "inputTokens": 1215,
+              "outputTokens": 30,
+              "totalCost": 0
+            }
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_end",
+            "contentType": "tool",
+            "toolName": "spawn_agent",
+            "toolCallId": "call_14",
+            "output": {
+              "text": "Hello from the fake model. **Bold** text.",
+              "iterations": 1,
+              "finishReason": "completed",
+              "usage": {
+                "inputTokens": 1215,
+                "outputTokens": 30
+              }
+            },
+            "durationMs": 77
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "iteration_end",
+            "iteration": 1,
+            "hadToolCalls": true,
+            "toolCallCount": 1
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "iteration_start",
+            "iteration": 2
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_start",
+            "contentType": "text",
+            "text": "Done with su"
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_start",
+            "contentType": "text",
+            "text": "b."
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "usage",
+            "inputTokens": 1216,
+            "outputTokens": 30,
+            "totalInputTokens": 2430,
+            "totalOutputTokens": 60,
+            "totalCost": 0
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_end",
+            "contentType": "text",
+            "text": "Done with sub."
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "iteration_end",
+            "iteration": 2,
+            "hadToolCalls": false,
+            "toolCallCount": 0
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "done",
+            "reason": "completed",
+            "text": "Done with sub.",
+            "iterations": 2,
+            "usage": {
+              "inputTokens": 2430,
+              "outputTokens": 60,
+              "totalCost": 0
+            }
+          }
+        ]
+      ],
+      "result": {
+        "finishReason": "completed",
+        "model": "gpt-4o",
+        "usage": {
+          "inputTokens": 2430,
+          "outputTokens": 60,
+          "cacheReadTokens": 0,
+          "cacheWriteTokens": 0,
+          "cost": 0
+        }
+      }
+    },
+    "mcp": {
+      "wire": [
+        [
+          "event",
+          {
+            "type": "iteration_start",
+            "iteration": 1
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "usage",
+            "inputTokens": 1217,
+            "outputTokens": 30,
+            "totalInputTokens": 1217,
+            "totalOutputTokens": 30,
+            "totalCost": 0
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_start",
+            "contentType": "tool",
+            "toolName": "kettu__set_plan",
+            "toolCallId": "call_17",
+            "input": {
+              "steps": [
+                {
+                  "content": "Probe step one",
+                  "status": "completed"
+                },
+                {
+                  "content": "Probe step two",
+                  "status": "in_progress"
+                }
+              ]
+            }
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_end",
+            "contentType": "tool",
+            "toolName": "kettu__set_plan",
+            "toolCallId": "call_17",
+            "output": {
+              "content": [
+                {
+                  "type": "text",
+                  "text": "called set_plan {\"steps\":[{\"content\":\"Probe step one\",\"status\":\"completed\"},{\"content\":\"Probe step two\",\"status\":\"in_progress\"}]}"
+                }
+              ]
+            },
+            "durationMs": 10
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "iteration_end",
+            "iteration": 1,
+            "hadToolCalls": true,
+            "toolCallCount": 1
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "iteration_start",
+            "iteration": 2
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_start",
+            "contentType": "text",
+            "text": "Done with mc"
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_start",
+            "contentType": "text",
+            "text": "p."
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "usage",
+            "inputTokens": 1218,
+            "outputTokens": 30,
+            "totalInputTokens": 2435,
+            "totalOutputTokens": 60,
+            "totalCost": 0
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_end",
+            "contentType": "text",
+            "text": "Done with mcp."
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "iteration_end",
+            "iteration": 2,
+            "hadToolCalls": false,
+            "toolCallCount": 0
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "done",
+            "reason": "completed",
+            "text": "Done with mcp.",
+            "iterations": 2,
+            "usage": {
+              "inputTokens": 2435,
+              "outputTokens": 60,
+              "totalCost": 0
+            }
+          }
+        ]
+      ],
+      "result": {
+        "finishReason": "completed",
+        "model": "gpt-4o",
+        "usage": {
+          "inputTokens": 2435,
+          "outputTokens": 60,
+          "cacheReadTokens": 0,
+          "cacheWriteTokens": 0,
+          "cost": 0
+        }
+      }
+    },
+    "slow": {
+      "wire": [
+        [
+          "event",
+          {
+            "type": "iteration_start",
+            "iteration": 1
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_start",
+            "contentType": "text",
+            "text": "tick 0 "
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_start",
+            "contentType": "text",
+            "text": "tick 1 "
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_start",
+            "contentType": "text",
+            "text": "tick 2 "
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_start",
+            "contentType": "text",
+            "text": "tick 3 "
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_start",
+            "contentType": "text",
+            "text": "tick 4 "
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_start",
+            "contentType": "text",
+            "text": "tick 5 "
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "done",
+            "reason": "aborted",
+            "text": "Done with mcp.",
+            "iterations": 1,
+            "usage": {
+              "inputTokens": 0,
+              "outputTokens": 0
+            }
+          }
+        ]
+      ],
+      "result": {
+        "finishReason": "aborted",
+        "model": "gpt-4o",
+        "usage": {
+          "inputTokens": 0,
+          "outputTokens": 0,
+          "cacheReadTokens": 0,
+          "cacheWriteTokens": 0,
+          "cost": null
+        }
+      }
+    },
+    "real-edit": {
+      "wire": [
+        [
+          "event",
+          {
+            "type": "iteration_start",
+            "iteration": 1
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_start",
+            "contentType": "reasoning",
+            "reasoning": "**Planning commentary and path usage**",
+            "redacted": false
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_start",
+            "contentType": "text",
+            "text": "Plan"
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_start",
+            "contentType": "text",
+            "text": ":"
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_start",
+            "contentType": "text",
+            "text": " I"
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_start",
+            "contentType": "text",
+            "text": "’ll"
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_start",
+            "contentType": "text",
+            "text": " read"
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_start",
+            "contentType": "text",
+            "text": " `/"
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_start",
+            "contentType": "text",
+            "text": "private"
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_start",
+            "contentType": "text",
+            "text": "/tmp"
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_start",
+            "contentType": "text",
+            "text": "/k"
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_start",
+            "contentType": "text",
+            "text": "ettu"
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_start",
+            "contentType": "text",
+            "text": "-"
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_start",
+            "contentType": "text",
+            "text": "196"
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_start",
+            "contentType": "text",
+            "text": "6"
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_start",
+            "contentType": "text",
+            "text": "-pro"
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_start",
+            "contentType": "text",
+            "text": "j"
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_start",
+            "contentType": "text",
+            "text": "/"
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_start",
+            "contentType": "text",
+            "text": "notes"
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_start",
+            "contentType": "text",
+            "text": ".txt"
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_start",
+            "contentType": "text",
+            "text": "`,"
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_start",
+            "contentType": "text",
+            "text": " then"
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_start",
+            "contentType": "text",
+            "text": " make"
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_start",
+            "contentType": "text",
+            "text": " the"
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_start",
+            "contentType": "text",
+            "text": " requested"
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_start",
+            "contentType": "text",
+            "text": " single"
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_start",
+            "contentType": "text",
+            "text": "-line"
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_start",
+            "contentType": "text",
+            "text": " edit"
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_start",
+            "contentType": "text",
+            "text": " and"
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_start",
+            "contentType": "text",
+            "text": " verify"
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_start",
+            "contentType": "text",
+            "text": " the"
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_start",
+            "contentType": "text",
+            "text": " file"
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_start",
+            "contentType": "text",
+            "text": " content"
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_start",
+            "contentType": "text",
+            "text": " using"
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_start",
+            "contentType": "text",
+            "text": " only"
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_start",
+            "contentType": "text",
+            "text": " the"
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_start",
+            "contentType": "text",
+            "text": " permitted"
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_start",
+            "contentType": "text",
+            "text": " file"
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_start",
+            "contentType": "text",
+            "text": " tools"
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_start",
+            "contentType": "text",
+            "text": "."
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "usage",
+            "inputTokens": 7964,
+            "outputTokens": 81,
+            "cacheReadTokens": 3328,
+            "cost": 0.011281600000000001,
+            "reasoningTokenCount": 31,
+            "totalInputTokens": 7964,
+            "totalOutputTokens": 81,
+            "totalCacheReadTokens": 3328,
+            "totalCost": 0.011281600000000001
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_end",
+            "contentType": "text",
+            "text": "Plan: I’ll read `/work/app/notes.txt`, then make the requested single-line edit and verify the file content using only the permitted file tools."
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_end",
+            "contentType": "reasoning",
+            "reasoning": "**Planning commentary and path usage**"
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_start",
+            "contentType": "tool",
+            "toolName": "read_files",
+            "toolCallId": "call_ymwnc08OZnXhCMHFM5mbpnIt",
+            "input": {
+              "files": [
+                {
+                  "path": "/work/app/notes.txt"
+                }
+              ]
+            }
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_end",
+            "contentType": "tool",
+            "toolName": "read_files",
+            "toolCallId": "call_ymwnc08OZnXhCMHFM5mbpnIt",
+            "output": [
+              {
+                "query": "/work/app/notes.txt",
+                "result": "1 | alpha\n2 | BETA-2\n3 | gamma",
+                "success": true
+              }
+            ],
+            "durationMs": 5
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "iteration_end",
+            "iteration": 1,
+            "hadToolCalls": true,
+            "toolCallCount": 1
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "iteration_start",
+            "iteration": 2
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "usage",
+            "inputTokens": 8093,
+            "outputTokens": 62,
+            "cacheReadTokens": 7424,
+            "cost": 0.0035668,
+            "totalInputTokens": 16057,
+            "totalOutputTokens": 143,
+            "totalCacheReadTokens": 10752,
+            "totalCost": 0.014848400000000001
+          }
+        ],
+        [
+          "approval",
+          {
+            "toolCallId": "call_CjdyDGNAPiOXsTzOMY5OrBsK",
+            "toolName": "apply_patch",
+            "input": {
+              "input": "*** Begin Patch\n*** Update File: /work/app/notes.txt\n@@\n alpha\n BETA-2\n-gamma\n+GAMMA-3\n*** End Patch"
+            }
+          }
+        ],
+        [
+          "answer",
+          {
+            "approved": true,
+            "always": false
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_start",
+            "contentType": "tool",
+            "toolName": "apply_patch",
+            "toolCallId": "call_CjdyDGNAPiOXsTzOMY5OrBsK",
+            "input": {
+              "input": "*** Begin Patch\n*** Update File: /work/app/notes.txt\n@@\n alpha\n BETA-2\n-gamma\n+GAMMA-3\n*** End Patch"
+            }
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_end",
+            "contentType": "tool",
+            "toolName": "apply_patch",
+            "toolCallId": "call_CjdyDGNAPiOXsTzOMY5OrBsK",
+            "output": {
+              "query": "apply_patch",
+              "result": "Successfully applied patch to the following files:\n/work/app/notes.txt",
+              "success": true
+            },
+            "durationMs": 2
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "iteration_end",
+            "iteration": 2,
+            "hadToolCalls": true,
+            "toolCallCount": 1
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "iteration_start",
+            "iteration": 3
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "usage",
+            "inputTokens": 8200,
+            "outputTokens": 34,
+            "cacheReadTokens": 7424,
+            "cost": 0.0034448000000000013,
+            "totalInputTokens": 24257,
+            "totalOutputTokens": 177,
+            "totalCacheReadTokens": 18176,
+            "totalCost": 0.018293200000000003
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_start",
+            "contentType": "tool",
+            "toolName": "read_files",
+            "toolCallId": "call_1k54GFqoK4fZRWkCIhsXCNE4",
+            "input": {
+              "files": [
+                {
+                  "path": "/work/app/notes.txt"
+                }
+              ]
+            }
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_end",
+            "contentType": "tool",
+            "toolName": "read_files",
+            "toolCallId": "call_1k54GFqoK4fZRWkCIhsXCNE4",
+            "output": [
+              {
+                "query": "/work/app/notes.txt",
+                "result": "1 | alpha\n2 | BETA-2\n3 | GAMMA-3",
+                "success": true
+              }
+            ],
+            "durationMs": 1
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "iteration_end",
+            "iteration": 3,
+            "hadToolCalls": true,
+            "toolCallCount": 1
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "iteration_start",
+            "iteration": 4
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_start",
+            "contentType": "text",
+            "text": "Updated"
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_start",
+            "contentType": "text",
+            "text": " `/"
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_start",
+            "contentType": "text",
+            "text": "private"
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_start",
+            "contentType": "text",
+            "text": "/tmp"
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_start",
+            "contentType": "text",
+            "text": "/k"
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_start",
+            "contentType": "text",
+            "text": "ettu"
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_start",
+            "contentType": "text",
+            "text": "-"
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_start",
+            "contentType": "text",
+            "text": "196"
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_start",
+            "contentType": "text",
+            "text": "6"
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_start",
+            "contentType": "text",
+            "text": "-pro"
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_start",
+            "contentType": "text",
+            "text": "j"
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_start",
+            "contentType": "text",
+            "text": "/"
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_start",
+            "contentType": "text",
+            "text": "notes"
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_start",
+            "contentType": "text",
+            "text": ".txt"
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_start",
+            "contentType": "text",
+            "text": "`"
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_start",
+            "contentType": "text",
+            "text": " line"
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_start",
+            "contentType": "text",
+            "text": " "
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_start",
+            "contentType": "text",
+            "text": "3"
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_start",
+            "contentType": "text",
+            "text": " to"
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_start",
+            "contentType": "text",
+            "text": " `"
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_start",
+            "contentType": "text",
+            "text": "G"
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_start",
+            "contentType": "text",
+            "text": "AM"
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_start",
+            "contentType": "text",
+            "text": "MA"
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_start",
+            "contentType": "text",
+            "text": "-"
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_start",
+            "contentType": "text",
+            "text": "3"
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_start",
+            "contentType": "text",
+            "text": "`."
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "usage",
+            "inputTokens": 8287,
+            "outputTokens": 30,
+            "cacheReadTokens": 7424,
+            "cost": 0.003570799999999999,
+            "totalInputTokens": 32544,
+            "totalOutputTokens": 207,
+            "totalCacheReadTokens": 25600,
+            "totalCost": 0.021864
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_end",
+            "contentType": "text",
+            "text": "Updated `/work/app/notes.txt` line 3 to `GAMMA-3`."
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "iteration_end",
+            "iteration": 4,
+            "hadToolCalls": false,
+            "toolCallCount": 0
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "done",
+            "reason": "completed",
+            "text": "Updated `/work/app/notes.txt` line 3 to `GAMMA-3`.",
+            "iterations": 4,
+            "usage": {
+              "inputTokens": 32544,
+              "outputTokens": 207,
+              "cacheReadTokens": 25600,
+              "totalCost": 0.021864
+            }
+          }
+        ]
+      ],
+      "result": {
+        "finishReason": "completed",
+        "model": "gpt-5.6-terra",
+        "usage": {
+          "inputTokens": 32544,
+          "outputTokens": 207,
+          "cacheReadTokens": 25600,
+          "cacheWriteTokens": 0,
+          "cost": 0.021864
+        }
+      }
+    }
+  }
+}

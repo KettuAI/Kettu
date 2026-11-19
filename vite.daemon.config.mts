@@ -48,6 +48,7 @@ export default defineConfig({
         'thread-worker': source('src/agent-host/threads/worker.ts'),
         'usage-worker': source('src/agent-host/usage/worker.ts'),
         'session-router': source('src/agent-host/session-router/router.ts'),
+        'cline-host': source('src/agent-host/cline/cline-host.ts'),
       },
       external: [/^node:/, 'node-pty'],
       output: {

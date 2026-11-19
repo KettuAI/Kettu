@@ -340,6 +340,8 @@ export interface AgentManagerDeps extends DriverOverrides {
   adaptersDir: string
   /** The session router a per-session agent launches through; null without one. */
   sessionRouterPath?: string | null
+  /** The bundle of the process that runs Cline's SDK; null without one. */
+  clineHostPath?: string | null
   detect?(def: AgentDefinition, ctx: DetectContext): Promise<Detection>
   install?(options: InstallOptions): Promise<InstalledAdapter>
   /** Downloads and extracts a binary agent's release archive. */
@@ -1082,14 +1084,14 @@ export class AgentManager {
       const chosen = spec ?? (await this.installPackage(slot))
       slot.protocol = preferredProtocol(
         slot.def,
-        this.programVersion(slot.h),
+        this.programVersion(slot.h, chosen),
         this.programRule(slot.h),
         slot.preferredFailed,
       )
       try {
         return await this.launch(slot, chosen)
       } catch (error) {
-        if (this.leavePreferred(slot, error)) return this.launch(slot, chosen)
+        if (this.leavePreferred(slot, error, chosen)) return this.launch(slot, chosen)
         const previous = await this.fallBack(slot, chosen, error)
         if (!previous) throw error
         return this.launch(slot, previous)
@@ -1138,11 +1140,15 @@ export class AgentManager {
     }
   }
 
-  /** The version of the program a start runs, as detection read it; null while it has not. */
-  private programVersion(h: Harness): string | null {
+  /**
+   * The version of the program a start runs: as detection read it from the user's program, or of
+   * Kettu's own install of a package, which the `spec` it launches names. Null while unknown.
+   */
+  private programVersion(h: Harness, spec: LaunchSpec | null = null): string | null {
     const detection = h.detection
     if (detection?.state !== 'available') return null
-    return detection.cli?.version ?? h.binaryVersion
+    const installed = h.def.launch.kind === 'package' ? (spec?.version ?? null) : null
+    return detection.cli?.version ?? h.binaryVersion ?? installed
   }
 
   /**
@@ -1150,10 +1156,10 @@ export class AgentManager {
    * definition's protocol instead, and keeps to it while its program stays that version. False
    * when the start that failed already ran on the definition's protocol.
    */
-  private leavePreferred(slot: Slot, error: unknown): boolean {
+  private leavePreferred(slot: Slot, error: unknown, spec: LaunchSpec): boolean {
     if (slot.protocol === null) return false
     if (error instanceof InstallCancelled || this.stopped || !this.has(slot.id)) return false
-    slot.preferredFailed = this.programVersion(slot.h)
+    slot.preferredFailed = this.programVersion(slot.h, spec)
     slot.protocol = null
     this.deps.diagnostics.event(
       slot.id,
@@ -1385,6 +1391,8 @@ export class AgentManager {
         currentCli: this.currentCli(slot, spec),
         cliVersion: slot.h.detection?.cli?.version ?? null,
         kettuDir: path.join(this.deps.adaptersDir, EXTENSIONS_FOLDER, slot.def.id),
+        nodeRuntime: this.deps.nodeRuntime,
+        clineHostPath: this.deps.clineHostPath ?? null,
       })
     } catch (error) {
       slot.launched = null

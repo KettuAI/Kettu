@@ -801,6 +801,32 @@
       "missing": "Changelog not found: pi's package could not be located."
     }
   },
+  "cline": {
+    "mode": {
+      "name": "Mode",
+      "plan": "Plan",
+      "planDescription": "Explores and plans without changing files",
+      "act": "Act",
+      "actDescription": "Changes files and runs commands"
+    },
+    "model": "Model",
+    "provider": {
+      "name": "Provider",
+      "description": "The provider Cline reaches the model through"
+    },
+    "autoApprove": {
+      "name": "Auto-approve tools",
+      "description": "Runs every tool call without asking"
+    },
+    "thinking": {
+      "name": "Thinking",
+      "off": "Off",
+      "on": "On"
+    },
+    "permission": {
+      "allowAlways": "Always allow in this session"
+    }
+  },
   "question": {
     "other": "Something else…"
   },

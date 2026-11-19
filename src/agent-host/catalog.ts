@@ -116,7 +116,7 @@ export type LaunchKind =
 
 /** How Kettu talks to an agent; each protocol has its driver in `drivers.ts`. */
 export type AgentProtocol =
-  'acp' | 'claude-sdk' | 'codex-app-server' | 'dsh-sdk' | 'opencode-server' | 'pi-rpc'
+  'acp' | 'claude-sdk' | 'cline-sdk' | 'codex-app-server' | 'dsh-sdk' | 'opencode-server' | 'pi-rpc'
 
 /**
  * An interface of the harness's own that an agent runs on in place of the definition's protocol

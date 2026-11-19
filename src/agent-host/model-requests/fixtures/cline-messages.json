@@ -1,0 +1,195 @@
+{
+  "version": 1,
+  "updated_at": "2026-11-19T16:31:18.392Z",
+  "agent": "lead",
+  "sessionId": "1795105676425_jvjGo_cli",
+  "origin": {
+    "source": "cli",
+    "mode": "user",
+    "sessionId": "1795105676425_jvjGo_cli",
+    "version": "3.0.74"
+  },
+  "messages": [
+    {
+      "id": "ae7276a3-1d3d-4368-b184-4fcf028841c1",
+      "role": "user",
+      "content": [
+        {
+          "type": "text",
+          "text": "<user_input mode=\"act\"><kettu-memory>\nKettu keeps this memory across sessions.\n</kettu-memory>\n\n\nKP hello from main over acp</user_input>"
+        }
+      ],
+      "ts": 1795105677431
+    },
+    {
+      "id": "msg_b30alpMa",
+      "role": "assistant",
+      "content": [
+        {
+          "type": "text",
+          "text": "Hello from the fake model. **Bold** text."
+        }
+      ],
+      "ts": 1795105677566,
+      "modelInfo": {
+        "id": "gpt-4o",
+        "provider": "openai-compatible"
+      },
+      "metrics": {
+        "inputTokens": 1221,
+        "outputTokens": 30,
+        "cacheReadTokens": 0,
+        "cacheWriteTokens": 0
+      }
+    },
+    {
+      "id": "bb5a6575-c00d-4786-a68c-45f9a7d380a1",
+      "role": "user",
+      "content": [
+        {
+          "type": "text",
+          "text": "<user_input mode=\"act\">KP read</user_input>"
+        }
+      ],
+      "ts": 1795105687935
+    },
+    {
+      "id": "msg_rQCT1g5y",
+      "role": "assistant",
+      "content": [
+        {
+          "type": "text",
+          "text": "Reading. "
+        },
+        {
+          "type": "tool_use",
+          "id": "call_22",
+          "name": "read_files",
+          "input": {
+            "files": [
+              {
+                "path": "/work/app/hello.txt"
+              }
+            ]
+          }
+        }
+      ],
+      "ts": 1795105687991,
+      "modelInfo": {
+        "id": "gpt-4o",
+        "provider": "openai-compatible"
+      },
+      "metrics": {
+        "inputTokens": 1222,
+        "outputTokens": 30,
+        "cacheReadTokens": 0,
+        "cacheWriteTokens": 0
+      }
+    },
+    {
+      "id": "msg_VjJv7q07",
+      "role": "user",
+      "content": [
+        {
+          "type": "tool_result",
+          "tool_use_id": "call_22",
+          "name": "read_files",
+          "content": [
+            {
+              "query": "/work/app/hello.txt",
+              "result": "1 | hello file\n2 | second line",
+              "success": true
+            }
+          ]
+        }
+      ],
+      "ts": 1795105693030
+    },
+    {
+      "id": "msg_6h3cCXNf",
+      "role": "assistant",
+      "content": [
+        {
+          "type": "text",
+          "text": "Done with read."
+        }
+      ],
+      "ts": 1795105693222,
+      "modelInfo": {
+        "id": "gpt-4o",
+        "provider": "openai-compatible"
+      },
+      "metrics": {
+        "inputTokens": 1223,
+        "outputTokens": 30,
+        "cacheReadTokens": 0,
+        "cacheWriteTokens": 0
+      }
+    },
+    {
+      "id": "6d6181f4-010b-4454-bc07-d48f28789db1",
+      "role": "user",
+      "content": [
+        {
+          "type": "text",
+          "text": "<user_input mode=\"act\">KP hello continuing on the sdk</user_input>"
+        }
+      ],
+      "ts": 1795105741227
+    },
+    {
+      "id": "msg_JUxWip0z",
+      "role": "assistant",
+      "content": [
+        {
+          "type": "text",
+          "text": "Hello from the fake model. **Bold** text."
+        }
+      ],
+      "ts": 1795105741346,
+      "modelInfo": {
+        "id": "gpt-4o",
+        "provider": "openai-compatible"
+      },
+      "metrics": {
+        "inputTokens": 1224,
+        "outputTokens": 30,
+        "cacheReadTokens": 0,
+        "cacheWriteTokens": 0
+      }
+    },
+    {
+      "id": "70809424-3541-4097-88d3-09449d84037d",
+      "role": "user",
+      "content": [
+        {
+          "type": "text",
+          "text": "<user_input mode=\"act\">KP hello back on acp</user_input>"
+        }
+      ],
+      "ts": 1795105878258
+    },
+    {
+      "id": "msg_sKOrzidk",
+      "role": "assistant",
+      "content": [
+        {
+          "type": "text",
+          "text": "Hello from the fake model. **Bold** text."
+        }
+      ],
+      "ts": 1795105878369,
+      "modelInfo": {
+        "id": "gpt-4o",
+        "provider": "openai-compatible"
+      },
+      "metrics": {
+        "inputTokens": 1228,
+        "outputTokens": 30,
+        "cacheReadTokens": 0,
+        "cacheWriteTokens": 0
+      }
+    }
+  ],
+  "system_prompt": "You are Cline, an AI coding agent. Your primary goal is to assist users with various coding tasks by leveraging your knowledge and the tools at your disposal. Given the user's prompt, you should use t"
+}
