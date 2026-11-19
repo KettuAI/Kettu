@@ -45,8 +45,6 @@ export type ToastOptions = {
   action?: ToastAction;
   /** In ms – Infinity keeps the toast until it's dismissed. Defaults to the Toaster's duration */
   duration?: number;
-  /** Unix timestamp in ms for a timer that keeps running while the stack is paused */
-  expiresAt?: number;
   /** Replaces the status icon */
   icon?: ReactNode;
   /** Sends the toast to the <Toaster id="…"> with this id instead of the default one */
@@ -101,7 +99,6 @@ type ToastData = {
   description?: ReactNode;
   action?: ToastAction;
   duration?: number;
-  expiresAt?: number;
   icon?: ReactNode;
   toaster?: string;
   onDismiss?: (id: ToastId) => void;
@@ -300,26 +297,19 @@ function ToastItem({
 
   // The timer: restarts on every update, keeps what's left while paused
   const duration = msOf(t.duration) ?? msOf(defaultDuration) ?? 4000;
-  const { expiresAt } = t;
   const timed = t.type !== "loading" && Number.isFinite(duration);
-  const running = timed && !removing && (expiresAt !== undefined || (!paused && !swiping));
-  const timerRef = useRef<HTMLSpanElement>(null);
-  useLayoutEffect(() => {
-    if (!timerRef.current || expiresAt === undefined) return;
-    timerRef.current.style.animationDelay = `${Math.min(0, expiresAt - Date.now() - duration)}ms`;
-  }, [expiresAt, duration, t.version]);
+  const running = timed && !paused && !swiping && !removing;
   useEffect(() => {
     if (timer.current.version !== t.version) timer.current = { version: t.version, left: duration };
     if (!running) return;
     const version = t.version;
     const started = Date.now();
-    const left = expiresAt === undefined ? timer.current.left : expiresAt - started;
-    const id = window.setTimeout(() => dismiss(t.id), Math.max(0, left));
+    const id = window.setTimeout(() => dismiss(t.id), Math.max(0, timer.current.left));
     return () => {
       window.clearTimeout(id);
-      if (expiresAt === undefined && timer.current.version === version) timer.current.left -= Date.now() - started;
+      if (timer.current.version === version) timer.current.left -= Date.now() - started;
     };
-  }, [running, t.version, duration, t.id, expiresAt]);
+  }, [running, t.version, duration, t.id]);
 
   /* Swipe: sideways in both directions, or out over the near edge; anything else rubber-bands back */
   const onPointerDown = (e: ReactPointerEvent<HTMLLIElement>) => {
@@ -468,9 +458,7 @@ function ToastItem({
           {hairline && timed && (
             <span
               key={t.version}
-              ref={timerRef}
               className="ui-ts__timer"
-              data-countdown={expiresAt !== undefined || undefined}
               aria-hidden="true"
               style={{ animationDuration: `${duration}ms`, animationPlayState: running ? "running" : "paused" }}
             />

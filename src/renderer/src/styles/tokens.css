@@ -55,6 +55,15 @@
     0 0 0 0.5px rgb(0 0 0 / 6%), 0 1px 1px -1px rgb(0 0 0 / 10%), 0 1px 2px 0 rgb(0 0 0 / 5%);
   --thread-float-shadow: 0 0 0 0.5px rgb(0 0 0 / 10%), 0 6px 16px -6px rgb(0 0 0 / 20%);
   --thread-pill-shadow: 0 6px 16px -6px rgb(0 0 0 / 30%);
+  /* The first Cmd+Q's HUD: dark glass in every mode, its countdown the dark mode's control blue. */
+  --hud-bg: rgb(30 30 32 / 78%);
+  --hud-edge: transparent;
+  --hud-shadow: inset 0 0 0 0.5px var(--hud-edge), 0 12px 32px -8px rgb(0 0 0 / 35%);
+  --hud-ink: #ffffff;
+  --hud-text: rgb(255 255 255 / 78%);
+  --hud-key: rgb(255 255 255 / 14%);
+  --hud-key-shadow: inset 0 0 0 0.5px rgb(255 255 255 / 18%), 0 1px 0 rgb(0 0 0 / 25%);
+  --hud-countdown: rgb(91 154 255 / 42%);
 
   --text-primary: #1f1f1f;
   --text-secondary: #5c5c5c;
@@ -723,6 +732,8 @@
     --thread-card-shadow: 0 0 0 0.5px rgb(255 255 255 / 10%), 0 1px 2px rgb(0 0 0 / 40%);
     --thread-float-shadow: 0 0 0 0.5px rgb(255 255 255 / 14%), 0 6px 16px -6px rgb(0 0 0 / 60%);
     --thread-pill-shadow: 0 6px 16px -6px rgb(0 0 0 / 60%);
+    --hud-bg: rgb(52 52 56 / 72%);
+    --hud-edge: rgb(255 255 255 / 10%);
 
     --text-primary: #e6e6e7;
     --text-secondary: #ababad;
@@ -1118,6 +1129,8 @@
   --thread-card-shadow: 0 0 0 0.5px rgb(255 255 255 / 10%), 0 1px 2px rgb(0 0 0 / 40%);
   --thread-float-shadow: 0 0 0 0.5px rgb(255 255 255 / 14%), 0 6px 16px -6px rgb(0 0 0 / 60%);
   --thread-pill-shadow: 0 6px 16px -6px rgb(0 0 0 / 60%);
+  --hud-bg: rgb(52 52 56 / 72%);
+  --hud-edge: rgb(255 255 255 / 10%);
 
   --text-primary: #e6e6e7;
   --text-secondary: #ababad;

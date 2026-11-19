@@ -172,6 +172,11 @@
   --color-control-on: var(--control-on);
   --color-control-on-tint: var(--control-on-tint);
   --color-send: var(--send);
+  --color-hud: var(--hud-bg);
+  --color-hud-ink: var(--hud-ink);
+  --color-hud-text: var(--hud-text);
+  --color-hud-key: var(--hud-key);
+  --color-hud-countdown: var(--hud-countdown);
   --color-limit-ok: var(--limit-ok);
   --color-limit-warn: var(--limit-warn);
   --color-limit-bad: var(--limit-bad);
@@ -273,6 +278,8 @@
   --shadow-raised: var(--raised-ring);
   --shadow-thumb: var(--thumb-shadow);
   --shadow-toast: var(--elevation-toast);
+  --shadow-hud: var(--hud-shadow);
+  --shadow-hud-key: var(--hud-key-shadow);
   --shadow-sheet: var(--sheet-ring);
   --shadow-sheet-focused: var(--sheet-focused-ring);
   --shadow-media: var(--elevation-media);
@@ -873,6 +880,19 @@
 }
 @utility animate-breathe {
   animation: breathe var(--duration-breath) ease-in-out infinite;
+}
+
+/* A fill that runs out once; the element sets its duration and, to join late, a negative delay. */
+@keyframes run-out {
+  from {
+    transform: scaleX(1);
+  }
+  to {
+    transform: scaleX(0);
+  }
+}
+@utility animate-run-out {
+  animation: run-out 0s linear both;
 }
 
 @keyframes stream-caret {

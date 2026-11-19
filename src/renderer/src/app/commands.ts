@@ -1,8 +1,7 @@
-import { useEffect, useRef } from 'react'
-import { toast } from '@renderer/components/ui/toast'
-import { i18n } from '@renderer/lib/i18n'
+import { useEffect } from 'react'
 import { recordAction, watchNavigation } from '@renderer/lib/action-log'
 import { confirmDebugRestart } from '@renderer/stores/debug'
+import { showQuitHint } from '@renderer/stores/quit-hint'
 import { openReport } from '@renderer/stores/report'
 import { useSessionsStore } from '@renderer/stores/sessions'
 import { checkForUpdates } from '@renderer/stores/updates'
@@ -26,7 +25,6 @@ export function useActionLog(): void {
 
 /** Commands from main: the app menu and notification clicks. */
 export function useAppCommands(): void {
-  const closeQuitHint = useRef<(() => void) | undefined>(undefined)
   useEffect(
     () =>
       window.kettu.app.onCommand((command) => {
@@ -66,18 +64,9 @@ export function useAppCommands(): void {
           case 'close':
             if (!closeCurrent(command.browser)) window.kettu.app.closeWindow()
             break
-          case 'quit-hint': {
-            closeQuitHint.current?.()
-            const { countdown } = command
-            closeQuitHint.current =
-              countdown && countdown.expiresAt > Date.now()
-                ? toast(i18n.t('updates:quit.pressAgain'), undefined, {
-                    tone: 'info',
-                    ...countdown,
-                  })
-                : undefined
+          case 'quit-hint':
+            showQuitHint(command.countdown)
             break
-          }
           case 'confirm-debug-restart':
             confirmDebugRestart()
             break
