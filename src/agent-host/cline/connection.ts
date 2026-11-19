@@ -559,6 +559,9 @@ export class ClineConnection implements AgentConnection {
     } finally {
       session.running = false
       this.withdraw(session)
+      const target = this.targets.get(sessionId)
+      const output = target && session.mapper.ended(target.context())
+      if (output) target.apply(output)
     }
   }
 

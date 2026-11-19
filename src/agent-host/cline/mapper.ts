@@ -339,6 +339,8 @@ export class SessionMapper {
   private contextWindow: number | null = null
   private textId: string | null = null
   private thoughtId: string | null = null
+  /** The divider of the compaction that runs. */
+  private compactionId: string | null = null
   /** When the request that is answering went out, and when its first output came. */
   private sentAt: number | null = null
   private firstOutputAt: number | null = null
@@ -378,6 +380,14 @@ export class SessionMapper {
     return out
   }
 
+  /** The turn ended: a compaction it was stopped in did not happen. Null when none ran. */
+  ended(ctx: MapperContext): MapperOutput | null {
+    if (!this.compactionId) return null
+    const out = output()
+    this.endCompaction(ctx, out, 'cancelled')
+    return out
+  }
+
   /** Maps one event; null for one the thread shows nothing of. */
   event(event: ClineEvent, ctx: MapperContext): MapperOutput | null {
     if (this.spawns.size > 0 && !this.own(event)) return null
@@ -409,8 +419,9 @@ export class SessionMapper {
         this.notice(ctx, out, event)
         return out
       case 'error':
-        // One it cannot go on from fails the turn, which says so itself; a failed call's own row
-        // says so too.
+        // One it cannot go on from fails the turn, which says so itself, and the compaction it
+        // came in the middle of; a failed call's own row says so too.
+        if (!event.recoverable) this.endCompaction(ctx, out, 'failed')
         if (event.recoverable && !FAILED_CALLS.test(event.error.message)) {
           addEntry(ctx, out, {
             kind: 'notice',
@@ -664,12 +675,7 @@ export class SessionMapper {
     // A failed call's own row says so.
     if (event.reason === 'tool_execution_failed') return
     if (event.reason?.includes('compaction')) {
-      addEntry(ctx, out, {
-        kind: 'compaction',
-        id: ctx.nextId(),
-        status: 'completed',
-        summary: '',
-      })
+      this.compaction(ctx, out, event.metadata?.phase)
       return
     }
     addEntry(ctx, out, {
@@ -678,5 +684,43 @@ export class SessionMapper {
       severity: event.noticeType === 'status' ? 'info' : 'warning',
       title: event.message,
     })
+  }
+
+  /**
+   * A compaction is one divider: Cline says when it starts, before the request it makes room for,
+   * and then that it is done or that it folded nothing. Its other notices show nothing.
+   */
+  private compaction(ctx: MapperContext, out: MapperOutput, phase: unknown): void {
+    if (phase === 'completed') {
+      this.endCompaction(ctx, out, 'completed', true)
+    } else if (phase === 'skipped') {
+      this.endCompaction(ctx, out, 'failed')
+    } else if (phase === 'started') {
+      this.endCompaction(ctx, out, 'cancelled')
+      this.compactionId = ctx.nextId()
+      addEntry(ctx, out, {
+        kind: 'compaction',
+        id: this.compactionId,
+        status: 'in_progress',
+        summary: '',
+      })
+    }
+  }
+
+  /** Ends the divider that runs; `always` adds one where Cline never said it started. */
+  private endCompaction(
+    ctx: MapperContext,
+    out: MapperOutput,
+    status: 'completed' | 'failed' | 'cancelled',
+    always = false,
+  ): void {
+    const id = this.compactionId
+    this.compactionId = null
+    const running = id ? ctx.thread.byId[id] : undefined
+    if (running?.kind === 'compaction') {
+      out.patches.push({ op: 'entry.update', id: running.id, changes: { status } })
+    } else if (always) {
+      addEntry(ctx, out, { kind: 'compaction', id: ctx.nextId(), status, summary: '' })
+    }
   }
 }

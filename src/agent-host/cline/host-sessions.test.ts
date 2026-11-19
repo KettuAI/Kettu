@@ -115,6 +115,8 @@ interface World {
   lastUsed: string | null
   rows: Record<string, { sessionId: string; provider: string; model: string; cwd: string }>
   stored: Record<string, SdkMessage[]>
+  /** The compaction the user chose in Cline; undefined for one who never chose. */
+  compaction?: 'basic' | 'agentic' | 'off'
   script: Script
   cores: FakeCore[]
   down: string[]
@@ -136,8 +138,14 @@ function world(overrides: Partial<World> = {}): World {
 function fakeSdk(w: World): Sdk {
   const models: Record<string, Record<string, SdkModelInfo>> = {
     anthropic: {
-      'model-a': { id: 'model-a', name: 'Model A', capabilities: ['reasoning', 'images'] },
-      'model-b': { id: 'model-b', name: 'Model B', capabilities: [] },
+      'model-a': {
+        id: 'model-a',
+        name: 'Model A',
+        contextWindow: 400_000,
+        maxInputTokens: 258_400,
+        capabilities: ['reasoning', 'images'],
+      },
+      'model-b': { id: 'model-b', name: 'Model B', contextWindow: 128_000, capabilities: [] },
     },
     cline: { 'cline/default': { id: 'cline/default', name: 'Default', capabilities: [] } },
   }
@@ -184,6 +192,7 @@ function fakeSdk(w: World): Sdk {
     getClineDefaultSystemPrompt: (options) =>
       `mode=${String(options.mode)} rules=${String(options.rules ?? '')}`,
     buildWorkspaceMetadata: async () => '',
+    readCompactionModeGlobally: () => w.compaction,
     projectSessionCompactionState: () => undefined,
     createSessionCompactionState: () => undefined,
     loginAndSaveLocalProviderOAuthCredentials: async (_manager, id, openUrl) => {
@@ -253,6 +262,27 @@ describe('Cline host sessions', () => {
       ['cline-pass', false],
       ['openai-codex', false],
     ])
+  })
+
+  it('reports the input a model takes as its window, which Cline compacts against', async () => {
+    const { open } = setup()
+    const opened = await open()
+    expect(opened.models.map((model) => [model.id, model.contextWindow])).toEqual([
+      ['model-a', 258_400],
+      ['model-b', 128_000],
+    ])
+  })
+
+  it('compacts a session unless the user turned that off in Cline, as its own CLI does', async () => {
+    const started = async (compaction?: World['compaction']) => {
+      const { open, prompt, sessionCores } = setup(world({ compaction }))
+      await open()
+      await prompt()
+      return sessionCores()[0]!.started!.config.compaction
+    }
+    expect(await started()).toEqual({ enabled: true })
+    expect(await started('basic')).toEqual({ enabled: true, strategy: 'basic' })
+    expect(await started('off')).toEqual({ enabled: false })
   })
 
   it('starts no core until the first prompt, then one under the id Kettu holds', async () => {

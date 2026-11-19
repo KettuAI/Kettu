@@ -2590,6 +2590,178 @@
           "cost": 0.021864
         }
       }
+    },
+    "real-compaction": {
+      "wire": [
+        [
+          "event",
+          {
+            "type": "iteration_start",
+            "iteration": 1
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "notice",
+            "noticeType": "status",
+            "displayRole": "status",
+            "message": "auto-compacting",
+            "reason": "auto_compaction",
+            "metadata": {
+              "kind": "auto_compaction",
+              "reason": "auto_compaction",
+              "phase": "started",
+              "iteration": 1,
+              "triggerTokens": 232560,
+              "targetTokens": 162792,
+              "maxInputTokens": 258400,
+              "messageTargetTokens": 134964
+            }
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "notice",
+            "noticeType": "status",
+            "displayRole": "status",
+            "message": "auto-compacted",
+            "reason": "auto_compaction",
+            "metadata": {
+              "kind": "auto_compaction",
+              "reason": "auto_compaction",
+              "phase": "completed",
+              "iteration": 1,
+              "tokensBefore": 250220,
+              "tokensAfter": 105635,
+              "messagesBefore": 3,
+              "messagesAfter": 2,
+              "maxInputTokens": 258400
+            }
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_start",
+            "contentType": "text",
+            "text": "AM",
+            "accumulated": "AM"
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_start",
+            "contentType": "text",
+            "text": "BER",
+            "accumulated": "AMBER"
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_start",
+            "contentType": "text",
+            "text": "-F",
+            "accumulated": "AMBER-F"
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_start",
+            "contentType": "text",
+            "text": "AL",
+            "accumulated": "AMBER-FAL"
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_start",
+            "contentType": "text",
+            "text": "CON",
+            "accumulated": "AMBER-FALCON"
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_start",
+            "contentType": "text",
+            "text": "-",
+            "accumulated": "AMBER-FALCON-"
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_start",
+            "contentType": "text",
+            "text": "17",
+            "accumulated": "AMBER-FALCON-17"
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "usage",
+            "inputTokens": 40276,
+            "outputTokens": 11,
+            "cacheReadTokens": 17664,
+            "cost": 0.0488888,
+            "totalInputTokens": 40276,
+            "totalOutputTokens": 11,
+            "totalCacheReadTokens": 17664,
+            "totalCost": 0.0488888
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_end",
+            "contentType": "text",
+            "text": "AMBER-FALCON-17"
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "iteration_end",
+            "iteration": 1,
+            "hadToolCalls": false,
+            "toolCallCount": 0
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "done",
+            "reason": "completed",
+            "text": "AMBER-FALCON-17",
+            "iterations": 1,
+            "usage": {
+              "inputTokens": 40276,
+              "outputTokens": 11,
+              "cacheReadTokens": 17664,
+              "totalCost": 0.0488888
+            }
+          }
+        ]
+      ],
+      "result": {
+        "finishReason": "completed",
+        "model": "gpt-5.6-terra",
+        "usage": {
+          "inputTokens": 40276,
+          "outputTokens": 11,
+          "cacheReadTokens": 17664,
+          "cacheWriteTokens": 0,
+          "cost": 0.0488888
+        }
+      }
     }
   }
 }

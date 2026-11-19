@@ -24,6 +24,7 @@ export interface SdkModelInfo {
   name?: string
   description?: string
   contextWindow?: number
+  maxInputTokens?: number
   capabilities?: string[]
 }
 
@@ -146,6 +147,8 @@ export interface Sdk {
     settings: SdkProviderSettings | undefined,
   ): string | undefined
   getClineDefaultSystemPrompt(options: Record<string, unknown>): string
+  /** Undefined when the user never chose in Cline, which then compacts. */
+  readCompactionModeGlobally(): 'basic' | 'agentic' | 'off' | undefined
   buildWorkspaceMetadata(cwd: string): Promise<string>
   projectSessionCompactionState(state: unknown, messages: SdkMessage[]): SdkMessage[] | undefined
   createSessionCompactionState(input: Record<string, unknown>): unknown
