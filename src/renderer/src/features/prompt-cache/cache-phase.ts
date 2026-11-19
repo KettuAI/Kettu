@@ -94,15 +94,37 @@ export function subscribeCacheTime(expiresAt: number, changed: () => void): () =
   }
 }
 
+/** Calls `changed` each second until the cache expires, for a countdown that shows seconds. */
+export function subscribeCacheSeconds(expiresAt: number, changed: () => void): () => void {
+  let stopSeconds: (() => void) | undefined
+  const check = () => {
+    changed()
+    if (expiresAt <= Date.now()) {
+      stopSeconds?.()
+      stopSeconds = undefined
+    }
+  }
+  if (expiresAt > Date.now()) stopSeconds = subscribeSeconds(check)
+  return () => stopSeconds?.()
+}
+
 /**
  * What `select` makes of the time left, or null without an expiry; `select` returns a primitive,
- * so the component re-renders only when that changes, such as each minute for "52 min".
+ * so the component re-renders only when that changes, such as each minute for "52 min". The time
+ * is read each minute until the last five; `everySecond` reads it each second throughout, for a
+ * countdown that shows seconds.
  */
-export function useCacheLeft<T>(expiresAt: number | null, select: (left: number) => T): T | null {
+export function useCacheLeft<T>(
+  expiresAt: number | null,
+  select: (left: number) => T,
+  everySecond = false,
+): T | null {
   const subscribe = useCallback(
     (changed: () => void) =>
-      expiresAt === null ? () => {} : subscribeCacheTime(expiresAt, changed),
-    [expiresAt],
+      expiresAt === null
+        ? () => {}
+        : (everySecond ? subscribeCacheSeconds : subscribeCacheTime)(expiresAt, changed),
+    [expiresAt, everySecond],
   )
   return useSyncExternalStore(subscribe, () =>
     expiresAt === null ? null : select(Math.max(0, expiresAt - Date.now())),

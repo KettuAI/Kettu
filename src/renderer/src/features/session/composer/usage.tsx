@@ -143,7 +143,7 @@ export function CacheButton({
   const { t } = useTranslation('composer')
   const timed = knownExpiry(cache)
   const phase = useCachePhase(timed)
-  const time = useCacheLeft(timed?.expiresAt ?? null, countdown)
+  const time = useCacheLeft(timed?.expiresAt ?? null, countdown, true)
   if (!timed || !phase) return null
   const expired = phase === 'expired'
   const label = expired
@@ -185,7 +185,7 @@ function CachePart({
   used: number
 }) {
   const { t } = useTranslation('composer')
-  const left = useCacheLeft(cache.expiresAt, (ms) => ms) ?? 0
+  const left = useCacheLeft(cache.expiresAt, (ms) => ms, true) ?? 0
   const expired = phase === 'expired'
   const read = tokens(used)
   const hours = cache.ttl % HOUR === 0
