@@ -48,6 +48,9 @@ export const ACCELERATORS: Partial<Record<SessionMenuItem, string>> = {
   delete: 'Backspace',
 }
 
+/** Archive's second item, beside it for a session with sub-sessions: archive it alone. */
+export const ARCHIVE_ALONE = 'Shift+A'
+
 /** Open in split view's sides, which take their keys while its submenu is open. */
 export const SPLIT_ACCELERATORS = { right: 'Mod+\\', below: 'Shift+Mod+\\' } as const
 

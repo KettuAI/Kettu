@@ -16,6 +16,8 @@ export interface WorkItem {
   count: number
   agentId: AgentId | null
   hostId: string | null
+  /** The session it belongs to; a subagent's work is its session's. */
+  sessionId: string | null
 }
 
 /**
@@ -50,6 +52,7 @@ export function workItems(work: RunningWork, background = false): WorkItem[] {
     count,
     agentId: work.agentId,
     hostId,
+    sessionId: work.sessionId,
   })
   return [
     ...(work.turn && !background ? [item('turn', session)] : []),
@@ -80,6 +83,7 @@ export async function workAtStake(sessionIds: readonly string[]): Promise<WorkIt
       count: 0,
       agentId: null,
       hostId: null,
+      sessionId: terminal.sessionId,
     })),
   ]
 }

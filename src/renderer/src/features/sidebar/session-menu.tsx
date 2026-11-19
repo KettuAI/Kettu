@@ -1,4 +1,4 @@
-import { type CSSProperties, useEffect, useRef, useState } from 'react'
+import { type CSSProperties, Fragment, useEffect, useRef, useState } from 'react'
 import {
   Archive01Icon,
   ArrowMoveDownRightIcon,
@@ -74,7 +74,12 @@ import { agentsOn, isInstalled, usableAgents, useAgentsStore } from '@renderer/s
 import { useGitStore } from '@renderer/stores/git'
 import { useTerminalAllowed } from '@renderer/stores/hosts'
 import { clearSelection } from '@renderer/stores/session-selection'
-import { hostOfSession, sessionTitle, useSessionsStore } from '@renderer/stores/sessions'
+import {
+  hostOfSession,
+  listedSubSessions,
+  sessionTitle,
+  useSessionsStore,
+} from '@renderer/stores/sessions'
 import {
   allPanes,
   canSplit,
@@ -102,6 +107,7 @@ import {
   sessionMenuGroups,
   settle,
   SPLIT_ACCELERATORS,
+  ARCHIVE_ALONE,
   type SessionMenuItem,
   type SessionMenuPlace,
 } from './session-menu-model'
@@ -140,21 +146,27 @@ function useInFront(sessionId: string): boolean {
 }
 
 /**
- * Archives with a toast that undoes it for six seconds, once confirmed when anything of theirs
- * runs, which archiving stops. Undo takes back the ones that archived; the toast names the failure
- * when some did not, since a second toast would replace it.
+ * Archives with a toast that undoes it for six seconds, with their sub-sessions as `subSessions`
+ * says, once the user said whether they go when it does not, and confirmed when anything of theirs
+ * runs, which archiving stops. Undo takes back the ones that archived, with the sub-sessions they
+ * left; the toast names the failure when some did not, since a second toast would replace it.
  */
-function archiveWithUndo(ids: readonly string[], title: string): void {
-  void confirmArchive(ids).then((archive) => {
-    if (archive) archiveNow(ids, title)
+function archiveWithUndo(ids: readonly string[], title: string, subSessions?: boolean): void {
+  void confirmArchive(ids, subSessions).then((answer) => {
+    if (answer) archiveNow(ids, title, answer.subSessions)
   })
 }
 
-function archiveNow(ids: readonly string[], title: string): void {
+/** How many sub-sessions in the list these sessions have, which archiving alone leaves there. */
+function useListedSubSessions(ids: readonly string[]): number {
+  return useSessionsStore((s) => ids.reduce((n, id) => n + listedSubSessions(s.byId, id).length, 0))
+}
+
+function archiveNow(ids: readonly string[], title: string, subSessions: boolean): void {
   // Read before archiving: the question names the sessions as they were.
   const { byId } = useSessionsStore.getState()
   const before = ids.flatMap((id) => (byId[id] ? [byId[id]] : []))
-  void settle(ids, archiveSession).then(({ done, errors }) => {
+  void settle(ids, (id) => archiveSession(id, subSessions)).then(({ done, errors }) => {
     const failure = errors.length > 0 ? errorMessage(errors[0]) : null
     if (done.length === 0) {
       if (failure) toast(failure)
@@ -234,6 +246,7 @@ export function SessionMenuItems({
   const local = !isWeb && hostOfPath(summary.projectPath) === null
   const resume = resumeCommand(summary, hostPath(sessionFolder(summary)))
   const { id } = summary
+  const subSessions = useListedSubSessions([id])
 
   const item = (name: SessionMenuItem) => {
     const accelerator = ACCELERATORS[name]
@@ -500,20 +513,35 @@ export function SessionMenuItems({
             {t('row.showInParent')}
           </DropdownMenuItem>
         )
-      case 'archive':
+      case 'archive': {
+        const title = t('row.archived', { title: sessionTitle(summary) })
+        if (subSessions === 0) {
+          return (
+            <DropdownMenuItem key={name} {...props} onClick={() => archiveWithUndo([id], title)}>
+              <MenuGlyph icon={Archive01Icon} />
+              {t('row.archive')}
+              {shortcut}
+            </DropdownMenuItem>
+          )
+        }
         return (
-          <DropdownMenuItem
-            key={name}
-            {...props}
-            onClick={() =>
-              archiveWithUndo([id], t('row.archived', { title: sessionTitle(summary) }))
-            }
-          >
-            <MenuGlyph icon={Archive01Icon} />
-            {t('row.archive')}
-            {shortcut}
-          </DropdownMenuItem>
+          <Fragment key={name}>
+            <DropdownMenuItem {...props} onClick={() => archiveWithUndo([id], title, true)}>
+              <MenuGlyph icon={Archive01Icon} />
+              {t('row.archiveAll')}
+              {shortcut}
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              data-accelerator={ARCHIVE_ALONE}
+              onClick={() => archiveWithUndo([id], title, false)}
+            >
+              <MenuGlyph icon={Archive01Icon} />
+              {t('row.archiveAlone')}
+              <DropdownMenuShortcut>{shortcutLabel(ARCHIVE_ALONE)}</DropdownMenuShortcut>
+            </DropdownMenuItem>
+          </Fragment>
         )
+      }
       case 'delete':
         return (
           <DropdownMenuItem
@@ -709,6 +737,8 @@ export function MultiSessionMenuItems({
     clearSelection()
     void Promise.all(summaries.map(run)).catch((error: unknown) => toast(errorMessage(error)))
   }
+  const listed = summaries.map((s) => s.id)
+  const subSessions = useListedSubSessions(listed)
   const groups = multiSessionMenuGroups(summaries, (index) => front[index] ?? false)
   const shortcut = (accelerator: string | undefined) =>
     accelerator && <DropdownMenuShortcut>{shortcutLabel(accelerator)}</DropdownMenuShortcut>
@@ -767,24 +797,35 @@ export function MultiSessionMenuItems({
                     {name === 'pin' ? t('row.pin') : t('row.unpin')}
                   </DropdownMenuItem>
                 )
-              case 'archive':
+              case 'archive': {
+                const archive = (subSessions?: boolean) => () => {
+                  clearSelection()
+                  archiveWithUndo(listed, t('row.archivedCount', { count }), subSessions)
+                }
+                if (subSessions === 0) {
+                  return (
+                    <DropdownMenuItem key={name} {...props} onClick={archive()}>
+                      <MenuGlyph icon={Archive01Icon} />
+                      {t('row.archiveCount', { count })}
+                      {shortcut(accelerator)}
+                    </DropdownMenuItem>
+                  )
+                }
                 return (
-                  <DropdownMenuItem
-                    key={name}
-                    {...props}
-                    onClick={() => {
-                      clearSelection()
-                      archiveWithUndo(
-                        summaries.map((s) => s.id),
-                        t('row.archivedCount', { count }),
-                      )
-                    }}
-                  >
-                    <MenuGlyph icon={Archive01Icon} />
-                    {t('row.archiveCount', { count })}
-                    {shortcut(accelerator)}
-                  </DropdownMenuItem>
+                  <Fragment key={name}>
+                    <DropdownMenuItem {...props} onClick={archive(true)}>
+                      <MenuGlyph icon={Archive01Icon} />
+                      {t('row.archiveAll')}
+                      {shortcut(accelerator)}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem data-accelerator={ARCHIVE_ALONE} onClick={archive(false)}>
+                      <MenuGlyph icon={Archive01Icon} />
+                      {t('row.archiveAloneCount', { count })}
+                      {shortcut(ARCHIVE_ALONE)}
+                    </DropdownMenuItem>
+                  </Fragment>
                 )
+              }
               case 'delete':
                 return (
                   <DropdownMenuItem

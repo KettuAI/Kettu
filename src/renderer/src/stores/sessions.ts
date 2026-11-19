@@ -20,19 +20,33 @@ interface SessionsStore {
   remove(sessionId: string): void
   refresh(): Promise<void>
   /**
-   * Shows the session archived before the host has closed it; the returned function says how the
-   * host's archive went, and one that failed brings the session back.
+   * Shows the session archived before the host has closed it, with the sub-sessions it leaves in
+   * the list on their own; the returned function says how the host's archive went, and one that
+   * failed brings them back.
    */
-  archiveNow(sessionId: string): (archived: boolean) => void
+  archiveNow(sessionId: string, leaving?: readonly string[]): (archived: boolean) => void
 }
 
 /** Sessions archived here that the host has not answered for yet, with when. */
 const archiving = new Map<string, number>()
 
-/** A summary as the list shows it: one archived here stays archived until the host answers. */
+/**
+ * Sub-sessions an archive here leaves in the list, by that archive's time, with their parent and
+ * the parent the host last reported for them.
+ */
+const leaving = new Map<string, { at: number; parentId: string; reported: string | null }>()
+
+/**
+ * A summary as the list shows it: one archived here stays archived, and a sub-session it leaves
+ * stays on its own, until the host answers.
+ */
 function listed(summary: SessionSummary): SessionSummary {
   const at = archiving.get(summary.id)
-  return at === undefined || summary.archivedAt ? summary : { ...summary, archivedAt: at }
+  const shown = at === undefined || summary.archivedAt ? summary : { ...summary, archivedAt: at }
+  const left = leaving.get(summary.id)
+  if (!left) return shown
+  left.reported = summary.parentId
+  return shown.parentId === null ? shown : { ...shown, parentId: null }
 }
 
 /** Sessions listed under their projects: a routine's runs and a task's steps are listed elsewhere. */
@@ -40,7 +54,7 @@ export function listedOrigin(summary: Pick<SessionSummary, 'origin'>): boolean {
   return summary.origin !== 'routine' && summary.origin !== 'task'
 }
 
-export const useSessionsStore = create<SessionsStore>()((set) => ({
+export const useSessionsStore = create<SessionsStore>()((set, get) => ({
   byId: {},
   loaded: false,
   error: null,
@@ -79,20 +93,47 @@ export const useSessionsStore = create<SessionsStore>()((set) => ({
     }
     useSessionsStore.getState().setAll(summaries)
   },
-  archiveNow(sessionId) {
+  archiveNow(sessionId, leave = []) {
     const at = Date.now()
     archiving.set(sessionId, at)
+    const parents = new Map<string, string>()
+    for (const id of leave) {
+      const parentId = get().byId[id]?.parentId
+      if (!parentId) continue
+      parents.set(id, parentId)
+      leaving.set(id, { at, parentId, reported: parentId })
+    }
     const mark = (from: number | null, to: number | null) =>
       set((state) => {
         const summary = state.byId[sessionId]
         if (!summary || summary.archivedAt !== from) return state
         return { byId: { ...state.byId, [sessionId]: { ...summary, archivedAt: to } } }
       })
+    const reparent = (ids: readonly string[], back: boolean) =>
+      set((state) => {
+        const byId = { ...state.byId }
+        for (const id of ids) {
+          const summary = byId[id]
+          const parentId = parents.get(id)
+          if (summary && parentId) byId[id] = { ...summary, parentId: back ? parentId : null }
+        }
+        return { byId }
+      })
     mark(null, at)
+    reparent([...parents.keys()], false)
     return (archived) => {
       if (archiving.get(sessionId) !== at) return
       archiving.delete(sessionId)
+      // A host from before archiving alone archives the whole tree, and says nothing of the
+      // sub-sessions, which go back under the session.
+      const back = [...parents.keys()].filter((id) => {
+        const left = leaving.get(id)
+        if (left?.at !== at) return false
+        leaving.delete(id)
+        return !archived || left.reported !== null
+      })
       if (!archived) mark(at, null)
+      reparent(back, true)
     }
   },
 }))
@@ -191,6 +232,25 @@ export function inPinnedTree(byId: Record<string, SessionSummary>, s: SessionSum
   let root = s
   while (root.parentId && byId[root.parentId]) root = byId[root.parentId]!
   return !!root.pinnedAt && !root.archivedAt
+}
+
+/**
+ * The sub-sessions right under a session that the list shows, reached through its subagents,
+ * which belong to it: the ones archiving it alone leaves in the list. One a window prepared and
+ * never sent goes with it.
+ */
+export function listedSubSessions(
+  byId: Record<string, SessionSummary>,
+  sessionId: string,
+): SessionSummary[] {
+  const all = Object.values(byId)
+  const under = (id: string): SessionSummary[] =>
+    all
+      .filter((s) => s.parentId === id)
+      .flatMap((s) =>
+        s.origin === 'subagent' ? under(s.id) : s.archivedAt || s.prepared ? [] : [s],
+      )
+  return under(sessionId)
 }
 
 /** Archived itself, or under a session that is. A missing parent is not treated as archived. */

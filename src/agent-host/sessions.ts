@@ -7577,6 +7577,7 @@ export class SessionManager {
     delete record.queue
     delete record.pinnedAt
     delete record.archivedAt
+    delete record.leftSubSessions
     delete record.routine
     delete record.task
     if (record.origin === 'task') record.origin = 'user'
@@ -7687,6 +7688,7 @@ export class SessionManager {
       'queue',
       'pinnedAt',
       'archivedAt',
+      'leftSubSessions',
       'routine',
       'task',
       'configDir',
@@ -9299,17 +9301,59 @@ export class SessionManager {
     this.saveRecord(sessionId)
   }
 
-  /** Takes a top-level session and its sub-sessions off the list, closed; the index keeps them. */
-  async archive(sessionId: string): Promise<void> {
+  /**
+   * Takes a top-level session off the list, closed, with its sub-sessions; the index keeps them.
+   * Without them, its subagents still go with it, and the sub-sessions in the list leave its tree
+   * to stay there as sessions of their own until it is restored.
+   */
+  async archive(sessionId: string, subSessions = true): Promise<void> {
     const record = this.topLevel(sessionId)
     if (record.archivedAt !== undefined) return
     await this.settled(sessionId)
-    const all = [...this.descendants(sessionId), record]
+    const left = subSessions ? [] : this.listedSubSessions(sessionId)
+    const staying = new Set(
+      left.flatMap((child) => [child.id, ...this.descendants(child.id).map((item) => item.id)]),
+    )
+    const all = [...this.descendants(sessionId).filter((item) => !staying.has(item.id)), record]
     await this.closeAll(all, true)
+    for (const child of left) {
+      child.parentId = null
+      this.saveRecord(child.id)
+    }
+    if (left.length > 0) record.leftSubSessions = left.map((child) => child.id)
+    else delete record.leftSubSessions
     delete record.pinnedAt
     record.archivedAt = this.now()
     this.saveRecord(sessionId)
     this.deps.events.ended(all.map((item) => item.id))
+  }
+
+  /**
+   * The sub-sessions right under a session that the list shows, reached through its subagents,
+   * which belong to it: not one archived on its own, nor one a window prepared and never sent.
+   */
+  private listedSubSessions(sessionId: string): SessionRecord[] {
+    return this.children(sessionId).flatMap((child) => {
+      if (child.origin === 'subagent') return this.listedSubSessions(child.id)
+      const listed = child.archivedAt === undefined && !this.live.get(child.id)?.prepared
+      return listed ? [child] : []
+    })
+  }
+
+  /** Puts the sub-sessions a session left in the list when archived back under it. */
+  private takeBackSubSessions(record: SessionRecord): void {
+    const left = record.leftSubSessions
+    if (!left) return
+    delete record.leftSubSessions
+    for (const id of left) {
+      const child = this.live.get(id)?.record ?? this.records.get(id)
+      // One deleted since stays gone, and one another tree took stays there.
+      if (!child || child.parentId !== null) continue
+      child.parentId = record.id
+      // Only a top-level session is pinned.
+      delete child.pinnedAt
+      this.saveRecord(id)
+    }
   }
 
   // The session tools: what the artifacts service calls, under the caller's id.
@@ -10159,6 +10203,7 @@ export class SessionManager {
       await this.deps.projects.add(projectPath)
     }
     delete record.archivedAt
+    this.takeBackSubSessions(record)
     this.saveRecord(record.id)
   }
 

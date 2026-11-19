@@ -1885,7 +1885,11 @@ export function createValidators(platform: Platform): Validators {
       const o = fields(params)
       return { sessionId: sessionId(o), pinned: flag(o, 'pinned') }
     },
-    'sessions.archive': session,
+    'sessions.archive': (params) => {
+      const o = fields(params)
+      const subSessions = optionalFlag(o, 'subSessions')
+      return { sessionId: sessionId(o), ...(subSessions === undefined ? {} : { subSessions }) }
+    },
     'sessions.unarchive': session,
     'sessions.markUnread': (params) => {
       const o = fields(params)
