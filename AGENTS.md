@@ -6,7 +6,7 @@ Guidance for coding agents working in this repository. `CLAUDE.md` imports this 
 
 Kettu is an Electron desktop GUI for terminal coding agents: Claude Code, Codex CLI, opencode and Pi. It is in early development; [README.md](./README.md) has the product vision and features, and [ROADMAP.md](./ROADMAP.md) the plans.
 
-Kettu is only a GUI: it implements no agent. It drives Claude Code through the Claude Agent SDK, Codex through `codex app-server`, and every other agent over the Agent Client Protocol (ACP).
+Kettu is only a GUI: it implements no agent. It drives Claude Code through the Claude Agent SDK, Codex through `codex app-server`, Cline through Cline's SDK, and every other agent over the Agent Client Protocol (ACP).
 
 ## Engineering rules
 
@@ -41,6 +41,8 @@ Beyond the UI stack: `@agentclientprotocol/sdk` for ACP (protocol v1 through the
 Computer use runs Cua Driver's `cua-driver` program (MIT) as a child of the agent host, in its direct MCP mode with its usage reports and update checks off. It is no npm dependency: `tools/install/cua-driver.mjs` fetches the pinned release for the target into `resources/cua-driver/`, checked by SHA-256, and the app ships it in its resources.
 
 Claude Code's `@anthropic-ai/claude-agent-sdk` is never a dependency: Kettu installs it into its data folder on first use and loads it at runtime, because the SDK's license grants no right to redistribute it. Codex's `@openai/codex` is not one either: Kettu runs the user's own `codex`. The repository holds only its own types for the parts of the SDK it uses, and lint rejects a value import of the package.
+
+Cline's `@cline/sdk` is no dependency either: the `cline` package Kettu installs into its data folder brings it, and a process of Kettu's own (`src/agent-host/cline/cline-host.ts`) loads it from there, so the SDK always has its CLI's version. Where that process cannot start, the Agent runs `cline --acp`.
 
 ### UI stack: one library per concern
 

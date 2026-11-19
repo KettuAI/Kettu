@@ -340,6 +340,8 @@ export interface AgentManagerDeps extends DriverOverrides {
   adaptersDir: string
   /** The session router a per-session agent launches through; null without one. */
   sessionRouterPath?: string | null
+  /** The bundle of the process that runs Cline's SDK; null without one. */
+  clineHostPath?: string | null
   detect?(def: AgentDefinition, ctx: DetectContext): Promise<Detection>
   install?(options: InstallOptions): Promise<InstalledAdapter>
   /** Downloads and extracts a binary agent's release archive. */
@@ -1385,6 +1387,8 @@ export class AgentManager {
         currentCli: this.currentCli(slot, spec),
         cliVersion: slot.h.detection?.cli?.version ?? null,
         kettuDir: path.join(this.deps.adaptersDir, EXTENSIONS_FOLDER, slot.def.id),
+        nodeRuntime: this.deps.nodeRuntime,
+        clineHostPath: this.deps.clineHostPath ?? null,
       })
     } catch (error) {
       slot.launched = null

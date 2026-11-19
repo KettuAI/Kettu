@@ -3,6 +3,7 @@
 import type { AgentId } from '@shared/thread'
 import { ACP_DRIVER } from './acp/driver'
 import { CLAUDE_SDK_DRIVER } from './claude/driver'
+import { CLINE_SDK_DRIVER } from './cline/driver'
 import { protocolOf, type AgentDefinition, type AgentProtocol } from './catalog'
 import { CODEX_DRIVER } from './codex/driver'
 import { DSH_DRIVER } from './dsh/driver'
@@ -14,6 +15,7 @@ import { PI_DRIVER } from './pi/driver'
 export const DRIVERS: Readonly<Record<AgentProtocol, AgentDriver>> = {
   acp: ACP_DRIVER,
   'claude-sdk': CLAUDE_SDK_DRIVER,
+  'cline-sdk': CLINE_SDK_DRIVER,
   'codex-app-server': CODEX_DRIVER,
   'dsh-sdk': DSH_DRIVER,
   'opencode-server': OPENCODE_SERVER_DRIVER,

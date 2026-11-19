@@ -155,6 +155,7 @@ import { Projects } from './projects'
 import { claudeOutside, type OutsideReader } from './outside-sessions'
 import { claudeCacheTtl, type CacheTtlReader } from './prompt-cache'
 import { claudeModelRequests } from './model-requests/claude'
+import { clineModelRequests } from './model-requests/cline'
 import { codexModelRequests } from './model-requests/codex'
 import { opencodeModelRequests } from './model-requests/opencode'
 import { byHarness } from './model-requests/reader'
@@ -277,6 +278,8 @@ export interface HostOptions {
   fakeAgentPath: string | null
   /** The session router's bundle, which a per-session agent's process runs under. */
   sessionRouterPath?: string | null
+  /** The bundle of the process that runs Cline's SDK; without it Cline runs over ACP. */
+  clineHostPath?: string | null
   settings: HostSettings
   baseEnv: Env
   send(message: HostToMain): void
@@ -867,6 +870,7 @@ export class AgentHost {
       reportsDir: path.join(options.userDataPath, 'agent-reports'),
       adaptersDir,
       sessionRouterPath: options.sessionRouterPath ?? null,
+      clineHostPath: options.clineHostPath ?? null,
       ...(options.detect ? { detect: options.detect } : {}),
       ...(options.protocols ? { protocols: options.protocols } : {}),
       ...(options.drivers ? { drivers: options.drivers } : {}),
@@ -1027,6 +1031,13 @@ export class AgentHost {
             },
           }),
           opencode: opencodeModelRequests({ sessions: (agentId) => this.agents.openCode(agentId) }),
+          cline: clineModelRequests({
+            home: options.homeDir ?? os.homedir(),
+            env: async () => {
+              await this.env.ready()
+              return this.env.agentEnv('cline')
+            },
+          }),
         },
         acpModelRequests(this.acpMessages),
       ),
