@@ -664,7 +664,8 @@
     },
     "account": {
       "account": "DeepSeek 账号",
-      "apiKey": "DeepSeek API key"
+      "apiKey": "DeepSeek API key",
+      "gateway": "自定义模型服务商"
     },
     "mode": {
       "name": "模式",
@@ -680,9 +681,13 @@
     "model": "模型",
     "effort": {
       "name": "推理强度",
+      "default": "默认",
       "off": "关",
+      "minimal": "最低",
       "low": "低",
+      "medium": "中",
       "high": "高",
+      "xhigh": "很高",
       "max": "最高"
     }
   },
