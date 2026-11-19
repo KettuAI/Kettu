@@ -1,0 +1,89 @@
+[
+  {
+    "type": "agent_start"
+  },
+  {
+    "type": "turn_start"
+  },
+  {
+    "type": "message_start",
+    "message": {
+      "role": "user",
+      "content": [
+        {
+          "type": "text",
+          "text": "Say hi."
+        }
+      ],
+      "timestamp": 1795103501547
+    }
+  },
+  {
+    "type": "message_end",
+    "message": {
+      "role": "user",
+      "content": [
+        {
+          "type": "text",
+          "text": "Say hi."
+        }
+      ],
+      "timestamp": 1795103501547
+    }
+  },
+  {
+    "type": "message_start",
+    "message": {
+      "role": "assistant",
+      "content": [],
+      "api": "openai-completions",
+      "provider": "example",
+      "model": "small-model",
+      "usage": {
+        "input": 0,
+        "output": 0,
+        "cacheRead": 0,
+        "cacheWrite": 0,
+        "totalTokens": 0
+      },
+      "stopReason": "error",
+      "timestamp": 1795103501622,
+      "errorMessage": "402: {\"message\":\"Insufficient Balance (request_id: 00000000-0000-4000-8000-000000000000)\",\"type\":\"insufficient_balance_error\",\"param\":null,\"code\":\"invalid_request_error\"}",
+      "durationMs": 1394,
+      "thinkingLevel": "high"
+    }
+  },
+  {
+    "type": "message_end",
+    "message": {
+      "role": "assistant",
+      "content": [],
+      "api": "openai-completions",
+      "provider": "example",
+      "model": "small-model",
+      "usage": {
+        "input": 0,
+        "output": 0,
+        "cacheRead": 0,
+        "cacheWrite": 0,
+        "totalTokens": 0
+      },
+      "stopReason": "error",
+      "timestamp": 1795103501622,
+      "errorMessage": "402: {\"message\":\"Insufficient Balance (request_id: 00000000-0000-4000-8000-000000000000)\",\"type\":\"insufficient_balance_error\",\"param\":null,\"code\":\"invalid_request_error\"}",
+      "durationMs": 1394,
+      "thinkingLevel": "high"
+    }
+  },
+  {
+    "type": "turn_end"
+  },
+  {
+    "type": "agent_end",
+    "willRetry": false
+  },
+  {
+    "type": "agent_settled",
+    "aborted": false
+  }
+]

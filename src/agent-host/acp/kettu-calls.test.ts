@@ -15,7 +15,6 @@ import { newTurnScope } from '../session-updates'
 import { AcpConnection, inProcessTransport } from './connection'
 import opencodeCalls from './fixtures/opencode-kettu-tools.json'
 import opencodeErrors from './fixtures/opencode-script-errors.json'
-import piCalls from './fixtures/pi-kettu-tools.json'
 
 /** A permission request the agent sends for a call, in place of an update. */
 interface Ask {
@@ -182,15 +181,6 @@ function textOf(entry: ThreadEntry): string {
     .join('\n')
 }
 
-describe("Pi's Kettu calls", () => {
-  it('hide a memory write that succeeded and keep one that failed', async () => {
-    const entries = await rows({ name: 'pi-acp', version: '0.0.34' }, piCalls)
-    expect(tools(entries)).toEqual([
-      { id: 't:call_14ed29b611f9492f9876aaa4', title: 'mcp__kettu__remember', status: 'failed' },
-    ])
-  })
-})
-
 describe("Kettu's calls named as Claude Code names them", () => {
   it('hide the plan and the report, and memory writes unless they fail', async () => {
     const entries = await rows({ name: 'fake-agent', version: '0.1.0' }, [
@@ -210,7 +200,7 @@ describe("Kettu's calls named as Claude Code names them", () => {
 
   it('keep the row of a call that asked for permission, through to its end', async () => {
     const [start, end] = call('c1', 'remember')
-    const entries = await rows({ name: 'pi-acp', version: '0.0.34' }, [
+    const entries = await rows({ name: 'fake-agent', version: '0.1.0' }, [
       start,
       { ask: { ...(start as object), sessionUpdate: undefined, status: 'pending' } },
       end,

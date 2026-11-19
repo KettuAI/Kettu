@@ -82,6 +82,10 @@ export interface HostedContext extends DriverContext {
    * detection finds again. Rejects with why none can run. A test may leave it out.
    */
   currentCli?(started: string): Promise<string>
+  /** The version the user's CLI printed when it was detected; null when it printed none. */
+  cliVersion?: string | null
+  /** Kettu's own folder for the files a driver writes for the agent, such as an extension. */
+  kettuDir?: string
 }
 
 export interface HostedDriver extends StoredConfig {

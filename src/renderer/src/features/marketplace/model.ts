@@ -405,7 +405,7 @@ export function relatedServers(id: string, catalog: MarketCatalog | null, limit 
   return { byPublisher: false, items: items.slice(0, limit) }
 }
 
-// pi-acp starts pi with fixed arguments, so Kettu has nowhere to hand Pi a skills folder.
+// Kettu hands Pi no skills folder yet.
 const NO_SKILLS: readonly HarnessId[] = ['pi']
 
 /** Whether Kettu can hand an agent the skills it keeps. */

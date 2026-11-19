@@ -9,7 +9,6 @@ import type { Platform } from '@shared/platform'
 import type { HostSettings } from '@shared/settings'
 import { harnessOf, type AgentId, type HarnessId } from '@shared/thread'
 import { listInstalled, type InstalledAdapter } from './adapter-install'
-import { PI_COMMAND_VARIABLE, PI_EXTENSION_VARIABLE, piLauncher } from './pi/launcher'
 import { AGORAGENTIC } from './agents/agoragentic'
 import { AMP } from './agents/amp'
 import { ANTIGRAVITY } from './agents/antigravity'
@@ -116,23 +115,7 @@ export type LaunchKind =
   | { kind: 'node-script'; script: string }
 
 /** How Kettu talks to an agent; each protocol has its driver in `drivers.ts`. */
-export type AgentProtocol = 'acp' | 'claude-sdk' | 'codex-app-server' | 'dsh-sdk'
-
-/** A program the adapter runs, which the user installs beside it. */
-export interface AgentRequires {
-  /** The command looked up on PATH. */
-  command: string
-  /** The oldest version the adapter runs. */
-  minimum: string
-  /** The variable the adapter reads to run it instead. */
-  variable: string
-  /**
-   * The oldest version of it that loads Kettu's extension, which then reaches Kettu's MCP service
-   * for the adapter (pi 1.0.0, the first with `registerMcpServer`): the adapter runs a launcher in
-   * `variable` that starts the program with the extension.
-   */
-  extension?: string
-}
+export type AgentProtocol = 'acp' | 'claude-sdk' | 'codex-app-server' | 'dsh-sdk' | 'pi-rpc'
 
 export interface AgentDefinition {
   id: HarnessId
@@ -142,28 +125,11 @@ export interface AgentDefinition {
   protocol?: AgentProtocol
   launch: LaunchKind
   requiresNode?: string
-  /** A program the adapter runs and the user installs, such as pi's `pi` (pi-acp 0.0.34). */
-  requires?: AgentRequires
-  /** Variables every launch adds (pi-acp 0.0.34 reads PI_ACP_ENABLE_EMBEDDED_CONTEXT). */
+  /** Variables every launch adds. */
   env?: Record<string, string>
   /** Variables the launch of an added agent adds, which keep it apart from the default agent. */
   addedEnv?: Record<string, string>
   install: { hint: HostKey; url: string; notice?: HostKey }
-  /**
-   * Its terminal sign-in runs the `requires` program alone, without the launch's variables
-   * (pi-acp 0.0.34's `pi_terminal_login` only runs `pi --terminal-login`).
-   */
-  signInWithCli?: true
-  /**
-   * Sends its thought levels again as legacy `modes`, which the host ignores, so no mode picker
-   * repeats them (pi-acp 0.0.34's `thought_level` option).
-   */
-  levelsAsModes?: true
-  /**
-   * Sends the agent's startup note as the session's first `agent_message_chunk` after
-   * `session/new`, which the host drops (pi-acp 0.0.34's `_meta.piAcp.startupInfo`).
-   */
-  startupNote?: true
   /** Pushes `_auth/status_update` as it starts, naming its account. */
   reportsAccount?: boolean
   /**
@@ -400,14 +366,12 @@ export interface LaunchSpec {
   display: CommandWords
   /** The user's own CLI this launch passes to the SDK, or runs itself. */
   cli?: string
-  /** It runs Kettu's extension, which takes Kettu's MCP service from each session's environment. */
-  kettuExtension?: true
   /** The version of Kettu's own install it runs: a package, a release archive or a uvx package. */
   version?: string
 }
 
-/** Kettu's own files an agent runs, such as Pi's extension, beside the installs and no install. */
-const EXTENSIONS_FOLDER = '.extensions'
+/** Kettu's own files a driver writes for an agent, such as Pi's extension, beside the installs. */
+export const EXTENSIONS_FOLDER = '.extensions'
 
 /** Where a package agent's version lives once installed, before detection says more. */
 export function packageDir(
@@ -492,8 +456,6 @@ export type Detection =
       state: 'available'
       spec: LaunchSpec | null
       adapter: AdapterPlan | null
-      /** A `requires` program that was found, and the version it printed. */
-      requires?: { program: string; version: string }
       /** The user's CLI that runs, for a harness with a `cli`. */
       cli?: InstalledCli
       /**
@@ -510,9 +472,9 @@ export type Detection =
     }
 
 /**
- * Whether detection found the user's own program: their CLI, the program an adapter runs, or a
- * binary outside `kettuDir`, where Kettu keeps the programs it installs. One that is found but
- * cannot run, such as a CLI too old, counts.
+ * Whether detection found the user's own program: their CLI, or a binary outside `kettuDir`, where
+ * Kettu keeps the programs it installs. One that is found but cannot run, such as a CLI too old,
+ * counts.
  */
 export function userProgramFound(
   def: AgentDefinition,
@@ -521,7 +483,6 @@ export function userProgramFound(
 ): boolean {
   if (detection.cli) return true
   if (detection.state !== 'available') return false
-  if (detection.requires) return true
   const command = def.launch.kind === 'binary' ? detection.spec?.command : undefined
   if (!command) return false
   const relative = path.relative(kettuDir, command)
@@ -552,7 +513,7 @@ export function librarySpec(entry: string, env: Record<string, string>): LaunchS
   return { command: entry, args: [], env, shell: false, display: { command: entry, args: [], env } }
 }
 
-/** `node <entry>` for an installed adapter, with what its `requires` adds. */
+/** `node <entry>` for an installed adapter. */
 export async function installedSpec(
   def: AgentDefinition,
   /** The user's Node.js, which only a library runs without. */
@@ -861,67 +822,6 @@ export async function detectAgent(def: AgentDefinition, ctx: DetectContext): Pro
           detail: t('detect.npmMissing', { agent: def.name, hint: t(def.install.hint) }),
         }
       }
-      // A program the adapter runs, which the user installs: pi-acp needs the user's own `pi`.
-      let requires: { program: string; version: string } | null = null
-      if (def.requires) {
-        const hint = t(def.install.hint)
-        const program = await findCommand(def.requires.command, ctx)
-        if (!program) {
-          return {
-            state: 'not-installed',
-            detail: t('detect.requiresMissing', {
-              agent: def.name,
-              command: def.requires.command,
-              hint,
-            }),
-          }
-        }
-        const answer = ctx.probeCli
-          ? await ctx.probeCli(program, ctx.env)
-          : { error: `${def.requires.command} --version was not asked.` }
-        if ('error' in answer) {
-          return {
-            state: 'not-installed',
-            detail: t('detect.requiresFailed', {
-              agent: def.name,
-              command: def.requires.command,
-              reason: answer.error,
-              hint,
-            }),
-          }
-        }
-        if (compareVersions(answer.version, def.requires.minimum) < 0) {
-          return {
-            state: 'not-installed',
-            detail: t('detect.requiresOutdated', {
-              agent: def.name,
-              command: def.requires.command,
-              required: def.requires.minimum,
-              installed: answer.version,
-              hint,
-            }),
-          }
-        }
-        requires = { program, version: answer.version }
-      }
-      let requiresEnv: Record<string, string> =
-        requires && def.requires ? { [def.requires.variable]: requires.program } : {}
-      let extension = false
-      const oldest = def.requires?.extension
-      if (requires && def.requires && oldest && compareVersions(requires.version, oldest) >= 0) {
-        try {
-          const dir = path.join(ctx.adaptersDir, EXTENSIONS_FOLDER, def.id)
-          const launcher = await piLauncher(dir, ctx.platform)
-          requiresEnv = {
-            [def.requires.variable]: launcher.command,
-            [PI_COMMAND_VARIABLE]: requires.program,
-            [PI_EXTENSION_VARIABLE]: launcher.extension,
-          }
-          extension = true
-        } catch {
-          // Unwritten, the program runs by itself as before, only without Kettu's tools.
-        }
-      }
       // A per-session agent runs only through the router, which every packaged build carries.
       if (launch.perSession && !ctx.sessionRouterPath) {
         return { state: 'not-installed', detail: 'The session router is missing from this build.' }
@@ -947,7 +847,6 @@ export async function detectAgent(def: AgentDefinition, ctx: DetectContext): Pro
           const env = {
             ...def.env,
             ...(launch.kind === 'package' ? launch.env : {}),
-            ...requiresEnv,
             ...passed.env,
             ...(def.cli.variable ? { [def.cli.variable]: passed.installed.path } : {}),
           }
@@ -967,15 +866,7 @@ export async function detectAgent(def: AgentDefinition, ctx: DetectContext): Pro
             cli: passed.installed.path,
           }
         }
-        const spec = await installedSpec(
-          def,
-          nodePath,
-          install,
-          lookup,
-          requiresEnv,
-          ctx.sessionRouterPath ?? null,
-        )
-        return extension ? { ...spec, kettuExtension: true } : spec
+        return installedSpec(def, nodePath, install, lookup, {}, ctx.sessionRouterPath ?? null)
       }
       const spec = current ? await specFor(current) : null
       const fallbackSpec = other ? await specFor(other) : null
@@ -995,7 +886,6 @@ export async function detectAgent(def: AgentDefinition, ctx: DetectContext): Pro
               ? { version: other.version, dir: other.dir, spec: fallbackSpec }
               : null,
         },
-        ...(requires ? { requires } : {}),
         ...(cli ? { cli: cli.installed } : {}),
       }
     }

@@ -26,8 +26,6 @@ interface NamingRow {
 const NAMINGS: ReadonlyMap<string, NamingRow> = new Map([
   // fake-agent 0.1.0 titles its calls as Claude Code names them.
   ['fake-agent', { since: '0.1.0', naming: 'claude' }],
-  // pi-acp 0.0.34 titles a call with pi's own name for the tool, Claude Code's form in pi 1.5.2.
-  ['pi-acp', { since: '0.0.34', naming: 'claude' }],
   // agy 1.5.9 names the tool beside each call, in a field ACP does not have.
   ['Antigravity ACP Server', { since: '1.5.9', naming: 'agy' }],
   // OpenCode 2.0.32 reaches the MCP servers a client gives only through its Code Mode.

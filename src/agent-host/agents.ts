@@ -20,7 +20,6 @@ import type {
   ClaudeSettings,
   CodebuddySettings,
   CodebuddySiteChange,
-  InstalledCli,
   McpStatus,
   PlanLimit,
   PlanResets,
@@ -141,6 +140,7 @@ import {
 import {
   detectAgent,
   displayCommand,
+  EXTENSIONS_FOLDER,
   protocolOf,
   type AgentDefinition,
   type CommandWords,
@@ -438,9 +438,6 @@ class Harness {
   cliMethod: AgentInstallMethod['id'] | null = null
   /** A binary agent's version, from its own `--version`, until it starts and reports its own. */
   binaryVersion: string | null = null
-  /** The `requires` program detection found, and the version it printed. */
-  requiresProgram: string | null = null
-  requiresVersion: string | null = null
   /** The program `binaryVersion` was read from, so an answer for another one is dropped. */
   binaryProgram: string | null = null
   /** The `--version` failure already logged, so a repeated detection logs it once. */
@@ -846,10 +843,6 @@ export class AgentManager {
     h.installedCli = installedCli
     h.installPlans = plans
     h.cliMethod = cliMethod
-    h.requiresProgram =
-      effective.state === 'available' ? (effective.requires?.program ?? null) : null
-    h.requiresVersion =
-      effective.state === 'available' ? (effective.requires?.version ?? null) : null
     // A binary agent's own version is asked in the background, so detection never waits for it.
     // A routed program's launch command is the runtime the router runs on, not the program.
     const program =
@@ -873,13 +866,6 @@ export class AgentManager {
     if (program) void this.askBinaryVersion(h, program, env)
   }
 
-  /** The program an adapter runs, as the page shows the user's CLI; null while it is not found. */
-  private requiresCli(detection: Detection | null | undefined): InstalledCli | null {
-    if (detection?.state !== 'available' || !detection.requires) return null
-    const { program, version } = detection.requires
-    return { path: program, version, variable: null, problem: null }
-  }
-
   /** How the user's own CLI, or a binary harness's program, was installed. */
   private async cliMethod(
     h: Harness,
@@ -888,7 +874,6 @@ export class AgentManager {
     const installs = h.def.installs
     const found =
       detection.cli?.path ??
-      (detection.state === 'available' ? detection.requires?.program : undefined) ??
       (h.def.launch.kind === 'binary' && detection.state === 'available'
         ? detection.spec?.command
         : undefined)
@@ -1360,6 +1345,8 @@ export class AgentManager {
         env,
         spawn: run.spawn,
         currentCli: this.currentCli(slot, spec),
+        cliVersion: slot.h.detection?.cli?.version ?? null,
+        kettuDir: path.join(this.deps.adaptersDir, EXTENSIONS_FOLDER, slot.def.id),
       })
     } catch (error) {
       slot.launched = null
@@ -2003,15 +1990,11 @@ export class AgentManager {
   }
 
   /**
-   * The user's own program, as detection found it: the SDK's CLI, the program an adapter runs, or a
-   * binary harness's program.
+   * The user's own program, as detection found it: the SDK's CLI or a binary harness's program.
    */
   private userProgram(h: Harness): { path: string; version: string | null } | null {
     const detection = h.detection
     if (detection?.cli) return { path: detection.cli.path, version: detection.cli.version }
-    if (detection?.state === 'available' && detection.requires) {
-      return { path: detection.requires.program, version: detection.requires.version }
-    }
     if (h.def.launch.kind !== 'binary' || detection?.state !== 'available' || !detection.spec) {
       return null
     }
@@ -2895,11 +2878,9 @@ export class AgentManager {
   async install(agentId: AgentId, method?: AgentInstallMethod['id']): Promise<void> {
     const { h } = this.slot(agentId)
     await this.detectAll()
-    // The user's program the adapter runs is installed first, the SDK's CLI or pi for pi-acp; one
-    // found too old is updated instead.
+    // The user's program an SDK runs is installed first; one found too old is updated instead.
     const cliMissing = h.detection?.state === 'not-installed' && !h.detection.cli
-    const runsProgram = !!h.def.cli || (!!h.def.requires && !!h.def.installs)
-    if (runsProgram && h.def.launch.kind === 'package' && cliMissing) {
+    if (h.def.cli && h.def.launch.kind === 'package' && cliMissing) {
       return this.installProgram(h, method)
     }
     switch (h.def.launch.kind) {
@@ -3033,9 +3014,7 @@ export class AgentManager {
           npmPrefix: () => this.npmPrefix(plan.tool),
         })
         const command =
-          h.def.cli?.command ??
-          h.def.requires?.command ??
-          (h.def.launch.kind === 'binary' ? h.def.launch.command : agent)
+          h.def.cli?.command ?? (h.def.launch.kind === 'binary' ? h.def.launch.command : agent)
         throw new Error(
           folder
             ? t('agent.binaryInstall.notOnPath', { agent, command, folder })
@@ -4836,10 +4815,7 @@ export class AgentManager {
       return formatCommand({ command: method.command, args: method.args, env }, this.deps.platform)
     }
     return formatCommand(
-      // pi-acp 0.0.34's only method just runs the `requires` program, so it runs alone.
-      slot.def.signInWithCli && slot.h.requiresProgram
-        ? { command: slot.h.requiresProgram, args: [], env: {} }
-        : { command: display.command, args: [...display.args, ...method.args], env },
+      { command: display.command, args: [...display.args, ...method.args], env },
       this.deps.platform,
     )
   }
@@ -4983,7 +4959,7 @@ export class AgentManager {
     const color = slot.added ? agentColor(this.deps.settings().addedAgents, slot.id) : null
     const cliVersion = this.cliUpdateVersion(h)
     const cliCommand = cliVersion ? (this.cliCommands.get(h) ?? null) : null
-    const cliCommandName = slot.def.cli?.command ?? slot.def.requires?.command
+    const cliCommandName = slot.def.cli?.command
     return {
       id: slot.id,
       name: slot.name,
@@ -5004,11 +4980,8 @@ export class AgentManager {
           ? { set: slot.apiKey, providers: slot.def.id === 'claude-code' }
           : null,
       state: slot.state,
-      // For an agent with a `requires` program its own version is the one shown, never the adapter's.
       // Kettu's own install names its release when the program reports no version of its own.
-      version: slot.def.requires
-        ? (h.requiresVersion ?? h.binaryVersion ?? null)
-        : (init?.version ?? h.binaryVersion ?? installed?.version ?? null),
+      version: init?.version ?? h.binaryVersion ?? installed?.version ?? null,
       package:
         launch.kind === 'package'
           ? {
@@ -5091,7 +5064,7 @@ export class AgentManager {
       cli: cliCommandName
         ? {
             command: cliCommandName,
-            installed: detection?.cli ?? this.requiresCli(detection),
+            installed: detection?.cli ?? null,
             method: h.cliMethod,
             update: cliVersion && cliCommand ? { version: cliVersion, command: cliCommand } : null,
           }

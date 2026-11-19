@@ -27,8 +27,6 @@ import {
 } from '@agentclientprotocol/sdk/unstable'
 import type { AgentId, ConfigOption, PermissionOption } from '@shared/thread'
 import {
-  KETTU_SERVICE_META,
-  MODEL_SCOPE_META,
   AgentRequestError,
   optionAnswer,
   type AgentConnection,
@@ -109,9 +107,7 @@ import {
   type Removal,
 } from './hidden-sessions'
 import { askedCall, mcpNaming, ownCall, type McpNaming } from './kettu-calls'
-import { dropScopeFile, ScopeFiles, takeScope, withinScope } from './model-scope'
 import { ownTitles } from './own-titles'
-import { selectQuestion } from './select-question'
 import { DELEGATED_SIGN_IN, delegatedSignInStart, requestUrlElicitation } from './sign-in'
 
 /** A message-level stream to an agent, from a process's stdio or an in-process agent. */
@@ -157,12 +153,6 @@ export interface AcpOptions {
   agentId?: AgentId
   /** Its name, for an error about it. */
   name?: string
-  /** The agent sends its thought levels again as legacy `modes`, which are ignored. */
-  levelsAsModes?: boolean
-  /** The agent sends its startup note as the first message after `session/new`, which is dropped. */
-  startupNote?: boolean
-  /** It runs Kettu's extension, which takes Kettu's MCP service from the session router. */
-  kettuExtension?: boolean
   /** Accounts its vendor moved to another harness, whose refusal is no sign-in to ask for. */
   movedAccounts?: MovedAccounts
 }
@@ -370,8 +360,6 @@ export class AcpConnection implements AgentConnection {
   private readonly collectors = new Map<string, (update: SessionUpdate) => void>()
   /** OpenCode's subagent sessions, to the session each runs under. */
   private readonly children = new Map<string, string>()
-  /** The startup note a session others opened by `session/new` sends before its first prompt. */
-  private readonly pendingStartup = new Map<string, string>()
   /** How its hidden sessions go, once `initialize` has answered. */
   private removal: Removal | null = null
   /** Hidden sessions an agent keeps once prompted: open to read, never to prompt. */
@@ -398,9 +386,6 @@ export class AcpConnection implements AgentConnection {
   private appendsSystemPrompt = false
   /** agy's sessions while it offers full access. */
   private readonly agyAccess = new Map<string, AgyAccess>()
-  /** The models each session of an agent with Kettu's extension is scoped to, when it is. */
-  private readonly scopes = new Map<string, ReadonlySet<string>>()
-  private readonly scopeFiles = new ScopeFiles()
 
   private constructor(
     private readonly transport: AcpTransport,
@@ -434,14 +419,13 @@ export class AcpConnection implements AgentConnection {
           : ctx.params.toolCall
         const context = target.context()
         const toolCall = askedCall(shaped, this.naming, context)
-        const select = selectQuestion(toolCall, ctx.params.options)
-        const { entryId, output } = mapPermissionToolCall(toolCall, context, select?.question)
+        const { entryId, output } = mapPermissionToolCall(toolCall, context)
         const answer = await target.requestPermission(
           {
             toolCallId: ctx.params.toolCall.toolCallId,
             toolEntryId: entryId,
             output,
-            options: select?.options ?? mapPermissionOptions(ctx.params.options),
+            options: mapPermissionOptions(ctx.params.options),
           },
           ctx.signal,
         )
@@ -494,7 +478,6 @@ export class AcpConnection implements AgentConnection {
         if (!ctx.method.startsWith('$/')) hooks.ignored(null, `notification ${ctx.method}`)
       })
     this.connection = app.connect(this.tap(transport.stream))
-    void this.connection.closed.then(() => this.scopeFiles.close())
   }
 
   static connect(transport: AcpTransport | AgentTransport, hooks: AcpHooks): AcpConnection {
@@ -560,14 +543,11 @@ export class AcpConnection implements AgentConnection {
   }
 
   private deliver(sessionId: string, update: SessionUpdate): void {
-    if (this.dropStartup(sessionId, update)) return
     this.learnChild(sessionId, update)
     const target = this.targets.get(sessionId)
     if (target) {
       this.notePlanWrite(sessionId, update)
-      target.apply(
-        this.withAccess(sessionId, this.withScope(sessionId, this.map(update, target.context()))),
-      )
+      target.apply(this.withAccess(sessionId, this.map(update, target.context())))
       return
     }
     const collector = this.collectors.get(sessionId)
@@ -598,20 +578,6 @@ export class AcpConnection implements AgentConnection {
     if (entry.updates.length < PENDING_UPDATES) entry.updates.push(update)
   }
 
-  /**
-   * Drops the startup note an agent marked `startupNote` sends after `session/new`: the first
-   * agent message before its first prompt, when its text is the answer's `_meta.piAcp.startupInfo`.
-   */
-  private dropStartup(sessionId: string, update: SessionUpdate): boolean {
-    const note = this.pendingStartup.get(sessionId)
-    if (note === undefined) return false
-    if (update.sessionUpdate !== 'agent_message_chunk') return false
-    this.pendingStartup.delete(sessionId)
-    if (update.content.type !== 'text' || update.content.text !== note) return false
-    this.hooks.ignored(sessionId, 'startup note')
-    return true
-  }
-
   private learnChild(sessionId: string, update: SessionUpdate): void {
     const child = (
       update._meta as Record<string, { id?: unknown } | undefined> | null | undefined
@@ -640,11 +606,7 @@ export class AcpConnection implements AgentConnection {
     if (!early) return
     this.pending.delete(sessionId)
     for (const update of early.updates) {
-      if (!this.dropStartup(sessionId, update)) {
-        target.apply(
-          this.withAccess(sessionId, this.withScope(sessionId, this.map(update, target.context()))),
-        )
-      }
+      target.apply(this.withAccess(sessionId, this.map(update, target.context())))
     }
   }
 
@@ -652,7 +614,6 @@ export class AcpConnection implements AgentConnection {
     if (target && this.targets.get(sessionId) !== target) return
     this.targets.delete(sessionId)
     this.pending.delete(sessionId)
-    this.pendingStartup.delete(sessionId)
     this.agyPlans.delete(sessionId)
     this.agyBuildModes.delete(sessionId)
     this.unregistered.add(sessionId)
@@ -674,10 +635,6 @@ export class AcpConnection implements AgentConnection {
     return this.connection.signal.aborted
   }
 
-  get kettuExtension(): boolean {
-    return this.hooks.kettuExtension === true
-  }
-
   get systemPromptAppend(): boolean {
     return this.appendsSystemPrompt
   }
@@ -687,12 +644,11 @@ export class AcpConnection implements AgentConnection {
     this.transport.close()
   }
 
-  /** The agent's options; legacy `modes` are ignored for an agent that sends its levels too. */
   private config(
     options: Parameters<typeof mapConfig>[0],
     modes: Parameters<typeof mapConfig>[1],
   ): ConfigOption[] {
-    return mapConfig(options, this.hooks.levelsAsModes ? null : modes)
+    return mapConfig(options, modes)
   }
 
   private async call<T>(run: () => Promise<T>): Promise<T> {
@@ -789,28 +745,8 @@ export class AcpConnection implements AgentConnection {
     return sessionMeta(this.hooks.agentId, options)
   }
 
-  /**
-   * The `_meta` of a request that starts the session's process: with its Kettu MCP service, and
-   * the file its model scope is written to.
-   */
-  private startMeta(
-    options: SessionOptions,
-    scopeFile: string | null = null,
-  ): Record<string, unknown> | undefined {
-    const meta = this.meta(options)
-    const service = this.kettuExtension ? options.kettuService : undefined
-    if (!service && !scopeFile) return meta
-    return {
-      ...meta,
-      ...(service ? { [KETTU_SERVICE_META]: { url: service.url, token: service.token } } : {}),
-      ...(scopeFile ? { [MODEL_SCOPE_META]: scopeFile } : {}),
-    }
-  }
-
   async newSession(cwd: string, options: SessionOptions = {}): Promise<OpenedSession> {
-    // Without a file, the menu lists every model the agent does.
-    const scopeFile = this.kettuExtension ? await this.scopeFiles.next().catch(() => null) : null
-    const started = this.startMeta(options, scopeFile)
+    const started = this.meta(options)
     const meta =
       this.appendsSystemPrompt && options.systemPromptAppend
         ? { ...started, ...systemPromptMeta(options.systemPromptAppend) }
@@ -821,28 +757,17 @@ export class AcpConnection implements AgentConnection {
         mcpServers: mcpServers(options.mcpServers),
         ...(meta ? { _meta: meta } : {}),
       }),
-    ).catch(async (error: unknown) => {
-      if (scopeFile) await dropScopeFile(scopeFile)
-      throw error
-    })
-    const scope = scopeFile ? await takeScope(scopeFile) : null
-    if (scope) this.scopes.set(response.sessionId, scope)
+    )
     this.readPlan(response._meta)
     this.allowWithoutAsking(response.sessionId, options)
     if (options.hidden && !promptsHidden(this.removal)) this.unprompted.add(response.sessionId)
-    // pi-acp 0.0.34 repeats the startup note its answer carries as the session's first message.
-    const startup = (response._meta as { piAcp?: { startupInfo?: unknown } } | null | undefined)
-      ?.piAcp?.startupInfo
-    if (this.hooks.startupNote && typeof startup === 'string' && startup !== '') {
-      this.pendingStartup.set(response.sessionId, startup)
-    }
     return {
       sessionId: response.sessionId,
       config: this.opened(
         response.sessionId,
         cwd,
         options,
-        this.scoped(response.sessionId, this.config(response.configOptions, response.modes)),
+        this.config(response.configOptions, response.modes),
       ),
     }
   }
@@ -852,7 +777,7 @@ export class AcpConnection implements AgentConnection {
     cwd: string,
     options: SessionOptions = {},
   ): Promise<SessionSetup> {
-    const meta = this.startMeta(options)
+    const meta = this.meta(options)
     const response = await this.call(() =>
       this.connection.agent.request(methods.agent.session.load, {
         sessionId,
@@ -930,7 +855,6 @@ export class AcpConnection implements AgentConnection {
     await this.call(() => this.connection.agent.request(methods.agent.session.close, { sessionId }))
     this.autoAllowed.delete(sessionId)
     this.agyAccess.delete(sessionId)
-    this.scopes.delete(sessionId)
   }
 
   async deleteSession(sessionId: string): Promise<void> {
@@ -939,7 +863,6 @@ export class AcpConnection implements AgentConnection {
     )
     this.autoAllowed.delete(sessionId)
     this.agyAccess.delete(sessionId)
-    this.scopes.delete(sessionId)
   }
 
   async listSessions(
@@ -968,8 +891,6 @@ export class AcpConnection implements AgentConnection {
     if (this.unprompted.has(sessionId)) {
       throw new Error(`${this.hooks.name ?? 'The agent'}'s hidden sessions are never prompted`)
     }
-    // The note comes before a session's first prompt; a message after it is the agent's own.
-    this.pendingStartup.delete(sessionId)
     await this.agyAccess.get(sessionId)?.restarting
     const planning = this.agy && plansAgy(this.version) && this.targets.has(sessionId)
     if (planning) {
@@ -1214,23 +1135,7 @@ export class AcpConnection implements AgentConnection {
           : { sessionId, configId: optionId, value },
       ),
     )
-    return this.scoped(sessionId, this.config(response.configOptions, null))
-  }
-
-  /** A session's options with its model choices narrowed to its scope, when it has one. */
-  private scoped(sessionId: string, config: ConfigOption[]): ConfigOption[] {
-    return withinScope(config, this.scopes.get(sessionId))
-  }
-
-  /** What a session update sets of the options, the model choices narrowed to its scope. */
-  private withScope(sessionId: string, out: MapperOutput): MapperOutput {
-    const scope = this.scopes.get(sessionId)
-    if (!scope) return out
-    for (const patch of out.patches) {
-      if (patch.op !== 'session.update' || !patch.changes.config) continue
-      patch.changes.config = withinScope(patch.changes.config, scope)
-    }
-    return out
+    return this.config(response.configOptions, null)
   }
 
   // agy's full access.
