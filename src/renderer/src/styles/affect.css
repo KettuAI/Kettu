@@ -3398,6 +3398,10 @@ li[data-row-exit='dust'] > * {
 :is(.kettu-settings, .kettu-sd) .ui-sg-row .ui-as-menu {
   min-width: 210px;
 }
+/* A choice that removes a safeguard keeps the select's red, focused too, as the menu opens on it. */
+:is(.kettu-settings, .kettu-sd) .ui-sg-row .ui-as-menu__item[data-danger] {
+  color: var(--danger);
+}
 :is(.kettu-settings, .kettu-sd) .k-input.ui-sg-input {
   width: 200px;
   height: 30px;

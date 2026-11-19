@@ -320,7 +320,15 @@ export function SettingSelect<T extends string>({
 }: {
   label: string
   value: T
-  options: { value: T; label: string; icon?: ReactNode; hint?: string; disabled?: boolean }[]
+  options: {
+    value: T
+    label: string
+    icon?: ReactNode
+    hint?: string
+    disabled?: boolean
+    /** Red, for a choice that removes a safeguard, as Full access does. */
+    danger?: boolean
+  }[]
   onChange: (value: T) => void
   disabled?: boolean
   className?: string
@@ -339,6 +347,7 @@ export function SettingSelect<T extends string>({
           logo: o.icon,
           description: o.hint,
           checked: o.value === value,
+          danger: o.danger,
           disabled: o.disabled,
           onSelect: () => {
             if (o.value !== value) onChange(o.value)
@@ -355,7 +364,9 @@ export function SettingSelect<T extends string>({
             onClick={toggle}
           >
             {mark && <span className="k-select__lead">{mark}</span>}
-            <span className="k-select__value">{chosen?.label}</span>
+            <span className={cn('k-select__value', chosen?.danger && 'text-danger')}>
+              {chosen?.label}
+            </span>
             <Icon icon={ArrowDown01Icon} size={14} />
           </button>
         )}
