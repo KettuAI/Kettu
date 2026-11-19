@@ -5,7 +5,7 @@
   "continue": "继续",
   "welcome": {
     "title": "欢迎使用 Kettu",
-    "lead": "你已经在用的编码 Agent 的家：Claude Code、Codex、OpenCode 和 Pi 并排在一个窗口里。",
+    "lead": "你已经在用的编码智能体的家：Claude Code、Codex、OpenCode 和 Pi 并排在一个窗口里。",
     "start": "开始",
     "fine": "免费、开源，你的工作留在这台电脑上",
     "hello": "你好，我是 Kettu",
@@ -54,19 +54,19 @@
     "open": "打开"
   },
   "agents": {
-    "title": "你的 Agent 准备好了",
+    "title": "你的智能体准备好了",
     "lead": "Kettu 在这台电脑上找到了它们，沿用你在终端里已有的登录。",
     "ready": "可以用了",
-    "note": "在设置 › Agent 里随时添加或移除",
+    "note": "在设置 › 智能体里随时添加或移除",
     "start": "开始使用 Kettu",
-    "noneTitle": "添加第一个 Agent",
+    "noneTitle": "添加第一个智能体",
     "noneLead": "在这里装一个，或者在终端里装好后回来重新检测。",
     "skip": "先跳过",
-    "loading": "正在这台电脑上找 Agent…"
+    "loading": "正在这台电脑上找智能体…"
   },
   "stage": {
     "noModels": "Kettu 自己不跑模型",
-    "noModelsHint": "它驱动你装的编码 Agent，用你自己的账号。",
+    "noModelsHint": "它驱动你装的编码智能体，用你自己的账号。",
     "phone": "iPhone",
     "phoneHint": "会话、通知",
     "browser": "任何浏览器",
@@ -77,7 +77,7 @@
     "connected": "已连接",
     "encrypted": "端到端加密",
     "thisComputer": "这台电脑",
-    "thisComputerHint": "这台电脑 · 你的 Agent 在这里运行",
+    "thisComputerHint": "这台电脑 · 你的智能体在这里运行",
     "caption": "Kettu 只转交加密后的会话，读不到内容"
   }
 }

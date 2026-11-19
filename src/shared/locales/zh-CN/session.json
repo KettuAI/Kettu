@@ -44,7 +44,7 @@
     "cancelled": "已取消",
     "maxTokens": "已达到 token 上限而停止",
     "maxTurnRequests": "已达到请求次数上限而停止",
-    "refusal": "Agent 拒绝了请求",
+    "refusal": "智能体拒绝了请求",
     "withTime": "{{reason}} · {{time}}"
   },
   "tool": {
@@ -68,13 +68,13 @@
     "showFullDiff": "显示完整差异"
   },
   "permission": {
-    "outsideScope": "超出此例程的权限：{{level}}。",
+    "outsideScope": "超出此定时任务的权限：{{level}}。",
     "answer": {
       "allowOnce": "已允许一次",
       "allowAlways": "已始终允许",
       "rejectOnce": "已拒绝",
       "rejectAlways": "已始终拒绝",
-      "allowedByRoutine": "由例程允许",
+      "allowedByRoutine": "由定时任务允许",
       "cancelled": "已取消",
       "withdrawn": "已不再需要",
       "onDevice": "{{answer}} · {{device}}"
@@ -139,7 +139,7 @@
       "timeout": "没有及时回答",
       "revoked": "本次会话已允许，后来撤回"
     },
-    "where": "点按、输入和截图，截图会交给这个 Agent 的模型服务商"
+    "where": "点按、输入和截图，截图会交给这个智能体的模型服务商"
   },
   "computerApp": {
     "decision": {
@@ -195,7 +195,7 @@
       "title": "一起带上",
       "about": "Kettu 的版本和你的系统",
       "logs": "最近 1 小时的日志和操作记录",
-      "ids": "这个会话和 Agent"
+      "ids": "这个会话和智能体"
     },
     "answer": {
       "sent": "已提交 · 报告 {{id}}",
@@ -249,7 +249,7 @@
     "showApp": "显示这个应用",
     "note": "只显示 {{agent}} 在用的窗口，你的其他窗口不在这里。",
     "idle": "{{agent}} 没在使用电脑",
-    "idleHint": "回合使用电脑时，Agent 在用的那个窗口会实时显示在这里。",
+    "idleHint": "回合使用电脑时，智能体在用的那个窗口会实时显示在这里。",
     "noWindow": "{{agent}} 还没打开窗口",
     "noWindowHint": "它一读取或操作某个窗口，那个窗口就会显示在这里。",
     "starting": "正在显示窗口…",
@@ -259,7 +259,7 @@
     "noPermissionHint": "在系统设置里允许，然后退出并重新打开 Kettu。",
     "allow": "打开系统设置",
     "retry": "重试",
-    "elsewhere": "只有在 Agent 使用其应用的那台电脑上才能显示窗口。"
+    "elsewhere": "只有在智能体使用其应用的那台电脑上才能显示窗口。"
   },
   "computerSetup": {
     "label": "设置 Computer use",
@@ -300,12 +300,12 @@
     "declinedNote": "不用了"
   },
   "subagent": {
-    "fallbackTitle": "子 Agent",
+    "fallbackTitle": "子智能体",
     "tools_other": "{{count}} 个工具"
   },
   "subagentBar": {
-    "runsFor": "{{agent}} 正在为 <parent/> 运行这个子 Agent",
-    "runsForParent": "{{agent}} 正在为<parent>父会话</parent>运行这个子 Agent",
+    "runsFor": "{{agent}} 正在为 <parent/> 运行这个子智能体",
+    "runsForParent": "{{agent}} 正在为<parent>父会话</parent>运行这个子智能体",
     "stop": "停止",
     "back": "返回 {{title}}",
     "backShort": "返回"
@@ -348,7 +348,7 @@
     "moreCommits_other": "另有 {{count}} 个提交",
     "pushed_other": "已推送 {{count}} 个提交到 <upstream/>",
     "switchedTo": "已切换到 <branch/>",
-    "openedPr": "已创建 Pull Request",
+    "openedPr": "已创建 PR",
     "copyCommitId": "复制提交 ID"
   },
   "artifactEntry": {
@@ -371,9 +371,9 @@
   },
   "replyFooter": {
     "copyReply": "复制回复",
-    "fork": "从这里分叉",
-    "forking": "正在分叉…",
-    "forkNotReady": "会话就绪后才能分叉",
+    "fork": "从这里另开会话",
+    "forking": "正在另开会话…",
+    "forkNotReady": "会话就绪后才能另开会话",
     "label": "回复操作"
   },
   "changes": {
@@ -424,21 +424,21 @@
     "subSessionProject": "子会话在父会话的项目中工作",
     "chooseProject": "选择要工作的项目",
     "projectMissing": "{{project}} 已不存在",
-    "chooseAgent": "为这个会话选择 Agent",
+    "chooseAgent": "为这个会话选择智能体",
     "whatToWorkOn": "想让 {{agent}} 做什么？",
     "message": "消息",
     "messageAgent": "给 {{agent}} 发消息",
     "describeTask": "描述一个任务…",
     "send": "发送",
-    "host": "主机",
+    "host": "电脑",
     "project": "项目",
     "chooseProjectShort": "选择项目",
     "missing": "未找到",
     "openProject": "打开项目…",
-    "agent": "Agent",
-    "chooseAgentShort": "选择 Agent",
+    "agent": "智能体",
+    "chooseAgentShort": "选择智能体",
     "notInstalled": "未安装",
-    "noProject": "无项目",
+    "noProject": "不属于项目",
     "searchProjects": "搜索项目…",
     "searchProjectsLabel": "搜索项目",
     "recent": "最近",
@@ -467,16 +467,16 @@
     "commitHint": "会话从这个提交开始",
     "missingLine": "这个项目的文件夹不见了，请换一个项目。",
     "chooseProjectFirst": "先选择项目",
-    "chooseAgentFirst": "先选择 Agent",
-    "noAgent": "没有可用的 Agent，先添加或启用一个再开始。",
-    "noAgentOnHost": "{{host}} 上暂时没有可以启动的 Agent。",
-    "noAgentNode_other": "暂时没有可以启动的 Agent：{{agents, list(style: narrow)}} 需要 Node.js 22 或更高版本。",
-    "noAgentUpdate_other": "暂时没有可以启动的 Agent：你的 {{agents, list(style: narrow)}} 版本比 Kettu 要的旧，更新后才能开始。",
-    "setUpAgents": "设置 Agent…",
+    "chooseAgentFirst": "先选择智能体",
+    "noAgent": "没有可用的智能体，先添加或启用一个再开始。",
+    "noAgentOnHost": "{{host}} 上暂时没有可以启动的智能体。",
+    "noAgentNode_other": "暂时没有可以启动的智能体：{{agents, list(style: narrow)}} 需要 Node.js 22 或更高版本。",
+    "noAgentUpdate_other": "暂时没有可以启动的智能体：你的 {{agents, list(style: narrow)}} 版本比 Kettu 要的旧，更新后才能开始。",
+    "setUpAgents": "设置智能体…",
     "agentMenu": {
-      "label": "Agent 和模型",
-      "search": "搜索 Agent 和模型",
-      "agents": "Agent",
+      "label": "智能体和模型",
+      "search": "搜索智能体和模型",
+      "agents": "智能体",
       "setsUp": "首次使用时自动配置",
       "installing": "正在安装…",
       "failed": "出错",
@@ -501,7 +501,7 @@
       "modelsOnStart": "{{agent}} 启动后，这里会列出它的模型。",
       "useAgent": "使用 {{agent}}",
       "moreModels": "更多模型 ({{number}})",
-      "noMatch": "没有匹配的 Agent 或模型",
+      "noMatch": "没有匹配的智能体或模型",
       "checking": "正在检查 {{agent}} 的模型…",
       "prepareFailed": "{{agent}} 无法打开会话：{{error}}",
       "versionBroken": "Kettu 检查发现你的 {{command}} {{version}} 和它不能一起用。",
@@ -535,7 +535,7 @@
     "projectOnHost": "项目：{{host}} 上的 {{name}}",
     "hostFolders": {
       "title": "在 {{host}} 上打开项目",
-      "description": "项目留在 {{host}} 上，不会复制到这台电脑；Agent 在那里读写它。",
+      "description": "项目留在 {{host}} 上，不会复制到这台电脑；智能体在那里读写它。",
       "up": "上一级",
       "location": "位置",
       "list": "{{folder}} 里的文件夹",
@@ -552,8 +552,8 @@
       "open": "打开"
     },
     "picker": {
-      "search": "搜索 Agent",
-      "noMatch": "没有匹配的 Agent",
+      "search": "搜索智能体",
+      "noMatch": "没有匹配的智能体",
       "signedOut": "已退出 · 登录后使用",
       "failed": "启动失败",
       "needsUpdate": "版本太旧 · 点击更新",
@@ -562,7 +562,7 @@
       "limitUsed": "已用 {{limit}}限额的 {{percent}}%",
       "limitLeft": "{{limit}}限额剩余 {{percent}}%",
       "limitReached": "已达 {{limit}}限额",
-      "manage": "管理 Agent…"
+      "manage": "管理智能体…"
     },
     "modelMenu": {
       "label": "模型",
@@ -578,18 +578,18 @@
       "finished": "{{ago}}完成"
     },
     "artifacts": {
-      "title": "最近的 artifact",
+      "title": "最近的产物",
       "viewAll": "查看全部"
     },
-    "addAgent": "添加 Agent…",
+    "addAgent": "添加智能体…",
     "guide": {
-      "title": "还没有 Agent",
+      "title": "还没有智能体",
       "hint": "装一个就能开始；在终端里装好的，点重新检测。",
       "about": {
         "claude-code": "Anthropic 出品，用 Claude 订阅或 API key 登录。",
         "codex": "OpenAI 出品，用 ChatGPT 或 API key 登录。",
         "opencode": "开源，可以接任意模型服务商。",
-        "pi": "小巧、可扩展的终端 Agent。"
+        "pi": "小巧、可扩展的终端智能体。"
       },
       "found": "已在这台电脑上找到",
       "outdated": "你的 {{name}} {{current}} 比 Kettu 要的旧，更新后才能用。",
@@ -598,7 +598,7 @@
     "workflow": {
       "label": "工作流",
       "chat": "对话",
-      "chatHint": "和一个 Agent 对话，和普通会话一样",
+      "chatHint": "和一个智能体对话，和普通会话一样",
       "heading": "工作流",
       "unreadableHint": "文件读不出来",
       "blocked": {
@@ -606,12 +606,12 @@
         "changed": "已改动，待批准",
         "unreadable": "读不出来"
       },
-      "findMore": "在 Marketplace 里找更多工作流…",
-      "addFromMarketplace": "去 Marketplace 添加一个工作流",
-      "worktreeHint": "需求在自己的 worktree 和分支上进行。",
-      "worktreeNote": "需求在自己的 worktree 里进行，从 <base>{{base}}</base> 切出新分支，发出时由 Kettu 起名。",
+      "findMore": "在市场里找更多工作流…",
+      "addFromMarketplace": "去市场添加一个工作流",
+      "worktreeHint": "需求在自己的工作树和分支上进行。",
+      "worktreeNote": "需求在自己的工作树里进行，从 <base>{{base}}</base> 切出新分支，发出时由 Kettu 起名。",
       "textOnly": "需求只能是文字：去掉附件后再发出。",
-      "stepAgents": "工作流的步骤只能由 Claude Code 和 Codex 的 Agent 来做：请选其中一个。",
+      "stepAgents": "工作流的步骤只能由 Claude Code 和 Codex 的智能体来做：请选其中一个。",
       "previewFoot": "Pace：{{pace}} · Auto 的步骤开始时才选人"
     }
   },
@@ -621,11 +621,11 @@
     "descriptionWithKey": "{{agent}} 需要先登录才能启动。",
     "noMethods": "{{agent}} 没有说明登录方式。请在它自己的命令行中登录，然后重试。",
     "apiKey": "API key",
-    "keyOnly": "{{agent}} 只能用 API key 登录。Codebuddy Code 的浏览器和微信登录整台电脑共用一份，加出来的 Agent 没有自己的登录。",
+    "keyOnly": "{{agent}} 只能用 API key 登录。Codebuddy Code 的浏览器和微信登录整台电脑共用一份，加出来的智能体没有自己的登录。",
     "copyCommand": "复制命令",
     "inTerminal": "在终端中登录",
     "signedIn": "我已登录，重试",
-    "envHint": "在设置 › Agent 里 {{agent}} 的页面上填写。",
+    "envHint": "在设置 › 智能体里 {{agent}} 的页面上填写。",
     "inSettings": "去设置里填写",
     "keySet": "我已填好，重试",
     "optional": "可选",
@@ -643,7 +643,7 @@
   },
   "view": {
     "couldntOpen": "无法打开此会话",
-    "hostSilent": "Agent 后台进程没有响应。",
+    "hostSilent": "智能体后台进程没有响应。",
     "stopped": "{{agent}} 已停止",
     "couldNotContinue": "{{agent}} 无法继续此会话。",
     "signInToContinue": "登录 {{agent}} 以继续",
@@ -652,13 +652,13 @@
     "openHarness": "打开 {{name}}",
     "signIn": "登录…",
     "agentRemoved": "{{agent}} 已移除",
-    "agentRemovedBody": "历史仍留在这里。可以在输入框里选另一个 Agent 接着做，或重新添加这个 Agent。",
+    "agentRemovedBody": "历史仍留在这里。可以在输入框里选另一个智能体接着做，或重新添加这个智能体。",
     "agentTurnedOff": "{{agent}} 已停用",
-    "agentTurnedOffBody": "历史仍留在这里。到设置里启用这个 Agent，或在输入框里选另一个 Agent 接着做。",
-    "openAgent": "打开 Agent",
+    "agentTurnedOffBody": "历史仍留在这里。到设置里启用这个智能体，或在输入框里选另一个智能体接着做。",
+    "openAgent": "打开智能体",
     "archivedComposer": "这个会话已归档，不能再发消息。",
     "restore": "恢复",
-    "openAgents": "打开 Agents",
+    "openAgents": "打开智能体设置",
     "announceApproval": "{{agent}} 需要你的授权",
     "announceQuestion": "{{agent}} 有问题要问你",
     "announceFinished": "{{agent}} 已完成"
@@ -672,7 +672,7 @@
     "failed": "查找失败",
     "short": "至少输入 2 个字",
     "indexing": "正在为对话建立索引，结果可能不全",
-    "unsupported": "这台主机还不能在会话中查找"
+    "unsupported": "这台电脑还不能在会话中查找"
   },
   "thread": {
     "label": "对话",
@@ -713,7 +713,7 @@
     }
   },
   "routine": {
-    "link": "打开例程 {{name}}",
+    "link": "打开定时任务 {{name}}",
     "sent": "由 {{name}} 发送 · 立即运行",
     "due": "由 {{name}} 发送 · {{when}} 到期",
     "catchUp": "由 {{name}} 发送 · 补运行 {{when}}"
@@ -731,7 +731,7 @@
     "sessionBrowser": "会话浏览器",
     "browserHint": "你自己的浏览器和登录状态",
     "sessionHint": "{{agent}} 可以查看和操作",
-    "sessionHintGeneric": "会话的 Agent 可以查看和操作",
+    "sessionHintGeneric": "会话的智能体可以查看和操作",
     "writtenBy": "由 {{agent}} 写在 <title>{{title}}</title> 中",
     "openIn": "在 {{browser}} 中打开",
     "openInSession": "在会话浏览器中打开",
@@ -972,11 +972,11 @@
   "worktree": {
     "where": "会话在哪里工作",
     "local": "本地",
-    "new": "新 worktree",
+    "new": "新工作树",
     "localTrigger": "本地 · <name>{{branch}}</name>",
-    "newTrigger": "Worktree · <name>{{branch}}</name>",
+    "newTrigger": "工作树 · <name>{{branch}}</name>",
     "localWorks": "在项目文件夹里的 <name>{{branch}}</name> 上工作",
-    "localHint": "这个项目的别的会话改的是同一批文件。选新 worktree，这个会话就有自己的分支和文件夹。",
+    "localHint": "这个项目的别的会话改的是同一批文件。选新工作树，这个会话就有自己的分支和文件夹。",
     "basedOn": "基于",
     "auto": "自动",
     "autoHint": "按你的消息起名",
@@ -999,25 +999,25 @@
     "noteNamed": "从 <base/> 切出新分支 <branch/>。",
     "noteNamedAt": "从 <base/> 的 <oid/> 切出新分支 <branch/>。",
     "branch": "分支",
-    "inWorktree": "在分支 {{branch}} 的 worktree 里工作",
-    "creating": "正在建 worktree…",
-    "preparing": "正在准备 worktree…",
+    "inWorktree": "在分支 {{branch}} 的工作树里工作",
+    "creating": "正在建工作树…",
+    "preparing": "正在准备工作树…",
     "showOutput": "查看输出",
-    "outputTitle": "worktree 准备的输出",
+    "outputTitle": "工作树准备的输出",
     "noOutput": "还没有输出。",
     "outputFailed": "没能读取输出：{{message}}",
-    "failedTitle": "worktree 没能准备好",
+    "failedTitle": "工作树没能准备好",
     "failedCopy": "复制本地文件失败。",
     "failedSetup": "初始化命令退出，退出码 {{code}}。",
     "failedStopped": "初始化命令没跑完就被结束了。",
-    "failedWaits": "第一条消息会等 worktree 准备好再发给 Agent。",
+    "failedWaits": "第一条消息会等工作树准备好再发给智能体。",
     "retry": "重试",
     "skip": "跳过并继续",
-    "missing": "worktree 的文件夹在 Kettu 之外被删掉了。发下一条消息时会按分支 <branch/> 重建。",
-    "removed": "worktree 的文件夹已删除。发下一条消息时会按分支 <branch/> 重建。",
-    "gone": "这个会话的 worktree 和分支都已删除，不能再继续对话。",
-    "agentWorktree": "在自己的 worktree <branch/> 里工作过",
-    "agentWorktreeUnnamed": "在自己的 worktree 里工作过",
+    "missing": "工作树的文件夹在 Kettu 之外被删掉了。发下一条消息时会按分支 <branch/> 重建。",
+    "removed": "工作树的文件夹已删除。发下一条消息时会按分支 <branch/> 重建。",
+    "gone": "这个会话的工作树和分支都已删除，不能再继续对话。",
+    "agentWorktree": "在自己的工作树 <branch/> 里工作过",
+    "agentWorktreeUnnamed": "在自己的工作树里工作过",
     "copyPath": "复制路径"
   },
   "workflow": {
@@ -1038,7 +1038,7 @@
     },
     "reviews": "审查{{steps}}",
     "hint": "“{{hint}}”",
-    "pinnedHint": "在这个工作流的 Marketplace 页面上为每个需求固定",
+    "pinnedHint": "在这个工作流的市场页面上为每个需求固定",
     "backToAuto": "改回 Auto",
     "whoDoes": "谁做{{step}}",
     "pinEveryTask": "为每个需求固定步骤",
@@ -1072,8 +1072,8 @@
       "removed": "“{{name}}”已经不在库里了",
       "refused": "工作流没有保存",
       "refusedHint": "{{agent}} 可以改好这些问题后重新保存。",
-      "approveHint": "在 Marketplace 里批准之前，什么都不能用它。",
-      "open": "在 Marketplace 中打开",
+      "approveHint": "在市场里批准之前，什么都不能用它。",
+      "open": "在市场中打开",
       "madeBy": "{{agent}} 写的"
     },
     "check": {
@@ -1135,14 +1135,14 @@
       "unlisted": "已下架"
     },
     "visibilityHint": {
-      "public": "列进 Marketplace，登录 Kettu 的人都能看到。",
+      "public": "列进市场，登录 Kettu 的人都能看到。",
       "private": "不列出，只有登录你账号的电脑能装。"
     },
     "harness": {
       "claude-code": "Claude Code",
       "codex": "Codex"
     },
-    "everyAgent": "所有 Agent",
+    "everyAgent": "所有智能体",
     "stepAgents": "Claude Code 和 Codex",
     "visibleTo": "谁能看到",
     "asBefore": "和之前一样",
@@ -1150,7 +1150,7 @@
     "addsGroup": {
       "skills": "Skill",
       "commands": "命令",
-      "agents": "Agent",
+      "agents": "智能体",
       "hooks": "Hook",
       "servers": "MCP 服务器"
     },
@@ -1178,14 +1178,14 @@
     "runsNothing": "安装时不运行任何东西",
     "withinLimits": "没有超出上限",
     "title": {
-      "new": "发布到 Kettu 的 Marketplace？",
+      "new": "发布到 Kettu 市场？",
       "version": "发布 {{name}} 的 {{version}}？",
-      "unlist": "把 {{name}} 从 Kettu 的 Marketplace 下架？"
+      "unlist": "把 {{name}} 从 Kettu 市场下架？"
     },
     "description": {
       "new": "点发布之前什么都不上传。以后的新版本还会再问你。",
       "version_other": "{{count}} 人装着它，他们下次更新时拿到 {{version}}。",
-      "unlist": "它会从 Marketplace 里去掉。已经装了的人照常能用，也照常收到新版本。"
+      "unlist": "它会从市场里去掉。已经装了的人照常能用，也照常收到新版本。"
     },
     "notes": "更新说明 · {{agent}} 写的，能改",
     "notesYours": "更新说明",
@@ -1210,7 +1210,7 @@
       "later": "没有发布",
       "expired": "没有及时回答",
       "ended": "这一轮先结束了",
-      "interrupted": "Marketplace 回复之前 Kettu 停止了"
+      "interrupted": "市场回复之前 Kettu 停止了"
     }
   },
   "sideChat": {
@@ -1218,7 +1218,7 @@
     "note": {
       "claude": "不进对话 · 不用工具",
       "codex": "不进对话 · 只读，不问授权",
-      "fork": "不进对话 · 临时分叉，用完即删",
+      "fork": "不进对话 · 临时副本，用完即删",
       "hidden": "不进对话 · 临时会话，用完即删",
       "other": "由 {{agent}} 回答 · 临时会话"
     },
@@ -1231,22 +1231,22 @@
       "codexTools": "能读文件、跑只读命令，不改东西、不问授权",
       "claudeCost": "用这个会话的额度、和主会话共用缓存；Claude Code 不单独报侧聊的用量，用量页里没有这部分",
       "codexCost": "用这个会话的额度、和主会话共用缓存",
-      "forkHow": "{{agent}} 把这个会话分叉出一份来答，Kettu 答完就删掉这份分叉",
+      "forkHow": "{{agent}} 把这个会话复制一份来答，Kettu 答完就删掉这份副本",
       "forkSees": "看得到到现在的全部对话；还在跑的那个工具调用不一定带上",
-      "forkCost": "和主会话共用一部分缓存；开分叉要几秒",
-      "hiddenHow": "{{agent}} 没有自带的侧问和分叉，Kettu 开一个用完即删的临时会话来答",
+      "forkCost": "和主会话共用一部分缓存；复制要几秒",
+      "hiddenHow": "{{agent}} 没有自带的侧问，也不能复制会话，Kettu 开一个用完即删的临时会话来答",
       "hiddenCarried": "放得下模型的窗口就带上全部对话，放不下带第一条请求和最近的几轮，并写明带了多少",
       "hiddenCost": "和主会话不共用缓存，第一问要全价付这段对话、慢几秒，追问会便宜下来"
     },
     "pick": {
       "title": "{{agent}} 还不能侧聊",
-      "why": "它开的临时会话现在删不干净，会留在它自己的会话历史里。可以换一个 Agent 来答，Kettu 带上这个会话的对话。",
+      "why": "它开的临时会话现在删不干净，会留在它自己的会话历史里。可以换一个智能体来答，Kettu 带上这个会话的对话。",
       "before": "由",
       "after": "来答",
       "cost": "花的是 {{agent}} 的额度；放得下就带上全部对话，放不下带第一条请求和最近的几轮。",
       "ask": "用 {{agent}} 问",
-      "none": "这台电脑上没有能侧聊的 Agent。",
-      "change": "换一个 Agent 来答"
+      "none": "这台电脑上没有能侧聊的智能体。",
+      "change": "换一个智能体来答"
     },
     "answering": "正在回答…",
     "stop": "停止",
@@ -1257,17 +1257,17 @@
     "copied": "已复制",
     "saw": {
       "agent": "看到整段对话 · {{agent}} 自带的侧问",
-      "fork": "看到整段对话 · 临时分叉",
-      "agentCompacted": "看到的是 Agent 现在记得的对话 · {{agent}} 自带的侧问",
-      "forkCompacted": "看到的是 Agent 现在记得的对话 · 临时分叉",
-      "compacted_other": "Agent 压缩过上下文：前 {{count}} 轮只在它的摘要里",
-      "compactedNone": "Agent 压缩过上下文，之后还没有新的对话",
+      "fork": "看到整段对话 · 临时副本",
+      "agentCompacted": "看到的是智能体现在记得的对话 · {{agent}} 自带的侧问",
+      "forkCompacted": "看到的是智能体现在记得的对话 · 临时副本",
+      "compacted_other": "智能体压缩过上下文：前 {{count}} 轮只在它的摘要里",
+      "compactedNone": "智能体压缩过上下文，之后还没有新的对话",
       "copyAfter_other": "看到压缩之后的全部 {{count}} 轮对话 · 约 {{tokens}}k token · 临时会话",
       "none": "会话还没有对话",
       "copyAll_other": "看到全部 {{count}} 轮对话 · 约 {{tokens}}k token · 临时会话",
       "copyPart_other": "看到第一条请求和最近 {{count}} 轮，共 {{total}} 轮 · 约 {{tokens}}k token · 临时会话",
       "fellBackAgent": "{{agent}} 自带的侧问用不了，改由临时会话来答",
-      "fellBackFork": "{{agent}} 分叉不了这个会话，改由临时会话来答"
+      "fellBackFork": "{{agent}} 复制不了这个会话，改由临时会话来答"
     },
     "step": {
       "read": "读了 {{title}}",

@@ -23,7 +23,7 @@
   "harness": {
     "offer": "{{name}} {{version}}",
     "offerLabel": "{{name}} {{version}} 已发布",
-    "offerAgents": "{{versions}} · {{count}} 个 Agent 在用",
+    "offerAgents": "{{versions}} · {{count}} 个智能体在用",
     "update": "更新",
     "installing": "正在更新 {{name}}",
     "progress": "更新进度",
@@ -86,7 +86,7 @@
     "stopsQuit": "退出会停止以下正在运行的任务：",
     "terminal": "终端",
     "background": "后台：{{work}}",
-    "scheduled_other": "{{count}} 个定时任务",
+    "scheduled_other": "{{count}} 个定时唤醒",
     "backgroundWork": "后台任务",
     "workSeparator": "、",
     "comeBackUpdate": "重启后，会话和草稿都会恢复。",

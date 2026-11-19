@@ -14,9 +14,9 @@
     "requests": "请求"
   },
   "hostBanner": {
-    "restarting": "正在重启 Agent 后台进程，会话会自动恢复。",
-    "reconnecting": "正在重连主机…",
-    "stopped": "Agent 后台进程已停止，且无法重启。",
+    "restarting": "正在重启智能体后台进程，会话会自动恢复。",
+    "reconnecting": "正在重连电脑…",
+    "stopped": "智能体后台进程已停止，且无法重启。",
     "restart": "重启",
     "reportProblem": "报告问题"
   },
@@ -88,14 +88,14 @@
       "newSession": "新建会话",
       "overview": "总览",
       "usage": "用量",
-      "routines": "例程",
-      "newRoutine": "新建例程",
-      "artifacts": "Artifacts",
-      "recentlyDeleted": "Artifacts › 最近删除",
-      "artifact": "Artifact",
+      "routines": "定时任务",
+      "newRoutine": "新建定时任务",
+      "artifacts": "产物",
+      "recentlyDeleted": "产物 › 最近删除",
+      "artifact": "产物",
       "task": "需求",
-      "marketplace": "Marketplace",
-      "marketplaceItem": "Marketplace › {{item}}",
+      "marketplace": "市场",
+      "marketplaceItem": "市场 › {{item}}",
       "settings": "设置 › {{section}}",
       "settingsItem": "设置 › {{section}} › {{item}}"
     }
@@ -107,9 +107,9 @@
   "windowHost": {
     "thisMac": "这台 Mac",
     "thisComputer": "这台电脑",
-    "unknown": "另一台主机",
+    "unknown": "另一台电脑",
     "away": "{{name}} 没有连上：{{state}}",
-    "lastRead": "这里是上次从它读到的内容，主机回来后会自动更新。",
-    "nothingRead": "还没有从它读到过内容，主机回来后会显示在这里。"
+    "lastRead": "这里是上次从它读到的内容，等它回来后会自动更新。",
+    "nothingRead": "还没有从它读到过内容，等它回来后会显示在这里。"
   }
 }

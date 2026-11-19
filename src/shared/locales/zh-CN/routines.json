@@ -1,39 +1,39 @@
 {
   "page": {
-    "title": "例程",
-    "description": "按计划运行的 Agent 任务，只在你给的权限内行事。",
-    "descriptionOn": "在 {{host}} 上按计划运行的 Agent 任务，只在你给的权限内行事。",
-    "descriptionThisMac": "在这台 Mac 上按计划运行的 Agent 任务，只在你给的权限内行事。",
-    "descriptionThisComputer": "在这台电脑上按计划运行的 Agent 任务，只在你给的权限内行事。",
-    "descriptionAll": "在所有主机上按计划运行的 Agent 任务，只在你给的权限内行事。",
-    "new": "新建例程",
-    "emptyTitle": "还没有例程",
-    "emptyDescription": "例程在 Kettu 打开时按计划把提示词发给 Agent，每次运行都在一个单独的会话里。",
-    "unreadableTitle": "无法读取你的例程",
-    "unreadable": "routines.json 已另存为 {{backup}}，没有丢失任何内容。新建例程不受影响。",
+    "title": "定时任务",
+    "description": "按计划运行的智能体任务，只在你给的权限内行事。",
+    "descriptionOn": "在 {{host}} 上按计划运行的智能体任务，只在你给的权限内行事。",
+    "descriptionThisMac": "在这台 Mac 上按计划运行的智能体任务，只在你给的权限内行事。",
+    "descriptionThisComputer": "在这台电脑上按计划运行的智能体任务，只在你给的权限内行事。",
+    "descriptionAll": "在所有电脑上按计划运行的智能体任务，只在你给的权限内行事。",
+    "new": "新建定时任务",
+    "emptyTitle": "还没有定时任务",
+    "emptyDescription": "定时任务在 Kettu 打开时按计划把提示词发给智能体，每次运行都在一个单独的会话里。",
+    "unreadableTitle": "无法读取你的定时任务",
+    "unreadable": "routines.json 已另存为 {{backup}}，没有丢失任何内容。新建定时任务不受影响。",
     "unreadableGone": "Kettu 以空列表开始。",
-    "loadFailed": "无法加载例程。",
+    "loadFailed": "无法加载定时任务。",
     "retry": "重试",
     "open": "打开 {{name}}",
     "switchOn": "开启 {{name}}",
     "switchOff": "关闭 {{name}}",
     "columns": {
-      "routine": "例程",
+      "routine": "定时任务",
       "schedule": "计划",
-      "agent": "Agent",
+      "agent": "智能体",
       "status": "状态",
       "name": "名称"
     },
-    "footnote": "例程只在 Kettu 打开时运行。Agent 距离套餐限额不到 10% 时，例程会暂停。"
+    "footnote": "定时任务只在 Kettu 打开时运行。智能体距离套餐限额不到 10% 时，定时任务会暂停。"
   },
   "examples": {
     "heading": "从示例开始",
-    "hint": "打开填好这些的新建例程，创建之前什么都不运行。",
+    "hint": "打开填好这些的新建定时任务，创建之前什么都不运行。",
     "use": "使用",
     "open": "从 {{name}} 开始",
     "triage": {
       "name": "早间整理",
-      "prompt": "总结上次运行以来新开或更新的 issue 和 Pull Request，标出紧急的。"
+      "prompt": "总结上次运行以来新开或更新的 issue 和 PR，标出紧急的。"
     },
     "tests": {
       "name": "夜间测试",
@@ -45,7 +45,7 @@
     },
     "changelog": {
       "name": "更新日志草稿",
-      "prompt": "按区域整理本周合并的 Pull Request，写出发布说明的草稿。"
+      "prompt": "按区域整理本周合并的 PR，写出发布说明的草稿。"
     },
     "links": {
       "name": "文档链接检查",
@@ -80,7 +80,7 @@
     "onHost": "{{host}} · {{line}}"
   },
   "signal": {
-    "name": "例程，{{signal}}",
+    "name": "定时任务，{{signal}}",
     "waiting_one": "{{count}} 个运行在等待批准",
     "waiting_other": "{{count}} 个运行在等待批准",
     "failed": "一个运行失败",
@@ -106,13 +106,13 @@
     "pausedFor": "已暂停：{{reason}}"
   },
   "pause": {
-    "title": "{{agent}} 的例程已暂停",
+    "title": "{{agent}} 的定时任务已暂停",
     "used": "{{agent}} 的限额已用 {{percent}}%（{{limit}}）",
     "reached": "{{agent}} 的限额已用完（{{limit}}）",
     "limitUsed": "限额已用 {{percent}}%（{{limit}}）。",
     "limitReached": "限额已用完（{{limit}}）。",
-    "resumes": "例程将于 {{time}} 恢复。",
-    "resumesDay": "例程将于 {{day}} {{time}} 恢复。",
+    "resumes": "定时任务将于 {{time}} 恢复。",
+    "resumesDay": "定时任务将于 {{day}} {{time}} 恢复。",
     "notice": "{{use}}{{resume}}"
   },
   "when": {
@@ -187,33 +187,33 @@
       "frequent": "{{field}}：两次运行至少间隔 5 分钟。",
       "empty": "{{field}}：至少选择一天。"
     },
-    "unvalid": "未保存。例程仍按上一个有效计划运行：{{schedule}}",
+    "unvalid": "未保存。定时任务仍按上一个有效计划运行：{{schedule}}",
     "runs": "运行",
     "runsOnce": "只运行一次",
     "dstNote": "夏令时调整时钟时，运行会顺延一小时，但不会被跳过。",
     "cronNote": "五个字段，按你的本地时间。"
   },
   "routine": {
-    "back": "例程",
-    "untitled": "未命名例程",
+    "back": "定时任务",
+    "untitled": "未命名定时任务",
     "notSaved": "尚未保存",
-    "newNotSaved": "新例程 · 尚未保存",
-    "name": "例程名称",
+    "newNotSaved": "新定时任务 · 尚未保存",
+    "name": "定时任务名称",
     "rename": "重命名",
-    "create": "创建例程",
+    "create": "创建定时任务",
     "cancel": "取消",
     "runNow": "立即运行",
     "more": "更多",
     "delete": "删除…",
     "task": "任务",
     "prompt": "提示词",
-    "promptDescription": "例程每次运行时原样发送。",
-    "promptPlaceholder": "每次运行时，Agent 要做什么？",
+    "promptDescription": "定时任务每次运行时原样发送。",
+    "promptPlaceholder": "每次运行时，智能体要做什么？",
     "project": "项目",
     "projectDescription": "它的运行在此工作。",
-    "noProject": "无项目",
-    "agent": "Agent 和模型",
-    "agentDescription": "它的运行使用的 Agent、模型和选项。",
+    "noProject": "不属于项目",
+    "agent": "智能体和模型",
+    "agentDescription": "它的运行使用的智能体、模型和选项。",
     "permissions": "权限",
     "permissionsHint": "它的运行可以不询问就做什么",
     "timeLimit": "时间限制",
@@ -242,18 +242,18 @@
     "runsFailed": "无法加载运行记录。",
     "createMissingPrompt": "先写提示词。",
     "createMissingProject": "先选择项目。",
-    "createMissingAgent": "先选择 Agent。",
-    "createHostAway": "这台主机离线，等它重新连上后再创建。",
+    "createMissingAgent": "先选择智能体。",
+    "createHostAway": "这台电脑离线，等它重新连上后再创建。",
     "saveFailed": "无法保存更改：{{error}}",
     "runFailed": "无法开始运行：{{error}}",
-    "deleted": "这个例程已被删除。",
-    "backToRoutines": "返回例程",
+    "deleted": "这个定时任务已被删除。",
+    "backToRoutines": "返回定时任务",
     "deleteTitle": "删除 {{name}}？",
     "deleteWithSessions_one": "它的 {{count}} 个运行会话会一并删除。",
     "deleteWithSessions_other": "它的 {{count}} 个运行会话会一并删除。",
     "deleteNoSessions": "它没有运行会话。",
     "deleteConfirm": "删除",
-    "deleteFailed": "无法删除例程：{{error}}"
+    "deleteFailed": "无法删除定时任务：{{error}}"
   },
   "runsHint": {
     "now": "立即运行可以先试一次。",

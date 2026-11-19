@@ -8,9 +8,9 @@
     "turnOf": "{{agent}} 会话里的一轮对话失败了。",
     "turn": "会话里的一轮对话失败了。",
     "error": "Kettu 显示了一条错误。",
-    "artifact": "有一个 artifact 打不开。",
+    "artifact": "有一个产物打不开。",
     "usage": "用量页加载不出来。",
-    "host": "Agent 后台进程已停止，且无法重启。",
+    "host": "智能体后台进程已停止，且无法重启。",
     "crash": "Kettu 上次运行时意外退出了。",
     "recording": "我录下了出现问题的操作过程。",
     "shown": "显示的错误：\n{{error}}"
@@ -19,7 +19,7 @@
     "writing": "正在根据 Kettu 记录到的情况写一份更完整的描述…",
     "written": "由 {{agent}} 根据 Kettu 记录到的情况起草，不对的地方可以直接改。",
     "writtenPlain": "根据 Kettu 记录到的情况起草，不对的地方可以直接改。",
-    "unavailable": "没有 Agent 能起草，这里是 Kettu 记录到的情况，可以再补充。"
+    "unavailable": "没有智能体能起草，这里是 Kettu 记录到的情况，可以再补充。"
   },
   "range": "日志范围",
   "ranges": {
@@ -31,12 +31,12 @@
   "extras": {
     "label": "还要带上",
     "titles": "会话标题和项目路径",
-    "messages": "最近和 Agent 来往的消息",
+    "messages": "最近和智能体来往的消息",
     "verbose": "详细记录",
     "dumps": "崩溃转储",
     "screenshot": "当前窗口的截图"
   },
-  "always": "一定带上：版本、系统、PATH 和 SHELL、去掉个人信息的设置、各 Agent 的状态、各 host 最近的事件，以及这段时间的日志和操作记录。密钥都会遮掉。",
+  "always": "一定带上：版本、系统、PATH 和 SHELL、去掉个人信息的设置、各智能体的状态、各 host 最近的事件，以及这段时间的日志和操作记录。密钥都会遮掉。",
   "sensitive": "消息、详细记录和崩溃转储里可能有提示词、代码和密钥。",
   "viewContents": "查看内容",
   "back": "返回",
@@ -52,7 +52,7 @@
     "tooLarge": "报告太大了，提交不了。换个短一点的时间范围或少带几项，或者存到本地附进 issue。",
     "rateLimited": "今天提交的报告太多了。先存到本地附进 issue，或者明天再提交。",
     "unauthorized": "登录已失效，重新登录后再提交。",
-    "signedOut": "这台主机没有登录 Kettu 账号。先为它登录，或者存到本地。",
+    "signedOut": "这台电脑没有登录 Kettu 账号。先为它登录，或者存到本地。",
     "network": "连不上 Kettu。检查一下网络，再提交一次。",
     "failed": "报告没能提交。存到本地附进 issue 吧。"
   },

@@ -1,7 +1,7 @@
 {
   "status": {
     "repository": "仓库",
-    "pullRequestState": "Pull Request #{{number}} · {{state}}",
+    "pullRequestState": "PR #{{number}} · {{state}}",
     "detachedAt": "HEAD 已分离于 {{ref}}",
     "branch": "分支 {{name}}",
     "noCommits": "尚无提交",
@@ -35,11 +35,11 @@
       "closed": "已关闭"
     },
     "icon": {
-      "none": "Pull Request",
-      "open": "Pull Request 已打开",
-      "draft": "Pull Request 草稿",
-      "merged": "Pull Request 已合并",
-      "closed": "Pull Request 已关闭"
+      "none": "PR",
+      "open": "PR 已打开",
+      "draft": "PR 草稿",
+      "merged": "PR 已合并",
+      "closed": "PR 已关闭"
     },
     "checks": {
       "passing": "检查通过",
@@ -61,9 +61,9 @@
   "prCard": {
     "opened": "{{when}}打开",
     "bot": "机器人",
-    "installGh": "安装 <cli>GitHub CLI</cli> 后即可查看这个 Pull Request 的状态、检查和作者。",
-    "signInGh": "登录 GitHub CLI 后即可查看这个 Pull Request：",
-    "failed": "无法加载这个 Pull Request。",
+    "installGh": "安装 <cli>GitHub CLI</cli> 后即可查看这个 PR 的状态、检查和作者。",
+    "signInGh": "登录 GitHub CLI 后即可查看这个 PR：",
+    "failed": "无法加载这个 PR。",
     "retry": "重试"
   },
   "ref": {
@@ -114,12 +114,12 @@
       "failed": "失败",
       "running": "运行中"
     },
-    "installGh": "安装 <cli>GitHub CLI</cli> 后即可查看和创建 Pull Request。",
-    "signInGh": "登录 GitHub CLI 后即可查看 Pull Request：",
+    "installGh": "安装 <cli>GitHub CLI</cli> 后即可查看和创建 PR。",
+    "signInGh": "登录 GitHub CLI 后即可查看 PR：",
     "copyCommand": "复制命令",
-    "publishFirst": "发布此分支后才能创建 Pull Request。",
-    "none": "没有 Pull Request",
-    "create": "创建 Pull Request…",
+    "publishFirst": "发布此分支后才能创建 PR。",
+    "none": "没有 PR",
+    "create": "创建 PR…",
     "blocked": {
       "conflicts": "与 {{base}} 有冲突"
     },
@@ -172,7 +172,7 @@
     "noBranch": "切换到一个分支后才能拉取或推送。",
     "operation": "{{operation}}",
     "publishRepo": "发布会在 GitHub 上创建仓库并推送此分支。",
-    "publishBranch": "发布此分支即可推送，并创建 Pull Request。",
+    "publishBranch": "发布此分支即可推送，并创建 PR。",
     "diverged": "已与 {{upstream}} 分叉：请在终端中变基或合并，再推送。",
     "upToDate": "已与 {{upstream}} 同步。",
     "ghMissing": "安装 GitHub CLI 后即可把此仓库发布到 GitHub。",
@@ -206,8 +206,8 @@
   "dialog": {
     "confirmPush": {
       "title": "推送到 {{branch}}？",
-      "description_other": "{{count}} 个提交会直接进入默认分支 {{branch}}，不经过 Pull Request。",
-      "descriptionUncounted": "此分支会直接进入默认分支 {{branch}}，不经过 Pull Request。",
+      "description_other": "{{count}} 个提交会直接进入默认分支 {{branch}}，不经过 PR。",
+      "descriptionUncounted": "此分支会直接进入默认分支 {{branch}}，不经过 PR。",
       "action": "推送到 {{branch}}"
     },
     "publish": {
@@ -224,7 +224,7 @@
       "action": "发布"
     },
     "createPr": {
-      "title": "创建 Pull Request",
+      "title": "创建 PR",
       "titleField": "标题",
       "body": "描述",
       "base": "目标分支",
