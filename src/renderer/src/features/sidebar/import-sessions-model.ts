@@ -50,6 +50,34 @@ export function shownAgent(
   return agents.find((id) => !empty(id)) ?? agents[0] ?? null
 }
 
+/** What a source's row says of its list: how many sessions can be imported and how many are picked. */
+export interface SourceCount {
+  /** Not in Kettu and not open elsewhere, among the pages read so far. */
+  importable: number
+  selected: number
+  /** More pages to read, so `importable` is a lower bound. */
+  more: boolean
+  /** The list came and holds no session at all. */
+  empty: boolean
+}
+
+/** A source's counts, or null while its list is not known. */
+export function sourceCount(
+  agentId: AgentId,
+  list: AgentList | undefined,
+  selected: ReadonlySet<string>,
+): SourceCount | null {
+  if (!listed(list)) return null
+  const keys = importableKeys(agentId, list)
+  const more = list.nextCursor !== null || list.loading
+  return {
+    importable: keys.length,
+    selected: keys.filter((key) => selected.has(key)).length,
+    more,
+    empty: list.sessions.length === 0 && !more,
+  }
+}
+
 /** Whether every key is selected; false with none to select. */
 export function allSelected(keys: readonly string[], selected: ReadonlySet<string>): boolean {
   return keys.length > 0 && keys.every((key) => selected.has(key))

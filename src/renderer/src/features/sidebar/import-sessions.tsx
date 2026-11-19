@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
+import { Alert02Icon, ComputerTerminal01Icon, Tick02Icon } from '@hugeicons/core-free-icons'
+import { HugeiconsIcon } from '@hugeicons/react'
 import { useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
-import type { Project } from '@shared/agent-host'
+import type { ImportableSession, Project } from '@shared/agent-host'
 import type { AgentId, PromptCache } from '@shared/thread'
 import { AgentMark } from '@renderer/components/agents/agent-mark'
 import { Button } from '@renderer/components/ui/button'
@@ -35,12 +37,15 @@ import {
   selectedSessions,
   sessionAgo,
   shownAgent,
+  type SourceCount,
+  sourceCount,
   withKeys,
 } from './import-sessions-model'
 
 /**
- * Sessions the agents already have for this folder, such as ones started in a terminal, one tab
- * per agent. Nothing is copied until the chosen ones are imported.
+ * Sessions the agents already have for this folder, such as ones started in a terminal: the agents
+ * in a rail, the shown agent's sessions beside it. Nothing is copied until the chosen ones are
+ * imported.
  */
 export function ImportSessionsDialog({
   project,
@@ -105,6 +110,14 @@ export function ImportSessionsDialog({
       })
   }
 
+  const reload = (agentId: AgentId) => {
+    setLists((l) => ({
+      ...l,
+      [agentId]: { sessions: [], nextCursor: null, loading: true, error: null },
+    }))
+    request(agentId)
+  }
+
   const loadMore = (agentId: AgentId, cursor: string) => {
     setLists((l) => ({
       ...l,
@@ -144,6 +157,7 @@ export function ImportSessionsDialog({
   const shownList = shown ? lists[shown] : undefined
   const keys = shown ? importableKeys(shown, shownList) : []
   const toImport = selectedSessions(agentIds, lists, selected)
+  const sources = new Set(toImport.map((s) => s.agentId)).size
 
   const importSelected = async () => {
     const token = run.current
@@ -205,74 +219,73 @@ export function ImportSessionsDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
         showCloseButton={false}
-        className="flex max-h-[min(600px,85svh)] flex-col gap-0 p-0 sm:max-w-[470px]"
+        className="flex h-[min(560px,85svh)] flex-col gap-0 p-0 sm:max-w-[700px]"
       >
-        <DialogHeader className="gap-1.5 px-5.5 pt-5">
+        <DialogHeader className="gap-1.5 px-5.5 pt-5 pb-4">
           <DialogTitle>{t('import.title', { project: project.name })}</DialogTitle>
           <DialogDescription>{t('import.description')}</DialogDescription>
         </DialogHeader>
         {agents.length === 0 || !shown ? (
-          <p className="px-5.5 pt-3.5 text-ui text-secondary">{t('import.noAgents')}</p>
+          <div className="flex min-h-0 flex-1 items-center justify-center border-y border-subtle px-5.5">
+            <p className="text-ui text-secondary">{t('import.noAgents')}</p>
+          </div>
         ) : (
           <Tabs
+            orientation="vertical"
             value={shown}
             onValueChange={(value: AgentId) => setChosen(value)}
-            className="min-h-0 flex-1 px-5.5 pt-3.5"
+            className="min-h-0 flex-1 flex-row gap-0 border-y border-subtle phone:flex-col"
           >
             <TabsList
+              variant="rail"
               aria-label={t('import.agents')}
-              className="justify-start gap-1.5 rounded-none bg-transparent p-0 shadow-none group-data-horizontal/tabs:h-auto"
+              className="w-56 shrink-0 scroll-fade-y justify-start overflow-y-auto overscroll-contain p-2 group-data-vertical/tabs:h-auto phone:max-h-30 phone:w-full"
             >
-              {agents.map((agent) => {
-                const list = lists[agent.id]
-                const known = listed(list)
-                const empty = known && list.sessions.length === 0 && !list.nextCursor
-                return (
-                  <TabsTrigger
-                    key={agent.id}
-                    value={agent.id}
-                    disabled={empty && agent.id !== shown}
-                    className="h-7 flex-none rounded-xl px-3 text-control font-medium text-secondary not-data-active:hover:bg-hover data-active:bg-subtle data-active:text-foreground group-data-[variant=default]/tabs-list:data-active:shadow-none dark:text-secondary"
-                  >
-                    {known
-                      ? t(list.nextCursor ? 'import.tabMore' : 'import.tab', {
-                          agent: agent.name,
-                          count: list.sessions.length,
-                        })
-                      : agent.name}
-                  </TabsTrigger>
-                )
-              })}
+              {agents.map((agent) => (
+                <SourceRow
+                  key={agent.id}
+                  agentId={agent.id}
+                  name={agent.name}
+                  count={sourceCount(agent.id, lists[agent.id], selected)}
+                  failed={!!lists[agent.id]?.error}
+                />
+              ))}
             </TabsList>
-            <TabsContent value={shown} tabIndex={-1} className="min-h-0 overflow-y-auto">
+            <TabsContent
+              value={shown}
+              tabIndex={-1}
+              className="flex min-h-0 min-w-0 flex-col border-l border-subtle phone:border-t phone:border-l-0"
+            >
               <SessionList
                 agentId={shown}
+                agentName={agents.find((a) => a.id === shown)?.name ?? ''}
                 list={shownList}
+                keys={keys}
                 selected={selected}
                 busy={busy}
                 failed={failed}
                 locked={running}
-                onSelect={(key, on) => setSelected((s) => withKeys(s, [key], on))}
+                onSelect={(picked, on) => setSelected((s) => withKeys(s, picked, on))}
                 onMore={(cursor) => loadMore(shown, cursor)}
                 onFork={(acpSessionId) => void forkSession(shown, acpSessionId)}
+                onRetry={() => reload(shown)}
               />
             </TabsContent>
           </Tabs>
         )}
-        <p className="px-5.5 pt-2.5 text-hint text-tertiary">{t('import.footnote')}</p>
-        <div className="flex items-center gap-2 px-5.5 py-4.5">
-          {keys.length > 0 && (
-            <label className="flex items-center gap-2 text-control text-secondary">
-              <Checkbox
-                checked={allSelected(keys, selected)}
-                disabled={running}
-                className="data-disabled:opacity-40"
-                onCheckedChange={(on) => setSelected((s) => withKeys(s, keys, on))}
-              />
-              {t('import.selectAll', { count: keys.length })}
-            </label>
-          )}
-          <span className="flex-1" />
+        <div className="flex items-center gap-2 px-5.5 py-3.5">
+          <span
+            className={cn(
+              'min-w-0 flex-1 truncate text-control',
+              toImport.length > 0 ? 'text-foreground' : 'text-tertiary',
+            )}
+          >
+            {toImport.length === 0
+              ? t('import.selectedNone')
+              : sources > 1
+                ? t('import.selectedAcross', { count: toImport.length, sources })
+                : t('import.selected', { count: toImport.length })}
+          </span>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             {t('common:actions.cancel')}
           </Button>
@@ -294,10 +307,64 @@ export function ImportSessionsDialog({
   )
 }
 
-/** One agent's sessions as rows to pick, each with when it last changed. */
+/** An agent in the rail, with how many of its sessions can be imported, or are picked of those. */
+function SourceRow({
+  agentId,
+  name,
+  count,
+  failed,
+}: {
+  agentId: AgentId
+  name: string
+  count: SourceCount | null
+  failed: boolean
+}) {
+  const { t } = useTranslation('sidebar')
+  const says = !count
+    ? null
+    : count.selected > 0
+      ? t('import.sourcePicked', { selected: count.selected, count: count.importable })
+      : count.importable > 0
+        ? t(count.more ? 'import.sourceCanMore' : 'import.sourceCan', { count: count.importable })
+        : t(count.empty ? 'import.sourceEmpty' : 'import.sourceNone')
+  return (
+    <TabsTrigger
+      value={agentId}
+      title={says ? `${name} · ${says}` : name}
+      className="justify-start gap-2 rounded-md group-data-[variant=rail]/tabs-list:data-active:bg-selected dark:group-data-[variant=rail]/tabs-list:data-active:bg-selected"
+    >
+      <AgentMark agent={agentId} size={14} />
+      <span className={cn('min-w-0 flex-1 truncate text-left', count?.empty && 'text-tertiary')}>
+        {name}
+      </span>
+      {says && <span className="sr-only">{says}</span>}
+      {failed ? (
+        <HugeiconsIcon icon={Alert02Icon} strokeWidth={1.9} className="size-3.5 text-danger" />
+      ) : !count ? (
+        <Spinner className="size-3 text-tertiary" />
+      ) : count.selected > 0 ? (
+        <span aria-hidden className="shrink-0 text-xs font-medium text-control-on tabular">
+          {count.selected}/{count.importable}
+          {count.more && '+'}
+        </span>
+      ) : count.importable > 0 ? (
+        <span aria-hidden className="shrink-0 text-xs text-tertiary tabular">
+          {count.importable}
+          {count.more && '+'}
+        </span>
+      ) : count.empty ? null : (
+        <HugeiconsIcon icon={Tick02Icon} strokeWidth={1.9} className="size-3.5 text-tertiary" />
+      )}
+    </TabsTrigger>
+  )
+}
+
+/** One agent's sessions: the ones to pick under a row that picks them all, the rest as plain rows. */
 function SessionList({
   agentId,
+  agentName,
   list,
+  keys,
   selected,
   busy,
   failed,
@@ -305,24 +372,38 @@ function SessionList({
   onSelect,
   onMore,
   onFork,
+  onRetry,
 }: {
   agentId: AgentId
+  agentName: string
   list: AgentList | undefined
+  /** The sessions of the list that can be picked. */
+  keys: readonly string[]
   selected: ReadonlySet<string>
   busy: string | null
   failed: Record<string, string>
   locked: boolean
-  onSelect: (key: string, on: boolean) => void
+  onSelect: (keys: readonly string[], on: boolean) => void
   onMore: (cursor: string) => void
   onFork: (acpSessionId: string) => void
+  onRetry: () => void
 }) {
   const { t } = useTranslation(['sidebar', 'common'])
-  if (list?.error) return <p className="py-2 text-ui text-danger">{list.error}</p>
+  if (list?.error) {
+    return (
+      <div className="flex flex-1 flex-col items-center justify-center gap-3 px-6 text-center">
+        <p className="text-ui text-balance text-danger">{list.error}</p>
+        <Button variant="outline" size="sm" onClick={onRetry}>
+          {t('common:actions.retry')}
+        </Button>
+      </div>
+    )
+  }
   if (!listed(list)) {
     return (
-      <div className="flex flex-col">
-        {[0.62, 0.48, 0.55].map((width) => (
-          <div key={width} className="flex h-10 items-center gap-2.5 border-b border-subtle px-1">
+      <div className="flex flex-col px-2 pt-2">
+        {[0.62, 0.48, 0.55, 0.4].map((width) => (
+          <div key={width} className="flex h-9 items-center gap-2.5 px-2">
             <Skeleton className="size-4 rounded-sm" />
             <Skeleton className="h-3" style={{ width: `${width * 100}%` }} />
           </div>
@@ -331,90 +412,156 @@ function SessionList({
     )
   }
   if (list.sessions.length === 0) {
-    return <p className="py-2 text-ui text-secondary">{t('import.noSessions')}</p>
+    return (
+      <div className="flex flex-1 items-center justify-center px-6 text-center">
+        <p className="text-ui text-secondary">{t('import.noSessions', { agent: agentName })}</p>
+      </div>
+    )
   }
+  const picked = keys.filter((key) => selected.has(key)).length
+  const inKettu = list.sessions.filter((s) => s.imported).length
+  const more = list.nextCursor !== null || list.loading
   return (
-    <ul className="flex flex-col">
-      {list.sessions.map((s) => {
-        const key = importKey(agentId, s.acpSessionId)
-        const failure = failed[key]
-        const meta = [
-          s.imported ? t('import.imported') : s.held ? t('import.held') : null,
-          s.updatedAt ? sessionAgo(Date.parse(s.updatedAt)) : null,
-        ]
-          .filter(Boolean)
-          .join(' · ')
-        return (
-          <li key={s.acpSessionId}>
-            <label
-              className="flex h-10 items-center gap-2.5 border-b border-subtle px-1"
-              title={s.held && !s.imported ? t('import.heldTip') : undefined}
-            >
-              <Checkbox
-                checked={s.imported || selected.has(key)}
-                disabled={s.imported || (s.held ?? false) || locked}
-                className="data-disabled:opacity-40"
-                onCheckedChange={(on) => onSelect(key, on)}
+    <>
+      <div className="flex h-10 shrink-0 items-center gap-2.5 border-b border-subtle px-4 text-control">
+        {keys.length > 0 ? (
+          <label className="flex min-w-0 items-center gap-2.5 text-secondary">
+            <Checkbox
+              checked={allSelected(keys, selected)}
+              indeterminate={picked > 0 && picked < keys.length}
+              disabled={locked}
+              onCheckedChange={(on) => onSelect(keys, on)}
+            />
+            <span className="truncate">
+              {t(more ? 'import.selectShown' : 'import.selectAll', { count: keys.length })}
+            </span>
+          </label>
+        ) : (
+          <span className="truncate text-tertiary">{t('import.nothingLeft')}</span>
+        )}
+        <span className="flex-1" />
+        {inKettu > 0 && keys.length > 0 && (
+          <span className="shrink-0 text-meta text-tertiary tabular">
+            {t('import.inKettu', { count: inKettu })}
+          </span>
+        )}
+      </div>
+      <ul className="flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain p-2">
+        {list.sessions.map((s) => {
+          const key = importKey(agentId, s.acpSessionId)
+          return (
+            <li key={s.acpSessionId}>
+              <SessionRow
+                session={s}
+                checked={selected.has(key)}
+                busy={busy === key}
+                failure={failed[key]}
+                locked={locked}
+                onSelect={(on) => onSelect([key], on)}
+                onFork={() => onFork(s.acpSessionId)}
               />
-              <AgentMark agent={agentId} size={16} />
-              <span
-                className={cn(
-                  'min-w-0 flex-1 truncate text-[13.5px]',
-                  s.imported ? 'text-secondary' : 'text-foreground',
-                )}
-              >
-                {s.title ?? t('common:untitledSession')}
-              </span>
-              {failure && (
-                <span className="max-w-40 truncate text-meta text-danger" title={failure}>
-                  {failure}
-                </span>
-              )}
-              {busy === key ? (
-                <Spinner className="size-3.5 text-tertiary" />
-              ) : (
-                <>
-                  {!s.imported && !s.held && s.cache?.ttl ? <CacheLeft cache={s.cache} /> : null}
-                  {meta && (
-                    <span className="text-meta whitespace-nowrap text-tertiary tabular">
-                      {meta}
-                    </span>
-                  )}
-                  {s.held && !s.imported && (
-                    <Button
-                      variant="ghost"
-                      size="xs"
-                      disabled={locked}
-                      onClick={(event) => {
-                        // Inside the row's label, a click would also reach its checkbox.
-                        event.preventDefault()
-                        onFork(s.acpSessionId)
-                      }}
-                    >
-                      {t('import.fork')}
-                    </Button>
-                  )}
-                </>
-              )}
-            </label>
+            </li>
+          )
+        })}
+        {more ? (
+          <li className="px-0.5 pt-1.5">
+            <Button
+              variant="ghost"
+              size="xs"
+              className="text-secondary"
+              disabled={list.loading}
+              onClick={() => list.nextCursor && onMore(list.nextCursor)}
+            >
+              {list.loading && <Spinner className="size-3" />}
+              {t('import.showMore')}
+            </Button>
           </li>
-        )
-      })}
-      {list.nextCursor !== null || list.loading ? (
-        <li className="pt-1.5">
-          <Button
-            variant="ghost"
-            size="xs"
-            className="text-tertiary"
-            disabled={list.loading}
-            onClick={() => list.nextCursor && onMore(list.nextCursor)}
-          >
-            {list.loading && <Spinner className="size-3" />}
-            {t('import.showMore')}
-          </Button>
-        </li>
-      ) : null}
-    </ul>
+        ) : null}
+      </ul>
+    </>
+  )
+}
+
+/**
+ * A listed session. Only one that can be imported has a checkbox; one already in Kettu and one a
+ * terminal still has open show a quiet mark in its place.
+ */
+function SessionRow({
+  session,
+  checked,
+  busy,
+  failure,
+  locked,
+  onSelect,
+  onFork,
+}: {
+  session: ImportableSession
+  checked: boolean
+  busy: boolean
+  failure: string | undefined
+  locked: boolean
+  onSelect: (on: boolean) => void
+  onFork: () => void
+}) {
+  const { t } = useTranslation(['sidebar', 'common'])
+  const held = !session.imported && (session.held ?? false)
+  const pickable = !session.imported && !held
+  const ago = session.updatedAt ? sessionAgo(Date.parse(session.updatedAt)) : null
+  const state = session.imported ? t('import.imported') : held ? t('import.held') : null
+  const Row = pickable ? 'label' : 'div'
+  return (
+    <Row
+      className={cn(
+        'flex min-h-9 items-center gap-2.5 rounded-md px-2',
+        pickable && 'hover:bg-hover',
+      )}
+      title={held ? t('import.heldTip') : undefined}
+    >
+      {pickable ? (
+        <Checkbox checked={checked} disabled={locked} onCheckedChange={onSelect} />
+      ) : (
+        <HugeiconsIcon
+          icon={session.imported ? Tick02Icon : ComputerTerminal01Icon}
+          strokeWidth={1.9}
+          aria-hidden
+          className="size-4 shrink-0 text-tertiary"
+        />
+      )}
+      <span className="flex min-w-0 flex-1 flex-col py-1.5">
+        <span
+          className={cn(
+            'truncate text-ui',
+            session.imported ? 'text-tertiary' : held ? 'text-secondary' : 'text-foreground',
+          )}
+        >
+          {session.title ?? t('common:untitledSession')}
+        </span>
+        {failure && <span className="line-clamp-2 text-meta text-danger">{failure}</span>}
+      </span>
+      {busy ? (
+        <Spinner className="size-3.5 text-tertiary" />
+      ) : (
+        <>
+          {pickable && session.cache?.ttl ? <CacheLeft cache={session.cache} /> : null}
+          {(state ?? ago) && (
+            <span
+              className={cn(
+                'shrink-0 text-meta whitespace-nowrap text-tertiary tabular',
+                // On a phone the terminal mark and Fork say it, and the title needs the room.
+                held && 'phone:hidden',
+              )}
+            >
+              {[state, held ? null : ago].filter(Boolean).join(' · ')}
+            </span>
+          )}
+          {held && (
+            <Button variant="outline" size="xs" disabled={locked} onClick={onFork}>
+              {t('import.fork')}
+            </Button>
+          )}
+        </>
+      )}
+    </Row>
   )
 }
 
@@ -425,8 +572,8 @@ function CacheLeft({ cache }: { cache: PromptCache }) {
   const minutes = useCacheLeft(expiresAt, (left) => Math.ceil(left / 60_000))
   if (!minutes) return null
   return (
-    <span className="text-meta whitespace-nowrap text-tertiary tabular">
-      {t('import.cacheLeft', { count: minutes })} ·
+    <span className="shrink-0 rounded-md bg-subtle px-1.5 py-0.5 text-meta whitespace-nowrap text-secondary tabular">
+      {t('import.cacheLeft', { count: minutes })}
     </span>
   )
 }
