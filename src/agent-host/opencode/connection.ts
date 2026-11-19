@@ -287,7 +287,7 @@ export function mcpConfig(server: McpServer): Record<string, unknown> | null {
 }
 
 /** The servers' paragraphs and Kettu's memory, as a session's instructions take them. */
-export function ownInstructions(options: SessionOptions): string | null {
+function instructionsFor(options: SessionOptions): string | null {
   const parts = [
     ...(options.mcpServers ?? []).flatMap((server) =>
       server.type === 'stdio' ? [] : (server.prompt ?? []),
@@ -867,7 +867,7 @@ export class OpenCodeConnection implements AgentConnection {
    */
   private async instruct(session: Session, options: SessionOptions, fresh: boolean): Promise<void> {
     if (options.promptAhead) return
-    const text = ownInstructions(options)
+    const text = instructionsFor(options)
     const route = `/api/experimental/session/${session.id}/instructions/entries`
     try {
       let current: string | null = null
