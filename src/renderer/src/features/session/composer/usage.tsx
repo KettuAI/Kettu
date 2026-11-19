@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { ArrowRight01Icon, Timer02Icon } from '@hugeicons/core-free-icons'
+import { ArrowDown01Icon, ArrowRight01Icon, Timer02Icon } from '@hugeicons/core-free-icons'
 import { Trans, useTranslation } from 'react-i18next'
 import type { AgentAccount, ContextList, PlanLimit } from '@shared/agent-host'
 import {
@@ -401,12 +401,11 @@ export function ContextButton({
               closed={closed}
             />
           )}
-          {shown && <SessionLine usage={shown} />}
-          <LastRequestLine sessionId={sessionId} />
+          <UsageLines sessionId={sessionId} usage={shown} />
           {readsModelRequests(agentId) && (
             <button
               type="button"
-              className="kettu-ctx__session kettu-ctx__link"
+              className="kettu-ctx__link"
               onClick={() => {
                 setOpen(false)
                 toggleSidePane(sessionId, 'requests', true)
@@ -611,44 +610,116 @@ function ContextPart({
   )
 }
 
-/** The session's tokens and cost on one row, with the kinds of tokens in its tooltip. */
-function SessionLine({ usage }: { usage: SessionUsage }) {
+const hitPercent = (share: number | null): string =>
+  share === null ? '\u2014' : `${Math.round(share * 100)}%`
+
+/**
+ * The session's tokens and its latest request as two blocks of one shape: the name and total on a
+ * line, then input, output and cache hit in the same three columns, so the figures line up.
+ */
+function UsageLines({ sessionId, usage }: { sessionId: string; usage: SessionUsage | null }) {
   const { t } = useTranslation('composer')
-  const totals = usage.tokens
-  if (!totals && !usage.cost) return null
-  const input = totals ? totals.input + (totals.cacheRead ?? 0) + (totals.cacheWrite ?? 0) : 0
-  const hit = totals && totals.cacheRead !== null && input > 0 ? totals.cacheRead / input : null
-  const parts = [
-    totals && t('usage.context.tokens', { tokens: tokens(totals.total) }),
-    hit !== null && t('usage.context.cached', { percent: `${Math.round(hit * 100)}%` }),
-    usage.cost && `≈ ${money(usage.cost.amount, usage.cost.currency)}`,
-  ].filter(Boolean)
-  const line = (
-    <div className="kettu-ctx__session">
-      <span>{t('usage.context.session')}</span>
-      <span className="tabular">{parts.join(' · ')}</span>
+  const last = useSessionView(sessionId)?.lastRequest
+  const totals = usage?.tokens ?? null
+  const session = usage && (totals || usage.cost)
+  if (!session && !last) return null
+  const sessionInput = totals
+    ? totals.input + (totals.cacheRead ?? 0) + (totals.cacheWrite ?? 0)
+    : 0
+  const sessionHit =
+    totals && totals.cacheRead !== null && sessionInput > 0 ? totals.cacheRead / sessionInput : null
+  const lastInput = last ? (last.input ?? 0) + (last.cacheRead ?? 0) + (last.cacheWrite ?? 0) : 0
+  const lastHit =
+    last && last.cacheRead !== null && lastInput > 0 ? last.cacheRead / lastInput : null
+  const sessionBlock = session && (
+    <UsageBlock
+      label={t('usage.context.session')}
+      total={[
+        totals && t('usage.context.tokens', { tokens: tokens(totals.total) }),
+        usage.cost && `\u2248 ${money(usage.cost.amount, usage.cost.currency)}`,
+      ]
+        .filter(Boolean)
+        .join(' \u00b7 ')}
+      figures={
+        totals && { input: tokens(sessionInput), output: tokens(totals.output), hit: sessionHit }
+      }
+    />
+  )
+  return (
+    <div className="kettu-ctx__usage">
+      {sessionBlock && totals ? (
+        <Tooltip>
+          <TooltipTrigger render={sessionBlock} />
+          <TooltipContent side="left" className="tabular">
+            <dl className="grid grid-cols-[auto_auto] gap-x-4">
+              <Total label={t('usage.context.input')} value={totals.input} />
+              <Total label={t('usage.context.output')} value={totals.output} />
+              <Total label={t('usage.context.reasoning')} value={totals.thought} />
+              <Total label={t('usage.context.cacheRead')} value={totals.cacheRead} />
+              <Total label={t('usage.context.cacheWrite')} value={totals.cacheWrite} />
+            </dl>
+          </TooltipContent>
+        </Tooltip>
+      ) : (
+        sessionBlock
+      )}
+      {last && (
+        <UsageBlock
+          label={t('usage.lastRequest.title')}
+          title={clockTime(last.at)}
+          total={
+            last.output === null
+              ? t('usage.lastRequest.running')
+              : t('usage.context.tokens', { tokens: tokens(lastInput + last.output) })
+          }
+          figures={{
+            input: tokens(lastInput),
+            output: last.output === null ? '\u2026' : tokens(last.output),
+            hit: lastHit,
+          }}
+        />
+      )}
     </div>
   )
-  if (!totals) return line
+}
+
+function UsageBlock({
+  label,
+  total,
+  title,
+  figures,
+  ...trigger
+}: {
+  label: string
+  total: string
+  title?: string
+  figures: { input: string; output: string; hit: number | null } | null
+}) {
+  const { t } = useTranslation('composer')
   return (
-    <Tooltip>
-      <TooltipTrigger render={line} />
-      <TooltipContent side="left" className="tabular">
-        <dl className="grid grid-cols-[auto_auto] gap-x-4">
-          <Total label={t('usage.context.input')} value={totals.input} />
-          <Total label={t('usage.context.output')} value={totals.output} />
-          <Total label={t('usage.context.reasoning')} value={totals.thought} />
-          <Total label={t('usage.context.cacheRead')} value={totals.cacheRead} />
-          <Total label={t('usage.context.cacheWrite')} value={totals.cacheWrite} />
-          {hit !== null && (
-            <>
-              <dt className="opacity-70">{t('usage.context.cacheHit')}</dt>
-              <dd className="text-right">{`${Math.round(hit * 100)}%`}</dd>
-            </>
-          )}
+    // The rest are a tooltip trigger's props, when the block opens one.
+    <div {...trigger} className="kettu-ctx__block" title={title}>
+      <div className="kettu-ctx__block-head">
+        <span>{label}</span>
+        <span className="tabular">{total}</span>
+      </div>
+      {figures && (
+        <dl className="kettu-ctx__figures tabular">
+          <div>
+            <dt>{t('usage.context.input')}</dt>
+            <dd>{figures.input}</dd>
+          </div>
+          <div>
+            <dt>{t('usage.context.output')}</dt>
+            <dd>{figures.output}</dd>
+          </div>
+          <div>
+            <dt>{t('usage.context.cacheHit')}</dt>
+            <dd>{hitPercent(figures.hit)}</dd>
+          </div>
         </dl>
-      </TooltipContent>
-    </Tooltip>
+      )}
+    </div>
   )
 }
 
@@ -744,13 +815,7 @@ function BreakdownError({ message, onRetry }: { message: string; onRetry: () => 
   )
 }
 
-function ListPart({
-  list,
-  summary = String(list.items.length),
-}: {
-  list: ContextList
-  summary?: string
-}) {
+function ListPart({ list }: { list: ContextList }) {
   const empty = list.items.length === 0
   return (
     <Collapsible>
@@ -767,7 +832,7 @@ function ListPart({
           )}
         />
         <span className="min-w-0 flex-1 truncate text-left">{list.name}</span>
-        <span className="text-tertiary tabular">{summary}</span>
+        <span className="text-tertiary tabular">{list.items.length}</span>
       </CollapsibleTrigger>
       <CollapsibleContent className={PANEL}>
         <ul className="mb-1 grid max-h-40 grid-cols-[1fr_auto] gap-x-3 gap-y-0.5 overflow-y-auto pl-4.25 text-small tabular">
@@ -788,6 +853,10 @@ function ListPart({
 
 type EstimateReading = { estimates: ContextEstimates | null } | { error: string }
 
+/**
+ * What the agent can load, sized by estimate: a section of its own under the measured context,
+ * since these sizes are of everything available and no part of the total above.
+ */
 function ContextEstimatePart({ sessionId, closed }: { sessionId: string; closed: boolean }) {
   const { t } = useTranslation('composer')
   const [reading, setReading] = useState<EstimateReading | null>(null)
@@ -809,38 +878,52 @@ function ContextEstimatePart({ sessionId, closed }: { sessionId: string; closed:
     }
   }, [attempt, closed, sessionId])
 
-  if (closed || (reading && 'estimates' in reading && !reading.estimates)) {
-    return <p className="kettu-ctx__note">{t('usage.estimates.disconnected')}</p>
-  }
-  if (!reading) return <BreakdownRows label={t('usage.estimates.loading')} />
-
-  const estimates = 'estimates' in reading ? reading.estimates : null
-  if (!estimates || (!estimates.skills && !estimates.mcpServers)) {
-    const message =
-      'error' in reading
-        ? t('usage.breakdown.error', { error: reading.error })
-        : t('usage.estimates.readFailed')
-    return (
-      <div className="kettu-ctx__pad">
+  const estimates = reading && 'estimates' in reading ? reading.estimates : null
+  const disconnected = closed || (reading !== null && 'estimates' in reading && !estimates)
+  const failed = !disconnected && reading !== null && !estimates?.skills && !estimates?.mcpServers
+  return (
+    <section className="kettu-ctx__defs" aria-label={t('usage.estimates.title')}>
+      <div className="kettu-ctx__defs-head">
+        <span>{t('usage.estimates.title')}</span>
+        <span className="kettu-ctx__tag">{t('usage.estimates.tag')}</span>
+      </div>
+      {disconnected ? (
+        <p className="kettu-ctx__defs-note">{t('usage.estimates.disconnected')}</p>
+      ) : !reading ? (
+        <div aria-label={t('usage.estimates.loading')}>
+          {[2 / 5, 3 / 5].map((width) => (
+            <div key={width} className="kettu-ctx__def">
+              <Skeleton className="h-3" style={{ width: `${width * 100}%` }} />
+            </div>
+          ))}
+        </div>
+      ) : failed ? (
         <BreakdownError
-          message={message}
+          message={
+            'error' in reading
+              ? t('usage.breakdown.error', { error: reading.error })
+              : t('usage.estimates.readFailed')
+          }
           onRetry={() => {
             setReading(null)
             setAttempt((n) => n + 1)
           }}
         />
-      </div>
-    )
-  }
-  return (
-    <div className="kettu-ctx__pad">
-      <EstimateList name={t('usage.estimates.skills')} items={estimates.skills} />
-      <EstimateList name={t('usage.estimates.mcpServers')} items={estimates.mcpServers} />
-      <p className="pt-1 text-small text-tertiary">{t('usage.estimates.note')}</p>
-    </div>
+      ) : (
+        <>
+          <EstimateList name={t('usage.estimates.skills')} items={estimates?.skills ?? null} />
+          <EstimateList
+            name={t('usage.estimates.mcpServers')}
+            items={estimates?.mcpServers ?? null}
+          />
+          <p className="kettu-ctx__defs-note">{t('usage.estimates.note')}</p>
+        </>
+      )}
+    </section>
   )
 }
 
+/** One kind of definition: its estimated size, opening the size of each. */
 function EstimateList({
   name,
   items,
@@ -855,24 +938,39 @@ function EstimateList({
     if (count === null) return t('usage.estimates.unavailable')
     return count === 0 ? tokens(count) : t('usage.estimates.count', { count: tokens(count) })
   }
-  const summary =
-    !items || (items.length > 0 && known.length === 0)
-      ? estimate(null)
-      : known.length < items.length
-        ? t('usage.estimates.partial', { estimate: estimate(total) })
-        : estimate(total)
+  const unknown = !items || (items.length > 0 && known.length === 0)
+  const partial = !unknown && known.length < items.length
+  const empty = !items || items.length === 0
   return (
-    <ListPart
-      list={{
-        name,
-        items: (items ?? []).map((item) => ({
-          name: item.name,
-          detail: null,
-          tokens: estimate(item.tokens),
-        })),
-      }}
-      summary={summary}
-    />
+    <Collapsible>
+      <CollapsibleTrigger disabled={empty} className="group/def kettu-ctx__def">
+        <span className="kettu-ctx__def-swatch" aria-hidden />
+        <span className="kettu-ctx__def-name">
+          <span className="truncate">{name}</span>
+          {!empty && (
+            <Glyph
+              icon={ArrowDown01Icon}
+              size={12}
+              className="shrink-0 transition-transform duration-(--duration-fast) group-data-panel-open/def:rotate-180 motion-reduce:transition-none"
+            />
+          )}
+        </span>
+        {partial && <span className="kettu-ctx__tag">{t('usage.estimates.partial')}</span>}
+        <span className="kettu-ctx__def-value tabular">{estimate(unknown ? null : total)}</span>
+      </CollapsibleTrigger>
+      <CollapsibleContent className={PANEL}>
+        <ul className="kettu-ctx__def-items tabular">
+          {(items ?? []).map((item, index) => (
+            <li key={index}>
+              <span className="truncate" title={item.name}>
+                {item.name}
+              </span>
+              <span>{estimate(item.tokens)}</span>
+            </li>
+          ))}
+        </ul>
+      </CollapsibleContent>
+    </Collapsible>
   )
 }
 
@@ -929,31 +1027,6 @@ export function PlanPart({
           </div>
         )
       })}
-    </div>
-  )
-}
-
-/** The main thread's latest request, as the stream reported it. */
-function LastRequestLine({ sessionId }: { sessionId: string }) {
-  const { t } = useTranslation('composer')
-  const last = useSessionView(sessionId)?.lastRequest
-  if (!last) return null
-  const input = (last.input ?? 0) + (last.cacheRead ?? 0) + (last.cacheWrite ?? 0)
-  const hit = last.cacheRead !== null && input > 0 ? last.cacheRead / input : null
-  const line =
-    last.output === null
-      ? t('usage.lastRequest.running')
-      : t('usage.lastRequest.line', {
-          input: tokens(input),
-          output: tokens(last.output),
-          hit: hit === null ? '—' : `${Math.round(hit * 100)}%`,
-        })
-  return (
-    <div className="kettu-ctx__session">
-      <span>{t('usage.lastRequest.title')}</span>
-      <span className="tabular" title={clockTime(last.at)}>
-        {line}
-      </span>
     </div>
   )
 }

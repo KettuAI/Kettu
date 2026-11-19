@@ -98,8 +98,7 @@
       "cacheWrite": "Cache write",
       "ofUsed": "of context used",
       "tokens": "{{tokens}} tokens",
-      "cacheHit": "Cache hit",
-      "cached": "{{percent}} cached"
+      "cacheHit": "Cache hit"
     },
     "breakdown": {
       "loading": "Reading what fills the context",
@@ -110,15 +109,17 @@
       "subagent": "Breakdown unavailable: only a sub-agent's total is reported"
     },
     "estimates": {
+      "title": "Available definitions",
+      "tag": "Estimate",
       "skills": "Skill catalog",
       "mcpServers": "MCP tool definitions",
       "count": "≈ {{count}}",
-      "partial": "{{estimate}} (partial)",
+      "partial": "Partial",
       "unavailable": "Unavailable",
       "loading": "Reading skill and MCP definitions",
       "readFailed": "Couldn't read skill and MCP definitions.",
       "disconnected": "Definition estimates are available while the session is connected.",
-      "note": "Definition sizes are estimated. Actual context use depends on what Codex loads."
+      "note": "Sizes of what Codex can load, not parts of the context above."
     },
     "limits": {
       "plan": "Plan",
@@ -189,7 +190,6 @@
     },
     "lastRequest": {
       "title": "Last request",
-      "line": "{{input}} in · {{output}} out · {{hit}} cached",
       "running": "running"
     },
     "everyRequest": "Every request"
