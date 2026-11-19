@@ -89,6 +89,7 @@ import {
 import { folderHooks } from './project-hooks'
 import { declaredServers } from './project-mcp'
 import { mapAccount, mapAuthStatus, mapContextUsage, mapUsageLimits } from './reports'
+import { TerminalCommands } from './terminal-commands'
 import { askedQuestions } from './tools'
 import type {
   AccountInfo,
@@ -472,12 +473,16 @@ export class ClaudeConnection implements AgentConnection {
   private readonly openPages = new Map<string, { targetId: string; entryId: string }>()
   private envQueue: Promise<unknown> = Promise.resolve()
   private account: string | null = null
+  private readonly terminalCommands: TerminalCommands
 
   constructor(
     private readonly context: HostedContext,
     private readonly load: LoadSdk,
   ) {
     this.closed = new Promise((resolve) => (this.resolveClosed = resolve))
+    this.terminalCommands = new TerminalCommands(context.kettuDir, (level, message) =>
+      context.hooks.log(level, message),
+    )
   }
 
   get isClosed(): boolean {
@@ -506,6 +511,7 @@ export class ClaudeConnection implements AgentConnection {
       void this.stop(session)
     }
     this.sessions.clear()
+    void this.terminalCommands.flush()
     this.resolveClosed()
   }
 
@@ -539,6 +545,7 @@ export class ClaudeConnection implements AgentConnection {
       : loading)
     this.sdk = sdk
     this.cli = this.context.spec.cli ?? this.env[CLI_VARIABLE] ?? bundledCli(entry)
+    await this.terminalCommands.load()
     let version: string | null = null
     try {
       const manifest = JSON.parse(
@@ -1082,6 +1089,7 @@ export class ClaudeConnection implements AgentConnection {
     session.choices.fast = init.fast_mode_state !== undefined && init.fast_mode_state !== 'off'
     if (typeof init.claude_code_version === 'string') session.version = init.claude_code_version
     session.commands = init.commands ?? []
+    session.terminal = new Set(this.terminalCommands.namesFor(session.version))
     session.config = buildConfig(
       session.models,
       session.choices,
@@ -1219,6 +1227,8 @@ export class ClaudeConnection implements AgentConnection {
       if (system.subtype === 'init') {
         const terminal = system.terminal_slash_commands
         session.terminal = new Set(Array.isArray(terminal) ? (terminal as string[]) : [])
+        const version = session.version ?? system.claude_code_version
+        if (typeof version === 'string') this.terminalCommands.remember(version, session.terminal)
         this.publishCommands(session)
         // A turn Claude Code starts once a background agent ends: it never went idle, so no
         // running state comes, only the init each turn of its opens with.

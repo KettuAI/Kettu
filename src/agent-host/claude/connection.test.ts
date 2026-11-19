@@ -1,4 +1,4 @@
-import { mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -1816,6 +1816,57 @@ describe('a turn', () => {
     query.close()
     await settle()
     expect(turns().at(-1)).toMatchObject({ kind: 'agentTurn', phase: 'failed' })
+  })
+})
+
+describe('terminal-only commands', () => {
+  const names = (target: Target): string[] =>
+    target.thread.session.commands.map((command) => command.name)
+  const init = (query: FakeQuery, terminal: string[]): SdkMessage =>
+    ({
+      type: 'system',
+      subtype: 'init',
+      session_id: query.sessionId,
+      terminal_slash_commands: terminal,
+    }) as SdkMessage
+
+  async function opened(s: Awaited<ReturnType<typeof setup>>, version: string) {
+    s.sdk.init = { ...s.sdk.init, claude_code_version: version }
+    const target = new Target()
+    const { sessionId } = await s.connection.newSession('/repo')
+    s.connection.register(sessionId, target)
+    await settle()
+    return { target, sessionId }
+  }
+
+  it('leaves out, before a turn of its own, what a turn of the same version named', async () => {
+    const kettuDir = await mkdtemp(path.join(os.tmpdir(), 'kettu-claude-dir-'))
+    dirs.push(kettuDir)
+    const s = await setup({}, {}, { kettuDir })
+    const first = await opened(s, '2.1.327')
+    // Claude Code names them only in the init a turn starts with.
+    expect(names(first.target)).toEqual(['review', 'statusline'])
+    s.sdk.script = (query) => {
+      query.running()
+      query.emit(init(query, ['statusline']))
+      query.finish()
+    }
+    await s.connection.prompt(first.sessionId, [{ type: 'text', text: 'Hi' }])
+    expect(names(first.target)).toEqual(['review'])
+
+    const second = await opened(s, '2.1.327')
+    expect(names(second.target)).toEqual(['review'])
+
+    s.connection.close()
+    await vi.waitFor(async () =>
+      expect(await readFile(path.join(kettuDir, 'terminal-commands.json'), 'utf8')).toContain(
+        'statusline',
+      ),
+    )
+    const later = await setup({}, {}, { kettuDir })
+    expect(names((await opened(later, '2.1.327')).target)).toEqual(['review'])
+    // Another version may name others, so its sessions wait for a turn of their own.
+    expect(names((await opened(later, '2.1.328')).target)).toEqual(['review', 'statusline'])
   })
 })
 
