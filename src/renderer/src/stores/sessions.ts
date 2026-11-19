@@ -4,6 +4,7 @@ import type { TaskSummary } from '@shared/workflow'
 import { errorMessage, host } from '@renderer/lib/host'
 import { hostOfPath } from '@renderer/lib/host-paths'
 import { i18n } from '@renderer/lib/i18n'
+import { pinnedProjects } from './projects'
 import { listedTasks, needingTasks, pinnedTasks, startedSteps, taskExpanded } from './tasks'
 import { NO_PROJECT_GROUP, PINNED_GROUP, THIS_COMPUTER, type MainView } from './view'
 
@@ -406,6 +407,16 @@ export function visibleOrder(
               : []),
           ],
     )
+  const projectRows = (project: Project): string[] =>
+    view.collapsedProjects[project.path]
+      ? []
+      : flatten(
+          sidebarRows(
+            sessionTree(byId, project.path),
+            listedTasks(tasks, project.path),
+            byActivity,
+          ),
+        )
   const order = [
     ...(view.hosts
       ? flatten(
@@ -419,20 +430,23 @@ export function visibleOrder(
       : []),
     ...(view.collapsedProjects[PINNED_GROUP]
       ? []
-      : flatten(
-          sidebarRows(pinnedTree(byId).filter(shown), pinnedTasks(tasks).filter(shownTask), byPin),
-        )),
+      : [
+          ...pinnedProjects(projects, hosts).flatMap(projectRows),
+          ...flatten(
+            sidebarRows(
+              pinnedTree(byId).filter(shown),
+              pinnedTasks(tasks).filter(shownTask),
+              byPin,
+            ),
+          ),
+        ]),
     ...hosts.flatMap((hostId) =>
       view.collapsedProjects[hostGroup(hostId)]
         ? []
         : [
             ...projects
-              .filter((p) => hostOfPath(p.path) === hostId && !view.collapsedProjects[p.path])
-              .flatMap((p) =>
-                flatten(
-                  sidebarRows(sessionTree(byId, p.path), listedTasks(tasks, p.path), byActivity),
-                ),
-              ),
+              .filter((p) => p.pinnedAt == null && hostOfPath(p.path) === hostId)
+              .flatMap(projectRows),
             ...(view.collapsedProjects[noProjectGroup(hostId)]
               ? []
               : flattenTree(sessionTree(byId, null, hostId), expanded)),
@@ -464,24 +478,29 @@ export function sidebarTabStop(
   const hosts = view.hosts ?? [null]
   const shown = (node: SessionNode) => hosts.includes(hostOfSession(node.summary))
   const shownTask = (task: TaskSummary) => hosts.includes(hostOfPath(task.projectPath))
-  if (pinnedTree(byId).some(shown) || pinnedTasks(tasks).some(shownTask)) {
+  if (
+    projects.some((p) => p.pinnedAt != null && hosts.includes(hostOfPath(p.path))) ||
+    pinnedTree(byId).some(shown) ||
+    pinnedTasks(tasks).some(shownTask)
+  ) {
     return { kind: 'group', key: PINNED_GROUP }
   }
+  let firstProject: Project | undefined
   for (const hostId of hosts) {
     if (view.hosts && view.collapsedProjects[hostGroup(hostId)]) {
       return { kind: 'group', key: hostGroup(hostId) }
     }
-    const project = projects.find(
-      (p) =>
-        hostOfPath(p.path) === hostId &&
-        (sessionTree(byId, p.path).length > 0 || listedTasks(tasks, p.path).length > 0),
+    const own = projects.filter((p) => p.pinnedAt == null && hostOfPath(p.path) === hostId)
+    firstProject ??= own[0]
+    const project = own.find(
+      (p) => sessionTree(byId, p.path).length > 0 || listedTasks(tasks, p.path).length > 0,
     )
     if (project) return { kind: 'group', key: project.path }
     if (sessionTree(byId, null, hostId).length > 0) {
       return { kind: 'group', key: noProjectGroup(hostId) }
     }
   }
-  return null
+  return firstProject ? { kind: 'group', key: firstProject.path } : null
 }
 
 export function sessionTitle(summary: Pick<SessionSummary, 'title'>): string {

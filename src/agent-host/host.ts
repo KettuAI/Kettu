@@ -2607,6 +2607,7 @@ export class AgentHost {
         this.options.send({ type: 'host:media-revoke', sessionId: null })
       },
       'projects.touch': ({ path }) => projects.touch(projects.match(path)),
+      'projects.pin': ({ path, pinned }) => projects.pin(projects.match(path), pinned),
       'projects.worktreeSettings': ({ path }) =>
         projects.worktreeSettings(projects.match(path).path),
       'projects.setWorktreeSettings': ({ path, settings }) =>

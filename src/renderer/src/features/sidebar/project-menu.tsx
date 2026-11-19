@@ -6,6 +6,8 @@ import {
   FolderOpenIcon,
   GitBranchIcon,
   PencilEdit02Icon,
+  PinIcon,
+  PinOffIcon,
 } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
 import type { Project } from '@shared/agent-host'
@@ -32,20 +34,33 @@ import { openProjectTerminal } from './project-menu-model'
  */
 export function ProjectMenuItems({
   project,
+  pinDisabled,
+  onPin,
   onImport,
   onRemove,
 }: {
   project: Project
+  pinDisabled: boolean
+  onPin: (pinned: boolean) => Promise<void>
   onImport: () => void
   onRemove: () => void
 }) {
   const { t } = useTranslation('sidebar')
   const terminal = useTerminalAllowed(project.path)
   const gone = project.missing
+  const local = hostOfPath(project.path) === null
   // Only this computer's folders open in its file manager.
-  const revealable = !isWeb && hostOfPath(project.path) === null
+  const revealable = !isWeb && local
   // Left out once the project is known not to be a Git repository.
   const git = useGitStore((s) => s.status[project.path]?.repo !== null)
+  const pinned = project.pinnedAt != null
+  const pinItem = project.pinnedAt !== undefined && (
+    <DropdownMenuItem disabled={pinDisabled} onClick={() => void onPin(!pinned)}>
+      <MenuGlyph icon={pinned ? PinOffIcon : PinIcon} />
+      {t(pinned ? 'project.menu.unpin' : 'project.menu.pin')}
+    </DropdownMenuItem>
+  )
+  if (!local) return <DropdownMenuGroup>{pinItem}</DropdownMenuGroup>
 
   return (
     <>
@@ -55,6 +70,7 @@ export function ProjectMenuItems({
           {t('project.menu.newSession')}
           <DropdownMenuShortcut>{formatShortcut('Mod+N')}</DropdownMenuShortcut>
         </DropdownMenuItem>
+        {pinItem}
       </DropdownMenuGroup>
       <DropdownMenuGroup>
         <DropdownMenuSeparator />
