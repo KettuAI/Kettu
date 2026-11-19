@@ -72,19 +72,6 @@
   --ui-ts-focus: color-mix(in srgb, var(--focus) 50%, transparent);
 }
 
-.ui-ts .ui-ts__timer[data-countdown] {
-  height: 2px;
-  background: var(--text-secondary);
-}
-@media (prefers-reduced-motion: reduce) {
-  .ui-ts .ui-ts__timer[data-countdown] {
-    animation-timing-function: step-end;
-  }
-}
-:root[data-reduce-motion='always'] .ui-ts .ui-ts__timer[data-countdown] {
-  animation-timing-function: step-end;
-}
-
 /* shell: the window frame on AffectUI's App Shell (components/affect/app-shell.tsx). Its variables
    point at the shell's tokens; the page is the desk, which <html> paints once. */
 .ui-as.ui-as {
