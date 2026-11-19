@@ -4,6 +4,7 @@ import {
   REPORT_ERROR_MAX,
   type ReportContext,
   type ReportExtra,
+  type ReportOrigin,
   type ReportRange,
 } from '@shared/report'
 
@@ -18,6 +19,8 @@ export interface ReportDialog {
   /** The other host the report is about; null for this computer, or the web client's host. */
   hostId: string | null
   context: ReportContext | null
+  /** The place it was opened from, which the description's first text names. */
+  origin: ReportOrigin | null
   range: ReportRange
   extras: ReportExtra[]
   /** The description it starts with, such as an agent's draft. */
@@ -50,6 +53,7 @@ export async function openReport(options: Partial<Omit<ReportDialog, 'key'>> = {
       context: options.context
         ? { ...options.context, error: options.context.error?.slice(0, REPORT_ERROR_MAX) ?? null }
         : null,
+      origin: options.origin ?? null,
       range: options.range ?? { kind: 'hour' },
       extras: options.extras ?? [],
       ...(options.description !== undefined ? { description: options.description } : {}),

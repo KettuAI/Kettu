@@ -13,7 +13,13 @@ import { DeviceAccessStore } from './devices/access'
 import os from 'node:os'
 import path from 'node:path'
 import { cp, mkdir, rename, rm, stat } from 'node:fs/promises'
-import type { AgentOptions, DiagnosticsBundle, HostEvent, McpStatus } from '@shared/agent-host'
+import type {
+  AgentOptions,
+  DiagnosticsBundle,
+  HostEvent,
+  HostParams,
+  McpStatus,
+} from '@shared/agent-host'
 import { OWNER } from '@shared/artifact-comments'
 import { flushLog, logFolder, redactLogText, writeLog } from '@shared/log/process-log'
 import { writeReport } from '@shared/log/report-bundle'
@@ -107,6 +113,7 @@ import {
 } from './device-browser'
 import { BrowserTurns } from './browser-turns'
 import { writeCommitMessage } from './commit-message'
+import { reportDraftPrompt, writeReportDraft } from './report-draft'
 import { Diagnostics } from './diagnostics'
 import { HostError, invalidParams } from './errors'
 import { setLocale, t } from './i18n'
@@ -1977,6 +1984,56 @@ export class AgentHost {
     }
   }
 
+  /**
+   * A draft of a problem report's description from the agent the report is about, else the one
+   * new sessions start with; null when Kettu observed nothing to write from.
+   */
+  private async draftReport(
+    params: HostParams<'agents.draftReport'>,
+  ): Promise<{ draft: string | null; agent: string | null }> {
+    const session =
+      params.sessionId !== null && this.sessions.has(params.sessionId)
+        ? this.sessions.summary(params.sessionId)
+        : null
+    const about = session?.agentId ?? params.agentId
+    const known = about !== null && this.agents.has(about)
+    const prompt = reportDraftPrompt(
+      {
+        origin: params.origin,
+        language: params.language,
+        agent: known ? this.agents.name(about) : null,
+        error: params.error,
+        log: this.diagnostics.logEntries(),
+        events: known ? this.diagnostics.agentEvents(about) : [],
+        now: Date.now(),
+      },
+      redactLogText,
+    )
+    if (prompt === null) return { draft: null, agent: null }
+    const agentId =
+      known && !this.agents.isDisabled(about)
+        ? about
+        : this.preferredAgent(session && !session.scratch ? session.projectPath : null)
+    if (agentId === null) throw new HostError('agent_error', t('report.draftNoAgent'))
+    const agent = this.agents.name(agentId)
+    try {
+      const runtime = await this.agents.ensureReady(agentId)
+      const dir = path.join(this.options.userDataPath, 'agent-reports')
+      await mkdir(dir, { recursive: true })
+      const draft = await writeReportDraft(runtime, {
+        dir,
+        prompt,
+        log: (line) => this.diagnostics.log('warn', line),
+      })
+      return { draft, agent }
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error)
+      // Info: the report this draft is for must not read its own failure as part of the problem.
+      this.diagnostics.log('info', `${agent}: could not draft a problem report: ${reason}`)
+      throw new HostError('agent_error', t('report.draftFailed', { agent, reason }))
+    }
+  }
+
   /** A page's question to the agent, in a hidden session with no tools in the reports' folder. */
   private async answerQuestion(agent: SampleAgent, question: SampleQuestion): Promise<string> {
     const runtime = await this.agents.ensureReady(agent.id as AgentId)
@@ -2503,6 +2560,7 @@ export class AgentHost {
       'agents.setCodebuddySite': ({ agentId, change }) => agents.setCodebuddySite(agentId, change),
       'agents.refreshAccount': ({ agentId, force }) => agents.refreshAccount(agentId, { force }),
       'agents.options': () => this.agentOptions.list().map((o) => this.withStartMode(o)),
+      'agents.draftReport': (params) => this.draftReport(params),
       'mcp.status': () => this.mcpStatus(),
       'market.catalog': ({ refresh, cached }) =>
         this.marketCatalog.catalog(refresh === true, cached === true),

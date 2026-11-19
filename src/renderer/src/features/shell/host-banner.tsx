@@ -86,7 +86,7 @@ export function HostBanner() {
                   variant="quiet"
                   size="xs"
                   className="rounded-full"
-                  onClick={() => void openReport()}
+                  onClick={() => void openReport({ origin: 'host' })}
                 >
                   {t('hostBanner.reportProblem')}
                 </Button>

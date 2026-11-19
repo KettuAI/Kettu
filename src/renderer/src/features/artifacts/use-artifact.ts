@@ -334,6 +334,7 @@ export function reportMissing(id: string, version: number | null): void {
   const which = version === null ? id : `${id} v${version}`
   void openReport({
     hostId: artifactHost(id),
+    origin: 'artifact',
     context: {
       sessionId: null,
       agentId: null,

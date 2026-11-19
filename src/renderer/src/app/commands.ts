@@ -89,7 +89,13 @@ export function useAppCommands(): void {
             break
           case 'report-problem':
             void openReport(
-              command.span ? { range: { kind: 'span', ...command.span }, extras: ['verbose'] } : {},
+              command.span
+                ? {
+                    origin: 'recording',
+                    range: { kind: 'span', ...command.span },
+                    extras: ['verbose'],
+                  }
+                : {},
             )
             break
         }

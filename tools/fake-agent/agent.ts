@@ -34,6 +34,7 @@ import {
   type ScenarioName,
 } from './options.ts'
 import { SCENARIO_RUNNERS, compact, syntheticAttachments, syntheticHistory } from './scenarios.ts'
+import { isReportDraftPrompt, reportDraft } from './report-draft.ts'
 import { isTitlesPrompt, titles } from './titles.ts'
 import type { FakeSessionState, Turn } from './turn.ts'
 
@@ -1027,9 +1028,11 @@ export function createFakeAgent(options: FakeAgentOptions = {}): AgentApp {
         }
         const run = isTitlesPrompt(text)
           ? titles
-          : choice.scenario === 'compact'
-            ? compact
-            : SCENARIO_RUNNERS[choice.scenario]
+          : isReportDraftPrompt(text)
+            ? reportDraft
+            : choice.scenario === 'compact'
+              ? compact
+              : SCENARIO_RUNNERS[choice.scenario]
         let stopReason: StopReason = 'end_turn'
         try {
           stopReason = await run(turn)

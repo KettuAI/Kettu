@@ -4,6 +4,23 @@
   "what": "发生了什么？",
   "whatPlaceholder": "写一句就行，什么语言都可以。",
   "context": "出错的信息也会一起带上。",
+  "prefill": {
+    "turnOf": "{{agent}} 会话里的一轮对话失败了。",
+    "turn": "会话里的一轮对话失败了。",
+    "error": "Kettu 显示了一条错误。",
+    "artifact": "有一个 artifact 打不开。",
+    "usage": "用量页加载不出来。",
+    "host": "Agent 后台进程已停止，且无法重启。",
+    "crash": "Kettu 上次运行时意外退出了。",
+    "recording": "我录下了出现问题的操作过程。",
+    "shown": "显示的错误：\n{{error}}"
+  },
+  "draft": {
+    "writing": "正在根据 Kettu 记录到的情况写一份更完整的描述…",
+    "written": "由 {{agent}} 根据 Kettu 记录到的情况起草，不对的地方可以直接改。",
+    "writtenPlain": "根据 Kettu 记录到的情况起草，不对的地方可以直接改。",
+    "unavailable": "没有 Agent 能起草，这里是 Kettu 记录到的情况，可以再补充。"
+  },
   "range": "日志范围",
   "ranges": {
     "span": "录下的这段",

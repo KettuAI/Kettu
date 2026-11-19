@@ -806,5 +806,9 @@
   },
   "marketSkills": {
     "nameTaken": "You’ve already added a skill named {{name}}, from {{from}}. Remove that one first: an agent keeps only one of two skills with the same name."
+  },
+  "report": {
+    "draftNoAgent": "No agent is available to draft the description",
+    "draftFailed": "{{agent}} could not draft the description: {{reason}}"
   }
 }

@@ -4,6 +4,23 @@
   "what": "What happened?",
   "whatPlaceholder": "A sentence is enough, in any language.",
   "context": "The error you came from goes in too.",
+  "prefill": {
+    "turnOf": "A turn failed in a {{agent}} session.",
+    "turn": "A turn failed in a session.",
+    "error": "Kettu showed an error.",
+    "artifact": "An artifact could not be opened.",
+    "usage": "The Usage page could not load.",
+    "host": "The agent host stopped and could not be restarted.",
+    "crash": "Kettu quit unexpectedly the last time it ran.",
+    "recording": "I recorded the steps that lead to the problem.",
+    "shown": "The error shown:\n{{error}}"
+  },
+  "draft": {
+    "writing": "Writing a fuller description from what Kettu observed…",
+    "written": "Drafted by {{agent}} from what Kettu observed. Change anything that is off.",
+    "writtenPlain": "Drafted from what Kettu observed. Change anything that is off.",
+    "unavailable": "No agent could draft this, so it holds what Kettu observed. Add what you like."
+  },
   "range": "Logs from",
   "ranges": {
     "span": "The recording",
