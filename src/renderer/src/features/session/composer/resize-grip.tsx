@@ -1,10 +1,18 @@
-import { useRef, useState, type KeyboardEvent, type PointerEvent, type RefObject } from 'react'
+import {
+  useEffect,
+  useRef,
+  useState,
+  type KeyboardEvent,
+  type PointerEvent,
+  type RefObject,
+} from 'react'
 import { useTranslation } from 'react-i18next'
 import {
   MAX_HEIGHT_SHARE,
   setComposerHeight,
   useComposerHeight,
 } from '@renderer/stores/composer-height'
+import { draggedHeight, fixedHeight } from './box-height'
 import type { ComposerEditorHandle } from './editor'
 
 // A key press moves the box this far, a Shift press four times as far.
@@ -23,7 +31,7 @@ interface Measure {
 export function ResizeGrip({ editor }: { editor: RefObject<ComposerEditorHandle | null> }) {
   const { t } = useTranslation('composer')
   // Where a drag started: the pointer's height and the box's, with the bounds measured then.
-  const drag = useRef<{ y: number; start: Measure } | null>(null)
+  const drag = useRef<{ y: number; start: Measure; moved: boolean } | null>(null)
   const [dragging, setDragging] = useState(false)
   const fixed = useComposerHeight((s) => s.height)
 
@@ -33,21 +41,31 @@ export function ResizeGrip({ editor }: { editor: RefObject<ComposerEditorHandle 
     const most = Math.max(measured.least, Math.floor(window.innerHeight * MAX_HEIGHT_SHARE))
     return { height: measured.height, least: measured.least, most }
   }
-  const setHeight = (from: Measure, wanted: number) => {
-    setComposerHeight(Math.round(Math.min(from.most, Math.max(from.least, wanted))))
-  }
+  // A height saved at the resting height, or under it after the text size grew, is automatic.
+  useEffect(() => {
+    if (fixed === null) return
+    const measured = editor.current?.measure()
+    if (measured && fixed <= measured.least) setComposerHeight(null)
+  }, [editor, fixed])
 
   const down = (event: PointerEvent<HTMLDivElement>) => {
     if (event.button !== 0) return
     const start = measure()
     if (!start) return
     event.currentTarget.setPointerCapture(event.pointerId)
-    drag.current = { y: event.clientY, start }
+    drag.current = { y: event.clientY, start, moved: false }
     setDragging(true)
   }
   const move = (event: PointerEvent<HTMLDivElement>) => {
     const current = drag.current
-    if (current) setHeight(current.start, current.start.height + current.y - event.clientY)
+    if (!current) return
+    const up = current.y - event.clientY
+    const height = current.moved
+      ? fixedHeight(current.start.height + up, current.start)
+      : draggedHeight(current.start, up)
+    if (height === undefined) return
+    current.moved = true
+    setComposerHeight(height)
   }
   const up = () => {
     drag.current = null
@@ -63,7 +81,7 @@ export function ResizeGrip({ editor }: { editor: RefObject<ComposerEditorHandle 
     const from = measure()
     if (!from) return
     const step = (event.shiftKey ? 4 : 1) * STEP
-    setHeight(from, from.height + (event.key === 'ArrowUp' ? step : -step))
+    setComposerHeight(fixedHeight(from.height + (event.key === 'ArrowUp' ? step : -step), from))
   }
 
   return (
