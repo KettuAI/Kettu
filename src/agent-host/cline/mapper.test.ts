@@ -202,6 +202,42 @@ describe('Cline mapper', () => {
     expect(entries.map((entry) => entry.kind)).toEqual(['agent'])
   })
 
+  it('maps a turn of a real model: its reasoning, reads, a patch with context and its usage', () => {
+    const { thread, entries, effects } = run(['real-edit'], { window: 400_000 })
+    expect(entries.map((entry) => entry.kind)).toEqual([
+      'thought',
+      'agent',
+      'tool',
+      'tool',
+      'tool',
+      'agent',
+    ])
+    expect(entries[0]).toMatchObject({
+      markdown: '**Planning commentary and path usage**',
+      streaming: false,
+    })
+    const [read, patch] = entries.filter((entry) => entry.kind === 'tool')
+    expect(read).toMatchObject({ title: "Read file 'notes.txt'", status: 'completed' })
+    expect(patch).toMatchObject({
+      title: "Edit file 'notes.txt'",
+      status: 'completed',
+      content: [
+        {
+          type: 'diff',
+          path: '/work/app/notes.txt',
+          oldText: 'alpha\nBETA-2\ngamma',
+          newText: 'alpha\nBETA-2\nGAMMA-3',
+        },
+      ],
+    })
+    // The context is the last request's, the cost every request's.
+    expect(thread.session.usage).toMatchObject({ used: 8287 + 30, size: 400_000 })
+    expect(thread.session.usage?.cost?.amount).toBeCloseTo(0.021864, 6)
+    const requests = effects.filter((effect) => effect.kind === 'request')
+    expect(requests).toHaveLength(4)
+    expect(requests[1]).toMatchObject({ cache: { read: 7424, written: 0 } })
+  })
+
   it('keeps what streamed before a stop', () => {
     const { entries } = run(['slow'])
     expect(entries).toHaveLength(1)

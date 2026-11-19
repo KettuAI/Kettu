@@ -1784,6 +1784,812 @@
           "cost": null
         }
       }
+    },
+    "real-edit": {
+      "wire": [
+        [
+          "event",
+          {
+            "type": "iteration_start",
+            "iteration": 1
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_start",
+            "contentType": "reasoning",
+            "reasoning": "**Planning commentary and path usage**",
+            "redacted": false
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_start",
+            "contentType": "text",
+            "text": "Plan"
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_start",
+            "contentType": "text",
+            "text": ":"
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_start",
+            "contentType": "text",
+            "text": " I"
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_start",
+            "contentType": "text",
+            "text": "’ll"
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_start",
+            "contentType": "text",
+            "text": " read"
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_start",
+            "contentType": "text",
+            "text": " `/"
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_start",
+            "contentType": "text",
+            "text": "private"
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_start",
+            "contentType": "text",
+            "text": "/tmp"
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_start",
+            "contentType": "text",
+            "text": "/k"
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_start",
+            "contentType": "text",
+            "text": "ettu"
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_start",
+            "contentType": "text",
+            "text": "-"
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_start",
+            "contentType": "text",
+            "text": "196"
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_start",
+            "contentType": "text",
+            "text": "6"
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_start",
+            "contentType": "text",
+            "text": "-pro"
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_start",
+            "contentType": "text",
+            "text": "j"
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_start",
+            "contentType": "text",
+            "text": "/"
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_start",
+            "contentType": "text",
+            "text": "notes"
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_start",
+            "contentType": "text",
+            "text": ".txt"
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_start",
+            "contentType": "text",
+            "text": "`,"
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_start",
+            "contentType": "text",
+            "text": " then"
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_start",
+            "contentType": "text",
+            "text": " make"
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_start",
+            "contentType": "text",
+            "text": " the"
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_start",
+            "contentType": "text",
+            "text": " requested"
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_start",
+            "contentType": "text",
+            "text": " single"
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_start",
+            "contentType": "text",
+            "text": "-line"
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_start",
+            "contentType": "text",
+            "text": " edit"
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_start",
+            "contentType": "text",
+            "text": " and"
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_start",
+            "contentType": "text",
+            "text": " verify"
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_start",
+            "contentType": "text",
+            "text": " the"
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_start",
+            "contentType": "text",
+            "text": " file"
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_start",
+            "contentType": "text",
+            "text": " content"
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_start",
+            "contentType": "text",
+            "text": " using"
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_start",
+            "contentType": "text",
+            "text": " only"
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_start",
+            "contentType": "text",
+            "text": " the"
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_start",
+            "contentType": "text",
+            "text": " permitted"
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_start",
+            "contentType": "text",
+            "text": " file"
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_start",
+            "contentType": "text",
+            "text": " tools"
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_start",
+            "contentType": "text",
+            "text": "."
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "usage",
+            "inputTokens": 7964,
+            "outputTokens": 81,
+            "cacheReadTokens": 3328,
+            "cost": 0.011281600000000001,
+            "reasoningTokenCount": 31,
+            "totalInputTokens": 7964,
+            "totalOutputTokens": 81,
+            "totalCacheReadTokens": 3328,
+            "totalCost": 0.011281600000000001
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_end",
+            "contentType": "text",
+            "text": "Plan: I’ll read `/work/app/notes.txt`, then make the requested single-line edit and verify the file content using only the permitted file tools."
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_end",
+            "contentType": "reasoning",
+            "reasoning": "**Planning commentary and path usage**"
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_start",
+            "contentType": "tool",
+            "toolName": "read_files",
+            "toolCallId": "call_ymwnc08OZnXhCMHFM5mbpnIt",
+            "input": {
+              "files": [
+                {
+                  "path": "/work/app/notes.txt"
+                }
+              ]
+            }
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_end",
+            "contentType": "tool",
+            "toolName": "read_files",
+            "toolCallId": "call_ymwnc08OZnXhCMHFM5mbpnIt",
+            "output": [
+              {
+                "query": "/work/app/notes.txt",
+                "result": "1 | alpha\n2 | BETA-2\n3 | gamma",
+                "success": true
+              }
+            ],
+            "durationMs": 5
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "iteration_end",
+            "iteration": 1,
+            "hadToolCalls": true,
+            "toolCallCount": 1
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "iteration_start",
+            "iteration": 2
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "usage",
+            "inputTokens": 8093,
+            "outputTokens": 62,
+            "cacheReadTokens": 7424,
+            "cost": 0.0035668,
+            "totalInputTokens": 16057,
+            "totalOutputTokens": 143,
+            "totalCacheReadTokens": 10752,
+            "totalCost": 0.014848400000000001
+          }
+        ],
+        [
+          "approval",
+          {
+            "toolCallId": "call_CjdyDGNAPiOXsTzOMY5OrBsK",
+            "toolName": "apply_patch",
+            "input": {
+              "input": "*** Begin Patch\n*** Update File: /work/app/notes.txt\n@@\n alpha\n BETA-2\n-gamma\n+GAMMA-3\n*** End Patch"
+            }
+          }
+        ],
+        [
+          "answer",
+          {
+            "approved": true,
+            "always": false
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_start",
+            "contentType": "tool",
+            "toolName": "apply_patch",
+            "toolCallId": "call_CjdyDGNAPiOXsTzOMY5OrBsK",
+            "input": {
+              "input": "*** Begin Patch\n*** Update File: /work/app/notes.txt\n@@\n alpha\n BETA-2\n-gamma\n+GAMMA-3\n*** End Patch"
+            }
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_end",
+            "contentType": "tool",
+            "toolName": "apply_patch",
+            "toolCallId": "call_CjdyDGNAPiOXsTzOMY5OrBsK",
+            "output": {
+              "query": "apply_patch",
+              "result": "Successfully applied patch to the following files:\n/work/app/notes.txt",
+              "success": true
+            },
+            "durationMs": 2
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "iteration_end",
+            "iteration": 2,
+            "hadToolCalls": true,
+            "toolCallCount": 1
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "iteration_start",
+            "iteration": 3
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "usage",
+            "inputTokens": 8200,
+            "outputTokens": 34,
+            "cacheReadTokens": 7424,
+            "cost": 0.0034448000000000013,
+            "totalInputTokens": 24257,
+            "totalOutputTokens": 177,
+            "totalCacheReadTokens": 18176,
+            "totalCost": 0.018293200000000003
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_start",
+            "contentType": "tool",
+            "toolName": "read_files",
+            "toolCallId": "call_1k54GFqoK4fZRWkCIhsXCNE4",
+            "input": {
+              "files": [
+                {
+                  "path": "/work/app/notes.txt"
+                }
+              ]
+            }
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_end",
+            "contentType": "tool",
+            "toolName": "read_files",
+            "toolCallId": "call_1k54GFqoK4fZRWkCIhsXCNE4",
+            "output": [
+              {
+                "query": "/work/app/notes.txt",
+                "result": "1 | alpha\n2 | BETA-2\n3 | GAMMA-3",
+                "success": true
+              }
+            ],
+            "durationMs": 1
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "iteration_end",
+            "iteration": 3,
+            "hadToolCalls": true,
+            "toolCallCount": 1
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "iteration_start",
+            "iteration": 4
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_start",
+            "contentType": "text",
+            "text": "Updated"
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_start",
+            "contentType": "text",
+            "text": " `/"
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_start",
+            "contentType": "text",
+            "text": "private"
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_start",
+            "contentType": "text",
+            "text": "/tmp"
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_start",
+            "contentType": "text",
+            "text": "/k"
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_start",
+            "contentType": "text",
+            "text": "ettu"
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_start",
+            "contentType": "text",
+            "text": "-"
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_start",
+            "contentType": "text",
+            "text": "196"
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_start",
+            "contentType": "text",
+            "text": "6"
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_start",
+            "contentType": "text",
+            "text": "-pro"
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_start",
+            "contentType": "text",
+            "text": "j"
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_start",
+            "contentType": "text",
+            "text": "/"
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_start",
+            "contentType": "text",
+            "text": "notes"
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_start",
+            "contentType": "text",
+            "text": ".txt"
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_start",
+            "contentType": "text",
+            "text": "`"
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_start",
+            "contentType": "text",
+            "text": " line"
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_start",
+            "contentType": "text",
+            "text": " "
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_start",
+            "contentType": "text",
+            "text": "3"
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_start",
+            "contentType": "text",
+            "text": " to"
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_start",
+            "contentType": "text",
+            "text": " `"
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_start",
+            "contentType": "text",
+            "text": "G"
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_start",
+            "contentType": "text",
+            "text": "AM"
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_start",
+            "contentType": "text",
+            "text": "MA"
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_start",
+            "contentType": "text",
+            "text": "-"
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_start",
+            "contentType": "text",
+            "text": "3"
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_start",
+            "contentType": "text",
+            "text": "`."
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "usage",
+            "inputTokens": 8287,
+            "outputTokens": 30,
+            "cacheReadTokens": 7424,
+            "cost": 0.003570799999999999,
+            "totalInputTokens": 32544,
+            "totalOutputTokens": 207,
+            "totalCacheReadTokens": 25600,
+            "totalCost": 0.021864
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "content_end",
+            "contentType": "text",
+            "text": "Updated `/work/app/notes.txt` line 3 to `GAMMA-3`."
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "iteration_end",
+            "iteration": 4,
+            "hadToolCalls": false,
+            "toolCallCount": 0
+          }
+        ],
+        [
+          "event",
+          {
+            "type": "done",
+            "reason": "completed",
+            "text": "Updated `/work/app/notes.txt` line 3 to `GAMMA-3`.",
+            "iterations": 4,
+            "usage": {
+              "inputTokens": 32544,
+              "outputTokens": 207,
+              "cacheReadTokens": 25600,
+              "totalCost": 0.021864
+            }
+          }
+        ]
+      ],
+      "result": {
+        "finishReason": "completed",
+        "model": "gpt-5.6-terra",
+        "usage": {
+          "inputTokens": 32544,
+          "outputTokens": 207,
+          "cacheReadTokens": 25600,
+          "cacheWriteTokens": 0,
+          "cost": 0.021864
+        }
+      }
     }
   }
 }
