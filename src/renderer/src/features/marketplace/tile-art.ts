@@ -1,6 +1,7 @@
 // What a Marketplace item's tile shows, in order: a bundled brand mark; a plugin's own logo, which
-// the host reads from the package on its computer; a glyph and color Kettu gives the items it
-// knows; a plugin's category glyph on its harness's color; else its kind's glyph and color.
+// the host reads from the package on its computer; the icon of the site a remote MCP server
+// connects to; a glyph and color Kettu gives the items it knows; a plugin's category glyph on its
+// harness's color; else its kind's glyph and color.
 
 import {
   AiBrain01Icon,
@@ -40,7 +41,7 @@ import {
   Xls01Icon,
 } from '@hugeicons/core-free-icons'
 import type { IconSvgElement } from '@hugeicons/react'
-import type { PluginHarness } from '@shared/marketplace'
+import type { McpSpec, PluginHarness } from '@shared/marketplace'
 import type { WireWorkflowEntry } from '@shared/workflow'
 import { KETTU_PLUGINS, kettuId, type CommunityItem } from '@shared/market-community'
 import { brandMark, type Mark } from './brand-marks'
@@ -48,7 +49,13 @@ import { pluginName } from './model'
 
 /** What a tile stands for. `name` is a skill's or a server's name as its source gives it. */
 export type TileSubject =
-  | { kind: 'mcp'; id: string; brand: string | null }
+  | {
+      kind: 'mcp'
+      id: string
+      brand: string | null
+      /** The address a remote server connects to, whose site's icon stands for it. */
+      site?: string | null
+    }
   | {
       kind: 'plugin'
       harness: PluginHarness
@@ -62,10 +69,15 @@ export type TileSubject =
 
 export type TileSize = 'small' | 'row' | 'big'
 
-export const serverSubject = (server: { id: string; brand: string | null }): TileSubject => ({
+export const serverSubject = (server: {
+  id: string
+  brand: string | null
+  spec?: McpSpec
+}): TileSubject => ({
   kind: 'mcp',
   id: server.id,
   brand: server.brand,
+  site: server.spec?.type === 'http' ? server.spec.url : null,
 })
 
 export const pluginSubject = (plugin: {

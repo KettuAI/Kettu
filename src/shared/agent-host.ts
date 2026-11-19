@@ -59,6 +59,7 @@ import type {
   CommunityDirectory,
   CommunityInstalled,
   CommunityListing,
+  CommunityWorkflow,
 } from './market-community'
 import type { MediaAuthorization, MediaOpenResult } from './media'
 import type { ModelRequestRaw, ModelRequestsOverview, ModelRequestsPage } from './model-requests'
@@ -989,6 +990,9 @@ export interface HostContract {
     result: CommunityDirectory
   }
   'market.communityListing': { params: { id: string }; result: CommunityListing }
+  // A workflow listing's flow for its page, before it is added: only the current version's
+  // `workflow.yaml` is read, checked and parsed; nothing is kept on the host or run.
+  'market.communityWorkflow': { params: { id: string }; result: CommunityWorkflow }
   // The plugins installed from the Kettu Marketplace, and where every installed item stands.
   'market.communityInstalled': { params: { refresh?: boolean }; result: CommunityInstalled }
   // Downloads a plugin listing's current version, checks every file, and installs or updates it
@@ -1802,6 +1806,7 @@ export const HOST_METHODS = [
   'market.discardPublishDraft',
   'market.community',
   'market.communityListing',
+  'market.communityWorkflow',
   'market.communityInstalled',
   'market.installCommunityPlugin',
   'market.addCommunityWorkflow',

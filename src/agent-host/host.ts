@@ -2639,6 +2639,7 @@ export class AgentHost {
       'market.community': ({ refresh, ...query }) =>
         this.marketCommunity.directory(query, refresh === true),
       'market.communityListing': ({ id }) => this.marketCommunity.listing(id),
+      'market.communityWorkflow': ({ id }) => this.marketCommunity.workflow(id),
       'market.communityInstalled': ({ refresh }) =>
         this.marketCommunity.installed(refresh === true),
       'market.installCommunityPlugin': ({ id, agentId, scope, projectPath }) =>

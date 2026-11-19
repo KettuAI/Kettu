@@ -2,7 +2,7 @@
 // and its file; the approval for one the user has not approved, or that changed since, and Update
 // for one from the Kettu Marketplace whose listing has a newer version.
 
-import { Fragment, useEffect, useState, type ReactNode } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import {
   ArrowDown01Icon,
   ArrowRight01Icon,
@@ -52,7 +52,6 @@ import { KettuMark, KindTag } from './rows'
 import {
   awaitsApproval,
   backArrowsOf,
-  flowGroups,
   flowLine,
   githubPage,
   githubRepo,
@@ -72,6 +71,7 @@ import {
   waitsForYou,
 } from './workflow-model'
 import { retryWorkflows, useWorkflowStanding, useWorkflows } from './workflow-actions'
+import { FlowChart } from './workflow-flow'
 import { WorkflowByline, WorkflowRow, WorkflowStateBadge, WorkflowUpdateButton } from './workflows'
 import { workflowSubject } from './tile-art'
 import { ItemTile } from './tiles'
@@ -183,7 +183,7 @@ export function WorkflowListing({
       <div className="k-mkt-body">
         <div className="k-mkt-body__main">
           {description && <p className="k-mkt-about">{description}</p>}
-          {workflow && <Flow workflow={workflow} />}
+          {workflow && <Flow workflow={workflow} pins={entry.pins} />}
           {workflow && <Steps entry={entry} workflow={workflow} />}
           {workflow && <Needs workflow={workflow} pending={awaitsApproval(entry)} />}
           {!(workflow && awaitsApproval(entry)) && <FileSection entry={entry} open={!workflow} />}
@@ -610,8 +610,8 @@ function Facts({ entry }: { entry: WireWorkflowEntry }) {
   )
 }
 
-/** The steps in order as chips, the ones that wait for you marked, then what sends work back. */
-function Flow({ workflow }: { workflow: Workflow }) {
+/** The flow as a chart, then in words what sends work back and what ends the task early. */
+function Flow({ workflow, pins }: { workflow: Workflow; pins: Record<string, StepPick> }) {
   const { t, i18n } = useTranslation('marketplace')
   const locale = i18n.language
   const ends = new Set(workflow.steps.flatMap((step) => step.outcomes.map((o) => o.end)))
@@ -621,34 +621,9 @@ function Flow({ workflow }: { workflow: Workflow }) {
   return (
     <section>
       <h3>{t('workflow.flow.title')}</h3>
-      <div className="k-mkt-list k-workflow-flow">
-        <ol className="k-workflow-flow__row">
-          {flowGroups(workflow).map((group) => (
-            <li key={group[0]!.id} className="k-workflow-flow__step">
-              {group.map((step, i) => (
-                <Fragment key={step.id}>
-                  {i > 0 && <span className="k-workflow-flow__and">+</span>}
-                  <span className="k-workflow-node">
-                    {stepName(workflow, step.id, locale)}
-                    {step.by === 'you' ? (
-                      <span className="k-workflow-you">{t('workflow.you')}</span>
-                    ) : (
-                      step.youReview && (
-                        <span className="k-workflow-you">{t('workflow.youReview')}</span>
-                      )
-                    )}
-                  </span>
-                </Fragment>
-              ))}
-              <Icon icon={ArrowRight01Icon} size={14} />
-            </li>
-          ))}
-          <li className="k-workflow-end">
-            <i aria-hidden />
-            {ends.has('done') ? t('workflow.end.done') : t('workflow.end.dropped')}
-          </li>
-        </ol>
-        {(backs.length > 0 || ends.has('dropped')) && (
+      <FlowChart workflow={workflow} pins={pins} />
+      {(backs.length > 0 || ends.has('dropped')) && (
+        <div className="k-mkt-list k-workflow-flow">
           <ul className="k-workflow-flow__notes">
             {backs.map(({ step, outcome }) => (
               <li key={`${step.id}:${outcome.name}`}>
@@ -673,8 +648,8 @@ function Flow({ workflow }: { workflow: Workflow }) {
                 )),
             )}
           </ul>
-        )}
-      </div>
+        </div>
+      )}
     </section>
   )
 }

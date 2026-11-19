@@ -27,6 +27,7 @@ import {
   type CommunityListing,
   type CommunityPlugin,
   type CommunityStanding,
+  type CommunityWorkflow,
 } from '@shared/market-community'
 import {
   HANDLE,
@@ -44,10 +45,11 @@ import {
 } from '@shared/market-publish'
 import type { CatalogServer, InstalledPlugin, PluginScope } from '@shared/marketplace'
 import { harnessOf, type AgentId } from '@shared/thread'
-import type { WorkflowEntry } from '@shared/workflow'
+import { WORKFLOW_FILE_BYTES, type WorkflowEntry } from '@shared/workflow'
 import { HostError } from '../errors'
 import { t } from '../i18n'
 import { JsonFile, type LogFn } from '../storage'
+import { parseWorkflow } from '../workflow/format'
 import type { CommunityOrigin } from '../workflow/library'
 import { WORKFLOW_FILE, utf8 } from './publish-check'
 import { MarketCallError } from './publish-tools'
@@ -308,6 +310,13 @@ export interface CommunityDeps {
   now?: () => number
 }
 
+/** A workflow listing's step names and those that wait for the user, when its version lists them. */
+function flowOf(listing: MarketListing): Pick<CommunityItem, 'steps' | 'waits'> {
+  const of = (label: string) => listing.adds?.find((group) => group.label === label)?.items
+  const steps = of('steps')
+  return steps && steps.length > 0 ? { steps, waits: of('waits') ?? [] } : {}
+}
+
 /** The row a listing shows as. */
 function itemOf(listing: MarketListing): CommunityItem {
   return {
@@ -323,6 +332,7 @@ function itemOf(listing: MarketListing): CommunityItem {
     version: listing.version,
     installs: listing.visibility === 'private' ? null : listing.installs,
     updatedAt: listing.updatedAt,
+    ...(listing.kind === 'workflow' ? flowOf(listing) : {}),
   }
 }
 
@@ -494,6 +504,37 @@ export class MarketCommunityService {
       bundle = uploadedBundle(version.files) ?? urlBundle(listing.server)
     }
     return { state: 'listed', listing, server, bundle }
+  }
+
+  /**
+   * A workflow listing's flow, for its page before it is added. Of its current version only
+   * `workflow.yaml` is downloaded, checked against the size and SHA-256 the version lists and read
+   * by the workflow format; nothing is written to the host and nothing counts as an install.
+   */
+  async workflow(id: string): Promise<CommunityWorkflow> {
+    const listing = await this.listed(id)
+    if (listing.kind !== 'workflow') throw refuse(t('marketCommunity.otherKind'))
+    const { version } = listing
+    const listed = await this.api(() =>
+      this.deps.call({ kind: 'version', id: listing.id, version }),
+    )
+    checkFileList(listed.files)
+    const file = listed.files.find((item) => item.path === WORKFLOW_FILE)
+    if (!file) return { version, workflow: null, problem: t('marketCommunity.noWorkflow') }
+    if (file.size > WORKFLOW_FILE_BYTES) throw refuse(t('marketCommunity.tooLarge'))
+    const answer = await this.api(() =>
+      this.deps.call({ kind: 'file', id: listing.id, version, path: file.path }),
+    )
+    const data = Buffer.from(answer.data, 'base64')
+    if (!matches(file, data, answer.sha256)) {
+      throw refuse(t('marketCommunity.mismatch', { path: file.path }))
+    }
+    const text = utf8(data)
+    if (text === null) return { version, workflow: null, problem: t('marketCommunity.noWorkflow') }
+    const read = parseWorkflow(text)
+    return read.workflow
+      ? { version, workflow: read.workflow, problem: null }
+      : { version, workflow: null, problem: read.problems[0]?.message ?? '' }
   }
 
   /**

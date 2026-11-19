@@ -28,20 +28,20 @@ import { useAgentName, useBusy, useChoosableAgents, useKeptSkill } from './hooks
 import { AgentPicker } from './install'
 import { catalogSkill, itemKey } from './model'
 import { ExternalLink, ListingFrame, ListingSkeleton, Missing } from './parts'
-import { AddControl, ItemRow, KindTag, OfficialBadge } from './rows'
+import { AddControl, ItemRow, KindTag, OfficialBadge, Publisher } from './rows'
 import { skillSubject } from './tile-art'
 import { ItemTile } from './tiles'
 
 export function SkillRow({
   skill,
   tab,
-  showKind,
   fresh,
+  card,
 }: {
   skill: CatalogSkill
   tab: MarketplaceTab
-  showKind: boolean
   fresh?: boolean
+  card?: boolean
 }) {
   const { t } = useTranslation('marketplace')
   const open = () => openMarketplace({ item: itemKey({ kind: 'skill', id: skill.id }), tab })
@@ -51,9 +51,15 @@ export function SkillRow({
     <ItemRow
       title={displayTitle(skill.name)}
       subject={skillSubject(skill.name)}
-      tag={showKind ? <KindTag kind="skill" /> : undefined}
+      meta={
+        <>
+          <KindTag kind="skill" />
+          <Publisher name={skill.publisher} />
+        </>
+      }
       line={skill.description}
       fresh={fresh}
+      card={card}
       onOpen={open}
       end={
         <AddControl
@@ -333,7 +339,7 @@ export function SkillListing({
           </h2>
           <div className="ui-as-int-grid">
             {related.map((s) => (
-              <SkillRow key={s.id} skill={s} tab={tab} showKind={false} />
+              <SkillRow key={s.id} skill={s} tab={tab} />
             ))}
           </div>
         </section>

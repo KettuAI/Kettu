@@ -52,7 +52,14 @@
     "mcp": "MCP 服务器",
     "workflow": "工作流",
     "community": "社区",
-    "yours": "你的"
+    "yours": "你的",
+    "count_other": "{{count}} 项",
+    "countOpen": "{{count}}+",
+    "trust": {
+      "official": "官方",
+      "verified": "认证发布者",
+      "community": "社区"
+    }
   },
   "row": {
     "install": "安装",
@@ -611,7 +618,25 @@
       "sessionGone": "已不在的会话"
     },
     "newVersion": "有新版本 {{version}}",
-    "communityEmpty": "这里还没有。大家发布到 Kettu 市场的工作流会出现在这里。"
+    "communityEmpty": "这里还没有。大家发布到 Kettu 市场的工作流会出现在这里。",
+    "row": {
+      "steps_other": "{{count}} 步",
+      "waitsHere": "等你"
+    },
+    "diagram": {
+      "label": "{{name}} 的流程",
+      "agentStep": "智能体做",
+      "yourStep": "你来做",
+      "legendAgent": "由智能体做，步骤开始时才选",
+      "legendYou": "等你",
+      "legendBack": "可以退回"
+    },
+    "preview": {
+      "listed": "这里画不出流程图，下面是发布者列出的步骤名，按顺序排。分支、并行的步骤和退回的规则，添加后才看得到。",
+      "none": "这里画不出流程图，这个条目也没有列出步骤。",
+      "reason": "原因：{{reason}}",
+      "readOnly": "只读预览"
+    }
   },
   "community": {
     "skillNote": "Kettu 从 Kettu 市场下载它、逐个核对文件，存在这台电脑上，开会话时交给这些智能体。",

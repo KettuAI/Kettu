@@ -1,8 +1,17 @@
-// The directory's parts on affectUI's Integrations: a row with its tile, name, badge, kind and
-// line, the round add button that installs, and the button that unfolds a section.
+// The directory's parts on affectUI's Integrations: a row with its tile, name, kind, publisher
+// and description, the button that installs, and the button that unfolds a section.
 
 import { useState, type ReactNode } from 'react'
-import { ArrowRight01Icon, CheckmarkBadge01Icon, Tick02Icon } from '@hugeicons/core-free-icons'
+import {
+  ArrowRight01Icon,
+  CheckmarkBadge01Icon,
+  Flowchart01Icon,
+  PlugSocketIcon,
+  PuzzleIcon,
+  SparklesIcon,
+  Tick02Icon,
+} from '@hugeicons/core-free-icons'
+import type { IconSvgElement } from '@hugeicons/react'
 import { useTranslation } from 'react-i18next'
 import type { CatalogServer, PluginHarness } from '@shared/marketplace'
 import { Icon, Popover } from '@renderer/components/affect/app-shell'
@@ -42,19 +51,41 @@ export function KettuMark() {
 
 export type ItemKind = 'mcp' | 'plugin' | 'skill' | 'workflow'
 
-/** The kind of an item, and for a plugin the harness it belongs to. */
+const KIND_ICON: Record<ItemKind, IconSvgElement> = {
+  mcp: PlugSocketIcon,
+  plugin: PuzzleIcon,
+  skill: SparklesIcon,
+  workflow: Flowchart01Icon,
+}
+
+/** The kind of an item behind its kind's glyph; a plugin's behind the mark of its harness. */
 export function KindTag({ kind, harness }: { kind: ItemKind; harness?: PluginHarness }) {
   const { t } = useTranslation('marketplace')
   return (
-    <span className="k-mkt-kind">
-      {harness && <AgentMark agent={harness} size={11} dot={null} />}
+    <span className="k-mkt-kind" data-kind={kind}>
+      {harness ? (
+        <AgentMark agent={harness} size={11} dot={null} />
+      ) : (
+        <Icon icon={KIND_ICON[kind]} size={12} />
+      )}
       {t(`kind.${kind}`)}
     </span>
   )
 }
 
+/** Who publishes an item, in a row's facts; the Kettu mark after Kettu's own publisher. */
+export function Publisher({ name, kettu }: { name: string; kettu?: boolean }) {
+  return (
+    <span className="k-mkt-publisher" title={name}>
+      <span>{name}</span>
+      {kettu && <KettuMark />}
+    </span>
+  )
+}
+
 /**
- * A row: its tile, name and line open its listing, when it has one; `end` sits at the row's end.
+ * A row: its tile, name, facts and line open its listing, when it has one; `end` sits at the
+ * row's end. The same parts make a card of Featured, where the line has room for three lines.
  * `icon` stands in for the item's tile, such as an agent's mark. The official badge shows on the
  * listing only, since every row carrying one crowds the list; the Kettu mark, rare, is the exception.
  */
@@ -64,9 +95,13 @@ export function ItemRow({
   icon,
   quiet,
   tag,
+  meta,
   line,
   lineTitle,
+  extra,
   fresh,
+  card,
+  oneLine,
   onOpen,
   end,
 }: {
@@ -75,11 +110,19 @@ export function ItemRow({
   icon?: ReactNode
   /** For what an agent keeps itself. */
   quiet?: boolean
+  /** After the name: a state that cannot wait for the facts under it. */
   tag?: ReactNode
+  /** The facts under the name, a dot between them: its kind, who publishes it, how many use it. */
+  meta?: ReactNode
   line: string | null
   /** The line's tooltip when it says more than the line. */
   lineTitle?: string
+  /** Under the line, such as a workflow's steps. */
+  extra?: ReactNode
   fresh?: boolean
+  card?: boolean
+  /** Keeps the line to one line, for a path or an address that reads no better on two. */
+  oneLine?: boolean
   onOpen?: () => void
   end?: ReactNode
 }) {
@@ -91,15 +134,24 @@ export function ItemRow({
         </span>
         {tag}
       </span>
+      {meta && <span className="k-mkt-meta">{meta}</span>}
       {line && (
-        <span className="ui-as-int-row__desc" title={lineTitle ?? line}>
+        <span
+          className="ui-as-int-row__desc"
+          data-one={oneLine ? '' : undefined}
+          title={lineTitle ?? line}
+        >
           {line}
         </span>
       )}
+      {extra}
     </>
   )
   return (
-    <div className={fresh ? 'ui-as-int-row ui-as-rise' : 'ui-as-int-row'}>
+    <div
+      className={fresh ? 'ui-as-int-row ui-as-rise' : 'ui-as-int-row'}
+      data-card={card ? '' : undefined}
+    >
       {icon ?? (subject && <ItemTile subject={subject} quiet={quiet} />)}
       {onOpen ? (
         <button type="button" className="ui-as-int-row__text k-mkt-open" onClick={onOpen}>
@@ -108,8 +160,33 @@ export function ItemRow({
       ) : (
         <span className="ui-as-int-row__text">{text}</span>
       )}
-      {end}
+      {end && <span className="k-mkt-row-end">{end}</span>}
     </div>
+  )
+}
+
+/** "6 steps": with the line of steps, what tells a workflow from the other kinds in a list. */
+export function StepsCount({ count }: { count: number }) {
+  const { t } = useTranslation('marketplace')
+  return <span>{t('workflow.row.steps', { count })}</span>
+}
+
+/** A workflow's steps in order on one line, those that wait for the user marked. */
+export function StepsLine({ names, waits }: { names: string[]; waits: string[] }) {
+  const { t } = useTranslation('marketplace')
+  return (
+    <span className="k-mkt-steps" title={names.join(' \u2192 ')}>
+      {names.map((name, i) => (
+        <span
+          key={i}
+          className="k-mkt-steps__step"
+          data-you={waits.includes(name) ? '' : undefined}
+        >
+          {i > 0 && <Icon icon={ArrowRight01Icon} size={11} />}
+          <span title={waits.includes(name) ? t('workflow.row.waitsHere') : undefined}>{name}</span>
+        </span>
+      ))}
+    </span>
   )
 }
 
@@ -281,9 +358,9 @@ export function SkeletonRows({ rows = 6 }: { rows?: number }) {
   )
 }
 
-export function SkeletonRow() {
+export function SkeletonRow({ card }: { card?: boolean }) {
   return (
-    <div className="ui-as-int-row k-mkt-skeleton" aria-hidden>
+    <div className="ui-as-int-row k-mkt-skeleton" data-card={card ? '' : undefined} aria-hidden>
       <Skeleton className="k-mkt-skeleton__tile" />
       <span className="ui-as-int-row__text">
         <Skeleton className="k-mkt-skeleton__name" />

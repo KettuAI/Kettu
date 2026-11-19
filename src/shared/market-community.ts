@@ -4,6 +4,7 @@
 // workflows go into the workflow library, which records the listing and version.
 
 import type { CatalogServer } from './marketplace'
+import type { Workflow } from './workflow'
 import {
   LISTING_ID,
   type ListingVisibility,
@@ -45,6 +46,9 @@ export interface CommunityItem {
   /** Null for an Only me listing, whose installs are not counted for anyone to see. */
   installs: number | null
   updatedAt: string
+  /** A workflow's step names in order and those that wait for the user, as its publisher's check listed them. */
+  steps?: string[]
+  waits?: string[]
 }
 
 export interface CommunityDirectory {
@@ -73,6 +77,14 @@ export type CommunityListing =
   | { state: 'taken-down' }
   // Deleted, never there, or another account's Only me listing.
   | { state: 'gone' }
+
+/**
+ * A workflow listing's flow as its current version's `workflow.yaml` reads, for its page before it
+ * is added; null with why when the file is missing or the workflow format refuses it.
+ */
+export type CommunityWorkflow =
+  | { version: string; workflow: Workflow; problem: null }
+  | { version: string; workflow: null; problem: string }
 
 /** Where an installed item stands with its listing. */
 export type CommunityStanding =

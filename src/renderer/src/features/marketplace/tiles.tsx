@@ -4,6 +4,7 @@ import { useEffect, type CSSProperties, type ReactNode } from 'react'
 import { Icon } from '@renderer/components/affect/app-shell'
 import { useDark } from '@renderer/hooks/use-dark'
 import { useHostScope } from '@renderer/stores/host-scope'
+import { loadSiteIcons, requestSiteIcon, useSiteIcon } from '@renderer/stores/site-icons'
 import { tileArt, type TileSize, type TileSubject } from './tile-art'
 
 /** A Codex plugin's logo for the theme shown: undefined while it is read, null without one. */
@@ -19,6 +20,21 @@ function usePluginLogo(pluginId: string | null): string | null | undefined {
   return (dark && logo.dark) || logo.light
 }
 
+/**
+ * The icon of the site a remote server connects to, as links in replies show a site's: main loads
+ * and keeps it, the page never does. Null without one, or while it is on its way.
+ */
+function useServerIcon(site: string | null): string | null {
+  const icon = useSiteIcon(site ?? '')
+  const missing = site !== null && !icon
+  useEffect(() => {
+    if (!site || !missing) return
+    loadSiteIcons()
+    requestSiteIcon(site)
+  }, [site, missing])
+  return site ? (icon ?? null) : null
+}
+
 /** A plain tile with a muted glyph or an agent's mark, for what has no item of its own. */
 export function PlainTile({ children }: { children: ReactNode }) {
   return (
@@ -29,8 +45,8 @@ export function PlainTile({ children }: { children: ReactNode }) {
 }
 
 /**
- * An item's tile, as affectUI's Integrations draws one: 30 px in a row, 64 px at the top of its
- * page, 20 px in a section's "and N more". `quiet` is for what an agent keeps itself, which Kettu
+ * An item's tile: 40 px in a row, 64 px at the top of its page, 20 px in a section's
+ * "and N more". `quiet` is for what an agent keeps itself, which Kettu
  * only shows: its glyph on a plain tile.
  */
 export function ItemTile({
@@ -45,7 +61,10 @@ export function ItemTile({
   const art = tileArt(subject)
   const hasLogo =
     !quiet && art.type === 'glyph' && subject.kind === 'plugin' && subject.marks !== false
-  const logo = usePluginLogo(hasLogo && subject.harness === 'codex' ? subject.id : null)
+  const pluginLogo = usePluginLogo(hasLogo && subject.harness === 'codex' ? subject.id : null)
+  const site =
+    !quiet && art.type === 'glyph' && subject.kind === 'mcp' ? (subject.site ?? null) : null
+  const logo = useServerIcon(site) ?? pluginLogo
   const sized = size === 'row' ? undefined : size
   if (art.type === 'mark') {
     const { mark } = art

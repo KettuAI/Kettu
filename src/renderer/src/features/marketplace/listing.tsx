@@ -56,7 +56,7 @@ import { PluginListing } from './plugins'
 import { BuiltinServerPage } from './builtin'
 import { PublishedListingPage } from './published-listing'
 import { KETTU_ITEM, previewIdOf, publishedIdOf } from './published-keys'
-import { AddButton, ItemRow, OfficialBadge } from './rows'
+import { AddButton, ItemRow, KindTag, OfficialBadge, Publisher } from './rows'
 import { SkillListing } from './skills'
 import { useListingWorkflow } from './workflow-actions'
 import { WorkflowListing } from './workflow-listing'
@@ -205,6 +205,12 @@ function RelatedRow({ server, tab }: { server: CatalogServer; tab: MarketplaceTa
     <ItemRow
       title={server.title}
       subject={serverSubject(server)}
+      meta={
+        <>
+          <KindTag kind="mcp" />
+          {server.publisher && <Publisher name={server.publisher} />}
+        </>
+      }
       line={server.description || null}
       onOpen={open}
       end={<AddButton server={server} onOpen={open} />}
