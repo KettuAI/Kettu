@@ -11,7 +11,8 @@
     "sideChat": "侧聊",
     "sideChatNews": "有新回答",
     "more": "更多工具",
-    "requests": "请求"
+    "requests": "请求",
+    "surfaces": "终端、浏览器和设备"
   },
   "hostBanner": {
     "restarting": "正在重启智能体后台进程，会话会自动恢复。",
@@ -111,5 +112,22 @@
     "away": "{{name}} 没有连上：{{state}}",
     "lastRead": "这里是上次从它读到的内容，等它回来后会自动更新。",
     "nothingRead": "还没有从它读到过内容，等它回来后会显示在这里。"
+  },
+  "surfaces": {
+    "tabs": "终端、网页和设备",
+    "add": "新开终端、网页或设备",
+    "recording": "正在录屏",
+    "kinds": {
+      "terminal": "终端",
+      "browser": "网页",
+      "devices": "设备"
+    },
+    "empty": {
+      "title": "这个会话还没开终端、网页或设备",
+      "text": "它们都开在这一排标签页里，智能体打开的也会出现在这里。",
+      "terminal": "终端",
+      "page": "网页",
+      "device": "移动设备"
+    }
   }
 }

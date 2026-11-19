@@ -475,6 +475,16 @@
   --pane-added: var(--ansi-green);
   --pane-phone: #0d0d0f;
   --pane-phone-edge: #2a2a2e;
+  /* Who uses a tab of the side panel: the agent, a step it asks of the user, the user who took it
+     over. Hues and rest tints are picked so every pair stays apart between breaths. */
+  --pane-agent: #f2581b;
+  --pane-agent-ink: #b33f0e;
+  --pane-asks: #a855f7;
+  --pane-asks-ink: #7e22ce;
+  --pane-you: #0ea5e9;
+  --pane-you-ink: #0369a1;
+  --pane-breath: 16%;
+  --pane-breath-glow: 45%;
 
   /* shell: the window frame, AffectUI's App Shell: its rows, cards, lines and shadows. */
   --shell-tray: #f4f4f4;
@@ -905,6 +915,14 @@
     --pane-added: var(--ansi-green);
     --pane-phone: #0d0d0f;
     --pane-phone-edge: #2a2a2e;
+    --pane-agent: #ff6a2b;
+    --pane-agent-ink: #ffa47a;
+    --pane-asks: #c084fc;
+    --pane-asks-ink: #e4c8ff;
+    --pane-you: #38bdf8;
+    --pane-you-ink: #a5e0fb;
+    --pane-breath: 18%;
+    --pane-breath-glow: 55%;
 
     /* shell: the window frame, AffectUI's App Shell: its rows, cards, lines and shadows. */
     --shell-tray: #1d1d20;
@@ -1291,6 +1309,14 @@
   --pane-added: var(--ansi-green);
   --pane-phone: #0d0d0f;
   --pane-phone-edge: #2a2a2e;
+  --pane-agent: #ff6a2b;
+  --pane-agent-ink: #ffa47a;
+  --pane-asks: #c084fc;
+  --pane-asks-ink: #e4c8ff;
+  --pane-you: #38bdf8;
+  --pane-you-ink: #a5e0fb;
+  --pane-breath: 18%;
+  --pane-breath-glow: 55%;
 
   /* shell: the window frame, AffectUI's App Shell: its rows, cards, lines and shadows. */
   --shell-tray: #1d1d20;

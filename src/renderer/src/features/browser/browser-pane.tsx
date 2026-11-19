@@ -1,11 +1,10 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef } from 'react'
 import {
   ArrowLeft01Icon,
   ArrowRight01Icon,
   Cancel01Icon,
   Globe02Icon,
   LinkSquare02Icon,
-  PlusSignIcon,
   ReloadIcon,
 } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
@@ -26,9 +25,9 @@ import { useSessionsStore } from '@renderer/stores/sessions'
 import { useBrowserStore } from '@renderer/stores/browser'
 import { useOverlayOpen } from '@renderer/stores/overlays'
 import { useSettingsStore } from '@renderer/stores/settings'
-import { panelSession, toggleSidePane } from '@renderer/stores/view'
+import { panelSession } from '@renderer/stores/view'
 import { AddressField } from './address-field'
-import { BrowserTabs, TabCountMenu } from './browser-tabs'
+import { SurfaceTabs } from '@renderer/features/shell/surface-tabs'
 import { OriginBar } from './origin-bar'
 import { BringSignInsOffer, SignInChip } from './sign-in-offer'
 
@@ -36,7 +35,15 @@ import { BringSignInsOffer, SignInChip } from './sign-in-offer'
  * The side panel's Browser pane: a session's tabs, the selected one's page drawn by main over the
  * pane's page area.
  */
-export function BrowserPane({ panel, maximized }: { panel: string; maximized: boolean }) {
+export function BrowserPane({
+  panel,
+  projectPath,
+  maximized,
+}: {
+  panel: string
+  projectPath: string
+  maximized: boolean
+}) {
   const { t } = useTranslation(['browser', 'common'])
   const sessionId = panelSession(panel)
   const state = useBrowserStore((s) => (sessionId ? s.bySession[sessionId] : undefined))
@@ -52,20 +59,12 @@ export function BrowserPane({ panel, maximized }: { panel: string; maximized: bo
   // The frame the page fills.
   const page = useRef<HTMLDivElement>(null)
   const address = useRef<HTMLInputElement>(null)
-  const [collapsed, setCollapsed] = useState(false)
   const name = agentId ? agentName(agentId, hostId) : t('empty.agent')
 
   // The pane shows the page, so the toggle's dot has done its work.
   useEffect(() => {
     if (sessionId) useBrowserStore.getState().seen(sessionId)
   }, [sessionId, hidden])
-
-  const closePage = useCallback(() => {
-    if (!sessionId) return
-    void window.kettu.browser
-      .close(sessionId)
-      .catch((error: unknown) => console.error('Could not close the page', error))
-  }, [sessionId])
 
   const newTab = useCallback(() => {
     if (!sessionId) return
@@ -74,37 +73,15 @@ export function BrowserPane({ panel, maximized }: { panel: string; maximized: bo
       .catch((error: unknown) => console.error('Could not open a tab', error))
   }, [sessionId])
 
-  const selectTab = (tabId: string) => {
-    if (sessionId) void window.kettu.browser.selectTab(sessionId, tabId)
-  }
-
-  const closeTab = (tabId: string) => {
-    if (sessionId) void window.kettu.browser.closeTab(sessionId, tabId)
-  }
-
-  // Mod+W closes the selected tab, and with the last one the browser, folding the pane away;
-  // Mod+T opens a tab; Mod+L in the page goes to its address.
+  // Mod+T opens a tab; Mod+L in the page goes to its address. Mod+W is the row's.
   useEffect(
     () =>
       onAppEvent((event) => {
         if (event.kind === 'focus-browser-address') {
           if (event.sessionId === sessionId) address.current?.focus()
-          return
-        }
-        if (event.kind === 'new-browser-tab') {
-          newTab()
-          return
-        }
-        if (event.kind !== 'close-browser') return
-        const current = sessionId ? useBrowserStore.getState().bySession[sessionId] : undefined
-        if (sessionId && current?.selected && current.tabs.length > 1) {
-          void window.kettu.browser.closeTab(sessionId, current.selected)
-          return
-        }
-        closePage()
-        toggleSidePane(panel, 'browser', false)
+        } else if (event.kind === 'new-browser-tab') newTab()
       }),
-    [closePage, newTab, panel, sessionId],
+    [newTab, sessionId],
   )
 
   const navigate = (url: string) => {
@@ -196,7 +173,6 @@ export function BrowserPane({ panel, maximized }: { panel: string; maximized: bo
   }, [sessionId])
 
   const url = state?.url ?? null
-  const hasTabs = !!state && state.tabs.length > 0
 
   return (
     <PaneSheet pane="browser" maximized={maximized} data-browser-panel="">
@@ -205,42 +181,16 @@ export function BrowserPane({ panel, maximized }: { panel: string; maximized: bo
         pane="browser"
         maximized={maximized}
         tools={
-          <>
-            {hasTabs && collapsed && (
-              <TabCountMenu state={state} agentName={name} onSelect={selectTab} />
-            )}
-            <PanelButton
-              label={t('actions.openExternal')}
-              disabled={!url}
-              onClick={() => sessionId && void window.kettu.browser.openExternal(sessionId)}
-            >
-              <PaneIcon icon={LinkSquare02Icon} />
-            </PanelButton>
-          </>
+          <PanelButton
+            label={t('actions.openExternal')}
+            disabled={!url}
+            onClick={() => sessionId && void window.kettu.browser.openExternal(sessionId)}
+          >
+            <PaneIcon icon={LinkSquare02Icon} />
+          </PanelButton>
         }
       >
-        {hasTabs ? (
-          <BrowserTabs
-            state={state}
-            agentName={name}
-            onSelect={selectTab}
-            onClose={(tabId) => (state.tabs.length > 1 ? closeTab(tabId) : closePage())}
-            onCollapsed={setCollapsed}
-          />
-        ) : (
-          <span className="kp-head__title">{t('title')}</span>
-        )}
-        {sessionId && (
-          <PanelButton
-            label={t('actions.newTab')}
-            shortcut={isMac ? '⌘T' : 'Ctrl+T'}
-            size="icon-xs"
-            className="kp-bnew"
-            onClick={newTab}
-          >
-            <PaneIcon icon={PlusSignIcon} size={14} />
-          </PanelButton>
-        )}
+        <SurfaceTabs panel={panel} projectPath={projectPath} />
       </PaneHead>
       <div className="kp-body">
         {/* A page without an address, such as a popup still at about:blank, is on screen too. */}

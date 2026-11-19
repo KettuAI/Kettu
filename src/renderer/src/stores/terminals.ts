@@ -12,6 +12,7 @@ import {
   replyRunInfo,
   replyRunTerminal,
 } from '@renderer/stores/reply-runs'
+import { foldSurface } from '@renderer/stores/surface-tabs'
 import {
   newSessionPanel,
   panelSession,
@@ -301,7 +302,7 @@ export function trackTerminalOpen(
 
 /**
  * A project's terminal list has come back for a panel in it. An explicit open with no tabs starts
- * one. A pane that was already open closes when the panel has none. A failed or stale list, or a
+ * one. A pane that was already open gives way to the row's other tabs when the panel has none. A failed or stale list, or a
  * create still in flight, changes nothing.
  */
 export function finishTerminalLoad(
@@ -323,7 +324,7 @@ export function finishTerminalLoad(
     void createTerminal(projectPath, panel)
     return
   }
-  toggleTerminal(panel, false)
+  foldSurface(panel, 'terminal')
 }
 
 /** Drops a terminal from the renderer, such as a stale tab the user restarts or closes. */
@@ -362,7 +363,7 @@ export function forgetTerminal(id: string): void {
   })
   if (!removedFrom || createInFlight(removedFrom)) return
   if (terminalsOf(useTerminalsStore.getState().byId, removedFrom).length === 0) {
-    toggleTerminal(removedFrom, false)
+    foldSurface(removedFrom, 'terminal')
   }
 }
 

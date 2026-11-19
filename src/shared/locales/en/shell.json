@@ -11,7 +11,8 @@
     "sideChat": "Side chat",
     "sideChatNews": "New answer",
     "more": "More tools",
-    "requests": "Requests"
+    "requests": "Requests",
+    "surfaces": "Terminal, browser and devices"
   },
   "hostBanner": {
     "restarting": "Restarting the agent host. Your sessions come back by themselves.",
@@ -111,5 +112,22 @@
     "away": "{{name}} is not connected: {{state}}",
     "lastRead": "This is what Kettu last read from it. It updates once the host is back.",
     "nothingRead": "Nothing has been read from it yet. It shows here once the host is back."
+  },
+  "surfaces": {
+    "tabs": "Terminals, pages and devices",
+    "add": "New terminal, page or device",
+    "recording": "Recording",
+    "kinds": {
+      "terminal": "Terminals",
+      "browser": "Pages",
+      "devices": "Devices"
+    },
+    "empty": {
+      "title": "No terminal, page or device yet",
+      "text": "They open here, in one row of tabs. What the agent opens shows here too.",
+      "terminal": "Terminal",
+      "page": "Page",
+      "device": "Mobile device"
+    }
   }
 }
