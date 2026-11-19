@@ -1,3 +1,5 @@
+import { useState } from 'react'
+import { useSortable } from '@dnd-kit/react/sortable'
 import { useTranslation } from 'react-i18next'
 import { AgentMark, AgentTile } from '@renderer/components/agents/agent-mark'
 import { PlanRings } from '@renderer/components/plan-rings'
@@ -8,6 +10,7 @@ import { useLimitView } from '@renderer/hooks/use-limit-view'
 import { planAmount, planBalance } from '@renderer/lib/format'
 import { LIMIT_TEXT, shownPercent } from '@renderer/lib/plan-limit'
 import { cn } from '@renderer/lib/utils'
+import { prefersReducedMotion } from '@renderer/stores/settings'
 import { useHostName, useWindowHost } from '@renderer/stores/window-host'
 import { hasModelGroups, type PlanCard } from './model'
 
@@ -15,18 +18,42 @@ import { hasModelGroups, type PlanCard } from './model'
  * An account's plan windows: its rings and, from the outer ring in, each window's figure. It
  * opens the Usage page; hovered or focused, it shows every window beside it.
  */
-export function PlanLimitCard({ card, onOpen }: { card: PlanCard; onOpen: () => void }) {
+export function PlanLimitCard({
+  card,
+  index,
+  sortHint,
+  dragging,
+  onOpen,
+}: {
+  card: PlanCard
+  index: number
+  sortHint?: string
+  dragging: boolean
+  onOpen: () => void
+}) {
   const hostName = useHostName()
+  const { ref, isDragging } = useSortable({
+    id: card.key,
+    index,
+    disabled: !sortHint,
+    transition: prefersReducedMotion() ? null : undefined,
+  })
+  const [detailsOpen, setDetailsOpen] = useState(false)
   // With every host shown, which of them the account is on.
   const hosts = useWindowHost().kind === 'all' ? card.hostIds.map(hostName).join(' · ') : null
   return (
-    <HoverCard>
+    <HoverCard open={detailsOpen && !dragging} onOpenChange={setDetailsOpen}>
       <HoverCardTrigger
         delay={100}
         closeDelay={100}
         render={
           <button
+            ref={ref}
             type="button"
+            aria-describedby={sortHint}
+            aria-keyshortcuts={sortHint && 'Alt+ArrowUp Alt+ArrowDown Alt+ArrowLeft Alt+ArrowRight'}
+            data-sortable={sortHint ? '' : undefined}
+            data-dragging={isDragging ? '' : undefined}
             onClick={onOpen}
             className={cn(
               'kettu-plan-card min-w-0 rounded-tile outline-none select-none',

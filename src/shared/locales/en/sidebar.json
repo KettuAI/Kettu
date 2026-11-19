@@ -333,6 +333,8 @@
     "ringLeft": "{{account}} · {{window}} {{percent}}% left",
     "ringNone": "{{agent}} reports no plan limits",
     "ringButton": "Plan limits: {{limit}}",
+    "reorderCards": "Drag to reorder, or hold Alt and press an arrow key.",
+    "cardMoved": "Moved {{name}} to position {{position}}.",
     "openUsage": "Open Usage",
     "theme": "Theme",
     "themes": {
