@@ -116,14 +116,19 @@ export type LaunchKind =
 
 /** How Kettu talks to an agent; each protocol has its driver in `drivers.ts`. */
 export type AgentProtocol =
-export type AgentProtocol =
-  | 'acp'
-  | 'claude-sdk'
-  | 'cline-sdk'
-  | 'codex-app-server'
-  | 'dsh-sdk'
-  | 'opencode-server'
-  | 'pi-rpc'
+  'acp' | 'claude-sdk' | 'cline-sdk' | 'codex-app-server' | 'dsh-sdk' | 'opencode-server' | 'pi-rpc'
+
+/**
+ * An interface of the harness's own that an agent runs on in place of the definition's protocol
+ * whenever it can. The definition's protocol runs instead for a version of the program the
+ * interface was not checked on, one the compatibility manifest holds back, or after a start over
+ * it failed. A session opens the same either way.
+ */
+export interface PreferredProtocol {
+  protocol: AgentProtocol
+  /** The versions of the harness's program it was checked on, as an npm range. */
+  checked: string
+}
 
 export interface AgentDefinition {
   id: HarnessId

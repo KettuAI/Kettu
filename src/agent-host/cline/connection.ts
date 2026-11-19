@@ -62,7 +62,7 @@ const OPTION = { allow: 'allow-once', always: 'allow-always', reject: 'reject' }
 const ANSWER = /^answer:(\d+)$/
 const OTHER_ANSWER = 'other'
 
-/** The SDK's process cannot serve the Agent, so another way has to run it. */
+/** The SDK's process cannot serve the agent: its start fails, and the agent runs over ACP. */
 export class ClineSdkUnavailable extends Error {
   constructor(reason: string) {
     super(reason)

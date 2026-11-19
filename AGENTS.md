@@ -42,7 +42,7 @@ Computer use runs Cua Driver's `cua-driver` program (MIT) as a child of the agen
 
 Claude Code's `@anthropic-ai/claude-agent-sdk` is never a dependency: Kettu installs it into its data folder on first use and loads it at runtime, because the SDK's license grants no right to redistribute it. Codex's `@openai/codex` is not one either: Kettu runs the user's own `codex`. The repository holds only its own types for the parts of the SDK it uses, and lint rejects a value import of the package.
 
-Cline's `@cline/sdk` is no dependency either: the `cline` package Kettu installs into its data folder brings it, and a process of Kettu's own (`src/agent-host/cline/cline-host.ts`) loads it from there, so the SDK always has its CLI's version. Where that process cannot start, the Agent runs `cline --acp`.
+Cline's `@cline/sdk` is no dependency either: the `cline` package Kettu installs into its data folder brings it, and a process of Kettu's own (`src/agent-host/cline/cline-host.ts`) loads it from there, so the SDK always has its CLI's version. It is Cline's preferred interface: a version it was not checked on, or a start over it that fails, runs `cline --acp` instead.
 
 ### UI stack: one library per concern
 

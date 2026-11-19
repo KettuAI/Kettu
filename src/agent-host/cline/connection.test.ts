@@ -14,7 +14,6 @@ import {
   type ThreadState,
 } from '@shared/thread'
 import type {
-  AgentConnection,
   ConnectionHooks,
   PermissionAnswer,
   PermissionRequest,
@@ -31,7 +30,6 @@ import {
   questionAnswer,
   sdkEntry,
 } from './connection'
-import { withFallback } from './driver'
 import recorded from './fixtures/recorded.json'
 import { CONFIG } from './options'
 import { ERROR, METHOD } from './protocol'
@@ -455,91 +453,5 @@ describe('Cline conversions', () => {
     ).toBe('mauve')
     expect(questionAnswer(['Red', 'Blue'], 'cancelled')).toBeNull()
     expect(questionAnswer(['Red', 'Blue'], { answers: [] })).toBeNull()
-  })
-})
-
-describe('Cline fallback', () => {
-  const stub = (init: () => Promise<unknown>) => {
-    let resolveClosed!: () => void
-    const closed = new Promise<void>((resolve) => (resolveClosed = resolve))
-    const connection = {
-      closed,
-      isClosed: false,
-      close: () => {
-        connection.isClosed = true
-        resolveClosed()
-      },
-      initialize: init,
-      which: '',
-    }
-    return connection
-  }
-  const settled = async (promise: Promise<void>): Promise<boolean> =>
-    Promise.race([
-      promise.then(() => true),
-      new Promise<boolean>((r) => setTimeout(() => r(false), 20)),
-    ])
-
-  it('is the first connection when it starts', async () => {
-    const first = Object.assign(
-      stub(async () => ({ name: 'first' })),
-      { which: 'first' },
-    )
-    const made: string[] = []
-    const connection = withFallback(
-      first as unknown as AgentConnection,
-      () => true,
-      () => {
-        made.push('second')
-        return first as unknown as AgentConnection
-      },
-      () => {},
-    )
-    expect(await connection.initialize('1')).toEqual({ name: 'first' })
-    expect(made).toEqual([])
-    expect((connection as unknown as { which: string }).which).toBe('first')
-    connection.close()
-    expect(await settled(connection.closed)).toBe(true)
-  })
-
-  it('becomes the fallback when the first cannot serve, and stays open though the first closed', async () => {
-    const first = stub(async () => {
-      first.close()
-      throw new ClineSdkUnavailable('no SDK')
-    })
-    const second = Object.assign(
-      stub(async () => ({ name: 'second' })),
-      { which: 'second' },
-    )
-    const reasons: string[] = []
-    const connection = withFallback(
-      first as unknown as AgentConnection,
-      (error) => error instanceof ClineSdkUnavailable,
-      () => second as unknown as AgentConnection,
-      (reason) => reasons.push(reason),
-    )
-    expect(await connection.initialize('1')).toEqual({ name: 'second' })
-    expect(reasons).toEqual(['no SDK'])
-    expect((connection as unknown as { which: string }).which).toBe('second')
-    expect(await settled(connection.closed)).toBe(false)
-    second.close()
-    expect(await settled(connection.closed)).toBe(true)
-  })
-
-  it('fails as the first does for any other failure', async () => {
-    const first = stub(async () => {
-      first.close()
-      throw new Error('broken')
-    })
-    const connection = withFallback(
-      first as unknown as AgentConnection,
-      (error) => error instanceof ClineSdkUnavailable,
-      () => {
-        throw new Error('never')
-      },
-      () => {},
-    )
-    await expect(connection.initialize('1')).rejects.toThrow('broken')
-    expect(await settled(connection.closed)).toBe(true)
   })
 })
