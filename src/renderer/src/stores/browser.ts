@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import type { BrowserState } from '@shared/browser'
 import { useSessionsStore } from '@renderer/stores/sessions'
+import { isSurfacePane } from '@renderer/stores/surface-tabs'
 import { useViewStore } from '@renderer/stores/view'
 
 interface BrowserStore {
@@ -57,19 +58,20 @@ export const useBrowserStore = create<BrowserStore>()((set) => ({
  * Follows the page state main sends, and tells main which sessions still exist, so a page closes
  * once its session leaves the host's memory. The first navigation of a session opens the pane
  * when its side panel shows nothing else; one showing another pane keeps it, and the toggle gets
- * a dot.
+ * a dot unless the pane is one with the row of tabs the page joins.
  */
 export function initBrowser(): void {
   window.kettu.browser.onState((state) => useBrowserStore.getState().receive(state))
   window.kettu.browser.onOpened(({ sessionId }) => {
     if (!useSessionsStore.getState().byId[sessionId]) return
     const shown = useViewStore.getState().sidePane[sessionId]
-    if (shown === undefined) {
+    if (shown === undefined || shown === 'surfaces') {
       // Nothing else in the session's panel: show the browser, without taking the focus.
       useViewStore.setState((s) => ({ sidePane: { ...s.sidePane, [sessionId]: 'browser' } }))
       return
     }
-    if (shown !== 'browser') {
+    // A terminal or a device showing has the page's tab beside its own in the row.
+    if (!isSurfacePane(shown)) {
       useBrowserStore.setState((s) => ({ unseen: { ...s.unseen, [sessionId]: true } }))
     }
   })

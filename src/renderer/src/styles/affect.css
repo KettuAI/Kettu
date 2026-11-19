@@ -1222,6 +1222,361 @@ li[data-row-exit='dust'] > * {
   color: var(--text-primary);
 }
 
+/* ---------- the side panel's row of tabs: terminals, pages and devices ---------- */
+/* The row pads itself so the light of a tab someone uses is not cut off at its edges. */
+.kp-stabs {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  margin: -6px -4px;
+  padding: 6px 4px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+}
+.kp-stabs::-webkit-scrollbar {
+  display: none;
+}
+.kp-stab {
+  --stab-wait: 70ms;
+  --stab-in: 180ms;
+  --stab-out: 140ms;
+  position: relative;
+  isolation: isolate;
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  max-width: 184px;
+  height: 28px;
+  border-radius: 8px;
+  font-size: 12.5px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  user-select: none;
+  transition:
+    background-color 160ms ease,
+    color 160ms ease,
+    box-shadow 160ms ease;
+  animation: kp-stab-in 220ms var(--ease-out-quint);
+}
+/* Long names give way first: the others share what is left, each up to its own width. */
+.kp-stab:not([data-selected]) {
+  max-width: min(184px, var(--stab-cap, 184px));
+}
+.kp-stabs[data-measuring] .kp-stab {
+  max-width: 184px;
+}
+.kp-stab:hover {
+  background: color-mix(in srgb, var(--bg-hover) 75%, transparent);
+  color: var(--text-primary);
+}
+.kp-stab[data-selected] {
+  background: var(--bg-selected);
+  color: var(--text-primary);
+}
+.kp-stab[data-dragging] {
+  background: var(--bg-selected);
+}
+.kp-stab[data-editing] {
+  background: var(--bg-surface);
+  box-shadow: inset 0 0 0 1px var(--border-strong);
+}
+.kp-stab[data-dim] :is(.kp-stab__icon, .kp-stab__name) {
+  opacity: 0.5;
+  filter: grayscale(1);
+}
+.kp-stab__btn {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  height: 100%;
+  padding: 0 9px 0 6px;
+  border-radius: inherit;
+  text-align: left;
+  outline: none;
+}
+.kp-stab__btn:focus-visible,
+.kp-stab__x:focus-visible {
+  outline: 2px solid var(--focus-ring-color);
+  outline-offset: -2px;
+}
+/* The kind's icon, where the close button takes its place on hover. */
+.kp-stab__icon {
+  position: relative;
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  color: var(--text-disabled);
+}
+.kp-stab[data-selected] .kp-stab__icon {
+  color: var(--pane-muted);
+}
+.kp-stab__name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.kp-stab__code {
+  flex: none;
+  color: var(--text-tertiary);
+  font-variant-numeric: tabular-nums;
+}
+.kp-stab__code[data-failed] {
+  color: var(--danger);
+}
+.kp-stab__dot,
+.kp-stab__badge {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+}
+.kp-stab__badge {
+  position: absolute;
+  top: 0;
+  right: -1px;
+  display: none;
+  width: 7px;
+  height: 7px;
+  box-shadow: 0 0 0 1.5px var(--bg-app);
+}
+:is(.kp-stab__dot, .kp-stab__badge)[data-tone='fox'] {
+  background: var(--pane-fox);
+}
+:is(.kp-stab__dot, .kp-stab__badge)[data-tone='live'] {
+  background: var(--pane-live);
+}
+:is(.kp-stab__dot, .kp-stab__badge)[data-tone='info'] {
+  background: var(--info);
+}
+:is(.kp-stab__dot, .kp-stab__badge)[data-tone='warning'] {
+  background: var(--warning);
+}
+:is(.kp-stab__dot, .kp-stab__badge)[data-tone='neutral'] {
+  background: var(--text-tertiary);
+}
+:is(.kp-stab__dot, .kp-stab__badge)[data-tone='danger'] {
+  background: var(--danger);
+}
+.kp-stab__rename {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  padding: 0 8px 0 30px;
+}
+.kp-stab__rename input {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  border: 0;
+  outline: 0;
+  background: none;
+  font: inherit;
+  color: var(--text-primary);
+}
+
+/* The close button lies over the icon's square: the icon shrinks into a blur as the button grows
+   out of it. Entering waits a moment, so sweeping the pointer along the row does not flash it on
+   every tab; leaving turns back at once. Only that square closes. */
+.kp-stab__x {
+  position: absolute;
+  top: 5px;
+  left: 6px;
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 5px;
+  color: var(--text-tertiary);
+  opacity: 0;
+  visibility: hidden;
+  transform: scale(0.5);
+  outline: none;
+  transition:
+    opacity var(--stab-out) var(--ease-out-quint),
+    transform var(--stab-out) var(--ease-out-quint),
+    visibility 0s linear var(--stab-out),
+    background-color 120ms ease,
+    color 120ms ease;
+}
+.kp-stab__icon > :first-child {
+  transition:
+    opacity var(--stab-out) var(--ease-out-quint),
+    transform var(--stab-out) var(--ease-out-quint),
+    filter var(--stab-out) var(--ease-out-quint);
+}
+.kp-stab:is(:hover, :focus-within):not([data-editing]) .kp-stab__x {
+  opacity: 1;
+  visibility: visible;
+  transform: none;
+  transition:
+    opacity var(--stab-in) var(--ease-out-quint) var(--stab-wait),
+    transform var(--stab-in) var(--ease-out-quint) var(--stab-wait),
+    visibility 0s linear var(--stab-wait),
+    background-color 120ms ease,
+    color 120ms ease;
+}
+.kp-stab:is(:hover, :focus-within):not([data-editing]) .kp-stab__icon > :first-child {
+  opacity: 0;
+  transform: scale(0.5);
+  filter: blur(2px);
+  transition:
+    opacity var(--stab-in) var(--ease-out-quint) var(--stab-wait),
+    transform var(--stab-in) var(--ease-out-quint) var(--stab-wait),
+    filter var(--stab-in) var(--ease-out-quint) var(--stab-wait);
+}
+.kp-stab__x:hover {
+  background: var(--bg-selected);
+  color: var(--text-primary);
+}
+.kp-stab[data-selected] .kp-stab__x:hover {
+  background: var(--border-default);
+}
+
+/* Only icons fit: the others keep their icon, their mark on its corner and no close button on
+   hover, so a click anywhere on them still chooses them. */
+.kp-stabs[data-tight]:not([data-measuring]) .kp-stab:not([data-selected]) .kp-stab__btn {
+  padding: 0 5px;
+}
+.kp-stabs[data-tight]:not([data-measuring])
+  .kp-stab:not([data-selected])
+  :is(.kp-stab__name, .kp-stab__code, .kp-stab__dot, .kp-stab__x) {
+  display: none;
+}
+.kp-stabs[data-tight]:not([data-measuring]) .kp-stab:not([data-selected]) .kp-stab__badge {
+  display: block;
+}
+/* The selected tab keeps its name, cut short only when even the icons leave it too little room. */
+.kp-stabs[data-tight]:not([data-measuring]) .kp-stab[data-selected] {
+  flex: 0 1 auto;
+  min-width: 84px;
+}
+.kp-stabs[data-tight] .kp-stab:not([data-selected]):hover .kp-stab__icon > :first-child {
+  opacity: 1;
+  transform: none;
+  filter: none;
+}
+
+/* Who uses the tab, on the whole of it: the agent's tint and glow breathe slowly, a step it asks
+   of the user breathes quickly, the user who took it over stands still. */
+.kp-stab[data-control='agent'] {
+  --stab-color: var(--pane-agent);
+  --stab-ink: var(--pane-agent-ink);
+  --stab-rest: 20%;
+  --stab-period: 2.8s;
+}
+.kp-stab[data-control='asks'] {
+  --stab-color: var(--pane-asks);
+  --stab-ink: var(--pane-asks-ink);
+  --stab-rest: 26%;
+  --stab-period: 1.3s;
+}
+.kp-stab[data-control='you'] {
+  --stab-color: var(--pane-you);
+  --stab-ink: var(--pane-you-ink);
+  --stab-rest: 16%;
+}
+.kp-stab[data-control] {
+  background: color-mix(in srgb, var(--stab-color) var(--stab-rest), transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--stab-color) 45%, transparent);
+  color: var(--stab-ink);
+}
+.kp-stab[data-control][data-selected] {
+  background: color-mix(in srgb, var(--stab-color) calc(var(--stab-rest) + 8%), transparent);
+  box-shadow: inset 0 0 0 1.5px var(--stab-color);
+}
+.kp-stab[data-control]:hover:not([data-selected]) {
+  background: color-mix(in srgb, var(--stab-color) calc(var(--stab-rest) + 4%), transparent);
+}
+.kp-stab[data-control] :is(.kp-stab__icon, .kp-stab__x) {
+  color: var(--stab-color);
+}
+.kp-stab[data-control] .kp-stab__x:hover {
+  background: color-mix(in srgb, var(--stab-color) 18%, transparent);
+  color: var(--stab-ink);
+}
+.kp-stab:is([data-control='agent'], [data-control='asks'])::before,
+.kp-stab:is([data-control='agent'], [data-control='asks'])::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  opacity: 0;
+  pointer-events: none;
+  animation: kp-stab-breathe var(--stab-period) cubic-bezier(0.45, 0, 0.55, 1) infinite;
+}
+.kp-stab:is([data-control='agent'], [data-control='asks'])::before {
+  box-shadow: 0 0 10px 1px
+    color-mix(in srgb, var(--stab-color) var(--pane-breath-glow), transparent);
+}
+.kp-stab:is([data-control='agent'], [data-control='asks'])::after {
+  background: color-mix(in srgb, var(--stab-color) var(--pane-breath), transparent);
+}
+@keyframes kp-stab-breathe {
+  0%,
+  100% {
+    opacity: 0;
+  }
+  48% {
+    opacity: 1;
+  }
+}
+@keyframes kp-stab-in {
+  from {
+    opacity: 0;
+    transform: translateY(3px);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .kp-stab,
+  .kp-stab::before,
+  .kp-stab::after {
+    animation: none !important;
+  }
+  .kp-stab:is([data-control='agent'], [data-control='asks'])::before,
+  .kp-stab:is([data-control='agent'], [data-control='asks'])::after {
+    opacity: 0.5;
+  }
+  .kp-stab__x,
+  .kp-stab__icon > :first-child {
+    transition: none !important;
+  }
+}
+:root[data-reduce-motion='always'] .kp-stab,
+:root[data-reduce-motion='always'] .kp-stab::before,
+:root[data-reduce-motion='always'] .kp-stab::after {
+  animation: none;
+}
+:root[data-reduce-motion='always']
+  .kp-stab:is([data-control='agent'], [data-control='asks'])::before,
+:root[data-reduce-motion='always']
+  .kp-stab:is([data-control='agent'], [data-control='asks'])::after {
+  opacity: 0.5;
+}
+:root[data-reduce-motion='always'] :is(.kp-stab__x, .kp-stab__icon > :first-child) {
+  transition: none;
+}
+.kp-tablist__mark {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 16px;
+}
+.kp-empty__acts {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 8px;
+}
+
 .kp-spin {
   flex: none;
   width: 12px;
@@ -1394,47 +1749,18 @@ li[data-row-exit='dust'] > * {
 /* The terminal lies on the pane's sheet with no box of its own: a hairline from edge to edge
    under the head and the screen out to the sheet's edges. Its tabs are names in a row, the chosen
    one on a gray pill, each with its close button. */
-.kp-pane[data-pane='terminal'] > .kp-head {
+.kp-pane:is([data-pane='terminal'], [data-pane='surfaces']) > .kp-head {
   position: relative;
   margin-bottom: 8px;
 }
 /* Out past the pane's padding, which is 10px 10px 10px 12px. */
-.kp-pane[data-pane='terminal'] > .kp-head::after {
+.kp-pane:is([data-pane='terminal'], [data-pane='surfaces']) > .kp-head::after {
   content: '';
   position: absolute;
   inset: auto -10px -8px -12px;
   height: var(--hairline);
   background: var(--border-subtle);
   pointer-events: none;
-}
-.kp-pane[data-pane='terminal'] .kp-tab {
-  height: 28px;
-  border-radius: 8px;
-  color: var(--text-secondary);
-}
-.kp-pane[data-pane='terminal'] .kp-tab[data-selected] {
-  background: var(--bg-selected);
-  color: var(--text-primary);
-}
-.kp-pane[data-pane='terminal'] .kp-tab .kp-tab__btn {
-  padding: 0 6px 0 10px;
-}
-.kp-pane[data-pane='terminal'] .kp-tab__x {
-  position: static;
-  margin-right: 5px;
-  opacity: 1;
-}
-.kp-pane[data-pane='terminal'] .kp-tab[data-selected] .kp-tab__x {
-  color: var(--text-tertiary);
-}
-.kp-pane[data-pane='terminal']
-  .kp-tab:not([data-selected]):is(:hover, :focus-within)
-  :is(.kp-tab__name, .kp-tab__dot) {
-  opacity: 1;
-  mask-image: none;
-}
-.kp-pane[data-pane='terminal'] .kp-tab:not([data-owned]) .kp-tab__rename {
-  padding-left: 10px;
 }
 .kp-pane[data-pane='terminal'] > .kp-body {
   margin: 0 -10px -10px -12px;
@@ -1758,83 +2084,6 @@ li[data-row-exit='dust'] > * {
   border-radius: 3px;
 }
 
-/* The browser's tabs: when they do not fit, the others keep only their site icon and the selected
-   one its name, and the count in the head lists them all. */
-.kp-btabs {
-  flex: 0 1 auto;
-}
-.kp-btabs[data-collapsed] .kp-btab:not([data-selected]) {
-  flex-shrink: 0;
-  min-width: 0;
-}
-.kp-btabs[data-collapsed] .kp-btab:not([data-selected]) .kp-tab__btn {
-  gap: 4px;
-  padding: 0 7px;
-}
-.kp-btabs[data-collapsed] .kp-btab:not([data-selected]) :is(.kp-tab__name, .kp-tab__x) {
-  display: none;
-}
-.kp-btabs[data-collapsed] .kp-btab[data-selected] {
-  flex-shrink: 0;
-  max-width: 168px;
-}
-.kp-btab[data-released] :is(.kp-sitemark, .kp-tab__icon) {
-  filter: grayscale(1);
-  opacity: 0.5;
-}
-.kp-btab[data-released] .kp-tab__name {
-  color: var(--text-disabled);
-}
-/* The agent's tab: a fox dot with a slow ring while its turn uses it, gray while the user holds
-   it, amber while it waits on them. */
-.kp-btab__who {
-  position: relative;
-  flex: none;
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--pane-fox);
-}
-.kp-btab[data-agent='agent'] .kp-btab__who::after {
-  content: '';
-  position: absolute;
-  inset: -3px;
-  border-radius: 50%;
-  box-shadow: 0 0 0 1.5px var(--pane-fox);
-  opacity: 0;
-  animation: kp-btab-ring 1800ms ease-out infinite;
-}
-.kp-btab[data-agent='you'] .kp-btab__who {
-  background: var(--text-disabled);
-}
-.kp-btab[data-agent='asks'] .kp-btab__who {
-  background: var(--tone-amber);
-}
-.kp-btab:not([data-selected]):is(:hover, :focus-within) .kp-btab__who {
-  opacity: 0;
-}
-@keyframes kp-btab-ring {
-  0% {
-    transform: scale(0.6);
-    opacity: 0.8;
-  }
-  70%,
-  100% {
-    transform: scale(1.5);
-    opacity: 0;
-  }
-}
-@media (prefers-reduced-motion: reduce) {
-  .kp-btab__who::after {
-    animation: none !important;
-  }
-}
-:root[data-reduce-motion='always'] .kp-btab__who::after {
-  animation: none;
-}
-.kp-head__main > .kp-bnew {
-  margin-left: 2px;
-}
 .kp-tabcount {
   display: inline-flex;
   gap: 2px;
@@ -2035,18 +2284,6 @@ li[data-row-exit='dust'] > * {
   .kp-device-state > span[data-live] {
     animation: none;
   }
-}
-/* A tab without room for its name: its mark and a dot for its state, with room after the mark
-   where the close shows on hover, so a click on the mark still chooses the tab. */
-.kp-tab[data-compact] {
-  flex: none;
-  min-width: 42px;
-}
-/* The chosen tab then gives way last: its name is cut short before another tab is pushed out of
-   reach, while its badge and close stay. */
-.kp-head__tabs[data-crowded] > .kp-tab[data-selected] {
-  flex-shrink: 1;
-  min-width: 0;
 }
 .kp-tab__dot.kp-device-dot {
   background: currentColor;

@@ -13,6 +13,7 @@ import {
   ResizablePanelGroup,
 } from '@renderer/components/ui/resizable'
 import { TerminalPanel } from '@renderer/features/terminal/terminal-panel'
+import { isSurfacePane } from '@renderer/stores/surface-tabs'
 import { hostOfPath } from '@renderer/lib/host-paths'
 import { layoutStorage } from '@renderer/lib/storage'
 import { cn } from '@renderer/lib/utils'
@@ -27,6 +28,7 @@ import { prefersReducedMotion } from '@renderer/stores/settings'
 import { toggleTerminal, useViewStore, type SidePane } from '@renderer/stores/view'
 import { usePhoneWindow } from './narrow'
 import { SHEET, SHEET_PANEL } from './sheet'
+import { SurfacesPane } from './surface-tabs'
 
 const FilesPanel = lazy(() => import('@renderer/features/files/files-panel'))
 const ArtifactPane = lazy(() => import('@renderer/features/artifacts/artifact-pane'))
@@ -41,15 +43,18 @@ const BrowserPane = lazy(() =>
 
 // The content and every pane share one minimum width.
 const MIN_WIDTH = 360
-// Each pane is a panel of its own, so each keeps the width the user gives it. The terminal keeps
-// the id it had when it was the only pane.
+// Each pane is a panel of its own, so each keeps the width the user gives it. Terminals, browser
+// pages and devices share one row of tabs and so one width, under the id the terminal had when it
+// was the only pane.
 const PANE_SIZE = { defaultSize: '480px', minSize: MIN_WIDTH } as const
+const SURFACES = { id: 'side-panel', ...PANE_SIZE } as const
 const PANES = {
-  terminal: { id: 'side-panel', ...PANE_SIZE },
+  terminal: SURFACES,
+  browser: SURFACES,
+  devices: SURFACES,
+  surfaces: SURFACES,
   files: { id: 'side-panel-files', ...PANE_SIZE },
   artifact: { id: 'side-panel-artifact', defaultSize: '560px', minSize: MIN_WIDTH },
-  browser: { id: 'side-panel-browser', ...PANE_SIZE },
-  devices: { id: 'side-panel-devices', ...PANE_SIZE },
   computer: { id: 'side-panel-computer', defaultSize: '540px', minSize: MIN_WIDTH },
   requests: { id: 'side-panel-requests', defaultSize: '560px', minSize: MIN_WIDTH },
 } as const
@@ -118,6 +123,7 @@ export function SidePanelArea({
       !remote ||
       shown === 'files' ||
       shown === 'browser' ||
+      shown === 'surfaces' ||
       shown === 'artifact' ||
       shown === 'requests'
     ) {
@@ -252,7 +258,8 @@ export function SidePanelArea({
             )}
           />
           <ResizablePanel
-            key={held}
+            // Switching between the row's kinds keeps the panel, so its width stays put.
+            key={isSurfacePane(held) ? 'surfaces' : held}
             panelRef={paneRef}
             {...PANES[held]}
             groupResizeBehavior="preserve-pixel-size"
@@ -267,9 +274,11 @@ export function SidePanelArea({
                   {held === 'files' ? (
                     <FilesPanel projectPath={projectPath} panel={panel} maximized={maximized} />
                   ) : held === 'browser' ? (
-                    <BrowserPane panel={panel} maximized={maximized} />
+                    <BrowserPane panel={panel} projectPath={projectPath} maximized={maximized} />
                   ) : held === 'devices' ? (
-                    <DevicesPane panel={panel} maximized={maximized} />
+                    <DevicesPane panel={panel} projectPath={projectPath} maximized={maximized} />
+                  ) : held === 'surfaces' ? (
+                    <SurfacesPane panel={panel} projectPath={projectPath} maximized={maximized} />
                   ) : held === 'computer' ? (
                     <ComputerPane panel={panel} maximized={maximized} />
                   ) : held === 'requests' ? (

@@ -111,9 +111,13 @@ export const PINNED_GROUP = 'pinned'
 /** This computer as the host the sidebar is narrowed to, which has no id of its own. */
 export const THIS_COMPUTER = 'this-computer'
 
-/** What the side panel shows; one pane at a time. An artifact's pane opens from the thread. */
+/**
+ * What the side panel shows; one pane at a time. An artifact's pane opens from the thread.
+ * Terminals, browser pages and devices share one row of tabs, and `surfaces` is that row's pane
+ * while none of them is open yet.
+ */
 export type SidePane =
-  'terminal' | 'files' | 'browser' | 'devices' | 'computer' | 'requests' | 'artifact'
+  'terminal' | 'files' | 'browser' | 'devices' | 'surfaces' | 'computer' | 'requests' | 'artifact'
 
 // No session id takes this form, so New session's panel in a project has a key of its own.
 const NEW_SESSION_PANEL = 'new-session:'

@@ -1,16 +1,14 @@
-import { useEffect, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import type { IconSvgElement } from '@hugeicons/react'
 import {
   Alert02Icon,
   ArrowTurnBackwardIcon,
   Camera01Icon,
-  ComputerPhoneSyncIcon,
   DashboardSquare01Icon,
   Home01Icon,
   Moon02Icon,
   MoreHorizontalIcon,
   PlayIcon,
-  PlusSignIcon,
   RecordIcon,
   RefreshIcon,
   RotateClockwiseIcon,
@@ -19,20 +17,13 @@ import {
   SquareLock02Icon,
   StopIcon,
   Sun03Icon,
-  Tablet01Icon,
   Unlink01Icon,
   VolumeHighIcon,
   VolumeLowIcon,
 } from '@hugeicons/core-free-icons'
-import type { TFunction } from 'i18next'
 import { AnimatePresence } from 'motion/react'
 import { useTranslation } from 'react-i18next'
-import {
-  SESSION_DEVICE_LIMIT,
-  type DeviceAppearance,
-  type DeviceButton,
-  type DeviceInfo,
-} from '@shared/device-host'
+import type { DeviceAppearance, DeviceButton, DeviceInfo } from '@shared/device-host'
 import { Button } from '@renderer/components/affect/button'
 import { Badge } from '@renderer/components/ui/badge'
 import {
@@ -57,12 +48,12 @@ import {
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
 import { SurfacePill } from '@renderer/components/control/surface-pill'
 import { useControlAgent } from '@renderer/components/control/use-control-agent'
+import { SurfaceTabs } from '@renderer/features/shell/surface-tabs'
 import {
   PaneHead,
   PaneIcon,
   PaneSheet,
   PaneSpinner,
-  PaneTabClose,
   PanelButton,
 } from '@renderer/features/shell/panel-button'
 import { errorMessage } from '@renderer/lib/host'
@@ -75,20 +66,19 @@ import {
   controlDevice,
   devicesOf,
   loadDevices,
-  moveDevice,
   openDevice,
   seenDevices,
-  selectDevice,
   setDeviceStream,
   shutDownDevice,
   useDevicesStore,
-  type DeviceStream,
 } from '@renderer/stores/devices'
 import { useSessionsStore } from '@renderer/stores/sessions'
 import { panelSession } from '@renderer/stores/view'
 import { canRecord, saveScreenshot, startRecording, stopRecording } from './device-capture'
 import { DeviceRequest } from './device-request'
 import { DeviceScreen } from './device-screen'
+import { rowOf, useAddable } from './device-marks'
+import { DeviceRow } from './device-row'
 import { DeviceSetup, HostSetup } from './device-setup'
 
 // The hardware buttons in groups: navigation, volume, then turning the device.
@@ -110,130 +100,16 @@ const BUTTONS: {
   [{ button: 'rotate', platforms: ['ios', 'android'], icon: RotateClockwiseIcon }],
 ]
 
-/** A device's mark: one for simulators and emulators, the device's form for a physical one. */
-function markOf(device: DeviceInfo): IconSvgElement {
-  if (device.kind !== 'physical') return ComputerPhoneSyncIcon
-  return /ipad|tablet|tab\b/i.test(`${device.name} ${device.model ?? ''}`)
-    ? Tablet01Icon
-    : SmartPhone01Icon
-}
-
-const DOT_COLOR = {
-  neutral: 'text-tertiary',
-  info: 'text-info',
-  warning: 'text-warning',
-  error: 'text-danger',
-} as const
-
-/** A state as a badge, with a dot for one that is happening now. */
-function State({
-  variant,
-  dot,
-  compact,
-  children,
-}: {
-  variant: 'neutral' | 'info' | 'warning' | 'error'
-  dot?: 'still' | 'live'
-  /** Only a dot in the state's color, where a tab has no room for the words. */
-  compact?: boolean
-  children: string
-}) {
-  if (compact) {
-    return (
-      <span
-        role="img"
-        aria-label={children}
-        className={cn('kp-tab__dot kp-device-dot', DOT_COLOR[variant])}
-      />
-    )
-  }
-  return (
-    <Badge variant={variant} className="kp-device-state">
-      {dot && <span aria-hidden data-live={dot === 'live' || undefined} />}
-      {children}
-    </Badge>
-  )
-}
-
-interface TabStatus {
-  variant: 'neutral' | 'info' | 'warning' | 'error'
-  dot?: 'still' | 'live'
-  label: string
-}
-
-/** What a device's tab says after its name, when it is anything but ready. */
-function statusOf(
-  t: TFunction<'devices'>,
-  device: DeviceInfo,
-  stream: DeviceStream | undefined,
-  /** The pane is still opening it: booted, but not yet ready to show. */
-  opening: boolean,
-): TabStatus | null {
-  if (device.problems.length > 0) return { variant: 'warning', label: t('state.notReady') }
-  if (device.state === 'booting' || opening) {
-    return { variant: 'info', dot: 'live', label: t('state.starting') }
-  }
-  if (device.state === 'shutdown') return { variant: 'neutral', label: t('state.shutdown') }
-  if (device.state === 'unavailable') return { variant: 'neutral', label: t('state.unavailable') }
-  if (stream?.state !== 'stopped' && stream?.state !== 'error') return null
-  return stream.drawn
-    ? { variant: 'warning', dot: 'still', label: t('state.lost') }
-    : { variant: 'error', dot: 'still', label: t('state.error') }
-}
-
-/**
- * Whether the tabs fit the head at their full width. When they do not, the ones not selected
- * keep only their mark and a dot for their state. `signature` changes with what the tabs say.
- */
-function useTabsFit(signature: string): { tabs: RefObject<HTMLDivElement | null>; fit: boolean } {
-  const tabs = useRef<HTMLDivElement>(null)
-  // The width the full tabs need, measured while they are drawn in full.
-  const needed = useRef<number | null>(null)
-  const [state, setState] = useState({ signature, fit: true })
-  // What the tabs say changed: draw them in full again and measure anew.
-  const fit = state.signature === signature ? state.fit : true
-
-  useLayoutEffect(() => {
-    const strip = tabs.current
-    const head = strip?.parentElement
-    if (!strip || !head) return
-    const room = (): number => {
-      let others = 0
-      for (const child of head.children) {
-        if (child !== strip) others += (child as HTMLElement).offsetWidth
-      }
-      const gap = parseFloat(getComputedStyle(head).columnGap) || 0
-      return head.clientWidth - others - gap * (head.children.length - 1)
-    }
-    const check = (): void => {
-      if (needed.current === null) return
-      const fits = room() >= needed.current
-      setState((now) =>
-        now.signature === signature && now.fit === fits ? now : { signature, fit: fits },
-      )
-    }
-    if (fit) {
-      // A name cut short takes less than it needs, so its hidden part is added back.
-      let width = 0
-      for (const tab of strip.children) {
-        const name = tab.querySelector<HTMLElement>('.kp-tab__name')
-        width += (tab as HTMLElement).offsetWidth
-        if (name) width += Math.max(0, name.scrollWidth - name.clientWidth)
-      }
-      const gap = parseFloat(getComputedStyle(strip).columnGap) || 0
-      needed.current = Math.ceil(width + gap * Math.max(0, strip.children.length - 1))
-    }
-    check()
-    const observer = new ResizeObserver(check)
-    observer.observe(head)
-    return () => observer.disconnect()
-  }, [signature, fit])
-
-  return { tabs, fit }
-}
-
 /** The side panel's Mobile devices pane: the devices a session holds, one tab each. */
-export function DevicesPane({ panel, maximized }: { panel: string; maximized: boolean }) {
+export function DevicesPane({
+  panel,
+  projectPath,
+  maximized,
+}: {
+  panel: string
+  projectPath: string
+  maximized: boolean
+}) {
   const { t } = useTranslation('devices')
   const sessionId = panelSession(panel)
   const devices = useDevicesStore((s) => s.devices)
@@ -247,15 +123,6 @@ export function DevicesPane({ panel, maximized }: { panel: string; maximized: bo
   const stream = useDevicesStore((s) => (selected ? s.streams[selected.id] : undefined))
   const recording = useDevicesStore((s) =>
     selected && s.recording?.deviceId === selected.id ? s.recording : null,
-  )
-
-  const statuses = held.map((device) =>
-    statusOf(t, device, device.id === selected?.id ? stream : undefined, device.id === opening),
-  )
-  const { tabs, fit } = useTabsFit(
-    held
-      .map((device, index) => `${device.id}:${device.name}:${statuses[index]?.label ?? ''}`)
-      .join('|') + `|${selected?.id ?? ''}`,
   )
 
   useEffect(() => {
@@ -394,55 +261,7 @@ export function DevicesPane({ panel, maximized }: { panel: string; maximized: bo
           </>
         }
       >
-        {held.length > 0 ? (
-          <div
-            ref={tabs}
-            role="tablist"
-            aria-label={t('tabs')}
-            className="kp-head__tabs"
-            data-crowded={!fit || undefined}
-          >
-            {held.map((device, index) => {
-              const chosen = device.id === selected?.id
-              const status = statuses[index]
-              const compact = !fit && !chosen
-              return (
-                <span
-                  key={device.id}
-                  className="kp-tab"
-                  data-selected={chosen || undefined}
-                  data-compact={compact || undefined}
-                >
-                  <button
-                    type="button"
-                    role="tab"
-                    aria-selected={chosen}
-                    aria-label={compact ? device.name : undefined}
-                    title={`${device.name} · ${status?.label ?? t(`kind.${device.kind}`)}`}
-                    onClick={() => sessionId && selectDevice(sessionId, device.id)}
-                    className="kp-tab__btn"
-                  >
-                    <PaneIcon icon={markOf(device)} size={14} className="kp-tab__icon" />
-                    {!compact && <span className="kp-tab__name">{device.name}</span>}
-                    {status && (
-                      <State variant={status.variant} dot={status.dot} compact={compact}>
-                        {status.label}
-                      </State>
-                    )}
-                  </button>
-                  <PaneTabClose
-                    label={t('actions.disconnect', { name: device.name })}
-                    onClick={() => sessionId && void closeDevice(sessionId, device.id)}
-                  />
-                </span>
-              )
-            })}
-          </div>
-        ) : (
-          <span className="kp-head__title">{t('title')}</span>
-        )}
-        {/* Beside the tab strip, not in it, so the strip's scrolling never clips the menu. */}
-        {sessionId && <AddDeviceMenu sessionId={sessionId} open={held.length} />}
+        <SurfaceTabs panel={panel} projectPath={projectPath} />
       </PaneHead>
       <div className="kp-body">
         {sessionId && <DeviceRequest sessionId={sessionId} />}
@@ -594,112 +413,6 @@ function Stage({ device, sessionId }: { device: DeviceInfo; sessionId: string })
 }
 
 /** The devices a session can add, by system: every one of this host it does not hold yet. */
-function useAddable(sessionId: string): { title: string; devices: DeviceInfo[] }[] {
-  const devices = useDevicesStore((s) => s.devices)
-  const others = devices.filter((device) => device.sessionId !== sessionId)
-  return [
-    { title: 'iOS', devices: others.filter((device) => device.platform === 'ios') },
-    { title: 'Android', devices: others.filter((device) => device.platform === 'android') },
-  ].filter((group) => group.devices.length > 0)
-}
-
-/** What picking a device does, and the state its row ends with. */
-function rowOf(device: DeviceInfo): {
-  state: 'shutdown' | 'unavailable' | 'plugIn' | 'notAllowed' | 'elsewhere' | null
-  act: (sessionId: string) => Promise<void>
-} {
-  if (device.sessionId !== null) {
-    return { state: 'elsewhere', act: (sessionId) => moveDevice(sessionId, device.id) }
-  }
-  const state = device.problems.includes('usb-required')
-    ? 'plugIn'
-    : device.problems.includes('usb-debugging-unauthorized')
-      ? 'notAllowed'
-      : device.state === 'shutdown'
-        ? 'shutdown'
-        : device.state === 'unavailable'
-          ? 'unavailable'
-          : null
-  return { state, act: (sessionId) => openDevice(sessionId, device.id) }
-}
-
-const ROW_VARIANT = {
-  shutdown: 'neutral',
-  unavailable: 'neutral',
-  plugIn: 'warning',
-  notAllowed: 'warning',
-  elsewhere: 'info',
-} as const
-
-/** A device's row in the add menu and in the empty pane: its mark, name and state. */
-function DeviceRow({ device }: { device: DeviceInfo }) {
-  const { t } = useTranslation('devices')
-  const { state } = rowOf(device)
-  return (
-    <>
-      <PaneIcon icon={markOf(device)} size={16} />
-      <span className="min-w-0 flex-1 truncate" title={device.name}>
-        {device.name}
-      </span>
-      {state && <State variant={ROW_VARIANT[state]}>{t(`row.${state}`)}</State>}
-      {state === 'elsewhere' && <span className="kp-device-move">{t('row.move')}</span>}
-    </>
-  )
-}
-
-function AddDeviceMenu({ sessionId, open }: { sessionId: string; open: number }) {
-  const { t } = useTranslation('devices')
-  const groups = useAddable(sessionId)
-  const full = open >= SESSION_DEVICE_LIMIT
-  return (
-    <DropdownMenu onOpenChange={(shown) => shown && void loadDevices()}>
-      <Tooltip>
-        <TooltipTrigger
-          render={
-            <DropdownMenuTrigger
-              render={
-                <button
-                  type="button"
-                  aria-label={t('actions.addDevice')}
-                  className="kp-tool app-region-no-drag"
-                />
-              }
-            />
-          }
-        >
-          <PaneIcon icon={PlusSignIcon} />
-        </TooltipTrigger>
-        <TooltipContent>{t('actions.addDevice')}</TooltipContent>
-      </Tooltip>
-      <DropdownMenuContent align="start" className="min-w-72">
-        <DropdownMenuGroup>
-          <DropdownMenuLabel>
-            {t('add.title', { open, limit: SESSION_DEVICE_LIMIT })}
-          </DropdownMenuLabel>
-        </DropdownMenuGroup>
-        {groups.length === 0 && (
-          <div className="px-2 py-1.5 text-hint text-secondary">{t('picker.none')}</div>
-        )}
-        {groups.map((group, index) => (
-          <DropdownMenuGroup key={group.title}>
-            {index > 0 && <DropdownMenuSeparator />}
-            <DropdownMenuLabel>{group.title}</DropdownMenuLabel>
-            {group.devices.map((device) => (
-              <DropdownMenuItem
-                key={device.id}
-                disabled={full}
-                onClick={() => void rowOf(device).act(sessionId)}
-              >
-                <DeviceRow device={device} />
-              </DropdownMenuItem>
-            ))}
-          </DropdownMenuGroup>
-        ))}
-      </DropdownMenuContent>
-    </DropdownMenu>
-  )
-}
-
 function MoreMenu({
   device,
   sessionId,
