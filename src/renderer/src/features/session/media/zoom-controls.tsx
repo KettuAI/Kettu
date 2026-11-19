@@ -1,9 +1,10 @@
 import { MinusSignIcon, PlusSignIcon } from '@hugeicons/core-free-icons'
-import { HugeiconsIcon } from '@hugeicons/react'
 import { useTranslation } from 'react-i18next'
 import { Button } from '@renderer/components/ui/button'
+import { Kbd } from '@renderer/components/ui/kbd'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
-import { PanelButton } from '@renderer/features/shell/panel-button'
+import { PaneIcon, PanelButton } from '@renderer/features/shell/panel-button'
+import { formatShortcut } from '@renderer/lib/platform'
 import { cn } from '@renderer/lib/utils'
 import type { PictureControls } from './picture-zoom'
 import { MAX_ZOOM } from './zoom'
@@ -15,8 +16,8 @@ export interface ZoomLevel {
 }
 
 /**
- * Zoom out, the level, which toggles the fit and 100%, and zoom in. Both the viewer's bar and the
- * Files pane's header show it, the pane at its smaller size.
+ * Zoom out, the level, which toggles the fit and 100%, and zoom in. Both the viewer and the Files
+ * pane's header show it, the pane at its smaller size.
  */
 export function ZoomControls({
   zoom,
@@ -31,17 +32,21 @@ export function ZoomControls({
   const fitted = zoom.z <= zoom.fit
   const viewer = size === 'sm'
   // The pane's header draws its icons at 14 px, as Save and the rest of it does.
-  const icon = viewer ? undefined : 'size-3.5'
+  const icon = viewer ? 16 : 14
+  const percent = Math.round(zoom.z * 100)
+  // A picture that fits at its own size has nothing to switch between.
+  const switches = !fitted || zoom.fit < 1
+  const target = fitted ? t('viewer.actualSize') : t('viewer.fit')
   return (
     <>
       <PanelButton
         size={viewer ? 'icon-sm' : 'icon-xs'}
         label={t('viewer.zoomOut')}
         shortcut="−"
-        disabled={!controls || fitted}
+        unavailable={!controls || fitted}
         onClick={() => controls?.zoomBy(-1)}
       >
-        <HugeiconsIcon icon={MinusSignIcon} strokeWidth={1.9} aria-hidden className={icon} />
+        <PaneIcon icon={MinusSignIcon} size={icon} />
       </PanelButton>
       <Tooltip>
         <TooltipTrigger
@@ -49,26 +54,31 @@ export function ZoomControls({
             <Button
               variant="quiet"
               size={viewer ? 'sm' : 'xs'}
+              aria-label={t('viewer.zoomLevel', { percent, action: target })}
+              aria-disabled={!controls || !switches || undefined}
               onClick={() => controls?.toggle()}
               className={cn(
-                'tabular app-region-no-drag',
-                viewer ? 'min-w-12 px-1.5 text-meta' : 'min-w-10 px-1.5 text-xs',
+                'tabular app-region-no-drag active:bg-accent aria-disabled:pointer-events-none',
+                viewer ? 'min-w-13 px-1.5 text-meta text-foreground' : 'min-w-10 px-1.5 text-xs',
               )}
             />
           }
         >
-          {Math.round(zoom.z * 100)}%
+          {percent}%
         </TooltipTrigger>
-        <TooltipContent>{fitted ? t('viewer.actualSize') : t('viewer.fit')}</TooltipContent>
+        <TooltipContent>
+          {target}
+          <Kbd>{formatShortcut(fitted ? 'Shift+0' : 'Shift+1')}</Kbd>
+        </TooltipContent>
       </Tooltip>
       <PanelButton
         size={viewer ? 'icon-sm' : 'icon-xs'}
         label={t('viewer.zoomIn')}
         shortcut="+"
-        disabled={!controls || zoom.z >= MAX_ZOOM}
+        unavailable={!controls || zoom.z >= MAX_ZOOM}
         onClick={() => controls?.zoomBy(1)}
       >
-        <HugeiconsIcon icon={PlusSignIcon} strokeWidth={1.9} aria-hidden className={icon} />
+        <PaneIcon icon={PlusSignIcon} size={icon} />
       </PanelButton>
     </>
   )

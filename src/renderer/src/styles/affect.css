@@ -1068,7 +1068,13 @@ li[data-row-exit='dust'] > * {
 .kp-tool--stop:hover {
   background: var(--destructive-tint-hover);
 }
-.kp-tool:disabled {
+/* The media viewer's tools answer a press too. */
+[data-media-viewer] .kp-tool:active {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+.kp-tool:disabled,
+.kp-tool[aria-disabled='true'] {
   opacity: 0.4;
   pointer-events: none;
 }
