@@ -1411,7 +1411,7 @@ li[data-row-exit='dust'] > * {
     transform var(--stab-out) var(--ease-out-quint),
     filter var(--stab-out) var(--ease-out-quint);
 }
-.kp-stab:is(:hover, :focus-within):not([data-editing]) .kp-stab__x {
+.kp-stab:is(:hover, :has(:focus-visible)):not([data-editing]) .kp-stab__x {
   opacity: 1;
   visibility: visible;
   transform: none;
@@ -1422,7 +1422,7 @@ li[data-row-exit='dust'] > * {
     background-color 120ms ease,
     color 120ms ease;
 }
-.kp-stab:is(:hover, :focus-within):not([data-editing]) .kp-stab__icon > :first-child {
+.kp-stab:is(:hover, :has(:focus-visible)):not([data-editing]) .kp-stab__icon > :first-child {
   opacity: 0;
   transform: scale(0.5);
   filter: blur(2px);
@@ -1455,7 +1455,7 @@ li[data-row-exit='dust'] > * {
 /* The selected tab keeps its name, cut short only when even the icons leave it too little room. */
 .kp-stabs[data-tight]:not([data-measuring]) .kp-stab[data-selected] {
   flex: 0 1 auto;
-  min-width: 84px;
+  min-width: 72px;
 }
 .kp-stabs[data-tight] .kp-stab:not([data-selected]):hover .kp-stab__icon > :first-child {
   opacity: 1;

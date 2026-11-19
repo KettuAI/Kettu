@@ -90,7 +90,7 @@ import { PaneEmpty, PaneHead, PaneIcon, PaneSheet, PaneSpinner } from './panel-b
 // The row of tabs a session's terminals, browser pages and devices share in the side panel.
 
 /** Below this width the tabs not selected keep only their icon. */
-const MIN_TAB_PX = 84
+const MIN_TAB_PX = 72
 /** Only a start that takes a while shows its Starting tab, so a quick one shows its tab at once. */
 const SLOW_START_MS = 400
 
@@ -359,16 +359,17 @@ function useRowFit(signature: string): {
       const widths = tabs.map((tab) => tab.offsetWidth)
       delete row.dataset.measuring
       const selected = tabs.findIndex((tab) => tab.dataset.selected !== undefined)
-      let others = 0
-      for (const child of head.children) {
-        if (child !== row) others += (child as HTMLElement).offsetWidth
-      }
+      // The count shows only while icons alone fit, so it must not keep the row that way.
+      const others = [...head.children].filter(
+        (child) => child !== row && !child.classList.contains('kp-tabcount'),
+      )
+      const othersWidth = others.reduce((sum, child) => sum + (child as HTMLElement).offsetWidth, 0)
       const headGap = parseFloat(getComputedStyle(head).columnGap) || 0
       const rowGap = parseFloat(getComputedStyle(row).columnGap) || 0
       const room =
         head.clientWidth -
-        others -
-        headGap * (head.children.length - 1) -
+        othersWidth -
+        headGap * others.length -
         rowGap * Math.max(0, tabs.length - 1) -
         (selected >= 0 ? widths[selected]! : 0)
       // Long names give way first: the others share what is left, each up to its own width.
