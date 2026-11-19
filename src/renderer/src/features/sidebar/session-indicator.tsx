@@ -1,4 +1,5 @@
 import { Alert02Icon } from '@hugeicons/core-free-icons'
+import type { ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { KnownExpiry } from '@shared/prompt-cache'
 import { TurnDots } from '@renderer/features/session/turn-dots'
@@ -69,6 +70,18 @@ export function SessionIndicator({
       )}
     >
       {mark}
+    </span>
+  )
+}
+
+/**
+ * The end of a row with tools: its host and status, in the room the row always keeps for the
+ * tools, so they show in its place without moving what comes before.
+ */
+export function RowEnd({ children }: { children: ReactNode }) {
+  return (
+    <span className="kettu-row-end ml-auto flex shrink-0 items-center justify-end gap-2 transition-opacity duration-(--duration-fast)">
+      {children}
     </span>
   )
 }
