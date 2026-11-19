@@ -731,7 +731,7 @@ export class OpenCodeConnection implements AgentConnection {
       if (this.refreshing.has(cwd)) continue
       const timer = setTimeout(() => {
         this.refreshing.delete(cwd)
-        void this.republish(cwd)
+        this.detached(this.republish(cwd))
       }, REFRESH_MS)
       timer.unref?.()
       this.refreshing.set(cwd, timer)
@@ -1458,10 +1458,10 @@ export class OpenCodeConnection implements AgentConnection {
         this.api.request<{ data?: FormInfo[] }>('GET', `${route}/form`),
       ])
       for (const request of permissions?.data ?? []) {
-        if (!session.requests.has(request.id)) void this.ask(session, request)
+        if (!session.requests.has(request.id)) this.detached(this.ask(session, request))
       }
       for (const form of forms?.data ?? []) {
-        if (!session.requests.has(form.id)) void this.fill(session, form)
+        if (!session.requests.has(form.id)) this.detached(this.fill(session, form))
       }
     } catch (error) {
       if (!this.done) {
@@ -1547,13 +1547,13 @@ export class OpenCodeConnection implements AgentConnection {
         this.progress(session, data<'session.tool.progress'>())
         break
       case 'permission.asked':
-        void this.ask(session, data<'permission.asked'>())
+        this.detached(this.ask(session, data<'permission.asked'>()))
         return
       case 'permission.replied':
         this.answered(session, data<'permission.replied'>().requestID)
         return
       case 'form.created':
-        void this.fill(session, data<'form.created'>().form)
+        this.detached(this.fill(session, data<'form.created'>().form))
         return
       case 'form.replied':
       case 'form.cancelled':
@@ -1894,6 +1894,13 @@ export class OpenCodeConnection implements AgentConnection {
   }
 
   // Helpers.
+
+  /** Lets work nobody waits for fail quietly: once the connection closed, its requests all do. */
+  private detached(work: Promise<unknown>): void {
+    work.catch((error: unknown) => {
+      if (!this.done) this.hooks.log('warn', (error as Error)?.message ?? String(error))
+    })
+  }
 
   /** The open session `sessionId` names; one that only lists options takes no turn. */
   private require(sessionId: string, listed = false): Session {
