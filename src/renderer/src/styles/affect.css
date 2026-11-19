@@ -735,6 +735,12 @@ li[data-row-exit='dust'] > * {
     0 0 0 1.5px var(--focus-ring-color),
     var(--elevation-card);
 }
+.kettu-plan-pop .kettu-plan-card[data-sortable] {
+  cursor: grab;
+}
+.kettu-plan-pop .kettu-plan-card[data-dragging] {
+  cursor: grabbing;
+}
 .kettu-plan-pop__row {
   display: flex;
   align-items: center;

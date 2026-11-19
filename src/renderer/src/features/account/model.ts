@@ -210,12 +210,20 @@ export function currentCard(cards: readonly PlanCard[], key: string): PlanCard |
 }
 
 /**
- * The cards the popover lists: the current account's first, then the others tightest first, so the
- * one that needs attention is never far down.
+ * Saved cards keep their order. Unplaced cards follow, with the current account first and the
+ * rest ordered by their tightest window.
  */
-export function popoverCards(cards: readonly PlanCard[], current: PlanCard | null): PlanCard[] {
+export function popoverCards(
+  cards: readonly PlanCard[],
+  current: PlanCard | null,
+  order: readonly string[],
+): PlanCard[] {
   const others = cards.filter((card) => card !== current).sort((a, b) => cardRank(b) - cardRank(a))
-  return current ? [current, ...others] : others
+  const ranked = current ? [current, ...others] : others
+  const positions = new Map(order.map((key, index) => [key, index]))
+  return ranked.sort(
+    (a, b) => (positions.get(a.key) ?? order.length) - (positions.get(b.key) ?? order.length),
+  )
 }
 
 /**

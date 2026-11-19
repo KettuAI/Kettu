@@ -1,4 +1,6 @@
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
+import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent } from 'react'
+import { DragDropProvider, PointerSensor, type DragEndEvent } from '@dnd-kit/react'
+import { isSortable } from '@dnd-kit/react/sortable'
 import { Analytics01Icon, ArrowRight01Icon } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
 import type { AgentId } from '@shared/thread'
@@ -17,6 +19,7 @@ import {
   ownKey,
   type AccountAgent,
 } from '@renderer/lib/plan-readings'
+import { readJson, writeJson } from '@renderer/lib/storage'
 import { useNow } from '@renderer/lib/use-now'
 import { agentsOn, planReadingsOf, useAgentsStore, usePlanReadings } from '@renderer/stores/agents'
 import { hostOfSession, useSessionsStore } from '@renderer/stores/sessions'
@@ -29,7 +32,7 @@ import {
   useWindowHost,
 } from '@renderer/stores/window-host'
 import { closeAccountMenu } from './menu-close'
-import { currentCard, planCards, popoverCards, tightestWindow } from './model'
+import { currentCard, planCards, popoverCards, tightestWindow, type PlanCard } from './model'
 import { PlanLimitCard } from './plan-limit-card'
 
 /**
@@ -178,13 +181,25 @@ export function PlanRing() {
 
 /** The popover's buttons that arrow keys step through: the cards and Open Usage. */
 const NAVIGABLE = 'button:not([role="radio"])'
+const PLAN_CARD_ORDER = 'plan-card-order'
+const PLAN_CARD_SENSORS = [PointerSensor]
 
-/** Every account's plan cards on an inset panel, the current one first, then Open Usage. */
+/** Every account's plan cards on an inset panel, then Open Usage. */
 function PlanPopover({ currentKey, close }: { currentKey: string | null; close: () => void }) {
   const { t } = useTranslation('sidebar')
   const cards = planCards(useAccountsWithLimits(), useNow())
   const current = cards.find((card) => card.key === currentKey) ?? null
-  const shown = popoverCards(cards, current)
+  const [order, setOrder] = useState(() => {
+    const stored = readJson<unknown>(PLAN_CARD_ORDER, [])
+    return Array.isArray(stored)
+      ? stored.filter((key): key is string => typeof key === 'string')
+      : []
+  })
+  const [draggedCards, setDraggedCards] = useState<PlanCard[] | null>(null)
+  const shown = draggedCards ?? popoverCards(cards, current, order)
+  const sortable = shown.length > 1
+  const sortHint = useId()
+  const [announcement, setAnnouncement] = useState('')
   const windowHost = useWindowHost()
   const hostName = useHostName()
   const shownKey = windowHost.kind === 'all' ? '*' : (windowHost.hostId ?? '')
@@ -198,13 +213,43 @@ function PlanPopover({ currentKey, close }: { currentKey: string | null; close: 
     close()
     openUsage()
   }
+  const moveCard = (from: number, to: number) => {
+    if (from === to || !shown[from] || !shown[to]) return
+    const visible = shown.map((card) => card.key)
+    const reordered = [...visible]
+    const [moved] = reordered.splice(from, 1)
+    reordered.splice(to, 0, moved)
+    const visibleKeys = new Set(visible)
+    const nextVisible = reordered.values()
+    // Reordering in a host's view keeps the slots of accounts on other hosts.
+    const next = [...new Set([...order, ...visible])].map((key) =>
+      visibleKeys.has(key) ? (nextVisible.next().value ?? key) : key,
+    )
+    setOrder(next)
+    writeJson(PLAN_CARD_ORDER, next)
+    setAnnouncement(t('account.cardMoved', { name: shown[from].name, position: to + 1 }))
+  }
+  const finishDrag = (event: DragEndEvent) => {
+    setDraggedCards(null)
+    const source = event.operation.source
+    if (!event.canceled && isSortable(source)) moveCard(source.initialIndex, source.index)
+  }
   // Arrow keys move through the cards and the rows under them, in order; the Used / Left switch
   // keeps its own arrow keys.
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     const step = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 }[event.key]
-    if (!step || (event.target as HTMLElement).closest('[role="radiogroup"]')) return
+    if (!step || draggedCards || (event.target as HTMLElement).closest('[role="radiogroup"]'))
+      return
     const buttons = [...(ref.current?.querySelectorAll<HTMLElement>(NAVIGABLE) ?? [])]
     const at = buttons.indexOf(document.activeElement as HTMLElement)
+    if (event.altKey) {
+      if (!sortable || at < 0 || at >= shown.length) return
+      event.preventDefault()
+      moveCard(at, at + step)
+      const button = buttons[at]
+      requestAnimationFrame(() => button.focus())
+      return
+    }
     const next = buttons[(at + step + buttons.length) % buttons.length]
     if (!next) return
     event.preventDefault()
@@ -226,12 +271,33 @@ function PlanPopover({ currentKey, close }: { currentKey: string | null; close: 
         </span>
         <LimitViewSwitch />
       </div>
+      {sortable && (
+        <span id={sortHint} className="sr-only">
+          {t('account.reorderCards')}
+        </span>
+      )}
+      <span role="status" className="sr-only">
+        {announcement}
+      </span>
       <div className="kettu-plan-pop__well scroll-fade-y">
-        <div className="grid grid-flow-dense grid-cols-2 gap-1">
-          {shown.map((card) => (
-            <PlanLimitCard key={card.key} card={card} onOpen={open} />
-          ))}
-        </div>
+        <DragDropProvider
+          sensors={PLAN_CARD_SENSORS}
+          onDragStart={() => setDraggedCards(shown)}
+          onDragEnd={finishDrag}
+        >
+          <div className="grid grid-cols-2 gap-1">
+            {shown.map((card, index) => (
+              <PlanLimitCard
+                key={card.key}
+                card={card}
+                index={index}
+                sortHint={sortable ? sortHint : undefined}
+                dragging={draggedCards !== null}
+                onOpen={open}
+              />
+            ))}
+          </div>
+        </DragDropProvider>
       </div>
       <button type="button" onClick={open} className="kettu-plan-pop__row">
         <Icon icon={Analytics01Icon} size={16} />

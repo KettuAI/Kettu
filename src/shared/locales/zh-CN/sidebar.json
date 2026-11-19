@@ -308,6 +308,8 @@
     "ringLeft": "{{account}} · {{window}} 剩余 {{percent}}%",
     "ringNone": "{{agent}} 不报告套餐限额",
     "ringButton": "套餐限额：{{limit}}",
+    "reorderCards": "拖动卡片调整顺序，也可以按住 Alt 键并按方向键。",
+    "cardMoved": "已将 {{name}} 移到第 {{position}} 位。",
     "openUsage": "打开用量",
     "theme": "主题",
     "themes": {
