@@ -266,6 +266,7 @@ export function ContextButton({
   holding,
   account,
   model,
+  subagent,
 }: {
   sessionId: string
   agentId: AgentId
@@ -288,6 +289,8 @@ export function ContextButton({
   account: AgentAccount | null
   /** The model's name, for the card's chip. */
   model: string | null
+  /** A sub-agent's context: its agent counts the total but breaks down only the parent's. */
+  subagent?: boolean
 }) {
   const { t } = useTranslation('composer')
   const limitView = useLimitView()
@@ -388,6 +391,7 @@ export function ContextButton({
               report={read}
               managed={pushed !== undefined && direct}
               model={model}
+              subagent={subagent}
             />
           )}
           {shown && estimates && (
@@ -488,6 +492,7 @@ function ContextPart({
   report,
   managed,
   model,
+  subagent,
 }: {
   sessionId: string
   agentId: AgentId
@@ -498,6 +503,7 @@ function ContextPart({
   report: ContextReport | undefined
   managed: boolean
   model: string | null
+  subagent?: boolean
 }) {
   const { t } = useTranslation('composer')
   const key = `${usage.used}/${usage.size}`
@@ -578,6 +584,9 @@ function ContextPart({
         <p className="kettu-ctx__note">
           {t(report?.error ? 'usage.breakdown.refreshFailed' : 'usage.breakdown.stale')}
         </p>
+      )}
+      {subagent && view.kind === 'none' && (
+        <p className="kettu-ctx__note">{t('usage.breakdown.subagent')}</p>
       )}
       {view.kind === 'loading' && <BreakdownRows label={t('usage.breakdown.loading')} />}
       {view.kind === 'error' && (

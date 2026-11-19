@@ -3,8 +3,10 @@ import { AiChat02Icon, ArrowLeft02Icon, StopIcon } from '@hugeicons/core-free-ic
 import { HugeiconsIcon } from '@hugeicons/react'
 import { Trans, useTranslation } from 'react-i18next'
 import type { SessionSummary } from '@shared/agent-host'
-import type { SessionView } from '@shared/thread'
+import { canonicalClaudeModel } from '@shared/agents'
+import type { ConfigOption, SessionView } from '@shared/thread'
 import { backTo } from '@renderer/app/history'
+import { AgentMark } from '@renderer/components/agents/agent-mark'
 import { Button } from '@renderer/components/ui/button'
 import { Spinner } from '@renderer/components/ui/spinner'
 import { errorMessage, host } from '@renderer/lib/host'
@@ -12,8 +14,18 @@ import { agentName } from '@renderer/stores/agents'
 import { hostOfSession, sessionTitle, useSessionsStore } from '@renderer/stores/sessions'
 import { openSession } from '@renderer/stores/view'
 import { TrayStyles } from './composer/affect-styles'
+import { shownChoice } from './composer/model-list'
 import { ContextButton } from './composer/usage'
+import { useSessionView } from './use-thread'
 import { AgentWorktreeLine } from './worktree/worktree-tag'
+
+/** The name the parent's model menu gives the model id a child reported, else the id itself. */
+function modelName(config: ConfigOption[] | undefined, id: string): string {
+  const choices = config?.find((o) => o.category === 'model')?.choices ?? []
+  const key = canonicalClaudeModel(id)
+  const choice = choices.find((c) => c.modelId && canonicalClaudeModel(c.modelId) === key)
+  return (choice && shownChoice(choices, choice.value)?.name) ?? id
+}
 
 /**
  * In place of the composer: the agent drives a sub-agent, so you can only stop it or go back. Its
@@ -28,6 +40,9 @@ export function SubagentBar({
 }) {
   const { t } = useTranslation('session')
   const parent = useSessionsStore((s) => (summary.parentId ? s.byId[summary.parentId] : undefined))
+  const parentConfig = useSessionView(summary.parentId ?? '')?.config
+  const ownModel = session?.subagent?.model
+  const model = ownModel ? modelName(parentConfig, ownModel) : null
   const [stopping, setStopping] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const running = summary.status === 'running' || summary.status === 'awaiting_permission'
@@ -128,23 +143,32 @@ export function SubagentBar({
             </p>
           )}
         </div>
-        {usage && (
+        {(usage || model) && (
           <span className="kettu-tray__group kettu-tray__group--end pt-1">
             <TrayStyles />
-            <ContextButton
-              sessionId={summary.id}
-              agentId={summary.agentId}
-              idle={!running}
-              closed={summary.status === 'closed'}
-              reports={false}
-              direct={false}
-              live={false}
-              usage={usage}
-              limits={[]}
-              holding={[]}
-              account={null}
-              model={null}
-            />
+            {model && (
+              <span className="ui-as-tray-link" data-static="" title={ownModel}>
+                <AgentMark agent={summary.agentId} size={13} />
+                <span className="kettu-tray-link__text">{model}</span>
+              </span>
+            )}
+            {usage && (
+              <ContextButton
+                sessionId={summary.id}
+                agentId={summary.agentId}
+                idle={!running}
+                closed={summary.status === 'closed'}
+                reports={false}
+                direct={false}
+                live={false}
+                usage={usage}
+                limits={[]}
+                holding={[]}
+                account={null}
+                model={model}
+                subagent
+              />
+            )}
           </span>
         )}
       </div>

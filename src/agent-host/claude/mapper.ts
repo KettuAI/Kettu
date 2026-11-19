@@ -507,6 +507,10 @@ export class ClaudeMapper {
         deliveries.push({ sessionId, map: (ctx) => this.toolUse(ctx, block, sessionId, true) })
       }
     }
+    const ownModel = message.message.model
+    if (sessionId !== this.sessionId && ownModel && ownModel !== SYNTHETIC_MODEL) {
+      deliveries.push({ sessionId, map: (ctx) => subagentModel(ctx, ownModel) })
+    }
     const usage = message.message.usage
     if (!replaying && usage) {
       // A subagent's own requests fill its own context, in the window of the model it runs on.
@@ -1587,6 +1591,16 @@ function planning(ctx: MapperContext): boolean {
 
 /** The context window Claude Code's models have unless it says otherwise. */
 export const DEFAULT_CONTEXT_WINDOW = 200_000
+
+/** Names the model a subagent's request ran on, on the subagent's own session. */
+function subagentModel(ctx: MapperContext, model: string): MapperOutput {
+  const out = output()
+  const info = ctx.thread.session.subagent
+  if (info && info.model !== model) {
+    out.patches.push({ op: 'session.update', changes: { subagent: { ...info, model } } })
+  }
+  return out
+}
 
 /** The tokens a request read: its input with what it read from and wrote to the cache. */
 export function contextTokens(usage: {
