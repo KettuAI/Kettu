@@ -1,0 +1,5 @@
+{"type": "session.created", "data": {"sessionID": "ses_e0b784d83ffeo7gtDG5s7V0vkH", "slug": "jolly-nebula", "version": "2.3.2", "projectID": "global", "location": {"directory": "/work/app"}, "subpath": "../../../../work/app", "model": {"id": "does-not-exist", "providerID": "deepseek"}}}
+{"type": "session.inbox.enqueued", "data": {"inboxID": "msg_1f487b38a0010GPxpX5Mou7MtD", "sessionID": "ses_e0b784d83ffeo7gtDG5s7V0vkH", "item": {"type": "user", "payload": {"text": "hi"}, "delivery": "steer"}}}
+{"type": "session.execution.started", "data": {"sessionID": "ses_e0b784d83ffeo7gtDG5s7V0vkH"}}
+{"type": "session.inbox.delivered", "data": {"sessionID": "ses_e0b784d83ffeo7gtDG5s7V0vkH", "inboxID": "msg_1f487b38a0010GPxpX5Mou7MtD"}}
+{"type": "session.execution.failed", "data": {"sessionID": "ses_e0b784d83ffeo7gtDG5s7V0vkH", "error": {"type": "provider.no-route", "message": "Model unavailable: deepseek/does-not-exist"}}}

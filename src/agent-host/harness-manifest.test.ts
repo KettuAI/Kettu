@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  heldBack,
   isBroken,
   MANIFEST_KEYS,
   parseManifest,
@@ -112,5 +113,21 @@ describe('the rule for this version of Kettu', () => {
     expect(usable(sdk, '0.3.320')).toBe(false)
     expect(usable(sdk, '0.3.326')).toBe(true)
     expect(usable(null, '0.3.320')).toBe(true)
+  })
+
+  it('holds versions back from a harness’s preferred interface, and reads no other range as one', () => {
+    const manifest = verified(
+      manifestDocument(43, {
+        opencode: [{ kettu: '>=0.1.13', fallback: '>=2.3.5 <2.3.8' }],
+        pi: [{ kettu: '*', fallback: 'not a range' }],
+      }),
+    )
+    const rule = ruleFor(manifest, 'opencode', '0.1.13')
+    expect(heldBack(rule, '2.3.6')).toBe(true)
+    expect(heldBack(rule, '2.3.8')).toBe(false)
+    expect(heldBack(ruleFor(manifest, 'opencode', '0.1.12'), '2.3.6')).toBe(false)
+    expect(heldBack(null, '2.3.6')).toBe(false)
+    // A rule that does not read drops its harness whole, as for any other field.
+    expect(manifest.harnesses.has('pi')).toBe(false)
   })
 })

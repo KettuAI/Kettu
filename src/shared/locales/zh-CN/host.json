@@ -688,6 +688,25 @@
       "max": "最高"
     }
   },
+  "opencode": {
+    "option": {
+      "model": "模型",
+      "effort": "推理强度",
+      "mode": "模式",
+      "defaultEffort": "默认"
+    },
+    "tool": {
+      "skill": "加载技能 '{{name}}'",
+      "script": "运行脚本",
+      "call": "工具调用"
+    },
+    "notice": {
+      "retry": "模型请求失败，正在重试（第 {{attempt}} 次）"
+    },
+    "command": {
+      "compact": "压缩会话"
+    }
+  },
   "pi": {
     "tool": {
       "toolSearch": "搜索工具 '{{query}}'",

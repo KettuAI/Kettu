@@ -141,8 +141,8 @@ import {
   detectAgent,
   displayCommand,
   EXTENSIONS_FOLDER,
-  protocolOf,
   type AgentDefinition,
+  type AgentProtocol,
   type CommandWords,
   type DetectContext,
   type Detection,
@@ -159,7 +159,7 @@ import {
 } from './connection'
 import type { Diagnostics } from './diagnostics'
 import type { AgentDriver, AgentTransport } from './driver'
-import { driverOf, type DriverOverrides } from './drivers'
+import { driverOf, preferredProtocol, protocolFor, type DriverOverrides } from './drivers'
 import { HostError, invalidParams } from './errors'
 import { getEnv, isExecutableFile, type Env } from './find-command'
 import {
@@ -190,6 +190,8 @@ import { HostedRun, type HostedRunHooks } from './hosted-run'
 import { t } from './i18n'
 import { CliVersions, type CliProbe, type CliVersion } from './installed-cli'
 import { OpenCodeClient } from './opencode/client'
+import { OpenCodeConnection } from './opencode/connection'
+import type { OpenCodeSessions } from './model-requests/opencode'
 import { readProviderUsage, type ProviderUsage } from './opencode/provider-usage'
 import { claudeJsonPath, readClaudeProfile } from './plan-tier'
 import { QUIT_REASON, type ToolOptions } from './process-tree'
@@ -464,6 +466,10 @@ class Slot {
   stopping: Promise<void> | null = null
   /** What the running launch ran, which is the command shown while it runs. */
   launchSpec: LaunchSpec | null = null
+  /** The harness's preferred interface, while the launch runs on it instead of its protocol. */
+  protocol: AgentProtocol | null = null
+  /** The version of the program whose preferred interface did not start, which runs without it. */
+  preferredFailed: string | null = null
   /** The configuration folder the running launch got, for an agent whose folder can be chosen. */
   launchConfig: RunningConfig | null = null
   intentionalStop = false
@@ -1074,9 +1080,16 @@ export class AgentManager {
   private async start(slot: Slot, spec: LaunchSpec | null): Promise<AgentRuntime> {
     const run = (async () => {
       const chosen = spec ?? (await this.installPackage(slot))
+      slot.protocol = preferredProtocol(
+        slot.def,
+        this.programVersion(slot.h),
+        this.programRule(slot.h),
+        slot.preferredFailed,
+      )
       try {
         return await this.launch(slot, chosen)
       } catch (error) {
+        if (this.leavePreferred(slot, error)) return this.launch(slot, chosen)
         const previous = await this.fallBack(slot, chosen, error)
         if (!previous) throw error
         return this.launch(slot, previous)
@@ -1123,6 +1136,31 @@ export class AgentManager {
     } finally {
       slot.starting = null
     }
+  }
+
+  /** The version of the program a start runs, as detection read it; null while it has not. */
+  private programVersion(h: Harness): string | null {
+    const detection = h.detection
+    if (detection?.state !== 'available') return null
+    return detection.cli?.version ?? h.binaryVersion
+  }
+
+  /**
+   * When a start over the harness's preferred interface fails, the agent starts over its
+   * definition's protocol instead, and keeps to it while its program stays that version. False
+   * when the start that failed already ran on the definition's protocol.
+   */
+  private leavePreferred(slot: Slot, error: unknown): boolean {
+    if (slot.protocol === null) return false
+    if (error instanceof InstallCancelled || this.stopped || !this.has(slot.id)) return false
+    slot.preferredFailed = this.programVersion(slot.h)
+    slot.protocol = null
+    this.deps.diagnostics.event(
+      slot.id,
+      'fall back',
+      `its own interface did not start: ${(error as Error).message}`,
+    )
+    return true
   }
 
   /**
@@ -1268,7 +1306,7 @@ export class AgentManager {
   }
 
   private driver(slot: Slot): AgentDriver {
-    return driverOf(slot.def, this.deps)
+    return driverOf(slot.def, this.deps, slot.protocol)
   }
 
   /**
@@ -3180,6 +3218,7 @@ export class AgentManager {
       slot.failures = []
       slot.state = 'available'
       slot.detail = null
+      slot.preferredFailed = null
       await this.detect(slot.h)
     }
     if (this.hooks.liveSessions(agentId) > 0 && !slot.runtime) await this.ensureReady(agentId)
@@ -3347,7 +3386,7 @@ export class AgentManager {
   private connectionHooks(slot: Slot): ConnectionHooks {
     const { diagnostics, acpMessages } = this.deps
     const agentId = slot.id
-    const acp = (this.deps.protocols?.[agentId] ?? protocolOf(slot.def)) === 'acp'
+    const acp = protocolFor(slot.def, this.deps, slot.protocol) === 'acp'
     return {
       traffic: (direction, message) => {
         diagnostics.traffic(agentId, direction, message)
@@ -4293,10 +4332,17 @@ export class AgentManager {
     if (slot.signIn === 'signed-in') this.hooks.signedIn(slot.id)
   }
 
-  /** OpenCode's own client for an OpenCode agent, which reads its sessions; null for another. */
-  openCode(agentId: AgentId): OpenCodeClient | null {
+  /**
+   * What reads an OpenCode agent's stored sessions; null for another agent. The server that runs
+   * its sessions reads them while it runs, else OpenCode's own client does.
+   */
+  openCode(agentId: AgentId): OpenCodeSessions | null {
     const slot = this.slots.get(agentId)
-    return slot && harnessOf(agentId) === 'opencode' ? this.openCodeClient(slot) : null
+    if (!slot || harnessOf(agentId) !== 'opencode') return null
+    const connection = slot.stopping ? null : slot.runtime?.connection
+    return connection instanceof OpenCodeConnection && !connection.isClosed
+      ? connection.stored
+      : this.openCodeClient(slot)
   }
 
   private openCodeClient(slot: Slot): OpenCodeClient {
