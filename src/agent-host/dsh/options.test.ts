@@ -2,7 +2,15 @@
 // model each stands for when its process starts.
 
 import { describe, expect, it } from 'vitest'
-import { CONFIG, choiceOf, configOptions, modelChoices, startChoice } from './options'
+import type { ListedModel } from './listing'
+import {
+  CONFIG,
+  choiceOf,
+  configOptions,
+  listedModelChoices,
+  modelChoices,
+  startChoice,
+} from './options'
 import { NO_ROUTES, type Routes } from './routes'
 
 const GATEWAY: Routes = {
@@ -110,6 +118,115 @@ describe('dsh models', () => {
     expect(choiceOf(choices, 'deepseek-account', 'deepseek-v4-pro')?.value).toBe('deepseek-v4-pro')
     expect(choiceOf(choices, 'my-gateway', 'auto/fast')?.value).toBe('my-gateway/auto/fast')
     expect(choiceOf(choices, 'other', 'auto/fast')).toBeUndefined()
+  })
+})
+
+describe('dsh listed models', () => {
+  const DEEPSEEK = [
+    { id: 'off', name: 'Off' },
+    { id: 'low', name: 'Low' },
+    { id: 'high', name: 'High' },
+    { id: 'max', name: 'Max' },
+  ]
+  const LISTED: ListedModel[] = [
+    {
+      provider: 'deepseek-official',
+      group: 'DeepSeek',
+      model: 'deepseek-v5',
+      name: 'DeepSeek-V5',
+      efforts: DEEPSEEK,
+      effort: 'high',
+    },
+    {
+      provider: 'deepseek-account',
+      group: 'DeepSeek Account',
+      model: 'deepseek-flash',
+      name: 'DeepSeek-V4.1-Flash',
+      efforts: DEEPSEEK,
+      effort: 'high',
+    },
+    {
+      provider: 'openai',
+      group: 'openai',
+      model: 'gpt-x',
+      name: 'GPT X',
+      efforts: [
+        { id: '', name: 'Provider default' },
+        { id: 'ultra', name: 'Ultra' },
+      ],
+      effort: '',
+    },
+    {
+      provider: 'my-gateway',
+      group: 'My Gateway',
+      model: 'plain',
+      name: 'plain',
+      efforts: [],
+      effort: null,
+    },
+  ]
+
+  it('offers every model dsh lists under dsh’s names, the signed-in DeepSeek route’s by bare id', () => {
+    expect(
+      listedModelChoices(LISTED, NO_ROUTES, 'deepseek-official').map((choice) => [
+        choice.value,
+        choice.provider,
+        choice.name,
+      ]),
+    ).toEqual([
+      ['deepseek-v5', 'deepseek-official', 'DeepSeek-V5'],
+      [
+        'deepseek-account/deepseek-flash',
+        'deepseek-account',
+        'DeepSeek Account/DeepSeek-V4.1-Flash',
+      ],
+      ['openai/gpt-x', 'openai', 'openai/GPT X'],
+      ['my-gateway/plain', 'my-gateway', 'My Gateway/plain'],
+    ])
+    expect(
+      listedModelChoices(LISTED, NO_ROUTES, 'deepseek-account').map((choice) => choice.value),
+    ).toEqual([
+      'deepseek-official/deepseek-v5',
+      'deepseek-flash',
+      'openai/gpt-x',
+      'my-gateway/plain',
+    ])
+  })
+
+  it('offers each model the levels dsh gives it, the provider’s own as Default', () => {
+    const choices = listedModelChoices(LISTED, NO_ROUTES, 'deepseek-official')
+    expect(choices.map((choice) => [choice.efforts, choice.effort])).toEqual([
+      [['off', 'low', 'high', 'max'], 'high'],
+      [['off', 'low', 'high', 'max'], 'high'],
+      [['default', 'ultra'], 'default'],
+      [[], null],
+    ])
+    const effort = configOptions(
+      { model: 'openai/gpt-x', effort: 'ultra', preset: 'workspace-write', plan: false },
+      choices,
+    ).find((candidate) => candidate.id === CONFIG.effort)
+    expect(effort?.choices).toEqual([
+      { value: 'default', name: 'Default' },
+      { value: 'ultra', name: 'Ultra' },
+    ])
+  })
+
+  it('starts the model chosen in dsh’s own pages on the level saved with it', () => {
+    const saved: Routes = {
+      ...NO_ROUTES,
+      selection: { provider: 'openai', model: 'gpt-x', effort: 'ultra' },
+    }
+    const choices = listedModelChoices(LISTED, saved, 'deepseek-official')
+    expect(startChoice(choices, saved)).toMatchObject({ value: 'openai/gpt-x', effort: 'ultra' })
+  })
+
+  it('reads the route and model an event names as the choice that stands for them', () => {
+    const choices = listedModelChoices(LISTED, NO_ROUTES, 'deepseek-official')
+    expect(choiceOf(choices, 'deepseek-official', 'deepseek-v5')?.value).toBe('deepseek-v5')
+    expect(choiceOf(choices, 'deepseek-account', 'deepseek-flash')?.value).toBe(
+      'deepseek-account/deepseek-flash',
+    )
+    expect(choiceOf(choices, 'deepseek-account', 'deepseek-v5')).toBeUndefined()
   })
 })
 

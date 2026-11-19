@@ -1,8 +1,8 @@
 // DeepSeek Harness through its SDK interface: one `dsh --profile sdk` process per open session,
 // spoken to over newline-delimited JSON-RPC on its stdio. The wire can neither stop a turn nor close
 // a session, and fixes the model at `initialize`, so Stop and a change of model end the session's
-// process, and the next prompt starts another that resumes the session. The models are the ones
-// the user configured in dsh, read from its home, since the wire lists none.
+// process, and the next prompt starts another that resumes the session. The wire lists no models,
+// so the menus show the list dsh gives in its ACP mode, read in a process of its own.
 
 import type { ChildProcess } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
@@ -43,6 +43,7 @@ import {
   choiceOf,
   configOptions,
   isMode,
+  listedModelChoices,
   modeCommands,
   modelChoices,
   startChoice,
@@ -61,12 +62,25 @@ import type {
   SubagentFinishedNotification,
   SubagentStartedNotification,
 } from './protocol'
-import { dshHome, readProvider, type Provider } from './credentials'
+import { credentialsStamp, dshHome, readProvider, type Provider } from './credentials'
+import { listingRows, readListing, type ListedModel } from './listing'
 import { NO_ROUTES, readRoutes, type Routes } from './routes'
 
 const PENDING_EVENTS = 2_000
 const INITIALIZE_TIMEOUT_MS = 60_000
 const SHUTDOWN_WAIT_MS = 5_000
+/** How long dsh's list of its models is kept, as dsh keeps what DeepSeek publishes. */
+const LISTING_MAX_AGE_MS = 600_000
+/** When a listing that gave no answer is tried again. */
+const LISTING_RETRY_MS = 60_000
+/** How long a session waits for a listing that is still being read. */
+const LISTING_WAIT_MS = 20_000
+
+/**
+ * The last list read for each dsh home, which outlives the agent's connection: a listing starts
+ * dsh once more, so an agent that starts again shows the last list while it reads the next.
+ */
+const LISTINGS = new Map<string, { listed: ListedModel[]; home: string; due: number }>()
 const NOT_FOUND = /not found/i
 const AUTH_CODES = new Set([
   'AUTH',
@@ -309,6 +323,15 @@ export class DshConnection implements AgentConnection {
   private signedIn: Provider | null = null
   private models: ModelChoice[] = modelChoices(NO_ROUTES, null)
   private reported: string | null = null
+  /** dsh's own list of its models; null until one was read. */
+  private listed: ListedModel[] | null = null
+  /** What of the home the last listing was started for, and when the next one is due. */
+  private listedFor: string | null = null
+  private listedDue = 0
+  private listing: Promise<void> | null = null
+  /** A listing ended, with a list or without: only then is a home known to offer no model. */
+  private settled = false
+  private readonly stopListing = new AbortController()
 
   constructor(private readonly context: HostedContext) {
     this.closed = new Promise((resolve) => (this.resolveClosed = resolve))
@@ -334,6 +357,7 @@ export class DshConnection implements AgentConnection {
   close(): void {
     if (this.done) return
     this.done = true
+    this.stopListing.abort()
     for (const session of this.sessions.values()) {
       session.turn?.reject(new AgentRequestError('closed', 'DeepSeek Harness stopped'))
       session.turn = null
@@ -401,13 +425,105 @@ export class DshConnection implements AgentConnection {
    */
   private async refresh(): Promise<void> {
     const { env } = this.context
-    const [routes, signedIn] = await Promise.all([readRoutes(dshHome(env)), readProvider(env)])
+    const folder = dshHome(env)
+    const [routes, signedIn, stamp] = await Promise.all([
+      readRoutes(folder),
+      readProvider(env),
+      credentialsStamp(env),
+    ])
     this.routes = routes
     this.signedIn = signedIn
-    this.models = modelChoices(routes, signedIn)
+    // What dsh lists follows its routes and the keys it holds for them.
+    const home = `${signedIn}\n${stamp}\n${routes.yaml}`
+    const kept = LISTINGS.get(folder)
+    if (this.listed === null && kept) {
+      this.listed = kept.listed
+      this.listedFor = kept.home
+      this.listedDue = kept.due
+      this.settled = true
+    }
+    if (!this.listing && !this.done && (home !== this.listedFor || Date.now() >= this.listedDue)) {
+      this.listedFor = home
+      this.listing = this.list(folder, home)
+        .catch(() => {
+          this.settled = true
+          this.listedDue = Date.now() + LISTING_RETRY_MS
+          this.apply()
+        })
+        .finally(() => {
+          this.listing = null
+        })
+    }
+    this.apply()
+  }
+
+  /**
+   * Reads dsh's own list in a process of its own, which gets the home's routes as a session's
+   * process does and keeps its session in a folder of Kettu's.
+   */
+  private async list(folder: string, home: string): Promise<void> {
+    const { spec, env } = this.context
+    const own = await mkdtemp(path.join(os.tmpdir(), 'kettu-dsh-models-'))
+    let listed: ListedModel[] | null
+    try {
+      const file = path.join(own, 'kettu.patch.yml')
+      await writeFile(file, `${this.routes.yaml}${listingRows(own)}`, { mode: 0o600 })
+      listed = await readListing({
+        cwd: own,
+        signal: this.stopListing.signal,
+        spawn: () =>
+          this.context.spawn({
+            command: spec.command,
+            args: [...spec.args, '--profile', 'acp', '--patch', file],
+            cwd: own,
+            env: { ...env, ...spec.env },
+          }),
+      }).catch(() => null)
+    } finally {
+      await rm(own, { recursive: true, force: true }).catch(() => {})
+    }
+    this.settled = true
+    this.listedDue = Date.now() + (listed ? LISTING_MAX_AGE_MS : LISTING_RETRY_MS)
+    if (this.done) return
+    if (listed) {
+      this.listed = listed
+      LISTINGS.set(folder, { listed, home, due: this.listedDue })
+    }
+    const before = JSON.stringify(this.models)
+    this.apply()
+    if (JSON.stringify(this.models) === before) return
+    for (const session of this.sessions.values()) {
+      if (this.targets.has(session.id)) this.config(session)
+    }
+  }
+
+  /** Waits a while for a listing that is being read, so what follows goes by dsh's own list. */
+  private async listSoon(): Promise<void> {
+    if (!this.listing) return
+    let timer: ReturnType<typeof setTimeout> | null = null
+    await Promise.race([
+      this.listing,
+      new Promise<void>((resolve) => {
+        timer = setTimeout(resolve, LISTING_WAIT_MS)
+      }),
+    ])
+    if (timer) clearTimeout(timer)
+  }
+
+  /**
+   * The models the menus offer, which are dsh's own list once it was read and until then the ones
+   * the home's files name, and the sign-in the agent shows.
+   */
+  private apply(): void {
+    const listed = this.listed ?? []
+    this.models =
+      listed.length > 0
+        ? listedModelChoices(listed, this.routes, this.signedIn)
+        : modelChoices(this.routes, this.signedIn)
     // Another route's own key is the user's to set in dsh, so a home with one counts as signed in.
-    const kind = signedIn ?? (routes.groups.length > 0 ? 'gateway' : 'none')
-    if (kind === this.reported) return
+    const routed = listed.length > 0 || this.routes.groups.length > 0
+    const kind = this.signedIn ?? (routed ? 'gateway' : this.settled ? 'none' : null)
+    if (kind === null || kind === this.reported) return
     this.reported = kind
     this.hooks.account(
       kind === 'deepseek-account'
@@ -480,8 +596,10 @@ export class DshConnection implements AgentConnection {
   async newSession(cwd: string, options: SessionOptions = {}): Promise<OpenedSession> {
     this.assertOpen()
     await this.refresh()
-    // Kettu's own read of the options, which is also how it learns that a sign-in was made.
-    if (options.hidden && this.signedIn === null && this.routes.groups.length === 0) {
+    // A session goes by dsh's own list: the first waits for it, as does Kettu's own read of the
+    // options, which is also how it learns that a sign-in was made.
+    if (options.hidden || this.listed === null) await this.listSoon()
+    if (options.hidden && this.reported === 'none') {
       throw new AgentRequestError('auth_required', 'DeepSeek Harness has no model to run on')
     }
     // dsh makes the id a folder name, so it stays short and plain.
@@ -497,6 +615,7 @@ export class DshConnection implements AgentConnection {
   ): Promise<SessionSetup> {
     this.assertOpen()
     await this.refresh()
+    if (this.listed === null) await this.listSoon()
     const existing = this.sessions.get(sessionId)
     if (existing) {
       existing.options = options
@@ -655,6 +774,7 @@ export class DshConnection implements AgentConnection {
         // A model added in dsh since the home was last read is one of its models too.
         if (optionId === CONFIG.model && !this.models.some((choice) => choice.value === value)) {
           await this.refresh()
+          await this.listSoon()
         }
         const model =
           optionId === CONFIG.model
@@ -726,6 +846,7 @@ export class DshConnection implements AgentConnection {
     const servers = session.options.mcpServers ?? []
     const patch = mcpPatch(servers)
     await this.refresh()
+    if (this.listed === null) await this.listSoon()
     // A model the user removed in dsh since leaves the session on another, which its menu shows.
     const { model, effort } = session
     this.settle(session)
