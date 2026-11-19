@@ -1,7 +1,6 @@
 import { Fragment, useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { Dialog as DialogPrimitive } from '@base-ui/react/dialog'
 import {
-  Analytics01Icon,
   ArrowRight01Icon,
   Clock01Icon,
   DashboardSquare02Icon,
@@ -11,12 +10,13 @@ import {
   KeyboardIcon,
   PaintBoardIcon,
   PencilEdit02Icon,
+  PieChartIcon,
   Presentation01Icon,
-  RepeatIcon,
   Settings02Icon,
   SidebarLeftIcon,
   StarIcon,
   Store01Icon,
+  TimeScheduleIcon,
 } from '@hugeicons/core-free-icons'
 import type { IconSvgElement } from '@hugeicons/react'
 import { useTranslation } from 'react-i18next'
@@ -348,9 +348,9 @@ function SearchPalette() {
 const ACTION_ICON: Record<SearchAction, IconSvgElement> = {
   newSession: PencilEdit02Icon,
   openProject: FolderOpenIcon,
-  openUsage: Analytics01Icon,
+  openUsage: PieChartIcon,
   openArtifacts: DashboardSquare02Icon,
-  openRoutines: RepeatIcon,
+  openRoutines: TimeScheduleIcon,
   openMarketplace: Store01Icon,
   openSettings: Settings02Icon,
   showShortcuts: KeyboardIcon,
