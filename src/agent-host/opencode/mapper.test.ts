@@ -357,6 +357,53 @@ describe('stored messages', () => {
   })
 })
 
+describe('a request', () => {
+  const step = (thread: TestThread, mapper: SessionMapper, events: ServerEvent[]): void => {
+    for (const event of events) {
+      const out = mapper.event(event, thread.context())
+      if (out) thread.apply(out)
+    }
+  }
+  const model = { id: 'deepseek-flash', providerID: 'deepseek' }
+  const tokens = { input: 10, output: 400, reasoning: 0, cache: { read: 0, write: 0 } }
+
+  it('is timed from when it went out, which its start event says after the fact', () => {
+    const mapper = new SessionMapper(CWD)
+    const timed = new TestThread()
+    timed.now = 10_000
+    step(timed, mapper, [
+      // The start comes with the first token, 4 s after the request went out.
+      {
+        type: 'session.step.started',
+        data: { assistantMessageID: 'msg_1', model, started: 6_000 },
+      },
+      { type: 'session.step.first-token', data: { assistantMessageID: 'msg_1' } },
+    ])
+    timed.now = 12_000
+    step(timed, mapper, [
+      { type: 'session.step.ended', data: { assistantMessageID: 'msg_1', tokens } },
+    ])
+    expect(timed.state.session.lastRequest).toMatchObject({ at: 6_000, ms: 6_000, output: 400 })
+    expect(timed.state.session.speed?.last).toMatchObject({ tokens: 400, approx: false })
+    expect(timed.state.session.speed!.last.firstTokenMs).toBeGreaterThanOrEqual(4_000)
+  })
+
+  it('names the model a subagent runs on in its own session', () => {
+    const thread = new TestThread()
+    thread.state = {
+      ...thread.state,
+      session: {
+        ...thread.state.session,
+        subagent: { description: null, canCancel: true, stateKnown: true, stopReason: null },
+      },
+    }
+    step(thread, new SessionMapper(CWD), [
+      { type: 'session.step.started', data: { assistantMessageID: 'msg_1', model } },
+    ])
+    expect(thread.state.session.subagent?.model).toBe('deepseek/deepseek-flash')
+  })
+})
+
 describe('ids and counts', () => {
   it('gives the replies of one assistant message entries of their own', () => {
     expect(textEntryId('msg_1', 0)).toBe('m:msg_1')

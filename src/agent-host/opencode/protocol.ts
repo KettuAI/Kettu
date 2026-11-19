@@ -222,7 +222,7 @@ export interface EventData {
   'session.execution.succeeded': OfSession
   'session.execution.failed': OfSession & { error?: StructuredError }
   'session.execution.interrupted': OfSession & { reason?: string }
-  'session.step.started': OfMessage & { agent?: string; model?: ModelRef }
+  'session.step.started': OfMessage & { agent?: string; model?: ModelRef; started?: number }
   'session.step.first-token': OfMessage
   'session.step.streamed': OfMessage
   'session.step.ended': OfMessage & { finish?: string; tokens?: TokenUsage; cost?: number }

@@ -190,6 +190,8 @@ import { HostedRun, type HostedRunHooks } from './hosted-run'
 import { t } from './i18n'
 import { CliVersions, type CliProbe, type CliVersion } from './installed-cli'
 import { OpenCodeClient } from './opencode/client'
+import { OpenCodeConnection } from './opencode/connection'
+import type { OpenCodeSessions } from './model-requests/opencode'
 import { readProviderUsage, type ProviderUsage } from './opencode/provider-usage'
 import { claudeJsonPath, readClaudeProfile } from './plan-tier'
 import { QUIT_REASON, type ToolOptions } from './process-tree'
@@ -4330,10 +4332,17 @@ export class AgentManager {
     if (slot.signIn === 'signed-in') this.hooks.signedIn(slot.id)
   }
 
-  /** OpenCode's own client for an OpenCode agent, which reads its sessions; null for another. */
-  openCode(agentId: AgentId): OpenCodeClient | null {
+  /**
+   * What reads an OpenCode agent's stored sessions; null for another agent. The server that runs
+   * its sessions reads them while it runs, else OpenCode's own client does.
+   */
+  openCode(agentId: AgentId): OpenCodeSessions | null {
     const slot = this.slots.get(agentId)
-    return slot && harnessOf(agentId) === 'opencode' ? this.openCodeClient(slot) : null
+    if (!slot || harnessOf(agentId) !== 'opencode') return null
+    const connection = slot.stopping ? null : slot.runtime?.connection
+    return connection instanceof OpenCodeConnection && !connection.isClosed
+      ? connection.stored
+      : this.openCodeClient(slot)
   }
 
   private openCodeClient(slot: Slot): OpenCodeClient {

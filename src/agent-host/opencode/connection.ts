@@ -36,6 +36,7 @@ import {
 } from '../connection'
 import type { HostedContext } from '../driver'
 import { t } from '../i18n'
+import type { OpenCodeSessions } from '../model-requests/opencode'
 import { addTokenTotals, type MapperContext, type MapperOutput } from '../session-updates'
 import { assistantMessageId, SessionMapper, tokenTotals } from './mapper'
 import {
@@ -101,6 +102,9 @@ const NOT_FOUND = -32002
 /** The key of the instruction entry that holds Kettu's guide and memory. */
 const INSTRUCTIONS_KEY = 'kettu'
 const COMPACT = 'compact'
+const SESSION_ID = /^ses_[A-Za-z0-9]+$/
+const MESSAGE_ID = /^msg_[A-Za-z0-9_]+$/
+const CURSOR = /^[A-Za-z0-9_-]{1,1024}$/
 const COMMAND = /^\/([A-Za-z][\w-]*)(?:[ \t]+([\s\S]*))?$/
 const OPTION = { allow: 'allow-once', always: 'allow-always', reject: 'reject', other: 'other' }
 /** An option id answering a question's choice, as a client without the card's questions sends. */
@@ -546,6 +550,45 @@ export class OpenCodeConnection implements AgentConnection {
 
   logout(): Promise<void> {
     return Promise.reject(new AgentRequestError('agent_error', 'OpenCode signs out per provider'))
+  }
+
+  /**
+   * OpenCode's stored sessions, read from the server that runs them: it answers for what its own
+   * version wrote, which a background service left running from an older one may not.
+   */
+  readonly stored: OpenCodeSessions = {
+    messages: async (sessionId, cursor) => {
+      if (!SESSION_ID.test(sessionId) || (cursor !== null && !CURSOR.test(cursor))) return null
+      const query = cursor === null ? '' : `?cursor=${cursor}`
+      const page = await this.read<{ data?: unknown[]; cursor?: { next?: unknown } }>(
+        `/api/session/${sessionId}/message${query}`,
+      )
+      if (!Array.isArray(page?.data)) return null
+      const next = page.cursor?.next
+      return { messages: page.data, next: typeof next === 'string' && next !== '' ? next : null }
+    },
+    message: async (sessionId, messageId) => {
+      if (!SESSION_ID.test(sessionId) || !MESSAGE_ID.test(messageId)) return null
+      const answer = await this.read<{ data?: unknown }>(
+        `/api/session/${sessionId}/message/${messageId}`,
+      )
+      return answer?.data ?? null
+    },
+    session: async (sessionId) => {
+      if (!SESSION_ID.test(sessionId)) return null
+      const answer = await this.read<{ data?: unknown }>(`/api/session/${sessionId}`)
+      const data = answer?.data
+      return typeof data === 'object' && data !== null ? (data as Record<string, unknown>) : null
+    },
+  }
+
+  /** Reads from the server; null when it cannot answer. */
+  private async read<T>(route: string): Promise<T | null> {
+    try {
+      return await this.api.request<T>('GET', route)
+    } catch {
+      return null
+    }
   }
 
   // Requests.
@@ -1031,7 +1074,8 @@ export class OpenCodeConnection implements AgentConnection {
           updatedAt: new Date(item.time.updated).toISOString(),
           cwd: item.location.directory,
         })),
-      nextCursor: items.length > 0 ? (page?.cursor?.next ?? null) : null,
+      // OpenCode names a next page whenever it answers; only a full page has one.
+      nextCursor: items.length >= MESSAGE_PAGE ? (page?.cursor?.next ?? null) : null,
     }
   }
 
@@ -1447,6 +1491,11 @@ export class OpenCodeConnection implements AgentConnection {
       case 'session.step.started': {
         const model = data<'session.step.started'>().model
         session.stepModel = model ? modelValue(model) : null
+        // The context is the running model's, also for a subagent and after a switch.
+        const known = model
+          ? findModel(this.offers.get(session.cwd)?.offer.models ?? [], modelValue(model))
+          : null
+        session.mapper.window(known?.limit?.context ?? null)
         break
       }
       case 'session.step.ended': {

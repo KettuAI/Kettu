@@ -919,8 +919,14 @@ describe('sessions OpenCode has', () => {
       sessions: [
         { sessionId: 'ses_a', title: 'A', updatedAt: '1970-01-01T00:00:00.002Z', cwd: CWD },
       ],
-      nextCursor: 'more',
+      // OpenCode names a next page even after the last one, so only a full page has more.
+      nextCursor: null,
     })
+    setup.server.on('GET', /^\/api\/session\?/, () => ({
+      data: Array.from({ length: 100 }, (_, n) => setup.server.info(`ses_p${n}`)),
+      cursor: { next: 'more' },
+    }))
+    expect((await setup.connection.listSessions(CWD, null)).nextCursor).toBe('more')
     expect(setup.server.sent.at(-1)!.path).toBe(
       '/api/session?directory=%2Fwork%2Fapp&parentID=null&limit=100',
     )
@@ -933,6 +939,39 @@ describe('sessions OpenCode has', () => {
     expect(setup.server.posts(/^\/api\/session\/ses_1$/)).toEqual([
       { method: 'DELETE', path: '/api/session/ses_1', body: undefined },
     ])
+  })
+})
+
+describe('stored sessions', () => {
+  it('are read from the server that runs them, for what its own version wrote', async () => {
+    const setup = await connect()
+    setup.server.on('GET', /\/message\?cursor=older$/, () => ({ data: [], cursor: {} }))
+    setup.server.on('GET', /\/message$/, () => ({
+      data: [{ id: 'msg_2', type: 'idle' }],
+      cursor: { next: 'older' },
+    }))
+    setup.server.on('GET', /\/message\/msg_2_4$/, () => ({ data: { id: 'msg_2_4' } }))
+    const { stored } = setup.connection
+    expect(await stored.messages(SES, null)).toEqual({
+      messages: [{ id: 'msg_2', type: 'idle' }],
+      next: 'older',
+    })
+    expect(await stored.messages(SES, 'older')).toEqual({ messages: [], next: null })
+    expect(await stored.message(SES, 'msg_2_4')).toEqual({ id: 'msg_2_4' })
+    expect(await stored.session(SES)).toMatchObject({ id: SES })
+  })
+
+  it('answer nothing for an id that is not one, or a session the server cannot read', async () => {
+    const setup = await connect()
+    const before = setup.server.sent.length
+    expect(await setup.connection.stored.session('../config')).toBeNull()
+    expect(await setup.connection.stored.message(SES, 'msg_1/../../x')).toBeNull()
+    expect(await setup.connection.stored.messages(SES, 'a b')).toBeNull()
+    expect(setup.server.sent.length).toBe(before)
+    setup.server.on('GET', /^\/api\/session\/ses_gone$/, () => {
+      throw new ServerError(404, 'SessionNotFoundError', 'Session not found')
+    })
+    expect(await setup.connection.stored.session('ses_gone')).toBeNull()
   })
 })
 

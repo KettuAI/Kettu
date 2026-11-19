@@ -36,6 +36,7 @@ import type {
   EventType,
   MessageFile,
   MessageInfo,
+  ModelRef,
   PermissionRequestInfo,
   ServerEvent,
   StructuredError,
@@ -377,10 +378,15 @@ export class SessionMapper {
     const out = output()
     const data = <K extends EventType>(): EventData[K] => (event.data ?? {}) as EventData[K]
     switch (event.type as EventType) {
-      case 'session.step.started':
-        this.sentAt = ctx.now
+      case 'session.step.started': {
+        // The event comes with the first token; `started` is when the request went out.
+        const { started } = data<'session.step.started'>()
+        this.sentAt =
+          typeof started === 'number' && started > 0 && started <= ctx.now ? started : ctx.now
         this.firstOutputAt = null
+        this.ranOn(ctx, out, data<'session.step.started'>().model)
         break
+      }
       case 'session.step.first-token':
         this.firstOutputAt ??= ctx.now
         break
@@ -562,6 +568,15 @@ export class SessionMapper {
       this.row(ctx, out, callId, { status: allowed ? 'completed' : 'failed' })
     }
     return out
+  }
+
+  /** A subagent's session names the model its own requests run on, which can differ from its parent's. */
+  private ranOn(ctx: MapperContext, out: MapperOutput, model: ModelRef | undefined): void {
+    const info = ctx.thread.session.subagent
+    if (!info || !model) return
+    const name = `${model.providerID}/${model.id}`
+    if (info.model === name) return
+    out.patches.push({ op: 'session.update', changes: { subagent: { ...info, model: name } } })
   }
 
   private appendText(ctx: MapperContext, out: MapperOutput, id: string, delta: string): void {
