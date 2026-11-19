@@ -83,6 +83,8 @@ const OFFER_TTL_MS = 60_000
 /** A folder the server has just opened lists its agents a moment later: how often it is asked. */
 const OFFER_RETRIES = 40
 const OFFER_RETRY_MS = 150
+/** How far the clock that stamps OpenCode's messages may be from the one that times the stream. */
+const CLOCK_SLACK_MS = 2_000
 /** How long a folder's changes settle before its sessions get their options again. */
 const REFRESH_MS = 300
 /**
@@ -459,6 +461,8 @@ export class OpenCodeConnection implements AgentConnection {
   private up: Promise<void>
   private streamIsUp: () => void = () => {}
   private streamed = false
+  /** When the stream's latest event came: what ended before it, the stream has delivered. */
+  private seenAt = 0
   private listings = 0
   /** The folders whose sessions get their options again once their changes settle. */
   private readonly refreshing = new Map<string, ReturnType<typeof setTimeout>>()
@@ -1355,10 +1359,12 @@ export class OpenCodeConnection implements AgentConnection {
       let opened = false
       try {
         await this.api.events((event) => {
+          const seenAt = this.seenAt
+          this.seenAt = Date.now()
           if (event.type === 'server.connected') {
             opened = true
             attempt = 0
-            this.connected()
+            this.connected(seenAt)
             return
           }
           try {
@@ -1379,14 +1385,15 @@ export class OpenCodeConnection implements AgentConnection {
     }
   }
 
-  private connected(): void {
+  /** The stream is open. One that opened before dropped after the event that came at `seenAt`. */
+  private connected(seenAt: number): void {
     const again = this.streamed
     this.streamed = true
     this.streamIsUp()
     if (!again) return
     this.refresh(null)
     for (const session of [...this.sessions.values()]) {
-      if (!session.listed) void this.resync(session)
+      if (!session.listed) void this.resync(session, seenAt - CLOCK_SLACK_MS)
     }
   }
 
@@ -1394,7 +1401,7 @@ export class OpenCodeConnection implements AgentConnection {
    * Catches a session up after the stream dropped: what its latest messages hold, whether its
    * loop still runs, and the requests that wait for the user.
    */
-  private async resync(session: Session): Promise<void> {
+  private async resync(session: Session, since: number): Promise<void> {
     try {
       const [messages, active] = await Promise.all([
         this.messages(session.id, true),
@@ -1403,7 +1410,15 @@ export class OpenCodeConnection implements AgentConnection {
       if (!this.sessions.has(session.id)) return
       const turn = session.turn
       if (!session.hidden) {
+        // Only what was not whole when the stream was last heard: the thread has the rest, some
+        // of it under ids an earlier connection gave it.
         for (const message of messages) {
+          const missed =
+            message.type === 'assistant'
+              ? (message.time?.completed ?? Infinity) >= since
+              : message.type === 'compaction' &&
+                (message.status === 'running' || (message.time?.created ?? 0) >= since)
+          if (!missed) continue
           this.deliver(session.id, (ctx) => session.mapper.message(message, ctx, true))
         }
       }

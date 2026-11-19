@@ -169,6 +169,7 @@ export type MessageInfo =
       id: string
       status?: 'running' | 'completed' | 'failed'
       summary?: string
+      time?: { created: number }
     }
   | {
       type: 'idle'

@@ -1047,6 +1047,13 @@ describe('a dropped event stream', () => {
           time: { created: Date.now() + 1000, completed: Date.now() + 2000 },
         },
         { type: 'user', id: 'msg_u1', text: 'Read note.txt' },
+        // Whole long before the stream dropped: the thread has it, here under another id.
+        {
+          type: 'assistant',
+          id: 'msg_a0',
+          content: [{ type: 'reasoning', text: 'An old thought' }],
+          time: { created: 1_000, completed: 2_000 },
+        },
       ],
       cursor: {},
     }))
