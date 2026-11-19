@@ -231,12 +231,13 @@ function entry(url: string, token: string, prompt: string): McpServer[] {
       name: SERVICE_NAME,
       url,
       headers: [{ name: 'Authorization', value: `Bearer ${token}` }],
-      // Kettu's own tools, which reach no further than its thread, memory, the project's sessions
-      // and reading the user's Marketplace listings; the browser, computer use, devices,
-      // terminals and artifacts still ask, and publishing waits for the user in a card.
+      // Kettu's own tools, which reach no further than its thread, memory, the project's sessions,
+      // its own guide and reading the user's Marketplace listings; the browser, computer use,
+      // devices, terminals and artifacts still ask, and publishing waits for the user in a card.
       autoAllow: [
         PLAN_TOOL,
         REPORT_TOOL,
+        GUIDE_TOOL,
         ...MEMORY_TOOL_NAMES,
         ...SESSION_TOOLS.map((tool) => tool.name),
         ...WORKFLOW_TOOL_NAMES,
