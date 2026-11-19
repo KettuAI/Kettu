@@ -4268,7 +4268,11 @@ export class AgentManager {
     const slot = this.registeredSlot(agentId)
     if (this.isDisabled(agentId)) return
     if (slot.def.id === 'opencode') return this.refreshProviders(slot, options?.force === true)
-    if (slot.def.id === 'deepseek') return this.refreshBalance(slot, options?.force === true)
+    if (slot.def.id === 'deepseek') {
+      // A model route set up in dsh's own pages tells Kettu nothing.
+      if (options?.force === true && slot.signIn === 'required') await this.checkSignIn(slot)
+      return this.refreshBalance(slot, options?.force === true)
+    }
     const force = options?.force === true
     if (!slot.def.reportsAccount) {
       if (force && slot.signIn === 'required') await this.checkSignIn(slot)

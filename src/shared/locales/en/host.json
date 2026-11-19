@@ -668,7 +668,8 @@
     },
     "account": {
       "account": "DeepSeek account",
-      "apiKey": "DeepSeek API key"
+      "apiKey": "DeepSeek API key",
+      "gateway": "Custom model provider"
     },
     "mode": {
       "name": "Mode",
@@ -684,9 +685,13 @@
     "model": "Model",
     "effort": {
       "name": "Reasoning",
+      "default": "Default",
       "off": "Off",
+      "minimal": "Minimal",
       "low": "Low",
+      "medium": "Medium",
       "high": "High",
+      "xhigh": "Extra high",
       "max": "Max"
     }
   },

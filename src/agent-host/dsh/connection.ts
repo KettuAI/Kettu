@@ -1,7 +1,8 @@
 // DeepSeek Harness through its SDK interface: one `dsh --profile sdk` process per open session,
 // spoken to over newline-delimited JSON-RPC on its stdio. The wire can neither stop a turn nor close
 // a session, and fixes the model at `initialize`, so Stop and a change of model end the session's
-// process, and the next prompt starts another that resumes the session.
+// process, and the next prompt starts another that resumes the session. The models are the ones
+// the user configured in dsh, read from its home, since the wire lists none.
 
 import type { ChildProcess } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
@@ -37,14 +38,15 @@ import {
 import { SessionMapper, tokenTotals } from './mapper'
 import {
   CONFIG,
-  DEFAULT_EFFORT,
-  DEFAULT_MODEL,
+  DEFAULT_LEVEL,
   DEFAULT_PRESET,
+  choiceOf,
   configOptions,
-  isEffort,
   isMode,
-  isModel,
   modeCommands,
+  modelChoices,
+  startChoice,
+  type ModelChoice,
 } from './options'
 import type {
   ApprovalOutcome,
@@ -59,7 +61,8 @@ import type {
   SubagentFinishedNotification,
   SubagentStartedNotification,
 } from './protocol'
-import { readProvider } from './credentials'
+import { dshHome, readProvider, type Provider } from './credentials'
+import { NO_ROUTES, readRoutes, type Routes } from './routes'
 
 const PENDING_EVENTS = 2_000
 const INITIALIZE_TIMEOUT_MS = 60_000
@@ -89,7 +92,7 @@ interface Proc {
   child: ChildProcess
   rpc: RpcPeer
   ready: Promise<void>
-  /** The `--patch` file mounting the session's MCP servers, removed with the process. */
+  /** The `--patch` file with the home's model routes and the session's MCP servers. */
   folder: string | null
   stopping: boolean
 }
@@ -102,8 +105,9 @@ interface Session {
   proc: Proc | null
   /** dsh has the session on disk, so a new process resumes it rather than starting one. */
   persisted: boolean
+  /** A model choice's value, and the level it runs at; null for a model without levels. */
   model: string
-  effort: string
+  effort: string | null
   preset: string
   plan: boolean
   turn: Turn | null
@@ -300,6 +304,11 @@ export class DshConnection implements AgentConnection {
   private readonly pending = new Map<string, Deferred[]>()
   private readonly unregistered = new Set<string>()
   private pendingCount = 0
+  /** The home's model routes and DeepSeek sign-in as last read, and the models they give. */
+  private routes: Routes = NO_ROUTES
+  private signedIn: Provider | null = null
+  private models: ModelChoice[] = modelChoices(NO_ROUTES, null)
+  private reported: string | null = null
 
   constructor(private readonly context: HostedContext) {
     this.closed = new Promise((resolve) => (this.resolveClosed = resolve))
@@ -313,8 +322,9 @@ export class DshConnection implements AgentConnection {
     return false
   }
 
+  // A session that is only opened starts no process, so dsh never hears of it.
   get unpromptedSessions(): boolean {
-    return this.hiddenSessions
+    return true
   }
 
   private get hooks(): ConnectionHooks {
@@ -350,7 +360,7 @@ export class DshConnection implements AgentConnection {
         // The version is only shown.
       }
     }
-    void this.reportAccount()
+    await this.refresh()
     return {
       name: 'DeepSeek Harness',
       version: this.version,
@@ -385,15 +395,49 @@ export class DshConnection implements AgentConnection {
     }
   }
 
-  private async reportAccount(): Promise<void> {
-    const provider = await readProvider(this.context.env)
+  /**
+   * Reads the home again: its routes change in dsh's own pages and its sign-in in a terminal,
+   * neither of which tells Kettu.
+   */
+  private async refresh(): Promise<void> {
+    const { env } = this.context
+    const [routes, signedIn] = await Promise.all([readRoutes(dshHome(env)), readProvider(env)])
+    this.routes = routes
+    this.signedIn = signedIn
+    this.models = modelChoices(routes, signedIn)
+    // Another route's own key is the user's to set in dsh, so a home with one counts as signed in.
+    const kind = signedIn ?? (routes.groups.length > 0 ? 'gateway' : 'none')
+    if (kind === this.reported) return
+    this.reported = kind
     this.hooks.account(
-      provider === 'deepseek-account'
+      kind === 'deepseek-account'
         ? { kind: 'account', label: t('dsh.account.account'), email: null }
-        : provider === 'deepseek-official'
+        : kind === 'deepseek-official'
           ? { kind: 'api_key', label: t('dsh.account.apiKey'), email: null }
-          : { kind: 'none', label: '', email: null },
+          : kind === 'gateway'
+            ? { kind: 'gateway', label: t('dsh.account.gateway'), email: null }
+            : { kind: 'none', label: '', email: null },
     )
+  }
+
+  /** Keeps the session on a model the home lists, and on a level that model has. */
+  private settle(session: Session): ModelChoice | null {
+    const listed = this.models.find((choice) => choice.value === session.model)
+    if (listed) {
+      if (session.effort === null || !listed.efforts.includes(session.effort))
+        session.effort = listed.effort
+      return listed
+    }
+    const start = startChoice(this.models, this.routes)
+    if (!start) return null
+    session.model = start.value
+    session.effort = start.effort
+    return start
+  }
+
+  private options(session: Session): ConfigOption[] {
+    this.settle(session)
+    return configOptions(session, this.models)
   }
 
   authenticate(methodId: string): Promise<void> {
@@ -421,8 +465,8 @@ export class DshConnection implements AgentConnection {
       mapper: new SessionMapper(cwd),
       proc: null,
       persisted,
-      model: DEFAULT_MODEL,
-      effort: DEFAULT_EFFORT,
+      model: '',
+      effort: null,
       preset: DEFAULT_PRESET,
       plan: false,
       turn: null,
@@ -435,10 +479,15 @@ export class DshConnection implements AgentConnection {
 
   async newSession(cwd: string, options: SessionOptions = {}): Promise<OpenedSession> {
     this.assertOpen()
+    await this.refresh()
+    // Kettu's own read of the options, which is also how it learns that a sign-in was made.
+    if (options.hidden && this.signedIn === null && this.routes.groups.length === 0) {
+      throw new AgentRequestError('auth_required', 'DeepSeek Harness has no model to run on')
+    }
     // dsh makes the id a folder name, so it stays short and plain.
     const sessionId = `kettu-${randomUUID().replace(/-/g, '')}`
     const session = this.open(sessionId, cwd, options, false)
-    return { sessionId, config: configOptions(session) }
+    return { sessionId, config: this.options(session) }
   }
 
   async resumeSession(
@@ -447,12 +496,13 @@ export class DshConnection implements AgentConnection {
     options: SessionOptions = {},
   ): Promise<SessionSetup> {
     this.assertOpen()
+    await this.refresh()
     const existing = this.sessions.get(sessionId)
     if (existing) {
       existing.options = options
-      return { config: configOptions(existing) }
+      return { config: this.options(existing) }
     }
-    return { config: configOptions(this.open(sessionId, cwd, options, true)) }
+    return { config: this.options(this.open(sessionId, cwd, options, true)) }
   }
 
   loadSession(): Promise<SessionSetup> {
@@ -484,7 +534,9 @@ export class DshConnection implements AgentConnection {
     return { sessions: [], nextCursor: null }
   }
 
-  async removeHidden(): Promise<void> {}
+  async removeHidden(sessionId: string): Promise<void> {
+    await this.closeSession(sessionId)
+  }
 
   register(sessionId: string, target: SessionTarget): void {
     this.targets.set(sessionId, target)
@@ -521,7 +573,7 @@ export class DshConnection implements AgentConnection {
     const proc = await this.ready(session)
     session.cancelling = false
     const result = new Promise<PromptResult>((resolve, reject) => {
-      session.turn = { resolve, reject, tokens: null, model: session.model, own: false }
+      session.turn = { resolve, reject, tokens: null, model: this.modelId(session), own: false }
     })
     try {
       await proc.rpc.request('session/prompt', {
@@ -545,7 +597,7 @@ export class DshConnection implements AgentConnection {
         resolve: () => resolve(),
         reject,
         tokens: null,
-        model: session.model,
+        model: this.modelId(session),
         own: false,
       }
     })
@@ -600,7 +652,15 @@ export class DshConnection implements AgentConnection {
     switch (optionId) {
       case CONFIG.model:
       case CONFIG.effort: {
-        if (optionId === CONFIG.model ? !isModel(value) : !isEffort(value)) {
+        // A model added in dsh since the home was last read is one of its models too.
+        if (optionId === CONFIG.model && !this.models.some((choice) => choice.value === value)) {
+          await this.refresh()
+        }
+        const model =
+          optionId === CONFIG.model
+            ? this.models.find((choice) => choice.value === value)
+            : this.settle(session)
+        if (!model || (optionId === CONFIG.effort && !model.efforts.includes(value))) {
           throw new AgentRequestError('agent_error', `No ${optionId} ${value}`)
         }
         if (session.turn) throw new AgentRequestError('agent_error', 'Change it between turns')
@@ -628,7 +688,7 @@ export class DshConnection implements AgentConnection {
       default:
         throw new AgentRequestError('agent_error', `No option ${optionId}`)
     }
-    return configOptions(session)
+    return this.options(session)
   }
 
   private async command(session: Session, text: string): Promise<void> {
@@ -665,12 +725,19 @@ export class DshConnection implements AgentConnection {
     const { spec, env } = this.context
     const servers = session.options.mcpServers ?? []
     const patch = mcpPatch(servers)
+    await this.refresh()
+    // A model the user removed in dsh since leaves the session on another, which its menu shows.
+    const { model, effort } = session
+    this.settle(session)
+    if (session.model !== model || session.effort !== effort) this.config(session)
+    // The routes' rows come as the user wrote them in dsh's own files.
+    const rows = `${this.routes.yaml}${patch.yaml}`
     let folder: string | null = null
     const args = [...spec.args, '--profile', 'sdk']
-    if (patch.yaml) {
+    if (rows) {
       folder = await mkdtemp(path.join(os.tmpdir(), 'kettu-dsh-'))
-      const file = path.join(folder, 'mcp.patch.yml')
-      await writeFile(file, patch.yaml, { mode: 0o600 })
+      const file = path.join(folder, 'kettu.patch.yml')
+      await writeFile(file, rows, { mode: 0o600 })
       args.push('--patch', file)
     }
     const child = this.context.spawn({
@@ -715,7 +782,11 @@ export class DshConnection implements AgentConnection {
   }
 
   private async handshake(session: Session, proc: Proc): Promise<void> {
-    const provider = (await readProvider(this.context.env)) ?? 'deepseek-official'
+    const model = this.settle(session)
+    if (!model)
+      throw new AgentRequestError('auth_required', 'DeepSeek Harness has no model to run on')
+    const provider = model.provider ?? this.signedIn ?? 'deepseek-official'
+    const effort = session.effort === DEFAULT_LEVEL ? null : session.effort
     const timeout = new Promise<never>((_, reject) =>
       setTimeout(
         () => reject(new Error('DeepSeek Harness did not start')),
@@ -727,8 +798,8 @@ export class DshConnection implements AgentConnection {
         cwd: session.cwd,
         approvalRequests: true,
         provider,
-        model: session.model,
-        reasoningEffort: session.effort,
+        model: model.model,
+        ...(effort !== null ? { reasoningEffort: effort } : {}),
         capabilities: { userQuestions: true },
       }),
       timeout,
@@ -920,7 +991,7 @@ export class DshConnection implements AgentConnection {
             resolve: (result) => this.deliver(session.id, agentTurn('ended', result)),
             reject: (error) => this.deliver(session.id, agentTurn('failed', undefined, error)),
             tokens: null,
-            model: session.model,
+            model: this.modelId(session),
             own: true,
           }
           this.deliver(session.id, agentTurn('started'))
@@ -962,8 +1033,10 @@ export class DshConnection implements AgentConnection {
       }
       case 'model/selection': {
         const data = event.data as EventData['model/selection']
-        if (isModel(data.model)) session.model = data.model
-        if (data.reasoningEffort && isEffort(data.reasoningEffort))
+        const model = choiceOf(this.models, data.provider, data.model)
+        if (!model) break
+        session.model = model.value
+        if (data.reasoningEffort && model.efforts.includes(data.reasoningEffort))
           session.effort = data.reasoningEffort
         break
       }
@@ -972,9 +1045,14 @@ export class DshConnection implements AgentConnection {
 
   private config(session: Session): void {
     this.deliver(session.id, {
-      patches: [{ op: 'session.update', changes: { config: configOptions(session) } }],
+      patches: [{ op: 'session.update', changes: { config: this.options(session) } }],
       effects: [],
     })
+  }
+
+  /** The id of the session's model, which its usage is counted under. */
+  private modelId(session: Session): string {
+    return this.models.find((choice) => choice.value === session.model)?.model ?? session.model
   }
 
   private result(turn: Turn, reason: StopReason): PromptResult {
