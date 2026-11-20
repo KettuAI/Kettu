@@ -70,7 +70,7 @@ A run whose checks fail still succeeds, so its artifact is the latest result. A 
 
 ## Repeated failures
 
-When a version has failed twice in a row, `report.mjs` opens one issue for it in this repository, titled `Harness check fails: <harness> <version>`, of type Bug with `area:agents` and `state:needs-triage`, carrying the step and the end of the log. It opens none when an issue of that title exists, open or closed, so a version gets at most one. Only runs on `main` open issues; on another branch the step prints what it would open.
+When a version has failed twice in a row, `report.mjs` opens one issue for it in this repository, titled `Harness check fails: <harness> <version>`, of type Bug, carrying the step and the end of the log. It opens none when an issue of that title exists, open or closed, so a version gets at most one. Only runs on `main` open issues; on another branch the step prints what it would open.
 
 ## Running it
 

@@ -94,16 +94,7 @@ function bodyOf(result) {
 }
 
 async function open(title, body) {
-  const fields = [
-    '-f',
-    `title=${title}`,
-    '-f',
-    `body=${body}`,
-    '-f',
-    'labels[]=area:agents',
-    '-f',
-    'labels[]=state:needs-triage',
-  ]
+  const fields = ['-f', `title=${title}`, '-f', `body=${body}`]
   const path = `repos/${repo}/issues`
   try {
     const { stdout } = await gh(['api', path, ...fields, '-f', 'type=Bug', '--jq', '.html_url'])

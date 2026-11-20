@@ -1,13 +1,11 @@
-name: Feature request
-description: Suggest something Kettu could do
+name: Feature request · 功能建议
+description: Something Kettu could do, or do better. · 希望 Kettu 能做的事。
 type: Feature
-labels:
-  - state:needs-triage
 body:
   - type: textarea
     id: request
     attributes:
-      label: What do you want, and why?
-      description: Any language is fine.
+      label: What do you want, and why? · 想要什么，为什么
+      description: One request per issue. Screenshots help. · 一个 issue 只提一件事，附截图更好。
     validations:
       required: true
