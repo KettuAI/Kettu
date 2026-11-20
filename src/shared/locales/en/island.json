@@ -28,7 +28,30 @@
     "answered": "Answered",
     "answeredElsewhere": "Already answered somewhere else",
     "answerFailed": "Could not answer: {{message}}",
-    "openKettu": "Open Kettu"
+    "openKettu": "Open Kettu",
+    "untitled": "New session",
+    "group": {
+      "needs_you": "Needs you",
+      "running": "Running",
+      "finished": "Finished"
+    },
+    "idle_one": "{{count}} more idle session",
+    "idle_other": "{{count}} more idle sessions",
+    "moreWaiting_one": "{{count}} more waiting",
+    "moreWaiting_other": "{{count}} more waiting",
+    "openInKettu": "Open in Kettu",
+    "summary": {
+      "waiting": "{{count}} need you",
+      "running": "{{count}} running",
+      "failed": "{{count}} failed"
+    },
+    "paused": "Paused",
+    "a11y": {
+      "island": "Dynamic Island: {{summary}}",
+      "quiet": "Nothing needs you",
+      "row": "Open {{title}}, {{status}}, {{agent}}"
+    },
+    "recommended": "Recommended"
   },
   "line": {
     "run": "Run {{command}}",

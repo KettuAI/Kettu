@@ -18,6 +18,7 @@ import {
 import type { AgentId, PermissionKind, ToolKind } from '@shared/thread'
 import { islandT } from '../i18n'
 import type {
+  IslandGroup,
   IslandHost,
   IslandOptionStyle,
   IslandRequest,
@@ -105,6 +106,15 @@ const OPTION_STYLE: Record<PermissionKind, IslandOptionStyle> = {
   allow_always: 'allow_always',
   reject_once: 'deny',
   reject_always: 'deny',
+}
+
+/** The permission card's order: any other option, the denials, then the allows, once first. */
+const CARD_ORDER: Record<IslandOptionStyle, number> = {
+  normal: 0,
+  recommended: 0,
+  deny: 1,
+  allow_once: 2,
+  allow_always: 3,
 }
 
 function clip(text: string): string {
@@ -243,6 +253,7 @@ function buildRequest(
           .filter(Boolean)
         return make('plan', islandT('request.plan'), lines, false, options)
       }
+      options.sort((a, b) => CARD_ORDER[a.style] - CARD_ORDER[b.style])
       const title = islandT(`request.tool.${TOOL_KEY[tool.toolKind]}`)
       if (tool.toolKind === 'execute') {
         const command = tool.rawInput ?? tool.title.replace(/^run\s+/i, '')
@@ -331,6 +342,7 @@ function modelName(options: AgentOptions | undefined, model: string | null): str
 
 function buildRow(
   { state, summary }: Listed,
+  group: IslandGroup,
   now: number,
   requests: { requests: PendingRequest[]; askedAt: Record<string, number> } | undefined,
 ): IslandRow {
@@ -406,6 +418,7 @@ function buildRow(
       color: agent?.color ?? null,
     },
     model: modelName(options, summary.model),
+    group,
     status,
     since,
     line,
@@ -465,10 +478,14 @@ export function buildView(hosts: readonly HostState[], now: number): BuiltView {
   const rowMap = new Map<string, { hostKey: string; sessionId: string }>()
   const requests: IslandRequest[] = []
   const sent = new Map<string, SentRequest>()
+  const listedIn = new Map<SessionSummary, IslandGroup>()
+  for (const s of groups.needsYou) listedIn.set(s, 'needs_you')
+  for (const s of groups.running) listedIn.set(s, 'running')
+  for (const s of groups.finished) listedIn.set(s, 'finished')
   for (const summary of [...shown, ...idle]) {
     const state = owners.get(summary)!
     const waiting = needsYou(summary) ? state.requests.get(summary.id) : undefined
-    const row = buildRow({ state, summary }, now, waiting)
+    const row = buildRow({ state, summary }, listedIn.get(summary) ?? 'idle', now, waiting)
     rows.push(row)
     rowMap.set(row.key, { hostKey: state.key, sessionId: summary.id })
     // An offline host's requests cannot be answered until it is back.

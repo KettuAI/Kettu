@@ -329,6 +329,23 @@ describe('changes', () => {
     expect(next.removedRows).toEqual(['s2'])
   })
 
+  it('names the menu bar panel’s group of each row, the idle ones last', async () => {
+    const s = setup([
+      summary('idle'),
+      summary('done', { attention: 'unread' }),
+      summary('run', { status: 'running' }),
+      summary('ask', { status: 'awaiting_permission' }),
+    ])
+    await started(s)
+    const rows = s.helper().of('view').at(-1)!.rows
+    expect(rows.map((row) => [row.sessionId, row.group])).toEqual([
+      ['ask', 'needs_you'],
+      ['run', 'running'],
+      ['done', 'finished'],
+      ['idle', 'idle'],
+    ])
+  })
+
   it('sends nothing when nothing it shows changed', async () => {
     const s = setup([summary('s1')])
     await started(s)
@@ -387,11 +404,11 @@ describe('answers', () => {
     return [...view.requests, ...changes.flatMap((change) => change.requests)]
   }
 
-  it('sends the requests with the options the island may answer', async () => {
+  it('sends the requests with the options the island may answer, in the card’s order', async () => {
     const s = await answering()
     const requests = sentRequests(s)
     expect(requests.map((r) => [r.key, r.kind, r.options.map((o) => o.id)])).toEqual([
-      ['s1#t1', 'permission', ['allow', 'deny']],
+      ['s1#t1', 'permission', ['deny', 'allow']],
       ['s1#t2', 'question', ['q0', 'q1']],
     ])
     expect(requests[0]).toMatchObject({ lines: ['pnpm test'], code: true, askedAt: 1000 })

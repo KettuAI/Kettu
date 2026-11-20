@@ -49,6 +49,7 @@ struct IslandRow: Codable, Equatable {
   let project: String
   let agent: IslandAgent
   let model: String?
+  let group: String
   let status: String
   let since: Double?
   let line: String

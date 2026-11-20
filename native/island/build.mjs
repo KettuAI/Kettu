@@ -1,22 +1,32 @@
 // @ts-check
 // Builds kettu-island, the macOS helper that draws the notch island from the view main sends,
 // for this Mac's architecture and copies it into the directory given as the first argument.
-// Elsewhere it builds nothing. No dependencies.
+// Elsewhere it builds nothing. It reads the agent marks and colors from the renderer's sources, so
+// the repository's packages must be installed.
 
 import { spawnSync } from 'node:child_process'
 import console from 'node:console'
-import { chmodSync, copyFileSync, mkdirSync, mkdtempSync, readdirSync, rmSync } from 'node:fs'
+import {
+  chmodSync,
+  copyFileSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import process from 'node:process'
 import { fileURLToPath } from 'node:url'
+import { generatedSwift } from './generate.mjs'
 
 const NAME = 'kettu-island'
 // Electron 44's own minimum.
 const MINIMUM_MACOS = '13.0'
 const ARCHITECTURES = { arm64: 'arm64', x64: 'x86_64' }
 
-function main() {
+async function main() {
   const destination = process.argv[2]
   if (!destination) {
     console.error('usage: node build.mjs <destination directory>')
@@ -50,6 +60,9 @@ function main() {
     .map((name) => join(sourceDir, name))
   const work = mkdtempSync(join(tmpdir(), `${NAME}-`))
   try {
+    const generated = join(work, 'Generated.swift')
+    writeFileSync(generated, await generatedSwift(resolve(here, '..', '..')))
+    sources.push(generated)
     const output = join(work, NAME)
     const result = spawnSync(
       'xcrun',
@@ -84,4 +97,4 @@ function main() {
   }
 }
 
-process.exitCode = main()
+process.exitCode = await main()

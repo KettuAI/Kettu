@@ -20,6 +20,9 @@ export interface IslandHost {
 export type IslandStatus =
   'running' | 'waiting' | 'unread' | 'failed' | 'idle' | 'limited' | 'starting' | 'sign_in'
 
+/** The menu bar panel's group a row is listed under; idle rows fold into one line. */
+export type IslandGroup = 'needs_you' | 'running' | 'finished' | 'idle'
+
 /** One session's row, as the island lists it. */
 export interface IslandRow {
   /** What the helper names the row by when it is opened. */
@@ -32,6 +35,7 @@ export interface IslandRow {
   project: string
   agent: { id: string; name: string; harness: string; color: string | null }
   model: string | null
+  group: IslandGroup
   /** `running` turns into stuck once `toolSince` is older than the hello's `stuckAfterMs`. */
   status: IslandStatus
   /** When it entered its status, as far as Kettu knows; null when it does not. */
