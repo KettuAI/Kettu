@@ -243,8 +243,9 @@ function entry(url: string, token: string, prompt: string): McpServer[] {
       url,
       headers: [{ name: 'Authorization', value: `Bearer ${token}` }],
       // Kettu's own tools, which reach no further than its thread, memory, the project's sessions,
-      // its own guide, reading the user's Marketplace listings, and listing and reading the
-      // session's terminals, a terminal of the user's asking them in Kettu's own card; the
+      // its own guide, reading the user's Marketplace listings, and listing, reading and naming
+      // the session's terminals, a terminal or name of the user's asking them in Kettu's own
+      // card; the
       // browser, computer use, devices, running and typing in terminals and artifacts still ask,
       // and publishing waits for the user in a card.
       // The settings tools ask in Kettu's own card where they ask, so the agent's prompt never does.

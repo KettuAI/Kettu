@@ -30,7 +30,10 @@ class FakePty implements PtyProcess {
   resume(): void {}
 }
 
-function host(modes: TtyModes | null = { echo: true, icanon: true }) {
+function host(
+  modes: TtyModes | null = { echo: true, icanon: true },
+  commandLine: (pty: PtyProcess) => Promise<string[] | null> = async () => null,
+) {
   const ptys: FakePty[] = []
   const infos: TerminalInfo[] = []
   const handedBack: [string, number][] = []
@@ -59,6 +62,7 @@ function host(modes: TtyModes | null = { echo: true, icanon: true }) {
       removed: () => undefined,
     },
     handedBack: (sessionId, ms) => handedBack.push([sessionId, ms]),
+    commandLine,
     ttyModes: async () => modes,
   })
   return { manager, ptys, infos, handedBack, cwds }
@@ -386,6 +390,85 @@ describe('terminals the user opens', () => {
       result: { kind: 'terminal', terminal: { usable: true } },
     })
     expect(await manager.agentCall(read(own))).toMatchObject({ result: { kind: 'output' } })
+  })
+})
+
+describe("a terminal's name", () => {
+  beforeEach(() => vi.useFakeTimers())
+  afterEach(() => vi.useRealTimers())
+
+  const size = { projectPath: '/work/app', cols: 80, rows: 24 }
+  const rename = (terminalId: string, name: string, asked = false) =>
+    ({ kind: 'rename', sessionId: 's1', terminalId, name, asked }) as const
+
+  it('is the command line of what runs, kept once it ends', async () => {
+    const { manager, ptys } = host(undefined, async () => ['node', '/opt/homebrew/bin/pnpm', 'dev'])
+    const user = await manager.create('window', { ...size, sessionId: 's1' })
+    const pty = ptys[0]!
+    pty.emit('% ')
+    await vi.advanceTimersByTimeAsync(200)
+    expect((await manager.list())[0]!.title).toBe('zsh')
+    pty.process = 'node'
+    pty.emit('ready\r\n')
+    await vi.advanceTimersByTimeAsync(200)
+    expect((await manager.list())[0]).toMatchObject({ id: user.id, title: 'pnpm dev', busy: true })
+    pty.process = 'zsh'
+    pty.emit('% ')
+    await vi.advanceTimersByTimeAsync(200)
+    expect((await manager.list())[0]).toMatchObject({ title: 'pnpm dev', busy: false })
+  })
+
+  it('is what the user names it, everywhere, until they clear it', async () => {
+    const { manager } = host()
+    const user = await manager.create('window', { ...size, sessionId: 's1' })
+    expect(manager.rename(user.id, '  Deploy  ')).toMatchObject({ name: 'Deploy', namedBy: 'user' })
+    expect(() => manager.rename(user.id, 'x'.repeat(41))).toThrow()
+    expect(() => manager.rename(user.id, 'a\nb')).toThrow()
+    const restarted = await manager.restart(user.id)
+    expect(restarted).toMatchObject({ name: 'Deploy', namedBy: 'user', title: 'zsh' })
+    expect(manager.rename(user.id, '')).toMatchObject({ name: null, namedBy: null })
+  })
+
+  it("takes the name an agent gives its terminal, or else the agent's command", async () => {
+    const { manager } = host()
+    const named = await manager.agentCall({ ...RUN, name: 'Dev server' })
+    expect(named).toMatchObject({
+      result: { terminal: { name: 'Dev server', namedBy: 'agent', title: 'pnpm dev' } },
+    })
+    const plain = await manager.agentCall(RUN)
+    expect(plain).toMatchObject({ result: { terminal: { name: null, title: 'pnpm dev' } } })
+    expect(await manager.agentCall({ ...RUN, name: 'x'.repeat(41) })).toMatchObject({
+      error: { code: 'failed' },
+    })
+  })
+
+  it("lets an agent rename its own terminal, and asks before it renames the user's", async () => {
+    const { manager } = host()
+    const own = terminalOf(await manager.agentCall(RUN))
+    expect(await manager.agentCall(rename(own, 'Server'))).toMatchObject({
+      result: { kind: 'terminal', terminal: { name: 'Server', namedBy: 'agent' } },
+    })
+
+    manager.rename(own, 'Mine')
+    expect(await manager.agentCall(rename(own, 'Server'))).toMatchObject({
+      result: { kind: 'ask' },
+    })
+    expect((await manager.list())[0]!.name).toBe('Mine')
+    expect(await manager.agentCall(rename(own, 'Server', true))).toMatchObject({
+      result: { terminal: { name: 'Server', namedBy: 'agent' } },
+    })
+
+    const user = await manager.create('window', { ...size, sessionId: 's1' })
+    expect(await manager.agentCall(rename(user.id, 'Logs'))).toMatchObject({
+      result: { kind: 'ask' },
+    })
+    await manager.agentCall({ kind: 'allow', sessionId: 's1', terminalId: user.id, allowed: true })
+    expect(await manager.agentCall(rename(user.id, 'Logs'))).toMatchObject({
+      result: { terminal: { name: 'Logs' } },
+    })
+    expect(
+      await manager.agentCall({ ...rename(user.id, 'Logs', true), sessionId: 's2' }),
+    ).toMatchObject({ error: { code: 'not_found' } })
   })
 })
 

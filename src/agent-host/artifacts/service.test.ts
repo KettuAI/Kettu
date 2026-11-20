@@ -32,7 +32,7 @@ describe('the servers a session attaches with', () => {
   })
 
   // Allowed tools run without asking the user, so none may reach past Kettu's own data.
-  it("allow without asking only Kettu's plan, report, memory, session, workflow and settings tools, its guide, reading the Marketplace and listing and reading terminals", async () => {
+  it("allow without asking only Kettu's plan, report, memory, session, workflow and settings tools, its guide, reading the Marketplace and listing, reading and naming terminals", async () => {
     const service = await started()
     const process = { closed: new Promise<void>(() => {}) } as AgentProcess
     const expected = [
@@ -41,6 +41,7 @@ describe('the servers a session attaches with', () => {
       'terminal_list',
       'terminal_read',
       'terminal_wait',
+      'terminal_rename',
       'report_problem',
       'list_memories',
       'read_memory',

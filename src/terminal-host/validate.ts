@@ -14,6 +14,7 @@ const MAX_PATH = 4096
 const MAX_COMMAND = 16 * 1024
 const MAX_SIZE = 1000
 const MAX_ACK = 1_000_000_000
+const MAX_NAME = 256
 
 type Params = Record<string, unknown>
 
@@ -123,6 +124,14 @@ export const validators: Validators = {
   },
   'terminals.kill': (raw) => ({ id: string(object(raw, ['id']), 'id', MAX_ID) }),
   'terminals.restart': (raw) => ({ id: string(object(raw, ['id']), 'id', MAX_ID) }),
+  'terminals.rename': (raw) => {
+    const params = object(raw, ['id', 'name'])
+    // Empty goes back to the title; the manager holds the name to its own limit.
+    if (typeof params.name !== 'string' || params.name.length > MAX_NAME) {
+      throw new ValidationError(`"name" must be a string of at most ${MAX_NAME} characters`)
+    }
+    return { id: string(params, 'id', MAX_ID), name: params.name }
+  },
   'terminals.takeOver': (raw) => ({ id: string(object(raw, ['id']), 'id', MAX_ID) }),
   'terminals.handBack': (raw) => ({ id: string(object(raw, ['id']), 'id', MAX_ID) }),
 }
