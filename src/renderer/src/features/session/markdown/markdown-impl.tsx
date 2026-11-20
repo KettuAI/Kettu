@@ -110,7 +110,7 @@ export function Link(props: ComponentProps<'a'> & ExtraProps) {
   const raw = typeof props.href === 'string' ? props.href : ''
   const local = localTarget(raw)
   const href = local ?? raw
-  const file = useFileRef(href)
+  const file = useFileRef(href, true)
   const own = useAgentFileRef(local)
   if (file) return <FileLink file={file} />
   if (own) return <AgentFileLink file={own} />
