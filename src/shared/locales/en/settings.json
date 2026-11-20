@@ -2004,7 +2004,9 @@
       "unsupportedTitle": "{{name}} {{version}} is outside the versions Kettu works with ({{supported}})",
       "bodyUpdate": "Kettu's checks found a problem with this version. Updating to {{update}} fixes it.",
       "bodyRecommended": "Kettu's checks passed {{recommended}}. Install that version the way you installed {{name}}, then detect again.",
-      "bodyOther": "Install another version the way you installed {{name}}, then detect again."
+      "bodyOther": "Install another version the way you installed {{name}}, then detect again.",
+      "pillBroken": "Does not work",
+      "pillUnsupported": "Unsupported"
     },
     "removedLine": "Removed from Kettu",
     "movedAccounts": {

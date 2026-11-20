@@ -273,6 +273,18 @@ function HarnessState({ status }: { status: AgentStatus }) {
   if (updated) return <StateDot label={t('agents.update.done')} />
   if (cliOutdated(status) !== null)
     return <Pill tone="attention">{t('harnesses.needsUpdate')}</Pill>
+  if (status.versionWarning) {
+    const { broken, supported } = status.versionWarning
+    return (
+      <Pill tone="attention">
+        {t(
+          broken || !supported
+            ? 'harnesses.versionWarning.pillBroken'
+            : 'harnesses.versionWarning.pillUnsupported',
+        )}
+      </Pill>
+    )
+  }
   const kind = installKind(status)
   // The SDK installs itself on first use beside the user's CLI.
   if (kind === 'package' && status.package?.isSdk) return null
@@ -1161,7 +1173,11 @@ function TaskNotice({ status, installed }: { status: AgentStatus; installed: boo
     )
   }
   if (status.update && status.automatic?.back) {
-    const current = status.release?.version ?? status.package?.version ?? version ?? ''
+    // Beside the user's own CLI, what moves is the SDK, so it is named, not the harness.
+    const moving = adapterOnlyUpdate(status)
+    const current = moving
+      ? moving.version
+      : (status.release?.version ?? status.package?.version ?? version ?? '')
     const to = status.update.adapterVersion
     const reason = status.automatic.backReason ?? 'registry'
     return (
@@ -1173,7 +1189,7 @@ function TaskNotice({ status, installed }: { status: AgentStatus; installed: boo
             : reason === 'broken'
               ? 'harnesses.switchBack.titleBroken'
               : 'harnesses.switchBack.titleKettu',
-          { name, current },
+          { name: moving?.name ?? name, current },
         )}
         action={
           <SetButton variant="primary" onClick={() => startUpdate(useAgentsStore, harness)}>
