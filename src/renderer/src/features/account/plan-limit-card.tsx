@@ -1,13 +1,15 @@
 import { useState } from 'react'
 import { useSortable } from '@dnd-kit/react/sortable'
+import { ArrowReloadHorizontalIcon } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
+import { Icon } from '@renderer/components/affect/app-shell'
 import { AgentMark, AgentTile } from '@renderer/components/agents/agent-mark'
 import { PlanRings } from '@renderer/components/plan-rings'
 import { HoverCard, HoverCardContent, HoverCardTrigger } from '@renderer/components/ui/hover-card'
 import { PlanPart } from '@renderer/features/session/composer/usage'
 import { ringStroke } from '@renderer/features/usage/plan-cards'
 import { useLimitView } from '@renderer/hooks/use-limit-view'
-import { monthDay, monthDayTime, planAmount, planBalance } from '@renderer/lib/format'
+import { monthDayTime, planAmount, planBalance } from '@renderer/lib/format'
 import { LIMIT_TEXT, shownPercent } from '@renderer/lib/plan-limit'
 import type { CardResets } from '@renderer/lib/plan-readings'
 import { cn } from '@renderer/lib/utils'
@@ -110,23 +112,34 @@ function CardFace({ card }: { card: PlanCard }) {
         )}
       </span>
       <span className="mt-1.75 flex min-w-0 items-center gap-2.25">
-        {count > 0 ? (
-          <PlanRings
-            rings={card.windows.map((w) => ({
-              id: w.id,
-              percent: shownPercent(w.percent, view),
-              level: w.level,
-            }))}
-            size={36}
-            {...(count > 3
-              ? ringStroke(count, 36)
-              : { stroke: count > 2 ? 3.5 : count > 1 ? 4 : 4.5, gap: count > 2 ? 1.5 : 2 })}
-            track="neutral"
-            className="size-9"
-          />
-        ) : (
-          <span aria-hidden className="size-9 shrink-0 rounded-full border border-border-soft" />
-        )}
+        <span className="relative flex shrink-0">
+          {count > 0 ? (
+            <PlanRings
+              rings={card.windows.map((w) => ({
+                id: w.id,
+                percent: shownPercent(w.percent, view),
+                level: w.level,
+              }))}
+              size={36}
+              {...(count > 3
+                ? ringStroke(count, 36)
+                : { stroke: count > 2 ? 3.5 : count > 1 ? 4 : 4.5, gap: count > 2 ? 1.5 : 2 })}
+              track="neutral"
+              className="size-9"
+            />
+          ) : (
+            <span aria-hidden className="size-9 shrink-0 rounded-full border border-border-soft" />
+          )}
+          {card.resets && (
+            <span className="absolute -right-1.5 -bottom-1 flex h-3.5 items-center justify-center gap-0.5 rounded-full bg-[color-mix(in_srgb,var(--shell-accent)_14%,var(--bg-surface))] px-1.25 text-badge leading-3.5 font-medium text-(--primary-foreground) tabular shadow-[0_0_0_1.5px_var(--bg-surface)]">
+              <Icon icon={ArrowReloadHorizontalIcon} size={10} />
+              <span aria-hidden>{card.resets.count}</span>
+              <span className="sr-only">
+                {t('usage:resets.count', { count: card.resets.count })}
+              </span>
+            </span>
+          )}
+        </span>
         <span className="flex min-w-0 flex-1 flex-col gap-px">
           {[...card.windows].reverse().map((w) => {
             const name = w.model
@@ -208,20 +221,6 @@ function CardFace({ card }: { card: PlanCard }) {
           </span>
         </span>
       ))}
-      {card.resets && (
-        <span className="-mt-px flex min-w-0 justify-between gap-1 text-badge leading-3.25 tracking-tight whitespace-nowrap">
-          <span className="min-w-0 truncate text-tertiary">
-            {t('usage:resets.count', { count: card.resets.count })}
-          </span>
-          {card.resets.each && (
-            <span className="shrink-0 text-primary tabular">
-              {card.resets.each[0]!.until === null
-                ? t('usage:resets.neverTile')
-                : t('usage:resets.until', { time: monthDay(card.resets.each[0]!.until) })}
-            </span>
-          )}
-        </span>
-      )}
     </>
   )
 }
