@@ -217,14 +217,20 @@ function mcpName(title: string): string | null {
   return kettuToolT(call.tool as never, { defaultValue: call.tool }) as string
 }
 
-/** The command an MCP tool's call runs, from its input, for the tools that run one. */
+/**
+ * The command an MCP tool's call runs, for the tools that run one. The hosts keep a call's input as
+ * its JSON, or as the command alone when it has one.
+ */
 function mcpCommand(rawInput: string | null | undefined): string | null {
-  if (!rawInput) return null
+  const raw = rawInput?.trim()
+  if (!raw) return null
   try {
-    const input = JSON.parse(rawInput) as { command?: unknown }
-    return typeof input.command === 'string' && input.command.trim() ? input.command : null
+    const input = JSON.parse(raw) as unknown
+    if (typeof input !== 'object' || input === null) return null
+    const { command } = input as { command?: unknown }
+    return typeof command === 'string' && command.trim() ? command : null
   } catch {
-    return null
+    return raw
   }
 }
 

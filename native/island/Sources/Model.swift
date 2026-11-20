@@ -341,9 +341,12 @@ final class IslandModel: ObservableObject {
     let waiting = rows.filter { $0.status == "waiting" || $0.status == "sign_in" }
     if !waiting.isEmpty || model.taskRequests > 0 {
       let count = max(model.store.summary.waiting, waiting.count + model.taskRequests)
+      // It names what opening it shows: the first request's session, or a task's fox and title.
+      let first = model.requests.first
+      let lead = first.map { model.row($0.row) } ?? waiting.first
       return Collapsed(
-        agents: agents(waiting), signal: .waiting, fact: counted(count),
-        title: title(waiting.first) ?? model.requests.first?.task?.title)
+        agents: lead.map { [$0.agent] } ?? [], signal: .waiting, fact: counted(count),
+        title: title(lead) ?? first?.task?.title)
     }
     let unseen = rows.filter { marksDone($0) && !model.seen.contains(model.seenKey($0)) }
     let failed = unseen.filter { $0.status == "failed" }

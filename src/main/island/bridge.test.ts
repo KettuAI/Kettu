@@ -484,7 +484,8 @@ describe('answers', () => {
       id: 't3',
       title: 'mcp__kettu__terminal_run',
       toolKind: 'other',
-      rawInput: JSON.stringify({ command: 'sleep 40 && echo done' }),
+      // As Claude Code's host keeps it: the command alone.
+      rawInput: 'sleep 40 && echo done',
       permission: {
         requestId: 'r3',
         options: [
