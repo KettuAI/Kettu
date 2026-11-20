@@ -70,6 +70,7 @@ import {
   LogCopyButton,
   MovedAccountsNotice,
   TaskLog,
+  WithCode,
 } from './agent-parts'
 import { installKind, startInstall, type InstallKind, type SettingsHook } from './harness-install'
 import { harnessVersion, useAction, VENDORS } from './agent-helpers'
@@ -372,7 +373,7 @@ export function InstallDialog({
           )}
           {!method && status.detail && (
             <p className="kettu-sd__text" data-selectable="">
-              {status.detail}
+              <WithCode text={status.detail} />
             </p>
           )}
           {method && (
@@ -508,7 +509,7 @@ export function HarnessListItem({ status }: { status: AgentStatus }) {
     ) : kind || awaitsPackage(status) ? (
       t('harnesses.groups.notInstalled')
     ) : r.kind === 'missing' || r.kind === 'failed' ? (
-      r.message
+      <WithCode text={r.message} />
     ) : (
       [version, agents > 0 ? t('harnesses.agentCount', { count: agents }) : null]
         .filter(Boolean)
@@ -629,12 +630,12 @@ function HarnessPageBody({ status }: { status: AgentStatus }) {
       <div>
         {r.kind !== 'failed' && r.kind !== 'missing' && status.detail && (
           <p className="ui-sg-hint" data-selectable="">
-            {status.detail}
+            <WithCode text={status.detail} />
           </p>
         )}
         {r.kind === 'missing' && !kind && !outdated && (
           <p className="ui-sg-hint" data-selectable="">
-            {r.message}{' '}
+            <WithCode text={r.message} />{' '}
             {r.url && (
               <a href={r.url} target="_blank" rel="noreferrer" className="k-link">
                 {r.action}
@@ -666,7 +667,9 @@ function HarnessPageBody({ status }: { status: AgentStatus }) {
               </SetButton>
             }
           >
-            <span data-selectable="">{r.message}</span>
+            <span data-selectable="">
+              <WithCode text={r.message} />
+            </span>
           </Notice>
         )}
         {status.uninstalled && <UninstalledNotice status={status} />}

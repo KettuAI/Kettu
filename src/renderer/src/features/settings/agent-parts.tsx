@@ -1,7 +1,7 @@
 // What the Agent and Harness sections of Settings both draw: reading an agent's account and
 // usage, its plan meters, sign-in, task logs and the rows of its configuration.
 
-import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
+import { Fragment, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import {
   Cancel01Icon,
   ComputerTerminal01Icon,
@@ -13,6 +13,7 @@ import { useTranslation } from 'react-i18next'
 import type { AgentStatus, AgentTask, PlanLimit } from '@shared/agent-host'
 import { Icon } from '@renderer/components/affect/app-shell'
 import { useRefresh } from '@renderer/components/refresh'
+import { codeSpans } from '@renderer/features/session/entries/helpers'
 import { planReset } from '@renderer/features/sidebar/plan-usage'
 import { addDays, dayOf, monthStartOf } from '@renderer/features/usage/model'
 import { limitLabel, mediumAgo, money } from '@renderer/lib/format'
@@ -49,6 +50,15 @@ export function ListMeter({ limits }: { limits: PlanLimit[] }) {
       />
     </span>
   )
+}
+
+/** A message from the host with its `code` spans set as code. */
+export function WithCode({ text }: { text: string }) {
+  return codeSpans(text).map((part, i) => (
+    <Fragment key={i}>
+      {part.code ? <code className="k-code">{part.text}</code> : part.text}
+    </Fragment>
+  ))
 }
 
 /** The small x at a notice's end that puts it away. */

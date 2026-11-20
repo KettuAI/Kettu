@@ -97,6 +97,7 @@ import {
   SignInNotice,
   SpendGroup,
   UsageGroup,
+  WithCode,
 } from './agent-parts'
 import { AgentProviders, ProviderBalances } from './agent-providers'
 import {
@@ -940,7 +941,7 @@ function AgentPageBody({ status }: { status: AgentStatus }) {
             data-wrap=""
             data-selectable=""
           >
-            {r.message}{' '}
+            <WithCode text={r.message} />{' '}
             {r.kind === 'missing' && (
               <button
                 type="button"
