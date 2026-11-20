@@ -666,6 +666,8 @@ interface Live {
   /** Who sent the latest turn: a window's or a device's port, and the device it serves. */
   sender: TurnSender | null
   failure: Failure | null
+  /** The sign-in notices it shows, settled once the agent reports it is signed in. */
+  signInNotices: string[]
   unread: boolean
   /** The current error was in front of the user, so the row no longer marks it. */
   errorSeen: boolean
@@ -3498,6 +3500,7 @@ export class SessionManager {
       ask: null,
       sender: null,
       failure: null,
+      signInNotices: [],
       unread: this.persistedUnread(record),
       errorSeen: false,
       connection: null,
@@ -5205,12 +5208,14 @@ export class SessionManager {
 
   /** The thread's notice that the agent asks to sign in, as a failed turn adds it. */
   private signInNotice(live: Live, error: HostError): void {
+    const id = this.nextId(live)
+    live.signInNotices.push(id)
     this.emit(live, [
       {
         op: 'entry.add',
         entry: {
           kind: 'notice',
-          id: this.nextId(live),
+          id,
           severity: 'error',
           title: t('notice.signInNeeded', { agent: this.deps.agents.name(live.record.agentId) }),
           description: error.message,
@@ -5779,10 +5784,28 @@ export class SessionManager {
 
   private agentSignedIn(agentId: AgentId): void {
     for (const live of [...this.live.values()]) {
-      if (live.record.agentId === agentId && live.thread.session.status === 'auth_required') {
-        void this.retry(live.id).catch(() => {})
-      }
+      if (live.record.agentId !== agentId) continue
+      this.settleSignInNotices(live)
+      if (live.thread.session.status === 'auth_required') void this.retry(live.id).catch(() => {})
     }
+  }
+
+  /** The thread's sign-in notices say the agent is signed in now, instead of asking for it. */
+  private settleSignInNotices(live: Live): void {
+    const ids = live.signInNotices.filter((id) => live.thread.byId[id]?.kind === 'notice')
+    live.signInNotices = []
+    if (ids.length === 0) return
+    const agent = this.deps.agents.name(live.record.agentId)
+    const changes = {
+      severity: 'info' as const,
+      title: t('notice.signedIn.title', { agent }),
+      // A description is replaced rather than dropped, since a patch sent as JSON drops undefined.
+      description: t('notice.signedIn.description'),
+    }
+    this.emit(
+      live,
+      ids.map((id) => ({ op: 'entry.update', id, changes })),
+    )
   }
 
   /**
@@ -8459,12 +8482,14 @@ export class SessionManager {
     if (givenBack) turn.attachments = []
     this.finishTurn(live, turn, null)
     const now = this.now()
+    const noticeId = this.nextId(live)
+    if (authRequired) live.signInNotices.push(noticeId)
     this.emit(live, [
       {
         op: 'entry.add',
         entry: {
           kind: 'notice',
-          id: this.nextId(live),
+          id: noticeId,
           severity: 'error',
           ...(authRequired
             ? {

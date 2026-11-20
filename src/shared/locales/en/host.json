@@ -65,6 +65,10 @@
       "description": "{{agent}} cannot replay sessions, so this one continues without its history."
     },
     "signInNeeded": "{{agent}} needs you to sign in",
+    "signedIn": {
+      "title": "Signed in to {{agent}}",
+      "description": "The session carries on."
+    },
     "closedBeforeSent": {
       "title": "The session closed before your message was sent",
       "description": "It waits in the queue until you resume it."
