@@ -442,6 +442,8 @@
   --duration-base: 180ms;
   --duration-slow: 220ms;
   --duration-slower: 450ms;
+  /* A session becoming the task it started: its mark turns into the ring, its chart grows. */
+  --duration-morph: 300ms;
   --duration-spin: 0.9s;
   /* One breath of the launch cover's fox, slow enough to read as calm. */
   --duration-breath: 2400ms;
@@ -990,6 +992,18 @@
   }
 }
 
+/* A session's row becoming its task's (features/sidebar/task-row.tsx): the ring turns in where
+   the agent's mark was. */
+@keyframes ring-in {
+  from {
+    opacity: 0;
+    transform: scale(0.4) rotate(-90deg);
+  }
+}
+.kettu-ring-in > svg {
+  animation: ring-in var(--duration-morph) var(--ease-out-quart) both;
+}
+
 /* Reduce motion: movement and loops stop; opacity and color changes remain. The transform
    variables do not inherit, so they are reset on every element. */
 @media (prefers-reduced-motion: reduce) {
@@ -1025,7 +1039,8 @@
     transition-duration: 0s !important;
   }
   [data-jump],
-  [data-jump-dots] {
+  [data-jump-dots],
+  .kettu-ring-in > svg {
     animation: none !important;
   }
   [data-slot='collapsible-content'] {
@@ -1063,7 +1078,8 @@
     transition-duration: 0s !important;
   }
   & [data-jump],
-  & [data-jump-dots] {
+  & [data-jump-dots],
+  & .kettu-ring-in > svg {
     animation: none !important;
   }
   & [data-slot='collapsible-content'] {

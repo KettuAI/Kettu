@@ -1268,13 +1268,14 @@
       "viewFile": "查看工作流文件",
       "another": "换一个做法",
       "reading": "正在读取…",
-      "started": "已作为需求开始 · {{title}}",
       "openTask": "打开",
       "declined": "没有用工作流，就在这里做",
       "useInstead": "改用它",
       "saved": "已存为你的工作流「{{name}}」",
       "open": "打开",
-      "notSaved": "没有存「{{name}}」"
+      "notSaved": "没有存「{{name}}」",
+      "startedAs": "已开始 · {{workflow}}",
+      "startedWritten": "已开始 · {{agent}} 写的工作流"
     },
     "saved": {
       "pending": "已保存“{{name}}”，等你批准",
@@ -1300,6 +1301,7 @@
           "outcomePlain": "报告的是这一步的结果之一",
           "note": "要交的说明已经写好",
           "document": "要交的文档是在这一步里写的",
+          "deliverables": "交出的文件都在",
           "committed": "改动都已提交",
           "merged": "合并已提交",
           "picks": "选择都成立"
@@ -1331,6 +1333,20 @@
       },
       "showDetails": "Kettu 的回复",
       "hideDetails": "收起"
+    },
+    "delivery": {
+      "done_one": "需求完成 · {{count}} 步 · {{time}}",
+      "done_other": "需求完成 · {{count}} 步 · {{time}}",
+      "dropped_one": "需求结束：不值得做 · {{count}} 步 · {{time}}",
+      "dropped_other": "需求结束：不值得做 · {{count}} 步 · {{time}}",
+      "cancelled_one": "需求已取消 · {{count}} 步 · {{time}}",
+      "cancelled_other": "需求已取消 · {{count}} 步 · {{time}}",
+      "openTask": "打开需求",
+      "written": "这个工作流是 {{agent}} 为这次需求写的，已经跑通：",
+      "save": "存为我的工作流",
+      "saved": "已在我的工作流中",
+      "publish": "发布到市场",
+      "publishAsked": "{{agent}} 正在先把它改成通用版本，发布前会在卡片里等你确认。"
     }
   },
   "marketPublish": {
@@ -1422,6 +1438,13 @@
       "expired": "没有及时回答",
       "ended": "这一轮先结束了",
       "interrupted": "市场回复之前 Kettu 停止了"
+    },
+    "fromTask": {
+      "label": "改了什么",
+      "same": "步骤和流向与需求跑的一样",
+      "changed": "步骤或流向与需求跑的不同",
+      "compare": "和需求“{{title}}”用的版本对比",
+      "hide": "收起对比"
     }
   },
   "sideChat": {

@@ -1,3 +1,4 @@
+import { useMemo } from 'react'
 import { SparklesIcon, Tick02Icon, UserIcon } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
 import type { Pace, Workflow, WireWorkflowEntry } from '@shared/workflow'
@@ -5,6 +6,7 @@ import type { AgentId } from '@shared/thread'
 import { AgentMark } from '@renderer/components/agents/agent-mark'
 import type { FlowEdge, FlowMetrics } from '@renderer/features/tasks/flow-layout'
 import { SidewaysFlow } from '@renderer/features/tasks/sideways-flow'
+import { wrappedLines } from '@renderer/features/tasks/wrapped-lines'
 import { Glyph } from '@renderer/features/shell/glyph'
 import { openWorkflowMarketplace } from './open-task'
 import { localStepName, stepSource, WORKFLOW_ICON, workflowName } from './workflow-picks'
@@ -24,6 +26,11 @@ const MINI: FlowMetrics = {
   bend: 8,
   pad: 10,
 }
+// A tile's room beside its name (padding, mark and gap), and its name's type: 12 px at 500 on a
+// 16 px line, on at most two lines.
+const TILE_X = 4 + 22 + 6 + 8
+const TILE_Y = 8
+const NAME = { size: 12, weight: 500, line: 16 }
 /** The widest a chart is drawn before it is shrunk to fit the card. */
 const MAX_W = 600
 const NO_PINS = {}
@@ -49,6 +56,24 @@ export function WorkflowPreview({
   const description = workflow.locales[i18n.language]?.description ?? workflow.description
   const label = (edge: FlowEdge) =>
     edge.outcomes.length > 0 ? edge.outcomes.join(t('tasks:or')) : t('tasks:flow.youSendBack')
+  // As tall as the longest name needs, so no name is cut off.
+  const metrics = useMemo(() => {
+    const lines = Math.max(
+      1,
+      ...workflow.steps.map((step) =>
+        Math.min(
+          2,
+          wrappedLines(
+            localStepName(workflow, step.id),
+            NAME.size,
+            NAME.weight,
+            MINI.nodeH - TILE_X,
+          ),
+        ),
+      ),
+    )
+    return { ...MINI, nodeW: Math.max(MINI.nodeW, TILE_Y + lines * NAME.line) }
+  }, [workflow])
 
   return (
     <div className="flex flex-col gap-2.5">
@@ -64,7 +89,7 @@ export function WorkflowPreview({
       </div>
       <SidewaysFlow
         workflow={workflow}
-        metrics={MINI}
+        metrics={metrics}
         scale={(width) => MAX_W / width}
         labelOf={(edge) => (edge.back || edge.points.length > 4 ? label(edge) : null)}
         labelClassName="text-[9.5px] tracking-[0.3px] uppercase"
@@ -92,7 +117,7 @@ export function WorkflowPreview({
                   <Glyph icon={SparklesIcon} size={12} className="text-(--agent-violet)" />
                 )}
               </span>
-              <span className="truncate">{name}</span>
+              <span className="line-clamp-2 leading-4 break-words">{name}</span>
             </span>
           )
         }}

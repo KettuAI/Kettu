@@ -889,7 +889,9 @@
     "done": "{{title}} 做完了",
     "dropped": "{{title}} 结束了，没有做",
     "cancelled": "{{title}} 已取消",
-    "endedBody": "{{workflow}} · {{steps}} 步"
+    "endedBody": "{{workflow}} · {{steps}} 步",
+    "notWritten": "只有用智能体为它现写的工作流、并且已经做完的需求，才能存下或发布这个工作流",
+    "noOrigin": "这条需求开始的那段对话已经不在了"
   },
   "marketPublish": {
     "handleInvalid": "发布者名是 1 到 32 个小写字母、数字和连字符，开头和结尾是字母或数字。",

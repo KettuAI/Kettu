@@ -29,6 +29,7 @@ import {
 } from '@renderer/stores/agent-switch'
 import { agentsOn, useAgentsStore, usePlanReadings } from '@renderer/stores/agents'
 import { hostOfSession } from '@renderer/stores/sessions'
+import { taskFrom, useTasksStore } from '@renderer/stores/tasks'
 import { AgentMarkHost } from '@renderer/components/agents/agent-mark-host'
 import { AgentMenu } from '@renderer/features/session/new-session/agent-menu'
 import { readFirstOptions } from '@renderer/features/session/new-session/prepared'
@@ -111,6 +112,8 @@ export function Composer({
 }) {
   const { t } = useTranslation(['composer', 'session'])
   const sessionId = session.id
+  // A task this conversation started still runs; what is said here goes to this agent alone.
+  const taskRunning = useTasksStore((s) => taskFrom(s.summaries, sessionId)?.status === 'running')
   // Another agent picked to take the session over with the next message, shown as its own.
   const pending = useAgentSwitchStore((s) => s.pending[sessionId] ?? null)
   // Every agent here is one of the host the session is on.
@@ -514,7 +517,9 @@ export function Composer({
             ? t('prompt.placeholder.denied')
             : running
               ? t(phone ? 'prompt.placeholder.runningTouch' : 'prompt.placeholder.runningQueue')
-              : t('prompt.placeholder.ask')
+              : taskRunning
+                ? t('prompt.placeholder.taskRunning')
+                : t('prompt.placeholder.ask')
 
   const cache = cacheExpiry(session, agent?.account ?? null)
   const timed = cache?.expiresAt != null ? cache : null

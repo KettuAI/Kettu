@@ -258,6 +258,30 @@ export interface SentBack {
   limit: number
 }
 
+/** Files and links a report may hand over, and how long their text may be. */
+export const MAX_STEP_DELIVERABLES = 10
+export const DELIVERABLE_TITLE_CHARS = 120
+export const DELIVERABLE_DETAIL_CHARS = 160
+export const DELIVERABLE_PATH_CHARS = 1_024
+export const DELIVERABLE_URL_CHARS = 2_048
+
+/**
+ * What a step hands over beside its document: a file it made, with its absolute path on the host,
+ * or a link to where its work went, such as a store's build page.
+ */
+export type StepDeliverable =
+  | { kind: 'file'; title: string; detail: string | null; path: string }
+  | { kind: 'link'; title: string; detail: string | null; url: string }
+
+/**
+ * What a task delivered, as its page and the conversation it started from list it: the pull
+ * requests of its steps, the latest document of each step, then the files and links they reported.
+ */
+export type TaskDeliverable =
+  | { kind: 'pull_request'; url: string }
+  | { kind: 'document'; artifactId: string; version: number; title: string }
+  | StepDeliverable
+
 export interface RoundView {
   id: string
   stepId: string
@@ -275,6 +299,8 @@ export interface RoundView {
   outcome: string | null
   note: string | null
   document: { artifactId: string; version: number; title: string } | null
+  /** Absent from an older host. */
+  deliverables?: StepDeliverable[]
   sentBack: SentBack | null
   stuck: { reason: StuckReason; detail: string | null } | null
   /** The session asks the person something: a permission, a question or a plan. */
@@ -365,6 +391,13 @@ export interface TaskSummary {
   unread: boolean
   createdAt: number
   updatedAt: number
+  /** When it ended, done, dropped or cancelled; absent from an older host. */
+  endedAt?: number | null
+  /**
+   * The session whose suggestion card started it, whose row it takes in the sidebar; absent from
+   * an older host.
+   */
+  from?: { sessionId: string } | null
 }
 
 export interface TaskView extends TaskSummary {
@@ -382,6 +415,8 @@ export interface TaskView extends TaskSummary {
   needs: TaskNeed[]
   /** The session whose agent suggested it, when it came from a suggestion card. */
   from: { sessionId: string } | null
+  /** What it delivered so far; absent from an older host. */
+  deliverables?: TaskDeliverable[]
 }
 
 export interface TaskStart {
@@ -522,7 +557,7 @@ export interface SessionTaskRef {
 // The checks Kettu shows on a report's or a pick's card.
 
 export type ReportCheck =
-  'step_open' | 'outcome' | 'note' | 'document' | 'committed' | 'merged' | 'picks'
+  'step_open' | 'outcome' | 'note' | 'document' | 'deliverables' | 'committed' | 'merged' | 'picks'
 
 export type PickCheck =
   'step' | 'agent' | 'allowed' | 'model' | 'effort' | 'tools' | 'limit' | 'review'

@@ -130,6 +130,19 @@ export function pinnedTasks(summaries: Record<string, TaskSummary>): TaskSummary
     .sort((a, b) => (a.pinnedAt ?? 0) - (b.pinnedAt ?? 0))
 }
 
+/** The latest task a suggestion card in the session started, if any. */
+export function taskFrom(
+  summaries: Record<string, TaskSummary>,
+  sessionId: string,
+): TaskSummary | undefined {
+  let found: TaskSummary | undefined
+  for (const task of Object.values(summaries)) {
+    if (task.from?.sessionId !== sessionId) continue
+    if (!found || task.createdAt > found.createdAt) found = task
+  }
+  return found
+}
+
 /** The tasks that wait for the person or are stuck, the latest first. */
 export function needingTasks(summaries: Record<string, TaskSummary>): TaskSummary[] {
   return Object.values(summaries)
@@ -151,15 +164,19 @@ export function startedSteps(task: TaskSummary): StepRow[] {
     .map((step) => ({ id: step.sessionId ?? `${task.id}/${step.id}`, step }))
 }
 
-/** Whether the main area shows the task's page or one of its steps' sessions. */
+/**
+ * Whether the main area shows the task's page, one of its steps' sessions or the conversation it
+ * started from, `originId`.
+ */
 export function taskShown(
   main: { kind: string; taskId?: string; sessionId?: string },
   taskId: string,
   byId: Record<string, SessionSummary>,
+  originId?: string,
 ): boolean {
   if (main.kind === 'task') return main.taskId === taskId
   if (main.kind !== 'session' || !main.sessionId) return false
-  return byId[main.sessionId]?.task?.taskId === taskId
+  return main.sessionId === originId || byId[main.sessionId]?.task?.taskId === taskId
 }
 
 /** Whether a task's row shows its steps: as the user left it, else while it is in front. */
@@ -170,8 +187,9 @@ export function taskExpanded(
   },
   taskId: string,
   byId: Record<string, SessionSummary>,
+  originId?: string,
 ): boolean {
-  return view.expandedParents[taskId] ?? taskShown(view.main, taskId, byId)
+  return view.expandedParents[taskId] ?? taskShown(view.main, taskId, byId, originId)
 }
 
 /**

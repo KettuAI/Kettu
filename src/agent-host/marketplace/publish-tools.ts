@@ -36,6 +36,8 @@ import type { Caller } from '../artifacts/tools'
 import { HostError } from '../errors'
 import { t } from '../i18n'
 import { pathKey } from '../paths'
+import { parseWorkflow } from '../workflow/format'
+import { sameFlow } from '../workflow/graph'
 import { checkFolder, type CheckedFile, type FolderCheck } from './publish-check'
 import type { NewDraft, PublishedVersion } from './publish-drafts'
 
@@ -50,6 +52,8 @@ export const MARKET_WAIT_MS = 10 * 60_000
 
 const PATH_CHARS = 4096
 const LISTING_REF_CHARS = 80
+const TASK_ID_CHARS = 64
+const CHANGES_CHARS = 300
 // A new version's changed files are compared line by line up to these bounds.
 const COMPARE_FILES = 40
 const COMPARE_BYTES = 256 * 1024
@@ -125,6 +129,20 @@ export const MARKET_TOOLS: Tool[] = [
           maxLength: LISTING_NOTES_CHARS,
           description:
             'What changed in this version, in a sentence or two. The user can edit them.',
+        },
+        from_task: {
+          type: 'string',
+          maxLength: TASK_ID_CHARS,
+          description:
+            'For a workflow made general from the one a task ran on, that task’s id, as Kettu ' +
+            'gave it when it asked you to publish: the card compares the two.',
+        },
+        changes: {
+          type: 'string',
+          maxLength: CHANGES_CHARS,
+          description:
+            'With from_task, one sentence on what you changed to make it general, such as the ' +
+            'project names and request text you took out.',
         },
       },
       required: ['path'],
@@ -213,6 +231,8 @@ export interface MarketToolsDeps {
   changed(): void
   agentOf(sessionId: string): string | null
   sessionTitle(sessionId: string): string | null | undefined
+  /** The workflow file a task ran on and the task's title, for the card to compare with. */
+  taskWorkflow?(taskId: string): Promise<{ title: string; text: string } | null>
   home: string
 }
 
@@ -278,8 +298,10 @@ export function parsePublishInput(input: unknown): {
   visibility: PublishVisibility | null
   version: string | null
   notes: string | null
+  fromTask: string | null
+  changes: string | null
 } {
-  const o = fields(input, ['path', 'visibility', 'version', 'notes'])
+  const o = fields(input, ['path', 'visibility', 'version', 'notes', 'from_task', 'changes'])
   const visibility = o.visibility ?? null
   if (visibility !== null && visibility !== 'public' && visibility !== 'private') {
     throw invalid('visibility must be public or private.')
@@ -293,6 +315,8 @@ export function parsePublishInput(input: unknown): {
     visibility,
     version,
     notes: text(o, 'notes', LISTING_NOTES_CHARS, false),
+    fromTask: text(o, 'from_task', TASK_ID_CHARS, false),
+    changes: text(o, 'changes', CHANGES_CHARS, false),
   }
 }
 
@@ -718,7 +742,7 @@ export class MarketTools {
         `Nothing was uploaded: ${plan.mineError ?? 'Kettu could not read the user’s listings.'}`,
       )
     }
-    const ask = await this.askOf(plan, args.visibility, args.notes)
+    const ask = await this.askOf(plan, args.visibility, args.notes, args)
     // Another call for the same folder may have opened its card while this one checked it.
     const opened = this.jobOf(caller.sessionId, 'publish', ref)
     if (opened) return this.follow(caller.sessionId, opened, deadline)
@@ -820,11 +844,13 @@ export class MarketTools {
     plan: Plan,
     visibility: PublishVisibility | null,
     notes: string | null,
+    from: { fromTask: string | null; changes: string | null } | null = null,
   ): Promise<MarketAsk | null> {
     const { check, listing } = plan
     if (!check.kind || !check.slug || !check.name) return null
     const account = this.deps.account()
     return {
+      ...(check.kind === 'workflow' ? await this.workflowOf(check, from) : {}),
       action: 'publish',
       item: {
         name: check.name,
@@ -850,6 +876,35 @@ export class MarketTools {
         !plan.mine || plan.mine.publisher || !account
           ? null
           : { suggested: suggestHandle(account) },
+    }
+  }
+
+  /**
+   * A workflow's flowchart for its card, and, when it generalizes the workflow a task ran on,
+   * what the card compares; a task Kettu does not have leaves that out.
+   */
+  private async workflowOf(
+    check: FolderCheck,
+    from: { fromTask: string | null; changes: string | null } | null,
+  ): Promise<Pick<MarketAsk, 'workflow' | 'fromTask'>> {
+    const file = check.files.find((f) => f.path === 'workflow.yaml')
+    const after = file?.data.toString('utf8') ?? null
+    const workflow = after === null ? null : parseWorkflow(after).workflow
+    if (!workflow) return {}
+    const taskId = from?.fromTask ?? null
+    const task = taskId ? await this.deps.taskWorkflow?.(taskId).catch(() => null) : null
+    const before = task ? parseWorkflow(task.text).workflow : null
+    if (!task || !before || !taskId) return { workflow }
+    return {
+      workflow,
+      fromTask: {
+        taskId,
+        title: task.title,
+        sameFlow: sameFlow(before, workflow),
+        changes: from?.changes ?? null,
+        before: task.text,
+        after: after!,
+      },
     }
   }
 

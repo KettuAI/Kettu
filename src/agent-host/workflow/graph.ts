@@ -38,3 +38,22 @@ export function forwardReach(workflow: Workflow, from: string): Set<string> {
 export function arrowKey(stepId: string, outcome: string | null): string {
   return outcome === null ? `${stepId}#review` : `${stepId}/${outcome}`
 }
+
+/**
+ * Whether two workflows have the same steps and arrows: who does each step, what it hands in, who
+ * reviews it and where each outcome goes. Names, prompts and descriptions may differ.
+ */
+export function sameFlow(a: Workflow, b: Workflow): boolean {
+  const shape = (workflow: Workflow) =>
+    JSON.stringify(
+      workflow.steps.map((step) => [
+        step.id,
+        step.by,
+        step.handIn,
+        step.youReview,
+        step.reviewOf,
+        step.outcomes.map((o) => [o.name, o.to, o.end, o.limit]),
+      ]),
+    )
+  return a.sendBackLimit === b.sendBackLimit && shape(a) === shape(b)
+}

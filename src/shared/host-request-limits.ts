@@ -200,6 +200,8 @@ export const HOST_REQUEST_LIMITS: Readonly<Record<HostMethod, number | null>> = 
   'tasks.note': HOST_MS,
   'tasks.pin': HOST_MS,
   'tasks.update': HOST_MS,
+  'tasks.saveWorkflow': HOST_MS,
+  'tasks.publishWorkflow': AGENT_MS,
   'permissions.respond': HOST_MS,
   'git.status': AGENT_MS,
   'git.unwatch': HOST_MS,

@@ -344,6 +344,8 @@ export interface SuggestionsDeps {
       given?: ResolvedWorkflow,
     ): Promise<TaskView>
     pastRuns(workflowId: string): { runs: number; medianMs: number | null }
+    /** The drafts tasks ran on, which are kept with their texts as long as those tasks. */
+    draftIds?(): ReadonlySet<string>
   }
   sessions: {
     agentOf(sessionId: string): AgentId | null
@@ -411,9 +413,9 @@ export class WorkflowSuggestions {
     this.random = deps.random ?? randomId
   }
 
+  /** Reads the cards; `sweep` follows once the tasks that may name their drafts are loaded. */
   async load(): Promise<void> {
     this.data = await this.deps.file.load()
-    await this.sweep()
   }
 
   flush(): Promise<void> {
@@ -1015,6 +1017,45 @@ export class WorkflowSuggestions {
     return view.id
   }
 
+  // A draft a task ran on.
+
+  /** The text of a draft a task ran on, as the user approved it on its card. */
+  async draftText(draftId: string): Promise<string> {
+    const draft = DRAFT_ID.test(draftId) ? this.data.drafts[draftId] : undefined
+    const text = draft ? await this.text(draft.hash) : null
+    if (text === null) throw notFound(t('workflow.notFound'))
+    return text
+  }
+
+  /**
+   * Save as my workflow, once a task that ran on a draft ended done: the draft goes into the
+   * library approved, as its card drew it. Saved again, it gives the entry it already became.
+   */
+  async saveDraft(draftId: string): Promise<WorkflowEntry> {
+    const draft = this.data.drafts[draftId]
+    const text = await this.draftText(draftId)
+    const entries = await this.deps.library.list()
+    let entry = entries.find((e) => e.hash === draft!.hash)
+    if (!entry) {
+      const created = await this.deps.library.create(text, {
+        sessionId: draft!.sessionId,
+        agentId: draft!.agentId,
+      })
+      if (!('id' in created)) throw invalidParams(problemLines(created.problems))
+      entry = created
+    }
+    if (!usableWorkflow(entry)) {
+      await this.deps.library.approve(entry.id, draft!.hash)
+      entry = (await this.deps.library.list()).find((e) => e.id === entry!.id) ?? entry
+    }
+    return entry
+  }
+
+  /** Who wrote a draft, for the task's delivery to name. */
+  draftAgent(draftId: string): AgentId | null {
+    return this.data.drafts[draftId]?.agentId ?? null
+  }
+
   // Keeping.
 
   private record(id: string): SuggestionRecord {
@@ -1061,9 +1102,10 @@ export class WorkflowSuggestions {
         .sort(([, a], [, b]) => b.createdAt - a.createdAt)
         .slice(0, KEPT)
     const suggestions = newest(this.data.suggestions)
-    const named = new Set(
-      suggestions.flatMap(([, s]) => (s.source.kind === 'draft' ? [s.source.draftId] : [])),
-    )
+    const named = new Set([
+      ...suggestions.flatMap(([, s]) => (s.source.kind === 'draft' ? [s.source.draftId] : [])),
+      ...(this.deps.tasks.draftIds?.() ?? []),
+    ])
     const recent = new Set(newest(this.data.drafts).map(([id]) => id))
     this.data.suggestions = Object.fromEntries(suggestions)
     this.data.drafts = Object.fromEntries(
@@ -1072,10 +1114,14 @@ export class WorkflowSuggestions {
   }
 
   /**
-   * Removes the texts no card or draft names any more; only as the host starts, so no text goes
-   * while a card that names it is being made.
+   * Removes the texts no card or draft names any more; only as the host starts, after the tasks,
+   * so no text goes while a card that names it is being made or a task runs on it.
    */
-  private async sweep(): Promise<void> {
+  async sweep(): Promise<void> {
+    const before = Object.keys(this.data.drafts).length + Object.keys(this.data.suggestions).length
+    this.trim()
+    if (Object.keys(this.data.drafts).length + Object.keys(this.data.suggestions).length !== before)
+      this.persist()
     let names: string[]
     try {
       names = await readdir(this.deps.dir)

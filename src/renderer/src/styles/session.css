@@ -2394,6 +2394,10 @@
   display: grid !important;
   gap: 3px !important;
 }
+.ks-pub-from {
+  display: grid !important;
+  gap: 6px !important;
+}
 .ks-pub-files > span {
   display: flex;
   align-items: center;
