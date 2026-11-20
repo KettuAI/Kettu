@@ -98,6 +98,7 @@ import {
   Spin,
 } from './controls'
 import type { AllowedSite } from './allowed-sites'
+import { LanguageFlag } from './language-flag'
 import { BlockLine, FlashMark, GroupNote, ItemLine, Notice, Thing } from './rows'
 import { useApply } from './use-apply'
 
@@ -110,12 +111,17 @@ export function Language() {
   const { t } = useTranslation('settings')
   const value = useSettings().general.language
   const [apply, error] = useApply()
-  const options: { value: LanguageSetting; label: string }[] = [
+  const options: { value: LanguageSetting; label: string; icon: ReactNode }[] = [
     {
       value: 'system',
       label: t('general.language.systemNamed', { name: LOCALE_NAMES[systemLocale] }),
+      icon: <Icon icon={Globe02Icon} size={14} />,
     },
-    ...LOCALES.map((locale) => ({ value: locale, label: LOCALE_NAMES[locale] })),
+    ...LOCALES.map((locale) => ({
+      value: locale,
+      label: LOCALE_NAMES[locale],
+      icon: <LanguageFlag locale={locale} />,
+    })),
   ]
   return (
     <>
@@ -124,7 +130,6 @@ export function Language() {
         label={t('general.language.name')}
         value={value}
         options={options}
-        lead={<Icon icon={Globe02Icon} size={14} />}
         onChange={(v) => apply({ general: { language: v } })}
       />
     </>

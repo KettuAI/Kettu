@@ -316,7 +316,6 @@ export function SettingSelect<T extends string>({
   onChange,
   disabled,
   className,
-  lead,
 }: {
   label: string
   value: T
@@ -332,8 +331,6 @@ export function SettingSelect<T extends string>({
   onChange: (value: T) => void
   disabled?: boolean
   className?: string
-  /** Shown before the value when the chosen option has no icon, as Language's globe. */
-  lead?: ReactNode
 }) {
   const chosen = options.find((o) => o.value === value)
   return (
@@ -361,11 +358,7 @@ export function SettingSelect<T extends string>({
             disabled={disabled}
             onClick={toggle}
           >
-            <SelectFace
-              mark={chosen?.icon ?? lead}
-              value={chosen?.label ?? ''}
-              danger={chosen?.danger}
-            />
+            <SelectFace mark={chosen?.icon} value={chosen?.label ?? ''} danger={chosen?.danger} />
           </button>
         )}
       />

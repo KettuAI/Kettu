@@ -3361,6 +3361,15 @@ li[data-row-exit='dust'] > * {
   height: 16px;
   color: var(--muted);
 }
+/* A language's flag, in the menu and on the field; the edge keeps white stripes from fading into the card. */
+:is(.ui-as-menu__logo, .k-select__lead) > svg.k-flag {
+  display: block;
+  width: 16px;
+  height: auto;
+  border-radius: 2px;
+  outline: 1px solid var(--line);
+  outline-offset: -1px;
+}
 .ui-ss-select.k-select:disabled {
   opacity: 0.45;
   cursor: default;
