@@ -443,9 +443,9 @@ struct PanelContent: View {
 }
 
 /// While a request waits, the panel is that card alone, the one thing the user has to do; answered,
-/// its word shows for a moment and the next card or the list follows. The list, from top to
-/// bottom: the session the island is about, a few other sessions with the rest folded into one
-/// line, the agents' plan limits, and the way to a new session or Kettu.
+/// its word shows for a moment and the next card or the list follows. The list is the sessions as
+/// the sidebar lists them, a few with the rest folded into one line, then the way to a new session
+/// or Kettu.
 struct PanelBody: View {
   @ObservedObject var model: IslandModel
 
@@ -455,30 +455,17 @@ struct PanelBody: View {
         NoteView(note: note).padding(.vertical, 4)
       } else if let request = model.requests.first {
         RequestCard(model: model, request: request).padding(.vertical, 4)
-      } else if model.rows.isEmpty {
-        EmptyPanel(model: model)
-        if !model.limits.isEmpty { UsageStrip(model: model) }
-        PanelFooter(model: model)
       } else {
-        if let focus = model.focusRow { FocusCard(model: model, row: focus) }
-        let others = model.otherRows
-        let shown = model.shownRows
-        if !shown.isEmpty {
-          HStack(spacing: 6) {
-            Text(model.text("others"))
-            Text("\(others.count)").foregroundColor(Theme.faint)
+        if model.rows.isEmpty {
+          EmptyPanel(model: model)
+        } else {
+          VStack(spacing: 1) {
+            ForEach(model.listRows, id: \.key) { row in SessionRow(model: model, row: row) }
           }
-          .font(Fonts.ui(11, .medium))
-          .foregroundColor(Theme.tertiary)
-          .padding(.horizontal, 10)
-          .padding(.top, model.focusRow == nil ? 2 : 12)
-          .padding(.bottom, 6)
-          ForEach(shown, id: \.key) { row in OtherRow(model: model, row: row) }
-          if others.count > shown.count {
-            MoreRow(model: model, count: others.count - shown.count)
-          }
+          .padding(.top, 2)
+          let more = model.rows.count - model.listRows.count
+          if more > 0 { MoreRow(model: model, count: more) }
         }
-        if !model.limits.isEmpty { UsageStrip(model: model) }
         PanelFooter(model: model)
       }
     }
@@ -501,7 +488,7 @@ struct MoreRow: View {
     .padding(.horizontal, 10)
     .frame(height: 30)
     .background(
-      RoundedRectangle(cornerRadius: 9, style: .continuous)
+      RoundedRectangle(cornerRadius: 8, style: .continuous)
         .fill(hover ? Theme.rowHover : Color.clear)
     )
     .contentShape(Rectangle())
@@ -527,61 +514,7 @@ struct EmptyPanel: View {
 }
 
 extension IslandModel {
-  /// How long until a time, as the duration strings write it; nil once it has passed.
-  func until(_ ms: Double?) -> String? {
-    guard let ms, ms > now.timeIntervalSince1970 * 1000 else { return nil }
-    return short(since: 2 * now.timeIntervalSince1970 * 1000 - ms)
-  }
-
-  /// A length of time in ms, as the duration strings write it.
-  func length(_ ms: Double) -> String? {
-    duration(since: now.timeIntervalSince1970 * 1000 - ms)
-  }
-
-  /// What the focus card's second line says: what the session does, waits for or did.
-  func line(of row: IslandRow) -> String {
-    switch status(of: row) {
-    case "stuck":
-      let time = duration(since: row.toolSince) ?? ""
-      return [text("stuck", ["time": time]), row.line].filter { !$0.isEmpty }.joined(
-        separator: " · ")
-    case "unread":
-      if let ms = focus?.turnMs, let time = length(ms) { return text("doneIn", ["time": time]) }
-      return row.line
-    case "limited":
-      guard let reset = until(row.limit?.resetsAt) else { return row.line }
-      return "\(row.line) · \(text("resets", ["time": reset]))"
-    case "idle":
-      if let background = row.background {
-        return text("runsInBackground", ["command": background.first])
-      }
-      return short(since: row.since).map { text("endedAgo", ["time": $0]) } ?? row.line
-    default:
-      return row.line
-    }
-  }
-
-  func lineColor(of row: IslandRow) -> Color {
-    switch status(of: row) {
-    case "waiting", "sign_in": return Theme.attention
-    case "failed", "limited": return Theme.danger
-    case "stuck": return Theme.warning
-    case "running", "starting": return Theme.running
-    case "unread": return Theme.success
-    default: return Theme.secondary
-    }
-  }
-
   func title(of row: IslandRow) -> String { row.title.isEmpty ? text("untitled") : row.title }
-
-  /// How long a row has been as it is: a running turn's time, else how long ago it changed.
-  func time(of row: IslandRow) -> String? {
-    guard let time = short(since: row.since) else { return nil }
-    switch status(of: row) {
-    case "running", "starting", "stuck", "waiting", "sign_in": return time
-    default: return text("ago", ["time": time])
-    }
-  }
 
   func rowLabel(_ row: IslandRow) -> String {
     let status = status(of: row)
@@ -593,287 +526,53 @@ extension IslandModel {
         "agent": row.agent.name,
       ])
   }
-}
 
-/// Facts in a row that wraps onto the next line when it runs out of room.
-struct FlowLayout: Layout {
-  var spacing: CGFloat = 12
-  var lineSpacing: CGFloat = 6
-
-  func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
-    let width = proposal.width ?? .infinity
-    var x: CGFloat = 0
-    var y: CGFloat = 0
-    var line: CGFloat = 0
-    var widest: CGFloat = 0
-    for view in subviews {
-      let size = view.sizeThatFits(.unspecified)
-      if x > 0 && x + size.width > width {
-        y += line + lineSpacing
-        x = 0
-        line = 0
-      }
-      widest = max(widest, x + size.width)
-      x += size.width + spacing
-      line = max(line, size.height)
-    }
-    return CGSize(width: min(widest, width), height: y + line)
-  }
-
-  func placeSubviews(
-    in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()
-  ) {
-    var x = bounds.minX
-    var y = bounds.minY
-    var line: CGFloat = 0
-    for view in subviews {
-      let size = view.sizeThatFits(.unspecified)
-      if x > bounds.minX && x + size.width > bounds.maxX {
-        y += line + lineSpacing
-        x = bounds.minX
-        line = 0
-      }
-      view.place(at: CGPoint(x: x, y: y), proposal: ProposedViewSize(size))
-      x += size.width + spacing
-      line = max(line, size.height)
-    }
+  /// A cache in its last stretch, as the sidebar marks it: the share of that stretch left.
+  func cacheEnding(_ cache: IslandCache?) -> Double? {
+    guard let cache, cache.endingMs > 0 else { return nil }
+    let left = cache.expiresAt - now.timeIntervalSince1970 * 1000
+    guard left > 0, left <= cache.endingMs else { return nil }
+    return left / cache.endingMs
   }
 }
 
-/// One fact: a small icon and its words, grey unless its level colors it.
-struct FactChip<Icon: View>: View {
-  let text: String
-  var color: Color = Theme.secondary
-  var mono = false
-  @ViewBuilder let icon: () -> Icon
-
-  var body: some View {
-    HStack(spacing: 5) {
-      icon()
-      Text(text)
-        .font(mono ? Fonts.mono(11) : Fonts.ui(11.5, .medium))
-        .lineLimit(1)
-    }
-    .foregroundColor(color)
-    .monospacedDigit()
-    .fixedSize()
-  }
-}
-
-private func symbol(_ name: String, _ color: Color? = nil) -> some View {
-  Image(systemName: name)
-    .font(.system(size: 10.5, weight: .medium))
-    .foregroundColor(color)
-    .frame(width: 12, height: 12)
-}
-
-/// The session the panel leads with: who and how long, what it does, its plan, its last reply or a
-/// word on its cache, then the facts that matter now.
-struct FocusCard: View {
+/// A session as the sidebar's row draws it: its agent's mark, its title and its project, and at the
+/// end one status in a fixed slot: waiting, failed, the turn's nine dots, a cache in its last
+/// minutes, or unread.
+struct SessionRow: View {
   @ObservedObject var model: IslandModel
   let row: IslandRow
   @State private var hover = false
 
   var body: some View {
     let status = model.status(of: row)
-    let focus = model.focus
-    VStack(alignment: .leading, spacing: 0) {
-      HStack(spacing: 10) {
-        MarkView(agent: row.agent, size: 20)
-        HStack(alignment: .firstTextBaseline, spacing: 6) {
-          Text(model.title(of: row))
-            .font(Fonts.ui(13.5, .semibold))
-            .foregroundColor(Theme.text)
-          if !row.project.isEmpty {
-            Text(row.project).font(Fonts.ui(12)).foregroundColor(Theme.tertiary)
-          }
-          if let host = row.host { HostTag(host: host, offline: model.text("offline")) }
-        }
-        .lineLimit(1)
-        Spacer(minLength: 8)
-        if let time = model.time(of: row) {
-          Text(time).font(Fonts.ui(11.5)).foregroundColor(Theme.tertiary).monospacedDigit()
-        }
-      }
-      HStack(spacing: 7) {
-        if status == "running" || status == "starting" {
-          TurnDots(
-            pattern: status == "starting" ? .think : TurnDots.Pattern(phase: row.phase), size: 12,
-            reduceMotion: model.reduceMotion)
-        }
-        Text(model.line(of: row)).lineLimit(1).truncationMode(.tail)
-      }
-      .font(Fonts.ui(12.5))
-      .foregroundColor(model.lineColor(of: row))
-      .padding(.leading, 30)
-      .padding(.top, 6)
-      middle(status: status, focus: focus)
-      facts(status: status)
-    }
-    .padding(.horizontal, 12)
-    .padding(.top, 11)
-    .padding(.bottom, 10)
-    .background(
-      RoundedRectangle(cornerRadius: 14, style: .continuous)
-        .fill(hover || model.selected == row.key ? Theme.cardHover : Theme.focusCard)
-    )
-    .padding(.top, 2)
-    .opacity(row.host?.offline == true ? 0.5 : 1)
-    .contentShape(Rectangle())
-    .onHover { hover = $0 }
-    .onTapGesture { model.open(row: row.key) }
-    .accessibilityElement(children: .combine)
-    .accessibilityLabel(model.rowLabel(row))
-    .accessibilityAddTraits(.isButton)
-  }
-
-  /// At most one of: the plan's progress and its step in progress while it runs, the last reply
-  /// once it ended, or the cache's cost once it expired.
-  @ViewBuilder private func middle(status: String, focus: IslandFocus?) -> some View {
-    if ["running", "starting", "stuck"].contains(status), let plan = row.plan {
-      HStack(spacing: 6) {
-        PlanRing(done: plan.done, total: plan.total, size: 12)
-        Text("\(plan.done)/\(plan.total)").fontWeight(.semibold).monospacedDigit()
-        if let current = plan.current {
-          Text(current).foregroundColor(Theme.quote).lineLimit(1).truncationMode(.tail)
-        }
-      }
-      .font(Fonts.ui(12))
-      .foregroundColor(Theme.text)
-      .padding(.leading, 30)
-      .padding(.top, 6)
-    } else if ["unread", "failed"].contains(status), let reply = focus?.reply {
-      Text(reply)
-        .font(Fonts.ui(12.5))
-        .foregroundColor(Theme.quote)
-        .lineLimit(2)
-        .lineSpacing(2)
-        .padding(.horizontal, 10)
-        .padding(.vertical, 7)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .overlay(alignment: .leading) { Rectangle().fill(Theme.track).frame(width: 2) }
-        .padding(.leading, 30)
-        .padding(.top, 7)
-    } else if status == "idle", model.cacheLeft(row.cache) == nil, model.justExpired(row.cache) {
-      Text(
-        row.cache?.tokens.map {
-          model.text("cache.expired", ["tokens": Self.tokens($0)])
-        } ?? model.text("cache.expiredShort")
-      )
-      .font(Fonts.ui(11.5))
-      .foregroundColor(Theme.tertiary)
-      .lineSpacing(2)
-      .fixedSize(horizontal: false, vertical: true)
-      .padding(.leading, 30)
-      .padding(.top, 6)
-    }
-  }
-
-  /// A token count as the composer writes it: 70K, 1.2M.
-  static func tokens(_ count: Double) -> String {
-    if count >= 1_000_000 { return String(format: "%.1fM", count / 1_000_000) }
-    if count >= 1000 { return "\(Int((count / 1000).rounded()))K" }
-    return "\(Int(count))"
-  }
-
-  /// Context, cache, branch, pull request, sub-agents, background, task, model; only what holds.
-  @ViewBuilder private func facts(status: String) -> some View {
-    FlowLayout(spacing: 12, lineSpacing: 6) {
-      if let context = row.context {
-        FactChip(
-          text: model.text("context", ["percent": "\(context.percent)"]),
-          color: context.level == "ok" ? Theme.secondary : Theme.limit(context.level)
-        ) { ContextRing(percent: context.percent, level: context.level, size: 12) }
-      }
-      if !["running", "starting", "stuck"].contains(status), let left = model.cacheLeft(row.cache) {
-        FactChip(
-          text: model.text("cache.left", ["time": left.text]),
-          color: left.ending ? Theme.warning : Theme.secondary
-        ) { symbol("timer") }
-      }
-      if let branch = row.branch, !branch.name.isEmpty {
-        FactChip(text: branch.name, mono: true) {
-          symbol(branch.worktree ? "folder" : "arrow.triangle.branch")
-        }
-      }
-      if let pr = row.pr {
-        FactChip(text: "#\(pr.number)") { symbol("arrow.triangle.pull", Self.color(pr.state)) }
-      }
-      if let subagents = row.subagents {
-        FactChip(text: subagents.text) { symbol("person.2") }
-      }
-      if let background = row.background {
-        FactChip(text: model.text("background", ["count": "\(background.count)"])) {
-          symbol("terminal")
-        }
-      }
-      if row.parent?.kind == "task", let task = row.parent?.title {
-        FactChip(
-          text: row.parent?.step.map {
-            model.text(
-              "taskStep", ["task": task, "index": "\($0.index)", "total": "\($0.total)"])
-          } ?? model.text("task", ["task": task])
-        ) { symbol("checklist") }
-      }
-      if let name = row.model {
-        FactChip(text: name) { EmptyView() }
-      }
-    }
-    .padding(.leading, 30)
-    .padding(.top, 9)
-  }
-
-  static func color(_ state: String) -> Color {
-    switch state {
-    case "merged": return Theme.merged
-    case "closed": return Theme.danger
-    case "draft": return Theme.secondary
-    default: return Theme.success
-    }
-  }
-}
-
-/// Any other session on one line: its signal, title and project, one fact, its agent and time.
-struct OtherRow: View {
-  @ObservedObject var model: IslandModel
-  let row: IslandRow
-  @State private var hover = false
-
-  var body: some View {
-    HStack(spacing: 9) {
-      Group {
-        if let signal = model.signal(of: row) {
-          SignalView(signal: signal, size: 13, reduceMotion: model.reduceMotion)
-        } else {
-          Circle().fill(Theme.faint).frame(width: 6, height: 6)
-        }
-      }
-      .frame(width: 14, height: 14)
-      HStack(alignment: .firstTextBaseline, spacing: 4) {
+    HStack(spacing: 8) {
+      MarkView(agent: row.agent, size: 14)
+      HStack(alignment: .firstTextBaseline, spacing: 6) {
         Text(model.title(of: row))
-          .font(Fonts.ui(12.5))
-          .foregroundColor(row.group == "idle" ? Theme.secondary : Theme.text)
+          .font(Fonts.ui(13, .medium))
+          .foregroundColor(row.group == "idle" ? Theme.quote : Theme.text)
         if !row.project.isEmpty {
           Text(row.project).font(Fonts.ui(12)).foregroundColor(Theme.tertiary)
         }
-        if let host = row.host { HostTag(host: host, offline: model.text("offline")) }
       }
       .lineLimit(1)
+      .truncationMode(.tail)
       Spacer(minLength: 8)
-      fact
-      MarkView(agent: row.agent, size: 13)
-      Text(model.short(since: row.since) ?? "")
-        .font(Fonts.ui(11.5))
-        .foregroundColor(Theme.tertiary)
-        .monospacedDigit()
-        .lineLimit(1)
-        .frame(width: 44, alignment: .trailing)
+      if let host = row.host {
+        Text(host.offline ? "\(host.name) · \(model.text("offline"))" : host.name)
+          .font(Fonts.ui(12))
+          .foregroundColor(Theme.tertiary)
+          .lineLimit(1)
+          .frame(maxWidth: 96, alignment: .trailing)
+      }
+      indicator(status).frame(width: 16, height: 16)
     }
-    .padding(.horizontal, 10)
-    .padding(.leading, row.parent?.kind == "session" ? 14 : 0)
+    .padding(.leading, row.parent?.kind == "session" ? 24 : 10)
+    .padding(.trailing, 10)
     .frame(height: 32)
     .background(
-      RoundedRectangle(cornerRadius: 9, style: .continuous)
+      RoundedRectangle(cornerRadius: 8, style: .continuous)
         .fill(hover || model.selected == row.key ? Theme.rowHover : Color.clear)
     )
     .opacity(row.host?.offline == true ? 0.5 : 1)
@@ -885,82 +584,38 @@ struct OtherRow: View {
     .accessibilityAddTraits(.isButton)
   }
 
-  /// One fact at most: a running plan's progress, a warm cache's time, or what runs in the
-  /// background.
-  @ViewBuilder private var fact: some View {
-    let status = model.status(of: row)
-    if ["running", "starting", "stuck"].contains(status), let plan = row.plan {
-      HStack(spacing: 4) {
-        PlanRing(done: plan.done, total: plan.total, size: 12)
-        Text("\(plan.done)/\(plan.total)")
+  @ViewBuilder private func indicator(_ status: String) -> some View {
+    switch status {
+    case "waiting", "sign_in":
+      WaitingDot(size: 8)
+    case "failed", "limited", "stuck":
+      SignalView(signal: model.signal(of: row) ?? .failed, size: 14, reduceMotion: model.reduceMotion)
+    case "running", "starting":
+      TurnDots(
+        pattern: status == "starting" ? .think : TurnDots.Pattern(phase: row.phase), size: 12,
+        reduceMotion: model.reduceMotion)
+    default:
+      if let share = model.cacheEnding(row.cache) {
+        CacheRing(share: share)
+      } else if status == "unread" {
+        Circle().fill(Theme.unread).frame(width: 6, height: 6)
       }
-      .font(Fonts.ui(11.5, .semibold))
-      .foregroundColor(Theme.quote)
-      .monospacedDigit()
-    } else if !["running", "starting", "stuck"].contains(status), let left = model.cacheLeft(row.cache)
-    {
-      FactChip(text: left.text, color: left.ending ? Theme.warning : Theme.secondary) {
-        symbol("timer")
-      }
-    } else if let background = row.background {
-      FactChip(text: background.first) { symbol("terminal") }
-        .frame(maxWidth: 150, alignment: .trailing)
     }
   }
 }
 
-/// The agents' plan limits at the bottom: each window's name, a small bar and the share used,
-/// colored only from the warning level, and when the fullest window resets.
-struct UsageStrip: View {
-  @ObservedObject var model: IslandModel
+/// A prompt cache in its last minutes, as the sidebar's ring: the part left in the warning color.
+struct CacheRing: View {
+  let share: Double
 
   var body: some View {
-    VStack(alignment: .leading, spacing: 7) {
-      ForEach(Array(model.limits.enumerated()), id: \.offset) { _, group in
-        HStack(spacing: 9) {
-          MarkView(
-            agent: IslandAgent(
-              id: group.agent.harness, name: group.agent.name, harness: group.agent.harness,
-              color: group.agent.color),
-            size: 13)
-          Text(group.agent.name)
-            .font(Fonts.ui(11.5, .semibold))
-            .foregroundColor(Theme.quote)
-            .lineLimit(1)
-            .frame(width: 92, alignment: .leading)
-          ForEach(Array(group.windows.enumerated()), id: \.offset) { _, window in
-            HStack(spacing: 6) {
-              Text(window.label).foregroundColor(Theme.secondary)
-              ZStack(alignment: .leading) {
-                Capsule().fill(Theme.button)
-                Capsule().fill(Theme.limit(window.level))
-                  .frame(width: max(1.5, 30 * CGFloat(min(100, window.usedPercent)) / 100))
-              }
-              .frame(width: 30, height: 4)
-              Text("\(Int(window.usedPercent))%")
-                .fontWeight(.semibold)
-                .foregroundColor(window.level == "ok" ? Theme.quote : Theme.limit(window.level))
-                .frame(minWidth: 28, alignment: .leading)
-            }
-          }
-          Spacer(minLength: 4)
-          if let fullest = group.windows.max(by: { $0.usedPercent < $1.usedPercent }),
-            let reset = model.until(fullest.resetsAt)
-          {
-            Text(model.text("resets", ["time": reset])).foregroundColor(Theme.tertiary)
-          }
-        }
-        .font(Fonts.ui(11.5, .medium))
-        .monospacedDigit()
-        .lineLimit(1)
-      }
+    ZStack {
+      Circle().stroke(Theme.track, lineWidth: 1.6)
+      Circle().trim(from: 0, to: share)
+        .stroke(Theme.warning, style: StrokeStyle(lineWidth: 1.6, lineCap: .round))
+        .rotationEffect(.degrees(-90))
     }
-    .padding(.horizontal, 10)
-    .padding(.top, 10)
-    .padding(.bottom, 2)
-    .overlay(alignment: .top) { Rectangle().fill(Theme.line).frame(height: 1) }
-    .padding(.top, 8)
-    .accessibilityElement(children: .combine)
+    .frame(width: 11, height: 11)
   }
 }
 

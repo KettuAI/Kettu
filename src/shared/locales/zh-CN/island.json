@@ -20,9 +20,7 @@
       "days": "{{d}} 天"
     },
     "for": "已 {{time}}",
-    "stuck": "{{time}} 没有结果",
     "waited": "已等 {{time}}",
-    "resets": "{{time}}后重置",
     "plan": "{{done}}/{{total}}",
     "offline": "离线",
     "answerInKettu": "在 Kettu 中回答",
@@ -54,26 +52,14 @@
     "recommended": "推荐",
     "cache": {
       "short": "缓存 {{time}}",
-      "left": "缓存还剩 {{time}}",
-      "about": "约 {{time}}",
-      "expired": "提示词缓存已过期，下一条消息会按全价重新读取约 {{tokens}} token。",
-      "expiredShort": "提示词缓存已过期，下一条消息会按全价重新读取整段对话。"
+      "about": "约 {{time}}"
     },
-    "endedAgo": "这一轮 {{time}}前结束",
-    "doneIn": "已完成 · 用了 {{time}}",
-    "context": "上下文 {{percent}}%",
-    "background": "后台 {{count}}",
-    "taskStep": "需求：{{task}} · 第 {{index}} 步，共 {{total}} 步",
-    "task": "需求：{{task}}",
     "today": "今天 {{count}} 个会话",
     "newSession": "新建会话",
-    "others": "其他会话",
     "empty": {
       "title": "还没有会话",
       "body": "在 Kettu 里开始第一个，它会出现在这里。"
     },
-    "ago": "{{time}}前",
-    "runsInBackground": "后台运行 {{command}}",
     "moreSessions": "还有 {{count}} 个会话",
     "viewInKettu": "在 Kettu 中查看"
   },
@@ -138,11 +124,5 @@
       "allowOnce": "允许一次",
       "allowAlways": "始终允许"
     }
-  },
-  "limit": {
-    "five_hour": "5 小时",
-    "seven_day": "7 天",
-    "seven_day_opus": "7 天 Opus",
-    "seven_day_sonnet": "7 天 Sonnet"
   }
 }

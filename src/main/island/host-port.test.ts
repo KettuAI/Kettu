@@ -46,7 +46,6 @@ it('asks the host only for the island’s methods', async () => {
     'agents.refreshLimits',
     'sessions.list',
     'sessions.requests',
-    'sessions.outputs',
     'tasks.list',
     'permissions.respond',
     'browser.answerOrigin',

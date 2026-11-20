@@ -112,25 +112,12 @@ final class IslandModel: ObservableObject {
 
   var rows: [IslandRow] { store.order.compactMap { store.rows[$0] } }
 
-  /// The session the expanded island leads with, as main chose it.
-  var focusRow: IslandRow? { store.focus.flatMap { store.rows[$0.row] } }
-
-  /// The focus's plan steps and last reply, when they belong to the focus row.
-  var focus: IslandFocus? { focusRow == nil ? nil : store.focus }
-
-  /// The other sessions, in main's order, as compact rows.
-  var otherRows: [IslandRow] {
-    let focus = focusRow?.key
-    return rows.filter { $0.key != focus }
-  }
-
-  /// The other sessions the list shows; the rest fold into one line that opens Kettu.
-  var shownRows: [IslandRow] { Array(otherRows.prefix(Metrics.listRows)) }
+  /// The sessions the list shows, in main's order; the rest fold into one line that opens Kettu.
+  var listRows: [IslandRow] { Array(rows.prefix(Metrics.listRows)) }
 
   /// While a request waits, or the word on one just answered shows, the panel is that card alone.
   var asking: Bool { note != nil || !requests.isEmpty }
 
-  var limits: [IslandLimits] { store.summary.limits ?? [] }
 
   var requests: [IslandRequest] { store.requestOrder.compactMap { store.requests[$0] } }
 
@@ -163,16 +150,6 @@ final class IslandModel: ObservableObject {
     return text("duration.days", ["d": "\(minutes / (24 * 60))"])
   }
 
-  /// A duration in its largest unit alone, for the island's narrow places.
-  func short(since ms: Double?) -> String? {
-    guard let ms else { return nil }
-    let seconds = max(0, Int(now.timeIntervalSince1970 - ms / 1000))
-    if seconds < 60 { return text("duration.seconds", ["s": "\(seconds)"]) }
-    if seconds < 3600 { return text("duration.minutes", ["m": "\(seconds / 60)"]) }
-    if seconds < 86400 { return text("duration.hours", ["h": "\(seconds / 3600)"]) }
-    return text("duration.days", ["d": "\(seconds / 86400)"])
-  }
-
   /// The collapsed island's parts as last laid out, which its width follows.
   @Published private(set) var parts: [String: CGFloat] = [:]
 
@@ -192,7 +169,7 @@ final class IslandModel: ObservableObject {
     case "stuck": return .stuck
     case "limited": return .limited
     case "unread": return .unread
-    default: return row.background != nil ? .background : nil
+    default: return nil
     }
   }
 
@@ -282,7 +259,7 @@ final class IslandModel: ObservableObject {
     cacheTimer?.invalidate()
     let nowMs = now.timeIntervalSince1970 * 1000
     var wait: Double?
-    for cache in [focusRow?.cache, rows.first?.cache].compactMap({ $0 }) {
+    for cache in rows.prefix(Metrics.listRows).compactMap(\.cache) {
       let left = cache.expiresAt - nowMs
       guard left > 0 else { continue }
       let next =
@@ -366,8 +343,7 @@ final class IslandModel: ObservableObject {
           fact: minutes.map { .word(model.text("duration.minutes", ["m": "\($0)"])) },
           title: title(running.first))
       }
-      // The dots act out what the focus does, as the expanded island's card shows it.
-      let lead = moving.first { $0.key == model.focusRow?.key } ?? moving[0]
+      let lead = moving[0]
       let signal: Signal =
         lead.status == "starting" ? .running(.think) : .running(TurnDots.Pattern(phase: lead.phase))
       let fact: Fact? =
@@ -387,7 +363,7 @@ final class IslandModel: ObservableObject {
         title: title(limited.first))
     }
     // Nothing needs a mark: Kettu's fox, and the latest session's warm cache or today's count.
-    let latest = model.focusRow ?? rows.first
+    let latest = rows.first
     var fact: Fact?
     if let left = model.cacheLeft(latest?.cache) {
       fact = .cache(model.text("cache.short", ["time": left.text]), ending: left.ending)
@@ -595,7 +571,7 @@ final class IslandModel: ObservableObject {
   /// Moves the keyboard's row up or down through the rows the panel lists.
   func moveSelection(_ step: Int) {
     guard !asking else { return }
-    let keys = ([focusRow].compactMap { $0 } + shownRows).map(\.key)
+    let keys = listRows.map(\.key)
     guard !keys.isEmpty else { return }
     let index = selected.flatMap { keys.firstIndex(of: $0) } ?? (step > 0 ? -1 : keys.count)
     selected = keys[max(0, min(keys.count - 1, index + step))]

@@ -51,7 +51,6 @@ enum Theme {
   static var merged: Color { token("merged") }
   static let chip = Color(hex: "#232327")
 
-  static func limit(_ level: String) -> Color { token("limit-\(level)") }
 }
 
 /// Sizes in points, from the hi-fi.
@@ -72,8 +71,8 @@ enum Metrics {
   static let margin: CGFloat = 28
   /// The height of the island's top band on a screen without a notch whose menu bar hides itself.
   static let bandHeight: CGFloat = 32
-  /// The other sessions the expanded list shows before it folds the rest into one line.
-  static let listRows = 4
+  /// The sessions the expanded list shows before it folds the rest into one line.
+  static let listRows = 6
   /// The middle of the collapsed island where no notch is in the way, which holds the title.
   static let plainMiddle: CGFloat = 185
 }

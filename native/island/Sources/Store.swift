@@ -13,8 +13,7 @@ final class Store {
   private(set) var requests: [String: IslandRequest] = [:]
   private(set) var requestOrder: [String] = []
   private(set) var summary = IslandSummary(
-    running: 0, waiting: 0, failed: 0, today: 0, limit: nil, limits: nil)
-  private(set) var focus: IslandFocus?
+    running: 0, waiting: 0, failed: 0, today: 0)
 
   enum Outcome {
     case applied
@@ -47,7 +46,6 @@ final class Store {
       requests.map { ($0.key, $0) }, uniquingKeysWith: { _, last in last })
     requestOrder = requests.map(\.key)
     if let summary = message.summary { self.summary = summary }
-    focus = message.focus
     seq = message.seq
   }
 
@@ -77,7 +75,6 @@ final class Store {
       }
     }
     if let summary = message.summary { self.summary = summary }
-    focus = message.focus
     return .applied
   }
 

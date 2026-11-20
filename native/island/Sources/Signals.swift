@@ -261,8 +261,6 @@ enum Signal: Equatable {
   case stuck
   case limited
   case unread
-  /// The turn ended and a background command still runs: a hollow dot.
-  case background
 }
 
 struct SignalView: View {
@@ -293,9 +291,6 @@ struct SignalView: View {
     case .unread:
       let dot: CGFloat = size >= 14 ? 8 : 6
       Circle().fill(Theme.unread).frame(width: dot, height: dot).frame(width: size, height: size)
-    case .background:
-      Circle().strokeBorder(Theme.secondary, lineWidth: 1.5).frame(width: 7, height: 7)
-        .frame(width: size, height: size)
     }
   }
 }
@@ -315,24 +310,6 @@ struct PlanRing: View {
         .rotationEffect(.degrees(-90))
     }
     .padding(1.1)
-    .frame(width: size, height: size)
-  }
-}
-
-/// The context's ring in its level's color, as the composer's tray draws it.
-struct ContextRing: View {
-  let percent: Int
-  let level: String
-  var size: CGFloat = 12
-
-  var body: some View {
-    ZStack {
-      Circle().stroke(Theme.track, lineWidth: 2)
-      Circle().trim(from: 0, to: CGFloat(min(100, percent)) / 100)
-        .stroke(Theme.limit(level), style: StrokeStyle(lineWidth: 2, lineCap: .round))
-        .rotationEffect(.degrees(-90))
-    }
-    .padding(1)
     .frame(width: size, height: size)
   }
 }

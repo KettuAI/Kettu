@@ -24,8 +24,6 @@ export const ISLAND_HOST_METHODS = [
   'agents.refreshLimits',
   'sessions.list',
   'sessions.requests',
-  // Only for the session the expanded island leads with: its plan's steps and its last reply.
-  'sessions.outputs',
   // For the titles of the tasks whose steps' rows name them, and the tasks that wait.
   'tasks.list',
   'permissions.respond',

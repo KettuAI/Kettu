@@ -28,13 +28,11 @@ shows while it is on:
   click, and closed 400 ms after the pointer leaves. While a request waits, the panel is that card
   alone, its permission answers always Deny, Allow once and Always allow, Kettu's own tools named as
   the thread names them; answered, its word shows for 1.2 s, then the next card or the list. The
-  list: the session main leads with (what it does, its plan's progress and step in progress, its
-  last reply or the cost of an expired cache, then the facts that hold now: context from 70%,
-  cache, branch, pull request, sub-agents, background commands, task, model), at most four other
-  sessions on one line with one fact each and the rest folded into one line, the agents' plan
-  limits, and New session and Open Kettu. The panel is laid out unseen first, so the outline grows
-  to its height in one critically damped spring. A click opens a row; the bare top opens Kettu. An
-  island opened by a click takes the keyboard: Esc, the arrows, Return and the digits.
+  list is the sessions as the sidebar draws them, the agent's mark, the title and the project with
+  one status at the end, six of them with the rest folded into one line, then New session and Open
+  Kettu. The panel is laid out unseen first, so the outline grows to its height in one critically
+  damped spring. A click opens a row; the bare top opens Kettu. An island opened by a click takes
+  the keyboard: Esc, the arrows, Return and the digits.
 
 AppKit draws the agent marks from SVG, which `generate.mjs` renders at build time from the
 renderer's mark components in the dark theme, with the tokens the signals use. The window is a

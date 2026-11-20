@@ -2,8 +2,6 @@
 // only other end. Main sends the view it built and every word the helper shows; the helper sends
 // back only what the user did, which main checks against what it sent before acting on it.
 
-import type { PullRequestState } from '@shared/git'
-import type { LimitLevel } from '@shared/plan-limits'
 import type { ToolKind } from '@shared/thread'
 
 /** Raised whenever either side's messages change in a way the other must know. */
@@ -35,15 +33,8 @@ export interface IslandRow {
   key: string
   sessionId: string
   host: IslandHost | null
-  /**
-   * The session or the task it belongs to, by its title, null while that is not known, and for a
-   * task's step which of its steps it is.
-   */
-  parent: {
-    kind: 'session' | 'task'
-    title: string | null
-    step: { index: number; total: number } | null
-  } | null
+  /** The session or the task it belongs to, by its title; null while that is not known. */
+  parent: { kind: 'session' | 'task'; title: string | null } | null
   title: string
   project: string
   agent: { id: string; name: string; harness: string; color: string | null }
@@ -71,28 +62,7 @@ export interface IslandRow {
    * it as ending, and whether the lifetime is the provider's documented minimum. Null while a turn
    * runs, which keeps it warm, and when nothing says how long it lasts.
    */
-  cache: {
-    expiresAt: number
-    endingMs: number
-    estimate: boolean
-    /** The context the next request reads again once it expired; null when not known. */
-    tokens: number | null
-  } | null
-  /** Its context window from 70% used on, and while it compacts; null otherwise. */
-  context: { percent: number; tokens: number; level: LimitLevel } | null
-  branch: { name: string; worktree: boolean } | null
-  pr: { number: number; state: PullRequestState } | null
-  /** The background commands and tasks it runs: how many, and the first by what it does. */
-  background: { count: number; first: string } | null
-}
-
-/** The session the expanded island leads with, in more depth than its row. */
-export interface IslandFocus {
-  row: string
-  /** The start of its last reply as plain text, once its turn ended. */
-  reply: string | null
-  /** How long its last turn took, in ms. */
-  turnMs: number | null
+  cache: { expiresAt: number; endingMs: number; estimate: boolean } | null
 }
 
 export type IslandRequestKind = 'permission' | 'question' | 'plan' | 'origin' | 'app' | 'kettu'
@@ -123,34 +93,12 @@ export interface IslandSummary {
   failed: number
   /** The sessions used since midnight, which the resting island counts once no cache is warm. */
   today: number
-  /** The tightest plan window of the agents on a plan. */
-  limit: {
-    agent: string
-    label: string
-    usedPercent: number | null
-    reached: boolean
-    resetsAt: number | null
-  } | null
-  /** Each agent's plan windows, the fullest agents first, as the expanded island's first line. */
-  limits: IslandLimits[]
-}
-
-/** One agent's plan windows: a short name, the share used, when it resets and how full it is. */
-export interface IslandLimits {
-  agent: { name: string; harness: string; color: string | null }
-  windows: {
-    label: string
-    usedPercent: number
-    resetsAt: number | null
-    level: LimitLevel
-  }[]
 }
 
 export interface IslandView {
   rows: IslandRow[]
   requests: IslandRequest[]
   summary: IslandSummary
-  focus: IslandFocus | null
 }
 
 export type ColorMode = 'light' | 'dark'
@@ -182,8 +130,6 @@ export type MainToIsland =
       removedRequests: string[]
       requestOrder?: string[]
       summary?: IslandSummary
-      /** The focus as it is now, sent whole with every change; null when there is none. */
-      focus: IslandFocus | null
     }
   | { type: 'pop'; row: string | null; kind: PopKind; title: string; body: string }
   | ({ type: 'answered'; id: string } & AnswerResult)

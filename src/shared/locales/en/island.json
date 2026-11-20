@@ -20,9 +20,7 @@
       "days": "{{d}}d"
     },
     "for": "for {{time}}",
-    "stuck": "No result for {{time}}",
     "waited": "Waiting {{time}}",
-    "resets": "Resets in {{time}}",
     "plan": "{{done}} of {{total}}",
     "offline": "Offline",
     "answerInKettu": "Answer in Kettu",
@@ -56,26 +54,14 @@
     "recommended": "Recommended",
     "cache": {
       "short": "Cache {{time}}",
-      "left": "Cache: {{time}} left",
-      "about": "~{{time}}",
-      "expired": "The prompt cache expired: the next message reads about {{tokens}} tokens again at full price.",
-      "expiredShort": "The prompt cache expired: the next message reads the conversation again at full price."
+      "about": "~{{time}}"
     },
-    "endedAgo": "This turn ended {{time}} ago",
-    "doneIn": "Done in {{time}}",
-    "context": "Context {{percent}}%",
-    "background": "{{count}} in background",
-    "taskStep": "Task: {{task}} · step {{index}} of {{total}}",
-    "task": "Task: {{task}}",
     "today": "{{count}} sessions today",
     "newSession": "New session",
-    "others": "Other sessions",
     "empty": {
       "title": "No sessions yet",
       "body": "Start one in Kettu and it shows here."
     },
-    "ago": "{{time}} ago",
-    "runsInBackground": "Runs {{command}} in the background",
     "moreSessions": "{{count}} more sessions",
     "viewInKettu": "View in Kettu"
   },
@@ -140,11 +126,5 @@
       "allowOnce": "Allow once",
       "allowAlways": "Always allow"
     }
-  },
-  "limit": {
-    "five_hour": "5h",
-    "seven_day": "7d",
-    "seven_day_opus": "7d Opus",
-    "seven_day_sonnet": "7d Sonnet"
   }
 }

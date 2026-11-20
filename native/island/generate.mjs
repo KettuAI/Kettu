@@ -112,9 +112,6 @@ export async function renderMarks(root) {
 // The added agents' dot colors, and the signals' colors.
 const AGENT_DOTS = ['teal', 'violet', 'amber', 'rose', 'green', 'slate']
 const TOKENS_USED = [
-  'limit-ok',
-  'limit-warn',
-  'limit-bad',
   'attention-dot',
   'attention',
   'danger',

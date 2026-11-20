@@ -3,36 +3,20 @@
 // every word in the current language. The helper sorts, counts and words nothing itself.
 
 import { basename, isAbsolute, relative } from 'node:path'
-import type {
-  AgentOptions,
-  AgentStatus,
-  SessionActivity,
-  SessionOutputs,
-  SessionSummary,
-} from '@shared/agent-host'
+import type { AgentOptions, AgentStatus, SessionActivity, SessionSummary } from '@shared/agent-host'
 import type { BrowserOriginDecision } from '@shared/browser'
 import type { ComputerAppDecision } from '@shared/computer-use'
 import type { PendingRequest, PendingTool } from '@shared/pending-requests'
-import { limitLevel } from '@shared/plan-limits'
 import { endingWindow, expiryOf, knownExpiry } from '@shared/prompt-cache'
-import {
-  groupSessions,
-  limitRows,
-  listed,
-  needsYou,
-  reachedLimit,
-  sessionModel,
-} from '@shared/session-groups'
+import { groupSessions, listed, needsYou, reachedLimit, sessionModel } from '@shared/session-groups'
 import type { AgentId, PermissionKind, ToolKind } from '@shared/thread'
 import type { TurnPhase } from '@shared/turn-phase'
 import type { StepState } from '@shared/workflow'
 import { KETTU_SERVER, mcpCallOf } from '@shared/mcp-call'
 import { islandT, kettuToolT } from '../i18n'
 import type {
-  IslandFocus,
   IslandGroup,
   IslandHost,
-  IslandLimits,
   IslandPhase,
   IslandOptionStyle,
   IslandRequest,
@@ -48,9 +32,6 @@ const FINISHED_ROWS = 5
 /** The latest other sessions of the last day, listed after the rest. */
 const IDLE_ROWS = 6
 const IDLE_WITHIN_MS = 24 * 60 * 60_000
-/** A context this full shows on the island, as it does when it compacts. */
-const CONTEXT_SHOWN = 70
-const MAX_REPLY_CHARS = 280
 const MAX_REQUEST_LINES = 6
 const MAX_LINE_CHARS = 300
 
@@ -74,14 +55,6 @@ export interface IslandTaskState {
   needsYou: boolean
   steps: { id: string; name: string; state: StepState; sessionId: string | null }[]
   updatedAt: number
-}
-
-/** The focus's session, which main reads in more depth than its summary. */
-export interface FocusTarget {
-  hostKey: string
-  sessionId: string
-  /** Changes whenever what its outputs say may have: its status, its plan or its turn. */
-  revision: string
 }
 
 /** A call the island's answer turns into, on the host of its request. */
@@ -117,20 +90,10 @@ export interface BuiltView {
   requests: ReadonlyMap<string, SentRequest>
   /** What each request belongs to, which opening it in Kettu goes to. */
   owners: ReadonlyMap<string, RequestOwner>
-  /** The focus's session, whose outputs the view wants. */
-  focus: FocusTarget | null
 }
 
 export type RequestOwner =
   { hostKey: string; sessionId: string; taskId?: never } | { hostKey: string; taskId: string }
-
-/** The outputs main read of the focus's session, for the revision it read them at. */
-export interface FocusOutputs {
-  hostKey: string
-  sessionId: string
-  revision: string
-  outputs: SessionOutputs
-}
 
 const ORIGIN_DECISIONS: BrowserOriginDecision[] = ['session', 'project', 'deny']
 const APP_DECISIONS: ComputerAppDecision[] = ['session', 'always', 'deny']
@@ -476,19 +439,6 @@ function phaseOf(summary: SessionSummary): IslandPhase {
   return (kind && TOOL_PHASES[kind]) || 'execute'
 }
 
-/** Markdown's marks dropped, so the start of a reply reads as one line of text. */
-function plainReply(markdown: string): string {
-  const text = markdown
-    .replace(/```[\s\S]*?```/g, ' ')
-    .replace(/!\[[^\]]*\]\([^)]*\)/g, ' ')
-    .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')
-    .replace(/^\s{0,3}(#+|>|[-*+]|\d+\.)\s+/gm, '')
-    .replace(/[*_~`]/g, '')
-    .replace(/\s+/g, ' ')
-    .trim()
-  return text.length > MAX_REPLY_CHARS ? `${text.slice(0, MAX_REPLY_CHARS - 1)}…` : text
-}
-
 function modelName(options: AgentOptions | undefined, model: string | null): string | null {
   const option = sessionModel(options, model)
   if (!option || model === null) return model
@@ -551,28 +501,16 @@ function buildRow(
     default:
       line = islandT(`line.${status}`)
   }
-  let parent: IslandRow['parent'] = null
-  if (summary.task) {
-    const task = state.tasks.get(summary.task.taskId)
-    const index = task?.steps.findIndex((step) => step.id === summary.task!.stepId) ?? -1
-    parent = {
-      kind: 'task',
-      title: task?.title ?? null,
-      step: index >= 0 ? { index: index + 1, total: task!.steps.length } : null,
-    }
-  } else if (summary.parentId) {
-    const title = state.sessions.get(summary.parentId)?.title ?? null
-    parent = { kind: 'session', title, step: null }
-  }
+  const parent = summary.task
+    ? { kind: 'task' as const, title: state.tasks.get(summary.task.taskId)?.title ?? null }
+    : summary.parentId
+      ? { kind: 'session' as const, title: state.sessions.get(summary.parentId)?.title ?? null }
+      : null
   const turnRuns = status === 'running'
   const expiry = turnRuns
     ? null
     : knownExpiry(expiryOf(summary.agentId, summary.cache, summary.model, agent?.account ?? null))
   const phase = turnRuns ? phaseOf(summary) : null
-  const context = summary.context
-  const percent = context && context.size > 0 ? Math.round((context.used / context.size) * 100) : 0
-  const background = summary.background ?? []
-  const pr = summary.prs?.find((p) => p.state !== null) ?? summary.pr
   const running = [...state.sessions.values()].filter(
     (s) => s.origin === 'subagent' && s.parentId === summary.id && s.status === 'running',
   ).length
@@ -613,107 +551,25 @@ function buildRow(
           expiresAt: expiry.expiresAt,
           endingMs: endingWindow(expiry.ttl),
           estimate: expiry.estimate,
-          tokens: context?.used || null,
         }
       : null,
-    context:
-      context && (percent >= CONTEXT_SHOWN || phase === 'compact')
-        ? {
-            percent,
-            tokens: context.used,
-            level: limitLevel({ usedPercent: percent, state: 'ok' }),
-          }
-        : null,
-    branch: summary.worktree
-      ? { name: summary.worktree.branch, worktree: true }
-      : summary.branch
-        ? { name: summary.branch, worktree: false }
-        : null,
-    pr: pr?.state ? { number: pr.number, state: pr.state } : null,
-    background:
-      background.length > 0 ? { count: background.length, first: clip(background[0]!) } : null,
   }
-}
-
-/** The order an agent's windows read in: the short one, the week, then the rest. */
-const WINDOW_ORDER = ['five_hour', 'seven_day']
-const SHOWN_LIMIT_AGENTS = 2
-const SHOWN_WINDOWS = 3
-
-/**
- * The plan windows of the agents on a plan, each agent once however many hosts have it, the
- * fullest first. A window that has reset reads as empty until the agent reads it again.
- */
-function agentLimits(hosts: readonly HostState[], now: number): IslandLimits[] {
-  const seen = new Set<string>()
-  const groups: (IslandLimits & { fullest: number })[] = []
-  for (const state of hosts) {
-    for (const agent of state.agents.values()) {
-      if (agent.hidden || agent.disabled || agent.registered === false) continue
-      const key = `${agent.harnessId}/${agent.account?.label ?? agent.name}`
-      if (seen.has(key)) continue
-      const rank = (window: string) => {
-        const i = WINDOW_ORDER.indexOf(window)
-        return i < 0 ? WINDOW_ORDER.length : i
-      }
-      const windows = agent.limits
-        .filter((limit) => limit.usedPercent !== null)
-        .sort((a, b) => rank(a.window) - rank(b.window))
-        .slice(0, SHOWN_WINDOWS)
-        .map((limit) => {
-          const reset = limit.resetsAt !== null && limit.resetsAt <= now
-          const usedPercent = reset ? 0 : Math.round(limit.usedPercent!)
-          return {
-            label: islandT(`limit.${limit.window}`, { defaultValue: limit.label }),
-            usedPercent,
-            resetsAt: reset ? null : limit.resetsAt,
-            level: reset ? ('ok' as const) : limitLevel(limit),
-          }
-        })
-      if (windows.length === 0) continue
-      seen.add(key)
-      groups.push({
-        agent: { name: agent.name, harness: agent.harnessId, color: agent.color ?? null },
-        windows,
-        fullest: Math.max(...windows.map((w) => w.usedPercent)),
-      })
-    }
-  }
-  return groups
-    .sort((a, b) => b.fullest - a.fullest)
-    .slice(0, SHOWN_LIMIT_AGENTS)
-    .map(({ agent, windows }) => ({ agent, windows }))
 }
 
 function buildSummary(
   rows: readonly IslandRow[],
   requests: readonly IslandRequest[],
-  hosts: readonly HostState[],
   all: readonly SessionSummary[],
   now: number,
 ): IslandSummary {
   const count = (status: IslandStatus) => rows.filter((row) => row.status === status).length
-  const limits = hosts.flatMap((state) => limitRows([...state.agents.values()], now))
-  const tightest =
-    limits.find((row) => row.limit.state === 'reached') ??
-    limits.sort((a, b) => (b.limit.usedPercent ?? 0) - (a.limit.usedPercent ?? 0))[0]
   const midnight = new Date(now)
   midnight.setHours(0, 0, 0, 0)
   return {
-    limits: agentLimits(hosts, now),
     running: count('running'),
     waiting: count('waiting') + count('sign_in') + requests.filter((r) => r.task).length,
     failed: count('failed'),
     today: all.filter((s) => listed(s) && s.parentId === null && s.updatedAt >= +midnight).length,
-    limit: tightest
-      ? {
-          agent: tightest.agent.name,
-          label: tightest.limit.label,
-          usedPercent: tightest.limit.usedPercent,
-          reached: tightest.limit.state === 'reached',
-          resetsAt: tightest.limit.resetsAt,
-        }
-      : null,
   }
 }
 
@@ -748,41 +604,8 @@ function taskRequests(state: HostState): { request: IslandRequest; taskId: strin
   return out
 }
 
-/**
- * Whom the expanded island leads with: the first session that runs, failed or finished out of
- * view, else the latest one used. One that waits is its request's card already.
- */
-function focusRow(rows: readonly IslandRow[]): IslandRow | null {
-  return (
-    rows.find((row) =>
-      ['running', 'starting', 'failed', 'unread', 'limited'].includes(row.status),
-    ) ??
-    rows.find((row) => row.group === 'idle') ??
-    null
-  )
-}
-
-/** What may change what the focus reads of a session's outputs: its status and its turn. */
-function focusRevision(summary: SessionSummary): string {
-  return JSON.stringify([summary.status, summary.attention, summary.turnStartedAt])
-}
-
-/** The focus's last reply and how long its turn took, once the turn ended. */
-function buildFocus(row: IslandRow, outputs: SessionOutputs | null): IslandFocus {
-  const ended = row.status !== 'running' && row.status !== 'starting'
-  return {
-    row: row.key,
-    reply: ended && outputs?.reply ? plainReply(outputs.reply) || null : null,
-    turnMs: ended ? (outputs?.turnMs ?? null) : null,
-  }
-}
-
 /** The whole view of every host, and what main needs to act on what the helper sends back. */
-export function buildView(
-  hosts: readonly HostState[],
-  now: number,
-  outputs: FocusOutputs | null = null,
-): BuiltView {
+export function buildView(hosts: readonly HostState[], now: number): BuiltView {
   const owners = new Map<SessionSummary, HostState>()
   for (const state of hosts)
     for (const summary of state.sessions.values()) owners.set(summary, state)
@@ -797,7 +620,6 @@ export function buildView(
     .slice(0, IDLE_ROWS)
   const rows: IslandRow[] = []
   const rowMap = new Map<string, { hostKey: string; sessionId: string }>()
-  const summaries = new Map<string, Listed>()
   const requests: IslandRequest[] = []
   const sent = new Map<string, SentRequest>()
   const requestOwners = new Map<string, RequestOwner>()
@@ -811,7 +633,6 @@ export function buildView(
     const row = buildRow({ state, summary }, listedIn.get(summary) ?? 'idle', now, waiting)
     rows.push(row)
     rowMap.set(row.key, { hostKey: state.key, sessionId: summary.id })
-    summaries.set(row.key, { state, summary })
     // An offline host's requests cannot be answered until it is back.
     if (!waiting || state.host?.offline) continue
     for (const pending of waiting.requests) {
@@ -839,33 +660,15 @@ export function buildView(
   }
   // The oldest request first, as the island answers them in turn.
   requests.sort((a, b) => (a.askedAt ?? Infinity) - (b.askedAt ?? Infinity))
-  const lead = focusRow(rows)
-  const leadOf = lead ? summaries.get(lead.key)! : null
-  const target: FocusTarget | null = leadOf
-    ? {
-        hostKey: leadOf.state.key,
-        sessionId: leadOf.summary.id,
-        revision: focusRevision(leadOf.summary),
-      }
-    : null
-  const read =
-    target &&
-    outputs &&
-    outputs.hostKey === target.hostKey &&
-    outputs.sessionId === target.sessionId
-      ? outputs.outputs
-      : null
   return {
     view: {
       rows,
       requests,
-      summary: buildSummary(rows, requests, hosts, all, now),
-      focus: lead ? buildFocus(lead, read) : null,
+      summary: buildSummary(rows, requests, all, now),
     },
     rows: rowMap,
     requests: sent,
     owners: requestOwners,
-    focus: target,
   }
 }
 
@@ -887,11 +690,8 @@ function sameOrder(a: readonly { key: string }[], b: readonly { key: string }[])
   return a.length === b.length && a.every((item, i) => item.key === b[i]!.key)
 }
 
-/** What changed from `before` to `after`, with the focus as it is now; null when nothing did. */
-export function diffView(
-  before: IslandView,
-  after: IslandView,
-): (ViewChange & { focus: IslandFocus | null }) | null {
+/** What changed from `before` to `after`; null when nothing did. */
+export function diffView(before: IslandView, after: IslandView): ViewChange | null {
   const oldRows = keyed(before.rows)
   const oldRequests = keyed(before.requests)
   const newRows = new Set(after.rows.map((row) => row.key))
@@ -909,8 +709,6 @@ export function diffView(
   if (JSON.stringify(before.summary) !== JSON.stringify(after.summary)) {
     change.summary = after.summary
   }
-  // The focus goes whole with every change, so the helper never tells a missing one from none.
-  const focusMoved = JSON.stringify(before.focus) !== JSON.stringify(after.focus)
   const empty =
     change.rows.length === 0 &&
     change.removedRows.length === 0 &&
@@ -918,7 +716,6 @@ export function diffView(
     change.removedRequests.length === 0 &&
     !change.order &&
     !change.requestOrder &&
-    !change.summary &&
-    !focusMoved
-  return empty ? null : { ...change, focus: after.focus }
+    !change.summary
+  return empty ? null : change
 }

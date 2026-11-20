@@ -15,13 +15,6 @@ struct IslandHost: Codable, Equatable {
 struct IslandParent: Codable, Equatable {
   let kind: String
   let title: String?
-  /// Which of its task's steps a step's session is.
-  let step: IslandStep?
-}
-
-struct IslandStep: Codable, Equatable {
-  let index: Int
-  let total: Int
 }
 
 struct IslandAgent: Codable, Equatable {
@@ -52,28 +45,6 @@ struct IslandCache: Codable, Equatable {
   /// How long before it expires the island marks it as ending.
   let endingMs: Double
   let estimate: Bool
-  let tokens: Double?
-}
-
-struct IslandContext: Codable, Equatable {
-  let percent: Int
-  let tokens: Double
-  let level: String
-}
-
-struct IslandBranch: Codable, Equatable {
-  let name: String
-  let worktree: Bool
-}
-
-struct IslandPullRequest: Codable, Equatable {
-  let number: Int
-  let state: String
-}
-
-struct IslandBackground: Codable, Equatable {
-  let count: Int
-  let first: String
 }
 
 struct IslandRow: Codable, Equatable {
@@ -97,10 +68,6 @@ struct IslandRow: Codable, Equatable {
   let limit: IslandLimit?
   let phase: String?
   let cache: IslandCache?
-  let context: IslandContext?
-  let branch: IslandBranch?
-  let pr: IslandPullRequest?
-  let background: IslandBackground?
 }
 
 struct IslandOption: Codable, Equatable {
@@ -127,46 +94,11 @@ struct IslandRequest: Codable, Equatable {
   let askedAt: Double?
 }
 
-struct SummaryLimit: Codable, Equatable {
-  let agent: String
-  let label: String
-  let usedPercent: Double?
-  let reached: Bool
-  let resetsAt: Double?
-}
-
-struct IslandWindow: Codable, Equatable {
-  let label: String
-  let usedPercent: Double
-  let resetsAt: Double?
-  let level: String
-}
-
-struct IslandLimits: Codable, Equatable {
-  let agent: IslandLimitAgent
-  let windows: [IslandWindow]
-}
-
-struct IslandLimitAgent: Codable, Equatable {
-  let name: String
-  let harness: String
-  let color: String?
-}
-
 struct IslandSummary: Codable, Equatable {
   let running: Int
   let waiting: Int
   let failed: Int
   let today: Int?
-  let limit: SummaryLimit?
-  let limits: [IslandLimits]?
-}
-
-/// The session the expanded island leads with, in more depth than its row.
-struct IslandFocus: Codable, Equatable {
-  let row: String
-  let reply: String?
-  let turnMs: Double?
 }
 
 /// What main sends. Fields a message type does not carry are nil.
@@ -188,8 +120,6 @@ struct MainMessage: Decodable {
   let order: [String]?
   let removedRequests: [String]?
   let requestOrder: [String]?
-  /// Sent whole with every view and change.
-  let focus: IslandFocus?
   // pop
   let row: String?
   let kind: String?
@@ -203,7 +133,7 @@ struct MainMessage: Decodable {
   enum CodingKeys: String, CodingKey {
     case type, version, locale, strings, colorMode, stuckAfterMs, seq, rows, requests, summary
     case removedRows, order, removedRequests, requestOrder, row, kind, title, body, id, result
-    case message, focus
+    case message
     case protocolVersion = "protocol"
   }
 }
