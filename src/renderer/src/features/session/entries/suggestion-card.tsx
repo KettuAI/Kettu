@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import {
   ArrowRight01Icon,
   BookOpen01Icon,
@@ -29,7 +29,12 @@ import { ConnectButton } from '@renderer/features/marketplace/connect'
 import { useConnection } from '@renderer/features/marketplace/hooks'
 import { InstallButton } from '@renderer/features/marketplace/listing'
 import { Glyph } from '@renderer/features/shell/glyph'
-import type { FlowEdge, FlowMetrics } from '@renderer/features/tasks/flow-layout'
+import {
+  layoutFlow,
+  sideways,
+  type FlowEdge,
+  type FlowMetrics,
+} from '@renderer/features/tasks/flow-layout'
 import { whoPicksText } from '@renderer/features/tasks/model'
 import { SidewaysFlow } from '@renderer/features/tasks/sideways-flow'
 import { count, runningFor } from '@renderer/lib/format'
@@ -48,7 +53,7 @@ import { cardIdOf } from './workflow-tools'
 /** Steps from the left, each a tile with who does it, its name and one line under it. */
 const METRICS: FlowMetrics = {
   nodeW: 44,
-  nodeH: 124,
+  nodeH: 136,
   endSize: 18,
   colGap: 10,
   rowGap: 26,
@@ -60,8 +65,10 @@ const METRICS: FlowMetrics = {
   bend: 8,
   pad: 14,
 }
+/** Narrower steps for a long chart, so it shrinks less to fit. */
+const NARROW: FlowMetrics = { ...METRICS, nodeH: 112, rowGap: 22 }
 /** A chart is shrunk to fit the card, but no further than this, so its names stay readable. */
-const MIN_FIT = 0.72
+const MIN_FIT = 0.66
 
 /**
  * The host's card for a suggestion or a workflow to keep, in the session's host's scope, so the
@@ -304,28 +311,40 @@ function Chart({ card, agent }: { card: WorkflowSuggestion; agent: string }) {
     observer.observe(el)
     return () => observer.disconnect()
   }, [])
-  const workflow = card.workflow
-  const label = (edge: FlowEdge): string | null => {
-    // A review's own send-back is said on its step.
-    if (edge.outcomes.length === 0) return null
-    const step = workflow.steps.find((s) => s.id === edge.from)
-    if (!edge.back && edge.to !== 'end:dropped' && (step?.outcomes.length ?? 0) < 2) return null
-    return edge.outcomes.join(t('tasks:or'))
-  }
+  // A step the user sees says so on its tile, so its send-back is not drawn as a loop.
+  const drawn = useMemo(
+    () => ({
+      ...card.workflow,
+      steps: card.workflow.steps.map((step) => ({ ...step, youReview: false })),
+    }),
+    [card.workflow],
+  )
+  const metrics = useMemo(
+    () => (room > 0 && sideways(layoutFlow(drawn, METRICS)).width * 0.85 > room ? NARROW : METRICS),
+    [drawn, room],
+  )
+  // Only the lanes are named, where there is room; a forward arrow's gap is too short.
+  const label = (edge: FlowEdge): string | null =>
+    (edge.back || (edge.to === 'end:dropped' && edge.points.length > 4)) && edge.outcomes.length > 0
+      ? edge.outcomes.join(t('tasks:or'))
+      : null
   return (
     <div
       ref={box}
-      className="flex min-w-0 justify-center overflow-x-auto rounded-xl bg-(--bg-code-block) bg-[radial-gradient(var(--thread-line-strong)_0.8px,transparent_1px)] bg-size-[14px_14px] px-2 py-1"
+      className="flex min-w-0 overflow-x-auto rounded-xl bg-(--bg-code-block) bg-[radial-gradient(var(--thread-line-strong)_0.8px,transparent_1px)] bg-size-[14px_14px] px-2 py-1"
     >
       {room > 0 && (
         <SidewaysFlow
-          workflow={workflow}
-          metrics={METRICS}
-          scale={(width) => Math.max(MIN_FIT, (room - 16) / width)}
+          workflow={drawn}
+          metrics={metrics}
+          scale={(width) => Math.max(MIN_FIT, (room - 20) / width)}
           labelOf={label}
           labelClassName="bg-(--bg-code-block)"
-          className="shrink-0"
-          step={(step, index) => <StepTile card={card} step={step} index={index} agent={agent} />}
+          // Centred by its margins, so a chart wider than the card scrolls from its start.
+          className="mx-auto shrink-0"
+          step={(_, index) => (
+            <StepTile card={card} step={card.workflow.steps[index]!} index={index} agent={agent} />
+          )}
           end={(end) => (
             <span className="relative grid size-full place-items-center rounded-full bg-card text-(--thread-faint) shadow-(--thread-card-shadow)">
               {end === 'done' ? (
@@ -556,7 +575,7 @@ function Tools({
   const key = names.join('\n')
   useEffect(() => onBlocked(key ? key.split('\n') : []), [key, onBlocked])
   return (
-    <div className="flex flex-col gap-1.5 border-t border-(--thread-line) pt-3">
+    <div className="flex flex-col gap-1.5 border-t border-(--thread-line) pt-3 empty:hidden">
       {tools.map((tool) => (
         <ToolRow
           key={`${tool.kind}:${tool.ref}`}
@@ -595,7 +614,8 @@ function ToolRow({ tool, onReady }: { tool: SuggestedTool; onReady: (ready: bool
   } else if (tool.setup === 'sign-in') {
     end = <span className="text-success">{t('workflow.card.tool.connected')}</span>
   } else if (kept && on) {
-    end = <span className="text-tertiary">{t('workflow.card.tool.installed')}</span>
+    // Installed and on: nothing to do about it.
+    return null
   } else {
     end = <span className="text-tertiary">{t('workflow.card.tool.atStart')}</span>
   }
@@ -652,14 +672,14 @@ function Progress({ items }: { items: StartProgress[] }) {
               <span className="size-3 rounded-full border border-(--thread-line-strong)" />
             )}
           </span>
-          <span className="min-w-0 truncate">{itemText(progress.item, t)}</span>
+          <span className="max-w-full shrink-0 truncate">{itemText(progress.item, t)}</span>
           {progress.item.kind === 'add' && (
             <span className="shrink-0 text-meta text-tertiary">
               {t('workflow.card.version', { version: progress.item.version })}
             </span>
           )}
           {progress.state === 'failed' && progress.error && (
-            <span className="min-w-0 truncate text-meta text-danger" title={progress.error}>
+            <span className="min-w-0 flex-1 truncate text-meta text-danger" title={progress.error}>
               {progress.error}
             </span>
           )}

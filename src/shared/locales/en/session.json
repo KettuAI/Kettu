@@ -1260,7 +1260,7 @@
       "tip": {
         "yours": "You do this step.",
         "first": "{{agent}} goes on with it.",
-        "picks": "Agent picked at start: {{who}}",
+        "picks": "Agent · {{who}}, when it starts",
         "see": "It goes on once you approve it; sent back, it is done again with your words."
       },
       "tool": {
@@ -1269,7 +1269,6 @@
         "signIn": "Sign in first",
         "keys": "Needs keys",
         "connected": "Connected",
-        "installed": "Installed",
         "atStart": "Installed at start"
       },
       "item": {
