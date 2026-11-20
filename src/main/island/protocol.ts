@@ -89,13 +89,6 @@ export interface IslandRow {
 /** The session the expanded island leads with, in more depth than its row. */
 export interface IslandFocus {
   row: string
-  /**
-   * Its plan's steps around the one in progress, with how many done ones before them and how many
-   * after them are left out; empty without a plan.
-   */
-  steps: { text: string; state: 'done' | 'now' | 'todo' }[]
-  before: number
-  after: number
   /** The start of its last reply as plain text, once its turn ended. */
   reply: string | null
   /** How long its last turn took, in ms. */

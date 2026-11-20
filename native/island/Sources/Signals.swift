@@ -336,36 +336,3 @@ struct ContextRing: View {
     .frame(width: size, height: size)
   }
 }
-
-/// A plan step's mark: a filled check once done, an arc for the one in progress, a dashed circle
-/// for one not started.
-struct StepMark: View {
-  let state: String
-
-  var body: some View {
-    Group {
-      switch state {
-      case "done":
-        ZStack {
-          Circle().fill(Theme.stepDone)
-          CheckShape().stroke(
-            Color.white, style: StrokeStyle(lineWidth: 1.6, lineCap: .round, lineJoin: .round)
-          )
-          .frame(width: 6, height: 4.4)
-        }
-      case "now":
-        ZStack {
-          Circle().stroke(Theme.track, lineWidth: 2)
-          Circle().trim(from: 0, to: 0.25)
-            .stroke(Theme.running, style: StrokeStyle(lineWidth: 2, lineCap: .round))
-            .rotationEffect(.degrees(-90))
-        }
-        .padding(1.4)
-      default:
-        Circle().stroke(Theme.faint, style: StrokeStyle(lineWidth: 1.4, dash: [2, 2.2]))
-          .padding(1.4)
-      }
-    }
-    .frame(width: 14, height: 14)
-  }
-}

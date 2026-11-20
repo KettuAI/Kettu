@@ -65,8 +65,6 @@
     "background": "后台 {{count}}",
     "taskStep": "需求：{{task}} · 第 {{index}} 步，共 {{total}} 步",
     "task": "需求：{{task}}",
-    "stepsBefore": "前面 {{count}} 步已完成",
-    "stepsAfter": "后面还有 {{count}} 步",
     "today": "今天 {{count}} 个会话",
     "newSession": "新建会话",
     "others": "其他会话",
@@ -75,7 +73,9 @@
       "body": "在 Kettu 里开始第一个，它会出现在这里。"
     },
     "ago": "{{time}}前",
-    "runsInBackground": "后台运行 {{command}}"
+    "runsInBackground": "后台运行 {{command}}",
+    "moreSessions": "还有 {{count}} 个会话",
+    "viewInKettu": "在 Kettu 中查看"
   },
   "line": {
     "run": "运行 {{command}}",
@@ -132,7 +132,12 @@
       "always": "始终允许 {{app}}",
       "deny": "不允许"
     },
-    "task": "需求在等你处理"
+    "task": "需求在等你处理",
+    "answer": {
+      "deny": "拒绝",
+      "allowOnce": "允许一次",
+      "allowAlways": "始终允许"
+    }
   },
   "limit": {
     "five_hour": "5 小时",

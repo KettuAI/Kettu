@@ -478,6 +478,51 @@ describe('answers', () => {
     ])
   })
 
+  it('sends the card’s three answers alone, and refuses the others, as for a Kettu tool', async () => {
+    const tool: ThreadEntry = {
+      ...TOOL,
+      id: 't3',
+      title: 'mcp__kettu__terminal_run',
+      toolKind: 'other',
+      rawInput: JSON.stringify({ command: 'sleep 40 && echo done' }),
+      permission: {
+        requestId: 'r3',
+        options: [
+          { id: 'once', name: 'Yes', kind: 'allow_once' },
+          { id: 'project', name: 'Yes, and always allow it in this project', kind: 'allow_always' },
+          { id: 'session', name: 'Yes, for this session', kind: 'allow_always' },
+          { id: 'no', name: 'Deny, and say what to do instead', kind: 'reject_once' },
+          { id: 'never', name: 'Never', kind: 'reject_always' },
+        ],
+      },
+    }
+    const s = setup([{ ...waiting, permissionCount: 1 }], { s1: [tool] })
+    await started(s)
+    await vi.advanceTimersByTimeAsync(COALESCE_MS)
+    const [request] = sentRequests(s)
+    expect(request).toMatchObject({
+      title: 'Run in terminal',
+      lines: ['sleep 40 && echo done'],
+      code: true,
+      options: [
+        { id: 'no', label: 'Deny', style: 'deny' },
+        { id: 'once', label: 'Allow once', style: 'allow_once' },
+        { id: 'project', label: 'Always allow', style: 'allow_always' },
+      ],
+    })
+    const calls = s.request.mock.calls.length
+    s.helper().say({ type: 'answer', id: 'a1', request: 's1#t3', option: 'session' })
+    s.helper().say({ type: 'answer', id: 'a2', request: 's1#t3', option: 'never' })
+    await vi.advanceTimersByTimeAsync(0)
+    expect(s.request.mock.calls).toHaveLength(calls)
+    expect(
+      s
+        .helper()
+        .of('answered')
+        .map((m) => m.result),
+    ).toEqual(['failed', 'failed'])
+  })
+
   it('refuses a request or option it never sent without calling the host', async () => {
     const s = await answering()
     const calls = s.request.mock.calls.length

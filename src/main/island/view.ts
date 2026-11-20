@@ -26,7 +26,8 @@ import {
 import type { AgentId, PermissionKind, ToolKind } from '@shared/thread'
 import type { TurnPhase } from '@shared/turn-phase'
 import type { StepState } from '@shared/workflow'
-import { islandT } from '../i18n'
+import { KETTU_SERVER, mcpCallOf } from '@shared/mcp-call'
+import { islandT, kettuToolT } from '../i18n'
 import type {
   IslandFocus,
   IslandGroup,
@@ -49,8 +50,6 @@ const IDLE_ROWS = 6
 const IDLE_WITHIN_MS = 24 * 60 * 60_000
 /** A context this full shows on the island, as it does when it compacts. */
 const CONTEXT_SHOWN = 70
-/** The plan steps the focus lists in full; a longer plan shows the ones around its current step. */
-const MAX_STEPS = 6
 const MAX_REPLY_CHARS = 280
 const MAX_REQUEST_LINES = 6
 const MAX_LINE_CHARS = 300
@@ -158,6 +157,35 @@ const OPTION_STYLE: Record<PermissionKind, IslandOptionStyle> = {
   reject_always: 'deny',
 }
 
+/**
+ * The permission card's answers, as the window's card has them: its first denial, then one allow
+ * of each kind, once first. Anything else is answered in Kettu.
+ */
+function permissionChoices<T extends { kind: PermissionKind }>(options: readonly T[]): T[] {
+  const deny =
+    options.find((o) => o.kind === 'reject_once') ?? options.find((o) => o.kind === 'reject_always')
+  const once = options.find((o) => o.kind === 'allow_once')
+  const always = options.find((o) => o.kind === 'allow_always')
+  return [deny, once, always].filter((o) => o !== undefined)
+}
+
+/**
+ * The card's words for an answer, the window's, so the three fit on one line; an agent's own may
+ * spell out a scope at length, which Kettu shows. Null for an answer that keeps its own words.
+ */
+function answerLabel(style: IslandOptionStyle): string | null {
+  switch (style) {
+    case 'deny':
+      return islandT('request.answer.deny')
+    case 'allow_once':
+      return islandT('request.answer.allowOnce')
+    case 'allow_always':
+      return islandT('request.answer.allowAlways')
+    default:
+      return null
+  }
+}
+
 /** The permission card's order: any other option, the denials, then the allows, once first. */
 const CARD_ORDER: Record<IslandOptionStyle, number> = {
   normal: 0,
@@ -179,10 +207,25 @@ function shownPath(path: string, projectPath: string): string {
   return inside && !inside.startsWith('..') && !isAbsolute(inside) ? inside : path
 }
 
-/** An MCP tool's server and name from a title such as `mcp__github__create_issue`. */
-function mcpCall(title: string): { server: string; tool: string } | null {
-  const match = /^mcp__(.+?)__(.+)$/.exec(title)
-  return match ? { server: match[1]!, tool: match[2]! } : null
+/** An MCP tool as the thread names it: Kettu's own by what it does, another's as `server: tool`. */
+function mcpName(title: string): string | null {
+  const call = mcpCallOf(title)
+  if (!call) return null
+  if (call.server !== KETTU_SERVER) {
+    return islandT('line.mcp', { server: call.server, tool: call.tool })
+  }
+  return kettuToolT(call.tool as never, { defaultValue: call.tool }) as string
+}
+
+/** The command an MCP tool's call runs, from its input, for the tools that run one. */
+function mcpCommand(rawInput: string | null | undefined): string | null {
+  if (!rawInput) return null
+  try {
+    const input = JSON.parse(rawInput) as { command?: unknown }
+    return typeof input.command === 'string' && input.command.trim() ? input.command : null
+  } catch {
+    return null
+  }
 }
 
 /** A call as one line: "Run pnpm test", "Edit src/app.ts", or its title. */
@@ -190,8 +233,8 @@ function toolLine(
   tool: { toolKind: ToolKind; title: string; detail: string | null },
   projectPath: string,
 ): string {
-  const mcp = mcpCall(tool.title)
-  if (mcp) return islandT('line.mcp', mcp)
+  const mcp = mcpName(tool.title)
+  if (mcp) return tool.detail ? `${mcp} · ${clip(tool.detail)}` : mcp
   const { toolKind, detail } = tool
   if (toolKind === 'execute') {
     return islandT('line.run', { command: clip(detail ?? tool.title.replace(/^run\s+/i, '')) })
@@ -286,7 +329,7 @@ function buildRequest(
       // A plan's answers that go with a note are written in the window.
       const choices = permission.plan
         ? permission.options.filter((o) => !o.note)
-        : permission.options
+        : permissionChoices(permission.options)
       const options = choices.map((option) => {
         answers.set(option.id, {
           method: 'permissions.respond',
@@ -294,7 +337,8 @@ function buildRequest(
         })
         const style: IslandOptionStyle =
           permission.plan && option.preferred ? 'recommended' : OPTION_STYLE[option.kind]
-        return { id: option.id, label: clip(plain(option.name)), style }
+        const label = permission.plan ? null : answerLabel(style)
+        return { id: option.id, label: label ?? clip(plain(option.name)), style }
       })
       if (permission.plan) {
         const lines = permission.plan.markdown
@@ -304,6 +348,17 @@ function buildRequest(
         return make('plan', islandT('request.plan'), lines, false, options)
       }
       options.sort((a, b) => CARD_ORDER[a.style] - CARD_ORDER[b.style])
+      const mcp = mcpName(tool.title)
+      if (mcp) {
+        const command = mcpCommand(tool.rawInput)
+        const lines = command
+          ? command
+              .split('\n')
+              .filter((l) => l.trim())
+              .map(clip)
+          : []
+        return make('permission', mcp, lines, command !== null, options)
+      }
       const title = islandT(`request.tool.${TOOL_KEY[tool.toolKind]}`)
       if (tool.toolKind === 'execute') {
         const command = tool.rawInput ?? tool.title.replace(/^run\s+/i, '')
@@ -701,42 +756,16 @@ function focusRow(rows: readonly IslandRow[]): IslandRow | null {
   )
 }
 
-/** What may change a session's outputs: its status, its plan and its turn. */
+/** What may change what the focus reads of a session's outputs: its status and its turn. */
 function focusRevision(summary: SessionSummary): string {
-  return JSON.stringify([summary.status, summary.attention, summary.plan, summary.turnStartedAt])
+  return JSON.stringify([summary.status, summary.attention, summary.turnStartedAt])
 }
 
-/** The focus's plan steps around the current one, and the start of its last reply. */
+/** The focus's last reply and how long its turn took, once the turn ended. */
 function buildFocus(row: IslandRow, outputs: SessionOutputs | null): IslandFocus {
-  const items = outputs?.plan ?? []
-  const steps = items.map((item) => ({
-    text: clip(item.content.split('\n')[0] ?? ''),
-    state:
-      item.status === 'completed'
-        ? ('done' as const)
-        : item.status === 'in_progress'
-          ? ('now' as const)
-          : ('todo' as const),
-  }))
-  let before = 0
-  let after = 0
-  let shown = steps
-  if (steps.length > MAX_STEPS) {
-    // The last done step, the current one and the two after it.
-    const current = steps.findIndex((step) => step.state !== 'done')
-    const at = current === -1 ? steps.length - 1 : current
-    const from = Math.max(0, at - 1)
-    const to = Math.min(steps.length, from + 4)
-    before = from
-    after = steps.length - to
-    shown = steps.slice(from, to)
-  }
   const ended = row.status !== 'running' && row.status !== 'starting'
   return {
     row: row.key,
-    steps: shown,
-    before,
-    after,
     reply: ended && outputs?.reply ? plainReply(outputs.reply) || null : null,
     turnMs: ended ? (outputs?.turnMs ?? null) : null,
   }

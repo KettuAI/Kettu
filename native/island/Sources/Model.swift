@@ -111,6 +111,12 @@ final class IslandModel: ObservableObject {
     return rows.filter { $0.key != focus }
   }
 
+  /// The other sessions the list shows; the rest fold into one line that opens Kettu.
+  var shownRows: [IslandRow] { Array(otherRows.prefix(Metrics.listRows)) }
+
+  /// While a request waits, or the word on one just answered shows, the panel is that card alone.
+  var asking: Bool { note != nil || !requests.isEmpty }
+
   var limits: [IslandLimits] { store.summary.limits ?? [] }
 
   var requests: [IslandRequest] { store.requestOrder.compactMap { store.requests[$0] } }
@@ -522,7 +528,8 @@ final class IslandModel: ObservableObject {
 
   /// Moves the keyboard's row up or down through the rows the panel lists.
   func moveSelection(_ step: Int) {
-    let keys = rows.map(\.key)
+    guard !asking else { return }
+    let keys = ([focusRow].compactMap { $0 } + shownRows).map(\.key)
     guard !keys.isEmpty else { return }
     let index = selected.flatMap { keys.firstIndex(of: $0) } ?? (step > 0 ? -1 : keys.count)
     selected = keys[max(0, min(keys.count - 1, index + step))]

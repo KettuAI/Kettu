@@ -67,8 +67,6 @@
     "background": "{{count}} in background",
     "taskStep": "Task: {{task}} · step {{index}} of {{total}}",
     "task": "Task: {{task}}",
-    "stepsBefore": "{{count}} earlier steps done",
-    "stepsAfter": "{{count}} more steps",
     "today": "{{count}} sessions today",
     "newSession": "New session",
     "others": "Other sessions",
@@ -77,7 +75,9 @@
       "body": "Start one in Kettu and it shows here."
     },
     "ago": "{{time}} ago",
-    "runsInBackground": "Runs {{command}} in the background"
+    "runsInBackground": "Runs {{command}} in the background",
+    "moreSessions": "{{count}} more sessions",
+    "viewInKettu": "View in Kettu"
   },
   "line": {
     "run": "Run {{command}}",
@@ -134,7 +134,12 @@
       "always": "Always allow {{app}}",
       "deny": "Don’t allow"
     },
-    "task": "A task waits for you"
+    "task": "A task waits for you",
+    "answer": {
+      "deny": "Deny",
+      "allowOnce": "Allow once",
+      "allowAlways": "Always allow"
+    }
   },
   "limit": {
     "five_hour": "5h",

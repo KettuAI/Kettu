@@ -162,18 +162,9 @@ struct IslandSummary: Codable, Equatable {
   let limits: [IslandLimits]?
 }
 
-struct IslandFocusStep: Codable, Equatable {
-  let text: String
-  /// done, now or todo.
-  let state: String
-}
-
 /// The session the expanded island leads with, in more depth than its row.
 struct IslandFocus: Codable, Equatable {
   let row: String
-  let steps: [IslandFocusStep]
-  let before: Int
-  let after: Int
   let reply: String?
   let turnMs: Double?
 }

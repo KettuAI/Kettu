@@ -48,7 +48,6 @@ enum Theme {
   static var unread: Color { token("shell-accent") }
   static var running: Color { token("shell-accent") }
   static var planDone: Color { token("success") }
-  static var stepDone: Color { token("success") }
   static var merged: Color { token("merged") }
   static let chip = Color(hex: "#232327")
 
@@ -73,6 +72,8 @@ enum Metrics {
   static let margin: CGFloat = 28
   /// The height of the island's top band on a screen without a notch whose menu bar hides itself.
   static let bandHeight: CGFloat = 32
+  /// The other sessions the expanded list shows before it folds the rest into one line.
+  static let listRows = 4
   /// The middle of the collapsed island where no notch is in the way, which holds the title.
   static let plainMiddle: CGFloat = 185
 }

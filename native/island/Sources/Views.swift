@@ -433,25 +433,28 @@ struct PanelContent: View {
   }
 }
 
-/// The panel from top to bottom by how much it needs the user: the request that waits, the session
-/// the island is about, the other sessions one line each, the agents' plan limits, and the way to
-/// a new session or Kettu.
+/// While a request waits, the panel is that card alone, the one thing the user has to do; answered,
+/// its word shows for a moment and the next card or the list follows. The list, from top to
+/// bottom: the session the island is about, a few other sessions with the rest folded into one
+/// line, the agents' plan limits, and the way to a new session or Kettu.
 struct PanelBody: View {
   @ObservedObject var model: IslandModel
 
   var body: some View {
     VStack(alignment: .leading, spacing: 0) {
-      if model.rows.isEmpty && model.requests.isEmpty {
+      if let note = model.note {
+        NoteView(note: note).padding(.vertical, 4)
+      } else if let request = model.requests.first {
+        RequestCard(model: model, request: request).padding(.vertical, 4)
+      } else if model.rows.isEmpty {
         EmptyPanel(model: model)
+        if !model.limits.isEmpty { UsageStrip(model: model) }
+        PanelFooter(model: model)
       } else {
-        if let note = model.note {
-          NoteView(note: note).padding(.bottom, 8)
-        } else if let request = model.requests.first {
-          RequestCard(model: model, request: request).padding(.bottom, 8)
-        }
         if let focus = model.focusRow { FocusCard(model: model, row: focus) }
         let others = model.otherRows
-        if !others.isEmpty {
+        let shown = model.shownRows
+        if !shown.isEmpty {
           HStack(spacing: 6) {
             Text(model.text("others"))
             Text("\(others.count)").foregroundColor(Theme.faint)
@@ -461,12 +464,42 @@ struct PanelBody: View {
           .padding(.horizontal, 10)
           .padding(.top, model.focusRow == nil ? 2 : 12)
           .padding(.bottom, 6)
-          ForEach(others, id: \.key) { row in OtherRow(model: model, row: row) }
+          ForEach(shown, id: \.key) { row in OtherRow(model: model, row: row) }
+          if others.count > shown.count {
+            MoreRow(model: model, count: others.count - shown.count)
+          }
         }
+        if !model.limits.isEmpty { UsageStrip(model: model) }
+        PanelFooter(model: model)
       }
-      if !model.limits.isEmpty { UsageStrip(model: model) }
-      PanelFooter(model: model)
     }
+  }
+}
+
+/// The sessions past the list's few, folded into one line that opens Kettu.
+struct MoreRow: View {
+  @ObservedObject var model: IslandModel
+  let count: Int
+  @State private var hover = false
+
+  var body: some View {
+    HStack {
+      Text(model.text("moreSessions", ["count": "\(count)"])).foregroundColor(Theme.secondary)
+      Spacer(minLength: 8)
+      Text(model.text("viewInKettu") + " ↗").foregroundColor(Theme.tertiary)
+    }
+    .font(Fonts.ui(12, .medium))
+    .padding(.horizontal, 10)
+    .frame(height: 30)
+    .background(
+      RoundedRectangle(cornerRadius: 9, style: .continuous)
+        .fill(hover ? Theme.rowHover : Color.clear)
+    )
+    .contentShape(Rectangle())
+    .onHover { hover = $0 }
+    .onTapGesture { model.open(row: nil) }
+    .accessibilityElement(children: .combine)
+    .accessibilityAddTraits(.isButton)
   }
 }
 
@@ -685,29 +718,21 @@ struct FocusCard: View {
     .accessibilityAddTraits(.isButton)
   }
 
-  /// At most one of: the plan while it runs, the last reply once it ended, or the cache's cost
-  /// once it expired.
+  /// At most one of: the plan's progress and its step in progress while it runs, the last reply
+  /// once it ended, or the cache's cost once it expired.
   @ViewBuilder private func middle(status: String, focus: IslandFocus?) -> some View {
-    if ["running", "starting", "stuck"].contains(status), let focus, !focus.steps.isEmpty {
-      VStack(alignment: .leading, spacing: 0) {
-        if focus.before > 0 { more(model.text("stepsBefore", ["count": "\(focus.before)"])) }
-        ForEach(Array(focus.steps.enumerated()), id: \.offset) { _, step in
-          HStack(spacing: 9) {
-            StepMark(state: step.state)
-            Text(step.text)
-              .font(Fonts.ui(12, step.state == "now" ? .semibold : .regular))
-              .foregroundColor(
-                step.state == "now"
-                  ? Theme.text : step.state == "done" ? Theme.secondary : Theme.tertiary
-              )
-              .lineLimit(1)
-          }
-          .frame(height: 21)
+    if ["running", "starting", "stuck"].contains(status), let plan = row.plan {
+      HStack(spacing: 6) {
+        PlanRing(done: plan.done, total: plan.total, size: 12)
+        Text("\(plan.done)/\(plan.total)").fontWeight(.semibold).monospacedDigit()
+        if let current = plan.current {
+          Text(current).foregroundColor(Theme.quote).lineLimit(1).truncationMode(.tail)
         }
-        if focus.after > 0 { more(model.text("stepsAfter", ["count": "\(focus.after)"])) }
       }
+      .font(Fonts.ui(12))
+      .foregroundColor(Theme.text)
       .padding(.leading, 30)
-      .padding(.top, 8)
+      .padding(.top, 6)
     } else if ["unread", "failed"].contains(status), let reply = focus?.reply {
       Text(reply)
         .font(Fonts.ui(12.5))
@@ -733,11 +758,6 @@ struct FocusCard: View {
       .padding(.leading, 30)
       .padding(.top, 6)
     }
-  }
-
-  private func more(_ text: String) -> some View {
-    Text(text).font(Fonts.ui(11.5)).foregroundColor(Theme.tertiary).padding(.leading, 23)
-      .frame(height: 21)
   }
 
   /// A token count as the composer writes it: 70K, 1.2M.
