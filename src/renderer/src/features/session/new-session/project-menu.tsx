@@ -35,7 +35,7 @@ import { NO_PROJECT_ICON } from '@renderer/features/shell/no-project-icon'
 import { isAway, useOtherHost, useOtherHosts, type OtherHost } from '@renderer/stores/hosts'
 import { useProjectsStore } from '@renderer/stores/projects'
 import { chooseNewSessionProject } from '@renderer/stores/view'
-import { nameHints } from '../project-names'
+import { projectNameHints } from '../project-names'
 import { HostFolderDialog } from './host-folder-dialog'
 
 // The values of the No project and Open project… items, which no project's path can take.
@@ -130,19 +130,7 @@ export function ProjectMenu({
   const hosts = useOtherHosts()
   const { contains } = useComboboxFilter()
   const byPath = useMemo(() => new Map(projects.map((p) => [p.path, p])), [projects])
-  // Each host tells its own projects of one name apart, by the paths it writes.
-  const hints = useMemo(() => {
-    const hosted = new Map<string, string>()
-    for (const hostId of new Set(projects.map((p) => hostOfPath(p.path)))) {
-      const paths = projects.map((p) => p.path).filter((path) => hostOfPath(path) === hostId)
-      const found = nameHints(paths.map(hostPath))
-      for (const path of paths) {
-        const hint = found.get(hostPath(path))
-        if (hint) hosted.set(path, hint)
-      }
-    }
-    return hosted
-  }, [projects])
+  const hints = useMemo(() => projectNameHints(projects.map((p) => p.path)), [projects])
   const groups = useMemo(() => projectGroups(projects, hosts, host), [projects, hosts, host])
   const listed = useMemo(
     () => (host === undefined ? projects : projects.filter((p) => hostOfPath(p.path) === host)),

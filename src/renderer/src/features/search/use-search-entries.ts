@@ -4,6 +4,7 @@ import { useShallow } from 'zustand/react/shallow'
 import type { ConversationHit, SessionSummary } from '@shared/agent-host'
 import { artifactKind, recency } from '@renderer/features/artifacts/model'
 import { scheduleWords } from '@renderer/features/routines/model'
+import { projectNameHints } from '@renderer/features/session/project-names'
 import { shortcutList, type ShortcutAction } from '@renderer/features/shell/shortcuts'
 import { useCloudOff } from '@renderer/lib/cloud'
 import { basename, dirname, shortAgo } from '@renderer/lib/format'
@@ -84,14 +85,23 @@ export function useSearchEntries(): SearchEntry[] {
   )
 }
 
-/** A project's name by its path, and "No project" for the scratch folders. */
+/**
+ * A project's name by its path, with the parent folders that tell it from another of the same name
+ * in brackets, and "No project" for the scratch folders.
+ */
 function useProjectName(): (path: string | null) => string {
   const { t } = useTranslation('sidebar')
   const projects = useProjectsStore(useShallow((s) => s.projects))
   const noProject = t('project.noProject')
   return useMemo(() => {
     const names = new Map(projects.map((project) => [project.path, project.name]))
-    return (path) => (path === null ? noProject : (names.get(path) ?? basename(hostPath(path))))
+    const hints = projectNameHints(projects.map((project) => project.path))
+    return (path) => {
+      if (path === null) return noProject
+      const name = names.get(path) ?? basename(hostPath(path))
+      const hint = hints.get(path)
+      return hint ? `${name} (${hint})` : name
+    }
   }, [projects, noProject])
 }
 

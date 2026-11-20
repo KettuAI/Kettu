@@ -60,6 +60,7 @@ import {
 import { listedTasks, pinnedTasks, useTasksStore } from '@renderer/stores/tasks'
 import { openSettings, PINNED_GROUP, showAllRows, useViewStore } from '@renderer/stores/view'
 import { StarCard } from '@renderer/features/github-star/star-prompts'
+import { projectNameHints } from '@renderer/features/session/project-names'
 import { AddProjectButton } from './add-project'
 import { HostEmpty, HostHeading, NeedsYouGroup } from './host-groups'
 import { useHostLabel } from './host-label'
@@ -308,6 +309,10 @@ function ProjectGroup({
   const key = project?.path ?? noProjectGroup(hostId)
   const { t } = useTranslation('sidebar')
   const name = project?.name ?? t('project.noProject')
+  // What tells the project from another of the same name, as New session's project menu shows it.
+  const hint = useProjectsStore((s) =>
+    project ? projectNameHints(s.projects.map((p) => p.path)).get(project.path) : undefined,
+  )
   const hostName = useHostLabel(hostId)
   const open = useViewStore((s) => !s.collapsedProjects[key])
   const allShown = useViewStore((s) => !!s.allRowsShown[key])
@@ -376,7 +381,10 @@ function ProjectGroup({
       )}
     >
       {!project ? <Glyph icon={NO_PROJECT_ICON} /> : open ? <FolderMark /> : <FolderClosedMark />}
-      <span className="ui-as-side__text">{name}</span>
+      <span className="ui-as-side__text">
+        {name}
+        {hint && <span className="ml-1.5 text-(--faint)">{hint}</span>}
+      </span>
       {project?.missing && (
         <span className="shrink-0 text-[12px] text-(--faint)">{t('project.missing')}</span>
       )}
