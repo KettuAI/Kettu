@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import type { Project } from '@shared/agent-host'
 import type { AgentId, HarnessId } from '@shared/thread'
 import {
   GROUPINGS,
@@ -28,6 +29,7 @@ import {
   type PaneView,
   type Place,
 } from '@renderer/features/split/layout'
+import { newSessionProject } from '@renderer/features/split/new-session-project'
 import type { RoutineExampleId } from '@renderer/features/routines/examples'
 import { NARROW_WINDOW, PHONE_WINDOW } from '@renderer/features/shell/narrow'
 import { hostOfPath } from '@renderer/lib/host-paths'
@@ -358,12 +360,19 @@ export function layoutSessions(layout: Layout): string[] {
   )
 }
 
-/** The projects the panes in view work in, joined, for their git status. */
-export function shownProjects(state: ViewStore): string {
+/**
+ * The projects the panes in view work in, joined, for their git status: a New session pane's
+ * included, which falls back to the selected or first project when it has none of its own.
+ */
+export function shownProjects(state: ViewStore, projects: readonly Project[]): string {
   const panes = new Set(state.visiblePanes.length ? state.visiblePanes : paneOrder(state.layout))
-  const paths = allPanes(state.layout).flatMap((pane) =>
-    panes.has(pane.id) && pane.view.projectPath ? [pane.view.projectPath] : [],
-  )
+  const paths = allPanes(state.layout).flatMap((pane) => {
+    if (!panes.has(pane.id)) return []
+    const { view } = pane
+    const fallback =
+      view.kind === 'new' ? newSessionProject(view, state.projectPath, projects)?.path : undefined
+    return [view.projectPath, fallback].filter((path): path is string => !!path)
+  })
   return [...new Set(paths)].join('\n')
 }
 

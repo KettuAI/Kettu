@@ -37,7 +37,7 @@ export function MainArea() {
   const selected = useViewStore((s) => s.projectPath)
   const main = useViewStore((s) => s.main)
   const layout = useViewStore((s) => s.layout)
-  const paths = useViewStore(shownProjects)
+  const paths = useViewStore((s) => shownProjects(s, projects))
   const shownSessions = useViewStore((s) => shownLayoutSessions(s).join('\n'))
   // The worktrees the sessions in view work in, which their panels follow.
   const worktrees = useSessionsStore((s) =>
