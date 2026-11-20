@@ -140,6 +140,10 @@ function contentText(content: readonly UserContent[]): string {
           return `[${ref.name}](${ref.uri})`
         case 'terminal':
           return `[the user's terminal ${ref.name}]`
+        case 'page':
+          return `[the user's browser tab ${ref.name}]`
+        case 'device':
+          return `[the device ${ref.name}]`
         case 'image':
           return '[an image]'
         case 'audio':

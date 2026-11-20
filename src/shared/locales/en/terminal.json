@@ -17,10 +17,7 @@
     "running": "Running",
     "close": "Close {{name}}",
     "owner": "· {{agent}}",
-    "password": "Waiting for a password",
-    "reference": "Reference in conversation",
-    "stopSharing": "Stop {{agent}} using it",
-    "shared": "{{agent}} may use it"
+    "password": "Waiting for a password"
   },
   "closeDialog": {
     "title": "End this terminal?",

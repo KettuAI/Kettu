@@ -6,14 +6,21 @@ import { actionOf, DeviceArgsError, DeviceTools, type DeviceToolDeps } from './t
 const caller = { sessionId: 's1', project: '/work/app' }
 const SIM = 'ios-sim:0E02CA7B-60D9-40F6-BCE1-C66A3DECAAEF'
 
-function tools(answer: DeviceAccessAnswer, always: string[] = []) {
+// By default the user connected the simulator to the session, so the agent asks before using it.
+function tools(
+  answer: DeviceAccessAnswer,
+  always: string[] = [],
+  device: { kind: string; sessionId: string | null } = { kind: 'simulator', sessionId: 's1' },
+  extra: Partial<DeviceToolDeps> = {},
+) {
   const calls: DeviceCall[] = []
   const stored = new Set(always)
   const deps: DeviceToolDeps = {
     call: async (call): Promise<DeviceCallAnswer> => {
       calls.push(call)
       if (call.kind === 'list') {
-        return { result: { text: '', value: { devices: [{ id: SIM, name: 'iPhone 17 Pro' }] } } }
+        const listed = { id: SIM, name: 'iPhone 17 Pro', ...device }
+        return { result: { text: '', value: { devices: [listed] } } }
       }
       return { result: { text: 'done' } }
     },
@@ -23,6 +30,7 @@ function tools(answer: DeviceAccessAnswer, always: string[] = []) {
     ask: vi.fn(async () => answer),
     alwaysAllowed: (id) => stored.has(id),
     allowAlways: (id) => stored.add(id),
+    ...extra,
   }
   return { tools: new DeviceTools(deps), deps, calls, stored }
 }
@@ -126,6 +134,42 @@ describe('device access', () => {
     const second = tools('deny', [SIM])
     await second.tools.call(caller, 'device_open', { deviceId: SIM })
     expect(second.deps.ask).not.toHaveBeenCalled()
+  })
+
+  it('lets the agent use a simulator it connects itself without asking', async () => {
+    const {
+      tools: subject,
+      deps,
+      calls,
+    } = tools('deny', [], { kind: 'simulator', sessionId: null })
+    await subject.call(caller, 'device_open', { deviceId: SIM })
+    await subject.call(caller, 'device_tap', { deviceId: SIM, ref: '@e1' })
+    expect(deps.ask).not.toHaveBeenCalled()
+    expect(calls.filter((call) => call.kind === 'open' || call.kind === 'action')).toHaveLength(2)
+  })
+
+  it('asks before a physical device, whoever connects it', async () => {
+    const { tools: subject, deps } = tools('deny', [], { kind: 'physical', sessionId: null })
+    const result = await subject.call(caller, 'device_open', { deviceId: SIM })
+    expect(deps.ask).toHaveBeenCalledTimes(1)
+    expect(result.structuredContent).toMatchObject({ code: 'not_allowed' })
+  })
+
+  it('asks nothing in full access, and the thread says it used the device', async () => {
+    const used = vi.fn()
+    const { tools: subject, deps } = tools('deny', [], undefined, {
+      fullAccess: () => true,
+      used,
+    })
+    await subject.call(caller, 'device_snapshot', { deviceId: SIM })
+    expect(deps.ask).not.toHaveBeenCalled()
+    expect(used).toHaveBeenCalledWith('s1', 'iPhone 17 Pro')
+  })
+
+  it('asks nothing for a device the user referenced in a message', async () => {
+    const { tools: subject, deps } = tools('deny', [], undefined, { shared: () => true })
+    await subject.call(caller, 'device_snapshot', { deviceId: SIM })
+    expect(deps.ask).not.toHaveBeenCalled()
   })
 
   it('answers listing without asking', async () => {

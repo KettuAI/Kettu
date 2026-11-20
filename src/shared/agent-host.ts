@@ -1679,9 +1679,9 @@ export interface HostContract {
     params: { sessionId: string; entryId: string; decision: DeviceAccessDecision }
     result: void
   }
-  // Any window's or device's answer to a card asking whether the agent may use a terminal the user
-  // opened; the first counts.
-  'terminals.answerAccess': {
+  // Any window's or device's answer to a card asking whether the agent may use a terminal or a
+  // browser tab the user opened, or rename a terminal of theirs; the first counts.
+  'surfaces.answerAccess': {
     params: { sessionId: string; entryId: string; decision: SurfaceAccessDecision }
     result: void
   }
@@ -2047,7 +2047,7 @@ export const HOST_METHODS = [
   'browser.answerOrigin',
   'devices.answerAccess',
   'devices.revokeAccess',
-  'terminals.answerAccess',
+  'surfaces.answerAccess',
   'terminals.revokeAccess',
   'devices.allowed',
   'devices.forget',

@@ -17,10 +17,7 @@
     "running": "正在运行",
     "close": "关闭 {{name}}",
     "owner": "· {{agent}}",
-    "password": "在等密码",
-    "reference": "在对话中引用",
-    "stopSharing": "收回 {{agent}} 的使用",
-    "shared": "{{agent}} 能用"
+    "password": "在等密码"
   },
   "closeDialog": {
     "title": "结束此终端？",

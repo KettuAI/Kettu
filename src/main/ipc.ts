@@ -913,6 +913,9 @@ export function registerIpcHandlers({
   handle('browser:close-tab', 2, (_, id, tab) =>
     browserViews.closeTab(sessionId(id), browserTabId(tab)),
   )
+  handle('browser:revoke-tab', 2, (_, id, tab) =>
+    browserViews.allowTab(sessionId(id), browserTabId(tab), false),
+  )
   handle('browser:bounds', 2, (_, id, bounds) =>
     browserViews.setBounds(sessionId(id), browserBounds(bounds)),
   )

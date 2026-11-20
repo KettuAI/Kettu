@@ -1,5 +1,5 @@
 import { memo } from 'react'
-import { ComputerTerminal01Icon, PencilEdit02Icon } from '@hugeicons/core-free-icons'
+import { ComputerTerminal01Icon, GlobalIcon, PencilEdit02Icon } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
 import type { SurfaceAccessAnswer } from '@shared/control'
 import { host } from '@renderer/lib/host'
@@ -20,7 +20,10 @@ const RENAME_TEXT = {
   revoked: 'terminalRename.answer.allow',
 } as const satisfies Record<SurfaceAccessAnswer | 'revoked', string>
 
-/** An agent asked to use a terminal the user opened in its session, or to rename one of theirs. */
+/**
+ * An agent asked to use a terminal or browser tab the user opened in its session, or to rename a
+ * terminal of theirs.
+ */
 export const SurfaceAccessEntry = memo(function SurfaceAccessEntry({
   sessionId,
   entryId,
@@ -35,6 +38,7 @@ export const SurfaceAccessEntry = memo(function SurfaceAccessEntry({
   const animation = useEntryAnimation(sessionId, entryId)
   if (!entry) return null
   const rename = entry.rename
+  const page = entry.surface === 'browser'
   const texts = rename === undefined ? ANSWER_TEXT : RENAME_TEXT
   const allow = t(
     rename === undefined ? 'terminalAccess.decision.allow' : 'terminalRename.decision.allow',
@@ -45,15 +49,23 @@ export const SurfaceAccessEntry = memo(function SurfaceAccessEntry({
       entryId={entryId}
       agentName={agentName}
       className={animation}
-      action={t(rename === undefined ? 'access.action.terminal' : 'access.action.terminalRename')}
+      action={t(
+        page
+          ? 'access.action.tab'
+          : rename === undefined
+            ? 'access.action.terminal'
+            : 'access.action.terminalRename',
+      )}
       target={entry.targetName}
-      glyph={rename === undefined ? ComputerTerminal01Icon : PencilEdit02Icon}
+      glyph={page ? GlobalIcon : rename === undefined ? ComputerTerminal01Icon : PencilEdit02Icon}
       reason={
-        rename === undefined
-          ? t(entry.readOnly ? 'terminalAccess.whereRead' : 'terminalAccess.where')
-          : rename
-            ? t('terminalRename.to', { name: rename })
-            : t('terminalRename.toAuto')
+        page
+          ? t('tabAccess.where')
+          : rename === undefined
+            ? t(entry.readOnly ? 'terminalAccess.whereRead' : 'terminalAccess.where')
+            : rename
+              ? t('terminalRename.to', { name: rename })
+              : t('terminalRename.toAuto')
       }
       // The card reads an allow for this session as its own.
       answer={entry.revoked ? 'revoked' : entry.decision === 'allow' ? 'session' : entry.decision}
@@ -68,7 +80,7 @@ export const SurfaceAccessEntry = memo(function SurfaceAccessEntry({
       }}
       trailing={null}
       request={(decision) =>
-        host('terminals.answerAccess', {
+        host('surfaces.answerAccess', {
           sessionId,
           entryId: entry.id,
           decision: decision === 'deny' ? 'deny' : 'allow',

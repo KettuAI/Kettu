@@ -521,8 +521,8 @@ export interface DeviceAccessEntry {
 export interface SurfaceAccessEntry {
   kind: 'surface_access'
   id: string
-  surface: 'terminal'
-  /** The terminal's id, and its name when the agent asked. */
+  surface: 'terminal' | 'browser'
+  /** The terminal's or the browser tab's id, and its name or page title when the agent asked. */
   targetId: string
   targetName: string
   /** The session planned when it asked, so the agent would only read it. */
@@ -973,8 +973,11 @@ export type ContentRef =
   | { kind: 'video'; mimeType: string; data: string; size: number; name: string | null }
   | { kind: 'link'; uri: string; name: string }
   | { kind: 'attachment'; attachment: Attachment } // what the user added, see attachments
-  // A terminal of the session the user referenced, which lets its agent use it; `name` as then.
+  // A terminal, browser tab or device of the session the user referenced, which lets its agent use
+  // it; `name` as it read then.
   | { kind: 'terminal'; terminalId: string; name: string }
+  | { kind: 'page'; tabId: string; name: string }
+  | { kind: 'device'; deviceId: string; name: string }
   | { kind: 'unsupported'; label: string }
 
 export interface Attachment {
@@ -1304,6 +1307,10 @@ function isContentRef(value: unknown): value is ContentRef {
       return typeof value.uri === 'string' && typeof value.name === 'string'
     case 'terminal':
       return typeof value.terminalId === 'string' && typeof value.name === 'string'
+    case 'page':
+      return typeof value.tabId === 'string' && typeof value.name === 'string'
+    case 'device':
+      return typeof value.deviceId === 'string' && typeof value.name === 'string'
     case 'attachment':
       return isAttachment(value.attachment)
     case 'unsupported':
@@ -1509,7 +1516,7 @@ export function isThreadEntry(value: unknown): value is ThreadEntry {
       )
     case 'surface_access':
       return (
-        value.surface === 'terminal' &&
+        (value.surface === 'terminal' || value.surface === 'browser') &&
         typeof value.targetId === 'string' &&
         (value.rename === undefined || typeof value.rename === 'string') &&
         typeof value.targetName === 'string' &&

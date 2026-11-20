@@ -31,7 +31,10 @@ export function onHost(hostId: string, path: string): string {
 /** A host's call as main reads it, or null when it is not one. */
 export function parseDeviceCall(value: unknown): BrowserDeviceCall | null {
   if (typeof value !== 'object' || value === null) return null
-  const { callId, sessionId, tool, args, projectPath, forward } = value as Record<string, unknown>
+  const { callId, sessionId, tool, args, projectPath, forward, allowTab } = value as Record<
+    string,
+    unknown
+  >
   if (typeof callId !== 'number' || !Number.isSafeInteger(callId) || callId < 1) return null
   if (typeof sessionId !== 'string' || sessionId === '' || sessionId.length > MAX_ID_CHARS) {
     return null
@@ -40,6 +43,9 @@ export function parseDeviceCall(value: unknown): BrowserDeviceCall | null {
   if (typeof args !== 'object' || args === null || Array.isArray(args)) return null
   if (typeof projectPath !== 'string' || projectPath.length > MAX_PATH_CHARS) return null
   if (forward !== undefined && !isBrowserForward(forward)) return null
+  if (allowTab !== undefined && (typeof allowTab !== 'string' || allowTab.length > MAX_ID_CHARS)) {
+    return null
+  }
   return {
     callId,
     sessionId,
@@ -47,6 +53,7 @@ export function parseDeviceCall(value: unknown): BrowserDeviceCall | null {
     args: args as Record<string, unknown>,
     projectPath,
     ...(forward ? { forward } : {}),
+    ...(typeof allowTab === 'string' ? { allowTab } : {}),
   }
 }
 
@@ -99,6 +106,7 @@ export interface RemoteBrowserDeps {
     args: Record<string, unknown>,
     projectPath: string,
     waiting: (waiting: boolean) => void,
+    allowTab?: string,
   ): Promise<BrowserCallAnswer>
   /** A port on this computer's loopback that reaches `forward` on the host; null when none can. */
   forward(hostId: string, sessionId: string, forward: BrowserForward): Promise<number | null>
@@ -276,12 +284,14 @@ export class RemoteBrowser {
       args,
       onHost(hostId, call.projectPath),
       (waiting) => void this.deps.request(hostId, 'browser.waiting', { callId, waiting }),
+      call.allowTab,
     )
     const mappings = this.mappings.get(sessionId) ?? []
     if (mappings.length === 0) return answer
     if ('error' in answer) {
-      const { code, message } = answer.error
-      return { error: { code, message: unmapped(message, mappings) as string } }
+      return {
+        error: { ...answer.error, message: unmapped(answer.error.message, mappings) as string },
+      }
     }
     const { text, value, image } = answer.result
     return {

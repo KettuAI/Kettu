@@ -296,7 +296,7 @@ Use it without being asked when it fits: after you change a page or a component,
 
 ## Tabs
 
-The browser has tabs, which the user shares. Your tools act on your current tab: \`browser_tabs\` lists, opens, selects and closes tabs, and a popup a page of yours opens becomes your current tab. A tab the user selects does not.
+The browser has tabs, which the user shares. Your tools act on your current tab: \`browser_tabs\` lists, opens, selects and closes tabs, and a popup a page of yours opens becomes your current tab. A tab the user selects does not. A tab the user opened is theirs: \`browser_tabs\` marks it, and your first call on it asks them in the conversation, unless they referenced it in their message. \`browser_navigate\` without a tab of your own opens one rather than taking theirs.
 
 ## Who is operating
 
@@ -319,7 +319,7 @@ Use it without being asked when you build or debug a mobile app: after a change,
 ## Steps
 
 1. \`device_list\` shows the devices with their ids, state and anything they still need.
-2. \`device_open\` opens one for this session; a shut-down simulator or emulator boots first. The first time, the user is asked to allow it.
+2. \`device_open\` opens one for this session; a shut-down simulator or emulator boots first. A simulator or emulator you connect yourself is yours; a physical device, or one the user connected to the session, asks the user first, unless they referenced it in their message.
 3. Build the app with the project's own commands, then \`device_install_app\` with the built .app for a simulator, .ipa for an iPhone or .apk for Android.
 4. \`device_launch_app\` starts it by bundle id or Android package, and follows it for later snapshots and logs.
 5. \`device_snapshot\` reads what the screen shows, each element you can act on with a reference such as @e3. Act with \`device_tap\`, \`device_fill\`, \`device_type\`, \`device_scroll\`, \`device_swipe\` and \`device_press_button\`. References change when the screen changes: read it again then.

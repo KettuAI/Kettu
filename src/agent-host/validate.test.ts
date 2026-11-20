@@ -820,6 +820,26 @@ describe('promptContent', () => {
     ])
   })
 
+  it('keeps a browser tab and a device the user referenced by their ids and names alone', () => {
+    expect(
+      promptContent([
+        { type: 'text', text: 'Look at @page:t4 on @device:0E02CA7B' },
+        { type: 'ref', ref: { kind: 'page', tabId: 't4', name: 'Mail', url: 'x' } },
+        { type: 'ref', ref: { kind: 'device', deviceId: 'ios-sim:0E02', name: 'iPhone 17' } },
+      ]),
+    ).toEqual([
+      { type: 'text', text: 'Look at @page:t4 on @device:0E02CA7B' },
+      { type: 'ref', ref: { kind: 'page', tabId: 't4', name: 'Mail' } },
+      { type: 'ref', ref: { kind: 'device', deviceId: 'ios-sim:0E02', name: 'iPhone 17' } },
+    ])
+    rejects(() =>
+      promptContent([
+        { type: 'text', text: 'x' },
+        { type: 'ref', ref: { kind: 'page', name: 'x' } },
+      ]),
+    )
+  })
+
   it('keeps a terminal the user referenced by its id and name alone', () => {
     expect(
       promptContent([

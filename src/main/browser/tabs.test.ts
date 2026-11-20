@@ -150,6 +150,49 @@ describe('tabsToRelease', () => {
   })
 })
 
+describe("the user's tabs", () => {
+  it('records who opened each tab, and lets the agent use only its own until allowed', () => {
+    const tabs = new TabStrip()
+    tabs.add('user', { select: true, agent: false })
+    tabs.add('mine', { select: false, agent: true })
+    expect([tabs.byOf('user'), tabs.byOf('mine')]).toEqual(['user', 'agent'])
+    expect([tabs.usable('user'), tabs.usable('mine')]).toEqual([false, true])
+    expect(tabs.allow('user', true)).toBe(true)
+    expect(tabs.usable('user')).toBe(true)
+    expect(tabs.allow('user', false)).toBe(true)
+    expect(tabs.usable('user')).toBe(false)
+    expect(tabs.allow('gone', true)).toBe(false)
+  })
+
+  it('forgets an allow with its tab', () => {
+    const tabs = strip('a')
+    tabs.allow('a', true)
+    tabs.remove('a')
+    tabs.add('a', { select: false, agent: false })
+    expect(tabs.usable('a')).toBe(false)
+  })
+
+  it("tells the agent which tabs are the user's and whether to ask first", () => {
+    const listed = listTabs(
+      [
+        { id: 'a', url: null, title: 'Mail', released: false, by: 'user', usable: false },
+        { id: 'b', url: null, title: 'Docs', released: false, by: 'user', usable: true },
+      ],
+      null,
+    )
+    expect(listed.map((tab) => [tab.yours, tab.usable])).toEqual([
+      [false, false],
+      [false, true],
+    ])
+    expect(tabsText(listed)).toBe(
+      [
+        '- 0: (the user opened it; ask first) "Mail" about:blank',
+        '- 1: (the user opened it) "Docs" about:blank',
+      ].join('\n'),
+    )
+  })
+})
+
 describe('the tab list an agent reads', () => {
   it('numbers the tabs in order and marks the current and released ones', () => {
     const listed = listTabs(
@@ -160,10 +203,25 @@ describe('the tab list an agent reads', () => {
       ],
       'b',
     )
+    const mine = { yours: true, usable: true }
     expect(listed).toEqual([
-      { index: 0, url: 'http://localhost:5173/', title: 'App', current: false, released: false },
-      { index: 1, url: 'about:blank', title: '', current: true, released: false },
-      { index: 2, url: 'https://example.com/', title: 'Example', current: false, released: true },
+      {
+        index: 0,
+        url: 'http://localhost:5173/',
+        title: 'App',
+        current: false,
+        released: false,
+        ...mine,
+      },
+      { index: 1, url: 'about:blank', title: '', current: true, released: false, ...mine },
+      {
+        index: 2,
+        url: 'https://example.com/',
+        title: 'Example',
+        current: false,
+        released: true,
+        ...mine,
+      },
     ])
     expect(tabsText(listed)).toBe(
       [

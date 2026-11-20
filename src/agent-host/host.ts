@@ -401,6 +401,12 @@ const REPLY_RUN_ERRORS: Record<TerminalCallErrorCode, PortErrorCode> = {
   failed: 'conflict',
 }
 
+/** Whether the user referenced a surface in a message to `sessionId`, or to New session's. */
+function sharedWith(shared: Map<string, string | null>, id: string, sessionId: string): boolean {
+  const to = shared.get(id)
+  return to !== undefined && (to === null || to === sessionId)
+}
+
 export class AgentHost {
   readonly diagnostics: Diagnostics
   /** What each ACP session sent and received since the host started, for the Requests pane. */
@@ -477,6 +483,9 @@ export class AgentHost {
   // Terminals the user referenced in a message, by id, with the session it went to; null for New
   // session's, whose terminals go to the session it creates. Each allows that session's agent.
   private readonly sharedTerminals = new Map<string, string | null>()
+  // Browser tabs and devices the user referenced the same way.
+  private readonly sharedTabs = new Map<string, string | null>()
+  private readonly sharedDevices = new Map<string, string | null>()
   /** Sessions whose running turn acted on a device, which the device host hears the end of. */
   private readonly deviceTurns = new Set<string>()
   private nextDeviceCall = 1
@@ -826,6 +835,18 @@ export class AgentHost {
       },
       wrote: (sessionId, write) => this.sessions.artifactWritten(sessionId, write),
       browserCall: (request, caller) => this.browserCall(request, caller),
+      browserAccess: {
+        fullAccess: (sessionId) => this.sessions.surfaceAccessOf(sessionId).fullAccess,
+        ask: (sessionId, tab) =>
+          this.sessions.surfaceAccessAsked(
+            sessionId,
+            { surface: 'browser', id: tab.id, name: tab.title },
+            { readOnly: false },
+            SURFACE_ACCESS_WAIT_MS,
+          ),
+        used: (sessionId, title) => this.sessions.surfaceUsed(sessionId, 'browser', title),
+        shared: (sessionId, tabId) => sharedWith(this.sharedTabs, tabId, sessionId),
+      },
       browserSession: (sessionId) => this.sessions.browserSession(sessionId),
       devices: {
         call: (call) => this.deviceCall(call),
@@ -833,6 +854,9 @@ export class AgentHost {
         ask: (sessionId, deviceId, deviceName) =>
           this.sessions.deviceAccessAsked(sessionId, deviceId, deviceName, DEVICE_ACCESS_WAIT_MS),
         alwaysAllowed: (deviceId) => this.deviceAccess.has(deviceId),
+        fullAccess: (sessionId) => this.sessions.surfaceAccessOf(sessionId).fullAccess,
+        used: (sessionId, name) => this.sessions.surfaceUsed(sessionId, 'device', name),
+        shared: (sessionId, deviceId) => sharedWith(this.sharedDevices, deviceId, sessionId),
         allowAlways: (deviceId) => this.deviceAccess.add(deviceId),
       },
       terminals: {
@@ -848,10 +872,7 @@ export class AgentHost {
           ),
         used: (sessionId, terminal) =>
           this.sessions.surfaceUsed(sessionId, 'terminal', terminal.name ?? terminal.title),
-        shared: (sessionId, terminalId) => {
-          const to = this.sharedTerminals.get(terminalId)
-          return to !== undefined && (to === null || to === sessionId)
-        },
+        shared: (sessionId, terminalId) => sharedWith(this.sharedTerminals, terminalId, sessionId),
       },
       sessionProject: (sessionId) => this.sessions.sessionProject(sessionId),
       sessionFolder: (sessionId) => this.sessions.sessionFolder(sessionId),
@@ -2372,6 +2393,7 @@ export class AgentHost {
         tool: request.tool,
         args: request.args,
         projectPath: request.projectPath,
+        ...(request.allowTab ? { allowTab: request.allowTab } : {}),
       })
     })
   }
@@ -2468,13 +2490,17 @@ export class AgentHost {
   }
 
   /**
-   * The terminals a user's message references: the session's agent may use them from now on, as the
-   * user shared them. A session that exists gets the allow at once, so the tab says so; New session's
-   * terminals reach their session later, so its agent's first call on one gives it.
+   * The terminals, browser tabs and devices a user's message references: the session's agent may
+   * use them from now on, as the user shared them. A terminal of a session that exists gets the
+   * allow at once, so its tab says so; the rest is given on the agent's first call, as New
+   * session's terminals reach their session only later.
    */
-  private shareTerminals(sessionId: string | null, content: readonly UserContent[]): void {
+  private shareSurfaces(sessionId: string | null, content: readonly UserContent[]): void {
     for (const item of content) {
-      if (item.type !== 'ref' || item.ref.kind !== 'terminal') continue
+      if (item.type !== 'ref') continue
+      if (item.ref.kind === 'page') this.sharedTabs.set(item.ref.tabId, sessionId)
+      if (item.ref.kind === 'device') this.sharedDevices.set(item.ref.deviceId, sessionId)
+      if (item.ref.kind !== 'terminal') continue
       const terminalId = item.ref.terminalId
       this.sharedTerminals.set(terminalId, sessionId)
       if (sessionId === null) continue
@@ -2896,7 +2922,7 @@ export class AgentHost {
       'sessions.create': async (params, { portId, device }) => {
         // A worktree is made with git, which is found as the agents find it.
         if (params.worktree) await this.env.ready()
-        if (params.prompt) this.shareTerminals(null, params.prompt)
+        if (params.prompt) this.shareSurfaces(null, params.prompt)
         return sessions.create(device ? { ...params, device: fromDevice(device) } : params, portId)
       },
       'sessions.prepare': (params, { portId }) => sessions.prepare(params, portId),
@@ -2927,7 +2953,7 @@ export class AgentHost {
       'sessions.unwatch': ({ sessionId }, { portId }) => sessions.unwatch(sessionId, portId),
       'sessions.show': ({ sessionIds }, { portId }) => sessions.show(sessionIds, portId),
       'sessions.prompt': ({ sessionId, content }, { portId, device }) => {
-        this.shareTerminals(sessionId, content)
+        this.shareSurfaces(sessionId, content)
         return sessions.prompt(sessionId, content, portId, fromDevice(device))
       },
       'sessions.attachEarly': ({ sessionId }) => sessions.attachEarly(sessionId),
@@ -2952,13 +2978,13 @@ export class AgentHost {
       'worktrees.skipSetup': ({ sessionId }) => sessions.skipWorktreeSetup(sessionId),
       'worktrees.setupLog': ({ sessionId, from }) => sessions.worktreeSetupLog(sessionId, from),
       'sessions.switchAgent': (params, { portId, device }) => {
-        this.shareTerminals(params.sessionId, params.content)
+        this.shareSurfaces(params.sessionId, params.content)
         return sessions.switchAgent(params, portId, fromDevice(device))
       },
       'sessions.context': ({ sessionId }) => sessions.context(sessionId),
       'sessions.contextEstimates': ({ sessionId }) => sessions.contextEstimates(sessionId),
       'sessions.queue': ({ sessionId, content }, { portId, device }) => {
-        this.shareTerminals(sessionId, content)
+        this.shareSurfaces(sessionId, content)
         return sessions.queue(sessionId, content, portId, fromDevice(device))
       },
       'sessions.runCommand': (params, { portId, device }) =>
@@ -3387,7 +3413,7 @@ export class AgentHost {
       'devices.answerAccess': ({ sessionId, entryId, decision }, { device }) => {
         sessions.answerDeviceAccess(sessionId, entryId, decision, fromDevice(device))
       },
-      'terminals.answerAccess': ({ sessionId, entryId, decision }, { device }) => {
+      'surfaces.answerAccess': ({ sessionId, entryId, decision }, { device }) => {
         sessions.answerSurfaceAccess(sessionId, entryId, decision, fromDevice(device))
       },
       'terminals.revokeAccess': ({ sessionId, terminalId }) =>

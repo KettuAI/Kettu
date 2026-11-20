@@ -450,6 +450,8 @@ export interface IpcInvokeContract {
   'browser:select-tab': { args: [sessionId: string, tabId: string]; result: void }
   /** Closing the last tab closes the browser. */
   'browser:close-tab': { args: [sessionId: string, tabId: string]; result: void }
+  // Takes back the session's agent the use of a tab the user opened, from the tab's menu.
+  'browser:revoke-tab': { args: [sessionId: string, tabId: string]; result: void }
   'browser:bounds': { args: [sessionId: string, bounds: BrowserBounds]; result: void }
   // A URL the renderer normalised; only http(s) ever reaches the page.
   'browser:navigate': { args: [sessionId: string, url: string]; result: void }
@@ -951,6 +953,7 @@ export interface KettuApi {
     selectTab(sessionId: string, tabId: string): Promise<void>
     /** Closes a tab; closing the last one closes the browser. */
     closeTab(sessionId: string, tabId: string): Promise<void>
+    revokeTab(sessionId: string, tabId: string): Promise<void>
     /** Where the pane's page sits, in device-independent pixels; null while it is not shown. */
     setBounds(sessionId: string, bounds: BrowserBounds): Promise<void>
     navigate(sessionId: string, url: string): Promise<void>

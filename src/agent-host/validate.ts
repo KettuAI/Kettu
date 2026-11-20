@@ -905,13 +905,25 @@ function contentRef(value: unknown, at: string): { ref: ContentRef; bytes: numbe
       const name = string(o, 'name', TERMINAL_NAME_CHARS)
       return { ref: { kind: 'terminal', terminalId, name }, bytes: terminalId.length + name.length }
     }
+    case 'page': {
+      const tabId = string(o, 'tabId', ID_CHARS)
+      const name = string(o, 'name', TEXT_CHARS)
+      return { ref: { kind: 'page', tabId, name }, bytes: tabId.length + name.length }
+    }
+    case 'device': {
+      const deviceId = string(o, 'deviceId', ID_CHARS)
+      const name = string(o, 'name', TERMINAL_NAME_CHARS)
+      return { ref: { kind: 'device', deviceId, name }, bytes: deviceId.length + name.length }
+    }
     case 'attachment': {
       // Only the id counts: the host takes everything else from its own record.
       const id = string(fields(o.attachment), 'id', ID_CHARS)
       return { ref: { kind: 'attachment', attachment: attachmentStub(id) }, bytes: 0 }
     }
     default:
-      throw invalidParams(`${at}: a prompt can carry images, links, terminals and attachments only`)
+      throw invalidParams(
+        `${at}: a prompt can carry images, links, terminals, tabs, devices and attachments only`,
+      )
   }
 }
 
@@ -2561,7 +2573,7 @@ export function createValidators(platform: Platform): Validators {
       }
       return { sessionId: sessionId(o), deviceId }
     },
-    'terminals.answerAccess': (params) => {
+    'surfaces.answerAccess': (params) => {
       const o = fields(params)
       if (!isSurfaceAccessDecision(o.decision))
         throw invalidParams('decision must be allow or deny')

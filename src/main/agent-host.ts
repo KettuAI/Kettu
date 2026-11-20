@@ -980,7 +980,7 @@ export class AgentHost {
 
   /** Runs a call on the session's page and posts its answer; a page that fails says why. */
   private browserCall(message: Extract<HostToMain, { type: 'host:browser-call' }>): void {
-    const { callId, sessionId, tool, args, projectPath } = message
+    const { callId, sessionId, tool, args, projectPath, allowTab } = message
     if (
       !Number.isSafeInteger(callId) ||
       typeof sessionId !== 'string' ||
@@ -998,6 +998,7 @@ export class AgentHost {
           tool: tool as BrowserCallRequest['tool'],
           args,
           projectPath: typeof projectPath === 'string' ? projectPath : '',
+          ...(typeof allowTab === 'string' ? { allowTab } : {}),
         })
       : Promise.resolve({
           error: { code: 'no_page', message: 'This build drives no browser.' },

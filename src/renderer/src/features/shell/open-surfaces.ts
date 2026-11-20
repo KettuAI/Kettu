@@ -1,9 +1,9 @@
 import { hostOfPath } from '@renderer/lib/host-paths'
 import { isWeb } from '@renderer/lib/platform'
 import { useBrowserStore } from '@renderer/stores/browser'
-import { devicesOf, useDevicesStore } from '@renderer/stores/devices'
+import { devicesOf, selectDevice, useDevicesStore } from '@renderer/stores/devices'
 import type { SurfaceKind } from '@renderer/stores/surface-tabs'
-import { terminalsOf, useTerminalsStore } from '@renderer/stores/terminals'
+import { showTerminal, terminalsOf, useTerminalsStore } from '@renderer/stores/terminals'
 import { panelSession, toggleSidePane } from '@renderer/stores/view'
 
 /**
@@ -23,4 +23,24 @@ export function openSurfaces(panel: string, projectPath: string, last?: SurfaceK
   const kind =
     last && has[last] ? last : (['terminal', 'browser', 'devices'] as const).find((k) => has[k])
   toggleSidePane(panel, kind ?? 'surfaces', true)
+}
+
+/** Opens the row on one terminal, browser tab or device, such as a message's chip names. */
+export function revealSurface(
+  panel: string,
+  kind: 'terminal' | 'page' | 'device',
+  id: string,
+): void {
+  const sessionId = panelSession(panel)
+  if (kind === 'terminal') {
+    toggleSidePane(panel, 'terminal', true)
+    showTerminal(panel, id)
+  } else if (kind === 'page') {
+    if (!sessionId || isWeb) return
+    toggleSidePane(panel, 'browser', true)
+    void window.kettu.browser.selectTab(sessionId, id)
+  } else if (sessionId) {
+    toggleSidePane(panel, 'devices', true)
+    selectDevice(sessionId, id)
+  }
 }

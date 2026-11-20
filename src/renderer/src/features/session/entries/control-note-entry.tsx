@@ -10,6 +10,14 @@ import { hostOfSession, useSessionsStore } from '@renderer/stores/sessions'
 import { useEntry, useEntryAnimation } from '../use-thread'
 import type { EntryProps } from './basic'
 
+// Computer use asks in its own setup, so no line says the agent started using the computer.
+const USED_NOTE = {
+  terminal: 'note.used.terminal',
+  browser: 'note.used.browser',
+  device: 'note.used.device',
+  computer: 'note.used.device',
+} as const
+
 /**
  * A quiet line across the thread where the user took a surface over: handed back after a while,
  * or paused by their own click in the app the agent used.
@@ -33,8 +41,7 @@ export const ControlNoteEntry = memo(function ControlNoteEntry({ sessionId, entr
         {entry.event === 'used' ? (
           <Trans
             t={t}
-            // Only a terminal of the user's is used this way so far.
-            i18nKey="note.used.terminal"
+            i18nKey={USED_NOTE[entry.surface]}
             values={{ name: entry.name, agent: agent ?? t('agent') }}
             components={{ b }}
           />

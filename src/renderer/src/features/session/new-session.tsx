@@ -66,11 +66,11 @@ import {
   paneAgent,
   useViewStore,
 } from '@renderer/stores/view'
-import { mentionTerminalsOf, useTerminalsStore } from '@renderer/stores/terminals'
 import { DropOverlay } from './attachments/drop-overlay'
 import { useFileDrop } from './attachments/use-file-drop'
 import { attachmentContent, attachmentsBlock } from './composer/attachments'
-import { mentionResolver, terminalRefs } from './composer/chips'
+import { mentionResolver, NO_SURFACES, surfaceRefs } from './composer/chips'
+import { mentionSurfacesOf } from './composer/mention-surfaces'
 import { hasMessage, NEW_SESSION_DRAFT, readDraft, readDraftAttachments } from './composer/drafts'
 import { useAddMenu } from './composer/add-menu'
 import { StartStyles, TrayStyles } from './composer/affect-styles'
@@ -472,13 +472,11 @@ function DraftComposer({
       }
       const preparedId = preparedFor(optionsState, hostId, agentId)?.summary?.id ?? null
       const text = editor.current?.text() ?? box.source.text
-      const terminals = projectPath
-        ? mentionTerminalsOf(useTerminalsStore.getState().byId, newSessionPanel(projectPath))
-        : []
+      const surfaces = projectPath ? mentionSurfacesOf(newSessionPanel(projectPath)) : NO_SURFACES
       const content: UserContent[] = [
         ...(text.trim() ? [{ type: 'text' as const, text }] : []),
         ...attachmentContent(attachments),
-        ...terminalRefs(text, mentionResolver([], null, terminals)).map((ref) => ({
+        ...surfaceRefs(text, mentionResolver([], null, surfaces)).map((ref) => ({
           type: 'ref' as const,
           ref,
         })),

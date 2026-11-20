@@ -3,6 +3,7 @@ import {
   Alert02Icon,
   BrowserIcon,
   ComputerTerminal01Icon,
+  SmartPhone01Icon,
   File01Icon,
   Folder01Icon,
   GlobalIcon,
@@ -133,6 +134,10 @@ function ChipBody({ chip, missing }: { chip: Chip; missing: boolean }) {
         <Glyph icon={Folder01Icon} className="size-3.25 shrink-0 text-tertiary" />
       ) : chip.kind === 'terminal' ? (
         <Glyph icon={ComputerTerminal01Icon} className="size-3.25 shrink-0 text-tertiary" />
+      ) : chip.kind === 'page' ? (
+        <Glyph icon={GlobalIcon} className="size-3.25 shrink-0 text-tertiary" />
+      ) : chip.kind === 'device' ? (
+        <Glyph icon={SmartPhone01Icon} className="size-3.25 shrink-0 text-tertiary" />
       ) : (
         <Glyph icon={File01Icon} className="size-3.25 shrink-0 text-tertiary" />
       )}

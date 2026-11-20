@@ -52,7 +52,13 @@ import {
   SESSION_TOOLS,
   type SessionToolsDeps,
 } from '../session-tools'
-import { BrowserTools, BROWSER_TOOLS, isBrowserToolName } from './browser-tools'
+import {
+  BrowserTools,
+  BROWSER_READ_TOOLS,
+  BROWSER_TOOLS,
+  isBrowserToolName,
+  type BrowserAccessDeps,
+} from './browser-tools'
 import {
   isPlanToolName,
   PlanTools,
@@ -171,6 +177,8 @@ export interface ArtifactServiceDeps extends ArtifactToolsDeps {
   wrote?(sessionId: string, write: ArtifactWrite): void
   /** Runs a browser tool call of `caller`'s on main; without it every `browser_*` call fails. */
   browserCall?(request: BrowserCallRequest, caller: string): Promise<BrowserCallAnswer>
+  /** How a browser tab the user opened is allowed for the agent. */
+  browserAccess?: BrowserAccessDeps
   /** The session whose browser a call drives: a subagent's use the session it runs under. */
   browserSession?(sessionId: string): string | null
   /** The project whose always-allowed sites the page reads. */
@@ -243,15 +251,16 @@ function entry(url: string, token: string, prompt: string): McpServer[] {
       url,
       headers: [{ name: 'Authorization', value: `Bearer ${token}` }],
       // Kettu's own tools, which reach no further than its thread, memory, the project's sessions,
-      // its own guide, reading the user's Marketplace listings, and listing, reading and naming
-      // the session's terminals, a terminal or name of the user's asking them in Kettu's own
-      // card; the
+      // its own guide, reading the user's Marketplace listings, listing, reading and naming the
+      // session's terminals and reading its browser's pages, a terminal, name or tab of the
+      // user's asking them in Kettu's own card; the
       // browser, computer use, devices, running and typing in terminals and artifacts still ask,
       // and publishing waits for the user in a card.
       // The settings tools ask in Kettu's own card where they ask, so the agent's prompt never does.
       autoAllow: [
         PLAN_TOOL,
         ...TERMINAL_READ_TOOLS,
+        ...BROWSER_READ_TOOLS,
         REPORT_TOOL,
         GUIDE_TOOL,
         ...MEMORY_TOOL_NAMES,
@@ -336,6 +345,7 @@ export class ArtifactService {
             }),
       pageOf: (sessionId) => deps.browserSession?.(sessionId) ?? sessionId,
       projectOf: (sessionId) => deps.sessionProject?.(sessionId) ?? '',
+      ...(deps.browserAccess ? { access: deps.browserAccess } : {}),
     })
     const devices = deps.devices
     this.deviceTools = devices
