@@ -2062,17 +2062,20 @@ export class AgentManager {
   }
 
   /**
-   * The user's own program of a binary harness with an npm route but no `cli` of its own, such as
-   * Kilo Code's: Kettu reads its updates from npm, so it shows as the harness's CLI. Null while
-   * Kettu's own install runs, since that one updates through the registry, or while none was found.
-   * `reported` is the version the running agent named, for when the program was not asked.
+   * The user's own program of a binary harness that detection named no CLI for: one with an npm
+   * route but no `cli` of its own, such as Kilo Code's, whose updates Kettu reads from npm, or one
+   * with a `cli` whose program was picked in Settings, which runs as it is. It shows as the
+   * harness's CLI. Null while Kettu's own install runs, since that one updates through the
+   * registry, or while none was found. `reported` is the version the running agent named, for when
+   * the program was not asked.
    */
   private ownProgram(
     h: Harness,
     reported: string | null,
   ): { command: string; installed: InstalledCli } | null {
     const { launch, installs, cli } = h.def
-    if (cli || launch.kind !== 'binary' || !installs?.npm || this.release(h)) return null
+    if (launch.kind !== 'binary' || this.release(h)) return null
+    if (cli ? h.detection?.cli : !installs?.npm) return null
     const mine = this.userProgram(h)
     if (!mine) return null
     const installed = {
@@ -2081,7 +2084,7 @@ export class AgentManager {
       variable: null,
       problem: null,
     }
-    return { command: launch.command, installed }
+    return { command: cli?.command ?? launch.command, installed }
   }
 
   /**
@@ -2920,6 +2923,9 @@ export class AgentManager {
       h.cliMethod === 'npm' && installs.npm
         ? npmPrefixOf(await realpath(mine.path).catch(() => mine.path), installs.npm, platform)
         : null
+    // A copy npm installed outside a global prefix, such as into a project, is not what
+    // `npm install -g` updates.
+    if (h.cliMethod === 'npm' && !npmPrefix) return null
     return updatePlan(installs, h.cliMethod, {
       platform,
       env: this.deps.env.agentEnv(h.def.id),

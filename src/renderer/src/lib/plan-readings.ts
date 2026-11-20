@@ -175,14 +175,17 @@ export function limitWays(
       if (agent.disabled || agent.registered === false) continue
       const running = agent.state === 'ready'
       const account = accountKey(agent)
-      if (agent.providers !== undefined || account === null) {
-        if (agent.providers !== undefined || (running && agent.limits.length > 0)) {
-          ways.set(ownKey(hostId, agent.id), [{ hostId, agentId: agent.id, running }])
-        }
+      if (agent.providers !== undefined) {
+        ways.set(ownKey(hostId, agent.id), [{ hostId, agentId: agent.id, running }])
         continue
       }
+      // One that is not started is read too, or its card would keep an old reading.
       if (!running && agent.state !== 'available') continue
       if (agent.limits.length === 0 && !agent.capabilities.reports) continue
+      if (account === null) {
+        ways.set(ownKey(hostId, agent.id), [{ hostId, agentId: agent.id, running }])
+        continue
+      }
       const key = accountCardKey(account)
       ways.set(key, [...(ways.get(key) ?? []), { hostId, agentId: agent.id, running }])
     }
