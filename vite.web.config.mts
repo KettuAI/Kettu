@@ -6,7 +6,7 @@
 
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
-import { defineConfig } from 'vite'
+import { defineConfig, normalizePath, type Plugin } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import { cn } from 'cn/vite'
@@ -18,6 +18,22 @@ const source = (file: string): string => fileURLToPath(new URL(file, import.meta
 
 // The page says hello with the version of Kettu it ships with, as the desktop app does.
 const { version } = JSON.parse(readFileSync(source('package.json'), 'utf8')) as { version: string }
+
+// The page links the renderer's sources above the root as `../src/`. A build resolves them as files,
+// but in the dev server the browser resolves them against the root first, so they go through
+// Vite's /@fs/ prefix there instead.
+const devSourceLinks = (): Plugin => ({
+  name: 'kettu-web-dev-source-links',
+  apply: 'serve',
+  transformIndexHtml: {
+    order: 'pre',
+    handler: (html) =>
+      html.replaceAll(
+        '"../src/',
+        `"/@fs/${normalizePath(source('src/renderer/src/')).replace(/^\//, '')}`,
+      ),
+  },
+})
 
 export default defineConfig(({ mode }) => {
   const hosted = mode === 'hosted'
@@ -40,6 +56,7 @@ export default defineConfig(({ mode }) => {
     },
     // The renderer's build writes the same tables; both read the renderer's sources.
     plugins: [
+      devSourceLinks(),
       react(),
       tailwindcss(),
       cn({ full: true, out: 'src/lib/cn-tables.ts', cwd: source('src/renderer') }),
