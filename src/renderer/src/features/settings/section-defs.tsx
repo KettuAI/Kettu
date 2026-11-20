@@ -27,7 +27,6 @@ import type { AgentId, HarnessId } from '@shared/thread'
 import { useCloudOff } from '@renderer/lib/cloud'
 import { basename, mediumAgo } from '@renderer/lib/format'
 import { errorMessage } from '@renderer/lib/host'
-import { i18n } from '@renderer/lib/i18n'
 import { useHostContext, useHostHas } from '@renderer/lib/host-features'
 import { formatShortcut, isHosted, isMac, isWeb, isWindows, platform } from '@renderer/lib/platform'
 import { useAppInfo } from '@renderer/lib/use-app-info'
@@ -116,7 +115,7 @@ import {
   StorageUsage,
   SubscriptionState,
 } from './account-section'
-import { english, type GroupDef, type RowDef, type SectionDef } from './model'
+import type { GroupDef, RowDef, SectionDef } from './model'
 import {
   AllowedSiteRow,
   AllowedSitesState,
@@ -169,7 +168,6 @@ function group(id: string, label: string, extra?: Omit<GroupDef, 'id' | 'label'>
 
 export function useGeneralSection(): SectionDef {
   const { t } = useTranslation('settings')
-  const en = english()
   const input = group('input', t('general.groups.input'))
   // Devices reach the computer only while Kettu runs, so remote access holds it on.
   const remoteOn = useSettingsStore((s) => s.settings.remote.enabled)
@@ -197,44 +195,31 @@ export function useGeneralSection(): SectionDef {
     rows: [
       {
         id: 'language',
-        name: t('general.language.name'),
-        english: en('general.language.name'),
-        description: t('general.language.description'),
-        keywords: t('general.language.keywords'),
+        setting: 'general.language',
         group: input,
         render: () => <Language />,
       },
       {
         id: 'send-key',
-        name: t('general.sendKey.name'),
-        english: en('general.sendKey.name'),
-        description: t('general.sendKey.description'),
-        keywords: t('general.sendKey.keywords'),
+        setting: 'general.send-key',
         group: input,
         render: () => <SendKey />,
       },
       {
         id: 'default-agent',
-        name: t('general.defaultAgent.name'),
-        english: en('general.defaultAgent.name'),
-        description: t('general.defaultAgent.description'),
+        setting: 'general.default-agent',
         group: sessions,
         render: () => <DefaultAgent />,
       },
       {
         id: 'new-session-list',
-        name: t('general.newSessionList.name'),
-        english: en('general.newSessionList.name'),
-        description: t('general.newSessionList.description'),
-        keywords: t('general.newSessionList.keywords'),
+        setting: 'general.new-session-list',
         group: sessions,
         render: () => <NewSessionListChoice />,
       },
       {
         id: 'restore',
-        name: t('general.restore.name'),
-        english: en('general.restore.name'),
-        description: t('general.restore.description'),
+        setting: 'general.restore',
         group: sessions,
         render: () => (
           <GeneralSwitch field="restoreLastSession" label={t('general.restore.name')} />
@@ -242,10 +227,7 @@ export function useGeneralSection(): SectionDef {
       },
       {
         id: 'confirm-quit',
-        name: t('general.confirmQuit.name'),
-        english: en('general.confirmQuit.name'),
-        description: t('general.confirmQuit.description'),
-        keywords: t('general.confirmQuit.keywords'),
+        setting: 'general.confirm-quit',
         group: sessions,
         render: () => (
           <GeneralSwitch field="confirmQuitWhileRunning" label={t('general.confirmQuit.name')} />
@@ -253,10 +235,7 @@ export function useGeneralSection(): SectionDef {
       },
       {
         id: 'session-titles',
-        name: t('general.sessionTitles.name'),
-        english: en('general.sessionTitles.name'),
-        description: t('general.sessionTitles.description'),
-        keywords: t('general.sessionTitles.keywords'),
+        setting: 'general.session-titles',
         group: sessions,
         render: () => (
           <GeneralSwitch field="sessionTitles" label={t('general.sessionTitles.name')} />
@@ -264,23 +243,13 @@ export function useGeneralSection(): SectionDef {
       },
       {
         id: 'light-model',
-        name: t('general.lightModel.name'),
-        english: en('general.lightModel.name'),
-        description: t('general.lightModel.description'),
-        keywords: t('general.lightModel.keywords'),
+        setting: 'general.light-model',
         group: sessions,
         render: () => <LightModelChoice label={t('general.lightModel.name')} />,
       },
       {
         id: 'background',
-        name: t('general.background.name'),
-        english: en('general.background.name'),
-        description: isMac
-          ? t('general.background.descriptionMac')
-          : isWindows
-            ? t('general.background.descriptionWindows')
-            : t('general.background.descriptionLinux'),
-        keywords: t('general.background.keywords'),
+        setting: 'general.background',
         group: sessions,
         render: () => (
           <GeneralSwitch
@@ -292,19 +261,14 @@ export function useGeneralSection(): SectionDef {
       },
       {
         id: 'outline-summaries',
-        name: t('general.outlineSummaries.name'),
-        english: en('general.outlineSummaries.name'),
-        description: t('general.outlineSummaries.description'),
-        keywords: t('general.outlineSummaries.keywords'),
+        setting: 'general.outline-summaries',
         group: thread,
         render: () => <OutlineSummaries label={t('general.outlineSummaries.name')} />,
       },
       {
         id: 'open-at-login',
-        name: t('general.openAtLogin.name'),
-        english: en('general.openAtLogin.name'),
+        setting: 'general.open-at-login',
         description: openAtLoginDescription,
-        keywords: t('general.openAtLogin.keywords'),
         group: startup,
         render: () => (
           <OpenAtLogin label={t('general.openAtLogin.name')} disabled={!loginItem?.available} />
@@ -312,21 +276,14 @@ export function useGeneralSection(): SectionDef {
       },
       {
         id: 'cloud',
-        name: t('general.cloud.name'),
-        english: en('general.cloud.name'),
-        // Not the email, which search results would show past Hide account.
-        description: t('general.cloud.note'),
-        keywords: t('general.cloud.keywords'),
+        setting: 'general.cloud',
         group: cloud,
         layout: 'custom',
         render: () => <CloudSwitchRow />,
       },
       {
         id: 'other-connections',
-        name: t('general.others.name'),
-        english: en('general.others.name'),
-        description: t('general.others.description'),
-        keywords: t('general.others.keywords'),
+        setting: 'general.other-connections',
         group: cloud,
         layout: 'block',
         render: (text) => <OtherConnections text={text} />,
@@ -337,7 +294,6 @@ export function useGeneralSection(): SectionDef {
 
 export function useAppearanceSection(): SectionDef {
   const { t } = useTranslation('settings')
-  const en = english()
   const scale = group('scale', t('appearance.groups.scale'))
   const zoomKeys = [formatShortcut('Mod+='), formatShortcut('Mod+-')] as const
   const zoomDescription = t('appearance.zoom.description', {
@@ -352,9 +308,7 @@ export function useAppearanceSection(): SectionDef {
     rows: [
       {
         id: 'theme',
-        name: t('appearance.theme.name'),
-        english: en('appearance.theme.name'),
-        keywords: t('appearance.theme.keywords'),
+        setting: 'appearance.theme',
         group: group('theme', t('appearance.groups.theme'), {
           actions: <ColorMode />,
           plain: true,
@@ -364,48 +318,33 @@ export function useAppearanceSection(): SectionDef {
       },
       {
         id: 'color-mode',
-        name: t('appearance.colorMode.name'),
-        english: en('appearance.colorMode.name'),
-        keywords: t('appearance.colorMode.keywords'),
+        setting: 'appearance.color-mode',
         searchOnly: true,
         render: () => null,
       },
       {
         id: 'zoom',
-        name: t('appearance.zoom.name'),
-        english: en('appearance.zoom.name'),
+        setting: 'appearance.zoom',
         description: zoomDescription,
-        keywords: t('appearance.zoom.keywords'),
         group: scale,
         render: () => <Zoom />,
       },
       {
         id: 'text-size',
-        name: t('appearance.textSize.name'),
-        english: en('appearance.textSize.name'),
-        description: t('appearance.textSize.description'),
-        keywords: t('appearance.textSize.keywords'),
+        setting: 'appearance.text-size',
         group: scale,
         layout: 'bare',
         render: (text) => <TextSize label={text} />,
       },
       {
         id: 'sidebar-hover',
-        name: t('appearance.sidebarHover.name'),
-        english: en('appearance.sidebarHover.name'),
-        description: t('appearance.sidebarHover.description'),
-        keywords: t('appearance.sidebarHover.keywords'),
+        setting: 'appearance.sidebar-hover',
         group: group('sidebar', t('appearance.groups.sidebar')),
         render: () => <SidebarHover label={t('appearance.sidebarHover.name')} />,
       },
       {
         id: 'reduce-motion',
-        name: t('appearance.reduceMotion.name'),
-        english: en('appearance.reduceMotion.name'),
-        description: isMac
-          ? t('appearance.reduceMotion.description')
-          : t('appearance.reduceMotion.descriptionOther'),
-        keywords: t('appearance.reduceMotion.keywords'),
+        setting: 'appearance.reduce-motion',
         group: group('motion', t('appearance.groups.motion')),
         render: () => <ReduceMotion />,
       },
@@ -416,15 +355,12 @@ export function useAppearanceSection(): SectionDef {
 export function useNotificationsSection(): SectionDef {
   const { t } = useTranslation('settings')
   const onHost = useHostContext()
-  const en = english()
   const when = group('when', t('notifications.groups.when'))
   const how = group('how', t('notifications.groups.how'))
   const rows: RowDef[] = [
     {
       id: 'preview',
-      name: t('notifications.groups.preview'),
-      english: en('notifications.groups.preview'),
-      description: t('notifications.test'),
+      setting: 'notifications.preview',
       // The preview stands on the page with its test button, as a notification would.
       group: group('preview', t('notifications.groups.preview'), {
         unlabeled: true,
@@ -441,10 +377,7 @@ export function useNotificationsSection(): SectionDef {
     },
     {
       id: 'permission',
-      name: t('notifications.permission.name'),
-      english: en('notifications.permission.name'),
-      description: t('notifications.permission.description'),
-      keywords: t('notifications.permission.keywords'),
+      setting: 'notifications.permission',
       group: when,
       render: () => (
         <NotificationSwitch field="permission" label={t('notifications.permission.name')} />
@@ -452,9 +385,7 @@ export function useNotificationsSection(): SectionDef {
     },
     {
       id: 'turn-ended',
-      name: t('notifications.turnEnded.name'),
-      english: en('notifications.turnEnded.name'),
-      description: t('notifications.turnEnded.description'),
+      setting: 'notifications.turn-ended',
       group: when,
       render: () => (
         <NotificationSwitch field="turnEnded" label={t('notifications.turnEnded.name')} />
@@ -462,10 +393,7 @@ export function useNotificationsSection(): SectionDef {
     },
     {
       id: 'routines',
-      name: t('notifications.routines.name'),
-      english: en('notifications.routines.name'),
-      description: t('notifications.routines.description'),
-      keywords: t('notifications.routines.keywords'),
+      setting: 'notifications.routines',
       group: when,
       render: () => (
         <NotificationSwitch field="routines" label={t('notifications.routines.name')} />
@@ -473,17 +401,13 @@ export function useNotificationsSection(): SectionDef {
     },
     {
       id: 'error',
-      name: t('notifications.error.name'),
-      english: en('notifications.error.name'),
-      description: t('notifications.error.description'),
+      setting: 'notifications.error',
       group: when,
       render: () => <NotificationSwitch field="error" label={t('notifications.error.name')} />,
     },
     {
       id: 'sound',
-      name: t('notifications.sound.name'),
-      english: en('notifications.sound.name'),
-      description: t('notifications.sound.description'),
+      setting: 'notifications.sound',
       group: how,
       render: () => <NotificationSwitch field="sound" label={t('notifications.sound.name')} />,
     },
@@ -493,9 +417,7 @@ export function useNotificationsSection(): SectionDef {
     const name = isMac ? t('notifications.badge.nameDock') : t('notifications.badge.nameTaskbar')
     rows.push({
       id: 'badge',
-      name,
-      description: t('notifications.badge.description'),
-      keywords: t('notifications.badge.keywords'),
+      setting: 'notifications.badge',
       group: how,
       render: () => <NotificationSwitch field="badge" label={name} />,
     })
@@ -511,7 +433,6 @@ export function useNotificationsSection(): SectionDef {
 
 export function useAccountSection(): SectionDef {
   const { t } = useTranslation('settings')
-  const en = english()
   const status = useAccountStore((s) => s.status)
   const signedIn = status?.state === 'signed-in' ? status : null
   const card = group('account', t('account.name'), {
@@ -521,11 +442,9 @@ export function useAccountSection(): SectionDef {
   const rows: RowDef[] = [
     {
       id: 'account',
-      name: t('account.name'),
-      english: en('account.name'),
+      setting: 'account.account',
       // Not the email, which search results would show past Hide account.
-      description: signedIn ? undefined : t('account.description'),
-      keywords: t('account.keywords'),
+      description: signedIn ? null : undefined,
       group: card,
       layout: 'custom',
       render: () => <AccountRow />,
@@ -536,10 +455,7 @@ export function useAccountSection(): SectionDef {
   if (plan) {
     rows.push({
       id: 'plan',
-      name: t('account.plan.name'),
-      english: en('account.plan.name'),
-      description: t('account.plan.description'),
-      keywords: t('account.plan.keywords'),
+      setting: 'account.plan',
       group: card,
       render: () => <PlanName plan={plan} />,
     })
@@ -548,19 +464,13 @@ export function useAccountSection(): SectionDef {
     rows.push(
       {
         id: 'devices',
-        name: t('account.devices.name'),
-        english: en('account.devices.name'),
-        description: t('account.devices.description'),
-        keywords: t('account.devices.keywords'),
+        setting: 'account.devices',
         group: card,
         render: () => <DeviceUsage plan={plan} usage={usage} />,
       },
       {
         id: 'storage',
-        name: t('account.storage.name'),
-        english: en('account.storage.name'),
-        description: t('account.storage.description'),
-        keywords: t('account.storage.keywords'),
+        setting: 'account.storage',
         group: card,
         render: () => <StorageUsage plan={plan} usage={usage} />,
       },
@@ -570,10 +480,7 @@ export function useAccountSection(): SectionDef {
   if (signedIn && points != null) {
     rows.push({
       id: 'points',
-      name: t('account.points.name'),
-      english: en('account.points.name'),
-      description: t('account.points.description'),
-      keywords: t('account.points.keywords'),
+      setting: 'account.points',
       group: card,
       render: () => <PointsBalance points={points} url={signedIn.pointsUrl} />,
     })
@@ -581,10 +488,7 @@ export function useAccountSection(): SectionDef {
   if (signedIn && signedIn.subscription !== 'none') {
     rows.push({
       id: 'subscription',
-      name: t('account.subscription.name'),
-      english: en('account.subscription.name'),
-      description: t('account.subscription.description'),
-      keywords: t('account.subscription.keywords'),
+      setting: 'account.subscription',
       group: card,
       render: () => <SubscriptionState status={signedIn.subscription} />,
     })
@@ -603,7 +507,6 @@ export function useUsageSection(): SectionDef {
   const { t } = useTranslation('usage')
   const onHost = useHostContext()
   const { hostId, useSettingsStore, useUsageStore } = useHostScope()
-  const en = i18n.getFixedT('en', 'usage')
   const fromComputer = useSettingsStore((s) => s.settings.usage.fromComputer)
   // Strings only: the status is a new object at every step of a scan.
   const logIds = useUsageStore(useShallow((s) => (s.status?.logs ?? []).map((log) => log.agentId)))
@@ -614,10 +517,8 @@ export function useUsageSection(): SectionDef {
   const rows: RowDef[] = [
     {
       id: 'from-computer',
-      name: t('settings.fromComputer.name', onHost),
-      english: en('settings.fromComputer.name'),
-      description: t('settings.fromComputer.description', onHost),
-      keywords: t('settings.fromComputer.keywords'),
+      setting: 'usage.from-computer',
+      params: onHost,
       group: sources,
       render: () => <FromComputer />,
     },
@@ -630,9 +531,8 @@ export function useUsageSection(): SectionDef {
     rows.push(
       ...logIds.map((agentId, i): RowDef => ({
         id: `logs-${agentId}`,
-        name: agentName(agentId, hostId),
-        description: logPlaces[i] ?? '',
-        keywords: t('settings.groups.logs'),
+        setting: 'usage.logs',
+        item: { name: agentName(agentId, hostId), description: logPlaces[i] ?? '' },
         group: logGroup,
         layout: 'custom',
         render: () => <LogRow agentId={agentId} />,
@@ -642,17 +542,13 @@ export function useUsageSection(): SectionDef {
   rows.push(
     {
       id: 'sidebar',
-      name: t('settings.sidebar.name'),
-      english: en('settings.sidebar.name'),
-      description: t('settings.sidebar.description'),
+      setting: 'usage.sidebar',
       group: group('display', t('settings.groups.display')),
       render: () => <SidebarEnd />,
     },
     {
       id: 'clear-record',
-      name: t('settings.clear.name'),
-      english: en('settings.clear.name'),
-      description: t('settings.clear.description'),
+      setting: 'usage.clear-record',
       group: group('danger', t('settings.groups.danger')),
       render: () => <ClearRecord />,
     },
@@ -670,7 +566,6 @@ export function useAgentsSection(): SectionDef {
   const { t } = useTranslation('settings')
   const onHost = useHostContext()
   const { useAgentsStore } = useHostScope()
-  const en = english()
   const agents = useAgentsStore(useShallow((s) => usableAgents(s.order, s.byId)))
   const idleRows = useIdleSessionRows()
   const workflowRows = useWorkflowRows()
@@ -693,11 +588,14 @@ export function useAgentsSection(): SectionDef {
         }
   const row = (status: AgentStatus): RowDef => ({
     id: status.id,
-    name: status.name,
-    description: status.account?.label ?? undefined,
-    keywords: `${t('agents.keywords')} ${status.harnessName} ${
-      status.account?.kind === 'none' ? '' : (status.account?.email ?? '')
-    }`,
+    setting: 'agents.agents',
+    item: {
+      name: status.name,
+      ...(status.account?.label ? { description: status.account.label } : {}),
+      keywords: `${status.harnessName} ${
+        status.account?.kind === 'none' ? '' : (status.account?.email ?? '')
+      }`,
+    },
     group: list,
     layout: 'custom',
     render: () => <AgentListItem status={status} />,
@@ -710,30 +608,28 @@ export function useAgentsSection(): SectionDef {
     icon: AiBrain01Icon,
     rows: [
       ...(agents.length === 0
-        ? [
+        ? ([
             {
               id: 'no-agents',
-              name: t('agents.empty.title'),
-              keywords: t('agents.empty.keywords'),
+              setting: 'agents.agents',
+              item: { name: t('agents.empty.title'), keywords: t('agents.empty.keywords') },
               group: list,
               layout: 'custom' as const,
               render: () => <NoAgents />,
             },
-          ]
-        : [
+          ] satisfies RowDef[])
+        : ([
             ...agents.map(row),
             {
               // Search still finds it; the list's head carries the one Add agent.
               id: 'add-agent',
-              name: t('agents.add.button'),
-              english: en('agents.add.button'),
-              keywords: t('agents.add.keywords'),
+              setting: 'agents.add-agent',
               group: list,
               searchOnly: true,
               layout: 'custom' as const,
               render: () => null,
             },
-          ]),
+          ] satisfies RowDef[])),
       ...idleRows,
       ...workflowRows,
     ],
@@ -744,7 +640,6 @@ export function useAgentsSection(): SectionDef {
 export function useHarnessesSection(): SectionDef {
   const { t } = useTranslation('settings')
   const { useAgentsStore } = useHostScope()
-  const en = english()
   const harnesses = useAgentsStore(useShallow((s) => harnessStatuses(s.order, s.byId)))
   const environment = useAgentsStore((s) => s.environment)
   // Installed: its program is on the machine, too old included, with any package Kettu adds for it.
@@ -761,8 +656,8 @@ export function useHarnessesSection(): SectionDef {
   }
   const row = (status: AgentStatus, group: GroupDef): RowDef => ({
     id: status.harnessId,
-    name: status.harnessName,
-    keywords: t('harnesses.keywords'),
+    setting: 'harnesses.installed',
+    item: { name: status.harnessName },
     group,
     layout: 'custom',
     render: () => <HarnessListItem status={status} />,
@@ -779,10 +674,8 @@ export function useHarnessesSection(): SectionDef {
       ...missing.map((h) => row(h, groups.missing)),
       {
         id: 'environment',
-        name: t('agents.environment.reload'),
-        english: en('agents.environment.reload'),
+        setting: 'harnesses.environment',
         description: environmentText(t, environment),
-        keywords: t('agents.environment.keywords'),
         searchOnly: true,
         render: () => null,
       },
@@ -798,7 +691,6 @@ export function useHarnessesSection(): SectionDef {
 
 export function useTerminalSection(): SectionDef {
   const { t } = useTranslation('settings')
-  const en = english()
   return {
     id: 'terminal',
     title: t('sections.terminal'),
@@ -807,8 +699,7 @@ export function useTerminalSection(): SectionDef {
     rows: [
       {
         id: 'shell',
-        name: t('terminal.shell.name'),
-        english: en('terminal.shell.name'),
+        setting: 'terminal.shell',
         description: isWindows
           ? t('terminal.shell.descriptionWindows')
           : t('terminal.shell.description'),
@@ -817,18 +708,13 @@ export function useTerminalSection(): SectionDef {
       },
       {
         id: 'font-family',
-        name: t('terminal.fontFamily.name'),
-        english: en('terminal.fontFamily.name'),
-        description: t('terminal.fontFamily.description'),
-        keywords: t('terminal.fontFamily.keywords'),
+        setting: 'terminal.font-family',
         group: group('display', t('terminal.groups.display')),
         render: () => <FontFamily label={t('terminal.fontFamily.name')} />,
       },
       {
         id: 'font-size',
-        name: t('terminal.fontSize.name'),
-        english: en('terminal.fontSize.name'),
-        description: t('terminal.fontSize.description'),
+        setting: 'terminal.font-size',
         group: group('display', t('terminal.groups.display')),
         // The preview closes the group, with no line under it.
         layout: 'bare',
@@ -840,7 +726,6 @@ export function useTerminalSection(): SectionDef {
 
 export function useGitSection(): SectionDef {
   const { t } = useTranslation('settings')
-  const en = english()
   const tools = group('tools', t('git.groups.tools'))
   return {
     id: 'git',
@@ -850,35 +735,25 @@ export function useGitSection(): SectionDef {
     rows: [
       {
         id: 'git',
-        name: t('git.git.name'),
-        english: en('git.git.name'),
-        description: t('git.git.description'),
+        setting: 'git.git',
         group: tools,
         render: () => <GitTool />,
       },
       {
         id: 'gh',
-        name: t('git.gh.name'),
-        english: en('git.gh.name'),
-        description: t('git.gh.description'),
-        keywords: t('git.gh.keywords'),
+        setting: 'git.gh',
         group: tools,
         render: () => <GhTool />,
       },
       {
         id: 'fetch',
-        name: t('git.fetch.name'),
-        english: en('git.fetch.name'),
-        description: t('git.fetch.description'),
+        setting: 'git.fetch',
         group: group('sync', t('git.groups.sync')),
         render: () => <BackgroundFetch />,
       },
       {
         id: 'worktree-root',
-        name: t('git.worktreeRoot.name'),
-        english: en('git.worktreeRoot.name'),
-        description: t('git.worktreeRoot.description'),
-        keywords: t('git.worktreeRoot.keywords'),
+        setting: 'git.worktree-root',
         group: group('worktrees', t('git.groups.worktrees')),
         render: () => <WorktreeLocation />,
       },
@@ -888,7 +763,6 @@ export function useGitSection(): SectionDef {
 
 export function useBrowserSection(): SectionDef {
   const { t } = useTranslation('settings')
-  const en = english()
   const { sites, error, remove, reload } = useAllowedSites()
   const remembered = useSettingsStore((s) => Object.keys(s.settings.thread.alwaysOpenIn).length)
   const allowed = group('allowed-sites', t('browser.groups.allowedSites'), {
@@ -911,18 +785,15 @@ export function useBrowserSection(): SectionDef {
     : [
         {
           id: 'bring-sign-ins',
-          name: t('browser.signIns.name'),
-          english: en('browser.signIns.name'),
-          description: t('browser.signIns.description'),
-          keywords: t('browser.signIns.keywords'),
+          setting: 'browser.bring-sign-ins',
           group: signIns,
           layout: 'custom',
           render: () => <BringSignInsRow />,
         },
         ...shownBrought.map((site): RowDef => ({
           id: `brought-${site.site}`,
-          name: site.site,
-          keywords: t('browser.signIns.keywords'),
+          setting: 'browser.brought-sites',
+          item: { name: site.site },
           group: signIns,
           layout: 'custom',
           render: () => <BroughtSiteRow site={site} />,
@@ -931,7 +802,8 @@ export function useBrowserSection(): SectionDef {
           ? [
               {
                 id: 'brought-more',
-                name: t('browser.signIns.showAll', { count: brought!.length }),
+                setting: 'browser.brought-sites',
+                item: { name: t('browser.signIns.showAll', { count: brought!.length }) },
                 group: signIns,
                 layout: 'custom',
                 render: () => (
@@ -949,19 +821,14 @@ export function useBrowserSection(): SectionDef {
     ...signInRows,
     {
       id: 'open-links-in',
-      name: t('browser.openLinksIn.name'),
-      english: en('browser.openLinksIn.name'),
+      setting: 'browser.open-links-in',
       description: t('browser.openLinksIn.description', { mod: formatShortcut('Mod') }),
-      keywords: t('browser.openLinksIn.keywords'),
       group: links,
       render: () => <OpenLinksIn label={t('browser.openLinksIn.name')} />,
     },
     {
       id: 'confirm-links',
-      name: t('browser.confirmLinks.name'),
-      english: en('browser.confirmLinks.name'),
-      description: t('browser.confirmLinks.description'),
-      keywords: t('browser.confirmLinks.keywords'),
+      setting: 'browser.confirm-links',
       group: links,
       render: () => <ConfirmLinks label={t('browser.confirmLinks.name')} />,
     },
@@ -970,10 +837,7 @@ export function useBrowserSection(): SectionDef {
       ? [
           {
             id: 'remembered-sites',
-            name: t('browser.rememberedSites.name'),
-            english: en('browser.rememberedSites.name'),
-            description: t('browser.rememberedSites.description'),
-            keywords: t('browser.rememberedSites.keywords'),
+            setting: 'browser.remembered-sites',
             group: links,
             layout: 'block',
             render: (text) => <RememberedSitesList label={text} />,
@@ -982,19 +846,13 @@ export function useBrowserSection(): SectionDef {
       : []),
     {
       id: 'clear-data',
-      name: t('browser.clearData.name'),
-      english: en('browser.clearData.name'),
-      description: t('browser.clearData.description'),
-      keywords: t('browser.clearData.keywords'),
+      setting: 'browser.clear-data',
       group: group('site-data', t('browser.groups.siteData')),
       render: () => <ClearBrowsingData />,
     },
     {
       id: 'allowed-sites',
-      name: t('browser.allowedSites.name'),
-      english: en('browser.allowedSites.name'),
-      description: t('browser.allowedSites.description'),
-      keywords: t('browser.allowedSites.keywords'),
+      setting: 'browser.allowed-sites',
       searchOnly: !!sites?.length,
       group: allowed,
       layout: 'custom',
@@ -1009,8 +867,8 @@ export function useBrowserSection(): SectionDef {
     // The web client has no built-in browser, so no sites it allows.
     ...(isWeb ? [] : (sites ?? [])).map((site): RowDef => ({
       id: `site-${site.origin}`,
-      name: originLabel(site.origin),
-      keywords: t('browser.allowedSites.keywords'),
+      setting: 'browser.allowed-sites',
+      item: { name: originLabel(site.origin) },
       group: allowed,
       layout: 'custom',
       render: () => <AllowedSiteRow site={site} onRemove={() => remove(site.origin)} />,
@@ -1030,7 +888,6 @@ export function useAdvancedSection(): SectionDef {
   const { t } = useTranslation('settings')
   const onHost = useHostContext()
   const { hostId } = useHostScope()
-  const en = english()
   const debugOn = useDebugStore((s) => s.status.on)
   const data = group('data', t('advanced.groups.data'))
   return {
@@ -1041,82 +898,60 @@ export function useAdvancedSection(): SectionDef {
     rows: [
       {
         id: 'proxy',
-        name: t('advanced.proxy.name'),
-        english: en('advanced.proxy.name'),
-        description: t('advanced.proxy.description'),
-        keywords: t('advanced.proxy.keywords'),
+        setting: 'advanced.proxy',
         group: group('network', t('advanced.groups.network')),
         layout: 'block',
         render: (text) => <Proxy label={text} />,
       },
       {
         id: 'report',
-        name: t('advanced.report.name'),
-        english: en('advanced.report.name'),
-        description: t('advanced.report.description'),
-        keywords: t('advanced.report.keywords'),
+        setting: 'advanced.report',
         group: data,
         render: () => <ReportProblem />,
       },
       // The log files and their switch are this computer's; a host elsewhere keeps its own.
       ...(isWeb || hostId !== null
         ? []
-        : [
+        : ([
             {
               id: 'logs',
-              name: t('advanced.logs.name'),
-              english: en('advanced.logs.name'),
-              description: t('advanced.logs.description'),
-              keywords: t('advanced.logs.keywords'),
+              setting: 'advanced.logs',
               group: data,
               render: () => <LogsFolderActions />,
             },
             {
               id: 'record-steps',
-              name: t('advanced.record.name'),
-              english: en('advanced.record.name'),
-              description: t('advanced.record.description'),
-              keywords: t('advanced.record.keywords'),
+              setting: 'advanced.record-steps',
               group: data,
               render: () => <RecordSteps />,
             },
             {
               id: 'detailed-records',
-              name: t('advanced.detailedRecords.name'),
-              english: en('advanced.detailedRecords.name'),
-              description: t('advanced.detailedRecords.description'),
-              keywords: t('advanced.detailedRecords.keywords'),
+              setting: 'advanced.detailed-records',
               group: data,
               render: () => <DetailedRecords label={t('advanced.detailedRecords.name')} />,
             },
             {
               id: 'debug-mode',
-              name: t('advanced.debugMode.name'),
-              english: en('advanced.debugMode.name'),
+              setting: 'advanced.debug-mode',
               description: debugOn
                 ? t('advanced.debugMode.descriptionOn')
                 : t('advanced.debugMode.description'),
-              keywords: t('advanced.debugMode.keywords'),
               group: data,
               layout: 'block' as const,
               render: (text: ReactNode) => <DebugModeRow text={text} />,
             },
-          ]),
+          ] satisfies RowDef[])),
       {
         id: 'data-folder',
-        name: t('advanced.dataFolder.name'),
-        english: en('advanced.dataFolder.name'),
-        description: t('advanced.dataFolder.description'),
+        setting: 'advanced.data-folder',
         rich: <DataFolderText />,
         group: data,
         render: () => <DataFolderActions />,
       },
       {
         id: 'remove-sessions',
-        name: t('advanced.removeSessions.name'),
-        english: en('advanced.removeSessions.name'),
-        description: t('advanced.removeSessions.description'),
-        keywords: t('advanced.removeSessions.keywords'),
+        setting: 'advanced.remove-sessions',
         group: group('danger', t('advanced.groups.danger')),
         render: () => <RemoveAll />,
       },
@@ -1126,7 +961,6 @@ export function useAdvancedSection(): SectionDef {
 
 export function useAboutSection(): SectionDef {
   const { t } = useTranslation('settings')
-  const en = english()
   const status = useUpdatesStore((s) => s.status)
   const info = useAppInfo()
   // A host whose Kettu Settings cannot update, as the daemon's, says so in the row.
@@ -1143,43 +977,35 @@ export function useAboutSection(): SectionDef {
     rows: [
       {
         id: 'update',
-        name: t('about.updates.name'),
-        english: en('about.updates.name'),
-        keywords: t('about.updates.keywords'),
+        setting: 'about.update',
         group: updates,
         layout: 'block',
         render: () => (updatable === false ? <NoUpdates /> : <UpdateRow status={status} />),
       },
       ...(updatable === false || status?.state.kind === 'off'
         ? []
-        : [
+        : ([
             {
               id: 'automatic',
-              name: t('about.automatic.name'),
-              english: en('about.automatic.name'),
-              description: t('about.automatic.description'),
+              setting: 'about.automatic',
               group: updates,
               render: () => <AutomaticUpdates />,
             },
             {
               id: 'source',
-              name: t('about.source.name'),
-              english: en('about.source.name'),
+              setting: 'about.source',
               description: cloudOffHere
                 ? t('about.source.local')
                 : githubOnly
                   ? t('about.source.githubDetail')
                   : t('about.source.autoDetail'),
-              keywords: t('about.source.keywords'),
               group: updates,
               render: () => <DownloadSource />,
             },
-          ]),
+          ] satisfies RowDef[])),
       {
         id: 'github',
-        name: t('about.github.name'),
-        english: en('about.github.name'),
-        keywords: t('about.github.keywords'),
+        setting: 'about.github',
         searchOnly: true,
         render: () => null,
       },
@@ -1193,7 +1019,6 @@ const ARCHIVED_EAGER = 30
 export function useArchivedSection(): SectionDef {
   const { t } = useTranslation(['settings', 'sidebar'])
   const { hostId } = useHostScope()
-  const en = english()
   const archived = useSessionsStore(useShallow((s) => archivedSessions(s.byId, hostId)))
   const projects = useProjectsStore((s) => s.projects)
   const where = (summary: SessionSummary) =>
@@ -1207,12 +1032,14 @@ export function useArchivedSection(): SectionDef {
     title: t('sections.archived'),
     description: t('pages.archived'),
     icon: Archive01Icon,
-    rows: archived.map((summary, i) => ({
+    rows: archived.map((summary, i): RowDef => ({
       id: summary.id,
-      name: sessionTitle(summary),
-      description: where(summary),
-      keywords: `${agentName(summary.agentId, hostId)} ${t('archived.keywords')}`,
-      english: en('sections.archived'),
+      setting: 'archived.sessions',
+      item: {
+        name: sessionTitle(summary),
+        description: where(summary),
+        keywords: agentName(summary.agentId, hostId),
+      },
       group: list,
       layout: 'custom',
       render: () => (
@@ -1231,7 +1058,6 @@ export function useArchivedSection(): SectionDef {
  */
 function useWebHostsSection(): SectionDef {
   const { t } = useTranslation('settings')
-  const en = english()
   const host = useWebHostStore((s) => s.host)
   const name = host?.name ?? ''
   const online = host?.connection.state === 'online'
@@ -1243,26 +1069,25 @@ function useWebHostsSection(): SectionDef {
     rows: [
       {
         id: 'hosts',
-        name: t('sections.hosts'),
-        english: en('sections.hosts'),
+        setting: 'hosts.hosts',
         description: t('pages.hostsWeb'),
-        keywords: t('hosts.keywords'),
         searchOnly: true,
         render: () => null,
       },
       {
         id: 'host',
-        name: name || t('sections.hosts'),
-        description: host ? webHostLine(t, host) : undefined,
-        keywords: t('hosts.keywords'),
+        setting: 'hosts.web-host',
+        item: {
+          name: name || t('sections.hosts'),
+          ...(host ? { description: webHostLine(t, host) } : {}),
+        },
         group: group('host', t('sections.hosts'), { unlabeled: true }),
         layout: 'custom',
         render: () => (host ? <WebHostRow host={host} /> : <HostsLoading />),
       },
       {
         id: 'device-name',
-        name: t('hosts.page.name'),
-        english: en('hosts.page.name'),
+        setting: 'hosts.device-name',
         description: online
           ? t('hosts.web.nameDescription', { name })
           : t('hosts.web.nameOffline', { name }),
@@ -1271,26 +1096,22 @@ function useWebHostsSection(): SectionDef {
       },
       {
         id: 'forget',
-        name: t('hosts.web.forget.name', { name }),
-        english: en('hosts.web.forget.name', { name }),
-        description: t('hosts.web.forget.description', { name }),
-        keywords: t('hosts.web.forget.keywords'),
+        setting: 'hosts.forget',
+        params: { name },
         group: group('forget', t('hosts.web.forget.name', { name }), { unlabeled: true }),
         render: () => <ForgetHost />,
       },
       ...(isHosted
-        ? [
+        ? ([
             {
               id: 'others',
-              name: t('hosts.web.others.name'),
-              english: en('hosts.web.others.name'),
+              setting: 'hosts.others',
               description: t('hosts.web.others.description', { name }),
-              keywords: t('hosts.web.others.keywords'),
               group: group('others', t('hosts.web.others.name')),
               layout: 'custom' as const,
               render: () => <OtherWebHosts />,
             },
-          ]
+          ] satisfies RowDef[])
         : []),
     ],
   }
@@ -1305,7 +1126,6 @@ export function useHostsSection(): SectionDef {
 
 function useDesktopHostsSection(): SectionDef {
   const { t } = useTranslation('settings')
-  const en = english()
   const status = useHostsStore((s) => s.status)
   const discovered = useDiscoveredHosts()
   const cloudOff = useCloudOff()
@@ -1321,34 +1141,31 @@ function useDesktopHostsSection(): SectionDef {
   const rows: RowDef[] = [
     {
       id: 'hosts',
-      name: t('sections.hosts'),
-      english: en('sections.hosts'),
-      description: t('pages.hosts'),
-      keywords: t('hosts.keywords'),
+      setting: 'hosts.hosts',
       searchOnly: true,
       render: () => null,
     },
     {
       id: 'add-host',
-      name: t('hosts.add.button'),
-      english: en('hosts.add.button'),
-      keywords: t('hosts.keywords'),
+      setting: 'hosts.add-host',
       searchOnly: true,
       render: () => null,
     },
     {
       id: 'this-computer',
-      name: status?.self.name ?? t('hosts.self.label'),
-      description: t('hosts.self.label'),
+      setting: 'hosts.this-computer',
+      item: {
+        name: status?.self.name ?? t('hosts.self.label'),
+        description: t('hosts.self.label'),
+      },
       group: list,
       layout: 'custom',
       render: () => (status ? <SelfRow self={status.self} /> : <HostsLoading />),
     },
     ...(hosts ?? []).map((host): RowDef => ({
       id: host.id,
-      name: host.name,
-      description: hostLine(t, host),
-      keywords: t('hosts.keywords'),
+      setting: 'hosts.hosts',
+      item: { name: host.name, description: hostLine(t, host) },
       group: list,
       layout: 'custom',
       render: () => <HostRow host={host} />,
@@ -1358,7 +1175,7 @@ function useDesktopHostsSection(): SectionDef {
   if (status && hosts === null) {
     rows.push({
       id: 'hosts-loading',
-      name: t('sections.hosts'),
+      setting: 'hosts.hosts',
       group: list,
       layout: 'custom',
       render: () => <HostsLoading />,
@@ -1374,10 +1191,7 @@ function useDesktopHostsSection(): SectionDef {
     rows.push(
       {
         id: 'account-hosts',
-        name: t('hosts.account.group'),
-        english: en('hosts.account.group'),
-        description: t('hosts.account.description'),
-        keywords: t('hosts.account.keywords'),
+        setting: 'hosts.account-hosts',
         group: account,
         layout: 'custom',
         searchOnly: found.length > 0,
@@ -1385,9 +1199,8 @@ function useDesktopHostsSection(): SectionDef {
       },
       ...found.map((host): RowDef => ({
         id: `account-${host.relayId}`,
-        name: host.name,
-        description: platformName(host.platform),
-        keywords: t('hosts.account.keywords'),
+        setting: 'hosts.account-hosts',
+        item: { name: host.name, description: platformName(host.platform) },
         group: account,
         layout: 'custom',
         render: () => <AccountHostRow host={host} />,
@@ -1408,7 +1221,6 @@ export function useRemoteSection(): SectionDef {
   const { t } = useTranslation('settings')
   const onHost = useHostContext()
   const { useSettingsStore, useRemoteStore } = useHostScope()
-  const en = english()
   const enabled = useSettingsStore((s) => s.settings.remote.enabled)
   const relayOn = useSettingsStore((s) => s.settings.remote.relay)
   const status = useRemoteStore((s) => s.status)
@@ -1421,10 +1233,8 @@ export function useRemoteSection(): SectionDef {
   })
   const switchRow: RowDef = {
     id: 'remote',
-    name: t('remote.switch'),
-    english: en('remote.switch'),
-    description: t('pages.remote', onHost),
-    keywords: t('remote.keywords'),
+    setting: 'remote.remote',
+    params: onHost,
     group: state,
     layout: 'custom',
     render: () => <RemoteSwitchRow />,
@@ -1453,9 +1263,8 @@ export function useRemoteSection(): SectionDef {
   const deviceRows: RowDef[] = [
     ...devices.map((device): RowDef => ({
       id: device.id,
-      name: device.name,
-      description: deviceLine(t, device),
-      keywords: t('remote.keywords'),
+      setting: 'remote.devices',
+      item: { name: device.name, description: deviceLine(t, device) },
       group: list,
       layout: 'custom',
       render: () => <DeviceRow device={device} online={online.includes(device.id)} />,
@@ -1463,9 +1272,7 @@ export function useRemoteSection(): SectionDef {
     })),
     {
       id: 'add-device',
-      name: t('remote.devices.add'),
-      english: en('remote.devices.add'),
-      keywords: t('remote.keywords'),
+      setting: 'remote.add-device',
       group: list,
       layout: devices.length === 0 ? 'custom' : undefined,
       searchOnly: devices.length > 0,
@@ -1481,61 +1288,48 @@ export function useRemoteSection(): SectionDef {
     switchRow,
     {
       id: 'host-name',
-      name: t('remote.hostName.name', onHost),
-      english: en('remote.hostName.name'),
-      description: t('remote.hostName.description'),
+      setting: 'remote.host-name',
+      params: onHost,
       group: state,
       render: () => <HostNameField label={t('remote.hostName.name', onHost)} />,
     },
     ...deviceRows,
     {
       id: 'direct',
-      name: t('remote.direct.name'),
-      english: en('remote.direct.name'),
+      setting: 'remote.direct',
       description: t(
         relayInUse(status) && !cloudOff
           ? 'remote.direct.descriptionFree'
           : 'remote.direct.description',
       ),
-      keywords: t('remote.direct.keywords'),
       group: direct,
       render: () => <DirectSwitch label={t('remote.direct.name')} />,
     },
     {
       id: 'direct-port',
-      name: t('remote.direct.port.name'),
-      english: en('remote.direct.port.name'),
-      description: t('remote.direct.port.description'),
-      keywords: t('remote.direct.keywords'),
+      setting: 'remote.direct-port',
       group: direct,
       render: () => <DirectPortField label={t('remote.direct.port.name')} />,
     },
     {
       id: 'direct-found',
-      name: t('remote.direct.found.name'),
-      english: en('remote.direct.found.name'),
-      description: t('remote.direct.found.description', onHost),
-      keywords: t('remote.direct.keywords'),
+      setting: 'remote.direct-found',
+      params: onHost,
       group: direct,
       layout: 'block',
       render: (text) => <FoundAddresses text={text} />,
     },
     {
       id: 'direct-own',
-      name: t('remote.direct.own.name'),
-      english: en('remote.direct.own.name'),
-      description: t('remote.direct.own.description'),
-      keywords: t('remote.direct.keywords'),
+      setting: 'remote.direct-own',
       group: direct,
       layout: 'block',
       render: (text) => <OwnAddresses text={text} />,
     },
     {
       id: 'terminal',
-      name: t('remote.terminal.name'),
-      english: en('remote.terminal.name'),
-      description: t('remote.terminal.description', onHost),
-      keywords: t('remote.terminal.keywords'),
+      setting: 'remote.terminal',
+      params: onHost,
       group: group('permissions', t('remote.groups.permissions')),
       render: () => <TerminalSwitch label={t('remote.terminal.name')} />,
     },
@@ -1544,19 +1338,15 @@ export function useRemoteSection(): SectionDef {
       : [
           {
             id: 'discoverable',
-            name: t('remote.discoverable.name'),
-            english: en('remote.discoverable.name'),
-            description: t('remote.discoverable.description', onHost),
-            keywords: t('remote.discoverable.keywords'),
+            setting: 'remote.discoverable',
+            params: onHost,
             group: group('permissions', t('remote.groups.permissions')),
             render: () => <DiscoverableSwitch label={t('remote.discoverable.name')} />,
           } satisfies RowDef,
           {
             id: 'relay',
-            name: t('remote.relay.name'),
-            english: en('remote.relay.name'),
-            description: t('remote.relay.description', onHost),
-            keywords: t('remote.relay.keywords'),
+            setting: 'remote.relay',
+            params: onHost,
             group: advanced,
             render: () => <RelaySwitch label={t('remote.relay.name')} />,
           } satisfies RowDef,
@@ -1565,10 +1355,7 @@ export function useRemoteSection(): SectionDef {
       ? [
           {
             id: 'relay-regions',
-            name: t('remote.relay.regions'),
-            english: en('remote.relay.regions'),
-            description: t('remote.relay.regionsDescription'),
-            keywords: t('remote.relay.keywords'),
+            setting: 'remote.relay-regions',
             group: advanced,
             layout: 'block',
             render: () => <RelayRegions />,
@@ -1579,10 +1366,8 @@ export function useRemoteSection(): SectionDef {
   if (resettable !== false) {
     rows.push({
       id: 'reset',
-      name: t('remote.reset.name'),
-      english: en('remote.reset.name'),
-      description: t('remote.reset.description', onHost),
-      keywords: t('remote.reset.keywords'),
+      setting: 'remote.reset',
+      params: onHost,
       group: group('danger', t('remote.groups.danger')),
       render: () => <ResetRemote />,
     })
@@ -1609,7 +1394,6 @@ export function useSharingSection(): SectionDef {
   const { t } = useTranslation('settings')
   const { hostId, sharing } = useHostScope()
   const { useSharingStore } = sharing
-  const en = english()
   const account = useSharingStore((s) => s.status?.cloudflare ?? null)
   const kettu = useSharingStore((s) => s.status?.kettu.account ?? null)
   const pages = useSharingStore(useShallow((s) => s.status?.published ?? []))
@@ -1631,10 +1415,8 @@ export function useSharingSection(): SectionDef {
       rows: [
         {
           id: 'cloudflare',
-          name: t('sharing.account.name'),
-          english: en('sharing.account.name'),
-          description: shares === false ? t('sharing.none.title') : undefined,
-          keywords: t('sharing.account.keywords'),
+          setting: 'sharing.cloudflare',
+          description: shares === false ? t('sharing.none.title') : null,
           searchOnly: true,
           render: () => null,
         },
@@ -1651,25 +1433,21 @@ export function useSharingSection(): SectionDef {
     rows.push(
       {
         id: 'kettu',
-        name: t('sharing.kettu.name'),
-        english: en('sharing.kettu.name'),
+        setting: 'sharing.kettu',
         // Not the email, which search results would show past Hide account.
-        description: kettu ? undefined : t('sharing.kettu.signedOut'),
-        keywords: t('sharing.kettu.keywords'),
+        description: kettu ? null : undefined,
         group: kettuGroup,
         layout: 'custom',
         render: () => <KettuSharingAccount />,
       },
       {
         id: 'auto',
-        name: t('sharing.auto.name'),
-        english: en('sharing.auto.name'),
+        setting: 'sharing.auto',
         description: [
           t('sharing.auto.description'),
           ...(full > 0 ? [t('sharing.auto.blockedFull', { count: full })] : []),
           ...(large > 0 ? [t('sharing.auto.blockedLarge', { count: large })] : []),
         ].join(' '),
-        keywords: t('sharing.auto.keywords'),
         group: kettuGroup,
         render: () => <AutoPublishSwitch />,
       },
@@ -1677,9 +1455,7 @@ export function useSharingSection(): SectionDef {
     if (kettu) {
       rows.push({
         id: 'kettu-storage',
-        name: t('sharing.kettu.storage'),
-        english: en('sharing.kettu.storage'),
-        keywords: t('sharing.kettu.keywords'),
+        setting: 'sharing.kettu-storage',
         group: kettuGroup,
         render: () => <KettuStorage />,
       })
@@ -1693,14 +1469,16 @@ export function useSharingSection(): SectionDef {
         const title = titles.get(page.id)
         return {
           id: `published-${page.id}`,
-          name: title ?? page.url,
-          description: title
-            ? page.url
-            : t('sharing.published.version', {
-                version: page.version,
-                ago: mediumAgo(page.publishedAt),
-              }),
-          keywords: t('sharing.published.keywords'),
+          setting: 'sharing.published',
+          item: {
+            name: title ?? page.url,
+            description: title
+              ? page.url
+              : t('sharing.published.version', {
+                  version: page.version,
+                  ago: mediumAgo(page.publishedAt),
+                }),
+          },
           group: list,
           layout: 'custom',
           render: () => <PublishedRow page={page} title={title} />,
@@ -1710,10 +1488,8 @@ export function useSharingSection(): SectionDef {
   }
   const cloudflare: RowDef = {
     id: 'cloudflare',
-    name: t('sharing.account.name'),
-    english: en('sharing.account.name'),
+    setting: 'sharing.cloudflare',
     description: account ? `${account.subdomain}.workers.dev` : t('sharing.account.description'),
-    keywords: t('sharing.account.keywords'),
     group: group('cloudflare', t('sharing.groups.account')),
     layout: 'custom',
     render: () => <SharingAccount />,
@@ -1721,8 +1497,7 @@ export function useSharingSection(): SectionDef {
   if (pages.length === 0) {
     published.push({
       id: 'published-empty',
-      name: t('sharing.groups.published'),
-      keywords: t('sharing.published.keywords'),
+      setting: 'sharing.published',
       group: group('published', t('sharing.groups.published')),
       layout: 'custom',
       render: () => <p className="ui-ss-empty">{t('sharing.published.empty')}</p>,
@@ -1769,7 +1544,6 @@ function useConsents() {
 /** Settings › Artifacts: the pages the user allowed to read project files or ask the agent. */
 export function useArtifactsSection(): SectionDef {
   const { t } = useTranslation('settings')
-  const en = english()
   const { rows, error, retry } = useConsents()
   const projects = useProjectsStore((s) => s.projects)
   const where = (row: ArtifactConsentRow): string =>
@@ -1780,12 +1554,10 @@ export function useArtifactsSection(): SectionDef {
     title: t('sections.artifacts'),
     description: t('pages.artifacts'),
     icon: DashboardSquare02Icon,
-    rows: (rows ?? []).map((row) => ({
+    rows: (rows ?? []).map((row): RowDef => ({
       id: `consent-${row.artifactId}`,
-      name: row.title,
-      description: where(row),
-      keywords: t('artifacts.keywords'),
-      english: en('sections.artifacts'),
+      setting: 'artifacts.page-permissions',
+      item: { name: row.title, description: where(row) },
       group: list,
       layout: 'custom',
       render: () => <ConsentRow row={row} where={where(row)} />,

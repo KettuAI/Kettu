@@ -37,6 +37,13 @@ import {
   type MarketTools,
 } from '../marketplace/publish-tools'
 import { SERVICE_NAME } from '../service-name'
+import {
+  CHANGE_SETTINGS,
+  isSettingsToolName,
+  SETTINGS_TOOL_NAMES,
+  SETTINGS_TOOLS,
+  type SettingsTools,
+} from '../settings/tools'
 import type { LogFn } from '../storage'
 import {
   SessionTools,
@@ -118,13 +125,14 @@ const TOOL_GROUPS: ReadonlyMap<string, McpToolGroup> = new Map(
       [MEMORY_TOOLS, 'memory'],
       [REPORT_TOOLS, 'reports'],
       [WORKFLOW_TOOLS, 'workflows'],
+      [SETTINGS_TOOLS, 'settings'],
     ] as const
   )
     .flatMap(([tools, group]) => tools.map((tool) => [tool.name, group] as const))
     .concat([[GUIDE_TOOL, 'sessions']]),
 )
 /** The tools that wait for the user's answer in the session before they act. */
-const ASKING_TOOLS: ReadonlySet<string> = new Set([MARKET_PUBLISH, MARKET_UNLIST])
+const ASKING_TOOLS: ReadonlySet<string> = new Set([MARKET_PUBLISH, MARKET_UNLIST, CHANGE_SETTINGS])
 
 /** Serves the computer use tools, on a host that carries the driver. */
 export interface ComputerCalls {
@@ -191,6 +199,8 @@ export interface ArtifactServiceDeps extends ArtifactToolsDeps {
    * services on; without them none.
    */
   market?: MarketTools
+  /** Kettu's settings tools; without them the service lists none. */
+  settings?: SettingsTools
   /** The proxy to the Marketplace's OAuth servers, under its own paths; without it none. */
   proxy?: {
     handle(req: http.IncomingMessage, res: http.ServerResponse, path: string): Promise<void>
@@ -234,6 +244,7 @@ function entry(url: string, token: string, prompt: string): McpServer[] {
       // Kettu's own tools, which reach no further than its thread, memory, the project's sessions,
       // its own guide and reading the user's Marketplace listings; the browser, computer use,
       // devices, terminals and artifacts still ask, and publishing waits for the user in a card.
+      // The settings tools ask in Kettu's own card where they ask, so the agent's prompt never does.
       autoAllow: [
         PLAN_TOOL,
         REPORT_TOOL,
@@ -242,6 +253,7 @@ function entry(url: string, token: string, prompt: string): McpServer[] {
         ...SESSION_TOOLS.map((tool) => tool.name),
         ...WORKFLOW_TOOL_NAMES,
         ...MARKET_AUTO_ALLOW,
+        ...SETTINGS_TOOL_NAMES,
       ],
       prompt,
       secret: true,
@@ -452,6 +464,7 @@ export class ArtifactService {
       ...(this.memoryOn ? MEMORY_TOOLS : []),
       ...(this.marketOn ? MARKET_TOOLS : []),
       ...(this.workflowTools?.listed(sessionId) ?? []),
+      ...(this.deps.settings ? SETTINGS_TOOLS : []),
     ]
   }
 
@@ -762,6 +775,15 @@ export class ArtifactService {
         // While signed out they are not listed, and a call answers why.
         try {
           return await market.call(caller, name, input)
+        } catch (error) {
+          this.deps.log('error', `${name} failed: ${(error as Error).message}`)
+          throw new McpError(ErrorCode.InternalError, `${name} failed: ${(error as Error).message}`)
+        }
+      }
+      const settings = this.deps.settings
+      if (settings && isSettingsToolName(name)) {
+        try {
+          return await settings.call(caller, name, input)
         } catch (error) {
           this.deps.log('error', `${name} failed: ${(error as Error).message}`)
           throw new McpError(ErrorCode.InternalError, `${name} failed: ${(error as Error).message}`)

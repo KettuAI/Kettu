@@ -31,6 +31,7 @@ const AFTER_END = new Set([
   'problem_report',
   'memory',
   'market_publish',
+  'settings_change',
   'session_started',
 ])
 

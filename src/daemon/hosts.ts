@@ -18,6 +18,7 @@ import type {
   RelayInit,
   RemoteHostStatus,
   RemoteHostToMain,
+  SettingsCallAnswer,
   TerminalHostToMain,
 } from '@shared/host-control'
 import { BROWSER_UNAVAILABLE } from '@shared/browser'
@@ -122,6 +123,8 @@ export interface HostsOptions {
   marketAccount(): MarketAccount | null
   /** Makes a Marketplace API call of the agent host's with the account's access token. */
   marketCall?(call: MarketCall): Promise<MarketCallAnswer>
+  /** An agent's settings tool reads or changes the daemon's settings. */
+  settingsCall?(call: unknown): SettingsCallAnswer
   /** The agent host's first start found the programs of these harnesses; the daemon adds their agents. */
   firstStart?(harnesses: unknown): void
   /** The host's X25519 private key, in base64, for the remote host alone. */
@@ -1007,6 +1010,16 @@ export class Hosts {
         break
       case 'host:market-call':
         if (Number.isSafeInteger(message.callId)) void this.marketCall(message.callId, message.call)
+        break
+      case 'host:settings-call':
+        if (Number.isSafeInteger(message.callId)) {
+          const run = this.options.settingsCall
+          this.agent.post({
+            type: 'settings-result',
+            callId: message.callId,
+            answer: run ? run(message.call) : { error: 'The daemon keeps no settings for agents.' },
+          })
+        }
         break
       case 'host:trash-call':
         if (Number.isSafeInteger(message.callId)) {

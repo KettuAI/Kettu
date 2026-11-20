@@ -32,6 +32,7 @@ import type {
 } from './market-publish'
 import type { MemoryAction, MemoryDraft, MemoryLayer, MemoryWriteStatus } from './memory'
 import type { RoutineRef } from './routines'
+import type { SettingScalar, SettingsSection } from './settings-catalog'
 
 export {
   AUTO_AGENT_HARNESSES,
@@ -374,6 +375,7 @@ export type ThreadEntry =
   | ProblemReportEntry // Kettu's own record of a problem report an agent drafted, and its outcome
   | MemoryWriteEntry // Kettu's own record of an agent's write to Kettu's memory, and its answer
   | MarketPublishEntry // Kettu's own record of a publish to the Kettu Marketplace, and its outcome
+  | SettingsChangeEntry // Kettu's own record of an agent's change to Kettu's settings, and its answer
 
 /**
  * Where another agent took the session over: from here on its turns are that agent's. `turns` of
@@ -688,6 +690,52 @@ export interface MarketPublishEntry {
   /** When an unanswered card counts as put off, in the host's milliseconds. */
   expiresAt: number
   outcome: MarketPublishOutcome | null
+  /** Set when a paired device gave the answer; the host's own windows give none. */
+  device?: FromDevice
+  /** The agent's entry before it, to put it back after a replay. */
+  after: string | null
+}
+
+/** One row an agent's change sets, as its card and line show it, in the host's words when asked. */
+export interface SettingChangeItem {
+  /** The row as the settings tools name it, such as `appearance.color-mode`. */
+  id: string
+  /** Its section and group, as "Appearance › Theme", then its name. */
+  place: string
+  name: string
+  from: { value: SettingScalar; text: string }
+  to: { value: SettingScalar; text: string }
+  /** What an always-asking row opens up, said on the card. */
+  warning?: string
+  /** Where View in Settings opens: the section, an agent's or harness's page, and the row. */
+  section: SettingsSection
+  item: string | null
+  row: string
+}
+
+/**
+ * What became of a change: made (and later undone, or changed again since, which takes its undo
+ * away), not made because the user said Don't change, nobody answered in time or the turn ended
+ * first, or refused when it was applied.
+ */
+export type SettingsChangeOutcome =
+  | { kind: 'changed'; undone?: true; stale?: true }
+  | { kind: 'declined' | 'expired' | 'ended' }
+  | { kind: 'failed'; message: string }
+
+/**
+ * An agent's change to Kettu's settings through `change_settings`: a card while it waits for the
+ * user (`outcome` null), or, when Full access made it without asking, only the line it leaves.
+ */
+export interface SettingsChangeEntry {
+  kind: 'settings_change'
+  id: string
+  items: SettingChangeItem[]
+  /** It waited for the user in a card; false when Full access changed it without asking. */
+  asked: boolean
+  /** When an unanswered card counts as declined, in the host's milliseconds; null when not asked. */
+  expiresAt: number | null
+  outcome: SettingsChangeOutcome | null
   /** Set when a paired device gave the answer; the host's own windows give none. */
   device?: FromDevice
   /** The agent's entry before it, to put it back after a replay. */

@@ -105,6 +105,7 @@ import {
   RowText,
 } from './rows'
 import { environmentText } from './environment-text'
+import { entryText } from './model'
 import { useApply } from './use-apply'
 
 /** A check the user started counts as just done for this long, then it reads as "checked ago". */
@@ -973,7 +974,10 @@ function AutomaticUpdatesRow({ status }: { status: AgentStatus }) {
         )
       : t(kettu ? 'harnesses.autoUpdate.onKettu' : 'harnesses.autoUpdate.on')
   return (
-    <RowFrame text={<RowText name={t('harnesses.autoUpdate.name')} description={line} />}>
+    <RowFrame
+      id="auto-update"
+      text={<RowText name={entryText('harnesses.auto-update').name} description={line} />}
+    >
       <ControlError error={error} />
       <SettingSwitch
         label={t('harnesses.autoUpdate.name')}

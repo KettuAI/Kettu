@@ -22,6 +22,7 @@ import { PUSH_URL, PUSH_URL_ENV, pushUrlFrom } from '@shared/remote/push'
 import { RELAY_TOKENS_FEATURE, RELAY_URL, RELAY_URL_ENV, relayUrlFrom } from '@shared/remote/relay'
 import type { RemoteStatus } from '@shared/remote/status'
 import type { ComputerHold } from '@shared/computer-use'
+import type { SettingFacts } from '@shared/host-control'
 import { stepZoom, type SettingsFile, type ZoomStep } from '@shared/settings'
 import { AGENTS_FOLDER, KETTU_HOME_FOLDER } from '@shared/storage'
 import { Account, NotSignedIn } from './account'
@@ -88,6 +89,7 @@ import { computerAppIcon, serveComputerCapture } from './computer-use'
 import { systemReleaseForRun } from './system-name'
 import { rendererPage } from './renderer'
 import { SettingsStore } from './settings'
+import { answerSettingsCall } from './settings-call'
 import { effectiveDirect, hostSettings, reachesHost, terminalSettings } from './settings-schema'
 import { hasPendingFrame, isRevoked, watchSubframes } from './subframes'
 import { DeviceHost } from './device-host'
@@ -126,6 +128,7 @@ import {
 const APP_USER_MODEL_ID = 'sh.kettu.app'
 
 const log = createLogger('main')
+const actionLog = createLogger('action')
 
 // Chromium draws classic scrollbars with arrow buttons on Linux; overlay ones take no room and
 // fade when idle, as on macOS. Windows reads the feature before this code runs, so the renderer
@@ -491,6 +494,13 @@ async function start(): Promise<void> {
         : Promise.resolve({
             error: { code: 'no_page', message: 'Another host’s session has this page.' },
           }),
+    settingsCall: (call) =>
+      answerSettingsCall(call, {
+        settings,
+        desktop: true,
+        facts: () => settingsFacts(),
+        changed: (patch) => actionLog.info('settings.update', { patch, by: 'agent' }),
+      }),
     marketAccount: () => marketAccount(),
     market: (call) =>
       runMarketCall(call, {
@@ -620,6 +630,41 @@ async function start(): Promise<void> {
     plainTextKey: remoteHost.plainTextDeviceKey,
     keyFailed: remoteHost.deviceKeyFailed,
   })
+  // What an agent's settings tools read beyond the file: counts, and the account as Settings shows
+  // it. A secret goes only as whether it is set.
+  const settingsFacts = (): SettingFacts => {
+    const facts: SettingFacts = {}
+    const status = account.status()
+    if (status.state === 'signed-in') {
+      facts['account.account'] = status.account.email
+      facts['account.plan'] = status.plan?.name ?? null
+      facts['account.subscription'] = status.subscription
+      facts['account.points'] = status.points
+      if (status.plan && status.usage) {
+        facts['account.devices'] = `${status.usage.devices} / ${status.plan.maxDevices}`
+      }
+    } else {
+      facts['account.account'] = null
+    }
+    facts['hosts.hosts'] = remoteHost.hosts?.length ?? null
+    facts['hosts.this-computer'] = hostName()
+    facts['remote.devices'] = remoteHost.devices.length
+    const shared = sharing.status()
+    facts['sharing.kettu'] = shared.kettu.account?.email ?? null
+    facts['sharing.auto'] = shared.auto.enabled
+    facts['sharing.published'] = shared.published.length
+    facts['sharing.cloudflare'] = shared.cloudflare !== null
+    const shown = themes.state()
+    const chosen = shown.installed.find((theme) => theme.id === shown.chosen)
+    facts['appearance.theme'] = chosen?.theme.name ?? 'Kettu'
+    const update = updater.getStatus()
+    facts['about.update'] =
+      update.state.kind === 'available' || update.state.kind === 'ready'
+        ? `${update.current} → ${update.state.version}`
+        : update.current
+    facts['advanced.data-folder'] = app.getPath('userData')
+    return facts
+  }
   const hostMedia = new HostMedia((hostId, params) =>
     hostSessions.call(hostId, 'media.read', params),
   )

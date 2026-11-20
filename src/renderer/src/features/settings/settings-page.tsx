@@ -46,7 +46,15 @@ import {
 } from '@renderer/stores/view'
 import { HostPicker } from './host-picker'
 import { HOST_SECTIONS } from './host-sections'
-import { excerpt, FlashContext, highlight, matches, type RowDef, type SectionDef } from './model'
+import {
+  excerpt,
+  FlashContext,
+  highlight,
+  matches,
+  rowText,
+  type RowDef,
+  type SectionDef,
+} from './model'
 import { GroupLabel, PageHeader, RowFrame, RowGroup, RowText, SectionBody } from './rows'
 import { webClusters } from './web-sections'
 import {
@@ -268,6 +276,20 @@ function SettingsLayout({
     else openSettings(section.id)
     setJump(row.id)
   }
+
+  // An agent's open_settings, or View in Settings on its card: the row flashes as a result's does.
+  const asked = useViewStore((s) => (s.settings.open ? (s.settings.row ?? null) : null))
+  const [took, setTook] = useState<string | null>(null)
+  if (asked !== took) {
+    setTook(asked)
+    if (asked !== null) {
+      setQuery('')
+      setJump(asked)
+    }
+  }
+  useEffect(() => {
+    if (asked) useViewStore.setState((s) => ({ settings: { ...s.settings, row: null } }))
+  }, [asked])
 
   // Every page, and the results, start at the top; a search result starts at its row, and the
   // list, back from an item's page, at that item, which takes the focus.
@@ -584,16 +606,7 @@ function SearchResults({
                           onClick={() => onGo(section, row)}
                           className="ui-sg-row k-item k-result"
                         >
-                          <span className="ui-sg-label">
-                            <b>
-                              <Marked text={row.name} query={query} />
-                            </b>
-                            {row.description && (
-                              <small className="k-clamp">
-                                <Marked text={excerpt(row.description, query)} query={query} />
-                              </small>
-                            )}
-                          </span>
+                          <ResultText row={row} query={query} />
                           <span className="k-chevron">
                             <Icon icon={ArrowRight01Icon} size={14} />
                           </span>
@@ -607,6 +620,22 @@ function SearchResults({
         </div>
       )}
     </>
+  )
+}
+
+function ResultText({ row, query }: { row: RowDef; query: string }) {
+  const { name, description } = rowText(row)
+  return (
+    <span className="ui-sg-label">
+      <b>
+        <Marked text={name} query={query} />
+      </b>
+      {description && (
+        <small className="k-clamp">
+          <Marked text={excerpt(description, query)} query={query} />
+        </small>
+      )}
+    </span>
   )
 }
 

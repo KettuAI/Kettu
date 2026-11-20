@@ -212,6 +212,7 @@ describe("Kettu's own skills", () => {
     'kettu-browser',
     'kettu-devices',
     'kettu-terminals',
+    'kettu-settings',
   ]
 
   function withOwn(agents: AgentId[], off: AgentId[] = [], kept: readonly MarketSkill[] = []) {

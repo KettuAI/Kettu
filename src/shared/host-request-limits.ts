@@ -72,6 +72,9 @@ export const HOST_REQUEST_LIMITS: Readonly<Record<HostMethod, number | null>> = 
   'market.addSkill': NONE,
   // Publish on a first publish sets the publisher name on Kettu's service first.
   'market.answerPublish': AGENT_MS,
+  'settings.answerChange': HOST_MS,
+  // Undo writes the settings through main or the daemon.
+  'settings.undoChange': AGENT_MS,
   'market.publishDrafts': HOST_MS,
   'market.discardPublishDraft': HOST_MS,
   'market.community': AGENT_MS,

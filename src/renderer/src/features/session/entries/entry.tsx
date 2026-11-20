@@ -16,6 +16,7 @@ import { ControlAskEntry } from './control-ask-entry'
 import { ControlNoteEntry } from './control-note-entry'
 import { DeviceAccessEntry } from './device-access-entry'
 import { MarketPublishEntry } from './market-publish-entry'
+import { SettingsChangeEntry } from './settings-change-entry'
 import { MemoryEntry } from './memory-entry'
 import { ComputerAppEntry } from './computer-app-entry'
 import { ProblemReportEntry } from './problem-report-entry'
@@ -91,6 +92,8 @@ export const Entry = memo(function Entry({
       return <MemoryEntry {...props} agentName={agentName} />
     case 'market_publish':
       return <MarketPublishEntry {...props} agentName={agentName} />
+    case 'settings_change':
+      return <SettingsChangeEntry {...props} agentName={agentName} />
     case 'control_ask':
       return <ControlAskEntry {...props} agentName={agentName} />
     case 'control_note':

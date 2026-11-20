@@ -102,6 +102,7 @@ import type {
   RoutinesProblem,
 } from './routines'
 import type { AgentColor } from './settings'
+import type { SettingsSection } from './settings-catalog'
 import type {
   SessionTaskRef,
   WorkflowAddSource,
@@ -563,6 +564,7 @@ export type McpToolGroup =
   | 'memory'
   | 'reports'
   | 'workflows'
+  | 'settings'
 
 export interface McpToolSummary {
   name: string
@@ -994,6 +996,15 @@ export interface HostContract {
     }
     result: void
   }
+  // Any window's or device's answer to a card an agent's change_settings shows: Change or Don't
+  // change; the first counts.
+  'settings.answerChange': {
+    params: { sessionId: string; entryId: string; decision: 'change' | 'keep' }
+    result: void
+  }
+  // Undo on a settings line: the rows go back to what they were, refused with `conflict` once one
+  // of them changed again since, which takes the undo away.
+  'settings.undoChange': { params: { sessionId: string; entryId: string }; result: void }
   // What was put off or refused, newest first, kept on the host to publish later.
   'market.publishDrafts': { params: void; result: { drafts: PublishDraft[] } }
   'market.discardPublishDraft': { params: { id: string }; result: void }
@@ -1821,6 +1832,8 @@ export const HOST_METHODS = [
   'market.skillRepository',
   'market.addSkill',
   'market.answerPublish',
+  'settings.answerChange',
+  'settings.undoChange',
   'market.publishDrafts',
   'market.discardPublishDraft',
   'market.community',
@@ -2076,6 +2089,8 @@ export type HostEvent =
   | { type: 'market.keysChanged' } // the Marketplace's keys changed; a page showing them reads again
   // The account, what it published or the drafts changed; Marketplace › Published reads again.
   | { type: 'market.publishedChanged' }
+  // To the windows showing a session: its agent's open_settings, Settings at a row.
+  | { type: 'settings.open'; section: SettingsSection; item: string | null; row: string }
   | { type: 'memory.changed' } // Kettu's memory or its switch changed; a page showing it reads again
   // A server's sign-in changed; `loginId` and `error` close a Connect the window started.
   | {

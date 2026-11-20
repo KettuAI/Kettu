@@ -240,6 +240,9 @@ export function settled(entry: ThreadEntry): ThreadEntry {
       return entry.outcome.kind === 'publishing' || entry.outcome.kind === 'unlisting'
         ? { ...entry, outcome: { kind: 'interrupted' } }
         : entry
+    case 'settings_change':
+      // A card still waiting ended with the turn that asked, and changed nothing.
+      return entry.outcome === null ? { ...entry, outcome: { kind: 'ended' } } : entry
     case 'tool': {
       const open = entry.status === 'pending' || entry.status === 'in_progress'
       if (!open && entry.permission === null) return entry

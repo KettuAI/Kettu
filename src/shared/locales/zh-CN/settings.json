@@ -2096,5 +2096,39 @@
       "notFound": "现在不在这台电脑上",
       "remove": "移除"
     }
+  },
+  "agentSettings": {
+    "on": "开",
+    "off": "关",
+    "system": "跟随系统",
+    "set": "已设置",
+    "notSet": "未设置",
+    "agent": {
+      "account": "登录",
+      "followAgent": "跟随智能体",
+      "kettuMcp": "Kettu 的 MCP 服务"
+    },
+    "harness": {
+      "program": "程序",
+      "install": "安装或卸载"
+    },
+    "lists": {
+      "broughtSites": "从其他浏览器带来登录的站点",
+      "memory": "记忆条目"
+    },
+    "warning": {
+      "cloud": "Kettu 的账号、中继、推送、分享到 Kettu 和问题报告会跟着开或关。",
+      "computer": "智能体将能读取并操作这台电脑上的应用。",
+      "agentOff": "停用的智能体会停下正在运行的对话，也不再开始新会话。",
+      "startMode": "这个智能体的新会话会直接以这个模式开始。",
+      "kettuMcp": "关掉后，这个智能体就没有 Kettu 的工具和随附的说明了。",
+      "remote": "配对的设备将能连接这台电脑、使用它的会话。",
+      "direct": "同一网络、VPN 或转发的端口上的设备将能直接连到这台电脑。",
+      "terminal": "配对的设备将能在这台电脑上运行任何命令。",
+      "discoverable": "登录同一个 Kettu 账号的设备将能找到这台电脑并请求添加。",
+      "relay": "设备将能从任何网络经 Kettu 中继连到这台电脑。",
+      "proxy": "智能体、npx 和更新都会经过这个代理。",
+      "source": "会改变 Kettu 下载更新的来源。"
+    }
   }
 }

@@ -1455,6 +1455,21 @@ export function createValidators(platform: Platform): Validators {
       return { id, ...(refresh === undefined ? {} : { refresh }) }
     },
     'market.addSkill': (params) => ({ source: skillSource(fields(params).source, platform) }),
+    'settings.answerChange': (params) => {
+      const o = fields(params)
+      if (o.decision !== 'change' && o.decision !== 'keep') {
+        throw invalidParams('decision must be change or keep')
+      }
+      return {
+        sessionId: sessionId(o),
+        entryId: string(o, 'entryId', ID_CHARS),
+        decision: o.decision,
+      }
+    },
+    'settings.undoChange': (params) => {
+      const o = fields(params)
+      return { sessionId: sessionId(o), entryId: string(o, 'entryId', ID_CHARS) }
+    },
     'market.answerPublish': (params) => {
       const o = fields(params)
       if (o.decision !== 'confirm' && o.decision !== 'later') {

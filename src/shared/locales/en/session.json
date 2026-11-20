@@ -1353,5 +1353,33 @@
     "removeQuote": "Remove the quote",
     "seconds": "{{n}} s",
     "by": "Answered by {{agent}}"
+  },
+  "settingsChange": {
+    "title_one": "Change {{count}} setting",
+    "title_other": "Change {{count}} settings",
+    "whoMac": "{{agent}} wants to change Kettu’s settings on this Mac",
+    "whoComputer": "{{agent}} wants to change Kettu’s settings on this computer",
+    "whoOther": "{{agent}} wants to change Kettu’s settings on {{computer}}",
+    "rows": "What changes",
+    "alwaysAsks": "This widens what agents, devices or the network can do, so Full access asks too.",
+    "view": "View in Settings",
+    "keep": "Don’t change",
+    "change": "Change",
+    "changing": "Changing…",
+    "changed": "Changed <b>{{what}}</b>: {{from}} → {{to}}",
+    "changedMany_one": "Changed <b>{{count}} setting</b>",
+    "changedMany_other": "Changed <b>{{count}} settings</b>",
+    "notChanged": "Didn’t change <b>{{what}}</b>",
+    "notChangedMany_one": "Didn’t change <b>{{count}} setting</b>",
+    "notChangedMany_other": "Didn’t change <b>{{count}} settings</b>",
+    "undone": "Undid <b>{{what}}</b>: {{to}} → {{from}}",
+    "undoneMany_one": "Undid <b>{{count}} setting</b>",
+    "undoneMany_other": "Undid <b>{{count}} settings</b>",
+    "noAnswer": "no answer in 10 minutes",
+    "answeredOn": "answered on {{device}}",
+    "undo": "Undo",
+    "undoLabel": "Undo the change to {{what}}",
+    "showRows": "Show what changed",
+    "row": "{{what}}: {{from}} → {{to}}"
   }
 }

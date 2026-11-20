@@ -2,6 +2,16 @@ import { createContext, type ReactNode } from 'react'
 import type { IconSvgElement } from '@hugeicons/react'
 import { i18n } from '@renderer/lib/i18n'
 import type { SettingsSection } from '@renderer/stores/view'
+import type { Platform } from '@shared/platform'
+import {
+  CATALOG,
+  keywordKeys,
+  platformKey,
+  type EntryText,
+  type SettingId,
+} from '@shared/settings-catalog'
+import { queryWords as words, wordStarts } from '@shared/word-match'
+import { platform } from '@renderer/lib/platform'
 
 /** The row a search result led to, lit for a moment once its page shows. */
 export const FlashContext = createContext<string | null>(null)
@@ -22,17 +32,21 @@ export interface GroupDef {
   note?: ReactNode
 }
 
-/** One row of a settings section: its name and description are what search matches. */
+/**
+ * One row of a settings section. Its words come from its entry in the settings catalog, which
+ * agents read too, so no row exists without one; a list's rows name their item themselves.
+ */
 export interface RowDef {
   id: string
-  name: string
-  description?: string
+  setting: SettingId
+  /** One item of a list entry, such as an agent, a device or a site, by its own name. */
+  item?: { name: string; description?: string; keywords?: string }
+  /** The description as it reads now, where the state changes it; null for none. */
+  description?: string | null
+  /** Values for the entry's words, such as the host the page shows. */
+  params?: Record<string, unknown>
   /** The description as the row shows it, when it marks up more than text, such as keys. */
   rich?: ReactNode
-  /** Extra words search should find, such as "dark" for the theme row. */
-  keywords?: string
-  /** The name in English, so a search in English finds the row in any language. */
-  english?: string
   /** Consecutive rows with the same group show under its label. */
   group?: GroupDef
   /**
@@ -46,6 +60,44 @@ export interface RowDef {
   open?: () => void
   /** Found by search but drawn by the page itself, as the environment line under the agents is. */
   searchOnly?: boolean
+}
+
+/** A row's words: its name and description, the words search also finds, and its English name. */
+export interface RowText {
+  name: string
+  description?: string
+  keywords?: string
+  english: string
+}
+
+type Words = (key: string, options?: Record<string, unknown>) => string
+
+/** An entry's own name and description, for the rows an item's page draws itself. */
+export function entryText(setting: SettingId, params?: Record<string, unknown>) {
+  return rowText({ id: '', setting, params, render: () => null })
+}
+
+/** A row's words in the interface's language, from its catalog entry or its item. */
+export function rowText(row: RowDef): RowText {
+  const entry = CATALOG[row.setting]
+  const t = i18n.getFixedT(null, 'settings') as unknown as Words
+  const en = i18n.getFixedT('en', 'settings') as unknown as Words
+  const key = (text: EntryText) => platformKey(text, platform as Platform)
+  const keywords = [...keywordKeys(entry).map((k) => t(k)), row.item?.keywords]
+    .filter(Boolean)
+    .join(' ')
+  const description =
+    row.description !== undefined
+      ? (row.description ?? undefined)
+      : row.item
+        ? row.item.description
+        : entry.description && t(key(entry.description), row.params)
+  return {
+    name: row.item?.name ?? t(key(entry.name), row.params),
+    ...(description ? { description } : {}),
+    ...(keywords ? { keywords } : {}),
+    english: en(key(entry.name), row.params),
+  }
 }
 
 export interface SectionDef {
@@ -65,34 +117,11 @@ export interface SectionDef {
   itemPage?: (item: string) => ReactNode
 }
 
-function words(query: string): string[] {
-  return query.toLowerCase().split(/\s+/).filter(Boolean)
-}
-
-const WORD = /[\p{L}\p{N}]/u
-// Chinese and Japanese run their words together, so any character can start one.
-const UNSPACED = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}]/u
-
-function startsWord(text: string, at: number): boolean {
-  if (at === 0) return true
-  const before = text[at - 1]!
-  return !WORD.test(before) || UNSPACED.test(before) || UNSPACED.test(text[at]!)
-}
-
-/** Where `word` starts a word of `lower`, so "sh" finds Shell but not finished. */
-function wordStarts(lower: string, word: string): number[] {
-  const found: number[] = []
-  for (let at = lower.indexOf(word); at >= 0; at = lower.indexOf(word, at + 1)) {
-    if (startsWord(lower, at)) found.push(at)
-  }
-  return found
-}
-
 /** Whether every word of the query starts a word of the row's name, description or keywords. */
 export function matches(row: RowDef, query: string): boolean {
   if (!query) return true
-  const text =
-    `${row.name} ${row.description ?? ''} ${row.keywords ?? ''} ${row.english ?? ''}`.toLowerCase()
+  const { name, description, keywords, english } = rowText(row)
+  const text = `${name} ${description ?? ''} ${keywords ?? ''} ${english}`.toLowerCase()
   return words(query).every((word) => wordStarts(text, word).length > 0)
 }
 
@@ -126,9 +155,4 @@ export function highlight(text: string, query: string): { text: string; match: b
     else parts.push({ text: text[i]!, match: marked[i]! })
   }
   return parts
-}
-
-/** Settings text in English, whatever the interface language, for `RowDef.english`. */
-export function english() {
-  return i18n.getFixedT('en', 'settings')
 }

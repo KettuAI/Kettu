@@ -47,9 +47,7 @@ export function useDevicesSection(): SectionDef {
   const rows: RowDef[] = [
     {
       id: 'allowed-devices',
-      name: t('devices.allowed.name'),
-      description: t('devices.allowed.description'),
-      keywords: t('devices.allowed.keywords'),
+      setting: 'devices.allowed-devices',
       searchOnly: !!ids?.length,
       group,
       layout: 'custom',
@@ -61,8 +59,8 @@ export function useDevicesSection(): SectionDef {
     },
     ...(ids ?? []).map((deviceId): RowDef => ({
       id: `device-${deviceId}`,
-      name: deviceId,
-      keywords: t('devices.allowed.keywords'),
+      setting: 'devices.allowed-devices',
+      item: { name: deviceId },
       group,
       layout: 'custom',
       render: () => <AllowedDeviceRow deviceId={deviceId} onForget={() => forget(deviceId)} />,
