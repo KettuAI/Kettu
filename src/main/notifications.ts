@@ -2,6 +2,7 @@ import { BrowserWindow, Notification } from 'electron'
 import type { HostToMain } from '@shared/host-control'
 import type { DiscoveryRequestEvent } from '@shared/remote/discovery'
 import { ATTENTION_SETTING, attentionTarget, attentionText } from '@shared/attention'
+import type { HostAttention } from '@shared/remote/host-admin'
 import type { SettingsFile } from '@shared/settings'
 import { sendCommand } from './events'
 import { t } from './i18n'
@@ -11,18 +12,26 @@ const log = createLogger('notifications')
 
 type Attention = Extract<HostToMain, { type: 'host:attention' }>
 
+/** Another host whose attention this computer shows, named in its notification. */
+export interface AttentionHost {
+  id: string
+  name: string
+}
+
 // Held so a notification is not garbage collected before it is clicked; one per session, or per
-// agent for a pause, so a newer notice replaces the older one instead of stacking.
+// agent of a host for a pause, so a newer notice replaces the older one instead of stacking.
 const shown = new Map<string, Notification>()
 
 /**
- * An OS notification for what needs the user, shown only when no window is focused. A request
- * that can be allowed once offers that and Open; clicking it, or Open, opens its session.
+ * An OS notification for what needs the user, on this computer or on another host, shown only
+ * when no window is focused. A request that can be allowed once offers that and Open; clicking
+ * it, or Open, opens its session, as does Allow once when the answer cannot be sent.
  */
 export function notifyAttention(
-  message: Attention,
+  message: Attention | HostAttention,
   settings: SettingsFile,
-  allowOnce: (sessionId: string, requestId: string, optionId: string) => void,
+  allowOnce: (sessionId: string, requestId: string, optionId: string) => boolean,
+  host: AttentionHost | null = null,
 ): void {
   const target = attentionTarget(message)
   if (!target) {
@@ -33,11 +42,16 @@ export function notifyAttention(
   if (BrowserWindow.getFocusedWindow()) return
   if (!Notification.isSupported()) return
 
-  const { key, command } = target
+  const { command } = target
+  // Agent ids repeat across hosts, so a pause on one never replaces another's.
+  const key = host ? `${host.id}:${target.key}` : target.key
   const answer = message.kind === 'permission' ? validAnswer(message.allowOnce) : null
+  const title = host
+    ? t('notifications.onHost', { host: host.name, title: message.title })
+    : message.title
   shown.get(key)?.close()
   const notification = new Notification({
-    ...attentionText(message),
+    ...attentionText({ ...message, title }),
     silent: !settings.notifications.sound,
     ...(answer
       ? {
@@ -57,11 +71,12 @@ export function notifyAttention(
   })
   notification.on('action', (details) => {
     forget()
-    if (details.actionIndex === 0 && answer && message.kind === 'permission') {
+    const allowed =
+      details.actionIndex === 0 &&
+      answer !== null &&
+      message.kind === 'permission' &&
       allowOnce(message.sessionId, answer.requestId, answer.optionId)
-    } else {
-      sendCommand(command)
-    }
+    if (!allowed) sendCommand(command)
   })
   notification.on('close', forget)
   notification.on('failed', (_, error) => {

@@ -33,7 +33,9 @@ function isId(value: unknown): value is string {
 export function attentionTarget(
   message: HostAttention,
 ): { key: string; command: AppCommand } | null {
-  if (!(message.kind in ATTENTION_SETTING)) return null
+  if (typeof message.kind !== 'string' || !Object.hasOwn(ATTENTION_SETTING, message.kind)) {
+    return null
+  }
   if (typeof message.title !== 'string' || typeof message.body !== 'string') return null
   if (message.kind === 'routine-paused') {
     return isId(message.agentId)

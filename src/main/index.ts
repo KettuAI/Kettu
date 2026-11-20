@@ -17,6 +17,7 @@ import { IDLE_CONTROL } from '@shared/control'
 import { guardKettuFetch } from '@shared/kettu-hosts'
 import { matchLocale, resolveLocale, type Locale } from '@shared/locale'
 import type { MarketAccount } from '@shared/market-publish'
+import type { HostAttention } from '@shared/remote/host-admin'
 import { HOSTS_FILE, type HostsStatus } from '@shared/remote/hosts'
 import { PUSH_URL, PUSH_URL_ENV, pushUrlFrom } from '@shared/remote/push'
 import { RELAY_TOKENS_FEATURE, RELAY_URL, RELAY_URL_ENV, relayUrlFrom } from '@shared/remote/relay'
@@ -432,9 +433,10 @@ async function start(): Promise<void> {
     onMarketOAuth: (serverId, state) => void marketKeys.setOAuth(serverId, state),
     onFirstStart: (harnesses) => settings.firstStart(harnesses),
     onAttention: (message) => {
-      notifyAttention(message, settings.get(), (sessionId, requestId, optionId) =>
-        agentHost.answerPermission(sessionId, requestId, optionId),
-      )
+      notifyAttention(message, settings.get(), (sessionId, requestId, optionId) => {
+        agentHost.answerPermission(sessionId, requestId, optionId)
+        return true
+      })
       hostAdmin?.attention(message)
       remoteHost.attention(message)
     },
@@ -674,6 +676,17 @@ async function start(): Promise<void> {
     browserCall: (hostId, call) => void remoteBrowser.call(hostId, call),
     originDecided: (hostId, event) => remoteBrowser.originDecided(hostId, event),
     browserEvent: (hostId, event) => remoteBrowser.browserEvent(hostId, event),
+    attention: (hostId, attention) => {
+      const host = remoteHost.hosts?.find((known) => known.id === hostId)
+      if (!host || typeof attention !== 'object' || attention === null) return
+      notifyAttention(
+        attention as HostAttention,
+        settings.get(),
+        (sessionId, requestId, optionId) =>
+          hostSessions.request(hostId, 'permissions.respond', { sessionId, requestId, optionId }),
+        { id: hostId, name: host.name },
+      )
+    },
     ended: (hostId) => {
       // The host's turns that used this computer's pages end with its session.
       browserTools?.endTurns(remoteBrowser.sessionsOf(hostId))

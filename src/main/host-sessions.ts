@@ -1,8 +1,9 @@
 // Relays each window's port to the sessions on other hosts: a request goes to the port of the
 // host it names under an id of main's own, so windows never share one, and its answer comes back
 // to the window that asked; each host's events and resyncs go to every window. A host's browser
-// calls are main's to run, and its answers to them main's own requests. Main also asks hosts on
-// the same ports, and answers a window's media from them on its media scheme.
+// calls are main's to run, and its answers to them main's own requests, and what it says needs
+// the user main's to notify about. Main also asks hosts on the same ports, and answers a window's
+// media from them on its media scheme.
 
 import { MessageChannelMain, type MessagePortMain, type WebContents } from 'electron'
 import type { DeviceFileContent, FileContent } from '@shared/files'
@@ -79,6 +80,8 @@ export interface HostSessionsOptions {
   originDecided?(hostId: string, event: unknown): void
   /** A host's `browser.turnEnded` or `browser.askAnswered` event, for that page too. */
   browserEvent?(hostId: string, event: unknown): void
+  /** What a host says needs its owner, for this computer's notifications; windows never see it. */
+  attention?(hostId: string, attention: unknown): void
   /** The host's session ended. */
   ended?(hostId: string): void
   /**
@@ -391,7 +394,12 @@ export class HostSessions {
       message.type === 'resync' ||
       (message.type === 'terminals.restarted' && Array.isArray(message.ids))
     if (!passed) return
-    const event = message.event as { type?: unknown; call?: unknown } | undefined
+    const event = message.event as
+      { type?: unknown; call?: unknown; attention?: unknown } | undefined
+    if (message.type === 'event' && event?.type === 'attention') {
+      this.options.attention?.(hostId, event.attention)
+      return
+    }
     if (message.type === 'event' && event?.type === 'browser.call') {
       this.options.browserCall?.(hostId, event.call)
       return

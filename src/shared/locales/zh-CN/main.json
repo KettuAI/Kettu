@@ -87,6 +87,7 @@
   "notifications": {
     "testTitle": "Kettu",
     "testBody": "通知已开启。智能体需要你时，会这样提醒你。",
+    "onHost": "{{host}} · {{title}}",
     "allowOnce": "允许一次",
     "open": "打开",
     "discoveryTitle": "有设备请求添加",
