@@ -30,12 +30,13 @@ export const TRAY_PANEL_HEIGHT = { min: 120, max: 720 }
 
 /**
  * The agent host's methods the panel may call: what it lists, the plan limits it reads again, the
- * requests it shows and the answers it gives. The panel's preload refuses every other method.
+ * requests it shows, the files a finished turn changed and the answers it gives. The panel's preload refuses every other method.
  */
 export const TRAY_HOST_METHODS = [
   'agents.list',
   'agents.refreshLimits',
   'sessions.list',
+  'sessions.requests',
   'sessions.snapshot',
   'permissions.respond',
   'browser.answerOrigin',

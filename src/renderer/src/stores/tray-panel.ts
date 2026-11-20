@@ -4,24 +4,19 @@ import type { BrowserOriginDecision } from '@shared/browser'
 import type { ComputerAppDecision } from '@shared/computer-use'
 import { isPortError, type PortConnectionState } from '@shared/port-rpc'
 import type { RemoteStatus } from '@shared/remote/status'
+import { pendingRequests } from '@shared/pending-requests'
+import { groupSessions, limitReaders, needsYou } from '@shared/session-groups'
 import type { TrayPanelApi } from '@shared/tray'
-import { limitReaders } from '@renderer/features/sidebar/plan-usage'
 import {
-  groupSessions,
-  needsYou,
-  readDetail,
+  changedFiles,
   stale,
-  type PendingRequest,
+  trayRequest,
   type SessionDetail,
+  type TrayRequest,
 } from '@renderer/features/tray/model'
 
-/** How soon a session's thread is read again while it changes, so a busy turn reads it seldom. */
+/** How soon a session is read again while it changes, so a busy turn reads it seldom. */
 const READ_INTERVAL_MS = 1500
-/**
- * How often a running session's thread is read while the panel shows: its summary does not move
- * with each step, and the panel watches no thread.
- */
-const RUNNING_INTERVAL_MS = 3000
 
 /** The menu bar panel's page has its own preload, which exposes these calls alone. */
 export function trayApi(): TrayPanelApi {
@@ -71,14 +66,32 @@ function visible(): boolean {
   return document.visibilityState === 'visible'
 }
 
-async function readThread(sessionId: string): Promise<void> {
+/**
+ * What a session waits on while it waits, and once its turn is done, the files it changed. A
+ * running session's row needs no read: its summary says what it runs.
+ */
+async function readDetail(summary: SessionSummary): Promise<SessionDetail> {
+  const read = { readAt: summary.updatedAt, readRequests: summary.permissionCount }
+  const before = useTrayPanelStore.getState().details[summary.id]
+  if (needsYou(summary)) {
+    const { entries } = await trayApi().agents.request('sessions.requests', {
+      sessionId: summary.id,
+    })
+    const requests = pendingRequests(entries).filter(trayRequest)
+    return { ...read, requests, files: before?.files ?? null }
+  }
+  if (summary.status === 'running') return { ...read, requests: [], files: null }
+  const snapshot = await trayApi().agents.request('sessions.snapshot', { sessionId: summary.id })
+  return { ...read, requests: [], files: changedFiles(snapshot.entries) }
+}
+
+async function readSession(sessionId: string): Promise<void> {
   const summary = useTrayPanelStore.getState().sessions[sessionId]
   if (!summary || reading.has(sessionId)) return
   reading.add(sessionId)
   lastRead.set(sessionId, Date.now())
   try {
-    const snapshot = await trayApi().agents.request('sessions.snapshot', { sessionId })
-    const detail = readDetail(snapshot.entries, snapshot.session.turnStartedAt, summary)
+    const detail = await readDetail(summary)
     useTrayPanelStore.setState((state) => {
       if (!state.sessions[sessionId]) return {}
       const details = { ...state.details, [sessionId]: detail }
@@ -102,34 +115,21 @@ function schedule(sessionId: string): void {
     sessionId,
     setTimeout(() => {
       timers.delete(sessionId)
-      void readThread(sessionId)
+      void readSession(sessionId)
     }, wait),
   )
 }
 
-/** Reads the threads of the listed sessions that changed, and with `running`, every running one. */
-function readListed(running = false): void {
+/** Reads the listed sessions that wait or finished and changed since they were read. */
+function readListed(): void {
   if (!visible()) return
   const { sessions, details, reviewing } = useTrayPanelStore.getState()
   const groups = groupSessions(Object.values(sessions))
   const reviewed = reviewing ? sessions[reviewing.sessionId] : undefined
-  const listed = [...groups.needsYou, ...groups.running, ...groups.finished]
+  const listed = [...groups.needsYou, ...groups.finished]
   for (const summary of reviewed ? [reviewed, ...listed] : listed) {
-    if (stale(summary, details[summary.id]) || (running && summary.status === 'running')) {
-      schedule(summary.id)
-    }
+    if (stale(summary, details[summary.id])) schedule(summary.id)
   }
-}
-
-let runningTimer: ReturnType<typeof setInterval> | null = null
-
-/** While the panel shows, its running rows follow the agents' steps. */
-function followVisibility(): void {
-  if (runningTimer) clearInterval(runningTimer)
-  runningTimer = null
-  if (!visible()) return
-  readListed(true)
-  runningTimer = setInterval(() => readListed(true), RUNNING_INTERVAL_MS)
 }
 
 /**
@@ -232,8 +232,7 @@ export async function initTrayPanel(): Promise<void> {
     }))
     readLimits()
   })
-  document.addEventListener('visibilitychange', followVisibility)
-  followVisibility()
+  document.addEventListener('visibilitychange', readListed)
   useTrayPanelStore.setState({ remote: await api.remote.status() })
 }
 
@@ -283,7 +282,7 @@ export type AnswerChoice =
  */
 export async function answer(
   sessionId: string,
-  request: PendingRequest,
+  request: TrayRequest,
   choice: AnswerChoice,
 ): Promise<string | null> {
   const api = trayApi()
