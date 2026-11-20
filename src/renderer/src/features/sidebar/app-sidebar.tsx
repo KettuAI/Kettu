@@ -24,6 +24,7 @@ import { toast } from '@renderer/components/ui/toast'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
 import { HostSwitchBar } from '@renderer/features/account/host-switch'
 import { Glyph } from '@renderer/features/shell/glyph'
+import { NO_PROJECT_ICON } from '@renderer/features/shell/no-project-icon'
 import { UpdateCardView } from '@renderer/features/updates/update-card'
 import { NoticeCard } from '@renderer/features/updates/update-notice'
 import { useUpdates } from '@renderer/features/updates/use-updates'
@@ -373,7 +374,7 @@ function ProjectGroup({
         (project?.missing || away) && 'text-(--faint)!',
       )}
     >
-      {open ? <FolderMark /> : <FolderClosedMark />}
+      {!project ? <Glyph icon={NO_PROJECT_ICON} /> : open ? <FolderMark /> : <FolderClosedMark />}
       <span className="ui-as-side__text">{name}</span>
       {showHost && (
         <span className="kettu-row-end max-w-24 shrink-0 truncate text-[12px] font-normal text-(--faint)">

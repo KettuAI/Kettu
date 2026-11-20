@@ -5,6 +5,7 @@ import { basename } from '@renderer/lib/format'
 import { hostOfPath, hostPath } from '@renderer/lib/host-paths'
 import { useProjectsStore } from '@renderer/stores/projects'
 import { Glyph } from '@renderer/features/shell/glyph'
+import { NO_PROJECT_ICON } from '@renderer/features/shell/no-project-icon'
 import { useSessionsStore } from '@renderer/stores/sessions'
 import { WORKTREE_ICON } from '../worktree/worktree-icon'
 import { WorktreeHint } from '../worktree/worktree-tag'
@@ -35,7 +36,13 @@ export function SessionPlace({
         <TooltipTrigger
           render={<span className="ui-as-tray-link kettu-tray-link--project" data-static="" />}
         >
-          {worktree ? <Glyph icon={WORKTREE_ICON} size={13} /> : <FolderMark />}
+          {worktree ? (
+            <Glyph icon={WORKTREE_ICON} size={13} />
+          ) : scratch ? (
+            <Glyph icon={NO_PROJECT_ICON} size={14} />
+          ) : (
+            <FolderMark />
+          )}
           <span className="kettu-tray-link__text">
             {scratch ? t('place.noProject') : (listed ?? basename(path))}
           </span>

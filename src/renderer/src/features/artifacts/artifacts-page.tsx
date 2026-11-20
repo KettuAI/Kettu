@@ -54,6 +54,7 @@ import { basename, longAgo } from '@renderer/lib/format'
 import { useHostContext } from '@renderer/lib/host-features'
 import { hostOfPath } from '@renderer/lib/host-paths'
 import { artifactHost } from '@renderer/lib/host'
+import { NO_PROJECT_ICON } from '@renderer/features/shell/no-project-icon'
 import { AwayContent, WindowHostAway } from '@renderer/features/shell/window-host-away'
 import { useHostName, useNamesHosts, useWindowHost } from '@renderer/stores/window-host'
 import { useWindowArtifacts } from './window-artifacts'
@@ -514,7 +515,7 @@ function GroupView({
   return (
     <section aria-label={label} className="k-arts__group">
       <h3 className="k-arts__project">
-        {of.kind === 'project' && <FolderClosedMark />}
+        {of.kind === 'project' ? <FolderClosedMark /> : <Icon icon={NO_PROJECT_ICON} size={16} />}
         {of.kind === 'project' ? (
           <Tooltip>
             <TooltipTrigger render={<span className="truncate" />} delay={700}>
@@ -841,6 +842,7 @@ function ImportMenu({
                   ))}
                   {own.length > 0 && <DropdownMenuSeparator />}
                   <DropdownMenuItem onClick={() => void importArtifact(null, kind)}>
+                    <Icon icon={NO_PROJECT_ICON} size={16} />
                     {t('page.noProject')}
                   </DropdownMenuItem>
                 </DropdownMenuGroup>
