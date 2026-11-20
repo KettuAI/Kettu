@@ -46,7 +46,15 @@ import {
 } from '@renderer/stores/view'
 import { HostPicker } from './host-picker'
 import { HOST_SECTIONS } from './host-sections'
-import { excerpt, FlashContext, highlight, matches, type RowDef, type SectionDef } from './model'
+import {
+  excerpt,
+  FlashContext,
+  highlight,
+  matches,
+  rowText,
+  type RowDef,
+  type SectionDef,
+} from './model'
 import { GroupLabel, PageHeader, RowFrame, RowGroup, RowText, SectionBody } from './rows'
 import { webClusters } from './web-sections'
 import {
@@ -249,6 +257,8 @@ function SettingsLayout({
   const [jump, setJump] = useState<string | null>(null)
   const [flash, setFlash] = useState<string | null>(null)
   const lastItem = useRef(item)
+  // What the page showed when it last moved, so a flashed row's jump ending keeps its place.
+  const lastShown = useRef({ active, item, searching })
 
   // Opening a section from elsewhere, such as the app menu, leaves the results behind.
   const [seen, setSeen] = useState(active)
@@ -269,12 +279,29 @@ function SettingsLayout({
     setJump(row.id)
   }
 
+  // An agent's open_settings, or View in Settings on its card: the row flashes as a result's does.
+  const asked = useViewStore((s) => (s.settings.open ? (s.settings.row ?? null) : null))
+  const [took, setTook] = useState<string | null>(null)
+  if (asked !== took) {
+    setTook(asked)
+    if (asked !== null) {
+      setQuery('')
+      setJump(asked)
+    }
+  }
+  useEffect(() => {
+    if (asked) useViewStore.setState((s) => ({ settings: { ...s.settings, row: null } }))
+  }, [asked])
+
   // Every page, and the results, start at the top; a search result starts at its row, and the
   // list, back from an item's page, at that item, which takes the focus.
   useLayoutEffect(() => {
     const view = scroller.current
     const left = lastItem.current
     lastItem.current = item
+    const shown = lastShown.current
+    const moved = shown.active !== active || shown.item !== item || shown.searching !== searching
+    lastShown.current = { active, item, searching }
     if (!view) return
     const row = jump ? view.querySelector<HTMLElement>(`[data-setting-row="${jump}"]`) : null
     const found =
@@ -288,7 +315,7 @@ function SettingsLayout({
     } else if (found) {
       found.scrollIntoView({ block: 'center' })
       found.focus({ preventScroll: true })
-    } else {
+    } else if (moved) {
       view.scrollTop = 0
     }
   }, [active, item, searching, jump])
@@ -584,16 +611,7 @@ function SearchResults({
                           onClick={() => onGo(section, row)}
                           className="ui-sg-row k-item k-result"
                         >
-                          <span className="ui-sg-label">
-                            <b>
-                              <Marked text={row.name} query={query} />
-                            </b>
-                            {row.description && (
-                              <small className="k-clamp">
-                                <Marked text={excerpt(row.description, query)} query={query} />
-                              </small>
-                            )}
-                          </span>
+                          <ResultText row={row} query={query} />
                           <span className="k-chevron">
                             <Icon icon={ArrowRight01Icon} size={14} />
                           </span>
@@ -607,6 +625,22 @@ function SearchResults({
         </div>
       )}
     </>
+  )
+}
+
+function ResultText({ row, query }: { row: RowDef; query: string }) {
+  const { name, description } = rowText(row)
+  return (
+    <span className="ui-sg-label">
+      <b>
+        <Marked text={name} query={query} />
+      </b>
+      {description && (
+        <small className="k-clamp">
+          <Marked text={excerpt(description, query)} query={query} />
+        </small>
+      )}
+    </span>
   )
 }
 

@@ -24,7 +24,7 @@ import { OWNER } from '@shared/artifact-comments'
 import { flushLog, logFolder, redactLogText, writeLog } from '@shared/log/process-log'
 import { writeReport } from '@shared/log/report-bundle'
 import { parseReportRequest } from '@shared/report'
-import { harnessOf, type HarnessId } from '@shared/agents'
+import { harnessOf, takesStartMode, type HarnessId } from '@shared/agents'
 import type { RuntimeAnswer } from '@shared/artifact-capabilities'
 import { ARTIFACT_ENTRY, artifactFileType } from '@shared/artifact-files'
 import { type ArtifactImportResult, type ArtifactSummary, NO_SESSION } from '@shared/artifacts'
@@ -48,6 +48,10 @@ import type {
   MainToHost,
   NodeRuntime,
   ReportBuildResult,
+  SettingFacts,
+  SettingsCall,
+  SettingsCallAnswer,
+  SettingsSnapshot,
 } from '@shared/host-control'
 import type { ArtifactExportFormat } from '@shared/artifact-types'
 import type { ComputerFrame } from '@shared/computer-use'
@@ -117,7 +121,7 @@ import { lightTarget } from './light-model'
 import { reportDraftPrompt, writeReportDraft } from './report-draft'
 import { Diagnostics } from './diagnostics'
 import { HostError, invalidParams } from './errors'
-import { setLocale, t } from './i18n'
+import { setLocale, t, tSettings, tSettingsEnglish } from './i18n'
 import { FilesService } from './files'
 import { MediaService } from './media'
 import { MemoryError, type MemoryErrorCode } from './memory/errors'
@@ -133,6 +137,13 @@ import { MarketPluginsService, pluginsFile } from './marketplace/plugins'
 import { MarketSkillsService, skillFor, skillsCatalogFile } from './marketplace/skills'
 import { PublishDrafts } from './marketplace/publish-drafts'
 import { MARKET_WAIT_MS, MarketCallError, MarketTools } from './marketplace/publish-tools'
+import {
+  SETTINGS_WAIT_MS,
+  SettingsTools,
+  StaleUndo,
+  type LocalFacts,
+  type SettingsTarget,
+} from './settings/tools'
 import {
   ALL_TRANSPORTS,
   keyState,
@@ -493,6 +504,11 @@ export class AgentHost {
   /** Trash calls awaiting main's answer: null once done, else why not. */
   private readonly trashCalls = new Map<number, (error: string | null) => void>()
   private nextTrashCall = 1
+  /** Settings calls awaiting main's or the daemon's answer. */
+  private readonly settingsCalls = new Map<number, (answer: SettingsCallAnswer) => void>()
+  private nextSettingsCall = 1
+  /** The settings tools of Kettu's MCP service. */
+  private readonly settingsTools: SettingsTools
   /** What was put off or refused, to publish later. */
   private readonly publishDrafts: PublishDrafts
   /** The Marketplace tools of Kettu's MCP service. */
@@ -558,6 +574,20 @@ export class AgentHost {
       agentOf: (sessionId) => this.sessions.sessionAgent(sessionId),
       sessionTitle: (sessionId) => this.sessions.title(sessionId),
       home: options.homeDir ?? os.homedir(),
+    })
+    this.settingsTools = new SettingsTools({
+      platform,
+      read: () => this.settingsCall({ kind: 'read' }),
+      apply: (patch) => this.settingsCall({ kind: 'change', patch }),
+      local: () => this.settingsLocal(),
+      fullAccess: (sessionId) => this.sessions.settingsFullAccess(sessionId),
+      ask: (sessionId, ask) => this.sessions.settingsAsked(sessionId, ask, SETTINGS_WAIT_MS),
+      recorded: (sessionId, items) => this.sessions.settingsRecorded(sessionId, items),
+      settle: (sessionId, entryId, outcome) =>
+        this.sessions.settingsSettled(sessionId, entryId, outcome),
+      open: (sessionId, target) => this.openSettings(sessionId, target),
+      words: tSettings,
+      english: tSettingsEnglish,
     })
     this.projects = new Projects({ file: projectsFile(options.userDataPath, log), platform })
     this.scratch = new ScratchFolders(path.join(options.userDataPath, 'scratch'), platform)
@@ -804,6 +834,7 @@ export class AgentHost {
       sessionFolder: (sessionId) => this.sessions.sessionFolder(sessionId),
       ...(this.computer ? { computer: this.computer } : {}),
       market: this.marketTools,
+      settings: this.settingsTools,
       proxy: this.mcpProxy,
       sessions: {
         info: (sessionId) => this.sessions.sessionInfo(sessionId),
@@ -992,6 +1023,7 @@ export class AgentHost {
           this.computer?.turnEnded(sessionId)
           this.browserTurnEnded(sessionId)
           this.marketTools.turnEnded(sessionId)
+          this.settingsTools.turnEnded(sessionId)
           if (this.deviceTurns.delete(sessionId)) {
             this.options.send({ type: 'host:device-turn-ended', sessionId })
           }
@@ -1590,6 +1622,119 @@ export class AgentHost {
     if (!resolve) return
     this.trashCalls.delete(callId)
     resolve(error)
+  }
+
+  /** Reads or changes the settings through main or the daemon, which keep the file. */
+  private settingsCall(call: SettingsCall): Promise<SettingsSnapshot> {
+    const callId = this.nextSettingsCall++
+    return new Promise<SettingsCallAnswer>((resolve) => {
+      this.settingsCalls.set(callId, resolve)
+      this.options.send({ type: 'host:settings-call', callId, call })
+    }).then((answer) => {
+      if ('error' in answer) throw new Error(answer.error)
+      return answer.result
+    })
+  }
+
+  /** `settings-result`: main's or the daemon's answer to a settings call. */
+  settingsResult(callId: number, answer: SettingsCallAnswer): void {
+    const resolve = this.settingsCalls.get(callId)
+    if (!resolve) return
+    this.settingsCalls.delete(callId)
+    resolve(answer)
+  }
+
+  /** What the settings tools read of the host itself: its agents and harnesses, and their facts. */
+  private async settingsLocal(): Promise<LocalFacts> {
+    const statuses = this.agents
+      .statuses()
+      .filter((status) => status.registered !== false && status.uninstalled !== true)
+    const facts: SettingFacts = {}
+    const modes: Partial<Record<AgentId, { value: string; name: string }[]>> = {}
+    for (const status of statuses) {
+      const account = status.account
+      facts[`agents.account:${status.id}`] =
+        account && account.kind !== 'none'
+          ? [account.label, account.email].filter(Boolean).join(' · ') || null
+          : null
+      // Only whether a key is set; its value stays where Kettu keeps it.
+      facts[`agents.api-key:${status.id}`] = status.apiKey ? status.apiKey.set : null
+      if (takesStartMode(status.id)) {
+        const option = this.agentOptions
+          .get(status.id)
+          ?.config.find((o) => o.category === 'mode' && o.type === 'select' && !!o.choices?.length)
+        if (option?.choices) {
+          modes[status.id] = option.choices.map((choice) => ({
+            value: choice.value,
+            name: choice.name,
+          }))
+        }
+      }
+    }
+    const harnesses = new Map(statuses.map((s) => [s.harnessId, s.harnessName]))
+    facts['agents.agents'] = statuses.length
+    facts['harnesses.installed'] = harnesses.size
+    facts['archived.sessions'] = this.sessions
+      .summaries()
+      .filter((summary) => summary.archivedAt !== null).length
+    facts['memory.enabled'] = this.memory.enabled
+    facts['agents.workflow-suggest'] = this.workflowLibrary.suggest
+    try {
+      facts['artifacts.page-permissions'] = (await this.consents.list()).length
+    } catch {
+      // Unread lists go without a count.
+    }
+    try {
+      await this.deviceAccess.ready
+      facts['devices.allowed-devices'] = this.deviceAccess.list().length
+    } catch {
+      // As above.
+    }
+    return {
+      agents: statuses.map((status) => ({
+        id: status.id,
+        name: status.name,
+        harnessId: status.harnessId,
+      })),
+      harnesses: [...harnesses].map(([id, name]) => ({ id, name })),
+      modes,
+      facts,
+    }
+  }
+
+  /**
+   * open_settings: Settings opens at the row in the desktop windows that show the session, a
+   * desktop app connected as a device included; a row of the desktop app's own only in this
+   * computer's windows. False when no such window shows it.
+   */
+  private openSettings(sessionId: string, target: SettingsTarget): boolean {
+    const ports = this.sessions.showing(sessionId).filter((portId) => {
+      const device = this.hub.deviceOf(portId)
+      return device === null || (!target.desktop && device.browser === true)
+    })
+    if (ports.length === 0) return false
+    this.hub.send(ports, {
+      type: 'settings.open',
+      section: target.section,
+      item: target.item,
+      row: target.row,
+    })
+    return true
+  }
+
+  /** Undo on a settings line: the rows go back, unless one changed again since. */
+  private async undoSettings(sessionId: string, entryId: string): Promise<void> {
+    const items = this.sessions.settingsChange(sessionId, entryId)
+    try {
+      await this.settingsTools.undo(items)
+    } catch (error) {
+      if (error instanceof StaleUndo) {
+        this.sessions.settingsSettled(sessionId, entryId, { kind: 'changed', stale: true })
+        throw new HostError('conflict', error.message)
+      }
+      throw new HostError('unavailable', (error as Error).message)
+    }
+    this.sessions.settingsSettled(sessionId, entryId, { kind: 'changed', undone: true })
   }
 
   /** `market-result`: main's or the daemon's answer to a Marketplace call. */
@@ -2618,6 +2763,9 @@ export class AgentHost {
       'market.skillRepository': ({ id, refresh }) =>
         this.marketSkills.repository(id, refresh === true),
       'market.addSkill': ({ source }) => this.marketSkills.add(source),
+      'settings.answerChange': ({ sessionId, entryId, decision }, { device }) =>
+        this.sessions.answerSettings(sessionId, entryId, decision, fromDevice(device)),
+      'settings.undoChange': ({ sessionId, entryId }) => this.undoSettings(sessionId, entryId),
       'market.answerPublish': ({ sessionId, entryId, ...answer }, { device }) =>
         this.sessions.answerMarket(
           sessionId,

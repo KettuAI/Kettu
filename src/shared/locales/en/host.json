@@ -158,7 +158,9 @@
     "withChanges_one": "{{text}} {{count}} file changed.",
     "withChanges_other": "{{text}} {{count}} files changed.",
     "marketPublish": "Wants to publish {{name}} to the Kettu Marketplace",
-    "marketUnlist": "Wants to unlist {{name}} from the Kettu Marketplace"
+    "marketUnlist": "Wants to unlist {{name}} from the Kettu Marketplace",
+    "settingsChange_one": "Wants to change {{count}} setting",
+    "settingsChange_other": "Wants to change {{count}} settings"
   },
   "routines": {
     "busy": "This routine already has a run working",

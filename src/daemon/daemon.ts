@@ -36,6 +36,7 @@ import { RelayFeatures, RelayToken, readRelayFeatures } from '../main/relay-toke
 import { nodeSystemReleaseForRun } from '../main/system-name'
 import type { RemoteIdentity } from '../main/remote-identity'
 import { SettingsStore } from '../main/settings'
+import { answerSettingsCall } from '../main/settings-call'
 import { SettingsError } from '../main/settings-schema'
 import { startDaemonAdmin } from './admin'
 import {
@@ -439,6 +440,15 @@ export async function startDaemon(options: DaemonOptions): Promise<RunningDaemon
     pushUrl,
     signedIn,
     marketAccount,
+    settingsCall: (call) =>
+      answerSettingsCall(call, {
+        settings,
+        desktop: false,
+        facts: () => ({
+          'remote.devices': hosts?.remoteAccess().devices.length ?? null,
+          'advanced.data-folder': options.dataPath,
+        }),
+      }),
     marketCall: (call) => {
       const signed = account
       if (!signed || !accountBase) {

@@ -1197,6 +1197,130 @@
 .ks-permission__command pre > span {
   color: var(--thread-faint);
 }
+/* A change of Kettu's settings on the permission card: a gear in the agent's place, who asks in
+   the interface face, the rows on a sunk block, and View in Settings at the answers' left. */
+.ks-settings-card .ui-prc__avatar {
+  color: var(--ui-prc-icon);
+}
+.ks-settings-card .ui-prc__sub {
+  font-family: var(--font-sans);
+  color: var(--ui-prc-muted);
+}
+.ks-settings-card .ui-prc__buttons {
+  flex: 1;
+}
+.ks-settings-card .ks-settings-card__view {
+  margin-right: auto;
+  color: var(--ui-prc-text);
+}
+.ks-settings-rows {
+  margin: 0;
+  padding: 4px 0;
+  list-style: none;
+  border-radius: 8px;
+  background: var(--bg-subtle);
+}
+.ks-settings-rows__row {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  padding: 5px 12px;
+  font-size: 13px;
+  line-height: 20px;
+  color: var(--thread-ink);
+}
+.ks-settings-rows__name {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.ks-settings-rows__place,
+.ks-settings-rows__arrow {
+  color: var(--thread-faint);
+}
+.ks-settings-rows__value {
+  display: inline-flex;
+  flex: none;
+  gap: 4px;
+  max-width: 55%;
+  overflow-wrap: anywhere;
+}
+.ks-settings-rows__value del {
+  color: var(--thread-faint);
+  text-decoration-color: currentColor;
+}
+.ks-settings-rows__value ins {
+  text-decoration: none;
+}
+.ks-settings-rows__warn {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  margin: 2px 8px 6px;
+  padding: 7px 10px;
+  border-radius: 8px;
+  background: var(--warning-tint);
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--warning);
+}
+.ks-settings-rows__warn > svg {
+  flex: none;
+  margin-top: 2px;
+}
+
+/* What came of a settings change, as the turn's end reads: one muted line, Undo at its end. */
+.ks-settings-line {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 24px;
+  min-width: 0;
+  font-size: 12px;
+  color: var(--thread-quiet);
+}
+.ks-settings-line b {
+  font-weight: 500;
+  color: var(--thread-prose);
+}
+.ks-settings-line__done {
+  color: var(--success);
+}
+.ks-settings-line__note {
+  flex: none;
+  color: var(--thread-faint);
+}
+.ks-settings-line__toggle {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 5px;
+  color: var(--thread-faint);
+}
+.ks-settings-line__toggle:hover {
+  background: var(--thread-hover);
+  color: var(--thread-prose);
+}
+.ks-settings-line__toggle[aria-expanded='true'] svg {
+  transform: rotate(180deg);
+}
+.ks-settings-line__undo {
+  flex: none;
+}
+.ks-settings-line__rows {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 2px 0 0 20px;
+  padding: 0;
+  list-style: none;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--thread-quiet);
+}
+
 .ks-permission__cwd {
   display: block;
   margin-top: 4px;

@@ -101,6 +101,9 @@ import {
   type DeviceAccessEntry,
   type MarketPublishEntry,
   type MarketPublishOutcome,
+  type SettingChangeItem,
+  type SettingsChangeEntry,
+  type SettingsChangeOutcome,
   type ComputerAppEntry,
   type ComputerSetupEntry,
   type ComputerUseView,
@@ -129,6 +132,7 @@ import {
 } from './artifacts/entries'
 import { allowOnceOption, changedFiles, replySummary, requestText } from './attention'
 import type { MarketAnswer, MarketAsk } from './marketplace/publish-tools'
+import type { SettingsAnswer, SettingsAsk } from './settings/tools'
 import { MODE_OPTION as AGY_MODE_OPTION } from './acp/agy-plan'
 import { parseContextReport } from './acp/claude-reports'
 import {
@@ -1095,6 +1099,8 @@ export class SessionManager {
   private readonly marketWaits = new Map<string, (answer: MarketAnswer) => void>()
   /** Cards whose Publish is setting the account's publisher name, which a second answer waits out. */
   private readonly marketAnswering = new Set<string>()
+  /** Settings cards that wait for the user, by entry id. */
+  private readonly settingsWaits = new Map<string, (answer: SettingsAnswer) => void>()
   /** Each first use of an app that waits, by the computer use service's request id. */
   private readonly appRequests = new Map<number, AppRequest>()
   /** Each session's card holding its folder's own MCP servers while it waits, with the folder. */
@@ -2107,6 +2113,145 @@ export class SessionManager {
           ...(device ? { device } : {}),
         }
         this.emit(live, [{ op: 'entry.update', id: entryId, changes }])
+      }
+      this.stopWaiting(live)
+      this.touch(live.id)
+      this.updateBadge()
+    }
+    resolve?.(answer)
+  }
+
+  /**
+   * An agent wants to change Kettu's settings: a card in the thread that waits for the user as a
+   * permission request does, and settles with their answer, `expired` after `waitMs`, or `ended`
+   * with the turn.
+   */
+  settingsAsked(
+    sessionId: string,
+    ask: SettingsAsk,
+    waitMs: number,
+  ): { entryId: string; answer: Promise<SettingsAnswer> } | null {
+    const live = this.live.get(sessionId)
+    if (!live) return null
+    const entry: SettingsChangeEntry = {
+      kind: 'settings_change',
+      id: this.nextId(live),
+      items: ask.items,
+      asked: true,
+      expiresAt: Date.now() + waitMs,
+      outcome: null,
+      after: agentEntryBefore(live.thread),
+    }
+    live.origins.set(`settings:${entry.id}`, entry.id)
+    this.emit(live, [{ op: 'entry.add', entry }])
+    const status = live.thread.session.status
+    if (status === 'running' || status === 'ready')
+      this.update(live, { status: 'awaiting_permission' })
+    this.touch(live.id)
+    this.updateBadge()
+    this.deps.events.attention(
+      live.id,
+      'permission',
+      this.titleOf(live),
+      t('attention.settingsChange', { count: ask.items.length }),
+      { id: entry.id },
+    )
+    const answer = new Promise<SettingsAnswer>((resolve) => {
+      const timer = setTimeout(
+        () => this.settleSettings(sessionId, entry.id, { decision: 'expired' }),
+        waitMs,
+      )
+      this.settingsWaits.set(entry.id, (given) => {
+        clearTimeout(timer)
+        resolve(given)
+      })
+    })
+    return { entryId: entry.id, answer }
+  }
+
+  /** A change Full access made without asking: only the line it leaves, with its undo. */
+  settingsRecorded(sessionId: string, items: SettingChangeItem[]): string | null {
+    const live = this.live.get(sessionId)
+    if (!live) return null
+    const entry: SettingsChangeEntry = {
+      kind: 'settings_change',
+      id: this.nextId(live),
+      items,
+      asked: false,
+      expiresAt: null,
+      outcome: { kind: 'changed' },
+      after: agentEntryBefore(live.thread),
+    }
+    this.emit(live, [{ op: 'entry.add', entry }])
+    return entry.id
+  }
+
+  /** A window's or a device's answer to a settings card; the first one counts. */
+  answerSettings(
+    sessionId: string,
+    entryId: string,
+    decision: 'change' | 'keep',
+    device?: FromDevice,
+  ): void {
+    this.recordOf(sessionId)
+    const live = this.live.get(sessionId)
+    const entry = live?.thread.byId[entryId]
+    if (!live || entry?.kind !== 'settings_change') throw notFound(`No settings card ${entryId}`)
+    if (entry.outcome !== null || !this.settingsWaits.has(entryId)) {
+      throw new HostError('not_found', `The settings card ${entryId} was already answered`, {
+        reason: ALREADY_ANSWERED,
+        device: entry.device ?? null,
+      })
+    }
+    this.settleSettings(sessionId, entryId, { decision }, device)
+  }
+
+  /** What became of a change the user confirmed, or of one undone later. */
+  settingsSettled(sessionId: string, entryId: string, outcome: SettingsChangeOutcome): void {
+    const live = this.live.get(sessionId)
+    if (live?.thread.byId[entryId]?.kind !== 'settings_change') return
+    this.emit(live, [{ op: 'entry.update', id: entryId, changes: { outcome } }])
+  }
+
+  /** A settings line's change, for its undo: the rows it set, once it was made and not undone. */
+  settingsChange(sessionId: string, entryId: string): SettingChangeItem[] {
+    this.recordOf(sessionId)
+    const entry = this.live.get(sessionId)?.thread.byId[entryId]
+    if (entry?.kind !== 'settings_change') throw notFound(`No settings change ${entryId}`)
+    if (entry.outcome?.kind !== 'changed' || entry.outcome.undone || entry.outcome.stale) {
+      throw new HostError('conflict', 'This change cannot be undone')
+    }
+    return entry.items
+  }
+
+  private settleSettings(
+    sessionId: string,
+    entryId: string,
+    answer: SettingsAnswer,
+    device?: FromDevice,
+  ): void {
+    const resolve = this.settingsWaits.get(entryId)
+    this.settingsWaits.delete(entryId)
+    const live = this.live.get(sessionId)
+    if (live) {
+      live.origins.delete(`settings:${entryId}`)
+      const entry = live.thread.byId[entryId]
+      if (entry?.kind === 'settings_change' && entry.outcome === null) {
+        // Change is settled by what applying it gives; the card holds until then.
+        if (answer.decision !== 'change') {
+          const outcome: SettingsChangeOutcome = {
+            kind: answer.decision === 'keep' ? 'declined' : answer.decision,
+          }
+          this.emit(live, [
+            {
+              op: 'entry.update',
+              id: entryId,
+              changes: { outcome, ...(device ? { device } : {}) },
+            },
+          ])
+        } else if (device) {
+          this.emit(live, [{ op: 'entry.update', id: entryId, changes: { device } }])
+        }
       }
       this.stopWaiting(live)
       this.touch(live.id)
@@ -9027,6 +9172,11 @@ export class SessionManager {
         this.settleMarket(live.id, entryId, { decision: 'ended' })
         continue
       }
+      // A settings card ends with its turn, changing nothing.
+      if (requestId.startsWith('settings:')) {
+        this.settleSettings(live.id, entryId, { decision: 'ended' })
+        continue
+      }
       live.origins.delete(requestId)
       this.originRequests.delete(requestId)
       const entry = live.thread.byId[entryId]
@@ -9438,6 +9588,17 @@ export class SessionManager {
       harness === 'codex' &&
       config.some((option) => option.id === CODEX_COLLABORATION_ID && option.value === 'plan')
     return starterRank(harness, typeof mode === 'string' ? mode : undefined, planning)
+  }
+
+  /**
+   * Whether the session's agent changes Kettu's settings without asking: a session the user
+   * started, in Full access at this moment. One another session started, a workflow step's and a
+   * routine's always ask, as do agents whose modes Kettu cannot rank.
+   */
+  settingsFullAccess(sessionId: string): boolean {
+    const record = this.records.get(sessionId) ?? this.live.get(sessionId)?.record
+    if (!record || record.origin !== 'user' || record.startedBy) return false
+    return this.starterRank(sessionId) === 4
   }
 
   /** A session's permission mode, from memory or its stored thread; null when it has none. */

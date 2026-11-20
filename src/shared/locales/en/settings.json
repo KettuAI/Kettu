@@ -2123,5 +2123,39 @@
       "notFound": "Not on this host now",
       "remove": "Remove"
     }
+  },
+  "agentSettings": {
+    "on": "On",
+    "off": "Off",
+    "system": "System",
+    "set": "Set",
+    "notSet": "Not set",
+    "agent": {
+      "account": "Signed in",
+      "followAgent": "Follow the agent",
+      "kettuMcp": "Kettu’s MCP server"
+    },
+    "harness": {
+      "program": "Program",
+      "install": "Install or uninstall"
+    },
+    "lists": {
+      "broughtSites": "Sites signed in from another browser",
+      "memory": "Memory entries"
+    },
+    "warning": {
+      "cloud": "Kettu’s account, relay, push, sharing to Kettu and problem reports go on or off with it.",
+      "computer": "Agents will be able to read and operate the apps on this computer.",
+      "agentOff": "A turned-off agent stops its running turns and starts no more sessions.",
+      "startMode": "New sessions of this agent will start in this mode without asking.",
+      "kettuMcp": "Without it, this agent loses Kettu’s tools and the guide that comes with them.",
+      "remote": "Paired devices will be able to connect to this computer and use its sessions.",
+      "direct": "Devices on the same network, a VPN or a forwarded port will reach this computer directly.",
+      "terminal": "Paired devices will be able to run any command on this computer.",
+      "discoverable": "Devices signed in to your Kettu account will be able to find this computer and ask to be added.",
+      "relay": "Devices will reach this computer through the Kettu relay from any network.",
+      "proxy": "Agents, npx and updates will go through this proxy.",
+      "source": "Changes where Kettu downloads its updates from."
+    }
   }
 }

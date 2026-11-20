@@ -19,6 +19,7 @@ export const GUIDE_TOPICS = [
   'terminals',
   'computer',
   'marketplace',
+  'settings',
 ] as const
 export type GuideTopic = (typeof GUIDE_TOPICS)[number]
 
@@ -412,6 +413,30 @@ A folder that holds a skill (\`SKILL.md\`), a workflow (\`workflow.yaml\`, with 
 
 \`marketplace_mine\` lists their listings, with who can see each, its versions and installs, and the drafts waiting to be published. \`marketplace_unlist\` takes a listing out of the Marketplace: it gets no new installs, while people who have it keep it. It waits for the user's card as a publish does; call it again with the same listing while they have not answered.`
 
+const settings = () => `# Kettu's settings
+
+The settings tools find the rows of Kettu's Settings page, take the user to one, and change them for the user. They are the settings of the computer this session runs on: a session on another computer sees that computer's, without the rows of the window the user looks at. Use them only when the user asks where a setting is or asks you to change one. Never change a setting on your own initiative, in Full access too, and change only the rows the user asked for.
+
+## Finding a row
+
+\`find_settings\` with a few words, in the user's language or in English, matches rows as the page's own search does. It lists each row's id, where it is (section › group › name), its name in the user's language and in English, its value, the values it takes and whether you may change it. Without words it lists every section and its rows. Tell the user where a row is in the page's own words, such as Settings › Appearance › Color mode.
+
+## Taking the user there
+
+\`open_settings\` with a row's id opens Settings at that row in the Kettu window that shows this session, and flashes it. With no desktop window showing the session, as when the user watches from a phone, it opens nothing and says so: then tell the user where the row is.
+
+## Changing rows
+
+1. Say what you will change, from what to what, before you change it.
+2. \`change_settings\` with the rows and their new values as find_settings lists them: true or false for a switch, a choice's value, a whole number or a text. One call changes all of its rows or none, in one card.
+3. In Full access the rows change at once, and the thread shows a line the user can undo. In any other mode the user answers a card in this session, which waits up to 10 minutes. The rows that widen what agents, devices or the network may do always ask, in Full access too: remote access, the relay, direct connections and their port, being found by the account's devices, devices' use of the terminal, computer use, an agent's start mode, turning an agent or Kettu's MCP server off for it, Kettu's cloud services, the proxy and the download source.
+4. The call returns within a minute. When it says the user has not answered yet, call it again with the same changes: it shows no second card and returns what became of this one.
+5. When the user chooses Don't change or does not answer, nothing changed: do not change those rows again unless they ask.
+
+## What you cannot change
+
+Secrets (API keys, tokens, the Cloudflare token) read only as set or not set. Program paths and configuration folders are picked only in a system dialog. Actions are the user's: signing in or out, adding or removing an agent, installing or uninstalling a harness, deleting archived sessions, clearing browsing data, unpublishing, adding a host, pairing a device, restarting in debug mode. For those, open the row with open_settings and let the user do it. Lists give only their count; sessions, artifacts and memory have their own tools.`
+
 /** A skill Kettu ships: its name, the topic of the guide it is, and its texts. */
 export interface SkillSpec {
   name: string
@@ -497,5 +522,13 @@ export const SKILL_SPECS: readonly SkillSpec[] = [
       'Publish a skill, MCP server, plugin or workflow to the Kettu Marketplace, or manage what ' +
       'the user published.',
     body: marketplace,
+  },
+  {
+    name: 'kettu-settings',
+    topic: 'settings',
+    description: () =>
+      "Find a Kettu setting the user asks about and take them to it, or change Kettu's settings " +
+      'when the user asks you to.',
+    body: settings,
   },
 ]

@@ -156,7 +156,8 @@
     "done": "{{title}} · 已完成",
     "withChanges_other": "{{text}}改动了 {{count}} 个文件。",
     "marketPublish": "想把 {{name}} 发布到 Kettu 市场",
-    "marketUnlist": "想把 {{name}} 从 Kettu 市场下架"
+    "marketUnlist": "想把 {{name}} 从 Kettu 市场下架",
+    "settingsChange_other": "想修改 {{count}} 项设置"
   },
   "routines": {
     "busy": "此定时任务已经有一个运行正在工作",

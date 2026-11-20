@@ -1300,5 +1300,29 @@
     "removeQuote": "去掉引用",
     "seconds": "{{n}} 秒",
     "by": "由 {{agent}} 回答"
+  },
+  "settingsChange": {
+    "title_other": "修改 {{count}} 项设置",
+    "whoMac": "{{agent}} 想修改这台 Mac 上 Kettu 的设置",
+    "whoComputer": "{{agent}} 想修改这台电脑上 Kettu 的设置",
+    "whoOther": "{{agent}} 想修改 {{computer}} 上 Kettu 的设置",
+    "rows": "要修改的项",
+    "alwaysAsks": "这一项放宽权限，完全访问下也要你确认。",
+    "view": "在设置中查看",
+    "keep": "不改",
+    "change": "修改",
+    "changing": "正在修改…",
+    "changed": "已修改 <b>{{what}}</b>：{{from}} → {{to}}",
+    "changedMany_other": "已修改 <b>{{count}} 项设置</b>",
+    "notChanged": "没有修改 <b>{{what}}</b>",
+    "notChangedMany_other": "没有修改 <b>{{count}} 项设置</b>",
+    "undone": "已撤销 <b>{{what}}</b>：{{to}} → {{from}}",
+    "undoneMany_other": "已撤销 <b>{{count}} 项设置</b>",
+    "noAnswer": "10 分钟没有回答",
+    "answeredOn": "在 {{device}} 上回答",
+    "undo": "撤销",
+    "undoLabel": "撤销对 {{what}} 的修改",
+    "showRows": "查看修改了什么",
+    "row": "{{what}}：{{from}} → {{to}}"
   }
 }

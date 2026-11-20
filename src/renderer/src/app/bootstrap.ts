@@ -66,7 +66,7 @@ import { useWorkflowsStore } from '@renderer/stores/workflows'
 import { tasksHostClosed, tasksHostOpened, useTasksStore } from '@renderer/stores/tasks'
 import { useSessionsStore } from '@renderer/stores/sessions'
 import { initSettings, useSettingsStore } from '@renderer/stores/settings'
-import { hostScopeEvent, hostScopeOpened } from '@renderer/stores/host-scope'
+import { hostScopeEvent, hostScopeOpened, useSettingsHostStore } from '@renderer/stores/host-scope'
 import { initHosts, loadHosts, useHostsStore } from '@renderer/stores/hosts'
 import { initRemote } from '@renderer/stores/remote'
 import { initSharing } from '@renderer/stores/sharing'
@@ -91,6 +91,7 @@ import {
   resetLayout,
   restoreLayout,
   savedLayout,
+  openSettingsRow,
   shownLayoutSessions,
   useViewStore,
 } from '@renderer/stores/view'
@@ -205,6 +206,11 @@ function onHostEvent(event: HostEvent, hostId: string | null = null): void {
       break
     case 'market.publishedChanged':
       marketPublishedChanged(null)
+      break
+    case 'settings.open':
+      // A row of the desktop app's own comes only from this computer's host.
+      useSettingsHostStore.setState({ hostId })
+      openSettingsRow(event.section, event.item, event.row)
       break
   }
 }

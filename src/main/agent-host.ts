@@ -38,6 +38,7 @@ import type {
   ComputerControlAction,
   HostToMain,
   MainToHost,
+  SettingsCallAnswer,
 } from '@shared/host-control'
 import {
   isComputerApp,
@@ -97,6 +98,8 @@ export interface AgentHostDeps {
   marketAccount(): MarketAccount | null
   /** Makes a Marketplace API call of the host's with the account's access token. */
   market?: (call: MarketCall) => Promise<MarketCallAnswer>
+  /** An agent's settings tool reads or changes the settings. */
+  settingsCall?: (call: unknown) => SettingsCallAnswer
   /** The host's first start found the programs of these harnesses; main adds their agents. */
   onFirstStart?(harnesses: unknown): void
   onAttention(message: Extract<HostToMain, { type: 'host:attention' }>): void
@@ -761,6 +764,17 @@ export class AgentHost {
         void trashAll(paths).then((error) =>
           this.host.post({ type: 'trash-result', callId, error }),
         )
+        break
+      }
+      case 'host:settings-call': {
+        const { callId } = message
+        if (!Number.isSafeInteger(callId)) break
+        const run = this.deps.settingsCall
+        this.host.post({
+          type: 'settings-result',
+          callId,
+          answer: run ? run(message.call) : { error: 'This build keeps no settings for agents.' },
+        })
         break
       }
       case 'host:market-call': {

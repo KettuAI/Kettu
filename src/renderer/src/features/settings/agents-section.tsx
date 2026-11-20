@@ -144,6 +144,7 @@ import {
   RowShell,
   RowText,
 } from './rows'
+import { entryText } from './model'
 import { useApply } from './use-apply'
 
 /** How long the dialog waits for the host to list an agent it just added, before giving up. */
@@ -1146,11 +1147,11 @@ function EnableGroup({ status }: { status: AgentStatus }) {
   return (
     <section className="k-group">
       <RowGroup>
-        <RowShell>
+        <RowShell id="enabled">
           <RowLine
             text={
               <RowText
-                name={t('agents.enable.name')}
+                name={entryText('agents.enabled').name}
                 description={t(off ? 'agents.enable.off' : 'agents.enable.on')}
               />
             }
@@ -1205,6 +1206,7 @@ function ApiKeyRow({ status }: { status: AgentStatus }) {
   const set = !!status.apiKey?.set
   return (
     <RowFrame
+      id="api-key"
       text={
         <RowText
           name={t('agents.key.row')}
@@ -1344,6 +1346,7 @@ function ConfigurationGroup({ status }: { status: AgentStatus }) {
         {/* The Marketplace shows this computer's servers only. */}
         {hostId === null && (
           <RowFrame
+            id="mcp-servers"
             text={
               <RowText
                 name={t('agents.mcpServers.name')}
@@ -1404,10 +1407,10 @@ function StartModeRow({ status }: { status: AgentStatus }) {
       : view.state === 'failed'
         ? t('agents.startMode.readFailed')
         : null)
-  const name = t('agents.startMode.name')
+  const { name, description } = entryText('agents.start-mode')
   return (
-    <RowShell>
-      <RowLine text={<RowText name={name} description={t('agents.startMode.description')} />}>
+    <RowShell id="start-mode">
+      <RowLine text={<RowText name={name} description={description} />}>
         {view.state === 'loading' ? (
           <Skel width={210} className="k-skel--field" />
         ) : (

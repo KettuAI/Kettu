@@ -943,7 +943,8 @@
       "terminal": "Terminal",
       "memory": "Memory",
       "reports": "Problem reports",
-      "workflows": "Workflows"
+      "workflows": "Workflows",
+      "settings": "Settings"
     },
     "new": "New",
     "whileSignedIn": "While you’re signed in to Kettu",

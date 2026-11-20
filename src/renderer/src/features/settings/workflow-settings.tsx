@@ -4,7 +4,7 @@
 import { useTranslation } from 'react-i18next'
 import { useHostScope } from '@renderer/stores/host-scope'
 import { useHostWorkflows } from '@renderer/stores/workflows'
-import { english, type GroupDef, type RowDef } from './model'
+import type { GroupDef, RowDef } from './model'
 import { EmptyRow, GroupNote } from './rows'
 import { changedAgents } from './workflow-data'
 import { AgentsLoading, AutoPickRow, ReadFailed, ResetAuto, SuggestSwitch } from './workflow-rows'
@@ -12,7 +12,6 @@ import { AgentsLoading, AutoPickRow, ReadFailed, ResetAuto, SuggestSwitch } from
 /** The workflow group and the agents Auto can pick, for the end of Settings › Agents. */
 export function useWorkflowRows(): RowDef[] {
   const { t } = useTranslation('settings')
-  const en = english()
   const { hostId, useAgentsStore } = useHostScope()
   const { settings, loaded, error } = useHostWorkflows(hostId)
   const byId = useAgentsStore((s) => s.byId)
@@ -28,14 +27,10 @@ export function useWorkflowRows(): RowDef[] {
       </>
     ),
   }
-  const keywords = t('agents.workflow.keywords')
   const rows: RowDef[] = [
     {
       id: 'workflow-suggest',
-      name: t('agents.workflow.suggest.name'),
-      english: en('agents.workflow.suggest.name'),
-      description: t('agents.workflow.suggest.description'),
-      keywords,
+      setting: 'agents.workflow-suggest',
       group: workflowGroup,
       render: () => <SuggestSwitch />,
     },
@@ -43,9 +38,7 @@ export function useWorkflowRows(): RowDef[] {
   if (!settings) {
     rows.push({
       id: 'workflow-auto-state',
-      name: t('agents.workflow.auto.group'),
-      english: en('agents.workflow.auto.group'),
-      keywords,
+      setting: 'agents.workflow-auto',
       group: autoGroup,
       layout: 'custom',
       render: () => (loaded && error ? <ReadFailed error={error} /> : <AgentsLoading />),
@@ -55,9 +48,7 @@ export function useWorkflowRows(): RowDef[] {
   if (settings.agents.length === 0) {
     rows.push({
       id: 'workflow-auto-none',
-      name: t('agents.workflow.auto.group'),
-      english: en('agents.workflow.auto.group'),
-      keywords,
+      setting: 'agents.workflow-auto',
       group: autoGroup,
       layout: 'custom',
       render: () => (
@@ -74,10 +65,12 @@ export function useWorkflowRows(): RowDef[] {
     const name = status?.name ?? agent.agentId
     rows.push({
       id: `workflow-auto:${agent.agentId}`,
-      name: t('agents.workflow.auto.rowName', { agent: name }),
-      english: en('agents.workflow.auto.rowName', { agent: name }),
-      description: status?.account?.label ?? undefined,
-      keywords: `${keywords} ${name}`,
+      setting: 'agents.workflow-auto',
+      item: {
+        name: t('agents.workflow.auto.rowName', { agent: name }),
+        ...(status?.account?.label ? { description: status.account.label } : {}),
+        keywords: name,
+      },
       group: autoGroup,
       layout: 'custom',
       render: () => (

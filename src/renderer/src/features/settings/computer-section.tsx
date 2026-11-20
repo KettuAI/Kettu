@@ -8,7 +8,7 @@ import { isMac, isWindows, platform } from '@renderer/lib/platform'
 import { useSettingsStore } from '@renderer/stores/settings'
 import { Pill } from './controls'
 import { AllowedAppRow, ComputerSwitch, PermissionRow, StopShortcut } from './computer-rows'
-import { english, type GroupDef, type RowDef, type SectionDef } from './model'
+import type { GroupDef, RowDef, SectionDef } from './model'
 import { GroupNote } from './rows'
 
 const isLinux = platform === 'linux'
@@ -51,7 +51,6 @@ export function linuxLine(status: ComputerUseStatus, t: TFunction<'settings'>): 
 /** Settings › Computer use: the switch, what the computer allows, and the always-allowed apps. */
 export function useComputerUseSection(): SectionDef {
   const { t } = useTranslation('settings')
-  const en = english()
   const { status, reload } = useComputerStatus()
   const allowedApps = useSettingsStore((s) => s.settings.computerUse.allowedApps)
   const [removeError, setRemoveError] = useState<string | null>(null)
@@ -81,28 +80,19 @@ export function useComputerUseSection(): SectionDef {
   const rows: RowDef[] = [
     {
       id: 'enabled',
-      name: t('computer.enabled.name'),
-      english: en('computer.enabled.name'),
-      description: t('computer.enabled.description'),
-      keywords: t('computer.enabled.keywords'),
+      setting: 'computer-use.enabled',
       group: main,
       render: () => <ComputerSwitch label={t('computer.enabled.name')} />,
     },
     {
       id: 'pause-on-use',
-      name: t('computer.pauseOnUse.name'),
-      english: en('computer.pauseOnUse.name'),
-      description: t('computer.pauseOnUse.description'),
-      keywords: t('computer.pauseOnUse.keywords'),
+      setting: 'computer-use.pause-on-use',
       group: main,
       render: () => <ComputerSwitch label={t('computer.pauseOnUse.name')} setting="pauseOnUse" />,
     },
     {
       id: 'stop-shortcut',
-      name: t('computer.stopShortcut.name'),
-      english: en('computer.stopShortcut.name'),
-      description: t('computer.stopShortcut.description'),
-      keywords: t('computer.stopShortcut.keywords'),
+      setting: 'computer-use.stop-shortcut',
       group: main,
       render: () => <StopShortcut />,
     },
@@ -110,10 +100,7 @@ export function useComputerUseSection(): SectionDef {
       ? ([
           {
             id: 'accessibility',
-            name: t('computer.accessibility.name'),
-            english: en('computer.accessibility.name'),
-            description: t('computer.accessibility.description'),
-            keywords: t('computer.enabled.keywords'),
+            setting: 'computer-use.accessibility',
             group: permissions,
             render: () => (
               <PermissionRow
@@ -125,10 +112,7 @@ export function useComputerUseSection(): SectionDef {
           },
           {
             id: 'screen-recording',
-            name: t('computer.screenRecording.name'),
-            english: en('computer.screenRecording.name'),
-            description: t('computer.screenRecording.description'),
-            keywords: t('computer.enabled.keywords'),
+            setting: 'computer-use.screen-recording',
             group: permissions,
             render: () => (
               <PermissionRow
@@ -144,9 +128,7 @@ export function useComputerUseSection(): SectionDef {
       ? [
           {
             id: 'windows',
-            name: t('computer.windows.name'),
-            english: en('computer.windows.name'),
-            description: t('computer.windows.description'),
+            setting: 'computer-use.windows',
             group: permissions,
             render: () => <Pill tone="success">{t('computer.permission.none')}</Pill>,
           } satisfies RowDef,
@@ -156,8 +138,7 @@ export function useComputerUseSection(): SectionDef {
       ? [
           {
             id: 'desktop',
-            name: t('computer.desktop.name'),
-            english: en('computer.desktop.name'),
+            setting: 'computer-use.desktop',
             description: linuxLine(status, t),
             group: permissions,
             render: () => null,
@@ -168,17 +149,19 @@ export function useComputerUseSection(): SectionDef {
       ? [
           {
             id: 'no-allowed-apps',
-            name: t('computer.allowedApps.none'),
-            description: t('computer.allowedApps.description'),
-            keywords: t('computer.allowedApps.keywords'),
+            setting: 'computer-use.allowed-apps',
+            item: {
+              name: t('computer.allowedApps.none'),
+              description: t('computer.allowedApps.description'),
+            },
             group: allowed,
             render: () => null,
           } satisfies RowDef,
         ]
       : allowedApps.map((app): RowDef => ({
           id: `app-${app.id}`,
-          name: app.name,
-          keywords: t('computer.allowedApps.keywords'),
+          setting: 'computer-use.allowed-apps',
+          item: { name: app.name },
           group: allowed,
           layout: 'custom',
           render: () => <AllowedAppRow app={app} onRemove={() => remove(app.id)} />,

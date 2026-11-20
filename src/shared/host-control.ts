@@ -29,7 +29,13 @@ import type { DirectAddress } from './remote/protocol'
 import type { ReportBuildResult, ReportRequest } from './report'
 import type { TerminalCall, TerminalCallAnswer } from './terminal-agent'
 import type { RelayStatus } from './remote/relay-host'
-import type { DirectSettings, HostSettings, SettingsFile, TerminalSettings } from './settings'
+import type {
+  DirectSettings,
+  HostSettings,
+  SettingsFile,
+  SettingsPatch,
+  TerminalSettings,
+} from './settings'
 import type { AgentId, HarnessId } from './thread'
 
 export type { ReportBuildResult }
@@ -176,6 +182,8 @@ export type MainToHost =
   | { type: 'market-result'; callId: number; answer: MarketCallAnswer }
   // The answer to a host:trash-call: null once every path is in the trash, else why one is not.
   | { type: 'trash-result'; callId: number; error: string | null }
+  // The answer to a host:settings-call.
+  | { type: 'settings-result'; callId: number; answer: SettingsCallAnswer }
   // A browser call now waits for the user to answer a new origin, so its limit grows to that wait.
   | { type: 'host:browser-waiting'; callId: number; waiting: boolean }
   // A page waits for a new origin: the session's thread shows it, waiting for the user.
@@ -193,6 +201,25 @@ export type MainToHost =
   // The user handed back a terminal the session's agent started.
   | { type: 'host:terminal-handed-back'; sessionId: string; durationMs: number }
   | { type: 'host:shutdown' }
+
+/**
+ * What the settings' owner knows beyond the file, by the row's tool id: an account's email, a
+ * list's count, whether a secret is set (never the secret).
+ */
+export type SettingFacts = Record<string, string | number | boolean | null>
+
+/** The settings as their owner keeps them, for an agent's settings tools. */
+export interface SettingsSnapshot {
+  file: SettingsFile
+  /** The owner is the desktop app, so the rows of its window and its computer apply. */
+  desktop: boolean
+  facts: SettingFacts
+}
+
+export type SettingsCall = { kind: 'read' } | { kind: 'change'; patch: SettingsPatch }
+
+/** The snapshot after the call, or why the owner refused the change, which changed nothing. */
+export type SettingsCallAnswer = { result: SettingsSnapshot } | { error: string }
 
 /** A file of an artifact's version: its path in the artifact, and where its bytes lie on disk. */
 export interface ArtifactContentFile {
@@ -354,6 +381,9 @@ export type HostToMain =
   | { type: 'host:market-call'; callId: number; call: MarketCall }
   // Absolute paths for the system's trash, which only main reaches; answered by trash-result.
   | { type: 'host:trash-call'; callId: number; paths: string[] }
+  // An agent's settings tool reads the settings, or changes them through the same checks as the
+  // Settings page, from whoever keeps the file: main or the daemon. Answered by settings-result.
+  | { type: 'host:settings-call'; callId: number; call: SettingsCall }
   // The artifacts service's port, which the browser's pages must never reach; null when it is down.
   | { type: 'host:service-port'; port: number | null }
   // A session's card allowed an app always: main keeps it in the settings, which come back.

@@ -11,6 +11,7 @@ import {
   Flag01Icon,
   Flowchart01Icon,
   Message01Icon,
+  Settings02Icon,
   SmartPhone01Icon,
   Store01Icon,
 } from '@hugeicons/core-free-icons'
@@ -43,6 +44,7 @@ const GROUPS: { id: McpToolGroup; icon: IconSvgElement }[] = [
   { id: 'memory', icon: Brain01Icon },
   { id: 'reports', icon: Flag01Icon },
   { id: 'workflows', icon: Flowchart01Icon },
+  { id: 'settings', icon: Settings02Icon },
 ]
 
 /** Tool names a group's row shows before "+ N more". */

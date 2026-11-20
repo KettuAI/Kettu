@@ -9,7 +9,7 @@ import {
 } from '@hugeicons/core-free-icons'
 import { Icon } from '@renderer/components/affect/app-shell'
 import { cn } from '@renderer/lib/utils'
-import { FlashContext, type GroupDef, type RowDef, type SectionDef } from './model'
+import { FlashContext, rowText, type GroupDef, type RowDef, type SectionDef } from './model'
 
 /** A section's title and its one line under it, as the settings screens draw a page's head. */
 export function PageHeader({
@@ -69,7 +69,10 @@ export function SectionBody({ section }: { section: SectionDef }) {
                   <RowShell key={row.id} id={row.id}>
                     {row.render(
                       row.layout === 'bare' ? (
-                        <RowText name={row.name} description={row.rich ?? row.description} />
+                        <RowText
+                          name={rowText(row).name}
+                          description={row.rich ?? rowText(row).description}
+                        />
                       ) : null,
                     )}
                   </RowShell>
@@ -132,7 +135,8 @@ export function Group({
 }
 
 function Row({ row }: { row: RowDef }) {
-  const text = <RowText name={row.name} description={row.rich ?? row.description} />
+  const words = rowText(row)
+  const text = <RowText name={words.name} description={row.rich ?? words.description} />
   if (row.layout === 'block') {
     return (
       <RowShell id={row.id}>
@@ -221,9 +225,18 @@ export function EmptyCard(props: { title: ReactNode; hint?: ReactNode; action?: 
 }
 
 /** A row of its own outside the section data, such as a fact on an agent's page. */
-export function RowFrame({ text, children }: { text: ReactNode; children?: ReactNode }) {
+export function RowFrame({
+  id,
+  text,
+  children,
+}: {
+  /** The row's id, which a search result or an agent's open_settings flashes. */
+  id?: string
+  text: ReactNode
+  children?: ReactNode
+}) {
   return (
-    <RowShell>
+    <RowShell id={id}>
       <RowLine text={text}>{children}</RowLine>
     </RowShell>
   )

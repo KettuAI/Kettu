@@ -24,7 +24,7 @@ import {
   ProjectPicker,
   ShowMoreRow,
 } from './memory-rows'
-import { english, type GroupDef, type RowDef, type SectionDef } from './model'
+import type { GroupDef, RowDef, SectionDef } from './model'
 
 const GLOBAL: MemoryScope = { layer: 'global' }
 /** A layer longer than this lists its latest `SHORT` entries and a row that shows the rest. */
@@ -41,7 +41,6 @@ function group(id: string, label: string, extra?: Omit<GroupDef, 'id' | 'label'>
  */
 export function useMemorySection(): SectionDef {
   const { t } = useTranslation('settings')
-  const en = english()
   const onHost = useHostContext()
   const { hostId } = useHostScope()
   const overview = useMemoryOverview()
@@ -73,12 +72,7 @@ export function useMemorySection(): SectionDef {
     icon: MEMORY_GLYPH,
     itemPage: (item: string) => <MemoryEntryPage item={item} />,
   }
-  const switchRow = {
-    id: 'enabled',
-    name: t('memory.switch.name'),
-    english: en('memory.switch.name'),
-    keywords: `${t('memory.keywords')} ${t('memory.switch.keywords')}`,
-  }
+  const switchRow = { id: 'enabled', setting: 'memory.enabled' as const }
   const read = overview.value
   if (read === null) {
     return {
@@ -97,8 +91,8 @@ export function useMemorySection(): SectionDef {
     const item = memoryItemKey(scope, entry.id)
     return {
       id: `entry:${item}`,
-      name: entry.title,
-      description: entry.description,
+      setting: 'memory.entries',
+      item: { name: entry.title, description: entry.description },
       group: within,
       layout: 'custom',
       render: () => <EntryRow item={item} entry={entry} />,
@@ -130,7 +124,8 @@ export function useMemorySection(): SectionDef {
   })
   rows.push({
     id: 'search',
-    name: t('memory.search.placeholder'),
+    setting: 'memory.entries',
+    item: { name: t('memory.search.placeholder') },
     group: searchGroup,
     layout: 'custom',
     render: () => <MemorySearch value={query} onChange={setQuery} />,
@@ -147,7 +142,8 @@ export function useMemorySection(): SectionDef {
   if (read.global.length === 0 && needle === '')
     rows.push({
       id: 'global-add',
-      name: t('memory.add'),
+      setting: 'memory.entries',
+      item: { name: t('memory.add') },
       group: globalGroup,
       layout: 'custom',
       render: () => <EmptyLayer scope={GLOBAL} projectName="" />,
@@ -165,7 +161,8 @@ export function useMemorySection(): SectionDef {
   if (!project || !projectScope) {
     rows.push({
       id: 'no-projects',
-      name: t('memory.empty.noProjectsTitle'),
+      setting: 'memory.entries',
+      item: { name: t('memory.empty.noProjectsTitle') },
       group: projectGroup,
       layout: 'custom',
       render: () => <NoProjects />,
@@ -175,7 +172,8 @@ export function useMemorySection(): SectionDef {
   if (entries === null) {
     rows.push({
       id: 'project-state',
-      name: project.name,
+      setting: 'memory.entries',
+      item: { name: project.name },
       group: projectGroup,
       layout: 'custom',
       render: () =>
@@ -190,7 +188,8 @@ export function useMemorySection(): SectionDef {
   if (entries.length === 0) {
     rows.push({
       id: 'project-add',
-      name: t('memory.add'),
+      setting: 'memory.entries',
+      item: { name: t('memory.add') },
       group: projectGroup,
       layout: 'custom',
       render: () => <EmptyLayer scope={projectScope} projectName={project.name} />,
@@ -205,7 +204,8 @@ export function useMemorySection(): SectionDef {
     rows.push(...hidden(entries))
     rows.push({
       id: 'no-matches',
-      name: t('memory.search.none', { query: query.trim() }),
+      setting: 'memory.entries',
+      item: { name: t('memory.search.none', { query: query.trim() }) },
       group: projectGroup,
       layout: 'custom',
       render: () => <NoMatches query={query.trim()} />,
@@ -219,7 +219,8 @@ export function useMemorySection(): SectionDef {
   if (short)
     rows.push({
       id: 'project-more',
-      name: t('memory.showMore', { count: found.length - shown.length }),
+      setting: 'memory.entries',
+      item: { name: t('memory.showMore', { count: found.length - shown.length }) },
       group: projectGroup,
       layout: 'custom',
       render: () => (
