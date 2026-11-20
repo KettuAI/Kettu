@@ -520,6 +520,9 @@ describe('createValidators', () => {
     rejects(() => pin({ path: 'repo', pinned: true }))
     rejects(() => pin({ path: '/repo', pinned: 'true' }))
     rejects(() => pin({ path: '/repo' }))
+    expect(pin({ path: null, pinned: true })).toEqual({ path: null, pinned: true })
+    rejects(() => pin({ pinned: true }))
+    rejects(() => pin({ path: null, pinned: 1 }))
   })
 
   it('keeps optional fields out when absent', () => {

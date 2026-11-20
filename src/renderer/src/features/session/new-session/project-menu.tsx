@@ -31,6 +31,7 @@ import { hostOfPath, hostPath } from '@renderer/lib/host-paths'
 import { formatShortcut } from '@renderer/lib/platform'
 import { FolderClosedMark } from '@renderer/components/affect/app-shell'
 import { Glyph } from '@renderer/features/shell/glyph'
+import { NO_PROJECT_ICON } from '@renderer/features/shell/no-project-icon'
 import { isAway, useOtherHost, useOtherHosts, type OtherHost } from '@renderer/stores/hosts'
 import { useProjectsStore } from '@renderer/stores/projects'
 import { chooseNewSessionProject } from '@renderer/stores/view'
@@ -242,7 +243,13 @@ export function ProjectMenu({
           )
         }
       >
-        {chip ? <FolderMark /> : <Glyph icon={Folder01Icon} />}
+        {noProject ? (
+          <Glyph icon={NO_PROJECT_ICON} size={chip ? 14 : 16} />
+        ) : chip ? (
+          <FolderMark />
+        ) : (
+          <Glyph icon={Folder01Icon} />
+        )}
         <span className={chip ? 'kettu-tray-link__text' : 'truncate text-foreground'}>
           {noProject
             ? t('newSession.noProject')
@@ -280,7 +287,7 @@ export function ProjectMenu({
                 <ComboboxCollection>
                   {(value: string) => (
                     <ComboboxItem key={value} value={value}>
-                      <Glyph icon={Folder01Icon} className="kettu-menu-mark" />
+                      <Glyph icon={NO_PROJECT_ICON} className="kettu-menu-mark" />
                       {t('newSession.noProject')}
                     </ComboboxItem>
                   )}

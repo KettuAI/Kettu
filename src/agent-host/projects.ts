@@ -2,7 +2,7 @@
 
 import { realpath as fsRealpath, stat } from 'node:fs/promises'
 import path from 'node:path'
-import type { Project } from '@shared/agent-host'
+import type { NoProject, Project } from '@shared/agent-host'
 import { DEFAULT_WORKTREE_SETTINGS, type ProjectWorktreeSettings } from '@shared/git'
 import type { Platform } from '@shared/platform'
 import { invalidParams, notFound } from './errors'
@@ -27,8 +27,9 @@ async function isDirectory(value: string): Promise<boolean> {
 
 export class Projects {
   private records: ProjectRecord[] = []
+  private noProjectPinnedAt: number | undefined
   private missing = new Map<string, boolean>()
-  private listeners = new Set<(projects: Project[]) => void>()
+  private listeners = new Set<(projects: Project[], noProject: NoProject) => void>()
   private readonly now: () => number
   private readonly realpath: (value: string) => Promise<string>
   private readonly isDirectory: (value: string) => Promise<boolean>
@@ -40,7 +41,9 @@ export class Projects {
   }
 
   async load(): Promise<void> {
-    this.records = (await this.deps.file.load()).projects
+    const file = await this.deps.file.load()
+    this.records = file.projects
+    this.noProjectPinnedAt = file.noProjectPinnedAt
     await this.refreshMissing(false)
   }
 
@@ -58,6 +61,11 @@ export class Projects {
         lastOpenedAt: record.lastOpenedAt,
         pinnedAt: record.pinnedAt ?? null,
       }))
+  }
+
+  /** The No project group, which holds the sessions started without a project. */
+  noProject(): NoProject {
+    return { pinnedAt: this.noProjectPinnedAt ?? null }
   }
 
   paths(): string[] {
@@ -158,6 +166,12 @@ export class Projects {
     this.changed()
   }
 
+  pinNoProject(pinned: boolean): void {
+    if (pinned === (this.noProjectPinnedAt !== undefined)) return
+    this.noProjectPinnedAt = pinned ? this.now() : undefined
+    this.changed()
+  }
+
   /** Marks projects whose folder is gone; they stay listed, so an unmounted drive loses nothing. */
   async refreshMissing(notify = true): Promise<void> {
     let changed = false
@@ -174,19 +188,26 @@ export class Projects {
     if (changed && notify) this.notify()
   }
 
-  onChange(listener: (projects: Project[]) => void): () => void {
+  onChange(listener: (projects: Project[], noProject: NoProject) => void): () => void {
     this.listeners.add(listener)
     return () => this.listeners.delete(listener)
   }
 
   private changed(): void {
-    this.deps.file.save({ version: 1, projects: this.records.map((record) => ({ ...record })) })
+    this.deps.file.save({
+      version: 1,
+      projects: this.records.map((record) => ({ ...record })),
+      ...(this.noProjectPinnedAt === undefined
+        ? {}
+        : { noProjectPinnedAt: this.noProjectPinnedAt }),
+    })
     this.notify()
   }
 
   private notify(): void {
     const projects = this.list()
-    for (const listener of this.listeners) listener(projects)
+    const noProject = this.noProject()
+    for (const listener of this.listeners) listener(projects, noProject)
   }
 
   flush(): Promise<void> {

@@ -1325,8 +1325,8 @@ export class AgentHost {
       closed: (portId) => this.portClosed(portId),
       log,
     })
-    this.projects.onChange((projects) => {
-      this.broadcast({ type: 'projects.changed', projects })
+    this.projects.onChange((projects, noProject) => {
+      this.broadcast({ type: 'projects.changed', projects, noProject })
       this.sendFolders()
     })
     this.env.onChange((info) => {
@@ -2911,7 +2911,9 @@ export class AgentHost {
         this.options.send({ type: 'host:media-revoke', sessionId: null })
       },
       'projects.touch': ({ path }) => projects.touch(projects.match(path)),
-      'projects.pin': ({ path, pinned }) => projects.pin(projects.match(path), pinned),
+      'projects.pin': ({ path, pinned }) =>
+        path === null ? projects.pinNoProject(pinned) : projects.pin(projects.match(path), pinned),
+      'projects.noProject': () => projects.noProject(),
       'projects.worktreeSettings': ({ path }) =>
         projects.worktreeSettings(projects.match(path).path),
       'projects.setWorktreeSettings': ({ path, settings }) =>

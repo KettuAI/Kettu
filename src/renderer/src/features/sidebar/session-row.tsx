@@ -171,6 +171,8 @@ export const SessionRow = memo(function SessionRow({
         { ...view, hosts: sidebarHosts(), away: awayHosts() },
         useSessionsStore.getState().byId,
         useProjectsStore.getState().projects,
+        {},
+        useProjectsStore.getState().noProjects,
       )
       selectRange(summary.id, current, order)
       return true

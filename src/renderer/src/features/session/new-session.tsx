@@ -17,6 +17,7 @@ import { HostChip } from '@renderer/features/session/composer/host-chip'
 import { useModeControl } from '@renderer/features/session/composer/mode-control'
 import { isSelect } from '@renderer/features/session/composer/options'
 import { Glyph } from '@renderer/features/shell/glyph'
+import { NO_PROJECT_ICON } from '@renderer/features/shell/no-project-icon'
 import { ModelMenu } from '@renderer/features/session/composer/model-menu'
 import { SendButton } from '@renderer/features/session/composer/send-button'
 import type { SelectOption } from '@renderer/features/session/composer/levels'
@@ -832,7 +833,7 @@ function ParentProject({ project, scratch }: { project: Project | null; scratch:
   return (
     <Tooltip>
       <TooltipTrigger render={<span className="ui-as-tray-link" data-static="" />}>
-        <FolderMark />
+        {scratch ? <Glyph icon={NO_PROJECT_ICON} size={14} /> : <FolderMark />}
         <span className="kettu-tray-link__text">
           {scratch ? t('newSession.noProject') : project?.name}
         </span>

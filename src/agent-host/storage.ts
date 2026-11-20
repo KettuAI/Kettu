@@ -288,6 +288,7 @@ export interface WorktreeRecord {
 export interface ProjectsFile {
   version: 1
   projects: ProjectRecord[]
+  noProjectPinnedAt?: number // when the user pinned the No project group
 }
 
 /** How many opened pull requests a session keeps; the oldest go first. */
@@ -664,7 +665,11 @@ export function parseProjectsFile(data: Record<string, unknown>): ProjectsFile |
       ...projectWorktreeOf(item.worktree),
     })
   }
-  return { version: 1, projects }
+  return {
+    version: 1,
+    projects,
+    ...(isTime(data.noProjectPinnedAt) ? { noProjectPinnedAt: data.noProjectPinnedAt } : {}),
+  }
 }
 
 // A queue that does not parse is dropped rather than failing the whole index.

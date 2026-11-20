@@ -87,6 +87,7 @@ function forget(hostId: string): void {
   listed.delete(hostId)
   useSessionsStore.getState().setAll([], hostId)
   useProjectsStore.getState().setAll([], hostId)
+  useProjectsStore.getState().setNoProject(hostId, undefined)
   forgetHostSessions(hostId)
   forgetHostAgents(hostId)
   forgetHostAgentOptions(hostId)
@@ -94,12 +95,15 @@ function forget(hostId: string): void {
 
 async function readLists(hostId: string): Promise<void> {
   try {
-    const [sessions, projects] = await Promise.all([
+    const [sessions, projects, noProject] = await Promise.all([
       hostAt(hostId, 'sessions.list', {}),
       hostAt(hostId, 'projects.list', undefined),
+      // A host from before No project pins has no such call, and offers no Pin for it.
+      hostAt(hostId, 'projects.noProject', undefined).catch(() => undefined),
     ])
     useSessionsStore.getState().setAll(sessions, hostId)
     useProjectsStore.getState().setAll(projects, hostId)
+    useProjectsStore.getState().setNoProject(hostId, noProject)
     listed.add(hostId)
   } catch (error) {
     console.warn(`Could not read the sessions of host ${hostId}`, error)
