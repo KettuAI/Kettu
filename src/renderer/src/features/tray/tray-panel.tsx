@@ -18,6 +18,7 @@ import { relaySummary, type RemoteStatus } from '@shared/remote/status'
 import type { TrayTarget } from '@shared/tray'
 import { AgentMark } from '@renderer/components/agents/agent-mark'
 import { BrandIcon } from '@renderer/components/brand'
+import { mcpLabel } from '@renderer/features/session/entries/mcp-tools'
 import { TurnDots } from '@renderer/features/session/turn-dots'
 import { Glyph } from '@renderer/features/shell/glyph'
 import { useLimitView } from '@renderer/hooks/use-limit-view'
@@ -85,6 +86,13 @@ function passes(event: KeyboardEvent): boolean {
   return (event.key === 'Enter' || event.key === ' ') && event.target instanceof HTMLButtonElement
 }
 
+/** A call of an MCP tool as the thread names it, without the names of what its ids stand for. */
+function mcpText(tool: PendingTool, projectPath: string): string | null {
+  const label = mcpLabel(tool, projectPath)
+  if (!label) return null
+  return [label.verb, label.target].filter(Boolean).join(i18n.t('session:summary.separator'))
+}
+
 /** The request's target as the row's second line and the review's box show it. */
 function requestTarget(
   request: PendingRequest,
@@ -100,6 +108,8 @@ function requestTarget(
   if (request.permission.questions && tool.question !== undefined) {
     return { text: tool.question, code: false }
   }
+  const mcp = mcpText(tool, projectPath)
+  if (mcp) return { text: mcp, code: false }
   const location = tool.locations[0]?.path
   if (tool.toolKind in VERB_KEY && location) {
     return { text: relativePath(location, projectPath), code: true }
@@ -320,6 +330,8 @@ function busy(groups: TrayGroups): boolean {
 
 /** A tool's step as a row's second line: "Run pnpm test", "Edit src/app.ts", or its title. */
 function toolLine(tool: PendingTool, projectPath: string): string {
+  const mcp = mcpText(tool, projectPath)
+  if (mcp) return mcp
   const location = tool.locations[0]?.path
   if (tool.toolKind === 'execute') {
     const command = tool.rawInput ?? tool.title.replace(/^run\s+/i, '')

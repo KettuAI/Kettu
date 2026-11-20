@@ -1,7 +1,7 @@
 import type { TFunction } from 'i18next'
 import type { SessionSummary } from '@shared/agent-host'
 import type { BackgroundTaskView, ThreadState } from '@shared/thread'
-import { toolLabel } from '@renderer/features/session/entries/helpers'
+import { labelText, toolLabel } from '@renderer/features/session/entries/helpers'
 import { ansiRuns } from '@renderer/features/session/entries/shell'
 import type { SubagentDigest, SubagentStep } from '@renderer/features/session/subagent/progress'
 import { listedSubagents } from '@renderer/features/sidebar/subagents'
@@ -62,8 +62,7 @@ function stepText(
   step: Pick<SubagentStep, 'toolKind' | 'title' | 'locations' | 'rawInput'>,
   projectPath: string,
 ) {
-  const { verb, target } = toolLabel(step, projectPath)
-  return [verb, target].filter(Boolean).join(' ')
+  return labelText(toolLabel(step, projectPath))
 }
 
 /** What a sub-agent is doing now: its call in flight, else null. */

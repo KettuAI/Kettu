@@ -10,6 +10,7 @@ import {
   type PickCheck,
   type ReportCheck,
 } from '@shared/workflow'
+import { KETTU_SERVER, mcpCallOf } from '@shared/mcp-call'
 import type { ThreadState, ToolEntry } from '@shared/thread'
 import { readJson, writeJson } from '@renderer/lib/storage'
 
@@ -26,11 +27,11 @@ export type WorkflowTool = keyof typeof WORKFLOW_TOOLS
 const BY_NAME = new Map(
   Object.entries(WORKFLOW_TOOLS).map(([tool, name]) => [name, tool as WorkflowTool]),
 )
-// Claude Code names a call `mcp__kettu__<tool>`, Codex `kettu: <tool>`, other agents their way.
-const CALL_NAME = /^(?:mcp__kettu__|kettu\s*[:：]\s*|kettu[_./])?([a-z_]+)$/
 
 export function workflowToolOf(entry: Pick<ToolEntry, 'title'>): WorkflowTool | null {
-  const name = CALL_NAME.exec(entry.title.trim())?.[1]
+  const call = mcpCallOf(entry.title)
+  // A bare tool name, as some agents title a call, is Kettu's: no other tool has these names.
+  const name = call ? (call.server === KETTU_SERVER ? call.tool : null) : entry.title.trim()
   return (name && BY_NAME.get(name as (typeof WORKFLOW_TOOLS)[WorkflowTool])) || null
 }
 
