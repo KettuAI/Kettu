@@ -536,9 +536,9 @@ extension IslandModel {
   }
 }
 
-/// A session as the sidebar's row draws it: its agent's mark, its title and its project, and at the
-/// end one status in a fixed slot: waiting, failed, the turn's nine dots, a cache in its last
-/// minutes, or unread.
+/// A session as the sidebar's row draws it: its agent's mark, its title and its project, its plan's
+/// progress as the session's plan chip shows it, and at the end one status in a fixed slot:
+/// waiting, failed, the turn's nine dots, a cache in its last minutes, or unread.
 struct SessionRow: View {
   @ObservedObject var model: IslandModel
   let row: IslandRow
@@ -559,6 +559,7 @@ struct SessionRow: View {
       .lineLimit(1)
       .truncationMode(.tail)
       Spacer(minLength: 8)
+      if let plan = row.plan { PlanChip(plan: plan) }
       if let host = row.host {
         Text(host.offline ? "\(host.name) · \(model.text("offline"))" : host.name)
           .font(Fonts.ui(12))
@@ -601,6 +602,29 @@ struct SessionRow: View {
         Circle().fill(Theme.unread).frame(width: 6, height: 6)
       }
     }
+  }
+}
+
+/// A plan's progress as the session's plan chip draws it: the ring, the step in progress and how many
+/// are done.
+struct PlanChip: View {
+  let plan: IslandPlan
+
+  var body: some View {
+    HStack(spacing: 5) {
+      PlanRing(done: plan.done, total: plan.total, size: 12)
+      if let current = plan.current {
+        Text(current)
+          .foregroundColor(Theme.quote)
+          .lineLimit(1)
+          .truncationMode(.tail)
+          .frame(maxWidth: 150, alignment: .leading)
+          .fixedSize()
+      }
+      Text("\(plan.done)/\(plan.total)").foregroundColor(Theme.tertiary).monospacedDigit()
+    }
+    .font(Fonts.ui(12))
+    .layoutPriority(1)
   }
 }
 

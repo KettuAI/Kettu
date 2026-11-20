@@ -28,8 +28,8 @@ shows while it is on:
   click, and closed 400 ms after the pointer leaves. While a request waits, the panel is that card
   alone, its permission answers always Deny, Allow once and Always allow, Kettu's own tools named as
   the thread names them; answered, its word shows for 1.2 s, then the next card or the list. The
-  list is the sessions as the sidebar draws them, the agent's mark, the title and the project with
-  one status at the end, six of them with the rest folded into one line, then New session and Open
+  list is the sessions as the sidebar draws them, the agent's mark, the title and the project, the
+  plan's progress as the session's plan chip shows it, and one status at the end, six of them with the rest folded into one line, then New session and Open
   Kettu. The panel is laid out unseen first, so the outline grows to its height in one critically
   damped spring. A click opens a row; the bare top opens Kettu. An island opened by a click takes
   the keyboard: Esc, the arrows, Return and the digits.
