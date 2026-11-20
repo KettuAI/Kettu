@@ -1927,7 +1927,7 @@ export class SessionManager {
    */
   surfaceAccessAsked(
     sessionId: string,
-    target: { surface: 'terminal'; id: string; name: string },
+    target: { surface: 'terminal' | 'browser'; id: string; name: string },
     ask: { readOnly: boolean; rename?: string },
     waitMs: number,
   ): Promise<SurfaceAccessAnswer> {
@@ -1956,9 +1956,11 @@ export class SessionManager {
       live.id,
       'permission',
       this.titleOf(live),
-      ask.rename !== undefined
-        ? t('attention.terminalRename', { terminal: target.name, name: ask.rename })
-        : t('attention.terminalAccess', { terminal: target.name }),
+      target.surface === 'browser'
+        ? t('attention.tabAccess', { tab: target.name })
+        : ask.rename !== undefined
+          ? t('attention.terminalRename', { terminal: target.name, name: ask.rename })
+          : t('attention.terminalAccess', { terminal: target.name }),
       { id: entry.id },
     )
     return new Promise((resolve) => {

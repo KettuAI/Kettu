@@ -128,6 +128,9 @@
       "terminal": "Terminal",
       "page": "Page",
       "device": "Mobile device"
-    }
+    },
+    "reference": "Reference in conversation",
+    "stopSharing": "Stop {{agent}} using it",
+    "shared": "{{agent}} may use it"
   }
 }

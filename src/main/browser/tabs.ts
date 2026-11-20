@@ -9,6 +9,8 @@ export interface StripTab {
   id: string
   /** The tab whose page opened this one with `window.open`, while that tab is open. */
   opener: string | null
+  /** Who opened it: the agent's calls, or the user. */
+  by: 'agent' | 'user'
 }
 
 export interface AddTab {
@@ -17,7 +19,7 @@ export interface AddTab {
   opener?: string | null
   /** The pane shows it. */
   select: boolean
-  /** It becomes the agent's current tab. */
+  /** It becomes the agent's current tab, which the agent opened. */
   agent: boolean
 }
 
@@ -30,6 +32,8 @@ export class TabStrip {
   private list: StripTab[] = []
   private chosen: string | null = null
   private agentTab: string | null = null
+  // Tabs the user opened and allowed the agent, which may use them from then on.
+  private readonly allowed = new Set<string>()
 
   get tabs(): readonly StripTab[] {
     return this.list
@@ -68,7 +72,7 @@ export class TabStrip {
     if (this.has(id)) throw new Error(`Tab ${id} is already open`)
     const opener = how.opener && this.has(how.opener) ? how.opener : null
     const after = how.after ? this.indexOf(how.after) : -1
-    const tab: StripTab = { id, opener }
+    const tab: StripTab = { id, opener, by: how.agent ? 'agent' : 'user' }
     if (after === -1) this.list.push(tab)
     else this.list.splice(after + 1, 0, tab)
     if (how.select || this.chosen === null) this.chosen = id
@@ -79,6 +83,28 @@ export class TabStrip {
     if (!this.has(id) || this.chosen === id) return false
     this.chosen = id
     return true
+  }
+
+  /** Whether the agent may act on a tab: one it opened, or one the user allowed it. */
+  usable(id: string): boolean {
+    const tab = this.list.find((entry) => entry.id === id)
+    return !!tab && (tab.by === 'agent' || this.allowed.has(id))
+  }
+
+  /** Allows the agent a tab the user opened, or takes the allow back. */
+  allow(id: string, allowed: boolean): boolean {
+    if (!this.has(id) || this.allowed.has(id) === allowed) return false
+    if (allowed) this.allowed.add(id)
+    else this.allowed.delete(id)
+    return true
+  }
+
+  byOf(id: string): 'agent' | 'user' | null {
+    return this.list.find((tab) => tab.id === id)?.by ?? null
+  }
+
+  isAllowed(id: string): boolean {
+    return this.allowed.has(id)
   }
 
   setAgent(id: string | null): void {
@@ -103,6 +129,7 @@ export class TabStrip {
     if (index === -1) return
     const { opener } = this.list[index]
     this.list.splice(index, 1)
+    this.allowed.delete(id)
     for (const tab of this.list) if (tab.opener === id) tab.opener = null
     if (this.agentTab === id) this.agentTab = opener
     if (this.chosen !== id) return
@@ -111,6 +138,7 @@ export class TabStrip {
 
   clear(): void {
     this.list = []
+    this.allowed.clear()
     this.chosen = null
     this.agentTab = null
   }
@@ -150,10 +178,21 @@ export interface ListedTab {
   current: boolean
   /** Released to save memory: selecting it loads it again. */
   released: boolean
+  /** The agent opened it; one the user opened needs their allow. */
+  yours: boolean
+  /** The agent may act on it now. */
+  usable: boolean
 }
 
 export function listTabs(
-  tabs: readonly { id: string; url: string | null; title: string | null; released: boolean }[],
+  tabs: readonly {
+    id: string
+    url: string | null
+    title: string | null
+    released: boolean
+    by?: 'agent' | 'user'
+    usable?: boolean
+  }[],
   current: string | null,
 ): ListedTab[] {
   return tabs.map((tab, index) => ({
@@ -162,6 +201,8 @@ export function listTabs(
     title: tab.title ?? '',
     current: tab.id === current,
     released: tab.released,
+    yours: tab.by !== 'user',
+    usable: tab.usable ?? true,
   }))
 }
 
@@ -170,7 +211,11 @@ export function tabsText(tabs: readonly ListedTab[]): string {
   if (tabs.length === 0) return 'The browser has no tabs. Open one with browser_navigate.'
   return tabs
     .map((tab) => {
-      const marks = [tab.current ? '(current)' : '', tab.released ? '(released)' : '']
+      const marks = [
+        tab.current ? '(current)' : '',
+        tab.released ? '(released)' : '',
+        tab.yours ? '' : tab.usable ? '(the user opened it)' : '(the user opened it; ask first)',
+      ]
         .filter(Boolean)
         .join(' ')
       const title = tab.title ? ` "${tab.title}"` : ''

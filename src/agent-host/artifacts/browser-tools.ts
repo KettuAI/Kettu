@@ -14,7 +14,12 @@ import {
   MAX_SESSION_TABS,
   ORIGIN_WAIT_MS,
 } from '@shared/browser'
-import { CONTROL_STEPS, CONTROL_WAIT_MS, isControlStep } from '@shared/control'
+import {
+  CONTROL_STEPS,
+  CONTROL_WAIT_MS,
+  isControlStep,
+  type SurfaceAccessAnswer,
+} from '@shared/control'
 import type { Caller } from './tools'
 
 /** A navigation and everything that waits on one. */
@@ -36,7 +41,24 @@ export type BrowserToolDeps = {
   pageOf(sessionId: string): string | null
   /** The project of the session whose page a call drives; '' when it has none to name. */
   projectOf(sessionId: string): string
+  /** How a tab the user opened is allowed; without it every such tab is refused. */
+  access?: BrowserAccessDeps
 }
+
+/** What lets the agent use a tab the user opened in the session's browser. */
+export interface BrowserAccessDeps {
+  /** Full access uses a tab of the user's without asking. */
+  fullAccess(sessionId: string): boolean
+  /** Asks the user in the thread whether the agent may use their tab. */
+  ask(sessionId: string, tab: { id: string; title: string }): Promise<SurfaceAccessAnswer>
+  /** Full access let the agent use a tab of the user's without asking. */
+  used(sessionId: string, title: string): void
+  /** The user referenced the tab in a message to the session, which allows it. */
+  shared(sessionId: string, tabId: string): boolean
+}
+
+// The longest page title a card shows of a tab the browser named.
+const MAX_TAB_TITLE = 200
 
 type Schema = Record<string, unknown>
 
@@ -71,6 +93,7 @@ const ERROR_CODES: BrowserToolErrorCode[] = [
   'user_has_control',
   'stopped',
   'not_allowed',
+  'needs_allow',
   'stale_ref',
   'timeout',
   'navigation_failed',
@@ -104,6 +127,12 @@ const TAB = object(
     title: { type: 'string' },
     current: { type: 'boolean', description: 'Your current tab, which your other tools act on.' },
     released: { type: 'boolean', description: 'Released to save memory; it loads when selected.' },
+    yours: {
+      type: 'boolean',
+      description:
+        'You opened it. A tab the user opened needs their allow: your first call on it asks them.',
+    },
+    usable: { type: 'boolean', description: 'You may act on it now.' },
   },
   ['index', 'url', 'title', 'current', 'released'],
 )
@@ -664,6 +693,12 @@ function failure(error: { code: BrowserToolErrorCode; message: string }): CallTo
 
 export class BrowserTools {
   private nextId = 1
+  // The user's answer each tab of theirs waits on, by session and tab, so a call made again while
+  // they decide waits on the same card rather than asking twice.
+  private readonly asking = new Map<string, Promise<SurfaceAccessAnswer>>()
+  // Allows the user gave while no call waited on the card, which the agent's next call takes to
+  // the page; once there, the page keeps them.
+  private readonly granted = new Set<string>()
   /** The waits the origin requests of `browser_waiting` start and end, by the call's id. */
   private readonly waits = new Map<number, (waiting: boolean) => void>()
 
@@ -699,9 +734,70 @@ export class BrowserTools {
       args: asked.args,
       projectPath: this.deps.projectOf(page),
     }
-    const answer = await this.forward(request, timeoutFor(tool, asked.args), caller.sessionId)
+    let answer = await this.forward(request, timeoutFor(tool, asked.args), caller.sessionId)
+    const theirs =
+      'error' in answer && answer.error.code === 'needs_allow' ? answer.error.tab : null
+    if (theirs && typeof theirs.id === 'string' && typeof theirs.title === 'string') {
+      const tab = { id: theirs.id, title: theirs.title.slice(0, MAX_TAB_TITLE) }
+      const decision = await this.allowed(page, tab)
+      if (decision === 'waiting') {
+        return failure({
+          code: 'needs_allow',
+          message: `The user has not answered yet whether you may use their tab "${tab.title}". Call again to keep waiting.`,
+        })
+      }
+      if (decision !== 'allow') {
+        return failure({
+          code: 'not_allowed',
+          message: `The user did not allow this session to use their tab "${tab.title}". Leave it alone unless they bring it up; open a tab of your own with browser_tabs if you need one.`,
+        })
+      }
+      const again = { ...request, callId: this.nextId++, allowTab: tab.id }
+      answer = await this.forward(again, timeoutFor(tool, asked.args), caller.sessionId)
+    }
     if ('error' in answer) return failure(answer.error)
     return this.result(tool, answer.result)
+  }
+
+  /**
+   * Whether the agent may use a tab the user opened: one they referenced, or any in Full access,
+   * at once; else their answer in a card, or `waiting` after CONTROL_WAIT_MS, to be called again.
+   */
+  private async allowed(
+    sessionId: string,
+    tab: { id: string; title: string },
+  ): Promise<SurfaceAccessAnswer | 'waiting'> {
+    const access = this.deps.access
+    if (!access) return 'deny'
+    if (access.shared(sessionId, tab.id)) return 'allow'
+    if (access.fullAccess(sessionId)) {
+      access.used(sessionId, tab.title)
+      return 'allow'
+    }
+    const key = `${sessionId}\n${tab.id}`
+    if (this.granted.delete(key)) return 'allow'
+    let asking = this.asking.get(key)
+    if (!asking) {
+      asking = access
+        .ask(sessionId, tab)
+        .then((answer) => {
+          if (answer === 'allow') this.granted.add(key)
+          return answer
+        })
+        .finally(() => this.asking.delete(key))
+      this.asking.set(key, asking)
+    }
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const decision = await Promise.race([
+      asking,
+      new Promise<'waiting'>((resolve) => {
+        timer = setTimeout(() => resolve('waiting'), CONTROL_WAIT_MS)
+      }),
+    ])
+    clearTimeout(timer)
+    // This call takes the allow to the page itself.
+    if (decision === 'allow') this.granted.delete(key)
+    return decision
   }
 
   /** `host:browser-waiting`: the call waits on a new origin, or that wait ended. */

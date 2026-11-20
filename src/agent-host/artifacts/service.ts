@@ -52,7 +52,12 @@ import {
   SESSION_TOOLS,
   type SessionToolsDeps,
 } from '../session-tools'
-import { BrowserTools, BROWSER_TOOLS, isBrowserToolName } from './browser-tools'
+import {
+  BrowserTools,
+  BROWSER_TOOLS,
+  isBrowserToolName,
+  type BrowserAccessDeps,
+} from './browser-tools'
 import {
   isPlanToolName,
   PlanTools,
@@ -171,6 +176,8 @@ export interface ArtifactServiceDeps extends ArtifactToolsDeps {
   wrote?(sessionId: string, write: ArtifactWrite): void
   /** Runs a browser tool call of `caller`'s on main; without it every `browser_*` call fails. */
   browserCall?(request: BrowserCallRequest, caller: string): Promise<BrowserCallAnswer>
+  /** How a browser tab the user opened is allowed for the agent. */
+  browserAccess?: BrowserAccessDeps
   /** The session whose browser a call drives: a subagent's use the session it runs under. */
   browserSession?(sessionId: string): string | null
   /** The project whose always-allowed sites the page reads. */
@@ -336,6 +343,7 @@ export class ArtifactService {
             }),
       pageOf: (sessionId) => deps.browserSession?.(sessionId) ?? sessionId,
       projectOf: (sessionId) => deps.sessionProject?.(sessionId) ?? '',
+      ...(deps.browserAccess ? { access: deps.browserAccess } : {}),
     })
     const devices = deps.devices
     this.deviceTools = devices

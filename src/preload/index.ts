@@ -311,6 +311,7 @@ const api: KettuApi = {
     newTab: (id) => invoke('browser:new-tab', id),
     selectTab: (id, tab) => invoke('browser:select-tab', id, tab),
     closeTab: (id, tab) => invoke('browser:close-tab', id, tab),
+    revokeTab: (id, tab) => invoke('browser:revoke-tab', id, tab),
     setBounds: (id, bounds) => invoke('browser:bounds', id, bounds),
     navigate: (id, url) => invoke('browser:navigate', id, url),
     back: (id) => invoke('browser:back', id),

@@ -278,6 +278,12 @@ export interface DeviceToolDeps {
   /** Devices the user always allows, kept on the host. */
   alwaysAllowed(deviceId: string): boolean
   allowAlways(deviceId: string): void
+  /** Full access uses a device without asking. */
+  fullAccess?(sessionId: string): boolean
+  /** Full access let the agent use a device without asking: the thread says so. */
+  used?(sessionId: string, name: string): void
+  /** The user referenced the device in a message to the session, which allows it. */
+  shared?(sessionId: string, deviceId: string): boolean
 }
 
 export class DeviceArgsError extends Error {}
@@ -478,7 +484,7 @@ export class DeviceTools {
         )
       }
       const action = name === 'device_open' ? null : actionOf(name, given)
-      const refused = await this.access(sessionId, deviceId)
+      const refused = await this.access(sessionId, deviceId, !action)
       if (refused) return refused
       const agentName = this.deps.agentName(sessionId)
       if (!action)
@@ -504,9 +510,18 @@ export class DeviceTools {
     this.allowed.get(sessionId)?.delete(deviceId)
   }
 
-  /** Null when the session may use the device; otherwise the refusal to return. */
-  private async access(sessionId: string, deviceId: string): Promise<CallToolResult | null> {
+  /**
+   * Null when the session may use the device; otherwise the refusal to return. A simulator or
+   * emulator the agent connects itself (`opening`) is its own; one the user connected to the
+   * session, and every physical device, which holds the user's own things, needs their allow.
+   */
+  private async access(
+    sessionId: string,
+    deviceId: string,
+    opening: boolean,
+  ): Promise<CallToolResult | null> {
     if (this.deps.alwaysAllowed(deviceId) || this.allowed.get(sessionId)?.has(deviceId)) return null
+    if (this.deps.shared?.(sessionId, deviceId)) return this.allow(sessionId, deviceId)
     const key = `${sessionId}\0${deviceId}`
     let asking = this.asking.get(key)
     if (!asking) {
@@ -518,24 +533,33 @@ export class DeviceTools {
       const device = devices.find((entry) => entry.id === deviceId)
       if (!device)
         return failure('not_found', 'No such device on this host. Call device_list for the ids.')
+      if (opening && device.kind !== 'physical' && device.sessionId !== sessionId) {
+        return this.allow(sessionId, deviceId)
+      }
+      if (this.deps.fullAccess?.(sessionId)) {
+        this.deps.used?.(sessionId, device.name)
+        return this.allow(sessionId, deviceId)
+      }
       asking = this.deps.ask(sessionId, deviceId, device.name)
       this.asking.set(key, asking)
       void asking.finally(() => this.asking.delete(key))
     }
     const answer = await asking
     if (answer === 'always') this.deps.allowAlways(deviceId)
-    if (answer === 'session' || answer === 'always') {
-      let set = this.allowed.get(sessionId)
-      if (!set) this.allowed.set(sessionId, (set = new Set()))
-      set.add(deviceId)
-      return null
-    }
+    if (answer === 'session' || answer === 'always') return this.allow(sessionId, deviceId)
     return failure(
       'not_allowed',
       answer === 'timeout'
         ? 'The user did not answer in time, so the device was not used.'
         : 'The user did not allow this session to use the device.',
     )
+  }
+
+  private allow(sessionId: string, deviceId: string): null {
+    let set = this.allowed.get(sessionId)
+    if (!set) this.allowed.set(sessionId, (set = new Set()))
+    set.add(deviceId)
+    return null
   }
 
   private forward(call: DeviceCall): Promise<DeviceCallAnswer> {

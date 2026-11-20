@@ -128,6 +128,9 @@
       "terminal": "终端",
       "page": "网页",
       "device": "移动设备"
-    }
+    },
+    "reference": "在对话中引用",
+    "stopSharing": "收回 {{agent}} 的使用",
+    "shared": "{{agent}} 能用"
   }
 }

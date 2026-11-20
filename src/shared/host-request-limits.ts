@@ -280,7 +280,7 @@ export const HOST_REQUEST_LIMITS: Readonly<Record<HostMethod, number | null>> = 
   'browser.answerOrigin': HOST_MS,
   'devices.answerAccess': HOST_MS,
   'devices.revokeAccess': HOST_MS,
-  'terminals.answerAccess': HOST_MS,
+  'surfaces.answerAccess': HOST_MS,
   'terminals.revokeAccess': HOST_MS,
   'devices.allowed': HOST_MS,
   'devices.forget': HOST_MS,

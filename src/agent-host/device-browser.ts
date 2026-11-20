@@ -17,6 +17,7 @@ const ERROR_CODES = new Set([
   'user_has_control',
   'stopped',
   'not_allowed',
+  'needs_allow',
   'stale_ref',
   'timeout',
   'navigation_failed',
@@ -32,14 +33,20 @@ export const BROWSER_GONE =
 
 /** What main or a desktop app answered a browser call: its result, or the error that refused it. */
 export function answerOf(result: unknown, problem: unknown): BrowserCallAnswer {
-  const error = problem as { code?: unknown; message?: unknown } | undefined
+  const error = problem as { code?: unknown; message?: unknown; tab?: unknown } | undefined
   if (error && typeof error === 'object') {
     const code = typeof error.code === 'string' && ERROR_CODES.has(error.code) ? error.code : null
     if (code) {
+      const tab = code === 'needs_allow' ? tabOf(error.tab) : null
+      // A tab of the user's that cannot be named cannot be asked about either.
+      if (code === 'needs_allow' && !tab) {
+        return { error: { code: 'invalid', message: 'Main gave no answer to the call.' } }
+      }
       return {
         error: {
           code: code as Extract<BrowserCallAnswer, { error: unknown }>['error']['code'],
           message: typeof error.message === 'string' ? error.message : 'The call failed.',
+          ...(tab ? { tab } : {}),
         },
       }
     }
@@ -61,6 +68,16 @@ export function answerOf(result: unknown, problem: unknown): BrowserCallAnswer {
     }
   }
   return { error: { code: 'invalid', message: 'Main gave no answer to the call.' } }
+}
+
+const MAX_TAB_ID = 64
+const MAX_TAB_TITLE = 200
+
+/** The user's tab a `needs_allow` names, as far as it can be one. */
+function tabOf(value: unknown): { id: string; title: string } | null {
+  const { id, title } = (value ?? {}) as { id?: unknown; title?: unknown }
+  if (typeof id !== 'string' || id === '' || id.length > MAX_TAB_ID) return null
+  return { id, title: typeof title === 'string' ? title.slice(0, MAX_TAB_TITLE) : id }
 }
 
 /** The ports the host serves, as far as the browser's routing reads them. */

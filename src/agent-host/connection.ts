@@ -279,6 +279,10 @@ export function promptBlocks(content: readonly UserContent[]): PromptBlock[] {
         return { type: 'resource_link', uri: ref.uri, name: ref.name }
       case 'terminal':
         return { type: 'text', text: terminalNotice(ref.terminalId, ref.name) }
+      case 'page':
+        return { type: 'text', text: pageNotice(ref.name) }
+      case 'device':
+        return { type: 'text', text: deviceNotice(ref.deviceId, ref.name) }
       // The host turns attachments into images and links before a prompt goes; never reached.
       case 'attachment':
         return { type: 'text', text: ref.attachment.name }
@@ -295,6 +299,16 @@ export function promptBlocks(content: readonly UserContent[]): PromptBlock[] {
 /** What the agent reads where the user referenced a terminal of the session. */
 export function terminalNotice(terminalId: string, name: string): string {
   return `[The user shares their terminal "${name}" with you, id ${terminalId}: read its output with terminal_read, and carry on in it with terminal_input.]`
+}
+
+/** What the agent reads where the user referenced a tab of the session's browser. */
+export function pageNotice(title: string): string {
+  return `[The user shares their browser tab "${title}" with you: find it with browser_tabs and select it to work in it.]`
+}
+
+/** What the agent reads where the user referenced a mobile device of the session. */
+export function deviceNotice(deviceId: string, name: string): string {
+  return `[The user shares the device "${name}" with you, id ${deviceId}: use it with the device tools.]`
 }
 
 /** A message of the conversation before an agent took a session over, as it is carried to it. */

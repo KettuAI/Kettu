@@ -67,6 +67,9 @@ export interface BrowserTab {
   released: boolean
   /** The tab whose page opened this one as a popup, while that tab is open. */
   opener: string | null
+  /** Who opened it, and for the user's, whether they allowed the session's agent to use it. */
+  by: 'agent' | 'user'
+  allowed: boolean
 }
 
 /** The most tabs one session's browser holds. */
@@ -128,6 +131,8 @@ export type BrowserToolErrorCode =
   // The turn ended, or the user stopped it, while the call waited on them.
   | 'stopped'
   | 'not_allowed'
+  // The call would act on a tab the user opened, which the agent may use once they allow it.
+  | 'needs_allow'
   | 'stale_ref'
   | 'timeout'
   | 'navigation_failed'
@@ -146,6 +151,8 @@ export const BROWSER_UNAVAILABLE =
 export interface BrowserToolError {
   code: BrowserToolErrorCode
   message: string
+  /** With `needs_allow`, the user's tab the call would act on. */
+  tab?: { id: string; title: string }
 }
 
 /** What main answers for a browser call: the tool's result, or its error. */
@@ -168,6 +175,8 @@ export interface BrowserCallRequest {
   args: Record<string, unknown>
   /** The calling session's project, whose always-allowed sites the page reads. */
   projectPath: string
+  /** A tab of the user's they just allowed the agent, which the call may then act on. */
+  allowTab?: string
 }
 
 /** A dev server on the agent's own host, which another computer's page reaches through a forward. */

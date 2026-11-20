@@ -31,7 +31,8 @@ import type { AgentId } from '@shared/thread'
 import { SESSION_DEVICE_LIMIT, type DeviceInfo } from '@shared/device-host'
 import { emitAppEvent, onAppEvent } from '@renderer/app/events'
 import { NEW_SESSION_DRAFT } from '@renderer/features/session/composer/drafts'
-import { terminalMention } from '@renderer/features/session/composer/chips'
+import { surfaceMention } from '@renderer/features/session/composer/chips'
+import { useThreadsStore } from '@renderer/stores/threads'
 import { host } from '@renderer/lib/host'
 import { tabSensors } from '@renderer/components/tab-sensors'
 import { AlertDialog } from '@renderer/components/ui/alert-dialog'
@@ -120,9 +121,35 @@ interface SurfaceItem {
   /** A browser tab released to save memory. */
   dim: boolean
   terminal: TerminalState | null
-  /** The session's agent, which a terminal the user opened can be shared with. */
+  /** The session's agent, which a terminal or tab the user opened can be shared with. */
   agent: string
+  /** A terminal or tab the user opened that the agent may use, which the menu can take back. */
+  shared: boolean
 }
+
+// How far back from the thread's end a card asking for a tab is looked for: it waits at the end.
+const ASKING_LOOKBACK = 60
+
+/** The browser tabs a card in the thread asks the user to let the agent use, by id. */
+function askedTabs(sessionId: string | null): string {
+  if (!sessionId) return ''
+  const state = useThreadsStore.getState().replicas[sessionId]?.state
+  if (!state) return ''
+  const ids: string[] = []
+  for (const id of state.order.slice(-ASKING_LOOKBACK)) {
+    const entry = state.byId[id]
+    if (
+      entry?.kind === 'surface_access' &&
+      entry.surface === 'browser' &&
+      entry.decision === null
+    ) {
+      ids.push(entry.targetId)
+    }
+  }
+  return ids.join('\n')
+}
+
+const MENTION_OF = { terminal: 'terminal', browser: 'page', devices: 'device' } as const
 
 /** Which kinds the session can open in the row. */
 interface SurfaceKinds {
@@ -181,6 +208,8 @@ function useSurfaceItems(panel: string, projectPath: string, kinds: SurfaceKinds
   const streams = useDevicesStore((s) => s.streams)
   const recording = useDevicesStore((s) => s.recording?.deviceId ?? null)
   const sessionAgent = useSessionsStore((s) => (sessionId ? s.byId[sessionId]?.agentId : null))
+  // Read on each thread change from the end only, where a card that waits sits.
+  const askingTabs = useThreadsStore(() => askedTabs(sessionId))
   const order = useSurfaceTabsStore((s) => s.order[panel])
 
   const items = useMemo(() => {
@@ -213,7 +242,7 @@ function useSurfaceItems(panel: string, projectPath: string, kinds: SurfaceKinds
       const owner = terminal.owner ? agent(terminal.owner.agentId) : null
       const shared =
         !terminal.owner && terminal.agentAllowed
-          ? t('terminal:tab.shared', { agent: agent(sessionAgent) })
+          ? t('shell:surfaces.shared', { agent: agent(sessionAgent) })
           : null
       list.push({
         key: surfaceKey('terminal', terminal.id),
@@ -235,10 +264,18 @@ function useSurfaceItems(panel: string, projectPath: string, kinds: SurfaceKinds
         dim: false,
         terminal,
         agent: agent(sessionAgent),
+        shared: !terminal.owner && terminal.agentAllowed,
       })
     }
+    const asking = new Set(askingTabs.split('\n'))
     for (const tab of browser?.tabs ?? []) {
-      const control = tab.id === browser?.agentTab ? controlOf(browser.control) : null
+      const control =
+        tab.id === browser?.agentTab
+          ? controlOf(browser.control)
+          : asking.has(tab.id)
+            ? ('asks' as const)
+            : null
+      const shared = tab.by === 'user' && tab.allowed
       const name =
         tab.title || (tab.url ? (addressText(tab.url) ?? tab.url) : t('browser:tabs.blank'))
       list.push({
@@ -253,6 +290,7 @@ function useSurfaceItems(panel: string, projectPath: string, kinds: SurfaceKinds
             : tab.released
               ? t('browser:tabs.releasedNote')
               : tab.url,
+          shared ? t('shell:surfaces.shared', { agent: agent(sessionAgent) }) : null,
         ]
           .filter(Boolean)
           .join(' · '),
@@ -264,6 +302,7 @@ function useSurfaceItems(panel: string, projectPath: string, kinds: SurfaceKinds
         dim: tab.released,
         terminal: null,
         agent: agent(sessionAgent),
+        shared,
       })
     }
     if (kinds.devices) {
@@ -300,6 +339,7 @@ function useSurfaceItems(panel: string, projectPath: string, kinds: SurfaceKinds
           dim: false,
           terminal: null,
           agent: agent(sessionAgent),
+          shared: false,
         })
       }
     }
@@ -328,6 +368,7 @@ function useSurfaceItems(panel: string, projectPath: string, kinds: SurfaceKinds
     streams,
     recording,
     order,
+    askingTabs,
   ])
 
   // The row remembers where each tab is, so the next one opens after them all.
@@ -610,7 +651,7 @@ function SurfaceTab({
   onSelect: () => void
   onClose: () => void
 }) {
-  const { t } = useTranslation(['terminal', 'browser', 'devices', 'common'])
+  const { t } = useTranslation(['terminal', 'browser', 'devices', 'common', 'shell'])
   const [editing, setEditing] = useState(false)
   const button = useRef<HTMLButtonElement | null>(null)
   const refocus = useRef(false)
@@ -732,31 +773,32 @@ function SurfaceTab({
             {t('terminal:tab.rename')}
           </ContextMenuItem>
         )}
-        {terminal && (
-          <ContextMenuItem
-            onClick={() =>
-              emitAppEvent({
-                kind: 'mention-into-composer',
-                draft: panelSession(panel) ?? NEW_SESSION_DRAFT,
-                mention: terminalMention(terminal.id),
-              })
-            }
-          >
-            <PaneIcon icon={MessageAdd01Icon} size={16} />
-            {t('terminal:tab.reference')}
-          </ContextMenuItem>
-        )}
-        {terminal && !terminal.owner && terminal.agentAllowed && terminal.sessionId && (
+        <ContextMenuItem
+          onClick={() =>
+            emitAppEvent({
+              kind: 'mention-into-composer',
+              draft: panelSession(panel) ?? NEW_SESSION_DRAFT,
+              mention: surfaceMention(MENTION_OF[item.kind], item.id),
+            })
+          }
+        >
+          <PaneIcon icon={MessageAdd01Icon} size={16} />
+          {t('shell:surfaces.reference')}
+        </ContextMenuItem>
+        {item.shared && (
           <ContextMenuItem
             onClick={() => {
-              const sessionId = terminal.sessionId
-              if (sessionId) {
+              const sessionId = terminal?.sessionId ?? panelSession(panel)
+              if (!sessionId) return
+              if (terminal) {
                 void host('terminals.revokeAccess', { sessionId, terminalId: terminal.id })
+              } else if (item.kind === 'browser') {
+                void window.kettu.browser.revokeTab(sessionId, item.id)
               }
             }}
           >
             <PaneIcon icon={UnavailableIcon} size={16} />
-            {t('terminal:tab.stopSharing', { agent: item.agent })}
+            {t('shell:surfaces.stopSharing', { agent: item.agent })}
           </ContextMenuItem>
         )}
         <ContextMenuItem onClick={onClose}>

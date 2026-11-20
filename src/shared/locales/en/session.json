@@ -165,6 +165,9 @@
     "where": "Reads its recent output and types commands into it. Passwords stay yours to type.",
     "whereRead": "Reads its recent output only, since this session is planning."
   },
+  "tabAccess": {
+    "where": "Reads the page and clicks and types in it, with your sign-ins in this browser"
+  },
   "terminalRename": {
     "to": "To “{{name}}”",
     "toAuto": "Back to what it runs",
@@ -1039,6 +1042,7 @@
       "site": "open a site",
       "device": "use a device",
       "terminal": "use your terminal",
+      "tab": "use your tab",
       "terminalRename": "rename your terminal",
       "app": "use an app",
       "projectMcp": "start MCP servers",

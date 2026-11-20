@@ -151,9 +151,22 @@ export class BrowserTools {
     args: Record<string, unknown>,
     projectPath = '',
     waiting?: (waiting: boolean) => void,
+    allowTab?: string,
   ): Promise<BrowserCallAnswer> {
     if (!isName(tool)) {
       return error('invalid', `Unknown browser tool ${tool}.`)
+    }
+    // The user's tabs are theirs: the agent host asks them, then sends the call again with the tab.
+    if (allowTab) this.deps.views.allowTab(sessionId, allowTab, true)
+    const theirs = this.deps.views.userTabFor(sessionId, tool, args)
+    if (theirs) {
+      return {
+        error: {
+          code: 'needs_allow',
+          message: `The user opened the tab "${theirs.title}", so they must allow you to use it.`,
+          tab: theirs,
+        },
+      }
     }
     // The page's rules read the project its always-allowed sites are stored under.
     this.deps.views.setProject(sessionId, projectPath)

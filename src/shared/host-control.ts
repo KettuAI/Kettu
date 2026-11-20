@@ -363,6 +363,8 @@ export type HostToMain =
       args: Record<string, unknown>
       /** The calling session's project, which its always-allowed sites are stored under. */
       projectPath: string
+      /** A tab of the user's they just allowed the agent. */
+      allowTab?: string
     }
   // The last running turn that used the session's page ended: the page is nobody's now.
   | { type: 'host:browser-turn-ended'; sessionId: string }

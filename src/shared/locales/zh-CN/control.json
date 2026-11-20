@@ -69,7 +69,9 @@
       "computer": "你点了 <b>{{app}}</b>，{{agent}} 暂停了"
     },
     "used": {
-      "terminal": "<b>{{agent}}</b> 开始使用你的终端「<b>{{name}}</b>」"
+      "terminal": "<b>{{agent}}</b> 开始使用你的终端「<b>{{name}}</b>」",
+      "browser": "<b>{{agent}}</b> 开始使用你的标签页「<b>{{name}}</b>」",
+      "device": "<b>{{agent}}</b> 开始使用「<b>{{name}}</b>」"
     }
   },
   "status": {

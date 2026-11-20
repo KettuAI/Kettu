@@ -373,8 +373,8 @@ async function start(): Promise<void> {
   })
   // Other hosts' agents drive the pages of the turns this computer sends them.
   const remoteBrowser = new RemoteBrowser({
-    run: (callId, sessionId, tool, args, projectPath, waiting) =>
-      browserTools!.call(callId, sessionId, tool, args, projectPath, waiting),
+    run: (callId, sessionId, tool, args, projectPath, waiting, allowTab) =>
+      browserTools!.call(callId, sessionId, tool, args, projectPath, waiting, allowTab),
     forward: (hostId, sessionId, forward) => remoteHost.forward(hostId, sessionId, forward),
     closeForwards: (hostId, sessionId) => remoteHost.closeForwards(hostId, sessionId),
     answerOrigin: (sessionId, requestId, decision) =>
@@ -490,6 +490,8 @@ async function start(): Promise<void> {
             request.tool,
             request.args,
             request.projectPath,
+            undefined,
+            request.allowTab,
           )
         : Promise.resolve({
             error: { code: 'no_page', message: 'Another host’s session has this page.' },

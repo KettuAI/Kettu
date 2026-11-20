@@ -61,6 +61,8 @@ export interface AgentTabInfo {
   url: string | null
   title: string | null
   released: boolean
+  by: 'agent' | 'user'
+  usable: boolean
 }
 
 interface Tab {
@@ -377,18 +379,53 @@ export class BrowserViews {
   }
 
   /**
-   * Opens `url` in the agent's tab, making one when the browser has none, and settles when the
-   * navigation has ended: the page's address and title, or Chromium's error. An origin the page
-   * may not open yet is asked for first, and the call fails `not_allowed` without an answer.
+   * Opens `url` in the agent's tab, making one of its own when it has none rather than taking the
+   * user's, and settles when the navigation has ended: the page's address and title, or
+   * Chromium's error. An origin the page may not open yet is asked for first, and the call fails
+   * `not_allowed` without an answer.
    */
   async load(sessionId: string, url: string): Promise<NavigateResult> {
     const browser = this.browser(sessionId)
-    const id = browser.strip.agentTarget()
+    const id = browser.strip.agent
     const tab =
       (id ? this.tabs.get(id) : undefined) ?? this.addTab(browser, { select: true, agent: true })
     const asked = await this.askFor(tab, url)
     if (asked) return asked
     return this.navigateAndWait(tab, url)
+  }
+
+  /**
+   * The tab of the user's a call would act on, which the agent may use only once they allow it;
+   * null when it acts on its own tab, one they allowed, or none yet.
+   */
+  userTabFor(
+    sessionId: string,
+    tool: string,
+    args: Record<string, unknown>,
+  ): { id: string; title: string } | null {
+    const browser = this.browsers.get(sessionId)
+    if (!browser) return null
+    const { strip } = browser
+    let id: string | null
+    if (tool === 'browser_tabs') {
+      if (args.action !== 'select' && args.action !== 'close') return null
+      const at = typeof args.index === 'number' ? strip.at(args.index) : null
+      id = at?.id ?? (args.action === 'close' && args.index === undefined ? strip.agent : null)
+    } else if (tool === 'browser_navigate') {
+      // With no tab of its own, the agent opens one.
+      id = strip.agent
+    } else {
+      id = strip.agent ?? strip.selected
+    }
+    if (id === null || strip.usable(id)) return null
+    const tab = this.tabs.get(id)
+    return { id, title: tab?.lastTitle || (tab ? this.urlOf(tab) : null) || id }
+  }
+
+  /** Allows the agent a tab the user opened in the session's browser, or takes the allow back. */
+  allowTab(sessionId: string, tabId: string, allowed: boolean): void {
+    const browser = this.browsers.get(sessionId)
+    if (browser?.strip.allow(tabId, allowed)) this.emit(browser)
   }
 
   /** One step back in the agent's tab, settled as `load` is. */
@@ -447,6 +484,8 @@ export class BrowserViews {
         url: this.urlOf(tab),
         title: tab.lastTitle,
         released: tab.released,
+        by: browser.strip.byOf(tab.id) ?? 'user',
+        usable: browser.strip.usable(tab.id),
       })),
       current: browser.strip.agent,
       selected: browser.strip.selected,
@@ -1374,6 +1413,8 @@ export class BrowserViews {
       loading: tab.loading,
       released: tab.released,
       opener: browser.strip.opener(tab.id),
+      by: browser.strip.byOf(tab.id) ?? 'user',
+      allowed: browser.strip.isAllowed(tab.id),
     }))
     const selected = this.selectedTab(browser)
     const contents = this.contentsOf(selected)

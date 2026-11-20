@@ -1,6 +1,11 @@
 import { describe, expect, it, vi } from 'vitest'
-import type { BrowserCallRequest } from '@shared/browser'
-import { BROWSER_TOOLS, BrowserTools } from './browser-tools'
+import type { BrowserCallAnswer, BrowserCallRequest } from '@shared/browser'
+import { CONTROL_WAIT_MS, type SurfaceAccessAnswer } from '@shared/control'
+import {
+  BROWSER_TOOLS,
+  BrowserTools,
+  type BrowserToolDeps as BrowserToolsDeps,
+} from './browser-tools'
 
 function tools() {
   const call = vi.fn(async (request: BrowserCallRequest) => ({
@@ -58,5 +63,75 @@ describe('browser_tabs arguments', () => {
     expect(result.structuredContent).toMatchObject({ code: 'invalid' })
     expect(String((result.content[0] as { text: string }).text)).toMatch(message)
     expect(call).not.toHaveBeenCalled()
+  })
+})
+
+describe('an agent using a tab the user opened', () => {
+  /** Main says the call needs the user's tab "t2" until a call brings the allow for it. */
+  function userTab(access: Partial<NonNullable<BrowserToolsDeps['access']>> = {}) {
+    const call = vi.fn(async (request: BrowserCallRequest): Promise<BrowserCallAnswer> => {
+      if (request.allowTab !== 't2') {
+        return {
+          error: { code: 'needs_allow', message: 'theirs', tab: { id: 't2', title: 'Mail' } },
+        }
+      }
+      return { result: { text: 'ok', value: { url: 'https://mail.example/' } } }
+    })
+    const ask = vi.fn(async (): Promise<SurfaceAccessAnswer> => 'allow')
+    const used = vi.fn()
+    const service = new BrowserTools({
+      call,
+      pageOf: (sessionId) => sessionId,
+      projectOf: () => '/project',
+      access: { fullAccess: () => false, ask, used, shared: () => false, ...access },
+    })
+    const snapshot = () => service.call(caller, 'browser_snapshot', {})
+    return { service, call, ask, used, snapshot }
+  }
+
+  it('asks the user, then sends the call again with the tab they allowed', async () => {
+    const { call, ask, snapshot } = userTab()
+    const result = await snapshot()
+    expect(ask).toHaveBeenCalledWith('s1', { id: 't2', title: 'Mail' })
+    expect(call.mock.calls.map(([request]) => request.allowTab)).toEqual([undefined, 't2'])
+    expect(result.isError).toBeUndefined()
+  })
+
+  it('leaves the tab alone when the user denies it', async () => {
+    const { call, snapshot } = userTab({ ask: async () => 'deny' })
+    const result = await snapshot()
+    expect(result.structuredContent).toMatchObject({ code: 'not_allowed' })
+    expect(call).toHaveBeenCalledOnce()
+  })
+
+  it('asks nothing in full access or for a tab the user referenced', async () => {
+    const full = userTab({ fullAccess: () => true })
+    await full.snapshot()
+    expect(full.ask).not.toHaveBeenCalled()
+    expect(full.used).toHaveBeenCalledWith('s1', 'Mail')
+    const shared = userTab({ shared: () => true })
+    await shared.snapshot()
+    expect(shared.ask).not.toHaveBeenCalled()
+    expect(shared.call.mock.calls.at(-1)?.[0].allowTab).toBe('t2')
+  })
+
+  it('takes an allow given while no call waited to the next call, once', async () => {
+    vi.useFakeTimers()
+    try {
+      let answer: (value: SurfaceAccessAnswer) => void = () => undefined
+      const ask = vi.fn(() => new Promise<SurfaceAccessAnswer>((resolve) => (answer = resolve)))
+      const { call, snapshot } = userTab({ ask })
+      const first = snapshot()
+      await vi.advanceTimersByTimeAsync(CONTROL_WAIT_MS)
+      expect(await first).toMatchObject({ structuredContent: { code: 'needs_allow' } })
+      answer('allow')
+      await vi.advanceTimersByTimeAsync(0)
+      const second = await snapshot()
+      expect(second.isError).toBeUndefined()
+      expect(ask).toHaveBeenCalledOnce()
+      expect(call.mock.calls.at(-1)?.[0].allowTab).toBe('t2')
+    } finally {
+      vi.useRealTimers()
+    }
   })
 })
