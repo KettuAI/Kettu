@@ -752,6 +752,22 @@
         "1h": "1 小时"
       }
     },
+    "autoCompact": {
+      "name": "自动压缩",
+      "catalog": "智能体的 Harness 什么时候自己压缩对话，按它自己设置的单位。",
+      "description": {
+        "window": "{{harness}} 按多大的上下文（token）工作，快到时压缩对话。Auto 由 {{harness}} 自己决定。项目自己的设置在该项目里优先，改动从下一个会话起生效。",
+        "trigger": "对话累积到多少 token 时，{{harness}} 开始压缩它。Auto 由 {{harness}} 自己决定。项目自己的设置在该项目里优先，改动从下一个会话起生效。",
+        "percent": "上下文窗口用到多少时，{{harness}} 开始压缩对话。Auto 由 {{harness}} 自己决定。项目自己的设置在该项目里优先，改动从下一个会话起生效。",
+        "reserve": "{{harness}} 在上下文窗口里留出多少 token 不用，剩下的不够时就压缩对话。Auto 由 {{harness}} 自己决定。项目自己的设置在该项目里优先，改动从下一个会话起生效。"
+      },
+      "perModel": "可以给所有模型设一个，也可以给某个模型另设。",
+      "range": "范围是 {{min}} 到 {{max}}",
+      "use": "使用 {{value}}",
+      "typeTokens": "输入数值，如 272K",
+      "typePercent": "输入百分比，如 85%",
+      "typeModel": "输入模型名"
+    },
     "keyOnly": {
       "note": "这个智能体只能用 API key 登录。{{name}} 的浏览器和微信登录整台电脑共用一份，存在这个智能体的目录之外，再加一个智能体也是同一个账号。"
     },

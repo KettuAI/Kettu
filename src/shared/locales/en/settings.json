@@ -756,6 +756,22 @@
         "1h": "1 hour"
       }
     },
+    "autoCompact": {
+      "name": "Auto-compact",
+      "catalog": "When the agent’s harness compacts a conversation on its own, in the unit its own setting takes.",
+      "description": {
+        "window": "The context size in tokens {{harness}} works within, compacting the conversation as it nears it. Auto lets {{harness}} decide. A project’s own settings win in that project, and a change applies from the next session.",
+        "trigger": "How many tokens of a conversation {{harness}} lets build up before it compacts it. Auto lets {{harness}} decide. A project’s own settings win in that project, and a change applies from the next session.",
+        "percent": "How full {{harness}} lets the context window get before it compacts the conversation. Auto lets {{harness}} decide. A project’s own settings win in that project, and a change applies from the next session.",
+        "reserve": "How many tokens of the context window {{harness}} keeps free; it compacts the conversation once less is left. Auto lets {{harness}} decide. A project’s own settings win in that project, and a change applies from the next session."
+      },
+      "perModel": "Set one for all models, and a different one for a model if you like.",
+      "range": "From {{min}} to {{max}}",
+      "use": "Use {{value}}",
+      "typeTokens": "Type a value, such as 272K",
+      "typePercent": "Type a percent, such as 85%",
+      "typeModel": "Type a model id"
+    },
     "keyOnly": {
       "note": "This agent signs in only with an API key. {{name}} keeps its browser and WeChat sign-in for the whole computer, outside this agent’s folder, so a second agent would share that account."
     },

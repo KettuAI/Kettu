@@ -121,6 +121,25 @@ describe('createValidators', () => {
     rejects(() => posix['sessions.sideClear']({ sessionId: 's', undo: 'yes' }))
   })
 
+  it('takes an auto-compact change of a whole number or null, for all models or one', () => {
+    const change = { model: 'openai/gpt-6', value: 272000 }
+    expect(posix['agents.setAutoCompact']({ agentId: 'pi', change, x: 1 })).toEqual({
+      agentId: 'pi',
+      change,
+    })
+    const all = { model: null, value: null }
+    expect(posix['agents.setAutoCompact']({ agentId: 'codex', change: all })).toEqual({
+      agentId: 'codex',
+      change: all,
+    })
+    const bad = (change: unknown): void =>
+      rejects(() => posix['agents.setAutoCompact']({ agentId: 'codex', change }))
+    bad({ model: null, value: '272000' })
+    bad({ model: null, value: 0.85 })
+    bad({ model: '', value: 85 })
+    bad({ value: 85 })
+  })
+
   it('takes only the two Claude Code settings, each with a value of its own kind', () => {
     const window = { setting: 'autoCompactWindow', model: 'claude-sonnet-5-5', value: 200000 }
     expect(

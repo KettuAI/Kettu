@@ -311,13 +311,11 @@ export function configLocations(
       if (root) {
         folder = p.join(root, 'config')
         env = 'GOOSE_PATH_ROOT'
-      } else if (platform === 'darwin') {
-        folder = p.join(home, 'Library', 'Application Support', 'Block', 'goose')
-        env = null
       } else if (platform === 'win32') {
         folder = p.join(appData ?? p.join(home, 'AppData', 'Roaming'), 'Block', 'goose', 'config')
         env = appData ? 'APPDATA' : null
       } else {
+        // etcetera's app strategy, which goose uses, is XDG on macOS too.
         folder = p.join(xdg ?? p.join(home, '.config'), 'goose')
         env = xdg ? 'XDG_CONFIG_HOME' : null
       }
@@ -418,7 +416,7 @@ export function configLocations(
         { id: 'folder', candidates: [folder], env: null },
         {
           id: 'settings',
-          candidates: [p.join(folder, 'config.yml'), p.join(folder, 'agent', 'config.yml')],
+          candidates: [p.join(folder, 'agent', 'config.yml'), p.join(folder, 'config.yml')],
           env: null,
         },
       ]
@@ -441,7 +439,8 @@ export function configLocations(
       const folder = p.join(home, '.codewhale')
       return [
         { id: 'folder', candidates: [folder], env: null },
-        { id: 'settings', candidates: [p.join(folder, 'config.toml')], env: null },
+        // CodeWhale reads its user settings from settings.toml; an old config.toml is unused.
+        { id: 'settings', candidates: [p.join(folder, 'settings.toml')], env: null },
       ]
     }
     case 'antigravity': {

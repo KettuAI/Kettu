@@ -30,15 +30,20 @@ export async function readSettings(file: string): Promise<Record<string, unknown
   return parsed as Record<string, unknown>
 }
 
-/** Writes beside the file and renames it over, so a crash never leaves half a settings file. */
+/** Writes the settings as JSON beside the file and renames it over. */
 export async function writeSettings(
   file: string,
   settings: Record<string, unknown>,
 ): Promise<void> {
+  await writeTextAtomic(file, `${JSON.stringify(settings, null, 2)}\n`)
+}
+
+/** Writes beside the file and renames it over, so a crash never leaves half a settings file. */
+export async function writeTextAtomic(file: string, text: string): Promise<void> {
   await mkdir(path.dirname(file), { recursive: true })
   const temp = `${file}.kettu-${process.pid}.tmp`
   try {
-    await writeFile(temp, `${JSON.stringify(settings, null, 2)}\n`, { mode: 0o600 })
+    await writeFile(temp, text, { mode: 0o600 })
     await rename(temp, file)
   } catch (error) {
     await rm(temp, { force: true })
