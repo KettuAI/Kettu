@@ -1,3 +1,4 @@
+import { useMemo } from 'react'
 import { create } from 'zustand'
 import { IDLE_CONTROL, type ActiveControl } from '@shared/control'
 import type { PortConnectionState } from '@shared/port-rpc'
@@ -246,6 +247,27 @@ function passwordAsked(panel: string, info: TerminalInfo): void {
   if (!sessionId || !shownLayoutSessions(useViewStore.getState()).includes(sessionId)) return
   toggleTerminal(panel, true)
   showTerminal(panel, info.id)
+}
+
+/** A terminal as an `@` mention names it: its id and the name its tab shows. */
+export interface MentionTerminal {
+  id: string
+  name: string
+}
+
+/** The terminals of a panel that a message to its session can reference. */
+export function mentionTerminalsOf(
+  byId: Record<string, TerminalState>,
+  panel: string | null,
+): MentionTerminal[] {
+  if (!panel) return []
+  return terminalsOf(byId, panel).map((t) => ({ id: t.id, name: t.name ?? (t.title || t.shell) }))
+}
+
+/** `mentionTerminalsOf` as a hook, which changes only when a terminal comes, goes or is renamed. */
+export function useMentionTerminals(panel: string | null): MentionTerminal[] {
+  const key = useTerminalsStore((s) => JSON.stringify(mentionTerminalsOf(s.byId, panel)))
+  return useMemo(() => JSON.parse(key) as MentionTerminal[], [key])
 }
 
 /** Opens a terminal's pane on it and gives it the keyboard, such as from a code block's run. */

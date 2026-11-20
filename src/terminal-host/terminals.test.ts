@@ -223,9 +223,10 @@ describe('terminals an agent starts', () => {
     expect(ptys[0]!.written.at(-1)).toBe('a')
     const restarted = await manager.restart(id)
     expect(restarted).toMatchObject({ owner: null, control: { kind: 'idle' } })
+    // The user's now: the agent asks them before it reads it again.
     expect(
       await manager.agentCall({ kind: 'read', sessionId: 's1', terminalId: id, lines: 5 }),
-    ).toMatchObject({ error: { code: 'not_found' } })
+    ).toMatchObject({ result: { kind: 'ask', terminal: { opener: 'user', usable: false } } })
   })
 
   it('reads its output as plain text', async () => {
@@ -269,6 +270,124 @@ async function prompts(pty: FakePty, program: string, text: string): Promise<voi
   pty.emit(text)
   await vi.advanceTimersByTimeAsync(400)
 }
+
+describe('terminals the user opens', () => {
+  beforeEach(() => vi.useFakeTimers())
+  afterEach(() => vi.useRealTimers())
+
+  const size = { projectPath: '/work/app', cols: 80, rows: 24 }
+  const read = (terminalId: string, sessionId = 's1') =>
+    ({ kind: 'read', sessionId, terminalId, lines: 5 }) as const
+  const allow = (terminalId: string, allowed: boolean, sessionId = 's1') =>
+    ({ kind: 'allow', sessionId, terminalId, allowed }) as const
+
+  it("asks first, then lets the session's agent use it once allowed", async () => {
+    const { manager, ptys } = host()
+    const user = await manager.create('window', { ...size, sessionId: 's1' })
+    expect(await manager.agentCall(read(user.id))).toMatchObject({
+      result: { kind: 'ask', terminal: { id: user.id, opener: 'user', usable: false } },
+    })
+    const typing = {
+      kind: 'input',
+      sessionId: 's1',
+      terminalId: user.id,
+      text: 'ls',
+      enter: true,
+    } as const
+    expect(await manager.agentCall(typing)).toMatchObject({ result: { kind: 'ask' } })
+    expect(ptys[0]!.written).toEqual([])
+
+    expect(await manager.agentCall(allow(user.id, true))).toMatchObject({
+      result: { kind: 'terminal', terminal: { usable: true } },
+    })
+    expect((await manager.list()).find((info) => info.id === user.id)?.agentAllowed).toBe(true)
+    expect(await manager.agentCall(read(user.id))).toMatchObject({ result: { kind: 'output' } })
+    expect(await manager.agentCall(typing)).toMatchObject({ result: { kind: 'terminal' } })
+    expect(ptys[0]!.written).toEqual(['ls\r'])
+  })
+
+  it("lists the session's terminals, the user's with whether the agent may use them", async () => {
+    const { manager } = host()
+    const own = terminalOf(await manager.agentCall(RUN))
+    const user = await manager.create('window', { ...size, sessionId: 's1' })
+    await manager.create('window', { ...size, sessionId: 's2' })
+    const answer = await manager.agentCall({ kind: 'list', sessionId: 's1' })
+    expect(answer).toMatchObject({
+      result: {
+        kind: 'list',
+        terminals: [
+          { id: own, opener: 'agent', usable: true },
+          { id: user.id, opener: 'user', usable: false },
+        ],
+      },
+    })
+  })
+
+  it("never reaches another session's terminal, even to allow it", async () => {
+    const { manager } = host()
+    const user = await manager.create('window', { ...size, sessionId: 's1' })
+    expect(await manager.agentCall(allow(user.id, true, 's2'))).toMatchObject({
+      error: { code: 'not_found' },
+    })
+    expect(await manager.agentCall(read(user.id, 's2'))).toMatchObject({
+      error: { code: 'not_found' },
+    })
+    expect((await manager.list()).find((info) => info.id === user.id)?.agentAllowed).toBe(false)
+  })
+
+  it('asks again once the user takes it back or restarts its shell', async () => {
+    const { manager } = host()
+    const user = await manager.create('window', { ...size, sessionId: 's1' })
+    await manager.agentCall(allow(user.id, true))
+    await manager.agentCall(allow(user.id, false))
+    expect(await manager.agentCall(read(user.id))).toMatchObject({ result: { kind: 'ask' } })
+
+    await manager.agentCall(allow(user.id, true))
+    const restarted = await manager.restart(user.id)
+    expect(restarted.agentAllowed).toBe(false)
+    expect(await manager.agentCall(read(user.id))).toMatchObject({ result: { kind: 'ask' } })
+  })
+
+  it("only reads the user's terminal while the session plans", async () => {
+    const { manager, ptys } = host()
+    const user = await manager.create('window', { ...size, sessionId: 's1' })
+    await manager.agentCall(allow(user.id, true))
+    const typing = {
+      kind: 'input',
+      sessionId: 's1',
+      terminalId: user.id,
+      text: 'ls',
+      enter: true,
+      readOnly: true,
+    } as const
+    expect(await manager.agentCall(typing)).toMatchObject({ error: { code: 'not_allowed' } })
+    expect(
+      await manager.agentCall({
+        kind: 'stop',
+        sessionId: 's1',
+        terminalId: user.id,
+        close: false,
+        readOnly: true,
+      }),
+    ).toMatchObject({ error: { code: 'not_allowed' } })
+    expect(ptys[0]!.written).toEqual([])
+
+    const own = terminalOf(await manager.agentCall(RUN))
+    await promptShown(ptys[1]!)
+    expect(await manager.agentCall({ ...typing, terminalId: own })).toMatchObject({
+      result: { kind: 'terminal' },
+    })
+  })
+
+  it("leaves an agent's own terminal as it is when allowed", async () => {
+    const { manager } = host()
+    const own = terminalOf(await manager.agentCall(RUN))
+    expect(await manager.agentCall(allow(own, false))).toMatchObject({
+      result: { kind: 'terminal', terminal: { usable: true } },
+    })
+    expect(await manager.agentCall(read(own))).toMatchObject({ result: { kind: 'output' } })
+  })
+})
 
 describe('code blocks the user runs from a reply', () => {
   beforeEach(() => vi.useFakeTimers())

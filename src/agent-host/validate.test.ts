@@ -820,6 +820,30 @@ describe('promptContent', () => {
     ])
   })
 
+  it('keeps a terminal the user referenced by its id and name alone', () => {
+    expect(
+      promptContent([
+        { type: 'text', text: 'Carry on in @terminal:3fa2c1d0' },
+        { type: 'ref', ref: { kind: 'terminal', terminalId: 't-1', name: 'pnpm dev', run: 'x' } },
+      ]),
+    ).toEqual([
+      { type: 'text', text: 'Carry on in @terminal:3fa2c1d0' },
+      { type: 'ref', ref: { kind: 'terminal', terminalId: 't-1', name: 'pnpm dev' } },
+    ])
+    rejects(() =>
+      promptContent([
+        { type: 'text', text: 'x' },
+        { type: 'ref', ref: { kind: 'terminal', terminalId: 't-1', name: 'n'.repeat(257) } },
+      ]),
+    )
+    rejects(() =>
+      promptContent([
+        { type: 'text', text: 'x' },
+        { type: 'ref', ref: { kind: 'terminal', name: 'zsh' } },
+      ]),
+    )
+  })
+
   it('rejects empty prompts and content the agent cannot take', () => {
     rejects(() => promptContent([]))
     rejects(() => promptContent([{ type: 'text', text: '   ' }]))

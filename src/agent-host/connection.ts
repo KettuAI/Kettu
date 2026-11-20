@@ -277,6 +277,8 @@ export function promptBlocks(content: readonly UserContent[]): PromptBlock[] {
           : { type: 'text', text: ref.mimeType }
       case 'link':
         return { type: 'resource_link', uri: ref.uri, name: ref.name }
+      case 'terminal':
+        return { type: 'text', text: terminalNotice(ref.terminalId, ref.name) }
       // The host turns attachments into images and links before a prompt goes; never reached.
       case 'attachment':
         return { type: 'text', text: ref.attachment.name }
@@ -288,6 +290,11 @@ export function promptBlocks(content: readonly UserContent[]): PromptBlock[] {
         return { type: 'text', text: ref.label }
     }
   })
+}
+
+/** What the agent reads where the user referenced a terminal of the session. */
+export function terminalNotice(terminalId: string, name: string): string {
+  return `[The user shares their terminal "${name}" with you, id ${terminalId}: read its output with terminal_read, and carry on in it with terminal_input.]`
 }
 
 /** A message of the conversation before an agent took a session over, as it is carried to it. */

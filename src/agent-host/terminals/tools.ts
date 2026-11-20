@@ -1,8 +1,10 @@
 // The `terminal_*` tools on Kettu's MCP service: an agent runs a command in a terminal tab of its
 // session, where the user sees it and can take it over, then reads, types into and stops it. Kettu
-// checks every argument here, and the terminal host lets a session reach only its own terminals.
+// checks every argument here, and the terminal host lets a session reach only its own terminals:
+// those its agent opened freely, those the user opened once the user allows it, which is asked here.
 
 import type { CallToolResult, Tool } from '@modelcontextprotocol/sdk/types.js'
+import { CONTROL_WAIT_MS, type SurfaceAccessAnswer } from '@shared/control'
 import {
   DEFAULT_TERMINAL_READ_LINES,
   MAX_TERMINAL_COMMAND,
@@ -27,7 +29,7 @@ function object(properties: Record<string, Schema>, required: string[] = []): To
 
 const TERMINAL_ID: Schema = {
   type: 'string',
-  description: 'The terminal id that terminal_run gave.',
+  description: 'The terminal id that terminal_run or terminal_list gave.',
 }
 const ACTS = { readOnlyHint: false, openWorldHint: false } as const
 const LINES: Schema = {
@@ -37,7 +39,20 @@ const LINES: Schema = {
   default: DEFAULT_TERMINAL_READ_LINES,
 }
 
+// A terminal the user opened is theirs: the first call on it asks them, and waits for the answer.
+const USERS =
+  ' A terminal the user opened needs their allow: your first call on it asks them in the conversation and waits for the answer; when it returns that they have not answered yet, call again to keep waiting.'
+
 export const TERMINAL_TOOLS: Tool[] = [
+  {
+    name: 'terminal_list',
+    title: 'List terminals',
+    description:
+      "This session's terminals beside the conversation, the ones the user opened included: each one's id, name, what runs in it, who opened it and whether you may use it now. Use it to pick up a terminal the user worked in, then read its output with terminal_read." +
+      USERS,
+    inputSchema: object({}),
+    annotations: { readOnlyHint: true },
+  },
   {
     name: 'terminal_run',
     title: 'Run in a terminal',
@@ -52,14 +67,15 @@ export const TERMINAL_TOOLS: Tool[] = [
     name: 'terminal_read',
     title: 'Read a terminal',
     description:
-      "The latest output of a terminal this session started or the user ran from your reply, as plain text, whether its command still runs, whether it waits for the user's password, and the shell's exit code.",
+      "The latest output of one of this session's terminals, as plain text, whether its command still runs, whether it waits for the user's password, and the shell's exit code. The output is what the terminal keeps, its last 1 MB, not the shell's history file." +
+      USERS,
     inputSchema: object({ terminalId: TERMINAL_ID, lines: LINES }, ['terminalId']),
     annotations: { readOnlyHint: true },
   },
   {
     name: 'terminal_wait',
     title: 'Wait on a terminal',
-    description: `Waits until the terminal's command ends, it waits for the user's password, or its output has been quiet for ${TERMINAL_QUIET_MS / 1000} s (such as a server that is up), at most ${TERMINAL_WAIT_MS / 1000} s, then answers like terminal_read and says why it returned. Call it again to keep waiting.`,
+    description: `Waits until the terminal's command ends, it waits for the user's password, or its output has been quiet for ${TERMINAL_QUIET_MS / 1000} s (such as a server that is up), at most ${TERMINAL_WAIT_MS / 1000} s, then answers like terminal_read and says why it returned. Call it again to keep waiting.${USERS}`,
     inputSchema: object({ terminalId: TERMINAL_ID, lines: LINES }, ['terminalId']),
     annotations: { readOnlyHint: true },
   },
@@ -67,7 +83,8 @@ export const TERMINAL_TOOLS: Tool[] = [
     name: 'terminal_input',
     title: 'Type into a terminal',
     description:
-      'Types text into a terminal this session started, and presses Enter when `enter` is set, such as an answer to a prompt. Never types a password: only the user does. While the user has taken the terminal over or types a password into it, the call waits; when it returns that they still do, call again to keep waiting.',
+      "Types text into one of this session's terminals, and presses Enter when `enter` is set, such as the next command in a terminal the user handed you or an answer to a prompt. Never types a password: only the user does. While the user has taken the terminal over or types a password into it, the call waits; when it returns that they still do, call again to keep waiting." +
+      USERS,
     inputSchema: object(
       {
         terminalId: TERMINAL_ID,
@@ -82,12 +99,23 @@ export const TERMINAL_TOOLS: Tool[] = [
     name: 'terminal_stop',
     title: 'Stop a terminal',
     description:
-      'Sends Ctrl+C to a terminal this session started, stopping its command. `close` also ends the shell and closes the tab. Waits like terminal_input while the user has it.',
+      "Sends Ctrl+C to one of this session's terminals, stopping its command. `close` also ends the shell and closes the tab. Waits like terminal_input while the user has it." +
+      USERS,
     inputSchema: object({ terminalId: TERMINAL_ID, close: { type: 'boolean', default: false } }, [
       'terminalId',
     ]),
     annotations: { ...ACTS },
   },
+]
+
+/**
+ * The tools that only list and read the session's terminals, which run without the agent's own
+ * permission prompt: on a terminal of the user's, Kettu asks them in its own card instead.
+ */
+export const TERMINAL_READ_TOOLS: readonly TerminalToolName[] = [
+  'terminal_list',
+  'terminal_read',
+  'terminal_wait',
 ]
 
 export function isTerminalToolName(name: string): name is TerminalToolName {
@@ -101,6 +129,14 @@ export interface TerminalToolDeps {
   agentOf(sessionId: string): AgentId | null
   /** The session's folder, its worktree when it has one; null when it has none yet. */
   folderOf(sessionId: string): string | null
+  /** What the session's permission mode lets it: full access asks nothing, planning only reads. */
+  accessOf(sessionId: string): { fullAccess: boolean; planning: boolean }
+  /** Asks the user in the session's thread whether its agent may use a terminal they opened. */
+  ask(sessionId: string, terminal: AgentTerminal, readOnly: boolean): Promise<SurfaceAccessAnswer>
+  /** Full access let the agent use a terminal the user opened without asking. */
+  used(sessionId: string, terminal: AgentTerminal): void
+  /** The user referenced the terminal in a message to the session, which allows it. */
+  shared(sessionId: string, terminalId: string): boolean
 }
 
 export class TerminalArgsError extends Error {}
@@ -161,10 +197,12 @@ export function terminalCallOf(
   name: TerminalToolName,
   sessionId: string,
   input: unknown,
-  context: { agentId: AgentId | null; folder: string | null },
+  context: { agentId: AgentId | null; folder: string | null; planning?: boolean },
 ): TerminalCall {
   const given = args(input)
   switch (name) {
+    case 'terminal_list':
+      return { kind: 'list', sessionId }
     case 'terminal_run': {
       const command = typed(given.command, 'command', false)
       if (!context.agentId || !context.folder) {
@@ -187,6 +225,7 @@ export function terminalCallOf(
         terminalId: terminalId(given.terminalId),
         text: typed(given.text, 'text', true),
         enter: flag(given.enter, 'enter', true),
+        ...(context.planning ? { readOnly: true } : {}),
       }
     case 'terminal_stop':
       return {
@@ -194,6 +233,7 @@ export function terminalCallOf(
         sessionId,
         terminalId: terminalId(given.terminalId),
         close: flag(given.close, 'close', false),
+        ...(context.planning ? { readOnly: true } : {}),
       }
   }
 }
@@ -208,6 +248,17 @@ function failure(code: string, message: string): CallToolResult {
 
 function reply(text: string, value: Record<string, unknown>): CallToolResult {
   return { content: [{ type: 'text', text }], structuredContent: value }
+}
+
+const OPENERS: Record<AgentTerminal['opener'], string> = {
+  agent: 'You opened it.',
+  reply: 'The user ran it from your reply.',
+  user: 'The user opened it.',
+}
+
+function listed(terminal: AgentTerminal): string {
+  const use = terminal.usable ? '' : ' Ask first: your first call on it asks the user to allow it.'
+  return `- ${describe(terminal)} Named "${terminal.title}". ${OPENERS[terminal.opener]}${use}`
 }
 
 function describe(terminal: AgentTerminal): string {
@@ -232,22 +283,102 @@ const WAIT_REASONS: Record<TerminalWaitReason, string> = {
 }
 
 export class TerminalTools {
+  // The user's answer each terminal of theirs waits on, by session and terminal, so a call made
+  // again while they decide waits on the same card rather than asking twice.
+  private readonly asking = new Map<string, Promise<SurfaceAccessAnswer>>()
+
   constructor(private readonly deps: TerminalToolDeps) {}
 
   async call(caller: Caller, name: string, input: unknown): Promise<CallToolResult> {
     if (!isTerminalToolName(name)) throw new Error(`Unknown tool ${name}`)
     const sessionId = this.deps.sessionOf(caller.sessionId)
+    const access = this.deps.accessOf(sessionId)
     let call: TerminalCall
     try {
       call = terminalCallOf(name, sessionId, input, {
         agentId: this.deps.agentOf(sessionId),
         folder: this.deps.folderOf(sessionId),
+        planning: access.planning,
       })
     } catch (error) {
       if (error instanceof TerminalArgsError) return failure('invalid_params', error.message)
       throw error
     }
-    return this.answer(await this.deps.call(call))
+    const answer = await this.deps.call(call)
+    if ('result' in answer && answer.result.kind === 'ask') {
+      return this.askFirst(call, answer.result.terminal, access)
+    }
+    return this.answer(answer)
+  }
+
+  /**
+   * A terminal the user opened: Full access goes ahead, any other mode asks the user in a card and
+   * waits up to CONTROL_WAIT_MS before telling the agent to call again. Once allowed, the call runs.
+   */
+  private async askFirst(
+    call: TerminalCall,
+    terminal: AgentTerminal,
+    access: { fullAccess: boolean; planning: boolean },
+  ): Promise<CallToolResult> {
+    const { sessionId } = call
+    let decision: SurfaceAccessAnswer | 'waiting'
+    if (this.deps.shared(sessionId, terminal.id)) {
+      // The user referenced it in the conversation, which allows it.
+      decision = await this.grant(sessionId, terminal.id)
+    } else if (access.fullAccess) {
+      decision = await this.grant(sessionId, terminal.id)
+      if (decision === 'allow') this.deps.used(sessionId, terminal)
+    } else {
+      const key = `${sessionId}\n${terminal.id}`
+      let asking = this.asking.get(key)
+      if (!asking) {
+        void this.deps.call({ kind: 'asking', sessionId, terminalId: terminal.id, asking: true })
+        // The allow is given as the answer comes, so a call made after it finds the terminal open.
+        asking = this.deps
+          .ask(sessionId, terminal, access.planning)
+          .then(async (answer) => {
+            if (answer === 'allow') return this.grant(sessionId, terminal.id)
+            await this.deps.call({
+              kind: 'asking',
+              sessionId,
+              terminalId: terminal.id,
+              asking: false,
+            })
+            return answer
+          })
+          .finally(() => this.asking.delete(key))
+        this.asking.set(key, asking)
+      }
+      let timer: ReturnType<typeof setTimeout> | undefined
+      decision = await Promise.race([
+        asking,
+        new Promise<'waiting'>((resolve) => {
+          timer = setTimeout(() => resolve('waiting'), CONTROL_WAIT_MS)
+        }),
+      ])
+      clearTimeout(timer)
+    }
+    if (decision === 'waiting') {
+      const status = `The user has not answered yet whether you may use their terminal "${terminal.title}". Call again to keep waiting.`
+      return reply(status, { asking: true, status })
+    }
+    if (decision !== 'allow') {
+      return failure(
+        'not_allowed',
+        `The user did not allow this session to use their terminal "${terminal.title}". Do not ask again unless they bring it up.`,
+      )
+    }
+    const answer = await this.deps.call(call)
+    if ('result' in answer && answer.result.kind === 'ask') {
+      return failure('not_allowed', `The user took their terminal "${terminal.title}" back.`)
+    }
+    return this.answer(answer)
+  }
+
+  /** Tells the terminal host the agent may use the terminal; `deny` when it is gone. */
+  private async grant(sessionId: string, terminalId: string): Promise<SurfaceAccessAnswer> {
+    const answer = await this.deps.call({ kind: 'allow', sessionId, terminalId, allowed: true })
+    return 'error' in answer ? 'deny' : 'allow'
   }
 
   /** The answer as text and as the same values structured, which some harnesses read alone. */
@@ -271,6 +402,15 @@ export class TerminalTools {
           ...(result.reason ? { reason: result.reason } : {}),
         })
       }
+      case 'list': {
+        const text =
+          result.terminals.length === 0
+            ? 'This session has no terminals. Open one with terminal_run.'
+            : `This session's terminals:\n${result.terminals.map(listed).join('\n')}`
+        return reply(text, { terminals: result.terminals })
+      }
+      case 'ask':
+        return failure('not_allowed', 'The user has not allowed this terminal.')
       case 'closed':
         return reply('The terminal is closed.', { closed: true })
       case 'held': {

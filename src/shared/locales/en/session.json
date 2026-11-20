@@ -151,6 +151,20 @@
     },
     "where": "Tap, type and take screenshots, which go to the agent’s model provider"
   },
+  "terminalAccess": {
+    "decision": {
+      "allow": "Allow for this session",
+      "deny": "Don’t allow"
+    },
+    "answer": {
+      "allow": "Allowed for this session",
+      "deny": "Denied",
+      "timeout": "Not answered in time",
+      "revoked": "Allowed for this session, then taken back"
+    },
+    "where": "Reads its recent output and types commands into it. Passwords stay yours to type.",
+    "whereRead": "Reads its recent output only, since this session is planning."
+  },
   "computerApp": {
     "decision": {
       "session": "Allow for this session",
@@ -1012,6 +1026,7 @@
     "action": {
       "site": "open a site",
       "device": "use a device",
+      "terminal": "use your terminal",
       "app": "use an app",
       "projectMcp": "start MCP servers",
       "projectHooks": "run commands this project sets to run automatically"

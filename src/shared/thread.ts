@@ -11,6 +11,7 @@ import {
   type ControlOutcome,
   type ControlStep,
   type ControlSurface,
+  type SurfaceAccessAnswer,
 } from './control'
 import type { DeviceAccessAnswer } from './device-agent'
 import type {
@@ -368,6 +369,7 @@ export type ThreadEntry =
   | ControlAskEntry // Kettu's own record of a step an agent asked the user to do, and its end
   | ControlNoteEntry // Kettu's own record of the user taking a surface over and handing it back
   | DeviceAccessEntry // Kettu's own record of an agent asking for a mobile device
+  | SurfaceAccessEntry // Kettu's own record of an agent asking for a terminal the user opened
   | ComputerAppEntry // Kettu's own record of a session's first use of an app, and the answer
   | ComputerSetupEntry // Kettu's own record of the setup a first call waited on, and its end
   | ProjectMcpEntry // Kettu's own record of a folder's MCP servers held for the user, and the answer
@@ -485,7 +487,12 @@ export type ControlNoteEntry = {
   surface: ControlSurface
   /** The agent's entry before it, to put it back after a replay. */
   after: string | null
-} & ({ event: 'handed_back'; durationMs: number } | { event: 'paused'; app: string })
+} & (
+  | { event: 'handed_back'; durationMs: number }
+  | { event: 'paused'; app: string }
+  /** The agent started using a terminal the user opened, which Full access lets it without asking. */
+  | { event: 'used'; name: string }
+)
 
 /**
  * An agent asked to read or operate a mobile device for the first time in its session. `decision`
@@ -500,6 +507,30 @@ export interface DeviceAccessEntry {
   /** When an unanswered request counts as denied, in the host's milliseconds. */
   expiresAt?: number
   /** The user took the session's allow back, so the agent's next use of the device asks again. */
+  revoked?: true
+  /** Set when a paired device gave the answer; the host's own windows give none. */
+  device?: FromDevice
+  /** The agent's entry before it, to put it back after a replay. */
+  after: string | null
+}
+
+/**
+ * An agent asked to use a terminal the user opened in its session. `decision` is null while it
+ * waits for the user, then the answer, `timeout` when none came.
+ */
+export interface SurfaceAccessEntry {
+  kind: 'surface_access'
+  id: string
+  surface: 'terminal'
+  /** The terminal's id, and its name when the agent asked. */
+  targetId: string
+  targetName: string
+  /** The session planned when it asked, so the agent would only read it. */
+  readOnly?: true
+  decision: SurfaceAccessAnswer | null
+  /** When an unanswered request counts as denied, in the host's milliseconds. */
+  expiresAt?: number
+  /** The user took the allow back, so the agent's next use asks again. */
   revoked?: true
   /** Set when a paired device gave the answer; the host's own windows give none. */
   device?: FromDevice
@@ -940,6 +971,8 @@ export type ContentRef =
   | { kind: 'video'; mimeType: string; data: string; size: number; name: string | null }
   | { kind: 'link'; uri: string; name: string }
   | { kind: 'attachment'; attachment: Attachment } // what the user added, see attachments
+  // A terminal of the session the user referenced, which lets its agent use it; `name` as then.
+  | { kind: 'terminal'; terminalId: string; name: string }
   | { kind: 'unsupported'; label: string }
 
 export interface Attachment {
@@ -1267,6 +1300,8 @@ function isContentRef(value: unknown): value is ContentRef {
       )
     case 'link':
       return typeof value.uri === 'string' && typeof value.name === 'string'
+    case 'terminal':
+      return typeof value.terminalId === 'string' && typeof value.name === 'string'
     case 'attachment':
       return isAttachment(value.attachment)
     case 'unsupported':
@@ -1455,7 +1490,8 @@ export function isThreadEntry(value: unknown): value is ThreadEntry {
       return (
         isControlSurface(value.surface) &&
         ((value.event === 'handed_back' && typeof value.durationMs === 'number') ||
-          (value.event === 'paused' && typeof value.app === 'string')) &&
+          (value.event === 'paused' && typeof value.app === 'string') ||
+          (value.event === 'used' && typeof value.name === 'string')) &&
         (value.after === null || typeof value.after === 'string')
       )
     case 'device_access':
@@ -1465,6 +1501,17 @@ export function isThreadEntry(value: unknown): value is ThreadEntry {
         (value.decision === null ||
           value.decision === 'session' ||
           value.decision === 'always' ||
+          value.decision === 'deny' ||
+          value.decision === 'timeout') &&
+        (value.after === null || typeof value.after === 'string')
+      )
+    case 'surface_access':
+      return (
+        value.surface === 'terminal' &&
+        typeof value.targetId === 'string' &&
+        typeof value.targetName === 'string' &&
+        (value.decision === null ||
+          value.decision === 'allow' ||
           value.decision === 'deny' ||
           value.decision === 'timeout') &&
         (value.after === null || typeof value.after === 'string')

@@ -18,16 +18,21 @@ import {
   ComputerPhoneSyncIcon,
   ComputerTerminal01Icon,
   Globe02Icon,
+  MessageAdd01Icon,
   PencilEdit02Icon,
   PlusSignIcon,
   Tick02Icon,
+  UnavailableIcon,
 } from '@hugeicons/core-free-icons'
 import { Trans, useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
 import type { SurfaceControl } from '@shared/control'
 import type { AgentId } from '@shared/thread'
 import { SESSION_DEVICE_LIMIT, type DeviceInfo } from '@shared/device-host'
-import { onAppEvent } from '@renderer/app/events'
+import { emitAppEvent, onAppEvent } from '@renderer/app/events'
+import { NEW_SESSION_DRAFT } from '@renderer/features/session/composer/drafts'
+import { terminalMention } from '@renderer/features/session/composer/chips'
+import { host } from '@renderer/lib/host'
 import { tabSensors } from '@renderer/components/tab-sensors'
 import { AlertDialog } from '@renderer/components/ui/alert-dialog'
 import {
@@ -115,6 +120,8 @@ interface SurfaceItem {
   /** A browser tab released to save memory. */
   dim: boolean
   terminal: TerminalState | null
+  /** The session's agent, which a terminal the user opened can be shared with. */
+  agent: string
 }
 
 /** Which kinds the session can open in the row. */
@@ -199,10 +206,15 @@ function useSurfaceItems(panel: string, projectPath: string, kinds: SurfaceKinds
             : terminal.busy && !exited
               ? { tone: 'live', label: t('terminal:tab.running') }
               : null
-      const control = controlOf(controls[terminal.id])
+      // While a card asks whether the agent may use it, the tab breathes as for a step it asks.
+      const control = controlOf(controls[terminal.id]) ?? (terminal.agentAsks ? 'asks' : null)
       const automatic = terminal.title || terminal.shell
       const name = terminal.name ?? automatic
       const owner = terminal.owner ? agent(terminal.owner.agentId) : null
+      const shared =
+        !terminal.owner && terminal.agentAllowed
+          ? t('terminal:tab.shared', { agent: agent(sessionAgent) })
+          : null
       list.push({
         key: surfaceKey('terminal', terminal.id),
         kind: 'terminal',
@@ -210,7 +222,7 @@ function useSurfaceItems(panel: string, projectPath: string, kinds: SurfaceKinds
         name,
         title: [
           terminal.name ? automatic : name,
-          control ? note(control, owner ?? agent(sessionAgent)) : owner,
+          control ? note(control, owner ?? agent(sessionAgent)) : (owner ?? shared),
           dot?.label,
         ]
           .filter(Boolean)
@@ -222,6 +234,7 @@ function useSurfaceItems(panel: string, projectPath: string, kinds: SurfaceKinds
         code: exited ? terminal.exitCode : null,
         dim: false,
         terminal,
+        agent: agent(sessionAgent),
       })
     }
     for (const tab of browser?.tabs ?? []) {
@@ -250,6 +263,7 @@ function useSurfaceItems(panel: string, projectPath: string, kinds: SurfaceKinds
         code: null,
         dim: tab.released,
         terminal: null,
+        agent: agent(sessionAgent),
       })
     }
     if (kinds.devices) {
@@ -285,6 +299,7 @@ function useSurfaceItems(panel: string, projectPath: string, kinds: SurfaceKinds
           code: null,
           dim: false,
           terminal: null,
+          agent: agent(sessionAgent),
         })
       }
     }
@@ -538,6 +553,7 @@ export function SurfaceTabs({ panel, projectPath }: { panel: string; projectPath
           {items.map((item, index) => (
             <SurfaceTab
               key={item.key}
+              panel={panel}
               item={item}
               index={index}
               onSelect={() => selectSurface(panel, item)}
@@ -582,11 +598,13 @@ export function SurfaceTabs({ panel, projectPath }: { panel: string; projectPath
  * mark after it, and who uses it drawn on the whole tab. A terminal's is renamed in place.
  */
 function SurfaceTab({
+  panel,
   item,
   index,
   onSelect,
   onClose,
 }: {
+  panel: string
   item: SurfaceItem
   index: number
   onSelect: () => void
@@ -712,6 +730,33 @@ function SurfaceTab({
           >
             <PaneIcon icon={PencilEdit02Icon} size={16} />
             {t('terminal:tab.rename')}
+          </ContextMenuItem>
+        )}
+        {terminal && (
+          <ContextMenuItem
+            onClick={() =>
+              emitAppEvent({
+                kind: 'mention-into-composer',
+                draft: panelSession(panel) ?? NEW_SESSION_DRAFT,
+                mention: terminalMention(terminal.id),
+              })
+            }
+          >
+            <PaneIcon icon={MessageAdd01Icon} size={16} />
+            {t('terminal:tab.reference')}
+          </ContextMenuItem>
+        )}
+        {terminal && !terminal.owner && terminal.agentAllowed && terminal.sessionId && (
+          <ContextMenuItem
+            onClick={() => {
+              const sessionId = terminal.sessionId
+              if (sessionId) {
+                void host('terminals.revokeAccess', { sessionId, terminalId: terminal.id })
+              }
+            }}
+          >
+            <PaneIcon icon={UnavailableIcon} size={16} />
+            {t('terminal:tab.stopSharing', { agent: item.agent })}
           </ContextMenuItem>
         )}
         <ContextMenuItem onClick={onClose}>

@@ -65,6 +65,18 @@ export type ActiveControl = Exclude<SurfaceControl, { kind: 'idle' }>
  */
 export const CONTROL_WAIT_MS = 45_000
 
+/** The user's answer when an agent asks to use a terminal they opened. */
+export type SurfaceAccessDecision = 'allow' | 'deny'
+/** The answer, or `timeout` when none came in time. */
+export type SurfaceAccessAnswer = SurfaceAccessDecision | 'timeout'
+
+export function isSurfaceAccessDecision(value: unknown): value is SurfaceAccessDecision {
+  return value === 'allow' || value === 'deny'
+}
+
+/** How long a request to use a terminal the user opened waits before it counts as denied. */
+export const SURFACE_ACCESS_WAIT_MS = 120_000
+
 /** How long the bubble at a held-back click stays. */
 export const HELD_BUBBLE_MS = 2_600
 

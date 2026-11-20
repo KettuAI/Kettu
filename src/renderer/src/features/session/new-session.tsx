@@ -59,15 +59,18 @@ import { refreshLimits } from '@renderer/stores/usage'
 import {
   chooseNewSessionHost,
   choosePaneAgent,
+  newSessionPanel,
   openAgentSettings,
   openHarnessSettings,
   openSession,
   paneAgent,
   useViewStore,
 } from '@renderer/stores/view'
+import { mentionTerminalsOf, useTerminalsStore } from '@renderer/stores/terminals'
 import { DropOverlay } from './attachments/drop-overlay'
 import { useFileDrop } from './attachments/use-file-drop'
 import { attachmentContent, attachmentsBlock } from './composer/attachments'
+import { mentionResolver, terminalRefs } from './composer/chips'
 import { hasMessage, NEW_SESSION_DRAFT, readDraft, readDraftAttachments } from './composer/drafts'
 import { useAddMenu } from './composer/add-menu'
 import { StartStyles, TrayStyles } from './composer/affect-styles'
@@ -469,9 +472,16 @@ function DraftComposer({
       }
       const preparedId = preparedFor(optionsState, hostId, agentId)?.summary?.id ?? null
       const text = editor.current?.text() ?? box.source.text
+      const terminals = projectPath
+        ? mentionTerminalsOf(useTerminalsStore.getState().byId, newSessionPanel(projectPath))
+        : []
       const content: UserContent[] = [
         ...(text.trim() ? [{ type: 'text' as const, text }] : []),
         ...attachmentContent(attachments),
+        ...terminalRefs(text, mentionResolver([], null, terminals)).map((ref) => ({
+          type: 'ref' as const,
+          ref,
+        })),
       ]
       // A worktree chosen before the project's status is read is still a worktree.
       const worktree =

@@ -131,6 +131,7 @@
   "attention": {
     "browserOrigin": "Wants to open {{site}}",
     "deviceAccess": "Wants to use {{device}}",
+    "terminalAccess": "Wants to use your terminal {{terminal}}",
     "computerApp": "Wants to use {{app}}",
     "computerSetup": "Wants to use your computer",
     "controlAsk": {
