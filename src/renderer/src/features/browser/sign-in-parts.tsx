@@ -3,6 +3,7 @@ import { BrowserIcon, SquareLock02Icon } from '@hugeicons/core-free-icons'
 import { HugeiconsIcon } from '@hugeicons/react'
 import { useTranslation } from 'react-i18next'
 import type { SignInBrowserId, SignInSource } from '@shared/signins'
+import { SiteIconImage } from '@renderer/components/site-icon-image'
 import { cn } from '@renderer/lib/utils'
 import { loadSiteIcons, useSiteIcon } from '@renderer/stores/site-icons'
 import { useSignInsStore } from '@renderer/stores/sign-ins'
@@ -42,7 +43,7 @@ export function SiteTile({ site, large }: { site: string; large?: boolean }) {
       data-icon={icon ? '' : undefined}
       style={icon ? undefined : { background: tileColor(site) }}
     >
-      {icon ? <img src={icon} alt="" /> : site[0]?.toUpperCase()}
+      {icon ? <SiteIconImage src={icon} /> : site[0]?.toUpperCase()}
     </span>
   )
 }

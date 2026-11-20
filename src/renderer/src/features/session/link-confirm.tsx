@@ -13,6 +13,7 @@ import {
   AlertDialogFooter,
   AlertDialogTitle,
 } from '@renderer/components/ui/alert-dialog'
+import { SiteIconImage } from '@renderer/components/site-icon-image'
 import { Badge } from '@renderer/components/ui/badge'
 import { Checkbox } from '@renderer/components/ui/checkbox'
 import { RadioGroup, RadioGroupTile } from '@renderer/components/ui/radio-group'
@@ -30,7 +31,7 @@ function SiteIcon({ url }: { url: string }) {
   if (icon) {
     return (
       <span className="size-8 shrink-0 overflow-hidden rounded-xl shadow-[0_0_0_var(--hairline)_var(--border-subtle)]">
-        <img src={icon} alt="" draggable={false} className="size-full object-contain" />
+        <SiteIconImage src={icon} className="size-full object-contain" />
       </span>
     )
   }
