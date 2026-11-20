@@ -21,6 +21,7 @@ import type {
   SettingsCallAnswer,
   TerminalHostToMain,
 } from '@shared/host-control'
+import { pushedAttention } from '@shared/attention'
 import { BROWSER_UNAVAILABLE } from '@shared/browser'
 import type { Locale } from '@shared/locale'
 import type { DeviceActivity } from '@shared/remote/activity'
@@ -1035,13 +1036,12 @@ export class Hosts {
           })
         }
         break
-      case 'host:attention':
+      case 'host:attention': {
         for (const listener of this.attentionListeners) listener(message)
-        // Devices are pushed nothing for a workflow task yet.
-        if (!('taskId' in message)) {
-          this.remote.post({ type: 'remote-host:attention', attention: message })
-        }
+        const attention = pushedAttention(message)
+        if (attention) this.remote.post({ type: 'remote-host:attention', attention })
         break
+      }
       case 'host:waiting':
         if (typeof message.sessions === 'object' && message.sessions !== null) {
           this.waiting = message.sessions

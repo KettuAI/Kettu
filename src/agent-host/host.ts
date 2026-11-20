@@ -1501,11 +1501,14 @@ export class AgentHost {
     return { ok: true, version: found.version.version, title: found.artifact.title }
   }
 
-  /** A task's notification, which opens the task, whether or not any step has a session. */
+  /**
+   * A task's notification, which opens the task whether or not any step has a session; devices,
+   * which open sessions, get it through its latest step's session.
+   */
   private taskAttention(task: TaskSummary, kind: 'needs-you' | 'ended'): void {
-    const step = [...task.steps]
-      .reverse()
-      .find((s) => s.state === 'needs_you' || s.state === 'error')
+    const steps = [...task.steps].reverse()
+    const step = steps.find((s) => s.state === 'needs_you' || s.state === 'error')
+    const sessionId = step?.sessionId ?? steps.find((s) => s.sessionId !== null)?.sessionId
     const title =
       kind === 'needs-you'
         ? t('tasks.needsYou', { title: task.title })
@@ -1524,6 +1527,7 @@ export class AgentHost {
       taskId: task.id,
       title,
       body,
+      ...(sessionId ? { sessionId, front: this.front(sessionId) } : {}),
     })
   }
 

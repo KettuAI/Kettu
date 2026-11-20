@@ -2,6 +2,7 @@
 // replaces, what a click opens, and its text held to what a notification shows. The desktop app's
 // notifications and the web client's both follow it.
 
+import type { HostToMain } from './host-control'
 import type { AppCommand } from './ipc'
 import type { HostAttention } from './remote/host-admin'
 import type { SettingsFile } from './settings'
@@ -53,6 +54,25 @@ export function attentionTarget(
   return 'sessionId' in message && isId(message.sessionId)
     ? { key: message.sessionId, command: { kind: 'open-session', sessionId: message.sessionId } }
     : null
+}
+
+type AttentionMessage = Extract<HostToMain, { type: 'host:attention' }>
+
+/**
+ * What devices are pushed for an attention message: a workflow task's goes as its step's session,
+ * which is what they open, and not at all when no step has a session.
+ */
+export function pushedAttention(message: AttentionMessage): AttentionMessage | null {
+  if (!('taskId' in message)) return message
+  if (message.sessionId === undefined) return null
+  return {
+    type: 'host:attention',
+    kind: message.kind === 'task-needs-you' ? 'permission' : 'turn-ended',
+    sessionId: message.sessionId,
+    title: message.title,
+    body: message.body,
+    ...(message.front ? { front: message.front } : {}),
+  }
 }
 
 /** The title and body as a notification shows them. */
