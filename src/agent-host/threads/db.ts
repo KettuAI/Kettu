@@ -387,6 +387,7 @@ const stateOf = (artifact: ArtifactRecord): ArtifactState => ({
 })
 
 function prepareAll(db: DatabaseSync) {
+  // Plain `?` marks only: Node 22 binds no positional arguments to numbered ones such as `?1`.
   const sql = (text: string): StatementSync => db.prepare(text)
   return {
     thread: sql(
@@ -412,19 +413,19 @@ function prepareAll(db: DatabaseSync) {
     turnFrom: sql(
       'SELECT turn FROM entries WHERE session_id = ? AND pos >= ? ORDER BY pos LIMIT 1',
     ),
-    // A message's text as `outlineText` reads it, in two parts.
+    // A message's text as `outlineText` reads it, in two parts: the length, then the session.
     userMessages: sql(`
       SELECT e.pos, e.entry_id, t.title,
         substr((SELECT group_concat(json_extract(part.value, '$.text'), char(10))
           FROM json_each(e.json, '$.content') AS part
-          WHERE json_extract(part.value, '$.type') = 'text'), 1, ?2) AS text,
+          WHERE json_extract(part.value, '$.type') = 'text'), 1, ?) AS text,
         (SELECT group_concat(COALESCE(
             json_extract(part.value, '$.ref.attachment.name'),
             json_extract(part.value, '$.ref.name')), ', ')
           FROM json_each(e.json, '$.content') AS part
           WHERE json_extract(part.value, '$.type') = 'ref') AS names
       FROM entries e LEFT JOIN outline_titles t ON t.session_id = e.session_id AND t.pos = e.pos
-      WHERE e.session_id = ?1 AND e.kind = 'user'
+      WHERE e.session_id = ? AND e.kind = 'user'
         AND json_extract(e.json, '$.from') IS NULL
         AND json_extract(e.json, '$.approval') IS NULL ORDER BY e.pos`),
     // The text of the user messages and agent replies in a range of positions, as the search
@@ -452,8 +453,8 @@ function prepareAll(db: DatabaseSync) {
       WHERE session_id = ? AND kind = 'agent' AND instr(json, 'github.com/') > 0
       ORDER BY pos DESC`),
     lastReply: sql(`
-      SELECT substr(json_extract(json, '$.markdown'), 1, ?2) AS markdown FROM entries
-      WHERE session_id = ?1 AND kind = 'agent' AND json_extract(json, '$.markdown') <> ''
+      SELECT substr(json_extract(json, '$.markdown'), 1, ?) AS markdown FROM entries
+      WHERE session_id = ? AND kind = 'agent' AND json_extract(json, '$.markdown') <> ''
       ORDER BY pos DESC LIMIT 1`),
     lastTurnMs: sql(`
       SELECT json_extract(json, '$.durationMs') AS ms FROM entries
@@ -483,12 +484,12 @@ function prepareAll(db: DatabaseSync) {
     blob: sql('SELECT mime, data FROM blobs WHERE session_id = ? AND hash = ?'),
     hasBlob: sql('SELECT 1 AS found FROM blobs WHERE session_id = ? AND hash = ?'),
     // `entries.json`, since json_each has a hidden column of that name.
-    mentions: sql(`SELECT 1 FROM entries WHERE session_id = ?1 AND (
-      (kind = 'agent' AND instr(json_extract(json, '$.markdown'), ?2) > 0)
+    mentions: sql(`SELECT 1 FROM entries WHERE session_id = ? AND (
+      (kind = 'agent' AND instr(json_extract(json, '$.markdown'), ?) > 0)
       OR (kind = 'user' AND EXISTS (
         SELECT 1 FROM json_each(entries.json, '$.content') AS part
         WHERE json_extract(part.value, '$.type') = 'text'
-          AND instr(json_extract(part.value, '$.text'), ?2) > 0
+          AND instr(json_extract(part.value, '$.text'), ?) > 0
       ))
     ) LIMIT 1`),
     artifact: sql(
@@ -548,7 +549,7 @@ function prepareAll(db: DatabaseSync) {
     ),
     insertComment: sql(`
       INSERT INTO artifact_comments (artifact_id, thread_id, n, person, session_id, body, created_at)
-      VALUES (?1, ?2, (SELECT COUNT(*) FROM artifact_comments WHERE artifact_id = ?1 AND thread_id = ?2), ?3, ?4, ?5, ?6)`),
+      VALUES (?, ?, (SELECT COUNT(*) FROM artifact_comments WHERE artifact_id = ? AND thread_id = ?), ?, ?, ?, ?)`),
     setResolved: sql(
       'UPDATE artifact_threads SET resolved_at = ? WHERE artifact_id = ? AND id = ?',
     ),
@@ -982,7 +983,7 @@ export class ThreadDb {
     return this.guard((sql) => {
       const head = this.headOf(sql, sessionId)
       if (!head) return null
-      const entries: OutlineRow[] = sql.userMessages.all(sessionId, OUTLINE_TEXT).map((row) => ({
+      const entries: OutlineRow[] = sql.userMessages.all(OUTLINE_TEXT, sessionId).map((row) => ({
         pos: Number(row.pos),
         entryId: String(row.entry_id),
         text: optionalText(row.text) || (optionalText(row.names) ?? ''),
@@ -1060,7 +1061,7 @@ export class ThreadDb {
         }
         if (references.length >= OUTPUT_REFERENCES) break
       }
-      const reply = optionalText(sql.lastReply.get(sessionId, OUTPUT_REPLY)?.markdown)
+      const reply = optionalText(sql.lastReply.get(OUTPUT_REPLY, sessionId)?.markdown)
       const ms = sql.lastTurnMs.get(sessionId)?.ms
       const latest = sql.latestPlan.get(sessionId)
       const planEntry = latest ? this.entryOf(sql, sessionId, latest, 'refs') : null
@@ -1209,7 +1210,7 @@ export class ThreadDb {
    * live thread tells it (`entryHolds`).
    */
   mentions(sessionId: string, text: string): boolean {
-    return this.guard((sql) => sql.mentions.get(sessionId, text) !== undefined, false)
+    return this.guard((sql) => sql.mentions.get(sessionId, text, text) !== undefined, false)
   }
 
   /** Drops the threads of these sessions, with their images, and returns the space. */
@@ -1609,7 +1610,7 @@ export class ThreadDb {
           throw new ThreadDbError(`${id} holds ${THREADS_PER_ARTIFACT} threads`, 'conflict')
         }
         sql.insertThread.run(id, threadId, JSON.stringify(anchor), at)
-        sql.insertComment.run(id, threadId, author.person, author.session, body, at)
+        sql.insertComment.run(id, threadId, id, threadId, author.person, author.session, body, at)
         return this.threadNow(sql, id, threadId)
       }),
     )
@@ -1625,7 +1626,7 @@ export class ThreadDb {
         if (thread.comments.length >= COMMENTS_PER_THREAD) {
           throw new ThreadDbError(`${threadId} holds ${COMMENTS_PER_THREAD} comments`, 'conflict')
         }
-        sql.insertComment.run(id, threadId, author.person, author.session, body, at)
+        sql.insertComment.run(id, threadId, id, threadId, author.person, author.session, body, at)
         if (author.session === null) sql.setSent.run(null, null, id, threadId)
         return this.threadNow(sql, id, threadId)
       }),

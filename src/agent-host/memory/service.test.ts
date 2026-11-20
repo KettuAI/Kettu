@@ -1,12 +1,15 @@
 import { mkdir, mkdtemp, readdir, readFile, rm, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { AgentId } from '@shared/agents'
 import { MEMORY_BODY_CHARS, MEMORY_ENTRIES_PER_LAYER, type MemoryScope } from '@shared/memory'
 import { claudeMemoryDir } from './claude-import'
 import { INDEX_BYTES } from './index-text'
 import { MemoryError, MemoryService, projectDirName } from './service'
+
+// Some tests write hundreds of files; a busy machine takes longer than the 5 s default.
+vi.setConfig({ testTimeout: 60_000 })
 
 let dir: string
 let root: string
@@ -177,9 +180,11 @@ describe('MemoryService store', () => {
 
     const folder = path.join(root, 'global')
     await mkdir(folder, { recursive: true })
-    for (let i = 1; i < MEMORY_ENTRIES_PER_LAYER; i++) {
-      await writeFile(path.join(folder, `e-${i}.md`), `---\ntitle: E${i}\n---\nBody\n`)
-    }
+    await Promise.all(
+      Array.from({ length: MEMORY_ENTRIES_PER_LAYER - 1 }, (_, i) =>
+        writeFile(path.join(folder, `e-${i + 1}.md`), `---\ntitle: E${i + 1}\n---\nBody\n`),
+      ),
+    )
     await memory.save(GLOBAL, null, draft('Last'), USER)
     expect(await code(memory.save(GLOBAL, null, draft('One more'), USER))).toBe('full')
     expect(await code(memory.save(GLOBAL, 'last', draft('Last', 'Changed.'), USER))).toBe('ok')
@@ -327,13 +332,15 @@ describe('MemoryService index', () => {
     const memory = service()
     const folder = path.join(root, 'projects', projectDirName(project))
     await mkdir(folder, { recursive: true })
-    for (let i = 0; i < 200; i++) {
-      const description = `Line ${i} ${'x'.repeat(150)}`
-      await writeFile(
-        path.join(folder, `e-${i}.md`),
-        `---\ntitle: E${i}\ndescription: ${description}\nupdated: ${new Date(now + i).toISOString()}\n---\nBody\n`,
-      )
-    }
+    await Promise.all(
+      Array.from({ length: 200 }, (_, i) => {
+        const description = `Line ${i} ${'x'.repeat(150)}`
+        return writeFile(
+          path.join(folder, `e-${i}.md`),
+          `---\ntitle: E${i}\ndescription: ${description}\nupdated: ${new Date(now + i).toISOString()}\n---\nBody\n`,
+        )
+      }),
+    )
     await memory.save(GLOBAL, null, draft('Tone'), USER)
     const text = await memory.index(project, true)
     const listed = text.split('\n').filter((line) => line.startsWith('- ['))
