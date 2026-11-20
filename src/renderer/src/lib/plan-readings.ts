@@ -1,7 +1,7 @@
 // An account's plan limits are its own, wherever it is signed in: each host reads them for its
 // agents, and every view shows the newest of those readings.
 
-import type { AgentStatus, PlanLimit } from '@shared/agent-host'
+import type { AgentStatus, PlanLimit, PlanResets, ResetsError } from '@shared/agent-host'
 import type { AgentId } from '@shared/thread'
 
 /** A computer's agents, null being this computer. */
@@ -69,6 +69,37 @@ export const ownKey = (hostId: string | null, id: string): string => `${hostId ?
 /** The key of an account's card or read, the same on every computer. */
 export const accountCardKey = (account: string): string => `account:${account}`
 
+/** The reset credits an account holds, as last read on any of its computers. */
+export interface CardResets {
+  /** How many it holds; 0 when only why they could not be read is known. */
+  count: number
+  /** Each credit, the soonest to run out first; null while the expiries are unknown. */
+  each: NonNullable<PlanResets['each']> | null
+  error: ResetsError | null
+  observedAt: number
+  /** The computer and agent that read them, which one is spent through. */
+  hostId: string | null
+  agentId: AgentId
+}
+
+/** What an agent read of its account's reset credits; null when it holds and reports none. */
+export function resetsOf(agent: AgentStatus, hostId: string | null): CardResets | null {
+  const held = agent.resets && agent.resets.count > 0 ? agent.resets : null
+  if (!held && !agent.resetsError) return null
+  return {
+    count: held?.count ?? 0,
+    each: held?.each ?? null,
+    error: agent.resetsError ?? null,
+    observedAt: held?.observedAt ?? 0,
+    hostId,
+    agentId: agent.id,
+  }
+}
+
+/** The later reading of two, since the credits are the account's wherever it is signed in. */
+export const newerResets = (a: CardResets | null, b: CardResets | null): CardResets | null =>
+  a && b ? (b.observedAt > a.observedAt ? b : a) : (a ?? b)
+
 /** An agent standing for its account among the hosts shown, with the account's newest limits. */
 export interface AccountAgent {
   key: string
@@ -77,6 +108,8 @@ export interface AccountAgent {
   hostIds: (string | null)[]
   agent: AgentStatus
   limits: PlanLimit[]
+  /** The account's reset credits at their newest reading; null when it holds none. */
+  resets: CardResets | null
   /** The agent's name, or the account's email when its agents go by different names. */
   name: string
 }
@@ -99,6 +132,7 @@ export function accountAgents(
       const same = found.find((other) => other.key === key)
       if (same) {
         if (!same.hostIds.includes(hostId)) same.hostIds.push(hostId)
+        same.resets = newerResets(same.resets, resetsOf(agent, hostId))
         continue
       }
       found.push({
@@ -107,6 +141,7 @@ export function accountAgents(
         hostIds: [hostId],
         agent,
         limits: newestLimits(readings, agent),
+        resets: resetsOf(agent, hostId),
         name: agent.name,
       })
     }

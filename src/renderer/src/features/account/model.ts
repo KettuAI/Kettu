@@ -5,7 +5,7 @@ import type { UpdateStatus } from '@shared/updates'
 import { planName } from '@renderer/features/tray/model'
 import type { UpdateItem } from '@renderer/features/updates/card-model'
 import { limitLevel, type LimitLevel } from '@renderer/lib/plan-limit'
-import type { AccountAgent } from '@renderer/lib/plan-readings'
+import type { AccountAgent, CardResets } from '@renderer/lib/plan-readings'
 import { THIS_COMPUTER } from '@renderer/stores/view'
 
 /** Who the account row and its menu name. */
@@ -81,6 +81,8 @@ export interface PlanCard {
   limits: PlanLimit[]
   balances: ProviderBalance[]
   account: AgentAccount | null
+  /** The account's reset credits; null when it holds none or none could be read. */
+  resets: CardResets | null
 }
 
 function cardWindows(limits: readonly PlanLimit[], now: number): CardWindow[] {
@@ -139,7 +141,7 @@ export function planTier(account: AgentAccount | null): string | null {
  * reading. OpenCode gets one per provider, named without a leading "OpenCode", which its mark shows.
  */
 export function planCards(accounts: readonly AccountAgent[], now: number): PlanCard[] {
-  return accounts.flatMap(({ key, hostId, hostIds, agent, limits, name }): PlanCard[] => {
+  return accounts.flatMap(({ key, hostId, hostIds, agent, limits, resets, name }): PlanCard[] => {
     if (agent.harnessId === 'opencode') {
       return (agent.providers ?? []).flatMap((provider) => {
         const limits = provider.usage?.limits ?? []
@@ -160,6 +162,7 @@ export function planCards(accounts: readonly AccountAgent[], now: number): PlanC
             limits,
             balances,
             account: { kind: 'external', label: provider.name, email: null },
+            resets: null,
           },
         ]
       })
@@ -180,6 +183,7 @@ export function planCards(accounts: readonly AccountAgent[], now: number): PlanC
         limits,
         balances,
         account: agent.account,
+        resets: resets && resets.count > 0 ? resets : null,
       },
     ]
   })
