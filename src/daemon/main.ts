@@ -108,7 +108,7 @@ async function pair(socket: string): Promise<number> {
   try {
     client = await connectControl(socket)
   } catch (error) {
-    if (error instanceof NotRunning) throw new Failure('The daemon is not running')
+    if (error instanceof NotRunning) throw new Failure(error.message, NOT_RUNNING)
     throw error
   }
   const stop = new AbortController()
@@ -146,9 +146,12 @@ async function direct(
 ): Promise<number> {
   try {
     switch (command.kind) {
-      case 'direct':
-        out(directReport(await callControl(socket, 'direct.get', undefined)))
-        return 0
+      case 'direct': {
+        const report = await callControl(socket, 'direct.get', undefined)
+        out(directReport(report))
+        // As `kettu direct port` exits when its port cannot be opened.
+        return report.status?.state === 'failed' ? 1 : 0
+      }
       case 'direct-port': {
         const client = await connectControl(socket)
         const questions = terminalQuestions(process.stdin, process.stdout)
@@ -595,7 +598,7 @@ async function run(command: Exclude<Command, { kind: 'help' | 'version' | 'usage
         }
         return 0
       } catch (error) {
-        if (error instanceof NotRunning) throw new Failure('The daemon is not running')
+        if (error instanceof NotRunning) throw new Failure(error.message, NOT_RUNNING)
         if (error instanceof ControlError) throw new Failure(error.message)
         throw error
       }

@@ -19,7 +19,7 @@ import {
 const READ_TIMEOUT = 30_000
 const ACTION_TIMEOUT = 30_000
 const SESSION_ID = /^ses_[A-Za-z0-9]+$/
-const MESSAGE_ID = /^msg_[A-Za-z0-9]+$/
+const MESSAGE_ID = /^msg_[A-Za-z0-9_]+$/
 // OpenCode's cursors are base64url.
 const CURSOR = /^[A-Za-z0-9_-]{1,1024}$/
 

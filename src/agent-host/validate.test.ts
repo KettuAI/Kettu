@@ -572,10 +572,26 @@ describe('createValidators', () => {
     rejects(() => page({ sessionId: 's', before: 'a'.repeat(1025) }))
 
     const raw = posix['sessions.modelRequestRaw']
-    for (const handle of ['system', '0-120,300-512', 'msg_1719e27e3001dJjIgtp6QtBkpk,msg_b2']) {
+    const forked = 'msg_1f4cca296002HjLI6zKqIJOfL8_4'
+    for (const handle of [
+      'system',
+      '0-120,300-512',
+      'msg_1719e27e3001dJjIgtp6QtBkpk,msg_b2',
+      forked,
+      `msg_b2,${forked}`,
+    ]) {
       expect(raw({ sessionId: 's', raw: handle })).toEqual({ sessionId: 's', raw: handle })
     }
-    for (const handle of ['msg_', 'msg_a/../b', '0-1,msg_a', 'ses_a', '/api/session/x']) {
+    for (const handle of [
+      'msg_',
+      'msg_a/../b',
+      '0-1,msg_a',
+      'ses_a',
+      '/api/session/x',
+      'msg_a_4/../b',
+      'msg_a.4',
+      'msg_a_4,',
+    ]) {
       rejects(() => raw({ sessionId: 's', raw: handle }))
     }
   })

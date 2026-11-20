@@ -35,6 +35,7 @@
     "alreadyInSession": "这个会话已经属于 Kettu 里的一个会话",
     "heldOutside": "这个会话还开在终端里。先在那边输入 /exit 再试，或者复制一份在 Kettu 里接着做。",
     "cannotList": "{{agent}} 无法列出它的会话",
+    "notInAgent": "{{agent}} 在这个文件夹里没有这个会话，它可能已被删除。",
     "configBetweenTurns": "{{option}} 只能在两轮对话之间更改",
     "ultracodeDescription": "用于大型任务的动态工作流",
     "promptTooLarge": "这条消息连同附件超过 10 MB，请移除一些再发送。",

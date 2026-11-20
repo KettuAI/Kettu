@@ -1776,7 +1776,7 @@ export function createValidators(platform: Platform): Validators {
       if (
         raw !== 'system' &&
         !/^\d+-\d+(,\d+-\d+)*$/.test(raw) &&
-        !/^msg_[A-Za-z0-9]+(,msg_[A-Za-z0-9]+)*$/.test(raw)
+        !/^msg_[A-Za-z0-9_]+(,msg_[A-Za-z0-9_]+)*$/.test(raw)
       ) {
         throw invalidParams('raw must name records of a page')
       }

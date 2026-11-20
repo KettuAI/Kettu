@@ -10956,6 +10956,8 @@ export class SessionManager {
     if (this.takenEarlier(params.agentId, params.acpSessionId) && !params.fork) {
       throw new HostError('busy', t('session.alreadyInSession'))
     }
+    // A fork reads the session itself and fails when it is gone.
+    if (!params.fork) await this.assertListed(params.agentId, projectPath, params.acpSessionId)
     const claude = harnessOf(params.agentId) === 'claude-code'
     const configDir = this.deps.agents.runningConfig(params.agentId)?.chosen ?? null
     let acpSessionId = params.acpSessionId
@@ -11011,6 +11013,36 @@ export class SessionManager {
     this.writeIndexNow()
     this.touch(record.id)
     return this.summary(record.id)
+  }
+
+  /** Fails unless the agent lists the session for the folder, reading every page it gives. */
+  private async assertListed(
+    agentId: AgentId,
+    projectPath: string,
+    acpSessionId: string,
+  ): Promise<void> {
+    const runtime = await this.deps.agents.ensureReady(agentId)
+    if (!runtime.init.capabilities.listSessions) {
+      throw new HostError(
+        'agent_unavailable',
+        t('session.cannotList', { agent: this.deps.agents.name(agentId) }),
+      )
+    }
+    const asked = new Set<string | null>()
+    let cursor: string | null = null
+    try {
+      // A cursor the agent gives twice would never end.
+      while (!asked.has(cursor)) {
+        asked.add(cursor)
+        const page = await runtime.connection.listSessions(projectPath, cursor)
+        if (page.sessions.some((item) => item.sessionId === acpSessionId)) return
+        if (page.nextCursor === null) break
+        cursor = page.nextCursor
+      }
+    } catch (error) {
+      throw agentError(error)
+    }
+    throw notFound(t('session.notInAgent', { agent: this.deps.agents.name(agentId) }))
   }
 
   /**
