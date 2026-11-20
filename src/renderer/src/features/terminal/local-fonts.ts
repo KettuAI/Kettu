@@ -6,7 +6,7 @@ interface InstalledFace {
 
 type QueryLocalFonts = () => Promise<InstalledFace[]>
 
-/** The installed monospace families, or why the window cannot list them. */
+/** The installed families, or why the window cannot list them. */
 export type FontList = { state: 'ready'; families: string[] } | { state: 'unavailable' }
 
 /** The Local Font Access API is Chromium's; other browsers and plain-http pages lack it. */
@@ -28,14 +28,18 @@ function monospace(families: string[]): string[] {
   })
 }
 
-/** Asks the browser to list the installed fonts, which it may first ask the user about. */
-export async function listInstalledFonts(): Promise<FontList> {
+/**
+ * Asks the browser to list the installed fonts, only the monospace ones when `monospaceOnly`; it
+ * may first ask the user about it.
+ */
+export async function listInstalledFonts(monospaceOnly: boolean): Promise<FontList> {
   const query = localFontsQuery()
   if (!query) return { state: 'unavailable' }
   try {
     const faces = await query()
     const families = [...new Set(faces.map((face) => face.family))].filter(isFontFamilyName)
-    return { state: 'ready', families: monospace(families).sort((a, b) => a.localeCompare(b)) }
+    const listed = monospaceOnly ? monospace(families) : families
+    return { state: 'ready', families: listed.sort((a, b) => a.localeCompare(b)) }
   } catch (error) {
     console.warn('Installed fonts cannot be listed; a name can still be typed', error)
     return { state: 'unavailable' }

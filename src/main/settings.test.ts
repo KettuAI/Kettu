@@ -484,3 +484,63 @@ describe('the terminal font', () => {
     expect(client).toEqual({ terminal: { fontFamily: 'Menlo' } })
   })
 })
+
+describe('the fonts the user picks', () => {
+  it('keeps the theme’s faces until one is named', async () => {
+    const store = await SettingsStore.load(dir)
+    expect(store.get().appearance.fonts).toEqual({})
+  })
+
+  it('keeps stored faces and drops a set that could break out of a font stack on load', async () => {
+    const fonts = { ui: 'Segoe UI', prose: 'Microsoft YaHei', code: 'Maple Mono NF CN' }
+    await save({ version: 1, appearance: { fonts } })
+    expect((await SettingsStore.load(dir)).get().appearance.fonts).toEqual(fonts)
+    for (const bad of [
+      { code: 'A", evil' },
+      { ui: '' },
+      { prose: "A'; x" },
+      { code: 7 },
+      { heading: 'Inter' },
+      ['Inter'],
+      'Inter',
+      null,
+    ]) {
+      await save({ version: 1, appearance: { fonts: bad } })
+      expect((await SettingsStore.load(dir)).get().appearance.fonts).toEqual({})
+    }
+  })
+
+  it('takes a set of face names in a change and refuses the rest', () => {
+    expect(validateSettingsPatch({ appearance: { fonts: { code: 'Maple Mono NF CN' } } })).toEqual({
+      appearance: { fonts: { code: 'Maple Mono NF CN' } },
+    })
+    expect(validateSettingsPatch({ appearance: { fonts: {} } })).toEqual({
+      appearance: { fonts: {} },
+    })
+    for (const bad of [
+      { code: 'A, B' },
+      { ui: 'url(x)' },
+      { prose: null },
+      { mono: 'Menlo' },
+      null,
+      'Menlo',
+    ]) {
+      expect(() => validateSettingsPatch({ appearance: { fonts: bad } })).toThrow()
+    }
+  })
+
+  it('replaces the whole set in a change', () => {
+    const both = mergeSettings(DEFAULT_SETTINGS, {
+      appearance: { fonts: { ui: 'Segoe UI', code: 'Menlo' } },
+    })
+    expect(both.appearance.fonts).toEqual({ ui: 'Segoe UI', code: 'Menlo' })
+    const one = mergeSettings(both, { appearance: { fonts: { code: 'Menlo' } } })
+    expect(one.appearance.fonts).toEqual({ code: 'Menlo' })
+  })
+
+  it('stays with the window that draws them, never on the host', () => {
+    const { host, client } = splitSettingsPatch({ appearance: { fonts: { code: 'Menlo' } } })
+    expect(host).toBeNull()
+    expect(client).toEqual({ appearance: { fonts: { code: 'Menlo' } } })
+  })
+})

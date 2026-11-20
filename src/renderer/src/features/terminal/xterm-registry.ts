@@ -142,7 +142,10 @@ function watchOnce(): void {
         if (instance.visible) fitNow(instance)
       }
     }
-    if (state.settings.terminal.fontFamily !== previous.settings.terminal.fontFamily) {
+    if (
+      state.settings.terminal.fontFamily !== previous.settings.terminal.fontFamily ||
+      state.settings.appearance.fonts.code !== previous.settings.appearance.fonts.code
+    ) {
       syncFontFamily()
     }
   })

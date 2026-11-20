@@ -1,5 +1,11 @@
 import { create } from 'zustand'
-import { DEFAULT_SETTINGS, type SettingsFile, type SettingsPatch } from '@shared/settings'
+import {
+  DEFAULT_SETTINGS,
+  isFontFamilyName,
+  USER_FONT_ROLES,
+  type SettingsFile,
+  type SettingsPatch,
+} from '@shared/settings'
 import { showColorMode } from '@renderer/lib/color-mode'
 import { applyLanguage } from '@renderer/lib/i18n'
 
@@ -22,12 +28,22 @@ const darkQuery = window.matchMedia('(prefers-color-scheme: dark)')
 
 function applyAppearance(settings: SettingsFile, fade = false): void {
   const root = document.documentElement
-  const { theme, textSize, reduceMotion, zoom } = settings.appearance
+  const { theme, textSize, reduceMotion, zoom, fonts } = settings.appearance
   const dark = theme === 'dark' || (theme === 'system' && darkQuery.matches)
   showColorMode(dark ? 'dark' : 'light', fade)
   root.dataset.textSize = textSize
   root.dataset.reduceMotion = reduceMotion
   root.style.setProperty('--zoom', String(zoom))
+  for (const role of USER_FONT_ROLES) {
+    const family = fonts[role]
+    if (family && isFontFamilyName(family)) {
+      root.style.setProperty(`--user-${role}-face`, `"${family}", var(--theme-${role}-face)`)
+      root.setAttribute(`data-user-font-${role}`, '')
+    } else {
+      root.style.removeProperty(`--user-${role}-face`)
+      root.removeAttribute(`data-user-font-${role}`)
+    }
+  }
 }
 
 /**

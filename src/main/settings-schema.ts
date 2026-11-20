@@ -21,6 +21,7 @@ import {
   type SettingsFile,
   type SettingsPatch,
   type TerminalSettings,
+  USER_FONT_ROLES,
   ZOOM_LEVELS,
 } from '@shared/settings'
 import { isComputerApp, isStopShortcut } from '@shared/computer-use'
@@ -157,6 +158,20 @@ const isLinkSites: Check = (value, path) => {
   return null
 }
 
+const isUserFonts: Check = (value, path) => {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    return `"${path}" must be an object`
+  }
+  for (const [role, family] of Object.entries(value)) {
+    if (!(USER_FONT_ROLES as readonly string[]).includes(role)) {
+      return `"${path}" names an unknown text "${role}"`
+    }
+    const problem = checkFontFamily(family, `${path}.${role}`)
+    if (problem) return problem
+  }
+  return null
+}
+
 /** Null, or an absolute path on this computer that has no NUL. */
 function isWorktreeRoot(value: unknown, path: string): string | null {
   if (value === null) return null
@@ -194,6 +209,7 @@ const SECTION_FIELDS = {
     reduceMotion: oneOf('system', 'always'),
     zoom: oneOf(...ZOOM_LEVELS),
     sidebarHover: isBoolean,
+    fonts: isUserFonts,
   },
   notifications: {
     permission: isBoolean,

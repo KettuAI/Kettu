@@ -68,6 +68,7 @@ export interface SettingsFile {
     reduceMotion: 'system' | 'always'
     zoom: ZoomLevel // Chromium's page zoom of the whole window
     sidebarHover: boolean // pointing at the toggle of a collapsed sidebar shows it over the page
+    fonts: UserFonts // replaced whole; a role left out keeps the theme's face
   }
   notifications: {
     permission: boolean
@@ -152,6 +153,12 @@ export type LinkDestination = 'browser' | 'session'
 export type OpenLinksIn = LinkDestination | 'ask'
 
 export const MAX_FONT_FAMILY_CHARS = 100
+
+/** The text the user may draw in a face of their own: the interface, replies and code. */
+export const USER_FONT_ROLES = ['ui', 'prose', 'code'] as const
+export type UserFontRole = (typeof USER_FONT_ROLES)[number]
+/** A face installed on the computer by role, each drawn before the theme's, which fills in. */
+export type UserFonts = Partial<Record<UserFontRole, string>>
 
 /** One face name, safe to put in quotes in a CSS font stack: no quotes, separators or controls. */
 export function isFontFamilyName(value: string): boolean {
@@ -248,6 +255,7 @@ export const DEFAULT_SETTINGS: SettingsFile = {
     reduceMotion: 'system',
     zoom: 1.1,
     sidebarHover: true,
+    fonts: {},
   },
   notifications: {
     permission: true,
