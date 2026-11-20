@@ -436,6 +436,19 @@ export class AgentHost {
     return null
   }
 
+  /**
+   * A port of main's own, served as a window's, for the notch island; null while the host is not
+   * running. Main calls only the island's methods on it.
+   */
+  connectMain(): MessagePortMain | null {
+    if (this.host.state !== 'ready') return null
+    const { port1, port2 } = new MessageChannelMain()
+    if (this.host.post({ type: 'host:connect', windowId: -1 }, [port1])) return port2
+    port1.close()
+    port2.close()
+    return null
+  }
+
   restart(): void {
     this.host.restart()
   }

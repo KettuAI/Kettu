@@ -120,7 +120,7 @@ export function sessionModel(
 ): ConfigOption | undefined {
   const option = options?.config.find((o) => o.category === 'model')
   if (!option || model === null) return undefined
-  return { ...option, value: model } as ConfigOption
+  return { ...option, value: model }
 }
 
 /**

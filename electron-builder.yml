@@ -10,7 +10,8 @@ extraResources:
   # The tray's images, read from the file system by src/main/tray.ts.
   - from: resources/tray
     to: tray
-  # The device host's helpers, which tools/install/device-helpers.mjs puts in out/helpers.
+  # The device host's helpers and the notch island's, which tools/install/device-helpers.mjs puts
+  # in out/helpers.
   - from: out/helpers
     to: helpers
   # Cua Driver's program, which computer use runs, as tools/install/cua-driver.mjs fetched it for

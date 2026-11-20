@@ -13,6 +13,7 @@ import type devices from './locales/en/devices.json'
 import type files from './locales/en/files.json'
 import type git from './locales/en/git.json'
 import type host from './locales/en/host.json'
+import type island from './locales/en/island.json'
 import type main from './locales/en/main.json'
 import type marketplace from './locales/en/marketplace.json'
 import type onboarding from './locales/en/onboarding.json'
@@ -50,6 +51,7 @@ declare module 'i18next' {
       files: typeof files
       git: typeof git
       host: typeof host
+      island: typeof island
       main: typeof main
       marketplace: typeof marketplace
       onboarding: typeof onboarding
