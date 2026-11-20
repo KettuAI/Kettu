@@ -348,7 +348,7 @@ function shown(selector: string): boolean {
 }
 
 /**
- * Previous or next row in sidebar order, across Pinned, the projects and No project: a session, a
+ * Previous or next row in sidebar order, across Pinned, No project and the projects: a session, a
  * task's page or one of its steps.
  */
 function stepSession(delta: -1 | 1): void {

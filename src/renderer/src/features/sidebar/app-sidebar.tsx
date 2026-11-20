@@ -75,8 +75,8 @@ import { SessionRow } from './session-row'
 import { TaskRow } from './task-row'
 
 /**
- * The sidebar's list under its menu, in App Shell's look: Pinned, then the projects as folders
- * holding their sessions, then No project; with other hosts, Needs you and each host's projects
+ * The sidebar's list under its menu, in App Shell's look: Pinned, then No project and the projects
+ * as folders holding their sessions; with other hosts, Needs you and each host's projects
  * under its heading.
  */
 export function SidebarList() {
@@ -186,6 +186,9 @@ export function SidebarList() {
               {projects.length === 0 && !scratch && (
                 <span className="ui-as-side__empty">{t('nav.empty')}</span>
               )}
+              {!noProjectPinned(noProjects, null) && (
+                <ProjectGroup project={null} stop={stop} onImport={importSessions} />
+              )}
               {projects
                 .filter((project) => project.pinnedAt == null)
                 .map((project) => (
@@ -196,9 +199,6 @@ export function SidebarList() {
                     onImport={importSessions}
                   />
                 ))}
-              {!noProjectPinned(noProjects, null) && (
-                <ProjectGroup project={null} stop={stop} onImport={importSessions} />
-              )}
             </div>
           </>
         )}
@@ -231,7 +231,7 @@ function noProjectHosts(
   )
 }
 
-/** A host's heading, its projects' folders and its No project folder. */
+/** A host's heading, its No project group and its projects' folders. */
 function HostSection({
   hostId,
   projects,
@@ -257,6 +257,15 @@ function HostSection({
       </div>
       {open && (
         <>
+          {!pinned && (
+            <ProjectGroup
+              project={null}
+              stop={stop}
+              onImport={onImport}
+              hostId={hostId}
+              away={away}
+            />
+          )}
           {own
             .filter((project) => project.pinnedAt == null)
             .map((project) => (
@@ -269,15 +278,6 @@ function HostSection({
                 away={away}
               />
             ))}
-          {!pinned && (
-            <ProjectGroup
-              project={null}
-              stop={stop}
-              onImport={onImport}
-              hostId={hostId}
-              away={away}
-            />
-          )}
           {own.length === 0 && !scratch && <HostEmpty />}
         </>
       )}

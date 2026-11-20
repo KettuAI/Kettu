@@ -441,7 +441,7 @@ export function hostGroup(hostId: string | null): string {
 export type SidebarTabStop = { kind: 'session'; id: string } | { kind: 'group'; key: string }
 
 /**
- * The rows the sidebar lists, in its order: Pinned, then each project's, then No project's. A
+ * The rows the sidebar lists, in its order: Pinned, then No project's, then each project's. A
  * collapsed group, parent or task leaves out the rows it hides. A row is a session's id, a task's,
  * or a task's step: its session's id, or `taskId/stepId` for a person's step.
  */
@@ -511,10 +511,10 @@ export function visibleOrder(
       view.collapsedProjects[hostGroup(hostId)]
         ? []
         : [
+            ...(noProjectPinned(noProjects, hostId) ? [] : noProjectRows(hostId)),
             ...projects
               .filter((p) => p.pinnedAt == null && hostOfPath(p.path) === hostId)
               .flatMap(projectRows),
-            ...(noProjectPinned(noProjects, hostId) ? [] : noProjectRows(hostId)),
           ],
     ),
   ]
@@ -559,15 +559,15 @@ export function sidebarTabStop(
     if (view.hosts && view.collapsedProjects[hostGroup(hostId)]) {
       return { kind: 'group', key: hostGroup(hostId) }
     }
+    if (!noProjectPinned(noProjects, hostId) && sessionTree(byId, null, hostId).length > 0) {
+      return { kind: 'group', key: noProjectGroup(hostId) }
+    }
     const own = projects.filter((p) => p.pinnedAt == null && hostOfPath(p.path) === hostId)
     firstProject ??= own[0]
     const project = own.find(
       (p) => sessionTree(byId, p.path).length > 0 || listedTasks(tasks, p.path).length > 0,
     )
     if (project) return { kind: 'group', key: project.path }
-    if (!noProjectPinned(noProjects, hostId) && sessionTree(byId, null, hostId).length > 0) {
-      return { kind: 'group', key: noProjectGroup(hostId) }
-    }
   }
   return firstProject ? { kind: 'group', key: firstProject.path } : null
 }
