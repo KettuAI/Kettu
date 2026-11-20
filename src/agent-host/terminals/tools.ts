@@ -5,6 +5,7 @@
 
 import type { CallToolResult, Tool } from '@modelcontextprotocol/sdk/types.js'
 import { CONTROL_WAIT_MS, type SurfaceAccessAnswer } from '@shared/control'
+import { MAX_TERMINAL_NAME, terminalName } from '@shared/terminal-host'
 import {
   DEFAULT_TERMINAL_READ_LINES,
   MAX_TERMINAL_COMMAND,
@@ -32,6 +33,11 @@ const TERMINAL_ID: Schema = {
   description: 'The terminal id that terminal_run or terminal_list gave.',
 }
 const ACTS = { readOnlyHint: false, openWorldHint: false } as const
+const NAME: Schema = {
+  type: 'string',
+  maxLength: MAX_TERMINAL_NAME,
+  description: `A short name for the tab, at most ${MAX_TERMINAL_NAME} characters, such as "Dev server".`,
+}
 const LINES: Schema = {
   type: 'integer',
   minimum: 1,
@@ -57,10 +63,11 @@ export const TERMINAL_TOOLS: Tool[] = [
     name: 'terminal_run',
     title: 'Run in a terminal',
     description:
-      "Opens a new terminal tab in this session's folder, beside the conversation, and runs a one-line command in the user's shell, such as a dev server, a watcher or a long build. The user sees it and can take it over. Returns the terminal's id; read its output with terminal_read.",
-    inputSchema: object({ command: { type: 'string', description: 'One line, run as typed.' } }, [
-      'command',
-    ]),
+      "Opens a new terminal tab in this session's folder, beside the conversation, and runs a one-line command in the user's shell, such as a dev server, a watcher or a long build. The user sees it and can take it over. Give it a short `name` that says what it is for; without one the tab shows the command. Returns the terminal's id; read its output with terminal_read.",
+    inputSchema: object(
+      { command: { type: 'string', description: 'One line, run as typed.' }, name: NAME },
+      ['command'],
+    ),
     annotations: { ...ACTS, destructiveHint: true },
   },
   {
@@ -106,6 +113,28 @@ export const TERMINAL_TOOLS: Tool[] = [
     ]),
     annotations: { ...ACTS },
   },
+  {
+    name: 'terminal_rename',
+    title: 'Rename a terminal',
+    description:
+      "Names one of this session's terminal tabs; an empty name goes back to what it runs. You may rename the terminals you opened and those the user lets you use, unless the user named them. A name the user gave, or a terminal of theirs you may not use yet, asks the user first and waits for the answer, unless the user asked you for this rename in the conversation: then set `userAsked` and it is renamed at once. Never set `userAsked` on your own initiative.",
+    inputSchema: object(
+      {
+        terminalId: TERMINAL_ID,
+        name: {
+          ...NAME,
+          description: `${String(NAME.description)} Empty goes back to the automatic name.`,
+        },
+        userAsked: {
+          type: 'boolean',
+          default: false,
+          description: 'The user asked you in the conversation to give this terminal this name.',
+        },
+      },
+      ['terminalId', 'name'],
+    ),
+    annotations: { readOnlyHint: false, openWorldHint: false, destructiveHint: false },
+  },
 ]
 
 /**
@@ -116,6 +145,8 @@ export const TERMINAL_READ_TOOLS: readonly TerminalToolName[] = [
   'terminal_list',
   'terminal_read',
   'terminal_wait',
+  // Touches nothing in a terminal; a name or terminal of the user's asks them in Kettu's card.
+  'terminal_rename',
 ]
 
 export function isTerminalToolName(name: string): name is TerminalToolName {
@@ -131,8 +162,15 @@ export interface TerminalToolDeps {
   folderOf(sessionId: string): string | null
   /** What the session's permission mode lets it: full access asks nothing, planning only reads. */
   accessOf(sessionId: string): { fullAccess: boolean; planning: boolean }
-  /** Asks the user in the session's thread whether its agent may use a terminal they opened. */
-  ask(sessionId: string, terminal: AgentTerminal, readOnly: boolean): Promise<SurfaceAccessAnswer>
+  /**
+   * Asks the user in the session's thread whether its agent may use a terminal they opened, or with
+   * `rename`, give it that name.
+   */
+  ask(
+    sessionId: string,
+    terminal: AgentTerminal,
+    ask: { readOnly: boolean; rename?: string },
+  ): Promise<SurfaceAccessAnswer>
   /** Full access let the agent use a terminal the user opened without asking. */
   used(sessionId: string, terminal: AgentTerminal): void
   /** The user referenced the terminal in a message to the session, which allows it. */
@@ -166,6 +204,13 @@ function typed(value: unknown, key: string, allowEmpty: boolean): string {
   return value
 }
 
+function terminalNameArg(value: unknown): string {
+  if (typeof value !== 'string') throw new TerminalArgsError('"name" must be a string')
+  const named = terminalName(value)
+  if ('problem' in named) throw new TerminalArgsError(named.problem)
+  return named.name ?? ''
+}
+
 function terminalId(value: unknown): string {
   if (typeof value !== 'string' || value.length === 0 || value.length > MAX_ID) {
     throw new TerminalArgsError('"terminalId" must be the id terminal_run gave')
@@ -197,7 +242,12 @@ export function terminalCallOf(
   name: TerminalToolName,
   sessionId: string,
   input: unknown,
-  context: { agentId: AgentId | null; folder: string | null; planning?: boolean },
+  context: {
+    agentId: AgentId | null
+    folder: string | null
+    planning?: boolean
+    fullAccess?: boolean
+  },
 ): TerminalCall {
   const given = args(input)
   switch (name) {
@@ -208,8 +258,25 @@ export function terminalCallOf(
       if (!context.agentId || !context.folder) {
         throw new TerminalArgsError('This session has no folder to open a terminal in')
       }
-      return { kind: 'run', sessionId, agentId: context.agentId, folder: context.folder, command }
+      const name = given.name === undefined ? undefined : terminalNameArg(given.name)
+      return {
+        kind: 'run',
+        sessionId,
+        agentId: context.agentId,
+        folder: context.folder,
+        command,
+        ...(name ? { name } : {}),
+      }
     }
+    case 'terminal_rename':
+      return {
+        kind: 'rename',
+        sessionId,
+        terminalId: terminalId(given.terminalId),
+        name: terminalNameArg(given.name),
+        // Full access asks nothing; the user asking for it is their answer.
+        asked: flag(given.userAsked, 'userAsked', false) || context.fullAccess === true,
+      }
     case 'terminal_read':
     case 'terminal_wait':
       return {
@@ -256,9 +323,15 @@ const OPENERS: Record<AgentTerminal['opener'], string> = {
   user: 'The user opened it.',
 }
 
+const NAMERS: Record<NonNullable<AgentTerminal['namedBy']>, string> = {
+  user: ' The user named it.',
+  agent: ' You named it.',
+}
+
 function listed(terminal: AgentTerminal): string {
   const use = terminal.usable ? '' : ' Ask first: your first call on it asks the user to allow it.'
-  return `- ${describe(terminal)} Named "${terminal.title}". ${OPENERS[terminal.opener]}${use}`
+  const by = terminal.namedBy ? NAMERS[terminal.namedBy] : ''
+  return `- ${describe(terminal)}${by} ${OPENERS[terminal.opener]}${use}`
 }
 
 function describe(terminal: AgentTerminal): string {
@@ -270,7 +343,8 @@ function describe(terminal: AgentTerminal): string {
         : terminal.busy
           ? `running ${terminal.title}`
           : 'idle at the prompt'
-  return `Terminal ${terminal.id}: ${state}.`
+  const name = terminal.name ? ` "${terminal.name}"` : ''
+  return `Terminal ${terminal.id}${name}: ${state}.`
 }
 
 const WAIT_REASONS: Record<TerminalWaitReason, string> = {
@@ -299,6 +373,7 @@ export class TerminalTools {
         agentId: this.deps.agentOf(sessionId),
         folder: this.deps.folderOf(sessionId),
         planning: access.planning,
+        fullAccess: access.fullAccess,
       })
     } catch (error) {
       if (error instanceof TerminalArgsError) return failure('invalid_params', error.message)
@@ -306,9 +381,64 @@ export class TerminalTools {
     }
     const answer = await this.deps.call(call)
     if ('result' in answer && answer.result.kind === 'ask') {
-      return this.askFirst(call, answer.result.terminal, access)
+      return call.kind === 'rename'
+        ? this.askRename(call, answer.result.terminal)
+        : this.askFirst(call, answer.result.terminal, access)
     }
     return this.answer(answer)
+  }
+
+  /**
+   * A rename of a name the user gave, or of a terminal of theirs: their card's answer renames it
+   * this once, without allowing the terminal itself.
+   */
+  private async askRename(
+    call: Extract<TerminalCall, { kind: 'rename' }>,
+    terminal: AgentTerminal,
+  ): Promise<CallToolResult> {
+    const { sessionId } = call
+    const key = `${sessionId}\n${terminal.id}\nrename\n${call.name}`
+    let asking = this.asking.get(key)
+    if (!asking) {
+      void this.deps.call({ kind: 'asking', sessionId, terminalId: terminal.id, asking: true })
+      asking = this.deps
+        .ask(sessionId, terminal, { readOnly: false, rename: call.name })
+        .then(async (answer) => {
+          await this.deps.call({
+            kind: 'asking',
+            sessionId,
+            terminalId: terminal.id,
+            asking: false,
+          })
+          return answer
+        })
+        .finally(() => this.asking.delete(key))
+      this.asking.set(key, asking)
+    }
+    const decision = await this.waitFor(asking)
+    if (decision === 'waiting') {
+      const status = `The user has not answered yet whether you may rename their terminal "${terminal.name ?? terminal.title}". Call again to keep waiting.`
+      return reply(status, { asking: true, status })
+    }
+    if (decision !== 'allow') {
+      return failure('not_allowed', 'The user kept the name of their terminal.')
+    }
+    return this.answer(await this.deps.call({ ...call, asked: true }))
+  }
+
+  /** The answer, or `waiting` once CONTROL_WAIT_MS passed without one. */
+  private async waitFor(
+    asking: Promise<SurfaceAccessAnswer>,
+  ): Promise<SurfaceAccessAnswer | 'waiting'> {
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const decision = await Promise.race([
+      asking,
+      new Promise<'waiting'>((resolve) => {
+        timer = setTimeout(() => resolve('waiting'), CONTROL_WAIT_MS)
+      }),
+    ])
+    clearTimeout(timer)
+    return decision
   }
 
   /**
@@ -335,7 +465,7 @@ export class TerminalTools {
         void this.deps.call({ kind: 'asking', sessionId, terminalId: terminal.id, asking: true })
         // The allow is given as the answer comes, so a call made after it finds the terminal open.
         asking = this.deps
-          .ask(sessionId, terminal, access.planning)
+          .ask(sessionId, terminal, { readOnly: access.planning })
           .then(async (answer) => {
             if (answer === 'allow') return this.grant(sessionId, terminal.id)
             await this.deps.call({
@@ -349,14 +479,7 @@ export class TerminalTools {
           .finally(() => this.asking.delete(key))
         this.asking.set(key, asking)
       }
-      let timer: ReturnType<typeof setTimeout> | undefined
-      decision = await Promise.race([
-        asking,
-        new Promise<'waiting'>((resolve) => {
-          timer = setTimeout(() => resolve('waiting'), CONTROL_WAIT_MS)
-        }),
-      ])
-      clearTimeout(timer)
+      decision = await this.waitFor(asking)
     }
     if (decision === 'waiting') {
       const status = `The user has not answered yet whether you may use their terminal "${terminal.title}". Call again to keep waiting.`

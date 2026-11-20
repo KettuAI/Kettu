@@ -527,6 +527,8 @@ export interface SurfaceAccessEntry {
   targetName: string
   /** The session planned when it asked, so the agent would only read it. */
   readOnly?: true
+  /** It asked to give the terminal this name, which an allow does this once, and nothing else. */
+  rename?: string
   decision: SurfaceAccessAnswer | null
   /** When an unanswered request counts as denied, in the host's milliseconds. */
   expiresAt?: number
@@ -1509,6 +1511,7 @@ export function isThreadEntry(value: unknown): value is ThreadEntry {
       return (
         value.surface === 'terminal' &&
         typeof value.targetId === 'string' &&
+        (value.rename === undefined || typeof value.rename === 'string') &&
         typeof value.targetName === 'string' &&
         (value.decision === null ||
           value.decision === 'allow' ||

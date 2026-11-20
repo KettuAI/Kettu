@@ -93,6 +93,8 @@ describe('terminal tool arguments', () => {
 const USER_TERMINAL: AgentTerminal = {
   id: 't1',
   title: 'pnpm dev',
+  name: null,
+  namedBy: null,
   busy: true,
   exitCode: null,
   password: false,
@@ -117,6 +119,10 @@ function userTerminal(deps: Partial<TerminalToolDeps> = {}) {
         return { result: { kind: 'terminal', terminal: { ...USER_TERMINAL, usable: allowed } } }
       }
       if (call.kind === 'asking') return { result: { kind: 'terminal', terminal: USER_TERMINAL } }
+      if (call.kind === 'rename') {
+        if (!call.asked) return { result: { kind: 'ask', terminal: USER_TERMINAL } }
+        return { result: { kind: 'terminal', terminal: { ...USER_TERMINAL, name: call.name } } }
+      }
       if (!allowed) return { result: { kind: 'ask', terminal: USER_TERMINAL } }
       return {
         result: { kind: 'output', terminal: { ...USER_TERMINAL, usable: true }, output: 'ok' },
@@ -146,7 +152,7 @@ describe('an agent using a terminal the user opened', () => {
   it('asks the user, gives the allow and then runs the call', async () => {
     const { calls, ask, read } = userTerminal()
     const result = await read()
-    expect(ask).toHaveBeenCalledWith('s1', USER_TERMINAL, false)
+    expect(ask).toHaveBeenCalledWith('s1', USER_TERMINAL, { readOnly: false })
     expect(kinds(calls)).toEqual(['read', 'asking:true', 'allow', 'read'])
     expect(result.isError).toBeUndefined()
     expect(result.structuredContent).toMatchObject({ output: 'ok' })
@@ -203,5 +209,58 @@ describe('an agent using a terminal the user opened', () => {
       readOnly: true,
     })
     expect(terminalCallOf('terminal_input', 's1', typing, context)).not.toHaveProperty('readOnly')
+  })
+})
+
+describe('an agent renaming a terminal', () => {
+  beforeEach(() => vi.useFakeTimers())
+  afterEach(() => vi.useRealTimers())
+
+  const caller = { sessionId: 's1', project: '/work/app' }
+
+  it("asks before it renames the user's, then renames it this once", async () => {
+    const { tools, calls, ask } = userTerminal()
+    const result = await tools.call(caller, 'terminal_rename', { terminalId: 't1', name: 'Deploy' })
+    expect(ask).toHaveBeenCalledWith('s1', USER_TERMINAL, { readOnly: false, rename: 'Deploy' })
+    expect(result.structuredContent).toMatchObject({ terminal: { name: 'Deploy' } })
+    expect(kinds(calls)).toEqual(['rename', 'asking:true', 'asking:false', 'rename'])
+    expect(calls.filter((call) => call.kind === 'allow')).toEqual([])
+  })
+
+  it('keeps the name when the user says no', async () => {
+    const { tools, calls } = userTerminal({ ask: async () => 'deny' })
+    const result = await tools.call(caller, 'terminal_rename', { terminalId: 't1', name: 'Deploy' })
+    expect(result).toMatchObject({ isError: true, structuredContent: { code: 'not_allowed' } })
+    expect(kinds(calls)).toEqual(['rename', 'asking:true', 'asking:false'])
+  })
+
+  it('renames at once when the user asked for it, or the mode asks nothing', async () => {
+    const asked = userTerminal()
+    await asked.tools.call(caller, 'terminal_rename', {
+      terminalId: 't1',
+      name: 'Deploy',
+      userAsked: true,
+    })
+    expect(asked.ask).not.toHaveBeenCalled()
+    expect(asked.calls).toEqual([
+      { kind: 'rename', sessionId: 's1', terminalId: 't1', name: 'Deploy', asked: true },
+    ])
+    const full = userTerminal({ accessOf: () => ({ fullAccess: true, planning: false }) })
+    await full.tools.call(caller, 'terminal_rename', { terminalId: 't1', name: 'Deploy' })
+    expect(full.ask).not.toHaveBeenCalled()
+    expect(kinds(full.calls)).toEqual(['rename'])
+  })
+
+  it('takes one line of at most 40 characters as a name, and empty to go back', () => {
+    const call = (name: unknown) =>
+      terminalCallOf('terminal_rename', 's1', { terminalId: 't1', name }, context)
+    expect(call('  Deploy  ')).toMatchObject({ name: 'Deploy', asked: false })
+    expect(call('')).toMatchObject({ name: '' })
+    expect(() => call('x'.repeat(41))).toThrow(TerminalArgsError)
+    expect(() => call('a\nb')).toThrow(TerminalArgsError)
+    expect(() => call(7)).toThrow(TerminalArgsError)
+    expect(
+      terminalCallOf('terminal_run', 's1', { command: 'pnpm dev', name: 'Dev server' }, context),
+    ).toMatchObject({ kind: 'run', name: 'Dev server' })
   })
 })

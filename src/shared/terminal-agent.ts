@@ -11,6 +11,7 @@ export const TERMINAL_TOOL_NAMES = [
   'terminal_wait',
   'terminal_input',
   'terminal_stop',
+  'terminal_rename',
 ] as const
 
 export type TerminalToolName = (typeof TERMINAL_TOOL_NAMES)[number]
@@ -24,6 +25,8 @@ export type TerminalCall =
       /** The session's folder, its worktree when it has one. */
       folder: string
       command: string
+      /** The tab's name, else the command names it. */
+      name?: string
     }
   /**
    * The user's Run on a shell code block of the session's agent's reply: a new terminal of the
@@ -45,6 +48,12 @@ export type TerminalCall =
    * agent host sends it, once the user allowed it in a card, shared it, or took it back.
    */
   | { kind: 'allow'; sessionId: string; terminalId: string; allowed: boolean }
+  /**
+   * Names the tab, an empty name going back to its title. A name the user gave, or a terminal of
+   * theirs the agent may not use yet, answers `ask` unless `asked`: the user asked for the rename,
+   * allowed it in a card, or the session's mode asks nothing.
+   */
+  | { kind: 'rename'; sessionId: string; terminalId: string; name: string; asked: boolean }
   /** The user is asked whether the agent may use the terminal, which its tab shows meanwhile. */
   | { kind: 'asking'; sessionId: string; terminalId: string; asking: boolean }
   | { kind: 'read'; sessionId: string; terminalId: string; lines: number }
@@ -64,7 +73,11 @@ export type TerminalCall =
 /** A terminal as the agent sees it. */
 export interface AgentTerminal {
   id: string
+  /** What it runs or last ran, or the shell's name. */
   title: string
+  /** The name its tab shows in place of the title, and who gave it; null for none. */
+  name: string | null
+  namedBy: 'user' | 'agent' | null
   busy: boolean
   exitCode: number | null
   /** Its program waits for the user to type a password. */

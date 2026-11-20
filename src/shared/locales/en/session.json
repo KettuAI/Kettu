@@ -165,6 +165,18 @@
     "where": "Reads its recent output and types commands into it. Passwords stay yours to type.",
     "whereRead": "Reads its recent output only, since this session is planning."
   },
+  "terminalRename": {
+    "to": "To “{{name}}”",
+    "toAuto": "Back to what it runs",
+    "decision": {
+      "allow": "Rename",
+      "deny": "Keep the name"
+    },
+    "answer": {
+      "allow": "Renamed",
+      "deny": "Kept the name"
+    }
+  },
   "computerApp": {
     "decision": {
       "session": "Allow for this session",
@@ -1027,6 +1039,7 @@
       "site": "open a site",
       "device": "use a device",
       "terminal": "use your terminal",
+      "terminalRename": "rename your terminal",
       "app": "use an app",
       "projectMcp": "start MCP servers",
       "projectHooks": "run commands this project sets to run automatically"

@@ -132,6 +132,7 @@
     "browserOrigin": "Wants to open {{site}}",
     "deviceAccess": "Wants to use {{device}}",
     "terminalAccess": "Wants to use your terminal {{terminal}}",
+    "terminalRename": "Wants to rename your terminal {{terminal}} to {{name}}",
     "computerApp": "Wants to use {{app}}",
     "computerSetup": "Wants to use your computer",
     "controlAsk": {

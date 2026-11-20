@@ -1,5 +1,5 @@
 import { memo } from 'react'
-import { ComputerTerminal01Icon } from '@hugeicons/core-free-icons'
+import { ComputerTerminal01Icon, PencilEdit02Icon } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
 import type { SurfaceAccessAnswer } from '@shared/control'
 import { host } from '@renderer/lib/host'
@@ -13,7 +13,14 @@ const ANSWER_TEXT = {
   revoked: 'terminalAccess.answer.revoked',
 } as const satisfies Record<SurfaceAccessAnswer | 'revoked', string>
 
-/** An agent asked to use a terminal the user opened in its session. */
+const RENAME_TEXT = {
+  allow: 'terminalRename.answer.allow',
+  deny: 'terminalRename.answer.deny',
+  timeout: 'terminalAccess.answer.timeout',
+  revoked: 'terminalRename.answer.allow',
+} as const satisfies Record<SurfaceAccessAnswer | 'revoked', string>
+
+/** An agent asked to use a terminal the user opened in its session, or to rename one of theirs. */
 export const SurfaceAccessEntry = memo(function SurfaceAccessEntry({
   sessionId,
   entryId,
@@ -27,29 +34,37 @@ export const SurfaceAccessEntry = memo(function SurfaceAccessEntry({
   const entry = useEntry(sessionId, entryId, 'surface_access')
   const animation = useEntryAnimation(sessionId, entryId)
   if (!entry) return null
-  const allow = t('terminalAccess.decision.allow')
+  const rename = entry.rename
+  const texts = rename === undefined ? ANSWER_TEXT : RENAME_TEXT
+  const allow = t(
+    rename === undefined ? 'terminalAccess.decision.allow' : 'terminalRename.decision.allow',
+  )
   return (
     <AccessCard
       sessionId={sessionId}
       entryId={entryId}
       agentName={agentName}
       className={animation}
-      action={t('access.action.terminal')}
+      action={t(rename === undefined ? 'access.action.terminal' : 'access.action.terminalRename')}
       target={entry.targetName}
-      glyph={ComputerTerminal01Icon}
-      reason={t(entry.readOnly ? 'terminalAccess.whereRead' : 'terminalAccess.where')}
+      glyph={rename === undefined ? ComputerTerminal01Icon : PencilEdit02Icon}
+      reason={
+        rename === undefined
+          ? t(entry.readOnly ? 'terminalAccess.whereRead' : 'terminalAccess.where')
+          : rename
+            ? t('terminalRename.to', { name: rename })
+            : t('terminalRename.toAuto')
+      }
       // The card reads an allow for this session as its own.
       answer={entry.revoked ? 'revoked' : entry.decision === 'allow' ? 'session' : entry.decision}
       device={entry.device}
       words={{
         allow: { session: allow, always: allow },
-        deny: t('terminalAccess.decision.deny'),
+        deny: t(
+          rename === undefined ? 'terminalAccess.decision.deny' : 'terminalRename.decision.deny',
+        ),
         answer: (a) =>
-          t(
-            a === 'session'
-              ? ANSWER_TEXT.allow
-              : (ANSWER_TEXT[a as keyof typeof ANSWER_TEXT] ?? ANSWER_TEXT.deny),
-          ),
+          t(a === 'session' ? texts.allow : (texts[a as keyof typeof texts] ?? texts.deny)),
       }}
       trailing={null}
       request={(decision) =>

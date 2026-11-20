@@ -26,6 +26,11 @@ describe('terminal request validators', () => {
       projectPath: '/p',
       sessionId: 's1',
     })
+    expect(validators['terminals.rename']({ id: 't', name: 'Dev server' })).toEqual({
+      id: 't',
+      name: 'Dev server',
+    })
+    expect(validators['terminals.rename']({ id: 't', name: '' })).toEqual({ id: 't', name: '' })
     expect(validators['terminals.list']({})).toEqual({})
     expect(validators['terminals.list'](undefined)).toEqual({})
     expect(validators['terminals.input']({ id: 't', data: '\x03' })).toEqual({
@@ -78,6 +83,10 @@ describe('terminal request validators', () => {
     ['terminals.kill', { id: '' }],
     ['terminals.kill', { id: 'x'.repeat(200) }],
     ['terminals.attach', 'id'],
+    ['terminals.rename', { id: 't' }],
+    ['terminals.rename', { id: 't', name: 7 }],
+    ['terminals.rename', { id: 't', name: 'x'.repeat(257) }],
+    ['terminals.rename', { id: 't', name: 'x', by: 'agent' }],
   ] as const)('rejects %s %j', (method, params) => {
     expect(() => validators[method](params as never)).toThrow(ValidationError)
   })

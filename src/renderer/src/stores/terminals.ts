@@ -4,7 +4,7 @@ import { IDLE_CONTROL, type ActiveControl } from '@shared/control'
 import type { PortConnectionState } from '@shared/port-rpc'
 import type { TerminalCommand, TerminalEvent, TerminalInfo } from '@shared/terminal-host'
 import { emitAppEvent } from '@renderer/app/events'
-import { errorMessage, terminalHost, terminals, terminalsAt } from '@renderer/lib/host'
+import { errorCode, errorMessage, terminalHost, terminals, terminalsAt } from '@renderer/lib/host'
 import { hostOfPath } from '@renderer/lib/host-paths'
 import { isWeb } from '@renderer/lib/platform'
 import {
@@ -31,7 +31,6 @@ export type { TerminalOwner } from '@shared/terminal-host'
 export interface TerminalState extends TerminalInfo {
   activity: boolean // printed while its tab was not shown
   stale: boolean // the terminal host restarted without it; its output stays, with Restart
-  name: string | null // the user's name for the tab; null follows the process title
   localUrl: string | null // the last local address with a port it printed
 }
 
@@ -172,6 +171,7 @@ function upsert(info: TerminalInfo, announceArrival = true): void {
     ...info,
     sessionId: info.sessionId ?? null,
     owner: info.owner ?? null,
+    agentAllowed: info.agentAllowed ?? false,
     control: info.control ?? IDLE_CONTROL,
     waiting: info.waiting ?? null,
   }
@@ -188,7 +188,9 @@ function upsert(info: TerminalInfo, announceArrival = true): void {
           ...info,
           activity: previous?.activity ?? false,
           stale: false,
-          name: previous?.name ?? null,
+          // A host from before tab names sends none, so the name given in this window stays.
+          name: info.name !== undefined ? info.name : (previous?.name ?? null),
+          namedBy: info.namedBy !== undefined ? info.namedBy : (previous?.namedBy ?? null),
           localUrl: previous?.localUrl ?? null,
         },
       },
@@ -665,14 +667,28 @@ export async function interruptTerminal(id: string): Promise<void> {
   }
 }
 
-/** Names a tab; a blank name returns it to the title of its process. */
-export function renameTerminal(id: string, name: string): void {
+/**
+ * Names a tab on its host, which every window and device then shows; a blank name returns it to
+ * its title. The name shows at once, and goes back if the host refuses it.
+ */
+export async function renameTerminal(id: string, name: string): Promise<void> {
   const next = name.trim() || null
-  useTerminalsStore.setState((s) => {
-    const t = s.byId[id]
-    if (!t || t.name === next) return s
-    return { byId: { ...s.byId, [id]: { ...t, name: next } } }
-  })
+  const before = useTerminalsStore.getState().byId[id]
+  if (!before || before.name === next) return
+  const set = (value: string | null, namedBy: TerminalState['namedBy']) =>
+    useTerminalsStore.setState((s) => {
+      const t = s.byId[id]
+      return t ? { byId: { ...s.byId, [id]: { ...t, name: value, namedBy } } } : s
+    })
+  set(next, next ? 'user' : null)
+  try {
+    upsert(await terminals('terminals.rename', { id, name: next ?? '' }), false)
+  } catch (error) {
+    // A host from before tab names keeps none: the name stays in this window, as it did then.
+    if (errorCode(error) === 'unknown_method') return
+    set(before.name, before.namedBy)
+    setError(panelsOf([id]), error)
+  }
 }
 
 /** Moves a tab to a place in its panel's row, which the order keeps from then on. */
@@ -798,6 +814,10 @@ export async function replaceStale(id: string): Promise<void> {
   if (!created) return
   inheritTab(id, created.id)
   forgetTerminal(id)
+  // The new shell's host keeps the old tab's name too, for every window and device.
+  if (old.name) {
+    void terminals('terminals.rename', { id: created.id, name: old.name }).catch(() => {})
+  }
 }
 
 /**
@@ -816,7 +836,7 @@ function inheritTab(oldId: string, newId: string): void {
       .map((other) => (other === oldId ? newId : other))
     const right = s.split[panel] === oldId
     return {
-      byId: { ...s.byId, [newId]: { ...created, name: old.name } },
+      byId: { ...s.byId, [newId]: { ...created, name: old.name, namedBy: old.namedBy } },
       order: { ...s.order, [panel]: ids },
       focusing: newId,
       ...(right

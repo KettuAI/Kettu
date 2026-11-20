@@ -1928,7 +1928,7 @@ export class SessionManager {
   surfaceAccessAsked(
     sessionId: string,
     target: { surface: 'terminal'; id: string; name: string },
-    readOnly: boolean,
+    ask: { readOnly: boolean; rename?: string },
     waitMs: number,
   ): Promise<SurfaceAccessAnswer> {
     const live = this.live.get(sessionId)
@@ -1939,7 +1939,8 @@ export class SessionManager {
       surface: target.surface,
       targetId: target.id,
       targetName: target.name,
-      ...(readOnly ? { readOnly: true as const } : {}),
+      ...(ask.readOnly ? { readOnly: true as const } : {}),
+      ...(ask.rename !== undefined ? { rename: ask.rename } : {}),
       decision: null,
       expiresAt: Date.now() + waitMs,
       after: agentEntryBefore(live.thread),
@@ -1955,7 +1956,9 @@ export class SessionManager {
       live.id,
       'permission',
       this.titleOf(live),
-      t('attention.terminalAccess', { terminal: target.name }),
+      ask.rename !== undefined
+        ? t('attention.terminalRename', { terminal: target.name, name: ask.rename })
+        : t('attention.terminalAccess', { terminal: target.name }),
       { id: entry.id },
     )
     return new Promise((resolve) => {

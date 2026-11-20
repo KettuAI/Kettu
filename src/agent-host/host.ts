@@ -839,15 +839,15 @@ export class AgentHost {
         call: (call) => this.terminalCall(call),
         agentOf: (sessionId) => this.sessions.sessionAgent(sessionId),
         accessOf: (sessionId) => this.sessions.surfaceAccessOf(sessionId),
-        ask: (sessionId, terminal, readOnly) =>
+        ask: (sessionId, terminal, ask) =>
           this.sessions.surfaceAccessAsked(
             sessionId,
-            { surface: 'terminal', id: terminal.id, name: terminal.title },
-            readOnly,
+            { surface: 'terminal', id: terminal.id, name: terminal.name ?? terminal.title },
+            ask,
             SURFACE_ACCESS_WAIT_MS,
           ),
         used: (sessionId, terminal) =>
-          this.sessions.surfaceUsed(sessionId, 'terminal', terminal.title),
+          this.sessions.surfaceUsed(sessionId, 'terminal', terminal.name ?? terminal.title),
         shared: (sessionId, terminalId) => {
           const to = this.sharedTerminals.get(terminalId)
           return to !== undefined && (to === null || to === sessionId)

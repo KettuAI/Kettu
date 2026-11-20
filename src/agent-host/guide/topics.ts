@@ -350,7 +350,7 @@ The terminal tools run commands in a terminal tab of this session, which the use
 
 ## Steps
 
-1. \`terminal_run\` opens a terminal tab in this session's folder and runs a one-line command in the user's shell. It returns the terminal's id.
+1. \`terminal_run\` opens a terminal tab in this session's folder and runs a one-line command in the user's shell. Give it a short \`name\` that says what it is for, such as "Dev server"; without one the tab shows the command. It returns the terminal's id.
 2. \`terminal_wait\` waits until the command ends, waits for a password, or has been quiet for ${TERMINAL_QUIET_MS / 1000} s, such as a server that is up, at most ${TERMINAL_WAIT_MS / 1000} s, and says why it returned; call it again to keep waiting. \`terminal_read\` gives the latest output at once.
 3. \`terminal_input\` types an answer to a prompt, and presses Enter unless \`enter\` is false.
 4. \`terminal_stop\` sends Ctrl+C; with \`close\` it also ends the shell and closes the tab.
@@ -364,6 +364,10 @@ When a terminal waits for a password, ask the user to type it in that terminal, 
 The user may take a terminal over. Your \`terminal_input\` and \`terminal_stop\` wait while they have it or type a password; when one returns saying they still do, call it again.
 
 The user may also run a code block of your reply in a terminal, and then tells you its id: read it with \`terminal_read\` or \`terminal_wait\`.
+
+## Names
+
+A tab shows its name, else what it runs or last ran. \`terminal_rename\` renames one: your own terminals freely, unless the user named them. A name the user gave, or a terminal of theirs you may not use yet, asks them first. When the user asks you in the conversation to rename a terminal, pass \`userAsked\` and it is renamed at once; never pass it otherwise.
 
 ## The user's terminals
 

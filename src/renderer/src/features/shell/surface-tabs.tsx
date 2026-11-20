@@ -638,7 +638,7 @@ function SurfaceTab({
   }, [editing])
 
   const finishRename = (value: string | null, restoreFocus: boolean) => {
-    if (value !== null && terminal) renameTerminal(terminal.id, value)
+    if (value !== null && terminal) void renameTerminal(terminal.id, value)
     refocus.current = restoreFocus
     setEditing(false)
   }

@@ -131,6 +131,7 @@
     "browserOrigin": "想打开 {{site}}",
     "deviceAccess": "想使用 {{device}}",
     "terminalAccess": "想使用你的终端「{{terminal}}」",
+    "terminalRename": "想把你的终端「{{terminal}}」改名为「{{name}}」",
     "computerApp": "想使用 {{app}}",
     "computerSetup": "想使用你的电脑",
     "controlAsk": {

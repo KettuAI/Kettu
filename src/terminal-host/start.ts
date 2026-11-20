@@ -8,6 +8,7 @@ import type { ControlChannel, PortChannel } from '@shared/port-channel'
 import type { FromPort } from '@shared/port-rpc'
 import type { PortDevice } from '@shared/remote/device'
 import type { TerminalEvent } from '@shared/terminal-host'
+import { readCommandLine } from './command-title'
 import { readTtyModes } from './password'
 import { ProjectRegistry } from './projects'
 import { PortServer } from './server'
@@ -73,6 +74,7 @@ export function startTerminalHost(
       isDevicePort: (port) => server?.isDevice(port) ?? false,
       handedBack: (sessionId, durationMs) =>
         send({ type: 'terminal-host:handed-back', sessionId, durationMs: Math.round(durationMs) }),
+      commandLine: (pty) => readCommandLine(message.platform, pty.pid),
       ttyModes: (pty) =>
         pty.ptsName ? readTtyModes(message.platform, pty.ptsName) : Promise.resolve(null),
       sink: {
@@ -98,6 +100,7 @@ export function startTerminalHost(
         'terminals.ack': (port, params) => terminals.ack(port, params.id, params.chars),
         'terminals.kill': (_, params) => terminals.kill(params.id),
         'terminals.restart': (_, params) => terminals.restart(params.id),
+        'terminals.rename': (_, params) => terminals.rename(params.id, params.name),
         'terminals.takeOver': (_, params) => terminals.takeOver(params.id),
         'terminals.handBack': (_, params) => terminals.handBack(params.id),
       },
