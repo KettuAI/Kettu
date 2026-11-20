@@ -455,10 +455,19 @@ async function start(): Promise<void> {
     // Another host's session is read and answered through the relay the windows use.
     callRemote: (hostId, method, params) => hostSessions.call(hostId, method, params),
     openRemotes: () => hostSessions.openHosts(),
-    open: (target) =>
-      target
-        ? openTrayTarget({ kind: 'session', sessionId: target.sessionId })
-        : openTrayTarget({ kind: 'app' }),
+    open: (target) => {
+      if (target?.kind === 'task') {
+        sendCommand({ kind: 'open-task', taskId: target.taskId })
+        return
+      }
+      openTrayTarget(
+        target === null
+          ? { kind: 'app' }
+          : target.kind === 'new-session'
+            ? { kind: 'new-session' }
+            : { kind: 'session', sessionId: target.sessionId },
+      )
+    },
     status: (state) => broadcast('island:changed', state),
     log: createLogger('island'),
   })

@@ -9,6 +9,7 @@ import {
   openRoutines,
   openSession,
   openSettings,
+  openTask,
   toggleSidebar,
   type SettingsSection,
 } from '@renderer/stores/view'
@@ -48,6 +49,9 @@ export function useAppCommands(): void {
             if (summary) openSession(summary.id, summary.projectPath)
             break
           }
+          case 'open-task':
+            openTask(command.taskId)
+            break
           case 'open-routines':
             openRoutines()
             break

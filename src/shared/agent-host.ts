@@ -104,6 +104,7 @@ import type {
 } from './routines'
 import type { AgentColor } from './settings'
 import type { SettingsSection } from './settings-catalog'
+import type { TurnPhase } from './turn-phase'
 import type {
   SessionTaskRef,
   WorkflowAddSource,
@@ -741,6 +742,13 @@ export interface SessionSummary {
   turnStartedAt?: number | null
   // The tool its running turn calls now; null while none runs; absent from older hosts
   activity?: SessionActivity | null
+  // What its running turn does now, as the thread's nine dots act it out; null between turns;
+  // absent from older hosts
+  phase?: TurnPhase['phase'] | null
+  // Its context window and what the latest request used of it; null until its agent says
+  context?: { used: number; size: number } | null
+  // The background commands and tasks it runs, by what they do; absent from older hosts
+  background?: string[]
 }
 
 /**

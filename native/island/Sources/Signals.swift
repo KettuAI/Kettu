@@ -70,12 +70,26 @@ struct MarkStack: View {
   }
 }
 
-/// The running turn's nine dots, with the renderer's patterns: every dot only changes its opacity,
-/// on its own offset into the loop. Core Animation runs them, so the helper itself stays idle.
+/// The running turn's nine dots, with the renderer's patterns for each phase: every dot only
+/// changes its opacity, on its own offset into the loop. Core Animation runs them, so the helper
+/// itself stays idle.
 struct TurnDots: NSViewRepresentable {
-  enum Pattern: Equatable {
-    case chase
-    case think
+  enum Pattern: String, Equatable {
+    case chase, think, read, search, edit, fetch, compact, write
+
+    /// The pattern of a phase main names; anything else runs the default chase.
+    init(phase: String?) {
+      switch phase {
+      case "think": self = .think
+      case "read": self = .read
+      case "search": self = .search
+      case "edit": self = .edit
+      case "fetch": self = .fetch
+      case "compact": self = .compact
+      case "write": self = .write
+      default: self = .chase
+      }
+    }
   }
 
   let pattern: Pattern
@@ -105,42 +119,67 @@ final class DotsView: NSView {
 
   override var isFlipped: Bool { true }
 
+  /// One of the renderer's keyframes: opacity at each point of the loop.
+  private struct Keys {
+    let times: [Double]
+    let values: [Double]
+  }
+
+  private static let trail = Keys(times: [0, 0.4, 1], values: [1, 0.22, 0.22])
+  private static let twinkle = Keys(times: [0, 0.15, 0.3, 1], values: [0.22, 1, 0.22, 0.22])
+  private static let swap = Keys(times: [0, 0.5, 1], values: [0.22, 1, 0.22])
+  private static let sweepEdge = Keys(
+    times: [0, 0.125, 0.25, 0.75, 0.875, 1], values: [1, 0.74, 0.22, 0.22, 0.74, 1])
+  private static let sweepMid = Keys(
+    times: [0, 0.125, 0.25, 0.375, 0.5, 0.625, 0.75, 0.875, 1],
+    values: [0.22, 0.36, 1, 0.36, 0.22, 0.36, 1, 0.36, 0.22])
+  private static let fill = Keys(times: [0, 0.55, 0.62, 1], values: [1, 1, 0.22, 0.22])
+
   // Each dot's place on the ring, clockwise from the top left by row; the centre is not on it.
   private static let ring = [0, 1, 2, 7, -1, 3, 6, 5, 4]
   // When in the loop each dot twinkles, scattered so no order shows.
-  private static let twinkle = [0, 0.53, 0.21, 0.78, 0.37, 0.91, 0.12, 0.66, 0.45]
+  private static let twinkles = [0, 0.53, 0.21, 0.78, 0.37, 0.91, 0.12, 0.66, 0.45]
 
-  private struct Loop {
-    let duration: Double
-    let keyTimes: [Double]
-    let values: [Double]
-    let easeInOut: Bool
-  }
-
-  private static let trail = Loop(
-    duration: 0.96, keyTimes: [0, 0.4, 1], values: [1, 0.22, 0.22], easeInOut: false)
-  private static let twinkling = Loop(
-    duration: 2.0, keyTimes: [0, 0.15, 0.3, 1], values: [0.22, 1, 0.22, 0.22], easeInOut: true)
-
-  /// Where in its loop a dot starts, from 0 to 1, or nil for a still dot.
-  private static func phase(_ pattern: TurnDots.Pattern, _ index: Int) -> Double? {
+  /// A pattern's loop: its length, whether it eases, and each dot's keyframes and where in the
+  /// loop it starts, from 0 to 1, or nil for a still dot. The renderer's turn-dot-patterns.
+  private static func loop(_ pattern: TurnDots.Pattern) -> (
+    seconds: Double, eases: Bool, dot: (Int, Int) -> (Keys, Double)?
+  ) {
+    let centre = { (x: Int, y: Int) in hypot(Double(x) - 1, Double(y) - 1) }
     switch pattern {
     case .chase:
-      let place = ring[index]
-      return place < 0 ? nil : (1 - Double(place) / 8).truncatingRemainder(dividingBy: 1)
+      return (
+        0.96, false,
+        { x, y in
+          let place = ring[y * 3 + x]
+          return place < 0 ? nil : (trail, Double(place) / 8)
+        }
+      )
     case .think:
-      return twinkle[index]
+      return (2.0, true, { x, y in (twinkle, (1 - twinkles[y * 3 + x]).truncatingRemainder(dividingBy: 1)) })
+    case .read:
+      return (1.5, false, { x, y in (trail, (Double(y) * 1.2 + Double(x) * 0.3) / 3.6) })
+    case .search:
+      return (1.6, false, { x, _ in x == 1 ? (sweepMid, 0) : (sweepEdge, Double(x) / 4) })
+    case .edit:
+      return (1.4, true, { x, y in (swap, (x + y) % 2 == 1 ? 0.5 : 0) })
+    case .fetch:
+      return (1.2, false, { x, y in (trail, centre(x, y) / 2.6) })
+    case .compact:
+      return (1.2, false, { x, y in (trail, (2.0.squareRoot() - centre(x, y)) / 2.6) })
+    case .write:
+      return (1.8, false, { x, y in (fill, Double(y * 3 + x) * 0.05) })
     }
   }
 
-  private static func value(_ loop: Loop, at phase: Double) -> Double {
-    for i in 1..<loop.keyTimes.count where phase <= loop.keyTimes[i] {
-      let t0 = loop.keyTimes[i - 1]
-      let t1 = loop.keyTimes[i]
+  private static func value(_ keys: Keys, at phase: Double) -> Double {
+    for i in 1..<keys.times.count where phase <= keys.times[i] {
+      let t0 = keys.times[i - 1]
+      let t1 = keys.times[i]
       let f = t1 > t0 ? (phase - t0) / (t1 - t0) : 0
-      return loop.values[i - 1] + (loop.values[i] - loop.values[i - 1]) * f
+      return keys.values[i - 1] + (keys.values[i] - keys.values[i - 1]) * f
     }
-    return loop.values.last ?? 0.22
+    return keys.values.last ?? 0.22
   }
 
   func configure(pattern: TurnDots.Pattern, size: CGFloat, reduceMotion: Bool) {
@@ -148,7 +187,7 @@ final class DotsView: NSView {
     shown = (pattern, size, reduceMotion)
     for dot in layer?.sublayers ?? [] { dot.removeFromSuperlayer() }
     let unit = size / 12
-    let loop = pattern == .chase ? Self.trail : Self.twinkling
+    let loop = Self.loop(pattern)
     for index in 0..<9 {
       let x = index % 3
       let y = index / 3
@@ -160,21 +199,23 @@ final class DotsView: NSView {
       dot.cornerRadius = radius
       dot.backgroundColor = Theme.turnDots.cgColor
       dot.opacity = 0.22
-      if let phase = Self.phase(pattern, index) {
+      if let (keys, at) = loop.dot(x, y) {
+        // The renderer delays each dot by (at - 1) loops, which starts it this far into the loop.
+        let start = (1 - at).truncatingRemainder(dividingBy: 1)
         if reduceMotion {
           // Reduce motion holds the frame the loop starts on, as the window does.
-          dot.opacity = Float(Self.value(loop, at: phase))
+          dot.opacity = Float(Self.value(keys, at: start))
         } else {
           let animation = CAKeyframeAnimation(keyPath: "opacity")
-          animation.values = loop.values
-          animation.keyTimes = loop.keyTimes.map { NSNumber(value: $0) }
-          animation.duration = loop.duration
+          animation.values = keys.values
+          animation.keyTimes = keys.times.map { NSNumber(value: $0) }
+          animation.duration = loop.seconds
           animation.repeatCount = .infinity
-          animation.timeOffset = phase * loop.duration
+          animation.timeOffset = start * loop.seconds
           animation.calculationMode = .linear
-          if loop.easeInOut {
+          if loop.eases {
             animation.timingFunctions = Array(
-              repeating: CAMediaTimingFunction(name: .easeInEaseOut), count: loop.values.count - 1)
+              repeating: CAMediaTimingFunction(name: .easeInEaseOut), count: keys.values.count - 1)
           }
           animation.isRemovedOnCompletion = false
           dot.add(animation, forKey: "opacity")
@@ -220,6 +261,8 @@ enum Signal: Equatable {
   case stuck
   case limited
   case unread
+  /// The turn ended and a background command still runs: a hollow dot.
+  case background
 }
 
 struct SignalView: View {
@@ -250,6 +293,79 @@ struct SignalView: View {
     case .unread:
       let dot: CGFloat = size >= 14 ? 8 : 6
       Circle().fill(Theme.unread).frame(width: dot, height: dot).frame(width: size, height: size)
+    case .background:
+      Circle().strokeBorder(Theme.secondary, lineWidth: 1.5).frame(width: 7, height: 7)
+        .frame(width: size, height: size)
     }
+  }
+}
+
+/// A plan's progress as a ring, green for the steps done, as the session's plan chip draws it.
+struct PlanRing: View {
+  let done: Int
+  let total: Int
+  var size: CGFloat = 13
+
+  var body: some View {
+    let share = total > 0 ? CGFloat(done) / CGFloat(total) : 0
+    ZStack {
+      Circle().stroke(Theme.track, lineWidth: 2.2)
+      Circle().trim(from: 0, to: share)
+        .stroke(Theme.planDone, style: StrokeStyle(lineWidth: 2.2, lineCap: .round))
+        .rotationEffect(.degrees(-90))
+    }
+    .padding(1.1)
+    .frame(width: size, height: size)
+  }
+}
+
+/// The context's ring in its level's color, as the composer's tray draws it.
+struct ContextRing: View {
+  let percent: Int
+  let level: String
+  var size: CGFloat = 12
+
+  var body: some View {
+    ZStack {
+      Circle().stroke(Theme.track, lineWidth: 2)
+      Circle().trim(from: 0, to: CGFloat(min(100, percent)) / 100)
+        .stroke(Theme.limit(level), style: StrokeStyle(lineWidth: 2, lineCap: .round))
+        .rotationEffect(.degrees(-90))
+    }
+    .padding(1)
+    .frame(width: size, height: size)
+  }
+}
+
+/// A plan step's mark: a filled check once done, an arc for the one in progress, a dashed circle
+/// for one not started.
+struct StepMark: View {
+  let state: String
+
+  var body: some View {
+    Group {
+      switch state {
+      case "done":
+        ZStack {
+          Circle().fill(Theme.stepDone)
+          CheckShape().stroke(
+            Color.white, style: StrokeStyle(lineWidth: 1.6, lineCap: .round, lineJoin: .round)
+          )
+          .frame(width: 6, height: 4.4)
+        }
+      case "now":
+        ZStack {
+          Circle().stroke(Theme.track, lineWidth: 2)
+          Circle().trim(from: 0, to: 0.25)
+            .stroke(Theme.running, style: StrokeStyle(lineWidth: 2, lineCap: .round))
+            .rotationEffect(.degrees(-90))
+        }
+        .padding(1.4)
+      default:
+        Circle().stroke(Theme.faint, style: StrokeStyle(lineWidth: 1.4, dash: [2, 2.2]))
+          .padding(1.4)
+      }
+    }
+    .frame(width: 14, height: 14)
   }
 }

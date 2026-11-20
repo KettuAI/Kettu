@@ -124,6 +124,7 @@ const TOKENS_USED = [
   'usage-green',
   'send',
   'shell-accent',
+  'merged',
 ]
 
 function hex(tokens, name) {

@@ -28,7 +28,7 @@ import {
   type MainToIsland,
   type PopKind,
 } from './protocol'
-import { buildView, diffView, type BuiltView, type HostState } from './view'
+import { buildView, diffView, type BuiltView, type FocusOutputs, type HostState } from './view'
 
 /** Changes this close together go as one message. */
 export const COALESCE_MS = 50
@@ -94,12 +94,17 @@ export interface IslandBridgeDeps {
   callRemote(hostId: string, method: IslandHostMethod, params: unknown): Promise<unknown>
   /** The other hosts whose session is open now. */
   openRemotes(): string[]
-  /** Brings the window forward at a session, or as it is for null. */
-  open(target: { hostKey: string; sessionId: string } | null): void
+  /** Brings the window forward at a session or a task, at New session, or as it is for null. */
+  open(target: IslandTarget | null): void
   status(state: IslandState): void
   log: IslandLog
   now?: () => number
 }
+
+export type IslandTarget =
+  | { kind: 'session'; hostKey: string; sessionId: string }
+  | { kind: 'task'; hostKey: string; taskId: string }
+  | { kind: 'new-session' }
 
 type Phase = 'off' | 'starting' | 'handshake' | 'running' | 'failed'
 
@@ -116,7 +121,16 @@ const LOCAL = 'local'
 const EMPTY_VIEW: IslandView = {
   rows: [],
   requests: [],
-  summary: { running: 0, waiting: 0, failed: 0, limit: null, limits: [] },
+  summary: { running: 0, waiting: 0, failed: 0, today: 0, limit: null, limits: [] },
+  focus: null,
+}
+
+const EMPTY_BUILT: BuiltView = {
+  view: EMPTY_VIEW,
+  rows: new Map(),
+  requests: new Map(),
+  owners: new Map(),
+  focus: null,
 }
 
 export class IslandBridge {
@@ -133,7 +147,10 @@ export class IslandBridge {
   private badLines = 0
   private seq = 0
   /** What the helper was last sent, which its answers and opens are checked against. */
-  private sent: BuiltView = { view: EMPTY_VIEW, rows: new Map(), requests: new Map() }
+  private sent: BuiltView = EMPTY_BUILT
+  /** The focus's outputs as last read, and the revision a read under way is for. */
+  private outputs: FocusOutputs | null = null
+  private readingOutputs: string | null = null
   private readonly answering = new Set<string>()
   private limitsReadAt = -Infinity
   private readonly hosts = new Map<string, Host>()
@@ -484,6 +501,12 @@ export class IslandBridge {
       case 'open':
         this.open(message.row)
         return
+      case 'openRequest':
+        this.openRequest(message.request)
+        return
+      case 'newSession':
+        this.deps.open({ kind: 'new-session' })
+        return
       case 'expanded':
         this.readLimits()
         return
@@ -502,7 +525,56 @@ export class IslandBridge {
       this.deps.log.warn('The island asked to open a row it was not sent')
       return
     }
-    this.deps.open(target)
+    this.deps.open({ kind: 'session', ...target })
+  }
+
+  private openRequest(key: string): void {
+    const owner = this.sent.owners.get(key)
+    if (!owner) {
+      this.deps.log.warn('The island asked to open a request it was not sent')
+      return
+    }
+    this.deps.open(
+      owner.taskId !== undefined
+        ? { kind: 'task', hostKey: owner.hostKey, taskId: owner.taskId }
+        : { kind: 'session', hostKey: owner.hostKey, sessionId: owner.sessionId },
+    )
+  }
+
+  /**
+   * Reads the focus's outputs when the session it leads with is new or its revision moved, one
+   * read at a time; the view takes them on its next build.
+   */
+  private readFocus(built: BuiltView): void {
+    const target = built.focus
+    if (!target) return
+    const key = `${target.hostKey}/${target.sessionId}@${target.revision}`
+    const held = this.outputs
+    if (held && `${held.hostKey}/${held.sessionId}@${held.revision}` === key) {
+      return
+    }
+    if (this.readingOutputs !== null) return
+    const host = this.hosts.get(target.hostKey)
+    if (!host || host.host?.offline) return
+    this.readingOutputs = key
+    host.request('sessions.outputs', { sessionId: target.sessionId }).then(
+      (outputs) => {
+        if (this.readingOutputs !== key) return
+        this.readingOutputs = null
+        this.outputs = { ...target, outputs }
+        this.changed()
+      },
+      (error: unknown) => {
+        if (this.readingOutputs !== key) return
+        this.readingOutputs = null
+        // Kept as read, so a session whose outputs fail is not asked again until it moves.
+        this.outputs = {
+          ...target,
+          outputs: { artifacts: [], references: [], reply: null, turnMs: null },
+        }
+        this.deps.log.warn(`Could not read the outputs of ${target.sessionId}: ${errorText(error)}`)
+      },
+    )
   }
 
   private readLimits(): void {
@@ -625,7 +697,9 @@ export class IslandBridge {
     for (const host of this.hosts.values()) host.feed.clear()
     this.hosts.clear()
     this.answering.clear()
-    this.sent = { view: EMPTY_VIEW, rows: new Map(), requests: new Map() }
+    this.sent = EMPTY_BUILT
+    this.outputs = null
+    this.readingOutputs = null
   }
 
   private hostStates(): HostState[] {
@@ -651,7 +725,7 @@ export class IslandBridge {
   /** The view now; null when what a host sent could not be read into one. */
   private build(): BuiltView | null {
     try {
-      return buildView(this.hostStates(), this.now())
+      return buildView(this.hostStates(), this.now(), this.outputs)
     } catch (error) {
       this.deps.log.error(`Could not build the island's view: ${errorText(error)}`)
       return null
@@ -662,9 +736,10 @@ export class IslandBridge {
     if (this.phase !== 'running') return
     const built = this.build()
     if (!built) return
+    this.readFocus(built)
     const change = diffView(this.sent.view, built.view)
-    if (!change) return
     this.sent = built
+    if (!change) return
     this.send({ type: 'change', seq: ++this.seq, ...change })
   }
 
@@ -673,6 +748,7 @@ export class IslandBridge {
     this.flushTimer = null
     const built = this.build()
     if (!built) return
+    this.readFocus(built)
     this.sent = built
     this.send({ type: 'view', seq: ++this.seq, ...built.view })
   }

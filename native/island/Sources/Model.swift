@@ -26,15 +26,25 @@ struct Pop: Equatable {
   let body: String
 }
 
-/// What the collapsed island shows: the marks of its most urgent group, or Kettu's fox when nothing
-/// needs one, that group's signal and a word for it, the title of the session it is about where no
-/// notch is in the way, and how many sessions it lists.
+/// The one fact the collapsed island adds to its signal.
+enum Fact: Equatable {
+  /// How many sessions: of its group, or used today while nothing else is said.
+  case count(Int)
+  /// How long the latest session's prompt cache stays warm; amber in its last stretch.
+  case cache(String, ending: Bool)
+  case plan(done: Int, total: Int)
+  /// The minutes stuck, or the day a used-up limit resets.
+  case word(String)
+}
+
+/// What the collapsed island shows: who it is about, the marks of its most urgent group or Kettu's
+/// fox when nothing needs one, that group's signal and one fact, and the title of the session it is
+/// about where no notch is in the way.
 struct Collapsed: Equatable {
   let agents: [IslandAgent]
   let signal: Signal?
-  let text: String?
+  let fact: Fact?
   let title: String?
-  let count: Int
 }
 
 /// What came of an answer the user gave on the island, shown in place of its card for a moment.
@@ -62,6 +72,8 @@ final class IslandModel: ObservableObject {
   @Published var selected: String?
   /// The expanded panel's content height, as last laid out.
   @Published var panelHeight: CGFloat = 0
+  /// While set, the panel is laid out unseen, so the island opens straight to its height.
+  @Published var measuring = false
   private(set) var openedByClick = false
   var onModeChange: ((Mode) -> Void)?
   var onAnnounce: ((String) -> Void)?
@@ -72,6 +84,7 @@ final class IslandModel: ObservableObject {
   private var tick: Timer?
   private var noteTimer: Timer?
   private var stuckTimer: Timer?
+  private var cacheTimer: Timer?
   /// Failed and finished rows the user saw on the open island, which stop marking the collapsed one.
   private var seen: Set<String> = []
   private var answers: [String: String] = [:]
@@ -86,8 +99,11 @@ final class IslandModel: ObservableObject {
 
   var rows: [IslandRow] { store.order.compactMap { store.rows[$0] } }
 
-  /// The session the expanded island leads with: the first that is not idle.
-  var focusRow: IslandRow? { rows.first { $0.group != "idle" } }
+  /// The session the expanded island leads with, as main chose it.
+  var focusRow: IslandRow? { store.focus.flatMap { store.rows[$0.row] } }
+
+  /// The focus's plan steps and last reply, when they belong to the focus row.
+  var focus: IslandFocus? { focusRow == nil ? nil : store.focus }
 
   /// The other sessions, in main's order, as compact rows.
   var otherRows: [IslandRow] {
@@ -152,14 +168,17 @@ final class IslandModel: ObservableObject {
     switch status(of: row) {
     case "waiting", "sign_in": return .waiting
     case "failed": return .failed
-    case "running": return .running(.chase)
+    case "running": return .running(TurnDots.Pattern(phase: row.phase))
     case "starting": return .running(.think)
     case "stuck": return .stuck
     case "limited": return .limited
     case "unread": return .unread
-    default: return nil
+    default: return row.background != nil ? .background : nil
     }
   }
+
+  /// The task requests, which wait for the user like a session's.
+  var taskRequests: Int { requests.filter { $0.task != nil }.count }
 
   var summaryText: String {
     let s = store.summary
@@ -167,7 +186,41 @@ final class IslandModel: ObservableObject {
     if s.waiting > 0 { parts.append(text("summary.waiting", ["count": "\(s.waiting)"])) }
     if s.running > 0 { parts.append(text("summary.running", ["count": "\(s.running)"])) }
     if s.failed > 0 { parts.append(text("summary.failed", ["count": "\(s.failed)"])) }
+    let done = rows.filter { $0.status == "unread" }.count
+    if done > 0 { parts.append(text("summary.done", ["count": "\(done)"])) }
+    if parts.isEmpty, let today = s.today, today > 0 {
+      parts.append(text("today", ["count": "\(today)"]))
+    }
     return parts.joined(separator: " · ")
+  }
+
+  // MARK: The prompt cache
+
+  /// How long a cache stays warm, as the island writes it, and whether it is in its last stretch;
+  /// nil once it expired. The last stretch counts seconds.
+  func cacheLeft(_ cache: IslandCache?) -> (text: String, ending: Bool)? {
+    guard let cache else { return nil }
+    let left = cache.expiresAt - now.timeIntervalSince1970 * 1000
+    guard left > 0 else { return nil }
+    let ending = left <= cache.endingMs
+    var time: String
+    if ending {
+      let seconds = Int((left / 1000).rounded(.up))
+      time = String(format: "%d:%02d", seconds / 60, seconds % 60)
+    } else if left >= 3_600_000 {
+      time = text("duration.hours", ["h": "\(Int(left / 3_600_000))"])
+    } else {
+      time = text("duration.minutes", ["m": "\(max(1, Int(left / 60_000)))"])
+    }
+    if cache.estimate { time = text("cache.about", ["time": time]) }
+    return (time, ending)
+  }
+
+  /// A cache that expired within the last half hour, whose cost the focus card says once.
+  func justExpired(_ cache: IslandCache?) -> Bool {
+    guard let cache else { return false }
+    let past = now.timeIntervalSince1970 * 1000 - cache.expiresAt
+    return past >= 0 && past < 30 * 60_000
   }
 
   // MARK: Changes from main
@@ -183,6 +236,29 @@ final class IslandModel: ObservableObject {
     revision += 1
     if mode == .hidden { setMode(.collapsed) }
     scheduleStuckCheck(all)
+    scheduleCacheTick()
+  }
+
+  /// A warm cache counts down with no message from main: the island looks again when the minute
+  /// it shows changes, every second in its last stretch, and when it expires. With no warm cache
+  /// in view, no timer runs; while the island is open its own second's tick does this.
+  private func scheduleCacheTick() {
+    cacheTimer?.invalidate()
+    let nowMs = now.timeIntervalSince1970 * 1000
+    var wait: Double?
+    for cache in [focusRow?.cache, rows.first?.cache].compactMap({ $0 }) {
+      let left = cache.expiresAt - nowMs
+      guard left > 0 else { continue }
+      let next =
+        left <= cache.endingMs
+        ? 1000 - left.truncatingRemainder(dividingBy: 1000)
+        : min(left - cache.endingMs, left.truncatingRemainder(dividingBy: 60_000))
+      wait = min(wait ?? next, max(next, 50))
+    }
+    guard let wait else { return }
+    cacheTimer = Timer.scheduledTimer(withTimeInterval: wait / 1000 + 0.01, repeats: false) {
+      [weak self] _ in self?.refresh()
+    }
   }
 
   /// A call turns stuck with no message from main, so the island looks again when the next one
@@ -214,43 +290,72 @@ final class IslandModel: ObservableObject {
   /// The most urgent group decides what the collapsed island shows: waiting, failed, running,
   /// done, limited, and with none of them Kettu's fox, since the island always shows while it is
   /// on. Failed and done rows mark it until the user reads them in Kettu or opens the island, so a
-  /// turn that ended while a Kettu window was in front, which pops nothing, still shows.
+  /// turn that ended while a Kettu window was in front, which pops nothing, still shows. The fact
+  /// beside the signal: a count past one, the running session's plan, and at rest how long the
+  /// latest session's prompt cache stays warm, else how many sessions were used today.
   private static func collapse(_ rows: [IslandRow], model: IslandModel) -> Collapsed {
     func agents(_ list: [IslandRow]) -> [IslandAgent] {
       var seen = Set<String>()
       return list.map(\.agent).filter { seen.insert("\($0.harness)/\($0.color ?? "")").inserted }
     }
-    func make(_ list: [IslandRow], _ signal: Signal?, _ text: String? = nil) -> Collapsed {
-      let title = list.first.map { $0.title.isEmpty ? model.text("untitled") : $0.title }
-      return Collapsed(
-        agents: agents(list), signal: signal, text: text, title: title, count: rows.count)
+    func title(_ row: IslandRow?) -> String? {
+      row.map { $0.title.isEmpty ? model.text("untitled") : $0.title }
     }
+    func counted(_ count: Int) -> Fact? { count > 1 ? .count(count) : nil }
     let waiting = rows.filter { $0.status == "waiting" || $0.status == "sign_in" }
-    if !waiting.isEmpty { return make(waiting, .waiting) }
+    if !waiting.isEmpty || model.taskRequests > 0 {
+      let count = max(model.store.summary.waiting, waiting.count + model.taskRequests)
+      return Collapsed(
+        agents: agents(waiting), signal: .waiting, fact: counted(count),
+        title: title(waiting.first) ?? model.requests.first?.task?.title)
+    }
     let unseen = rows.filter { marksDone($0) && !model.seen.contains(model.seenKey($0)) }
     let failed = unseen.filter { $0.status == "failed" }
-    if !failed.isEmpty { return make(failed, .failed) }
+    if !failed.isEmpty {
+      return Collapsed(
+        agents: agents(failed), signal: .failed, fact: counted(failed.count),
+        title: title(failed.first))
+    }
     let running = rows.filter { $0.status == "running" || $0.status == "starting" }
     if !running.isEmpty {
       let moving = running.filter { model.status(of: $0) != "stuck" }
       if moving.isEmpty {
         let longest = running.compactMap(\.toolSince).min()
         let minutes = longest.map { max(1, Int(model.now.timeIntervalSince1970 - $0 / 1000) / 60) }
-        return make(running, .stuck, minutes.map { model.text("duration.minutes", ["m": "\($0)"]) })
+        return Collapsed(
+          agents: agents(running), signal: .stuck,
+          fact: minutes.map { .word(model.text("duration.minutes", ["m": "\($0)"])) },
+          title: title(running.first))
       }
-      let pattern: TurnDots.Pattern = moving.contains { $0.status == "running" } ? .chase : .think
-      return make(moving, .running(pattern))
+      // The dots act out what the focus does, as the expanded island's card shows it.
+      let lead = moving.first { $0.key == model.focusRow?.key } ?? moving[0]
+      let signal: Signal =
+        lead.status == "starting" ? .running(.think) : .running(TurnDots.Pattern(phase: lead.phase))
+      let fact: Fact? =
+        lead.plan.map { .plan(done: $0.done, total: $0.total) } ?? counted(moving.count)
+      return Collapsed(agents: agents(moving), signal: signal, fact: fact, title: title(lead))
     }
     let done = unseen.filter { $0.status == "unread" }
-    if !done.isEmpty { return make(done, .unread) }
+    if !done.isEmpty {
+      return Collapsed(
+        agents: agents(done), signal: .unread, fact: counted(done.count), title: title(done.first))
+    }
     let limited = rows.filter { $0.status == "limited" }
     if !limited.isEmpty {
       let reset = limited.compactMap { $0.limit?.resetsAt }.min()
-      return make(limited, .limited, reset.map { model.resetDay($0) })
+      return Collapsed(
+        agents: agents(limited), signal: .limited, fact: reset.map { .word(model.resetDay($0)) },
+        title: title(limited.first))
     }
-    // Nothing needs a mark: Kettu's fox, and the latest session's title where there is room.
-    let latest = rows.first.map { $0.title.isEmpty ? model.text("untitled") : $0.title }
-    return Collapsed(agents: [], signal: nil, text: nil, title: latest, count: rows.count)
+    // Nothing needs a mark: Kettu's fox, and the latest session's warm cache or today's count.
+    let latest = model.focusRow ?? rows.first
+    var fact: Fact?
+    if let left = model.cacheLeft(latest?.cache) {
+      fact = .cache(model.text("cache.short", ["time": left.text]), ending: left.ending)
+    } else if let today = model.store.summary.today, today > 0 {
+      fact = .count(today)
+    }
+    return Collapsed(agents: [], signal: nil, fact: fact, title: title(latest))
   }
 
   /// When a limit resets, as short as the collapsed island needs: a time today, else a weekday.
@@ -335,11 +440,24 @@ final class IslandModel: ObservableObject {
 
   // MARK: What the user does
 
+  /// Lays the panel out unseen ahead of opening, as when the pointer comes onto the island.
+  func prepare() {
+    if !measuring { measuring = true }
+  }
+
   func expand(byClick: Bool) {
     guard mode != .open else {
       if byClick {
         openedByClick = true
         onModeChange?(.open)
+      }
+      return
+    }
+    // The panel's height is measured first, so the island grows to it in one move.
+    if !measuring {
+      measuring = true
+      DispatchQueue.main.asyncAfter(deadline: .now() + 0.03) { [weak self] in
+        self?.expand(byClick: byClick)
       }
       return
     }
@@ -365,6 +483,7 @@ final class IslandModel: ObservableObject {
     tick = nil
     openedByClick = false
     selected = nil
+    measuring = false
     guard mode == .open || mode == .grown else { return }
     popTimer?.invalidate()
     pops.removeAll()
@@ -374,6 +493,16 @@ final class IslandModel: ObservableObject {
 
   func open(row: String?) {
     send(.open(row: row))
+    collapse()
+  }
+
+  func open(request: IslandRequest) {
+    send(.openRequest(request.key))
+    collapse()
+  }
+
+  func newSession() {
+    send(.newSession)
     collapse()
   }
 
@@ -406,17 +535,14 @@ final class IslandModel: ObservableObject {
     onModeChange?(next)
   }
 
-  /// The springs of the hi-fi, or a short fade when the system asks for less motion.
+  /// The hi-fi's springs, critically damped so nothing overshoots, or a short fade when the
+  /// system asks for less motion.
   func animation(from: Mode, to: Mode) -> Animation {
     if reduceMotion { return .easeInOut(duration: 0.2) }
     switch to {
-    case .open: return .spring(response: 0.45, dampingFraction: 0.82)
-    case .grown: return .spring(response: 0.42, dampingFraction: 0.8)
-    case .collapsed:
-      return from == .hidden
-        ? .spring(response: 0.35, dampingFraction: 0.9)
-        : .spring(response: 0.36, dampingFraction: 0.95)
-    case .hidden: return .spring(response: 0.35, dampingFraction: 0.95)
+    case .open: return .spring(response: 0.38, dampingFraction: 1)
+    case .grown: return .spring(response: 0.38, dampingFraction: 1)
+    case .collapsed, .hidden: return .spring(response: 0.3, dampingFraction: 1)
     }
   }
 }

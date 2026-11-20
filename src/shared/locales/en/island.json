@@ -44,7 +44,8 @@
     "summary": {
       "waiting": "{{count}} need you",
       "running": "{{count}} running",
-      "failed": "{{count}} failed"
+      "failed": "{{count}} failed",
+      "done": "{{count}} done"
     },
     "paused": "Paused",
     "a11y": {
@@ -52,7 +53,31 @@
       "quiet": "Nothing needs you",
       "row": "Open {{title}}, {{status}}, {{agent}}"
     },
-    "recommended": "Recommended"
+    "recommended": "Recommended",
+    "cache": {
+      "short": "Cache {{time}}",
+      "left": "Cache: {{time}} left",
+      "about": "~{{time}}",
+      "expired": "The prompt cache expired: the next message reads about {{tokens}} tokens again at full price.",
+      "expiredShort": "The prompt cache expired: the next message reads the conversation again at full price."
+    },
+    "endedAgo": "This turn ended {{time}} ago",
+    "doneIn": "Done in {{time}}",
+    "context": "Context {{percent}}%",
+    "background": "{{count}} in background",
+    "taskStep": "Task: {{task}} · step {{index}} of {{total}}",
+    "task": "Task: {{task}}",
+    "stepsBefore": "{{count}} earlier steps done",
+    "stepsAfter": "{{count}} more steps",
+    "today": "{{count}} sessions today",
+    "newSession": "New session",
+    "others": "Other sessions",
+    "empty": {
+      "title": "No sessions yet",
+      "body": "Start one in Kettu and it shows here."
+    },
+    "ago": "{{time}} ago",
+    "runsInBackground": "Runs {{command}} in the background"
   },
   "line": {
     "run": "Run {{command}}",
@@ -108,7 +133,8 @@
       "session": "Allow for this session",
       "always": "Always allow {{app}}",
       "deny": "Don’t allow"
-    }
+    },
+    "task": "A task waits for you"
   },
   "limit": {
     "five_hour": "5h",

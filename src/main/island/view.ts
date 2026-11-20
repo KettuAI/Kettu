@@ -3,11 +3,18 @@
 // every word in the current language. The helper sorts, counts and words nothing itself.
 
 import { basename, isAbsolute, relative } from 'node:path'
-import type { AgentOptions, AgentStatus, SessionActivity, SessionSummary } from '@shared/agent-host'
+import type {
+  AgentOptions,
+  AgentStatus,
+  SessionActivity,
+  SessionOutputs,
+  SessionSummary,
+} from '@shared/agent-host'
 import type { BrowserOriginDecision } from '@shared/browser'
 import type { ComputerAppDecision } from '@shared/computer-use'
 import type { PendingRequest, PendingTool } from '@shared/pending-requests'
 import { limitLevel } from '@shared/plan-limits'
+import { endingWindow, expiryOf, knownExpiry } from '@shared/prompt-cache'
 import {
   groupSessions,
   limitRows,
@@ -17,11 +24,15 @@ import {
   sessionModel,
 } from '@shared/session-groups'
 import type { AgentId, PermissionKind, ToolKind } from '@shared/thread'
+import type { TurnPhase } from '@shared/turn-phase'
+import type { StepState } from '@shared/workflow'
 import { islandT } from '../i18n'
 import type {
+  IslandFocus,
   IslandGroup,
   IslandHost,
   IslandLimits,
+  IslandPhase,
   IslandOptionStyle,
   IslandRequest,
   IslandRequestKind,
@@ -33,8 +44,14 @@ import type {
 
 /** Sessions that finished out of view, listed after the running ones. */
 const FINISHED_ROWS = 5
-/** The latest other sessions, which the island folds into its last row. */
-const IDLE_ROWS = 5
+/** The latest other sessions of the last day, listed after the rest. */
+const IDLE_ROWS = 6
+const IDLE_WITHIN_MS = 24 * 60 * 60_000
+/** A context this full shows on the island, as it does when it compacts. */
+const CONTEXT_SHOWN = 70
+/** The plan steps the focus lists in full; a longer plan shows the ones around its current step. */
+const MAX_STEPS = 6
+const MAX_REPLY_CHARS = 280
 const MAX_REQUEST_LINES = 6
 const MAX_LINE_CHARS = 300
 
@@ -48,8 +65,24 @@ export interface HostState {
   options: ReadonlyMap<AgentId, AgentOptions>
   /** What waits in each session that waits, as last read. */
   requests: ReadonlyMap<string, { requests: PendingRequest[]; askedAt: Record<string, number> }>
-  /** Each task's title, by id. */
-  tasks: ReadonlyMap<string, string>
+  /** Each task, by id, for its steps' rows and for what it waits for. */
+  tasks: ReadonlyMap<string, IslandTaskState>
+}
+
+/** What the island keeps of a task. */
+export interface IslandTaskState {
+  title: string
+  needsYou: boolean
+  steps: { id: string; name: string; state: StepState; sessionId: string | null }[]
+  updatedAt: number
+}
+
+/** The focus's session, which main reads in more depth than its summary. */
+export interface FocusTarget {
+  hostKey: string
+  sessionId: string
+  /** Changes whenever what its outputs say may have: its status, its plan or its turn. */
+  revision: string
 }
 
 /** A call the island's answer turns into, on the host of its request. */
@@ -83,6 +116,21 @@ export interface BuiltView {
   view: IslandView
   rows: ReadonlyMap<string, { hostKey: string; sessionId: string }>
   requests: ReadonlyMap<string, SentRequest>
+  /** What each request belongs to, which opening it in Kettu goes to. */
+  owners: ReadonlyMap<string, RequestOwner>
+  /** The focus's session, whose outputs the view wants. */
+  focus: FocusTarget | null
+}
+
+export type RequestOwner =
+  { hostKey: string; sessionId: string; taskId?: never } | { hostKey: string; taskId: string }
+
+/** The outputs main read of the focus's session, for the revision it read them at. */
+export interface FocusOutputs {
+  hostKey: string
+  sessionId: string
+  revision: string
+  outputs: SessionOutputs
 }
 
 const ORIGIN_DECISIONS: BrowserOriginDecision[] = ['session', 'project', 'deny']
@@ -190,7 +238,7 @@ function buildRequest(
 ): BuiltRequest {
   const key = `${rowKey}#${pending.entryId}`
   const answers = new Map<string, HostAnswer>()
-  const base = { key, row: rowKey, askedAt }
+  const base = { key, row: rowKey, task: null, askedAt }
   const make = (
     kind: IslandRequestKind,
     title: string,
@@ -336,6 +384,50 @@ function rowKey(state: HostState, sessionId: string): string {
   return state.host ? `${state.key}/${sessionId}` : sessionId
 }
 
+const PHASES: Record<TurnPhase['phase'], IslandPhase | null> = {
+  thinking: 'think',
+  execute: 'execute',
+  read: 'read',
+  search: 'search',
+  fetch: 'fetch',
+  edit: 'edit',
+  writing: 'write',
+  compacting: 'compact',
+  working: 'execute',
+  approval: null,
+  question: null,
+}
+
+const TOOL_PHASES: Partial<Record<ToolKind, IslandPhase>> = {
+  execute: 'execute',
+  read: 'read',
+  search: 'search',
+  fetch: 'fetch',
+  edit: 'edit',
+  delete: 'edit',
+  move: 'edit',
+}
+
+/** What a running turn does now: its summary's phase, else what its tool call does. */
+function phaseOf(summary: SessionSummary): IslandPhase {
+  if (summary.phase) return PHASES[summary.phase] ?? 'execute'
+  const kind = summary.activity?.toolKind
+  return (kind && TOOL_PHASES[kind]) || 'execute'
+}
+
+/** Markdown's marks dropped, so the start of a reply reads as one line of text. */
+function plainReply(markdown: string): string {
+  const text = markdown
+    .replace(/```[\s\S]*?```/g, ' ')
+    .replace(/!\[[^\]]*\]\([^)]*\)/g, ' ')
+    .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')
+    .replace(/^\s{0,3}(#+|>|[-*+]|\d+\.)\s+/gm, '')
+    .replace(/[*_~`]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+  return text.length > MAX_REPLY_CHARS ? `${text.slice(0, MAX_REPLY_CHARS - 1)}…` : text
+}
+
 function modelName(options: AgentOptions | undefined, model: string | null): string | null {
   const option = sessionModel(options, model)
   if (!option || model === null) return model
@@ -398,11 +490,28 @@ function buildRow(
     default:
       line = islandT(`line.${status}`)
   }
-  const parent = summary.task
-    ? { kind: 'task' as const, title: state.tasks.get(summary.task.taskId) ?? null }
-    : summary.parentId
-      ? { kind: 'session' as const, title: state.sessions.get(summary.parentId)?.title ?? null }
-      : null
+  let parent: IslandRow['parent'] = null
+  if (summary.task) {
+    const task = state.tasks.get(summary.task.taskId)
+    const index = task?.steps.findIndex((step) => step.id === summary.task!.stepId) ?? -1
+    parent = {
+      kind: 'task',
+      title: task?.title ?? null,
+      step: index >= 0 ? { index: index + 1, total: task!.steps.length } : null,
+    }
+  } else if (summary.parentId) {
+    const title = state.sessions.get(summary.parentId)?.title ?? null
+    parent = { kind: 'session', title, step: null }
+  }
+  const turnRuns = status === 'running'
+  const expiry = turnRuns
+    ? null
+    : knownExpiry(expiryOf(summary.agentId, summary.cache, summary.model, agent?.account ?? null))
+  const phase = turnRuns ? phaseOf(summary) : null
+  const context = summary.context
+  const percent = context && context.size > 0 ? Math.round((context.used / context.size) * 100) : 0
+  const background = summary.background ?? []
+  const pr = summary.prs?.find((p) => p.state !== null) ?? summary.pr
   const running = [...state.sessions.values()].filter(
     (s) => s.origin === 'subagent' && s.parentId === summary.id && s.status === 'running',
   ).length
@@ -437,6 +546,31 @@ function buildRow(
     subagents:
       running > 0 ? { running, text: islandT('line.subagents', { count: running }) } : null,
     limit: limit ? { label: limit.label, resetsAt: limit.resetsAt } : null,
+    phase,
+    cache: expiry
+      ? {
+          expiresAt: expiry.expiresAt,
+          endingMs: endingWindow(expiry.ttl),
+          estimate: expiry.estimate,
+          tokens: context?.used || null,
+        }
+      : null,
+    context:
+      context && (percent >= CONTEXT_SHOWN || phase === 'compact')
+        ? {
+            percent,
+            tokens: context.used,
+            level: limitLevel({ usedPercent: percent, state: 'ok' }),
+          }
+        : null,
+    branch: summary.worktree
+      ? { name: summary.worktree.branch, worktree: true }
+      : summary.branch
+        ? { name: summary.branch, worktree: false }
+        : null,
+    pr: pr?.state ? { number: pr.number, state: pr.state } : null,
+    background:
+      background.length > 0 ? { count: background.length, first: clip(background[0]!) } : null,
   }
 }
 
@@ -490,17 +624,26 @@ function agentLimits(hosts: readonly HostState[], now: number): IslandLimits[] {
     .map(({ agent, windows }) => ({ agent, windows }))
 }
 
-function buildSummary(rows: readonly IslandRow[], hosts: readonly HostState[], now: number) {
+function buildSummary(
+  rows: readonly IslandRow[],
+  requests: readonly IslandRequest[],
+  hosts: readonly HostState[],
+  all: readonly SessionSummary[],
+  now: number,
+): IslandSummary {
   const count = (status: IslandStatus) => rows.filter((row) => row.status === status).length
   const limits = hosts.flatMap((state) => limitRows([...state.agents.values()], now))
   const tightest =
     limits.find((row) => row.limit.state === 'reached') ??
     limits.sort((a, b) => (b.limit.usedPercent ?? 0) - (a.limit.usedPercent ?? 0))[0]
-  const summary: IslandSummary = {
+  const midnight = new Date(now)
+  midnight.setHours(0, 0, 0, 0)
+  return {
     limits: agentLimits(hosts, now),
     running: count('running'),
-    waiting: count('waiting'),
+    waiting: count('waiting') + count('sign_in') + requests.filter((r) => r.task).length,
     failed: count('failed'),
+    today: all.filter((s) => listed(s) && s.parentId === null && s.updatedAt >= +midnight).length,
     limit: tightest
       ? {
           agent: tightest.agent.name,
@@ -511,11 +654,100 @@ function buildSummary(rows: readonly IslandRow[], hosts: readonly HostState[], n
         }
       : null,
   }
-  return summary
+}
+
+/**
+ * The tasks that wait for the user on a step of their own, a review or a person's step; a step
+ * whose session asks is that session's request already.
+ */
+function taskRequests(state: HostState): { request: IslandRequest; taskId: string }[] {
+  if (state.host?.offline) return []
+  const out: { request: IslandRequest; taskId: string; at: number }[] = []
+  for (const [taskId, task] of state.tasks) {
+    if (!task.needsYou) continue
+    const step = task.steps.find((s) => s.state === 'needs_you')
+    const asking = step?.sessionId ? state.sessions.get(step.sessionId) : undefined
+    if (asking && needsYou(asking)) continue
+    out.push({
+      taskId,
+      at: task.updatedAt,
+      request: {
+        key: `task:${state.key}/${taskId}`,
+        row: null,
+        task: { title: task.title, step: step?.name ?? null },
+        kind: 'kettu',
+        title: islandT('request.task'),
+        lines: [],
+        code: false,
+        options: [],
+        askedAt: task.updatedAt,
+      },
+    })
+  }
+  return out
+}
+
+/**
+ * Whom the expanded island leads with: the first session that runs, failed or finished out of
+ * view, else the latest one used. One that waits is its request's card already.
+ */
+function focusRow(rows: readonly IslandRow[]): IslandRow | null {
+  return (
+    rows.find((row) =>
+      ['running', 'starting', 'failed', 'unread', 'limited'].includes(row.status),
+    ) ??
+    rows.find((row) => row.group === 'idle') ??
+    null
+  )
+}
+
+/** What may change a session's outputs: its status, its plan and its turn. */
+function focusRevision(summary: SessionSummary): string {
+  return JSON.stringify([summary.status, summary.attention, summary.plan, summary.turnStartedAt])
+}
+
+/** The focus's plan steps around the current one, and the start of its last reply. */
+function buildFocus(row: IslandRow, outputs: SessionOutputs | null): IslandFocus {
+  const items = outputs?.plan ?? []
+  const steps = items.map((item) => ({
+    text: clip(item.content.split('\n')[0] ?? ''),
+    state:
+      item.status === 'completed'
+        ? ('done' as const)
+        : item.status === 'in_progress'
+          ? ('now' as const)
+          : ('todo' as const),
+  }))
+  let before = 0
+  let after = 0
+  let shown = steps
+  if (steps.length > MAX_STEPS) {
+    // The last done step, the current one and the two after it.
+    const current = steps.findIndex((step) => step.state !== 'done')
+    const at = current === -1 ? steps.length - 1 : current
+    const from = Math.max(0, at - 1)
+    const to = Math.min(steps.length, from + 4)
+    before = from
+    after = steps.length - to
+    shown = steps.slice(from, to)
+  }
+  const ended = row.status !== 'running' && row.status !== 'starting'
+  return {
+    row: row.key,
+    steps: shown,
+    before,
+    after,
+    reply: ended && outputs?.reply ? plainReply(outputs.reply) || null : null,
+    turnMs: ended ? (outputs?.turnMs ?? null) : null,
+  }
 }
 
 /** The whole view of every host, and what main needs to act on what the helper sends back. */
-export function buildView(hosts: readonly HostState[], now: number): BuiltView {
+export function buildView(
+  hosts: readonly HostState[],
+  now: number,
+  outputs: FocusOutputs | null = null,
+): BuiltView {
   const owners = new Map<SessionSummary, HostState>()
   for (const state of hosts)
     for (const summary of state.sessions.values()) owners.set(summary, state)
@@ -525,12 +757,15 @@ export function buildView(hosts: readonly HostState[], now: number): BuiltView {
   const taken = new Set(shown)
   const idle = all
     .filter((s) => listed(s) && !taken.has(s) && s.parentId === null)
+    .filter((s) => now - s.updatedAt < IDLE_WITHIN_MS)
     .sort((a, b) => b.updatedAt - a.updatedAt)
     .slice(0, IDLE_ROWS)
   const rows: IslandRow[] = []
   const rowMap = new Map<string, { hostKey: string; sessionId: string }>()
+  const summaries = new Map<string, Listed>()
   const requests: IslandRequest[] = []
   const sent = new Map<string, SentRequest>()
+  const requestOwners = new Map<string, RequestOwner>()
   const listedIn = new Map<SessionSummary, IslandGroup>()
   for (const s of groups.needsYou) listedIn.set(s, 'needs_you')
   for (const s of groups.running) listedIn.set(s, 'running')
@@ -541,6 +776,7 @@ export function buildView(hosts: readonly HostState[], now: number): BuiltView {
     const row = buildRow({ state, summary }, listedIn.get(summary) ?? 'idle', now, waiting)
     rows.push(row)
     rowMap.set(row.key, { hostKey: state.key, sessionId: summary.id })
+    summaries.set(row.key, { state, summary })
     // An offline host's requests cannot be answered until it is back.
     if (!waiting || state.host?.offline) continue
     for (const pending of waiting.requests) {
@@ -557,14 +793,44 @@ export function buildView(hosts: readonly HostState[], now: number): BuiltView {
         sessionId: summary.id,
         answers: built.answers,
       })
+      requestOwners.set(built.request.key, { hostKey: state.key, sessionId: summary.id })
+    }
+  }
+  for (const state of hosts) {
+    for (const { request, taskId } of taskRequests(state)) {
+      requests.push(request)
+      requestOwners.set(request.key, { hostKey: state.key, taskId })
     }
   }
   // The oldest request first, as the island answers them in turn.
   requests.sort((a, b) => (a.askedAt ?? Infinity) - (b.askedAt ?? Infinity))
+  const lead = focusRow(rows)
+  const leadOf = lead ? summaries.get(lead.key)! : null
+  const target: FocusTarget | null = leadOf
+    ? {
+        hostKey: leadOf.state.key,
+        sessionId: leadOf.summary.id,
+        revision: focusRevision(leadOf.summary),
+      }
+    : null
+  const read =
+    target &&
+    outputs &&
+    outputs.hostKey === target.hostKey &&
+    outputs.sessionId === target.sessionId
+      ? outputs.outputs
+      : null
   return {
-    view: { rows, requests, summary: buildSummary(rows, hosts, now) },
+    view: {
+      rows,
+      requests,
+      summary: buildSummary(rows, requests, hosts, all, now),
+      focus: lead ? buildFocus(lead, read) : null,
+    },
     rows: rowMap,
     requests: sent,
+    owners: requestOwners,
+    focus: target,
   }
 }
 
@@ -586,8 +852,11 @@ function sameOrder(a: readonly { key: string }[], b: readonly { key: string }[])
   return a.length === b.length && a.every((item, i) => item.key === b[i]!.key)
 }
 
-/** What changed from `before` to `after`; null when nothing did. */
-export function diffView(before: IslandView, after: IslandView): ViewChange | null {
+/** What changed from `before` to `after`, with the focus as it is now; null when nothing did. */
+export function diffView(
+  before: IslandView,
+  after: IslandView,
+): (ViewChange & { focus: IslandFocus | null }) | null {
   const oldRows = keyed(before.rows)
   const oldRequests = keyed(before.requests)
   const newRows = new Set(after.rows.map((row) => row.key))
@@ -605,6 +874,8 @@ export function diffView(before: IslandView, after: IslandView): ViewChange | nu
   if (JSON.stringify(before.summary) !== JSON.stringify(after.summary)) {
     change.summary = after.summary
   }
+  // The focus goes whole with every change, so the helper never tells a missing one from none.
+  const focusMoved = JSON.stringify(before.focus) !== JSON.stringify(after.focus)
   const empty =
     change.rows.length === 0 &&
     change.removedRows.length === 0 &&
@@ -612,6 +883,7 @@ export function diffView(before: IslandView, after: IslandView): ViewChange | nu
     change.removedRequests.length === 0 &&
     !change.order &&
     !change.requestOrder &&
-    !change.summary
-  return empty ? null : change
+    !change.summary &&
+    !focusMoved
+  return empty ? null : { ...change, focus: after.focus }
 }

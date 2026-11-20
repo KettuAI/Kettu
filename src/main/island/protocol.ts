@@ -2,11 +2,12 @@
 // only other end. Main sends the view it built and every word the helper shows; the helper sends
 // back only what the user did, which main checks against what it sent before acting on it.
 
+import type { PullRequestState } from '@shared/git'
 import type { LimitLevel } from '@shared/plan-limits'
 import type { ToolKind } from '@shared/thread'
 
 /** Raised whenever either side's messages change in a way the other must know. */
-export const ISLAND_PROTOCOL = 1
+export const ISLAND_PROTOCOL = 2
 
 /** The longest line either side sends, in bytes of UTF-8, the newline excluded. */
 export const MAX_LINE_BYTES = 1024 * 1024
@@ -24,14 +25,25 @@ export type IslandStatus =
 /** The menu bar panel's group a row is listed under; idle rows fold into one line. */
 export type IslandGroup = 'needs_you' | 'running' | 'finished' | 'idle'
 
+/** The nine dots' pattern for what a running turn does now, as the thread acts it out. */
+export type IslandPhase =
+  'think' | 'execute' | 'read' | 'search' | 'edit' | 'write' | 'fetch' | 'compact'
+
 /** One session's row, as the island lists it. */
 export interface IslandRow {
   /** What the helper names the row by when it is opened. */
   key: string
   sessionId: string
   host: IslandHost | null
-  /** The session or the task it belongs to, by its title; null while that is not known. */
-  parent: { kind: 'session' | 'task'; title: string | null } | null
+  /**
+   * The session or the task it belongs to, by its title, null while that is not known, and for a
+   * task's step which of its steps it is.
+   */
+  parent: {
+    kind: 'session' | 'task'
+    title: string | null
+    step: { index: number; total: number } | null
+  } | null
   title: string
   project: string
   agent: { id: string; name: string; harness: string; color: string | null }
@@ -52,6 +64,42 @@ export interface IslandRow {
   subagents: { running: number; text: string } | null
   /** The used-up window that holds it back, and when that resets. */
   limit: { label: string; resetsAt: number | null } | null
+  /** What its running turn does now; null between turns. */
+  phase: IslandPhase | null
+  /**
+   * Its prompt cache once its turn ended: when it expires, how long before that the island marks
+   * it as ending, and whether the lifetime is the provider's documented minimum. Null while a turn
+   * runs, which keeps it warm, and when nothing says how long it lasts.
+   */
+  cache: {
+    expiresAt: number
+    endingMs: number
+    estimate: boolean
+    /** The context the next request reads again once it expired; null when not known. */
+    tokens: number | null
+  } | null
+  /** Its context window from 70% used on, and while it compacts; null otherwise. */
+  context: { percent: number; tokens: number; level: LimitLevel } | null
+  branch: { name: string; worktree: boolean } | null
+  pr: { number: number; state: PullRequestState } | null
+  /** The background commands and tasks it runs: how many, and the first by what it does. */
+  background: { count: number; first: string } | null
+}
+
+/** The session the expanded island leads with, in more depth than its row. */
+export interface IslandFocus {
+  row: string
+  /**
+   * Its plan's steps around the one in progress, with how many done ones before them and how many
+   * after them are left out; empty without a plan.
+   */
+  steps: { text: string; state: 'done' | 'now' | 'todo' }[]
+  before: number
+  after: number
+  /** The start of its last reply as plain text, once its turn ended. */
+  reply: string | null
+  /** How long its last turn took, in ms. */
+  turnMs: number | null
 }
 
 export type IslandRequestKind = 'permission' | 'question' | 'plan' | 'origin' | 'app' | 'kettu'
@@ -61,8 +109,10 @@ export type IslandOptionStyle = 'deny' | 'allow_once' | 'allow_always' | 'normal
 /** What waits for the user's answer; the kinds the island cannot answer carry no options. */
 export interface IslandRequest {
   key: string
-  /** The row of its session. */
-  row: string
+  /** The row of its session; null for a task's. */
+  row: string | null
+  /** The task that waits, by its title and the step's name; null for a session's request. */
+  task: { title: string; step: string | null } | null
   kind: IslandRequestKind
   title: string
   /** A few lines: the command, the changed files, the question or the plan's start. */
@@ -75,8 +125,11 @@ export interface IslandRequest {
 
 export interface IslandSummary {
   running: number
+  /** Sessions and tasks that wait for the user. */
   waiting: number
   failed: number
+  /** The sessions used since midnight, which the resting island counts once no cache is warm. */
+  today: number
   /** The tightest plan window of the agents on a plan. */
   limit: {
     agent: string
@@ -104,6 +157,7 @@ export interface IslandView {
   rows: IslandRow[]
   requests: IslandRequest[]
   summary: IslandSummary
+  focus: IslandFocus | null
 }
 
 export type ColorMode = 'light' | 'dark'
@@ -135,6 +189,8 @@ export type MainToIsland =
       removedRequests: string[]
       requestOrder?: string[]
       summary?: IslandSummary
+      /** The focus as it is now, sent whole with every change; null when there is none. */
+      focus: IslandFocus | null
     }
   | { type: 'pop'; row: string | null; kind: PopKind; title: string; body: string }
   | ({ type: 'answered'; id: string } & AnswerResult)
@@ -147,6 +203,9 @@ export type IslandToMain =
   | { type: 'answer'; id: string; request: string; option: string }
   /** A row's session, or Kettu itself without one. */
   | { type: 'open'; row: string | null }
+  /** What a request belongs to, to answer it in Kettu: its session or its task. */
+  | { type: 'openRequest'; request: string }
+  | { type: 'newSession' }
   | { type: 'expanded' }
   | { type: 'resync' }
 
@@ -188,6 +247,13 @@ export function parseIslandLine(line: string): IslandToMain | null {
       if (row !== null && row !== undefined && !isId(row)) return null
       return { type: 'open', row: row ?? null }
     }
+    case 'openRequest': {
+      const { request } = message
+      if (!isId(request)) return null
+      return { type: 'openRequest', request }
+    }
+    case 'newSession':
+      return { type: 'newSession' }
     case 'expanded':
       return { type: 'expanded' }
     case 'resync':

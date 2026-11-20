@@ -323,6 +323,7 @@ import {
   type ThreadPage,
   type ThreadWrite,
 } from './threads/model'
+import { turnPhase } from '@shared/turn-phase'
 import { ThreadStoreError, type ThreadStore } from './threads/store'
 import type { UsageRow } from './usage/model'
 import { recordRows } from './usage/record'
@@ -884,6 +885,11 @@ function planProgress({ order, byId }: ThreadState): PlanProgress | null {
   return null
 }
 
+/** The background commands and tasks still running, by what they do. */
+function runningBackground({ session }: ThreadState): string[] {
+  return (session.background ?? []).filter((task) => task.status === 'running').map((t) => t.title)
+}
+
 /** Whether a patch can change the latest plan, which the session's summary carries. */
 function changesPlan(thread: ThreadState, patch: Patch): boolean {
   if (patch.op === 'entry.add') return patch.entry.kind === 'plan'
@@ -1431,6 +1437,9 @@ export class SessionManager {
         live && (status === 'running' || status === 'awaiting_permission')
           ? live.activity.current(live.thread)
           : null,
+      phase: live && status === 'running' ? turnPhase(live.thread).phase : null,
+      context: session?.usage?.size ? { used: session.usage.used, size: session.usage.size } : null,
+      background: live ? runningBackground(live.thread) : [],
       ...(record.worktree ? { worktree: this.worktreeSummary(record.worktree) } : {}),
       ...(record.agentWorktree ? { agentWorktree: { ...record.agentWorktree } } : {}),
       ...(live?.prepared

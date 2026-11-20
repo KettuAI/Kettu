@@ -144,6 +144,7 @@ export type AppCommand =
   | { kind: 'confirm-debug-restart' }
   | { kind: 'toggle-sidebar' }
   | { kind: 'open-session'; sessionId: string }
+  | { kind: 'open-task'; taskId: string }
   | { kind: 'open-routines' }
   | { kind: 'go-back' }
   | { kind: 'go-forward' }

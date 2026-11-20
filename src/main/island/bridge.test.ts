@@ -236,6 +236,8 @@ async function started(s: Setup): Promise<void> {
 
 beforeEach(() => {
   vi.useFakeTimers()
+  // An hour after the fixtures' sessions were used, so they count as used within the last day.
+  vi.setSystemTime(60 * 60_000)
 })
 
 afterEach(() => {
@@ -530,7 +532,42 @@ describe('opens and pops', () => {
     s.helper().say({ type: 'open', row: 'other' })
     s.helper().say({ type: 'open', row: null })
     await vi.advanceTimersByTimeAsync(0)
-    expect(s.opened).toEqual([{ hostKey: 'local', sessionId: 's1' }, null])
+    expect(s.opened).toEqual([{ kind: 'session', hostKey: 'local', sessionId: 's1' }, null])
+  })
+
+  it('opens only what a request it sent belongs to, a task’s included', async () => {
+    const s = setup([summary('s1')])
+    s.request.mockImplementation(async (method: string, params: unknown) =>
+      method === 'tasks.list'
+        ? [
+            {
+              id: 'task1',
+              title: 'Ship the island',
+              status: 'running',
+              needsYou: true,
+              archivedAt: null,
+              updatedAt: 5,
+              steps: [{ id: 'review', name: 'Review', state: 'needs_you', sessionId: null }],
+            },
+          ]
+        : hostAnswer([summary('s1')], {}, method, params),
+    )
+    await started(s)
+    const request = s.helper().of('view').at(-1)!.requests[0]!
+    expect(request).toMatchObject({
+      key: 'task:local/task1',
+      row: null,
+      task: { title: 'Ship the island', step: 'Review' },
+      options: [],
+    })
+    s.helper().say({ type: 'openRequest', request: 'task:local/other' })
+    s.helper().say({ type: 'openRequest', request: request.key })
+    s.helper().say({ type: 'newSession' })
+    await vi.advanceTimersByTimeAsync(0)
+    expect(s.opened).toEqual([
+      { kind: 'task', hostKey: 'local', taskId: 'task1' },
+      { kind: 'new-session' },
+    ])
   })
 
   it('pops what needs the user only while no window is in front', async () => {
@@ -603,6 +640,7 @@ describe('workflow steps', () => {
     expect(s.helper().of('view').at(-1)!.rows[0]!.parent).toEqual({
       kind: 'task',
       title: 'Ship the island',
+      step: null,
     })
 
     s.emit({
@@ -613,11 +651,16 @@ describe('workflow steps', () => {
     expect(s.helper().of('change').at(-1)!.rows[0]!.parent).toEqual({
       kind: 'task',
       title: 'Ship the Dynamic Island',
+      step: null,
     })
 
     s.emit({ type: 'task.removed', taskId: 'task1' })
     await vi.advanceTimersByTimeAsync(COALESCE_MS)
-    expect(s.helper().of('change').at(-1)!.rows[0]!.parent).toEqual({ kind: 'task', title: null })
+    expect(s.helper().of('change').at(-1)!.rows[0]!.parent).toEqual({
+      kind: 'task',
+      title: null,
+      step: null,
+    })
   })
 
   it('reads a host that has no tasks', async () => {
@@ -763,10 +806,10 @@ describe('other hosts', () => {
     await vi.advanceTimersByTimeAsync(COALESCE_MS)
     expect(s.remoteCalls).toContainEqual([studio, 'tasks.list', undefined])
     const row = () => current(s).rows.find((r) => r.key === `${studio}/r2`)
-    expect(row()?.parent).toEqual({ kind: 'task', title: 'Ship the island' })
+    expect(row()?.parent).toEqual({ kind: 'task', step: null, title: 'Ship the island' })
     s.bridge.remoteEvent(studio, { type: 'task.changed', task: { id: 'task1', title: 'Renamed' } })
     await vi.advanceTimersByTimeAsync(COALESCE_MS)
-    expect(row()?.parent).toEqual({ kind: 'task', title: 'Renamed' })
+    expect(row()?.parent).toEqual({ kind: 'task', title: 'Renamed', step: null })
   })
 
   it('drops a host that is no longer known', async () => {

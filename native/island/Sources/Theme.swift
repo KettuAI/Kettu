@@ -22,6 +22,10 @@ enum Theme {
 
   static let surface = Color.black
   static let card = Color(hex: "#1c1c1f")
+  /// The session the expanded island leads with, a step above the panel.
+  static let focusCard = Color(hex: "#121215")
+  static let line = Color(hex: "#232327")
+  static let track = Color(hex: "#2c2c30")
   static let cardHover = Color(hex: "#26262a")
   static let rowHover = Color(hex: "#151518")
   static let button = Color(hex: "#2a2a2e")
@@ -42,6 +46,10 @@ enum Theme {
   static var usageGreen: Color { token("usage-green") }
   static var turnDots: NSColor { NSColor(Color(hex: tokenHex["send"] ?? "#f2581b")) }
   static var unread: Color { token("shell-accent") }
+  static var running: Color { token("shell-accent") }
+  static var planDone: Color { token("success") }
+  static var stepDone: Color { token("success") }
+  static var merged: Color { token("merged") }
   static let chip = Color(hex: "#232327")
 
   static func limit(_ level: String) -> Color { token("limit-\(level)") }
@@ -51,10 +59,11 @@ enum Theme {
 enum Metrics {
   static let shoulder: CGFloat = 7
   static let collapsedRadius: CGFloat = 12
-  static let grownWidth: CGFloat = 400
-  static let grownBody: CGFloat = 56
-  static let grownRadius: CGFloat = 26
-  static let openWidth: CGFloat = 520
+  static let grownWidth: CGFloat = 380
+  /// The grown island's text under the band of its marks and state.
+  static let grownBody: CGFloat = 44
+  static let grownRadius: CGFloat = 20
+  static let openWidth: CGFloat = 500
   static let openRadius: CGFloat = 28
   static let wingMark: CGFloat = 18
   static let markOverlap: CGFloat = 5
@@ -64,8 +73,8 @@ enum Metrics {
   static let margin: CGFloat = 28
   /// The height of the island's top band on a screen without a notch whose menu bar hides itself.
   static let bandHeight: CGFloat = 32
-  /// The longest title the collapsed island shows where no notch is in the way.
-  static let titleWidth: CGFloat = 200
+  /// The middle of the collapsed island where no notch is in the way, which holds the title.
+  static let plainMiddle: CGFloat = 185
 }
 
 enum Fonts {

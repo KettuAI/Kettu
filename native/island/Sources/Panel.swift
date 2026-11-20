@@ -28,6 +28,10 @@ final class IslandController {
   private var hoverTimer: Timer?
   private var leaveTimer: Timer?
   private var inside = false
+  /// The pointer's latest place and time, and its speed in points per ms, smoothed.
+  private var lastPoint: CGPoint?
+  private var lastMove: TimeInterval = 0
+  private var speed: Double = 0
   private var hideWork: DispatchWorkItem?
   private let floating: Bool
   private let notchScreen: Bool
@@ -98,7 +102,7 @@ final class IslandController {
     }
     g.maxHeight = (frame.height * Metrics.maxHeightShare).rounded()
     if model.geometry != g { model.geometry = g }
-    let width = max(Metrics.openWidth, g.notchWidth + 300) + 2 * Metrics.margin
+    let width = max(Metrics.openWidth, g.notchWidth + 300, Metrics.grownWidth) + 2 * Metrics.margin
     let height = g.maxHeight + Metrics.margin
     panel.setFrame(
       NSRect(x: (top.x - width / 2).rounded(), y: top.y - height, width: width, height: height),
@@ -187,6 +191,14 @@ final class IslandController {
   }
 
   private func pointerMoved() {
+    let point = NSEvent.mouseLocation
+    let time = ProcessInfo.processInfo.systemUptime
+    if let last = lastPoint, time > lastMove {
+      let now = hypot(point.x - last.x, point.y - last.y) / ((time - lastMove) * 1000)
+      speed = 0.6 * now + 0.4 * speed
+    }
+    lastPoint = point
+    lastMove = time
     let over =
       model.mode != .hidden && islandRect().insetBy(dx: -1, dy: -1).contains(NSEvent.mouseLocation)
     if panel.ignoresMouseEvents == over { panel.ignoresMouseEvents = !over }
@@ -195,22 +207,43 @@ final class IslandController {
     if over { entered() } else { left() }
   }
 
+  /// The pointer rests on the island for 320 ms and moves slower than 0.6 pt per ms before it
+  /// opens, so passing over it on the way to the menu bar opens nothing.
+  private static let dwell: TimeInterval = 0.32
+  private static let slow = 0.6
+  /// How long the pointer may be off an island it opened before it closes.
+  private static let grace: TimeInterval = 0.4
+
   private func entered() {
     leaveTimer?.invalidate()
     guard model.mode == .collapsed || model.mode == .grown else { return }
     model.holdPop(paused: true)
+    // Laid out now, so the island opens straight to the panel's height.
+    model.prepare()
+    armHover(after: Self.dwell)
+  }
+
+  private func armHover(after seconds: TimeInterval) {
     hoverTimer?.invalidate()
-    hoverTimer = Timer.scheduledTimer(withTimeInterval: 0.25, repeats: false) { [weak self] _ in
-      self?.model.expand(byClick: false)
+    hoverTimer = Timer.scheduledTimer(withTimeInterval: seconds, repeats: false) {
+      [weak self] _ in
+      guard let self, self.inside else { return }
+      let still = ProcessInfo.processInfo.systemUptime - self.lastMove > 0.08
+      if still || self.speed < Self.slow {
+        self.model.expand(byClick: false)
+      } else {
+        self.armHover(after: 0.08)
+      }
     }
   }
 
   private func left() {
     hoverTimer?.invalidate()
     if model.mode == .grown { model.holdPop() }
+    if model.mode == .collapsed { model.measuring = false }
     if model.mode == .open && !model.openedByClick {
-      leaveTimer = Timer.scheduledTimer(withTimeInterval: 0.3, repeats: false) { [weak self] _ in
-        self?.model.collapse()
+      leaveTimer = Timer.scheduledTimer(withTimeInterval: Self.grace, repeats: false) {
+        [weak self] _ in self?.model.collapse()
       }
     }
   }
@@ -229,8 +262,12 @@ final class IslandController {
       model.moveSelection(-1)
       return true
     case 36, 76:
-      if let row = model.selected ?? model.requests.first?.row {
+      if let row = model.selected {
         model.open(row: row)
+        return true
+      }
+      if let request = model.requests.first {
+        model.open(request: request)
         return true
       }
       return false

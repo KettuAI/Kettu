@@ -42,7 +42,8 @@
     "summary": {
       "waiting": "{{count}} 个等你",
       "running": "{{count}} 个在跑",
-      "failed": "{{count}} 个失败"
+      "failed": "{{count}} 个失败",
+      "done": "{{count}} 个完成"
     },
     "paused": "已暂停",
     "a11y": {
@@ -50,7 +51,31 @@
       "quiet": "没有要你处理的",
       "row": "打开 {{title}}，{{status}}，{{agent}}"
     },
-    "recommended": "推荐"
+    "recommended": "推荐",
+    "cache": {
+      "short": "缓存 {{time}}",
+      "left": "缓存还剩 {{time}}",
+      "about": "约 {{time}}",
+      "expired": "提示词缓存已过期，下一条消息会按全价重新读取约 {{tokens}} token。",
+      "expiredShort": "提示词缓存已过期，下一条消息会按全价重新读取整段对话。"
+    },
+    "endedAgo": "这一轮 {{time}}前结束",
+    "doneIn": "已完成 · 用了 {{time}}",
+    "context": "上下文 {{percent}}%",
+    "background": "后台 {{count}}",
+    "taskStep": "需求：{{task}} · 第 {{index}} 步，共 {{total}} 步",
+    "task": "需求：{{task}}",
+    "stepsBefore": "前面 {{count}} 步已完成",
+    "stepsAfter": "后面还有 {{count}} 步",
+    "today": "今天 {{count}} 个会话",
+    "newSession": "新建会话",
+    "others": "其他会话",
+    "empty": {
+      "title": "还没有会话",
+      "body": "在 Kettu 里开始第一个，它会出现在这里。"
+    },
+    "ago": "{{time}}前",
+    "runsInBackground": "后台运行 {{command}}"
   },
   "line": {
     "run": "运行 {{command}}",
@@ -106,7 +131,8 @@
       "session": "本会话内允许",
       "always": "始终允许 {{app}}",
       "deny": "不允许"
-    }
+    },
+    "task": "需求在等你处理"
   },
   "limit": {
     "five_hour": "5 小时",

@@ -1,7 +1,7 @@
 import Foundation
 
 /// The protocol version this helper speaks; main's hello names its own.
-let islandProtocol = 1
+let islandProtocol = 2
 
 /// The longest line either side sends, in bytes, the newline excluded.
 let maxLineBytes = 1024 * 1024
@@ -15,6 +15,13 @@ struct IslandHost: Codable, Equatable {
 struct IslandParent: Codable, Equatable {
   let kind: String
   let title: String?
+  /// Which of its task's steps a step's session is.
+  let step: IslandStep?
+}
+
+struct IslandStep: Codable, Equatable {
+  let index: Int
+  let total: Int
 }
 
 struct IslandAgent: Codable, Equatable {
@@ -40,6 +47,35 @@ struct IslandLimit: Codable, Equatable {
   let resetsAt: Double?
 }
 
+struct IslandCache: Codable, Equatable {
+  let expiresAt: Double
+  /// How long before it expires the island marks it as ending.
+  let endingMs: Double
+  let estimate: Bool
+  let tokens: Double?
+}
+
+struct IslandContext: Codable, Equatable {
+  let percent: Int
+  let tokens: Double
+  let level: String
+}
+
+struct IslandBranch: Codable, Equatable {
+  let name: String
+  let worktree: Bool
+}
+
+struct IslandPullRequest: Codable, Equatable {
+  let number: Int
+  let state: String
+}
+
+struct IslandBackground: Codable, Equatable {
+  let count: Int
+  let first: String
+}
+
 struct IslandRow: Codable, Equatable {
   let key: String
   let sessionId: String
@@ -59,6 +95,12 @@ struct IslandRow: Codable, Equatable {
   let plan: IslandPlan?
   let subagents: IslandSubagents?
   let limit: IslandLimit?
+  let phase: String?
+  let cache: IslandCache?
+  let context: IslandContext?
+  let branch: IslandBranch?
+  let pr: IslandPullRequest?
+  let background: IslandBackground?
 }
 
 struct IslandOption: Codable, Equatable {
@@ -67,9 +109,16 @@ struct IslandOption: Codable, Equatable {
   let style: String
 }
 
+struct IslandTaskRef: Codable, Equatable {
+  let title: String
+  let step: String?
+}
+
 struct IslandRequest: Codable, Equatable {
   let key: String
-  let row: String
+  /// Its session's row; nil for a task's.
+  let row: String?
+  let task: IslandTaskRef?
   let kind: String
   let title: String
   let lines: [String]
@@ -108,8 +157,25 @@ struct IslandSummary: Codable, Equatable {
   let running: Int
   let waiting: Int
   let failed: Int
+  let today: Int?
   let limit: SummaryLimit?
   let limits: [IslandLimits]?
+}
+
+struct IslandFocusStep: Codable, Equatable {
+  let text: String
+  /// done, now or todo.
+  let state: String
+}
+
+/// The session the expanded island leads with, in more depth than its row.
+struct IslandFocus: Codable, Equatable {
+  let row: String
+  let steps: [IslandFocusStep]
+  let before: Int
+  let after: Int
+  let reply: String?
+  let turnMs: Double?
 }
 
 /// What main sends. Fields a message type does not carry are nil.
@@ -131,6 +197,8 @@ struct MainMessage: Decodable {
   let order: [String]?
   let removedRequests: [String]?
   let requestOrder: [String]?
+  /// Sent whole with every view and change.
+  let focus: IslandFocus?
   // pop
   let row: String?
   let kind: String?
@@ -144,7 +212,7 @@ struct MainMessage: Decodable {
   enum CodingKeys: String, CodingKey {
     case type, version, locale, strings, colorMode, stuckAfterMs, seq, rows, requests, summary
     case removedRows, order, removedRequests, requestOrder, row, kind, title, body, id, result
-    case message
+    case message, focus
     case protocolVersion = "protocol"
   }
 }
@@ -154,6 +222,9 @@ enum HelperMessage {
   case ready
   case answer(id: String, request: String, option: String)
   case open(row: String?)
+  /// What a request belongs to, its session or its task, to answer it in Kettu.
+  case openRequest(String)
+  case newSession
   case expanded
   case resync
 
@@ -165,6 +236,10 @@ enum HelperMessage {
       return ["type": "answer", "id": id, "request": request, "option": option]
     case .open(let row):
       return ["type": "open", "row": row as Any? ?? NSNull()]
+    case .openRequest(let request):
+      return ["type": "openRequest", "request": request]
+    case .newSession:
+      return ["type": "newSession"]
     case .expanded:
       return ["type": "expanded"]
     case .resync:

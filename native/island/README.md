@@ -10,17 +10,26 @@ It draws the island at the top middle of the screen whose menu bar is in use: in
 screen without one, in the middle of the menu bar, growing down from the top as from a notch. It
 shows while it is on:
 
-- **Collapsed**: the agent marks of the most urgent group, waiting, failed, running, done, or held by
-  a plan limit, with that group's signal (the waiting dot, the error alert, the turn's nine dots or
-  a clock once every running call is stuck, the unread dot, the limit ring), or with none of them
-  Kettu's fox; and a badge with how many sessions it lists. Without a notch in the way, the title
-  of the session it is about sits between them. Failed and done rows mark it until they are read in
-  Kettu or the island is opened.
-- **Grown**: main's pops, one at a time, for 6 seconds (4 for a finished turn).
-- **Expanded**, after 250 ms of hover or a click: each agent's plan windows, the oldest request with
-  its options as buttons, the session it is about in full, then every other session on one line.
-  A click opens a row; the bare top opens Kettu. An island opened by a click takes the keyboard:
-  Esc, the arrows, Return and the digits.
+- **Collapsed**: one signal and one fact. On the left the agent marks of the most urgent group,
+  waiting, failed, running, done, or held by a plan limit, or with none of them Kettu's fox; on the
+  right that group's signal (the waiting dot, the error alert, the turn's nine dots acting out its
+  phase as the thread's do, a clock once every running call is stuck, the unread dot, the limit
+  ring) and a count past one, the running session's plan, the minutes stuck or the reset day. At
+  rest the fact is how long the latest session's prompt cache stays warm, amber with seconds in its
+  last stretch, else how many sessions were used today. Without a notch, the same outline, with the
+  title of the session it is about in the middle. Failed and done rows mark it until they are read
+  in Kettu or the island is opened.
+- **Grown**: main's pops, one at a time, for 6 seconds (4 for a finished turn): the marks in the
+  left wing and the state in the right, the session and what happened under them.
+- **Expanded**, once the pointer rests on it for 320 ms and moves slower than 0.6 pt per ms, or on a
+  click, and closed 400 ms after the pointer leaves: from top to bottom the oldest request with its
+  options as buttons, the session main leads with (what it does, its plan's steps, its last reply or
+  the cost of an expired cache, then the facts that hold now: context from 70%, cache, branch, pull
+  request, sub-agents, background commands, task, model), every other session on one line with one
+  fact, the agents' plan limits, and New session and Open Kettu. The panel is laid out unseen first,
+  so the outline grows to its height in one critically damped spring. A click opens a row; the
+  bare top opens Kettu. An island opened by a click takes the keyboard: Esc, the arrows, Return and
+  the digits.
 
 AppKit draws the agent marks from SVG, which `generate.mjs` renders at build time from the
 renderer's mark components in the dark theme, with the tokens the signals use. The window is a
@@ -37,21 +46,23 @@ node native/island/build.mjs out/helpers   # what a development run of Kettu sta
 Every message is one line of UTF-8 JSON, at most 1 MiB; main drops longer or malformed lines from the
 helper and starts it again after several in a row. `src/main/island/protocol.ts` defines both sides.
 
-| Direction      | `type`       | Carries                                                                                                                                             |
-| -------------- | ------------ | --------------------------------------------------------------------------------------------------------------------------------------------------- |
-| main to helper | `hello`      | `protocol`, Kettu's `version`, `locale`, `strings`, `colorMode`, `stuckAfterMs`                                                                     |
-| main to helper | `view`       | `seq`, `rows` in the order to show, `requests` oldest first, `summary`                                                                              |
-| main to helper | `change`     | `seq`, changed `rows` and `requests`, `removedRows`, `removedRequests`, new `order` and `requestOrder` when they changed, `summary` when it changed |
-| main to helper | `pop`        | `row` or null, `kind`, `title`, `body`: something needs the user                                                                                    |
-| main to helper | `answered`   | the answer's `id`; `result` `answered`, `elsewhere` or `failed` with `message`                                                                      |
-| main to helper | `strings`    | `locale` and `strings`, followed by a `view`                                                                                                        |
-| main to helper | `appearance` | `colorMode`                                                                                                                                         |
-| main to helper | `quit`       | nothing; main ends the helper a second later if it is still there                                                                                   |
-| helper to main | `ready`      | `protocol`, the helper's `version`                                                                                                                  |
-| helper to main | `answer`     | its own `id`, a `request` key and an `option` id main sent                                                                                          |
-| helper to main | `open`       | a `row` key, or null for Kettu itself                                                                                                               |
-| helper to main | `expanded`   | nothing; main has the agents read their plan limits, at most once a minute                                                                          |
-| helper to main | `resync`     | nothing; main sends a whole `view`                                                                                                                  |
+| Direction      | `type`        | Carries                                                                                                                                                      |
+| -------------- | ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| main to helper | `hello`       | `protocol`, Kettu's `version`, `locale`, `strings`, `colorMode`, `stuckAfterMs`                                                                              |
+| main to helper | `view`        | `seq`, `rows` in the order to show, `requests` oldest first, `summary`, `focus`                                                                              |
+| main to helper | `change`      | `seq`, changed `rows` and `requests`, `removedRows`, `removedRequests`, new `order` and `requestOrder` when they changed, `summary` when it changed, `focus` |
+| main to helper | `pop`         | `row` or null, `kind`, `title`, `body`: something needs the user                                                                                             |
+| main to helper | `answered`    | the answer's `id`; `result` `answered`, `elsewhere` or `failed` with `message`                                                                               |
+| main to helper | `strings`     | `locale` and `strings`, followed by a `view`                                                                                                                 |
+| main to helper | `appearance`  | `colorMode`                                                                                                                                                  |
+| main to helper | `quit`        | nothing; main ends the helper a second later if it is still there                                                                                            |
+| helper to main | `ready`       | `protocol`, the helper's `version`                                                                                                                           |
+| helper to main | `answer`      | its own `id`, a `request` key and an `option` id main sent                                                                                                   |
+| helper to main | `open`        | a `row` key, or null for Kettu itself                                                                                                                        |
+| helper to main | `openRequest` | a `request` key main sent: its session or its task opens in Kettu                                                                                            |
+| helper to main | `newSession`  | nothing; Kettu opens New session                                                                                                                             |
+| helper to main | `expanded`    | nothing; main has the agents read their plan limits, at most once a minute                                                                                   |
+| helper to main | `resync`      | nothing; main sends a whole `view`                                                                                                                           |
 
 A `change` whose `seq` does not follow the last one means one was lost: the helper sends `resync`.
 
