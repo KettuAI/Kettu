@@ -248,7 +248,8 @@ struct SignalView: View {
       LimitRing(size: size - 1)
         .frame(width: size, height: size)
     case .unread:
-      Circle().fill(Theme.unread).frame(width: 6, height: 6).frame(width: size, height: size)
+      let dot: CGFloat = size >= 14 ? 8 : 6
+      Circle().fill(Theme.unread).frame(width: dot, height: dot).frame(width: size, height: size)
     }
   }
 }

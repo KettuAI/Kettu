@@ -10,9 +10,10 @@ It draws the island in the notch of the screen whose menu bar is in use, or, on 
 notch, a floating island just under the menu bar:
 
 - **Collapsed**: nothing while nothing needs a mark. Otherwise up to three stacked agent marks of the
-  most urgent group, waiting, failed and not yet seen, running, or held by a plan limit, and that
-  group's signal: the waiting dot, the error alert, the turn's nine dots (a clock once every
-  running call is stuck) or the limit ring, with a count or the reset day.
+  most urgent group, waiting, failed, running, done, or held by a plan limit, and that group's
+  signal: the waiting dot, the error alert, the turn's nine dots (a clock once every running call
+  is stuck), the unread dot or the limit ring, with a count or the reset day. Failed and done rows
+  mark it until they are read in Kettu or the island is opened.
 - **Grown**: main's pops, one at a time, for 6 seconds (4 for a finished turn).
 - **Expanded**, after 250 ms of hover or a click: the oldest request with its options as buttons,
   then the rows under the menu bar panel's groups. A click opens a row; the bare top opens Kettu.

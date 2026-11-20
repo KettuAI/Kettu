@@ -68,7 +68,8 @@ final class IslandModel: ObservableObject {
   private var tick: Timer?
   private var noteTimer: Timer?
   private var stuckTimer: Timer?
-  private var seenFailed: Set<String> = []
+  /// Failed and finished rows the user saw on the open island, which stop marking the collapsed one.
+  private var seen: Set<String> = []
   private var answers: [String: String] = [:]
   private var nextAnswer = 1
 
@@ -152,8 +153,8 @@ final class IslandModel: ObservableObject {
   func refresh() {
     now = Date()
     let all = rows
-    let live = Set(all.filter { $0.status == "failed" }.map(failKey))
-    seenFailed.formIntersection(live)
+    let live = Set(all.filter { Self.marksDone($0) }.map(seenKey))
+    seen.formIntersection(live)
     collapsed = Self.collapse(all, model: self)
     if let selected, store.rows[selected] == nil { self.selected = nil }
     revision += 1
@@ -181,10 +182,16 @@ final class IslandModel: ObservableObject {
     }
   }
 
-  private func failKey(_ row: IslandRow) -> String { "\(row.key)@\(row.since ?? 0)" }
+  private func seenKey(_ row: IslandRow) -> String { "\(row.key)@\(row.status)@\(row.since ?? 0)" }
 
-  /// The most urgent group decides what the collapsed island shows: waiting, failed and not yet
-  /// seen, running, limited. Finished rows never show collapsed.
+  /// A turn that ended, failed or done, which the user has not read yet.
+  private static func marksDone(_ row: IslandRow) -> Bool {
+    row.status == "failed" || row.status == "unread"
+  }
+
+  /// The most urgent group decides what the collapsed island shows: waiting, failed, running,
+  /// done, limited. Failed and done rows mark it until the user reads them in Kettu or opens the
+  /// island, so a turn that ended while a Kettu window was in front, which pops nothing, still shows.
   private static func collapse(_ rows: [IslandRow], model: IslandModel) -> Collapsed? {
     func agents(_ list: [IslandRow]) -> [IslandAgent] {
       var seen = Set<String>()
@@ -195,9 +202,8 @@ final class IslandModel: ObservableObject {
     if !waiting.isEmpty {
       return Collapsed(agents: agents(waiting), signal: .waiting, text: count(waiting))
     }
-    let failed = rows.filter {
-      $0.status == "failed" && !model.seenFailed.contains(model.failKey($0))
-    }
+    let unseen = rows.filter { marksDone($0) && !model.seen.contains(model.seenKey($0)) }
+    let failed = unseen.filter { $0.status == "failed" }
     if !failed.isEmpty {
       return Collapsed(agents: agents(failed), signal: .failed, text: count(failed))
     }
@@ -213,6 +219,10 @@ final class IslandModel: ObservableObject {
       }
       let pattern: TurnDots.Pattern = moving.contains { $0.status == "running" } ? .chase : .think
       return Collapsed(agents: agents(running), signal: .running(pattern), text: count(running))
+    }
+    let done = unseen.filter { $0.status == "unread" }
+    if !done.isEmpty {
+      return Collapsed(agents: agents(done), signal: .unread, text: count(done))
     }
     let limited = rows.filter { $0.status == "limited" }
     if !limited.isEmpty {
@@ -318,8 +328,8 @@ final class IslandModel: ObservableObject {
     pops.removeAll()
     pop = nil
     queued = 0
-    // Opening shows every failure, so the collapsed island stops pointing at them.
-    for row in rows where row.status == "failed" { seenFailed.insert(failKey(row)) }
+    // Opening shows every ended turn, so the collapsed island stops pointing at them.
+    for row in rows where Self.marksDone(row) { seen.insert(seenKey(row)) }
     collapsed = Self.collapse(rows, model: self)
     now = Date()
     tick?.invalidate()
