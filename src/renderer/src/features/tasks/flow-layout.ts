@@ -172,9 +172,12 @@ export function layoutFlow(workflow: Workflow, m: FlowMetrics = TASK_METRICS): F
 
   const edges: FlowEdge[] = []
   const incoming = new Map<string, number>()
+  const arrivals = new Map<FlowEdge, Point>()
   // Forward arrows: the outcomes of a step that lead to the same steps share one arrow, and each
   // arrow leaves the step's bottom at its own point. With one way on, its label sits under the
-  // step; with several, by where each arrives, so they keep apart.
+  // step; with several, by where each arrives, so they keep apart. An arrow that skips rows or ends
+  // in a join keeps its label under the step too, since where it arrives it shares its run with
+  // other arrows, whose labels would sit on the same spot.
   for (const step of workflow.steps) {
     const from = box.get(step.id)!
     const ways: { key: string; names: string[]; targets: string[]; end: TaskEnd | null }[] = []
@@ -185,6 +188,10 @@ export function layoutFlow(workflow: Workflow, m: FlowMetrics = TASK_METRICS): F
       if (way) way.names.push(outcome.name)
       else ways.push({ key, names: [outcome.name], targets, end: outcome.end })
     }
+    // Arrows that skip rows go down the left side, so they leave from the left and cross no other.
+    const skipping = (way: (typeof ways)[number]) =>
+      way.targets.some((to) => (box.get(to)?.row ?? rowCount) > from.row + 1)
+    ways.sort((a, b) => Number(skipping(b)) - Number(skipping(a)))
     ways.forEach((way, j) => {
       const exitX = from.x + (NODE_W * (j + 1)) / (ways.length + 1)
       const bottom = from.y + NODE_H
@@ -195,8 +202,9 @@ export function layoutFlow(workflow: Workflow, m: FlowMetrics = TASK_METRICS): F
         const tx = endBox ? endBox.x : target!.x + NODE_W / 2
         const ty = endBox ? endBox.y - END_SIZE / 2 : target!.y
         const targetRow = endBox ? rowCount : target!.row
+        const skips = targetRow > from.row + 1
         let points: Point[]
-        if (targetRow > from.row + 1) {
+        if (skips) {
           // Down the side, clear of the rows it passes.
           const lane = originX - LANE_START / 2 - j * 6
           const before = ty - ROW_GAP / 2
@@ -217,21 +225,27 @@ export function layoutFlow(workflow: Workflow, m: FlowMetrics = TASK_METRICS): F
           ]
         }
         incoming.set(to, (incoming.get(to) ?? 0) + 1)
-        edges.push({
+        const edge: FlowEdge = {
           id: `${step.id}/${way.key}/${to}`,
           from: step.id,
           outcomes: way.names,
           to,
           back: false,
           points,
-          label: ways.length > 1 ? [tx, ty - 14] : [exitX, bottom + 14],
+          label: [exitX, bottom + 14],
           align: 'center',
           join: false,
-        })
+        }
+        if (ways.length > 1 && !skips) arrivals.set(edge, [tx, ty - 14])
+        edges.push(edge)
       }
     })
   }
-  for (const edge of edges) edge.join = (incoming.get(edge.to) ?? 0) > 1
+  for (const edge of edges) {
+    edge.join = (incoming.get(edge.to) ?? 0) > 1
+    const arrival = arrivals.get(edge)
+    if (arrival && !edge.join) edge.label = arrival
+  }
 
   // Arrows back: out of the step's side, along its lane, into the target's side, each leaving and
   // entering at a height of its own; the label starts at the lane, by where it enters.
