@@ -1,6 +1,6 @@
 {
   "helper": {
-    "label": "Sessions in the notch",
+    "label": "Dynamic Island",
     "status": {
       "running": "Running",
       "waiting": "Needs you",

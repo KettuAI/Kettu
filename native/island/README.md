@@ -1,7 +1,7 @@
 # kettu-island
 
-The macOS helper behind the notch island. Kettu's main process starts it as a child once the first
-window shows, while Settings › Notifications › Show sessions in the notch is on, and talks to it over
+The macOS helper behind the Dynamic Island. Kettu's main process starts it as a child once the first
+window shows, while Settings › Notifications › Dynamic Island is on, and talks to it over
 its standard input and output. Main builds the whole view, every word included; the helper only keeps
 it and sends back what the user did. It reads no files, opens no sockets, uses no network and asks
 for no system permission. Reaching the end of stdin, as when Kettu quits or crashes, makes it exit.
