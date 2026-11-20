@@ -36,7 +36,8 @@
   "errors": {
     "hostRestarted": "A background process of Kettu restarted. Try again.",
     "hostOffline": "The host is not connected. Try again once it is back.",
-    "hostTimeout": "Kettu got no answer in time. Try again."
+    "hostTimeout": "Kettu got no answer in time. Try again.",
+    "terminalNotAllowed": "This computer does not allow devices to use its terminal."
   },
   "planReset": {
     "in": "Resets in {{time}}",
