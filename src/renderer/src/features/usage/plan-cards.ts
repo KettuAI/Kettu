@@ -1,10 +1,4 @@
-import type {
-  AgentStatus,
-  PlanLimit,
-  PlanResets,
-  ProviderBalance,
-  ResetsError,
-} from '@shared/agent-host'
+import type { AgentStatus, PlanLimit, ProviderBalance } from '@shared/agent-host'
 import type { AgentId } from '@shared/thread'
 import { joinPlanTier, planTier } from '@renderer/features/account/model'
 import { planName } from '@renderer/features/tray/model'
@@ -12,9 +6,12 @@ import { limitLevel, type LimitLevel } from '@renderer/lib/plan-limit'
 import {
   accountCardKey,
   accountKey,
+  newerResets,
   newestLimits,
   ownKey,
   readAtOf,
+  resetsOf,
+  type CardResets,
   type HostAgentList,
   type PlanReading,
 } from '@renderer/lib/plan-readings'
@@ -95,37 +92,6 @@ export interface CardPlace {
   agentId: AgentId
   agentName: string
 }
-
-/** The reset credits a card's account holds, as last read on any of its computers. */
-export interface CardResets {
-  /** How many it holds; 0 when only why they could not be read is known. */
-  count: number
-  /** Each credit, the soonest to run out first; null while the expiries are unknown. */
-  each: NonNullable<PlanResets['each']> | null
-  error: ResetsError | null
-  observedAt: number
-  /** The computer and agent that read them, which one is spent through. */
-  hostId: string | null
-  agentId: AgentId
-}
-
-/** What an agent read of its account's reset credits; null when it holds and reports none. */
-function resetsOf(agent: AgentStatus, hostId: string | null): CardResets | null {
-  const held = agent.resets && agent.resets.count > 0 ? agent.resets : null
-  if (!held && !agent.resetsError) return null
-  return {
-    count: held?.count ?? 0,
-    each: held?.each ?? null,
-    error: agent.resetsError ?? null,
-    observedAt: held?.observedAt ?? 0,
-    hostId,
-    agentId: agent.id,
-  }
-}
-
-/** The later reading of two, since the credits are the account's wherever it is signed in. */
-const newerResets = (a: CardResets | null, b: CardResets | null): CardResets | null =>
-  a && b ? (b.observedAt > a.observedAt ? b : a) : (a ?? b)
 
 /** One account's card on the Usage page, an OpenCode provider's included. */
 export interface UsageCard {

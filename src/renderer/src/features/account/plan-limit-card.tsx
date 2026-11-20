@@ -7,8 +7,9 @@ import { HoverCard, HoverCardContent, HoverCardTrigger } from '@renderer/compone
 import { PlanPart } from '@renderer/features/session/composer/usage'
 import { ringStroke } from '@renderer/features/usage/plan-cards'
 import { useLimitView } from '@renderer/hooks/use-limit-view'
-import { planAmount, planBalance } from '@renderer/lib/format'
+import { monthDay, monthDayTime, planAmount, planBalance } from '@renderer/lib/format'
 import { LIMIT_TEXT, shownPercent } from '@renderer/lib/plan-limit'
+import type { CardResets } from '@renderer/lib/plan-readings'
 import { cn } from '@renderer/lib/utils'
 import { prefersReducedMotion } from '@renderer/stores/settings'
 import { useHostName, useWindowHost } from '@renderer/stores/window-host'
@@ -75,6 +76,7 @@ export function PlanLimitCard({
           )}
         </div>
         <PlanPart limits={card.limits} account={card.account} />
+        {card.resets && <ResetsPart resets={card.resets} />}
       </HoverCardContent>
     </HoverCard>
   )
@@ -206,6 +208,43 @@ function CardFace({ card }: { card: PlanCard }) {
           </span>
         </span>
       ))}
+      {card.resets && (
+        <span className="-mt-px flex min-w-0 justify-between gap-1 text-badge leading-3.25 tracking-tight whitespace-nowrap">
+          <span className="min-w-0 truncate text-tertiary">
+            {t('usage:resets.count', { count: card.resets.count })}
+          </span>
+          {card.resets.each && (
+            <span className="shrink-0 text-primary tabular">
+              {card.resets.each[0]!.until === null
+                ? t('usage:resets.neverTile')
+                : t('usage:resets.until', { time: monthDay(card.resets.each[0]!.until) })}
+            </span>
+          )}
+        </span>
+      )}
     </>
+  )
+}
+
+/** The reset credits an account holds, under its windows: how many, then when each runs out. */
+function ResetsPart({ resets }: { resets: CardResets }) {
+  const { t } = useTranslation('usage')
+  return (
+    <div className="mt-3 flex flex-col gap-1.25 text-hint">
+      <div className="text-small font-medium text-tertiary">
+        {t('resets.count', { count: resets.count })}
+      </div>
+      {resets.each ? (
+        resets.each.map((credit) => (
+          <div key={credit.id} className="truncate text-secondary tabular">
+            {credit.until === null
+              ? t('resets.never')
+              : t('resets.until', { time: monthDayTime(credit.until) })}
+          </div>
+        ))
+      ) : (
+        <div className="text-secondary">{t('resets.unknown')}</div>
+      )}
+    </div>
   )
 }

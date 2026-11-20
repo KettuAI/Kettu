@@ -15,8 +15,8 @@ import { Spinner } from '@renderer/components/ui/spinner'
 import { toast } from '@renderer/components/ui/toast'
 import { monthDayTime } from '@renderer/lib/format'
 import { errorMessage } from '@renderer/lib/host'
+import type { CardResets } from '@renderer/lib/plan-readings'
 import { spendReset } from '@renderer/stores/usage'
-import type { CardResets } from './plan-cards'
 
 /**
  * Asks before one of an account's reset credits is spent, which cannot be undone: it names the
