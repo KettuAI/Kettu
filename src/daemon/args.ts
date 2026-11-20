@@ -118,8 +118,9 @@ Environment:
                                it the first start picks one at random and keeps it
 
 Write an IPv6 address in brackets, as [fd00::1]:4567.
-kettu status and the direct, terminal and verbose commands exit with 3 when the daemon is not
-running. kettu report without a running daemon saves the logs and settings alone.
+kettu status and the devices, pair, direct, terminal and verbose commands exit with 3 when the
+daemon is not running. kettu direct exits with 1 when direct connections cannot listen. kettu
+report without a running daemon saves the logs and settings alone.
 `
 
 const OPTIONS = {

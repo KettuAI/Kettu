@@ -314,4 +314,14 @@ describe('opencodeModelRequests', () => {
     await expect(reader.raw(target, 'system', false)).rejects.toThrow('Not a request')
     await expect(reader.raw(target, 'msg_gone', false)).rejects.toThrow('no longer has')
   })
+
+  it('reads the messages of a forked session, whose ids end in a copy number', async () => {
+    const forked = [user('t0_4', 'Prompt'), assistant('t0r0_4', [])]
+    const { sessions } = fakeSessions(forked)
+    const reader = opencodeModelRequests({ sessions: () => sessions })
+    const page = await reader.page(target, null)
+    const raw = await reader.raw(target, page!.turns[0].requests[0].raw, false)
+    expect(raw.records.map((r) => (r as { id: string }).id)).toEqual(['msg_t0_4', 'msg_t0r0_4'])
+    await expect(reader.raw(target, 'msg_t0_4/../x', false)).rejects.toThrow('Not a request')
+  })
 })

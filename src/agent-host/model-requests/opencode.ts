@@ -32,7 +32,8 @@ export interface OpenCodeSessions {
 
 /** How many of OpenCode's pages one read takes at most, looking for the start of a turn. */
 const PAGES = 8
-const MESSAGE_IDS = /^msg_[A-Za-z0-9]+(,msg_[A-Za-z0-9]+)*$/
+// A fork's copied messages end in `_` and a number.
+const MESSAGE_IDS = /^msg_[A-Za-z0-9_]+(,msg_[A-Za-z0-9_]+)*$/
 
 /** The cursor of the messages older than one, made the way OpenCode makes its own. */
 export function cursorBefore(messageId: string): string {

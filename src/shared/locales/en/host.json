@@ -35,6 +35,7 @@
     "alreadyInSession": "This session is already part of a Kettu session",
     "heldOutside": "This session is still open in a terminal. Exit it there with /exit and try again, or fork a copy to carry on in Kettu.",
     "cannotList": "{{agent}} cannot list its sessions",
+    "notInAgent": "{{agent}} has no such session for this folder. It may have been deleted.",
     "configBetweenTurns": "{{option}} changes between turns",
     "ultracodeDescription": "Dynamic workflows for substantial tasks",
     "promptTooLarge": "The message is over 10 MB with its attachments. Remove some to send.",
