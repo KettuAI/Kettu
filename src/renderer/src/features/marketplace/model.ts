@@ -308,34 +308,6 @@ export function matchesQuery(listing: Listing, query: string): boolean {
     .includes(needle)
 }
 
-/**
- * The name agents call a registry server by: the last part of its registry name, without the
- * words every server has, made unique among Kettu's and never `kettu`, Kettu's own server's.
- */
-export function serverName(id: string, kept: MarketServer[]): string {
-  const last = id.split('/').pop() ?? id
-  const plain = (text: string) =>
-    text
-      .toLowerCase()
-      .replace(/[^a-z0-9_-]+/g, '-')
-      .replace(/-{2,}/g, '-')
-      .replace(/^[^a-z0-9]+|[-_]+$/g, '')
-  const short = plain(last.replace(/^mcp[-_]?(server)?[-_]?|[-_]?mcp([-_]?server)?$/gi, ''))
-  const base = (short || plain(last)).slice(0, 40)
-  return uniqueName(MARKET_NAME.test(base) ? base : 'server', kept)
-}
-
-/** `base`, or `base-2`, `base-3`… when another server Kettu keeps or Kettu itself has it. */
-function uniqueName(base: string, kept: MarketServer[]): string {
-  const taken = new Set(kept.map((s) => s.name))
-  taken.add('kettu')
-  if (!taken.has(base)) return base
-  for (let n = 2; ; n++) {
-    const name = `${base}-${n}`
-    if (!taken.has(name)) return name
-  }
-}
-
 /** Whether a name a user typed can be a server's name among the ones Kettu keeps. */
 export function nameProblem(
   name: string,

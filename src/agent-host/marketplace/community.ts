@@ -79,7 +79,7 @@ type WorkflowSummary = Pick<Workflow, 'name' | 'description' | 'when' | 'locales
   steps: Pick<WorkflowStep, 'id' | 'name' | 'by' | 'youReview'>[]
 }
 
-type WorkflowCatalog = {
+export type WorkflowCatalog = {
   status: 'available' | 'signed_out' | 'unavailable'
   items: (CommunityItem & { workflow: WorkflowSummary | null })[]
 }
@@ -637,11 +637,18 @@ export class MarketCommunityService {
     return this.readWorkflowVersion(listing.id, listing.version)
   }
 
-  private async readWorkflowVersion(id: string, version: string): Promise<CommunityWorkflow> {
+  /**
+   * The `workflow.yaml` of one version of a workflow listing, checked against the size and SHA-256
+   * the version lists; null when the version has none that reads as text.
+   */
+  async workflowText(id: string, version: string): Promise<string | null> {
+    if (!LISTING_ID.test(id) || !VERSION.test(version)) {
+      throw refuse('Not a listing of the Kettu Marketplace')
+    }
     const listed = await this.api(() => this.deps.call({ kind: 'version', id, version }))
     checkFileList(listed.files)
     const file = listed.files.find((item) => item.path === WORKFLOW_FILE)
-    if (!file) return { version, workflow: null, problem: t('marketCommunity.noWorkflow') }
+    if (!file) return null
     if (file.size > WORKFLOW_FILE_BYTES) throw refuse(t('marketCommunity.tooLarge'))
     const answer = await this.api(() =>
       this.deps.call({ kind: 'file', id, version, path: file.path }),
@@ -650,7 +657,31 @@ export class MarketCommunityService {
     if (!matches(file, data, answer.sha256)) {
       throw refuse(t('marketCommunity.mismatch', { path: file.path }))
     }
-    const text = utf8(data)
+    return utf8(data)
+  }
+
+  /**
+   * Adds one version of a workflow listing to the library, as `installWorkflow` adds the current
+   * one, and counts it; the text is the one `workflowText` read and its caller checked.
+   */
+  async addWorkflowVersion(
+    listing: { id: string; version: string; handle: string; slug: string; official: boolean },
+    text: string,
+  ): Promise<WorkflowEntry> {
+    const { entry, updated } = await this.deps.installWorkflow(text, {
+      kind: 'community',
+      listingId: listing.id,
+      version: listing.version,
+      handle: listing.handle,
+      slug: listing.slug,
+      official: listing.official,
+    })
+    void this.count(listing.id, listing.version, updated ? 'update' : 'install')
+    return entry
+  }
+
+  private async readWorkflowVersion(id: string, version: string): Promise<CommunityWorkflow> {
+    const text = await this.workflowText(id, version)
     if (text === null) return { version, workflow: null, problem: t('marketCommunity.noWorkflow') }
     const read = parseWorkflow(text)
     return read.workflow
@@ -725,16 +756,7 @@ export class MarketCommunityService {
     const file = files.find((item) => item.path === WORKFLOW_FILE)
     const text = file ? utf8(file.data) : null
     if (text === null) throw refuse(t('marketCommunity.noWorkflow'))
-    const { entry, updated } = await this.deps.installWorkflow(text, {
-      kind: 'community',
-      listingId: listing.id,
-      version: listing.version,
-      handle: listing.handle,
-      slug: listing.slug,
-      official: listing.official,
-    })
-    void this.count(listing.id, listing.version, updated ? 'update' : 'install')
-    return entry
+    return this.addWorkflowVersion(listing, text)
   }
 
   /** The plugins installed from the Kettu Marketplace and where each installed item stands. */

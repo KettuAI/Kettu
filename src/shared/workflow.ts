@@ -3,6 +3,7 @@
 // its clients.
 
 import { isAgentId } from './agents'
+import type { CatalogServer, SkillSource } from './marketplace'
 import type { AgentId } from './thread'
 
 export const WORKFLOW_FORMAT = 1
@@ -397,6 +398,118 @@ export interface TaskStart {
   pins?: Record<string, StepPick>
   /** The task's worktree in a Git repository: the ref to cut from and its branch's name. */
   worktree?: { base: string; branch?: string }
+}
+
+// Suggestions: the cards an agent's suggest_workflow and create_workflow show in its session.
+
+/** Where a suggested workflow comes from. */
+export type SuggestedSource =
+  | { kind: 'library'; workflowId: string }
+  | {
+      kind: 'marketplace'
+      listingId: string
+      version: string
+      handle: string
+      slug: string
+      official: boolean
+      installs: number | null
+    }
+  // Written by the session's agent for this one requirement, kept outside the library.
+  | { kind: 'draft'; draftId: string }
+
+/** A tool a suggested workflow names, as its card shows it. */
+export interface SuggestedTool {
+  kind: 'mcp' | 'skill'
+  /** As the workflow names it: a name the host keeps, or a Marketplace entry's id. */
+  ref: string
+  title: string
+  description: string | null
+  /** The server Start installs, or the one the host keeps; null for a skill. */
+  server: CatalogServer | null
+  /** The skill Start installs; null for a server or one the host keeps. */
+  skill: SkillSource | null
+  /** What the user does on the card before Start: sign in, fill in keys, or nothing. */
+  setup: 'none' | 'sign-in' | 'keys'
+}
+
+/** One thing Start does, in the order it does them; the card ticks each off. */
+export type StartItem =
+  | { kind: 'connected'; ref: string; title: string } // a tool that signs in is connected
+  | { kind: 'add'; name: string; version: string } // a Marketplace workflow goes into the library
+  | { kind: 'install'; ref: string; tool: 'mcp' | 'skill'; title: string }
+  | { kind: 'start'; step: string } // approves what the card drew and starts the task
+
+export interface StartProgress {
+  item: StartItem
+  state: 'waiting' | 'running' | 'done' | 'failed'
+  error: string | null
+}
+
+/**
+ * The user's answer to a card, kept on the host: still waiting, Start under way, stopped at a
+ * failed item, the task started, Do it here, or a workflow to keep saved or not.
+ */
+export type SuggestionAnswer =
+  | { kind: 'waiting' }
+  | { kind: 'starting' | 'failed'; items: StartProgress[] }
+  | { kind: 'started'; taskId: string; items: StartProgress[] }
+  | { kind: 'declined' }
+  | { kind: 'saved'; workflowId: string }
+  | { kind: 'not_saved' }
+
+/** What the card says under the chart. */
+export interface SuggestionFacts {
+  /** How long the workflow took on this host, the middle of its finished runs; null before one. */
+  pastMs: number | null
+  runs: number
+  /** The task works in a new worktree; false in the project folder; null for a workflow to keep. */
+  worktree: boolean | null
+}
+
+/** A card as clients draw it. `purpose` save is a workflow written for the user to keep. */
+export interface WorkflowSuggestion {
+  id: string
+  sessionId: string
+  purpose: 'start' | 'save'
+  source: SuggestedSource
+  /** The workflow the card draws; Start and Save approve this and nothing else. */
+  workflow: Workflow
+  hash: string
+  /** The library is short of an approval of this hash, so Start or Save approves it. */
+  approves: boolean
+  task: string
+  title: string | null
+  pace: Pace
+  paceReason: string | null
+  /** The agent that suggested or wrote it. */
+  agentId: AgentId
+  tools: SuggestedTool[]
+  facts: SuggestionFacts
+  answer: SuggestionAnswer
+  /** Set when a paired device gave the answer. */
+  device?: { id: string; name: string }
+  createdAt: number
+}
+
+const SKILL_CATALOG_REF = /^[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+:[A-Za-z0-9._-]+$/
+const REGISTRY_REF = /^[A-Za-z0-9.-]+\/[A-Za-z0-9._-]+$/
+const KETTU_REF = /^kettu:[a-z2-7]{10}$/
+
+/**
+ * Whether a tool a workflow names is a Marketplace entry Start can install: a Kettu Marketplace
+ * listing, an MCP Registry server's name or a skills catalog id, as the Marketplace keeps them.
+ */
+export function marketToolRef(kind: 'mcp' | 'skill', ref: string): boolean {
+  if (KETTU_REF.test(ref)) return true
+  return kind === 'mcp' ? REGISTRY_REF.test(ref) : SKILL_CATALOG_REF.test(ref)
+}
+
+/** The kept server or skill a workflow's name for it means: by its name, or its entry's id. */
+export function keptTool<T extends { id: string; name: string }>(
+  kept: readonly T[],
+  ref: string,
+): T | undefined {
+  return kept.find((item) => item.name === ref) ?? kept.find((item) => item.id === ref)
 }
 
 /** A step session's link to its task, on its summary. */

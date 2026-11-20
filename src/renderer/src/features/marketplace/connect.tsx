@@ -233,8 +233,19 @@ function ConnectFailure({ serverId }: { serverId: string }) {
   )
 }
 
-/** Connect for a server not kept yet: in a row, or as the listing's main button. */
-export function ConnectButton({ server, big = false }: { server: CatalogServer; big?: boolean }) {
+/**
+ * Connect for a server not kept yet, or for `kept` while it is signed out: in a row, or as the
+ * listing's main button.
+ */
+export function ConnectButton({
+  server,
+  kept = null,
+  big = false,
+}: {
+  server: CatalogServer | MarketServer
+  kept?: MarketServer | null
+  big?: boolean
+}) {
   const { t } = useTranslation('marketplace')
   const [open, setOpen] = useState(false)
   const flow = useConnectFlow(server.id)
@@ -242,7 +253,7 @@ export function ConnectButton({ server, big = false }: { server: CatalogServer; 
   return (
     <span className="k-mkt-row-end">
       {!open && <ConnectFailure serverId={server.id} />}
-      <ConnectPopover server={server} kept={null} open={open} setOpen={setOpen}>
+      <ConnectPopover server={server} kept={kept} open={open} setOpen={setOpen}>
         <Button
           size={big ? 'md' : 'sm'}
           variant={big ? 'primary' : 'secondary'}

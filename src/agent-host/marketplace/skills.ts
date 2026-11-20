@@ -504,7 +504,7 @@ export class MarketSkillsService {
       .filter(
         (skill) =>
           skill.on &&
-          names.includes(skill.name) &&
+          (names.includes(skill.name) || names.includes(skill.id)) &&
           !skillFor(skill, agentId) &&
           this.present.has(skillFolder(skill.id)),
       )

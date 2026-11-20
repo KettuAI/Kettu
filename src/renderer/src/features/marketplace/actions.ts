@@ -3,17 +3,18 @@
 // settings; and the plugins and marketplaces the harnesses keep, through the agent host. Each works
 // on the host of the scope it is given.
 
-import type {
-  CatalogPlugin,
-  CatalogServer,
-  InstalledPlugin,
-  MarketConnection,
-  MarketServer,
-  MarketSkill,
-  McpSpec,
-  PluginMarketplace,
-  PluginScope,
-  SkillSource,
+import {
+  serverName,
+  type CatalogPlugin,
+  type CatalogServer,
+  type InstalledPlugin,
+  type MarketConnection,
+  type MarketServer,
+  type MarketSkill,
+  type McpSpec,
+  type PluginMarketplace,
+  type PluginScope,
+  type SkillSource,
 } from '@shared/marketplace'
 import type { AgentId } from '@shared/thread'
 import { listingIdOf } from '@shared/market-community'
@@ -31,7 +32,7 @@ import {
   type ConnectFlow,
 } from '@renderer/stores/marketplace'
 import type { HostScope } from '@renderer/stores/host-scope'
-import { oauthFlow, serverName } from './model'
+import { oauthFlow } from './model'
 
 // Bound to the namespace only: each call reads the language shown at the time.
 const t = i18n.getFixedT(null, 'marketplace')

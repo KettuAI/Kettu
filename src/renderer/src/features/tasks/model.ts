@@ -173,7 +173,7 @@ export function pickedByText(pickedBy: PickedBy, view: TaskView): string {
 }
 
 /** The steps whose forward arrows lead to `stepId`. */
-function stepsBefore(view: TaskView, stepId: string) {
+function stepsBefore(view: Pick<TaskView, 'workflow'>, stepId: string) {
   const at = stepIndex(view.workflow, stepId)
   return view.workflow.steps.filter(
     (s) => stepIndex(view.workflow, s.id) < at && s.outcomes.some((o) => o.to.includes(stepId)),
@@ -185,7 +185,7 @@ function stepsBefore(view: TaskView, stepId: string) {
  * person's step, which picks nothing, the agent's step before that; at a join, the last branch to
  * finish; nobody for the first step, which the tray chose.
  */
-export function whoPicksText(view: TaskView, stepId: string): string {
+export function whoPicksText(view: Pick<TaskView, 'workflow' | 'pins'>, stepId: string): string {
   const step = view.workflow.steps.find((s) => s.id === stepId)
   if (!step) return ''
   if (step.by === 'you') return t('picked.person')

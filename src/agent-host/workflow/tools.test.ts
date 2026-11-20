@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { WorkflowEntry } from '@shared/workflow'
 import type { ReportResult } from './engine'
+import { SuggestionRefused, type SuggestInput } from './suggestions'
 import { WorkflowTools } from './tools'
 
 const ENTRY = {
@@ -23,7 +24,16 @@ function tools(options: { suggest?: boolean } = {}) {
     library: {
       suggest: options.suggest ?? true,
       list: async () => [ENTRY],
-      create: async () => ({ problems: [{ at: 'steps', message: 'must list at least one step' }] }),
+    },
+    suggestions: {
+      suggest: async (_sessionId: string, input: SuggestInput) => {
+        if (input.workflowId !== ENTRY.id) {
+          throw new SuggestionRefused('not_found', `No workflow ${input.workflowId}`)
+        }
+        return { id: 'wfs-aaaaaaaaaaaa', workflow: { name: ENTRY.name } } as never
+      },
+      draft: async () => ({ problems: [{ at: 'steps', message: 'must list at least one step' }] }),
+      keep: async () => ({ problems: [] }),
     },
     marketplace: {
       publicWorkflows: async () => ({ status: 'signed_out' as const, items: [] }),
@@ -100,7 +110,7 @@ describe('the workflow tools', () => {
       pace_reason: 'It must hold',
     })
     expect(result.structuredContent).toMatchObject({
-      suggestion: { workflow_id: 'feature-development', pace: 'thorough' },
+      suggestion: { id: 'wfs-aaaaaaaaaaaa', workflow_id: 'feature-development', pace: 'thorough' },
     })
     const unknown = await on.call(caller('plain'), 'suggest_workflow', {
       workflow_id: 'nope',
