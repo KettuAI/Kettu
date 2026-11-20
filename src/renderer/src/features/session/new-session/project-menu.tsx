@@ -264,8 +264,9 @@ export function ProjectMenu({
           <span className="shrink-0 text-danger">{t('newSession.missing')}</span>
         )}
       </Trigger>
-      <ComboboxContent sideOffset={8} className="kettu-project-menu w-70 max-w-80">
+      <ComboboxContent sideOffset={8} className="kettu-project-menu flex w-70 max-w-80 flex-col">
         <ComboboxInput
+          className="shrink-0"
           showTrigger={false}
           placeholder={t('newSession.searchProjects')}
           aria-label={t('newSession.searchProjectsLabel')}
@@ -280,7 +281,8 @@ export function ProjectMenu({
             {t('newSession.hostNotConnected', { host: hostName(host) })}
           </p>
         )}
-        <ComboboxList className="max-h-none overflow-y-visible">
+        {/* A column that shrinks to the popup's height: the project lists take what is left. */}
+        <ComboboxList className="flex min-h-0 max-h-none flex-col overflow-y-visible">
           {(group: ProjectGroup, index: number) =>
             group.value === 'none' ? (
               <ComboboxGroup key={group.value} items={group.items}>
@@ -296,11 +298,15 @@ export function ProjectMenu({
             ) : group.value.startsWith('host:') ? (
               <HostProjects key={group.value} group={group} byPath={byPath} hints={hints} />
             ) : group.value === 'recent' ? (
-              <ComboboxGroup key={group.value} items={group.items}>
-                {index > 0 && <ComboboxSeparator />}
-                <ComboboxLabel>{t('newSession.recent')}</ComboboxLabel>
+              <ComboboxGroup
+                key={group.value}
+                items={group.items}
+                className="flex min-h-0 flex-col"
+              >
+                {index > 0 && <ComboboxSeparator className="shrink-0" />}
+                <ComboboxLabel className="shrink-0">{t('newSession.recent')}</ComboboxLabel>
                 {/* Only the projects scroll, leaving room for the search field and Open project… */}
-                <div className="relative -mx-1.5 max-h-[min(--spacing(72),calc(var(--available-height)---spacing(28)))] scroll-fade-y overflow-y-auto overscroll-contain px-1.5">
+                <div className="relative -mx-1.5 max-h-72 scroll-fade-y overflow-y-auto overscroll-contain px-1.5">
                   <ComboboxCollection>
                     {(path: string) => {
                       const p = byPath.get(path)
@@ -393,9 +399,9 @@ function HostProjects({
   const away = isAway(host?.connection ?? null)
   const name = group.hostId === null ? t('newSession.thisComputer') : (host?.name ?? '')
   return (
-    <ComboboxGroup items={group.items}>
-      <ComboboxSeparator />
-      <ComboboxLabel className="flex items-center gap-1.5">
+    <ComboboxGroup items={group.items} className="flex min-h-0 flex-col">
+      <ComboboxSeparator className="shrink-0" />
+      <ComboboxLabel className="flex shrink-0 items-center gap-1.5">
         {group.hostId === null ? (
           <Glyph icon={ComputerIcon} size={13} />
         ) : (
@@ -405,7 +411,7 @@ function HostProjects({
         {away && <span className="shrink-0">{t('newSession.hostOffline')}</span>}
       </ComboboxLabel>
       {/* Only the projects scroll, a host's at a time. */}
-      <div className="relative -mx-1.5 max-h-[min(--spacing(56),calc(var(--available-height)---spacing(28)))] scroll-fade-y overflow-y-auto overscroll-contain px-1.5">
+      <div className="relative -mx-1.5 max-h-56 scroll-fade-y overflow-y-auto overscroll-contain px-1.5">
         <ComboboxCollection>
           {(path: string) => {
             const p = byPath.get(path)
