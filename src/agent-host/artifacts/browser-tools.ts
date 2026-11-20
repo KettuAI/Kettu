@@ -120,6 +120,18 @@ function output(properties: Record<string, Schema>): Tool['outputSchema'] {
 
 const READ_ONLY = { readOnlyHint: true } as const
 
+/**
+ * The tools that only read a page, which run without the agent's own permission prompt: they read
+ * the agent's own tabs, and on a tab the user opened Kettu asks them in its own card instead.
+ */
+export const BROWSER_READ_TOOLS: readonly BrowserToolName[] = [
+  'browser_snapshot',
+  'browser_take_screenshot',
+  'browser_wait_for',
+  'browser_console_messages',
+  'browser_network_requests',
+]
+
 const TAB = object(
   {
     index: { type: 'integer' },
