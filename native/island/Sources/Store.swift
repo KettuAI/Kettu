@@ -12,7 +12,8 @@ final class Store {
   private(set) var order: [String] = []
   private(set) var requests: [String: IslandRequest] = [:]
   private(set) var requestOrder: [String] = []
-  private(set) var summary = IslandSummary(running: 0, waiting: 0, failed: 0, limit: nil)
+  private(set) var summary = IslandSummary(
+    running: 0, waiting: 0, failed: 0, limit: nil, limits: nil)
 
   enum Outcome {
     case applied

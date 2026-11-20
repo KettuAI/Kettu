@@ -7,6 +7,7 @@ import type { AgentOptions, AgentStatus, SessionActivity, SessionSummary } from 
 import type { BrowserOriginDecision } from '@shared/browser'
 import type { ComputerAppDecision } from '@shared/computer-use'
 import type { PendingRequest, PendingTool } from '@shared/pending-requests'
+import { limitLevel } from '@shared/plan-limits'
 import {
   groupSessions,
   limitRows,
@@ -20,6 +21,7 @@ import { islandT } from '../i18n'
 import type {
   IslandGroup,
   IslandHost,
+  IslandLimits,
   IslandOptionStyle,
   IslandRequest,
   IslandRequestKind,
@@ -438,6 +440,56 @@ function buildRow(
   }
 }
 
+/** The order an agent's windows read in: the short one, the week, then the rest. */
+const WINDOW_ORDER = ['five_hour', 'seven_day']
+const SHOWN_LIMIT_AGENTS = 2
+const SHOWN_WINDOWS = 3
+
+/**
+ * The plan windows of the agents on a plan, each agent once however many hosts have it, the
+ * fullest first. A window that has reset reads as empty until the agent reads it again.
+ */
+function agentLimits(hosts: readonly HostState[], now: number): IslandLimits[] {
+  const seen = new Set<string>()
+  const groups: (IslandLimits & { fullest: number })[] = []
+  for (const state of hosts) {
+    for (const agent of state.agents.values()) {
+      if (agent.hidden || agent.disabled || agent.registered === false) continue
+      const key = `${agent.harnessId}/${agent.account?.label ?? agent.name}`
+      if (seen.has(key)) continue
+      const rank = (window: string) => {
+        const i = WINDOW_ORDER.indexOf(window)
+        return i < 0 ? WINDOW_ORDER.length : i
+      }
+      const windows = agent.limits
+        .filter((limit) => limit.usedPercent !== null)
+        .sort((a, b) => rank(a.window) - rank(b.window))
+        .slice(0, SHOWN_WINDOWS)
+        .map((limit) => {
+          const reset = limit.resetsAt !== null && limit.resetsAt <= now
+          const usedPercent = reset ? 0 : Math.round(limit.usedPercent!)
+          return {
+            label: islandT(`limit.${limit.window}`, { defaultValue: limit.label }),
+            usedPercent,
+            resetsAt: reset ? null : limit.resetsAt,
+            level: reset ? ('ok' as const) : limitLevel(limit),
+          }
+        })
+      if (windows.length === 0) continue
+      seen.add(key)
+      groups.push({
+        agent: { name: agent.name, harness: agent.harnessId, color: agent.color ?? null },
+        windows,
+        fullest: Math.max(...windows.map((w) => w.usedPercent)),
+      })
+    }
+  }
+  return groups
+    .sort((a, b) => b.fullest - a.fullest)
+    .slice(0, SHOWN_LIMIT_AGENTS)
+    .map(({ agent, windows }) => ({ agent, windows }))
+}
+
 function buildSummary(rows: readonly IslandRow[], hosts: readonly HostState[], now: number) {
   const count = (status: IslandStatus) => rows.filter((row) => row.status === status).length
   const limits = hosts.flatMap((state) => limitRows([...state.agents.values()], now))
@@ -445,6 +497,7 @@ function buildSummary(rows: readonly IslandRow[], hosts: readonly HostState[], n
     limits.find((row) => row.limit.state === 'reached') ??
     limits.sort((a, b) => (b.limit.usedPercent ?? 0) - (a.limit.usedPercent ?? 0))[0]
   const summary: IslandSummary = {
+    limits: agentLimits(hosts, now),
     running: count('running'),
     waiting: count('waiting'),
     failed: count('failed'),

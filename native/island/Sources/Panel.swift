@@ -32,8 +32,8 @@ final class IslandController {
   private let floating: Bool
   private let notchScreen: Bool
 
-  /// `floating` and `notchScreen` are development switches: draw the floating island over a notch,
-  /// and keep to the screen with the notch whichever display is in use.
+  /// `floating` and `notchScreen` are development switches: draw the island as on a screen without
+  /// a notch, and keep to the screen with the notch whichever display is in use.
   init(model: IslandModel, floating: Bool = false, notchScreen: Bool = false) {
     self.model = model
     self.floating = floating
@@ -85,15 +85,16 @@ final class IslandController {
     {
       g.notchWidth = frame.width - left.width - right.width
       g.notchHeight = screen.safeAreaInsets.top
-      g.attached = true
+      g.hasNotch = true
       top = CGPoint(x: frame.minX + left.width + g.notchWidth / 2, y: frame.maxY)
     } else {
-      // No notch: a floating island just under the menu bar, clear of the apps' menus.
-      let menuBar = max(frame.maxY - screen.visibleFrame.maxY, NSStatusBar.system.thickness)
-      g.notchWidth = Metrics.floatingGap
-      g.notchHeight = 32
-      g.attached = false
-      top = CGPoint(x: frame.midX, y: frame.maxY - menuBar - 6)
+      // No notch: the island hangs from the middle of the menu bar, clear of the apps' menus.
+      // A menu bar that hides itself leaves the top of the screen.
+      let menuBar = frame.maxY - screen.visibleFrame.maxY
+      g.notchWidth = 0
+      g.notchHeight = Metrics.bandHeight
+      g.hasNotch = false
+      top = CGPoint(x: frame.midX, y: frame.maxY - max(0, menuBar))
     }
     g.maxHeight = (frame.height * Metrics.maxHeightShare).rounded()
     if model.geometry != g { model.geometry = g }

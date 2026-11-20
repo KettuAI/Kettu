@@ -9,6 +9,8 @@ import { dirname, join } from 'node:path'
 
 const MARKS_DIR = 'src/renderer/src/components/agents/marks'
 const TOKENS = 'src/renderer/src/styles/tokens.css'
+// The icon's shaded fox without its tile, which the island shows while nothing needs a mark.
+const BRAND_FOX = 'src/renderer/src/assets/kettu-fox.svg'
 // Marks drawn in `currentColor` take the island's primary text color.
 const TEXT_COLOR = '#f2f2f7'
 
@@ -110,6 +112,9 @@ export async function renderMarks(root) {
 // The added agents' dot colors, and the signals' colors.
 const AGENT_DOTS = ['teal', 'violet', 'amber', 'rose', 'green', 'slate']
 const TOKENS_USED = [
+  'limit-ok',
+  'limit-warn',
+  'limit-bad',
   'attention-dot',
   'attention',
   'danger',
@@ -128,7 +133,10 @@ function hex(tokens, name) {
   return value
 }
 
-/** The Swift source: `markSVG` by harness, `agentDotHex` by color name, `tokenHex` by token. */
+/**
+ * The Swift source: `markSVG` by harness, `agentDotHex` by color name, `tokenHex` by token and
+ * `brandFoxSVG`.
+ */
 export async function generatedSwift(root) {
   const { marks, tokens } = await renderMarks(root)
   const lit = (text) => JSON.stringify(text)
@@ -150,5 +158,7 @@ export async function generatedSwift(root) {
       'tokenHex',
       TOKENS_USED.map((name) => [name, hex(tokens, name)]),
     ),
+    `let brandFoxSVG = ${lit(readFileSync(join(root, BRAND_FOX), 'utf8'))}`,
+    '',
   ].join('\n')
 }

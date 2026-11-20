@@ -1,4 +1,4 @@
-// Which of an agent's plan-limit windows hold back one of its models.
+// Which of an agent's plan-limit windows hold back one of its models, and how full one is.
 
 import type { PlanLimit } from './agent-host'
 import type { ConfigOption } from './thread'
@@ -39,4 +39,19 @@ export function limitsForModel(
     if (names.length === 0 || !names.every((name) => known.has(name))) return true
     return names.every((name) => own.has(name))
   })
+}
+
+/** How full a plan limit is: under 70% used, 70 to 89%, or 90% and over. */
+export type LimitLevel = 'ok' | 'warn' | 'bad'
+
+/**
+ * A plan limit's level, which colors its bar wherever one is shown. It goes by the whole
+ * percentage the bar shows beside it, so "90%" never sits next to a yellow bar.
+ */
+export function limitLevel(limit: Pick<PlanLimit, 'usedPercent' | 'state'>): LimitLevel {
+  if (limit.state === 'reached') return 'bad'
+  const used = Math.round(limit.usedPercent ?? 0)
+  if (used >= 90) return 'bad'
+  if (used >= 70) return 'warn'
+  return 'ok'
 }

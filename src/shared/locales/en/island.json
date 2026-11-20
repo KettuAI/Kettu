@@ -15,6 +15,7 @@
     "duration": {
       "seconds": "{{s}}s",
       "minutes": "{{m}}m",
+      "hours": "{{h}}h",
       "hoursMinutes": "{{h}}h {{m}}m",
       "days": "{{d}}d"
     },
@@ -108,5 +109,11 @@
       "always": "Always allow {{app}}",
       "deny": "Don’t allow"
     }
+  },
+  "limit": {
+    "five_hour": "5h",
+    "seven_day": "7d",
+    "seven_day_opus": "7d Opus",
+    "seven_day_sonnet": "7d Sonnet"
   }
 }

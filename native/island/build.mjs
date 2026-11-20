@@ -12,6 +12,7 @@ import {
   mkdirSync,
   mkdtempSync,
   readdirSync,
+  renameSync,
   rmSync,
   writeFileSync,
 } from 'node:fs'
@@ -88,8 +89,12 @@ async function main() {
     }
     const target = join(resolve(destination), NAME)
     mkdirSync(dirname(target), { recursive: true })
-    copyFileSync(output, target)
-    chmodSync(target, 0o755)
+    // A new file renamed into place, since macOS kills a binary overwritten while a copy of it
+    // runs, as a development run of Kettu keeps the helper running.
+    const fresh = `${target}.new`
+    copyFileSync(output, fresh)
+    chmodSync(fresh, 0o755)
+    renameSync(fresh, target)
     console.log(`${NAME}: built ${target} (${arch})`)
     return 0
   } finally {

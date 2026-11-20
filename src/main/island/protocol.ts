@@ -2,6 +2,7 @@
 // only other end. Main sends the view it built and every word the helper shows; the helper sends
 // back only what the user did, which main checks against what it sent before acting on it.
 
+import type { LimitLevel } from '@shared/plan-limits'
 import type { ToolKind } from '@shared/thread'
 
 /** Raised whenever either side's messages change in a way the other must know. */
@@ -84,6 +85,19 @@ export interface IslandSummary {
     reached: boolean
     resetsAt: number | null
   } | null
+  /** Each agent's plan windows, the fullest agents first, as the expanded island's first line. */
+  limits: IslandLimits[]
+}
+
+/** One agent's plan windows: a short name, the share used, when it resets and how full it is. */
+export interface IslandLimits {
+  agent: { name: string; harness: string; color: string | null }
+  windows: {
+    label: string
+    usedPercent: number
+    resetsAt: number | null
+    level: LimitLevel
+  }[]
 }
 
 export interface IslandView {

@@ -42,6 +42,9 @@ enum Theme {
   static var usageGreen: Color { token("usage-green") }
   static var turnDots: NSColor { NSColor(Color(hex: tokenHex["send"] ?? "#f2581b")) }
   static var unread: Color { token("shell-accent") }
+  static let chip = Color(hex: "#232327")
+
+  static func limit(_ level: String) -> Color { token("limit-\(level)") }
 }
 
 /// Sizes in points, from the hi-fi.
@@ -59,8 +62,11 @@ enum Metrics {
   static let maxHeightShare: CGFloat = 0.7
   /// Room around the island inside its window, for the shoulders and the shadow.
   static let margin: CGFloat = 28
-  /// The gap a floating island keeps between its wings, where a notch would be.
-  static let floatingGap: CGFloat = 24
+  /// The height of the island's top band on a screen without a notch, where it hangs from the
+  /// menu bar.
+  static let bandHeight: CGFloat = 32
+  /// The longest title the collapsed island shows where no notch is in the way.
+  static let titleWidth: CGFloat = 200
 }
 
 enum Fonts {

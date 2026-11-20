@@ -1,5 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { ALREADY_ANSWERED, type HostEvent, type SessionSummary } from '@shared/agent-host'
+import {
+  ALREADY_ANSWERED,
+  type AgentStatus,
+  type HostEvent,
+  type SessionSummary,
+} from '@shared/agent-host'
 import type { IslandState } from '@shared/island'
 import type { ThreadEntry } from '@shared/thread'
 import { COALESCE_MS, IslandBridge, type HelperProcess, type IslandBridgeDeps } from './bridge'
@@ -343,6 +348,41 @@ describe('changes', () => {
       ['run', 'running'],
       ['done', 'finished'],
       ['idle', 'idle'],
+    ])
+  })
+
+  it('sends each agent’s plan windows, the short one first and a reset one as empty', async () => {
+    const s = setup([summary('s1')])
+    await started(s)
+    const now = Date.now()
+    const window = (id: string, usedPercent: number, resetsAt: number) => ({
+      window: id,
+      label: id,
+      usedPercent,
+      resetsAt,
+      state: 'ok' as const,
+      observedAt: now,
+    })
+    s.emit({
+      type: 'agent.status',
+      status: {
+        id: 'claude-code',
+        name: 'Claude Code',
+        harnessId: 'claude-code',
+        hidden: false,
+        limits: [window('seven_day', 72.4, now + 3_600_000), window('five_hour', 95, now - 1000)],
+      } as unknown as AgentStatus,
+    })
+    await vi.advanceTimersByTimeAsync(COALESCE_MS)
+    const limits = s.helper().of('change').at(-1)!.summary!.limits
+    expect(limits).toMatchObject([
+      {
+        agent: { name: 'Claude Code', harness: 'claude-code', color: null },
+        windows: [
+          { usedPercent: 0, resetsAt: null, level: 'ok' },
+          { usedPercent: 72, resetsAt: now + 3_600_000, level: 'warn' },
+        ],
+      },
     ])
   })
 

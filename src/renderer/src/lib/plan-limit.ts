@@ -1,19 +1,7 @@
 import type { PlanLimit } from '@shared/agent-host'
+import type { LimitLevel } from '@shared/plan-limits'
 
-/** How full a plan limit is: under 70% used, 70 to 89%, or 90% and over. */
-export type LimitLevel = 'ok' | 'warn' | 'bad'
-
-/**
- * A plan limit's level, which colors its bar wherever one is shown. It goes by the whole
- * percentage the bar shows beside it, so "90%" never sits next to a yellow bar.
- */
-export function limitLevel(limit: Pick<PlanLimit, 'usedPercent' | 'state'>): LimitLevel {
-  if (limit.state === 'reached') return 'bad'
-  const used = Math.round(limit.usedPercent ?? 0)
-  if (used >= 90) return 'bad'
-  if (used >= 70) return 'warn'
-  return 'ok'
-}
+export { limitLevel, type LimitLevel } from '@shared/plan-limits'
 
 /** Whether plan limits show the share used or the share left. */
 export type LimitView = 'used' | 'left'

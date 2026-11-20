@@ -116,7 +116,7 @@ const LOCAL = 'local'
 const EMPTY_VIEW: IslandView = {
   rows: [],
   requests: [],
-  summary: { running: 0, waiting: 0, failed: 0, limit: null },
+  summary: { running: 0, waiting: 0, failed: 0, limit: null, limits: [] },
 }
 
 export class IslandBridge {

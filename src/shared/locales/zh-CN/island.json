@@ -15,6 +15,7 @@
     "duration": {
       "seconds": "{{s}} 秒",
       "minutes": "{{m}} 分钟",
+      "hours": "{{h}} 小时",
       "hoursMinutes": "{{h}} 小时 {{m}} 分钟",
       "days": "{{d}} 天"
     },
@@ -106,5 +107,11 @@
       "always": "始终允许 {{app}}",
       "deny": "不允许"
     }
+  },
+  "limit": {
+    "five_hour": "5 小时",
+    "seven_day": "7 天",
+    "seven_day_opus": "7 天 Opus",
+    "seven_day_sonnet": "7 天 Sonnet"
   }
 }

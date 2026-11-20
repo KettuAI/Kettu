@@ -3,11 +3,11 @@ import SwiftUI
 
 /// Where the island sits and how large it may grow, from the screen it is on.
 struct IslandGeometry: Equatable {
-  /// The notch's width and height; on a screen without one, the floating island's gap and height.
+  /// The notch's width, nothing on a screen without one, where the island hangs from the menu bar.
   var notchWidth: CGFloat = 196
+  /// The height of the island's top band: the notch's, or `Metrics.bandHeight`.
   var notchHeight: CGFloat = 32
-  /// Attached to the top edge over a notch, or floating under the menu bar.
-  var attached = true
+  var hasNotch = true
   var maxHeight: CGFloat = 600
 }
 
@@ -26,11 +26,15 @@ struct Pop: Equatable {
   let body: String
 }
 
-/// What the collapsed island shows: the marks of its most urgent group and that group's signal.
+/// What the collapsed island shows: the marks of its most urgent group, or Kettu's fox when nothing
+/// needs one, that group's signal and a word for it, the title of the session it is about where no
+/// notch is in the way, and how many sessions it lists.
 struct Collapsed: Equatable {
   let agents: [IslandAgent]
-  let signal: Signal
+  let signal: Signal?
   let text: String?
+  let title: String?
+  let count: Int
 }
 
 /// What came of an answer the user gave on the island, shown in place of its card for a moment.
@@ -82,15 +86,16 @@ final class IslandModel: ObservableObject {
 
   var rows: [IslandRow] { store.order.compactMap { store.rows[$0] } }
 
-  var groups: [(group: String, rows: [IslandRow])] {
-    let all = rows
-    return ["needs_you", "running", "finished"].compactMap { group in
-      let list = all.filter { $0.group == group }
-      return list.isEmpty ? nil : (group, list)
-    }
+  /// The session the expanded island leads with: the first that is not idle.
+  var focusRow: IslandRow? { rows.first { $0.group != "idle" } }
+
+  /// The other sessions, in main's order, as compact rows.
+  var otherRows: [IslandRow] {
+    let focus = focusRow?.key
+    return rows.filter { $0.key != focus }
   }
 
-  var idleCount: Int { rows.filter { $0.group == "idle" }.count }
+  var limits: [IslandLimits] { store.summary.limits ?? [] }
 
   var requests: [IslandRequest] { store.requestOrder.compactMap { store.requests[$0] } }
 
@@ -121,6 +126,24 @@ final class IslandModel: ObservableObject {
       return text("duration.hoursMinutes", ["h": "\(minutes / 60)", "m": "\(minutes % 60)"])
     }
     return text("duration.days", ["d": "\(minutes / (24 * 60))"])
+  }
+
+  /// A duration in its largest unit alone, for the island's narrow places.
+  func short(since ms: Double?) -> String? {
+    guard let ms else { return nil }
+    let seconds = max(0, Int(now.timeIntervalSince1970 - ms / 1000))
+    if seconds < 60 { return text("duration.seconds", ["s": "\(seconds)"]) }
+    if seconds < 3600 { return text("duration.minutes", ["m": "\(seconds / 60)"]) }
+    if seconds < 86400 { return text("duration.hours", ["h": "\(seconds / 3600)"]) }
+    return text("duration.days", ["d": "\(seconds / 86400)"])
+  }
+
+  /// The collapsed island's parts as last laid out, which its width follows.
+  @Published private(set) var parts: [String: CGFloat] = [:]
+
+  func setPart(_ name: String, _ width: CGFloat) {
+    guard abs((parts[name] ?? -1) - width) > 0.5 else { return }
+    withAnimation(animation(from: .collapsed, to: .collapsed)) { parts[name] = width }
   }
 
   func status(of row: IslandRow) -> String { store.status(of: row, now: now) }
@@ -158,8 +181,7 @@ final class IslandModel: ObservableObject {
     collapsed = Self.collapse(all, model: self)
     if let selected, store.rows[selected] == nil { self.selected = nil }
     revision += 1
-    if mode == .hidden && collapsed != nil { setMode(.collapsed) }
-    if mode == .collapsed && collapsed == nil { setMode(.hidden) }
+    if mode == .hidden { setMode(.collapsed) }
     scheduleStuckCheck(all)
   }
 
@@ -190,47 +212,45 @@ final class IslandModel: ObservableObject {
   }
 
   /// The most urgent group decides what the collapsed island shows: waiting, failed, running,
-  /// done, limited. Failed and done rows mark it until the user reads them in Kettu or opens the
-  /// island, so a turn that ended while a Kettu window was in front, which pops nothing, still shows.
-  private static func collapse(_ rows: [IslandRow], model: IslandModel) -> Collapsed? {
+  /// done, limited, and with none of them Kettu's fox, since the island always shows while it is
+  /// on. Failed and done rows mark it until the user reads them in Kettu or opens the island, so a
+  /// turn that ended while a Kettu window was in front, which pops nothing, still shows.
+  private static func collapse(_ rows: [IslandRow], model: IslandModel) -> Collapsed {
     func agents(_ list: [IslandRow]) -> [IslandAgent] {
       var seen = Set<String>()
       return list.map(\.agent).filter { seen.insert("\($0.harness)/\($0.color ?? "")").inserted }
     }
-    func count(_ list: [IslandRow]) -> String? { list.count > 1 ? "\(list.count)" : nil }
-    let waiting = rows.filter { $0.status == "waiting" || $0.status == "sign_in" }
-    if !waiting.isEmpty {
-      return Collapsed(agents: agents(waiting), signal: .waiting, text: count(waiting))
+    func make(_ list: [IslandRow], _ signal: Signal?, _ text: String? = nil) -> Collapsed {
+      let title = list.first.map { $0.title.isEmpty ? model.text("untitled") : $0.title }
+      return Collapsed(
+        agents: agents(list), signal: signal, text: text, title: title, count: rows.count)
     }
+    let waiting = rows.filter { $0.status == "waiting" || $0.status == "sign_in" }
+    if !waiting.isEmpty { return make(waiting, .waiting) }
     let unseen = rows.filter { marksDone($0) && !model.seen.contains(model.seenKey($0)) }
     let failed = unseen.filter { $0.status == "failed" }
-    if !failed.isEmpty {
-      return Collapsed(agents: agents(failed), signal: .failed, text: count(failed))
-    }
+    if !failed.isEmpty { return make(failed, .failed) }
     let running = rows.filter { $0.status == "running" || $0.status == "starting" }
     if !running.isEmpty {
       let moving = running.filter { model.status(of: $0) != "stuck" }
       if moving.isEmpty {
         let longest = running.compactMap(\.toolSince).min()
         let minutes = longest.map { max(1, Int(model.now.timeIntervalSince1970 - $0 / 1000) / 60) }
-        return Collapsed(
-          agents: agents(running), signal: .stuck,
-          text: minutes.map { model.text("duration.minutes", ["m": "\($0)"]) })
+        return make(running, .stuck, minutes.map { model.text("duration.minutes", ["m": "\($0)"]) })
       }
       let pattern: TurnDots.Pattern = moving.contains { $0.status == "running" } ? .chase : .think
-      return Collapsed(agents: agents(running), signal: .running(pattern), text: count(running))
+      return make(moving, .running(pattern))
     }
     let done = unseen.filter { $0.status == "unread" }
-    if !done.isEmpty {
-      return Collapsed(agents: agents(done), signal: .unread, text: count(done))
-    }
+    if !done.isEmpty { return make(done, .unread) }
     let limited = rows.filter { $0.status == "limited" }
     if !limited.isEmpty {
       let reset = limited.compactMap { $0.limit?.resetsAt }.min()
-      return Collapsed(
-        agents: agents(limited), signal: .limited, text: reset.map { model.resetDay($0) })
+      return make(limited, .limited, reset.map { model.resetDay($0) })
     }
-    return nil
+    // Nothing needs a mark: Kettu's fox, and the latest session's title where there is room.
+    let latest = rows.first.map { $0.title.isEmpty ? model.text("untitled") : $0.title }
+    return Collapsed(agents: [], signal: nil, text: nil, title: latest, count: rows.count)
   }
 
   /// When a limit resets, as short as the collapsed island needs: a time today, else a weekday.
@@ -271,7 +291,7 @@ final class IslandModel: ObservableObject {
     guard let next = pops.first else {
       pop = nil
       queued = 0
-      setMode(collapsed == nil ? .hidden : .collapsed)
+      setMode(.collapsed)
       return
     }
     pop = next
@@ -349,7 +369,7 @@ final class IslandModel: ObservableObject {
     popTimer?.invalidate()
     pops.removeAll()
     pop = nil
-    setMode(collapsed == nil ? .hidden : .collapsed)
+    setMode(.collapsed)
   }
 
   func open(row: String?) {
@@ -373,7 +393,7 @@ final class IslandModel: ObservableObject {
 
   /// Moves the keyboard's row up or down through the rows the panel lists.
   func moveSelection(_ step: Int) {
-    let keys = groups.flatMap { $0.rows.map(\.key) }
+    let keys = rows.map(\.key)
     guard !keys.isEmpty else { return }
     let index = selected.flatMap { keys.firstIndex(of: $0) } ?? (step > 0 ? -1 : keys.count)
     selected = keys[max(0, min(keys.count - 1, index + step))]

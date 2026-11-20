@@ -86,11 +86,30 @@ struct SummaryLimit: Codable, Equatable {
   let resetsAt: Double?
 }
 
+struct IslandWindow: Codable, Equatable {
+  let label: String
+  let usedPercent: Double
+  let resetsAt: Double?
+  let level: String
+}
+
+struct IslandLimits: Codable, Equatable {
+  let agent: IslandLimitAgent
+  let windows: [IslandWindow]
+}
+
+struct IslandLimitAgent: Codable, Equatable {
+  let name: String
+  let harness: String
+  let color: String?
+}
+
 struct IslandSummary: Codable, Equatable {
   let running: Int
   let waiting: Int
   let failed: Int
   let limit: SummaryLimit?
+  let limits: [IslandLimits]?
 }
 
 /// What main sends. Fields a message type does not carry are nil.

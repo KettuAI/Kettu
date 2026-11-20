@@ -1,10 +1,9 @@
 import AppKit
 import SwiftUI
 
-/// The island's outline: flat along the top, where two small concave shoulders meet the menu bar,
-/// with round bottom corners. A floating island, on a screen without a notch, is round all over.
+/// The island's outline: flat along the top, where two small concave shoulders meet the menu bar
+/// or the notch, with round bottom corners.
 struct IslandShape: Shape {
-  var attached: Bool
   var radius: CGFloat
   var shoulders = true
 
@@ -15,7 +14,6 @@ struct IslandShape: Shape {
 
   func path(in rect: CGRect) -> Path {
     let r = max(0, min(radius, rect.height / 2, rect.width / 2))
-    guard attached else { return Path(roundedRect: rect, cornerRadius: r, style: .continuous) }
     let s = shoulders ? Metrics.shoulder : 0
     var p = Path()
     p.move(to: CGPoint(x: rect.minX - s, y: rect.minY))
@@ -46,12 +44,11 @@ struct IslandRoot: View {
   @ObservedObject var model: IslandModel
 
   var body: some View {
-    let g = model.geometry
     let size = model.frameSize()
     let radius = model.radius()
     VStack(spacing: 0) {
       ZStack(alignment: .top) {
-        IslandShape(attached: g.attached, radius: radius)
+        IslandShape(radius: radius)
           .fill(Theme.surface)
           .shadow(color: .black.opacity(model.mode == .open ? 0.35 : 0), radius: 18, y: 8)
         ZStack(alignment: .top) {
@@ -67,11 +64,10 @@ struct IslandRoot: View {
           }
         }
         .frame(width: size.width, height: size.height, alignment: .top)
-        .clipShape(IslandShape(attached: g.attached, radius: radius, shoulders: false))
+        .clipShape(IslandShape(radius: radius, shoulders: false))
       }
       .frame(width: size.width, height: size.height)
       .opacity(model.mode == .hidden ? 0 : 1)
-      .padding(.top, 0)
       Spacer(minLength: 0)
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
@@ -80,76 +76,166 @@ struct IslandRoot: View {
 }
 
 extension IslandModel {
-  /// The island's size in each mode: the collapsed wings follow their content, so the island
-  /// never shows empty black, and both match so the notch stays in the middle.
+  /// The island's size in each mode. Collapsed over a notch, its two wings match so the notch
+  /// stays in the middle and follow their content, so it never shows empty black; without a
+  /// notch it is one band as wide as its content.
   func frameSize() -> CGSize {
     let g = geometry
     switch mode {
     case .hidden:
-      return CGSize(width: g.notchWidth, height: g.notchHeight)
+      return CGSize(width: max(g.notchWidth, 1), height: g.notchHeight)
     case .collapsed:
-      return CGSize(width: g.notchWidth + 2 * wing(), height: g.notchHeight)
+      if g.hasNotch { return CGSize(width: g.notchWidth + 2 * wing(), height: g.notchHeight) }
+      return CGSize(width: max(120, bandWidth()), height: g.notchHeight)
     case .grown:
       return CGSize(
         width: max(Metrics.grownWidth, g.notchWidth + 160),
-        height: grownLead + Metrics.grownBody + (g.attached ? 0 : 4))
+        height: grownLead + Metrics.grownBody + (g.hasNotch ? 0 : 4))
     case .open:
       let body = min(max(panelHeight, 60), g.maxHeight - g.notchHeight)
       return CGSize(width: max(Metrics.openWidth, g.notchWidth + 300), height: g.notchHeight + body)
     }
   }
 
-  /// What the grown island keeps above its line: the notch, or a little air when floating.
-  var grownLead: CGFloat { geometry.attached ? geometry.notchHeight : 4 }
+  /// What the grown island keeps above its line: the notch, or a little air under the menu bar.
+  var grownLead: CGFloat { geometry.hasNotch ? geometry.notchHeight : 4 }
 
   func radius() -> CGFloat {
     switch mode {
-    case .hidden, .collapsed:
-      return geometry.attached ? Metrics.collapsedRadius : geometry.notchHeight / 2
+    case .hidden, .collapsed: return Metrics.collapsedRadius
     case .grown: return Metrics.grownRadius
     case .open: return Metrics.openRadius
     }
   }
 
+  /// The collapsed island's wings: each side's content as laid out, plus its padding; both wings
+  /// take the wider, so the notch stays in the middle.
   func wing() -> CGFloat {
-    guard let collapsed else { return 0 }
-    let marks = min(3, collapsed.agents.count)
-    let left = marks == 0 ? 0 : 12 + Metrics.wingMark + CGFloat(marks - 1) * 13 + 8
-    var right: CGFloat = 8 + 14 + 12
-    if let text = collapsed.text {
-      let font = NSFont.monospacedDigitSystemFont(ofSize: 13, weight: .semibold)
-      right += 7 + (text as NSString).size(withAttributes: [.font: font]).width.rounded(.up)
-    }
-    return max(left, right, Metrics.wingMin)
+    max(
+      10 + (parts["left"] ?? Metrics.wingMark) + 8, 8 + (parts["right"] ?? 0) + 12, Metrics.wingMin)
+  }
+
+  /// The collapsed island's width where no notch is in the way: its content in one band.
+  private func bandWidth() -> CGFloat {
+    let title = min(parts["title"] ?? 0, Metrics.titleWidth)
+    let right = parts["right"] ?? 0
+    return 10 + (parts["left"] ?? Metrics.wingMark) + (title > 0 ? 10 + title : 0) + 14 + right + 12
   }
 }
 
 // MARK: Collapsed
 
+/// The icon's shaded fox, which stands in for the marks while nothing needs one.
+struct BrandFox: View {
+  var size: CGFloat = Metrics.wingMark
+  private static let image = NSImage(data: Data(brandFoxSVG.utf8))
+
+  var body: some View {
+    Group {
+      if let image = Self.image {
+        Image(nsImage: image).resizable().interpolation(.high).aspectRatio(contentMode: .fit)
+      } else {
+        Color.clear
+      }
+    }
+    .frame(width: size, height: size)
+    .accessibilityHidden(true)
+  }
+}
+
+/// How many sessions the island lists, on a small grey tile.
+struct CountBadge: View {
+  let count: Int
+
+  var body: some View {
+    Text("\(count)")
+      .font(Fonts.ui(11.5, .semibold))
+      .monospacedDigit()
+      .foregroundColor(Theme.quote)
+      .padding(.horizontal, 6)
+      .frame(minWidth: 20, minHeight: 20)
+      .background(RoundedRectangle(cornerRadius: 6, style: .continuous).fill(Theme.button))
+      .fixedSize()
+  }
+}
+
+/// The marks of the group the island is about, or the fox.
+struct LeadMarks: View {
+  let collapsed: Collapsed?
+
+  var body: some View {
+    if let agents = collapsed?.agents, !agents.isEmpty {
+      MarkStack(agents: agents)
+    } else {
+      BrandFox().padding(2)
+    }
+  }
+}
+
+/// The signal, its word and the count badge, as the right of the collapsed island.
+struct TrailingStatus: View {
+  let collapsed: Collapsed?
+  let reduceMotion: Bool
+
+  var body: some View {
+    HStack(spacing: 7) {
+      if let signal = collapsed?.signal { SignalView(signal: signal, reduceMotion: reduceMotion) }
+      if let text = collapsed?.text {
+        Text(text).font(Fonts.ui(13, .semibold)).monospacedDigit().foregroundColor(Theme.text)
+      }
+      if let count = collapsed?.count, count > 0 { CountBadge(count: count) }
+    }
+  }
+}
+
 struct CollapsedContent: View {
   @ObservedObject var model: IslandModel
 
   var body: some View {
+    let g = model.geometry
     let c = model.collapsed
     HStack(spacing: 0) {
-      if let c { MarkStack(agents: c.agents).padding(.leading, 10) }
-      Spacer(minLength: model.geometry.notchWidth)
-      if let c {
-        HStack(spacing: 7) {
-          SignalView(signal: c.signal, reduceMotion: model.reduceMotion)
-          if let text = c.text {
-            Text(text).font(Fonts.ui(13, .semibold)).monospacedDigit().foregroundColor(Theme.text)
-          }
-        }
-        .padding(.trailing, 12)
+      LeadMarks(collapsed: c).fixedSize().measured("left", model).padding(.leading, 10)
+      if !g.hasNotch, let title = c?.title {
+        // The full title is measured unseen, so the band widens to it up to the cap and the
+        // shown copy cuts it short only past that.
+        Text(title)
+          .font(Fonts.ui(13, .medium))
+          .foregroundColor(c?.signal == nil ? Theme.secondary : Theme.text)
+          .lineLimit(1)
+          .truncationMode(.tail)
+          .frame(maxWidth: Metrics.titleWidth, alignment: .leading)
+          .background(
+            Text(title).font(Fonts.ui(13, .medium)).lineLimit(1).fixedSize().hidden()
+              .measured("title", model),
+            alignment: .leading
+          )
+          .padding(.leading, 10)
       }
+      Spacer(minLength: g.hasNotch ? g.notchWidth : 14)
+      TrailingStatus(collapsed: c, reduceMotion: model.reduceMotion)
+        .fixedSize()
+        .measured("right", model)
+        .padding(.trailing, 12)
     }
-    .frame(height: model.geometry.notchHeight)
+    .frame(height: g.notchHeight)
     .contentShape(Rectangle())
     .onTapGesture { model.expand(byClick: true) }
     .accessibilityElement(children: .ignore)
     .accessibilityLabel(model.islandLabel)
     .accessibilityAddTraits(.isButton)
+  }
+}
+
+extension View {
+  /// Reports this view's laid-out width to the model, which sizes the island by it.
+  func measured(_ name: String, _ model: IslandModel) -> some View {
+    background(
+      GeometryReader { proxy in
+        Color.clear
+          .onAppear { model.setPart(name, proxy.size.width) }
+          .onChange(of: proxy.size.width) { model.setPart(name, $0) }
+      })
   }
 }
 
@@ -191,18 +277,22 @@ extension IslandModel {
   }
 }
 
-struct HostTag: View {
-  let host: IslandHost
-  let offline: String
+/// A small grey label beside a row, as in the menu bar panel's facts.
+struct Chip: View {
+  var agent: IslandAgent?
+  let text: String
 
   var body: some View {
-    Text(host.offline ? "\(host.name) · \(offline)" : host.name)
-      .font(Fonts.ui(10.5, .medium))
-      .foregroundColor(Theme.secondary)
-      .padding(.horizontal, 5)
-      .padding(.vertical, 2)
-      .background(RoundedRectangle(cornerRadius: 5).fill(Theme.card))
-      .fixedSize()
+    HStack(spacing: 4) {
+      if let agent { MarkView(agent: agent, size: 11) }
+      Text(text).lineLimit(1)
+    }
+    .font(Fonts.ui(11.5, .medium))
+    .foregroundColor(Theme.secondary)
+    .padding(.horizontal, 7)
+    .padding(.vertical, 3)
+    .background(RoundedRectangle(cornerRadius: 6, style: .continuous).fill(Theme.chip))
+    .fixedSize()
   }
 }
 
@@ -216,7 +306,7 @@ struct GrownContent: View {
         let row = model.row(pop.row)
         let (label, color) = model.pill(for: pop.kind)
         HStack(spacing: 11) {
-          if let row { MarkView(agent: row.agent, size: 24) }
+          if let row { MarkView(agent: row.agent, size: 24) } else { BrandFox(size: 24) }
           VStack(alignment: .leading, spacing: 2) {
             HStack(spacing: 4) {
               (Text(pop.title).foregroundColor(Theme.text)
@@ -224,7 +314,9 @@ struct GrownContent: View {
                 .foregroundColor(Theme.secondary).fontWeight(.medium))
                 .font(Fonts.ui(13.5, .semibold))
                 .lineLimit(1)
-              if let host = row?.host { HostTag(host: host, offline: model.text("offline")) }
+              if let host = row?.host {
+                Chip(text: host.offline ? "\(host.name) · \(model.text("offline"))" : host.name)
+              }
             }
             Text(pop.body).font(Fonts.ui(12)).foregroundColor(Theme.secondary).lineLimit(1)
           }
@@ -252,11 +344,11 @@ struct PanelContent: View {
     let g = model.geometry
     VStack(spacing: 0) {
       HStack(spacing: 8) {
-        if let c = model.collapsed {
-          MarkStack(agents: c.agents)
-          SignalView(signal: c.signal, reduceMotion: model.reduceMotion)
+        LeadMarks(collapsed: model.collapsed)
+        if let signal = model.collapsed?.signal {
+          SignalView(signal: signal, reduceMotion: model.reduceMotion)
         }
-        Spacer(minLength: g.notchWidth)
+        Spacer(minLength: g.hasNotch ? g.notchWidth : 14)
         Text(model.summaryText)
           .font(Fonts.ui(11.5, .medium))
           .foregroundColor(Theme.secondary)
@@ -274,7 +366,7 @@ struct PanelContent: View {
       ScrollView(.vertical) {
         PanelBody(model: model)
           .padding(.horizontal, 10)
-          .padding(.top, 4)
+          .padding(.top, 2)
           .padding(.bottom, 10)
           .background(
             GeometryReader { proxy in
@@ -289,85 +381,159 @@ struct PanelContent: View {
   }
 }
 
+/// The agents' plan windows on one line: each window's name, the share used in its level's color,
+/// and how long until it resets.
+struct LimitsLine: View {
+  @ObservedObject var model: IslandModel
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 6) {
+      ForEach(Array(model.limits.enumerated()), id: \.offset) { _, group in
+        HStack(spacing: 8) {
+          MarkView(
+            agent: IslandAgent(
+              id: group.agent.harness, name: group.agent.name, harness: group.agent.harness,
+              color: group.agent.color),
+            size: 13)
+          ForEach(Array(group.windows.enumerated()), id: \.offset) { index, window in
+            if index > 0 { Text("|").foregroundColor(Theme.faint) }
+            HStack(spacing: 4) {
+              Text(window.label).foregroundColor(Theme.text)
+              Text("\(Int(window.usedPercent))%").foregroundColor(Theme.limit(window.level))
+              if let reset = model.until(window.resetsAt) {
+                Text(reset).foregroundColor(Theme.tertiary).fontWeight(.regular)
+              }
+            }
+          }
+        }
+      }
+    }
+    .frame(maxWidth: .infinity, alignment: .leading)
+    .font(Fonts.ui(12, .semibold))
+    .monospacedDigit()
+    .lineLimit(1)
+    .padding(.horizontal, 8)
+    .padding(.top, 4)
+    .padding(.bottom, 8)
+    .accessibilityElement(children: .combine)
+  }
+}
+
 struct PanelBody: View {
   @ObservedObject var model: IslandModel
 
   var body: some View {
     VStack(alignment: .leading, spacing: 0) {
+      if !model.limits.isEmpty { LimitsLine(model: model) }
       if let note = model.note {
-        NoteView(note: note)
+        NoteView(note: note).padding(.bottom, 6)
       } else if let request = model.requests.first {
-        RequestCard(model: model, request: request)
+        RequestCard(model: model, request: request).padding(.bottom, 6)
       }
-      ForEach(model.groups, id: \.group) { group in
-        HStack(spacing: 6) {
-          Text(model.text("group.\(group.group)")).foregroundColor(Theme.tertiary)
-          Text("\(group.rows.count)").foregroundColor(Theme.faint)
-        }
-        .font(Fonts.ui(11.5, .medium))
-        .padding(.horizontal, 8)
-        .padding(.top, 12)
-        .padding(.bottom, 3)
-        .accessibilityAddTraits(.isHeader)
-        ForEach(group.rows, id: \.key) { row in RowView(model: model, row: row) }
+      if let focus = model.focusRow { FocusRow(model: model, row: focus) }
+      ForEach(model.otherRows, id: \.key) { row in CompactRow(model: model, row: row) }
+    }
+  }
+}
+
+extension IslandModel {
+  /// How long until a time, as the duration strings write it; nil once it has passed.
+  func until(_ ms: Double?) -> String? {
+    guard let ms, ms > now.timeIntervalSince1970 * 1000 else { return nil }
+    return short(since: 2 * now.timeIntervalSince1970 * 1000 - ms)
+  }
+
+  /// A row's second line: what it does or waits for, with its plan, sub-agents and task.
+  func line(of row: IslandRow) -> String {
+    let status = status(of: row)
+    var parts: [String] = []
+    if status == "stuck", let time = duration(since: row.toolSince) {
+      parts.append(text("stuck", ["time": time]))
+    }
+    if !row.line.isEmpty { parts.append(row.line) }
+    if let plan = row.plan {
+      parts.append(text("plan", ["done": "\(plan.done)", "total": "\(plan.total)"]))
+    }
+    if let subagents = row.subagents { parts.append(subagents.text) }
+    if row.parent?.kind == "task", let task = row.parent?.title { parts.append(task) }
+    return parts.joined(separator: " · ")
+  }
+
+  func lineColor(of row: IslandRow) -> Color {
+    switch status(of: row) {
+    case "waiting", "sign_in": return Theme.attention
+    case "failed", "limited": return Theme.danger
+    case "stuck": return Theme.warning
+    case "running", "starting": return Theme.unread
+    case "unread": return Theme.success
+    default: return Theme.secondary
+    }
+  }
+
+  func title(of row: IslandRow) -> String { row.title.isEmpty ? text("untitled") : row.title }
+
+  func rowLabel(_ row: IslandRow) -> String {
+    let status = status(of: row)
+    return text(
+      "a11y.row",
+      [
+        "title": title(of: row),
+        "status": text("status.\(status == "sign_in" ? "signIn" : status)"),
+        "agent": row.agent.name,
+      ])
+  }
+}
+
+/// A row's facts on the right: its agent, its project or computer, and how long it has been so.
+struct RowFacts: View {
+  @ObservedObject var model: IslandModel
+  let row: IslandRow
+
+  var body: some View {
+    HStack(spacing: 6) {
+      Chip(agent: row.agent, text: row.model ?? row.agent.name)
+      if let host = row.host {
+        Chip(text: host.offline ? "\(host.name) · \(model.text("offline"))" : host.name)
+      } else if !row.project.isEmpty {
+        Chip(text: row.project)
       }
-      if model.idleCount > 0 {
-        Divider().overlay(Theme.card).padding(.top, 6)
-        Text(model.counted("idle", model.idleCount))
-          .font(Fonts.ui(12.5))
-          .foregroundColor(Theme.secondary)
-          .padding(.leading, 34)
-          .padding(.top, 10)
-          .padding(.bottom, 2)
+      if let time = model.short(since: row.since) {
+        Text(time)
+          .font(Fonts.ui(11.5))
+          .foregroundColor(Theme.tertiary)
+          .monospacedDigit()
+          .lineLimit(1)
+          .fixedSize()
+          .frame(minWidth: 34, alignment: .trailing)
       }
     }
   }
 }
 
-struct RowView: View {
+/// The session the panel leads with: its mark, title and what it does, in full.
+struct FocusRow: View {
   @ObservedObject var model: IslandModel
   let row: IslandRow
   @State private var hover = false
 
   var body: some View {
-    let status = model.status(of: row)
-    let title = row.title.isEmpty ? model.text("untitled") : row.title
-    HStack(spacing: 10) {
-      MarkView(agent: row.agent, size: 16)
-      VStack(alignment: .leading, spacing: 2) {
-        HStack(spacing: 4) {
-          (Text(title).foregroundColor(Theme.text)
-            + Text(row.project.isEmpty ? "" : " · \(row.project)").foregroundColor(Theme.secondary))
-            .font(Fonts.ui(13))
-            .lineLimit(1)
-          if let host = row.host { HostTag(host: host, offline: model.text("offline")) }
-        }
-        Text(line(status))
-          .font(Fonts.ui(12))
-          .foregroundColor(lineColor(status))
+    HStack(alignment: .top, spacing: 12) {
+      MarkView(agent: row.agent, size: 22).padding(.top, 1)
+      VStack(alignment: .leading, spacing: 3) {
+        Text(model.title(of: row))
+          .font(Fonts.ui(14, .semibold))
+          .foregroundColor(Theme.text)
           .lineLimit(1)
+        Text(model.line(of: row))
+          .font(Fonts.ui(12.5))
+          .foregroundColor(model.lineColor(of: row))
+          .lineLimit(2)
       }
       Spacer(minLength: 8)
-      VStack(alignment: .trailing, spacing: 1) {
-        if let name = row.model { Text(name).foregroundColor(Theme.secondary) }
-        if let time = model.duration(since: row.since) {
-          Text(time).foregroundColor(Theme.tertiary).monospacedDigit()
-        }
-      }
-      .font(Fonts.ui(11.5))
-      .lineLimit(1)
-      Group {
-        if let signal = model.signal(of: row) {
-          SignalView(signal: signal, size: 13, reduceMotion: model.reduceMotion)
-        } else {
-          Color.clear
-        }
-      }
-      .frame(width: 14, height: 14)
+      RowFacts(model: model, row: row)
     }
-    .padding(.horizontal, 8)
-    .padding(.vertical, 7)
-    .frame(minHeight: 46)
+    .padding(.horizontal, 10)
+    .padding(.vertical, 10)
     .padding(.leading, row.parent?.kind == "session" ? 14 : 0)
     .background(
       RoundedRectangle(cornerRadius: 12, style: .continuous)
@@ -378,38 +544,48 @@ struct RowView: View {
     .onHover { hover = $0 }
     .onTapGesture { model.open(row: row.key) }
     .accessibilityElement(children: .ignore)
-    .accessibilityLabel(
-      model.text(
-        "a11y.row",
-        [
-          "title": title, "status": model.text("status.\(status == "sign_in" ? "signIn" : status)"),
-          "agent": row.agent.name,
-        ])
-    )
+    .accessibilityLabel(model.rowLabel(row))
     .accessibilityAddTraits(.isButton)
   }
+}
 
-  private func line(_ status: String) -> String {
-    var parts: [String] = []
-    if status == "stuck", let time = model.duration(since: row.toolSince) {
-      parts.append(model.text("stuck", ["time": time]))
-    }
-    if !row.line.isEmpty { parts.append(row.line) }
-    if let plan = row.plan {
-      parts.append(model.text("plan", ["done": "\(plan.done)", "total": "\(plan.total)"]))
-    }
-    if let subagents = row.subagents { parts.append(subagents.text) }
-    if row.parent?.kind == "task", let task = row.parent?.title { parts.append(task) }
-    return parts.joined(separator: " · ")
-  }
+/// Any other session on one line: its signal, title and facts.
+struct CompactRow: View {
+  @ObservedObject var model: IslandModel
+  let row: IslandRow
+  @State private var hover = false
 
-  private func lineColor(_ status: String) -> Color {
-    switch status {
-    case "waiting", "sign_in": return Theme.attention
-    case "failed", "limited": return Theme.danger
-    case "stuck": return Theme.warning
-    default: return Theme.secondary
+  var body: some View {
+    HStack(spacing: 10) {
+      Group {
+        if let signal = model.signal(of: row) {
+          SignalView(signal: signal, size: 13, reduceMotion: model.reduceMotion)
+        } else {
+          Circle().fill(Theme.faint).frame(width: 6, height: 6)
+        }
+      }
+      .frame(width: 14, height: 14)
+      Text(model.title(of: row))
+        .font(Fonts.ui(13))
+        .foregroundColor(row.group == "idle" ? Theme.secondary : Theme.text)
+        .lineLimit(1)
+      Spacer(minLength: 8)
+      RowFacts(model: model, row: row)
     }
+    .padding(.horizontal, 10)
+    .frame(minHeight: 36)
+    .padding(.leading, row.parent?.kind == "session" ? 14 : 0)
+    .background(
+      RoundedRectangle(cornerRadius: 10, style: .continuous)
+        .fill(hover || model.selected == row.key ? Theme.rowHover : Color.clear)
+    )
+    .opacity(row.host?.offline == true ? 0.5 : 1)
+    .contentShape(Rectangle())
+    .onHover { hover = $0 }
+    .onTapGesture { model.open(row: row.key) }
+    .accessibilityElement(children: .ignore)
+    .accessibilityLabel(model.rowLabel(row))
+    .accessibilityAddTraits(.isButton)
   }
 }
 

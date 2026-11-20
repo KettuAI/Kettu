@@ -6,18 +6,20 @@ its standard input and output. Main builds the whole view, every word included; 
 it and sends back what the user did. It reads no files, opens no sockets, uses no network and asks
 for no system permission. Reaching the end of stdin, as when Kettu quits or crashes, makes it exit.
 
-It draws the island in the notch of the screen whose menu bar is in use, or, on a screen without a
-notch, a floating island just under the menu bar:
+It draws the island at the top middle of the screen whose menu bar is in use: in the notch, or on a
+screen without one, hanging from the menu bar. It shows while it is on:
 
-- **Collapsed**: nothing while nothing needs a mark. Otherwise up to three stacked agent marks of the
-  most urgent group, waiting, failed, running, done, or held by a plan limit, and that group's
-  signal: the waiting dot, the error alert, the turn's nine dots (a clock once every running call
-  is stuck), the unread dot or the limit ring, with a count or the reset day. Failed and done rows
-  mark it until they are read in Kettu or the island is opened.
+- **Collapsed**: the agent marks of the most urgent group, waiting, failed, running, done, or held by
+  a plan limit, with that group's signal (the waiting dot, the error alert, the turn's nine dots or
+  a clock once every running call is stuck, the unread dot, the limit ring), or with none of them
+  Kettu's fox; and a badge with how many sessions it lists. Without a notch in the way, the title
+  of the session it is about sits between them. Failed and done rows mark it until they are read in
+  Kettu or the island is opened.
 - **Grown**: main's pops, one at a time, for 6 seconds (4 for a finished turn).
-- **Expanded**, after 250 ms of hover or a click: the oldest request with its options as buttons,
-  then the rows under the menu bar panel's groups. A click opens a row; the bare top opens Kettu.
-  An island opened by a click takes the keyboard: Esc, the arrows, Return and the digits.
+- **Expanded**, after 250 ms of hover or a click: each agent's plan windows, the oldest request with
+  its options as buttons, the session it is about in full, then every other session on one line.
+  A click opens a row; the bare top opens Kettu. An island opened by a click takes the keyboard:
+  Esc, the arrows, Return and the digits.
 
 AppKit draws the agent marks from SVG, which `generate.mjs` renders at build time from the
 renderer's mark components in the dark theme, with the tokens the signals use. The window is a
@@ -58,7 +60,7 @@ A development run of Kettu passes `KETTU_ISLAND_DEBUG` on to the helper, a comma
 `log` logs every row and request after each message, `answer=allow_once` answers each new request once with its
 first option of that style, through the same message a click would send, and `expand` sends one
 `expanded` after the first view. `notch` keeps the island on the screen with the notch whichever
-display is in use, and `floating` draws the floating island even there. `drive` lets a test script
+display is in use, and `floating` draws the island there as on a screen without a notch. `drive` lets a test script
 on the helper's stdin send `{ "type": "debug", "kind": ... }` with `expand`, `click`, `collapse` or
 `answer`. A packaged Kettu passes nothing on.
 

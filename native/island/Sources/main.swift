@@ -9,7 +9,7 @@ import AppKit
 //   expand         say the island was expanded once the first view arrived
 //   drive          take `debug` messages on stdin, as a test script sends: their `kind` is expand,
 //                  click, collapse or answer (the first request's first option)
-//   floating       draw the floating island even over a notch
+//   floating       draw the island as on a screen without a notch
 //   notch          keep to the screen with the notch, whichever display is in use
 
 struct Debug {
