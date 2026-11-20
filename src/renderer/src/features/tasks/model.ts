@@ -120,23 +120,28 @@ export function useModelText(
   hostId: string | null,
   pick: StepPick | null,
 ): { model: string | null; effort: string | null } {
-  return useAgentOptionsStore(
-    useShallow((s) => {
-      if (!pick) return NO_MODEL
-      const entry = optionsOn(s, hostId)[pick.agentId]
-      const option = entry?.config.find((o) => o.category === 'model')
-      const model = pick.model
-        ? (option?.choices?.find((c) => c.value === pick.model)?.name ?? pick.model)
-        : null
-      const level =
-        (pick.model ? entry?.levels[pick.model] : undefined) ??
-        entry?.config.find((o) => o.category === 'thought_level')
-      const effort = pick.effort
-        ? (level?.choices?.find((c) => c.value === pick.effort)?.name ?? pick.effort)
-        : null
-      return { model, effort }
-    }),
-  )
+  return useAgentOptionsStore(useShallow((s) => modelTextOf(s, hostId, pick)))
+}
+
+/** The names of a pick's model and effort in the host's cached options, as far as known. */
+export function modelTextOf(
+  s: Parameters<typeof optionsOn>[0],
+  hostId: string | null,
+  pick: StepPick | null,
+): { model: string | null; effort: string | null } {
+  if (!pick) return NO_MODEL
+  const entry = optionsOn(s, hostId)[pick.agentId]
+  const option = entry?.config.find((o) => o.category === 'model')
+  const model = pick.model
+    ? (option?.choices?.find((c) => c.value === pick.model)?.name ?? pick.model)
+    : null
+  const level =
+    (pick.model ? entry?.levels[pick.model] : undefined) ??
+    entry?.config.find((o) => o.category === 'thought_level')
+  const effort = pick.effort
+    ? (level?.choices?.find((c) => c.value === pick.effort)?.name ?? pick.effort)
+    : null
+  return { model, effort }
 }
 
 const NO_MODEL = { model: null, effort: null }

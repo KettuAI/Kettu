@@ -51,7 +51,6 @@ import { updateTask } from './actions'
 import { TaskRing } from './task-ring'
 import { StartedFrom, Timeline } from './timeline'
 import { useTaskSessions, useTaskView } from './use-task'
-import { useChartMorph } from './chart-morph'
 
 /**
  * A task's page: its name, workflow and progress in the top bar with Timeline and Flowchart beside
@@ -72,9 +71,6 @@ export default function TaskPage({ taskId, flow }: { taskId: string; flow: boole
 
   // The timeline opens at its end, as a thread does, where what waits for you is.
   const scroller = useRef<HTMLDivElement>(null)
-  // Started from a suggestion card, its flowchart grows out of the card's.
-  const chart = useRef<HTMLDivElement>(null)
-  useChartMorph(taskId, chart, !!task)
   const ready = !!view
   useLayoutEffect(() => {
     const element = scroller.current
@@ -125,10 +121,7 @@ export default function TaskPage({ taskId, flow }: { taskId: string; flow: boole
       <TaskBar task={task} view={view} flow={flow} />
       {flow ? (
         // The flowchart's canvas fills the room and pans itself.
-        <div
-          ref={chart}
-          className="flex min-h-0 flex-1 origin-top-left flex-col gap-2 px-8 pt-4 pb-4"
-        >
+        <div className="flex min-h-0 flex-1 flex-col gap-2 px-8 pt-4 pb-4">
           {view && <StartedFrom view={view} className="mx-auto w-full max-w-(--thread-column)" />}
           {body}
         </div>
