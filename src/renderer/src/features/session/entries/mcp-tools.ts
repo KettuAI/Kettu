@@ -92,6 +92,7 @@ const TARGETS = {
   terminal_wait: [{ terminal: 'terminalId' }],
   terminal_input: [{ terminal: 'terminalId' }],
   terminal_stop: [{ terminal: 'terminalId' }],
+  terminal_rename: ['name', { terminal: 'terminalId' }],
   computer_list_apps: [],
   computer_list_windows: [],
   computer_get_window_state: ['query'],

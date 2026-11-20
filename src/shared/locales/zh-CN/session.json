@@ -137,6 +137,7 @@
     "terminal_wait": "等待终端",
     "terminal_input": "在终端中输入",
     "terminal_stop": "停止终端",
+    "terminal_rename": "重命名终端",
     "computer_list_apps": "列出应用",
     "computer_list_windows": "列出窗口",
     "computer_get_window_state": "读取窗口",

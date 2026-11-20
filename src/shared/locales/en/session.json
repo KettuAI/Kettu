@@ -147,6 +147,7 @@
     "terminal_wait": "Wait for terminal",
     "terminal_input": "Type in terminal",
     "terminal_stop": "Stop terminal",
+    "terminal_rename": "Rename terminal",
     "computer_list_apps": "List apps",
     "computer_list_windows": "List windows",
     "computer_get_window_state": "Read window",
