@@ -1,6 +1,6 @@
 # Roadmap
 
-What Kettu has and what comes next, release by release. Releases have no fixed dates: a core feature ships as soon as it is done, and smaller fixes with the next release, so the order here is firmer than the timing. Each item links to its issue, where you can follow it or tell us what you need; the [milestones](https://github.com/KettuAI/Kettu/milestones) hold the full lists, fixes included. [简体中文](./ROADMAP.zh-CN.md)
+What Kettu has and what comes next, release by release. Releases have no fixed dates: a core feature ships as soon as it is done, and smaller fixes with the next release, so the order here is firmer than the timing. Each item links to its issue, where you can follow it or tell us what you need; the [release notes](https://github.com/KettuAI/Kettu/releases) list everything that shipped, fixes included. [简体中文](./ROADMAP.zh-CN.md)
 
 ## Available now
 

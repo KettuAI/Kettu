@@ -1,48 +1,38 @@
-name: Bug report
-description: Something in Kettu does not work
+name: Bug report · 报告问题
+description: Something doesn't work as it should. · 有东西不正常。
 type: Bug
-labels:
-  - state:needs-triage
+# Report a Problem in the app opens this form with version, os and logs filled in, so keep
+# the file name and those ids.
 body:
+  - type: markdown
+    attributes:
+      value: |
+        In Kettu, **Report a Problem…** fills in this form for you.
+        在 Kettu 里用「报告问题…」，会自动帮你填好这张表。
   - type: textarea
     id: what-happened
     attributes:
-      label: What happened?
-      description: Tell us what went wrong and what you expected. A screenshot is welcome, and any language is fine.
+      label: What happened? · 发生了什么
+      description: What you did, what you saw, what you expected. Screenshots help. · 做了什么、看到什么、本该怎样，附截图更好。
     validations:
       required: true
   - type: input
     id: version
     attributes:
-      label: Kettu version
-      description: Find it in Settings > About.
-      placeholder: 0.0.1
+      label: Kettu version · 版本
+      description: Settings › About · 设置 › 关于
+      placeholder: 0.1.13
     validations:
       required: true
   - type: input
     id: os
     attributes:
-      label: Operating system
-      description: The system and its version.
-      placeholder: macOS 15.2, Windows 11 24H2, Ubuntu 24.04
+      label: System · 系统
+      placeholder: macOS 26.1 / Windows 11 / iOS 26.1
     validations:
       required: true
-  - type: dropdown
-    id: agent
-    attributes:
-      label: Agent
-      description: The agent in use when it happened, if any.
-      options:
-        - Claude Code
-        - Codex CLI
-        - opencode
-        - Other
-  - type: textarea
-    id: steps
-    attributes:
-      label: Steps to reproduce
   - type: textarea
     id: logs
     attributes:
-      label: Logs or error text
+      label: Error text · 报错
       render: text
