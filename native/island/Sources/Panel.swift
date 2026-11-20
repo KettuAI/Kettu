@@ -202,6 +202,7 @@ final class IslandController {
     let over =
       model.mode != .hidden && islandRect().insetBy(dx: -1, dy: -1).contains(NSEvent.mouseLocation)
     if panel.ignoresMouseEvents == over { panel.ignoresMouseEvents = !over }
+    model.pointerInside = over
     guard over != inside else { return }
     inside = over
     if over { entered() } else { left() }
@@ -241,7 +242,8 @@ final class IslandController {
     hoverTimer?.invalidate()
     if model.mode == .grown { model.holdPop() }
     if model.mode == .collapsed { model.measuring = false }
-    if model.mode == .open && !model.openedByClick {
+    // An island a request opened stays until it is answered or dismissed with a click elsewhere.
+    if model.mode == .open && model.opener == .hover {
       leaveTimer = Timer.scheduledTimer(withTimeInterval: Self.grace, repeats: false) {
         [weak self] _ in self?.model.collapse()
       }

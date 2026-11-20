@@ -18,6 +18,14 @@ enum Mode: Equatable {
   case open
 }
 
+/// What opened the island, which decides what closes it: the pointer leaving one the hover
+/// opened, an answer to the last request one a request opened, and a click elsewhere any.
+enum Opener {
+  case hover
+  case click
+  case request
+}
+
 struct Pop: Equatable {
   let id: Int
   let row: String?
@@ -74,7 +82,12 @@ final class IslandModel: ObservableObject {
   @Published var panelHeight: CGFloat = 0
   /// While set, the panel is laid out unseen, so the island opens straight to its height.
   @Published var measuring = false
-  private(set) var openedByClick = false
+  private(set) var opener = Opener.hover
+  var openedByClick: Bool { opener == .click }
+  /// Whether the pointer is over the island, which the controller keeps.
+  var pointerInside = false
+  /// A request popped before main's view had it; the island opens to it once it has.
+  private var requestPop: (pop: Pop, timer: Timer)?
   var onModeChange: ((Mode) -> Void)?
   var onAnnounce: ((String) -> Void)?
 
@@ -243,6 +256,23 @@ final class IslandModel: ObservableObject {
     if mode == .hidden { setMode(.collapsed) }
     scheduleStuckCheck(all)
     scheduleCacheTick()
+    if let waiting = requestPop, !requests.isEmpty {
+      waiting.timer.invalidate()
+      requestPop = nil
+      expand(by: .request)
+    }
+    settleRequest()
+  }
+
+  /// An island a request opened closes once nothing is left to answer, unless the pointer is on
+  /// it, which keeps it open as a hover would.
+  private func settleRequest() {
+    guard mode == .open, opener == .request, !asking else { return }
+    if pointerInside {
+      opener = .hover
+    } else {
+      collapse()
+    }
   }
 
   /// A warm cache counts down with no message from main: the island looks again when the minute
@@ -381,6 +411,16 @@ final class IslandModel: ObservableObject {
       body: message.body ?? "")
     nextPop += 1
     onAnnounce?([item.title, item.body].filter { !$0.isEmpty }.joined(separator: ", "))
+    // What needs an answer opens the island at its card, without a hint to hover first, and keeps
+    // an island the pointer opened open until it is answered.
+    if kind == "permission" {
+      if mode == .open {
+        if opener == .hover { opener = .request }
+      } else {
+        openForRequest(item)
+      }
+      return
+    }
     if mode == .open { return }
     // A newer pop of the same session replaces the one waiting in line.
     pops.removeAll { $0.row != nil && $0.row == item.row && $0.id != pop?.id }
@@ -395,6 +435,23 @@ final class IslandModel: ObservableObject {
     pops = (showing.map { [$0] } ?? []) + rest
     queued = max(0, pops.count - 1)
     if mode != .grown { showNextPop() }
+  }
+
+  /// Opens at the request once main's view has it; if it never comes, as for a request it could
+  /// not read, the pop grows out as any other.
+  private func openForRequest(_ item: Pop) {
+    if !requests.isEmpty {
+      expand(by: .request)
+      return
+    }
+    requestPop?.timer.invalidate()
+    let timer = Timer.scheduledTimer(withTimeInterval: 2, repeats: false) { [weak self] _ in
+      guard let self, let waiting = self.requestPop else { return }
+      self.requestPop = nil
+      self.pops.append(waiting.pop)
+      if self.mode != .grown && self.mode != .open { self.showNextPop() }
+    }
+    requestPop = (item, timer)
   }
 
   private func showNextPop() {
@@ -441,6 +498,7 @@ final class IslandModel: ObservableObject {
     noteTimer?.invalidate()
     noteTimer = Timer.scheduledTimer(withTimeInterval: 1.2, repeats: false) { [weak self] _ in
       self?.note = nil
+      self?.settleRequest()
     }
   }
 
@@ -452,9 +510,13 @@ final class IslandModel: ObservableObject {
   }
 
   func expand(byClick: Bool) {
+    expand(by: byClick ? .click : .hover)
+  }
+
+  func expand(by cause: Opener) {
     guard mode != .open else {
-      if byClick {
-        openedByClick = true
+      if cause == .click {
+        opener = .click
         onModeChange?(.open)
       }
       return
@@ -463,11 +525,11 @@ final class IslandModel: ObservableObject {
     if !measuring {
       measuring = true
       DispatchQueue.main.asyncAfter(deadline: .now() + 0.03) { [weak self] in
-        self?.expand(byClick: byClick)
+        self?.expand(by: cause)
       }
       return
     }
-    openedByClick = byClick
+    opener = cause
     popTimer?.invalidate()
     pops.removeAll()
     pop = nil
@@ -487,7 +549,7 @@ final class IslandModel: ObservableObject {
   func collapse() {
     tick?.invalidate()
     tick = nil
-    openedByClick = false
+    opener = .hover
     selected = nil
     measuring = false
     guard mode == .open || mode == .grown else { return }

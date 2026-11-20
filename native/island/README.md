@@ -20,7 +20,9 @@ shows while it is on:
   title of the session it is about in the middle. Failed and done rows mark it until they are read
   in Kettu or the island is opened.
 - **Grown**: main's pops, one at a time, for 6 seconds (4 for a finished turn): the marks in the
-  left wing and the state in the right, the session and what happened under them.
+  left wing and the state in the right, the session and what happened under them. A request is no
+  pop: it opens the island at its card, without the keyboard, and the island stays open until the
+  last request is answered or a click elsewhere dismisses it.
 - **Expanded**, once the pointer rests on it for 120 ms and moves slower than 1.2 pt per ms, or on a
   click, and closed 400 ms after the pointer leaves. While a request waits, the panel is that card
   alone, its permission answers always Deny, Allow once and Always allow, Kettu's own tools named as
