@@ -223,6 +223,14 @@ function sectionTitle(section: SettingsSection): string {
   return SECTION_TITLES[section] ?? `sections.${section}`
 }
 
+/**
+ * A result whose words go in its structured content too, since an agent that reads the structured
+ * content alone, as Claude Code does, would miss what to do next.
+ */
+function reply(text: string, data: Record<string, unknown>): CallToolResult {
+  return { content: [{ type: 'text', text }], structuredContent: { message: text, ...data } }
+}
+
 function failed(message: string): CallToolResult {
   return { content: [{ type: 'text', text: message }], isError: true }
 }
@@ -335,15 +343,10 @@ export class SettingsTools {
       .map(({ id, item }) => ({ id, item, entry: CATALOG[id] }))
       .filter((row) => !words || matchesWords(this.searchText(row, ctx), words))
     if (rows.length === 0) {
-      return {
-        content: [
-          {
-            type: 'text',
-            text: `No setting matches "${words}". Try other words, or call find_settings without a query to list every row.`,
-          },
-        ],
-        structuredContent: { rows: [] },
-      }
+      return reply(
+        `No setting matches "${words}". Try other words, or call find_settings without a query to list every row.`,
+        { rows: [] },
+      )
     }
     const full = words !== '' && rows.length <= MAX_FOUND
     const listed = rows.map((row) => this.describe(row, ctx, snapshot, facts, full))
@@ -361,7 +364,7 @@ export class SettingsTools {
       : `Every row of Kettu's Settings on this computer, by section.`
     return {
       content: [{ type: 'text', text: [head, ...lines].join('\n') }],
-      structuredContent: { rows: listed.map((row) => row.found) },
+      structuredContent: { message: head, rows: listed.map((row) => row.found) },
     }
   }
 
@@ -371,7 +374,11 @@ export class SettingsTools {
     const parts: string[] = []
     for (const words of [this.deps.words, this.deps.english]) {
       parts.push(words(platformKey(entry.name, ctx.platform)))
-      if (entry.description) parts.push(words(platformKey(entry.description, ctx.platform)))
+      if (entry.description) {
+        parts.push(
+          words(platformKey(entry.description, ctx.platform), entry.params?.(ctx.platform)),
+        )
+      }
       for (const key of keywordKeys(entry)) parts.push(words(key))
       parts.push(words(sectionTitle(entry.section)))
       if (entry.group) parts.push(words(entry.group))
@@ -530,7 +537,9 @@ export class SettingsTools {
               ]
             : undefined
     const description =
-      full && entry.description ? t(platformKey(entry.description, ctx.platform)) : undefined
+      full && entry.description
+        ? t(platformKey(entry.description, ctx.platform), entry.params?.(ctx.platform))
+        : undefined
     // A secret's value, whatever the owner sent, goes out only as whether it is set.
     const shown = entry.kind === 'secret' ? undefined : value
     const bits = [
@@ -567,6 +576,7 @@ export class SettingsTools {
         ...(text ? { valueText: text } : {}),
         ...(takes ? { values: takes } : {}),
         change: access.may,
+        access: access.how,
       },
     }
   }
@@ -594,7 +604,7 @@ export class SettingsTools {
     const text = opened
       ? `Opened Settings at ${place} in the window that shows this session.`
       : `No Kettu desktop window shows this session now, so nothing opened. Tell the user it is in Settings › ${place}.`
-    return { content: [{ type: 'text', text }], structuredContent: { opened, place } }
+    return reply(text, { opened, place })
   }
 
   private async change(caller: Caller, input: unknown, deadline: number): Promise<CallToolResult> {
@@ -684,15 +694,10 @@ export class SettingsTools {
       throw new Refusal(['Nothing was changed:', ...problems].join('\n'))
     }
     if (items.length === 0) {
-      return {
-        content: [
-          {
-            type: 'text',
-            text: `Nothing to change: ${unchanged.join(', ')} already ${unchanged.length === 1 ? 'has' : 'have'} that value.`,
-          },
-        ],
-        structuredContent: { changed: false },
-      }
+      return reply(
+        `Nothing to change: ${unchanged.join(', ')} already ${unchanged.length === 1 ? 'has' : 'have'} that value.`,
+        { changed: false },
+      )
     }
     const already = unchanged.length > 0 ? ` ${unchanged.join(', ')} already had that value.` : ''
     const askAlways = items.some(({ row }) => row.entry.access === 'ask')
@@ -742,7 +747,7 @@ export class SettingsTools {
           : answer.decision === 'expired'
             ? 'The user did not answer within 10 minutes, so nothing changed.'
             : 'The turn ended before the user answered, so nothing changed.'
-      return { content: [{ type: 'text', text }], structuredContent: { changed: false } }
+      return reply(text, { changed: false })
     }
     try {
       const snapshot = await this.deps.read()
@@ -809,10 +814,7 @@ function changedResult(
   const text =
     `${asked ? 'The user pressed Change. ' : ''}Changed ${lines.join('; ')}.${already} ` +
     'It takes effect at once; the thread shows a line the user can undo.'
-  return {
-    content: [{ type: 'text', text }],
-    structuredContent: { changed: true, rows: items.map((item) => item.id) },
-  }
+  return reply(text, { changed: true, rows: items.map((item) => item.id) })
 }
 
 function stillWaiting(job: CardJob): CallToolResult {
@@ -820,8 +822,5 @@ function stillWaiting(job: CardJob): CallToolResult {
   const text = job.confirmed
     ? `The user pressed Change and Kettu is applying it. Call change_settings again with the same changes for the outcome.`
     : `The user has not answered the card to change ${rows} yet, and nothing changed. Call change_settings again with the same changes to keep waiting on the same card; it shows no second one.`
-  return {
-    content: [{ type: 'text', text }],
-    structuredContent: { waiting: true, confirmed: job.confirmed },
-  }
+  return reply(text, { waiting: true, confirmed: job.confirmed })
 }

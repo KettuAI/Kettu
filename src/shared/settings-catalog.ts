@@ -104,6 +104,8 @@ export interface CatalogEntry {
   access?: SettingAccess
   /** For an always-asking row: what changing it opens up, said on the card. */
   warning?: TextKey
+  /** Values for its words' placeholders, such as a shortcut's keys, on the host's system. */
+  params?(platform: Platform): Record<string, string>
   /** A row of each agent's or harness's own page, named by its id. */
   item?: 'agent' | 'harness'
   /** Whether the host has the row; always when absent. */
@@ -367,6 +369,10 @@ const ENTRIES = {
     group: 'appearance.groups.scale',
     name: 'appearance.zoom.name',
     description: 'appearance.zoom.description',
+    params: (platform) =>
+      platform === 'darwin'
+        ? { zoomIn: '⌘=', zoomOut: '⌘-' }
+        : { zoomIn: 'Ctrl+=', zoomOut: 'Ctrl+-' },
     keywords: 'appearance.zoom.keywords',
     part: 'desktop',
     access: 'change',
@@ -663,6 +669,7 @@ const ENTRIES = {
     group: 'browser.groups.links',
     name: 'browser.openLinksIn.name',
     description: 'browser.openLinksIn.description',
+    params: (platform) => ({ mod: platform === 'darwin' ? '⌘' : 'Ctrl' }),
     keywords: 'browser.openLinksIn.keywords',
     part: 'desktop',
     access: 'change',

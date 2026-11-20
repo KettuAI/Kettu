@@ -99,6 +99,13 @@ describe('find_settings', () => {
     expect(text(zh)).toContain('颜色模式 (Color mode)')
   })
 
+  it('fills the placeholders of a row’s words', async () => {
+    const { tools } = harness()
+    const found = text(await tools.call(CALLER, FIND_SETTINGS, { query: 'zoom' }))
+    expect(found).toContain('⌘= and ⌘- work anywhere')
+    expect(found).not.toContain('{{')
+  })
+
   it('lists the rows of each agent by its id', async () => {
     const { tools } = harness()
     const all = text(await tools.call(CALLER, FIND_SETTINGS, {}))

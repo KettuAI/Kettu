@@ -257,6 +257,8 @@ function SettingsLayout({
   const [jump, setJump] = useState<string | null>(null)
   const [flash, setFlash] = useState<string | null>(null)
   const lastItem = useRef(item)
+  // What the page showed when it last moved, so a flashed row's jump ending keeps its place.
+  const lastShown = useRef({ active, item, searching })
 
   // Opening a section from elsewhere, such as the app menu, leaves the results behind.
   const [seen, setSeen] = useState(active)
@@ -297,6 +299,9 @@ function SettingsLayout({
     const view = scroller.current
     const left = lastItem.current
     lastItem.current = item
+    const shown = lastShown.current
+    const moved = shown.active !== active || shown.item !== item || shown.searching !== searching
+    lastShown.current = { active, item, searching }
     if (!view) return
     const row = jump ? view.querySelector<HTMLElement>(`[data-setting-row="${jump}"]`) : null
     const found =
@@ -310,7 +315,7 @@ function SettingsLayout({
     } else if (found) {
       found.scrollIntoView({ block: 'center' })
       found.focus({ preventScroll: true })
-    } else {
+    } else if (moved) {
       view.scrollTop = 0
     }
   }, [active, item, searching, jump])
