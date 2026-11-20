@@ -7,6 +7,7 @@
   "or": " or ",
   "and": " and ",
   "row": {
+    "startedHere": "Started here",
     "collapse": "Collapse steps",
     "expand": "Expand steps",
     "stepOf": "Step {{at}} of {{total}}",
@@ -83,7 +84,9 @@
     "retry": "Try again",
     "missing": "This task is gone",
     "missingBody": "It was deleted, or its computer no longer lists it.",
-    "newSession": "New session"
+    "newSession": "New session",
+    "delivered": "Delivered",
+    "steps": "Steps"
   },
   "timeline": {
     "started": "Started with {{workflow}} · {{time}}",
@@ -198,6 +201,21 @@
     "ended": "This task has ended",
     "noAdvance": "Adding doesn’t advance the flow",
     "send": "Add",
-    "textOnly": "Notes are text only"
+    "textOnly": "Notes are text only",
+    "doneLine": "Task done",
+    "doneOn": "Task done · {{branch}}",
+    "doneMerged": "Task done · {{branch}} merged",
+    "droppedLine": "Task ended as not worth doing",
+    "cancelledLine": "Task cancelled"
+  },
+  "deliverables": {
+    "version": "Version {{version}}"
+  },
+  "steps": {
+    "sentBack_one": "Sent back {{count}} time",
+    "sentBack_other": "Sent back {{count}} times",
+    "rounds_one": "{{count}} round",
+    "rounds_other": "{{count}} rounds",
+    "notRun": "Not run"
   }
 }

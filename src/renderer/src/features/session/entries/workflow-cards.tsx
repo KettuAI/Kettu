@@ -226,6 +226,7 @@ const KNOWN_REPORT: ReadonlySet<string> = new Set([
   'outcome',
   'note',
   'document',
+  'deliverables',
   'committed',
   'merged',
   'picks',

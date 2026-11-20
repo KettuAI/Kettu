@@ -1315,13 +1315,14 @@
       "viewFile": "View workflow file",
       "another": "Another way",
       "reading": "Reading…",
-      "started": "Started as a task · {{title}}",
       "openTask": "Open",
       "declined": "Doing it here, without a workflow",
       "useInstead": "Use it instead",
       "saved": "Saved as your workflow “{{name}}”",
       "open": "Open",
-      "notSaved": "Did not save “{{name}}”"
+      "notSaved": "Did not save “{{name}}”",
+      "startedAs": "Started · {{workflow}}",
+      "startedWritten": "Started · a workflow {{agent}} wrote"
     },
     "saved": {
       "pending": "Saved “{{name}}” for your approval",
@@ -1347,6 +1348,7 @@
           "outcomePlain": "It reported one of this step's outcomes",
           "note": "The note it hands in is there",
           "document": "It wrote the document it hands in during this step",
+          "deliverables": "The files it hands over are there",
           "committed": "Its changes are committed",
           "merged": "The merge is committed",
           "picks": "Its picks hold"
@@ -1381,6 +1383,20 @@
       },
       "showDetails": "What Kettu said",
       "hideDetails": "Hide"
+    },
+    "delivery": {
+      "done_one": "Task done · {{count}} step · {{time}}",
+      "done_other": "Task done · {{count}} steps · {{time}}",
+      "dropped_one": "Task ended as not worth doing · {{count}} step · {{time}}",
+      "dropped_other": "Task ended as not worth doing · {{count}} steps · {{time}}",
+      "cancelled_one": "Task cancelled · {{count}} step · {{time}}",
+      "cancelled_other": "Task cancelled · {{count}} steps · {{time}}",
+      "openTask": "Open task",
+      "written": "{{agent}} wrote this workflow for this task, and it worked:",
+      "save": "Save as my workflow",
+      "saved": "In my workflows",
+      "publish": "Publish to the Marketplace",
+      "publishAsked": "{{agent}} is making it general first; publishing waits for you in its card."
     }
   },
   "marketPublish": {
@@ -1475,6 +1491,13 @@
       "expired": "No answer in time",
       "ended": "The turn ended first",
       "interrupted": "Kettu stopped before the Marketplace answered"
+    },
+    "fromTask": {
+      "label": "What changed",
+      "same": "Steps and arrows as the task ran them",
+      "changed": "Steps or arrows differ from what the task ran",
+      "compare": "Compare with the version “{{title}}” used",
+      "hide": "Hide the comparison"
     }
   },
   "sideChat": {

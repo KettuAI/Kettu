@@ -13,8 +13,9 @@ import type { AgentId } from '@shared/thread'
 import { TaskEngine, type TaskEngineDeps, type TaskStepStart } from './engine'
 import type { MergeResult, TaskGit } from './git'
 import { emptyWorkflowsFile, WorkflowLibrary } from './library'
-import type { TaskRecord } from './model'
+import { taskRecordOf, type TaskRecord } from './model'
 import type { WorkflowAgent } from './picks'
+import { deliveryOf } from './views'
 
 const dirs: string[] = []
 
@@ -200,6 +201,10 @@ async function harness(
     starting?: () => Promise<void>
     comments?: string[]
     workingLimit?: () => number
+    /** The files there on the host, for what a report hands over. */
+    files?: string[]
+    /** The pull requests of each session. */
+    pullRequests?: Record<string, string[]>
   } = {},
 ) {
   const dir = mkdtempSync(path.join(os.tmpdir(), 'kettu-tasks-'))
@@ -231,7 +236,12 @@ async function harness(
   const merges: { cwd: string; branch: string }[] = []
   const uncommitted = new Map<string, string[]>()
   const documents = new Set<string>()
-  const events: { changed: TaskView[]; attention: string[] } = { changed: [], attention: [] }
+  const events: {
+    changed: TaskView[]
+    attention: string[]
+    ended: { view: TaskView; written: boolean }[]
+  } = { changed: [], attention: [], ended: [] }
+  const files = new Set(options.files ?? [])
   let n = 0
   let ids = 0
   const git: TaskGit = {
@@ -310,23 +320,33 @@ async function harness(
       changed: (view) => events.changed.push(view),
       removed: () => {},
       attention: (task, kind) => events.attention.push(`${task.title}:${kind}`),
+      ended: (view, written) => events.ended.push({ view, written }),
     },
     ...(options.workingLimit ? { workingLimit: options.workingLimit } : {}),
+    exists: async (file) => files.has(file),
+    pullRequests: (ids) => ids.flatMap((id) => options.pullRequests?.[id] ?? []),
     log: () => {},
     now: () => 1_000,
     random: () => (++ids).toString(16).padStart(12, '0'),
   }
   const engine = new TaskEngine(deps)
   await engine.load()
-  const start = async (workflow: string, values: Record<string, string> = { model: 'opus' }) => {
-    const view = await engine.start({
-      projectPath: '/repo',
-      workflowId: workflowIds[workflow] ?? workflow,
-      text: 'Add an export button',
-      pace: 'balanced',
-      agentId: 'claude-code',
-      options: values,
-    })
+  const start = async (
+    workflow: string,
+    values: Record<string, string> = { model: 'opus' },
+    from?: { sessionId: string },
+  ) => {
+    const view = await engine.start(
+      {
+        projectPath: '/repo',
+        workflowId: workflowIds[workflow] ?? workflow,
+        text: 'Add an export button',
+        pace: 'balanced',
+        agentId: 'claude-code',
+        options: values,
+      },
+      from,
+    )
     await settle()
     return view
   }
@@ -365,6 +385,25 @@ async function harness(
 }
 
 const done = { outcome: null, note: 'Did it and ran the checks.', artifactId: null }
+
+/** A design handed in as a document, then a build that ends the task. */
+const SHIP = `format: 1
+name: Ship
+steps:
+  - id: design
+    name: Design
+    hand_in: document
+    prompt: Design it.
+    outcomes:
+      - name: Done
+        to: build
+  - id: build
+    name: Build
+    prompt: Build it.
+    outcomes:
+      - name: Done
+        end: done
+`
 
 describe('the task engine', () => {
   it('starts the first step in its own worktree with the agent and model of the tray', async () => {
@@ -902,6 +941,100 @@ steps:
     await h.settle()
     expect(h.engine.get(third.id).rounds[0]!.state).toBe('working')
     expect(branches().filter((s) => s === 'queued')).toHaveLength(1)
+  })
+
+  it('keeps what steps hand over and the conversation a task started from, and tells it at the end', async () => {
+    const h = await harness({
+      workflows: { ship: SHIP },
+      files: ['/wt/task/dist/app.dmg'],
+      pullRequests: { s2: ['https://github.com/acme/app/pull/7'] },
+    })
+    const task = await h.start('ship', { model: 'opus' }, { sessionId: 'chat' })
+    expect(h.engine.list()[0]).toMatchObject({ id: task.id, from: { sessionId: 'chat' } })
+    expect(h.store.get(task.id)!.from).toEqual({ sessionId: 'chat' })
+
+    const design = h.sessionOf(task.id, 'design')
+    h.documents.add('art_d')
+    const reported = await h.engine.report(design, {
+      outcome: null,
+      note: null,
+      artifactId: 'art_d',
+      deliverables: [
+        { kind: 'link', title: 'Spec', detail: null, url: 'https://example.com/spec' },
+      ],
+    })
+    expect(reported.accepted).toBe(true)
+    await h.engine.pick(design, [
+      { step: 'build', agent: 'codex', model: 'gpt', effort: null, reason: 'Plain work' },
+    ])
+    await h.settle()
+
+    const build = h.sessionOf(task.id, 'build')
+    const installer = {
+      kind: 'file' as const,
+      title: 'Installer',
+      detail: 'macOS',
+      path: 'dist/app.dmg',
+    }
+    const refused = await h.engine.report(build, {
+      ...done,
+      deliverables: [installer, { kind: 'file', title: 'Logs', detail: null, path: 'logs.zip' }],
+    })
+    expect(refused.accepted).toBe(false)
+    expect(refused.checks.find((c) => c.check === 'deliverables')).toMatchObject({
+      ok: false,
+      detail: expect.stringContaining('logs.zip'),
+    })
+    const ended = await h.engine.report(build, { ...done, deliverables: [installer] })
+    expect(ended.next).toEqual({ kind: 'end', end: 'done' })
+
+    const delivered = [
+      { kind: 'pull_request', url: 'https://github.com/acme/app/pull/7' },
+      { kind: 'link', title: 'Spec', detail: null, url: 'https://example.com/spec' },
+      { ...installer, path: '/wt/task/dist/app.dmg' },
+      { kind: 'document', artifactId: 'art_d', version: 1, title: 'Design' },
+    ]
+    expect(h.engine.get(task.id).deliverables).toEqual(delivered)
+    expect(h.events.ended).toHaveLength(1)
+    const { view, written } = h.events.ended[0]!
+    expect(written).toBe(false)
+    expect(view).toMatchObject({ status: 'done', from: { sessionId: 'chat' } })
+    expect(deliveryOf(view, null, 5_000)).toEqual({
+      taskId: task.id,
+      title: 'Add an export button',
+      status: 'done',
+      steps: 2,
+      durationMs: 0,
+      deliverables: delivered,
+      written: null,
+    })
+
+    // What the host stored reads back, and so does a round stored before deliverables.
+    const stored = h.store.get(task.id)!
+    expect(taskRecordOf(stored)?.rounds[1]!.deliverables).toEqual([
+      { ...installer, path: '/wt/task/dist/app.dmg' },
+    ])
+    const older = structuredClone(stored)
+    for (const round of older.rounds) delete round.deliverables
+    expect(taskRecordOf(older)).not.toBeNull()
+    const bad = structuredClone(stored)
+    bad.rounds[0]!.deliverables = [{ kind: 'link', title: 'x', detail: null, url: 'file:///etc' }]
+    expect(taskRecordOf(bad)).toBeNull()
+  })
+
+  it('tells only a task that started from a conversation when it is cancelled', async () => {
+    const h = await harness({ workflows: { ship: SHIP } })
+    const plain = await h.start('ship')
+    await h.engine.cancel(plain.id)
+    expect(h.events.ended).toEqual([])
+    const fromCard = await h.start('ship', { model: 'opus' }, { sessionId: 'chat' })
+    await h.engine.cancel(fromCard.id)
+    expect(h.events.ended.map((e) => e.view.status)).toEqual(['cancelled'])
+    expect(deliveryOf(h.events.ended[0]!.view, 'claude-code', 9_000)).toMatchObject({
+      status: 'cancelled',
+      steps: 1,
+      written: null,
+    })
   })
 
   it('keeps a task only once it is not running, and deletes its step sessions with it', async () => {

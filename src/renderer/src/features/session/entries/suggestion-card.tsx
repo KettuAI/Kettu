@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import {
   ArrowRight01Icon,
   BookOpen01Icon,
@@ -11,64 +11,34 @@ import {
   GitBranchIcon,
   PlugSocketIcon,
   SparklesIcon,
-  Tick02Icon,
   UserIcon,
 } from '@hugeicons/core-free-icons'
 import type { TFunction } from 'i18next'
 import { useTranslation } from 'react-i18next'
 import { keptTool, type StartItem, type StartProgress, type SuggestedTool } from '@shared/workflow'
 import type { Workflow, WorkflowStep, WorkflowSuggestion } from '@shared/workflow'
-import type { AgentId, ToolEntry } from '@shared/thread'
+import type { ToolEntry } from '@shared/thread'
 import { emitAppEvent } from '@renderer/app/events'
 import { Icon } from '@renderer/components/affect/app-shell'
 import { ApprovalCard } from '@renderer/components/affect/approval-card'
-import { AgentMark } from '@renderer/components/agents/agent-mark'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@renderer/components/ui/dialog'
-import { HoverCard, HoverCardContent, HoverCardTrigger } from '@renderer/components/ui/hover-card'
 import { ConnectButton } from '@renderer/features/marketplace/connect'
 import { useConnection } from '@renderer/features/marketplace/hooks'
 import { InstallButton } from '@renderer/features/marketplace/listing'
 import { Glyph } from '@renderer/features/shell/glyph'
-import {
-  layoutFlow,
-  sideways,
-  type FlowEdge,
-  type FlowMetrics,
-} from '@renderer/features/tasks/flow-layout'
-import { whoPicksText } from '@renderer/features/tasks/model'
-import { SidewaysFlow } from '@renderer/features/tasks/sideways-flow'
+import { chartShown, chartToTask, holdChart } from '@renderer/features/tasks/chart-morph'
+import { WorkflowChart } from '@renderer/features/tasks/workflow-chart'
 import { count, runningFor } from '@renderer/lib/format'
 import { errorMessage, hostAt } from '@renderer/lib/host'
 import { cn } from '@renderer/lib/utils'
 import { HostScopeContext, hostScope, LOCAL_SCOPE, useHostScope } from '@renderer/stores/host-scope'
 import { hostOfSession, useSessionsStore } from '@renderer/stores/sessions'
-import { useTasksStore } from '@renderer/stores/tasks'
 import { useSuggestion, useSuggestionsStore } from '@renderer/stores/workflow-suggestions'
 import { openTask, openWorkflowMarketplace } from '../new-session/open-task'
 import { listOf, localStepName, WORKFLOW_ICON } from '../new-session/workflow-picks'
 import { useSessionView } from '../use-thread'
 import { revealWaiting } from './helpers'
 import { cardIdOf } from './workflow-tools'
-
-/** Steps from the left, each a tile with who does it, its name and one line under it. */
-const METRICS: FlowMetrics = {
-  nodeW: 44,
-  nodeH: 136,
-  endSize: 18,
-  colGap: 10,
-  rowGap: 26,
-  laneStart: 20,
-  laneGap: 16,
-  labelRoom: 0,
-  slot: 10,
-  inset: 12,
-  bend: 8,
-  pad: 14,
-}
-/** Narrower steps for a long chart, so it shrinks less to fit. */
-const NARROW: FlowMetrics = { ...METRICS, nodeH: 112, rowGap: 22 }
-/** A chart is shrunk to fit the card, but no further than this, so its names stay readable. */
-const MIN_FIT = 0.66
 
 /**
  * The host's card for a suggestion or a workflow to keep, in the session's host's scope, so the
@@ -106,12 +76,13 @@ function Card({ card, agent }: { card: WorkflowSuggestion; agent: string }) {
       delete rest[card.id]
       return { pressed: rest }
     })
-    openTask(taskId)
+    chartToTask(card.id, taskId)
+    openTask(taskId, { flow: true })
   }, [taskId, pressed, card.id])
 
   switch (answer.kind) {
     case 'started':
-      return <StartedLine card={card} taskId={answer.taskId} />
+      return <StartedLine card={card} taskId={answer.taskId} agent={agent} />
     case 'declined':
       return <DeclinedLine card={card} />
     case 'saved':
@@ -182,6 +153,7 @@ function Pending({ card, agent }: { card: WorkflowSuggestion; agent: string }) {
           )
         : undefined
     if (kind === 'start') {
+      holdChart(card.id)
       useSuggestionsStore.setState((s) => ({ pressed: { ...s.pressed, [card.id]: true } }))
     }
     try {
@@ -300,203 +272,16 @@ function Summary({ card }: { card: WorkflowSuggestion }) {
 // The flowchart.
 
 function Chart({ card, agent }: { card: WorkflowSuggestion; agent: string }) {
-  const { t } = useTranslation(['session', 'tasks'])
-  const box = useRef<HTMLDivElement>(null)
-  const [room, setRoom] = useState(0)
-  useLayoutEffect(() => {
-    const el = box.current
-    if (!el) return
-    setRoom(el.clientWidth)
-    const observer = new ResizeObserver(() => setRoom(el.clientWidth))
-    observer.observe(el)
-    return () => observer.disconnect()
-  }, [])
-  // A step the user sees says so on its tile, so its send-back is not drawn as a loop.
-  const drawn = useMemo(
-    () => ({
-      ...card.workflow,
-      steps: card.workflow.steps.map((step) => ({ ...step, youReview: false })),
-    }),
-    [card.workflow],
-  )
-  const metrics = useMemo(
-    () => (room > 0 && sideways(layoutFlow(drawn, METRICS)).width * 0.85 > room ? NARROW : METRICS),
-    [drawn, room],
-  )
-  // Only the lanes are named, where there is room; a forward arrow's gap is too short.
-  const label = (edge: FlowEdge): string | null =>
-    (edge.back || (edge.to === 'end:dropped' && edge.points.length > 4)) && edge.outcomes.length > 0
-      ? edge.outcomes.join(t('tasks:or'))
-      : null
-  return (
-    <div
-      ref={box}
-      className="flex min-w-0 overflow-x-auto rounded-xl bg-(--bg-code-block) bg-[radial-gradient(var(--thread-line-strong)_0.8px,transparent_1px)] bg-size-[14px_14px] px-2 py-1"
-    >
-      {room > 0 && (
-        <SidewaysFlow
-          workflow={drawn}
-          metrics={metrics}
-          scale={(width) => Math.max(MIN_FIT, (room - 20) / width)}
-          labelOf={label}
-          labelClassName="bg-(--bg-code-block)"
-          // Centred by its margins, so a chart wider than the card scrolls from its start.
-          className="mx-auto shrink-0"
-          step={(_, index) => (
-            <StepTile card={card} step={card.workflow.steps[index]!} index={index} agent={agent} />
-          )}
-          end={(end) => (
-            <span className="relative grid size-full place-items-center rounded-full bg-card text-(--thread-faint) shadow-(--thread-card-shadow)">
-              {end === 'done' ? (
-                <Glyph icon={Tick02Icon} size={11} className="text-(--thread-done)" />
-              ) : (
-                <span className="size-1.5 rounded-[2px] bg-current" />
-              )}
-              {end === 'done' && (
-                <span className="absolute top-[calc(100%+3px)] text-[10px] whitespace-nowrap text-(--thread-muted)">
-                  {t('tasks:flow.end.done')}
-                </span>
-              )}
-            </span>
-          )}
-        />
-      )}
-    </div>
-  )
-}
-
-/** The line under a step's name: what the user does there, a second agent, or its tools. */
-function stepLine(
-  card: WorkflowSuggestion,
-  step: WorkflowStep,
-  index: number,
-  t: TFunction<'session'>,
-): { text: string; you: boolean } | null {
-  if (step.by === 'you') return { text: t('workflow.card.node.yours'), you: true }
-  if (step.youReview) {
-    return {
-      text: t(index === 0 ? 'workflow.card.node.firstSee' : 'workflow.card.node.see'),
-      you: true,
-    }
-  }
-  if (step.reviewOf.length > 0) return { text: t('workflow.card.node.other'), you: false }
-  const tools = toolTitles(card, step)
-  if (tools.length > 0)
-    return { text: t('workflow.card.node.uses', { tools: listOf(tools) }), you: false }
-  return null
-}
-
-function toolTitles(card: WorkflowSuggestion, step: WorkflowStep): string[] {
-  const named = [
-    ...step.tools.skills.map((ref) => ({ kind: 'skill' as const, ref })),
-    ...step.tools.mcp.map((ref) => ({ kind: 'mcp' as const, ref })),
-  ]
-  return named.map(
-    (n) => card.tools.find((tool) => tool.kind === n.kind && tool.ref === n.ref)?.title ?? n.ref,
-  )
-}
-
-function StepTile({
-  card,
-  step,
-  index,
-  agent,
-}: {
-  card: WorkflowSuggestion
-  step: WorkflowStep
-  index: number
-  agent: string
-}) {
-  const { t } = useTranslation('session')
   const scope = useHostScope()
-  const name = localStepName(card.workflow, step.id)
-  const line = stepLine(card, step, index, t)
-  const tools = toolTitles(card, step)
-  const who =
-    step.by === 'you'
-      ? t('workflow.card.tip.yours')
-      : index === 0
-        ? t('workflow.card.tip.first', { agent })
-        : t('workflow.card.tip.picks', {
-            who: whoPicksText({ workflow: card.workflow, pins: {} }, step.id),
-          })
   return (
-    <HoverCard>
-      <HoverCardTrigger
-        delay={250}
-        closeDelay={0}
-        render={
-          <span
-            tabIndex={0}
-            className="flex size-full min-w-0 cursor-default items-center gap-2 rounded-[9px] bg-card px-2 shadow-(--thread-card-shadow) outline-none focus-visible:ring-[1.5px] focus-visible:ring-(--focus)"
-          />
-        }
-      >
-        <WhoMark step={step} index={index} agentId={card.agentId} hostId={scope.hostId} />
-        <span className="flex min-w-0 flex-1 flex-col">
-          <span className="truncate text-small leading-4 font-medium text-(--thread-ink)">
-            {name}
-          </span>
-          {line && (
-            <span
-              className={cn(
-                'truncate text-[11px] leading-3.5',
-                line.you ? 'text-warning' : 'text-(--thread-muted)',
-              )}
-            >
-              {line.text}
-            </span>
-          )}
-        </span>
-      </HoverCardTrigger>
-      <HoverCardContent side="bottom" align="start" sideOffset={6} className="w-72 p-3">
-        <div className="flex flex-col gap-1.5 text-meta leading-relaxed">
-          <span className="text-ui font-medium text-primary">{name}</span>
-          {step.prompt && (
-            <span className="line-clamp-5 whitespace-pre-line text-secondary">{step.prompt}</span>
-          )}
-          {step.youReview && step.by === 'agent' && (
-            <span className="text-secondary">{t('workflow.card.tip.see')}</span>
-          )}
-          {tools.length > 0 && (
-            <span className="text-secondary">
-              {t('workflow.card.node.uses', { tools: listOf(tools) })}
-            </span>
-          )}
-          <span className="text-tertiary">{who}</span>
-        </div>
-      </HoverCardContent>
-    </HoverCard>
-  )
-}
-
-/** Who does a step: the user, this session's agent for the first, or the spark of a pick to come. */
-function WhoMark({
-  step,
-  index,
-  agentId,
-  hostId,
-}: {
-  step: WorkflowStep
-  index: number
-  agentId: AgentId
-  hostId: string | null
-}) {
-  return (
-    <span
-      className={cn(
-        'grid size-6 shrink-0 place-items-center rounded-[7px]',
-        step.by === 'you' ? 'bg-warning-tint text-warning' : 'bg-(--thread-chip)',
-      )}
-    >
-      {step.by === 'you' ? (
-        <Glyph icon={UserIcon} size={12} />
-      ) : index === 0 ? (
-        <AgentMark agent={agentId} size={12} hostId={hostId} />
-      ) : (
-        <Glyph icon={SparklesIcon} size={12} className="text-(--agent-violet)" />
-      )}
-    </span>
+    <WorkflowChart
+      workflow={card.workflow}
+      agentId={card.agentId}
+      agentName={agent}
+      hostId={scope.hostId}
+      tools={card.tools}
+      chartRef={(el) => chartShown(card.id, el)}
+    />
   )
 }
 
@@ -875,17 +660,43 @@ function AnsweredLine({
   )
 }
 
-function StartedLine({ card, taskId }: { card: WorkflowSuggestion; taskId: string }) {
-  const { t } = useTranslation('session')
-  const title = useTasksStore((s) => s.summaries[taskId]?.title ?? null)
+/** The card once its task started: folded into one row that opens the task. */
+function StartedLine({
+  card,
+  taskId,
+  agent,
+}: {
+  card: WorkflowSuggestion
+  taskId: string
+  agent: string
+}) {
+  const { t, i18n } = useTranslation('session')
   return (
-    <AnsweredLine
-      icon={CheckmarkCircle02Icon}
-      tone="done"
-      action={{ label: t('workflow.card.openTask'), run: () => openTask(taskId) }}
-    >
-      {t('workflow.card.started', { title: title ?? card.title ?? card.task })}
-    </AnsweredLine>
+    <div className="flex min-w-0 flex-col gap-1">
+      <span className="px-0.5 text-hint text-(--thread-faint)">
+        {t('workflow.card.label', { agent })}
+      </span>
+      <div className="flex min-w-0 items-center gap-2 rounded-xl border border-(--thread-line) px-3 py-2 text-small">
+        <Glyph icon={CheckmarkCircle02Icon} size={15} className="shrink-0 text-success" />
+        <span className="min-w-0 flex-1 truncate">
+          <span className="font-medium text-(--thread-ink)">{t('workflow.card.title')}</span>
+          <span className="text-(--thread-muted)">
+            {' · '}
+            {card.source.kind === 'draft'
+              ? t('workflow.card.startedWritten', { agent })
+              : t('workflow.card.startedAs', { workflow: nameOf(card.workflow, i18n.language) })}
+          </span>
+        </span>
+        <button
+          type="button"
+          onClick={() => openTask(taskId)}
+          className="inline-flex shrink-0 items-center gap-0.5 text-link hover:underline"
+        >
+          {t('workflow.delivery.openTask')}
+          <Glyph icon={ArrowRight01Icon} size={13} />
+        </button>
+      </div>
+    </div>
   )
 }
 

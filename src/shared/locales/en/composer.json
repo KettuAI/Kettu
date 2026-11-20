@@ -7,6 +7,7 @@
       "awaitingAnswer": "Waiting for your answer",
       "limitReached": "{{limit}} limit reached · resets {{time}}",
       "ask": "Reply…",
+      "taskRunning": "Keep chatting; this doesn’t change the task",
       "denied": "Say what to do differently",
       "runningQueue": "Queue a message · Esc stops",
       "runningTouch": "Queue a message",

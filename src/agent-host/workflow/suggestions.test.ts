@@ -90,7 +90,13 @@ const SERVER_TOOL: SuggestedTool = {
 }
 
 function harness(
-  options: { stored?: SuggestionsFile; text?: string; tools?: SuggestedTool[] } = {},
+  options: {
+    stored?: SuggestionsFile
+    text?: string
+    tools?: SuggestedTool[]
+    /** The drafts tasks ran on. */
+    draftIds?: Set<string>
+  } = {},
 ) {
   const kept = { mcp: [] as MarketServer[], skills: [] as MarketSkill[] }
   const known = () => ({
@@ -216,6 +222,7 @@ function harness(
         return { id: `t-${started.length}` } as TaskView
       },
       pastRuns: () => ({ runs: 0, medianMs: null }),
+      draftIds: () => options.draftIds ?? new Set<string>(),
     },
     sessions: {
       agentOf: () => 'claude-code' as const,
@@ -429,6 +436,58 @@ describe('a workflow card', () => {
       { id: 'fix-a-bug', source: 'agent', approval: 'approved', hash: workflowHash(TEXT) },
     ])
     await expect(h.suggestions.notSave(card.id)).rejects.toMatchObject({ code: 'conflict' })
+  })
+
+  it('saves the draft a task ran on into the library approved, once', async () => {
+    const h = harness()
+    await h.suggestions.load()
+    h.kept.skills.push({
+      id: SKILL,
+      name: 'pdf',
+      description: '',
+      source: 'catalog',
+      origin: 'https://github.com/anthropics/skills',
+      version: 'abc',
+      agents: 'all',
+      on: true,
+    })
+    const draft = await h.suggestions.draft('chat', TEXT.replace(`      mcp: [${SERVER}]\n`, ''))
+    if (!('draftId' in draft)) throw new Error('The draft did not read')
+    expect(await h.library.list()).toEqual([])
+    const saved = await h.suggestions.saveDraft(draft.draftId)
+    expect(saved).toMatchObject({
+      source: 'agent',
+      approval: 'approved',
+      hash: draft.hash,
+      origin: { kind: 'agent', sessionId: 'chat', agentId: 'claude-code' },
+    })
+    const again = await h.suggestions.saveDraft(draft.draftId)
+    expect(again.id).toBe(saved.id)
+    expect(await h.library.list()).toHaveLength(1)
+    expect(h.suggestions.draftAgent(draft.draftId)).toBe('claude-code')
+    await expect(h.suggestions.saveDraft('draft:nothinghere')).rejects.toBeInstanceOf(HostError)
+  })
+
+  it('keeps the text of a draft a task ran on past the drafts it keeps otherwise', async () => {
+    const plain = TEXT.replace(`      mcp: [${SERVER}]\n`, '').replace(
+      `      skills: [${SKILL}]\n`,
+      '',
+    )
+    const used = new Set<string>()
+    const h = harness({ draftIds: used })
+    await h.suggestions.load()
+    const first = await h.suggestions.draft('chat', plain)
+    const loose = await h.suggestions.draft('chat', plain.replace('Fix it.', 'Fix it well.'))
+    if (!('draftId' in first) || !('draftId' in loose)) throw new Error('A draft did not read')
+    used.add(first.draftId)
+    for (let i = 0; i < 200; i++) {
+      await h.suggestions.draft('chat', plain.replace('Fix it.', `Fix it, take ${i}.`))
+    }
+    const again = h.reopen()
+    await again.load()
+    await again.sweep()
+    expect(await again.draftText(first.draftId)).toBe(plain)
+    await expect(again.draftText(loose.draftId)).rejects.toBeInstanceOf(HostError)
   })
 
   it('refuses a draft naming a tool neither kept here nor in the Marketplace', async () => {

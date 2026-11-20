@@ -894,7 +894,9 @@
     "done": "{{title}} is done",
     "dropped": "{{title}} ended without being done",
     "cancelled": "{{title}} was cancelled",
-    "endedBody": "{{workflow}} · {{steps}} steps"
+    "endedBody": "{{workflow}} · {{steps}} steps",
+    "notWritten": "Only a task that ended done on a workflow its agent wrote for it can keep or publish that workflow",
+    "noOrigin": "The conversation this task started from is gone"
   },
   "marketPublish": {
     "handleInvalid": "A publisher name is 1 to 32 lowercase letters, digits and hyphens, starting and ending with a letter or digit.",

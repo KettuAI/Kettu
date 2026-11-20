@@ -1234,6 +1234,11 @@ export interface HostContract {
     }
     result: TaskView
   }
+  // Save as my workflow: the workflow an agent wrote for a task that ended done, into the library.
+  'tasks.saveWorkflow': { params: { taskId: string }; result: WireWorkflowEntry }
+  // Publish to the Marketplace: asks the agent of the conversation the task started from to make
+  // that workflow general and publish it, which waits for the user in its card.
+  'tasks.publishWorkflow': { params: { taskId: string }; result: void }
   // The window's prepared session for New session; `replace` opens a new one even when it holds one.
   'sessions.prepare': {
     params: {
@@ -2031,6 +2036,8 @@ export const HOST_METHODS = [
   'tasks.note',
   'tasks.pin',
   'tasks.update',
+  'tasks.saveWorkflow',
+  'tasks.publishWorkflow',
   'permissions.respond',
   'git.status',
   'git.unwatch',

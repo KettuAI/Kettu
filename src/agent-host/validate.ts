@@ -2072,6 +2072,8 @@ export function createValidators(platform: Platform): Validators {
       const o = fields(params)
       return { taskId: taskId(o), stepId: stepId(o), pick: stepPickOf(o.pick ?? null) }
     },
+    'tasks.saveWorkflow': (params) => ({ taskId: taskId(fields(params)) }),
+    'tasks.publishWorkflow': (params) => ({ taskId: taskId(fields(params)) }),
     'tasks.update': (params) => {
       const o = fields(params)
       const title = optionalString(o, 'title', TASK_TITLE_CHARS)

@@ -7,6 +7,7 @@
   "or": " 或 ",
   "and": "和",
   "row": {
+    "startedHere": "从这里开始",
     "collapse": "收起步骤",
     "expand": "展开步骤",
     "stepOf": "第 {{at}} 步，共 {{total}} 步",
@@ -83,7 +84,9 @@
     "retry": "重试",
     "missing": "这条需求不在了",
     "missingBody": "它被删除了，或者它所在的电脑不再列出它。",
-    "newSession": "新建会话"
+    "newSession": "新建会话",
+    "delivered": "交付",
+    "steps": "步骤"
   },
   "timeline": {
     "started": "按 {{workflow}} 开始 · {{time}}",
@@ -198,6 +201,21 @@
     "ended": "这条需求已经结束",
     "noAdvance": "补充不推进流程",
     "send": "补充",
-    "textOnly": "补充只能是文字"
+    "textOnly": "补充只能是文字",
+    "doneLine": "需求完成",
+    "doneOn": "需求完成 · {{branch}}",
+    "doneMerged": "需求完成 · {{branch}} 已合并",
+    "droppedLine": "需求结束：不值得做",
+    "cancelledLine": "需求已取消"
+  },
+  "deliverables": {
+    "version": "第 {{version}} 版"
+  },
+  "steps": {
+    "sentBack_one": "退回 {{count}} 次",
+    "sentBack_other": "退回 {{count}} 次",
+    "rounds_one": "{{count}} 轮",
+    "rounds_other": "{{count}} 轮",
+    "notRun": "没有运行"
   }
 }

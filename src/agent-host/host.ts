@@ -196,12 +196,16 @@ import {
   type SuggestedTool,
   type WorkflowSettings,
   type TaskSummary,
+  type TaskView,
+  type WorkflowEntry,
 } from '@shared/workflow'
 import { STEP_HARNESSES } from './workflow/picks'
 import { createTaskGit } from './workflow/git'
 import { optionsOfPick, pickOfOptions, workflowAgents } from './workflow/host-agents'
 import { WorkflowLibrary, workflowsFile } from './workflow/library'
 import { WorkflowSuggestions, suggestionsFile } from './workflow/suggestions'
+import { publishWorkflowPrompt } from './workflow/prompts'
+import { deliveryOf } from './workflow/views'
 import type { RoutineSessionHooksRef } from './routines/hooks'
 import type { RoutineClock } from './routines/scheduler'
 import { ScratchFolders } from './scratch'
@@ -229,6 +233,7 @@ import {
   type JsonFile,
   type RegistryListingFile,
   type HarnessManifestFile,
+  writeFileAtomic,
 } from './storage'
 import { GitHubStar, gitHubStarFile } from './github-star'
 import { digestEntries } from './threads/digest'
@@ -607,6 +612,12 @@ export class AgentHost {
       changed: () => this.hub.broadcast({ type: 'market.publishedChanged' }),
       agentOf: (sessionId) => this.sessions.sessionAgent(sessionId),
       sessionTitle: (sessionId) => this.sessions.title(sessionId),
+      taskWorkflow: async (taskId) => {
+        const draft = this.tasks.writtenDraft(taskId)
+        if (!draft) return null
+        const text = await this.workflowSuggestions.draftText(draft)
+        return { title: this.tasks.get(taskId).title, text }
+      },
       home: options.homeDir ?? os.homedir(),
     })
     this.settingsTools = new SettingsTools({
@@ -1316,8 +1327,13 @@ export class AgentHost {
         changed: (task) => this.broadcast({ type: 'task.changed', task }),
         removed: (taskId) => this.broadcast({ type: 'task.removed', taskId }),
         attention: (task, kind) => this.taskAttention(task, kind),
+        ended: (view, written) => void this.taskEnded(view, written),
       },
       workingLimit: () => this.settings.workflow.maxWorkingSteps,
+      pullRequests: (sessionIds) =>
+        sessionIds.flatMap((id) =>
+          this.sessions.has(id) ? (this.sessions.summary(id).prs ?? []).map((pr) => pr.url) : [],
+        ),
       log,
     })
     taskHooks.current = this.tasks
@@ -1340,6 +1356,7 @@ export class AgentHost {
       tasks: {
         start: (params, from, given) => this.tasks.start(params, from, given),
         pastRuns: (workflowId) => this.tasks.pastRuns(workflowId),
+        draftIds: () => this.tasks.draftIds(),
       },
       sessions: {
         agentOf: (sessionId) => this.sessions.sessionAgent(sessionId),
@@ -1440,6 +1457,8 @@ export class AgentHost {
     ])
     // After the sessions, whose step sessions it messages when it resumes.
     await host.tasks.load()
+    // After the tasks, whose drafts keep their texts.
+    await host.workflowSuggestions.sweep()
     host.agents.restore(remembered)
     host.agents.restoreRegistry(listing)
     host.agents.restoreManifest(manifest)
@@ -1582,6 +1601,50 @@ export class AgentHost {
       body,
       ...(sessionId ? { sessionId, front: this.front(sessionId) } : {}),
     })
+  }
+
+  /** A task that ended tells the conversation it started from what it delivered. */
+  private async taskEnded(view: TaskView, written: boolean): Promise<void> {
+    const from = view.from
+    if (!from) return
+    const writtenBy = written
+      ? (this.workflowSuggestions.draftAgent(view.workflowId) ??
+        this.sessions.sessionAgent(from.sessionId))
+      : null
+    try {
+      await this.sessions.taskDelivered(from.sessionId, deliveryOf(view, writtenBy, Date.now()))
+    } catch (error) {
+      this.diagnostics.log('warn', `Could not deliver task ${view.id}: ${(error as Error).message}`)
+    }
+  }
+
+  /** Save as my workflow, on a task that ran on a workflow its agent wrote for it and ended done. */
+  private async saveTaskWorkflow(taskId: string): Promise<WorkflowEntry> {
+    const draft = this.tasks.writtenDraft(taskId)
+    if (!draft) throw new HostError('conflict', t('tasks.notWritten'))
+    return this.workflowSuggestions.saveDraft(draft)
+  }
+
+  /**
+   * Publish to the Marketplace: the task's workflow goes into a folder of its own, and the agent of
+   * the conversation it started from is asked to make it general there and publish it.
+   */
+  private async publishTaskWorkflow(taskId: string): Promise<void> {
+    const draft = this.tasks.writtenDraft(taskId)
+    if (!draft) throw new HostError('conflict', t('tasks.notWritten'))
+    const view = this.tasks.get(taskId)
+    const sessionId = view.from?.sessionId
+    if (!sessionId || !this.sessions.has(sessionId)) throw notFound(t('tasks.noOrigin'))
+    const folder = path.join(this.options.userDataPath, 'workflows-to-publish', taskId)
+    await mkdir(folder, { recursive: true })
+    const file = path.join(folder, 'workflow.yaml')
+    // The agent's general version is kept when the user asks again.
+    if (!(await stat(file).catch(() => null))) {
+      await writeFileAtomic(file, await this.workflowSuggestions.draftText(draft))
+    }
+    await this.sessions.sendCardAnswer(sessionId, publishWorkflowPrompt(view, folder))
+    const entry = await this.sessions.taskDelivery(sessionId, taskId)
+    if (entry) this.sessions.taskPublishAsked(sessionId, entry.id)
   }
 
   /** Who shows a session in front now: any window or device, and which devices. */
@@ -3272,6 +3335,8 @@ export class AgentHost {
       'tasks.note': ({ taskId, text }) => this.tasks.note(taskId, text),
       'tasks.pin': ({ taskId, stepId, pick }) => this.tasks.pinStep(taskId, stepId, pick),
       'tasks.update': ({ taskId, ...change }) => this.tasks.update(taskId, change),
+      'tasks.saveWorkflow': ({ taskId }) => this.saveTaskWorkflow(taskId),
+      'tasks.publishWorkflow': ({ taskId }) => this.publishTaskWorkflow(taskId),
       'sessions.removeAll': async () => {
         await sessions.removeAll()
         this.options.send({ type: 'host:media-revoke', sessionId: null })

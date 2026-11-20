@@ -110,6 +110,7 @@ import {
   type MarketPublishOutcome,
   type SettingChangeItem,
   type SettingsChangeEntry,
+  type TaskDeliveryEntry,
   type SettingsChangeOutcome,
   type ComputerAppEntry,
   type ComputerSetupEntry,
@@ -2323,6 +2324,46 @@ export class SessionManager {
     }
     this.emit(live, [{ op: 'entry.add', entry }])
     return entry.id
+  }
+
+  /**
+   * A task this session's suggestion card started ended: what it delivered goes at the end of
+   * the conversation, which is read back from storage if it is not open, without its agent.
+   */
+  async taskDelivered(
+    sessionId: string,
+    delivery: Omit<TaskDeliveryEntry, 'kind' | 'id' | 'after'>,
+  ): Promise<void> {
+    if (!this.records.has(sessionId)) return
+    const live = await this.revive(sessionId)
+    const entry: TaskDeliveryEntry = {
+      kind: 'task_delivery',
+      id: this.nextId(live),
+      ...delivery,
+      after: agentEntryBefore(live.thread),
+    }
+    this.emit(live, [{ op: 'entry.add', entry }])
+    if (!this.inFront(live.id)) live.unread = true
+    this.touch(live.id)
+    this.updateBadge()
+  }
+
+  /** The delivery of a task in the conversation it started from, for Save and Publish. */
+  async taskDelivery(sessionId: string, taskId: string): Promise<TaskDeliveryEntry | null> {
+    if (!this.records.has(sessionId)) return null
+    const live = await this.revive(sessionId)
+    for (let i = live.thread.order.length - 1; i >= 0; i--) {
+      const entry = live.thread.byId[live.thread.order[i]!]
+      if (entry?.kind === 'task_delivery' && entry.taskId === taskId) return entry
+    }
+    return null
+  }
+
+  /** The user asked the session's agent to publish the workflow a task delivered. */
+  taskPublishAsked(sessionId: string, entryId: string): void {
+    const live = this.live.get(sessionId)
+    if (live?.thread.byId[entryId]?.kind !== 'task_delivery') return
+    this.emit(live, [{ op: 'entry.update', id: entryId, changes: { publishAsked: this.now() } }])
   }
 
   /** A window's or a device's answer to a settings card; the first one counts. */

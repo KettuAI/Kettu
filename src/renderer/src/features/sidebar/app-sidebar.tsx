@@ -539,7 +539,13 @@ function GroupRow({
   return row.kind === 'session' ? (
     <SessionRow node={row.node} tabStopId={tabStopId} indent={indent} showHost={showHost} />
   ) : (
-    <TaskRow task={row.task} tabStopId={tabStopId} indent={indent} showHost={showHost} />
+    <TaskRow
+      task={row.task}
+      origin={row.origin}
+      tabStopId={tabStopId}
+      indent={indent}
+      showHost={showHost}
+    />
   )
 }
 

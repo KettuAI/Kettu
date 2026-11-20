@@ -4,6 +4,11 @@
 
 import type { CallToolResult, Tool } from '@modelcontextprotocol/sdk/types.js'
 import {
+  DELIVERABLE_DETAIL_CHARS,
+  DELIVERABLE_PATH_CHARS,
+  DELIVERABLE_TITLE_CHARS,
+  DELIVERABLE_URL_CHARS,
+  MAX_STEP_DELIVERABLES,
   PACES,
   PICK_REASON_CHARS,
   REPORT_NOTE_CHARS,
@@ -14,6 +19,7 @@ import {
   stepName,
   usableWorkflow,
   workflowText,
+  type StepDeliverable,
   type WorkflowEntry,
   type WorkflowProblem,
   type WorkflowStep,
@@ -167,6 +173,30 @@ export const WORKFLOW_TOOLS: Tool[] = [
           type: 'string',
           maxLength: ID_CHARS,
           description: 'The document artifact the step hands in, when it hands in a document.',
+        },
+        deliverables: {
+          type: 'array',
+          maxItems: MAX_STEP_DELIVERABLES,
+          description:
+            'What the step made for the user beyond its document, which the task lists when it ' +
+            'ends: a file, such as an installer, by its path, absolute or from your folder, or a ' +
+            "link to where the work went, such as a store's build page. Leave out pull requests " +
+            'and documents, which Kettu lists by itself.',
+          items: {
+            type: 'object',
+            properties: {
+              title: { type: 'string', minLength: 1, maxLength: DELIVERABLE_TITLE_CHARS },
+              detail: {
+                type: 'string',
+                maxLength: DELIVERABLE_DETAIL_CHARS,
+                description: 'A short fact beside the title, such as the platforms or build.',
+              },
+              path: { type: 'string', minLength: 1, maxLength: DELIVERABLE_PATH_CHARS },
+              url: { type: 'string', minLength: 1, maxLength: DELIVERABLE_URL_CHARS },
+            },
+            required: ['title'],
+            additionalProperties: false,
+          },
         },
       },
       additionalProperties: false,
@@ -337,6 +367,36 @@ function workflowListing(
       you_review: step.youReview,
     })),
   }
+}
+
+/** The files and links a report hands over, each a path or an http(s) URL. */
+export function deliverablesOf(value: unknown): StepDeliverable[] | null {
+  if (value === undefined || value === null) return null
+  if (!Array.isArray(value) || value.length > MAX_STEP_DELIVERABLES) {
+    throw new WorkflowToolError(
+      'invalid',
+      `deliverables must list at most ${MAX_STEP_DELIVERABLES} files or links.`,
+    )
+  }
+  return value.map((item, i): StepDeliverable => {
+    const o = objectOf(item, ['title', 'detail', 'path', 'url'])
+    const where = `deliverables[${i}]`
+    const title = text(o, 'title', DELIVERABLE_TITLE_CHARS, true)!.trim()
+    const detail = text(o, 'detail', DELIVERABLE_DETAIL_CHARS, false)?.trim() || null
+    const file = text(o, 'path', DELIVERABLE_PATH_CHARS, false)?.trim() || null
+    const url = text(o, 'url', DELIVERABLE_URL_CHARS, false)?.trim() || null
+    if ((file === null) === (url === null)) {
+      throw new WorkflowToolError('invalid', `${where} needs a path or a url, not both.`)
+    }
+    if (url !== null) {
+      const protocol = URL.parse(url)?.protocol
+      if (protocol !== 'https:' && protocol !== 'http:') {
+        throw new WorkflowToolError('invalid', `${where}.url must be an http(s) URL.`)
+      }
+      return { kind: 'link', title, detail, url }
+    }
+    return { kind: 'file', title, detail, path: file! }
+  })
 }
 
 function checksText(lines: { check: string; ok: boolean; detail: string | null }[]): string {
@@ -537,11 +597,12 @@ export class WorkflowTools {
   }
 
   private async report(sessionId: string, input: unknown): Promise<CallToolResult> {
-    const o = objectOf(input ?? {}, ['outcome', 'note', 'artifact_id'])
+    const o = objectOf(input ?? {}, ['outcome', 'note', 'artifact_id', 'deliverables'])
     const report: ReportInput = {
       outcome: text(o, 'outcome', OUTCOME_CHARS, false),
       note: text(o, 'note', REPORT_NOTE_CHARS, false),
       artifactId: text(o, 'artifact_id', ID_CHARS, false),
+      deliverables: deliverablesOf(o.deliverables),
     }
     const answer = await this.deps.report(sessionId, report)
     const structured = { ...answer } as unknown as Record<string, unknown>
