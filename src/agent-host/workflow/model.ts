@@ -211,6 +211,8 @@ function isBlocked(value: unknown): value is BlockedReason {
       return isAgentId(value.agentId) && isNullableTime(value.resetsAt)
     case 'unusable':
       return isAgentId(value.agentId) && isString(value.why)
+    case 'tools':
+      return isStringList(value.missing)
     case 'no_agent':
     case 'no_picker':
       return true

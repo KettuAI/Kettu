@@ -222,6 +222,8 @@ export function blockedText(reason: BlockedReason, hostId: string | null, now: n
         : t('blocked.limit', { agent: agentName(reason.agentId, hostId) })
     case 'unusable':
       return t(`blocked.${reason.why}`, { agent: agentName(reason.agentId, hostId) })
+    case 'tools':
+      return t('blocked.tools', { tools: reason.missing.join(', ') })
     case 'no_agent':
       return t('blocked.noAgent')
     case 'no_picker':

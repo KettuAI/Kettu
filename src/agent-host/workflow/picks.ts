@@ -47,12 +47,15 @@ export interface WorkflowAgent {
   efforts: string[] | null
   /** Its plan limits that hold back `model`. */
   limits(model: string | null): PlanLimit[]
-  /** The Skills and MCP servers it gets from Kettu, by name. */
+  /**
+   * The Skills and MCP servers a step's session of it can be handed, by name: the host's that are
+   * installed and on, whichever agents they go to otherwise.
+   */
   skills: ReadonlySet<string>
   mcp: ReadonlySet<string>
 }
 
-/** The tools a step names that the agent's sessions do not get. */
+/** The tools a step names that its session could not be handed. */
 export function missingTools(agent: WorkflowAgent, tools: StepTools): string[] {
   return [
     ...tools.mcp.filter((name) => !agent.mcp.has(name)),
@@ -128,7 +131,8 @@ export function blockedFor(
   if (agent.disabled) return unusable('disabled')
   if (!STEP_HARNESSES.has(agent.harness)) return unusable('harness')
   if (!agent.kettu) return unusable('no_kettu')
-  if (missingTools(agent, step.tools).length > 0) return unusable('no_kettu')
+  const missing = missingTools(agent, step.tools)
+  if (missing.length > 0) return { kind: 'tools', missing }
   if (agent.models !== null && pick.model !== null) {
     if (!agent.models.some((m) => m.value === pick.model)) return unusable('model')
   }
@@ -219,13 +223,11 @@ export function checkPick(
       `The efforts offered here are: ${efforts.join(', ')}; or leave effort out.`,
     )
   }
-  const missing = missingTools(agent, step.tools)
+  // A tool the host lacks holds the step for the user once picked; no other pick would have it.
   line(
     'tools',
-    agent.kettu && missing.length === 0,
-    !agent.kettu
-      ? `Kettu's MCP server is off for ${agent.name}, so it could not report the step.`
-      : `${agent.name} does not get ${missing.join(', ')} from the Marketplace, which this step needs.`,
+    agent.kettu,
+    `Kettu's MCP server is off for ${agent.name}, so it could not report the step.`,
   )
   const reached = reachedLimit(agent.limits(pick.model), now)
   line(

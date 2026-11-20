@@ -878,11 +878,13 @@
     "nothingToRetry": "This step waits for nothing to retry",
     "stillRunning": "Cancel the task before deleting it",
     "noteEmpty": "A note needs text",
+    "sendBackEmpty": "Say what to change, or leave a comment on the document, before sending it back",
     "cannotPin": "This step has started, so it cannot be pinned now",
     "needsYou": "{{title}} needs you",
     "needsYouBody": "{{step}} · {{workflow}}",
     "done": "{{title}} is done",
     "dropped": "{{title}} ended without being done",
+    "cancelled": "{{title}} was cancelled",
     "endedBody": "{{workflow}} · {{steps}} steps"
   },
   "marketPublish": {

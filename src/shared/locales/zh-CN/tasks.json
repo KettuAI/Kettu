@@ -108,7 +108,8 @@
     "version": "第 {{version}} 版 · 在右边打开",
     "comments_one": "退回时，你在文档上的评论会一起交回给 {{agent}}",
     "comments_other": "退回时，你在文档上的 {{count}} 条评论会一起交回给 {{agent}}",
-    "notePlaceholder": "给 {{agent}} 的说明（可选）",
+    "notePlaceholder": "退回时，写下要 {{agent}} 改什么",
+    "sendBackEmpty": "退回前写一句要改什么，或者在文档上留评论。",
     "approve": "批准",
     "approveNext": "批准，进入{{next}}",
     "sendBack": "退回"
@@ -133,6 +134,7 @@
     "effort": "{{agent}} 不再提供固定时选的推理强度。",
     "no_kettu": "{{agent}} 没有 Kettu 的工具，步骤要用它上报。",
     "not_ready": "{{agent}} 还没准备好。",
+    "tools": "它要用 {{tools}}，这台电脑上没装或已关掉。在市场里装好后重试。",
     "noAgent": "没有允许 Auto 选的智能体。到「设置 › 智能体」里打开一个，或者固定一个。",
     "noPicker": "没有步骤交棒给它，需要你固定一个智能体。",
     "picking": "它在等前一步选人。",

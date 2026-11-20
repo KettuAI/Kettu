@@ -462,25 +462,86 @@ export class MarketSkillsService {
 
   /**
    * What an attach of the agent's session gets: skill folders for Codex, a plugin for Claude Code;
-   * with Kettu's own skills when `kettu`, the session reaching Kettu's server. Waits for a sync
-   * under way, so the first sessions after a start get what it writes.
+   * with Kettu's own skills when `kettu`, the session reaching Kettu's server, and the skills a
+   * workflow step names in `step`, which its session gets whatever agent does it. Waits for a
+   * sync under way, so the first sessions after a start get what it writes.
    */
   async sessionOptions(
     agentId: AgentId,
     kettu: boolean,
+    step: readonly string[] = [],
   ): Promise<Pick<SessionOptions, 'skillRoots' | 'localPlugins'>> {
     await this.syncing
     const harness = harnessOf(agentId)
+    const added = this.stepSkills(agentId, step)
     if (harness === 'codex') {
-      return { skillRoots: [...(kettu ? this.kettuRoots() : []), ...this.roots(agentId)] }
+      return {
+        skillRoots: [
+          ...(kettu ? this.kettuRoots() : []),
+          ...this.roots(agentId),
+          ...added.map((skill) => path.join(this.store, skillFolder(skill.id))),
+        ],
+      }
     }
     if (harness === 'claude-code') {
       // An agent added since the last sync, as one found on a first start is.
       if (!this.written.has(agentId)) await this.queued(() => this.writePlugins(agentId))
+      if (added.length > 0) {
+        const plugin = await this.stepPlugin(agentId, kettu, added)
+        if (plugin) return { localPlugins: [plugin] }
+      }
       const plugin = (kettu ? this.kettuPlugins : this.plugins).get(agentId)
       return plugin ? { localPlugins: [plugin] } : {}
     }
     return {}
+  }
+
+  /** The skills a step names that are on and on disk, and that the agent does not get anyway. */
+  private stepSkills(agentId: AgentId, names: readonly string[]): MarketSkill[] {
+    if (names.length === 0) return []
+    return this.deps
+      .settings()
+      .filter(
+        (skill) =>
+          skill.on &&
+          names.includes(skill.name) &&
+          !skillFor(skill, agentId) &&
+          this.present.has(skillFolder(skill.id)),
+      )
+  }
+
+  /**
+   * Claude Code's plugin for a step's session: the agent's own skills, Kettu's first when `kettu`,
+   * and the step's. Its folder is named by what it adds, so the step's sessions share it.
+   */
+  private async stepPlugin(
+    agentId: AgentId,
+    kettu: boolean,
+    added: readonly MarketSkill[],
+  ): Promise<string | null> {
+    const ids = new Set(added.map((skill) => skill.id))
+    const key = createHash('sha256')
+      .update(JSON.stringify([kettu, [...ids].sort()]))
+      .digest('hex')
+      .slice(0, 12)
+    const folder = path.join(this.root, 'claude', `${skillFolder(agentId)}-step-${key}`)
+    const made = new Map<AgentId, string>()
+    await this.queued(async () => {
+      const market: [string, string][] = []
+      for (const skill of this.deps.settings()) {
+        const dir = skillFolder(skill.id)
+        if (!this.present.has(dir) || (!skillFor(skill, agentId) && !ids.has(skill.id))) continue
+        market.push([skill.name, path.join(this.store, dir, skill.name)])
+      }
+      const own = kettu ? this.deps.ownSkills?.() : undefined
+      const first = own ? [...kettuSkillDirs(this.kettuRoot, own)] : []
+      try {
+        await this.writeClaudePlugin(made, agentId, folder, linkNames(first, market))
+      } catch (error) {
+        this.deps.log('warn', `Could not write a step's skills: ${(error as Error).message}`)
+      }
+    })
+    return made.get(agentId) ?? null
   }
 
   /** OpenCode's environment as its process starts, with the agent's skill folders. */

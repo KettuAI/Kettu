@@ -144,6 +144,7 @@ export type AppCommand =
   | { kind: 'toggle-sidebar' }
   | { kind: 'open-session'; sessionId: string }
   | { kind: 'open-routines' }
+  | { kind: 'open-task'; taskId: string }
   | { kind: 'go-back' }
   | { kind: 'go-forward' }
   | { kind: 'show-history' }

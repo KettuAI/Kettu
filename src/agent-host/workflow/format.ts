@@ -152,7 +152,7 @@ function readOutcome(value: unknown, path: string, p: Problems): WorkflowOutcome
     if (ENDS.includes(endValue as TaskEnd)) end = endValue as TaskEnd
     else p.add(join(path, 'end'), 'must be done or dropped')
   }
-  if (to.length === 0 && end === null && endValue === undefined) {
+  if (to.length === 0 && end === null && (endValue === undefined || endValue === null)) {
     p.add(path, 'needs to (the steps it starts) or end (done or dropped)')
   }
   if (to.length > 0 && end !== null) p.add(path, 'has both to and end; give one')

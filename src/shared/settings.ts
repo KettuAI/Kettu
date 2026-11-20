@@ -5,6 +5,7 @@ import type { MarketServer, MarketSkill } from './marketplace'
 import type { DirectAddress } from './remote/protocol'
 import { BUILTIN_THEME_ID } from './themes'
 import type { AgentId, HarnessId } from './thread'
+import { DEFAULT_WORKING_STEPS, type WorkingStepLimit } from './workflow'
 
 /** Whether a host's first start has run, so it runs once. */
 export interface InitialSetup {
@@ -111,6 +112,8 @@ export interface SettingsFile {
   startModes: Partial<Record<AgentId, string>>
   // When idle Claude Code sessions let their agent go; outOfView and inView in minutes.
   idleSessions: IdleSessionsSettings
+  // How many workflow step sessions work at once across every task.
+  workflow: { maxWorkingSteps: WorkingStepLimit }
   // source: where updates come from; GitHub only never reaches Kettu's download service.
   updates: { automatic: 'download' | 'restart' | 'notify' | 'off'; source: 'auto' | 'github' }
   privacy: { hideAccount: boolean } // kept so older files still parse; loading turns it off
@@ -275,6 +278,7 @@ export const DEFAULT_SETTINGS: SettingsFile = {
   marketplace: { mcp: [], skills: [] },
   startModes: {},
   idleSessions: { release: 'auto', outOfView: 5, inView: 30, limit: null },
+  workflow: { maxWorkingSteps: DEFAULT_WORKING_STEPS },
   updates: { automatic: 'download', source: 'auto' },
   privacy: { hideAccount: false },
   diagnostics: { verboseUntil: null },
@@ -334,6 +338,7 @@ export interface SettingsPatch {
   disabledAgents?: AgentId[] // replaced whole
   startModes?: Partial<Record<AgentId, string | null>> // merged by agent; null clears one
   idleSessions?: Partial<SettingsFile['idleSessions']>
+  workflow?: Partial<SettingsFile['workflow']>
   updates?: Partial<SettingsFile['updates']>
   privacy?: Partial<SettingsFile['privacy']>
   diagnostics?: Partial<SettingsFile['diagnostics']>
@@ -365,6 +370,7 @@ export interface HostSettings {
   marketplace: SettingsFile['marketplace']
   startModes: SettingsFile['startModes']
   idleSessions: SettingsFile['idleSessions']
+  workflow: SettingsFile['workflow']
   usage: { fromComputer: boolean }
   sessionTitles: boolean // write a title for a session its agent leaves untitled
   lightModel: LightModel // which model Kettu's own requests ask

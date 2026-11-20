@@ -17,6 +17,7 @@ import {
   type SettingsPatch,
 } from './settings'
 import type { AgentId, HarnessId } from './thread'
+import { WORKING_STEP_LIMITS } from './workflow'
 
 export const SETTINGS_SECTIONS = [
   'general',
@@ -1035,6 +1036,22 @@ const ENTRIES = {
     keywords: 'agents.workflow.keywords',
     part: 'host',
     kind: 'info',
+  },
+  'agents.workflow-steps': {
+    section: 'agents',
+    row: 'workflow-steps',
+    group: 'agents.workflow.group',
+    name: 'agents.workflow.steps.name',
+    description: 'agents.workflow.steps.description',
+    keywords: 'agents.workflow.keywords',
+    part: 'host',
+    access: 'change',
+    ...pick(
+      'workflow',
+      'maxWorkingSteps',
+      (file) => file.workflow.maxWorkingSteps,
+      WORKING_STEP_LIMITS.map((n) => ({ value: n, label: { text: String(n) } })),
+    ),
   },
 
   // ---- Harnesses
