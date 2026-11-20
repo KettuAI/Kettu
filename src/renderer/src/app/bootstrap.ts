@@ -122,6 +122,7 @@ function onHostEvent(event: HostEvent, hostId: string | null = null): void {
       return
     case 'projects.changed':
       useProjectsStore.getState().setAll(event.projects, hostId)
+      if (event.noProject) useProjectsStore.getState().setNoProject(hostId, event.noProject)
       return
     case 'git.changed':
       receiveGitStatus(event.status)

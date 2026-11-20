@@ -120,3 +120,48 @@ export function ProjectMenuItems({
     </>
   )
 }
+
+/**
+ * No project's actions: only what fits a group of scratch folders, which is no folder itself.
+ * `pinned` is undefined on a host that cannot pin it.
+ */
+export function NoProjectMenuItems({
+  local,
+  pinned,
+  pinDisabled,
+  onPin,
+}: {
+  local: boolean
+  pinned: boolean | undefined
+  pinDisabled: boolean
+  onPin: (pinned: boolean) => Promise<void>
+}) {
+  const { t } = useTranslation('sidebar')
+  const pinItem = pinned !== undefined && (
+    <DropdownMenuItem disabled={pinDisabled} onClick={() => void onPin(!pinned)}>
+      <MenuGlyph icon={pinned ? PinOffIcon : PinIcon} />
+      {t(pinned ? 'project.menu.unpinNoProject' : 'project.menu.pinNoProject')}
+    </DropdownMenuItem>
+  )
+  if (!local) return <DropdownMenuGroup>{pinItem}</DropdownMenuGroup>
+
+  return (
+    <>
+      <DropdownMenuGroup>
+        <DropdownMenuItem onClick={() => newSession(null, true)}>
+          <MenuGlyph icon={PencilEdit02Icon} />
+          {t('project.menu.newSession')}
+          <DropdownMenuShortcut>{formatShortcut('Mod+N')}</DropdownMenuShortcut>
+        </DropdownMenuItem>
+        {pinItem}
+      </DropdownMenuGroup>
+      <DropdownMenuGroup>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem onClick={() => openSettings('archived')}>
+          <MenuGlyph icon={Archive01Icon} />
+          {t('project.menu.showArchived')}
+        </DropdownMenuItem>
+      </DropdownMenuGroup>
+    </>
+  )
+}

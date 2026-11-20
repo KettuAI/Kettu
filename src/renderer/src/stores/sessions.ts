@@ -1,10 +1,10 @@
 import { create } from 'zustand'
-import type { Project, SessionSummary } from '@shared/agent-host'
+import type { NoProject, Project, SessionSummary } from '@shared/agent-host'
 import type { TaskSummary } from '@shared/workflow'
 import { errorMessage, host } from '@renderer/lib/host'
 import { hostOfPath } from '@renderer/lib/host-paths'
 import { i18n } from '@renderer/lib/i18n'
-import { pinnedProjects } from './projects'
+import { noProjectPinned, pinnedFolders, type PinnedFolder } from './projects'
 import { listedTasks, needingTasks, pinnedTasks, startedSteps, taskExpanded } from './tasks'
 import { NO_PROJECT_GROUP, PINNED_GROUP, THIS_COMPUTER, type MainView } from './view'
 
@@ -450,6 +450,7 @@ export function visibleOrder(
   byId: Record<string, SessionSummary>,
   projects: readonly Project[],
   tasks: Record<string, TaskSummary> = {},
+  noProjects: Readonly<Record<string, NoProject>> = {},
 ): string[] {
   const expanded = (id: string) => view.expandedParents[id] ?? false
   const hosts = view.hosts ?? [null]
@@ -477,6 +478,12 @@ export function visibleOrder(
             byActivity,
           ),
         )
+  const noProjectRows = (hostId: string | null): string[] =>
+    view.collapsedProjects[noProjectGroup(hostId)]
+      ? []
+      : flattenTree(sessionTree(byId, null, hostId), expanded)
+  const folderRows = (folder: PinnedFolder): string[] =>
+    folder.project ? projectRows(folder.project) : noProjectRows(folder.hostId)
   const order = [
     ...(view.hosts
       ? flatten(
@@ -491,7 +498,7 @@ export function visibleOrder(
     ...(view.collapsedProjects[PINNED_GROUP]
       ? []
       : [
-          ...pinnedProjects(projects, hosts).flatMap(projectRows),
+          ...pinnedFolders(projects, noProjects, hosts).flatMap(folderRows),
           ...flatten(
             sidebarRows(
               pinnedTree(byId).filter(shown),
@@ -507,9 +514,7 @@ export function visibleOrder(
             ...projects
               .filter((p) => p.pinnedAt == null && hostOfPath(p.path) === hostId)
               .flatMap(projectRows),
-            ...(view.collapsedProjects[noProjectGroup(hostId)]
-              ? []
-              : flattenTree(sessionTree(byId, null, hostId), expanded)),
+            ...(noProjectPinned(noProjects, hostId) ? [] : noProjectRows(hostId)),
           ],
     ),
   ]
@@ -526,8 +531,9 @@ export function sidebarTabStop(
   byId: Record<string, SessionSummary>,
   projects: readonly Project[],
   tasks: Record<string, TaskSummary> = {},
+  noProjects: Readonly<Record<string, NoProject>> = {},
 ): SidebarTabStop | null {
-  const order = visibleOrder(view, byId, projects, tasks)
+  const order = visibleOrder(view, byId, projects, tasks, noProjects)
   const front =
     view.main.kind === 'session'
       ? view.main.sessionId
@@ -538,8 +544,11 @@ export function sidebarTabStop(
   const hosts = view.hosts ?? [null]
   const shown = (node: SessionNode) => hosts.includes(hostOfSession(node.summary))
   const shownTask = (task: TaskSummary) => hosts.includes(hostOfPath(task.projectPath))
+  // A pinned No project shows only while it has sessions; a pinned project shows without.
   if (
-    projects.some((p) => p.pinnedAt != null && hosts.includes(hostOfPath(p.path))) ||
+    pinnedFolders(projects, noProjects, hosts).some(
+      (folder) => folder.project || sessionTree(byId, null, folder.hostId).length > 0,
+    ) ||
     pinnedTree(byId).some(shown) ||
     pinnedTasks(tasks).some(shownTask)
   ) {
@@ -556,7 +565,7 @@ export function sidebarTabStop(
       (p) => sessionTree(byId, p.path).length > 0 || listedTasks(tasks, p.path).length > 0,
     )
     if (project) return { kind: 'group', key: project.path }
-    if (sessionTree(byId, null, hostId).length > 0) {
+    if (!noProjectPinned(noProjects, hostId) && sessionTree(byId, null, hostId).length > 0) {
       return { kind: 'group', key: noProjectGroup(hostId) }
     }
   }

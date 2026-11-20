@@ -360,6 +360,7 @@ function stepSession(delta: -1 | 1): void {
     byId,
     useProjectsStore.getState().projects,
     tasks,
+    useProjectsStore.getState().noProjects,
   )
   if (!order.length) return
   const currentId =

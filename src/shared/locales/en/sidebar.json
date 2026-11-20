@@ -106,6 +106,8 @@
       "newSession": "New session",
       "pin": "Pin project",
       "unpin": "Unpin project",
+      "pinNoProject": "Pin",
+      "unpinNoProject": "Unpin",
       "openInTerminal": "Open in terminal",
       "showIn": "Show in {{name}}",
       "showArchived": "Show archived",

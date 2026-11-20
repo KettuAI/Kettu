@@ -595,6 +595,42 @@ describe('the host files', () => {
     })
   })
 
+  it('keeps the No project pin across loads, apart from the projects', async () => {
+    const project = { path: '/repo', name: 'repo', addedAt: 1, lastOpenedAt: 2 }
+    const file = projectsFile(dir, log)
+    file.save({ version: 1, projects: [project] })
+    await file.flush()
+    const registry = (time: number) =>
+      new Projects({
+        file: projectsFile(dir, log),
+        platform: 'linux',
+        now: () => time,
+        isDirectory: async () => true,
+      })
+
+    const first = registry(3)
+    await first.load()
+    expect(first.noProject()).toEqual({ pinnedAt: null })
+    const heard: unknown[] = []
+    first.onChange((_, noProject) => heard.push(noProject))
+    first.pinNoProject(true)
+    first.pinNoProject(true)
+    expect(heard).toEqual([{ pinnedAt: 3 }])
+    await first.flush()
+
+    const next = registry(4)
+    await next.load()
+    expect(next.noProject()).toEqual({ pinnedAt: 3 })
+    expect(next.list()[0]).toMatchObject({ path: '/repo', pinnedAt: null })
+    next.pinNoProject(false)
+    await next.flush()
+    expect(await projectsFile(dir, log).load()).toEqual({ version: 1, projects: [project] })
+    expect(parseProjectsFile({ projects: [], noProjectPinnedAt: 'soon' })).toEqual({
+      version: 1,
+      projects: [],
+    })
+  })
+
   it('keeps what each agent reported and drops what does not parse, entry by entry', () => {
     const account = { kind: 'account', label: 'Claude Max', email: 'me@example.com' }
     const limit = {

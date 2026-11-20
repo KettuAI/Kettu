@@ -635,6 +635,11 @@ export interface Project {
   pinnedAt?: number | null // absent on hosts that do not support project pins
 }
 
+/** The sidebar's No project group, which holds the sessions started without a project. */
+export interface NoProject {
+  pinnedAt: number | null
+}
+
 export type SessionAttention = 'none' | 'permission' | 'unread' | 'error'
 
 /**
@@ -1065,7 +1070,9 @@ export interface HostContract {
   'projects.add': { params: { path: string }; result: Project }
   'projects.remove': { params: { path: string }; result: void }
   'projects.touch': { params: { path: string }; result: void }
-  'projects.pin': { params: { path: string; pinned: boolean }; result: void }
+  // A null path pins the No project group.
+  'projects.pin': { params: { path: string | null; pinned: boolean }; result: void }
+  'projects.noProject': { params: void; result: NoProject }
   // How the project names and prepares its sessions' worktrees.
   'projects.worktreeSettings': { params: { path: string }; result: ProjectWorktreeSettings }
   // A device needs the owner's leave to use the terminal to change these, as they run a command.
@@ -1868,6 +1875,7 @@ export const HOST_METHODS = [
   'projects.remove',
   'projects.touch',
   'projects.pin',
+  'projects.noProject',
   'projects.worktreeSettings',
   'projects.setWorktreeSettings',
   'paths.complete',
@@ -2088,7 +2096,8 @@ export type HostEvent =
   | { type: 'agent.options'; options: AgentOptions }
   // To the port whose `agents.authenticate` runs: the agent's sign-in page, for its device to open.
   | { type: 'agents.signInLink'; agentId: AgentId; url: string }
-  | { type: 'projects.changed'; projects: Project[] }
+  // `noProject` is absent from hosts that cannot pin No project.
+  | { type: 'projects.changed'; projects: Project[]; noProject?: NoProject }
   | { type: 'environment.changed'; info: EnvironmentInfo }
   | { type: 'git.changed'; status: GitStatus }
   | { type: 'git.pr'; projectPath: string; pr: PullRequest | null }
