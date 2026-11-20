@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useId, useMemo, useState } from 'react'
 import { Download01Icon, SourceCodeIcon } from '@hugeicons/core-free-icons'
 import { HugeiconsIcon } from '@hugeicons/react'
 import { useTranslation } from 'react-i18next'
@@ -14,9 +14,11 @@ import {
 import { fenceFileName } from './code-meta'
 import { CodeFrame, type BlockProps } from './code-frame'
 import { downloadText } from './download'
+import { openPicture } from './open-picture'
 
 interface Picture {
   url: string
+  xml: string
   title: string | null
 }
 
@@ -32,6 +34,7 @@ function pictureOf(code: string): Picture | null {
   const xml = new XMLSerializer().serializeToString(svg)
   return {
     url: `data:image/svg+xml;charset=utf-8,${encodeURIComponent(xml)}`,
+    xml,
     title: svg.querySelector('title')?.textContent?.trim() || null,
   }
 }
@@ -67,6 +70,7 @@ function sizeOf(svg: SVGSVGElement): void {
 export function SvgBlock(props: BlockProps) {
   const { code, language, meta, isIncomplete } = props
   const { t } = useTranslation('session')
+  const key = `svg:${useId()}`
   const [source, setSource] = useState(false)
   // The text that failed, so a block whose text changes gets another try.
   const [failed, setFailed] = useState<string | null>(null)
@@ -91,6 +95,18 @@ export function SvgBlock(props: BlockProps) {
       <BlockPicture
         src={picture.url}
         alt={picture.title ?? t('svg.alt')}
+        data-viewer-key={key}
+        open={{
+          label: t('media.openLarger'),
+          onOpen: (from) =>
+            openPicture({
+              key,
+              xml: picture.xml,
+              name: name ? downloadName(name) : null,
+              alt: picture.title ?? t('svg.alt'),
+              from,
+            }),
+        }}
         onError={() => setFailed(code)}
         actions={
           <>
