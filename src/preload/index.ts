@@ -147,6 +147,7 @@ const api: KettuApi = {
     close: (url) => invoke('artifact:close', url),
     thumbnail: (id, version, layout) => invoke('artifact:thumbnail', id, version, layout),
     openExternal: (id, version) => invoke('artifact:open-external', id, version),
+    reveal: (id, version) => invoke('artifact:reveal', id, version),
     export: (id, version) => invoke('artifact:export', id, version),
     exportAs: (id, version, format) => invoke('artifact:export-as', id, version, format),
     import: (project, kind) => invoke('artifact:import', project, kind),

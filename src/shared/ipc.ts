@@ -318,6 +318,7 @@ export interface IpcInvokeContract {
     result: string | null
   }
   'artifact:open-external': { args: [id: string, version: number]; result: void }
+  'artifact:reveal': { args: [id: string, version: number]; result: void }
   'artifact:export': { args: [id: string, version: number]; result: boolean }
   // A page's image as a base64 PNG, for a message to an agent; null when it cannot render.
   'artifact:page-image': {
@@ -637,6 +638,8 @@ export interface KettuApi {
     thumbnail(id: string, version: number, layout: ThumbnailPage[] | null): Promise<string | null>
     /** Opens a copy of the version in the default browser, outside the app's isolation. */
     openExternal(id: string, version: number): Promise<void>
+    /** Selects a copy of the version in the system file manager, as `openExternal` would open it. */
+    reveal(id: string, version: number): Promise<void>
     /**
      * Asks where to save the version: its HTML file, or a folder for its files when it has
      * several; false when the user cancelled.

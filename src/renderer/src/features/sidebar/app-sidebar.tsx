@@ -71,6 +71,7 @@ import { RemoveProjectDialog } from './remove-project'
 import { GroupRenameHints } from './rename-hints'
 import { RenameScope } from './rename-scope'
 import { limitRows, rowInSight, ROWS_SHOWN } from './row-limit'
+import { RowEnd } from './session-indicator'
 import { SessionRow } from './session-row'
 import { TaskRow } from './task-row'
 
@@ -376,11 +377,6 @@ function ProjectGroup({
     >
       {!project ? <Glyph icon={NO_PROJECT_ICON} /> : open ? <FolderMark /> : <FolderClosedMark />}
       <span className="ui-as-side__text">{name}</span>
-      {showHost && (
-        <span className="kettu-row-end max-w-24 shrink-0 truncate text-[12px] font-normal text-(--faint)">
-          {hostName}
-        </span>
-      )}
       {project?.missing && (
         <span className="shrink-0 text-[12px] text-(--faint)">{t('project.missing')}</span>
       )}
@@ -388,6 +384,13 @@ function ProjectGroup({
       <span className="ui-as-chat-folder__arrow" aria-hidden>
         <Glyph icon={ArrowRight01Icon} size={13} />
       </span>
+      <RowEnd>
+        {showHost && (
+          <span className="max-w-24 truncate text-[12px] font-normal text-(--faint)">
+            {hostName}
+          </span>
+        )}
+      </RowEnd>
     </button>
   )
   const tooltip = project ? (
