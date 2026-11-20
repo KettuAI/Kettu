@@ -279,7 +279,7 @@ steps:
     })
   })
 
-  it('refuses links, and stops at the version’s limits', async () => {
+  it('refuses links, and stops at the version’s limits', { timeout: 60_000 }, async () => {
     await put({ 'SKILL.md': SKILL, 'real.md': 'x' })
     await symlink(path.join(root, 'real.md'), path.join(root, 'link.md'))
     const linked = await checkFolder(root)
@@ -287,7 +287,9 @@ steps:
 
     const many = path.join(root, 'many')
     await put({ 'SKILL.md': SKILL }, many)
-    for (let i = 0; i < PUBLISH_LIMITS.files; i++) await put({ [`f/${i}.txt`]: 'x' }, many)
+    await Promise.all(
+      Array.from({ length: PUBLISH_LIMITS.files }, (_, i) => put({ [`f/${i}.txt`]: 'x' }, many)),
+    )
     const tooMany = await checkFolder(many)
     expect(tooMany.problems.map((p) => p.message)).toContainEqual(
       expect.stringMatching(/more than 400 files/),
