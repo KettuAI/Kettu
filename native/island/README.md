@@ -19,7 +19,8 @@ shows while it is on:
   last stretch, else how many sessions were used today. Without a notch, the same outline, with the
   title of the session it is about in the middle. Failed and done rows mark it until they are read
   in Kettu or the island is opened.
-- **Grown**: main's pops, one at a time, for 6 seconds (4 for a finished turn): the marks in the
+- **Grown**: main's pops, one at a time, for 6 seconds (2 for a finished turn), unless a Kettu window
+  in front shows that session: the marks in the
   left wing and the state in the right, the session and what happened under them. A request is no
   pop: it opens the island at its card, without the keyboard, and the island stays open until the
   last request is answered or a click elsewhere dismisses it.

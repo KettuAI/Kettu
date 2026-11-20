@@ -291,10 +291,15 @@ export class IslandBridge {
     this.local?.close()
   }
 
-  /** What the host told main needs the user: the island pops it out unless a window is in front. */
+  /**
+   * What the host told main needs the user: the island pops it out unless a window in front shows
+   * that session already, so a session that ends behind another one in Kettu still says so.
+   */
   attention(message: HostAttention, hostKey = LOCAL): void {
     if (this.phase !== 'running' || !attentionTarget(message)) return
-    if (!this.deps.kindEnabled(message.kind) || this.deps.windowFocused()) return
+    if (!this.deps.kindEnabled(message.kind)) return
+    const front = 'front' in message ? message.front : undefined
+    if (this.deps.windowFocused() && front?.any) return
     const { title, body } = attentionText(message)
     const row = message.kind === 'routine-paused' ? null : this.rowKeyOf(hostKey, message.sessionId)
     this.send({ type: 'pop', row, kind: message.kind, title, body })

@@ -616,18 +616,24 @@ describe('opens and pops', () => {
     ])
   })
 
-  it('pops what needs the user only while no window is in front', async () => {
-    const s = setup([summary('s1')])
+  it('pops what needs the user unless a window in front shows that session', async () => {
+    let focused = false
+    const s = setup([summary('s1')], {}, [], { windowFocused: () => focused })
     await started(s)
-    const attention = {
+    const attention = (any: boolean) => ({
       type: 'host:attention' as const,
       sessionId: 's1',
       kind: 'turn-ended' as const,
       title: 'Done',
       body: 'kettu',
-    }
-    s.bridge.attention(attention)
+      front: { any, devices: [] },
+    })
+    s.bridge.attention(attention(true))
+    focused = true
+    s.bridge.attention(attention(false))
+    s.bridge.attention(attention(true))
     expect(s.helper().of('pop')).toEqual([
+      { type: 'pop', row: 's1', kind: 'turn-ended', title: 'Done', body: 'kettu' },
       { type: 'pop', row: 's1', kind: 'turn-ended', title: 'Done', body: 'kettu' },
     ])
   })

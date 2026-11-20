@@ -475,7 +475,8 @@ final class IslandModel: ObservableObject {
   func holdPop(paused: Bool = false) {
     popTimer?.invalidate()
     guard mode == .grown, let pop, !paused else { return }
-    let seconds: Double = ["turn-ended", "routine-ended"].contains(pop.kind) ? 4 : 6
+    // A finished turn says so and goes; an error stays longer.
+    let seconds: Double = ["turn-ended", "routine-ended"].contains(pop.kind) ? 2 : 6
     popTimer = Timer.scheduledTimer(withTimeInterval: seconds, repeats: false) { [weak self] _ in
       guard let self else { return }
       self.pops.removeFirst()
