@@ -251,7 +251,11 @@ export function resultContent(
     output = toLf(output).replace(/\n+$/, '')
     return [...(output ? [markdown(fenced(output, 'console'))] : []), ...images]
   }
-  if (error) return [...(body ? [markdown(fenced(body))] : []), ...images]
+  if (error) {
+    const shown = [...(body ? [markdown(fenced(body))] : []), ...images]
+    // A plan sent back stays the first Markdown, the plan the next one is compared with.
+    return name === 'ExitPlanMode' ? [...before, ...shown] : shown
+  }
   switch (name) {
     case 'Edit':
     case 'NotebookEdit':
