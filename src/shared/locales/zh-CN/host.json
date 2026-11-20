@@ -65,6 +65,10 @@
       "description": "{{agent}} 无法回放会话，这个会话将在没有历史记录的情况下继续。"
     },
     "signInNeeded": "{{agent}} 需要你登录",
+    "signedIn": {
+      "title": "已登录 {{agent}}",
+      "description": "会话已继续。"
+    },
     "closedBeforeSent": {
       "title": "会话在消息发出前已关闭",
       "description": "消息会留在队列中，点击「继续」后才会发出。"

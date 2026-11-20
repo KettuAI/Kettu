@@ -7,6 +7,7 @@ import type { Diagnostics } from './diagnostics'
 import type { LastRequest, OutsideReader } from './outside-sessions'
 import type { Projects } from './projects'
 import type { ScratchFolders } from './scratch'
+import { HostError } from './errors'
 import { SessionManager, type SessionEvents } from './sessions'
 import { returnedFile, sessionsFile, type SessionRecord, type SessionsFile } from './storage'
 import type { StoredThread } from './threads/model'
@@ -65,7 +66,7 @@ function manager(
     settings: () => ({}) as never,
     ...(extra.outside ? { outside: extra.outside } : {}),
   } satisfies ConstructorParameters<typeof SessionManager>[0]
-  return { sessions: new SessionManager(deps), added }
+  return { sessions: new SessionManager(deps), added, agents: deps.agents }
 }
 
 /** An agent that lists `pages` of session ids for any folder, one page per call. */
@@ -429,5 +430,45 @@ describe('answering a problem report', () => {
     expect(snapshot.entries.find((entry) => entry.id === 'e:1')).toMatchObject({
       outcome: { kind: 'skipped' },
     })
+  })
+})
+
+describe('signing in', () => {
+  it('settles the notice that asked for it once the agent reports it is signed in', async () => {
+    let starts = 0
+    const agents: Record<string, unknown> = {
+      name: () => 'Agent',
+      authRequired: () => {},
+      ensureReady: async () => ({
+        init: { capabilities: {} },
+        connection: {
+          newSession: () => {
+            starts++
+            // The retry after the sign-in is left starting.
+            if (starts > 1) return new Promise(() => {})
+            return Promise.reject(new HostError('auth_required', 'Run the login command'))
+          },
+        },
+      }),
+    }
+    const { sessions, agents: hooked } = manager({}, { agents })
+    await sessions.load()
+    const summary = await sessions.create({
+      agentId: 'cline',
+      projectPath: '/repo',
+      prompt: [{ type: 'text', text: 'Hello' }],
+    })
+    const notices = async () =>
+      (await sessions.open(summary.id)).entries.filter((entry) => entry.kind === 'notice')
+    expect(await notices()).toMatchObject([
+      { severity: 'error', description: 'Run the login command' },
+    ])
+    hooked.hooks.signedIn('cline')
+
+    await vi.waitFor(() => expect(starts).toBe(2))
+    const [notice, ...rest] = await notices()
+    expect(rest).toEqual([])
+    expect(notice).toMatchObject({ severity: 'info' })
+    expect(notice).not.toMatchObject({ description: 'Run the login command' })
   })
 })
