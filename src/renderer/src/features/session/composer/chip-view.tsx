@@ -7,6 +7,7 @@ import {
   GlobalIcon,
 } from '@hugeicons/core-free-icons'
 import { githubReferenceFromLink, type GitHubReference } from '@shared/git'
+import { SiteIconImage } from '@renderer/components/site-icon-image'
 import { ProjectPathContext } from '@renderer/features/files/file-refs'
 import { ReferenceIcon } from '@renderer/features/git/gh-reference'
 import {
@@ -66,14 +67,7 @@ function SiteIcon({ url }: { url: string }) {
   const icon = useSiteIcon(url)
   useEffect(loadSiteIcons, [])
   if (!icon) return <Glyph icon={GlobalIcon} className="size-3.5 shrink-0 text-tertiary" />
-  return (
-    <img
-      src={icon}
-      alt=""
-      draggable={false}
-      className="size-3.5 shrink-0 rounded-sm object-contain"
-    />
-  )
+  return <SiteIconImage src={icon} className="size-3.5 shrink-0 rounded-sm object-contain" />
 }
 
 /** A GitHub issue or pull request as the thread's reference: its state, number and title. */

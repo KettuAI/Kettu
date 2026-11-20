@@ -2,6 +2,7 @@
 
 import { useEffect, type CSSProperties, type ReactNode } from 'react'
 import { Icon } from '@renderer/components/affect/app-shell'
+import { SiteIconImage } from '@renderer/components/site-icon-image'
 import { useDark } from '@renderer/hooks/use-dark'
 import { useHostScope } from '@renderer/stores/host-scope'
 import { loadSiteIcons, requestSiteIcon, useSiteIcon } from '@renderer/stores/site-icons'
@@ -91,7 +92,7 @@ export function ItemTile({
   if (logo !== null) {
     return (
       <span aria-hidden className="ui-as-int-logo k-mkt-tile" data-size={sized}>
-        {logo && <img className="k-mkt-tile__logo" src={logo} alt="" draggable={false} />}
+        {logo && <SiteIconImage className="k-mkt-tile__logo" src={logo} />}
       </span>
     )
   }

@@ -30,6 +30,7 @@ import {
   ContextMenuShortcut,
   ContextMenuTrigger,
 } from '@renderer/components/ui/context-menu'
+import { SiteIconImage } from '@renderer/components/site-icon-image'
 import { HoverCard, HoverCardContent, HoverCardTrigger } from '@renderer/components/ui/hover-card'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
 import {
@@ -123,7 +124,7 @@ function SiteTile({ url }: { url: string }) {
   if (icon) {
     return (
       <span aria-hidden className={tile}>
-        <img src={icon} alt="" draggable={false} className="size-full object-contain" />
+        <SiteIconImage src={icon} className="size-full object-contain" />
       </span>
     )
   }

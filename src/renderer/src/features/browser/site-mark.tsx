@@ -1,5 +1,6 @@
 import { useEffect } from 'react'
 import { Globe02Icon } from '@hugeicons/core-free-icons'
+import { SiteIconImage } from '@renderer/components/site-icon-image'
 import { PaneIcon } from '@renderer/features/shell/panel-button'
 import { loadSiteIcons, useSiteIcon } from '@renderer/stores/site-icons'
 
@@ -7,6 +8,6 @@ import { loadSiteIcons, useSiteIcon } from '@renderer/stores/site-icons'
 export function SiteMark({ url }: { url: string | null }) {
   useEffect(loadSiteIcons, [])
   const icon = useSiteIcon(url ?? '')
-  if (icon) return <img src={icon} alt="" aria-hidden className="kp-sitemark" />
+  if (icon) return <SiteIconImage src={icon} className="kp-sitemark" />
   return <PaneIcon icon={Globe02Icon} size={14} className="kp-tab__icon" />
 }
