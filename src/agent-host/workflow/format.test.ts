@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { WORKFLOW_DESCRIPTION_CHARS, workflowText } from '@shared/workflow'
 import { parseWorkflow, workflowHash, toolProblems } from './format'
 
 const STEPS = `
@@ -29,6 +30,47 @@ function problemsOf(text: string): string[] {
 }
 
 describe('Workflow files', () => {
+  it('reads when to use a workflow, with a per-language override and a fallback', () => {
+    const read = parseWorkflow(
+      workflow(`when: Use for a feature with a separate review.
+locales:
+  en-GB:
+    name: Feature and review
+  zh-CN:
+    when: 功能需要单独审查时使用。
+${STEPS}`),
+    )
+    expect(read.problems).toEqual([])
+    expect(workflowText(read.workflow!, 'zh-CN')).toMatchObject({
+      when: '功能需要单独审查时使用。',
+    })
+    expect(workflowText(read.workflow!, 'en-GB')).toMatchObject({
+      name: 'Feature and review',
+      when: 'Use for a feature with a separate review.',
+    })
+    expect(parseWorkflow(workflow(STEPS)).workflow).not.toHaveProperty('when')
+  })
+
+  it('refuses non-text, multiline and overlong when fields', () => {
+    expect(
+      problemsOf(
+        workflow(`when: false
+locales:
+  en-GB:
+    when: |-
+      First line
+      Second line
+  fr:
+    when: ${'x'.repeat(WORKFLOW_DESCRIPTION_CHARS + 1)}
+${STEPS}`),
+      ),
+    ).toEqual([
+      'when: must be text',
+      'locales.en-GB.when: must be one line',
+      `locales.fr.when: is longer than ${WORKFLOW_DESCRIPTION_CHARS} characters`,
+    ])
+  })
+
   it('reads steps, arrows back, reviews and defaults', () => {
     const read = parseWorkflow(workflow(STEPS))
     expect(read.problems).toEqual([])

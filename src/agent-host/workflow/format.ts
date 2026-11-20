@@ -95,6 +95,15 @@ function text(
   return trimmed
 }
 
+function whenText(data: Data, path: string, p: Problems): string | null {
+  const when = text(data, 'when', path, WORKFLOW_DESCRIPTION_CHARS, p, true)
+  if (when !== null && /[\r\n\u2028\u2029]/u.test(when)) {
+    p.add(join(path, 'when'), 'must be one line')
+    return null
+  }
+  return when
+}
+
 /** A single string or a list of them, as `to` and `review_of` take either. */
 function names(value: unknown, path: string, p: Problems): string[] {
   if (value === undefined || value === null) return []
@@ -278,15 +287,17 @@ function readLocales(value: unknown, p: Problems): Record<string, WorkflowLocale
       continue
     }
     if (!isData(raw)) {
-      p.add(path, 'must be a mapping with name, description and steps')
+      p.add(path, 'must be a mapping with name, description, when or steps')
       continue
     }
-    knownKeys(raw, path, ['name', 'description', 'steps'], p)
+    knownKeys(raw, path, ['name', 'description', 'when', 'steps'], p)
     const locale: WorkflowLocale = {}
     const name = text(raw, 'name', path, WORKFLOW_NAME_CHARS, p, true)
     if (name !== null) locale.name = name
     const description = text(raw, 'description', path, WORKFLOW_DESCRIPTION_CHARS, p, true)
     if (description !== null) locale.description = description
+    const when = whenText(raw, path, p)
+    if (when !== null) locale.when = when
     const steps = own(raw, 'steps')
     if (steps !== undefined && steps !== null) {
       if (!isData(steps)) p.add(join(path, 'steps'), 'must map step ids to names')
@@ -380,10 +391,16 @@ function readWorkflow(value: unknown, p: Problems): Workflow | null {
     p.add('', 'the file must be a mapping')
     return null
   }
-  knownKeys(value, '', ['format', 'name', 'description', 'locales', 'send_back_limit', 'steps'], p)
+  knownKeys(
+    value,
+    '',
+    ['format', 'name', 'description', 'when', 'locales', 'send_back_limit', 'steps'],
+    p,
+  )
   if (own(value, 'format') !== WORKFLOW_FORMAT) p.add('format', `must be ${WORKFLOW_FORMAT}`)
   const name = text(value, 'name', '', WORKFLOW_NAME_CHARS, p)
   const description = text(value, 'description', '', WORKFLOW_DESCRIPTION_CHARS, p, true) ?? ''
+  const when = whenText(value, '', p)
   const locales = readLocales(own(value, 'locales'), p)
   const sendBackLimit =
     limit(own(value, 'send_back_limit'), 'send_back_limit', p) ?? DEFAULT_SEND_BACK_LIMIT
@@ -400,6 +417,7 @@ function readWorkflow(value: unknown, p: Problems): Workflow | null {
     format: WORKFLOW_FORMAT,
     name,
     description,
+    ...(when === null ? {} : { when }),
     locales,
     sendBackLimit,
     steps: steps as WorkflowStep[],

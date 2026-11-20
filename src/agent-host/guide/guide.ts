@@ -174,10 +174,10 @@ export function serviceInstructions(flags: GuideFlags): string {
       'reply. Kettu tells you when its turn ends, so never wait for it in a loop. Topic sessions.',
     'Workflows: ' +
       (flags.suggest
-        ? "for a requirement large enough for stages, suggest one of the user's workflows from " +
-          'list_workflows with suggest_workflow instead of doing it all here; '
+        ? 'for work that needs stages or spans platforms or modules, use list_workflows to find ' +
+          'a workflow in the library or the Kettu Marketplace and use suggest_workflow. '
         : '') +
-      "write one with create_workflow only when the user asks. A step's session follows its " +
+      "Use create_workflow when the user asks for a workflow to keep. A step's session follows its " +
       'first message and reports with report_step. Topic workflows.',
     `Plan: ${PLAN_TOOL} shows the progress of a task of two or more steps; its description has ` +
       'the rules.',

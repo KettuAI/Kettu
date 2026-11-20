@@ -152,7 +152,7 @@ describe('what an agent reads before it searches its tools', () => {
       .filter((tool) => tool._meta?.['anthropic/alwaysLoad'] === true)
       .map((tool) => tool.name)
     expect(loaded.sort()).toEqual(
-      ['create_artifact', 'set_plan', 'start_session', 'suggest_workflow'].sort(),
+      ['create_artifact', 'list_workflows', 'set_plan', 'start_session', 'suggest_workflow'].sort(),
     )
   })
 })
