@@ -43,6 +43,7 @@ import { addressKey, isPort, MAX_OWN_ADDRESSES, parseDirectAddress } from '@shar
 import type { DirectAddress } from '@shared/remote/protocol'
 import { DEVICE_NAME_CHARS, isDeviceName } from '@shared/remote/device'
 import { THEME_ID } from '@shared/themes'
+import { WORKING_STEP_LIMITS } from '@shared/workflow'
 import { isAbsolutePath } from '../agent-host/paths'
 import {
   AUTO_AGENT_HARNESSES,
@@ -221,6 +222,7 @@ const SECTION_FIELDS = {
     inView: oneOf(...IN_VIEW_MINUTES),
     limit: oneOf(...IDLE_LIMITS),
   },
+  workflow: { maxWorkingSteps: oneOf(...WORKING_STEP_LIMITS) },
   computerUse: {
     enabled: isBoolean,
     allowedApps: isComputerApps,
@@ -1529,6 +1531,7 @@ export function hostSettings(settings: SettingsFile, systemLocale: Locale): Host
     marketplace: structuredClone(settings.marketplace),
     startModes: { ...settings.startModes },
     idleSessions: { ...settings.idleSessions },
+    workflow: { ...settings.workflow },
     usage: { fromComputer: settings.usage.fromComputer },
     sessionTitles: settings.general.sessionTitles,
     lightModel: structuredClone(settings.general.lightModel),
@@ -1562,6 +1565,7 @@ const HOST_SECTIONS: ReadonlySet<SettingsSection> = new Set([
   'marketplace',
   'startModes',
   'idleSessions',
+  'workflow',
   'usage',
   'computerUse',
   'cloud',

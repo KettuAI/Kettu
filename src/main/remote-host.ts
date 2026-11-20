@@ -413,6 +413,8 @@ export class RemoteHost {
 
   /** What the agent host says needs the user, which devices may be notified of. */
   attention(attention: Extract<HostToMain, { type: 'host:attention' }>): void {
+    // Devices are pushed nothing for a workflow task yet.
+    if ('taskId' in attention) return
     this.toServer({ type: 'remote-host:attention', attention })
   }
 

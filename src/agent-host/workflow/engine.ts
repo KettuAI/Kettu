@@ -5,8 +5,9 @@
 
 import { randomBytes } from 'node:crypto'
 import {
+  DEFAULT_WORKING_STEPS,
   MAX_TASK_NOTES,
-  MAX_WORKING_STEPS,
+  MAX_TASK_STEPS,
   isBackArrow,
   stepIndex,
   type CheckLine,
@@ -15,6 +16,7 @@ import {
   type ReportCheck,
   type SentBack,
   type SessionTaskRef,
+  type StepTools,
   type WorkflowOutcome,
   type WorkflowStep,
   type StepPick,
@@ -49,7 +51,7 @@ import {
   type PickInput,
   type WorkflowAgent,
 } from './picks'
-import { againPrompt, notePrompt, reminderPrompt, RESUME_PROMPT, stepPrompt } from './prompts'
+import { againPrompt, notePrompt, reminderPrompt, resumePrompt, stepPrompt } from './prompts'
 import { canPinStep, LIVE, needsOf, summaryOf, viewOf, WORKING } from './views'
 
 /** Refused picks in a row before the task waits for the user. */
@@ -101,7 +103,7 @@ export interface TaskDocuments {
 export interface TaskEvents {
   changed(view: TaskView): void
   removed(taskId: string): void
-  /** The task first needs the user, or it ended. */
+  /** The task starts to need the user, or it ended or was cancelled. */
   attention(task: TaskSummary, kind: 'needs-you' | 'ended'): void
 }
 
@@ -126,6 +128,8 @@ export interface TaskEngineDeps {
   /** The pick the tray's option values stand for. */
   pickOf(agentId: AgentId, options: Record<string, string | boolean>): StepPick
   events: TaskEvents
+  /** Step sessions working at once across every task, as the user set it. */
+  workingLimit?(): number
   log: LogFn
   now?(): number
   random?(): string
@@ -155,8 +159,8 @@ export interface PickResult {
 export interface TaskSessionHooks {
   /** The step's session exists, before anything is sent. */
   sessionCreated(sessionId: string, ref: SessionTaskRef): void
-  /** A turn of the session ended. */
-  turnEnded(sessionId: string): void
+  /** A turn of the session ended; `byUser` when the user's own message started it. */
+  turnEnded(sessionId: string, turn: { byUser: boolean }): void
   /** A request waits for the user in the session, or the last was answered. */
   waiting(sessionId: string, waiting: boolean): void
   sessionGone(sessionId: string): void
@@ -207,7 +211,11 @@ export class TaskEngine implements TaskSessionHooks {
             changed = true
           } else if ((round.state === 'working' || round.state === 'picking') && round.sessionId) {
             round.reminded = false
-            void this.message(round.sessionId, RESUME_PROMPT)
+            const owed =
+              round.state === 'picking' && round.picks
+                ? round.picks.needed.filter((id) => !round.picks!.made.includes(id))
+                : null
+            void this.message(round.sessionId, resumePrompt(owed))
           }
         }
         if (changed) this.save(task)
@@ -244,6 +252,12 @@ export class TaskEngine implements TaskSessionHooks {
     if (!ref) return null
     const round = this.tasks.get(ref.taskId)?.rounds.find((r) => r.id === ref.roundId)
     return round ? { taskId: ref.taskId, stepId: round.stepId, roundId: round.id } : null
+  }
+
+  /** The MCP servers and Skills a step's session is handed, whoever does the step. */
+  toolsOf(ref: SessionTaskRef): StepTools | null {
+    const task = this.tasks.get(ref.taskId)
+    return task ? (stepOf(task.workflow, ref.stepId)?.tools ?? null) : null
   }
 
   private task(taskId: string): TaskRecord {
@@ -500,22 +514,32 @@ export class TaskEngine implements TaskSessionHooks {
     return `r${task.rounds.length + 1}-${this.random().slice(0, 6)}`
   }
 
-  /** Starts queued rounds while fewer than the limit of step sessions work, oldest first. */
+  /**
+   * Starts queued rounds, oldest first, while fewer step sessions work than the host's limit and
+   * than a task's own, so one task with parallel branches leaves room for the others.
+   */
   private pump(): void {
     if (this.closed) return
+    const limit = this.deps.workingLimit?.() ?? DEFAULT_WORKING_STEPS
     let working = 0
+    const byTask = new Map<string, number>()
     const queued: { task: TaskRecord; round: RoundRecord }[] = []
     for (const task of this.tasks.values()) {
       if (task.status !== 'running') continue
       for (const round of task.rounds) {
-        if (WORKING.has(round.state)) working++
-        else if (round.state === 'queued') queued.push({ task, round })
+        if (WORKING.has(round.state)) {
+          working++
+          byTask.set(task.id, (byTask.get(task.id) ?? 0) + 1)
+        } else if (round.state === 'queued') queued.push({ task, round })
       }
     }
     queued.sort((a, b) => a.round.queuedAt - b.round.queuedAt)
     for (const { task, round } of queued) {
-      if (working >= MAX_WORKING_STEPS) break
+      if (working >= limit) break
+      const own = byTask.get(task.id) ?? 0
+      if (own >= MAX_TASK_STEPS) continue
       working++
+      byTask.set(task.id, own + 1)
       round.state = 'starting'
       this.save(task)
       void this.launch(task.id, round.id)
@@ -538,9 +562,15 @@ export class TaskEngine implements TaskSessionHooks {
       }
       // Before the prompt goes, so what the agent writes counts as this round's.
       round.startedAt = this.now()
-      if (round.sessionId && this.deps.sessions.has(round.sessionId)) {
-        this.bySession.set(round.sessionId, { taskId, roundId })
-        await this.deps.sessions.send(round.sessionId, againPrompt(task, round, where))
+      let sessionId = round.sessionId
+      if (sessionId && this.deps.sessions.has(sessionId)) {
+        this.bySession.set(sessionId, { taskId, roundId })
+        // A session made for this round before a restart may never have had its first message.
+        const own = !task.rounds.some((r) => r !== round && r.sessionId === sessionId)
+        await this.deps.sessions.send(
+          sessionId,
+          own ? stepPrompt(task, round, where) : againPrompt(task, round, where),
+        )
       } else {
         const step = stepOf(task.workflow, round.stepId)!
         const options =
@@ -555,11 +585,16 @@ export class TaskEngine implements TaskSessionHooks {
           title: `${task.title} · ${step.name}`,
           task: { taskId, stepId: round.stepId, roundId },
         })
+        sessionId = summary.id
         round.sessionId = summary.id
         this.bySession.set(summary.id, { taskId, roundId })
       }
       await this.locked(() => {
-        if (round.state !== 'starting') return
+        if (round.state !== 'starting') {
+          // Cancelled, ended or sent back while its session started: it must not work on.
+          if (sessionId) void this.deps.sessions.cancel(sessionId).catch(() => {})
+          return
+        }
         round.state = 'working'
         this.save(task)
       })
@@ -639,7 +674,10 @@ export class TaskEngine implements TaskSessionHooks {
   sessionCreated(sessionId: string, ref: SessionTaskRef): void {
     this.bySession.set(sessionId, { taskId: ref.taskId, roundId: ref.roundId })
     const found = this.roundOf(ref.taskId, ref.roundId)
-    if (found && found.round.sessionId === null) found.round.sessionId = sessionId
+    if (!found || found.round.sessionId !== null) return
+    found.round.sessionId = sessionId
+    // Kept at once, so a restart before the step starts goes on in this session.
+    this.save(found.task)
   }
 
   working(sessionId: string): boolean {
@@ -647,7 +685,9 @@ export class TaskEngine implements TaskSessionHooks {
     return found !== null && (found.round.state === 'working' || found.round.state === 'starting')
   }
 
-  turnEnded(sessionId: string): void {
+  turnEnded(sessionId: string, turn: { byUser: boolean }): void {
+    // A turn that answered the user's own message owes no report; only the agent's own turns do.
+    if (turn.byUser) return
     void this.locked(() => {
       const found = this.roundOfSession(sessionId)
       if (!found) return
@@ -1155,11 +1195,14 @@ export class TaskEngine implements TaskSessionHooks {
         await this.follow(task, round)
         return viewOf(task)
       }
-      const key = arrowKey(round.stepId, null)
-      task.arrows[key] = (task.arrows[key] ?? 0) + 1
+      const text = note?.trim() || null
       const comments = round.document
         ? await this.deps.documents.openComments(round.document.artifactId).catch(() => [])
         : []
+      // The next round must have something to fix.
+      if (text === null && comments.length === 0) throw invalidParams(t('tasks.sendBackEmpty'))
+      const key = arrowKey(round.stepId, null)
+      task.arrows[key] = (task.arrows[key] ?? 0) + 1
       round.state = 'done'
       for (const [stepId, held] of Object.entries(task.ahead)) {
         if (held.roundId === round.id) delete task.ahead[stepId]
@@ -1170,7 +1213,7 @@ export class TaskEngine implements TaskSessionHooks {
           stepId: round.stepId,
           roundId: round.id,
           outcome: null,
-          note: note?.trim() || null,
+          note: text,
           comments,
           by: 'person',
           count: task.arrows[key]!,
@@ -1294,6 +1337,7 @@ export class TaskEngine implements TaskSessionHooks {
       task.status = 'cancelled'
       task.endedAt = this.now()
       this.save(task)
+      this.deps.events.attention(summaryOf(task), 'ended')
       this.pump()
       return viewOf(task)
     })
@@ -1364,7 +1408,12 @@ export class TaskEngine implements TaskSessionHooks {
     })
   }
 
-  /** Plan limits or agents changed: steps held by them may start now. */
+  /** The user changed how many step sessions may work at once. */
+  limitChanged(): void {
+    void this.locked(() => this.pump())
+  }
+
+  /** Plan limits, agents or the host's tools changed: steps held by them may start now. */
   recheck(): void {
     void this.locked(() => {
       for (const task of this.tasks.values()) {
@@ -1442,10 +1491,13 @@ export class TaskEngine implements TaskSessionHooks {
     this.timer.unref?.()
   }
 
-  /** Stores the task, tells clients and notifies once when it first needs the user. */
+  /**
+   * Stores the task, tells clients and notifies once each time it starts to need the user. A
+   * step's session asking notifies by itself, so that alone does not.
+   */
   private save(task: TaskRecord): void {
     task.updatedAt = this.now()
-    const needing = needsOf(task).length > 0
+    const needing = needsOf(task).some((need) => need.kind !== 'asking')
     if (needing && !task.needing) {
       task.unread = true
       this.deps.events.attention(summaryOf(task), 'needs-you')

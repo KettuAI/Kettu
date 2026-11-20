@@ -1037,7 +1037,10 @@ export class Hosts {
         break
       case 'host:attention':
         for (const listener of this.attentionListeners) listener(message)
-        this.remote.post({ type: 'remote-host:attention', attention: message })
+        // Devices are pushed nothing for a workflow task yet.
+        if (!('taskId' in message)) {
+          this.remote.post({ type: 'remote-host:attention', attention: message })
+        }
         break
       case 'host:waiting':
         if (typeof message.sessions === 'object' && message.sessions !== null) {

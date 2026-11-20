@@ -12,8 +12,12 @@ export const MAX_OUTCOMES = 8
 export const MAX_TOOLS = 20
 export const DEFAULT_SEND_BACK_LIMIT = 3
 export const MAX_SEND_BACK_LIMIT = 20
-/** Step sessions working at once, across every task of the host. */
-export const MAX_WORKING_STEPS = 3
+/** Step sessions working at once in one task, so one task never holds every free session. */
+export const MAX_TASK_STEPS = 3
+/** Step sessions working at once across every task of the host, as the user may set it. */
+export const WORKING_STEP_LIMITS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12] as const
+export type WorkingStepLimit = (typeof WORKING_STEP_LIMITS)[number]
+export const DEFAULT_WORKING_STEPS: WorkingStepLimit = 6
 export const WORKFLOW_NAME_CHARS = 80
 export const WORKFLOW_DESCRIPTION_CHARS = 2_000
 export const STEP_PROMPT_CHARS = 20_000
@@ -286,6 +290,7 @@ export type BlockedReason =
       agentId: AgentId
       why: 'disabled' | 'removed' | 'harness' | 'model' | 'effort' | 'no_kettu' | 'not_ready'
     }
+  | { kind: 'tools'; missing: string[] } // named MCP servers or Skills not installed and on
   | { kind: 'no_agent' } // no agent Auto may pick
   | { kind: 'no_picker' } // no agent handed off to it, so it needs a pin
   | { kind: 'picking'; roundId: string } // waits for that round's agent to pick

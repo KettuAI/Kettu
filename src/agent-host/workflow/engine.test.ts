@@ -3,7 +3,12 @@ import os from 'node:os'
 import path from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import type { SessionSummary } from '@shared/agent-host'
-import { MAX_WORKING_STEPS, type StepPick, type TaskView } from '@shared/workflow'
+import {
+  DEFAULT_WORKING_STEPS,
+  MAX_TASK_STEPS,
+  type StepPick,
+  type TaskView,
+} from '@shared/workflow'
 import type { AgentId } from '@shared/thread'
 import { TaskEngine, type TaskEngineDeps, type TaskStepStart } from './engine'
 import type { MergeResult, TaskGit } from './git'
@@ -81,6 +86,78 @@ steps:
         end: dropped
 `
 
+/** One step that names the MCP server and Skill it works with. */
+const TOOLS = `format: 1
+name: Tools
+steps:
+  - id: research
+    name: Research
+    prompt: Look it up.
+    tools:
+      mcp: [docs]
+      skills: [review-kit]
+    outcomes:
+      - name: Done
+        end: done
+`
+
+/** Split runs four branches at once, more than one task may run together. */
+const WIDE = `format: 1
+name: Wide
+steps:
+  - id: split
+    name: Split
+    prompt: Split it.
+    outcomes:
+      - name: Done
+        to: [a, b, c, d]
+  - id: a
+    name: A
+    prompt: A.
+    outcomes:
+      - name: Done
+        end: done
+  - id: b
+    name: B
+    prompt: B.
+    outcomes:
+      - name: Done
+        end: done
+  - id: c
+    name: C
+    prompt: C.
+    outcomes:
+      - name: Done
+        end: done
+  - id: d
+    name: D
+    prompt: D.
+    outcomes:
+      - name: Done
+        end: done
+`
+
+/** A person decides first, so no step has a session when the task needs them. */
+const ASK_FIRST = `format: 1
+name: Ask first
+steps:
+  - id: decide
+    name: Decide
+    by: you
+    prompt: Go ahead?
+    outcomes:
+      - name: Yes
+        to: build
+      - name: No
+        end: dropped
+  - id: build
+    name: Build
+    prompt: Build it.
+    outcomes:
+      - name: Done
+        end: done
+`
+
 function agent(id: AgentId, models: string[], extra: Partial<WorkflowAgent> = {}): WorkflowAgent {
   return {
     id,
@@ -115,6 +192,14 @@ async function harness(
     agents?: WorkflowAgent[]
     stored?: TaskRecord[]
     merge?: (branch: string) => MergeResult
+    /** The MCP servers and Skills the host knows, which a workflow may name. */
+    known?: { mcp: string[]; skills: string[] }
+    /** Sessions there before the engine loads. */
+    live?: string[]
+    /** Holds a step's session start after it exists, until it settles. */
+    starting?: () => Promise<void>
+    comments?: string[]
+    workingLimit?: () => number
   } = {},
 ) {
   const dir = mkdtempSync(path.join(os.tmpdir(), 'kettu-tasks-'))
@@ -123,7 +208,10 @@ async function harness(
   const library = new WorkflowLibrary({
     dir,
     file: { load: async () => data, save: () => {}, flush: async () => {} },
-    knownTools: () => ({ mcp: new Set(), skills: new Set() }),
+    knownTools: () => ({
+      mcp: new Set(options.known?.mcp ?? []),
+      skills: new Set(options.known?.skills ?? []),
+    }),
     log: () => {},
   })
   await library.load()
@@ -139,7 +227,7 @@ async function harness(
   const created: TaskStepStart[] = []
   const sent: { sessionId: string; text: string }[] = []
   const cancelled: string[] = []
-  const sessions = new Set<string>()
+  const sessions = new Set<string>(options.live ?? [])
   const merges: { cwd: string; branch: string }[] = []
   const uncommitted = new Map<string, string[]>()
   const documents = new Set<string>()
@@ -176,6 +264,9 @@ async function harness(
         created.push(params)
         const id = `s${++n}`
         sessions.add(id)
+        // As the session manager does, before the session starts.
+        engine.sessionCreated(id, params.task)
+        await options.starting?.()
         return { id } as SessionSummary
       },
       send: async (sessionId, text) => {
@@ -204,7 +295,7 @@ async function harness(
         documents.has(artifactId)
           ? { ok: true, version: 1, title: 'Design' }
           : { ok: false, why: 'not_written' },
-      openComments: async () => ['Say how it is undone'],
+      openComments: async () => options.comments ?? ['Say how it is undone'],
     },
     resolveProject: async (value) => value,
     agents: () =>
@@ -220,6 +311,7 @@ async function harness(
       removed: () => {},
       attention: (task, kind) => events.attention.push(`${task.title}:${kind}`),
     },
+    ...(options.workingLimit ? { workingLimit: options.workingLimit } : {}),
     log: () => {},
     now: () => 1_000,
     random: () => (++ids).toString(16).padStart(12, '0'),
@@ -552,11 +644,11 @@ describe('the task engine', () => {
     expect(pinned.rounds.find((r) => r.stepId === 'build')?.pickedBy).toEqual({ kind: 'task_pin' })
   })
 
-  it(`works at most ${MAX_WORKING_STEPS} step sessions at once across tasks`, async () => {
+  it(`works at most ${DEFAULT_WORKING_STEPS} step sessions at once across tasks`, async () => {
     const h = await harness({ workflows: { parallel: PARALLEL } })
-    for (let i = 0; i < MAX_WORKING_STEPS + 1; i++) await h.start('parallel')
+    for (let i = 0; i < DEFAULT_WORKING_STEPS + 1; i++) await h.start('parallel')
     const states = h.engine.list().map((t) => h.engine.get(t.id).rounds[0]!.state)
-    expect(states.filter((s) => s === 'working')).toHaveLength(MAX_WORKING_STEPS)
+    expect(states.filter((s) => s === 'working')).toHaveLength(DEFAULT_WORKING_STEPS)
     expect(states.filter((s) => s === 'queued')).toHaveLength(1)
     const busy = h.engine.list().find((t) => h.engine.get(t.id).rounds[0]!.state === 'working')!
     await h.engine.cancel(busy.id)
@@ -570,11 +662,11 @@ describe('the task engine', () => {
     const h = await harness({ workflows: { parallel: PARALLEL } })
     const task = await h.start('parallel')
     const session = h.sessionOf(task.id, 'split')
-    h.engine.turnEnded(session)
+    h.engine.turnEnded(session, { byUser: false })
     await h.settle()
     expect(h.sent.at(-1)).toMatchObject({ sessionId: session })
     expect(h.sent.at(-1)!.text).toContain('report_step')
-    h.engine.turnEnded(session)
+    h.engine.turnEnded(session, { byUser: false })
     await h.settle()
     expect(h.engine.get(task.id).rounds[0]!.stuck?.reason).toBe('no_report')
     expect(h.engine.working(session)).toBe(false)
@@ -598,6 +690,218 @@ describe('the task engine', () => {
       done,
     )
     expect(report.accepted).toBe(true)
+  })
+
+  it('hands a step its tools whoever does it, and holds it only for a tool the host lacks', async () => {
+    const lacking = agent('claude-code', ['opus', 'sonnet'])
+    const h = await harness({
+      workflows: { tools: TOOLS },
+      known: { mcp: ['docs'], skills: ['review-kit'] },
+      agents: [lacking],
+    })
+    const task = await h.start('tools')
+    const view = h.engine.get(task.id)
+    expect(h.created).toHaveLength(0)
+    expect(view.waiting).toEqual([
+      expect.objectContaining({
+        stepId: 'research',
+        blocked: { kind: 'tools', missing: ['docs', 'review-kit'] },
+      }),
+    ])
+    expect(view.needs).toEqual([expect.objectContaining({ kind: 'blocked', stepId: 'research' })])
+
+    // Installed and on, they go to the step's session even though the agent's own list has neither.
+    lacking.mcp = new Set(['docs'])
+    lacking.skills = new Set(['review-kit'])
+    h.engine.recheck()
+    await h.settle()
+    expect(h.created).toHaveLength(1)
+    const round = h.engine.get(task.id).rounds[0]!
+    expect(round.state).toBe('working')
+    expect(h.engine.toolsOf({ taskId: task.id, stepId: 'research', roundId: round.id })).toEqual({
+      mcp: ['docs'],
+      skills: ['review-kit'],
+    })
+  })
+
+  it('never stops a step for a turn that answered the user', async () => {
+    const h = await harness({ workflows: { parallel: PARALLEL } })
+    const task = await h.start('parallel')
+    const session = h.sessionOf(task.id, 'split')
+    const before = h.sent.length
+    h.engine.turnEnded(session, { byUser: true })
+    h.engine.turnEnded(session, { byUser: true })
+    h.engine.turnEnded(session, { byUser: true })
+    await h.settle()
+    expect(h.sent).toHaveLength(before)
+    expect(h.engine.get(task.id).rounds[0]).toMatchObject({ state: 'working', stuck: null })
+    // The agent's own turn still owes the report.
+    h.engine.turnEnded(session, { byUser: false })
+    await h.settle()
+    expect(h.sent.at(-1)!.text).toContain('report_step')
+    expect(h.engine.get(task.id).rounds[0]!.state).toBe('working')
+  })
+
+  it('tells a step that was picking after a restart to pick, not to report', async () => {
+    const first = await harness({ workflows: { parallel: PARALLEL } })
+    const task = await first.start('parallel')
+    const session = first.sessionOf(task.id, 'split')
+    await first.engine.report(session, done)
+    await first.settle()
+    const second = await harness({
+      workflows: { parallel: PARALLEL },
+      stored: [...first.store.values()],
+    })
+    await second.settle()
+    const resume = second.sent.find((m) => m.sessionId === session)!.text
+    expect(resume).toContain('pick_step_agents')
+    expect(resume).toContain('"front"')
+    expect(resume).toContain('"back"')
+    expect(resume).not.toContain('call `report_step`')
+  })
+
+  it('refuses a workflow whose outcome neither goes on nor ends', async () => {
+    const h = await harness()
+    const entry = await h.library.add({
+      kind: 'file',
+      name: 'nowhere.yaml',
+      text: `format: 1
+name: Nowhere
+steps:
+  - id: build
+    name: Build
+    prompt: Build it.
+    outcomes:
+      - name: Done
+        end: done
+      - name: Lost
+        end: null
+`,
+    })
+    expect(entry.problems).toEqual([
+      expect.objectContaining({
+        at: 'steps[0].outcomes[1]',
+        message: expect.stringContaining('needs to'),
+      }),
+    ])
+    await expect(h.start(entry.id)).rejects.toMatchObject({ code: 'invalid_params' })
+  })
+
+  it('stops a step session that was still starting when the task was cancelled', async () => {
+    let release = (): void => {}
+    const gate = new Promise<void>((resolve) => (release = resolve))
+    const h = await harness({ workflows: { parallel: PARALLEL }, starting: () => gate })
+    const task = await h.start('parallel')
+    expect(h.engine.get(task.id).rounds[0]!.state).toBe('starting')
+    await h.engine.cancel(task.id)
+    // A cancel before the session has a turn stops nothing; it must come once its prompt went.
+    const early = h.cancelled.length
+    release()
+    await h.settle()
+    const round = h.engine.get(task.id).rounds[0]!
+    expect(round.state).toBe('stopped')
+    expect(h.cancelled.slice(early)).toEqual([round.sessionId])
+  })
+
+  it('gives a step whose session was made before a restart the whole task again', async () => {
+    const first = await harness({ workflows: { parallel: PARALLEL } })
+    const task = await first.start('parallel')
+    const stored = structuredClone([...first.store.values()])
+    const round = stored[0]!.rounds[0]!
+    // The host stopped after the step's session was made, before it was marked working.
+    round.state = 'starting'
+    const session = round.sessionId!
+    const second = await harness({
+      workflows: { parallel: PARALLEL },
+      stored,
+      live: [session],
+    })
+    await second.settle()
+    expect(second.created).toHaveLength(0)
+    const sent = second.sent.filter((m) => m.sessionId === session).map((m) => m.text)
+    expect(sent.at(-1)).toContain('## The task\n\nAdd an export button')
+    expect(second.engine.get(task.id).rounds[0]!.state).toBe('working')
+  })
+
+  it('notifies from the task itself: once as it needs the user, and when it is cancelled', async () => {
+    const h = await harness({ workflows: { ask: ASK_FIRST, parallel: PARALLEL } })
+    const asked = await h.start('ask')
+    // No step has a session yet; the task still notifies.
+    expect(h.engine.get(asked.id).needs).toEqual([expect.objectContaining({ kind: 'person' })])
+    expect(h.events.attention).toEqual(['Add an export button:needs-you'])
+
+    h.events.attention.length = 0
+    const task = await h.start('parallel')
+    const session = h.sessionOf(task.id, 'split')
+    // A step's session asking notifies by itself, however often it asks.
+    h.engine.waiting(session, true)
+    h.engine.waiting(session, false)
+    h.engine.waiting(session, true)
+    await h.settle()
+    expect(h.engine.get(task.id).needs).toEqual([expect.objectContaining({ kind: 'asking' })])
+    expect(h.events.attention).toEqual([])
+
+    await h.engine.cancel(task.id)
+    expect(h.events.attention).toEqual(['Add an export button:ended'])
+  })
+
+  it('sends a review back only with a note or an open comment', async () => {
+    const h = await harness({ workflows: { reviewed: REVIEWED }, comments: [] })
+    const task = await h.start('reviewed')
+    const design = h.sessionOf(task.id, 'design')
+    h.documents.add('art_x')
+    await h.engine.report(design, { outcome: null, note: null, artifactId: 'art_x' })
+    await h.engine.pick(design, [
+      { step: 'build', agent: 'codex', model: 'gpt', effort: null, reason: 'Plain work' },
+    ])
+    const round = h.engine.get(task.id).rounds[0]!
+    await expect(h.engine.review(task.id, round.id, false, '  ')).rejects.toMatchObject({
+      code: 'invalid_params',
+    })
+    expect(h.engine.get(task.id).rounds[0]!.state).toBe('reviewing')
+    expect(h.engine.get(task.id).arrows.find((a) => a.from === 'design')?.taken).toBe(0)
+    const view = await h.engine.review(task.id, round.id, false, 'Cover undo')
+    expect(view.rounds.find((r) => r.n === 2)?.sentBack).toMatchObject({ note: 'Cover undo' })
+  })
+
+  it(`runs at most ${MAX_TASK_STEPS} steps of one task at once, and the host's total across tasks`, async () => {
+    let limit = DEFAULT_WORKING_STEPS
+    const h = await harness({ workflows: { wide: WIDE }, workingLimit: () => limit })
+    const task = await h.start('wide')
+    const split = h.sessionOf(task.id, 'split')
+    await h.engine.report(split, done)
+    await h.engine.pick(
+      split,
+      ['a', 'b', 'c', 'd'].map((step) => ({
+        step,
+        agent: 'claude-code',
+        model: 'sonnet',
+        effort: null,
+        reason: 'x',
+      })),
+    )
+    await h.settle()
+    const branches = () =>
+      h.engine
+        .get(task.id)
+        .rounds.filter((r) => r.stepId !== 'split')
+        .map((r) => r.state)
+    expect(branches().filter((s) => s === 'working')).toHaveLength(MAX_TASK_STEPS)
+    expect(branches().filter((s) => s === 'queued')).toHaveLength(1)
+
+    // Another task still starts beside it.
+    const other = await h.start('wide')
+    expect(h.engine.get(other.id).rounds[0]!.state).toBe('working')
+
+    // The host's total holds the rest back, and a higher one lets them go.
+    limit = 4
+    const third = await h.start('wide')
+    expect(h.engine.get(third.id).rounds[0]!.state).toBe('queued')
+    limit = 5
+    h.engine.limitChanged()
+    await h.settle()
+    expect(h.engine.get(third.id).rounds[0]!.state).toBe('working')
+    expect(branches().filter((s) => s === 'queued')).toHaveLength(1)
   })
 
   it('keeps a task only once it is not running, and deletes its step sessions with it', async () => {

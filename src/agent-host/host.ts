@@ -1044,6 +1044,7 @@ export class AgentHost {
               platform,
               taken,
               node: options.nodeRuntime,
+              also: record.task ? (this.tasks.toolsOf(record.task)?.mcp ?? []) : [],
               oauth: {
                 access: (server) => this.marketConnections.access(server),
                 bearer: () =>
@@ -1077,7 +1078,12 @@ export class AgentHost {
           }
         },
       },
-      skills: (agentId, kettu) => this.marketSkills.sessionOptions(agentId, kettu),
+      skills: (record, kettu) =>
+        this.marketSkills.sessionOptions(
+          record.agentId,
+          kettu,
+          record.task ? (this.tasks.toolsOf(record.task)?.skills ?? []) : [],
+        ),
       memory: this.memory,
       usage: this.usage,
       cacheTtl:
@@ -1288,6 +1294,7 @@ export class AgentHost {
         removed: (taskId) => this.broadcast({ type: 'task.removed', taskId }),
         attention: (task, kind) => this.taskAttention(task, kind),
       },
+      workingLimit: () => this.settings.workflow.maxWorkingSteps,
       log,
     })
     taskHooks.current = this.tasks
@@ -1494,31 +1501,29 @@ export class AgentHost {
     return { ok: true, version: found.version.version, title: found.artifact.title }
   }
 
-  /** A task's notification: through its latest step's session, which opens the task from there. */
+  /** A task's notification, which opens the task, whether or not any step has a session. */
   private taskAttention(task: TaskSummary, kind: 'needs-you' | 'ended'): void {
-    const step =
-      [...task.steps].reverse().find((s) => s.state === 'needs_you' || s.state === 'error') ??
-      [...task.steps].reverse().find((s) => s.sessionId !== null)
-    const sessionId =
-      step?.sessionId ?? [...task.steps].reverse().find((s) => s.sessionId)?.sessionId
-    if (!sessionId) return
+    const step = [...task.steps]
+      .reverse()
+      .find((s) => s.state === 'needs_you' || s.state === 'error')
     const title =
       kind === 'needs-you'
         ? t('tasks.needsYou', { title: task.title })
-        : task.end === 'done'
-          ? t('tasks.done', { title: task.title })
-          : t('tasks.dropped', { title: task.title })
+        : task.status === 'cancelled'
+          ? t('tasks.cancelled', { title: task.title })
+          : task.end === 'done'
+            ? t('tasks.done', { title: task.title })
+            : t('tasks.dropped', { title: task.title })
     const body =
       kind === 'needs-you'
         ? t('tasks.needsYouBody', { step: step?.name ?? '', workflow: task.workflowName })
         : t('tasks.endedBody', { workflow: task.workflowName, steps: task.steps.length })
     this.options.send({
       type: 'host:attention',
-      sessionId,
-      kind: kind === 'needs-you' ? 'permission' : 'turn-ended',
+      kind: kind === 'needs-you' ? 'task-needs-you' : 'task-ended',
+      taskId: task.id,
       title,
       body,
-      front: this.front(sessionId),
     })
   }
 
@@ -1577,6 +1582,13 @@ export class AgentHost {
     this.startModesChanged(previous, next)
     if (JSON.stringify(previous.idleSessions) !== JSON.stringify(next.idleSessions)) {
       this.idleRelease.notify()
+    }
+    if (previous.workflow.maxWorkingSteps !== next.workflow.maxWorkingSteps) {
+      this.tasks.limitChanged()
+    }
+    // A step held for a tool the host lacked may start once it is installed and on.
+    if (JSON.stringify(previous.marketplace) !== JSON.stringify(next.marketplace)) {
+      this.tasks.recheck()
     }
     this.marketChanged(previous.marketplace.mcp, this.marketKeys)
     if (JSON.stringify(previous.marketplace.mcp) !== JSON.stringify(next.marketplace.mcp)) {

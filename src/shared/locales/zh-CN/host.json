@@ -873,11 +873,13 @@
     "nothingToRetry": "这一步没有可以重试的",
     "stillRunning": "先取消这个需求，再删除",
     "noteEmpty": "备注不能为空",
+    "sendBackEmpty": "退回前写一句要改什么，或者在文档上留评论",
     "cannotPin": "这一步已经开始了，现在不能固定",
     "needsYou": "{{title}} 等你处理",
     "needsYouBody": "{{step}} · {{workflow}}",
     "done": "{{title}} 做完了",
     "dropped": "{{title}} 结束了，没有做",
+    "cancelled": "{{title}} 已取消",
     "endedBody": "{{workflow}} · {{steps}} 步"
   },
   "marketPublish": {

@@ -13,6 +13,8 @@ export const ATTENTION_SETTING = {
   error: 'error',
   'routine-ended': 'routines',
   'routine-paused': 'routines',
+  'task-needs-you': 'permission',
+  'task-ended': 'turnEnded',
 } as const satisfies Record<HostAttention['kind'], keyof SettingsFile['notifications']>
 
 const MAX_TITLE = 120
@@ -28,7 +30,8 @@ function isId(value: unknown): value is string {
 
 /**
  * What a well-formed attention message stands for, which a newer one of the same replaces, and
- * what a click opens: its session, or the Routines page for a pause. Null for a malformed one.
+ * what a click opens: its session, the Routines page for a pause, or a workflow task. Null for a
+ * malformed one.
  */
 export function attentionTarget(
   message: HostAttention,
@@ -42,7 +45,12 @@ export function attentionTarget(
       ? { key: `routines:${message.agentId}`, command: { kind: 'open-routines' } }
       : null
   }
-  return isId(message.sessionId)
+  if (message.kind === 'task-needs-you' || message.kind === 'task-ended') {
+    return isId(message.taskId)
+      ? { key: `task:${message.taskId}`, command: { kind: 'open-task', taskId: message.taskId } }
+      : null
+  }
+  return 'sessionId' in message && isId(message.sessionId)
     ? { key: message.sessionId, command: { kind: 'open-session', sessionId: message.sessionId } }
     : null
 }

@@ -517,11 +517,11 @@ export interface SessionManagerDeps {
   /** The artifacts service; without it every attach passes no MCP servers. */
   mcp?: SessionMcp
   /**
-   * The skills an attach of the agent's session passes, Kettu's own with them when `kettu`, the
-   * session reaching Kettu's server; without it none.
+   * The skills an attach of the session passes, Kettu's own with them when `kettu`, the session
+   * reaching Kettu's server, and a workflow step's own; without it none.
    */
   skills?: (
-    agentId: AgentId,
+    record: SessionRecord,
     kettu: boolean,
   ) => Promise<Pick<SessionOptions, 'skillRoots' | 'localPlugins'>>
   /** Kettu's memory; without it no session is handed any. */
@@ -722,6 +722,10 @@ interface Live {
   heldFirst: Live['first']
   /** Who queued each waiting prompt, by item id; apart from the queue, which every client sees. */
   queuedBy: Map<string, string>
+  /** The waiting prompts Kettu queued itself, such as a step's reminder, by item id. */
+  kettuQueued: Set<string>
+  /** The last turn began with the user's own message, which owes no step report. */
+  userTurn: boolean
   /** The message that gave the session its first title, for a written title, and its tries. */
   titlePrompt: UserContent[] | null
   titleWriting: boolean
@@ -3527,6 +3531,8 @@ export class SessionManager {
       first: null,
       heldFirst: null,
       queuedBy: new Map(),
+      kettuQueued: new Set(),
+      userTurn: false,
       titlePrompt: null,
       titleWriting: false,
       titleFailedAt: null,
@@ -3599,7 +3605,7 @@ export class SessionManager {
     const projectHooks = this.projectHooksGate(sessionId)
     const own = this.kettuServers(sessionId, record, runtime)
     const reached = own.length > 0
-    const skills = (await this.deps.skills?.(record.agentId, reached)) ?? {}
+    const skills = (await this.deps.skills?.(record, reached)) ?? {}
     const memory = await this.memoryFor(sessionId, record, reached)
     const append = runtime?.connection.systemPromptAppend
       ? kettuAhead(
@@ -4646,13 +4652,15 @@ export class SessionManager {
     const live = await this.revive(sessionId)
     const { status, queue, queuePaused } = live.thread.session
     if (canSend(status) && (queue.length === 0 || queuePaused)) {
-      this.sendPrompt(live, content)
+      this.sendPrompt(live, content, undefined, undefined, undefined, undefined, true)
       return
     }
     if (!canSend(status) && status !== 'running' && status !== 'awaiting_permission') {
       throw busyError(status)
     }
-    this.update(live, { queue: [...queue, { id: randomUUID(), content, at: this.now() }] })
+    const id = randomUUID()
+    live.kettuQueued.add(id)
+    this.update(live, { queue: [...queue, { id, content, at: this.now() }] })
     this.persist(live)
     this.touch(live.id)
   }
@@ -6899,6 +6907,7 @@ export class SessionManager {
     this.sendPrompt(live, hydrated, undefined, portId, device)
   }
 
+  /** Sends a prompt; `kettu` when Kettu sends it itself, as a step's reminder. */
   private sendPrompt(
     live: Live,
     content: UserContent[],
@@ -6906,8 +6915,10 @@ export class SessionManager {
     portId?: string,
     device?: FromDevice,
     approval?: true,
+    kettu?: true,
   ): void {
     live.used = true
+    live.userTurn = kettu !== true && from === undefined
     const now = this.now()
     const entryId = this.addPrompt(live, content, now, from, device, approval)
     this.startTurn(live, content, now, entryId, portId)
@@ -7608,7 +7619,8 @@ export class SessionManager {
     this.update(live, { queue: rest, ...(rest.length === 0 ? { queuePaused: false } : {}) })
     const queuedBy = live.queuedBy.get(next.id)
     live.queuedBy.delete(next.id)
-    this.sendPrompt(live, next.content, next.from, queuedBy, next.device, next.approval)
+    const kettu = live.kettuQueued.delete(next.id) ? true : undefined
+    this.sendPrompt(live, next.content, next.from, queuedBy, next.device, next.approval, kettu)
   }
 
   private pauseQueue(live: Live): void {
@@ -8417,7 +8429,7 @@ export class SessionManager {
   /** Tells the task engine a step's turn ended; true for a step's session, which stays quiet. */
   private reportStep(live: Live): boolean {
     if (live.record.origin !== 'task') return false
-    this.deps.task?.current?.turnEnded(live.id)
+    this.deps.task?.current?.turnEnded(live.id, { byUser: live.userTurn })
     return true
   }
 

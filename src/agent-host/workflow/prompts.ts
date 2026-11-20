@@ -167,10 +167,23 @@ export function reminderPrompt(picking: boolean): string {
     : `Your step is not reported yet. If it is done, call \`${REPORT_TOOL}\` now with an outcome and what the step hands in; if it is not, finish it first. Kettu stops the task for the user if this turn also ends without a report.`
 }
 
-/** Sent to a step that was working when the host restarted. */
-export const RESUME_PROMPT =
-  `Kettu restarted while you worked on this step. Check where you stopped, finish the step and ` +
-  `call \`${REPORT_TOOL}\`.`
+/**
+ * Sent to a step that was working when the host restarted; `owed` are the steps it still picks
+ * for, when its report was accepted already.
+ */
+export function resumePrompt(owed: readonly string[] | null): string {
+  if (owed) {
+    return (
+      `Kettu restarted after it accepted your report, before you picked who does the next steps. ` +
+      `Call \`${PICK_TOOL}\` with a pick for each of these steps: ` +
+      `${owed.map((id) => `"${id}"`).join(', ')}. Do not report the step again.`
+    )
+  }
+  return (
+    `Kettu restarted while you worked on this step. Check where you stopped, finish the step and ` +
+    `call \`${REPORT_TOOL}\`.`
+  )
+}
 
 /** A note the user added for the steps of the task. */
 export function notePrompt(text: string): string {
