@@ -137,6 +137,7 @@ import type {
   SessionStatus,
   SlashCommand,
   ThreadEntry,
+  ToolKind,
   UserContent,
 } from './thread'
 
@@ -738,6 +739,8 @@ export interface SessionSummary {
   plan?: PlanProgress | null
   // When its running turn started; null between turns; absent from older hosts
   turnStartedAt?: number | null
+  // The tool its running turn calls now; null while none runs; absent from older hosts
+  activity?: SessionActivity | null
 }
 
 /**
@@ -763,6 +766,21 @@ export interface SideChatAgent {
 export interface LightAgent {
   agentId: AgentId
   name: string
+}
+
+/**
+ * The tool call a session's main thread runs now, as its summary carries it: the latest one to
+ * start of those still running. It changes when a call starts or ends, not with its output.
+ */
+export interface SessionActivity {
+  /** The call's entry in the thread. */
+  entryId: string
+  toolKind: ToolKind
+  title: string
+  /** Its key argument: a command's first line, a file's path, a search's words or an address. */
+  detail: string | null
+  /** When the call started, in ms since the epoch. */
+  startedAt: number
 }
 
 /** How far a session's latest plan got, as its summary carries it. */
@@ -1253,8 +1271,12 @@ export interface HostContract {
   // One entry whole, as a device whose page held its tool output as a digest opens it.
   'sessions.entry': { params: { sessionId: string; entryId: string }; result: ThreadEntry }
   // What waits for the user's answer in the session, in thread order: what its summary's
-  // `permissionCount` counts. Empty for a closed session, where nothing waits.
-  'sessions.requests': { params: { sessionId: string }; result: { entries: ThreadEntry[] } }
+  // `permissionCount` counts. Empty for a closed session, where nothing waits. `askedAt`: when
+  // each began to wait, by entry id, in ms since the epoch; absent from older hosts.
+  'sessions.requests': {
+    params: { sessionId: string }
+    result: { entries: ThreadEntry[]; askedAt?: Record<string, number> }
+  }
   'sessions.outline': { params: { sessionId: string }; result: { entries: OutlineEntry[] } }
   // The session's requests to its model, read from the agent's own record of the session: the
   // newest page, or the one before `before`. Null when Kettu cannot read this agent's record.
