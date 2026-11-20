@@ -452,6 +452,9 @@ async function start(): Promise<void> {
         close: () => client.close(),
       }
     },
+    // Another host's session is read and answered through the relay the windows use.
+    callRemote: (hostId, method, params) => hostSessions.call(hostId, method, params),
+    openRemotes: () => hostSessions.openHosts(),
     open: (target) =>
       target
         ? openTrayTarget({ kind: 'session', sessionId: target.sessionId })
@@ -719,6 +722,9 @@ async function start(): Promise<void> {
     attention: (hostId, attention) => {
       const host = remoteHost.hosts?.find((known) => known.id === hostId)
       if (!host || typeof attention !== 'object' || attention === null) return
+      // While the island runs, it shows another host's too in place of a notification.
+      island.remoteAttention(hostId, attention)
+      if (island.showing()) return
       notifyAttention(
         attention as HostAttention,
         settings.get(),
@@ -732,7 +738,11 @@ async function start(): Promise<void> {
       browserTools?.endTurns(remoteBrowser.sessionsOf(hostId))
       remoteBrowser.hostClosed(hostId)
       remoteArtifacts.ended(hostId)
+      island.remoteClosed(hostId)
     },
+    opened: (hostId) => island.remoteOpened(hostId),
+    event: (hostId, event) => island.remoteEvent(hostId, event),
+    resync: (hostId) => island.remoteResync(hostId),
     artifactEvent: (hostId, event) => {
       if (event.type === 'artifacts.runtime') remoteArtifacts.streamed(hostId, event)
       else if (event.type === 'artifacts.changed' || event.type === 'artifacts.version') {
@@ -762,6 +772,11 @@ async function start(): Promise<void> {
   }
   const hostsChanged = (): void => {
     hostSessions.connections(remoteHost.hosts)
+    island.remoteHosts(
+      (remoteHost.hosts ?? [])
+        .filter((host) => !host.removed)
+        .map((host) => ({ id: host.id, name: host.name })),
+    )
     broadcast('hosts:changed', hostsStatus())
     relayToken.update()
   }

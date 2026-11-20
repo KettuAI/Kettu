@@ -84,6 +84,12 @@ export interface HostSessionsOptions {
   attention?(hostId: string, attention: unknown): void
   /** The host's session ended. */
   ended?(hostId: string): void
+  /** A session with the host opened, so main's own reads of it may start. */
+  opened?(hostId: string): void
+  /** Each of a host's events but `attention`, for main's own use; the windows get it as well. */
+  event?(hostId: string, event: unknown): void
+  /** The host lost what it kept for this computer, so what was read of it is read again. */
+  resync?(hostId: string): void
   /**
    * A host's event about its artifacts, for main's copy of them. An `artifacts.runtime` event is
    * main's alone, since only main opens streams there; the windows hear the others too.
@@ -140,6 +146,12 @@ export class HostSessions {
       this.send(held.asker, hostId, held.method, held.params)
     }
     this.held.delete(hostId)
+    this.options.opened?.(hostId)
+  }
+
+  /** The hosts whose session is open now. */
+  openHosts(): string[] {
+    return [...this.hosts.keys()]
   }
 
   /** The session ended: its requests fail, and the windows hear of it. */
@@ -399,6 +411,10 @@ export class HostSessions {
     if (message.type === 'event' && event?.type === 'attention') {
       this.options.attention?.(hostId, event.attention)
       return
+    }
+    if (message.type === 'resync') this.options.resync?.(hostId)
+    if (message.type === 'event' && typeof event === 'object' && event !== null) {
+      this.options.event?.(hostId, event)
     }
     if (message.type === 'event' && event?.type === 'browser.call') {
       this.options.browserCall?.(hostId, event.call)

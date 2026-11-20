@@ -55,6 +55,22 @@ export interface HostFeedDeps {
   warn(message: string): void
 }
 
+/** Whether a summary has what the view reads of it, as one from another host may not. */
+function readable(value: unknown): value is SessionSummary {
+  if (typeof value !== 'object' || value === null) return false
+  const s = value as Record<string, unknown>
+  return (
+    typeof s.id === 'string' &&
+    typeof s.agentId === 'string' &&
+    typeof s.projectPath === 'string' &&
+    typeof s.status === 'string' &&
+    typeof s.attention === 'string' &&
+    typeof s.permissionCount === 'number' &&
+    typeof s.updatedAt === 'number' &&
+    (s.title === null || typeof s.title === 'string')
+  )
+}
+
 export class HostFeed {
   readonly sessions = new Map<string, SessionSummary>()
   readonly agents = new Map<AgentId, AgentStatus>()
@@ -85,7 +101,9 @@ export class HostFeed {
     ])
     if (generation !== this.generation) return
     this.forget()
-    for (const summary of sessions) if (!summary.prepared) this.sessions.set(summary.id, summary)
+    for (const summary of sessions) {
+      if (readable(summary) && !summary.prepared) this.sessions.set(summary.id, summary)
+    }
     for (const agent of agents) this.agents.set(agent.id, agent)
     for (const option of options) this.options.set(option.agentId, option)
     for (const task of tasks) {
@@ -117,7 +135,7 @@ export class HostFeed {
     switch (event.type) {
       case 'session.summary': {
         const { summary } = event
-        if (summary.prepared) return
+        if (!readable(summary) || summary.prepared) return
         this.sessions.set(summary.id, summary)
         this.follow(summary)
         break

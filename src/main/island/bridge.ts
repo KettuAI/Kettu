@@ -4,11 +4,17 @@
 // reaches a host unchecked, and no method beyond the island's list is ever called.
 
 import { ALREADY_ANSWERED, type HostEvent } from '@shared/agent-host'
-import { attentionText } from '@shared/attention'
+import { attentionTarget, attentionText } from '@shared/attention'
 import type { HostAttention } from '@shared/remote/host-admin'
 import type { IslandState } from '@shared/island'
 import { limitReaders } from '@shared/session-groups'
-import { errorText, HostFeed, type HostRequest } from './host-feed'
+import {
+  errorText,
+  HostFeed,
+  isIslandHostMethod,
+  type HostRequest,
+  type IslandHostMethod,
+} from './host-feed'
 import {
   ISLAND_PROTOCOL,
   islandLine,
@@ -84,6 +90,10 @@ export interface IslandBridgeDeps {
    * it end, as when the host restarts.
    */
   connectLocal(onEvent: (event: HostEvent) => void, onClose: () => void): IslandConnection | null
+  /** Asks another host's agent host through main's relay to it, for the island's methods alone. */
+  callRemote(hostId: string, method: IslandHostMethod, params: unknown): Promise<unknown>
+  /** The other hosts whose session is open now. */
+  openRemotes(): string[]
   /** Brings the window forward at a session, or as it is for null. */
   open(target: { hostKey: string; sessionId: string } | null): void
   status(state: IslandState): void
@@ -95,6 +105,7 @@ type Phase = 'off' | 'starting' | 'handshake' | 'running' | 'failed'
 
 interface Host {
   key: string
+  /** Null for this computer; another host's name, and whether its session is closed. */
   host: IslandHost | null
   feed: HostFeed
   request: HostRequest
@@ -129,6 +140,8 @@ export class IslandBridge {
   private local: IslandConnection | null = null
   private locale: string
   private colorMode: ColorMode
+  /** The other hosts this computer knows, by id, with their names. */
+  private known = new Map<string, string>()
 
   constructor(private readonly deps: IslandBridgeDeps) {
     this.locale = deps.locale()
@@ -203,6 +216,59 @@ export class IslandBridge {
     this.connectLocal()
   }
 
+  /** The other hosts this computer knows; one no longer listed leaves the island. */
+  remoteHosts(hosts: readonly { id: string; name: string }[]): void {
+    this.known = new Map(hosts.map((host) => [host.id, host.name]))
+    if (this.phase !== 'running') return
+    for (const [key, host] of [...this.hosts]) {
+      if (key === LOCAL || this.known.has(key)) continue
+      host.feed.clear()
+      this.hosts.delete(key)
+    }
+    const open = new Set(this.deps.openRemotes())
+    for (const [id, name] of this.known) {
+      const host = this.hosts.get(id)
+      if (!host) this.addRemote(id, name, open.has(id))
+      else if (host.host && host.host.name !== name) host.host = { ...host.host, name }
+    }
+    this.changed()
+  }
+
+  /** A session with another host opened: it is read whole. */
+  remoteOpened(hostId: string): void {
+    const host = this.hosts.get(hostId)
+    if (!host?.host) return
+    host.host = { ...host.host, offline: false }
+    this.loadRemote(host)
+  }
+
+  /** The session with another host ended: its rows stay, marked offline, without its requests. */
+  remoteClosed(hostId: string): void {
+    const host = this.hosts.get(hostId)
+    if (!host?.host || host.host.offline) return
+    host.host = { ...host.host, offline: true }
+    this.changed()
+  }
+
+  /** Another host lost what it kept for this computer, so it is read whole again. */
+  remoteResync(hostId: string): void {
+    const host = this.hosts.get(hostId)
+    if (host?.host && !host.host.offline) this.loadRemote(host)
+  }
+
+  /** One of another host's events, for its sessions and agents. */
+  remoteEvent(hostId: string, event: unknown): void {
+    const host = this.hosts.get(hostId)
+    if (!host?.host || typeof event !== 'object' || event === null) return
+    host.feed.event(event as HostEvent)
+  }
+
+  /** What another host says needs the user, popped as this computer's would be. */
+  remoteAttention(hostId: string, attention: unknown): void {
+    if (!this.hosts.get(hostId)?.host || typeof attention !== 'object' || attention === null) return
+    this.attention(attention as HostAttention, hostId)
+  }
+
   /** This computer's agent host stopped; it is read again once `localHostReady` says it is back. */
   localHostDown(): void {
     this.local?.close()
@@ -210,7 +276,7 @@ export class IslandBridge {
 
   /** What the host told main needs the user: the island pops it out unless a window is in front. */
   attention(message: HostAttention, hostKey = LOCAL): void {
-    if (this.phase !== 'running') return
+    if (this.phase !== 'running' || !attentionTarget(message)) return
     if (!this.deps.kindEnabled(message.kind) || this.deps.windowFocused()) return
     const { title, body } = attentionText(message)
     const row = message.kind === 'routine-paused' ? null : this.rowKeyOf(hostKey, message.sessionId)
@@ -403,6 +469,7 @@ export class IslandBridge {
       this.deps.log.info(`The island ${message.version} is ready`)
       this.setPhase('running')
       this.connectLocal()
+      this.remoteHosts([...this.known].map(([id, name]) => ({ id, name })))
       this.sendView()
       return
     }
@@ -527,6 +594,30 @@ export class IslandBridge {
     )
   }
 
+  private addRemote(id: string, name: string, open: boolean): void {
+    const request: HostRequest = (method, params) => {
+      // The same few methods as this computer's, whatever a caller passes.
+      if (!isIslandHostMethod(method)) {
+        return Promise.reject({ code: 'forbidden', message: `${String(method)} is not allowed` })
+      }
+      return this.deps.callRemote(id, method, params) as never
+    }
+    const feed = new HostFeed({
+      request,
+      changed: () => this.changed(),
+      warn: (message) => this.deps.log.warn(message),
+    })
+    const host: Host = { key: id, host: { id, name, offline: !open }, feed, request }
+    this.hosts.set(id, host)
+    if (open) this.loadRemote(host)
+  }
+
+  private loadRemote(host: Host): void {
+    host.feed.load().catch((error: unknown) => {
+      this.deps.log.warn(`Could not read the sessions of host ${host.key}: ${errorText(error)}`)
+    })
+  }
+
   private disconnect(): void {
     const local = this.local
     this.local = null
@@ -557,9 +648,20 @@ export class IslandBridge {
     }, COALESCE_MS)
   }
 
+  /** The view now; null when what a host sent could not be read into one. */
+  private build(): BuiltView | null {
+    try {
+      return buildView(this.hostStates(), this.now())
+    } catch (error) {
+      this.deps.log.error(`Could not build the island's view: ${errorText(error)}`)
+      return null
+    }
+  }
+
   private flush(): void {
     if (this.phase !== 'running') return
-    const built = buildView(this.hostStates(), this.now())
+    const built = this.build()
+    if (!built) return
     const change = diffView(this.sent.view, built.view)
     if (!change) return
     this.sent = built
@@ -569,7 +671,8 @@ export class IslandBridge {
   private sendView(): void {
     if (this.flushTimer) clearTimeout(this.flushTimer)
     this.flushTimer = null
-    const built = buildView(this.hostStates(), this.now())
+    const built = this.build()
+    if (!built) return
     this.sent = built
     this.send({ type: 'view', seq: ++this.seq, ...built.view })
   }
