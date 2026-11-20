@@ -176,7 +176,7 @@ describe('importing a session from a terminal', () => {
     expect(await index()).toBeNull()
   })
 
-  it('looks through every page its agent lists, and stops at a cursor it repeats', async () => {
+  it('looks through every page its agent lists', async () => {
     const { sessions } = manager({}, { agents: lists(['a'], ['b'], ['cli-1']) })
     await sessions.load()
     await sessions.importSession({
@@ -185,7 +185,11 @@ describe('importing a session from a terminal', () => {
       acpSessionId: 'cli-1',
     })
     expect(sessions.list('/repo')).toHaveLength(1)
-    const stuck = manager(
+    await vi.waitFor(async () => expect((await index())?.sessions).toHaveLength(1))
+  })
+
+  it('stops looking at a cursor its agent gives twice', async () => {
+    const { sessions } = manager(
       {},
       {
         agents: {
@@ -199,9 +203,9 @@ describe('importing a session from a terminal', () => {
         },
       },
     )
-    await stuck.sessions.load()
+    await sessions.load()
     await expect(
-      stuck.sessions.importSession({
+      sessions.importSession({
         agentId: 'claude-code',
         projectPath: '/repo',
         acpSessionId: 'cli-1',
