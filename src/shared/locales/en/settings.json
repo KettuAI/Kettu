@@ -259,7 +259,8 @@
       "theme": "Theme",
       "scale": "Zoom and text",
       "sidebar": "Sidebar",
-      "motion": "Motion"
+      "motion": "Motion",
+      "fonts": "Fonts"
     },
     "zoom": {
       "name": "Zoom",
@@ -268,6 +269,22 @@
       "zoomIn": "Zoom in",
       "zoomOut": "Zoom out",
       "reset": "Reset"
+    },
+    "fonts": {
+      "keywords": "font family typeface installed",
+      "default": "Theme’s font",
+      "ui": {
+        "name": "Interface font",
+        "description": "Menus, buttons, the sidebar and Settings. The theme’s font fills in what it lacks."
+      },
+      "prose": {
+        "name": "Reply font",
+        "description": "Replies and your messages in the thread. The theme’s font fills in what it lacks."
+      },
+      "code": {
+        "name": "Code font",
+        "description": "Code blocks, inline code, diffs and the editor, and the terminal unless it has a font of its own. Only monospace fonts are listed."
+      }
     }
   },
   "terminal": {
@@ -281,14 +298,9 @@
     },
     "fontFamily": {
       "name": "Font",
-      "description": "A font installed on this computer, such as a Nerd Font for prompt icons. The theme’s code font fills in what it lacks.",
+      "description": "A font installed on this computer, such as a Nerd Font for prompt icons. The code font fills in what it lacks.",
       "keywords": "font family typeface nerd font monospace icons",
-      "default": "Theme’s code font",
-      "search": "Search or type a font name",
-      "use": "Use “{{name}}”",
-      "noMatch": "No monospace font matches.",
-      "loading": "Reading the installed fonts…",
-      "unavailable": "This browser cannot list fonts. Type a name to use it."
+      "default": "Code font"
     },
     "fontSize": {
       "name": "Font size",
@@ -2175,5 +2187,13 @@
       "proxy": "Agents, npx and updates will go through this proxy.",
       "source": "Changes where Kettu downloads its updates from."
     }
+  },
+  "fonts": {
+    "search": "Search or type a font name",
+    "use": "Use “{{name}}”",
+    "noMatch": "No font matches.",
+    "noMonospaceMatch": "No monospace font matches.",
+    "loading": "Reading the installed fonts…",
+    "unavailable": "This browser cannot list fonts. Type a name to use it."
   }
 }

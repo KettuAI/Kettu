@@ -467,13 +467,17 @@
     'Manrope Variable', 'Inter Variable', 'Platform Chinese', 'PingFang SC', 'Microsoft YaHei',
     'Noto Sans CJK SC', system-ui, sans-serif;
 
-  --ui-face: var(--face-inter);
-  --prose-face: var(--face-inter);
+  --theme-ui-face: var(--face-inter);
+  --theme-prose-face: var(--face-inter);
   --display-face: var(--ui-face);
   --greeting-face:
     'Source Serif 4 Variable', 'Songti SC', STSong, SimSun, 'Noto Serif CJK SC', ui-serif, Georgia,
     serif;
-  --code-face: 'JetBrains Mono Variable', var(--face-system-mono);
+  --theme-code-face: 'JetBrains Mono Variable', var(--face-system-mono);
+  /* A face the user picked in Settings comes first and the theme's fills in what it lacks. */
+  --ui-face: var(--user-ui-face, var(--theme-ui-face));
+  --prose-face: var(--user-prose-face, var(--theme-prose-face));
+  --code-face: var(--user-code-face, var(--theme-code-face));
   /* Inter's single-storey a, where its files keep that variant: the bundled subsets do not, so
      it draws Inter's default a. Another face keeps its own letters. */
   --ui-features: 'cv11';
@@ -496,38 +500,45 @@
   --corner-controls: calc(4 * 28px + 8px + 2px + 8px + 16px);
 }
 :root[data-font-ui='system'] {
-  --ui-face: var(--face-system);
+  --theme-ui-face: var(--face-system);
 }
 :root[data-font-ui='inter'] {
-  --ui-face: var(--face-inter);
+  --theme-ui-face: var(--face-inter);
 }
 :root[data-font-ui='source-serif-4'] {
-  --ui-face: var(--face-source-serif-4);
+  --theme-ui-face: var(--face-source-serif-4);
 }
 :root[data-font-ui='jetbrains-mono'] {
-  --ui-face: var(--face-jetbrains-mono);
+  --theme-ui-face: var(--face-jetbrains-mono);
 }
 :root[data-font-ui]:not([data-font-ui='inter']) {
   --ui-features: normal;
 }
 :root[data-font-prose='system'] {
-  --prose-face: var(--face-system);
+  --theme-prose-face: var(--face-system);
 }
 :root[data-font-prose='inter'] {
-  --prose-face: var(--face-inter);
+  --theme-prose-face: var(--face-inter);
 }
 :root[data-font-prose='source-serif-4'] {
-  --prose-face: var(--face-source-serif-4);
+  --theme-prose-face: var(--face-source-serif-4);
   --prose-scale: 1.1;
 }
 :root[data-font-prose='jetbrains-mono'] {
-  --prose-face: var(--face-jetbrains-mono);
+  --theme-prose-face: var(--face-jetbrains-mono);
 }
 :root[data-font-prose]:not([data-font-prose='inter']) {
   --prose-features: normal;
 }
 :root[data-font-code='system'] {
-  --code-face: var(--face-system-mono);
+  --theme-code-face: var(--face-system-mono);
+}
+:root[data-user-font-ui] {
+  --ui-features: normal;
+}
+:root[data-user-font-prose] {
+  --prose-features: normal;
+  --prose-scale: 1;
 }
 
 :root[data-text-size='small'] {
