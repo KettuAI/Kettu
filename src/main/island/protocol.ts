@@ -26,7 +26,7 @@ export interface IslandRow {
   key: string
   sessionId: string
   host: IslandHost | null
-  /** The session or the task it belongs to, by title when Kettu knows it. */
+  /** The session or the task it belongs to, by its title; null while that is not known. */
   parent: { kind: 'session' | 'task'; title: string | null } | null
   title: string
   project: string
@@ -125,8 +125,7 @@ export type MainToIsland =
   | { type: 'quit' }
 
 export type IslandToMain =
-  /** `shows`: the helper draws the island on screen, so notifications of its kinds stay quiet. */
-  | { type: 'ready'; protocol: number; version: string; shows: boolean }
+  | { type: 'ready'; protocol: number; version: string }
   | { type: 'answer'; id: string; request: string; option: string }
   /** A row's session, or Kettu itself without one. */
   | { type: 'open'; row: string | null }
@@ -156,11 +155,10 @@ export function parseIslandLine(line: string): IslandToMain | null {
   const message = value as Record<string, unknown>
   switch (message.type) {
     case 'ready': {
-      const { protocol, version, shows } = message
+      const { protocol, version } = message
       if (typeof protocol !== 'number' || !Number.isSafeInteger(protocol)) return null
       if (typeof version !== 'string' || version.length > MAX_VERSION_CHARS) return null
-      if (typeof shows !== 'boolean') return null
-      return { type: 'ready', protocol, version, shows }
+      return { type: 'ready', protocol, version }
     }
     case 'answer': {
       const { id, request, option } = message

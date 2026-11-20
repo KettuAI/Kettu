@@ -22,6 +22,8 @@ export const ISLAND_HOST_METHODS = [
   'agents.refreshLimits',
   'sessions.list',
   'sessions.requests',
+  // Read only for the titles of the tasks whose steps' rows name them.
+  'tasks.list',
   'permissions.respond',
   'browser.answerOrigin',
   'computer.answerApp',
@@ -57,6 +59,8 @@ export class HostFeed {
   readonly sessions = new Map<string, SessionSummary>()
   readonly agents = new Map<AgentId, AgentStatus>()
   readonly options = new Map<AgentId, AgentOptions>()
+  /** Each task's title, by id, for the rows of its steps. */
+  readonly tasks = new Map<string, string>()
   readonly requests = new Map<
     string,
     { requests: PendingRequest[]; askedAt: Record<string, number> }
@@ -72,16 +76,23 @@ export class HostFeed {
   async load(): Promise<void> {
     const generation = ++this.generation
     const { request } = this.deps
-    const [sessions, agents, options] = await Promise.all([
+    const [sessions, agents, options, tasks] = await Promise.all([
       request('sessions.list', {}),
       request('agents.list', undefined),
       request('agents.options', undefined),
+      // A host from before tasks has none to name.
+      request('tasks.list', undefined).catch(() => []),
     ])
     if (generation !== this.generation) return
     this.forget()
     for (const summary of sessions) if (!summary.prepared) this.sessions.set(summary.id, summary)
     for (const agent of agents) this.agents.set(agent.id, agent)
     for (const option of options) this.options.set(option.agentId, option)
+    for (const task of tasks) {
+      if (typeof task?.id === 'string' && typeof task.title === 'string') {
+        this.tasks.set(task.id, task.title)
+      }
+    }
     for (const summary of this.sessions.values()) this.follow(summary)
     this.deps.changed()
   }
@@ -97,6 +108,7 @@ export class HostFeed {
     this.sessions.clear()
     this.agents.clear()
     this.options.clear()
+    this.tasks.clear()
     this.requests.clear()
     this.readAt.clear()
   }
@@ -124,6 +136,16 @@ export class HostFeed {
         break
       case 'agent.options':
         this.options.set(event.options.agentId, event.options)
+        break
+      case 'task.changed': {
+        const { id, title } = (event.task ?? {}) as { id?: unknown; title?: unknown }
+        if (typeof id !== 'string' || typeof title !== 'string') return
+        if (this.tasks.get(id) === title) return
+        this.tasks.set(id, title)
+        break
+      }
+      case 'task.removed':
+        if (!this.tasks.delete(event.taskId)) return
         break
       default:
         return

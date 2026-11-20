@@ -45,6 +45,8 @@ export interface HostState {
   options: ReadonlyMap<AgentId, AgentOptions>
   /** What waits in each session that waits, as last read. */
   requests: ReadonlyMap<string, { requests: PendingRequest[]; askedAt: Record<string, number> }>
+  /** Each task's title, by id. */
+  tasks: ReadonlyMap<string, string>
 }
 
 /** A call the island's answer turns into, on the host of its request. */
@@ -383,7 +385,7 @@ function buildRow(
       line = islandT(`line.${status}`)
   }
   const parent = summary.task
-    ? { kind: 'task' as const, title: null }
+    ? { kind: 'task' as const, title: state.tasks.get(summary.task.taskId) ?? null }
     : summary.parentId
       ? { kind: 'session' as const, title: state.sessions.get(summary.parentId)?.title ?? null }
       : null

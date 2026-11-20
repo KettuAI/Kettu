@@ -27,7 +27,14 @@ it('asks the host only for the island’s methods', async () => {
     (event) => events.push(event),
     () => {},
   )
-  for (const method of ['sessions.show', 'sessions.snapshot', 'sessions.prompt', 'git.status']) {
+  const refused = [
+    'sessions.show',
+    'sessions.snapshot',
+    'sessions.prompt',
+    'git.status',
+    'tasks.get',
+  ]
+  for (const method of [...refused, 'tasks.start', 'tasks.sessions']) {
     await expect(client.request(method as never, {} as never)).rejects.toMatchObject({
       code: 'forbidden',
     })
@@ -39,6 +46,7 @@ it('asks the host only for the island’s methods', async () => {
     'agents.refreshLimits',
     'sessions.list',
     'sessions.requests',
+    'tasks.list',
     'permissions.respond',
     'browser.answerOrigin',
     'computer.answerApp',

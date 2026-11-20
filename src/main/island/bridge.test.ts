@@ -122,7 +122,11 @@ interface Setup {
   closeHost(): void
 }
 
-function setup(sessions: SessionSummary[], entries: Record<string, ThreadEntry[]> = {}): Setup {
+function setup(
+  sessions: SessionSummary[],
+  entries: Record<string, ThreadEntry[]> = {},
+  over: Partial<IslandBridgeDeps> = {},
+): Setup {
   const helpers: FakeHelper[] = []
   const states: IslandState[] = []
   const opened: unknown[] = []
@@ -135,6 +139,8 @@ function setup(sessions: SessionSummary[], entries: Record<string, ThreadEntry[]
       case 'agents.list':
       case 'agents.options':
         return []
+      case 'tasks.list':
+        return [{ id: 'task1', title: 'Ship the island' }]
       case 'sessions.requests': {
         const { sessionId } = params as { sessionId: string }
         const list = entries[sessionId] ?? []
@@ -166,6 +172,7 @@ function setup(sessions: SessionSummary[], entries: Record<string, ThreadEntry[]
     status: (state) => states.push(state),
     log: { info: () => {}, warn: () => {}, error: () => {} },
     now: () => Date.now(),
+    ...over,
   }
   const bridge = new IslandBridge(deps)
   return {
@@ -181,10 +188,10 @@ function setup(sessions: SessionSummary[], entries: Record<string, ThreadEntry[]
 }
 
 /** Starts the bridge and has the helper say it is ready; resolves once the host was read. */
-async function started(s: Setup, shows = true): Promise<void> {
+async function started(s: Setup): Promise<void> {
   s.bridge.firstWindowShown()
   await vi.advanceTimersByTimeAsync(0)
-  s.helper().say({ type: 'ready', protocol: ISLAND_PROTOCOL, version: '0.1.0', shows })
+  s.helper().say({ type: 'ready', protocol: ISLAND_PROTOCOL, version: '0.1.0' })
   await vi.advanceTimersByTimeAsync(0)
 }
 
@@ -207,7 +214,7 @@ describe('handshake', () => {
     expect(s.helper().of('view')).toEqual([])
     expect(s.bridge.showing()).toBe(false)
 
-    s.helper().say({ type: 'ready', protocol: ISLAND_PROTOCOL, version: '0.1.0', shows: true })
+    s.helper().say({ type: 'ready', protocol: ISLAND_PROTOCOL, version: '0.1.0' })
     await vi.advanceTimersByTimeAsync(0)
     expect(s.bridge.state()).toEqual({ state: 'running' })
     expect(s.bridge.showing()).toBe(true)
@@ -216,18 +223,28 @@ describe('handshake', () => {
     expect(views.map((view) => view.seq)).toEqual(views.map((_, i) => i + 1))
   })
 
-  it('keeps notifications while the helper draws nothing', async () => {
-    const s = setup([])
-    await started(s, false)
-    expect(s.bridge.state()).toEqual({ state: 'running' })
+  it('quiets notifications only while it runs: off, or stopped, they come back', async () => {
+    let enabled = true
+    const s = setup([], {}, { enabled: () => enabled })
+    await started(s)
+    expect(s.bridge.showing()).toBe(true)
+    enabled = false
+    s.bridge.settingsChanged()
     expect(s.bridge.showing()).toBe(false)
+    enabled = true
+    s.bridge.settingsChanged()
+    await vi.advanceTimersByTimeAsync(0)
+    expect(s.bridge.showing()).toBe(false)
+    s.helper().say({ type: 'ready', protocol: ISLAND_PROTOCOL, version: '0.1.0' })
+    await vi.advanceTimersByTimeAsync(0)
+    expect(s.bridge.showing()).toBe(true)
   })
 
   it('stops for good on another protocol version, sending nothing more', async () => {
     const s = setup([summary('s1')])
     s.bridge.firstWindowShown()
     await vi.advanceTimersByTimeAsync(0)
-    s.helper().say({ type: 'ready', protocol: ISLAND_PROTOCOL + 1, version: '9', shows: true })
+    s.helper().say({ type: 'ready', protocol: ISLAND_PROTOCOL + 1, version: '9' })
     await vi.advanceTimersByTimeAsync(5_000)
     expect(s.bridge.state()).toEqual({ state: 'failed', reason: 'protocol' })
     expect(s.bridge.showing()).toBe(false)
@@ -479,5 +496,52 @@ describe('a helper that fails', () => {
     s.bridge.firstWindowShown()
     await vi.advanceTimersByTimeAsync(10_000)
     expect(s.helpers[0]!.killed).toBe(true)
+  })
+})
+
+describe('workflow steps', () => {
+  it('names the task a step’s row belongs to, and follows its title', async () => {
+    const step = summary('s1', {
+      origin: 'task',
+      task: { taskId: 'task1', stepId: 'build', roundId: 'r1' },
+      status: 'running',
+    })
+    const s = setup([step])
+    await started(s)
+    expect(s.request).toHaveBeenCalledWith('tasks.list', undefined)
+    expect(s.helper().of('view').at(-1)!.rows[0]!.parent).toEqual({
+      kind: 'task',
+      title: 'Ship the island',
+    })
+
+    s.emit({
+      type: 'task.changed',
+      task: { id: 'task1', title: 'Ship the Dynamic Island' } as never,
+    })
+    await vi.advanceTimersByTimeAsync(COALESCE_MS)
+    expect(s.helper().of('change').at(-1)!.rows[0]!.parent).toEqual({
+      kind: 'task',
+      title: 'Ship the Dynamic Island',
+    })
+
+    s.emit({ type: 'task.removed', taskId: 'task1' })
+    await vi.advanceTimersByTimeAsync(COALESCE_MS)
+    expect(s.helper().of('change').at(-1)!.rows[0]!.parent).toEqual({ kind: 'task', title: null })
+  })
+
+  it('reads a host that has no tasks', async () => {
+    const s = setup([summary('s1')])
+    s.request.mockImplementation(async (method: string) => {
+      if (method === 'tasks.list') throw { code: 'unknown_method', message: 'Unknown' }
+      return method === 'sessions.list' ? [summary('s1')] : []
+    })
+    await started(s)
+    expect(
+      s
+        .helper()
+        .of('view')
+        .at(-1)!
+        .rows.map((row) => row.sessionId),
+    ).toEqual(['s1'])
   })
 })

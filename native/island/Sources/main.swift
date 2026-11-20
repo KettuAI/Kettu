@@ -1,18 +1,15 @@
 import Foundation
 
-// kettu-island: the notch island's helper, started by Kettu's main process. This first version
-// keeps the view main sends in step and answers through main; it draws nothing yet, so it tells
-// main it shows nothing and notifications go on as before.
+// kettu-island: the Dynamic Island's helper, started by Kettu's main process. This first version
+// keeps the view main sends in step and answers through main; it draws nothing yet.
 //
 // KETTU_ISLAND_DEBUG, which only a development run of Kettu passes on, is a comma-separated list:
 //   log            log the view after each message
-//   shows          tell main the island shows, so it stops the notifications it would show
 //   answer=STYLE   answer each new request once with its first option of STYLE, such as allow_once
 //   expand         say the island was expanded once the first view arrived
 
 struct Debug {
   var log = false
-  var shows = false
   var answerStyle: String?
   var expand = false
 
@@ -21,8 +18,6 @@ struct Debug {
     {
       if part == "log" || part == "1" {
         log = true
-      } else if part == "shows" {
-        shows = true
       } else if part == "expand" {
         expand = true
       } else if part.hasPrefix("answer=") {
@@ -53,7 +48,8 @@ func dump() {
     let status = store.text("status.\(store.status(of: row) == "sign_in" ? "signIn" : store.status(of: row))")
     let host = row.host.map { " @\($0.name)\($0.offline ? " (\(store.text("offline")))" : "")" } ?? ""
     let plan = row.plan.map { " " + store.text("plan", ["done": "\($0.done)", "total": "\($0.total)"]) } ?? ""
-    log("  [\(status)] \(row.agent.name) · \(row.title)\(host) — \(row.line)\(plan)")
+    let parent = row.parent.map { " ← \($0.kind) \($0.title ?? "?")" } ?? ""
+    log("  [\(status)] \(row.agent.name) · \(row.title)\(host)\(parent) — \(row.line)\(plan)")
   }
   for key in store.requestOrder {
     guard let request = store.requests[key] else { continue }
@@ -96,7 +92,7 @@ func handle(_ line: Data) {
       log("Kettu speaks protocol \(version), this helper \(islandProtocol)")
     }
     ready = true
-    channel.send(.ready(shows: debug.shows))
+    channel.send(.ready)
     log("Ready for Kettu \(message.version ?? "?") in \(store.locale), \(store.colorMode)")
   case "view":
     guard ready else { return }

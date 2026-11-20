@@ -131,7 +131,7 @@ struct MainMessage: Decodable {
 
 /// What the helper sends: only what the user did, which main checks before acting on it.
 enum HelperMessage {
-  case ready(shows: Bool)
+  case ready
   case answer(id: String, request: String, option: String)
   case open(row: String?)
   case expanded
@@ -139,10 +139,8 @@ enum HelperMessage {
 
   var json: [String: Any] {
     switch self {
-    case .ready(let shows):
-      return [
-        "type": "ready", "protocol": islandProtocol, "version": helperVersion, "shows": shows,
-      ]
+    case .ready:
+      return ["type": "ready", "protocol": islandProtocol, "version": helperVersion]
     case .answer(let id, let request, let option):
       return ["type": "answer", "id": id, "request": request, "option": option]
     case .open(let row):

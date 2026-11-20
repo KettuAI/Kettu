@@ -110,8 +110,6 @@ const EMPTY_VIEW: IslandView = {
 
 export class IslandBridge {
   private phase: Phase = 'off'
-  /** The running helper draws the island on screen, as its `ready` said. */
-  private shows = false
   private failure: Extract<IslandState, { state: 'failed' }>['reason'] | null = null
   private helper: HelperProcess | null = null
   /** Set while main ends the helper on purpose, so its exit is no crash. */
@@ -141,9 +139,12 @@ export class IslandBridge {
     return this.deps.now?.() ?? Date.now()
   }
 
-  /** The island runs and shows what needs the user, so notifications of those kinds stay quiet. */
+  /**
+   * The island runs, so the notifications of the kinds it shows stay quiet: they come back only
+   * once it is turned off or stopped after repeated crashes.
+   */
   showing(): boolean {
-    return this.phase === 'running' && this.shows
+    return this.phase === 'running'
   }
 
   state(): IslandState {
@@ -232,7 +233,6 @@ export class IslandBridge {
   private setPhase(phase: Phase): void {
     if (phase === this.phase) return
     this.phase = phase
-    if (phase !== 'running') this.shows = false
     this.deps.status(this.state())
   }
 
@@ -400,10 +400,7 @@ export class IslandBridge {
         this.fail('protocol')
         return
       }
-      this.deps.log.info(
-        `The island ${message.version} is ready${message.shows ? '' : ', drawing nothing'}`,
-      )
-      this.shows = message.shows
+      this.deps.log.info(`The island ${message.version} is ready`)
       this.setPhase('running')
       this.connectLocal()
       this.sendView()
@@ -548,6 +545,7 @@ export class IslandBridge {
       agents: feed.agents,
       options: feed.options,
       requests: feed.requests,
+      tasks: feed.tasks,
     }))
   }
 

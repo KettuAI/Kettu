@@ -3,9 +3,11 @@ import { islandLine, LineReader, MAX_LINE_BYTES, parseIslandLine } from './proto
 
 describe('parseIslandLine', () => {
   it('takes the messages the helper may send', () => {
-    expect(parseIslandLine('{"type":"ready","protocol":1,"version":"0.1.0","shows":true}')).toEqual(
-      { type: 'ready', protocol: 1, version: '0.1.0', shows: true },
-    )
+    expect(parseIslandLine('{"type":"ready","protocol":1,"version":"0.1.0"}')).toEqual({
+      type: 'ready',
+      protocol: 1,
+      version: '0.1.0',
+    })
     expect(parseIslandLine('{"type":"answer","id":"a1","request":"s#t","option":"o"}')).toEqual({
       type: 'answer',
       id: 'a1',
@@ -39,10 +41,10 @@ describe('parseIslandLine', () => {
       '{"type":"quit"}',
       '{"type":"hello"}',
       '{"type":"request","method":"sessions.show","params":{}}',
-      '{"type":"ready","protocol":"1","version":"x","shows":false}',
-      '{"type":"ready","protocol":1.5,"version":"x","shows":false}',
-      '{"type":"ready","protocol":1,"version":"x"}',
-      `{"type":"ready","protocol":1,"version":"${'v'.repeat(65)}","shows":false}`,
+      '{"type":"ready","protocol":"1","version":"x"}',
+      '{"type":"ready","protocol":1.5,"version":"x"}',
+      '{"type":"ready","protocol":1}',
+      `{"type":"ready","protocol":1,"version":"${'v'.repeat(65)}"}`,
       '{"type":"answer","id":"","request":"r","option":"o"}',
       '{"type":"answer","id":1,"request":"r","option":"o"}',
       '{"type":"answer","id":"a","request":"r"}',
