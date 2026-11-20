@@ -495,8 +495,8 @@ export class WorkflowTools {
       pace_reason: paceReason,
     }
     return result(
-      `The user sees your suggestion to run this through "${card.workflow.name}" and decides. ` +
-        'Wait for them: do not start the work yourself.',
+      `The user sees your suggestion to run this through "${card.workflow.name}" in card ` +
+        `${card.id} and decides. Wait for them: do not start the work yourself.`,
       { suggestion },
     )
   }
@@ -522,8 +522,8 @@ export class WorkflowTools {
       const card = await this.deps.suggestions.keep(sessionId, yaml)
       if ('problems' in card) return refused(card.problems)
       return result(
-        `The user sees a card to save "${card.workflow.name}" to their library and decides. ` +
-          'Wait for them.',
+        `The user sees card ${card.id} to save "${card.workflow.name}" to their library and ` +
+          'decides. Wait for them.',
         { suggestion: { id: card.id, workflow_name: card.workflow.name, keep: true } },
       )
     }

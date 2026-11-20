@@ -1188,7 +1188,7 @@ export interface HostContract {
   'workflows.answerSuggestion': {
     params: {
       id: string
-      answer: 'start' | 'decline' | 'reconsider' | 'save' | 'not_save'
+      answer: 'start' | 'decline' | 'another' | 'reconsider' | 'save' | 'not_save'
       // The first step's agent and its option values, as the session runs them.
       agentId?: AgentId
       options?: Record<string, string | boolean>

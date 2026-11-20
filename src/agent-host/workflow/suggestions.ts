@@ -759,8 +759,11 @@ export class WorkflowSuggestions {
 
   // Answers.
 
-  /** Do it here: the card folds, the agent is told to go on, and the same workflow is refused. */
-  async decline(id: string, device?: Device): Promise<WorkflowSuggestion> {
+  /**
+   * Do it here, or Another way: the card folds, the agent is told to go on or to find another way,
+   * and the same workflow is refused.
+   */
+  async decline(id: string, device?: Device, another = false): Promise<WorkflowSuggestion> {
     const record = this.record(id)
     if (record.purpose !== 'start' || record.answer.kind !== 'waiting') {
       throw new HostError('conflict', t('workflow.cardAnswered'))
@@ -771,8 +774,12 @@ export class WorkflowSuggestions {
     await this.deps.sessions
       .tell(
         record.sessionId,
-        `The user chose to do this here instead of running it through "${view.workflow.name}". ` +
-          'Go on with the work yourself in this session.',
+        another
+          ? `The user wants another way than running this through "${view.workflow.name}". ` +
+              `Suggest a different workflow, write one for this with create_workflow, ` +
+              'or ask them what they have in mind.'
+          : `The user chose to do this here instead of running it through "${view.workflow.name}". ` +
+              'Go on with the work yourself in this session.',
       )
       .catch((error: unknown) =>
         this.deps.log('warn', `Could not tell the agent: ${(error as Error).message}`),

@@ -348,3 +348,27 @@ export function sideways(layout: FlowLayout): FlowLayout {
     edges: layout.edges.map((e) => ({ ...e, points: e.points.map(turn), label: turn(e.label) })),
   }
 }
+
+/** Where a lane's label sits: the middle of the arrow's longest run, along its lane. */
+export function laneMiddle(points: Point[]): Point {
+  let best: [Point, Point] = [points[0]!, points[1]!]
+  for (let i = 1; i < points.length - 1; i++) {
+    const a = points[i]!
+    const b = points[i + 1]!
+    const length = Math.hypot(b[0] - a[0], b[1] - a[1])
+    if (length > Math.hypot(best[1][0] - best[0][0], best[1][1] - best[0][1])) best = [a, b]
+  }
+  return [(best[0][0] + best[1][0]) / 2, (best[0][1] + best[1][1]) / 2]
+}
+
+/** An arrow into a join stops short of its dot, which sits where the arrows meet. */
+export function intoJoin(points: Point[]): { points: Point[]; dot: Point } {
+  const last = points.at(-1)!
+  const before = points.at(-2)!
+  const dx = Math.sign(last[0] - before[0])
+  const dy = Math.sign(last[1] - before[1])
+  return {
+    points: [...points.slice(0, -1), [last[0] - dx * 7, last[1] - dy * 7]],
+    dot: [last[0] - dx * 4, last[1] - dy * 4],
+  }
+}

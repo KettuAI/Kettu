@@ -451,6 +451,7 @@ const SUGGESTION_ID = /^wfs-[a-z2-7]{12}$/
 const SUGGESTION_ANSWERS: ReadonlySet<unknown> = new Set([
   'start',
   'decline',
+  'another',
   'reconsider',
   'save',
   'not_save',
@@ -465,7 +466,7 @@ function suggestionId(o: Fields): string {
 function answerSuggestion(value: unknown): HostParams<'workflows.answerSuggestion'> {
   const o = fields(value)
   if (!SUGGESTION_ANSWERS.has(o.answer)) {
-    throw invalidParams('answer must be start, decline, reconsider, save or not_save')
+    throw invalidParams('answer must be start, decline, another, reconsider, save or not_save')
   }
   return {
     id: suggestionId(o),

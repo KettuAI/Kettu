@@ -3232,7 +3232,8 @@ export class AgentHost {
             return view
           }
           case 'decline':
-            return this.workflowSuggestions.decline(id, from)
+          case 'another':
+            return this.workflowSuggestions.decline(id, from, answer === 'another')
           case 'reconsider':
             return this.workflowSuggestions.reconsider(id)
           case 'save':

@@ -65,6 +65,12 @@ export type ApprovalCardProps = {
   label?: ReactNode;
   /** Where the buttons sit: on the gray tray below the card (default) or inside the white card */
   actions?: "tray" | "card";
+  /** A short line at the start of the buttons' row, e.g. what Approve also does */
+  note?: ReactNode;
+  /** Approve shows but cannot be pressed yet */
+  approveDisabled?: boolean;
+  /** No buttons and no shortcuts, e.g. while the approved action runs elsewhere */
+  hideActions?: boolean;
   className?: string;
 };
 
@@ -93,6 +99,9 @@ export function ApprovalCard({
   shortcuts = true,
   label,
   actions = "card",
+  note,
+  approveDisabled = false,
+  hideActions = false,
   className,
 }: ApprovalCardProps) {
   const id = useId();
@@ -145,7 +154,7 @@ export function ApprovalCard({
   /* ---------- Decisions ---------- */
 
   const approve = async () => {
-    if (resolved || busy) return;
+    if (resolved || busy || approveDisabled || hideActions) return;
     const result = onApprove?.({ always });
     if (result && typeof (result as Promise<unknown>).then === "function") {
       setBusy(true);
@@ -161,7 +170,7 @@ export function ApprovalCard({
   };
 
   const deny = (why: DenyReason = "user") => {
-    if (resolved || (busy && why === "user")) return;
+    if (resolved || (busy && why === "user") || (hideActions && why === "user")) return;
     setReason(why);
     if (why === "timeout") onExpire?.();
     onDeny?.({ reason: why });
@@ -169,7 +178,7 @@ export function ApprovalCard({
   };
 
   const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
-    if (resolved || busy || e.defaultPrevented) return;
+    if (resolved || busy || hideActions || e.defaultPrevented) return;
     if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
       e.preventDefault();
       void approve();
@@ -303,6 +312,7 @@ export function ApprovalCard({
   const foot = (
     <div className="ui-apc__foot">
       {actions === "card" && alwaysBox}
+      {note && <span className="ui-apc__note">{note}</span>}
       {total > 0 && (
         <span className="ui-apc__expires" data-paused={paused || undefined} data-low={secondsLeft <= 10 || undefined} aria-hidden="true">
           <svg viewBox="0 0 16 16">
@@ -312,7 +322,7 @@ export function ApprovalCard({
           Expires in {clock(secondsLeft)}
         </span>
       )}
-      <div className="ui-apc__actions">
+      {!hideActions && <div className="ui-apc__actions">
         {onEdit && (
           <button
             type="button"
@@ -342,7 +352,8 @@ export function ApprovalCard({
           type="button"
           className="ui-apc__btn ui-apc__btn--primary ui-apc__approve"
           aria-keyshortcuts="Meta+Enter Control+Enter"
-          aria-disabled={busy || undefined}
+          aria-disabled={busy || approveDisabled || undefined}
+          data-off={approveDisabled || undefined}
           onClick={() => void approve()}
         >
           {approveLabel}
@@ -358,7 +369,7 @@ export function ApprovalCard({
             )
           )}
         </button>
-      </div>
+      </div>}
     </div>
   );
 
@@ -940,6 +951,19 @@ const css = /* css */ `
 }
 .ui-apc[data-busy] .ui-apc__approve {
   cursor: progress;
+}
+.ui-apc__approve[data-off] {
+  opacity: 0.45;
+  cursor: default;
+}
+.ui-apc__approve[data-off]:active {
+  transform: none;
+}
+.ui-apc__note {
+  min-width: 0;
+  color: var(--ui-apc-muted);
+  font-size: 12.5px;
+  line-height: 1.4;
 }
 
 .ui-apc__kbd {
