@@ -25,6 +25,9 @@ function tools(options: { suggest?: boolean } = {}) {
       list: async () => [ENTRY],
       create: async () => ({ problems: [{ at: 'steps', message: 'must list at least one step' }] }),
     },
+    marketplace: {
+      publicWorkflows: async () => ({ status: 'signed_out' as const, items: [] }),
+    },
     report: async (sessionId: string): Promise<ReportResult> => {
       reports.push(sessionId)
       return { accepted: true, checks: [], next: { kind: 'review' }, facts: null }

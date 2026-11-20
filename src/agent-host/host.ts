@@ -812,6 +812,7 @@ export class AgentHost {
     this.artifactService = new ArtifactService({
       workflow: {
         library: this.workflowLibrary,
+        marketplace: this.marketCommunity,
         report: (sessionId, input) => this.tasks.report(sessionId, input),
         pick: (sessionId, picks) => this.tasks.pick(sessionId, picks),
         isStep: (sessionId) => this.tasks.refOf(sessionId) !== null,

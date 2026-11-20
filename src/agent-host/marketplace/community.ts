@@ -1,5 +1,5 @@
 // The Kettu Marketplace as the host installs from it: its public listings and the account's own
-// Only me ones, read through main or the daemon; a version's files, downloaded only on Install and
+// Only me ones, read through main or the daemon; a version's files, downloaded for install or preview and
 // each checked against the SHA-256 the service gave before anything is written; the plugins, kept
 // in a local marketplace of each harness that the harness installs them from; and the workflows,
 // written into the workflow library to wait for the user's approval.
@@ -45,7 +45,12 @@ import {
 } from '@shared/market-publish'
 import type { CatalogServer, InstalledPlugin, PluginScope } from '@shared/marketplace'
 import { harnessOf, type AgentId } from '@shared/thread'
-import { WORKFLOW_FILE_BYTES, type WorkflowEntry } from '@shared/workflow'
+import {
+  WORKFLOW_FILE_BYTES,
+  type Workflow,
+  type WorkflowEntry,
+  type WorkflowStep,
+} from '@shared/workflow'
 import { HostError } from '../errors'
 import { t } from '../i18n'
 import { JsonFile, type LogFn } from '../storage'
@@ -68,6 +73,15 @@ const PARTIAL = '.partial-'
 const MANIFESTS: Record<PublishHarness, string> = {
   'claude-code': '.claude-plugin/plugin.json',
   codex: '.codex-plugin/plugin.json',
+}
+
+type WorkflowSummary = Pick<Workflow, 'name' | 'description' | 'when' | 'locales'> & {
+  steps: Pick<WorkflowStep, 'id' | 'name' | 'by' | 'youReview'>[]
+}
+
+type WorkflowCatalog = {
+  status: 'available' | 'signed_out' | 'unavailable'
+  items: (CommunityItem & { workflow: WorkflowSummary | null })[]
 }
 
 /** A file of a version, downloaded and checked. */
@@ -410,6 +424,15 @@ export function urlBundle(server: Record<string, unknown> | undefined): BundleRe
 
 export class MarketCommunityService {
   private readonly directories = new Map<string, { at: number; result: CommunityDirectory }>()
+  private workflowCatalog: {
+    email: string
+    expires: number
+    result: Promise<WorkflowCatalog>
+  } | null = null
+  private readonly workflowSummaries = new Map<
+    string,
+    { version: string; summary: Promise<WorkflowSummary | null> }
+  >()
   private readonly standings = new Map<string, { at: number; standing: CommunityStanding }>()
   private kept: CommunityRecords | null = null
   private loading: Promise<CommunityRecords> | null = null
@@ -489,6 +512,103 @@ export class MarketCommunityService {
     return result
   }
 
+  /** The whole public workflow catalog, with no search text or private listings. */
+  async publicWorkflows(): Promise<WorkflowCatalog> {
+    const email = this.deps.account()?.email
+    if (!email) return { status: 'signed_out', items: [] }
+    let cached = this.workflowCatalog
+    if (!cached || cached.email !== email || cached.expires <= this.now()) {
+      cached = {
+        email,
+        expires: this.now() + DIRECTORY_MS,
+        result: this.readPublicWorkflows(),
+      }
+      this.workflowCatalog = cached
+    }
+    try {
+      const catalog = await cached.result
+      return this.deps.account()?.email === email ? catalog : { status: 'signed_out', items: [] }
+    } catch (error) {
+      if (this.workflowCatalog === cached) this.workflowCatalog = null
+      if (!this.deps.account() || (error instanceof HostError && error.code === 'auth_required')) {
+        return { status: 'signed_out', items: [] }
+      }
+      return { status: 'unavailable', items: [] }
+    }
+  }
+
+  private async readPublicWorkflows(): Promise<WorkflowCatalog> {
+    const byId = new Map<string, MarketListing>()
+    const cursors = new Set<string>()
+    let cursor: string | null = null
+    do {
+      const page = await this.api(() =>
+        this.deps.call({
+          kind: 'directory',
+          listingKind: 'workflow',
+          ...(cursor ? { cursor } : {}),
+        }),
+      )
+      for (const item of page.items) {
+        if (
+          item.visibility === 'public' &&
+          item.kind === 'workflow' &&
+          LISTING_ID.test(item.id) &&
+          VERSION.test(item.version)
+        ) {
+          byId.set(item.id, item)
+        }
+      }
+      cursor = page.next
+      if (cursor === null) break
+      if (cursors.has(cursor)) throw new Error('The Marketplace repeated a directory page.')
+      cursors.add(cursor)
+    } while (cursor)
+
+    for (const id of this.workflowSummaries.keys()) {
+      if (!byId.has(id)) this.workflowSummaries.delete(id)
+    }
+    const listings = [...byId.values()].sort(
+      (a, b) => Number(b.official) - Number(a.official) || b.installs - a.installs,
+    )
+    const items: WorkflowCatalog['items'] = new Array(listings.length)
+    let next = 0
+    const worker = async (): Promise<void> => {
+      while (next < listings.length) {
+        const index = next++
+        const listing = listings[index]!
+        items[index] = { ...itemOf(listing), workflow: await this.workflowSummary(listing) }
+      }
+    }
+    await Promise.all(Array.from({ length: Math.min(PARALLEL, listings.length) }, worker))
+    return { status: 'available', items }
+  }
+
+  private async workflowSummary(listing: MarketListing): Promise<WorkflowSummary | null> {
+    const { id, version } = listing
+    const hit = this.workflowSummaries.get(id)
+    if (hit?.version === version) return hit.summary
+    const summary = this.readWorkflowVersion(id, version)
+      .then(({ workflow }) => {
+        if (!workflow) return null
+        const { name, description, when, locales, steps } = workflow
+        return {
+          name,
+          description,
+          when,
+          locales,
+          steps: steps.map(({ id, name, by, youReview }) => ({ id, name, by, youReview })),
+        }
+      })
+      .catch((error: unknown) => {
+        if (this.workflowSummaries.get(id)?.summary === summary) this.workflowSummaries.delete(id)
+        if (error instanceof HostError && error.code === 'auth_required') throw error
+        return null
+      })
+    this.workflowSummaries.set(id, { version, summary })
+    return summary
+  }
+
   /** A listing's page; nothing of its files is read. */
   async listing(id: string): Promise<CommunityListing> {
     const found = await this.read(id)
@@ -514,16 +634,17 @@ export class MarketCommunityService {
   async workflow(id: string): Promise<CommunityWorkflow> {
     const listing = await this.listed(id)
     if (listing.kind !== 'workflow') throw refuse(t('marketCommunity.otherKind'))
-    const { version } = listing
-    const listed = await this.api(() =>
-      this.deps.call({ kind: 'version', id: listing.id, version }),
-    )
+    return this.readWorkflowVersion(listing.id, listing.version)
+  }
+
+  private async readWorkflowVersion(id: string, version: string): Promise<CommunityWorkflow> {
+    const listed = await this.api(() => this.deps.call({ kind: 'version', id, version }))
     checkFileList(listed.files)
     const file = listed.files.find((item) => item.path === WORKFLOW_FILE)
     if (!file) return { version, workflow: null, problem: t('marketCommunity.noWorkflow') }
     if (file.size > WORKFLOW_FILE_BYTES) throw refuse(t('marketCommunity.tooLarge'))
     const answer = await this.api(() =>
-      this.deps.call({ kind: 'file', id: listing.id, version, path: file.path }),
+      this.deps.call({ kind: 'file', id, version, path: file.path }),
     )
     const data = Buffer.from(answer.data, 'base64')
     if (!matches(file, data, answer.sha256)) {

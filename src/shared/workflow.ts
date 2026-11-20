@@ -69,10 +69,11 @@ export interface WorkflowStep {
   tools: StepTools
 }
 
-/** A workflow's name, description and step names in another language. */
+/** A workflow's text and step names in another language. */
 export interface WorkflowLocale {
   name?: string
   description?: string
+  when?: string
   steps?: Record<string, string>
 }
 
@@ -80,6 +81,7 @@ export interface Workflow {
   format: typeof WORKFLOW_FORMAT
   name: string
   description: string
+  when?: string
   locales: Record<string, WorkflowLocale>
   sendBackLimit: number
   /** In forward order; the first is the start. An arrow to itself or an earlier step sends back. */
@@ -454,16 +456,25 @@ export function backArrows(
   )
 }
 
-/** A name from the workflow's locale for `locale`, falling back to the file's own. */
+/** Text from the workflow's locale, falling back to the file's own field by field. */
 export function workflowText(
-  workflow: Workflow,
+  workflow: Pick<Workflow, 'name' | 'description' | 'when' | 'locales'>,
   locale: string,
-): { name: string; description: string } {
+): { name: string; description: string; when?: string } {
   const own = workflow.locales[locale]
-  return { name: own?.name ?? workflow.name, description: own?.description ?? workflow.description }
+  const when = own?.when ?? workflow.when
+  return {
+    name: own?.name ?? workflow.name,
+    description: own?.description ?? workflow.description,
+    ...(when === undefined ? {} : { when }),
+  }
 }
 
-export function stepName(workflow: Workflow, stepId: string, locale?: string): string {
+export function stepName(
+  workflow: Pick<Workflow, 'locales'> & { steps: Pick<WorkflowStep, 'id' | 'name'>[] },
+  stepId: string,
+  locale?: string,
+): string {
   const own = locale === undefined ? undefined : workflow.locales[locale]?.steps?.[stepId]
   return own ?? workflow.steps.find((step) => step.id === stepId)?.name ?? stepId
 }

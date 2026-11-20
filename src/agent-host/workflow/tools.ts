@@ -11,12 +11,17 @@ import {
   TASK_TEXT_CHARS,
   TASK_TITLE_CHARS,
   isPace,
+  stepName,
   usableWorkflow,
+  workflowText,
   type WorkflowEntry,
+  type WorkflowStep,
 } from '@shared/workflow'
 import type { AgentId } from '@shared/thread'
 import type { Caller } from '../artifacts/tools'
 import { HostError } from '../errors'
+import { currentLocale } from '../i18n'
+import type { MarketCommunityService } from '../marketplace/community'
 import type { PickResult, ReportInput, ReportResult } from './engine'
 import type { WorkflowLibrary } from './library'
 import type { PickInput } from './picks'
@@ -59,10 +64,11 @@ export const WORKFLOW_TOOLS: Tool[] = [
     name: LIST_WORKFLOWS_TOOL,
     title: 'List workflows',
     description:
-      'Lists the workflows the user can start a task with: their ids, names, what they are for and ' +
-      'their steps. Use it before suggesting one with suggest_workflow.',
+      "Lists usable workflows in the user's library and public workflows in the Kettu Marketplace. " +
+      'Use it to find a workflow for work that needs stages or spans several platforms or modules.',
     inputSchema: { type: 'object', properties: {}, additionalProperties: false },
     annotations: { readOnlyHint: true, openWorldHint: false },
+    _meta: { 'anthropic/alwaysLoad': true },
   },
   {
     name: SUGGEST_WORKFLOW_TOOL,
@@ -241,6 +247,7 @@ export function workflowToolStructured(
 
 export interface WorkflowToolsDeps {
   library: Pick<WorkflowLibrary, 'list' | 'create' | 'suggest'>
+  marketplace: Pick<MarketCommunityService, 'publicWorkflows'>
   report(sessionId: string, input: ReportInput): Promise<ReportResult>
   pick(sessionId: string, picks: PickInput[]): Promise<PickResult>
   /** The session works for a workflow step. */
@@ -298,14 +305,20 @@ function result(text: string, structured: Record<string, unknown>, error = false
   }
 }
 
-function workflowListing(entry: WorkflowEntry) {
+function workflowListing(
+  workflow: Parameters<typeof workflowText>[0] & {
+    steps: Pick<WorkflowStep, 'id' | 'name' | 'by' | 'youReview'>[]
+  },
+  locale: string,
+) {
+  const { name, description, when } = workflowText(workflow, locale)
   return {
-    id: entry.id,
-    name: entry.name,
-    description: entry.workflow?.description ?? '',
-    steps: (entry.workflow?.steps ?? []).map((step) => ({
+    name,
+    description,
+    when: when ?? null,
+    steps: workflow.steps.map((step) => ({
       id: step.id,
-      name: step.name,
+      name: stepName(workflow, step.id, locale),
       by: step.by,
       you_review: step.youReview,
     })),
@@ -392,13 +405,44 @@ export class WorkflowTools {
 
   private async list(input: unknown): Promise<CallToolResult> {
     objectOf(input ?? {}, [])
-    const workflows = (await this.usable()).map(workflowListing)
-    const lines = workflows.map(
-      (workflow) => `- ${workflow.id}: ${workflow.name}. ${workflow.description}`,
-    )
-    return result(lines.length > 0 ? lines.join('\n') : 'No workflow can be started now.', {
-      workflows,
+    const entries = await this.usable()
+    const { items, status } = await this.deps.marketplace.publicWorkflows()
+    const locale = currentLocale()
+    const installs = new Map(items.map((item) => [item.id, item.installs]))
+    const library = entries.map((entry) => {
+      const origin = entry.origin?.kind === 'community' ? entry.origin : null
+      return {
+        id: entry.id,
+        ...workflowListing(entry.workflow!, locale),
+        publisher: origin?.handle ?? null,
+        official: origin?.official ?? false,
+        installs: origin ? (installs.get(origin.listingId) ?? null) : null,
+        version: origin?.version ?? null,
+      }
     })
+    const marketplace = items.map((item) => ({
+      id: item.id,
+      ...(item.workflow
+        ? workflowListing(item.workflow, locale)
+        : {
+            name: item.name,
+            description: item.description,
+            when: null,
+            steps: (item.steps ?? []).map((name) => ({ name })),
+          }),
+      publisher: item.handle,
+      official: item.official,
+      installs: item.installs,
+      version: item.version,
+    }))
+    const listed = { library, marketplace, marketplace_status: status }
+    const why =
+      status === 'signed_out'
+        ? 'Sign in to the Kettu Marketplace on this host to list its workflows.'
+        : status === 'unavailable'
+          ? 'The Kettu Marketplace workflow catalog is unavailable.'
+          : ''
+    return result(why ? `${why}\n${JSON.stringify(listed)}` : JSON.stringify(listed), listed)
   }
 
   private async suggest(input: unknown): Promise<CallToolResult> {
