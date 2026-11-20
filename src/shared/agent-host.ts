@@ -1,6 +1,7 @@
 // The contract between the renderer and the agent host, over the agent host port.
 
 import type { CodebuddyShellOverride, CodebuddySite, PromptCacheTtl } from './agents'
+import type { CompactUnit } from './auto-compact'
 import type { DeviceAccessDecision } from './device-agent'
 import type { ArtifactConsentAsk, ArtifactConsentRow, RuntimeAnswer } from './artifact-capabilities'
 import type { ArtifactContent, ArtifactSession, ArtifactSummary, VersionSummary } from './artifacts'
@@ -528,6 +529,39 @@ export type ClaudeSettingChange =
   | { setting: 'autoCompactWindow'; model: string | null; value: number | null }
   | { setting: 'promptCacheTtl'; value: PromptCacheTtl | null }
 
+/** One model's row of an agent's auto-compact setting. */
+export interface AutoCompactRow {
+  /** The model as the harness's file keys it. */
+  model: string
+  /** The name the agent lists it by; null for a model only the file names. */
+  name: string | null
+  /** The value in the setting's unit; null when the file holds none, so the harness picks. */
+  value: number | null
+  /** What the file holds when it is no number of the unit, shown as written. */
+  other: string | null
+}
+
+/** When an agent's harness compacts on its own, as its configuration holds it, in its own unit. */
+export interface AutoCompactSettings {
+  unit: CompactUnit
+  /** The range a value is written in: tokens, or a whole percent for `percent`. */
+  min: number
+  max: number
+  /** The value for every model without a row of its own; null when none is set. */
+  all: number | null
+  allOther: string | null
+  /** A row per model for a harness that sets one per model; null when it sets one for all. */
+  models: AutoCompactRow[] | null
+  /** The file the value is kept in; null when the harness writes its own configuration. */
+  file: string | null
+}
+
+/** One change; a null value removes the key, so the harness picks, and a null model means all. */
+export interface AutoCompactChange {
+  model: string | null
+  value: number | null
+}
+
 /** What a Codebuddy Code agent's page edits in its settings file, and what overrides it. */
 export interface CodebuddySettings {
   /**
@@ -894,6 +928,11 @@ export interface HostContract {
     params: { agentId: AgentId; change: ClaudeSettingChange }
     result: void
   }
+  // When the agent's harness compacts, read from its configuration in the harness's own unit;
+  // rejects with the reason when that cannot be read.
+  'agents.autoCompact': { params: { agentId: AgentId }; result: AutoCompactSettings }
+  // Writes one value there and nothing else.
+  'agents.setAutoCompact': { params: { agentId: AgentId; change: AutoCompactChange }; result: void }
   // A Codebuddy Code agent's site, read from its settings file, and what overrides it; rejects
   // with the reason when the file cannot be read.
   'agents.codebuddySettings': { params: { agentId: AgentId }; result: CodebuddySettings }
@@ -1818,6 +1857,8 @@ export const HOST_METHODS = [
   'agents.details',
   'agents.claudeSettings',
   'agents.setClaudeSetting',
+  'agents.autoCompact',
+  'agents.setAutoCompact',
   'agents.codebuddySettings',
   'agents.setCodebuddySite',
   'agents.refreshAccount',

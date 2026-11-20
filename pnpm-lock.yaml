@@ -65,6 +65,9 @@ importers:
       '@codemirror/view':
         specifier: 6.43.15
         version: 6.43.15
+      '@decimalturn/toml-patch':
+        specifier: ^3.3.3
+        version: 3.3.3
       '@dnd-kit/react':
         specifier: ^0.5.1
         version: 0.5.1(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
@@ -200,6 +203,9 @@ importers:
       i18next:
         specifier: 26.5.4
         version: 26.5.4(typescript@6.0.3)
+      jsonc-parser:
+        specifier: ^3.3.1
+        version: 3.3.1
       jszip:
         specifier: 3.10.2
         version: 3.10.2
@@ -610,6 +616,10 @@ packages:
 
   '@date-fns/tz@1.5.0':
     resolution: {integrity: sha512-lwYN/vDPeNRULcepoE/LO2Pgx+7/RV+S9ARfbc9lr2DtGkOD7pAiruHvbR1RX3Qyf6ja47EWJDMsNK5vK08DJg==}
+
+  '@decimalturn/toml-patch@3.3.3':
+    resolution: {integrity: sha512-x3+jj/r8uEEnnVs0vgdSYxn4YXcnklZPmbQ105DI/e4mng+9z/eDUuc8PMwASab51CWt15DTVHLYiEbDBUzHJA==}
+    engines: {node: '>=16'}
 
   '@dnd-kit/abstract@0.5.1':
     resolution: {integrity: sha512-XI13sUYRvRgggMocjHlQhLRgENm/2GF94KF7mk+c0uxse7sbn75r0BgxoNPDlzLTDPWx6PkS0YHoeXN9JWhnOA==}
@@ -3146,6 +3156,9 @@ packages:
     engines: {node: '>=6'}
     hasBin: true
 
+  jsonc-parser@3.3.1:
+    resolution: {integrity: sha512-HUgH65KyejrUFPvHFPbqOY0rsFip3Bo5wb4ngvdi1EpCYWUQDC5V+Y7mZws+DLkr4M//zQJoanu1SP+87Dv1oQ==}
+
   jsonfile@4.0.0:
     resolution: {integrity: sha512-m6F1R3z8jjlf2imQHS2Qez5sjKWQzbuuhuJ/FKYFRZvPE3PuHcSMVZzfsLhGVOkfd20obL5SWEBew5ShlquNxg==}
 
@@ -5491,6 +5504,8 @@ snapshots:
       w3c-keyname: 2.2.8
 
   '@date-fns/tz@1.5.0': {}
+
+  '@decimalturn/toml-patch@3.3.3': {}
 
   '@dnd-kit/abstract@0.5.1':
     dependencies:
@@ -8289,6 +8304,8 @@ snapshots:
     optional: true
 
   json5@2.2.3: {}
+
+  jsonc-parser@3.3.1: {}
 
   jsonfile@4.0.0:
     optionalDependencies:

@@ -1374,6 +1374,19 @@ export function createValidators(platform: Platform): Validators {
         },
       }
     },
+    'agents.autoCompact': agent,
+    'agents.setAutoCompact': (params) => {
+      const o = fields(params)
+      const change = fields(o.change)
+      const value = change.value
+      if (value !== null && (typeof value !== 'number' || !Number.isInteger(value))) {
+        throw invalidParams('change.value must be a whole number or null')
+      }
+      return {
+        agentId: agentId(o),
+        change: { model: change.model === null ? null : string(change, 'model', 256), value },
+      }
+    },
     'agents.codebuddySettings': agent,
     'agents.setCodebuddySite': (params) => {
       const o = fields(params)

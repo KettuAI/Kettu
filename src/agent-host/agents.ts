@@ -2,7 +2,7 @@
 // sign-in state and the AgentStatus every port sees. A harness's detection, installs and updates
 // are shared by its agents: its default agent and those added with folders of their own.
 
-import { mkdir, readFile, realpath, rm } from 'node:fs/promises'
+import { mkdir, readFile, realpath, rm, stat } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import type {
@@ -16,6 +16,8 @@ import type {
   AgentStatus,
   AgentTask,
   AgentUpdate,
+  AutoCompactChange,
+  AutoCompactSettings,
   ClaudeSettingChange,
   ClaudeSettings,
   CodebuddySettings,
@@ -60,6 +62,7 @@ import {
 } from './vendor-usage/antigravity'
 import { readAntigravityUsage } from './antigravity-usage'
 import { signsInWithKeyOnly } from '@shared/agents'
+import { takesAutoCompact } from '@shared/auto-compact'
 import type { AgentProcess, NodeRuntime } from '@shared/host-control'
 import type { Platform } from '@shared/platform'
 import { agentColor, type AddedAgent, type HostSettings } from '@shared/settings'
@@ -128,6 +131,8 @@ import {
 } from './dsh/credentials'
 import { readClaudeSettings, writeClaudeSetting, type ListedModel } from './claude/user-settings'
 import { readCodebuddySite, shellOverrides, writeCodebuddySite } from './codebuddy/user-settings'
+import { readAutoCompact, writeAutoCompact, type CompactPlace } from './auto-compact/settings'
+import type { CodexRequest } from './marketplace/codex-plugins'
 import {
   installedFolder,
   installMethodOf,
@@ -4726,6 +4731,46 @@ export class AgentManager {
     return slot
   }
 
+  // When an agent's harness compacts on its own.
+
+  /** The agent's auto-compact setting, from its harness's own configuration. */
+  async autoCompact(
+    agentId: AgentId,
+    config: readonly ConfigOption[] | undefined,
+    codex: () => Promise<CodexRequest>,
+  ): Promise<AutoCompactSettings> {
+    return readAutoCompact(await this.compactPlace(agentId, config, codex))
+  }
+
+  /** Writes one value there; a session opened later reads it. */
+  async setAutoCompact(
+    agentId: AgentId,
+    change: AutoCompactChange,
+    codex: () => Promise<CodexRequest>,
+  ): Promise<void> {
+    await writeAutoCompact(await this.compactPlace(agentId, undefined, codex), change)
+    this.deps.diagnostics.event(agentId, 'auto-compact', change.model === null ? 'all' : 'model')
+  }
+
+  private async compactPlace(
+    agentId: AgentId,
+    config: readonly ConfigOption[] | undefined,
+    codex: () => Promise<CodexRequest>,
+  ): Promise<CompactPlace> {
+    const slot = this.registeredSlot(agentId)
+    if (!takesAutoCompact(agentId)) {
+      throw invalidParams(`${slot.def.name} has no auto-compact setting Kettu edits`)
+    }
+    await this.detectAll()
+    return {
+      harness: slot.def.id,
+      file: slot.def.id === 'codex' ? '' : await this.existingSettingsFile(slot),
+      version: this.status(agentId).version,
+      config,
+      codex,
+    }
+  }
+
   // Codebuddy Code's site.
 
   /** A Codebuddy Code agent's site, from its settings file, and the shell variables over it. */
@@ -4761,6 +4806,31 @@ export class AgentManager {
     const folder = this.configFolder(slot.id)
     if (!folder) throw new Error(`${slot.name} has no configuration folder`)
     return folder
+  }
+
+  /** The first of the agent's settings files that exists, else the one it reads first. */
+  private async existingSettingsFile(slot: Slot): Promise<string> {
+    const { platform } = this.deps
+    const env = this.deps.env.agentEnv(slot.id)
+    const candidates =
+      configLocations(
+        slot.def.id,
+        (name) => getEnv(env, name, platform),
+        os.homedir(),
+        platform,
+        this.chosenFolder(slot),
+      ).find((location) => location.id === 'settings')?.candidates ?? []
+    for (const file of candidates) {
+      if (
+        await stat(file).then(
+          (info) => info.isFile(),
+          () => false,
+        )
+      )
+        return file
+    }
+    if (!candidates[0]) throw new Error(`${slot.name} has no settings file`)
+    return candidates[0]
   }
 
   /** The agent's settings file, where Claude Code reads the variables of its `env`. */

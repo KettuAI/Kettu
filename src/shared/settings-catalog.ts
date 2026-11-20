@@ -3,6 +3,7 @@
 // Kettu's settings tools read the same entries, so a row added to the page is one agents see.
 
 import { isFullAccessMode } from './agents'
+import { takesAutoCompact } from './auto-compact'
 import { IDLE_RELEASE_MODES } from './idle-release'
 import { LOCALE_NAMES, LOCALES } from './locale'
 import type { Platform } from './platform'
@@ -920,17 +921,17 @@ const ENTRIES = {
   },
   'agents.auto-compact': {
     section: 'agents',
-    row: 'claude-settings',
-    name: 'agents.claudeSettings.compact.name',
-    description: 'agents.claudeSettings.compact.description',
+    row: 'auto-compact',
+    name: 'agents.autoCompact.name',
+    description: 'agents.autoCompact.catalog',
     part: 'host',
     kind: 'info',
     item: 'agent',
-    on: (ctx, item) => ctx.agents.some((a) => a.id === item && a.harnessId === 'claude-code'),
+    on: (ctx, item) => ctx.agents.some((a) => a.id === item && takesAutoCompact(a.id)),
   },
   'agents.prompt-cache': {
     section: 'agents',
-    row: 'claude-settings',
+    row: 'prompt-cache',
     name: 'agents.claudeSettings.cache.name',
     description: 'agents.claudeSettings.cache.description',
     part: 'host',

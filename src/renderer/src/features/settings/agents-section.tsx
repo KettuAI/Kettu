@@ -23,6 +23,7 @@ import {
   takesStartMode,
   type CodebuddySite,
 } from '@shared/agents'
+import { takesAutoCompact } from '@shared/auto-compact'
 import {
   AGENT_COLORS,
   AGENT_NAME_CHARS,
@@ -121,6 +122,7 @@ import {
   SettingSwitch,
   Skel,
 } from './controls'
+import { AutoCompactRows } from './auto-compact-rows'
 import { ClaudeSettingsRows } from './claude-settings-rows'
 import { CodebuddySettingsRows } from './codebuddy-settings-rows'
 import { PlaceRow } from './places'
@@ -1339,6 +1341,7 @@ function ConfigurationGroup({ status }: { status: AgentStatus }) {
           </SetButton>
         </RowFrame>
         {takesStartMode(status.id) && <StartModeRow key={status.id} status={status} />}
+        {takesAutoCompact(status.id) && <AutoCompactRows key={status.id} status={status} />}
         {takesClaudeSettings(status.id) && <ClaudeSettingsRows key={status.id} status={status} />}
         {takesCodebuddySettings(status.id) && (
           <CodebuddySettingsRows key={status.id} status={status} />

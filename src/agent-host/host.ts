@@ -2795,6 +2795,12 @@ export class AgentHost {
       'agents.claudeSettings': ({ agentId }) =>
         agents.claudeSettings(agentId, listedModels(this.agentOptions.get(agentId)?.config)),
       'agents.setClaudeSetting': ({ agentId, change }) => agents.setClaudeSetting(agentId, change),
+      'agents.autoCompact': ({ agentId }) =>
+        agents.autoCompact(agentId, this.agentOptions.get(agentId)?.config, () =>
+          this.appServer(agentId),
+        ),
+      'agents.setAutoCompact': ({ agentId, change }) =>
+        agents.setAutoCompact(agentId, change, () => this.appServer(agentId)),
       'agents.codebuddySettings': ({ agentId }) => agents.codebuddySettings(agentId),
       'agents.setCodebuddySite': ({ agentId, change }) => agents.setCodebuddySite(agentId, change),
       'agents.refreshAccount': ({ agentId, force }) => agents.refreshAccount(agentId, { force }),
