@@ -11,6 +11,7 @@ export function firstWaiting(sessionId: string): string | null {
       (entry?.kind === 'tool' && !!entry.permission) ||
       (entry?.kind === 'browser_origin' && entry.decision === null) ||
       (entry?.kind === 'device_access' && entry.decision === null) ||
+      (entry?.kind === 'surface_access' && entry.decision === null) ||
       (entry?.kind === 'computer_app' && entry.decision === null) ||
       (entry?.kind === 'computer_setup' && entry.outcome === null) ||
       (entry?.kind === 'control_ask' && entry.outcome === null) ||

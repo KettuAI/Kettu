@@ -27,6 +27,13 @@ export interface TerminalInfo {
   createdAt: number
   /** Null for a terminal the user opened; cleared when its shell is restarted. */
   owner: TerminalOwner | null
+  /**
+   * The user allowed their session's agent to use this terminal they opened. False for one an
+   * agent opened, which needs no allow; cleared when its shell is restarted.
+   */
+  agentAllowed: boolean
+  /** A card asks the user whether the session's agent may use it. */
+  agentAsks?: true
   /** Who uses it in the owner's running turn; idle for every terminal no turn uses. */
   control: SurfaceControl
   /** What its program waits for the user to type: a password, or nothing known. */

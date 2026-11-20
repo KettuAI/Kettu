@@ -30,7 +30,15 @@ export const ControlNoteEntry = memo(function ControlNoteEntry({ sessionId, entr
         <HugeiconsIcon icon={Cursor02Icon} strokeWidth={1.9} aria-hidden className="size-3.5" />
       </MarkerIcon>
       <MarkerContent>
-        {entry.event === 'paused' ? (
+        {entry.event === 'used' ? (
+          <Trans
+            t={t}
+            // Only a terminal of the user's is used this way so far.
+            i18nKey="note.used.terminal"
+            values={{ name: entry.name, agent: agent ?? t('agent') }}
+            components={{ b }}
+          />
+        ) : entry.event === 'paused' ? (
           <Trans
             t={t}
             i18nKey="note.paused.computer"

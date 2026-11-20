@@ -1,11 +1,15 @@
 // What in a prompt's text reads as a chip: the command it starts with, `@` mentions of attached
-// or project files, and links. Chips are only how the text looks; the text is what is sent.
+// or project files and of the session's terminals, and links. Chips are only how the text looks;
+// the text is what is sent, with a ref for each terminal it mentions.
 
 import { leadingCommand } from './slash'
 
 /** What an `@` mention names, once resolved against the attachments and the project. */
 export interface MentionTarget {
-  kind: 'file' | 'folder' | 'image'
+  kind: 'file' | 'folder' | 'image' | 'terminal'
+  /** The terminal it stands for, and the tab's name. */
+  terminalId?: string
+  name?: string
   /** The draft attachment it stands for, when one has its name. */
   attachmentKey?: string
   /** The path relative to the project, when the project has it. */
@@ -152,7 +156,13 @@ export function findChips(text: string, context: ChipContext): Chip[] {
     if (!found) continue
     const { token, name, lines, target } = found
     const label =
-      target.kind === 'folder' ? (name.endsWith('/') ? name : `${name}/`) : basename(name)
+      target.kind === 'terminal'
+        ? (target.name ?? name)
+        : target.kind === 'folder'
+          ? name.endsWith('/')
+            ? name
+            : `${name}/`
+          : basename(name)
     chips.push({ ...target, from, to: from + 1 + token.length, label, lines })
   }
   const taken = (from: number, to: number) => chips.some((c) => from < c.to && to > c.from)
@@ -192,9 +202,42 @@ export function mentionedAs(item: { name: string; kind: string }): string {
   return item.kind === 'folder' ? `${item.name}/` : item.name
 }
 
+const TERMINAL_MENTION = 'terminal:'
+// Enough of a terminal's id to tell the session's terminals apart.
+const TERMINAL_ID_CHARS = 8
+
+/** How the text mentions a terminal: its tab's name, with spaces, would end the mention. */
+export function terminalMention(terminalId: string): string {
+  return `@${TERMINAL_MENTION}${terminalId.slice(0, TERMINAL_ID_CHARS)}`
+}
+
+/** A terminal the text mentions as `terminal:<start of its id>`, among `terminals`. */
+function terminalOf(
+  token: string,
+  terminals: readonly { id: string; name: string }[],
+): MentionTarget | null {
+  if (!token.startsWith(TERMINAL_MENTION)) return null
+  const start = token.slice(TERMINAL_MENTION.length)
+  if (start.length < TERMINAL_ID_CHARS) return null
+  const terminal = terminals.find((t) => t.id.startsWith(start))
+  return terminal ? { kind: 'terminal', terminalId: terminal.id, name: terminal.name } : null
+}
+
+/** The terminals the text mentions, as a prompt carries them, each once. */
+export function terminalRefs(
+  text: string,
+  resolve: (token: string) => MentionTarget | null,
+): { kind: 'terminal'; terminalId: string; name: string }[] {
+  const refs = new Map<string, string>()
+  for (const chip of findChips(text, { commands: [], resolve })) {
+    if (chip.kind === 'terminal' && chip.terminalId) refs.set(chip.terminalId, chip.label)
+  }
+  return [...refs].map(([terminalId, name]) => ({ kind: 'terminal', terminalId, name }))
+}
+
 /**
- * Resolves a mention against the attachments first, by the name it is written as, then against
- * the project's files and folders by path.
+ * Resolves a mention against the session's terminals and the attachments first, by the name it is
+ * written as, then against the project's files and folders by path.
  */
 export function mentionResolver(
   attachments: readonly {
@@ -205,8 +248,11 @@ export function mentionResolver(
     thumb?: string | null
   }[],
   project: { files: ReadonlySet<string>; folders: ReadonlySet<string> } | null,
+  terminals: readonly { id: string; name: string }[] = [],
 ): (token: string) => MentionTarget | null {
   return (token) => {
+    const terminal = terminalOf(token, terminals)
+    if (terminal) return terminal
     const item = attachments.find(
       (a) => a.kind !== 'text' && (mentionedAs(a) === token || a.name === token),
     )

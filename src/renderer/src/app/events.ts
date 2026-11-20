@@ -9,6 +9,8 @@ export type AppEvent =
   | { kind: 'close-browser' } // Mod+W with the browser used last
   | { kind: 'new-browser-tab' } // Mod+T with the browser used last
   | { kind: 'insert-into-composer'; sessionId: string | null; text: string }
+  // A mention, such as a terminal's, put after the text of the composer of `draft`.
+  | { kind: 'mention-into-composer'; draft: string; mention: string }
   | { kind: 'command-into-composer'; sessionId: string; name: string } // a sent command, clicked
   | { kind: 'draft-written'; draft: string } // written from outside its composer, which reloads it
   | { kind: 'add-attachments' } // Mod+U: the composer's Add files or photos…

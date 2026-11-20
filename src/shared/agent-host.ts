@@ -17,7 +17,7 @@ import type {
   BrowserOriginDecision,
 } from './browser'
 import type { ComputerAppDecision } from './computer-use'
-import type { ControlOutcome } from './control'
+import type { ControlOutcome, SurfaceAccessDecision } from './control'
 import type { ContextBreakdown, ContextEstimates } from './context'
 import type { DeviceFileContent, FileContent, FileList, FileSearch, FileWritten } from './files'
 import type { ArtifactContentFile, BackgroundWork } from './host-control'
@@ -1679,6 +1679,14 @@ export interface HostContract {
     params: { sessionId: string; entryId: string; decision: DeviceAccessDecision }
     result: void
   }
+  // Any window's or device's answer to a card asking whether the agent may use a terminal the user
+  // opened; the first counts.
+  'terminals.answerAccess': {
+    params: { sessionId: string; entryId: string; decision: SurfaceAccessDecision }
+    result: void
+  }
+  // Takes back the use of a terminal the user opened from the session's agent, which asks again.
+  'terminals.revokeAccess': { params: { sessionId: string; terminalId: string }; result: void }
   // Takes back the allow a session's agent has for a device, so its next use asks again.
   'devices.revokeAccess': { params: { sessionId: string; deviceId: string }; result: void }
   // The mobile devices agents may always use on this host, and taking one off that list.
@@ -2039,6 +2047,8 @@ export const HOST_METHODS = [
   'browser.answerOrigin',
   'devices.answerAccess',
   'devices.revokeAccess',
+  'terminals.answerAccess',
+  'terminals.revokeAccess',
   'devices.allowed',
   'devices.forget',
   'computer.answerApp',

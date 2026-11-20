@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useMemo } from 'react'
 import {
   Alert02Icon,
   BrowserIcon,
+  ComputerTerminal01Icon,
   File01Icon,
   Folder01Icon,
   GlobalIcon,
@@ -130,6 +131,8 @@ function ChipBody({ chip, missing }: { chip: Chip; missing: boolean }) {
         />
       ) : chip.kind === 'folder' ? (
         <Glyph icon={Folder01Icon} className="size-3.25 shrink-0 text-tertiary" />
+      ) : chip.kind === 'terminal' ? (
+        <Glyph icon={ComputerTerminal01Icon} className="size-3.25 shrink-0 text-tertiary" />
       ) : (
         <Glyph icon={File01Icon} className="size-3.25 shrink-0 text-tertiary" />
       )}

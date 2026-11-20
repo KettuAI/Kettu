@@ -204,6 +204,19 @@ export function usePromptBox({
     [draft, source],
   )
 
+  /** Puts a mention after what the box holds, in the same line, with a space after it. */
+  const addMention = useCallback(
+    (mention: string) => {
+      const current = (editor.current?.text() ?? '').replace(/\s+$/, '')
+      const next = current ? `${current} ${mention} ` : `${mention} `
+      source.set(next, null)
+      writeDraft(draft, next)
+      editor.current?.setText(next)
+      requestAnimationFrame(() => editor.current?.focus())
+    },
+    [draft, source],
+  )
+
   /** Puts the command at the start of the text, unless it starts with it already. */
   const addCommand = useCallback(
     (name: string) => {
@@ -241,8 +254,12 @@ export function usePromptBox({
           closeHistory()
           addCommand(event.name)
         }
+        if (event.kind === 'mention-into-composer' && event.draft === draft) {
+          closeHistory()
+          addMention(event.mention)
+        }
       }),
-    [draft, sessionId, source, closeHistory, addText, addCommand],
+    [draft, sessionId, source, closeHistory, addText, addCommand, addMention],
   )
 
   /** Typing changed the text: its state, its draft, and a slash list Esc closed. */

@@ -15,6 +15,8 @@ import { formatShortcut, isMod, isWeb } from '@renderer/lib/platform'
 import { cn } from '@renderer/lib/utils'
 import type { DraftAttachment } from '@renderer/stores/attachments'
 import { ensureFiles, openFile, useFilesStore } from '@renderer/stores/files'
+import { revealTerminal, useMentionTerminals } from '@renderer/stores/terminals'
+import { newSessionPanel } from '@renderer/stores/view'
 import { openViewer } from '@renderer/stores/viewer'
 import { openAttachmentPath } from '../attachments/open-attachment'
 import { draftKey } from '../media/viewer-items'
@@ -91,7 +93,13 @@ export function usePromptChips({
     if (projectPath && mentions) ensureFiles(projectPath)
   }, [projectPath, mentions])
   const project = files ? projectOf(files.paths, files.known) : null
-  const resolve = useMemo(() => mentionResolver(attachments, project), [attachments, project])
+  const terminals = useMentionTerminals(
+    sessionId ?? (projectPath ? newSessionPanel(projectPath) : null),
+  )
+  const resolve = useMemo(
+    () => mentionResolver(attachments, project, terminals),
+    [attachments, project, terminals],
+  )
   const names = useMemo(() => commands.map((c) => c.name), [commands])
 
   // The preview belongs to the text it was opened on: an edit can take its chip away.
@@ -99,7 +107,7 @@ export function usePromptChips({
   const hoverTimer = useRef<number | undefined>(undefined)
   const onHover = (chip: Chip | null, element: HTMLElement | null) => {
     window.clearTimeout(hoverTimer.current)
-    if (!chip || !element || chip.kind === 'command') {
+    if (!chip || !element || chip.kind === 'command' || chip.kind === 'terminal') {
       setHover(null)
       return
     }
@@ -142,6 +150,10 @@ export function usePromptChips({
     if (chip.kind === 'command') return
     if (chip.kind === 'link') {
       links.open(chip.url)
+      return
+    }
+    if (chip.kind === 'terminal') {
+      if (chip.terminalId) revealTerminal(chip.terminalId)
       return
     }
     const item = attachments.find((a) => a.key === chip.attachmentKey)

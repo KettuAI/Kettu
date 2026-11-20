@@ -141,6 +141,20 @@
     },
     "where": "点按、输入和截图，截图会交给这个智能体的模型服务商"
   },
+  "terminalAccess": {
+    "decision": {
+      "allow": "本次会话允许",
+      "deny": "拒绝"
+    },
+    "answer": {
+      "allow": "本次会话已允许",
+      "deny": "已拒绝",
+      "timeout": "没有及时回答",
+      "revoked": "本次会话已允许，后来收回"
+    },
+    "where": "读它最近的输出，并在里面输入命令；密码仍然只由你输入",
+    "whereRead": "只读它最近的输出，因为这个会话在计划模式"
+  },
   "computerApp": {
     "decision": {
       "session": "本会话内允许",
@@ -972,6 +986,7 @@
     "action": {
       "site": "打开网站",
       "device": "使用设备",
+      "terminal": "使用你的终端",
       "app": "使用应用",
       "projectMcp": "启动 MCP 服务器",
       "projectHooks": "运行这个项目设为自动执行的命令"

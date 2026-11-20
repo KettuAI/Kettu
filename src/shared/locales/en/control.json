@@ -67,6 +67,9 @@
     },
     "paused": {
       "computer": "You clicked in <b>{{app}}</b>, so {{agent}} paused"
+    },
+    "used": {
+      "terminal": "<b>{{agent}}</b> started using your terminal <b>{{name}}</b>"
     }
   },
   "status": {

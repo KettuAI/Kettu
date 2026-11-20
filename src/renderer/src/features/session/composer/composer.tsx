@@ -39,10 +39,12 @@ import { setPaneSelection, useArtifactsStore } from '@renderer/stores/artifacts'
 import { useSettingsStore } from '@renderer/stores/settings'
 import { showSending, useThreadsStore } from '@renderer/stores/threads'
 import { useViewStore } from '@renderer/stores/view'
+import { mentionTerminalsOf, useTerminalsStore } from '@renderer/stores/terminals'
 import { askSide, openSideChat, sideQuestionOf } from '@renderer/stores/side-chat'
 import { awaitsAnswer, endedOnRejection } from '../turn-phase'
 import { TrayStyles } from './affect-styles'
 import { attachmentContent, attachmentsBlock, type AttachmentsBlock } from './attachments'
+import { mentionResolver, terminalRefs } from './chips'
 import { OptionMenu } from './control-row'
 import { useModeControl } from './mode-control'
 import { isSelect, onCycleKeys } from './options'
@@ -324,9 +326,15 @@ export function Composer({
     const sent = selection && taken.prompt.trim() ? selection : null
     const prompt = sent ? selectionPrompt(taken.prompt, sent) : taken.prompt
     if (sent) setPaneSelection(null)
+    const terminals = mentionTerminalsOf(useTerminalsStore.getState().byId, sessionId)
     const content: UserContent[] = [
       ...(prompt.trim() ? [{ type: 'text' as const, text: prompt }] : []),
       ...attachmentContent(taken.held),
+      // A terminal the text mentions goes with it, which lets the agent use it.
+      ...terminalRefs(prompt, mentionResolver([], null, terminals)).map((ref) => ({
+        type: 'ref' as const,
+        ref,
+      })),
     ]
     return { taken, sent, content }
   }

@@ -35,7 +35,7 @@ import {
   type BrowserCallRequest,
   type BrowserOriginAnswer,
 } from '@shared/browser'
-import { isControlOutcome, isControlStep } from '@shared/control'
+import { isControlOutcome, isControlStep, SURFACE_ACCESS_WAIT_MS } from '@shared/control'
 import type {
   AgentProcess,
   AttentionFront,
@@ -71,7 +71,13 @@ import {
   type MarketResults,
 } from '@shared/market-publish'
 import { HARNESSES_FOLDER, KETTU_HOME_FOLDER, PLUGINS_FOLDER } from '@shared/storage'
-import type { AgentId, DigestedThreadEntry, FromDevice, ThreadEntry } from '@shared/thread'
+import type {
+  AgentId,
+  DigestedThreadEntry,
+  FromDevice,
+  ThreadEntry,
+  UserContent,
+} from '@shared/thread'
 import { AgentFiles } from './agent-files'
 import { agentOptionsFile, AgentOptionsStore, startModeIn } from './agent-options'
 import { listedModels } from './claude/user-settings'
@@ -468,6 +474,9 @@ export class AgentHost {
   private nextTerminalCall = 1
   // Sessions whose running turn used a terminal, told to the terminal host when the turn ends.
   private readonly terminalTurns = new Set<string>()
+  // Terminals the user referenced in a message, by id, with the session it went to; null for New
+  // session's, whose terminals go to the session it creates. Each allows that session's agent.
+  private readonly sharedTerminals = new Map<string, string | null>()
   /** Sessions whose running turn acted on a device, which the device host hears the end of. */
   private readonly deviceTurns = new Set<string>()
   private nextDeviceCall = 1
@@ -829,6 +838,20 @@ export class AgentHost {
       terminals: {
         call: (call) => this.terminalCall(call),
         agentOf: (sessionId) => this.sessions.sessionAgent(sessionId),
+        accessOf: (sessionId) => this.sessions.surfaceAccessOf(sessionId),
+        ask: (sessionId, terminal, readOnly) =>
+          this.sessions.surfaceAccessAsked(
+            sessionId,
+            { surface: 'terminal', id: terminal.id, name: terminal.title },
+            readOnly,
+            SURFACE_ACCESS_WAIT_MS,
+          ),
+        used: (sessionId, terminal) =>
+          this.sessions.surfaceUsed(sessionId, 'terminal', terminal.title),
+        shared: (sessionId, terminalId) => {
+          const to = this.sharedTerminals.get(terminalId)
+          return to !== undefined && (to === null || to === sessionId)
+        },
       },
       sessionProject: (sessionId) => this.sessions.sessionProject(sessionId),
       sessionFolder: (sessionId) => this.sessions.sessionFolder(sessionId),
@@ -2444,6 +2467,30 @@ export class AgentHost {
     }
   }
 
+  /**
+   * The terminals a user's message references: the session's agent may use them from now on, as the
+   * user shared them. A session that exists gets the allow at once, so the tab says so; New session's
+   * terminals reach their session later, so its agent's first call on one gives it.
+   */
+  private shareTerminals(sessionId: string | null, content: readonly UserContent[]): void {
+    for (const item of content) {
+      if (item.type !== 'ref' || item.ref.kind !== 'terminal') continue
+      const terminalId = item.ref.terminalId
+      this.sharedTerminals.set(terminalId, sessionId)
+      if (sessionId === null) continue
+      const session = this.sessions.browserSession(sessionId) ?? sessionId
+      void this.terminalCall({ kind: 'allow', sessionId: session, terminalId, allowed: true })
+    }
+  }
+
+  /** Takes back the session's agent the use of a terminal the user opened, from the tab's menu. */
+  private async revokeTerminal(sessionId: string, terminalId: string): Promise<void> {
+    this.sharedTerminals.delete(terminalId)
+    const answer = await this.terminalCall({ kind: 'allow', sessionId, terminalId, allowed: false })
+    if ('error' in answer) throw new HostError('not_found', answer.error.message)
+    this.sessions.surfaceAccessRevoked(sessionId, terminalId)
+  }
+
   /** Sends an agent's terminal call to its parent, which hands it to the terminal host. */
   terminalCall(call: TerminalCall): Promise<TerminalCallAnswer> {
     // Only these take the terminal for the turn; the terminal host frees it when the turn ends.
@@ -2849,6 +2896,7 @@ export class AgentHost {
       'sessions.create': async (params, { portId, device }) => {
         // A worktree is made with git, which is found as the agents find it.
         if (params.worktree) await this.env.ready()
+        if (params.prompt) this.shareTerminals(null, params.prompt)
         return sessions.create(device ? { ...params, device: fromDevice(device) } : params, portId)
       },
       'sessions.prepare': (params, { portId }) => sessions.prepare(params, portId),
@@ -2878,8 +2926,10 @@ export class AgentHost {
       'sessions.watch': ({ sessionId }, { portId }) => sessions.watch(sessionId, portId),
       'sessions.unwatch': ({ sessionId }, { portId }) => sessions.unwatch(sessionId, portId),
       'sessions.show': ({ sessionIds }, { portId }) => sessions.show(sessionIds, portId),
-      'sessions.prompt': ({ sessionId, content }, { portId, device }) =>
-        sessions.prompt(sessionId, content, portId, fromDevice(device)),
+      'sessions.prompt': ({ sessionId, content }, { portId, device }) => {
+        this.shareTerminals(sessionId, content)
+        return sessions.prompt(sessionId, content, portId, fromDevice(device))
+      },
       'sessions.attachEarly': ({ sessionId }) => sessions.attachEarly(sessionId),
       'sessions.cancel': ({ sessionId }) => sessions.cancel(sessionId),
       'sessions.runningWork': ({ sessionIds }) => ({ sessions: sessions.runningWork(sessionIds) }),
@@ -2901,12 +2951,16 @@ export class AgentHost {
       'worktrees.retrySetup': ({ sessionId }) => sessions.retryWorktreeSetup(sessionId),
       'worktrees.skipSetup': ({ sessionId }) => sessions.skipWorktreeSetup(sessionId),
       'worktrees.setupLog': ({ sessionId, from }) => sessions.worktreeSetupLog(sessionId, from),
-      'sessions.switchAgent': (params, { portId, device }) =>
-        sessions.switchAgent(params, portId, fromDevice(device)),
+      'sessions.switchAgent': (params, { portId, device }) => {
+        this.shareTerminals(params.sessionId, params.content)
+        return sessions.switchAgent(params, portId, fromDevice(device))
+      },
       'sessions.context': ({ sessionId }) => sessions.context(sessionId),
       'sessions.contextEstimates': ({ sessionId }) => sessions.contextEstimates(sessionId),
-      'sessions.queue': ({ sessionId, content }, { portId, device }) =>
-        sessions.queue(sessionId, content, portId, fromDevice(device)),
+      'sessions.queue': ({ sessionId, content }, { portId, device }) => {
+        this.shareTerminals(sessionId, content)
+        return sessions.queue(sessionId, content, portId, fromDevice(device))
+      },
       'sessions.runCommand': (params, { portId, device }) =>
         this.runReplyCommand(params, portId, device),
       'sessions.unqueue': ({ sessionId, itemId }) => sessions.unqueue(sessionId, itemId),
@@ -3333,6 +3387,11 @@ export class AgentHost {
       'devices.answerAccess': ({ sessionId, entryId, decision }, { device }) => {
         sessions.answerDeviceAccess(sessionId, entryId, decision, fromDevice(device))
       },
+      'terminals.answerAccess': ({ sessionId, entryId, decision }, { device }) => {
+        sessions.answerSurfaceAccess(sessionId, entryId, decision, fromDevice(device))
+      },
+      'terminals.revokeAccess': ({ sessionId, terminalId }) =>
+        this.revokeTerminal(sessionId, terminalId),
       'devices.revokeAccess': ({ sessionId, deviceId }) => {
         this.artifactService.revokeDevice(sessionId, deviceId)
         sessions.deviceAccessRevoked(sessionId, deviceId)

@@ -36,7 +36,13 @@ import { CONTEXT_REFRESH_MS, type ContextEstimates } from '@shared/context'
 import { firstLine, outlineText } from '@shared/outline'
 import { longEnough, queryWords } from '@shared/search-fold'
 import { originLabel, type BrowserOriginAnswer, type BrowserOriginDecision } from '@shared/browser'
-import type { ControlOutcome, ControlStep, ControlSurface } from '@shared/control'
+import type {
+  ControlOutcome,
+  ControlStep,
+  ControlSurface,
+  SurfaceAccessAnswer,
+  SurfaceAccessDecision,
+} from '@shared/control'
 import type {
   ComputerApp,
   ComputerAppAnswer,
@@ -99,6 +105,7 @@ import {
   type ControlAskEntry,
   type ControlNoteEntry,
   type DeviceAccessEntry,
+  type SurfaceAccessEntry,
   type MarketPublishEntry,
   type MarketPublishOutcome,
   type SettingChangeItem,
@@ -1095,6 +1102,7 @@ export class SessionManager {
   private readonly originRequests = new Map<string, OriginRequest>()
   /** Each device card's answer, by its entry id, which the waiting tool call takes. */
   private readonly deviceWaits = new Map<string, (answer: DeviceAccessAnswer) => void>()
+  private readonly surfaceWaits = new Map<string, (answer: SurfaceAccessAnswer) => void>()
   /** Marketplace cards that wait for the user, by entry id. */
   private readonly marketWaits = new Map<string, (answer: MarketAnswer) => void>()
   /** Cards whose Publish is setting the account's publisher name, which a second answer waits out. */
@@ -1913,6 +1921,126 @@ export class SessionManager {
     })
   }
 
+  /**
+   * An agent wants a terminal the user opened in its session: a card in the thread that waits for
+   * the user, as a device's first use does, and settles with their answer or `timeout`.
+   */
+  surfaceAccessAsked(
+    sessionId: string,
+    target: { surface: 'terminal'; id: string; name: string },
+    readOnly: boolean,
+    waitMs: number,
+  ): Promise<SurfaceAccessAnswer> {
+    const live = this.live.get(sessionId)
+    if (!live) return Promise.resolve('timeout')
+    const entry: SurfaceAccessEntry = {
+      kind: 'surface_access',
+      id: this.nextId(live),
+      surface: target.surface,
+      targetId: target.id,
+      targetName: target.name,
+      ...(readOnly ? { readOnly: true as const } : {}),
+      decision: null,
+      expiresAt: Date.now() + waitMs,
+      after: agentEntryBefore(live.thread),
+    }
+    live.origins.set(`surface:${entry.id}`, entry.id)
+    this.emit(live, [{ op: 'entry.add', entry }])
+    const status = live.thread.session.status
+    if (status === 'running' || status === 'ready')
+      this.update(live, { status: 'awaiting_permission' })
+    this.touch(live.id)
+    this.updateBadge()
+    this.deps.events.attention(
+      live.id,
+      'permission',
+      this.titleOf(live),
+      t('attention.terminalAccess', { terminal: target.name }),
+      { id: entry.id },
+    )
+    return new Promise((resolve) => {
+      const timer = setTimeout(
+        () => this.settleSurfaceAccess(sessionId, entry.id, 'timeout'),
+        waitMs,
+      )
+      this.surfaceWaits.set(entry.id, (answer) => {
+        clearTimeout(timer)
+        resolve(answer)
+      })
+    })
+  }
+
+  /** A window's or a device's answer to a terminal card; the first one counts. */
+  answerSurfaceAccess(
+    sessionId: string,
+    entryId: string,
+    decision: SurfaceAccessDecision,
+    device?: FromDevice,
+  ): void {
+    this.recordOf(sessionId)
+    const live = this.live.get(sessionId)
+    const entry = live?.thread.byId[entryId]
+    if (!live || entry?.kind !== 'surface_access')
+      throw notFound(`No terminal request in ${entryId}`)
+    if (entry.decision !== null || !this.surfaceWaits.has(entryId)) {
+      throw new HostError('not_found', `The terminal request ${entryId} was already answered`, {
+        reason: ALREADY_ANSWERED,
+        device: entry.device ?? null,
+      })
+    }
+    this.settleSurfaceAccess(sessionId, entryId, decision, device)
+  }
+
+  /** Marks the cards that allowed the agent a terminal as taken back. */
+  surfaceAccessRevoked(sessionId: string, targetId: string): void {
+    this.recordOf(sessionId)
+    const live = this.live.get(sessionId)
+    if (!live) return
+    const patches = threadEntries(live.thread)
+      .filter(
+        (entry) =>
+          entry.kind === 'surface_access' &&
+          entry.targetId === targetId &&
+          entry.decision === 'allow' &&
+          !entry.revoked,
+      )
+      .map((entry) => ({
+        op: 'entry.update' as const,
+        id: entry.id,
+        changes: { revoked: true as const },
+      }))
+    if (patches.length > 0) this.emit(live, patches)
+  }
+
+  /** Full access let the agent use a terminal the user opened without asking: the thread says so. */
+  surfaceUsed(sessionId: string, surface: ControlSurface, name: string): void {
+    this.controlNote(sessionId, surface, { event: 'used', name })
+  }
+
+  private settleSurfaceAccess(
+    sessionId: string,
+    entryId: string,
+    decision: SurfaceAccessAnswer,
+    device?: FromDevice,
+  ): void {
+    const resolve = this.surfaceWaits.get(entryId)
+    this.surfaceWaits.delete(entryId)
+    const live = this.live.get(sessionId)
+    if (live) {
+      live.origins.delete(`surface:${entryId}`)
+      const entry = live.thread.byId[entryId]
+      if (entry?.kind === 'surface_access' && entry.decision === null) {
+        this.emit(live, [
+          { op: 'entry.update', id: entryId, changes: { decision, ...(device ? { device } : {}) } },
+        ])
+      }
+      this.stopWaiting(live)
+      this.touch(live.id)
+      this.updateBadge()
+    }
+    resolve?.(decision)
+  }
+
   /** A window's or a device's answer to a device card; the first one counts. */
   answerDeviceAccess(
     sessionId: string,
@@ -2354,7 +2482,10 @@ export class SessionManager {
   private controlNote(
     sessionId: string,
     surface: ControlSurface,
-    note: { event: 'handed_back'; durationMs: number } | { event: 'paused'; app: string },
+    note:
+      | { event: 'handed_back'; durationMs: number }
+      | { event: 'paused'; app: string }
+      | { event: 'used'; name: string },
   ): void {
     const live = this.live.get(sessionId)
     if (!live) return
@@ -9167,6 +9298,10 @@ export class SessionManager {
         this.settleDeviceAccess(live.id, entryId, 'timeout')
         continue
       }
+      if (requestId.startsWith('surface:')) {
+        this.settleSurfaceAccess(live.id, entryId, 'timeout')
+        continue
+      }
       // A publish put off this way is kept as a draft, as by Not now.
       if (requestId.startsWith('market:')) {
         this.settleMarket(live.id, entryId, { decision: 'ended' })
@@ -9599,6 +9734,24 @@ export class SessionManager {
     const record = this.records.get(sessionId) ?? this.live.get(sessionId)?.record
     if (!record || record.origin !== 'user' || record.startedBy) return false
     return this.starterRank(sessionId) === 4
+  }
+
+  /**
+   * What a session's mode lets its agent do with a terminal the user opened: Full access uses it
+   * without asking, planning only reads it. A mode Kettu cannot rank asks.
+   */
+  surfaceAccessOf(sessionId: string): { fullAccess: boolean; planning: boolean } {
+    const record = this.recordOf(sessionId)
+    const harness = harnessOf(record.agentId)
+    const config = this.live.get(sessionId)?.thread.session.config ?? []
+    const optionId = modeOptionId(record.agentId)
+    const mode = config.find((option) => option.id === optionId)?.value
+    const planning =
+      mode === 'plan' ||
+      (harness === 'codex' &&
+        config.some((option) => option.id === CODEX_COLLABORATION_ID && option.value === 'plan'))
+    const rank = starterRank(harness, typeof mode === 'string' ? mode : undefined, planning)
+    return { fullAccess: rank === 4, planning }
   }
 
   /** A session's permission mode, from memory or its stored thread; null when it has none. */

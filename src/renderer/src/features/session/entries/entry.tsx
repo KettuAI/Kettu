@@ -15,6 +15,7 @@ import { BrowserOriginEntry } from './browser-origin-entry'
 import { ControlAskEntry } from './control-ask-entry'
 import { ControlNoteEntry } from './control-note-entry'
 import { DeviceAccessEntry } from './device-access-entry'
+import { SurfaceAccessEntry } from './surface-access-entry'
 import { MarketPublishEntry } from './market-publish-entry'
 import { SettingsChangeEntry } from './settings-change-entry'
 import { MemoryEntry } from './memory-entry'
@@ -78,6 +79,8 @@ export const Entry = memo(function Entry({
       return <BrowserOriginEntry {...props} agentName={agentName} />
     case 'device_access':
       return <DeviceAccessEntry {...props} agentName={agentName} />
+    case 'surface_access':
+      return <SurfaceAccessEntry {...props} agentName={agentName} />
     case 'computer_app':
       return <ComputerAppEntry {...props} agentName={agentName} />
     case 'computer_setup':
