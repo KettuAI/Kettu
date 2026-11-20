@@ -3,9 +3,9 @@ import SwiftUI
 
 /// Where the island sits and how large it may grow, from the screen it is on.
 struct IslandGeometry: Equatable {
-  /// The notch's width, nothing on a screen without one, where the island hangs from the menu bar.
+  /// The notch's width, nothing on a screen without one, where the island sits in the menu bar.
   var notchWidth: CGFloat = 196
-  /// The height of the island's top band: the notch's, or `Metrics.bandHeight`.
+  /// The height of the island's top band: the notch's, or the menu bar's.
   var notchHeight: CGFloat = 32
   var hasNotch = true
   var maxHeight: CGFloat = 600

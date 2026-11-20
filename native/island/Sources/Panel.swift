@@ -88,13 +88,13 @@ final class IslandController {
       g.hasNotch = true
       top = CGPoint(x: frame.minX + left.width + g.notchWidth / 2, y: frame.maxY)
     } else {
-      // No notch: the island hangs from the middle of the menu bar, clear of the apps' menus.
-      // A menu bar that hides itself leaves the top of the screen.
+      // No notch: the island sits in the middle of the menu bar, as tall as it, and grows down
+      // from the top of the screen as it would from a notch.
       let menuBar = frame.maxY - screen.visibleFrame.maxY
       g.notchWidth = 0
-      g.notchHeight = Metrics.bandHeight
+      g.notchHeight = menuBar > 0 ? menuBar : Metrics.bandHeight
       g.hasNotch = false
-      top = CGPoint(x: frame.midX, y: frame.maxY - max(0, menuBar))
+      top = CGPoint(x: frame.midX, y: frame.maxY)
     }
     g.maxHeight = (frame.height * Metrics.maxHeightShare).rounded()
     if model.geometry != g { model.geometry = g }

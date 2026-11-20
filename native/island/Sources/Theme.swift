@@ -62,8 +62,7 @@ enum Metrics {
   static let maxHeightShare: CGFloat = 0.7
   /// Room around the island inside its window, for the shoulders and the shadow.
   static let margin: CGFloat = 28
-  /// The height of the island's top band on a screen without a notch, where it hangs from the
-  /// menu bar.
+  /// The height of the island's top band on a screen without a notch whose menu bar hides itself.
   static let bandHeight: CGFloat = 32
   /// The longest title the collapsed island shows where no notch is in the way.
   static let titleWidth: CGFloat = 200

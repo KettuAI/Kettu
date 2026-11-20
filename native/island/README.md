@@ -7,7 +7,8 @@ it and sends back what the user did. It reads no files, opens no sockets, uses n
 for no system permission. Reaching the end of stdin, as when Kettu quits or crashes, makes it exit.
 
 It draws the island at the top middle of the screen whose menu bar is in use: in the notch, or on a
-screen without one, hanging from the menu bar. It shows while it is on:
+screen without one, in the middle of the menu bar, growing down from the top as from a notch. It
+shows while it is on:
 
 - **Collapsed**: the agent marks of the most urgent group, waiting, failed, running, done, or held by
   a plan limit, with that group's signal (the waiting dot, the error alert, the turn's nine dots or
