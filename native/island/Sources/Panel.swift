@@ -207,10 +207,10 @@ final class IslandController {
     if over { entered() } else { left() }
   }
 
-  /// The pointer rests on the island for 320 ms and moves slower than 0.6 pt per ms before it
+  /// The pointer rests on the island for 120 ms and moves slower than 1.2 pt per ms before it
   /// opens, so passing over it on the way to the menu bar opens nothing.
-  private static let dwell: TimeInterval = 0.32
-  private static let slow = 0.6
+  private static let dwell: TimeInterval = 0.12
+  private static let slow = 1.2
   /// How long the pointer may be off an island it opened before it closes.
   private static let grace: TimeInterval = 0.4
 
@@ -228,11 +228,11 @@ final class IslandController {
     hoverTimer = Timer.scheduledTimer(withTimeInterval: seconds, repeats: false) {
       [weak self] _ in
       guard let self, self.inside else { return }
-      let still = ProcessInfo.processInfo.systemUptime - self.lastMove > 0.08
+      let still = ProcessInfo.processInfo.systemUptime - self.lastMove > 0.05
       if still || self.speed < Self.slow {
         self.model.expand(byClick: false)
       } else {
-        self.armHover(after: 0.08)
+        self.armHover(after: 0.04)
       }
     }
   }

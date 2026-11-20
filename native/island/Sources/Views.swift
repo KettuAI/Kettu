@@ -37,13 +37,13 @@ struct IslandShape: Shape {
 }
 
 /// The content's change as the outline moves: the old leaves in 90 ms, the new comes in from
-/// 6 pt below once the outline is 40% of the way. Less motion keeps only the fade.
+/// 6 pt below once the outline is a third of the way. Less motion keeps only the fade.
 private func swap(_ reduceMotion: Bool) -> AnyTransition {
   let removal = AnyTransition.opacity.animation(.easeOut(duration: 0.09))
   if reduceMotion { return .asymmetric(insertion: .opacity.animation(.easeOut(duration: 0.15)), removal: removal) }
   return .asymmetric(
     insertion: .opacity.combined(with: .offset(y: 6))
-      .animation(.easeOut(duration: 0.22).delay(0.15)),
+      .animation(.easeOut(duration: 0.18).delay(0.1)),
     removal: removal)
 }
 

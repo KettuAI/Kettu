@@ -21,7 +21,7 @@ shows while it is on:
   in Kettu or the island is opened.
 - **Grown**: main's pops, one at a time, for 6 seconds (4 for a finished turn): the marks in the
   left wing and the state in the right, the session and what happened under them.
-- **Expanded**, once the pointer rests on it for 320 ms and moves slower than 0.6 pt per ms, or on a
+- **Expanded**, once the pointer rests on it for 120 ms and moves slower than 1.2 pt per ms, or on a
   click, and closed 400 ms after the pointer leaves: from top to bottom the oldest request with its
   options as buttons, the session main leads with (what it does, its plan's steps, its last reply or
   the cost of an expired cache, then the facts that hold now: context from 70%, cache, branch, pull

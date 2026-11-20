@@ -540,7 +540,7 @@ final class IslandModel: ObservableObject {
   func animation(from: Mode, to: Mode) -> Animation {
     if reduceMotion { return .easeInOut(duration: 0.2) }
     switch to {
-    case .open: return .spring(response: 0.38, dampingFraction: 1)
+    case .open: return .spring(response: 0.3, dampingFraction: 1)
     case .grown: return .spring(response: 0.38, dampingFraction: 1)
     case .collapsed, .hidden: return .spring(response: 0.3, dampingFraction: 1)
     }
