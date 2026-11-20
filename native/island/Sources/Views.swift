@@ -396,7 +396,16 @@ struct PanelContent: View {
     let g = model.geometry
     VStack(spacing: 0) {
       HStack(spacing: 8) {
-        LeadMarks(collapsed: model.collapsed)
+        // A request's card names the session; its agent's mark heads the island, once.
+        if model.note == nil, let request = model.requests.first {
+          if let row = model.row(request.row) {
+            MarkView(agent: row.agent, size: Metrics.wingMark)
+          } else {
+            BrandFox().padding(2)
+          }
+        } else {
+          LeadMarks(collapsed: model.collapsed)
+        }
         if let signal = model.collapsed?.signal {
           SignalView(signal: signal, reduceMotion: model.reduceMotion)
         }
@@ -1020,7 +1029,6 @@ struct RequestCard: View {
     let pending = model.pending.contains(request.key)
     VStack(alignment: .leading, spacing: 0) {
       HStack(spacing: 9) {
-        if let row { MarkView(agent: row.agent, size: 16) } else { BrandFox(size: 16) }
         VStack(alignment: .leading, spacing: 1) {
           Text(
             request.task?.title ?? row.map { $0.title.isEmpty ? model.text("untitled") : $0.title }
