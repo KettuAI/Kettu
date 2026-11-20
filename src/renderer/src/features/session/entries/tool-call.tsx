@@ -80,7 +80,7 @@ export function StepCard({
     return (
       <ToolCallCard
         {...facts}
-        name={label.verb ?? entry.title}
+        name={label.verb ?? label.target ?? entry.title}
         summary={
           label.verb && label.target ? (
             <ToolSummary entry={entry} target={label.target} note={note} />

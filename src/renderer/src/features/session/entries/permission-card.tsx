@@ -29,7 +29,7 @@ import { hostOfPath } from '@renderer/lib/host-paths'
 import { cn } from '@renderer/lib/utils'
 import { useRoutinesStore } from '@renderer/stores/routines'
 import { useSessionsStore } from '@renderer/stores/sessions'
-import { codeSpans, respondToPermission, toolLabel } from './helpers'
+import { codeSpans, labelText, respondToPermission, toolLabel } from './helpers'
 import { StepCard } from './tool-call'
 import { KIND_GLYPH, stepFacts, useToolCallLabels } from './tool-call-model'
 import { ContentBlock, ToolMedia } from './tool-parts'
@@ -190,7 +190,11 @@ export function PermissionEntry({
   const label = toolLabel(entry, projectPath)
   const command = label.kind === 'command' ? label.target : null
   const action = t(`permission.card.action.${ACTION_KEY[entry.toolKind]}`)
-  const target = command ? command.split('\n')[0]! : label.target
+  const target = command
+    ? command.split('\n')[0]!
+    : label.kind === 'tool'
+      ? labelText(label)
+      : label.target
   const preview = previewOf(entry, projectPath, (diff) => cachedStats([diff]))
   const decision = permission ? null : result ? decisionOf(result) : null
   const busy = away || answering !== null

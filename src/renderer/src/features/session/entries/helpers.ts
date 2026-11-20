@@ -15,7 +15,10 @@ import {
 import { basename, duration, relativePath } from '@renderer/lib/format'
 import { errorCode, host } from '@renderer/lib/host'
 import { i18n } from '@renderer/lib/i18n'
+import { sessionTitle, useSessionsStore } from '@renderer/stores/sessions'
+import { useTerminalsStore } from '@renderer/stores/terminals'
 import { nameHints } from '../project-names'
+import { mcpLabel, type CallNames } from './mcp-tools'
 
 /**
  * Brings a card that waits for the user into view while its thread follows the end. A reader
@@ -41,15 +44,35 @@ const FILE_KINDS: Partial<Record<ToolKind, FileKind>> = {
   move: 'move',
 }
 
+// Read when a row draws, so a name that arrives later shows on the row's next update.
+const CALL_NAMES: CallNames = {
+  session: (id) => {
+    const summary = useSessionsStore.getState().byId[id]
+    return summary ? sessionTitle(summary) : null
+  },
+  terminal: (id) => {
+    const terminal = useTerminalsStore.getState().byId[id]
+    return terminal ? (terminal.name ?? (terminal.title || terminal.shell)) : null
+  },
+}
+
+export type ToolLabel = {
+  verb: string | null
+  target: string | null
+  kind: 'path' | 'command' | 'title' | 'tool'
+}
+
 /**
- * What the header names: a verb with a path or command, or the agent's own title. A finished
- * call's verb is in the past tense ("Edited", "Ran").
+ * What the header names: a verb with a path or command, an MCP tool by its name with what it acts
+ * on, or the agent's own title. A finished call's verb is in the past tense ("Edited", "Ran").
  */
 export function toolLabel(
   entry: Pick<ToolEntry, 'toolKind' | 'title' | 'locations' | 'rawInput'>,
   projectPath: string,
   done = false,
-): { verb: string | null; target: string | null; kind: 'path' | 'command' | 'title' } {
+): ToolLabel {
+  const mcp = mcpLabel(entry, projectPath, CALL_NAMES)
+  if (mcp) return mcp
   const verbs = done ? 'session:tool.verbDone' : 'session:tool.verb'
   const fileKind = FILE_KINDS[entry.toolKind]
   const location = entry.locations[0]?.path
@@ -66,6 +89,13 @@ export function toolLabel(
     return { verb: i18n.t(`${verbs}.run`), target, kind: 'command' }
   }
   return { verb: null, target: entry.title, kind: 'title' }
+}
+
+/** A label as one line, as a card or a list names the call: "Read a.ts", "Find settings · proxy". */
+export function labelText(label: ToolLabel): string {
+  if (!label.verb || !label.target) return label.verb ?? label.target ?? ''
+  const separator = label.kind === 'tool' ? i18n.t('session:summary.separator') : ' '
+  return `${label.verb}${separator}${label.target}`
 }
 
 /** An option's answer; `note` goes with an option that takes one, such as keeping on planning. */
