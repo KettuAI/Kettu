@@ -173,6 +173,7 @@ export function useGeneralSection(): SectionDef {
   const remoteOn = useSettingsStore((s) => s.settings.remote.enabled)
   const sessions = group('sessions', t('general.groups.sessions'), {
     note: remoteOn && <GroupNote>{t('general.background.lockedByRemote')}</GroupNote>,
+    noteFor: 'background',
   })
   const thread = group('thread', t('general.groups.thread'))
   const startup = group('startup', t('general.groups.startup'))

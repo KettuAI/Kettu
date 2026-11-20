@@ -966,7 +966,8 @@ li[data-row-exit='dust'] > * {
   flex: none;
   align-items: center;
   gap: 2px;
-  height: 28px;
+  /* A failure in the head wraps onto more lines, which the head grows to hold. */
+  min-height: 28px;
 }
 .kp-head--cornered {
   padding-left: var(--corner-inset);
@@ -1011,11 +1012,11 @@ li[data-row-exit='dust'] > * {
 .kp-head__error {
   min-width: 0;
   max-width: 40%;
-  overflow: hidden;
+  padding: 7px 0;
   font-size: 12px;
+  line-height: 14px;
   color: var(--danger);
-  white-space: nowrap;
-  text-overflow: ellipsis;
+  overflow-wrap: anywhere;
 }
 .kp-body {
   position: relative;
