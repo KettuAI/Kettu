@@ -866,7 +866,15 @@
     "libraryFull": "Your workflow library is full",
     "downloadFailed": "Could not download the workflow: {{error}}",
     "downloadStatus": "GitHub answered {{status}} for the workflow",
-    "listingProblem": "The workflow has a problem, so nothing was installed: {{problem}}"
+    "listingProblem": "The workflow has a problem, so nothing was installed: {{problem}}",
+    "cardNotFound": "This card is no longer there",
+    "cardAnswered": "This card was already answered",
+    "cardBusy": "Start is already under way",
+    "connectFirst": "Connect {{name}} first",
+    "listingChanged": "The Marketplace's version is not the one the card showed. Ask the agent for the card again.",
+    "noWorkflowFile": "That version of the workflow has no workflow file",
+    "noProject": "The session has no project to start the task in",
+    "toolGone": "Kettu cannot find {{name}} in the Marketplace now"
   },
   "tasks": {
     "notFound": "No such task",

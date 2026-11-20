@@ -861,7 +861,15 @@
     "libraryFull": "你的 工作流 库满了",
     "downloadFailed": "没能下载这个 工作流：{{error}}",
     "downloadStatus": "GitHub 对这个 工作流 返回了 {{status}}",
-    "listingProblem": "这个工作流有问题，所以什么都没装：{{problem}}"
+    "listingProblem": "这个工作流有问题，所以什么都没装：{{problem}}",
+    "cardNotFound": "这张卡片已经不在了",
+    "cardAnswered": "这张卡片已经回答过了",
+    "cardBusy": "已经在开始了",
+    "connectFirst": "先连接 {{name}}",
+    "listingChanged": "市场里的这一版和卡片上画的不一样。请让智能体重新给出卡片。",
+    "noWorkflowFile": "这一版工作流里没有工作流文件",
+    "noProject": "这个会话没有可以开始需求的项目",
+    "toolGone": "现在在市场里找不到 {{name}}"
   },
   "tasks": {
     "notFound": "没有这个需求",

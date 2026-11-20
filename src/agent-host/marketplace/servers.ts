@@ -132,7 +132,7 @@ export function libraryServers(
     oauth?: OAuthAccess
     /** Kettu's own Node.js, for the servers that run on it. */
     node?: NodeRuntime
-    /** Servers a workflow step names, which its session gets while they are on. */
+    /** Servers a workflow step names, by name or id, which its session gets while they are on. */
     also?: readonly string[]
   },
 ): McpServer[] {
@@ -145,7 +145,8 @@ export function libraryServers(
     return name
   }
   for (const server of servers) {
-    if (!serverFor(server, agentId) && !(server.on && options.also?.includes(server.name))) continue
+    const named = options.also?.includes(server.name) || options.also?.includes(server.id)
+    if (!serverFor(server, agentId) && !(server.on && named)) continue
     const { spec } = server
     if (spec.type === 'http' && spec.oauth) {
       const access = options.oauth?.access(server) ?? null

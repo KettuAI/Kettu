@@ -15,6 +15,7 @@ import {
   WORKFLOW_NAME_CHARS,
   STEP_HINT_CHARS,
   STEP_PROMPT_CHARS,
+  marketToolRef,
   stepIndex,
   type HandIn,
   type Workflow,
@@ -482,7 +483,10 @@ export function parseWorkflow(source: string): WorkflowRead {
   return { workflow, problems: [] }
 }
 
-/** The tools the workflow names that this host does not know, as problems. */
+/**
+ * The tools the workflow names that are neither kept on this host, by name or id, nor a
+ * Marketplace entry that Start installs, as problems.
+ */
 export function toolProblems(
   workflow: Workflow,
   known: { mcp: ReadonlySet<string>; skills: ReadonlySet<string> },
@@ -491,7 +495,7 @@ export function toolProblems(
   workflow.steps.forEach((step, index) => {
     for (const kind of ['mcp', 'skills'] as const) {
       step.tools[kind].forEach((name, i) => {
-        if (!known[kind].has(name)) {
+        if (!known[kind].has(name) && !marketToolRef(kind === 'mcp' ? 'mcp' : 'skill', name)) {
           problems.push({
             at: join(join(join('steps', index), 'tools'), kind) + `[${i}]`,
             message:

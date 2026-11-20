@@ -69,8 +69,11 @@ export function workflowAgents(sources: WorkflowAgentSources): WorkflowAgent[] {
           value === null || !model
             ? [...status.limits]
             : limitsForModel(status.limits, { ...model, value }),
-        skills: new Set(sources.marketplace.skills.filter((s) => s.on).map((s) => s.name)),
-        mcp: new Set(sources.marketplace.mcp.filter((s) => s.on).map((s) => s.name)),
+        // A step names a tool by its name or its Marketplace entry's id.
+        skills: new Set(
+          sources.marketplace.skills.filter((s) => s.on).flatMap((s) => [s.name, s.id]),
+        ),
+        mcp: new Set(sources.marketplace.mcp.filter((s) => s.on).flatMap((s) => [s.name, s.id])),
       }
     })
 }

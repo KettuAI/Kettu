@@ -110,6 +110,7 @@ import type {
   WireWorkflowEntry,
   WorkflowSettings,
   WorkflowSettingsChange,
+  WorkflowSuggestion,
   StepPick,
   TaskStart,
   TaskSummary,
@@ -1177,6 +1178,23 @@ export interface HostContract {
   }
   'workflows.settings': { params: void; result: WorkflowSettings }
   'workflows.setSettings': { params: WorkflowSettingsChange; result: WorkflowSettings }
+  // The cards the workflow tools leave in a session: a suggestion to run a requirement through a
+  // workflow, and a workflow an agent wrote for the user to keep.
+  'workflows.suggestions': { params: { sessionId: string }; result: WorkflowSuggestion[] }
+  // The file a card drew, for View file.
+  'workflows.suggestionFile': { params: { id: string }; result: { text: string } }
+  // Start (Retry after a failed item) answers once Start is under way; `workflows.suggestion`
+  // events follow its items. Decline is Do it here, reconsider is Use it instead.
+  'workflows.answerSuggestion': {
+    params: {
+      id: string
+      answer: 'start' | 'decline' | 'reconsider' | 'save' | 'not_save'
+      // The first step's agent and its option values, as the session runs them.
+      agentId?: AgentId
+      options?: Record<string, string | boolean>
+    }
+    result: WorkflowSuggestion
+  }
   // Tasks: a requirement run through a workflow, one session per step.
   'tasks.list': { params: void; result: TaskSummary[] }
   'tasks.get': { params: { taskId: string }; result: TaskView }
@@ -1998,6 +2016,9 @@ export const HOST_METHODS = [
   'workflows.pin',
   'workflows.settings',
   'workflows.setSettings',
+  'workflows.suggestions',
+  'workflows.suggestionFile',
+  'workflows.answerSuggestion',
   'tasks.list',
   'tasks.get',
   'tasks.sessions',
@@ -2190,6 +2211,7 @@ export type HostEvent =
   | { type: 'task.changed'; task: TaskView }
   | { type: 'task.removed'; taskId: string }
   | { type: 'workflows.changed' } // the workflow library or its settings changed; a page showing it reads again
+  | { type: 'workflows.suggestion'; suggestion: WorkflowSuggestion } // a card's answer or Start's progress
   | { type: 'routine.run'; run: RoutineRun } // a run's status changed
   // To the port of the desktop app that sent the turn: a call for its main to run on the session's
   // page, answered by `browser.answer`.

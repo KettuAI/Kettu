@@ -640,6 +640,11 @@ steps:
         agentOf: () => 'codex',
         report: () => Promise.reject(new Error('Unexpected report')),
         pick: () => Promise.reject(new Error('Unexpected pick')),
+        suggestions: {
+          suggest: () => Promise.reject(new Error('Unexpected suggestion')),
+          draft: () => Promise.reject(new Error('Unexpected draft')),
+          keep: () => Promise.reject(new Error('Unexpected workflow to keep')),
+        },
       })
       return (input: unknown = {}) =>
         tools.call({ sessionId: 'chat', project: '/test' }, 'list_workflows', input)
@@ -690,7 +695,7 @@ steps:
           library: [{ id: 'release-notes', name: 'Release notes' }],
           marketplace: [
             {
-              id: official.id,
+              id: `kettu:${official.id}`,
               name: '发布说明',
               description: '起草并审阅发布说明。',
               when: '发布说明需要审批时使用。',
@@ -700,7 +705,7 @@ steps:
               installs: 2,
               version: '1.0.0',
             },
-            { id: popular.id, official: false, installs: 80 },
+            { id: `kettu:${popular.id}`, official: false, installs: 80 },
           ],
           marketplace_status: 'available',
         })

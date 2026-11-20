@@ -33,7 +33,7 @@ import { t } from '../i18n'
 import type { LogFn, WorktreeRecord } from '../storage'
 import type { TaskGit } from './git'
 import { arrowKey, forwardReach, outcomeOf, stepOf } from './graph'
-import type { WorkflowLibrary } from './library'
+import type { ResolvedWorkflow, WorkflowLibrary } from './library'
 import {
   TASK_ID,
   type HeldPick,
@@ -254,6 +254,18 @@ export class TaskEngine implements TaskSessionHooks {
     return round ? { taskId: ref.taskId, stepId: round.stepId, roundId: round.id } : null
   }
 
+  /** How long the workflow's tasks that ended done took: their count and the middle one. */
+  pastRuns(workflowId: string): { runs: number; medianMs: number | null } {
+    const took = [...this.tasks.values()]
+      .filter((t) => t.workflowId === workflowId && t.status === 'done' && t.endedAt !== null)
+      .map((t) => t.endedAt! - t.createdAt)
+      .sort((a, b) => a - b)
+    if (took.length === 0) return { runs: 0, medianMs: null }
+    const mid = Math.floor(took.length / 2)
+    const medianMs = took.length % 2 ? took[mid]! : Math.round((took[mid - 1]! + took[mid]!) / 2)
+    return { runs: took.length, medianMs }
+  }
+
   /** The MCP servers and Skills a step's session is handed, whoever does the step. */
   toolsOf(ref: SessionTaskRef): StepTools | null {
     const task = this.tasks.get(ref.taskId)
@@ -268,8 +280,16 @@ export class TaskEngine implements TaskSessionHooks {
 
   // Starting.
 
-  async start(params: TaskStart, from?: { sessionId: string }): Promise<TaskView> {
-    const resolved = await this.deps.library.resolve(params.workflowId)
+  /**
+   * Starts a task through a library workflow, or through `resolved`, one the user approved on a
+   * card, such as a session's agent wrote for this requirement alone.
+   */
+  async start(
+    params: TaskStart,
+    from?: { sessionId: string },
+    given?: ResolvedWorkflow,
+  ): Promise<TaskView> {
+    const resolved = given ?? (await this.deps.library.resolve(params.workflowId))
     const projectPath = await this.deps.resolveProject(params.projectPath)
     const first = resolved.workflow.steps[0]!
     if (first.by === 'agent') {

@@ -249,7 +249,7 @@ const SUGGESTING = `## When to suggest one
 3. Pace: \`quick\` to try an idea fast, \`thorough\` for work that must hold, \`balanced\` otherwise.
 4. While the card waits, do not do the work yourself. When the user does not press Start, do not suggest a workflow for the same requirement again; go on as they ask.
 
-When you adapt or write a workflow for this requirement, give it three to six steps. For large work, start with a requirement review that the user approves. After implementation, have another agent review the code. Draw one branch for each platform. Hand the workflow for this requirement to \`suggest_workflow\`.
+When you adapt or write a workflow for this requirement, give it three to six steps. For large work, start with a requirement review that the user approves. After implementation, have another agent review the code. Draw one branch for each platform. Write it with \`create_workflow\`, which keeps it for this requirement alone, and hand the id it gives to \`suggest_workflow\`.
 
 `
 
@@ -259,13 +259,13 @@ A workflow runs a requirement as a task through steps the user approved, such as
 
 ${suggest ? SUGGESTING : ''}## Writing a workflow
 
-When the user asks for a workflow to keep, write it with \`create_workflow\`. The user approves a workflow before using it from their library. A file with problems is refused with each problem and where it is: fix them and call again.
+When the user asks for a workflow to keep, write it with \`create_workflow\` and \`keep: true\`: the user sees it drawn and saves it to their library. A file with problems is refused with each problem and where it is: fix them and call again.
 
 - YAML, at most ${WORKFLOW_FILE_BYTES / 1024} KB: \`format: 1\`, \`name\`, \`description\`, an optional \`send_back_limit\` (how often an arrow back may be taken, ${DEFAULT_SEND_BACK_LIMIT} by default), and \`steps\` in order, at most ${MAX_WORKFLOW_STEPS}, the first being the start.
 - Optional \`when\` is one line saying when to use it. Add translated text under a language code in \`locales\`.
 - A step has \`id\` (kebab-case), \`name\`, \`prompt\` (what to do, or on the user's step what to ask them), \`by\` (\`agent\`, the default, or \`you\` for a step the user does), \`hand_in\` (\`document\`, \`outcome\`, or \`note\`, the default), and \`outcomes\`.
 - An outcome has a \`name\` and either \`to\`, naming one step or a list of steps that run at once, or \`end: done\` or \`end: dropped\`. An arrow to the step itself or an earlier one sends the work back, and may have its own \`limit\`.
-- Optional on a step: \`you_review: true\` for the user to approve what it hands in, \`hint\` for whoever picks its agent, \`review_of\` naming the steps it reviews, whose agent and model it will not share, and \`tools\` with the \`mcp\` servers and \`skills\` it is handed, by name.
+- Optional on a step: \`you_review: true\` for the user to approve what it hands in, \`hint\` for whoever picks its agent, \`review_of\` naming the steps it reviews, whose agent and model it will not share, and \`tools\` with the \`mcp\` servers and \`skills\` it is handed: each a name Kettu has installed, or a Marketplace entry that Start installs, such as an MCP Registry server's name, a skills catalog id like \`owner/repo:name\`, or \`kettu:<listing>\`.
 - A step that hands in an outcome needs at least two outcomes. The user's step hands in an outcome and has no \`you_review\`, \`hint\`, \`review_of\` or \`tools\`. Every step is reached from the first, and every path ends the task.
 - Never name an agent, harness or model: who does each step is picked when it starts.
 

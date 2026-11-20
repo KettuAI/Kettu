@@ -4646,6 +4646,15 @@ export class SessionManager {
     return this.summary(live.id)
   }
 
+  /**
+   * The user's answer on a card the session's thread shows, such as Do it here on a workflow's:
+   * the agent gets it, but it is no bubble of the user's, since the card already says it.
+   */
+  async sendCardAnswer(sessionId: string, text: string): Promise<void> {
+    const live = await this.revive(sessionId)
+    this.sendForUser(live, text, { approval: true })
+  }
+
   /** Kettu's own message to a session, such as a step's reminder: sent now or queued. */
   async sendFromKettu(sessionId: string, text: string): Promise<void> {
     const content: UserContent[] = [{ type: 'text', text }]

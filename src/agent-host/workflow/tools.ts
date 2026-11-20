@@ -15,8 +15,10 @@ import {
   usableWorkflow,
   workflowText,
   type WorkflowEntry,
+  type WorkflowProblem,
   type WorkflowStep,
 } from '@shared/workflow'
+import { kettuId } from '@shared/market-community'
 import type { AgentId } from '@shared/thread'
 import type { Caller } from '../artifacts/tools'
 import { HostError } from '../errors'
@@ -25,6 +27,7 @@ import type { MarketCommunityService } from '../marketplace/community'
 import type { PickResult, ReportInput, ReportResult } from './engine'
 import type { WorkflowLibrary } from './library'
 import type { PickInput } from './picks'
+import { SuggestionRefused, type WorkflowSuggestions } from './suggestions'
 import { PICK_TOOL, REPORT_TOOL } from './prompts'
 
 export const LIST_WORKFLOWS_TOOL = 'list_workflows'
@@ -74,17 +77,19 @@ export const WORKFLOW_TOOLS: Tool[] = [
     name: SUGGEST_WORKFLOW_TOOL,
     title: 'Suggest a workflow',
     description:
-      'Suggests running the requirement as a task through a workflow. Kettu shows the user a card ' +
-      'with the workflow, the task text, the pace and who does each step; nothing starts until the ' +
-      'user presses Start. Suggest only for work that is large enough to need its steps, and ' +
-      'do not do the work yourself while the card waits.',
+      'Suggests running the requirement as a task through a workflow: one list_workflows gave, ' +
+      "from the user's library or the Kettu Marketplace, or one you wrote for it with " +
+      'create_workflow. Kettu shows the user a card with its flowchart; Start adds the workflow ' +
+      'and the tools it names and starts the task, and nothing starts before it. Suggest only for ' +
+      'work that is large enough to need its steps, and do not do the work yourself while the ' +
+      'card waits.',
     inputSchema: {
       type: 'object',
       properties: {
         workflow_id: {
           type: 'string',
           maxLength: ID_CHARS,
-          description: 'An id list_workflows gave.',
+          description: 'An id list_workflows or create_workflow gave.',
         },
         task: {
           type: 'string',
@@ -116,18 +121,26 @@ export const WORKFLOW_TOOLS: Tool[] = [
     name: CREATE_WORKFLOW_TOOL,
     title: 'Write a workflow',
     description:
-      "Saves a workflow you wrote as YAML into the user's library, where it waits for the user to " +
-      'approve it before any task can use it. A file with problems is refused with each problem ' +
-      'and where it is; fix them and call again. Format: `format: 1`, `name`, `description`, ' +
-      'optional `send_back_limit`, and `steps` in order, the first being the start. A step has ' +
-      '`id` (kebab-case), `name`, `prompt`, `by` (agent or you), `hand_in` (document, outcome or ' +
-      'note), `outcomes` (each a `name` with `to` naming one step, several steps to run at ' +
-      'once, or `end: done` / `end: dropped`), and optionally `you_review`, `hint`, `review_of` ' +
-      'and `tools` (`mcp` and `skills` by name). Never name an agent, harness or model.',
+      'Writes a workflow as YAML. By default it is for the requirement at hand: Kettu keeps it ' +
+      "outside the user's library and gives its id for suggest_workflow. With keep, when the user " +
+      'asked for a workflow to keep, the user sees a card that saves it to their library. A file ' +
+      'with problems is refused with each problem and where it is; fix them and call again. ' +
+      'Format: `format: 1`, `name`, `description`, optional `send_back_limit`, and `steps` in ' +
+      'order, the first being the start. A step has `id` (kebab-case), `name`, `prompt`, `by` ' +
+      '(agent or you), `hand_in` (document, outcome or note), `outcomes` (each a `name` with `to` ' +
+      'naming one step, several steps to run at once, or `end: done` / `end: dropped`), and ' +
+      'optionally `you_review`, `hint`, `review_of` and `tools`: `mcp` and `skills`, each a name ' +
+      'Kettu has installed or a Marketplace entry that Start installs (an MCP Registry server ' +
+      'name, a skills catalog id such as owner/repo:name, or kettu:<listing>). Never name an ' +
+      'agent, harness or model.',
     inputSchema: {
       type: 'object',
       properties: {
         yaml: { type: 'string', minLength: 1, maxLength: WORKFLOW_FILE_BYTES },
+        keep: {
+          type: 'boolean',
+          description: 'The user asked for a workflow to keep in their library; false by default.',
+        },
       },
       required: ['yaml'],
       additionalProperties: false,
@@ -246,8 +259,9 @@ export function workflowToolStructured(
 }
 
 export interface WorkflowToolsDeps {
-  library: Pick<WorkflowLibrary, 'list' | 'create' | 'suggest'>
+  library: Pick<WorkflowLibrary, 'list' | 'suggest'>
   marketplace: Pick<MarketCommunityService, 'publicWorkflows'>
+  suggestions: Pick<WorkflowSuggestions, 'suggest' | 'draft' | 'keep'>
   report(sessionId: string, input: ReportInput): Promise<ReportResult>
   pick(sessionId: string, picks: PickInput[]): Promise<PickResult>
   /** The session works for a workflow step. */
@@ -382,7 +396,7 @@ export class WorkflowTools {
         case LIST_WORKFLOWS_TOOL:
           return await this.list(input)
         case SUGGEST_WORKFLOW_TOOL:
-          return await this.suggest(input)
+          return await this.suggest(caller.sessionId, input)
         case CREATE_WORKFLOW_TOOL:
           return await this.create(caller.sessionId, input)
         default:
@@ -390,6 +404,14 @@ export class WorkflowTools {
       }
     } catch (error) {
       if (error instanceof WorkflowToolError) return failure(error)
+      if (error instanceof SuggestionRefused) {
+        return failure(
+          new WorkflowToolError(
+            error.code === 'not_found' ? 'not_found' : 'not_allowed',
+            error.message,
+          ),
+        )
+      }
       if (error instanceof HostError)
         return failure(new WorkflowToolError('invalid', error.message))
       throw error
@@ -421,7 +443,7 @@ export class WorkflowTools {
       }
     })
     const marketplace = items.map((item) => ({
-      id: item.id,
+      id: kettuId(item.id),
       ...(item.workflow
         ? workflowListing(item.workflow, locale)
         : {
@@ -445,7 +467,7 @@ export class WorkflowTools {
     return result(why ? `${why}\n${JSON.stringify(listed)}` : JSON.stringify(listed), listed)
   }
 
-  private async suggest(input: unknown): Promise<CallToolResult> {
+  private async suggest(sessionId: string, input: unknown): Promise<CallToolResult> {
     const o = objectOf(input, ['workflow_id', 'task', 'title', 'pace', 'pace_reason'])
     const workflowId = text(o, 'workflow_id', ID_CHARS, true)!
     const task = text(o, 'task', TASK_TEXT_CHARS, true)!
@@ -453,53 +475,64 @@ export class WorkflowTools {
     const paceReason = text(o, 'pace_reason', PICK_REASON_CHARS, false)
     if (!isPace(o.pace))
       throw new WorkflowToolError('invalid', 'pace must be quick, balanced or thorough.')
-    const entry = (await this.usable()).find((workflow) => workflow.id === workflowId)
-    if (!entry) {
-      throw new WorkflowToolError(
-        'not_found',
-        `No workflow ${workflowId} can be started; use an id list_workflows gave.`,
-      )
+    if (!this.deps.library.suggest) {
+      throw new WorkflowToolError('not_allowed', 'The user turned off workflow suggestions.')
     }
+    const card = await this.deps.suggestions.suggest(sessionId, {
+      workflowId,
+      task,
+      title,
+      pace: o.pace,
+      paceReason,
+    })
     const suggestion = {
-      workflow_id: entry.id,
-      workflow_name: entry.name,
+      id: card.id,
+      workflow_id: workflowId,
+      workflow_name: card.workflow.name,
       task,
       title,
       pace: o.pace,
       pace_reason: paceReason,
     }
     return result(
-      `The user sees your suggestion to run this through "${entry.name}" and decides. ` +
+      `The user sees your suggestion to run this through "${card.workflow.name}" and decides. ` +
         'Wait for them: do not start the work yourself.',
       { suggestion },
     )
   }
 
   private async create(sessionId: string, input: unknown): Promise<CallToolResult> {
-    const o = objectOf(input, ['yaml'])
+    const o = objectOf(input, ['yaml', 'keep'])
     const yaml = text(o, 'yaml', WORKFLOW_FILE_BYTES, true)!
-    const agentId = this.deps.agentOf(sessionId)
-    if (!agentId) throw new WorkflowToolError('not_found', 'Kettu does not have this session.')
-    const saved = await this.deps.library.create(yaml, { sessionId, agentId })
-    // A workflow entry lists its problems too; a refusal is the one without an id.
-    if (!('id' in saved)) {
-      const lines = saved.problems.map((p) => `- ${p.at ? `${p.at}: ` : ''}${p.message}`)
+    if (o.keep !== undefined && typeof o.keep !== 'boolean') {
+      throw new WorkflowToolError('invalid', 'keep must be true or false.')
+    }
+    if (!this.deps.agentOf(sessionId)) {
+      throw new WorkflowToolError('not_found', 'Kettu does not have this session.')
+    }
+    const refused = (problems: WorkflowProblem[]) => {
+      const lines = problems.map((p) => `- ${p.at ? `${p.at}: ` : ''}${p.message}`)
       return result(
         `The workflow was not saved. Fix these and call ${CREATE_WORKFLOW_TOOL} again:\n${lines.join('\n')}`,
-        { saved: false, problems: saved.problems },
+        { saved: false, problems },
         true,
       )
     }
+    if (o.keep === true) {
+      const card = await this.deps.suggestions.keep(sessionId, yaml)
+      if ('problems' in card) return refused(card.problems)
+      return result(
+        `The user sees a card to save "${card.workflow.name}" to their library and decides. ` +
+          'Wait for them.',
+        { suggestion: { id: card.id, workflow_name: card.workflow.name, keep: true } },
+      )
+    }
+    const draft = await this.deps.suggestions.draft(sessionId, yaml)
+    if ('problems' in draft) return refused(draft.problems)
     return result(
-      `Saved "${saved.name}" as ${saved.id}. It waits for the user to approve it in the ` +
-        'Marketplace before any task can use it.',
-      {
-        saved: true,
-        workflow_id: saved.id,
-        name: saved.name,
-        hash: saved.hash,
-        approval: saved.approval,
-      },
+      `Wrote "${draft.name}" for this requirement as ${draft.draftId}. Suggest it with ` +
+        `${SUGGEST_WORKFLOW_TOOL}; it stays out of the user's library.`,
+      { draft: true, workflow_id: draft.draftId, name: draft.name, hash: draft.hash },
     )
   }
 
