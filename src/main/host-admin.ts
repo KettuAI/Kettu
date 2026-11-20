@@ -288,7 +288,13 @@ export class HostAdmin {
     const attention: HostAttention =
       message.kind === 'routine-paused'
         ? { kind: message.kind, agentId: message.agentId, title, body }
-        : { kind: message.kind, sessionId: message.sessionId, title, body }
+        : {
+            kind: message.kind,
+            sessionId: message.sessionId,
+            title,
+            body,
+            ...(message.allowOnce ? { allowOnce: message.allowOnce } : {}),
+          }
     this.deps.send({ type: 'attention', attention }, null)
   }
 
