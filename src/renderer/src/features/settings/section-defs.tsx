@@ -50,6 +50,8 @@ import { useUpdatesStore } from '@renderer/stores/updates'
 import { openAgentSettings, openHarnessSettings, openSettingsItem } from '@renderer/stores/view'
 import { AboutHero, AutomaticUpdates, DownloadSource, NoUpdates, UpdateRow } from './about-section'
 import { useIdleSessionRows } from './idle-sessions'
+import { IslandSwitch } from './island-row'
+import { useIslandDescription } from './island-state'
 import { useWorkflowRows } from './workflow-settings'
 import {
   AgentListItem,
@@ -357,6 +359,7 @@ export function useNotificationsSection(): SectionDef {
   const onHost = useHostContext()
   const when = group('when', t('notifications.groups.when'))
   const how = group('how', t('notifications.groups.how'))
+  const islandDescription = useIslandDescription()
   const rows: RowDef[] = [
     {
       id: 'preview',
@@ -412,6 +415,16 @@ export function useNotificationsSection(): SectionDef {
       render: () => <NotificationSwitch field="sound" label={t('notifications.sound.name')} />,
     },
   ]
+  // The notch island is the macOS app's own; a browser has none.
+  if (isMac && !isWeb) {
+    rows.push({
+      id: 'island',
+      setting: 'notifications.island',
+      group: how,
+      description: islandDescription,
+      render: () => <IslandSwitch label={t('notifications.island.name')} />,
+    })
+  }
   // Linux desktops differ in how they show a count, so the row is left out there.
   if (platform !== 'linux') {
     const name = isMac ? t('notifications.badge.nameDock') : t('notifications.badge.nameTaskbar')

@@ -51,6 +51,7 @@ import type { TerminalMethod, TerminalsApi } from './terminal-host'
 import type { DeviceCaptureKind, DevicesApi } from './device-host'
 import type { PreparedReport, ReportFileView, ReportRequest, ReportSubmitResult } from './report'
 import type { CatalogInstallResult, CatalogState, ThemeInstallResult, ThemesState } from './themes'
+import type { IslandState } from './island'
 import type { AgentId, HarnessId } from './thread'
 import type { TrayTarget } from './tray'
 import type { UpdateStatus } from './updates'
@@ -296,6 +297,8 @@ export interface IpcInvokeContract {
   'media:reveal': { args: [url: string]; result: void }
   'media:open-external': { args: [url: string]; result: void }
   'notifications:test': { args: []; result: boolean }
+  'island:status': { args: []; result: IslandState }
+  'island:retry': { args: []; result: void }
   'update:get-status': { args: []; result: UpdateStatus }
   'update:check': { args: []; result: UpdateStatus }
   'update:download': { args: []; result: void }
@@ -525,6 +528,7 @@ export interface IpcEventContract {
   'account:changed': AccountStatus
   'sharing:changed': SharingStatus
   'remote:changed': RemoteStatus
+  'island:changed': IslandState
   /** Sent only to the page that opened the code. */
   'remote:pairing': RemotePairingEvent
   /** Sent to every window: a device of the account asks to be added, or that request ended. */
@@ -920,6 +924,13 @@ export interface KettuApi {
   notifications: {
     /** Shows a sample notification at once; false when the system does not support them. */
     test(): Promise<boolean>
+  }
+  /** The macOS notch island, as its switch in Settings › Notifications shows it. */
+  island: {
+    status(): Promise<IslandState>
+    /** Starts it again after it stopped on repeated crashes. */
+    retry(): Promise<void>
+    onChanged(listener: (state: IslandState) => void): () => void
   }
   updates: {
     getStatus(): Promise<UpdateStatus>

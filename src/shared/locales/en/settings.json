@@ -364,6 +364,17 @@
       "description": "Sessions waiting for your approval.",
       "keywords": "badge"
     },
+    "island": {
+      "name": "Show sessions in the notch",
+      "description": "What needs you comes out of the notch at the top of the screen, where you can answer it. While this is on, those kinds come there instead of as notifications.",
+      "keywords": "notch island dynamic menu bar",
+      "retry": "Try again",
+      "failed": {
+        "crashed": "Stopped after it quit three times within a minute. Notifications show as before.",
+        "protocol": "This build’s notch helper does not match Kettu. Notifications show as before.",
+        "missing": "This build has no notch helper. Notifications show as before."
+      }
+    },
     "footer": "Shows only while no Kettu window is in front.",
     "groups": {
       "preview": "Preview",

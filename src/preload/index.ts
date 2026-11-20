@@ -89,6 +89,7 @@ const onArtifactSelected = subscribe('artifact:selected')
 const onAccountChanged = subscribe('account:changed')
 const onSharingChanged = subscribe('sharing:changed')
 const onRemoteChanged = subscribe('remote:changed')
+const onIslandChanged = subscribe('island:changed')
 const onRemotePairing = subscribe('remote:pairing')
 const onRemoteDiscovery = subscribe('remote:discovery')
 const onHostsChanged = subscribe('hosts:changed')
@@ -298,6 +299,11 @@ const api: KettuApi = {
   },
   notifications: {
     test: () => invoke('notifications:test'),
+  },
+  island: {
+    status: () => invoke('island:status'),
+    retry: () => invoke('island:retry'),
+    onChanged: onIslandChanged,
   },
   computer: {
     status: () => invoke('computer:status'),

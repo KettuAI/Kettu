@@ -484,6 +484,12 @@ export function webApi(link: HostLink, settings: WebSettings, context: WebHostCo
         )
       },
     },
+    // A browser has no notch island: its switch shows only in the macOS app.
+    island: {
+      status: () => Promise.resolve({ state: 'off' }),
+      retry: () => Promise.resolve(),
+      onChanged: () => () => {},
+    },
     updates: {
       getStatus: () => admin('updates.status'),
       check: () => admin('updates.check'),

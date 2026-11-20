@@ -202,6 +202,7 @@ const SECTION_FIELDS = {
     routines: isBoolean,
     sound: isBoolean,
     badge: isBoolean,
+    island: isBoolean,
   },
   git: { backgroundFetch: isBoolean, worktreeRoot: isWorktreeRoot },
   updates: {
