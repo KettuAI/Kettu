@@ -1985,7 +1985,9 @@
       "unsupportedTitle": "{{name}} {{version}} 不在 Kettu 能用的版本里（{{supported}}）",
       "bodyUpdate": "Kettu 检查发现这个版本有问题，更新到 {{update}} 就能解决。",
       "bodyRecommended": "Kettu 检查通过的是 {{recommended}}。按你安装 {{name}} 的方式装这个版本，再重新检测。",
-      "bodyOther": "按你安装 {{name}} 的方式换一个版本，再重新检测。"
+      "bodyOther": "按你安装 {{name}} 的方式换一个版本，再重新检测。",
+      "pillBroken": "不能用",
+      "pillUnsupported": "版本不支持"
     },
     "removedLine": "已从 Kettu 卸载",
     "movedAccounts": {

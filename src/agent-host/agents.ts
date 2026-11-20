@@ -22,6 +22,7 @@ import type {
   ClaudeSettings,
   CodebuddySettings,
   CodebuddySiteChange,
+  InstalledCli,
   McpStatus,
   PlanLimit,
   PlanResets,
@@ -2058,6 +2059,29 @@ export class AgentManager {
       return null
     }
     return { path: detection.spec.command, version: h.binaryVersion }
+  }
+
+  /**
+   * The user's own program of a binary harness with an npm route but no `cli` of its own, such as
+   * Kilo Code's: Kettu reads its updates from npm, so it shows as the harness's CLI. Null while
+   * Kettu's own install runs, since that one updates through the registry, or while none was found.
+   * `reported` is the version the running agent named, for when the program was not asked.
+   */
+  private ownProgram(
+    h: Harness,
+    reported: string | null,
+  ): { command: string; installed: InstalledCli } | null {
+    const { launch, installs, cli } = h.def
+    if (cli || launch.kind !== 'binary' || !installs?.npm || this.release(h)) return null
+    const mine = this.userProgram(h)
+    if (!mine) return null
+    const installed = {
+      path: mine.path,
+      version: mine.version ?? reported,
+      variable: null,
+      problem: null,
+    }
+    return { command: launch.command, installed }
   }
 
   /**
@@ -5091,7 +5115,8 @@ export class AgentManager {
     const color = slot.added ? agentColor(this.deps.settings().addedAgents, slot.id) : null
     const cliVersion = this.cliUpdateVersion(h)
     const cliCommand = cliVersion ? (this.cliCommands.get(h) ?? null) : null
-    const cliCommandName = slot.def.cli?.command
+    const own = this.ownProgram(h, init?.version ?? null)
+    const cliCommandName = slot.def.cli?.command ?? own?.command
     return {
       id: slot.id,
       name: slot.name,
@@ -5196,7 +5221,7 @@ export class AgentManager {
       cli: cliCommandName
         ? {
             command: cliCommandName,
-            installed: detection?.cli ?? null,
+            installed: detection?.cli ?? own?.installed ?? null,
             method: h.cliMethod,
             update: cliVersion && cliCommand ? { version: cliVersion, command: cliCommand } : null,
           }

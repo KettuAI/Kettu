@@ -314,7 +314,7 @@ export interface AgentTask {
  */
 export type VersionMoveReason = 'registry' | 'manifest' | 'broken' | 'bundled'
 
-/** The user's own Claude Code or Codex, the only CLI a start runs. */
+/** The user's own program a start runs, such as Claude Code's or Codex's CLI. */
 export interface AgentCli {
   command: string // looked up on PATH, such as claude
   installed: InstalledCli | null // null: none found
@@ -446,7 +446,7 @@ export interface AgentStatus {
   updateSkipped: boolean // the user dismissed this update in the sidebar's notice
   task: AgentTask | null
   installMethods: AgentInstallMethod[] // a binary agent's ways to install; empty for the others
-  cli: AgentCli | null // the user's Claude Code or Codex; null for the others
+  cli: AgentCli | null // the user's own program a harness runs; null for the others
   // The configuration folder a start uses and the one the running process uses (null while none
   // runs); null for an agent whose folder cannot be chosen. `created`: Kettu made it.
   configDir: { runs: string; active: string | null; created: boolean } | null
