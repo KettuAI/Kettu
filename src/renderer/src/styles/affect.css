@@ -431,20 +431,28 @@
   ) {
   color: revert-layer;
 }
-/* A row always keeps the room of its tools at its end, so they show without moving the title or
+/* A row with tools always keeps their room at its end, so they show without moving the title or
    the badges before them: two 24 px tools 2 px apart, 4 px from the edge and 2 px clear of what
    comes before, less the row's own 6 px padding and 8 px gap. The row's status and host sit in
    that room and are gone in the frame the tools show; they fade back in when the row is left.
-   Touch rows keep App Shell's layout. */
+   A row without tools keeps its status. Touch rows keep App Shell's layout. */
 @media (hover: hover) {
-  .ui-as.ui-as .ui-as-chat-row:is(:hover, :has(:focus-visible), [data-menu]) .ui-as-chat-row__link {
+  .ui-as.ui-as .ui-as-chat-row:is(:hover, :has(:focus-visible), [data-menu]) .ui-as-chat-row__link,
+  .ui-as.ui-as
+    .ui-as-chat-folder-row:is(:hover, :has(:focus-visible), [data-menu])
+    > .ui-as-chat-folder {
     padding-right: 6px;
   }
-  .ui-as-chat-row:has(> .ui-as-chat-row__tools) .kettu-row-end {
+  :is(.ui-as-chat-row, .ui-as-chat-folder-row):has(> .ui-as-chat-row__tools > *) .kettu-row-end {
     min-width: 42px;
   }
 }
-.ui-as-chat-row:is(:hover, :has(:focus-visible), [data-menu]) .kettu-row-end {
+:is(.ui-as-chat-row, .ui-as-chat-folder-row):has(> .ui-as-chat-row__tools > *):is(
+    :hover,
+    :has(:focus-visible),
+    [data-menu]
+  )
+  .kettu-row-end {
   opacity: 0;
   transition: none;
 }
