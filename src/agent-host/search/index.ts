@@ -6,6 +6,7 @@ import { mkdirSync, rmSync } from 'node:fs'
 import path from 'node:path'
 import { DatabaseSync, type SQLOutputValue, type StatementSync } from 'node:sqlite'
 import { foldBulk } from '@shared/search-fold'
+import { transaction } from '../sqlite'
 import type { IndexedMessage } from './messages'
 import { snippetOf } from './snippet'
 
@@ -211,15 +212,7 @@ export class SearchIndex {
   }
 
   private transaction<T>(run: () => T): T {
-    this.db.exec('BEGIN')
-    try {
-      const result = run()
-      this.db.exec('COMMIT')
-      return result
-    } catch (error) {
-      if (this.db.isTransaction) this.db.exec('ROLLBACK')
-      throw error
-    }
+    return transaction(this.db, run)
   }
 
   // Writing.

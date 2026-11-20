@@ -38,6 +38,7 @@ import type {
 import type { RuntimeCall } from '../artifacts/runtime/calls'
 import type { RoutineCall, RoutineCalls, RoutineRunStats } from '../routines/calls'
 import type { IndexedMessage } from '../search/messages'
+import { transaction } from '../sqlite'
 import { taskRecordOf, type TaskCall, type TaskCalls } from '../workflow/model'
 import {
   storedBlobs,
@@ -802,15 +803,7 @@ export class ThreadDb {
   }
 
   private transaction<T>(db: DatabaseSync, run: () => T): T {
-    db.exec('BEGIN')
-    try {
-      const result = run()
-      db.exec('COMMIT')
-      return result
-    } catch (error) {
-      if (db.isTransaction) db.exec('ROLLBACK')
-      throw error
-    }
+    return transaction(db, run)
   }
 
   // Reading.
