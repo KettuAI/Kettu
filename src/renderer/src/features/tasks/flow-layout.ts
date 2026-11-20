@@ -5,11 +5,6 @@
 
 import { isBackArrow, type Workflow, type TaskEnd } from '@shared/workflow'
 
-export const NODE_W = 268
-export const NODE_H = 140
-export const END_SIZE = 28
-export const COL_GAP = 36
-
 /** Sizes the layout works in, across the rows (`nodeW`, `colGap`) and down them (the rest). */
 export interface FlowMetrics {
   nodeW: number
@@ -31,21 +26,6 @@ export interface FlowMetrics {
   pad: number
 }
 
-export const TASK_METRICS: FlowMetrics = {
-  nodeW: NODE_W,
-  nodeH: NODE_H,
-  endSize: END_SIZE,
-  colGap: COL_GAP,
-  rowGap: 90,
-  laneStart: 36,
-  laneGap: 20,
-  labelRoom: 220,
-  slot: 22,
-  inset: 22,
-  bend: 24,
-  pad: 12,
-}
-
 export type Point = [number, number]
 
 export interface NodeBox {
@@ -53,6 +33,8 @@ export interface NodeBox {
   x: number
   y: number
   row: number
+  /** How far it runs down the rows: `nodeH`, or its row's longest step's when steps size apart. */
+  length: number
 }
 
 export interface EndBox {
@@ -106,8 +88,15 @@ function rowsOf(workflow: Workflow): Map<string, number> {
   return rows
 }
 
-/** Lays out the workflow; every coordinate is in the chart's own box, from its top left. */
-export function layoutFlow(workflow: Workflow, m: FlowMetrics = TASK_METRICS): FlowLayout {
+/**
+ * Lays out the workflow; every coordinate is in the chart's own box, from its top left. With
+ * `lengthOf`, each row runs as far down as its longest step needs instead of `nodeH`.
+ */
+export function layoutFlow(
+  workflow: Workflow,
+  m: FlowMetrics,
+  lengthOf?: (stepId: string) => number,
+): FlowLayout {
   const { nodeW: NODE_W, nodeH: NODE_H, endSize: END_SIZE, colGap: COL_GAP, rowGap: ROW_GAP } = m
   const {
     laneStart: LANE_START,
@@ -120,7 +109,7 @@ export function layoutFlow(workflow: Workflow, m: FlowMetrics = TASK_METRICS): F
   const rowCount = Math.max(...rows.values()) + 1
   const byRow: string[][] = Array.from({ length: rowCount }, () => [])
   for (const step of workflow.steps) byRow[rows.get(step.id)!]!.push(step.id)
-  const ends: TaskEnd[] = (['done', 'dropped'] as const).filter((end) =>
+  const ends: TaskEnd[] = (['dropped', 'done'] as const).filter((end) =>
     workflow.steps.some((s) => s.outcomes.some((o) => o.end === end)),
   )
   const widest = Math.max(...byRow.map((ids) => ids.length), ends.length)
@@ -153,11 +142,24 @@ export function layoutFlow(workflow: Workflow, m: FlowMetrics = TASK_METRICS): F
   const skipRoom = (LANE_START * 5) / 6
 
   const originX = PAD + Math.max(leftRoom, skipRoom)
-  const rowY = (row: number) => PAD + row * (NODE_H + ROW_GAP)
+  const rowLength = byRow.map((ids) =>
+    lengthOf ? Math.max(...ids.map((id) => lengthOf(id))) : NODE_H,
+  )
+  const rowTops = rowLength.reduce(
+    (tops, length, i) => [...tops, tops[i]! + length + ROW_GAP],
+    [PAD],
+  )
+  const rowY = (row: number) => rowTops[row]!
   const centred = (count: number, i: number, width: number) =>
     originX + (rowsWidth - (count * width + (count - 1) * COL_GAP)) / 2 + i * (width + COL_GAP)
   const nodes: NodeBox[] = byRow.flatMap((ids, row) =>
-    ids.map((id, i) => ({ id, row, x: centred(ids.length, i, NODE_W), y: rowY(row) })),
+    ids.map((id, i) => ({
+      id,
+      row,
+      x: centred(ids.length, i, NODE_W),
+      y: rowY(row),
+      length: rowLength[row]!,
+    })),
   )
   const endTop = rowY(rowCount)
   const endBoxes: EndBox[] = ends.map((end, i) => ({
@@ -194,7 +196,7 @@ export function layoutFlow(workflow: Workflow, m: FlowMetrics = TASK_METRICS): F
     ways.sort((a, b) => Number(skipping(b)) - Number(skipping(a)))
     ways.forEach((way, j) => {
       const exitX = from.x + (NODE_W * (j + 1)) / (ways.length + 1)
-      const bottom = from.y + NODE_H
+      const bottom = from.y + from.length
       const bus = bottom + ROW_GAP / 2 + (j - (ways.length - 1) / 2) * 8
       for (const to of way.targets) {
         const endBox = way.end ? endBoxes.find((e) => e.end === way.end) : undefined
@@ -266,7 +268,7 @@ export function layoutFlow(workflow: Workflow, m: FlowMetrics = TASK_METRICS): F
       const entry = entries.get(back.to) ?? 0
       exits.set(back.from, exit + 1)
       entries.set(back.to, entry + 1)
-      const outY = from.y + NODE_H - m.inset - exit * SLOT
+      const outY = from.y + from.length - m.inset - exit * SLOT
       const inY = to.y + m.inset + entry * SLOT
       const out: Point[] = open(back.from)
         ? [
@@ -274,9 +276,9 @@ export function layoutFlow(workflow: Workflow, m: FlowMetrics = TASK_METRICS): F
             [x, outY],
           ]
         : [
-            [sideX(from) - dir * (m.bend + exit * 12), from.y + NODE_H],
-            [sideX(from) - dir * (m.bend + exit * 12), from.y + NODE_H + 12 + exit * 6],
-            [x, from.y + NODE_H + 12 + exit * 6],
+            [sideX(from) - dir * (m.bend + exit * 12), from.y + from.length],
+            [sideX(from) - dir * (m.bend + exit * 12), from.y + from.length + 12 + exit * 6],
+            [x, from.y + from.length + 12 + exit * 6],
           ]
       const into: Point[] = open(back.to)
         ? [

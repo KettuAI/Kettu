@@ -29,14 +29,24 @@ export function chartToTask(cardId: string, taskId: string): void {
   if (held?.key === cardId) held = { ...held, key: taskId }
 }
 
+/** Where a chart is drawn on screen, in px. */
+export interface ChartRect {
+  left: number
+  top: number
+  width: number
+  height: number
+}
+
 /**
- * Grows the task page's flowchart from the card's chart, once, the first time it shows: when
- * `ready`, the page past its loading state.
+ * Grows the task page's flowchart from the card's chart, once, the first time it shows: `target`
+ * moves and scales from its top left so the chart drawn in it, at `chart()` once `ready`, starts
+ * where the card's was, its left edge and middle on the card's.
  */
 export function useChartMorph(
   taskId: string,
   target: RefObject<HTMLElement | null>,
   ready: boolean,
+  chart: () => ChartRect | null,
 ): void {
   const reduced = useReducedMotionConfig()
   useLayoutEffect(() => {
@@ -45,19 +55,21 @@ export function useChartMorph(
     const from = held?.key === taskId && Date.now() - held.at < FRESH_MS ? held.rect : null
     if (!element || !from) return
     held = null
-    if (reduced) return
-    const to = element.getBoundingClientRect()
-    if (to.width === 0 || to.height === 0) return
+    const to = chart()
+    if (reduced || !to || to.width === 0 || to.height === 0) return
+    const box = element.getBoundingClientRect()
     const scale = Math.min(1, from.width / to.width)
     void animate(
       element,
       {
-        x: [from.left - to.left, 0],
-        y: [from.top - to.top, 0],
+        x: [from.left - box.left - scale * (to.left - box.left), 0],
+        y: [from.top + from.height / 2 - box.top - scale * (to.top + to.height / 2 - box.top), 0],
         scale: [scale, 1],
         opacity: [0.6, 1],
       },
       MORPH,
     )
+    // The chart's place is read once, when it first shows.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [taskId, target, reduced, ready])
 }
