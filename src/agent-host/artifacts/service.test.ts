@@ -1,7 +1,8 @@
 import { afterEach, describe, expect, it } from 'vitest'
-import type { Tool } from '@modelcontextprotocol/sdk/types.js'
+import type { CallToolResult, Tool } from '@modelcontextprotocol/sdk/types.js'
 import type { MarketTools } from '../marketplace/publish-tools'
 import { PLAN_PROMPT } from '../plan-tool'
+import { CORE_TOOLS, declared, GATEWAY_TOOL } from '../tool-gateway'
 import { ArtifactService, type AgentProcess, type ArtifactServiceDeps } from './service'
 
 const services: ArtifactService[] = []
@@ -87,9 +88,17 @@ describe('the servers a session attaches with', () => {
   })
 })
 
-/** What the service answers a request of an agent's, as a session's token reaches it. */
-async function rpc<T>(service: ArtifactService, method: string, params: unknown): Promise<T> {
-  const [server] = service.servers('s1', '/repo')
+/**
+ * What the service answers a request of an agent's, as a session's token reaches it; `gateway` for
+ * an agent given the short list.
+ */
+async function answer<T>(
+  service: ArtifactService,
+  method: string,
+  params: unknown,
+  gateway = false,
+): Promise<{ result?: T; error?: { message: string } }> {
+  const [server] = service.servers('s1', '/repo', gateway)
   if (!server || server.type !== 'http') throw new Error('No server')
   const response = await fetch(server.url, {
     method: 'POST',
@@ -100,9 +109,27 @@ async function rpc<T>(service: ArtifactService, method: string, params: unknown)
     },
     body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }),
   })
-  const body = (await response.json()) as { result: T }
+  return (await response.json()) as { result?: T; error?: { message: string } }
+}
+
+async function rpc<T>(service: ArtifactService, method: string, params: unknown): Promise<T> {
+  return (await answer<T>(service, method, params)).result!
+}
+
+/** A call of the gateway from a session given the short list. */
+async function viaGateway(service: ArtifactService, args: unknown): Promise<CallToolResult> {
+  const body = await answer<CallToolResult>(
+    service,
+    'tools/call',
+    { name: GATEWAY_TOOL, arguments: args },
+    true,
+  )
+  if (!body.result) throw new Error(body.error?.message ?? 'No result')
   return body.result
 }
+
+const texts = (result: CallToolResult): string =>
+  result.content.map((block) => (block.type === 'text' ? block.text : '')).join('\n')
 
 const INITIALIZE = {
   protocolVersion: '2025-06-18',
@@ -191,5 +218,92 @@ describe('the Marketplace tools', () => {
       'marketplace_mine',
       'marketplace_unlist',
     ])
+  })
+})
+
+// agy drops the largest MCP tools past a budget of its own and cannot call a dropped one over ACP.
+describe('an agent that drops tools past a budget of its own', () => {
+  it('is listed the core tools and the gateway, within 16000 bytes, the gateway the smallest', async () => {
+    const service = await everythingOn()
+    const { result } = await answer<{ tools: Tool[] }>(service, 'tools/list', {}, true)
+    const tools = result!.tools
+    expect(tools.map((tool) => tool.name).sort()).toEqual([...CORE_TOOLS, GATEWAY_TOOL].sort())
+    const size = (tool: Tool) => JSON.stringify(declared(tool)).length
+    expect(tools.reduce((sum, tool) => sum + size(tool), 0)).toBeLessThanOrEqual(16000)
+    const gateway = tools.find((tool) => tool.name === GATEWAY_TOOL)!
+    for (const tool of tools) {
+      if (tool !== gateway) expect(size(gateway)).toBeLessThan(size(tool))
+    }
+  })
+
+  it("leaves every other agent's list as it is", async () => {
+    const service = await everythingOn()
+    const { tools } = await rpc<{ tools: Tool[] }>(service, 'tools/list', {})
+    const names = tools.map((tool) => tool.name)
+    expect(names).not.toContain(GATEWAY_TOOL)
+    expect(names).toEqual(service.toolSummaries().map((tool) => tool.name))
+  })
+
+  it("runs only a tool of the session's full list", async () => {
+    const service = await everythingOn()
+    // A step's own tool, which a session outside a workflow step is not given.
+    for (const tool of ['report_step', 'no_such_tool', GATEWAY_TOOL]) {
+      const result = await viaGateway(service, { tool, arguments: {} })
+      expect(result.isError).toBe(true)
+      expect(texts(result)).toContain(`${tool} is not a Kettu tool this session can use`)
+    }
+    const odd = await viaGateway(service, { tool: 'list_agents', arguments: [] })
+    expect(odd.isError).toBe(true)
+  })
+
+  it('describes a tool without running it when the call has no arguments', async () => {
+    // Memory has no store here, so running a memory tool would fail.
+    const service = await everythingOn()
+    const result = await viaGateway(service, { tool: 'forget_memory' })
+    expect(result.isError).toBeUndefined()
+    expect(texts(result)).toContain('Arguments of forget_memory (JSON Schema): {')
+  })
+
+  it("runs a tool as a direct call does, and a topic lists its part's tools with their arguments", async () => {
+    const service = await everythingOn()
+    const result = await viaGateway(service, {
+      tool: 'read_kettu_guide',
+      arguments: { topic: 'devices' },
+    })
+    expect(result.isError).toBeUndefined()
+    expect(texts(result)).toContain('### device_tap')
+    expect(texts(result)).toContain('Arguments of device_tap (JSON Schema): {')
+    // The harness may drop a core tool too, so the topic gives its arguments as well.
+    const artifacts = await viaGateway(service, {
+      tool: 'read_kettu_guide',
+      arguments: { topic: 'artifacts' },
+    })
+    expect(texts(artifacts)).toContain('Arguments of create_artifact (JSON Schema): {')
+    expect(texts(artifacts)).not.toContain(`### ${GATEWAY_TOOL}`)
+
+    const direct = await rpc<CallToolResult>(service, 'tools/call', {
+      name: 'read_kettu_guide',
+      arguments: { topic: 'devices' },
+    })
+    expect(texts(direct)).not.toContain(GATEWAY_TOOL)
+  })
+
+  it('adds the arguments to a call that failed', async () => {
+    const service = await everythingOn()
+    const result = await viaGateway(service, {
+      tool: 'read_kettu_guide',
+      arguments: { topic: 'nope' },
+    })
+    expect(result.isError).toBe(true)
+    expect(texts(result)).toContain('Arguments of read_kettu_guide (JSON Schema)')
+  })
+
+  it('is no tool for a session given the full list', async () => {
+    const service = await everythingOn()
+    const body = await answer(service, 'tools/call', {
+      name: GATEWAY_TOOL,
+      arguments: { tool: 'list_agents', arguments: {} },
+    })
+    expect(body.error?.message).toContain(`Unknown tool ${GATEWAY_TOOL}`)
   })
 })

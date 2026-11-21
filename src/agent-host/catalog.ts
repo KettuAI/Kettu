@@ -175,6 +175,11 @@ export interface AgentDefinition {
    * each tool call, so the artifacts service gives its process one token per folder.
    */
   mcpServersByName?: boolean
+  /**
+   * Drops MCP tools past a budget of its own and cannot call a dropped one, so Kettu's server
+   * lists it only its core tools and a gateway that runs the rest.
+   */
+  toolGateway?: boolean
   /** How Kettu can install the harness's program for the user, by its vendor's routes. */
   installs?: BinaryInstalls
   /** The user's own CLI that runs: the SDK's for Claude Code, the program itself for Codex. */

@@ -7,6 +7,7 @@ import type { CallToolResult, Tool } from '@modelcontextprotocol/sdk/types.js'
 import { PLAN_TOOL } from '../plan-tool'
 import { REPORT_TOOL } from '../report-tool'
 import { SERVICE_NAME } from '../service-name'
+import { GATEWAY_TOOL } from '../tool-gateway'
 import {
   GUIDE_TOPICS,
   parts,
@@ -111,8 +112,9 @@ export function guideText(topic: GuideTopic, flags: GuideFlags): string | null {
 /**
  * The paragraph that tells an agent where Kettu's tools are and when to load which part, the same
  * for every session: for an agent that takes skills, by their names; else by the guide's topics.
+ * An agent given the short list with the gateway is told how to reach the rest.
  */
-export function guidePrompt(flags: GuideFlags, skills: boolean): string {
+export function guidePrompt(flags: GuideFlags, skills: boolean, gateway = false): string {
   const name = (topic: GuideTopic) => (skills ? skillName(topic) : topic)
   const uses: [string, GuideTopic[]][] = [
     ['show the user a page, report or document', ['artifacts']],
@@ -145,9 +147,12 @@ export function guidePrompt(flags: GuideFlags, skills: boolean): string {
   const diagrams =
     'Kettu draws mermaid and svg code blocks in replies as diagrams: draw a flowchart or any other ' +
     'diagram with one of them, never as ASCII art or box-drawing characters.'
+  const reach = gateway
+    ? ` Only some of Kettu's tools are in your function list: call any other, such as one a topic or your memory names, with ${GATEWAY_TOOL}, its name as tool and its arguments as arguments.`
+    : ''
   return skills
-    ? `${intro} kettu-* skills say when and how to use them. Load the matching skill before you ${list}. ${check} ${diagrams}`
-    : `${intro} ${GUIDE_TOOL} tool says when and how to use them. Read the matching topic with it before you ${list}. ${check} ${diagrams}`
+    ? `${intro} kettu-* skills say when and how to use them. Load the matching skill before you ${list}.${reach} ${check} ${diagrams}`
+    : `${intro} ${GUIDE_TOOL} tool says when and how to use them. Read the matching topic with it before you ${list}.${reach} ${check} ${diagrams}`
 }
 
 /**

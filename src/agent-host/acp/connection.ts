@@ -96,7 +96,14 @@ import {
   withFullAccess,
 } from './agy-access'
 import { systemPromptMeta, takesSystemPromptAppend } from './agy-prompt'
-import { agyAllowOnce, agyAutoAllowed, fromAgy, inWholeFile, onAgyOwnFiles } from './agy-tools'
+import {
+  agyAllowOnce,
+  agyAutoAllowed,
+  fromAgy,
+  inWholeFile,
+  onAgyOwnFiles,
+  throughGateway,
+} from './agy-tools'
 import { fromCodeMode } from './code-mode'
 import { forkPointMeta, forksAtMessage } from './fork-point'
 import {
@@ -402,10 +409,12 @@ export class AcpConnection implements AgentConnection {
           hooks.log('warn', `Permission request for unknown session ${ctx.params.sessionId}`)
           return { outcome: { outcome: 'cancelled' } }
         }
+        // A call through Kettu's gateway asks and shows as the tool it runs.
+        const asked = this.agy ? throughGateway(ctx.params.toolCall) : ctx.params.toolCall
         if (this.agy) {
           // agy asks for every MCP tool; Kettu's own run without asking, as Claude Code's do.
           const optionId = agyAllowOnce(
-            ctx.params.toolCall,
+            asked,
             ctx.params.options,
             this.autoAllowed.get(ctx.params.sessionId),
           )
@@ -413,7 +422,7 @@ export class AcpConnection implements AgentConnection {
         }
         const shaped = this.agy
           ? await inWholeFile(
-              fromAgy(ctx.params.toolCall),
+              fromAgy(asked),
               (file) => target.readProjectFile?.(file) ?? Promise.resolve(null),
             )
           : ctx.params.toolCall
@@ -534,7 +543,7 @@ export class AcpConnection implements AgentConnection {
     }
     if (this.agy && onAgyOwnFiles(update, ctx)) return { patches: [], effects: [] }
     const shaped = this.agy
-      ? fromAgy(update)
+      ? fromAgy(throughGateway(update))
       : this.naming === 'code'
         ? fromCodeMode(update)
         : update

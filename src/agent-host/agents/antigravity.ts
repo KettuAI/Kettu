@@ -34,4 +34,7 @@ export const ANTIGRAVITY: AgentDefinition = {
   keySignIn: { method: 'gemini-api-key', variable: 'GEMINI_API_KEY' },
   // Google and Gemini Enterprise sign in through agy's own terminal sign-in.
   terminalSignIn: { replaces: ['oauth-personal', 'oauth-business'] },
+  // agy 1.5.14 drops the largest MCP tools past its customization budget, and over ACP gives the
+  // model no call_mcp_tool for a dropped one.
+  toolGateway: true,
 }
