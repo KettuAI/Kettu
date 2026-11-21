@@ -3,6 +3,7 @@
 // not. Requests, responses and events pass through unchanged; opening and closing a terminal is
 // noted in the device's activity with its project, never with what is typed or shown.
 
+import { portError } from '@shared/hosts-text'
 import type { PortChannel } from '@shared/port-channel'
 import type { PortError } from '@shared/port-rpc'
 import type { PortDevice } from '@shared/remote/device'
@@ -14,17 +15,12 @@ export function isTerminalMethod(method: unknown): method is string {
   return typeof method === 'string' && method.startsWith('terminals.')
 }
 
-export const NOT_ALLOWED: PortError = {
-  code: 'terminal_not_allowed',
-  message: 'This computer does not allow devices to use its terminal',
-}
+// Built when used, so their words follow the language the host was last told.
+export const notAllowed = (): PortError => portError('terminal_not_allowed', 'terminal.notAllowed')
 
-const UNAVAILABLE: PortError = {
-  code: 'host_restarted',
-  message: 'The terminal host is not running',
-}
+const unavailable = (): PortError => portError('host_restarted', 'terminal.notRunning')
 
-const TOO_MANY: PortError = { code: 'busy', message: 'Too many terminal requests are waiting' }
+const tooMany = (): PortError => portError('busy', 'terminal.tooMany')
 
 /** The device's terminal requests waiting for an answer; past this many the next are refused. */
 const MAX_WAITING = 1024
@@ -84,9 +80,9 @@ export class DeviceTerminal {
   /** A `terminals.*` request from the device. */
   request(request: Request): void {
     if (this.state === 'ended') return
-    if (!this.options.allowed()) return this.refuse(request.id, NOT_ALLOWED)
+    if (!this.options.allowed()) return this.refuse(request.id, notAllowed())
     if (this.queued.length + this.waiting.size >= MAX_WAITING) {
-      return this.refuse(request.id, TOO_MANY)
+      return this.refuse(request.id, tooMany())
     }
     if (this.state === 'open') return this.forward(request)
     this.queued.push(request)
@@ -116,7 +112,7 @@ export class DeviceTerminal {
     if (generation !== this.generation) return port?.close()
     if (!port) {
       this.state = 'idle'
-      return this.reset(UNAVAILABLE)
+      return this.reset(unavailable())
     }
     this.port = port
     port.onMessage((data) => {
@@ -130,7 +126,7 @@ export class DeviceTerminal {
       // Before the waiting requests' errors, so the device knows its terminals ended first.
       const ids = [...this.opened.keys()]
       this.options.send({ type: 'terminals.restarted', ids } satisfies TerminalsRestarted)
-      this.reset(UNAVAILABLE)
+      this.reset(unavailable())
     })
     port.send({ type: 'request', id: LIST_ID, method: 'terminals.list', params: {} })
   }

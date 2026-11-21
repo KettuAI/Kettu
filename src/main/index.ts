@@ -1096,6 +1096,9 @@ async function start(): Promise<void> {
       setLocale(localeOf(next))
       installMenu(menuDeps)
       tray.updateMenu()
+      remoteHost.localeChanged()
+      terminalHost.localeChanged()
+      deviceHost.localeChanged()
     }
     island.settingsChanged()
     // The agent host reads `general.sessionTitles` and `general.lightModel`, which `reachesHost`

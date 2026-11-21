@@ -20,7 +20,7 @@ import {
   setVerboseRecords,
   verboseRecords,
 } from '@shared/log/process-log'
-import { matchLocale } from '@shared/locale'
+import { matchLocale, resolveLocale } from '@shared/locale'
 import type { MarketAccount } from '@shared/market-publish'
 import { addressKey, MAX_OWN_ADDRESSES, parsePort } from '@shared/remote/address'
 import { PUSH_URL, PUSH_URL_ENV, pushUrlFrom } from '@shared/remote/push'
@@ -30,6 +30,7 @@ import { Account, NotSignedIn } from '../main/account'
 import { accountBaseUrl, AccountApi, clientInfo, DAEMON_CLIENT } from '../main/account/service'
 import { accountFile } from '../main/account/store'
 import { MarketUnauthorized, runMarketCall } from '../main/market-api'
+import { locale as currentLocale, setLocale, t } from '../main/i18n'
 import { createLogger } from '../main/log'
 import { MarketKeys, marketKeysFile } from '../main/market-keys'
 import { RelayFeatures, RelayToken, readRelayFeatures } from '../main/relay-token'
@@ -315,6 +316,12 @@ export async function startDaemon(options: DaemonOptions): Promise<RunningDaemon
     await release(server, options.controlSocket)
     throw error
   }
+  // The text main's modules write follows the daemon's language, as its hosts' does.
+  const systemLocale = matchLocale([Intl.DateTimeFormat().resolvedOptions().locale])
+  setLocale(resolveLocale(settings.get().general.language, systemLocale))
+  settings.onChange((next, changed) => {
+    if (changed.has('general')) setLocale(resolveLocale(next.general.language, systemLocale))
+  })
   try {
     relayKey = await loadRelayHostKey(options.dataPath)
   } catch (error) {
@@ -358,7 +365,7 @@ export async function startDaemon(options: DaemonOptions): Promise<RunningDaemon
           arch: process.arch,
           version: options.version,
         }),
-      locale: () => 'en',
+      locale: currentLocale,
       openBrowser: () => Promise.reject(new Error('The daemon signs in with kettu login')),
       bringToFront: () => {},
       avatar: async () => null,
@@ -427,7 +434,7 @@ export async function startDaemon(options: DaemonOptions): Promise<RunningDaemon
     bundleDir: options.bundleDir,
     dataPath: options.dataPath,
     version: options.version,
-    systemLocale: matchLocale([Intl.DateTimeFormat().resolvedOptions().locale]),
+    systemLocale,
     settings: () => settings.get(),
     marketKeys: () => marketKeys.contentsForHost(),
     marketOAuth: (serverId, state) => void marketKeys.setOAuth(serverId, state),
@@ -453,7 +460,7 @@ export async function startDaemon(options: DaemonOptions): Promise<RunningDaemon
       const signed = account
       if (!signed || !accountBase) {
         return Promise.resolve({
-          error: { code: 'signed_out', status: null, message: 'The daemon cannot use an account.' },
+          error: { code: 'signed_out', status: null, message: t('daemon.noAccount') },
         })
       }
       return runMarketCall(call, {
@@ -477,7 +484,7 @@ export async function startDaemon(options: DaemonOptions): Promise<RunningDaemon
     admin: async (deviceId, method, params) =>
       admin
         ? admin.answer(deviceId, method, params)
-        : { error: { code: 'unavailable', message: 'The daemon is starting' } },
+        : { error: { code: 'unavailable', message: t('hostAdmin.starting') } },
   })
   hosts = running
   if (account) {

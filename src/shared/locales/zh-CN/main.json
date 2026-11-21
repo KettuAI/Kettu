@@ -140,19 +140,40 @@
     },
     "answeredStatus": "Kettu 返回了状态 {{status}}",
     "unreachable": "连不上 Kettu 市场：{{reason}}",
-    "signedOut": "没有登录 Kettu 账号，或者 Kettu 的服务已关闭。"
+    "signedOut": "没有登录 Kettu 账号，或者 Kettu 的服务已关闭。",
+    "failure": {
+      "notFound": "Kettu 市场里没有这一项。",
+      "takenDown": "这个条目已被 Kettu 下架。",
+      "takenDownNoVersions": "这个条目已被 Kettu 下架，不能再发新版本。",
+      "checkFailed": "这个版本没有通过 Kettu 市场的检查。",
+      "checkFailedWith": "这个版本没有通过 Kettu 市场的检查：\n{{problems}}",
+      "moreProblems": "……另有 {{count}} 条",
+      "tooLarge": "这个版本太大：一个版本的大小和文件数量都有上限。",
+      "storageFull": "这个账号的云存储不够用了。",
+      "storageFullUsed": "这个账号的云存储不够用了：已用 {{used}}，上限 {{limit}}。",
+      "versionExists": "版本 {{version}} 已经发布过了。",
+      "versionExistsAny": "这个版本已经发布过了。",
+      "withdrawn": "这个版本已被撤回。",
+      "handleTaken": "这个发布者名已经有人用了。",
+      "noPublisher": "发布之前先设置发布者名。",
+      "tooManyListings": "一个账号能发布的条目有上限，这个账号已经到了。",
+      "conflict": "这个条目刚好被同时发布了，请再试一次。"
+    }
   },
   "agentHost": {
     "down": "智能体后台进程没有运行",
-    "silent": "智能体后台进程没有及时响应"
+    "silent": "智能体后台进程没有及时响应",
+    "exited": "智能体后台进程已退出"
   },
   "terminalHost": {
     "stopped": "终端后台进程已停止",
-    "silent": "终端没有及时响应"
+    "silent": "终端没有及时响应",
+    "notRunning": "终端后台进程没有运行"
   },
   "deviceHost": {
     "stopped": "设备后台进程已停止",
-    "silent": "设备没有及时响应"
+    "silent": "设备没有及时响应",
+    "notRunning": "设备后台进程没有运行"
   },
   "hostSessions": {
     "offline": "这台电脑没有连上",
@@ -261,5 +282,10 @@
     "tookTooLong": "读取浏览器花的时间太长了",
     "workerStopped": "读取登录的进程意外停止，退出码 {{code}}",
     "noProfile": "这台电脑上没有这个浏览器配置文件"
+  },
+  "daemon": {
+    "noTrash": "这台电脑没有 Kettu 能用的回收站。",
+    "noAccount": "后台服务用不了 Kettu 账号。",
+    "notSignedIn": "后台服务没有登录 Kettu 账号。"
   }
 }

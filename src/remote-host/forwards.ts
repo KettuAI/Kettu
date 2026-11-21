@@ -5,6 +5,7 @@
 
 import net from 'node:net'
 import { isBrowserForward, type BrowserForward } from '@shared/browser'
+import { portError, t } from '@shared/hosts-text'
 import type { PortError } from '@shared/port-rpc'
 import { MAX_FORWARDS, type StreamCancel, type StreamEnd } from '@shared/remote/streams'
 import type { Transport } from '@shared/remote/transport'
@@ -80,17 +81,11 @@ export class HostForwards {
       !isBrowserForward(forward) ||
       !this.grants.has(grantKey(sessionId, forward.host, forward.port))
     ) {
-      return this.refuse(stream, {
-        code: 'forbidden',
-        message: 'No agent of the session opened that port on the host',
-      })
+      return this.refuse(stream, portError('forbidden', 'remote.portNotOpened'))
     }
     const max = this.options.max ?? MAX_FORWARDS
     if (this.forwards.size >= max) {
-      return this.refuse(stream, {
-        code: 'busy',
-        message: `A device may have at most ${max} forwarded connections at once`,
-      })
+      return this.refuse(stream, portError('busy', 'remote.forwardsBusy', { max }))
     }
     const socket = (this.options.connect ?? connectLoopback)(forward.host, forward.port)
     const forwarded: Forwarded = { socket, sentEnd: false, gotEnd: false, quiet: false }
@@ -112,8 +107,8 @@ export class HostForwards {
       if (failure) this.options.log('info', `A forward to port ${forward.port} failed: ${failure}`)
       const message =
         failure === 'ECONNREFUSED'
-          ? `Nothing listens on port ${forward.port} on the host`
-          : 'The connection on the host ended'
+          ? t('remote.nothingListens', { port: forward.port })
+          : t('remote.forwardEnded')
       this.options.send({ type: 'stream.cancel', stream, error: { code: 'unavailable', message } })
     })
   }
@@ -126,7 +121,7 @@ export class HostForwards {
     forwarded.socket.write(data)
     if (forwarded.socket.writableLength > MAX_UNWRITTEN) {
       this.drop(stream, forwarded)
-      this.refuse(stream, { code: 'busy', message: 'The dev server on the host reads too slowly' })
+      this.refuse(stream, portError('busy', 'remote.devServerSlow'))
     }
     return true
   }

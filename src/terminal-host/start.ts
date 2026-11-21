@@ -3,6 +3,8 @@
 // process, node-main.ts under Node.js.
 
 import type { MainToTerminalHost, TerminalHostToMain } from '@shared/host-control'
+import { setLocale, t } from '@shared/hosts-text'
+import { isLocale } from '@shared/locale'
 import { writeLog } from '@shared/log/process-log'
 import type { ControlChannel, PortChannel } from '@shared/port-channel'
 import type { FromPort } from '@shared/port-rpc'
@@ -61,6 +63,7 @@ export function startTerminalHost(
   let allowDevices = false
 
   function init(message: Extract<MainToTerminalHost, { type: 'terminal-host:init' }>): void {
+    if (isLocale(message.locale)) setLocale(message.locale)
     projects = new ProjectRegistry(message.platform)
     projects.set(message.projects)
     const terminals = new TerminalManager({
@@ -123,6 +126,9 @@ export function startTerminalHost(
       case 'terminal-host:init':
         if (!manager) init(message)
         break
+      case 'terminal-host:locale':
+        if (isLocale(message.locale)) setLocale(message.locale)
+        break
       case 'terminal-host:settings':
         manager?.setShellPath(message.settings.shellPath)
         allowDevices = message.settings.allowDevices === true
@@ -151,7 +157,7 @@ export function startTerminalHost(
             answer: {
               error: {
                 code: 'not_allowed',
-                message: 'This computer does not allow devices to use its terminal',
+                message: t('terminal.notAllowed'),
               },
             },
           })
@@ -160,7 +166,7 @@ export function startTerminalHost(
         void (
           manager?.agentCall(call) ??
           Promise.resolve({
-            error: { code: 'unavailable' as const, message: 'The terminal host is starting' },
+            error: { code: 'unavailable' as const, message: t('terminal.starting') },
           })
         ).then((answer) => send({ type: 'terminal-host:answer', callId, answer }))
         break

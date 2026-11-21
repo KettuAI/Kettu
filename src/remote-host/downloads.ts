@@ -3,6 +3,7 @@
 // waits while the transport holds more than a little, so a device that stops reading stops it.
 
 import type { FileHandle } from 'node:fs/promises'
+import { words } from '@shared/hosts-text'
 import type { PortError } from '@shared/port-rpc'
 import { BYTES_PER_FRAME, type Channel } from '@shared/remote/channel'
 import type { StreamCancel, StreamEnd } from '@shared/remote/streams'
@@ -160,12 +161,11 @@ export class Downloads {
       if (download.over) return
       const ended = error instanceof EndedEarly
       // Never the error's own message, which may name the file.
-      const message = ended
-        ? `The file ended before its ${source.size} bytes`
-        : 'The bytes could not be read'
+      const key = ended ? 'remote.fileShort' : 'remote.bytesUnreadable'
+      const { message, log } = words(key, { size: source.size })
       const failed: PortError = { code: 'internal', message }
       this.options.send({ type: 'stream.cancel', stream, error: failed })
-      this.options.failed(ended ? message : `${message} (${errorCode(error)})`)
+      this.options.failed(ended ? log : `${log} (${errorCode(error)})`)
     } finally {
       download.over = true
       await this.settle(download)

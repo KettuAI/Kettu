@@ -5,6 +5,7 @@
 
 import { spawn } from 'node:child_process'
 import { Duplex } from 'node:stream'
+import { t } from '@shared/hosts-text'
 import { MAX_FAILURE_DETAIL, type SshAddress } from '@shared/remote/hosts'
 import type { Platform } from '@shared/platform'
 import type { DirectAddress } from '@shared/remote/protocol'
@@ -158,7 +159,7 @@ export function runSsh(
     }
     const timer = setTimeout(() => {
       child.kill()
-      stderr += '\nssh: the command took too long and was stopped\n'
+      stderr += `\n${t('remote.sshTooSlow')}\n`
     }, options.timeoutMs)
     options.signal.addEventListener('abort', abort, { once: true })
     child.stdout

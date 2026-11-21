@@ -5,6 +5,7 @@ import { spawn, type ChildProcess } from 'node:child_process'
 import path from 'node:path'
 import { createInterface } from 'node:readline'
 import type { Env } from '../agent-host/find-command'
+import { t } from '@shared/hosts-text'
 import type {
   DeviceFrame,
   DeviceInput,
@@ -96,11 +97,11 @@ export class IosSimulatorDriver implements DeviceDriver {
     child.stderr?.on('data', (chunk: Buffer) => this.log(chunk.toString().trimEnd()))
     child.once('exit', (code) => {
       this.child = null
-      if (!this.stopped) this.end(`The simulator stream stopped (exit ${code ?? 'signal'})`)
+      if (!this.stopped) this.end(t('devices.simulatorStopped', { code: code ?? 'signal' }))
     })
     this.started = await new Promise<Started>((resolve, reject) => {
       const timer = setTimeout(
-        () => reject(new DriverError('start_timeout', 'The simulator stream did not start')),
+        () => reject(new DriverError('start_timeout', t('devices.simulatorStreamSlow'))),
         START_TIMEOUT_MS,
       )
       const lines = createInterface({ input: child.stdout! })
@@ -120,7 +121,7 @@ export class IosSimulatorDriver implements DeviceDriver {
       })
       child.once('exit', () => {
         clearTimeout(timer)
-        reject(new DriverError('start_failed', 'The simulator stream could not start'))
+        reject(new DriverError('start_failed', t('devices.simulatorStreamFailed')))
       })
     })
     this.openInput()
@@ -202,12 +203,17 @@ export class IosSimulatorDriver implements DeviceDriver {
 
   async screenshot(): Promise<Uint8Array> {
     const started = this.started
-    if (!started) throw new DriverError('not_started', 'The simulator stream has not started')
+    if (!started) throw new DriverError('not_started', t('devices.simulatorNotStarted'))
     const response = await fetch(`${started.url}/api/screenshot`, {
       method: 'POST',
       headers: { authorization: `Bearer ${started.token}` },
     })
-    if (!response.ok) throw new DriverError('screenshot', `Screenshot failed (${response.status})`)
+    if (!response.ok) {
+      throw new DriverError(
+        'screenshot',
+        t('devices.screenshotFailed', { status: response.status }),
+      )
+    }
     return new Uint8Array(await response.arrayBuffer())
   }
 

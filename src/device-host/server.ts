@@ -1,3 +1,4 @@
+import { t } from '@shared/hosts-text'
 import { withOperation } from '@shared/log/process-log'
 import { logRequest } from '@shared/log/requests'
 import type { DeviceEvent, DeviceMethod } from '@shared/device-host'
@@ -84,7 +85,7 @@ export class PortServer {
     if (device && !this.allowDevices) {
       this.reply(port, request.id, {
         code: 'forbidden',
-        message: 'This computer does not let devices use its mobile devices',
+        message: t('devices.notAllowed'),
       })
       return
     }

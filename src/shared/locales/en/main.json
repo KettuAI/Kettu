@@ -146,19 +146,40 @@
     },
     "answeredStatus": "Kettu answered {{status}}",
     "unreachable": "Could not reach the Kettu Marketplace: {{reason}}",
-    "signedOut": "Not signed in to a Kettu account, or Kettu’s services are off."
+    "signedOut": "Not signed in to a Kettu account, or Kettu’s services are off.",
+    "failure": {
+      "notFound": "It is not in the Kettu Marketplace.",
+      "takenDown": "Kettu took this listing down.",
+      "takenDownNoVersions": "Kettu took this listing down, so it takes no new versions.",
+      "checkFailed": "The version did not pass the Kettu Marketplace’s checks.",
+      "checkFailedWith": "The version did not pass the Kettu Marketplace’s checks:\n{{problems}}",
+      "moreProblems": "… and {{count}} more",
+      "tooLarge": "The version is too large: a version has a limit on its size and on its number of files.",
+      "storageFull": "The account has no cloud storage left for this.",
+      "storageFullUsed": "The account has no cloud storage left for this: {{used}} of {{limit}} is used.",
+      "versionExists": "Version {{version}} was already published.",
+      "versionExistsAny": "This version was already published.",
+      "withdrawn": "This version was withdrawn.",
+      "handleTaken": "Another publisher has this handle.",
+      "noPublisher": "Set a publisher handle before publishing.",
+      "tooManyListings": "An account has a limit on its listings, and this one has reached it.",
+      "conflict": "This listing was published at the same time. Try again."
+    }
   },
   "agentHost": {
     "down": "The agent host is down",
-    "silent": "The agent host did not answer in time"
+    "silent": "The agent host did not answer in time",
+    "exited": "The agent host exited"
   },
   "terminalHost": {
     "stopped": "The terminal host stopped",
-    "silent": "The terminal did not answer in time"
+    "silent": "The terminal did not answer in time",
+    "notRunning": "The terminal host is not running"
   },
   "deviceHost": {
     "stopped": "The device host stopped",
-    "silent": "The device did not answer in time"
+    "silent": "The device did not answer in time",
+    "notRunning": "The device host is not running"
   },
   "hostSessions": {
     "offline": "The host is not connected",
@@ -267,5 +288,10 @@
     "tookTooLong": "Reading the browsers took too long",
     "workerStopped": "The sign-ins worker stopped with code {{code}}",
     "noProfile": "That browser profile is not on this computer"
+  },
+  "daemon": {
+    "noTrash": "This computer has no trash that Kettu can use.",
+    "noAccount": "The daemon cannot use an account.",
+    "notSignedIn": "The daemon is not signed in to a Kettu account."
   }
 }

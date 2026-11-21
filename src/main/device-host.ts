@@ -7,7 +7,7 @@ import {
 import type { DeviceHostToMain, MainToDeviceHost } from '@shared/host-control'
 import type { PortDevice } from '@shared/remote/device'
 import deviceHostPath from '../device-host/index?modulePath'
-import { t } from './i18n'
+import { locale as currentLocale, t } from './i18n'
 import { createLogger } from './log'
 import { UtilityHost, type UtilityHostEvent, type UtilityHostState } from './utility-host'
 
@@ -39,6 +39,7 @@ export class DeviceHost {
         type: 'device-host:init',
         platform: process.platform,
         appVersion: app.getVersion(),
+        locale: currentLocale(),
         nodeRuntime: { command: process.execPath, env: { ELECTRON_RUN_AS_NODE: '1' } },
         dataDir: app.getPath('userData'),
         resourcesPath: app.isPackaged ? process.resourcesPath : null,
@@ -91,6 +92,11 @@ export class DeviceHost {
 
   setAllowDevices(allowed: boolean): void {
     this.host.post({ type: 'device-host:allow-devices', allowed })
+  }
+
+  /** Tells the process the interface language changed, for the text it writes. */
+  localeChanged(): void {
+    this.host.post({ type: 'device-host:locale', locale: currentLocale() })
   }
 
   endSessions(sessionIds: string[]): void {

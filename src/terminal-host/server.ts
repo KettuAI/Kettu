@@ -1,3 +1,4 @@
+import { t } from '@shared/hosts-text'
 import { withOperation } from '@shared/log/process-log'
 import { logRequest } from '@shared/log/requests'
 import type { PortChannel } from '@shared/port-channel'
@@ -87,7 +88,7 @@ export class PortServer {
       this.warn(`Device ${device.id} asked for a terminal while devices may not use one`)
       this.reply(port, request.id, {
         code: 'terminal_not_allowed',
-        message: 'This computer does not allow devices to use its terminal',
+        message: t('terminal.notAllowed'),
       })
       return
     }

@@ -3,6 +3,7 @@
 // frame's pictures travel as base64; each device acknowledges its own frames, so a slow phone skips ahead on its own.
 
 import { DEVICE_METHODS } from '@shared/device-host'
+import { portError } from '@shared/hosts-text'
 import type { PortChannel } from '@shared/port-channel'
 import type { PortError } from '@shared/port-rpc'
 import type { PortDevice } from '@shared/remote/device'
@@ -13,8 +14,9 @@ export function isDeviceMethod(method: unknown): method is string {
   return typeof method === 'string' && (DEVICE_METHODS as readonly string[]).includes(method)
 }
 
-const UNAVAILABLE: PortError = { code: 'unavailable', message: 'The device host is not running' }
-const TOO_MANY: PortError = { code: 'busy', message: 'Too many device requests are waiting' }
+// Built when used, so their words follow the language the host was last told.
+const unavailable = (): PortError => portError('unavailable', 'devices.hostNotRunning')
+const tooMany = (): PortError => portError('busy', 'devices.tooMany')
 const MAX_WAITING = 1024
 
 type Request = { type: 'request'; id?: unknown; method: string; params?: unknown }
@@ -80,7 +82,7 @@ export class DeviceDevices {
   request(request: Request): void {
     if (this.state === 'ended') return
     if (this.queued.length + this.waiting.size >= MAX_WAITING)
-      return this.refuse(request.id, TOO_MANY)
+      return this.refuse(request.id, tooMany())
     if (this.state === 'open') return this.forward(request)
     this.queued.push(request)
     if (this.state === 'idle') void this.openPort()
@@ -93,7 +95,7 @@ export class DeviceDevices {
     this.port = null
     this.generation++
     this.state = error ? 'idle' : 'ended'
-    this.reset(error ?? UNAVAILABLE)
+    this.reset(error ?? unavailable())
     port?.close()
   }
 
@@ -104,7 +106,7 @@ export class DeviceDevices {
     if (generation !== this.generation) return port?.close()
     if (!port) {
       this.state = 'idle'
-      return this.reset(UNAVAILABLE)
+      return this.reset(unavailable())
     }
     this.port = port
     this.state = 'open'
@@ -120,7 +122,7 @@ export class DeviceDevices {
       this.options.log('warn', `The device port of paired device ${this.options.device.id} closed`)
       this.port = null
       this.state = 'idle'
-      this.reset(UNAVAILABLE)
+      this.reset(unavailable())
       this.options.send({ type: 'event', event: { type: 'devices.restarted' } })
     })
     for (const request of this.queued.splice(0)) this.forward(request)

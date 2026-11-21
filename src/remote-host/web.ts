@@ -15,6 +15,7 @@ import { ARTIFACT_ENTRY, artifactFileType, isHtmlPath } from '@shared/artifact-f
 import { parseServed, servedHtml } from '@shared/artifact-page'
 import { ARTIFACT_PERMISSIONS_POLICY, artifactCsp } from '@shared/artifact-policy'
 import { VIEWER_PREFIX, viewerBase, viewerPage } from '@shared/artifact-types'
+import { t } from '@shared/hosts-text'
 import { matchLocale, type Locale } from '@shared/locale'
 import { MAX_NOISE_MESSAGE } from '@shared/remote/noise'
 import type { Transport } from '@shared/remote/transport'
@@ -224,9 +225,9 @@ export class WebServer {
     this.stopWaiting(socket)
     response.once('finish', () => this.wait(socket))
     this.answer(request, response).catch((error: unknown) => {
-      this.options.log('warn', `The web client could not be served: ${(error as Error).message}`)
+      this.options.log('warn', `The web client could not be served: ${logText(error)}`)
       if (response.headersSent) response.destroy()
-      else plain(response, 500, 'Kettu could not read this file.')
+      else plain(response, 500, t('remote.pageUnreadable', { lng: requestLocale(request) }))
     })
   }
 
@@ -239,12 +240,14 @@ export class WebServer {
     if (url && frame) return this.frame(request, response, frame, url.searchParams)
     const files = await this.load()
     const index = files?.get('/index.html')
-    if (!files || !index) return plain(response, 503, 'This Kettu has no web client.')
+    if (!files || !index) {
+      return plain(response, 503, t('remote.pageNoWebClient', { lng: requestLocale(request) }))
+    }
     const pathname = pathOf(request.url)
     if (pathname === null) return plain(response, 400, 'The path is not valid.')
     const file = files.get(pathname)
     if (pathname.startsWith('/assets/')) {
-      if (!file) return plain(response, 404, 'Not found.')
+      if (!file) return plain(response, 404, notFound(request))
       // It answers the page's media URLs, so it takes the whole site from its folder.
       const worker: Record<string, string> = pathname.startsWith(MEDIA_WORKER_PREFIX)
         ? { 'Service-Worker-Allowed': '/' }
@@ -269,7 +272,7 @@ export class WebServer {
     const host = request.headers.host
     if (!host || !HOST.test(host)) return plain(response, 400, 'The host is not valid.')
     const wanted = parseServed(rest, params)
-    if (!wanted) return plain(response, 404, 'Not found.', frameCors(request))
+    if (!wanted) return plain(response, 404, notFound(request), frameCors(request))
     if (wanted.path === ARTIFACT_ENTRY || wanted.path.startsWith(VIEWER_PREFIX)) {
       const typed = await this.options.server.frameType?.(token, wanted.version)
       if (typed) {
@@ -277,7 +280,7 @@ export class WebServer {
         if (wanted.path.startsWith(VIEWER_PREFIX)) {
           const viewers = await this.loadViewers()
           const file = viewers?.get(`/${wanted.path.slice(VIEWER_PREFIX.length)}`)
-          if (!file) return plain(response, 404, 'Not found.', frameCors(request))
+          if (!file) return plain(response, 404, notFound(request), frameCors(request))
           return send(
             request,
             response,
@@ -291,7 +294,7 @@ export class WebServer {
           requestLocale(request),
           viewerBase(wanted.version),
         )
-        if (!page) return plain(response, 404, 'Not found.', frameCors(request))
+        if (!page) return plain(response, 404, notFound(request), frameCors(request))
         const html = servedHtml(page, null, { path: ARTIFACT_ENTRY, transport: 'port' })
         const body = Buffer.from(html, 'utf8')
         const type = artifactFileType(ARTIFACT_ENTRY)
@@ -300,7 +303,7 @@ export class WebServer {
       }
     }
     const found = await this.options.server.frameFile(token, wanted.version, wanted.path)
-    if (!found) return plain(response, 404, 'Not found.', frameCors(request))
+    if (!found) return plain(response, 404, notFound(request), frameCors(request))
     const headers = frameHeaders(request, host, `${FRAME_PATH}${token}/`, found.strict)
     const type = artifactFileType(wanted.path)
     if (!isHtmlPath(wanted.path)) {
@@ -377,6 +380,17 @@ function sameOrigin(request: IncomingMessage): boolean {
   if (!page || !host || (page.protocol !== 'http:' && page.protocol !== 'https:')) return false
   // Read with the page's scheme, so a default port drops from both alike.
   return URL.parse(`${page.protocol}//${host}`)?.host === page.host
+}
+
+/** A refusal worded in the browser's own language. */
+function notFound(request: IncomingMessage): string {
+  return t('remote.pageNotFound', { lng: requestLocale(request) })
+}
+
+/** An error as a log line says it: in English where it keeps its words that way. */
+function logText(error: unknown): string {
+  const { log, message } = (error ?? {}) as { log?: unknown; message?: unknown }
+  return typeof log === 'string' ? log : String(message ?? error)
 }
 
 /** The interface language the browser asks for, which a type's viewer speaks. */

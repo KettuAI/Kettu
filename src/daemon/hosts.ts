@@ -23,7 +23,7 @@ import type {
 } from '@shared/host-control'
 import { pushedAttention } from '@shared/attention'
 import { BROWSER_UNAVAILABLE } from '@shared/browser'
-import type { Locale } from '@shared/locale'
+import { resolveLocale, type Locale } from '@shared/locale'
 import type { DeviceActivity } from '@shared/remote/activity'
 import { isDirectStatus, isPort } from '@shared/remote/address'
 import { deviceId, type NewDevice } from '@shared/remote/device'
@@ -35,6 +35,7 @@ import type { MarketAccount, MarketCall, MarketCallAnswer } from '@shared/market
 import { reportBuildResult, type ReportBuildResult } from '@shared/report'
 import type { DirectSettings, SettingsFile } from '@shared/settings'
 import { processControl, stopTrees, type ProcessId } from '../agent-host/process-tree'
+import { t } from '../main/i18n'
 import { createLogger } from '../main/log'
 import { marketCallOf } from '../main/market-api'
 import type { MarketKeysPush } from '../main/market-keys'
@@ -51,8 +52,6 @@ import { daemonUserAgent } from './update'
 type Attention = Extract<HostToMain, { type: 'host:attention' }>
 type ReportParams = Omit<Extract<MainToHost, { type: 'host:report-request' }>, 'type' | 'requestId'>
 
-// Under Node.js the host reaches no system trash, so a delete there asks to remove for good.
-const NO_TRASH = 'This computer has no trash that Kettu can use.'
 const log = createLogger('daemon')
 // What each host logs carries its own name, as in the app's log.
 const agentLog = createLogger('agent-host')
@@ -173,6 +172,8 @@ export class Hosts {
   private token: string | null = null
   /** The relay token the relays get in its place, once the main relay takes them. */
   private relayToken: string | null = null
+  /** The language the hosts were last told, for the text they write. */
+  private sentLocale: Locale
   /** Use the Kettu relay, as the remote host was last told. */
   private sentRelay: boolean | null = null
   private resetting: Promise<void> | null = null
@@ -201,6 +202,7 @@ export class Hosts {
     this.privateKey = options.privateKey
     this.relayKey = options.relayKey
     this.sshPort = options.sshPort
+    this.sentLocale = this.locale()
     const bundle = (name: string): string => path.join(options.bundleDir, name)
     this.agent = new ForkedHost<MainToHost, HostToMain>({
       log: agentLog,
@@ -249,6 +251,7 @@ export class Hosts {
         type: 'terminal-host:init',
         platform: process.platform,
         appVersion: options.version,
+        locale: this.locale(),
         settings: terminalSettings(options.settings()),
         projects: this.projects,
         authCommands: this.authCommands,
@@ -290,6 +293,7 @@ export class Hosts {
         type: 'device-host:init',
         platform: process.platform,
         appVersion: options.version,
+        locale: this.locale(),
         nodeRuntime: { command: process.execPath, env: {} },
         dataDir: options.dataPath,
         resourcesPath: null,
@@ -327,6 +331,7 @@ export class Hosts {
         userDataPath: options.dataPath,
         appVersion: options.version,
         platform: process.platform,
+        locale: this.locale(),
         hostName: this.initHostName(),
         privateKey: this.privateKey,
         plainTextKey: true,
@@ -351,6 +356,11 @@ export class Hosts {
         for (const answer of [...this.requests.values()]) answer(null)
       },
     })
+  }
+
+  /** The language of the text the daemon and its hosts write, as its settings and system say. */
+  private locale(): Locale {
+    return resolveLocale(this.settings().general.language, this.options.systemLocale)
   }
 
   /** Starts the agent host, then the remote host on its socket; the terminal host waits. */
@@ -504,7 +514,7 @@ export class Hosts {
     const down: ReportBuildResult = {
       ok: false,
       reason: 'failed',
-      message: 'The agent host is down',
+      message: t('agentHost.down'),
     }
     if (this.agent.state !== 'ready') return Promise.resolve(down)
     const requestId = this.nextReport++
@@ -513,7 +523,7 @@ export class Hosts {
       const late: ReportBuildResult = {
         ok: false,
         reason: 'failed',
-        message: 'The agent host did not answer in time',
+        message: t('agentHost.silent'),
       }
       const answer = (result: ReportBuildResult): void => {
         clearTimeout(timer)
@@ -555,6 +565,14 @@ export class Hosts {
         type: 'host:settings',
         settings: hostSettings(settings, this.options.systemLocale),
       })
+    }
+    // Hosts that are not running read it when they start.
+    const locale = this.locale()
+    if (locale !== this.sentLocale) {
+      this.sentLocale = locale
+      this.terminal.post({ type: 'terminal-host:locale', locale })
+      this.deviceHost.post({ type: 'device-host:locale', locale })
+      this.remote.post({ type: 'remote-host:locale', locale })
     }
     if (changed.has('remote')) {
       this.directChanged()
@@ -773,7 +791,7 @@ export class Hosts {
     if (!Number.isSafeInteger(requestId)) return
     const answer: AdminAnswer = this.options.admin
       ? await this.options.admin(deviceId, method, params)
-      : { error: { code: 'unavailable', message: 'This host takes no such calls' } }
+      : { error: { code: 'unavailable', message: t('remoteHost.noAdmin') } }
     this.remote.post({ type: 'remote-host:admin-result', requestId, ...answer })
   }
 
@@ -793,7 +811,7 @@ export class Hosts {
     this.agent.post({
       type: 'device-result',
       callId,
-      answer: { error: { code: 'unavailable', message: 'The device host is not running' } },
+      answer: { error: { code: 'unavailable', message: t('deviceHost.notRunning') } },
     })
   }
 
@@ -808,9 +826,7 @@ export class Hosts {
             error: {
               code: call ? 'signed_out' : 'unavailable',
               status: null,
-              message: call
-                ? 'The daemon is not signed in to a Kettu account.'
-                : 'Not a Marketplace call.',
+              message: call ? t('daemon.notSignedIn') : 'Not a Marketplace call.',
             },
           }
     this.agent.post({ type: 'market-result', callId, answer })
@@ -827,7 +843,7 @@ export class Hosts {
     this.agent.post({
       type: 'terminal-result',
       callId,
-      answer: { error: { code: 'unavailable', message: 'The terminal host is not running' } },
+      answer: { error: { code: 'unavailable', message: t('terminalHost.notRunning') } },
     })
   }
 
@@ -1024,7 +1040,12 @@ export class Hosts {
         break
       case 'host:trash-call':
         if (Number.isSafeInteger(message.callId)) {
-          this.agent.post({ type: 'trash-result', callId: message.callId, error: NO_TRASH })
+          // Under Node.js the host reaches no system trash, so a delete there asks to remove for good.
+          this.agent.post({
+            type: 'trash-result',
+            callId: message.callId,
+            error: t('daemon.noTrash'),
+          })
         }
         break
       case 'host:browser-call':
@@ -1083,7 +1104,7 @@ export class Hosts {
     this.deviceHost.post({ type: 'device-host:turn-ended', sessionId: null })
     this.terminal.post({ type: 'terminal-host:turn-ended', sessionId: null })
     for (const answer of [...this.reportRequests.values()]) {
-      answer({ ok: false, reason: 'failed', message: 'The agent host exited' })
+      answer({ ok: false, reason: 'failed', message: t('agentHost.exited') })
     }
     const roots = this.agentProcesses
     this.agentProcesses = []
