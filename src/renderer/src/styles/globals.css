@@ -1538,15 +1538,23 @@
   & [data-math-block] + [data-math-block] {
     margin-top: 0.6667em;
   }
+  /* The number has a column of its own, so a formula wider than the reply scrolls sideways with
+     its number after it instead of running under it. */
   & [data-math-block] {
     position: relative;
     counter-increment: equation;
+    display: grid;
+    grid-template-columns: minmax(38px, 1fr) auto minmax(38px, 1fr);
+    align-items: center;
     overflow-x: auto;
     border-radius: var(--radius-code);
     background: var(--bg-subtle);
-    padding: 17px 52px;
+    padding: 17px 14px;
     color: var(--text-primary);
     text-align: center;
+    & > * {
+      grid-column: 2;
+    }
     & .katex-display {
       margin: 0;
     }
@@ -1555,10 +1563,9 @@
     }
     &::after {
       content: '(' counter(equation) ')';
-      position: absolute;
-      top: 50%;
-      right: 14px;
-      translate: 0 -50%;
+      grid-row: 1;
+      grid-column: 3;
+      justify-self: end;
       color: var(--text-tertiary);
       font-family: var(--font-sans);
       font-size: 13px;

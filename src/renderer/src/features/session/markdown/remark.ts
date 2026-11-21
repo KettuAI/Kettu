@@ -7,6 +7,7 @@ import { githubRefs } from './github-refs'
 import { gluedLinks } from './glued-links'
 import { localImages } from './local-images'
 import { localLinks } from './local-links'
+import { replyMath } from './maths'
 
 type RemarkPlugins = NonNullable<StreamdownProps['remarkPlugins']>
 
@@ -19,12 +20,13 @@ const defaults = Object.entries(defaultRemarkPlugins).map(
 
 // A line break in agent text is a line break, as in the agents' own terminals: a command's
 // plain output, such as Claude Code's `/usage` when the adapter falls back to it, relies on it.
-// Maths takes `$$`, inline or on lines of its own; a single `$` stays text, since replies quote
-// prices far more often than formulas.
+// Maths takes `$$`, inline or on lines of its own; a single `$` is replyMath's, which keeps prices
+// as text, and so are `\(...\)` and `\[...\]`.
 export const remarkPlugins: RemarkPlugins = [
   ...defaults,
   gluedLinks,
   [remarkMath, { singleDollarTextMath: false }],
+  replyMath,
   remarkBreaks,
   emojiShortcodes,
   codexCitations,
