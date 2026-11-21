@@ -651,6 +651,8 @@ interface Live {
   answered: Map<string, FromDevice | null>
   /** Each waiting new origin's entry, by `originKey`. */
   origins: Map<string, string>
+  /** Publish cards that outlived the turn that opened them, which no turn waits on. */
+  lateCards: Set<string>
   /** Who answered the latest new origins, by entry id: a device, or null for a window. */
   originsAnswered: Map<string, FromDevice | null>
   /** Each first use of an app that waits for the user: its entry, by the request's id. */
@@ -2124,7 +2126,7 @@ export class SessionManager {
   /**
    * An agent wants to publish to the Kettu Marketplace, or to unlist a listing: a card in the
    * thread that waits for the user as a device's first use does, and settles with their answer,
-   * `expired` after `waitMs`, or `ended` with the turn.
+   * `expired` after `waitMs`, or `ended` when the session closes. The turn's end leaves it waiting.
    */
   marketAsked(
     sessionId: string,
@@ -2241,6 +2243,7 @@ export class SessionManager {
     const live = this.live.get(sessionId)
     if (live) {
       live.origins.delete(`market:${entryId}`)
+      live.lateCards.delete(entryId)
       const entry = live.thread.byId[entryId]
       if (entry?.kind === 'market_publish' && entry.outcome === null) {
         const outcome: MarketPublishOutcome =
@@ -3541,6 +3544,7 @@ export class SessionManager {
       permissions: new Map(),
       answered: new Map(),
       origins: new Map(),
+      lateCards: new Set(),
       originsAnswered: new Map(),
       apps: new Map(),
       appsAnswered: new Map(),
@@ -9466,9 +9470,11 @@ export class SessionManager {
         this.settleSurfaceAccess(live.id, entryId, 'timeout')
         continue
       }
-      // A publish put off this way is kept as a draft, as by Not now.
+      // A publish card waits its own time past the turn; put off when the session closes, it is
+      // kept as a draft, as by Not now.
       if (requestId.startsWith('market:')) {
-        this.settleMarket(live.id, entryId, { decision: 'ended' })
+        if (keepNonBlocking) live.lateCards.add(entryId)
+        else this.settleMarket(live.id, entryId, { decision: 'ended' })
         continue
       }
       // A settings card ends with its turn, changing nothing.
@@ -9509,7 +9515,8 @@ export class SessionManager {
 
   /** Once no request or new site waits for the user, the session goes back to its turn or rests. */
   private stopWaiting(live: Live): void {
-    const nonBlocking = [...live.permissions.values()].filter((p) => p.nonBlocking).length
+    const nonBlocking =
+      [...live.permissions.values()].filter((p) => p.nonBlocking).length + live.lateCards.size
     if (waitingCount(live) - nonBlocking > 0) return
     if (live.thread.session.status !== 'awaiting_permission') return
     this.update(live, { status: live.turn || live.childRunning ? 'running' : 'ready' })

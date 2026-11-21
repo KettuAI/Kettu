@@ -79,6 +79,8 @@ interface Harness {
   calls: MarketCall[]
   asks: MarketAsk[]
   outcomes: MarketPublishOutcome[]
+  /** What the session was told of cards no call took. */
+  told: { sessionId: string; text: string }[]
   drafts: NewDraft[]
   /** Each version that reached the service, with its folder. */
   published: {
@@ -111,6 +113,7 @@ function harness(
   const calls: MarketCall[] = []
   const asks: MarketAsk[] = []
   const outcomes: MarketPublishOutcome[] = []
+  const told: Harness['told'] = []
   const drafts: NewDraft[] = []
   const published: Harness['published'] = []
   const account = { current: ACCOUNT as MarketAccount | null }
@@ -132,6 +135,7 @@ function harness(
       }
     },
     settle: (_sessionId, _entryId, outcome) => outcomes.push(outcome),
+    tell: (sessionId, text) => told.push({ sessionId, text }),
     drafts: {
       put: async (draft) => {
         drafts.push(draft)
@@ -155,6 +159,7 @@ function harness(
     calls,
     asks,
     outcomes,
+    told,
     drafts,
     published,
     account,
@@ -205,7 +210,7 @@ describe('marketplace_publish', () => {
     expect(h.drafts).toEqual([])
   })
 
-  it('uploads nothing on Not now, a timeout or the turn ending, and keeps a draft', async () => {
+  it('uploads nothing on Not now, a timeout or the session closing, and keeps a draft', async () => {
     for (const decision of ['later', 'expired', 'ended'] as const) {
       const h = harness()
       const call = h.tools.call(caller(), MARKET_PUBLISH, {
@@ -445,12 +450,78 @@ describe('a card the user has not answered within one call', () => {
     expect(h.asks).toHaveLength(1)
   })
 
-  it('asks again in a later turn instead of handing over what the last one left', async () => {
+  it('keeps the card past the turn that opened it, and tells the session what came of it', async () => {
+    const h = harness()
+    await waitedOnce(h)
+    h.tools.turnEnded('s1')
+    await vi.advanceTimersByTimeAsync(5 * 60_000)
+    expect(h.drafts).toEqual([])
+    h.answer({ decision: 'confirm', visibility: null, notes: null })
+    await vi.waitFor(() => expect(h.told).toHaveLength(1))
+    expect(uploads(h)).toHaveLength(1)
+    expect(h.told[0]!.sessionId).toBe('s1')
+    expect(h.told[0]!.text).toContain('Changelog writer')
+    expect(h.told[0]!.text).toContain('Published @amigoer/changelog-writer 1.0.0')
+    // A call of the turn it woke gets the same outcome, with no second card.
+    const again = await publishCall(h)
+    expect(again.structuredContent).toMatchObject({ published: true, version: '1.0.0' })
+    expect(h.asks).toHaveLength(1)
+    expect(uploads(h)).toHaveLength(1)
+  })
+
+  it('tells the session of Not now or a card that expired after its turn', async () => {
+    for (const decision of ['later', 'expired'] as const) {
+      const h = harness()
+      await waitedOnce(h)
+      h.tools.turnEnded('s1')
+      h.answer({ decision })
+      await vi.waitFor(() => expect(h.told).toHaveLength(1))
+      expect(h.told[0]!.text).toContain(decision === 'later' ? 'Not now' : 'did not answer')
+      expect(h.drafts).toHaveLength(1)
+    }
+  })
+
+  it('hands the outcome to a call of a later turn instead of telling it', async () => {
+    const h = harness()
+    await waitedOnce(h)
+    h.tools.turnEnded('s1')
+    const later = publishCall(h)
+    await vi.advanceTimersByTimeAsync(1_000)
+    h.answer({ decision: 'confirm', visibility: null, notes: null })
+    expect((await later).structuredContent).toMatchObject({ published: true })
+    expect(h.told).toEqual([])
+    expect(h.asks).toHaveLength(1)
+  })
+
+  it('tells an outcome no call took once the turn ends', async () => {
+    const h = harness()
+    await waitedOnce(h)
+    h.answer({ decision: 'confirm', visibility: null, notes: null })
+    await vi.waitFor(() => expect(h.outcomes).toHaveLength(1))
+    // The turn still runs, so its agent may call again for it.
+    expect(h.told).toEqual([])
+    h.tools.turnEnded('s1')
+    expect(h.told).toHaveLength(1)
+    expect(h.told[0]!.text).toContain('Published')
+  })
+
+  it('tells the outcome a call of an ended turn was still waiting for', async () => {
+    const h = harness()
+    const call = publishCall(h)
+    await asked(h)
+    h.tools.turnEnded('s1')
+    h.answer({ decision: 'later' })
+    await call
+    await vi.waitFor(() => expect(h.told).toHaveLength(1))
+  })
+
+  it('tells nothing of a card that ended with its session, and asks again after it', async () => {
     const h = harness()
     await waitedOnce(h)
     h.tools.turnEnded('s1')
     h.answer({ decision: 'ended' })
     await vi.waitFor(() => expect(h.drafts).toHaveLength(1))
+    expect(h.told).toEqual([])
     void publishCall(h)
     await vi.waitFor(() => expect(h.asks).toHaveLength(2))
   })
