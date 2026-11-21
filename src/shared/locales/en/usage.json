@@ -156,6 +156,8 @@
     "failed": "Couldn’t read",
     "neverRead": "Couldn’t read the plan usage.",
     "lastRead": "Last read {{ago}}",
+    "nextReset": "Next reset: {{window}}, {{time}}",
+    "notStarted": "Not started",
     "backIn": "Back in {{time}}",
     "windowUsed": "{{window}}: {{percent}}% used.",
     "windowLeft": "{{window}}: {{percent}}% left.",

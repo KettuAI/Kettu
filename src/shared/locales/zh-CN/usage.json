@@ -151,6 +151,8 @@
     "failed": "读取失败",
     "neverRead": "读不到套餐用量。",
     "lastRead": "上次读取：{{ago}}",
+    "nextReset": "下次重置：{{window}}，{{time}}",
+    "notStarted": "还没开始",
     "backIn": "{{time}}后恢复",
     "windowUsed": "{{window}}：已用 {{percent}}%。",
     "windowLeft": "{{window}}：剩余 {{percent}}%。",

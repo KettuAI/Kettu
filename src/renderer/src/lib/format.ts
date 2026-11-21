@@ -246,6 +246,12 @@ export function limitShort(limit: Pick<PlanLimit, 'window' | 'label'>, separator
   return parts.kind ? windowShort(parts, separator) : limit.label
 }
 
+/** The length alone of `limitShort`, "7d" for "7d · Fable"; the agent's own label when it has none. */
+export function limitLength(limit: Pick<PlanLimit, 'window' | 'label'>): string {
+  const parts = windowParts(limit)
+  return parts.kind ? windowName(parts, 'composer:usage.shortWindow') : limit.label
+}
+
 /** The end of `limitShort` that names a model, group or pool, as written there; null without one. */
 export function limitShortScope(limit: Pick<PlanLimit, 'window' | 'label'>): string | null {
   const parts = windowParts(limit)
