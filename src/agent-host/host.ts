@@ -15,6 +15,7 @@ import path from 'node:path'
 import { cp, mkdir, readFile, rename, rm, stat } from 'node:fs/promises'
 import type {
   AgentOptions,
+  AgentStatus,
   DiagnosticsBundle,
   HostEvent,
   HostParams,
@@ -241,12 +242,17 @@ import type { ImageMode } from './threads/model'
 import { ThreadStore, type ThreadWorkerFactory } from './threads/store'
 import { UsageManager, type UsageTimings } from './usage/manager'
 import type { LogReader } from './usage/model'
+import { LimitNotices, limitNoticeText, type LimitNotice } from './limit-notices'
 import { LOG_READERS } from './usage/readers'
 import { UsageStore, type UsageWorkerFactory } from './usage/store'
 import { createValidators } from './validate'
 
 // The agent menu reads a running agent's options again once they are older than this.
 const OPTIONS_FRESH_MS = 5 * 60_000
+/** How long a used-up window's notice waits for the turn it stopped to fail. */
+const LIMIT_MERGE_MS = 2_000
+/** A turn that failed this long before its window was used up counts as stopped by it. */
+const LIMIT_FAILED_WITHIN_MS = 15_000
 /** The harnesses whose connection answers a page's question in a session with no tools at all. */
 const QUESTION_HARNESSES: ReadonlySet<HarnessId> = new Set(['claude-code'])
 
@@ -430,6 +436,11 @@ export class AgentHost {
   readonly diagnostics: Diagnostics
   /** What each ACP session sent and received since the host started, for the Requests pane. */
   private readonly acpMessages = new AcpMessages()
+  private readonly limitNotices = new LimitNotices()
+  /** Each agent's session whose turn failed last, which a used-up window's notice may stand for. */
+  private readonly lastFailed = new Map<AgentId, { sessionId: string; at: number }>()
+  /** The session a used-up window stopped, by the window's key, which its reset opens. */
+  private readonly stoppedBy = new Map<string, string>()
   readonly env: EnvironmentService
   readonly projects: Projects
   readonly scratch: ScratchFolders
@@ -1001,6 +1012,7 @@ export class AgentHost {
       ...(options.agentTimings ? { timings: options.agentTimings } : {}),
       status: (status) => {
         this.hub.broadcast({ type: 'agent.status', status })
+        this.limitsNoticed(status)
         this.routines.limitsChanged(status.id)
         this.tasks?.recheck()
       },
@@ -1229,7 +1241,8 @@ export class AgentHost {
             this.hub.send([portId], { type: 'session.viewers', sessionId, viewers })
           }
         },
-        attention: (sessionId, kind, title, body, request) =>
+        attention: (sessionId, kind, title, body, request) => {
+          if (kind === 'error') this.sessionFailed(sessionId)
           options.send({
             type: 'host:attention',
             sessionId,
@@ -1241,7 +1254,8 @@ export class AgentHost {
               : {}),
             ...(request ? { request } : {}),
             front: this.front(sessionId),
-          }),
+          })
+        },
         badge: (count) => options.send({ type: 'host:badge', count }),
         waiting: (sessions) => options.send({ type: 'host:waiting', sessions }),
         seen: (sessionId) => options.send({ type: 'host:seen', sessionId }),
@@ -1617,6 +1631,49 @@ export class AgentHost {
       title,
       body,
       ...(sessionId ? { sessionId, front: this.front(sessionId) } : {}),
+    })
+  }
+
+  /** What a status changed in the agent's plan limit windows, said as notices. */
+  private limitsNoticed(status: AgentStatus): void {
+    for (const notice of this.limitNotices.observe(status, Date.now())) {
+      // A used-up window waits a moment for the turn it stopped to fail, so the two say it once.
+      if (notice.level === 'reached') setTimeout(() => this.sendLimitNotice(notice), LIMIT_MERGE_MS)
+      else this.sendLimitNotice(notice)
+    }
+  }
+
+  private sessionFailed(sessionId: string): void {
+    if (!this.sessions.has(sessionId)) return
+    this.lastFailed.set(this.sessions.summary(sessionId).agentId, { sessionId, at: Date.now() })
+  }
+
+  private sendLimitNotice(notice: LimitNotice): void {
+    const now = Date.now()
+    let sessionId: string | undefined
+    if (notice.level === 'reached') {
+      const failed = this.lastFailed.get(notice.agentId)
+      if (failed && now - failed.at < LIMIT_FAILED_WITHIN_MS) {
+        sessionId = failed.sessionId
+        this.stoppedBy.set(notice.key, sessionId)
+      }
+    } else if (notice.level === 'reset') {
+      sessionId = this.stoppedBy.get(notice.key)
+      this.stoppedBy.delete(notice.key)
+    }
+    const summary =
+      sessionId && this.sessions.has(sessionId) ? this.sessions.summary(sessionId) : null
+    const { title, body } = limitNoticeText(notice, summary?.title ?? null, now)
+    this.options.send({
+      type: 'host:attention',
+      kind: 'plan-limit',
+      agentId: notice.agentId,
+      level: notice.level,
+      key: notice.key,
+      usedPercent: notice.limit.usedPercent,
+      ...(summary ? { sessionId: summary.id } : {}),
+      title,
+      body,
     })
   }
 

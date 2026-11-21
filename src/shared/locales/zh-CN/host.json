@@ -185,6 +185,16 @@
     "pausedUsedNoReset": "{{limit}}限额已用 {{percent}}%",
     "pausedReachedNoReset": "{{limit}}限额已用完"
   },
+  "planLimitNotice": {
+    "near": "{{limit}}限额已用 {{percent}}%",
+    "reached": "{{limit}}限额已用完",
+    "reset": "{{limit}}限额已重置",
+    "resets": "{{account}} · {{time}} 重置",
+    "goOn": "{{account}} · 可以继续用了",
+    "sessionReached": "{{limit}}限额已用完 · {{time}} 重置",
+    "sessionReachedNoReset": "{{limit}}限额已用完",
+    "sessionReset": "{{limit}}限额已重置，可以接着做了"
+  },
   "planWindow": {
     "five_hour": "5 小时",
     "seven_day": "每周",

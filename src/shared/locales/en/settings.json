@@ -366,6 +366,16 @@
       "name": "Errors",
       "description": "A session failed or an agent stopped."
     },
+    "updates": {
+      "name": "Kettu updates",
+      "description": "A new version downloaded, or one waiting for a step of yours. Once per version.",
+      "keywords": "update version upgrade"
+    },
+    "planLimits": {
+      "name": "Plan limits",
+      "description": "A plan limit at 90%, used up, or reset after it was used up.",
+      "keywords": "limit quota plan usage"
+    },
     "sound": {
       "name": "Play a sound",
       "description": "The system’s notification sound."

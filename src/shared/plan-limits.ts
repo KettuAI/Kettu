@@ -1,4 +1,4 @@
-// Which of an agent's plan-limit windows hold back one of its models.
+// Which of an agent's plan-limit windows hold back one of its models, and how full one is.
 
 import type { PlanLimit } from './agent-host'
 import type { ConfigOption } from './thread'
@@ -39,4 +39,39 @@ export function limitsForModel(
     if (names.length === 0 || !names.every((name) => known.has(name))) return true
     return names.every((name) => own.has(name))
   })
+}
+
+const DAY = 24 * 60 * 60_000
+
+/** When a window resets: the clock time today, with the weekday within six days, else the date. */
+export function resetTimeText(at: number, now: number, locale: string): string {
+  const day = (time: number): number => new Date(time).setHours(0, 0, 0, 0)
+  // Rounded, since a day across a clock change is not 24 hours.
+  const days = Math.round((day(at) - day(now)) / DAY)
+  const clock: Intl.DateTimeFormatOptions = { hour: 'numeric', minute: '2-digit' }
+  const options: Intl.DateTimeFormatOptions =
+    days === 0
+      ? clock
+      : days > 0 && days <= 6
+        ? { ...clock, weekday: 'short' }
+        : { ...clock, month: 'short', day: 'numeric' }
+  return new Intl.DateTimeFormat(locale, options).format(at)
+}
+
+/** A plan limit notice: a window at 90%, used up, or reset after it was used up. */
+export type PlanLimitNoticeLevel = 'near' | 'reached' | 'reset'
+
+/** How full a plan limit is: under 70% used, 70 to 89%, or 90% and over. */
+export type LimitLevel = 'ok' | 'warn' | 'bad'
+
+/**
+ * A plan limit's level, which colors its bar wherever one is shown. It goes by the whole
+ * percentage the bar shows beside it, so "90%" never sits next to a yellow bar.
+ */
+export function limitLevel(limit: Pick<PlanLimit, 'usedPercent' | 'state'>): LimitLevel {
+  if (limit.state === 'reached') return 'bad'
+  const used = Math.round(limit.usedPercent ?? 0)
+  if (used >= 90) return 'bad'
+  if (used >= 70) return 'warn'
+  return 'ok'
 }

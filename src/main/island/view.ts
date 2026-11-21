@@ -7,18 +7,20 @@ import type { AgentOptions, AgentStatus, SessionActivity, SessionSummary } from 
 import type { BrowserOriginDecision } from '@shared/browser'
 import type { ComputerAppDecision } from '@shared/computer-use'
 import type { PendingRequest, PendingTool } from '@shared/pending-requests'
-import {
-  groupSessions,
-  limitRows,
-  listed,
-  needsYou,
-  reachedLimit,
-  sessionModel,
-} from '@shared/session-groups'
+import { endingWindow, expiryOf, knownExpiry } from '@shared/prompt-cache'
+import { groupSessions, listed, needsYou, reachedLimit, sessionModel } from '@shared/session-groups'
 import type { AgentId, PermissionKind, ToolKind } from '@shared/thread'
-import { islandT } from '../i18n'
+import type { TurnPhase } from '@shared/turn-phase'
+import type { StepState } from '@shared/workflow'
+import { KETTU_SERVER, mcpCallOf } from '@shared/mcp-call'
+import type { UpdateStatus } from '@shared/updates'
+import { islandT, kettuToolT } from '../i18n'
+import { buildNotices, type NoticeAction } from './notices'
 import type {
+  IslandGroup,
   IslandHost,
+  IslandNotice,
+  IslandPhase,
   IslandOptionStyle,
   IslandRequest,
   IslandRequestKind,
@@ -30,8 +32,9 @@ import type {
 
 /** Sessions that finished out of view, listed after the running ones. */
 const FINISHED_ROWS = 5
-/** The latest other sessions, which the island folds into its last row. */
-const IDLE_ROWS = 5
+/** The latest other sessions of the last day, listed after the rest. */
+const IDLE_ROWS = 6
+const IDLE_WITHIN_MS = 24 * 60 * 60_000
 const MAX_REQUEST_LINES = 6
 const MAX_LINE_CHARS = 300
 
@@ -45,8 +48,16 @@ export interface HostState {
   options: ReadonlyMap<AgentId, AgentOptions>
   /** What waits in each session that waits, as last read. */
   requests: ReadonlyMap<string, { requests: PendingRequest[]; askedAt: Record<string, number> }>
-  /** Each task's title, by id. */
-  tasks: ReadonlyMap<string, string>
+  /** Each task, by id, for its steps' rows and for what it waits for. */
+  tasks: ReadonlyMap<string, IslandTaskState>
+}
+
+/** What the island keeps of a task. */
+export interface IslandTaskState {
+  title: string
+  needsYou: boolean
+  steps: { id: string; name: string; state: StepState; sessionId: string | null }[]
+  updatedAt: number
 }
 
 /** A call the island's answer turns into, on the host of its request. */
@@ -80,7 +91,14 @@ export interface BuiltView {
   view: IslandView
   rows: ReadonlyMap<string, { hostKey: string; sessionId: string }>
   requests: ReadonlyMap<string, SentRequest>
+  /** What each request belongs to, which opening it in Kettu goes to. */
+  owners: ReadonlyMap<string, RequestOwner>
+  /** What each notice does when clicked. */
+  notices: ReadonlyMap<string, NoticeAction>
 }
+
+export type RequestOwner =
+  { hostKey: string; sessionId: string; taskId?: never } | { hostKey: string; taskId: string }
 
 const ORIGIN_DECISIONS: BrowserOriginDecision[] = ['session', 'project', 'deny']
 const APP_DECISIONS: ComputerAppDecision[] = ['session', 'always', 'deny']
@@ -107,6 +125,44 @@ const OPTION_STYLE: Record<PermissionKind, IslandOptionStyle> = {
   reject_always: 'deny',
 }
 
+/**
+ * The permission card's answers, as the window's card has them: its first denial, then one allow
+ * of each kind, once first. Anything else is answered in Kettu.
+ */
+function permissionChoices<T extends { kind: PermissionKind }>(options: readonly T[]): T[] {
+  const deny =
+    options.find((o) => o.kind === 'reject_once') ?? options.find((o) => o.kind === 'reject_always')
+  const once = options.find((o) => o.kind === 'allow_once')
+  const always = options.find((o) => o.kind === 'allow_always')
+  return [deny, once, always].filter((o) => o !== undefined)
+}
+
+/**
+ * The card's words for an answer, the window's, so the three fit on one line; an agent's own may
+ * spell out a scope at length, which Kettu shows. Null for an answer that keeps its own words.
+ */
+function answerLabel(style: IslandOptionStyle): string | null {
+  switch (style) {
+    case 'deny':
+      return islandT('request.answer.deny')
+    case 'allow_once':
+      return islandT('request.answer.allowOnce')
+    case 'allow_always':
+      return islandT('request.answer.allowAlways')
+    default:
+      return null
+  }
+}
+
+/** The permission card's order: any other option, the denials, then the allows, once first. */
+const CARD_ORDER: Record<IslandOptionStyle, number> = {
+  normal: 0,
+  recommended: 0,
+  deny: 1,
+  allow_once: 2,
+  allow_always: 3,
+}
+
 function clip(text: string): string {
   const line = text.replace(/\s+/g, ' ').trim()
   return line.length > MAX_LINE_CHARS ? `${line.slice(0, MAX_LINE_CHARS - 1)}…` : line
@@ -119,10 +175,31 @@ function shownPath(path: string, projectPath: string): string {
   return inside && !inside.startsWith('..') && !isAbsolute(inside) ? inside : path
 }
 
-/** An MCP tool's server and name from a title such as `mcp__github__create_issue`. */
-function mcpCall(title: string): { server: string; tool: string } | null {
-  const match = /^mcp__(.+?)__(.+)$/.exec(title)
-  return match ? { server: match[1]!, tool: match[2]! } : null
+/** An MCP tool as the thread names it: Kettu's own by what it does, another's as `server: tool`. */
+function mcpName(title: string): string | null {
+  const call = mcpCallOf(title)
+  if (!call) return null
+  if (call.server !== KETTU_SERVER) {
+    return islandT('line.mcp', { server: call.server, tool: call.tool })
+  }
+  return kettuToolT(call.tool as never, { defaultValue: call.tool }) as string
+}
+
+/**
+ * The command an MCP tool's call runs, for the tools that run one. The hosts keep a call's input as
+ * its JSON, or as the command alone when it has one.
+ */
+function mcpCommand(rawInput: string | null | undefined): string | null {
+  const raw = rawInput?.trim()
+  if (!raw) return null
+  try {
+    const input = JSON.parse(raw) as unknown
+    if (typeof input !== 'object' || input === null) return null
+    const { command } = input as { command?: unknown }
+    return typeof command === 'string' && command.trim() ? command : null
+  } catch {
+    return raw
+  }
 }
 
 /** A call as one line: "Run pnpm test", "Edit src/app.ts", or its title. */
@@ -130,8 +207,8 @@ function toolLine(
   tool: { toolKind: ToolKind; title: string; detail: string | null },
   projectPath: string,
 ): string {
-  const mcp = mcpCall(tool.title)
-  if (mcp) return islandT('line.mcp', mcp)
+  const mcp = mcpName(tool.title)
+  if (mcp) return tool.detail ? `${mcp} · ${clip(tool.detail)}` : mcp
   const { toolKind, detail } = tool
   if (toolKind === 'execute') {
     return islandT('line.run', { command: clip(detail ?? tool.title.replace(/^run\s+/i, '')) })
@@ -178,7 +255,7 @@ function buildRequest(
 ): BuiltRequest {
   const key = `${rowKey}#${pending.entryId}`
   const answers = new Map<string, HostAnswer>()
-  const base = { key, row: rowKey, askedAt }
+  const base = { key, row: rowKey, task: null, askedAt }
   const make = (
     kind: IslandRequestKind,
     title: string,
@@ -226,7 +303,7 @@ function buildRequest(
       // A plan's answers that go with a note are written in the window.
       const choices = permission.plan
         ? permission.options.filter((o) => !o.note)
-        : permission.options
+        : permissionChoices(permission.options)
       const options = choices.map((option) => {
         answers.set(option.id, {
           method: 'permissions.respond',
@@ -234,7 +311,8 @@ function buildRequest(
         })
         const style: IslandOptionStyle =
           permission.plan && option.preferred ? 'recommended' : OPTION_STYLE[option.kind]
-        return { id: option.id, label: clip(plain(option.name)), style }
+        const label = permission.plan ? null : answerLabel(style)
+        return { id: option.id, label: label ?? clip(plain(option.name)), style }
       })
       if (permission.plan) {
         const lines = permission.plan.markdown
@@ -242,6 +320,18 @@ function buildRequest(
           .map((line) => clip(line.replace(/^\s*(#+|[-*]|\d+\.)\s*/, '')))
           .filter(Boolean)
         return make('plan', islandT('request.plan'), lines, false, options)
+      }
+      options.sort((a, b) => CARD_ORDER[a.style] - CARD_ORDER[b.style])
+      const mcp = mcpName(tool.title)
+      if (mcp) {
+        const command = mcpCommand(tool.rawInput)
+        const lines = command
+          ? command
+              .split('\n')
+              .filter((l) => l.trim())
+              .map(clip)
+          : []
+        return make('permission', mcp, lines, command !== null, options)
       }
       const title = islandT(`request.tool.${TOOL_KEY[tool.toolKind]}`)
       if (tool.toolKind === 'execute') {
@@ -323,6 +413,47 @@ function rowKey(state: HostState, sessionId: string): string {
   return state.host ? `${state.key}/${sessionId}` : sessionId
 }
 
+const PHASES: Record<TurnPhase['phase'], IslandPhase | null> = {
+  thinking: 'think',
+  execute: 'execute',
+  read: 'read',
+  search: 'search',
+  fetch: 'fetch',
+  edit: 'edit',
+  writing: 'write',
+  compacting: 'compact',
+  working: 'execute',
+  approval: null,
+  question: null,
+}
+
+const TOOL_PHASES: Partial<Record<ToolKind, IslandPhase>> = {
+  execute: 'execute',
+  read: 'read',
+  search: 'search',
+  fetch: 'fetch',
+  edit: 'edit',
+  delete: 'edit',
+  move: 'edit',
+}
+
+/** What a running turn does now: its summary's phase, else what its tool call does. */
+function phaseOf(summary: SessionSummary): IslandPhase {
+  if (summary.phase) return PHASES[summary.phase] ?? 'execute'
+  const kind = summary.activity?.toolKind
+  return (kind && TOOL_PHASES[kind]) || 'execute'
+}
+
+/** What a running turn does, as its row's line: compacting, its tool call, thinking or writing. */
+function runningLine(summary: SessionSummary): string {
+  const phase = phaseOf(summary)
+  if (phase === 'compact') return islandT('line.compacting')
+  if (summary.activity) return activityLine(summary.activity, summary.projectPath)
+  if (phase === 'think') return islandT('line.thinking')
+  if (phase === 'write') return islandT('line.writing')
+  return islandT(summary.origin === 'routine' ? 'line.routine' : 'line.working')
+}
+
 function modelName(options: AgentOptions | undefined, model: string | null): string | null {
   const option = sessionModel(options, model)
   if (!option || model === null) return model
@@ -331,6 +462,7 @@ function modelName(options: AgentOptions | undefined, model: string | null): str
 
 function buildRow(
   { state, summary }: Listed,
+  group: IslandGroup,
   now: number,
   requests: { requests: PendingRequest[]; askedAt: Record<string, number> } | undefined,
 ): IslandRow {
@@ -368,9 +500,7 @@ function buildRow(
       line = waitingLine(requests?.requests[0], summary.projectPath)
       break
     case 'running':
-      line = activity
-        ? activityLine(activity, summary.projectPath)
-        : islandT(summary.origin === 'routine' ? 'line.routine' : 'line.working')
+      line = runningLine(summary)
       break
     case 'sign_in':
       line = islandT('line.signIn', { agent: agentName })
@@ -385,10 +515,15 @@ function buildRow(
       line = islandT(`line.${status}`)
   }
   const parent = summary.task
-    ? { kind: 'task' as const, title: state.tasks.get(summary.task.taskId) ?? null }
+    ? { kind: 'task' as const, title: state.tasks.get(summary.task.taskId)?.title ?? null }
     : summary.parentId
       ? { kind: 'session' as const, title: state.sessions.get(summary.parentId)?.title ?? null }
       : null
+  const turnRuns = status === 'running'
+  const expiry = turnRuns
+    ? null
+    : knownExpiry(expiryOf(summary.agentId, summary.cache, summary.model, agent?.account ?? null))
+  const phase = turnRuns ? phaseOf(summary) : null
   const running = [...state.sessions.values()].filter(
     (s) => s.origin === 'subagent' && s.parentId === summary.id && s.status === 'running',
   ).length
@@ -406,6 +541,7 @@ function buildRow(
       color: agent?.color ?? null,
     },
     model: modelName(options, summary.model),
+    group,
     status,
     since,
     line,
@@ -422,34 +558,71 @@ function buildRow(
     subagents:
       running > 0 ? { running, text: islandT('line.subagents', { count: running }) } : null,
     limit: limit ? { label: limit.label, resetsAt: limit.resetsAt } : null,
-  }
-}
-
-function buildSummary(rows: readonly IslandRow[], hosts: readonly HostState[], now: number) {
-  const count = (status: IslandStatus) => rows.filter((row) => row.status === status).length
-  const limits = hosts.flatMap((state) => limitRows([...state.agents.values()], now))
-  const tightest =
-    limits.find((row) => row.limit.state === 'reached') ??
-    limits.sort((a, b) => (b.limit.usedPercent ?? 0) - (a.limit.usedPercent ?? 0))[0]
-  const summary: IslandSummary = {
-    running: count('running'),
-    waiting: count('waiting'),
-    failed: count('failed'),
-    limit: tightest
+    phase,
+    cache: expiry
       ? {
-          agent: tightest.agent.name,
-          label: tightest.limit.label,
-          usedPercent: tightest.limit.usedPercent,
-          reached: tightest.limit.state === 'reached',
-          resetsAt: tightest.limit.resetsAt,
+          expiresAt: expiry.expiresAt,
+          endingMs: endingWindow(expiry.ttl),
+          estimate: expiry.estimate,
         }
       : null,
   }
-  return summary
+}
+
+function buildSummary(
+  rows: readonly IslandRow[],
+  requests: readonly IslandRequest[],
+  all: readonly SessionSummary[],
+  now: number,
+): IslandSummary {
+  const count = (status: IslandStatus) => rows.filter((row) => row.status === status).length
+  const midnight = new Date(now)
+  midnight.setHours(0, 0, 0, 0)
+  return {
+    running: count('running'),
+    waiting: count('waiting') + count('sign_in') + requests.filter((r) => r.task).length,
+    failed: count('failed'),
+    today: all.filter((s) => listed(s) && s.parentId === null && s.updatedAt >= +midnight).length,
+  }
+}
+
+/**
+ * The tasks that wait for the user on a step of their own, a review or a person's step; a step
+ * whose session asks is that session's request already.
+ */
+function taskRequests(state: HostState): { request: IslandRequest; taskId: string }[] {
+  if (state.host?.offline) return []
+  const out: { request: IslandRequest; taskId: string; at: number }[] = []
+  for (const [taskId, task] of state.tasks) {
+    if (!task.needsYou) continue
+    const step = task.steps.find((s) => s.state === 'needs_you')
+    const asking = step?.sessionId ? state.sessions.get(step.sessionId) : undefined
+    if (asking && needsYou(asking)) continue
+    out.push({
+      taskId,
+      at: task.updatedAt,
+      request: {
+        key: `task:${state.key}/${taskId}`,
+        row: null,
+        task: { title: task.title, step: step?.name ?? null },
+        kind: 'kettu',
+        title: islandT('request.task'),
+        lines: [],
+        code: false,
+        options: [],
+        askedAt: task.updatedAt,
+      },
+    })
+  }
+  return out
 }
 
 /** The whole view of every host, and what main needs to act on what the helper sends back. */
-export function buildView(hosts: readonly HostState[], now: number): BuiltView {
+export function buildView(
+  hosts: readonly HostState[],
+  now: number,
+  update: UpdateStatus | null = null,
+): BuiltView {
   const owners = new Map<SessionSummary, HostState>()
   for (const state of hosts)
     for (const summary of state.sessions.values()) owners.set(summary, state)
@@ -459,16 +632,22 @@ export function buildView(hosts: readonly HostState[], now: number): BuiltView {
   const taken = new Set(shown)
   const idle = all
     .filter((s) => listed(s) && !taken.has(s) && s.parentId === null)
+    .filter((s) => now - s.updatedAt < IDLE_WITHIN_MS)
     .sort((a, b) => b.updatedAt - a.updatedAt)
     .slice(0, IDLE_ROWS)
   const rows: IslandRow[] = []
   const rowMap = new Map<string, { hostKey: string; sessionId: string }>()
   const requests: IslandRequest[] = []
   const sent = new Map<string, SentRequest>()
+  const requestOwners = new Map<string, RequestOwner>()
+  const listedIn = new Map<SessionSummary, IslandGroup>()
+  for (const s of groups.needsYou) listedIn.set(s, 'needs_you')
+  for (const s of groups.running) listedIn.set(s, 'running')
+  for (const s of groups.finished) listedIn.set(s, 'finished')
   for (const summary of [...shown, ...idle]) {
     const state = owners.get(summary)!
     const waiting = needsYou(summary) ? state.requests.get(summary.id) : undefined
-    const row = buildRow({ state, summary }, now, waiting)
+    const row = buildRow({ state, summary }, listedIn.get(summary) ?? 'idle', now, waiting)
     rows.push(row)
     rowMap.set(row.key, { hostKey: state.key, sessionId: summary.id })
     // An offline host's requests cannot be answered until it is back.
@@ -487,14 +666,29 @@ export function buildView(hosts: readonly HostState[], now: number): BuiltView {
         sessionId: summary.id,
         answers: built.answers,
       })
+      requestOwners.set(built.request.key, { hostKey: state.key, sessionId: summary.id })
+    }
+  }
+  for (const state of hosts) {
+    for (const { request, taskId } of taskRequests(state)) {
+      requests.push(request)
+      requestOwners.set(request.key, { hostKey: state.key, taskId })
     }
   }
   // The oldest request first, as the island answers them in turn.
   requests.sort((a, b) => (a.askedAt ?? Infinity) - (b.askedAt ?? Infinity))
+  const notices = buildNotices(update, hosts, now)
   return {
-    view: { rows, requests, summary: buildSummary(rows, hosts, now) },
+    view: {
+      rows,
+      requests,
+      notices: notices.notices,
+      summary: buildSummary(rows, requests, all, now),
+    },
     rows: rowMap,
     requests: sent,
+    owners: requestOwners,
+    notices: notices.actions,
   }
 }
 
@@ -505,6 +699,7 @@ export interface ViewChange {
   requests: IslandRequest[]
   removedRequests: string[]
   requestOrder?: string[]
+  notices?: IslandNotice[]
   summary?: IslandSummary
 }
 
@@ -532,6 +727,9 @@ export function diffView(before: IslandView, after: IslandView): ViewChange | nu
   if (!sameOrder(before.requests, after.requests)) {
     change.requestOrder = after.requests.map((request) => request.key)
   }
+  if (JSON.stringify(before.notices) !== JSON.stringify(after.notices)) {
+    change.notices = after.notices
+  }
   if (JSON.stringify(before.summary) !== JSON.stringify(after.summary)) {
     change.summary = after.summary
   }
@@ -542,6 +740,7 @@ export function diffView(before: IslandView, after: IslandView): ViewChange | nu
     change.removedRequests.length === 0 &&
     !change.order &&
     !change.requestOrder &&
+    !change.notices &&
     !change.summary
   return empty ? null : change
 }

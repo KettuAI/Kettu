@@ -14,6 +14,8 @@ import type {
 } from '@shared/agent-host'
 import { pendingRequests, type PendingRequest } from '@shared/pending-requests'
 import type { AgentId } from '@shared/thread'
+import type { TaskSummary } from '@shared/workflow'
+import type { IslandTaskState } from './view'
 
 /** The agent host's methods the island may use, on every host it shows. */
 export const ISLAND_HOST_METHODS = [
@@ -22,7 +24,7 @@ export const ISLAND_HOST_METHODS = [
   'agents.refreshLimits',
   'sessions.list',
   'sessions.requests',
-  // Read only for the titles of the tasks whose steps' rows name them.
+  // For the titles of the tasks whose steps' rows name them, and the tasks that wait.
   'tasks.list',
   'permissions.respond',
   'browser.answerOrigin',
@@ -55,6 +57,27 @@ export interface HostFeedDeps {
   warn(message: string): void
 }
 
+/** What the island keeps of a task, or null for one it cannot read, as from an older host. */
+function taskState(value: unknown): IslandTaskState | null {
+  if (typeof value !== 'object' || value === null) return null
+  const task = value as Partial<TaskSummary>
+  if (typeof task.title !== 'string') return null
+  const steps = Array.isArray(task.steps)
+    ? task.steps.filter((step) => typeof step?.id === 'string' && typeof step.name === 'string')
+    : []
+  return {
+    title: task.title,
+    needsYou: task.needsYou === true && task.status === 'running' && !task.archivedAt,
+    steps: steps.map(({ id, name, state, sessionId }) => ({
+      id,
+      name,
+      state,
+      sessionId: sessionId ?? null,
+    })),
+    updatedAt: typeof task.updatedAt === 'number' ? task.updatedAt : 0,
+  }
+}
+
 /** Whether a summary has what the view reads of it, as one from another host may not. */
 function readable(value: unknown): value is SessionSummary {
   if (typeof value !== 'object' || value === null) return false
@@ -75,8 +98,8 @@ export class HostFeed {
   readonly sessions = new Map<string, SessionSummary>()
   readonly agents = new Map<AgentId, AgentStatus>()
   readonly options = new Map<AgentId, AgentOptions>()
-  /** Each task's title, by id, for the rows of its steps. */
-  readonly tasks = new Map<string, string>()
+  /** Each task, by id, for the rows of its steps and for what it waits for. */
+  readonly tasks = new Map<string, IslandTaskState>()
   readonly requests = new Map<
     string,
     { requests: PendingRequest[]; askedAt: Record<string, number> }
@@ -107,9 +130,8 @@ export class HostFeed {
     for (const agent of agents) this.agents.set(agent.id, agent)
     for (const option of options) this.options.set(option.agentId, option)
     for (const task of tasks) {
-      if (typeof task?.id === 'string' && typeof task.title === 'string') {
-        this.tasks.set(task.id, task.title)
-      }
+      const state = taskState(task)
+      if (state && typeof task.id === 'string') this.tasks.set(task.id, state)
     }
     for (const summary of this.sessions.values()) this.follow(summary)
     this.deps.changed()
@@ -156,10 +178,11 @@ export class HostFeed {
         this.options.set(event.options.agentId, event.options)
         break
       case 'task.changed': {
-        const { id, title } = (event.task ?? {}) as { id?: unknown; title?: unknown }
-        if (typeof id !== 'string' || typeof title !== 'string') return
-        if (this.tasks.get(id) === title) return
-        this.tasks.set(id, title)
+        const id = (event.task as { id?: unknown } | undefined)?.id
+        const state = taskState(event.task)
+        if (typeof id !== 'string' || !state) return
+        if (JSON.stringify(this.tasks.get(id)) === JSON.stringify(state)) return
+        this.tasks.set(id, state)
         break
       }
       case 'task.removed':

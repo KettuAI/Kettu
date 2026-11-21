@@ -5,7 +5,7 @@
 import type { ToolKind } from '@shared/thread'
 
 /** Raised whenever either side's messages change in a way the other must know. */
-export const ISLAND_PROTOCOL = 1
+export const ISLAND_PROTOCOL = 3
 
 /** The longest line either side sends, in bytes of UTF-8, the newline excluded. */
 export const MAX_LINE_BYTES = 1024 * 1024
@@ -20,6 +20,13 @@ export interface IslandHost {
 export type IslandStatus =
   'running' | 'waiting' | 'unread' | 'failed' | 'idle' | 'limited' | 'starting' | 'sign_in'
 
+/** The menu bar panel's group a row is listed under; idle rows fold into one line. */
+export type IslandGroup = 'needs_you' | 'running' | 'finished' | 'idle'
+
+/** The nine dots' pattern for what a running turn does now, as the thread acts it out. */
+export type IslandPhase =
+  'think' | 'execute' | 'read' | 'search' | 'edit' | 'write' | 'fetch' | 'compact'
+
 /** One session's row, as the island lists it. */
 export interface IslandRow {
   /** What the helper names the row by when it is opened. */
@@ -32,6 +39,7 @@ export interface IslandRow {
   project: string
   agent: { id: string; name: string; harness: string; color: string | null }
   model: string | null
+  group: IslandGroup
   /** `running` turns into stuck once `toolSince` is older than the hello's `stuckAfterMs`. */
   status: IslandStatus
   /** When it entered its status, as far as Kettu knows; null when it does not. */
@@ -47,6 +55,14 @@ export interface IslandRow {
   subagents: { running: number; text: string } | null
   /** The used-up window that holds it back, and when that resets. */
   limit: { label: string; resetsAt: number | null } | null
+  /** What its running turn does now; null between turns. */
+  phase: IslandPhase | null
+  /**
+   * Its prompt cache once its turn ended: when it expires, how long before that the island marks
+   * it as ending, and whether the lifetime is the provider's documented minimum. Null while a turn
+   * runs, which keeps it warm, and when nothing says how long it lasts.
+   */
+  cache: { expiresAt: number; endingMs: number; estimate: boolean } | null
 }
 
 export type IslandRequestKind = 'permission' | 'question' | 'plan' | 'origin' | 'app' | 'kettu'
@@ -56,8 +72,10 @@ export type IslandOptionStyle = 'deny' | 'allow_once' | 'allow_always' | 'normal
 /** What waits for the user's answer; the kinds the island cannot answer carry no options. */
 export interface IslandRequest {
   key: string
-  /** The row of its session. */
-  row: string
+  /** The row of its session; null for a task's. */
+  row: string | null
+  /** The task that waits, by its title and the step's name; null for a session's request. */
+  task: { title: string; step: string | null } | null
   kind: IslandRequestKind
   title: string
   /** A few lines: the command, the changed files, the question or the plan's start. */
@@ -68,29 +86,62 @@ export interface IslandRequest {
   askedAt: number | null
 }
 
+/** An agent's mark: its harness's, with an added agent's color dot. */
+export interface IslandMark {
+  harness: string
+  color: string | null
+}
+
+export type IslandNoticeKind = 'app_update' | 'agent_update' | 'limit'
+
+/** One line under the sessions about Kettu itself: its update, the agents' updates, a plan limit. */
+export interface IslandNotice {
+  key: string
+  kind: IslandNoticeKind
+  /** The agents' marks it leads with; empty for Kettu's own, which leads with the fox. */
+  marks: IslandMark[]
+  title: string
+  /** Grey words after the title. */
+  detail: string | null
+  /** A plan limit window's ring: how full, whether used up, and the words beside it. */
+  meter: { percent: number; reached: boolean; text: string } | null
+  /** Grey words at the end, such as when the window resets. */
+  trailing: string | null
+  /** A button that acts in place, by its words; null when a click opens Kettu instead. */
+  button: string | null
+  /** The words that say a click opens Kettu. */
+  link: string | null
+}
+
 export interface IslandSummary {
   running: number
+  /** Sessions and tasks that wait for the user. */
   waiting: number
   failed: number
-  /** The tightest plan window of the agents on a plan. */
-  limit: {
-    agent: string
-    label: string
-    usedPercent: number | null
-    reached: boolean
-    resetsAt: number | null
-  } | null
+  /** The sessions used since midnight, which the resting island counts once no cache is warm. */
+  today: number
 }
 
 export interface IslandView {
   rows: IslandRow[]
   requests: IslandRequest[]
+  notices: IslandNotice[]
   summary: IslandSummary
 }
 
 export type ColorMode = 'light' | 'dark'
 
-export type PopKind = 'permission' | 'turn-ended' | 'error' | 'routine-ended' | 'routine-paused'
+export type PopKind =
+  | 'permission'
+  | 'turn-ended'
+  | 'error'
+  | 'routine-ended'
+  | 'routine-paused'
+  | 'limit-near'
+  | 'limit-reached'
+  | 'limit-reset'
+  | 'update'
+  | 'update-manual'
 
 export type AnswerResult =
   { result: 'answered' } | { result: 'elsewhere' } | { result: 'failed'; message: string }
@@ -116,9 +167,23 @@ export type MainToIsland =
       requests: IslandRequest[]
       removedRequests: string[]
       requestOrder?: string[]
+      /** Every notice, when any changed. */
+      notices?: IslandNotice[]
       summary?: IslandSummary
     }
-  | { type: 'pop'; row: string | null; kind: PopKind; title: string; body: string }
+  | {
+      type: 'pop'
+      row: string | null
+      kind: PopKind
+      title: string
+      body: string
+      /** Whose mark leads a pop with no row; null or absent for Kettu's fox. */
+      mark?: IslandMark | null
+      /** A plan limit window's use, for its ring. */
+      percent?: number | null
+      /** What a click on a pop with no row does, sent back as a notice. */
+      action?: string | null
+    }
   | ({ type: 'answered'; id: string } & AnswerResult)
   | { type: 'strings'; locale: string; strings: Record<string, string> }
   | { type: 'appearance'; colorMode: ColorMode }
@@ -129,6 +194,11 @@ export type IslandToMain =
   | { type: 'answer'; id: string; request: string; option: string }
   /** A row's session, or Kettu itself without one. */
   | { type: 'open'; row: string | null }
+  /** What a request belongs to, to answer it in Kettu: its session or its task. */
+  | { type: 'openRequest'; request: string }
+  /** A notice or a pop's action: its button, or its row. */
+  | { type: 'notice'; notice: string }
+  | { type: 'newSession' }
   | { type: 'expanded' }
   | { type: 'resync' }
 
@@ -170,6 +240,18 @@ export function parseIslandLine(line: string): IslandToMain | null {
       if (row !== null && row !== undefined && !isId(row)) return null
       return { type: 'open', row: row ?? null }
     }
+    case 'openRequest': {
+      const { request } = message
+      if (!isId(request)) return null
+      return { type: 'openRequest', request }
+    }
+    case 'notice': {
+      const { notice } = message
+      if (!isId(notice)) return null
+      return { type: 'notice', notice }
+    }
+    case 'newSession':
+      return { type: 'newSession' }
     case 'expanded':
       return { type: 'expanded' }
     case 'resync':

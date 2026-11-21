@@ -15,20 +15,67 @@
     "duration": {
       "seconds": "{{s}}s",
       "minutes": "{{m}}m",
+      "hours": "{{h}}h",
       "hoursMinutes": "{{h}}h {{m}}m",
       "days": "{{d}}d"
     },
     "for": "for {{time}}",
-    "stuck": "No result for {{time}}",
     "waited": "Waiting {{time}}",
-    "resets": "Resets in {{time}}",
     "plan": "{{done}} of {{total}}",
     "offline": "Offline",
     "answerInKettu": "Answer in Kettu",
     "answered": "Answered",
     "answeredElsewhere": "Already answered somewhere else",
     "answerFailed": "Could not answer: {{message}}",
-    "openKettu": "Open Kettu"
+    "openKettu": "Open Kettu",
+    "untitled": "New session",
+    "group": {
+      "needs_you": "Needs you",
+      "running": "Running",
+      "finished": "Finished"
+    },
+    "idle_one": "{{count}} more idle session",
+    "idle_other": "{{count}} more idle sessions",
+    "moreWaiting_one": "{{count}} more waiting",
+    "moreWaiting_other": "{{count}} more waiting",
+    "openInKettu": "Open in Kettu",
+    "summary": {
+      "waiting": "{{count}} need you",
+      "running": "{{count}} running",
+      "failed": "{{count}} failed",
+      "done": "{{count}} done"
+    },
+    "paused": "Paused",
+    "a11y": {
+      "island": "Dynamic Island: {{summary}}",
+      "quiet": "Nothing needs you",
+      "row": "Open {{title}}, {{status}}, {{agent}}"
+    },
+    "recommended": "Recommended",
+    "cache": {
+      "short": "Cache {{time}}",
+      "about": "~{{time}}",
+      "left": "Cache warm for {{time}}"
+    },
+    "today": "{{count}} sessions today",
+    "newSession": "New session",
+    "empty": {
+      "title": "No sessions yet",
+      "body": "Start one in Kettu and it shows here."
+    },
+    "moreSessions": "{{count}} more sessions",
+    "viewInKettu": "View in Kettu",
+    "row": {
+      "stuck": "No result for {{time}}"
+    },
+    "ago": "{{time}} ago",
+    "resets": "Resets {{day}}",
+    "pop": {
+      "update": "Update ready",
+      "updateManual": "Update",
+      "limitReached": "Used up",
+      "limitReset": "Reset"
+    }
   },
   "line": {
     "run": "Run {{command}}",
@@ -44,14 +91,17 @@
     "starting": "Starting",
     "signIn": "Sign in to {{agent}} to go on",
     "failed": "Stopped with an error",
-    "unread": "Finished, not seen yet",
-    "idle": "Finished",
+    "unread": "Done",
+    "idle": "Ended",
     "limited": "{{window}} limit used up",
     "subagents_one": "{{count}} sub-agent running",
     "subagents_other": "{{count}} sub-agents running",
     "origin": "Wants to open {{origin}}",
     "app": "Wants to use {{app}}",
-    "question": "Asks: {{question}}"
+    "question": "Asks: {{question}}",
+    "thinking": "Thinking…",
+    "writing": "Writing a reply…",
+    "compacting": "Compacting the context"
   },
   "request": {
     "tool": {
@@ -84,6 +134,31 @@
       "session": "Allow for this session",
       "always": "Always allow {{app}}",
       "deny": "Don’t allow"
+    },
+    "task": "A task waits for you",
+    "answer": {
+      "deny": "Deny",
+      "allowOnce": "Allow once",
+      "allowAlways": "Always allow"
     }
+  },
+  "notice": {
+    "appReady": "Kettu {{version}} is ready",
+    "appReadyNote": "Sessions resume",
+    "restart": "Restart",
+    "appAvailable": "Kettu {{version}} is available",
+    "update": "Update",
+    "agentOne": "{{name}} has an update",
+    "agentTwo": "{{first}} and {{second}} have updates",
+    "agentMany": "{{name}} and {{others}} others have updates",
+    "view": "View",
+    "usedUp": "Used up",
+    "resets": "Resets {{time}}"
+  },
+  "pop": {
+    "appReady": "Kettu {{version}} is ready",
+    "appReadyBody": "Restart to update; sessions resume",
+    "appAvailable": "Kettu {{version}} is available",
+    "appAvailableBody": "Update it in Kettu"
   }
 }

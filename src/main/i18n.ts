@@ -6,18 +6,26 @@ import islandEn from '@shared/locales/en/island.json'
 import en from '@shared/locales/en/main.json'
 import islandZhCN from '@shared/locales/zh-CN/island.json'
 import zhCN from '@shared/locales/zh-CN/main.json'
+import { kettuTool as kettuToolEn } from '@shared/locales/en/session.json'
+import { kettuTool as kettuToolZhCN } from '@shared/locales/zh-CN/session.json'
 
 // English until the settings are read, which is also what the tests see.
 void i18next.init(
   i18nOptions(
     'en',
-    { en: { main: en, island: islandEn }, 'zh-CN': { main: zhCN, island: islandZhCN } },
+    {
+      // Of the thread's words only its names for Kettu's own tools, which the island's lines use.
+      en: { main: en, island: islandEn, session: { kettuTool: kettuToolEn } },
+      'zh-CN': { main: zhCN, island: islandZhCN, session: { kettuTool: kettuToolZhCN } },
+    },
     'main',
   ),
 )
 
 export const t = i18next.getFixedT(null, 'main')
 export const islandT = i18next.getFixedT(null, 'island')
+/** Kettu's own MCP tools by what they do, as the thread names them. */
+export const kettuToolT = i18next.getFixedT(null, 'session', 'kettuTool')
 
 /** The island helper's own words in the current language, flat, as `status.running`. */
 export function islandHelperStrings(): Record<string, string> {

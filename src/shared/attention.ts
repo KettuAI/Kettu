@@ -4,6 +4,7 @@
 
 import type { HostToMain } from './host-control'
 import type { AppCommand } from './ipc'
+import type { PlanLimitNoticeLevel } from './plan-limits'
 import type { HostAttention } from './remote/host-admin'
 import type { SettingsFile } from './settings'
 
@@ -14,6 +15,7 @@ export const ATTENTION_SETTING = {
   error: 'error',
   'routine-ended': 'routines',
   'routine-paused': 'routines',
+  'plan-limit': 'planLimits',
   'task-needs-you': 'permission',
   'task-ended': 'turnEnded',
 } as const satisfies Record<HostAttention['kind'], keyof SettingsFile['notifications']>
@@ -29,10 +31,12 @@ function isId(value: unknown): value is string {
   return typeof value === 'string' && value.length > 0 && value.length <= 200
 }
 
+const PLAN_LIMIT_LEVELS: readonly PlanLimitNoticeLevel[] = ['near', 'reached', 'reset']
+
 /**
  * What a well-formed attention message stands for, which a newer one of the same replaces, and
- * what a click opens: its session, the Routines page for a pause, or a workflow task. Null for a
- * malformed one.
+ * what a click opens: its session, the Routines page for a pause, a workflow task, or the Usage
+ * page for a plan limit that names no session. Null for a malformed one.
  */
 export function attentionTarget(
   message: HostAttention,
@@ -41,6 +45,19 @@ export function attentionTarget(
     return null
   }
   if (typeof message.title !== 'string' || typeof message.body !== 'string') return null
+  if (message.kind === 'plan-limit') {
+    if (!isId(message.agentId) || !isId(message.key)) return null
+    if (!PLAN_LIMIT_LEVELS.includes(message.level)) return null
+    if (message.sessionId !== undefined) {
+      return isId(message.sessionId)
+        ? {
+            key: message.sessionId,
+            command: { kind: 'open-session', sessionId: message.sessionId },
+          }
+        : null
+    }
+    return { key: `limit:${message.key}`, command: { kind: 'open-usage' } }
+  }
   if (message.kind === 'routine-paused') {
     return isId(message.agentId)
       ? { key: `routines:${message.agentId}`, command: { kind: 'open-routines' } }
@@ -60,9 +77,11 @@ type AttentionMessage = Extract<HostToMain, { type: 'host:attention' }>
 
 /**
  * What devices are pushed for an attention message: a workflow task's goes as its step's session,
- * which is what they open, and not at all when no step has a session.
+ * which is what they open, and not at all when no step has a session. A plan limit is not pushed:
+ * it is the desktop's notice of the account, which devices do not take.
  */
 export function pushedAttention(message: AttentionMessage): AttentionMessage | null {
+  if (message.kind === 'plan-limit') return null
   if (!('taskId' in message)) return message
   if (message.sessionId === undefined) return null
   return {

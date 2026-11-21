@@ -8,6 +8,8 @@ import { attentionTarget, attentionText } from '@shared/attention'
 import type { HostAttention } from '@shared/remote/host-admin'
 import type { IslandState } from '@shared/island'
 import { limitReaders } from '@shared/session-groups'
+import { harnessOf, type AgentId } from '@shared/thread'
+import type { UpdateStatus } from '@shared/updates'
 import {
   errorText,
   HostFeed,
@@ -23,11 +25,13 @@ import {
   type AnswerResult,
   type ColorMode,
   type IslandHost,
+  type IslandMark,
   type IslandToMain,
   type IslandView,
   type MainToIsland,
   type PopKind,
 } from './protocol'
+import type { NoticeAction } from './notices'
 import { buildView, diffView, type BuiltView, type HostState } from './view'
 
 /** Changes this close together go as one message. */
@@ -49,6 +53,8 @@ export const STUCK_AFTER_MS = 5 * 60_000
 const MAX_UNREAD_BYTES = 8 * 1024 * 1024
 /** Answers that may wait for their hosts at once. */
 const MAX_ANSWERS = 16
+/** The latest pops whose click main still knows what to do with. */
+const MAX_POP_ACTIONS = 16
 
 /** The helper as a running process, which tests replace. */
 export interface HelperProcess {
@@ -77,7 +83,7 @@ export interface IslandBridgeDeps {
   /** The switch in Settings › Notifications. */
   enabled(): boolean
   /** Whether a kind's notification switch is on, which governs the island's pops too. */
-  kindEnabled(kind: PopKind): boolean
+  allowed(kind: HostAttention['kind'] | 'update'): boolean
   windowFocused(): boolean
   colorMode(): ColorMode
   version: string
@@ -94,12 +100,21 @@ export interface IslandBridgeDeps {
   callRemote(hostId: string, method: IslandHostMethod, params: unknown): Promise<unknown>
   /** The other hosts whose session is open now. */
   openRemotes(): string[]
-  /** Brings the window forward at a session, or as it is for null. */
-  open(target: { hostKey: string; sessionId: string } | null): void
+  /** Brings the window forward at a session or a task, at New session, or as it is for null. */
+  open(target: IslandTarget | null): void
+  /** Kettu's update now, for its notice. */
+  updateStatus(): UpdateStatus | null
+  /** A notice was clicked: restart into the update, or open the page it is about. */
+  noticeAction(action: NoticeAction): void
   status(state: IslandState): void
   log: IslandLog
   now?: () => number
 }
+
+export type IslandTarget =
+  | { kind: 'session'; hostKey: string; sessionId: string }
+  | { kind: 'task'; hostKey: string; taskId: string }
+  | { kind: 'new-session' }
 
 type Phase = 'off' | 'starting' | 'handshake' | 'running' | 'failed'
 
@@ -116,7 +131,25 @@ const LOCAL = 'local'
 const EMPTY_VIEW: IslandView = {
   rows: [],
   requests: [],
-  summary: { running: 0, waiting: 0, failed: 0, limit: null },
+  notices: [],
+  summary: { running: 0, waiting: 0, failed: 0, today: 0 },
+}
+
+const EMPTY_BUILT: BuiltView = {
+  view: EMPTY_VIEW,
+  rows: new Map(),
+  requests: new Map(),
+  owners: new Map(),
+  notices: new Map(),
+}
+
+/** What a click on a pop with no row does. */
+type PopAction = { kind: 'notice'; action: NoticeAction } | { kind: 'open'; target: IslandTarget }
+
+const LIMIT_POP: Record<'near' | 'reached' | 'reset', PopKind> = {
+  near: 'limit-near',
+  reached: 'limit-reached',
+  reset: 'limit-reset',
 }
 
 export class IslandBridge {
@@ -133,8 +166,10 @@ export class IslandBridge {
   private badLines = 0
   private seq = 0
   /** What the helper was last sent, which its answers and opens are checked against. */
-  private sent: BuiltView = { view: EMPTY_VIEW, rows: new Map(), requests: new Map() }
+  private sent: BuiltView = EMPTY_BUILT
   private readonly answering = new Set<string>()
+  private readonly popActions = new Map<string, PopAction>()
+  private popSeq = 0
   private limitsReadAt = -Infinity
   private readonly hosts = new Map<string, Host>()
   private local: IslandConnection | null = null
@@ -279,19 +314,84 @@ export class IslandBridge {
     this.local?.close()
   }
 
-  /** What the host told main needs the user: the island pops it out unless a window is in front. */
+  /**
+   * What the host told main needs the user: the island pops it out unless a window in front shows
+   * that session already, so a session that ends behind another one in Kettu still says so.
+   */
   attention(message: HostAttention, hostKey = LOCAL): void {
-    if (this.phase !== 'running' || 'taskId' in message || !attentionTarget(message)) return
-    if (!this.deps.kindEnabled(message.kind) || this.deps.windowFocused()) return
+    if (this.phase !== 'running' || !attentionTarget(message)) return
+    if (!this.deps.allowed(message.kind)) return
+    const front = 'front' in message ? message.front : undefined
+    if (this.deps.windowFocused() && front?.any) return
     const { title, body } = attentionText(message)
+    if (message.kind === 'plan-limit') {
+      const { sessionId } = message
+      const row = sessionId ? this.rowKeyOf(hostKey, sessionId) : null
+      const action: PopAction | null = row
+        ? null
+        : sessionId
+          ? { kind: 'open', target: { kind: 'session', hostKey, sessionId } }
+          : { kind: 'notice', action: 'usage' }
+      this.send({
+        type: 'pop',
+        row,
+        kind: LIMIT_POP[message.level],
+        title,
+        body,
+        mark: row ? null : this.markOf(hostKey, message.agentId),
+        percent: message.usedPercent,
+        action: action ? this.popAction(action) : null,
+      })
+      return
+    }
+    if ('taskId' in message) return
     const row = message.kind === 'routine-paused' ? null : this.rowKeyOf(hostKey, message.sessionId)
     this.send({ type: 'pop', row, kind: message.kind, title, body })
+  }
+
+  /** Kettu's update changed: its notice follows. */
+  updatesChanged(): void {
+    this.changed()
+  }
+
+  /**
+   * Kettu's update, downloaded or waiting for a step of the user's, pops out once; false when the
+   * island is not running or its switch is off, so a notification may say it instead.
+   */
+  updatePopped(ready: boolean, words: { title: string; body: string }): boolean {
+    if (this.phase !== 'running' || !this.deps.allowed('update')) return false
+    this.send({
+      type: 'pop',
+      row: null,
+      kind: ready ? 'update' : 'update-manual',
+      ...words,
+      mark: null,
+      action: this.popAction({ kind: 'notice', action: ready ? 'restart' : 'updates' }),
+    })
+    return true
   }
 
   /** Kettu quits: the helper is told to leave and ended if it stays. */
   quit(): void {
     this.windowShown = false
     this.stop()
+  }
+
+  /** An agent's mark on a host, with its color when it is an added agent. */
+  private markOf(hostKey: string, agentId: AgentId): IslandMark {
+    const status = this.hosts.get(hostKey)?.feed.agents.get(agentId)
+    return { harness: status?.harnessId ?? harnessOf(agentId), color: status?.color ?? null }
+  }
+
+  /** Keeps what a pop's click does, under a key the helper sends back; the oldest go first. */
+  private popAction(action: PopAction): string {
+    const key = `pop:${++this.popSeq}`
+    this.popActions.set(key, action)
+    for (const old of this.popActions.keys()) {
+      if (this.popActions.size <= MAX_POP_ACTIONS) break
+      this.popActions.delete(old)
+    }
+    return key
   }
 
   private rowKeyOf(hostKey: string, sessionId: string): string | null {
@@ -489,6 +589,15 @@ export class IslandBridge {
       case 'open':
         this.open(message.row)
         return
+      case 'openRequest':
+        this.openRequest(message.request)
+        return
+      case 'notice':
+        this.notice(message.notice)
+        return
+      case 'newSession':
+        this.deps.open({ kind: 'new-session' })
+        return
       case 'expanded':
         this.readLimits()
         return
@@ -507,7 +616,36 @@ export class IslandBridge {
       this.deps.log.warn('The island asked to open a row it was not sent')
       return
     }
-    this.deps.open(target)
+    this.deps.open({ kind: 'session', ...target })
+  }
+
+  /** A notice the helper was sent, or a pop's action main keeps; anything else is refused. */
+  private notice(key: string): void {
+    const action = this.sent.notices.get(key)
+    if (action) {
+      this.deps.noticeAction(action)
+      return
+    }
+    const pop = this.popActions.get(key)
+    if (!pop) {
+      this.deps.log.warn('The island asked for a notice it was not sent')
+      return
+    }
+    if (pop.kind === 'notice') this.deps.noticeAction(pop.action)
+    else this.deps.open(pop.target)
+  }
+
+  private openRequest(key: string): void {
+    const owner = this.sent.owners.get(key)
+    if (!owner) {
+      this.deps.log.warn('The island asked to open a request it was not sent')
+      return
+    }
+    this.deps.open(
+      owner.taskId !== undefined
+        ? { kind: 'task', hostKey: owner.hostKey, taskId: owner.taskId }
+        : { kind: 'session', hostKey: owner.hostKey, sessionId: owner.sessionId },
+    )
   }
 
   private readLimits(): void {
@@ -630,7 +768,8 @@ export class IslandBridge {
     for (const host of this.hosts.values()) host.feed.clear()
     this.hosts.clear()
     this.answering.clear()
-    this.sent = { view: EMPTY_VIEW, rows: new Map(), requests: new Map() }
+    this.popActions.clear()
+    this.sent = EMPTY_BUILT
   }
 
   private hostStates(): HostState[] {
@@ -656,7 +795,7 @@ export class IslandBridge {
   /** The view now; null when what a host sent could not be read into one. */
   private build(): BuiltView | null {
     try {
-      return buildView(this.hostStates(), this.now())
+      return buildView(this.hostStates(), this.now(), this.deps.updateStatus())
     } catch (error) {
       this.deps.log.error(`Could not build the island's view: ${errorText(error)}`)
       return null
@@ -668,8 +807,8 @@ export class IslandBridge {
     const built = this.build()
     if (!built) return
     const change = diffView(this.sent.view, built.view)
-    if (!change) return
     this.sent = built
+    if (!change) return
     this.send({ type: 'change', seq: ++this.seq, ...change })
   }
 

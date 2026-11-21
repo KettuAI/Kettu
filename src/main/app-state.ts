@@ -9,6 +9,7 @@ export interface AppState {
   lastRunVersion: string | null // the version that ran last, to tell a launch after an update
   dismissedUpdate: string | null // the version whose update notice was dismissed
   updateAfterMove: string | null // the version Update moved the app to /Applications for
+  notifiedUpdate: string | null // the version the island or a notification announced, once
   updateSources: SignedSourceList | null // the latest source list, checked again when read
 }
 
@@ -26,13 +27,14 @@ function signedList(value: unknown): SignedSourceList | null {
 
 function parseAppState(raw: unknown): AppState | null {
   if (typeof raw !== 'object' || raw === null) return null
-  // Files written before updateAfterMove or updateSources existed lack them.
+  // Files written before updateAfterMove, updateSources or notifiedUpdate existed lack them.
   const {
     version,
     lastRunVersion,
     dismissedUpdate,
     updateAfterMove = null,
     updateSources = null,
+    notifiedUpdate = null,
   } = raw as Record<string, unknown>
   const optionalString = (value: unknown): value is string | null =>
     value === null || (typeof value === 'string' && value.length <= 256)
@@ -40,7 +42,8 @@ function parseAppState(raw: unknown): AppState | null {
     version !== 1 ||
     !optionalString(lastRunVersion) ||
     !optionalString(dismissedUpdate) ||
-    !optionalString(updateAfterMove)
+    !optionalString(updateAfterMove) ||
+    !optionalString(notifiedUpdate)
   ) {
     return null
   }
@@ -50,6 +53,7 @@ function parseAppState(raw: unknown): AppState | null {
     dismissedUpdate,
     updateAfterMove,
     updateSources: signedList(updateSources),
+    notifiedUpdate,
   }
 }
 
@@ -67,6 +71,7 @@ export class AppStateStore {
       dismissedUpdate: null,
       updateAfterMove: null,
       updateSources: null,
+      notifiedUpdate: null,
     }
     const read = await readJsonFile(path)
     let state = empty
@@ -92,7 +97,8 @@ export class AppStateStore {
       next.lastRunVersion === this.state.lastRunVersion &&
       next.dismissedUpdate === this.state.dismissedUpdate &&
       next.updateAfterMove === this.state.updateAfterMove &&
-      next.updateSources === this.state.updateSources
+      next.updateSources === this.state.updateSources &&
+      next.notifiedUpdate === this.state.notifiedUpdate
     ) {
       return
     }

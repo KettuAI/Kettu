@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ALREADY_ANSWERED, type HostEvent, type SessionSummary } from '@shared/agent-host'
 import type { IslandState } from '@shared/island'
 import type { ThreadEntry } from '@shared/thread'
+import type { UpdateStatus } from '@shared/updates'
 import { COALESCE_MS, IslandBridge, type HelperProcess, type IslandBridgeDeps } from './bridge'
 import { ISLAND_HOST_METHODS } from './host-feed'
 import { ISLAND_PROTOCOL, type MainToIsland } from './protocol'
@@ -120,6 +121,7 @@ interface Setup {
   emit(event: HostEvent): void
   states: IslandState[]
   opened: unknown[]
+  actions: string[]
   closeHost(): void
   remoteCalls: [string, string, unknown][]
   remoteOpen: Set<string>
@@ -165,6 +167,7 @@ function setup(
   const helpers: FakeHelper[] = []
   const states: IslandState[] = []
   const opened: unknown[] = []
+  const actions: string[] = []
   let onEvent: ((event: HostEvent) => void) | null = null
   let onClose: (() => void) | null = null
   const request = vi.fn(async (method: string, params: unknown) =>
@@ -174,7 +177,7 @@ function setup(
   const remoteOpen = new Set(remotes.map((remote) => remote.id))
   const deps: IslandBridgeDeps = {
     enabled: () => true,
-    kindEnabled: () => true,
+    allowed: () => true,
     windowFocused: () => false,
     colorMode: () => 'light',
     version: '0.1.13',
@@ -200,6 +203,8 @@ function setup(
       return { request: request as never, close: () => onClose?.() }
     },
     open: (target) => opened.push(target),
+    updateStatus: () => null,
+    noticeAction: (action) => actions.push(action),
     status: (state) => states.push(state),
     log: { info: () => {}, warn: () => {}, error: () => {} },
     now: () => Date.now(),
@@ -215,6 +220,7 @@ function setup(
     emit: (event) => onEvent!(event),
     states,
     opened,
+    actions,
     closeHost: () => onClose!(),
     remoteCalls,
     remoteOpen,
@@ -231,6 +237,8 @@ async function started(s: Setup): Promise<void> {
 
 beforeEach(() => {
   vi.useFakeTimers()
+  // An hour after the fixtures' sessions were used, so they count as used within the last day.
+  vi.setSystemTime(60 * 60_000)
 })
 
 afterEach(() => {
@@ -329,6 +337,23 @@ describe('changes', () => {
     expect(next.removedRows).toEqual(['s2'])
   })
 
+  it('names the menu bar panel’s group of each row, the idle ones last', async () => {
+    const s = setup([
+      summary('idle'),
+      summary('done', { attention: 'unread' }),
+      summary('run', { status: 'running' }),
+      summary('ask', { status: 'awaiting_permission' }),
+    ])
+    await started(s)
+    const rows = s.helper().of('view').at(-1)!.rows
+    expect(rows.map((row) => [row.sessionId, row.group])).toEqual([
+      ['ask', 'needs_you'],
+      ['run', 'running'],
+      ['done', 'finished'],
+      ['idle', 'idle'],
+    ])
+  })
+
   it('sends nothing when nothing it shows changed', async () => {
     const s = setup([summary('s1')])
     await started(s)
@@ -387,11 +412,11 @@ describe('answers', () => {
     return [...view.requests, ...changes.flatMap((change) => change.requests)]
   }
 
-  it('sends the requests with the options the island may answer', async () => {
+  it('sends the requests with the options the island may answer, in the card’s order', async () => {
     const s = await answering()
     const requests = sentRequests(s)
     expect(requests.map((r) => [r.key, r.kind, r.options.map((o) => o.id)])).toEqual([
-      ['s1#t1', 'permission', ['allow', 'deny']],
+      ['s1#t1', 'permission', ['deny', 'allow']],
       ['s1#t2', 'question', ['q0', 'q1']],
     ])
     expect(requests[0]).toMatchObject({ lines: ['pnpm test'], code: true, askedAt: 1000 })
@@ -417,6 +442,52 @@ describe('answers', () => {
       { type: 'answered', id: 'a1', result: 'answered' },
       { type: 'answered', id: 'a2', result: 'answered' },
     ])
+  })
+
+  it('sends the card’s three answers alone, and refuses the others, as for a Kettu tool', async () => {
+    const tool: ThreadEntry = {
+      ...TOOL,
+      id: 't3',
+      title: 'mcp__kettu__terminal_run',
+      toolKind: 'other',
+      // As Claude Code's host keeps it: the command alone.
+      rawInput: 'sleep 40 && echo done',
+      permission: {
+        requestId: 'r3',
+        options: [
+          { id: 'once', name: 'Yes', kind: 'allow_once' },
+          { id: 'project', name: 'Yes, and always allow it in this project', kind: 'allow_always' },
+          { id: 'session', name: 'Yes, for this session', kind: 'allow_always' },
+          { id: 'no', name: 'Deny, and say what to do instead', kind: 'reject_once' },
+          { id: 'never', name: 'Never', kind: 'reject_always' },
+        ],
+      },
+    }
+    const s = setup([{ ...waiting, permissionCount: 1 }], { s1: [tool] })
+    await started(s)
+    await vi.advanceTimersByTimeAsync(COALESCE_MS)
+    const [request] = sentRequests(s)
+    expect(request).toMatchObject({
+      title: 'Run in terminal',
+      lines: ['sleep 40 && echo done'],
+      code: true,
+      options: [
+        { id: 'no', label: 'Deny', style: 'deny' },
+        { id: 'once', label: 'Allow once', style: 'allow_once' },
+        { id: 'project', label: 'Always allow', style: 'allow_always' },
+      ],
+    })
+    const calls = s.request.mock.calls.length
+    s.helper().say({ type: 'answer', id: 'a1', request: 's1#t3', option: 'session' })
+    s.helper().say({ type: 'answer', id: 'a2', request: 's1#t3', option: 'never' })
+    await vi.advanceTimersByTimeAsync(0)
+    expect(s.request.mock.calls).toHaveLength(calls)
+    expect(
+      s
+        .helper()
+        .of('answered')
+        .map((m) => m.result),
+    ).toEqual(['failed', 'failed'])
   })
 
   it('refuses a request or option it never sent without calling the host', async () => {
@@ -473,21 +544,62 @@ describe('opens and pops', () => {
     s.helper().say({ type: 'open', row: 'other' })
     s.helper().say({ type: 'open', row: null })
     await vi.advanceTimersByTimeAsync(0)
-    expect(s.opened).toEqual([{ hostKey: 'local', sessionId: 's1' }, null])
+    expect(s.opened).toEqual([{ kind: 'session', hostKey: 'local', sessionId: 's1' }, null])
   })
 
-  it('pops what needs the user only while no window is in front', async () => {
+  it('opens only what a request it sent belongs to, a task’s included', async () => {
     const s = setup([summary('s1')])
+    s.request.mockImplementation(async (method: string, params: unknown) =>
+      method === 'tasks.list'
+        ? [
+            {
+              id: 'task1',
+              title: 'Ship the island',
+              status: 'running',
+              needsYou: true,
+              archivedAt: null,
+              updatedAt: 5,
+              steps: [{ id: 'review', name: 'Review', state: 'needs_you', sessionId: null }],
+            },
+          ]
+        : hostAnswer([summary('s1')], {}, method, params),
+    )
     await started(s)
-    const attention = {
+    const request = s.helper().of('view').at(-1)!.requests[0]!
+    expect(request).toMatchObject({
+      key: 'task:local/task1',
+      row: null,
+      task: { title: 'Ship the island', step: 'Review' },
+      options: [],
+    })
+    s.helper().say({ type: 'openRequest', request: 'task:local/other' })
+    s.helper().say({ type: 'openRequest', request: request.key })
+    s.helper().say({ type: 'newSession' })
+    await vi.advanceTimersByTimeAsync(0)
+    expect(s.opened).toEqual([
+      { kind: 'task', hostKey: 'local', taskId: 'task1' },
+      { kind: 'new-session' },
+    ])
+  })
+
+  it('pops what needs the user unless a window in front shows that session', async () => {
+    let focused = false
+    const s = setup([summary('s1')], {}, [], { windowFocused: () => focused })
+    await started(s)
+    const attention = (any: boolean) => ({
       type: 'host:attention' as const,
       sessionId: 's1',
       kind: 'turn-ended' as const,
       title: 'Done',
       body: 'kettu',
-    }
-    s.bridge.attention(attention)
+      front: { any, devices: [] },
+    })
+    s.bridge.attention(attention(true))
+    focused = true
+    s.bridge.attention(attention(false))
+    s.bridge.attention(attention(true))
     expect(s.helper().of('pop')).toEqual([
+      { type: 'pop', row: 's1', kind: 'turn-ended', title: 'Done', body: 'kettu' },
       { type: 'pop', row: 's1', kind: 'turn-ended', title: 'Done', body: 'kettu' },
     ])
   })
@@ -508,6 +620,45 @@ describe('opens and pops', () => {
     expect(s.bridge.shows({ kind: 'turn-ended', sessionId: 's1', title: 'Done', body: '' })).toBe(
       true,
     )
+  })
+})
+
+describe('notices', () => {
+  it('acts only on the notices and pops it sent', async () => {
+    const status: UpdateStatus = {
+      state: { kind: 'ready', version: '0.2.0' },
+      mode: 'install',
+      readOnly: false,
+      current: '0.1.13',
+      updatedFrom: null,
+      dismissed: null,
+    }
+    const s = setup([summary('s1')], {}, [], { updateStatus: () => status })
+    await started(s)
+    expect(
+      s
+        .helper()
+        .of('view')
+        .at(-1)!
+        .notices.map((notice) => notice.key),
+    ).toEqual(['app-update'])
+    s.bridge.attention({
+      kind: 'plan-limit',
+      agentId: 'claude-code',
+      level: 'near',
+      key: 'claude-code:me@example.com:five_hour',
+      usedPercent: 92,
+      title: '5-hour limit 92% used',
+      body: 'Claude Max',
+    })
+    const pop = s.helper().of('pop').at(-1)!
+    expect(pop).toMatchObject({ row: null, kind: 'limit-near', percent: 92 })
+    s.helper().say({ type: 'notice', notice: 'app-update' })
+    s.helper().say({ type: 'notice', notice: pop.action! })
+    s.helper().say({ type: 'notice', notice: 'pop:999' })
+    s.helper().say({ type: 'notice', notice: 'limit' })
+    await vi.advanceTimersByTimeAsync(0)
+    expect(s.actions).toEqual(['restart', 'usage'])
   })
 })
 
@@ -578,7 +729,10 @@ describe('workflow steps', () => {
 
     s.emit({ type: 'task.removed', taskId: 'task1' })
     await vi.advanceTimersByTimeAsync(COALESCE_MS)
-    expect(s.helper().of('change').at(-1)!.rows[0]!.parent).toEqual({ kind: 'task', title: null })
+    expect(s.helper().of('change').at(-1)!.rows[0]!.parent).toEqual({
+      kind: 'task',
+      title: null,
+    })
   })
 
   it('reads a host that has no tasks', async () => {

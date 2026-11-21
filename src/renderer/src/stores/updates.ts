@@ -30,6 +30,8 @@ interface UpdatesStore {
   harnessBatch: HarnessBatchEntry[]
   /** The update card was closed on updates still to do, so Settings shows a dot until opened. */
   settingsDot: boolean
+  /** Counts the asks from outside the window, such as the notch island, to show the update list. */
+  listAsked: number
 }
 
 const SETTINGS_DOT_KEY = 'updates.settingsDot'
@@ -45,7 +47,13 @@ export const useUpdatesStore = create<UpdatesStore>()(() => ({
   harnessInstalling: null,
   harnessBatch: [],
   settingsDot: readJson<unknown>(SETTINGS_DOT_KEY, false) === true,
+  listAsked: 0,
 }))
+
+/** Shows the update card's list of every update, where the card has one. */
+export function askUpdateList(): void {
+  useUpdatesStore.setState((s) => ({ listAsked: s.listAsked + 1 }))
+}
 
 /** Shows what the downloaded update brings, with Restart now and Later. */
 export function openUpdateDialog(open = true): void {

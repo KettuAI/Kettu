@@ -325,6 +325,7 @@ import {
   type ThreadPage,
   type ThreadWrite,
 } from './threads/model'
+import { turnPhase } from '@shared/turn-phase'
 import { ThreadStoreError, type ThreadStore } from './threads/store'
 import type { UsageRow } from './usage/model'
 import { recordRows } from './usage/record'
@@ -1454,6 +1455,7 @@ export class SessionManager {
         live && (status === 'running' || status === 'awaiting_permission')
           ? live.activity.current(live.thread)
           : null,
+      phase: live && status === 'running' ? turnPhase(live.thread).phase : null,
       ...(record.worktree ? { worktree: this.worktreeSummary(record.worktree) } : {}),
       ...(record.agentWorktree ? { agentWorktree: { ...record.agentWorktree } } : {}),
       ...(live?.prepared

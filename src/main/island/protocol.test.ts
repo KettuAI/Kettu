@@ -17,6 +17,15 @@ describe('parseIslandLine', () => {
     expect(parseIslandLine('{"type":"open","row":"s1"}')).toEqual({ type: 'open', row: 's1' })
     expect(parseIslandLine('{"type":"open","row":null}')).toEqual({ type: 'open', row: null })
     expect(parseIslandLine('{"type":"open"}')).toEqual({ type: 'open', row: null })
+    expect(parseIslandLine('{"type":"openRequest","request":"task:local/t1"}')).toEqual({
+      type: 'openRequest',
+      request: 'task:local/t1',
+    })
+    expect(parseIslandLine('{"type":"notice","notice":"app-update"}')).toEqual({
+      type: 'notice',
+      notice: 'app-update',
+    })
+    expect(parseIslandLine('{"type":"newSession"}')).toEqual({ type: 'newSession' })
     expect(parseIslandLine('{"type":"expanded"}')).toEqual({ type: 'expanded' })
     expect(parseIslandLine('{"type":"resync"}')).toEqual({ type: 'resync' })
   })
@@ -52,6 +61,13 @@ describe('parseIslandLine', () => {
       '{"type":"answer","id":"a","request":{"key":"r"},"option":"o"}',
       '{"type":"open","row":7}',
       '{"type":"open","row":""}',
+      '{"type":"openRequest"}',
+      '{"type":"notice"}',
+      '{"type":"notice","notice":""}',
+      '{"type":"notice","notice":{"action":"restart"}}',
+      `{"type":"notice","notice":"${'n'.repeat(129)}"}`,
+      '{"type":"openRequest","request":""}',
+      '{"type":"openRequest","request":{"taskId":"t1"}}',
     ]
     for (const line of refused) expect(parseIslandLine(line), line).toBeNull()
   })

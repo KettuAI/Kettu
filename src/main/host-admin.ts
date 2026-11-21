@@ -285,18 +285,32 @@ export class HostAdmin {
   /** What needs the user, which the devices notify about as the host's own window does. */
   attention(message: Extract<HostToMain, { type: 'host:attention' }>): void {
     const { title, body } = message
-    const attention: HostAttention =
-      message.kind === 'routine-paused'
-        ? { kind: message.kind, agentId: message.agentId, title, body }
-        : 'taskId' in message
-          ? { kind: message.kind, taskId: message.taskId, title, body }
-          : {
-              kind: message.kind,
-              sessionId: message.sessionId,
-              title,
-              body,
-              ...(message.allowOnce ? { allowOnce: message.allowOnce } : {}),
-            }
+    let attention: HostAttention
+    if (message.kind === 'routine-paused') {
+      attention = { kind: message.kind, agentId: message.agentId, title, body }
+    } else if (message.kind === 'plan-limit') {
+      const { agentId, level, key, usedPercent, sessionId } = message
+      attention = {
+        kind: message.kind,
+        agentId,
+        level,
+        key,
+        usedPercent,
+        title,
+        body,
+        ...(sessionId ? { sessionId } : {}),
+      }
+    } else if ('taskId' in message) {
+      attention = { kind: message.kind, taskId: message.taskId, title, body }
+    } else {
+      attention = {
+        kind: message.kind,
+        sessionId: message.sessionId,
+        title,
+        body,
+        ...(message.allowOnce ? { allowOnce: message.allowOnce } : {}),
+      }
+    }
     this.deps.send({ type: 'attention', attention }, null)
   }
 

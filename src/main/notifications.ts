@@ -140,6 +140,55 @@ export function notifyDiscovery(
   notification.show()
 }
 
+/**
+ * A notice of Kettu's own, such as its update, as an OS notification while no window is focused;
+ * a newer one of the same key replaces it, and its click does `open`.
+ */
+export function notifyNotice(
+  key: string,
+  words: { title: string; body: string },
+  settings: SettingsFile,
+  open: () => void,
+): void {
+  if (BrowserWindow.getFocusedWindow() || !Notification.isSupported()) return
+  shown.get(key)?.close()
+  const notification = new Notification({ ...words, silent: !settings.notifications.sound })
+  const forget = (): void => {
+    if (shown.get(key) === notification) shown.delete(key)
+  }
+  notification.on('click', () => {
+    forget()
+    open()
+  })
+  notification.on('close', forget)
+  notification.on('failed', (_, error) => {
+    forget()
+    log.warn(`Notification failed: ${error}`)
+  })
+  shown.set(key, notification)
+  notification.show()
+}
+
+/** How long a plan limit notice another host also says counts as the same one. */
+const REPEAT_MS = 30 * 60_000
+
+/**
+ * Every host signed in to an account says its plan limit notices, and two agents may share an
+ * account across hosts; this computer says each window's notice once.
+ */
+export class RepeatedNotices {
+  private readonly seen = new Map<string, number>()
+
+  repeated(message: HostAttention, now = Date.now()): boolean {
+    if (message.kind !== 'plan-limit' || typeof message.key !== 'string') return false
+    for (const [key, at] of this.seen) if (now - at >= REPEAT_MS) this.seen.delete(key)
+    const key = `${message.key}:${message.level}`
+    if (this.seen.has(key)) return true
+    this.seen.set(key, now)
+    return false
+  }
+}
+
 /** A sample from Settings › Notifications, shown even while a window is focused. */
 export function notifyTest(settings: SettingsFile): boolean {
   if (!Notification.isSupported()) return false

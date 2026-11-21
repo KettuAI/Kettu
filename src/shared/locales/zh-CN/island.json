@@ -15,20 +15,65 @@
     "duration": {
       "seconds": "{{s}} 秒",
       "minutes": "{{m}} 分钟",
+      "hours": "{{h}} 小时",
       "hoursMinutes": "{{h}} 小时 {{m}} 分钟",
       "days": "{{d}} 天"
     },
     "for": "已 {{time}}",
-    "stuck": "{{time}} 没有结果",
     "waited": "已等 {{time}}",
-    "resets": "{{time}}后重置",
     "plan": "{{done}}/{{total}}",
     "offline": "离线",
     "answerInKettu": "在 Kettu 中回答",
     "answered": "已回答",
     "answeredElsewhere": "已在别处回答",
     "answerFailed": "没能回答：{{message}}",
-    "openKettu": "打开 Kettu"
+    "openKettu": "打开 Kettu",
+    "untitled": "新会话",
+    "group": {
+      "needs_you": "等你处理",
+      "running": "正在运行",
+      "finished": "已完成"
+    },
+    "idle_other": "还有 {{count}} 个会话闲着",
+    "moreWaiting_other": "还有 {{count}} 个在等",
+    "openInKettu": "在 Kettu 中打开",
+    "summary": {
+      "waiting": "{{count}} 个等你",
+      "running": "{{count}} 个在跑",
+      "failed": "{{count}} 个失败",
+      "done": "{{count}} 个完成"
+    },
+    "paused": "已暂停",
+    "a11y": {
+      "island": "灵动岛：{{summary}}",
+      "quiet": "没有要你处理的",
+      "row": "打开 {{title}}，{{status}}，{{agent}}"
+    },
+    "recommended": "推荐",
+    "cache": {
+      "short": "缓存 {{time}}",
+      "about": "约 {{time}}",
+      "left": "缓存还剩 {{time}}"
+    },
+    "today": "今天 {{count}} 个会话",
+    "newSession": "新建会话",
+    "empty": {
+      "title": "还没有会话",
+      "body": "在 Kettu 里开始第一个，它会出现在这里。"
+    },
+    "moreSessions": "还有 {{count}} 个会话",
+    "viewInKettu": "在 Kettu 中查看",
+    "row": {
+      "stuck": "{{time}}没有结果"
+    },
+    "ago": "{{time}}前",
+    "resets": "{{day}}重置",
+    "pop": {
+      "update": "可以更新",
+      "updateManual": "去更新",
+      "limitReached": "已用完",
+      "limitReset": "已重置"
+    }
   },
   "line": {
     "run": "运行 {{command}}",
@@ -44,14 +89,17 @@
     "starting": "正在启动",
     "signIn": "登录 {{agent}} 后才能继续",
     "failed": "出错停下了",
-    "unread": "已完成，还没看过",
-    "idle": "已完成",
+    "unread": "已完成",
+    "idle": "已结束",
     "limited": "{{window}}限额用完了",
     "subagents_one": "{{count}} 个子智能体在运行",
     "subagents_other": "{{count}} 个子智能体在运行",
     "origin": "想打开 {{origin}}",
     "app": "想使用 {{app}}",
-    "question": "在问你：{{question}}"
+    "question": "在问你：{{question}}",
+    "thinking": "在想…",
+    "writing": "在写回复…",
+    "compacting": "正在压缩上下文"
   },
   "request": {
     "tool": {
@@ -84,6 +132,31 @@
       "session": "本会话内允许",
       "always": "始终允许 {{app}}",
       "deny": "不允许"
+    },
+    "task": "需求在等你处理",
+    "answer": {
+      "deny": "拒绝",
+      "allowOnce": "允许一次",
+      "allowAlways": "始终允许"
     }
+  },
+  "notice": {
+    "appReady": "Kettu {{version}} 已就绪",
+    "appReadyNote": "会话会自动恢复",
+    "restart": "重启",
+    "appAvailable": "Kettu {{version}} 可以更新了",
+    "update": "更新",
+    "agentOne": "{{name}} 有更新",
+    "agentTwo": "{{first}} 和 {{second}} 有更新",
+    "agentMany": "{{name}} 等 {{count}} 个有更新",
+    "view": "查看",
+    "usedUp": "用完了",
+    "resets": "{{time}} 重置"
+  },
+  "pop": {
+    "appReady": "Kettu {{version}} 已就绪",
+    "appReadyBody": "重启后更新，会话会自动恢复",
+    "appAvailable": "Kettu {{version}} 可以更新了",
+    "appAvailableBody": "在 Kettu 里更新"
   }
 }

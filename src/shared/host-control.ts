@@ -12,6 +12,7 @@ import type { ControlOutcome } from './control'
 import type { MarketAccount, MarketCall, MarketCallAnswer } from './market-publish'
 import type { MediaGrantRecord } from './media'
 import type { Platform } from './platform'
+import type { PlanLimitNoticeLevel } from './plan-limits'
 import type { PortError } from './port-rpc'
 import type { DeviceActivity } from './remote/activity'
 import type { NewDevice, PairedDevice, PortDevice } from './remote/device'
@@ -326,6 +327,20 @@ export type HostToMain =
       type: 'host:attention'
       kind: 'routine-paused'
       agentId: AgentId
+      title: string
+      body: string
+    }
+  // A plan limit window of an agent's account reached 90%, was used up, or reset after that.
+  | {
+      type: 'host:attention'
+      kind: 'plan-limit'
+      agentId: AgentId
+      level: PlanLimitNoticeLevel
+      /** The account and the window, alike on every host signed in to that account. */
+      key: string
+      usedPercent: number | null
+      /** The session the used-up window stopped, whose own notice this one replaces. */
+      sessionId?: string
       title: string
       body: string
     }
