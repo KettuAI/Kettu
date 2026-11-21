@@ -14,7 +14,9 @@
     "searchField": "Search…",
     "projects": "Projects",
     "openProject": "Open project…",
-    "resize": "Resize sidebar"
+    "resize": "Resize sidebar",
+    "hidePage": "Hide from sidebar",
+    "customize": "Customize sidebar…"
   },
   "search": {
     "placeholder": "Search sessions, artifacts, routines and more",
@@ -41,6 +43,7 @@
     "action": {
       "newSession": "New session",
       "openProject": "Open project…",
+      "openOverview": "Open Overview",
       "openUsage": "Open Usage",
       "openArtifacts": "Open Artifacts",
       "openRoutines": "Open Routines",

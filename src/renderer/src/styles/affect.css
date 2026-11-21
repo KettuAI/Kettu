@@ -405,7 +405,13 @@
 .ui-as-side__nav > .ui-as-side__group:first-child {
   gap: 2px;
 }
-.ui-as-side__nav > .ui-as-side__group:first-child > .ui-as-side__item:first-child {
+/* A menu row whose context menu is open keeps the hover fill, as the session rows do. */
+.ui-as.ui-as .ui-as-side__item[data-popup-open] {
+  background: var(--hover);
+  color: var(--ink);
+}
+/* With every page hidden from the sidebar, New session stands alone and the projects follow it. */
+.ui-as-side__nav > .ui-as-side__group:first-child > .ui-as-side__item:first-child:not(:last-child) {
   margin-bottom: 4px;
 }
 .ui-as.ui-as .ui-as-side__label {
@@ -3057,6 +3063,56 @@ li[data-row-exit='dust'] > * {
   flex-direction: row;
   align-items: center;
   gap: 12px;
+}
+
+/* Settings › Appearance › Sidebar: the pages, each a shorter row dragged by its handle in front.
+   The list wraps its rows, so the hairline before each is drawn here. */
+:is(.kettu-settings, .kettu-sd) .k-sort-rows > * + * > .k-row,
+:is(.kettu-settings, .kettu-sd) .ui-sg-card > * + .k-sort-rows > :first-child > .k-row {
+  box-shadow: inset 0 0.5px 0 var(--line);
+}
+:is(.kettu-settings, .kettu-sd) .k-sort-row[data-dragging] {
+  border-radius: var(--radius-card);
+  background: var(--card);
+  box-shadow: var(--elevation-float);
+}
+:is(.kettu-settings, .kettu-sd) .k-sort-row[data-dragging] > .k-row {
+  box-shadow: none;
+}
+:is(.kettu-settings, .kettu-sd) .k-sort-line {
+  justify-content: flex-start;
+  gap: 8px;
+  min-height: 44px;
+  padding-block: 6px;
+  padding-left: 8px;
+}
+:is(.kettu-settings, .kettu-sd) .k-sort-icon {
+  display: grid;
+  flex: none;
+  place-items: center;
+  color: var(--muted);
+}
+:is(.kettu-settings, .kettu-sd) .k-sort-handle {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: var(--radius-md);
+  color: var(--faint);
+  cursor: grab;
+  touch-action: none;
+}
+:is(.kettu-settings, .kettu-sd) .k-sort-handle:hover {
+  background: var(--hover);
+  color: var(--ink);
+}
+:is(.kettu-settings, .kettu-sd) .k-sort-row[data-dragging] .k-sort-handle {
+  cursor: grabbing;
+}
+:is(.kettu-settings, .kettu-sd) .k-sort-restore {
+  justify-content: flex-start;
+  min-height: 48px;
 }
 
 /* A page's title, then its groups: a head, a card of rows, a note under it */

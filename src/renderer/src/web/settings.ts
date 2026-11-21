@@ -9,7 +9,13 @@ import {
   type HostAdminEvent,
   type HostSettingsPart,
 } from '@shared/remote/host-admin'
-import { DEFAULT_SETTINGS, type SettingsFile, type SettingsPatch } from '@shared/settings'
+import {
+  DEFAULT_SETTINGS,
+  readSidebarOrder,
+  readSidebarPages,
+  type SettingsFile,
+  type SettingsPatch,
+} from '@shared/settings'
 import type { LinkState } from '@shared/remote/link'
 
 const KEY = 'kettu.settings'
@@ -201,6 +207,11 @@ function merge(settings: SettingsFile, patch: SettingsPatch): SettingsFile {
       } else if (typeof value === typeof fallback) merged[key] = value
     }
     ;(next as Record<string, unknown>)[section] = merged
+  }
+  next.appearance = {
+    ...next.appearance,
+    sidebarOrder: readSidebarOrder(next.appearance.sidebarOrder),
+    sidebarHidden: readSidebarPages(next.appearance.sidebarHidden),
   }
   return next
 }

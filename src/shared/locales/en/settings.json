@@ -255,6 +255,17 @@
       "description": "With the sidebar collapsed, pointing at its button shows it over the page until the pointer leaves.",
       "keywords": "sidebar collapse expand peek reveal hover"
     },
+    "sidebarPages": {
+      "overview": "Overview",
+      "artifacts": "Artifacts",
+      "routines": "Routines",
+      "marketplace": "Marketplace",
+      "usage": "Usage",
+      "description": "Listed in the sidebar. Hidden, it still opens from Search.",
+      "keywords": "sidebar page show hide order reorder customize",
+      "move": "Move {{name}}",
+      "restore": "Restore default"
+    },
     "groups": {
       "theme": "Theme",
       "scale": "Zoom and text",

@@ -2,7 +2,7 @@
 "use client";
 
 import { createPortal } from "react-dom";
-import { Fragment, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type DragEvent as ReactDragEvent, type PointerEvent as ReactPointerEvent, type ReactNode, type RefObject } from "react";
+import { Fragment, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type DragEvent as ReactDragEvent, type PointerEvent as ReactPointerEvent, type ReactElement, type ReactNode, type RefObject } from "react";
 import { HugeiconsIcon, type IconSvgElement } from "@hugeicons/react";
 import {
   ArrowDown01Icon,
@@ -126,7 +126,7 @@ export const Flag = ({ code }: { code: "gb" | "de" | "fr" | "es" }) => (
   </svg>
 );
 
-export type ShellNavItem = { label: string; icon: IconSvgElement; /** Small number at the end, e.g. unread items */ count?: number; /** Your own mark at the row's end, in place of the count */ end?: ReactNode; /** The row's name for screen readers, when its end says more than the label */ ariaLabel?: string };
+export type ShellNavItem = { label: string; icon: IconSvgElement; /** Small number at the end, e.g. unread items */ count?: number; /** Your own mark at the row's end, in place of the count */ end?: ReactNode; /** The row's name for screen readers, when its end says more than the label */ ariaLabel?: string; /** Your own element around the row's button, e.g. a context menu whose trigger renders it */ wrap?: (row: ReactElement) => ReactNode };
 /** A labelled list under the menu – replaces Projects when given */
 export type ShellGroup = { label: string; items: ShellNavItem[]; /** Text shown while the list is empty */ empty?: string };
 
@@ -743,23 +743,26 @@ export function AppShell({
 
         <nav className="ui-as-side__nav" aria-label={labels?.menu ?? "Main menu"}>
           <div className="ui-as-side__group">
-            {nav.map((item, i) => (
-              <button
-                key={`${i}-${item.label}`}
-                type="button"
-                className="ui-as-side__item"
-                aria-current={active === item.label ? "page" : undefined}
-                aria-label={item.ariaLabel}
-                title={rail ? item.label : undefined}
-                onClick={() => go(item.label)}
-              >
-                <Icon icon={item.icon} size={16} />
-                <span className="ui-as-side__text" title={item.label}>
-                  {item.label}
-                </span>
-                {item.end ?? (!!item.count && item.count > 0 && <span className="ui-as-side__count" title={item.count.toLocaleString()}>{shortCount(item.count)}</span>)}
-              </button>
-            ))}
+            {nav.map((item, i) => {
+              const row = (
+                <button
+                  key={`${i}-${item.label}`}
+                  type="button"
+                  className="ui-as-side__item"
+                  aria-current={active === item.label ? "page" : undefined}
+                  aria-label={item.ariaLabel}
+                  title={rail ? item.label : undefined}
+                  onClick={() => go(item.label)}
+                >
+                  <Icon icon={item.icon} size={16} />
+                  <span className="ui-as-side__text" title={item.label}>
+                    {item.label}
+                  </span>
+                  {item.end ?? (!!item.count && item.count > 0 && <span className="ui-as-side__count" title={item.count.toLocaleString()}>{shortCount(item.count)}</span>)}
+                </button>
+              );
+              return item.wrap ? <Fragment key={`${i}-${item.label}`}>{item.wrap(row)}</Fragment> : row;
+            })}
           </div>
           {list ? list : groups ? (
             groups.map((group, gi) => (

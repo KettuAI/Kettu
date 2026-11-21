@@ -8,8 +8,8 @@ import { cn } from '@renderer/lib/utils'
 const PRESS_TRAVEL = 10
 
 /**
- * Sidebar groups the user can drag into another order, each a `SortableGroup` inside. A group
- * dropped outside the list goes back to its place.
+ * Groups the user can drag into another order, each a `SortableGroup` inside, such as the
+ * sidebar's folders. A group dropped outside the list goes back to its place.
  */
 export function SortableList({
   onMove,
@@ -20,7 +20,7 @@ export function SortableList({
   className?: string
   onMove: (from: number, to: number) => void
   /** A press held long enough to pick a group up and let go where it began, as a click. */
-  onPress: (id: string) => void
+  onPress?: (id: string) => void
   children: ReactNode
 }) {
   const list = useRef<HTMLDivElement>(null)
@@ -32,7 +32,7 @@ export function SortableList({
     if (source.index === source.initialIndex) {
       const travel = Math.hypot(current.x - initial.x, current.y - initial.y)
       if (event.nativeEvent?.type.startsWith('pointer') && travel < PRESS_TRAVEL) {
-        onPress(String(source.id))
+        onPress?.(String(source.id))
       }
       return
     }

@@ -32,6 +32,8 @@ export interface GroupDef {
   note?: ReactNode
   /** The row the note explains: it shows only while that row does, as it does not in the web client. */
   noteFor?: string
+  /** Draws the group's card from its rows, as a list the user drags into another order does. */
+  card?: (rows: RowDef[]) => ReactNode
 }
 
 /**
