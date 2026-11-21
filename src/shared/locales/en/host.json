@@ -929,10 +929,6 @@
       "apiKey": "DeepSeek API key",
       "gateway": "Custom model provider"
     },
-    "balance": {
-      "recharge": "Recharge balance",
-      "bonus": "Bonus balance"
-    },
     "balanceExpired": "The DeepSeek sign-in has expired. Sign in again in a terminal to see the balance.",
     "mode": {
       "name": "Mode",

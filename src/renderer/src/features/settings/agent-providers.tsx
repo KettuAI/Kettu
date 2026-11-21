@@ -16,7 +16,7 @@ import { useRefresh } from '@renderer/components/refresh'
 import { Dialog, DialogClose } from '@renderer/components/ui/dialog'
 import { toast } from '@renderer/components/ui/toast'
 import { currentLocale } from '@renderer/lib/i18n'
-import { mediumAgo, money } from '@renderer/lib/format'
+import { balanceLabel, mediumAgo, money } from '@renderer/lib/format'
 import { errorMessage } from '@renderer/lib/host'
 import { newestLimits } from '@renderer/lib/plan-readings'
 import { useNow } from '@renderer/lib/use-now'
@@ -454,7 +454,7 @@ export function ProviderBalances({ providers }: { providers: readonly AgentProvi
             key={`${provider.id}-${balance.label}-${index}`}
             text={
               <RowText
-                name={balance.label}
+                name={balanceLabel(balance.label)}
                 description={`${provider.name} · ${t('agents.providers.usage.observed', { ago: mediumAgo(provider.usage!.observedAt, now) })}`}
               />
             }

@@ -168,6 +168,10 @@
     "windowLeft": "{{window}}: {{percent}}% left.",
     "prepaidBalance": "Prepaid balance",
     "extraUsage": "Extra usage",
+    "balance": "Balance",
+    "addOnCredits": "Add-on credits",
+    "rechargeBalance": "Recharge balance",
+    "bonusBalance": "Bonus balance",
     "units": {
       "credits": "credits",
       "premiumRequests": "premium requests"

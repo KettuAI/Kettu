@@ -75,8 +75,8 @@ export async function readAccountBalance(query: AccountBalanceQuery): Promise<Ac
     const data = object(body?.data)
     if (body?.code !== 0 || data?.biz_code !== 0) return failed
     const summary = object(data.biz_data)
-    const recharge = wallets(summary?.normal_wallets, t('dsh.balance.recharge'))
-    const bonus = wallets(summary?.bonus_wallets, t('dsh.balance.bonus'))
+    const recharge = wallets(summary?.normal_wallets, 'Recharge balance')
+    const bonus = wallets(summary?.bonus_wallets, 'Bonus balance')
     if (!recharge || !bonus) return failed
     return {
       usage: {
