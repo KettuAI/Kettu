@@ -9,6 +9,7 @@ import type { UpdateStatus } from '@shared/updates'
 import { islandT, locale } from '../i18n'
 import type { IslandMark, IslandNotice } from './protocol'
 import type { HostState } from './view'
+import { limitLabel } from './windows'
 
 /** What a notice does when clicked: restart into the downloaded update, or open a page. */
 export type NoticeAction = 'restart' | 'updates' | 'usage'
@@ -124,7 +125,7 @@ function limitNotice(
       kind: 'limit',
       marks: [markOf(status)],
       title: status.account?.label || status.name,
-      detail: limit.label,
+      detail: limitLabel(limit),
       meter: {
         percent: reached ? 100 : used,
         reached,

@@ -2,8 +2,16 @@
 
 import i18next from 'i18next'
 import { i18nOptions, type Locale } from '@shared/locale'
+import {
+  planWindow as planWindowEn,
+  planWindowInText as planWindowInTextEn,
+} from '@shared/locales/en/common.json'
 import islandEn from '@shared/locales/en/island.json'
 import en from '@shared/locales/en/main.json'
+import {
+  planWindow as planWindowZhCN,
+  planWindowInText as planWindowInTextZhCN,
+} from '@shared/locales/zh-CN/common.json'
 import islandZhCN from '@shared/locales/zh-CN/island.json'
 import zhCN from '@shared/locales/zh-CN/main.json'
 import { kettuTool as kettuToolEn } from '@shared/locales/en/session.json'
@@ -19,9 +27,20 @@ void i18n.init(
   i18nOptions(
     'en',
     {
-      // Of the thread's words only its names for Kettu's own tools, which the island's lines use.
-      en: { main: en, island: islandEn, session: { kettuTool: kettuToolEn } },
-      'zh-CN': { main: zhCN, island: islandZhCN, session: { kettuTool: kettuToolZhCN } },
+      // Of the interface's words only what the island's lines use: its names for Kettu's own
+      // tools and for plan limit windows.
+      en: {
+        main: en,
+        island: islandEn,
+        session: { kettuTool: kettuToolEn },
+        common: { planWindow: planWindowEn, planWindowInText: planWindowInTextEn },
+      },
+      'zh-CN': {
+        main: zhCN,
+        island: islandZhCN,
+        session: { kettuTool: kettuToolZhCN },
+        common: { planWindow: planWindowZhCN, planWindowInText: planWindowInTextZhCN },
+      },
     },
     'main',
   ),
@@ -33,6 +52,8 @@ export const tEnglish = i18n.getFixedT('en', 'main')
 export const islandT = i18n.getFixedT(null, 'island')
 /** Kettu's own MCP tools by what they do, as the thread names them. */
 export const kettuToolT = i18n.getFixedT(null, 'session', 'kettuTool')
+/** The names of plan limit windows, as the interface words them. */
+export const planWindowT = i18n.getFixedT(null, 'common')
 
 /** The island helper's own words in the current language, flat, as `status.running`. */
 export function islandHelperStrings(): Record<string, string> {
