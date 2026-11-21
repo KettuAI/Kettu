@@ -12,6 +12,7 @@ import {
   ResizablePanel,
   ResizablePanelGroup,
 } from '@renderer/components/ui/resizable'
+import { useToastArea } from '@renderer/components/ui/toast'
 import { TerminalPanel } from '@renderer/features/terminal/terminal-panel'
 import { isSurfacePane } from '@renderer/stores/surface-tabs'
 import { hostOfPath } from '@renderer/lib/host-paths'
@@ -145,10 +146,14 @@ export function SidePanelArea({
   })
   const groupRef = useGroupRef()
   const contentRef = usePanelRef()
+  const contentBox = useRef<HTMLDivElement>(null)
   const paneRef = usePanelRef()
   // The layout before the drag that folds the content, which Restore brings back.
   const settled = useRef<Layout | null>(null)
   const [folded, setFolded] = useState(false)
+  // Toasts centre over the content, clear of the pane's native page; once the pane covers the
+  // area they centre over all of it.
+  useToastArea('content', contentBox, !maximized && !folded)
   // Layout changes made here wait a frame, out of the library's own callback.
   const onLayoutChanged = (next: Layout, meta: LayoutChangedMeta) => {
     if (!contentRef.current?.isCollapsed()) {
@@ -233,6 +238,7 @@ export function SidePanelArea({
       <ResizablePanel
         id="content"
         panelRef={contentRef}
+        elementRef={contentBox}
         minSize={MIN_WIDTH}
         collapsible
         onResize={(size) => setFolded(size.inPixels === 0)}

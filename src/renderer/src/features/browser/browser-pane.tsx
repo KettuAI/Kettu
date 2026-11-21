@@ -132,20 +132,27 @@ export function BrowserPane({
   }, [report])
 
   // An overlay that covers the page takes a still in its place: a web view is a native layer the
-  // renderer cannot draw over.
+  // renderer cannot draw over. A toast stays up while the pane maximizes or restores, so the
+  // check runs again then.
   useEffect(() => {
     if (!sessionId) return
-    if (!overlayOpen) {
+    const thaw = () => {
       if (!useBrowserStore.getState().stills[sessionId]) return
       void window.kettu.browser.thaw(sessionId).finally(() => {
         useBrowserStore.getState().setStill(sessionId, null)
       })
+    }
+    if (!overlayOpen) {
+      thaw()
       return
     }
     let cancelled = false
     const frame = requestAnimationFrame(() => {
       const area = page.current
-      if (!area || !covers(area)) return
+      if (!area || !covers(area)) {
+        thaw()
+        return
+      }
       void window.kettu.browser
         .freeze(sessionId)
         .then((image) => {
@@ -160,7 +167,7 @@ export function BrowserPane({
       cancelled = true
       cancelAnimationFrame(frame)
     }
-  }, [overlayOpen, sessionId])
+  }, [overlayOpen, sessionId, maximized])
 
   // Leaving the pane or its session drops a still that is no longer in front of anything.
   useEffect(() => {

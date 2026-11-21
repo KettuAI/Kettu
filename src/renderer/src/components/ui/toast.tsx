@@ -1,4 +1,11 @@
-import { useEffect, useId, useSyncExternalStore } from 'react'
+import {
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useRef,
+  useSyncExternalStore,
+  type RefObject,
+} from 'react'
 import { Alert02Icon } from '@hugeicons/core-free-icons'
 import { HugeiconsIcon, type IconSvgElement } from '@hugeicons/react'
 import { useTranslation } from 'react-i18next'
@@ -31,9 +38,15 @@ const subscribe = (listener: () => void) => {
 }
 const anyOpen = () => open.size > 0
 
+// As long as the toaster keeps a closed toast on screen while it fades.
+const EXIT_MS = 420
+
+// A closed toast still covers the page while it fades, so the page stays a still until it is gone.
 const onDismiss = (closed: ToastId) => {
-  open.delete(closed)
-  changed()
+  setTimeout(() => {
+    open.delete(closed)
+    changed()
+  }, EXIT_MS)
 }
 
 function track(show: (options: AffectToastOptions) => ToastId, options: AffectToastOptions) {
@@ -149,21 +162,85 @@ export function noticeToast(
   changed()
 }
 
+// What toasts are centred over: the main area, or its part beside the side panel while one shows.
+type ToastSlot = 'main' | 'content'
+const areas: Record<ToastSlot, HTMLElement | null> = { main: null, content: null }
+const areaListeners = new Set<() => void>()
+const subscribeArea = (listener: () => void) => {
+  areaListeners.add(listener)
+  return () => areaListeners.delete(listener)
+}
+const currentArea = () => areas.content ?? areas.main
+
+function setArea(slot: ToastSlot, element: HTMLElement | null) {
+  if (areas[slot] === element) return
+  areas[slot] = element
+  areaListeners.forEach((listener) => listener())
+}
+
+/** Makes the element's box what toasts are centred over while `enabled`. */
+export function useToastArea(
+  slot: ToastSlot,
+  element: RefObject<HTMLElement | null>,
+  enabled = true,
+) {
+  useLayoutEffect(() => {
+    if (!enabled) return
+    setArea(slot, element.current)
+    return () => setArea(slot, null)
+  }, [slot, element, enabled])
+}
+
 /** The toasts' layer, mounted once at the app's root. */
 export function Toaster() {
   const { t } = useTranslation('common')
   const id = useId()
   const shown = useSyncExternalStore(subscribe, anyOpen)
+  const area = useSyncExternalStore(subscribeArea, currentArea)
+  const frame = useRef<HTMLDivElement>(null)
   // A toast can cover the browser pane's native view, as a menu can.
   useEffect(() => {
     useOverlayStore.getState().set(id, shown)
     return () => useOverlayStore.getState().set(id, false)
   }, [id, shown])
+  // The frame stays at the window's top layer, above dialogs, and takes the area's box, which the
+  // toaster centres its stack in.
+  useLayoutEffect(() => {
+    const box = frame.current
+    if (!box) return
+    if (!area) {
+      box.style.inset = '0'
+      box.style.width = box.style.height = ''
+      return
+    }
+    const fit = () => {
+      const { left, top, width, height } = area.getBoundingClientRect()
+      box.style.inset = `${top}px auto auto ${left}px`
+      box.style.width = `${width}px`
+      box.style.height = `${height}px`
+    }
+    fit()
+    const observer = new ResizeObserver(fit)
+    observer.observe(area)
+    window.addEventListener('resize', fit)
+    return () => {
+      observer.disconnect()
+      window.removeEventListener('resize', fit)
+    }
+  }, [area])
   return (
-    <AffectToaster
-      position="bottom-center"
-      label={t('toasts.region')}
-      closeLabel={t('actions.dismiss')}
-    />
+    <div
+      ref={frame}
+      data-overlay-layer={shown ? '' : undefined}
+      className="pointer-events-none fixed z-9999"
+    >
+      <AffectToaster
+        inline
+        position="bottom-center"
+        label={t('toasts.region')}
+        closeLabel={t('actions.dismiss')}
+        className="pointer-events-auto"
+      />
+    </div>
   )
 }
