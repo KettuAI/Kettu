@@ -1810,50 +1810,51 @@ export class AgentHost {
 
   /**
    * Installs a tool a workflow card's Start names, for every agent as the Marketplace installs by
-   * default, or turns on the one Kettu keeps off. The settings are read from their owner first, so
-   * one install never writes over the one before it.
+   * default, or turns on the one Kettu keeps off. The change is an edit of the list its owner
+   * holds, so it never writes over another install made meanwhile.
    */
   private async installMarketTool(tool: SuggestedTool): Promise<void> {
     const { marketplace } = (await this.settingsCall({ kind: 'read' })).file
     if (tool.kind === 'skill') {
       const own = keptTool(marketplace.skills, tool.ref)
       if (own?.on) return
-      let skills: MarketSkill[]
+      let entry: MarketSkill
       if (own) {
-        skills = marketplace.skills.map((s) => (s === own ? { ...s, on: true } : s))
+        entry = { ...own, on: true }
       } else {
         if (!tool.skill) throw notFound(t('workflow.toolGone', { name: tool.title }))
-        const added = await this.marketSkills.add(tool.skill)
-        const entry: MarketSkill = { ...added, agents: 'all', on: true }
-        skills = [...marketplace.skills.filter((s) => s.id !== entry.id), entry]
+        entry = { ...(await this.marketSkills.add(tool.skill)), agents: 'all', on: true }
       }
-      await this.settingsCall({ kind: 'change', patch: { marketplace: { skills } } })
+      await this.settingsCall({
+        kind: 'change',
+        patch: { marketplace: { skillsEdit: { put: [entry] } } },
+      })
       return
     }
     const own = keptTool(marketplace.mcp, tool.ref)
     if (own?.on) return
-    let mcp: MarketServer[]
+    let entry: MarketServer
     if (own) {
-      mcp = marketplace.mcp.map((s) => (s === own ? { ...s, on: true } : s))
+      entry = { ...own, on: true }
     } else {
       const server = tool.server
       if (!server) throw notFound(t('workflow.toolGone', { name: tool.title }))
       const kettu = listingIdOf(server.id) !== null
-      mcp = [
-        ...marketplace.mcp,
-        {
-          id: server.id,
-          name: serverName(kettu ? server.title : server.id, marketplace.mcp),
-          title: server.title,
-          source: kettu ? 'kettu' : 'registry',
-          version: server.version,
-          spec: server.spec,
-          agents: 'all',
-          on: true,
-        },
-      ]
+      entry = {
+        id: server.id,
+        name: serverName(kettu ? server.title : server.id, marketplace.mcp),
+        title: server.title,
+        source: kettu ? 'kettu' : 'registry',
+        version: server.version,
+        spec: server.spec,
+        agents: 'all',
+        on: true,
+      }
     }
-    await this.settingsCall({ kind: 'change', patch: { marketplace: { mcp } } })
+    await this.settingsCall({
+      kind: 'change',
+      patch: { marketplace: { mcpEdit: { put: [entry] } } },
+    })
   }
 
   /** Makes a Marketplace API call through main or the daemon, which hold the access token. */

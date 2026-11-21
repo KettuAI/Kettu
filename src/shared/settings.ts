@@ -304,6 +304,30 @@ export function stepZoom(zoom: ZoomLevel, step: ZoomStep): ZoomLevel {
 }
 
 /**
+ * Changes to a kept list, applied to the list the settings owner holds when the patch arrives:
+ * `put` adds an entry or replaces the one with its id, in place, and `remove` drops ids. Removes
+ * apply first.
+ */
+export interface ListEdit<T> {
+  put?: T[]
+  remove?: string[]
+}
+
+export function applyListEdit<T extends { id: string }>(
+  list: readonly T[],
+  edit: ListEdit<T>,
+): T[] {
+  const removed = new Set(edit.remove)
+  const next = list.filter((item) => !removed.has(item.id))
+  for (const item of edit.put ?? []) {
+    const at = next.findIndex((other) => other.id === item.id)
+    if (at < 0) next.push(item)
+    else next[at] = item
+  }
+  return next
+}
+
+/**
  * A change from the renderer. Sections merge key by key; `proxy` is replaced whole.
  * Executable paths and configuration folders can only be cleared here (`null`); setting one goes
  * through a native dialog in main, so the renderer never sends a path to a program or folder.
@@ -334,7 +358,14 @@ export interface SettingsPatch {
   }
   git?: Partial<SettingsFile['git']>
   mcp?: { kettu: { off: AgentId[] } } // the list is replaced whole
-  marketplace?: { mcp?: MarketServer[]; skills?: MarketSkill[] } // each list is replaced whole
+  // Each list is replaced whole, then its edit is applied; an edit is for a client that must not
+  // overwrite what another changed meanwhile.
+  marketplace?: {
+    mcp?: MarketServer[]
+    skills?: MarketSkill[]
+    mcpEdit?: ListEdit<MarketServer>
+    skillsEdit?: ListEdit<MarketSkill>
+  }
   disabledAgents?: AgentId[] // replaced whole
   startModes?: Partial<Record<AgentId, string | null>> // merged by agent; null clears one
   idleSessions?: Partial<SettingsFile['idleSessions']>

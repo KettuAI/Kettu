@@ -441,6 +441,97 @@ describe('items from the Kettu Marketplace in a patch', () => {
   })
 })
 
+describe('edits to the servers and skills Kettu keeps', () => {
+  const server = (id: string, name = id, over: Record<string, unknown> = {}) => ({
+    id: `kettu:${id.padEnd(10, 'x')}`,
+    name,
+    title: name,
+    source: 'kettu',
+    version: '1.0.0',
+    spec: { type: 'stdio', command: 'npx', args: ['-y', `${name}@1.0.0`], env: [] },
+    agents: 'all',
+    on: true,
+    ...over,
+  })
+  const skill = (id: string, name = id) => ({
+    id: `kettu:${id.padEnd(10, 'x')}`,
+    name,
+    description: 'A skill.',
+    source: 'kettu',
+    origin: `@amigoer/${name}`,
+    version: '1.0.0',
+    agents: 'all',
+    on: true,
+  })
+  const names = (list: { name: string }[]) => list.map((item) => item.name)
+
+  it('adds each server to the list the host holds, not the one its sender read', async () => {
+    const store = await SettingsStore.load(dir)
+    store.update({ marketplace: { mcp: [server('first')] } })
+    // Two installs that began from a list holding only the first server.
+    store.update({ marketplace: { mcpEdit: { put: [server('second')] } } })
+    store.update({ marketplace: { mcpEdit: { put: [server('third')] } } })
+    expect(names(store.get().marketplace.mcp)).toEqual(['first', 'second', 'third'])
+  })
+
+  it('adds each skill to the list the host holds', async () => {
+    const store = await SettingsStore.load(dir)
+    store.update({ marketplace: { skillsEdit: { put: [skill('one')] } } })
+    store.update({ marketplace: { skillsEdit: { put: [skill('two')] } } })
+    expect(names(store.get().marketplace.skills)).toEqual(['one', 'two'])
+  })
+
+  it('replaces an entry in place by its id and removes by id', async () => {
+    const store = await SettingsStore.load(dir)
+    store.update({
+      marketplace: { mcp: [server('first'), server('second'), server('third')] },
+    })
+    store.update({
+      marketplace: { mcpEdit: { put: [server('second', 'second', { on: false })] } },
+    })
+    expect(store.get().marketplace.mcp.map((s) => [s.name, s.on])).toEqual([
+      ['first', true],
+      ['second', false],
+      ['third', true],
+    ])
+    store.update({ marketplace: { mcpEdit: { remove: [server('first').id, 'kettu:gone'] } } })
+    expect(names(store.get().marketplace.mcp)).toEqual(['second', 'third'])
+  })
+
+  it('refuses an edit that repeats another entry’s name and changes nothing', async () => {
+    const store = await SettingsStore.load(dir)
+    store.update({ marketplace: { mcp: [server('first', 'notes')] } })
+    expect(() =>
+      store.update({ marketplace: { mcpEdit: { put: [server('second', 'notes')] } } }),
+    ).toThrow(/repeats/)
+    expect(names(store.get().marketplace.mcp)).toEqual(['notes'])
+    store.update({ marketplace: { skillsEdit: { put: [skill('one', 'greeter')] } } })
+    expect(() =>
+      store.update({ marketplace: { skillsEdit: { put: [skill('two', 'greeter')] } } }),
+    ).toThrow(/repeats/)
+    expect(names(store.get().marketplace.skills)).toEqual(['greeter'])
+  })
+
+  it('still takes a whole list from a client that sends one', async () => {
+    const store = await SettingsStore.load(dir)
+    store.update({ marketplace: { mcp: [server('first'), server('second')] } })
+    store.update({ marketplace: { mcp: [server('third')] } })
+    expect(names(store.get().marketplace.mcp)).toEqual(['third'])
+  })
+
+  it('checks the entries and ids an edit carries', () => {
+    expect(() =>
+      validateSettingsPatch({ marketplace: { mcpEdit: { put: [{ ...server('a'), id: 'x' }] } } }),
+    ).toThrow()
+    expect(() =>
+      validateSettingsPatch({ marketplace: { mcpEdit: { put: [server('a'), server('a')] } } }),
+    ).toThrow(/repeats/)
+    expect(() => validateSettingsPatch({ marketplace: { mcpEdit: { remove: [3] } } })).toThrow()
+    expect(() => validateSettingsPatch({ marketplace: { mcpEdit: { drop: [] } } })).toThrow()
+    expect(() => validateSettingsPatch({ marketplace: { skillsEdit: 'all' } })).toThrow()
+  })
+})
+
 describe('the terminal font', () => {
   it('uses the theme’s code font until a face is named', async () => {
     const store = await SettingsStore.load(dir)
