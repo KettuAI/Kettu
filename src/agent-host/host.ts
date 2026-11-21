@@ -3164,6 +3164,8 @@ export class AgentHost {
       'projects.touch': ({ path }) => projects.touch(projects.match(path)),
       'projects.pin': ({ path, pinned }) =>
         path === null ? projects.pinNoProject(pinned) : projects.pin(projects.match(path), pinned),
+      'projects.move': ({ path, before }) =>
+        projects.move(projects.match(path), before === null ? null : projects.match(before)),
       'projects.noProject': () => projects.noProject(),
       'projects.worktreeSettings': ({ path }) =>
         projects.worktreeSettings(projects.match(path).path),

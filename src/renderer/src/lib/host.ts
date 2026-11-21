@@ -257,7 +257,7 @@ export function toHost(method: string, params: unknown, depth: number): unknown 
   for (const [key, value] of Object.entries(params)) {
     copy[key] =
       typeof value === 'string' &&
-      (key === 'projectPath' || (key === 'path' && isProjectCall(method)))
+      (key === 'projectPath' || ((key === 'path' || key === 'before') && isProjectCall(method)))
         ? hostPath(value)
         : toHost(method, value, depth + 1)
   }

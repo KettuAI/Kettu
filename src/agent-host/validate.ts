@@ -1704,6 +1704,13 @@ export function createValidators(platform: Platform): Validators {
         pinned: flag(o, 'pinned'),
       }
     },
+    'projects.move': (params) => {
+      const o = fields(params)
+      return {
+        path: absolutePath(o, 'path', platform),
+        before: o.before === null ? null : absolutePath(o, 'before', platform),
+      }
+    },
     'projects.noProject': none,
     'projects.worktreeSettings': folder,
     'projects.setWorktreeSettings': (params) => {

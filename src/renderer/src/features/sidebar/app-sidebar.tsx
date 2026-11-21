@@ -58,7 +58,13 @@ import {
   useSessionsStore,
 } from '@renderer/stores/sessions'
 import { listedTasks, pinnedTasks, useTasksStore } from '@renderer/stores/tasks'
-import { openSettings, PINNED_GROUP, showAllRows, useViewStore } from '@renderer/stores/view'
+import {
+  openSettings,
+  PINNED_GROUP,
+  showAllRows,
+  THIS_COMPUTER,
+  useViewStore,
+} from '@renderer/stores/view'
 import { StarCard } from '@renderer/features/github-star/star-prompts'
 import { projectNameHints } from '@renderer/features/session/project-names'
 import { AddProjectButton } from './add-project'
@@ -74,6 +80,7 @@ import { RenameScope } from './rename-scope'
 import { limitRows, rowInSight, ROWS_SHOWN } from './row-limit'
 import { RowEnd } from './session-indicator'
 import { SessionRow } from './session-row'
+import { SortableGroup, SortableList } from './sortable-list'
 import { TaskRow } from './task-row'
 
 /**
@@ -98,10 +105,11 @@ export function SidebarList() {
   const expandedParents = useViewStore((s) => s.expandedParents)
   const others = useOtherHosts()
   const hostFilter = useViewStore((s) => s.hostFilter)
+  const hostOrder = useViewStore((s) => s.hostOrder)
   // With other hosts, the list groups by host; with none, it is as it always was.
   const hosts = useMemo(
-    () => (others.length > 0 ? shownHosts(others, hostFilter) : null),
-    [others, hostFilter],
+    () => (others.length > 0 ? shownHosts(others, hostFilter, hostOrder) : null),
+    [others, hostFilter, hostOrder],
   )
   const away = useMemo(
     () => others.filter((host) => isAway(host.connection)).map((host) => host.id),
@@ -167,15 +175,23 @@ export function SidebarList() {
               away={away}
               onImport={importSessions}
             />
-            {hosts.map((hostId) => (
-              <HostSection
-                key={hostId ?? 'this-computer'}
-                hostId={hostId}
-                projects={projects}
-                stop={stop}
-                onImport={importSessions}
-              />
-            ))}
+            <SortableList
+              className="kettu-side-hosts"
+              onMove={(from, to) => moveHost(hosts, from, to)}
+              onPress={toggleGroup}
+            >
+              {hosts.map((hostId, index) => (
+                <HostSection
+                  key={hostId ?? THIS_COMPUTER}
+                  hostId={hostId}
+                  index={index}
+                  movable={hosts.length > 1}
+                  projects={projects}
+                  stop={stop}
+                  onImport={importSessions}
+                />
+              ))}
+            </SortableList>
           </>
         ) : (
           <>
@@ -191,16 +207,7 @@ export function SidebarList() {
               {!noProjectPinned(noProjects, null) && (
                 <ProjectGroup project={null} stop={stop} onImport={importSessions} />
               )}
-              {projects
-                .filter((project) => project.pinnedAt == null)
-                .map((project) => (
-                  <ProjectGroup
-                    key={project.path}
-                    project={project}
-                    stop={stop}
-                    onImport={importSessions}
-                  />
-                ))}
+              <ProjectList projects={projects} stop={stop} onImport={importSessions} />
             </div>
           </>
         )}
@@ -233,14 +240,74 @@ function noProjectHosts(
   )
 }
 
+/** `hosts` with the one at `from` moved to `to`, kept as this window's order. */
+function moveHost(hosts: readonly (string | null)[], from: number, to: number): void {
+  const order = hosts.map((hostId) => hostId ?? THIS_COMPUTER)
+  const [moved] = order.splice(from, 1)
+  order.splice(to, 0, moved!)
+  useViewStore.setState({ hostOrder: order })
+}
+
+/**
+ * A host's projects outside Pinned, in the order it keeps; a host that keeps one lets them be
+ * dragged within its list, and an older one does not.
+ */
+function ProjectList({
+  projects,
+  stop,
+  onImport,
+  hostId = null,
+  away = false,
+}: {
+  projects: readonly Project[]
+  stop: SidebarTabStop | null
+  onImport: (project: Project) => void
+  hostId?: string | null
+  away?: boolean
+}) {
+  const shown = projects.filter((project) => project.pinnedAt == null)
+  const movable = !away && shown.length > 1 && shown.every((p) => p.order !== undefined)
+  const move = (from: number, to: number) => {
+    const order = shown.map((project) => project.path)
+    const [path] = order.splice(from, 1)
+    order.splice(to, 0, path!)
+    useProjectsStore
+      .getState()
+      .move(path!, order[to + 1] ?? null)
+      .catch((error: unknown) => toast(errorMessage(error), undefined, { tone: 'warning' }))
+  }
+  return (
+    <SortableList onMove={move} onPress={toggleGroup}>
+      {shown.map((project, index) => (
+        <SortableGroup key={project.path} id={project.path} index={index} disabled={!movable}>
+          {(handleRef) => (
+            <ProjectGroup
+              project={project}
+              stop={stop}
+              onImport={onImport}
+              hostId={hostId}
+              away={away}
+              handleRef={handleRef}
+            />
+          )}
+        </SortableGroup>
+      ))}
+    </SortableList>
+  )
+}
+
 /** A host's heading, its No project group and its projects' folders. */
 function HostSection({
   hostId,
+  index,
+  movable,
   projects,
   stop,
   onImport,
 }: {
   hostId: string | null
+  index: number
+  movable: boolean
   projects: readonly Project[]
   stop: SidebarTabStop | null
   onImport: (project: Project) => void
@@ -251,39 +318,52 @@ function HostSection({
   const pinned = useProjectsStore((s) => noProjectPinned(s.noProjects, hostId))
   const key = hostGroup(hostId)
   const open = useViewStore((s) => !s.collapsedProjects[key])
+  const label = useHostLabel(hostId)
   return (
-    <section aria-label={useHostLabel(hostId)} className="ui-as-side__group">
-      <div className="kettu-host-head">
-        <HostHeading hostId={hostId} open={open} stop={stop} onToggle={() => toggleGroup(key)} />
-        {!away && <AddProjectButton hostId={hostId} />}
-      </div>
-      {open && (
+    <SortableGroup
+      id={key}
+      index={index}
+      disabled={!movable}
+      as="section"
+      label={label}
+      className="ui-as-side__group"
+    >
+      {(handleRef) => (
         <>
-          {!pinned && (
-            <ProjectGroup
-              project={null}
-              stop={stop}
-              onImport={onImport}
+          <div className="kettu-host-head">
+            <HostHeading
               hostId={hostId}
-              away={away}
+              open={open}
+              stop={stop}
+              onToggle={() => toggleGroup(key)}
+              handleRef={handleRef}
             />
-          )}
-          {own
-            .filter((project) => project.pinnedAt == null)
-            .map((project) => (
-              <ProjectGroup
-                key={project.path}
-                project={project}
+            {!away && <AddProjectButton hostId={hostId} />}
+          </div>
+          {open && (
+            <>
+              {!pinned && (
+                <ProjectGroup
+                  project={null}
+                  stop={stop}
+                  onImport={onImport}
+                  hostId={hostId}
+                  away={away}
+                />
+              )}
+              <ProjectList
+                projects={own}
                 stop={stop}
                 onImport={onImport}
                 hostId={hostId}
                 away={away}
               />
-            ))}
-          {own.length === 0 && !scratch && <HostEmpty />}
+              {own.length === 0 && !scratch && <HostEmpty />}
+            </>
+          )}
         </>
       )}
-    </section>
+    </SortableGroup>
   )
 }
 
@@ -298,6 +378,7 @@ function ProjectGroup({
   hostId = null,
   away = false,
   showHost = false,
+  handleRef,
 }: {
   project: Project | null
   stop: SidebarTabStop | null
@@ -305,6 +386,8 @@ function ProjectGroup({
   hostId?: string | null
   away?: boolean
   showHost?: boolean
+  /** Where a drag picks the folder up, when its list can be reordered. */
+  handleRef?: (element: Element | null) => void
 }) {
   const key = project?.path ?? noProjectGroup(hostId)
   const { t } = useTranslation('sidebar')
@@ -361,13 +444,19 @@ function ProjectGroup({
 
   const row = (
     <button
+      ref={handleRef}
       type="button"
       data-sidebar-row=""
       data-sidebar-group={key}
       tabIndex={groupStop ? 0 : -1}
       aria-expanded={open}
-      onClick={toggle}
+      onClick={(event) => {
+        // A drag that ends on the row clicks it; its list folds it then, if it was a press.
+        if (!event.defaultPrevented) toggle()
+      }}
       onKeyDown={(event) => {
+        // A row being dragged from the keyboard moves with the arrows instead.
+        if (event.defaultPrevented) return
         // The context menu key opens the More menu, the row's menu for the keyboard.
         if (hasMenu && (event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10'))) {
           event.preventDefault()
@@ -689,8 +778,9 @@ function PinnedGroup({
 
 /** The list is one Tab stop; the arrow keys move between rows. */
 function moveRowFocus(event: KeyboardEvent<HTMLDivElement>): void {
-  // A row being renamed is a text field, which keeps its own Home and End.
-  if (event.target instanceof HTMLInputElement) return
+  // A row being renamed is a text field, which keeps its own Home and End; a row being dragged
+  // from the keyboard takes the arrows.
+  if (event.target instanceof HTMLInputElement || event.defaultPrevented) return
   if (
     event.key !== 'ArrowDown' &&
     event.key !== 'ArrowUp' &&

@@ -116,11 +116,14 @@ export function HostHeading({
   open,
   stop,
   onToggle,
+  handleRef,
 }: {
   hostId: string | null
   open: boolean
   stop: SidebarTabStop | null
   onToggle: () => void
+  /** Where a drag picks the host's group up, with other hosts to move it among. */
+  handleRef?: (element: Element | null) => void
 }) {
   const host = useOtherHost(hostId)
   const name = useHostLabel(hostId)
@@ -129,12 +132,17 @@ export function HostHeading({
   const state = host ? <HostStateText host={host} /> : null
   return (
     <button
+      ref={handleRef}
       type="button"
       data-sidebar-row=""
       tabIndex={stop?.kind === 'group' && stop.key === hostGroup(hostId) ? 0 : -1}
       aria-expanded={open}
-      onClick={onToggle}
+      onClick={(event) => {
+        // A drag that ends on the heading clicks it; its list folds it then, if it was a press.
+        if (!event.defaultPrevented) onToggle()
+      }}
       onKeyDown={(event) => {
+        if (event.defaultPrevented) return
         if (event.key === 'ArrowRight' && !open) onToggle()
         else if (event.key === 'ArrowLeft' && open) onToggle()
       }}

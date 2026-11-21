@@ -52,15 +52,25 @@ export class Projects {
   }
 
   list(): Project[] {
-    return [...this.records]
-      .sort((a, b) => b.lastOpenedAt - a.lastOpenedAt)
-      .map((record) => ({
-        path: record.path,
-        name: record.name,
-        missing: this.missing.get(this.key(record.path)) ?? false,
-        lastOpenedAt: record.lastOpenedAt,
-        pinnedAt: record.pinnedAt ?? null,
-      }))
+    return this.ordered().map((record) => ({
+      path: record.path,
+      name: record.name,
+      missing: this.missing.get(this.key(record.path)) ?? false,
+      lastOpenedAt: record.lastOpenedAt,
+      pinnedAt: record.pinnedAt ?? null,
+      order: record.order ?? null,
+    }))
+  }
+
+  /** The user's order once they moved a project, the latest opened first until then. */
+  private ordered(): ProjectRecord[] {
+    if (!this.records.some((record) => record.order !== undefined)) {
+      return [...this.records].sort((a, b) => b.lastOpenedAt - a.lastOpenedAt)
+    }
+    // A record without a place, such as one an older version added, goes after the others.
+    return [...this.records].sort(
+      (a, b) => (a.order ?? Infinity) - (b.order ?? Infinity) || a.addedAt - b.addedAt,
+    )
   }
 
   /** The No project group, which holds the sessions started without a project. */
@@ -104,11 +114,14 @@ export class Projects {
       this.missing.set(this.key(existing.path), false)
     } else {
       const now = this.now()
+      const places = this.records.flatMap((record) => record.order ?? [])
       this.records.push({
         path: canonical,
         name: folderName(canonical, this.deps.platform),
         addedAt: now,
         lastOpenedAt: now,
+        // Once the user has an order, a new project goes to its end.
+        ...(places.length > 0 ? { order: Math.max(...places) + 1 } : {}),
       })
       this.missing.set(this.key(canonical), false)
     }
@@ -163,6 +176,15 @@ export class Projects {
     if (pinned === (record.pinnedAt !== undefined)) return
     if (pinned) record.pinnedAt = this.now()
     else delete record.pinnedAt
+    this.changed()
+  }
+
+  /** Puts a project just before `before`, or last with null; every project then has a place. */
+  move(record: ProjectRecord, before: ProjectRecord | null): void {
+    if (before === record) throw invalidParams('A project cannot move before itself')
+    const ordered = this.ordered().filter((item) => item !== record)
+    ordered.splice(before ? ordered.indexOf(before) : ordered.length, 0, record)
+    for (const [index, item] of ordered.entries()) item.order = index
     this.changed()
   }
 

@@ -668,6 +668,9 @@ export interface Project {
   missing: boolean // the folder no longer exists
   lastOpenedAt: number
   pinnedAt?: number | null // absent on hosts that do not support project pins
+  // Its place in the host's order: null until the user moves a project there, absent on hosts
+  // that cannot reorder projects. `projects.list` already gives them in this order.
+  order?: number | null
 }
 
 /** The sidebar's No project group, which holds the sessions started without a project. */
@@ -1112,6 +1115,8 @@ export interface HostContract {
   'projects.touch': { params: { path: string }; result: void }
   // A null path pins the No project group.
   'projects.pin': { params: { path: string | null; pinned: boolean }; result: void }
+  // Puts a project just before another of the same host, or last with a null `before`.
+  'projects.move': { params: { path: string; before: string | null }; result: void }
   'projects.noProject': { params: void; result: NoProject }
   // How the project names and prepares its sessions' worktrees.
   'projects.worktreeSettings': { params: { path: string }; result: ProjectWorktreeSettings }
@@ -1939,6 +1944,7 @@ export const HOST_METHODS = [
   'projects.remove',
   'projects.touch',
   'projects.pin',
+  'projects.move',
   'projects.noProject',
   'projects.worktreeSettings',
   'projects.setWorktreeSettings',
