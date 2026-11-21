@@ -713,6 +713,31 @@
       "limitUsed": "{{percent}}% of {{limit}} limit",
       "limitLeft": "{{percent}}% of {{limit}} limit left",
       "limitReached": "{{limit}} limit reached",
+      "limitUsedUp": "{{limit}} limit reached",
+      "limitReachedResets": "{{limit}} limit reached · resets {{time}}",
+      "balanceUsedUp": "Balance used up",
+      "limit": {
+        "used": "{{limit}} limit {{percent}}% used",
+        "left": "{{limit}} limit {{percent}}% left"
+      },
+      "tag": {
+        "unsupported": "Unsupported",
+        "update": "Update",
+        "updating": "Updating…",
+        "fix": "Fix",
+        "failed": "Failed",
+        "signIn": "Sign in",
+        "installing": "Installing…",
+        "setsUp": "Sets up",
+        "noBalance": "No balance",
+        "usedUp": "{{window}} used up",
+        "resets": "{{window}} · {{time}}",
+        "used": "{{window}} {{percent}}%",
+        "left": "{{window}} {{percent}}% left",
+        "weeklyOf": "{{model}} 7d",
+        "fiveHourOf": "{{model}} 5h"
+      },
+      "rowState": "{{name}}, {{state}}",
       "manage": "Manage agents…"
     },
     "modelMenu": {

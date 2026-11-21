@@ -695,6 +695,31 @@
       "limitUsed": "已用 {{limit}}限额的 {{percent}}%",
       "limitLeft": "{{limit}}限额剩余 {{percent}}%",
       "limitReached": "已达 {{limit}}限额",
+      "limitUsedUp": "{{limit}}限额已用完",
+      "limitReachedResets": "{{limit}}限额已用完 · {{time}} 重置",
+      "balanceUsedUp": "余额已用完",
+      "limit": {
+        "used": "{{limit}}限额已用 {{percent}}%",
+        "left": "{{limit}}限额剩 {{percent}}%"
+      },
+      "tag": {
+        "unsupported": "版本不支持",
+        "update": "更新",
+        "updating": "正在更新…",
+        "fix": "解决",
+        "failed": "失败",
+        "signIn": "登录",
+        "installing": "正在安装…",
+        "setsUp": "待配置",
+        "noBalance": "余额用完",
+        "usedUp": "{{window}}已用完",
+        "resets": "{{window}} · {{time}}",
+        "used": "{{window}} {{percent}}%",
+        "left": "{{window}}剩 {{percent}}%",
+        "weeklyOf": "{{model}} 7 天",
+        "fiveHourOf": "{{model}} 5 小时"
+      },
+      "rowState": "{{name}}，{{state}}",
       "manage": "管理智能体…"
     },
     "modelMenu": {

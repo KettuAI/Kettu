@@ -41,6 +41,36 @@ export function limitsForModel(
   })
 }
 
+/** From this share used, a window is nearly used up. */
+export const NEAR_PERCENT = 90
+
+/**
+ * The one window that tells whether an agent would stop a session on `model`: the used-up one that
+ * resets last, since that is when the agent can run again, else the fullest at 90% or more, the
+ * later reset on a tie. Only windows that hold the model back count, and a window past its reset
+ * is skipped, since its reading is from before it. A window with no known reset is taken as the
+ * last to reset. Null when none is used up or nearly.
+ */
+export function holdingLimit(
+  limits: readonly PlanLimit[],
+  model: ConfigOption | undefined,
+  now: number,
+): { limit: PlanLimit; reached: boolean } | null {
+  const current = limitsForModel(limits, model).filter(
+    (limit) => limit.resetsAt === null || limit.resetsAt > now,
+  )
+  const resets = (limit: PlanLimit): number => limit.resetsAt ?? Infinity
+  const reached = current
+    .filter((limit) => limit.state === 'reached')
+    .sort((a, b) => resets(b) - resets(a))[0]
+  if (reached) return { limit: reached, reached: true }
+  const used = (limit: PlanLimit): number => Math.round(limit.usedPercent ?? -1)
+  const near = current
+    .filter((limit) => used(limit) >= NEAR_PERCENT)
+    .sort((a, b) => used(b) - used(a) || resets(b) - resets(a))[0]
+  return near ? { limit: near, reached: false } : null
+}
+
 const DAY = 24 * 60 * 60_000
 
 /** When a window resets: the clock time today, with the weekday within six days, else the date. */
