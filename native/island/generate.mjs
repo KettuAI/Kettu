@@ -81,6 +81,42 @@ async function loadMarks(root) {
   return { marks: load(join(dir, 'index.ts')).AGENT_MARKS, requireFromRoot }
 }
 
+/**
+ * Path data with every token apart. The SVG grammar lets an arc's two flags run into the numbers
+ * around them, as in `0 012.285`, which CoreSVG reads as one number, dropping the rest of the path.
+ */
+function separateArcFlags(d) {
+  const command = /[\s,]*([A-Za-z])/y
+  const number = /[\s,]*([+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?)/y
+  const flag = /[\s,]*([01])/y
+  const out = []
+  let at = 0
+  let arc = false
+  let index = 0
+  while (at < d.length) {
+    command.lastIndex = at
+    const c = command.exec(d)
+    if (c) {
+      out.push(c[1])
+      arc = c[1] === 'A' || c[1] === 'a'
+      index = 0
+      at = command.lastIndex
+      continue
+    }
+    const token = arc && (index % 7 === 3 || index % 7 === 4) ? flag : number
+    token.lastIndex = at
+    const m = token.exec(d)
+    if (!m) {
+      if (/^[\s,]*$/.test(d.slice(at))) break
+      throw new Error(`Cannot read path data at ${at}: ${d.slice(at, at + 24)}`)
+    }
+    out.push(m[1])
+    index += 1
+    at = token.lastIndex
+  }
+  return out.join(' ')
+}
+
 /** Every harness's mark as a standalone SVG document, keyed by harness id. */
 export async function renderMarks(root) {
   const tokens = darkTokens(root)
@@ -95,6 +131,9 @@ export async function renderMarks(root) {
         return value
       })
       .replaceAll('currentColor', TEXT_COLOR)
+      .replace(/ d="([^"]*)"/g, (whole, d) =>
+        /[Aa]/.test(d) ? ` d="${separateArcFlags(d)}"` : whole,
+      )
   const out = {}
   for (const [harness, { viewBox, Body }] of Object.entries(marks)) {
     const markup = renderToStaticMarkup(
