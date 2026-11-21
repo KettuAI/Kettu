@@ -46,7 +46,7 @@ struct Pop: Equatable {
 enum Fact: Equatable {
   /// How many sessions of its group.
   case count(Int)
-  case plan(done: Int, total: Int)
+  case plan(done: Int, step: Int, total: Int)
   /// The minutes stuck, or the day a used-up limit resets.
   case word(String)
 }
@@ -359,7 +359,7 @@ final class IslandModel: ObservableObject {
       let signal: Signal =
         lead.status == "starting" ? .running(.think) : .running(TurnDots.Pattern(phase: lead.phase))
       let fact: Fact? =
-        lead.plan.map { .plan(done: $0.done, total: $0.total) } ?? counted(moving.count)
+        lead.plan.map { .plan(done: $0.done, step: $0.step, total: $0.total) } ?? counted(moving.count)
       return Collapsed(agents: agents(moving), signal: signal, fact: fact, title: title(lead))
     }
     let done = unseen.filter { $0.status == "unread" }

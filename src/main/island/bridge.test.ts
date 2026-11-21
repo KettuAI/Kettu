@@ -354,6 +354,26 @@ describe('changes', () => {
     ])
   })
 
+  it('names the plan step a row is on, as the plan chip does', async () => {
+    const plan = (done: number, current: { index: number; text: string } | null) => ({
+      done,
+      total: 4,
+      current,
+    })
+    const s = setup([
+      summary('first', { status: 'running', plan: plan(0, { index: 0, text: 'Read' }) }),
+      summary('between', { status: 'running', plan: plan(1, null) }),
+      summary('all', { status: 'running', plan: plan(4, null) }),
+    ])
+    await started(s)
+    const rows = s.helper().of('view').at(-1)!.rows
+    expect(rows.map((row) => [row.sessionId, row.plan?.done, row.plan?.step])).toEqual([
+      ['first', 0, 1],
+      ['between', 1, 2],
+      ['all', 4, 4],
+    ])
+  })
+
   it('sends nothing when nothing it shows changed', async () => {
     const s = setup([summary('s1')])
     await started(s)

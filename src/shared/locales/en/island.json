@@ -21,7 +21,7 @@
     },
     "for": "for {{time}}",
     "waited": "Waiting {{time}}",
-    "plan": "{{done}} of {{total}}",
+    "plan": "{{step}} of {{total}}",
     "offline": "Offline",
     "answerInKettu": "Answer in Kettu",
     "answered": "Answered",

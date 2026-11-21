@@ -1,7 +1,7 @@
 import Foundation
 
 /// The protocol version this helper speaks; main's hello names its own.
-let islandProtocol = 3
+let islandProtocol = 4
 
 /// The longest line either side sends, in bytes, the newline excluded.
 let maxLineBytes = 1024 * 1024
@@ -27,6 +27,8 @@ struct IslandAgent: Codable, Equatable {
 struct IslandPlan: Codable, Equatable {
   let done: Int
   let total: Int
+  /// The step it is on, from 1, as the session's plan chip counts it.
+  let step: Int
   let current: String?
 }
 

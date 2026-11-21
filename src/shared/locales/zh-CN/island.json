@@ -21,7 +21,7 @@
     },
     "for": "已 {{time}}",
     "waited": "已等 {{time}}",
-    "plan": "{{done}}/{{total}}",
+    "plan": "{{step}}/{{total}}",
     "offline": "离线",
     "answerInKettu": "在 Kettu 中回答",
     "answered": "已回答",
