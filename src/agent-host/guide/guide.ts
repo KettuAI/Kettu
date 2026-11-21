@@ -80,28 +80,17 @@ export function kettuSkills(flags: GuideFlags): KettuSkill[] {
 }
 
 /**
- * The folder a skill's text is kept in, named for that text, so an agent that lists a folder once
- * finds a new one when the text changes.
+ * The folder a set of skills is kept in, named for their texts, so an agent that lists a folder
+ * once finds a new one when a text changes. It carries no skill's name: Codex lists each skill as
+ * `<root>/<name>/SKILL.md`, and a root that repeats the name was read one level short.
  */
-export function skillFolderName(skill: KettuSkill): string {
+export function skillSetName(skills: readonly KettuSkill[]): string {
   const hash = createHash('sha256')
-  hash.update(skill.text)
-  for (const file of skill.files) hash.update(`\0${file.name}\0${file.text}`)
-  return `${skill.name}-${hash.digest('hex').slice(0, 10)}`
-}
-
-/** Every text a skill can have, whatever is on, by the folder it is kept in. */
-export function allSkillFolders(): Map<string, KettuSkill> {
-  const folders = new Map<string, KettuSkill>()
-  for (const computer of [false, true]) {
-    for (const market of [false, true]) {
-      for (const suggest of [false, true]) {
-        const flags = { computer, market, suggest, memory: false }
-        for (const skill of kettuSkills(flags)) folders.set(skillFolderName(skill), skill)
-      }
-    }
+  for (const skill of skills) {
+    hash.update(`\0${skill.name}\0${skill.text}`)
+    for (const file of skill.files) hash.update(`\0${file.name}\0${file.text}`)
   }
-  return folders
+  return hash.digest('hex').slice(0, 12)
 }
 
 /** The topics read_kettu_guide answers while these features are on. */

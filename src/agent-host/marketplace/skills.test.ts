@@ -215,7 +215,12 @@ describe("Kettu's own skills", () => {
     'kettu-settings',
   ]
 
-  function withOwn(agents: AgentId[], off: AgentId[] = [], kept: readonly MarketSkill[] = []) {
+  function withOwn(
+    agents: AgentId[],
+    off: AgentId[] = [],
+    kept: readonly MarketSkill[] = [],
+    on: () => GuideFlags = () => flags,
+  ) {
     return new MarketSkillsService({
       userDataPath: root,
       file: skillsCatalogFile(root, log),
@@ -229,7 +234,7 @@ describe("Kettu's own skills", () => {
       kettu: () => Promise.reject(new Error('not in this test')),
       repositories: REPOSITORIES,
       fetch: github({}),
-      ownSkills: () => flags,
+      ownSkills: on,
       kettuOn: (agentId) => !off.includes(agentId),
     })
   }
@@ -237,17 +242,26 @@ describe("Kettu's own skills", () => {
   /** The skills under roots that each hold skills, as an agent finds them. */
   async function found(roots: readonly string[]): Promise<string[]> {
     const names = await Promise.all(roots.map((dir) => readdir(dir)))
-    return names.flat()
+    return names.flat().sort()
   }
 
-  it("go to Codex and OpenCode as skill folders, only for a session that reaches Kettu's server", async () => {
+  const own = () => path.join(root, 'marketplace', 'kettu-skills')
+
+  it("go to Codex and OpenCode as one skill folder, only for a session that reaches Kettu's server", async () => {
     const skills = withOwn(['codex', 'opencode'])
     await skills.sync()
     const codex = await skills.sessionOptions('codex', true)
-    expect(await found(codex.skillRoots ?? [])).toEqual(handed)
+    expect(codex.skillRoots).toHaveLength(1)
+    expect(await found(codex.skillRoots ?? [])).toEqual([...handed].sort())
+    // Codex lists `<root>/<name>/SKILL.md`; a root named for the skill was read one level short.
+    expect(path.basename(codex.skillRoots![0]!)).not.toMatch(/kettu/)
+    for (const name of handed) {
+      const text = await readFile(path.join(codex.skillRoots![0]!, name, 'SKILL.md'), 'utf8')
+      expect(text).toContain(`name: ${name}`)
+    }
     expect(await skills.sessionOptions('codex', false)).toEqual({ skillRoots: [] })
     const config = JSON.parse(skills.launchEnv('opencode', {}).OPENCODE_CONFIG_CONTENT ?? '{}')
-    expect(await found(config.skills)).toEqual(handed)
+    expect(config.skills).toEqual(codex.skillRoots)
     const off = withOwn(['opencode'], ['opencode'])
     expect(off.launchEnv('opencode', {}).OPENCODE_CONFIG_CONTENT).toBeUndefined()
   })
@@ -291,5 +305,35 @@ describe("Kettu's own skills", () => {
     expect(await skills.sessionOptions('gemini', true)).toEqual({})
     expect(skills.takesSkills('gemini')).toBe(false)
     expect(skills.launchEnv('gemini', {})).toEqual({})
+  })
+
+  it('leave on disk only the folder of the features that are on, after an update', async () => {
+    const stale = path.join(own(), 'kettu-workflows-0123456789', 'kettu-workflows')
+    await mkdir(stale, { recursive: true })
+    await writeFile(path.join(stale, 'SKILL.md'), skillMd('kettu-workflows'))
+    await mkdir(path.join(own(), '.partial-left-by-a-crash'), { recursive: true })
+    const skills = withOwn(['codex'])
+    await skills.sync()
+    const [current] = (await skills.sessionOptions('codex', true)).skillRoots!
+    expect(await readdir(own())).toEqual([path.basename(current!)])
+    expect(await readdir(current!)).toHaveLength(handed.length)
+  })
+
+  it('keep a folder an agent was handed until the next start, and write no other features', async () => {
+    let now: GuideFlags = flags
+    const skills = withOwn(['codex'], [], [], () => now)
+    await skills.sync()
+    const [before] = (await skills.sessionOptions('codex', true)).skillRoots!
+    now = { ...flags, suggest: false }
+    await skills.sync()
+    const [after] = (await skills.sessionOptions('codex', true)).skillRoots!
+    expect(after).not.toBe(before)
+    expect((await readdir(own())).sort()).toEqual(
+      [before, after].map((p) => path.basename(p!)).sort(),
+    )
+    const text = await readFile(path.join(after!, 'kettu-workflows', 'SKILL.md'), 'utf8')
+    expect(text).not.toContain('suggest_workflow')
+    await withOwn(['codex'], [], [], () => now).sync()
+    expect(await readdir(own())).toEqual([path.basename(after!)])
   })
 })
