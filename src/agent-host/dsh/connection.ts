@@ -62,7 +62,7 @@ import type {
   SubagentFinishedNotification,
   SubagentStartedNotification,
 } from './protocol'
-import { credentialsStamp, dshHome, readProvider, type Provider } from './credentials'
+import { credentialsStamp, dshHome, readProvider, routeAccount, type Provider } from './credentials'
 import { listingRows, readListing, type ListedModel } from './listing'
 import { NO_ROUTES, readRoutes, type Routes } from './routes'
 
@@ -557,13 +557,11 @@ export class DshConnection implements AgentConnection {
     if (kind === null || kind === this.reported) return
     this.reported = kind
     this.hooks.account(
-      kind === 'deepseek-account'
-        ? { kind: 'account', label: t('dsh.account.account'), email: null }
-        : kind === 'deepseek-official'
-          ? { kind: 'api_key', label: t('dsh.account.apiKey'), email: null }
-          : kind === 'gateway'
-            ? { kind: 'gateway', label: t('dsh.account.gateway'), email: null }
-            : { kind: 'none', label: '', email: null },
+      kind === 'gateway'
+        ? { kind: 'gateway', label: t('dsh.account.gateway'), email: null }
+        : kind === 'none'
+          ? { kind: 'none', label: '', email: null }
+          : routeAccount(kind),
     )
   }
 

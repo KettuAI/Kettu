@@ -5,7 +5,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { parse } from 'yaml'
-import { clearApiKey, readApiKey, readProvider, writeApiKey } from './credentials'
+import { clearApiKey, readAccountToken, readApiKey, readProvider, writeApiKey } from './credentials'
 
 let home: string
 const file = () => path.join(home, '.credentials.yaml')
@@ -75,5 +75,34 @@ describe('dsh credentials', () => {
     )
     expect(await readProvider(env)).toBe('deepseek-account')
     expect(await readApiKey(env)).toBe('sk-x')
+  })
+
+  it('reads the account token only when the DeepSeek platform issued it', async () => {
+    const env = { DSH_HOME: home }
+    const grant = (payload: string) =>
+      writeFile(
+        file(),
+        [
+          'version: 1',
+          'records:',
+          '  deepseek-account-platform/default:',
+          '    kind: grant',
+          '    payload:',
+          payload,
+          '',
+        ].join('\n'),
+      )
+    expect(await readAccountToken(env)).toBeNull()
+    await grant('      token: tok\n      issuer: https://platform.deepseek.com')
+    expect(await readAccountToken(env)).toBe('tok')
+    // Anywhere else would hand the token to a host other than the one it is sent to.
+    await grant('      token: tok\n      issuer: https://platform.deepseek.com.example.net')
+    expect(await readAccountToken(env)).toBeNull()
+    await grant('      token: tok\n      issuer: http://platform.deepseek.com')
+    expect(await readAccountToken(env)).toBeNull()
+    await grant('      token: tok')
+    expect(await readAccountToken(env)).toBeNull()
+    await grant('      token: ""\n      issuer: https://platform.deepseek.com')
+    expect(await readAccountToken(env)).toBeNull()
   })
 })

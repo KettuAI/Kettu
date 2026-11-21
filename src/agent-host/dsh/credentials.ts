@@ -6,6 +6,7 @@ import { chmod, mkdir, readFile, rename, stat, writeFile } from 'node:fs/promise
 import os from 'node:os'
 import path from 'node:path'
 import { isMap, parseDocument } from 'yaml'
+import type { AgentAccount } from '@shared/agent-host'
 import type { Env } from '../find-command'
 import { t } from '../i18n'
 
@@ -13,6 +14,8 @@ export const API_KEY = 'DEEPSEEK_API_KEY'
 const FILE = '.credentials.yaml'
 /** The record dsh's DeepSeek account sign-in stores its grant under. */
 const ACCOUNT_RECORD = 'deepseek-account-platform/default'
+/** DeepSeek's platform, which issues the account sign-in and answers its balance. */
+export const ACCOUNT_ORIGIN = 'https://platform.deepseek.com'
 
 export type Provider = 'deepseek-account' | 'deepseek-official'
 
@@ -72,6 +75,31 @@ export async function credentialsStamp(env: Env): Promise<number> {
     (stats) => stats.mtimeMs,
     () => 0,
   )
+}
+
+/**
+ * The account sign-in's token, read for the one request that shows its balance and never kept.
+ * Only a grant DeepSeek's own platform issued is read, since that platform is the only place the
+ * token is sent; dsh itself drops a grant whose issuer is not its platform.
+ */
+export async function readAccountToken(env: Env): Promise<string | null> {
+  const { records } = sections(await readText(path.join(dshHome(env), FILE)))
+  const record = records[ACCOUNT_RECORD]
+  const payload =
+    typeof record === 'object' && record !== null
+      ? (record as { payload?: unknown }).payload
+      : undefined
+  if (typeof payload !== 'object' || payload === null) return null
+  const { token, issuer } = payload as { token?: unknown; issuer?: unknown }
+  if (issuer !== ACCOUNT_ORIGIN || typeof token !== 'string' || token === '') return null
+  return token
+}
+
+/** What Settings shows for the route the agent signs in on. */
+export function routeAccount(provider: Provider): AgentAccount {
+  return provider === 'deepseek-account'
+    ? { kind: 'account', label: t('dsh.account.account'), email: null }
+    : { kind: 'api_key', label: t('dsh.account.apiKey'), email: null }
 }
 
 /** The key the file holds, read for the one request that shows its balance and never kept. */
