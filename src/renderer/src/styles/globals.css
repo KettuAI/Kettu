@@ -1705,11 +1705,13 @@
   color: var(--danger);
   font-size: 12px;
 }
-/* An SVG or a diagram, bare in the prose at its own size; its actions show at its corner. */
+/* An SVG or a diagram, bare in the prose at its own size, centered in the column when narrower;
+   its actions show at its corner. */
 .block-picture {
   position: relative;
   width: fit-content;
   max-width: 100%;
+  margin-inline: auto;
   & > img {
     display: block;
     max-width: 100%;
