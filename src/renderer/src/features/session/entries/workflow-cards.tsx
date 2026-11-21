@@ -11,6 +11,8 @@ import {
 import type { AgentId, ToolEntry } from '@shared/thread'
 import { AgentMark } from '@renderer/components/agents/agent-mark'
 import { Glyph } from '@renderer/features/shell/glyph'
+import { outcomeTitle } from '@renderer/features/tasks/model'
+import { useTaskView } from '@renderer/features/tasks/use-task'
 import { cn } from '@renderer/lib/utils'
 import { optionsOn, useAgentOptionsStore } from '@renderer/stores/agent-options'
 import { agentName } from '@renderer/stores/agents'
@@ -180,11 +182,15 @@ function ReportCard({
   const { t } = useTranslation('session')
   const { task } = useCaller(sessionId)
   const nameOf = useStepNames(task)
+  const { view } = useTaskView(task?.taskId ?? '', task !== null)
+  // Reported by the file's own name, shown in the language of the interface.
+  const outcome =
+    call.outcome && task ? outcomeTitle(view?.workflow, task.stepId, call.outcome) : call.outcome
   const label = (line: CheckLine<ReportCheck>): string => {
     if (!line.ok && line.detail) return line.detail
     if (line.check === 'outcome') {
-      return call.outcome
-        ? t('workflow.check.lines.report.outcome', { outcome: call.outcome })
+      return outcome
+        ? t('workflow.check.lines.report.outcome', { outcome })
         : t('workflow.check.lines.report.outcomePlain')
     }
     return KNOWN_REPORT.has(line.check)
@@ -195,11 +201,7 @@ function ReportCard({
     <CardShell tone={call.accepted ? 'good' : 'bad'}>
       <CardHead
         icon={WORKFLOW_ICON}
-        title={
-          call.outcome
-            ? t('workflow.check.report', { outcome: call.outcome })
-            : t('workflow.check.reportPlain')
-        }
+        title={outcome ? t('workflow.check.report', { outcome }) : t('workflow.check.reportPlain')}
         badge={call.accepted}
       />
       <CheckList

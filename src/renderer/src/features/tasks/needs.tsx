@@ -23,7 +23,7 @@ import { agentName } from '@renderer/stores/agents'
 import { useSessionsStore } from '@renderer/stores/sessions'
 import { useTasksStore } from '@renderer/stores/tasks'
 import { openSession } from '@renderer/stores/view'
-import { blockedText, needKey, nextAfter, stepTitle, stuckText } from './model'
+import { blockedText, needKey, nextAfter, outcomeTitle, stepTitle, stuckText } from './model'
 import { PinEditor } from './pin-editor'
 import { DocumentChip } from './timeline'
 
@@ -94,7 +94,10 @@ function ReviewCard({ view, roundId }: { view: TaskView; roundId: string }) {
   const agent = round.by ? agentName(round.by.agentId, hostId) : t('picked.person')
   const comments = threads?.filter((thread) => thread.resolvedAt === null).length ?? 0
   const next = nextAfter(view, round)
-  const outcome = round.outcome ?? t('state.done')
+  const outcome =
+    round.outcome === null
+      ? t('state.done')
+      : outcomeTitle(view.workflow, round.stepId, round.outcome)
   const answer = (approve: boolean) =>
     run(() =>
       host('tasks.review', {
@@ -212,7 +215,7 @@ function PersonCard({ view, roundId }: { view: TaskView; roundId: string }) {
             aria-busy={busy && chosen === outcome.name}
             onClick={() => answer(outcome.name)}
           >
-            {outcome.name}
+            {outcomeTitle(view.workflow, step.id, outcome.name)}
           </Button>
         ))}
       </div>

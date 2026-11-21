@@ -56,6 +56,7 @@ import {
 import {
   latestRound,
   modelTextOf,
+  outcomeTitle,
   pickedByText,
   pickLine,
   stepTitle,
@@ -447,7 +448,7 @@ function FlowArrow({ data }: EdgeProps) {
   // Only the lanes are named; a forward arrow's gap is too short for words.
   const lane = edge.back || (edge.to === 'end:dropped' && edge.points.length > 4)
   const arrow = arrowsOf(view, edge)[0]
-  const name = edge.outcomes.join(t('or'))
+  const name = edge.outcomes.map((o) => outcomeTitle(view.workflow, edge.from, o)).join(t('or'))
   const text = !lane
     ? null
     : edge.back
@@ -606,7 +607,7 @@ function StepCard({
         ? t('flow.waitingOn', { steps: on.join(t('and')) })
         : null
       : round?.outcome
-        ? t('flow.reported', { outcome: round.outcome })
+        ? t('flow.reported', { outcome: outcomeTitle(view.workflow, facts.id, round.outcome) })
         : facts.reviews.length > 0
           ? t('flow.reviews', {
               steps: facts.reviews.map((id) => stepTitle(view.workflow, id)).join(t('and')),

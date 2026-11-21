@@ -272,6 +272,34 @@ function readStep(value: unknown, index: number, p: Problems): WorkflowStep | nu
   return { id, name, prompt, by, handIn, outcomes, youReview, hint, reviewOf, tools }
 }
 
+/** A locale's outcome names: step ids to each outcome's name in the file and its translation. */
+function readOutcomeNames(
+  value: unknown,
+  path: string,
+  p: Problems,
+): Record<string, Record<string, string>> | null {
+  if (value === undefined || value === null) return null
+  if (!isData(value)) {
+    p.add(path, 'must map step ids to their outcomes')
+    return null
+  }
+  const byStep: Record<string, Record<string, string>> = {}
+  for (const [stepId, raw] of Object.entries(value)) {
+    const at = join(path, stepId)
+    if (!isData(raw)) {
+      p.add(at, 'must map outcome names to names')
+      continue
+    }
+    const named: Record<string, string> = {}
+    for (const key of Object.keys(raw)) {
+      const name = text(raw, key, at, OUTCOME_CHARS, p)
+      if (name !== null) named[key] = name
+    }
+    byStep[stepId] = named
+  }
+  return byStep
+}
+
 function readLocales(value: unknown, p: Problems): Record<string, WorkflowLocale> {
   const locales: Record<string, WorkflowLocale> = {}
   if (value === undefined || value === null) return locales
@@ -288,10 +316,10 @@ function readLocales(value: unknown, p: Problems): Record<string, WorkflowLocale
       continue
     }
     if (!isData(raw)) {
-      p.add(path, 'must be a mapping with name, description, when or steps')
+      p.add(path, 'must be a mapping with name, description, when, steps or outcomes')
       continue
     }
-    knownKeys(raw, path, ['name', 'description', 'when', 'steps'], p)
+    knownKeys(raw, path, ['name', 'description', 'when', 'steps', 'outcomes'], p)
     const locale: WorkflowLocale = {}
     const name = text(raw, 'name', path, WORKFLOW_NAME_CHARS, p, true)
     if (name !== null) locale.name = name
@@ -311,6 +339,8 @@ function readLocales(value: unknown, p: Problems): Record<string, WorkflowLocale
         locale.steps = named
       }
     }
+    const outcomes = readOutcomeNames(own(raw, 'outcomes'), join(path, 'outcomes'), p)
+    if (outcomes !== null) locale.outcomes = outcomes
     locales[code] = locale
   }
   return locales
@@ -427,6 +457,19 @@ function readWorkflow(value: unknown, p: Problems): Workflow | null {
     for (const stepId of Object.keys(locale.steps ?? {})) {
       if (!workflow.steps.some((step) => step.id === stepId)) {
         p.add(join(join(join('locales', code), 'steps'), stepId), `no step "${stepId}"`)
+      }
+    }
+    for (const [stepId, named] of Object.entries(locale.outcomes ?? {})) {
+      const at = join(join(join('locales', code), 'outcomes'), stepId)
+      const step = workflow.steps.find((s) => s.id === stepId)
+      if (!step) {
+        p.add(at, `no step "${stepId}"`)
+        continue
+      }
+      for (const name of Object.keys(named)) {
+        if (!step.outcomes.some((outcome) => outcome.name === name)) {
+          p.add(join(at, name), `"${stepId}" has no outcome "${name}"`)
+        }
       }
     }
   }

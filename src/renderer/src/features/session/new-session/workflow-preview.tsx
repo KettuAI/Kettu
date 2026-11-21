@@ -5,6 +5,7 @@ import type { Pace, Workflow, WireWorkflowEntry } from '@shared/workflow'
 import type { AgentId } from '@shared/thread'
 import { AgentMark } from '@renderer/components/agents/agent-mark'
 import type { FlowEdge, FlowMetrics } from '@renderer/features/tasks/flow-layout'
+import { outcomeTitle } from '@renderer/features/tasks/model'
 import { SidewaysFlow } from '@renderer/features/tasks/sideways-flow'
 import { wrappedLines } from '@renderer/features/tasks/wrapped-lines'
 import { Glyph } from '@renderer/features/shell/glyph'
@@ -55,7 +56,9 @@ export function WorkflowPreview({
   const workflow = entry.workflow
   const description = workflow.locales[i18n.language]?.description ?? workflow.description
   const label = (edge: FlowEdge) =>
-    edge.outcomes.length > 0 ? edge.outcomes.join(t('tasks:or')) : t('tasks:flow.youSendBack')
+    edge.outcomes.length > 0
+      ? edge.outcomes.map((o) => outcomeTitle(workflow, edge.from, o)).join(t('tasks:or'))
+      : t('tasks:flow.youSendBack')
   // As tall as the longest name needs, so no name is cut off.
   const metrics = useMemo(() => {
     const lines = Math.max(
