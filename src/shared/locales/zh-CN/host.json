@@ -219,7 +219,7 @@
     "cliGone": "{{path}} 不见了，可能是 {{agent}} 正在更新。{{reason}}",
     "cliRestart": "{{agent}} 现在在 {{path}}，重启 Kettu 后才能使用。",
     "cannotInstall": "无法安装 {{agent}}",
-    "notInstalled": "{{agent}} 未安装。安装后才能开始会话。",
+    "notInstalled": "{{agent}} 未安装。",
     "busyInstalling": "{{agent}} 正在安装或启动",
     "closeSessionsFirst": "请先关闭使用 {{agent}} 的会话",
     "stillRunning": "{{agent}} 未能停止，仍在运行，请等它退出后再试",
@@ -292,13 +292,16 @@
   "detect": {
     "noVersion": "没有适合这台电脑的 {{agent}} 版本，所以无法安装。",
     "nodeMissing": "{{agent}} 需要 Node.js，但在 PATH 中找不到 node。",
-    "nodeToInstall": "{{agent}} 首次使用时通过 npm 安装，这需要 Node.js，但在 PATH 中找不到 node。",
+    "nodeUnreadable": "{{agent}} 需要 Node.js，但 `{{path}} --version` 出错：{{reason}}",
+    "printedNothing": "没有任何输出。",
+    "nodeToInstall": "Kettu 用 npm 安装 {{agent}}，这需要 Node.js，但在 PATH 中找不到 node。",
     "nodeOutdated": "{{agent}} 需要 Node.js {{required}} 或更高版本，当前安装的是 {{installed}}。",
     "uvOutdated": "{{agent}} 需要 uv {{required}} 或更高版本，当前安装的是 {{installed}}。请用 `uv self update` 更新，或用安装它的工具更新。",
-    "npmMissing": "{{agent}} 会在首次使用时通过 npm 安装，但在 PATH 中找不到 npm。{{hint}}",
+    "npmMissing": "Kettu 用 npm 安装 {{agent}}，但在 PATH 中找不到 npm。{{hint}}",
     "programUnusable": "为 {{agent}} 选择的程序（{{path}}）无法运行。",
     "commandMissing": "在 PATH 中找不到 {{command}}。{{hint}}",
     "scriptMissing": "{{script}} 不存在。",
+    "noRouter": "{{agent}} 要经 Kettu 的会话路由运行，但这个版本的 Kettu 缺少它。请重新安装 Kettu。",
     "antigravityInstallNotice": "官方安装程序会把 agy 装到 ~/.local/bin，并在你的 Shell 配置文件里把它加入 PATH。",
     "opencodeInstallNotice": "Kettu 运行的是 OpenCode 2。OpenCode 1 用同一个命令，所以安装前请先卸载用 Homebrew 或 npm 装的 OpenCode 1；用安装脚本装会直接替换它。",
     "geminiAudience": "Gemini CLI 供 Gemini Code Assist Standard 和 Enterprise、Code Assist for GitHub 以及付费的 Gemini API 或 Vertex AI key 使用。自 2026 年 6 月 18 日起，Google 把个人 Google 账号（免费版和 Google AI Pro、Ultra）转到了 Google Antigravity。",
@@ -319,7 +322,7 @@
       "hermes": "在 macOS 或 Linux 上，请在「设置 › Harness」中安装 Hermes Agent；在 Windows 上，请按官方指南通过 WSL2 安装。",
       "muse": "请从 dev.meta.ai 安装 Muse Code，或在「设置 › Harness」中选择它的程序。",
       "codewhale": "请用 codewhale.net 上的安装程序安装 CodeWhale，或在「设置 › Harness」中选择它的程序。",
-      "deepseek": "Kettu 第一次使用 DeepSeek Harness 时从 npm 安装它，需要 Node.js 24.9 或更高版本。",
+      "deepseek": "请从 nodejs.org 安装 Node.js 24.9 或更高版本（自带 npm），然后在设置中点击「重新加载环境」。",
       "harn": "请安装 Harn，或在「设置 › Harness」中选择它的程序。",
       "kimchi": "请安装 Kimchi，或在「设置 › Harness」中选择它的程序。",
       "archive": "请在「设置 › Harness」中安装。",
@@ -331,7 +334,14 @@
     "cliUnsupported": "{{agent}} 找到的 {{path}} 不经 Shell 无法运行。",
     "cliFailed": "{{agent}} 无法读取它的程序的版本：{{reason}}",
     "cliOutdated": "{{agent}} 需要 {{command}} {{required}} 或更高版本，当前安装的是 {{installed}}。请在「设置 › Harness」中更新。",
-    "uninstalled": "{{agent}} 已卸载。要再次使用，请重新安装。"
+    "uninstalled": "{{agent}} 已卸载。要再次使用，请重新安装。",
+    "notInstalledByKettu": "{{agent}} 不由 Kettu 安装。",
+    "why": {
+      "chosenUnusable": "{{path}} 不存在或不可执行",
+      "needsShell": "{{path}} 只能经 Shell 运行",
+      "versionUnread": "{{command}} --version 出错：{{reason}}",
+      "noRouter": "这个版本的 Kettu 缺少会话路由"
+    }
   },
   "environment": {
     "inherited": "Kettu 启动后对 PATH 的修改，点「重新加载环境」后生效。",

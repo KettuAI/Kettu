@@ -247,8 +247,8 @@ describe('the version of a harness that follows the registry', () => {
     await m.agents.checkUpdates()
     await expect(m.agents.ensureReady('gemini')).rejects.toMatchObject({
       code: 'agent_unavailable',
-      message: 'Gemini CLI is not installed. Install it to start a session.',
-      data: { agentId: 'gemini', state: 'not-installed' },
+      message: 'Gemini CLI is not installed.',
+      data: { agentId: 'gemini', state: 'not-installed', reason: { kind: 'not-installed' } },
     })
     expect(m.installs).toEqual([])
     expect(m.launches).toEqual([])

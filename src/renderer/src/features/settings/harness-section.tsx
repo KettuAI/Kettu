@@ -37,9 +37,16 @@ import { toast } from '@renderer/components/ui/toast'
 import {
   cliOutdated,
   listedInstalled,
+  programUnchecked,
   readiness,
   showsCurrent,
 } from '@renderer/features/agents/readiness'
+import {
+  harnessProblem,
+  programCopy,
+  programHere,
+  type HarnessProblem,
+} from '@renderer/features/agents/harness-problem'
 import { adapterOnlyUpdate } from '@renderer/features/agents/updates'
 import { PANEL } from '@renderer/features/session/entries/helpers'
 import { mediumAgo } from '@renderer/lib/format'
@@ -48,7 +55,6 @@ import { useNow } from '@renderer/lib/use-now'
 import {
   awaitsPackage,
   harnessStatuses,
-  isInstalled,
   usableAgents,
   type AgentsStoreHook,
 } from '@renderer/stores/agents'
@@ -61,6 +67,7 @@ import {
   Log,
   LogCopyButton,
   MovedAccountsNotice,
+  ProblemFixButton,
   TaskLog,
   WithCode,
 } from './agent-parts'
@@ -254,8 +261,13 @@ function HarnessState({ status }: { status: AgentStatus }) {
     )
   }
   if (updated) return <StateDot label={t('agents.update.done')} />
-  if (cliOutdated(status) !== null)
-    return <Pill tone="attention">{t('harnesses.needsUpdate')}</Pill>
+  // A harness on the machine gets the fix for why it cannot run; one still to install keeps the
+  // same Install as the rest, whose window says what it needs, unless no version fits at all.
+  const problem = harnessProblem(status)
+  if (problem?.reason.kind === 'no-version') return null
+  if (problem && problem.fix !== 'install' && programHere(status)) {
+    return problem.fix && <ProblemFixButton status={status} fix={problem.fix} />
+  }
   if (status.versionWarning) {
     const { broken, supported } = status.versionWarning
     return (
@@ -299,6 +311,7 @@ export function HarnessListItem({ status }: { status: AgentStatus }) {
     (s) => usableAgents(s.order, s.byId).filter((a) => a.harnessId === status.harnessId).length,
   )
   const r = readiness(status)
+  const problem = harnessProblem(status)
   const version = harnessVersion(status)
   const kind = installKind(status)
   const summary: ReactNode =
@@ -312,19 +325,23 @@ export function HarnessListItem({ status }: { status: AgentStatus }) {
       <span className="k-danger">{taskError.message}</span>
     ) : status.uninstalled ? (
       t('harnesses.removedLine')
-    ) : cliOutdated(status) !== null ? (
-      [version, t('harnesses.needsUpdate')].filter(Boolean).join(' · ')
+    ) : problem?.reason.kind === 'too-old' ? (
+      [version, problem.label].filter(Boolean).join(' · ')
     ) : awaitsPackage(status) && status.package?.isSdk ? (
       t('agents.installsOnFirstUse')
     ) : kind === 'package' && status.package?.isSdk ? (
       // Beside the user's own CLI the SDK installs itself on the first start.
       [version, t('harnesses.sdkOnFirstUse')].filter(Boolean).join(' · ')
-    ) : kind || awaitsPackage(status) ? (
-      t('harnesses.groups.notInstalled')
-    ) : r.kind === 'missing' || r.kind === 'failed' ? (
+    ) : problem ? (
+      <WithCode text={problem.text} />
+    ) : r.kind === 'failed' ? (
       <WithCode text={r.message} />
     ) : (
-      [version, agents > 0 ? t('harnesses.agentCount', { count: agents }) : null]
+      [
+        version,
+        programCopy(status),
+        agents > 0 ? t('harnesses.agentCount', { count: agents }) : null,
+      ]
         .filter(Boolean)
         .join(' · ')
     )
@@ -433,9 +450,12 @@ function HarnessPageBody({ status }: { status: AgentStatus }) {
   const environment = useAgentsStore((s) => s.environment)
   const [act, busy, error] = useAction()
   const r = readiness(status)
-  const outdated = cliOutdated(status) !== null
-  const installed = listedInstalled(status) || isInstalled(status) || outdated
+  const problem = harnessProblem(status)
+  const installed = listedInstalled(status) || programHere(status)
   const kind = installKind(status)
+  // Installing fixes a missing harness, and the version notices a program too old.
+  const ownNotice =
+    problem && problem.fix !== 'install' && problem.reason.kind !== 'too-old' ? problem : null
   return (
     <div>
       <HarnessPageHeader status={status} />
@@ -446,16 +466,7 @@ function HarnessPageBody({ status }: { status: AgentStatus }) {
             <WithCode text={status.detail} />
           </p>
         )}
-        {r.kind === 'missing' && !kind && !outdated && (
-          <p className="ui-sg-hint" data-selectable="">
-            <WithCode text={r.message} />{' '}
-            {r.url && (
-              <a href={r.url} target="_blank" rel="noreferrer" className="k-link">
-                {r.action}
-              </a>
-            )}
-          </p>
-        )}
+        {ownNotice && <ProblemNotice status={status} problem={ownNotice} />}
         {error && (
           <p className="ui-sg-hint k-error" data-wrap="">
             {error}
@@ -486,7 +497,7 @@ function HarnessPageBody({ status }: { status: AgentStatus }) {
           </Notice>
         )}
         {status.uninstalled && <UninstalledNotice status={status} />}
-        {kind && <InstallNotice status={status} kind={kind} />}
+        {kind && !ownNotice && <InstallNotice status={status} kind={kind} />}
 
         <VersionGroup status={status} />
         <ProgramGroup status={status} />
@@ -665,7 +676,8 @@ function VersionGroup({ status }: { status: AgentStatus }) {
   const version = harnessVersion(status)
   const checkedAt = status.updateCheckedAt
   const checks =
-    !!status.package || !!status.cli || !!status.release?.registry || checkedAt !== null
+    !programUnchecked(status) &&
+    (!!status.package || !!status.cli || !!status.release?.registry || checkedAt !== null)
   const updating = status.task?.kind === 'update' && status.task.state === 'running'
   const next = status.cli?.update?.version ?? status.update?.cliVersion ?? null
   // A stale check does not make a missing program current, so it gets no green dot.
@@ -888,7 +900,7 @@ function VersionWarningNotice({ status }: { status: AgentStatus }) {
 /** An update on offer, under way, failed or just done, in one notice under the page's title. */
 function TaskNotice({ status, installed }: { status: AgentStatus; installed: boolean }) {
   const { useAgentsStore } = useHostScope()
-  const { t } = useTranslation(['settings', 'common'])
+  const { t } = useTranslation(['settings', 'common', 'agents'])
   const updated = useAgentsStore((s) => s.updated[status.id])
   const taskError = useAgentsStore((s) => s.taskErrors[status.id])
   const [doneSeen, setDoneSeen] = useState(false)
@@ -948,7 +960,7 @@ function TaskNotice({ status, installed }: { status: AgentStatus; installed: boo
         icon={outdated ? undefined : <Icon icon={Download04Icon} size={16} />}
         title={
           outdated
-            ? t('harnesses.cliOutdatedTitle', { name })
+            ? t('agents:problem.tooOldAt', { version: minimum ?? '' })
             : t('agents.update.noticeTitle', { name, version: cliUpdate.version })
         }
         action={
@@ -972,7 +984,7 @@ function TaskNotice({ status, installed }: { status: AgentStatus; installed: boo
     return (
       <Notice
         variant="warning"
-        title={t('harnesses.cliOutdatedTitle', { name })}
+        title={t('agents:problem.tooOldAt', { version: minimum })}
         action={
           <SetButton
             variant="primary"
@@ -1104,6 +1116,23 @@ function FailedTaskNotice({ status, task }: { status: AgentStatus; task: AgentTa
       {updating
         ? t('agents.update.failedBody')
         : task.error && <span data-selectable="">{task.error}</span>}
+    </Notice>
+  )
+}
+
+/** Why the harness cannot run when installing it would not help, the host's words and the fix. */
+function ProblemNotice({ status, problem }: { status: AgentStatus; problem: HarnessProblem }) {
+  return (
+    <Notice
+      variant={problem.fix ? 'warning' : 'info'}
+      title={problem.label}
+      action={
+        problem.fix && <ProblemFixButton status={status} fix={problem.fix} variant="primary" />
+      }
+    >
+      <span data-selectable="">
+        <WithCode text={status.detail ?? problem.text} />
+      </span>
     </Notice>
   )
 }

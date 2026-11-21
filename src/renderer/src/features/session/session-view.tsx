@@ -12,6 +12,8 @@ import { BrowserLabel } from '@renderer/features/browser/browser-label'
 import { DeviceLabels } from '@renderer/features/devices/device-label'
 import { TerminalLabels } from '@renderer/features/terminal/terminal-label'
 import { ProjectPathContext } from '@renderer/features/files/file-refs'
+import { HarnessPageButton } from '@renderer/features/agents/fix-button'
+import { harnessAtFault } from '@renderer/features/agents/problem-fix'
 import { openHostSettings } from '@renderer/features/settings/host-sections'
 import { SHEET_INSIDE_RADIUS } from '@renderer/features/shell/sheet'
 import { usePane } from '@renderer/features/split/pane-context'
@@ -264,7 +266,15 @@ function SessionBody({ summary }: { summary: SessionSummary }) {
                     message={session.error?.message ?? t('view.couldNotContinue', { agent: name })}
                     detail={session.error?.detail}
                     onRetry={retry}
-                    action={missingCopy && <InstallCopyButton missing={missingCopy} />}
+                    action={
+                      missingCopy ? (
+                        <InstallCopyButton missing={missingCopy} />
+                      ) : (
+                        harnessAtFault(agentStatus) && (
+                          <HarnessPageButton status={agentStatus} hostId={hostId} />
+                        )
+                      )
+                    }
                     report={{ hostId: otherHost?.id ?? null, sessionId, agentId: summary.agentId }}
                   />
                 ) : null}

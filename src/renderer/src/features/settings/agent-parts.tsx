@@ -3,6 +3,7 @@
 
 import { Fragment, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import {
+  ArrowUpRight01Icon,
   Cancel01Icon,
   ComputerTerminal01Icon,
   Copy01Icon,
@@ -13,8 +14,10 @@ import { useTranslation } from 'react-i18next'
 import type { AgentStatus, AgentTask, PlanLimit } from '@shared/agent-host'
 import { Icon } from '@renderer/components/affect/app-shell'
 import { useRefresh } from '@renderer/components/refresh'
+import { FIX_URLS, type ProblemFix } from '@renderer/features/agents/harness-problem'
 import { codeSpans } from '@renderer/features/session/entries/helpers'
 import { planReset } from '@renderer/features/sidebar/plan-usage'
+import { confirmCliUpdate } from '@renderer/features/updates/command-confirm-model'
 import { addDays, dayOf, monthStartOf } from '@renderer/features/usage/model'
 import { limitLabel, mediumAgo, money } from '@renderer/lib/format'
 import { useLimitView } from '@renderer/hooks/use-limit-view'
@@ -26,8 +29,17 @@ import { openSignInPage, usePlanReadings } from '@renderer/stores/agents'
 import { useHostScope } from '@renderer/stores/host-scope'
 import { openHarnessSettings } from '@renderer/stores/view'
 import { limitsReadable, percent, useAction } from './agent-helpers'
-import { CommandLine, ControlError, IconAction, Meter, SetButton, Spin } from './controls'
+import {
+  CommandLine,
+  ControlError,
+  IconAction,
+  LinkButton,
+  Meter,
+  SetButton,
+  Spin,
+} from './controls'
 import { Group, GroupLabel, Notice, RowFrame, RowGroup, RowShell, RowText } from './rows'
+import { openInstall } from './harness-install'
 import { agentCost } from './spend'
 
 /** The window nearest its limit as a list row's end: its label and percent over a 4 px bar. */
@@ -65,6 +77,67 @@ export function WithCode({ text }: { text: string }) {
 export function DismissButton({ onClick }: { onClick: () => void }) {
   const { t } = useTranslation('settings')
   return <IconAction label={t('agents.task.dismiss')} icon={Cancel01Icon} onClick={onClick} />
+}
+
+/**
+ * The button that fixes why a harness cannot run, as Settings draws it: a tool's guide opens in
+ * the browser, a program is chosen in the system's dialog, an install opens the install window, and
+ * an update shows its command first on this computer, or opens the harness's page on another.
+ */
+export function ProblemFixButton({
+  status,
+  fix,
+  variant,
+}: {
+  status: AgentStatus
+  fix: ProblemFix
+  variant?: 'primary' | 'secondary'
+}) {
+  const { api, hostId } = useHostScope()
+  const { t } = useTranslation('agents')
+  const [act, busy, error] = useAction()
+  switch (fix) {
+    case 'node':
+    case 'npm':
+    case 'uv':
+      return (
+        <LinkButton href={FIX_URLS[fix]} icon={<Icon icon={ArrowUpRight01Icon} size={14} />}>
+          {t(`problem.fix.${fix}`)}
+        </LinkButton>
+      )
+    case 'choose':
+      return (
+        <>
+          <ControlError error={error} />
+          <SetButton
+            variant={variant}
+            loading={busy}
+            onClick={() => act(() => api.dialogs.chooseAgentBinary(status.harnessId))}
+          >
+            {t('problem.fix.choose')}
+          </SetButton>
+        </>
+      )
+    case 'install':
+      return (
+        <SetButton variant={variant} onClick={() => void openInstall(status.harnessId, hostId)}>
+          {t('problem.fix.install')}
+        </SetButton>
+      )
+    case 'update':
+      return (
+        <SetButton
+          variant={variant}
+          onClick={() =>
+            hostId === null && status.cli?.update
+              ? void confirmCliUpdate(status)
+              : openHarnessSettings(status.harnessId)
+          }
+        >
+          {t('problem.fix.update')}
+        </SetButton>
+      )
+  }
 }
 
 /**

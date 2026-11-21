@@ -362,6 +362,8 @@ export interface NodeProbe {
   nodeVersion: string | null
   npmPath: string | null
   nodePath: string | null
+  /** Why the node found did not say its version, empty when it printed nothing; absent otherwise. */
+  nodeError?: string
 }
 
 /** Finds `node` and `npm` and asks `node --version`, with the agent environment. */
@@ -372,25 +374,34 @@ export async function probeNode(env: Env, platform: Platform): Promise<NodeProbe
     findCommand('npm', lookup),
   ])
   if (!nodePath) return { nodeVersion: null, npmPath, nodePath }
-  const nodeVersion = await new Promise<string | null>((resolve) => {
+  const answer = await new Promise<{ version: string } | { error: string }>((resolve) => {
     execFile(
       nodePath,
       ['--version'],
       { env: env as NodeJS.ProcessEnv, timeout: 10_000, windowsHide: true },
-      (error, stdout) => resolve(error ? null : stdout.trim() || null),
+      (error, stdout) => {
+        const version = stdout.trim()
+        // An empty error is a node that printed nothing.
+        if (error || !version) resolve({ error: error?.message ?? '' })
+        else resolve({ version })
+      },
     )
   })
-  return { nodeVersion, npmPath, nodePath }
+  return 'version' in answer
+    ? { nodeVersion: answer.version, npmPath, nodePath }
+    : { nodeVersion: null, npmPath, nodePath, nodeError: answer.error }
 }
 
-/** Whether a `v24.1.0`-style version satisfies a `>=22`-style requirement. */
+/** Whether a `v24.1.0`-style version satisfies a `>=22.19.0`-style requirement, or a bare `22`. */
 export function satisfiesNode(version: string, requirement: string): boolean {
-  const have = /^v?(\d+)(?:\.(\d+))?/.exec(version.trim())
-  const need = /^>=\s*(\d+)(?:\.(\d+))?/.exec(requirement.trim())
+  const have = /^v?(\d+)(?:\.(\d+))?(?:\.(\d+))?/.exec(version.trim())
+  const need = /^(?:>=)?\s*v?(\d+)(?:\.(\d+))?(?:\.(\d+))?/.exec(requirement.trim())
   if (!have || !need) return false
-  const [haveMajor, haveMinor] = [Number(have[1]), Number(have[2] ?? 0)]
-  const [needMajor, needMinor] = [Number(need[1]), Number(need[2] ?? 0)]
-  return haveMajor > needMajor || (haveMajor === needMajor && haveMinor >= needMinor)
+  for (let part = 1; part <= 3; part++) {
+    const [a, b] = [Number(have[part] ?? 0), Number(need[part] ?? 0)]
+    if (a !== b) return a > b
+  }
+  return true
 }
 
 export interface EnvironmentServiceDeps {

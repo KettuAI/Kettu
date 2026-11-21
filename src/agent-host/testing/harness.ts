@@ -431,7 +431,11 @@ export async function startTestHost(options: TestHostOptions = {}): Promise<Test
           ? { ...detection, cli: { path: FAKE_AGENT_MAIN, version, variable: null, problem: null } }
           : detection
       }
-      return { state: 'not-installed', detail: `${def.name} is not part of the tests` }
+      return {
+        state: 'not-installed',
+        detail: `${def.name} is not part of the tests`,
+        reason: { kind: 'not-installed' },
+      }
     },
     protocols,
     ...(options.drivers ? { drivers: options.drivers } : {}),

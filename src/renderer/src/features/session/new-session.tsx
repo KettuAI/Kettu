@@ -13,6 +13,9 @@ import { FolderMark } from '@renderer/components/affect/assistant-home'
 import { ChatComposer } from '@renderer/components/affect/chat-composer'
 import { Button } from '@renderer/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
+import { FIX_URLS, reasonLabel } from '@renderer/features/agents/harness-problem'
+import { FixButton } from '@renderer/features/agents/fix-button'
+import { openInstall } from '@renderer/features/settings/harness-install'
 import { HostChip } from '@renderer/features/session/composer/host-chip'
 import { useModeControl } from '@renderer/features/session/composer/mode-control'
 import { isSelect } from '@renderer/features/session/composer/options'
@@ -109,8 +112,8 @@ import {
   canStart,
   menuAgents,
   noAgentCanStart,
-  noAgentUntilUpdated,
   startValues,
+  type NoAgentReason,
 } from './new-session/start-options'
 import { useStartConfig } from './new-session/use-start-config'
 import { openTask } from './new-session/open-task'
@@ -300,21 +303,15 @@ function DraftComposer({
     const starts = hostId === null && defaultAgent && defaultUsable ? defaultAgent : onlyAgent
     if (starts) choosePaneAgent(paneId, starts)
   }, [paneId, agentId, parent, hostId, defaultAgent, defaultUsable, onlyAgent])
-  const waitingForNode = useAgentsStore(
+  // The agents that are on, once they are read.
+  const onAgents = useAgentsStore(
     useShallow((s) => {
       if (hostId === null ? !s.loaded : !(hostId in s.hosts)) return null
       const { order, byId } = agentsOn(s, hostId)
-      const usable = usableAgents(order, byId).filter((a) => !a.disabled)
-      return usable.length === 0 ? [] : noAgentCanStart(usable)
+      return usableAgents(order, byId).filter((a) => !a.disabled)
     }),
   )
-  const waitingForUpdate = useAgentsStore(
-    useShallow((s) => {
-      if (hostId === null ? !s.loaded : !(hostId in s.hosts)) return []
-      const { order, byId } = agentsOn(s, hostId)
-      return noAgentUntilUpdated(usableAgents(order, byId).filter((a) => !a.disabled))
-    }),
-  )
+  const stopped = onAgents && noAgentCanStart(onAgents)
   // This computer has no agent at all, not merely none that is on: the install guide shows.
   const noAgent = useAgentsStore(
     (s) => hostId === null && s.loaded && usableAgents(s.order, s.byId).length === 0,
@@ -711,13 +708,7 @@ function DraftComposer({
           gitStatus && project && <WorktreeNote projectPath={project.path} status={gitStatus} />
         )}
         {agentId && <StartNotices agentId={agentId} hostId={hostId} />}
-        {waitingForNode && !(noAgent && guide) && (
-          <NoAgentLine
-            waitingForNode={waitingForNode}
-            waitingForUpdate={waitingForUpdate}
-            hostId={hostId}
-          />
-        )}
+        {stopped && !(noAgent && guide) && <NoAgentLine stopped={stopped} hostId={hostId} />}
       </div>
       {children}
     </>
@@ -777,60 +768,72 @@ function noticeText(
 }
 
 /**
- * While no agent can start: why, in one line, and the way to Settings › Agents to fix it; on
- * another host only why, since this computer's Settings do not set up its agents.
+ * While no agent can start: why, in one line, as its harness's state says it, and the button for
+ * the cause: a tool's guide, the install window for one harness to install, Settings › Harnesses
+ * for a harness to update or fix, or Settings › Agents when none is on. Another host only says why,
+ * since this computer's Settings do not set up its agents.
  */
-function NoAgentLine({
-  waitingForNode,
-  waitingForUpdate,
-  hostId,
-}: {
-  waitingForNode: string[]
-  waitingForUpdate: string[]
-  hostId: string | null
-}) {
-  const { t } = useTranslation('session')
+function NoAgentLine({ stopped, hostId }: { stopped: NoAgentReason; hostId: string | null }) {
+  const { t } = useTranslation(['session', 'agents'])
   const hostLabel = useHostLabel(hostId)
+  const { reason, agents, harnesses } = stopped
   const text =
     hostId !== null
       ? t('newSession.noAgentOnHost', { host: hostLabel })
-      : waitingForNode.length > 0
-        ? t('newSession.noAgentNode', { agents: waitingForNode, count: waitingForNode.length })
-        : waitingForUpdate.length > 0
-          ? t('newSession.noAgentUpdate', {
-              agents: waitingForUpdate,
-              count: waitingForUpdate.length,
-            })
-          : t('newSession.noAgent')
-  const updating = waitingForNode.length === 0 && waitingForUpdate.length > 0
-  const noneYet = waitingForNode.length === 0 && !updating
+      : reason
+        ? t('newSession.noAgentBecause', { agents, reason: reasonLabel(reason) })
+        : t('newSession.noAgent')
+  const kind = reason?.kind
+  const tool =
+    kind === 'needs-node'
+      ? 'node'
+      : kind === 'needs-npm'
+        ? 'npm'
+        : kind === 'needs-uv'
+          ? 'uv'
+          : null
+  // One harness opens its own page; several, the list.
+  const harness = harnesses.length === 1 ? harnesses[0]! : null
   return (
     <div className="flex min-w-0 items-center gap-2 px-2.75">
       <p
         className={cn(
           'truncate text-xs',
-          noneYet ? 'text-secondary' : updating ? 'text-warning' : 'text-destructive',
+          !reason ? 'text-secondary' : kind === 'too-old' ? 'text-warning' : 'text-destructive',
         )}
         title={text}
       >
         {text}
       </p>
-      {hostId === null && (
-        <Button
-          variant="outline"
-          size="xs"
-          className="shrink-0"
-          onClick={() => (noneYet ? openAgentSettings(null) : openHarnessSettings(null))}
-        >
-          {t(
-            noneYet
-              ? 'newSession.addAgent'
-              : updating
-                ? 'newSession.updateHarness'
-                : 'newSession.installHarness',
-          )}
-        </Button>
-      )}
+      {hostId === null &&
+        (tool ? (
+          <FixButton
+            action={{ label: t(`agents:problem.fix.${tool}`), href: FIX_URLS[tool], run: null }}
+          />
+        ) : (
+          <Button
+            variant="outline"
+            size="xs"
+            className="shrink-0"
+            onClick={() =>
+              !reason
+                ? openAgentSettings(null)
+                : kind === 'not-installed' && harness
+                  ? void openInstall(harness)
+                  : openHarnessSettings(harness)
+            }
+          >
+            {t(
+              !reason
+                ? 'newSession.addAgent'
+                : kind === 'too-old'
+                  ? 'newSession.updateHarness'
+                  : kind === 'cannot-run'
+                    ? 'newSession.openHarness'
+                    : 'newSession.installHarness',
+            )}
+          </Button>
+        ))}
     </div>
   )
 }

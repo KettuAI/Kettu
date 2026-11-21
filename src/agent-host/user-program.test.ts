@@ -26,6 +26,7 @@ describe('the user program a first start counts', () => {
     const tooOld: Detection = {
       state: 'not-installed',
       detail: 'too old',
+      reason: { kind: 'too-old', minimum: '2.1.0', installed: '2.0.0' },
       cli: cli({ kind: 'too-old', minimum: '2.1.0' }),
     }
     expect(userProgramFound(adapter, tooOld, KETTU)).toBe(true)
@@ -63,7 +64,12 @@ describe('the user program a first start counts', () => {
   })
 
   it('does not count a harness whose program was not found, or a package alone', () => {
-    expect(userProgramFound(binary, { state: 'not-installed', detail: '' }, KETTU)).toBe(false)
+    const missing: Detection = {
+      state: 'not-installed',
+      detail: '',
+      reason: { kind: 'not-installed' },
+    }
+    expect(userProgramFound(binary, missing, KETTU)).toBe(false)
     const package_: Detection = {
       state: 'available',
       spec: spec('/usr/bin/node'),

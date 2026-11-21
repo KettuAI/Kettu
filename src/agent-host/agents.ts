@@ -22,6 +22,7 @@ import type {
   ClaudeSettings,
   CodebuddySettings,
   CodebuddySiteChange,
+  HarnessReason,
   InstallOffer,
   InstalledCli,
   McpStatus,
@@ -632,6 +633,11 @@ function programOf(def: AgentDefinition): AgentStatus['program'] {
   }
 }
 
+/** A state detection gives a harness that cannot run, for the reason it found. */
+function unavailable(state: AgentState): boolean {
+  return state === 'not-installed' || state === 'node-missing' || state === 'node-outdated'
+}
+
 /**
  * The version that runs: the handshake's, else the program's, else the installed package's, since
  * a package harness has no program to ask and Grok names none in its handshake.
@@ -932,6 +938,7 @@ export class AgentManager {
       ? {
           state: 'not-installed',
           detail: t('detect.uninstalled', { agent: h.def.name }),
+          reason: { kind: 'not-installed' },
         }
       : detection
     h.detection = effective
@@ -1185,13 +1192,16 @@ export class AgentManager {
         {
           agentId,
           state: detection?.state ?? 'not-installed',
+          reason: detection?.reason ?? { kind: 'not-installed' },
         },
       )
     }
     if (!detection.spec && !installsOnStart(h.def, detection.adapter)) {
+      // Kettu's own copy is gone, and a start no longer installs it unasked.
       throw new HostError('agent_unavailable', t('agent.notInstalled', { agent: slot.name }), {
         agentId,
         state: 'not-installed',
+        reason: { kind: 'not-installed' } satisfies HarnessReason,
       })
     }
     return this.start(slot, detection.spec)
@@ -1920,7 +1930,7 @@ export class AgentManager {
     const agents = this.agentsOf(h)
     const { launch } = h.def
     if (launch.kind !== 'package') {
-      throw invalidParams(`${h.def.name} is not installed by Kettu`)
+      throw invalidParams(t('detect.notInstalledByKettu', { agent: h.def.name }))
     }
     if (h.installing || agents.some((slot) => slot.starting)) {
       throw new HostError('busy', t('agent.busyInstalling', { agent: h.def.name }))
@@ -2833,7 +2843,7 @@ export class AgentManager {
     await this.detectAll()
     if (this.targeted(h)) return this.updateToTarget(h)
     if (launch.kind !== 'package') {
-      throw invalidParams(`${h.def.name} is not installed by Kettu`)
+      throw invalidParams(t('detect.notInstalledByKettu', { agent: h.def.name }))
     }
     const update = this.updateOf(h)
     if (!update) throw invalidParams(t('agent.update.none', { agent: h.def.name }))
@@ -3193,7 +3203,7 @@ export class AgentManager {
         return this.installProgram(h, method)
       case 'uvx':
       case 'node-script':
-        throw invalidParams(`${h.def.name} is not installed by Kettu`)
+        throw invalidParams(t('detect.notInstalledByKettu', { agent: h.def.name }))
     }
   }
 
@@ -3338,7 +3348,7 @@ export class AgentManager {
   ): Promise<void> {
     const installs = h.def.installs
     const agent = h.def.name
-    if (!installs) throw invalidParams(`${agent} is not installed by Kettu`)
+    if (!installs) throw invalidParams(t('detect.notInstalledByKettu', { agent }))
     if (this.programRuns(h)) {
       throw invalidParams(t('agent.alreadyInstalled', { agent }))
     }
@@ -4817,8 +4827,14 @@ export class AgentManager {
     if (slot.providerActionRun) throw new HostError('busy', 'A provider account is being changed')
     const run = async (): Promise<void> => {
       await this.detectAll()
-      if (slot.h.detection?.state !== 'available' || !slot.h.detection.spec) {
-        throw new HostError('agent_unavailable', 'OpenCode is not installed')
+      const detection = slot.h.detection
+      if (detection?.state !== 'available' || !detection.spec) {
+        throw new HostError(
+          'agent_unavailable',
+          detection && detection.state !== 'available'
+            ? detection.detail
+            : t('agent.notAvailable', { agent: slot.def.name }),
+        )
       }
       await slot.providersRun
       await this.openCodeClient(slot).action(input)
@@ -5363,11 +5379,16 @@ export class AgentManager {
       authMethods.splice(0, authMethods.length, ...(terminal ? [terminal] : []), ...kept)
     }
     if (slot.def.id === 'qwen' && this.has(agentId)) {
+      // Kettu's own copy runs as node and its script, which stays; only the launch words go.
+      const launched = slot.def.launch.kind === 'package' ? (slot.def.launch.args ?? []) : []
       authMethods.push({
         id: 'qwen-terminal-login',
         name: 'Sign in with a subscription',
         type: 'terminal',
-        command: formatCommand({ ...display, args: [] }, platform),
+        command: formatCommand(
+          { ...display, args: display.args.slice(0, display.args.length - launched.length) },
+          platform,
+        ),
       })
     }
     if (slot.def.id === 'grok' && this.has(agentId)) {
@@ -5497,13 +5518,10 @@ export class AgentManager {
       ...(slot.resets ? { resets: slot.resets } : {}),
       ...(slot.resetsError ? { resetsError: slot.resetsError } : {}),
       detail: slot.detail ?? h.adapterNote,
+      reason:
+        unavailable(slot.state) && detection?.state !== 'available' ? detection?.reason : null,
       installNotice: slot.def.install.notice ? t(slot.def.install.notice) : null,
-      installUrl:
-        slot.state === 'not-installed' ||
-        slot.state === 'node-missing' ||
-        slot.state === 'node-outdated'
-          ? slot.def.install.url
-          : null,
+      installUrl: unavailable(slot.state) ? slot.def.install.url : null,
       progress:
         slot.state === 'starting' || slot.state === 'installing' ? slot.progress.lastLines(5) : [],
       launchCommand: formatCommand(display, platform),
@@ -5548,6 +5566,7 @@ export class AgentManager {
             installed: detection?.cli ?? own?.installed ?? null,
             method: h.cliMethod,
             update: cliVersion && cliCommand ? { version: cliVersion, command: cliCommand } : null,
+            checkable: this.programSource(h) !== null,
           }
         : null,
       configDir: config

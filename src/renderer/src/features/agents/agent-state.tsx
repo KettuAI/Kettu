@@ -1,7 +1,7 @@
 import { AlertCircleIcon } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
 import type { AgentStatus } from '@shared/agent-host'
-import { cliOutdated, readiness } from './readiness'
+import { readiness } from './readiness'
 import { Icon } from '@renderer/components/affect/app-shell'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
 import { cn } from '@renderer/lib/utils'
@@ -49,10 +49,6 @@ export function AgentStateLine({ status, className }: { status: AgentStatus; cla
         </span>
       )
     case 'missing':
-      return (
-        <span className={base}>
-          {t(cliOutdated(status) !== null ? 'state.needsUpdate' : 'state.notAvailable')}
-        </span>
-      )
+      return <span className={base}>{r.problem.label}</span>
   }
 }

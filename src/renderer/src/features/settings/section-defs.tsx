@@ -25,19 +25,14 @@ import type { ArtifactConsentRow } from '@shared/artifact-capabilities'
 import { originLabel } from '@shared/browser'
 import { USER_FONT_ROLES } from '@shared/settings'
 import type { AgentId, HarnessId } from '@shared/thread'
+import { programHere } from '@renderer/features/agents/harness-problem'
 import { useCloudOff } from '@renderer/lib/cloud'
 import { basename, mediumAgo } from '@renderer/lib/format'
 import { errorMessage } from '@renderer/lib/host'
 import { useHostContext, useHostHas } from '@renderer/lib/host-features'
 import { formatShortcut, isHosted, isMac, isWeb, isWindows, platform } from '@renderer/lib/platform'
 import { useAppInfo } from '@renderer/lib/use-app-info'
-import {
-  agentName,
-  awaitsPackage,
-  harnessStatuses,
-  hasProgram,
-  usableAgents,
-} from '@renderer/stores/agents'
+import { agentName, awaitsPackage, harnessStatuses, usableAgents } from '@renderer/stores/agents'
 import { useAccountStore } from '@renderer/stores/account'
 import { useDebugStore } from '@renderer/stores/debug'
 import { artifactListShown, useArtifactsStore } from '@renderer/stores/artifacts'
@@ -698,8 +693,9 @@ export function useHarnessesSection(): SectionDef {
   const { useAgentsStore } = useHostScope()
   const harnesses = useAgentsStore(useShallow((s) => harnessStatuses(s.order, s.byId)))
   const environment = useAgentsStore((s) => s.environment)
-  // Installed: its program is on the machine, too old included, with any package Kettu adds for it.
-  const installed = harnesses.filter((h) => hasProgram(h) && !awaitsPackage(h) && !h.uninstalled)
+  // Installed: its program is on the machine, too old or waiting for Node.js included, with any
+  // package Kettu adds for it.
+  const installed = harnesses.filter((h) => programHere(h) && !awaitsPackage(h) && !h.uninstalled)
   const missing = harnesses.filter((h) => !installed.includes(h))
   const groups = {
     installed: {
