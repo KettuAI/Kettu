@@ -1,7 +1,8 @@
 import type { AccountStatus } from '@shared/account'
 import type { AgentAccount, PlanLimit, ProviderBalance } from '@shared/agent-host'
-import type { AgentId } from '@shared/thread'
+import type { AgentId, ConfigOption } from '@shared/thread'
 import type { UpdateStatus } from '@shared/updates'
+import { limitsForModel } from '@shared/plan-limits'
 import { planName } from '@shared/session-groups'
 import type { UpdateItem } from '@renderer/features/updates/card-model'
 import { limitLevel, type LimitLevel } from '@renderer/lib/plan-limit'
@@ -192,9 +193,39 @@ export function planCards(accounts: readonly AccountAgent[], now: number): PlanC
 const LEVEL_RANK: Record<LimitLevel, number> = { ok: 0, warn: 1, bad: 2 }
 const windowRank = (w: CardWindow): number => LEVEL_RANK[w.level] * 1000 + w.percent
 
-/** A card's tightest window, a reached or red one first: what the account row's ring draws. */
+/** A card's tightest window, a reached or red one first, which orders the cards. */
 export function tightestWindow(card: PlanCard): CardWindow {
   return card.windows.reduce((a, b) => (windowRank(b) > windowRank(a) ? b : a))
+}
+
+/**
+ * The rings the account row draws for a card, innermost first: only the windows that hold back
+ * the session's model, as the composer counts them. An unknown model counts every window.
+ */
+export function ringWindows(
+  card: PlanCard,
+  model: ConfigOption | undefined,
+  now: number,
+): CardWindow[] {
+  return cardWindows(limitsForModel(card.limits, model), now)
+}
+
+/** What the account row writes for an account that reports a balance and no plan windows. */
+export interface BalanceTotal {
+  /** The wallets of the first wallet's currency, summed. */
+  amount: number
+  currency: string
+  /** Every wallet, for the tooltip. */
+  wallets: ProviderBalance[]
+}
+
+export function balanceTotal(balances: readonly ProviderBalance[]): BalanceTotal | null {
+  const first = balances[0]
+  if (!first) return null
+  const amount = balances
+    .filter((balance) => balance.currency === first.currency)
+    .reduce((sum, balance) => sum + balance.amount, 0)
+  return { amount, currency: first.currency, wallets: [...balances] }
 }
 
 const cardRank = (card: PlanCard): number =>

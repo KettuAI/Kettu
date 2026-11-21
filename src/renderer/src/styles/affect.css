@@ -732,6 +732,11 @@ li[data-row-exit='dust'] > * {
 .kettu-plan-ring__button[aria-expanded='true'] {
   background: var(--bg-selected);
 }
+/* An account that reports only a balance shows its amount in place of the rings. */
+.kettu-plan-ring__button--amount {
+  width: auto;
+  padding: 0 6px;
+}
 .kettu-plan-pop {
   padding: 4px;
   border-radius: 12px;
