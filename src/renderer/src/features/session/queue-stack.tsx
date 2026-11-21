@@ -274,8 +274,13 @@ export function QueueStack({
     >
       {queue.map((item, i) => {
         const p = place(i)
-        // A report is drawn from its fields, as in the thread, not from the sentence the agent gets.
-        const text = item.from?.ended ? reportSentence(item.from.ended) : promptText(item)
+        // A report is drawn from its fields, as in the thread, not from the sentence the agent gets,
+        // and a message of comments from its summary, not from the quotes it sends.
+        const text = item.from?.ended
+          ? reportSentence(item.from.ended)
+          : item.comments
+            ? t('queue.comments', { count: item.comments.count, text: item.comments.text })
+            : promptText(item)
         const attachments = queuedAttachments(item).length
         return (
           <div

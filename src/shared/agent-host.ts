@@ -129,6 +129,7 @@ import type {
   PatchBatch,
   PlanItem,
   PromptCache,
+  QueuedComments,
   ProjectHooksDecision,
   ProjectMcpDecision,
   ProblemReportOutcome,
@@ -1422,7 +1423,8 @@ export interface HostContract {
   'sessions.context': { params: { sessionId: string }; result: ContextBreakdown | null }
   'sessions.contextEstimates': { params: { sessionId: string }; result: ContextEstimates | null }
   'sessions.queue': {
-    params: { sessionId: string; content: UserContent[] }
+    /** `comments` for a message built from comments on passages, which its queue row shows. */
+    params: { sessionId: string; content: UserContent[]; comments?: QueuedComments }
     result: { itemId: string | null } // null when it was sent at once
   }
   /**

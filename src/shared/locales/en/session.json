@@ -549,7 +549,9 @@
     "count_one": "{{count}} queued",
     "count_other": "{{count}} queued",
     "title": "Queued",
-    "collapse": "Hide the queue"
+    "collapse": "Hide the queue",
+    "comments_one": "{{count}} comment · {{text}}",
+    "comments_other": "{{count}} comments · {{text}}"
   },
   "agentStart": {
     "installing": "Installing {{agent}}…",

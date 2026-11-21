@@ -4,6 +4,7 @@ import { AnimatePresence } from 'motion/react'
 import { useTranslation } from 'react-i18next'
 import { cacheExpiry, knownExpiry } from '@shared/prompt-cache'
 import {
+  QUEUED_COMMENTS_TEXT,
   harnessOf,
   type AgentId,
   type ConfigOption,
@@ -344,6 +345,14 @@ export function Composer({
     const prompt = sent ? selectionPrompt(taken.prompt, sent) : taken.prompt
     if (sent) setPaneSelection(null)
     const text = commentsMessage(comments, prompt)
+    // How the message reads in the queue: the count, then the text or else the first comment.
+    const summary =
+      comments.length > 0
+        ? {
+            count: comments.length,
+            text: (taken.prompt.trim() || comments[0]!.comment).slice(0, QUEUED_COMMENTS_TEXT),
+          }
+        : null
     const content: UserContent[] = [
       ...(text.trim() ? [{ type: 'text' as const, text }] : []),
       ...attachmentContent(taken.held),
@@ -356,7 +365,7 @@ export function Composer({
       ),
     ]
     const commentIds = comments.map((c) => c.id)
-    return { taken, sent, content, commentIds }
+    return { taken, sent, content, commentIds, summary }
   }
 
   // The background work the session's agent would stop by switching, while the user is asked.
@@ -419,9 +428,9 @@ export function Composer({
 
   /** With `shown`, the session is free, so the message shows in the thread as it goes. */
   const queue = (steer: boolean, shown = false) => {
-    const { taken, sent, content, commentIds } = takeContent()
+    const { taken, sent, content, commentIds, summary } = takeContent()
     const unshow = shown ? showSending(sessionId, content) : null
-    host('sessions.queue', { sessionId, content })
+    host('sessions.queue', { sessionId, content, ...(summary ? { comments: summary } : {}) })
       .then(({ itemId }) => {
         removeComments(sessionId, commentIds)
         // It waits in the queue after all, which shows it there.

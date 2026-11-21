@@ -1515,6 +1515,30 @@ describe('worktree requests', () => {
     rejects(() => posix['projects.setWorktreeSettings']({ path: 'repo', settings }))
   })
 
+  it("keeps a queued message's comment summary only when it reads", () => {
+    const content = [{ type: 'text', text: '> a\n\nb' }]
+    const comments = { count: 2, text: 'Looks good' }
+    expect(posix['sessions.queue']({ sessionId: 's', content, comments })).toEqual({
+      sessionId: 's',
+      content,
+      comments,
+    })
+    expect(posix['sessions.queue']({ sessionId: 's', content })).toEqual({
+      sessionId: 's',
+      content,
+    })
+    for (const bad of [
+      { count: 0, text: 'x' },
+      { count: 1.5, text: 'x' },
+      { count: 1, text: '' },
+      { count: 1, text: 'x'.repeat(501) },
+      { count: 1 },
+      'two',
+    ]) {
+      rejects(() => posix['sessions.queue']({ sessionId: 's', content, comments: bad }))
+    }
+  })
+
   it("runs only a reply's code block that shows all it runs", () => {
     expect(
       posix['sessions.runCommand']({

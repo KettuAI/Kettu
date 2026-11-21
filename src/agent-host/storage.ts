@@ -7,6 +7,7 @@ import { GITHUB_PULL_REQUEST_URL, type ProjectWorktreeSettings } from '@shared/g
 import type { SessionTaskRef } from '@shared/workflow'
 import {
   isAgentId,
+  isQueuedComments,
   isUserContent,
   type AgentId,
   type PromptCache,
@@ -694,9 +695,13 @@ function queueOf(value: unknown): { queue?: QueuedPrompt[] } {
   return queue.length > 0 ? { queue: queue.map(withFrom) } : {}
 }
 
-/** A queued prompt another session's agent sent keeps whose it is, for its label. */
+/**
+ * A queued prompt another session's agent sent keeps whose it is, for its label, and one built
+ * from comments keeps their summary, for its row.
+ */
 function withFrom(item: QueuedPrompt): QueuedPrompt {
-  const { from, ...rest } = item as QueuedPrompt & { from?: unknown }
+  const { from, comments, ...kept } = item as QueuedPrompt & { from?: unknown; comments?: unknown }
+  const rest = isQueuedComments(comments) ? { ...kept, comments } : kept
   return isRecord(from) && isString(from.sessionId) && isString(from.title)
     ? {
         ...rest,

@@ -97,6 +97,7 @@ import {
   type PlanItem,
   type QuestionAnswer,
   type SessionSnapshot,
+  type QueuedComments,
   type SessionStatus,
   type SessionView,
   type StopReason,
@@ -7626,6 +7627,7 @@ export class SessionManager {
     input: UserContent[],
     portId?: string,
     device?: FromDevice,
+    comments?: QueuedComments,
   ): Promise<{ itemId: string | null }> {
     this.assertRegistered(sessionId)
     if (this.recordOf(sessionId).origin === 'subagent') {
@@ -7644,7 +7646,13 @@ export class SessionManager {
     if (!canSend(status) && status !== 'running' && status !== 'awaiting_permission') {
       throw busyError(status)
     }
-    const item = { id: randomUUID(), content, at: this.now(), ...(device ? { device } : {}) }
+    const item = {
+      id: randomUUID(),
+      content,
+      at: this.now(),
+      ...(device ? { device } : {}),
+      ...(comments ? { comments } : {}),
+    }
     if (portId !== undefined) live.queuedBy.set(item.id, portId)
     this.update(live, { queue: [...queue, item] })
     this.persist(live)

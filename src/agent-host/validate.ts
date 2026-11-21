@@ -84,7 +84,9 @@ import {
 } from '@shared/routines'
 import { ATTACHMENT_BYTES, ATTACHMENT_LIMIT, PROMPT_BYTES, THUMB_CHARS } from '@shared/attachments'
 import {
+  QUEUED_COMMENTS_TEXT,
   isAgentId,
+  isQueuedComments,
   type AgentId,
   type ContentRef,
   type FormValues,
@@ -1932,7 +1934,18 @@ export function createValidators(platform: Platform): Validators {
     'sessions.contextEstimates': session,
     'sessions.queue': (params) => {
       const o = fields(params)
-      return { sessionId: sessionId(o), content: promptContent(o.content) }
+      if (o.comments !== undefined && !isQueuedComments(o.comments)) {
+        throw invalidParams(
+          `comments must be a count from 1 and a text of 1 to ${QUEUED_COMMENTS_TEXT} characters`,
+        )
+      }
+      return {
+        sessionId: sessionId(o),
+        content: promptContent(o.content),
+        ...(o.comments === undefined
+          ? {}
+          : { comments: { count: o.comments.count, text: o.comments.text } }),
+      }
     },
     'sessions.runCommand': (params) => {
       const o = fields(params)

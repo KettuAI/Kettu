@@ -371,6 +371,20 @@ describe('the host files', () => {
     ).toEqual({ version: 1, sessions: [{ ...session, queue: [{ ...item, from }] }] })
   })
 
+  it("keeps a queued message's comment summary, dropping one that does not read", () => {
+    const item = { id: 'q1', content: [{ type: 'text' as const, text: '> a\n\nb' }], at: 1 }
+    const queued: SessionRecord = {
+      ...session,
+      queue: [{ ...item, comments: { count: 2, text: 'Looks good' } }],
+    }
+    expect(parseSessionsFile({ sessions: [queued] })).toEqual({ version: 1, sessions: [queued] })
+    expect(
+      parseSessionsFile({
+        sessions: [{ ...session, queue: [{ ...item, comments: { count: '2', text: 'x' } }] }],
+      }),
+    ).toEqual({ version: 1, sessions: [{ ...session, queue: [item] }] })
+  })
+
   it("keeps a session's worktree and never lets an unreadable one fall back to the project", () => {
     const worktree = {
       path: '/repo-worktrees/kettu-fix-login-1a2b3c',

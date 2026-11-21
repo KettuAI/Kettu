@@ -197,6 +197,30 @@ export interface QueuedPrompt {
   approval?: true
   /** Set for a message Kettu itself wrote to the agent, such as a workflow step's reminder. */
   kettu?: true
+  /** Set for a message built from comments on passages, for its row in the queue. */
+  comments?: QueuedComments
+}
+
+/** How a message of comments reads in the queue: how many, and the text or else the first one. */
+export interface QueuedComments {
+  count: number
+  text: string
+}
+
+/** The most characters of a queued message's comment summary. */
+export const QUEUED_COMMENTS_TEXT = 500
+
+export function isQueuedComments(value: unknown): value is QueuedComments {
+  if (typeof value !== 'object' || value === null) return false
+  const { count, text } = value as Record<string, unknown>
+  return (
+    typeof count === 'number' &&
+    Number.isSafeInteger(count) &&
+    count > 0 &&
+    typeof text === 'string' &&
+    text.length > 0 &&
+    text.length <= QUEUED_COMMENTS_TEXT
+  )
 }
 
 /** The session that started or messaged another one through the session tools. */

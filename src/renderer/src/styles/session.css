@@ -2105,9 +2105,11 @@
   padding: 6px 4px 6px 8px;
   border-radius: 8px;
 }
+/* The list's ground is already the hover gray, so a row takes the highlighted menu item's fill,
+   which still reads on it in the dark theme. */
 .ks-comments__row:hover,
 .ks-comments__row:has(:focus-visible) {
-  background: var(--bg-hover);
+  background: var(--bg-selected);
 }
 .ks-comments__row > .ks-reply-num {
   margin-top: 1px;
