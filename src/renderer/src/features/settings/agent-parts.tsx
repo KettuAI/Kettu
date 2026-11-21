@@ -1,7 +1,7 @@
 // What the Agent and Harness sections of Settings both draw: reading an agent's account and
 // usage, its plan meters, sign-in, task logs and the rows of its configuration.
 
-import { Fragment, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
+import { Fragment, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import {
   ArrowUpRight01Icon,
   Cancel01Icon,
@@ -18,8 +18,7 @@ import { FIX_URLS, type ProblemFix } from '@renderer/features/agents/harness-pro
 import { codeSpans } from '@renderer/features/session/entries/helpers'
 import { planReset } from '@renderer/features/sidebar/plan-usage'
 import { confirmCliUpdate } from '@renderer/features/updates/command-confirm-model'
-import { addDays, dayOf, monthStartOf } from '@renderer/features/usage/model'
-import { limitLabel, mediumAgo, money } from '@renderer/lib/format'
+import { limitLabel, mediumAgo } from '@renderer/lib/format'
 import { useLimitView } from '@renderer/hooks/use-limit-view'
 import { errorMessage } from '@renderer/lib/host'
 import { newestLimits } from '@renderer/lib/plan-readings'
@@ -38,9 +37,8 @@ import {
   SetButton,
   Spin,
 } from './controls'
-import { Group, GroupLabel, Notice, RowFrame, RowGroup, RowShell, RowText } from './rows'
+import { GroupLabel, Notice, RowFrame, RowGroup, RowShell, RowText } from './rows'
 import { openInstall } from './harness-install'
-import { agentCost } from './spend'
 
 /** The window nearest its limit as a list row's end: its label and percent over a 4 px bar. */
 export function ListMeter({ limits }: { limits: PlanLimit[] }) {
@@ -339,73 +337,6 @@ export function LogCopyButton({ task }: { task: AgentTask }) {
 }
 
 /** Plan usage, one row per window, read afresh while the page shows. */
-/**
- * What Kettu sent through an agent signed in with an API key this month, by its own record: an
- * API key has no plan limits to read.
- */
-export function SpendGroup({
-  status,
-  providers = false,
-  account = false,
-}: {
-  status: AgentStatus
-  /** A provider-based agent: its provider usage is read elsewhere. */
-  providers?: boolean
-  /** An account billed by use, with no plan limits, rather than an API key. */
-  account?: boolean
-}) {
-  const { request } = useHostScope()
-  const { t } = useTranslation('settings')
-  // undefined while it is read; null when no model it used has a price.
-  const [cost, setCost] = useState<number | null | undefined>(undefined)
-  const [error, setError] = useState<string | null>(null)
-  useEffect(() => {
-    let cancelled = false
-    const today = dayOf(Date.now())
-    const from = monthStartOf(today)
-    const to = addDays(today, 1)
-    request('usage.summary', { dayStarts: [from, to], from, to, scope: 'kettu' }).then(
-      (summary) => {
-        if (!cancelled) setCost(agentCost(summary.days, status.id))
-      },
-      (e: unknown) => {
-        if (!cancelled) setError(errorMessage(e))
-      },
-    )
-    return () => {
-      cancelled = true
-    }
-  }, [request, status.id])
-  return (
-    <Group label={t('agents.spend.group')}>
-      <RowFrame
-        text={
-          <RowText
-            name={t('agents.spend.month')}
-            description={t(
-              providers
-                ? 'agents.spend.descriptionProviders'
-                : account
-                  ? 'agents.spend.descriptionAccount'
-                  : 'agents.spend.description',
-              { name: status.harnessName },
-            )}
-          />
-        }
-      >
-        <ControlError error={error} />
-        {cost === undefined ? (
-          !error && <Spin />
-        ) : (
-          <span className="k-figure">
-            {cost === null ? t('agents.spend.unpriced') : money(cost, 'USD')}
-          </span>
-        )}
-      </RowFrame>
-    </Group>
-  )
-}
-
 export function UsageGroup({
   status,
   reading,

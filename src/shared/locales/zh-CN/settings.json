@@ -748,14 +748,6 @@
       "not-yet-supported": "Kettu 暂时还不能读取这个智能体的套餐用量。",
       "console-managed": "用这种方式登录时，用量在 Google AI Studio 或 Google Cloud 里查看。"
     },
-    "spend": {
-      "group": "花费",
-      "month": "本月",
-      "description": "{{name}} 不为 API key 报告套餐额度。这里是 Kettu 统计的、它发出的请求。",
-      "descriptionProviders": "Kettu 本月通过这个智能体发出的用量，按 Kettu 自己的记录统计。",
-      "descriptionAccount": "这个账号按用量计费，没有套餐额度。这里是 Kettu 统计的、它发出的请求。",
-      "unpriced": "无价格"
-    },
     "configuration": "配置",
     "config": {
       "folder": "目录",
