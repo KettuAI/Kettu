@@ -9,6 +9,7 @@ import type { LogFn } from '../agent-host/storage'
 import { BYTES_PER_FRAME } from '@shared/remote/channel'
 import { bytesOf, findPlaces, isBinary, type Place } from '@shared/remote/places'
 import { MAX_UPLOAD_BYTES } from '@shared/remote/streams'
+import { portError } from '@shared/hosts-text'
 import type { PortError } from '@shared/port-rpc'
 
 /** Bytes the transport may hold before an upload waits for them to leave. */
@@ -152,16 +153,13 @@ export class LinkRequests {
     const message = withRefs(outgoing.message, uploads, 0) as Record<string, unknown>
     if (uploads.length === 0) return this.put(wire, outgoing, message)
     if (!wire.bytes) {
-      return this.reject(outgoing, {
-        code: 'invalid_params',
-        message: 'This host takes no files; update Kettu on it',
-      })
+      return this.reject(outgoing, portError('invalid_params', 'remote.noFiles'))
     }
     if (uploads.some((upload) => upload.bytes.length > MAX_UPLOAD_BYTES)) {
-      return this.reject(outgoing, {
-        code: 'invalid_params',
-        message: `An upload is at most ${MAX_UPLOAD_BYTES} bytes`,
-      })
+      return this.reject(
+        outgoing,
+        portError('invalid_params', 'remote.uploadTooLarge', { max: MAX_UPLOAD_BYTES }),
+      )
     }
     void this.upload(wire, outgoing, attempt, message, uploads)
   }
@@ -237,7 +235,7 @@ export class LinkRequests {
     if (!download) return
     const { awaited } = download
     if (download.received !== download.size) {
-      return this.fail(awaited, internal('A stream from the host ended short'))
+      return this.fail(awaited, portError('internal', 'remote.streamShort'))
     }
     this.downloads.delete(stream as number)
     download.place.holder[download.place.key] = joined(download.chunks, download.size)
@@ -246,7 +244,7 @@ export class LinkRequests {
 
   private cancelled(stream: unknown, error: unknown): void {
     if (typeof stream !== 'number') return
-    const reason = isPortError(error) ? error : internal('The host gave up a stream')
+    const reason = isPortError(error) ? error : portError('internal', 'remote.streamGivenUp')
     const upload = this.uploads.get(stream)
     if (upload) {
       this.uploads.delete(stream)

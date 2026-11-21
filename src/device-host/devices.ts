@@ -4,6 +4,7 @@
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import type { Env } from '../agent-host/find-command'
+import { t } from '@shared/hosts-text'
 import {
   SurfaceControls,
   type ControlPoint,
@@ -43,6 +44,11 @@ import { FrameFanout } from './stream'
 /** A device nobody watches keeps capturing this long, for a pane that comes straight back. */
 const IDLE_CAPTURE_MS = 30_000
 const LIST_EVERY_MS = 5_000
+
+/** Why a command failed, without the `Error: ` an error object's string starts with. */
+function reasonOf(error: unknown): string {
+  return error instanceof Error ? error.message : String(error)
+}
 
 export class DeviceError extends Error {
   constructor(
@@ -222,10 +228,10 @@ export class DeviceManager {
       await this.list()
       found = this.found.get(id)
     }
-    if (!found) throw new DeviceError('not_found', 'No such device on this host')
+    if (!found) throw new DeviceError('not_found', t('devices.noSuchDevice'))
     const holder = this.leases.get(id)
     if (holder && holder !== sessionId) {
-      throw new DeviceError('busy', 'Another session is using this device', { sessionId: holder })
+      throw new DeviceError('busy', t('devices.busyOther'), { sessionId: holder })
     }
     this.checkRoom(id, sessionId)
     this.leases.set(id, sessionId)
@@ -244,18 +250,24 @@ export class DeviceManager {
         await this.list()
       } catch (error) {
         this.setState(id, 'shutdown')
-        throw new DeviceError('unavailable', `The simulator did not boot: ${String(error)}`)
+        throw new DeviceError(
+          'unavailable',
+          t('devices.simulatorBoot', { reason: reasonOf(error) }),
+        )
       } finally {
         this.booting.delete(id)
       }
     } else if (found.kind === 'emulator' && found.state === 'shutdown') {
       if (!tools.emulator || !tools.adb)
-        throw new DeviceError('unavailable', 'The Android emulator is missing')
+        throw new DeviceError('unavailable', t('devices.emulatorMissing'))
       this.setState(id, 'booting')
       const serial = await bootEmulator(tools.emulator, tools.adb, found.target, env).catch(
         (error: unknown) => {
           this.setState(id, 'shutdown')
-          throw new DeviceError('unavailable', `The emulator did not start: ${String(error)}`)
+          throw new DeviceError(
+            'unavailable',
+            t('devices.emulatorStart', { reason: reasonOf(error) }),
+          )
         },
       )
       // The running emulator is listed by its serial; the lease moves with it.
@@ -275,7 +287,7 @@ export class DeviceManager {
       await this.list()
     }
     const info = this.info(id)
-    if (!info) throw new DeviceError('not_found', 'The device went away')
+    if (!info) throw new DeviceError('not_found', t('devices.wentAway'))
     return info
   }
 
@@ -296,7 +308,7 @@ export class DeviceManager {
       this.broadcastList()
     }
     const info = this.info(id)
-    if (!info) throw new DeviceError('not_found', 'The device went away')
+    if (!info) throw new DeviceError('not_found', t('devices.wentAway'))
     return info
   }
 
@@ -306,11 +318,9 @@ export class DeviceManager {
     let held = 0
     for (const holder of this.leases.values()) if (holder === sessionId) held += 1
     if (held >= SESSION_DEVICE_LIMIT) {
-      throw new DeviceError(
-        'busy',
-        `This session already has ${SESSION_DEVICE_LIMIT} devices open. Close one first.`,
-        { limit: SESSION_DEVICE_LIMIT },
-      )
+      throw new DeviceError('busy', t('devices.roomLimit', { limit: SESSION_DEVICE_LIMIT }), {
+        limit: SESSION_DEVICE_LIMIT,
+      })
     }
   }
 
@@ -337,7 +347,7 @@ export class DeviceManager {
     this.checkHolder(id, sessionId)
     const found = this.found.get(id)
     if (found && found.kind === 'physical') {
-      throw new DeviceError('unavailable', 'Only simulators and emulators shut down from here')
+      throw new DeviceError('unavailable', t('devices.shutdownPhysical'))
     }
     const down = found?.kind === 'emulator' ? (this.booted.get(id) ?? null) : id
     this.booted.delete(id)
@@ -409,7 +419,7 @@ export class DeviceManager {
     // A host that just started has not listed yet.
     if (!this.found.has(id)) await this.list()
     const found = this.found.get(id)
-    if (!found) throw new DeviceError('not_found', 'No such device on this host')
+    if (!found) throw new DeviceError('not_found', t('devices.noSuchDevice'))
     // Watching from here, so an unwatch or a closed port while the stream starts is not undone.
     let set = this.watching.get(port)
     if (!set) this.watching.set(port, (set = new Set()))
@@ -474,7 +484,7 @@ export class DeviceManager {
   input(id: DeviceId, input: DeviceInput, sessionId: string): boolean {
     this.checkHolder(id, sessionId)
     const live = this.live.get(id)
-    if (!live) throw new DeviceError('unavailable', 'The device is not streaming')
+    if (!live) throw new DeviceError('unavailable', t('devices.notStreaming'))
     if (this.controls.holdsInput(id) && input.type !== 'scroll') return false
     live.driver.send(input)
     return true
@@ -484,7 +494,7 @@ export class DeviceManager {
     await this.restored
     this.checkHolder(id, sessionId)
     const found = this.found.get(id)
-    if (!found) throw new DeviceError('not_found', 'No such device on this host')
+    if (!found) throw new DeviceError('not_found', t('devices.noSuchDevice'))
     const live = await this.ensureLive(found)
     try {
       return await live.driver.screenshot()
@@ -522,7 +532,7 @@ export class DeviceManager {
     await this.restored
     this.checkHolder(id, sessionId)
     const found = this.found.get(id)
-    if (!found) throw new DeviceError('not_found', 'No such device on this host')
+    if (!found) throw new DeviceError('not_found', t('devices.noSuchDevice'))
     const tools = await this.loadTools()
     const env = await this.deps.env()
     if (found.kind === 'simulator' && tools.xcrun) {
@@ -542,7 +552,7 @@ export class DeviceManager {
         env,
       )
     } else {
-      throw new DeviceError('unavailable', 'The appearance of this device cannot be set from here')
+      throw new DeviceError('unavailable', t('devices.appearanceUnsupported'))
     }
   }
 
@@ -740,16 +750,16 @@ export class DeviceManager {
   private createDriver(found: FoundDevice, tools: Tools, env: Env): DeviceDriver {
     const log = (message: string): void => this.deps.log(`[${found.name}] ${message}`)
     if (found.platform === 'ios' && found.kind === 'simulator') {
-      if (!tools.xcrun) throw new DeviceError('unavailable', 'Xcode is not installed')
+      if (!tools.xcrun) throw new DeviceError('unavailable', t('devices.noXcode'))
       if (process.arch !== 'arm64') {
-        throw new DeviceError('unavailable', 'Simulator video needs a Mac with Apple silicon')
+        throw new DeviceError('unavailable', t('devices.needsAppleSilicon'))
       }
       return new IosSimulatorDriver(found.target, env, log)
     }
     if (found.platform === 'ios') {
       return new IosDeviceDriver(found.target, found.osVersion, this.deps.resourcesPath, env, log)
     }
-    if (!tools.adb) throw new DeviceError('unavailable', 'adb is not installed')
+    if (!tools.adb) throw new DeviceError('unavailable', t('devices.noAdb'))
     return new AndroidDriver(found.target, tools.adb, this.deps.resourcesPath, env, log)
   }
 
@@ -770,7 +780,7 @@ export class DeviceManager {
       return existing
     }
     if (found.state === 'shutdown' || found.state === 'booting') {
-      throw new DeviceError('unavailable', 'The device is not running')
+      throw new DeviceError('unavailable', t('devices.notRunning'))
     }
     const tools = await this.loadTools()
     const env = await this.deps.env()
@@ -860,7 +870,7 @@ export class DeviceManager {
   /** A client sees and operates a device only for the session that holds it. */
   private checkHolder(id: DeviceId, sessionId: string): void {
     if (this.leases.get(id) !== sessionId) {
-      throw new DeviceError('forbidden', 'This device is not open in this session')
+      throw new DeviceError('forbidden', t('devices.notOpenHere'))
     }
   }
 

@@ -8,6 +8,7 @@ import islandZhCN from '@shared/locales/zh-CN/island.json'
 import zhCN from '@shared/locales/zh-CN/main.json'
 import { kettuTool as kettuToolEn } from '@shared/locales/en/session.json'
 import { kettuTool as kettuToolZhCN } from '@shared/locales/zh-CN/session.json'
+import { setLocale as setAgentHostLocale } from '../agent-host/i18n'
 
 // Its own instance, so the agent host's catalog, which some modules main shares code with load
 // onto the global one, never replaces these.
@@ -52,6 +53,8 @@ export function islandHelperStrings(): Record<string, string> {
 
 export function setLocale(locale: Locale): void {
   if (i18n.language !== locale) void i18n.changeLanguage(locale)
+  // Agent host code that main or the daemon runs itself writes through the host's own instance.
+  setAgentHostLocale(locale)
 }
 
 export function locale(): Locale {

@@ -15,6 +15,7 @@ import { errorAnswer, messageHeader } from '@shared/artifact-capabilities'
 import { isHtmlPath } from '@shared/artifact-files'
 import { ARTIFACT_ID } from '@shared/artifacts'
 import type { AdminAnswer } from '@shared/host-control'
+import { loggedPortError, t } from '@shared/hosts-text'
 import type { PortChannel } from '@shared/port-channel'
 import { isPortError, type PortError } from '@shared/port-rpc'
 import type { ActivityActor, NewActivity } from '@shared/remote/activity'
@@ -100,7 +101,7 @@ import type { LogFn } from '../agent-host/storage'
 import type { ActivityLog } from './activity'
 import { DeviceDevices, isDeviceMethod } from './device-devices'
 import type { DiscoveryRequests, DiscoverySlot } from './discovery'
-import { DeviceTerminal, isTerminalMethod, NOT_ALLOWED } from './device-terminal'
+import { DeviceTerminal, isTerminalMethod, notAllowed } from './device-terminal'
 import type { DeviceStore, RemovedDevice } from './devices'
 import { bytesSource, Downloads, fileSource } from './downloads'
 import { HostForwards } from './forwards'
@@ -1080,8 +1081,8 @@ class DeviceSession {
         },
       },
       ...(options.uploadIdleMs ? { idleMs: options.uploadIdleMs } : {}),
-      cancelled: (stream, error) => {
-        options.log('warn', `Device ${device.id}'s upload failed: ${error.message}`)
+      cancelled: (stream, { log, ...error }) => {
+        options.log('warn', `Device ${device.id}'s upload failed: ${log ?? error.message}`)
         this.send({ type: 'stream.cancel', stream, error } satisfies StreamCancel)
       },
     })
@@ -1292,7 +1293,7 @@ class DeviceSession {
     this.uploads.closeAll()
     this.downloads.closeAll()
     this.forwards.close()
-    for (const asked of this.asking.values()) asked.reject(ENDED)
+    for (const asked of this.asking.values()) asked.reject(ended())
     this.asking.clear()
     const port = this.port
     this.port = null
@@ -1316,7 +1317,7 @@ class DeviceSession {
   terminalChanged(allowed: boolean): void {
     if (!this.live) return
     this.send({ type: 'terminal', allowed } satisfies TerminalAccess)
-    if (!allowed) this.terminal?.close(NOT_ALLOWED)
+    if (!allowed) this.terminal?.close(notAllowed())
   }
 
   /** Something of the host its owner hears, beside the agent host's events. */
@@ -1469,7 +1470,7 @@ class DeviceSession {
         this.send({
           type: 'error',
           id,
-          error: { code: 'forbidden', message: `A paired device may not call "${method}"` },
+          error: { code: 'forbidden', message: t('remote.deviceMayNotCall', { method }) },
         })
       }
       return
@@ -1510,7 +1511,7 @@ class DeviceSession {
       reply({ type: 'error', id, error: { code, message } })
     const notifications = this.server.options.notifications?.()
     if (!notifications || this.version < PUSH_VERSION) {
-      return fail('unavailable', 'This host sends no notifications')
+      return fail('unavailable', t('remote.noNotifications'))
     }
     if (method === NOTIFICATIONS_GET) {
       return reply({ type: 'response', id, result: notifications.state(this.device.id) })
@@ -1518,7 +1519,7 @@ class DeviceSession {
     const update = parseNotificationsUpdate(params)
     if (!update) return fail('invalid_params', 'The target or the choices are not ones')
     const state = await notifications.update(this.device.id, update)
-    if (!state) return fail('not_found', 'The device is no longer paired')
+    if (!state) return fail('not_found', t('remote.notPaired'))
     reply({ type: 'response', id, result: state })
   }
 
@@ -1534,11 +1535,11 @@ class DeviceSession {
         'warn',
         `Device ${this.device.id} asked for ${method}, which it may not call`,
       )
-      const message = `A paired device may not call "${method}"`
+      const message = t('remote.deviceMayNotCall', { method })
       return reply({ type: 'error', id, error: { code: 'forbidden', message } })
     }
     const answer = await run(this.device.id, method, params).catch((): AdminAnswer => ({
-      error: { code: 'internal', message: 'The host could not answer' },
+      error: { code: 'internal', message: t('remote.hostCouldNotAnswer') },
     }))
     if ('error' in answer) reply({ type: 'error', id, error: answer.error })
     else reply({ type: 'response', id, result: answer.result })
@@ -1561,8 +1562,8 @@ class DeviceSession {
       const reason = failed.reason
       const error: PortError =
         reason instanceof UploadError
-          ? reason.error
-          : { code: 'internal', message: 'An upload could not be read' }
+          ? onWire(reason.error)
+          : { code: 'internal', message: t('remote.uploadUnreadable') }
       if (typeof id === 'number') this.send({ type: 'error', id, error })
       return
     }
@@ -1601,11 +1602,11 @@ class DeviceSession {
     const reply = (message: unknown): void => {
       if (this.live) this.send(message)
     }
-    const fail = (error: PortError): void => reply({ type: 'error', id, error })
+    const fail = (error: PortError): void => reply({ type: 'error', id, error: onWire(error) })
     const range = mediaRange(params)
     if (typeof range === 'string') return fail({ code: 'invalid_params', message: range })
     if (this.mediaReads >= MAX_MEDIA_STREAMS) {
-      const message = `A connection may read at most ${MAX_MEDIA_STREAMS} media files at once`
+      const message = t('remote.mediaBusy', { max: MAX_MEDIA_STREAMS })
       return fail({ code: 'busy', message })
     }
     this.mediaReads++
@@ -1647,7 +1648,7 @@ class DeviceSession {
       reply({ type: 'response', id, result })
       this.downloads.start(stream)
     } catch (error) {
-      fail(isPortError(error) ? error : { code: 'internal', message: 'The file could not be read' })
+      fail(isPortError(error) ? error : { code: 'internal', message: t('remote.fileUnreadable') })
     } finally {
       if (!streaming) this.mediaReads--
     }
@@ -1670,8 +1671,8 @@ class DeviceSession {
     try {
       await this.ask('artifacts.content', { id: artifactId })
     } catch (error) {
-      const failed = isPortError(error) ? error : ENDED
-      return reply({ type: 'error', id, error: failed })
+      const failed = isPortError(error) ? error : ended()
+      return reply({ type: 'error', id, error: onWire(failed) })
     }
     if (!this.live) return
     const token = this.server.frames.open(this, artifactId)
@@ -1702,7 +1703,7 @@ class DeviceSession {
         : ''
     const frame = this.server.frames.find(token)
     if (!frame || frame.session !== this) {
-      return fail({ code: 'not_found', message: 'No such frame is open' })
+      return fail({ code: 'not_found', message: t('remote.noFrame') })
     }
     if (stream !== undefined && (typeof stream !== 'string' || stream.length > STREAM_CHARS)) {
       return fail({ code: 'invalid_params', message: 'stream must be a short name' })
@@ -1716,7 +1717,7 @@ class DeviceSession {
       const result =
         kind === 'use'
           ? { ...header, ok: true, value: null }
-          : errorAnswer(header, 'not_allowed', 'Open the artifact again to use this.')
+          : errorAnswer(header, 'not_allowed', t('remote.reopenArtifact'))
       return this.send({ type: 'response', id, result })
     }
     this.forward({
@@ -1751,7 +1752,7 @@ class DeviceSession {
   /** Asks the agent host on the device's port, under an id no request of the device's has. */
   private ask<M extends HostMethod>(method: M, params: unknown): Promise<HostResult<M>> {
     const port = this.port
-    if (!port) return Promise.reject(ENDED)
+    if (!port) return Promise.reject(ended())
     const id = -++this.asked
     return new Promise((resolve, reject) => {
       this.asking.set(id, { resolve: resolve as (result: unknown) => void, reject })
@@ -1769,7 +1770,7 @@ class DeviceSession {
     const asked = this.asking.get(id)
     this.asking.delete(id)
     if (type === 'response') asked?.resolve(result)
-    else asked?.reject(isPortError(error) ? error : ENDED)
+    else asked?.reject(isPortError(error) ? error : ended())
     return true
   }
 
@@ -1824,7 +1825,7 @@ class DeviceSession {
       )
       // A response too long for the channel still tells the device its request failed.
       if ((type === 'response' || type === 'error') && typeof id === 'number') {
-        const message = 'The answer is too long for the connection'
+        const message = t('remote.answerTooLong')
         const failed = { type: 'error', id, error: { code: 'internal', message } }
         this.outbox.push({ kind: 'json', value: failed }).catch(() => {})
       }
@@ -1832,7 +1833,19 @@ class DeviceSession {
   }
 }
 
-const ENDED: PortError = { code: 'internal', message: 'The connection ended' }
+/** Built when needed, so its words follow the language the host was last told. */
+function ended(): PortError {
+  return loggedPortError('internal', 'remote.connectionEnded')
+}
+
+/** An error as a device hears it, without the English line for the log. */
+function onWire(error: PortError): PortError {
+  return {
+    code: error.code,
+    message: error.message,
+    ...(error.data === undefined ? {} : { data: error.data }),
+  }
+}
 
 /** The part of a file a `media.read` asks for, or why its numbers are not one. */
 function mediaRange(params: unknown): { offset: number; length: number | null } | string {

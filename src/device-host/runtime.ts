@@ -5,6 +5,7 @@ import { existsSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { createServer } from 'node:net'
 import path from 'node:path'
+import { t } from '@shared/hosts-text'
 import { isExecutableFile } from '../agent-host/find-command'
 
 const require = createRequire(__filename)
@@ -23,7 +24,7 @@ export function packageRoot(name: string): string {
     const root = path.join(dir, name)
     if (existsSync(path.join(root, 'package.json'))) return unpacked(root)
   }
-  throw new Error(`${name} is not installed with Kettu`)
+  throw new Error(t('devices.notInstalled', { name }))
 }
 
 /** How to run a Node.js script: this process's own runtime, as Node.js under Electron. */

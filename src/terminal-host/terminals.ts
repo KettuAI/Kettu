@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { CONTROL_WAIT_MS, ControlWait, SurfaceControls } from '@shared/control'
 import type { BusyTerminal } from '@shared/host-control'
+import { t, tEnglish } from '@shared/hosts-text'
 import type { Platform } from '@shared/platform'
 import type { PortErrorCode } from '@shared/port-rpc'
 import {
@@ -61,11 +62,16 @@ export interface TerminalSink {
 }
 
 export class TerminalError extends Error {
+  /** The message in English, for logs; `message` is in the user's language. */
+  readonly log: string
+
   constructor(
     readonly code: PortErrorCode,
     message: string,
+    log = message,
   ) {
     super(message)
+    this.log = log
   }
 }
 
@@ -206,7 +212,7 @@ export class TerminalManager {
       await this.loadPty()
       return null
     } catch (error) {
-      return (error as Error).message
+      return error instanceof TerminalError ? error.log : (error as Error).message
     }
   }
 
@@ -234,14 +240,14 @@ export class TerminalManager {
   ): Promise<TerminalInfo> {
     const project = await this.options.projects.match(params.projectPath)
     if (!project) {
-      throw new TerminalError('restricted', 'Terminals open only in a known project folder')
+      throw new TerminalError('restricted', t('terminal.unknownProject'))
     }
     const cwd =
       params.folder === undefined
         ? project.cwd
         : await this.options.projects.folderIn(project, params.folder)
     if (cwd === null) {
-      throw new TerminalError('restricted', 'Terminals open only in a folder of their project')
+      throw new TerminalError('restricted', t('terminal.outsideProject'))
     }
     const shell = await resolveShell(
       this.options.platform,
@@ -405,7 +411,7 @@ export class TerminalManager {
           }
           const data = call.enter ? `${call.text}\r` : call.text
           return await this.agentAct(call.sessionId, call.terminalId, call.readOnly, (terminal) => {
-            if (!terminal.pty) throw new TerminalError('internal', 'The shell has exited')
+            if (!terminal.pty) throw new TerminalError('internal', t('terminal.shellExited'))
             terminal.pty.write(data)
             return { kind: 'terminal', terminal: agentView(terminal) }
           })
@@ -447,7 +453,7 @@ export class TerminalManager {
   private allow(call: Extract<TerminalCall, { kind: 'allow' }>): AgentTerminal {
     const terminal = this.terminals.get(call.terminalId)
     if (!terminal || sessionOf(terminal) !== call.sessionId) {
-      throw new TerminalError('not_found', `This session has no terminal "${call.terminalId}"`)
+      throw new TerminalError('not_found', t('terminal.noSuchTerminal', { id: call.terminalId }))
     }
     const { info } = terminal
     if (info.owner === null && (info.agentAllowed !== call.allowed || info.agentAsks)) {
@@ -469,7 +475,7 @@ export class TerminalManager {
   ): Extract<TerminalCallAnswer, { result: unknown }>['result'] {
     const terminal = this.terminals.get(call.terminalId)
     if (!terminal || sessionOf(terminal) !== call.sessionId) {
-      throw new TerminalError('not_found', `This session has no terminal "${call.terminalId}"`)
+      throw new TerminalError('not_found', t('terminal.noSuchTerminal', { id: call.terminalId }))
     }
     const { info } = terminal
     const theirs = info.namedBy === 'user' || (info.owner === null && !info.agentAllowed)
@@ -500,7 +506,7 @@ export class TerminalManager {
   private asking(call: Extract<TerminalCall, { kind: 'asking' }>): AgentTerminal {
     const terminal = this.terminals.get(call.terminalId)
     if (!terminal || sessionOf(terminal) !== call.sessionId) {
-      throw new TerminalError('not_found', `This session has no terminal "${call.terminalId}"`)
+      throw new TerminalError('not_found', t('terminal.noSuchTerminal', { id: call.terminalId }))
     }
     const { info } = terminal
     if (info.owner === null && !!info.agentAsks !== call.asking) {
@@ -546,7 +552,10 @@ export class TerminalManager {
     call: Extract<TerminalCall, { kind: 'reply' }>,
   ): Promise<TerminalCallAnswer> {
     const problem = replyCommandProblem(call.command)
-    if (problem) return failure('failed', `The code block cannot run: ${problem}`)
+    if (problem) {
+      const why = t(`terminal.blockProblem.${problem}`)
+      return failure('failed', t('terminal.blockCannotRun', { problem: why }))
+    }
     const command = call.command.replace(/\r?\n$/, '')
     const info = await this.open(
       {
@@ -567,10 +576,7 @@ export class TerminalManager {
     })
     if (!typed) {
       this.kill(info.id)
-      return failure(
-        'failed',
-        "This shell takes no bracketed paste, so the block's lines cannot go in at once",
-      )
+      return failure('failed', t('terminal.noBracketedPaste'))
     }
     return { result: { kind: 'terminal', terminal: agentView(this.get(info.id)) } }
   }
@@ -664,7 +670,7 @@ export class TerminalManager {
   private owned(sessionId: string, id: string): Terminal {
     const terminal = this.terminals.get(id)
     if (!terminal || sessionOf(terminal) !== sessionId) {
-      throw new TerminalError('not_found', `This session has no terminal "${id}"`)
+      throw new TerminalError('not_found', t('terminal.noSuchTerminal', { id }))
     }
     if (terminal.info.owner === null && !terminal.info.agentAllowed) throw new AskFirst(terminal)
     return terminal
@@ -774,14 +780,19 @@ export class TerminalManager {
 
   private get(id: string): Terminal {
     const terminal = this.terminals.get(id)
-    if (!terminal) throw new TerminalError('not_found', `No terminal "${id}"`)
+    if (!terminal) throw new TerminalError('not_found', t('terminal.terminalGone', { id }))
     return terminal
   }
 
   private loadPty(): Promise<PtySpawn> {
     this.spawnPty ??= this.options.loadPty().catch((error: unknown) => {
       this.spawnPty = null
-      throw new TerminalError('internal', `Terminals are unavailable: ${(error as Error).message}`)
+      const reason = (error as Error).message
+      throw new TerminalError(
+        'internal',
+        t('terminal.unavailable', { reason }),
+        tEnglish('terminal.unavailable', { reason }),
+      )
     })
     return this.spawnPty
   }
@@ -799,9 +810,11 @@ export class TerminalManager {
         env: shellEnvironment(this.options.env, this.options.platform, this.options.appVersion),
       })
     } catch (error) {
+      const params = { shell: terminal.shell.file, reason: (error as Error).message }
       throw new TerminalError(
         'internal',
-        `Could not start ${terminal.shell.file}: ${(error as Error).message}`,
+        t('terminal.startFailed', params),
+        tEnglish('terminal.startFailed', params),
       )
     }
     terminal.pty = pty

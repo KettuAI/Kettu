@@ -636,6 +636,7 @@ function startHost(): {
     type: 'device-host:init',
     platform: 'darwin',
     appVersion: '0.0.0',
+    locale: 'en',
     nodeRuntime: { command: 'node', env: {} },
     // No folder, so the leases stay in memory.
     dataDir: '',

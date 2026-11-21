@@ -8,6 +8,7 @@ import os from 'node:os'
 import path from 'node:path'
 import type { Env } from '../agent-host/find-command'
 import type { DeviceInput, DeviceOrientation, DeviceScreen, FrameKind } from '@shared/device-host'
+import { t } from '@shared/hosts-text'
 import { asciiKey, DriverError, hidUsage, type DeviceDriver, type DriverEvents } from './driver'
 import { encodeJsonFrame, FRAME_TAG, FrameReader, frameJson } from './framing'
 import { helperPath } from './runtime'
@@ -21,13 +22,18 @@ const KIND_BY_TAG: Record<number, FrameKind> = {
 }
 
 /** The helper's error codes, as the pane names the step that is missing. */
-const HELPER_ERRORS: Record<string, string> = {
-  'no-device': 'Connect the device with a USB cable',
-  'unsupported-ios': 'This iOS version has no screen service',
-  'developer-mode-off': 'Turn on Developer Mode on the device',
-  'ddi-not-mounted': 'The developer disk image is not mounted',
-  'not-paired': 'Trust this computer on the device',
-  'camera-in-use': 'An app on the device is using the camera or microphone',
+const HELPER_ERRORS = [
+  'no-device',
+  'unsupported-ios',
+  'developer-mode-off',
+  'ddi-not-mounted',
+  'not-paired',
+  'camera-in-use',
+] as const
+
+function helperError(code: string, message: unknown): string {
+  const known = HELPER_ERRORS.find((error) => error === code)
+  return known ? t(`devices.helperErrors.${known}`) : String(message ?? code)
 }
 
 export function majorVersion(osVersion: string | null): number {
@@ -62,7 +68,7 @@ export class IosDeviceDriver implements DeviceDriver {
     const modern = majorVersion(this.osVersion) >= 27
     const name = modern ? 'kettu-ios-device' : 'kettu-ios-usb-capture'
     const helper = await helperPath(name, this.resourcesPath)
-    if (!helper) throw new DriverError('helper_missing', `${name} is not installed with Kettu`)
+    if (!helper) throw new DriverError('helper_missing', t('devices.notInstalled', { name }))
     const child = spawn(helper, ['stream', '--udid', this.udid], {
       env: this.env as NodeJS.ProcessEnv,
       stdio: ['pipe', 'pipe', 'pipe'],
@@ -105,7 +111,7 @@ export class IosDeviceDriver implements DeviceDriver {
             events.input(this.hid)
           } else if (value.type === 'error') {
             const code = String(value.code)
-            const message = HELPER_ERRORS[code] ?? String(value.message ?? code)
+            const message = helperError(code, value.message)
             settle?.(new DriverError(code, message))
             if (!settle) this.end(message)
           }
@@ -114,10 +120,9 @@ export class IosDeviceDriver implements DeviceDriver {
     })
     child.once('exit', (code) => {
       this.child = null
-      settle?.(
-        new DriverError('helper_exit', `The device stream stopped (exit ${code ?? 'signal'})`),
-      )
-      if (!this.stopped) this.end(`The device stream stopped (exit ${code ?? 'signal'})`)
+      const stopped = t('devices.deviceStreamStopped', { code: code ?? 'signal' })
+      settle?.(new DriverError('helper_exit', stopped))
+      if (!this.stopped) this.end(stopped)
     })
     await ready
   }

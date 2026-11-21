@@ -6,6 +6,7 @@ import { randomInt } from 'node:crypto'
 import { connect, type Socket } from 'node:net'
 import type { Env } from '../agent-host/find-command'
 import type { DeviceInput, DeviceScreen } from '@shared/device-host'
+import { t } from '@shared/hosts-text'
 import { AnnexBToAvcc } from './annexb'
 import { parseAdbDevices, run } from './discovery'
 import { DriverError, type DeviceDriver, type DriverEvents } from './driver'
@@ -86,7 +87,9 @@ export class AndroidDriver implements DeviceDriver {
   async start(events: DriverEvents): Promise<void> {
     this.events = events
     const jar = await helperPath('scrcpy-server', this.resourcesPath)
-    if (!jar) throw new DriverError('helper_missing', 'scrcpy-server is not installed with Kettu')
+    if (!jar) {
+      throw new DriverError('helper_missing', t('devices.notInstalled', { name: 'scrcpy-server' }))
+    }
     await run(this.adb, ['-s', this.serial, 'push', jar, DEVICE_PATH], this.env, 60_000)
     const scid = randomInt(1, 0x7fffffff).toString(16).padStart(8, '0')
     this.port = await freePort()
@@ -125,7 +128,7 @@ export class AndroidDriver implements DeviceDriver {
     server.stderr?.on('data', (chunk: Buffer) => this.log(chunk.toString().trimEnd()))
     server.once('exit', (code) => {
       this.server = null
-      if (!this.stopped) this.end(`The Android stream stopped (exit ${code ?? 'signal'})`)
+      if (!this.stopped) this.end(t('devices.androidStopped', { code: code ?? 'signal' }))
     })
     this.video = await this.connectVideo()
     this.control = await connectOnce(this.port)
@@ -238,7 +241,7 @@ export class AndroidDriver implements DeviceDriver {
           })
           socket.once('close', () => {
             if (first) resolve(false)
-            else if (!this.stopped) this.end('The Android video stopped')
+            else if (!this.stopped) this.end(t('devices.androidVideoStopped'))
           })
           socket.once('error', () => undefined)
         })
@@ -247,8 +250,7 @@ export class AndroidDriver implements DeviceDriver {
       } catch {
         // Not listening yet.
       }
-      if (Date.now() > deadline)
-        throw new DriverError('connect', 'The Android stream did not start')
+      if (Date.now() > deadline) throw new DriverError('connect', t('devices.androidStreamSlow'))
       await new Promise((resolve) => setTimeout(resolve, 250))
     }
   }
@@ -256,11 +258,9 @@ export class AndroidDriver implements DeviceDriver {
   private onVideo(events: ReturnType<ScrcpyVideoReader['push']>, converter: AnnexBToAvcc): void {
     for (const event of events) {
       if (event.type === 'codec' && event.codec !== SCRCPY_CODEC_H264) {
-        this.end('The device does not encode H.264')
+        this.end(t('devices.noH264'))
       } else if (event.type === 'disabled') {
-        this.end(
-          event.error ? 'The device could not start its encoder' : 'The device disabled video',
-        )
+        this.end(event.error ? t('devices.encoderFailed') : t('devices.videoDisabled'))
       } else if (event.type === 'session') {
         this.size = { width: event.width, height: event.height }
         converter.reset()
@@ -334,5 +334,5 @@ export async function bootEmulator(
       if (booted.trim() === '1') return row.serial
     }
   }
-  throw new Error('The emulator did not finish booting')
+  throw new Error(t('devices.emulatorBoot'))
 }

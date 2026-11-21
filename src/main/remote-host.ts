@@ -45,7 +45,7 @@ import type { DirectAddress } from '@shared/remote/protocol'
 import { parseRelayStatuses } from '@shared/remote/relay-host'
 import type { DirectSettings } from '@shared/settings'
 import remoteHostPath from '../remote-host/index?modulePath'
-import { t } from './i18n'
+import { locale as currentLocale, t } from './i18n'
 import { createLogger } from './log'
 import type { StoredDevices } from './remote-devices'
 import type { RemoteIdentity } from './remote-identity'
@@ -295,6 +295,11 @@ export class RemoteHost {
     const sent = JSON.stringify(direct)
     if (!this.serving || sent === this.direct) return
     if (this.toServer({ type: 'remote-host:direct', direct })) this.direct = sent
+  }
+
+  /** Tells the process the interface language changed, for the text it writes; each start reads it. */
+  localeChanged(): void {
+    this.host?.post({ type: 'remote-host:locale', locale: currentLocale() })
   }
 
   /** Tells the process when devices may use the terminal or no longer may; each start reads it. */
@@ -780,6 +785,7 @@ export class RemoteHost {
       userDataPath: this.deps.userDataPath,
       appVersion: this.deps.appVersion,
       platform: process.platform,
+      locale: currentLocale(),
       hostName: this.deps.hostName(),
       ...(identity ? { privateKey: identity.privateKey } : {}),
       plainTextKey: identity?.plainText ?? false,

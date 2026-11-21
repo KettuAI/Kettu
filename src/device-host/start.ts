@@ -11,6 +11,8 @@ import type {
 } from '@shared/device-agent'
 import type { DeviceEvent } from '@shared/device-host'
 import type { DeviceHostToMain, MainToDeviceHost } from '@shared/host-control'
+import { setLocale, t } from '@shared/hosts-text'
+import { isLocale } from '@shared/locale'
 import { writeLog } from '@shared/log/process-log'
 import type { ControlChannel, PortChannel } from '@shared/port-channel'
 import type { FromPort } from '@shared/port-rpc'
@@ -46,6 +48,7 @@ export function startDeviceHost(
   const running = new Map<string, AbortController>()
 
   function init(message: Extract<MainToDeviceHost, { type: 'device-host:init' }>): void {
+    if (isLocale(message.locale)) setLocale(message.locale)
     let env: Promise<Env> | null = null
     const loadEnv = (): Promise<Env> => {
       env ??= resolveShellEnvironment({
@@ -136,7 +139,7 @@ export function startDeviceHost(
   async function call(request: DeviceCall): Promise<DeviceCallAnswer> {
     const devices = manager
     const agent = actions
-    if (!devices || !agent) return failure('unavailable', 'The device host has not started')
+    if (!devices || !agent) return failure('unavailable', t('devices.starting'))
     try {
       if (request.kind === 'list') {
         const list = await devices.list()
@@ -243,6 +246,9 @@ export function startDeviceHost(
         break
       case 'device-host:allow-devices':
         server?.setAllowDevices(message.allowed)
+        break
+      case 'device-host:locale':
+        if (isLocale(message.locale)) setLocale(message.locale)
         break
       case 'device-host:sessions-ended': {
         void manager

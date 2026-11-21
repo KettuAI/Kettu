@@ -9,6 +9,7 @@ import { AGENTS_FOLDER, KETTU_HOME_FOLDER } from '@shared/storage'
 import { BUILTIN_THEME_ID } from '@shared/themes'
 import { AgentFolders } from '../main/agent-folders'
 import { AdminError, HostAdmin, type HostAdminDeps } from '../main/host-admin'
+import { t } from '../main/i18n'
 import type { SettingsStore } from '../main/settings'
 import { nodeSystemNameForRun } from '../main/system-name'
 import { ThemeCatalog } from '../main/theme-catalog'
@@ -128,7 +129,9 @@ export async function startDaemonAdmin({
         try {
           await hosts.resetRemote()
         } catch (error) {
-          if (error instanceof ControlError) throw new AdminError('unavailable', error.message)
+          if (error instanceof ControlError) {
+            throw new AdminError('unavailable', t('remoteHost.resetFailed'))
+          }
           throw error
         }
       },

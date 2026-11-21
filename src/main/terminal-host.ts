@@ -8,7 +8,7 @@ import {
   type TerminalCallAnswer,
 } from '@shared/terminal-agent'
 import terminalHostPath from '../terminal-host/index?modulePath'
-import { t } from './i18n'
+import { locale as currentLocale, t } from './i18n'
 import { createLogger } from './log'
 import { UtilityHost, type UtilityHostEvent, type UtilityHostState } from './utility-host'
 
@@ -48,6 +48,7 @@ export class TerminalHost {
         type: 'terminal-host:init',
         platform: process.platform,
         appVersion: app.getVersion(),
+        locale: currentLocale(),
         settings: deps.settings(),
         projects: this.projects,
         authCommands: this.authCommands,
@@ -115,6 +116,11 @@ export class TerminalHost {
 
   pushSettings(settings: TerminalSettings): void {
     this.host.post({ type: 'terminal-host:settings', settings })
+  }
+
+  /** Tells the process the interface language changed, for the text it writes. */
+  localeChanged(): void {
+    this.host.post({ type: 'terminal-host:locale', locale: currentLocale() })
   }
 
   setProjects(paths: string[]): void {

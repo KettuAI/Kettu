@@ -189,7 +189,15 @@ describe('MarketApi errors', () => {
     })
     const taken = fake(() => json(409, { error: 'version_exists', message: 'Exists' }))
     await expect(api(taken.fetch).publisher()).rejects.toMatchObject({
-      failure: { code: 'version_exists', status: 409, message: 'Exists' },
+      failure: {
+        code: 'version_exists',
+        status: 409,
+        message: 'This version was already published.',
+      },
+    })
+    const unknown = fake(() => json(500, { error: 'brand_new', message: 'The service’s words' }))
+    await expect(api(unknown.fetch).publisher()).rejects.toMatchObject({
+      failure: { code: 'brand_new', message: 'The service’s words' },
     })
   })
 

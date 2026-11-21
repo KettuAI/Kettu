@@ -27,7 +27,7 @@ import {
   type VersionCheck,
   type VersionFile,
 } from '@shared/market-publish'
-import { t } from './i18n'
+import { locale, t } from './i18n'
 
 const TIMEOUT_MS = 120_000
 const MAX_MESSAGE = 500
@@ -256,19 +256,108 @@ function parseProblems(value: unknown): MarketProblem[] | undefined {
   })
 }
 
-/** The service's error body, `{ error: <code>, message, ... }`, as a failure. */
-function failureOf(status: number, body: Fields | null): MarketFailure {
+/** What the call sent that an error names, which the service's answer does not repeat. */
+interface Sent {
+  version?: string
+}
+
+/** The most problems of a failed check the sentence lists; `problems` holds them all. */
+const MAX_LISTED_PROBLEMS = 5
+
+/** A size in the interface language, such as 8.4 MB. */
+function sizeText(bytes: number): string {
+  const units = ['byte', 'kilobyte', 'megabyte', 'gigabyte'] as const
+  let value = bytes
+  let unit = 0
+  while (value >= 1024 && unit < units.length - 1) {
+    value /= 1024
+    unit++
+  }
+  return new Intl.NumberFormat(locale(), {
+    style: 'unit',
+    unit: units[unit],
+    unitDisplay: 'short',
+    maximumFractionDigits: 1,
+  }).format(value)
+}
+
+/** What a failed check found, one problem a line, as the service wrote each. */
+function problemLines(problems: readonly MarketProblem[]): string {
+  const lines = problems
+    .slice(0, MAX_LISTED_PROBLEMS)
+    .map((problem) => `- ${problem.path ? `${problem.path}: ` : ''}${problem.message}`)
+  if (problems.length > MAX_LISTED_PROBLEMS) {
+    lines.push(t('market.failure.moreProblems', { count: problems.length - MAX_LISTED_PROBLEMS }))
+  }
+  return lines.join('\n')
+}
+
+/** The sentence for an error code the service gives, in the user's language; null for any other. */
+function failureText(
+  code: string,
+  status: number,
+  found: { problems?: MarketProblem[]; bytes?: number; limit?: number },
+  sent: Sent,
+): string | null {
+  switch (code) {
+    case 'not_found':
+      return t('market.failure.notFound')
+    case 'taken_down':
+      // Taken down for good is answered 410; a publish to one is refused 403.
+      return t(status === 403 ? 'market.failure.takenDownNoVersions' : 'market.failure.takenDown')
+    case 'check_failed':
+      return found.problems?.length
+        ? t('market.failure.checkFailedWith', { problems: problemLines(found.problems) })
+        : t('market.failure.checkFailed')
+    case 'too_large':
+      return t('market.failure.tooLarge')
+    case 'storage_full':
+      return found.bytes !== undefined && found.limit !== undefined
+        ? t('market.failure.storageFullUsed', {
+            used: sizeText(found.bytes),
+            limit: sizeText(found.limit),
+          })
+        : t('market.failure.storageFull')
+    case 'version_exists':
+      return sent.version
+        ? t('market.failure.versionExists', { version: sent.version })
+        : t('market.failure.versionExistsAny')
+    case 'withdrawn':
+      return t('market.failure.withdrawn')
+    case 'handle_taken':
+      return t('market.failure.handleTaken')
+    case 'no_publisher':
+      return t('market.failure.noPublisher')
+    case 'too_many_listings':
+      return t('market.failure.tooManyListings')
+    case 'conflict':
+      return t('market.failure.conflict')
+    default:
+      return null
+  }
+}
+
+/**
+ * The service's error body, `{ error: <code>, message, ... }`, as a failure. Its `message` is
+ * English, so a code Kettu knows gets a sentence of its own, and the service's words stay for a
+ * code it does not.
+ */
+function failureOf(status: number, body: Fields | null, sent: Sent = {}): MarketFailure {
   const code = text(body?.error) ?? (status === 404 ? 'not_found' : 'failed')
-  const message =
-    text(body?.message)?.slice(0, MAX_MESSAGE) ?? t('market.answeredStatus', { status })
   const problems = parseProblems(body?.problems)
+  const bytes = isCount(body?.bytes) ? body.bytes : undefined
+  const limit = isCount(body?.limit) ? body.limit : undefined
+  const message =
+    failureText(code, status, { problems, bytes, limit }, sent) ??
+    text(body?.message)?.slice(0, MAX_MESSAGE) ??
+    t('market.answeredStatus', { status })
   return {
     code,
     status,
     message,
     ...(problems ? { problems } : {}),
-    ...(isCount(body?.bytes) ? { bytes: body.bytes } : {}),
-    ...(isCount(body?.limit) ? { limit: body.limit } : {}),
+    ...(bytes !== undefined ? { bytes } : {}),
+    ...(limit !== undefined ? { limit } : {}),
   }
 }
 
@@ -325,7 +414,11 @@ export class MarketApi {
     for (const file of files) {
       data.append(file.path, new Blob([file.bytes as Uint8Array<ArrayBuffer>]), file.path)
     }
-    const body = await this.json('/versions', { method: 'POST', body: data })
+    const body = await this.json(
+      '/versions',
+      { method: 'POST', body: data },
+      { version: manifest.version },
+    )
     return parseMineListing(body?.listing)
   }
 
@@ -434,7 +527,7 @@ export class MarketApi {
   }
 
   /** Throws the failure an error answer says. */
-  private async refused(response: Response): Promise<never> {
+  private async refused(response: Response, sent: Sent = {}): Promise<never> {
     const raw = await response.text().catch(() => '')
     let body: Fields | null
     try {
@@ -442,7 +535,7 @@ export class MarketApi {
     } catch {
       body = null
     }
-    const failure = failureOf(response.status, body)
+    const failure = failureOf(response.status, body, sent)
     if (response.status === 401 || failure.code === 'unauthorized') {
       throw new MarketUnauthorized(failure.message)
     }
@@ -453,6 +546,7 @@ export class MarketApi {
   private async json(
     path: string,
     { json, ...init }: RequestInit & { json?: unknown },
+    sent: Sent = {},
   ): Promise<Fields | null> {
     const headers: Record<string, string> = { accept: 'application/json' }
     if (json !== undefined) headers['content-type'] = 'application/json'
@@ -461,7 +555,7 @@ export class MarketApi {
       headers,
       ...(json !== undefined ? { body: JSON.stringify(json) } : {}),
     })
-    if (!response.ok) return this.refused(response)
+    if (!response.ok) return this.refused(response, sent)
     const raw = await response.text().catch(() => '')
     if (!raw) return null
     try {
