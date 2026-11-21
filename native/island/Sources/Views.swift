@@ -60,7 +60,7 @@ struct IslandRoot: View {
           .shadow(color: .black.opacity(model.mode == .open ? 0.35 : 0), radius: 18, y: 8)
         ZStack(alignment: .top) {
           switch model.mode {
-          case .hidden:
+          case .hidden, .rest:
             Color.clear
           case .collapsed:
             CollapsedContent(model: model).transition(swap(model.reduceMotion))
@@ -74,7 +74,7 @@ struct IslandRoot: View {
         .clipShape(IslandShape(radius: radius, shoulders: false))
       }
       .frame(width: size.width, height: size.height)
-      .opacity(model.mode == .hidden ? 0 : 1)
+      .opacity(model.mode == .hidden || model.mode == .rest ? 0 : 1)
       .animation(model.animation(to: .collapsed), value: model.parts)
       .animation(model.animation(to: .open), value: model.panelHeight)
       .animation(model.animation(to: model.mode), value: model.mode)
@@ -118,7 +118,7 @@ extension IslandModel {
   func frameSize() -> CGSize {
     let g = geometry
     switch mode {
-    case .hidden:
+    case .hidden, .rest:
       return CGSize(width: max(g.notchWidth, 1), height: g.notchHeight)
     case .collapsed:
       return CGSize(width: middleWidth + 2 * wing(), height: g.notchHeight)
@@ -133,7 +133,7 @@ extension IslandModel {
 
   func radius() -> CGFloat {
     switch mode {
-    case .hidden, .collapsed: return Metrics.collapsedRadius
+    case .hidden, .rest, .collapsed: return Metrics.collapsedRadius
     case .grown: return Metrics.grownRadius
     case .open: return Metrics.openRadius
     }
@@ -197,7 +197,7 @@ struct LeadMarks: View {
   }
 }
 
-/// The fact beside the signal: a count, the plan, the cache's time left or a word.
+/// The fact beside the signal: a count, the plan or a word.
 struct FactView: View {
   let fact: Fact
 
@@ -212,13 +212,6 @@ struct FactView: View {
       }
       .font(Fonts.ui(13, .semibold))
       .foregroundColor(Theme.text)
-    case .cache(let text, let ending):
-      HStack(spacing: 4) {
-        Image(systemName: "timer").font(.system(size: 11, weight: .medium))
-        Text(text)
-      }
-      .font(Fonts.ui(12, .semibold))
-      .foregroundColor(ending ? Theme.warning : Theme.secondary)
     case .word(let text):
       Text(text).font(Fonts.ui(13, .semibold)).foregroundColor(Theme.text)
     }

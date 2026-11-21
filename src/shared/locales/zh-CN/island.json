@@ -51,7 +51,6 @@
     },
     "recommended": "推荐",
     "cache": {
-      "short": "缓存 {{time}}",
       "about": "约 {{time}}",
       "left": "缓存还剩 {{time}}"
     },
