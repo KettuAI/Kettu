@@ -22,7 +22,7 @@ import { newestLimits } from '@renderer/lib/plan-readings'
 import { useNow } from '@renderer/lib/use-now'
 import { usePlanReadings } from '@renderer/stores/agents'
 import { useHostScope } from '@renderer/stores/host-scope'
-import { UsageGroup } from './agent-parts'
+import { Fact, UsageGroup } from './agent-parts'
 import { useAction } from './agent-helpers'
 import { CommandLine, ControlError, FindField, IconAction, Pill, SetButton, Spin } from './controls'
 import {
@@ -211,6 +211,73 @@ export function AgentProviders({
         }}
       />
     </>
+  )
+}
+
+/**
+ * The providers an agent that signs in to each one itself lists models from, such as Pi: one row
+ * each with its model count, and Add provider running the agent's own sign-in in a terminal.
+ */
+export function ModelProviders({
+  status,
+  reading,
+  onSignIn,
+}: {
+  status: AgentStatus
+  reading: boolean
+  /** Runs a sign-in command in the built-in terminal of this computer; null on another host. */
+  onSignIn: ((command: string) => void) | null
+}) {
+  const { t } = useTranslation('settings')
+  const providers = status.modelProviders
+  const command = status.authMethods.find((m) => m.type === 'terminal' && m.command)?.command
+  return (
+    <section className="k-group" aria-label={t('agents.providers.group')}>
+      <GroupLabel
+        group={{
+          id: 'providers',
+          label: t('agents.providers.group'),
+          ...(providers?.length ? { count: providers.length } : {}),
+          ...(command &&
+            onSignIn && {
+              actions: (
+                <SetButton
+                  variant="ghost"
+                  icon={<Icon icon={ComputerTerminal01Icon} size={14} />}
+                  onClick={() => onSignIn(command)}
+                >
+                  {t('agents.providers.add')}
+                </SetButton>
+              ),
+            }),
+        }}
+      />
+      {!providers ? (
+        <p className="k-reading">
+          {reading ? (
+            <span className="k-end">
+              <Spin />
+              {t('agents.providers.reading')}
+            </span>
+          ) : (
+            t('agents.modelProviders.unread', { name: status.harnessName })
+          )}
+        </p>
+      ) : providers.length === 0 ? (
+        <p className="k-reading">{t('agents.providers.none')}</p>
+      ) : (
+        <RowGroup>
+          {providers.map((provider) => (
+            <Fact key={provider.id} name={provider.id}>
+              {t('agents.modelProviders.models', { count: provider.models })}
+            </Fact>
+          ))}
+        </RowGroup>
+      )}
+      <p className="ui-sg-hint" data-wrap="">
+        {t('agents.modelProviders.hint', { name: status.harnessName })}
+      </p>
+    </section>
   )
 }
 

@@ -108,10 +108,12 @@ export function harnessVersion(status: AgentStatus): string | null {
 }
 
 /** Whether the agent's harness has another agent, which is when "Default" tells them apart. */
-export function useHasOtherAgents(status: AgentStatus): boolean {
+export function useHasOtherAgents(status: AgentStatus | null): boolean {
   const { useAgentsStore } = useHostScope()
-  return useAgentsStore((s) =>
-    s.order.some((id) => id !== status.id && s.byId[id]?.harnessId === status.harnessId),
+  return useAgentsStore(
+    (s) =>
+      !!status &&
+      s.order.some((id) => id !== status.id && s.byId[id]?.harnessId === status.harnessId),
   )
 }
 
