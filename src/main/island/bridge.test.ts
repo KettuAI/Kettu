@@ -3,6 +3,7 @@ import { ALREADY_ANSWERED, type HostEvent, type SessionSummary } from '@shared/a
 import type { IslandState } from '@shared/island'
 import type { ThreadEntry } from '@shared/thread'
 import { COALESCE_MS, IslandBridge, type HelperProcess, type IslandBridgeDeps } from './bridge'
+import { ISLAND_HOST_METHODS } from './host-feed'
 import { ISLAND_PROTOCOL, type MainToIsland } from './protocol'
 
 class FakeHelper implements HelperProcess {
@@ -120,11 +121,45 @@ interface Setup {
   states: IslandState[]
   opened: unknown[]
   closeHost(): void
+  remoteCalls: [string, string, unknown][]
+  remoteOpen: Set<string>
+}
+
+interface Remote {
+  id: string
+  name: string
+  sessions: SessionSummary[]
+  entries?: Record<string, ThreadEntry[]>
+}
+
+function hostAnswer(
+  sessions: SessionSummary[],
+  entries: Record<string, ThreadEntry[]>,
+  method: string,
+  params: unknown,
+): unknown {
+  switch (method) {
+    case 'sessions.list':
+      return sessions
+    case 'agents.list':
+    case 'agents.options':
+      return []
+    case 'tasks.list':
+      return [{ id: 'task1', title: 'Ship the island' }]
+    case 'sessions.requests': {
+      const { sessionId } = params as { sessionId: string }
+      const list = entries[sessionId] ?? []
+      return { entries: list, askedAt: Object.fromEntries(list.map((e) => [e.id, 1000])) }
+    }
+    default:
+      return undefined
+  }
 }
 
 function setup(
   sessions: SessionSummary[],
   entries: Record<string, ThreadEntry[]> = {},
+  remotes: Remote[] = [],
   over: Partial<IslandBridgeDeps> = {},
 ): Setup {
   const helpers: FakeHelper[] = []
@@ -132,24 +167,11 @@ function setup(
   const opened: unknown[] = []
   let onEvent: ((event: HostEvent) => void) | null = null
   let onClose: (() => void) | null = null
-  const request = vi.fn(async (method: string, params: unknown) => {
-    switch (method) {
-      case 'sessions.list':
-        return sessions
-      case 'agents.list':
-      case 'agents.options':
-        return []
-      case 'tasks.list':
-        return [{ id: 'task1', title: 'Ship the island' }]
-      case 'sessions.requests': {
-        const { sessionId } = params as { sessionId: string }
-        const list = entries[sessionId] ?? []
-        return { entries: list, askedAt: Object.fromEntries(list.map((e) => [e.id, 1000])) }
-      }
-      default:
-        return undefined
-    }
-  })
+  const request = vi.fn(async (method: string, params: unknown) =>
+    hostAnswer(sessions, entries, method, params),
+  )
+  const remoteCalls: [string, string, unknown][] = []
+  const remoteOpen = new Set(remotes.map((remote) => remote.id))
   const deps: IslandBridgeDeps = {
     enabled: () => true,
     kindEnabled: () => true,
@@ -163,6 +185,15 @@ function setup(
       helpers.push(helper)
       return helper
     },
+    callRemote: async (hostId, method, params) => {
+      remoteCalls.push([hostId, method, params])
+      const remote = remotes.find((r) => r.id === hostId)
+      if (!remote || !remoteOpen.has(hostId)) {
+        throw { code: 'host_offline', message: 'The host is not connected' }
+      }
+      return hostAnswer(remote.sessions, remote.entries ?? {}, method, params)
+    },
+    openRemotes: () => [...remoteOpen],
     connectLocal: (event, close) => {
       onEvent = event
       onClose = close
@@ -175,6 +206,7 @@ function setup(
     ...over,
   }
   const bridge = new IslandBridge(deps)
+  bridge.remoteHosts(remotes.map(({ id, name }) => ({ id, name })))
   return {
     bridge,
     helpers,
@@ -184,6 +216,8 @@ function setup(
     states,
     opened,
     closeHost: () => onClose!(),
+    remoteCalls,
+    remoteOpen,
   }
 }
 
@@ -225,7 +259,7 @@ describe('handshake', () => {
 
   it('quiets notifications only while it runs: off, or stopped, they come back', async () => {
     let enabled = true
-    const s = setup([], {}, { enabled: () => enabled })
+    const s = setup([], {}, [], { enabled: () => enabled })
     await started(s)
     expect(s.bridge.showing()).toBe(true)
     enabled = false
@@ -561,5 +595,145 @@ describe('workflow steps', () => {
         .at(-1)!
         .rows.map((row) => row.sessionId),
     ).toEqual(['s1'])
+  })
+})
+
+describe('other hosts', () => {
+  const studio = 'a'.repeat(32)
+  const waiting = summary('r1', {
+    title: 'Deploy',
+    status: 'awaiting_permission',
+    attention: 'permission',
+    permissionCount: 1,
+    updatedAt: 5,
+  })
+
+  function current(s: Setup) {
+    const view = s.helper().of('view').at(-1)!
+    const rows = new Map(view.rows.map((row) => [row.key, row]))
+    const requests = new Map(view.requests.map((request) => [request.key, request]))
+    for (const change of s
+      .helper()
+      .of('change')
+      .filter((c) => c.seq > view.seq)) {
+      for (const key of change.removedRows) rows.delete(key)
+      for (const row of change.rows) rows.set(row.key, row)
+      for (const key of change.removedRequests) requests.delete(key)
+      for (const request of change.requests) requests.set(request.key, request)
+    }
+    return { rows: [...rows.values()], requests: [...requests.values()] }
+  }
+
+  async function withStudio(): Promise<Setup> {
+    const s = setup([summary('s1')], {}, [
+      { id: studio, name: 'Studio', sessions: [waiting], entries: { r1: [TOOL] } },
+    ])
+    await started(s)
+    await vi.advanceTimersByTimeAsync(COALESCE_MS)
+    return s
+  }
+
+  it('lists their sessions like this computer’s, each row naming its host', async () => {
+    const s = await withStudio()
+    const { rows, requests } = current(s)
+    expect(rows.map((row) => [row.key, row.host])).toEqual([
+      [`${studio}/r1`, { id: studio, name: 'Studio', offline: false }],
+      ['s1', null],
+    ])
+    expect(requests.map((request) => request.key)).toEqual([`${studio}/r1#t1`])
+  })
+
+  it('marks a host’s rows offline while it is not connected, without its requests', async () => {
+    const s = await withStudio()
+    s.remoteOpen.delete(studio)
+    s.bridge.remoteClosed(studio)
+    await vi.advanceTimersByTimeAsync(COALESCE_MS)
+    let view = current(s)
+    expect(view.rows.find((row) => row.key === `${studio}/r1`)?.host?.offline).toBe(true)
+    expect(view.requests).toEqual([])
+
+    s.remoteOpen.add(studio)
+    s.bridge.remoteOpened(studio)
+    await vi.advanceTimersByTimeAsync(COALESCE_MS)
+    view = current(s)
+    expect(view.rows.find((row) => row.key === `${studio}/r1`)?.host?.offline).toBe(false)
+    expect(view.requests.map((request) => request.key)).toEqual([`${studio}/r1#t1`])
+  })
+
+  it('answers a host’s request on that host, with the island’s methods alone', async () => {
+    const s = await withStudio()
+    s.helper().say({ type: 'answer', id: 'a1', request: `${studio}/r1#t1`, option: 'allow' })
+    await vi.advanceTimersByTimeAsync(0)
+    expect(s.remoteCalls).toContainEqual([
+      studio,
+      'permissions.respond',
+      { sessionId: 'r1', requestId: 'r1', optionId: 'allow' },
+    ])
+    expect(s.helper().of('answered')).toEqual([{ type: 'answered', id: 'a1', result: 'answered' }])
+    for (const [, method] of s.remoteCalls) {
+      expect(ISLAND_HOST_METHODS as readonly string[]).toContain(method)
+    }
+    expect(s.request).not.toHaveBeenCalledWith('permissions.respond', expect.anything())
+  })
+
+  it('follows a host’s events, and pops what needs the user there', async () => {
+    const s = await withStudio()
+    s.bridge.remoteEvent(studio, {
+      type: 'session.summary',
+      summary: { ...waiting, status: 'running', attention: 'none', permissionCount: 0 },
+    })
+    await vi.advanceTimersByTimeAsync(COALESCE_MS)
+    expect(current(s).rows.find((row) => row.key === `${studio}/r1`)?.status).toBe('running')
+
+    s.bridge.remoteAttention(studio, {
+      kind: 'error',
+      sessionId: 'r1',
+      title: 'Deploy failed',
+      body: 'x',
+    })
+    s.bridge.remoteAttention(studio, { kind: 'error', title: 1 })
+    s.bridge.remoteAttention(studio, null)
+    s.bridge.remoteAttention('b'.repeat(32), {
+      kind: 'error',
+      sessionId: 'r1',
+      title: 'Unknown host',
+      body: '',
+    })
+    expect(s.helper().of('pop')).toEqual([
+      { type: 'pop', row: `${studio}/r1`, kind: 'error', title: 'Deploy failed', body: 'x' },
+    ])
+  })
+
+  it('ignores a summary it cannot read rather than breaking the view', async () => {
+    const s = await withStudio()
+    const count = s.helper().sent.length
+    s.bridge.remoteEvent(studio, { type: 'session.summary', summary: { id: 7 } })
+    s.bridge.remoteEvent(studio, { type: 'session.summary', summary: null })
+    await vi.advanceTimersByTimeAsync(COALESCE_MS)
+    expect(s.helper().sent).toHaveLength(count)
+  })
+
+  it('names the task of a host’s step, read from that host', async () => {
+    const step = summary('r2', {
+      origin: 'task',
+      task: { taskId: 'task1', stepId: 'build', roundId: 'x' },
+      status: 'running',
+    })
+    const s = setup([], {}, [{ id: studio, name: 'Studio', sessions: [step] }])
+    await started(s)
+    await vi.advanceTimersByTimeAsync(COALESCE_MS)
+    expect(s.remoteCalls).toContainEqual([studio, 'tasks.list', undefined])
+    const row = () => current(s).rows.find((r) => r.key === `${studio}/r2`)
+    expect(row()?.parent).toEqual({ kind: 'task', title: 'Ship the island' })
+    s.bridge.remoteEvent(studio, { type: 'task.changed', task: { id: 'task1', title: 'Renamed' } })
+    await vi.advanceTimersByTimeAsync(COALESCE_MS)
+    expect(row()?.parent).toEqual({ kind: 'task', title: 'Renamed' })
+  })
+
+  it('drops a host that is no longer known', async () => {
+    const s = await withStudio()
+    s.bridge.remoteHosts([])
+    await vi.advanceTimersByTimeAsync(COALESCE_MS)
+    expect(current(s).rows.map((row) => row.key)).toEqual(['s1'])
   })
 })
