@@ -10,6 +10,7 @@ import { useTranslation } from 'react-i18next'
 import { computerControl, type ComputerAct } from '@shared/computer-use'
 import type { ComputerUseView } from '@shared/thread'
 import { ControlPointer } from '@renderer/components/control/control-pointer'
+import { PillDock } from '@renderer/components/control/pill-dock'
 import { SurfaceLight } from '@renderer/components/control/surface-light'
 import { SurfacePill } from '@renderer/components/control/surface-pill'
 import { useControlAgent } from '@renderer/components/control/use-control-agent'
@@ -332,7 +333,7 @@ export default function ComputerPane({ panel, maximized }: { panel: string; maxi
         )}
         <div className="kp-cstage" data-control={view?.control ?? 'idle'}>
           {body}
-          <span className="kp-cpill">
+          <PillDock kind="computer" className="kp-cpill">
             <AnimatePresence>
               {view && hostId === null && (
                 <SurfacePill
@@ -347,7 +348,7 @@ export default function ComputerPane({ panel, maximized }: { panel: string; maxi
                 />
               )}
             </AnimatePresence>
-          </span>
+          </PillDock>
         </div>
         {view && hostId === null && (
           <p className="kp-cnote">

@@ -412,6 +412,15 @@ export const OVERLAY_PILL_ROOM = 12
 /** The pill's gap from the surface's bottom edge, in the overlay's CSS pixels. */
 export const OVERLAY_PILL_BOTTOM = 14
 
+/**
+ * Where the user put a surface's pill: its share of the room the surface leaves it, across and
+ * down, 0 at the left and top and 1 at the right and bottom.
+ */
+export interface PillPlace {
+  x: number
+  y: number
+}
+
 /** What main tells the overlay's page. */
 export type ControlOverlayEvent =
   | { type: 'state'; state: ControlOverlayState }
@@ -428,11 +437,22 @@ export type ControlOverlayRequest =
   | { type: 'answer'; outcome: ControlOutcome }
   /** A wheel over the surface, which goes through to it. */
   | { type: 'wheel'; x: number; y: number; deltaX: number; deltaY: number }
-  /** The pill's box with its shadow's room, in CSS pixels, for the `pill` layout's bounds. */
-  | { type: 'pill'; width: number; height: number }
+  /**
+   * The pill's box with its shadow's room, in CSS pixels, for the `pill` layout's bounds, and where
+   * the user put it; without a place it is centred at the bottom.
+   */
+  | { type: 'pill'; width: number; height: number; at?: PillPlace }
 
 const MAX_WHEEL = 10_000
 const MAX_EDGE = 100_000
+
+function pillPlace(value: unknown): PillPlace | null {
+  if (typeof value !== 'object' || value === null) return null
+  const { x, y } = value as Record<string, unknown>
+  const share = (n: unknown): n is number =>
+    typeof n === 'number' && Number.isFinite(n) && n >= 0 && n <= 1
+  return share(x) && share(y) ? { x, y } : null
+}
 
 /** A request from the overlay's page, or null when it is not one: the page is untrusted input. */
 export function parseOverlayRequest(value: unknown): ControlOverlayRequest | null {
@@ -459,10 +479,14 @@ export function parseOverlayRequest(value: unknown): ControlOverlayRequest | nul
         deltaX: request.deltaX as number,
         deltaY: request.deltaY as number,
       }
-    case 'pill':
+    case 'pill': {
       if (!finite('width', MAX_EDGE) || !finite('height', MAX_EDGE)) return null
-      if ((request.width as number) <= 0 || (request.height as number) <= 0) return null
-      return { type: 'pill', width: request.width as number, height: request.height as number }
+      const { width, height } = request as { width: number; height: number }
+      if (width <= 0 || height <= 0) return null
+      if (request.at === undefined || request.at === null) return { type: 'pill', width, height }
+      const at = pillPlace(request.at)
+      return at ? { type: 'pill', width, height, at } : null
+    }
     default:
       return null
   }

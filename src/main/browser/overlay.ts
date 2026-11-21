@@ -13,6 +13,7 @@ import {
   type ControlOverlayEvent,
   type ControlOverlayRequest,
   type ControlOverlayState,
+  type PillPlace,
 } from '@shared/control'
 import type { SettingsFile } from '@shared/settings'
 import type { ThemesState } from '@shared/themes'
@@ -59,6 +60,7 @@ export class PageOverlay {
   private at: OverlayParent | null = null
   private state: ControlOverlayState | null = null
   private pill = PILL_DEFAULT
+  private pillAt: PillPlace | null = null
 
   constructor(private readonly deps: PageOverlayDeps) {}
 
@@ -198,6 +200,7 @@ export class PageOverlay {
       }
       if (request.type === 'pill') {
         this.pill = { width: request.width, height: request.height }
+        this.pillAt = request.at ?? null
         this.place()
         return
       }
@@ -218,7 +221,7 @@ export class PageOverlay {
     return Math.round(at.bounds.width / this.deps.zoom())
   }
 
-  /** Over the whole page, or over the pill alone at the page's bottom. */
+  /** Over the whole page, or over the pill alone, at the page's bottom unless the user moved it. */
   private place(): void {
     const view = this.view
     const at = this.at
@@ -232,12 +235,12 @@ export class PageOverlay {
     const zoom = this.deps.zoom()
     const width = Math.min(bounds.width, Math.ceil(this.pill.width * zoom))
     const height = Math.min(bounds.height, Math.ceil(this.pill.height * zoom))
+    const free = { x: bounds.width - width, y: bounds.height - height }
+    const rest = (OVERLAY_PILL_BOTTOM - OVERLAY_PILL_ROOM) * zoom
     view.setBorderRadius(0)
     view.setBounds({
-      x: Math.round(bounds.x + (bounds.width - width) / 2),
-      y: Math.round(
-        bounds.y + bounds.height - height - (OVERLAY_PILL_BOTTOM - OVERLAY_PILL_ROOM) * zoom,
-      ),
+      x: Math.round(bounds.x + free.x * (this.pillAt?.x ?? 0.5)),
+      y: Math.round(bounds.y + (this.pillAt ? free.y * this.pillAt.y : free.y - rest)),
       width,
       height,
     })

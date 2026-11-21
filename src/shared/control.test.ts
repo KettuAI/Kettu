@@ -233,6 +233,9 @@ describe('parseOverlayRequest', () => {
       width: 320,
       height: 60,
     })
+    expect(
+      parseOverlayRequest({ type: 'pill', width: 320, height: 60, at: { x: 0.25, y: 1, z: 2 } }),
+    ).toEqual({ type: 'pill', width: 320, height: 60, at: { x: 0.25, y: 1 } })
   })
 
   it('refuses anything else', () => {
@@ -245,6 +248,9 @@ describe('parseOverlayRequest', () => {
       { type: 'wheel', x: 1, y: 1, deltaX: Infinity, deltaY: 0 },
       { type: 'wheel', x: 1, y: 1, deltaX: 0, deltaY: 1e9 },
       { type: 'pill', width: 0, height: 10 },
+      { type: 'pill', width: 10, height: 10, at: { x: 2, y: 0 } },
+      { type: 'pill', width: 10, height: 10, at: { x: 0, y: Number.NaN } },
+      { type: 'pill', width: 10, height: 10, at: 'left' },
     ]) {
       expect(parseOverlayRequest(value)).toBeNull()
     }

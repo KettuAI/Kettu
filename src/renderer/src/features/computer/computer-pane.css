@@ -103,16 +103,9 @@
     var(--elevation-page-drop);
   background: transparent;
 }
-/* The pill at the stage's bottom, as wide as its content and never wider than the stage. */
+/* The pill at the stage's bottom. */
 .kp-cpill {
-  position: absolute;
-  bottom: 14px;
-  left: 50%;
   z-index: 6;
-  display: flex;
-  width: max-content;
-  max-width: calc(100% - 24px);
-  translate: -50% 0;
 }
 .kp-cnote {
   display: flex;

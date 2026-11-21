@@ -185,15 +185,46 @@
   }
 }
 
-/* On a surface Kettu draws in an overlay: centred at its bottom, as wide as its content needs and
-   never wider than the surface, so the overlay sized to the pill never squeezes it. */
-.ctl-overlay-pill {
+/* The room the pill moves in: its pane inset by 12px, which is also what the browser's pill view
+   keeps around the pill for its shadow. The pill rests centred at the bottom, `--ctl-dock-rest`
+   above the room's edge, until it is dragged by anything but its buttons. */
+.ctl-dock-field {
   position: absolute;
+  inset: 12px;
+  pointer-events: none;
+}
+.ctl-dock {
+  position: absolute;
+  bottom: var(--ctl-dock-rest, 2px);
   left: 50%;
   display: flex;
   width: max-content;
-  max-width: calc(var(--surface-width) - 24px);
+  max-width: 100%;
   translate: -50% 0;
+  cursor: grab;
+  user-select: none;
+  touch-action: none;
+  pointer-events: auto;
+}
+.ctl-dock [data-slot='button'] {
+  cursor: default;
+}
+.ctl-dock[data-dragging],
+.ctl-dock[data-dragging] * {
+  cursor: grabbing;
+}
+/* In a view sized to the pill alone, the pill fills it and is not moved. */
+.ctl-dock[data-still] {
+  top: 0;
+  bottom: auto;
+  left: 0;
+  translate: none;
+  cursor: default;
+}
+/* On a surface Kettu draws in an overlay: as wide as its content needs and never wider than the
+   surface, so the overlay sized to the pill never squeezes it. */
+.ctl-overlay-field .ctl-dock {
+  max-width: calc(var(--surface-width) - 24px);
 }
 
 /* ---------- The bubble at a held-back click ---------- */
