@@ -318,6 +318,11 @@ extension IslandModel {
     case "permission": return (text("status.waiting"), Theme.attention)
     case "error": return (text("status.failed"), Theme.danger)
     case "routine-paused": return (text("paused"), Theme.warning)
+    case "limit-near": return ("", Theme.usageRed)
+    case "limit-reached": return (text("pop.limitReached"), Theme.danger)
+    case "limit-reset": return (text("pop.limitReset"), Theme.success)
+    case "update": return (text("pop.update"), Theme.running)
+    case "update-manual": return (text("pop.updateManual"), Theme.running)
     default: return (text("status.unread"), Theme.success)
     }
   }
@@ -353,7 +358,11 @@ struct GrownContent: View {
         let (label, color) = model.pill(for: pop.kind)
         HStack(spacing: 0) {
           Group {
-            if let row { MarkView(agent: row.agent, size: g.hasNotch ? 20 : 17) } else {
+            if let row {
+              MarkView(agent: row.agent, size: g.hasNotch ? 20 : 17)
+            } else if let mark = pop.mark {
+              MarkView(agent: mark.agent, size: g.hasNotch ? 20 : 17)
+            } else {
               BrandFox(size: g.hasNotch ? 20 : 17)
             }
           }
@@ -361,7 +370,11 @@ struct GrownContent: View {
           Spacer(minLength: model.middleWidth)
           HStack(spacing: 6) {
             if model.queued > 0 { Pill(text: "+\(model.queued)", color: Theme.secondary, dot: false) }
-            Pill(text: label, color: color)
+            if pop.kind == "limit-near", let percent = pop.percent {
+              LimitPill(percent: percent)
+            } else {
+              Pill(text: label, color: color)
+            }
           }
           .padding(.trailing, 10)
         }
@@ -386,7 +399,47 @@ struct GrownContent: View {
     }
     .frame(maxHeight: .infinity, alignment: .top)
     .contentShape(Rectangle())
-    .onTapGesture { model.expand(byClick: true) }
+    .onTapGesture { model.tapPop() }
+  }
+}
+
+extension IslandMark {
+  /// As a row's agent, for the same mark: a mark the system cannot draw falls back to its initial.
+  var agent: IslandAgent { IslandAgent(id: harness, name: harness, harness: harness, color: color) }
+}
+
+/// A plan limit window near full on a pop: its ring and how much is used, in the limit's red.
+struct LimitPill: View {
+  let percent: Double
+
+  var body: some View {
+    HStack(spacing: 6) {
+      UsageRing(percent: percent)
+      Text("\(Int(percent.rounded()))%").monospacedDigit()
+    }
+    .font(Fonts.ui(11.5, .semibold))
+    .foregroundColor(Theme.usageRed)
+    .padding(.horizontal, 9)
+    .frame(height: 24)
+    .background(Capsule().fill(Theme.usageRed.opacity(0.16)))
+    .fixedSize()
+  }
+}
+
+/// A plan limit window's use as the window's rings draw it: the used part on a tinted disc.
+struct UsageRing: View {
+  let percent: Double
+
+  var body: some View {
+    let share = min(1, max(0, percent / 100))
+    ZStack {
+      Circle().fill(Theme.usageRed.opacity(0.18))
+      Circle().trim(from: 0, to: share)
+        .stroke(Theme.usageRed, style: StrokeStyle(lineWidth: 2.2, lineCap: .butt))
+        .rotationEffect(.degrees(-90))
+        .padding(1.1)
+    }
+    .frame(width: 12, height: 12)
   }
 }
 
@@ -472,6 +525,16 @@ struct PanelBody: View {
           let more = model.rows.count - model.listRows.count
           if more > 0 { MoreRow(model: model, count: more) }
         }
+        if !model.notices.isEmpty {
+          VStack(spacing: 1) {
+            ForEach(model.notices, id: \.key) { notice in
+              NoticeRow(model: model, notice: notice)
+            }
+          }
+          .padding(.top, 6)
+          .overlay(alignment: .top) { Rectangle().fill(Theme.line).frame(height: 1) }
+          .padding(.top, 6)
+        }
         PanelFooter(model: model)
       }
     }
@@ -502,6 +565,83 @@ struct MoreRow: View {
     .onTapGesture { model.open(row: nil) }
     .accessibilityElement(children: .combine)
     .accessibilityAddTraits(.isButton)
+  }
+}
+
+/// A notice under the sessions: Kettu's update with Restart, the agents' updates, or the fullest
+/// plan limit window. Its button acts in place; a click anywhere else on it does the same.
+struct NoticeRow: View {
+  @ObservedObject var model: IslandModel
+  let notice: IslandNotice
+  @State private var hover = false
+
+  var body: some View {
+    HStack(spacing: 8) {
+      lead
+      HStack(alignment: .firstTextBaseline, spacing: 6) {
+        Text(notice.title).font(Fonts.ui(13, .medium)).foregroundColor(Theme.text)
+          .layoutPriority(1)
+        if let detail = notice.detail {
+          Text(detail).font(Fonts.ui(12)).foregroundColor(Theme.tertiary)
+        }
+      }
+      .lineLimit(1)
+      .truncationMode(.tail)
+      Spacer(minLength: 8)
+      if let meter = notice.meter {
+        HStack(spacing: 5) {
+          if meter.reached { LimitRing(size: 12) } else { UsageRing(percent: meter.percent) }
+          Text(meter.text).monospacedDigit()
+        }
+        .font(Fonts.ui(12, .medium))
+        .foregroundColor(Theme.usageRed)
+        .fixedSize()
+      }
+      if let trailing = notice.trailing { TimeText(text: trailing) }
+      if let button = notice.button {
+        Text(button)
+          .font(Fonts.ui(12, .semibold))
+          .foregroundColor(Theme.text)
+          .padding(.horizontal, 9)
+          .frame(height: 22)
+          .background(
+            RoundedRectangle(cornerRadius: 7, style: .continuous)
+              .fill(hover ? Theme.buttonHover : Theme.button))
+          .fixedSize()
+      }
+      if let link = notice.link {
+        Text(link + " ↗").font(Fonts.ui(12, .medium)).foregroundColor(Theme.secondary).fixedSize()
+      }
+    }
+    .padding(.horizontal, 10)
+    .frame(height: 32)
+    .background(
+      RoundedRectangle(cornerRadius: 8, style: .continuous)
+        .fill(hover ? Theme.rowHover : Color.clear)
+    )
+    .contentShape(Rectangle())
+    .onHover { hover = $0 }
+    .onTapGesture { model.act(notice.key) }
+    .accessibilityElement(children: .combine)
+    .accessibilityAddTraits(.isButton)
+  }
+
+  @ViewBuilder private var lead: some View {
+    if notice.marks.isEmpty {
+      BrandFox(size: 14)
+    } else if notice.marks.count == 1 {
+      MarkView(agent: notice.marks[0].agent, size: 14)
+    } else {
+      // Ringed in black where they overlap; the title moves over for the marks behind the first.
+      HStack(spacing: -4) {
+        ForEach(Array(notice.marks.enumerated()), id: \.offset) { index, mark in
+          MarkView(agent: mark.agent, size: 14)
+            .padding(1)
+            .background(Circle().fill(Theme.surface))
+            .zIndex(Double(notice.marks.count - index))
+        }
+      }
+    }
   }
 }
 

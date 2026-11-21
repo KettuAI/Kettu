@@ -67,7 +67,13 @@
       "stuck": "{{time}}没有结果"
     },
     "ago": "{{time}}前",
-    "resets": "{{day}}重置"
+    "resets": "{{day}}重置",
+    "pop": {
+      "update": "可以更新",
+      "updateManual": "去更新",
+      "limitReached": "已用完",
+      "limitReset": "已重置"
+    }
   },
   "line": {
     "run": "运行 {{command}}",
@@ -133,5 +139,24 @@
       "allowOnce": "允许一次",
       "allowAlways": "始终允许"
     }
+  },
+  "notice": {
+    "appReady": "Kettu {{version}} 已就绪",
+    "appReadyNote": "会话会自动恢复",
+    "restart": "重启",
+    "appAvailable": "Kettu {{version}} 可以更新了",
+    "update": "更新",
+    "agentOne": "{{name}} 有更新",
+    "agentTwo": "{{first}} 和 {{second}} 有更新",
+    "agentMany": "{{name}} 等 {{count}} 个有更新",
+    "view": "查看",
+    "usedUp": "用完了",
+    "resets": "{{time}} 重置"
+  },
+  "pop": {
+    "appReady": "Kettu {{version}} 已就绪",
+    "appReadyBody": "重启后更新，会话会自动恢复",
+    "appAvailable": "Kettu {{version}} 可以更新了",
+    "appAvailableBody": "在 Kettu 里更新"
   }
 }

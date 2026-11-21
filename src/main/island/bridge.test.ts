@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ALREADY_ANSWERED, type HostEvent, type SessionSummary } from '@shared/agent-host'
 import type { IslandState } from '@shared/island'
 import type { ThreadEntry } from '@shared/thread'
+import type { UpdateStatus } from '@shared/updates'
 import { COALESCE_MS, IslandBridge, type HelperProcess, type IslandBridgeDeps } from './bridge'
 import { ISLAND_HOST_METHODS } from './host-feed'
 import { ISLAND_PROTOCOL, type MainToIsland } from './protocol'
@@ -120,6 +121,7 @@ interface Setup {
   emit(event: HostEvent): void
   states: IslandState[]
   opened: unknown[]
+  actions: string[]
   closeHost(): void
   remoteCalls: [string, string, unknown][]
   remoteOpen: Set<string>
@@ -165,6 +167,7 @@ function setup(
   const helpers: FakeHelper[] = []
   const states: IslandState[] = []
   const opened: unknown[] = []
+  const actions: string[] = []
   let onEvent: ((event: HostEvent) => void) | null = null
   let onClose: (() => void) | null = null
   const request = vi.fn(async (method: string, params: unknown) =>
@@ -174,7 +177,7 @@ function setup(
   const remoteOpen = new Set(remotes.map((remote) => remote.id))
   const deps: IslandBridgeDeps = {
     enabled: () => true,
-    kindEnabled: () => true,
+    allowed: () => true,
     windowFocused: () => false,
     colorMode: () => 'light',
     version: '0.1.13',
@@ -200,6 +203,8 @@ function setup(
       return { request: request as never, close: () => onClose?.() }
     },
     open: (target) => opened.push(target),
+    updateStatus: () => null,
+    noticeAction: (action) => actions.push(action),
     status: (state) => states.push(state),
     log: { info: () => {}, warn: () => {}, error: () => {} },
     now: () => Date.now(),
@@ -215,6 +220,7 @@ function setup(
     emit: (event) => onEvent!(event),
     states,
     opened,
+    actions,
     closeHost: () => onClose!(),
     remoteCalls,
     remoteOpen,
@@ -596,6 +602,45 @@ describe('opens and pops', () => {
       { type: 'pop', row: 's1', kind: 'turn-ended', title: 'Done', body: 'kettu' },
       { type: 'pop', row: 's1', kind: 'turn-ended', title: 'Done', body: 'kettu' },
     ])
+  })
+})
+
+describe('notices', () => {
+  it('acts only on the notices and pops it sent', async () => {
+    const status: UpdateStatus = {
+      state: { kind: 'ready', version: '0.2.0' },
+      mode: 'install',
+      readOnly: false,
+      current: '0.1.13',
+      updatedFrom: null,
+      dismissed: null,
+    }
+    const s = setup([summary('s1')], {}, [], { updateStatus: () => status })
+    await started(s)
+    expect(
+      s
+        .helper()
+        .of('view')
+        .at(-1)!
+        .notices.map((notice) => notice.key),
+    ).toEqual(['app-update'])
+    s.bridge.attention({
+      kind: 'plan-limit',
+      agentId: 'claude-code',
+      level: 'near',
+      key: 'claude-code:me@example.com:five_hour',
+      usedPercent: 92,
+      title: '5-hour limit 92% used',
+      body: 'Claude Max',
+    })
+    const pop = s.helper().of('pop').at(-1)!
+    expect(pop).toMatchObject({ row: null, kind: 'limit-near', percent: 92 })
+    s.helper().say({ type: 'notice', notice: 'app-update' })
+    s.helper().say({ type: 'notice', notice: pop.action! })
+    s.helper().say({ type: 'notice', notice: 'pop:999' })
+    s.helper().say({ type: 'notice', notice: 'limit' })
+    await vi.advanceTimersByTimeAsync(0)
+    expect(s.actions).toEqual(['restart', 'usage'])
   })
 })
 

@@ -41,6 +41,26 @@ export function limitsForModel(
   })
 }
 
+const DAY = 24 * 60 * 60_000
+
+/** When a window resets: the clock time today, with the weekday within six days, else the date. */
+export function resetTimeText(at: number, now: number, locale: string): string {
+  const day = (time: number): number => new Date(time).setHours(0, 0, 0, 0)
+  // Rounded, since a day across a clock change is not 24 hours.
+  const days = Math.round((day(at) - day(now)) / DAY)
+  const clock: Intl.DateTimeFormatOptions = { hour: 'numeric', minute: '2-digit' }
+  const options: Intl.DateTimeFormatOptions =
+    days === 0
+      ? clock
+      : days > 0 && days <= 6
+        ? { ...clock, weekday: 'short' }
+        : { ...clock, month: 'short', day: 'numeric' }
+  return new Intl.DateTimeFormat(locale, options).format(at)
+}
+
+/** A plan limit notice: a window at 90%, used up, or reset after it was used up. */
+export type PlanLimitNoticeLevel = 'near' | 'reached' | 'reset'
+
 /** How full a plan limit is: under 70% used, 70 to 89%, or 90% and over. */
 export type LimitLevel = 'ok' | 'warn' | 'bad'
 

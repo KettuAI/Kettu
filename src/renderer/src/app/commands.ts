@@ -4,12 +4,13 @@ import { confirmDebugRestart } from '@renderer/stores/debug'
 import { showQuitHint } from '@renderer/stores/quit-hint'
 import { openReport } from '@renderer/stores/report'
 import { useSessionsStore } from '@renderer/stores/sessions'
-import { checkForUpdates } from '@renderer/stores/updates'
+import { askUpdateList, checkForUpdates } from '@renderer/stores/updates'
 import {
   openRoutines,
   openSession,
   openSettings,
   openTask,
+  openUsage,
   toggleSidebar,
   type SettingsSection,
 } from '@renderer/stores/view'
@@ -54,6 +55,12 @@ export function useAppCommands(): void {
             break
           case 'open-routines':
             openRoutines()
+            break
+          case 'open-usage':
+            openUsage()
+            break
+          case 'open-updates':
+            askUpdateList()
             break
           // The menu has these keys when the page leaves them, as it does under a dialog or menu.
           case 'go-back':

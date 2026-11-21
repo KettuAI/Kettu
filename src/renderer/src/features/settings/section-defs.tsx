@@ -408,6 +408,27 @@ export function useNotificationsSection(): SectionDef {
       group: when,
       render: () => <NotificationSwitch field="error" label={t('notifications.error.name')} />,
     },
+    // Kettu's own update and the agents' plan limits are the desktop app's to say.
+    ...(isWeb
+      ? []
+      : [
+          {
+            id: 'updates',
+            setting: 'notifications.updates' as const,
+            group: when,
+            render: () => (
+              <NotificationSwitch field="updates" label={t('notifications.updates.name')} />
+            ),
+          },
+          {
+            id: 'plan-limits',
+            setting: 'notifications.plan-limits' as const,
+            group: when,
+            render: () => (
+              <NotificationSwitch field="planLimits" label={t('notifications.planLimits.name')} />
+            ),
+          },
+        ]),
     {
       id: 'sound',
       setting: 'notifications.sound',

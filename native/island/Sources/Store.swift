@@ -12,6 +12,7 @@ final class Store {
   private(set) var order: [String] = []
   private(set) var requests: [String: IslandRequest] = [:]
   private(set) var requestOrder: [String] = []
+  private(set) var notices: [IslandNotice] = []
   private(set) var summary = IslandSummary(
     running: 0, waiting: 0, failed: 0, today: 0)
 
@@ -45,6 +46,7 @@ final class Store {
     self.requests = Dictionary(
       requests.map { ($0.key, $0) }, uniquingKeysWith: { _, last in last })
     requestOrder = requests.map(\.key)
+    notices = message.notices ?? []
     if let summary = message.summary { self.summary = summary }
     seq = message.seq
   }
@@ -74,6 +76,7 @@ final class Store {
         requestOrder.append(request.key)
       }
     }
+    if let notices = message.notices { self.notices = notices }
     if let summary = message.summary { self.summary = summary }
     return .applied
   }

@@ -32,6 +32,12 @@ struct Pop: Equatable {
   let kind: String
   let title: String
   let body: String
+  /// Whose mark leads a pop with no row; nil for Kettu's fox.
+  let mark: IslandMark?
+  /// A plan limit window's use, for its ring.
+  let percent: Double?
+  /// What a click on a pop with no row does, sent back as a notice.
+  let action: String?
 }
 
 /// The one fact the collapsed island adds to its signal.
@@ -120,6 +126,9 @@ final class IslandModel: ObservableObject {
 
 
   var requests: [IslandRequest] { store.requestOrder.compactMap { store.requests[$0] } }
+
+  /// Kettu's update, the agents' updates and the fullest plan limit, under the sessions.
+  var notices: [IslandNotice] { store.notices }
 
   func row(_ key: String?) -> IslandRow? { key.flatMap { store.rows[$0] } }
 
@@ -404,7 +413,8 @@ final class IslandModel: ObservableObject {
     guard let kind = message.kind else { return }
     let item = Pop(
       id: nextPop, row: message.row, kind: kind, title: message.title ?? "",
-      body: message.body ?? "")
+      body: message.body ?? "", mark: message.mark, percent: message.percent,
+      action: message.action)
     nextPop += 1
     onAnnounce?([item.title, item.body].filter { !$0.isEmpty }.joined(separator: ", "))
     // What needs an answer opens the island at its card, without a hint to hover first, and keeps
@@ -418,11 +428,20 @@ final class IslandModel: ObservableObject {
       return
     }
     if mode == .open { return }
+    // A newer pop of the session showing takes its place, as a used-up limit does the failed turn
+    // it stopped.
+    if mode == .grown, let showing = pop, showing.row != nil, showing.row == item.row {
+      pops[0] = item
+      pop = item
+      holdPop()
+      return
+    }
     // A newer pop of the same session replaces the one waiting in line.
     pops.removeAll { $0.row != nil && $0.row == item.row && $0.id != pop?.id }
     pops.append(item)
     let rank = [
-      "permission": 0, "error": 1, "routine-paused": 2, "turn-ended": 3, "routine-ended": 4,
+      "permission": 0, "error": 1, "limit-reached": 1, "routine-paused": 2, "limit-near": 2,
+      "turn-ended": 3, "routine-ended": 4, "limit-reset": 4, "update": 5, "update-manual": 5,
     ]
     let showing = pops.first { $0.id == pop?.id }
     let rest = pops.filter { $0.id != pop?.id }.sorted {
@@ -468,8 +487,11 @@ final class IslandModel: ObservableObject {
   func holdPop(paused: Bool = false) {
     popTimer?.invalidate()
     guard mode == .grown, let pop, !paused else { return }
-    // A finished turn says so and goes; an error stays longer.
-    let seconds: Double = ["turn-ended", "routine-ended"].contains(pop.kind) ? 2 : 6
+    // A finished turn says so and goes; an update or a filling limit a little longer; an error
+    // or a used-up limit longest.
+    let seconds: Double =
+      ["turn-ended", "routine-ended", "limit-reset"].contains(pop.kind)
+      ? 2 : ["limit-near", "update", "update-manual"].contains(pop.kind) ? 4 : 6
     popTimer = Timer.scheduledTimer(withTimeInterval: seconds, repeats: false) { [weak self] _ in
       guard let self else { return }
       self.pops.removeFirst()
@@ -570,6 +592,21 @@ final class IslandModel: ObservableObject {
   func open(row: String?) {
     send(.open(row: row))
     collapse()
+  }
+
+  /// A notice's button or row: main restarts into the update or opens the page it is about.
+  func act(_ notice: String) {
+    send(.notice(notice))
+    collapse()
+  }
+
+  /// A pop of Kettu's own goes where it is about; a session's opens the island at its list.
+  func tapPop() {
+    if let action = pop?.action {
+      act(action)
+    } else {
+      expand(byClick: true)
+    }
   }
 
   func open(request: IslandRequest) {

@@ -13,10 +13,13 @@ import type { AgentId, PermissionKind, ToolKind } from '@shared/thread'
 import type { TurnPhase } from '@shared/turn-phase'
 import type { StepState } from '@shared/workflow'
 import { KETTU_SERVER, mcpCallOf } from '@shared/mcp-call'
+import type { UpdateStatus } from '@shared/updates'
 import { islandT, kettuToolT } from '../i18n'
+import { buildNotices, type NoticeAction } from './notices'
 import type {
   IslandGroup,
   IslandHost,
+  IslandNotice,
   IslandPhase,
   IslandOptionStyle,
   IslandRequest,
@@ -90,6 +93,8 @@ export interface BuiltView {
   requests: ReadonlyMap<string, SentRequest>
   /** What each request belongs to, which opening it in Kettu goes to. */
   owners: ReadonlyMap<string, RequestOwner>
+  /** What each notice does when clicked. */
+  notices: ReadonlyMap<string, NoticeAction>
 }
 
 export type RequestOwner =
@@ -613,7 +618,11 @@ function taskRequests(state: HostState): { request: IslandRequest; taskId: strin
 }
 
 /** The whole view of every host, and what main needs to act on what the helper sends back. */
-export function buildView(hosts: readonly HostState[], now: number): BuiltView {
+export function buildView(
+  hosts: readonly HostState[],
+  now: number,
+  update: UpdateStatus | null = null,
+): BuiltView {
   const owners = new Map<SessionSummary, HostState>()
   for (const state of hosts)
     for (const summary of state.sessions.values()) owners.set(summary, state)
@@ -668,15 +677,18 @@ export function buildView(hosts: readonly HostState[], now: number): BuiltView {
   }
   // The oldest request first, as the island answers them in turn.
   requests.sort((a, b) => (a.askedAt ?? Infinity) - (b.askedAt ?? Infinity))
+  const notices = buildNotices(update, hosts, now)
   return {
     view: {
       rows,
       requests,
+      notices: notices.notices,
       summary: buildSummary(rows, requests, all, now),
     },
     rows: rowMap,
     requests: sent,
     owners: requestOwners,
+    notices: notices.actions,
   }
 }
 
@@ -687,6 +699,7 @@ export interface ViewChange {
   requests: IslandRequest[]
   removedRequests: string[]
   requestOrder?: string[]
+  notices?: IslandNotice[]
   summary?: IslandSummary
 }
 
@@ -714,6 +727,9 @@ export function diffView(before: IslandView, after: IslandView): ViewChange | nu
   if (!sameOrder(before.requests, after.requests)) {
     change.requestOrder = after.requests.map((request) => request.key)
   }
+  if (JSON.stringify(before.notices) !== JSON.stringify(after.notices)) {
+    change.notices = after.notices
+  }
   if (JSON.stringify(before.summary) !== JSON.stringify(after.summary)) {
     change.summary = after.summary
   }
@@ -724,6 +740,7 @@ export function diffView(before: IslandView, after: IslandView): ViewChange | nu
     change.removedRequests.length === 0 &&
     !change.order &&
     !change.requestOrder &&
+    !change.notices &&
     !change.summary
   return empty ? null : change
 }

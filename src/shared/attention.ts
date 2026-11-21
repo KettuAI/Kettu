@@ -3,6 +3,7 @@
 // notifications and the web client's both follow it.
 
 import type { AppCommand } from './ipc'
+import type { PlanLimitNoticeLevel } from './plan-limits'
 import type { HostAttention } from './remote/host-admin'
 import type { SettingsFile } from './settings'
 
@@ -13,6 +14,7 @@ export const ATTENTION_SETTING = {
   error: 'error',
   'routine-ended': 'routines',
   'routine-paused': 'routines',
+  'plan-limit': 'planLimits',
 } as const satisfies Record<HostAttention['kind'], keyof SettingsFile['notifications']>
 
 const MAX_TITLE = 120
@@ -26,9 +28,12 @@ function isId(value: unknown): value is string {
   return typeof value === 'string' && value.length > 0 && value.length <= 200
 }
 
+const PLAN_LIMIT_LEVELS: readonly PlanLimitNoticeLevel[] = ['near', 'reached', 'reset']
+
 /**
  * What a well-formed attention message stands for, which a newer one of the same replaces, and
- * what a click opens: its session, or the Routines page for a pause. Null for a malformed one.
+ * what a click opens: its session, the Routines page for a pause, or the Usage page for a plan
+ * limit that names no session. Null for a malformed one.
  */
 export function attentionTarget(
   message: HostAttention,
@@ -37,6 +42,19 @@ export function attentionTarget(
     return null
   }
   if (typeof message.title !== 'string' || typeof message.body !== 'string') return null
+  if (message.kind === 'plan-limit') {
+    if (!isId(message.agentId) || !isId(message.key)) return null
+    if (!PLAN_LIMIT_LEVELS.includes(message.level)) return null
+    if (message.sessionId !== undefined) {
+      return isId(message.sessionId)
+        ? {
+            key: message.sessionId,
+            command: { kind: 'open-session', sessionId: message.sessionId },
+          }
+        : null
+    }
+    return { key: `limit:${message.key}`, command: { kind: 'open-usage' } }
+  }
   if (message.kind === 'routine-paused') {
     return isId(message.agentId)
       ? { key: `routines:${message.agentId}`, command: { kind: 'open-routines' } }

@@ -1,7 +1,7 @@
 import Foundation
 
 /// The protocol version this helper speaks; main's hello names its own.
-let islandProtocol = 2
+let islandProtocol = 3
 
 /// The longest line either side sends, in bytes, the newline excluded.
 let maxLineBytes = 1024 * 1024
@@ -94,6 +94,33 @@ struct IslandRequest: Codable, Equatable {
   let askedAt: Double?
 }
 
+/// An agent's mark: its harness's, with an added agent's color dot.
+struct IslandMark: Codable, Equatable {
+  let harness: String
+  let color: String?
+}
+
+struct IslandMeter: Codable, Equatable {
+  let percent: Double
+  let reached: Bool
+  let text: String
+}
+
+/// One line under the sessions about Kettu itself: its update, the agents' updates, a plan limit.
+struct IslandNotice: Codable, Equatable {
+  let key: String
+  let kind: String
+  /// Empty for Kettu's own, which leads with the fox.
+  let marks: [IslandMark]
+  let title: String
+  let detail: String?
+  let meter: IslandMeter?
+  let trailing: String?
+  /// A button that acts in place; nil when a click opens Kettu instead.
+  let button: String?
+  let link: String?
+}
+
 struct IslandSummary: Codable, Equatable {
   let running: Int
   let waiting: Int
@@ -115,6 +142,7 @@ struct MainMessage: Decodable {
   let seq: Int?
   let rows: [IslandRow]?
   let requests: [IslandRequest]?
+  let notices: [IslandNotice]?
   let summary: IslandSummary?
   let removedRows: [String]?
   let order: [String]?
@@ -125,6 +153,9 @@ struct MainMessage: Decodable {
   let kind: String?
   let title: String?
   let body: String?
+  let mark: IslandMark?
+  let percent: Double?
+  let action: String?
   // answered
   let id: String?
   let result: String?
@@ -133,7 +164,7 @@ struct MainMessage: Decodable {
   enum CodingKeys: String, CodingKey {
     case type, version, locale, strings, colorMode, stuckAfterMs, seq, rows, requests, summary
     case removedRows, order, removedRequests, requestOrder, row, kind, title, body, id, result
-    case message
+    case message, notices, mark, percent, action
     case protocolVersion = "protocol"
   }
 }
@@ -145,6 +176,8 @@ enum HelperMessage {
   case open(row: String?)
   /// What a request belongs to, its session or its task, to answer it in Kettu.
   case openRequest(String)
+  /// A notice's button or row, or a pop's action.
+  case notice(String)
   case newSession
   case expanded
   case resync
@@ -159,6 +192,8 @@ enum HelperMessage {
       return ["type": "open", "row": row as Any? ?? NSNull()]
     case .openRequest(let request):
       return ["type": "openRequest", "request": request]
+    case .notice(let notice):
+      return ["type": "notice", "notice": notice]
     case .newSession:
       return ["type": "newSession"]
     case .expanded:

@@ -69,7 +69,13 @@
       "stuck": "No result for {{time}}"
     },
     "ago": "{{time}} ago",
-    "resets": "Resets {{day}}"
+    "resets": "Resets {{day}}",
+    "pop": {
+      "update": "Update ready",
+      "updateManual": "Update",
+      "limitReached": "Used up",
+      "limitReset": "Reset"
+    }
   },
   "line": {
     "run": "Run {{command}}",
@@ -135,5 +141,24 @@
       "allowOnce": "Allow once",
       "allowAlways": "Always allow"
     }
+  },
+  "notice": {
+    "appReady": "Kettu {{version}} is ready",
+    "appReadyNote": "Sessions resume",
+    "restart": "Restart",
+    "appAvailable": "Kettu {{version}} is available",
+    "update": "Update",
+    "agentOne": "{{name}} has an update",
+    "agentTwo": "{{first}} and {{second}} have updates",
+    "agentMany": "{{name}} and {{others}} others have updates",
+    "view": "View",
+    "usedUp": "Used up",
+    "resets": "Resets {{time}}"
+  },
+  "pop": {
+    "appReady": "Kettu {{version}} is ready",
+    "appReadyBody": "Restart to update; sessions resume",
+    "appAvailable": "Kettu {{version}} is available",
+    "appAvailableBody": "Update it in Kettu"
   }
 }

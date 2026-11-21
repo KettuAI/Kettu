@@ -32,7 +32,9 @@ shows while it is on:
   one status at the end. Up to four sessions, each row has a second line: what it is doing or what
   came of it in its state's color, and the plan's progress or a time on its right; with more, every
   row keeps one line with only that progress or time, six of them with the rest folded into one
-  line. Then New session and Open Kettu. The panel is laid out unseen first, so the outline grows to its height in one critically
+  line. Under them, after a hairline, up to three notices: Kettu's update, the agents' updates and
+  the tightest plan limit, each one line with a button that acts in place or a link into Kettu.
+  Then New session and Open Kettu. The panel is laid out unseen first, so the outline grows to its height in one critically
   damped spring. A click opens a row; the bare top opens Kettu. An island opened by a click takes
   the keyboard: Esc, the arrows, Return and the digits.
 
@@ -55,23 +57,24 @@ node native/island/build.mjs out/helpers   # what a development run of Kettu sta
 Every message is one line of UTF-8 JSON, at most 1 MiB; main drops longer or malformed lines from the
 helper and starts it again after several in a row. `src/main/island/protocol.ts` defines both sides.
 
-| Direction      | `type`        | Carries                                                                                                                                                      |
-| -------------- | ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| main to helper | `hello`       | `protocol`, Kettu's `version`, `locale`, `strings`, `colorMode`, `stuckAfterMs`                                                                              |
-| main to helper | `view`        | `seq`, `rows` in the order to show, `requests` oldest first, `summary`, `focus`                                                                              |
-| main to helper | `change`      | `seq`, changed `rows` and `requests`, `removedRows`, `removedRequests`, new `order` and `requestOrder` when they changed, `summary` when it changed, `focus` |
-| main to helper | `pop`         | `row` or null, `kind`, `title`, `body`: something needs the user                                                                                             |
-| main to helper | `answered`    | the answer's `id`; `result` `answered`, `elsewhere` or `failed` with `message`                                                                               |
-| main to helper | `strings`     | `locale` and `strings`, followed by a `view`                                                                                                                 |
-| main to helper | `appearance`  | `colorMode`                                                                                                                                                  |
-| main to helper | `quit`        | nothing; main ends the helper a second later if it is still there                                                                                            |
-| helper to main | `ready`       | `protocol`, the helper's `version`                                                                                                                           |
-| helper to main | `answer`      | its own `id`, a `request` key and an `option` id main sent                                                                                                   |
-| helper to main | `open`        | a `row` key, or null for Kettu itself                                                                                                                        |
-| helper to main | `openRequest` | a `request` key main sent: its session or its task opens in Kettu                                                                                            |
-| helper to main | `newSession`  | nothing; Kettu opens New session                                                                                                                             |
-| helper to main | `expanded`    | nothing; main has the agents read their plan limits, at most once a minute                                                                                   |
-| helper to main | `resync`      | nothing; main sends a whole `view`                                                                                                                           |
+| Direction      | `type`        | Carries                                                                                                                                                                      |
+| -------------- | ------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| main to helper | `hello`       | `protocol`, Kettu's `version`, `locale`, `strings`, `colorMode`, `stuckAfterMs`                                                                                              |
+| main to helper | `view`        | `seq`, `rows` in the order to show, `requests` oldest first, `notices`, `summary`, `focus`                                                                                   |
+| main to helper | `change`      | `seq`, changed `rows` and `requests`, `removedRows`, `removedRequests`, new `order` and `requestOrder` when they changed, `notices` and `summary` when they changed, `focus` |
+| main to helper | `pop`         | `row` or null, `kind`, `title`, `body`; without a row, the `mark`, a limit's `percent` and the `action` a click sends back                                                   |
+| main to helper | `answered`    | the answer's `id`; `result` `answered`, `elsewhere` or `failed` with `message`                                                                                               |
+| main to helper | `strings`     | `locale` and `strings`, followed by a `view`                                                                                                                                 |
+| main to helper | `appearance`  | `colorMode`                                                                                                                                                                  |
+| main to helper | `quit`        | nothing; main ends the helper a second later if it is still there                                                                                                            |
+| helper to main | `ready`       | `protocol`, the helper's `version`                                                                                                                                           |
+| helper to main | `answer`      | its own `id`, a `request` key and an `option` id main sent                                                                                                                   |
+| helper to main | `open`        | a `row` key, or null for Kettu itself                                                                                                                                        |
+| helper to main | `openRequest` | a `request` key main sent: its session or its task opens in Kettu                                                                                                            |
+| helper to main | `notice`      | a notice's key or a pop's `action` main sent: main acts on it                                                                                                                |
+| helper to main | `newSession`  | nothing; Kettu opens New session                                                                                                                                             |
+| helper to main | `expanded`    | nothing; main has the agents read their plan limits, at most once a minute                                                                                                   |
+| helper to main | `resync`      | nothing; main sends a whole `view`                                                                                                                                           |
 
 A `change` whose `seq` does not follow the last one means one was lost: the helper sends `resync`.
 

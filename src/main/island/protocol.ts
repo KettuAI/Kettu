@@ -5,7 +5,7 @@
 import type { ToolKind } from '@shared/thread'
 
 /** Raised whenever either side's messages change in a way the other must know. */
-export const ISLAND_PROTOCOL = 2
+export const ISLAND_PROTOCOL = 3
 
 /** The longest line either side sends, in bytes of UTF-8, the newline excluded. */
 export const MAX_LINE_BYTES = 1024 * 1024
@@ -86,6 +86,33 @@ export interface IslandRequest {
   askedAt: number | null
 }
 
+/** An agent's mark: its harness's, with an added agent's color dot. */
+export interface IslandMark {
+  harness: string
+  color: string | null
+}
+
+export type IslandNoticeKind = 'app_update' | 'agent_update' | 'limit'
+
+/** One line under the sessions about Kettu itself: its update, the agents' updates, a plan limit. */
+export interface IslandNotice {
+  key: string
+  kind: IslandNoticeKind
+  /** The agents' marks it leads with; empty for Kettu's own, which leads with the fox. */
+  marks: IslandMark[]
+  title: string
+  /** Grey words after the title. */
+  detail: string | null
+  /** A plan limit window's ring: how full, whether used up, and the words beside it. */
+  meter: { percent: number; reached: boolean; text: string } | null
+  /** Grey words at the end, such as when the window resets. */
+  trailing: string | null
+  /** A button that acts in place, by its words; null when a click opens Kettu instead. */
+  button: string | null
+  /** The words that say a click opens Kettu. */
+  link: string | null
+}
+
 export interface IslandSummary {
   running: number
   /** Sessions and tasks that wait for the user. */
@@ -98,12 +125,23 @@ export interface IslandSummary {
 export interface IslandView {
   rows: IslandRow[]
   requests: IslandRequest[]
+  notices: IslandNotice[]
   summary: IslandSummary
 }
 
 export type ColorMode = 'light' | 'dark'
 
-export type PopKind = 'permission' | 'turn-ended' | 'error' | 'routine-ended' | 'routine-paused'
+export type PopKind =
+  | 'permission'
+  | 'turn-ended'
+  | 'error'
+  | 'routine-ended'
+  | 'routine-paused'
+  | 'limit-near'
+  | 'limit-reached'
+  | 'limit-reset'
+  | 'update'
+  | 'update-manual'
 
 export type AnswerResult =
   { result: 'answered' } | { result: 'elsewhere' } | { result: 'failed'; message: string }
@@ -129,9 +167,23 @@ export type MainToIsland =
       requests: IslandRequest[]
       removedRequests: string[]
       requestOrder?: string[]
+      /** Every notice, when any changed. */
+      notices?: IslandNotice[]
       summary?: IslandSummary
     }
-  | { type: 'pop'; row: string | null; kind: PopKind; title: string; body: string }
+  | {
+      type: 'pop'
+      row: string | null
+      kind: PopKind
+      title: string
+      body: string
+      /** Whose mark leads a pop with no row; null or absent for Kettu's fox. */
+      mark?: IslandMark | null
+      /** A plan limit window's use, for its ring. */
+      percent?: number | null
+      /** What a click on a pop with no row does, sent back as a notice. */
+      action?: string | null
+    }
   | ({ type: 'answered'; id: string } & AnswerResult)
   | { type: 'strings'; locale: string; strings: Record<string, string> }
   | { type: 'appearance'; colorMode: ColorMode }
@@ -144,6 +196,8 @@ export type IslandToMain =
   | { type: 'open'; row: string | null }
   /** What a request belongs to, to answer it in Kettu: its session or its task. */
   | { type: 'openRequest'; request: string }
+  /** A notice or a pop's action: its button, or its row. */
+  | { type: 'notice'; notice: string }
   | { type: 'newSession' }
   | { type: 'expanded' }
   | { type: 'resync' }
@@ -190,6 +244,11 @@ export function parseIslandLine(line: string): IslandToMain | null {
       const { request } = message
       if (!isId(request)) return null
       return { type: 'openRequest', request }
+    }
+    case 'notice': {
+      const { notice } = message
+      if (!isId(notice)) return null
+      return { type: 'notice', notice }
     }
     case 'newSession':
       return { type: 'newSession' }

@@ -24,7 +24,7 @@ import {
   type RunStatus,
   type RunView,
 } from '@shared/routines'
-import { limitsForModel } from '@shared/plan-limits'
+import { limitsForModel, resetTimeText } from '@shared/plan-limits'
 import type { AgentId, ConfigOption } from '@shared/thread'
 import { HostError } from '../errors'
 import { currentLocale, hasMessage, t } from '../i18n'
@@ -1126,7 +1126,7 @@ function pauseView({ agentId, limit }: LimitPause): NonNullable<RoutineView['pau
  * A plan-limit window's name inside a sentence: Kettu's for the windows it knows, else the agent's
  * own, with a per-model week as "Fable weekly" so it does not read as two windows.
  */
-function windowName(limit: PlanLimit): string {
+export function windowName(limit: PlanLimit): string {
   for (const key of [`planWindowInText.${limit.window}`, `planWindow.${limit.window}`]) {
     if (hasMessage(key)) return (t as (key: string) => string)(key)
   }
@@ -1138,21 +1138,9 @@ function windowName(limit: PlanLimit): string {
   return fiveHour ? t('planWindowInText.fiveHourOf', { model: fiveHour[1]! }) : limit.label
 }
 
-const DAY = 24 * 60 * 60_000
-
-/** When a window resets: the clock time today, with the weekday within six days, else the date. */
-function resetTime(at: number, now: number): string {
-  const day = (time: number): number => new Date(time).setHours(0, 0, 0, 0)
-  // Rounded, since a day across a clock change is not 24 hours.
-  const days = Math.round((day(at) - day(now)) / DAY)
-  const clock: Intl.DateTimeFormatOptions = { hour: 'numeric', minute: '2-digit' }
-  const options: Intl.DateTimeFormatOptions =
-    days === 0
-      ? clock
-      : days > 0 && days <= 6
-        ? { ...clock, weekday: 'short' }
-        : { ...clock, month: 'short', day: 'numeric' }
-  return new Intl.DateTimeFormat(currentLocale(), options).format(at)
+/** When a window resets, in the interface language. */
+export function resetTime(at: number, now: number): string {
+  return resetTimeText(at, now, currentLocale())
 }
 
 // Pi has no mode to set; its caption says it does not ask before it acts.

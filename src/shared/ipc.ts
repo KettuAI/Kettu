@@ -146,6 +146,9 @@ export type AppCommand =
   | { kind: 'open-session'; sessionId: string }
   | { kind: 'open-task'; taskId: string }
   | { kind: 'open-routines' }
+  | { kind: 'open-usage' }
+  /** The sidebar's update card, with its list when it has one. */
+  | { kind: 'open-updates' }
   | { kind: 'go-back' }
   | { kind: 'go-forward' }
   | { kind: 'show-history' }

@@ -183,6 +183,16 @@
     "pausedUsedNoReset": "{{limit}} limit {{percent}}% used",
     "pausedReachedNoReset": "{{limit}} limit reached"
   },
+  "planLimitNotice": {
+    "near": "{{limit}} limit {{percent}}% used",
+    "reached": "{{limit}} limit reached",
+    "reset": "{{limit}} limit reset",
+    "resets": "{{account}} · resets {{time}}",
+    "goOn": "{{account}} · you can carry on",
+    "sessionReached": "{{limit}} limit reached · resets {{time}}",
+    "sessionReachedNoReset": "{{limit}} limit reached",
+    "sessionReset": "{{limit}} limit reset, it can carry on"
+  },
   "planWindow": {
     "five_hour": "5-hour",
     "seven_day": "Weekly",

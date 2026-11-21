@@ -456,8 +456,15 @@ function SeveralCard({
 }) {
   const { t } = useTranslation('updates')
   const current = useUpdatesStore((s) => s.status?.current)
+  const listAsked = useUpdatesStore((s) => s.listAsked)
   const [open, setOpen] = useState(false)
   const card = useRef<HTMLDivElement>(null)
+  const asked = useRef(listAsked)
+  useEffect(() => {
+    if (listAsked === asked.current) return
+    asked.current = listAsked
+    setOpen(true)
+  }, [listAsked])
   const harnesses = shown.flatMap((item) =>
     item.kind === 'harness' && !item.skipped ? [item.offer.agentId] : [],
   )
