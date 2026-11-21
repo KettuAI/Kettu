@@ -611,12 +611,17 @@ export function backArrows(
   )
 }
 
+// A file's maps are plain objects, so a key such as `constructor` must not reach their prototype.
+function ownEntry<T>(map: Record<string, T> | undefined, key: string | undefined): T | undefined {
+  return map !== undefined && key !== undefined && Object.hasOwn(map, key) ? map[key] : undefined
+}
+
 /** Text from the workflow's locale, falling back to the file's own field by field. */
 export function workflowText(
   workflow: Pick<Workflow, 'name' | 'description' | 'when' | 'locales'>,
   locale: string,
 ): { name: string; description: string; when?: string } {
-  const own = workflow.locales[locale]
+  const own = ownEntry(workflow.locales, locale)
   const when = own?.when ?? workflow.when
   return {
     name: own?.name ?? workflow.name,
@@ -630,7 +635,7 @@ export function stepName(
   stepId: string,
   locale?: string,
 ): string {
-  const own = locale === undefined ? undefined : workflow.locales[locale]?.steps?.[stepId]
+  const own = ownEntry(ownEntry(workflow.locales, locale)?.steps, stepId)
   return own ?? workflow.steps.find((step) => step.id === stepId)?.name ?? stepId
 }
 
@@ -644,9 +649,8 @@ export function outcomeName(
   outcome: string,
   locale?: string,
 ): string {
-  const names = locale === undefined ? undefined : workflow.locales[locale]?.outcomes
-  const step = names && Object.hasOwn(names, stepId) ? names[stepId] : undefined
-  return step && Object.hasOwn(step, outcome) ? step[outcome]! : outcome
+  const step = ownEntry(ownEntry(workflow.locales, locale)?.outcomes, stepId)
+  return ownEntry(step, outcome) ?? outcome
 }
 
 const PICKED_KINDS: ReadonlySet<string> = new Set([

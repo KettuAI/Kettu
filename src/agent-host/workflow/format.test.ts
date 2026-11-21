@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { WORKFLOW_DESCRIPTION_CHARS, outcomeName, workflowText } from '@shared/workflow'
+import { WORKFLOW_DESCRIPTION_CHARS, outcomeName, stepName, workflowText } from '@shared/workflow'
 import { parseWorkflow, workflowHash, toolProblems } from './format'
 
 const STEPS = `
@@ -109,6 +109,38 @@ ${STEPS}`),
     expect(outcomeName(flow, 'review', 'Approved', 'fr')).toBe('Approved')
     expect(outcomeName(flow, 'review', 'Approved')).toBe('Approved')
     expect(outcomeName(flow, 'review', 'constructor', 'zh-CN')).toBe('constructor')
+  })
+
+  it('reads only names a language gives, never what every object has', () => {
+    const flow = parseWorkflow(
+      workflow(`locales:
+  zh-CN:
+    name: 测试
+    steps:
+      build: 构建
+    outcomes:
+      build:
+        Done: 完成
+steps:
+  - id: build
+    name: Build
+    prompt: Build it.
+    outcomes:
+      - name: Done
+        to: constructor
+  - id: constructor
+    name: Construct
+    prompt: Construct it.
+    outcomes:
+      - name: toString
+        end: done
+`),
+    ).workflow!
+    expect(stepName(flow, 'constructor', 'zh-CN')).toBe('Construct')
+    expect(stepName(flow, 'build', 'zh-CN')).toBe('构建')
+    expect(outcomeName(flow, 'constructor', 'toString', 'zh-CN')).toBe('toString')
+    expect(workflowText(flow, 'constructor').name).toBe('Test')
+    expect(workflowText(flow, 'toString').description).toBe('')
   })
 
   it('refuses outcome names for an unknown step or outcome, or not as text', () => {
