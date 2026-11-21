@@ -12,11 +12,11 @@ export interface IndexedMessage {
 /**
  * The text of a user message or an agent reply as Search reads it: the text parts of a message
  * joined by lines, the Markdown of a reply. Empty for every other entry, and for the answer Kettu
- * sends for a card, which is no message of the user's own.
+ * sends for a card or a message Kettu wrote itself, which are no messages of the user's own.
  */
 export function messageText(entry: ThreadEntry): string {
   if (entry.kind === 'agent') return entry.markdown.trim()
-  if (entry.kind !== 'user' || entry.approval) return ''
+  if (entry.kind !== 'user' || entry.approval || entry.kettu) return ''
   return entry.content
     .flatMap((part) => (part.type === 'text' ? [part.text] : []))
     .join('\n')

@@ -477,7 +477,7 @@ export function showSending(sessionId: string, content: UserContent[]): () => vo
  * when the session's host is another computer or this is the web client.
  */
 function isOwnMessage(entry: ThreadEntry): entry is UserEntry {
-  return entry.kind === 'user' && !entry.steered && !entry.from && !entry.approval
+  return entry.kind === 'user' && !entry.steered && !entry.from && !entry.approval && !entry.kettu
 }
 
 /** The batch's new messages that take the place of messages sending, oldest first. */

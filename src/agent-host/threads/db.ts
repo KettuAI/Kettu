@@ -428,9 +428,11 @@ function prepareAll(db: DatabaseSync) {
       FROM entries e LEFT JOIN outline_titles t ON t.session_id = e.session_id AND t.pos = e.pos
       WHERE e.session_id = ? AND e.kind = 'user'
         AND json_extract(e.json, '$.from') IS NULL
-        AND json_extract(e.json, '$.approval') IS NULL ORDER BY e.pos`),
+        AND json_extract(e.json, '$.approval') IS NULL
+        AND json_extract(e.json, '$.kettu') IS NULL ORDER BY e.pos`),
     // The text of the user messages and agent replies in a range of positions, as the search
-    // index reads them; an answer a card already shows is no message of the user's own.
+    // index reads them; an answer a card already shows, or a message Kettu wrote itself, is no
+    // message of the user's own.
     messagesIn: sql(`
       SELECT pos, entry_id, kind,
         CASE kind WHEN 'agent' THEN json_extract(json, '$.markdown')
@@ -439,7 +441,7 @@ function prepareAll(db: DatabaseSync) {
             WHERE json_extract(part.value, '$.type') = 'text') END AS text
       FROM entries
       WHERE session_id = ? AND pos >= ? AND pos < ? AND kind IN ('user', 'agent')
-        AND json_extract(json, '$.approval') IS NULL
+        AND json_extract(json, '$.approval') IS NULL AND json_extract(json, '$.kettu') IS NULL
       ORDER BY pos`),
     threadState: sql('SELECT next_pos, updated_at FROM threads WHERE session_id = ?'),
     threadMarks: sql('SELECT session_id, updated_at FROM threads'),

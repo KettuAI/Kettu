@@ -23,7 +23,7 @@ interface Browsing {
 
 /** The message's text when it can be recalled: sent by the user, with something to type. */
 function recallable(entry: ThreadEntry | undefined): string | null {
-  if (entry?.kind !== 'user' || entry.from || entry.approval) return null
+  if (entry?.kind !== 'user' || entry.from || entry.approval || entry.kettu) return null
   const text = entry.content
     .filter((part) => part.type === 'text')
     .map((part) => part.text)

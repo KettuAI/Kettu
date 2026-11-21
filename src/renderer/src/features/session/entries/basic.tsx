@@ -47,7 +47,7 @@ import { OutOfCreditEnd } from './out-of-credit'
 import { splitLinks } from './text-links'
 import { UserActions } from './message-actions'
 import { ReplyRunChip } from './reply-run-chip'
-import { FromSessionCard, ReportLine } from './session-origin'
+import { FromSessionCard, KettuCard, ReportLine } from './session-origin'
 import { TurnEndTag } from './turn-end-tag'
 import { RefChip, SentAttachments, UserContentView } from './user-content'
 
@@ -83,7 +83,7 @@ export const UserEntry = memo(function UserEntry({
     return <ReportLine from={entry.from} ended={entry.from.ended} end={end} className={animation} />
   }
   return (
-    <div className={cn('ks-user', entry.from && 'ks-user--agent', animation)}>
+    <div className={cn('ks-user', (entry.from || entry.kettu) && 'ks-user--agent', animation)}>
       {attachments.length > 0 && (
         <div className="flex w-full justify-end pb-1">
           <SentAttachments sessionId={sessionId} entryId={entryId} attachments={attachments} />
@@ -96,6 +96,10 @@ export const UserEntry = memo(function UserEntry({
           <FromSessionCard from={entry.from}>
             <UserContentView content={rest} sessionId={sessionId} entryId={entryId} />
           </FromSessionCard>
+        ) : entry.kettu ? (
+          <KettuCard>
+            <UserContentView content={rest} sessionId={sessionId} entryId={entryId} />
+          </KettuCard>
         ) : (
           <div className="ks-user__bubble" data-run-notice={runNotice ? '' : undefined}>
             {runNotice ? (

@@ -451,7 +451,8 @@
     "label": "{{names, list(style: narrow)}} 上也开着这个会话"
   },
   "userEntry": {
-    "device": "从 {{device}} 发送"
+    "device": "从 {{device}} 发送",
+    "kettu": "Kettu"
   },
   "sessionReport": {
     "agent": "该会话",
@@ -522,6 +523,7 @@
     "attachment": "附件",
     "from": "来自 {{device}}",
     "fromSession": "来自 {{title}}",
+    "fromKettu": "来自 Kettu",
     "attachments_other": "{{count}} 个附件",
     "sendNow": "立即发送",
     "steer": "立即插入当前对话",
