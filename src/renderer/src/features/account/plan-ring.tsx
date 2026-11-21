@@ -3,12 +3,14 @@ import { DragDropProvider, PointerSensor, type DragEndEvent } from '@dnd-kit/rea
 import { isSortable } from '@dnd-kit/react/sortable'
 import { ArrowRight01Icon, PieChartIcon } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
-import type { AgentId } from '@shared/thread'
+import type { ProviderBalance } from '@shared/agent-host'
+import type { AgentId, ConfigOption } from '@shared/thread'
 import { Icon, Popover } from '@renderer/components/affect/app-shell'
 import { LimitViewSwitch } from '@renderer/components/plan-limit-view'
 import { PlanRings } from '@renderer/components/plan-rings'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
 import { useLimitView } from '@renderer/hooks/use-limit-view'
+import { balanceLabel, planBalance } from '@renderer/lib/format'
 import { errorMessage } from '@renderer/lib/host'
 import { hostOfPath } from '@renderer/lib/host-paths'
 import { shownPercent } from '@renderer/lib/plan-limit'
@@ -21,8 +23,12 @@ import {
 } from '@renderer/lib/plan-readings'
 import { readJson, writeJson } from '@renderer/lib/storage'
 import { useNow } from '@renderer/lib/use-now'
+import { cn } from '@renderer/lib/utils'
+import { isSelect } from '@renderer/features/session/composer/options'
+import { useStartConfig } from '@renderer/features/session/new-session/use-start-config'
 import { agentsOn, planReadingsOf, useAgentsStore, usePlanReadings } from '@renderer/stores/agents'
 import { hostOfSession, useSessionsStore } from '@renderer/stores/sessions'
+import { useThreadsStore } from '@renderer/stores/threads'
 import { planLimitWays, readLimitsThrough } from '@renderer/stores/usage'
 import { openUsage, useViewStore } from '@renderer/stores/view'
 import {
@@ -32,7 +38,14 @@ import {
   useWindowHost,
 } from '@renderer/stores/window-host'
 import { closeAccountMenu } from './menu-close'
-import { currentCard, planCards, popoverCards, tightestWindow, type PlanCard } from './model'
+import {
+  balanceTotal,
+  currentCard,
+  planCards,
+  popoverCards,
+  ringWindows,
+  type PlanCard,
+} from './model'
 import { PlanLimitCard } from './plan-limit-card'
 
 /**
@@ -64,73 +77,131 @@ function useAccountsWithLimits(): AccountAgent[] {
   )
 }
 
-/** The agent of the session shown, the focused pane's in a split, or New session's choice. */
-function useShownAgent(): { hostId: string | null; agentId: AgentId } | null {
+/**
+ * The agent of the session shown, the focused pane's in a split, or New session's choice, with
+ * the session when one is shown.
+ */
+function useShownAgent(): {
+  hostId: string | null
+  agentId: AgentId
+  sessionId: string | null
+} | null {
   const main = useViewStore((s) => s.main)
   const projectPath = useViewStore((s) => s.projectPath)
   const summary = useSessionsStore((s) =>
     main.kind === 'session' ? s.byId[main.sessionId] : undefined,
   )
   return useMemo(() => {
-    if (summary) return { hostId: hostOfSession(summary), agentId: summary.agentId }
+    if (summary) {
+      return { hostId: hostOfSession(summary), agentId: summary.agentId, sessionId: summary.id }
+    }
     if (main.kind !== 'new' || !main.agentId) return null
     const hostId = main.noProject
       ? null
       : projectPath
         ? hostOfPath(projectPath)
         : (main.hostId ?? null)
-    return { hostId, agentId: main.agentId }
+    return { hostId, agentId: main.agentId, sessionId: null }
   }, [main, projectPath, summary])
 }
 
+const isModel = (option: ConfigOption): boolean => option.category === 'model' && isSelect(option)
+
 /**
- * The account the ring follows, by its card key, and its agent's name; on a page with no agent of
- * its own, the one followed last.
+ * The account the ring follows, by its card key, and the model its session runs, or New session's
+ * pick; on a page with no agent of its own, the ones followed last.
  */
-function useCurrentAccount(): { key: string; agentName: string } | null {
+function useCurrentAccount(): { key: string; model: ConfigOption | undefined } | null {
   const agent = useShownAgent()
-  const found = useAgentsStore((s) => {
+  const key = useAgentsStore((s) => {
     if (!agent) return null
     const status = agentsOn(s, agent.hostId).byId[agent.agentId]
     if (!status) return null
     const account = accountKey(status)
-    const key = account === null ? ownKey(agent.hostId, agent.agentId) : accountCardKey(account)
-    return `${key}\n${status.name}`
+    return account === null ? ownKey(agent.hostId, agent.agentId) : accountCardKey(account)
   })
+  const sessionModel = useThreadsStore((s) =>
+    agent?.sessionId ? s.replicas[agent.sessionId]?.state?.session.config.find(isModel) : undefined,
+  )
+  const startConfig = useStartConfig(
+    agent && !agent.sessionId ? agent.agentId : null,
+    undefined,
+    agent?.hostId ?? null,
+  )
+  const model = agent?.sessionId ? sessionModel : startConfig?.find(isModel)
+  const found = useMemo(() => (key === null ? null : { key, model }), [key, model])
   const [kept, setKept] = useState(found)
   if (found !== null && found !== kept) setKept(found)
-  const shown = found ?? kept
-  if (shown === null) return null
-  const cut = shown.lastIndexOf('\n')
-  return { key: shown.slice(0, cut), agentName: shown.slice(cut + 1) }
+  return found ?? kept
+}
+
+/** Rings that fit 20 px, by how many there are. */
+function ringSizes(count: number): { stroke: number; gap: number } {
+  if (count <= 1) return { stroke: 2.5, gap: 0 }
+  if (count === 2) return { stroke: 2.2, gap: 1.2 }
+  if (count === 3) return { stroke: 1.8, gap: 1 }
+  return { stroke: 1.5, gap: 0.75 }
+}
+
+/** A balance in its currency, or in its own units, such as credits, by their shown name. */
+function balanceText(
+  balance: Omit<ProviderBalance, 'label'>,
+  units: Record<string, string>,
+): string {
+  return planBalance(balance.amount, balance.currency, units[balance.currency] ?? balance.currency)
 }
 
 /**
- * The account row's plan ring: the current session's account at its tightest window, which opens
- * every account's plan cards where the account menu opens. Gone while no account reports a limit.
+ * The account row's plan button for the current session's account: a ring per window that holds
+ * its model back, as the plan cards draw them, or the balance of an account that reports only one;
+ * gone when it reports neither. It opens every account's plan cards where the account menu opens.
  */
 export function PlanRing() {
-  const { t } = useTranslation(['sidebar', 'composer'])
-  const cards = planCards(useAccountsWithLimits(), useNow())
+  const { t } = useTranslation(['sidebar', 'composer', 'usage'])
+  const now = useNow()
+  const cards = planCards(useAccountsWithLimits(), now)
   const current = useCurrentAccount()
   const view = useLimitView()
   const [open, setOpen] = useState(false)
-  if (cards.length === 0) return null
 
   const card = current ? currentCard(cards, current.key) : null
-  const tightest = card?.windows.length ? tightestWindow(card) : null
-  const label =
-    card && tightest
-      ? t(view === 'left' ? 'sidebar:account.ringLeft' : 'sidebar:account.ring', {
-          account: card.name,
-          window: tightest.model
-            ? `${t(`composer:usage.shortWindow.${tightest.window}`)} ${tightest.model}`
-            : t(`composer:usage.shortWindow.${tightest.window}`),
-          percent: shownPercent(tightest.percent, view),
-        })
-      : current
-        ? t('sidebar:account.ringNone', { agent: current.agentName })
-        : t('sidebar:account.limits')
+  const windows = card ? ringWindows(card, current?.model, now) : []
+  const balance = card && windows.length === 0 ? balanceTotal(card.balances) : null
+  if (!card || (windows.length === 0 && !balance)) return null
+
+  const units: Record<string, string> = {
+    credits: t('usage:limits.units.credits'),
+    requests: t('usage:limits.units.premiumRequests'),
+  }
+  let label: string
+  if (balance) {
+    const amount = balanceText(balance, units)
+    label =
+      balance.wallets.length > 1
+        ? t('sidebar:account.ringBalanceWallets', {
+            account: card.name,
+            amount,
+            wallets: balance.wallets
+              .map((w) => `${balanceLabel(w.label)} ${balanceText(w, units)}`)
+              .join(' · '),
+          })
+        : t('sidebar:account.ringBalance', { account: card.name, amount })
+  } else {
+    label = t('sidebar:account.ring', {
+      account: card.name,
+      windows: [...windows]
+        .reverse()
+        .map((w) =>
+          t(view === 'left' ? 'sidebar:account.ringWindowLeft' : 'sidebar:account.ringWindow', {
+            window: w.model
+              ? `${t(`composer:usage.shortWindow.${w.window}`)} ${w.model}`
+              : t(`composer:usage.shortWindow.${w.window}`),
+            percent: shownPercent(w.percent, view),
+          }),
+        )
+        .join(' · '),
+    })
+  }
 
   const toggle = () => {
     if (!open) closeAccountMenu()
@@ -145,35 +216,34 @@ export function PlanRing() {
           render={
             <button
               type="button"
-              aria-label={card ? t('sidebar:account.ringButton', { limit: label }) : label}
+              aria-label={t('sidebar:account.ringButton', { limit: label })}
               aria-expanded={open}
               aria-haspopup="dialog"
               onClick={toggle}
-              className="ui-as-icon-btn ui-as-user-action kettu-plan-ring__button"
+              className={cn(
+                'ui-as-icon-btn ui-as-user-action kettu-plan-ring__button',
+                balance && 'kettu-plan-ring__button--amount',
+              )}
             />
           }
         >
-          <PlanRings
-            rings={[
-              tightest
-                ? {
-                    id: tightest.id,
-                    percent: shownPercent(tightest.percent, view),
-                    level: tightest.level,
-                  }
-                : { id: 'none', percent: 0, level: 'ok' },
-            ]}
-            size={16}
-            stroke={2.5}
-            gap={0}
-            track="neutral"
-            className="size-4"
-          />
+          {balance ? (
+            <span className="tabular text-small text-secondary">{balanceText(balance, units)}</span>
+          ) : (
+            // Rings always show the share used, so a fuller ring is always nearer the limit.
+            <PlanRings
+              rings={windows.map((w) => ({ id: w.id, percent: w.percent, level: w.level }))}
+              size={20}
+              {...ringSizes(windows.length)}
+              track="neutral"
+              className="size-5"
+            />
+          )}
         </TooltipTrigger>
         {!open && <TooltipContent side="top">{label}</TooltipContent>}
       </Tooltip>
       <Popover open={open} onClose={() => setOpen(false)} side="top" className="ui-as-user-pop">
-        {open && <PlanPopover currentKey={card?.key ?? null} close={() => setOpen(false)} />}
+        {open && <PlanPopover currentKey={card.key} close={() => setOpen(false)} />}
       </Popover>
     </span>
   )
