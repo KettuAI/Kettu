@@ -437,18 +437,21 @@
   ) {
   color: revert-layer;
 }
-/* A session's or task's row keeps no room for its tools, More and Pin: the title, badges, status and
-   host run to its end. On hover or focus the tools sit over that end, 54 px wide, and what is under
-   them fades out through a mask on the row's body, since the sidebar's fill is translucent and
-   cannot cover it; nothing moves, and the mask follows the tools' own fade-in. A project's row
-   keeps the room of its tools, which fills as they show. Touch rows keep App Shell's layout. */
+/* 有子代理徽标时，空状态槽收起，让徽标贴近行尾。 */
+.ui-as-chat-row:has([data-subagent-badge]) .kettu-row-end:not(:has(> :not(:empty))) {
+  display: none;
+}
+/* 会话和任务行默认用满宽度。子代理徽标所在的行在工具出现时为它们留出空间，
+   其余行继续用遮罩和工具一起淡出行尾内容。触屏沿用 App Shell 的布局。 */
 @property --kettu-row-cover {
   syntax: '<number>';
   inherits: false;
   initial-value: 0;
 }
 @media (hover: hover) {
-  .ui-as.ui-as .ui-as-chat-row:is(:hover, :has(:focus-visible), [data-menu]) .ui-as-chat-row__link,
+  .ui-as.ui-as
+    .ui-as-chat-row:not(:has([data-subagent-badge])):is(:hover, :has(:focus-visible), [data-menu])
+    .ui-as-chat-row__link,
   .ui-as.ui-as
     .ui-as-chat-folder-row:is(:hover, :has(:focus-visible), [data-menu])
     > .ui-as-chat-folder {
@@ -457,18 +460,26 @@
   .ui-as-chat-folder-row:has(> .ui-as-chat-row__tools > *) .kettu-row-end {
     min-width: 42px;
   }
-  .ui-as-chat-row:has(> .ui-as-chat-row__tools > *) .kettu-row-body {
-    transition: --kettu-row-cover var(--duration-fast) ease;
+  .ui-as-chat-row:has([data-subagent-badge]):is(:hover, :has(:focus-visible), [data-menu])
+    .kettu-row-end {
+    position: absolute;
+    opacity: 0;
+    pointer-events: none;
+    transition: none;
   }
-  .ui-as-chat-row:has(> .ui-as-chat-row__tools > *):is(:hover, :has(:focus-visible), [data-menu])
+  .ui-as-chat-row:has(> .ui-as-chat-row__tools > *):not(:has([data-subagent-badge])) {
     .kettu-row-body {
-    --kettu-row-cover: 1;
-    mask-image: linear-gradient(
-      to right,
-      black calc(100% - 66px),
-      color-mix(in srgb, black calc((1 - var(--kettu-row-cover)) * 100%), transparent)
-        calc(100% - 50px)
-    );
+      transition: --kettu-row-cover var(--duration-fast) ease;
+    }
+    &:is(:hover, :has(:focus-visible), [data-menu]) .kettu-row-body {
+      --kettu-row-cover: 1;
+      mask-image: linear-gradient(
+        to right,
+        black calc(100% - 66px),
+        color-mix(in srgb, black calc((1 - var(--kettu-row-cover)) * 100%), transparent)
+          calc(100% - 50px)
+      );
+    }
   }
   /* The tools go in the frame the row is left, so no tool shows over the title coming back. */
   .ui-as-chat-row > .ui-as-chat-row__tools {
