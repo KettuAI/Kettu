@@ -102,7 +102,8 @@ final class IslandController {
     }
     g.maxHeight = (frame.height * Metrics.maxHeightShare).rounded()
     if model.geometry != g { model.geometry = g }
-    let width = max(Metrics.openWidth, g.notchWidth + 300, Metrics.grownWidth) + 2 * Metrics.margin
+    let width =
+      max(Metrics.openWidth, g.notchWidth + Metrics.openWings, Metrics.grownWidth) + 2 * Metrics.margin
     let height = g.maxHeight + Metrics.margin
     panel.setFrame(
       NSRect(x: (top.x - width / 2).rounded(), y: top.y - height, width: width, height: height),

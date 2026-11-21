@@ -439,6 +439,16 @@ function phaseOf(summary: SessionSummary): IslandPhase {
   return (kind && TOOL_PHASES[kind]) || 'execute'
 }
 
+/** What a running turn does, as its row's line: compacting, its tool call, thinking or writing. */
+function runningLine(summary: SessionSummary): string {
+  const phase = phaseOf(summary)
+  if (phase === 'compact') return islandT('line.compacting')
+  if (summary.activity) return activityLine(summary.activity, summary.projectPath)
+  if (phase === 'think') return islandT('line.thinking')
+  if (phase === 'write') return islandT('line.writing')
+  return islandT(summary.origin === 'routine' ? 'line.routine' : 'line.working')
+}
+
 function modelName(options: AgentOptions | undefined, model: string | null): string | null {
   const option = sessionModel(options, model)
   if (!option || model === null) return model
@@ -485,9 +495,7 @@ function buildRow(
       line = waitingLine(requests?.requests[0], summary.projectPath)
       break
     case 'running':
-      line = activity
-        ? activityLine(activity, summary.projectPath)
-        : islandT(summary.origin === 'routine' ? 'line.routine' : 'line.working')
+      line = runningLine(summary)
       break
     case 'sign_in':
       line = islandT('line.signIn', { agent: agentName })

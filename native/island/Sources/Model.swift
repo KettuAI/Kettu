@@ -150,6 +150,23 @@ final class IslandModel: ObservableObject {
     return text("duration.days", ["d": "\(minutes / (24 * 60))"])
   }
 
+  /// How long ago, in its largest unit only: "3 minutes ago", "1 hour ago".
+  func ago(since ms: Double?) -> String? {
+    guard let ms else { return nil }
+    let seconds = max(0, Int(now.timeIntervalSince1970 - ms / 1000))
+    let time: String
+    if seconds < 60 {
+      time = text("duration.seconds", ["s": "\(seconds)"])
+    } else if seconds < 3600 {
+      time = text("duration.minutes", ["m": "\(seconds / 60)"])
+    } else if seconds < 24 * 3600 {
+      time = text("duration.hours", ["h": "\(seconds / 3600)"])
+    } else {
+      time = text("duration.days", ["d": "\(seconds / (24 * 3600))"])
+    }
+    return text("ago", ["time": time])
+  }
+
   /// The collapsed island's parts as last laid out, which its width follows.
   @Published private(set) var parts: [String: CGFloat] = [:]
 

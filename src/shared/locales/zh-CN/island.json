@@ -52,7 +52,8 @@
     "recommended": "推荐",
     "cache": {
       "short": "缓存 {{time}}",
-      "about": "约 {{time}}"
+      "about": "约 {{time}}",
+      "left": "缓存还剩 {{time}}"
     },
     "today": "今天 {{count}} 个会话",
     "newSession": "新建会话",
@@ -61,7 +62,12 @@
       "body": "在 Kettu 里开始第一个，它会出现在这里。"
     },
     "moreSessions": "还有 {{count}} 个会话",
-    "viewInKettu": "在 Kettu 中查看"
+    "viewInKettu": "在 Kettu 中查看",
+    "row": {
+      "stuck": "{{time}}没有结果"
+    },
+    "ago": "{{time}}前",
+    "resets": "{{day}}重置"
   },
   "line": {
     "run": "运行 {{command}}",
@@ -77,14 +83,17 @@
     "starting": "正在启动",
     "signIn": "登录 {{agent}} 后才能继续",
     "failed": "出错停下了",
-    "unread": "已完成，还没看过",
-    "idle": "已完成",
+    "unread": "已完成",
+    "idle": "已结束",
     "limited": "{{window}}限额用完了",
     "subagents_one": "{{count}} 个子智能体在运行",
     "subagents_other": "{{count}} 个子智能体在运行",
     "origin": "想打开 {{origin}}",
     "app": "想使用 {{app}}",
-    "question": "在问你：{{question}}"
+    "question": "在问你：{{question}}",
+    "thinking": "在想…",
+    "writing": "在写回复…",
+    "compacting": "正在压缩上下文"
   },
   "request": {
     "tool": {

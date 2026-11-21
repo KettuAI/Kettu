@@ -61,7 +61,9 @@ enum Metrics {
   /// The grown island's text under the band of its marks and state.
   static let grownBody: CGFloat = 44
   static let grownRadius: CGFloat = 20
-  static let openWidth: CGFloat = 500
+  static let openWidth: CGFloat = 460
+  /// The panel's wings beside the notch, together.
+  static let openWings: CGFloat = 260
   static let openRadius: CGFloat = 28
   static let wingMark: CGFloat = 18
   static let markOverlap: CGFloat = 5
@@ -73,6 +75,8 @@ enum Metrics {
   static let bandHeight: CGFloat = 32
   /// The sessions the expanded list shows before it folds the rest into one line.
   static let listRows = 6
+  /// Up to this many sessions, each row takes a second line.
+  static let twoLineRows = 4
   /// The middle of the collapsed island where no notch is in the way, which holds the title.
   static let plainMiddle: CGFloat = 185
 }

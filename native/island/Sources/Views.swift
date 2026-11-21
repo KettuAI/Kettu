@@ -107,7 +107,7 @@ struct IslandRoot: View {
 }
 
 extension IslandModel {
-  var openWidth: CGFloat { max(Metrics.openWidth, geometry.notchWidth + 300) }
+  var openWidth: CGFloat { max(Metrics.openWidth, geometry.notchWidth + Metrics.openWings) }
 
   /// The middle of the collapsed island: the notch, or where no notch is in the way the band the
   /// title sits in, so the island keeps one outline on every screen.
@@ -462,8 +462,11 @@ struct PanelBody: View {
         if model.rows.isEmpty {
           EmptyPanel(model: model)
         } else {
-          VStack(spacing: 1) {
-            ForEach(model.listRows, id: \.key) { row in SessionRow(model: model, row: row) }
+          let oneLine = model.rows.count > Metrics.twoLineRows
+          VStack(spacing: oneLine ? 1 : 2) {
+            ForEach(model.listRows, id: \.key) { row in
+              SessionRow(model: model, row: row, oneLine: oneLine)
+            }
           }
           .padding(.top, 2)
           let more = model.rows.count - model.listRows.count
@@ -539,44 +542,61 @@ extension IslandModel {
   }
 }
 
-/// A session as the sidebar's row draws it: its agent's mark, its title and its project, its plan's
-/// progress as the session's plan chip shows it, and at the end one status in a fixed slot:
-/// waiting, failed, the turn's nine dots, a cache in its last minutes, or unread.
+/// A session as the sidebar's row draws it: its agent's mark, its title and its project, and at
+/// the end one status in a fixed slot: waiting, failed, the turn's nine dots, a cache in its last
+/// minutes, or unread. With few sessions a second line says what it is doing or what came of it,
+/// with the plan's progress or a time on its right; with many the row keeps one line and only
+/// that progress or time.
 struct SessionRow: View {
   @ObservedObject var model: IslandModel
   let row: IslandRow
+  let oneLine: Bool
   @State private var hover = false
 
   var body: some View {
     let status = model.status(of: row)
-    HStack(spacing: 8) {
-      MarkView(agent: row.agent, size: 14)
-      HStack(alignment: .firstTextBaseline, spacing: 6) {
-        Text(model.title(of: row))
-          .font(Fonts.ui(13, .medium))
-          .foregroundColor(row.group == "idle" ? Theme.quote : Theme.text)
-        if !row.project.isEmpty {
-          Text(row.project).font(Fonts.ui(12)).foregroundColor(Theme.tertiary)
+    VStack(alignment: .leading, spacing: 5) {
+      HStack(spacing: 8) {
+        MarkView(agent: row.agent, size: 14)
+        HStack(alignment: .firstTextBaseline, spacing: 6) {
+          Text(model.title(of: row))
+            .font(Fonts.ui(13, .medium))
+            .foregroundColor(row.group == "idle" ? Theme.quote : Theme.text)
+            .layoutPriority(1)
+          if !row.project.isEmpty {
+            Text(row.project).font(Fonts.ui(12)).foregroundColor(Theme.tertiary)
+          }
+          if let host = row.host {
+            Text(host.offline ? "\(host.name) · \(model.text("offline"))" : host.name)
+              .font(Fonts.ui(12))
+              .foregroundColor(Theme.tertiary)
+          }
         }
+        .lineLimit(1)
+        .truncationMode(.tail)
+        Spacer(minLength: 8)
+        if oneLine { trailing(status) }
+        indicator(status).frame(width: 16, height: 16)
       }
-      .lineLimit(1)
-      .truncationMode(.tail)
-      Spacer(minLength: 8)
-      if let plan = row.plan { PlanChip(plan: plan) }
-      if let host = row.host {
-        Text(host.offline ? "\(host.name) · \(model.text("offline"))" : host.name)
-          .font(Fonts.ui(12))
-          .foregroundColor(Theme.tertiary)
-          .lineLimit(1)
-          .frame(maxWidth: 96, alignment: .trailing)
+      if !oneLine {
+        HStack(spacing: 8) {
+          detail(status)
+            .font(Fonts.ui(12))
+            .lineLimit(1)
+            .truncationMode(.tail)
+          Spacer(minLength: 8)
+          trailing(status)
+        }
+        .padding(.leading, 22)
       }
-      indicator(status).frame(width: 16, height: 16)
     }
     .padding(.leading, row.parent?.kind == "session" ? 24 : 10)
     .padding(.trailing, 10)
-    .frame(height: 32)
+    .padding(.top, oneLine ? 0 : 7)
+    .padding(.bottom, oneLine ? 0 : 8)
+    .frame(height: oneLine ? 32 : nil)
     .background(
-      RoundedRectangle(cornerRadius: 8, style: .continuous)
+      RoundedRectangle(cornerRadius: oneLine ? 8 : 9, style: .continuous)
         .fill(hover || model.selected == row.key ? Theme.rowHover : Color.clear)
     )
     .opacity(row.host?.offline == true ? 0.5 : 1)
@@ -586,6 +606,56 @@ struct SessionRow: View {
     .accessibilityElement(children: .ignore)
     .accessibilityLabel(model.rowLabel(row))
     .accessibilityAddTraits(.isButton)
+  }
+
+  /// What it is doing or what came of it, in its state's color.
+  @ViewBuilder private func detail(_ status: String) -> some View {
+    switch status {
+    case "running", "starting":
+      Text(row.line).foregroundColor(Theme.running)
+    case "stuck":
+      let minutes = row.toolSince.map { max(1, Int(model.now.timeIntervalSince1970 - $0 / 1000) / 60) }
+      let stuck = minutes.map {
+        model.text("row.stuck", ["time": model.text("duration.minutes", ["m": "\($0)"])])
+      }
+      Text([stuck, row.line].compactMap { $0 }.joined(separator: " · "))
+        .foregroundColor(Theme.warning)
+    case "waiting", "sign_in":
+      Text(row.line).foregroundColor(Theme.attention)
+    case "unread":
+      Text(row.line).foregroundColor(Theme.success)
+    case "failed", "limited":
+      Text(row.line).foregroundColor(Theme.danger)
+    default:
+      if let left = model.cacheLeft(row.cache) {
+        Text(model.text("cache.left", ["time": left.text]))
+          .foregroundColor(left.ending ? Theme.warning : Theme.tertiary)
+          .monospacedDigit()
+      } else {
+        Text(row.line).foregroundColor(Theme.tertiary)
+      }
+    }
+  }
+
+  /// The plan's progress while it runs, else how long the turn has run, when a used-up limit
+  /// resets, or how long ago it ended.
+  @ViewBuilder private func trailing(_ status: String) -> some View {
+    switch status {
+    case "running", "starting", "stuck":
+      if let plan = row.plan {
+        PlanProgress(model: model, plan: plan)
+      } else if let time = model.duration(since: row.turnStartedAt ?? row.since) {
+        TimeText(text: time)
+      }
+    case "limited":
+      if let resets = row.limit?.resetsAt {
+        TimeText(text: model.text("resets", ["day": model.resetDay(resets)]))
+      }
+    case "sign_in":
+      EmptyView()
+    default:
+      if let time = model.ago(since: row.since) { TimeText(text: time) }
+    }
   }
 
   @ViewBuilder private func indicator(_ status: String) -> some View {
@@ -608,26 +678,33 @@ struct SessionRow: View {
   }
 }
 
-/// A plan's progress as the session's plan chip draws it: the ring, the step in progress and how many
-/// are done.
-struct PlanChip: View {
+/// A time on a row's right: how long, how long ago, or when a limit resets.
+struct TimeText: View {
+  let text: String
+
+  var body: some View {
+    Text(text)
+      .font(Fonts.ui(12))
+      .foregroundColor(Theme.tertiary)
+      .lineLimit(1)
+      .fixedSize()
+  }
+}
+
+/// A plan's progress as the session's plan chip draws it: the ring and how many steps are done.
+struct PlanProgress: View {
+  @ObservedObject var model: IslandModel
   let plan: IslandPlan
 
   var body: some View {
     HStack(spacing: 5) {
       PlanRing(done: plan.done, total: plan.total, size: 12)
-      if let current = plan.current {
-        Text(current)
-          .foregroundColor(Theme.quote)
-          .lineLimit(1)
-          .truncationMode(.tail)
-          .frame(maxWidth: 150, alignment: .leading)
-          .fixedSize()
-      }
-      Text("\(plan.done)/\(plan.total)").foregroundColor(Theme.tertiary).monospacedDigit()
+      Text(model.text("plan", ["done": "\(plan.done)", "total": "\(plan.total)"]))
+        .foregroundColor(Theme.tertiary)
+        .monospacedDigit()
     }
     .font(Fonts.ui(12))
-    .layoutPriority(1)
+    .fixedSize()
   }
 }
 

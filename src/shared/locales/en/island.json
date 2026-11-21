@@ -54,7 +54,8 @@
     "recommended": "Recommended",
     "cache": {
       "short": "Cache {{time}}",
-      "about": "~{{time}}"
+      "about": "~{{time}}",
+      "left": "Cache warm for {{time}}"
     },
     "today": "{{count}} sessions today",
     "newSession": "New session",
@@ -63,7 +64,12 @@
       "body": "Start one in Kettu and it shows here."
     },
     "moreSessions": "{{count}} more sessions",
-    "viewInKettu": "View in Kettu"
+    "viewInKettu": "View in Kettu",
+    "row": {
+      "stuck": "No result for {{time}}"
+    },
+    "ago": "{{time}} ago",
+    "resets": "Resets {{day}}"
   },
   "line": {
     "run": "Run {{command}}",
@@ -79,14 +85,17 @@
     "starting": "Starting",
     "signIn": "Sign in to {{agent}} to go on",
     "failed": "Stopped with an error",
-    "unread": "Finished, not seen yet",
-    "idle": "Finished",
+    "unread": "Done",
+    "idle": "Ended",
     "limited": "{{window}} limit used up",
     "subagents_one": "{{count}} sub-agent running",
     "subagents_other": "{{count}} sub-agents running",
     "origin": "Wants to open {{origin}}",
     "app": "Wants to use {{app}}",
-    "question": "Asks: {{question}}"
+    "question": "Asks: {{question}}",
+    "thinking": "Thinking…",
+    "writing": "Writing a reply…",
+    "compacting": "Compacting the context"
   },
   "request": {
     "tool": {
