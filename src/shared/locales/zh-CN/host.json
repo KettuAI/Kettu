@@ -35,6 +35,7 @@
     "alreadyInSession": "这个会话已经属于 Kettu 里的一个会话",
     "heldOutside": "这个会话还开在终端里。先在那边输入 /exit 再试，或者复制一份在 Kettu 里接着做。",
     "cannotList": "{{agent}} 无法列出它的会话",
+    "notInAgent": "{{agent}} 在这个文件夹里没有这个会话，它可能已被删除。",
     "configBetweenTurns": "{{option}} 只能在两轮对话之间更改",
     "ultracodeDescription": "用于大型任务的动态工作流",
     "promptTooLarge": "这条消息连同附件超过 10 MB，请移除一些再发送。",
@@ -64,6 +65,10 @@
       "description": "{{agent}} 无法回放会话，这个会话将在没有历史记录的情况下继续。"
     },
     "signInNeeded": "{{agent}} 需要你登录",
+    "signedIn": {
+      "title": "已登录 {{agent}}",
+      "description": "会话已继续。"
+    },
     "closedBeforeSent": {
       "title": "会话在消息发出前已关闭",
       "description": "消息会留在队列中，点击「继续」后才会发出。"
@@ -278,6 +283,7 @@
     "nodeMissing": "{{agent}} 需要 Node.js，但在 PATH 中找不到 node。",
     "nodeToInstall": "{{agent}} 首次使用时通过 npm 安装，这需要 Node.js，但在 PATH 中找不到 node。",
     "nodeOutdated": "{{agent}} 需要 Node.js {{required}} 或更高版本，当前安装的是 {{installed}}。",
+    "uvOutdated": "{{agent}} 需要 uv {{required}} 或更高版本，当前安装的是 {{installed}}。请用 `uv self update` 更新，或用安装它的工具更新。",
     "npmMissing": "{{agent}} 会在首次使用时通过 npm 安装，但在 PATH 中找不到 npm。{{hint}}",
     "programUnusable": "为 {{agent}} 选择的程序（{{path}}）无法运行。",
     "commandMissing": "在 PATH 中找不到 {{command}}。{{hint}}",
@@ -855,7 +861,15 @@
     "libraryFull": "你的 工作流 库满了",
     "downloadFailed": "没能下载这个 工作流：{{error}}",
     "downloadStatus": "GitHub 对这个 工作流 返回了 {{status}}",
-    "listingProblem": "这个工作流有问题，所以什么都没装：{{problem}}"
+    "listingProblem": "这个工作流有问题，所以什么都没装：{{problem}}",
+    "cardNotFound": "这张卡片已经不在了",
+    "cardAnswered": "这张卡片已经回答过了",
+    "cardBusy": "已经在开始了",
+    "connectFirst": "先连接 {{name}}",
+    "listingChanged": "市场里的这一版和卡片上画的不一样。请让智能体重新给出卡片。",
+    "noWorkflowFile": "这一版工作流里没有工作流文件",
+    "noProject": "这个会话没有可以开始需求的项目",
+    "toolGone": "现在在市场里找不到 {{name}}"
   },
   "tasks": {
     "notFound": "没有这个需求",
@@ -868,12 +882,16 @@
     "nothingToRetry": "这一步没有可以重试的",
     "stillRunning": "先取消这个需求，再删除",
     "noteEmpty": "备注不能为空",
+    "sendBackEmpty": "退回前写一句要改什么，或者在文档上留评论",
     "cannotPin": "这一步已经开始了，现在不能固定",
     "needsYou": "{{title}} 等你处理",
     "needsYouBody": "{{step}} · {{workflow}}",
     "done": "{{title}} 做完了",
     "dropped": "{{title}} 结束了，没有做",
-    "endedBody": "{{workflow}} · {{steps}} 步"
+    "cancelled": "{{title}} 已取消",
+    "endedBody": "{{workflow}} · {{steps}} 步",
+    "notWritten": "只有用智能体为它现写的工作流、并且已经做完的需求，才能存下或发布这个工作流",
+    "noOrigin": "这条需求开始的那段对话已经不在了"
   },
   "marketPublish": {
     "handleInvalid": "发布者名是 1 到 32 个小写字母、数字和连字符，开头和结尾是字母或数字。",

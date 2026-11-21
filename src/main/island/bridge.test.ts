@@ -491,6 +491,24 @@ describe('opens and pops', () => {
       { type: 'pop', row: 's1', kind: 'turn-ended', title: 'Done', body: 'kettu' },
     ])
   })
+
+  it('leaves a workflow task to its notification, popping nothing for it', async () => {
+    const s = setup([summary('s1')])
+    await started(s)
+    const task = {
+      kind: 'task-ended' as const,
+      taskId: 'task1',
+      sessionId: 's1',
+      title: 'Ship the island',
+      body: 'Done',
+    }
+    s.bridge.attention(task)
+    expect(s.helper().of('pop')).toEqual([])
+    expect(s.bridge.shows(task)).toBe(false)
+    expect(s.bridge.shows({ kind: 'turn-ended', sessionId: 's1', title: 'Done', body: '' })).toBe(
+      true,
+    )
+  })
 })
 
 describe('a helper that fails', () => {

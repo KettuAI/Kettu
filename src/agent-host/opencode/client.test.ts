@@ -391,3 +391,23 @@ describe('OpenCodeClient.action', () => {
     expect((failure as Error).message).not.toContain('sk-new-secret')
   })
 })
+
+describe('OpenCodeClient.message', () => {
+  it('reads a message of a forked session, whose id ends in a copy number, and no path', async () => {
+    const paths: string[] = []
+    const client = new OpenCodeClient({
+      program: '/bin/opencode',
+      env: {},
+      platform: 'darwin',
+      runProgram: async (options) => {
+        paths.push(options.args[2] ?? '')
+        return run(JSON.stringify({ data: { id: 'msg_1f4cca296002HjLI6zKqIJOfL8_4' } }))
+      },
+    })
+    expect(await client.message('ses_a', 'msg_1f4cca296002HjLI6zKqIJOfL8_4')).toEqual({
+      id: 'msg_1f4cca296002HjLI6zKqIJOfL8_4',
+    })
+    expect(await client.message('ses_a', 'msg_a_4/../x')).toBeNull()
+    expect(paths).toEqual(['/api/session/ses_a/message/msg_1f4cca296002HjLI6zKqIJOfL8_4'])
+  })
+})

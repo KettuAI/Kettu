@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -23,6 +23,7 @@ import {
   MarketTools,
   type MarketAnswer,
   type MarketAsk,
+  type MarketToolsDeps,
 } from './publish-tools'
 
 let root: string
@@ -78,6 +79,8 @@ interface Harness {
   calls: MarketCall[]
   asks: MarketAsk[]
   outcomes: MarketPublishOutcome[]
+  /** What the session was told of cards no call took. */
+  told: { sessionId: string; text: string }[]
   drafts: NewDraft[]
   /** Each version that reached the service, with its folder. */
   published: {
@@ -105,10 +108,12 @@ function harness(
   mine: MarketMine = { publisher: null, listings: [], storage: { bytes: 0, limit: 1 } },
   serve: (call: MarketCall) => unknown = publishedListing,
   kept: PublishDraft[] = [],
+  extra: Partial<MarketToolsDeps> = {},
 ): Harness {
   const calls: MarketCall[] = []
   const asks: MarketAsk[] = []
   const outcomes: MarketPublishOutcome[] = []
+  const told: Harness['told'] = []
   const drafts: NewDraft[] = []
   const published: Harness['published'] = []
   const account = { current: ACCOUNT as MarketAccount | null }
@@ -130,6 +135,7 @@ function harness(
       }
     },
     settle: (_sessionId, _entryId, outcome) => outcomes.push(outcome),
+    tell: (sessionId, text) => told.push({ sessionId, text }),
     drafts: {
       put: async (draft) => {
         drafts.push(draft)
@@ -146,12 +152,14 @@ function harness(
     agentOf: () => 'claude-code',
     sessionTitle: () => 'Publish the changelog skill',
     home: os.homedir(),
+    ...extra,
   })
   return {
     tools,
     calls,
     asks,
     outcomes,
+    told,
     drafts,
     published,
     account,
@@ -202,7 +210,7 @@ describe('marketplace_publish', () => {
     expect(h.drafts).toEqual([])
   })
 
-  it('uploads nothing on Not now, a timeout or the turn ending, and keeps a draft', async () => {
+  it('uploads nothing on Not now, a timeout or the session closing, and keeps a draft', async () => {
     for (const decision of ['later', 'expired', 'ended'] as const) {
       const h = harness()
       const call = h.tools.call(caller(), MARKET_PUBLISH, {
@@ -416,14 +424,201 @@ describe('a card the user has not answered within one call', () => {
     expect(h.calls.filter((c) => c.kind === 'update')).toHaveLength(1)
   })
 
-  it('asks again in a later turn instead of handing over what the last one left', async () => {
+  it('returns every call waiting on the card once it expires, keeping one draft', async () => {
+    const h = harness()
+    const first = publishCall(h)
+    await asked(h)
+    const joined = publishCall(h)
+    h.answer({ decision: 'expired' })
+    const results = await Promise.all([first, joined])
+    for (const result of results) {
+      expect(result.isError).toBeUndefined()
+      expect(result.structuredContent).toEqual({ published: false, draft: true })
+    }
+    expect(h.asks).toHaveLength(1)
+    expect(h.drafts).toHaveLength(1)
+    expect(uploads(h)).toEqual([])
+  })
+
+  it('returns a call that joined after the first one gave up, once the card expires', async () => {
+    const h = harness()
+    await waitedOnce(h)
+    const again = publishCall(h)
+    await vi.advanceTimersByTimeAsync(CONTROL_WAIT_MS / 2)
+    h.answer({ decision: 'expired' })
+    expect((await again).structuredContent).toEqual({ published: false, draft: true })
+    expect(h.asks).toHaveLength(1)
+  })
+
+  it('keeps the card past the turn that opened it, and tells the session what came of it', async () => {
+    const h = harness()
+    await waitedOnce(h)
+    h.tools.turnEnded('s1')
+    await vi.advanceTimersByTimeAsync(5 * 60_000)
+    expect(h.drafts).toEqual([])
+    h.answer({ decision: 'confirm', visibility: null, notes: null })
+    await vi.waitFor(() => expect(h.told).toHaveLength(1))
+    expect(uploads(h)).toHaveLength(1)
+    expect(h.told[0]!.sessionId).toBe('s1')
+    expect(h.told[0]!.text).toContain('Changelog writer')
+    expect(h.told[0]!.text).toContain('Published @amigoer/changelog-writer 1.0.0')
+    // A call of the turn it woke gets the same outcome, with no second card.
+    const again = await publishCall(h)
+    expect(again.structuredContent).toMatchObject({ published: true, version: '1.0.0' })
+    expect(h.asks).toHaveLength(1)
+    expect(uploads(h)).toHaveLength(1)
+  })
+
+  it('tells the session of Not now or a card that expired after its turn', async () => {
+    for (const decision of ['later', 'expired'] as const) {
+      const h = harness()
+      await waitedOnce(h)
+      h.tools.turnEnded('s1')
+      h.answer({ decision })
+      await vi.waitFor(() => expect(h.told).toHaveLength(1))
+      expect(h.told[0]!.text).toContain(decision === 'later' ? 'Not now' : 'did not answer')
+      expect(h.drafts).toHaveLength(1)
+    }
+  })
+
+  it('hands the outcome to a call of a later turn instead of telling it', async () => {
+    const h = harness()
+    await waitedOnce(h)
+    h.tools.turnEnded('s1')
+    const later = publishCall(h)
+    await vi.advanceTimersByTimeAsync(1_000)
+    h.answer({ decision: 'confirm', visibility: null, notes: null })
+    expect((await later).structuredContent).toMatchObject({ published: true })
+    expect(h.told).toEqual([])
+    expect(h.asks).toHaveLength(1)
+  })
+
+  it('tells an outcome no call took once the turn ends', async () => {
+    const h = harness()
+    await waitedOnce(h)
+    h.answer({ decision: 'confirm', visibility: null, notes: null })
+    await vi.waitFor(() => expect(h.outcomes).toHaveLength(1))
+    // The turn still runs, so its agent may call again for it.
+    expect(h.told).toEqual([])
+    h.tools.turnEnded('s1')
+    expect(h.told).toHaveLength(1)
+    expect(h.told[0]!.text).toContain('Published')
+  })
+
+  it('tells the outcome a call of an ended turn was still waiting for', async () => {
+    const h = harness()
+    const call = publishCall(h)
+    await asked(h)
+    h.tools.turnEnded('s1')
+    h.answer({ decision: 'later' })
+    await call
+    await vi.waitFor(() => expect(h.told).toHaveLength(1))
+  })
+
+  it('tells nothing of a card that ended with its session, and asks again after it', async () => {
     const h = harness()
     await waitedOnce(h)
     h.tools.turnEnded('s1')
     h.answer({ decision: 'ended' })
     await vi.waitFor(() => expect(h.drafts).toHaveLength(1))
+    expect(h.told).toEqual([])
     void publishCall(h)
     await vi.waitFor(() => expect(h.asks).toHaveLength(2))
+  })
+})
+
+// The agent writes no file of its own, so publishing a task's workflow asks only in Kettu's card.
+describe('a workflow handed as text for the task Kettu asked to publish it from', () => {
+  const TASK_WORKFLOW = `format: 1
+name: Review the login change
+description: Review the login change on another agent.
+steps:
+  - id: review
+    name: Review
+    prompt: Review the login change.
+    outcomes:
+      - name: Approved
+        end: done
+`
+  const GENERAL = TASK_WORKFLOW.replaceAll('the login change', 'a change')
+  const copy = () => path.join(root, 'to-publish', 't-1')
+
+  function taskHarness(): Harness {
+    return harness(undefined, publishedListing, [], {
+      taskWorkflowFolder: (taskId) => (taskId === 't-1' ? copy() : null),
+      taskWorkflow: async (taskId) =>
+        taskId === 't-1' ? { title: 'Review the login change', text: TASK_WORKFLOW } : null,
+    })
+  }
+
+  const kept = () => readFile(path.join(copy(), 'workflow.yaml'), 'utf8')
+
+  it('checks and publishes it from the task’s folder, with one card for repeated calls', async () => {
+    const h = taskHarness()
+    const checked = await h.tools.call(caller(), MARKET_CHECK, {
+      workflow: GENERAL,
+      from_task: 't-1',
+    })
+    expect(checked.structuredContent).toMatchObject({
+      ready: true,
+      kind: 'workflow',
+      name: 'Review a change',
+    })
+    expect(await kept()).toBe(GENERAL)
+
+    const args = { workflow: GENERAL, from_task: 't-1', changes: 'Took out the login change.' }
+    const first = h.tools.call(caller(), MARKET_PUBLISH, args)
+    await asked(h)
+    const again = h.tools.call(caller(), MARKET_PUBLISH, args)
+    expect(h.asks[0]).toMatchObject({
+      item: { kind: 'workflow', name: 'Review a change' },
+      fromTask: {
+        taskId: 't-1',
+        sameFlow: true,
+        changes: 'Took out the login change.',
+        before: TASK_WORKFLOW,
+        after: GENERAL,
+      },
+    })
+    h.answer({ decision: 'confirm', visibility: 'private', notes: null })
+    for (const result of await Promise.all([first, again])) {
+      expect(result.structuredContent).toMatchObject({ published: true, version: '1.0.0' })
+    }
+    expect(h.asks).toHaveLength(1)
+    expect(uploads(h)).toHaveLength(1)
+  })
+
+  it('leaves the folder as the waiting card shows it', async () => {
+    const h = taskHarness()
+    void h.tools.call(caller(), MARKET_PUBLISH, { workflow: GENERAL, from_task: 't-1' })
+    await asked(h)
+    const checked = await h.tools.call(caller(), MARKET_CHECK, {
+      workflow: TASK_WORKFLOW,
+      from_task: 't-1',
+    })
+    expect(checked.isError).toBe(true)
+    expect(await kept()).toBe(GENERAL)
+  })
+
+  it('refuses a task Kettu did not ask about and malformed arguments, writing nothing', async () => {
+    const h = taskHarness()
+    const refusals: [Record<string, unknown>, string][] = [
+      [{ workflow: GENERAL, from_task: 't-2' }, 'not_found'],
+      [{ workflow: GENERAL, from_task: '../t-1' }, 'invalid'],
+      [{ workflow: GENERAL }, 'invalid'],
+      [{ workflow: GENERAL, from_task: 't-1', path: 'skills/changelog-writer' }, 'invalid'],
+      [{ from_task: 't-1' }, 'invalid'],
+      [{ workflow: 'x'.repeat(256 * 1024 + 1), from_task: 't-1' }, 'invalid'],
+    ]
+    for (const name of [MARKET_CHECK, MARKET_PUBLISH]) {
+      for (const [input, code] of refusals) {
+        const result = await h.tools.call(caller(), name, input)
+        expect(result.isError, `${name} ${JSON.stringify(input).slice(0, 80)}`).toBe(true)
+        expect(result.structuredContent).toMatchObject({ code })
+      }
+    }
+    await expect(kept()).rejects.toThrow()
+    expect(h.asks).toEqual([])
   })
 })
 

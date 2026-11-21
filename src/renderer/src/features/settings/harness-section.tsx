@@ -70,6 +70,7 @@ import {
   LogCopyButton,
   MovedAccountsNotice,
   TaskLog,
+  WithCode,
 } from './agent-parts'
 import { installKind, startInstall, type InstallKind, type SettingsHook } from './harness-install'
 import { harnessVersion, useAction, VENDORS } from './agent-helpers'
@@ -272,6 +273,18 @@ function HarnessState({ status }: { status: AgentStatus }) {
   if (updated) return <StateDot label={t('agents.update.done')} />
   if (cliOutdated(status) !== null)
     return <Pill tone="attention">{t('harnesses.needsUpdate')}</Pill>
+  if (status.versionWarning) {
+    const { broken, supported } = status.versionWarning
+    return (
+      <Pill tone="attention">
+        {t(
+          broken || !supported
+            ? 'harnesses.versionWarning.pillBroken'
+            : 'harnesses.versionWarning.pillUnsupported',
+        )}
+      </Pill>
+    )
+  }
   const kind = installKind(status)
   // The SDK installs itself on first use beside the user's CLI.
   if (kind === 'package' && status.package?.isSdk) return null
@@ -372,7 +385,7 @@ export function InstallDialog({
           )}
           {!method && status.detail && (
             <p className="kettu-sd__text" data-selectable="">
-              {status.detail}
+              <WithCode text={status.detail} />
             </p>
           )}
           {method && (
@@ -508,7 +521,7 @@ export function HarnessListItem({ status }: { status: AgentStatus }) {
     ) : kind || awaitsPackage(status) ? (
       t('harnesses.groups.notInstalled')
     ) : r.kind === 'missing' || r.kind === 'failed' ? (
-      r.message
+      <WithCode text={r.message} />
     ) : (
       [version, agents > 0 ? t('harnesses.agentCount', { count: agents }) : null]
         .filter(Boolean)
@@ -629,12 +642,12 @@ function HarnessPageBody({ status }: { status: AgentStatus }) {
       <div>
         {r.kind !== 'failed' && r.kind !== 'missing' && status.detail && (
           <p className="ui-sg-hint" data-selectable="">
-            {status.detail}
+            <WithCode text={status.detail} />
           </p>
         )}
         {r.kind === 'missing' && !kind && !outdated && (
           <p className="ui-sg-hint" data-selectable="">
-            {r.message}{' '}
+            <WithCode text={r.message} />{' '}
             {r.url && (
               <a href={r.url} target="_blank" rel="noreferrer" className="k-link">
                 {r.action}
@@ -666,7 +679,9 @@ function HarnessPageBody({ status }: { status: AgentStatus }) {
               </SetButton>
             }
           >
-            <span data-selectable="">{r.message}</span>
+            <span data-selectable="">
+              <WithCode text={r.message} />
+            </span>
           </Notice>
         )}
         {status.uninstalled && <UninstalledNotice status={status} />}
@@ -1158,7 +1173,11 @@ function TaskNotice({ status, installed }: { status: AgentStatus; installed: boo
     )
   }
   if (status.update && status.automatic?.back) {
-    const current = status.release?.version ?? status.package?.version ?? version ?? ''
+    // Beside the user's own CLI, what moves is the SDK, so it is named, not the harness.
+    const moving = adapterOnlyUpdate(status)
+    const current = moving
+      ? moving.version
+      : (status.release?.version ?? status.package?.version ?? version ?? '')
     const to = status.update.adapterVersion
     const reason = status.automatic.backReason ?? 'registry'
     return (
@@ -1170,7 +1189,7 @@ function TaskNotice({ status, installed }: { status: AgentStatus; installed: boo
             : reason === 'broken'
               ? 'harnesses.switchBack.titleBroken'
               : 'harnesses.switchBack.titleKettu',
-          { name, current },
+          { name: moving?.name ?? name, current },
         )}
         action={
           <SetButton variant="primary" onClick={() => startUpdate(useAgentsStore, harness)}>

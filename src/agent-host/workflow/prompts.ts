@@ -16,7 +16,9 @@ const HOW =
   `step is done, call \`${REPORT_TOOL}\` of the \`${SERVICE_NAME}\` MCP server with one of the ` +
   `outcomes below and what the step hands in. Kettu checks the report and refuses it with what ` +
   `to fix when something is missing; fix it and report again. Do not end your turn before your ` +
-  `report is accepted.`
+  `report is accepted. When the step made something for the user beyond its document, such as an ` +
+  `installer or a build sent to a store, pass it in \`deliverables\`, so the user finds it when ` +
+  `the task ends.`
 
 function arrowText(task: TaskRecord, step: WorkflowStep, outcome: WorkflowOutcome): string {
   if (outcome.end === 'done') return 'ends the task as done'
@@ -167,12 +169,56 @@ export function reminderPrompt(picking: boolean): string {
     : `Your step is not reported yet. If it is done, call \`${REPORT_TOOL}\` now with an outcome and what the step hands in; if it is not, finish it first. Kettu stops the task for the user if this turn also ends without a report.`
 }
 
-/** Sent to a step that was working when the host restarted. */
-export const RESUME_PROMPT =
-  `Kettu restarted while you worked on this step. Check where you stopped, finish the step and ` +
-  `call \`${REPORT_TOOL}\`.`
+/**
+ * Sent to a step that was working when the host restarted; `owed` are the steps it still picks
+ * for, when its report was accepted already.
+ */
+export function resumePrompt(owed: readonly string[] | null): string {
+  if (owed) {
+    return (
+      `Kettu restarted after it accepted your report, before you picked who does the next steps. ` +
+      `Call \`${PICK_TOOL}\` with a pick for each of these steps: ` +
+      `${owed.map((id) => `"${id}"`).join(', ')}. Do not report the step again.`
+    )
+  }
+  return (
+    `Kettu restarted while you worked on this step. Check where you stopped, finish the step and ` +
+    `call \`${REPORT_TOOL}\`.`
+  )
+}
 
 /** A note the user added for the steps of the task. */
 export function notePrompt(text: string): string {
   return `A note from the user for this task, to keep in mind from now on:\n\n${text}`
+}
+
+/**
+ * Kettu's message to the agent of the conversation a task started from, when the user asks to
+ * publish the workflow it wrote for that task: generalize it, then publish it by handing the text
+ * to the Marketplace tools, so no file of the agent's own needs a permission. `general` says the
+ * text is the general version the agent made when the user asked before.
+ */
+export function publishWorkflowPrompt(
+  task: { id: string; title: string },
+  workflow: string,
+  general: boolean,
+): string {
+  const longest = Math.max(0, ...(workflow.match(/`+/g) ?? []).map((run) => run.length))
+  const fence = '`'.repeat(Math.max(3, longest + 1))
+  return (
+    `The user wants to publish the workflow you wrote for the task "${task.title}" to the Kettu ` +
+    `Marketplace; the task ran on it and ended done. ` +
+    (general
+      ? `This is the general version you made of it when the user asked before:`
+      : `This is its workflow.yaml as the task ran it:`) +
+    `\n\n${fence}yaml\n${workflow.endsWith('\n') ? workflow : `${workflow}\n`}${fence}\n\n` +
+    `Make it a general version: take out this project's names and paths and the request's own ` +
+    `text, give it a name and description that fit any similar requirement, and write each ` +
+    `step's prompt for one. Keep its steps and arrows unless they only fit this project. Write ` +
+    `no file: Kettu keeps the workflow for the task. Check it with marketplace_check, passing ` +
+    `the whole general workflow.yaml as workflow and from_task "${task.id}", and fix what it ` +
+    `finds. Then publish it with marketplace_publish, passing the same workflow and from_task ` +
+    `and, in changes, one sentence on what you took out or changed. The user confirms the ` +
+    `publish in a card.`
+  )
 }

@@ -7,6 +7,7 @@
   "or": " or ",
   "and": " and ",
   "row": {
+    "startedHere": "Started here",
     "collapse": "Collapse steps",
     "expand": "Expand steps",
     "stepOf": "Step {{at}} of {{total}}",
@@ -83,7 +84,9 @@
     "retry": "Try again",
     "missing": "This task is gone",
     "missingBody": "It was deleted, or its computer no longer lists it.",
-    "newSession": "New session"
+    "newSession": "New session",
+    "delivered": "Delivered",
+    "steps": "Steps"
   },
   "timeline": {
     "started": "Started with {{workflow}} · {{time}}",
@@ -108,7 +111,8 @@
     "version": "Version {{version}} · Opens on the right",
     "comments_one": "Your comment on the document goes back to {{agent}} with a send back",
     "comments_other": "Your {{count}} comments on the document go back to {{agent}} with a send back",
-    "notePlaceholder": "A note for {{agent}} (optional)",
+    "notePlaceholder": "What {{agent}} should change, if you send it back",
+    "sendBackEmpty": "Say what to change, or comment on the document, before sending it back.",
     "approve": "Approve",
     "approveNext": "Approve, go to {{next}}",
     "sendBack": "Send back"
@@ -133,6 +137,7 @@
     "effort": "{{agent}} no longer offers the effort it was pinned with.",
     "no_kettu": "{{agent}} doesn’t have Kettu’s tools, which a step reports with.",
     "not_ready": "{{agent}} isn’t ready yet.",
+    "tools": "It needs {{tools}}, which this computer doesn’t have installed and on. Add it in the Marketplace, then retry.",
     "noAgent": "No agent is allowed for Auto. Turn one on in Settings › Agents, or pin someone.",
     "noPicker": "No step handed off to it, so it needs someone pinned.",
     "picking": "It waits for the step before it to pick who does it.",
@@ -196,6 +201,21 @@
     "ended": "This task has ended",
     "noAdvance": "Adding doesn’t advance the flow",
     "send": "Add",
-    "textOnly": "Notes are text only"
+    "textOnly": "Notes are text only",
+    "doneLine": "Task done",
+    "doneOn": "Task done · {{branch}}",
+    "doneMerged": "Task done · {{branch}} merged",
+    "droppedLine": "Task ended as not worth doing",
+    "cancelledLine": "Task cancelled"
+  },
+  "deliverables": {
+    "version": "Version {{version}}"
+  },
+  "steps": {
+    "sentBack_one": "Sent back {{count}} time",
+    "sentBack_other": "Sent back {{count}} times",
+    "rounds_one": "{{count}} round",
+    "rounds_other": "{{count}} rounds",
+    "notRun": "Not run"
   }
 }

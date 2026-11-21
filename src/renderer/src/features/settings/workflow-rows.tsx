@@ -3,14 +3,38 @@
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { AgentId } from '@shared/thread'
+import { WORKING_STEP_LIMITS, type WorkingStepLimit } from '@shared/workflow'
 import { AgentTile } from '@renderer/components/agents/agent-mark'
 import { Skeleton } from '@renderer/components/ui/skeleton'
 import { errorMessage } from '@renderer/lib/host'
 import { useHostScope } from '@renderer/stores/host-scope'
 import { workflowsKey, useHostWorkflows, useWorkflowsStore } from '@renderer/stores/workflows'
-import { ControlError, SetButton, SettingSwitch } from './controls'
+import { ControlError, SetButton, SettingSelect, SettingSwitch } from './controls'
 import { ItemLine, RowLine, RowText, Thing } from './rows'
+import { useApply } from './use-apply'
 import { changedAgents, changeWorkflowSettings } from './workflow-data'
+
+const STEP_LIMITS = WORKING_STEP_LIMITS.map((n) => ({ value: String(n), label: String(n) }))
+
+/** How many step sessions work at once across the host's tasks. */
+export function StepLimitSelect({ label }: { label: string }) {
+  const { useSettingsStore } = useHostScope()
+  const limit = useSettingsStore((s) => s.settings.workflow.maxWorkingSteps)
+  const [apply, error] = useApply()
+  return (
+    <>
+      <ControlError error={error} />
+      <SettingSelect
+        label={label}
+        value={String(limit)}
+        options={STEP_LIMITS}
+        onChange={(value) =>
+          apply({ workflow: { maxWorkingSteps: Number(value) as WorkingStepLimit } })
+        }
+      />
+    </>
+  )
+}
 
 /** Agents can suggest a workflow: read again each time the page shows, as agents come and go. */
 export function SuggestSwitch() {

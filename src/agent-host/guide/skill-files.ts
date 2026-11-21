@@ -1,51 +1,64 @@
-// Kettu's own skills on disk: every text a skill can have, each in a folder named for that text,
-// written once and kept while this version of the app uses it.
+// Kettu's own skills on disk: the skills of the features that are on, together in one folder named
+// for their texts, kept while an agent may still read it.
 
 import { randomUUID } from 'node:crypto'
-import { mkdir, readdir, rename, rm, writeFile } from 'node:fs/promises'
+import { mkdir, readdir, rename, rm, stat, writeFile } from 'node:fs/promises'
 import path from 'node:path'
-import { allSkillFolders, kettuSkills, skillFolderName, type GuideFlags } from './guide'
+import { kettuSkills, skillSetName, type GuideFlags } from './guide'
 
 const PARTIAL = '.partial-'
 
+/** The folder of the skills an agent gets for these features, one skill folder in it each. */
+export function kettuSkillRoot(root: string, flags: GuideFlags): string {
+  return path.join(root, skillSetName(kettuSkills(flags)))
+}
+
+/** The folder of each of those skills, by name, as a plugin links it. */
+export function kettuSkillDirs(root: string, flags: GuideFlags): Map<string, string> {
+  const set = kettuSkillRoot(root, flags)
+  return new Map(kettuSkills(flags).map((skill) => [skill.name, path.join(set, skill.name)]))
+}
+
 /**
- * Brings `root` in line with this version's skills: folders it no longer uses go, and each folder
- * it lacks is written whole, then moved into place, so an agent never reads half of one.
+ * Writes the skills for `flags` unless they are there, whole and then moved into place so an agent
+ * never reads half of them, and removes everything else in `root` but the folders in `keep`, which
+ * agents were handed and may still read.
  */
-export async function writeKettuSkills(root: string): Promise<void> {
-  const folders = allSkillFolders()
+export async function writeKettuSkills(
+  root: string,
+  flags: GuideFlags,
+  keep: ReadonlySet<string>,
+): Promise<void> {
+  const skills = kettuSkills(flags)
+  const name = skillSetName(skills)
   await mkdir(root, { recursive: true })
-  const present = new Set(await readdir(root))
-  for (const name of present) {
-    if (!folders.has(name)) await rm(path.join(root, name), { recursive: true, force: true })
+  for (const entry of await readdir(root)) {
+    if (entry !== name && !keep.has(entry)) {
+      await rm(path.join(root, entry), { recursive: true, force: true })
+    }
   }
-  for (const [folder, skill] of folders) {
-    if (present.has(folder)) continue
-    const partial = path.join(root, `${PARTIAL}${randomUUID()}`)
-    try {
+  if (await exists(path.join(root, name))) return
+  const partial = path.join(root, `${PARTIAL}${randomUUID()}`)
+  try {
+    for (const skill of skills) {
       const dir = path.join(partial, skill.name)
       await mkdir(dir, { recursive: true })
       await writeFile(path.join(dir, 'SKILL.md'), skill.text)
       for (const file of skill.files) await writeFile(path.join(dir, file.name), file.text)
-      await rename(partial, path.join(root, folder))
-    } catch (error) {
-      await rm(partial, { recursive: true, force: true })
-      throw error
     }
+    await rename(partial, path.join(root, name))
+  } catch (error) {
+    await rm(partial, { recursive: true, force: true })
+    throw error
   }
 }
 
-/** The skill roots under `root` an agent is handed for these features, each holding one skill. */
-export function kettuSkillRoots(root: string, flags: GuideFlags): string[] {
-  return kettuSkills(flags).map((skill) => path.join(root, skillFolderName(skill)))
-}
-
-/** The folder of a skill under one of those roots, as a plugin links it. */
-export function kettuSkillDirs(root: string, flags: GuideFlags): Map<string, string> {
-  return new Map(
-    kettuSkills(flags).map((skill) => [
-      skill.name,
-      path.join(root, skillFolderName(skill), skill.name),
-    ]),
-  )
+async function exists(file: string): Promise<boolean> {
+  try {
+    await stat(file)
+    return true
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return false
+    throw error
+  }
 }

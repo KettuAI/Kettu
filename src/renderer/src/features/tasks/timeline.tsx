@@ -21,7 +21,15 @@ import { useNow } from '@renderer/lib/use-now'
 import { cn } from '@renderer/lib/utils'
 import { sessionTitle, useSessionsStore } from '@renderer/stores/sessions'
 import { openSession, taskPanel, toggleArtifactPane, useViewStore } from '@renderer/stores/view'
-import { pickedByText, pickLine, workflowTitle, stepTitle, useModelText } from './model'
+import {
+  outcomeTitle,
+  pickedByText,
+  pickLine,
+  workflowTitle,
+  stepTitle,
+  useModelText,
+} from './model'
+import { Delivered, StepsSummary } from './ended-summary'
 import { NeedCards } from './needs'
 
 /** A thing on the timeline, in the order it happened: a round of a step, or a note you added. */
@@ -34,9 +42,21 @@ const SHOWN = new Set(['starting', 'working', 'picking', 'done', 'stopped', 'stu
 /**
  * The task as it went: what was asked and where it came from, a card per round of a step, with
  * who did it, who picked them and why, its outcome and time and what it handed in; the notes you
- * added; then the cards that wait for you and the steps still to come.
+ * added; then the cards that wait for you and the steps still to come. Once it ended, what it
+ * delivered and a row per step instead.
  */
 export function Timeline({ view }: { view: TaskView }) {
+  if (view.status !== 'running') {
+    return (
+      <ProjectPathContext value={view.worktreePath ?? view.projectPath}>
+        <div className="flex flex-col gap-5">
+          <Asked view={view} />
+          <Delivered view={view} />
+          <StepsSummary view={view} />
+        </div>
+      </ProjectPathContext>
+    )
+  }
   const items: Item[] = [
     ...view.rounds
       .filter((round) => SHOWN.has(round.state))
@@ -56,7 +76,6 @@ export function Timeline({ view }: { view: TaskView }) {
         )}
         <NeedCards view={view} />
         <Upcoming view={view} />
-        <Ended view={view} />
       </div>
     </ProjectPathContext>
   )
@@ -64,33 +83,44 @@ export function Timeline({ view }: { view: TaskView }) {
 
 /** The task's own text at the top, as the message that started it, and where it came from. */
 function Asked({ view }: { view: TaskView }) {
-  const { t } = useTranslation('tasks')
-  const from = useSessionsStore((s) => (view.from ? s.byId[view.from.sessionId] : undefined))
   return (
     <div className="ks-user mb-2">
       <SentText text={view.text} />
-      <span className="flex items-center gap-1.5 text-hint text-(--thread-faint)">
-        <Glyph icon={Message01Icon} size={12} />
-        {from ? (
-          <button
-            type="button"
-            className="hover:text-(--thread-ink) hover:underline"
-            onClick={() => openSession(from.id, from.projectPath)}
-          >
-            {t('timeline.startedFrom', {
-              session: sessionTitle(from),
-              workflow: workflowTitle(view, view),
-              time: clockTime(view.createdAt),
-            })}
-          </button>
-        ) : (
-          t('timeline.started', {
+      <StartedFrom view={view} />
+    </div>
+  )
+}
+
+/** Where the task came from, the conversation it opens when it started from one, and when. */
+export function StartedFrom({ view, className }: { view: TaskView; className?: string }) {
+  const { t } = useTranslation('tasks')
+  const from = useSessionsStore((s) => (view.from ? s.byId[view.from.sessionId] : undefined))
+  return (
+    <span
+      className={cn('flex min-w-0 items-center gap-1.5 text-hint text-(--thread-faint)', className)}
+    >
+      <Glyph icon={Message01Icon} size={12} className="shrink-0" />
+      {from ? (
+        <button
+          type="button"
+          className="truncate hover:text-(--thread-ink) hover:underline"
+          onClick={() => openSession(from.id, from.projectPath)}
+        >
+          {t('timeline.startedFrom', {
+            session: sessionTitle(from),
             workflow: workflowTitle(view, view),
             time: clockTime(view.createdAt),
-          })
-        )}
-      </span>
-    </div>
+          })}
+        </button>
+      ) : (
+        <span className="truncate">
+          {t('timeline.started', {
+            workflow: workflowTitle(view, view),
+            time: clockTime(view.createdAt),
+          })}
+        </span>
+      )}
+    </span>
   )
 }
 
@@ -172,7 +202,14 @@ function RoundCard({ view, round }: { view: TaskView; round: RoundView }) {
           )}
           <span className="truncate text-hint text-(--thread-muted)">{who}</span>
         </span>
-        <RoundState round={round} sentBack={!!back} backward={backward} />
+        <RoundState
+          round={round}
+          outcome={
+            round.outcome === null ? null : outcomeTitle(view.workflow, round.stepId, round.outcome)
+          }
+          sentBack={!!back}
+          backward={backward}
+        />
         {time && (
           <span className="shrink-0 text-hint text-(--thread-text) tabular-nums">{time}</span>
         )}
@@ -213,10 +250,13 @@ function RoundCard({ view, round }: { view: TaskView; round: RoundView }) {
  */
 function RoundState({
   round,
+  outcome,
   sentBack,
   backward,
 }: {
   round: RoundView
+  /** Its outcome's name in the language shown. */
+  outcome: string | null
   sentBack: boolean
   backward: boolean
 }) {
@@ -225,7 +265,7 @@ function RoundState({
     return (
       <Badge variant="warning">
         <Glyph icon={ArrowTurnBackwardIcon} size={12} />
-        {round.outcome}
+        {outcome}
       </Badge>
     )
   }
@@ -242,7 +282,7 @@ function RoundState({
       return (
         <Badge variant="success">
           <Glyph icon={Tick02Icon} size={12} />
-          {round.outcome ?? t('state.done')}
+          {outcome ?? t('state.done')}
         </Badge>
       )
     case 'stopped':
@@ -334,18 +374,5 @@ function Upcoming({ view }: { view: TaskView }) {
         </span>
       ))}
     </p>
-  )
-}
-
-/** How an ended task ended, under its last round. */
-function Ended({ view }: { view: TaskView }) {
-  const { t } = useTranslation('tasks')
-  if (view.status === 'running') return null
-  return (
-    <div className="my-2 flex items-center gap-3 text-hint text-(--thread-muted)">
-      <span className="h-px flex-1 bg-(--thread-line)" />
-      <span>{t(`ended.${view.status}`)}</span>
-      <span className="h-px flex-1 bg-(--thread-line)" />
-    </div>
   )
 }

@@ -370,6 +370,36 @@ describe('isThreadEntry', () => {
       device: { id: 'phone', name: 'Phone' },
       after: null,
     },
+    {
+      kind: 'task_delivery',
+      id: 'e:17',
+      taskId: 't-1',
+      title: 'Ship the release',
+      status: 'done',
+      steps: 3,
+      durationMs: 60_000,
+      deliverables: [
+        { kind: 'pull_request', url: 'https://github.com/o/r/pull/1' },
+        { kind: 'document', artifactId: 'art_1', version: 2, title: 'Design' },
+        { kind: 'file', title: 'App.dmg', detail: null, path: '/w/App.dmg' },
+        { kind: 'link', title: 'Build 42', detail: 'iOS', url: 'https://example.com/b/42' },
+      ],
+      written: { agentId: 'claude-code' },
+      publishAsked: 1_700_000_000_000,
+      after: null,
+    },
+    {
+      kind: 'task_delivery',
+      id: 'e:18',
+      taskId: 't-2',
+      title: 'Try an idea',
+      status: 'cancelled',
+      steps: 1,
+      durationMs: 5,
+      deliverables: [],
+      written: null,
+      after: 'm:1',
+    },
   ]
 
   it('accepts every kind of entry', () => {
@@ -392,6 +422,10 @@ describe('isThreadEntry', () => {
     ).toBe(false)
     expect(isThreadEntry({ ...valid[3], permission: { requestId: 'p' } })).toBe(false)
     expect(isThreadEntry({ ...valid[3], description: 1 })).toBe(false)
+    const delivery = valid.find((entry) => entry.kind === 'task_delivery')!
+    expect(isThreadEntry({ ...delivery, status: 'running' })).toBe(false)
+    expect(isThreadEntry({ ...delivery, deliverables: [{ kind: 'link', title: 'x' }] })).toBe(false)
+    expect(isThreadEntry({ ...delivery, written: { agentId: 1 } })).toBe(false)
     const artifact = valid.find((entry) => entry.kind === 'artifact')!
     expect(isThreadEntry({ ...artifact, action: 'read' })).toBe(false)
     expect(isThreadEntry({ ...artifact, writes: undefined })).toBe(false)

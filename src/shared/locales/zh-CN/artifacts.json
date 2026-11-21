@@ -118,6 +118,7 @@
   "menu": {
     "open": "打开",
     "openInBrowser": "在浏览器中打开",
+    "showIn": "在{{name}}中显示",
     "share": "分享…",
     "export": "导出…",
     "exportAs": {

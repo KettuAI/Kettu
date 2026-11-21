@@ -34,6 +34,7 @@ import type {
 import type { MemoryAction, MemoryDraft, MemoryLayer, MemoryWriteStatus } from './memory'
 import type { RoutineRef } from './routines'
 import type { SettingScalar, SettingsSection } from './settings-catalog'
+import type { TaskDeliverable, Workflow } from './workflow'
 
 export {
   AUTO_AGENT_HARNESSES,
@@ -378,6 +379,7 @@ export type ThreadEntry =
   | MemoryWriteEntry // Kettu's own record of an agent's write to Kettu's memory, and its answer
   | MarketPublishEntry // Kettu's own record of a publish to the Kettu Marketplace, and its outcome
   | SettingsChangeEntry // Kettu's own record of an agent's change to Kettu's settings, and its answer
+  | TaskDeliveryEntry // Kettu's own record of a task this session started ending, and what it delivered
 
 /**
  * Where another agent took the session over: from here on its turns are that agent's. `turns` of
@@ -720,11 +722,47 @@ export interface MarketPublishEntry {
   changes: MarketPublishChange[] | null
   /** The publisher name a first publish suggests; null once the account has one. */
   publisher: { suggested: string } | null
+  /** A workflow's flowchart, as its `workflow.yaml` reads; absent for the other kinds. */
+  workflow?: Workflow
+  /**
+   * The task whose workflow this generalizes, when its agent says so: whether the steps and arrows
+   * stayed, the agent's sentence on what it changed, and both files to compare.
+   */
+  fromTask?: {
+    taskId: string
+    title: string
+    sameFlow: boolean
+    changes: string | null
+    before: string
+    after: string
+  }
   /** When an unanswered card counts as put off, in the host's milliseconds. */
   expiresAt: number
   outcome: MarketPublishOutcome | null
   /** Set when a paired device gave the answer; the host's own windows give none. */
   device?: FromDevice
+  /** The agent's entry before it, to put it back after a replay. */
+  after: string | null
+}
+
+/**
+ * A task started from this session's suggestion card ended: what it delivered, as it stood then.
+ * It waits for no answer. `written` names the agent that wrote the task's workflow for it, which
+ * offers Save and Publish once the task is done; `publishAsked` is when the user last asked the
+ * session's agent to publish that workflow.
+ */
+export interface TaskDeliveryEntry {
+  kind: 'task_delivery'
+  id: string
+  taskId: string
+  title: string
+  status: 'done' | 'dropped' | 'cancelled'
+  /** The steps that ran, and how long the task took from its start. */
+  steps: number
+  durationMs: number
+  deliverables: TaskDeliverable[]
+  written: { agentId: AgentId } | null
+  publishAsked?: number
   /** The agent's entry before it, to put it back after a replay. */
   after: string | null
 }
@@ -1593,6 +1631,39 @@ export function isThreadEntry(value: unknown): value is ThreadEntry {
           value.outcome === 'timeout') &&
         (value.after === null || typeof value.after === 'string')
       )
+    case 'task_delivery':
+      return (
+        typeof value.taskId === 'string' &&
+        typeof value.title === 'string' &&
+        (value.status === 'done' || value.status === 'dropped' || value.status === 'cancelled') &&
+        typeof value.steps === 'number' &&
+        typeof value.durationMs === 'number' &&
+        isListOf(value.deliverables, isTaskDeliverable) &&
+        (value.written === null || (isRecord(value.written) && isAgentId(value.written.agentId))) &&
+        (value.publishAsked === undefined || typeof value.publishAsked === 'number') &&
+        (value.after === null || typeof value.after === 'string')
+      )
+    default:
+      return false
+  }
+}
+
+function isTaskDeliverable(value: unknown): value is TaskDeliverable {
+  if (!isRecord(value)) return false
+  const detail = value.detail === null || typeof value.detail === 'string'
+  switch (value.kind) {
+    case 'pull_request':
+      return typeof value.url === 'string'
+    case 'document':
+      return (
+        typeof value.artifactId === 'string' &&
+        typeof value.version === 'number' &&
+        typeof value.title === 'string'
+      )
+    case 'file':
+      return typeof value.title === 'string' && detail && typeof value.path === 'string'
+    case 'link':
+      return typeof value.title === 'string' && detail && typeof value.url === 'string'
     default:
       return false
   }

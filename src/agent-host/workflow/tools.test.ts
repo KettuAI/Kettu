@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { WorkflowEntry } from '@shared/workflow'
-import type { ReportResult } from './engine'
+import type { ReportInput, ReportResult } from './engine'
+import { SuggestionRefused, type SuggestInput } from './suggestions'
 import { WorkflowTools } from './tools'
 
 const ENTRY = {
@@ -19,21 +20,35 @@ const ENTRY = {
 
 function tools(options: { suggest?: boolean } = {}) {
   const reports: string[] = []
+  const inputs: ReportInput[] = []
   const deps = {
     library: {
       suggest: options.suggest ?? true,
       list: async () => [ENTRY],
-      create: async () => ({ problems: [{ at: 'steps', message: 'must list at least one step' }] }),
     },
-    report: async (sessionId: string): Promise<ReportResult> => {
+    suggestions: {
+      suggest: async (_sessionId: string, input: SuggestInput) => {
+        if (input.workflowId !== ENTRY.id) {
+          throw new SuggestionRefused('not_found', `No workflow ${input.workflowId}`)
+        }
+        return { id: 'wfs-aaaaaaaaaaaa', workflow: { name: ENTRY.name } } as never
+      },
+      draft: async () => ({ problems: [{ at: 'steps', message: 'must list at least one step' }] }),
+      keep: async () => ({ problems: [] }),
+    },
+    marketplace: {
+      publicWorkflows: async () => ({ status: 'signed_out' as const, items: [] }),
+    },
+    report: async (sessionId: string, input: ReportInput): Promise<ReportResult> => {
       reports.push(sessionId)
+      inputs.push(input)
       return { accepted: true, checks: [], next: { kind: 'review' }, facts: null }
     },
     pick: async () => ({ accepted: true, checks: [], next: { kind: 'start' as const, steps: [] } }),
     isStep: (sessionId: string) => sessionId === 'step',
     agentOf: () => 'claude-code' as const,
   }
-  return { tools: new WorkflowTools(deps), reports }
+  return { tools: new WorkflowTools(deps), reports, inputs }
 }
 
 const caller = (sessionId: string, subagent = false) => ({
@@ -53,6 +68,38 @@ describe('the workflow tools', () => {
     })
     expect(pick.isError).toBe(true)
     expect(reports).toEqual([])
+  })
+
+  it('take files and http links a report hands over, and refuse anything else', async () => {
+    const { tools: t, inputs } = tools()
+    const ok = await t.call(caller('step'), 'report_step', {
+      outcome: 'Done',
+      deliverables: [
+        { title: ' Installer ', detail: 'macOS', path: 'dist/app.dmg' },
+        { title: 'Build', url: 'https://appstoreconnect.apple.com/apps/1' },
+      ],
+    })
+    expect(ok.isError).toBeUndefined()
+    expect(inputs[0]!.deliverables).toEqual([
+      { kind: 'file', title: 'Installer', detail: 'macOS', path: 'dist/app.dmg' },
+      {
+        kind: 'link',
+        title: 'Build',
+        detail: null,
+        url: 'https://appstoreconnect.apple.com/apps/1',
+      },
+    ])
+    for (const deliverables of [
+      [{ title: 'Script', url: 'javascript:alert(1)' }],
+      [{ title: 'Both', path: 'a', url: 'https://example.com' }],
+      [{ title: 'Neither' }],
+      [{ title: 'Extra', path: 'a', run: true }],
+      Array.from({ length: 11 }, (_, i) => ({ title: `F${i}`, path: `f${i}` })),
+    ]) {
+      const refused = await t.call(caller('step'), 'report_step', { outcome: 'Done', deliverables })
+      expect(refused.structuredContent).toMatchObject({ code: 'invalid' })
+    }
+    expect(inputs).toHaveLength(1)
   })
 
   it('refuse a subagent, and a step session anything but its own two tools', async () => {
@@ -97,7 +144,7 @@ describe('the workflow tools', () => {
       pace_reason: 'It must hold',
     })
     expect(result.structuredContent).toMatchObject({
-      suggestion: { workflow_id: 'feature-development', pace: 'thorough' },
+      suggestion: { id: 'wfs-aaaaaaaaaaaa', workflow_id: 'feature-development', pace: 'thorough' },
     })
     const unknown = await on.call(caller('plain'), 'suggest_workflow', {
       workflow_id: 'nope',

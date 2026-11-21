@@ -3,7 +3,7 @@
 // Marketplace; and the option values a pick starts a session with.
 
 import type { AgentOptions, AgentStatus } from '@shared/agent-host'
-import { serverFor, type MarketServer, type MarketSkill } from '@shared/marketplace'
+import type { MarketServer, MarketSkill } from '@shared/marketplace'
 import { limitsForModel } from '@shared/plan-limits'
 import type { StepPick } from '@shared/workflow'
 import type { AgentId, ConfigOption } from '@shared/thread'
@@ -22,10 +22,6 @@ function levelOption(options: AgentOptions | null, model: string | null): Config
 function choicesOf(option: ConfigOption | undefined): string[] | null {
   const values = option?.choices?.map((choice) => choice.value) ?? []
   return values.length > 0 ? values : null
-}
-
-function skillFor(skill: MarketSkill, agentId: AgentId): boolean {
-  return skill.on && (skill.agents === 'all' || skill.agents.includes(agentId))
 }
 
 export interface WorkflowAgentSources {
@@ -73,12 +69,11 @@ export function workflowAgents(sources: WorkflowAgentSources): WorkflowAgent[] {
           value === null || !model
             ? [...status.limits]
             : limitsForModel(status.limits, { ...model, value }),
+        // A step names a tool by its name or its Marketplace entry's id.
         skills: new Set(
-          sources.marketplace.skills.filter((s) => skillFor(s, status.id)).map((s) => s.name),
+          sources.marketplace.skills.filter((s) => s.on).flatMap((s) => [s.name, s.id]),
         ),
-        mcp: new Set(
-          sources.marketplace.mcp.filter((s) => serverFor(s, status.id)).map((s) => s.name),
-        ),
+        mcp: new Set(sources.marketplace.mcp.filter((s) => s.on).flatMap((s) => [s.name, s.id])),
       }
     })
 }

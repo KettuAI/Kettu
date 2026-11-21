@@ -13,6 +13,7 @@ import type {
   RemoteHostStopReason,
   RemoteHostToMain,
 } from '@shared/host-control'
+import { pushedAttention } from '@shared/attention'
 import type { BrowserForward } from '@shared/browser'
 import type { DeviceActivity } from '@shared/remote/activity'
 import { isDirectStatus } from '@shared/remote/address'
@@ -412,8 +413,9 @@ export class RemoteHost {
   }
 
   /** What the agent host says needs the user, which devices may be notified of. */
-  attention(attention: Extract<HostToMain, { type: 'host:attention' }>): void {
-    this.toServer({ type: 'remote-host:attention', attention })
+  attention(message: Extract<HostToMain, { type: 'host:attention' }>): void {
+    const attention = pushedAttention(message)
+    if (attention) this.toServer({ type: 'remote-host:attention', attention })
   }
 
   /** What waits for the user now, by session. */

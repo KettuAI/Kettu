@@ -1,7 +1,7 @@
-// A workflow drawn before any task runs through it: its steps in order, those that run side by
-// side, where each outcome goes, what sends work back and how it ends, with who does each step.
-// Read-only, on the task flowchart's layout and canvas, sized to the flow: a small one shows whole
-// at full size, a large one is shrunk to fit and can be panned and zoomed.
+// A workflow drawn before any task runs through it: its steps in order from the left, those that
+// run side by side stacked, what sends work back and how it ends, with who does each step. The
+// chart the suggestion card and the task page draw, read-only and smaller, sized to the flow: a
+// small one shows whole at full size, a large one is shrunk to fit and can be panned and zoomed.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
@@ -27,8 +27,11 @@ import {
   Tick02Icon,
   UserIcon,
 } from '@hugeicons/core-free-icons'
+import type { TFunction } from 'i18next'
 import { useTranslation } from 'react-i18next'
 import {
+  isBackArrow,
+  outcomeName,
   stepName,
   type StepPick,
   type TaskEnd,
@@ -39,34 +42,49 @@ import { Icon } from '@renderer/components/affect/app-shell'
 import { AgentMark } from '@renderer/components/agents/agent-mark'
 import {
   headOf,
+  intoJoin,
+  laneMiddle,
   layoutFlow,
   pathOf,
+  sideways,
   type FlowEdge,
   type FlowMetrics,
 } from '@renderer/features/tasks/flow-layout'
+import { textWidth } from '@renderer/features/tasks/wrapped-lines'
 
+/**
+ * On the task flowchart's layout turned to run from the left: `nodeH` is a step's width once
+ * turned, `nodeW` its height, `rowGap` the room between columns and `colGap` between steps stacked
+ * in one.
+ */
 const METRICS: FlowMetrics = {
-  nodeW: 212,
-  nodeH: 58,
+  nodeW: 52,
+  nodeH: 168,
   endSize: 24,
-  colGap: 20,
-  rowGap: 52,
-  laneStart: 26,
-  laneGap: 18,
-  labelRoom: 196,
-  slot: 20,
+  colGap: 14,
+  rowGap: 30,
+  laneStart: 22,
+  laneGap: 16,
+  labelRoom: 0,
+  slot: 12,
   inset: 16,
-  bend: 20,
+  bend: 14,
   pad: 14,
 }
+// A step's width: its padding, who does it and the gaps, around its widest line, within bounds.
+const NODE_X = 10 + 28 + 10 + 10
+const NODE_MIN_W = 108
+const NODE_MAX_W = 248
 /** The tallest the canvas grows; a longer flow is shrunk to fit, then panned. */
 const MAX_HEIGHT = 640
 /** A flow is shrunk no further than this to fit, so its names stay readable. */
 const MIN_FIT = 0.6
+/** Under a flow that needs its zoom controls at rest, room for them, so they cover none of it. */
+const CONTROLS_ROOM = 36
 
-type StepData = { step: WorkflowStep; name: string; reviews: string[]; pick: StepPick | null }
+type StepData = { step: WorkflowStep; name: string; line: string; pick: StepPick | null }
 type EndData = { end: TaskEnd }
-type ArrowData = { edge: FlowEdge; label: string | null }
+type ArrowData = { edge: FlowEdge; label: string | null; dashed: boolean }
 
 const NODE_TYPES = { step: StepNode, end: EndNode }
 const EDGE_TYPES = { flow: FlowArrow }
@@ -93,7 +111,31 @@ export default function WorkflowDiagram({
 function Canvas({ workflow, pins }: { workflow: Workflow; pins?: Record<string, StepPick> }) {
   const { t, i18n } = useTranslation(['marketplace', 'tasks'])
   const locale = i18n.language
-  const layout = useMemo(() => layoutFlow(workflow, METRICS), [workflow])
+  // A step you review says so on its node, so its send-back is not drawn as a loop.
+  const drawn = useMemo(
+    () => ({ ...workflow, steps: workflow.steps.map((step) => ({ ...step, youReview: false })) }),
+    [workflow],
+  )
+  // Each step as wide as its words need, a column as its widest; longer words are cut, and whole
+  // in its title.
+  const lengths = useMemo(() => {
+    const badge = textWidth(t('workflow.youReview'), 10.5, 500) + 10 + 10
+    return new Map(
+      workflow.steps.map((step) => {
+        const words = Math.max(
+          textWidth(stepName(workflow, step.id, locale), 13, 500),
+          textWidth(stepLine(step, workflow, locale, t), 11.5, 400),
+        )
+        const extra = step.by === 'agent' && step.youReview ? badge : 0
+        const width = Math.ceil(words + extra) + NODE_X
+        return [step.id, Math.min(NODE_MAX_W, Math.max(NODE_MIN_W, width))]
+      }),
+    )
+  }, [workflow, locale, t])
+  const layout = useMemo(
+    () => sideways(layoutFlow(drawn, METRICS, (id) => lengths.get(id) ?? METRICS.nodeH)),
+    [drawn, lengths],
+  )
   const nodes = useMemo<Node[]>(
     () => [
       ...layout.nodes.map((n) => {
@@ -102,12 +144,12 @@ function Canvas({ workflow, pins }: { workflow: Workflow; pins?: Record<string, 
           id: n.id,
           type: 'step',
           position: { x: n.x, y: n.y },
-          width: METRICS.nodeW,
-          height: METRICS.nodeH,
+          width: n.length,
+          height: METRICS.nodeW,
           data: {
             step,
             name: stepName(workflow, step.id, locale),
-            reviews: step.reviewOf.map((id) => stepName(workflow, id, locale)),
+            line: stepLine(step, workflow, locale, t),
             pick: pins?.[step.id] ?? null,
           } satisfies StepData,
         }
@@ -121,31 +163,35 @@ function Canvas({ workflow, pins }: { workflow: Workflow; pins?: Record<string, 
         data: { end: e.end } satisfies EndData,
       })),
     ],
-    [layout, workflow, pins, locale],
+    [layout, workflow, pins, locale, t],
   )
   const edges = useMemo<Edge[]>(
     () =>
       layout.edges.map((edge) => {
         const step = workflow.steps.find((s) => s.id === edge.from)!
-        const name =
-          edge.outcomes.length > 0 ? edge.outcomes.join(t('tasks:or')) : t('tasks:flow.youSendBack')
+        const name = edge.outcomes
+          .map((o) => outcomeName(workflow, edge.from, o, locale))
+          .join(t('tasks:or'))
         const limit =
           step.outcomes.find((o) => o.name === edge.outcomes[0])?.limit ?? workflow.sendBackLimit
-        // A step with one way on needs no word on its arrow.
-        const label = edge.back
-          ? `${name}${t('tasks:separator')}${t('tasks:flow.upTo', { limit })}`
-          : step.outcomes.length > 1
-            ? name
-            : null
+        // An arrow to the early end runs above the steps like one back, so it is dashed as they are.
+        const dashed = edge.back || edge.to === 'end:dropped'
+        // Only the lanes are named, as on the task's chart; a forward arrow's gap is too short.
+        const lane = edge.back || (edge.to === 'end:dropped' && edge.points.length > 4)
+        const label = !lane
+          ? null
+          : edge.back
+            ? `${name}${t('tasks:separator')}${t('tasks:flow.upTo', { limit })}`
+            : name
         return {
           id: edge.id,
           source: edge.from,
           target: edge.to,
           type: 'flow',
-          data: { edge, label } satisfies ArrowData,
+          data: { edge, label, dashed } satisfies ArrowData,
         }
       }),
-    [layout, workflow, t],
+    [layout, workflow, locale, t],
   )
 
   const box = useRef<HTMLDivElement>(null)
@@ -154,20 +200,16 @@ function Canvas({ workflow, pins }: { workflow: Workflow; pins?: Record<string, 
   const fitZoom = width
     ? Math.max(MIN_FIT, Math.min(1, width / layout.width, MAX_HEIGHT / layout.height))
     : 1
-  const height = Math.min(MAX_HEIGHT, Math.ceil(layout.height * fitZoom))
+  // The whole flow shows at rest, so only a larger one needs its controls.
+  const cut = layout.width * fitZoom > width + 1 || layout.height * fitZoom > MAX_HEIGHT + 1
+  const height =
+    Math.min(MAX_HEIGHT, Math.ceil(layout.height * fitZoom)) + (cut ? CONTROLS_ROOM : 0)
   const fit = useCallback(() => {
     const el = box.current
     if (!el || !el.clientWidth) return
-    // The steps sit in the middle; the labels of arrows back, all at one side, do not pull them off it.
-    const xs = layout.nodes.flatMap((n) => [n.x, n.x + METRICS.nodeW])
-    const middle = (Math.min(...xs) + Math.max(...xs)) / 2
+    // Centred when it fits; a wider one starts at its first step.
     const spare = el.clientWidth - layout.width * fitZoom
-    const x = el.clientWidth / 2 - middle * fitZoom
-    void flow.setViewport({
-      x: spare > 0 ? Math.min(spare, Math.max(0, x)) : 0,
-      y: 0,
-      zoom: fitZoom,
-    })
+    void flow.setViewport({ x: Math.max(0, spare / 2), y: 0, zoom: fitZoom })
   }, [flow, layout, fitZoom])
   useEffect(() => {
     const el = box.current
@@ -179,9 +221,6 @@ function Canvas({ workflow, pins }: { workflow: Workflow; pins?: Record<string, 
   }, [])
   // Placed again when the chart or its room changes; a pan or zoom stays until then.
   useEffect(fit, [fit])
-  // The whole flow shows at rest, so only a larger one needs its controls.
-  const cut = layout.width * fitZoom > width + 1 || layout.height * fitZoom > MAX_HEIGHT + 1
-
   return (
     <div
       ref={box}
@@ -241,31 +280,24 @@ function ZoomControls({ onFit, quiet }: { onFit: () => void; quiet: boolean }) {
 }
 
 function FlowArrow({ data }: EdgeProps) {
-  const { edge, label } = data as ArrowData
-  const last = edge.points.at(-1)!
+  const { edge, label, dashed } = data as ArrowData
   // Into a join the arrow stops at its dot.
-  const points = edge.join
-    ? [...edge.points.slice(0, -1), [last[0], last[1] - 7] as [number, number]]
-    : edge.points
+  const { points, dot } = edge.join ? intoJoin(edge.points) : { points: edge.points, dot: null }
+  const [x, y] = laneMiddle(edge.points)
   return (
     <>
       <BaseEdge
-        path={pathOf(points, 12)}
+        path={pathOf(points, 10)}
         className="k-flow__line"
-        data-back={edge.back || undefined}
+        data-dashed={dashed || undefined}
       />
       {!edge.join && <path d={headOf(points)} className="k-flow__head" />}
-      {edge.join && <circle cx={last[0]} cy={last[1] - 4} r={3.5} className="k-flow__join" />}
+      {dot && <circle cx={dot[0]} cy={dot[1]} r={3.5} className="k-flow__join" />}
       {label && (
         <EdgeLabelRenderer>
           <span
             className="k-flow__label"
-            data-back={edge.back || undefined}
-            style={{
-              transform: `translate(${edge.label[0]}px, ${edge.label[1]}px) translate(${
-                edge.align === 'center' ? '-50%' : edge.align === 'start' ? '0' : '-100%'
-              }, -50%)`,
-            }}
+            style={{ transform: `translate(${x}px, ${y}px) translate(-50%, -50%)` }}
           >
             {label}
           </span>
@@ -280,7 +312,7 @@ function EndNode({ data }: NodeProps) {
   const { t } = useTranslation('marketplace')
   return (
     <div className="k-flow__end" data-end={end}>
-      <Handle type="target" position={Position.Top} isConnectable={false} className="invisible!" />
+      <Handle type="target" position={Position.Left} isConnectable={false} className="invisible!" />
       <span>{end === 'done' ? <Icon icon={Tick02Icon} size={12} /> : <i />}</span>
       <small>{t(`workflow.end.${end}`)}</small>
     </div>
@@ -302,21 +334,35 @@ function Who({ step, pick }: { step: WorkflowStep; pick: StepPick | null }) {
   )
 }
 
+/** The line under a step's name: yours, the steps it reviews, or an agent's. */
+function stepLine(
+  step: WorkflowStep,
+  workflow: Workflow,
+  locale: string,
+  t: TFunction<['marketplace', 'tasks']>,
+): string {
+  if (step.by === 'you') return t('workflow.diagram.yourStep')
+  if (step.reviewOf.length > 0) {
+    return t('tasks:flow.reviews', {
+      steps: step.reviewOf.map((id) => stepName(workflow, id, locale)).join(t('tasks:and')),
+    })
+  }
+  return t('workflow.diagram.agentStep')
+}
+
 function StepNode({ data }: NodeProps) {
-  const { step, name, reviews, pick } = data as StepData
-  const { t } = useTranslation(['marketplace', 'tasks'])
-  const line =
-    step.by === 'you'
-      ? t('workflow.diagram.yourStep')
-      : reviews.length > 0
-        ? t('tasks:flow.reviews', { steps: reviews.join(t('tasks:and')) })
-        : t('workflow.diagram.agentStep')
+  const { step, name, line, pick } = data as StepData
+  const { t } = useTranslation('marketplace')
   return (
-    <div className="k-flow__step" data-you={step.by === 'you' ? '' : undefined} title={name}>
-      <Handle type="target" position={Position.Top} isConnectable={false} className="invisible!" />
+    <div
+      className="k-flow__step"
+      data-you={step.by === 'you' ? '' : undefined}
+      title={`${name}\n${line}`}
+    >
+      <Handle type="target" position={Position.Left} isConnectable={false} className="invisible!" />
       <Handle
         type="source"
-        position={Position.Bottom}
+        position={Position.Right}
         isConnectable={false}
         className="invisible!"
       />
@@ -336,12 +382,9 @@ function StepNode({ data }: NodeProps) {
 function Legend({ workflow }: { workflow: Workflow }) {
   const { t } = useTranslation('marketplace')
   const you = workflow.steps.some((step) => step.by === 'you' || step.youReview)
-  const back = workflow.steps.some(
-    (step, at) =>
-      step.youReview ||
-      step.outcomes.some((o) =>
-        o.to.some((to) => workflow.steps.findIndex((s) => s.id === to) <= at),
-      ),
+  // A step you review sends back with no line of its own, so only the arrows back are dashed.
+  const back = workflow.steps.some((step) =>
+    step.outcomes.some((o) => isBackArrow(workflow, step.id, o)),
   )
   const agents = workflow.steps.some((step) => step.by === 'agent')
   return (

@@ -107,6 +107,7 @@ import { useGuideStatuses } from './new-session/guide-statuses'
 import {
   agentNeed,
   canStart,
+  menuAgents,
   noAgentCanStart,
   noAgentUntilUpdated,
   startValues,
@@ -276,7 +277,7 @@ function DraftComposer({
   const readings = usePlanReadings()
   const limits = status ? newestLimits(readings, status) : undefined
   // A default agent that became usable after this page opened, such as the first start's, is what
-  // the page starts with.
+  // the page starts with; without one, the only agent the host can start is.
   const defaultAgent = useSettingsStore((s) => s.settings.general.defaultAgent)
   const defaultOff = useSettingsStore(
     (s) => !!defaultAgent && s.settings.disabledAgents.includes(defaultAgent),
@@ -285,13 +286,20 @@ function DraftComposer({
     // Until this computer's agents are read after launch, the settings say whether it is off.
     if (!s.loaded) return !!defaultAgent && !defaultOff
     const candidate = defaultAgent ? s.byId[defaultAgent] : undefined
-    return !!candidate && candidate.registered !== false && !candidate.disabled
+    return !!candidate && canStart(candidate)
+  })
+  const onlyAgent = useAgentsStore((s) => {
+    if (hostId === null ? !s.loaded : !(hostId in s.hosts)) return null
+    const { order, byId } = agentsOn(s, hostId)
+    const startable = menuAgents(usableAgents(order, byId))
+    return startable.length === 1 ? startable[0]!.id : null
   })
   useEffect(() => {
-    if (paneId && !agentId && !parent && hostId === null && defaultAgent && defaultUsable) {
-      choosePaneAgent(paneId, defaultAgent)
-    }
-  }, [paneId, agentId, parent, hostId, defaultAgent, defaultUsable])
+    if (!paneId || agentId || parent) return
+    // The default agent is this computer's setting, so another host starts on its only agent.
+    const starts = hostId === null && defaultAgent && defaultUsable ? defaultAgent : onlyAgent
+    if (starts) choosePaneAgent(paneId, starts)
+  }, [paneId, agentId, parent, hostId, defaultAgent, defaultUsable, onlyAgent])
   const waitingForNode = useAgentsStore(
     useShallow((s) => {
       if (hostId === null ? !s.loaded : !(hostId in s.hosts)) return null

@@ -1,6 +1,6 @@
 import { resolve } from 'node:path'
 import { defineConfig } from 'vitest/config'
-import { pageRuntime } from './tools/build/page-runtime'
+import { pageRuntime } from './tools/build/page-runtime.ts'
 
 export default defineConfig({
   plugins: [pageRuntime(resolve('src/shared/artifact-runtime/runtime.ts'))],

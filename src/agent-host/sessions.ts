@@ -110,6 +110,7 @@ import {
   type MarketPublishOutcome,
   type SettingChangeItem,
   type SettingsChangeEntry,
+  type TaskDeliveryEntry,
   type SettingsChangeOutcome,
   type ComputerAppEntry,
   type ComputerSetupEntry,
@@ -518,11 +519,11 @@ export interface SessionManagerDeps {
   /** The artifacts service; without it every attach passes no MCP servers. */
   mcp?: SessionMcp
   /**
-   * The skills an attach of the agent's session passes, Kettu's own with them when `kettu`, the
-   * session reaching Kettu's server; without it none.
+   * The skills an attach of the session passes, Kettu's own with them when `kettu`, the session
+   * reaching Kettu's server, and a workflow step's own; without it none.
    */
   skills?: (
-    agentId: AgentId,
+    record: SessionRecord,
     kettu: boolean,
   ) => Promise<Pick<SessionOptions, 'skillRoots' | 'localPlugins'>>
   /** Kettu's memory; without it no session is handed any. */
@@ -651,6 +652,8 @@ interface Live {
   answered: Map<string, FromDevice | null>
   /** Each waiting new origin's entry, by `originKey`. */
   origins: Map<string, string>
+  /** Publish cards that outlived the turn that opened them, which no turn waits on. */
+  lateCards: Set<string>
   /** Who answered the latest new origins, by entry id: a device, or null for a window. */
   originsAnswered: Map<string, FromDevice | null>
   /** Each first use of an app that waits for the user: its entry, by the request's id. */
@@ -671,6 +674,8 @@ interface Live {
   /** Who sent the latest turn: a window's or a device's port, and the device it serves. */
   sender: TurnSender | null
   failure: Failure | null
+  /** The sign-in notices it shows, settled once the agent reports it is signed in. */
+  signInNotices: string[]
   unread: boolean
   /** The current error was in front of the user, so the row no longer marks it. */
   errorSeen: boolean
@@ -725,6 +730,13 @@ interface Live {
   heldFirst: Live['first']
   /** Who queued each waiting prompt, by item id; apart from the queue, which every client sees. */
   queuedBy: Map<string, string>
+  /**
+   * The waiting prompts Kettu queued itself, such as a step's reminder, by item id, each with what
+   * says it is still due when its turn comes.
+   */
+  kettuQueued: Map<string, (() => boolean) | null>
+  /** The last turn began with the user's own message, which owes no step report. */
+  userTurn: boolean
   /** The message that gave the session its first title, for a written title, and its tries. */
   titlePrompt: UserContent[] | null
   titleWriting: boolean
@@ -2134,7 +2146,7 @@ export class SessionManager {
   /**
    * An agent wants to publish to the Kettu Marketplace, or to unlist a listing: a card in the
    * thread that waits for the user as a device's first use does, and settles with their answer,
-   * `expired` after `waitMs`, or `ended` with the turn.
+   * `expired` after `waitMs`, or `ended` when the session closes. The turn's end leaves it waiting.
    */
   marketAsked(
     sessionId: string,
@@ -2251,6 +2263,7 @@ export class SessionManager {
     const live = this.live.get(sessionId)
     if (live) {
       live.origins.delete(`market:${entryId}`)
+      live.lateCards.delete(entryId)
       const entry = live.thread.byId[entryId]
       if (entry?.kind === 'market_publish' && entry.outcome === null) {
         const outcome: MarketPublishOutcome =
@@ -2337,6 +2350,46 @@ export class SessionManager {
     }
     this.emit(live, [{ op: 'entry.add', entry }])
     return entry.id
+  }
+
+  /**
+   * A task this session's suggestion card started ended: what it delivered goes at the end of
+   * the conversation, which is read back from storage if it is not open, without its agent.
+   */
+  async taskDelivered(
+    sessionId: string,
+    delivery: Omit<TaskDeliveryEntry, 'kind' | 'id' | 'after'>,
+  ): Promise<void> {
+    if (!this.records.has(sessionId)) return
+    const live = await this.revive(sessionId)
+    const entry: TaskDeliveryEntry = {
+      kind: 'task_delivery',
+      id: this.nextId(live),
+      ...delivery,
+      after: agentEntryBefore(live.thread),
+    }
+    this.emit(live, [{ op: 'entry.add', entry }])
+    if (!this.inFront(live.id)) live.unread = true
+    this.touch(live.id)
+    this.updateBadge()
+  }
+
+  /** The delivery of a task in the conversation it started from, for Save and Publish. */
+  async taskDelivery(sessionId: string, taskId: string): Promise<TaskDeliveryEntry | null> {
+    if (!this.records.has(sessionId)) return null
+    const live = await this.revive(sessionId)
+    for (let i = live.thread.order.length - 1; i >= 0; i--) {
+      const entry = live.thread.byId[live.thread.order[i]!]
+      if (entry?.kind === 'task_delivery' && entry.taskId === taskId) return entry
+    }
+    return null
+  }
+
+  /** The user asked the session's agent to publish the workflow a task delivered. */
+  taskPublishAsked(sessionId: string, entryId: string): void {
+    const live = this.live.get(sessionId)
+    if (live?.thread.byId[entryId]?.kind !== 'task_delivery') return
+    this.emit(live, [{ op: 'entry.update', id: entryId, changes: { publishAsked: this.now() } }])
   }
 
   /** A window's or a device's answer to a settings card; the first one counts. */
@@ -3518,6 +3571,7 @@ export class SessionManager {
       permissions: new Map(),
       answered: new Map(),
       origins: new Map(),
+      lateCards: new Set(),
       originsAnswered: new Map(),
       apps: new Map(),
       appsAnswered: new Map(),
@@ -3527,6 +3581,7 @@ export class SessionManager {
       activity: new ToolActivity(),
       sender: null,
       failure: null,
+      signInNotices: [],
       unread: this.persistedUnread(record),
       errorSeen: false,
       connection: null,
@@ -3553,6 +3608,8 @@ export class SessionManager {
       first: null,
       heldFirst: null,
       queuedBy: new Map(),
+      kettuQueued: new Map(),
+      userTurn: false,
       titlePrompt: null,
       titleWriting: false,
       titleFailedAt: null,
@@ -3625,7 +3682,7 @@ export class SessionManager {
     const projectHooks = this.projectHooksGate(sessionId)
     const own = this.kettuServers(sessionId, record, runtime)
     const reached = own.length > 0
-    const skills = (await this.deps.skills?.(record.agentId, reached)) ?? {}
+    const skills = (await this.deps.skills?.(record, reached)) ?? {}
     const memory = await this.memoryFor(sessionId, record, reached)
     const append = runtime?.connection.systemPromptAppend
       ? kettuAhead(
@@ -4530,8 +4587,7 @@ export class SessionManager {
       const inherited = this.recordOf(params.parentId).worktree
       if (inherited) worktree = { ...inherited }
     } else if (params.worktree !== undefined) {
-      const manager = this.deps.worktrees
-      if (!manager || scratch.contains(projectPath)) {
+      if (scratch.contains(projectPath)) {
         throw invalidParams('A worktree needs a project in a Git repository')
       }
       const request: Parameters<WorktreeManager['create']>[1] = {
@@ -4539,11 +4595,8 @@ export class SessionManager {
         ...(params.worktree.branch === undefined ? {} : { branch: params.worktree.branch }),
         text: (prompt && fallbackTitle(prompt)) ?? '',
       }
-      worktree = await manager.create(projectPath, request)
+      worktree = await this.createWorktree(projectPath, request, params, prompt ?? null)
       newWorktree = true
-      if (prompt && !request.branch?.trim()) {
-        this.nameBranch(params.agentId, projectPath, worktree, prompt, request, params.options)
-      }
     }
     const now = this.now()
     const record: SessionRecord = {
@@ -4613,6 +4666,23 @@ export class SessionManager {
     return this.summary(live.id)
   }
 
+  /** Names the task's branch before it is saved or any step uses it. */
+  async createTaskWorktree(
+    projectPath: string,
+    request: Parameters<WorktreeManager['create']>[1],
+    first: { agentId: AgentId; options: Record<string, string | boolean> },
+  ): Promise<WorktreeRecord> {
+    const message: UserContent[] = [{ type: 'text', text: request.text }]
+    const worktree = await this.createWorktree(
+      projectPath,
+      { ...request, text: fallbackTitle(message) ?? '' },
+      first,
+      message,
+    )
+    await this.finishBranchName(projectPath, worktree)
+    return worktree
+  }
+
   /**
    * A workflow step's session: top-level with `origin: 'task'`, in its task's folder, in the agent's
    * start mode held as a started session's is, so never full access or a plan mode; Kettu answers
@@ -4666,19 +4736,34 @@ export class SessionManager {
     return this.summary(live.id)
   }
 
-  /** Kettu's own message to a session, such as a step's reminder: sent now or queued. */
-  async sendFromKettu(sessionId: string, text: string): Promise<void> {
+  /**
+   * The user's answer on a card the session's thread shows, such as Do it here on a workflow's:
+   * the agent gets it, but it is no bubble of the user's, since the card already says it.
+   */
+  async sendCardAnswer(sessionId: string, text: string): Promise<void> {
+    const live = await this.revive(sessionId)
+    this.sendForUser(live, text, { approval: true })
+  }
+
+  /**
+   * Kettu's own message to a session, such as a step's reminder: sent now or queued. `due` is asked
+   * again when it would go out, and the message is dropped unsent once it says no.
+   */
+  async sendFromKettu(sessionId: string, text: string, due?: () => boolean): Promise<void> {
     const content: UserContent[] = [{ type: 'text', text }]
     const live = await this.revive(sessionId)
     const { status, queue, queuePaused } = live.thread.session
     if (canSend(status) && (queue.length === 0 || queuePaused)) {
-      this.sendPrompt(live, content)
+      if (due && !due()) return
+      this.sendPrompt(live, content, undefined, undefined, undefined, undefined, true)
       return
     }
     if (!canSend(status) && status !== 'running' && status !== 'awaiting_permission') {
       throw busyError(status)
     }
-    this.update(live, { queue: [...queue, { id: randomUUID(), content, at: this.now() }] })
+    const id = randomUUID()
+    live.kettuQueued.set(id, due ?? null)
+    this.update(live, { queue: [...queue, { id, content, at: this.now() }] })
     this.persist(live)
     this.touch(live.id)
   }
@@ -5234,12 +5319,14 @@ export class SessionManager {
 
   /** The thread's notice that the agent asks to sign in, as a failed turn adds it. */
   private signInNotice(live: Live, error: HostError): void {
+    const id = this.nextId(live)
+    live.signInNotices.push(id)
     this.emit(live, [
       {
         op: 'entry.add',
         entry: {
           kind: 'notice',
-          id: this.nextId(live),
+          id,
           severity: 'error',
           title: t('notice.signInNeeded', { agent: this.deps.agents.name(live.record.agentId) }),
           description: error.message,
@@ -5808,10 +5895,28 @@ export class SessionManager {
 
   private agentSignedIn(agentId: AgentId): void {
     for (const live of [...this.live.values()]) {
-      if (live.record.agentId === agentId && live.thread.session.status === 'auth_required') {
-        void this.retry(live.id).catch(() => {})
-      }
+      if (live.record.agentId !== agentId) continue
+      this.settleSignInNotices(live)
+      if (live.thread.session.status === 'auth_required') void this.retry(live.id).catch(() => {})
     }
+  }
+
+  /** The thread's sign-in notices say the agent is signed in now, instead of asking for it. */
+  private settleSignInNotices(live: Live): void {
+    const ids = live.signInNotices.filter((id) => live.thread.byId[id]?.kind === 'notice')
+    live.signInNotices = []
+    if (ids.length === 0) return
+    const agent = this.deps.agents.name(live.record.agentId)
+    const changes = {
+      severity: 'info' as const,
+      title: t('notice.signedIn.title', { agent }),
+      // A description is replaced rather than dropped, since a patch sent as JSON drops undefined.
+      description: t('notice.signedIn.description'),
+    }
+    this.emit(
+      live,
+      ids.map((id) => ({ op: 'entry.update', id, changes })),
+    )
   }
 
   /**
@@ -6905,6 +7010,7 @@ export class SessionManager {
     this.sendPrompt(live, hydrated, undefined, portId, device)
   }
 
+  /** Sends a prompt; `kettu` when Kettu sends it itself, as a step's reminder. */
   private sendPrompt(
     live: Live,
     content: UserContent[],
@@ -6912,8 +7018,10 @@ export class SessionManager {
     portId?: string,
     device?: FromDevice,
     approval?: true,
+    kettu?: true,
   ): void {
     live.used = true
+    live.userTurn = kettu !== true && from === undefined
     const now = this.now()
     const entryId = this.addPrompt(live, content, now, from, device, approval)
     this.startTurn(live, content, now, entryId, portId)
@@ -7609,12 +7717,30 @@ export class SessionManager {
       return
     }
     const { status, queue, queuePaused } = live.thread.session
-    const [next, ...rest] = queue
-    if (!next || (queuePaused && !chosen) || !canSend(status) || this.waitsForWorktree(live)) return
+    if (
+      queue.length === 0 ||
+      (queuePaused && !chosen) ||
+      !canSend(status) ||
+      this.waitsForWorktree(live)
+    ) {
+      return
+    }
+    // Kettu's own messages that are no longer due, such as a reminder for a step that reported
+    // meanwhile, are dropped as their turn comes.
+    const start = queue.findIndex((item) => live.kettuQueued.get(item.id)?.() !== false)
+    const dropped = start === -1 ? queue : queue.slice(0, start)
+    for (const item of dropped) live.kettuQueued.delete(item.id)
+    const [next, ...rest] = queue.slice(dropped.length)
+    if (!next) {
+      this.update(live, { queue: [], queuePaused: false })
+      this.persist(live)
+      return
+    }
     this.update(live, { queue: rest, ...(rest.length === 0 ? { queuePaused: false } : {}) })
     const queuedBy = live.queuedBy.get(next.id)
     live.queuedBy.delete(next.id)
-    this.sendPrompt(live, next.content, next.from, queuedBy, next.device, next.approval)
+    const kettu = live.kettuQueued.delete(next.id) ? true : undefined
+    this.sendPrompt(live, next.content, next.from, queuedBy, next.device, next.approval, kettu)
   }
 
   private pauseQueue(live: Live): void {
@@ -7743,14 +7869,7 @@ export class SessionManager {
       }
       const writer =
         target.agentId === agentId ? runtime : await this.deps.agents.ensureReady(target.agentId)
-      // The reports folder holds every hidden session, made once for the first of them.
-      await mkdir(this.deps.reportsDir, { recursive: true })
-      const title = await writeSessionTitle(writer, {
-        dir: this.deps.reportsDir,
-        model: target.model,
-        message,
-        log: (line) => this.deps.diagnostics.log('warn', line),
-      })
+      const title = await this.askTitle(writer, target.model, message)
       this.applyWrittenTitle(live, title)
     } catch (error) {
       live.titleFailedAt = this.now()
@@ -7761,6 +7880,48 @@ export class SessionManager {
     } finally {
       live.titleWriting = false
     }
+  }
+
+  /** Uses the same title writer for a requirement and falls back to its source session. */
+  async titleTask(sessionId: string, text: string): Promise<string | null> {
+    const live = this.live.get(sessionId)
+    const source = live?.record ?? this.records.get(sessionId)
+    const message: UserContent[] = [{ type: 'text', text }]
+    const firstLine = fallbackTitle(message)
+    function usableTitle(title: string | null): string | null {
+      return listedTitle(listedTitle(title, text), firstLine)
+    }
+    if (source && this.deps.settings().sessionTitles && firstLine) {
+      const target = lightTarget(
+        this.deps.settings().lightModel,
+        source.agentId,
+        live
+          ? (modelOf(live.thread.session.config) ?? source.model ?? null)
+          : (source.model ?? null),
+      )
+      try {
+        const writer = await this.deps.agents.ensureReady(target.agentId)
+        const title = usableTitle(await this.askTitle(writer, target.model, message))
+        if (title) return title
+      } catch (error) {
+        this.deps.diagnostics.log('warn', `Could not title a task: ${(error as Error).message}`)
+      }
+    }
+    return usableTitle(this.title(sessionId) ?? null)
+  }
+
+  private async askTitle(
+    writer: Parameters<typeof writeSessionTitle>[0],
+    model: LightTarget['model'],
+    message: UserContent[],
+  ): Promise<string> {
+    await mkdir(this.deps.reportsDir, { recursive: true })
+    return writeSessionTitle(writer, {
+      dir: this.deps.reportsDir,
+      model,
+      message,
+      log: (line) => this.deps.diagnostics.log('warn', line),
+    })
   }
 
   /** A title a hidden session wrote, under the user's and over the cut first line. */
@@ -8424,7 +8585,7 @@ export class SessionManager {
   /** Tells the task engine a step's turn ended; true for a step's session, which stays quiet. */
   private reportStep(live: Live): boolean {
     if (live.record.origin !== 'task') return false
-    this.deps.task?.current?.turnEnded(live.id)
+    this.deps.task?.current?.turnEnded(live.id, { byUser: live.userTurn })
     return true
   }
 
@@ -8489,12 +8650,14 @@ export class SessionManager {
     if (givenBack) turn.attachments = []
     this.finishTurn(live, turn, null)
     const now = this.now()
+    const noticeId = this.nextId(live)
+    if (authRequired) live.signInNotices.push(noticeId)
     this.emit(live, [
       {
         op: 'entry.add',
         entry: {
           kind: 'notice',
-          id: this.nextId(live),
+          id: noticeId,
           severity: 'error',
           ...(authRequired
             ? {
@@ -9337,9 +9500,11 @@ export class SessionManager {
         this.settleSurfaceAccess(live.id, entryId, 'timeout')
         continue
       }
-      // A publish put off this way is kept as a draft, as by Not now.
+      // A publish card waits its own time past the turn; put off when the session closes, it is
+      // kept as a draft, as by Not now.
       if (requestId.startsWith('market:')) {
-        this.settleMarket(live.id, entryId, { decision: 'ended' })
+        if (keepNonBlocking) live.lateCards.add(entryId)
+        else this.settleMarket(live.id, entryId, { decision: 'ended' })
         continue
       }
       // A settings card ends with its turn, changing nothing.
@@ -9380,7 +9545,8 @@ export class SessionManager {
 
   /** Once no request or new site waits for the user, the session goes back to its turn or rests. */
   private stopWaiting(live: Live): void {
-    const nonBlocking = [...live.permissions.values()].filter((p) => p.nonBlocking).length
+    const nonBlocking =
+      [...live.permissions.values()].filter((p) => p.nonBlocking).length + live.lateCards.size
     if (waitingCount(live) - nonBlocking > 0) return
     if (live.thread.session.status !== 'awaiting_permission') return
     this.update(live, { status: live.turn || live.childRunning ? 'running' : 'ready' })
@@ -10294,37 +10460,39 @@ export class SessionManager {
     })
   }
 
-  /**
-   * Has the session's agent write a name for the new worktree's branch from the first message,
-   * while the worktree is prepared. Only while titles are written, and only for a first message
-   * that waits for preparation, since one that does not goes before a name could come.
-   */
-  private nameBranch(
-    agentId: AgentId,
+  /** Creates a worktree and starts writing its branch name while the caller gets it ready. */
+  private async createWorktree(
     projectPath: string,
-    worktree: WorktreeRecord,
-    message: UserContent[],
-    values: { type?: string; issue?: string },
-    picks: Record<string, string | boolean> = {},
-  ): void {
+    request: Parameters<WorktreeManager['create']>[1],
+    first: { agentId: AgentId; options?: Record<string, string | boolean> },
+    message: UserContent[] | null,
+  ): Promise<WorktreeRecord> {
     const manager = this.deps.worktrees
-    if (!manager || !this.deps.settings().sessionTitles) return
-    if (!manager.settings(projectPath).waitForSetup) return
-    if (titleMessageText(message).trim() === '') return
-    const target = lightTarget(
-      this.deps.settings().lightModel,
-      agentId,
-      this.startModel(agentId, picks),
-    )
-    const naming = new BranchNaming(this.writeBranchSlug(target, message))
-    const { type, issue } = values
-    this.branchNames.set(pathKey(worktree.path, this.deps.platform), {
-      naming,
-      values: {
-        ...(type === undefined ? {} : { type }),
-        ...(issue === undefined ? {} : { issue }),
-      },
-    })
+    if (!manager) throw invalidParams('A worktree needs a project in a Git repository')
+    const worktree = await manager.create(projectPath, request)
+    if (
+      message &&
+      !request.branch?.trim() &&
+      this.deps.settings().sessionTitles &&
+      manager.settings(projectPath).waitForSetup &&
+      titleMessageText(message).trim() !== ''
+    ) {
+      const target = lightTarget(
+        this.deps.settings().lightModel,
+        first.agentId,
+        this.startModel(first.agentId, first.options ?? {}),
+      )
+      const naming = new BranchNaming(this.writeBranchSlug(target, message))
+      const { type, issue } = request
+      this.branchNames.set(pathKey(worktree.path, this.deps.platform), {
+        naming,
+        values: {
+          ...(type === undefined ? {} : { type }),
+          ...(issue === undefined ? {} : { issue }),
+        },
+      })
+    }
+    return worktree
   }
 
   /** The slug the agent's hidden session writes for a branch, or null when it writes none. */
@@ -10364,32 +10532,39 @@ export class SessionManager {
    * agent wrote or keeps its own: at once when no name is being written.
    */
   private afterBranchName(projectPath: string, path: string, release: () => void): void {
-    const key = pathKey(path, this.deps.platform)
-    const entry = this.branchNames.get(key)
-    if (!entry) {
+    const worktree = this.branchNames.has(pathKey(path, this.deps.platform))
+      ? this.worktreeUsers(path)[0]?.worktree
+      : undefined
+    if (!worktree) {
       release()
       return
     }
-    void entry.naming
-      .settle((slug) => this.renameBranch(projectPath, path, { ...entry.values, slug }))
-      .then(() => {
-        if (this.branchNames.get(key) === entry) this.branchNames.delete(key)
-        release()
-      })
+    void this.finishBranchName(projectPath, worktree).then(release)
+  }
+
+  private async finishBranchName(projectPath: string, worktree: WorktreeRecord): Promise<void> {
+    const key = pathKey(worktree.path, this.deps.platform)
+    const entry = this.branchNames.get(key)
+    if (!entry) return
+    await entry.naming.settle((slug) =>
+      this.renameBranch(projectPath, worktree, { ...entry.values, slug }),
+    )
+    if (this.branchNames.get(key) === entry) this.branchNames.delete(key)
   }
 
   /** Names the worktree's branch from the slug, for every session in it; never rejects. */
   private async renameBranch(
     projectPath: string,
-    path: string,
+    worktree: WorktreeRecord,
     values: { slug: string; type?: string; issue?: string },
   ): Promise<void> {
     const manager = this.deps.worktrees
-    const worktree = this.worktreeUsers(path)[0]?.worktree
-    if (!manager || !worktree || worktree.removed !== undefined) return
+    if (!manager || worktree.removed !== undefined) return
+    const { path } = worktree
     try {
       const branch = await manager.renameBranch(projectPath, { ...worktree }, values)
       if (branch === null) return
+      worktree.branch = branch
       this.markWorktree(path, (record) => {
         record.branch = branch
       })
@@ -10986,6 +11161,8 @@ export class SessionManager {
     if (this.takenEarlier(params.agentId, params.acpSessionId) && !params.fork) {
       throw new HostError('busy', t('session.alreadyInSession'))
     }
+    // A fork reads the session itself and fails when it is gone.
+    if (!params.fork) await this.assertListed(params.agentId, projectPath, params.acpSessionId)
     const claude = harnessOf(params.agentId) === 'claude-code'
     const configDir = this.deps.agents.runningConfig(params.agentId)?.chosen ?? null
     let acpSessionId = params.acpSessionId
@@ -11041,6 +11218,36 @@ export class SessionManager {
     this.writeIndexNow()
     this.touch(record.id)
     return this.summary(record.id)
+  }
+
+  /** Fails unless the agent lists the session for the folder, reading every page it gives. */
+  private async assertListed(
+    agentId: AgentId,
+    projectPath: string,
+    acpSessionId: string,
+  ): Promise<void> {
+    const runtime = await this.deps.agents.ensureReady(agentId)
+    if (!runtime.init.capabilities.listSessions) {
+      throw new HostError(
+        'agent_unavailable',
+        t('session.cannotList', { agent: this.deps.agents.name(agentId) }),
+      )
+    }
+    const asked = new Set<string | null>()
+    let cursor: string | null = null
+    try {
+      // A cursor the agent gives twice would never end.
+      while (!asked.has(cursor)) {
+        asked.add(cursor)
+        const page = await runtime.connection.listSessions(projectPath, cursor)
+        if (page.sessions.some((item) => item.sessionId === acpSessionId)) return
+        if (page.nextCursor === null) break
+        cursor = page.nextCursor
+      }
+    } catch (error) {
+      throw agentError(error)
+    }
+    throw notFound(t('session.notInAgent', { agent: this.deps.agents.name(agentId) }))
   }
 
   /**

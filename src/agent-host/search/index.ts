@@ -6,6 +6,7 @@ import { mkdirSync, rmSync } from 'node:fs'
 import path from 'node:path'
 import { DatabaseSync, type SQLOutputValue, type StatementSync } from 'node:sqlite'
 import { foldBulk } from '@shared/search-fold'
+import { transaction } from '../sqlite'
 import type { IndexedMessage } from './messages'
 import { snippetOf } from './snippet'
 
@@ -103,6 +104,21 @@ export function isIndexDamaged(error: unknown): boolean {
 
 class WrongIndexError extends Error {}
 
+/**
+ * Whether this SQLite can run the trigram index a file already has. A file made by a Node.js
+ * with FTS5 can be opened by one without (22.13 to 22.15): reads of the messages still work, but
+ * every write fires a trigger into a module that is not there.
+ */
+function runsTrigram(db: DatabaseSync): boolean {
+  try {
+    db.prepare('SELECT 1 FROM message_fts LIMIT 0')
+    return true
+  } catch (error) {
+    if (/no such (module|tokenizer)/i.test(message(error))) return false
+    throw error
+  }
+}
+
 /** An FTS5 phrase that matches `word` as it stands. */
 const phrase = (word: string): string => `"${word.replace(/"/g, '""')}"`
 
@@ -141,7 +157,8 @@ export class SearchIndex {
     try {
       db = new DatabaseSync(file, { readOnly: true })
       db.exec('PRAGMA busy_timeout = 5000')
-      return new SearchIndex(db, SearchIndex.readMeta(db).fts)
+      const { fts } = SearchIndex.readMeta(db)
+      return new SearchIndex(db, fts && runsTrigram(db))
     } catch (error) {
       db?.close()
       if (resultCode(error) !== SQLITE_CANTOPEN) {
@@ -178,7 +195,13 @@ export class SearchIndex {
       db.exec('PRAGMA synchronous = NORMAL')
       db.exec('PRAGMA busy_timeout = 5000')
       const empty = db.prepare('SELECT count(*) AS n FROM sqlite_master').get()?.n === 0
-      if (!empty) return new SearchIndex(db, SearchIndex.readMeta(db).fts)
+      if (!empty) {
+        const { fts } = SearchIndex.readMeta(db)
+        if (fts && !runsTrigram(db)) {
+          throw new WrongIndexError('its trigram index needs an FTS5 this SQLite does not have')
+        }
+        return new SearchIndex(db, fts)
+      }
       db.exec('BEGIN')
       db.exec(TABLES)
       let fts = false
@@ -211,15 +234,7 @@ export class SearchIndex {
   }
 
   private transaction<T>(run: () => T): T {
-    this.db.exec('BEGIN')
-    try {
-      const result = run()
-      this.db.exec('COMMIT')
-      return result
-    } catch (error) {
-      if (this.db.isTransaction) this.db.exec('ROLLBACK')
-      throw error
-    }
+    return transaction(this.db, run)
   }
 
   // Writing.

@@ -35,6 +35,7 @@
     "alreadyInSession": "This session is already part of a Kettu session",
     "heldOutside": "This session is still open in a terminal. Exit it there with /exit and try again, or fork a copy to carry on in Kettu.",
     "cannotList": "{{agent}} cannot list its sessions",
+    "notInAgent": "{{agent}} has no such session for this folder. It may have been deleted.",
     "configBetweenTurns": "{{option}} changes between turns",
     "ultracodeDescription": "Dynamic workflows for substantial tasks",
     "promptTooLarge": "The message is over 10 MB with its attachments. Remove some to send.",
@@ -64,6 +65,10 @@
       "description": "{{agent}} cannot replay sessions, so this one continues without its history."
     },
     "signInNeeded": "{{agent}} needs you to sign in",
+    "signedIn": {
+      "title": "Signed in to {{agent}}",
+      "description": "The session carries on."
+    },
     "closedBeforeSent": {
       "title": "The session closed before your message was sent",
       "description": "It waits in the queue until you resume it."
@@ -282,6 +287,7 @@
     "nodeMissing": "{{agent}} runs on Node.js, and node was not found on PATH.",
     "nodeToInstall": "{{agent}} is installed with npm on first use, which needs Node.js, and node was not found on PATH.",
     "nodeOutdated": "{{agent}} needs Node.js {{required}} or later; {{installed}} is installed.",
+    "uvOutdated": "{{agent}} needs uv {{required}} or later; {{installed}} is installed. Update it with `uv self update`, or with the tool you installed it with.",
     "npmMissing": "{{agent}} is installed with npm on first use, and npm was not found on PATH. {{hint}}",
     "programUnusable": "The program chosen for {{agent}} ({{path}}) cannot be run.",
     "commandMissing": "{{command}} was not found on PATH. {{hint}}",
@@ -860,7 +866,15 @@
     "libraryFull": "Your workflow library is full",
     "downloadFailed": "Could not download the workflow: {{error}}",
     "downloadStatus": "GitHub answered {{status}} for the workflow",
-    "listingProblem": "The workflow has a problem, so nothing was installed: {{problem}}"
+    "listingProblem": "The workflow has a problem, so nothing was installed: {{problem}}",
+    "cardNotFound": "This card is no longer there",
+    "cardAnswered": "This card was already answered",
+    "cardBusy": "Start is already under way",
+    "connectFirst": "Connect {{name}} first",
+    "listingChanged": "The Marketplace's version is not the one the card showed. Ask the agent for the card again.",
+    "noWorkflowFile": "That version of the workflow has no workflow file",
+    "noProject": "The session has no project to start the task in",
+    "toolGone": "Kettu cannot find {{name}} in the Marketplace now"
   },
   "tasks": {
     "notFound": "No such task",
@@ -873,12 +887,16 @@
     "nothingToRetry": "This step waits for nothing to retry",
     "stillRunning": "Cancel the task before deleting it",
     "noteEmpty": "A note needs text",
+    "sendBackEmpty": "Say what to change, or leave a comment on the document, before sending it back",
     "cannotPin": "This step has started, so it cannot be pinned now",
     "needsYou": "{{title}} needs you",
     "needsYouBody": "{{step}} · {{workflow}}",
     "done": "{{title}} is done",
     "dropped": "{{title}} ended without being done",
-    "endedBody": "{{workflow}} · {{steps}} steps"
+    "cancelled": "{{title}} was cancelled",
+    "endedBody": "{{workflow}} · {{steps}} steps",
+    "notWritten": "Only a task that ended done on a workflow its agent wrote for it can keep or publish that workflow",
+    "noOrigin": "The conversation this task started from is gone"
   },
   "marketPublish": {
     "handleInvalid": "A publisher name is 1 to 32 lowercase letters, digits and hyphens, starting and ending with a letter or digit.",

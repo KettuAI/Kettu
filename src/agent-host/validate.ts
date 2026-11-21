@@ -447,6 +447,35 @@ function taskStart(value: unknown, platform: Platform): HostParams<'tasks.start'
   }
 }
 
+const SUGGESTION_ID = /^wfs-[a-z2-7]{12}$/
+const SUGGESTION_ANSWERS: ReadonlySet<unknown> = new Set([
+  'start',
+  'decline',
+  'another',
+  'reconsider',
+  'save',
+  'not_save',
+])
+
+function suggestionId(o: Fields): string {
+  const id = string(o, 'id', 16)
+  if (!SUGGESTION_ID.test(id)) throw invalidParams('id must name a workflow card')
+  return id
+}
+
+function answerSuggestion(value: unknown): HostParams<'workflows.answerSuggestion'> {
+  const o = fields(value)
+  if (!SUGGESTION_ANSWERS.has(o.answer)) {
+    throw invalidParams('answer must be start, decline, another, reconsider, save or not_save')
+  }
+  return {
+    id: suggestionId(o),
+    answer: o.answer as HostParams<'workflows.answerSuggestion'>['answer'],
+    ...(o.agentId === undefined ? {} : { agentId: agentId(o) }),
+    ...(o.options === undefined ? {} : { options: configValues(o.options) }),
+  }
+}
+
 function workflowAddSource(value: unknown): HostParams<'workflows.add'> {
   const o = fields(value)
   if (o.kind === 'url') return { kind: 'url', url: string(o, 'url', URL_CHARS) }
@@ -1675,6 +1704,13 @@ export function createValidators(platform: Platform): Validators {
         pinned: flag(o, 'pinned'),
       }
     },
+    'projects.move': (params) => {
+      const o = fields(params)
+      return {
+        path: absolutePath(o, 'path', platform),
+        before: o.before === null ? null : absolutePath(o, 'before', platform),
+      }
+    },
     'projects.noProject': none,
     'projects.worktreeSettings': folder,
     'projects.setWorktreeSettings': (params) => {
@@ -1776,7 +1812,7 @@ export function createValidators(platform: Platform): Validators {
       if (
         raw !== 'system' &&
         !/^\d+-\d+(,\d+-\d+)*$/.test(raw) &&
-        !/^msg_[A-Za-z0-9]+(,msg_[A-Za-z0-9]+)*$/.test(raw)
+        !/^msg_[A-Za-z0-9_]+(,msg_[A-Za-z0-9_]+)*$/.test(raw)
       ) {
         throw invalidParams('raw must name records of a page')
       }
@@ -2001,6 +2037,9 @@ export function createValidators(platform: Platform): Validators {
     },
     'workflows.settings': none,
     'workflows.setSettings': workflowSettingsChange,
+    'workflows.suggestions': (params) => ({ sessionId: sessionId(fields(params)) }),
+    'workflows.suggestionFile': (params) => ({ id: suggestionId(fields(params)) }),
+    'workflows.answerSuggestion': answerSuggestion,
     'tasks.list': none,
     'tasks.get': (params) => ({ taskId: taskId(fields(params)) }),
     'tasks.sessions': (params) => ({ taskId: taskId(fields(params)) }),
@@ -2040,6 +2079,8 @@ export function createValidators(platform: Platform): Validators {
       const o = fields(params)
       return { taskId: taskId(o), stepId: stepId(o), pick: stepPickOf(o.pick ?? null) }
     },
+    'tasks.saveWorkflow': (params) => ({ taskId: taskId(fields(params)) }),
+    'tasks.publishWorkflow': (params) => ({ taskId: taskId(fields(params)) }),
     'tasks.update': (params) => {
       const o = fields(params)
       const title = optionalString(o, 'title', TASK_TITLE_CHARS)

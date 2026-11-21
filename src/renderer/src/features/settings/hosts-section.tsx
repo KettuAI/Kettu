@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { Add01Icon, ComputerIcon, LaptopIcon } from '@hugeicons/core-free-icons'
 import { Trans, useTranslation } from 'react-i18next'
 import type { HostStatus, HostsStatus } from '@shared/remote/hosts'
@@ -18,9 +18,11 @@ export function AddHostButton() {
   const { t } = useTranslation('settings')
   const keyFailed = useHostsStore((s) => s.status?.keyFailed === true)
   const [open, setOpen] = useState(false)
+  const trigger = useRef<HTMLButtonElement>(null)
   return (
     <>
       <SetButton
+        ref={trigger}
         variant="primary"
         icon={<Icon icon={Add01Icon} size={14} />}
         disabled={keyFailed}
@@ -28,7 +30,7 @@ export function AddHostButton() {
       >
         {t('hosts.add.button')}
       </SetButton>
-      <AddHostDialog open={open} onOpenChange={setOpen} />
+      <AddHostDialog open={open} onOpenChange={setOpen} finalFocus={trigger} />
     </>
   )
 }

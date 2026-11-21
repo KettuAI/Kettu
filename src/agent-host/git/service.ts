@@ -98,6 +98,8 @@ interface ProjectState {
   projectPath: string
   cache: RepoCache
   status: GitStatus | null
+  /** Tells apart edits that leave `status` the same; see `readStatus`. */
+  fingerprint: string
   seq: number
   refresher: { request(): Promise<Snapshot> }
   retainers: Set<string>
@@ -266,6 +268,7 @@ export function createGitService(
         projectPath,
         cache: createRepoCache(),
         status: null,
+        fingerprint: '',
         seq: 0,
         refresher: createCoalescer(() => track(runRefresh(created))),
         retainers: new Set(),
@@ -324,15 +327,23 @@ export function createGitService(
 
   async function runRefresh(state: ProjectState): Promise<Snapshot> {
     let next: GitStatus
+    let fingerprint = state.fingerprint
     try {
-      next = await readStatus({ projectPath: state.projectPath, exec, cache: state.cache, now })
+      const read = await readStatus({
+        projectPath: state.projectPath,
+        exec,
+        cache: state.cache,
+        now,
+      })
+      next = read.status
+      fingerprint = read.fingerprint
       logChange(state, 'status', 'warn', null)
     } catch (error) {
       if (disposed)
         return snapshotOf(state) ?? { status: emptyStatus(state.projectPath, now()), seq: 0 }
       next = failedStatus(state, error)
     }
-    return commitStatus(state, next)
+    return commitStatus(state, next, fingerprint)
   }
 
   function failedStatus(state: ProjectState, error: unknown): GitStatus {
@@ -343,12 +354,14 @@ export function createGitService(
     return { ...emptyStatus(state.projectPath, now()), stale: !missing }
   }
 
-  function commitStatus(state: ProjectState, next: GitStatus): Snapshot {
+  function commitStatus(state: ProjectState, next: GitStatus, fingerprint: string): Snapshot {
     const previous = state.status
+    const edited = fingerprint !== state.fingerprint
     state.status = next
+    state.fingerprint = fingerprint
     state.seq += 1
     const snapshot = { status: next, seq: state.seq }
-    if (previous === null || !sameStatus(previous, next)) changed.emit(next)
+    if (previous === null || edited || !sameStatus(previous, next)) changed.emit(next)
     if (isLive(state)) {
       ensureWatcher(state, next)
       triggerPullRequests(state, previous, next)

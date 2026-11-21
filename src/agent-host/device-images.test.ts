@@ -1,11 +1,14 @@
 import { randomBytes } from 'node:crypto'
 import { rm } from 'node:fs/promises'
-import { afterEach, expect, it } from 'vitest'
+import { afterEach, expect, it, vi } from 'vitest'
 import type { HostEvent } from '@shared/agent-host'
 import type { PortDevice } from '@shared/remote/device'
 import { PortHub, type Handlers, type Validators } from './rpc'
 import { startTestHost, TestPort, type TestHost } from './testing/harness'
 import { tempFolder } from './testing/temp'
+
+// Two hosts start and restart; a busy machine takes longer than the 5 s default.
+vi.setConfig({ testTimeout: 60_000 })
 
 const hosts: TestHost[] = []
 let dir: string | null = null

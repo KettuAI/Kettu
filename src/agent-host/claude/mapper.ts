@@ -213,6 +213,11 @@ export class ClaudeMapper {
   /** What the session was last told about `working`; null before anything ran. */
   private told: { running: boolean; listed: boolean } | null = null
   private compacting: string | null = null
+  /**
+   * The compaction whose `compact_result` came before its `compact_boundary`, which the boundary
+   * still ends: one compaction is one entry whichever of the two comes first.
+   */
+  private compacted: string | null = null
   /** In a replay: the subagents its history started, whose own histories follow. */
   readonly replayed: ReplayedSubagent[] = []
   /** In a subagent's replay: its parent, whose prompt its first message is. */
@@ -1039,6 +1044,7 @@ export class ClaudeMapper {
         if (status === 'compacting' && !this.compacting) {
           const id = `c:${String(message.uuid ?? Date.now())}`
           this.compacting = id
+          this.compacted = null
           deliveries.push({
             sessionId: parent,
             map: (ctx) => {
@@ -1053,6 +1059,7 @@ export class ClaudeMapper {
           const id = this.compacting
           this.compacting = null
           const failed = message.compact_result === 'failed'
+          this.compacted = failed ? null : id
           const error = typeof message.compact_error === 'string' ? message.compact_error : ''
           deliveries.push({
             sessionId: parent,
@@ -1071,15 +1078,19 @@ export class ClaudeMapper {
         return deliveries
       }
       case 'compact_boundary': {
-        const id = this.compacting ?? `c:${String(message.uuid ?? Date.now())}`
+        const id = this.compacting ?? this.compacted ?? `c:${String(message.uuid ?? Date.now())}`
         this.compacting = null
+        this.compacted = null
         return [
           {
             sessionId: parent,
             map: (ctx) => {
               const out = output()
-              if (ctx.thread.byId[id]?.kind === 'compaction') {
-                out.patches.push({ op: 'entry.update', id, changes: { status: 'completed' } })
+              const entry = ctx.thread.byId[id]
+              if (entry?.kind === 'compaction') {
+                if (entry.status !== 'completed') {
+                  out.patches.push({ op: 'entry.update', id, changes: { status: 'completed' } })
+                }
               } else {
                 addEntry(ctx, out, { kind: 'compaction', id, status: 'completed', summary: '' })
               }

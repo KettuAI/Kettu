@@ -7,6 +7,7 @@
   "or": " 或 ",
   "and": "和",
   "row": {
+    "startedHere": "从这里开始",
     "collapse": "收起步骤",
     "expand": "展开步骤",
     "stepOf": "第 {{at}} 步，共 {{total}} 步",
@@ -83,7 +84,9 @@
     "retry": "重试",
     "missing": "这条需求不在了",
     "missingBody": "它被删除了，或者它所在的电脑不再列出它。",
-    "newSession": "新建会话"
+    "newSession": "新建会话",
+    "delivered": "交付",
+    "steps": "步骤"
   },
   "timeline": {
     "started": "按 {{workflow}} 开始 · {{time}}",
@@ -108,7 +111,8 @@
     "version": "第 {{version}} 版 · 在右边打开",
     "comments_one": "退回时，你在文档上的评论会一起交回给 {{agent}}",
     "comments_other": "退回时，你在文档上的 {{count}} 条评论会一起交回给 {{agent}}",
-    "notePlaceholder": "给 {{agent}} 的说明（可选）",
+    "notePlaceholder": "退回时，写下要 {{agent}} 改什么",
+    "sendBackEmpty": "退回前写一句要改什么，或者在文档上留评论。",
     "approve": "批准",
     "approveNext": "批准，进入{{next}}",
     "sendBack": "退回"
@@ -133,6 +137,7 @@
     "effort": "{{agent}} 不再提供固定时选的推理强度。",
     "no_kettu": "{{agent}} 没有 Kettu 的工具，步骤要用它上报。",
     "not_ready": "{{agent}} 还没准备好。",
+    "tools": "它要用 {{tools}}，这台电脑上没装或已关掉。在市场里装好后重试。",
     "noAgent": "没有允许 Auto 选的智能体。到「设置 › 智能体」里打开一个，或者固定一个。",
     "noPicker": "没有步骤交棒给它，需要你固定一个智能体。",
     "picking": "它在等前一步选人。",
@@ -196,6 +201,21 @@
     "ended": "这条需求已经结束",
     "noAdvance": "补充不推进流程",
     "send": "补充",
-    "textOnly": "补充只能是文字"
+    "textOnly": "补充只能是文字",
+    "doneLine": "需求完成",
+    "doneOn": "需求完成 · {{branch}}",
+    "doneMerged": "需求完成 · {{branch}} 已合并",
+    "droppedLine": "需求结束：不值得做",
+    "cancelledLine": "需求已取消"
+  },
+  "deliverables": {
+    "version": "第 {{version}} 版"
+  },
+  "steps": {
+    "sentBack_one": "退回 {{count}} 次",
+    "sentBack_other": "退回 {{count}} 次",
+    "rounds_one": "{{count}} 轮",
+    "rounds_other": "{{count}} 轮",
+    "notRun": "没有运行"
   }
 }

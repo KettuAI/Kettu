@@ -4,9 +4,12 @@
 // picked by the agent that hands off to it; the engine only checks that a pick holds.
 
 import { randomBytes } from 'node:crypto'
+import { stat } from 'node:fs/promises'
+import path from 'node:path'
 import {
+  DEFAULT_WORKING_STEPS,
   MAX_TASK_NOTES,
-  MAX_WORKING_STEPS,
+  MAX_TASK_STEPS,
   isBackArrow,
   stepIndex,
   type CheckLine,
@@ -15,6 +18,8 @@ import {
   type ReportCheck,
   type SentBack,
   type SessionTaskRef,
+  type StepDeliverable,
+  type StepTools,
   type WorkflowOutcome,
   type WorkflowStep,
   type StepPick,
@@ -31,7 +36,7 @@ import { t } from '../i18n'
 import type { LogFn, WorktreeRecord } from '../storage'
 import type { TaskGit } from './git'
 import { arrowKey, forwardReach, outcomeOf, stepOf } from './graph'
-import type { WorkflowLibrary } from './library'
+import type { ResolvedWorkflow, WorkflowLibrary } from './library'
 import {
   TASK_ID,
   type HeldPick,
@@ -49,7 +54,7 @@ import {
   type PickInput,
   type WorkflowAgent,
 } from './picks'
-import { againPrompt, notePrompt, reminderPrompt, RESUME_PROMPT, stepPrompt } from './prompts'
+import { againPrompt, notePrompt, reminderPrompt, resumePrompt, stepPrompt } from './prompts'
 import { canPinStep, LIVE, needsOf, summaryOf, viewOf, WORKING } from './views'
 
 /** Refused picks in a row before the task waits for the user. */
@@ -70,8 +75,11 @@ export interface TaskStepStart {
 
 export interface TaskSessions {
   createStep(params: TaskStepStart): Promise<SessionSummary>
-  /** Sends a message from Kettu, or queues it while the session works. */
-  send(sessionId: string, text: string): Promise<void>
+  /**
+   * Sends a message from Kettu, or queues it while the session works; a queued one goes out only
+   * if `due`, asked when its turn comes, still says so.
+   */
+  send(sessionId: string, text: string, due?: () => boolean): Promise<void>
   /** Stops the session's turn, if one runs. */
   cancel(sessionId: string): Promise<void>
   delete(sessionId: string): Promise<void>
@@ -82,6 +90,7 @@ export interface TaskWorktrees {
   create(
     projectPath: string,
     request: { base: string; branch?: string; text: string },
+    first?: Pick<TaskStart, 'agentId' | 'options'>,
   ): Promise<WorktreeRecord>
   /** Removes a worktree that is done with, never one with changes not committed. */
   remove(projectPath: string, record: WorktreeRecord, branch: 'keep' | 'delete'): Promise<void>
@@ -101,8 +110,13 @@ export interface TaskDocuments {
 export interface TaskEvents {
   changed(view: TaskView): void
   removed(taskId: string): void
-  /** The task first needs the user, or it ended. */
+  /** The task starts to need the user, or it ended or was cancelled. */
   attention(task: TaskSummary, kind: 'needs-you' | 'ended'): void
+  /**
+   * The task ended, done, dropped or cancelled, as it stands then; `written` when it ran on a
+   * workflow an agent wrote for it alone.
+   */
+  ended?(view: TaskView, written: boolean): void
 }
 
 export interface TaskEngineDeps {
@@ -113,6 +127,8 @@ export interface TaskEngineDeps {
   }
   library: WorkflowLibrary
   sessions: TaskSessions
+  /** Writes a suggested task title, with the source session as its fallback. */
+  titleTask(sessionId: string, text: string): Promise<string | null>
   /** Null on a host that makes no worktrees: every step works in the project folder. */
   worktrees: TaskWorktrees | null
   git: TaskGit
@@ -126,6 +142,12 @@ export interface TaskEngineDeps {
   /** The pick the tray's option values stand for. */
   pickOf(agentId: AgentId, options: Record<string, string | boolean>): StepPick
   events: TaskEvents
+  /** Step sessions working at once across every task, as the user set it. */
+  workingLimit?(): number
+  /** The pull requests the sessions opened or found on their branches, as URLs. */
+  pullRequests?(sessionIds: readonly string[]): string[]
+  /** Whether a file or folder a report hands over is there. */
+  exists?(path: string): Promise<boolean>
   log: LogFn
   now?(): number
   random?(): string
@@ -135,6 +157,8 @@ export interface ReportInput {
   outcome: string | null
   note: string | null
   artifactId: string | null
+  /** Files, by a path absolute or from the step's folder, and links it hands over. */
+  deliverables?: StepDeliverable[] | null
 }
 
 export interface ReportResult {
@@ -155,8 +179,8 @@ export interface PickResult {
 export interface TaskSessionHooks {
   /** The step's session exists, before anything is sent. */
   sessionCreated(sessionId: string, ref: SessionTaskRef): void
-  /** A turn of the session ended. */
-  turnEnded(sessionId: string): void
+  /** A turn of the session ended; `byUser` when the user's own message started it. */
+  turnEnded(sessionId: string, turn: { byUser: boolean }): void
   /** A request waits for the user in the session, or the last was answered. */
   waiting(sessionId: string, waiting: boolean): void
   sessionGone(sessionId: string): void
@@ -170,6 +194,15 @@ export interface TaskSessionHooksRef {
 
 const MAIN = 'main'
 
+async function pathExists(file: string): Promise<boolean> {
+  try {
+    await stat(file)
+    return true
+  } catch {
+    return false
+  }
+}
+
 export class TaskEngine implements TaskSessionHooks {
   private readonly tasks = new Map<string, TaskRecord>()
   /** Rounds by their session. */
@@ -179,10 +212,12 @@ export class TaskEngine implements TaskSessionHooks {
   private closed = false
   private readonly now: () => number
   private readonly random: () => string
+  private readonly exists: (path: string) => Promise<boolean>
 
   constructor(private readonly deps: TaskEngineDeps) {
     this.now = deps.now ?? Date.now
     this.random = deps.random ?? (() => randomBytes(6).toString('hex'))
+    this.exists = deps.exists ?? pathExists
   }
 
   // Loading and the lock every change takes.
@@ -207,7 +242,11 @@ export class TaskEngine implements TaskSessionHooks {
             changed = true
           } else if ((round.state === 'working' || round.state === 'picking') && round.sessionId) {
             round.reminded = false
-            void this.message(round.sessionId, RESUME_PROMPT)
+            const owed =
+              round.state === 'picking' && round.picks
+                ? round.picks.needed.filter((id) => !round.picks!.made.includes(id))
+                : null
+            void this.message(round.sessionId, resumePrompt(owed))
           }
         }
         if (changed) this.save(task)
@@ -235,7 +274,26 @@ export class TaskEngine implements TaskSessionHooks {
   }
 
   get(taskId: string): TaskView {
-    return viewOf(this.task(taskId))
+    return this.view(this.task(taskId))
+  }
+
+  /** The draft a task that ended done ran on, which an agent wrote for it alone; null otherwise. */
+  writtenDraft(taskId: string): string | null {
+    const task = this.task(taskId)
+    return task.workflowSource === 'agent' && task.status === 'done' ? task.workflowId : null
+  }
+
+  /** The drafts tasks ran on, which stay as long as their tasks. */
+  draftIds(): Set<string> {
+    const ids = new Set<string>()
+    for (const task of this.tasks.values())
+      if (task.workflowSource === 'agent') ids.add(task.workflowId)
+    return ids
+  }
+
+  private view(task: TaskRecord): TaskView {
+    const sessions = [...new Set(task.rounds.flatMap((r) => (r.sessionId ? [r.sessionId] : [])))]
+    return viewOf(task, this.deps.pullRequests?.(sessions) ?? [])
   }
 
   /** The step a session works for, as its summary names it. */
@@ -246,6 +304,24 @@ export class TaskEngine implements TaskSessionHooks {
     return round ? { taskId: ref.taskId, stepId: round.stepId, roundId: round.id } : null
   }
 
+  /** How long the workflow's tasks that ended done took: their count and the middle one. */
+  pastRuns(workflowId: string): { runs: number; medianMs: number | null } {
+    const took = [...this.tasks.values()]
+      .filter((t) => t.workflowId === workflowId && t.status === 'done' && t.endedAt !== null)
+      .map((t) => t.endedAt! - t.createdAt)
+      .sort((a, b) => a - b)
+    if (took.length === 0) return { runs: 0, medianMs: null }
+    const mid = Math.floor(took.length / 2)
+    const medianMs = took.length % 2 ? took[mid]! : Math.round((took[mid - 1]! + took[mid]!) / 2)
+    return { runs: took.length, medianMs }
+  }
+
+  /** The MCP servers and Skills a step's session is handed, whoever does the step. */
+  toolsOf(ref: SessionTaskRef): StepTools | null {
+    const task = this.tasks.get(ref.taskId)
+    return task ? (stepOf(task.workflow, ref.stepId)?.tools ?? null) : null
+  }
+
   private task(taskId: string): TaskRecord {
     const task = this.tasks.get(taskId)
     if (!task) throw notFound(t('tasks.notFound'))
@@ -254,8 +330,16 @@ export class TaskEngine implements TaskSessionHooks {
 
   // Starting.
 
-  async start(params: TaskStart, from?: { sessionId: string }): Promise<TaskView> {
-    const resolved = await this.deps.library.resolve(params.workflowId)
+  /**
+   * Starts a task through a library workflow, or through `resolved`, one the user approved on a
+   * card, such as a session's agent wrote for this requirement alone.
+   */
+  async start(
+    params: TaskStart,
+    from?: { sessionId: string },
+    given?: ResolvedWorkflow,
+  ): Promise<TaskView> {
+    const resolved = given ?? (await this.deps.library.resolve(params.workflowId))
     const projectPath = await this.deps.resolveProject(params.projectPath)
     const first = resolved.workflow.steps[0]!
     if (first.by === 'agent') {
@@ -269,20 +353,31 @@ export class TaskEngine implements TaskSessionHooks {
         )
       }
     }
-    const title = (params.title?.trim() || firstLine(params.text)).slice(0, 120)
-    let worktree: WorktreeRecord | null = null
-    if (this.deps.worktrees && (await this.deps.git.isRepo(projectPath))) {
-      worktree = await this.deps.worktrees.create(projectPath, {
-        base: params.worktree?.base ?? 'HEAD',
-        ...(params.worktree?.branch ? { branch: params.worktree.branch } : {}),
-        text: title,
-      })
-    }
+    const explicitTitle = params.title?.trim()
+    const worktrees = this.deps.worktrees
+    const hasWorktree = worktrees && (await this.deps.git.isRepo(projectPath))
+    const [title, worktree] = await Promise.all([
+      explicitTitle ||
+        (from
+          ? this.deps.titleTask(from.sessionId, params.text).then((title) => title ?? resolved.name)
+          : firstLine(params.text)),
+      hasWorktree
+        ? worktrees.create(
+            projectPath,
+            {
+              base: params.worktree?.base ?? 'HEAD',
+              ...(params.worktree?.branch ? { branch: params.worktree.branch } : {}),
+              text: params.text,
+            },
+            { agentId: params.agentId, options: params.options },
+          )
+        : null,
+    ])
     const now = this.now()
     const task: TaskRecord = {
       id: `t-${this.random().padEnd(12, '0').slice(0, 12)}`,
       projectPath,
-      title,
+      title: title.slice(0, 120),
       text: params.text,
       workflowId: resolved.id,
       workflowName: resolved.name,
@@ -319,7 +414,7 @@ export class TaskEngine implements TaskSessionHooks {
       this.advance(task)
       this.save(task)
       this.pump()
-      return viewOf(task)
+      return this.view(task)
     })
   }
 
@@ -500,22 +595,32 @@ export class TaskEngine implements TaskSessionHooks {
     return `r${task.rounds.length + 1}-${this.random().slice(0, 6)}`
   }
 
-  /** Starts queued rounds while fewer than the limit of step sessions work, oldest first. */
+  /**
+   * Starts queued rounds, oldest first, while fewer step sessions work than the host's limit and
+   * than a task's own, so one task with parallel branches leaves room for the others.
+   */
   private pump(): void {
     if (this.closed) return
+    const limit = this.deps.workingLimit?.() ?? DEFAULT_WORKING_STEPS
     let working = 0
+    const byTask = new Map<string, number>()
     const queued: { task: TaskRecord; round: RoundRecord }[] = []
     for (const task of this.tasks.values()) {
       if (task.status !== 'running') continue
       for (const round of task.rounds) {
-        if (WORKING.has(round.state)) working++
-        else if (round.state === 'queued') queued.push({ task, round })
+        if (WORKING.has(round.state)) {
+          working++
+          byTask.set(task.id, (byTask.get(task.id) ?? 0) + 1)
+        } else if (round.state === 'queued') queued.push({ task, round })
       }
     }
     queued.sort((a, b) => a.round.queuedAt - b.round.queuedAt)
     for (const { task, round } of queued) {
-      if (working >= MAX_WORKING_STEPS) break
+      if (working >= limit) break
+      const own = byTask.get(task.id) ?? 0
+      if (own >= MAX_TASK_STEPS) continue
       working++
+      byTask.set(task.id, own + 1)
       round.state = 'starting'
       this.save(task)
       void this.launch(task.id, round.id)
@@ -538,9 +643,15 @@ export class TaskEngine implements TaskSessionHooks {
       }
       // Before the prompt goes, so what the agent writes counts as this round's.
       round.startedAt = this.now()
-      if (round.sessionId && this.deps.sessions.has(round.sessionId)) {
-        this.bySession.set(round.sessionId, { taskId, roundId })
-        await this.deps.sessions.send(round.sessionId, againPrompt(task, round, where))
+      let sessionId = round.sessionId
+      if (sessionId && this.deps.sessions.has(sessionId)) {
+        this.bySession.set(sessionId, { taskId, roundId })
+        // A session made for this round before a restart may never have had its first message.
+        const own = !task.rounds.some((r) => r !== round && r.sessionId === sessionId)
+        await this.deps.sessions.send(
+          sessionId,
+          own ? stepPrompt(task, round, where) : againPrompt(task, round, where),
+        )
       } else {
         const step = stepOf(task.workflow, round.stepId)!
         const options =
@@ -555,11 +666,16 @@ export class TaskEngine implements TaskSessionHooks {
           title: `${task.title} · ${step.name}`,
           task: { taskId, stepId: round.stepId, roundId },
         })
+        sessionId = summary.id
         round.sessionId = summary.id
         this.bySession.set(summary.id, { taskId, roundId })
       }
       await this.locked(() => {
-        if (round.state !== 'starting') return
+        if (round.state !== 'starting') {
+          // Cancelled, ended or sent back while its session started: it must not work on.
+          if (sessionId) void this.deps.sessions.cancel(sessionId).catch(() => {})
+          return
+        }
         round.state = 'working'
         this.save(task)
       })
@@ -639,7 +755,10 @@ export class TaskEngine implements TaskSessionHooks {
   sessionCreated(sessionId: string, ref: SessionTaskRef): void {
     this.bySession.set(sessionId, { taskId: ref.taskId, roundId: ref.roundId })
     const found = this.roundOf(ref.taskId, ref.roundId)
-    if (found && found.round.sessionId === null) found.round.sessionId = sessionId
+    if (!found || found.round.sessionId !== null) return
+    found.round.sessionId = sessionId
+    // Kept at once, so a restart before the step starts goes on in this session.
+    this.save(found.task)
   }
 
   working(sessionId: string): boolean {
@@ -647,7 +766,9 @@ export class TaskEngine implements TaskSessionHooks {
     return found !== null && (found.round.state === 'working' || found.round.state === 'starting')
   }
 
-  turnEnded(sessionId: string): void {
+  turnEnded(sessionId: string, turn: { byUser: boolean }): void {
+    // A turn that answered the user's own message owes no report; only the agent's own turns do.
+    if (turn.byUser) return
     void this.locked(() => {
       const found = this.roundOfSession(sessionId)
       if (!found) return
@@ -658,7 +779,14 @@ export class TaskEngine implements TaskSessionHooks {
       if (!round.reminded) {
         round.reminded = true
         this.save(task)
-        void this.message(sessionId, reminderPrompt(picking))
+        // Queued behind other messages, it may come after the step already reported or picked.
+        const state = round.state
+        const due = () =>
+          task.status === 'running' &&
+          round.state === state &&
+          round.reminded &&
+          this.roundOfSession(sessionId)?.round === round
+        void this.message(sessionId, reminderPrompt(picking), due)
         return
       }
       this.stick(round, picking ? 'no_pick' : 'no_report', null)
@@ -774,6 +902,24 @@ export class TaskEngine implements TaskSessionHooks {
       }
       const lane = task.lanes.find((l) => l.id === round.lane)
       const folder = lane?.worktree?.path ?? null
+      const deliverables: StepDeliverable[] = []
+      if (input.deliverables && input.deliverables.length > 0) {
+        const missing: string[] = []
+        for (const item of input.deliverables) {
+          if (item.kind === 'link') {
+            deliverables.push({ ...item })
+            continue
+          }
+          const file = path.resolve(folder ?? task.projectPath, item.path)
+          if (await this.exists(file)) deliverables.push({ ...item, path: file })
+          else missing.push(item.path)
+        }
+        line(
+          'deliverables',
+          missing.length === 0,
+          `These files you hand over are not there: ${missing.join(', ')}. Pass paths that exist, absolute or from your folder.`,
+        )
+      }
       if (folder && round.merge) {
         const merging = await this.deps.git.merging(folder)
         const conflicts = merging ? await this.deps.git.conflicts(folder) : []
@@ -811,6 +957,8 @@ export class TaskEngine implements TaskSessionHooks {
       round.outcome = outcome.name
       round.note = note
       round.document = document
+      if (deliverables.length > 0) round.deliverables = deliverables
+      else delete round.deliverables
       if (round.merge) round.merge = null
       if (back) {
         const key = arrowKey(step.id, outcome.name)
@@ -1113,6 +1261,17 @@ export class TaskEngine implements TaskSessionHooks {
       if (lane.id !== MAIN && lane.state === 'open') lane.state = 'abandoned'
     void this.cleanLanes(task)
     this.deps.events.attention(summaryOf(task), 'ended')
+    this.deliver(task)
+  }
+
+  /** Tells the conversation a task started from how it ended. */
+  private deliver(task: TaskRecord): void {
+    if (!task.from) return
+    try {
+      this.deps.events.ended?.(this.view(task), task.workflowSource === 'agent')
+    } catch (error) {
+      this.deps.log('warn', `Could not deliver task ${task.id}: ${(error as Error).message}`)
+    }
   }
 
   /** Removes merged and dropped branch worktrees; the task's own stays with its branch. */
@@ -1153,13 +1312,16 @@ export class TaskEngine implements TaskSessionHooks {
       if (round.state !== 'reviewing') throw new HostError('conflict', t('tasks.notReviewing'))
       if (approve) {
         await this.follow(task, round)
-        return viewOf(task)
+        return this.view(task)
       }
-      const key = arrowKey(round.stepId, null)
-      task.arrows[key] = (task.arrows[key] ?? 0) + 1
+      const text = note?.trim() || null
       const comments = round.document
         ? await this.deps.documents.openComments(round.document.artifactId).catch(() => [])
         : []
+      // The next round must have something to fix.
+      if (text === null && comments.length === 0) throw invalidParams(t('tasks.sendBackEmpty'))
+      const key = arrowKey(round.stepId, null)
+      task.arrows[key] = (task.arrows[key] ?? 0) + 1
       round.state = 'done'
       for (const [stepId, held] of Object.entries(task.ahead)) {
         if (held.roundId === round.id) delete task.ahead[stepId]
@@ -1170,7 +1332,7 @@ export class TaskEngine implements TaskSessionHooks {
           stepId: round.stepId,
           roundId: round.id,
           outcome: null,
-          note: note?.trim() || null,
+          note: text,
           comments,
           by: 'person',
           count: task.arrows[key]!,
@@ -1180,7 +1342,7 @@ export class TaskEngine implements TaskSessionHooks {
       this.advance(task)
       this.save(task)
       this.pump()
-      return viewOf(task)
+      return this.view(task)
     })
   }
 
@@ -1202,7 +1364,7 @@ export class TaskEngine implements TaskSessionHooks {
       round.note = note?.trim() || null
       round.startedAt ??= round.queuedAt
       await this.follow(task, round)
-      return viewOf(task)
+      return this.view(task)
     })
   }
 
@@ -1218,7 +1380,7 @@ export class TaskEngine implements TaskSessionHooks {
         task.ending = null
         await this.end(task, round, ending.end)
         this.save(task)
-        return viewOf(task)
+        return this.view(task)
       }
       const round = task.rounds.findLast((r) => r.stepId === stepId && r.state === 'stuck')
       if (round?.stuck) {
@@ -1280,22 +1442,24 @@ export class TaskEngine implements TaskSessionHooks {
       }
       this.save(task)
       this.pump()
-      return viewOf(task)
+      return this.view(task)
     })
   }
 
   cancel(taskId: string): Promise<TaskView> {
     return this.locked(() => {
       const task = this.task(taskId)
-      if (task.status !== 'running') return viewOf(task)
+      if (task.status !== 'running') return this.view(task)
       for (const round of task.rounds) if (LIVE.has(round.state)) this.stopRound(round)
       task.waiting = []
       task.ending = null
       task.status = 'cancelled'
       task.endedAt = this.now()
       this.save(task)
+      this.deps.events.attention(summaryOf(task), 'ended')
+      this.deliver(task)
       this.pump()
-      return viewOf(task)
+      return this.view(task)
     })
   }
 
@@ -1328,7 +1492,7 @@ export class TaskEngine implements TaskSessionHooks {
           void this.message(round.sessionId, notePrompt(clean))
       }
       this.save(task)
-      return viewOf(task)
+      return this.view(task)
     })
   }
 
@@ -1344,7 +1508,7 @@ export class TaskEngine implements TaskSessionHooks {
       this.advance(task)
       this.save(task)
       this.pump()
-      return viewOf(task)
+      return this.view(task)
     })
   }
 
@@ -1360,11 +1524,16 @@ export class TaskEngine implements TaskSessionHooks {
       if (change.archived !== undefined) task.archivedAt = change.archived ? this.now() : null
       if (change.unread !== undefined) task.unread = change.unread
       this.save(task)
-      return viewOf(task)
+      return this.view(task)
     })
   }
 
-  /** Plan limits or agents changed: steps held by them may start now. */
+  /** The user changed how many step sessions may work at once. */
+  limitChanged(): void {
+    void this.locked(() => this.pump())
+  }
+
+  /** Plan limits, agents or the host's tools changed: steps held by them may start now. */
   recheck(): void {
     void this.locked(() => {
       for (const task of this.tasks.values()) {
@@ -1415,9 +1584,9 @@ export class TaskEngine implements TaskSessionHooks {
     return latest ? { task: found.task, round: latest } : found
   }
 
-  private async message(sessionId: string, text: string): Promise<void> {
+  private async message(sessionId: string, text: string, due?: () => boolean): Promise<void> {
     try {
-      await this.deps.sessions.send(sessionId, text)
+      await this.deps.sessions.send(sessionId, text, due)
     } catch (error) {
       this.deps.log('warn', `Could not message a step's session: ${(error as Error).message}`)
     }
@@ -1442,10 +1611,13 @@ export class TaskEngine implements TaskSessionHooks {
     this.timer.unref?.()
   }
 
-  /** Stores the task, tells clients and notifies once when it first needs the user. */
+  /**
+   * Stores the task, tells clients and notifies once each time it starts to need the user. A
+   * step's session asking notifies by itself, so that alone does not.
+   */
   private save(task: TaskRecord): void {
     task.updatedAt = this.now()
-    const needing = needsOf(task).length > 0
+    const needing = needsOf(task).some((need) => need.kind !== 'asking')
     if (needing && !task.needing) {
       task.unread = true
       this.deps.events.attention(summaryOf(task), 'needs-you')
@@ -1454,7 +1626,7 @@ export class TaskEngine implements TaskSessionHooks {
     this.deps.store.put(task).catch((error: unknown) => {
       this.deps.log('error', `Could not store task ${task.id}: ${(error as Error).message}`)
     })
-    if (this.tasks.has(task.id)) this.deps.events.changed(viewOf(task))
+    if (this.tasks.has(task.id)) this.deps.events.changed(this.view(task))
   }
 }
 

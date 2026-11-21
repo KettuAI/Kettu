@@ -31,11 +31,15 @@ import {
   type PublishVisibility,
 } from '@shared/market-publish'
 import type { Platform } from '@shared/platform'
+import { WORKFLOW_FILE_BYTES } from '@shared/workflow'
 import type { MarketPublishAsk, MarketPublishChange, MarketPublishOutcome } from '@shared/thread'
 import type { Caller } from '../artifacts/tools'
 import { HostError } from '../errors'
 import { t } from '../i18n'
 import { pathKey } from '../paths'
+import { writeFileAtomic } from '../storage'
+import { parseWorkflow } from '../workflow/format'
+import { sameFlow } from '../workflow/graph'
 import { checkFolder, type CheckedFile, type FolderCheck } from './publish-check'
 import type { NewDraft, PublishedVersion } from './publish-drafts'
 
@@ -43,16 +47,44 @@ export const MARKET_CHECK = 'marketplace_check'
 export const MARKET_PUBLISH = 'marketplace_publish'
 export const MARKET_MINE = 'marketplace_mine'
 export const MARKET_UNLIST = 'marketplace_unlist'
-/** Read only, so they run without the agent's permission prompt; publish and unlist ask in a card. */
-export const MARKET_AUTO_ALLOW = [MARKET_CHECK, MARKET_MINE]
-/** How long a card waits before what it asked is put off. */
-export const MARKET_WAIT_MS = 10 * 60_000
+/**
+ * They run without the agent's own permission prompt: check and mine only read, and publish and
+ * unlist wait for the user in Kettu's card, so the card is the only ask.
+ */
+export const MARKET_AUTO_ALLOW = [MARKET_CHECK, MARKET_MINE, MARKET_PUBLISH, MARKET_UNLIST]
 
 const PATH_CHARS = 4096
 const LISTING_REF_CHARS = 80
+const TASK_ID_CHARS = 64
+const TASK_ID = /^[A-Za-z0-9_-]+$/
+const CHANGES_CHARS = 300
 // A new version's changed files are compared line by line up to these bounds.
 const COMPARE_FILES = 40
 const COMPARE_BYTES = 256 * 1024
+
+const PATH_FIELD = {
+  type: 'string',
+  minLength: 1,
+  maxLength: PATH_CHARS,
+  description: 'The folder or .mcpb file, absolute or from the session’s folder.',
+} as const
+
+const WORKFLOW_FIELD = {
+  type: 'string',
+  minLength: 1,
+  maxLength: WORKFLOW_FILE_BYTES,
+  description:
+    'Instead of path, the whole workflow.yaml of a task’s workflow Kettu asked you to publish, ' +
+    'with from_task: Kettu keeps it in that task’s folder, so write no file of your own.',
+} as const
+
+const FROM_TASK_FIELD = {
+  type: 'string',
+  maxLength: TASK_ID_CHARS,
+  description:
+    'For a workflow made general from the one a task ran on, that task’s id, as Kettu gave it ' +
+    'when it asked you to publish: the card compares the two.',
+} as const
 
 export const MARKET_TOOLS: Tool[] = [
   {
@@ -68,18 +100,15 @@ export const MARKET_TOOLS: Tool[] = [
       'the MCP servers and Skills they name), whether the user published it before, and every ' +
       'problem that keeps it from being published, such as a missing field, a workflow.yaml the ' +
       'workflow format refuses, too many files or a secret in a file. Fix the problems, then ' +
-      'check again.',
+      'check again. Pass path, or for a task’s workflow Kettu asked you to publish, workflow ' +
+      'and from_task.',
     inputSchema: {
       type: 'object',
       properties: {
-        path: {
-          type: 'string',
-          minLength: 1,
-          maxLength: PATH_CHARS,
-          description: 'The folder or .mcpb file, absolute or from the session’s folder.',
-        },
+        path: PATH_FIELD,
+        workflow: WORKFLOW_FIELD,
+        from_task: FROM_TASK_FIELD,
       },
-      required: ['path'],
       additionalProperties: false,
     },
     annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
@@ -92,21 +121,18 @@ export const MARKET_TOOLS: Tool[] = [
       'the user published. Check it with marketplace_check first. The user confirms every ' +
       'publish in a card in this session, which waits up to 10 minutes; nothing is uploaded ' +
       'until they press Publish. This call returns within a minute: if it says the user has not ' +
-      'answered yet, call it again with the same path, which shows no second card and returns ' +
+      'answered yet, call it again with the same arguments, which shows no second card and returns ' +
       'what became of this one, even when they answered between calls. If they choose Not now or ' +
       'do not answer, nothing is uploaded and it is kept as a draft they can publish later: do ' +
       'not publish it again unless they ask. Plugins and MCP servers take the version in their ' +
       'manifest; a skill or a workflow gets 1.0.0 first, then the next patch version unless you ' +
-      'pass one. For a new version, write short notes on what changed.',
+      'pass one. For a new version, write short notes on what changed. Pass path, or for a ' +
+      'task’s workflow Kettu asked you to publish, workflow and from_task.',
     inputSchema: {
       type: 'object',
       properties: {
-        path: {
-          type: 'string',
-          minLength: 1,
-          maxLength: PATH_CHARS,
-          description: 'The folder or .mcpb file, absolute or from the session’s folder.',
-        },
+        path: PATH_FIELD,
+        workflow: WORKFLOW_FIELD,
         visibility: {
           type: 'string',
           enum: ['public', 'private'],
@@ -126,8 +152,15 @@ export const MARKET_TOOLS: Tool[] = [
           description:
             'What changed in this version, in a sentence or two. The user can edit them.',
         },
+        from_task: FROM_TASK_FIELD,
+        changes: {
+          type: 'string',
+          maxLength: CHANGES_CHARS,
+          description:
+            'With from_task, one sentence on what you changed to make it general, such as the ' +
+            'project names and request text you took out.',
+        },
       },
-      required: ['path'],
       additionalProperties: false,
     },
     annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
@@ -202,6 +235,11 @@ export interface MarketToolsDeps {
   ask(sessionId: string, ask: MarketAsk): { entryId: string; answer: Promise<MarketAnswer> } | null
   /** What became of a card the user answered. */
   settle(sessionId: string, entryId: string, outcome: MarketPublishOutcome): void
+  /**
+   * Tells the session what became of a card no call of its is left to take, as the answer on a
+   * card it showed: sent now when it is idle, else queued.
+   */
+  tell(sessionId: string, text: string): void
   drafts: {
     put(draft: NewDraft): Promise<PublishDraft>
     published(folder: string, version?: PublishedVersion): Promise<void>
@@ -213,12 +251,20 @@ export interface MarketToolsDeps {
   changed(): void
   agentOf(sessionId: string): string | null
   sessionTitle(sessionId: string): string | null | undefined
+  /** The workflow file a task ran on and the task's title, for the card to compare with. */
+  taskWorkflow?(taskId: string): Promise<{ title: string; text: string } | null>
+  /**
+   * The folder Kettu keeps a task's workflow in for publishing, for a task whose agent wrote its
+   * workflow and that ended done; null for any other.
+   */
+  taskWorkflowFolder?(taskId: string): string | null
   home: string
 }
 
 /**
- * A card a call opened and what follows its answer. It outlives the call, so the agent's next call
- * for the same folder or listing picks it up, until one gets its result or the turn ends.
+ * A card a call opened and what follows its answer. It outlives the call and the turn, so the
+ * agent's next call for the same folder or listing picks it up; what comes of it once no call is
+ * left to take it is told to the session.
  */
 interface CardJob {
   action: 'publish' | 'unlist'
@@ -227,7 +273,16 @@ interface CardJob {
   /** The item's name, as a call that returns before the answer says it. */
   name: string
   confirmed: boolean
+  /** It ended with its session, which no one is told. */
+  ended: boolean
   result: Promise<CallToolResult>
+  /** Counts the session's turn ends since it opened; a call takes it only within its own turn. */
+  turn: number
+  /** Calls of the current turn waiting on it. */
+  waiting: number
+  /** What came of it while no call waited, as the session is told. */
+  came: string | null
+  told: boolean
 }
 
 type Code = 'invalid' | 'signed_out' | 'not_found' | 'not_ready' | 'refused'
@@ -273,13 +328,51 @@ function text(
   return value.trim()
 }
 
-export function parsePublishInput(input: unknown): {
-  path: string
+/** A call's folder: a path, or a task's workflow as text for the folder Kettu keeps it in. */
+interface Target {
+  path: string | null
+  workflow: string | null
+  fromTask: string | null
+}
+
+function targetOf(o: Record<string, unknown>): Target {
+  const given = text(o, 'path', PATH_CHARS, false)
+  const fromTask = text(o, 'from_task', TASK_ID_CHARS, false)
+  if (fromTask !== null && !TASK_ID.test(fromTask)) {
+    throw invalid('from_task must be a task id as Kettu gave it.')
+  }
+  const workflow = o.workflow
+  if (workflow === undefined) {
+    if (given === null) throw invalid('Pass path, or workflow with from_task.')
+    return { path: given, workflow: null, fromTask }
+  }
+  if (given !== null) throw invalid('Pass either path or workflow, not both.')
+  if (typeof workflow !== 'string' || workflow.trim() === '') {
+    throw invalid('workflow must be the text of a workflow.yaml.')
+  }
+  if (Buffer.byteLength(workflow, 'utf8') > WORKFLOW_FILE_BYTES) {
+    throw invalid(`workflow must be at most ${WORKFLOW_FILE_BYTES / 1024} KB.`)
+  }
+  if (fromTask === null) throw invalid('workflow needs from_task, the task Kettu asked about.')
+  return { path: null, workflow, fromTask }
+}
+
+export function parsePublishInput(input: unknown): Target & {
   visibility: PublishVisibility | null
   version: string | null
   notes: string | null
+  changes: string | null
 } {
-  const o = fields(input, ['path', 'visibility', 'version', 'notes'])
+  const o = fields(input, [
+    'path',
+    'workflow',
+    'visibility',
+    'version',
+    'notes',
+    'from_task',
+    'changes',
+  ])
+  const target = targetOf(o)
   const visibility = o.visibility ?? null
   if (visibility !== null && visibility !== 'public' && visibility !== 'private') {
     throw invalid('visibility must be public or private.')
@@ -289,10 +382,11 @@ export function parsePublishInput(input: unknown): {
     throw invalid(`version must be a version such as 1.2.0, not "${version}".`)
   }
   return {
-    path: text(o, 'path', PATH_CHARS, true)!,
+    ...target,
     visibility,
     version,
     notes: text(o, 'notes', LISTING_NOTES_CHARS, false),
+    changes: text(o, 'changes', CHANGES_CHARS, false),
   }
 }
 
@@ -378,11 +472,19 @@ export class MarketTools {
   }
 
   /**
-   * The session's turn ended: no call of it comes back for what its cards became, and a later
-   * turn's call for the same folder or listing asks again.
+   * The session's turn ended: its cards wait on for their own time, and what comes of one no call
+   * took is told to the session. A card already told is done once the turn after it ends.
    */
   turnEnded(sessionId: string): void {
-    this.jobs.delete(sessionId)
+    for (const job of this.jobs.get(sessionId) ?? []) {
+      if (job.told) {
+        this.done(sessionId, job)
+        continue
+      }
+      job.turn++
+      job.waiting = 0
+      if (job.came !== null) this.tell(sessionId, job)
+    }
   }
 
   /** Serves a call; a refusal becomes a tool error whose text says why. */
@@ -561,6 +663,20 @@ export class MarketTools {
     return caller.folder ?? caller.project
   }
 
+  /** The absolute folder a call names: its path, or the folder Kettu keeps its task's workflow in. */
+  private folderOf(target: Target, base: string): string {
+    if (target.path !== null) return path.resolve(base, target.path)
+    const folder = this.deps.taskWorkflowFolder?.(target.fromTask!) ?? null
+    if (!folder) {
+      throw new Refusal(
+        'not_found',
+        `Kettu has no workflow of task ${target.fromTask} to publish. Pass the task id Kettu gave ` +
+          'when it asked you to publish.',
+      )
+    }
+    return folder
+  }
+
   /** The path as the card shows it: from the session's folder, or with `~` for the home folder. */
   private shown(target: string, base: string): string {
     const relative = path.relative(base, target)
@@ -646,10 +762,22 @@ export class MarketTools {
   }
 
   private async check(caller: Caller, input: unknown): Promise<CallToolResult> {
-    const o = fields(input, ['path'])
+    const given = targetOf(fields(input, ['path', 'workflow', 'from_task']))
     const base = this.where(caller)
-    const given = text(o, 'path', PATH_CHARS, true)!
-    const plan = await this.plan(path.resolve(base, given), base, null)
+    const target = this.folderOf(given, base)
+    if (given.workflow !== null) {
+      const ref = pathKey(target, process.platform as Platform)
+      if (this.jobOf(caller.sessionId, 'publish', ref)) {
+        throw new Refusal(
+          'refused',
+          'Its publish waits for the user’s answer in a card, so the workflow was left as the ' +
+            'card shows it. Call marketplace_publish again with the same arguments for what ' +
+            'became of it.',
+        )
+      }
+      await writeFileAtomic(path.join(target, 'workflow.yaml'), given.workflow)
+    }
+    const plan = await this.plan(target, base, null)
     const { check, listing, problems } = plan
     const lines: string[] = []
     if (check.kind && check.name) {
@@ -699,10 +827,14 @@ export class MarketTools {
   private async publish(caller: Caller, input: unknown, deadline: number): Promise<CallToolResult> {
     const args = parsePublishInput(input)
     const base = this.where(caller)
-    const target = path.resolve(base, args.path)
+    const target = this.folderOf(args, base)
     const ref = pathKey(target, process.platform as Platform)
     const waiting = this.jobOf(caller.sessionId, 'publish', ref)
     if (waiting) return this.follow(caller.sessionId, waiting, deadline)
+    // Written only once no card waits on the folder, so what the user confirms is what uploads.
+    if (args.workflow !== null) {
+      await writeFileAtomic(path.join(target, 'workflow.yaml'), args.workflow)
+    }
     const plan = await this.plan(target, base, args.version)
     const { check } = plan
     if (plan.problems.length > 0 || !check.kind || !check.slug || !check.name || !plan.version) {
@@ -718,7 +850,7 @@ export class MarketTools {
         `Nothing was uploaded: ${plan.mineError ?? 'Kettu could not read the user’s listings.'}`,
       )
     }
-    const ask = await this.askOf(plan, args.visibility, args.notes)
+    const ask = await this.askOf(plan, args.visibility, args.notes, args)
     // Another call for the same folder may have opened its card while this one checked it.
     const opened = this.jobOf(caller.sessionId, 'publish', ref)
     if (opened) return this.follow(caller.sessionId, opened, deadline)
@@ -759,7 +891,7 @@ export class MarketTools {
                 ? 'The user chose Not now. Nothing was uploaded; it is kept as a draft in Marketplace › Published. Do not publish it again unless they ask.'
                 : answer.decision === 'expired'
                   ? 'The user did not answer within 10 minutes. Nothing was uploaded; it is kept as a draft in Marketplace › Published.'
-                  : 'The turn ended before the user answered. Nothing was uploaded; it is kept as a draft in Marketplace › Published.',
+                  : 'The session closed before the user answered. Nothing was uploaded; it is kept as a draft in Marketplace › Published.',
           },
         ],
         structuredContent: { published: false, draft: true },
@@ -820,11 +952,13 @@ export class MarketTools {
     plan: Plan,
     visibility: PublishVisibility | null,
     notes: string | null,
+    from: { fromTask: string | null; changes: string | null } | null = null,
   ): Promise<MarketAsk | null> {
     const { check, listing } = plan
     if (!check.kind || !check.slug || !check.name) return null
     const account = this.deps.account()
     return {
+      ...(check.kind === 'workflow' ? await this.workflowOf(check, from) : {}),
       action: 'publish',
       item: {
         name: check.name,
@@ -850,6 +984,35 @@ export class MarketTools {
         !plan.mine || plan.mine.publisher || !account
           ? null
           : { suggested: suggestHandle(account) },
+    }
+  }
+
+  /**
+   * A workflow's flowchart for its card, and, when it generalizes the workflow a task ran on,
+   * what the card compares; a task Kettu does not have leaves that out.
+   */
+  private async workflowOf(
+    check: FolderCheck,
+    from: { fromTask: string | null; changes: string | null } | null,
+  ): Promise<Pick<MarketAsk, 'workflow' | 'fromTask'>> {
+    const file = check.files.find((f) => f.path === 'workflow.yaml')
+    const after = file?.data.toString('utf8') ?? null
+    const workflow = after === null ? null : parseWorkflow(after).workflow
+    if (!workflow) return {}
+    const taskId = from?.fromTask ?? null
+    const task = taskId ? await this.deps.taskWorkflow?.(taskId).catch(() => null) : null
+    const before = task ? parseWorkflow(task.text).workflow : null
+    if (!task || !before || !taskId) return { workflow }
+    return {
+      workflow,
+      fromTask: {
+        taskId,
+        title: task.title,
+        sameFlow: sameFlow(before, workflow),
+        changes: from?.changes ?? null,
+        before: task.text,
+        after: after!,
+      },
     }
   }
 
@@ -1158,15 +1321,51 @@ export class MarketTools {
     answer: Promise<MarketAnswer>,
     then: (answer: MarketAnswer) => Promise<CallToolResult>,
   ): CardJob {
-    const job: CardJob = { action, refs, name, confirmed: false, result: null! }
+    const job: CardJob = {
+      action,
+      refs,
+      name,
+      confirmed: false,
+      ended: false,
+      result: null!,
+      turn: 0,
+      waiting: 0,
+      came: null,
+      told: false,
+    }
     job.result = answer.then((given) => {
       job.confirmed = given.decision === 'confirm'
+      job.ended = given.decision === 'ended'
       return then(given)
     })
-    // A failure no call waits for is still handed to the next one.
-    job.result.catch(() => {})
+    // Before any call's, so a call still waiting is counted when the outcome lands.
+    job.result.then(
+      (result) => this.came(sessionId, job, resultText(result)),
+      (error: unknown) => this.came(sessionId, job, (error as Error).message),
+    )
     this.jobs.set(sessionId, [...(this.jobs.get(sessionId) ?? []), job])
     return job
+  }
+
+  /**
+   * The card has an outcome: a waiting call takes it; else the session is told now if the turn
+   * that opened it ended, or when it ends.
+   */
+  private came(sessionId: string, job: CardJob, text: string): void {
+    job.came = text
+    if (job.waiting === 0 && job.turn > 0) this.tell(sessionId, job)
+  }
+
+  private tell(sessionId: string, job: CardJob): void {
+    if (job.told || job.came === null) return
+    job.told = true
+    if (job.ended) return this.done(sessionId, job)
+    const card = job.action === 'publish' ? 'publish' : 'unlist'
+    this.deps.tell(
+      sessionId,
+      `What became of the card to ${card} ${job.name}, which an earlier turn of yours opened: ` +
+        job.came,
+    )
   }
 
   /** The card's outcome once it has one, or by the deadline that the user has not answered yet. */
@@ -1175,15 +1374,20 @@ export class MarketTools {
     const late = new Promise<null>((resolve) => {
       timer = setTimeout(() => resolve(null), Math.max(0, deadline - Date.now()))
     })
+    const turn = job.turn
+    job.waiting++
+    // A call whose turn ended meanwhile hands its outcome to no one, so the session is told it.
+    const taken = () => job.turn === turn && !job.told
     try {
       const result = await Promise.race([job.result, late])
       if (result === null) return stillWaiting(job)
-      this.done(sessionId, job)
+      if (taken()) this.done(sessionId, job)
       return result
     } catch (error) {
-      this.done(sessionId, job)
+      if (taken()) this.done(sessionId, job)
       throw error
     } finally {
+      if (job.turn === turn) job.waiting--
       clearTimeout(timer)
     }
   }
@@ -1193,6 +1397,10 @@ export class MarketTools {
     if (left.length > 0) this.jobs.set(sessionId, left)
     else this.jobs.delete(sessionId)
   }
+}
+
+function resultText(result: CallToolResult): string {
+  return result.content.flatMap((item) => (item.type === 'text' ? [item.text] : [])).join('\n')
 }
 
 /** A call that returns before the card's outcome, for the agent to call again. */
@@ -1209,7 +1417,9 @@ function stillWaiting(job: CardJob): CallToolResult {
       ? `The user has not answered the card to publish ${job.name} yet, and nothing was uploaded. ${again} to keep waiting on the same card; it shows no second one.`
       : `The user has not answered the card to unlist ${job.name} yet, and it stays listed. ${again} to keep waiting on the same card; it shows no second one.`
   return {
-    content: [{ type: 'text', text }],
+    content: [
+      { type: 'text', text: `${text} If your turn ends first, Kettu tells you the outcome.` },
+    ],
     structuredContent: { waiting: true, confirmed: job.confirmed },
   }
 }

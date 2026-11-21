@@ -5,6 +5,7 @@ import type { MarketServer, MarketSkill } from './marketplace'
 import type { DirectAddress } from './remote/protocol'
 import { BUILTIN_THEME_ID } from './themes'
 import type { AgentId, HarnessId } from './thread'
+import { DEFAULT_WORKING_STEPS, type WorkingStepLimit } from './workflow'
 
 /** Whether a host's first start has run, so it runs once. */
 export interface InitialSetup {
@@ -68,6 +69,7 @@ export interface SettingsFile {
     reduceMotion: 'system' | 'always'
     zoom: ZoomLevel // Chromium's page zoom of the whole window
     sidebarHover: boolean // pointing at the toggle of a collapsed sidebar shows it over the page
+    fonts: UserFonts // replaced whole; a role left out keeps the theme's face
   }
   notifications: {
     permission: boolean
@@ -113,6 +115,8 @@ export interface SettingsFile {
   startModes: Partial<Record<AgentId, string>>
   // When idle Claude Code sessions let their agent go; outOfView and inView in minutes.
   idleSessions: IdleSessionsSettings
+  // How many workflow step sessions work at once across every task.
+  workflow: { maxWorkingSteps: WorkingStepLimit }
   // source: where updates come from; GitHub only never reaches Kettu's download service.
   updates: { automatic: 'download' | 'restart' | 'notify' | 'off'; source: 'auto' | 'github' }
   privacy: { hideAccount: boolean } // kept so older files still parse; loading turns it off
@@ -155,6 +159,12 @@ export type LinkDestination = 'browser' | 'session'
 export type OpenLinksIn = LinkDestination | 'ask'
 
 export const MAX_FONT_FAMILY_CHARS = 100
+
+/** The text the user may draw in a face of their own: the interface, replies and code. */
+export const USER_FONT_ROLES = ['ui', 'prose', 'code'] as const
+export type UserFontRole = (typeof USER_FONT_ROLES)[number]
+/** A face installed on the computer by role, each drawn before the theme's, which fills in. */
+export type UserFonts = Partial<Record<UserFontRole, string>>
 
 /** One face name, safe to put in quotes in a CSS font stack: no quotes, separators or controls. */
 export function isFontFamilyName(value: string): boolean {
@@ -251,6 +261,7 @@ export const DEFAULT_SETTINGS: SettingsFile = {
     reduceMotion: 'system',
     zoom: 1.1,
     sidebarHover: true,
+    fonts: {},
   },
   notifications: {
     permission: true,
@@ -271,6 +282,7 @@ export const DEFAULT_SETTINGS: SettingsFile = {
   marketplace: { mcp: [], skills: [] },
   startModes: {},
   idleSessions: { release: 'auto', outOfView: 5, inView: 30, limit: null },
+  workflow: { maxWorkingSteps: DEFAULT_WORKING_STEPS },
   updates: { automatic: 'download', source: 'auto' },
   privacy: { hideAccount: false },
   diagnostics: { verboseUntil: null },
@@ -293,6 +305,30 @@ export function stepZoom(zoom: ZoomLevel, step: ZoomStep): ZoomLevel {
   if (step === 0) return DEFAULT_SETTINGS.appearance.zoom
   const at = ZOOM_LEVELS.indexOf(zoom) + step
   return ZOOM_LEVELS[Math.min(Math.max(at, 0), ZOOM_LEVELS.length - 1)]!
+}
+
+/**
+ * Changes to a kept list, applied to the list the settings owner holds when the patch arrives:
+ * `put` adds an entry or replaces the one with its id, in place, and `remove` drops ids. Removes
+ * apply first.
+ */
+export interface ListEdit<T> {
+  put?: T[]
+  remove?: string[]
+}
+
+export function applyListEdit<T extends { id: string }>(
+  list: readonly T[],
+  edit: ListEdit<T>,
+): T[] {
+  const removed = new Set(edit.remove)
+  const next = list.filter((item) => !removed.has(item.id))
+  for (const item of edit.put ?? []) {
+    const at = next.findIndex((other) => other.id === item.id)
+    if (at < 0) next.push(item)
+    else next[at] = item
+  }
+  return next
 }
 
 /**
@@ -326,10 +362,18 @@ export interface SettingsPatch {
   }
   git?: Partial<SettingsFile['git']>
   mcp?: { kettu: { off: AgentId[] } } // the list is replaced whole
-  marketplace?: { mcp?: MarketServer[]; skills?: MarketSkill[] } // each list is replaced whole
+  // Each list is replaced whole, then its edit is applied; an edit is for a client that must not
+  // overwrite what another changed meanwhile.
+  marketplace?: {
+    mcp?: MarketServer[]
+    skills?: MarketSkill[]
+    mcpEdit?: ListEdit<MarketServer>
+    skillsEdit?: ListEdit<MarketSkill>
+  }
   disabledAgents?: AgentId[] // replaced whole
   startModes?: Partial<Record<AgentId, string | null>> // merged by agent; null clears one
   idleSessions?: Partial<SettingsFile['idleSessions']>
+  workflow?: Partial<SettingsFile['workflow']>
   updates?: Partial<SettingsFile['updates']>
   privacy?: Partial<SettingsFile['privacy']>
   diagnostics?: Partial<SettingsFile['diagnostics']>
@@ -361,6 +405,7 @@ export interface HostSettings {
   marketplace: SettingsFile['marketplace']
   startModes: SettingsFile['startModes']
   idleSessions: SettingsFile['idleSessions']
+  workflow: SettingsFile['workflow']
   usage: { fromComputer: boolean }
   sessionTitles: boolean // write a title for a session its agent leaves untitled
   lightModel: LightModel // which model Kettu's own requests ask

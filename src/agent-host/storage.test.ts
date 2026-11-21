@@ -574,6 +574,7 @@ describe('the host files', () => {
         missing: true,
         lastOpenedAt: 2,
         pinnedAt: null,
+        order: null,
       },
     ])
     first.pin(first.match('/repo'), true)
@@ -592,6 +593,75 @@ describe('the host files', () => {
     expect(parseProjectsFile({ projects: [{ ...project, pinnedAt: -1 }] })).toEqual({
       version: 1,
       projects: [project],
+    })
+  })
+
+  it('keeps the order the user moved projects into, with later projects at the end', async () => {
+    const at = (name: string, lastOpenedAt: number) => ({
+      path: `/${name}`,
+      name,
+      addedAt: 1,
+      lastOpenedAt,
+    })
+    const file = projectsFile(dir, log)
+    file.save({ version: 1, projects: [at('a', 2), at('b', 4), at('c', 3)] })
+    await file.flush()
+    let time = 10
+    const registry = () =>
+      new Projects({
+        file: projectsFile(dir, log),
+        platform: 'linux',
+        now: () => time,
+        realpath: async (value) => value,
+        isDirectory: async () => true,
+      })
+    const paths = (projects: Projects) => projects.list().map((project) => project.path)
+
+    const first = registry()
+    await first.load()
+    // Until a project is moved, the latest opened comes first, and opening one moves it up.
+    expect(paths(first)).toEqual(['/b', '/c', '/a'])
+    expect(first.list().every((project) => project.order === null)).toBe(true)
+    first.touch(first.match('/a'))
+    expect(paths(first)).toEqual(['/a', '/b', '/c'])
+
+    const heard: string[][] = []
+    first.onChange((projects) => heard.push(projects.map((project) => project.path)))
+    first.move(first.match('/a'), null)
+    expect(heard).toEqual([['/b', '/c', '/a']])
+    first.move(first.match('/c'), first.match('/b'))
+    expect(paths(first)).toEqual(['/c', '/b', '/a'])
+    // Once moved, opening a project keeps its place and a new one goes to the end.
+    time = 20
+    first.touch(first.match('/a'))
+    await first.add('/d')
+    await first.add('/b')
+    expect(paths(first)).toEqual(['/c', '/b', '/a', '/d'])
+    expect(first.list().map((project) => project.order)).toEqual([0, 1, 2, 3])
+    first.remove(first.match('/b'))
+    first.move(first.match('/d'), first.match('/c'))
+    await first.flush()
+
+    const next = registry()
+    await next.load()
+    expect(paths(next)).toEqual(['/d', '/c', '/a'])
+
+    // A path the host does not list, or the project itself as its own neighbour, is refused.
+    expect(() => next.move(next.match('/elsewhere'), null)).toThrow(/No project/)
+    expect(() => next.move(next.match('/a'), next.match('/elsewhere'))).toThrow(/No project/)
+    expect(() => next.move(next.match('/a'), next.match('/a'))).toThrow(/itself/)
+    expect(paths(next)).toEqual(['/d', '/c', '/a'])
+
+    // A stored order that is not a whole number at or above zero is dropped.
+    for (const order of [-1, 1.5, '1', null]) {
+      expect(parseProjectsFile({ projects: [{ ...at('a', 2), order }] })).toEqual({
+        version: 1,
+        projects: [at('a', 2)],
+      })
+    }
+    expect(parseProjectsFile({ projects: [{ ...at('a', 2), order: 3 }] })).toEqual({
+      version: 1,
+      projects: [{ ...at('a', 2), order: 3 }],
     })
   })
 

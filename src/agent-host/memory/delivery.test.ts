@@ -120,7 +120,7 @@ it('still sends the guide and memory ahead of an agy session it did not create, 
   const { id } = await window.request('sessions.import', {
     agentId: 'antigravity',
     projectPath: host.project,
-    acpSessionId: 'history-3',
+    acpSessionId: 'cli-refactor-router',
   })
   await window.open(id)
   await window.untilStatus(id, 'ready')

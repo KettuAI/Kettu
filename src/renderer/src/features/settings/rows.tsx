@@ -82,7 +82,7 @@ export function SectionBody({ section }: { section: SectionDef }) {
               )}
             </RowGroup>
           )}
-          {group?.note}
+          {group && (!group.noteFor || rows.some((row) => row.id === group.noteFor)) && group.note}
         </section>
       ))}
     </div>

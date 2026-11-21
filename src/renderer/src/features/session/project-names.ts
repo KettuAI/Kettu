@@ -1,4 +1,5 @@
 import { basename } from '@renderer/lib/format'
+import { hostOfPath, hostPath } from '@renderer/lib/host-paths'
 
 /** The folders a path sits in, outermost first, for either separator. */
 function parentsOf(path: string): string[] {
@@ -32,6 +33,23 @@ export function nameHints(paths: readonly string[]): Map<string, string> {
         if (tails[i]) hints.set(path, tails[i])
       })
       break
+    }
+  }
+  return hints
+}
+
+/**
+ * `nameHints` for the projects' paths as the window names them, each host telling its own projects
+ * of one name apart by the paths it writes; keyed by the window's path.
+ */
+export function projectNameHints(paths: readonly string[]): Map<string, string> {
+  const hints = new Map<string, string>()
+  for (const hostId of new Set(paths.map(hostOfPath))) {
+    const own = paths.filter((path) => hostOfPath(path) === hostId)
+    const found = nameHints(own.map(hostPath))
+    for (const path of own) {
+      const hint = found.get(hostPath(path))
+      if (hint) hints.set(path, hint)
     }
   }
   return hints

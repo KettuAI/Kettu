@@ -1,23 +1,25 @@
 // What the Marketplace changes: the servers and skills Kettu keeps, in the host settings'
-// `marketplace`, each list written whole; the servers' keys, which go to main apart from the
-// settings; and the plugins and marketplaces the harnesses keep, through the agent host. Each works
-// on the host of the scope it is given.
+// `marketplace`, each change an edit the host applies to its own list; the servers' keys, which go
+// to main apart from the settings; and the plugins and marketplaces the harnesses keep, through
+// the agent host. Each works on the host of the scope it is given.
 
-import type {
-  CatalogPlugin,
-  CatalogServer,
-  InstalledPlugin,
-  MarketConnection,
-  MarketServer,
-  MarketSkill,
-  McpSpec,
-  PluginMarketplace,
-  PluginScope,
-  SkillSource,
+import {
+  serverName,
+  type CatalogPlugin,
+  type CatalogServer,
+  type InstalledPlugin,
+  type MarketConnection,
+  type MarketServer,
+  type MarketSkill,
+  type McpSpec,
+  type PluginMarketplace,
+  type PluginScope,
+  type SkillSource,
 } from '@shared/marketplace'
 import type { AgentId } from '@shared/thread'
 import { listingIdOf } from '@shared/market-community'
 import type { PublishHarness } from '@shared/market-publish'
+import { applyListEdit, type ListEdit } from '@shared/settings'
 import { toast } from '@renderer/components/ui/toast'
 import { errorMessage } from '@renderer/lib/host'
 import { currentLocale, i18n } from '@renderer/lib/i18n'
@@ -31,7 +33,7 @@ import {
   type ConnectFlow,
 } from '@renderer/stores/marketplace'
 import type { HostScope } from '@renderer/stores/host-scope'
-import { oauthFlow, serverName } from './model'
+import { oauthFlow } from './model'
 
 // Bound to the namespace only: each call reads the language shown at the time.
 const t = i18n.getFixedT(null, 'marketplace')
@@ -53,16 +55,37 @@ export function keptServers(scope: HostScope): MarketServer[] {
   return scope.useSettingsStore.getState().settings.marketplace.mcp
 }
 
-async function save(scope: HostScope, servers: MarketServer[]): Promise<void> {
-  await scope.useSettingsStore.getState().update({ marketplace: { mcp: servers } })
+// What a host that takes only whole lists answers to an edit.
+const NO_EDITS = /Unknown setting "marketplace\.(mcpEdit|skillsEdit)"/
+
+/**
+ * Changes the servers Kettu keeps as an edit of the host's own list, so installs and removals
+ * made together, here or from another device, never drop each other. A host too old to take an
+ * edit gets the list written whole.
+ */
+async function editServers(scope: HostScope, edit: ListEdit<MarketServer>): Promise<void> {
+  const { update } = scope.useSettingsStore.getState()
+  try {
+    await update({ marketplace: { mcpEdit: edit } })
+  } catch (e) {
+    if (!NO_EDITS.test(errorMessage(e))) throw e
+    await update({ marketplace: { mcp: applyListEdit(keptServers(scope), edit) } })
+  }
 }
 
 export function keptSkills(scope: HostScope): MarketSkill[] {
   return scope.useSettingsStore.getState().settings.marketplace.skills
 }
 
-async function saveSkills(scope: HostScope, skills: MarketSkill[]): Promise<void> {
-  await scope.useSettingsStore.getState().update({ marketplace: { skills } })
+/** The same for the skills Kettu keeps. */
+async function editSkills(scope: HostScope, edit: ListEdit<MarketSkill>): Promise<void> {
+  const { update } = scope.useSettingsStore.getState()
+  try {
+    await update({ marketplace: { skillsEdit: edit } })
+  } catch (e) {
+    if (!NO_EDITS.test(errorMessage(e))) throw e
+    await update({ marketplace: { skills: applyListEdit(keptSkills(scope), edit) } })
+  }
 }
 
 function warn(text: string): void {
@@ -136,7 +159,7 @@ export async function installServer(
       on: true,
     }
     try {
-      await save(scope, [...kept, entry])
+      await editServers(scope, { put: [entry] })
     } catch (e) {
       warnRetry(
         t('toast.installFailed', { name: server.title, error: errorMessage(e) }),
@@ -199,7 +222,7 @@ export async function addServer(
     agents: 'all',
     on: true,
   }
-  await save(scope, [...keptServers(scope), entry])
+  await editServers(scope, { put: [entry] })
   const stored = await storeValues(scope, entry.id, name, secrets)
   if (oauthFlow(entry.spec)) void connectServer(scope, entry, 'all')
   else if (stored) readyToast(scope, name, 'all')
@@ -212,14 +235,10 @@ export async function changeServer(
   id: string,
   change: (server: MarketServer) => MarketServer,
 ): Promise<void> {
-  const kept = keptServers(scope)
-  const server = kept.find((s) => s.id === id)
+  const server = keptServers(scope).find((s) => s.id === id)
   if (!server) return
   try {
-    await save(
-      scope,
-      kept.map((s) => (s.id === id ? change(s) : s)),
-    )
+    await editServers(scope, { put: [change(server)] })
   } catch (e) {
     toast(t('toast.changeFailed', { name: server.title, error: errorMessage(e) }), undefined, {
       tone: 'warning',
@@ -237,13 +256,9 @@ export function setServerAgents(scope: HostScope, id: string, agents: AgentChoic
 
 /** Removes a server Kettu keeps; main clears its keys with it. Throws when it could not. */
 export async function uninstallServer(scope: HostScope, id: string): Promise<void> {
-  const kept = keptServers(scope)
-  const server = kept.find((s) => s.id === id)
+  const server = keptServers(scope).find((s) => s.id === id)
   if (!server) return
-  await save(
-    scope,
-    kept.filter((s) => s.id !== id),
-  )
+  await editServers(scope, { remove: [id] })
   toast(t('toast.uninstalled', { name: server.title }), undefined, { tone: 'success' })
 }
 
@@ -412,7 +427,7 @@ export async function installSkill(
   try {
     const skill = await scope.request('market.addSkill', { source })
     const entry: MarketSkill = { ...skill, agents, on: true }
-    await saveSkills(scope, [...keptSkills(scope).filter((s) => s.id !== entry.id), entry])
+    await editSkills(scope, { put: [entry] })
     readyToast(scope, entry.name, agents)
     return true
   } catch (e) {
@@ -432,14 +447,10 @@ async function changeSkill(
   id: string,
   change: (skill: MarketSkill) => MarketSkill,
 ): Promise<void> {
-  const kept = keptSkills(scope)
-  const skill = kept.find((s) => s.id === id)
+  const skill = keptSkills(scope).find((s) => s.id === id)
   if (!skill) return
   try {
-    await saveSkills(
-      scope,
-      kept.map((s) => (s.id === id ? change(s) : s)),
-    )
+    await editSkills(scope, { put: [change(skill)] })
   } catch (e) {
     warn(t('toast.changeFailed', { name: skill.name, error: errorMessage(e) }))
   }
@@ -455,13 +466,9 @@ export function setSkillAgents(scope: HostScope, id: string, agents: AgentChoice
 
 /** Removes a skill Kettu keeps. Throws when it could not. */
 export async function removeSkill(scope: HostScope, id: string): Promise<void> {
-  const kept = keptSkills(scope)
-  const skill = kept.find((s) => s.id === id)
+  const skill = keptSkills(scope).find((s) => s.id === id)
   if (!skill) return
-  await saveSkills(
-    scope,
-    kept.filter((s) => s.id !== id),
-  )
+  await editSkills(scope, { remove: [id] })
   toast(t('toast.uninstalled', { name: skill.name }), undefined, { tone: 'success' })
 }
 
@@ -487,10 +494,7 @@ export function connectionProblem(connection: MarketConnection): string | null {
 /** Takes a server that a Connect added out of the settings again. */
 async function dropFresh(scope: HostScope, serverId: string, title: string): Promise<void> {
   try {
-    await save(
-      scope,
-      keptServers(scope).filter((s) => s.id !== serverId),
-    )
+    await editServers(scope, { remove: [serverId] })
   } catch (e) {
     warn(t('toast.changeFailed', { name: title, error: errorMessage(e) }))
   }
@@ -563,19 +567,20 @@ export async function connectServer(
     })
     const others = kept.filter((s) => s.id !== serverId)
     try {
-      await save(scope, [
-        ...others,
-        {
-          id: serverId,
-          name: nameOf(server, others),
-          title: server.title,
-          source: sourceOf(server),
-          version: server.version,
-          spec: server.spec,
-          agents,
-          on: true,
-        },
-      ])
+      await editServers(scope, {
+        put: [
+          {
+            id: serverId,
+            name: nameOf(server, others),
+            title: server.title,
+            source: sourceOf(server),
+            version: server.version,
+            spec: server.spec,
+            agents,
+            on: true,
+          },
+        ],
+      })
     } catch (e) {
       setConnectFlow(scope.useMarketplaceStore, serverId, {
         serverId,
@@ -741,12 +746,10 @@ export async function updateCommunitySkill(scope: HostScope, kept: MarketSkill):
   setBusy(market, busy, true)
   try {
     const skill = await scope.request('market.addSkill', { source: { kind: 'kettu', id: listing } })
-    await saveSkills(
-      scope,
-      keptSkills(scope).map((s) =>
-        s.id === kept.id ? { ...skill, agents: s.agents, on: s.on } : s,
-      ),
-    )
+    const current = keptSkills(scope).find((s) => s.id === kept.id)
+    if (current) {
+      await editSkills(scope, { put: [{ ...skill, agents: current.agents, on: current.on }] })
+    }
     communityChanged(scope)
     toast(t('toast.updated', { name: skill.name, version: skill.version ?? '' }), undefined, {
       tone: 'success',
@@ -769,14 +772,12 @@ export async function updateCommunityServer(
   values: Record<string, string> = {},
 ): Promise<void> {
   try {
-    await save(
-      scope,
-      keptServers(scope).map((s) =>
-        s.id === kept.id
-          ? { ...s, title: server.title, version: server.version, spec: server.spec }
-          : s,
-      ),
-    )
+    const current = keptServers(scope).find((s) => s.id === kept.id)
+    if (current) {
+      await editServers(scope, {
+        put: [{ ...current, title: server.title, version: server.version, spec: server.spec }],
+      })
+    }
     communityChanged(scope)
     if (!(await storeValues(scope, kept.id, server.title, values))) return
     toast(t('toast.updated', { name: server.title, version: server.version }), undefined, {
