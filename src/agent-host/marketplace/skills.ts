@@ -38,7 +38,7 @@ import type { SessionOptions } from '../connection'
 import { HostError } from '../errors'
 import type { Env } from '../find-command'
 import { kettuSkills, type GuideFlags } from '../guide/guide'
-import { kettuSkillDirs, kettuSkillRoots, writeKettuSkills } from '../guide/skill-files'
+import { kettuSkillDirs, kettuSkillRoot, writeKettuSkills } from '../guide/skill-files'
 import { t } from '../i18n'
 import { JsonFile, type LogFn } from '../storage'
 import { kettuId } from '@shared/market-community'
@@ -337,6 +337,11 @@ export class MarketSkillsService {
   private readonly kettuPlugins = new Map<AgentId, string>()
   /** The Claude Code agents whose plugins are written. */
   private readonly written = new Set<AgentId>()
+  /**
+   * The folders of Kettu's own skills handed to agents since the host started: they may still read
+   * them, so a sync keeps them until the next start.
+   */
+  private readonly handedOwn = new Set<string>()
   private syncing: Promise<void> = Promise.resolve()
   private readonly now: () => number
 
@@ -452,7 +457,16 @@ export class MarketSkillsService {
   /** Kettu's own skill roots, for an agent that reaches Kettu's server. */
   private kettuRoots(): string[] {
     const flags = this.deps.ownSkills?.()
-    return flags ? kettuSkillRoots(this.kettuRoot, flags) : []
+    if (!flags) return []
+    const root = kettuSkillRoot(this.kettuRoot, flags)
+    this.handedOwn.add(path.basename(root))
+    return [root]
+  }
+
+  /** The folder of each of Kettu's own skills, for a plugin to link. */
+  private kettuDirs(flags: GuideFlags): [string, string][] {
+    this.handedOwn.add(path.basename(kettuSkillRoot(this.kettuRoot, flags)))
+    return [...kettuSkillDirs(this.kettuRoot, flags)]
   }
 
   /** Whether the agent takes the skill folders Kettu hands it. */
@@ -534,7 +548,7 @@ export class MarketSkillsService {
         market.push([skill.name, path.join(this.store, dir, skill.name)])
       }
       const own = kettu ? this.deps.ownSkills?.() : undefined
-      const first = own ? [...kettuSkillDirs(this.kettuRoot, own)] : []
+      const first = own ? this.kettuDirs(own) : []
       try {
         await this.writeClaudePlugin(made, agentId, folder, linkNames(first, market))
       } catch (error) {
@@ -570,9 +584,10 @@ export class MarketSkillsService {
   }
 
   private async syncNow(): Promise<void> {
-    if (this.deps.ownSkills) {
+    const flags = this.deps.ownSkills?.()
+    if (flags) {
       try {
-        await writeKettuSkills(this.kettuRoot)
+        await writeKettuSkills(this.kettuRoot, flags, this.handedOwn)
       } catch (error) {
         this.deps.log('warn', `Could not write Kettu's own skills: ${(error as Error).message}`)
       }
@@ -631,7 +646,7 @@ export class MarketSkillsService {
     const folder = path.join(this.root, 'claude', skillFolder(agentId))
     await this.writeClaudePlugin(this.plugins, agentId, folder, linkNames([], market))
     const own = this.deps.ownSkills?.()
-    const first = own ? [...kettuSkillDirs(this.kettuRoot, own)] : []
+    const first = own ? this.kettuDirs(own) : []
     await this.writeClaudePlugin(
       this.kettuPlugins,
       agentId,
