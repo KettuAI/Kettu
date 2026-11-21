@@ -605,10 +605,10 @@
   }
   /* The passages that comments waiting in the composer are on, and the one whose row is pointed at. */
   ::highlight(reply-comment) {
-    background-color: color-mix(in srgb, var(--send) 11%, transparent);
+    background-color: var(--comment-mark);
   }
   ::highlight(reply-comment-hover) {
-    background-color: color-mix(in srgb, var(--send) 18%, transparent);
+    background-color: var(--comment-mark-hover);
   }
   input,
   textarea,

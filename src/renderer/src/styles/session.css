@@ -2042,7 +2042,7 @@
 }
 
 /* A comment's number, at the end of its passage in the thread and on its row in the composer:
-   inline code's muted fox on its faint fox ground, which reads at 4.5:1 in both themes. */
+   the control blue on its faint tint, which reads at 4.5:1 in both themes. */
 .ks-reply-num {
   display: inline-flex;
   flex: none;
@@ -2052,12 +2052,12 @@
   height: 16px;
   padding: 0 4px;
   border-radius: 999px;
-  background: var(--bg-code-inline);
+  background: var(--comment-num);
   font-size: 10.5px;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
   line-height: 1;
-  color: var(--code-inline);
+  color: var(--control-on);
 }
 .ks-reply-marks {
   position: absolute;
@@ -2076,7 +2076,7 @@
   transition: background-color var(--duration-fast);
 }
 .ks-reply-mark[data-hovered] {
-  background: color-mix(in srgb, var(--send) 24%, var(--bg-app));
+  background: var(--comment-num-hover);
 }
 
 /* The comments that go with the next message, on the composer's upper edge. */
