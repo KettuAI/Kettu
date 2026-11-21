@@ -62,9 +62,9 @@ const METRICS: FlowMetrics = {
   nodeH: 168,
   endSize: 24,
   colGap: 14,
-  rowGap: 40,
-  laneStart: 26,
-  laneGap: 18,
+  rowGap: 30,
+  laneStart: 22,
+  laneGap: 16,
   labelRoom: 0,
   slot: 12,
   inset: 16,
@@ -73,12 +73,14 @@ const METRICS: FlowMetrics = {
 }
 // A step's width: its padding, who does it and the gaps, around its widest line, within bounds.
 const NODE_X = 10 + 28 + 10 + 10
-const NODE_MIN_W = 140
+const NODE_MIN_W = 108
 const NODE_MAX_W = 248
 /** The tallest the canvas grows; a longer flow is shrunk to fit, then panned. */
 const MAX_HEIGHT = 640
 /** A flow is shrunk no further than this to fit, so its names stay readable. */
 const MIN_FIT = 0.6
+/** Under a flow that needs its zoom controls at rest, room for them, so they cover none of it. */
+const CONTROLS_ROOM = 36
 
 type StepData = { step: WorkflowStep; name: string; line: string; pick: StepPick | null }
 type EndData = { end: TaskEnd }
@@ -198,7 +200,10 @@ function Canvas({ workflow, pins }: { workflow: Workflow; pins?: Record<string, 
   const fitZoom = width
     ? Math.max(MIN_FIT, Math.min(1, width / layout.width, MAX_HEIGHT / layout.height))
     : 1
-  const height = Math.min(MAX_HEIGHT, Math.ceil(layout.height * fitZoom))
+  // The whole flow shows at rest, so only a larger one needs its controls.
+  const cut = layout.width * fitZoom > width + 1 || layout.height * fitZoom > MAX_HEIGHT + 1
+  const height =
+    Math.min(MAX_HEIGHT, Math.ceil(layout.height * fitZoom)) + (cut ? CONTROLS_ROOM : 0)
   const fit = useCallback(() => {
     const el = box.current
     if (!el || !el.clientWidth) return
@@ -216,9 +221,6 @@ function Canvas({ workflow, pins }: { workflow: Workflow; pins?: Record<string, 
   }, [])
   // Placed again when the chart or its room changes; a pan or zoom stays until then.
   useEffect(fit, [fit])
-  // The whole flow shows at rest, so only a larger one needs its controls.
-  const cut = layout.width * fitZoom > width + 1 || layout.height * fitZoom > MAX_HEIGHT + 1
-
   return (
     <div
       ref={box}
