@@ -16,6 +16,7 @@ import { host } from '@renderer/lib/host'
 import { formatShortcut } from '@renderer/lib/platform'
 import { cn } from '@renderer/lib/utils'
 import { Glyph } from '@renderer/features/shell/glyph'
+import { emitAppEvent } from '@renderer/app/events'
 import { loadGitTools, receiveCurrentPr, receiveGitStatus, useGitStore } from '@renderer/stores/git'
 import { BranchPopover } from './branch-popover'
 import { BranchSwitcher } from './branch-switcher'
@@ -34,7 +35,14 @@ function middleTruncate(text: string, max: number): string {
  * The project's branch and its state on the composer's tray; it opens the branch's popover (sync,
  * changes, commits and the pull request), and Option-click opens the branch switcher.
  */
-export function BranchTrayLink({ projectPath }: { projectPath: string }) {
+export function BranchTrayLink({
+  projectPath,
+  sessionId,
+}: {
+  projectPath: string
+  /** The session whose composer a hand-off to the agent writes in. */
+  sessionId: string
+}) {
   const { t } = useTranslation('git')
   const status = useGitStore((s) => s.status[projectPath])
   const pr = useGitStore((s) => s.currentPr[projectPath] ?? null)
@@ -44,6 +52,8 @@ export function BranchTrayLink({ projectPath }: { projectPath: string }) {
   useDialogReturn(projectPath, trigger)
   // A commit's card is a popup outside the popover's own, which the same Escape would close too.
   const cardEscape = useRef<Event | null>(null)
+  // After a hand-off the focus belongs to the composer, not to the chip the popover opened from.
+  const handedOff = useRef(false)
   if (!status?.repo) return null
 
   const refresh = (): void => {
@@ -68,7 +78,16 @@ export function BranchTrayLink({ projectPath }: { projectPath: string }) {
       return
     }
     setOpen(next ? 'branch' : null)
-    if (next) refresh()
+    if (next) {
+      handedOff.current = false
+      refresh()
+    }
+  }
+
+  const handOff = (text: string): void => {
+    handedOff.current = true
+    setOpen(null)
+    emitAppEvent({ kind: 'insert-into-composer', sessionId, text })
   }
 
   const onChipKeys = (event: KeyboardEvent<HTMLButtonElement>): void => {
@@ -100,6 +119,7 @@ export function BranchTrayLink({ projectPath }: { projectPath: string }) {
         </Tooltip>
         <PopoverContent
           ref={popup}
+          finalFocus={() => !handedOff.current}
           side="top"
           align="start"
           sideOffset={8}
@@ -120,13 +140,14 @@ export function BranchTrayLink({ projectPath }: { projectPath: string }) {
             popoverKeys(event, branchName(status))
           }}
           onPointerMove={followPointer}
-          className="kettu-pop kettu-branch-pop max-h-[min(47rem,var(--available-height))] w-89 overflow-y-auto"
+          className="kettu-pop kettu-branch-pop max-h-[min(47rem,var(--available-height))] w-99 overflow-hidden"
         >
           <BranchPopover
             status={status}
             pr={pr}
             onClose={() => setOpen(null)}
             onSwitch={() => setOpen('switch')}
+            onHandOff={handOff}
           />
         </PopoverContent>
       </Popover>

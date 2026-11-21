@@ -50,7 +50,8 @@ export type GitDialog =
       operation: Extract<GitOperationRequest, { kind: 'push' }>
       count: number
     }
-  | { kind: 'commit'; paths: string[] | null }
+  // `andPush` makes the dialog's default action commit and push.
+  | { kind: 'commit'; paths: string[] | null; andPush?: boolean }
   | { kind: 'discard'; paths: string[] }
   | { kind: 'newBranch' }
   | { kind: 'log' }

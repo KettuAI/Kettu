@@ -87,16 +87,15 @@
     "notPublished": "未发布",
     "detached": "HEAD 已分离",
     "unborn": "尚无提交",
-    "ahead": "领先",
-    "behind": "落后",
     "switchBranch": "切换分支",
-    "fromBase": "来自 {{base}} · {{fetched}}",
+    "fromBase": "从 {{base}} 分出 · {{fetched}}",
     "changes": "更改",
     "commit": "提交…",
     "onBranch": "此分支上",
-    "commits_one": "{{count}} 个提交",
-    "commits_other": "{{count}} 个提交",
-    "copyPath": "复制路径"
+    "copyPath": "复制路径",
+    "conflict": "冲突",
+    "conflictsAndChanges": "冲突和更改",
+    "worktree": "工作树"
   },
   "timeline": {
     "files_other": "{{count}} 个文件",
@@ -108,17 +107,9 @@
     "more": "还有 {{count}} 个"
   },
   "prPart": {
-    "queued": "排队中",
-    "run": {
-      "passed": "已通过",
-      "failed": "失败",
-      "running": "运行中"
-    },
     "installGh": "安装 <cli>GitHub CLI</cli> 后即可查看和创建 PR。",
     "signInGh": "登录 GitHub CLI 后即可查看 PR：",
     "copyCommand": "复制命令",
-    "publishFirst": "发布此分支后才能创建 PR。",
-    "none": "没有 PR",
     "create": "创建 PR…",
     "blocked": {
       "conflicts": "与 {{base}} 有冲突"
@@ -126,18 +117,10 @@
     "label": "拉取请求",
     "mergedAgo": "{{when}}合并",
     "closedAgo": "{{when}}关闭",
-    "checksPassed_one": "{{count}} 项检查通过 {{passed}} 项",
-    "checksPassed_other": "{{count}} 项检查通过 {{passed}} 项",
-    "waiting": {
-      "draft": "草稿",
-      "failing": "检查未通过",
-      "review": "等待审查",
-      "checks": "等待检查",
-      "ready": "可以合并"
-    }
+    "tally": "{{passed}}/{{total}} 通过",
+    "failedWord": "失败"
   },
   "sync": {
-    "label": "同步",
     "fetched": "{{when}}抓取",
     "neverFetched": "从未抓取",
     "noRemote": "没有远程仓库",
@@ -170,10 +153,7 @@
   },
   "hint": {
     "noBranch": "切换到一个分支后才能拉取或推送。",
-    "operation": "{{operation}}",
     "publishRepo": "发布会在 GitHub 上创建仓库并推送此分支。",
-    "publishBranch": "发布此分支即可推送，并创建 PR。",
-    "diverged": "已与 {{upstream}} 分叉：请在终端中变基或合并，再推送。",
     "upToDate": "已与 {{upstream}} 同步。",
     "ghMissing": "安装 GitHub CLI 后即可把此仓库发布到 GitHub。",
     "ghSignedOut": "运行 gh auth login 登录 GitHub CLI 后即可发布此仓库。",
@@ -317,5 +297,192 @@
     "createPr": "创建 PR",
     "openPr": "打开",
     "pullAndRetry": "拉取后重试"
+  },
+  "journey": {
+    "title": "从更改到合并的进度",
+    "label": {
+      "uncommitted": "未提交",
+      "conflicts": "冲突",
+      "local": "未推送",
+      "toPull": "待拉取",
+      "pushed": "已推送",
+      "remote": "远端",
+      "pr": "PR",
+      "prNumber": "PR #{{number}}",
+      "merge": "合并",
+      "merged": "已合并"
+    },
+    "note": {
+      "files_other": "{{count}} 个文件",
+      "commits_other": "{{count}} 个提交",
+      "published": "已发布",
+      "notPublished": "未发布",
+      "signIn": "需要登录",
+      "installGh": "需要 gh",
+      "checkFailed": "{{name}} 失败",
+      "checksPassed": "{{passed}}/{{total}} 通过",
+      "passed": "已通过",
+      "draft": "草稿",
+      "closed": "已关闭",
+      "open": "已打开",
+      "ready": "可以合并",
+      "ago": "{{when}}"
+    }
+  },
+  "next": {
+    "operation": {
+      "merge": "合并",
+      "rebase": "变基",
+      "cherry-pick": "拣选",
+      "revert": "还原"
+    },
+    "conflicts": {
+      "title_other": "{{operation}}停在 {{count}} 个冲突的文件上",
+      "titleLoose_other": "{{count}} 个文件有冲突",
+      "note": "解决冲突后继续；Kettu 不替你合并更改。"
+    },
+    "continue": {
+      "title": "{{operation}}等着继续",
+      "note": "冲突已经解决，请在终端里继续。"
+    },
+    "commit": {
+      "title_other": "提交 {{count}} 个文件的更改",
+      "note": "还没有提交",
+      "unpublished": "新分支，还没有推送过",
+      "checks": "{{name}} 在 PR 上失败了，改完一起推送"
+    },
+    "noBranch": {
+      "unborn": "第一次提交会开出这个分支。"
+    },
+    "publishRepo": {
+      "title": "把这个仓库发布到 GitHub"
+    },
+    "blocked": {
+      "title": "这个分支没法从这里推送"
+    },
+    "diverged": {
+      "title": "本地和 {{upstream}} 各走了几步",
+      "note": "拉取只会快进，推送从不强推；先变基或合并，再同步。"
+    },
+    "pull": {
+      "title_other": "拉取 {{count}} 个新提交",
+      "note": "{{upstream}} 上有这个分支没有的提交。"
+    },
+    "push": {
+      "title_other": "推送 {{count}} 个提交到 {{remote}}",
+      "note": {
+        "plain": "它们只在这台电脑上。",
+        "pr": "推送之后就能创建 PR。",
+        "updatesPr": "推送后 PR #{{number}} 会跟着更新。"
+      }
+    },
+    "publishBranch": {
+      "title": "把分支发布到 {{remote}}",
+      "note_other": "{{count}} 个提交只在这台电脑上。"
+    },
+    "createPr": {
+      "title": "创建 PR",
+      "note": {
+        "ready": "向 {{base}} 开一个，就能看到检查和审查。",
+        "noGh": "在 GitHub 上向 {{base}} 开一个。",
+        "signedOut": "在 GitHub 上向 {{base}} 开一个。"
+      }
+    },
+    "fixChecks": {
+      "title_one": "{{name}} 检查失败了",
+      "title_other": "{{count}} 项检查失败了",
+      "note": "PR #{{number}} 要等它们通过才能合并。"
+    },
+    "waiting": {
+      "draft": {
+        "title": "PR 还是草稿",
+        "note": "在 GitHub 上把它标为可以审查。"
+      },
+      "conflicts": {
+        "title": "和 {{base}} 有冲突",
+        "note": "解决后才能合并。"
+      },
+      "checks": {
+        "title": "等待检查",
+        "note": "检查通过后就能合并。"
+      },
+      "review": {
+        "title": "等待审查",
+        "note": "批准后就能合并。"
+      },
+      "changes": {
+        "title": "审查要求更改",
+        "note": "改完后再请人审查。"
+      },
+      "blocked": {
+        "title": "PR 暂时不能合并",
+        "note": "在 GitHub 上打开，看是什么挡住了它。"
+      }
+    },
+    "merge": {
+      "title": "可以合并了",
+      "checks_other": "{{count}} 项检查通过",
+      "approved": "已批准",
+      "clean": "和 {{base}} 没有冲突"
+    },
+    "merged": {
+      "title": "已经合并到 {{base}}",
+      "note": "这个分支的工作都在 {{base}} 里了。"
+    },
+    "closed": {
+      "title": "PR 已关闭",
+      "note": "它没有合并就被关闭了。"
+    },
+    "upToDate": {
+      "title": "都是最新的",
+      "empty": "你在 {{branch}} 上做的更改会显示在这里。"
+    },
+    "action": {
+      "commitAndPublish": "提交并发布分支",
+      "handOffConflicts": "让智能体解决冲突",
+      "handOffRebase": "让智能体变基",
+      "handOffFix": "让智能体修复",
+      "copyCommand": "复制 {{command}}",
+      "pullCount": "拉取 {{count}}",
+      "push_other": "推送 {{count}} 个提交",
+      "publishBranch": "发布分支",
+      "mergeOnGitHub": "在 GitHub 上合并",
+      "openPr": "打开 PR",
+      "viewPr": "查看 PR",
+      "switchTo": "切换到 {{base}}"
+    },
+    "reason": {
+      "pushFirst": "要先推送这个分支"
+    }
+  },
+  "tree": {
+    "newestFirst": "新的在上",
+    "newOnRemote_other": "{{remote}} 上有 {{count}} 个新提交",
+    "notPulled": "还没拉取",
+    "moreLocal_other": "还有 {{count}} 个本地提交",
+    "morePushed_other": "还有 {{count}} 个已推送的提交",
+    "onlyHere": "上面 {{count}} 个只在这台电脑上",
+    "inSync": "已同步",
+    "behind": "落后 {{count}} 个提交",
+    "notPublished": "还没发布到 {{remote}}",
+    "noRemote": "还没有远程仓库",
+    "publish": "发布",
+    "from": "从"
+  },
+  "handOff": {
+    "fix": "PR #{{number}} 的 {{check}} 检查失败了，请看日志并修复。",
+    "fixMany": "PR #{{number}} 的这几项检查失败了：{{checks}}，请看日志并修复。",
+    "operation": {
+      "merge": "合并",
+      "rebase": "变基",
+      "cherry-pick": "拣选",
+      "revert": "还原"
+    },
+    "andMore": "等 {{count}} 个",
+    "stopped": "{{branch}} 上的{{operation}}停在了冲突上，请解决冲突后继续。",
+    "stoppedIn": "{{branch}} 上的{{operation}}停在了这些文件的冲突上：{{files}}，请解决冲突后继续。",
+    "loose": "{{branch}} 有冲突，请解决。",
+    "looseIn": "{{branch}} 在这些文件里有冲突：{{files}}，请解决。",
+    "rebase": "{{branch}} 和 {{upstream}} 各自有了新提交，请把 {{branch}} 变基到 {{upstream}}，并解决冲突。"
   }
 }

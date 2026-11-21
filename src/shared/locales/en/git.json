@@ -87,16 +87,15 @@
     "notPublished": "not published",
     "detached": "Detached HEAD",
     "unborn": "No commits yet",
-    "ahead": "ahead",
-    "behind": "behind",
     "switchBranch": "Switch branch",
     "fromBase": "from {{base}} · {{fetched}}",
     "changes": "Changes",
     "commit": "Commit…",
     "onBranch": "On this branch",
-    "commits_one": "{{count}} commit",
-    "commits_other": "{{count}} commits",
-    "copyPath": "Copy path"
+    "copyPath": "Copy path",
+    "conflict": "Conflict",
+    "conflictsAndChanges": "Conflicts and changes",
+    "worktree": "worktree"
   },
   "timeline": {
     "files_one": "{{count}} file",
@@ -109,17 +108,9 @@
     "more": "{{count}} more"
   },
   "prPart": {
-    "queued": "Queued",
-    "run": {
-      "passed": "Passed",
-      "failed": "Failed",
-      "running": "Running"
-    },
     "installGh": "Install the <cli>GitHub CLI</cli> to see and create pull requests.",
     "signInGh": "Sign in to the GitHub CLI to see pull requests:",
     "copyCommand": "Copy command",
-    "publishFirst": "Publish the branch to open a pull request.",
-    "none": "No pull request",
     "create": "Create pull request…",
     "blocked": {
       "conflicts": "Has conflicts with {{base}}"
@@ -127,18 +118,10 @@
     "label": "Pull request",
     "mergedAgo": "Merged {{when}}",
     "closedAgo": "Closed {{when}}",
-    "checksPassed_one": "{{passed}} of {{count}} check",
-    "checksPassed_other": "{{passed}} of {{count}} checks",
-    "waiting": {
-      "draft": "Draft",
-      "failing": "Checks failing",
-      "review": "Waiting for review",
-      "checks": "Waiting for checks",
-      "ready": "Ready to merge"
-    }
+    "tally": "{{passed}}/{{total}} passed",
+    "failedWord": "failed"
   },
   "sync": {
-    "label": "Sync",
     "fetched": "fetched {{when}}",
     "neverFetched": "never fetched",
     "noRemote": "No remote",
@@ -171,10 +154,7 @@
   },
   "hint": {
     "noBranch": "Check out a branch to pull or push.",
-    "operation": "{{operation}}",
     "publishRepo": "Publish creates a GitHub repository and pushes this branch.",
-    "publishBranch": "Publish the branch to push it and open a pull request.",
-    "diverged": "Diverged from {{upstream}}: rebase or merge in the terminal, then push.",
     "upToDate": "Up to date with {{upstream}}.",
     "ghMissing": "Install the GitHub CLI to publish this repository to GitHub.",
     "ghSignedOut": "Sign in to the GitHub CLI with gh auth login to publish this repository.",
@@ -319,5 +299,205 @@
     "createPr": "Create PR",
     "openPr": "Open",
     "pullAndRetry": "Pull and retry"
+  },
+  "journey": {
+    "title": "Progress from changes to merge",
+    "label": {
+      "uncommitted": "Changes",
+      "conflicts": "Conflicts",
+      "local": "Not pushed",
+      "toPull": "To pull",
+      "pushed": "Pushed",
+      "remote": "Remote",
+      "pr": "PR",
+      "prNumber": "PR #{{number}}",
+      "merge": "Merge",
+      "merged": "Merged"
+    },
+    "note": {
+      "files_one": "{{count}} file",
+      "files_other": "{{count}} files",
+      "commits_one": "{{count}} commit",
+      "commits_other": "{{count}} commits",
+      "published": "Published",
+      "notPublished": "Not published",
+      "signIn": "Sign in",
+      "installGh": "Needs gh",
+      "checkFailed": "{{name}} failed",
+      "checksPassed": "{{passed}}/{{total}} passed",
+      "passed": "Passed",
+      "draft": "Draft",
+      "closed": "Closed",
+      "open": "Open",
+      "ready": "Ready",
+      "ago": "{{when}}"
+    }
+  },
+  "next": {
+    "operation": {
+      "merge": "Merge",
+      "rebase": "Rebase",
+      "cherry-pick": "Cherry-pick",
+      "revert": "Revert"
+    },
+    "conflicts": {
+      "title_one": "{{operation}} stopped on {{count}} conflicting file",
+      "title_other": "{{operation}} stopped on {{count}} conflicting files",
+      "titleLoose_one": "{{count}} file has conflicts",
+      "titleLoose_other": "{{count}} files have conflicts",
+      "note": "Resolve them and carry on. Kettu doesn't merge changes for you."
+    },
+    "continue": {
+      "title": "{{operation}} is waiting to continue",
+      "note": "The conflicts are resolved. Continue it from the terminal."
+    },
+    "commit": {
+      "title_one": "Commit {{count}} changed file",
+      "title_other": "Commit {{count}} changed files",
+      "note": "Not committed yet",
+      "unpublished": "new branch, not pushed yet",
+      "checks": "{{name}} failed on the pull request, push the fix with it"
+    },
+    "noBranch": {
+      "unborn": "The first commit starts the branch."
+    },
+    "publishRepo": {
+      "title": "Publish this repository to GitHub"
+    },
+    "blocked": {
+      "title": "This branch can't be pushed from here"
+    },
+    "diverged": {
+      "title": "This branch and {{upstream}} have each moved on",
+      "note": "Pull only fast-forwards and push never forces, so rebase or merge first."
+    },
+    "pull": {
+      "title_one": "Pull {{count}} new commit",
+      "title_other": "Pull {{count}} new commits",
+      "note": "{{upstream}} has commits this branch doesn't."
+    },
+    "push": {
+      "title_one": "Push {{count}} commit to {{remote}}",
+      "title_other": "Push {{count}} commits to {{remote}}",
+      "note": {
+        "plain": "They are only on this computer.",
+        "pr": "Push first, then open a pull request.",
+        "updatesPr": "Pull request #{{number}} updates with the push."
+      }
+    },
+    "publishBranch": {
+      "title": "Publish the branch to {{remote}}",
+      "note_one": "{{count}} commit is only on this computer.",
+      "note_other": "{{count}} commits are only on this computer."
+    },
+    "createPr": {
+      "title": "Create a pull request",
+      "note": {
+        "ready": "Open one into {{base}} to get checks and a review.",
+        "noGh": "Open one into {{base}} on GitHub.",
+        "signedOut": "Open one into {{base}} on GitHub."
+      }
+    },
+    "fixChecks": {
+      "title_one": "The {{name}} check failed",
+      "title_other": "{{count}} checks failed",
+      "note": "Pull request #{{number}} can't merge until they pass."
+    },
+    "waiting": {
+      "draft": {
+        "title": "The pull request is a draft",
+        "note": "Mark it ready for review on GitHub."
+      },
+      "conflicts": {
+        "title": "Conflicts with {{base}}",
+        "note": "They need resolving before it can merge."
+      },
+      "checks": {
+        "title": "Waiting for checks",
+        "note": "It can merge once they pass."
+      },
+      "review": {
+        "title": "Waiting for a review",
+        "note": "It can merge once it is approved."
+      },
+      "changes": {
+        "title": "Changes were requested",
+        "note": "Address them, then ask for another review."
+      },
+      "blocked": {
+        "title": "The pull request can't merge yet",
+        "note": "Open it on GitHub to see what blocks it."
+      }
+    },
+    "merge": {
+      "title": "Ready to merge",
+      "checks_one": "{{count}} check passed",
+      "checks_other": "{{count}} checks passed",
+      "approved": "approved",
+      "clean": "no conflicts with {{base}}"
+    },
+    "merged": {
+      "title": "Merged into {{base}}",
+      "note": "This branch's work is in {{base}}."
+    },
+    "closed": {
+      "title": "The pull request was closed",
+      "note": "It was closed without merging."
+    },
+    "upToDate": {
+      "title": "All up to date",
+      "empty": "Changes you make on {{branch}} show up here."
+    },
+    "action": {
+      "commitAndPublish": "Commit and publish branch",
+      "handOffConflicts": "Ask the agent to resolve",
+      "handOffRebase": "Ask the agent to rebase",
+      "handOffFix": "Ask the agent to fix",
+      "copyCommand": "Copy {{command}}",
+      "pullCount": "Pull {{count}}",
+      "push_one": "Push {{count}} commit",
+      "push_other": "Push {{count}} commits",
+      "publishBranch": "Publish branch",
+      "mergeOnGitHub": "Merge on GitHub",
+      "openPr": "Open pull request",
+      "viewPr": "View pull request",
+      "switchTo": "Switch to {{base}}"
+    },
+    "reason": {
+      "pushFirst": "Push the branch first"
+    }
+  },
+  "tree": {
+    "newestFirst": "newest first",
+    "newOnRemote_one": "{{count}} new commit on {{remote}}",
+    "newOnRemote_other": "{{count}} new commits on {{remote}}",
+    "notPulled": "not pulled yet",
+    "moreLocal_one": "{{count}} more local commit",
+    "moreLocal_other": "{{count}} more local commits",
+    "morePushed_one": "{{count}} more pushed commit",
+    "morePushed_other": "{{count}} more pushed commits",
+    "onlyHere": "{{count}} only on this computer",
+    "inSync": "in sync",
+    "behind": "{{count}} behind",
+    "notPublished": "Not on {{remote}} yet",
+    "noRemote": "No remote yet",
+    "publish": "Publish",
+    "from": "from"
+  },
+  "handOff": {
+    "fix": "The {{check}} check failed on pull request #{{number}}. Please read its log and fix it.",
+    "fixMany": "These checks failed on pull request #{{number}}: {{checks}}. Please read their logs and fix them.",
+    "operation": {
+      "merge": "merge",
+      "rebase": "rebase",
+      "cherry-pick": "cherry-pick",
+      "revert": "revert"
+    },
+    "andMore": " and {{count}} more",
+    "stopped": "The {{operation}} on {{branch}} stopped on conflicts. Please resolve them and continue.",
+    "stoppedIn": "The {{operation}} on {{branch}} stopped on conflicts in {{files}}. Please resolve them and continue.",
+    "loose": "{{branch}} has conflicts. Please resolve them.",
+    "looseIn": "{{branch}} has conflicts in {{files}}. Please resolve them.",
+    "rebase": "{{branch}} and {{upstream}} have each gained commits. Please rebase {{branch}} onto {{upstream}} and resolve any conflicts."
   }
 }

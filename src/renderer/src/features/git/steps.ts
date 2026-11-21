@@ -11,7 +11,7 @@ import {
   type GitOperationRequest,
 } from '@renderer/stores/git'
 import { failureNote, successNote, type NextStep, type ResultNote } from './results'
-import { pushesToDefault, pushTargetOf } from './sync'
+import { pushesToDefault, pushTargetOf, type OperationKind } from './sync'
 
 const LABEL = {
   pull: 'git:sync.pull',
@@ -80,6 +80,15 @@ export function pushNow(projectPath: string): void {
     return
   }
   if (request) void runStep(projectPath, request)
+}
+
+/**
+ * Pushes or publishes from the branch popover. What asks in a dialog closes the popover first; a
+ * plain push runs at once, with its progress on the button.
+ */
+export function pushFromPopover(status: GitStatus, kind: OperationKind, onClose: () => void): void {
+  if (kind !== 'push' || pushesToDefault(status, 'push')) onClose()
+  pushNow(status.projectPath)
 }
 
 function show(projectPath: string, result: ResultNote): void {

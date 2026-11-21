@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import type { TFunction } from 'i18next'
 import {
-  Folder01Icon,
+  ArrowDown01Icon,
   FolderLinksIcon,
   GitBranchIcon,
   GitCommitIcon,
@@ -16,58 +16,75 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui
 import { longAgo } from '@renderer/lib/format'
 import { hostPath } from '@renderer/lib/host-paths'
 import { useNow } from '@renderer/lib/use-now'
-import { openGitDialog, useGitStore } from '@renderer/stores/git'
+import { useGitStore } from '@renderer/stores/git'
 import { showSidePane } from '@renderer/stores/view'
-import { CopyButton } from './copy-button'
+import { BranchTree } from './branch-tree'
+import { handOffText } from './hand-off'
+import { Journey, NextStepCard } from './next-step-card'
 import { branchName } from './popover-keys'
 import { PullRequestPart } from './pr-part'
-import {
-  ChangeRow,
-  CommitRows,
-  ErrorRow,
-  LineCounts,
-  LoadingRows,
-  PartHead,
-  PartRule,
-  ROW,
-} from './rows'
+import { ChangeRow, Count, ErrorRow, LineCounts, LoadingRows, PartHead, ROW } from './rows'
 import { runStep } from './steps'
-import { SyncStrip } from './sync-part'
 import { commandOf } from './sync'
 import { useChanges } from './use-git-data'
 
 export { CopyButton } from './copy-button'
 
 /** Uncommitted files shown before "N more", which opens them in the Files pane. */
-const CHANGES_SHOWN = 6
-/** The branch's commits shown before "N more". */
-const COMMITS_SHOWN = 5
+const CHANGES_SHOWN = 4
 
 /**
- * The branch with its sync state and Pull and Push, the uncommitted work, the pull request with
- * its checks, the branch's commits, then the folder it is checked out in.
+ * The branch, how far it is from a merge, the one step to take next, then below, scrolling on
+ * their own, the uncommitted work, the pull request with its checks and the branch's commits.
  */
 export function BranchPopover({
   status,
   pr,
   onClose,
   onSwitch,
+  onHandOff,
 }: {
   status: GitStatus
   pr: PullRequest | null
   onClose: () => void
   onSwitch: () => void
+  /** Puts a sentence in the session's composer, and closes the popover. */
+  onHandOff: (text: string) => void
 }) {
+  const { t } = useTranslation('git')
+  const gh = useGitStore((s) => s.tools?.gh.state ?? null)
+  const count = changeTotal(status)
+  const changes = useChanges(status.projectPath, count > 0)
+  const fixChecks = (): void => {
+    const text = handOffText('handOffFix', status, pr, changes.data, t)
+    if (text) onHandOff(text)
+  }
   return (
-    <div className="flex min-h-0 flex-col">
-      <Header status={status} onSwitch={onSwitch} />
-      <SyncStrip status={status} onClose={onClose} />
-      <ChangesPart status={status} onClose={onClose} />
-      <PullRequestPart status={status} pr={pr} onClose={onClose} />
-      <CommitsPart status={status} onClose={onClose} />
-      <WorktreeFooter status={status} />
+    <div className="flex min-h-0 flex-1 flex-col">
+      <div className="shrink-0">
+        <Header status={status} onSwitch={onSwitch} />
+        <Journey status={status} pr={pr} gh={gh} />
+        <NextStepCard
+          status={status}
+          pr={pr}
+          gh={gh}
+          files={changes.data}
+          onClose={onClose}
+          onHandOff={onHandOff}
+        />
+      </div>
+      <div className="-mx-3.5 -mb-3.5 min-h-0 flex-1 overflow-y-auto px-3.5 pb-3.5">
+        <ChangesPart status={status} files={changes} count={count} onClose={onClose} />
+        <PullRequestPart status={status} pr={pr} onClose={onClose} onFix={fixChecks} />
+        <BranchTree status={status} onClose={onClose} />
+      </div>
     </div>
   )
+}
+
+function changeTotal(status: GitStatus): number {
+  const { staged, unstaged, untracked, conflicted } = status.changes
+  return staged + unstaged + untracked + conflicted
 }
 
 function Header({ status, onSwitch }: { status: GitStatus; onSwitch: () => void }) {
@@ -75,10 +92,13 @@ function Header({ status, onSwitch }: { status: GitStatus; onSwitch: () => void 
   const now = useNow()
   const running = useGitStore((s) => s.running[status.projectPath] ?? null)
   const refresh = useRefresh({ busy: running?.kind === 'fetch' })
-  const { head, defaultBranch, remote } = status
+  const { head, defaultBranch, remote, operation, upstream } = status
   const icon = head.detached ? GitCommitIcon : GitBranchIcon
   const fromBase = defaultBranch && head.branch !== defaultBranch
   const fetched = running?.kind === 'fetch' ? t('sync.fetching') : fetchedText(status, now, t)
+  // A linked worktree's git folder is inside the main repository's, under worktrees/.
+  const linked = !!status.repo && /[\\/]worktrees[\\/][^\\/]+[\\/]?$/.test(status.repo.gitDir)
+  const unpublished = !upstream && !head.detached && !!head.oid && !!remote
 
   const fetchNow = (): void => {
     void refresh
@@ -104,15 +124,35 @@ function Header({ status, onSwitch }: { status: GitStatus; onSwitch: () => void 
               />
             }
           >
-            <Glyph icon={icon} className="size-3.5 shrink-0 text-tertiary" />
-            <span className="min-w-0 truncate text-row leading-snug font-semibold tracking-[-0.006em] text-primary">
+            <Glyph icon={icon} className="size-4 shrink-0 text-tertiary" />
+            <span className="min-w-0 truncate text-row font-semibold text-primary">
               {branchName(status)}
             </span>
+            <Glyph icon={ArrowDown01Icon} className="size-3.5 shrink-0 text-tertiary" />
           </TooltipTrigger>
           <TooltipContent>{t('popover.switchBranch')}</TooltipContent>
         </Tooltip>
-        <p className="mt-0.75 ml-5.25 truncate text-small leading-snug text-tertiary">
-          {fromBase ? t('popover.fromBase', { base: defaultBranch, fetched }) : fetched}
+        <p className="mt-0.75 ml-5.25 flex min-w-0 items-center gap-1.5 text-small leading-snug whitespace-nowrap text-tertiary">
+          {linked && <WorktreeMark root={status.repo ? hostPath(status.repo.root) : ''} />}
+          <span className="min-w-0 truncate">
+            {operation ? (
+              <>
+                <span className="font-medium text-danger">
+                  {t(
+                    `status.operation.${operation.kind === 'cherry-pick' ? 'cherryPick' : operation.kind}`,
+                  )}
+                  {operation.step && ` ${operation.step[0]}/${operation.step[1]}`}
+                </span>
+                {' · '}
+                {fetched}
+              </>
+            ) : (
+              <>
+                {fromBase ? t('popover.fromBase', { base: defaultBranch, fetched }) : fetched}
+                {unpublished && ` · ${t('popover.notPublished')}`}
+              </>
+            )}
+          </span>
         </p>
       </div>
       <Tooltip>
@@ -141,6 +181,38 @@ function Header({ status, onSwitch }: { status: GitStatus; onSwitch: () => void 
   )
 }
 
+/** Marks a linked worktree; the folder shows on hover and a click copies it. */
+function WorktreeMark({ root }: { root: string }) {
+  const { t } = useTranslation('git')
+  const [copied, setCopied] = useState(false)
+  return (
+    <Tooltip>
+      <TooltipTrigger
+        render={
+          <button
+            type="button"
+            className="inline-flex h-4.5 shrink-0 items-center gap-1 rounded-full bg-selected px-1.75 text-caption font-medium text-secondary outline-none hover:bg-hover focus-ring"
+            onClick={() => {
+              void navigator.clipboard.writeText(root).then(() => {
+                setCopied(true)
+                setTimeout(() => setCopied(false), 1500)
+              })
+            }}
+          />
+        }
+      >
+        <Glyph icon={FolderLinksIcon} size={11} />
+        {t('popover.worktree')}
+      </TooltipTrigger>
+      <TooltipContent>
+        <span className="font-mono text-code-sm">{root}</span>
+        <br />
+        {copied ? t('timeline.copied') : t('popover.copyPath')}
+      </TooltipContent>
+    </Tooltip>
+  )
+}
+
 function fetchedText(status: GitStatus, now: number, t: TFunction<'git'>): string {
   if (!status.remote) return t('sync.noRemote')
   return status.lastFetchedAt
@@ -148,37 +220,37 @@ function fetchedText(status: GitStatus, now: number, t: TFunction<'git'>): strin
     : t('sync.neverFetched')
 }
 
-/** The working tree's changed files with their totals, and Commit…. */
-function ChangesPart({ status, onClose }: { status: GitStatus; onClose: () => void }) {
+/** The working tree's changed files with their totals; the conflicted ones first. */
+function ChangesPart({
+  status,
+  files: loaded,
+  count,
+  onClose,
+}: {
+  status: GitStatus
+  files: ReturnType<typeof useChanges>
+  count: number
+  onClose: () => void
+}) {
   const { t } = useTranslation('git')
   const { changes } = status
-  const count = changes.staged + changes.unstaged + changes.untracked + changes.conflicted
-  const { data, error } = useChanges(status.projectPath, count > 0)
+  const { data, error } = loaded
+  const files = useMemo(
+    () =>
+      (data ?? []).toSorted((a, b) => +(b.status === 'conflicted') - +(a.status === 'conflicted')),
+    [data],
+  )
   if (count === 0) return null
-  const files = data ?? []
   const more = files.length - CHANGES_SHOWN
+  const conflicts = changes.conflicted > 0
   return (
-    <>
-      <PartRule />
+    <section className="mt-4">
       <PartHead>
-        <span className="font-medium">{t('popover.changes')}</span>
-        <LineCounts insertions={changes.insertions} deletions={changes.deletions} />
-        <span className="flex-1" />
-        <Button
-          variant="outline"
-          size="sm"
-          data-git-row=""
-          disabled={changes.conflicted > 0 || !!status.operation}
-          className="px-2.5 text-hint"
-          onClick={() => {
-            onClose()
-            openGitDialog(status.projectPath, { kind: 'commit', paths: null })
-          }}
-        >
-          {t('popover.commit')}
-        </Button>
+        <span>{conflicts ? t('popover.conflictsAndChanges') : t('popover.changes')}</span>
+        <Count>{count}</Count>
+        {!conflicts && <LineCounts insertions={changes.insertions} deletions={changes.deletions} />}
       </PartHead>
-      <div className="mt-1">
+      <div className="mt-0.5">
         {data ? (
           files
             .slice(0, CHANGES_SHOWN)
@@ -201,7 +273,7 @@ function ChangesPart({ status, onClose }: { status: GitStatus; onClose: () => vo
             type="button"
             tabIndex={-1}
             data-git-row=""
-            className={`${ROW} h-7 text-small text-tertiary`}
+            className={`${ROW} h-6.5 text-small text-tertiary`}
             onClick={() => {
               onClose()
               showSidePane(status.projectPath, 'files')
@@ -211,63 +283,6 @@ function ChangesPart({ status, onClose }: { status: GitStatus; onClose: () => vo
           </button>
         )}
       </div>
-    </>
-  )
-}
-
-/** The commits on this branch and not on the default one, oldest first like a pull request's. */
-function CommitsPart({ status, onClose }: { status: GitStatus; onClose: () => void }) {
-  const { t } = useTranslation('git')
-  const [all, setAll] = useState(false)
-  const { commits } = status
-  const shown = useMemo(
-    () => (all ? commits : commits.slice(0, COMMITS_SHOWN)).toReversed(),
-    [all, commits],
-  )
-  if (commits.length === 0) return null
-  return (
-    <>
-      <PartRule />
-      <PartHead>
-        <span className="font-medium">{t('popover.onBranch')}</span>
-        <span className="tabular">{t('popover.commits', { count: commits.length })}</span>
-      </PartHead>
-      {shown.length < commits.length && (
-        <button
-          type="button"
-          tabIndex={-1}
-          data-git-row=""
-          className={`${ROW} h-6.5 text-small text-tertiary`}
-          onClick={() => setAll(true)}
-        >
-          {t('timeline.more', { count: commits.length - shown.length })}
-        </button>
-      )}
-      <CommitRows status={status} commits={shown} onOpened={onClose} />
-    </>
-  )
-}
-
-/** The folder the branch is checked out in, a worktree's or the repository's own. */
-function WorktreeFooter({ status }: { status: GitStatus }) {
-  const { t } = useTranslation('git')
-  if (!status.repo) return null
-  const root = hostPath(status.repo.root)
-  // A linked worktree's git folder is inside the main repository's, under worktrees/.
-  const linked = /[\\/]worktrees[\\/][^\\/]+[\\/]?$/.test(status.repo.gitDir)
-  const icon = linked ? FolderLinksIcon : Folder01Icon
-  return (
-    <div className="mt-2 flex items-center gap-1.75 pt-2.5 text-tertiary shadow-[inset_0_var(--hairline)_0_var(--border-subtle)]">
-      <Glyph icon={icon} className="size-3.25 shrink-0" />
-      <span className="min-w-0 flex-1 truncate font-mono text-code-sm" title={root}>
-        {root}
-      </span>
-      <CopyButton
-        text={root}
-        label={t('popover.copyPath')}
-        className="size-5.5"
-        iconClassName="size-3"
-      />
-    </div>
+    </section>
   )
 }
