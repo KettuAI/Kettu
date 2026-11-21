@@ -43,7 +43,8 @@
     "nowTitle_one": "停止 {{name}} 正在运行的会话？",
     "nowTitle_other": "停止 {{name}} 正在运行的 {{count}} 个会话？",
     "nowBody": "Kettu 会先停止当前这一轮，再更新 {{name}}。会话会保留，之后可以继续。",
-    "nowConfirm": "停止并更新"
+    "nowConfirm": "停止并更新",
+    "skipVersion": "跳过这个版本"
   },
   "several": {
     "title": "{{count}} 个更新",
@@ -116,5 +117,12 @@
     "releaseNotes": "完整更新说明",
     "later": "稍后",
     "restart": "立即重启"
+  },
+  "command": {
+    "titleOne": "运行 {{name}} 的更新命令？",
+    "title": "运行这些更新命令？",
+    "bodyOne": "{{name}} 是你自己装的，Kettu 用它的安装方式对应的命令来更新，在后台运行。",
+    "body": "这些是你自己装的，Kettu 用各自安装方式对应的命令来更新，在后台依次运行。",
+    "run": "运行"
   }
 }

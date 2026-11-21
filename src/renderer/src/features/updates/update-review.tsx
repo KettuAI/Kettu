@@ -18,10 +18,10 @@ import {
   type UpdateItem,
 } from './card-model'
 import {
+  requestHarnessUpdates,
   retryHarnessUpdate,
   skipHarnessUpdates,
   unskipHarnessUpdate,
-  updateHarnesses,
 } from './harness-updates'
 import { CARD_BUTTON } from './update-actions'
 import { AppAction, UpdateMark } from './update-parts'
@@ -79,7 +79,7 @@ export function UpdateReview({ items, batch }: { items: UpdateItem[]; batch: Bat
           <Button
             size="xs"
             disabled={pending.length === 0}
-            onClick={() => updateHarnesses(pending.map((item) => item.offer.agentId))}
+            onClick={() => void requestHarnessUpdates(pending.map((item) => item.offer.agentId))}
             className={CARD_BUTTON}
           >
             {t('review.updateAll')}
@@ -249,7 +249,7 @@ function HarnessRow({ item }: { item: HarnessItem }) {
         <Button
           size="xs"
           variant="secondary"
-          onClick={() => updateHarnesses([offer.agentId])}
+          onClick={() => void requestHarnessUpdates([offer.agentId])}
           className={CARD_BUTTON}
         >
           {t('harness.update')}

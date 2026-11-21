@@ -4,8 +4,10 @@ import { describe, expect, it } from 'vitest'
 import type { AgentStatus } from '@shared/agent-host'
 import { DEFAULT_SETTINGS, type HostSettings } from '@shared/settings'
 import type { InstallOptions, InstalledAdapter } from './adapter-install'
+import type { ArchiveInstallOptions, InstalledArchive } from './archive-install'
 import type { ExitInfo } from './agent-process'
 import { AgentManager, type LaunchedAgent } from './agents'
+import { archiveKey } from './binary-install'
 import type { AgentDefinition } from './catalog'
 import { Diagnostics } from './diagnostics'
 import type { SignedManifest } from './harness-manifest'
@@ -460,5 +462,136 @@ describe("the version Kettu's compatibility manifest gives", () => {
       reason: 'broken',
     })
     expect(await kept.start()).toBe('1.0.0')
+  })
+})
+
+const ARCHIVE_DEF: AgentDefinition = {
+  id: 'cursor',
+  name: 'Cursor',
+  registryId: 'cursor',
+  launch: { kind: 'binary', command: 'cursor-agent', args: ['acp'] },
+  install: { hint: 'detect.hint.cursor', url: 'https://cursor.com/docs/cli/acp' },
+  installs: { archive: {} },
+}
+
+const ARCHIVE_PROGRAM = '#!/bin/sh\nexit 0\n'
+
+/** The registry's listing of the archive at `version`, which gives no SHA-256 for it. */
+function unhashedListing(version: string): RegistryAgents {
+  const binary = {
+    [archiveKey(process.platform === 'win32' ? 'win32' : process.platform, process.arch)]: {
+      archive: `https://downloads.example.com/cursor-${version}.tar.gz`,
+      cmd: './cursor-agent',
+      args: ['acp'],
+    },
+  }
+  return parseRegistry({ agents: [{ id: 'cursor', version, distribution: { binary } }] })!
+}
+
+/** An archive install as Kettu records it, written straight to disk. */
+async function writeArchive(root: string, version: string): Promise<InstalledArchive> {
+  const dir = path.join(root, 'cursor', version)
+  await mkdir(dir, { recursive: true })
+  await writeFile(path.join(dir, 'cursor-agent'), ARCHIVE_PROGRAM, { mode: 0o755 })
+  const record = {
+    version,
+    url: `https://downloads.example.com/cursor-${version}.tar.gz`,
+    sha256: 'ab'.repeat(32),
+    cmd: './cursor-agent',
+    args: ['acp'],
+    installedAt: Date.now(),
+  }
+  await writeFile(path.join(dir, 'installed.json'), JSON.stringify(record))
+  return { ...record, dir }
+}
+
+/** A harness installed from a registry archive at 1.0.0, whose registry lists `live` unhashed. */
+async function archiveManager(live: string) {
+  const root = await tempFolder('kettu-archive-versions-')
+  await writeArchive(root, '1.0.0')
+  const downloads: ArchiveInstallOptions[] = []
+  const diagnostics = new Diagnostics()
+  const platform = process.platform === 'win32' ? 'win32' : process.platform
+  const nodeRuntime = { command: process.execPath, env: {} }
+  const settings: HostSettings = {
+    ...DEFAULT_SETTINGS,
+    locale: 'en',
+    initialSetupDone: true,
+    agents: { cursor: { enabled: true } },
+    addedAgents: [],
+    disabledAgents: [],
+    usage: { fromComputer: false },
+    sessionTitles: true,
+    lightModel: { mode: 'small' },
+    defaultAgent: null,
+    downloadService: false,
+  }
+  const agents = new AgentManager({
+    catalog: [ARCHIVE_DEF],
+    platform,
+    nodeRuntime,
+    appVersion: KETTU_VERSION,
+    env: new EnvironmentService({
+      platform,
+      nodeRuntime,
+      baseEnv: { PATH: '' },
+      resolve: async ({ baseEnv }) => ({
+        env: baseEnv,
+        source: 'inherited',
+        shell: null,
+        durationMs: 0,
+        warning: null,
+      }),
+      probe: async () => ({ nodeVersion: '24.0.0', npmPath: null, nodePath: null }),
+    }),
+    diagnostics,
+    launcher: inProcessLauncher(await loadFakeAgent()),
+    settings: () => settings,
+    reportsDir: path.join(root, 'reports'),
+    adaptersDir: root,
+    bundled: parseBundled({ registry: { agents: [...unhashedListing('1.0.0').values()] } }),
+    fetchRegistry: async () => unhashedListing(live),
+    manifestKeys: [signer.key],
+    fetchManifest: async () => {
+      throw new Error('offline')
+    },
+    installArchive: async (options) => {
+      downloads.push(options)
+      const installed = await writeArchive(root, options.version)
+      return { ...installed, sha256: 'cd'.repeat(32) }
+    },
+    status: () => {},
+    processes: () => {},
+    authCommands: () => {},
+  })
+  agents.restoreUpdates({
+    version: 1,
+    agents: { cursor: { checkedAt: null, attemptedAt: null, latest: null, ran: '1.0.0' } },
+  })
+  return { agents, downloads, diagnostics, status: () => agents.status('cursor') }
+}
+
+describe('an archive the registry gives no SHA-256 for', () => {
+  it('is not installed by automatic updates, which say so and offer it by hand', async () => {
+    const m = await archiveManager('1.1.0')
+    await m.agents.checkUpdates()
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    expect(m.downloads).toEqual([])
+    expect(m.status().release?.version).toBe('1.0.0')
+    expect(m.status().automatic).toMatchObject({ on: true, noChecksum: true })
+    expect(m.status().update).toEqual({ adapterVersion: '1.1.0', cliVersion: null })
+  })
+
+  it('installs by hand as a first install does, logging the hash it measured', async () => {
+    const m = await archiveManager('1.1.0')
+    await m.agents.checkUpdates()
+    await m.agents.update('cursor')
+    expect(m.downloads.map((d) => [d.version, d.sha256])).toEqual([['1.1.0', undefined]])
+    expect(m.status().release?.version).toBe('1.1.0')
+    expect(m.status().update).toBeNull()
+    const warning = m.diagnostics
+      .logEntries()
+      .find((entry) => entry.level === 'warn' && entry.message.includes('cd'.repeat(32)))
+    expect(warning?.message).toContain('cursor-1.1.0.tar.gz')
   })
 })

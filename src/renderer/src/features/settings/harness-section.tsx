@@ -17,6 +17,7 @@ import type {
   AgentInstallMethod,
   AgentStatus,
   AgentTask,
+  ProgramMethod,
   VersionMoveReason,
 } from '@shared/agent-host'
 import type { HarnessId } from '@shared/thread'
@@ -72,7 +73,13 @@ import {
   TaskLog,
   WithCode,
 } from './agent-parts'
-import { installKind, startInstall, type InstallKind, type SettingsHook } from './harness-install'
+import {
+  installKind,
+  installRoute,
+  startInstall,
+  type InstallKind,
+  type SettingsHook,
+} from './harness-install'
 import { harnessVersion, useAction, VENDORS } from './agent-helpers'
 import {
   CommandLine,
@@ -152,10 +159,10 @@ function retryTask(
   if (task.kind === 'update') {
     if (task.method) startCliUpdate(agents, harness)
     else startUpdate(agents, harness)
-  } else void startInstall(agents, settings, harness, task.method)
+  } else void startInstall(agents, settings, harness, installRoute(task))
 }
 
-function methodName(t: SettingsT, method: AgentInstallMethod['id']): string {
+function methodName(t: SettingsT, method: ProgramMethod): string {
   return t(`harnesses.methods.${method}`)
 }
 
@@ -965,9 +972,11 @@ const SWITCH_BACK_LINE = {
 /**
  * The switch for Kettu's own install of a harness to follow its target by itself, from the ACP
  * Registry or Kettu's checks, and the last move it made: an update, or a switch back after a
- * withdrawal, and why.
+ * withdrawal, and why. A version without a checksum, which it does not install, is offered here
+ * by hand.
  */
 function AutomaticUpdatesRow({ status }: { status: AgentStatus }) {
+  const { useAgentsStore } = useHostScope()
   const { t } = useTranslation('settings')
   const now = useNow()
   const [apply, error] = useApply()
@@ -976,24 +985,36 @@ function AutomaticUpdatesRow({ status }: { status: AgentStatus }) {
   const { moved } = automatic
   const ago = moved ? mediumAgo(moved.at, now) : ''
   const kettu = automatic.follows === 'kettu'
-  const line = !automatic.on
-    ? t(kettu ? 'harnesses.autoUpdate.offKettu' : 'harnesses.autoUpdate.off')
-    : moved
-      ? t(
-          moved.withdrawn ? WENT_BACK[moved.reason ?? 'registry'] : 'harnesses.autoUpdate.updated',
-          {
-            from: moved.from,
-            to: moved.to,
-            ago,
-          },
-        )
-      : t(kettu ? 'harnesses.autoUpdate.onKettu' : 'harnesses.autoUpdate.on')
+  const unchecked =
+    automatic.on && automatic.noChecksum && status.update ? status.update.adapterVersion : null
+  const busy = status.task?.state === 'running'
+  const line = unchecked
+    ? t('harnesses.autoUpdate.noChecksum')
+    : !automatic.on
+      ? t(kettu ? 'harnesses.autoUpdate.offKettu' : 'harnesses.autoUpdate.off')
+      : moved
+        ? t(
+            moved.withdrawn
+              ? WENT_BACK[moved.reason ?? 'registry']
+              : 'harnesses.autoUpdate.updated',
+            {
+              from: moved.from,
+              to: moved.to,
+              ago,
+            },
+          )
+        : t(kettu ? 'harnesses.autoUpdate.onKettu' : 'harnesses.autoUpdate.on')
   return (
     <RowFrame
       id="auto-update"
       text={<RowText name={entryText('harnesses.auto-update').name} description={line} />}
     >
       <ControlError error={error} />
+      {unchecked && !busy && (
+        <SetButton onClick={() => startUpdate(useAgentsStore, status.harnessId)}>
+          {t('harnesses.updateTo', { version: unchecked })}
+        </SetButton>
+      )}
       <SettingSwitch
         label={t('harnesses.autoUpdate.name')}
         checked={automatic.on}

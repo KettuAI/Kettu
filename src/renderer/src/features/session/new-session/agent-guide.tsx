@@ -14,8 +14,10 @@ import { InstallDialog } from '@renderer/features/settings/harness-section'
 import {
   addDefaultAgents,
   installKind,
+  installRoute,
   startInstall,
 } from '@renderer/features/settings/harness-install'
+import { confirmCliUpdate } from '@renderer/features/updates/command-confirm-model'
 import { errorMessage } from '@renderer/lib/host'
 import { hasProgram, useAgentsStore } from '@renderer/stores/agents'
 import { useSettingsStore } from '@renderer/stores/settings'
@@ -94,7 +96,7 @@ function GuideRow({ status }: { status: AgentStatus }) {
   const install = () => {
     if (kind === 'program') setInstalling(true)
     else if (kind === 'package')
-      void startInstall(useAgentsStore, useSettingsStore, harness, task?.method)
+      void startInstall(useAgentsStore, useSettingsStore, harness, installRoute(task))
     else openHarnessSettings(harness)
   }
 
@@ -121,11 +123,7 @@ function GuideRow({ status }: { status: AgentStatus }) {
           {ts(task?.kind === 'update' ? 'agents.update.updating' : 'agents.install.installing')}
         </span>
       ) : minimum !== null ? (
-        <Button
-          variant="outline"
-          size="xs"
-          onClick={() => void useAgentsStore.getState().updateCli(status.id)}
-        >
+        <Button variant="outline" size="xs" onClick={() => void confirmCliUpdate(status)}>
           {ts(reason ? 'agents.update.failed' : 'agents.update.button')}
         </Button>
       ) : hasProgram(status) ? (

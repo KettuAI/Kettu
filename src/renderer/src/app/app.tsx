@@ -23,6 +23,7 @@ import {
 } from '@renderer/features/shell/top-bar'
 import { useSidebarPeek } from '@renderer/features/shell/sidebar-peek'
 import { QuitConfirm } from '@renderer/features/updates/quit-confirm'
+import { CommandConfirmDialog } from '@renderer/features/updates/command-confirm'
 import { UpdateDialog } from '@renderer/features/updates/update-dialog'
 import { useAccountShell } from '@renderer/features/account/account-row'
 import { SidebarList, SidebarNotices } from '@renderer/features/sidebar/app-sidebar'
@@ -116,6 +117,7 @@ export function App() {
         <LaunchCover />
         <QuitConfirm />
         <UpdateDialog />
+        <CommandConfirmDialog />
         <DebugRestartDialog />
         <ArtifactDialogs />
         <ArtifactConsentDialog />
