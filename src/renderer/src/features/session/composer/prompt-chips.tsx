@@ -245,7 +245,7 @@ export function usePromptChips({
             side="top"
             align="start"
             sideOffset={8}
-            className="pointer-events-none isolate z-50 outline-none"
+            className="pointer-events-none isolate z-(--layer-menu) outline-none"
           >
             <Popover.Popup
               initialFocus={false}
@@ -275,7 +275,7 @@ export function usePromptChips({
             side="top"
             align="start"
             sideOffset={4}
-            className="isolate z-50 outline-none"
+            className="isolate z-(--layer-menu) outline-none"
           >
             <Popover.Popup
               initialFocus={false}

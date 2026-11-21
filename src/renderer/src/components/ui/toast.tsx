@@ -203,7 +203,7 @@ export function Toaster() {
     useOverlayStore.getState().set(id, shown)
     return () => useOverlayStore.getState().set(id, false)
   }, [id, shown])
-  // The frame stays at the window's top layer, above dialogs, and takes the area's box, which the
+  // The frame stays above dialogs and below open menus, and takes the area's box, which the
   // toaster centres its stack in.
   useLayoutEffect(() => {
     const box = frame.current
@@ -232,7 +232,7 @@ export function Toaster() {
     <div
       ref={frame}
       data-overlay-layer={shown ? '' : undefined}
-      className="pointer-events-none fixed z-9999"
+      className="pointer-events-none fixed z-(--layer-toast)"
     >
       <AffectToaster
         inline

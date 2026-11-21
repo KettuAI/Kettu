@@ -436,6 +436,11 @@
   --scrollbar-size: 10px;
   --scrollbar-inset: 3px;
 
+  /* Layers above the page's own, which dialogs and viewers share at 50: a toast shows over a
+     dialog, and an open menu, popover or tooltip over a toast. */
+  --layer-toast: 60;
+  --layer-menu: 70;
+
   /* Motion: 150 to 220 ms on --ease-standard; spinners turn once in 0.9 s. */
   --duration-instant: 60ms;
   --duration-fast: 150ms;

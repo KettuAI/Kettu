@@ -45,7 +45,7 @@ function PopoverContent({
         sideOffset={sideOffset}
         collisionAvoidance={collisionAvoidance}
         anchor={anchor}
-        className="isolate z-50"
+        className="isolate z-(--layer-menu)"
       >
         <PopoverPrimitive.Popup
           data-slot="popover-content"

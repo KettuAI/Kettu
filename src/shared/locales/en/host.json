@@ -288,6 +288,8 @@
     "reportTimeout": "{{command}} did not finish in {{seconds}} s",
     "unreadableReport": "{{agent}}'s {{command}} gave no report Kettu can read",
     "removed": "This agent was deleted, so this session cannot continue.",
+    "providerBusy": "A provider account is being changed",
+    "noProviders": "This agent has no provider accounts",
     "disabled": "{{agent}} is turned off. Turn it on in Settings › Agents to use it.",
     "uninstall": {
       "busy": "{{agent}} is being installed or updated. Wait for it to finish, then uninstall."
@@ -742,6 +744,15 @@
     },
     "command": {
       "compact": "Compact the session"
+    },
+    "account": {
+      "unknownProvider": "OpenCode does not know this provider.",
+      "removeFailed": "OpenCode could not remove the account.",
+      "activateFailed": "OpenCode could not activate the account.",
+      "saveKeyFailed": "OpenCode could not save the key.",
+      "keySavedNotActivated": "The key was saved, but OpenCode could not activate the account.",
+      "listFailed": "OpenCode could not list its providers.",
+      "readCredentialsFailed": "OpenCode could not read its credentials."
     }
   },
   "pi": {
@@ -988,6 +999,11 @@
   },
   "marketSkills": {
     "nameTaken": "You’ve already added a skill named {{name}}, from {{from}}. Remove that one first: an agent keeps only one of two skills with the same name."
+  },
+  "marketPlugins": {
+    "notListedInstalled": "{{agent}} did not list {{id}} as installed",
+    "marketplaceNotListed": "{{agent}} did not list the marketplace it added",
+    "noSuchPlugin": "{{agent}} offers no plugin {{id}}"
   },
   "report": {
     "draftNoAgent": "No agent is available to draft the description",

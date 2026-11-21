@@ -327,7 +327,7 @@ export function PromptBox({
             // Shorter over the box rather than flipped under it, where it would hide Send: New
             // session's box can sit high with little room above.
             collisionAvoidance={{ side: 'none' }}
-            className="isolate z-50 outline-none"
+            className="isolate z-(--layer-menu) outline-none"
           >
             <Popover.Popup
               ref={popup}

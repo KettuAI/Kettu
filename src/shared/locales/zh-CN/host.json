@@ -284,6 +284,8 @@
     "reportTimeout": "{{command}} 没有在 {{seconds}} 秒内完成",
     "unreadableReport": "{{agent}} 的 {{command}} 没有返回 Kettu 能读取的报告",
     "removed": "这个智能体已删除，这个会话无法继续。",
+    "providerBusy": "有一个厂商账号正在更改",
+    "noProviders": "这个智能体没有厂商账号",
     "disabled": "{{agent}} 已停用。到设置 › 智能体里启用后才能使用。",
     "uninstall": {
       "busy": "{{agent}} 正在安装或更新，等它完成后才能卸载。"
@@ -737,6 +739,15 @@
     },
     "command": {
       "compact": "压缩会话"
+    },
+    "account": {
+      "unknownProvider": "OpenCode 不认识这个厂商。",
+      "removeFailed": "OpenCode 无法移除这个账号。",
+      "activateFailed": "OpenCode 无法把这个账号设为使用中。",
+      "saveKeyFailed": "OpenCode 无法保存这个 key。",
+      "keySavedNotActivated": "key 已保存，但 OpenCode 无法把这个账号设为使用中。",
+      "listFailed": "OpenCode 无法列出它的厂商。",
+      "readCredentialsFailed": "OpenCode 无法读取它的凭据。"
     }
   },
   "pi": {
@@ -983,6 +994,11 @@
   },
   "marketSkills": {
     "nameTaken": "已经添加过名为 {{name}} 的技能，来自 {{from}}。先移除那一个：同名的两个技能，智能体只会保留一个。"
+  },
+  "marketPlugins": {
+    "notListedInstalled": "{{agent}} 的已安装列表里没有 {{id}}",
+    "marketplaceNotListed": "{{agent}} 的列表里没有它刚添加的市场",
+    "noSuchPlugin": "{{agent}} 没有提供插件 {{id}}"
   },
   "report": {
     "draftNoAgent": "没有可用来起草描述的智能体",
