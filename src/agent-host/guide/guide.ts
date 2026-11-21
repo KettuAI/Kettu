@@ -129,7 +129,12 @@ export function guidePrompt(flags: GuideFlags, skills: boolean): string {
     ['show the user a page, report or document', ['artifacts']],
     ['hand work to another session or agent', ['sessions']],
     ...(flags.suggest
-      ? [['take on a requirement large enough for stages', ['workflows']] as [string, GuideTopic[]]]
+      ? [
+          [
+            'take on work the user wants carried through stages, even stages they spell out',
+            ['workflows'],
+          ] as [string, GuideTopic[]],
+        ]
       : []),
     flags.computer
       ? [

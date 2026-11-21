@@ -238,8 +238,9 @@ steps:
 
 const SUGGESTING = `## When to suggest one
 
-- Do work that can give its result in one go here in the conversation.
-- Suggest a workflow on your own for work that needs stages such as requirement review, design, implementation, code review, testing and release, or work across several platforms or modules.
+- Do here what one reply can finish, such as writing a function or fixing a typo.
+- Suggest a workflow on your own when the user wants work carried through stages, such as from research or requirement review through design, build, code review and testing to release or launch, or a spec, failing tests, build and another agent's review in turn, or across several platforms or modules. The stages are what they asked for, even when they spell the steps out for you and the change itself looks small.
+- Suggest before you read the code or start building. A suggestion is only a card: nothing runs until the user starts it, and they can still have it done here.
 - Leave decisions about platforms, technology and scope to the first step. Ask one or two questions up front only if you need the answers to choose a workflow.
 
 ## Suggesting
@@ -487,9 +488,12 @@ export const SKILL_SPECS: readonly SkillSpec[] = [
     topic: 'workflows',
     description: (flags) =>
       flags.suggest
-        ? 'Suggest a Kettu workflow for work that needs stages, from requirement review to release, ' +
-          "or spans several platforms or modules. Find one in the user's library or the Kettu " +
-          'Marketplace. Also use this skill to write a workflow or run a workflow step.'
+        ? 'Load before you read code or build when the user wants work carried through stages, ' +
+          'even stages they spell out for you, such as from research or requirement review to ' +
+          "release or launch, or a spec, failing tests, build and another agent's review, or " +
+          "across several platforms or modules: suggest a Kettu workflow from the user's " +
+          'library or the Kettu Marketplace, or write one, instead of doing it all here. Also to ' +
+          'write a workflow or run a workflow step.'
         : 'Write a Kettu workflow for the user, or run a step of a task that Kettu runs through ' +
           'a workflow.',
     body: (flags) => workflows(flags.suggest),
