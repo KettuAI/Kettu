@@ -1899,14 +1899,7 @@ li[data-row-exit='dust'] > * {
 }
 /* While a turn uses the terminal: who has it, at its foot. */
 .kp-tbox__pill {
-  position: absolute;
-  bottom: 14px;
-  left: 50%;
   z-index: 4;
-  display: flex;
-  width: max-content;
-  max-width: calc(100% - 24px);
-  translate: -50% 0;
 }
 .kp-ask {
   position: absolute;
@@ -2157,14 +2150,8 @@ li[data-row-exit='dust'] > * {
 }
 /* While a turn uses the device: who has it, at its bottom, above the hardware keys. */
 .kp-stage__pill {
-  position: absolute;
-  bottom: 46px;
-  left: 50%;
+  --ctl-dock-rest: 34px;
   z-index: 4;
-  display: flex;
-  width: max-content;
-  max-width: calc(100% - 24px);
-  translate: -50% 0;
 }
 .kp-device-screen {
   position: relative;

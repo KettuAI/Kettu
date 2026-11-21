@@ -46,6 +46,7 @@ import {
   EmptyTitle,
 } from '@renderer/components/ui/empty'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
+import { PillDock } from '@renderer/components/control/pill-dock'
 import { SurfacePill } from '@renderer/components/control/surface-pill'
 import { useControlAgent } from '@renderer/components/control/use-control-agent'
 import { SurfaceTabs } from '@renderer/features/shell/surface-tabs'
@@ -359,7 +360,7 @@ function Stage({ device, sessionId }: { device: DeviceInfo; sessionId: string })
         onHeld={held}
         onTakeOver={takeOver}
       />
-      <div className="kp-stage__pill">
+      <PillDock kind="device" className="kp-stage__pill">
         <AnimatePresence>
           {control && (
             <SurfacePill
@@ -376,7 +377,7 @@ function Stage({ device, sessionId }: { device: DeviceInfo; sessionId: string })
             />
           )}
         </AnimatePresence>
-      </div>
+      </PillDock>
       <div role="toolbar" aria-label={t('buttons.label')} className="kp-hw">
         {BUTTONS.map((group, index) => {
           const shown = group.filter((entry) => entry.platforms.includes(device.platform))
