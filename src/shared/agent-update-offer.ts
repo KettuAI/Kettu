@@ -1,7 +1,7 @@
 // The update a harness offers through one of its agents, which the sidebar's card and the notch
 // island both offer.
 
-import type { AgentInstallMethod, AgentStatus } from './agent-host'
+import type { AgentStatus, ProgramMethod } from './agent-host'
 import type { AgentId } from './thread'
 
 /** One harness's update on offer, as the card and its popover name it. */
@@ -14,7 +14,7 @@ export interface AgentUpdateOffer {
   /** The command that updates the user's own program; null when Kettu updates its package. */
   command: string | null
   /** How the user installed their program, which the command follows. */
-  method: AgentInstallMethod['id'] | null
+  method: ProgramMethod | null
   /** Kettu's package the update installs; `versions` when `from` and `to` are its own. */
   package: { name: string; versions: boolean } | null
 }

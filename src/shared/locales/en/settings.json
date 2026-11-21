@@ -1970,7 +1970,10 @@
       "brew": "Homebrew",
       "npm": "npm",
       "script": "Official install script",
-      "winget": "WinGet"
+      "winget": "WinGet",
+      "pnpm": "pnpm",
+      "bun": "bun",
+      "yarn": "Yarn"
     },
     "updateTo": "Update to {{version}}",
     "agentCount_one": "{{count}} agent",
@@ -2028,7 +2031,8 @@
       "offKettu": "Stays on the version it runs, and offers each new version Kettu's checks recommend.",
       "wentBackBroken": "Went back from {{from}} to {{to}} {{ago}}: Kettu's checks found {{from}} does not work with this version of Kettu",
       "wentBackManifest": "Went back from {{from}} to {{to}} {{ago}}: Kettu's checks recommend {{to}}",
-      "wentBackBundled": "Went back from {{from}} to {{to}} {{ago}}: this version of Kettu comes with {{to}}"
+      "wentBackBundled": "Went back from {{from}} to {{to}} {{ago}}: this version of Kettu comes with {{to}}",
+      "noChecksum": "This version has no checksum, so it can’t update automatically. Updating by hand installs it without that check."
     },
     "switchBack": {
       "line": "The ACP Registry lists {{version}} now",

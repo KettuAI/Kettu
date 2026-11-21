@@ -306,7 +306,7 @@ export interface AgentTask {
   kind: 'install' | 'update'
   state: 'running' | 'failed'
   command: string // what runs, quoted for the platform
-  method: AgentInstallMethod['id'] | null // the route a binary agent's install took; null otherwise
+  method: ProgramMethod | null // the route a binary agent's install or a program's update took
   progress: string[] // the latest output lines
   error: string | null // why it failed, in the user's terms
 }
@@ -323,7 +323,7 @@ export interface AgentCli {
   command: string // looked up on PATH, such as claude
   installed: InstalledCli | null // null: none found
   // How it was installed, read from where it lives; null when Kettu cannot tell.
-  method: AgentInstallMethod['id'] | null
+  method: ProgramMethod | null
   // A newer version, from the daily check, and the command that updates it the way it was
   // installed; null when up to date, unchecked, or the way is unknown.
   update: { version: string; command: string } | null
@@ -348,6 +348,12 @@ export interface AgentInstallMethod {
   command: string // quoted for the platform, as the page shows it
   available: boolean // the tool it needs was found on the agent environment's PATH
 }
+
+/**
+ * How the user's own program was installed: a route Kettu installs by, or a global install of
+ * another package manager, which updates and removes it with its own commands.
+ */
+export type ProgramMethod = AgentInstallMethod['id'] | 'pnpm' | 'bun' | 'yarn'
 
 export interface AgentStatus {
   id: AgentId
@@ -419,9 +425,10 @@ export interface AgentStatus {
   updateCheckedAt: number | null
   // How Kettu's own install of a harness follows the version it is given, from the ACP Registry or
   // Kettu's compatibility manifest (`follows`): whether it updates by itself, its last move, when
-  // and why (`withdrawn` when it went back to an older version), and whether the update on offer
-  // goes back to an older version, and why. Null for the other harnesses, and absent on older
-  // hosts; `follows` and the reasons are absent on older hosts too.
+  // and why (`withdrawn` when it went back to an older version), whether the update on offer
+  // goes back to an older version, and why, and whether it is an archive without a SHA-256 for
+  // this platform (`noChecksum`), which only installs by hand. Null for the other harnesses, and
+  // absent on older hosts; `follows`, the reasons and `noChecksum` are absent on older hosts too.
   automatic?: {
     on: boolean
     moved: {
@@ -434,6 +441,7 @@ export interface AgentStatus {
     back: boolean
     backReason?: VersionMoveReason
     follows?: 'registry' | 'kettu'
+    noChecksum?: true
   } | null
   // The user's own program is a version Kettu's compatibility manifest says does not work:
   // `broken` when it names it, else it is outside `supported`; `recommended` is the version Kettu

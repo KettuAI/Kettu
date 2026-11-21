@@ -4,7 +4,16 @@
 
 import type { AgentUpdate } from '@shared/agent-host'
 import type { Platform } from '@shared/platform'
-import { npmFailure, runNpm, type NpmOptions, type NpmRun } from './adapter-install'
+import {
+  npmFailure,
+  programFailure,
+  runNpm,
+  runProgram,
+  type NpmOptions,
+  type NpmRun,
+  type ProgramOptions,
+  type ProgramRun,
+} from './adapter-install'
 import type { Env } from './find-command'
 import { t } from './i18n'
 import { compareVersions, highestVersion, isVersion } from './versions'
@@ -133,6 +142,58 @@ async function fetchInRange(options: LatestOptions, range: string): Promise<Agen
     adapterVersion: best.version,
     cliVersion: typeof best.cli === 'string' && isVersion(best.cli) ? best.cli : null,
   }
+}
+
+export interface BrewLatestOptions {
+  brew: string
+  /** The formula, a tap's included, or the cask. */
+  name: string
+  cask: boolean
+  env: Env
+  platform: Platform
+  cwd: string
+  timeoutMs: number
+  signal?: AbortSignal
+  run?(options: ProgramOptions): Promise<ProgramRun>
+}
+
+/**
+ * The version Homebrew would upgrade a formula or cask to, as `brew info --json=v2` prints it:
+ * a formula's stable version, or a cask's version before any `,` build part. Null when it names
+ * none.
+ */
+export function brewVersion(text: string, cask: boolean): string | null {
+  const parsed = parseJson(text)
+  if (!isObject(parsed)) return null
+  const list = parsed[cask ? 'casks' : 'formulae']
+  const entry: unknown = Array.isArray(list) ? list[0] : undefined
+  if (!isObject(entry)) return null
+  const raw = cask ? entry.version : isObject(entry.versions) ? entry.versions.stable : undefined
+  const version = typeof raw === 'string' ? raw.split(',')[0] : undefined
+  return isVersion(version) ? version : null
+}
+
+/**
+ * The newest version of a formula or cask that Homebrew knows, read through the user's own brew,
+ * which answers from its own copy of the formulae. Rejects with a reason the user can read.
+ */
+export async function fetchBrewLatest(options: BrewLatestOptions): Promise<string> {
+  const args = ['info', '--json=v2', options.cask ? '--cask' : '--formula', options.name]
+  const run = await (options.run ?? runProgram)({
+    program: options.brew,
+    args,
+    cwd: options.cwd,
+    env: options.env,
+    platform: options.platform,
+    timeoutMs: options.timeoutMs,
+    ...(options.signal ? { signal: options.signal } : {}),
+  })
+  if (run.aborted) throw new Error(t('agent.update.stopped'))
+  const failure = programFailure('brew', run, options.timeoutMs)
+  if (failure) throw new Error(failure)
+  const version = brewVersion(run.stdout, options.cask)
+  if (!version) throw new Error(t('agent.update.noVersion', { package: options.name }))
+  return version
 }
 
 /** The install a start runs, as the update decision sees it. */

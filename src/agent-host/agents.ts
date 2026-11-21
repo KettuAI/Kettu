@@ -26,6 +26,7 @@ import type {
   McpStatus,
   PlanLimit,
   PlanResets,
+  ProgramMethod,
   ProviderBalance,
   ResetsError,
   ResetSpendCode,
@@ -107,7 +108,7 @@ import {
   type StopTimings,
 } from './agent-process'
 import type { AgentTrees } from './agent-trees'
-import { decideUpdate, fetchLatest, type LatestOptions } from './agent-updates'
+import { decideUpdate, fetchBrewLatest, fetchLatest, type LatestOptions } from './agent-updates'
 import {
   installArchive,
   listArchiveInstalls,
@@ -135,12 +136,15 @@ import { readCodebuddySite, shellOverrides, writeCodebuddySite } from './codebud
 import { readAutoCompact, writeAutoCompact, type CompactPlace } from './auto-compact/settings'
 import type { CodexRequest } from './marketplace/codex-plugins'
 import {
+  globalInstallOf,
   installedFolder,
   installMethodOf,
   installPlans,
-  npmPrefixOf,
+  shellShimTarget,
+  uninstallPlan,
   updatePlan,
   type ArchiveEntry,
+  type GlobalInstall,
   type InstallPlan,
 } from './binary-install'
 import {
@@ -167,7 +171,7 @@ import type { Diagnostics } from './diagnostics'
 import type { AgentDriver, AgentTransport } from './driver'
 import { driverOf, preferredProtocol, protocolFor, type DriverOverrides } from './drivers'
 import { HostError, invalidParams } from './errors'
-import { getEnv, isExecutableFile, type Env } from './find-command'
+import { findCommand, getEnv, isExecutableFile, type Env } from './find-command'
 import {
   fetchManifest,
   isBroken,
@@ -194,7 +198,12 @@ import {
 } from './harness-versions'
 import { HostedRun, type HostedRunHooks } from './hosted-run'
 import { t } from './i18n'
-import { CliVersions, type CliProbe, type CliVersion } from './installed-cli'
+import {
+  CliVersions,
+  shimTarget as cmdShimTarget,
+  type CliProbe,
+  type CliVersion,
+} from './installed-cli'
 import { OpenCodeClient } from './opencode/client'
 import { OpenCodeConnection } from './opencode/connection'
 import type { OpenCodeSessions } from './model-requests/opencode'
@@ -445,7 +454,9 @@ class Harness {
   /** The CLI version of the install a start runs, read at detection. */
   installedCli: string | null = null
   /** How the user's CLI was installed, told by where it lives. */
-  cliMethod: AgentInstallMethod['id'] | null = null
+  cliMethod: ProgramMethod | null = null
+  /** The package manager's global install it lies in, and the folder its commands name. */
+  cliGlobal: GlobalInstall | null = null
   /** A binary agent's version, from its own `--version`, until it starts and reports its own. */
   binaryVersion: string | null = null
   /** The program `binaryVersion` was read from, so an answer for another one is dropped. */
@@ -645,6 +656,27 @@ type Move = NonNullable<NonNullable<AgentStatus['automatic']>['moved']>
 const sameVersion = (a: string, b: string | null | undefined): boolean =>
   !!b && compareVersions(a, b) === 0
 
+// npm's and pnpm's shims are under 1 KB; a larger file is not one of them.
+const SHIM_LIMIT = 64 * 1024
+
+/**
+ * The package file a shim at `file` starts: a shell script off Windows, a `.cmd` on it. Null for
+ * any other file.
+ */
+async function shimTarget(file: string, platform: Platform): Promise<string | null> {
+  if (platform === 'win32' && !/\.(?:cmd|bat)$/i.test(file)) return null
+  const info = await stat(file).catch(() => null)
+  if (!info?.isFile() || info.size > SHIM_LIMIT) return null
+  const text = await readFile(file, 'utf8').catch(() => null)
+  if (text === null) return null
+  return platform === 'win32' ? cmdShimTarget(text, file) : shellShimTarget(text, file)
+}
+
+/** An archive the registry gives no SHA-256 for, which only the user's click installs. */
+function unhashed(target: TargetRelease): boolean {
+  return target.kind === 'archive' && !target.entry.sha256
+}
+
 /** Whether two updates name the same adapter and CLI versions. */
 function sameUpdate(a: AgentUpdate | null, b: AgentUpdate | null): boolean {
   return !!a && !!b && a.adapterVersion === b.adapterVersion && a.cliVersion === b.cliVersion
@@ -834,7 +866,7 @@ export class AgentManager {
     const running = adapter?.current ?? adapter?.fallback
     const log = (level: 'info' | 'warn' | 'error', message: string): void =>
       this.deps.diagnostics.log(level, message)
-    const [installedCli, plans, cliMethod] = await Promise.all([
+    const [installedCli, plans, route] = await Promise.all([
       running ? readCliVersion(h.def.id, running.dir, log) : null,
       h.def.installs
         ? installPlans(h.def.installs, {
@@ -858,7 +890,8 @@ export class AgentManager {
     h.detection = effective
     h.installedCli = installedCli
     h.installPlans = plans
-    h.cliMethod = cliMethod
+    h.cliMethod = route.method
+    h.cliGlobal = route.global
     // A binary agent's own version is asked in the background, so detection never waits for it.
     // A routed program's launch command is the runtime the router runs on, not the program.
     const program =
@@ -883,20 +916,47 @@ export class AgentManager {
     if (program) h.binaryVersionAsked = this.askBinaryVersion(h, program, env)
   }
 
-  /** How the user's own CLI, or a binary harness's program, was installed. */
+  /**
+   * How the user's own CLI, or a binary harness's program, was installed, and the package
+   * manager's global install it lies in, if any.
+   */
   private async cliMethod(
     h: Harness,
     detection: Detection,
-  ): Promise<AgentInstallMethod['id'] | null> {
-    const installs = h.def.installs
+  ): Promise<{ method: ProgramMethod | null; global: GlobalInstall | null }> {
+    const none = { method: null, global: null }
+    const { platform } = this.deps
+    const installs = { ...h.def.installs }
+    installs.npm ??= this.programPackage(h) ?? undefined
     const found =
       detection.cli?.path ??
       (h.def.launch.kind === 'binary' && detection.state === 'available'
         ? detection.spec?.command
         : undefined)
-    if (!installs || !found) return null
+    if (!found) return none
+    const routeOf = (file: string) => {
+      const method = installMethodOf(installs, file, { platform, home: os.homedir() })
+      if (!method) return null
+      const global = installs.npm ? globalInstallOf(file, installs.npm, platform) : null
+      return { method, global: global?.manager === method ? global : null }
+    }
     const real = await realpath(found).catch(() => found)
-    return installMethodOf(installs, real, { platform: this.deps.platform, home: os.homedir() })
+    const direct = routeOf(real)
+    if (direct) return direct
+    // pnpm's global commands are shell scripts, and every package manager's are `.cmd` files on
+    // Windows, which start the package's file.
+    const target = await shimTarget(found, platform)
+    if (!target) return none
+    return routeOf(target) ?? routeOf(await realpath(target).catch(() => target)) ?? none
+  }
+
+  /**
+   * The npm package of the harness's own program, which npm, pnpm, bun or yarn may have installed
+   * globally: its vendor's npm route, or a package harness's own package.
+   */
+  private programPackage(h: Harness): string | null {
+    const { installs, launch } = h.def
+    return installs?.npm ?? (launch.kind === 'package' ? launch.package : null)
   }
 
   /** A program's `--version` answer: the test's probe, or the cache the CLIs are asked through. */
@@ -1727,12 +1787,21 @@ export class AgentManager {
     h.moved = null
     if (!program) return { command: null, error: null }
     await this.deps.env.ready()
+    const { platform } = this.deps
+    const env = this.deps.env.agentEnv(h.def.id)
+    const found = program.lookUp
+      ? await findCommand(program.program, {
+          platform,
+          env,
+          isExecutable: (file) => isExecutableFile(file, platform),
+        })
+      : null
     const run = await runProgram({
-      program: program.program,
+      program: found ?? program.program,
       args: program.args,
       cwd: os.homedir(),
-      env: this.deps.env.agentEnv(h.def.id),
-      platform: this.deps.platform,
+      env,
+      platform,
       timeoutMs: this.timings.installMs,
     })
     return {
@@ -1744,7 +1813,7 @@ export class AgentManager {
   /** How to remove the user's own program, when its install route has a safe opposite. */
   private programUninstall(
     h: Harness,
-  ): { command: string; program: string; args: string[] } | null {
+  ): { command: string; program: string; args: string[]; lookUp?: boolean } | null {
     const { installs } = h.def
     if (h.def.launch.kind === 'uvx') {
       const args = ['cache', 'clean', h.def.launch.package]
@@ -1754,8 +1823,18 @@ export class AgentManager {
         args,
       }
     }
-    if (!installs) return null
     const method = h.cliMethod
+    const global = h.cliGlobal
+    const npmPackage = this.programPackage(h)
+    if (global && npmPackage && global.manager === method) {
+      const plan = uninstallPlan(global.manager, npmPackage, global.dir, this.deps.platform)
+      const npm = this.deps.env.nodeProbe().npmPath
+      if (!plan || (plan.tool === 'npm' && !npm)) return null
+      // pnpm, bun and yarn are looked up when it runs, since `pnpm.cmd` does not start by name.
+      const program = plan.tool === 'npm' ? npm! : plan.tool
+      return { command: plan.command, program, args: plan.args, lookUp: plan.tool !== 'npm' }
+    }
+    if (!installs) return null
     if (method === 'brew') {
       const name = installs.brewCask ?? installs.brew
       if (!name) return null
@@ -1763,16 +1842,6 @@ export class AgentManager {
       return {
         command: formatCommand({ command: 'brew', args }, this.deps.platform),
         program: 'brew',
-        args,
-      }
-    }
-    if (method === 'npm' && installs.npm) {
-      const npm = this.deps.env.nodeProbe().npmPath
-      if (!npm) return null
-      const args = ['uninstall', '-g', installs.npm]
-      return {
-        command: formatCommand({ command: 'npm', args }, this.deps.platform),
-        program: npm,
         args,
       }
     }
@@ -2034,16 +2103,15 @@ export class AgentManager {
   }
 
   /**
-   * The target on offer to a harness with a target and automatic updates off. An archive without a
-   * SHA-256 to check it against, a version that failed to start, or an SDK that is not known to
-   * run on the user's CLI is none.
+   * The target on offer to a harness with a target and automatic updates off, or to one with them
+   * on whose target is an archive without a SHA-256, which they do not install. A version that
+   * failed to start, or an SDK that is not known to run on the user's CLI, is none.
    */
   private targetUpdate(h: Harness): AgentUpdate | null {
-    if (this.automatic(h)) return null
     const running = this.ownVersion(h)
     const target = this.target(h)
     if (!running || !target || compareVersions(target.version, running) === 0) return null
-    if (target.kind === 'archive' && !target.entry.sha256) return null
+    if (this.automatic(h) && !unhashed(target)) return null
     if (h.failed && compareVersions(h.failed.version, target.version) === 0) return null
     if (this.cliFits(h, target.version) !== true) return null
     return { adapterVersion: target.version, cliVersion: null }
@@ -2064,10 +2132,10 @@ export class AgentManager {
   /**
    * The user's own program of a binary harness that detection named no CLI for: one with an npm
    * route but no `cli` of its own, such as Kilo Code's, whose updates Kettu reads from npm, or one
-   * with a `cli` whose program was picked in Settings, which runs as it is. It shows as the
-   * harness's CLI. Null while Kettu's own install runs, since that one updates through the
-   * registry, or while none was found. `reported` is the version the running agent named, for when
-   * the program was not asked.
+   * Homebrew installed, whose updates Homebrew tells, or one with a `cli` whose program was picked
+   * in Settings, which runs as it is. It shows as the harness's CLI. Null while Kettu's own install
+   * runs, since that one updates through the registry, or while none was found. `reported` is the
+   * version the running agent named, for when the program was not asked.
    */
   private ownProgram(
     h: Harness,
@@ -2075,7 +2143,8 @@ export class AgentManager {
   ): { command: string; installed: InstalledCli } | null {
     const { launch, installs, cli } = h.def
     if (launch.kind !== 'binary' || this.release(h)) return null
-    if (cli ? h.detection?.cli : !installs?.npm) return null
+    const checked = !!installs?.npm || this.programSource(h)?.kind === 'brew'
+    if (cli ? h.detection?.cli : !checked) return null
     const mine = this.userProgram(h)
     if (!mine) return null
     const installed = {
@@ -2166,13 +2235,14 @@ export class AgentManager {
   }
 
   /**
-   * Kettu's own package for it, the user's program, which npm publishes, or Kettu's install of a
-   * registry release is checked. A binary harness's archive counts only while it runs, since the
-   * user's own program keeps its own updates; before detection, it may.
+   * Kettu's own package for it, the user's program, which npm or Homebrew publishes, or Kettu's
+   * install of a registry release is checked. A binary harness's archive counts only while it
+   * runs, since the user's own program keeps its own updates; before detection, it may.
    */
   private checksUpdates(h: Harness): boolean {
-    const { launch } = h.def
-    if (launch.kind === 'package' || launch.kind === 'uvx' || h.def.installs?.npm) return true
+    const { launch, installs } = h.def
+    if (launch.kind === 'package' || launch.kind === 'uvx') return true
+    if (installs?.npm || installs?.brew || installs?.brewCask) return true
     return this.targeted(h) && (h.detection === null || !!this.release(h))
   }
 
@@ -2248,19 +2318,38 @@ export class AgentManager {
   }
 
   /**
-   * The harnesses npm's check asks about: a vendor's own package of Kettu's without a target whose
-   * npm was found, and those whose user's program is installed, whose versions npm publishes too.
-   * The others Kettu installs follow their target.
+   * The harnesses the daily check asks about: a vendor's own package of Kettu's without a target
+   * whose npm was found, and those whose user's program is installed in a way that tells its newer
+   * versions. The others Kettu installs follow their target.
    */
   private checkable(): Harness[] {
     const npm = this.deps.env.nodeProbe().npmPath
     return [...this.harnesses.values()].filter((h) => {
       const detection = h.detection
-      if (h.def.launch.kind === 'package' && !this.targeted(h)) {
-        return detection?.state === 'available' && !!detection.adapter?.npm
-      }
-      return !!npm && !!h.def.installs?.npm && !!this.userProgram(h)
+      const own = h.def.launch.kind === 'package' && !this.targeted(h)
+      if (own && detection?.state === 'available' && detection.adapter?.npm) return true
+      const source = this.programSource(h)
+      return source?.kind === 'brew' || (source?.kind === 'npm' && !!npm)
     })
+  }
+
+  /**
+   * Where the user's own program's newer versions are read, by how it was installed: Homebrew for
+   * a formula or cask; npm for a global install of npm, pnpm, bun or yarn, and for any other
+   * program its vendor also publishes on npm, as an install script's is. Null for one whose
+   * install route tells none.
+   */
+  private programSource(
+    h: Harness,
+  ): { kind: 'npm'; package: string } | { kind: 'brew'; name: string; cask: boolean } | null {
+    if (!this.userProgram(h)) return null
+    const installs = h.def.installs
+    if (h.cliMethod === 'brew') {
+      const name = installs?.brewCask ?? installs?.brew
+      return name ? { kind: 'brew', name, cask: !!installs?.brewCask } : null
+    }
+    const npmPackage = h.cliGlobal ? this.programPackage(h) : (installs?.npm ?? null)
+    return npmPackage ? { kind: 'npm', package: npmPackage } : null
   }
 
   private checkDue(h: Harness): number {
@@ -2519,7 +2608,7 @@ export class AgentManager {
       diagnostics.log('info', `${h.def.name}: ${message}`)
     }
     // An update is checked against the hash the registry gives, which a first install may lack.
-    if (target.kind === 'archive' && !target.entry.sha256) {
+    if (unhashed(target)) {
       note(`${target.version} is not installed by itself: the registry gives no SHA-256 for it`)
       return
     }
@@ -2561,44 +2650,68 @@ export class AgentManager {
 
   private async checkHarness(h: Harness, signal: AbortSignal): Promise<string | null> {
     const { launch } = h.def
+    const { platform } = this.deps
     const detection = h.detection
     const npm =
       (detection?.state === 'available' ? detection.adapter?.npm : null) ??
       this.deps.env.nodeProbe().npmPath
-    if (!npm) return null
-    const options = {
-      npm,
-      env: this.deps.env.agentEnv(h.def.id),
-      platform: this.deps.platform,
+    const env = this.deps.env.agentEnv(h.def.id)
+    const source = this.programSource(h)
+    const brew =
+      source?.kind === 'brew'
+        ? await findCommand('brew', {
+            platform,
+            env,
+            isExecutable: (file) => isExecutableFile(file, platform),
+          })
+        : null
+    const ownPackage = launch.kind === 'package' && !this.targeted(h) && !!npm
+    if (!ownPackage && !(source?.kind === 'npm' && npm) && !brew) return null
+    const shared = {
+      env,
+      platform,
       cwd: os.homedir(),
       timeoutMs: this.timings.updateViewMs,
       signal,
     }
     const fetch = this.deps.fetchLatest ?? fetchLatest
-    const cliPackage = h.def.installs?.npm
+    const readCli = async (): Promise<string | null> => {
+      if (source?.kind === 'npm' && npm) {
+        return (await fetch({ ...shared, npm, package: source.package, cli: null })).adapterVersion
+      }
+      if (source?.kind === 'brew' && brew) {
+        return fetchBrewLatest({
+          ...shared,
+          brew,
+          name: source.name,
+          cask: source.cask,
+          ...(this.deps.runProgram ? { run: this.deps.runProgram } : {}),
+        })
+      }
+      return null
+    }
     try {
       const [latest, cli] = await Promise.all([
-        launch.kind === 'package' && !this.targeted(h)
+        launch.kind === 'package' && !this.targeted(h) && npm
           ? fetch({
-              ...options,
+              ...shared,
+              npm,
               package: launch.package,
               ...(launch.updates ? { range: launch.updates } : {}),
               cli: CLI_VERSION_SOURCES[h.def.id] ?? null,
             })
           : null,
-        cliPackage && this.userProgram(h)
-          ? fetch({ ...options, package: cliPackage, cli: null })
-          : null,
+        readCli(),
       ])
       if (latest) h.latest = latest
-      if (cli) h.cliLatest = cli.adapterVersion
+      if (cli) h.cliLatest = cli
       h.checkedAt = Date.now()
       h.attemptedAt = h.checkedAt
       const found = [
         latest
           ? `${latest.adapterVersion}${latest.cliVersion ? `, CLI ${latest.cliVersion}` : ''}`
           : '',
-        cli ? `${cliPackage} ${cli.adapterVersion}` : '',
+        cli && source ? `${source.kind === 'brew' ? source.name : source.package} ${cli}` : '',
       ]
       this.deps.diagnostics.event(h.def.id, 'update check', found.filter(Boolean).join('; '))
       this.emit(this.home(h))
@@ -2772,6 +2885,13 @@ export class AgentManager {
           await removeTree(installed.dir)
           throw new Error(t('agent.binaryInstall.incomplete', { agent }))
         }
+        // As on a first install, a file the registry gives no hash for keeps the one measured.
+        if (!entry.sha256) {
+          diagnostics.log(
+            'warn',
+            `${entry.url} has no SHA-256 in the registry; installed the file with ${installed.sha256}.`,
+          )
+        }
         break
       }
       case 'uvx': {
@@ -2915,24 +3035,24 @@ export class AgentManager {
   private async cliUpdatePlan(
     h: Harness,
   ): Promise<{ command: string; run: { program: string; args: string[] } | null } | null> {
-    const installs = h.def.installs
     const mine = this.userProgram(h)
-    if (!installs || !mine || !h.cliMethod) return null
-    const platform = this.deps.platform
-    const npmPrefix =
-      h.cliMethod === 'npm' && installs.npm
-        ? npmPrefixOf(await realpath(mine.path).catch(() => mine.path), installs.npm, platform)
-        : null
+    const method = h.cliMethod
+    if (!mine || !method) return null
+    const installs = { ...h.def.installs }
+    installs.npm ??= this.programPackage(h) ?? undefined
+    const global = h.cliGlobal
     // A copy npm installed outside a global prefix, such as into a project, is not what
     // `npm install -g` updates.
-    if (h.cliMethod === 'npm' && !npmPrefix) return null
-    return updatePlan(installs, h.cliMethod, {
+    if (method === 'npm' && !global?.dir) return null
+    const platform = this.deps.platform
+    return updatePlan(installs, method, {
       platform,
       env: this.deps.env.agentEnv(h.def.id),
       npm: this.deps.env.nodeProbe().npmPath,
       isExecutable: (file) => isExecutableFile(file, platform),
       program: mine.path,
-      npmPrefix,
+      npmPrefix: method === 'npm' ? (global?.dir ?? null) : null,
+      globalDir: method === 'pnpm' || method === 'yarn' ? (global?.dir ?? null) : null,
     })
   }
 
@@ -5288,12 +5408,14 @@ export class AgentManager {
     const update = this.targetUpdate(h)
     const running = this.ownVersion(h)
     const back = !!update && !!running && compareVersions(update.adapterVersion, running) < 0
+    const target = update ? this.target(h) : null
     return {
       on: this.automatic(h),
       moved: h.moved,
       back,
       ...(back && running ? { backReason: this.moveReason(h, running) } : {}),
       follows: followsRegistry(h.def) ? 'registry' : 'kettu',
+      ...(target && unhashed(target) ? { noChecksum: true as const } : {}),
     }
   }
 
@@ -5402,7 +5524,8 @@ export class AgentManager {
    * looks up tools such as brew on PATH, which `status` does not wait for.
    */
   private async refreshCliCommand(h: Harness): Promise<void> {
-    const key = `${this.cliUpdateVersion(h)}\0${h.cliMethod}\0${this.userProgram(h)?.path}`
+    const mine = this.userProgram(h)
+    const key = [this.cliUpdateVersion(h), h.cliMethod, h.cliGlobal?.dir, mine?.path].join('\0')
     if (!this.cliUpdateVersion(h) || this.cliCommandKeys.get(h) === key) return
     this.cliCommandKeys.set(h, key)
     const plan = await this.cliUpdatePlan(h).catch(() => null)

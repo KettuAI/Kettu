@@ -1952,7 +1952,10 @@
       "brew": "Homebrew",
       "npm": "npm",
       "script": "官方安装脚本",
-      "winget": "WinGet"
+      "winget": "WinGet",
+      "pnpm": "pnpm",
+      "bun": "bun",
+      "yarn": "Yarn"
     },
     "updateTo": "更新到 {{version}}",
     "agentCount_other": "{{count}} 个智能体",
@@ -2009,7 +2012,8 @@
       "offKettu": "停在当前版本，Kettu 检查后推荐新版本时提示更新。",
       "wentBackBroken": "{{ago}}从 {{from}} 换回 {{to}}：Kettu 检查发现 {{from}} 和这个版本的 Kettu 不能一起用",
       "wentBackManifest": "{{ago}}从 {{from}} 换回 {{to}}：Kettu 检查后推荐 {{to}}",
-      "wentBackBundled": "{{ago}}从 {{from}} 换回 {{to}}：这个版本的 Kettu 自带的是 {{to}}"
+      "wentBackBundled": "{{ago}}从 {{from}} 换回 {{to}}：这个版本的 Kettu 自带的是 {{to}}",
+      "noChecksum": "这个版本没有校验值，不能自动更新。手动更新时不做这项校验，照常安装。"
     },
     "switchBack": {
       "line": "ACP Registry 现在列出的是 {{version}}",

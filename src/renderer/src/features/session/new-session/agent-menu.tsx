@@ -33,6 +33,7 @@ import { shownChoice, shownValue } from '@renderer/features/session/composer/mod
 import { cliOutdated, listedInstalled } from '@renderer/features/agents/readiness'
 import { Ring } from '@renderer/features/session/composer/usage'
 import { planReset } from '@renderer/features/sidebar/plan-usage'
+import { confirmCliUpdate } from '@renderer/features/updates/command-confirm-model'
 import { tightestLimit } from '@shared/session-groups'
 import { useLimitView } from '@renderer/hooks/use-limit-view'
 import { limitLabel } from '@renderer/lib/format'
@@ -1054,7 +1055,7 @@ function UpdateNotice({
         disabled={running}
         onClick={() => {
           if (update) {
-            void useAgentsStore.getState().updateCli(status.id)
+            void confirmCliUpdate(status)
             return
           }
           onLeave()
@@ -1125,7 +1126,7 @@ function VersionNotice({
         disabled={running}
         onClick={() => {
           if (update) {
-            void useAgentsStore.getState().updateCli(status.id)
+            void confirmCliUpdate(status)
             return
           }
           onLeave()

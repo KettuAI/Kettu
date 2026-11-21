@@ -5,6 +5,7 @@ import { useAgentsStore } from '@renderer/stores/agents'
 import { hostOfSession, useSessionsStore } from '@renderer/stores/sessions'
 import { useUpdatesStore, type HarnessBatchEntry } from '@renderer/stores/updates'
 import { offerRoute, updateOffer, type AgentUpdateRoute } from './agent-updates'
+import { confirmCommands, programCommands } from './command-confirm-model'
 import { HarnessQueue } from './harness-queue'
 
 /** This computer's sessions of the agent's harness with a turn running now. */
@@ -94,6 +95,14 @@ export function updateHarnesses(agentIds: readonly AgentId[]): void {
     return next
   })
   queue.request(agentIds)
+}
+
+/**
+ * Updates the harnesses once the user saw the update commands of those that are their own
+ * programs and chose Run; Kettu's own installs need no command shown.
+ */
+export async function requestHarnessUpdates(agentIds: readonly AgentId[]): Promise<void> {
+  if (await confirmCommands(programCommands(agentIds))) updateHarnesses(agentIds)
 }
 
 /** Clears the batch the card followed, once it showed how it ended. */

@@ -1,6 +1,6 @@
 // Installing a harness from Kettu: what route it takes and the agent it gives the harness after.
 
-import type { AgentInstallMethod, AgentStatus } from '@shared/agent-host'
+import type { AgentInstallMethod, AgentStatus, AgentTask } from '@shared/agent-host'
 import type { SettingsFile, SettingsPatch } from '@shared/settings'
 import type { HarnessId } from '@shared/thread'
 import { cliOutdated } from '@renderer/features/agents/readiness'
@@ -20,6 +20,12 @@ export function installKind(status: AgentStatus): InstallKind | null {
   if (status.package && !status.package.installed && status.state === 'available') return 'package'
   if (['not-installed', 'node-missing', 'node-outdated'].includes(status.state)) return 'setup'
   return null
+}
+
+/** The route a failed install took, to retry it the same way; null for an update's. */
+export function installRoute(task: AgentTask | null | undefined): AgentInstallMethod['id'] | null {
+  const method = task?.kind === 'install' ? task.method : null
+  return method === 'pnpm' || method === 'bun' || method === 'yarn' ? null : method
 }
 
 export type SettingsHook = {

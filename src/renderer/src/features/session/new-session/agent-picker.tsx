@@ -36,6 +36,7 @@ import {
 } from '@renderer/stores/agents'
 import { refreshLimits } from '@renderer/stores/usage'
 import { openAgentSettings, openHarnessSettings } from '@renderer/stores/view'
+import { confirmCliUpdate } from '@renderer/features/updates/command-confirm-model'
 import { agentNeed, menuAgents } from './start-options'
 import { agentLine, type LineTone } from './picker'
 import { refreshOnMenu } from './prepared'
@@ -105,11 +106,13 @@ export function AgentPicker({
         onValueChange={(id: AgentId | null, details) => {
           if (!id) return
           const status = byId.get(id)
-          // An agent whose own program is too old is not chosen: a click updates it.
+          // An agent whose own program is too old is not chosen: a click updates it, once its
+          // command is shown.
           if (status && agentNeed(status) === 'update') {
             if (status.cli?.update) {
               details.cancel()
-              void useAgentsStore.getState().updateCli(status.id)
+              setOpen(false)
+              void confirmCliUpdate(status)
             } else {
               setOpen(false)
               openHarnessSettings(status.harnessId)

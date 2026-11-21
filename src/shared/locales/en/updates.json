@@ -43,7 +43,8 @@
     "nowTitle_one": "Stop {{name}}’s running session?",
     "nowTitle_other": "Stop {{name}}’s {{count}} running sessions?",
     "nowBody": "Kettu stops the turn, then updates {{name}}. The session stays, so you can continue it afterwards.",
-    "nowConfirm": "Stop and update"
+    "nowConfirm": "Stop and update",
+    "skipVersion": "Skip this version"
   },
   "several": {
     "title": "{{count}} updates",
@@ -119,5 +120,12 @@
     "releaseNotes": "Full release notes",
     "later": "Later",
     "restart": "Restart now"
+  },
+  "command": {
+    "titleOne": "Run {{name}}’s update command?",
+    "title": "Run these update commands?",
+    "bodyOne": "You installed {{name}} yourself, so Kettu updates it with the command its install uses. It runs in the background.",
+    "body": "You installed these yourself, so Kettu updates each with the command its install uses. They run in the background, one after another.",
+    "run": "Run"
   }
 }
