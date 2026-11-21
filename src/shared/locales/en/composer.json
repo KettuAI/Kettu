@@ -284,5 +284,14 @@
     "thisComputer_mac": "This Mac",
     "unknownHost": "Another host",
     "noProject": "No project"
+  },
+  "comments": {
+    "label": "Comments sent with your message",
+    "header_one": "{{count}} comment · sent with your message below",
+    "header_other": "{{count}} comments · sent with your message below",
+    "removeAll": "Remove all",
+    "remove": "Remove comment {{number}}",
+    "edit": "Edit comment {{number}}",
+    "show": "Show passage {{number}} in the thread"
   }
 }

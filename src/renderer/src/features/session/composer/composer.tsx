@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useEffectEvent, useMemo, useRef, useState } from 'react'
 import { ArrowDataTransferHorizontalIcon } from '@hugeicons/core-free-icons'
 import { AnimatePresence } from 'motion/react'
 import { useTranslation } from 'react-i18next'
 import { cacheExpiry, knownExpiry } from '@shared/prompt-cache'
 import {
+  QUEUED_COMMENTS_TEXT,
   harnessOf,
   type AgentId,
   type ConfigOption,
@@ -15,6 +16,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui
 import { useCachePhase } from '@renderer/features/prompt-cache/cache-phase'
 import { BranchTrayLink } from '@renderer/features/git/git-status'
 import { limitPhrase, resetTime, tokens } from '@renderer/lib/format'
+import { onAppEvent } from '@renderer/app/events'
 import { errorMessage, host } from '@renderer/lib/host'
 import { newestLimits } from '@renderer/lib/plan-readings'
 import { isMod } from '@renderer/lib/platform'
@@ -41,6 +43,14 @@ import { useSettingsStore } from '@renderer/stores/settings'
 import { showSending, useThreadsStore } from '@renderer/stores/threads'
 import { useViewStore } from '@renderer/stores/view'
 import { askSide, openSideChat, sideQuestionOf } from '@renderer/stores/side-chat'
+import {
+  commentsOf,
+  keepComments,
+  removeComments,
+  useReplyComments,
+} from '@renderer/stores/reply-comments'
+import { commentsMessage } from '../entries/reply-quote'
+import { CommentList } from './comment-list'
 import { awaitsAnswer, endedOnRejection } from '../turn-phase'
 import { TrayStyles } from './affect-styles'
 import { attachmentContent, attachmentsBlock, type AttachmentsBlock } from './attachments'
@@ -205,8 +215,10 @@ export function Composer({
     // During a turn the send key queues the message and the steer key sends it into the turn.
     canQueue: running && holds && !blocked && pending === null && !mustSwitch,
   })
+  // Comments on passages go with the message, so with one, Send works on an empty box.
+  const commented = useReplyComments(sessionId).length > 0
   // Read as values, so typing renders the composer only when one of them changes.
-  const holdsMessage = useBoxText(box, (text) => hasMessage(text, attachments))
+  const holdsMessage = useBoxText(box, (text) => hasMessage(text, attachments)) || commented
   const blockedBy = useBoxText(box, (text) => attachmentsBlock(attachments, text)?.message ?? null)
   const blocked = blockedBy === null ? null : attachmentsBlock(attachments, box.source.text)
   const { canSend, canQueue } = can(holdsMessage, blocked)
@@ -222,7 +234,7 @@ export function Composer({
   // The message as a key comes, from the editor itself, which a render may not have caught up with.
   const live = () => {
     const text = box.editor.current?.text() ?? box.source.text
-    const holds = hasMessage(text, attachments)
+    const holds = hasMessage(text, attachments) || commentsOf(sessionId).length > 0
     return { holds, ...can(holds, attachmentsBlock(attachments, text)) }
   }
   // Why the send key does nothing now, for the line under the box.
@@ -324,13 +336,25 @@ export function Composer({
     send: () => send(live()),
   })
 
+  // The comments stay in the composer until the message is sent, and with it when it fails.
   const takeContent = () => {
     const taken = box.take()
+    const comments = commentsOf(sessionId)
+    keepComments(sessionId)
     const sent = selection && taken.prompt.trim() ? selection : null
     const prompt = sent ? selectionPrompt(taken.prompt, sent) : taken.prompt
     if (sent) setPaneSelection(null)
+    const text = commentsMessage(comments, prompt)
+    // How the message reads in the queue: the count, then the text or else the first comment.
+    const summary =
+      comments.length > 0
+        ? {
+            count: comments.length,
+            text: (taken.prompt.trim() || comments[0]!.comment).slice(0, QUEUED_COMMENTS_TEXT),
+          }
+        : null
     const content: UserContent[] = [
-      ...(prompt.trim() ? [{ type: 'text' as const, text: prompt }] : []),
+      ...(text.trim() ? [{ type: 'text' as const, text }] : []),
       ...attachmentContent(taken.held),
       // A terminal, tab or device the text mentions goes with it, which lets the agent use it.
       ...surfaceRefs(prompt, mentionResolver([], null, mentionSurfacesOf(sessionId))).map(
@@ -340,7 +364,8 @@ export function Composer({
         }),
       ),
     ]
-    return { taken, sent, content }
+    const commentIds = comments.map((c) => c.id)
+    return { taken, sent, content, commentIds, summary }
   }
 
   // The background work the session's agent would stop by switching, while the user is asked.
@@ -364,7 +389,7 @@ export function Composer({
   const switchNow = () => {
     const now = useAgentSwitchStore.getState().pending[sessionId]
     if (!now) return
-    const { taken, sent, content } = takeContent()
+    const { taken, sent, content, commentIds } = takeContent()
     const options = Object.keys(now.values).length > 0 ? { options: now.values } : {}
     host('sessions.switchAgent', {
       sessionId,
@@ -373,7 +398,10 @@ export function Composer({
       ...options,
       ...(now.summarize ? { summarize: true } : {}),
     })
-      .then(() => setPendingSwitch(sessionId, null))
+      .then(() => {
+        setPendingSwitch(sessionId, null)
+        removeComments(sessionId, commentIds)
+      })
       .catch((reason: unknown) => {
         if (sent) setPaneSelection(sent)
         box.restore(taken)(reason)
@@ -400,10 +428,11 @@ export function Composer({
 
   /** With `shown`, the session is free, so the message shows in the thread as it goes. */
   const queue = (steer: boolean, shown = false) => {
-    const { taken, sent, content } = takeContent()
+    const { taken, sent, content, commentIds, summary } = takeContent()
     const unshow = shown ? showSending(sessionId, content) : null
-    host('sessions.queue', { sessionId, content })
+    host('sessions.queue', { sessionId, content, ...(summary ? { comments: summary } : {}) })
       .then(({ itemId }) => {
+        removeComments(sessionId, commentIds)
         // It waits in the queue after all, which shows it there.
         if (itemId) unshow?.()
         // Once queued, a failed steer leaves the message in the queue, not lost.
@@ -423,6 +452,21 @@ export function Composer({
   const cancel = () => {
     host('sessions.cancel', { sessionId }).catch((e: unknown) => setError(errorMessage(e)))
   }
+
+  // Add and send in the selection box sends what this composer holds, the new comment included.
+  const paneId = usePane()?.paneId ?? null
+  const sendFromReply = useEffectEvent(() => {
+    const now = live()
+    if (now.canSend || now.canQueue) send(now)
+  })
+  useEffect(
+    () =>
+      onAppEvent((event) => {
+        if (event.kind !== 'send-composer' || event.sessionId !== sessionId) return
+        if (event.paneId === null || event.paneId === paneId) sendFromReply()
+      }),
+    [sessionId, paneId],
+  )
 
   // A step asked for and not yet reported, so quick presses keep stepping from it.
   const stepped = useRef<Record<string, { from: string | undefined; to: string }>>({})
@@ -612,6 +656,7 @@ export function Composer({
             top={
               <>
                 {box.historyPosition && <HistoryHeader position={box.historyPosition} />}
+                <CommentList sessionId={sessionId} />
                 <AnimatePresence initial={false}>
                   {outOfCredit && !starting && (
                     <OutOfCreditStrip

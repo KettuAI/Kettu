@@ -549,7 +549,9 @@
     "count_one": "{{count}} queued",
     "count_other": "{{count}} queued",
     "title": "Queued",
-    "collapse": "Hide the queue"
+    "collapse": "Hide the queue",
+    "comments_one": "{{count}} comment · {{text}}",
+    "comments_other": "{{count}} comments · {{text}}"
   },
   "agentStart": {
     "installing": "Installing {{agent}}…",
@@ -1046,10 +1048,11 @@
   },
   "reply": {
     "button": "Reply",
-    "placeholder": "Reply to {{agent}}…",
-    "send": "Send reply",
+    "placeholder": "Write a comment…",
     "quote": "Quoted text",
-    "side": "Side chat"
+    "side": "Side chat",
+    "add": "Add",
+    "addKeys": "{{add}} to add · {{send}} to add and send"
   },
   "planCard": {
     "label": "Plan",

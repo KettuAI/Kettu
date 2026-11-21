@@ -3317,9 +3317,9 @@ export class AgentHost {
       },
       'sessions.context': ({ sessionId }) => sessions.context(sessionId),
       'sessions.contextEstimates': ({ sessionId }) => sessions.contextEstimates(sessionId),
-      'sessions.queue': ({ sessionId, content }, { portId, device }) => {
+      'sessions.queue': ({ sessionId, content, comments }, { portId, device }) => {
         this.shareSurfaces(sessionId, content)
-        return sessions.queue(sessionId, content, portId, fromDevice(device))
+        return sessions.queue(sessionId, content, portId, fromDevice(device), comments)
       },
       'sessions.runCommand': (params, { portId, device }) =>
         this.runReplyCommand(params, portId, device),

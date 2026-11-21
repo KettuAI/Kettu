@@ -206,7 +206,19 @@ function SessionBody({ summary }: { summary: SessionSummary }) {
   } else {
     body = (
       <>
-        <Thread sessionId={sessionId} projectPath={folder} agentName={name} working={running} />
+        <Thread
+          sessionId={sessionId}
+          projectPath={folder}
+          agentName={name}
+          working={running}
+          commenting={
+            !!session &&
+            !away &&
+            !archived &&
+            summary.origin !== 'subagent' &&
+            summary.worktree?.state !== 'gone'
+          }
+        />
         <ThreadWidthGrips gutter={gutter} />
       </>
     )

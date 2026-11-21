@@ -12,6 +12,10 @@ export type AppEvent =
   // A mention, such as a terminal's, put after the text of the composer of `draft`.
   | { kind: 'mention-into-composer'; draft: string; mention: string }
   | { kind: 'command-into-composer'; sessionId: string; name: string } // a sent command, clicked
+  // Sends what the session's composer holds, comments included, in the pane `paneId` or any.
+  | { kind: 'send-composer'; sessionId: string; paneId: string | null }
+  // Scrolls the thread to the passage a comment in the composer is on.
+  | { kind: 'reveal-comment'; sessionId: string; paneId: string | null; commentId: string }
   | { kind: 'draft-written'; draft: string } // written from outside its composer, which reloads it
   | { kind: 'add-attachments' } // Mod+U: the composer's Add files or photos…
   | { kind: 'open-add-menu' } // Mod+Shift+A: the composer's plus menu

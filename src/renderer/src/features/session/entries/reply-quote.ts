@@ -1,16 +1,32 @@
-// A reply to a passage is a message that starts with the passage as a Markdown blockquote.
+// A comment on a passage goes as the passage in a Markdown blockquote with the comment after it.
 
 const QUOTE_LIMIT = 2000
 
-/** The message a reply sends: the passage quoted, a blank line, then the answer. */
-export function replyMessage(passage: string, answer: string): string {
+/** A passage as a blockquote; a line of its own that starts with `>` stays text in the quote. */
+function quoteBlock(passage: string): string {
   let quoted = passage
     .replace(/\r\n?/g, '\n')
     .replace(/\n{3,}/g, '\n\n')
     .trim()
   if (quoted.length > QUOTE_LIMIT) quoted = `${quoted.slice(0, QUOTE_LIMIT).trimEnd()}…`
-  const lines = quoted.split('\n').map((line) => (line ? `> ${line}` : '>'))
-  return `${lines.join('\n')}\n\n${answer.trim()}`
+  return quoted
+    .split('\n')
+    .map((line) => (line ? `> ${line.replace(/^( {0,3})>/, '$1\\>')}` : '>'))
+    .join('\n')
+}
+
+/**
+ * The message the composer sends with comments: each passage quoted with its comment after it, in
+ * the order given, then the composer's text. Without comments, the text as it is.
+ */
+export function commentsMessage(
+  comments: readonly { passage: string; comment: string }[],
+  text: string,
+): string {
+  if (comments.length === 0) return text
+  const parts = comments.map((c) => `${quoteBlock(c.passage)}\n\n${c.comment.trim()}`)
+  if (text.trim()) parts.push(text.trim())
+  return parts.join('\n\n')
 }
 
 /** The quote a message starts with, without its markers, and the text after it. */

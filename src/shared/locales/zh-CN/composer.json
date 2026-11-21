@@ -275,5 +275,13 @@
     "thisComputer_mac": "这台 Mac",
     "unknownHost": "另一台电脑",
     "noProject": "不属于项目"
+  },
+  "comments": {
+    "label": "和消息一起发出的评论",
+    "header_other": "{{count}} 条评论 · 会和下面的话一起发出",
+    "removeAll": "全部移除",
+    "remove": "移除第 {{number}} 条评论",
+    "edit": "修改第 {{number}} 条评论",
+    "show": "在对话里显示第 {{number}} 段"
   }
 }

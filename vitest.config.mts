@@ -5,7 +5,10 @@ import { pageRuntime } from './tools/build/page-runtime.ts'
 export default defineConfig({
   plugins: [pageRuntime(resolve('src/shared/artifact-runtime/runtime.ts'))],
   resolve: {
-    alias: [{ find: '@shared', replacement: resolve('src/shared') }],
+    alias: [
+      { find: '@shared', replacement: resolve('src/shared') },
+      { find: '@renderer', replacement: resolve('src/renderer/src') },
+    ],
   },
   test: {
     environment: 'node',

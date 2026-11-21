@@ -532,7 +532,8 @@
     "remove": "移除",
     "count_other": "{{count}} 条排队",
     "title": "排队",
-    "collapse": "收起队列"
+    "collapse": "收起队列",
+    "comments_other": "{{count}} 条评论 · {{text}}"
   },
   "agentStart": {
     "installing": "正在安装 {{agent}}…",
@@ -1012,10 +1013,11 @@
   },
   "reply": {
     "button": "回复",
-    "placeholder": "回复 {{agent}}…",
-    "send": "发送回复",
+    "placeholder": "写评论…",
     "quote": "引用的文字",
-    "side": "侧聊"
+    "side": "侧聊",
+    "add": "加入",
+    "addKeys": "{{add}} 加入 · {{send}} 加入并立即发送"
   },
   "planCard": {
     "label": "计划",

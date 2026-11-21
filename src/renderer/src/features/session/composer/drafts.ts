@@ -1,10 +1,11 @@
 import { isAttachment, type Attachment } from '@shared/thread'
 import { removeKey } from '@renderer/lib/storage'
 
-// Unsent composer text and attachments per session, in localStorage under `draft:<sessionId>` as
-// JSON `{ text, attachments }`, written 300 ms after the last change. One stored as plain text,
-// before drafts had attachments, reads as text alone. A draft that is too large or fails to save
-// stays in memory.
+// Unsent composer text, attachments and passage comments per session, in localStorage under
+// `draft:<sessionId>` as JSON `{ text, attachments, comments }`, written 300 ms after the last
+// change. One stored as plain text, before drafts had attachments, reads as text alone, and one
+// stored before comments as one without them. A draft that is too large or fails to save stays in
+// memory.
 
 /** The New session screen's draft, kept like a session's until the session it starts exists. */
 export const NEW_SESSION_DRAFT = 'new'
@@ -20,9 +21,23 @@ export interface SavedAttachment {
   hostId?: string
 }
 
+/**
+ * A comment on a passage of an agent message, waiting in the composer: `start` and `end` are the
+ * passage's offsets in the text of the message `entryId`, which mark it in the thread again.
+ */
+export interface DraftComment {
+  id: string
+  entryId: string
+  passage: string
+  start: number
+  end: number
+  comment: string
+}
+
 interface Draft {
   text: string
   attachments: SavedAttachment[]
+  comments: DraftComment[]
 }
 
 const WRITE_DELAY_MS = 300
@@ -33,7 +48,7 @@ const timers = new Map<string, ReturnType<typeof setTimeout>>()
 
 const PREFIX = 'draft:'
 const key = (sessionId: string) => `${PREFIX}${sessionId}`
-const EMPTY: Draft = { text: '', attachments: [] }
+const EMPTY: Draft = { text: '', attachments: [], comments: [] }
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -52,19 +67,32 @@ function isSaved(value: unknown): value is SavedAttachment {
   )
 }
 
+function isComment(value: unknown): value is DraftComment {
+  return (
+    isRecord(value) &&
+    typeof value.id === 'string' &&
+    typeof value.entryId === 'string' &&
+    typeof value.passage === 'string' &&
+    typeof value.start === 'number' &&
+    typeof value.end === 'number' &&
+    typeof value.comment === 'string'
+  )
+}
+
 /** A stored draft; one stored as plain text, or that is not a draft's JSON, is text alone. */
 export function parseDraft(raw: string): Draft {
   if (raw.startsWith('{')) {
     try {
       const value: unknown = JSON.parse(raw)
       if (isRecord(value) && typeof value.text === 'string' && Array.isArray(value.attachments)) {
-        return { text: value.text, attachments: value.attachments.filter(isSaved) }
+        const comments = Array.isArray(value.comments) ? value.comments.filter(isComment) : []
+        return { text: value.text, attachments: value.attachments.filter(isSaved), comments }
       }
     } catch {
       // Text that only starts like JSON.
     }
   }
-  return { text: raw, attachments: [] }
+  return { text: raw, attachments: [], comments: [] }
 }
 
 function read(sessionId: string): Draft {
@@ -84,6 +112,10 @@ export function readDraft(sessionId: string): string {
 
 export function readDraftAttachments(sessionId: string): SavedAttachment[] {
   return read(sessionId).attachments
+}
+
+export function readDraftComments(sessionId: string): DraftComment[] {
+  return read(sessionId).comments
 }
 
 /** Whether a draft holds what Send takes: text other than white space, or an attachment. */
@@ -109,6 +141,10 @@ export function writeDraftAttachments(sessionId: string, attachments: SavedAttac
   write(sessionId, { ...read(sessionId), attachments })
 }
 
+export function writeDraftComments(sessionId: string, comments: DraftComment[]): void {
+  write(sessionId, { ...read(sessionId), comments })
+}
+
 /** Writes a pending draft now, for example when the composer unmounts. */
 export function flushDraft(sessionId: string): void {
   const timer = timers.get(sessionId)
@@ -116,7 +152,7 @@ export function flushDraft(sessionId: string): void {
   timers.delete(sessionId)
   const draft = memory.get(sessionId)
   if (draft === undefined) return
-  if (!draft.text && draft.attachments.length === 0) {
+  if (!draft.text && draft.attachments.length === 0 && draft.comments.length === 0) {
     removeKey(key(sessionId))
     memory.delete(sessionId)
     return
@@ -148,12 +184,12 @@ export function draftIds(): string[] {
   return [...ids].sort()
 }
 
-/** The sessions whose draft, saved or in memory, holds more than white space or an attachment. */
+/** The sessions whose draft, saved or in memory, holds text, an attachment or a comment. */
 export function draftedSessions(): string[] {
   return draftIds().filter((id) => {
     if (id === NEW_SESSION_DRAFT) return false
     const draft = read(id)
-    return draft.text.trim() !== '' || draft.attachments.length > 0
+    return draft.text.trim() !== '' || draft.attachments.length > 0 || draft.comments.length > 0
   })
 }
 

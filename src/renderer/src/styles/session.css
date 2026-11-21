@@ -2037,6 +2037,141 @@
   background: color-mix(in srgb, var(--bg-app) 28%, transparent);
 }
 
+/* A comment's number, at the end of its passage in the thread and on its row in the composer:
+   inline code's muted fox on its faint fox ground, which reads at 4.5:1 in both themes. */
+.ks-reply-num {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: var(--bg-code-inline);
+  font-size: 10.5px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  color: var(--code-inline);
+}
+.ks-reply-marks {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+/* Above the passage's last character, so it covers none of the text after it. */
+.ks-reply-mark {
+  position: absolute;
+  min-width: 14px;
+  height: 14px;
+  padding: 0 3px;
+  font-size: 10px;
+  translate: -50% -60%;
+  box-shadow: 0 0 0 1.5px var(--bg-app);
+  transition: background-color var(--duration-fast);
+}
+.ks-reply-mark[data-hovered] {
+  background: color-mix(in srgb, var(--send) 24%, var(--bg-app));
+}
+
+/* The comments that go with the next message, on the composer's upper edge. */
+.ks-comments {
+  margin: -4px -6px 8px;
+  padding: 6px 4px 4px;
+  border-radius: 10px;
+  background: var(--ui-ccc-wash);
+  box-shadow: inset 0 0 0 0.5px var(--ui-ccc-line);
+}
+.ks-comments__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 2px 4px 8px;
+  font-size: 12px;
+  color: var(--thread-muted);
+}
+.ks-comments__list {
+  display: flex;
+  flex-direction: column;
+  max-height: 220px;
+  overflow-y: auto;
+}
+.ks-comments__row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 8px;
+  padding: 6px 4px 6px 8px;
+  border-radius: 8px;
+}
+/* The list's ground is already the hover gray, so a row takes the highlighted menu item's fill,
+   which still reads on it in the dark theme. */
+.ks-comments__row:hover,
+.ks-comments__row:has(:focus-visible) {
+  background: var(--bg-selected);
+}
+.ks-comments__row > .ks-reply-num {
+  margin-top: 1px;
+}
+.ks-comments__quote {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  padding-left: 7px;
+  border-left: 2px solid var(--border-strong);
+  border-radius: 0;
+  font-size: 12px;
+  line-height: 18px;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--thread-faint);
+  outline: none;
+}
+.ks-comments__quote:hover {
+  color: var(--thread-text);
+}
+/* The rows are tight, so the focus ring sits on the text instead of past it. */
+.ks-comments__quote:focus-visible,
+.ks-comments__text:focus-visible {
+  border-radius: 4px;
+  outline: 1.5px solid var(--focus-ring-color);
+  outline-offset: 0;
+}
+.ks-comments__text {
+  display: -webkit-box;
+  max-width: 100%;
+  margin-top: 2px;
+  overflow: hidden;
+  font-size: 13px;
+  line-height: 19px;
+  text-align: left;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  color: var(--thread-prose);
+  cursor: text;
+  outline: none;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+}
+.ks-comments__edit {
+  min-height: 0;
+  max-height: 120px;
+  margin-top: 2px;
+  padding: 2px 6px;
+  font-size: 13px;
+  line-height: 19px;
+  resize: none;
+}
+.ks-comments__remove {
+  opacity: 0;
+}
+.ks-comments__row:hover .ks-comments__remove,
+.ks-comments__row:has(:focus-visible) .ks-comments__remove {
+  opacity: 1;
+}
+
 /* A turn's changes: the count and the repository's actions, then a row per file. */
 .ks-changes {
   display: flex;
