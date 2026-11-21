@@ -1290,7 +1290,7 @@ export class AgentHost {
       library: this.workflowLibrary,
       sessions: {
         createStep: (params) => this.sessions.createStep(params),
-        send: (sessionId, text) => this.sessions.sendFromKettu(sessionId, text),
+        send: (sessionId, text, due) => this.sessions.sendFromKettu(sessionId, text, due),
         cancel: (sessionId) => this.sessions.cancel(sessionId),
         delete: (sessionId) => this.sessions.delete(sessionId),
         has: (sessionId) => this.sessions.has(sessionId),

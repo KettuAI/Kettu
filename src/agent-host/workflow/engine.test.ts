@@ -232,7 +232,7 @@ async function harness(
     (options.stored ?? []).map((task) => [task.id, structuredClone(task)]),
   )
   const created: TaskStepStart[] = []
-  const sent: { sessionId: string; text: string }[] = []
+  const sent: { sessionId: string; text: string; due?: () => boolean }[] = []
   const cancelled: string[] = []
   const sessions = new Set<string>(options.live ?? [])
   const merges: { cwd: string; branch: string }[] = []
@@ -281,8 +281,8 @@ async function harness(
         await options.starting?.()
         return { id } as SessionSummary
       },
-      send: async (sessionId, text) => {
-        sent.push({ sessionId, text })
+      send: async (sessionId, text, due) => {
+        sent.push({ sessionId, text, due })
       },
       cancel: async (sessionId) => {
         cancelled.push(sessionId)
@@ -754,6 +754,44 @@ describe('the task engine', () => {
     await h.engine.retry(task.id, 'split', 'Please finish')
     expect(h.engine.get(task.id).rounds[0]!.state).toBe('working')
     expect(h.sent.at(-1)!.text).toContain('Please finish')
+  })
+
+  it('drops a reminder still queued once its step reported or picked', async () => {
+    const h = await harness({ workflows: { parallel: PARALLEL } })
+    const task = await h.start('parallel')
+    const session = h.sessionOf(task.id, 'split')
+    h.engine.turnEnded(session, { byUser: false })
+    await h.settle()
+    const report = h.sent.at(-1)!
+    expect(report.text).toContain('report_step')
+    // Queued behind the user's message, it goes out only while the step still owes its report.
+    expect(report.due?.()).toBe(true)
+    await h.engine.report(session, done)
+    expect(report.due?.()).toBe(false)
+
+    h.engine.turnEnded(session, { byUser: false })
+    await h.settle()
+    const pick = h.sent.at(-1)!
+    expect(pick.text).toContain('pick_step_agents')
+    expect(pick.due?.()).toBe(true)
+    await h.engine.pick(session, [
+      { step: 'front', agent: 'claude-code', model: 'sonnet', effort: null, reason: 'UI' },
+      { step: 'back', agent: 'codex', model: 'gpt', effort: null, reason: 'API' },
+    ])
+    expect(pick.due?.()).toBe(false)
+    expect(report.due?.()).toBe(false)
+  })
+
+  it('drops a reminder still queued once its task is cancelled', async () => {
+    const h = await harness({ workflows: { parallel: PARALLEL } })
+    const task = await h.start('parallel')
+    const session = h.sessionOf(task.id, 'split')
+    h.engine.turnEnded(session, { byUser: false })
+    await h.settle()
+    const reminder = h.sent.at(-1)!
+    expect(reminder.due?.()).toBe(true)
+    await h.engine.cancel(task.id)
+    expect(reminder.due?.()).toBe(false)
   })
 
   it('carries on after a restart from the stored task', async () => {

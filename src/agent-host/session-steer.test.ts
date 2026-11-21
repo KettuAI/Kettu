@@ -36,7 +36,7 @@ async function runningSession() {
   })
   // The fake server is no port event, so the wait polls.
   await vi.waitFor(() => expect(started.turnId).toBeDefined())
-  return { server, window, id, started }
+  return { server, host, window, id, started }
 }
 
 /** A Codex session whose turn waits on a question. */
@@ -128,4 +128,24 @@ it('answers a question the turn does not wait for into the running turn', async 
   expect(input.text).toContain('<send_user_message_question_reply>')
   expect(input.text).toContain('"answer":"Spaces"')
   expect(window.thread(id).session.queue).toHaveLength(0)
+})
+
+it("drops a message of Kettu's that is no longer due when its turn comes, and sends the next", async () => {
+  const { server, host, window, id, started } = await runningSession()
+  let due = true
+  await host.host.sessions.sendFromKettu(id, 'Your step is not reported yet.', () => due)
+  await host.host.sessions.sendFromKettu(id, 'Your step was sent back.', () => true)
+  await vi.waitFor(() => expect(window.thread(id).session.queue).toHaveLength(2))
+  // The step reports while the messages wait.
+  due = false
+  server.notify('turn/completed', {
+    threadId: started.threadId,
+    turn: turn(started.turnId!, 'completed'),
+  })
+
+  const texts = () =>
+    server.sent('turn/start').map((p) => (p.input as { text?: string }[])[0]?.text)
+  await vi.waitFor(() => expect(texts()).toContain('Your step was sent back.'))
+  expect(texts()).not.toContain('Your step is not reported yet.')
+  await vi.waitFor(() => expect(window.thread(id).session.queue).toHaveLength(0))
 })
