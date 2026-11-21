@@ -54,6 +54,7 @@ import { INCOMPLETE_LINK, localTarget, unopenedTarget } from './local-links'
 import { githubAlerts } from './github-alerts'
 import { bareReferenceNumber } from './github-refs'
 import { fenceInlineSvg } from './inline-svg'
+import { fenceBracketMath } from './maths'
 import { remarkPlugins } from './remark'
 import { BlockCode } from './code-frame'
 import { MarkdownTable } from './markdown-table'
@@ -306,11 +307,12 @@ function useChunks(markdown: string): string[] {
 
 /**
  * Agent prose. Raw HTML goes through the sanitizer, and an inline `<svg>` is first written as an
- * `svg` code block (`inline-svg.ts`). A long text renders in chunks (`chunks.ts`), so a streamed
- * update re-renders, lays out and paints the live tail instead of the whole message. Streaming
- * mode splits each chunk into memoized blocks, and the mode never changes: static mode renders
- * one tree, so switching when a message finishes would rebuild all of it. Finishing only turns
- * off incomplete-markdown repair.
+ * `svg` code block (`inline-svg.ts`) and a `\[...\]` on lines of its own as a `$$` block
+ * (`maths.ts`). A long text renders in chunks (`chunks.ts`), so a streamed update re-renders,
+ * lays out and paints the live tail instead of the whole message. Streaming mode splits each
+ * chunk into memoized blocks, and the mode never changes: static mode renders one tree, so
+ * switching when a message finishes would rebuild all of it. Finishing only turns off
+ * incomplete-markdown repair.
  */
 function MarkdownImpl({
   markdown,
@@ -322,7 +324,9 @@ function MarkdownImpl({
   // Finishing re-renders every code block and table to enable their controls; deferring it lets
   // React split that work across frames instead of blocking one.
   const live = useDeferredValue(streaming)
-  const chunks = useChunks(useMemo(() => fenceInlineSvg(markdown, live), [markdown, live]))
+  const chunks = useChunks(
+    useMemo(() => fenceBracketMath(fenceInlineSvg(markdown, live), live), [markdown, live]),
+  )
   const [named] = useState(() => new NamedMedia())
   return (
     <div className={cn('markdown', className)}>

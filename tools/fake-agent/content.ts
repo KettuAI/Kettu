@@ -430,6 +430,24 @@ $$
 $$
 a + \\notacommand{b}
 $$
+
+单个 \`$\` 也是公式：设函数$f(x)$在点$x_0$处有$n$阶导数，where $f(x)$ is smooth near $x_0$。价格仍是文字：$5 to $10, costs $5, or $8 with tax, 共 $660。转义的 \\$x\\$ 是美元符号，代码里的 \`$x$\` 不变。
+
+另一种写法：函数 \\(f(x)\\) 在 \\( x_0 \\) 附近展开为
+\\[
+f(x) = \\sum_{k=0}^{n} \\frac{f^{(k)}(x_0)}{k!}(x - x_0)^k + R_n(x)
+\\]
+其中余项是 \\[ R_n(x) = \\frac{f^{(n+1)}(\\xi)}{(n+1)!}(x - x_0)^{n+1} \\]
+
+| 项 | 公式 | 说明 |
+| --- | --- | --- |
+| 余项 | $R_n(x) = o((x - x_0)^n)$ | 佩亚诺型 |
+| 系数 | \\(a_k = \\frac{f^{(k)}(x_0)}{k!}\\) | 第 $k$ 项 |
+| 价格 | $5 to $10 | 不是公式 |
+
+$$
+\\Phi(x) = \\frac{1}{\\sqrt{2\\pi}} \\int_{-\\infty}^{x} e^{-t^2/2} \\, dt + \\sum_{n=0}^{\\infty} \\frac{(-1)^n x^{2n+1}}{2^n n! (2n+1)} + \\prod_{k=1}^{m} \\left(1 + \\frac{x}{k}\\right) + \\lim_{h \\to 0} \\frac{f(x + h) - f(x)}{h} + \\oint_C \\mathbf{F} \\cdot d\\mathbf{r}
+$$
 `
 
 export const CONTENT_BLOCKS = `代码块：文件名或语言在左，换行和复制在右；超过 20 行默认折叠。
