@@ -23,7 +23,7 @@ export function PaneSwitch({
 }: {
   panel: string
   projectPath: string
-  pane: Extract<SurfaceRowId, 'files' | 'requests' | 'computer'>
+  pane: Extract<SurfaceRowId, 'files' | 'git' | 'requests' | 'computer'>
 }) {
   const { t } = useTranslation('shell')
   const rows = useSurfaceRows(panel, projectPath)

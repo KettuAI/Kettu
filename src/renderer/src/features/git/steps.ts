@@ -11,6 +11,7 @@ import {
   type GitOperationRequest,
 } from '@renderer/stores/git'
 import { failureNote, successNote, type NextStep, type ResultNote } from './results'
+import { openGitPane } from './pane/open-pane'
 import { pushesToDefault, pushTargetOf, type OperationKind } from './sync'
 
 const LABEL = {
@@ -113,7 +114,7 @@ function runNext(projectPath: string, next: NextStep): void {
       pushNow(projectPath)
       return
     case 'createPr':
-      openGitDialog(projectPath, { kind: 'createPr' })
+      openGitPane(projectPath, { tab: 'pr' })
       return
     case 'openPr': {
       const pr = useGitStore.getState().currentPr[projectPath]

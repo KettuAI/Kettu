@@ -157,7 +157,7 @@ export function failingRuns(pr: PullRequest): string[] {
 }
 
 /** Open, with nothing failing, nothing pending, no conflicts and no review that blocks it. */
-function readyToMerge(pr: PullRequest): boolean {
+export function readyToMerge(pr: PullRequest): boolean {
   return (
     pr.state === 'open' &&
     (pr.checks.state === 'passing' || pr.checks.state === 'none') &&
@@ -289,8 +289,10 @@ function next(
   }
 }
 
+export type WaitingVariant = 'draft' | 'conflicts' | 'checks' | 'review' | 'changes' | 'blocked'
+
 /** Why an open pull request cannot merge yet, in the fewest words. */
-function waitingVariant(pr: PullRequest): string {
+export function waitingVariant(pr: PullRequest): WaitingVariant {
   if (pr.state === 'draft') return 'draft'
   if (pr.mergeable === 'conflicting') return 'conflicts'
   if (pr.checks.state === 'pending') return 'checks'

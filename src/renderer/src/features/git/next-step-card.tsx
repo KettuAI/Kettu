@@ -51,6 +51,7 @@ import {
   type NextStep,
   type NextTone,
 } from './next-step'
+import type { OpenGitPane } from './pane/open-pane'
 import { OPERATION } from './results'
 import { pushFromPopover, runStep } from './steps'
 import { commandOf, failureOf, lastLine, stepOf, type OperationKind } from './sync'
@@ -412,6 +413,7 @@ export function NextStepCard({
   files,
   onClose,
   onHandOff,
+  onOpenPane,
 }: {
   status: GitStatus
   pr: PullRequest | null
@@ -421,6 +423,8 @@ export function NextStepCard({
   onClose: () => void
   /** Puts a sentence in the session's composer; the popover closes around it. */
   onHandOff: (text: string) => void
+  /** Opens the Git pane, for the steps that are taken there. */
+  onOpenPane: (request: Omit<OpenGitPane, 'panel'>) => void
 }) {
   const { t } = useTranslation('git')
   const { projectPath } = status
@@ -442,11 +446,11 @@ export function NextStepCard({
     switch (action) {
       case 'commit':
         onClose()
-        openGitDialog(projectPath, { kind: 'commit', paths: null })
+        onOpenPane({ tab: 'changes', commit: { only: null, andPush: false } })
         return
       case 'commitAndPush':
         onClose()
-        openGitDialog(projectPath, { kind: 'commit', paths: null, andPush: true })
+        onOpenPane({ tab: 'changes', commit: { only: null, andPush: true } })
         return
       case 'handOffConflicts':
       case 'handOffRebase':
@@ -474,7 +478,7 @@ export function NextStepCard({
         return
       case 'createPr':
         onClose()
-        openGitDialog(projectPath, { kind: 'createPr' })
+        onOpenPane({ tab: 'pr' })
         return
       case 'switchDefault':
         if (status.defaultBranch) {

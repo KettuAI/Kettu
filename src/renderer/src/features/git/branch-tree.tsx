@@ -1,4 +1,4 @@
-import { useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
+import { useState, type KeyboardEvent, type ReactNode } from 'react'
 import {
   CloudUploadIcon,
   Copy01Icon,
@@ -29,7 +29,8 @@ import { CopyButton } from './copy-button'
 import { disclosureKeys } from './popover-keys'
 import { ChangeRow, Count, ErrorRow, LineCounts, LoadingRows, PartHead, ROW } from './rows'
 import { pushFromPopover } from './steps'
-import { planSync, pushTargetOf, type OperationKind } from './sync'
+import { useCommitCards, type Cards } from './commit-cards'
+import { planSync, pushTargetOf, PUSH_LABEL, PUSHING, type OperationKind } from './sync'
 import { loadCommit, useCommit } from './use-git-data'
 
 /** Commits shown before "N more": the newest local ones, and the nearest pushed one. */
@@ -37,7 +38,7 @@ const LOCAL_SHOWN = 3
 const PUSHED_SHOWN = 1
 
 /** The grid every row of the tree shares: the rail's column, then the text. */
-const TREE_GRID = 'grid grid-cols-[18px_minmax(0,1fr)_auto] items-center gap-x-2'
+export const TREE_GRID = 'grid grid-cols-[18px_minmax(0,1fr)_auto] items-center gap-x-2'
 
 type DotKind = 'local' | 'pushed' | 'pull' | 'gap' | 'base'
 
@@ -49,13 +50,14 @@ const DOT: Record<DotKind, string> = {
   base: 'rounded-[3px] bg-(--composer-card) shadow-[0_0_0_1.5px_var(--text-placeholder)]',
 }
 
-/** A mark on the rail, in the column left of a row's text. */
-function Dot({ kind }: { kind: DotKind }) {
+/** A mark on the rail, in the column left of a row's text; `high` keeps it by a row's first line. */
+export function Dot({ kind, high = false }: { kind: DotKind; high?: boolean }) {
   return (
     <span aria-hidden className="relative self-stretch">
       <i
         className={cn(
-          'absolute top-[calc(50%-5.5px)] left-[3px] size-2.75 rounded-full',
+          'absolute left-[3px] size-2.75 rounded-full',
+          high ? 'top-3' : 'top-[calc(50%-5.5px)]',
           DOT[kind],
         )}
       />
@@ -64,7 +66,7 @@ function Dot({ kind }: { kind: DotKind }) {
 }
 
 /** A line of the tree that is not a commit. */
-function TreeLine({
+export function TreeLine({
   kind,
   children,
   end,
@@ -96,35 +98,6 @@ function TreeLine({
     </button>
   )
 }
-
-/** Which commits show their files, and whether a card is on screen, shared by every row. */
-function useCommitCards() {
-  const [open, setOpen] = useState<ReadonlySet<string>>(() => new Set())
-  // Once one commit's card shows, the next opens at once.
-  const [warm, setWarm] = useState(false)
-  const cooling = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const onCard = (shown: boolean): void => {
-    if (cooling.current) clearTimeout(cooling.current)
-    if (shown) setWarm(true)
-    else cooling.current = setTimeout(() => setWarm(false), 300)
-  }
-  const toggle = (oid: string) => () =>
-    setOpen((now) => {
-      const next = new Set(now)
-      if (next.has(oid)) next.delete(oid)
-      else next.add(oid)
-      return next
-    })
-  return { open, warm, onCard, toggle }
-}
-
-type Cards = ReturnType<typeof useCommitCards>
-
-const PUSH_LABEL = {
-  push: 'sync.push',
-  publishBranch: 'tree.publish',
-  publishRepo: 'sync.publishRepo',
-} as const
 
 /**
  * The branch's commits as a short tree, the newest on top: the local ones, a push line that
@@ -234,10 +207,8 @@ export function BranchTree({ status, onClose }: { status: GitStatus; onClose: ()
   )
 }
 
-const PUSHING = new Set<string>(['push', 'publishBranch', 'publishRepo'])
-
 /** The dashed line between the local commits and the pushed ones, with its Push or Publish. */
-function PushLine({
+export function PushLine({
   status,
   remote,
   localCount,
@@ -344,23 +315,26 @@ function openMenuFromKeys(event: KeyboardEvent<HTMLElement>): boolean {
   return true
 }
 
-function CommitRow({
+export function CommitRow({
   status,
   commit,
   cards,
   onOpened,
+  pane = false,
 }: {
   status: GitStatus
   commit: CommitSummary
   cards: Cards
   onOpened: () => void
+  /** The Git pane's row: a second line with the commit's author, id and files, and its lines. */
+  pane?: boolean
 }) {
   const { t } = useTranslation('git')
   const now = useNow()
   const [copied, setCopied] = useState(false)
   const open = cards.open.has(commit.oid)
   const toggle = cards.toggle(commit.oid)
-  const details = useCommit(status.projectPath, commit.oid, open)
+  const details = useCommit(status.projectPath, commit.oid, open || pane)
   const github = status.remote?.github
   const copy = (text: string) => void navigator.clipboard.writeText(text)
   const copyId = (): void => {
@@ -381,7 +355,7 @@ function CommitRow({
                   type="button"
                   tabIndex={-1}
                   data-git-row=""
-                  className={cn(ROW, TREE_GRID, 'min-h-7')}
+                  className={cn(ROW, TREE_GRID, pane ? 'items-start py-1.25' : 'min-h-7')}
                   aria-expanded={open}
                   onClick={toggle}
                   onKeyDown={(event) => {
@@ -397,16 +371,52 @@ function CommitRow({
                 />
               }
             >
-              <Dot kind={commit.pushed ? 'pushed' : 'local'} />
-              <span className="min-w-0 truncate text-control text-primary">{commit.subject}</span>
-              <span
-                className={cn(
-                  'shrink-0 text-caption text-placeholder tabular',
-                  copied && 'text-secondary',
-                )}
-              >
-                {copied ? t('timeline.copied') : longAgo(commit.authoredAt, now)}
-              </span>
+              <Dot kind={commit.pushed ? 'pushed' : 'local'} high={pane} />
+              {pane ? (
+                <>
+                  <span className="min-w-0">
+                    <span className="block truncate text-control text-primary">
+                      {commit.subject}
+                    </span>
+                    <span className="mt-0.5 flex min-w-0 gap-2 text-caption text-placeholder">
+                      <span className="shrink-0 font-mono text-code-sm text-tertiary">
+                        {commit.oid.slice(0, 7)}
+                      </span>
+                      {details.data && (
+                        <span className="min-w-0 truncate">{details.data.authorName}</span>
+                      )}
+                      <span className="shrink-0">
+                        {copied ? t('timeline.copied') : longAgo(commit.authoredAt, now)}
+                      </span>
+                      {details.data && (
+                        <span className="shrink-0">
+                          {t('timeline.files', { count: details.data.files.length })}
+                        </span>
+                      )}
+                    </span>
+                  </span>
+                  {details.data && (
+                    <LineCounts
+                      insertions={details.data.files.reduce((n, f) => n + (f.insertions ?? 0), 0)}
+                      deletions={details.data.files.reduce((n, f) => n + (f.deletions ?? 0), 0)}
+                    />
+                  )}
+                </>
+              ) : (
+                <>
+                  <span className="min-w-0 truncate text-control text-primary">
+                    {commit.subject}
+                  </span>
+                  <span
+                    className={cn(
+                      'shrink-0 text-caption text-placeholder tabular',
+                      copied && 'text-secondary',
+                    )}
+                  >
+                    {copied ? t('timeline.copied') : longAgo(commit.authoredAt, now)}
+                  </span>
+                </>
+              )}
             </HoverCardTrigger>
             <HoverCardContent
               side="left"

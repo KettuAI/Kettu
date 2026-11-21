@@ -95,7 +95,84 @@
     "copyPath": "复制路径",
     "conflict": "冲突",
     "conflictsAndChanges": "冲突和更改",
-    "worktree": "工作树"
+    "worktree": "工作树",
+    "viewAll": "全部查看",
+    "openInPane": "在 Git 窗格里打开"
+  },
+  "pane": {
+    "title": "Git",
+    "more": "更多",
+    "copyBranch": "复制分支名",
+    "openRepository": "在 GitHub 上打开仓库",
+    "notRepoTitle": "不是 Git 仓库",
+    "notRepoText": "在这个文件夹里初始化 Git 后，这里会显示它的更改、提交和 PR。",
+    "stale": "刚才没能刷新，下面是上一次读到的状态。",
+    "tab": {
+      "changes": "更改",
+      "commits": "提交",
+      "pr": "PR"
+    },
+    "sync": {
+      "notPublished": "这个分支还不在 {{remote}} 上。",
+      "diverged": "已分叉：{{ahead}} 个待推送，{{behind}} 个待拉取",
+      "toPush_one": "{{count}} 个提交待推送到 {{upstream}}",
+      "toPush_other": "{{count}} 个提交待推送到 {{upstream}}",
+      "toPull_one": "{{count}} 个提交待从 {{upstream}} 拉取",
+      "toPull_other": "{{count}} 个提交待从 {{upstream}} 拉取",
+      "inSync": "与 {{upstream}} 同步 · {{fetched}}"
+    },
+    "changes": {
+      "emptyTitle": "没有更改",
+      "emptyText": "你或智能体改动的文件会出现在这里，等待提交。",
+      "conflicts": "冲突",
+      "tickAll": "全选",
+      "tick": "把 {{name}} 加入提交",
+      "discard": "放弃…",
+      "discardBlocked": "先完成正在进行的操作",
+      "discardTicked": "放弃已勾选文件的更改",
+      "openInFiles": "在文件中打开",
+      "discardFile": "放弃更改",
+      "binary": "二进制文件，不能预览。",
+      "tooLarge": "文件太大，不预览。",
+      "same": "没有可显示的差异。",
+      "showFullDiff": "显示完整差异"
+    },
+    "box": {
+      "tickFiles": "勾选要提交的文件",
+      "writeMessage": "先写提交信息",
+      "cannotPush": "这个分支在这里没有可推送的位置",
+      "moreWays": "更多提交方式",
+      "commitPushAndPr": "提交、推送并创建 PR"
+    },
+    "commits": {
+      "emptyTitle": "这个分支还没有提交",
+      "emptyFrom": "从 {{base}} 分出后的提交会出现在这里。",
+      "emptyText": "这个分支上的提交会出现在这里。",
+      "toPull": "待拉取",
+      "notPushed": "未推送",
+      "pushed": "已推送"
+    },
+    "pr": {
+      "notGitHub": "这个仓库的远程不在 GitHub 上，没有 PR 页面。",
+      "checks": "检查",
+      "checkState": {
+        "passing": "通过",
+        "failing": "失败",
+        "pending": "进行中"
+      },
+      "review": {
+        "title": "评审",
+        "approved": "评审者已批准。",
+        "changes_requested": "评审者要求修改。",
+        "review_required": "等待评审。"
+      },
+      "mergeReady": "可合并",
+      "blocked": "被阻止",
+      "openLog": "打开日志",
+      "copyLink": "复制链接",
+      "drafting": "正在起草…",
+      "drafted": "智能体起草"
+    }
   },
   "timeline": {
     "files_other": "{{count}} 个文件",
@@ -204,19 +281,12 @@
       "action": "发布"
     },
     "createPr": {
-      "title": "创建 PR",
       "titleField": "标题",
       "body": "描述",
       "base": "目标分支",
       "draft": "作为草稿创建",
       "action": "创建拉取请求",
       "notOnGitHub": "此分支还不在 GitHub 上。",
-      "commits_one": "{{count}} 个提交",
-      "commits_other": "{{count}} 个提交",
-      "commitsFiles_one": "{{count}} 个提交 · {{files}}",
-      "commitsFiles_other": "{{count}} 个提交 · {{files}}",
-      "files_one": "{{count}} 个文件",
-      "files_other": "{{count}} 个文件",
       "pushesFirst": "会先推送"
     },
     "log": {
@@ -233,12 +303,10 @@
       "action": "丢弃"
     },
     "commit": {
-      "title": "提交到 {{branch}}",
       "message": "提交信息",
       "placeholder": "用一行说明改了什么\n\n为什么改",
       "write": "用 AI 写提交信息",
       "writing": "正在写提交信息…",
-      "files": "文件",
       "filesChosen_one": "已选 {{chosen}} / {{count}} 个文件",
       "filesChosen_other": "已选 {{chosen}} / {{count}} 个文件",
       "commit": "提交",

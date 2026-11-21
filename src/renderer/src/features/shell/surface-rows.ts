@@ -5,6 +5,7 @@ import {
   ComputerPhoneSyncIcon,
   ComputerTerminal01Icon,
   File01Icon,
+  GitCompareIcon,
 } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
 import { REQUESTS_ICON } from '@renderer/features/requests/icon'
@@ -18,7 +19,8 @@ import { hostOfSession, useSessionsStore } from '@renderer/stores/sessions'
 import { createTerminal } from '@renderer/stores/terminals'
 import { panelSession, toggleSidePane, toggleTerminal } from '@renderer/stores/view'
 
-export type SurfaceRowId = 'terminal' | 'browser' | 'devices' | 'files' | 'requests' | 'computer'
+export type SurfaceRowId =
+  'terminal' | 'browser' | 'devices' | 'files' | 'git' | 'requests' | 'computer'
 
 /** The rows in the order the list shows them: the tabs a row can open, then the panes. */
 const ROWS: { id: SurfaceRowId; icon: IconSvgElement; key: string; group: 0 | 1 }[] = [
@@ -26,6 +28,7 @@ const ROWS: { id: SurfaceRowId; icon: IconSvgElement; key: string; group: 0 | 1 
   { id: 'browser', icon: BrowserIcon, key: 'P', group: 0 },
   { id: 'devices', icon: ComputerPhoneSyncIcon, key: 'D', group: 0 },
   { id: 'files', icon: File01Icon, key: 'F', group: 1 },
+  { id: 'git', icon: GitCompareIcon, key: 'G', group: 1 },
   { id: 'requests', icon: REQUESTS_ICON, key: 'R', group: 1 },
   { id: 'computer', icon: ComputerIcon, key: 'C', group: 1 },
 ]
@@ -83,6 +86,7 @@ export function useSurfaceRows(panel: string, projectPath: string): SurfaceRow[]
           ? 'noDevices'
           : null,
     files: null,
+    git: null,
     requests: !sessionId
       ? 'firstMessage'
       : readsModelRequests(summary?.agentId)

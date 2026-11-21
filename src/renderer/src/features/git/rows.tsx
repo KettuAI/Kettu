@@ -4,9 +4,8 @@ import type { ChangedFile, GitStatus } from '@shared/git'
 import { Skeleton } from '@renderer/components/ui/skeleton'
 import { ChangeBadge } from '@renderer/features/files/change-badge'
 import { cn } from '@renderer/lib/utils'
-import { openDiff } from '@renderer/stores/files'
+import { openChangeDiff } from './open-change-diff'
 import { kidKeys } from './popover-keys'
-import { projectRelative } from './sync'
 
 /**
  * A row of the popover, bleeding into its padding. The highlight is focus, which follows the
@@ -65,7 +64,7 @@ function barOf(insertions: number, deletions: number): ('added' | 'removed')[] {
   return Array.from({ length: 5 }, (_, i) => (i < added ? 'added' : 'removed'))
 }
 
-function LineBar({ insertions, deletions }: { insertions: number; deletions: number }) {
+export function LineBar({ insertions, deletions }: { insertions: number; deletions: number }) {
   const squares = barOf(insertions, deletions)
   if (squares.length === 0) return null
   return (
@@ -114,14 +113,7 @@ export function ChangeRow({
       aria-label={t('timeline.openDiff', { name })}
       onKeyDown={nested ? kidKeys : undefined}
       onClick={() => {
-        const root = status.repo?.root ?? status.projectPath
-        openDiff(status.projectPath, {
-          path: file.path,
-          oldPath: file.oldPath,
-          ref: commit,
-          projectFile:
-            file.status === 'deleted' ? null : projectRelative(root, status.projectPath, file.path),
-        })
+        openChangeDiff(status, file, commit)
         onOpened()
       }}
     >

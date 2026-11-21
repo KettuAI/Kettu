@@ -40,21 +40,79 @@ export type GitOperationRequest =
   | { kind: 'commit'; message: string; paths: string[] }
   | { kind: 'discard'; paths: string[] }
 
-/** A dialog the branch popover or the Files pane opens; it lives outside them, so they can close. */
+/** A dialog the branch popover, the Git pane or the Files pane opens; it lives outside them. */
 export type GitDialog =
   | { kind: 'publishRepo' }
   | { kind: 'publishBranch' }
-  | { kind: 'createPr' }
   | {
       kind: 'confirmPush'
       operation: Extract<GitOperationRequest, { kind: 'push' }>
       count: number
     }
-  // `andPush` makes the dialog's default action commit and push.
-  | { kind: 'commit'; paths: string[] | null; andPush?: boolean }
   | { kind: 'discard'; paths: string[] }
   | { kind: 'newBranch' }
   | { kind: 'log' }
+
+/** The Git pane's pages. */
+export type GitPaneTab = 'changes' | 'commits' | 'pr'
+
+/** A project's commit box, which keeps what is typed while the pane shows another page. */
+export interface CommitBox {
+  message: string
+  /** The user typed in it, so a drafted message never replaces what is there. */
+  edited: boolean
+  /** A message was asked for since the last commit, so the box does not ask by itself again. */
+  drafted: boolean
+  /** Mod+Enter commits and pushes, as the box was opened by Commit and push. */
+  andPush: boolean
+  /** A message is being written, which the box shows whichever page the pane is on. */
+  writing: boolean
+  /** Why the last draft or commit failed. */
+  problem: string | null
+}
+
+export const EMPTY_BOX: CommitBox = {
+  message: '',
+  edited: false,
+  drafted: false,
+  andPush: false,
+  writing: false,
+  problem: null,
+}
+
+/** What opened the commit box: the files it is for, or all of them, and what Mod+Enter does. */
+export interface CommitAsk {
+  only: string[] | null
+  andPush: boolean
+}
+
+/** A project's new pull request, which keeps what is typed while the pane shows another page. */
+export interface PullRequestForm {
+  title: string
+  body: string
+  /** The branch to merge into; null until the form picks the default one. */
+  base: string | null
+  draft: boolean
+  /** The user typed in the field, so a drafted text never replaces it. */
+  titleEdited: boolean
+  bodyEdited: boolean
+  /** The base a draft was asked for, so the form does not ask again for the same one. */
+  draftedFor: string | null
+  drafting: boolean
+  draftError: string | null
+}
+
+export const EMPTY_PULL_REQUEST_FORM: PullRequestForm = {
+  title: '',
+  body: '',
+  base: null,
+  draft: false,
+  titleEdited: false,
+  bodyEdited: false,
+  draftedFor: null,
+  drafting: false,
+  draftError: null,
+}
 
 interface GitStore {
   status: Record<string, GitStatus>
@@ -75,6 +133,16 @@ interface GitStore {
   /** By project, the last operation that failed, until the next one starts. */
   failed: Record<string, FailedOperation>
   dialogs: Record<string, GitDialog>
+  /** By panel, the page the Git pane shows. */
+  paneTab: Record<string, GitPaneTab>
+  /** By project, the changed files the user left out of the next commit; the rest are ticked. */
+  leftOut: Record<string, string[]>
+  /** By project, the commit box. */
+  box: Record<string, CommitBox>
+  /** By project, an opener's wish for the commit box, until the Changes page takes it. */
+  commitAsk: Record<string, CommitAsk>
+  /** By project, the new pull request's form. */
+  pullRequestForm: Record<string, PullRequestForm>
 }
 
 export const useGitStore = create<GitStore>()(() => ({
@@ -90,6 +158,11 @@ export const useGitStore = create<GitStore>()(() => ({
   running: {},
   failed: {},
   dialogs: {},
+  paneTab: {},
+  leftOut: {},
+  box: {},
+  commitAsk: {},
+  pullRequestForm: {},
 }))
 
 export function receiveGitStatus(status: GitStatus): void {
@@ -411,6 +484,50 @@ export async function createPullRequest(
   receiveCurrentPr(projectPath, pr)
   useGitStore.setState((s) => ({ pullRequests: { ...s.pullRequests, [pr.url]: pr } }))
   return pr
+}
+
+/** Reads the project's repository and pull request again, as opening the popover or pane does. */
+export function refreshGitProject(projectPath: string): void {
+  void host('git.status', { projectPath }).then(receiveGitStatus, () => {})
+  void host('git.currentPullRequest', { projectPath }).then(
+    (current) => receiveCurrentPr(projectPath, current),
+    () => {},
+  )
+  if (!useGitStore.getState().tools) void loadGitTools()
+}
+
+export function setGitPaneTab(panel: string, tab: GitPaneTab): void {
+  useGitStore.setState((s) => ({ paneTab: { ...s.paneTab, [panel]: tab } }))
+}
+
+export function setLeftOut(projectPath: string, paths: string[]): void {
+  useGitStore.setState((s) => ({ leftOut: { ...s.leftOut, [projectPath]: paths } }))
+}
+
+export function updateCommitBox(projectPath: string, change: Partial<CommitBox>): void {
+  useGitStore.setState((s) => ({
+    box: { ...s.box, [projectPath]: { ...(s.box[projectPath] ?? EMPTY_BOX), ...change } },
+  }))
+}
+
+export function updatePullRequestForm(projectPath: string, change: Partial<PullRequestForm>): void {
+  useGitStore.setState((s) => ({
+    pullRequestForm: {
+      ...s.pullRequestForm,
+      [projectPath]: { ...(s.pullRequestForm[projectPath] ?? EMPTY_PULL_REQUEST_FORM), ...change },
+    },
+  }))
+}
+
+export function clearPullRequestForm(projectPath: string): void {
+  useGitStore.setState((s) => ({ pullRequestForm: without(s.pullRequestForm, projectPath) }))
+}
+
+/** Takes the opener's wish for the commit box, if there is one. */
+export function takeCommitAsk(projectPath: string): CommitAsk | null {
+  const ask = useGitStore.getState().commitAsk[projectPath] ?? null
+  if (ask) useGitStore.setState((s) => ({ commitAsk: without(s.commitAsk, projectPath) }))
+  return ask
 }
 
 export function dismissGitFailure(projectPath: string): void {

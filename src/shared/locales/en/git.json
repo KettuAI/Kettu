@@ -95,7 +95,84 @@
     "copyPath": "Copy path",
     "conflict": "Conflict",
     "conflictsAndChanges": "Conflicts and changes",
-    "worktree": "worktree"
+    "worktree": "worktree",
+    "viewAll": "View all",
+    "openInPane": "Open in the Git pane"
+  },
+  "pane": {
+    "title": "Git",
+    "more": "More",
+    "copyBranch": "Copy branch name",
+    "openRepository": "Open repository on GitHub",
+    "notRepoTitle": "Not a Git repository",
+    "notRepoText": "Initialize Git in this folder to see its changes, commits and pull request here.",
+    "stale": "Couldn’t refresh just now. This is the last state Kettu read.",
+    "tab": {
+      "changes": "Changes",
+      "commits": "Commits",
+      "pr": "Pull request"
+    },
+    "sync": {
+      "notPublished": "This branch isn’t on {{remote}} yet.",
+      "diverged": "Diverged: {{ahead}} to push and {{behind}} to pull",
+      "toPush_one": "{{count}} commit to push to {{upstream}}",
+      "toPush_other": "{{count}} commits to push to {{upstream}}",
+      "toPull_one": "{{count}} commit to pull from {{upstream}}",
+      "toPull_other": "{{count}} commits to pull from {{upstream}}",
+      "inSync": "In sync with {{upstream}} · {{fetched}}"
+    },
+    "changes": {
+      "emptyTitle": "No changes",
+      "emptyText": "Files you or the agent change show up here, ready to commit.",
+      "conflicts": "Conflicts",
+      "tickAll": "Select all files",
+      "tick": "Include {{name}} in the commit",
+      "discard": "Discard…",
+      "discardBlocked": "Finish the operation in progress first",
+      "discardTicked": "Discard the changes of the ticked files",
+      "openInFiles": "Open in Files",
+      "discardFile": "Discard changes",
+      "binary": "Binary file, no preview.",
+      "tooLarge": "Too large to preview.",
+      "same": "No difference to show.",
+      "showFullDiff": "Show full diff"
+    },
+    "box": {
+      "tickFiles": "Tick the files to commit",
+      "writeMessage": "Write a commit message",
+      "cannotPush": "There is nowhere to push this branch from here",
+      "moreWays": "More ways to commit",
+      "commitPushAndPr": "Commit, push and open a pull request"
+    },
+    "commits": {
+      "emptyTitle": "No commits on this branch",
+      "emptyFrom": "Commits made after branching from {{base}} show up here.",
+      "emptyText": "Commits on this branch show up here.",
+      "toPull": "To pull",
+      "notPushed": "Not pushed",
+      "pushed": "Pushed"
+    },
+    "pr": {
+      "notGitHub": "This repository’s remote isn’t on GitHub, so there is no pull request page.",
+      "checks": "Checks",
+      "checkState": {
+        "passing": "Passing",
+        "failing": "Failing",
+        "pending": "Running"
+      },
+      "review": {
+        "title": "Review",
+        "approved": "A reviewer approved it.",
+        "changes_requested": "A reviewer asked for changes.",
+        "review_required": "Waiting for a review."
+      },
+      "mergeReady": "Ready",
+      "blocked": "Blocked",
+      "openLog": "Open log",
+      "copyLink": "Copy link",
+      "drafting": "Drafting…",
+      "drafted": "Drafted by the agent"
+    }
   },
   "timeline": {
     "files_one": "{{count}} file",
@@ -206,19 +283,12 @@
       "action": "Publish"
     },
     "createPr": {
-      "title": "Create pull request",
       "titleField": "Title",
       "body": "Description",
       "base": "Base",
       "draft": "Open as a draft",
       "action": "Create pull request",
       "notOnGitHub": "The branch isn’t on GitHub yet.",
-      "commits_one": "{{count}} commit",
-      "commits_other": "{{count}} commits",
-      "commitsFiles_one": "{{count}} commit · {{files}}",
-      "commitsFiles_other": "{{count}} commits · {{files}}",
-      "files_one": "{{count}} file",
-      "files_other": "{{count}} files",
       "pushesFirst": "Pushes first"
     },
     "log": {
@@ -235,12 +305,10 @@
       "action": "Discard"
     },
     "commit": {
-      "title": "Commit to {{branch}}",
       "message": "Message",
       "placeholder": "What changed, in one line\n\nWhy it changed",
       "write": "Write the message with AI",
       "writing": "Writing the message…",
-      "files": "Files",
       "filesChosen_one": "{{chosen}} of {{count}} file",
       "filesChosen_other": "{{chosen}} of {{count}} files",
       "commit": "Commit",

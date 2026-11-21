@@ -12,15 +12,15 @@ import type { GitStatus } from '@shared/git'
 import { Popover, PopoverContent, PopoverTrigger } from '@renderer/components/ui/popover'
 import { Spinner } from '@renderer/components/ui/spinner'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
-import { host } from '@renderer/lib/host'
 import { formatShortcut } from '@renderer/lib/platform'
 import { cn } from '@renderer/lib/utils'
 import { Glyph } from '@renderer/features/shell/glyph'
 import { emitAppEvent } from '@renderer/app/events'
-import { loadGitTools, receiveCurrentPr, receiveGitStatus, useGitStore } from '@renderer/stores/git'
+import { refreshGitProject, useGitStore } from '@renderer/stores/git'
 import { BranchPopover } from './branch-popover'
 import { BranchSwitcher } from './branch-switcher'
 import { useDialogReturn } from './dialog-focus'
+import { openGitPane, type OpenGitPane } from './pane/open-pane'
 import { branchName, followPointer, popoverKeys } from './popover-keys'
 
 /** Middle truncation keeps both ends of a branch name, where the meaning usually is. */
@@ -56,16 +56,6 @@ export function BranchTrayLink({
   const handedOff = useRef(false)
   if (!status?.repo) return null
 
-  const refresh = (): void => {
-    // Opening shows the repository as it is now, not as the last watch event left it.
-    void host('git.status', { projectPath }).then(receiveGitStatus, () => {})
-    void host('git.currentPullRequest', { projectPath }).then(
-      (current) => receiveCurrentPr(projectPath, current),
-      () => {},
-    )
-    if (!useGitStore.getState().tools) void loadGitTools()
-  }
-
   const onOpenChange = (next: boolean, details: PopoverPrimitive.Root.ChangeEventDetails): void => {
     if (!next && details.reason === 'escape-key' && details.event === cardEscape.current) {
       details.cancel()
@@ -80,8 +70,15 @@ export function BranchTrayLink({
     setOpen(next ? 'branch' : null)
     if (next) {
       handedOff.current = false
-      refresh()
+      // Opening shows the repository as it is now, not as the last watch event left it.
+      refreshGitProject(projectPath)
     }
+  }
+
+  const openPane = (request: Omit<OpenGitPane, 'panel'>): void => {
+    handedOff.current = true
+    setOpen(null)
+    openGitPane(projectPath, { ...request, panel: sessionId })
   }
 
   const handOff = (text: string): void => {
@@ -148,6 +145,7 @@ export function BranchTrayLink({
             onClose={() => setOpen(null)}
             onSwitch={() => setOpen('switch')}
             onHandOff={handOff}
+            onOpenPane={openPane}
           />
         </PopoverContent>
       </Popover>

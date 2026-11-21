@@ -36,6 +36,7 @@ const ArtifactPane = lazy(() => import('@renderer/features/artifacts/artifact-pa
 const DevicesPane = lazy(() => import('@renderer/features/devices/devices-pane'))
 const ComputerPane = lazy(() => import('@renderer/features/computer/computer-pane'))
 const RequestsPane = lazy(() => import('@renderer/features/requests/requests-pane'))
+const GitPane = lazy(() => import('@renderer/features/git/pane/git-pane'))
 const BrowserPane = lazy(() =>
   import('@renderer/features/browser/browser-pane').then((module) => ({
     default: module.BrowserPane,
@@ -55,6 +56,7 @@ const PANES = {
   devices: SURFACES,
   surfaces: SURFACES,
   files: { id: 'side-panel-files', ...PANE_SIZE },
+  git: { id: 'side-panel-git', ...PANE_SIZE },
   artifact: { id: 'side-panel-artifact', defaultSize: '560px', minSize: MIN_WIDTH },
   computer: { id: 'side-panel-computer', defaultSize: '540px', minSize: MIN_WIDTH },
   requests: { id: 'side-panel-requests', defaultSize: '560px', minSize: MIN_WIDTH },
@@ -123,6 +125,7 @@ export function SidePanelArea({
     if (
       !remote ||
       shown === 'files' ||
+      shown === 'git' ||
       shown === 'browser' ||
       shown === 'surfaces' ||
       shown === 'artifact' ||
@@ -279,6 +282,8 @@ export function SidePanelArea({
                 <Suspense fallback={<div className={cn('h-full', SHEET)} />}>
                   {held === 'files' ? (
                     <FilesPanel projectPath={projectPath} panel={panel} maximized={maximized} />
+                  ) : held === 'git' ? (
+                    <GitPane panel={panel} projectPath={projectPath} maximized={maximized} />
                   ) : held === 'browser' ? (
                     <BrowserPane panel={panel} projectPath={projectPath} maximized={maximized} />
                   ) : held === 'devices' ? (
