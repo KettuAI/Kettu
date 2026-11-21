@@ -5174,6 +5174,17 @@ li[data-row-exit='dust'] > * {
 .kettu-composer > .ui-ccc {
   max-width: none;
 }
+/* The model and permission menus open inside the main area, which sits under the toast layer, so
+   the toasts step aside while one is open. */
+body:has(.ui-mdpc[data-open], .ui-ccc__menu[data-open='true']) .kettu-toasts {
+  opacity: 0;
+  visibility: hidden;
+}
+.kettu-toasts {
+  transition:
+    opacity var(--duration-fast) var(--ease-standard),
+    visibility 0s;
+}
 /* A message started on an expired prompt cache: a pop over the composer's top edge, at the right,
    over the end of the thread so nothing moves. */
 .kettu-cache-notice {

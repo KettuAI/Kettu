@@ -1352,7 +1352,7 @@ export class AgentManager {
     }
     this.registeredSlot(agentId)
     this.assertEnabled(agentId)
-    if (this.stopped) throw new Error(`${slot.name} was not started: the host is stopping.`)
+    if (this.stopped) throw new Error(t('agent.hostStopping', { agent: slot.name }))
     slot.state = 'starting'
     slot.detail = null
     slot.progress.clear()
@@ -1433,7 +1433,7 @@ export class AgentManager {
       const info = await launched.stop(this.tools())
       if (!launched.hasExited) this.letGo(slot, launched, info)
       throw error instanceof AgentRequestError
-        ? new Error(`${slot.name} failed to initialize: ${error.message}`)
+        ? new Error(t('agent.initializeFailed', { agent: slot.name, reason: error.message }))
         : error
     } finally {
       if (timer) clearTimeout(timer)
@@ -1686,7 +1686,7 @@ export class AgentManager {
     const started = Date.now()
     diagnostics.event(slot.id, 'install', `${adapter.package}@${version}`)
     try {
-      if (!adapter.npm) throw new Error('npm was not found on PATH.')
+      if (!adapter.npm) throw new Error(t('agent.noNpm'))
       await (this.deps.install ?? installAdapter)({
         root: this.deps.adaptersDir,
         agentId: harnessId,
@@ -1711,7 +1711,7 @@ export class AgentManager {
       if (!spec) {
         throw new Error(
           h.detection?.state === 'available'
-            ? `${adapter.package} ${version} is incomplete on disk.`
+            ? t('agent.incompleteInstall', { name: `${adapter.package} ${version}` })
             : h.detection?.detail,
         )
       }

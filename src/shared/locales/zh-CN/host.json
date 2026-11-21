@@ -238,6 +238,10 @@
     "antigravityLimitsFailed": "{{agent}} 没能读出套餐限额：{{error}}",
     "antigravityNoPlan": "{{agent}} 没有报出 Google 套餐，所以没有可读的套餐限额。如果你用的是 Google 账号，请在终端里重新登录。",
     "initializeTimeout": "{{agent}} 没有在 {{seconds}} 秒内响应 initialize。",
+    "initializeFailed": "{{agent}} 初始化失败：{{reason}}",
+    "hostStopping": "{{agent}} 没有启动：Kettu 正在停止。",
+    "noNpm": "在 PATH 中找不到 npm。",
+    "incompleteInstall": "{{name}} 的安装不完整。",
     "exit": {
       "code": "{{agent}} 已退出，退出码 {{code}}",
       "signal": "{{agent}} 被 {{signal}} 信号终止",
@@ -742,6 +746,8 @@
     },
     "account": {
       "unknownProvider": "OpenCode 不认识这个厂商。",
+      "unknownAction": "OpenCode 不认识这个操作。",
+      "credentialRequired": "需要一个凭据。",
       "removeFailed": "OpenCode 无法移除这个账号。",
       "activateFailed": "OpenCode 无法把这个账号设为使用中。",
       "saveKeyFailed": "OpenCode 无法保存这个 key。",

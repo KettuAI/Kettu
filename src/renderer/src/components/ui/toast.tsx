@@ -232,7 +232,7 @@ export function Toaster() {
     <div
       ref={frame}
       data-overlay-layer={shown ? '' : undefined}
-      className="pointer-events-none fixed z-(--layer-toast)"
+      className="kettu-toasts pointer-events-none fixed z-(--layer-toast)"
     >
       <AffectToaster
         inline

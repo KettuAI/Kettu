@@ -481,7 +481,9 @@ export async function installAdapter(options: InstallOptions): Promise<Installed
     }
     const installed = await readInstall(target, options.package)
     if (installed?.version !== options.version) {
-      throw new Error(`${options.package} ${options.version} is incomplete on disk.`)
+      throw new Error(
+        t('agent.incompleteInstall', { name: `${options.package} ${options.version}` }),
+      )
     }
     return installed
   } catch (error) {

@@ -326,7 +326,7 @@ export async function installArchive(options: ArchiveInstallOptions): Promise<In
     await renameWithRetry(partial, target, options.platform)
     const installed = await readRecord(target)
     if (installed?.version !== options.version) {
-      throw new Error(`${options.version} is incomplete on disk.`)
+      throw new Error(t('agent.incompleteInstall', { name: options.version }))
     }
     return installed
   } catch (error) {
