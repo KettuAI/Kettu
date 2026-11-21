@@ -300,6 +300,8 @@ export class HostAdmin {
         body,
         ...(sessionId ? { sessionId } : {}),
       }
+    } else if ('taskId' in message) {
+      attention = { kind: message.kind, taskId: message.taskId, title, body }
     } else {
       attention = {
         kind: message.kind,

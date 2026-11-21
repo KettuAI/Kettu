@@ -23,8 +23,9 @@
   align-items: center;
   gap: 8px;
 }
+/* Block-level, so the label sits in no line box whose baseline would lift it off the segment's middle. */
 .k-ov-view {
-  display: inline-flex;
+  display: flex;
   align-items: center;
   gap: 6px;
 }

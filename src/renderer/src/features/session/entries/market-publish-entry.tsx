@@ -35,7 +35,10 @@ import { Spinner } from '@renderer/components/ui/spinner'
 import { bytes } from '@renderer/lib/format'
 import { host } from '@renderer/lib/host'
 import { cn } from '@renderer/lib/utils'
+import { WorkflowChart } from '@renderer/features/tasks/workflow-chart'
 import { tileArt } from '../../marketplace/tile-art'
+import { Clamp } from '../clamp'
+import { Diff } from '../markdown'
 import { useEntry, useEntryAnimation } from '../use-thread'
 import { useAnswering } from './use-answering'
 
@@ -170,14 +173,17 @@ function Facts({ entry, visibility }: { entry: Ask; visibility: ReactNode }) {
   const { t } = useTranslation('session')
   const [filesOpen, setFilesOpen] = useState(false)
   const publish = entry.action === 'publish'
+  // The chart above draws a workflow's steps.
+  const adds = entry.workflow ? entry.adds.filter((group) => group.label !== 'steps') : entry.adds
   return (
     <dl className="ks-pub-dl">
       {visibility}
-      {entry.adds.length > 0 && (
+      {publish && entry.fromTask && <FromTask from={entry.fromTask} />}
+      {adds.length > 0 && (
         <div>
           <dt>{t('marketPublish.adds')}</dt>
           <dd className="ks-pub-adds">
-            {entry.adds.map((group) => (
+            {adds.map((group) => (
               <span key={group.label}>
                 {t(
                   `marketPublish.${entry.item.kind === 'workflow' ? 'workflowGroup' : 'addsGroup'}.${group.label}`,
@@ -284,6 +290,45 @@ function Facts({ entry, visibility }: { entry: Ask; visibility: ReactNode }) {
   )
 }
 
+/**
+ * A workflow made general from a task's: what the agent says it changed, whether the steps and
+ * arrows stayed, and the two files side by side on request.
+ */
+function FromTask({ from }: { from: NonNullable<Ask['fromTask']> }) {
+  const { t } = useTranslation('session')
+  const [open, setOpen] = useState(false)
+  return (
+    <div>
+      <dt>{t('marketPublish.fromTask.label')}</dt>
+      <dd className="ks-pub-from">
+        {from.changes && <span data-selectable="">{from.changes}</span>}
+        <span className="ks-pub-uploads">
+          <span className={cn('ks-pub-faint', !from.sameFlow && 'text-warning')}>
+            {from.sameFlow ? t('marketPublish.fromTask.same') : t('marketPublish.fromTask.changed')}
+          </span>
+          <button
+            type="button"
+            className="ks-pub-link"
+            aria-expanded={open}
+            onClick={() => setOpen((shown) => !shown)}
+          >
+            {open
+              ? t('marketPublish.fromTask.hide')
+              : t('marketPublish.fromTask.compare', { title: from.title })}
+          </button>
+        </span>
+        {open && (
+          <div className="flex flex-col overflow-hidden rounded-code border border-subtle">
+            <Clamp maxHeight={360} more={t('tool.showFullDiff')} buttonClassName="mx-2 my-1">
+              <Diff path="workflow.yaml" oldText={from.before} newText={from.after} />
+            </Clamp>
+          </div>
+        )}
+      </dd>
+    </div>
+  )
+}
+
 /** Keys typed into a field of the card stay there: Esc leaves the field instead of Not now. */
 function stayInField(event: KeyboardEvent<HTMLElement>) {
   if (event.key === 'Escape') {
@@ -336,6 +381,7 @@ export function PublishForm({
   return (
     <div className="ks-pub__body">
       <ListingLine entry={ask} />
+      {ask.workflow && <WorkflowChart workflow={ask.workflow} hostId={null} />}
       {fresh && (
         <div className="ks-pub-row">
           <span className="ks-pub-label">{t('marketPublish.visibleTo')}</span>

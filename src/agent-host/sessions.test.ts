@@ -7,6 +7,7 @@ import type { Diagnostics } from './diagnostics'
 import type { LastRequest, OutsideReader } from './outside-sessions'
 import type { Projects } from './projects'
 import type { ScratchFolders } from './scratch'
+import { HostError } from './errors'
 import { SessionManager, type SessionEvents } from './sessions'
 import { returnedFile, sessionsFile, type SessionRecord, type SessionsFile } from './storage'
 import type { StoredThread } from './threads/model'
@@ -65,7 +66,26 @@ function manager(
     settings: () => ({}) as never,
     ...(extra.outside ? { outside: extra.outside } : {}),
   } satisfies ConstructorParameters<typeof SessionManager>[0]
-  return { sessions: new SessionManager(deps), added }
+  return { sessions: new SessionManager(deps), added, agents: deps.agents }
+}
+
+/** An agent that lists `pages` of session ids for any folder, one page per call. */
+function lists(...pages: string[][]): Record<string, unknown> {
+  return {
+    name: () => 'Agent',
+    ensureReady: async () => ({
+      init: { capabilities: { listSessions: true } },
+      connection: {
+        listSessions: async (_cwd: string, cursor: string | null) => {
+          const at = cursor === null ? 0 : Number(cursor)
+          return {
+            sessions: pages[at].map((sessionId) => ({ sessionId, title: null, updatedAt: null })),
+            nextCursor: at + 1 < pages.length ? String(at + 1) : null,
+          }
+        },
+      },
+    }),
+  }
 }
 
 async function index(): Promise<SessionsFile | null> {
@@ -78,7 +98,7 @@ async function index(): Promise<SessionsFile | null> {
 
 describe('the session index', () => {
   it('writes a session that first enters it at once, before a crash can lose it', async () => {
-    const { sessions } = manager()
+    const { sessions } = manager({}, { agents: lists(['acp-1']) })
     await sessions.load()
     const summary = await sessions.importSession({
       agentId: 'claude-code',
@@ -111,7 +131,7 @@ describe('importing a session from a terminal', () => {
   })
 
   it('refuses one a terminal still has open, and keeps nothing of it', async () => {
-    const { sessions } = manager({}, { outside: reader(true) })
+    const { sessions } = manager({}, { outside: reader(true), agents: lists(['cli-1']) })
     await sessions.load()
     await expect(
       sessions.importSession({
@@ -124,7 +144,7 @@ describe('importing a session from a terminal', () => {
   })
 
   it('keeps how its last request ran and its cache, and sends the guide ahead', async () => {
-    const { sessions } = manager({}, { outside: reader(false) })
+    const { sessions } = manager({}, { outside: reader(false), agents: lists(['cli-1']) })
     await sessions.load()
     const summary = await sessions.importSession({
       agentId: 'claude-code',
@@ -140,6 +160,74 @@ describe('importing a session from a terminal', () => {
         instructionsAhead: true,
       }),
     )
+  })
+
+  it('refuses a session id its agent does not list for the folder, and keeps nothing of it', async () => {
+    const { sessions, added } = manager({}, { outside: reader(false), agents: lists(['cli-1']) })
+    await sessions.load()
+    await expect(
+      sessions.importSession({
+        agentId: 'claude-code',
+        projectPath: '/repo',
+        acpSessionId: 'made-up',
+      }),
+    ).rejects.toMatchObject({ code: 'not_found' })
+    expect(sessions.list('/repo')).toEqual([])
+    expect(added).toEqual([])
+    expect(await index()).toBeNull()
+  })
+
+  it('looks through every page its agent lists', async () => {
+    const { sessions } = manager({}, { agents: lists(['a'], ['b'], ['cli-1']) })
+    await sessions.load()
+    await sessions.importSession({
+      agentId: 'claude-code',
+      projectPath: '/repo',
+      acpSessionId: 'cli-1',
+    })
+    expect(sessions.list('/repo')).toHaveLength(1)
+    await vi.waitFor(async () => expect((await index())?.sessions).toHaveLength(1))
+  })
+
+  it('stops looking at a cursor its agent gives twice', async () => {
+    const { sessions } = manager(
+      {},
+      {
+        agents: {
+          name: () => 'Agent',
+          ensureReady: async () => ({
+            init: { capabilities: { listSessions: true } },
+            connection: {
+              listSessions: async () => ({ sessions: [], nextCursor: 'same' }),
+            },
+          }),
+        },
+      },
+    )
+    await sessions.load()
+    await expect(
+      sessions.importSession({
+        agentId: 'claude-code',
+        projectPath: '/repo',
+        acpSessionId: 'cli-1',
+      }),
+    ).rejects.toMatchObject({ code: 'not_found' })
+  })
+
+  it('refuses an agent that cannot list its sessions, which it cannot check', async () => {
+    const { sessions } = manager(
+      {},
+      {
+        agents: {
+          name: () => 'Agent',
+          ensureReady: async () => ({ init: { capabilities: { listSessions: false } } }),
+        },
+      },
+    )
+    await sessions.load()
+    await expect(
+      sessions.importSession({ agentId: 'claude-code', projectPath: '/repo', acpSessionId: 'x' }),
+    ).rejects.toMatchObject({ code: 'agent_unavailable' })
   })
 
   it('copies one a terminal has open when asked to fork, with the settings of the original', async () => {
@@ -342,5 +430,45 @@ describe('answering a problem report', () => {
     expect(snapshot.entries.find((entry) => entry.id === 'e:1')).toMatchObject({
       outcome: { kind: 'skipped' },
     })
+  })
+})
+
+describe('signing in', () => {
+  it('settles the notice that asked for it once the agent reports it is signed in', async () => {
+    let starts = 0
+    const agents: Record<string, unknown> = {
+      name: () => 'Agent',
+      authRequired: () => {},
+      ensureReady: async () => ({
+        init: { capabilities: {} },
+        connection: {
+          newSession: () => {
+            starts++
+            // The retry after the sign-in is left starting.
+            if (starts > 1) return new Promise(() => {})
+            return Promise.reject(new HostError('auth_required', 'Run the login command'))
+          },
+        },
+      }),
+    }
+    const { sessions, agents: hooked } = manager({}, { agents })
+    await sessions.load()
+    const summary = await sessions.create({
+      agentId: 'cline',
+      projectPath: '/repo',
+      prompt: [{ type: 'text', text: 'Hello' }],
+    })
+    const notices = async () =>
+      (await sessions.open(summary.id)).entries.filter((entry) => entry.kind === 'notice')
+    expect(await notices()).toMatchObject([
+      { severity: 'error', description: 'Run the login command' },
+    ])
+    hooked.hooks.signedIn('cline')
+
+    await vi.waitFor(() => expect(starts).toBe(2))
+    const [notice, ...rest] = await notices()
+    expect(rest).toEqual([])
+    expect(notice).toMatchObject({ severity: 'info' })
+    expect(notice).not.toMatchObject({ description: 'Run the login command' })
   })
 })

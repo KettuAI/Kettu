@@ -344,6 +344,17 @@ export type HostToMain =
       title: string
       body: string
     }
+  // A workflow task starts to need the user, or it ended or was cancelled; it opens the task.
+  | {
+      type: 'host:attention'
+      kind: 'task-needs-you' | 'task-ended'
+      taskId: string
+      title: string
+      body: string
+      // A step's session, for devices, which open sessions rather than tasks.
+      sessionId?: string
+      front?: AttentionFront
+    }
   | { type: 'host:badge'; count: number } // pending permission requests across sessions
   // What waits for the user, by session: the ids of the requests, new sites, apps and setups.
   | { type: 'host:waiting'; sessions: Record<string, string[]> }

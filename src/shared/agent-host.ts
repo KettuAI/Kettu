@@ -111,6 +111,7 @@ import type {
   WireWorkflowEntry,
   WorkflowSettings,
   WorkflowSettingsChange,
+  WorkflowSuggestion,
   StepPick,
   TaskStart,
   TaskSummary,
@@ -316,7 +317,7 @@ export interface AgentTask {
  */
 export type VersionMoveReason = 'registry' | 'manifest' | 'broken' | 'bundled'
 
-/** The user's own Claude Code or Codex, the only CLI a start runs. */
+/** The user's own program a start runs, such as Claude Code's or Codex's CLI. */
 export interface AgentCli {
   command: string // looked up on PATH, such as claude
   installed: InstalledCli | null // null: none found
@@ -448,7 +449,7 @@ export interface AgentStatus {
   updateSkipped: boolean // the user dismissed this update in the sidebar's notice
   task: AgentTask | null
   installMethods: AgentInstallMethod[] // a binary agent's ways to install; empty for the others
-  cli: AgentCli | null // the user's Claude Code or Codex; null for the others
+  cli: AgentCli | null // the user's own program a harness runs; null for the others
   // The configuration folder a start uses and the one the running process uses (null while none
   // runs); null for an agent whose folder cannot be chosen. `created`: Kettu made it.
   configDir: { runs: string; active: string | null; created: boolean } | null
@@ -669,6 +670,9 @@ export interface Project {
   missing: boolean // the folder no longer exists
   lastOpenedAt: number
   pinnedAt?: number | null // absent on hosts that do not support project pins
+  // Its place in the host's order: null until the user moves a project there, absent on hosts
+  // that cannot reorder projects. `projects.list` already gives them in this order.
+  order?: number | null
 }
 
 /** The sidebar's No project group, which holds the sessions started without a project. */
@@ -1133,6 +1137,8 @@ export interface HostContract {
   'projects.touch': { params: { path: string }; result: void }
   // A null path pins the No project group.
   'projects.pin': { params: { path: string | null; pinned: boolean }; result: void }
+  // Puts a project just before another of the same host, or last with a null `before`.
+  'projects.move': { params: { path: string; before: string | null }; result: void }
   'projects.noProject': { params: void; result: NoProject }
   // How the project names and prepares its sessions' worktrees.
   'projects.worktreeSettings': { params: { path: string }; result: ProjectWorktreeSettings }
@@ -1199,6 +1205,23 @@ export interface HostContract {
   }
   'workflows.settings': { params: void; result: WorkflowSettings }
   'workflows.setSettings': { params: WorkflowSettingsChange; result: WorkflowSettings }
+  // The cards the workflow tools leave in a session: a suggestion to run a requirement through a
+  // workflow, and a workflow an agent wrote for the user to keep.
+  'workflows.suggestions': { params: { sessionId: string }; result: WorkflowSuggestion[] }
+  // The file a card drew, for View file.
+  'workflows.suggestionFile': { params: { id: string }; result: { text: string } }
+  // Start (Retry after a failed item) answers once Start is under way; `workflows.suggestion`
+  // events follow its items. Decline is Do it here, reconsider is Use it instead.
+  'workflows.answerSuggestion': {
+    params: {
+      id: string
+      answer: 'start' | 'decline' | 'another' | 'reconsider' | 'save' | 'not_save'
+      // The first step's agent and its option values, as the session runs them.
+      agentId?: AgentId
+      options?: Record<string, string | boolean>
+    }
+    result: WorkflowSuggestion
+  }
   // Tasks: a requirement run through a workflow, one session per step.
   'tasks.list': { params: void; result: TaskSummary[] }
   'tasks.get': { params: { taskId: string }; result: TaskView }
@@ -1238,6 +1261,11 @@ export interface HostContract {
     }
     result: TaskView
   }
+  // Save as my workflow: the workflow an agent wrote for a task that ended done, into the library.
+  'tasks.saveWorkflow': { params: { taskId: string }; result: WireWorkflowEntry }
+  // Publish to the Marketplace: asks the agent of the conversation the task started from to make
+  // that workflow general and publish it, which waits for the user in its card.
+  'tasks.publishWorkflow': { params: { taskId: string }; result: void }
   // The window's prepared session for New session; `replace` opens a new one even when it holds one.
   'sessions.prepare': {
     params: {
@@ -1942,6 +1970,7 @@ export const HOST_METHODS = [
   'projects.remove',
   'projects.touch',
   'projects.pin',
+  'projects.move',
   'projects.noProject',
   'projects.worktreeSettings',
   'projects.setWorktreeSettings',
@@ -2024,6 +2053,9 @@ export const HOST_METHODS = [
   'workflows.pin',
   'workflows.settings',
   'workflows.setSettings',
+  'workflows.suggestions',
+  'workflows.suggestionFile',
+  'workflows.answerSuggestion',
   'tasks.list',
   'tasks.get',
   'tasks.sessions',
@@ -2036,6 +2068,8 @@ export const HOST_METHODS = [
   'tasks.note',
   'tasks.pin',
   'tasks.update',
+  'tasks.saveWorkflow',
+  'tasks.publishWorkflow',
   'permissions.respond',
   'git.status',
   'git.unwatch',
@@ -2216,6 +2250,7 @@ export type HostEvent =
   | { type: 'task.changed'; task: TaskView }
   | { type: 'task.removed'; taskId: string }
   | { type: 'workflows.changed' } // the workflow library or its settings changed; a page showing it reads again
+  | { type: 'workflows.suggestion'; suggestion: WorkflowSuggestion } // a card's answer or Start's progress
   | { type: 'routine.run'; run: RoutineRun } // a run's status changed
   // To the port of the desktop app that sent the turn: a call for its main to run on the session's
   // page, answered by `browser.answer`.

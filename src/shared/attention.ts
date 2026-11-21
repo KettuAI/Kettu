@@ -2,6 +2,7 @@
 // replaces, what a click opens, and its text held to what a notification shows. The desktop app's
 // notifications and the web client's both follow it.
 
+import type { HostToMain } from './host-control'
 import type { AppCommand } from './ipc'
 import type { PlanLimitNoticeLevel } from './plan-limits'
 import type { HostAttention } from './remote/host-admin'
@@ -15,6 +16,8 @@ export const ATTENTION_SETTING = {
   'routine-ended': 'routines',
   'routine-paused': 'routines',
   'plan-limit': 'planLimits',
+  'task-needs-you': 'permission',
+  'task-ended': 'turnEnded',
 } as const satisfies Record<HostAttention['kind'], keyof SettingsFile['notifications']>
 
 const MAX_TITLE = 120
@@ -32,8 +35,8 @@ const PLAN_LIMIT_LEVELS: readonly PlanLimitNoticeLevel[] = ['near', 'reached', '
 
 /**
  * What a well-formed attention message stands for, which a newer one of the same replaces, and
- * what a click opens: its session, the Routines page for a pause, or the Usage page for a plan
- * limit that names no session. Null for a malformed one.
+ * what a click opens: its session, the Routines page for a pause, a workflow task, or the Usage
+ * page for a plan limit that names no session. Null for a malformed one.
  */
 export function attentionTarget(
   message: HostAttention,
@@ -60,9 +63,35 @@ export function attentionTarget(
       ? { key: `routines:${message.agentId}`, command: { kind: 'open-routines' } }
       : null
   }
-  return isId(message.sessionId)
+  if (message.kind === 'task-needs-you' || message.kind === 'task-ended') {
+    return isId(message.taskId)
+      ? { key: `task:${message.taskId}`, command: { kind: 'open-task', taskId: message.taskId } }
+      : null
+  }
+  return 'sessionId' in message && isId(message.sessionId)
     ? { key: message.sessionId, command: { kind: 'open-session', sessionId: message.sessionId } }
     : null
+}
+
+type AttentionMessage = Extract<HostToMain, { type: 'host:attention' }>
+
+/**
+ * What devices are pushed for an attention message: a workflow task's goes as its step's session,
+ * which is what they open, and not at all when no step has a session. A plan limit is not pushed:
+ * it is the desktop's notice of the account, which devices do not take.
+ */
+export function pushedAttention(message: AttentionMessage): AttentionMessage | null {
+  if (message.kind === 'plan-limit') return null
+  if (!('taskId' in message)) return message
+  if (message.sessionId === undefined) return null
+  return {
+    type: 'host:attention',
+    kind: message.kind === 'task-needs-you' ? 'permission' : 'turn-ended',
+    sessionId: message.sessionId,
+    title: message.title,
+    body: message.body,
+    ...(message.front ? { front: message.front } : {}),
+  }
 }
 
 /** The title and body as a notification shows them. */

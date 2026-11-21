@@ -1,55 +1,45 @@
 # 路线图
 
-Kettu 现在有什么、接下来做什么，按版本列出。版本没有固定的发布日期：核心功能完成后马上发版，较小的修复随下一版一起发布，所以这里的先后顺序比时间更可靠。每一项都链接到对应的 Issue，你可以在那里关注进展，或者告诉我们你的需求；完整的列表（包括各项修复）见 [Milestones](https://github.com/KettuAI/Kettu/milestones)。[English](./ROADMAP.md)
+Kettu 现在有什么、接下来做什么。版本没有固定的发布日期：功能完成后马上发版，较小的修复随下一版一起发布，所以这里的先后顺序比时间更可靠。每一项都链接到对应的 Issue，你可以在那里关注进展，或者告诉我们你的需求；每个版本发布的全部内容（包括各项修复）见[发布说明](https://github.com/KettuAI/Kettu/releases)。[English](./ROADMAP.md)
 
 ## 现在已有
 
-[v0.0.30](https://github.com/KettuAI/Kettu/releases/tag/v0.0.30) 中：
+[v0.1.13](https://github.com/KettuAI/Kettu/releases/tag/v0.1.13) 中：
 
-- 并排使用 Claude Code、Codex、OpenCode、Pi 和另外 40 多个 Agent，其中 Claude Code 和 Codex 经它们自己的接口接入；暂时不用的 Agent 可以关掉，会话不会丢；两轮之间可以把会话交给另一个 Agent
-- 多会话并行、子 Agent，以及从任意一条回复分叉，窗口最多分成九格，侧边栏标出哪个会话在干活、在等你或已做完
-- 按一个键就能回答的授权卡片，在一张卡片里回答 Agent 的多个问题，顶栏显示计划，运行中可以排队和插话，可以只回复选中的段落，以及通知
-- Diff、Git 状态与 Pull Request，回复里的 GitHub 引用，用标签页打开的文件面板，每个会话一个终端，以及 Agent 可以操作的内置浏览器
-- Artifacts：网页、文档、幻灯片和画布，保留历史版本；留言给 Agent 看、直接编辑画布、演示，导出为 Word、Markdown、PowerPoint 和 PDF，还能发布到 kettu.page，可以只有自己能看、凭访问码看或公开
-- 移动设备：iOS 模拟器、Android 模拟器和真机就在会话旁边，你和 Agent 都能操作
-- Computer use：打开之后，Agent 能操作你电脑上的应用
-- Routines，带每个账号套餐额度的 token 用量和费用，以及一个能搜会话、Artifacts、Routines、项目、设置和操作的命令面板
-- 在你自己的网络里从其他设备使用会话：设备配对、直接连接、使用另一台电脑上的 Kettu，以及填 SSH 地址添加开发机，daemon 会替你装好
-- 登录 Kettu 账号后的官方云服务：从任何网络连回你电脑的中继，以及 app.kettu.sh 上的 Web 客户端
-- 在应用里提交问题报告，浅色和深色模式，从文件或在线目录安装的主题，简体中文和英文
-- 支持 Apple 芯片和 Intel 的 macOS 版，经过 Apple 签名和公证；x64 和 Arm 的 Windows 版和 Linux 版；更新在你选择的时候安装
+- 48 个 Agent，Claude Code、Codex、OpenCode、Pi 等，用你自己的安装、账号和设置；暂时不用的可以关掉，会话不会丢；两轮之间可以把会话交给另一个 Agent
+- 并行的会话、子 Agent 和从任意回复分出的分叉，由 Kettu 创建和清理的 Git worktree，窗口最多分成九格，侧边栏标出哪个会话在干活、在等你或已做完
+- 一键回应授权请求，Agent 的多个问题在一张卡片里回答，计划显示在顶栏，排队消息引导正在进行的一轮，回复选中的段落，以及通知
+- Agent 之间的交接，让任务按步骤走、每步一个会话的工作流，以及一个页面看全所有会话和任务的总览
+- Diff、Git 状态和 Pull Request，回复里的 GitHub 引用，标签页里的文件面板，每个会话自己的终端，以及 Agent 能操作的内置浏览器
+- Artifacts：带版本的网页、文档、幻灯片和画布，Agent 会读的留言，导出成 Word 和 PowerPoint，以及发布到 kettu.page 的页面，可以只有自己能看、凭访问码看或公开
+- 会话旁边的移动设备，你和 Agent 都能操作；打开之后的 Computer use
+- Routines，带每个账号套餐额度的用量和费用，管理插件、Skills、MCP 服务器和工作流的 Marketplace，以及什么都能搜的命令面板
+- 随处可用：任何浏览器打开 app.kettu.sh 经 Kettu 中继连回电脑，在你自己的网络里不用账号，另一台电脑上的 Kettu，经 SSH 加进来的开发机，全部端到端加密
+- iPhone 和 iPad 应用，正在 [TestFlight 公开测试](https://testflight.apple.com/join/zsbFyAPQ)
+- 浅色和深色模式，主题，简体中文和英文，以及从应用里发送问题报告
+- macOS 版（Apple 芯片和 Intel，经过 Apple 签名和公证），Windows 和 Linux 版（x64 和 Arm），以及用在服务器上的 daemon 和 Docker 镜像
 
-## v0.1.0：完整的桌面应用
+## 接下来
 
-- [ ] 桌面应用的每个部分都做完，并对照设计验收
-- [ ] 经过 Microsoft 签名的 Windows 安装包，并在两个版本之间验证 macOS 一键更新（[#68](https://github.com/KettuAI/Kettu/issues/68)）
-- [ ] 把会话退回到任意一条消息之前，撤销 Agent 在那之后改的文件（[#615](https://github.com/KettuAI/Kettu/issues/615)）
-- [ ] 每个会话的 MCP 服务器和它们的连接状态（[#617](https://github.com/KettuAI/Kettu/issues/617)）
-- [ ] 并行的会话各自在自己的 Git worktree 里工作（[#618](https://github.com/KettuAI/Kettu/issues/618)），以及在一处审阅一个会话或一轮的改动（[#619](https://github.com/KettuAI/Kettu/issues/619)）
-- [ ] 盯着会话开的 Pull Request，检查失败、出现冲突或有人评审时叫醒 Agent 接着处理（[#621](https://github.com/KettuAI/Kettu/issues/621)）
+- [ ] 在 MacBook 的刘海里显示每个会话在做什么，并且直接在那里回应（[#2053](https://github.com/KettuAI/Kettu/issues/2053)、[#2059](https://github.com/KettuAI/Kettu/issues/2059)）
+- [ ] Antigravity 的协作子 Agent 显示在它的会话下面，它的提问进问题卡片（[#1695](https://github.com/KettuAI/Kettu/issues/1695)、[#1696](https://github.com/KettuAI/Kettu/issues/1696)）
+- [ ] 在你的其他设备上看到电脑的更多状态：云服务和 Computer use 是否打开，以及它的诊断信息（[#1584](https://github.com/KettuAI/Kettu/issues/1584)、[#1596](https://github.com/KettuAI/Kettu/issues/1596)、[#1597](https://github.com/KettuAI/Kettu/issues/1597)）
 
-## v0.2.0：在你自己的网络里，从其他设备使用会话
+## 正在考虑
 
-已经可以用了，只剩：
+有人提了、我们正在权衡的。在 Issue 上点个赞会有帮助：
 
-- [ ] 在手机上的 Web 客户端里只读查看文件，修改交给 Agent（[#749](https://github.com/KettuAI/Kettu/issues/749)）
-
-## v0.3.0：官方云服务
-
-中继、app.kettu.sh 上的 Web 客户端和 Kettu 账号已经可以用了。接下来：
-
-- [ ] 会话需要你时，在你的其他设备上收到通知（[#388](https://github.com/KettuAI/Kettu/issues/388)）
-- [ ] 适合手机宽度的 Web 客户端布局，在有应用之前安卓手机也用它（[#712](https://github.com/KettuAI/Kettu/issues/712)）
-
-## v0.4.0：iOS 应用
-
-- [ ] iPhone 和 iPad 上的原生应用（[#383](https://github.com/KettuAI/Kettu/issues/383)）：你的会话，在锁屏和通知上回答授权请求，分享扩展和用量小组件
+- [ ] 左右并排的 Diff（[#1916](https://github.com/KettuAI/Kettu/issues/1916)），以及撤销某一轮的文件改动（[#1789](https://github.com/KettuAI/Kettu/issues/1789)）
+- [ ] 每一轮回复下面显示这一轮的费用和 token（[#1918](https://github.com/KettuAI/Kettu/issues/1918)）
+- [ ] 直接在输入框里把任务交给另一个 Agent（[#2058](https://github.com/KettuAI/Kettu/issues/2058)）
+- [ ] 在内置浏览器的页面上做标注交给 Agent（[#1812](https://github.com/KettuAI/Kettu/issues/1812)）
+- [ ] 把对话导出成文件（[#1836](https://github.com/KettuAI/Kettu/issues/1836)），往项目里上传文件（[#1838](https://github.com/KettuAI/Kettu/issues/1838)），以及预览 PDF 和 Word 文件（[#1839](https://github.com/KettuAI/Kettu/issues/1839)）
+- [ ] 自己设定界面、回复和代码的字体、字重和字号（[#1841](https://github.com/KettuAI/Kettu/issues/1841)）
 
 ## 以后
 
-- [ ] 原生的安卓应用
-- [ ] 按对话内容搜索所有会话（[#622](https://github.com/KettuAI/Kettu/issues/622)）
-- [ ] 把 Agent 生成的 Word、PowerPoint 和 Excel 文件作为 Artifacts 显示（[#365](https://github.com/KettuAI/Kettu/issues/365)），从项目的设计系统生成 Artifacts（[#370](https://github.com/KettuAI/Kettu/issues/370)），以及导出为 PNG（[#367](https://github.com/KettuAI/Kettu/issues/367)）
-- [ ] 在设置中管理技能和插件（[#488](https://github.com/KettuAI/Kettu/issues/488)、[#489](https://github.com/KettuAI/Kettu/issues/489)），以及显示会话启动的后台任务（[#495](https://github.com/KettuAI/Kettu/issues/495)）
+- [ ] 原生 Android 应用，排在 iPhone 和 iPad 应用之后
+- [ ] 设备经 NAT 穿透直接连到你的电脑（[#1527](https://github.com/KettuAI/Kettu/issues/1527)）
+- [ ] 更多 Agent 改用自己的接口而不是 ACP：先是 GitHub Copilot、Cursor、OMP、Muse Code 和 Amp（[#2021](https://github.com/KettuAI/Kettu/issues/2021)），再是 Kilo Code、Qoder 和 Factory Droid（[#2022](https://github.com/KettuAI/Kettu/issues/2022)）
 
 还缺什么？[提一个 Issue](https://github.com/KettuAI/Kettu/issues/new/choose)，告诉我们你需要什么。

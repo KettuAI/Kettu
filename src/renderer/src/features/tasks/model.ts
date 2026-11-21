@@ -3,6 +3,7 @@
 import type { SessionSummary } from '@shared/agent-host'
 import { harnessOf } from '@shared/agents'
 import {
+  outcomeName,
   stepIndex,
   stepName,
   type BlockedReason,
@@ -104,6 +105,15 @@ export function stepTitle(
   return stepName(workflow, stepId, i18n.language)
 }
 
+/** An outcome's name in the language shown; a step still reports the file's own name. */
+export function outcomeTitle(
+  workflow: Workflow | undefined,
+  stepId: string,
+  outcome: string,
+): string {
+  return workflow ? outcomeName(workflow, stepId, outcome, i18n.language) : outcome
+}
+
 /** The workflow's name in the language shown. */
 export function workflowTitle(task: TaskSummary, view: TaskView | undefined): string {
   return view?.workflow.locales[i18n.language]?.name ?? task.workflowName
@@ -120,23 +130,28 @@ export function useModelText(
   hostId: string | null,
   pick: StepPick | null,
 ): { model: string | null; effort: string | null } {
-  return useAgentOptionsStore(
-    useShallow((s) => {
-      if (!pick) return NO_MODEL
-      const entry = optionsOn(s, hostId)[pick.agentId]
-      const option = entry?.config.find((o) => o.category === 'model')
-      const model = pick.model
-        ? (option?.choices?.find((c) => c.value === pick.model)?.name ?? pick.model)
-        : null
-      const level =
-        (pick.model ? entry?.levels[pick.model] : undefined) ??
-        entry?.config.find((o) => o.category === 'thought_level')
-      const effort = pick.effort
-        ? (level?.choices?.find((c) => c.value === pick.effort)?.name ?? pick.effort)
-        : null
-      return { model, effort }
-    }),
-  )
+  return useAgentOptionsStore(useShallow((s) => modelTextOf(s, hostId, pick)))
+}
+
+/** The names of a pick's model and effort in the host's cached options, as far as known. */
+export function modelTextOf(
+  s: Parameters<typeof optionsOn>[0],
+  hostId: string | null,
+  pick: StepPick | null,
+): { model: string | null; effort: string | null } {
+  if (!pick) return NO_MODEL
+  const entry = optionsOn(s, hostId)[pick.agentId]
+  const option = entry?.config.find((o) => o.category === 'model')
+  const model = pick.model
+    ? (option?.choices?.find((c) => c.value === pick.model)?.name ?? pick.model)
+    : null
+  const level =
+    (pick.model ? entry?.levels[pick.model] : undefined) ??
+    entry?.config.find((o) => o.category === 'thought_level')
+  const effort = pick.effort
+    ? (level?.choices?.find((c) => c.value === pick.effort)?.name ?? pick.effort)
+    : null
+  return { model, effort }
 }
 
 const NO_MODEL = { model: null, effort: null }
@@ -173,7 +188,7 @@ export function pickedByText(pickedBy: PickedBy, view: TaskView): string {
 }
 
 /** The steps whose forward arrows lead to `stepId`. */
-function stepsBefore(view: TaskView, stepId: string) {
+function stepsBefore(view: Pick<TaskView, 'workflow'>, stepId: string) {
   const at = stepIndex(view.workflow, stepId)
   return view.workflow.steps.filter(
     (s) => stepIndex(view.workflow, s.id) < at && s.outcomes.some((o) => o.to.includes(stepId)),
@@ -185,7 +200,7 @@ function stepsBefore(view: TaskView, stepId: string) {
  * person's step, which picks nothing, the agent's step before that; at a join, the last branch to
  * finish; nobody for the first step, which the tray chose.
  */
-export function whoPicksText(view: TaskView, stepId: string): string {
+export function whoPicksText(view: Pick<TaskView, 'workflow' | 'pins'>, stepId: string): string {
   const step = view.workflow.steps.find((s) => s.id === stepId)
   if (!step) return ''
   if (step.by === 'you') return t('picked.person')
@@ -222,6 +237,8 @@ export function blockedText(reason: BlockedReason, hostId: string | null, now: n
         : t('blocked.limit', { agent: agentName(reason.agentId, hostId) })
     case 'unusable':
       return t(`blocked.${reason.why}`, { agent: agentName(reason.agentId, hostId) })
+    case 'tools':
+      return t('blocked.tools', { tools: reason.missing.join(', ') })
     case 'no_agent':
       return t('blocked.noAgent')
     case 'no_picker':

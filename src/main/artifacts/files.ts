@@ -94,6 +94,19 @@ export class ArtifactFiles {
    * version of several files in a folder of its own.
    */
   async openExternal(id: unknown, version: unknown): Promise<void> {
+    await shell.openExternal(pathToFileURL(await this.copyOut(id, version)).href)
+  }
+
+  /**
+   * `artifact:reveal`: the same copy as `openExternal` makes, selected in the file manager and
+   * never run.
+   */
+  async reveal(id: unknown, version: unknown): Promise<void> {
+    shell.showItemInFolder(await this.copyOut(id, version))
+  }
+
+  /** Copies the version's files into the temporary folder; the page that opens it. */
+  private async copyOut(id: unknown, version: unknown): Promise<string> {
     const found = await this.find(id, version)
     await mkdir(this.tempDir, { recursive: true, mode: 0o700 })
     const name = `${found.id}-v${found.version}`
@@ -109,7 +122,7 @@ export class ArtifactFiles {
       page = path.join(folder, ARTIFACT_ENTRY)
       if (overview) await writeFile(page, overview)
     }
-    await shell.openExternal(pathToFileURL(page).href)
+    return page
   }
 
   /**

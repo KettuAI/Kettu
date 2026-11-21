@@ -1134,7 +1134,7 @@
 .k-workflow-flow__notes {
   display: grid;
   gap: 2px;
-  margin: 12px 0 0;
+  margin: 0;
   padding: 0;
   list-style: none;
   font-size: 12px;
@@ -1718,7 +1718,7 @@
   }
 }
 
-/* A workflow's flow as a chart, read-only: steps in rows from the top, arrows back at the side */
+/* A workflow's flow as a chart, read-only: steps from the left, arrows back and early ends dashed */
 .k-flow-card {
   padding: 16px 16px 12px;
   border-radius: 14px;
@@ -1750,7 +1750,7 @@
   stroke-linecap: round;
   stroke-linejoin: round;
 }
-.k-flow .react-flow__edge-path.k-flow__line[data-back] {
+.k-flow .react-flow__edge-path.k-flow__line[data-dashed] {
   stroke-dasharray: 4 4;
 }
 .k-flow__head {

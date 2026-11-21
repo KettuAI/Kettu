@@ -12,6 +12,7 @@ import type {
 } from '@shared/market-publish'
 import type { InstalledPlugin } from '@shared/marketplace'
 import type { AgentId } from '@shared/thread'
+import { setLocale } from '../i18n'
 import {
   communityFile,
   MarketCommunityService,
@@ -20,6 +21,7 @@ import {
   type LocalMarketplace,
 } from './community'
 import { WorkflowLibrary, workflowsFile } from '../workflow/library'
+import { WorkflowTools } from '../workflow/tools'
 import { MarketCallError } from './publish-tools'
 import { MarketSkillsService, skillsCatalogFile } from './skills'
 
@@ -92,6 +94,7 @@ interface Fake {
   sent?: Record<string, string>
   mine?: MineListing[]
   directory?: MarketListing[]
+  nextDirectoryPage?: MarketListing[]
 }
 
 function fake(over: Partial<Fake> = {}): Fake {
@@ -110,6 +113,7 @@ function service(
     installs?: { agentId: AgentId; local: LocalMarketplace; name: string }[]
     installed?: boolean
     workflows?: WorkflowLibrary
+    now?: () => number
   } = {},
 ) {
   return new MarketCommunityService({
@@ -117,13 +121,16 @@ function service(
     pluginsRoot: pluginsRoot(),
     file: communityFile(root, log),
     log,
+    now: extra.now,
     account: () => (extra.account === undefined ? ACCOUNT : extra.account),
     kept: () => [],
     call: (async (call: MarketCall) => {
       f.calls.push(call)
       switch (call.kind) {
         case 'directory':
-          return { items: f.directory ?? [], next: null }
+          return call.cursor
+            ? { items: f.nextDirectoryPage ?? [], next: null }
+            : { items: f.directory ?? [], next: f.nextDirectoryPage ? 'page-2' : null }
         case 'mine':
           return { publisher: null, listings: f.mine ?? [], storage: { bytes: 0, limit: 1 } }
         case 'listing': {
@@ -615,6 +622,127 @@ steps:
         files: { 'workflow.yaml': WORKFLOW, 'README.md': '# Release notes\n' },
         ...over,
       })
+
+    async function listTool(community: MarketCommunityService) {
+      const library = await workflowLibrary()
+      const entry = await library.create(WORKFLOW, { sessionId: 'draft', agentId: 'codex' })
+      if (!('id' in entry)) throw new Error('The test workflow did not parse')
+      await library.approve(entry.id, entry.hash)
+      await library.create(WORKFLOW.replace('Release notes', 'Unapproved draft'), {
+        sessionId: 'draft',
+        agentId: 'codex',
+      })
+      await library.flush()
+      const tools = new WorkflowTools({
+        library,
+        marketplace: community,
+        isStep: () => false,
+        agentOf: () => 'codex',
+        report: () => Promise.reject(new Error('Unexpected report')),
+        pick: () => Promise.reject(new Error('Unexpected pick')),
+        suggestions: {
+          suggest: () => Promise.reject(new Error('Unexpected suggestion')),
+          draft: () => Promise.reject(new Error('Unexpected draft')),
+          keep: () => Promise.reject(new Error('Unexpected workflow to keep')),
+        },
+      })
+      return (input: unknown = {}) =>
+        tools.call({ sessionId: 'chat', project: '/test' }, 'list_workflows', input)
+    }
+
+    it('lists approved library workflows and explains why the signed-out host cannot list the Marketplace', async () => {
+      const f = published()
+      const list = await listTool(service(f, { account: null }))
+      const response = await list()
+      expect(response.structuredContent).toMatchObject({
+        library: [{ id: 'release-notes', name: 'Release notes' }],
+        marketplace: [],
+        marketplace_status: 'signed_out',
+      })
+      expect(response.content[0]).toMatchObject({ text: expect.stringContaining('Sign in') })
+      expect(f.calls).toEqual([])
+    })
+
+    it('lists both groups in the interface language without sending any search or user text', async () => {
+      const official = workflowListing({ id: 'official23', official: true, installs: 2 })
+      const popular = workflowListing({ id: 'populara23', installs: 80 })
+      const f = published({
+        directory: [popular, workflowListing({ visibility: 'private' }), listing()],
+        nextDirectoryPage: [official],
+        files: {
+          'workflow.yaml': WORKFLOW.replace(
+            'steps:\n',
+            `when: Use for release notes that need approval.
+locales:
+  zh-CN:
+    name: 发布说明
+    description: 起草并审阅发布说明。
+    when: 发布说明需要审批时使用。
+    steps:
+      draft: 起草
+steps:
+`,
+          ),
+        },
+      })
+      const list = await listTool(service(f))
+      const refused = await list({ q: 'Private request', task: 'Private context' })
+      expect(refused.structuredContent).toMatchObject({ code: 'invalid' })
+      expect(f.calls).toEqual([])
+      setLocale('zh-CN')
+      try {
+        expect((await list()).structuredContent).toMatchObject({
+          library: [{ id: 'release-notes', name: 'Release notes' }],
+          marketplace: [
+            {
+              id: `kettu:${official.id}`,
+              name: '发布说明',
+              description: '起草并审阅发布说明。',
+              when: '发布说明需要审批时使用。',
+              steps: [{ id: 'draft', name: '起草' }],
+              publisher: official.handle,
+              official: true,
+              installs: 2,
+              version: '1.0.0',
+            },
+            { id: `kettu:${popular.id}`, official: false, installs: 80 },
+          ],
+          marketplace_status: 'available',
+        })
+      } finally {
+        setLocale('en')
+      }
+      expect(f.calls).toEqual([
+        { kind: 'directory', listingKind: 'workflow' },
+        { kind: 'directory', listingKind: 'workflow', cursor: 'page-2' },
+        { kind: 'version', id: official.id, version: '1.0.0' },
+        { kind: 'version', id: popular.id, version: '1.0.0' },
+        { kind: 'file', id: official.id, version: '1.0.0', path: 'workflow.yaml' },
+        { kind: 'file', id: popular.id, version: '1.0.0', path: 'workflow.yaml' },
+      ])
+    })
+
+    it('refreshes the directory but reads workflow text again only for a new version', async () => {
+      const f = published({ directory: [workflowListing()] })
+      let now = 0
+      const community = service(f, { now: () => now })
+      await Promise.all([community.publicWorkflows(), community.publicWorkflows()])
+      expect(f.calls.map(({ kind }) => kind)).toEqual(['directory', 'version', 'file'])
+      now += 5 * 60_000
+      await community.publicWorkflows()
+      expect(f.calls.map(({ kind }) => kind)).toEqual(['directory', 'version', 'file', 'directory'])
+      f.directory = [workflowListing({ version: '1.0.1' })]
+      f.files['workflow.yaml'] = WORKFLOW.replace('steps:\n', 'when: Use before release.\nsteps:\n')
+      now += 5 * 60_000
+      expect(await community.publicWorkflows()).toMatchObject({
+        items: [{ version: '1.0.1', workflow: { when: 'Use before release.' } }],
+      })
+      expect(f.calls.slice(-3)).toEqual([
+        { kind: 'directory', listingKind: 'workflow' },
+        { kind: 'version', id: 'abcdefgh23', version: '1.0.1' },
+        { kind: 'file', id: 'abcdefgh23', version: '1.0.1', path: 'workflow.yaml' },
+      ])
+    })
 
     it('keeps an installed listing in the library unapproved, with its listing and version', async () => {
       const f = published()

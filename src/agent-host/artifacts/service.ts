@@ -254,9 +254,9 @@ function entry(url: string, token: string, prompt: string): McpServer[] {
       // its own guide, reading the user's Marketplace listings, listing, reading and naming the
       // session's terminals and reading its browser's pages, a terminal, name or tab of the
       // user's asking them in Kettu's own card; the
-      // browser, computer use, devices, running and typing in terminals and artifacts still ask,
-      // and publishing waits for the user in a card.
-      // The settings tools ask in Kettu's own card where they ask, so the agent's prompt never does.
+      // browser, computer use, devices, running and typing in terminals and artifacts still ask.
+      // Publishing, unlisting and the settings tools ask in Kettu's own card where they ask, so
+      // the agent's prompt never does.
       autoAllow: [
         PLAN_TOOL,
         ...TERMINAL_READ_TOOLS,

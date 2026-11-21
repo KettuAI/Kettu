@@ -365,6 +365,7 @@ export async function startTestHost(options: TestHostOptions = {}): Promise<Test
       marketplace: DEFAULT_SETTINGS.marketplace,
       startModes: DEFAULT_SETTINGS.startModes,
       idleSessions: DEFAULT_SETTINGS.idleSessions,
+      workflow: DEFAULT_SETTINGS.workflow,
       usage: { fromComputer: false },
       sessionTitles: true,
       lightModel: { mode: 'small' },

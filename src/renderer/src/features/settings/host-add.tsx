@@ -58,6 +58,7 @@ export function AddHostDialog({
   onOpenChange,
   ssh,
   onAdded,
+  finalFocus,
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
@@ -65,6 +66,8 @@ export function AddHostDialog({
   ssh?: SshAddress
   /** The host added, as the dialog closes on it. */
   onAdded?: (host: HostStatus) => void
+  /** Takes focus on close: the dialog's autofocused field is taken for the opener otherwise. */
+  finalFocus?: RefObject<HTMLElement | null>
 }) {
   // Each opening starts afresh.
   const [opened, setOpened] = useState(open)
@@ -87,6 +90,7 @@ export function AddHostDialog({
         key={round}
         open={open}
         ssh={ssh}
+        finalFocus={finalFocus}
         pairingRef={pairing}
         onDone={(host) => {
           onOpenChange(false)
@@ -100,11 +104,13 @@ export function AddHostDialog({
 function AddHostFlow({
   open,
   ssh: sshTarget,
+  finalFocus,
   pairingRef,
   onDone,
 }: {
   open: boolean
   ssh?: SshAddress
+  finalFocus?: RefObject<HTMLElement | null>
   pairingRef: RefObject<boolean>
   onDone: (added: HostStatus | null) => void
 }) {
@@ -215,7 +221,7 @@ function AddHostFlow({
 
   if (account && !cloudOff) {
     return (
-      <SettingsDialogContent>
+      <SettingsDialogContent finalFocus={finalFocus}>
         <AccountPairFlow
           host={account}
           open={open}
@@ -243,7 +249,7 @@ function AddHostFlow({
     </>
   )
   return (
-    <SettingsDialogContent>
+    <SettingsDialogContent finalFocus={finalFocus}>
       {ssh.manual.kind === 'added' ? (
         <Added
           host={ssh.manual.host}

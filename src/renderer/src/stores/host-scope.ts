@@ -21,7 +21,12 @@ import {
   type HostInfo,
   type HostSettingsPart,
 } from '@shared/remote/host-admin'
-import { DEFAULT_SETTINGS, type SettingsFile, type SettingsPatch } from '@shared/settings'
+import {
+  applyListEdit,
+  DEFAULT_SETTINGS,
+  type SettingsFile,
+  type SettingsPatch,
+} from '@shared/settings'
 import type { HarnessId } from '@shared/thread'
 import type { UsageStatus } from '@shared/usage'
 import { copyPath } from '@renderer/lib/copy-path'
@@ -242,8 +247,26 @@ async function done(call: Promise<unknown>): Promise<void> {
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value)
 
+/** The kept servers and skills with a patch's lists and edits over them, as the host applies them. */
+function overlayMarketplace(
+  shown: SettingsFile['marketplace'],
+  patch: NonNullable<SettingsPatch['marketplace']>,
+): SettingsFile['marketplace'] {
+  let mcp = patch.mcp ?? shown.mcp
+  let skills = patch.skills ?? shown.skills
+  if (patch.mcpEdit) mcp = applyListEdit(mcp, patch.mcpEdit)
+  if (patch.skillsEdit) skills = applyListEdit(skills, patch.skillsEdit)
+  return structuredClone({ mcp, skills })
+}
+
 /** A value with a patch's keys over it, objects key by key; lists and `proxy` replaced whole. */
 function overlay(value: unknown, patch: unknown, key = ''): unknown {
+  if (key === 'marketplace' && isRecord(value) && isRecord(patch)) {
+    return overlayMarketplace(
+      value as unknown as SettingsFile['marketplace'],
+      patch as NonNullable<SettingsPatch['marketplace']>,
+    )
+  }
   if (key === 'proxy' || !isRecord(value) || !isRecord(patch)) return structuredClone(patch)
   const next: Record<string, unknown> = { ...value }
   for (const [k, v] of Object.entries(patch)) {

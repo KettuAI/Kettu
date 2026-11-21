@@ -375,26 +375,52 @@ function sameNode(a: SessionNode, b: SessionNode): boolean {
   )
 }
 
-/** A row of a sidebar group: a session with its sub-sessions, or a task with its steps. */
+/**
+ * A row of a sidebar group: a session with its sub-sessions, or a task with its steps and, when a
+ * suggestion card in it started the task, the conversation it started from, whose row it took.
+ */
 export type SidebarRow =
   | { kind: 'session'; id: string; node: SessionNode }
-  | { kind: 'task'; id: string; task: TaskSummary }
+  | { kind: 'task'; id: string; task: TaskSummary; origin?: SessionNode }
 
-/** A group's sessions and tasks in one list, by `order` of each. */
+/**
+ * A group's sessions and tasks in one list, by `order` of each. A task started from a session of
+ * the same list takes that session's row, the session hanging under it; one session goes under
+ * one task, the latest.
+ */
 export function sidebarRows(
   nodes: readonly SessionNode[],
   tasks: readonly TaskSummary[],
   order: (row: SidebarRow) => number,
 ): SidebarRow[] {
+  const byId = new Map(nodes.map((node) => [node.summary.id, node]))
+  const origins = new Map<string, SessionNode>()
+  const taken = new Set<string>()
+  for (const task of [...tasks].sort((a, b) => b.createdAt - a.createdAt)) {
+    const id = task.from?.sessionId
+    const node = id ? byId.get(id) : undefined
+    if (!node || taken.has(node.summary.id)) continue
+    origins.set(task.id, node)
+    taken.add(node.summary.id)
+  }
   return [
-    ...nodes.map((node): SidebarRow => ({ kind: 'session', id: node.summary.id, node })),
-    ...tasks.map((task): SidebarRow => ({ kind: 'task', id: task.id, task })),
+    ...nodes
+      .filter((node) => !taken.has(node.summary.id))
+      .map((node): SidebarRow => ({ kind: 'session', id: node.summary.id, node })),
+    ...tasks.map((task): SidebarRow => {
+      const origin = origins.get(task.id)
+      return origin
+        ? { kind: 'task', id: task.id, task, origin }
+        : { kind: 'task', id: task.id, task }
+    }),
   ].sort((a, b) => order(a) - order(b))
 }
 
-/** Latest activity first, as a project's group lists its rows. */
+/** Latest activity first, as a project's group lists its rows; a task counts its conversation's. */
 export const byActivity = (row: SidebarRow): number =>
-  -(row.kind === 'session' ? row.node.summary.updatedAt : row.task.updatedAt)
+  -(row.kind === 'session'
+    ? row.node.summary.updatedAt
+    : Math.max(row.task.updatedAt, row.origin?.summary.updatedAt ?? 0))
 
 /** In the order they were pinned, as Pinned lists its rows. */
 export const byPin = (row: SidebarRow): number =>
@@ -463,8 +489,11 @@ export function visibleOrder(
         ? flattenTree([row.node], open ? expanded : () => false)
         : [
             row.id,
-            ...(open && taskExpanded(view, row.id, byId)
-              ? startedSteps(row.task).map((step) => step.id)
+            ...(open && taskExpanded(view, row.id, byId, row.origin?.summary.id)
+              ? [
+                  ...(row.origin ? [row.origin.summary.id] : []),
+                  ...startedSteps(row.task).map((step) => step.id),
+                ]
               : []),
           ],
     )

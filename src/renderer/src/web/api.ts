@@ -280,6 +280,7 @@ export function webApi(link: HostLink, settings: WebSettings, context: WebHostCo
         return admin('artifacts.thumbnail', { id, version, layout }).catch(() => null)
       },
       openExternal: () => unsupported('open an artifact outside the app'),
+      reveal: () => unsupported('show an artifact in the file manager'),
       export: async (id, version) => {
         const read = (await link.request('artifacts.read', { id, version })) as ArtifactContent
         if (read.files.length > 1 || read.files.some((f) => f.path === CANVAS_FILE)) {

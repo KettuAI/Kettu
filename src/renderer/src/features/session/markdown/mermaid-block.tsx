@@ -1,5 +1,5 @@
 import { useEffect, useId, useState } from 'react'
-import { SourceCodeIcon } from '@hugeicons/core-free-icons'
+import { Download01Icon, SourceCodeIcon } from '@hugeicons/core-free-icons'
 import { HugeiconsIcon } from '@hugeicons/react'
 import { createMermaidPlugin } from '@streamdown/mermaid'
 import { useTranslation } from 'react-i18next'
@@ -15,6 +15,8 @@ import {
   PreviewSourceSwitch,
 } from './block-frame'
 import { CodeFrame, type BlockProps } from './code-frame'
+import { downloadText } from './download'
+import { openPicture } from './open-picture'
 
 const plugin = createMermaidPlugin()
 
@@ -52,25 +54,42 @@ function themeVariables(): Record<string, string> {
   }
 }
 
-type Drawn = { url: string; width: number } | { error: string | null } | null
+type Drawn = { url: string; width: number; xml: string } | { error: string | null } | null
+
+const SVG_NS = 'http://www.w3.org/2000/svg'
 
 /**
  * The diagram as a picture: an `<img>` runs none of the SVG's scripts and loads nothing it
  * references. Mermaid sizes its SVG to its container, so the picture takes the size its view box
- * gives it instead.
+ * gives it instead. `xml` is the same SVG on a page of the theme's background, for the viewer and
+ * the saved file, which are not seen on the thread's.
  */
-function pictureOf(svg: string): { url: string; width: number } | { error: string } {
+function pictureOf(
+  svg: string,
+  background: string,
+): { url: string; width: number; xml: string } | { error: string } {
   // Labels with a line break are HTML inside the SVG, with a bare `<br>` that XML parsing rejects,
   // so it is read as HTML and written back as XML.
   const root = new DOMParser().parseFromString(svg, 'text/html').body.querySelector('svg')
   if (!root) return { error: 'The output holds no SVG.' }
-  const [, , width, height] = (root.getAttribute('viewBox') ?? '').split(/[\s,]+/).map(Number)
+  const [x = 0, y = 0, width, height] = (root.getAttribute('viewBox') ?? '')
+    .split(/[\s,]+/)
+    .map(Number)
   if (!width || !height) return { error: 'The SVG has no usable view box.' }
   root.setAttribute('width', String(width))
   root.setAttribute('height', String(height))
   root.removeAttribute('style')
-  const xml = new XMLSerializer().serializeToString(root)
-  return { url: `data:image/svg+xml;charset=utf-8,${encodeURIComponent(xml)}`, width }
+  const url = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(new XMLSerializer().serializeToString(root))}`
+  const page = root.ownerDocument.createElementNS(SVG_NS, 'rect')
+  page.setAttribute('x', String(x))
+  page.setAttribute('y', String(y))
+  page.setAttribute('width', String(width))
+  page.setAttribute('height', String(height))
+  page.setAttribute('fill', background)
+  // The diagram's own styles may name `rect`.
+  page.setAttribute('style', `fill: ${background}`)
+  root.prepend(page)
+  return { url, width, xml: new XMLSerializer().serializeToString(root) }
 }
 
 /**
@@ -83,18 +102,20 @@ export default function MermaidBlock(props: BlockProps) {
   const { t } = useTranslation('session')
   const dark = useDark()
   const theme = useThemesStore((s) => s.shown)
-  const id = `mermaid-${useId().replace(/[^\w-]/g, '')}`
+  const uid = useId()
+  const id = `mermaid-${uid.replace(/[^\w-]/g, '')}`
   const [source, setSource] = useState(false)
   const [drawn, setDrawn] = useState<Drawn>(null)
 
   useEffect(() => {
     if (isIncomplete) return
     let current = true
+    const variables = themeVariables()
     const mermaid = plugin.getMermaid({
       startOnLoad: false,
       securityLevel: 'strict',
       theme: 'base',
-      themeVariables: themeVariables(),
+      themeVariables: variables,
       // Nodes take the cards' 6 px corners and a 30 px height.
       themeCSS: '.node rect { rx: 6px; ry: 6px; }',
       flowchart: { htmlLabels: false, padding: 8 },
@@ -102,7 +123,7 @@ export default function MermaidBlock(props: BlockProps) {
     mermaid.render(id, code).then(
       ({ svg }) => {
         if (!current) return
-        setDrawn(pictureOf(svg))
+        setDrawn(pictureOf(svg, variables.background ?? ''))
       },
       (error: unknown) =>
         current && setDrawn({ error: error instanceof Error ? error.message : String(error) }),
@@ -114,17 +135,39 @@ export default function MermaidBlock(props: BlockProps) {
 
   if (isIncomplete || !drawn) return <CodeFrame {...props} />
   const failed = 'error' in drawn
+  const download = !failed && (
+    <BlockAction
+      label={t('block.download')}
+      onClick={() => downloadText(drawn.xml, 'diagram.svg', 'image/svg+xml')}
+    >
+      <HugeiconsIcon icon={Download01Icon} strokeWidth={1.9} aria-hidden />
+    </BlockAction>
+  )
   if (!failed && !source) {
+    const key = `diagram:${uid}`
     return (
       <BlockPicture
         src={drawn.url}
         width={drawn.width}
         alt={t('block.diagram')}
+        data-viewer-key={key}
+        open={{
+          label: t('media.openLarger'),
+          onOpen: (from) =>
+            openPicture({
+              key,
+              xml: drawn.xml,
+              name: t('block.diagram'),
+              alt: t('block.diagram'),
+              from,
+            }),
+        }}
         actions={
           <>
             <BlockAction label={t('block.source')} onClick={() => setSource(true)}>
               <HugeiconsIcon icon={SourceCodeIcon} strokeWidth={1.9} aria-hidden />
             </BlockAction>
+            {download}
             <BlockCopy text={code} label={t('block.copy')} />
           </>
         }
@@ -149,6 +192,7 @@ export default function MermaidBlock(props: BlockProps) {
               }}
             />
           )}
+          {download}
           <BlockCopy text={code} label={t('block.copy')} />
         </>
       }

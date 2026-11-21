@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { attentionTarget } from './attention'
+import { attentionTarget, pushedAttention } from './attention'
 import type { HostAttention } from './remote/host-admin'
 
 const limit = (over: Record<string, unknown> = {}): HostAttention =>
@@ -32,5 +32,12 @@ describe('attentionTarget for a plan limit', () => {
     expect(attentionTarget(limit({ agentId: 7 }))).toBeNull()
     expect(attentionTarget(limit({ sessionId: '' }))).toBeNull()
     expect(attentionTarget(limit({ title: null }))).toBeNull()
+  })
+})
+
+describe('pushedAttention for a plan limit', () => {
+  it('pushes none to devices, which take only sessions, routines and tasks', () => {
+    const message = { type: 'host:attention', ...limit() } as Parameters<typeof pushedAttention>[0]
+    expect(pushedAttention(message)).toBeNull()
   })
 })

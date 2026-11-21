@@ -23,6 +23,7 @@ import { useShallow } from 'zustand/react/shallow'
 import type { AgentStatus, SessionSummary } from '@shared/agent-host'
 import type { ArtifactConsentRow } from '@shared/artifact-capabilities'
 import { originLabel } from '@shared/browser'
+import { USER_FONT_ROLES } from '@shared/settings'
 import type { AgentId, HarnessId } from '@shared/thread'
 import { useCloudOff } from '@renderer/lib/cloud'
 import { basename, mediumAgo } from '@renderer/lib/format'
@@ -71,7 +72,7 @@ import { CloudSwitchRow, OtherConnections } from './cloud-section'
 import { useCloudOffHere } from './use-cloud-off-here'
 import { useGitHubOnly } from './use-github-only'
 import { DebugModeRow } from './debug-mode'
-import { FontFamily } from './font-family'
+import { FontFamily, UserFont } from './font-family'
 import { ConsentRow, ConsentsState } from './artifacts-section'
 import { EmptyCard, GroupNote } from './rows'
 import { BROUGHT_SHOWN, useBroughtSites } from './brought-sites'
@@ -175,6 +176,7 @@ export function useGeneralSection(): SectionDef {
   const remoteOn = useSettingsStore((s) => s.settings.remote.enabled)
   const sessions = group('sessions', t('general.groups.sessions'), {
     note: remoteOn && <GroupNote>{t('general.background.lockedByRemote')}</GroupNote>,
+    noteFor: 'background',
   })
   const thread = group('thread', t('general.groups.thread'))
   const startup = group('startup', t('general.groups.startup'))
@@ -297,6 +299,7 @@ export function useGeneralSection(): SectionDef {
 export function useAppearanceSection(): SectionDef {
   const { t } = useTranslation('settings')
   const scale = group('scale', t('appearance.groups.scale'))
+  const fonts = group('fonts', t('appearance.groups.fonts'))
   const zoomKeys = [formatShortcut('Mod+='), formatShortcut('Mod+-')] as const
   const zoomDescription = t('appearance.zoom.description', {
     zoomIn: zoomKeys[0],
@@ -338,6 +341,12 @@ export function useAppearanceSection(): SectionDef {
         layout: 'bare',
         render: (text) => <TextSize label={text} />,
       },
+      ...USER_FONT_ROLES.map((role) => ({
+        id: `font-${role}`,
+        setting: `appearance.font-${role}` as const,
+        group: fonts,
+        render: () => <UserFont role={role} label={t(`appearance.fonts.${role}.name`)} />,
+      })),
       {
         id: 'sidebar-hover',
         setting: 'appearance.sidebar-hover',

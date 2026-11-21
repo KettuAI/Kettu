@@ -269,6 +269,7 @@ export interface ProjectRecord {
   addedAt: number
   lastOpenedAt: number
   pinnedAt?: number
+  order?: number // its place once the user moved a project on this host; earlier ones come first
   worktree?: Partial<ProjectWorktreeSettings> // only what differs from the defaults
 }
 
@@ -662,6 +663,9 @@ export function parseProjectsFile(data: Record<string, unknown>): ProjectsFile |
       addedAt: item.addedAt,
       lastOpenedAt: item.lastOpenedAt,
       ...(isTime(item.pinnedAt) ? { pinnedAt: item.pinnedAt } : {}),
+      ...(Number.isSafeInteger(item.order) && (item.order as number) >= 0
+        ? { order: item.order as number }
+        : {}),
       ...projectWorktreeOf(item.worktree),
     })
   }

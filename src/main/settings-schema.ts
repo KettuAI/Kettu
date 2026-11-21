@@ -3,6 +3,7 @@
 import { isStartMode, START_MODE_CHARS, takesStartMode } from '@shared/agents'
 import {
   AGENT_NAME_CHARS,
+  applyListEdit,
   CONFIG_VARIABLES,
   DEFAULT_SETTINGS,
   AGENT_COLORS,
@@ -16,11 +17,13 @@ import {
   ONBOARDING_STEPS,
   type AddedAgent,
   type HostSettings,
+  type ListEdit,
   type ProxySettings,
   type DirectSettings,
   type SettingsFile,
   type SettingsPatch,
   type TerminalSettings,
+  USER_FONT_ROLES,
   ZOOM_LEVELS,
 } from '@shared/settings'
 import { isComputerApp, isStopShortcut } from '@shared/computer-use'
@@ -43,6 +46,7 @@ import { addressKey, isPort, MAX_OWN_ADDRESSES, parseDirectAddress } from '@shar
 import type { DirectAddress } from '@shared/remote/protocol'
 import { DEVICE_NAME_CHARS, isDeviceName } from '@shared/remote/device'
 import { THEME_ID } from '@shared/themes'
+import { WORKING_STEP_LIMITS } from '@shared/workflow'
 import { isAbsolutePath } from '../agent-host/paths'
 import {
   AUTO_AGENT_HARNESSES,
@@ -157,6 +161,20 @@ const isLinkSites: Check = (value, path) => {
   return null
 }
 
+const isUserFonts: Check = (value, path) => {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    return `"${path}" must be an object`
+  }
+  for (const [role, family] of Object.entries(value)) {
+    if (!(USER_FONT_ROLES as readonly string[]).includes(role)) {
+      return `"${path}" names an unknown text "${role}"`
+    }
+    const problem = checkFontFamily(family, `${path}.${role}`)
+    if (problem) return problem
+  }
+  return null
+}
+
 /** Null, or an absolute path on this computer that has no NUL. */
 function isWorktreeRoot(value: unknown, path: string): string | null {
   if (value === null) return null
@@ -194,6 +212,7 @@ const SECTION_FIELDS = {
     reduceMotion: oneOf('system', 'always'),
     zoom: oneOf(...ZOOM_LEVELS),
     sidebarHover: isBoolean,
+    fonts: isUserFonts,
   },
   notifications: {
     permission: isBoolean,
@@ -224,6 +243,7 @@ const SECTION_FIELDS = {
     inView: oneOf(...IN_VIEW_MINUTES),
     limit: oneOf(...IDLE_LIMITS),
   },
+  workflow: { maxWorkingSteps: oneOf(...WORKING_STEP_LIMITS) },
   computerUse: {
     enabled: isBoolean,
     allowedApps: isComputerApps,
@@ -761,13 +781,47 @@ function readMarketList<T extends { id: string; name: string }>(
   return items
 }
 
-/** `marketplace` in a patch: each list it holds replaces the stored one whole. */
+/** An edit in a patch: each entry to put valid, its id and name once, and ids to remove. */
+function checkMarketEdit<T extends { id: string; name: string }>(
+  raw: unknown,
+  path: string,
+  max: number,
+  parse: MarketParse<T>,
+  kind: string,
+): ListEdit<T> | string {
+  if (!isRecord(raw)) return `"${path}" must be an object`
+  const extra = extraKey(raw, ['put', 'remove'], path, true)
+  if (extra) return extra
+  const checked: ListEdit<T> = {}
+  if (raw.put !== undefined) {
+    const put = checkMarketList(raw.put, `${path}.put`, max, parse, kind)
+    if (typeof put === 'string') return put
+    checked.put = put
+  }
+  if (raw.remove !== undefined) {
+    const { remove } = raw
+    if (
+      !Array.isArray(remove) ||
+      remove.length > max ||
+      remove.some((id) => typeof id !== 'string' || id.length > MAX_MARKET_ID)
+    ) {
+      return `"${path}.remove" must list at most ${max} ids of at most ${MAX_MARKET_ID} characters`
+    }
+    checked.remove = [...(remove as string[])]
+  }
+  return checked
+}
+
+/**
+ * `marketplace` in a patch: each list it holds replaces the stored one whole, then its edit
+ * changes the list as it stands.
+ */
 function checkMarketplace(
   value: unknown,
   path: string,
 ): NonNullable<SettingsPatch['marketplace']> | string {
   if (!isRecord(value)) return `"${path}" must be an object`
-  const extra = extraKey(value, ['mcp', 'skills'], path, true)
+  const extra = extraKey(value, ['mcp', 'skills', 'mcpEdit', 'skillsEdit'], path, true)
   if (extra) return extra
   const checked: NonNullable<SettingsPatch['marketplace']> = {}
   if (value.mcp !== undefined) {
@@ -791,6 +845,28 @@ function checkMarketplace(
     )
     if (typeof skills === 'string') return skills
     checked.skills = skills
+  }
+  if (value.mcpEdit !== undefined) {
+    const edit = checkMarketEdit(
+      value.mcpEdit,
+      `${path}.mcpEdit`,
+      MAX_MARKET_SERVERS,
+      parseMarketServer,
+      'server',
+    )
+    if (typeof edit === 'string') return edit
+    checked.mcpEdit = edit
+  }
+  if (value.skillsEdit !== undefined) {
+    const edit = checkMarketEdit(
+      value.skillsEdit,
+      `${path}.skillsEdit`,
+      MAX_MARKET_SKILLS,
+      parseMarketSkill,
+      'skill',
+    )
+    if (typeof edit === 'string') return edit
+    checked.skillsEdit = edit
   }
   return checked
 }
@@ -998,9 +1074,29 @@ export function effectiveDirect(settings: SettingsFile, signedIn: boolean): Dire
   return held && !direct.enabled ? { ...direct, enabled: true } : direct
 }
 
+/** A kept list with an edit applied; throws when it would then repeat a name or run past `max`. */
+function editedList<T extends { id: string; name: string }>(
+  list: readonly T[],
+  edit: ListEdit<T>,
+  max: number,
+  kind: string,
+): T[] {
+  const next = applyListEdit(list, edit)
+  if (next.length > max) throw new SettingsError(`Kettu keeps at most ${max} ${kind}s`)
+  const names = new Set<string>()
+  for (const item of next) {
+    if (names.has(item.name)) {
+      throw new SettingsError(`"${item.name}" repeats another ${kind}'s name`)
+    }
+    names.add(item.name)
+  }
+  return next
+}
+
 /**
  * Applies a validated patch. Sections merge key by key; `proxy` is replaced whole. Run in the
- * background and direct connections stay on while remote access is.
+ * background and direct connections stay on while remote access is. Throws a `SettingsError`
+ * when an edit of the servers or skills would leave two with one name.
  */
 export function mergeSettings(current: SettingsFile, patch: SettingsPatch): SettingsFile {
   const next = structuredClone(current)
@@ -1013,6 +1109,22 @@ export function mergeSettings(current: SettingsFile, patch: SettingsPatch): Sett
   if (patch.marketplace?.mcp) next.marketplace.mcp = structuredClone(patch.marketplace.mcp)
   if (patch.marketplace?.skills) {
     next.marketplace.skills = structuredClone(patch.marketplace.skills)
+  }
+  if (patch.marketplace?.mcpEdit) {
+    next.marketplace.mcp = editedList(
+      next.marketplace.mcp,
+      structuredClone(patch.marketplace.mcpEdit),
+      MAX_MARKET_SERVERS,
+      'server',
+    )
+  }
+  if (patch.marketplace?.skillsEdit) {
+    next.marketplace.skills = editedList(
+      next.marketplace.skills,
+      structuredClone(patch.marketplace.skillsEdit),
+      MAX_MARKET_SKILLS,
+      'skill',
+    )
   }
   if (patch.disabledAgents) next.disabledAgents = [...patch.disabledAgents]
   if (patch.startModes) {
@@ -1532,6 +1644,7 @@ export function hostSettings(settings: SettingsFile, systemLocale: Locale): Host
     marketplace: structuredClone(settings.marketplace),
     startModes: { ...settings.startModes },
     idleSessions: { ...settings.idleSessions },
+    workflow: { ...settings.workflow },
     usage: { fromComputer: settings.usage.fromComputer },
     sessionTitles: settings.general.sessionTitles,
     lightModel: structuredClone(settings.general.lightModel),
@@ -1565,6 +1678,7 @@ const HOST_SECTIONS: ReadonlySet<SettingsSection> = new Set([
   'marketplace',
   'startModes',
   'idleSessions',
+  'workflow',
   'usage',
   'computerUse',
   'cloud',

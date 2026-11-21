@@ -32,7 +32,7 @@ describe('the servers a session attaches with', () => {
   })
 
   // Allowed tools run without asking the user, so none may reach past Kettu's own data.
-  it("allow without asking only Kettu's plan, report, memory, session, workflow and settings tools, its guide, reading the Marketplace, listing, reading and naming terminals and reading pages", async () => {
+  it("allow without asking only Kettu's plan, report, memory, session, workflow, Marketplace and settings tools, its guide, listing, reading and naming terminals and reading pages", async () => {
     const service = await started()
     const process = { closed: new Promise<void>(() => {}) } as AgentProcess
     const expected = [
@@ -68,6 +68,9 @@ describe('the servers a session attaches with', () => {
       'pick_step_agents',
       'marketplace_check',
       'marketplace_mine',
+      // Publishing and unlisting ask the user in Kettu's own card before anything leaves.
+      'marketplace_publish',
+      'marketplace_unlist',
       'find_settings',
       'open_settings',
       'change_settings',
@@ -152,7 +155,7 @@ describe('what an agent reads before it searches its tools', () => {
       .filter((tool) => tool._meta?.['anthropic/alwaysLoad'] === true)
       .map((tool) => tool.name)
     expect(loaded.sort()).toEqual(
-      ['create_artifact', 'set_plan', 'start_session', 'suggest_workflow'].sort(),
+      ['create_artifact', 'list_workflows', 'set_plan', 'start_session', 'suggest_workflow'].sort(),
     )
   })
 })

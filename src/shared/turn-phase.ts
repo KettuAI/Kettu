@@ -45,6 +45,7 @@ const QUIET = new Set([
   'memory',
   'control_ask',
   'control_note',
+  'task_delivery',
 ])
 
 // The phase is read on every streamed chunk, so a long run of tool calls is read no further back.

@@ -195,6 +195,11 @@ export class IslandBridge {
     return this.phase === 'running'
   }
 
+  /** Whether it shows this in place of a notification: all but a workflow task's, while it runs. */
+  shows(message: HostAttention): boolean {
+    return this.showing() && !('taskId' in message)
+  }
+
   state(): IslandState {
     switch (this.phase) {
       case 'starting':
@@ -339,6 +344,7 @@ export class IslandBridge {
       })
       return
     }
+    if ('taskId' in message) return
     const row = message.kind === 'routine-paused' ? null : this.rowKeyOf(hostKey, message.sessionId)
     this.send({ type: 'pop', row, kind: message.kind, title, body })
   }

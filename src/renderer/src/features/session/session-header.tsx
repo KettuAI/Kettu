@@ -1,5 +1,10 @@
 import { useRef, useState } from 'react'
-import { AiChat02Icon, ArrowLeft01Icon, ArrowRight01Icon } from '@hugeicons/core-free-icons'
+import {
+  AiChat02Icon,
+  ArrowLeft01Icon,
+  ArrowRight01Icon,
+  BubbleChatIcon,
+} from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
 import type { SessionSummary } from '@shared/agent-host'
 import type { SessionView } from '@shared/thread'
@@ -12,7 +17,7 @@ import { usePane } from '@renderer/features/split/pane-context'
 import { usePaneDragSource } from '@renderer/features/split/session-drag-model'
 import { PrBarChip } from '@renderer/features/git/pr-bar-chip'
 import { HeaderTools, SessionMoreMenu } from '@renderer/features/shell/header-tools'
-import { StepRoundBadge, TaskCrumb } from '@renderer/features/tasks/step-crumb'
+import { StepRoundBadge, TaskCrumb, TaskCrumbLink } from '@renderer/features/tasks/step-crumb'
 import { useStepSessionTitle } from '@renderer/features/tasks/use-task'
 import { PlanChip } from './plan-chip'
 import { ViewersChip } from './viewers-chip'
@@ -22,6 +27,7 @@ import { SessionTitleField } from '@renderer/features/sidebar/session-menu'
 import { useRenaming } from '@renderer/features/sidebar/use-renaming'
 import { agentName } from '@renderer/stores/agents'
 import { useRoutinesStore } from '@renderer/stores/routines'
+import { taskFrom, useTasksStore } from '@renderer/stores/tasks'
 import {
   hostOfSession,
   sessionArchived,
@@ -84,6 +90,7 @@ export function SessionHeader({
   session: SessionView | undefined
 }) {
   const { t: ts } = useTranslation('session')
+  const { t: tt } = useTranslation('tasks')
   const parent = useSessionsStore((s) => (summary.parentId ? s.byId[summary.parentId] : undefined))
   const routine = useRoutinesStore((s) =>
     summary.routine ? s.byId[summary.routine.routineId] : undefined,
@@ -94,7 +101,11 @@ export function SessionHeader({
   const [titleWidth, setTitleWidth] = useState(0)
   const measureTitle = () => setTitleWidth(titleButtonRef.current?.offsetWidth ?? 0)
   const stepTitle = useStepSessionTitle(summary)
-  const title = stepTitle ?? sessionTitle(summary)
+  // The conversation a task started from, which the task's row holds as Started here.
+  const originTask = useTasksStore((s) =>
+    summary.task ? undefined : taskFrom(s.summaries, summary.id),
+  )
+  const title = originTask ? tt('row.startedHere') : (stepTitle ?? sessionTitle(summary))
   const pane = usePane()
   const archived = useSessionsStore((s) => sessionArchived(s.byId, summary.id))
 
@@ -122,8 +133,11 @@ export function SessionHeader({
         )}
         {parent && <ParentLink parent={parent} />}
         {summary.task && <TaskCrumb summary={summary} />}
+        {originTask && <TaskCrumbLink task={originTask} />}
         <span className="grid w-4 shrink-0 place-items-center">
-          {summary.origin === 'subagent' ? (
+          {originTask ? (
+            <Icon icon={BubbleChatIcon} size={16} />
+          ) : summary.origin === 'subagent' ? (
             <Icon icon={AiChat02Icon} size={16} />
           ) : (
             <AgentMark agent={summary.agentId} size={16} hostId={hostOfSession(summary)} />

@@ -258,7 +258,8 @@
       "theme": "主题",
       "scale": "缩放与文字",
       "sidebar": "侧边栏",
-      "motion": "动态效果"
+      "motion": "动态效果",
+      "fonts": "字体"
     },
     "zoom": {
       "name": "界面缩放",
@@ -267,6 +268,22 @@
       "zoomIn": "放大",
       "zoomOut": "缩小",
       "reset": "重置"
+    },
+    "fonts": {
+      "keywords": "字体 font 界面 回复 代码 等宽",
+      "default": "主题的字体",
+      "ui": {
+        "name": "界面字体",
+        "description": "菜单、按钮、侧边栏和设置用的字体。所选字体缺少的字形由主题的字体补上。"
+      },
+      "prose": {
+        "name": "回复字体",
+        "description": "对话里的回复和你发送的消息用的字体。所选字体缺少的字形由主题的字体补上。"
+      },
+      "code": {
+        "name": "代码字体",
+        "description": "代码块、行内代码、差异和编辑器用的字体，终端没选自己的字体时也用它。这里只列等宽字体。"
+      }
     }
   },
   "terminal": {
@@ -280,14 +297,9 @@
     },
     "fontFamily": {
       "name": "字体",
-      "description": "这台电脑上已安装的字体，例如能显示提示符图标的 Nerd Font。所选字体缺少的字形由主题的代码字体补上。",
+      "description": "这台电脑上已安装的字体，例如能显示提示符图标的 Nerd Font。所选字体缺少的字形由代码字体补上。",
       "keywords": "字体 font nerd font 等宽 图标",
-      "default": "主题的代码字体",
-      "search": "搜索或输入字体名",
-      "use": "使用“{{name}}”",
-      "noMatch": "没有匹配的等宽字体。",
-      "loading": "正在读取已安装的字体…",
-      "unavailable": "这个浏览器列不出字体，输入字体名即可使用。"
+      "default": "代码字体"
     },
     "fontSize": {
       "name": "字号",
@@ -1100,6 +1112,10 @@
       "suggest": {
         "name": "智能体能建议工作流",
         "description": "在普通会话里，智能体觉得这件事需要工作流时会提出来，你确认后才开始。关掉后，智能体看不到这个功能。"
+      },
+      "steps": {
+        "name": "同时进行的步骤",
+        "description": "这台电脑上所有需求合起来算。一条需求最多同时做 3 步，多的排队。你自己的会话不算。"
       },
       "auto": {
         "group": "Auto 能选的智能体",
@@ -2006,7 +2022,9 @@
       "unsupportedTitle": "{{name}} {{version}} 不在 Kettu 能用的版本里（{{supported}}）",
       "bodyUpdate": "Kettu 检查发现这个版本有问题，更新到 {{update}} 就能解决。",
       "bodyRecommended": "Kettu 检查通过的是 {{recommended}}。按你安装 {{name}} 的方式装这个版本，再重新检测。",
-      "bodyOther": "按你安装 {{name}} 的方式换一个版本，再重新检测。"
+      "bodyOther": "按你安装 {{name}} 的方式换一个版本，再重新检测。",
+      "pillBroken": "不能用",
+      "pillUnsupported": "版本不支持"
     },
     "removedLine": "已从 Kettu 卸载",
     "movedAccounts": {
@@ -2167,5 +2185,13 @@
       "proxy": "智能体、npx 和更新都会经过这个代理。",
       "source": "会改变 Kettu 下载更新的来源。"
     }
+  },
+  "fonts": {
+    "search": "搜索或输入字体名",
+    "use": "使用“{{name}}”",
+    "noMatch": "没有匹配的字体。",
+    "noMonospaceMatch": "没有匹配的等宽字体。",
+    "loading": "正在读取已安装的字体…",
+    "unavailable": "这个浏览器列不出字体，输入字体名即可使用。"
   }
 }

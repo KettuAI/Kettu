@@ -257,7 +257,7 @@ export function toHost(method: string, params: unknown, depth: number): unknown 
   for (const [key, value] of Object.entries(params)) {
     copy[key] =
       typeof value === 'string' &&
-      (key === 'projectPath' || (key === 'path' && isProjectCall(method)))
+      (key === 'projectPath' || ((key === 'path' || key === 'before') && isProjectCall(method)))
         ? hostPath(value)
         : toHost(method, value, depth + 1)
   }
@@ -405,6 +405,7 @@ export function errorMessage(error: unknown): string {
   if (errorCode(error) === 'host_restarted') return i18n.t('errors.hostRestarted')
   if (errorCode(error) === 'host_offline') return i18n.t('errors.hostOffline')
   if (errorCode(error) === 'timeout') return i18n.t('errors.hostTimeout')
+  if (errorCode(error) === 'terminal_not_allowed') return i18n.t('errors.terminalNotAllowed')
   if (error instanceof Error) return error.message
   if (typeof error === 'object' && error !== null && 'message' in error) {
     return String((error as { message: unknown }).message)

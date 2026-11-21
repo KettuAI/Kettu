@@ -120,6 +120,7 @@
   "menu": {
     "open": "Open",
     "openInBrowser": "Open in browser",
+    "showIn": "Show in {{name}}",
     "share": "Share…",
     "export": "Export…",
     "exportAs": {

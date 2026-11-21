@@ -5,6 +5,7 @@ import { showQuitHint } from '@renderer/stores/quit-hint'
 import { openReport } from '@renderer/stores/report'
 import { useSessionsStore } from '@renderer/stores/sessions'
 import { askUpdateList, checkForUpdates } from '@renderer/stores/updates'
+import { useTasksStore } from '@renderer/stores/tasks'
 import {
   openRoutines,
   openSession,
@@ -50,9 +51,6 @@ export function useAppCommands(): void {
             if (summary) openSession(summary.id, summary.projectPath)
             break
           }
-          case 'open-task':
-            openTask(command.taskId)
-            break
           case 'open-routines':
             openRoutines()
             break
@@ -61,6 +59,9 @@ export function useAppCommands(): void {
             break
           case 'open-updates':
             askUpdateList()
+            break
+          case 'open-task':
+            if (useTasksStore.getState().summaries[command.taskId]) openTask(command.taskId)
             break
           // The menu has these keys when the page leaves them, as it does under a dialog or menu.
           case 'go-back':

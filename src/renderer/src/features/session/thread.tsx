@@ -573,7 +573,7 @@ export const Thread = memo(function Thread({
           </MessageScrollerContent>
         </MessageScrollerViewport>
         <ReplyToSelection
-          key={sessionId}
+          key={`reply-${sessionId}`}
           sessionId={sessionId}
           agentName={agentName}
           content={content}
@@ -584,7 +584,7 @@ export const Thread = memo(function Thread({
         <MessageOutline sessionId={sessionId} viewport={viewport} content={content} jumps={jumps} />
         <RevealTarget sessionId={sessionId} viewport={viewport} content={content} jumps={jumps} />
         <FindInSession
-          key={sessionId}
+          key={`find-${sessionId}`}
           sessionId={sessionId}
           viewport={viewport}
           content={content}

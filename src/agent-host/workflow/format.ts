@@ -15,6 +15,7 @@ import {
   WORKFLOW_NAME_CHARS,
   STEP_HINT_CHARS,
   STEP_PROMPT_CHARS,
+  marketToolRef,
   stepIndex,
   type HandIn,
   type Workflow,
@@ -95,6 +96,15 @@ function text(
   return trimmed
 }
 
+function whenText(data: Data, path: string, p: Problems): string | null {
+  const when = text(data, 'when', path, WORKFLOW_DESCRIPTION_CHARS, p, true)
+  if (when !== null && /[\r\n\u2028\u2029]/u.test(when)) {
+    p.add(join(path, 'when'), 'must be one line')
+    return null
+  }
+  return when
+}
+
 /** A single string or a list of them, as `to` and `review_of` take either. */
 function names(value: unknown, path: string, p: Problems): string[] {
   if (value === undefined || value === null) return []
@@ -143,7 +153,7 @@ function readOutcome(value: unknown, path: string, p: Problems): WorkflowOutcome
     if (ENDS.includes(endValue as TaskEnd)) end = endValue as TaskEnd
     else p.add(join(path, 'end'), 'must be done or dropped')
   }
-  if (to.length === 0 && end === null && endValue === undefined) {
+  if (to.length === 0 && end === null && (endValue === undefined || endValue === null)) {
     p.add(path, 'needs to (the steps it starts) or end (done or dropped)')
   }
   if (to.length > 0 && end !== null) p.add(path, 'has both to and end; give one')
@@ -262,6 +272,34 @@ function readStep(value: unknown, index: number, p: Problems): WorkflowStep | nu
   return { id, name, prompt, by, handIn, outcomes, youReview, hint, reviewOf, tools }
 }
 
+/** A locale's outcome names: step ids to each outcome's name in the file and its translation. */
+function readOutcomeNames(
+  value: unknown,
+  path: string,
+  p: Problems,
+): Record<string, Record<string, string>> | null {
+  if (value === undefined || value === null) return null
+  if (!isData(value)) {
+    p.add(path, 'must map step ids to their outcomes')
+    return null
+  }
+  const byStep: Record<string, Record<string, string>> = {}
+  for (const [stepId, raw] of Object.entries(value)) {
+    const at = join(path, stepId)
+    if (!isData(raw)) {
+      p.add(at, 'must map outcome names to names')
+      continue
+    }
+    const named: Record<string, string> = {}
+    for (const key of Object.keys(raw)) {
+      const name = text(raw, key, at, OUTCOME_CHARS, p)
+      if (name !== null) named[key] = name
+    }
+    byStep[stepId] = named
+  }
+  return byStep
+}
+
 function readLocales(value: unknown, p: Problems): Record<string, WorkflowLocale> {
   const locales: Record<string, WorkflowLocale> = {}
   if (value === undefined || value === null) return locales
@@ -278,15 +316,17 @@ function readLocales(value: unknown, p: Problems): Record<string, WorkflowLocale
       continue
     }
     if (!isData(raw)) {
-      p.add(path, 'must be a mapping with name, description and steps')
+      p.add(path, 'must be a mapping with name, description, when, steps or outcomes')
       continue
     }
-    knownKeys(raw, path, ['name', 'description', 'steps'], p)
+    knownKeys(raw, path, ['name', 'description', 'when', 'steps', 'outcomes'], p)
     const locale: WorkflowLocale = {}
     const name = text(raw, 'name', path, WORKFLOW_NAME_CHARS, p, true)
     if (name !== null) locale.name = name
     const description = text(raw, 'description', path, WORKFLOW_DESCRIPTION_CHARS, p, true)
     if (description !== null) locale.description = description
+    const when = whenText(raw, path, p)
+    if (when !== null) locale.when = when
     const steps = own(raw, 'steps')
     if (steps !== undefined && steps !== null) {
       if (!isData(steps)) p.add(join(path, 'steps'), 'must map step ids to names')
@@ -299,6 +339,8 @@ function readLocales(value: unknown, p: Problems): Record<string, WorkflowLocale
         locale.steps = named
       }
     }
+    const outcomes = readOutcomeNames(own(raw, 'outcomes'), join(path, 'outcomes'), p)
+    if (outcomes !== null) locale.outcomes = outcomes
     locales[code] = locale
   }
   return locales
@@ -380,10 +422,16 @@ function readWorkflow(value: unknown, p: Problems): Workflow | null {
     p.add('', 'the file must be a mapping')
     return null
   }
-  knownKeys(value, '', ['format', 'name', 'description', 'locales', 'send_back_limit', 'steps'], p)
+  knownKeys(
+    value,
+    '',
+    ['format', 'name', 'description', 'when', 'locales', 'send_back_limit', 'steps'],
+    p,
+  )
   if (own(value, 'format') !== WORKFLOW_FORMAT) p.add('format', `must be ${WORKFLOW_FORMAT}`)
   const name = text(value, 'name', '', WORKFLOW_NAME_CHARS, p)
   const description = text(value, 'description', '', WORKFLOW_DESCRIPTION_CHARS, p, true) ?? ''
+  const when = whenText(value, '', p)
   const locales = readLocales(own(value, 'locales'), p)
   const sendBackLimit =
     limit(own(value, 'send_back_limit'), 'send_back_limit', p) ?? DEFAULT_SEND_BACK_LIMIT
@@ -400,6 +448,7 @@ function readWorkflow(value: unknown, p: Problems): Workflow | null {
     format: WORKFLOW_FORMAT,
     name,
     description,
+    ...(when === null ? {} : { when }),
     locales,
     sendBackLimit,
     steps: steps as WorkflowStep[],
@@ -408,6 +457,19 @@ function readWorkflow(value: unknown, p: Problems): Workflow | null {
     for (const stepId of Object.keys(locale.steps ?? {})) {
       if (!workflow.steps.some((step) => step.id === stepId)) {
         p.add(join(join(join('locales', code), 'steps'), stepId), `no step "${stepId}"`)
+      }
+    }
+    for (const [stepId, named] of Object.entries(locale.outcomes ?? {})) {
+      const at = join(join(join('locales', code), 'outcomes'), stepId)
+      const step = workflow.steps.find((s) => s.id === stepId)
+      if (!step) {
+        p.add(at, `no step "${stepId}"`)
+        continue
+      }
+      for (const name of Object.keys(named)) {
+        if (!step.outcomes.some((outcome) => outcome.name === name)) {
+          p.add(join(at, name), `"${stepId}" has no outcome "${name}"`)
+        }
       }
     }
   }
@@ -464,7 +526,10 @@ export function parseWorkflow(source: string): WorkflowRead {
   return { workflow, problems: [] }
 }
 
-/** The tools the workflow names that this host does not know, as problems. */
+/**
+ * The tools the workflow names that are neither kept on this host, by name or id, nor a
+ * Marketplace entry that Start installs, as problems.
+ */
 export function toolProblems(
   workflow: Workflow,
   known: { mcp: ReadonlySet<string>; skills: ReadonlySet<string> },
@@ -473,7 +538,7 @@ export function toolProblems(
   workflow.steps.forEach((step, index) => {
     for (const kind of ['mcp', 'skills'] as const) {
       step.tools[kind].forEach((name, i) => {
-        if (!known[kind].has(name)) {
+        if (!known[kind].has(name) && !marketToolRef(kind === 'mcp' ? 'mcp' : 'skill', name)) {
           problems.push({
             at: join(join(join('steps', index), 'tools'), kind) + `[${i}]`,
             message:

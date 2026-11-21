@@ -2,12 +2,16 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import {
   Alert02Icon,
   ArrowUp02Icon,
+  CheckmarkCircle02Icon,
   FlowIcon,
   GitBranchIcon,
+  GitMergeIcon,
+  MinusSignCircleIcon,
   MoreHorizontalIcon,
 } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
+import { githubReferenceOf, type GitHubReference } from '@shared/git'
 import type { TaskSummary, TaskView } from '@shared/workflow'
 import { Icon } from '@renderer/components/affect/app-shell'
 import { ChatComposer } from '@renderer/components/affect/chat-composer'
@@ -26,6 +30,7 @@ import {
   EmptyTitle,
 } from '@renderer/components/ui/empty'
 import { Skeleton } from '@renderer/components/ui/skeleton'
+import { useReferenceData } from '@renderer/features/git/gh-reference-data'
 import { TrayStyles } from '@renderer/features/session/composer/affect-styles'
 import { ThreadSkeleton } from '@renderer/features/session/session-states'
 import { Glyph } from '@renderer/features/shell/glyph'
@@ -34,6 +39,7 @@ import { useRenaming } from '@renderer/features/sidebar/use-renaming'
 import { errorMessage, host } from '@renderer/lib/host'
 import { hostOfPath } from '@renderer/lib/host-paths'
 import { cn } from '@renderer/lib/utils'
+import { loadReference } from '@renderer/stores/git'
 import { isAway, useOtherHost } from '@renderer/stores/hosts'
 import { useSessionsStore } from '@renderer/stores/sessions'
 import { useTasksStore } from '@renderer/stores/tasks'
@@ -43,7 +49,7 @@ import { progressText, workflowTitle } from './model'
 import { CancelTaskDialog, DeleteTaskDialog, TaskMenuItems, TaskTitleField } from './task-menu'
 import { updateTask } from './actions'
 import { TaskRing } from './task-ring'
-import { Timeline } from './timeline'
+import { StartedFrom, Timeline } from './timeline'
 import { useTaskSessions, useTaskView } from './use-task'
 
 /**
@@ -115,7 +121,10 @@ export default function TaskPage({ taskId, flow }: { taskId: string; flow: boole
       <TaskBar task={task} view={view} flow={flow} />
       {flow ? (
         // The flowchart's canvas fills the room and pans itself.
-        <div className="flex min-h-0 flex-1 flex-col px-8 pt-4 pb-4">{body}</div>
+        <div className="flex min-h-0 flex-1 flex-col gap-2 px-8 pt-4 pb-4">
+          {view && <StartedFrom view={view} className="mx-auto w-full max-w-(--thread-column)" />}
+          {body}
+        </div>
       ) : (
         <div ref={scroller} className="min-h-0 flex-1 overflow-y-auto">
           <div className="ks-thread ks-thread__column mx-auto w-full px-8 pt-4 pb-6">{body}</div>
@@ -123,7 +132,11 @@ export default function TaskPage({ taskId, flow }: { taskId: string; flow: boole
       )}
       <div className="px-8 pb-6">
         <div className="mx-auto w-full max-w-(--thread-column)">
-          <NotesComposer task={task} view={view} disabled={away} />
+          {task.status === 'running' ? (
+            <NotesComposer task={task} view={view} disabled={away} />
+          ) : (
+            <EndedLine task={task} view={view} />
+          )}
         </div>
       </div>
     </div>
@@ -299,6 +312,42 @@ function TaskState({ task }: { task: TaskSummary }) {
     >
       {t(`ended.${task.status}`)}
     </span>
+  )
+}
+
+/** In the composer's place once the task ended: how it ended, and its branch merged when it was. */
+function EndedLine({ task, view }: { task: TaskSummary; view: TaskView | undefined }) {
+  const pr = view?.deliverables?.find((d) => d.kind === 'pull_request')
+  const reference = pr ? githubReferenceOf(pr.url) : null
+  if (reference && task.status === 'done' && task.branch) {
+    return <PullLine task={task} reference={reference} />
+  }
+  return <EndedText task={task} merged={false} />
+}
+
+function PullLine({ task, reference }: { task: TaskSummary; reference: GitHubReference }) {
+  const { data } = useReferenceData(reference)
+  useEffect(() => loadReference(reference), [reference])
+  return <EndedText task={task} merged={data?.kind === 'pull' && data.pr.state === 'merged'} />
+}
+
+function EndedText({ task, merged }: { task: TaskSummary; merged: boolean }) {
+  const { t } = useTranslation('tasks')
+  const done = task.status === 'done'
+  const text = done
+    ? task.branch
+      ? t(merged ? 'composer.doneMerged' : 'composer.doneOn', { branch: task.branch })
+      : t('composer.doneLine')
+    : t(task.status === 'dropped' ? 'composer.droppedLine' : 'composer.cancelledLine')
+  return (
+    <p className="flex min-h-11 items-center justify-center gap-2 rounded-xl border border-(--thread-line) px-4 py-2.5 text-small text-(--thread-muted)">
+      <Glyph
+        icon={done ? (merged ? GitMergeIcon : CheckmarkCircle02Icon) : MinusSignCircleIcon}
+        size={15}
+        className={cn('shrink-0', done ? 'text-success' : 'text-tertiary')}
+      />
+      <span className="truncate">{text}</span>
+    </p>
   )
 }
 

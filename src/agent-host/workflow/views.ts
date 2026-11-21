@@ -7,13 +7,14 @@ import {
   type RoundState,
   type RoundView,
   type StepState,
+  type TaskDeliverable,
   type TaskNeed,
   type TaskStepSummary,
   type TaskSummary,
   type TaskView,
   type WaitingView,
 } from '@shared/workflow'
-import type { AgentId } from '@shared/thread'
+import type { AgentId, TaskDeliveryEntry } from '@shared/thread'
 import { arrowKey, stepOf } from './graph'
 import type { LaneRecord, RoundRecord, TaskRecord } from './model'
 
@@ -152,6 +153,8 @@ export function summaryOf(task: TaskRecord): TaskSummary {
     unread: task.unread,
     createdAt: task.createdAt,
     updatedAt: task.updatedAt,
+    endedAt: task.endedAt,
+    from: task.from ? { ...task.from } : null,
   }
 }
 
@@ -173,6 +176,7 @@ function roundView(task: TaskRecord, round: RoundRecord): RoundView {
     outcome: round.outcome,
     note: round.note,
     document: round.document ? { ...round.document } : null,
+    deliverables: (round.deliverables ?? []).map((item) => ({ ...item })),
     sentBack: round.sentBack ? structuredClone(round.sentBack) : null,
     stuck: round.stuck ? { ...round.stuck } : null,
     asking: round.asking,
@@ -230,7 +234,47 @@ function waitingView(task: TaskRecord): WaitingView[] {
   })
 }
 
-export function viewOf(task: TaskRecord): TaskView {
+/**
+ * What a task delivered: the pull requests of its steps' sessions, then for each step in the
+ * workflow's order the files and links its latest report handed over, then the documents they
+ * handed in, each document once at its latest version.
+ */
+export function deliverablesOf(
+  task: TaskRecord,
+  pullRequests: readonly string[],
+): TaskDeliverable[] {
+  const out: TaskDeliverable[] = []
+  const seen = new Set<string>()
+  const add = (key: string, item: TaskDeliverable) => {
+    if (seen.has(key)) return
+    seen.add(key)
+    out.push(item)
+  }
+  for (const url of pullRequests) add(`pr:${url}`, { kind: 'pull_request', url })
+  const reported = task.workflow.steps.flatMap((step) => {
+    const round = task.rounds.findLast((r) => r.stepId === step.id && r.outcome !== null)
+    return round ? [round] : []
+  })
+  for (const round of reported) {
+    for (const item of round.deliverables ?? []) {
+      add(item.kind === 'file' ? `file:${item.path}` : `link:${item.url}`, { ...item })
+    }
+  }
+  const documents = new Map<string, Extract<TaskDeliverable, { kind: 'document' }>>()
+  for (const round of reported) {
+    const doc = round.document
+    if (!doc) continue
+    const known = documents.get(doc.artifactId)
+    if (known && known.version >= doc.version) continue
+    // A later version moves the document to where its step stands.
+    documents.delete(doc.artifactId)
+    documents.set(doc.artifactId, { kind: 'document', ...doc })
+  }
+  for (const doc of documents.values()) add(`doc:${doc.artifactId}`, doc)
+  return out
+}
+
+export function viewOf(task: TaskRecord, pullRequests: readonly string[] = []): TaskView {
   return {
     ...summaryOf(task),
     text: task.text,
@@ -245,6 +289,7 @@ export function viewOf(task: TaskRecord): TaskView {
     arrows: arrowsOf(task),
     needs: needsOf(task),
     from: task.from ? { ...task.from } : null,
+    deliverables: deliverablesOf(task, pullRequests),
   }
 }
 
@@ -254,4 +299,28 @@ export function canPinStep(task: TaskRecord, stepId: string): boolean {
   if (step?.by !== 'agent') return false
   const live = task.rounds.some((round) => round.stepId === stepId && LIVE.has(round.state))
   return !live
+}
+
+/**
+ * What the conversation a task started from is told when it ends: how, the steps that ran, how
+ * long it took and what it delivered; `writtenBy` is the agent that wrote its workflow for it.
+ */
+export function deliveryOf(
+  view: TaskView,
+  writtenBy: AgentId | null,
+  now: number,
+): Omit<TaskDeliveryEntry, 'kind' | 'id' | 'after'> {
+  const ran = new Set(
+    view.rounds.filter((r) => r.startedAt !== null || r.outcome !== null).map((r) => r.stepId),
+  )
+  const status = view.status === 'running' ? 'cancelled' : view.status
+  return {
+    taskId: view.id,
+    title: view.title,
+    status,
+    steps: ran.size,
+    durationMs: Math.max(0, (view.endedAt ?? now) - view.createdAt),
+    deliverables: (view.deliverables ?? []).map((item) => ({ ...item })),
+    written: writtenBy && status === 'done' ? { agentId: writtenBy } : null,
+  }
 }

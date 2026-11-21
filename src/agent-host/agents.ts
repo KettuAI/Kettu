@@ -22,6 +22,7 @@ import type {
   ClaudeSettings,
   CodebuddySettings,
   CodebuddySiteChange,
+  InstalledCli,
   McpStatus,
   PlanLimit,
   PlanResets,
@@ -2061,6 +2062,32 @@ export class AgentManager {
   }
 
   /**
+   * The user's own program of a binary harness that detection named no CLI for: one with an npm
+   * route but no `cli` of its own, such as Kilo Code's, whose updates Kettu reads from npm, or one
+   * with a `cli` whose program was picked in Settings, which runs as it is. It shows as the
+   * harness's CLI. Null while Kettu's own install runs, since that one updates through the
+   * registry, or while none was found. `reported` is the version the running agent named, for when
+   * the program was not asked.
+   */
+  private ownProgram(
+    h: Harness,
+    reported: string | null,
+  ): { command: string; installed: InstalledCli } | null {
+    const { launch, installs, cli } = h.def
+    if (launch.kind !== 'binary' || this.release(h)) return null
+    if (cli ? h.detection?.cli : !installs?.npm) return null
+    const mine = this.userProgram(h)
+    if (!mine) return null
+    const installed = {
+      path: mine.path,
+      version: mine.version ?? reported,
+      variable: null,
+      problem: null,
+    }
+    return { command: cli?.command ?? launch.command, installed }
+  }
+
+  /**
    * A newer version of the user's own program than the one it runs: from npm, or, for one too old
    * to run, at least the oldest that runs, which its own update brings before any check.
    */
@@ -2896,6 +2923,9 @@ export class AgentManager {
       h.cliMethod === 'npm' && installs.npm
         ? npmPrefixOf(await realpath(mine.path).catch(() => mine.path), installs.npm, platform)
         : null
+    // A copy npm installed outside a global prefix, such as into a project, is not what
+    // `npm install -g` updates.
+    if (h.cliMethod === 'npm' && !npmPrefix) return null
     return updatePlan(installs, h.cliMethod, {
       platform,
       env: this.deps.env.agentEnv(h.def.id),
@@ -5091,7 +5121,8 @@ export class AgentManager {
     const color = slot.added ? agentColor(this.deps.settings().addedAgents, slot.id) : null
     const cliVersion = this.cliUpdateVersion(h)
     const cliCommand = cliVersion ? (this.cliCommands.get(h) ?? null) : null
-    const cliCommandName = slot.def.cli?.command
+    const own = this.ownProgram(h, init?.version ?? null)
+    const cliCommandName = slot.def.cli?.command ?? own?.command
     return {
       id: slot.id,
       name: slot.name,
@@ -5196,7 +5227,7 @@ export class AgentManager {
       cli: cliCommandName
         ? {
             command: cliCommandName,
-            installed: detection?.cli ?? null,
+            installed: detection?.cli ?? own?.installed ?? null,
             method: h.cliMethod,
             update: cliVersion && cliCommand ? { version: cliVersion, command: cliCommand } : null,
           }

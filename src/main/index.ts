@@ -504,7 +504,7 @@ async function start(): Promise<void> {
       // While the island runs, it shows what needs the user in place of a notification.
       if (!repeatedNotices.repeated(message)) {
         island.attention(message)
-        if (!island.showing()) {
+        if (!island.shows(message)) {
           notifyAttention(message, settings.get(), (sessionId, requestId, optionId) => {
             agentHost.answerPermission(sessionId, requestId, optionId)
             return true
@@ -758,7 +758,7 @@ async function start(): Promise<void> {
       if (repeatedNotices.repeated(attention as HostAttention)) return
       // While the island runs, it shows another host's too in place of a notification.
       island.remoteAttention(hostId, attention)
-      if (island.showing()) return
+      if (island.shows(attention as HostAttention)) return
       notifyAttention(
         attention as HostAttention,
         settings.get(),
