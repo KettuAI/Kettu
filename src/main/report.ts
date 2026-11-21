@@ -157,16 +157,16 @@ export class Reports {
 
   async view(id: unknown, filePath: unknown): Promise<ReportFileView> {
     const kept = this.shelf.get(id)
-    if (!kept) throw new ReportError('not_found', 'This report is no longer prepared')
+    if (!kept) throw new ReportError('not_found', t('report.gone'))
     const info = kept.files.find((file) => file.path === filePath)
-    if (!info) throw new ReportError('not_found', 'The bundle has no such file')
+    if (!info) throw new ReportError('not_found', t('report.noFile'))
     let zip = this.zips.get(id as string)
     if (!zip) {
       zip = await JSZip.loadAsync(await readFile(kept.file))
       if (this.shelf.get(id)) this.zips.set(id as string, zip)
     }
     const entry = zip.file(info.path)
-    if (!entry) throw new ReportError('not_found', 'The bundle has no such file')
+    if (!entry) throw new ReportError('not_found', t('report.noFile'))
     if (info.kind === 'binary') return { kind: 'binary' }
     if (info.kind === 'image') {
       return { kind: 'image', dataUrl: `data:image/png;base64,${await entry.async('base64')}` }
@@ -182,7 +182,7 @@ export class Reports {
   /** Asks where to save the zip, warning that a public issue lets anyone download it. */
   async save(window: BrowserWindow | null, id: unknown): Promise<string | null> {
     const kept = this.shelf.get(id)
-    if (!kept) throw new ReportError('not_found', 'This report is no longer prepared')
+    if (!kept) throw new ReportError('not_found', t('report.gone'))
     const options: Electron.SaveDialogOptions = {
       title: t('dialogs.saveReport'),
       message: t('dialogs.saveReportWarning'),

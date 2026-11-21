@@ -23,6 +23,7 @@ import {
 } from '@shared/artifacts'
 import type { ArtifactContentFile, ArtifactContentResult } from '@shared/host-control'
 import { safeName } from '@shared/file-name'
+import { t } from '../i18n'
 import { overviewOf } from './overview'
 import { isInside, isStored } from './protocol'
 
@@ -172,8 +173,8 @@ export class ArtifactFiles {
   ): Promise<boolean> {
     const wanted = parseVersion(id, version)
     const found = await this.deps.content(wanted.id, wanted.version)
-    if (found.kind === 'failed') throw new Error('The agent host did not answer')
-    if (found.kind === 'not_found' || !found.type) throw new Error('Not found')
+    if (found.kind === 'failed') throw new Error(t('artifacts.hostSilent'))
+    if (found.kind === 'not_found' || !found.type) throw new Error(t('artifacts.notFound'))
     const type = found.type
     if (!isExportFormat(type.name, format)) throw new Error('Not a format this type exports to')
     const name = safeName(found.title, wanted.id)
@@ -235,13 +236,13 @@ export class ArtifactFiles {
   private async find(id: unknown, version: unknown): Promise<FoundVersion> {
     const wanted = parseVersion(id, version)
     const found = await this.deps.content(wanted.id, wanted.version)
-    if (found.kind === 'failed') throw new Error('The agent host did not answer')
+    if (found.kind === 'failed') throw new Error(t('artifacts.hostSilent'))
     if (
       found.kind === 'not_found' ||
       !found.files.some((file) => file.path === ARTIFACT_ENTRY || file.path === CANVAS_FILE) ||
       !found.files.every((file) => isStored(this.deps, wanted.id, file.file))
     ) {
-      throw new Error('Not found')
+      throw new Error(t('artifacts.notFound'))
     }
     await this.deps.ready?.(wanted.id, found.version, null)
     return { ...wanted, title: found.title, files: found.files }

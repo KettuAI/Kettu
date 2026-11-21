@@ -2,6 +2,7 @@
 // size, printed by Chromium in a hidden window of the thumbnails' session.
 
 import { BrowserWindow, type Session } from 'electron'
+import { t } from '../i18n'
 import { createLogger } from '../log'
 
 const log = createLogger('artifacts')
@@ -40,7 +41,7 @@ export async function printViewer(session: Session, page: string): Promise<Buffe
     // when its own PDF is taken.
     const until = Date.now() + READY_WAIT_MS
     for (;;) {
-      if (window.isDestroyed()) throw new Error('The print window closed')
+      if (window.isDestroyed()) throw new Error(t('artifacts.printClosed'))
       const ready = await Promise.race([
         contents.executeJavaScript("document.documentElement.dataset.ready === 'true'", true).then(
           (value: unknown) => value === true,

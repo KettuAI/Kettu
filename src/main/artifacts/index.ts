@@ -22,7 +22,7 @@ import { safeName } from '@shared/file-name'
 import type { ArtifactContentResult, ArtifactExportResult } from '@shared/host-control'
 import type { ArtifactOpenResult } from '@shared/ipc'
 import { sendEvent } from '../events'
-import { locale } from '../i18n'
+import { locale, t } from '../i18n'
 import { ArtifactFiles, parseVersion } from './files'
 import { filterArtifactRequests, guardArtifactFrames } from './guards'
 import { ARTIFACT_SCHEME, ArtifactOrigins, originId } from './origins'
@@ -220,7 +220,7 @@ export class Artifacts {
   ): Promise<boolean> {
     if (typeof name !== 'string' || name.length > NAME_CHARS) throw new Error('Not a file name')
     const image = await this.png(id, version, page, size)
-    if (!image) throw new Error('The page could not be rendered')
+    if (!image) throw new Error(t('artifacts.notRendered'))
     const options: Electron.SaveDialogOptions = {
       defaultPath: join(app.getPath('downloads'), `${safeName(name, 'page')}.png`),
       filters: [{ name: 'PNG', extensions: ['png'] }],
@@ -269,7 +269,7 @@ export class Artifacts {
   async printPdf(id: unknown, version: unknown): Promise<Buffer> {
     const wanted = parseVersion(id, version)
     const found = await this.deps.content(wanted.id, wanted.version)
-    if (found.kind !== 'found' || !found.type) throw new Error('Not found')
+    if (found.kind !== 'found' || !found.type) throw new Error(t('artifacts.notFound'))
     if (!isExportFormat(found.type.name, 'pdf'))
       throw new Error('Not a format this type exports to')
     return this.thumbnails.print(wanted.id, wanted.version)
@@ -281,8 +281,9 @@ export class Artifacts {
     format: ArtifactExportFormat,
   ): Promise<ExportedFile[]> {
     const result = await this.deps.exportVersion(id, version, format)
-    if (result.kind === 'not_found') throw new Error('Not found')
-    if (result.kind === 'failed') throw new Error(`The export failed: ${result.message}`)
+    if (result.kind === 'not_found') throw new Error(t('artifacts.notFound'))
+    if (result.kind === 'failed')
+      throw new Error(t('artifacts.exportFailed', { reason: result.message }))
     return result.files
   }
 

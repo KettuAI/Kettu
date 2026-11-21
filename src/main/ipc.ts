@@ -67,7 +67,7 @@ import { createLogger } from './log'
 import { parseActionBatch } from './action-records'
 import { clearVerboseRecords, dismissUnexpectedExit, unexpectedExitNotice } from './app-log'
 import { grantedPath, type MediaGrants } from './media'
-import { copyImage, ON_HOST, revealMedia, saveMediaAs } from './media-actions'
+import { copyImage, onHostText, revealMedia, saveMediaAs } from './media-actions'
 import type { IslandBridge } from './island/bridge'
 import { notifyTest } from './notifications'
 import type { QuitFlow } from './quit'
@@ -680,7 +680,7 @@ export function registerIpcHandlers({
   handle('media:reveal', 1, (_, url) => revealMedia(url, mediaGrants, hostMedia))
 
   handle('media:open-external', 1, async (_, url) => {
-    if (hostMedia.byUrl(url)) throw new Error(ON_HOST)
+    if (hostMedia.byUrl(url)) throw new Error(onHostText())
     const error = await shell.openPath(await grantedPath(url, mediaGrants))
     if (error) throw new Error(error)
   })

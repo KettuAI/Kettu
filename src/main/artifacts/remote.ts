@@ -26,6 +26,7 @@ import type {
   ArtifactContentResult,
   ArtifactExportResult,
 } from '@shared/host-control'
+import { t } from '../i18n'
 import { createLogger } from '../log'
 import { ContentCache } from './content-cache'
 
@@ -296,10 +297,13 @@ export class RemoteArtifacts {
     } catch (error) {
       if (codeOf(error) === 'not_found') return { kind: 'not_found' }
       const message = (error as { message?: unknown } | null)?.message
-      return { kind: 'failed', message: typeof message === 'string' ? message : 'Export failed' }
+      return {
+        kind: 'failed',
+        message: typeof message === 'string' ? message : t('artifacts.hostExportFailed'),
+      }
     }
     const { title, files } = (result ?? {}) as { title?: unknown; files?: unknown }
-    const failed: ArtifactExportResult = { kind: 'failed', message: 'The host sent no files' }
+    const failed: ArtifactExportResult = { kind: 'failed', message: t('artifacts.hostSentNoFiles') }
     if (typeof title !== 'string' || title.length > MAX_TITLE) return failed
     if (!Array.isArray(files) || files.length < 1 || files.length > VERSION_FILES) return failed
     const exported: ExportedFile[] = []

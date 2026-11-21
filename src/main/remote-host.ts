@@ -45,6 +45,7 @@ import type { DirectAddress } from '@shared/remote/protocol'
 import { parseRelayStatuses } from '@shared/remote/relay-host'
 import type { DirectSettings } from '@shared/settings'
 import remoteHostPath from '../remote-host/index?modulePath'
+import { t } from './i18n'
 import { createLogger } from './log'
 import type { StoredDevices } from './remote-devices'
 import type { RemoteIdentity } from './remote-identity'
@@ -596,9 +597,9 @@ export class RemoteHost {
    */
   reset(): Promise<void> {
     const run = this.changes.then(async () => {
-      if (!this.host || !this.serving || !this.latest) throw new Error('Remote access is not on')
+      if (!this.host || !this.serving || !this.latest) throw new Error(t('remoteHost.notOn'))
       const answer = await this.request((requestId) => ({ type: 'remote-host:reset', requestId }))
-      if (!answer) throw new Error('The remote host did not reset')
+      if (!answer) throw new Error(t('remoteHost.resetFailed'))
       await this.stopServing()
       await this.deps.newIdentity()
       await this.deps.newRelayKey()
@@ -923,7 +924,7 @@ export class RemoteHost {
     if (!Number.isSafeInteger(requestId)) return
     const answer: AdminAnswer = this.deps.admin
       ? await this.deps.admin(deviceId, method, params)
-      : { error: { code: 'unavailable', message: 'This host takes no such calls' } }
+      : { error: { code: 'unavailable', message: t('remoteHost.noAdmin') } }
     if (this.host === host) host.post({ type: 'remote-host:admin-result', requestId, ...answer })
   }
 

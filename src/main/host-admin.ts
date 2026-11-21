@@ -38,6 +38,7 @@ import type { UpdateStatus } from '@shared/updates'
 import { isAbsolutePath } from '../agent-host/paths'
 import type { AgentFolders } from './agent-folders'
 import { isExecutableFile } from './executable'
+import { t } from './i18n'
 import { MarketKeysError } from './market-keys'
 import type { SettingsStore } from './settings'
 import { SettingsError } from './settings-schema'
@@ -69,7 +70,7 @@ export function deviceIdArg(value: unknown): string {
 /** A device's name as the owner typed it, cleaned up as the remote host keeps it. */
 export function deviceName(value: unknown): string {
   const name = normalizeDeviceName(value)
-  if (!name) throw invalid('A device needs a name')
+  if (!name) throw invalid(t('hostAdmin.deviceNeedsName'))
   return name
 }
 
@@ -81,7 +82,7 @@ export function pairingCode(value: unknown): number {
 /** A program the host may run, as a dialog picked it or a device typed it; refused otherwise. */
 export async function runnableProgram(file: string, platform: Platform): Promise<string> {
   if (!(await isExecutableFile(file, platform))) {
-    throw invalid(`"${file}" is not a program that can be run`)
+    throw invalid(t('hostAdmin.notProgram', { path: file }))
   }
   return file
 }
@@ -339,13 +340,13 @@ export class HostAdmin {
   }
 
   private sharing(): AdminSharing {
-    if (!this.deps.sharing) throw new AdminError('unavailable', 'This host does not publish')
+    if (!this.deps.sharing) throw new AdminError('unavailable', t('hostAdmin.noPublish'))
     return this.deps.sharing
   }
 
   private updates(): AdminUpdates {
     if (!this.deps.updates) {
-      throw new AdminError('unavailable', 'This host is not updated from Settings')
+      throw new AdminError('unavailable', t('hostAdmin.noUpdates'))
     }
     return this.deps.updates
   }
@@ -363,7 +364,7 @@ export class HostAdmin {
           throw invalid(`A device keeps these settings itself, not the host: ${keys}`)
         }
         if (this.deps.remoteAlwaysOn && (patch as SettingsPatch).remote?.enabled === false) {
-          throw invalid('This host always serves remote access')
+          throw invalid(t('hostAdmin.remoteAlwaysOn'))
         }
         settings.update(patch)
         return this.hostPart()
@@ -372,7 +373,7 @@ export class HostAdmin {
         const { harnessId, name, folder } = fields(params)
         if (folder === null) return agentFolders.add(harnessId, name, null)
         const typed = typedPath(folder, 'folder', platform)
-        if (!(await isDirectory(typed))) throw invalid(`"${typed}" is not a folder on this host`)
+        if (!(await isDirectory(typed))) throw invalid(t('hostAdmin.notFolder', { path: typed }))
         // As the dialog's folder is, once the host has checked it.
         agentFolders.remember(typed)
         return agentFolders.add(harnessId, name, typed)
@@ -557,24 +558,24 @@ export class HostAdmin {
         )
       case 'artifacts.thumbnail': {
         if (!this.deps.thumbnail) {
-          throw new AdminError('unavailable', 'This host does not capture previews')
+          throw new AdminError('unavailable', t('hostAdmin.noPreviews'))
         }
         const { id, version, layout } = fields(params)
         return this.deps.thumbnail(id, version, layout)
       }
       case 'artifacts.png': {
-        if (!this.deps.png) throw new AdminError('unavailable', 'This host does not render pages')
+        if (!this.deps.png) throw new AdminError('unavailable', t('hostAdmin.noRender'))
         const { id, version, page, size } = fields(params)
         const image = await this.deps.png(id, version, page, size)
         return image ? `data:image/png;base64,${image.toString('base64')}` : null
       }
       case 'artifacts.printPdf': {
-        if (!this.deps.printPdf) throw new AdminError('unavailable', 'This host does not print')
+        if (!this.deps.printPdf) throw new AdminError('unavailable', t('hostAdmin.noPrint'))
         const { id, version } = fields(params)
         return (await this.deps.printPdf(id, version)).toString('base64')
       }
       case 'host.report': {
-        if (!this.deps.report) throw new AdminError('unavailable', 'This host makes no reports')
+        if (!this.deps.report) throw new AdminError('unavailable', t('hostAdmin.noReports'))
         let request: ReportRequest
         try {
           request = parseReportRequest(fields(params).request)
@@ -585,7 +586,7 @@ export class HostAdmin {
       }
       case 'host.submitReport': {
         if (!this.deps.submitReport) {
-          throw new AdminError('unavailable', 'This host submits no reports')
+          throw new AdminError('unavailable', t('hostAdmin.noSubmit'))
         }
         const { ref } = fields(params)
         if (typeof ref !== 'string' || ref.length > 100) throw invalid("ref must be a bundle's id")

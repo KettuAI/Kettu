@@ -8,6 +8,7 @@ import {
   type TerminalCallAnswer,
 } from '@shared/terminal-agent'
 import terminalHostPath from '../terminal-host/index?modulePath'
+import { t } from './i18n'
 import { createLogger } from './log'
 import { UtilityHost, type UtilityHostEvent, type UtilityHostState } from './utility-host'
 
@@ -64,7 +65,7 @@ export class TerminalHost {
         for (const resolve of this.busyRequests.values()) resolve([])
         this.busyRequests.clear()
         for (const resolve of this.calls.values()) {
-          resolve({ error: { code: 'unavailable', message: 'The terminal host stopped' } })
+          resolve({ error: { code: 'unavailable', message: t('terminalHost.stopped') } })
         }
         this.calls.clear()
         this.pending.length = 0
@@ -142,7 +143,7 @@ export class TerminalHost {
     return new Promise((resolve) => {
       const timer = setTimeout(() => {
         this.calls.delete(callId)
-        resolve({ error: { code: 'failed', message: 'The terminal did not answer in time' } })
+        resolve({ error: { code: 'failed', message: t('terminalHost.silent') } })
       }, TERMINAL_CALL_TIMEOUT_MS)
       this.calls.set(callId, (answer) => {
         clearTimeout(timer)

@@ -7,6 +7,7 @@ import type { UpdateStatus } from '@shared/updates'
 import type { AppStateStore } from './app-state'
 import { loadAutoUpdater } from './auto-updater'
 import { broadcast } from './events'
+import { t } from './i18n'
 import { createLogger } from './log'
 import { sessionProxy } from './proxy'
 import type { SettingsSection } from './settings-schema'
@@ -149,16 +150,14 @@ export class Updater {
     const off = this.status.state
     if (off.kind === 'off') {
       throw new Error(
-        off.reason === 'development'
-          ? 'Updates are off in development builds'
-          : 'Updates for this installation come from the package manager',
+        off.reason === 'development' ? t('updater.offDevelopment') : t('updater.offPackageManager'),
       )
     }
     if (this.mode === 'link') {
-      throw new Error('This build cannot install updates; open the release page to download it')
+      throw new Error(t('updater.linkOnly'))
     }
     const { state } = this.status
-    if (state.kind !== 'available') throw new Error('There is no update to download')
+    if (state.kind !== 'available') throw new Error(t('updater.nothingToDownload'))
     if (this.readOnly) {
       this.deps.requestMove()
       return
@@ -177,7 +176,10 @@ export class Updater {
     if (state.kind !== 'available') return false
     // Electron would return true without moving or quitting, and the flow would quit for nothing.
     if (app.isInApplicationsFolder()) {
-      this.moveFailed('The app is in an Applications folder on a read-only volume')
+      this.moveFailed(
+        t('updater.readOnlyVolume'),
+        'The app is in an Applications folder on a read-only volume',
+      )
       return false
     }
     this.dispatch({ type: 'moving', version: state.version })
@@ -207,7 +209,7 @@ export class Updater {
   }
 
   restart(): void {
-    if (this.status.state.kind !== 'ready') throw new Error('No update is ready to install')
+    if (this.status.state.kind !== 'ready') throw new Error(t('updater.nothingReady'))
     this.deps.requestRestart()
   }
 
@@ -344,8 +346,8 @@ export class Updater {
     if (this.status.state.kind === 'available') await this.download().catch(() => undefined)
   }
 
-  private moveFailed(message: string): void {
-    log.warn(`Could not move the app to /Applications: ${message}`)
+  private moveFailed(message: string, logged = message): void {
+    log.warn(`Could not move the app to /Applications: ${logged}`)
     this.dispatch({ type: 'move-failed', message })
   }
 
@@ -420,7 +422,8 @@ export class Updater {
           if (this.downloadActive) return
           this.errorEvents++
           const message = errorMessage(error)
-          log.warn(`${this.manual ? 'Manual' : 'Automatic'} update step failed: ${message}`)
+          const said = error instanceof SourcesFailed ? error.log : message
+          log.warn(`${this.manual ? 'Manual' : 'Automatic'} update step failed: ${said}`)
           this.dispatch({
             type: 'error',
             message,
@@ -596,7 +599,7 @@ export class Updater {
         const next = run.next()
         if (!next) {
           log.warn(`Could not download from ${source.id}: ${reason}; no source is left`)
-          throw stalled ? new Error(`The download made no progress for ${stallMs / 1000} s`) : error
+          throw stalled ? new Error(t('updater.stalled', { seconds: stallMs / 1000 })) : error
         }
         log.warn(`Could not download from ${source.id}: ${reason}; moving on to ${next.id}`)
       } finally {

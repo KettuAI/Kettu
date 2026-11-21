@@ -3,7 +3,8 @@
 
 import { Worker } from 'node:worker_threads'
 import workerPath from './worker?modulePath'
-import type { WorkerReply, WorkerRequest } from './protocol'
+import { t } from '../../i18n'
+import { WorkerError, type WorkerReply, type WorkerRequest } from './protocol'
 import type { ReaderEnv } from './reader'
 
 // Long enough for the user to read macOS's prompt and type their password.
@@ -46,7 +47,13 @@ export class SignInWorkers {
       const timer = setTimeout(
         () => {
           if (read) cancel()
-          else finish(() => reject(new Error('Reading the browsers took too long')))
+          else {
+            finish(() =>
+              reject(
+                new WorkerError(t('signIns.tookTooLong'), 'Reading the browsers took too long'),
+              ),
+            )
+          }
         },
         read ? READ_TIMEOUT_MS : LIST_TIMEOUT_MS,
       )
@@ -56,7 +63,14 @@ export class SignInWorkers {
       // Kept after the answer too: an error event nobody listens to would take main down.
       worker.on('error', (error) => finish(() => reject(error)))
       worker.on('exit', (code) =>
-        finish(() => reject(new Error(`The sign-ins worker stopped with code ${code}`))),
+        finish(() =>
+          reject(
+            new WorkerError(
+              t('signIns.workerStopped', { code: String(code) }),
+              `The sign-ins worker stopped with code ${code}`,
+            ),
+          ),
+        ),
       )
       worker.postMessage(request)
     })

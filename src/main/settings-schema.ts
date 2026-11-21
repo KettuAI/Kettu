@@ -63,6 +63,7 @@ import {
   type AgentId,
   type HarnessId,
 } from '@shared/thread'
+import { t } from './i18n'
 
 export const SETTINGS_VERSION = 1
 
@@ -1103,14 +1104,24 @@ function editedList<T extends { id: string; name: string }>(
   list: readonly T[],
   edit: ListEdit<T>,
   max: number,
-  kind: string,
+  kind: 'server' | 'skill',
 ): T[] {
   const next = applyListEdit(list, edit)
-  if (next.length > max) throw new SettingsError(`Kettu keeps at most ${max} ${kind}s`)
+  if (next.length > max) {
+    throw new SettingsError(
+      kind === 'server'
+        ? t('settings.tooManyServers', { max })
+        : t('settings.tooManySkills', { max }),
+    )
+  }
   const names = new Set<string>()
   for (const item of next) {
     if (names.has(item.name)) {
-      throw new SettingsError(`"${item.name}" repeats another ${kind}'s name`)
+      throw new SettingsError(
+        kind === 'server'
+          ? t('settings.repeatedServer', { name: item.name })
+          : t('settings.repeatedSkill', { name: item.name }),
+      )
     }
     names.add(item.name)
   }
@@ -1227,7 +1238,7 @@ export function agentName(value: unknown): string {
   const name = typeof value === 'string' ? value.trim() : ''
   const control = [...name].some((char) => char.charCodeAt(0) < 0x20)
   if (name.length === 0 || [...name].length > AGENT_NAME_CHARS || control) {
-    throw new SettingsError(`An agent's name must be 1 to ${AGENT_NAME_CHARS} characters`)
+    throw new SettingsError(t('settings.agentName', { max: AGENT_NAME_CHARS }))
   }
   return name
 }

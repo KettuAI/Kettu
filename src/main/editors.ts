@@ -324,8 +324,7 @@ export class Editors {
       : await dialog.showOpenDialog(options)
     const [picked] = result.filePaths
     if (result.canceled || !picked) return null
-    if (!(await this.isApp(picked)))
-      throw new Error(`"${picked}" is not an app that can be started`)
+    if (!(await this.isApp(picked))) throw new Error(t('editors.notApp', { path: picked }))
 
     const key = await this.canonical(picked)
     let editor: Editor | null = null
@@ -446,7 +445,8 @@ export class Editors {
       throw new Error(`A path to open must be a string of 1 to ${PATH_MAX_CHARS} characters`)
     }
     if (!path.isAbsolute(value)) throw new Error('A path to open must be absolute')
-    if ((await this.kind(value)) === null) throw new Error(`"${value}" is not a file or folder`)
+    if ((await this.kind(value)) === null)
+      throw new Error(t('editors.notFileOrFolder', { path: value }))
     return value
   }
 
@@ -455,7 +455,9 @@ export class Editors {
       await this.launch(editor.program, file)
     } catch (error) {
       log.warn(`Could not open ${file} in ${editor.program}: ${messageOf(error)}`)
-      throw new Error(`Could not open it in ${editor.name}: ${messageOf(error)}`, { cause: error })
+      throw new Error(t('editors.openFailed', { editor: editor.name, reason: messageOf(error) }), {
+        cause: error,
+      })
     }
   }
 

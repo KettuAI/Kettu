@@ -9,8 +9,12 @@ import zhCN from '@shared/locales/zh-CN/main.json'
 import { kettuTool as kettuToolEn } from '@shared/locales/en/session.json'
 import { kettuTool as kettuToolZhCN } from '@shared/locales/zh-CN/session.json'
 
+// Its own instance, so the agent host's catalog, which some modules main shares code with load
+// onto the global one, never replaces these.
+const i18n = i18next.createInstance()
+
 // English until the settings are read, which is also what the tests see.
-void i18next.init(
+void i18n.init(
   i18nOptions(
     'en',
     {
@@ -22,10 +26,12 @@ void i18next.init(
   ),
 )
 
-export const t = i18next.getFixedT(null, 'main')
-export const islandT = i18next.getFixedT(null, 'island')
+export const t = i18n.getFixedT(null, 'main')
+/** The same words in English, for logs. */
+export const tEnglish = i18n.getFixedT('en', 'main')
+export const islandT = i18n.getFixedT(null, 'island')
 /** Kettu's own MCP tools by what they do, as the thread names them. */
-export const kettuToolT = i18next.getFixedT(null, 'session', 'kettuTool')
+export const kettuToolT = i18n.getFixedT(null, 'session', 'kettuTool')
 
 /** The island helper's own words in the current language, flat, as `status.running`. */
 export function islandHelperStrings(): Record<string, string> {
@@ -39,15 +45,15 @@ export function islandHelperStrings(): Record<string, string> {
   }
   // English first, so a word the language lacks falls back as `t()` does.
   walk(islandEn.helper, '')
-  const bundle = i18next.getResourceBundle(i18next.language, 'island') as { helper?: unknown }
+  const bundle = i18n.getResourceBundle(i18n.language, 'island') as { helper?: unknown }
   walk(bundle?.helper, '')
   return flat
 }
 
 export function setLocale(locale: Locale): void {
-  if (i18next.language !== locale) void i18next.changeLanguage(locale)
+  if (i18n.language !== locale) void i18n.changeLanguage(locale)
 }
 
 export function locale(): Locale {
-  return i18next.language as Locale
+  return i18n.language as Locale
 }

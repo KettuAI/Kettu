@@ -27,6 +27,7 @@ import {
   type VersionCheck,
   type VersionFile,
 } from '@shared/market-publish'
+import { t } from './i18n'
 
 const TIMEOUT_MS = 120_000
 const MAX_MESSAGE = 500
@@ -59,11 +60,15 @@ function record(value: unknown): Fields | null {
     : null
 }
 
-function unexpected(what: string): MarketApiError {
+/** What an answer the Marketplace gave was meant to hold, which the failure names. */
+type Answered =
+  'publisher' | 'listing' | 'version' | 'versionFiles' | 'mine' | 'directory' | 'request'
+
+function unexpected(what: Answered): MarketApiError {
   return new MarketApiError({
     code: 'unexpected',
     status: null,
-    message: `The Kettu Marketplace answered ${what} in a form not understood`,
+    message: t('market.unexpected', { what: t(`market.answered.${what}`) }),
   })
 }
 
@@ -89,7 +94,7 @@ function parsePublisher(value: unknown): MarketPublisher {
   const fields = record(value)
   const handle = text(fields?.handle)
   const since = text(fields?.since)
-  if (handle === null || !HANDLE.test(handle) || since === null) throw unexpected('the publisher')
+  if (handle === null || !HANDLE.test(handle) || since === null) throw unexpected('publisher')
   return { handle, since }
 }
 
@@ -112,7 +117,7 @@ function parseServer(value: unknown): { server?: Record<string, unknown> } {
 }
 
 /** The fields every listing has, mine or another account's. */
-function listingBase(value: unknown, what: string) {
+function listingBase(value: unknown, what: Answered) {
   const fields = record(value)
   const id = text(fields?.id)
   const handle = text(fields?.handle)
@@ -172,7 +177,7 @@ function parseVersion(value: unknown): MineVersion {
   const fields = record(value)
   const version = text(fields?.version)
   const publishedAt = text(fields?.publishedAt)
-  if (!fields || version === null || publishedAt === null) throw unexpected('a version')
+  if (!fields || version === null || publishedAt === null) throw unexpected('version')
   return {
     version,
     notes: text(fields.notes) ?? '',
@@ -187,7 +192,7 @@ function parseVersion(value: unknown): MineVersion {
 }
 
 export function parseMineListing(value: unknown): MineListing {
-  const { fields, base } = listingBase(value, 'a listing')
+  const { fields, base } = listingBase(value, 'listing')
   const installs = record(fields.installs)
   const takenDown = record(fields.takenDown)
   const days = Array.isArray(installs?.days) ? installs.days.filter(isCount) : []
@@ -209,9 +214,9 @@ export function parseMineListing(value: unknown): MineListing {
 }
 
 function parseListing(value: unknown): MarketListing {
-  const { fields, base } = listingBase(value, 'a listing')
+  const { fields, base } = listingBase(value, 'listing')
   const version = text(fields.version)
-  if (version === null) throw unexpected('a listing')
+  if (version === null) throw unexpected('listing')
   return {
     ...base,
     version,
@@ -227,13 +232,13 @@ function parseListing(value: unknown): MarketListing {
 }
 
 function parseVersionFiles(body: Fields | null): MarketVersionFiles {
-  if (!Array.isArray(body?.files)) throw unexpected('the version’s files')
+  if (!Array.isArray(body?.files)) throw unexpected('versionFiles')
   const files: VersionFile[] = body.files.map((item: unknown) => {
     const fields = record(item)
     const path = text(fields?.path)
     const sha256 = text(fields?.sha256)
     if (path === null || sha256 === null || !isCount(fields?.size)) {
-      throw unexpected('the version’s files')
+      throw unexpected('versionFiles')
     }
     return { path, size: fields.size, sha256 }
   })
@@ -254,7 +259,8 @@ function parseProblems(value: unknown): MarketProblem[] | undefined {
 /** The service's error body, `{ error: <code>, message, ... }`, as a failure. */
 function failureOf(status: number, body: Fields | null): MarketFailure {
   const code = text(body?.error) ?? (status === 404 ? 'not_found' : 'failed')
-  const message = text(body?.message)?.slice(0, MAX_MESSAGE) ?? `Kettu answered ${status}`
+  const message =
+    text(body?.message)?.slice(0, MAX_MESSAGE) ?? t('market.answeredStatus', { status })
   const problems = parseProblems(body?.problems)
   return {
     code,
@@ -342,7 +348,7 @@ export class MarketApi {
   async mine(): Promise<MarketMine> {
     const body = await this.json('/mine', { method: 'GET' })
     const storage = record(body?.storage)
-    if (!Array.isArray(body?.listings) || !storage) throw unexpected('your listings')
+    if (!Array.isArray(body?.listings) || !storage) throw unexpected('mine')
     return {
       publisher: body.publisher == null ? null : parsePublisher(body.publisher),
       listings: body.listings.map(parseMineListing),
@@ -364,7 +370,7 @@ export class MarketApi {
     if (query.cursor) params.set('cursor', query.cursor)
     const search = params.toString()
     const body = await this.json(`/directory${search ? `?${search}` : ''}`, { method: 'GET' })
-    if (!Array.isArray(body?.items)) throw unexpected('the directory')
+    if (!Array.isArray(body?.items)) throw unexpected('directory')
     return { items: body.items.map(parseListing), next: text(body.next) }
   }
 
@@ -422,7 +428,7 @@ export class MarketApi {
       throw new MarketApiError({
         code: 'network',
         status: null,
-        message: `Could not reach the Kettu Marketplace: ${(error as Error).message}`,
+        message: t('market.unreachable', { reason: (error as Error).message }),
       })
     }
   }
@@ -463,7 +469,7 @@ export class MarketApi {
       if (!body) throw new Error('not an object')
       return body
     } catch {
-      throw unexpected('the request')
+      throw unexpected('request')
     }
   }
 }
@@ -559,7 +565,7 @@ export async function runMarketCall(
         error: {
           code: 'signed_out',
           status: null,
-          message: 'Not signed in to a Kettu account, or Kettu’s services are off.',
+          message: t('market.signedOut'),
         },
       }
     }

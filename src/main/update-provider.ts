@@ -11,6 +11,7 @@ import type {
 } from 'electron-updater'
 import type { ProviderRuntimeOptions } from 'electron-updater/out/providers/Provider'
 import { parse } from 'yaml'
+import { t, tEnglish } from './i18n'
 import type { Logger } from './log'
 import { compareVersions, errorMessage } from './update-state'
 import {
@@ -51,12 +52,37 @@ export interface FeedDeps {
 
 /** Why one source could not answer a check: it was not reached, or what it gave was not usable. */
 class SourceError extends Error {
+  /** The message in English, for logs; `message` is in the user's language. */
+  readonly log: string
+
   constructor(
     message: string,
     readonly reached: boolean,
+    log = message,
   ) {
     super(message)
+    this.log = log
   }
+}
+
+type SourceErrorKey =
+  | 'updates.notYaml'
+  | 'updates.noVersion'
+  | 'updates.notSigned'
+  | 'updates.versionMismatch'
+  | 'updates.noFiles'
+  | 'updates.tooLarge'
+  | 'updates.noAnswer'
+
+type Say = (key: string, params?: Record<string, string | number>) => string
+
+/** A source's failure in the user's language, with the same words in English for the log. */
+function sourceError(
+  key: SourceErrorKey,
+  params: Record<string, string | number>,
+  reached: boolean,
+): SourceError {
+  return new SourceError((t as Say)(key, params), reached, (tEnglish as Say)(key, params))
 }
 
 /** Whether electron-updater's executor failed on an HTTP status, which its HttpError carries. */
@@ -76,11 +102,11 @@ function readUpdateInfo(file: Buffer, name: string): UpdateInfo {
   try {
     info = parse(file.toString('utf8'))
   } catch (error) {
-    throw new SourceError(`${name} is not YAML: ${errorMessage(error)}`, true)
+    throw sourceError('updates.notYaml', { name, reason: errorMessage(error) }, true)
   }
   const version = (info as Partial<UpdateInfo> | null)?.version
   if (typeof version !== 'string' || !RELEASE_VERSION.test(version)) {
-    throw new SourceError(`${name} names no release version`, true)
+    throw sourceError('updates.noVersion', { name }, true)
   }
   return info as UpdateInfo
 }
@@ -151,7 +177,7 @@ export function sourcesProvider(
             error instanceof SourceError ? error : new SourceError(errorMessage(error), true)
           const next = sources[index + 1]
           log.warn(
-            `Could not check on ${source.id}: ${failure.message}` +
+            `Could not check on ${source.id}: ${failure.log}` +
               (next ? `; trying ${next.id}` : '; no source is left'),
           )
         }
@@ -161,14 +187,15 @@ export function sourcesProvider(
       if (stale) return stale
       const githubOnly = sources.length === 1 && sources[0] === GITHUB_SOURCE
       throw new SourcesFailed(
-        failure?.message ?? 'No source to check',
+        failure?.message ?? t('updates.noSource'),
         githubOnly && !failure?.reached,
+        failure?.log ?? tEnglish('updates.noSource'),
       )
     }
 
     override resolveFiles(info: UpdateInfo): ResolvedUpdateFileInfo[] {
       const source = deps.downloadSource()
-      if (!source) throw new Error('Check for updates before downloading one')
+      if (!source) throw new Error(t('updates.checkFirst'))
       return info.files.map((file) => ({
         url: new URL(releaseFileUrl(source, info.version, file.url)),
         info: file,
@@ -222,15 +249,15 @@ export function sourcesProvider(
       if (!verifyUpdateFile(name, file, signature)) {
         file = await this.fetchSmall(releaseFileUrl(source, version, name), timeoutMs)
         if (!verifyUpdateFile(name, file, signature)) {
-          throw new SourceError(`${name} is not signed with Kettu's release key`, true)
+          throw sourceError('updates.notSigned', { name }, true)
         }
       }
       const info = readUpdateInfo(file, name)
       if (info.version !== version) {
-        throw new SourceError(`${name} of ${version} names ${info.version}`, true)
+        throw sourceError('updates.versionMismatch', { name, version, named: info.version }, true)
       }
       if (!Array.isArray(info.files) || info.files.length === 0 || !info.files.every(isFileInfo)) {
-        throw new SourceError(`${name} lists no files with their checksums`, true)
+        throw sourceError('updates.noFiles', { name }, true)
       }
       return info
     }
@@ -243,11 +270,11 @@ export function sourcesProvider(
           headers: { 'User-Agent': deps.userAgent },
           cancellationToken: token,
         })
-        if (bytes.length > MAX_SMALL_FILE) throw new SourceError(`${url} is too large`, true)
+        if (bytes.length > MAX_SMALL_FILE) throw sourceError('updates.tooLarge', { url }, true)
         return bytes
       } catch (error) {
         if (token.cancelled) {
-          throw new SourceError(`no answer from ${url} within ${timeoutMs / 1000} s`, false)
+          throw sourceError('updates.noAnswer', { url, seconds: timeoutMs / 1000 }, false)
         }
         if (error instanceof SourceError) throw error
         // An HTTP status, such as 404 for a release from before signing, means it was reached.

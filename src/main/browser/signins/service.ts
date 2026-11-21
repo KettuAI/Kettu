@@ -12,8 +12,9 @@ import type {
   SignInSource,
 } from '@shared/signins'
 import type { Logger } from '../../log'
+import { t } from '../../i18n'
 import type { BroughtStore } from './brought'
-import type { WorkerRequest } from './protocol'
+import { readLog, type WorkerRequest } from './protocol'
 import type { IndexEntry, ReadResult, SourceListing } from './reader'
 import { bringable, isGoogleSite, siteOf } from './sites'
 import {
@@ -73,7 +74,7 @@ export class SignIns {
   /** A profile's sites; throws for a profile this computer does not have. */
   async sites(choice: SignInChoice): Promise<SignInSite[]> {
     const sites = (await this.deps.run({ op: 'sites', choice })) as SignInSite[] | null
-    if (!sites) throw new Error('That browser profile is not on this computer')
+    if (!sites) throw new Error(t('signIns.noProfile'))
     return sites
   }
 
@@ -99,7 +100,7 @@ export class SignIns {
       })) as ReadResult
     } catch (error) {
       if ((error as Error).message === 'cancelled') return { ok: false, reason: 'cancelled' }
-      this.deps.log.warn(`Could not read the sign-ins: ${(error as Error).message}`)
+      this.deps.log.warn(`Could not read the sign-ins: ${readLog(error)}`)
       return { ok: false, reason: 'unreadable' }
     }
     if (!result.ok) return result
@@ -198,7 +199,7 @@ export class SignIns {
       this.index = { at: this.now(), sites }
       return sites
     } catch (error) {
-      this.deps.log.warn(`Could not read the browsers' sites: ${(error as Error).message}`)
+      this.deps.log.warn(`Could not read the browsers' sites: ${readLog(error)}`)
       return this.index?.sites ?? new Map<string, IndexEntry>()
     }
   }
