@@ -374,6 +374,8 @@ export class DshConnection implements AgentConnection {
 
   async initialize(): Promise<AgentInit> {
     const entry = this.entry
+    // The user's own dsh runs without an entry, and said its version as it was detected.
+    this.version = this.context.cliVersion ?? null
     if (entry) {
       try {
         const manifest = JSON.parse(

@@ -13,6 +13,7 @@ export const DEEPSEEK: AgentDefinition = {
   launch: {
     kind: 'package',
     package: '@deepseek-ai/dsh',
+    command: 'dsh',
     fromVendor: true,
     updates: '~0.2.2-rc.2',
   },

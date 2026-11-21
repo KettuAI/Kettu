@@ -119,11 +119,19 @@ describe('adding the agents the first start found', () => {
     await store.flush()
   })
 
-  it('adds only harnesses that run the user program', async () => {
+  it('adds every harness whose own program was found, npm packages included', async () => {
     const store = await SettingsStore.load(dir)
-    const next = store.firstStart(['gemini', 'opencode'])
-    expect(next.agents.gemini).toBeUndefined()
+    const next = store.firstStart(['deepseek', 'gemini', 'opencode'])
+    expect(next.agents.deepseek).toEqual({ enabled: true })
+    expect(next.agents.gemini).toEqual({ enabled: true })
     expect(next.agents.opencode).toEqual({ enabled: true })
+    expect(next.general.defaultAgent).toBe('opencode')
+    await store.flush()
+  })
+
+  it('never adds the development agent, which needs no adding', async () => {
+    const store = await SettingsStore.load(dir)
+    expect(store.firstStart(['fake-agent']).agents['fake-agent']).toBeUndefined()
     await store.flush()
   })
 

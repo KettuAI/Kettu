@@ -7,6 +7,7 @@ export const DROID: AgentDefinition = {
   launch: {
     kind: 'package',
     package: 'droid',
+    command: 'droid',
     args: ['exec', '--output-format', 'acp-daemon'],
     // The agent would update its own package behind the pin Kettu records.
     env: { DROID_DISABLE_AUTO_UPDATE: 'true', FACTORY_DROID_AUTO_UPDATE_ENABLED: 'false' },

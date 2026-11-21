@@ -341,6 +341,14 @@ export type InstalledCliProblem =
   | { kind: 'failed'; reason: string } // its version could not be read
   | { kind: 'too-old'; minimum: string }
 
+/**
+ * Why the user's own program of a harness Kettu also installs does not run: its version is outside
+ * `range`, the npm range of versions Kettu runs; Kettu's compatibility manifest says it does not
+ * work; or it cannot be run or asked its version (`detail`, in the user's terms).
+ */
+export type UnusedProgramReason =
+  { kind: 'range'; range: string } | { kind: 'manifest' } | { kind: 'unusable'; detail: string }
+
 /** A way Kettu can install a harness's program, such as OpenCode, in the order it prefers them. */
 export interface AgentInstallMethod {
   id: 'brew' | 'npm' | 'script' | 'winget' | 'archive'
@@ -411,6 +419,19 @@ export interface AgentStatus {
   launchCommand: string // as shown in Settings › Agents, quoted for the platform
   binaryOverride: string | null // the program picked in Settings, if any
   binaryCommand: string | null // the command a binary agent's launch runs; null for the others
+  // The harness's program as its page names it, which one picked in Settings replaces; `onPath`
+  // when Kettu looks for the user's own on PATH first. Null for a harness that runs none of its
+  // own, and absent on older hosts.
+  program?: { command: string; onPath: boolean } | null
+  // The user's own program of a harness Kettu installs too, found but not run, and why: Kettu's
+  // own install runs instead, or Install is offered. Null when there is none, and absent on older
+  // hosts.
+  unusedProgram?: {
+    command: string
+    path: string
+    version: string | null
+    why: UnusedProgramReason
+  } | null
   // Where that program was found: on PATH, the one picked in Settings or Kettu's install; null
   // while none was, and for the others.
   binaryPath?: string | null

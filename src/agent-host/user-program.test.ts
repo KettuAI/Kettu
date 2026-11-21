@@ -40,6 +40,19 @@ describe('the user program a first start counts', () => {
     expect(userProgramFound(binary, found, KETTU)).toBe(true)
   })
 
+  it('counts a package harness program found at a version Kettu does not run', () => {
+    const passedOver: Detection = {
+      state: 'available',
+      spec: spec('/usr/bin/node'),
+      adapter: null,
+      unused: {
+        installed: { ...cli(), path: '/usr/local/bin/dsh', version: '0.3.0' },
+        why: { kind: 'range', range: '~0.2.2-rc.2' },
+      },
+    }
+    expect(userProgramFound(adapter, passedOver, KETTU)).toBe(true)
+  })
+
   it('does not count a binary Kettu installed itself', () => {
     const installed: Detection = {
       state: 'available',

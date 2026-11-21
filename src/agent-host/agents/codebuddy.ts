@@ -9,6 +9,7 @@ export const CODEBUDDY: AgentDefinition = {
   launch: {
     kind: 'package',
     package: '@tencent-ai/codebuddy-code',
+    command: 'codebuddy',
     args: ['--acp'],
   },
   install: { hint: 'detect.hint.node', url: 'https://nodejs.org/en/download' },

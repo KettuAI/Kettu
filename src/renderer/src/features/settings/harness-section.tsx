@@ -429,7 +429,7 @@ export function InstallDialog({
               </LinkButton>
             </span>
           )}
-          {status.binaryCommand && (
+          {(status.program ?? status.binaryCommand) && (
             <ChooseElsewhere harness={status.harnessId} onChosen={() => onOpenChange(false)} />
           )}
           <ControlError error={error} />
@@ -1377,7 +1377,7 @@ function InstallNotice({ status, kind }: { status: AgentStatus; kind: InstallKin
         </SetButton>
       }
       more={
-        status.binaryCommand && (
+        (status.program ?? status.binaryCommand) && (
           <span className="k-end">
             <button
               type="button"
@@ -1399,21 +1399,60 @@ function InstallNotice({ status, kind }: { status: AgentStatus; kind: InstallKin
   )
 }
 
+/** The versions an npm range covers, as the page says them: `~0.2.2` is 0.2.x. */
+function rangeText(t: SettingsT, range: string): string {
+  const tilde = /^~(\d+)\.(\d+)\.\S+$/.exec(range)
+  if (tilde) return `${tilde[1]}.${tilde[2]}.x`
+  const from = /^>=\s*(\S+)$/.exec(range)
+  return from ? t('harnesses.unused.from', { version: from[1] }) : range
+}
+
+/** Why the user's own program found for the harness does not run, and what runs instead. */
+function unusedNote(t: SettingsT, status: AgentStatus): string | null {
+  const unused = status.unusedProgram
+  if (!unused) return null
+  const { command, version } = unused
+  const why =
+    unused.why.kind === 'range'
+      ? t('harnesses.unused.range', {
+          command,
+          version: version ?? '',
+          range: rangeText(t, unused.why.range),
+        })
+      : unused.why.kind === 'manifest'
+        ? t('harnesses.unused.manifest', { command, version: version ?? '' })
+        : unused.why.detail
+  const pkg = status.package
+  const instead = pkg?.installed
+    ? t('harnesses.unused.kettuRuns', { version: pkg.version })
+    : t('harnesses.unused.install', { name: status.harnessName })
+  return `${why} ${instead}`
+}
+
 /**
- * The program that runs: the user's own CLI or binary, with its version, how it was installed, and
- * another one picked in a dialog for a harness that runs a binary.
+ * The program that runs: the user's own CLI or binary, with its version and how it was installed,
+ * one picked in a dialog, or for a harness Kettu installs, its own copy and why the user's own
+ * program found beside it does not run.
  */
 function ProgramGroup({ status }: { status: AgentStatus }) {
   const { api, useSettingsStore } = useHostScope()
   const { t } = useTranslation('settings')
   const override = useSettingsStore((s) => s.settings.agents[status.harnessId]?.binaryPath)
   const [act, , error] = useAction()
+  // Older hosts name only a binary harness's program.
+  const program =
+    status.program ??
+    (status.binaryCommand ? { command: status.binaryCommand, onPath: true } : null)
   const installed = status.cli?.installed ?? null
-  const command = status.cli?.command ?? status.binaryCommand
+  const command = status.cli?.command ?? program?.command
   if (!command) return null
-  const version = harnessVersion(status)
+  const unused = status.unusedProgram ?? null
+  // Kettu's own copy runs, since none of the user's runs in its place.
+  const kettuInstalls = (!!status.package && !status.package.isSdk) || program?.onPath === false
+  const kettuCopy = kettuInstalls && !status.cli && !override
+  const version = unused && kettuCopy ? unused.version : harnessVersion(status)
   const method = status.cli?.method ?? null
-  const path = override ?? installed?.path ?? status.binaryPath ?? null
+  const path = override ?? installed?.path ?? status.binaryPath ?? unused?.path ?? null
   const problem = installed?.problem
   const note = installed?.variable
     ? t('agents.setBy', { env: installed.variable })
@@ -1421,9 +1460,11 @@ function ProgramGroup({ status }: { status: AgentStatus }) {
       ? t('agents.cli.unsupported', { command })
       : problem?.kind === 'failed'
         ? problem.reason
-        : !path
-          ? t('agents.cli.notFound', { command })
-          : null
+        : kettuCopy && unused
+          ? unusedNote(t, status)
+          : !path && program?.onPath !== false
+            ? t('agents.cli.notFound', { command })
+            : null
   return (
     <section className="k-group" aria-label={t('agents.program')}>
       <GroupLabel group={{ id: 'program', label: t('agents.program') }} />
@@ -1431,16 +1472,20 @@ function ProgramGroup({ status }: { status: AgentStatus }) {
         <ConfigFrame
           name={t('harnesses.programName', { command })}
           description={
-            method
-              ? t('harnesses.installedWith', { method: methodName(t, method) })
-              : status.package?.isSdk
-                ? t('harnesses.programSdk')
-                : status.release
-                  ? t('harnesses.programKettu')
-                  : t('harnesses.programOwn')
+            override
+              ? t('harnesses.programChosen')
+              : method
+                ? t('harnesses.installedWith', { method: methodName(t, method) })
+                : status.package?.isSdk
+                  ? t('harnesses.programSdk')
+                  : kettuCopy
+                    ? t(unused ? 'harnesses.programUnused' : 'harnesses.programKettuCopy')
+                    : status.release
+                      ? t('harnesses.programKettu')
+                      : t('harnesses.programOwn')
           }
           control={
-            status.binaryCommand && (
+            program && (
               <>
                 <ControlError error={error} />
                 {override && (
@@ -1471,7 +1516,8 @@ function ProgramGroup({ status }: { status: AgentStatus }) {
               {version && <span className="k-mono k-muted">{version}</span>}
             </PathLine>
           ) : (
-            <span className="k-muted">{t('agents.programOnPath', { command })}</span>
+            program?.onPath !== false &&
+            !kettuCopy && <span className="k-muted">{t('agents.programOnPath', { command })}</span>
           )}
           {note && (
             <span className="k-muted" data-selectable="">

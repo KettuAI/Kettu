@@ -2008,6 +2008,16 @@
     "programSdk": "Your own, which the SDK runs.",
     "programOwn": "Your own, which Kettu runs.",
     "programKettu": "Installed by Kettu, in Kettu’s data folder.",
+    "programChosen": "Picked by you, which Kettu runs.",
+    "programUnused": "Your own, which Kettu does not run.",
+    "programKettuCopy": "Kettu’s own copy runs.",
+    "unused": {
+      "range": "Your {{command}} {{version}} is outside {{range}}, the versions Kettu runs.",
+      "manifest": "Kettu’s checks say your {{command}} {{version}} does not work.",
+      "from": "{{version}} or later",
+      "kettuRuns": "Kettu’s own copy, {{version}}, runs instead.",
+      "install": "Install Kettu’s own copy to use {{name}}."
+    },
     "packageGroup": "Installed by Kettu",
     "sdkLine": "{{version}} · in Kettu’s data folder, without the CLI",
     "adapterLine": "{{version}} · in Kettu’s data folder",
