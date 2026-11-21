@@ -14,7 +14,9 @@
     "searchField": "搜索…",
     "projects": "项目",
     "openProject": "打开项目…",
-    "resize": "调整侧边栏宽度"
+    "resize": "调整侧边栏宽度",
+    "hidePage": "从侧边栏隐藏",
+    "customize": "自定义侧边栏…"
   },
   "search": {
     "placeholder": "搜索会话、产物、定时任务等",
@@ -41,6 +43,7 @@
     "action": {
       "newSession": "新建会话",
       "openProject": "打开项目…",
+      "openOverview": "打开总览",
       "openUsage": "打开用量",
       "openArtifacts": "打开产物",
       "openRoutines": "打开定时任务",

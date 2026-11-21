@@ -69,6 +69,8 @@ export interface SettingsFile {
     reduceMotion: 'system' | 'always'
     zoom: ZoomLevel // Chromium's page zoom of the whole window
     sidebarHover: boolean // pointing at the toggle of a collapsed sidebar shows it over the page
+    sidebarOrder: SidebarPage[] // every page once, as the sidebar lists them; replaced whole
+    sidebarHidden: SidebarPage[] // pages the sidebar leaves out; replaced whole
     fonts: UserFonts // replaced whole; a role left out keeps the theme's face
   }
   notifications: {
@@ -158,6 +160,30 @@ export type OpenLinksIn = LinkDestination | 'ask'
 export const MAX_FONT_FAMILY_CHARS = 100
 
 /** The text the user may draw in a face of their own: the interface, replies and code. */
+/** The pages under New session in the sidebar, in their default order. */
+export const SIDEBAR_PAGES = ['overview', 'artifacts', 'routines', 'marketplace', 'usage'] as const
+export type SidebarPage = (typeof SIDEBAR_PAGES)[number]
+
+export function isSidebarPage(value: unknown): value is SidebarPage {
+  return (SIDEBAR_PAGES as readonly unknown[]).includes(value)
+}
+
+/** The known pages of a stored list, each once; anything else, such as a later version's, dropped. */
+export function readSidebarPages(value: unknown): SidebarPage[] {
+  return Array.isArray(value) ? [...new Set<unknown>(value)].filter(isSidebarPage) : []
+}
+
+/** A stored order, with each page it lacks put back after the page it follows by default. */
+export function readSidebarOrder(value: unknown): SidebarPage[] {
+  const order = readSidebarPages(value)
+  SIDEBAR_PAGES.forEach((page, i) => {
+    if (order.includes(page)) return
+    const before = i === 0 ? -1 : order.indexOf(SIDEBAR_PAGES[i - 1]!)
+    order.splice(before + 1, 0, page)
+  })
+  return order
+}
+
 export const USER_FONT_ROLES = ['ui', 'prose', 'code'] as const
 export type UserFontRole = (typeof USER_FONT_ROLES)[number]
 /** A face installed on the computer by role, each drawn before the theme's, which fills in. */
@@ -258,6 +284,8 @@ export const DEFAULT_SETTINGS: SettingsFile = {
     reduceMotion: 'system',
     zoom: 1.1,
     sidebarHover: true,
+    sidebarOrder: [...SIDEBAR_PAGES],
+    sidebarHidden: [],
     fonts: {},
   },
   notifications: {

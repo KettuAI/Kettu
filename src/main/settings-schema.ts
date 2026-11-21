@@ -11,10 +11,14 @@ import {
   nextAgentColor,
   isFontFamilyName,
   isLinkSite,
+  isSidebarPage,
+  readSidebarOrder,
+  readSidebarPages,
   LIGHT_MODEL_CHARS,
   MAX_LINK_SITES,
   NEW_SESSION_LISTS,
   ONBOARDING_STEPS,
+  SIDEBAR_PAGES,
   type AddedAgent,
   type HostSettings,
   type ListEdit,
@@ -175,6 +179,25 @@ const isUserFonts: Check = (value, path) => {
   return null
 }
 
+const PAGES_LIST = SIDEBAR_PAGES.map((page) => JSON.stringify(page)).join(', ')
+
+/** Pages of the sidebar, each at most once. */
+const isSidebarPages: Check = (value, path) =>
+  Array.isArray(value) && value.every(isSidebarPage) && new Set(value).size === value.length
+    ? null
+    : `"${path}" must list pages of ${PAGES_LIST}, each at most once`
+
+/** The sidebar's order: every page once. */
+const isSidebarOrder: Check = (value, path) =>
+  isSidebarPages(value, path) === null && (value as unknown[]).length === SIDEBAR_PAGES.length
+    ? null
+    : `"${path}" must list each of ${PAGES_LIST} once`
+
+// Stored values read leniently, so a file a later version wrote keeps what this one knows.
+const LENIENT_FIELDS: Partial<Record<FieldSection, Record<string, (value: unknown) => unknown>>> = {
+  appearance: { sidebarOrder: readSidebarOrder, sidebarHidden: readSidebarPages },
+}
+
 /** Null, or an absolute path on this computer that has no NUL. */
 function isWorktreeRoot(value: unknown, path: string): string | null {
   if (value === null) return null
@@ -212,6 +235,8 @@ const SECTION_FIELDS = {
     reduceMotion: oneOf('system', 'always'),
     zoom: oneOf(...ZOOM_LEVELS),
     sidebarHover: isBoolean,
+    sidebarOrder: isSidebarOrder,
+    sidebarHidden: isSidebarPages,
     fonts: isUserFonts,
   },
   notifications: {
@@ -1349,6 +1374,11 @@ export function parseSettingsFile(raw: unknown): LoadedSettings {
     const target = settings[section] as Record<string, unknown>
     for (const [key, check] of Object.entries(fields)) {
       if (!(key in value)) continue
+      const lenient = LENIENT_FIELDS[section]?.[key]
+      if (lenient && Array.isArray(value[key])) {
+        target[key] = lenient(value[key])
+        continue
+      }
       const problem = check(value[key], `${section}.${key}`)
       if (problem) problems.push(problem)
       else target[key] = value[key]

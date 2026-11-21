@@ -11,6 +11,7 @@ export type SearchKind =
 export type SearchAction =
   | 'newSession'
   | 'openProject'
+  | 'openOverview'
   | 'openUsage'
   | 'openArtifacts'
   | 'openRoutines'
@@ -23,6 +24,7 @@ export type SearchAction =
 export const SEARCH_ACTIONS: readonly SearchAction[] = [
   'newSession',
   'openProject',
+  'openOverview',
   'openUsage',
   'openArtifacts',
   'openRoutines',

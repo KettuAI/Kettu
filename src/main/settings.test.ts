@@ -635,3 +635,96 @@ describe('the fonts the user picks', () => {
     expect(client).toEqual({ appearance: { fonts: { code: 'Menlo' } } })
   })
 })
+
+describe('the pages the sidebar lists', () => {
+  const ALL = ['overview', 'artifacts', 'routines', 'marketplace', 'usage']
+
+  it('shows every page in its default order until the user changes them', async () => {
+    const { appearance } = (await SettingsStore.load(dir)).get()
+    expect(appearance.sidebarOrder).toEqual(ALL)
+    expect(appearance.sidebarHidden).toEqual([])
+  })
+
+  it('keeps a stored order and hidden pages on load', async () => {
+    const order = ['usage', 'marketplace', 'overview', 'routines', 'artifacts']
+    await save({ version: 1, appearance: { sidebarOrder: order, sidebarHidden: ['usage'] } })
+    const { appearance } = (await SettingsStore.load(dir)).get()
+    expect(appearance.sidebarOrder).toEqual(order)
+    expect(appearance.sidebarHidden).toEqual(['usage'])
+  })
+
+  it('drops unknown and repeated pages and puts a missing one at its default place', async () => {
+    await save({
+      version: 1,
+      appearance: {
+        sidebarOrder: ['usage', 'later-page', 'overview', 'usage', 7, 'routines', 'marketplace'],
+        sidebarHidden: ['routines', 'later-page', 'routines', null],
+      },
+    })
+    const { appearance } = (await SettingsStore.load(dir)).get()
+    expect(appearance.sidebarOrder).toEqual([
+      'usage',
+      'overview',
+      'artifacts',
+      'routines',
+      'marketplace',
+    ])
+    expect(appearance.sidebarHidden).toEqual(['routines'])
+  })
+
+  it('places pages missing before every kept one at the start', async () => {
+    await save({ version: 1, appearance: { sidebarOrder: ['marketplace', 'usage'] } })
+    expect((await SettingsStore.load(dir)).get().appearance.sidebarOrder).toEqual(ALL)
+  })
+
+  it('goes back to the defaults for a value that is not a list', async () => {
+    for (const bad of ['usage', { usage: true }, null, 3]) {
+      await save({ version: 1, appearance: { sidebarOrder: bad, sidebarHidden: bad } })
+      const { appearance } = (await SettingsStore.load(dir)).get()
+      expect(appearance.sidebarOrder).toEqual(ALL)
+      expect(appearance.sidebarHidden).toEqual([])
+    }
+  })
+
+  it('takes an order of every page once and hidden pages in a change', () => {
+    const order = ['routines', 'overview', 'usage', 'artifacts', 'marketplace']
+    expect(
+      validateSettingsPatch({ appearance: { sidebarOrder: order, sidebarHidden: ['overview'] } }),
+    ).toEqual({ appearance: { sidebarOrder: order, sidebarHidden: ['overview'] } })
+    expect(validateSettingsPatch({ appearance: { sidebarHidden: ALL } })).toEqual({
+      appearance: { sidebarHidden: ALL },
+    })
+    expect(validateSettingsPatch({ appearance: { sidebarHidden: [] } })).toEqual({
+      appearance: { sidebarHidden: [] },
+    })
+  })
+
+  it('refuses an order that leaves out, repeats or adds a page', () => {
+    for (const bad of [
+      ['overview', 'artifacts', 'routines', 'marketplace'],
+      ['overview', 'artifacts', 'routines', 'marketplace', 'usage', 'usage'],
+      ['overview', 'artifacts', 'routines', 'marketplace', 'newSession'],
+      ['overview', 'artifacts', 'routines', 'marketplace', 'usage', 'later-page'],
+      'overview',
+      null,
+    ]) {
+      expect(() => validateSettingsPatch({ appearance: { sidebarOrder: bad } })).toThrow()
+    }
+  })
+
+  it('refuses hidden pages that repeat or name what the sidebar cannot hide', () => {
+    for (const bad of [['usage', 'usage'], ['newSession'], ['later-page'], [3], 'usage', null]) {
+      expect(() => validateSettingsPatch({ appearance: { sidebarHidden: bad } })).toThrow()
+    }
+  })
+
+  it('replaces each list whole in a change', () => {
+    const hidden = mergeSettings(DEFAULT_SETTINGS, {
+      appearance: { sidebarHidden: ['usage', 'overview'] },
+    })
+    expect(hidden.appearance.sidebarHidden).toEqual(['usage', 'overview'])
+    const shown = mergeSettings(hidden, { appearance: { sidebarHidden: ['overview'] } })
+    expect(shown.appearance.sidebarHidden).toEqual(['overview'])
+    expect(shown.appearance.sidebarOrder).toEqual(ALL)
+  })
+})

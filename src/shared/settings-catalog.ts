@@ -13,6 +13,7 @@ import {
   type UserFontRole,
   NEW_SESSION_LISTS,
   ZOOM_LEVELS,
+  type SidebarPage,
   type SettingsFile,
   type SettingsPatch,
 } from './settings'
@@ -178,6 +179,27 @@ function userFont(role: UserFontRole): CatalogEntry {
       if (value === '' || value === null) delete fonts[role]
       else fonts[role] = String(value)
       return { appearance: { fonts } }
+    },
+  }
+}
+
+/** Whether the sidebar lists a page; its place among the others is set in the list only. */
+function sidebarPage(page: SidebarPage): CatalogEntry {
+  return {
+    section: 'appearance',
+    row: `sidebar-${page}`,
+    group: 'appearance.groups.sidebar',
+    name: `appearance.sidebarPages.${page}`,
+    description: 'appearance.sidebarPages.description',
+    keywords: 'appearance.sidebarPages.keywords',
+    part: 'desktop',
+    access: 'change',
+    kind: 'switch',
+    options: ON_OFF,
+    get: (file) => !file.appearance.sidebarHidden.includes(page),
+    patch: (value, file) => {
+      const others = file.appearance.sidebarHidden.filter((hidden) => hidden !== page)
+      return { appearance: { sidebarHidden: value === true ? others : [...others, page] } }
     },
   }
 }
@@ -440,6 +462,11 @@ const ENTRIES = {
     access: 'change',
     ...flag('appearance', 'sidebarHover', (file) => file.appearance.sidebarHover),
   },
+  'appearance.sidebar-overview': sidebarPage('overview'),
+  'appearance.sidebar-artifacts': sidebarPage('artifacts'),
+  'appearance.sidebar-routines': sidebarPage('routines'),
+  'appearance.sidebar-marketplace': sidebarPage('marketplace'),
+  'appearance.sidebar-usage': sidebarPage('usage'),
   'appearance.reduce-motion': {
     section: 'appearance',
     row: 'reduce-motion',

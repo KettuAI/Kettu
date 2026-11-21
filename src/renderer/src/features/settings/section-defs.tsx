@@ -49,6 +49,7 @@ import { useWebHostStore } from '@renderer/stores/web-host'
 import { useHostScope } from '@renderer/stores/host-scope'
 import { useUpdatesStore } from '@renderer/stores/updates'
 import { openAgentSettings, openHarnessSettings, openSettingsItem } from '@renderer/stores/view'
+import { pageRow } from '@renderer/features/sidebar/sidebar-pages'
 import { AboutHero, AutomaticUpdates, DownloadSource, NoUpdates, UpdateRow } from './about-section'
 import { useIdleSessionRows } from './idle-sessions'
 import { useWorkflowRows } from './workflow-settings'
@@ -156,6 +157,7 @@ import {
   Zoom,
 } from './sections'
 import { useAllowedSites } from './allowed-sites'
+import { SidebarCard } from './sidebar-pages'
 import { ThemeTiles } from './theme-section'
 import { ClearRecord, FromComputer, LogRow, SidebarEnd, SyncLogs } from './usage-section'
 import { BrowserNameField, ForgetHost, OtherWebHosts, WebHostRow } from './web-host-section'
@@ -298,6 +300,10 @@ export function useAppearanceSection(): SectionDef {
   const { t } = useTranslation('settings')
   const scale = group('scale', t('appearance.groups.scale'))
   const fonts = group('fonts', t('appearance.groups.fonts'))
+  const sidebar = group('sidebar', t('appearance.groups.sidebar'), {
+    card: (rows) => <SidebarCard rows={rows} />,
+  })
+  const sidebarOrder = useHostScope().useSettingsStore((s) => s.settings.appearance.sidebarOrder)
   const zoomKeys = [formatShortcut('Mod+='), formatShortcut('Mod+-')] as const
   const zoomDescription = t('appearance.zoom.description', {
     zoomIn: zoomKeys[0],
@@ -348,9 +354,16 @@ export function useAppearanceSection(): SectionDef {
       {
         id: 'sidebar-hover',
         setting: 'appearance.sidebar-hover',
-        group: group('sidebar', t('appearance.groups.sidebar')),
+        group: sidebar,
         render: () => <SidebarHover label={t('appearance.sidebarHover.name')} />,
       },
+      // Drawn by the group's card, which puts them in the sidebar's order.
+      ...sidebarOrder.map((page) => ({
+        id: pageRow(page),
+        setting: `appearance.sidebar-${page}` as const,
+        group: sidebar,
+        render: () => null,
+      })),
       {
         id: 'reduce-motion',
         setting: 'appearance.reduce-motion',

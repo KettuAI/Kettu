@@ -254,6 +254,17 @@
       "description": "收起侧边栏后，鼠标移到它的按钮上，侧边栏会浮在页面上方显示，鼠标移开后收回。",
       "keywords": "侧边栏 收起 展开 悬停 悬浮 sidebar hover"
     },
+    "sidebarPages": {
+      "overview": "总览",
+      "artifacts": "产物",
+      "routines": "定时任务",
+      "marketplace": "市场",
+      "usage": "用量",
+      "description": "在侧边栏列出。隐藏后仍能从搜索打开。",
+      "keywords": "侧边栏 页面 显示 隐藏 顺序 排序 自定义 sidebar",
+      "move": "移动{{name}}",
+      "restore": "恢复默认"
+    },
     "groups": {
       "theme": "主题",
       "scale": "缩放与文字",

@@ -1,13 +1,8 @@
-import type { ReactNode } from 'react'
-import {
-  DashboardSquare02Icon,
-  KanbanIcon,
-  PencilEdit02Icon,
-  PieChartIcon,
-  Store01Icon,
-  TimeScheduleIcon,
-} from '@hugeicons/core-free-icons'
+import type { ReactElement, ReactNode } from 'react'
+import { PencilEdit02Icon } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
+import { useShallow } from 'zustand/react/shallow'
+import type { SidebarPage } from '@shared/settings'
 import { newSession } from '@renderer/app/actions'
 import type { AppShellProps, ShellNavItem } from '@renderer/components/affect/app-shell'
 import { useOverviewCount } from '@renderer/features/overview/use-overview'
@@ -15,20 +10,15 @@ import { strongestSignal, signalText } from '@renderer/features/routines/model'
 import { useShownRoutines } from '@renderer/features/routines/window-routines'
 import { useSessionsStore } from '@renderer/stores/sessions'
 import { useSettingsStore } from '@renderer/stores/settings'
-import {
-  openArtifacts,
-  openMarketplace,
-  openOverview,
-  openRoutines,
-  openUsage,
-  useViewStore,
-} from '@renderer/stores/view'
+import { useViewStore } from '@renderer/stores/view'
 import { NavShortcut, RoutineSignalMark, TightestLimit, TodayCost, TodayTokens } from './nav-ends'
+import { NavMenu } from './nav-menu'
+import { OPEN_PAGE, PAGE_ICON } from './sidebar-pages'
 
 /**
- * The sidebar's menu for App Shell: New session, Overview, Artifacts, Routines, Marketplace and
- * Usage, with the row the main area shows marked, and at the rows' ends New session's shortcut,
- * Overview's count of what is for the user and the Routines and Usage rows' marks.
+ * The sidebar's menu for App Shell: New session, then the pages Settings shows, in its order, with
+ * the row the main area shows marked, and at the rows' ends New session's shortcut, Overview's
+ * count of what is for the user and the Routines and Usage rows' marks.
  */
 export function useSidebarNav(): Pick<AppShellProps, 'nav' | 'active' | 'onNavigate'> {
   const { t } = useTranslation('sidebar')
@@ -58,24 +48,42 @@ export function useSidebarNav(): Pick<AppShellProps, 'nav' | 'active' | 'onNavig
   })
   const routineRun = useRoutineRunShown()
   const active = current ?? (routineRun ? 'routines' : null)
+  const { order, hidden } = useSettingsStore(
+    useShallow((s) => ({
+      order: s.settings.appearance.sidebarOrder,
+      hidden: s.settings.appearance.sidebarHidden,
+    })),
+  )
+  const ends: Record<SidebarPage, Partial<ShellNavItem>> = {
+    overview: { count: forYou || undefined },
+    artifacts: {},
+    routines: { end: routines.end, ariaLabel: routines.name },
+    marketplace: {},
+    usage: { end: usageEnd },
+  }
   const nav: ShellNavItem[] = [
-    { label: labels.newSession, icon: PencilEdit02Icon, end: <NavShortcut keys="Mod+N" /> },
-    { label: labels.overview, icon: KanbanIcon, count: forYou || undefined },
-    { label: labels.artifacts, icon: DashboardSquare02Icon },
-    { label: labels.routines, icon: TimeScheduleIcon, end: routines.end, ariaLabel: routines.name },
-    { label: labels.marketplace, icon: Store01Icon },
-    { label: labels.usage, icon: PieChartIcon, end: usageEnd },
+    {
+      label: labels.newSession,
+      icon: PencilEdit02Icon,
+      end: <NavShortcut keys="Mod+N" />,
+      wrap: (row) => <NavMenu row={row} />,
+    },
+    ...order
+      .filter((page) => !hidden.includes(page))
+      .map((page) => ({
+        label: labels[page],
+        icon: PAGE_ICON[page],
+        ...ends[page],
+        wrap: (row: ReactElement) => <NavMenu row={row} page={page} />,
+      })),
   ]
   return {
     nav,
     active: active ? labels[active] : undefined,
     onNavigate: (label) => {
-      if (label === labels.newSession) newSession()
-      else if (label === labels.overview) openOverview()
-      else if (label === labels.artifacts) openArtifacts()
-      else if (label === labels.routines) openRoutines()
-      else if (label === labels.marketplace) openMarketplace()
-      else if (label === labels.usage) openUsage()
+      if (label === labels.newSession) return newSession()
+      const page = order.find((p) => labels[p] === label)
+      if (page) OPEN_PAGE[page]()
     },
   }
 }

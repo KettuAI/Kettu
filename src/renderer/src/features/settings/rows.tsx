@@ -54,7 +54,9 @@ export function SectionBody({ section }: { section: SectionDef }) {
       {groups.map(({ group, rows }, i) => (
         <section key={group?.id ?? i} aria-label={group?.label} className="k-group">
           {group && !group.unlabeled && <GroupLabel group={group} />}
-          {group?.plain ? (
+          {group?.card ? (
+            group.card(rows)
+          ) : group?.plain ? (
             <div className="k-plain">
               {rows.map((row) => (
                 <RowShell key={row.id} id={row.id}>
@@ -134,7 +136,8 @@ export function Group({
   )
 }
 
-function Row({ row }: { row: RowDef }) {
+/** A row as a group's card draws it: its words beside its control. */
+export function Row({ row }: { row: RowDef }) {
   const words = rowText(row)
   const text = <RowText name={words.name} description={row.rich ?? words.description} />
   if (row.layout === 'block') {
