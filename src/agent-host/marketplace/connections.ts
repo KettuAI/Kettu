@@ -12,7 +12,9 @@ import type {
   McpSpec,
 } from '@shared/marketplace'
 import { HostError } from '../errors'
+import { t } from '../i18n'
 import type { LogFn } from '../storage'
+import { LocalizedError, logText } from '../localized-error'
 import {
   browserLogin,
   detectSignIn,
@@ -145,7 +147,7 @@ export class MarketConnectionsService {
   /** Starts signing in to a server of the settings; a sign-in already on its way for it ends. */
   async connect(serverId: string): Promise<ConnectStart> {
     const server = oauthServer(this.deps.servers().find((item) => item.id === serverId))
-    if (!server) throw new HostError('not_found', 'Kettu keeps no server of that id that signs in')
+    if (!server) throw new HostError('not_found', t('marketConnect.noServer'))
     for (const [loginId, held] of this.logins) {
       if (held.serverId === serverId) this.cancel(loginId)
     }
@@ -258,12 +260,13 @@ export class MarketConnectionsService {
     } catch (error) {
       if (this.signs.get(serverId) !== sign) return null
       const reason = failure(error)
+      const logged = error instanceof LocalizedError ? error.log : reason
       if (error instanceof RenewalRefused) {
-        this.deps.log('warn', `The token for ${serverId} could not be renewed: ${reason}`)
+        this.deps.log('warn', `The token for ${serverId} could not be renewed: ${logged}`)
         this.save(serverId, { ...sign, savedAt: this.stamp(), reconnect: reason })
       } else {
         this.retryAt.set(serverId, this.now() + RENEW_RETRY_MS)
-        this.deps.log('warn', `Renewing the token for ${serverId} failed; trying again: ${reason}`)
+        this.deps.log('warn', `Renewing the token for ${serverId} failed; trying again: ${logged}`)
       }
       return null
     }
@@ -287,7 +290,7 @@ export class MarketConnectionsService {
           return
         }
         const message = (error as Error).message
-        this.deps.log('warn', `Signing in to ${serverId} failed: ${message}`)
+        this.deps.log('warn', `Signing in to ${serverId} failed: ${logText(error)}`)
         this.errors.set(serverId, message)
         this.deps.changed(serverId, server ? this.connection(server) : connection, loginId, message)
       },

@@ -589,6 +589,7 @@ function describeExit(info: ExitInfo): string {
 }
 
 function exitText(agent: string, info: ExitInfo): string {
+  if (info.closed) return t('agent.exit.closed', { agent })
   if (info.error) return t('agent.exit.error', { agent, error: info.error })
   if (info.signal) return t('agent.exit.signal', { agent, signal: info.signal })
   return t('agent.exit.code', { agent, code: String(info.code) })
@@ -875,7 +876,7 @@ export class AgentManager {
 
   private slot(agentId: AgentId): Slot {
     const slot = this.slots.get(agentId)
-    if (!slot) throw invalidParams(`Unknown agent ${agentId}`)
+    if (!slot) throw invalidParams(t('agent.unknown', { agent: agentId }))
     return slot
   }
 
@@ -1665,12 +1666,12 @@ export class AgentManager {
   ): Promise<LaunchSpec> {
     const { h } = slot
     if (this.stopped) {
-      throw new InstallCancelled(`${h.def.name} was not installed: the host is stopping.`)
+      throw new InstallCancelled(t('agent.notInstalledStopping', { agent: h.def.name }))
     }
     const detection = h.detection
     const adapter = detection?.state === 'available' ? detection.adapter : null
     if (!detection || detection.state !== 'available' || !adapter) {
-      throw new Error(`${h.def.name} has no adapter to install.`)
+      throw new Error(t('agent.noAdapter', { agent: h.def.name }))
     }
     const { diagnostics, platform } = this.deps
     const harnessId = h.def.id
@@ -3378,7 +3379,7 @@ export class AgentManager {
     if (!plan) {
       throw invalidParams(
         methodId
-          ? `${agent} has no ${methodId} install on this platform`
+          ? t('agent.binaryInstall.methodMissing', { agent, method: methodId })
           : t('agent.binaryInstall.noMethod', { agent }),
       )
     }
@@ -3449,7 +3450,7 @@ export class AgentManager {
   /** Downloads the registry's archive for the harness, then detects again so it turns available. */
   private async installArchive(h: Harness, plan: InstallPlan): Promise<void> {
     const archive = plan.archive
-    if (!archive) throw invalidParams(`${h.def.name} has no archive to download`)
+    if (!archive) throw invalidParams(t('agent.binaryInstall.noArchive', { agent: h.def.name }))
     this.assertNoInstall(h)
     const { platform, diagnostics } = this.deps
     const agent = h.def.name
@@ -4006,8 +4007,7 @@ export class AgentManager {
         if (hiddenSession) await connection.closeSession(hiddenSession).catch(() => {})
       }
       const usage = parseMistralAccount(reply, now)
-      if (!usage)
-        throw this.limitsError(slot, new Error('The vendor returned an unknown usage reply'))
+      if (!usage) throw this.limitsError(slot, new Error(t('agent.unknownUsageReply')))
       this.applyVendorUsage(slot, usage, now)
       return
     }
@@ -4032,7 +4032,10 @@ export class AgentManager {
         usage = await readAuggieAccount(command.command, args, env, os.homedir(), now)
       }
       if (!usage)
-        throw this.limitsError(slot, new Error(`${slot.name} returned an unknown account reply`))
+        throw this.limitsError(
+          slot,
+          new Error(t('agent.unknownAccountReply', { agent: slot.name })),
+        )
       this.applyVendorUsage(slot, usage, now)
       return
     }
@@ -4365,8 +4368,7 @@ export class AgentManager {
       throw error
     }
     const usage = parseGrokBilling(reply, now)
-    if (!usage)
-      throw this.limitsError(slot, new Error('The vendor returned an unknown usage reply'))
+    if (!usage) throw this.limitsError(slot, new Error(t('agent.unknownUsageReply')))
     this.applyVendorUsage(slot, usage, now)
     if (slot.signIn !== 'signed-in') this.signedIn(slot.id)
   }
@@ -4800,8 +4802,7 @@ export class AgentManager {
       slot.signIn = connected.length > 0 ? 'signed-in' : 'unknown'
       if (wasRequired && connected.length > 0) this.hooks.signedIn(slot.id)
     } catch {
-      slot.providersError =
-        'Could not read OpenCode providers. Check the installed OpenCode version and try again.'
+      slot.providersError = t('agent.providersFailed')
       throw new HostError('agent_unavailable', slot.providersError)
     } finally {
       this.emit(slot)
@@ -4895,14 +4896,18 @@ export class AgentManager {
   ): Promise<void> {
     const runtime = await this.ensureReady(agentId)
     const method = runtime.init.authMethods.find((m) => m.id === methodId)
-    if (!method) throw invalidParams(`${this.name(agentId)} has no sign-in method ${methodId}`)
+    if (!method) {
+      throw invalidParams(
+        t('agent.noSignInMethod', { agent: this.name(agentId), method: methodId }),
+      )
+    }
     if (method.type === 'env') {
       throw invalidParams(
         t('agent.keyInSettings', { method: method.name, agent: this.name(agentId) }),
       )
     }
     if (method.type !== 'agent') {
-      throw invalidParams(`${method.name} runs in a terminal; use its command instead`)
+      throw invalidParams(t('agent.signInInTerminal', { method: method.name }))
     }
     const slot = this.slot(agentId)
     if (client.device && !handsOverPage(slot.def, methodId)) {
@@ -5014,7 +5019,7 @@ export class AgentManager {
     } else if (slot.def.id === 'codebuddy') {
       await writeCodebuddyKey(this.settingsFile(slot), checked)
     } else {
-      throw invalidParams(`${slot.def.name} takes no API key from Kettu`)
+      throw invalidParams(t('agent.noApiKey', { agent: slot.def.name }))
     }
     this.deps.diagnostics.event(agentId, 'api key', 'set')
     slot.apiKey = true
@@ -5029,7 +5034,7 @@ export class AgentManager {
     else if (slot.def.id === 'codex') await this.runCodexLogin(slot, ['logout'])
     else if (slot.def.id === 'deepseek') await clearDshKey(this.dshFolder(slot))
     else if (slot.def.id === 'codebuddy') await clearCodebuddyKey(this.settingsFile(slot))
-    else throw invalidParams(`${slot.def.name} takes no API key from Kettu`)
+    else throw invalidParams(t('agent.noApiKey', { agent: slot.def.name }))
     this.deps.diagnostics.event(agentId, 'api key', 'cleared')
     slot.apiKey = false
     await this.credentialsChanged(slot)
@@ -5095,7 +5100,7 @@ export class AgentManager {
   private claudeSlot(agentId: AgentId): Slot {
     const slot = this.registeredSlot(agentId)
     if (slot.def.id !== 'claude-code') {
-      throw invalidParams(`${slot.def.name} has no settings Kettu edits`)
+      throw invalidParams(t('agent.noSettings', { agent: slot.def.name }))
     }
     return slot
   }
@@ -5128,7 +5133,7 @@ export class AgentManager {
   ): Promise<CompactPlace> {
     const slot = this.registeredSlot(agentId)
     if (!takesAutoCompact(agentId)) {
-      throw invalidParams(`${slot.def.name} has no auto-compact setting Kettu edits`)
+      throw invalidParams(t('agent.noAutoCompact', { agent: slot.def.name }))
     }
     await this.detectAll()
     return {
@@ -5165,7 +5170,7 @@ export class AgentManager {
   private codebuddySlot(agentId: AgentId): Slot {
     const slot = this.registeredSlot(agentId)
     if (slot.def.id !== 'codebuddy') {
-      throw invalidParams(`${slot.def.name} has no site Kettu edits`)
+      throw invalidParams(t('agent.noSite', { agent: slot.def.name }))
     }
     return slot
   }
@@ -5173,7 +5178,7 @@ export class AgentManager {
   /** The agent's dsh home, where its `.credentials.yaml` lives. */
   private dshFolder(slot: Slot): string {
     const folder = this.configFolder(slot.id)
-    if (!folder) throw new Error(`${slot.name} has no configuration folder`)
+    if (!folder) throw new Error(t('agent.noConfigFolder', { agent: slot.name }))
     return folder
   }
 
@@ -5198,7 +5203,7 @@ export class AgentManager {
       )
         return file
     }
-    if (!candidates[0]) throw new Error(`${slot.name} has no settings file`)
+    if (!candidates[0]) throw new Error(t('agent.noSettingsFile', { agent: slot.name }))
     return candidates[0]
   }
 
@@ -5213,7 +5218,7 @@ export class AgentManager {
       platform,
       this.chosenFolder(slot),
     ).find((location) => location.id === 'settings')?.candidates[0]
-    if (!file) throw new Error(`${slot.name} has no settings file`)
+    if (!file) throw new Error(t('agent.noSettingsFile', { agent: slot.name }))
     return file
   }
 
@@ -5403,7 +5408,7 @@ export class AgentManager {
       const launched = slot.def.launch.kind === 'package' ? (slot.def.launch.args ?? []) : []
       authMethods.push({
         id: 'qwen-terminal-login',
-        name: 'Sign in with a subscription',
+        name: t('agent.signIn.subscription'),
         type: 'terminal',
         command: formatCommand(
           { ...display, args: display.args.slice(0, display.args.length - launched.length) },
@@ -5416,7 +5421,7 @@ export class AgentManager {
       const launched = slot.def.launch.kind === 'package' ? (slot.def.launch.args ?? []) : []
       authMethods.push({
         id: 'grok-device-login',
-        name: 'Sign in with a device code',
+        name: t('agent.signIn.deviceCode'),
         type: 'terminal',
         command: formatCommand(
           {
@@ -5435,7 +5440,7 @@ export class AgentManager {
       // Its own method only uses a sign-in made with its CLI, which runs in a terminal.
       authMethods.push({
         id: 'cursor-terminal-login',
-        name: 'Sign in in a terminal',
+        name: t('agent.signIn.terminal'),
         type: 'terminal',
         command: formatCommand(
           { ...display, args: [...display.args.filter((arg) => arg !== 'acp'), 'login'] },

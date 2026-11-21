@@ -19,6 +19,7 @@ import type { ToolKind } from '@shared/thread'
 import type { BranchPullRequest, GitEventDraft, GitServiceApi, GitServiceDeps } from './api'
 import { HostError } from '../errors'
 import { t } from '../i18n'
+import { logText } from '../localized-error'
 import { readBranches, readRemoteBranches, readRemotes } from './branches'
 import { createCoalescer } from './coalesce'
 import { readCommitContext } from './commit-context'
@@ -152,10 +153,7 @@ function sameJson(a: unknown, b: unknown): boolean {
   return JSON.stringify(a) === JSON.stringify(b)
 }
 
-function messageOf(error: unknown): string {
-  if (error instanceof CommandError) return error.log
-  return error instanceof Error ? error.message : String(error)
-}
+const messageOf = logText
 
 type KnownPullRequest = { state: PullRequestState; failing: boolean }
 

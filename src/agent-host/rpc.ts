@@ -19,6 +19,7 @@ import { forbiddenToDevices } from '@shared/remote/allow-list'
 import type { PortDevice } from '@shared/remote/device'
 import { findPlaces, isBinary } from '@shared/remote/places'
 import { HostError, isHostError } from './errors'
+import { t } from './i18n'
 
 export interface RequestContext {
   portId: string
@@ -334,7 +335,7 @@ export class PortHub {
       answer({
         type: 'error',
         id,
-        error: { code: 'busy', message: 'This device has too many requests waiting' },
+        error: { code: 'busy', message: t('hostError.tooManyRequests') },
       })
       return
     }

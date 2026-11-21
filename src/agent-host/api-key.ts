@@ -3,6 +3,7 @@
 // `codex login --with-api-key`. Kettu keeps no copy and never reads one back; only the keys it
 // writes are touched.
 
+import { t } from './i18n'
 import { isObject, readSettings, writeSettings } from './settings-file'
 
 /** What the user typed; `baseUrl` and `model` only for Claude Code. */
@@ -31,24 +32,24 @@ const MAX_MODEL_CHARS = 256
 export function checkApiKey(input: ApiKeyInput, allowProvider: boolean): ApiKeyInput {
   const key = input.key.trim()
   if (key.length === 0 || key.length > MAX_KEY_CHARS || /\s/.test(key)) {
-    throw new Error('The API key must be one word without spaces')
+    throw new Error(t('apiKey.oneWord'))
   }
   const checked: ApiKeyInput = { key }
   const baseUrl = input.baseUrl?.trim()
   const model = input.model?.trim()
   if (!allowProvider && (baseUrl || model)) {
-    throw new Error('This harness takes only an API key')
+    throw new Error(t('apiKey.keyOnly'))
   }
   if (baseUrl) {
     const url = URL.parse(baseUrl)
     if (baseUrl.length > MAX_URL_CHARS || !url || !['http:', 'https:'].includes(url.protocol)) {
-      throw new Error('The base URL must be an http or https address')
+      throw new Error(t('apiKey.baseUrl'))
     }
     checked.baseUrl = baseUrl
   }
   if (model) {
     if (model.length > MAX_MODEL_CHARS || /\s/.test(model)) {
-      throw new Error('The model must be one word without spaces')
+      throw new Error(t('agentConfig.modelOneWord'))
     }
     checked.model = model
   }

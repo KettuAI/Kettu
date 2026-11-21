@@ -12,6 +12,7 @@ import {
   type PromptBlock,
   type SideQuestion,
 } from './connection'
+import { LocalizedError } from './localized-error'
 import type { HiddenRuntime } from './reports'
 
 /** An answer's text at most, as stored and sent to clients. */
@@ -220,13 +221,16 @@ export async function answerHidden(
       return await connection.answerQuestion(request.dir, blocks, grow, signal)
     } catch (error) {
       if (timeout.aborted) {
-        throw new Error(`no answer within ${timeoutMs / 1000} s`, { cause: error })
+        throw new LocalizedError(
+          { key: 'light.noAnswer', params: { seconds: timeoutMs / 1000 } },
+          { cause: error },
+        )
       }
       throw error
     }
   }
   if (!connection.hiddenSessions) {
-    throw new Error("the agent's hidden sessions cannot be removed without a trace")
+    throw new LocalizedError({ key: 'light.noRemoval' })
   }
   const remove = (sessionId: string): Promise<void> =>
     connection.removeHidden(sessionId, (message) =>
@@ -244,7 +248,9 @@ export async function answerHidden(
     signal.throwIfAborted()
     await useModel(connection, setup, request.model)
     const messages = await connection.collect(setup.sessionId, request.prompt)
-    if (timeout.aborted) throw new Error(`no answer within ${timeoutMs / 1000} s`)
+    if (timeout.aborted) {
+      throw new LocalizedError({ key: 'light.noAnswer', params: { seconds: timeoutMs / 1000 } })
+    }
     signal.throwIfAborted()
     const answer = messages.join('\n\n')
     request.text(answer)
@@ -306,7 +312,9 @@ export async function answerFork(
     signal.throwIfAborted()
     await useModel(connection, setup, request.model)
     const messages = await connection.collect(setup.sessionId, request.prompt)
-    if (timeout.aborted) throw new Error(`no answer within ${timeoutMs / 1000} s`)
+    if (timeout.aborted) {
+      throw new LocalizedError({ key: 'light.noAnswer', params: { seconds: timeoutMs / 1000 } })
+    }
     signal.throwIfAborted()
     const answer = messages.join('\n\n')
     request.text(answer)

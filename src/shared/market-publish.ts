@@ -161,7 +161,10 @@ export interface ListingChange {
 /** A problem a check found, the service's or the host's, with the file it is in. */
 export interface MarketProblem {
   path?: string
+  /** In English, as agents read it. */
   message: string
+  /** The same in the user's language when that is not English; the interface shows it first. */
+  text?: string
 }
 
 /**

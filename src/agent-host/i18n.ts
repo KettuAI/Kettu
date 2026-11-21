@@ -50,6 +50,14 @@ export function translate(message: HostMessage): string {
   )
 }
 
+/** The same message in English, for agents and logs. */
+export function translateEnglish(message: HostMessage): string {
+  return (tEnglish as (key: string, params?: Record<string, string | number>) => string)(
+    message.key,
+    message.params,
+  )
+}
+
 /** The language the host writes in, for dates and times formatted to match. */
 export function currentLocale(): string {
   return i18next.language

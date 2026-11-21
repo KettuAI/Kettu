@@ -5,6 +5,7 @@
 import { randomBytes } from 'node:crypto'
 import { addLogSecret } from '@shared/log/process-log'
 import type { HostedContext } from '../driver'
+import { t } from '../i18n'
 import type { ServerEvent, ServerInfo } from './protocol'
 
 const START_TIMEOUT_MS = 20_000
@@ -80,7 +81,7 @@ function errorOf(status: number, text: string): ServerError {
   } catch {
     // Not JSON: the text is the message.
   }
-  return new ServerError(status, tag, message || `OpenCode answered ${status}`)
+  return new ServerError(status, tag, message || t('opencode.answered', { status }))
 }
 
 export function httpApi(url: string, password: string, fetcher: typeof fetch = fetch): ServerApi {

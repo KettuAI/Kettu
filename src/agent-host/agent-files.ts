@@ -8,6 +8,7 @@ import { harnessOf, type AgentId } from '@shared/agents'
 import type { FileContent } from '@shared/files'
 import type { Platform } from '@shared/platform'
 import { HostError, invalidParams, notFound } from './errors'
+import { t } from './i18n'
 import { isAbsolutePath, isInside } from './paths'
 
 // An agent's id of its session as one folder's name: no separator, and not `.` or `..`.
@@ -63,22 +64,22 @@ export class AgentFiles {
     const { platform } = this.deps
     if (file.includes('\0')) throw invalidParams('path contains a NUL character')
     if (!isAbsolutePath(file, platform)) throw invalidParams('path must be an absolute path')
-    if (!this.deps.session(sessionId)) throw notFound(`No session ${sessionId}`)
+    if (!this.deps.session(sessionId)) throw notFound(t('session.notFound'))
     const folder = this.folder(sessionId)
-    const refused = new HostError('forbidden', `${file} is not one of the session's agent's files`)
+    const refused = new HostError('forbidden', t('agentFile.foreign', { file }))
     if (folder === null) throw refused
     const base = await realpath(folder).catch(() => null)
     // Nothing is looked up for a path outside the folder, so no other file's presence shows.
     if (!isInside(file, folder, platform) && !(base !== null && isInside(file, base, platform))) {
       throw refused
     }
-    if (base === null) throw notFound(`${file} does not exist`)
+    if (base === null) throw notFound(t('agentFile.missing', { file }))
     let real: string
     try {
       real = await realpath(file)
     } catch (error) {
       const code = (error as NodeJS.ErrnoException | undefined)?.code
-      if (code === 'ENOENT' || code === 'ENOTDIR') throw notFound(`${file} does not exist`)
+      if (code === 'ENOENT' || code === 'ENOTDIR') throw notFound(t('agentFile.missing', { file }))
       throw error
     }
     if (!isInside(real, base, platform)) throw refused

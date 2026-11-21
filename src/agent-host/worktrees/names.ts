@@ -5,12 +5,14 @@ import { createHash } from 'node:crypto'
 import path from 'node:path'
 import {
   branchProblem,
+  MAX_BRANCH_LENGTH,
   fillBranchTemplate,
   unknownPlaceholder,
   type TemplateValues,
 } from '@shared/branch-name'
 import type { Platform } from '@shared/platform'
 import { invalidParams } from '../errors'
+import { t } from '../i18n'
 import { pathKey } from '../paths'
 
 const MAX_SLUG_LENGTH = 40
@@ -48,7 +50,10 @@ function joinWords(words: readonly string[]): string {
 export function branchFromTemplate(template: string, values: TemplateValues): string {
   const filled = fillBranchTemplate(template, values)
   if (filled === null) {
-    throw invalidParams(`Unknown placeholder in branch template: ${unknownPlaceholder(template)}`)
+    throw invalidParams(
+      t('worktree.unknownPlaceholder', { placeholder: String(unknownPlaceholder(template)) }),
+      { field: 'branch' },
+    )
   }
   return filled
 }
@@ -59,8 +64,15 @@ export function branchFromTemplate(template: string, values: TemplateValues): st
  */
 export function checkWorktreeBranch(name: string): string {
   const reason = branchProblem(name)
-  if (reason !== null)
-    throw invalidParams(`Unusable branch name ${JSON.stringify(name)}: ${reason}`)
+  if (reason !== null) {
+    throw invalidParams(
+      t('worktree.unusableBranch', {
+        name: JSON.stringify(name),
+        reason: t(`worktree.branchProblem.${reason}`, { max: MAX_BRANCH_LENGTH }),
+      }),
+      { field: 'branch' },
+    )
+  }
   return name
 }
 

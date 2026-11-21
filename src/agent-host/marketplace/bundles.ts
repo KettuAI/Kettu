@@ -130,7 +130,10 @@ export async function fetchBundle(
   }
   const final = URL.parse(response.url || url)
   if (final?.protocol !== 'https:') {
-    throw new HostError('unavailable', t('marketBundle.downloadFailed', { reason: 'not https' }))
+    throw new HostError(
+      'unavailable',
+      t('marketBundle.downloadFailed', { reason: t('marketBundle.notHttps') }),
+    )
   }
   if (!response.ok || !response.body) {
     throw new HostError(

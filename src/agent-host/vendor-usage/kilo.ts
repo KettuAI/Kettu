@@ -1,5 +1,6 @@
 import { spawn } from 'node:child_process'
 import { createServer } from 'node:net'
+import { t } from '../i18n'
 import { balance, number, object, type VendorUsage } from './common'
 
 export function parseKiloProfile(value: unknown): VendorUsage | null {
@@ -39,13 +40,16 @@ async function freePort(): Promise<number> {
     server.listen(0, '127.0.0.1', resolve)
   })
   const address = server.address()
-  if (!address || typeof address === 'string') throw new Error('Could not reserve a local port')
+  if (!address || typeof address === 'string') throw new Error(t('usageRead.kilo.noPort'))
   const { port } = address
   await new Promise<void>((resolve, reject) =>
     server.close((error) => (error ? reject(error) : resolve())),
   )
   return port
 }
+
+/** A final answer, unlike a failed connection while the server is still starting. */
+class ProfileRefused extends Error {}
 
 export async function readKiloProfile(
   command: string,
@@ -72,19 +76,21 @@ export async function readKiloProfile(
   try {
     const deadline = Date.now() + 12_000
     while (Date.now() < deadline) {
-      if (server.exitCode !== null) throw new Error('Kilo server exited before the profile read')
+      if (server.exitCode !== null) throw new Error(t('usageRead.kilo.exited'))
       try {
         const response = await fetch(`http://127.0.0.1:${port}/kilo/profile`, {
           signal: AbortSignal.timeout(1000),
         })
-        if (!response.ok) throw new Error(`Kilo profile read returned ${response.status}`)
+        if (!response.ok) {
+          throw new ProfileRefused(t('usageRead.kilo.refused', { status: response.status }))
+        }
         return parseKiloProfile(await response.json())
       } catch (error) {
-        if (error instanceof Error && error.message.startsWith('Kilo profile read')) throw error
+        if (error instanceof ProfileRefused) throw error
         await new Promise((resolve) => setTimeout(resolve, 200))
       }
     }
-    throw new Error('Kilo profile read timed out')
+    throw new Error(t('usageRead.kilo.timedOut'))
   } finally {
     if (server.exitCode === null) server.kill()
   }

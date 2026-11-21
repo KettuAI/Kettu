@@ -15,6 +15,8 @@ import type {
 } from '@modelcontextprotocol/sdk/shared/auth.js'
 import { addLogSecret } from '@shared/log/process-log'
 import type { McpOAuth } from '@shared/marketplace'
+import { t } from '../i18n'
+import { LocalizedError } from '../localized-error'
 
 /** A sign-in as main keeps it, by server id. */
 export interface SignIn {
@@ -204,7 +206,12 @@ export async function probe(
       ...(scope ? { scope } : {}),
     }
   }
-  if (!response.ok) throw new Error(`The server answered ${response.status}`)
+  if (!response.ok) {
+    throw new LocalizedError({
+      key: 'marketConnect.serverStatus',
+      params: { status: response.status },
+    })
+  }
   const session = response.headers.get('mcp-session-id')
   if (session) {
     void fetcher(url, {
@@ -271,9 +278,7 @@ export function isCancelled(error: unknown): boolean {
 
 /** The page the browser lands on after the service, which says where to go next. */
 function landing(ok: boolean): string {
-  const said = ok
-    ? 'Signed in. You can close this tab and return to Kettu.'
-    : 'The sign-in did not finish. You can close this tab and try again in Kettu.'
+  const said = ok ? t('marketConnect.landing.done') : t('marketConnect.landing.failed')
   return `<!doctype html><meta charset="utf-8"><title>Kettu</title><body style="font:16px system-ui;margin:4rem">${said}</body>`
 }
 
@@ -309,7 +314,12 @@ async function callback(): Promise<{
       .end(landing(!error && !!code))
     if (error || !code) {
       const reason = url.searchParams.get('error_description') ?? error ?? 'no code'
-      reject(new Error(`The service refused the sign-in: ${reason.slice(0, 300)}`))
+      reject(
+        new LocalizedError({
+          key: 'marketConnect.refused',
+          params: { reason: reason.slice(0, 300) },
+        }),
+      )
     } else {
       resolve(code)
     }
@@ -357,9 +367,9 @@ export async function browserLogin(options: BrowserOptions): Promise<BrowserLogi
     fetchFn,
   })
   const metadata = info.authorizationServerMetadata
-  if (!metadata) throw new Error('The server names no authorization server Kettu can read')
+  if (!metadata) throw new LocalizedError({ key: 'marketConnect.noAuthServer' })
   if (!metadata.code_challenge_methods_supported?.includes('S256')) {
-    throw new Error('The authorization server does not offer PKCE with S256')
+    throw new LocalizedError({ key: 'marketConnect.noPkce' })
   }
   const resource = resourceFor(sdk, options.url, info.resourceMetadata?.resource)
   const scope = options.probe.scope ?? info.resourceMetadata?.scopes_supported?.join(' ')
@@ -396,7 +406,7 @@ export async function browserLogin(options: BrowserOptions): Promise<BrowserLogi
     const done = (async (): Promise<SignIn> => {
       const timeout = new Promise<never>((_, fail) => {
         timer = setTimeout(
-          () => fail(new Error('The sign-in did not finish within five minutes')),
+          () => fail(new LocalizedError({ key: 'marketConnect.timedOut' })),
           options.timeoutMs ?? LOGIN_MS,
         )
       })
@@ -471,7 +481,12 @@ async function formPost(
     body: new URLSearchParams(form),
   })
   const body = (await response.json().catch(() => null)) as unknown
-  if (!isRecord(body)) throw new Error(`${new URL(url).host} answered ${response.status}`)
+  if (!isRecord(body)) {
+    throw new LocalizedError({
+      key: 'marketConnect.hostStatus',
+      params: { host: new URL(url).host, status: response.status },
+    })
+  }
   return body
 }
 
@@ -489,11 +504,11 @@ export async function deviceLogin(options: DeviceOptions): Promise<DeviceLogin> 
   )
   const issuer = resourceMetadata.authorization_servers?.[0]
   const clientId = issuer ? DEVICE_CLIENTS[issuer] : undefined
-  if (!issuer || !clientId) throw new Error('Kettu has no app registered with this service')
+  if (!issuer || !clientId) throw new LocalizedError({ key: 'marketConnect.noApp' })
   const metadata = (await sdk.discoverAuthorizationServerMetadata(issuer, { fetchFn })) as
     (AuthorizationServerMetadata & { device_authorization_endpoint?: string }) | undefined
   const deviceEndpoint = metadata?.device_authorization_endpoint
-  if (!metadata || !deviceEndpoint) throw new Error('The service offers no device sign-in')
+  if (!metadata || !deviceEndpoint) throw new LocalizedError({ key: 'marketConnect.noDevice' })
   const scope = resourceMetadata.scopes_supported?.join(' ')
   const started = await formPost(fetchFn, deviceEndpoint, {
     client_id: clientId,
@@ -503,8 +518,11 @@ export async function deviceLogin(options: DeviceOptions): Promise<DeviceLogin> 
   const userCode = text(started.user_code)
   const verificationUri = text(started.verification_uri)
   if (!deviceCode || !userCode || !verificationUri) {
-    throw new Error(
-      `The service did not start a device sign-in: ${text(started.error_description) ?? text(started.error) ?? 'no code'}`,
+    const reason = text(started.error_description) ?? text(started.error)
+    throw new LocalizedError(
+      reason
+        ? { key: 'marketConnect.deviceNotStarted', params: { reason } }
+        : { key: 'marketConnect.deviceNoCode' },
     )
   }
   const expiresAt = options.now() + (Number(started.expires_in) || 900) * 1000
@@ -515,7 +533,9 @@ export async function deviceLogin(options: DeviceOptions): Promise<DeviceLogin> 
     for (;;) {
       await sleep(interval)
       if (cancelled) throw new LoginCancelled()
-      if (options.now() >= expiresAt) throw new Error('The code expired before it was entered')
+      if (options.now() >= expiresAt) {
+        throw new LocalizedError({ key: 'marketConnect.codeExpired' })
+      }
       const answer = await formPost(fetchFn, metadata.token_endpoint, {
         client_id: clientId,
         device_code: deviceCode,
@@ -528,14 +548,16 @@ export async function deviceLogin(options: DeviceOptions): Promise<DeviceLogin> 
         interval += 5_000
         continue
       }
-      if (error === 'expired_token') throw new Error('The code expired before it was entered')
-      if (error === 'access_denied') throw new Error('The sign-in was denied at the service')
-      if (error)
-        throw new Error(
-          `The service refused the sign-in: ${text(answer.error_description) ?? error}`,
-        )
+      if (error === 'expired_token') throw new LocalizedError({ key: 'marketConnect.codeExpired' })
+      if (error === 'access_denied') throw new LocalizedError({ key: 'marketConnect.denied' })
+      if (error) {
+        throw new LocalizedError({
+          key: 'marketConnect.refused',
+          params: { reason: text(answer.error_description) ?? error },
+        })
+      }
       const access = text(answer.access_token)
-      if (!access) throw new Error('The service gave no token')
+      if (!access) throw new LocalizedError({ key: 'marketConnect.noToken' })
       const tokens = keptTokens(
         {
           access_token: access,
@@ -591,7 +613,7 @@ async function accountOf(issuer: string, token: string, fetcher: Fetch): Promise
 }
 
 /** A renewal the service refused, or a sign-in with nothing to renew with: it must be done again. */
-export class RenewalRefused extends Error {}
+export class RenewalRefused extends LocalizedError {}
 
 // The token endpoint's errors that say nothing about the refresh token, so it is tried again later.
 const PASSING_ERRORS: ReadonlySet<string> = new Set([
@@ -608,11 +630,11 @@ const PASSING_ERRORS: ReadonlySet<string> = new Set([
 export async function renew(sign: SignIn, fetcher: Fetch, now: () => number): Promise<SignIn> {
   const refresh = sign.tokens?.refresh
   if (!refresh || !sign.issuer || !sign.client)
-    throw new RenewalRefused('The token expired and cannot be renewed')
+    throw new RenewalRefused({ key: 'marketConnect.renewExpired' })
   const sdk = await loadAuth()
   const metadata = await sdk.discoverAuthorizationServerMetadata(sign.issuer, { fetchFn: fetcher })
   // Without it the SDK would guess the token endpoint; every sign-in had metadata when it was made.
-  if (!metadata) throw new Error('The authorization server metadata could not be read')
+  if (!metadata) throw new LocalizedError({ key: 'marketConnect.noMetadata' })
   let tokens: OAuthTokens
   try {
     tokens = await sdk.refreshAuthorization(sign.issuer, {
@@ -625,9 +647,10 @@ export async function renew(sign: SignIn, fetcher: Fetch, now: () => number): Pr
   } catch (error) {
     const { message, errorCode } = error as { message?: string; errorCode?: unknown }
     if (typeof errorCode === 'string' && !PASSING_ERRORS.has(errorCode)) {
-      throw new RenewalRefused(
-        `The service refused to renew the token: ${errorCode}${message ? ` (${message})` : ''}`,
-      )
+      throw new RenewalRefused({
+        key: 'marketConnect.renewRefused',
+        params: { reason: `${errorCode}${message ? ` (${message})` : ''}` },
+      })
     }
     throw error
   }

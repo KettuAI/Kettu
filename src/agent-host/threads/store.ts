@@ -6,6 +6,7 @@ import type { OutlineTitle } from '@shared/agent-host'
 import type { ArtifactState } from '@shared/artifacts'
 import type { ArtifactCall, ArtifactCallName, ArtifactCalls } from '../artifacts/model'
 import type { RuntimeCall, RuntimeCallName, RuntimeCalls } from '../artifacts/runtime/calls'
+import { translate, type HostMessage } from '../i18n'
 import type { RoutineCall, RoutineCallName, RoutineCalls } from '../routines/calls'
 import type { TaskCall, TaskCallName, TaskCalls } from '../workflow/model'
 import type { FindAnswer, SearchAnswer } from '../search/reads'
@@ -59,12 +60,17 @@ export function nodeThreadWorker(worker: Worker): ThreadWorker {
 }
 
 export class ThreadStoreError extends Error {
+  /** The message in English, for agents and logs; `message` is in the user's language. */
+  readonly english: string
+
   constructor(
     message: string,
     readonly code: ThreadErrorCode | null,
     readonly data?: ArtifactState,
+    text?: HostMessage,
   ) {
-    super(message)
+    super(text ? translate(text) : message)
+    this.english = message
     this.name = 'ThreadStoreError'
   }
 }
@@ -158,7 +164,7 @@ export class ThreadStore {
           break
         case 'error':
           this.settle(slot, reply.id)?.reject(
-            new ThreadStoreError(reply.message, reply.code, reply.data),
+            new ThreadStoreError(reply.message, reply.code, reply.data, reply.text),
           )
           break
       }

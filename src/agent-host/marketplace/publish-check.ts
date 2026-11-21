@@ -20,8 +20,10 @@ import {
   type PublishHarness,
   type PublishKind,
 } from '@shared/market-publish'
-import { parseWorkflow } from '../workflow/format'
+import type { HostKey } from '../i18n'
+import { parseWorkflow, problemText } from '../workflow/format'
 import { frontmatter } from './frontmatter'
+import { problem, problemOf, problemWith } from './localized-error'
 import { catalogServer } from './registry'
 import { SKILL_NAME } from './skills'
 
@@ -110,6 +112,23 @@ const SECRETS: { what: string; pattern: RegExp }[] = [
   { what: 'a Hugging Face token', pattern: /(?<![A-Za-z0-9_])hf_[A-Za-z0-9]{34,}/ },
 ]
 
+/** The words for each kind of secret, as the catalog has them. */
+const SECRET_NAMES: Record<string, HostKey> = {
+  'a private key': 'marketPublish.check.secret.privateKey',
+  'a GitHub token': 'marketPublish.check.secret.github',
+  'an Anthropic API key': 'marketPublish.check.secret.anthropic',
+  'an OpenRouter API key': 'marketPublish.check.secret.openrouter',
+  'a DeepSeek-style API key': 'marketPublish.check.secret.deepseek',
+  'an OpenAI API key': 'marketPublish.check.secret.openai',
+  'an AWS access key': 'marketPublish.check.secret.aws',
+  'a Slack token': 'marketPublish.check.secret.slack',
+  'a Stripe key': 'marketPublish.check.secret.stripe',
+  'a Google API key': 'marketPublish.check.secret.google',
+  'an npm token': 'marketPublish.check.secret.npm',
+  'a GitLab token': 'marketPublish.check.secret.gitlab',
+  'a Hugging Face token': 'marketPublish.check.secret.huggingFace',
+}
+
 /** A run of one character, or AWS's documented example key, which no real secret is. */
 function placeholder(match: string): boolean {
   return /(.)\1{11,}/.test(match) || match.includes('EXAMPLE')
@@ -163,12 +182,11 @@ function checked(relative: string, data: Buffer): CheckedFile {
 }
 
 /** Why a file's name cannot go to the service as part of a path; null when it can. */
-function nameProblem(name: string): string | null {
-  if (name.length > MAX_NAME) return 'Its name is too long.'
+function nameProblem(name: string): HostKey | null {
+  if (name.length > MAX_NAME) return 'marketPublish.check.nameTooLong'
   // Control characters and backslashes read differently on each system.
   // eslint-disable-next-line no-control-regex
-  if (/[\u0000-\u001f\u007f\\]/.test(name))
-    return 'Its name holds a backslash or control character.'
+  if (/[\u0000-\u001f\u007f\\]/.test(name)) return 'marketPublish.check.nameCharacters'
   return null
 }
 
@@ -186,15 +204,12 @@ async function walk(root: string, problems: MarketProblem[]): Promise<CheckedFil
       const relative = prefix === '' ? entry.name : `${prefix}/${entry.name}`
       const full = path.join(dir, entry.name)
       if (entry.isSymbolicLink()) {
-        problems.push({
-          path: relative,
-          message: 'It is a link. Replace it with the file itself, or remove it.',
-        })
+        problems.push(problem(relative, 'marketPublish.check.link'))
         continue
       }
       const bad = nameProblem(entry.name)
       if (bad || relative.length > MAX_PATH) {
-        problems.push({ path: relative, message: bad ?? 'Its path is too long.' })
+        problems.push(problem(relative, bad ?? 'marketPublish.check.pathTooLong'))
         continue
       }
       if (entry.isDirectory()) {
@@ -204,15 +219,17 @@ async function walk(root: string, problems: MarketProblem[]): Promise<CheckedFil
       if (!entry.isFile()) continue
       const size = (await lstat(full)).size
       if (files.length + 1 > PUBLISH_LIMITS.files) {
-        problems.push({
-          message: `The folder holds more than ${PUBLISH_LIMITS.files} files, the most a version may have.`,
-        })
+        problems.push(
+          problem(undefined, 'marketPublish.check.tooManyFiles', { count: PUBLISH_LIMITS.files }),
+        )
         throw new Over()
       }
       if (bytes + size > PUBLISH_LIMITS.bytes) {
-        problems.push({
-          message: `The folder is larger than ${PUBLISH_LIMITS.bytes / (1024 * 1024)} MB, the most a version may be.`,
-        })
+        problems.push(
+          problem(undefined, 'marketPublish.check.folderTooLarge', {
+            mb: PUBLISH_LIMITS.bytes / (1024 * 1024),
+          }),
+        )
         throw new Over()
       }
       bytes += size
@@ -259,10 +276,10 @@ function json(file: CheckedFile | undefined, problems: MarketProblem[]): Fields 
   if (!file) return null
   try {
     const value = record(JSON.parse(file.data.toString('utf8')))
-    if (!value) problems.push({ path: file.path, message: 'It is not a JSON object.' })
+    if (!value) problems.push(problem(file.path, 'marketPublish.check.notJsonObject'))
     return value
   } catch {
-    problems.push({ path: file.path, message: 'It is not valid JSON.' })
+    problems.push(problem(file.path, 'marketPublish.check.notJson'))
     return null
   }
 }
@@ -317,22 +334,22 @@ function pluginParts(
   return { adds, runs: [...new Set(runs)] }
 }
 
-function missing(file: string, field: string): MarketProblem {
-  return { path: file, message: `It has no ${field}.` }
+function missing(
+  file: string,
+  field: 'name' | 'description' | 'version' | 'versionNumber' | 'nameFront' | 'descriptionFront',
+): MarketProblem {
+  return problem(file, `marketPublish.check.missing.${field}`)
 }
 
 function readSkill(check: FolderCheck, file: CheckedFile): void {
   const fields = frontmatter(file.data.toString('utf8'))
   const name = text(fields.name)
   const description = text(fields.description)
-  if (!name) check.problems.push(missing(SKILL_FILE, 'name in its front matter'))
+  if (!name) check.problems.push(missing(SKILL_FILE, 'nameFront'))
   else if (!SKILL_NAME.test(name)) {
-    check.problems.push({
-      path: SKILL_FILE,
-      message: `The name "${name}" must be lowercase letters, digits and hyphens.`,
-    })
+    check.problems.push(problem(SKILL_FILE, 'marketPublish.check.skillName', { name }))
   }
-  if (!description) check.problems.push(missing(SKILL_FILE, 'description in its front matter'))
+  if (!description) check.problems.push(missing(SKILL_FILE, 'descriptionFront'))
   if (!name || !SKILL_NAME.test(name)) return
   check.slug = toHandle(name)
   check.name = displayTitle(name)
@@ -356,15 +373,16 @@ export function utf8(data: Buffer): string | null {
 function readWorkflow(check: FolderCheck, file: CheckedFile): void {
   const source = utf8(file.data)
   if (source === null) {
-    check.problems.push({ path: WORKFLOW_FILE, message: 'It is not UTF-8 text.' })
+    check.problems.push(problem(WORKFLOW_FILE, 'marketPublish.check.notUtf8'))
     return
   }
   const read = parseWorkflow(source)
   if (!read.workflow) {
-    for (const problem of read.problems) {
+    for (const found of read.problems) {
+      const at = found.at ? `${found.at}: ` : ''
       check.problems.push({
         path: WORKFLOW_FILE,
-        message: problem.at ? `${problem.at}: ${problem.message}` : problem.message,
+        ...problemOf(`${at}${found.message}`, `${at}${problemText(found)}`),
       })
     }
     return
@@ -373,10 +391,9 @@ function readWorkflow(check: FolderCheck, file: CheckedFile): void {
   const slug = toHandle(workflow.name)
   if (HANDLE.test(slug)) check.slug = slug
   else {
-    check.problems.push({
-      path: WORKFLOW_FILE,
-      message: `The name "${workflow.name}" has no Latin letters or digits to name the listing by. Name it in English and give other languages under locales.`,
-    })
+    check.problems.push(
+      problem(WORKFLOW_FILE, 'marketPublish.check.workflowName', { name: workflow.name }),
+    )
   }
   check.name = workflow.name
   if (workflow.description.trim()) Object.assign(check, describe(workflow.description))
@@ -384,10 +401,9 @@ function readWorkflow(check: FolderCheck, file: CheckedFile): void {
   const readme = check.files.find((item) => item.path === README)
   const about = readme?.text ? readme.data.toString('utf8').trim() : ''
   if (about.length > LISTING_ABOUT_CHARS) {
-    check.problems.push({
-      path: README,
-      message: `It is longer than ${LISTING_ABOUT_CHARS} characters, the most a listing's text may be.`,
-    })
+    check.problems.push(
+      problem(README, 'marketPublish.check.readmeTooLong', { count: LISTING_ABOUT_CHARS }),
+    )
   } else if (about) check.about = about
   const named = (kind: 'mcp' | 'skills') => [
     ...new Set(workflow.steps.flatMap((step) => step.tools[kind])),
@@ -416,10 +432,7 @@ function readPlugin(check: FolderCheck, file: CheckedFile, harness: PublishHarne
   if (!description) check.problems.push(missing(file.path, 'description'))
   if (!version) check.problems.push(missing(file.path, 'version'))
   else if (!VERSION.test(version)) {
-    check.problems.push({
-      path: file.path,
-      message: `"${version}" is not a version such as 1.0.0.`,
-    })
+    check.problems.push(problem(file.path, 'marketPublish.check.badVersion', { version }))
   } else check.version = version
   if (name) {
     check.slug = toHandle(name)
@@ -441,19 +454,13 @@ function readServer(check: FolderCheck, file: CheckedFile): void {
   if (!description) check.problems.push(missing(SERVER_FILE, 'description'))
   if (!version) check.problems.push(missing(SERVER_FILE, 'version'))
   else if (!VERSION.test(version)) {
-    check.problems.push({
-      path: SERVER_FILE,
-      message: `"${version}" is not a version such as 1.0.0.`,
-    })
+    check.problems.push(problem(SERVER_FILE, 'marketPublish.check.badVersion', { version }))
   } else check.version = version
   check.server = server
   const bundled = check.files.length > 0
   const spec = bundled ? null : catalogServer({ server })
   if (!bundled && !spec) {
-    check.problems.push({
-      path: SERVER_FILE,
-      message: 'It names no package or https remote that Kettu can run.',
-    })
+    check.problems.push(problem(SERVER_FILE, 'marketPublish.check.serverNotRunnable'))
   }
   if (spec) check.runs = [specRuns(spec.spec)]
   if (name) {
@@ -473,11 +480,11 @@ async function readBundle(check: FolderCheck, file: CheckedFile): Promise<void> 
     const entry = zip.file('manifest.json')
     if (entry) manifest = record(JSON.parse(await entry.async('string')))
   } catch {
-    check.problems.push({ path: file.path, message: 'It is not an MCP bundle Kettu can read.' })
+    check.problems.push(problem(file.path, 'marketPublish.check.notBundle'))
     return
   }
   if (!manifest) {
-    check.problems.push({ path: file.path, message: 'It has no manifest.json.' })
+    check.problems.push(problem(file.path, 'marketPublish.check.bundleNoManifest'))
     return
   }
   const name = text(manifest.name)
@@ -486,7 +493,7 @@ async function readBundle(check: FolderCheck, file: CheckedFile): Promise<void> 
   if (!name) check.problems.push(missing(`${file.path} manifest.json`, 'name'))
   if (!description) check.problems.push(missing(`${file.path} manifest.json`, 'description'))
   if (!version || !VERSION.test(version)) {
-    check.problems.push(missing(`${file.path} manifest.json`, 'version such as 1.0.0'))
+    check.problems.push(missing(`${file.path} manifest.json`, 'versionNumber'))
   } else check.version = version
   const config = record(record(manifest.server)?.mcp_config)
   const command = text(config?.command)
@@ -518,10 +525,12 @@ function scan(check: FolderCheck, files: readonly CheckedFile[]): void {
   for (const file of files) {
     if (!file.text) continue
     for (const { line, what } of findSecrets(file.data.toString('utf8'))) {
-      check.problems.push({
-        path: file.path,
-        message: `Line ${line} looks like ${what}. Remove it, and revoke it if it is real.`,
-      })
+      const named = SECRET_NAMES[what]
+      check.problems.push(
+        problemWith(file.path, (say) =>
+          say('marketPublish.check.secret.found', { line, what: named ? say(named) : what }),
+        ),
+      )
     }
   }
 }
@@ -549,22 +558,24 @@ export async function checkFolder(target: string): Promise<FolderCheck> {
   try {
     info = await lstat(target)
   } catch {
-    check.problems.push({ message: `Nothing is at ${target}.` })
+    check.problems.push(problem(undefined, 'marketPublish.check.nothingAt', { path: target }))
     return check
   }
   if (info.isSymbolicLink()) {
-    check.problems.push({ message: 'The path is a link. Give the folder it points to instead.' })
+    check.problems.push(problem(undefined, 'marketPublish.check.pathIsLink'))
     return check
   }
   if (info.isFile()) {
     if (!target.endsWith(BUNDLE)) {
-      check.problems.push({ message: 'Publish a folder, or an MCP bundle (.mcpb) file.' })
+      check.problems.push(problem(undefined, 'marketPublish.check.folderOrBundle'))
       return check
     }
     if (info.size > PUBLISH_LIMITS.bytes) {
-      check.problems.push({
-        message: `The bundle is larger than ${PUBLISH_LIMITS.bytes / (1024 * 1024)} MB, the most a version may be.`,
-      })
+      check.problems.push(
+        problem(undefined, 'marketPublish.check.bundleTooLarge', {
+          mb: PUBLISH_LIMITS.bytes / (1024 * 1024),
+        }),
+      )
       return check
     }
     const file = checked(path.basename(target), await readFile(target))
@@ -574,7 +585,7 @@ export async function checkFolder(target: string): Promise<FolderCheck> {
     return finish(check)
   }
   if (!info.isDirectory()) {
-    check.problems.push({ message: 'Publish a folder, or an MCP bundle (.mcpb) file.' })
+    check.problems.push(problem(undefined, 'marketPublish.check.folderOrBundle'))
     return check
   }
   const at = (file: string) => path.join(target, ...file.split('/'))
@@ -584,10 +595,7 @@ export async function checkFolder(target: string): Promise<FolderCheck> {
     ),
   )
   if (claude && codex) {
-    check.problems.push({
-      message:
-        'The folder is both a Claude Code and a Codex plugin. Publish each from a folder of its own.',
-    })
+    check.problems.push(problem(undefined, 'marketPublish.check.bothPlugins'))
     return check
   }
   if (claude || codex || skill) {
@@ -611,14 +619,15 @@ export async function checkFolder(target: string): Promise<FolderCheck> {
       (entry) => entry.isFile() && entry.name.endsWith(BUNDLE),
     )
     if (bundles.length > 1) {
-      check.problems.push({ message: 'The folder holds more than one MCP bundle. Keep one.' })
+      check.problems.push(problem(undefined, 'marketPublish.check.manyBundles'))
     } else if (bundles[0]) {
       const size = (await lstat(at(bundles[0].name))).size
       if (size > PUBLISH_LIMITS.bytes) {
-        check.problems.push({
-          path: bundles[0].name,
-          message: `It is larger than ${PUBLISH_LIMITS.bytes / (1024 * 1024)} MB, the most a version may be.`,
-        })
+        check.problems.push(
+          problem(bundles[0].name, 'marketPublish.check.fileTooLarge', {
+            mb: PUBLISH_LIMITS.bytes / (1024 * 1024),
+          }),
+        )
       } else {
         check.files = [checked(bundles[0].name, await readFile(at(bundles[0].name)))]
         check.bytes = check.files[0]!.size
@@ -639,10 +648,7 @@ export async function checkFolder(target: string): Promise<FolderCheck> {
     if (file) readWorkflow(check, file)
     return finish(check)
   }
-  check.problems.push({
-    message:
-      'Kettu cannot tell what this folder is. A skill has a SKILL.md, a workflow a workflow.yaml, a plugin a .claude-plugin/plugin.json or .codex-plugin/plugin.json, and an MCP server a server.json.',
-  })
+  check.problems.push(problem(undefined, 'marketPublish.check.unknownFolder'))
   return check
 }
 
@@ -653,7 +659,7 @@ async function readSmall(
 ): Promise<CheckedFile | null> {
   const size = (await lstat(file)).size
   if (size > MANIFEST_BYTES) {
-    problems.push({ path: relative, message: 'It is too large to be a manifest.' })
+    problems.push(problem(relative, 'marketPublish.check.manifestTooLarge'))
     return null
   }
   return checked(relative, await readFile(file))
@@ -663,17 +669,15 @@ async function readSmall(
 function finish(check: FolderCheck): FolderCheck {
   scan(check, check.files)
   if (check.about && check.about.length > LISTING_ABOUT_CHARS) {
-    check.problems.push({
-      path: check.manifest ?? undefined,
-      message: `The description is longer than ${LISTING_ABOUT_CHARS} characters.`,
-    })
+    check.problems.push(
+      problem(check.manifest ?? undefined, 'marketPublish.check.aboutTooLong', {
+        count: LISTING_ABOUT_CHARS,
+      }),
+    )
   }
   // The upload's own part is named so.
   if (check.files.some((file) => file.path === 'manifest')) {
-    check.problems.push({
-      path: 'manifest',
-      message: 'A file at the top may not be named manifest. Rename it.',
-    })
+    check.problems.push(problem('manifest', 'marketPublish.check.manifestName'))
   }
   return check
 }

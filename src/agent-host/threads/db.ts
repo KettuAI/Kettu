@@ -63,6 +63,7 @@ import {
   type ThreadWrite,
 } from './model'
 import { originOf, type MessageOrigin, type StoredOrigin } from './origins'
+import type { HostMessage } from '../i18n'
 import type { ThreadDbStatus, ThreadErrorCode } from './protocol'
 import {
   declarationAt,
@@ -309,6 +310,8 @@ export class ThreadDbError extends Error {
     message: string,
     readonly code: ThreadErrorCode,
     readonly data?: ArtifactState,
+    /** The message for the user, which the worker cannot word in their language itself. */
+    readonly text?: HostMessage,
   ) {
     super(message)
     this.name = 'ThreadDbError'
@@ -805,7 +808,10 @@ export class ThreadDb {
   /** As `guard`, for what has no answer without the database: it fails with `unavailable`. */
   private must<T>(run: (sql: Statements, db: DatabaseSync) => T): T {
     const { sql, db } = this
-    if (!sql || !db) throw new ThreadDbError('The thread database is not open', 'unavailable')
+    if (!sql || !db)
+      throw new ThreadDbError('The thread database is not open', 'unavailable', undefined, {
+        key: 'threadDb.notOpen',
+      })
     return this.attempt(sql, db, run)
   }
 
@@ -825,6 +831,8 @@ export class ThreadDb {
         throw new ThreadDbError(
           `The thread database was damaged: ${(error as Error).message}`,
           'corrupt',
+          undefined,
+          { key: 'threadDb.damaged', params: { reason: (error as Error).message } },
         )
       }
       if (resultCode(error) === SQLITE_CONSTRAINT) {
@@ -1296,10 +1304,16 @@ export class ThreadDb {
     const row = sql.artifact.get(id)
     const artifact = row ? artifactRecord(row) : null
     if (!artifact || (project !== null && artifact.project !== project)) {
-      throw new ThreadDbError(`No artifact ${id}`, 'not_found')
+      throw new ThreadDbError(`No artifact ${id}`, 'not_found', undefined, {
+        key: 'artifacts.noArtifact',
+        params: { id },
+      })
     }
     if (live && artifact.deletedAt !== null) {
-      throw new ThreadDbError(`${id} is in Recently deleted`, 'deleted', stateOf(artifact))
+      throw new ThreadDbError(`${id} is in Recently deleted`, 'deleted', stateOf(artifact), {
+        key: 'artifacts.deleted',
+        params: { id },
+      })
     }
     return artifact
   }
@@ -1325,6 +1339,15 @@ export class ThreadDb {
           `version ${baseVersion}`,
         'conflict',
         { ...stateOf(artifact), changed },
+        {
+          key: 'artifacts.changedSince',
+          params: {
+            id: artifact.id,
+            head: artifact.head,
+            changed: changed.join(', '),
+            base: baseVersion,
+          },
+        },
       )
     }
     if (!Number.isSafeInteger(baseVersion) || baseVersion < 1 || baseVersion > artifact.head) {
@@ -1409,7 +1432,12 @@ export class ThreadDb {
       const artifact = this.artifactIn(sql, id, project, project !== null)
       const n = version ?? artifact.head
       const row = sql.version.get(id, n)
-      if (!row) throw new ThreadDbError(`${id} has no version ${n}`, 'not_found')
+      if (!row) {
+        throw new ThreadDbError(`${id} has no version ${n}`, 'not_found', undefined, {
+          key: 'artifacts.noVersion',
+          params: { id, version: n },
+        })
+      }
       return {
         artifact,
         version: versionRecord(row),
@@ -1514,7 +1542,12 @@ export class ThreadDb {
         const artifact = this.artifactIn(sql, params.id, params.project, true)
         const row = sql.version.get(artifact.id, params.version)
         if (!row) {
-          throw new ThreadDbError(`${artifact.id} has no version ${params.version}`, 'not_found')
+          throw new ThreadDbError(
+            `${artifact.id} has no version ${params.version}`,
+            'not_found',
+            undefined,
+            { key: 'artifacts.noVersion', params: { id: artifact.id, version: params.version } },
+          )
         }
         // Restoring writes every file in which the old version differs from the latest.
         const old = new Map(
@@ -1582,7 +1615,10 @@ export class ThreadDb {
     this.must((sql, db) => {
       const artifact = this.artifactIn(sql, id, null, false)
       if (artifact.deletedAt === null) {
-        throw new ThreadDbError(`${id} is not in Recently deleted`, 'conflict', stateOf(artifact))
+        throw new ThreadDbError(`${id} is not in Recently deleted`, 'conflict', stateOf(artifact), {
+          key: 'artifacts.notDeleted',
+          params: { id },
+        })
       }
       const hashes = sql.hashesOf.all(id).map((row) => String(row.hash))
       sql.deleteArtifact.run(id)
@@ -1618,7 +1654,12 @@ export class ThreadDb {
 
   private threadRow(sql: Statements, artifactId: string, threadId: string): Row {
     const row = sql.threadOf.get(artifactId, threadId)
-    if (!row) throw new ThreadDbError(`${artifactId} has no thread ${threadId}`, 'not_found')
+    if (!row) {
+      throw new ThreadDbError(`${artifactId} has no thread ${threadId}`, 'not_found', undefined, {
+        key: 'artifacts.noThread',
+        params: { id: artifactId, thread: threadId },
+      })
+    }
     return row
   }
 
@@ -1665,7 +1706,12 @@ export class ThreadDb {
         this.artifactIn(sql, id, params.project, true)
         const count = Number((sql.threadCount.get(id) as { n?: number } | undefined)?.n ?? 0)
         if (count >= THREADS_PER_ARTIFACT) {
-          throw new ThreadDbError(`${id} holds ${THREADS_PER_ARTIFACT} threads`, 'conflict')
+          throw new ThreadDbError(
+            `${id} holds ${THREADS_PER_ARTIFACT} threads`,
+            'conflict',
+            undefined,
+            { key: 'artifacts.threadsFull', params: { id, count: THREADS_PER_ARTIFACT } },
+          )
         }
         sql.insertThread.run(id, threadId, JSON.stringify(anchor), at)
         sql.insertComment.run(id, threadId, id, threadId, author.person, author.session, body, at)
@@ -1682,7 +1728,15 @@ export class ThreadDb {
         this.artifactIn(sql, id, params.project, true)
         const thread = this.threadNow(sql, id, threadId)
         if (thread.comments.length >= COMMENTS_PER_THREAD) {
-          throw new ThreadDbError(`${threadId} holds ${COMMENTS_PER_THREAD} comments`, 'conflict')
+          throw new ThreadDbError(
+            `${threadId} holds ${COMMENTS_PER_THREAD} comments`,
+            'conflict',
+            undefined,
+            {
+              key: 'artifacts.commentsFull',
+              params: { thread: threadId, count: COMMENTS_PER_THREAD },
+            },
+          )
         }
         sql.insertComment.run(id, threadId, id, threadId, author.person, author.session, body, at)
         if (author.session === null) sql.setSent.run(null, null, id, threadId)

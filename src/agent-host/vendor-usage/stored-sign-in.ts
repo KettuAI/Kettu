@@ -5,6 +5,7 @@
 import { readFile } from 'node:fs/promises'
 import type { Platform } from '@shared/platform'
 import { getEnv, type Env } from '../find-command'
+import { t } from '../i18n'
 import { versionAtLeast } from '../versions'
 import { readBody, type VendorUsage } from './common'
 
@@ -56,7 +57,7 @@ export async function readSignInFile(file: string): Promise<string | null> {
   } catch (error) {
     const code = (error as NodeJS.ErrnoException).code
     if (code === 'ENOENT' || code === 'ENOTDIR') return null
-    throw new UsageReadError('The stored sign-in could not be read')
+    throw new UsageReadError(t('usageRead.storedUnreadable'))
   }
 }
 
@@ -65,7 +66,7 @@ export function parseSignIn(text: string): unknown {
   try {
     return JSON.parse(text) as unknown
   } catch {
-    throw new UsageReadError('The stored sign-in could not be read')
+    throw new UsageReadError(t('usageRead.storedUnreadable'))
   }
 }
 
@@ -92,10 +93,10 @@ export async function askVendor(request: VendorRequest, place: SignInPlace): Pro
   try {
     url = new URL(request.url)
   } catch {
-    throw new UsageReadError(`${vendor}'s usage endpoint is not listed`)
+    throw new UsageReadError(t('usageRead.endpointNotListed', { vendor }))
   }
   if (url.protocol !== 'https:' || !request.origins.includes(url.origin)) {
-    throw new UsageReadError(`${vendor}'s usage endpoint is not listed`)
+    throw new UsageReadError(t('usageRead.endpointNotListed', { vendor }))
   }
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), request.timeoutMs ?? TIMEOUT_MS)
@@ -110,25 +111,28 @@ export async function askVendor(request: VendorRequest, place: SignInPlace): Pro
     })
   } catch {
     clearTimeout(timer)
-    throw new UsageReadError(`${vendor} could not be reached`)
+    throw new UsageReadError(t('usageRead.unreachable', { vendor }))
   }
   try {
     if (response.status === 401 || response.status === 403) {
-      throw new UsageReadError(`${vendor} did not accept the stored sign-in`, response.status)
+      throw new UsageReadError(t('usageRead.notAccepted', { vendor }), response.status)
     }
     if (!response.ok) {
-      throw new UsageReadError(`${vendor} answered ${response.status}`, response.status)
+      throw new UsageReadError(
+        t('usageRead.answered', { vendor, status: response.status }),
+        response.status,
+      )
     }
     let text: string
     try {
       text = await readBody(response)
     } catch {
-      throw new UsageReadError(`${vendor}'s usage reply could not be read`)
+      throw new UsageReadError(t('usageRead.replyUnreadable', { vendor }))
     }
     try {
       return JSON.parse(text) as unknown
     } catch {
-      throw new UsageReadError(`${vendor}'s usage reply could not be read`)
+      throw new UsageReadError(t('usageRead.replyUnreadable', { vendor }))
     }
   } finally {
     clearTimeout(timer)

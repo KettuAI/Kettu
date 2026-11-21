@@ -4,6 +4,7 @@ import type { OutlineTitle } from '@shared/agent-host'
 import type { ArtifactState } from '@shared/artifacts'
 import type { ArtifactCall } from '../artifacts/model'
 import type { RuntimeCall } from '../artifacts/runtime/calls'
+import type { HostMessage } from '../i18n'
 import type { RoutineCall } from '../routines/calls'
 import type { TaskCall } from '../workflow/model'
 import type { ImageMode, ThreadWrite } from './model'
@@ -87,4 +88,6 @@ export type ThreadReply =
       message: string
       code: ThreadErrorCode | null
       data?: ArtifactState
+      // What the user reads for it, which the host words in their language.
+      text?: HostMessage
     }

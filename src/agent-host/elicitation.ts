@@ -215,54 +215,56 @@ function checkValue(field: FormField, value: FormValues[string]): void {
   const name = field.title
   switch (field.type) {
     case 'text': {
-      if (typeof value !== 'string') throw invalidParams(`${name} takes text`)
+      if (typeof value !== 'string') throw invalidParams(t('elicitation.invalid.text', { name }))
       // JSON Schema counts characters, not UTF-16 units.
       const length = [...value].length
       if (field.minLength !== undefined && length < field.minLength) {
-        throw invalidParams(`${name} takes at least ${field.minLength} characters`)
+        throw invalidParams(t('elicitation.invalid.minLength', { name, min: field.minLength }))
       }
       if (field.maxLength !== undefined && length > field.maxLength) {
-        throw invalidParams(`${name} takes at most ${field.maxLength} characters`)
+        throw invalidParams(t('elicitation.invalid.maxLength', { name, max: field.maxLength }))
       }
       if (field.format !== undefined && formatProblem(field.format, value)) {
-        throw invalidParams(`${name} is not a valid ${field.format}`)
+        throw invalidParams(t('elicitation.invalid.format', { name, format: field.format }))
       }
       return
     }
     case 'number':
       if (typeof value !== 'number' || !Number.isFinite(value)) {
-        throw invalidParams(`${name} takes a number`)
+        throw invalidParams(t('elicitation.invalid.number', { name }))
       }
       if (field.integer && !Number.isInteger(value))
-        throw invalidParams(`${name} takes a whole number`)
+        throw invalidParams(t('elicitation.invalid.integer', { name }))
       if (field.minimum !== undefined && value < field.minimum) {
-        throw invalidParams(`${name} takes at least ${field.minimum}`)
+        throw invalidParams(t('elicitation.invalid.minimum', { name, min: field.minimum }))
       }
       if (field.maximum !== undefined && value > field.maximum) {
-        throw invalidParams(`${name} takes at most ${field.maximum}`)
+        throw invalidParams(t('elicitation.invalid.maximum', { name, max: field.maximum }))
       }
       return
     case 'boolean':
-      if (typeof value !== 'boolean') throw invalidParams(`${name} takes yes or no`)
+      if (typeof value !== 'boolean')
+        throw invalidParams(t('elicitation.invalid.boolean', { name }))
       return
     case 'choice':
       if (typeof value !== 'string' || !field.choices.some((choice) => choice.value === value)) {
-        throw invalidParams(`${name} has no such choice`)
+        throw invalidParams(t('elicitation.invalid.noChoice', { name }))
       }
       return
     case 'choices': {
-      if (!Array.isArray(value)) throw invalidParams(`${name} takes a list of choices`)
-      if (new Set(value).size !== value.length) throw invalidParams(`${name} names a choice twice`)
+      if (!Array.isArray(value)) throw invalidParams(t('elicitation.invalid.list', { name }))
+      if (new Set(value).size !== value.length)
+        throw invalidParams(t('elicitation.invalid.twice', { name }))
       for (const item of value) {
         if (!field.choices.some((choice) => choice.value === item)) {
-          throw invalidParams(`${name} has no such choice`)
+          throw invalidParams(t('elicitation.invalid.noChoice', { name }))
         }
       }
       if (field.minItems !== undefined && value.length < field.minItems) {
-        throw invalidParams(`${name} takes at least ${field.minItems} choices`)
+        throw invalidParams(t('elicitation.invalid.minItems', { name, min: field.minItems }))
       }
       if (field.maxItems !== undefined && value.length > field.maxItems) {
-        throw invalidParams(`${name} takes at most ${field.maxItems} choices`)
+        throw invalidParams(t('elicitation.invalid.maxItems', { name, max: field.maxItems }))
       }
       return
     }
@@ -281,13 +283,14 @@ function given(values: FormValues, key: string): FormValues[string] | undefined 
 export function checkedValues(fields: readonly FormField[], values: FormValues): FormValues {
   const keys = new Set(fields.map((item) => item.key))
   for (const key of Object.keys(values)) {
-    if (!keys.has(key)) throw invalidParams(`The form has no field ${key}`)
+    if (!keys.has(key)) throw invalidParams(t('elicitation.invalid.noField', { key }))
   }
   const sent: [string, FormValues[string]][] = []
   for (const item of fields) {
     const value = given(values, item.key)
     if (value === undefined || (item.type === 'text' && value === '')) {
-      if (item.required) throw invalidParams(`${item.title} is required`)
+      if (item.required)
+        throw invalidParams(t('elicitation.invalid.required', { name: item.title }))
       continue
     }
     checkValue(item, value)

@@ -631,7 +631,7 @@ export class DshConnection implements AgentConnection {
     // options, which is also how it learns that a sign-in was made.
     if (options.hidden || this.listed === null) await this.listSoon()
     if (options.hidden && this.reported === 'none') {
-      throw new AgentRequestError('auth_required', 'DeepSeek Harness has no model to run on')
+      throw new AgentRequestError('auth_required', t('dsh.noModel'))
     }
     // dsh makes the id a folder name, so it stays short and plain.
     const sessionId = `kettu-${randomUUID().replace(/-/g, '')}`
@@ -719,7 +719,7 @@ export class DshConnection implements AgentConnection {
 
   async prompt(sessionId: string, prompt: readonly PromptBlock[]): Promise<PromptResult> {
     const session = this.requireSession(sessionId)
-    if (session.turn) throw new AgentRequestError('agent_error', 'A turn is already running')
+    if (session.turn) throw new AgentRequestError('agent_error', t('agentRun.turnRunning'))
     const proc = await this.ready(session)
     session.cancelling = false
     const result = new Promise<PromptResult>((resolve, reject) => {
@@ -797,8 +797,9 @@ export class DshConnection implements AgentConnection {
     value: string | boolean,
   ): Promise<ConfigOption[]> {
     const session = this.requireSession(sessionId)
-    if (typeof value !== 'string')
-      throw new AgentRequestError('agent_error', `${optionId} takes a choice`)
+    if (typeof value !== 'string') {
+      throw new AgentRequestError('agent_error', t('agentRun.takesChoice', { option: optionId }))
+    }
     switch (optionId) {
       case CONFIG.model:
       case CONFIG.effort: {
@@ -812,9 +813,12 @@ export class DshConnection implements AgentConnection {
             ? this.models.find((choice) => choice.value === value)
             : this.settle(session)
         if (!model || (optionId === CONFIG.effort && !model.efforts.includes(value))) {
-          throw new AgentRequestError('agent_error', `No ${optionId} ${value}`)
+          throw new AgentRequestError(
+            'agent_error',
+            t('agentRun.noChoice', { option: optionId, value }),
+          )
         }
-        if (session.turn) throw new AgentRequestError('agent_error', 'Change it between turns')
+        if (session.turn) throw new AgentRequestError('agent_error', t('agentRun.betweenTurns'))
         const changed =
           optionId === CONFIG.model ? session.model !== value : session.effort !== value
         if (optionId === CONFIG.model) session.model = value
@@ -824,7 +828,8 @@ export class DshConnection implements AgentConnection {
         break
       }
       case CONFIG.mode: {
-        if (!isMode(value)) throw new AgentRequestError('agent_error', `No mode ${value}`)
+        if (!isMode(value))
+          throw new AgentRequestError('agent_error', t('agentRun.noMode', { value }))
         const from = { preset: session.preset, plan: session.plan }
         if (value === 'plan') session.plan = true
         else {
@@ -837,7 +842,7 @@ export class DshConnection implements AgentConnection {
         break
       }
       default:
-        throw new AgentRequestError('agent_error', `No option ${optionId}`)
+        throw new AgentRequestError('agent_error', t('agentRun.noOption', { option: optionId }))
     }
     return this.options(session)
   }
@@ -935,15 +940,11 @@ export class DshConnection implements AgentConnection {
 
   private async handshake(session: Session, proc: Proc): Promise<void> {
     const model = this.settle(session)
-    if (!model)
-      throw new AgentRequestError('auth_required', 'DeepSeek Harness has no model to run on')
+    if (!model) throw new AgentRequestError('auth_required', t('dsh.noModel'))
     const provider = model.provider ?? this.signedIn ?? 'deepseek-official'
     const effort = session.effort === DEFAULT_LEVEL ? null : session.effort
     const timeout = new Promise<never>((_, reject) =>
-      setTimeout(
-        () => reject(new Error('DeepSeek Harness did not start')),
-        INITIALIZE_TIMEOUT_MS,
-      ).unref(),
+      setTimeout(() => reject(new Error(t('dsh.didNotStart'))), INITIALIZE_TIMEOUT_MS).unref(),
     )
     await Promise.race([
       proc.rpc.request('initialize', {
@@ -1370,7 +1371,9 @@ export class DshConnection implements AgentConnection {
   private requireSession(sessionId: string): Session {
     this.assertOpen()
     const session = this.sessions.get(sessionId)
-    if (!session) throw new AgentRequestError('agent_error', `No session ${sessionId}`, -32002)
+    if (!session) {
+      throw new AgentRequestError('agent_error', t('agentRun.noSession', { id: sessionId }), -32002)
+    }
     return session
   }
 

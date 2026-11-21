@@ -146,6 +146,16 @@ export function inProcessTransport(app: AgentApp): AcpTransport & MessageTranspo
   }
 }
 
+/** The words for what the session router reports with a `data.reason`; the agent's own otherwise. */
+function routerText(error: RequestError): string {
+  const data = error.data as { reason?: unknown; folder?: unknown } | null
+  if (data?.reason === 'folder_missing') {
+    return t('agent.sessionFolderMissing', { folder: String(data.folder ?? '(none)') })
+  }
+  if (data?.reason === 'no_session_flag') return t('agent.noSessionFlag')
+  return error.message
+}
+
 /** The ACP messages over what the launcher gave the driver. */
 function acpTransport(transport: AcpTransport | AgentTransport): AcpTransport {
   if ('kind' in transport && transport.kind === 'stdio') {
@@ -682,7 +692,7 @@ export class AcpConnection implements AgentConnection {
       if (error.code === AUTH_REQUIRED) {
         return new AgentRequestError('auth_required', error.message, error.code, error.data)
       }
-      return new AgentRequestError('agent_error', error.message, error.code, error.data)
+      return new AgentRequestError('agent_error', routerText(error), error.code, error.data)
     }
     if (this.connection.signal.aborted) {
       return new AgentRequestError('closed', 'The agent connection closed')
@@ -704,7 +714,10 @@ export class AcpConnection implements AgentConnection {
     )
     if (init.protocolVersion !== 1) {
       throw new Error(
-        `${this.hooks.name ?? 'The agent'} speaks an unsupported protocol version (${init.protocolVersion}).`,
+        t('agent.protocolVersion', {
+          agent: this.hooks.name ?? t('agent.theAgent'),
+          version: String(init.protocolVersion),
+        }),
       )
     }
     const caps = init.agentCapabilities ?? {}
@@ -1336,7 +1349,7 @@ export class AcpConnection implements AgentConnection {
       // Mistral Vibe: `start` answers with the page and an attempt; `complete` waits for the
       // browser to finish it.
       const started = delegatedSignInStart(await request({ action: 'start' }))
-      if (!started) throw new AgentRequestError('agent_error', 'The agent gave no sign-in page')
+      if (!started) throw new AgentRequestError('agent_error', t('agent.noSignInPage'))
       client.openLink(started.url)
       await request({ action: 'complete', attemptId: started.attemptId })
     } finally {

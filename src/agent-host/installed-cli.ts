@@ -10,6 +10,7 @@ import type { Platform } from '@shared/platform'
 import { programFailure, runProgram, type ProgramOptions, type ProgramRun } from './adapter-install'
 import { codexBinary, npmCodexEnv } from './codex-binary'
 import { findCommand, findCommands, getEnv, needsShell, type Env } from './find-command'
+import { t } from './i18n'
 import { compareVersions } from './versions'
 
 /** File access, injected so tests can lay out any platform's install. */
@@ -295,7 +296,7 @@ export class CliVersions {
     // A script changes, not the runner that runs it.
     const file = words.at(-1) ?? program
     const info = await (this.options.stat ?? ((file) => stat(file).catch(() => null)))(file)
-    if (!info) return { error: `${file} was not found.` }
+    if (!info) return { error: t('agent.program.fileNotFound', { file }) }
     const key = [program, ...words, info.size, info.mtimeMs].join('\0')
     let answer = this.answers.get(key)
     if (!answer) {
@@ -338,7 +339,7 @@ export class CliVersions {
           : null
     if (failure) return { answer: { error: failure }, transient }
     const version = parseCliVersion(result.stdout)
-    const answer = version ? { version } : { error: `${name} --version printed no version.` }
+    const answer = version ? { version } : { error: t('agent.program.noVersion', { name }) }
     return { answer, transient: null }
   }
 }

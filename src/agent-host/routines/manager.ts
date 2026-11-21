@@ -1095,7 +1095,7 @@ export class RoutinesManager {
     name: K,
     params: RoutineCalls[K]['params'],
   ): Promise<RoutineCalls[K]['result']> {
-    if (!this.deps.threads) return Promise.reject(new Error('The thread database is not open'))
+    if (!this.deps.threads) return Promise.reject(new Error(t('threadDb.notOpen')))
     return this.deps.threads.routine(name, params)
   }
 }

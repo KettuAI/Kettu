@@ -3,6 +3,7 @@
 
 import { isAbsolute, relative, sep } from 'node:path'
 import type { AgentAccount, ContextBreakdown, ContextList, PlanLimit } from '@shared/agent-host'
+import { t } from '../i18n'
 import { WINDOW_LABELS } from '../session-updates'
 import type { AccountInfo, ContextUsageAnswer, UsageAnswer, UsageWindow } from './sdk'
 
@@ -30,16 +31,16 @@ export function mapAccount(info: AccountInfo | undefined): AgentAccount | null {
   if (!info) return null
   const { apiProvider, apiKeySource, subscriptionType, tokenSource } = info
   if (apiProvider === 'gateway')
-    return { kind: 'gateway', label: 'Custom model gateway', email: null }
+    return { kind: 'gateway', label: t('claude.account.gateway'), email: null }
   if (apiProvider && apiProvider !== 'firstParty') {
     return { kind: 'external', label: EXTERNAL_PROVIDERS[apiProvider] ?? apiProvider, email: null }
   }
   if (apiKeySource && apiKeySource !== 'none') {
-    return { kind: 'api_key', label: 'Anthropic API key', email: null }
+    return { kind: 'api_key', label: t('claude.account.apiKey'), email: null }
   }
   // The answer names no plan for this token, and `auth status` would name the stored sign-in.
   if (tokenSource === 'ANTHROPIC_AUTH_TOKEN') {
-    return { kind: 'gateway', label: 'Custom model gateway', email: null }
+    return { kind: 'gateway', label: t('claude.account.gateway'), email: null }
   }
   if (subscriptionType) {
     return { kind: 'account', label: planLabel(subscriptionType), email: info.email ?? null }
@@ -82,7 +83,7 @@ export function mapAuthStatus(stdout: string): AgentAccount | null {
   }
   // Logged in, but not in a way this knows: leave the account unknown rather than signed out.
   if (fields.loggedIn) return null
-  return { kind: 'none', label: 'Not signed in', email: null }
+  return { kind: 'none', label: t('claude.account.none'), email: null }
 }
 
 const slug = (text: string): string =>

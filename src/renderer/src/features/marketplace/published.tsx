@@ -340,7 +340,11 @@ function NeedRow({ draft, listing }: { draft: PublishDraft; listing: MineListing
     <small data-selectable="">
       {[
         draft.error,
-        problem ? (problem.path ? `${problem.path}: ${problem.message}` : problem.message) : null,
+        problem
+          ? problem.path
+            ? `${problem.path}: ${problem.text ?? problem.message}`
+            : (problem.text ?? problem.message)
+          : null,
         listing?.current ? t('published.needs.stays', { version: listing.current }) : null,
       ]
         .filter(Boolean)

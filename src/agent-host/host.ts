@@ -146,6 +146,7 @@ import { catalogFile, MarketCatalogService } from './marketplace/catalog'
 import { bundlesFile, MarketBundlesService } from './marketplace/bundles'
 import { communityFile, MarketCommunityService } from './marketplace/community'
 import { MarketConnectionsService } from './marketplace/connections'
+import { logText } from './localized-error'
 import { parseSignIns } from './marketplace/oauth'
 import { McpProxy } from './marketplace/proxy'
 import type { CodexRequest } from './marketplace/codex-plugins'
@@ -2317,7 +2318,7 @@ export class AgentHost {
   private async appServer(agentId: AgentId): Promise<CodexRequest> {
     const { connection } = await this.agents.ensureReady(agentId)
     const request = connection.request?.bind(connection)
-    if (!request) throw new HostError('agent_unavailable', 'The agent takes no such request')
+    if (!request) throw new HostError('agent_unavailable', t('hostError.agentNoRequest'))
     return request
   }
 
@@ -2512,7 +2513,7 @@ export class AgentHost {
       })
     } catch (error) {
       const reason = error instanceof Error ? error.message : String(error)
-      this.diagnostics.log('warn', `${agent}: could not write a commit message: ${reason}`)
+      this.diagnostics.log('warn', `${agent}: could not write a commit message: ${logText(error)}`)
       throw new HostError('agent_error', t('git.commitMessageFailed', { agent, reason }))
     }
   }
@@ -2567,7 +2568,7 @@ export class AgentHost {
     } catch (error) {
       const reason = error instanceof Error ? error.message : String(error)
       // Info: the report this draft is for must not read its own failure as part of the problem.
-      this.diagnostics.log('info', `${agent}: could not draft a problem report: ${reason}`)
+      this.diagnostics.log('info', `${agent}: could not draft a problem report: ${logText(error)}`)
       throw new HostError('agent_error', t('report.draftFailed', { agent, reason }))
     }
   }
@@ -2790,9 +2791,9 @@ export class AgentHost {
   ): Promise<{ terminalId: string; notified: boolean }> {
     const sessionId = this.sessions.browserSession(params.sessionId)
     const agentId = sessionId ? this.sessions.sessionAgent(sessionId) : null
-    if (!sessionId || !agentId) throw new HostError('not_found', `No session ${params.sessionId}`)
+    if (!sessionId || !agentId) throw new HostError('not_found', t('session.notFound'))
     const folder = this.sessions.sessionFolder(sessionId) ?? this.sessions.sessionProject(sessionId)
-    if (!folder) throw new HostError('restricted', 'This session has no folder to run in')
+    if (!folder) throw new HostError('restricted', t('hostError.noFolder'))
     const answer = await this.terminalCall({
       kind: 'reply',
       sessionId,
@@ -3592,7 +3593,7 @@ export class AgentHost {
       'artifacts.file': async ({ id, version, path }) => {
         const found = await artifacts.read(id, { version })
         const file = found.files.find((f) => f.path === path)
-        if (!file) throw new HostError('not_found', `${id} version ${version} has no file ${path}`)
+        if (!file) throw new HostError('not_found', t('hostError.noArtifactFile', { path }))
         return {
           type: artifactFileType(path),
           bytes: toArrayBuffer(await artifacts.bytes(found, file)),
@@ -3718,7 +3719,7 @@ export class AgentHost {
           fromDevice(device),
         )
         if (!this.computer?.answer(requestId, decision)) {
-          throw new HostError('not_found', `No app waits in ${entryId}`)
+          throw new HostError('not_found', t('session.waiting.app.gone'))
         }
       },
       'sessions.answerProjectMcp': ({ sessionId, entryId, decision }, { device }) => {
@@ -3762,13 +3763,13 @@ export class AgentHost {
       },
       'computer.show': async ({ sessionId }, { device }) => {
         // The window comes forward on this computer, for someone in front of it.
-        if (device) throw new HostError('forbidden', 'Show app works only on this computer.')
+        if (device) throw new HostError('forbidden', t('hostError.showHere'))
         await this.computer?.show(sessionId)
       },
       'computer.declineSetup': ({ sessionId, entryId }, { device }) => {
         const requestId = sessions.declineComputerSetup(sessionId, entryId, fromDevice(device))
         if (!this.computer?.declineSetup(requestId)) {
-          throw new HostError('not_found', `No setup waits in ${entryId}`)
+          throw new HostError('not_found', t('session.waiting.setup.gone'))
         }
       },
       'browser.answerOrigin': ({ sessionId, entryId, decision }, { device }) => {

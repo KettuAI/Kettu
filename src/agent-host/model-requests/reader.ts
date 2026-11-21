@@ -7,6 +7,7 @@ import {
   type ModelRequestsPage,
 } from '@shared/model-requests'
 import { harnessOf, type AgentId, type HarnessId } from '@shared/thread'
+import { t } from '../i18n'
 import type { ByteSource } from '../usage/lines'
 import { decodeRanges } from './claude-transcript'
 
@@ -41,7 +42,7 @@ export function byHarness(
     summary: async (target) => (await of(target)?.summary(target)) ?? null,
     raw: (target, raw, full) => {
       const reader = of(target)
-      if (!reader) return Promise.reject(new Error('This agent keeps no record Kettu reads'))
+      if (!reader) return Promise.reject(new Error(t('modelRequest.noRecord')))
       return reader.raw(target, raw, full)
     },
   }
@@ -64,10 +65,10 @@ export async function readRanges(
   const size = source.length ?? 0
   let total = 0
   for (const [start, end] of ranges) {
-    if (end > size) throw new Error('The session file changed; open the request again')
+    if (end > size) throw new Error(t('modelRequest.fileChanged'))
     total += end - start
   }
-  if (total > RAW_LIMIT) throw new Error('These records are too large to show')
+  if (total > RAW_LIMIT) throw new Error(t('modelRequest.tooLarge'))
   const records: unknown[] = []
   try {
     for (const [start, end] of ranges) {
@@ -75,7 +76,7 @@ export async function readRanges(
     }
   } catch (error) {
     if (error instanceof SyntaxError) {
-      throw new Error('The session file changed; open the request again', { cause: error })
+      throw new Error(t('modelRequest.fileChanged'), { cause: error })
     }
     throw error
   }

@@ -1,6 +1,7 @@
 // Pure parsers for the machine-readable output of git and the text of gh.
 
 import type { ChangedFile, ChangeStatus, PushTarget } from '@shared/git'
+import { LocalizedError } from '../localized-error'
 
 export interface PorcelainStatus {
   /** Null on an unborn branch. */
@@ -96,7 +97,11 @@ export function parseShortstat(output: string): { insertions: number; deletions:
 /** Parses `git rev-list --left-right --count A...B`: commits only in A, then only in B. */
 export function parseLeftRightCount(output: string): { left: number; right: number } {
   const match = /^(\d+)\s+(\d+)\s*$/.exec(output)
-  if (!match) throw new Error(`Unexpected rev-list count output: ${JSON.stringify(output)}`)
+  if (!match)
+    throw new LocalizedError({
+      key: 'git.unexpected.revList',
+      params: { output: JSON.stringify(output) },
+    })
   return { left: Number(match[1]), right: Number(match[2]) }
 }
 

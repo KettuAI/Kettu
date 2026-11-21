@@ -204,6 +204,7 @@ import type { McpTransports } from './marketplace/servers'
 import { questionsResult } from './question-answers'
 import { HostError, invalidParams, notFound } from './errors'
 import { t } from './i18n'
+import { logText } from './localized-error'
 import {
   GITHUB_PULL_REQUEST_URL,
   githubReferenceOf,
@@ -1279,7 +1280,7 @@ export class SessionManager {
 
   private recordOf(sessionId: string): SessionRecord {
     const record = this.live.get(sessionId)?.record ?? this.records.get(sessionId)
-    if (!record) throw notFound(`No session ${sessionId}`)
+    if (!record) throw notFound(t('session.notFound'))
     return record
   }
 
@@ -1679,9 +1680,9 @@ export class SessionManager {
     this.recordOf(sessionId)
     const live = await this.revive(sessionId)
     const entry = live.thread.byId[entryId]
-    if (entry?.kind !== 'problem_report') throw notFound(`No report waits in ${entryId}`)
+    if (entry?.kind !== 'problem_report') throw notFound(t('session.waiting.report.gone'))
     if (entry.outcome !== null) {
-      throw new HostError('not_found', `The report ${entryId} was already answered`, {
+      throw new HostError('not_found', t('session.waiting.report.answered'), {
         reason: ALREADY_ANSWERED,
         device: entry.device ?? null,
       })
@@ -1760,12 +1761,12 @@ export class SessionManager {
     const live = await this.revive(sessionId)
     const entry = live.thread.byId[entryId]
     if (!memory || entry?.kind !== 'memory' || entry.layer !== 'global') {
-      throw notFound(`No memory proposal waits in ${entryId}`)
+      throw notFound(t('session.waiting.memoryProposal.gone'))
     }
     const key = `${sessionId}\n${entryId}`
     const answering = this.memoryAnswers.get(key)
     if (entry.status !== 'proposed' || answering !== undefined) {
-      throw new HostError('not_found', `The memory proposal ${entryId} was already answered`, {
+      throw new HostError('not_found', t('session.waiting.memoryProposal.answered'), {
         reason: ALREADY_ANSWERED,
         device: answering !== undefined ? answering : (entry.device ?? null),
       })
@@ -1783,10 +1784,10 @@ export class SessionManager {
       const by: MemorySource = { agentId: live.record.agentId, sessionId }
       let memoryId = entry.memoryId
       if (entry.action === 'forget') {
-        if (memoryId === null) throw invalidParams(`${entryId} names no memory to forget`)
+        if (memoryId === null) throw invalidParams(t('session.waiting.memoryProposal.noForget'))
         await memory.remove(scope, memoryId, by)
       } else {
-        if (entry.draft === null) throw invalidParams(`${entryId} holds nothing to remember`)
+        if (entry.draft === null) throw invalidParams(t('session.waiting.memoryProposal.noDraft'))
         const id = entry.action === 'update' ? memoryId : null
         memoryId = (await memory.save(scope, id, entry.draft, by)).entry.id
       }
@@ -1804,10 +1805,10 @@ export class SessionManager {
     const live = await this.revive(sessionId)
     const entry = live.thread.byId[entryId]
     if (!memory || entry?.kind !== 'memory' || entry.status !== 'written' || entry.undo === null) {
-      throw notFound(`No memory write to take back in ${entryId}`)
+      throw notFound(t('session.waiting.memoryUndo.gone'))
     }
     const key = `${sessionId}\n${entryId}`
-    if (this.memoryAnswers.has(key)) throw notFound(`The write in ${entryId} is being taken back`)
+    if (this.memoryAnswers.has(key)) throw notFound(t('session.waiting.memoryUndo.busy'))
     this.memoryAnswers.set(key, null)
     let result: 'undone' | 'changed' | 'gone'
     try {
@@ -1822,13 +1823,13 @@ export class SessionManager {
       return
     }
     if (result === 'changed') {
-      throw new HostError('conflict', 'The memory changed after this write, so it stays as it is', {
+      throw new HostError('conflict', t('session.waiting.memoryUndo.changed'), {
         reason: 'memory_changed',
       })
     }
     // Its record is gone for good, so the thread offers Undo no more.
     this.emit(live, [{ op: 'entry.update', id: entryId, changes: { undo: null } }])
-    throw new HostError('not_found', 'This write can no longer be taken back', {
+    throw new HostError('not_found', t('session.waiting.memoryUndo.undone'), {
       reason: 'memory_gone',
     })
   }
@@ -2024,9 +2025,9 @@ export class SessionManager {
     const live = this.live.get(sessionId)
     const entry = live?.thread.byId[entryId]
     if (!live || entry?.kind !== 'surface_access')
-      throw notFound(`No terminal request in ${entryId}`)
+      throw notFound(t('session.waiting.terminal.gone'))
     if (entry.decision !== null || !this.surfaceWaits.has(entryId)) {
-      throw new HostError('not_found', `The terminal request ${entryId} was already answered`, {
+      throw new HostError('not_found', t('session.waiting.terminal.answered'), {
         reason: ALREADY_ANSWERED,
         device: entry.device ?? null,
       })
@@ -2094,9 +2095,9 @@ export class SessionManager {
     this.recordOf(sessionId)
     const live = this.live.get(sessionId)
     const entry = live?.thread.byId[entryId]
-    if (!live || entry?.kind !== 'device_access') throw notFound(`No device request in ${entryId}`)
+    if (!live || entry?.kind !== 'device_access') throw notFound(t('session.waiting.device.gone'))
     if (entry.decision !== null || !this.deviceWaits.has(entryId)) {
-      throw new HostError('not_found', `The device request ${entryId} was already answered`, {
+      throw new HostError('not_found', t('session.waiting.device.answered'), {
         reason: ALREADY_ANSWERED,
         device: entry.device ?? null,
       })
@@ -2218,9 +2219,9 @@ export class SessionManager {
     this.recordOf(sessionId)
     const live = this.live.get(sessionId)
     const entry = live?.thread.byId[entryId]
-    if (!live || entry?.kind !== 'market_publish') throw notFound(`No Marketplace card ${entryId}`)
+    if (!live || entry?.kind !== 'market_publish') throw notFound(t('session.waiting.market.gone'))
     const answered = (): HostError =>
-      new HostError('not_found', `The Marketplace card ${entryId} was already answered`, {
+      new HostError('not_found', t('session.waiting.market.answered'), {
         reason: ALREADY_ANSWERED,
         device: entry.device ?? null,
       })
@@ -2231,7 +2232,7 @@ export class SessionManager {
     )
       throw answered()
     if (given.decision === 'confirm' && entry.action === 'publish' && entry.publisher) {
-      if (!given.handle) throw invalidParams('A first publish needs a publisher name')
+      if (!given.handle) throw invalidParams(t('session.publisherName'))
       this.marketAnswering.add(entryId)
       try {
         await setPublisher(given.handle)
@@ -2408,9 +2409,10 @@ export class SessionManager {
     this.recordOf(sessionId)
     const live = this.live.get(sessionId)
     const entry = live?.thread.byId[entryId]
-    if (!live || entry?.kind !== 'settings_change') throw notFound(`No settings card ${entryId}`)
+    if (!live || entry?.kind !== 'settings_change')
+      throw notFound(t('session.waiting.settings.gone'))
     if (entry.outcome !== null || !this.settingsWaits.has(entryId)) {
-      throw new HostError('not_found', `The settings card ${entryId} was already answered`, {
+      throw new HostError('not_found', t('session.waiting.settings.answered'), {
         reason: ALREADY_ANSWERED,
         device: entry.device ?? null,
       })
@@ -2429,9 +2431,9 @@ export class SessionManager {
   settingsChange(sessionId: string, entryId: string): SettingChangeItem[] {
     this.recordOf(sessionId)
     const entry = this.live.get(sessionId)?.thread.byId[entryId]
-    if (entry?.kind !== 'settings_change') throw notFound(`No settings change ${entryId}`)
+    if (entry?.kind !== 'settings_change') throw notFound(t('session.waiting.settings.noChange'))
     if (entry.outcome?.kind !== 'changed' || entry.outcome.undone || entry.outcome.stale) {
-      throw new HostError('conflict', 'This change cannot be undone')
+      throw new HostError('conflict', t('session.waiting.settings.noUndo'))
     }
     return entry.items
   }
@@ -2543,9 +2545,9 @@ export class SessionManager {
   ): void {
     this.recordOf(sessionId)
     const ask = this.live.get(sessionId)?.ask
-    if (!ask || ask.entryId !== entryId) throw notFound(`No step waits in ${entryId}`)
+    if (!ask || ask.entryId !== entryId) throw notFound(t('session.waiting.step.gone'))
     if (ask.answer) {
-      throw new HostError('not_found', `The step of ${entryId} was already answered`, {
+      throw new HostError('not_found', t('session.waiting.step.answered'), {
         reason: ALREADY_ANSWERED,
         device: ask.answer.device,
       })
@@ -2600,12 +2602,12 @@ export class SessionManager {
     const waiting = key === undefined ? undefined : this.originRequests.get(key)
     const first = waiting?.answer
     if (live && (first || live.originsAnswered.has(entryId))) {
-      throw new HostError('not_found', `The new site of ${entryId} was already answered`, {
+      throw new HostError('not_found', t('session.waiting.origin.answered'), {
         reason: ALREADY_ANSWERED,
         device: first ? first.device : (live.originsAnswered.get(entryId) ?? null),
       })
     }
-    if (!waiting) throw notFound(`No new site waits in ${entryId}`)
+    if (!waiting) throw notFound(t('session.waiting.origin.gone'))
     waiting.answer = { decision, device: device ?? null }
     return { owner: waiting.owner, requestId: waiting.requestId }
   }
@@ -2713,12 +2715,12 @@ export class SessionManager {
     const waiting = requestId === undefined ? undefined : this.appRequests.get(requestId)
     const first = waiting?.answer
     if (live && (first || live.appsAnswered.has(entryId))) {
-      throw new HostError('not_found', `The app of ${entryId} was already answered`, {
+      throw new HostError('not_found', t('session.waiting.app.answered'), {
         reason: ALREADY_ANSWERED,
         device: first ? first.device : (live.appsAnswered.get(entryId) ?? null),
       })
     }
-    if (!waiting || requestId === undefined) throw notFound(`No app waits in ${entryId}`)
+    if (!waiting || requestId === undefined) throw notFound(t('session.waiting.app.gone'))
     waiting.answer = { decision, device: device ?? null }
     return requestId
   }
@@ -2794,7 +2796,7 @@ export class SessionManager {
     const live = this.live.get(sessionId)
     const requestId = live && [...live.setups].find(([, id]) => id === entryId)?.[0]
     const waiting = requestId === undefined ? undefined : this.setupRequests.get(requestId)
-    if (!waiting || requestId === undefined) throw notFound(`No setup waits in ${entryId}`)
+    if (!waiting || requestId === undefined) throw notFound(t('session.waiting.setup.gone'))
     waiting.declinedBy = device ?? null
     return requestId
   }
@@ -3217,7 +3219,7 @@ export class SessionManager {
         const entry = live.thread.byId[entryId]
         return { entries: entry ? [entry] : [] }
       })
-      if (!entries[0]) throw notFound(`Session ${sessionId} has no entry ${entryId}`)
+      if (!entries[0]) throw notFound(t('session.noEntry'))
       return entries[0]
     }
     const record = this.recordOf(sessionId)
@@ -3241,7 +3243,7 @@ export class SessionManager {
       stored && this.isCurrent(record, stored.head)
         ? (splitLinks([stored.entry]) ?? [stored.entry]).find(({ id }) => id === entryId)
         : undefined
-    if (!entry) throw notFound(`Session ${sessionId} has no entry ${entryId}`)
+    if (!entry) throw notFound(t('session.noEntry'))
     return settled(entry)
   }
 
@@ -3295,7 +3297,7 @@ export class SessionManager {
 
   async modelRequestRaw(sessionId: string, raw: string, full: boolean): Promise<ModelRequestRaw> {
     const reader = this.deps.modelRequests
-    if (!reader) throw notFound(`Session ${sessionId} has no record of its requests to read`)
+    if (!reader) throw notFound(t('session.noRequestRecord'))
     return reader.raw(this.requestsTarget(sessionId), raw, full)
   }
 
@@ -3499,7 +3501,7 @@ export class SessionManager {
       this.summaryFailedAt.set(sessionId, this.now())
       this.deps.diagnostics.log(
         'warn',
-        `${this.deps.agents.name(writer)}: could not title the outline of session ${sessionId}: ${(error as Error).message}`,
+        `${this.deps.agents.name(writer)}: could not title the outline of session ${sessionId}: ${logText(error)}`,
       )
       return { titles: [] }
     } finally {
@@ -3829,16 +3831,16 @@ export class SessionManager {
     this.recordOf(sessionId)
     const live = this.live.get(sessionId)
     const entry = live?.thread.byId[entryId]
-    if (!live || entry?.kind !== 'project_mcp') throw notFound(`No MCP servers wait in ${entryId}`)
+    if (!live || entry?.kind !== 'project_mcp') throw notFound(t('session.waiting.mcp.gone'))
     if (entry.decision !== null) {
-      throw new HostError('not_found', `The MCP servers of ${entryId} were already answered`, {
+      throw new HostError('not_found', t('session.waiting.mcp.answered'), {
         reason: ALREADY_ANSWERED,
         device: entry.device ?? null,
       })
     }
     const card = this.projectMcpCards.get(sessionId)
     const answers = this.deps.projectMcp
-    if (card?.entryId !== entryId || !answers) throw notFound(`No MCP servers wait in ${entryId}`)
+    if (card?.entryId !== entryId || !answers) throw notFound(t('session.waiting.mcp.gone'))
     answers.answer(
       card.folder,
       entry.servers.map((server) => server.name),
@@ -3900,16 +3902,16 @@ export class SessionManager {
     this.recordOf(sessionId)
     const live = this.live.get(sessionId)
     const entry = live?.thread.byId[entryId]
-    if (!live || entry?.kind !== 'project_hooks') throw notFound(`No hooks wait in ${entryId}`)
+    if (!live || entry?.kind !== 'project_hooks') throw notFound(t('session.waiting.hooks.gone'))
     if (entry.decision !== null) {
-      throw new HostError('not_found', `The hooks of ${entryId} were already answered`, {
+      throw new HostError('not_found', t('session.waiting.hooks.answered'), {
         reason: ALREADY_ANSWERED,
         device: entry.device ?? null,
       })
     }
     const card = this.projectHooksCards.get(sessionId)
     const answers = this.deps.projectHooks
-    if (card?.entryId !== entryId || !answers) throw notFound(`No hooks wait in ${entryId}`)
+    if (card?.entryId !== entryId || !answers) throw notFound(t('session.waiting.hooks.gone'))
     answers.answer(card.folder, card.digest, decision)
     for (const [id, other] of [...this.projectHooksCards]) {
       if (other.folder !== card.folder) continue
@@ -4567,7 +4569,8 @@ export class SessionManager {
     portId?: string,
   ): Promise<SessionSummary> {
     const { agents, projects, scratch } = this.deps
-    if (!agents.has(params.agentId)) throw invalidParams(`Unknown agent ${params.agentId}`)
+    if (!agents.has(params.agentId))
+      throw invalidParams(t('agent.unknown', { agent: params.agentId }))
     agents.assertEnabled(params.agentId)
     // Before a prepared session is taken over, so a refused prompt leaves it prepared.
     const prompt = params.prompt && this.hydrate(params.prompt)
@@ -4582,7 +4585,7 @@ export class SessionManager {
       if (adopted) return adopted
     }
     if (params.projectPath === null && params.parentId !== undefined) {
-      throw invalidParams('A sub-session belongs to the project of its parent')
+      throw invalidParams(t('session.subSessionProject'))
     }
     const projectPath =
       params.projectPath === null
@@ -4591,7 +4594,7 @@ export class SessionManager {
     if (params.parentId !== undefined) {
       const parent = this.recordOf(params.parentId)
       if (!samePath(parent.projectPath, projectPath, this.deps.platform)) {
-        throw invalidParams('A sub-session belongs to the project of its parent')
+        throw invalidParams(t('session.subSessionProject'))
       }
     }
     if (!scratch.contains(projectPath)) await projects.add(projectPath)
@@ -4602,7 +4605,7 @@ export class SessionManager {
       if (inherited) worktree = { ...inherited }
     } else if (params.worktree !== undefined) {
       if (scratch.contains(projectPath)) {
-        throw invalidParams('A worktree needs a project in a Git repository')
+        throw invalidParams(t('session.worktreeNeedsRepo'))
       }
       const request: Parameters<WorktreeManager['create']>[1] = {
         base: params.worktree.base,
@@ -4705,7 +4708,8 @@ export class SessionManager {
    */
   async createStep(params: TaskStepStart): Promise<SessionSummary> {
     const { agents, projects } = this.deps
-    if (!agents.has(params.agentId)) throw invalidParams(`Unknown agent ${params.agentId}`)
+    if (!agents.has(params.agentId))
+      throw invalidParams(t('agent.unknown', { agent: params.agentId }))
     agents.assertEnabled(params.agentId)
     const projectPath = await projects.resolveDirectory(params.projectPath)
     const now = this.now()
@@ -4791,7 +4795,8 @@ export class SessionManager {
    */
   async createRun(params: RoutineSessionStart): Promise<SessionSummary> {
     const { agents, projects, scratch } = this.deps
-    if (!agents.has(params.agentId)) throw invalidParams(`Unknown agent ${params.agentId}`)
+    if (!agents.has(params.agentId))
+      throw invalidParams(t('agent.unknown', { agent: params.agentId }))
     agents.assertEnabled(params.agentId)
     const projectPath = await projects.resolveDirectory(params.projectPath)
     if (!scratch.contains(projectPath)) await projects.add(projectPath)
@@ -4868,7 +4873,7 @@ export class SessionManager {
     portId: string,
   ): Promise<SessionSummary> {
     if (!this.deps.agents.has(params.agentId)) {
-      throw invalidParams(`Unknown agent ${params.agentId}`)
+      throw invalidParams(t('agent.unknown', { agent: params.agentId }))
     }
     this.deps.agents.assertEnabled(params.agentId)
     const key = preparedKey(params)
@@ -4931,7 +4936,7 @@ export class SessionManager {
         params.projectPath !== null &&
         !samePath(params.projectPath, projectPath, this.deps.platform)
       ) {
-        throw invalidParams('A sub-session belongs to the project of its parent')
+        throw invalidParams(t('session.subSessionProject'))
       }
     } else {
       projectPath =
@@ -7118,7 +7123,7 @@ export class SessionManager {
       throw new HostError('restricted', t('session.subagent.noPrompt'))
     }
     this.refuseIfCannotSend(sessionId)
-    if (!this.deps.agents.has(agentId)) throw invalidParams(`Unknown agent ${agentId}`)
+    if (!this.deps.agents.has(agentId)) throw invalidParams(t('agent.unknown', { agent: agentId }))
     this.deps.agents.assertEnabled(agentId)
     this.reportsSent.delete(sessionId)
     const hydrated = this.hydrate(params.content)
@@ -7442,7 +7447,7 @@ export class SessionManager {
       if (item.type === 'text') bytes += Buffer.byteLength(item.text, 'utf8')
       if (item.type !== 'ref' || item.ref.kind !== 'attachment') return item
       const store = this.deps.attachments
-      if (!store) throw invalidParams('This host takes no attachments')
+      if (!store) throw invalidParams(t('session.noAttachments'))
       const attachment = store.view(item.ref.attachment.id)
       bytes += promptShare(attachment)
       return { type: 'ref', ref: { kind: 'attachment', attachment } }
@@ -7506,7 +7511,7 @@ export class SessionManager {
         shown.push(item)
         continue
       }
-      if (!store) throw invalidParams('This host takes no attachments')
+      if (!store) throw invalidParams(t('session.noAttachments'))
       const record = store.get(item.ref.attachment.id)
       const sent = await sendAttachment(store, record, prompt)
       ids.push(record.id)
@@ -7591,7 +7596,7 @@ export class SessionManager {
   async blob(sessionId: string, hash: string): Promise<AttachmentBytes> {
     this.recordOf(sessionId)
     const stored = await this.storedBlob(sessionId, hash)
-    if (!stored) throw notFound(`Session ${sessionId} keeps no attachment ${hash}`)
+    if (!stored) throw notFound(t('session.noAttachment'))
     return { mimeType: stored.mime, bytes: toArrayBuffer(stored.data) }
   }
 
@@ -7663,7 +7668,7 @@ export class SessionManager {
   async unqueue(sessionId: string, itemId: string): Promise<void> {
     const live = await this.revive(sessionId)
     const { queue } = live.thread.session
-    if (!queue.some((item) => item.id === itemId)) throw notFound(`No queued prompt ${itemId}`)
+    if (!queue.some((item) => item.id === itemId)) throw notFound(t('session.noQueued'))
     live.queuedBy.delete(itemId)
     const rest = queue.filter((item) => item.id !== itemId)
     this.update(live, { queue: rest, ...(rest.length === 0 ? { queuePaused: false } : {}) })
@@ -7683,7 +7688,7 @@ export class SessionManager {
   /** Steers a queued prompt; false when the turn was ending and the prompt stays first. */
   private async steerItem(live: Live, itemId: string): Promise<boolean> {
     const item = live.thread.session.queue.find((i) => i.id === itemId)
-    if (!item) throw notFound(`No queued prompt ${itemId}`)
+    if (!item) throw notFound(t('session.noQueued'))
     if (!this.deps.agents.status(live.record.agentId).capabilities.steering) {
       throw new HostError(
         'restricted',
@@ -7762,7 +7767,7 @@ export class SessionManager {
     }
     const { queue } = live.thread.session
     const item = queue.find((i) => i.id === itemId)
-    if (!item) throw notFound(`No queued prompt ${itemId}`)
+    if (!item) throw notFound(t('session.noQueued'))
     if (!live.turn || live.turn.ended) throw new HostError('busy', t('session.noTurn'))
     this.update(live, { queue: [item, ...queue.filter((i) => i.id !== itemId)] })
     this.persist(live)
@@ -7957,7 +7962,7 @@ export class SessionManager {
       live.titleFailedAt = this.now()
       this.deps.diagnostics.log(
         'warn',
-        `${name}: could not title session ${live.id}: ${(error as Error).message}`,
+        `${name}: could not title session ${live.id}: ${logText(error)}`,
       )
     } finally {
       live.titleWriting = false
@@ -7986,7 +7991,7 @@ export class SessionManager {
         const title = usableTitle(await this.askTitle(writer, target.model, message))
         if (title) return title
       } catch (error) {
-        this.deps.diagnostics.log('warn', `Could not title a task: ${(error as Error).message}`)
+        this.deps.diagnostics.log('warn', `Could not title a task: ${logText(error)}`)
       }
     }
     return usableTitle(this.title(sessionId) ?? null)
@@ -9125,10 +9130,7 @@ export class SessionManager {
         return
       }
       ended({ status: 'failed', error: agentError(error).message })
-      this.deps.diagnostics.log(
-        'warn',
-        `The side question of ${live.id} failed: ${(error as Error).message}`,
-      )
+      this.deps.diagnostics.log('warn', `The side question of ${live.id} failed: ${logText(error)}`)
     }
   }
 
@@ -9649,12 +9651,12 @@ export class SessionManager {
     const live = this.live.get(sessionId)
     const pending = live?.permissions.get(requestId)
     if (live && !pending && live.answered.has(requestId)) {
-      throw new HostError('not_found', `Request ${requestId} was already answered`, {
+      throw new HostError('not_found', t('session.waiting.permission.answered'), {
         reason: ALREADY_ANSWERED,
         device: live.answered.get(requestId) ?? null,
       })
     }
-    if (!live || !pending) throw notFound(`No pending permission request ${requestId}`)
+    if (!live || !pending) throw notFound(t('session.waiting.permission.gone'))
     let result: Exclude<NonNullable<ToolEntry['permissionResult']>, string>
     let given: PermissionAnswer
     const form = pending.elicitation?.kind === 'form' ? pending.elicitation : null
@@ -9768,9 +9770,9 @@ export class SessionManager {
     const status = live.thread.session.status
     if (!live.connection && status !== 'closed') throw busyError(status)
     const option = live.thread.session.config.find((o) => o.id === optionId)
-    if (!option) throw invalidParams(`No config option ${optionId}`)
+    if (!option) throw invalidParams(t('session.noConfigOption', { option: optionId }))
     if (!isValueOf(option, value)) {
-      throw invalidParams(`${String(value)} is not a choice of ${option.name}`)
+      throw invalidParams(t('session.notAChoice', { value: String(value), option: option.name }))
     }
     if (option.idleOnly && (live.turn || (status !== 'ready' && status !== 'closed'))) {
       throw new HostError('busy', t('session.configBetweenTurns', { option: option.name }))
@@ -10554,7 +10556,7 @@ export class SessionManager {
     message: UserContent[] | null,
   ): Promise<WorktreeRecord> {
     const manager = this.deps.worktrees
-    if (!manager) throw invalidParams('A worktree needs a project in a Git repository')
+    if (!manager) throw invalidParams(t('session.worktreeNeedsRepo'))
     const worktree = await manager.create(projectPath, request)
     if (
       message &&
@@ -10598,7 +10600,7 @@ export class SessionManager {
     } catch (error) {
       this.deps.diagnostics.log(
         'warn',
-        `${this.deps.agents.name(target.agentId)}: could not name a branch: ${(error as Error).message}`,
+        `${this.deps.agents.name(target.agentId)}: could not name a branch: ${logText(error)}`,
       )
       return null
     }
@@ -10693,7 +10695,7 @@ export class SessionManager {
     const { worktree } = record
     const manager = this.deps.worktrees
     if (!worktree || worktree.path === '' || !manager) {
-      throw notFound('This session has no worktree')
+      throw notFound(t('session.noWorktree'))
     }
     const state = await manager.inspect(record.projectPath, worktree)
     const others = this.worktreeUsers(worktree.path)
@@ -10718,7 +10720,7 @@ export class SessionManager {
     const { worktree } = record
     const manager = this.deps.worktrees
     if (!worktree || worktree.path === '' || worktree.removed !== undefined || !manager) {
-      throw notFound('This session has no worktree to remove')
+      throw notFound(t('session.noWorktreeToRemove'))
     }
     const users = this.worktreeUsers(worktree.path)
     await this.closeAll(
@@ -10753,7 +10755,7 @@ export class SessionManager {
   retryWorktreeSetup(sessionId: string): void {
     const record = this.recordOf(sessionId)
     const { worktree } = record
-    if (!worktree || worktree.removed !== undefined) throw notFound('This session has no worktree')
+    if (!worktree || worktree.removed !== undefined) throw notFound(t('session.noWorktree'))
     if (this.deps.worktrees?.isPreparing(worktree.path)) return
     this.prepareWorktree(record.projectPath, worktree)
   }
@@ -10762,7 +10764,7 @@ export class SessionManager {
   skipWorktreeSetup(sessionId: string): void {
     const record = this.recordOf(sessionId)
     const { worktree } = record
-    if (!worktree || worktree.removed !== undefined) throw notFound('This session has no worktree')
+    if (!worktree || worktree.removed !== undefined) throw notFound(t('session.noWorktree'))
     this.deps.worktrees?.stop(worktree.path)
     this.afterBranchName(record.projectPath, worktree.path, () => {
       this.preparing.delete(pathKey(worktree.path, this.deps.platform))
@@ -11239,7 +11241,7 @@ export class SessionManager {
     fork?: boolean
   }): Promise<SessionSummary> {
     if (!this.deps.agents.has(params.agentId))
-      throw invalidParams(`Unknown agent ${params.agentId}`)
+      throw invalidParams(t('agent.unknown', { agent: params.agentId }))
     this.deps.agents.assertEnabled(params.agentId)
     const projectPath = await this.deps.projects.resolveDirectory(params.projectPath)
     const existing = this.findByAcp(params.agentId, params.acpSessionId)

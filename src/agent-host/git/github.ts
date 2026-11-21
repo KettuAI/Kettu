@@ -12,6 +12,7 @@ import {
   type PullRequestAuthor,
   type PullRequestState,
 } from '@shared/git'
+import { LocalizedError } from '../localized-error'
 import type { BranchPullRequest } from './api'
 
 const PULL_REQUEST_FIELDS =
@@ -189,10 +190,14 @@ function authorOf(value: unknown): PullRequestAuthor | null {
 
 /** Maps the JSON of `gh pr view --json ...`; throws when it is not a pull request on github.com. */
 export function mapPullRequest(raw: unknown): PullRequest {
-  if (!isObject(raw)) throw new Error('Unexpected gh output: not a pull request object')
+  if (!isObject(raw)) throw new LocalizedError({ key: 'git.unexpected.pullRequestObject' })
   const url = text(raw.url)
   const parts = GITHUB_PULL_REQUEST_URL.exec(url)
-  if (!parts) throw new Error(`Unexpected pull request URL: ${url || '(none)'}`)
+  if (!parts)
+    throw new LocalizedError({
+      key: 'git.unexpected.pullRequestUrl',
+      params: { url: url || '(none)' },
+    })
   const updatedAt = Date.parse(text(raw.updatedAt))
   return {
     url,
@@ -242,7 +247,7 @@ const ISSUE_QUERY = `query($owner: String!, $repo: String!, $number: Int!) {
 /** Arguments of `gh api graphql` for the issue at `url`, which matches GITHUB_ISSUE_URL. */
 export function issueArgs(url: string): string[] {
   const parts = GITHUB_ISSUE_URL.exec(url)
-  if (!parts) throw new Error('Not a GitHub issue URL')
+  if (!parts) throw new LocalizedError({ key: 'git.notIssueUrl' })
   // -f keeps owner and repo strings even when they look like numbers; -F makes the number an Int.
   return [
     'api',
@@ -293,17 +298,17 @@ function closedByOf(value: unknown): Issue['closedBy'] {
  */
 export function mapIssue(raw: unknown, url: string): Issue | { pullRequestUrl: string } {
   const parts = GITHUB_ISSUE_URL.exec(url)
-  if (!parts || !isRepositoryName(parts[2]!)) throw new Error('Not a GitHub issue URL')
+  if (!parts || !isRepositoryName(parts[2]!)) throw new LocalizedError({ key: 'git.notIssueUrl' })
   const data = isObject(raw) && isObject(raw.data) ? raw.data : null
   const repository = data && isObject(data.repository) ? data.repository : null
   const item =
     repository && isObject(repository.issueOrPullRequest) ? repository.issueOrPullRequest : null
-  if (!item) throw new Error('GitHub has no issue at this address, or it cannot be read')
+  if (!item) throw new LocalizedError({ key: 'git.noIssue' })
   if (item.__typename === 'PullRequest') {
     const pull = `https://github.com/${parts[1]}/${parts[2]}/pull/${parts[3]}`
     return { pullRequestUrl: pull }
   }
-  if (item.__typename !== 'Issue') throw new Error('Unexpected gh output: not an issue')
+  if (item.__typename !== 'Issue') throw new LocalizedError({ key: 'git.unexpected.issue' })
   const closed = text(item.state).toUpperCase() === 'CLOSED'
   const reason = text(item.stateReason).toUpperCase()
   return {
@@ -337,7 +342,7 @@ export function mapAvatarUrl(raw: unknown): string | null {
  * head branch, an open one wins over a closed one, then the first (newest) one.
  */
 export function mapBranchPullRequests(raw: unknown): Map<string, BranchPullRequest> {
-  if (!Array.isArray(raw)) throw new Error('Unexpected gh output: not a pull request list')
+  if (!Array.isArray(raw)) throw new LocalizedError({ key: 'git.unexpected.pullRequestList' })
   const byBranch = new Map<string, BranchPullRequest>()
   for (const item of raw) {
     if (!isObject(item)) continue

@@ -18,6 +18,7 @@ import { CANVAS_SPLIT_NOTE, type CanvasEvent, type CanvasState } from '@shared/a
 import { ARTIFACT_ENTRY } from '@shared/artifact-files'
 import { splitLegacyCanvas } from '@shared/canvas-legacy'
 import { HostError } from '../errors'
+import { t } from '../i18n'
 import type { LogFn } from '../storage'
 import type { ArtifactStore, FoundVersion } from './store'
 
@@ -81,7 +82,11 @@ export class LiveCanvases {
       if (error instanceof CanvasError) {
         throw new HostError(
           'invalid_params',
-          `${CANVAS_FILE} of ${found.artifact.id} is not valid: ${error.message}`,
+          t('artifacts.canvasInvalid', {
+            file: CANVAS_FILE,
+            id: found.artifact.id,
+            reason: error.message,
+          }),
         )
       }
       throw error

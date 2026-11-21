@@ -26,6 +26,7 @@ import * as claude from './claude-plugins'
 import * as codex from './codex-plugins'
 import type { PluginLogoPaths } from './codex-plugins'
 import type { LocalMarketplace } from './community'
+import { logText } from '../localized-error'
 import { readLogo } from './plugin-logo'
 
 /** What one agent's harness reported, as kept. */
@@ -399,10 +400,7 @@ export class MarketPluginsService {
       if ((await installed()).some((plugin) => fromKettu(plugin.id))) return
       await remove()
     } catch (error) {
-      this.deps.log(
-        'warn',
-        `Could not remove ${KETTU_PLUGINS} from ${agentId}: ${(error as Error).message}`,
-      )
+      this.deps.log('warn', `Could not remove ${KETTU_PLUGINS} from ${agentId}: ${logText(error)}`)
     }
   }
 
@@ -430,7 +428,7 @@ export class MarketPluginsService {
       } catch (error) {
         this.deps.log(
           'warn',
-          `Could not point ${agentId}'s ${KETTU_PLUGINS} at ${local.dir}: ${(error as Error).message}`,
+          `Could not point ${agentId}'s ${KETTU_PLUGINS} at ${local.dir}: ${logText(error)}`,
         )
       }
     }
@@ -477,19 +475,16 @@ export class MarketPluginsService {
 
   private harness(agentId: AgentId): PluginHarness {
     const harness = pluginHarness(agentId)
-    if (!harness) throw new HostError('invalid_params', 'Only Claude Code and Codex have plugins')
+    if (!harness) throw new HostError('invalid_params', t('marketPlugins.noPlugins'))
     return harness
   }
 
   private checkScope(harness: PluginHarness, scope: PluginScope, projectPath: string | null): void {
     if (harness === 'codex' && scope !== 'user') {
-      throw new HostError('invalid_params', 'Codex installs plugins for the user only')
+      throw new HostError('invalid_params', t('marketPlugins.codexUserOnly'))
     }
     if ((scope === 'user') !== (projectPath === null)) {
-      throw new HostError(
-        'invalid_params',
-        'A project or local scope needs the project, and only it',
-      )
+      throw new HostError('invalid_params', t('marketPlugins.scopeNeedsProject'))
     }
   }
 

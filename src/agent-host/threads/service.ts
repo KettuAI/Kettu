@@ -52,6 +52,7 @@ export function startThreadService(
         id: request.id,
         message: 'The thread database is not open',
         code: 'unavailable',
+        text: { key: 'threadDb.notOpen' },
       })
       return
     }
@@ -65,6 +66,7 @@ export function startThreadService(
         message: (error as Error).message,
         code: known?.code ?? null,
         ...(known?.data ? { data: known.data } : {}),
+        ...(known?.text ? { text: known.text } : {}),
       })
     }
     if (db.recoveries !== recoveries) {
@@ -107,13 +109,22 @@ function run(
     case 'outline':
       return db.outline(request.sessionId)
     case 'search':
-      if (!reads) throw new ThreadDbError('The search index is not open', 'unavailable')
+      if (!reads)
+        throw new ThreadDbError('The search index is not open', 'unavailable', undefined, {
+          key: 'threadDb.searchNotOpen',
+        })
       return reads.find(request.words)
     case 'find':
-      if (!reads) throw new ThreadDbError('The search index is not open', 'unavailable')
+      if (!reads)
+        throw new ThreadDbError('The search index is not open', 'unavailable', undefined, {
+          key: 'threadDb.searchNotOpen',
+        })
       return reads.findIn(request.sessionId, request.words, request.limit)
     case 'snippets':
-      if (!reads) throw new ThreadDbError('The search index is not open', 'unavailable')
+      if (!reads)
+        throw new ThreadDbError('The search index is not open', 'unavailable', undefined, {
+          key: 'threadDb.searchNotOpen',
+        })
       return reads.snippets(request.words, request.picks)
     case 'outputs':
       return db.outputs(request.sessionId)

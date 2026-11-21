@@ -72,7 +72,9 @@ function viewFailure(run: NpmRun, parsed: unknown): string {
   const code = typeof error?.code === 'string' ? error.code : ''
   if (OFFLINE.test(code) || OFFLINE.test(run.output.toString())) return t('agent.update.offline')
   if (typeof error?.summary === 'string' && error.summary !== '') return error.summary
-  return npmFailure(run.output) || `npm exited with code ${run.code}`
+  return (
+    npmFailure(run.output) || t('agent.program.exitedBare', { name: 'npm', code: String(run.code) })
+  )
 }
 
 /** `npm view <words> --json`; undefined when npm printed nothing, as for a field none has. */
@@ -91,7 +93,7 @@ async function view(options: LatestOptions, words: string[]): Promise<unknown> {
   if (run.timedOut) {
     throw new Error(t('agent.update.timeout', { seconds: String(options.timeoutMs / 1000) }))
   }
-  if (run.error) throw new Error(`npm could not be started: ${run.error}`)
+  if (run.error) throw new Error(t('agent.program.notStarted', { name: 'npm', error: run.error }))
   const parsed = parseJson(run.stdout)
   if (run.code !== 0) throw new Error(viewFailure(run, parsed))
   return parsed

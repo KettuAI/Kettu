@@ -307,10 +307,17 @@ describe('marketplace_publish', () => {
     const result = await call
     expect(result.isError).toBe(true)
     expect(h.outcomes).toEqual([
-      { kind: 'failed', message: 'Refused', problems: [{ message: 'Bad' }] },
+      {
+        kind: 'failed',
+        message: 'The Kettu Marketplace’s check didn’t pass.',
+        problems: [{ message: 'Bad' }],
+      },
     ])
     expect(h.drafts).toEqual([
-      expect.objectContaining({ error: 'Refused', problems: [{ message: 'Bad' }] }),
+      expect.objectContaining({
+        error: 'The Kettu Marketplace’s check didn’t pass.',
+        problems: [{ message: 'Bad' }],
+      }),
     ])
   })
 })

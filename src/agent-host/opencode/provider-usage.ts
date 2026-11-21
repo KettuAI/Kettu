@@ -2,11 +2,10 @@
 // vendors whose keys it stores. Secrets stay in the request headers and never reach a result.
 
 import type { AgentProvider, PlanLimit, ProviderBalance } from '@shared/agent-host'
+import { t } from '../i18n'
 import { readBody } from '../vendor-usage/common'
 import { parseKimiCodeUsage } from '../vendor-usage/kimi-code'
 import { parseMiniMaxRemains } from '../vendor-usage/minimax-code'
-
-export const USAGE_ERROR = 'Usage could not be read.'
 
 export type ProviderUsage = NonNullable<AgentProvider['usage']>
 
@@ -15,7 +14,13 @@ export function unsupportedUsage(now: number): ProviderUsage {
 }
 
 export function failedUsage(now: number): ProviderUsage {
-  return { state: 'error', limits: [], balances: [], observedAt: now, error: USAGE_ERROR }
+  return {
+    state: 'error',
+    limits: [],
+    balances: [],
+    observedAt: now,
+    error: t('opencode.usageFailed'),
+  }
 }
 
 function readyUsage(

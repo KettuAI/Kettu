@@ -16,6 +16,7 @@ import {
   type RequestTurn,
 } from '@shared/model-requests'
 import type { Env } from '../find-command'
+import { t } from '../i18n'
 import { withoutKettu } from './acp-messages'
 import { arr, emptyTokens, num, obj, preview, str, summarizeActions } from './claude-transcript'
 import { foldAll, type ModelRequestsReader, type RequestsTarget } from './reader'
@@ -320,7 +321,7 @@ export function clineModelRequests(deps: {
 
     async raw(target, raw, full) {
       const record = await read(target)
-      if (!record) throw new Error('Cline keeps no messages for this session')
+      if (!record) throw new Error(t('modelRequest.noClineMessages'))
       if (raw === SYSTEM) return foldAll([{ system_prompt: record.system_prompt ?? null }], full)
       const match = /^(\d+)-(\d+)$/.exec(raw)
       if (!match) throw new Error('Not a request of this session')

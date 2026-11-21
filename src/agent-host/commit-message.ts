@@ -3,6 +3,7 @@
 
 import type { ChangedFile } from '@shared/git'
 import type { CommitContext } from './git/commit-context'
+import { LocalizedError } from './localized-error'
 import { askSmallModel, type ModelPick } from './outline-titles'
 import type { HiddenRuntime } from './reports'
 
@@ -111,6 +112,6 @@ export async function writeCommitMessage(
   const joined = reply.join('\n')
   const answer = joined.includes('```') ? joined : (reply.findLast((m) => m.trim() !== '') ?? '')
   const message = cleanCommitMessage(answer)
-  if (message === null) throw new Error('its reply held no commit message')
+  if (message === null) throw new LocalizedError({ key: 'light.noCommitMessage' })
   return message
 }

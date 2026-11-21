@@ -31,6 +31,22 @@ export function parseWorktreeInclude(text: string): string[] {
     .filter((line) => line !== '' && !line.startsWith('#'))
 }
 
+/** The refused entries' reasons: the words for logs, and a name to say them in the user's language. */
+const REFUSALS = {
+  nul: 'contains a NUL character',
+  glob: 'globs are not supported',
+  absolute: 'absolute paths are not allowed',
+  colon: 'contains ":"',
+  dotdot: '".." is not allowed',
+  itself: 'names the project itself',
+  git: 'names git metadata',
+} as const
+export type IncludeProblem = keyof typeof REFUSALS
+
+function refused(problem: IncludeProblem): { reason: string; problem: IncludeProblem } {
+  return { reason: REFUSALS[problem], problem }
+}
+
 /**
  * The entry as a relative path with `/` separators, or the reason it is refused. Globs are
  * refused rather than read literally, since a user who wrote one expects it to match.
@@ -38,19 +54,17 @@ export function parseWorktreeInclude(text: string): string[] {
 export function checkIncludeEntry(
   entry: string,
   platform: Platform,
-): { path: string } | { reason: string } {
-  if (entry.includes('\0')) return { reason: 'contains a NUL character' }
-  if (/[*?[]/.test(entry)) return { reason: 'globs are not supported' }
+): { path: string } | { reason: string; problem: IncludeProblem } {
+  if (entry.includes('\0')) return refused('nul')
+  if (/[*?[]/.test(entry)) return refused('glob')
   const slashed = platform === 'win32' ? entry.replace(/\\/g, '/') : entry
-  if (isAbsolutePath(entry, platform) || slashed.startsWith('/')) {
-    return { reason: 'absolute paths are not allowed' }
-  }
+  if (isAbsolutePath(entry, platform) || slashed.startsWith('/')) return refused('absolute')
   // Drive-relative paths and alternate data streams.
-  if (platform === 'win32' && slashed.includes(':')) return { reason: 'contains ":"' }
+  if (platform === 'win32' && slashed.includes(':')) return refused('colon')
   const parts = slashed.split('/').filter((part) => part !== '' && part !== '.')
-  if (parts.includes('..')) return { reason: '".." is not allowed' }
-  if (parts.length === 0) return { reason: 'names the project itself' }
-  if (parts[0]!.toLowerCase() === '.git') return { reason: 'names git metadata' }
+  if (parts.includes('..')) return refused('dotdot')
+  if (parts.length === 0) return refused('itself')
+  if (parts[0]!.toLowerCase() === '.git') return refused('git')
   return { path: parts.join('/') }
 }
 

@@ -54,7 +54,7 @@ import {
 import { HostError } from '../errors'
 import { t } from '../i18n'
 import { JsonFile, type LogFn } from '../storage'
-import { parseWorkflow } from '../workflow/format'
+import { parseWorkflow, problemText } from '../workflow/format'
 import type { CommunityOrigin } from '../workflow/library'
 import { WORKFLOW_FILE, utf8 } from './publish-check'
 import { MarketCallError } from './publish-tools'
@@ -643,7 +643,7 @@ export class MarketCommunityService {
    */
   async workflowText(id: string, version: string): Promise<string | null> {
     if (!LISTING_ID.test(id) || !VERSION.test(version)) {
-      throw refuse('Not a listing of the Kettu Marketplace')
+      throw refuse(t('marketCommunity.notListing'))
     }
     const listed = await this.api(() => this.deps.call({ kind: 'version', id, version }))
     checkFileList(listed.files)
@@ -686,7 +686,7 @@ export class MarketCommunityService {
     const read = parseWorkflow(text)
     return read.workflow
       ? { version, workflow: read.workflow, problem: null }
-      : { version, workflow: null, problem: read.problems[0]?.message ?? '' }
+      : { version, workflow: null, problem: read.problems[0] ? problemText(read.problems[0]) : '' }
   }
 
   /**
@@ -854,7 +854,7 @@ export class MarketCommunityService {
   ): Promise<InstalledPlugin> {
     const harness = harnessOf(agentId)
     if (harness !== 'claude-code' && harness !== 'codex') {
-      throw refuse('Only Claude Code and Codex have plugins')
+      throw refuse(t('marketPlugins.noPlugins'))
     }
     const { listing, files } = await this.download(id, 'plugin')
     if (listing.harness !== harness) throw refuse(t('marketCommunity.otherHarness'))
@@ -988,7 +988,7 @@ export class MarketCommunityService {
   private async read(
     id: string,
   ): Promise<{ state: 'listed'; listing: MarketListing } | { state: 'taken-down' | 'gone' }> {
-    if (!LISTING_ID.test(id)) throw refuse('Not a listing of the Kettu Marketplace')
+    if (!LISTING_ID.test(id)) throw refuse(t('marketCommunity.notListing'))
     if (!this.deps.account()) throw new HostError('auth_required', t('marketCommunity.signedOut'))
     let listing: MarketListing
     try {

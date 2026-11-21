@@ -57,6 +57,82 @@
       "closesWithParent": "子智能体会话随父会话一起关闭",
       "deletedWithParent": "子智能体会话随父会话一起删除",
       "failed": "子智能体运行失败"
+    },
+    "notFound": "这个会话已经不存在了",
+    "subSessionProject": "子会话要和它的父会话在同一个项目里",
+    "worktreeNeedsRepo": "工作树需要项目在 Git 仓库里",
+    "noWorktree": "这个会话没有工作树",
+    "noWorktreeToRemove": "这个会话没有可以删除的工作树",
+    "noAttachments": "这台电脑不接收附件",
+    "noEntry": "这一项已不在这个会话里",
+    "noRequestRecord": "这个会话没有可读的请求记录",
+    "noAttachment": "这个会话里没有这个附件",
+    "noQueued": "这条消息已不在队列里",
+    "publisherName": "第一次发布需要填写发布者名称",
+    "noConfigOption": "没有“{{option}}”这个选项",
+    "notAChoice": "“{{value}}”不是“{{option}}”的可选值",
+    "waiting": {
+      "report": {
+        "gone": "这份问题报告已不再等待回答",
+        "answered": "这份问题报告已经回答过了"
+      },
+      "memoryProposal": {
+        "gone": "这条记忆提议已不再等待回答",
+        "answered": "这条记忆提议已经回答过了",
+        "noForget": "这条提议没有指明要忘记哪条记忆",
+        "noDraft": "这条提议里没有要记住的内容"
+      },
+      "memoryUndo": {
+        "gone": "这里没有可以撤销的记忆写入",
+        "busy": "这次记忆写入正在撤销",
+        "changed": "写入之后这条记忆又被改过，所以保持现状",
+        "undone": "这次写入已经不能撤销了"
+      },
+      "terminal": {
+        "gone": "这个终端请求已不再等待回答",
+        "answered": "这个终端请求已经回答过了"
+      },
+      "device": {
+        "gone": "这个设备请求已不再等待回答",
+        "answered": "这个设备请求已经回答过了"
+      },
+      "market": {
+        "gone": "这张市场卡片已不再等待回答",
+        "answered": "这张市场卡片已经回答过了"
+      },
+      "settings": {
+        "gone": "这张设置卡片已不再等待回答",
+        "answered": "这张设置卡片已经回答过了",
+        "noChange": "找不到这次设置更改",
+        "noUndo": "这次更改不能撤销"
+      },
+      "step": {
+        "gone": "这一步已不再等待回答",
+        "answered": "这一步已经回答过了"
+      },
+      "origin": {
+        "gone": "这个新网站的请求已不再等待回答",
+        "answered": "这个新网站的请求已经回答过了"
+      },
+      "app": {
+        "gone": "这个应用的请求已不再等待回答",
+        "answered": "这个应用的请求已经回答过了"
+      },
+      "setup": {
+        "gone": "这张设置引导卡片已不再等待回答"
+      },
+      "mcp": {
+        "gone": "这些 MCP 服务器的请求已不再等待回答",
+        "answered": "这些 MCP 服务器的请求已经回答过了"
+      },
+      "hooks": {
+        "gone": "这些 hooks 的请求已不再等待回答",
+        "answered": "这些 hooks 的请求已经回答过了"
+      },
+      "permission": {
+        "gone": "这个授权请求已不再等待回答",
+        "answered": "这个授权请求已经回答过了"
+      }
     }
   },
   "notice": {
@@ -245,7 +321,8 @@
     "exit": {
       "code": "{{agent}} 已退出，退出码 {{code}}",
       "signal": "{{agent}} 被 {{signal}} 信号终止",
-      "error": "{{agent}}：{{error}}"
+      "error": "{{agent}}：{{error}}",
+      "closed": "{{agent}} 关闭了连接"
     },
     "exited": "{{exit}}。",
     "exitedBeforeReady": "{{exit}}，未能就绪。",
@@ -283,7 +360,9 @@
       "downloadError": "无法下载 {{name}}：{{reason}}",
       "downloadTimedOut": "{{name}} 没有在 {{seconds}} 秒内下载完成。",
       "hashMismatch": "下载的文件与其 SHA-256 不符：应为 {{expected}}，实际为 {{actual}}。",
-      "extracting": "正在解压…"
+      "extracting": "正在解压…",
+      "methodMissing": "{{agent}} 在这个系统上没有 {{method}} 安装方式",
+      "noArchive": "{{agent}} 没有可下载的压缩包"
     },
     "reportTimeout": "{{command}} 没有在 {{seconds}} 秒内完成",
     "unreadableReport": "{{agent}} 的 {{command}} 没有返回 Kettu 能读取的报告",
@@ -293,7 +372,47 @@
     "disabled": "{{agent}} 已停用。到设置 › 智能体里启用后才能使用。",
     "uninstall": {
       "busy": "{{agent}} 正在安装或更新，等它完成后才能卸载。"
-    }
+    },
+    "unknown": "未知的智能体 {{agent}}",
+    "notInstalledStopping": "{{agent}} 没有安装：Kettu 正在停止。",
+    "noAdapter": "{{agent}} 没有可安装的适配器。",
+    "program": {
+      "timedOutMinutes": "{{name}} 没有在 {{minutes}} 分钟内完成。",
+      "timedOutSeconds": "{{name}} 没有在 {{seconds}} 秒内完成。",
+      "notStarted": "{{name}} 无法启动：{{error}}",
+      "stopped": "{{name}} 被 {{signal}} 信号终止。{{detail}}",
+      "exited": "{{name}} 已退出，退出码 {{code}}。{{detail}}",
+      "exitedBare": "{{name}} 已退出，退出码 {{code}}",
+      "fileNotFound": "找不到 {{file}}。",
+      "noVersion": "{{name}} --version 没有输出版本号。"
+    },
+    "unknownUsageReply": "厂商返回了无法识别的用量回复",
+    "unknownAccountReply": "{{agent}} 返回了无法识别的账号回复",
+    "providersFailed": "无法读取 OpenCode 的厂商。请检查已安装的 OpenCode 版本，然后重试。",
+    "noSignInMethod": "{{agent}} 没有登录方式 {{method}}",
+    "signInInTerminal": "{{method}} 要在终端里运行，请改用它的命令",
+    "noApiKey": "{{agent}} 不通过 Kettu 设置 API key",
+    "noSettings": "Kettu 不编辑 {{agent}} 的设置",
+    "noAutoCompact": "Kettu 不编辑 {{agent}} 的自动压缩设置",
+    "noSite": "Kettu 不编辑 {{agent}} 的站点设置",
+    "noConfigFolder": "{{agent}} 没有配置文件夹",
+    "noSettingsFile": "{{agent}} 没有设置文件",
+    "noProgram": "{{name}} 已安装，但没有可运行的程序。",
+    "antigravity": {
+      "noAnswer": "agy /{{command}} 没有在 {{seconds}} 秒内给出回复",
+      "noJson": "agy /{{command}} 已退出，退出码 {{code}}，没有 JSON 回复"
+    },
+    "protocolVersion": "{{agent}} 使用了不支持的协议版本（{{version}}）。",
+    "theAgent": "智能体",
+    "noSignInPage": "智能体没有给出登录页面",
+    "sdkLacks": "{{entry}} 处的 Claude Agent SDK 缺少 {{missing}}",
+    "signIn": {
+      "subscription": "用订阅登录",
+      "deviceCode": "用设备码登录",
+      "terminal": "在终端里登录"
+    },
+    "sessionFolderMissing": "会话的文件夹 {{folder}} 不存在",
+    "noSessionFlag": "这个智能体没有用来启动会话的参数"
   },
   "detect": {
     "noVersion": "没有适合这台电脑的 {{agent}} 版本，所以无法安装。",
@@ -352,7 +471,12 @@
   "environment": {
     "inherited": "Kettu 启动后对 PATH 的修改，点「重新加载环境」后生效。",
     "registryFailed": "无法从 Windows 读取 PATH（{{error}}），智能体将使用 Kettu 启动时的环境。",
-    "fallback": "无法读取 {{shell}} 的环境（{{error}}），智能体将使用 Kettu 启动时的环境。"
+    "fallback": "无法读取 {{shell}} 的环境（{{error}}），智能体将使用 Kettu 启动时的环境。",
+    "shellTimeout": "登录 Shell 在 {{seconds}} 秒内没有响应",
+    "signal": "信号 {{signal}}",
+    "exitCode": "退出码 {{code}}",
+    "noEnvironment": "{{shell}} 没有输出环境变量（{{reason}}）",
+    "noEnvironmentDetail": "{{shell}} 没有输出环境变量（{{reason}}）：{{detail}}"
   },
   "git": {
     "notReady": "Git 暂不可用",
@@ -387,13 +511,76 @@
       "exitCode": "已退出，退出码 {{code}}",
       "command": "{{command}}：{{detail}}",
       "ghNotJson": "gh 输出的内容不是 JSON"
+    },
+    "unusableRemote": "远程名 {{remote}} 不能使用",
+    "unusableBranch": "分支名 {{branch}} 不能使用",
+    "discardConflicted": "不会丢弃有冲突的文件：{{path}}",
+    "notRepositoryName": "{{name}} 不是有效的仓库名",
+    "noPullRequestUrl": "gh 没有输出新 PR 的链接",
+    "notPullRequestUrl": "不是 GitHub PR 的链接：{{url}}",
+    "notIssueUrl": "不是 GitHub issue 的链接",
+    "noIssue": "GitHub 上没有这个地址对应的 issue，或者读不到它",
+    "unexpected": {
+      "pullRequestObject": "gh 的输出不符合预期：不是一个 PR 对象",
+      "pullRequestUrl": "PR 的链接不符合预期：{{url}}",
+      "issue": "gh 的输出不符合预期：不是一个 issue",
+      "pullRequestList": "gh 的输出不符合预期：不是 PR 列表",
+      "revList": "rev-list 的计数输出不符合预期：{{output}}",
+      "show": "git show 对 {{oid}} 的输出不符合预期"
     }
   },
   "files": {
-    "projectMissing": "项目文件夹不存在"
+    "projectMissing": "项目文件夹不存在",
+    "notFileOrFolder": "{{path}} 不是文件，也不是文件夹",
+    "insideGit": "{{path}} 在 .git 里面",
+    "textTooLarge": "文本超过了 {{bytes}} 字节",
+    "changedSinceRead": "{{path}} 在读取之后又被改动过",
+    "moveIntoItself": "{{path}} 不能移动到它自己里面",
+    "copyIntoItself": "{{path}} 不能复制到它自己里面",
+    "alreadyExists": "{{path}} 已经存在",
+    "pathNul": "路径里有 NUL 字符",
+    "pathNotRelative": "路径必须是相对于项目的路径",
+    "pathDotDot": "路径里不能有 ..",
+    "pathNoName": "路径必须指向一个文件",
+    "notFolder": "{{path}} 不是文件夹",
+    "notFile": "{{path}} 不是文件",
+    "outsideProject": "{{path}} 在项目之外",
+    "tooManyCopies": "{{name}} 的副本太多了",
+    "notExist": "{{path}} 不存在"
   },
   "worktree": {
-    "branchDeleteFailed": "无法删除分支 {{branch}}：{{reason}}"
+    "branchDeleteFailed": "无法删除分支 {{branch}}：{{reason}}",
+    "unknownPlaceholder": "分支名模板里有未知的占位符：{{placeholder}}",
+    "unusableBranch": "分支名 {{name}} 不可用，因为{{reason}}",
+    "branchProblem": {
+      "empty": "它是空的",
+      "tooLong": "它超过了 {{max}} 个字符",
+      "dash": "它以“-”开头",
+      "reserved": "它是保留名",
+      "special": "它含有空格、控制字符或特殊字符",
+      "dots": "它含有“..”",
+      "atBrace": "它含有“@{”",
+      "emptyComponent": "它有一段路径是空的",
+      "endsDot": "它以“.”结尾",
+      "componentDot": "某一段路径以“.”开头",
+      "componentLock": "某一段路径以“.lock”结尾"
+    },
+    "baseNotFound": "找不到起点 {{base}}",
+    "outsideRoot": "工作树的文件夹超出了它的根目录",
+    "namesTaken": "从 {{first}} 到 {{last}} 的名称都已被占用",
+    "changedSinceInspected": "检查之后，这个工作树又有了变化",
+    "notOfProject": "这个文件夹不是该项目的工作树",
+    "branchGone": "分支 {{branch}} 已不存在",
+    "setupStopped": "已停止",
+    "includeProblem": {
+      "nul": "含有 NUL 字符",
+      "glob": "不支持通配符",
+      "absolute": "不允许用绝对路径",
+      "colon": "含有“:”",
+      "dotdot": "不允许出现“..”",
+      "itself": "指向的是项目本身",
+      "git": "指向的是 git 元数据"
+    }
   },
   "permission": {
     "allowOnce": "允许一次",
@@ -480,6 +667,24 @@
         "name": "完全访问",
         "description": "从不询问。请在沙箱或工作树里使用"
       }
+    },
+    "notStarted": "Claude Code 还没有启动",
+    "noProgram": "找不到 SDK 要用的 Claude Code 程序",
+    "noTaskOutput": "这个版本的 Claude Code 读不了任务输出",
+    "stoppedEarly": "Claude Code 在本轮对话结束前停止了",
+    "ultracodeUnknown": "Ultracode 继承的值未知，所以无法应用",
+    "auth": {
+      "login": "用 Claude 登录",
+      "loginDescription": "运行 `claude`，再输入 /login",
+      "subscription": "Claude 订阅",
+      "subscriptionDescription": "使用 Claude 订阅",
+      "console": "Anthropic Console",
+      "consoleDescription": "使用 Anthropic Console（按 API 用量计费）"
+    },
+    "account": {
+      "none": "未登录",
+      "apiKey": "Anthropic API key",
+      "gateway": "自定义模型网关"
     }
   },
   "codex": {
@@ -683,7 +888,10 @@
       "stillStarting": "有些 MCP 服务器还在启动。稍后再运行 `/mcp` 查看它们的状态。",
       "unknownError": "未知的 MCP 启动错误",
       "unnamed": "（未命名）"
-    }
+    },
+    "noValue": "Codex 的 {{option}} 没有 {{value}} 这个值",
+    "cannotSignOut": "这里无法让 Codex 退出登录",
+    "unknownError": "未知错误"
   },
   "dsh": {
     "tool": {
@@ -738,7 +946,11 @@
       "high": "高",
       "xhigh": "很高",
       "max": "最高"
-    }
+    },
+    "noModel": "DeepSeek Harness 没有可用的模型",
+    "didNotStart": "DeepSeek Harness 没有启动",
+    "credentialsInvalid": "{{file}} 不是有效的 YAML，请先修好它，或自己删除那里的 key",
+    "credentialsNotMap": "{{file}} 里没有凭据映射"
   },
   "opencode": {
     "option": {
@@ -767,8 +979,16 @@
       "saveKeyFailed": "OpenCode 无法保存这个 key。",
       "keySavedNotActivated": "key 已保存，但 OpenCode 无法把这个账号设为使用中。",
       "listFailed": "OpenCode 无法列出它的厂商。",
-      "readCredentialsFailed": "OpenCode 无法读取它的凭据。"
-    }
+      "readCredentialsFailed": "OpenCode 无法读取它的凭据。",
+      "wrongProvider": "这个凭据不属于这个厂商。",
+      "keyRequired": "需要填写 key。",
+      "noKeySignIn": "这个厂商不支持用 key 登录。"
+    },
+    "turnFailed": "OpenCode 没能完成这一轮对话",
+    "replyGone": "OpenCode 已经没有那条回复了",
+    "noEvents": "OpenCode 没有发来事件",
+    "answered": "OpenCode 返回了 {{status}}",
+    "usageFailed": "读不了用量。"
   },
   "pi": {
     "tool": {
@@ -858,7 +1078,9 @@
     },
     "changelog": {
       "missing": "找不到更新日志：无法定位 pi 的安装包。"
-    }
+    },
+    "noAnswer": "pi 没有在 {{seconds}} 秒内响应 {{command}}",
+    "refused": "pi 拒绝了这个请求"
   },
   "cline": {
     "mode": {
@@ -884,7 +1106,8 @@
     },
     "permission": {
       "allowAlways": "本会话始终允许"
-    }
+    },
+    "signInFirst": "请先登录 Cline，再开始会话"
   },
   "question": {
     "other": "其他回答…"
@@ -896,10 +1119,49 @@
     "open": "打开",
     "decline": "拒绝",
     "yes": "是",
-    "no": "否"
+    "no": "否",
+    "invalid": {
+      "text": "{{name}} 需要文字",
+      "minLength": "{{name}} 至少要 {{min}} 个字符",
+      "maxLength": "{{name}} 最多 {{max}} 个字符",
+      "format": "{{name}} 不是有效的 {{format}}",
+      "number": "{{name}} 需要一个数字",
+      "integer": "{{name}} 需要一个整数",
+      "minimum": "{{name}} 不能小于 {{min}}",
+      "maximum": "{{name}} 不能大于 {{max}}",
+      "boolean": "{{name}} 只能选是或否",
+      "noChoice": "{{name}} 没有这个选项",
+      "list": "{{name}} 需要一组选项",
+      "twice": "{{name}} 里有重复的选项",
+      "minItems": "{{name}} 至少要选 {{min}} 项",
+      "maxItems": "{{name}} 最多选 {{max}} 项",
+      "noField": "表单里没有 {{key}} 这个字段",
+      "required": "{{name}} 必填"
+    }
   },
   "artifacts": {
-    "formatUpgraded": "已迁移到其类型格式的第 {{format}} 版"
+    "formatUpgraded": "已迁移到其类型格式的第 {{format}} 版",
+    "edit": {
+      "noElement": "偏移量 {{offset}} 处没有元素",
+      "textTooLong": "文字太长",
+      "moreThanText": "偏移量 {{offset}} 处的 <{{tag}}> 里不只有文字",
+      "styleRefused": "样式里有不允许修改的属性或值"
+    },
+    "needDatabase": "产物需要对话数据库",
+    "deleted": "{{id}} 在最近删除中",
+    "noHtmlFile": "{{id}} 里没有 HTML 文件 {{path}}",
+    "notUtf8": "{{path}} 不是 UTF-8 文本",
+    "fileTooLarge": "文件太大",
+    "noArtifact": "没有产物 {{id}}",
+    "noVersion": "{{id}} 没有版本 {{version}}",
+    "notDeleted": "{{id}} 不在最近删除中",
+    "noThread": "{{id}} 里没有评论 {{thread}}",
+    "threadsFull": "{{id}} 已有 {{count}} 条评论，不能再添加",
+    "commentsFull": "评论 {{thread}} 已满 {{count}} 条，不能再回复",
+    "changedSince": "{{id}} 已是版本 {{head}}，自版本 {{base}} 起 {{changed}} 有改动",
+    "canvasInvalid": "{{id}} 的 {{file}} 无效：{{reason}}",
+    "pptxNoBytes": "导出 PowerPoint 没有得到任何内容",
+    "noQuestion": "这个问题已经不在了"
   },
   "workflow": {
     "unusable": "{{name}} 用不了：{{problem}}",
@@ -944,7 +1206,8 @@
     "cancelled": "{{title}} 已取消",
     "endedBody": "{{workflow}} · {{steps}} 步",
     "notWritten": "只有用智能体为它现写的工作流、并且已经做完的需求，才能存下或发布这个工作流",
-    "noOrigin": "这条需求开始的那段对话已经不在了"
+    "noOrigin": "这条需求开始的那段对话已经不在了",
+    "noCommit": "用作起点的分支还没有任何提交"
   },
   "marketPublish": {
     "handleInvalid": "发布者名是 1 到 32 个小写字母、数字和连字符，开头和结尾是字母或数字。",
@@ -967,6 +1230,64 @@
       "not_found": "它已经不在 Kettu 市场里了。",
       "check_failed": "没有通过 Kettu 市场的检查。",
       "conflict": "同时有别的改动，再试一次。"
+    },
+    "check": {
+      "link": "这是一个链接，请换成文件本身，或者删掉它。",
+      "nameTooLong": "它的名字太长了。",
+      "nameCharacters": "它的名字里有反斜杠或控制字符。",
+      "pathTooLong": "它的路径太长了。",
+      "tooManyFiles": "文件夹里的文件超过了 {{count}} 个，这是一个版本的上限。",
+      "folderTooLarge": "文件夹超过了 {{mb}} MB，这是一个版本的上限。",
+      "notJsonObject": "它不是 JSON 对象。",
+      "notJson": "它不是有效的 JSON。",
+      "missing": {
+        "name": "没有 name。",
+        "description": "没有 description。",
+        "version": "没有 version。",
+        "versionNumber": "没有 1.0.0 这样的版本号。",
+        "nameFront": "front matter 里没有 name。",
+        "descriptionFront": "front matter 里没有 description。"
+      },
+      "skillName": "名字“{{name}}”只能由小写字母、数字和连字符组成。",
+      "notUtf8": "它不是 UTF-8 文本。",
+      "workflowName": "名字“{{name}}”里没有可用来给条目取名的拉丁字母或数字。请用英文命名，其他语言写在 locales 下。",
+      "readmeTooLong": "它超过了 {{count}} 个字符，这是条目介绍文字的上限。",
+      "badVersion": "“{{version}}”不是 1.0.0 这样的版本号。",
+      "serverNotRunnable": "它没有给出 Kettu 能运行的包或 https 远程地址。",
+      "notBundle": "它不是 Kettu 能读的 MCP 包。",
+      "bundleNoManifest": "它没有 manifest.json。",
+      "secret": {
+        "found": "第 {{line}} 行看起来像 {{what}}。请删掉它；如果是真的，还要把它作废。",
+        "privateKey": "私钥",
+        "github": "GitHub token",
+        "anthropic": "Anthropic API key",
+        "openrouter": "OpenRouter API key",
+        "deepseek": "DeepSeek 风格的 API key",
+        "openai": "OpenAI API key",
+        "aws": "AWS 访问密钥",
+        "slack": "Slack token",
+        "stripe": "Stripe 密钥",
+        "google": "Google API key",
+        "npm": "npm token",
+        "gitlab": "GitLab token",
+        "huggingFace": "Hugging Face token"
+      },
+      "nothingAt": "{{path}} 不存在。",
+      "pathIsLink": "这个路径是链接，请改为提供它指向的文件夹。",
+      "folderOrBundle": "请发布一个文件夹，或一个 MCP 包（.mcpb）文件。",
+      "bundleTooLarge": "这个包超过了 {{mb}} MB，这是一个版本的上限。",
+      "bothPlugins": "这个文件夹同时是 Claude Code 插件和 Codex 插件，请把它们分别放进各自的文件夹再发布。",
+      "manyBundles": "文件夹里有不止一个 MCP 包，只留一个。",
+      "fileTooLarge": "它超过了 {{mb}} MB，这是一个版本的上限。",
+      "unknownFolder": "Kettu 认不出这个文件夹是什么。技能要有 SKILL.md，工作流要有 workflow.yaml，插件要有 .claude-plugin/plugin.json 或 .codex-plugin/plugin.json，MCP 服务器要有 server.json。",
+      "manifestTooLarge": "它太大了，不像是清单文件。",
+      "aboutTooLong": "描述超过了 {{count}} 个字符。",
+      "manifestName": "最上层的文件不能叫 manifest，请改名。",
+      "otherKind": "{{listing}} 已经是你发布过的条目，而且类型不同，请给这个换个名字。",
+      "takenDown": "{{listing}} 已被 Kettu 下架：{{reason}}",
+      "versionInManifest": "版本号是 {{version}}，以清单里写的为准；要改请改清单，不要另外指定 {{wanted}}。",
+      "versionTakenNumbered": "{{listing}} 的 {{version}} 版已经发布过了，请换更高的版本号。",
+      "versionTaken": "{{listing}} 的 {{version}} 版已经发布过了，请在 {{manifest}} 里调高版本号。"
     }
   },
   "marketCommunity": {
@@ -982,7 +1303,8 @@
     "otherHarness": "这个插件是给另一种智能体的。",
     "noManifest": "这个插件没有带名字的 {{file}}，装不了。",
     "nameTaken": "已经装了 Kettu 市场里另一个叫 {{name}} 的插件（{{other}}）。先卸载它。",
-    "noWorkflow": "这一项没有 UTF-8 文本的 workflow.yaml，所以什么都没装。"
+    "noWorkflow": "这一项没有 UTF-8 文本的 workflow.yaml，所以什么都没装。",
+    "notListing": "这不是 Kettu 市场里的条目"
   },
   "marketBundle": {
     "invalid": "这个 MCP 包装不了：{{reason}}",
@@ -1010,18 +1332,297 @@
     "tooBig": "这个包超过 {{mb}} MB，什么都没装。",
     "mismatch": "这个包和它的校验值对不上，什么都没装。",
     "outside": "Kettu 不会运行这个包文件夹以外的路径 {{path}}。",
-    "changed": "下载时这个条目有了新版本，请再点一次安装。"
+    "changed": "下载时这个条目有了新版本，请再点一次安装。",
+    "notHttps": "不是 https 连接"
   },
   "marketSkills": {
-    "nameTaken": "已经添加过名为 {{name}} 的技能，来自 {{from}}。先移除那一个：同名的两个技能，智能体只会保留一个。"
+    "nameTaken": "已经添加过名为 {{name}} 的技能，来自 {{from}}。先移除那一个：同名的两个技能，智能体只会保留一个。",
+    "badName": "“{{name}}”不能做技能名：只能用小写字母、数字和连字符",
+    "noDescription": "技能 {{name}} 没有描述",
+    "sameName": "技能名 {{name}} 已被 {{path}} 使用",
+    "notInCatalog": "{{id}} 不在技能目录里",
+    "noSuchSkill": "目录里没有技能 {{name}}",
+    "needsGithub": "请提供 github.com 上的仓库，或仓库里的某个文件夹",
+    "noSkillFile": "{{url}} 里没有 {{file}}",
+    "manySkills": "{{url}} 里有 {{count}} 个技能，请指定其中一个的文件夹",
+    "notFolder": "{{folder}} 不是文件夹",
+    "folderNoSkillFile": "{{folder}} 里没有 {{file}}",
+    "noFile": "这个技能没有 {{file}}",
+    "outside": "技能引用了它自己文件夹之外的文件：{{path}}",
+    "link": "技能里有一个链接，Kettu 不会复制链接：{{path}}",
+    "tooManyFiles": "技能的文件超过了 {{count}} 个",
+    "tooLarge": "技能超过了 {{mb}} MB",
+    "github": {
+      "timeout": "GitHub 在 {{seconds}} 秒内没有响应",
+      "unreachable": "连不上 GitHub：{{reason}}",
+      "notFound": "GitHub 上没有这个仓库或分支，或者仓库是私有的",
+      "status": "GitHub 返回了 {{status}}",
+      "tooLarge": "仓库超过了 {{mb}} MB",
+      "unpackedTooLarge": "仓库解压后超过了 {{mb}} MB",
+      "notTarball": "下载的内容不是 tar 压缩包：{{reason}}",
+      "unsafePath": "压缩包里有不安全的路径：{{path}}"
+    }
   },
   "marketPlugins": {
     "notListedInstalled": "{{agent}} 的已安装列表里没有 {{id}}",
     "marketplaceNotListed": "{{agent}} 的列表里没有它刚添加的市场",
-    "noSuchPlugin": "{{agent}} 没有提供插件 {{id}}"
+    "noSuchPlugin": "{{agent}} 没有提供插件 {{id}}",
+    "noPlugins": "只有 Claude Code 和 Codex 有插件",
+    "codexUserOnly": "Codex 的插件只能装给当前用户",
+    "scopeNeedsProject": "项目范围和本地范围必须指定项目，其他范围不能指定",
+    "marketplaceListNotJson": "Claude Code 的市场列表不是 JSON",
+    "marketplaceListNotList": "Claude Code 的市场列表不是列表",
+    "pluginListNotJson": "Claude Code 的插件列表不是 JSON",
+    "pluginListNotObject": "Claude Code 的插件列表格式不对",
+    "claudeNoResult": "Claude Code 没有给出结果",
+    "claudeOutcome": "Claude Code 返回了 {{outcome}}",
+    "claudeFailed": "claude 运行失败"
   },
   "report": {
     "draftNoAgent": "没有可用来起草描述的智能体",
     "draftFailed": "{{agent}} 没能起草描述：{{reason}}"
+  },
+  "hostError": {
+    "agentNoRequest": "这个智能体不接受这种请求",
+    "noFolder": "这个会话没有可以运行命令的文件夹",
+    "noArtifactFile": "产物的这个版本里没有文件 {{path}}",
+    "showHere": "“显示应用”只能在这台电脑上使用。",
+    "tooManyRequests": "这台设备等待处理的请求太多了",
+    "agentStopping": "智能体正在停止"
+  },
+  "agentFile": {
+    "foreign": "{{file}} 不属于这个会话的智能体",
+    "missing": "{{file}} 不存在"
+  },
+  "attachment": {
+    "notText": "{{name}} 不是 UTF-8 文本",
+    "grantExpired": "Kettu 已经不能读取这个文件了，请重新添加。"
+  },
+  "light": {
+    "noModel": "它已不再提供模型 {{model}}",
+    "noRemoval": "这个智能体的隐藏会话无法不留痕迹地删除",
+    "noAnswer": "{{seconds}} 秒内没有回答",
+    "noCommitMessage": "它的回复里没有提交信息"
+  },
+  "threadDb": {
+    "notOpen": "对话数据库没有打开",
+    "searchNotOpen": "搜索索引没有打开",
+    "damaged": "对话数据库已损坏：{{reason}}"
+  },
+  "computer": {
+    "cannotShow": "这个应用无法切到前台。"
+  },
+  "memory": {
+    "titleEmpty": "标题不能为空。",
+    "titleTooLong": "标题最多 {{max}} 个字符。",
+    "descriptionTooLong": "摘要最多 {{max}} 个字符。",
+    "bodyTooLong": "正文最多 {{max}} 个字符。每条只记一件事。",
+    "sameTitle": "条目 {{id}} 已经用了这个标题。请更新那一条，不要再添加一条。"
+  },
+  "workflowFile": {
+    "unknownField": "未知字段",
+    "required": "必填",
+    "mustBeText": "必须是文本",
+    "notEmpty": "不能为空",
+    "tooLong": "不能超过 {{max}} 个字符",
+    "oneLine": "必须是一行",
+    "stepIdOrList": "必须是步骤 id，或步骤 id 的列表",
+    "stepId": "必须是步骤 id",
+    "namesTwice": "重复写了“{{id}}”",
+    "wholeNumber": "必须是 1 到 {{max}} 的整数",
+    "outcomeMapping": "必须是包含 name 和去向的映射",
+    "doneOrDropped": "必须是 done 或 dropped",
+    "needsToOrEnd": "需要 to（它启动的步骤）或 end（done 或 dropped）",
+    "bothToEnd": "同时写了 to 和 end，只能写一个",
+    "toolsMapping": "必须是包含 mcp 和 skills 列表的映射",
+    "nameList": "必须是名称列表",
+    "tooManyNames": "列出的名称不能超过 {{max}} 个",
+    "name": "必须是名称",
+    "mapping": "必须是映射",
+    "idFormat": "必须是用短横线连接的小写形式（kebab-case），最多 {{max}} 个字符",
+    "agentOrYou": "必须是 agent 或 you",
+    "handInKind": "必须是 document、outcome 或 note",
+    "trueOrFalse": "必须是 true 或 false",
+    "oneOutcome": "至少要列出一个结果",
+    "tooManyOutcomes": "列出的结果不能超过 {{max}} 个",
+    "outcomeTwice": "已有另一个结果叫“{{name}}”",
+    "personHandsOutcome": "由人完成的步骤要交出结果（outcome）",
+    "personNotReviewed": "由人完成的步骤不用审核",
+    "personNoAgent": "由人完成的步骤不用选智能体",
+    "personNoReview": "由人完成的步骤不审核别的步骤",
+    "personNoTools": "由人完成的步骤没有会话可以交付工具",
+    "twoOutcomes": "交出结果的步骤至少要有两个结果",
+    "outcomesMapping": "必须把步骤 id 映射到各自的结果",
+    "outcomeNames": "必须把结果名映射到名称",
+    "localesMapping": "必须是语言代码的映射",
+    "tooManyLocales": "语言不能超过 {{max}} 种",
+    "languageCode": "必须是语言代码，例如 zh-CN",
+    "localeMapping": "必须是包含 name、description、when、steps 或 outcomes 的映射",
+    "stepNames": "必须把步骤 id 映射到名称",
+    "stepTwice": "已有另一个步骤叫“{{id}}”",
+    "limitBack": "只有指回本步骤或更早步骤的箭头才有次数上限",
+    "backOne": "指回去的箭头只能指向一个步骤",
+    "reviewSelf": "步骤不能审核自己",
+    "reviewPerson": "“{{id}}”是由人完成的步骤",
+    "unreachable": "从第一个步骤出发永远到不了“{{id}}”",
+    "noEnd": "没有任何结果会结束需求；请给一个结果写上 end: done 或 end: dropped",
+    "noPathToEnd": "从“{{id}}”出发的任何路径都不会结束需求",
+    "fileMapping": "文件必须是一个映射",
+    "formatValue": "必须是 {{format}}",
+    "oneStep": "至少要列出一个步骤",
+    "tooManySteps": "步骤不能超过 {{max}} 个",
+    "noOutcome": "“{{id}}”没有叫“{{name}}”的结果",
+    "noStep": "没有步骤“{{id}}”",
+    "fileTooLarge": "文件超过 {{kb}} KB",
+    "notYaml": "不是有效的 YAML：{{reason}}",
+    "noAliases": "不允许使用 YAML 别名",
+    "notAWorkflow": "这不是工作流文件",
+    "noMcp": "Kettu 里没有安装 MCP 服务器“{{name}}”",
+    "noSkill": "Kettu 里没有安装技能“{{name}}”",
+    "unreadable": "无法读取：{{reason}}",
+    "fileGone": "文件已经不在了"
+  },
+  "apiKey": {
+    "oneWord": "API key 必须是不含空格的一整段文字",
+    "keyOnly": "这个 Harness 只接受 API key",
+    "baseUrl": "Base URL 必须是 http 或 https 地址"
+  },
+  "agentConfig": {
+    "modelOneWord": "模型名必须是不含空格的一整段文字",
+    "invalidFile": "{{file}} 不是有效的 {{format}}，请先修好它，或自己在那里设置这个键",
+    "notTable": "{{file}} 里不是设置表",
+    "parentNotTable": "{{file}} 中的 {{key}} 不是表，请先修好它，或自己在那里设置这个键",
+    "noAutoCompact": "这个 Harness 没有自动压缩设置",
+    "oneValue": "这个 Harness 的所有模型共用一个值",
+    "wholeNumber": "这个值必须是 {{min}} 到 {{max}} 之间的整数",
+    "pluginRows": "{{file}} 不是插件行的列表，请先修好它，或自己在那里设置阈值",
+    "rowNotMap": "{{file}} 中 {{row}} 这一行的 config 不是映射，请先修好它",
+    "cacheDuration": "提示词缓存时长只能是 5m 或 1h",
+    "windowRange": "窗口必须在 {{min}} 到 {{max}} token 之间",
+    "modelSettingsNotObject": "{{file}} 中的 modelSettings 不是对象，请先修好它，或自己在那里设置窗口",
+    "siteChoice": "站点只能是 international、china 或 automatic",
+    "notJsonObject": "{{file}} 里不是一个 JSON 对象"
+  },
+  "agentRun": {
+    "noSession": "没有会话 {{id}}",
+    "notOpen": "会话 {{id}} 没有打开",
+    "ended": "会话 {{id}} 已结束",
+    "turnRunning": "上一轮对话还在进行中",
+    "notRunning": "{{agent}} 没有在运行",
+    "noForkPoint": "在会话 {{id}} 中找不到要从这里另开会话的消息 {{message}}",
+    "noOptionTakes": "选项 {{option}} 不接受 {{value}}",
+    "questionCancelled": "这个提问已取消",
+    "betweenTurns": "请等这一轮对话结束后再更改",
+    "takesChoice": "{{option}} 要从选项里选一个",
+    "noChoice": "{{option}} 里没有 {{value}}",
+    "noModel": "没有模型 {{value}}",
+    "noEffort": "没有推理强度 {{value}}",
+    "noMode": "没有模式 {{value}}",
+    "noOption": "没有选项 {{option}}"
+  },
+  "usageRead": {
+    "notSignedIn": "{{vendor}} 尚未登录",
+    "signInExpired": "{{vendor}} 的登录已过期",
+    "noPlanUsage": "{{vendor}} 没有返回套餐用量",
+    "noBalanceOrPlan": "{{vendor}} 没有返回余额或套餐",
+    "noAccount": "{{vendor}} 没有返回账号信息",
+    "noResets": "{{vendor}} 没有返回重置卡",
+    "unknownAnswer": "{{vendor}} 返回了无法识别的内容",
+    "refusedAccount": "{{vendor}} 拒绝了读取账号的请求",
+    "noApiKeyUsage": "用 API key 登录时，暂时读不到 {{vendor}} 的用量",
+    "otherServer": "{{vendor}} 登录的服务器 Kettu 读不了",
+    "noFactoryKey": "{{vendor}} 没有可用来读取套餐的 FACTORY_API_KEY",
+    "storedUnreadable": "读不了已保存的登录",
+    "endpointNotListed": "{{vendor}} 的用量地址不在 Kettu 允许访问的名单里",
+    "unreachable": "连不上 {{vendor}}",
+    "notAccepted": "{{vendor}} 不接受已保存的登录",
+    "answered": "{{vendor}} 返回了 {{status}}",
+    "replyUnreadable": "读不了 {{vendor}} 返回的用量",
+    "kilo": {
+      "noPort": "没能占用本机端口",
+      "exited": "Kilo 服务在读取资料前就退出了",
+      "refused": "读取 Kilo 资料时返回了 {{status}}",
+      "timedOut": "读取 Kilo 资料超时"
+    },
+    "auggieFailed": "读取 Auggie 账号状态失败",
+    "rpc": {
+      "badFrame": "JSON-RPC 帧无效",
+      "failed": "厂商的 RPC 调用失败",
+      "exited": "厂商的 RPC 进程已退出，退出码 {{code}}",
+      "timedOut": "厂商的 RPC 调用超时"
+    }
+  },
+  "modelRequest": {
+    "noRecord": "这个智能体没有 Kettu 能读取的记录",
+    "noSessionFile": "这个会话没有可读取的会话文件",
+    "noRollout": "这个会话没有可读取的 rollout 文件",
+    "noClineMessages": "Cline 没有保存这个会话的消息",
+    "messagesGone": "这些消息已经不再保存",
+    "openCodeGone": "OpenCode 里已经没有这些消息，请重新打开这个请求",
+    "fileChanged": "会话文件已变化，请重新打开这个请求",
+    "tooLarge": "这些记录太大，无法显示"
+  },
+  "usage": {
+    "workerStopped": "用量统计进程已停止",
+    "workerStoppedWith": "用量统计进程已停止：{{error}}"
+  },
+  "marketCatalog": {
+    "tooLarge": "MCP Registry 返回的内容超过了 {{bytes}} 字节",
+    "notJson": "MCP Registry 返回的不是 JSON",
+    "timeout": "MCP Registry 在 {{seconds}} 秒内没有响应",
+    "unreachable": "连不上 MCP Registry：{{reason}}",
+    "status": "MCP Registry 返回了 {{status}}",
+    "unreadable": "没能读取 MCP Registry：{{reason}}"
+  },
+  "marketConnect": {
+    "serverStatus": "服务器返回了 {{status}}",
+    "hostStatus": "{{host}} 返回了 {{status}}",
+    "refused": "服务拒绝了这次登录：{{reason}}",
+    "noAuthServer": "服务器没有给出 Kettu 能读懂的授权服务器",
+    "noPkce": "授权服务器不支持 S256 的 PKCE",
+    "timedOut": "登录没有在五分钟内完成",
+    "noApp": "Kettu 没有在这个服务上注册应用",
+    "noDevice": "这个服务不支持设备登录",
+    "deviceNotStarted": "服务没能开始设备登录：{{reason}}",
+    "deviceNoCode": "服务没能开始设备登录：没有给出验证码",
+    "codeExpired": "验证码在输入前就过期了",
+    "denied": "登录在服务端被拒绝了",
+    "noToken": "服务没有给出 token",
+    "noMetadata": "读不到授权服务器的元数据",
+    "renewRefused": "服务拒绝为 token 续期：{{reason}}",
+    "renewExpired": "token 已过期，无法续期",
+    "noServer": "Kettu 里没有这个需要登录的服务器",
+    "landing": {
+      "done": "已登录。可以关掉这个标签页，回到 Kettu。",
+      "failed": "登录没有完成。可以关掉这个标签页，回到 Kettu 重试。"
+    }
+  },
+  "project": {
+    "notAbsolute": "项目路径必须是绝对路径",
+    "notExist": "{{path}} 不存在",
+    "notFolder": "{{path}} 不是文件夹",
+    "noProject": "{{path}} 不在项目列表里",
+    "moveBeforeItself": "项目不能移到它自己的前面"
+  },
+  "process": {
+    "toolTimedOut": "{{name}} 没有在 {{ms}} 毫秒内完成"
+  },
+  "validate": {
+    "empty": "{{key}} 不能为空",
+    "tooLong": "{{key}} 超过了 {{max}} 个字符",
+    "routineName": "名称最多 {{max}} 个字符",
+    "routinePrompt": "提示词需要 1 到 {{max}} 个字符",
+    "commentBody": "评论需要 1 到 {{max}} 个字符，不能只有空白",
+    "promptItems": "消息里的内容超过了 {{max}} 项",
+    "promptAttachments": "一条消息最多带 {{max}} 个附件",
+    "promptTooLarge": "消息超过了 10 MB",
+    "promptEmpty": "消息是空的",
+    "textTooLarge": "文本超过了 1 MiB",
+    "artifactTitle": "标题需要 1 到 {{max}} 个字符，不能只有空白",
+    "branchTemplate": "分支名模板最多 {{max}} 个字符",
+    "copyCount": "要复制的文件最多 {{max}} 个",
+    "copyPaths": "要复制的文件必须写成路径",
+    "copyEntry": "复制 {{entry}}：{{reason}}",
+    "setupCommand": "初始化命令最多 {{max}} 个字符"
   }
 }

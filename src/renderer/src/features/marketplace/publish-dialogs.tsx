@@ -61,7 +61,7 @@ function Problems({ problems }: { problems: MarketProblem[] }) {
       {problems.map((problem, i) => (
         <li key={i}>
           {problem.path && <span className="k-mkt-mono">{problem.path}</span>}
-          <span>{problem.message}</span>
+          <span>{problem.text ?? problem.message}</span>
         </li>
       ))}
     </ul>

@@ -4,6 +4,7 @@
 
 import { SKILL_NAME, type SkillTrust } from '@shared/marketplace'
 import { frontmatter, frontmatterLists } from './frontmatter'
+import { LocalizedError, logText } from '../localized-error'
 import { folderFiles, type FolderLimits, type TarFile, type Tarball } from './tarball'
 
 export interface SkillRepositorySpec {
@@ -123,9 +124,11 @@ export function skillFields(text: string, fallback: string): { name: string; des
   const name = (fields.name ?? fallback).trim()
   const description = (fields.description ?? '').replace(/\s+/g, ' ').trim()
   if (!SKILL_NAME.test(name)) {
-    throw new Error(`"${name}" is not a skill name: lowercase letters, digits and hyphens`)
+    throw new LocalizedError({ key: 'marketSkills.badName', params: { name } })
   }
-  if (description === '') throw new Error(`The skill ${name} has no description`)
+  if (description === '') {
+    throw new LocalizedError({ key: 'marketSkills.noDescription', params: { name } })
+  }
   return { name, description: description.slice(0, DESCRIPTION_CHARS) }
 }
 
@@ -249,7 +252,12 @@ export function repositorySkills(
         .toString('utf8')
       const { name, description } = skillFields(text, dir.split('/').pop() || spec.repo)
       const same = skills.find((skill) => skill.entry.name === name)
-      if (same) throw new Error(`${same.entry.path} has its name, ${name}`)
+      if (same) {
+        throw new LocalizedError({
+          key: 'marketSkills.sameName',
+          params: { path: same.entry.path, name },
+        })
+      }
       const entry: CatalogEntry = {
         name,
         description,
@@ -259,7 +267,7 @@ export function repositorySkills(
       }
       skills.push({ entry, files })
     } catch (error) {
-      left.push({ path: dir, reason: (error as Error).message })
+      left.push({ path: dir, reason: logText(error) })
     }
   }
   return { skills, left }

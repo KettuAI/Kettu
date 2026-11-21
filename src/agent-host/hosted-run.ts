@@ -7,6 +7,7 @@ import { spawnAgent, type AgentRun, type ExitInfo, type SpawnedAgent } from './a
 import type { AgentConnection } from './connection'
 import type { HostedSpawn } from './driver'
 import { needsShell } from './find-command'
+import { t } from './i18n'
 import type { ToolOptions } from './process-tree'
 
 export interface HostedRunHooks {
@@ -21,8 +22,13 @@ export interface HostedRunHooks {
 }
 
 const STOPPED: ExitInfo = { code: 0, signal: null }
-// Read after the agent's name, as an exit's error is.
-const CLOSED: ExitInfo = { code: null, signal: null, error: 'closed its connection' }
+// Its error reads after the agent's name in diagnostics.
+const CLOSED: ExitInfo = {
+  code: null,
+  signal: null,
+  error: 'closed its connection',
+  closed: true,
+}
 const KILLED: ExitInfo = { code: null, signal: 'SIGKILL' }
 
 export class HostedRun implements AgentRun {
@@ -61,7 +67,7 @@ export class HostedRun implements AgentRun {
   }
 
   readonly spawn: HostedSpawn = (options) => {
-    if (this.closing) throw new Error('The agent is stopping')
+    if (this.closing) throw new Error(t('hostError.agentStopping'))
     const { command, args } = options
     const child = spawnAgent(
       {

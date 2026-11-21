@@ -10,6 +10,7 @@ import {
   type Deck,
   type Slide,
 } from '@shared/artifact-slides'
+import { t } from '../../i18n'
 import { imageInfo } from './images'
 
 /** The slide's width in inches; its height follows the deck's aspect. */
@@ -324,6 +325,6 @@ export async function slidesPptx(
   const builder = new Builder(pptx, DECK_PALETTES[deck.theme ?? 'light'], images, deck.aspect)
   for (const slide of deck.slides) builder.add(slide)
   const written = await pptx.write({ outputType: 'nodebuffer' })
-  if (!(written instanceof Uint8Array)) throw new Error('PowerPoint export gave no bytes')
+  if (!(written instanceof Uint8Array)) throw new Error(t('artifacts.pptxNoBytes'))
   return new Uint8Array(written)
 }

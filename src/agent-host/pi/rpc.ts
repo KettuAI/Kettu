@@ -2,6 +2,7 @@
 // response repeats, and every other record is an event of the session.
 
 import type { Readable, Writable } from 'node:stream'
+import { t } from '../i18n'
 import { jsonLineWriter, readJsonLines, type JsonLineWriter } from './jsonl'
 import type { PiEvent, PiResponse, PiUiAnswer } from './protocol'
 
@@ -87,7 +88,7 @@ export class PiRpc {
       if (timeoutMs !== undefined) {
         pending.timer = setTimeout(() => {
           if (!this.pending.delete(id)) return
-          reject(new Error(`pi did not answer ${command.type} within ${timeoutMs / 1000} s`))
+          reject(new Error(t('pi.noAnswer', { command: command.type, seconds: timeoutMs / 1000 })))
         }, timeoutMs)
         pending.timer.unref?.()
       }
@@ -127,7 +128,9 @@ export class PiRpc {
     this.pending.delete(response.id!)
     if (pending.timer) clearTimeout(pending.timer)
     if (response.success) pending.resolve(response.data)
-    else pending.reject(new PiCommandError(pending.command, response.error ?? 'pi refused it'))
+    else {
+      pending.reject(new PiCommandError(pending.command, response.error ?? t('pi.refused')))
+    }
   }
 
   private finish(): void {

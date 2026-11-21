@@ -339,14 +339,18 @@ export function npmFailure(output: TextRing): string {
 export function programFailure(name: string, run: ProgramRun, timeoutMs: number): string | null {
   if (run.aborted) return t('agent.installStopped')
   if (run.timedOut) {
-    const limit =
-      timeoutMs >= 60_000 ? `${Math.round(timeoutMs / 60_000)} minutes` : `${timeoutMs / 1000} s`
-    return `${name} did not finish within ${limit}.`
+    return timeoutMs >= 60_000
+      ? t('agent.program.timedOutMinutes', { name, minutes: Math.round(timeoutMs / 60_000) })
+      : t('agent.program.timedOutSeconds', { name, seconds: timeoutMs / 1000 })
   }
-  if (run.error) return `${name} could not be started: ${run.error}`
+  if (run.error) return t('agent.program.notStarted', { name, error: run.error })
   if (run.code === 0) return null
-  const how = run.signal ? `was stopped by ${run.signal}` : `exited with code ${run.code}`
-  return `${name} ${how}. ${npmFailure(run.output)}`.trim()
+  const detail = npmFailure(run.output)
+  return (
+    run.signal
+      ? t('agent.program.stopped', { name, signal: run.signal, detail })
+      : t('agent.program.exited', { name, code: String(run.code), detail })
+  ).trim()
 }
 
 const RETRYABLE = new Set(['EPERM', 'EACCES', 'EBUSY'])
@@ -430,7 +434,9 @@ export async function installAdapter(options: InstallOptions): Promise<Installed
   try {
     const probe = await run(['--version'], 30_000, false)
     if (probe.aborted) throw new Error(t('agent.installStopped'))
-    if (probe.error) throw new Error(`npm could not be started: ${probe.error}`)
+    if (probe.error) {
+      throw new Error(t('agent.program.notStarted', { name: 'npm', error: probe.error }))
+    }
     const npmVersion = probe.code === 0 ? probe.stdout.trim() || null : null
     await writeFile(
       path.join(partial, 'package.json'),
@@ -449,7 +455,7 @@ export async function installAdapter(options: InstallOptions): Promise<Installed
     const failure = programFailure('npm', result, options.timeoutMs)
     if (failure) throw new Error(failure)
     if (!(await binEntry(partial, options.package))) {
-      throw new Error(`${options.package} was installed without a program to run.`)
+      throw new Error(t('agent.noProgram', { name: options.package }))
     }
     const record: InstalledRecord = {
       package: options.package,

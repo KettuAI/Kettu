@@ -40,6 +40,7 @@ import { pathKey } from '../paths'
 import { writeFileAtomic } from '../storage'
 import { parseWorkflow } from '../workflow/format'
 import { sameFlow } from '../workflow/graph'
+import { forAgent, problemOf, problemWith } from './localized-error'
 import { checkFolder, type CheckedFile, type FolderCheck } from './publish-check'
 import type { NewDraft, PublishedVersion } from './publish-drafts'
 
@@ -439,6 +440,8 @@ interface Plan {
   mine: MarketMine | null
   /** Why the user's listings could not be read, for a check that goes on without them. */
   mineError: string | null
+  /** The same in the user's language. */
+  mineText: string | null
   listing: MineListing | null
   version: string | null
   problems: MarketProblem[]
@@ -549,7 +552,9 @@ export class MarketTools {
     const draft = this.draftFor(draftId, target)
     const plan = await this.plan(target, null, draftVersion(draft), true)
     const problems = [...plan.problems]
-    if (plan.check.slug && !plan.mine && plan.mineError) problems.push({ message: plan.mineError })
+    if (plan.check.slug && !plan.mine && plan.mineError) {
+      problems.push(problemOf(plan.mineError, plan.mineText ?? plan.mineError))
+    }
     const ask = await this.askOf(
       plan,
       draft?.manifest.visibility ?? null,
@@ -572,7 +577,7 @@ export class MarketTools {
       })
     }
     if (!plan.mine) {
-      throw new HostError('unavailable', plan.mineError ?? t('marketPublish.failure.unreadable'))
+      throw new HostError('unavailable', plan.mineText ?? t('marketPublish.failure.unreadable'))
     }
     const from = draft
       ? {
@@ -708,26 +713,33 @@ export class MarketTools {
     const problems = [...check.problems]
     let mine: MarketMine | null = null
     let mineError: string | null = null
+    let mineText: string | null = null
     if (check.slug) {
       try {
         mine = await this.deps.call({ kind: 'mine' })
       } catch (error) {
         if (!(error instanceof MarketCallError)) throw error
         mineError = serviceText(error.failure)
+        mineText = userText(error.failure)
       }
     }
     const same = mine?.listings.find((listing) => listing.slug === check.slug) ?? null
     let listing: MineListing | null = null
     if (same && (same.kind !== check.kind || (same.harness ?? null) !== check.harness)) {
-      problems.push({
-        message: `${listingName(same)} is already one of the user’s listings, as another kind. Give this one another name.`,
-      })
+      problems.push(
+        problemWith(undefined, (say) =>
+          say('marketPublish.check.otherKind', { listing: listingName(same) }),
+        ),
+      )
     } else if (same) {
       listing = same
       if (same.takenDown) {
-        problems.push({
-          message: `${listingName(same)} was taken down by Kettu: ${same.takenDown.reason}`,
-        })
+        const { reason } = same.takenDown
+        problems.push(
+          problemWith(undefined, (say) =>
+            say('marketPublish.check.takenDown', { listing: listingName(same), reason }),
+          ),
+        )
       }
     }
     const taken = listing?.versions.map((v) => v.version) ?? []
@@ -736,18 +748,26 @@ export class MarketTools {
     if (numbered(check.kind)) {
       version = wanted ?? (listing ? nextPatch(taken) : '1.0.0')
     } else if (wanted !== null && check.version !== null && wanted !== check.version) {
-      problems.push({
-        path: check.manifest ?? undefined,
-        message: `The version is ${check.version}, as the manifest says; change it there instead of passing ${wanted}.`,
-      })
+      const passed = { version: check.version, wanted }
+      problems.push(
+        problemWith(check.manifest ?? undefined, (say) =>
+          say('marketPublish.check.versionInManifest', passed),
+        ),
+      )
     }
     if (version !== null && taken.includes(version)) {
-      problems.push({
-        path: numbered(check.kind) ? undefined : (check.manifest ?? undefined),
-        message: numbered(check.kind)
-          ? `Version ${version} of ${listingName(listing!)} is published already. Pass a higher version.`
-          : `Version ${version} of ${listingName(listing!)} is published already. Raise the version in ${check.manifest}.`,
-      })
+      const name = listingName(listing!)
+      problems.push(
+        problemWith(numbered(check.kind) ? undefined : (check.manifest ?? undefined), (say) =>
+          numbered(check.kind)
+            ? say('marketPublish.check.versionTakenNumbered', { version, listing: name })
+            : say('marketPublish.check.versionTaken', {
+                version,
+                listing: name,
+                manifest: check.manifest ?? '',
+              }),
+        ),
+      )
     }
     return {
       check,
@@ -755,6 +775,7 @@ export class MarketTools {
       folder: base === null ? this.homeShown(target) : this.shown(target, base),
       mine,
       mineError,
+      mineText,
       listing,
       version,
       problems,
@@ -819,7 +840,7 @@ export class MarketTools {
         bytes: check.bytes,
         adds: check.adds,
         runs: check.runs,
-        problems,
+        problems: forAgent(problems),
       },
     }
   }
@@ -906,9 +927,10 @@ export class MarketTools {
     } catch (error) {
       if (!(error instanceof MarketCallError)) throw error
       const message = serviceText(error.failure)
+      const shown = userText(error.failure)
       const problems = error.failure.problems ?? []
-      this.deps.settle(caller.sessionId, entryId, { kind: 'failed', message, problems })
-      await draft(message, problems)
+      this.deps.settle(caller.sessionId, entryId, { kind: 'failed', message: shown, problems })
+      await draft(shown, problems)
       throw new Refusal(
         'refused',
         [
@@ -1289,7 +1311,11 @@ export class MarketTools {
     } catch (error) {
       if (!(error instanceof MarketCallError)) throw error
       const message = serviceText(error.failure)
-      this.deps.settle(caller.sessionId, entryId, { kind: 'failed', message, problems: [] })
+      this.deps.settle(caller.sessionId, entryId, {
+        kind: 'failed',
+        message: userText(error.failure),
+        problems: [],
+      })
       throw new Refusal('refused', `The Kettu Marketplace did not unlist it: ${message}`)
     }
     this.deps.settle(caller.sessionId, entryId, { kind: 'unlisted' })
@@ -1516,7 +1542,11 @@ export function hostFailure(failure: MarketFailure): HostError {
 function failed(code: string, message: string, problems: MarketProblem[]): CallToolResult {
   return {
     content: [{ type: 'text', text: message }],
-    structuredContent: { code, message, ...(problems.length > 0 ? { problems } : {}) },
+    structuredContent: {
+      code,
+      message,
+      ...(problems.length > 0 ? { problems: forAgent(problems) } : {}),
+    },
     isError: true,
   }
 }

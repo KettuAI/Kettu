@@ -7,6 +7,7 @@
 
 import path from 'node:path'
 import type { PlanLimit } from '@shared/agent-host'
+import { t } from '../i18n'
 import { balance, number, object, percentLimit, time, type VendorUsage } from './common'
 import {
   askVendor,
@@ -86,7 +87,7 @@ export async function readDevinUsage(place: SignInPlace): Promise<VendorUsage> {
   const text = await readSignInFile(credentialsFile(place))
   const credentials = text === null ? {} : readCredentialLines(text)
   const key = credentials.windsurf_api_key?.trim()
-  if (!key) throw new UsageReadError(`${VENDOR} is not signed in`)
+  if (!key) throw new UsageReadError(t('usageRead.notSignedIn', { vendor: VENDOR }))
   const server = (
     variable(place, 'WINDSURF_API_SERVER_URL') ??
     credentials.api_server_url ??
@@ -94,7 +95,7 @@ export async function readDevinUsage(place: SignInPlace): Promise<VendorUsage> {
   ).replace(/\/+$/, '')
   // A sign-in to another server is not sent anywhere: that server is not a listed endpoint.
   if (server !== DEVIN_ORIGINS[0]) {
-    throw new UsageReadError(`${VENDOR} signs in to a server Kettu does not read`)
+    throw new UsageReadError(t('usageRead.otherServer', { vendor: VENDOR }))
   }
   const reply = await askVendor(
     {
@@ -119,7 +120,7 @@ export async function readDevinUsage(place: SignInPlace): Promise<VendorUsage> {
   )
   const usage = parseDevinStatus(reply, place.now)
   if (!usage || (usage.limits.length === 0 && usage.balances.length === 0 && !usage.tier)) {
-    throw new UsageReadError(`${VENDOR} sent no plan usage`)
+    throw new UsageReadError(t('usageRead.noPlanUsage', { vendor: VENDOR }))
   }
   return usage
 }

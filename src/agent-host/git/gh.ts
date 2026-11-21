@@ -2,6 +2,7 @@
 
 import type { GitTools, Issue, PullRequest } from '@shared/git'
 import { t, tEnglish } from '../i18n'
+import { logText } from '../localized-error'
 import type { BranchPullRequest } from './api'
 import {
   describeFailure,
@@ -58,7 +59,7 @@ function mapped<T>(result: ExecResult, map: (json: unknown) => T): GhOutcome<T> 
     return { ok: true, value: map(json.value) }
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
-    return { ok: false, reason: 'failed', message, log: message }
+    return { ok: false, reason: 'failed', message, log: logText(error) }
   }
 }
 

@@ -11,6 +11,7 @@ import {
   type PromptCacheTtl,
 } from '@shared/agents'
 import type { ConfigOption } from '@shared/thread'
+import { t } from '../i18n'
 import { isObject, readSettings, writeSettings } from '../settings-file'
 
 /** A model the agent lists: its id as the settings key it, and the name it shows. */
@@ -80,7 +81,7 @@ export async function readClaudeSettings(
 export function checkClaudeSetting(change: ClaudeSettingChange): ClaudeSettingChange {
   if (change.setting === 'promptCacheTtl') {
     if (change.value !== null && !PROMPT_CACHE_TTLS.includes(change.value)) {
-      throw new Error('The prompt cache duration must be 5m or 1h')
+      throw new Error(t('agentConfig.cacheDuration'))
     }
     return change
   }
@@ -89,14 +90,14 @@ export function checkClaudeSetting(change: ClaudeSettingChange): ClaudeSettingCh
     model !== null &&
     (model.length === 0 || model.length > MAX_MODEL_CHARS || /\s/.test(model))
   ) {
-    throw new Error('The model must be one word without spaces')
+    throw new Error(t('agentConfig.modelOneWord'))
   }
   const { value } = change
   if (
     value !== null &&
     !(Number.isInteger(value) && value >= AUTO_COMPACT_MIN && value <= AUTO_COMPACT_MAX)
   ) {
-    throw new Error(`The window must be from ${AUTO_COMPACT_MIN} to ${AUTO_COMPACT_MAX} tokens`)
+    throw new Error(t('agentConfig.windowRange', { min: AUTO_COMPACT_MIN, max: AUTO_COMPACT_MAX }))
   }
   return { setting: 'autoCompactWindow', model, value }
 }
@@ -109,9 +110,7 @@ function withWindow(
   value: number | null,
 ): Record<string, unknown> | null {
   if (settings.modelSettings !== undefined && !isObject(settings.modelSettings)) {
-    throw new Error(
-      `modelSettings in ${file} is not an object; fix it or set the window there yourself`,
-    )
+    throw new Error(t('agentConfig.modelSettingsNotObject', { file }))
   }
   const models: Record<string, unknown> = isObject(settings.modelSettings)
     ? { ...settings.modelSettings }

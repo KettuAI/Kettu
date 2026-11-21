@@ -4,6 +4,7 @@
 
 import type { OutlineTitle } from '@shared/agent-host'
 import type { ConfigOption } from '@shared/thread'
+import { LocalizedError } from './localized-error'
 import { REPORT_TIMEOUT_MS, type HiddenRuntime } from './reports'
 
 /** At most this many messages go in one summary, the newest first... */
@@ -40,7 +41,7 @@ export function pickModel(config: readonly ConfigOption[], pick: ModelPick): str
   const choices = modelOption(config)?.choices ?? []
   if (pick.pinned) {
     if (!choices.some((choice) => choice.value === pick.model)) {
-      throw new Error(`it no longer offers the model ${pick.model ?? ''}`)
+      throw new LocalizedError({ key: 'light.noModel', params: { model: pick.model ?? '' } })
     }
     return pick.model
   }
@@ -139,7 +140,7 @@ export async function askSmallModel(
 ): Promise<string[]> {
   const { connection } = runtime
   if (!connection.hiddenSessions) {
-    throw new Error("the agent's hidden sessions cannot be removed without a trace")
+    throw new LocalizedError({ key: 'light.noRemoval' })
   }
   const timeoutMs = request.timeoutMs ?? REPORT_TIMEOUT_MS
   const remove = (sessionId: string): Promise<void> =>
@@ -165,7 +166,9 @@ export async function askSmallModel(
       new Promise<never>((_, reject) => {
         timer = setTimeout(() => {
           if (sessionId) void connection.cancel(sessionId).catch(() => {})
-          reject(new Error(`no answer within ${timeoutMs / 1000} s`))
+          reject(
+            new LocalizedError({ key: 'light.noAnswer', params: { seconds: timeoutMs / 1000 } }),
+          )
         }, timeoutMs)
       }),
     ])

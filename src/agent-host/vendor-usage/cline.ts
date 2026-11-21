@@ -6,6 +6,7 @@
 
 import path from 'node:path'
 import type { PlanLimit } from '@shared/agent-host'
+import { t } from '../i18n'
 import { balance, number, object, time, type VendorUsage } from './common'
 import {
   askVendor,
@@ -24,7 +25,7 @@ export const CLINE_ORIGINS = ['https://api.cline.bot'] as const
 function data(value: unknown): unknown {
   const root = object(value)
   if (root && typeof root.success === 'boolean') {
-    if (!root.success) throw new UsageReadError(`${VENDOR} refused the account read`)
+    if (!root.success) throw new UsageReadError(t('usageRead.refusedAccount', { vendor: VENDOR }))
     return root.data
   }
   return value
@@ -77,10 +78,10 @@ async function storedToken(place: SignInPlace): Promise<string> {
     text === null ? null : object(object(object(parseSignIn(text))?.providers)?.cline)
   const auth = object(object(settings?.settings)?.auth)
   const token = typeof auth?.accessToken === 'string' ? auth.accessToken.trim() : ''
-  if (!token) throw new UsageReadError(`${VENDOR} is not signed in`)
+  if (!token) throw new UsageReadError(t('usageRead.notSignedIn', { vendor: VENDOR }))
   const expiresAt = number(auth?.expiresAt)
   if (expiresAt !== null && expiresAt > 0 && expiresAt <= place.now) {
-    throw new UsageReadError(`${VENDOR}'s sign-in has expired`)
+    throw new UsageReadError(t('usageRead.signInExpired', { vendor: VENDOR }))
   }
   return token.toLowerCase().startsWith('workos:') ? token : `workos:${token}`
 }
@@ -99,7 +100,7 @@ export async function readClineUsage(place: SignInPlace): Promise<VendorUsage> {
     )
   const me = object(data(await ask('/users/me')))
   const id = typeof me?.id === 'string' ? me.id.trim() : ''
-  if (!id) throw new UsageReadError(`${VENDOR} sent no account`)
+  if (!id) throw new UsageReadError(t('usageRead.noAccount', { vendor: VENDOR }))
   const [credits, plan] = await Promise.all([
     ask(`/users/${encodeURIComponent(id)}/balance`).then(parseClineBalance),
     ask('/users/me/plan').then(
@@ -112,7 +113,7 @@ export async function readClineUsage(place: SignInPlace): Promise<VendorUsage> {
     ),
   ])
   if (credits === null && !plan.tier && !plan.period) {
-    throw new UsageReadError(`${VENDOR} sent no balance or plan`)
+    throw new UsageReadError(t('usageRead.noBalanceOrPlan', { vendor: VENDOR }))
   }
   return {
     ...(plan.tier ? { tier: plan.tier } : {}),

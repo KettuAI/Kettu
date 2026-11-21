@@ -10,6 +10,7 @@ import {
   writeClaudeSetting,
   type ListedModel,
 } from '../claude/user-settings'
+import { t } from '../i18n'
 import type { CodexRequest } from '../marketplace/codex-plugins'
 import { versionAtLeast } from '../versions'
 import {
@@ -35,7 +36,7 @@ export interface CompactPlace {
 
 function specOf(harness: HarnessId): CompactSpec {
   const spec = compactSpec(harness)
-  if (!spec) throw new Error('This harness has no auto-compact setting')
+  if (!spec) throw new Error(t('agentConfig.noAutoCompact'))
   return spec
 }
 
@@ -131,13 +132,13 @@ export function checkAutoCompact(
   const spec = specOf(harness)
   const model = change.model === null ? null : change.model.trim()
   if (model !== null) {
-    if (!perModel(spec, version)) throw new Error('This harness sets one value for every model')
+    if (!perModel(spec, version)) throw new Error(t('agentConfig.oneValue'))
     if (model.length === 0 || model.length > MAX_MODEL_CHARS || /\s/.test(model)) {
-      throw new Error('The model must be one word without spaces')
+      throw new Error(t('agentConfig.modelOneWord'))
     }
   }
   if (change.value !== null && !inCompactRange(spec, change.value)) {
-    throw new Error(`The value must be a whole number from ${spec.min} to ${spec.max}`)
+    throw new Error(t('agentConfig.wholeNumber', { min: spec.min, max: spec.max }))
   }
   return { model, value: change.value }
 }

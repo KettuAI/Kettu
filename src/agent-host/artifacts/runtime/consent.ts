@@ -10,6 +10,7 @@ import {
   type ConsentCapability,
 } from '@shared/artifact-capabilities'
 import { HostError } from '../../errors'
+import { t } from '../../i18n'
 import type { ArtifactStore } from '../store'
 import type { DeclaredArtifact } from './calls'
 import { DESKTOP_CLIENT, type ConsentOutcome } from './dispatcher'
@@ -114,7 +115,7 @@ export class ArtifactConsents {
   async answer(requestId: string, allow: boolean, portId: string): Promise<void> {
     const pending = this.pending.get(requestId)
     if (!pending || !pending.ports.has(portId)) {
-      throw new HostError('not_found', 'No such question is open for this port')
+      throw new HostError('not_found', t('artifacts.noQuestion'))
     }
     this.pending.delete(requestId)
     let outcome: ConsentOutcome = 'denied'

@@ -362,7 +362,7 @@ export class Attachments {
   }): Promise<Attachment> {
     const data = new Uint8Array(source.bytes)
     const text = textOf(data)
-    if (text === null) throw invalidParams(`${source.name} is not UTF-8 text`)
+    if (text === null) throw invalidParams(t('attachment.notText', { name: source.name }))
     const named = {
       type: 'text',
       name: source.name,
@@ -387,7 +387,7 @@ export class Attachments {
     const grant = this.grants.get(grantId)
     this.grants.delete(grantId)
     if (!grant || grant.at < this.now() - GRANT_MAX_AGE_MS)
-      throw invalidParams(`No grant ${grantId}`)
+      throw invalidParams(t('attachment.grantExpired'))
     return this.addPath(grant.path, grant.kind, thumb)
   }
 

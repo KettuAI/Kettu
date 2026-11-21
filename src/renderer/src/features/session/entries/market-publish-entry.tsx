@@ -632,7 +632,7 @@ function PublishSettled({ entry }: { entry: Entry }) {
           {problems.map((p, i) => (
             <li key={i}>
               {p.path && <span className="ks-answered__question">{p.path}</span>}
-              <span className="ks-answered__answer">{p.message}</span>
+              <span className="ks-answered__answer">{p.text ?? p.message}</span>
             </li>
           ))}
         </ul>

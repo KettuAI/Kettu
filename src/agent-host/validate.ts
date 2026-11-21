@@ -96,6 +96,7 @@ import {
 } from '@shared/thread'
 import { FORM_FIELDS, FORM_KEY_CHARS } from './elicitation'
 import { invalidParams } from './errors'
+import { t } from './i18n'
 import { bundleToken } from './marketplace/bundles'
 import { TASK_ID } from './workflow/model'
 import { isCompletablePath } from './path-completion'
@@ -165,8 +166,8 @@ function none(params: unknown): void {
 function string(o: Fields, key: string, max: number): string {
   const value = o[key]
   if (typeof value !== 'string') throw invalidParams(`${key} must be a string`)
-  if (value.length === 0) throw invalidParams(`${key} must not be empty`)
-  if (value.length > max) throw invalidParams(`${key} is longer than ${max} characters`)
+  if (value.length === 0) throw invalidParams(t('validate.empty', { key }))
+  if (value.length > max) throw invalidParams(t('validate.tooLong', { key, max }))
   return value
 }
 
@@ -176,7 +177,7 @@ function optionalString(o: Fields, key: string, max: number): string | undefined
 
 function agentId(o: Fields, key = 'agentId'): AgentId {
   const value = string(o, key, ID_CHARS)
-  if (!isAgentId(value)) throw invalidParams(`Unknown agent ${value}`)
+  if (!isAgentId(value)) throw invalidParams(t('agent.unknown', { agent: value }))
   return value
 }
 
@@ -500,7 +501,7 @@ function workflowSettingsChange(value: unknown): HostParams<'workflows.setSettin
     if (entries.length > 64) throw invalidParams('autoPick names too many agents')
     autoPick = {}
     for (const [id, allowed] of entries) {
-      if (!isAgentId(id)) throw invalidParams(`Unknown agent ${id}`)
+      if (!isAgentId(id)) throw invalidParams(t('agent.unknown', { agent: id }))
       if (allowed !== null && typeof allowed !== 'boolean') {
         throw invalidParams('autoPick values must be true, false or null')
       }
@@ -537,21 +538,28 @@ function worktreeSettings(value: unknown, platform: Platform): ProjectWorktreeSe
   const o = fields(value)
   const template = o.branchTemplate
   if (typeof template !== 'string' || template.length > MAX_TEMPLATE) {
-    throw invalidParams(`branchTemplate must be a string of at most ${MAX_TEMPLATE} characters`)
+    throw invalidParams(t('validate.branchTemplate', { max: MAX_TEMPLATE }), { field: 'branch' })
   }
   // A template must give a usable name with and without an issue.
   for (const issue of ['', '1']) {
     checkWorktreeBranch(branchFromTemplate(template, { slug: 'slug', type: 'feat', issue }))
   }
   if (!Array.isArray(o.copy) || o.copy.length > MAX_WORKTREE_COPY_PATHS) {
-    throw invalidParams(`copy must be a list of at most ${MAX_WORKTREE_COPY_PATHS} paths`)
+    throw invalidParams(t('validate.copyCount', { max: MAX_WORKTREE_COPY_PATHS }), {
+      field: 'copy',
+    })
   }
   const copy = o.copy.map((entry) => {
     if (typeof entry !== 'string' || entry.length === 0 || entry.length > 1024) {
-      throw invalidParams('copy must list paths')
+      throw invalidParams(t('validate.copyPaths'), { field: 'copy' })
     }
     const checked = checkIncludeEntry(entry, platform)
-    if ('reason' in checked) throw invalidParams(`copy: ${entry} ${checked.reason}`)
+    if ('reason' in checked) {
+      throw invalidParams(
+        t('validate.copyEntry', { entry, reason: t(`worktree.includeProblem.${checked.problem}`) }),
+        { field: 'copy' },
+      )
+    }
     return checked.path
   })
   const setup = o.setup
@@ -562,9 +570,7 @@ function worktreeSettings(value: unknown, platform: Platform): ProjectWorktreeSe
       setup.length > MAX_SETUP_COMMAND ||
       setup.includes('\0'))
   ) {
-    throw invalidParams(
-      `setup must be null or a command of at most ${MAX_SETUP_COMMAND} characters`,
-    )
+    throw invalidParams(t('validate.setupCommand', { max: MAX_SETUP_COMMAND }), { field: 'setup' })
   }
   return {
     branchTemplate: template,
@@ -715,10 +721,10 @@ function routineDraft(value: unknown, platform: Platform): RoutineDraft {
   const o = fields(value)
   const name = o.name === undefined ? '' : o.name
   if (typeof name !== 'string' || name.length > ROUTINE_NAME_CHARS) {
-    throw invalidParams(`name must be at most ${ROUTINE_NAME_CHARS} characters`)
+    throw invalidParams(t('validate.routineName', { max: ROUTINE_NAME_CHARS }))
   }
   if (typeof o.prompt !== 'string' || o.prompt.trim() === '' || o.prompt.length > PROMPT_CHARS) {
-    throw invalidParams(`prompt must be 1 to ${PROMPT_CHARS} characters`)
+    throw invalidParams(t('validate.routinePrompt', { max: PROMPT_CHARS }))
   }
   return {
     name,
@@ -758,13 +764,13 @@ function routineChanges(value: unknown, platform: Platform): RoutineChanges {
   const changes: RoutineChanges = {}
   if (o.name !== undefined) {
     if (typeof o.name !== 'string' || o.name.length > ROUTINE_NAME_CHARS) {
-      throw invalidParams(`name must be at most ${ROUTINE_NAME_CHARS} characters`)
+      throw invalidParams(t('validate.routineName', { max: ROUTINE_NAME_CHARS }))
     }
     changes.name = o.name
   }
   if (o.prompt !== undefined) {
     if (typeof o.prompt !== 'string' || o.prompt.trim() === '' || o.prompt.length > PROMPT_CHARS) {
-      throw invalidParams(`prompt must be 1 to ${PROMPT_CHARS} characters`)
+      throw invalidParams(t('validate.routinePrompt', { max: PROMPT_CHARS }))
     }
     changes.prompt = o.prompt
   }
@@ -873,7 +879,7 @@ function threadId(o: Fields): string {
 function commentBody(o: Fields): string {
   const value = o.body
   if (typeof value !== 'string' || value.trim() === '' || longer(value, COMMENT_CHARS)) {
-    throw invalidParams(`body must be 1 to ${COMMENT_CHARS} characters, not blank`)
+    throw invalidParams(t('validate.commentBody', { max: COMMENT_CHARS }))
   }
   return value
 }
@@ -999,7 +1005,7 @@ function bytes(o: Fields, key: string, max: number): ArrayBuffer {
 export function promptContent(value: unknown): UserContent[] {
   if (!Array.isArray(value)) throw invalidParams('content must be an array')
   if (value.length > PROMPT_ITEMS)
-    throw invalidParams(`content has more than ${PROMPT_ITEMS} items`)
+    throw invalidParams(t('validate.promptItems', { max: PROMPT_ITEMS }))
   const out: UserContent[] = []
   let bytes = 0
   let attachments = 0
@@ -1016,16 +1022,16 @@ export function promptContent(value: unknown): UserContent[] {
       const { ref, bytes: size } = contentRef(o.ref, at)
       bytes += size
       if (ref.kind === 'attachment' && ++attachments > ATTACHMENT_LIMIT) {
-        throw invalidParams(`A prompt carries at most ${ATTACHMENT_LIMIT} attachments`)
+        throw invalidParams(t('validate.promptAttachments', { max: ATTACHMENT_LIMIT }))
       }
       substance = true
       out.push({ type: 'ref', ref })
     } else {
       throw invalidParams(`${at}.type must be text or ref`)
     }
-    if (bytes > PROMPT_BYTES) throw invalidParams('The prompt is larger than 10 MB')
+    if (bytes > PROMPT_BYTES) throw invalidParams(t('validate.promptTooLarge'))
   })
-  if (!substance) throw invalidParams('The prompt is empty')
+  if (!substance) throw invalidParams(t('validate.promptEmpty'))
   return out
 }
 
@@ -2356,7 +2362,7 @@ export function createValidators(platform: Platform): Validators {
       const o = fields(params)
       // An empty file is text too, so `string` does not fit; the host checks the size in bytes.
       if (typeof o.text !== 'string') throw invalidParams('text must be a string')
-      if (o.text.length > FILE_READ_LIMIT) throw invalidParams('text is larger than 1 MiB')
+      if (o.text.length > FILE_READ_LIMIT) throw invalidParams(t('validate.textTooLarge'))
       return {
         projectPath: absolutePath(o, 'projectPath', platform),
         path: relativePath(o, 'path', platform),
@@ -2431,7 +2437,7 @@ export function createValidators(platform: Platform): Validators {
       const o = fields(params)
       const title = o.title
       if (typeof title !== 'string' || title.trim() === '' || longer(title, ARTIFACT_TITLE_CHARS)) {
-        throw invalidParams(`title must be 1 to ${ARTIFACT_TITLE_CHARS} characters, not blank`)
+        throw invalidParams(t('validate.artifactTitle', { max: ARTIFACT_TITLE_CHARS }))
       }
       return { id: artifactId(o), title }
     },

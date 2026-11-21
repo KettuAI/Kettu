@@ -9,6 +9,7 @@ import {
   type PullRequest,
   type RepositoryVisibility,
 } from '@shared/git'
+import { t } from '../i18n'
 import { failureText, type Exec, type ExecResult } from './exec'
 
 export const SYNC_TIMEOUT_MS = 60_000
@@ -51,12 +52,12 @@ export function pull(exec: Exec, cwd: string): Promise<string> {
 
 function checkRemoteName(remote: string): string {
   // Never let a remote name read as an option.
-  if (remote === '' || remote.startsWith('-')) throw new Error(`Unusable remote name: ${remote}`)
+  if (remote === '' || remote.startsWith('-')) throw new Error(t('git.unusableRemote', { remote }))
   return remote
 }
 
 function checkBranchName(branch: string): string {
-  if (branch === '' || branch.startsWith('-')) throw new Error(`Unusable branch name: ${branch}`)
+  if (branch === '' || branch.startsWith('-')) throw new Error(t('git.unusableBranch', { branch }))
   return branch
 }
 
@@ -184,7 +185,7 @@ export async function discardFiles(
         if (file.oldPath !== null) restore.push(file.oldPath)
         break
       case 'conflicted':
-        throw new Error(`Not discarding a conflicted file: ${file.path}`)
+        throw new Error(t('git.discardConflicted', { path: file.path }))
       default:
         restore.push(file.path)
     }
@@ -221,7 +222,7 @@ export function publishRepository(
   visibility: RepositoryVisibility,
 ): Promise<string> {
   if (!isRepositoryName(name)) {
-    throw new Error(`Not a repository name: ${name}`)
+    throw new Error(t('git.notRepositoryName', { name }))
   }
   return run(
     exec,
@@ -271,7 +272,7 @@ export async function createPullRequest(
     .map((line) => line.trim())
     .reverse()
     .find((line) => GITHUB_PULL_REQUEST_URL.test(line))
-  if (!url) throw new Error(`gh did not print the new pull request's URL\n${log}`.trim())
+  if (!url) throw new Error(`${t('git.noPullRequestUrl')}\n${log}`.trim())
   return { url, log }
 }
 
@@ -283,7 +284,7 @@ export function createdPullRequest(
   at: number,
 ): PullRequest {
   const match = GITHUB_PULL_REQUEST_URL.exec(url)
-  if (!match) throw new Error(`Not a GitHub pull request URL: ${url}`)
+  if (!match) throw new Error(t('git.notPullRequestUrl', { url }))
   return {
     url,
     owner: match[1]!,
