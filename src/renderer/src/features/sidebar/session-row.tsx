@@ -262,13 +262,6 @@ export const SessionRow = memo(function SessionRow({
         <span className="ui-as-side__text" dir="auto">
           {title}
         </span>
-        {node.subagents.length > 0 && !away && (
-          <SubagentBadge
-            parent={summary}
-            subagents={node.subagents}
-            onEnter={() => setCardOpen(false)}
-          />
-        )}
         {summary.worktree && (
           <WorktreeRowMark worktree={summary.worktree} onEnter={() => setCardOpen(false)} />
         )}
@@ -282,6 +275,13 @@ export const SessionRow = memo(function SessionRow({
           </span>
         )}
         {gone && <span className="sr-only">{gone}</span>}
+        {node.subagents.length > 0 && !away && (
+          <SubagentBadge
+            parent={summary}
+            subagents={node.subagents}
+            onEnter={() => setCardOpen(false)}
+          />
+        )}
         <RowEnd>
           {showHost && hostName && (
             <span className="max-w-24 truncate text-[12px] font-normal text-(--faint)">
