@@ -51,9 +51,24 @@ const LINE_TONE: Record<LineTone, string> = {
   danger: 'text-danger',
 }
 
-/** What stops an agent, at the end of its row; the whole sentence shows while the pointer rests on it. */
+/**
+ * What stops an agent, at the end of its row; the whole sentence shows while the pointer rests on
+ * it. A window's model, group or pool gives way to the agent's name first, with an ellipsis.
+ */
 function RowTag({ tag }: { tag: AgentTag }) {
-  const label = (
+  const { scope } = tag
+  const label = scope ? (
+    <span
+      className={cn(
+        'flex max-w-1/2 min-w-0 items-baseline pl-2 text-small whitespace-nowrap',
+        LINE_TONE[tag.tone],
+      )}
+    >
+      <span className="shrink-0 whitespace-pre">{scope.before}</span>
+      <span className="min-w-0 truncate">{scope.name}</span>
+      <span className="shrink-0 whitespace-pre">{scope.after}</span>
+    </span>
+  ) : (
     <span className={cn('shrink-0 pl-2 text-small whitespace-nowrap', LINE_TONE[tag.tone])}>
       {tag.text}
     </span>

@@ -5,7 +5,7 @@ import type { AgentStatus, PlanLimit, ProviderBalance } from '@shared/agent-host
 import { holdingLimit } from '@shared/plan-limits'
 import type { ConfigOption } from '@shared/thread'
 import { harnessProblem } from '@renderer/features/agents/harness-problem'
-import { limitPhrase, limitShort, resetDay, resetTime } from '@renderer/lib/format'
+import { limitPhrase, limitShort, limitShortScope, resetDay, resetTime } from '@renderer/lib/format'
 import { i18n } from '@renderer/lib/i18n'
 import { limitPercent, type LimitView } from '@renderer/lib/plan-limit'
 import { agentNeed } from './start-options'
@@ -16,13 +16,37 @@ export interface AgentTag {
   tone: LineTone
   /** The whole sentence, shown while the pointer rests on the tag; null where the tag says all. */
   title: string | null
+  /**
+   * `text` split around the model, group or pool of a window, the one part that gives way when the
+   * row is tight; null where the tag names none.
+   */
+  scope: { before: string; name: string; after: string } | null
 }
 
 const tag = (text: string, tone: LineTone, title: string | null): AgentTag => ({
   text,
   tone,
   title,
+  scope: null,
 })
+
+/** A window's tag, with its model, group or pool marked off in the text. */
+function windowTag(
+  text: string,
+  tone: LineTone,
+  title: string,
+  window: string,
+  scope: string | null,
+): AgentTag {
+  const end = text.indexOf(window) + window.length
+  if (!scope || end < window.length) return tag(text, tone, title)
+  return {
+    text,
+    tone,
+    title,
+    scope: { before: text.slice(0, end - scope.length), name: scope, after: text.slice(end) },
+  }
+}
 
 /** A window without its OpenCode provider, whose models are the only ones it holds back. */
 function plain(limit: PlanLimit): PlanLimit {
@@ -159,10 +183,11 @@ export function agentTag(
   if (!held) return null
   const limit = plain(held.limit)
   const window = limitShort(limit)
+  const scope = limitShortScope(limit)
   const phrase = limitPhrase(limit)
   if (held.reached) {
     const at = limit.resetsAt
-    return tag(
+    return windowTag(
       at === null
         ? t('session:newSession.picker.tag.usedUp', { window })
         : t('session:newSession.picker.tag.resets', { window, time: resetDay(at, now) }),
@@ -173,13 +198,17 @@ export function agentTag(
             limit: phrase,
             time: resetTime(at, now),
           }),
+      window,
+      scope,
     )
   }
   const percent = limitPercent(limit, view)
   const key = view === 'left' ? 'left' : 'used'
-  return tag(
+  return windowTag(
     t(`session:newSession.picker.tag.${key}`, { window, percent }),
     'attention',
     t(`session:newSession.picker.limit.${key}`, { limit: phrase, percent }),
+    window,
+    scope,
   )
 }

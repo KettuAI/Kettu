@@ -234,12 +234,22 @@ export function limitPhrase(limit: Pick<PlanLimit, 'window' | 'label'>): string 
  */
 export function windowShort(parts: WindowName, separator = ' '): string {
   const name = windowName(parts, 'composer:usage.shortWindow')
-  return parts.scope ? `${name}${separator}${parts.scope.replace(/\s+models?$/i, '')}` : name
+  const scope = shortScope(parts)
+  return scope ? `${name}${separator}${scope}` : name
 }
+
+const shortScope = (parts: Pick<WindowParts, 'scope'>): string | null =>
+  parts.scope?.replace(/\s+models?$/i, '') ?? null
 
 export function limitShort(limit: Pick<PlanLimit, 'window' | 'label'>, separator = ' '): string {
   const parts = windowParts(limit)
   return parts.kind ? windowShort(parts, separator) : limit.label
+}
+
+/** The end of `limitShort` that names a model, group or pool, as written there; null without one. */
+export function limitShortScope(limit: Pick<PlanLimit, 'window' | 'label'>): string | null {
+  const parts = windowParts(limit)
+  return parts.kind ? shortScope(parts) : null
 }
 
 /** A count compactly, for figures, readouts and legends: "980", "1.2K", "41.7B". */
