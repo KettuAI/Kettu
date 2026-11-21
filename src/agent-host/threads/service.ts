@@ -119,6 +119,11 @@ function run(
       return db.outputs(request.sessionId)
     case 'setOutlineTitles':
       return db.setOutlineTitles(request.sessionId, request.titles)
+    case 'origins':
+      return db.origins(request.sessionId)
+    case 'putOrigin':
+      db.putOrigin(request.sessionId, request.origin)
+      return null
     case 'routine':
       return db.routine(request.call)
     case 'task':

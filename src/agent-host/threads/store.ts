@@ -21,6 +21,7 @@ import type {
   ThreadPage,
   ThreadWrite,
 } from './model'
+import type { StoredOrigin } from './origins'
 import type {
   ThreadDbStatus,
   ThreadErrorCode,
@@ -400,6 +401,16 @@ export class ThreadStore {
   /** Stores outline titles; false when the session has no stored thread to keep them with. */
   setOutlineTitles(sessionId: string, titles: OutlineTitle[]): Promise<boolean> {
     return this.sessionWrite({ op: 'setOutlineTitles', sessionId, titles }, [sessionId])
+  }
+
+  /** Who sent the messages Kettu marked in a session, in the order they were added. */
+  origins(sessionId: string): Promise<StoredOrigin[]> {
+    return this.read({ op: 'origins', sessionId }, sessionId)
+  }
+
+  /** Keeps who sent a message Kettu marked, so a thread rebuilt from the agent's history has it. */
+  putOrigin(sessionId: string, origin: StoredOrigin): Promise<void> {
+    return this.sessionWrite({ op: 'putOrigin', sessionId, origin }, [sessionId])
   }
 
   /** A call on the artifact records, which share the database. */
