@@ -252,14 +252,14 @@ export class OpenCodeClient {
       if (failed(run)) throw new Error(t('opencode.account.removeFailed'))
       return
     }
-    if (input.action !== 'activate') throw new Error('OpenCode does not know this action.')
+    if (input.action !== 'activate') throw new Error(t('opencode.account.unknownAction'))
     const run = await this.runTool(['api', 'post', `${path}/activate`], undefined, ACTION_TIMEOUT)
     if (failed(run)) throw new Error(t('opencode.account.activateFailed'))
   }
 
   private credentialId(value: unknown): string {
     if (typeof value !== 'string' || value.trim() === '') {
-      throw new Error('A credential is required.')
+      throw new Error(t('opencode.account.credentialRequired'))
     }
     return value
   }

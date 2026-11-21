@@ -241,6 +241,10 @@
     "antigravityLimitsFailed": "{{agent}} could not read its plan limits: {{error}}",
     "antigravityNoPlan": "{{agent}} named no Google plan, so it has no plan limits to read. If you use it with a Google account, sign in again in a terminal.",
     "initializeTimeout": "{{agent}} did not answer initialize within {{seconds}} s.",
+    "initializeFailed": "{{agent}} failed to initialize: {{reason}}",
+    "hostStopping": "{{agent}} was not started: the host is stopping.",
+    "noNpm": "npm was not found on PATH.",
+    "incompleteInstall": "{{name}} is incomplete on disk.",
     "exit": {
       "code": "{{agent}} exited with code {{code}}",
       "signal": "{{agent}} was stopped by {{signal}}",
@@ -747,6 +751,8 @@
     },
     "account": {
       "unknownProvider": "OpenCode does not know this provider.",
+      "unknownAction": "OpenCode does not know this action.",
+      "credentialRequired": "A credential is required.",
       "removeFailed": "OpenCode could not remove the account.",
       "activateFailed": "OpenCode could not activate the account.",
       "saveKeyFailed": "OpenCode could not save the key.",
