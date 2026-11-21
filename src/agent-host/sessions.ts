@@ -723,8 +723,11 @@ interface Live {
   heldFirst: Live['first']
   /** Who queued each waiting prompt, by item id; apart from the queue, which every client sees. */
   queuedBy: Map<string, string>
-  /** The waiting prompts Kettu queued itself, such as a step's reminder, by item id. */
-  kettuQueued: Set<string>
+  /**
+   * The waiting prompts Kettu queued itself, such as a step's reminder, by item id, each with what
+   * says it is still due when its turn comes.
+   */
+  kettuQueued: Map<string, (() => boolean) | null>
   /** The last turn began with the user's own message, which owes no step report. */
   userTurn: boolean
   /** The message that gave the session its first title, for a written title, and its tries. */
@@ -3572,7 +3575,7 @@ export class SessionManager {
       first: null,
       heldFirst: null,
       queuedBy: new Map(),
-      kettuQueued: new Set(),
+      kettuQueued: new Map(),
       userTurn: false,
       titlePrompt: null,
       titleWriting: false,
@@ -4709,12 +4712,16 @@ export class SessionManager {
     this.sendForUser(live, text, { approval: true })
   }
 
-  /** Kettu's own message to a session, such as a step's reminder: sent now or queued. */
-  async sendFromKettu(sessionId: string, text: string): Promise<void> {
+  /**
+   * Kettu's own message to a session, such as a step's reminder: sent now or queued. `due` is asked
+   * again when it would go out, and the message is dropped unsent once it says no.
+   */
+  async sendFromKettu(sessionId: string, text: string, due?: () => boolean): Promise<void> {
     const content: UserContent[] = [{ type: 'text', text }]
     const live = await this.revive(sessionId)
     const { status, queue, queuePaused } = live.thread.session
     if (canSend(status) && (queue.length === 0 || queuePaused)) {
+      if (due && !due()) return
       this.sendPrompt(live, content, undefined, undefined, undefined, undefined, true)
       return
     }
@@ -4722,7 +4729,7 @@ export class SessionManager {
       throw busyError(status)
     }
     const id = randomUUID()
-    live.kettuQueued.add(id)
+    live.kettuQueued.set(id, due ?? null)
     this.update(live, { queue: [...queue, { id, content, at: this.now() }] })
     this.persist(live)
     this.touch(live.id)
@@ -7677,8 +7684,25 @@ export class SessionManager {
       return
     }
     const { status, queue, queuePaused } = live.thread.session
-    const [next, ...rest] = queue
-    if (!next || (queuePaused && !chosen) || !canSend(status) || this.waitsForWorktree(live)) return
+    if (
+      queue.length === 0 ||
+      (queuePaused && !chosen) ||
+      !canSend(status) ||
+      this.waitsForWorktree(live)
+    ) {
+      return
+    }
+    // Kettu's own messages that are no longer due, such as a reminder for a step that reported
+    // meanwhile, are dropped as their turn comes.
+    const start = queue.findIndex((item) => live.kettuQueued.get(item.id)?.() !== false)
+    const dropped = start === -1 ? queue : queue.slice(0, start)
+    for (const item of dropped) live.kettuQueued.delete(item.id)
+    const [next, ...rest] = queue.slice(dropped.length)
+    if (!next) {
+      this.update(live, { queue: [], queuePaused: false })
+      this.persist(live)
+      return
+    }
     this.update(live, { queue: rest, ...(rest.length === 0 ? { queuePaused: false } : {}) })
     const queuedBy = live.queuedBy.get(next.id)
     live.queuedBy.delete(next.id)

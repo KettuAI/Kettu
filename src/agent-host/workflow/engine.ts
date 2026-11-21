@@ -75,8 +75,11 @@ export interface TaskStepStart {
 
 export interface TaskSessions {
   createStep(params: TaskStepStart): Promise<SessionSummary>
-  /** Sends a message from Kettu, or queues it while the session works. */
-  send(sessionId: string, text: string): Promise<void>
+  /**
+   * Sends a message from Kettu, or queues it while the session works; a queued one goes out only
+   * if `due`, asked when its turn comes, still says so.
+   */
+  send(sessionId: string, text: string, due?: () => boolean): Promise<void>
   /** Stops the session's turn, if one runs. */
   cancel(sessionId: string): Promise<void>
   delete(sessionId: string): Promise<void>
@@ -776,7 +779,14 @@ export class TaskEngine implements TaskSessionHooks {
       if (!round.reminded) {
         round.reminded = true
         this.save(task)
-        void this.message(sessionId, reminderPrompt(picking))
+        // Queued behind other messages, it may come after the step already reported or picked.
+        const state = round.state
+        const due = () =>
+          task.status === 'running' &&
+          round.state === state &&
+          round.reminded &&
+          this.roundOfSession(sessionId)?.round === round
+        void this.message(sessionId, reminderPrompt(picking), due)
         return
       }
       this.stick(round, picking ? 'no_pick' : 'no_report', null)
@@ -1574,9 +1584,9 @@ export class TaskEngine implements TaskSessionHooks {
     return latest ? { task: found.task, round: latest } : found
   }
 
-  private async message(sessionId: string, text: string): Promise<void> {
+  private async message(sessionId: string, text: string, due?: () => boolean): Promise<void> {
     try {
-      await this.deps.sessions.send(sessionId, text)
+      await this.deps.sessions.send(sessionId, text, due)
     } catch (error) {
       this.deps.log('warn', `Could not message a step's session: ${(error as Error).message}`)
     }
