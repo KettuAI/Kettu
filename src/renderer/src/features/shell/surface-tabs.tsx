@@ -13,14 +13,12 @@ import { DragDropProvider, type DragEndEvent } from '@dnd-kit/react'
 import { isSortable, useSortable } from '@dnd-kit/react/sortable'
 import {
   ArrowDown01Icon,
-  BrowserIcon,
   Cancel01Icon,
-  ComputerPhoneSyncIcon,
   ComputerTerminal01Icon,
-  Globe02Icon,
   MessageAdd01Icon,
   PencilEdit02Icon,
   PlusSignIcon,
+  SidebarRightIcon,
   Tick02Icon,
   UnavailableIcon,
 } from '@hugeicons/core-free-icons'
@@ -49,7 +47,9 @@ import {
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
-  DropdownMenuShortcut,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from '@renderer/components/ui/dropdown-menu'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
@@ -57,8 +57,9 @@ import { addressText } from '@renderer/features/browser/address'
 import { SiteMark } from '@renderer/features/browser/site-mark'
 import { markOf, rowOf, statusOf, useAddable } from '@renderer/features/devices/device-marks'
 import { DeviceRow } from '@renderer/features/devices/device-row'
+import { runSessionMenuAccelerator } from '@renderer/features/sidebar/session-menu-model'
 import { hostOfPath } from '@renderer/lib/host-paths'
-import { formatShortcut, isMac, isWeb } from '@renderer/lib/platform'
+import { isMac, isWeb } from '@renderer/lib/platform'
 import { agentName } from '@renderer/stores/agents'
 import { useBrowserStore } from '@renderer/stores/browser'
 import {
@@ -91,6 +92,8 @@ import {
 } from '@renderer/stores/terminals'
 import { panelSession, toggleSidePane, toggleTerminal, useViewStore } from '@renderer/stores/view'
 import { openSurfaces } from './open-surfaces'
+import { SurfaceList, SurfaceMenuItems } from './surface-list'
+import { focusSurfaceList, startSurface, useSurfaceRows, type SurfaceRowId } from './surface-rows'
 import { PaneEmpty, PaneHead, PaneIcon, PaneSheet, PaneSpinner } from './panel-button'
 
 // The row of tabs a session's terminals, browser pages and devices share in the side panel.
@@ -615,7 +618,8 @@ export function SurfaceTabs({ panel, projectPath }: { panel: string; projectPath
       </DragDropProvider>
       <AddMenu
         panel={panel}
-        kinds={kinds}
+        projectPath={projectPath}
+        listShown={shown === 'surfaces'}
         onTerminal={newTerminal}
         onTab={newTab}
         open={items.filter((item) => item.kind === 'devices').length}
@@ -852,65 +856,76 @@ function TabNameInput({
   )
 }
 
-/** **+**: a terminal, a page, or one of this host's devices, as Add device listed them. */
+/**
+ * **+**: the side panel's list, with the host's devices under Mobile device as Add device listed
+ * them. While the empty pane shows the list, **+** only takes the focus to it.
+ */
 function AddMenu({
   panel,
-  kinds,
+  projectPath,
   open,
+  listShown,
   onTerminal,
   onTab,
 }: {
   panel: string
-  kinds: SurfaceKinds
+  projectPath: string
   /** How many devices the session has open. */
   open: number
+  /** The empty pane is shown, listing the same rows. */
+  listShown: boolean
   onTerminal: () => void
   onTab: () => void
 }) {
   const { t } = useTranslation(['shell', 'terminal', 'browser', 'devices'])
   const sessionId = panelSession(panel)
+  const rows = useSurfaceRows(panel, projectPath)
+  const devicesOn = rows.some((row) => row.id === 'devices' && !row.off)
   const full = open >= SESSION_DEVICE_LIMIT
-  if (!kinds.terminal && !kinds.browser && !kinds.devices) return null
+
+  const pick = (id: SurfaceRowId) => {
+    if (id === 'terminal') onTerminal()
+    else if (id === 'browser') onTab()
+    else startSurface(panel, projectPath, id)
+  }
+  const trigger = (
+    <button
+      type="button"
+      aria-label={t('shell:surfaces.add')}
+      className="kp-tool kp-tool--sm app-region-no-drag"
+      onClick={listShown ? () => focusSurfaceList(panel) : undefined}
+    />
+  )
   return (
-    <DropdownMenu onOpenChange={(shown) => shown && kinds.devices && void loadDevices()}>
+    <DropdownMenu onOpenChange={(shown) => shown && devicesOn && void loadDevices()}>
       <Tooltip>
-        <TooltipTrigger
-          render={
-            <DropdownMenuTrigger
-              render={
-                <button
-                  type="button"
-                  aria-label={t('shell:surfaces.add')}
-                  className="kp-tool kp-tool--sm app-region-no-drag"
-                />
-              }
-            />
-          }
-        >
+        <TooltipTrigger render={listShown ? trigger : <DropdownMenuTrigger render={trigger} />}>
           <PaneIcon icon={PlusSignIcon} size={14} />
         </TooltipTrigger>
         <TooltipContent>{t('shell:surfaces.add')}</TooltipContent>
       </Tooltip>
-      <DropdownMenuContent align="start" className="min-w-64">
-        <DropdownMenuGroup>
-          {kinds.terminal && (
-            <DropdownMenuItem onClick={onTerminal}>
-              <PaneIcon icon={ComputerTerminal01Icon} size={16} />
-              {t('terminal:panel.newTerminal')}
-              <DropdownMenuShortcut>{formatShortcut('Ctrl+Shift+`')}</DropdownMenuShortcut>
-            </DropdownMenuItem>
-          )}
-          {kinds.browser && (
-            <DropdownMenuItem onClick={onTab}>
-              <PaneIcon icon={Globe02Icon} size={16} />
-              {t('browser:actions.newTab')}
-              <DropdownMenuShortcut>{isMac ? '⌘T' : 'Ctrl+T'}</DropdownMenuShortcut>
-            </DropdownMenuItem>
-          )}
-        </DropdownMenuGroup>
-        {kinds.devices && sessionId && (
-          <DeviceItems sessionId={sessionId} open={open} full={full} panel={panel} />
-        )}
+      <DropdownMenuContent
+        align="start"
+        className="w-68"
+        onKeyDown={(event) => runSessionMenuAccelerator(event, isMac)}
+      >
+        <SurfaceMenuItems
+          rows={rows}
+          onPick={pick}
+          devices={(row) =>
+            sessionId && (
+              <DropdownMenuSub key={row.id}>
+                <DropdownMenuSubTrigger data-accelerator={row.key}>
+                  <PaneIcon icon={row.icon} size={16} />
+                  {row.label}
+                </DropdownMenuSubTrigger>
+                <DropdownMenuSubContent className="min-w-64">
+                  <DeviceItems sessionId={sessionId} open={open} full={full} panel={panel} />
+                </DropdownMenuSubContent>
+              </DropdownMenuSub>
+            )
+          }
+        />
       </DropdownMenuContent>
     </DropdownMenu>
   )
@@ -935,7 +950,6 @@ function DeviceItems({
   }
   return (
     <>
-      <DropdownMenuSeparator />
       <DropdownMenuGroup>
         <DropdownMenuLabel>
           {t('add.title', { open, limit: SESSION_DEVICE_LIMIT })}
@@ -1058,7 +1072,7 @@ function EndTerminal({
 
 /**
  * The row's own pane while the session has no terminal, page or device open: the row with its
- * **+**, and the three to start from. It gives way to a kind as soon as one has a tab.
+ * **+**, and the side panel's list to start from. It gives way to a kind as soon as one has a tab.
  */
 export function SurfacesPane({
   panel,
@@ -1069,25 +1083,12 @@ export function SurfacesPane({
   projectPath: string
   maximized: boolean
 }) {
-  const { t } = useTranslation(['shell', 'terminal', 'browser', 'devices'])
-  const sessionId = panelSession(panel)
-  const kinds = useSurfaceKinds(panel, projectPath)
+  const { t } = useTranslation(['shell'])
   const first = useSurfaceTabsStore((s) => s.order[panel]?.[0] ?? null)
 
   useEffect(() => {
     if (first) openSurfaces(panel, projectPath)
   }, [first, panel, projectPath])
-
-  const start = (kind: SurfaceKind) => {
-    if (kind === 'terminal') {
-      toggleTerminal(panel, true)
-      void createTerminal(projectPath, panel)
-    } else if (kind === 'browser') {
-      if (!sessionId) return
-      toggleSidePane(panel, 'browser', true)
-      void window.kettu.browser.newTab(sessionId)
-    } else toggleSidePane(panel, 'devices', true)
-  }
 
   return (
     <PaneSheet pane="surfaces" maximized={maximized}>
@@ -1096,30 +1097,17 @@ export function SurfacesPane({
       </PaneHead>
       <div className="kp-body">
         <PaneEmpty
-          icon={<PaneIcon icon={BrowserIcon} size={20} />}
+          icon={<PaneIcon icon={SidebarRightIcon} size={20} />}
           title={t('shell:surfaces.empty.title')}
           text={t('shell:surfaces.empty.text')}
         >
-          <span className="kp-empty__acts">
-            {kinds.terminal && (
-              <button type="button" className="kp-btn" onClick={() => start('terminal')}>
-                <PaneIcon icon={ComputerTerminal01Icon} size={13} />
-                {t('shell:surfaces.empty.terminal')}
-              </button>
-            )}
-            {kinds.browser && (
-              <button type="button" className="kp-btn" onClick={() => start('browser')}>
-                <PaneIcon icon={Globe02Icon} size={13} />
-                {t('shell:surfaces.empty.page')}
-              </button>
-            )}
-            {kinds.devices && (
-              <button type="button" className="kp-btn" onClick={() => start('devices')}>
-                <PaneIcon icon={ComputerPhoneSyncIcon} size={13} />
-                {t('shell:surfaces.empty.device')}
-              </button>
-            )}
-          </span>
+          <div className="mt-4">
+            <SurfaceList
+              panel={panel}
+              projectPath={projectPath}
+              onPick={(id) => startSurface(panel, projectPath, id)}
+            />
+          </div>
         </PaneEmpty>
       </div>
     </PaneSheet>

@@ -48,6 +48,7 @@ import { foldLines } from '@renderer/features/session/markdown/code-meta'
 import { useSessionView } from '@renderer/features/session/use-thread'
 import { Glyph } from '@renderer/features/shell/glyph'
 import { PaneEmpty, PaneHead, PaneIcon, PaneSheet } from '@renderer/features/shell/panel-button'
+import { PaneSwitch } from '@renderer/features/shell/pane-switch'
 import {
   bytes,
   clockTime,
@@ -103,7 +104,15 @@ function hitTone(hit: number | null): string | undefined {
   return hit >= 0.8 ? 'kr-good' : hit >= 0.4 ? 'kr-warn' : 'kr-bad'
 }
 
-export default function RequestsPane({ panel, maximized }: { panel: string; maximized: boolean }) {
+export default function RequestsPane({
+  panel,
+  projectPath,
+  maximized,
+}: {
+  panel: string
+  projectPath: string
+  maximized: boolean
+}) {
   const { t } = useTranslation('requests')
   const sessionId = panelSession(panel) ?? ''
   const session = useSessionView(sessionId)
@@ -166,7 +175,7 @@ export default function RequestsPane({ panel, maximized }: { panel: string; maxi
     <PaneSheet pane="requests" maximized={maximized}>
       <PaneHead panel={panel} pane="requests" maximized={maximized}>
         <span className="kr-head">
-          <PaneIcon icon={REQUESTS_ICON} />
+          <PaneSwitch panel={panel} projectPath={projectPath} pane="requests" />
           <b>{t('title')}</b>
           {count !== null && data.source && (
             <span>

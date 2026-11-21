@@ -123,12 +123,29 @@
       "devices": "Devices"
     },
     "empty": {
-      "title": "No terminal, page or device yet",
-      "text": "They open here, in one row of tabs. What the agent opens shows here too.",
-      "terminal": "Terminal",
-      "page": "Page",
-      "device": "Mobile device"
+      "title": "Open in the side panel",
+      "text": "Terminals, pages and devices sit in one row of tabs. What the agent opens shows here too."
     },
+    "list": {
+      "terminal": "Terminal",
+      "browser": "Page",
+      "devices": "Mobile device",
+      "files": "Files",
+      "requests": "Requests",
+      "computer": "Computer",
+      "live": "In use",
+      "off": {
+        "terminal": "Off on this computer",
+        "firstMessage": "After the first message",
+        "webBrowser": "Desktop app only",
+        "webComputer": "Desktop app only",
+        "noDevices": "Needs Xcode or Android SDK",
+        "otherHost": "This computer's projects only",
+        "noRequests": "Not given by this agent",
+        "computer": "While an agent uses it"
+      }
+    },
+    "switch": "Change pane",
     "reference": "Reference in conversation",
     "stopSharing": "Stop {{agent}} using it",
     "shared": "{{agent}} may use it"

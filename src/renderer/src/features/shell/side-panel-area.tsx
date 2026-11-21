@@ -286,9 +286,14 @@ export function SidePanelArea({
                   ) : held === 'surfaces' ? (
                     <SurfacesPane panel={panel} projectPath={projectPath} maximized={maximized} />
                   ) : held === 'computer' ? (
-                    <ComputerPane panel={panel} maximized={maximized} />
+                    <ComputerPane panel={panel} projectPath={projectPath} maximized={maximized} />
                   ) : held === 'requests' ? (
-                    <RequestsPane key={panel} panel={panel} maximized={maximized} />
+                    <RequestsPane
+                      key={panel}
+                      panel={panel}
+                      projectPath={projectPath}
+                      maximized={maximized}
+                    />
                   ) : (
                     artifactId && (
                       <ArtifactPane
