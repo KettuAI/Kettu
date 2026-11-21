@@ -7,6 +7,7 @@ import { AgentMark } from '@renderer/components/agents/agent-mark'
 import type { FlowEdge, FlowMetrics } from '@renderer/features/tasks/flow-layout'
 import { outcomeTitle } from '@renderer/features/tasks/model'
 import { SidewaysFlow } from '@renderer/features/tasks/sideways-flow'
+import { Phrase } from '@renderer/features/tasks/phrase'
 import { wrappedLines } from '@renderer/features/tasks/wrapped-lines'
 import { Glyph } from '@renderer/features/shell/glyph'
 import { openWorkflowMarketplace } from './open-task'
@@ -120,7 +121,9 @@ export function WorkflowPreview({
                   <Glyph icon={SparklesIcon} size={12} className="text-(--agent-violet)" />
                 )}
               </span>
-              <span className="line-clamp-2 leading-4 break-words">{name}</span>
+              <span className="line-clamp-2 leading-4 break-keep break-words">
+                <Phrase text={name} />
+              </span>
             </span>
           )
         }}

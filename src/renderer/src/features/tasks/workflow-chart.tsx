@@ -16,7 +16,8 @@ import { cn } from '@renderer/lib/utils'
 import { layoutFlow, sideways, type FlowEdge, type FlowMetrics } from './flow-layout'
 import { outcomeTitle, whoPicksText } from './model'
 import { SidewaysFlow } from './sideways-flow'
-import { wrappedLines } from './wrapped-lines'
+import { Phrase } from './phrase'
+import { textWidth, wrappedLines } from './wrapped-lines'
 
 /** Steps from the left, each a tile with who does it, its name and one line under it. */
 const METRICS: FlowMetrics = {
@@ -110,7 +111,16 @@ export function WorkflowChart({
     // chart scrolls as little as it can; as tall as the wordiest tile then needs. No name ends in
     // an ellipsis.
     const names = workflow.steps.map((step) => localStepName(workflow, step.id))
-    const least = base.nodeH - TILE_X
+    // A line under a name that fits the widest tile keeps to one line, so a short phrase such as
+    // "换一个智能体" is never broken.
+    const oneLine = Math.max(
+      0,
+      ...workflow.steps
+        .map((step, index) => stepLine(tools, step, index, t)?.text ?? '')
+        .map((text) => Math.ceil(textWidth(text, UNDER.size, UNDER.weight)) + 1)
+        .filter((width) => width <= NAME_MAX_W),
+    )
+    const least = Math.max(base.nodeH - TILE_X, oneLine)
     const two = Math.max(least, ...names.map((name) => widthFor(name, 2)))
     const fits = sideways(layoutFlow(drawn, { ...base, nodeH: TILE_X + two })).width * MIN_FIT
     const width =
@@ -252,17 +262,17 @@ function StepTile({
       >
         <WhoMark step={step} index={index} agentId={agentId} hostId={hostId} />
         <span className="flex min-w-0 flex-1 flex-col">
-          <span className="line-clamp-3 text-small leading-4 font-medium break-words text-(--thread-ink)">
-            {name}
+          <span className="line-clamp-3 text-small leading-4 font-medium break-keep break-words text-(--thread-ink)">
+            <Phrase text={name} />
           </span>
           {line && (
             <span
               className={cn(
-                'line-clamp-2 text-[11px] leading-3.5 break-words',
+                'line-clamp-2 text-[11px] leading-3.5 break-keep break-words',
                 line.you ? 'text-warning' : 'text-(--thread-muted)',
               )}
             >
-              {line.text}
+              <Phrase text={line.text} />
             </span>
           )}
         </span>

@@ -1134,7 +1134,7 @@
 .k-workflow-flow__notes {
   display: grid;
   gap: 2px;
-  margin: 12px 0 0;
+  margin: 0;
   padding: 0;
   list-style: none;
   font-size: 12px;

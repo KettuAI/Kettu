@@ -11,7 +11,7 @@ import {
 import type { AgentId, ToolEntry } from '@shared/thread'
 import { AgentMark } from '@renderer/components/agents/agent-mark'
 import { Glyph } from '@renderer/features/shell/glyph'
-import { outcomeTitle } from '@renderer/features/tasks/model'
+import { outcomeTitle, stepTitle } from '@renderer/features/tasks/model'
 import { useTaskView } from '@renderer/features/tasks/use-task'
 import { cn } from '@renderer/lib/utils'
 import { optionsOn, useAgentOptionsStore } from '@renderer/stores/agent-options'
@@ -164,10 +164,18 @@ function SavedCard({
 
 // A step's report and pick.
 
-/** The step session's task: its steps' names, by id. */
-function useStepNames(task: { taskId: string; stepId: string } | null) {
+/**
+ * The step session's task: its steps' names by id, and its outcomes' names, in the language shown
+ * once its workflow is read, the file's own names until then.
+ */
+function useStepText(task: { taskId: string; stepId: string } | null) {
   const steps = useTasksStore((s) => (task ? s.summaries[task.taskId]?.steps : undefined))
-  return (id: string) => steps?.find((step) => step.id === id)?.name ?? id
+  const workflow = useTaskView(task?.taskId ?? '', task !== null).view?.workflow
+  return {
+    nameOf: (id: string) =>
+      stepTitle(workflow, id, steps?.find((step) => step.id === id)?.name ?? id),
+    outcomeOf: (outcome: string) => (task ? outcomeTitle(workflow, task.stepId, outcome) : outcome),
+  }
 }
 
 function ReportCard({
@@ -181,11 +189,8 @@ function ReportCard({
 }) {
   const { t } = useTranslation('session')
   const { task } = useCaller(sessionId)
-  const nameOf = useStepNames(task)
-  const { view } = useTaskView(task?.taskId ?? '', task !== null)
-  // Reported by the file's own name, shown in the language of the interface.
-  const outcome =
-    call.outcome && task ? outcomeTitle(view?.workflow, task.stepId, call.outcome) : call.outcome
+  const { nameOf, outcomeOf } = useStepText(task)
+  const outcome = call.outcome ? outcomeOf(call.outcome) : null
   const label = (line: CheckLine<ReportCheck>): string => {
     if (!line.ok && line.detail) return line.detail
     if (line.check === 'outcome') {
@@ -245,7 +250,7 @@ function PickCard({
 }) {
   const { t } = useTranslation('session')
   const { hostId, task } = useCaller(sessionId)
-  const nameOf = useStepNames(task)
+  const { nameOf } = useStepText(task)
   const options = useAgentOptionsStore((s) => optionsOn(s, hostId))
   const steps = [...new Set(call.picks.map((p) => p.step))]
   return (
