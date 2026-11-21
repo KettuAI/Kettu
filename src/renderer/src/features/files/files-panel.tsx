@@ -46,6 +46,7 @@ import {
   useFilesStore,
   watchFiles,
 } from '@renderer/stores/files'
+import { openGitPane } from '@renderer/features/git/pane/open-pane'
 import { openGitDialog, useGitStore } from '@renderer/stores/git'
 import { ChangeBadge } from './change-badge'
 import { useFileChanges, type FileChanges, type ProjectChange } from './changes'
@@ -522,7 +523,10 @@ function ChangesFoot({ projectPath, changes }: { projectPath: string; changes: F
           className="kp-btn kp-btn--sm kp-btn--solid"
           disabled={blocked}
           onClick={() =>
-            openGitDialog(projectPath, { kind: 'commit', paths: list.map((c) => c.file.path) })
+            openGitPane(projectPath, {
+              tab: 'changes',
+              commit: { only: list.map((c) => c.file.path), andPush: false },
+            })
           }
         >
           {t('changes.commit')}

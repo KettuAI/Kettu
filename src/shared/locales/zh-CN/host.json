@@ -517,6 +517,8 @@
     "unknownRemote": "此仓库有多个远程仓库，且没有为此分支指定其中一个",
     "commitMessageNoAgent": "没有可用来写提交信息的智能体，请先在设置里添加或开启一个",
     "commitMessageFailed": "{{agent}} 没能写出提交信息：{{reason}}",
+    "draftNoAgent": "没有可用来写草稿的智能体，请先在设置里添加或开启一个",
+    "draftFailed": "{{agent}} 没能写出草稿：{{reason}}",
     "failure": {
       "timeout": "超时",
       "notFound": "找不到命令",
@@ -1416,7 +1418,8 @@
     "noModel": "它已不再提供模型 {{model}}",
     "noRemoval": "这个智能体的隐藏会话无法不留痕迹地删除",
     "noAnswer": "{{seconds}} 秒内没有回答",
-    "noCommitMessage": "它的回复里没有提交信息"
+    "noCommitMessage": "它的回复里没有提交信息",
+    "noPullRequestDraft": "它的回复里没有 PR 标题"
   },
   "threadDb": {
     "notOpen": "对话数据库没有打开",

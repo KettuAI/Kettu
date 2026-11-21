@@ -133,6 +133,7 @@ import {
 } from './device-browser'
 import { BrowserTurns } from './browser-turns'
 import { writeCommitMessage } from './commit-message'
+import { writePullRequestDraft } from './pull-request-draft'
 import { lightTarget } from './light-model'
 import { reportDraftPrompt, writeReportDraft } from './report-draft'
 import { Diagnostics } from './diagnostics'
@@ -2519,6 +2520,35 @@ export class AgentHost {
   }
 
   /**
+   * A title and description for a pull request of the branch into `base`, from the project's
+   * preferred agent or the one the lightweight tasks' model is pinned to.
+   */
+  private async pullRequestDraft(
+    projectPath: string,
+    base: string,
+  ): Promise<{ title: string; body: string }> {
+    const context = await this.gitProjectCall(projectPath, (g, p) => g.pullRequestContext(p, base))
+    const target = lightTarget(this.settings.lightModel, this.preferredAgent(projectPath), null)
+    if (target === null) throw new HostError('agent_error', t('git.draftNoAgent'))
+    const agent = this.agents.name(target.agentId)
+    try {
+      const runtime = await this.agents.ensureReady(target.agentId)
+      const dir = path.join(this.options.userDataPath, 'agent-reports')
+      await mkdir(dir, { recursive: true })
+      return await writePullRequestDraft(runtime, {
+        dir,
+        context,
+        model: target.model,
+        log: (line) => this.diagnostics.log('warn', line),
+      })
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error)
+      this.diagnostics.log('warn', `${agent}: could not write a pull request: ${logText(error)}`)
+      throw new HostError('agent_error', t('git.draftFailed', { agent, reason }))
+    }
+  }
+
+  /**
    * A draft of a problem report's description from the agent the report is about, else the one
    * new sessions start with, unless the lightweight tasks' model is pinned to another; null when
    * Kettu observed nothing to write from.
@@ -3481,6 +3511,7 @@ export class AgentHost {
         this.gitProjectCall(projectPath, (g, p) => g.commit(p, oid)),
       'git.changes': ({ projectPath }) => this.gitProjectCall(projectPath, (g, p) => g.changes(p)),
       'git.commitMessage': ({ projectPath, paths }) => this.commitMessage(projectPath, paths),
+      'git.pullRequestDraft': ({ projectPath, base }) => this.pullRequestDraft(projectPath, base),
       'git.incoming': ({ projectPath, from }) =>
         this.gitProjectCall(projectPath, (g, p) => g.incoming(p, from)),
       'git.fileDiff': ({ projectPath, path, oldPath, ref }) =>

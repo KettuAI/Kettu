@@ -30,3 +30,17 @@ export function checkCountText(checks: PullRequest['checks']): string {
     .filter(Boolean)
     .join(' · ')
 }
+
+/** The tint of a pull request state's pill. */
+export const BADGE: Record<PullRequestState, string> = {
+  open: 'bg-success/12 text-success',
+  draft: 'bg-selected text-secondary',
+  merged: 'bg-merged/12 text-merged',
+  closed: 'bg-danger/11 text-danger',
+}
+
+export const REVIEW_BADGE = {
+  approved: 'bg-success/12 text-success',
+  changes_requested: 'bg-danger/11 text-danger',
+  review_required: 'bg-warning/13 text-warning',
+} as const

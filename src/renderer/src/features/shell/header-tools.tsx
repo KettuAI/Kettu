@@ -7,6 +7,7 @@ import {
   ComputerIcon,
   DashboardSquare02Icon,
   File01Icon,
+  GitCompareIcon,
   MoreHorizontalIcon,
   SidebarRightIcon,
 } from '@hugeicons/core-free-icons'
@@ -150,6 +151,7 @@ export function HeaderTools({
     ...(terminal || browser || (sessionId && devices) ? (['surfaces'] as const) : []),
     ...(requests ? (['requests'] as const) : []),
     'files',
+    'git',
   ]
   const phone = usePhoneWindow()
   const more =
@@ -411,6 +413,7 @@ const PANE_ITEMS = {
   surfaces: { icon: BrowserIcon, label: 'headerTools.surfaces' },
   requests: { icon: REQUESTS_ICON, label: 'headerTools.requests' },
   files: { icon: File01Icon, label: 'headerTools.files' },
+  git: { icon: GitCompareIcon, label: 'headerTools.git' },
 } as const
 
 /**

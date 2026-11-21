@@ -1,11 +1,18 @@
 import type { KeyboardEvent, PointerEvent } from 'react'
+import type { TFunction } from 'i18next'
 import type { GitStatus } from '@shared/git'
+import { longAgo } from '@renderer/lib/format'
 import { isMod } from '@renderer/lib/platform'
 
 /** The branch as the popover names it: the short id when detached. */
 export function branchName(status: GitStatus): string {
   const { head } = status
   return head.detached ? (head.oid?.slice(0, 7) ?? 'HEAD') : (head.branch ?? 'HEAD')
+}
+
+/** Whether the project is a linked worktree: its git folder is inside the main one's, under worktrees/. */
+export function isLinkedWorktree(status: GitStatus): boolean {
+  return !!status.repo && /[\\/]worktrees[\\/][^\\/]+[\\/]?$/.test(status.repo.gitDir)
 }
 
 const MOVES = new Set(['ArrowDown', 'ArrowUp', 'Home', 'End'])
@@ -76,4 +83,12 @@ export function kidKeys(event: KeyboardEvent<HTMLElement>): void {
     event.preventDefault()
     row.focus()
   }
+}
+
+/** When the repository was last fetched, or that it has no remote or was never fetched. */
+export function fetchedText(status: GitStatus, now: number, t: TFunction<'git'>): string {
+  if (!status.remote) return t('sync.noRemote')
+  return status.lastFetchedAt
+    ? t('sync.fetched', { when: longAgo(status.lastFetchedAt, now) })
+    : t('sync.neverFetched')
 }

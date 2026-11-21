@@ -6,7 +6,7 @@ import {
   MagicWand01Icon,
 } from '@hugeicons/core-free-icons'
 import { Trans, useTranslation } from 'react-i18next'
-import type { CheckRun, GitStatus, PullRequest, PullRequestState } from '@shared/git'
+import type { CheckRun, GitStatus, PullRequest } from '@shared/git'
 import { Button, buttonVariants } from '@renderer/components/ui/button'
 import { Glyph } from '@renderer/features/shell/glyph'
 import { longAgo, shortDuration } from '@renderer/lib/format'
@@ -15,7 +15,7 @@ import { cn } from '@renderer/lib/utils'
 import { useGitStore } from '@renderer/stores/git'
 import { CopyButton } from './copy-button'
 import { PrIcon } from './pr-icon'
-import { prStateText, REVIEW_KEY } from './pr-text'
+import { BADGE, prStateText, REVIEW_BADGE, REVIEW_KEY } from './pr-text'
 import { compareUrl, nextStepOf } from './next-step'
 import { PartHead } from './rows'
 
@@ -120,20 +120,8 @@ function Note({ children, action }: { children: ReactNode; action?: ReactNode })
   )
 }
 
-const BADGE: Record<PullRequestState, string> = {
-  open: 'bg-success/12 text-success',
-  draft: 'bg-selected text-secondary',
-  merged: 'bg-merged/12 text-merged',
-  closed: 'bg-danger/11 text-danger',
-}
-
-const REVIEW_BADGE = {
-  approved: 'bg-success/12 text-success',
-  changes_requested: 'bg-danger/11 text-danger',
-  review_required: 'bg-warning/13 text-warning',
-} as const
-
-const PILL = 'inline-flex h-4.5 items-center gap-1 rounded-full px-1.75 text-caption font-medium'
+export const PILL =
+  'inline-flex h-4.5 items-center gap-1 rounded-full px-1.75 text-caption font-medium'
 
 function PullRequestCard({
   pr,
@@ -225,7 +213,7 @@ function PullRequestCard({
 }
 
 /** One check in the bar: failed red, passed green, running with light moving over it, queued gray. */
-function Segment({ run }: { run: CheckRun }) {
+export function Segment({ run }: { run: CheckRun }) {
   const running = run.outcome === 'pending' && run.startedAt !== null
   return (
     <span

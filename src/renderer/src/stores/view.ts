@@ -120,7 +120,15 @@ export const THIS_COMPUTER = 'this-computer'
  * while none of them is open yet.
  */
 export type SidePane =
-  'terminal' | 'files' | 'browser' | 'devices' | 'surfaces' | 'computer' | 'requests' | 'artifact'
+  | 'terminal'
+  | 'files'
+  | 'git'
+  | 'browser'
+  | 'devices'
+  | 'surfaces'
+  | 'computer'
+  | 'requests'
+  | 'artifact'
 
 // No session id takes this form, so New session's panel in a project has a key of its own.
 const NEW_SESSION_PANEL = 'new-session:'

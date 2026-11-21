@@ -1,26 +1,9 @@
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  type FormEvent,
-  type ReactNode,
-} from 'react'
-import {
-  ArrowLeft02Icon,
-  GitBranchIcon,
-  GlobalIcon,
-  SparklesIcon,
-  SquareLock02Icon,
-  Tick02Icon,
-  Upload04Icon,
-} from '@hugeicons/core-free-icons'
+import { useCallback, useEffect, useState, type FormEvent, type ReactNode } from 'react'
+import { GlobalIcon, SquareLock02Icon, Tick02Icon, Upload04Icon } from '@hugeicons/core-free-icons'
 import { Trans, useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
 import {
   isRepositoryName,
-  type ChangedFile,
   type GitRemote,
   type GitStatus,
   type RepositoryVisibility,
@@ -37,7 +20,6 @@ import {
   AlertDialogTitle,
 } from '@renderer/components/ui/alert-dialog'
 import { Button } from '@renderer/components/ui/button'
-import { Checkbox } from '@renderer/components/ui/checkbox'
 import {
   Dialog,
   DialogClose,
@@ -64,25 +46,14 @@ import {
   SelectValue,
 } from '@renderer/components/ui/select'
 import { Spinner } from '@renderer/components/ui/spinner'
-import { Textarea } from '@renderer/components/ui/textarea'
-import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
 import { errorMessage, host } from '@renderer/lib/host'
-import { isMod } from '@renderer/lib/platform'
 import { cn } from '@renderer/lib/utils'
-import {
-  closeGitDialog,
-  createPullRequest,
-  runGitOperation,
-  useGitStore,
-  type GitDialog,
-} from '@renderer/stores/git'
+import { closeGitDialog, useGitStore, type GitDialog } from '@renderer/stores/git'
 import { CopyButton } from './copy-button'
 import { dialogReturn } from './dialog-focus'
-import { LineCounts } from './rows'
-import { pushNow, pushRequest, runStep, showCreatedPr } from './steps'
-import { failureOf, lastLine, pullRequestHead, pushTargetOf, suggestPullRequest } from './sync'
+import { runStep } from './steps'
+import { failureOf, lastLine, pushTargetOf } from './sync'
 import { isBranchName } from './switcher-model'
-import { loadCommit, useChanges } from './use-git-data'
 import { Glyph } from '@renderer/features/shell/glyph'
 
 type ReturnFocus = () => HTMLElement | true
@@ -131,18 +102,6 @@ function GitDialogs({ status, returnFocus }: { status: GitStatus; returnFocus: R
           )}
         </DialogContent>
       </Dialog>
-      <Dialog open={shown('commit')} onOpenChange={onOpenChange}>
-        <DialogContent finalFocus={returnFocus} showCloseButton={false} className={SHEET_115}>
-          {dialog?.kind === 'commit' && (
-            <CommitForm status={status} dialog={dialog} onClose={close} />
-          )}
-        </DialogContent>
-      </Dialog>
-      <Dialog open={shown('createPr')} onOpenChange={onOpenChange}>
-        <DialogContent finalFocus={returnFocus} showCloseButton={false} className={SHEET_120}>
-          {dialog?.kind === 'createPr' && <CreatePrForm status={status} onClose={close} />}
-        </DialogContent>
-      </Dialog>
       <Dialog open={shown('newBranch')} onOpenChange={onOpenChange}>
         <DialogContent finalFocus={returnFocus} showCloseButton={false} className={SHEET_100}>
           {dialog?.kind === 'newBranch' && <NewBranchForm status={status} onClose={close} />}
@@ -161,8 +120,6 @@ function GitDialogs({ status, returnFocus }: { status: GitStatus; returnFocus: R
 // The column is capped to the dialog, or a long path in a row would widen it past the dialog.
 const SHEET = 'grid-cols-[minmax(0,1fr)] gap-0 p-0'
 const SHEET_100 = cn(SHEET, 'sm:max-w-100')
-const SHEET_115 = cn(SHEET, 'sm:max-w-115')
-const SHEET_120 = cn(SHEET, 'sm:max-w-120')
 
 function Head({ children }: { children: ReactNode }) {
   return (
@@ -304,197 +261,6 @@ function DiscardDialog({
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>
-  )
-}
-
-/** The files a commit can take: everything changed but a conflicted file. */
-function committable(files: readonly ChangedFile[]): ChangedFile[] {
-  return files.filter((file) => file.status !== 'conflicted')
-}
-
-function CommitForm({
-  status,
-  dialog,
-  onClose,
-}: {
-  status: GitStatus
-  dialog: Extract<GitDialog, { kind: 'commit' }>
-  onClose: () => void
-}) {
-  const { t } = useTranslation(['git', 'common'])
-  const { projectPath } = status
-  const { data, error: loadError } = useChanges(projectPath, true)
-  const files = useMemo(() => committable(data ?? []), [data])
-  const [message, setMessage] = useState('')
-  // Null until the changes load: then the files the opener chose, or all of them.
-  const [ticked, setTicked] = useState<ReadonlySet<string> | null>(null)
-  if (data && ticked === null) {
-    const all = files.map((file) => file.path)
-    setTicked(new Set(dialog.paths ? all.filter((path) => dialog.paths!.includes(path)) : all))
-  }
-  const [busy, setBusy] = useState<'commit' | 'push' | null>(null)
-  const [error, setError] = useState<string | null>(null)
-  const [writing, setWriting] = useState(false)
-  const [writeError, setWriteError] = useState<string | null>(null)
-  const open = useRef(true)
-  useEffect(() => {
-    open.current = true
-    return () => {
-      open.current = false
-    }
-  }, [])
-  const chosen = files.filter((file) => ticked?.has(file.path))
-  const ready = message.trim() !== '' && chosen.length > 0 && !busy && !writing
-
-  const toggle = (path: string, on: boolean): void => {
-    const next = new Set(ticked ?? [])
-    if (on) next.add(path)
-    else next.delete(path)
-    setTicked(next)
-  }
-
-  // The agent writes the message from the chosen files; the box stays as it was if it cannot.
-  const write = async (): Promise<void> => {
-    if (writing || busy || chosen.length === 0) return
-    setWriting(true)
-    setWriteError(null)
-    try {
-      const written = await host('git.commitMessage', {
-        projectPath,
-        paths: chosen.map((file) => file.path),
-      })
-      if (open.current) setMessage(written)
-    } catch (failure) {
-      if (open.current) setWriteError(errorMessage(failure))
-    } finally {
-      if (open.current) setWriting(false)
-    }
-  }
-
-  const commit = async (andPush: boolean): Promise<void> => {
-    if (!ready) return
-    setBusy(andPush ? 'push' : 'commit')
-    setError(null)
-    const done = await runStep(
-      projectPath,
-      { kind: 'commit', message: message.trim(), paths: chosen.map((file) => file.path) },
-      { quietFailure: true, noNext: andPush },
-    )
-    setBusy(null)
-    if (!done) {
-      setError(useGitStore.getState().failed[projectPath]?.log ?? '')
-      return
-    }
-    onClose()
-    if (andPush) pushNow(projectPath)
-  }
-
-  return (
-    <form
-      className="contents"
-      onSubmit={(event: FormEvent) => {
-        event.preventDefault()
-        void commit(dialog.andPush === true)
-      }}
-    >
-      <Head>{t('dialog.commit.title', { branch: status.head.branch ?? 'HEAD' })}</Head>
-      <Body>
-        <Label
-          htmlFor="commit-message"
-          action={
-            <Tooltip>
-              <TooltipTrigger
-                render={
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon-xs"
-                    className="-my-1"
-                    aria-label={t('dialog.commit.write')}
-                    disabled={ticked === null || chosen.length === 0 || !!busy || writing}
-                    onClick={() => void write()}
-                  />
-                }
-              >
-                {writing ? (
-                  <Spinner className="size-3.5" />
-                ) : (
-                  <Glyph icon={SparklesIcon} size={14} />
-                )}
-              </TooltipTrigger>
-              <TooltipContent>
-                {writing ? t('dialog.commit.writing') : t('dialog.commit.write')}
-              </TooltipContent>
-            </Tooltip>
-          }
-        >
-          {t('dialog.commit.message')}
-        </Label>
-        <Textarea
-          id="commit-message"
-          value={message}
-          autoFocus
-          rows={4}
-          readOnly={writing}
-          placeholder={writing ? t('dialog.commit.writing') : t('dialog.commit.placeholder')}
-          className="max-h-60 min-h-27.5 resize-none text-control leading-[1.55]"
-          onChange={(event) => setMessage(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.nativeEvent.isComposing || event.keyCode === 229) return
-            if (event.key === 'Enter' && isMod(event)) {
-              event.preventDefault()
-              void commit(dialog.andPush === true)
-            }
-          }}
-        />
-        {writeError !== null && <FailureText log={writeError} />}
-        <Label>
-          {ticked
-            ? t('dialog.commit.filesChosen', { count: files.length, chosen: chosen.length })
-            : t('dialog.commit.files')}
-        </Label>
-        <div className="-mx-1 max-h-50 overflow-y-auto px-1">
-          {loadError && <p className="text-small text-danger">{loadError.split('\n')[0]}</p>}
-          {files.map((file) => (
-            <label key={file.path} className="flex h-7.5 items-center gap-2.25" title={file.path}>
-              <Checkbox
-                checked={ticked?.has(file.path) ?? false}
-                onCheckedChange={(on) => toggle(file.path, on)}
-              />
-              <span className="min-w-0 flex-1 truncate font-mono text-code text-primary">
-                {file.path}
-              </span>
-              <LineCounts insertions={file.insertions} deletions={file.deletions} />
-            </label>
-          ))}
-        </div>
-        {error !== null && <FailureText log={error} />}
-      </Body>
-      <Foot>
-        <DialogClose render={<Button variant="outline" size="compact" />}>
-          {t('common:actions.cancel')}
-        </DialogClose>
-        <Button
-          type="button"
-          variant="outline"
-          size="compact"
-          disabled={!ready}
-          onClick={() => void commit(false)}
-        >
-          {busy === 'commit' && <Spinner data-icon="inline-start" />}
-          {t('dialog.commit.commit')}
-        </Button>
-        <Button
-          type="button"
-          size="compact"
-          disabled={!ready || status.push === null}
-          onClick={() => void commit(true)}
-        >
-          {busy === 'push' && <Spinner data-icon="inline-start" />}
-          {t('dialog.commit.commitAndPush')}
-        </Button>
-      </Foot>
-    </form>
   )
 }
 
@@ -671,165 +437,6 @@ function NewBranchForm({ status, onClose }: { status: GitStatus; onClose: () => 
         <Button type="submit" size="compact" disabled={!valid || busy}>
           {busy && <Spinner data-icon="inline-start" />}
           {t('dialog.newBranch.action')}
-        </Button>
-      </Foot>
-    </form>
-  )
-}
-
-/** The paths the branch's commits change, from their cached details. */
-function useBranchFiles(status: GitStatus): number | null {
-  const [count, setCount] = useState<number | null>(null)
-  const key = status.commits.map((c) => c.oid).join(',')
-  useEffect(() => {
-    let live = true
-    Promise.all(status.commits.map((c) => loadCommit(status.projectPath, c.oid))).then(
-      (details) => {
-        if (!live) return
-        setCount(new Set(details.flatMap((d) => d.files.map((f) => f.path))).size)
-      },
-      () => live && setCount(null),
-    )
-    return () => {
-      live = false
-    }
-    // `key` names the commits.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [status.projectPath, key])
-  return count
-}
-
-function CreatePrForm({ status, onClose }: { status: GitStatus; onClose: () => void }) {
-  const { t } = useTranslation(['git', 'common'])
-  const { projectPath } = status
-  const target = pushTargetOf(status)
-  const headBranch = target?.branch ?? status.head.branch ?? ''
-  const [initial] = useState(() => suggestPullRequest(status.head.branch ?? '', status.commits))
-  const [title, setTitle] = useState(initial.title)
-  const [body, setBody] = useState(initial.body)
-  const [base, setBase] = useState(status.defaultBranch ?? '')
-  const [draft, setDraft] = useState(false)
-  const [busy, setBusy] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const files = useBranchFiles(status)
-  const [branches, setBranches] = useState<string[]>([])
-  useEffect(() => {
-    let live = true
-    host('git.branches', { projectPath }).then(
-      (list) => live && setBranches(list.branches.map((b) => b.name)),
-      () => {},
-    )
-    return () => {
-      live = false
-    }
-  }, [projectPath])
-  // Unpublished, or with commits the remote does not have yet, it is pushed before it is opened.
-  const pushesFirst = !!target && (target.setUpstream || (status.upstream?.ahead ?? 0) > 0)
-  const valid = target !== null && title.trim() !== '' && base.trim() !== '' && base !== headBranch
-
-  const submit = async (event: FormEvent): Promise<void> => {
-    event.preventDefault()
-    if (!valid || busy) return
-    setBusy(true)
-    setError(null)
-    try {
-      if (pushesFirst) {
-        const request = pushRequest(status)
-        if (!request || !(await runGitOperation(projectPath, request))) {
-          setError(useGitStore.getState().failed[projectPath]?.log ?? '')
-          return
-        }
-      }
-      if (!pullRequestHead(useGitStore.getState().status[projectPath] ?? status)) {
-        setError(t('dialog.createPr.notOnGitHub'))
-        return
-      }
-      const pr = await createPullRequest(projectPath, {
-        title: title.trim(),
-        body,
-        base: base.trim(),
-        draft,
-      })
-      onClose()
-      showCreatedPr(projectPath, pr.number)
-    } catch (e) {
-      setError(errorMessage(e))
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  const choices = [...new Set([base, ...branches.filter((b) => b !== headBranch)])].filter(Boolean)
-  return (
-    <form className="contents" onSubmit={(event) => void submit(event)}>
-      <Head>{t('dialog.createPr.title')}</Head>
-      <Body>
-        <div className="flex items-center gap-2 text-control text-secondary">
-          <Select
-            value={base}
-            items={choices.map((name) => ({ value: name, label: name }))}
-            onValueChange={(next) => next && setBase(next as string)}
-          >
-            <SelectTrigger
-              aria-label={t('dialog.createPr.base')}
-              variant="quiet"
-              size="sm"
-              className="gap-1.5 rounded-xl px-2.5 text-control font-medium text-primary data-[size=sm]:h-6.5 data-[variant=quiet]:bg-subtle [&>svg:last-child]:hidden"
-            >
-              <Glyph icon={GitBranchIcon} className="size-3.25" />
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectGroup>
-                {choices.map((name) => (
-                  <SelectItem key={name} value={name}>
-                    {name}
-                  </SelectItem>
-                ))}
-              </SelectGroup>
-            </SelectContent>
-          </Select>
-          <Glyph icon={ArrowLeft02Icon} className="size-3.5 shrink-0 text-tertiary" />
-          <span className="min-w-0 truncate font-mono text-command text-primary">{headBranch}</span>
-          <span className="flex-1" />
-          <span className="shrink-0 text-hint text-tertiary tabular">
-            {files === null
-              ? t('dialog.createPr.commits', { count: status.commits.length })
-              : t('dialog.createPr.commitsFiles', {
-                  count: status.commits.length,
-                  files: t('dialog.createPr.files', { count: files }),
-                })}
-          </span>
-        </div>
-        <Label htmlFor="pr-title">{t('dialog.createPr.titleField')}</Label>
-        <Input
-          id="pr-title"
-          value={title}
-          autoFocus
-          className="h-8.5 text-control"
-          onChange={(e) => setTitle(e.target.value)}
-        />
-        <Label htmlFor="pr-body">{t('dialog.createPr.body')}</Label>
-        <Textarea
-          id="pr-body"
-          value={body}
-          rows={7}
-          className="max-h-75 min-h-42.5 resize-none text-control leading-[1.55]"
-          onChange={(e) => setBody(e.target.value)}
-        />
-        <label className="mt-3 flex items-center gap-2.25 text-control text-primary">
-          <Checkbox checked={draft} onCheckedChange={setDraft} />
-          {t('dialog.createPr.draft')}
-        </label>
-        {error !== null && <FailureText log={error} />}
-      </Body>
-      <Foot note={pushesFirst ? t('dialog.createPr.pushesFirst') : undefined}>
-        <DialogClose render={<Button variant="outline" size="compact" />}>
-          {t('common:actions.cancel')}
-        </DialogClose>
-        <Button type="submit" size="compact" disabled={!valid || busy}>
-          {busy && <Spinner data-icon="inline-start" />}
-          {t('dialog.createPr.action')}
         </Button>
       </Foot>
     </form>
