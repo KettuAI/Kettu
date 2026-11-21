@@ -274,8 +274,12 @@
 .ks-answer .ui-ansc:is([data-phase='done'], [data-phase='stopped']) .ui-ansc__card {
   padding-bottom: 0;
 }
+/* Hidden, the label lies over the last line, so it must not take a drag's hit test or the
+   selection would jump to its place before the whole message. */
 .ks-answer .ui-ansc:is([data-phase='done'], [data-phase='stopped']) .ui-ansc__label {
   opacity: 0;
+  pointer-events: none;
+  user-select: none;
 }
 /* Written, the hidden dots stop instead of looping on; their loop is set inline. */
 .ks-answer .ui-ansc:is([data-phase='done'], [data-phase='stopped']) [data-turn-dots] circle {
