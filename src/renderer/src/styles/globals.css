@@ -603,6 +603,13 @@
   ::highlight(reply-quote) {
     background-color: var(--selection);
   }
+  /* The passages that comments waiting in the composer are on, and the one whose row is pointed at. */
+  ::highlight(reply-comment) {
+    background-color: color-mix(in srgb, var(--send) 11%, transparent);
+  }
+  ::highlight(reply-comment-hover) {
+    background-color: color-mix(in srgb, var(--send) 18%, transparent);
+  }
   input,
   textarea,
   [contenteditable] {

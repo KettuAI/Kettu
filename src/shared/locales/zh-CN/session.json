@@ -1012,10 +1012,11 @@
   },
   "reply": {
     "button": "回复",
-    "placeholder": "回复 {{agent}}…",
-    "send": "发送回复",
+    "placeholder": "写评论…",
     "quote": "引用的文字",
-    "side": "侧聊"
+    "side": "侧聊",
+    "add": "加入",
+    "addKeys": "{{add}} 加入 · {{send}} 加入并立即发送"
   },
   "planCard": {
     "label": "计划",

@@ -163,7 +163,12 @@ export const AgentEntry = memo(function AgentEntry({ sessionId, entryId }: Entry
   if (writing && !wrote) setWrote(true)
   if (!entry) return null
   return (
-    <div className={cn('ks-answer min-w-0', animation)} data-selectable="" data-agent-message="">
+    <div
+      className={cn('ks-answer min-w-0', animation)}
+      data-selectable=""
+      data-agent-message=""
+      data-entry-id={entryId}
+    >
       <AIAnswer
         sources={NO_SOURCES}
         answer=""
