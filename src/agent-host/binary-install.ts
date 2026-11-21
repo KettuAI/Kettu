@@ -57,6 +57,11 @@ export interface BinaryInstalls {
   winget?: string
   /** The npm package, installed globally. */
   npm?: string
+  /**
+   * The dist-tag the vendor's install names, such as `prerelease`, which installs and updates take
+   * in place of `latest`. Removing and finding the program use the bare package.
+   */
+  npmTag?: string
   /** The npm route skips the package's install scripts, as the vendor's own command does. */
   ignoreScripts?: true
   archive?: ArchiveRoute
@@ -71,6 +76,11 @@ export const NPM_GLOBAL_FLAGS = [
   '--no-update-notifier',
   '--loglevel=http',
 ] as const
+
+/** The package at `at`, the vendor's dist-tag by default, or the bare name when there is none. */
+function npmSpec(installs: BinaryInstalls, at = installs.npmTag): string {
+  return at ? `${installs.npm}@${at}` : (installs.npm ?? '')
+}
 
 /** The registry's key for a platform and architecture, such as `darwin-aarch64`. */
 export function archiveKey(platform: Platform, arch: string): string {
@@ -233,7 +243,7 @@ export async function installPlans(
       'install',
       '-g',
       ...(installs.ignoreScripts ? ['--ignore-scripts'] : []),
-      installs.npm,
+      npmSpec(installs),
     ]
     const command = formatCommand({ command: 'npm', args: npmArgs }, platform)
     plans.push({
@@ -470,7 +480,7 @@ export async function updatePlan(
         '-g',
         ...(ctx.npmPrefix ? ['--prefix', ctx.npmPrefix] : []),
         ...(installs.ignoreScripts ? ['--ignore-scripts'] : []),
-        `${installs.npm}@${ctx.version ?? 'latest'}`,
+        npmSpec(installs, ctx.version ?? installs.npmTag ?? 'latest'),
       ]
       return {
         command: formatCommand({ command: 'npm', args }, platform),
@@ -485,7 +495,7 @@ export async function updatePlan(
         ...GLOBAL_ADD[method],
         ...(ctx.globalDir && method !== 'bun' ? [DIR_FLAG[method], ctx.globalDir] : []),
         ...(installs.ignoreScripts ? ['--ignore-scripts'] : []),
-        `${installs.npm}@${ctx.version ?? 'latest'}`,
+        npmSpec(installs, ctx.version ?? installs.npmTag ?? 'latest'),
       ]
       const tool = await findCommand(method, ctx)
       return {

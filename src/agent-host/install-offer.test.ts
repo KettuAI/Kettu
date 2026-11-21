@@ -3,6 +3,7 @@
 
 import { describe, expect, it } from 'vitest'
 import type { InstalledAdapter } from './adapter-install'
+import { AUGGIE } from './agents/auggie'
 import { CLAUDE_CODE } from './agents/claude-code'
 import { CODEX } from './agents/codex'
 import { DEEPSEEK } from './agents/deepseek'
@@ -172,6 +173,18 @@ describe("a package harness's vendor routes and guide", () => {
     ])
     expect(offer.routes[2]?.details.folder).toBe('/home/me/.local/bin')
     expect(offer.guide).toBe('https://docs.factory.com/droid-cli/quickstart')
+  })
+
+  it("lists Auggie's documented install at its prerelease tag", async () => {
+    const plans = await installPlans(AUGGIE.installs!, { ...lookup({}), agentId: 'auggie' })
+    const offer = installOffer(
+      input({ def: AUGGIE, plans, copy: { version: '0.30.0', bytes: null } }),
+    )
+    expect(offer.routes.map((route) => [route.id, route.command])).toEqual([
+      ['copy', null],
+      ['npm', 'npm install -g @augmentcode/auggie@prerelease'],
+    ])
+    expect(offer.guide).toBe('https://docs.augmentcode.com/cli/setup-auggie/install-auggie-cli')
   })
 
   it("offers only Kettu's copy, and the guide, for a harness whose docs list no global install", () => {

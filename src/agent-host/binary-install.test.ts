@@ -87,6 +87,38 @@ describe('the npm route', () => {
     ])
   })
 
+  it('installs and updates at the dist-tag the vendor documents, and removes by the bare name', async () => {
+    const installs: BinaryInstalls = { npm: '@vendor/cli', npmTag: 'prerelease' }
+    const [plan] = await installPlans(installs, context)
+    expect(plan?.command).toBe('npm install -g @vendor/cli@prerelease')
+    expect(plan?.run?.args.slice(0, 3)).toEqual(['install', '-g', '@vendor/cli@prerelease'])
+
+    const update = await updatePlan(installs, 'npm', {
+      ...context,
+      program: '/Users/ann/.local/bin/cli',
+      npmPrefix: '/Users/ann/.local',
+    })
+    expect(update?.command).toBe('npm install -g --prefix /Users/ann/.local @vendor/cli@prerelease')
+    const pinned = await updatePlan(installs, 'npm', {
+      ...context,
+      program: '/bin/cli',
+      version: '2.0.0-rc.1',
+    })
+    expect(pinned?.command).toBe('npm install -g @vendor/cli@2.0.0-rc.1')
+    const bun = await updatePlan(installs, 'bun', { ...context, program: '/bin/cli' })
+    expect(bun?.command).toBe('bun add -g @vendor/cli@prerelease')
+
+    expect(uninstallPlan('npm', '@vendor/cli', '/Users/ann/.local', 'darwin')?.command).toBe(
+      'npm uninstall -g --prefix /Users/ann/.local @vendor/cli',
+    )
+    expect(
+      installMethodOf(installs, '/opt/homebrew/lib/node_modules/@vendor/cli/bin/cli.js', {
+        platform: 'darwin',
+        home: '/Users/ann',
+      }),
+    ).toBe('npm')
+  })
+
   it('reads the npm prefix from where the package lives', () => {
     const pkg = '@anthropic-ai/claude-code'
     expect(
