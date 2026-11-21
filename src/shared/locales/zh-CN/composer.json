@@ -7,6 +7,7 @@
       "awaitingAnswer": "等待你的回答",
       "limitReached": "{{limit}}限额已用完 · {{time}} 重置",
       "ask": "回复…",
+      "taskRunning": "接着聊，不影响需求",
       "denied": "说说改用什么做法",
       "runningQueue": "排队一条消息 · Esc 停止",
       "runningTouch": "排队一条消息",

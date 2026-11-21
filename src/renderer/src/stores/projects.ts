@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import type { NoProject, Project } from '@shared/agent-host'
-import { errorMessage, host } from '@renderer/lib/host'
+import { errorMessage, host, hostAt } from '@renderer/lib/host'
 import { hostOfPath } from '@renderer/lib/host-paths'
 
 interface ProjectsStore {
@@ -21,6 +21,8 @@ interface ProjectsStore {
   refresh(): Promise<void>
   add(path: string): Promise<Project>
   remove(path: string): Promise<void>
+  /** Puts a project just before another of its host's, or last with null, as its host keeps it. */
+  move(path: string, before: string | null): Promise<void>
 }
 
 /** `projects` with one host's replaced, this computer's first. */
@@ -31,6 +33,23 @@ export function withHostProjects(
 ): Project[] {
   const others = projects.filter((p) => hostOfPath(p.path) !== hostId)
   return hostId === null ? [...replacing, ...others] : [...others, ...replacing]
+}
+
+/** `projects` with `path` put just before `before`, or after its host's last project with null. */
+export function withProjectMoved(
+  projects: readonly Project[],
+  path: string,
+  before: string | null,
+): Project[] {
+  const project = projects.find((p) => p.path === path)
+  if (!project) return [...projects]
+  const rest = projects.filter((p) => p !== project)
+  const hostId = hostOfPath(path)
+  const at = before
+    ? rest.findIndex((p) => p.path === before)
+    : rest.findLastIndex((p) => hostOfPath(p.path) === hostId) + 1
+  rest.splice(at < 0 ? rest.length : at, 0, project)
+  return rest
 }
 
 /** The key of a host's No project group in `noProjects`, '' being this computer's. */
@@ -110,13 +129,38 @@ export const useProjectsStore = create<ProjectsStore>()((set) => ({
   },
   async add(path) {
     const project = await host('projects.add', { path })
-    set((state) => ({
-      projects: [project, ...state.projects.filter((p) => p.path !== project.path)],
-    }))
+    set((state) => {
+      // A host that keeps the user's order puts a new project last; its list follows.
+      const listed = state.projects.some((p) => p.path === project.path)
+      if (project.order != null && listed) return {}
+      const others = state.projects.filter((p) => p.path !== project.path)
+      return {
+        projects:
+          project.order != null
+            ? withProjectMoved([...others, project], project.path, null)
+            : [project, ...others],
+      }
+    })
     return project
   },
   async remove(path) {
     await host('projects.remove', { path })
     set((state) => ({ projects: state.projects.filter((p) => p.path !== path) }))
+  },
+  async move(path, before) {
+    const moved = withProjectMoved(useProjectsStore.getState().projects, path, before)
+    set({ projects: moved })
+    try {
+      await host('projects.move', { path, before })
+    } catch (error) {
+      // Its host's list comes again unless another change already replaced this one.
+      if (useProjectsStore.getState().projects === moved) {
+        const hostId = hostOfPath(path)
+        void hostAt(hostId, 'projects.list', undefined)
+          .then((projects) => useProjectsStore.getState().setAll(projects, hostId))
+          .catch(() => {})
+      }
+      throw error
+    }
   },
 }))

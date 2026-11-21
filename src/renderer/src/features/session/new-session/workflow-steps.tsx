@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react'
 import { ArrowRight02Icon, SparklesIcon, UserIcon } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
-import { PACES, type Pace, type Workflow, type WorkflowStep, type StepPick } from '@shared/workflow'
+import { PACES, type Pace, type Workflow, type StepPick } from '@shared/workflow'
 import type { AgentId } from '@shared/thread'
 import { AgentMark } from '@renderer/components/agents/agent-mark'
 import { SegmentedControl } from '@renderer/components/affect/segmented-control'
@@ -84,12 +84,13 @@ const CHIP =
 
 /** A step pinned for this task, or Auto, at its row's end: a menu to pin or go back to Auto. */
 function StepPicker({
-  step,
+  name,
   pin,
   hostId,
   onPin,
 }: {
-  step: WorkflowStep
+  /** The step's name in the interface's language. */
+  name: string
   pin: StepPick | null
   hostId: string | null
   onPin: (pick: StepPick | null) => void
@@ -133,7 +134,7 @@ function StepPicker({
         const own = optionsOn(useAgentOptionsStore.getState(), hostId)[pin.agentId]
         onPin(pickOf(own, pin.agentId, { ...pickValues(own, pin), [optionId]: value }))
       }}
-      label={t('workflow.whoDoes', { step: step.name })}
+      label={t('workflow.whoDoes', { step: name })}
     />
   )
 }
@@ -214,7 +215,7 @@ export function StepRows({
                 </span>
               ) : (
                 <StepPicker
-                  step={step}
+                  name={name}
                   pin={taskPins[step.id] ?? null}
                   hostId={hostId}
                   onPin={(pick) => onPin(step.id, pick)}

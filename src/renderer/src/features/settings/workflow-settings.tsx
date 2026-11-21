@@ -1,5 +1,5 @@
-// Settings › Agents › workflow: whether agents may suggest a workflow, and which Claude Code and Codex
-// agents Auto may pick for a step. Both are the host's, kept beside its workflow library.
+// Settings › Agents › workflow: whether agents may suggest a workflow, how many steps work at once,
+// and which Claude Code and Codex agents Auto may pick for a step. All are the host's.
 
 import { useTranslation } from 'react-i18next'
 import { useHostScope } from '@renderer/stores/host-scope'
@@ -7,7 +7,14 @@ import { useHostWorkflows } from '@renderer/stores/workflows'
 import type { GroupDef, RowDef } from './model'
 import { EmptyRow, GroupNote } from './rows'
 import { changedAgents } from './workflow-data'
-import { AgentsLoading, AutoPickRow, ReadFailed, ResetAuto, SuggestSwitch } from './workflow-rows'
+import {
+  AgentsLoading,
+  AutoPickRow,
+  ReadFailed,
+  ResetAuto,
+  StepLimitSelect,
+  SuggestSwitch,
+} from './workflow-rows'
 
 /** The workflow group and the agents Auto can pick, for the end of Settings › Agents. */
 export function useWorkflowRows(): RowDef[] {
@@ -33,6 +40,12 @@ export function useWorkflowRows(): RowDef[] {
       setting: 'agents.workflow-suggest',
       group: workflowGroup,
       render: () => <SuggestSwitch />,
+    },
+    {
+      id: 'workflow-steps',
+      setting: 'agents.workflow-steps',
+      group: workflowGroup,
+      render: () => <StepLimitSelect label={t('agents.workflow.steps.name')} />,
     },
   ]
   if (!settings) {

@@ -11,6 +11,7 @@ import { useProjectsStore } from '@renderer/stores/projects'
 import { useSessionsStore } from '@renderer/stores/sessions'
 import { useViewStore } from '@renderer/stores/view'
 import { findPane } from './layout'
+import { newSessionProject } from './new-session-project'
 import { usePane } from './pane-context'
 
 /** What a pane shows: a session, a session being created, or New session. */
@@ -29,17 +30,7 @@ export function PaneContent({ paneId }: { paneId: string }) {
     if (!listed && hostId !== null) return <WaitingForHost hostId={hostId} />
     return <SessionView key={`${paneId}:${view.sessionId}`} sessionId={view.sessionId} />
   }
-  // New session with no project of its own starts in the one selected, as the main area had it;
-  // with a host chosen, in a project on that host.
-  const onHost = (path: string) => view.hostId === undefined || hostOfPath(path) === view.hostId
-  const path = view.noProject
-    ? null
-    : ([view.projectPath, selected].find((p) => p && onHost(p)) ?? null)
-  const project = path
-    ? (projects.find((p) => p.path === path) ?? null)
-    : view.noProject
-      ? null
-      : (projects.find((p) => onHost(p.path)) ?? null)
+  const project = newSessionProject(view, selected, projects)
   return (
     <NewSessionView
       key={`${paneId}:new`}

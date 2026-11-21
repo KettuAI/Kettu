@@ -20,6 +20,7 @@ import {
 import { useTranslation } from 'react-i18next'
 import {
   LEGACY_OFFICIAL,
+  outcomeName,
   stepName,
   type Workflow,
   type WireWorkflowEntry,
@@ -629,7 +630,7 @@ function Flow({ workflow, pins }: { workflow: Workflow; pins: Record<string, Ste
               <li key={`${step.id}:${outcome.name}`}>
                 {t('workflow.flow.back', {
                   from: stepName(workflow, step.id, locale),
-                  outcome: outcome.name,
+                  outcome: outcomeName(workflow, step.id, outcome.name, locale),
                   to: outcome.to.map((id) => stepName(workflow, id, locale)).join(' + '),
                   count: outcome.limit ?? workflow.sendBackLimit,
                 })}
@@ -642,7 +643,7 @@ function Flow({ workflow, pins }: { workflow: Workflow; pins: Record<string, Ste
                   <li key={`${step.id}:${outcome.name}:end`}>
                     {t('workflow.flow.dropped', {
                       from: stepName(workflow, step.id, locale),
-                      outcome: outcome.name,
+                      outcome: outcomeName(workflow, step.id, outcome.name, locale),
                     })}
                   </li>
                 )),
@@ -737,7 +738,7 @@ function StepRow({
             const back = backArrowsOf(workflow, step).includes(outcome)
             return (
               <li key={outcome.name}>
-                <span>{outcome.name}</span>
+                <span>{outcomeName(workflow, step.id, outcome.name, locale)}</span>
                 <Icon icon={back ? UndoIcon : ArrowRight01Icon} size={12} />
                 <span>
                   {target.kind === 'end'

@@ -469,7 +469,7 @@ async function start(): Promise<void> {
     onAttention: (message) => {
       // While the island runs, it shows what needs the user in place of a notification.
       island.attention(message)
-      if (!island.showing()) {
+      if (!island.shows(message)) {
         notifyAttention(message, settings.get(), (sessionId, requestId, optionId) => {
           agentHost.answerPermission(sessionId, requestId, optionId)
           return true

@@ -3,6 +3,11 @@
 
 import { isAgentId } from '@shared/agents'
 import {
+  DELIVERABLE_DETAIL_CHARS,
+  DELIVERABLE_PATH_CHARS,
+  DELIVERABLE_TITLE_CHARS,
+  DELIVERABLE_URL_CHARS,
+  MAX_STEP_DELIVERABLES,
   isPace,
   isPickedBy,
   isStepPick,
@@ -11,6 +16,7 @@ import {
   type PickedBy,
   type RoundState,
   type SentBack,
+  type StepDeliverable,
   type Workflow,
   type WorkflowSource,
   type StepPick,
@@ -59,6 +65,8 @@ export interface RoundRecord {
   outcome: string | null
   note: string | null
   document: { artifactId: string; version: number; title: string } | null
+  /** Files and links its report handed over; a record stored before them has none. */
+  deliverables?: StepDeliverable[]
   sentBack: SentBack | null
   /** The person's note when they retried it. */
   retryNote: string | null
@@ -211,6 +219,8 @@ function isBlocked(value: unknown): value is BlockedReason {
       return isAgentId(value.agentId) && isNullableTime(value.resetsAt)
     case 'unusable':
       return isAgentId(value.agentId) && isString(value.why)
+    case 'tools':
+      return isStringList(value.missing)
     case 'no_agent':
     case 'no_picker':
       return true
@@ -231,6 +241,24 @@ function isLane(value: unknown): value is LaneRecord {
     LANE_STATES.has(value.state) &&
     isTime(value.createdAt)
   )
+}
+
+/** A file or link as `report_step` stores it, which only the host writes. */
+export function isStepDeliverable(value: unknown): value is StepDeliverable {
+  if (!isRecord(value)) return false
+  const { kind, title, detail } = value
+  if (!isString(title) || title.length === 0 || title.length > DELIVERABLE_TITLE_CHARS) return false
+  if (!(detail === null || (isString(detail) && detail.length <= DELIVERABLE_DETAIL_CHARS)))
+    return false
+  if (kind === 'file') return isString(value.path) && value.path.length <= DELIVERABLE_PATH_CHARS
+  if (kind === 'link') {
+    return (
+      isString(value.url) &&
+      value.url.length <= DELIVERABLE_URL_CHARS &&
+      /^https?:\/\//i.test(value.url)
+    )
+  }
+  return false
 }
 
 function isRound(value: unknown): value is RoundRecord {
@@ -259,6 +287,10 @@ function isRound(value: unknown): value is RoundRecord {
         isString(doc.artifactId) &&
         Number.isSafeInteger(doc.version) &&
         isString(doc.title))) &&
+    (value.deliverables === undefined ||
+      (Array.isArray(value.deliverables) &&
+        value.deliverables.length <= MAX_STEP_DELIVERABLES &&
+        value.deliverables.every(isStepDeliverable))) &&
     (value.sentBack === null || isSentBack(value.sentBack)) &&
     isNullableString(value.retryNote) &&
     (stuck === null ||

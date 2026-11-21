@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { WORKFLOW_DESCRIPTION_CHARS, outcomeName, stepName, workflowText } from '@shared/workflow'
 import { parseWorkflow, workflowHash, toolProblems } from './format'
 
 const STEPS = `
@@ -29,6 +30,146 @@ function problemsOf(text: string): string[] {
 }
 
 describe('Workflow files', () => {
+  it('reads when to use a workflow, with a per-language override and a fallback', () => {
+    const read = parseWorkflow(
+      workflow(`when: Use for a feature with a separate review.
+locales:
+  en-GB:
+    name: Feature and review
+  zh-CN:
+    when: 功能需要单独审查时使用。
+${STEPS}`),
+    )
+    expect(read.problems).toEqual([])
+    expect(workflowText(read.workflow!, 'zh-CN')).toMatchObject({
+      when: '功能需要单独审查时使用。',
+    })
+    expect(workflowText(read.workflow!, 'en-GB')).toMatchObject({
+      name: 'Feature and review',
+      when: 'Use for a feature with a separate review.',
+    })
+    expect(parseWorkflow(workflow(STEPS)).workflow).not.toHaveProperty('when')
+  })
+
+  it('refuses non-text, multiline and overlong when fields', () => {
+    expect(
+      problemsOf(
+        workflow(`when: false
+locales:
+  en-GB:
+    when: |-
+      First line
+      Second line
+  fr:
+    when: ${'x'.repeat(WORKFLOW_DESCRIPTION_CHARS + 1)}
+${STEPS}`),
+      ),
+    ).toEqual([
+      'when: must be text',
+      'locales.en-GB.when: must be one line',
+      `locales.fr.when: is longer than ${WORKFLOW_DESCRIPTION_CHARS} characters`,
+    ])
+  })
+
+  it('reads outcome names per language, for display only', () => {
+    const read = parseWorkflow(
+      workflow(`locales:
+  zh-CN:
+    steps:
+      review: 审查
+    outcomes:
+      review:
+        Approved: 通过
+        Changes needed: 需要修改
+  en-GB:
+    outcomes:
+      build:
+        Done: Finished
+${STEPS}`),
+    )
+    expect(read.problems).toEqual([])
+    const flow = read.workflow!
+    expect(outcomeName(flow, 'review', 'Changes needed', 'zh-CN')).toBe('需要修改')
+    expect(outcomeName(flow, 'build', 'Done', 'en-GB')).toBe('Finished')
+    // Reports and what is stored keep the file's own names.
+    expect(flow.steps[1]!.outcomes.map((o) => o.name)).toEqual(['Approved', 'Changes needed'])
+  })
+
+  it('falls back to the name in the file where a language has none', () => {
+    const flow = parseWorkflow(
+      workflow(`locales:
+  zh-CN:
+    outcomes:
+      review:
+        Approved: 通过
+${STEPS}`),
+    ).workflow!
+    expect(outcomeName(flow, 'review', 'Changes needed', 'zh-CN')).toBe('Changes needed')
+    expect(outcomeName(flow, 'build', 'Done', 'zh-CN')).toBe('Done')
+    expect(outcomeName(flow, 'review', 'Approved', 'fr')).toBe('Approved')
+    expect(outcomeName(flow, 'review', 'Approved')).toBe('Approved')
+    expect(outcomeName(flow, 'review', 'constructor', 'zh-CN')).toBe('constructor')
+  })
+
+  it('reads only names a language gives, never what every object has', () => {
+    const flow = parseWorkflow(
+      workflow(`locales:
+  zh-CN:
+    name: 测试
+    steps:
+      build: 构建
+    outcomes:
+      build:
+        Done: 完成
+steps:
+  - id: build
+    name: Build
+    prompt: Build it.
+    outcomes:
+      - name: Done
+        to: constructor
+  - id: constructor
+    name: Construct
+    prompt: Construct it.
+    outcomes:
+      - name: toString
+        end: done
+`),
+    ).workflow!
+    expect(stepName(flow, 'constructor', 'zh-CN')).toBe('Construct')
+    expect(stepName(flow, 'build', 'zh-CN')).toBe('构建')
+    expect(outcomeName(flow, 'constructor', 'toString', 'zh-CN')).toBe('toString')
+    expect(workflowText(flow, 'constructor').name).toBe('Test')
+    expect(workflowText(flow, 'toString').description).toBe('')
+  })
+
+  it('refuses outcome names for an unknown step or outcome, or not as text', () => {
+    expect(
+      problemsOf(
+        workflow(`locales:
+  zh-CN:
+    outcomes:
+      ship:
+        Done: 完成
+      review:
+        Rejected: 拒绝
+        Approved: 3
+  fr:
+    outcomes: [Approved]
+  de:
+    outcomes:
+      review: Genehmigt
+${STEPS}`),
+      ),
+    ).toEqual([
+      'locales.zh-CN.outcomes.review.Approved: must be text',
+      'locales.fr.outcomes: must map step ids to their outcomes',
+      'locales.de.outcomes.review: must map outcome names to names',
+      'locales.zh-CN.outcomes.ship: no step "ship"',
+      'locales.zh-CN.outcomes.review.Rejected: "review" has no outcome "Rejected"',
+    ])
+  })
+
   it('reads steps, arrows back, reviews and defaults', () => {
     const read = parseWorkflow(workflow(STEPS))
     expect(read.problems).toEqual([])

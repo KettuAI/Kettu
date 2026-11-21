@@ -238,6 +238,11 @@ export class Artifacts {
     return this.files.openExternal(id, version)
   }
 
+  /** `artifact:reveal`. */
+  reveal(id: unknown, version: unknown): Promise<void> {
+    return this.files.reveal(id, version)
+  }
+
   /** `artifact:export`. */
   export(window: BrowserWindow | null, id: unknown, version: unknown): Promise<boolean> {
     return this.files.export(window, id, version)

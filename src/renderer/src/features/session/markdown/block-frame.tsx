@@ -1,5 +1,5 @@
-import { useState, type ComponentProps, type ReactNode } from 'react'
-import { Copy01Icon, Tick02Icon } from '@hugeicons/core-free-icons'
+import { useRef, useState, type ComponentProps, type ReactNode } from 'react'
+import { ArrowExpand01Icon, Copy01Icon, Tick02Icon } from '@hugeicons/core-free-icons'
 import { HugeiconsIcon } from '@hugeicons/react'
 import { Button } from '@renderer/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
@@ -26,16 +26,38 @@ export function BlockFrame({
 
 /**
  * A picture drawn from a block, an SVG or a diagram: bare in the prose at its own size, with the
- * block's actions in a small toolbar at its corner that shows on hover and keyboard focus.
+ * block's actions in a small toolbar at its corner that shows on hover and keyboard focus. With
+ * `open`, a click on the picture and the toolbar's first action open it larger.
  */
 export function BlockPicture({
   actions,
+  open,
   ...props
-}: ComponentProps<'img'> & { actions: ReactNode }) {
+}: ComponentProps<'img'> & {
+  actions: ReactNode
+  open?: { label: string; onOpen: (picture: HTMLImageElement) => void }
+}) {
+  const picture = useRef<HTMLImageElement>(null)
+  const opened = () => picture.current && open?.onOpen(picture.current)
   return (
     <div data-block-frame="" className="block-picture">
-      <img decoding="async" {...props} />
-      <div className="block-picture-actions">{actions}</div>
+      <img decoding="async" {...props} ref={picture} />
+      {open && (
+        <button
+          type="button"
+          aria-label={open.label}
+          onClick={opened}
+          className="absolute inset-0 cursor-zoom-in rounded-[inherit] outline-none focus-visible:shadow-[inset_0_0_0_1.5px_var(--focus-ring-color)]"
+        />
+      )}
+      <div className="block-picture-actions">
+        {open && (
+          <BlockAction label={open.label} onClick={opened}>
+            <HugeiconsIcon icon={ArrowExpand01Icon} strokeWidth={1.9} aria-hidden />
+          </BlockAction>
+        )}
+        {actions}
+      </div>
     </div>
   )
 }

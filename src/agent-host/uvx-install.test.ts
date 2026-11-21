@@ -65,3 +65,34 @@ describe('the uvx version a start runs', () => {
     await expect(writeUvxVersion(root, 'fast-agent', '9.0.0; rm -rf ~')).rejects.toThrow()
   })
 })
+
+describe('the uv a uvx agent needs', () => {
+  const needing: AgentDefinition = { ...def, requiresUv: '0.12.0' }
+  const asking = (version: string | null) =>
+    ({
+      ...context('/unused', { wanted: '0.10.1' }),
+      probeCli: async () =>
+        version ? { version } : { error: 'uvx --version printed no version.' },
+    }) satisfies DetectContext
+
+  it('says an older uv is too old, and how to update it', async () => {
+    const found = await detectAgent(needing, asking('0.8.3'))
+    expect(found).toMatchObject({ state: 'not-installed' })
+    expect(found).toHaveProperty('detail', expect.stringContaining('0.12.0'))
+    expect(found).toHaveProperty('detail', expect.stringContaining('0.8.3'))
+    expect(found).toHaveProperty('detail', expect.stringContaining('uv self update'))
+  })
+
+  it('runs with the uv it needs or a newer one', async () => {
+    expect(await detectAgent(needing, asking('0.12.0'))).toMatchObject({ state: 'available' })
+    expect(await detectAgent(needing, asking('0.13.6'))).toMatchObject({ state: 'available' })
+  })
+
+  it('leaves an agent that names no uv, and a uv that will not say its version, to start', async () => {
+    expect(await detectAgent(def, asking('0.8.3'))).toMatchObject({ state: 'available' })
+    expect(await detectAgent(needing, asking(null))).toMatchObject({ state: 'available' })
+    expect(await detectAgent(needing, context('/unused', { wanted: '0.10.1' }))).toMatchObject({
+      state: 'available',
+    })
+  })
+})

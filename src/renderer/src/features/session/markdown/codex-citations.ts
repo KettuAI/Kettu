@@ -1,4 +1,5 @@
-// A remark plugin for Codex's file citations: `:codex-file-citation{path="..." line_range_start=3}`.
+// A remark plugin for Codex's citations: of files, `:codex-file-citation{path="..." line_range_start=3}`,
+// and of web search sources, `\uE200cite\uE202turn0search1\uE202turn0view0\uE201`.
 
 interface MdNode {
   type: string
@@ -9,6 +10,10 @@ interface MdNode {
 
 // The directive, with the optional label in brackets that Codex also writes before its attributes.
 const CITATION = /:codex-file-citation(?:\[[^\]\n]*\])?\{([^{}\n]*)\}/g
+// Codex's app-server never says which source a web citation's id names, so these are left out,
+// with the spaces before them; an unclosed one at the end is one still being written.
+const WEB_CITATION = /[ \t]*\uE200cite(?:\uE202[^\uE200\uE201\n]*)?(?:\uE201|$)/g
+const WEB_CITATION_START = /[ \t]*\uE200(?:c(?:i(?:te?)?)?)?$/
 const ATTRIBUTE = /([\w-]+)=(?:"([^"]*)"|'([^']*)'|([^\s"'}]+))/g
 // Their text is the link's own words, or code, which stays as written.
 const SKIP = new Set(['link', 'linkReference', 'inlineCode', 'code', 'html', 'definition'])
@@ -40,7 +45,12 @@ function citation(source: string): MdNode | null {
   return { type: 'link', url, children: [{ type: 'text', value: name + lines }] }
 }
 
-function split(text: string): MdNode[] | null {
+function withoutWebCitations(text: string): string {
+  return text.replace(WEB_CITATION, '').replace(WEB_CITATION_START, '')
+}
+
+function split(source: string): MdNode[] | null {
+  const text = withoutWebCitations(source)
   const out: MdNode[] = []
   let last = 0
   for (const match of text.matchAll(CITATION)) {
@@ -51,19 +61,20 @@ function split(text: string): MdNode[] | null {
     out.push(link)
     last = at + match[0].length
   }
-  if (out.length === 0) return null
+  if (out.length === 0) return text === source ? null : text ? [{ type: 'text', value: text }] : []
   if (last < text.length) out.push({ type: 'text', value: text.slice(last) })
   return out
 }
 
-/** Turns Codex's file citations in a reply's text into links to the file. */
+/** Turns Codex's file citations in a reply's text into links to the file, and drops its web ones. */
 export function codexCitations() {
   const visit = (node: MdNode): void => {
     if (!node.children || SKIP.has(node.type)) return
     node.children = node.children.flatMap((child) => {
       if (child.type === 'text' && child.value) return split(child.value) ?? [child]
       visit(child)
-      return [child]
+      // A paragraph of citations alone is left empty.
+      return child.type === 'paragraph' && child.children?.length === 0 ? [] : [child]
     })
   }
   return visit

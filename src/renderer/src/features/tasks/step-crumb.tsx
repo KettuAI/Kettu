@@ -6,7 +6,7 @@ import {
 } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
 import type { SessionSummary } from '@shared/agent-host'
-import type { RoundView, TaskView } from '@shared/workflow'
+import type { RoundView, TaskSummary, TaskView } from '@shared/workflow'
 import { backTo } from '@renderer/app/history'
 import { Button } from '@renderer/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
@@ -32,12 +32,17 @@ const WORKING = new Set(['queued', 'starting', 'working', 'picking', 'stuck'])
  * then a chevron before the step's own mark and name; with the round it is on past the first.
  */
 export function TaskCrumb({ summary }: { summary: SessionSummary }) {
-  const { t } = useTranslation('tasks')
   const ref = summary.task!
   const task = useTasksStore((s) => s.summaries[ref.taskId])
   // Read here for the round and the sent back note, which the bar and the thread show.
   useTaskView(ref.taskId)
   if (!task) return null
+  return <TaskCrumbLink task={task} />
+}
+
+/** The task's ring and name, back to its page, and the chevron after them. */
+export function TaskCrumbLink({ task }: { task: TaskSummary }) {
+  const { t } = useTranslation('tasks')
   const label = t('crumb.back', { title: task.title })
   return (
     <>

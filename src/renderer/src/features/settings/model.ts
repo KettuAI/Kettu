@@ -30,6 +30,8 @@ export interface GroupDef {
   unlabeled?: boolean
   /** What shows under the group's card, as a `GroupNote` saying what a setting implies. */
   note?: ReactNode
+  /** The row the note explains: it shows only while that row does, as it does not in the web client. */
+  noteFor?: string
 }
 
 /**

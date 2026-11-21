@@ -23,7 +23,7 @@ import { agentName } from '@renderer/stores/agents'
 import { useSessionsStore } from '@renderer/stores/sessions'
 import { useTasksStore } from '@renderer/stores/tasks'
 import { openSession } from '@renderer/stores/view'
-import { blockedText, needKey, nextAfter, stepTitle, stuckText } from './model'
+import { blockedText, needKey, nextAfter, outcomeTitle, stepTitle, stuckText } from './model'
 import { PinEditor } from './pin-editor'
 import { DocumentChip } from './timeline'
 
@@ -85,6 +85,7 @@ function ReviewCard({ view, roundId }: { view: TaskView; roundId: string }) {
   const { t } = useTranslation('tasks')
   const round = view.rounds.find((r) => r.id === roundId)
   const [note, setNote] = useState('')
+  const [empty, setEmpty] = useState(false)
   const { busy, error, run } = useTaskRequest(view.id)
   const { threads } = useComments(round?.document?.artifactId ?? null)
   if (!round) return null
@@ -93,7 +94,10 @@ function ReviewCard({ view, roundId }: { view: TaskView; roundId: string }) {
   const agent = round.by ? agentName(round.by.agentId, hostId) : t('picked.person')
   const comments = threads?.filter((thread) => thread.resolvedAt === null).length ?? 0
   const next = nextAfter(view, round)
-  const outcome = round.outcome ?? t('state.done')
+  const outcome =
+    round.outcome === null
+      ? t('state.done')
+      : outcomeTitle(view.workflow, round.stepId, round.outcome)
   const answer = (approve: boolean) =>
     run(() =>
       host('tasks.review', {
@@ -124,7 +128,15 @@ function ReviewCard({ view, roundId }: { view: TaskView; roundId: string }) {
         onApprove={async () => {
           if (busy || !(await answer(true))) throw new Error('not sent')
         }}
-        onDeny={() => void (busy ? undefined : answer(false))}
+        onDeny={() => {
+          if (busy) return
+          // A send back must give the next round something to fix.
+          if (!note.trim() && comments === 0) {
+            setEmpty(true)
+            return
+          }
+          void answer(false)
+        }}
         preview={
           <div className="flex flex-col gap-2.5">
             {round.document && (
@@ -150,12 +162,16 @@ function ReviewCard({ view, roundId }: { view: TaskView; roundId: string }) {
             )}
             <NoteField
               value={note}
-              onChange={setNote}
+              onChange={(value) => {
+                setNote(value)
+                setEmpty(false)
+              }}
               placeholder={t('review.notePlaceholder', { agent })}
             />
           </div>
         }
       />
+      {empty && <CardError text={t('review.sendBackEmpty')} />}
       {error && <CardError text={error} />}
     </div>
   )
@@ -199,7 +215,7 @@ function PersonCard({ view, roundId }: { view: TaskView; roundId: string }) {
             aria-busy={busy && chosen === outcome.name}
             onClick={() => answer(outcome.name)}
           >
-            {outcome.name}
+            {outcomeTitle(view.workflow, step.id, outcome.name)}
           </Button>
         ))}
       </div>

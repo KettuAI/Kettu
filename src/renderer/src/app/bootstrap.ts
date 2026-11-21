@@ -63,6 +63,7 @@ import { useProjectsStore } from '@renderer/stores/projects'
 import { routinesHostClosed, routinesHostOpened, useRoutinesStore } from '@renderer/stores/routines'
 import { useIdleReleaseStore } from '@renderer/stores/idle-release'
 import { useWorkflowsStore } from '@renderer/stores/workflows'
+import { useSuggestionsStore } from '@renderer/stores/workflow-suggestions'
 import { tasksHostClosed, tasksHostOpened, useTasksStore } from '@renderer/stores/tasks'
 import { useSessionsStore } from '@renderer/stores/sessions'
 import { initSettings, useSettingsStore } from '@renderer/stores/settings'
@@ -170,6 +171,9 @@ function onHostEvent(event: HostEvent, hostId: string | null = null): void {
       return
     case 'workflows.changed':
       useWorkflowsStore.getState().changed(hostId)
+      return
+    case 'workflows.suggestion':
+      useSuggestionsStore.getState().receive(event.suggestion)
       return
     case 'idleRelease.changed':
       useIdleReleaseStore.getState().receive(hostId, event.state)

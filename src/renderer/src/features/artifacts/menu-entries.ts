@@ -3,6 +3,7 @@ import {
   Clock01Icon,
   Delete02Icon,
   Download04Icon,
+  FolderOpenIcon,
   Image01Icon,
   LinkSquare02Icon,
   PencilEdit02Icon,
@@ -21,7 +22,7 @@ import { progressToast, toast } from '@renderer/components/ui/toast'
 import { askArtifactDialog, deleteArtifact, restoreArtifact } from '@renderer/stores/artifacts'
 import { useSessionsStore } from '@renderer/stores/sessions'
 import { useHostHas } from '@renderer/lib/host-features'
-import { isWeb } from '@renderer/lib/platform'
+import { fileManagerName, isWeb } from '@renderer/lib/platform'
 import { openSessionWithArtifact } from '@renderer/stores/view'
 import { useArtifactPublished } from './artifact-host'
 import { removeCard } from './card-dust'
@@ -199,6 +200,13 @@ export function useEntries(target: MenuTarget, options: MenuOptions): Entry[] {
         void window.kettu.artifacts
           .openExternal(artifactRefOf(target.id), target.version)
           .catch(failed),
+    })
+    entries.push({
+      key: 'reveal',
+      label: t('menu.showIn', { name: fileManagerName() }),
+      icon: FolderOpenIcon,
+      run: () =>
+        void window.kettu.artifacts.reveal(artifactRefOf(target.id), target.version).catch(failed),
     })
   }
   if (onShare) {

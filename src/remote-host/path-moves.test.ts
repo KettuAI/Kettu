@@ -178,8 +178,10 @@ async function setup({ regions = false, sendsLate = 0 } = {}) {
     networkCheckMs: null,
   })
   cleanups.push(() => client.stop())
-  await expect.poll(() => relays.relay(MAIN).hosts.has(relayId)).toBe(true)
-  if (regions) await expect.poll(() => relays.relay(HK).hosts.has(relayId)).toBe(true)
+  await expect.poll(() => relays.relay(MAIN).hosts.has(relayId), { timeout: 15_000 }).toBe(true)
+  if (regions) {
+    await expect.poll(() => relays.relay(HK).hosts.has(relayId), { timeout: 15_000 }).toBe(true)
+  }
 
   const connection = () => client.list().find((known) => known.id === host.id)!.connection
   const via = (): string => {

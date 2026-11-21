@@ -441,6 +441,97 @@ describe('items from the Kettu Marketplace in a patch', () => {
   })
 })
 
+describe('edits to the servers and skills Kettu keeps', () => {
+  const server = (id: string, name = id, over: Record<string, unknown> = {}) => ({
+    id: `kettu:${id.padEnd(10, 'x')}`,
+    name,
+    title: name,
+    source: 'kettu',
+    version: '1.0.0',
+    spec: { type: 'stdio', command: 'npx', args: ['-y', `${name}@1.0.0`], env: [] },
+    agents: 'all',
+    on: true,
+    ...over,
+  })
+  const skill = (id: string, name = id) => ({
+    id: `kettu:${id.padEnd(10, 'x')}`,
+    name,
+    description: 'A skill.',
+    source: 'kettu',
+    origin: `@amigoer/${name}`,
+    version: '1.0.0',
+    agents: 'all',
+    on: true,
+  })
+  const names = (list: { name: string }[]) => list.map((item) => item.name)
+
+  it('adds each server to the list the host holds, not the one its sender read', async () => {
+    const store = await SettingsStore.load(dir)
+    store.update({ marketplace: { mcp: [server('first')] } })
+    // Two installs that began from a list holding only the first server.
+    store.update({ marketplace: { mcpEdit: { put: [server('second')] } } })
+    store.update({ marketplace: { mcpEdit: { put: [server('third')] } } })
+    expect(names(store.get().marketplace.mcp)).toEqual(['first', 'second', 'third'])
+  })
+
+  it('adds each skill to the list the host holds', async () => {
+    const store = await SettingsStore.load(dir)
+    store.update({ marketplace: { skillsEdit: { put: [skill('one')] } } })
+    store.update({ marketplace: { skillsEdit: { put: [skill('two')] } } })
+    expect(names(store.get().marketplace.skills)).toEqual(['one', 'two'])
+  })
+
+  it('replaces an entry in place by its id and removes by id', async () => {
+    const store = await SettingsStore.load(dir)
+    store.update({
+      marketplace: { mcp: [server('first'), server('second'), server('third')] },
+    })
+    store.update({
+      marketplace: { mcpEdit: { put: [server('second', 'second', { on: false })] } },
+    })
+    expect(store.get().marketplace.mcp.map((s) => [s.name, s.on])).toEqual([
+      ['first', true],
+      ['second', false],
+      ['third', true],
+    ])
+    store.update({ marketplace: { mcpEdit: { remove: [server('first').id, 'kettu:gone'] } } })
+    expect(names(store.get().marketplace.mcp)).toEqual(['second', 'third'])
+  })
+
+  it('refuses an edit that repeats another entry’s name and changes nothing', async () => {
+    const store = await SettingsStore.load(dir)
+    store.update({ marketplace: { mcp: [server('first', 'notes')] } })
+    expect(() =>
+      store.update({ marketplace: { mcpEdit: { put: [server('second', 'notes')] } } }),
+    ).toThrow(/repeats/)
+    expect(names(store.get().marketplace.mcp)).toEqual(['notes'])
+    store.update({ marketplace: { skillsEdit: { put: [skill('one', 'greeter')] } } })
+    expect(() =>
+      store.update({ marketplace: { skillsEdit: { put: [skill('two', 'greeter')] } } }),
+    ).toThrow(/repeats/)
+    expect(names(store.get().marketplace.skills)).toEqual(['greeter'])
+  })
+
+  it('still takes a whole list from a client that sends one', async () => {
+    const store = await SettingsStore.load(dir)
+    store.update({ marketplace: { mcp: [server('first'), server('second')] } })
+    store.update({ marketplace: { mcp: [server('third')] } })
+    expect(names(store.get().marketplace.mcp)).toEqual(['third'])
+  })
+
+  it('checks the entries and ids an edit carries', () => {
+    expect(() =>
+      validateSettingsPatch({ marketplace: { mcpEdit: { put: [{ ...server('a'), id: 'x' }] } } }),
+    ).toThrow()
+    expect(() =>
+      validateSettingsPatch({ marketplace: { mcpEdit: { put: [server('a'), server('a')] } } }),
+    ).toThrow(/repeats/)
+    expect(() => validateSettingsPatch({ marketplace: { mcpEdit: { remove: [3] } } })).toThrow()
+    expect(() => validateSettingsPatch({ marketplace: { mcpEdit: { drop: [] } } })).toThrow()
+    expect(() => validateSettingsPatch({ marketplace: { skillsEdit: 'all' } })).toThrow()
+  })
+})
+
 describe('the terminal font', () => {
   it('uses the theme’s code font until a face is named', async () => {
     const store = await SettingsStore.load(dir)
@@ -482,5 +573,65 @@ describe('the terminal font', () => {
     const { host, client } = splitSettingsPatch({ terminal: { fontFamily: 'Menlo' } })
     expect(host).toBeNull()
     expect(client).toEqual({ terminal: { fontFamily: 'Menlo' } })
+  })
+})
+
+describe('the fonts the user picks', () => {
+  it('keeps the theme’s faces until one is named', async () => {
+    const store = await SettingsStore.load(dir)
+    expect(store.get().appearance.fonts).toEqual({})
+  })
+
+  it('keeps stored faces and drops a set that could break out of a font stack on load', async () => {
+    const fonts = { ui: 'Segoe UI', prose: 'Microsoft YaHei', code: 'Maple Mono NF CN' }
+    await save({ version: 1, appearance: { fonts } })
+    expect((await SettingsStore.load(dir)).get().appearance.fonts).toEqual(fonts)
+    for (const bad of [
+      { code: 'A", evil' },
+      { ui: '' },
+      { prose: "A'; x" },
+      { code: 7 },
+      { heading: 'Inter' },
+      ['Inter'],
+      'Inter',
+      null,
+    ]) {
+      await save({ version: 1, appearance: { fonts: bad } })
+      expect((await SettingsStore.load(dir)).get().appearance.fonts).toEqual({})
+    }
+  })
+
+  it('takes a set of face names in a change and refuses the rest', () => {
+    expect(validateSettingsPatch({ appearance: { fonts: { code: 'Maple Mono NF CN' } } })).toEqual({
+      appearance: { fonts: { code: 'Maple Mono NF CN' } },
+    })
+    expect(validateSettingsPatch({ appearance: { fonts: {} } })).toEqual({
+      appearance: { fonts: {} },
+    })
+    for (const bad of [
+      { code: 'A, B' },
+      { ui: 'url(x)' },
+      { prose: null },
+      { mono: 'Menlo' },
+      null,
+      'Menlo',
+    ]) {
+      expect(() => validateSettingsPatch({ appearance: { fonts: bad } })).toThrow()
+    }
+  })
+
+  it('replaces the whole set in a change', () => {
+    const both = mergeSettings(DEFAULT_SETTINGS, {
+      appearance: { fonts: { ui: 'Segoe UI', code: 'Menlo' } },
+    })
+    expect(both.appearance.fonts).toEqual({ ui: 'Segoe UI', code: 'Menlo' })
+    const one = mergeSettings(both, { appearance: { fonts: { code: 'Menlo' } } })
+    expect(one.appearance.fonts).toEqual({ code: 'Menlo' })
+  })
+
+  it('stays with the window that draws them, never on the host', () => {
+    const { host, client } = splitSettingsPatch({ appearance: { fonts: { code: 'Menlo' } } })
+    expect(host).toBeNull()
+    expect(client).toEqual({ appearance: { fonts: { code: 'Menlo' } } })
   })
 })

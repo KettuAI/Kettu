@@ -147,6 +147,11 @@ export class IslandBridge {
     return this.phase === 'running'
   }
 
+  /** Whether it shows this in place of a notification: all but a workflow task's, while it runs. */
+  shows(message: HostAttention): boolean {
+    return this.showing() && !('taskId' in message)
+  }
+
   state(): IslandState {
     switch (this.phase) {
       case 'starting':
@@ -210,7 +215,7 @@ export class IslandBridge {
 
   /** What the host told main needs the user: the island pops it out unless a window is in front. */
   attention(message: HostAttention, hostKey = LOCAL): void {
-    if (this.phase !== 'running') return
+    if (this.phase !== 'running' || 'taskId' in message) return
     if (!this.deps.kindEnabled(message.kind) || this.deps.windowFocused()) return
     const { title, body } = attentionText(message)
     const row = message.kind === 'routine-paused' ? null : this.rowKeyOf(hostKey, message.sessionId)

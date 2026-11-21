@@ -2,6 +2,7 @@ import { memo, useMemo, useRef, useState, type ReactElement } from 'react'
 import {
   ArrowDown01Icon,
   ArrowRight01Icon,
+  BubbleChatIcon,
   MoreHorizontalIcon,
   PinIcon,
   PinOffIcon,
@@ -32,7 +33,7 @@ import {
   taskRowStatus,
 } from '@renderer/features/tasks/model'
 import { TaskCard } from '@renderer/features/tasks/task-card'
-import type { RowStatus } from './row-status'
+import { rowStatus, type RowStatus } from './row-status'
 import {
   CancelTaskDialog,
   DeleteTaskDialog,
@@ -45,7 +46,7 @@ import { useTaskSessions, useTaskView } from '@renderer/features/tasks/use-task'
 import { hostOfPath } from '@renderer/lib/host-paths'
 import { cn } from '@renderer/lib/utils'
 import { isAway, useOtherHost } from '@renderer/stores/hosts'
-import { useSessionsStore } from '@renderer/stores/sessions'
+import { useSessionsStore, type SessionNode } from '@renderer/stores/sessions'
 import { startedSteps, type StepRow } from '@renderer/stores/tasks'
 import { openSession, openTask, useViewStore } from '@renderer/stores/view'
 import { RenameHints } from './rename-hints'
@@ -59,21 +60,27 @@ import { INDENT_PAD, NESTED_STEP, ROW_PAD, TreeLine } from './session-row'
 import { PullRequestsBadge } from './pr-badge'
 import { useRenaming } from './use-renaming'
 
+/** Ring segments grow in this long after a task starts, as its row takes its session's place. */
+const FRESH_MS = 2_000
+
 /**
  * A task in its project, as a session's row: the caret, its progress ring in place of an agent's
  * mark, its title, the pull requests of its branch and the session row's one status slot over the
- * task and its steps. Its started steps hang under it as sub-sessions do, each with its agent's
- * mark; folded, it shows which step it is on where a session counts its sub-sessions. The task in
- * front is expanded and the others folded, until the user folds or unfolds one.
+ * task and its steps. The conversation it started from, `origin`, hangs first under it as Started
+ * here, its started steps after it as sub-sessions do, each with its agent's mark; folded, it shows
+ * which step it is on where a session counts its sub-sessions. The task in front is expanded and
+ * the others folded, until the user folds or unfolds one.
  */
 export const TaskRow = memo(function TaskRow({
   task,
+  origin,
   tabStopId,
   showHost = false,
   indent = false,
   flat = false,
 }: {
   task: TaskSummary
+  origin?: SessionNode
   tabStopId: string | null
   showHost?: boolean
   indent?: boolean
@@ -91,12 +98,16 @@ export const TaskRow = memo(function TaskRow({
   const frontSession = useViewStore((s) =>
     !s.settings.open && s.main.kind === 'session' ? s.main.sessionId : null,
   )
+  const originId = flat ? undefined : origin?.summary.id
   const inFront = useSessionsStore(
-    (s) => current || (frontSession !== null && s.byId[frontSession]?.task?.taskId === task.id),
+    (s) =>
+      current ||
+      (frontSession !== null &&
+        (frontSession === originId || s.byId[frontSession]?.task?.taskId === task.id)),
   )
   const userExpanded = useViewStore((s) => s.expandedParents[task.id])
   const steps = useMemo(() => startedSteps(task), [task])
-  const hasSteps = steps.length > 0 && !flat
+  const hasSteps = (steps.length > 0 || originId !== undefined) && !flat
   const expanded = hasSteps && (userExpanded ?? inFront)
   const setExpanded = (value: boolean) =>
     useViewStore.setState((s) => ({ expandedParents: { ...s.expandedParents, [task.id]: value } }))
@@ -117,7 +128,10 @@ export const TaskRow = memo(function TaskRow({
   const rename = useRenaming(() => row.current?.querySelector<HTMLElement>('[data-sidebar-row]'))
   const ownHints = useRenameHints(rename.renaming)
   const base = indent ? INDENT_PAD : ROW_PAD
-  const status = taskRowStatus(task, sessions, !expanded, view)
+  const status = withOrigin(
+    taskRowStatus(task, sessions, !expanded, view),
+    origin && !flat && !expanded ? rowStatus(origin, true) : null,
+  )
   const prs = useMemo(() => pullRequestsOf(sessions), [sessions])
   const folded = hasSteps && !expanded
   const progress =
@@ -141,8 +155,10 @@ export const TaskRow = memo(function TaskRow({
       <Glyph icon={expanded ? ArrowDown01Icon : ArrowRight01Icon} size={12} />
     </span>
   )
+  // The ring takes the agent's mark's place as the session becomes the task.
+  const [fresh] = useState(() => Date.now() - task.createdAt < FRESH_MS)
   const mark = (
-    <span className="ui-as-chat-row__logo relative">
+    <span className={cn('ui-as-chat-row__logo relative', fresh && 'kettu-ring-in')}>
       <TaskRing task={task} />
     </span>
   )
@@ -316,6 +332,17 @@ export const TaskRow = memo(function TaskRow({
       {expanded && (
         <ul className="flex flex-col">
           <AnimatePresence initial={false}>
+            {origin && originId && (
+              <OriginRowItem
+                key={originId}
+                node={origin}
+                tabStopId={tabStopId}
+                base={base}
+                indent={indent}
+                last={steps.length === 0}
+                away={away}
+              />
+            )}
             {steps.map((step, i) => (
               <StepRowItem
                 key={step.id}
@@ -342,6 +369,78 @@ export const TaskRow = memo(function TaskRow({
     </motion.li>
   )
 })
+
+/** A folded task's status with its conversation's, the loudest of each. */
+function withOrigin(own: RowStatus, origin: RowStatus | null): RowStatus {
+  if (!origin) return own
+  return {
+    waiting: own.waiting + origin.waiting,
+    failed: own.failed || origin.failed,
+    running: own.running || origin.running,
+    starting: own.starting || origin.starting,
+    unread: own.unread || origin.unread,
+  }
+}
+
+/**
+ * The conversation a task started from, under the task as Started here: a speech mark, the
+ * session's own status and its hover card; it opens the conversation, which goes on beside it.
+ */
+function OriginRowItem({
+  node,
+  tabStopId,
+  base,
+  indent,
+  last,
+  away,
+}: {
+  node: SessionNode
+  tabStopId: string | null
+  base: number
+  indent: boolean
+  last: boolean
+  away: boolean
+}) {
+  const { t } = useTranslation('tasks')
+  const { summary } = node
+  const current = useViewStore(
+    (s) => !s.settings.open && s.main.kind === 'session' && s.main.sessionId === summary.id,
+  )
+  const variants = useMemo(() => rowVariants(summary.id), [summary.id])
+  const status = rowStatus(node, true)
+  const button = (
+    <button
+      type="button"
+      className={cn('ui-as-side__item ui-as-chat-row__link', away && 'text-(--faint)!')}
+      data-sidebar-row=""
+      data-session-id={summary.id}
+      tabIndex={tabStopId === summary.id ? 0 : -1}
+      aria-current={current ? 'page' : undefined}
+      onClick={() => openSession(summary.id, summary.projectPath)}
+      style={{ paddingLeft: base + NESTED_STEP }}
+    >
+      <span className="ui-as-chat-row__logo relative text-(--faint)">
+        <Glyph icon={BubbleChatIcon} size={14} />
+      </span>
+      <span className="ui-as-side__text text-(--muted)">{t('row.startedHere')}</span>
+      {!away && <SessionIndicator status={status} expiring={null} className="kettu-row-end" />}
+    </button>
+  )
+  return (
+    <motion.li
+      className="flex flex-col"
+      variants={variants}
+      initial={false}
+      animate="shown"
+      exit="exit"
+    >
+      <div className="ui-as-chat-row" data-indent={indent || undefined}>
+        <TreeLine last={last} left={base + 7} />
+        <StepHover summary={summary} status={status} button={button} />
+      </div>
+    </motion.li>
+  )
+}
 
 /** A task's pull requests: those its steps' sessions opened or found on its branch, once each. */
 function pullRequestsOf(sessions: readonly (SessionSummary | undefined)[]): SessionPullRequest[] {

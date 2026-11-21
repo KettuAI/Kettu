@@ -431,20 +431,28 @@
   ) {
   color: revert-layer;
 }
-/* A row always keeps the room of its tools at its end, so they show without moving the title or
+/* A row with tools always keeps their room at its end, so they show without moving the title or
    the badges before them: two 24 px tools 2 px apart, 4 px from the edge and 2 px clear of what
    comes before, less the row's own 6 px padding and 8 px gap. The row's status and host sit in
    that room and are gone in the frame the tools show; they fade back in when the row is left.
-   Touch rows keep App Shell's layout. */
+   A row without tools keeps its status. Touch rows keep App Shell's layout. */
 @media (hover: hover) {
-  .ui-as.ui-as .ui-as-chat-row:is(:hover, :has(:focus-visible), [data-menu]) .ui-as-chat-row__link {
+  .ui-as.ui-as .ui-as-chat-row:is(:hover, :has(:focus-visible), [data-menu]) .ui-as-chat-row__link,
+  .ui-as.ui-as
+    .ui-as-chat-folder-row:is(:hover, :has(:focus-visible), [data-menu])
+    > .ui-as-chat-folder {
     padding-right: 6px;
   }
-  .ui-as-chat-row:has(> .ui-as-chat-row__tools) .kettu-row-end {
+  :is(.ui-as-chat-row, .ui-as-chat-folder-row):has(> .ui-as-chat-row__tools > *) .kettu-row-end {
     min-width: 42px;
   }
 }
-.ui-as-chat-row:is(:hover, :has(:focus-visible), [data-menu]) .kettu-row-end {
+:is(.ui-as-chat-row, .ui-as-chat-folder-row):has(> .ui-as-chat-row__tools > *):is(
+    :hover,
+    :has(:focus-visible),
+    [data-menu]
+  )
+  .kettu-row-end {
   opacity: 0;
   transition: none;
 }
@@ -958,7 +966,8 @@ li[data-row-exit='dust'] > * {
   flex: none;
   align-items: center;
   gap: 2px;
-  height: 28px;
+  /* A failure in the head wraps onto more lines, which the head grows to hold. */
+  min-height: 28px;
 }
 .kp-head--cornered {
   padding-left: var(--corner-inset);
@@ -1003,11 +1012,11 @@ li[data-row-exit='dust'] > * {
 .kp-head__error {
   min-width: 0;
   max-width: 40%;
-  overflow: hidden;
+  padding: 7px 0;
   font-size: 12px;
+  line-height: 14px;
   color: var(--danger);
-  white-space: nowrap;
-  text-overflow: ellipsis;
+  overflow-wrap: anywhere;
 }
 .kp-body {
   position: relative;
@@ -5669,18 +5678,26 @@ li[data-row-exit='dust'] > * {
   color: var(--composer-muted);
 }
 /* The session's tokens and the last request's: a name and total, then the same three columns
-   under each, so input, output and cache hit line up between the two. */
+   under each, so input, output and cache hit line up between the two. The blocks share the
+   columns, which are as wide as their widest figure, so a figure never wraps. */
 .kettu-ctx__usage {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(max-content, 1fr));
+  gap: 8px 12px;
   padding: 9px 14px 10px;
   border-top: 0.5px solid var(--composer-line);
+}
+.kettu-ctx__block {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: subgrid;
+  row-gap: 0;
 }
 /* A total too long to sit beside its name drops under it, still at the right edge. */
 .kettu-ctx__block-head {
   display: flex;
   flex-wrap: wrap;
+  grid-column: 1 / -1;
   align-items: baseline;
   justify-content: space-between;
   gap: 0 12px;
@@ -5696,20 +5713,17 @@ li[data-row-exit='dust'] > * {
 }
 .kettu-ctx__figures {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 0 12px;
+  grid-column: 1 / -1;
+  grid-template-columns: subgrid;
   margin: 1px 0 0;
   font-size: 12px;
   line-height: 18px;
   color: var(--composer-muted);
 }
-/* A figure too long for its column stacks under its name instead of being cut. */
 .kettu-ctx__figures > div {
   display: flex;
-  flex-wrap: wrap;
-  align-content: flex-start;
   gap: 0 5px;
-  min-width: 0;
+  white-space: nowrap;
 }
 .kettu-ctx__figures > div:last-child {
   justify-content: flex-end;
@@ -6722,6 +6736,11 @@ li[data-row-exit='dust'] > * {
   --ui-tkc-ring: 0 0 0 0.5px var(--border-default);
   --ui-tkc-focus: var(--focus-ring-color);
 }
+/* The code face in every theme, since the user picks it in Settings. */
+.ui-tcc.ui-tcc,
+.ui-tcc-group.ui-tcc-group {
+  --ui-tcc-mono: var(--font-mono);
+}
 [data-installed-theme] .ui-tcc,
 [data-installed-theme] .ui-tcc-group {
   --ui-tcc-card: var(--shell-card);
@@ -7077,4 +7096,20 @@ li[data-row-exit='dust'] > * {
 .ks-memory-text {
   font-size: 12.5px;
   color: inherit;
+}
+
+/* Sidebar folders and host groups being dragged into another order. */
+.kettu-side-sortable {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+}
+.kettu-side-sortable[data-dragging],
+.kettu-side-hosts > .ui-as-side__group[data-dragging] {
+  border-radius: var(--radius-code);
+  background: var(--bg-surface);
+  box-shadow: var(--elevation-float);
+}
+.ui-as-side__group + .kettu-side-hosts {
+  margin-top: 10px;
 }

@@ -80,28 +80,17 @@ export function kettuSkills(flags: GuideFlags): KettuSkill[] {
 }
 
 /**
- * The folder a skill's text is kept in, named for that text, so an agent that lists a folder once
- * finds a new one when the text changes.
+ * The folder a set of skills is kept in, named for their texts, so an agent that lists a folder
+ * once finds a new one when a text changes. It carries no skill's name: Codex lists each skill as
+ * `<root>/<name>/SKILL.md`, and a root that repeats the name was read one level short.
  */
-export function skillFolderName(skill: KettuSkill): string {
+export function skillSetName(skills: readonly KettuSkill[]): string {
   const hash = createHash('sha256')
-  hash.update(skill.text)
-  for (const file of skill.files) hash.update(`\0${file.name}\0${file.text}`)
-  return `${skill.name}-${hash.digest('hex').slice(0, 10)}`
-}
-
-/** Every text a skill can have, whatever is on, by the folder it is kept in. */
-export function allSkillFolders(): Map<string, KettuSkill> {
-  const folders = new Map<string, KettuSkill>()
-  for (const computer of [false, true]) {
-    for (const market of [false, true]) {
-      for (const suggest of [false, true]) {
-        const flags = { computer, market, suggest, memory: false }
-        for (const skill of kettuSkills(flags)) folders.set(skillFolderName(skill), skill)
-      }
-    }
+  for (const skill of skills) {
+    hash.update(`\0${skill.name}\0${skill.text}`)
+    for (const file of skill.files) hash.update(`\0${file.name}\0${file.text}`)
   }
-  return folders
+  return hash.digest('hex').slice(0, 12)
 }
 
 /** The topics read_kettu_guide answers while these features are on. */
@@ -129,7 +118,12 @@ export function guidePrompt(flags: GuideFlags, skills: boolean): string {
     ['show the user a page, report or document', ['artifacts']],
     ['hand work to another session or agent', ['sessions']],
     ...(flags.suggest
-      ? [['take on a requirement large enough for stages', ['workflows']] as [string, GuideTopic[]]]
+      ? [
+          [
+            'take on work the user wants carried through stages, even stages they spell out',
+            ['workflows'],
+          ] as [string, GuideTopic[]],
+        ]
       : []),
     flags.computer
       ? [
@@ -174,10 +168,10 @@ export function serviceInstructions(flags: GuideFlags): string {
       'reply. Kettu tells you when its turn ends, so never wait for it in a loop. Topic sessions.',
     'Workflows: ' +
       (flags.suggest
-        ? "for a requirement large enough for stages, suggest one of the user's workflows from " +
-          'list_workflows with suggest_workflow instead of doing it all here; '
+        ? 'for work that needs stages or spans platforms or modules, use list_workflows to find ' +
+          'a workflow in the library or the Kettu Marketplace and use suggest_workflow. '
         : '') +
-      "write one with create_workflow only when the user asks. A step's session follows its " +
+      "Use create_workflow when the user asks for a workflow to keep. A step's session follows its " +
       'first message and reports with report_step. Topic workflows.',
     `Plan: ${PLAN_TOOL} shows the progress of a task of two or more steps; its description has ` +
       'the rules.',

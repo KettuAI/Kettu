@@ -10,12 +10,14 @@ import type { Platform } from './platform'
 import {
   isFontFamilyName,
   MAX_FONT_FAMILY_CHARS,
+  type UserFontRole,
   NEW_SESSION_LISTS,
   ZOOM_LEVELS,
   type SettingsFile,
   type SettingsPatch,
 } from './settings'
 import type { AgentId, HarnessId } from './thread'
+import { WORKING_STEP_LIMITS } from './workflow'
 
 export const SETTINGS_SECTIONS = [
   'general',
@@ -153,6 +155,30 @@ function flag<S extends keyof SettingsPatch>(
     options: ON_OFF,
     get: (file) => read(file),
     patch: (value) => ({ [section]: { [key]: value === true } }) as SettingsPatch,
+  }
+}
+
+/** A face of the user's own for one kind of text; empty goes back to the theme's. */
+function userFont(role: UserFontRole): CatalogEntry {
+  return {
+    section: 'appearance',
+    row: `font-${role}`,
+    group: 'appearance.groups.fonts',
+    name: `appearance.fonts.${role}.name`,
+    description: `appearance.fonts.${role}.description`,
+    keywords: 'appearance.fonts.keywords',
+    part: 'desktop',
+    access: 'change',
+    kind: 'text',
+    chars: MAX_FONT_FAMILY_CHARS,
+    check: (value) => value === '' || isFontFamilyName(value),
+    get: (file) => file.appearance.fonts[role] ?? null,
+    patch: (value, file) => {
+      const fonts = { ...file.appearance.fonts }
+      if (value === '' || value === null) delete fonts[role]
+      else fonts[role] = String(value)
+      return { appearance: { fonts } }
+    },
   }
 }
 
@@ -400,6 +426,9 @@ const ENTRIES = {
       choices(['small', 'default', 'large'], (size) => `appearance.textSize.${size}`),
     ),
   },
+  'appearance.font-ui': userFont('ui'),
+  'appearance.font-prose': userFont('prose'),
+  'appearance.font-code': userFont('code'),
   'appearance.sidebar-hover': {
     section: 'appearance',
     row: 'sidebar-hover',
@@ -1018,6 +1047,22 @@ const ENTRIES = {
     keywords: 'agents.workflow.keywords',
     part: 'host',
     kind: 'info',
+  },
+  'agents.workflow-steps': {
+    section: 'agents',
+    row: 'workflow-steps',
+    group: 'agents.workflow.group',
+    name: 'agents.workflow.steps.name',
+    description: 'agents.workflow.steps.description',
+    keywords: 'agents.workflow.keywords',
+    part: 'host',
+    access: 'change',
+    ...pick(
+      'workflow',
+      'maxWorkingSteps',
+      (file) => file.workflow.maxWorkingSteps,
+      WORKING_STEP_LIMITS.map((n) => ({ value: n, label: { text: String(n) } })),
+    ),
   },
 
   // ---- Harnesses

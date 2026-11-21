@@ -2,7 +2,15 @@
 // folder and a name, with its account, sign-in, API key, usage and configuration. Installs and
 // updates are Settings > Harnesses'.
 
-import { useEffect, useId, useState, type FormEvent, type ReactNode } from 'react'
+import {
+  useEffect,
+  useId,
+  useRef,
+  useState,
+  type FormEvent,
+  type ReactNode,
+  type RefObject,
+} from 'react'
 import {
   Add01Icon,
   ComputerTerminal01Icon,
@@ -97,6 +105,7 @@ import {
   SignInNotice,
   SpendGroup,
   UsageGroup,
+  WithCode,
 } from './agent-parts'
 import { AgentProviders, ProviderBalances } from './agent-providers'
 import {
@@ -315,6 +324,7 @@ export function AgentsGroupActions() {
 function AddAgentButton({ primary = false }: { primary?: boolean }) {
   const { t } = useTranslation('settings')
   const [open, setOpen] = useState(false)
+  const trigger = useRef<HTMLButtonElement>(null)
   const addable = useAddable()
   const add = (): void => {
     if (addable.length === 0) openHarnessSettings(null)
@@ -323,13 +333,14 @@ function AddAgentButton({ primary = false }: { primary?: boolean }) {
   return (
     <>
       <SetButton
+        ref={trigger}
         variant={primary ? 'primary' : 'ghost'}
         icon={<Icon icon={Add01Icon} size={14} />}
         onClick={add}
       >
         {t('agents.add.button')}
       </SetButton>
-      <AddAgentDialog open={open} onOpenChange={setOpen} harnesses={addable} />
+      <AddAgentDialog open={open} onOpenChange={setOpen} harnesses={addable} finalFocus={trigger} />
     </>
   )
 }
@@ -371,10 +382,13 @@ function AddAgentDialog({
   open,
   onOpenChange,
   harnesses,
+  finalFocus,
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
   harnesses: AgentStatus[]
+  /** Takes focus on close: the dialog's autofocused field is taken for the opener otherwise. */
+  finalFocus: RefObject<HTMLElement | null>
 }) {
   const { api, request, useAgentsStore, useSettingsStore } = useHostScope()
   const { t } = useTranslation(['settings', 'common'])
@@ -476,7 +490,7 @@ function AddAgentDialog({
         if (!next) reset()
       }}
     >
-      <SettingsDialogContent className="sm:max-w-135">
+      <SettingsDialogContent className="sm:max-w-135" finalFocus={finalFocus}>
         <form className="contents" onSubmit={(event) => void submit(event)}>
           <SettingsDialogHeader title={t('agents.add.title')}>
             {t('agents.add.description')}
@@ -940,7 +954,7 @@ function AgentPageBody({ status }: { status: AgentStatus }) {
             data-wrap=""
             data-selectable=""
           >
-            {r.message}{' '}
+            <WithCode text={r.message} />{' '}
             {r.kind === 'missing' && (
               <button
                 type="button"

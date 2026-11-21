@@ -1,55 +1,45 @@
 # Roadmap
 
-What Kettu has and what comes next, release by release. Releases have no fixed dates: a core feature ships as soon as it is done, and smaller fixes with the next release, so the order here is firmer than the timing. Each item links to its issue, where you can follow it or tell us what you need; the [milestones](https://github.com/KettuAI/Kettu/milestones) hold the full lists, fixes included. [简体中文](./ROADMAP.zh-CN.md)
+What Kettu has and what comes next. Releases have no fixed dates: a feature ships as soon as it is done, and smaller fixes with the next release, so the order here is firmer than the timing. Each item links to its issue, where you can follow it or tell us what you need; the [release notes](https://github.com/KettuAI/Kettu/releases) list everything that shipped, fixes included. [简体中文](./ROADMAP.zh-CN.md)
 
 ## Available now
 
-In [v0.0.30](https://github.com/KettuAI/Kettu/releases/tag/v0.0.30):
+In [v0.1.13](https://github.com/KettuAI/Kettu/releases/tag/v0.1.13):
 
-- Claude Code, Codex, OpenCode, Pi and more than 40 other agents side by side, with Claude Code and Codex through their own interfaces, each agent turned off without losing its sessions, and a session handed to another agent between turns
-- Parallel sessions, subagents and forks from any reply, split into up to nine panes, with the sidebar showing which session is working, waiting for you or done
-- Permission cards answered with one key, an agent's questions answered in one card, its plan in the top bar, a queue to steer a running turn, replies to a selected passage, and notifications
+- 48 agents, Claude Code, Codex, OpenCode, Pi and more, with your own installs, accounts and settings, each turned off without losing its sessions, and a session handed to another agent between turns
+- Parallel sessions, subagents and forks from any reply, Git worktrees Kettu creates and cleans up, and up to nine panes, with the sidebar showing which session is working, waiting for you or done
+- Permission requests answered with one key, an agent's questions in one card, its plan in the top bar, a queue to steer a running turn, replies to a selected passage, and notifications
+- Hand-offs from one agent to another, Workflows that run a task through steps with a session for each, and an Overview of every session and task
 - Diffs, Git status and pull requests, GitHub references in replies, the Files pane in tabs, a terminal for each session, and a built-in browser that agents can drive
-- Artifacts: pages, documents, slides and canvases with their versions; comments the agent reads, a canvas edited directly, presenting, exports to Word, Markdown, PowerPoint and PDF, and pages published to kettu.page, private, behind an access code or public
-- Mobile devices: iOS simulators, Android emulators and real phones beside the session, for you and the agent
-- Computer use: agents use the apps on your computer once you turn it on
-- Routines, token usage and cost with each account's plan limits, and one command palette for sessions, artifacts, routines, projects, settings and actions
-- Your sessions on your other devices over your own network: pairing, direct connections, another computer's Kettu, and development machines added over SSH with the daemon set up for you
-- The official cloud with a Kettu account: the relay that reaches your computers from any network, and the web client at app.kettu.sh
-- Problem reports sent from the app, light and dark modes, themes from a file or the online catalog, and English and Simplified Chinese
-- Builds for macOS on Apple silicon and Intel, signed and notarized by Apple, and for Windows and Linux on x64 and Arm, with updates that install when you choose
+- Artifacts: pages, documents, slides and canvases with their versions, comments the agent reads, exports to Word and PowerPoint, and pages published to kettu.page, private, behind an access code or public
+- Mobile devices beside the session, for you and the agent, and computer use once you turn it on
+- Routines, usage and cost with each account's plan limits, the Marketplace for plugins, skills, MCP servers and workflows, and one command palette for everything
+- Your sessions everywhere: any browser at app.kettu.sh through the Kettu relay, your own network without an account, another computer's Kettu, and development machines added over SSH, all end-to-end encrypted
+- The iPhone and iPad app, in [public beta on TestFlight](https://testflight.apple.com/join/zsbFyAPQ)
+- Light and dark modes, themes, English and Simplified Chinese, and problem reports sent from the app
+- Builds for macOS on Apple silicon and Intel, signed and notarized by Apple, and for Windows and Linux on x64 and Arm, plus a daemon and a Docker image for servers
 
-## v0.1.0: the desktop app complete
+## Next
 
-- [ ] Every part of the desktop app finished and checked against its design
-- [ ] Windows builds signed by Microsoft, and one-click macOS updates checked from one release to the next ([#68](https://github.com/KettuAI/Kettu/issues/68))
-- [ ] Take a session back to before any message, with the agent's file changes after it undone ([#615](https://github.com/KettuAI/Kettu/issues/615))
-- [ ] Each session's MCP servers with their status ([#617](https://github.com/KettuAI/Kettu/issues/617))
-- [ ] Parallel sessions in their own Git worktrees ([#618](https://github.com/KettuAI/Kettu/issues/618)), and the changes of a session or a turn reviewed in one place ([#619](https://github.com/KettuAI/Kettu/issues/619))
-- [ ] A session's pull request watched, with its agent woken when checks fail, conflicts appear or a review comes in ([#621](https://github.com/KettuAI/Kettu/issues/621))
+- [ ] What every session is doing, shown in the MacBook's notch and answered there ([#2053](https://github.com/KettuAI/Kettu/issues/2053), [#2059](https://github.com/KettuAI/Kettu/issues/2059))
+- [ ] Antigravity's teamwork sub-agents under their session, and its questions in the question card ([#1695](https://github.com/KettuAI/Kettu/issues/1695), [#1696](https://github.com/KettuAI/Kettu/issues/1696))
+- [ ] More of a computer's state on your other devices: whether its cloud and computer use are on, and its diagnostics ([#1584](https://github.com/KettuAI/Kettu/issues/1584), [#1596](https://github.com/KettuAI/Kettu/issues/1596), [#1597](https://github.com/KettuAI/Kettu/issues/1597))
 
-## v0.2.0: your sessions on your other devices, over your own network
+## Being considered
 
-Available now, apart from:
+Asked for and being weighed. A thumbs-up on the issue helps:
 
-- [ ] Files read-only in the web client on a phone, where edits are left to the agent ([#749](https://github.com/KettuAI/Kettu/issues/749))
-
-## v0.3.0: the official cloud
-
-The relay, the web client at app.kettu.sh and the Kettu account are available now. Still to come:
-
-- [ ] Notifications on your other devices when a session needs you ([#388](https://github.com/KettuAI/Kettu/issues/388))
-- [ ] The web client laid out for a phone's width, which Android phones use until there is an app ([#712](https://github.com/KettuAI/Kettu/issues/712))
-
-## v0.4.0: the iOS app
-
-- [ ] A native app for iPhone and iPad ([#383](https://github.com/KettuAI/Kettu/issues/383)): your sessions, permission requests answered from the lock screen and notifications, a share extension and a usage widget
+- [ ] Side-by-side diffs ([#1916](https://github.com/KettuAI/Kettu/issues/1916)), and undoing the file changes of one turn ([#1789](https://github.com/KettuAI/Kettu/issues/1789))
+- [ ] Each turn's cost and tokens under its reply ([#1918](https://github.com/KettuAI/Kettu/issues/1918))
+- [ ] Handing a task to another agent straight from the composer ([#2058](https://github.com/KettuAI/Kettu/issues/2058))
+- [ ] Marking up a page in the built-in browser for the agent ([#1812](https://github.com/KettuAI/Kettu/issues/1812))
+- [ ] Exporting a conversation to a file ([#1836](https://github.com/KettuAI/Kettu/issues/1836)), uploading files into a project ([#1838](https://github.com/KettuAI/Kettu/issues/1838)) and previewing PDF and Word files ([#1839](https://github.com/KettuAI/Kettu/issues/1839))
+- [ ] Your own font, weight and size for the interface, replies and code ([#1841](https://github.com/KettuAI/Kettu/issues/1841))
 
 ## Later
 
-- [ ] A native Android app
-- [ ] Search across all sessions by what was said in them ([#622](https://github.com/KettuAI/Kettu/issues/622))
-- [ ] Word, PowerPoint and Excel files agents create shown as artifacts ([#365](https://github.com/KettuAI/Kettu/issues/365)), artifacts built from a project's design system ([#370](https://github.com/KettuAI/Kettu/issues/370)), and exports to PNG ([#367](https://github.com/KettuAI/Kettu/issues/367))
-- [ ] Skills and plugins managed in Settings ([#488](https://github.com/KettuAI/Kettu/issues/488), [#489](https://github.com/KettuAI/Kettu/issues/489)), and a session's background tasks ([#495](https://github.com/KettuAI/Kettu/issues/495))
+- [ ] A native Android app, after the iPhone and iPad app
+- [ ] Devices connecting to your computers directly through NAT traversal ([#1527](https://github.com/KettuAI/Kettu/issues/1527))
+- [ ] More agents on their own interfaces instead of ACP: GitHub Copilot, Cursor, OMP, Muse Code and Amp ([#2021](https://github.com/KettuAI/Kettu/issues/2021)), then Kilo Code, Qoder and Factory Droid ([#2022](https://github.com/KettuAI/Kettu/issues/2022))
 
 Missing something? [Open an issue](https://github.com/KettuAI/Kettu/issues/new/choose) and tell us what you need.

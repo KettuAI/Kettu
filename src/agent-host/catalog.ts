@@ -139,6 +139,8 @@ export interface AgentDefinition {
   preferred?: PreferredProtocol
   launch: LaunchKind
   requiresNode?: string
+  /** The oldest uv that resolves a uvx agent's dependencies, as a version. */
+  requiresUv?: string
   /** Variables every launch adds. */
   env?: Record<string, string>
   /** Variables the launch of an added agent adds, which keep it apart from the default agent. */
@@ -970,6 +972,21 @@ export async function detectAgent(def: AgentDefinition, ctx: DetectContext): Pro
       }
       if (!choice)
         return { state: 'not-installed', detail: t('detect.noVersion', { agent: def.name }) }
+      // An older uv fails on the first run with its resolver's words, so it is said here. A uv
+      // that will not say its version is left to start.
+      if (def.requiresUv && ctx.probeCli) {
+        const asked = await ctx.probeCli(program, ctx.env)
+        if ('version' in asked && compareVersions(asked.version, def.requiresUv) < 0) {
+          return {
+            state: 'not-installed',
+            detail: t('detect.uvOutdated', {
+              agent: def.name,
+              required: def.requiresUv,
+              installed: asked.version,
+            }),
+          }
+        }
+      }
       // uv keeps what it fetched, so the version recorded runs, else the one that ran before;
       // with neither, the wanted one, which uvx fetches as it starts.
       const fetched = await (ctx.uvxVersion ?? ((id) => readUvxVersion(ctx.adaptersDir, id)))(

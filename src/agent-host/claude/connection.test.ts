@@ -11,6 +11,7 @@ import {
   type SessionView,
   type ThreadEntry,
   type ThreadState,
+  type ToolEntry,
 } from '@shared/thread'
 import type { LaunchSpec } from '../catalog'
 import { CLAUDE_CODE } from '../catalog'
@@ -25,6 +26,7 @@ import {
   type ProjectMcpGate,
 } from '../connection'
 import type { HostedContext, HostedSpawnOptions } from '../driver'
+import { planMarkdown } from '../plan-revision'
 import {
   newTurnScope,
   type MapperContext,
@@ -2450,6 +2452,31 @@ describe('permissions', () => {
     })
     const config = await s.connection.setConfigOption(sessionId, 'effort', 'default')
     expect(config.find((option) => option.id === 'mode')?.value).toBe('plan')
+  })
+
+  it('keeps a plan sent back as its first Markdown, for the next plan to compare with', async () => {
+    const plan = '# Plan\n\n1. Edit'
+    s.sdk.script = (query) => {
+      query.running()
+      query.emit(
+        assistant(query, 'msg_1', [
+          { type: 'tool_use', id: 'toolu_p1', name: 'ExitPlanMode', input: { plan } },
+        ]),
+      )
+      query.emit(
+        toolResult(
+          query,
+          'toolu_p1',
+          'The user wants you to keep planning and revise the plan. Their note: Keep the old API',
+          true,
+        ),
+      )
+      query.finish()
+    }
+    await s.connection.prompt(sessionId, [{ type: 'text', text: 'go' }])
+    const entry = target.entries().find((e) => e.id === 't:toolu_p1')
+    expect(entry).toMatchObject({ kind: 'tool', status: 'failed' })
+    expect(planMarkdown(entry as ToolEntry)).toBe(plan)
   })
 
   function elicit(request: Record<string, unknown>) {

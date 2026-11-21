@@ -9,21 +9,49 @@ const MAX_WAIT_MS = 120_000
 
 type Step = { wait: number } | { name: string; args: Record<string, unknown> }
 
+/**
+ * Splits at ` ; ` outside JSON strings. A line break or tab typed inside a string is turned into
+ * its escape, so a string can be written across lines and keeps them.
+ */
+function calls(text: string): string[] {
+  const out: string[] = []
+  const escapes: Record<string, string> = { '\n': '\\n', '\r': '\\r', '\t': '\\t' }
+  let part = ''
+  let inString = false
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i]!
+    if (inString) {
+      if (c === '\\') part += c + (text[++i] ?? '')
+      else {
+        if (c === '"') inString = false
+        part += escapes[c] ?? c
+      }
+    } else if (c === ';' && /\s/.test(text[i - 1] ?? '') && /\s/.test(text[i + 1] ?? '')) {
+      out.push(part.trim())
+      part = ''
+    } else {
+      if (c === '"') inString = true
+      part += c
+    }
+  }
+  out.push(part.trim())
+  return out
+}
+
 /** The steps of `<tool> [arguments] ; wait <ms> ; ...`, or why they cannot be read. */
 export function steps(text: string, first = 'computer_list_apps'): Step[] | string {
-  const parts = text.trim() ? text.split(/\s+;\s+/) : [first]
   const out: Step[] = []
-  for (const part of parts) {
-    const [name = first, ...rest] = part.trim().split(/\s+/)
+  for (const part of text.trim() ? calls(text.trim()) : [first]) {
+    const [, name = first, rest = ''] = /^(\S*)\s*([\s\S]*)$/.exec(part) ?? []
     if (name === 'wait') {
-      const ms = Number(rest[0])
+      const ms = rest ? Number(rest.split(/\s+/)[0]) : NaN
       if (!Number.isFinite(ms) || ms < 0) return 'A wait takes milliseconds, such as wait 5000.'
       out.push({ wait: Math.min(ms, MAX_WAIT_MS) })
       continue
     }
     try {
-      const args = rest.length > 0 ? (JSON.parse(rest.join(' ')) as Record<string, unknown>) : {}
-      out.push({ name, args })
+      const args = rest ? (JSON.parse(rest) as Record<string, unknown>) : {}
+      out.push({ name: name || first, args })
     } catch {
       return 'The arguments must be JSON, such as {"pid": 123}.'
     }

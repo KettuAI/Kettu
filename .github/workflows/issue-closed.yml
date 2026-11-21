@@ -1,6 +1,6 @@
 name: Issue closed
 
-# A closed issue keeps no state: label, whether a merged pull request's Closes or a person closed
+# A closed issue keeps no waiting label, whether a merged pull request's Closes or a person closed
 # it, as completed or not planned. Run by hand, it clears the labels from every closed issue.
 on:
   issues:
@@ -12,7 +12,7 @@ permissions:
 
 jobs:
   clear:
-    name: Clear the state labels
+    name: Clear the waiting labels
     runs-on: ubuntu-24.04
     env:
       GH_TOKEN: ${{ github.token }}
@@ -30,19 +30,17 @@ jobs:
           NUMBER: ${{ github.event.issue.number }}
         run: |
           labels="$(gh issue view "$NUMBER" --json labels \
-            --jq '[.labels[].name | select(startswith("state:"))] | join(",")')"
+            --jq '[.labels[].name | select(IN("needs-info", "needs-decision", "blocked"))] | join(",")')"
           if [ -n "$labels" ]; then
             gh issue edit "$NUMBER" --remove-label "$labels"
           fi
       - name: From every closed issue, a label at a time
         if: github.event_name == 'workflow_dispatch'
         run: |
-          gh label list --search 'state:' --limit 100 --json name \
-            --jq '.[].name | select(startswith("state:"))' |
-            while read -r label; do
-              gh issue list --state closed --label "$label" --limit 1000 --json number \
-                --jq '.[].number' |
-                while read -r number; do
-                  gh issue edit "$number" --remove-label "$label" < /dev/null
-                done
-            done
+          for label in needs-info needs-decision blocked; do
+            gh issue list --state closed --label "$label" --limit 1000 --json number \
+              --jq '.[].number' |
+              while read -r number; do
+                gh issue edit "$number" --remove-label "$label" < /dev/null
+              done
+          done
