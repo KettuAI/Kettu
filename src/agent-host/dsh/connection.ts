@@ -6,7 +6,7 @@
 
 import type { ChildProcess } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { mkdtemp, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import type { ConfigOption, QuestionAnswer, StopReason, TokenTotals } from '@shared/thread'
@@ -81,6 +81,29 @@ const LISTING_WAIT_MS = 20_000
  * dsh once more, so an agent that starts again shows the last list while it reads the next.
  */
 const LISTINGS = new Map<string, { listed: ListedModel[]; home: string; due: number }>()
+/** The temporary folder of each listing process, and how old a leftover one is removed. */
+const LISTING_PREFIX = 'kettu-dsh-models-'
+const STALE_LISTING_MS = 24 * 60 * 60_000
+let staleRemoved = false
+
+/**
+ * Removes listing folders a day old or older, left by a host that quit while dsh still ran; once
+ * per run, since a listing removes its own.
+ */
+async function removeStaleListings(): Promise<void> {
+  if (staleRemoved) return
+  staleRemoved = true
+  const tmp = os.tmpdir()
+  const names = await readdir(tmp).catch(() => [])
+  const now = Date.now()
+  for (const name of names) {
+    if (!name.startsWith(LISTING_PREFIX)) continue
+    const folder = path.join(tmp, name)
+    const info = await stat(folder).catch(() => null)
+    if (!info?.isDirectory() || now - info.mtimeMs < STALE_LISTING_MS) continue
+    await rm(folder, { recursive: true, force: true }).catch(() => {})
+  }
+}
 const NOT_FOUND = /not found/i
 const AUTH_CODES = new Set([
   'AUTH',
@@ -465,24 +488,30 @@ export class DshConnection implements AgentConnection {
    */
   private async list(folder: string, home: string): Promise<void> {
     const { spec, env } = this.context
-    const own = await mkdtemp(path.join(os.tmpdir(), 'kettu-dsh-models-'))
+    void removeStaleListings()
+    const own = await mkdtemp(path.join(os.tmpdir(), LISTING_PREFIX))
     let listed: ListedModel[] | null
+    let exited: Promise<void> = Promise.resolve()
     try {
       const file = path.join(own, 'kettu.patch.yml')
       await writeFile(file, `${this.routes.yaml}${listingRows(own)}`, { mode: 0o600 })
-      listed = await readListing({
+      const listing = await readListing({
         cwd: own,
         signal: this.stopListing.signal,
-        spawn: () =>
+        spawn: (stop) =>
           this.context.spawn({
             command: spec.command,
             args: [...spec.args, '--profile', 'acp', '--patch', file],
             cwd: own,
             env: { ...env, ...spec.env },
+            signal: stop,
           }),
       }).catch(() => null)
+      listed = listing?.models ?? null
+      exited = listing?.exited ?? exited
     } finally {
-      await rm(own, { recursive: true, force: true }).catch(() => {})
+      // dsh still writes to the folder as it exits, so it goes once dsh has, in the background.
+      void exited.then(() => rm(own, { recursive: true, force: true })).catch(() => {})
     }
     this.settled = true
     this.listedDue = Date.now() + (listed ? LISTING_MAX_AGE_MS : LISTING_RETRY_MS)

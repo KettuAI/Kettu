@@ -404,6 +404,8 @@ export async function updatePlan(
     npmPrefix?: string | null
     /** pnpm's global dir or yarn's global folder the program was installed under. */
     globalDir?: string | null
+    /** The version a package manager installs; its newest when not given. */
+    version?: string
   },
 ): Promise<UpdatePlan | null> {
   const { platform } = ctx
@@ -457,7 +459,7 @@ export async function updatePlan(
         '-g',
         ...(ctx.npmPrefix ? ['--prefix', ctx.npmPrefix] : []),
         ...(installs.ignoreScripts ? ['--ignore-scripts'] : []),
-        `${installs.npm}@latest`,
+        `${installs.npm}@${ctx.version ?? 'latest'}`,
       ]
       return {
         command: formatCommand({ command: 'npm', args }, platform),
@@ -472,7 +474,7 @@ export async function updatePlan(
         ...GLOBAL_ADD[method],
         ...(ctx.globalDir && method !== 'bun' ? [DIR_FLAG[method], ctx.globalDir] : []),
         ...(installs.ignoreScripts ? ['--ignore-scripts'] : []),
-        `${installs.npm}@latest`,
+        `${installs.npm}@${ctx.version ?? 'latest'}`,
       ]
       const tool = await findCommand(method, ctx)
       return {

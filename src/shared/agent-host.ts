@@ -689,7 +689,7 @@ export interface EnvironmentInfo {
   shell: string | null
   resolvedAt: number | null
   durationMs: number | null
-  warning: string | null // why it fell back, or a note such as the Windows restart hint
+  warning: string | null // why it fell back, or a note such as the Windows PATH hint
   nodeVersion: string | null
   npmPath: string | null
 }

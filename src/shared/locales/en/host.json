@@ -337,7 +337,8 @@
     "uninstalled": "{{agent}} was uninstalled. Install it to use it again."
   },
   "environment": {
-    "inherited": "Changes to PATH made after Kettu started take effect after a restart.",
+    "inherited": "Reload environment to pick up changes to PATH made after Kettu started.",
+    "registryFailed": "Could not read PATH from Windows ({{error}}). Agents use the environment Kettu started with.",
     "fallback": "Could not read the environment of {{shell}} ({{error}}). Agents use the environment Kettu started with."
   },
   "git": {
