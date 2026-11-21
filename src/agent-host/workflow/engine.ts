@@ -87,6 +87,7 @@ export interface TaskWorktrees {
   create(
     projectPath: string,
     request: { base: string; branch?: string; text: string },
+    first?: Pick<TaskStart, 'agentId' | 'options'>,
   ): Promise<WorktreeRecord>
   /** Removes a worktree that is done with, never one with changes not committed. */
   remove(projectPath: string, record: WorktreeRecord, branch: 'keep' | 'delete'): Promise<void>
@@ -123,6 +124,8 @@ export interface TaskEngineDeps {
   }
   library: WorkflowLibrary
   sessions: TaskSessions
+  /** Writes a suggested task title, with the source session as its fallback. */
+  titleTask(sessionId: string, text: string): Promise<string | null>
   /** Null on a host that makes no worktrees: every step works in the project folder. */
   worktrees: TaskWorktrees | null
   git: TaskGit
@@ -347,20 +350,31 @@ export class TaskEngine implements TaskSessionHooks {
         )
       }
     }
-    const title = (params.title?.trim() || firstLine(params.text)).slice(0, 120)
-    let worktree: WorktreeRecord | null = null
-    if (this.deps.worktrees && (await this.deps.git.isRepo(projectPath))) {
-      worktree = await this.deps.worktrees.create(projectPath, {
-        base: params.worktree?.base ?? 'HEAD',
-        ...(params.worktree?.branch ? { branch: params.worktree.branch } : {}),
-        text: title,
-      })
-    }
+    const explicitTitle = params.title?.trim()
+    const worktrees = this.deps.worktrees
+    const hasWorktree = worktrees && (await this.deps.git.isRepo(projectPath))
+    const [title, worktree] = await Promise.all([
+      explicitTitle ||
+        (from
+          ? this.deps.titleTask(from.sessionId, params.text).then((title) => title ?? resolved.name)
+          : firstLine(params.text)),
+      hasWorktree
+        ? worktrees.create(
+            projectPath,
+            {
+              base: params.worktree?.base ?? 'HEAD',
+              ...(params.worktree?.branch ? { branch: params.worktree.branch } : {}),
+              text: params.text,
+            },
+            { agentId: params.agentId, options: params.options },
+          )
+        : null,
+    ])
     const now = this.now()
     const task: TaskRecord = {
       id: `t-${this.random().padEnd(12, '0').slice(0, 12)}`,
       projectPath,
-      title,
+      title: title.slice(0, 120),
       text: params.text,
       workflowId: resolved.id,
       workflowName: resolved.name,

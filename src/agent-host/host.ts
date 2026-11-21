@@ -1295,8 +1295,12 @@ export class AgentHost {
         delete: (sessionId) => this.sessions.delete(sessionId),
         has: (sessionId) => this.sessions.has(sessionId),
       },
+      titleTask: (sessionId, text) => this.sessions.titleTask(sessionId, text),
       worktrees: {
-        create: (projectPath, request) => this.worktrees.create(projectPath, request),
+        create: (projectPath, request, first) =>
+          first
+            ? this.sessions.createTaskWorktree(projectPath, request, first)
+            : this.worktrees.create(projectPath, request),
         remove: async (projectPath, record, branch) => {
           const expected = await this.worktrees.inspect(projectPath, record)
           // Nothing the user was not shown is thrown away: a dirty worktree stays.

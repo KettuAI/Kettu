@@ -192,6 +192,8 @@ async function harness(
     workflows?: Record<string, string>
     agents?: WorkflowAgent[]
     stored?: TaskRecord[]
+    titleTask?: TaskEngineDeps['titleTask']
+    createWorktree?: NonNullable<TaskEngineDeps['worktrees']>['create']
     merge?: (branch: string) => MergeResult
     /** The MCP servers and Skills the host knows, which a workflow may name. */
     known?: { mcp: string[]; skills: string[] }
@@ -291,14 +293,17 @@ async function harness(
       has: (sessionId) => sessions.has(sessionId),
     },
     worktrees: {
-      create: async (_project, request) => ({
-        path: `/wt/${request.branch ?? 'task'}`,
-        branch: request.branch ?? 'kettu/task',
-        base: request.base,
-        baseOid: 'c0ffee',
-      }),
+      create:
+        options.createWorktree ??
+        (async (_project, request) => ({
+          path: `/wt/${request.branch ?? 'task'}`,
+          branch: request.branch ?? 'kettu/task',
+          base: request.base,
+          baseOid: 'c0ffee',
+        })),
       remove: async () => {},
     },
+    titleTask: options.titleTask ?? (async () => null),
     git,
     documents: {
       written: async (artifactId) =>
@@ -428,6 +433,43 @@ describe('the task engine', () => {
       'not_reached',
       'not_reached',
     ])
+  })
+
+  it('stores the written title and branch for an untitled task from a session', async () => {
+    const h = await harness({
+      workflows: { reviewed: REVIEWED },
+      titleTask: async (sessionId, text) => {
+        expect(sessionId).toBe('source-session')
+        expect(text).toBe('Add an export button')
+        return 'Export button'
+      },
+      createWorktree: async (project, request, first) => {
+        expect(project).toBe('/repo')
+        expect(request.text).toBe('Add an export button')
+        expect(first).toEqual({ agentId: 'claude-code', options: { model: 'opus' } })
+        return {
+          path: '/wt/temporary',
+          branch: 'kettu/add-export',
+          base: 'HEAD',
+          baseOid: 'c0ffee',
+        }
+      },
+    })
+    const task = await h.start('reviewed', undefined, { sessionId: 'source-session' })
+
+    expect(h.store.get(task.id)).toMatchObject({
+      title: 'Export button',
+      text: 'Add an export button',
+      lanes: [{ id: 'main', worktree: { path: '/wt/temporary', branch: 'kettu/add-export' } }],
+    })
+    expect(h.created[0]?.prompt).toContain('on the branch `kettu/add-export`')
+  })
+
+  it('uses the workflow name when a suggested task has no title to use', async () => {
+    const h = await harness({ workflows: { reviewed: REVIEWED } })
+    const task = await h.start('reviewed', undefined, { sessionId: 'source-session' })
+
+    expect(h.store.get(task.id)?.title).toBe('Reviewed')
   })
 
   it('refuses a report that is not complete, and says what is missing', async () => {
@@ -1001,7 +1043,7 @@ steps:
     expect(view).toMatchObject({ status: 'done', from: { sessionId: 'chat' } })
     expect(deliveryOf(view, null, 5_000)).toEqual({
       taskId: task.id,
-      title: 'Add an export button',
+      title: 'Ship',
       status: 'done',
       steps: 2,
       durationMs: 0,
