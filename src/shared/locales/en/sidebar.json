@@ -149,6 +149,7 @@
     "rename": "Rename…",
     "renameTitle": "Rename session",
     "newSubSession": "New sub-session",
+    "subagents": "Sub-agents",
     "delete": "Delete",
     "deleteMenu": "Delete…",
     "deleteTitle": "Delete “{{title}}”?",

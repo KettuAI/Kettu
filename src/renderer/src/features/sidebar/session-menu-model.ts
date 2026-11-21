@@ -13,6 +13,7 @@ export type SessionMenuItem =
   | 'fork'
   | 'forkSame'
   | 'newSubSession'
+  | 'subagents'
   | 'openInSplit'
   | 'pullRequest'
   | 'openInEditor'
@@ -79,6 +80,8 @@ export interface SessionMenuContext {
   worktree?: boolean
   /** Its worktree can be removed now. */
   removeWorktree?: boolean
+  /** Its row's badge lists sub-agents, which the menu lists too. */
+  subagents?: boolean
 }
 
 /**
@@ -98,6 +101,7 @@ export function sessionMenuGroups(
     rename = true,
     worktree = false,
     removeWorktree = false,
+    subagents = false,
   }: SessionMenuContext,
 ): SessionMenuItem[][] {
   const running = isRunning(summary)
@@ -133,7 +137,7 @@ export function sessionMenuGroups(
       : [
           state,
           topLevel ? ['pin', 'unread', 'rename'] : ['unread', 'rename'],
-          [...forks, 'newSubSession'],
+          [...forks, 'newSubSession', ...(subagents ? (['subagents'] as const) : [])],
           [
             ...(shown ? [] : (['openInSplit'] as const)),
             ...((summary.prs?.length ?? (summary.pr ? 1 : 0)) > 0

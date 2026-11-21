@@ -16,3 +16,8 @@ export function listedSubagents(
     .sort((a, b) => b.updatedAt - a.updatedAt)
   return [...running, ...finished]
 }
+
+/** A sub-agent that failed, or needs a look for an error. */
+export function subagentFailed(child: Pick<SessionSummary, 'attention' | 'status'>): boolean {
+  return child.attention === 'error' || child.status === 'failed'
+}
