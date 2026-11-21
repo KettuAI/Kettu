@@ -21,6 +21,8 @@ export const DEEPSEEK: AgentDefinition = {
   install: {
     hint: 'detect.hint.deepseek',
     url: 'https://github.com/deepseek-ai/deepseek-harness',
+    guide: 'https://github.com/deepseek-ai/deepseek-harness#run',
   },
+  // Its docs list `npx` and a desktop app, no global install, so only Kettu's copy is offered.
   configVariable: CONFIG_VARIABLES.deepseek,
 }

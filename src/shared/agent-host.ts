@@ -433,6 +433,8 @@ export interface InstallRoute {
 /** The ways to install a harness, the recommended first. */
 export interface InstallOffer {
   routes: InstallRoute[]
+  /** The vendor's install page; absent when it has none, and on older hosts. */
+  guide?: string
 }
 
 export interface AgentStatus {

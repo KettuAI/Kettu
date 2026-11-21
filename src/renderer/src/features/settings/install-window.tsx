@@ -109,6 +109,8 @@ function InstallDialog({
   const route = routes.find((r) => r.id === picked) ?? routes.find(installable) ?? routes[0] ?? null
   const ready = !!route && installable(route)
   const body = introText(t, status, offer)
+  // A missing program or Node.js sends the user to its page; otherwise the vendor's own guide.
+  const guide = status.installUrl ?? offer?.guide ?? null
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       {/* The body scrolls between the title and the actions in a short window. */}
@@ -175,12 +177,9 @@ function InstallDialog({
           {route && !route.details.needs.every((need) => need.ok) && (
             <p className="kettu-sd__hint">{t('harnesses.install.needsFirst')}</p>
           )}
-          {status.installUrl && (
+          {guide && (
             <span>
-              <LinkButton
-                href={status.installUrl}
-                icon={<Icon icon={ArrowUpRight01Icon} size={14} />}
-              >
+              <LinkButton href={guide} icon={<Icon icon={ArrowUpRight01Icon} size={14} />}>
                 {t('harnesses.install.guide')}
               </LinkButton>
             </span>

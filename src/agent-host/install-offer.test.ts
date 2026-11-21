@@ -5,6 +5,8 @@ import { describe, expect, it } from 'vitest'
 import type { InstalledAdapter } from './adapter-install'
 import { CLAUDE_CODE } from './agents/claude-code'
 import { CODEX } from './agents/codex'
+import { DEEPSEEK } from './agents/deepseek'
+import { DROID } from './agents/droid'
 import { GEMINI } from './agents/gemini'
 import { GOOSE } from './agents/goose'
 import { KIMI } from './agents/kimi'
@@ -136,6 +138,48 @@ describe("an npm package harness's install", () => {
         { kind: 'npm', ok: false },
       ],
     })
+  })
+})
+
+describe("a package harness's vendor routes and guide", () => {
+  it("lists Gemini CLI's global npm command and its install page", async () => {
+    const plans = await installPlans(GEMINI.installs!, { ...lookup({}), agentId: 'gemini' })
+    const offer = installOffer(
+      input({ def: GEMINI, plans, copy: { version: '0.70.0', bytes: null } }),
+    )
+    expect(offer.routes.map((route) => [route.id, route.command])).toEqual([
+      ['copy', null],
+      ['npm', 'npm install -g @google/gemini-cli'],
+    ])
+    expect(offer.guide).toBe('https://geminicli.com/docs/get-started/installation/')
+  })
+
+  it("lists Droid's script, Homebrew cask and npm commands, the script first on macOS", async () => {
+    const plans = await installPlans(DROID.installs!, {
+      ...lookup({ brew: '/opt/homebrew/bin/brew', sh: '/usr/bin/sh', curl: '/usr/bin/curl' }),
+      platform: 'darwin',
+      env: { PATH: '/usr/bin:/opt/homebrew/bin' },
+      agentId: 'droid',
+    })
+    const offer = installOffer(
+      input({ def: DROID, plans, platform: 'darwin', copy: { version: '1.17.0', bytes: null } }),
+    )
+    expect(offer.routes.map((route) => [route.id, route.command])).toEqual([
+      ['copy', null],
+      ['brew', 'brew install --cask droid'],
+      ['script', 'curl -fsSL https://app.factory.ai/cli | sh'],
+      ['npm', 'npm install -g droid'],
+    ])
+    expect(offer.routes[2]?.details.folder).toBe('/home/me/.local/bin')
+    expect(offer.guide).toBe('https://docs.factory.com/droid-cli/quickstart')
+  })
+
+  it("offers only Kettu's copy, and the guide, for a harness whose docs list no global install", () => {
+    const offer = installOffer(
+      input({ def: DEEPSEEK, copy: { version: '0.2.2-rc.5', bytes: null } }),
+    )
+    expect(offer.routes.map((route) => route.id)).toEqual(['copy'])
+    expect(offer.guide).toBe('https://github.com/deepseek-ai/deepseek-harness#run')
   })
 })
 
