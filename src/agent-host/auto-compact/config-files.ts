@@ -10,6 +10,7 @@ import {
   stringify as stringifyToml,
 } from '@decimalturn/toml-patch'
 import { Document, isMap, parseDocument } from 'yaml'
+import { t } from '../i18n'
 import { isObject, writeTextAtomic } from '../settings-file'
 
 export type ConfigFormat = 'json' | 'yaml' | 'toml'
@@ -29,7 +30,7 @@ async function readText(file: string): Promise<string> {
 // Rewriting a file Kettu cannot read would lose what the user wrote in it.
 function unreadable(file: string, format: ConfigFormat): Error {
   const name = format === 'json' ? 'JSON' : format === 'yaml' ? 'YAML' : 'TOML'
-  return new Error(`${file} is not valid ${name}; fix it or set the key there yourself`)
+  return new Error(t('agentConfig.invalidFile', { file, format: name }))
 }
 
 function parseText(file: string, format: ConfigFormat, text: string): Record<string, unknown> {
@@ -51,7 +52,7 @@ function parseText(file: string, format: ConfigFormat, text: string): Record<str
       throw unreadable(file, format)
     }
   }
-  if (!isObject(parsed)) throw new Error(`${file} does not hold a table of settings`)
+  if (!isObject(parsed)) throw new Error(t('agentConfig.notTable', { file }))
   return parsed
 }
 
@@ -87,9 +88,7 @@ function checkParents(file: string, config: Record<string, unknown>, key: KeyPat
   for (let depth = 1; depth < key.length; depth++) {
     const parent = valueAt(config, key.slice(0, depth))
     if (parent !== undefined && !isObject(parent)) {
-      throw new Error(
-        `${key.slice(0, depth).join('.')} in ${file} is not a table; fix it or set the key there yourself`,
-      )
+      throw new Error(t('agentConfig.parentNotTable', { key: key.slice(0, depth).join('.'), file }))
     }
   }
 }

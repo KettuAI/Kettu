@@ -209,7 +209,8 @@ export function createWorktreeGit(deps: WorktreeGitDeps): WorktreeGit {
   async function create(request: WorktreeRequest): Promise<WorktreeRecord> {
     const project = request.projectPath
     const baseOid = await resolveCommit(project, request.base)
-    if (baseOid === null) throw invalidParams(`Base ${JSON.stringify(request.base)} not found`)
+    if (baseOid === null)
+      throw invalidParams(t('worktree.baseNotFound', { base: JSON.stringify(request.base) }))
 
     let wanted: string
     if (request.branch !== undefined && request.branch.trim() !== '') {
@@ -230,8 +231,7 @@ export function createWorktreeGit(deps: WorktreeGitDeps): WorktreeGit {
       checkWorktreeBranch(branch)
       if (isTaken(taken, branch, request.takenByPullRequest)) continue
       const folder = p.join(root, folderNameFor(branch, platform))
-      if (!insideRoot(root, folder, platform))
-        throw invalidParams('Worktree folder outside its root')
+      if (!insideRoot(root, folder, platform)) throw invalidParams(t('worktree.outsideRoot'))
       if (await exists(folder)) continue
       const result = await git(
         project,
@@ -241,7 +241,10 @@ export function createWorktreeGit(deps: WorktreeGitDeps): WorktreeGit {
       if (!ok(result)) throw gitError('git worktree add', result)
       return { path: await canonical(folder), branch, base: request.base, baseOid }
     }
-    throw new HostError('conflict', `Every name from ${wanted} to ${wanted}-${MAX_SUFFIX} is taken`)
+    throw new HostError(
+      'conflict',
+      t('worktree.namesTaken', { first: wanted, last: `${wanted}-${MAX_SUFFIX}` }),
+    )
 
     function slugFor(text: string): string {
       return slugOf(text) || `session-${random().slice(0, 6)}`
@@ -367,14 +370,14 @@ export function createWorktreeGit(deps: WorktreeGitDeps): WorktreeGit {
       state.uncommitted !== expected.uncommitted ||
       state.unpushed !== expected.unpushed
     ) {
-      throw new HostError('conflict', 'The worktree changed since it was inspected')
+      throw new HostError('conflict', t('worktree.changedSinceInspected'))
     }
 
     if (state.exists) {
       const listed = await listWorktrees(projectPath)
       const own = listed.slice(1).some((entry) => samePath(entry.path, record.path, platform))
       if (!own || samePath(record.path, projectPath, platform)) {
-        throw new HostError('conflict', 'The folder is not a worktree of this project')
+        throw new HostError('conflict', t('worktree.notOfProject'))
       }
       // Changed files go only when the user was shown them and they are still what was shown; a
       // single --force still leaves a locked worktree alone.
@@ -417,7 +420,7 @@ export function createWorktreeGit(deps: WorktreeGitDeps): WorktreeGit {
     checkWorktreeBranch(record.branch)
     await prune(projectPath)
     if ((await branchHead(projectPath, record.branch)) === null) {
-      throw notFound(`Branch ${record.branch} no longer exists`)
+      throw notFound(t('worktree.branchGone', { branch: record.branch }))
     }
     const result = await git(
       projectPath,

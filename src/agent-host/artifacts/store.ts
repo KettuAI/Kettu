@@ -21,6 +21,7 @@ import type { ArtifactTypeInfo } from '@shared/artifact-types'
 import type { CanvasEvent } from '@shared/artifact-canvas'
 import { withParamValues, type ParamValue } from '@shared/artifact-params'
 import { HostError } from '../errors'
+import { t, tEnglish } from '../i18n'
 import type { LogFn } from '../storage'
 import { ThreadStoreError, type ThreadStore } from '../threads/store'
 import { contentPath, versionKey } from './content'
@@ -54,6 +55,8 @@ export class ArtifactError extends HostError {
     readonly reason: ArtifactErrorCode,
     message: string,
     readonly state: ArtifactState | null,
+    /** The message in English, for agents and pages; `message` is in the user's language. */
+    readonly english: string = message,
   ) {
     super(reason === 'not_found' ? 'not_found' : 'conflict', message, state ?? undefined)
     this.name = 'ArtifactError'
@@ -175,7 +178,7 @@ export class ArtifactStore {
     params: ArtifactCalls[K]['params'],
   ): Promise<ArtifactCalls[K]['result']> {
     const { threads } = this.deps
-    if (!threads) throw new HostError('internal', 'Artifacts need the thread database')
+    if (!threads) throw new HostError('internal', t('artifacts.needDatabase'))
     return this.refused(() => threads.artifact(name, params))
   }
 
@@ -189,7 +192,7 @@ export class ArtifactStore {
     params: RuntimeCalls[K]['params'],
   ): Promise<RuntimeCalls[K]['result']> {
     const { threads } = this.deps
-    if (!threads) throw new HostError('internal', 'Artifacts need the thread database')
+    if (!threads) throw new HostError('internal', t('artifacts.needDatabase'))
     return this.refused(() => threads.runtime(name, params))
   }
 
@@ -201,7 +204,7 @@ export class ArtifactStore {
         error instanceof ThreadStoreError &&
         (error.code === 'not_found' || error.code === 'deleted' || error.code === 'conflict')
       ) {
-        throw new ArtifactError(error.code, error.message, error.data ?? null)
+        throw new ArtifactError(error.code, error.message, error.data ?? null, error.english)
       }
       throw error
     }
@@ -575,15 +578,20 @@ export class ArtifactStore {
   }): Promise<{ version: number }> {
     const found = await this.get(input.id)
     if (found.artifact.deletedAt !== null) {
-      throw new ArtifactError('deleted', `${input.id} is in Recently deleted`, {
-        version: found.artifact.head,
-        deleted: true,
-      })
+      throw new ArtifactError(
+        'deleted',
+        t('artifacts.deleted', { id: input.id }),
+        { version: found.artifact.head, deleted: true },
+        tEnglish('artifacts.deleted', { id: input.id }),
+      )
     }
     // The latest version's file: the write lands there unless the file changed since the base.
     const file = found.files.find((f) => f.path === input.path)
     if (!file || !isHtmlPath(file.path)) {
-      throw new HostError('not_found', `${input.id} has no HTML file ${input.path}`)
+      throw new HostError(
+        'not_found',
+        t('artifacts.noHtmlFile', { id: input.id, path: input.path }),
+      )
     }
     let text: string
     try {
@@ -591,7 +599,7 @@ export class ArtifactStore {
         await this.bytes(found, file),
       )
     } catch {
-      throw new HostError('invalid_params', `${input.path} is not UTF-8 text`)
+      throw new HostError('invalid_params', t('artifacts.notUtf8', { path: input.path }))
     }
     let edited: string
     try {
@@ -601,8 +609,9 @@ export class ArtifactStore {
       throw error
     }
     const data = Buffer.from(edited, 'utf8')
-    if (data.length > DISK_FILE_BYTES)
-      throw new HostError('invalid_params', 'The file is too large')
+    if (data.length > DISK_FILE_BYTES) {
+      throw new HostError('invalid_params', t('artifacts.fileTooLarge'))
+    }
     return this.write({
       id: input.id,
       baseVersion: input.baseVersion,
@@ -622,14 +631,19 @@ export class ArtifactStore {
   }): Promise<{ version: number }> {
     const found = await this.get(input.id)
     if (found.artifact.deletedAt !== null) {
-      throw new ArtifactError('deleted', `${input.id} is in Recently deleted`, {
-        version: found.artifact.head,
-        deleted: true,
-      })
+      throw new ArtifactError(
+        'deleted',
+        t('artifacts.deleted', { id: input.id }),
+        { version: found.artifact.head, deleted: true },
+        tEnglish('artifacts.deleted', { id: input.id }),
+      )
     }
     const file = found.files.find((f) => f.path === input.path)
     if (!file || !isHtmlPath(file.path)) {
-      throw new HostError('not_found', `${input.id} has no HTML file ${input.path}`)
+      throw new HostError(
+        'not_found',
+        t('artifacts.noHtmlFile', { id: input.id, path: input.path }),
+      )
     }
     let edited: string
     try {

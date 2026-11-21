@@ -3,6 +3,7 @@
 import type { Worker } from 'node:worker_threads'
 import type { AgentId } from '@shared/thread'
 import type { ClockRequest, ScanProgress, TokenParts } from '@shared/usage'
+import { t } from '../i18n'
 import type { LogFn } from '../storage'
 import type { DbSummary, SourceMap, SourceStats, UsageDbStatus } from './db'
 import type { UsageRow } from './model'
@@ -30,7 +31,10 @@ export function nodeUsageWorker(worker: Worker): UsageWorker {
         failure = error
       })
       worker.on('exit', (code) =>
-        listener(failure ?? (code === 0 ? null : new Error(`exited with code ${code}`))),
+        listener(
+          failure ??
+            (code === 0 ? null : new Error(t('git.failure.exitCode', { code: String(code) }))),
+        ),
       )
     },
     terminate: () => worker.terminate(),
@@ -104,7 +108,9 @@ export class UsageStore {
         this.settleReady('unavailable')
         return
       }
-      const reason = `The usage worker stopped${error ? `: ${error.message}` : ''}`
+      const reason = error
+        ? t('usage.workerStoppedWith', { error: error.message })
+        : t('usage.workerStopped')
       // What it was doing is lost; the next scan reads from the cursors it committed.
       this.failPending(reason)
       options.onProgress(null)

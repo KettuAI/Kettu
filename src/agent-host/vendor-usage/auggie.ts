@@ -1,6 +1,7 @@
 import type { PlanLimit } from '@shared/agent-host'
 import { amountLimit, number, object, type VendorUsage } from './common'
 import { runProgram } from '../adapter-install'
+import { t } from '../i18n'
 
 export function parseAuggieAccount(value: unknown, now: number): VendorUsage | null {
   const body = object(value)
@@ -41,6 +42,6 @@ export async function readAuggieAccount(
     platform: process.platform,
     timeoutMs: 15_000,
   })
-  if (run.code !== 0 || run.error || run.timedOut) throw new Error('Auggie account status failed')
+  if (run.code !== 0 || run.error || run.timedOut) throw new Error(t('usageRead.auggieFailed'))
   return parseAuggieAccount(JSON.parse(run.stdout), now)
 }

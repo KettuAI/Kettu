@@ -9,6 +9,7 @@ import {
   type RequestTokens,
 } from '@shared/model-requests'
 import { arr, obj, str } from './claude-transcript'
+import { t } from '../i18n'
 import { bufferSource, eachLine, fileSource, zstdSource, type ByteSource } from '../usage/lines'
 import { codexTokens, parseCodexRollout, summarizeCodexSystem } from './codex-rollout'
 import { parseLines, readPageFrom, type PageRules } from './pages'
@@ -258,7 +259,7 @@ export function codexModelRequests(deps: {
 
     async raw(target, raw, full) {
       const file = await fileOf(target)
-      if (!file) throw new Error('This session has no rollout to read')
+      if (!file) throw new Error(t('modelRequest.noRollout'))
       const source = await sourceOf(file)
       if (raw === 'system') return foldAll(await systemRecords(source), full)
       return readRanges(source, raw, full)

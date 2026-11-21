@@ -49,8 +49,10 @@ export function WorktreeSettingsDialog() {
 
 type Field = 'branch' | 'copy' | 'setup'
 
-/** Which field the host's `invalid_params` message is about, by the name it starts with. */
-function fieldOf(message: string): Field | null {
+/** Which field the host's `invalid_params` error is about: its data, else the name its message starts with. */
+function fieldOf(failure: unknown, message: string): Field | null {
+  const named = (failure as { data?: { field?: unknown } } | null)?.data?.field
+  if (named === 'branch' || named === 'copy' || named === 'setup') return named
   if (message.startsWith('copy')) return 'copy'
   if (message.startsWith('setup')) return 'setup'
   if (message.startsWith('branch') || /branch|ref/i.test(message)) return 'branch'
@@ -127,7 +129,7 @@ function SettingsForm({
         code === 'forbidden'
           ? { field: null, message: t('worktreeSettings.forbidden') }
           : code === 'invalid_params'
-            ? { field: fieldOf(message), message }
+            ? { field: fieldOf(failure, message), message }
             : { field: null, message },
       )
     } finally {

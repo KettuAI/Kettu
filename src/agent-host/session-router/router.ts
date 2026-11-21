@@ -29,6 +29,24 @@ interface RpcMessage {
   error?: RpcError
 }
 
+/** A failure the host words in the user's language by the `data.reason` it carries. */
+class RouterError extends Error {
+  readonly data: { reason: string; folder?: string }
+
+  constructor(message: string, data: { reason: string; folder?: string }) {
+    super(message)
+    this.data = data
+  }
+}
+
+function failureOf(error: unknown): RpcError {
+  return {
+    code: INTERNAL_ERROR,
+    message: (error as Error).message,
+    ...(error instanceof RouterError ? { data: error.data } : {}),
+  }
+}
+
 interface Deferred {
   resolve(message: RpcMessage): void
   reject(error: Error): void
@@ -258,7 +276,7 @@ export class SessionRouter {
       const answer = await this.request(this.control, method, params)
       return answer.error ? this.sendError(id, answer.error) : this.sendResult(id, answer.result)
     } catch (error) {
-      this.sendError(id, { code: INTERNAL_ERROR, message: (error as Error).message })
+      this.sendError(id, failureOf(error))
     }
   }
 
@@ -304,7 +322,7 @@ export class SessionRouter {
       this.sendResult(id, answer.result)
     } catch (error) {
       if (child) this.endChild(child)
-      this.sendError(id, { code: INTERNAL_ERROR, message: (error as Error).message })
+      this.sendError(id, failureOf(error))
     }
   }
 
@@ -340,7 +358,7 @@ export class SessionRouter {
       this.sendResult(id, answer.result)
     } catch (error) {
       if (child) this.endChild(child)
-      this.sendError(id, { code: INTERNAL_ERROR, message: (error as Error).message })
+      this.sendError(id, failureOf(error))
     }
   }
 
@@ -370,7 +388,7 @@ export class SessionRouter {
       const answer = await this.request(this.control, 'session/delete', params)
       return answer.error ? this.sendError(id, answer.error) : this.sendResult(id, answer.result)
     } catch (error) {
-      this.sendError(id, { code: INTERNAL_ERROR, message: (error as Error).message })
+      this.sendError(id, failureOf(error))
     }
   }
 
@@ -378,7 +396,9 @@ export class SessionRouter {
   private async flagFor(flagged: boolean): Promise<string[]> {
     if (!flagged) return []
     if (this.sessionFlag === null || !(await this.flagListed())) {
-      throw new Error('The agent has no session flag to start with')
+      throw new RouterError('The agent has no session flag to start with', {
+        reason: 'no_session_flag',
+      })
     }
     return [this.sessionFlag]
   }
@@ -431,7 +451,10 @@ export class SessionRouter {
       const folder = folderOf(params)
       // A missing folder fails the request; spawning in it would end every session as a crash.
       if (folder === null || !isFolder(folder)) {
-        throw new Error(`The session's folder ${folder ?? '(none)'} does not exist`)
+        throw new RouterError(`The session's folder ${folder ?? '(none)'} does not exist`, {
+          reason: 'folder_missing',
+          ...(folder === null ? {} : { folder }),
+        })
       }
       cwd = folder
     }

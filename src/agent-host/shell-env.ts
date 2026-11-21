@@ -18,7 +18,7 @@ import {
   pathEntries,
   type Env,
 } from './find-command'
-import { translate, type HostMessage } from './i18n'
+import { t, translate, type HostMessage } from './i18n'
 import { runTool } from './process-tree'
 import { quotePosix } from './quote'
 
@@ -284,7 +284,7 @@ function runProbe(shell: string, options: ResolveOptions, timeoutMs: number): Pr
       } catch {
         child.kill('SIGKILL')
       }
-      finish(new Error(`the login shell did not answer within ${timeoutMs / 1000} s`))
+      finish(new Error(t('environment.shellTimeout', { seconds: timeoutMs / 1000 })))
     }, timeoutMs)
     child.stdout.setEncoding('utf8').on('data', (data: string) => {
       if (stdout.length < MAX_PROBE_OUTPUT) stdout += data
@@ -296,11 +296,16 @@ function runProbe(shell: string, options: ResolveOptions, timeoutMs: number): Pr
     child.on('close', (code, signal) => {
       const env = parseProbeOutput(stdout, mark)
       if (env) return finish(null, env)
-      const reason = signal ? `signal ${signal}` : `exit code ${code}`
+      const reason = signal
+        ? t('environment.signal', { signal })
+        : t('environment.exitCode', { code: String(code) })
       const detail = stderr.trim().split('\n').slice(-3).join(' ')
+      const shellName = path.posix.basename(shell)
       finish(
         new Error(
-          `${path.posix.basename(shell)} printed no environment (${reason})${detail ? `: ${detail}` : ''}`,
+          detail
+            ? t('environment.noEnvironmentDetail', { shell: shellName, reason, detail })
+            : t('environment.noEnvironment', { shell: shellName, reason }),
         ),
       )
     })

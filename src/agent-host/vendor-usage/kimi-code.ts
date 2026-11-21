@@ -6,6 +6,7 @@
 import { createHash } from 'node:crypto'
 import path from 'node:path'
 import type { PlanLimit, ProviderBalance } from '@shared/agent-host'
+import { t } from '../i18n'
 import { balance, number, object, percentLimit, time, type VendorUsage } from './common'
 import {
   askVendor,
@@ -163,7 +164,7 @@ export async function readKimiCodeUsage(place: SignInPlace): Promise<VendorUsage
     if (!access) continue
     const expiresAt = number(token?.expires_at)
     if (expiresAt !== null && expiresAt > 0 && expiresAt * 1000 <= place.now) {
-      throw new UsageReadError(`${VENDOR}'s sign-in has expired`)
+      throw new UsageReadError(t('usageRead.signInExpired', { vendor: VENDOR }))
     }
     const reply = await askVendor(
       {
@@ -176,9 +177,9 @@ export async function readKimiCodeUsage(place: SignInPlace): Promise<VendorUsage
     )
     const usage = parseKimiCodeUsage(reply, place.now)
     if (!usage || (usage.limits.length === 0 && usage.balances.length === 0)) {
-      throw new UsageReadError(`${VENDOR} sent no plan usage`)
+      throw new UsageReadError(t('usageRead.noPlanUsage', { vendor: VENDOR }))
     }
     return usage
   }
-  throw new UsageReadError(`${VENDOR} is not signed in`)
+  throw new UsageReadError(t('usageRead.notSignedIn', { vendor: VENDOR }))
 }

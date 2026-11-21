@@ -6,6 +6,7 @@ import { lstat, open, readlink, realpath } from 'node:fs/promises'
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
 import type { CommitDetails, FileDiff, LogCommit } from '@shared/git'
 import type { Platform } from '@shared/platform'
+import { LocalizedError } from '../localized-error'
 import { pathKey } from '../paths'
 import { expectOk, GIT_TIMEOUT_MS, type Exec, type ExecResult } from './exec'
 import {
@@ -42,7 +43,7 @@ export async function readCommitDetails(
     show('--format=', '-z', '-M', '--diff-merges=first-parent', '--numstat'),
   ])
   const parsed = parseCommitHeader(expectOk('git show', header).stdout)
-  if (!parsed) throw new Error(`Unexpected git show output for ${oid}`)
+  if (!parsed) throw new LocalizedError({ key: 'git.unexpected.show', params: { oid } })
   const files = withLineCounts(
     parseNameStatus(expectOk('git show', names).stdout),
     parseNumstat(expectOk('git show', numbers).stdout),

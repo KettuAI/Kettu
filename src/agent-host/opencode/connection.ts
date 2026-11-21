@@ -179,7 +179,7 @@ interface PromptFile {
 export function turnError(error: StructuredError | undefined): Error {
   return new AgentRequestError(
     'agent_error',
-    error?.message || 'OpenCode could not finish the turn',
+    error?.message || t('opencode.turnFailed'),
     null,
     error
       ? { type: error.type, ...(error.status !== undefined ? { status: error.status } : {}) }
@@ -1027,7 +1027,7 @@ export class OpenCodeConnection implements AgentConnection {
       })
     }
     if (index < 0) {
-      throw new AgentRequestError('agent_error', 'OpenCode no longer has that reply')
+      throw new AgentRequestError('agent_error', t('opencode.replyGone'))
     }
     let next = index + 1
     if (messages[next]?.type === 'idle') next++
@@ -1365,7 +1365,7 @@ export class OpenCodeConnection implements AgentConnection {
   ): Promise<ConfigOption[]> {
     const session = this.require(sessionId, true)
     if (typeof value !== 'string') {
-      throw new AgentRequestError('agent_error', `${optionId} takes a choice`)
+      throw new AgentRequestError('agent_error', t('agentRun.takesChoice', { option: optionId }))
     }
     const offer = await this.offer(session.cwd)
     const route = `/api/session/${sessionId}`
@@ -1373,7 +1373,7 @@ export class OpenCodeConnection implements AgentConnection {
     switch (optionId) {
       case CONFIG.model: {
         const model = findModel(offer.models, value)
-        if (!model) throw new AgentRequestError('agent_error', `No model ${value}`)
+        if (!model) throw new AgentRequestError('agent_error', t('agentRun.noModel', { value }))
         // An effort the new model also has is kept; any other falls back to its default.
         const variant = current?.variant
         const kept = variant && model.variants?.some((item) => item.id === variant) ? variant : null
@@ -1389,7 +1389,9 @@ export class OpenCodeConnection implements AgentConnection {
       case CONFIG.effort: {
         const model = current ? findModel(offer.models, modelValue(current)) : null
         const known = value === DEFAULT_EFFORT || model?.variants?.some((item) => item.id === value)
-        if (!current || !known) throw new AgentRequestError('agent_error', `No effort ${value}`)
+        if (!current || !known) {
+          throw new AgentRequestError('agent_error', t('agentRun.noEffort', { value }))
+        }
         const next: ModelRef = {
           id: current.id,
           providerID: current.providerID,
@@ -1401,14 +1403,14 @@ export class OpenCodeConnection implements AgentConnection {
       }
       case CONFIG.mode: {
         if (!modes(offer.agents).some((agent) => agent.id === value)) {
-          throw new AgentRequestError('agent_error', `No mode ${value}`)
+          throw new AgentRequestError('agent_error', t('agentRun.noMode', { value }))
         }
         if (!session.listed) await this.call('POST', `${route}/agent`, { agent: value })
         session.chosen = { ...session.chosen, agent: value }
         break
       }
       default:
-        throw new AgentRequestError('agent_error', `No option ${optionId}`)
+        throw new AgentRequestError('agent_error', t('agentRun.noOption', { option: optionId }))
     }
     return this.config(session, offer)
   }
@@ -1420,7 +1422,7 @@ export class OpenCodeConnection implements AgentConnection {
     let timer: ReturnType<typeof setTimeout> | null = null
     const late = new Promise<never>((_, reject) => {
       timer = setTimeout(
-        () => reject(new AgentRequestError('agent_error', 'OpenCode sends no events')),
+        () => reject(new AgentRequestError('agent_error', t('opencode.noEvents'))),
         STREAM_WAIT_MS,
       )
     })
@@ -1982,7 +1984,13 @@ export class OpenCodeConnection implements AgentConnection {
   private require(sessionId: string, listed = false): Session {
     if (this.done) throw new AgentRequestError('closed', 'OpenCode stopped')
     const session = this.sessions.get(sessionId)
-    if (!session) throw new AgentRequestError('agent_error', `No session ${sessionId}`, NOT_FOUND)
+    if (!session) {
+      throw new AgentRequestError(
+        'agent_error',
+        t('agentRun.noSession', { id: sessionId }),
+        NOT_FOUND,
+      )
+    }
     if (session.listed && !listed) {
       throw new AgentRequestError('agent_error', 'This session only lists options')
     }

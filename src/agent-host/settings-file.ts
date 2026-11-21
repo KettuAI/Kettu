@@ -3,6 +3,7 @@
 
 import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import path from 'node:path'
+import { t } from './i18n'
 
 export function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -22,10 +23,10 @@ export async function readSettings(file: string): Promise<Record<string, unknown
     parsed = JSON.parse(text)
   } catch {
     // Rewriting a file Kettu cannot read would lose what the user wrote in it.
-    throw new Error(`${file} is not valid JSON; fix it or set the key there yourself`)
+    throw new Error(t('agentConfig.invalidFile', { file, format: 'JSON' }))
   }
   if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
-    throw new Error(`${file} does not hold a JSON object`)
+    throw new Error(t('agentConfig.notJsonObject', { file }))
   }
   return parsed as Record<string, unknown>
 }

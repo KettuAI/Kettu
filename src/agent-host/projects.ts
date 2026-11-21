@@ -6,6 +6,7 @@ import type { NoProject, Project } from '@shared/agent-host'
 import { DEFAULT_WORKTREE_SETTINGS, type ProjectWorktreeSettings } from '@shared/git'
 import type { Platform } from '@shared/platform'
 import { invalidParams, notFound } from './errors'
+import { t } from './i18n'
 import { canonicalizePath, folderName, isAbsolutePath, pathKey } from './paths'
 import type { JsonFile, ProjectRecord, ProjectsFile } from './storage'
 
@@ -93,15 +94,16 @@ export class Projects {
    */
   async resolveDirectory(value: string): Promise<string> {
     if (!isAbsolutePath(value, this.deps.platform)) {
-      throw invalidParams('projectPath must be an absolute path')
+      throw invalidParams(t('project.notAbsolute'))
     }
     let canonical: string
     try {
       canonical = await canonicalizePath(value, this.deps.platform, this.realpath)
     } catch {
-      throw invalidParams(`${value} does not exist`)
+      throw invalidParams(t('project.notExist', { path: value }))
     }
-    if (!(await this.isDirectory(canonical))) throw invalidParams(`${value} is not a folder`)
+    if (!(await this.isDirectory(canonical)))
+      throw invalidParams(t('project.notFolder', { path: value }))
     return canonical
   }
 
@@ -136,7 +138,7 @@ export class Projects {
     }
     const api = this.deps.platform === 'win32' ? path.win32 : path.posix
     const record = this.find(api.resolve(value))
-    if (!record) throw notFound(`No project at ${value}`)
+    if (!record) throw notFound(t('project.noProject', { path: value }))
     return record
   }
 
@@ -149,7 +151,7 @@ export class Projects {
   /** Stores only what differs from the defaults; a project that is not listed is refused. */
   setWorktreeSettings(value: string, settings: ProjectWorktreeSettings): void {
     const record = this.find(value)
-    if (!record) throw notFound(`No project at ${value}`)
+    if (!record) throw notFound(t('project.noProject', { path: value }))
     const differs: Partial<ProjectWorktreeSettings> = {}
     for (const key of Object.keys(DEFAULT_WORKTREE_SETTINGS) as (keyof ProjectWorktreeSettings)[]) {
       if (JSON.stringify(settings[key]) !== JSON.stringify(DEFAULT_WORKTREE_SETTINGS[key])) {
@@ -181,7 +183,7 @@ export class Projects {
 
   /** Puts a project just before `before`, or last with null; every project then has a place. */
   move(record: ProjectRecord, before: ProjectRecord | null): void {
-    if (before === record) throw invalidParams('A project cannot move before itself')
+    if (before === record) throw invalidParams(t('project.moveBeforeItself'))
     const ordered = this.ordered().filter((item) => item !== record)
     ordered.splice(before ? ordered.indexOf(before) : ordered.length, 0, record)
     for (const [index, item] of ordered.entries()) item.order = index

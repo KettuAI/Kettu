@@ -46,6 +46,7 @@ import type { MarketListing } from '@shared/market-publish'
 import { codexOwnSkills } from './codex-plugins'
 import { modeOf, type DownloadedFile } from './community'
 import { frontmatter } from './frontmatter'
+import { logText } from '../localized-error'
 import {
   SKILL_FILE,
   SKILL_MD_BYTES,
@@ -397,7 +398,7 @@ export class MarketSkillsService {
   /** One repository of the catalog, read as `skills` reads each. */
   async repository(id: string, refresh = false): Promise<MarketSkillRepository> {
     const spec = this.specs.find((item) => repositoryId(item) === id)
-    if (!spec) throw new HostError('not_found', `${id} is not in the skills catalog`)
+    if (!spec) throw new HostError('not_found', t('marketSkills.notInCatalog', { id }))
     const state = await this.readRepository(spec, refresh, false)
     const kept = await this.load()
     return { repository: this.repositoryOf(spec, state), skills: this.catalogOf(spec, kept, state) }
@@ -698,7 +699,9 @@ export class MarketSkillsService {
   private async addFromCatalog(id: string): Promise<MarketSkill> {
     const parsed = catalogSkillId(id)
     const spec = parsed && this.specs.find((item) => repositoryId(item) === parsed.repository)
-    if (!parsed || !spec) throw new HostError('invalid_params', `${id} is not in the catalog`)
+    if (!parsed || !spec) {
+      throw new HostError('invalid_params', t('marketSkills.notInCatalog', { id }))
+    }
     const state = await this.readRepository(spec, false, false)
     const copy = (await this.load()).repositories[parsed.repository]
     const listed = state.read ? copy?.skills.find((skill) => skill.name === parsed.name) : undefined
@@ -706,7 +709,7 @@ export class MarketSkillsService {
       const failure = this.failures.get(parsed.repository)
       throw new HostError(
         failure ? 'unavailable' : 'not_found',
-        failure ?? `The catalog has no skill ${parsed.name}`,
+        failure ?? t('marketSkills.noSuchSkill', { name: parsed.name }),
       )
     }
     const files = await readFolder(path.join(this.catalogDir(spec, copy.dir), listed.name))
@@ -727,15 +730,17 @@ export class MarketSkillsService {
   private async addFromGithub(url: string): Promise<MarketSkill> {
     const source = githubSource(url)
     if (!source) {
-      throw new HostError('invalid_params', 'Give a github.com repository, or a folder in one')
+      throw new HostError('invalid_params', t('marketSkills.needsGithub'))
     }
     const tarball = await this.download(tarballUrl(source))
     const dirs = skillDirs(tarball, source.path)
-    if (dirs.length === 0) throw new HostError('not_found', `There is no ${SKILL_FILE} in ${url}`)
+    if (dirs.length === 0) {
+      throw new HostError('not_found', t('marketSkills.noSkillFile', { file: SKILL_FILE, url }))
+    }
     if (dirs.length > 1) {
       throw new HostError(
         'invalid_params',
-        `${url} holds ${dirs.length} skills; give the folder of one of them`,
+        t('marketSkills.manySkills', { url, count: dirs.length }),
       )
     }
     const folder = dirs[0]!
@@ -776,10 +781,15 @@ export class MarketSkillsService {
 
   private async addFromFolder(folder: string): Promise<MarketSkill> {
     const info = await stat(folder).catch(() => null)
-    if (!info?.isDirectory()) throw new HostError('not_found', `${folder} is not a folder`)
+    if (!info?.isDirectory()) {
+      throw new HostError('not_found', t('marketSkills.notFolder', { folder }))
+    }
     const files = await readFolder(folder)
     if (!files.some((file) => file.path === SKILL_FILE)) {
-      throw new HostError('invalid_params', `${folder} has no ${SKILL_FILE}`)
+      throw new HostError(
+        'invalid_params',
+        t('marketSkills.folderNoSkillFile', { folder, file: SKILL_FILE }),
+      )
     }
     const skill = skillInfo(skillText(files), path.basename(folder))
     const id = `local:${randomUUID()}`
@@ -917,9 +927,8 @@ export class MarketSkillsService {
       this.failures.delete(id)
     } catch (error) {
       await rm(partial, { recursive: true, force: true })
-      const message = (error as Error).message
-      this.failures.set(id, message)
-      this.deps.log('warn', `The skills of ${id} are from before: ${message}`)
+      this.failures.set(id, (error as Error).message)
+      this.deps.log('warn', `The skills of ${id} are from before: ${logText(error)}`)
     }
   }
 
@@ -1000,7 +1009,9 @@ export class MarketSkillsService {
 
 function skillText(files: SkillFiles): string {
   const file = files.find((item) => item.path === SKILL_FILE)
-  if (!file) throw new HostError('invalid_params', `The skill has no ${SKILL_FILE}`)
+  if (!file) {
+    throw new HostError('invalid_params', t('marketSkills.noFile', { file: SKILL_FILE }))
+  }
   return file.data.subarray(0, SKILL_MD_BYTES).toString('utf8')
 }
 
@@ -1009,7 +1020,7 @@ async function writeFiles(dir: string, files: SkillFiles): Promise<void> {
   for (const file of files) {
     const target = path.resolve(root, ...file.path.split('/'))
     if (!target.startsWith(root + path.sep)) {
-      throw new HostError('invalid_params', `The skill names a file outside it: ${file.path}`)
+      throw new HostError('invalid_params', t('marketSkills.outside', { path: file.path }))
     }
     await mkdir(path.dirname(target), { recursive: true })
     // Scripts keep their run bit; nothing else of the archive's modes comes along.
@@ -1026,10 +1037,7 @@ async function readFolder(root: string): Promise<SkillFiles> {
       const full = path.join(dir, entry.name)
       const relative = prefix === '' ? entry.name : `${prefix}/${entry.name}`
       if (entry.isSymbolicLink()) {
-        throw new HostError(
-          'invalid_params',
-          `The skill holds a link, which Kettu does not copy: ${relative}`,
-        )
+        throw new HostError('invalid_params', t('marketSkills.link', { path: relative }))
       }
       if (entry.isDirectory()) {
         await walk(full, relative)
@@ -1041,13 +1049,13 @@ async function readFolder(root: string): Promise<SkillFiles> {
       if (files.length >= SKILL_LIMITS.files) {
         throw new HostError(
           'invalid_params',
-          `The skill holds more than ${SKILL_LIMITS.files} files`,
+          t('marketSkills.tooManyFiles', { count: SKILL_LIMITS.files }),
         )
       }
       if (bytes > SKILL_LIMITS.bytes) {
         throw new HostError(
           'invalid_params',
-          `The skill is larger than ${SKILL_LIMITS.bytes / (1024 * 1024)} MB`,
+          t('marketSkills.tooLarge', { mb: SKILL_LIMITS.bytes / (1024 * 1024) }),
         )
       }
       files.push({ path: relative, data: await readFile(full), mode: info.mode })

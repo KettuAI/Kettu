@@ -57,6 +57,82 @@
       "closesWithParent": "A subagent session closes with its parent",
       "deletedWithParent": "A subagent session is deleted with its parent",
       "failed": "The subagent failed"
+    },
+    "notFound": "This session no longer exists",
+    "subSessionProject": "A sub-session belongs to the project of its parent",
+    "worktreeNeedsRepo": "A worktree needs a project in a Git repository",
+    "noWorktree": "This session has no worktree",
+    "noWorktreeToRemove": "This session has no worktree to remove",
+    "noAttachments": "This host takes no attachments",
+    "noEntry": "This item is no longer in the session",
+    "noRequestRecord": "This session has no record of its requests to read",
+    "noAttachment": "This session keeps no such attachment",
+    "noQueued": "This message is no longer in the queue",
+    "publisherName": "A first publish needs a publisher name",
+    "noConfigOption": "No config option {{option}}",
+    "notAChoice": "{{value}} is not a choice of {{option}}",
+    "waiting": {
+      "report": {
+        "gone": "This problem report is no longer waiting for an answer",
+        "answered": "This problem report was already answered"
+      },
+      "memoryProposal": {
+        "gone": "This memory proposal is no longer waiting for an answer",
+        "answered": "This memory proposal was already answered",
+        "noForget": "This proposal names no memory to forget",
+        "noDraft": "This proposal holds nothing to remember"
+      },
+      "memoryUndo": {
+        "gone": "There is no memory write here to take back",
+        "busy": "This memory write is already being taken back",
+        "changed": "The memory changed after this write, so it stays as it is",
+        "undone": "This write can no longer be taken back"
+      },
+      "terminal": {
+        "gone": "This terminal request is no longer waiting for an answer",
+        "answered": "This terminal request was already answered"
+      },
+      "device": {
+        "gone": "This device request is no longer waiting for an answer",
+        "answered": "This device request was already answered"
+      },
+      "market": {
+        "gone": "This Marketplace card is no longer waiting for an answer",
+        "answered": "This Marketplace card was already answered"
+      },
+      "settings": {
+        "gone": "This settings card is no longer waiting for an answer",
+        "answered": "This settings card was already answered",
+        "noChange": "This settings change is no longer on record",
+        "noUndo": "This change cannot be undone"
+      },
+      "step": {
+        "gone": "This step is no longer waiting for an answer",
+        "answered": "This step was already answered"
+      },
+      "origin": {
+        "gone": "This new site request is no longer waiting for an answer",
+        "answered": "This new site request was already answered"
+      },
+      "app": {
+        "gone": "This app request is no longer waiting for an answer",
+        "answered": "This app request was already answered"
+      },
+      "setup": {
+        "gone": "This setup card is no longer waiting for an answer"
+      },
+      "mcp": {
+        "gone": "These MCP servers are no longer waiting for an answer",
+        "answered": "These MCP servers were already answered"
+      },
+      "hooks": {
+        "gone": "These hooks are no longer waiting for an answer",
+        "answered": "These hooks were already answered"
+      },
+      "permission": {
+        "gone": "This request is no longer waiting for an answer",
+        "answered": "This request was already answered"
+      }
     }
   },
   "notice": {
@@ -248,7 +324,8 @@
     "exit": {
       "code": "{{agent}} exited with code {{code}}",
       "signal": "{{agent}} was stopped by {{signal}}",
-      "error": "{{agent}} {{error}}"
+      "error": "{{agent}} {{error}}",
+      "closed": "{{agent}} closed its connection"
     },
     "exited": "{{exit}}.",
     "exitedBeforeReady": "{{exit}} before it was ready.",
@@ -287,7 +364,9 @@
       "downloadError": "{{name}} could not be downloaded: {{reason}}",
       "downloadTimedOut": "{{name}} did not finish downloading within {{seconds}} s.",
       "hashMismatch": "The downloaded file does not match its SHA-256: expected {{expected}}, got {{actual}}.",
-      "extracting": "Extracting the archive…"
+      "extracting": "Extracting the archive…",
+      "methodMissing": "{{agent}} has no {{method}} install on this platform",
+      "noArchive": "{{agent}} has no archive to download"
     },
     "reportTimeout": "{{command}} did not finish in {{seconds}} s",
     "unreadableReport": "{{agent}}'s {{command}} gave no report Kettu can read",
@@ -297,7 +376,47 @@
     "disabled": "{{agent}} is turned off. Turn it on in Settings › Agents to use it.",
     "uninstall": {
       "busy": "{{agent}} is being installed or updated. Wait for it to finish, then uninstall."
-    }
+    },
+    "unknown": "Unknown agent {{agent}}",
+    "notInstalledStopping": "{{agent}} was not installed: the host is stopping.",
+    "noAdapter": "{{agent}} has no adapter to install.",
+    "program": {
+      "timedOutMinutes": "{{name}} did not finish within {{minutes}} minutes.",
+      "timedOutSeconds": "{{name}} did not finish within {{seconds}} s.",
+      "notStarted": "{{name}} could not be started: {{error}}",
+      "stopped": "{{name}} was stopped by {{signal}}. {{detail}}",
+      "exited": "{{name}} exited with code {{code}}. {{detail}}",
+      "exitedBare": "{{name}} exited with code {{code}}",
+      "fileNotFound": "{{file}} was not found.",
+      "noVersion": "{{name}} --version printed no version."
+    },
+    "unknownUsageReply": "The vendor returned an unknown usage reply",
+    "unknownAccountReply": "{{agent}} returned an unknown account reply",
+    "providersFailed": "Could not read OpenCode providers. Check the installed OpenCode version and try again.",
+    "noSignInMethod": "{{agent}} has no sign-in method {{method}}",
+    "signInInTerminal": "{{method}} runs in a terminal; use its command instead",
+    "noApiKey": "{{agent}} takes no API key from Kettu",
+    "noSettings": "{{agent}} has no settings Kettu edits",
+    "noAutoCompact": "{{agent}} has no auto-compact setting Kettu edits",
+    "noSite": "{{agent}} has no site Kettu edits",
+    "noConfigFolder": "{{agent}} has no configuration folder",
+    "noSettingsFile": "{{agent}} has no settings file",
+    "noProgram": "{{name}} was installed without a program to run.",
+    "antigravity": {
+      "noAnswer": "agy /{{command}} gave no answer within {{seconds}} s",
+      "noJson": "agy /{{command}} exited with code {{code}} and no JSON reply"
+    },
+    "protocolVersion": "{{agent}} speaks an unsupported protocol version ({{version}}).",
+    "theAgent": "The agent",
+    "noSignInPage": "The agent gave no sign-in page",
+    "sdkLacks": "The Claude Agent SDK at {{entry}} lacks {{missing}}",
+    "signIn": {
+      "subscription": "Sign in with a subscription",
+      "deviceCode": "Sign in with a device code",
+      "terminal": "Sign in in a terminal"
+    },
+    "sessionFolderMissing": "The session's folder {{folder}} does not exist",
+    "noSessionFlag": "The agent has no session flag to start with"
   },
   "detect": {
     "noVersion": "No version of {{agent}} fits this computer, so it cannot be installed.",
@@ -356,7 +475,12 @@
   "environment": {
     "inherited": "Reload environment to pick up changes to PATH made after Kettu started.",
     "registryFailed": "Could not read PATH from Windows ({{error}}). Agents use the environment Kettu started with.",
-    "fallback": "Could not read the environment of {{shell}} ({{error}}). Agents use the environment Kettu started with."
+    "fallback": "Could not read the environment of {{shell}} ({{error}}). Agents use the environment Kettu started with.",
+    "shellTimeout": "the login shell did not answer within {{seconds}} s",
+    "signal": "signal {{signal}}",
+    "exitCode": "exit code {{code}}",
+    "noEnvironment": "{{shell}} printed no environment ({{reason}})",
+    "noEnvironmentDetail": "{{shell}} printed no environment ({{reason}}): {{detail}}"
   },
   "git": {
     "notReady": "Git is not available yet",
@@ -391,13 +515,76 @@
       "exitCode": "exited with code {{code}}",
       "command": "{{command}}: {{detail}}",
       "ghNotJson": "gh printed output that is not JSON"
+    },
+    "unusableRemote": "Unusable remote name: {{remote}}",
+    "unusableBranch": "Unusable branch name: {{branch}}",
+    "discardConflicted": "Not discarding a conflicted file: {{path}}",
+    "notRepositoryName": "Not a repository name: {{name}}",
+    "noPullRequestUrl": "gh did not print the new pull request's URL",
+    "notPullRequestUrl": "Not a GitHub pull request URL: {{url}}",
+    "notIssueUrl": "Not a GitHub issue URL",
+    "noIssue": "GitHub has no issue at this address, or it cannot be read",
+    "unexpected": {
+      "pullRequestObject": "Unexpected gh output: not a pull request object",
+      "pullRequestUrl": "Unexpected pull request URL: {{url}}",
+      "issue": "Unexpected gh output: not an issue",
+      "pullRequestList": "Unexpected gh output: not a pull request list",
+      "revList": "Unexpected rev-list count output: {{output}}",
+      "show": "Unexpected git show output for {{oid}}"
     }
   },
   "files": {
-    "projectMissing": "The project folder does not exist"
+    "projectMissing": "The project folder does not exist",
+    "notFileOrFolder": "{{path}} is not a file or a folder",
+    "insideGit": "{{path}} is inside .git",
+    "textTooLarge": "The text is larger than {{bytes}} bytes",
+    "changedSinceRead": "{{path}} changed since it was read",
+    "moveIntoItself": "{{path}} cannot move into itself",
+    "copyIntoItself": "{{path}} cannot be copied into itself",
+    "alreadyExists": "{{path}} already exists",
+    "pathNul": "path contains a NUL character",
+    "pathNotRelative": "path must be relative to the project",
+    "pathDotDot": "path must not contain ..",
+    "pathNoName": "path must name a file",
+    "notFolder": "{{path}} is not a folder",
+    "notFile": "{{path}} is not a file",
+    "outsideProject": "{{path}} is outside the project",
+    "tooManyCopies": "Too many copies of {{name}}",
+    "notExist": "{{path}} does not exist"
   },
   "worktree": {
-    "branchDeleteFailed": "Could not delete {{branch}}: {{reason}}"
+    "branchDeleteFailed": "Could not delete {{branch}}: {{reason}}",
+    "unknownPlaceholder": "Unknown placeholder in branch template: {{placeholder}}",
+    "unusableBranch": "Unusable branch name {{name}}: {{reason}}",
+    "branchProblem": {
+      "empty": "it is empty",
+      "tooLong": "it is longer than {{max}} characters",
+      "dash": "it starts with \"-\"",
+      "reserved": "it is reserved",
+      "special": "it has a space, a control or a special character",
+      "dots": "it has \"..\"",
+      "atBrace": "it has \"@{\"",
+      "emptyComponent": "it has an empty path component",
+      "endsDot": "it ends with \".\"",
+      "componentDot": "a path component starts with \".\"",
+      "componentLock": "a path component ends with \".lock\""
+    },
+    "baseNotFound": "Base {{base}} not found",
+    "outsideRoot": "Worktree folder outside its root",
+    "namesTaken": "Every name from {{first}} to {{last}} is taken",
+    "changedSinceInspected": "The worktree changed since it was inspected",
+    "notOfProject": "The folder is not a worktree of this project",
+    "branchGone": "Branch {{branch}} no longer exists",
+    "setupStopped": "stopped",
+    "includeProblem": {
+      "nul": "contains a NUL character",
+      "glob": "globs are not supported",
+      "absolute": "absolute paths are not allowed",
+      "colon": "contains \":\"",
+      "dotdot": "\"..\" is not allowed",
+      "itself": "names the project itself",
+      "git": "names git metadata"
+    }
   },
   "permission": {
     "allowOnce": "Allow once",
@@ -484,6 +671,24 @@
         "name": "Full access",
         "description": "Never asks. Use it in a sandbox or a worktree"
       }
+    },
+    "notStarted": "Claude Code has not started",
+    "noProgram": "No Claude Code program was found for the SDK",
+    "noTaskOutput": "This Claude Code cannot read task output",
+    "stoppedEarly": "Claude Code stopped before the turn ended",
+    "ultracodeUnknown": "Ultracode's inherited value is unknown, so it cannot be applied",
+    "auth": {
+      "login": "Log in with Claude",
+      "loginDescription": "Run `claude` and then /login",
+      "subscription": "Claude Subscription",
+      "subscriptionDescription": "Use Claude subscription",
+      "console": "Anthropic Console",
+      "consoleDescription": "Use Anthropic Console (API usage billing)"
+    },
+    "account": {
+      "none": "Not signed in",
+      "apiKey": "Anthropic API key",
+      "gateway": "Custom model gateway"
     }
   },
   "codex": {
@@ -688,7 +893,10 @@
       "stillStarting": "Some MCP servers are still starting. Run `/mcp` again later to see their status.",
       "unknownError": "unknown MCP startup error",
       "unnamed": "(unnamed)"
-    }
+    },
+    "noValue": "Codex has no value {{value}} for {{option}}",
+    "cannotSignOut": "Codex cannot sign out here",
+    "unknownError": "Unknown error"
   },
   "dsh": {
     "tool": {
@@ -743,7 +951,11 @@
       "high": "High",
       "xhigh": "Extra high",
       "max": "Max"
-    }
+    },
+    "noModel": "DeepSeek Harness has no model to run on",
+    "didNotStart": "DeepSeek Harness did not start",
+    "credentialsInvalid": "{{file}} is not valid YAML; fix it or remove the key there",
+    "credentialsNotMap": "{{file}} does not hold a credential map"
   },
   "opencode": {
     "option": {
@@ -772,8 +984,16 @@
       "saveKeyFailed": "OpenCode could not save the key.",
       "keySavedNotActivated": "The key was saved, but OpenCode could not activate the account.",
       "listFailed": "OpenCode could not list its providers.",
-      "readCredentialsFailed": "OpenCode could not read its credentials."
-    }
+      "readCredentialsFailed": "OpenCode could not read its credentials.",
+      "wrongProvider": "The credential does not belong to this provider.",
+      "keyRequired": "A key is required.",
+      "noKeySignIn": "This provider has no key sign-in."
+    },
+    "turnFailed": "OpenCode could not finish the turn",
+    "replyGone": "OpenCode no longer has that reply",
+    "noEvents": "OpenCode sends no events",
+    "answered": "OpenCode answered {{status}}",
+    "usageFailed": "Usage could not be read."
   },
   "pi": {
     "tool": {
@@ -863,7 +1083,9 @@
     },
     "changelog": {
       "missing": "Changelog not found: pi's package could not be located."
-    }
+    },
+    "noAnswer": "pi did not answer {{command}} within {{seconds}} s",
+    "refused": "pi refused it"
   },
   "cline": {
     "mode": {
@@ -889,7 +1111,8 @@
     },
     "permission": {
       "allowAlways": "Always allow in this session"
-    }
+    },
+    "signInFirst": "Sign in to Cline before starting a session"
   },
   "question": {
     "other": "Something else…"
@@ -901,10 +1124,49 @@
     "open": "Open",
     "decline": "Decline",
     "yes": "Yes",
-    "no": "No"
+    "no": "No",
+    "invalid": {
+      "text": "{{name}} takes text",
+      "minLength": "{{name}} takes at least {{min}} characters",
+      "maxLength": "{{name}} takes at most {{max}} characters",
+      "format": "{{name}} is not a valid {{format}}",
+      "number": "{{name}} takes a number",
+      "integer": "{{name}} takes a whole number",
+      "minimum": "{{name}} takes at least {{min}}",
+      "maximum": "{{name}} takes at most {{max}}",
+      "boolean": "{{name}} takes yes or no",
+      "noChoice": "{{name}} has no such choice",
+      "list": "{{name}} takes a list of choices",
+      "twice": "{{name}} names a choice twice",
+      "minItems": "{{name}} takes at least {{min}} choices",
+      "maxItems": "{{name}} takes at most {{max}} choices",
+      "noField": "The form has no field {{key}}",
+      "required": "{{name}} is required"
+    }
   },
   "artifacts": {
-    "formatUpgraded": "Moved to version {{format}} of its type’s format"
+    "formatUpgraded": "Moved to version {{format}} of its type’s format",
+    "edit": {
+      "noElement": "No element starts at offset {{offset}}",
+      "textTooLong": "The text is too long",
+      "moreThanText": "The <{{tag}}> at offset {{offset}} holds more than text",
+      "styleRefused": "The style has a property or value an edit may not write"
+    },
+    "needDatabase": "Artifacts need the thread database",
+    "deleted": "{{id}} is in Recently deleted",
+    "noHtmlFile": "{{id}} has no HTML file {{path}}",
+    "notUtf8": "{{path}} is not UTF-8 text",
+    "fileTooLarge": "The file is too large",
+    "noArtifact": "No artifact {{id}}",
+    "noVersion": "{{id}} has no version {{version}}",
+    "notDeleted": "{{id}} is not in Recently deleted",
+    "noThread": "{{id}} has no thread {{thread}}",
+    "threadsFull": "{{id}} holds {{count}} threads",
+    "commentsFull": "{{thread}} holds {{count}} comments",
+    "changedSince": "{{id}} is at version {{head}}, and {{changed}} changed since version {{base}}",
+    "canvasInvalid": "{{file}} of {{id}} is not valid: {{reason}}",
+    "pptxNoBytes": "PowerPoint export gave no bytes",
+    "noQuestion": "No such question is open for this port"
   },
   "workflow": {
     "unusable": "{{name}} cannot be used: {{problem}}",
@@ -949,7 +1211,8 @@
     "cancelled": "{{title}} was cancelled",
     "endedBody": "{{workflow}} · {{steps}} steps",
     "notWritten": "Only a task that ended done on a workflow its agent wrote for it can keep or publish that workflow",
-    "noOrigin": "The conversation this task started from is gone"
+    "noOrigin": "The conversation this task started from is gone",
+    "noCommit": "The branch to work from has no commit"
   },
   "marketPublish": {
     "handleInvalid": "A publisher name is 1 to 32 lowercase letters, digits and hyphens, starting and ending with a letter or digit.",
@@ -972,6 +1235,64 @@
       "not_found": "It’s no longer in the Kettu Marketplace.",
       "check_failed": "The Kettu Marketplace’s check didn’t pass.",
       "conflict": "Something else changed it at the same time. Try again."
+    },
+    "check": {
+      "link": "It is a link. Replace it with the file itself, or remove it.",
+      "nameTooLong": "Its name is too long.",
+      "nameCharacters": "Its name holds a backslash or control character.",
+      "pathTooLong": "Its path is too long.",
+      "tooManyFiles": "The folder holds more than {{count}} files, the most a version may have.",
+      "folderTooLarge": "The folder is larger than {{mb}} MB, the most a version may be.",
+      "notJsonObject": "It is not a JSON object.",
+      "notJson": "It is not valid JSON.",
+      "missing": {
+        "name": "It has no name.",
+        "description": "It has no description.",
+        "version": "It has no version.",
+        "versionNumber": "It has no version such as 1.0.0.",
+        "nameFront": "It has no name in its front matter.",
+        "descriptionFront": "It has no description in its front matter."
+      },
+      "skillName": "The name \"{{name}}\" must be lowercase letters, digits and hyphens.",
+      "notUtf8": "It is not UTF-8 text.",
+      "workflowName": "The name \"{{name}}\" has no Latin letters or digits to name the listing by. Name it in English and give other languages under locales.",
+      "readmeTooLong": "It is longer than {{count}} characters, the most a listing's text may be.",
+      "badVersion": "\"{{version}}\" is not a version such as 1.0.0.",
+      "serverNotRunnable": "It names no package or https remote that Kettu can run.",
+      "notBundle": "It is not an MCP bundle Kettu can read.",
+      "bundleNoManifest": "It has no manifest.json.",
+      "secret": {
+        "found": "Line {{line}} looks like {{what}}. Remove it, and revoke it if it is real.",
+        "privateKey": "a private key",
+        "github": "a GitHub token",
+        "anthropic": "an Anthropic API key",
+        "openrouter": "an OpenRouter API key",
+        "deepseek": "a DeepSeek-style API key",
+        "openai": "an OpenAI API key",
+        "aws": "an AWS access key",
+        "slack": "a Slack token",
+        "stripe": "a Stripe key",
+        "google": "a Google API key",
+        "npm": "an npm token",
+        "gitlab": "a GitLab token",
+        "huggingFace": "a Hugging Face token"
+      },
+      "nothingAt": "Nothing is at {{path}}.",
+      "pathIsLink": "The path is a link. Give the folder it points to instead.",
+      "folderOrBundle": "Publish a folder, or an MCP bundle (.mcpb) file.",
+      "bundleTooLarge": "The bundle is larger than {{mb}} MB, the most a version may be.",
+      "bothPlugins": "The folder is both a Claude Code and a Codex plugin. Publish each from a folder of its own.",
+      "manyBundles": "The folder holds more than one MCP bundle. Keep one.",
+      "fileTooLarge": "It is larger than {{mb}} MB, the most a version may be.",
+      "unknownFolder": "Kettu cannot tell what this folder is. A skill has a SKILL.md, a workflow a workflow.yaml, a plugin a .claude-plugin/plugin.json or .codex-plugin/plugin.json, and an MCP server a server.json.",
+      "manifestTooLarge": "It is too large to be a manifest.",
+      "aboutTooLong": "The description is longer than {{count}} characters.",
+      "manifestName": "A file at the top may not be named manifest. Rename it.",
+      "otherKind": "{{listing}} is already one of the user’s listings, as another kind. Give this one another name.",
+      "takenDown": "{{listing}} was taken down by Kettu: {{reason}}",
+      "versionInManifest": "The version is {{version}}, as the manifest says; change it there instead of passing {{wanted}}.",
+      "versionTakenNumbered": "Version {{version}} of {{listing}} is published already. Pass a higher version.",
+      "versionTaken": "Version {{version}} of {{listing}} is published already. Raise the version in {{manifest}}."
     }
   },
   "marketCommunity": {
@@ -987,7 +1308,8 @@
     "otherHarness": "This plugin is for another agent.",
     "noManifest": "The plugin has no {{file}} with a name, so it can’t be installed.",
     "nameTaken": "Another plugin named {{name}} from the Kettu Marketplace is installed ({{other}}). Uninstall it first.",
-    "noWorkflow": "The listing has no workflow.yaml in UTF-8 text, so nothing was installed."
+    "noWorkflow": "The listing has no workflow.yaml in UTF-8 text, so nothing was installed.",
+    "notListing": "Not a listing of the Kettu Marketplace"
   },
   "marketBundle": {
     "invalid": "This MCP bundle can’t be installed: {{reason}}",
@@ -1015,18 +1337,297 @@
     "tooBig": "The bundle is larger than {{mb}} MB, so nothing was installed.",
     "mismatch": "The bundle didn’t match its checksum, so nothing was installed.",
     "outside": "Kettu won’t run a path outside the bundle’s folder, {{path}}.",
-    "changed": "The listing changed while the bundle was downloading. Click Install again."
+    "changed": "The listing changed while the bundle was downloading. Click Install again.",
+    "notHttps": "not https"
   },
   "marketSkills": {
-    "nameTaken": "You’ve already added a skill named {{name}}, from {{from}}. Remove that one first: an agent keeps only one of two skills with the same name."
+    "nameTaken": "You’ve already added a skill named {{name}}, from {{from}}. Remove that one first: an agent keeps only one of two skills with the same name.",
+    "badName": "\"{{name}}\" is not a skill name: lowercase letters, digits and hyphens",
+    "noDescription": "The skill {{name}} has no description",
+    "sameName": "{{path}} has its name, {{name}}",
+    "notInCatalog": "{{id}} is not in the skills catalog",
+    "noSuchSkill": "The catalog has no skill {{name}}",
+    "needsGithub": "Give a github.com repository, or a folder in one",
+    "noSkillFile": "There is no {{file}} in {{url}}",
+    "manySkills": "{{url}} holds {{count}} skills; give the folder of one of them",
+    "notFolder": "{{folder}} is not a folder",
+    "folderNoSkillFile": "{{folder}} has no {{file}}",
+    "noFile": "The skill has no {{file}}",
+    "outside": "The skill names a file outside it: {{path}}",
+    "link": "The skill holds a link, which Kettu does not copy: {{path}}",
+    "tooManyFiles": "The skill holds more than {{count}} files",
+    "tooLarge": "The skill is larger than {{mb}} MB",
+    "github": {
+      "timeout": "GitHub did not answer within {{seconds}} s",
+      "unreachable": "Could not reach GitHub: {{reason}}",
+      "notFound": "GitHub has no such repository or ref, or it is private",
+      "status": "GitHub answered {{status}}",
+      "tooLarge": "The repository is larger than {{mb}} MB",
+      "unpackedTooLarge": "The repository is larger than {{mb}} MB unpacked",
+      "notTarball": "The download is not a tarball: {{reason}}",
+      "unsafePath": "The archive holds an unsafe path: {{path}}"
+    }
   },
   "marketPlugins": {
     "notListedInstalled": "{{agent}} did not list {{id}} as installed",
     "marketplaceNotListed": "{{agent}} did not list the marketplace it added",
-    "noSuchPlugin": "{{agent}} offers no plugin {{id}}"
+    "noSuchPlugin": "{{agent}} offers no plugin {{id}}",
+    "noPlugins": "Only Claude Code and Codex have plugins",
+    "codexUserOnly": "Codex installs plugins for the user only",
+    "scopeNeedsProject": "A project or local scope needs the project, and only it",
+    "marketplaceListNotJson": "Claude Code's marketplace list was not JSON",
+    "marketplaceListNotList": "Claude Code's marketplace list was not a list",
+    "pluginListNotJson": "Claude Code's plugin list was not JSON",
+    "pluginListNotObject": "Claude Code's plugin list was not an object",
+    "claudeNoResult": "Claude Code gave no result",
+    "claudeOutcome": "Claude Code answered {{outcome}}",
+    "claudeFailed": "claude failed"
   },
   "report": {
     "draftNoAgent": "No agent is available to draft the description",
     "draftFailed": "{{agent}} could not draft the description: {{reason}}"
+  },
+  "hostError": {
+    "agentNoRequest": "The agent takes no such request",
+    "noFolder": "This session has no folder to run in",
+    "noArtifactFile": "This version of the artifact has no file {{path}}",
+    "showHere": "Show app works only on this computer.",
+    "tooManyRequests": "This device has too many requests waiting",
+    "agentStopping": "The agent is stopping"
+  },
+  "agentFile": {
+    "foreign": "{{file}} is not one of the session's agent's files",
+    "missing": "{{file}} does not exist"
+  },
+  "attachment": {
+    "notText": "{{name}} is not UTF-8 text",
+    "grantExpired": "Kettu can no longer read this file. Add it again."
+  },
+  "light": {
+    "noModel": "it no longer offers the model {{model}}",
+    "noRemoval": "the agent's hidden sessions cannot be removed without a trace",
+    "noAnswer": "no answer within {{seconds}} s",
+    "noCommitMessage": "its reply held no commit message"
+  },
+  "threadDb": {
+    "notOpen": "The thread database is not open",
+    "searchNotOpen": "The search index is not open",
+    "damaged": "The thread database was damaged: {{reason}}"
+  },
+  "computer": {
+    "cannotShow": "The app could not come to the front."
+  },
+  "memory": {
+    "titleEmpty": "title must not be empty.",
+    "titleTooLong": "title must be at most {{max}} characters.",
+    "descriptionTooLong": "description must be at most {{max}} characters.",
+    "bodyTooLong": "body must be at most {{max}} characters. Keep one fact per entry.",
+    "sameTitle": "The entry {{id}} already has this title. Update that entry instead of adding another."
+  },
+  "workflowFile": {
+    "unknownField": "unknown field",
+    "required": "is required",
+    "mustBeText": "must be text",
+    "notEmpty": "must not be empty",
+    "tooLong": "is longer than {{max}} characters",
+    "oneLine": "must be one line",
+    "stepIdOrList": "must be a step id or a list of them",
+    "stepId": "must be a step id",
+    "namesTwice": "names \"{{id}}\" twice",
+    "wholeNumber": "must be a whole number from 1 to {{max}}",
+    "outcomeMapping": "must be a mapping with a name and where it goes",
+    "doneOrDropped": "must be done or dropped",
+    "needsToOrEnd": "needs to (the steps it starts) or end (done or dropped)",
+    "bothToEnd": "has both to and end; give one",
+    "toolsMapping": "must be a mapping with mcp and skills lists",
+    "nameList": "must be a list of names",
+    "tooManyNames": "lists more than {{max}} names",
+    "name": "must be a name",
+    "mapping": "must be a mapping",
+    "idFormat": "must be kebab-case, up to {{max}} characters",
+    "agentOrYou": "must be agent or you",
+    "handInKind": "must be document, outcome or note",
+    "trueOrFalse": "must be true or false",
+    "oneOutcome": "must list at least one outcome",
+    "tooManyOutcomes": "lists more than {{max}} outcomes",
+    "outcomeTwice": "another outcome is named \"{{name}}\"",
+    "personHandsOutcome": "a person's step hands in an outcome",
+    "personNotReviewed": "a person's step is not reviewed",
+    "personNoAgent": "a person's step has no agent to pick",
+    "personNoReview": "a person's step reviews nothing",
+    "personNoTools": "a person's step has no session to hand tools to",
+    "twoOutcomes": "a step that hands in an outcome needs at least two outcomes",
+    "outcomesMapping": "must map step ids to their outcomes",
+    "outcomeNames": "must map outcome names to names",
+    "localesMapping": "must be a mapping of language codes",
+    "tooManyLocales": "has more than {{max}} languages",
+    "languageCode": "must be a language code such as zh-CN",
+    "localeMapping": "must be a mapping with name, description, when, steps or outcomes",
+    "stepNames": "must map step ids to names",
+    "stepTwice": "another step is \"{{id}}\"",
+    "limitBack": "only an arrow back to this or an earlier step has a limit",
+    "backOne": "an arrow back goes to one step",
+    "reviewSelf": "a step cannot review itself",
+    "reviewPerson": "\"{{id}}\" is a person's step",
+    "unreachable": "\"{{id}}\" is never reached from the first step",
+    "noEnd": "no outcome ends the task; give one end: done or end: dropped",
+    "noPathToEnd": "no path from \"{{id}}\" ever ends the task",
+    "fileMapping": "the file must be a mapping",
+    "formatValue": "must be {{format}}",
+    "oneStep": "must list at least one step",
+    "tooManySteps": "lists more than {{max}} steps",
+    "noOutcome": "\"{{id}}\" has no outcome \"{{name}}\"",
+    "noStep": "no step \"{{id}}\"",
+    "fileTooLarge": "the file is larger than {{kb}} KB",
+    "notYaml": "not valid YAML: {{reason}}",
+    "noAliases": "YAML aliases are not allowed",
+    "notAWorkflow": "not a workflow",
+    "noMcp": "no MCP server \"{{name}}\" is installed in Kettu",
+    "noSkill": "no Skill \"{{name}}\" is installed in Kettu",
+    "unreadable": "could not be read: {{reason}}",
+    "fileGone": "the file is gone"
+  },
+  "apiKey": {
+    "oneWord": "The API key must be one word without spaces",
+    "keyOnly": "This harness takes only an API key",
+    "baseUrl": "The base URL must be an http or https address"
+  },
+  "agentConfig": {
+    "modelOneWord": "The model must be one word without spaces",
+    "invalidFile": "{{file}} is not valid {{format}}; fix it or set the key there yourself",
+    "notTable": "{{file}} does not hold a table of settings",
+    "parentNotTable": "{{key}} in {{file}} is not a table; fix it or set the key there yourself",
+    "noAutoCompact": "This harness has no auto-compact setting",
+    "oneValue": "This harness sets one value for every model",
+    "wholeNumber": "The value must be a whole number from {{min}} to {{max}}",
+    "pluginRows": "{{file}} is not a list of plugin rows; fix it or set the threshold there yourself",
+    "rowNotMap": "The {{row}} row's config in {{file}} is not a map; fix it first",
+    "cacheDuration": "The prompt cache duration must be 5m or 1h",
+    "windowRange": "The window must be from {{min}} to {{max}} tokens",
+    "modelSettingsNotObject": "modelSettings in {{file}} is not an object; fix it or set the window there yourself",
+    "siteChoice": "The site must be international, china or automatic",
+    "notJsonObject": "{{file}} does not hold a JSON object"
+  },
+  "agentRun": {
+    "noSession": "No session {{id}}",
+    "notOpen": "Session {{id}} is not open",
+    "ended": "Session {{id}} has ended",
+    "turnRunning": "A turn is already running",
+    "notRunning": "{{agent}} is not running",
+    "noForkPoint": "Fork point message {{message}} was not found in session {{id}}",
+    "noOptionTakes": "No option {{option}} takes {{value}}",
+    "questionCancelled": "The question was cancelled",
+    "betweenTurns": "Change it between turns",
+    "takesChoice": "{{option}} takes a choice",
+    "noChoice": "No {{option}} {{value}}",
+    "noModel": "No model {{value}}",
+    "noEffort": "No effort {{value}}",
+    "noMode": "No mode {{value}}",
+    "noOption": "No option {{option}}"
+  },
+  "usageRead": {
+    "notSignedIn": "{{vendor}} is not signed in",
+    "signInExpired": "{{vendor}}'s sign-in has expired",
+    "noPlanUsage": "{{vendor}} sent no plan usage",
+    "noBalanceOrPlan": "{{vendor}} sent no balance or plan",
+    "noAccount": "{{vendor}} sent no account",
+    "noResets": "{{vendor}} sent no reset credits",
+    "unknownAnswer": "{{vendor}} sent an unknown answer",
+    "refusedAccount": "{{vendor}} refused the account read",
+    "noApiKeyUsage": "{{vendor}}'s usage is not read for an API key sign-in yet",
+    "otherServer": "{{vendor}} signs in to a server Kettu does not read",
+    "noFactoryKey": "{{vendor}} has no FACTORY_API_KEY to read the plan with",
+    "storedUnreadable": "The stored sign-in could not be read",
+    "endpointNotListed": "{{vendor}}'s usage endpoint is not listed",
+    "unreachable": "{{vendor}} could not be reached",
+    "notAccepted": "{{vendor}} did not accept the stored sign-in",
+    "answered": "{{vendor}} answered {{status}}",
+    "replyUnreadable": "{{vendor}}'s usage reply could not be read",
+    "kilo": {
+      "noPort": "Could not reserve a local port",
+      "exited": "Kilo server exited before the profile read",
+      "refused": "Kilo profile read returned {{status}}",
+      "timedOut": "Kilo profile read timed out"
+    },
+    "auggieFailed": "Auggie account status failed",
+    "rpc": {
+      "badFrame": "Invalid JSON-RPC frame",
+      "failed": "Vendor RPC failed",
+      "exited": "Vendor RPC exited with code {{code}}",
+      "timedOut": "Vendor RPC timed out"
+    }
+  },
+  "modelRequest": {
+    "noRecord": "This agent keeps no record Kettu reads",
+    "noSessionFile": "This session has no session file to read",
+    "noRollout": "This session has no rollout to read",
+    "noClineMessages": "Cline keeps no messages for this session",
+    "messagesGone": "These messages are no longer kept",
+    "openCodeGone": "OpenCode no longer has these messages; open the request again",
+    "fileChanged": "The session file changed; open the request again",
+    "tooLarge": "These records are too large to show"
+  },
+  "usage": {
+    "workerStopped": "The usage worker stopped",
+    "workerStoppedWith": "The usage worker stopped: {{error}}"
+  },
+  "marketCatalog": {
+    "tooLarge": "The MCP Registry sent more than {{bytes}} bytes",
+    "notJson": "The MCP Registry sent something other than JSON",
+    "timeout": "The MCP Registry did not answer in {{seconds}} s",
+    "unreachable": "Could not reach the MCP Registry: {{reason}}",
+    "status": "The MCP Registry answered {{status}}",
+    "unreadable": "Could not read the MCP Registry: {{reason}}"
+  },
+  "marketConnect": {
+    "serverStatus": "The server answered {{status}}",
+    "hostStatus": "{{host}} answered {{status}}",
+    "refused": "The service refused the sign-in: {{reason}}",
+    "noAuthServer": "The server names no authorization server Kettu can read",
+    "noPkce": "The authorization server does not offer PKCE with S256",
+    "timedOut": "The sign-in did not finish within five minutes",
+    "noApp": "Kettu has no app registered with this service",
+    "noDevice": "The service offers no device sign-in",
+    "deviceNotStarted": "The service did not start a device sign-in: {{reason}}",
+    "deviceNoCode": "The service did not start a device sign-in: no code",
+    "codeExpired": "The code expired before it was entered",
+    "denied": "The sign-in was denied at the service",
+    "noToken": "The service gave no token",
+    "noMetadata": "The authorization server metadata could not be read",
+    "renewExpired": "The token expired and cannot be renewed",
+    "renewRefused": "The service refused to renew the token: {{reason}}",
+    "noServer": "Kettu keeps no server of that id that signs in",
+    "landing": {
+      "done": "Signed in. You can close this tab and return to Kettu.",
+      "failed": "The sign-in did not finish. You can close this tab and try again in Kettu."
+    }
+  },
+  "project": {
+    "notAbsolute": "projectPath must be an absolute path",
+    "notExist": "{{path}} does not exist",
+    "notFolder": "{{path}} is not a folder",
+    "noProject": "No project at {{path}}",
+    "moveBeforeItself": "A project cannot move before itself"
+  },
+  "process": {
+    "toolTimedOut": "{{name}} did not finish within {{ms}} ms"
+  },
+  "validate": {
+    "empty": "{{key}} must not be empty",
+    "tooLong": "{{key}} is longer than {{max}} characters",
+    "routineName": "name must be at most {{max}} characters",
+    "routinePrompt": "prompt must be 1 to {{max}} characters",
+    "commentBody": "body must be 1 to {{max}} characters, not blank",
+    "promptItems": "content has more than {{max}} items",
+    "promptAttachments": "A prompt carries at most {{max}} attachments",
+    "promptTooLarge": "The prompt is larger than 10 MB",
+    "promptEmpty": "The prompt is empty",
+    "textTooLarge": "text is larger than 1 MiB",
+    "artifactTitle": "title must be 1 to {{max}} characters, not blank",
+    "branchTemplate": "branchTemplate must be a string of at most {{max}} characters",
+    "copyCount": "copy must be a list of at most {{max}} paths",
+    "copyPaths": "copy must list paths",
+    "copyEntry": "copy: {{entry}} {{reason}}",
+    "setupCommand": "setup must be null or a command of at most {{max}} characters"
   }
 }

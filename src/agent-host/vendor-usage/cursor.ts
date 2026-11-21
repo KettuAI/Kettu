@@ -5,6 +5,7 @@
 import { execFile } from 'node:child_process'
 import path from 'node:path'
 import type { AgentAccount, PlanLimit } from '@shared/agent-host'
+import { t } from '../i18n'
 import { number, object, percentLimit, time, type VendorUsage } from './common'
 import {
   askVendor,
@@ -162,9 +163,9 @@ export async function readCursorUsage(place: CursorPlace): Promise<VendorUsage> 
   let token = await accessToken(place)
   if (!token && variable(place, 'CURSOR_API_KEY')) {
     // Exchanging a key for a token is not read here until it is checked against a real key.
-    throw new UsageReadError(`${VENDOR}'s usage is not read for an API key sign-in yet`)
+    throw new UsageReadError(t('usageRead.noApiKeyUsage', { vendor: VENDOR }))
   }
-  if (!token) throw new UsageReadError(`${VENDOR} is not signed in`)
+  if (!token) throw new UsageReadError(t('usageRead.notSignedIn', { vendor: VENDOR }))
   const read = async (access: string) => {
     const [usage, plan] = await Promise.all([
       dashboard('GetCurrentPeriodUsage', access, place),
@@ -179,10 +180,10 @@ export async function readCursorUsage(place: CursorPlace): Promise<VendorUsage> 
     if (!(error instanceof UsageReadError) || error.status !== 401 || !place.renew) throw error
     await place.renew()
     token = await accessToken(place)
-    if (!token) throw new UsageReadError(`${VENDOR} is not signed in`)
+    if (!token) throw new UsageReadError(t('usageRead.notSignedIn', { vendor: VENDOR }))
     usage = await read(token)
   }
-  if (!usage) throw new UsageReadError(`${VENDOR} sent no plan usage`)
+  if (!usage) throw new UsageReadError(t('usageRead.noPlanUsage', { vendor: VENDOR }))
   return usage
 }
 

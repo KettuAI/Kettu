@@ -4,6 +4,7 @@
 
 import { promisify } from 'node:util'
 import { gunzip as gunzipCallback } from 'node:zlib'
+import { LocalizedError } from '../localized-error'
 
 const gunzip = promisify(gunzipCallback)
 
@@ -121,17 +122,26 @@ export async function downloadTarball(
     response = await fetcher(url, { signal, redirect: 'follow' })
   } catch (error) {
     if (signal.aborted) {
-      throw new Error(`GitHub did not answer within ${limits.timeoutMs / 1000} s`, { cause: error })
+      throw new LocalizedError(
+        { key: 'marketSkills.github.timeout', params: { seconds: limits.timeoutMs / 1000 } },
+        { cause: error },
+      )
     }
-    throw new Error(`Could not reach GitHub: ${(error as Error).message}`, { cause: error })
+    throw new LocalizedError(
+      { key: 'marketSkills.github.unreachable', params: { reason: (error as Error).message } },
+      { cause: error },
+    )
   }
   if (response.status === 404) {
     void response.body?.cancel()
-    throw new Error('GitHub has no such repository or ref, or it is private')
+    throw new LocalizedError({ key: 'marketSkills.github.notFound' })
   }
   if (!response.ok || !response.body) {
     void response.body?.cancel()
-    throw new Error(`GitHub answered ${response.status}`)
+    throw new LocalizedError({
+      key: 'marketSkills.github.status',
+      params: { status: response.status },
+    })
   }
   const chunks: Uint8Array[] = []
   let size = 0
@@ -143,13 +153,19 @@ export async function downloadTarball(
       size += value.byteLength
       if (size > limits.downloadBytes) {
         void reader.cancel()
-        throw new Error(`The repository is larger than ${mb(limits.downloadBytes)} MB`)
+        throw new LocalizedError({
+          key: 'marketSkills.github.tooLarge',
+          params: { mb: mb(limits.downloadBytes) },
+        })
       }
       chunks.push(value)
     }
   } catch (error) {
     if (signal.aborted) {
-      throw new Error(`GitHub did not answer within ${limits.timeoutMs / 1000} s`, { cause: error })
+      throw new LocalizedError(
+        { key: 'marketSkills.github.timeout', params: { seconds: limits.timeoutMs / 1000 } },
+        { cause: error },
+      )
     }
     throw error
   }
@@ -210,11 +226,15 @@ export async function readTarball(
     tar = await gunzip(gz, { maxOutputLength: limits.unpackedBytes })
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === 'ERR_BUFFER_TOO_LARGE') {
-      throw new Error(`The repository is larger than ${mb(limits.unpackedBytes)} MB unpacked`, {
-        cause: error,
-      })
+      throw new LocalizedError(
+        { key: 'marketSkills.github.unpackedTooLarge', params: { mb: mb(limits.unpackedBytes) } },
+        { cause: error },
+      )
     }
-    throw new Error(`The download is not a tarball: ${(error as Error).message}`, { cause: error })
+    throw new LocalizedError(
+      { key: 'marketSkills.github.notTarball', params: { reason: (error as Error).message } },
+      { cause: error },
+    )
   }
   const entries = await (decompress ?? (await loadDecompress()))(tar)
   return checkedEntries(entries, tarCommit(tar))
@@ -233,7 +253,10 @@ export function checkedEntries(
     if (path === null) {
       // The top folder itself names no path inside the repository.
       if (!entry.path.replace(/\/+$/, '').includes('/') && entry.type !== 'file') continue
-      throw new Error(`The archive holds an unsafe path: ${entry.path}`)
+      throw new LocalizedError({
+        key: 'marketSkills.github.unsafePath',
+        params: { path: entry.path },
+      })
     }
     if (entry.type === 'symlink' || entry.type === 'link') {
       links.push(path)
@@ -257,15 +280,18 @@ export interface FolderLimits {
 export function folderFiles(tarball: Tarball, folder: string, limits: FolderLimits): TarFile[] {
   const prefix = folder === '' ? '' : `${folder}/`
   const link = tarball.links.find((path) => path.startsWith(prefix))
-  if (link !== undefined)
-    throw new Error(`The skill holds a link, which Kettu does not copy: ${link}`)
+  if (link !== undefined) {
+    throw new LocalizedError({ key: 'marketSkills.link', params: { path: link } })
+  }
   const files = tarball.files
     .filter((file) => file.path.startsWith(prefix))
     .map((file) => ({ ...file, path: file.path.slice(prefix.length) }))
   if (files.length > limits.files) {
-    throw new Error(`The skill holds more than ${limits.files} files`)
+    throw new LocalizedError({ key: 'marketSkills.tooManyFiles', params: { count: limits.files } })
   }
   const bytes = files.reduce((sum, file) => sum + file.data.length, 0)
-  if (bytes > limits.bytes) throw new Error(`The skill is larger than ${mb(limits.bytes)} MB`)
+  if (bytes > limits.bytes) {
+    throw new LocalizedError({ key: 'marketSkills.tooLarge', params: { mb: mb(limits.bytes) } })
+  }
   return files
 }

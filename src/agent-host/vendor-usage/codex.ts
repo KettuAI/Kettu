@@ -4,6 +4,7 @@
 
 import path from 'node:path'
 import type { PlanResets, ResetSpendCode } from '@shared/agent-host'
+import { t } from '../i18n'
 import { number, object, time } from './common'
 import {
   askVendor,
@@ -137,7 +138,7 @@ export async function readCodexResets(place: CodexPlace): Promise<CodexResetsRea
   const signedIn = await signIn(place)
   if (!signedIn) return null
   const count = parseCodexResetCount(await ask(signedIn, place, { path: '/usage' }))
-  if (count === null) throw new UsageReadError(`${VENDOR} sent no reset credits`)
+  if (count === null) throw new UsageReadError(t('usageRead.noResets', { vendor: VENDOR }))
   if (count === 0) return { resets: { count, each: [], observedAt: place.now }, details: 'read' }
   let each: PlanResets['each'] | null = null
   let expired = false
@@ -166,13 +167,13 @@ export async function spendCodexReset(
   requestId: string,
 ): Promise<ResetSpendCode> {
   const signedIn = await signIn(place)
-  if (!signedIn) throw new UsageReadError(`${VENDOR} is not signed in`)
+  if (!signedIn) throw new UsageReadError(t('usageRead.notSignedIn', { vendor: VENDOR }))
   const reply = await ask(signedIn, place, {
     path: '/rate-limit-reset-credits/consume',
     body: JSON.stringify({ credit_id: creditId, redeem_request_id: requestId }),
   })
   const code = object(reply)?.code
   const known = SPEND_CODES.find((item) => item === code)
-  if (!known) throw new UsageReadError(`${VENDOR} sent an unknown answer`)
+  if (!known) throw new UsageReadError(t('usageRead.unknownAnswer', { vendor: VENDOR }))
   return known
 }

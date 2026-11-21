@@ -85,6 +85,8 @@ export class HostError extends Error {
   constructor(
     readonly code: number,
     message: string,
+    // The process cannot translate, so the agent host words a refusal it names by reason.
+    readonly reason?: 'signIn' | 'betweenTurns',
   ) {
     super(message)
   }
@@ -272,7 +274,11 @@ export class Host {
     }
     const ready = (await this.providers()).filter((provider) => provider.ready)
     if (ready.length === 0 && !row) {
-      throw new HostError(ERROR.authRequired, 'Sign in to Cline before starting a session')
+      throw new HostError(
+        ERROR.authRequired,
+        'Sign in to Cline before starting a session',
+        'signIn',
+      )
     }
     const last = this.lastProvider()
     const provider =
@@ -554,7 +560,9 @@ export class Host {
     const provider = next.provider !== undefined && next.provider !== settings.provider
     const mode = next.mode !== undefined && next.mode !== settings.mode
     if (provider || mode) {
-      if (session.running) throw new HostError(ERROR.failed, 'Change it between turns')
+      if (session.running) {
+        throw new HostError(ERROR.failed, 'Change it between turns', 'betweenTurns')
+      }
       // Both shape the system prompt and the tools, so the next prompt starts a core with them.
       await this.teardown(session, provider ? 'kettu_provider_change' : 'kettu_mode_change')
       if (mode) settings.mode = next.mode!

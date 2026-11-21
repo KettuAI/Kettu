@@ -9,6 +9,7 @@ import {
   CODEBUDDY_SITES,
   type CodebuddyShellOverride,
 } from '@shared/agents'
+import { t } from '../i18n'
 import { isObject, readSettings, writeSettings } from '../settings-file'
 
 /** Reads the site from the file; a file that names none follows the agent's sign-in. */
@@ -37,7 +38,7 @@ export function shellOverrides(
 export function checkCodebuddySite(change: CodebuddySiteChange): CodebuddySiteChange {
   const { site } = change
   if (site !== 'automatic' && !CODEBUDDY_SITES.includes(site)) {
-    throw new Error('The site must be international, china or automatic')
+    throw new Error(t('agentConfig.siteChoice'))
   }
   return { site }
 }

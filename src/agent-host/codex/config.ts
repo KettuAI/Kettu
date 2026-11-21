@@ -242,7 +242,7 @@ export function buildConfig(settings: Settings, models: readonly Model[]): Confi
 
 export class ConfigValueError extends Error {
   constructor(optionId: string, value: unknown) {
-    super(`Codex has no value ${JSON.stringify(value)} for ${optionId}`)
+    super(t('codex.noValue', { value: JSON.stringify(value), option: optionId }))
     this.name = 'ConfigValueError'
   }
 }

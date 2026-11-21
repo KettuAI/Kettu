@@ -1,4 +1,5 @@
 import { spawn } from 'node:child_process'
+import { t } from '../i18n'
 
 interface RpcCall {
   method: string
@@ -50,7 +51,8 @@ export async function requestOverStdio(
         if (boundary < 0) return
         const header = buffer.subarray(0, boundary).toString('ascii')
         const length = Number(/content-length:\s*(\d+)/i.exec(header)?.[1])
-        if (!Number.isFinite(length) || length < 0) return fail(new Error('Invalid JSON-RPC frame'))
+        if (!Number.isFinite(length) || length < 0)
+          return fail(new Error(t('usageRead.rpc.badFrame')))
         if (buffer.length < boundary + 4 + length) return
         const message = JSON.parse(
           buffer.subarray(boundary + 4, boundary + 4 + length).toString('utf8'),
@@ -61,7 +63,8 @@ export async function requestOverStdio(
         }
         buffer = buffer.subarray(boundary + 4 + length)
         if (message.id !== requestId) continue
-        if (message.error) return fail(new Error(message.error.message ?? 'Vendor RPC failed'))
+        if (message.error)
+          return fail(new Error(message.error.message ?? t('usageRead.rpc.failed')))
         if (next === calls.length) {
           done = true
           resolve(message.result)
@@ -78,9 +81,9 @@ export async function requestOverStdio(
     })
     child.once('error', (error) => fail(error))
     child.once('exit', (code) => {
-      if (!done) fail(new Error(`Vendor RPC exited with code ${String(code)}`))
+      if (!done) fail(new Error(t('usageRead.rpc.exited', { code: String(code) })))
     })
-    timer = setTimeout(() => fail(new Error('Vendor RPC timed out')), timeoutMs)
+    timer = setTimeout(() => fail(new Error(t('usageRead.rpc.timedOut'))), timeoutMs)
     send()
   })
   try {

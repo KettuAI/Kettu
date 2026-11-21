@@ -5,6 +5,7 @@
 // Copyright (c) 2026 yetone. MIT License.
 
 import type { PlanLimit } from '@shared/agent-host'
+import { t } from '../i18n'
 import { balance, number, object, percentLimit, time, type VendorUsage } from './common'
 import { askVendor, UsageReadError, variable, type SignInPlace } from './stored-sign-in'
 
@@ -41,7 +42,7 @@ export function parseFactoryLimits(value: unknown, now: number): VendorUsage | n
 
 export async function readFactoryLimits(place: SignInPlace): Promise<VendorUsage> {
   const key = variable(place, 'FACTORY_API_KEY')
-  if (!key) throw new UsageReadError(`${VENDOR} has no FACTORY_API_KEY to read the plan with`)
+  if (!key) throw new UsageReadError(t('usageRead.noFactoryKey', { vendor: VENDOR }))
   const reply = await askVendor(
     {
       vendor: VENDOR,
@@ -52,6 +53,6 @@ export async function readFactoryLimits(place: SignInPlace): Promise<VendorUsage
     place,
   )
   const usage = parseFactoryLimits(reply, place.now)
-  if (!usage) throw new UsageReadError(`${VENDOR} sent no plan usage`)
+  if (!usage) throw new UsageReadError(t('usageRead.noPlanUsage', { vendor: VENDOR }))
   return usage
 }

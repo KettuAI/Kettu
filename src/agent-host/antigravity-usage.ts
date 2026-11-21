@@ -59,13 +59,13 @@ async function ask(deps: AntigravityUsageDeps, command: 'usage' | 'credits'): Pr
     )
   }
   if (run.timedOut) {
-    throw new Error(`agy /${command} gave no answer within ${deps.timeoutMs / 1000} s`)
+    throw new Error(t('agent.antigravity.noAnswer', { command, seconds: deps.timeoutMs / 1000 }))
   }
-  if (run.error) throw new Error(`agy could not start: ${run.error}`)
+  if (run.error) throw new Error(t('agent.program.notStarted', { name: 'agy', error: run.error }))
   try {
     return JSON.parse(run.stdout) as unknown
   } catch {
-    throw new Error(`agy /${command} exited with code ${run.code} and no JSON reply`)
+    throw new Error(t('agent.antigravity.noJson', { command, code: String(run.code) }))
   }
 }
 

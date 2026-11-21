@@ -24,7 +24,7 @@ import type { AgentId } from '@shared/thread'
 import { HostError, invalidParams, notFound } from '../errors'
 import { t } from '../i18n'
 import { JsonFile, writeFileAtomic, type LogFn, type Migration } from '../storage'
-import { parseWorkflow, workflowHash, toolProblems } from './format'
+import { fileProblem, parseWorkflow, problemText, workflowHash, toolProblems } from './format'
 
 export const WORKFLOWS_VERSION = 1
 // No older formats exist yet; each future version adds its step here, with a test.
@@ -287,7 +287,7 @@ export class WorkflowLibrary {
       throw invalidParams(
         t('workflow.unusable', {
           name: entry.name,
-          problem: problem ? `${problem.at} ${problem.message}`.trim() : '',
+          problem: problem ? `${problem.at} ${problemText(problem)}`.trim() : '',
         }),
       )
     }
@@ -385,7 +385,7 @@ export class WorkflowLibrary {
       const problem = read.problems[0]
       throw invalidParams(
         t('workflow.listingProblem', {
-          problem: problem ? `${problem.at} ${problem.message}`.trim() : '',
+          problem: problem ? `${problem.at} ${problemText(problem)}`.trim() : '',
         }),
       )
     }
@@ -521,7 +521,7 @@ export class WorkflowLibrary {
             workflow: null,
             hash: '',
             problems: [
-              { at: '', message: `the file is larger than ${WORKFLOW_FILE_BYTES / 1024} KB` },
+              fileProblem('', 'workflowFile.fileTooLarge', { kb: WORKFLOW_FILE_BYTES / 1024 }),
             ],
           }
         }
@@ -534,7 +534,9 @@ export class WorkflowLibrary {
           text: null,
           workflow: null,
           hash: '',
-          problems: [{ at: '', message: `could not be read: ${(error as Error).message}` }],
+          problems: [
+            fileProblem('', 'workflowFile.unreadable', { reason: (error as Error).message }),
+          ],
         }
       }
       const read = parseWorkflow(text)
@@ -553,7 +555,7 @@ export class WorkflowLibrary {
     const record = this.data.entries[read.id]
     const problems = [...read.problems]
     if (read.text === null && problems.length === 0) {
-      problems.push({ at: '', message: 'the file is gone' })
+      problems.push(fileProblem('', 'workflowFile.fileGone'))
     }
     if (read.workflow) problems.push(...toolProblems(read.workflow, this.deps.knownTools()))
     const approval: WorkflowEntry['approval'] =
@@ -563,7 +565,7 @@ export class WorkflowLibrary {
       source,
       workflow: read.workflow,
       name: read.workflow?.name ?? read.id,
-      problems,
+      problems: problems.map((problem) => ({ at: problem.at, message: problemText(problem) })),
       approval,
       hash: read.hash,
       origin: record?.origin ?? null,

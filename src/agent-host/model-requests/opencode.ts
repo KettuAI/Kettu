@@ -14,6 +14,7 @@ import {
   type RequestTurn,
 } from '@shared/model-requests'
 import type { AgentId } from '@shared/thread'
+import { t } from '../i18n'
 import { arr, num, obj, preview, str, summarizeActions } from './claude-transcript'
 import { foldAll, type ModelRequestsReader } from './reader'
 
@@ -343,13 +344,13 @@ export function opencodeModelRequests(deps: {
 
     async raw(target, raw, full) {
       const sessions = deps.sessions(target.agentId)
-      if (!sessions) throw new Error('This agent keeps no record Kettu reads')
+      if (!sessions) throw new Error(t('modelRequest.noRecord'))
       if (!MESSAGE_IDS.test(raw)) throw new Error('Not a request of this session')
       const records = await Promise.all(
         raw.split(',').map((id) => sessions.message(target.acpSessionId, id)),
       )
       if (records.some((r) => r === null)) {
-        throw new Error('OpenCode no longer has these messages; open the request again')
+        throw new Error(t('modelRequest.openCodeGone'))
       }
       return foldAll(records, full)
     },

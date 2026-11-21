@@ -7,6 +7,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { isMap, parseDocument } from 'yaml'
 import type { Env } from '../find-command'
+import { t } from '../i18n'
 
 export const API_KEY = 'DEEPSEEK_API_KEY'
 const FILE = '.credentials.yaml'
@@ -87,11 +88,11 @@ async function changeKey(home: string, key: string | null): Promise<void> {
   const text = await readText(file)
   const doc = parseDocument(text ?? 'version: 1\n')
   if (text !== null && doc.errors.length > 0) {
-    throw new Error(`${file} is not valid YAML; fix it or remove the key there`)
+    throw new Error(t('dsh.credentialsInvalid', { file }))
   }
   if (!isMap(doc.contents)) {
     if (key === null) return
-    throw new Error(`${file} does not hold a credential map`)
+    throw new Error(t('dsh.credentialsNotMap', { file }))
   }
   if (key === null) {
     if (!doc.hasIn(['refs', API_KEY])) return

@@ -8,6 +8,7 @@ import {
   type PreviewStyle,
 } from '@shared/artifact-runtime/page-messages'
 import { decodeText, startTagAt, textContentRange, type StartTag } from '@shared/artifact-source'
+import { t } from '../i18n'
 
 export interface ElementChange {
   style: PreviewStyle | null
@@ -82,18 +83,18 @@ function withStyleAttribute(html: string, tag: StartTag, style: PreviewStyle): s
  */
 export function editElement(html: string, offset: number, change: ElementChange): string {
   const tag = startTagAt(html, offset)
-  if (!tag) throw new EditError(`No element starts at offset ${offset}`)
+  if (!tag) throw new EditError(t('artifacts.edit.noElement', { offset }))
   let out = html
   // The text lies after the tag, so changing it first leaves the tag's offsets as they are.
   if (change.text !== null) {
-    if (change.text.length > EDIT_TEXT_CHARS) throw new EditError('The text is too long')
+    if (change.text.length > EDIT_TEXT_CHARS) throw new EditError(t('artifacts.edit.textTooLong'))
     const range = textContentRange(html, tag)
-    if (!range) throw new EditError(`The <${tag.name}> at offset ${offset} holds more than text`)
+    if (!range) throw new EditError(t('artifacts.edit.moreThanText', { tag: tag.name, offset }))
     out = out.slice(0, range.start) + htmlText(change.text) + out.slice(range.end)
   }
   if (change.style) {
     const style = checkedStyle(change.style)
-    if (!style) throw new EditError('The style has a property or value an edit may not write')
+    if (!style) throw new EditError(t('artifacts.edit.styleRefused'))
     if (Object.keys(style).length > 0) out = withStyleAttribute(out, tag, style)
   }
   return out

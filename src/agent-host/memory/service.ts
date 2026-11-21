@@ -307,21 +307,24 @@ export class MemoryService {
     const title = oneLine(draft.title)
     const description = oneLine(draft.description)
     const body = normalizeBody(draft.body)
-    if (title === '') throw new MemoryError('invalid', 'title must not be empty.')
+    if (title === '') throw new MemoryError('invalid', { key: 'memory.titleEmpty' })
     if (longer(title, MEMORY_TITLE_CHARS)) {
-      throw new MemoryError('invalid', `title must be at most ${MEMORY_TITLE_CHARS} characters.`)
+      throw new MemoryError('invalid', {
+        key: 'memory.titleTooLong',
+        params: { max: MEMORY_TITLE_CHARS },
+      })
     }
     if (longer(description, MEMORY_DESCRIPTION_CHARS)) {
-      throw new MemoryError(
-        'invalid',
-        `description must be at most ${MEMORY_DESCRIPTION_CHARS} characters.`,
-      )
+      throw new MemoryError('invalid', {
+        key: 'memory.descriptionTooLong',
+        params: { max: MEMORY_DESCRIPTION_CHARS },
+      })
     }
     if (longer(body, MEMORY_BODY_CHARS)) {
-      throw new MemoryError(
-        'invalid',
-        `body must be at most ${MEMORY_BODY_CHARS} characters. Keep one fact per entry.`,
-      )
+      throw new MemoryError('invalid', {
+        key: 'memory.bodyTooLong',
+        params: { max: MEMORY_BODY_CHARS },
+      })
     }
     const secret = secretKind(`${title}\n${description}\n${body}`)
     if (secret !== null) {
@@ -366,10 +369,10 @@ export class MemoryService {
       (entry) => entry.id !== id && entry.title.toLowerCase() === draft.title.toLowerCase(),
     )
     if (twin) {
-      throw new MemoryError(
-        'conflict',
-        `The entry ${twin.id} already has this title. Update that entry instead of adding another.`,
-      )
+      throw new MemoryError('conflict', {
+        key: 'memory.sameTitle',
+        params: { id: twin.id },
+      })
     }
     return { entries, existing }
   }

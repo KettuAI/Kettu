@@ -2,7 +2,7 @@
 // committed, and merging a parallel branch into the folder where its steps join.
 
 import {
-  describeFailure,
+  commandFailureText,
   failureText,
   GIT_TIMEOUT_MS,
   type Exec,
@@ -62,7 +62,7 @@ export function createTaskGit(exec: Exec): TaskGit {
     },
     async uncommitted(cwd) {
       const result = await git(cwd, ['status', '--porcelain=v1', '-z', '--untracked-files=all'])
-      if (!ok(result)) throw new Error(`git status failed: ${describeFailure(result)}`)
+      if (!ok(result)) throw new Error(commandFailureText('git status', result))
       return result.stdout
         .split('\0')
         .filter((item) => item.length > 3)

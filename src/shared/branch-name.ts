@@ -41,27 +41,37 @@ export function fillBranchTemplate(template: string, values: TemplateValues): st
   })
 }
 
+export type BranchProblem =
+  | 'empty'
+  | 'tooLong'
+  | 'dash'
+  | 'reserved'
+  | 'special'
+  | 'dots'
+  | 'atBrace'
+  | 'emptyComponent'
+  | 'endsDot'
+  | 'componentDot'
+  | 'componentLock'
+
 /**
  * Why `git check-ref-format --branch` would refuse the name, or a leading `-`, which git would read
  * as an option, or more than 100 characters; null when it is usable.
  */
-export function branchProblem(name: string): string | null {
-  if (name === '') return 'it is empty'
-  if (name.length > MAX_BRANCH_LENGTH) return `it is longer than ${MAX_BRANCH_LENGTH} characters`
-  if (name.startsWith('-')) return 'it starts with "-"'
-  if (name === '@' || name === 'HEAD') return 'it is reserved'
+export function branchProblem(name: string): BranchProblem | null {
+  if (name === '') return 'empty'
+  if (name.length > MAX_BRANCH_LENGTH) return 'tooLong'
+  if (name.startsWith('-')) return 'dash'
+  if (name === '@' || name === 'HEAD') return 'reserved'
   // eslint-disable-next-line no-control-regex
-  if (/[\x00-\x20\x7f~^:?*[\\]/.test(name))
-    return 'it has a space, a control or a special character'
-  if (name.includes('..')) return 'it has ".."'
-  if (name.includes('@{')) return 'it has "@{"'
-  if (name.startsWith('/') || name.endsWith('/') || name.includes('//')) {
-    return 'it has an empty path component'
-  }
-  if (name.endsWith('.')) return 'it ends with "."'
+  if (/[\x00-\x20\x7f~^:?*[\\]/.test(name)) return 'special'
+  if (name.includes('..')) return 'dots'
+  if (name.includes('@{')) return 'atBrace'
+  if (name.startsWith('/') || name.endsWith('/') || name.includes('//')) return 'emptyComponent'
+  if (name.endsWith('.')) return 'endsDot'
   for (const component of name.split('/')) {
-    if (component.startsWith('.')) return 'a path component starts with "."'
-    if (component.endsWith('.lock')) return 'a path component ends with ".lock"'
+    if (component.startsWith('.')) return 'componentDot'
+    if (component.endsWith('.lock')) return 'componentLock'
   }
   return null
 }

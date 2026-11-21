@@ -19,8 +19,8 @@ export class HostError extends Error {
   }
 }
 
-export function invalidParams(message: string): HostError {
-  return new HostError('invalid_params', message)
+export function invalidParams(message: string, data?: unknown): HostError {
+  return new HostError('invalid_params', message, data)
 }
 
 export function notFound(message: string): HostError {

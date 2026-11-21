@@ -13,6 +13,7 @@ import {
 import { harnessOf } from '@shared/thread'
 import { findClaudeTranscript } from '../prompt-cache'
 import { projectsFolder } from '../usage/readers/claude'
+import { t } from '../i18n'
 import { eachLine, fileSource, openLog } from '../usage/lines'
 import { parseLines, readPageFrom, type PageRules, type RawLine } from './pages'
 import { foldAll, readRanges, type ModelRequestsReader, type RequestsTarget } from './reader'
@@ -241,7 +242,7 @@ export function claudeModelRequests(deps: {
 
     async raw(target, raw, full) {
       const file = await fileOf(target)
-      if (!file) throw new Error('This session has no session file to read')
+      if (!file) throw new Error(t('modelRequest.noSessionFile'))
       if (raw === 'system') return foldAll(await shapeRecords(file), full)
       const { size } = await stat(file)
       return readRanges(fileSource(file, size), raw, full)

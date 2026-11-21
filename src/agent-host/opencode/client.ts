@@ -269,14 +269,14 @@ export class OpenCodeClient {
       const connection = record(item)
       return connection?.type === 'credential' && connection.id === credentialId
     })
-    if (!owned) throw new Error('The credential does not belong to this provider.')
+    if (!owned) throw new Error(t('opencode.account.wrongProvider'))
   }
 
   private async setKey(provider: Integration, value: unknown): Promise<void> {
     const key = typeof value === 'string' ? value : ''
-    if (key.trim() === '') throw new Error('A key is required.')
+    if (key.trim() === '') throw new Error(t('opencode.account.keyRequired'))
     const hasKey = provider.methods.some((item) => record(item)?.type === 'key')
-    if (!hasKey) throw new Error('This provider has no key sign-in.')
+    if (!hasKey) throw new Error(t('opencode.account.noKeySignIn'))
 
     const id = `cred_${randomBytes(12).toString('hex')}`
     const entry = [

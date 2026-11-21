@@ -11,6 +11,7 @@ import {
   type MarketSearch,
 } from '@shared/marketplace'
 import { JsonFile, type LogFn } from '../storage'
+import { LocalizedError, logText } from '../localized-error'
 import { catalogServer, REGISTRY_URL, type Listing } from './registry'
 
 const SEARCH_MS = 5 * 60_000
@@ -148,14 +149,14 @@ export function catalogFile(userDataPath: string, log: LogFn): JsonFile<CatalogF
 }
 
 /** A read the registry did not answer, as the catalog explains it. */
-class RegistryError extends Error {}
+class RegistryError extends LocalizedError {}
 
 /** The body of a response, as JSON, read only up to `limit` bytes. */
 async function cappedJson(response: Response, limit: number): Promise<unknown> {
   const length = Number(response.headers.get('content-length'))
   if (length > limit || !response.body) {
     void response.body?.cancel()
-    throw new RegistryError(`The MCP Registry sent more than ${limit} bytes`)
+    throw new RegistryError({ key: 'marketCatalog.tooLarge', params: { bytes: limit } })
   }
   const chunks: Uint8Array[] = []
   let size = 0
@@ -166,14 +167,14 @@ async function cappedJson(response: Response, limit: number): Promise<unknown> {
     size += value.byteLength
     if (size > limit) {
       void reader.cancel()
-      throw new RegistryError(`The MCP Registry sent more than ${limit} bytes`)
+      throw new RegistryError({ key: 'marketCatalog.tooLarge', params: { bytes: limit } })
     }
     chunks.push(value)
   }
   try {
     return JSON.parse(Buffer.concat(chunks).toString('utf8')) as unknown
   } catch {
-    throw new RegistryError('The MCP Registry sent something other than JSON')
+    throw new RegistryError({ key: 'marketCatalog.notJson' })
   }
 }
 
@@ -304,7 +305,7 @@ export class MarketCatalogService {
     const kept = await this.load()
     const ids = [...new Set(SECTIONS.flatMap((section) => section.ids))]
     const entries: Record<string, unknown> = {}
-    const failures: string[] = []
+    const failures: unknown[] = []
     let next = 0
     const worker = async (): Promise<void> => {
       while (next < ids.length) {
@@ -316,15 +317,15 @@ export class MarketCatalogService {
           )
           if (entry !== null) entries[id] = entry
         } catch (failure) {
-          failures.push((failure as Error).message)
+          failures.push(failure)
           if (Object.hasOwn(kept.entries, id)) entries[id] = kept.entries[id]
         }
       }
     }
     await Promise.all(Array.from({ length: PARALLEL }, worker))
-    const error = failures[0]
-    if (error !== undefined) {
-      this.options.log('warn', `The Marketplace catalog is from before: ${error}`)
+    if (failures.length > 0) {
+      const error = (failures[0] as Error).message
+      this.options.log('warn', `The Marketplace catalog is from before: ${logText(failures[0])}`)
       return { sections: catalogSections(entries), fetchedAt: kept.fetchedAt, error }
     }
     const fetchedAt = this.now()
@@ -341,9 +342,15 @@ export class MarketCatalogService {
       response = await this.fetch(url, { signal, headers: { accept: 'application/json' } })
     } catch (error) {
       if (signal.aborted) {
-        throw new RegistryError(`The MCP Registry did not answer in ${TIMEOUT_MS / 1000} s`)
+        throw new RegistryError({
+          key: 'marketCatalog.timeout',
+          params: { seconds: TIMEOUT_MS / 1000 },
+        })
       }
-      throw new RegistryError(`Could not reach the MCP Registry: ${(error as Error).message}`)
+      throw new RegistryError({
+        key: 'marketCatalog.unreachable',
+        params: { reason: (error as Error).message },
+      })
     }
     if (response.status === 404) {
       void response.body?.cancel()
@@ -351,16 +358,25 @@ export class MarketCatalogService {
     }
     if (!response.ok) {
       void response.body?.cancel()
-      throw new RegistryError(`The MCP Registry answered ${response.status}`)
+      throw new RegistryError({
+        key: 'marketCatalog.status',
+        params: { status: response.status },
+      })
     }
     try {
       return await cappedJson(response, limit)
     } catch (error) {
       if (error instanceof RegistryError) throw error
       if (signal.aborted) {
-        throw new RegistryError(`The MCP Registry did not answer in ${TIMEOUT_MS / 1000} s`)
+        throw new RegistryError({
+          key: 'marketCatalog.timeout',
+          params: { seconds: TIMEOUT_MS / 1000 },
+        })
       }
-      throw new RegistryError(`Could not read the MCP Registry: ${(error as Error).message}`)
+      throw new RegistryError({
+        key: 'marketCatalog.unreadable',
+        params: { reason: (error as Error).message },
+      })
     }
   }
 }

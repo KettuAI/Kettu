@@ -23,8 +23,9 @@ import {
   type ProgramRun,
 } from '../adapter-install'
 import type { Env } from '../find-command'
-import { t } from '../i18n'
+import { t, type HostKey } from '../i18n'
 import type { Platform } from '@shared/platform'
+import { LocalizedError } from '../localized-error'
 
 export const OFFICIAL_MARKETPLACE = 'claude-plugins-official'
 const SKILLS_DIR = 'skills-dir'
@@ -93,11 +94,11 @@ function https(value: unknown): string | null {
   return url?.protocol === 'https:' ? url.href : null
 }
 
-function json(stdout: string, what: string): unknown {
+function json(stdout: string, notJson: HostKey): unknown {
   try {
     return JSON.parse(stdout) as unknown
   } catch {
-    throw new Error(`Claude Code's ${what} was not JSON`)
+    throw new LocalizedError({ key: notJson })
   }
 }
 
@@ -117,8 +118,9 @@ export function lastJsonLine(stdout: string): Fields | null {
 
 /** `claude plugin marketplace list --json`. */
 export function parseMarketplaces(stdout: string): ClaudeMarketplace[] {
-  const value = json(stdout, 'marketplace list')
-  if (!Array.isArray(value)) throw new Error("Claude Code's marketplace list was not a list")
+  const value = json(stdout, 'marketPlugins.marketplaceListNotJson')
+  if (!Array.isArray(value))
+    throw new LocalizedError({ key: 'marketPlugins.marketplaceListNotList' })
   return value.filter(isRecord).flatMap((item) => {
     const name = text(item.name)
     if (!name) return []
@@ -136,10 +138,10 @@ export function parsePluginList(stdout: string): {
   installed: Installed[]
   available: Available[]
 } {
-  const value = json(stdout, 'plugin list')
+  const value = json(stdout, 'marketPlugins.pluginListNotJson')
   // Without --available the list is the installed plugins alone.
   const record = Array.isArray(value) ? { installed: value, available: [] } : value
-  if (!isRecord(record)) throw new Error("Claude Code's plugin list was not an object")
+  if (!isRecord(record)) throw new LocalizedError({ key: 'marketPlugins.pluginListNotObject' })
   const installed = (Array.isArray(record.installed) ? record.installed : [])
     .filter(isRecord)
     .flatMap((item): Installed[] => {
@@ -356,7 +358,9 @@ async function claude(
   if (run.code !== 0 || run.timedOut || run.aborted || run.error) {
     const said = lastJsonLine(run.stdout)
     const message = said ? (text(said.message) ?? text(said.error)) : null
-    throw new Error(message ?? programFailure('claude', run, options.timeoutMs) ?? 'claude failed')
+    const failure = message ?? programFailure('claude', run, options.timeoutMs)
+    if (failure) throw new Error(failure)
+    throw new LocalizedError({ key: 'marketPlugins.claudeFailed' })
   }
   return run.stdout
 }
@@ -365,9 +369,14 @@ async function claude(
 async function change(cli: ClaudeCli, args: string[], cwd?: string): Promise<Fields> {
   const stdout = await claude(cli, [...args, '--json'], { cwd, timeoutMs: CHANGE_MS })
   const result = lastJsonLine(stdout)
-  if (!result) throw new Error('Claude Code gave no result')
+  if (!result) throw new LocalizedError({ key: 'marketPlugins.claudeNoResult' })
   if (result.outcome !== undefined && result.outcome !== 'ok') {
-    throw new Error(text(result.message) ?? `Claude Code answered ${String(result.outcome)}`)
+    const said = text(result.message)
+    if (said) throw new Error(said)
+    throw new LocalizedError({
+      key: 'marketPlugins.claudeOutcome',
+      params: { outcome: String(result.outcome) },
+    })
   }
   return result
 }

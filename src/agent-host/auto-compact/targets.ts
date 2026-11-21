@@ -4,6 +4,7 @@
 
 import { Document, isMap, isSeq, parseDocument, type YAMLMap } from 'yaml'
 import type { HarnessId } from '@shared/thread'
+import { t } from '../i18n'
 import { isObject, writeTextAtomic } from '../settings-file'
 import {
   readConfig,
@@ -98,7 +99,7 @@ export async function writeFileTarget(
   value: number | null,
 ): Promise<void> {
   const key = model === null ? target.key : target.modelKey?.(model)
-  if (!key) throw new Error('This harness sets one value for every model')
+  if (!key) throw new Error(t('agentConfig.oneValue'))
   await setConfigValue(
     file,
     target.format,
@@ -129,9 +130,7 @@ async function readDshDocument(file: string): Promise<{ doc: Document; empty: bo
   if (text.trim() === '') return { doc: new Document([]), empty: true }
   const doc = parseDocument(text)
   if (doc.errors.length > 0 || !isSeq(doc.contents)) {
-    throw new Error(
-      `${file} is not a list of plugin rows; fix it or set the threshold there yourself`,
-    )
+    throw new Error(t('agentConfig.pluginRows', { file }))
   }
   return { doc, empty: false }
 }
@@ -160,7 +159,7 @@ export async function writeDshThreshold(file: string, value: number | null): Pro
   } else if (row) {
     const config = row.get('config')
     if (config !== undefined && !isMap(config)) {
-      throw new Error(`The ${DSH_ROW} row's config in ${file} is not a map; fix it first`)
+      throw new Error(t('agentConfig.rowNotMap', { row: DSH_ROW, file }))
     }
     row.setIn(['config', 'thresholdRatio'], storedValue(value, 'fraction'))
   } else {

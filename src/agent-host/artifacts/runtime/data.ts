@@ -213,7 +213,7 @@ export class ArtifactData {
         if (error.reason === 'deleted') {
           throw new CapabilityError('not_found', 'The artifact is in Recently deleted.')
         }
-        throw new CapabilityError('not_found', error.message)
+        throw new CapabilityError('not_found', error.english)
       }
       if (error instanceof ThreadStoreError) {
         if (error.code === 'too_large') {

@@ -6,6 +6,7 @@
 import { execFile } from 'node:child_process'
 import path from 'node:path'
 import type { Platform } from '@shared/platform'
+import { t } from './i18n'
 
 export interface ProcessRow {
   pid: number
@@ -160,7 +161,7 @@ export function runTool(
 
 function toolTimedOut(file: string, timeoutMs: number): NodeJS.ErrnoException {
   const name = path.win32.basename(file)
-  return Object.assign(new Error(`${name} did not finish within ${timeoutMs} ms`), {
+  return Object.assign(new Error(t('process.toolTimedOut', { name, ms: timeoutMs })), {
     code: 'ETIMEDOUT',
   })
 }

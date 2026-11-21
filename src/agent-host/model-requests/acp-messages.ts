@@ -13,6 +13,7 @@ import {
   type RequestTurn,
 } from '@shared/model-requests'
 import type { AgentId } from '@shared/thread'
+import { t } from '../i18n'
 import { arr, emptyTokens, num, obj, preview, str, summarizeActions } from './claude-transcript'
 import { foldAll, type ModelRequestsReader } from './reader'
 
@@ -308,7 +309,7 @@ export function acpModelRequests(store: AcpMessages): ModelRequestsReader {
       const messages = store
         .of(target.agentId, target.acpSessionId)
         .filter((m) => m.seq >= from && m.seq < to)
-      if (messages.length === 0) throw new Error('These messages are no longer kept')
+      if (messages.length === 0) throw new Error(t('modelRequest.messagesGone'))
       return foldAll(
         messages.map((m) => JSON.parse(m.text) as unknown),
         full,

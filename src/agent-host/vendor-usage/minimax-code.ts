@@ -8,6 +8,7 @@
 import path from 'node:path'
 import { parse } from 'yaml'
 import type { PlanLimit } from '@shared/agent-host'
+import { t } from '../i18n'
 import { number, object, percentLimit, time, type VendorUsage } from './common'
 import {
   askVendor,
@@ -88,7 +89,7 @@ async function storedKey(dataDir: string): Promise<{ key: string; region: 'cn' |
   try {
     config = parse(text)
   } catch {
-    throw new UsageReadError('The stored sign-in could not be read')
+    throw new UsageReadError(t('usageRead.storedUnreadable'))
   }
   const api = object(object(config)?.minimax_api)
   const key = typeof api?.apiKey === 'string' ? api.apiKey.trim() : ''
@@ -124,7 +125,7 @@ export async function readMiniMaxCodeUsage(place: SignInPlace): Promise<VendorUs
     const text = await readSignInFile(file)
     const auth = text === null ? null : object(object(parseSignIn(text))?.auth)
     const token = typeof auth?.accessToken === 'string' ? auth.accessToken.trim() : ''
-    if (!token) throw new UsageReadError(`${VENDOR} is not signed in`)
+    if (!token) throw new UsageReadError(t('usageRead.notSignedIn', { vendor: VENDOR }))
     reply = await askVendor(
       {
         vendor: VENDOR,
@@ -136,6 +137,6 @@ export async function readMiniMaxCodeUsage(place: SignInPlace): Promise<VendorUs
     )
   }
   const usage = parseMiniMaxRemains(reply, place.now)
-  if (!usage) throw new UsageReadError(`${VENDOR} sent no plan usage`)
+  if (!usage) throw new UsageReadError(t('usageRead.noPlanUsage', { vendor: VENDOR }))
   return usage
 }

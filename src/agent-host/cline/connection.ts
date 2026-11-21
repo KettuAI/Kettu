@@ -62,6 +62,14 @@ const OPTION = { allow: 'allow-once', always: 'allow-always', reject: 'reject' }
 const ANSWER = /^answer:(\d+)$/
 const OTHER_ANSWER = 'other'
 
+/** Kettu's words for a refusal the SDK's process names by reason, which cannot translate. */
+function refusalText(data: unknown): string | null {
+  const reason = (data as { reason?: unknown } | null | undefined)?.reason
+  if (reason === 'signIn') return t('cline.signInFirst')
+  if (reason === 'betweenTurns') return t('agentRun.betweenTurns')
+  return null
+}
+
 /** The SDK's process cannot serve the agent: its start fails, and the agent runs over ACP. */
 export class ClineSdkUnavailable extends Error {
   constructor(reason: string) {
@@ -544,7 +552,7 @@ export class ClineConnection implements AgentConnection {
 
   async prompt(sessionId: string, prompt: readonly PromptBlock[]): Promise<PromptResult> {
     const session = this.requireSession(sessionId)
-    if (session.running) throw new AgentRequestError('agent_error', 'A turn is already running')
+    if (session.running) throw new AgentRequestError('agent_error', t('agentRun.turnRunning'))
     session.running = true
     session.mapper.turn()
     try {
@@ -608,7 +616,12 @@ export class ClineConnection implements AgentConnection {
   ): Promise<ConfigOption[]> {
     const session = this.requireSession(sessionId)
     const settings = settingsChange(optionId, value, session.choices)
-    if (!settings) throw new AgentRequestError('agent_error', `No ${optionId} ${String(value)}`)
+    if (!settings) {
+      throw new AgentRequestError(
+        'agent_error',
+        t('agentRun.noChoice', { option: optionId, value: String(value) }),
+      )
+    }
     const result = await this.call<SetResult>(METHOD.set, { sessionId, settings })
     session.choices = { ...session.choices, settings: result.settings, models: result.models }
     session.mapper.window(currentModel(session.choices)?.contextWindow ?? null)
@@ -761,7 +774,9 @@ export class ClineConnection implements AgentConnection {
   private requireSession(sessionId: string): Session {
     this.assertOpen()
     const session = this.sessions.get(sessionId)
-    if (!session) throw new AgentRequestError('agent_error', `No session ${sessionId}`, -32002)
+    if (!session) {
+      throw new AgentRequestError('agent_error', t('agentRun.noSession', { id: sessionId }), -32002)
+    }
     return session
   }
 
@@ -775,7 +790,7 @@ export class ClineConnection implements AgentConnection {
     if (error instanceof RpcError) {
       return new AgentRequestError(
         error.code === ERROR.authRequired ? 'auth_required' : 'agent_error',
-        error.message,
+        refusalText(error.data) ?? error.message,
         error.code,
       )
     }

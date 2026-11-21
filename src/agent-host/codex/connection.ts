@@ -585,7 +585,7 @@ export class CodexConnection implements AgentConnection {
   /** `codex logout`, with the program and environment the agent runs with. */
   async logout(): Promise<void> {
     const launch = this.launch
-    if (!launch) throw new AgentRequestError('agent_error', 'Codex cannot sign out here')
+    if (!launch) throw new AgentRequestError('agent_error', t('codex.cannotSignOut'))
     const timeoutMs = 30_000
     const run = await (launch.run ?? runProgram)({
       program: launch.spec.command,
@@ -889,7 +889,9 @@ export class CodexConnection implements AgentConnection {
   ): Promise<SideAnswer> {
     await this.requireSignIn()
     const parent = this.threads.get(sessionId)
-    if (!parent?.cwd) throw new AgentRequestError('agent_error', 'The Codex session is not open')
+    if (!parent?.cwd) {
+      throw new AgentRequestError('agent_error', t('agentRun.notOpen', { id: sessionId }))
+    }
     const cwd = parent.cwd
     signal.throwIfAborted()
     const source = parent.known ? parent.settings : undefined
@@ -1450,7 +1452,7 @@ export class CodexConnection implements AgentConnection {
   async prompt(sessionId: string, prompt: readonly PromptBlock[]): Promise<PromptResult> {
     const record = this.thread(sessionId)
     if (record.prompting || record.command) {
-      throw new AgentRequestError('agent_error', 'A turn is already running in this session')
+      throw new AgentRequestError('agent_error', t('agentRun.turnRunning'))
     }
     const command = parseCommand(prompt)
     if (command) return this.runCommand(record, command)
@@ -1594,7 +1596,9 @@ export class CodexConnection implements AgentConnection {
     value: string | boolean,
   ): Promise<ConfigOption[]> {
     const record = this.threads.get(sessionId)
-    if (!record) throw new AgentRequestError('agent_error', `Codex has no session ${sessionId}`)
+    if (!record) {
+      throw new AgentRequestError('agent_error', t('agentRun.noSession', { id: sessionId }))
+    }
     const models = await this.listModels()
     try {
       record.settings = applyOption(record.settings, models, optionId, value)

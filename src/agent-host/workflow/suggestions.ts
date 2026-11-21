@@ -36,7 +36,7 @@ import { HostError, invalidParams, notFound } from '../errors'
 import { t } from '../i18n'
 import type { WorkflowCatalog } from '../marketplace/community'
 import { JsonFile, writeFileAtomic, type LogFn, type Migration } from '../storage'
-import { parseWorkflow, toolProblems, workflowHash } from './format'
+import { parseWorkflow, problemText, toolProblems, workflowHash } from './format'
 import type { ResolvedWorkflow, WorkflowLibrary } from './library'
 
 export const SUGGESTIONS_VERSION = 1
@@ -397,8 +397,11 @@ function sourceKey(source: SuggestedSource): string {
   }
 }
 
-function problemLines(problems: WorkflowProblem[]): string {
-  return problems.map((p) => `- ${p.at ? `${p.at}: ` : ''}${p.message}`).join('\n')
+function problemLines(
+  problems: WorkflowProblem[],
+  say: (p: WorkflowProblem) => string = (p) => p.message,
+): string {
+  return problems.map((p) => `- ${p.at ? `${p.at}: ` : ''}${say(p)}`).join('\n')
 }
 
 export class WorkflowSuggestions {
@@ -826,7 +829,7 @@ export class WorkflowSuggestions {
         sessionId: record.sessionId,
         agentId: record.agentId,
       })
-      if (!('id' in saved)) throw invalidParams(problemLines(saved.problems))
+      if (!('id' in saved)) throw invalidParams(problemLines(saved.problems, problemText))
       await this.deps.library.approve(saved.id, record.hash)
       record.answer = { kind: 'saved', workflowId: saved.id }
       this.answered(record, device)
@@ -1041,7 +1044,7 @@ export class WorkflowSuggestions {
         sessionId: draft!.sessionId,
         agentId: draft!.agentId,
       })
-      if (!('id' in created)) throw invalidParams(problemLines(created.problems))
+      if (!('id' in created)) throw invalidParams(problemLines(created.problems, problemText))
       entry = created
     }
     if (!usableWorkflow(entry)) {

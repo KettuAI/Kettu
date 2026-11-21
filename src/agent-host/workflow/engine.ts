@@ -698,7 +698,7 @@ export class TaskEngine implements TaskSessionHooks {
     if (lane.worktree || !main.worktree || !this.deps.worktrees) return false
     const parent = task.lanes.find((l) => l.id === lane.parent) ?? main
     const base = lane.base ?? (await this.deps.git.head(parent.worktree?.path ?? task.projectPath))
-    if (!base) throw new Error('The branch to work from has no commit')
+    if (!base) throw new Error(t('tasks.noCommit'))
     const n = task.lanes.filter((l) => l.id.startsWith(`${round.stepId}~`)).length
     lane.worktree = await this.deps.worktrees.create(task.projectPath, {
       base,

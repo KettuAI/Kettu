@@ -20,6 +20,8 @@ export interface ExitInfo {
   signal: string | null
   /** Set when the process could not be started at all, or when a stop did not end it. */
   error?: string
+  /** An agent run in the host ended its connection; `error` says so for diagnostics. */
+  closed?: true
 }
 
 export interface StopTimings {

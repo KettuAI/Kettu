@@ -4,6 +4,7 @@
 import { Readable, Writable } from 'node:stream'
 import { ndJsonStream } from '@agentclientprotocol/sdk/unstable'
 import type { AgentTransport } from '../driver'
+import { t } from '../i18n'
 import type { RequestId } from './protocol'
 
 export interface MessageStream {
@@ -158,7 +159,7 @@ export class RpcPeer {
       pending.reject(
         new RpcError(
           typeof error.code === 'number' ? error.code : INTERNAL_ERROR,
-          typeof error.message === 'string' ? error.message : 'Unknown error',
+          typeof error.message === 'string' ? error.message : t('codex.unknownError'),
           error.data,
         ),
       )

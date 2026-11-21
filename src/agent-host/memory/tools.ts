@@ -287,8 +287,8 @@ export class MemoryTools {
     } catch (error) {
       if (!(error instanceof MemoryError)) throw error
       return {
-        content: [{ type: 'text', text: error.message }],
-        structuredContent: { code: error.code, message: error.message },
+        content: [{ type: 'text', text: error.english }],
+        structuredContent: { code: error.code, message: error.english },
         isError: true,
       }
     }

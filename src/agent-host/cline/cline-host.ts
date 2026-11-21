@@ -73,7 +73,16 @@ async function main(): Promise<void> {
       (error: unknown) => {
         if (id === undefined) return
         const code = error instanceof HostError ? error.code : ERROR.failed
-        post({ jsonrpc: '2.0', id, error: { code, message: messageOf(error) } })
+        const reason = error instanceof HostError ? error.reason : undefined
+        post({
+          jsonrpc: '2.0',
+          id,
+          error: {
+            code,
+            message: messageOf(error),
+            ...(reason ? { data: { reason } } : {}),
+          },
+        })
       },
     )
   })
