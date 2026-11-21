@@ -6,7 +6,10 @@ import type { CallToolResult, Tool } from '@modelcontextprotocol/sdk/types.js'
 
 export const GATEWAY_TOOL = 'call_kettu_tool'
 
-/** The tools such an agent still gets declared: the entries it must reach without a lookup. */
+/**
+ * The tools such an agent still gets declared: the entries it must reach without a lookup. With no
+ * device tool in its list agy 1.5.14 ran `xcrun` for the user's simulators, so `device_list` is one.
+ */
 export const CORE_TOOLS: ReadonlySet<string> = new Set([
   'read_kettu_guide',
   'create_artifact',
@@ -22,12 +25,13 @@ export const CORE_TOOLS: ReadonlySet<string> = new Set([
   'list_workflows',
   'suggest_workflow',
   'browser_navigate',
+  'device_list',
 ])
 
 export const GATEWAY: Tool = {
   name: GATEWAY_TOOL,
   description:
-    "Runs a Kettu tool not in your function list. Leave out arguments to get the tool's arguments.",
+    'Runs a Kettu tool not in your function list; leave out arguments to read its arguments.',
   inputSchema: {
     type: 'object',
     properties: { tool: { type: 'string' }, arguments: { type: 'object' } },
