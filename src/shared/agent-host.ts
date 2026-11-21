@@ -170,6 +170,12 @@ export interface PlanLimit {
    * "Gemini 3.8 Flash"; absent for a window that counts the whole plan.
    */
   models?: string[]
+  /**
+   * Set while extra usage covers this used-up window: the plan refuses requests and extra usage
+   * lets them through. It ends with an event that says extra usage is not in use, when the window
+   * resets, or when a read shows it not used up.
+   */
+  extraUsage?: true
 }
 
 /** The rate-limit reset credits an account holds: spending one restarts its windows at once. */

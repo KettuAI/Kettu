@@ -24,6 +24,7 @@ export const SCENARIOS = [
   'svg',
   'shell',
   'usage',
+  'extra-usage',
   'status',
   'context',
   'recall',
@@ -107,6 +108,11 @@ export const SCENARIO_DESCRIPTIONS: Record<ScenarioName, { description: string; 
   usage: {
     description: "The plan limits, as Claude Code's /usage reports them",
     hint: '--plain --unreadable',
+  },
+  'extra-usage': {
+    description:
+      'The 5-hour window used up while extra usage lets requests through, as Claude Code reports it',
+    hint: 'off: the window reset; refused: still used up and extra usage no longer covers it',
   },
   status: { description: "The plan limits, as Codex's /status reports them" },
   context: { description: "What fills the context, as Claude Code's /context reports it" },

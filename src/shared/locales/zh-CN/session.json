@@ -697,6 +697,7 @@
       "limitReached": "已达 {{limit}}限额",
       "limitUsedUp": "{{limit}}限额已用完",
       "limitReachedResets": "{{limit}}限额已用完 · {{time}} 重置",
+      "limitExtraUsage": "{{limit}}限额已用完 · 正在用额外用量",
       "balanceUsedUp": "余额已用完",
       "limit": {
         "used": "{{limit}}限额已用 {{percent}}%",
@@ -714,6 +715,7 @@
         "noBalance": "余额用完",
         "usedUp": "{{window}}已用完",
         "resets": "{{window}} · {{time}}",
+        "extraUsage": "额外用量",
         "used": "{{window}} {{percent}}%",
         "left": "{{window}}剩 {{percent}}%"
       },

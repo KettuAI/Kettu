@@ -1062,6 +1062,7 @@ function limitOf(value: unknown): PlanLimit | null {
     observedAt: value.observedAt,
     ...(amount ? { amount } : {}),
     ...(models ? { models } : {}),
+    ...(value.extraUsage === true ? { extraUsage: true as const } : {}),
   }
 }
 

@@ -4069,6 +4069,9 @@ export class SessionManager {
       case 'limits-allowed':
         this.deps.agents.allowLimits(agentId)
         break
+      case 'extra-usage':
+        this.deps.agents.setExtraUsage(agentId, effect.inUse)
+        break
       case 'title': {
         if (effect.title === null) {
           delete live.record.titleSource

@@ -100,9 +100,10 @@ export function limitsOf(
 
 /**
  * The tag of an agent's row, the first of these that applies: a version Kettu's checks reject,
- * what the agent needs before it starts, a used-up balance, a used-up plan window, a window at
- * 90% or more. `limits` are the account's newest reading and `model` the one a new session starts
- * on, since a window of another model does not hold it back. Null when nothing is wrong.
+ * what the agent needs before it starts, a used-up balance, a used-up plan window that extra usage
+ * covers, a used-up plan window, a window at 90% or more. `limits` are the account's newest
+ * reading and `model` the one a new session starts on, since a window of another model does not
+ * hold it back. Null when nothing is wrong.
  */
 export function agentTag(
   status: AgentStatus,
@@ -185,6 +186,13 @@ export function agentTag(
   const window = limitShort(limit)
   const scope = limitShortScope(limit)
   const phrase = limitPhrase(limit)
+  if (held.reached && limit.extraUsage) {
+    return tag(
+      t('session:newSession.picker.tag.extraUsage'),
+      'attention',
+      t('session:newSession.picker.limitExtraUsage', { limit: phrase }),
+    )
+  }
   if (held.reached) {
     const at = limit.resetsAt
     return windowTag(

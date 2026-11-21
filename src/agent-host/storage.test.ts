@@ -736,6 +736,31 @@ describe('the host files', () => {
         },
       }),
     ).toEqual({ version: 1, agents: { 'claude-code': { account, limits: [limit] } } })
+    // Extra usage covering a window is kept with it, and only as the flag.
+    expect(
+      parseAgentsFile({
+        agents: {
+          'claude-code': {
+            account,
+            limits: [
+              { ...limit, state: 'reached', extraUsage: true },
+              { ...limit, window: 'seven_day', extraUsage: 'yes' },
+            ],
+          },
+        },
+      }),
+    ).toEqual({
+      version: 1,
+      agents: {
+        'claude-code': {
+          account,
+          limits: [
+            { ...limit, state: 'reached', extraUsage: true },
+            { ...limit, window: 'seven_day' },
+          ],
+        },
+      },
+    })
     expect(
       parseAgentsFile({
         agents: { 'claude-code': { account: { ...account, tier: '5x' }, limits: [] } },

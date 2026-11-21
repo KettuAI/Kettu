@@ -1,5 +1,6 @@
 import type { SessionUpdate, ToolCallUpdate } from '@agentclientprotocol/sdk/unstable'
 import { describe, expect, it } from 'vitest'
+import type { PlanLimit } from '@shared/agent-host'
 import {
   applyPatches,
   threadEntries,
@@ -33,9 +34,12 @@ import {
 } from './mapper'
 import {
   allowedLimit,
+  coverWithExtraUsage,
+  endExtraUsage,
   mapRateLimits,
   mergeReadLimit,
   mergeReadLimits,
+  rateLimitEffects,
   rawInputText,
 } from '../session-updates'
 
@@ -1420,10 +1424,175 @@ describe('extensions and helpers', () => {
     const known = [window('five_hour', 0, 1), window('seven_day', 3, 5), window('overage', 20, 5)]
     expect(mergeReadLimits(known, [window('seven_day', 4, 10)], 10)).toEqual([
       window('seven_day', 4, 10),
-      // Extra usage comes only in rate limit events.
-      window('overage', 20, 5),
     ])
     expect(mergeReadLimits(known, [], 10)).toEqual(known)
+  })
+
+  describe('extra usage', () => {
+    // A rate limit event while the plan refuses requests and extra usage lets them through.
+    const inUse = {
+      status: 'rejected',
+      rateLimitType: 'five_hour',
+      resetsAt: 1_794_489_000,
+      overageStatus: 'allowed',
+      overageResetsAt: 1_796_000_000,
+      isUsingOverage: true,
+      unifiedWindows: {
+        five_hour: { utilization: 1, resetsAt: 1_794_489_000, status: 'rejected' },
+        seven_day: { utilization: 0.4, resetsAt: 1_794_661_200 },
+      },
+    }
+    const over = {
+      status: 'allowed',
+      rateLimitType: 'five_hour',
+      resetsAt: 1_794_500_000,
+      isUsingOverage: false,
+      unifiedWindows: {
+        five_hour: { utilization: 0.1, resetsAt: 1_794_500_000 },
+        seven_day: { utilization: 0.4, resetsAt: 1_794_661_200 },
+      },
+    }
+    const window = (id: string, patch: Partial<PlanLimit> = {}): PlanLimit => ({
+      window: id,
+      label: id,
+      usedPercent: 100,
+      resetsAt: 9_000,
+      state: 'reached',
+      observedAt: 1,
+      ...patch,
+    })
+
+    it('reads whether an event says extra usage is in use, and leaves it out when it does not', () => {
+      expect(mapRateLimits(inUse, 5)?.extraUsage).toBe(true)
+      expect(mapRateLimits(over, 5)?.extraUsage).toBe(false)
+      expect(mapRateLimits({ status: 'rejected', overageInUse: true }, 5)?.extraUsage).toBe(true)
+      // The service's own word counts too.
+      expect(
+        mapRateLimits({ status: 'rejected', isUsingOverage: false, overageInUse: true }, 5)
+          ?.extraUsage,
+      ).toBe(true)
+      expect(
+        mapRateLimits({ status: 'rejected', rateLimitType: 'five_hour' }, 5),
+      ).not.toHaveProperty('extraUsage')
+      expect(mapRateLimits({ status: 'allowed', isUsingOverage: 'yes' }, 5)).not.toHaveProperty(
+        'extraUsage',
+      )
+    })
+
+    it('starts extra usage after the windows an event reports, and ends it before them', () => {
+      const kinds = (value: unknown) => rateLimitEffects(value, 5).map((effect) => effect.kind)
+      expect(kinds(inUse)).toEqual(['limit', 'limit', 'extra-usage'])
+      expect(rateLimitEffects(inUse, 5).at(-1)).toEqual({ kind: 'extra-usage', inUse: true })
+      expect(kinds(over)).toEqual(['extra-usage', 'limit', 'limit', 'limits-allowed'])
+      expect(rateLimitEffects(over, 5)[0]).toEqual({ kind: 'extra-usage', inUse: false })
+      expect(kinds({ status: 'allowed', rateLimitType: 'five_hour' })).toEqual([
+        'limit',
+        'limits-allowed',
+      ])
+    })
+
+    it('maps an ACP usage update the same way', () => {
+      const { effects } = run([
+        {
+          sessionUpdate: 'usage_update',
+          used: 1200,
+          size: 200000,
+          _meta: { '_claude/rateLimit': inUse },
+        },
+      ])
+      expect(effects.map((effect) => effect.kind)).toEqual(['limit', 'limit', 'extra-usage'])
+    })
+
+    it('covers the used-up windows that have not reset, and nothing else', () => {
+      const covered = coverWithExtraUsage(
+        [
+          window('five_hour'),
+          window('seven_day', { usedPercent: 40, state: 'ok' }),
+          // At 100% with no rejection in its reading, which the plan's refusal makes one.
+          window('seven_day_fable', { state: 'ok' }),
+          window('seven_day_opus', { resetsAt: 4 }),
+          window('overage'),
+        ],
+        5,
+      )
+      expect(covered.map((limit) => [limit.window, limit.extraUsage, limit.state])).toEqual([
+        ['five_hour', true, 'reached'],
+        ['seven_day', undefined, 'ok'],
+        ['seven_day_fable', true, 'reached'],
+        ['seven_day_opus', undefined, 'reached'],
+        ['overage', undefined, 'reached'],
+      ])
+    })
+
+    it('ends with an event that says it is not in use, with its gauge unless that is used up', () => {
+      const limits = [
+        window('five_hour', { extraUsage: true }),
+        window('overage', { usedPercent: 91, state: 'warning' }),
+      ]
+      expect(endExtraUsage(limits, 5)).toEqual([window('five_hour')])
+      const spent = window('overage', { state: 'reached' })
+      expect(endExtraUsage([spent], 5)).toEqual([spent])
+      expect(endExtraUsage([spent], 9_000)).toEqual([])
+    })
+
+    it('is over when the plan accepts requests again', () => {
+      expect(allowedLimit(window('five_hour', { usedPercent: null, extraUsage: true }))).toEqual(
+        window('five_hour', { usedPercent: null, state: 'ok' }),
+      )
+      const full = window('five_hour', { extraUsage: true })
+      expect(allowedLimit(full)).toBe(full)
+    })
+
+    it('holds through a read that still shows the window used up, until it resets', () => {
+      const before = window('five_hour', { extraUsage: true })
+      const used = window('five_hour', { observedAt: 10 })
+      expect(mergeReadLimit(before, used, 10)).toEqual({ ...used, extraUsage: true })
+      // A read without its use keeps the block, and extra usage with it.
+      const unknown = window('five_hour', { usedPercent: null, state: 'ok', observedAt: 10 })
+      expect(mergeReadLimit(before, unknown, 10)).toEqual({
+        ...unknown,
+        state: 'reached',
+        extraUsage: true,
+      })
+      expect(mergeReadLimit(before, unknown, 9_000)).toEqual(unknown)
+      expect(mergeReadLimit(before, used, 9_000)).toEqual(used)
+    })
+
+    it('ends when a read shows the window not used up', () => {
+      const before = window('five_hour', { extraUsage: true })
+      const read = window('five_hour', { usedPercent: 38, state: 'ok', observedAt: 10 })
+      expect(mergeReadLimit(before, read, 10)).toEqual(read)
+    })
+
+    it('keeps the extra usage window through a read only while it is in use or used up', () => {
+      const gauge = window('overage', { usedPercent: 91, state: 'warning' })
+      const covered = window('five_hour', { extraUsage: true })
+      const read = [
+        window('five_hour', { observedAt: 10 }),
+        window('seven_day', { usedPercent: 4 }),
+      ]
+      expect(mergeReadLimits([covered, gauge], read, 10).map((limit) => limit.window)).toEqual([
+        'five_hour',
+        'seven_day',
+        'overage',
+      ])
+      // The window is no longer covered: a read that shows it not used up.
+      const notUsedUp = [window('five_hour', { usedPercent: 38, state: 'ok', observedAt: 10 })]
+      expect(mergeReadLimits([covered, gauge], notUsedUp, 10).map((l) => l.window)).toEqual([
+        'five_hour',
+      ])
+      // Nor once the extra usage window itself has reset.
+      expect(mergeReadLimits([covered, gauge], read, 9_000).map((l) => l.window)).toEqual([
+        'five_hour',
+        'seven_day',
+      ])
+      // A used-up budget stays until it resets, whether or not extra usage is in use.
+      const spent = window('overage')
+      expect(mergeReadLimits([spent], notUsedUp, 10).map((l) => l.window)).toEqual([
+        'five_hour',
+        'overage',
+      ])
+    })
   })
 
   it('clears a reached state once the plan is allowed again, unless the window is used up', () => {

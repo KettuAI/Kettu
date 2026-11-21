@@ -243,7 +243,13 @@ import {
 } from './registry'
 import { hasContextReport, limitsReport, runReport, type LimitsReport } from './reports'
 import { TextRing } from './ring'
-import { allowedLimit, mergeReadLimits, planWindow } from './session-updates'
+import {
+  allowedLimit,
+  coverWithExtraUsage,
+  endExtraUsage,
+  mergeReadLimits,
+  planWindow,
+} from './session-updates'
 import type { EnvironmentService } from './shell-env'
 import type {
   AgentsFile,
@@ -3905,6 +3911,18 @@ export class AgentManager {
       changed = true
     }
     if (changed) this.emit(slot)
+  }
+
+  /** Extra usage starts or stops covering the plan's used-up windows, as an event says. */
+  setExtraUsage(agentId: AgentId, inUse: boolean): void {
+    const slot = this.slots.get(agentId)
+    if (!slot) return
+    const before = [...slot.limits.values()]
+    const now = Date.now()
+    const after = inUse ? coverWithExtraUsage(before, now) : endExtraUsage(before, now)
+    if (after.length === before.length && after.every((limit, i) => limit === before[i])) return
+    slot.limits = new Map(after.map((limit) => [limit.window, limit]))
+    this.emit(slot)
   }
 
   /**

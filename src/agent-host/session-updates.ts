@@ -81,6 +81,8 @@ export type MapperEffect =
   | { kind: 'limit'; limit: PlanLimit }
   // The plan accepts requests again, which ends a block a window showed.
   | { kind: 'limits-allowed' }
+  // Extra usage starts or stops letting requests through while the plan's used-up windows refuse them.
+  | { kind: 'extra-usage'; inUse: boolean }
   | { kind: 'title'; title: string | null }
   | { kind: 'ignored'; variant: string; detail: string }
   | {
@@ -401,16 +403,27 @@ function windowLimit(window: string, info: Record<string, unknown>, now: number)
 }
 
 /**
+ * Whether a rate limit event says extra usage is in use: `isUsingOverage` is true while the plan
+ * refuses requests and extra usage lets them through, and `overageInUse` is the service's own
+ * word for it. Null when the event says neither way.
+ */
+function extraUsageOf(info: Record<string, unknown>): boolean | null {
+  if (info.isUsingOverage === true || info.overageInUse === true) return true
+  const said = typeof info.isUsingOverage === 'boolean' || typeof info.overageInUse === 'boolean'
+  return said ? false : null
+}
+
+/**
  * One Claude Code rate limit event, or `_claude/rateLimit` from `usage_update._meta`. Its
  * `status` is the whole plan's and `rateLimitType` only the window that stands for it;
  * `unifiedWindows` has each window's own reading, which wins. `utilization` is a fraction
  * (0.42 is 42%) and `resetsAt` in Unix seconds. `allowed` is false while the plan refuses
- * requests.
+ * requests. `extraUsage` is whether extra usage is in use, left out when the event does not say.
  */
 export function mapRateLimits(
   value: unknown,
   now: number,
-): { allowed: boolean; limits: PlanLimit[] } | null {
+): { allowed: boolean; limits: PlanLimit[]; extraUsage?: boolean } | null {
   if (typeof value !== 'object' || value === null) return null
   const info = value as Record<string, unknown>
   if (typeof info.status !== 'string') return null
@@ -428,16 +441,66 @@ export function mapRateLimits(
   if (window !== '' && !limits.some((l) => l.window === window)) {
     limits.push(windowLimit(window, info, now))
   }
-  return { allowed: info.status !== 'rejected', limits }
+  const extraUsage = extraUsageOf(info)
+  return {
+    allowed: info.status !== 'rejected',
+    limits,
+    ...(extraUsage === null ? {} : { extraUsage }),
+  }
 }
 
 /** What a rate limit event tells the agent's limits. */
 export function rateLimitEffects(value: unknown, now: number): MapperEffect[] {
   const event = mapRateLimits(value, now)
   if (!event) return []
-  const effects: MapperEffect[] = event.limits.map((limit) => ({ kind: 'limit', limit }))
+  const effects: MapperEffect[] = []
+  // Ending goes first, so a window the event itself reports is kept.
+  if (event.extraUsage === false) effects.push({ kind: 'extra-usage', inUse: false })
+  effects.push(...event.limits.map((limit): MapperEffect => ({ kind: 'limit', limit })))
   if (event.allowed) effects.push({ kind: 'limits-allowed' })
+  // Starting goes last, so it covers the windows the event just reported.
+  if (event.extraUsage === true) effects.push({ kind: 'extra-usage', inUse: true })
   return effects
+}
+
+const stillOn = (limit: PlanLimit, now: number): boolean =>
+  limit.resetsAt === null || limit.resetsAt > now
+
+/**
+ * The windows once extra usage is in use: every used-up plan window that has not reset is covered
+ * by it, since the plan refuses requests as a whole and extra usage lets them through. A window
+ * at 100% counts as used up even when its reading carries no rejection.
+ */
+export function coverWithExtraUsage(limits: readonly PlanLimit[], now: number): PlanLimit[] {
+  const usedUp = (limit: PlanLimit): boolean =>
+    limit.state === 'reached' || (limit.usedPercent !== null && limit.usedPercent >= 100)
+  return limits.map((limit) =>
+    limit.window === 'overage' || !usedUp(limit) || limit.extraUsage || !stillOn(limit, now)
+      ? limit
+      : { ...limit, state: 'reached', extraUsage: true },
+  )
+}
+
+/**
+ * An extra usage window the plan's reading keeps: it stands while extra usage is in use or its own
+ * budget is used up, and not past its reset, so it never outlives either.
+ */
+function overageStands(limit: PlanLimit, inUse: boolean, now: number): boolean {
+  return stillOn(limit, now) && (inUse || limit.state === 'reached')
+}
+
+function uncovered(limit: PlanLimit): PlanLimit {
+  if (!limit.extraUsage) return limit
+  const rest = { ...limit }
+  delete rest.extraUsage
+  return rest
+}
+
+/** The windows once an event says extra usage is not in use: none is covered, and its gauge goes. */
+export function endExtraUsage(limits: readonly PlanLimit[], now: number): PlanLimit[] {
+  return limits
+    .filter((limit) => limit.window !== 'overage' || overageStands(limit, false, now))
+    .map(uncovered)
 }
 
 /**
@@ -448,18 +511,10 @@ export function allowedLimit(limit: PlanLimit): PlanLimit {
   if (limit.state !== 'reached' || (limit.usedPercent !== null && limit.usedPercent >= 100)) {
     return limit
   }
-  return { ...limit, state: 'ok' }
+  return { ...uncovered(limit), state: 'ok' }
 }
 
-/**
- * A window read from the agent's report over the one known before. A warning the agent pushed
- * holds until its window resets, and so does a block, unless the read shows the window not full.
- */
-export function mergeReadLimit(
-  before: PlanLimit | undefined,
-  read: PlanLimit,
-  now: number,
-): PlanLimit {
+function readOver(before: PlanLimit | undefined, read: PlanLimit, now: number): PlanLimit {
   if (read.state !== 'ok' || !before || before.state === 'ok') return read
   if ((before.resetsAt ?? 0) <= now) return read
   if (before.state === 'reached' && read.usedPercent !== null) return read
@@ -467,10 +522,26 @@ export function mergeReadLimit(
 }
 
 /**
+ * A window read from the agent's report over the one known before. A warning the agent pushed
+ * holds until its window resets, and so does a block, unless the read shows the window not full.
+ * Extra usage covering the window holds with its block: a read that shows it not used up ends it.
+ */
+export function mergeReadLimit(
+  before: PlanLimit | undefined,
+  read: PlanLimit,
+  now: number,
+): PlanLimit {
+  const merged = readOver(before, read, now)
+  if (!before?.extraUsage || merged.state !== 'reached' || !stillOn(before, now)) return merged
+  return { ...merged, extraUsage: true }
+}
+
+/**
  * The windows after a read of the plan limits. A read lists every window the plan has, so one it
- * no longer lists is gone, as a plan without a 5-hour window answers it null; extra usage comes
- * only in rate limit events and stays. A read with no windows changes nothing, since Claude
- * Code's read answers none when it fails.
+ * no longer lists is gone, as a plan without a 5-hour window answers it null. The extra usage
+ * window comes only in rate limit events and stays only while extra usage is in use or its budget
+ * is used up, and until it resets. A read with no windows changes nothing, since Claude Code's
+ * read answers none when it fails.
  */
 export function mergeReadLimits(
   known: readonly PlanLimit[],
@@ -479,13 +550,17 @@ export function mergeReadLimits(
 ): PlanLimit[] {
   if (read.length === 0) return [...known]
   const listed = new Set(read.map((limit) => limit.window))
-  const kept = known.filter((limit) => limit.window === 'overage' && !listed.has('overage'))
   const merged = read.map((limit) =>
     mergeReadLimit(
       known.find((before) => before.window === limit.window),
       limit,
       now,
     ),
+  )
+  const inUse = merged.some((limit) => limit.extraUsage)
+  const kept = known.filter(
+    (limit) =>
+      limit.window === 'overage' && !listed.has('overage') && overageStands(limit, inUse, now),
   )
   return [...merged, ...kept]
 }

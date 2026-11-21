@@ -576,10 +576,12 @@ function DraftComposer({
               commandsNote={commandsNote}
               placeholder={
                 reached?.resetsAt
-                  ? tc('prompt.placeholder.limitReached', {
-                      limit: limitPhrase(reached),
-                      time: resetTime(reached.resetsAt),
-                    })
+                  ? tc(
+                      reached.extraUsage
+                        ? 'prompt.placeholder.limitExtraUsage'
+                        : 'prompt.placeholder.limitReached',
+                      { limit: limitPhrase(reached), time: resetTime(reached.resetsAt) },
+                    )
                   : t('newSession.describeTask')
               }
               label={name ? t('newSession.messageAgent', { agent: name }) : t('newSession.message')}
