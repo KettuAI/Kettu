@@ -24,6 +24,7 @@ import {
 import { useSidebarPeek } from '@renderer/features/shell/sidebar-peek'
 import { QuitConfirm } from '@renderer/features/updates/quit-confirm'
 import { CommandConfirmDialog } from '@renderer/features/updates/command-confirm'
+import { useInstallWindow } from '@renderer/features/settings/harness-install'
 import { UpdateDialog } from '@renderer/features/updates/update-dialog'
 import { useAccountShell } from '@renderer/features/account/account-row'
 import { SidebarList, SidebarNotices } from '@renderer/features/sidebar/app-sidebar'
@@ -52,6 +53,8 @@ const SettingsPage = lazy(() => import('@renderer/features/settings/settings-pag
 const HostPathDialog = lazy(() => import('@renderer/web/host-path-dialog'))
 // The first run on a fresh install, over the whole window until it is done.
 const Onboarding = lazy(() => import('@renderer/features/onboarding/onboarding'))
+// What an install of a harness brings, shown before it runs; loaded once an Install first opens it.
+const InstallWindow = lazy(() => import('@renderer/features/settings/install-window'))
 
 export function App() {
   const settingsOpen = useViewStore((s) => s.settings.open)
@@ -69,6 +72,7 @@ export function App() {
   const [settingsLoaded, setSettingsLoaded] = useState(false)
   if (settingsOpen && !settingsLoaded) setSettingsLoaded(true)
   const pathAsked = usePathRequest((s) => s.asked !== null)
+  const installMounted = useInstallWindow((s) => s.mounted)
   const [pathPicker, setPathPicker] = useState(false)
   if (pathAsked && !pathPicker) setPathPicker(true)
   useKeyboardShortcuts()
@@ -118,6 +122,11 @@ export function App() {
         <QuitConfirm />
         <UpdateDialog />
         <CommandConfirmDialog />
+        {installMounted && (
+          <Suspense fallback={null}>
+            <InstallWindow />
+          </Suspense>
+        )}
         <DebugRestartDialog />
         <ArtifactDialogs />
         <ArtifactConsentDialog />

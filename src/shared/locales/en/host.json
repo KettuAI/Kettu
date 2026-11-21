@@ -222,6 +222,7 @@
     "cliGone": "{{path}} is gone, perhaps because {{agent}} is being updated. {{reason}}",
     "cliRestart": "{{agent}} is now at {{path}}; restart Kettu to use it.",
     "cannotInstall": "{{agent}} cannot be installed",
+    "notInstalled": "{{agent}} is not installed. Install it to start a session.",
     "busyInstalling": "{{agent}} is already being installed or started",
     "closeSessionsFirst": "Close the sessions that use {{agent}} first",
     "stillRunning": "{{agent}} did not stop and is still running; try again once it has exited",

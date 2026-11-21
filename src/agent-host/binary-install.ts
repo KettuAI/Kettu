@@ -263,7 +263,20 @@ export async function installedFolder(
   installs: BinaryInstalls,
   ctx: { platform: Platform; home: string; npmPrefix(): Promise<string | null> },
 ): Promise<string | null> {
-  const p = ctx.platform === 'win32' ? path.win32 : path.posix
+  const npmPrefix = plan.id === 'npm' ? await ctx.npmPrefix() : null
+  return routeFolder(plan, installs, { ...ctx, npmPrefix })
+}
+
+/**
+ * The folder a route puts the program into, as far as Kettu can tell before it runs; `npmPrefix`
+ * is npm's global prefix, which only the npm route needs.
+ */
+export function routeFolder(
+  plan: InstallPlan,
+  installs: BinaryInstalls,
+  ctx: { platform: Platform; home: string; npmPrefix: string | null },
+): string | null {
+  const p = platformPath(ctx.platform)
   switch (plan.id) {
     case 'archive':
       return plan.archive?.folder ?? null
@@ -272,12 +285,10 @@ export async function installedFolder(
       return plan.tool ? p.dirname(plan.tool) : null
     case 'script':
       return installs.scriptBin ? p.join(ctx.home, ...installs.scriptBin) : null
-    case 'npm': {
-      const prefix = await ctx.npmPrefix()
-      if (!prefix) return null
+    case 'npm':
+      if (!ctx.npmPrefix) return null
       // npm links global programs into the prefix itself on Windows, and into its bin elsewhere.
-      return ctx.platform === 'win32' ? prefix : p.join(prefix, 'bin')
-    }
+      return ctx.platform === 'win32' ? ctx.npmPrefix : p.join(ctx.npmPrefix, 'bin')
     case 'winget':
       return null
   }

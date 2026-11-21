@@ -10,11 +10,11 @@ import { Button } from '@renderer/components/ui/button'
 import { RingSpinner } from '@renderer/components/ui/spinner'
 import { toast } from '@renderer/components/ui/toast'
 import { cliOutdated } from '@renderer/features/agents/readiness'
-import { InstallDialog } from '@renderer/features/settings/harness-section'
 import {
   addDefaultAgents,
   installKind,
   installRoute,
+  openInstall,
   startInstall,
 } from '@renderer/features/settings/harness-install'
 import { confirmCliUpdate } from '@renderer/features/updates/command-confirm-model'
@@ -85,7 +85,6 @@ function GuideRow({ status }: { status: AgentStatus }) {
   const { t } = useTranslation('session')
   const { t: ts } = useTranslation('settings')
   const taskError = useAgentsStore((s) => s.taskErrors[status.id])
-  const [installing, setInstalling] = useState(false)
   const harness = status.harnessId
   const task = status.task
   const running = task?.state === 'running' || status.state === 'installing'
@@ -93,10 +92,11 @@ function GuideRow({ status }: { status: AgentStatus }) {
   const reason = failure ?? taskError?.message ?? null
   const kind = installKind(status)
   const minimum = cliOutdated(status)
+  // A failed install is tried again by the route the user already picked in the install window.
   const install = () => {
-    if (kind === 'program') setInstalling(true)
-    else if (kind === 'package')
+    if (failure && task)
       void startInstall(useAgentsStore, useSettingsStore, harness, installRoute(task))
+    else if (kind) void openInstall(harness)
     else openHarnessSettings(harness)
   }
 
@@ -132,9 +132,6 @@ function GuideRow({ status }: { status: AgentStatus }) {
         <Button variant="outline" size="xs" onClick={install}>
           {reason ? ts('agents.install.failed') : ts('agents.install.button')}
         </Button>
-      )}
-      {kind === 'program' && (
-        <InstallDialog status={status} open={installing} onOpenChange={setInstalling} />
       )}
     </li>
   )

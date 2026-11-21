@@ -833,7 +833,9 @@ function Pane({
           />
           <span className="truncate shimmer">
             {status.state === 'installing'
-              ? t('agentStart.installing', { agent: name })
+              ? status.package?.isSdk
+                ? t('agentStart.installingSdk')
+                : t('agentStart.installing', { agent: name })
               : status.state === 'starting'
                 ? t('agentStart.starting', { agent: name })
                 : t('newSession.agentMenu.checking', { agent: name })}

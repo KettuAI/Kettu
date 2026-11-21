@@ -4,6 +4,7 @@ import {
   Archive01Icon,
   ArrowUp02Icon,
   Bug01Icon,
+  Download04Icon,
   RefreshIcon,
   WifiDisconnected01Icon,
 } from '@hugeicons/core-free-icons'
@@ -16,6 +17,7 @@ import { Button } from '@renderer/components/ui/button'
 import { InputGroup, InputGroupAddon, InputGroupButton } from '@renderer/components/ui/input-group'
 import { Skeleton } from '@renderer/components/ui/skeleton'
 import { Spinner } from '@renderer/components/ui/spinner'
+import { openInstall, type MissingCopy } from '@renderer/features/settings/harness-install'
 import { connectionText } from '@renderer/features/settings/host-text'
 import { HostAwayAction } from '@renderer/features/shell/host-away-action'
 import { errorMessage } from '@renderer/lib/host'
@@ -82,19 +84,39 @@ export function ThreadSkeleton({ className }: { className?: string }) {
 
 const NO_LINES: string[] = []
 
+type SessionT = ReturnType<typeof useTranslation<'session'>>['t']
+
+/** Whether a start's install is Claude Code's SDK, the only one a start installs by itself. */
+function useInstallsSdk(agentId: AgentId, hostId: string | null): boolean {
+  return useAgentsStore((s) => !!agentsOn(s, hostId).byId[agentId]?.package?.isSdk)
+}
+
+/** "Starting Codex…", or what a start installs: "Installing Claude Agent SDK…". */
+function startLine(
+  t: SessionT,
+  installing: boolean,
+  sdk: boolean,
+  agentId: AgentId,
+  hostId: string | null,
+): string {
+  if (installing && sdk) return t('agentStart.installingSdk')
+  return t(installing ? 'agentStart.installing' : 'agentStart.starting', {
+    agent: agentName(agentId, hostId),
+  })
+}
+
 /** "Starting Codex…" with the latest lines the agent printed, or "Installing Codex…" with npm's. */
 export function StartingAgent({ agentId, hostId }: { agentId: AgentId; hostId: string | null }) {
   const { t } = useTranslation('session')
   const progress = useAgentsStore((s) => agentsOn(s, hostId).byId[agentId]?.progress ?? NO_LINES)
   const state = useAgentsStore((s) => agentsOn(s, hostId).byId[agentId]?.state)
+  const sdk = useInstallsSdk(agentId, hostId)
   return (
     <div className="flex flex-col items-center gap-2 px-6 pt-6 pb-2 text-center" role="status">
       <span className="inline-flex items-center gap-2 text-ui text-muted-foreground">
         <Spinner className={cn('size-3.5', state === 'installing' && 'text-info')} />
         <span className="shimmer">
-          {t(state === 'installing' ? 'agentStart.installing' : 'agentStart.starting', {
-            agent: agentName(agentId, hostId),
-          })}
+          {startLine(t, state === 'installing', sdk, agentId, hostId)}
         </span>
       </span>
       {progress.length > 0 && (
@@ -128,12 +150,11 @@ export function ComposerPlaceholder({
   const { t } = useTranslation('session')
   const progress = useAgentsStore((s) => agentsOn(s, hostId).byId[agentId]?.progress.at(-1))
   const state = useAgentsStore((s) => agentsOn(s, hostId).byId[agentId]?.state)
+  const sdk = useInstallsSdk(agentId, hostId)
   const text =
     state === 'ready'
       ? t('agentStart.loading')
-      : t(state === 'installing' ? 'agentStart.installing' : 'agentStart.starting', {
-          agent: agentName(agentId, hostId),
-        })
+      : startLine(t, state === 'installing', sdk, agentId, hostId)
   return (
     <div className="flex flex-col">
       <InputGroup variant="composer">
@@ -194,6 +215,7 @@ export function FirstMessage({
   const installing = useAgentsStore(
     (s) => agentsOn(s, hostId).byId[agentId]?.state === 'installing',
   )
+  const sdk = useInstallsSdk(agentId, hostId)
   const attachments = contentAttachments(content)
   const rest = content.filter((c) => c.type !== 'ref' || c.ref.kind !== 'attachment')
   return (
@@ -214,11 +236,7 @@ export function FirstMessage({
         </div>
         <div role="status" className="flex flex-col gap-0.5 pt-2.5">
           <p className="text-prose text-muted-foreground">
-            <span className="shimmer">
-              {t(installing ? 'agentStart.installing' : 'agentStart.starting', {
-                agent: agentName(agentId, hostId),
-              })}
-            </span>
+            <span className="shimmer">{startLine(t, installing, sdk, agentId, hostId)}</span>
           </p>
           {progress.slice(-3).map((line, i) => (
             <span
@@ -241,6 +259,7 @@ export function FailedState({
   detail,
   onRetry,
   report,
+  action,
 }: {
   title: string
   message: string
@@ -248,6 +267,8 @@ export function FailedState({
   onRetry: () => void
   /** What the report carries of where it failed, and the host it failed on. */
   report?: { hostId: string | null; sessionId?: string; agentId?: AgentId }
+  /** The button that fixes it, before Retry. */
+  action?: ReactNode
 }) {
   return (
     <div
@@ -281,6 +302,7 @@ export function FailedState({
         onRetry={onRetry}
         report={report}
         error={detail ? `${message}\n${detail}` : message}
+        action={action}
       />
     </div>
   )
@@ -294,6 +316,7 @@ export function FailedActions({
   origin = 'error',
   error,
   className,
+  action,
 }: {
   onRetry: () => void
   retrying?: boolean
@@ -302,11 +325,19 @@ export function FailedActions({
   origin?: ReportOrigin
   error: string
   className?: string
+  /** The button that fixes it, which comes first in Retry's place as the main action. */
+  action?: ReactNode
 }) {
   const { t } = useTranslation(['session', 'common'])
   return (
     <div className={cn('flex flex-wrap items-center gap-1.5', className)}>
-      <Button size="compact" disabled={retrying} onClick={onRetry}>
+      {action}
+      <Button
+        size="compact"
+        variant={action ? 'outline' : undefined}
+        disabled={retrying}
+        onClick={onRetry}
+      >
         {retrying ? (
           <Spinner data-icon="inline-start" />
         ) : (
@@ -338,6 +369,30 @@ export function FailedActions({
         {t('failed.reportProblem')}
       </Button>
     </div>
+  )
+}
+
+/** Install, which opens the install window, or that the install runs. */
+export function InstallCopyButton({ missing }: { missing: MissingCopy }) {
+  const { t } = useTranslation('session')
+  return (
+    <Button
+      size="compact"
+      disabled={missing.installing}
+      onClick={() => void openInstall(missing.harness)}
+    >
+      {missing.installing ? (
+        <Spinner data-icon="inline-start" />
+      ) : (
+        <HugeiconsIcon
+          icon={Download04Icon}
+          strokeWidth={1.9}
+          aria-hidden
+          data-icon="inline-start"
+        />
+      )}
+      {t(missing.installing ? 'failed.installing' : 'failed.install')}
+    </Button>
   )
 }
 

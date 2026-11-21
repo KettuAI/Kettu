@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import { brewVersion } from './agent-updates'
+import type { NpmOptions, NpmRun } from './adapter-install'
+import { brewVersion, fetchLatest } from './agent-updates'
+import { TextRing } from './ring'
 
 describe("Homebrew's version of a formula or cask", () => {
   it("reads a formula's stable version and a cask's version without its build", () => {
@@ -13,5 +15,60 @@ describe("Homebrew's version of a formula or cask", () => {
     expect(brewVersion('{"formulae":[]}', false)).toBeNull()
     expect(brewVersion(JSON.stringify({ casks: [{ version: 'latest' }] }), true)).toBeNull()
     expect(brewVersion('Error: No available formula', false)).toBeNull()
+  })
+})
+
+describe("npm's answer for the version an install takes", () => {
+  const answering = (stdout: unknown) => {
+    const asked: string[][] = []
+    const run = async (options: NpmOptions): Promise<NpmRun> => {
+      asked.push([...options.args])
+      return {
+        code: 0,
+        signal: null,
+        timedOut: false,
+        aborted: false,
+        output: new TextRing(1024),
+        stdout: JSON.stringify(stdout),
+      }
+    }
+    const options = {
+      npm: '/usr/bin/npm',
+      package: '@google/gemini-cli',
+      cli: null,
+      env: {},
+      platform: 'linux' as const,
+      cwd: '/home/me',
+      timeoutMs: 1000,
+      run,
+    }
+    return { asked, options }
+  }
+
+  it("carries the package's own size, read in the same view as its version", async () => {
+    const latest = answering({ version: '0.66.0', 'dist.unpackedSize': 98_502_179 })
+    expect(await fetchLatest(latest.options)).toEqual({
+      adapterVersion: '0.66.0',
+      cliVersion: null,
+      unpackedSize: 98_502_179,
+    })
+    expect(latest.asked).toHaveLength(1)
+    expect(latest.asked[0]).toContain('dist.unpackedSize')
+
+    const ranged = answering([
+      { version: '0.65.0', 'dist.unpackedSize': 1 },
+      { version: '0.66.1', 'dist.unpackedSize': 2_000 },
+    ])
+    expect(await fetchLatest({ ...ranged.options, range: '~0.66.0' })).toEqual({
+      adapterVersion: '0.66.1',
+      cliVersion: null,
+      unpackedSize: 2_000,
+    })
+    expect(ranged.asked).toHaveLength(1)
+  })
+
+  it('leaves the size out when npm gives none', async () => {
+    const bare = answering('0.66.0')
+    expect(await fetchLatest(bare.options)).toEqual({ adapterVersion: '0.66.0', cliVersion: null })
   })
 })

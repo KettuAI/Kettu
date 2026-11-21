@@ -233,11 +233,26 @@ async function manager(setup: Setup) {
 }
 
 describe('the version of a harness that follows the registry', () => {
-  it('installs the version the registry lists on first use', async () => {
+  it('installs the version the registry lists when the user installs it, which a start runs', async () => {
     const m = await manager({ live: '1.1.0' })
     await m.agents.checkUpdates()
+    await m.agents.install('gemini')
+    expect(m.installs).toEqual(['1.1.0'])
     expect(await m.start()).toBe('1.1.0')
     expect(m.installs).toEqual(['1.1.0'])
+  })
+
+  it('installs nothing when a session starts while no copy is installed, and says so', async () => {
+    const m = await manager({ live: '1.1.0' })
+    await m.agents.checkUpdates()
+    await expect(m.agents.ensureReady('gemini')).rejects.toMatchObject({
+      code: 'agent_unavailable',
+      message: 'Gemini CLI is not installed. Install it to start a session.',
+      data: { agentId: 'gemini', state: 'not-installed' },
+    })
+    expect(m.installs).toEqual([])
+    expect(m.launches).toEqual([])
+    expect(m.status()).toMatchObject({ state: 'available', package: { installed: false } })
   })
 
   it('installs a newer version in the background, which the next start runs', async () => {

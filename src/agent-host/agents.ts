@@ -22,6 +22,7 @@ import type {
   ClaudeSettings,
   CodebuddySettings,
   CodebuddySiteChange,
+  InstallOffer,
   InstalledCli,
   McpStatus,
   PlanLimit,
@@ -86,6 +87,7 @@ import {
   removeStaleInstalls,
   removeTree,
   listInstalled,
+  runNpm,
   runProgram,
   type InstalledAdapter,
   type InstallOptions,
@@ -107,7 +109,13 @@ import {
   type StopTimings,
 } from './agent-process'
 import type { AgentTrees } from './agent-trees'
-import { decideUpdate, fetchBrewLatest, fetchLatest, type LatestOptions } from './agent-updates'
+import {
+  decideUpdate,
+  fetchBrewLatest,
+  fetchLatest,
+  type LatestFound,
+  type LatestOptions,
+} from './agent-updates'
 import {
   installArchive,
   listArchiveInstalls,
@@ -199,6 +207,13 @@ import {
 } from './harness-versions'
 import { HostedRun, type HostedRunHooks } from './hosted-run'
 import { t } from './i18n'
+import {
+  installOffer,
+  installsOnStart,
+  npmConfigKeys,
+  parseNpmConfig,
+  type NpmConfig,
+} from './install-offer'
 import {
   CliVersions,
   shimTarget as cmdShimTarget,
@@ -363,7 +378,7 @@ export interface AgentManagerDeps extends DriverOverrides {
   /** Downloads and extracts a binary agent's release archive. */
   installArchive?(options: ArchiveInstallOptions): Promise<InstalledArchive>
   /** Asks npm for an adapter's newest version and the CLI it carries. */
-  fetchLatest?(options: LatestOptions): Promise<AgentUpdate>
+  fetchLatest?(options: LatestOptions): Promise<LatestFound>
   /** Reads the ACP Registry's listing, whose versions the harnesses Kettu installs follow. */
   fetchRegistry?(options: RegistryFetchOptions): Promise<RegistryAgents>
   /** Reads the body of Kettu's harness compatibility manifest from its download service. */
@@ -468,6 +483,8 @@ class Harness {
   binaryVersionFailure: string | null = null
   /** The program's install routes, found at detection. */
   installPlans: InstallPlan[] = []
+  /** The size of each version of Kettu's own package, without its dependencies, as npm gave it. */
+  sizes = new Map<string, number>()
   /** An install or update the user asked for, which runs beside the agents' own lifecycle. */
   task: Omit<AgentTask, 'progress'> | null = null
   taskRun: Promise<void> | null = null
@@ -743,6 +760,8 @@ export class AgentManager {
   /** The update command for each harness's user program, and what it was worked out for. */
   private readonly cliCommands = new Map<Harness, string>()
   private readonly cliCommandKeys = new Map<Harness, string>()
+  /** npm's configuration for the install window, by the keys asked, until the next redetect. */
+  private readonly npmConfigs = new Map<string, Promise<NpmConfig | null>>()
   hooks: AgentSessionHooks = {
     liveSessions: () => 0,
     agentExited: () => {},
@@ -1054,6 +1073,7 @@ export class AgentManager {
   /** Detects every harness again in the environment as it is now. */
   async redetect(): Promise<AgentStatus[]> {
     this.cliVersions.clear()
+    this.npmConfigs.clear()
     await Promise.all([...this.harnesses.values()].map((h) => this.detect(h)))
     return this.statuses()
   }
@@ -1167,6 +1187,12 @@ export class AgentManager {
           state: detection?.state ?? 'not-installed',
         },
       )
+    }
+    if (!detection.spec && !installsOnStart(h.def, detection.adapter)) {
+      throw new HostError('agent_unavailable', t('agent.notInstalled', { agent: slot.name }), {
+        agentId,
+        state: 'not-installed',
+      })
     }
     return this.start(slot, detection.spec)
   }
@@ -2593,6 +2619,7 @@ export class AgentManager {
         cli: source,
       })
       h.targetCli = { version: target.version, cli: found.cliVersion }
+      if (found.unpackedSize) h.sizes.set(found.adapterVersion, found.unpackedSize)
     } catch (error) {
       const message = (error as Error).message
       this.deps.diagnostics.log(
@@ -2759,7 +2786,11 @@ export class AgentManager {
           : null,
         readCli(),
       ])
-      if (latest) h.latest = latest
+      if (latest) {
+        const { unpackedSize, ...update } = latest
+        h.latest = update
+        if (unpackedSize) h.sizes.set(update.adapterVersion, unpackedSize)
+      }
       if (cli) h.cliLatest = cli
       h.checkedAt = Date.now()
       h.attemptedAt = h.checkedAt
@@ -3166,7 +3197,84 @@ export class AgentManager {
     }
   }
 
-  /** The first-use install, shared with any start that waits for it. */
+  /**
+   * What each way of installing the harness brings, for the install window: Kettu's own copy of
+   * its npm or uvx package first, then its vendor's routes and the Registry's archive.
+   */
+  async installOffer(agentId: AgentId): Promise<InstallOffer> {
+    const { h } = this.slot(agentId)
+    await this.detectAll()
+    const { def } = h
+    const { launch } = def
+    const { platform } = this.deps
+    const node = this.deps.env.nodeProbe()
+    const env = this.deps.env.agentEnv(def.id)
+    // Claude Code's SDK installs on its first start, beside the user's own `claude`.
+    const ownPackage = (launch.kind === 'package' && !def.cli) || launch.kind === 'uvx'
+    const version = ownPackage ? (this.versionChoice(h)?.wanted ?? null) : null
+    const copy = version ? { version, bytes: h.sizes.get(version) ?? null } : null
+    const npmRoute = h.installPlans.some((plan) => plan.id === 'npm')
+    const packages = [
+      ...(copy && launch.kind === 'package' ? [launch.package] : []),
+      ...(npmRoute && def.installs?.npm ? [def.installs.npm] : []),
+    ]
+    const [npm, uvx] = await Promise.all([
+      packages.length > 0 ? this.npmConfig(h, node.npmPath, npmConfigKeys(packages), env) : null,
+      launch.kind === 'uvx'
+        ? findCommand('uvx', {
+            platform,
+            env,
+            isExecutable: (file) => isExecutableFile(file, platform),
+          })
+        : null,
+    ])
+    return installOffer({
+      def,
+      platform,
+      home: os.homedir(),
+      root: this.deps.adaptersDir,
+      plans: h.installPlans,
+      copy,
+      node,
+      uv: !!uvx,
+      npm,
+    })
+  }
+
+  /** `npm config get` of these keys, asked once until the next redetect; null when npm fails. */
+  private npmConfig(
+    h: Harness,
+    npm: string | null,
+    keys: string[],
+    env: Env,
+  ): Promise<NpmConfig | null> {
+    if (!npm) return Promise.resolve(null)
+    const key = `${h.def.id} ${keys.join(' ')}`
+    const known = this.npmConfigs.get(key)
+    if (known) return known
+    const read = (async () => {
+      const run = await runNpm({
+        npm,
+        args: ['config', 'get', ...keys],
+        cwd: os.homedir(),
+        env,
+        platform: this.deps.platform,
+        timeoutMs: this.timings.updateViewMs,
+      })
+      const failure = programFailure('npm', run, this.timings.updateViewMs)
+      if (!failure) return parseNpmConfig(run.stdout)
+      this.deps.diagnostics.log(
+        'warn',
+        `${h.def.name}: npm's configuration was not read: ${failure}`,
+      )
+      this.npmConfigs.delete(key)
+      return null
+    })()
+    this.npmConfigs.set(key, read)
+    return read
+  }
+
+  /** Installs Kettu's copy of a package harness when the user asks, which a start waits for. */
   private async installNow(h: Harness): Promise<void> {
     const home = this.home(h)
     const agentId = home.id

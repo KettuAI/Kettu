@@ -6,20 +6,13 @@ import {
   Alert02Icon,
   AlertCircleIcon,
   ArrowDown01Icon,
-  ArrowUpRight01Icon,
   Cancel01Icon,
   Download04Icon,
   RefreshIcon,
 } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
-import type {
-  AgentInstallMethod,
-  AgentStatus,
-  AgentTask,
-  ProgramMethod,
-  VersionMoveReason,
-} from '@shared/agent-host'
+import type { AgentStatus, AgentTask, ProgramMethod, VersionMoveReason } from '@shared/agent-host'
 import type { HarnessId } from '@shared/thread'
 import { AgentTile } from '@renderer/components/agents/agent-mark'
 import { Icon } from '@renderer/components/affect/app-shell'
@@ -40,8 +33,6 @@ import {
   AlertDialogTitle,
 } from '@renderer/components/ui/alert-dialog'
 import { Checkbox } from '@renderer/components/ui/checkbox'
-import { Dialog, DialogClose } from '@renderer/components/ui/dialog'
-import { RadioGroup, RadioGroupTile } from '@renderer/components/ui/radio-group'
 import { toast } from '@renderer/components/ui/toast'
 import {
   cliOutdated,
@@ -76,6 +67,7 @@ import {
 import {
   installKind,
   installRoute,
+  openInstall,
   startInstall,
   type InstallKind,
   type SettingsHook,
@@ -86,21 +78,12 @@ import {
   ControlError,
   CopyAction,
   DangerButton,
-  LinkButton,
   Pill,
   SetButton,
   SettingSwitch,
   Spin,
 } from './controls'
 import { PathActions, PathLine } from './places'
-import {
-  SETTINGS_TILE,
-  SettingsDialogBody,
-  SettingsDialogContent,
-  SettingsDialogFooter,
-  SettingsDialogHeader,
-  SettingsField,
-} from './settings-dialog'
 import {
   FlashMark,
   GroupLabel,
@@ -129,12 +112,6 @@ async function checkForUpdates(agents: AgentsStoreHook): Promise<void> {
   await agents.getState().checkUpdates()
   const error = agents.getState().updateCheck.error
   if (error) throw new Error(error)
-}
-
-/** The way Kettu would install it now, or null when it cannot. */
-function installMethod(status: AgentStatus, picked?: string): AgentInstallMethod | null {
-  const available = status.installMethods.filter((m) => m.available)
-  return available.find((m) => m.id === picked) ?? available[0] ?? null
 }
 
 function startUpdate(agents: AgentsStoreHook, harness: HarnessId): void {
@@ -195,11 +172,10 @@ function PillClose({
  * Update, Install, or that it is up to date once a check has run.
  */
 function HarnessState({ status }: { status: AgentStatus }) {
-  const { useAgentsStore, useSettingsStore } = useHostScope()
+  const { hostId, useAgentsStore, useSettingsStore } = useHostScope()
   const { t } = useTranslation('settings')
   const updated = useAgentsStore((s) => s.updated[status.id])
   const taskError = useAgentsStore((s) => s.taskErrors[status.id])
-  const [installing, setInstalling] = useState(false)
   const task: AgentTask | null = status.task
   const harness = status.harnessId
   if (task?.state === 'running' || status.state === 'installing') {
@@ -252,7 +228,7 @@ function HarnessState({ status }: { status: AgentStatus }) {
   }
   if (status.uninstalled) {
     return (
-      <SetButton onClick={() => void startInstall(useAgentsStore, useSettingsStore, harness)}>
+      <SetButton onClick={() => void openInstall(harness, hostId)}>
         {t('agents.install.button')}
       </SetButton>
     )
@@ -297,20 +273,9 @@ function HarnessState({ status }: { status: AgentStatus }) {
   if (kind === 'package' && status.package?.isSdk) return null
   if (kind) {
     return (
-      <>
-        <SetButton
-          onClick={() =>
-            kind === 'package'
-              ? void startInstall(useAgentsStore, useSettingsStore, harness)
-              : setInstalling(true)
-          }
-        >
-          {t('agents.install.button')}
-        </SetButton>
-        {kind !== 'package' && (
-          <InstallDialog status={status} open={installing} onOpenChange={setInstalling} />
-        )}
-      </>
+      <SetButton onClick={() => void openInstall(harness, hostId)}>
+        {t('agents.install.button')}
+      </SetButton>
     )
   }
   return showsCurrent(status) ? <StateDot label={t('agents.update.upToDate')} /> : null
@@ -322,177 +287,6 @@ function StateDot({ label }: { label: string }) {
     <span className="ui-ss-badge" data-tone="ok">
       {label}
     </span>
-  )
-}
-
-/**
- * Installing the user's own program, such as Claude Code: the vendor's routes, the recommended
- * first, those whose tool is missing disabled, and the command that runs, which can be copied.
- */
-export function InstallDialog({
-  status,
-  open,
-  onOpenChange,
-}: {
-  status: AgentStatus
-  open: boolean
-  onOpenChange: (open: boolean) => void
-}) {
-  const { useAgentsStore, useSettingsStore } = useHostScope()
-  const { t } = useTranslation(['settings', 'common'])
-  const [picked, setPicked] = useState<AgentInstallMethod['id'] | undefined>(undefined)
-  const method = installMethod(status, picked)
-  const vendor = VENDORS[status.harnessId]
-  const [check, checking, error] = useAction()
-  const hasMethods = status.installMethods.length > 0
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <SettingsDialogContent className="sm:max-w-125">
-        <SettingsDialogHeader title={t('harnesses.install.title', { name: status.harnessName })}>
-          {t(
-            hasMethods
-              ? vendor
-                ? 'harnesses.install.body'
-                : 'harnesses.install.bodyPlain'
-              : 'harnesses.install.setupBody',
-            { name: status.harnessName, vendor },
-          )}
-        </SettingsDialogHeader>
-        <SettingsDialogBody>
-          {hasMethods && (
-            <SettingsField label={t('harnesses.install.method')}>
-              <RadioGroup
-                aria-label={t('harnesses.install.method')}
-                value={method?.id ?? null}
-                onValueChange={(id) => setPicked(id as AgentInstallMethod['id'])}
-                className="kettu-sd__choices"
-              >
-                {status.installMethods.map((m, index) => (
-                  <RadioGroupTile
-                    key={m.id}
-                    value={m.id}
-                    disabled={!m.available}
-                    className={SETTINGS_TILE}
-                  >
-                    <span className="ui-sg-label">
-                      <b className="k-row-title">
-                        {methodName(t, m.id)}
-                        {index === 0 && m.available && (
-                          <span className="ui-ss-badge" data-tone="ok">
-                            {t('harnesses.install.recommended')}
-                          </span>
-                        )}
-                      </b>
-                      {!m.available && <small>{t('agents.install.notFound')}</small>}
-                    </span>
-                  </RadioGroupTile>
-                ))}
-              </RadioGroup>
-            </SettingsField>
-          )}
-          {!method && status.detail && (
-            <p className="kettu-sd__text" data-selectable="">
-              <WithCode text={status.detail} />
-            </p>
-          )}
-          {method && (
-            <SettingsField
-              label={t(
-                method.id === 'archive' ? 'harnesses.install.downloads' : 'harnesses.install.runs',
-              )}
-            >
-              <div className="k-cmd k-cmd--wrap">
-                <code data-selectable="" title={method.command}>
-                  {method.command}
-                </code>
-                <CopyAction
-                  text={method.command}
-                  label={t(
-                    method.id === 'archive' ? 'common:actions.copy' : 'harnesses.install.copy',
-                  )}
-                />
-              </div>
-              <span className="kettu-sd__hint">
-                {t(
-                  method.id === 'archive'
-                    ? 'harnesses.install.downloadBody'
-                    : 'harnesses.install.ownTerminal',
-                )}
-              </span>
-            </SettingsField>
-          )}
-          {method && status.installNotice && (
-            <p className="kettu-sd__text" data-selectable="">
-              {status.installNotice}
-            </p>
-          )}
-          {status.installUrl && (
-            <span>
-              <LinkButton
-                href={status.installUrl}
-                icon={<Icon icon={ArrowUpRight01Icon} size={14} />}
-              >
-                {t('harnesses.install.guide')}
-              </LinkButton>
-            </span>
-          )}
-          {(status.program ?? status.binaryCommand) && (
-            <ChooseElsewhere harness={status.harnessId} onChosen={() => onOpenChange(false)} />
-          )}
-          <ControlError error={error} />
-        </SettingsDialogBody>
-        <SettingsDialogFooter>
-          <DialogClose render={<SetButton size="md" variant="ghost" />}>
-            {t('common:actions.cancel')}
-          </DialogClose>
-          {method ? (
-            <SetButton
-              size="md"
-              variant="primary"
-              onClick={() => {
-                void startInstall(useAgentsStore, useSettingsStore, status.harnessId, method.id)
-                onOpenChange(false)
-              }}
-            >
-              {t('agents.install.button')}
-            </SetButton>
-          ) : (
-            <SetButton
-              size="md"
-              variant="primary"
-              loading={checking}
-              onClick={() => check(() => useAgentsStore.getState().reloadEnvironment())}
-            >
-              {t('agents.environment.reload')}
-            </SetButton>
-          )}
-        </SettingsDialogFooter>
-      </SettingsDialogContent>
-    </Dialog>
-  )
-}
-
-/**
- * The install dialog's link to a program installed elsewhere, and why main refused the one chosen.
- * It mounts with the dialog's content, so a refusal is gone when the dialog opens again.
- */
-function ChooseElsewhere({ harness, onChosen }: { harness: HarnessId; onChosen: () => void }) {
-  const { api } = useHostScope()
-  const { t } = useTranslation('settings')
-  const [act, , error] = useAction()
-  return (
-    <>
-      <button
-        type="button"
-        onClick={() =>
-          act(() => api.dialogs.chooseAgentBinary(harness).then((path) => path && onChosen()))
-        }
-        className="k-link k-self-start"
-      >
-        {t('agents.install.elsewhere')}
-      </button>
-      {error && <p className="kettu-sd__error">{error}</p>}
-    </>
   )
 }
 
@@ -1316,7 +1110,7 @@ function FailedTaskNotice({ status, task }: { status: AgentStatus; task: AgentTa
 
 /** A harness that was uninstalled: Install brings it back with its configuration. */
 function UninstalledNotice({ status }: { status: AgentStatus }) {
-  const { useAgentsStore, useSettingsStore } = useHostScope()
+  const { hostId } = useHostScope()
   const { t } = useTranslation('settings')
   return (
     <Notice
@@ -1324,10 +1118,7 @@ function UninstalledNotice({ status }: { status: AgentStatus }) {
       icon={<Icon icon={Download04Icon} size={16} />}
       title={t('harnesses.removedLine')}
       action={
-        <SetButton
-          variant="primary"
-          onClick={() => void startInstall(useAgentsStore, useSettingsStore, status.harnessId)}
-        >
+        <SetButton variant="primary" onClick={() => void openInstall(status.harnessId, hostId)}>
           {t('agents.install.button')}
         </SetButton>
       }
@@ -1339,9 +1130,8 @@ function UninstalledNotice({ status }: { status: AgentStatus }) {
 
 /** Installing a harness: its program by a route in the dialog, or Kettu's package; then progress. */
 function InstallNotice({ status, kind }: { status: AgentStatus; kind: InstallKind }) {
-  const { api, useAgentsStore, useSettingsStore } = useHostScope()
+  const { api, hostId, useAgentsStore } = useHostScope()
   const { t } = useTranslation(['settings', 'common'])
-  const [open, setOpen] = useState(false)
   const [act, , error] = useAction()
   const task = status.task?.kind === 'install' ? status.task : null
   const name = status.harnessName
@@ -1375,11 +1165,8 @@ function InstallNotice({ status, kind }: { status: AgentStatus; kind: InstallKin
         icon={<Icon icon={Download04Icon} size={16} />}
         title={t('agents.install.title', { name })}
         action={
-          <SetButton
-            variant="primary"
-            onClick={() => void startInstall(useAgentsStore, useSettingsStore, status.harnessId)}
-          >
-            {t('agents.install.button')}
+          <SetButton variant="primary" onClick={() => void openInstall(status.harnessId, hostId)}>
+            {t('harnesses.install.open')}
           </SetButton>
         }
       >
@@ -1393,7 +1180,7 @@ function InstallNotice({ status, kind }: { status: AgentStatus; kind: InstallKin
       icon={<Icon icon={Download04Icon} size={16} />}
       title={t('agents.install.title', { name })}
       action={
-        <SetButton variant="primary" onClick={() => setOpen(true)}>
+        <SetButton variant="primary" onClick={() => void openInstall(status.harnessId, hostId)}>
           {t('harnesses.install.open')}
         </SetButton>
       }
@@ -1415,7 +1202,6 @@ function InstallNotice({ status, kind }: { status: AgentStatus; kind: InstallKin
       {status.cli
         ? t('harnesses.install.cliBody', { name, command: status.cli.command })
         : t('agents.install.body')}
-      <InstallDialog status={status} open={open} onOpenChange={setOpen} />
     </Notice>
   )
 }
@@ -1575,7 +1361,7 @@ function PackageGroup({ status }: { status: AgentStatus }) {
                   ? t(pkg.isSdk ? 'harnesses.sdkLine' : 'harnesses.adapterLine', {
                       version: pkg.version,
                     })
-                  : t('agents.installsOnFirstUse')
+                  : t(pkg.isSdk ? 'agents.installsOnFirstUse' : 'harnesses.groups.notInstalled')
               }
             />
           }
