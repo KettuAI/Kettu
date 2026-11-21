@@ -185,6 +185,15 @@ export function limitLabel(limit: Pick<PlanLimit, 'window' | 'label'>): string {
   return fiveHour ? i18n.t('planWindow.fiveHourOf', { model: fiveHour[1] }) : limit.label
 }
 
+/** A window's name without the model it is for: "Weekly" for "Weekly · Fable". */
+export function limitWindowName(limit: Pick<PlanLimit, 'window' | 'label'>): string {
+  if (limit.window.startsWith('seven_day') || limit.label.startsWith('Weekly · '))
+    return i18n.t('planWindow.seven_day')
+  if (limit.window.startsWith('five_hour') || limit.label.startsWith('5-hour · '))
+    return i18n.t('planWindow.five_hour')
+  return limitLabel(limit)
+}
+
 /**
  * A window's name inside a sentence: "Fable weekly", since "Weekly · Fable limit reached" reads as
  * two windows.

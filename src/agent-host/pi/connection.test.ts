@@ -2,6 +2,7 @@
 // what a turn resolves with, and what is sent to pi, with events recorded from pi 1.5.2 and 0.81.0.
 
 import type { ChildProcess } from 'node:child_process'
+import type { ModelProvider } from '@shared/agent-host'
 import { EventEmitter } from 'node:events'
 import { mkdir, mkdtemp, realpath, rm, stat, writeFile } from 'node:fs/promises'
 import os from 'node:os'
@@ -248,6 +249,8 @@ interface Setup {
   agentDir: string
   cwd: string
   logs: string[]
+  /** Each list of providers the connection reported, in order. */
+  providers: ModelProvider[][]
 }
 
 async function connect(
@@ -259,11 +262,13 @@ async function connect(
   await mkdir(cwd, { recursive: true })
   const spawned: FakePi[] = []
   const logs: string[] = []
+  const providers: ModelProvider[][] = []
   const connection = new PiConnection({
     def: PI,
     hooks: {
       traffic: () => {},
       account: () => {},
+      modelProviders: (listed) => providers.push(listed),
       ignored: () => {},
       log: (_level, message) => logs.push(message),
     },
@@ -300,7 +305,7 @@ async function connect(
   })
   connections.push(connection)
   await connection.initialize()
-  return { connection, spawned, agentDir, cwd, logs }
+  return { connection, spawned, agentDir, cwd, logs, providers }
 }
 
 /** Writes a session file as pi names and starts one, in the folder of the working directory. */
@@ -383,8 +388,21 @@ describe('starting a session', () => {
     ])
   })
 
+  it('reports the providers its models come from, with how many each lists', async () => {
+    const { connection, cwd, providers } = await connect({
+      script: (pi) => {
+        pi.models = [...MODELS, { provider: 'deepseek', id: 'deepseek-v4', name: 'V4' }]
+      },
+    })
+    await connection.newSession(cwd)
+    expect(providers.at(-1)).toEqual([
+      { id: 'example', models: 2 },
+      { id: 'deepseek', models: 1 },
+    ])
+  })
+
   it('asks for a sign-in when pi has no model provider, and ends the process', async () => {
-    const { connection, spawned, cwd } = await connect({
+    const { connection, spawned, cwd, providers } = await connect({
       script: (pi) => {
         pi.models = []
         pi.state = { ...pi.state, model: { provider: 'unknown', id: 'unknown' } }
@@ -393,6 +411,7 @@ describe('starting a session', () => {
     const failure = await connection.newSession(cwd).catch((error: unknown) => error)
     expect(failure).toBeInstanceOf(AgentRequestError)
     expect((failure as AgentRequestError).kind).toBe('auth_required')
+    expect(providers.at(-1)).toEqual([])
     await tick()
     expect(spawned[0]!.exitCode).toBe(0)
   })

@@ -4,6 +4,7 @@
 import type {
   AgentAccount,
   ContextBreakdown,
+  ModelProvider,
   PlanLimit,
   PromptCapabilities,
 } from '@shared/agent-host'
@@ -87,6 +88,8 @@ export interface SessionTarget {
 export interface ConnectionHooks {
   traffic(direction: 'in' | 'out', message: unknown): void
   account(account: AgentAccount): void
+  /** The providers an agent that signs in to each one itself lists models from (Pi). */
+  modelProviders?(providers: ModelProvider[]): void
   /**
    * The sign-in method an answer shows, for an agent that names it only that way, such as Google
    * Antigravity by its plan; null when the answer shows none.

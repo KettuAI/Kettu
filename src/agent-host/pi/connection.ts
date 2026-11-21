@@ -54,7 +54,14 @@ import {
   toolPath,
   writesFile,
 } from './mapper'
-import { CONFIG, configOptions, hasModel, parseModelValue, parseScope } from './options'
+import {
+  CONFIG,
+  configOptions,
+  hasModel,
+  modelProviders,
+  parseModelValue,
+  parseScope,
+} from './options'
 import type {
   PiCommandInfo,
   PiDisposition,
@@ -698,6 +705,7 @@ export class PiConnection implements AgentConnection {
     ])
     session.models = Array.isArray(models?.models) ? models.models : []
     session.levels = Array.isArray(levels?.levels) ? levels.levels : []
+    this.hooks.modelProviders?.(modelProviders(session.models))
     this.took(session, state)
   }
 

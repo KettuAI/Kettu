@@ -2,6 +2,7 @@
 // its thinking level, among the levels its model takes. The ids and names are the ones Kettu's
 // stored sessions and remembered choices already hold.
 
+import type { ModelProvider } from '@shared/agent-host'
 import type { ConfigOption } from '@shared/thread'
 import type { PiModel } from './protocol'
 
@@ -51,6 +52,16 @@ export function parseScope(text: string | undefined): ReadonlySet<string> | null
     models.filter((model): model is string => typeof model === 'string').slice(0, MAX_SCOPE),
   )
   return scope.size > 0 ? scope : null
+}
+
+/** The providers pi lists models from, in its order, with how many models each lists. */
+export function modelProviders(models: readonly PiModel[]): ModelProvider[] {
+  const counts = new Map<string, number>()
+  for (const model of models) {
+    if (!model.provider || !model.id) continue
+    counts.set(model.provider, (counts.get(model.provider) ?? 0) + 1)
+  }
+  return [...counts].map(([id, count]) => ({ id, models: count }))
 }
 
 export interface Choices {

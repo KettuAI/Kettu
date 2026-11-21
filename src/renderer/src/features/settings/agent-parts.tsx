@@ -18,7 +18,7 @@ import { FIX_URLS, type ProblemFix } from '@renderer/features/agents/harness-pro
 import { codeSpans } from '@renderer/features/session/entries/helpers'
 import { planReset } from '@renderer/features/sidebar/plan-usage'
 import { confirmCliUpdate } from '@renderer/features/updates/command-confirm-model'
-import { limitLabel, mediumAgo } from '@renderer/lib/format'
+import { limitLabel, limitWindowName, mediumAgo } from '@renderer/lib/format'
 import { useLimitView } from '@renderer/hooks/use-limit-view'
 import { errorMessage } from '@renderer/lib/host'
 import { newestLimits } from '@renderer/lib/plan-readings'
@@ -40,16 +40,32 @@ import {
 import { GroupLabel, Notice, RowFrame, RowGroup, RowShell, RowText } from './rows'
 import { openInstall } from './harness-install'
 
-/** The window nearest its limit as a list row's end: its label and percent over a 4 px bar. */
-export function ListMeter({ limits }: { limits: PlanLimit[] }) {
+/**
+ * A list row's end: the window nearest its limit, named without its model, over a 4 px bar and the
+ * percent, in fixed columns so every row's bar lines up. With no limits, an empty bar and a dash:
+ * the agent reports its plan usage, which has not been read yet.
+ */
+export function ListMeter({ limits, reading = false }: { limits: PlanLimit[]; reading?: boolean }) {
   const { t } = useTranslation(['settings', 'composer'])
   const view = useLimitView()
+  if (limits.length === 0) {
+    const waiting = t(reading ? 'agents.readingUsage' : 'agents.usageOnceRunning')
+    return (
+      <span className="k-list-meter" title={waiting} role="img" aria-label={waiting}>
+        <span />
+        <span className="k-meter">
+          <span className="k-meter__bar" />
+          <span className="k-num k-meter__value">—</span>
+        </span>
+      </span>
+    )
+  }
   const limit = limits.reduce((most, next) =>
     (next.usedPercent ?? 0) > (most.usedPercent ?? 0) ? next : most,
   )
   return (
-    <span className="k-end" title={limitLabel(limit)}>
-      <span className="k-meter">{limitLabel(limit)}</span>
+    <span className="k-list-meter" title={limitLabel(limit)}>
+      <span className="k-list-meter__label">{limitWindowName(limit)}</span>
       <Meter
         value={limitPercent(limit, view) ?? 0}
         level={limitLevel(limit)}

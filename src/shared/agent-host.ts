@@ -225,6 +225,12 @@ export interface AgentProvider {
   } | null
 }
 
+/** A provider an agent lists models from, as the agent names it, and how many it lists. */
+export interface ModelProvider {
+  id: string
+  models: number
+}
+
 export interface AgentProviderAction {
   agentId: AgentId
   providerId: string
@@ -476,6 +482,12 @@ export interface AgentStatus {
   account: AgentAccount | null // what the agent reports through `_auth/status_update`
   providers?: AgentProvider[]
   providersError?: string | null
+  /**
+   * The providers a harness that signs in to each one itself has models from, as it names them,
+   * with how many models each lists (Pi); null until it first listed them, absent for the others
+   * and on older hosts.
+   */
+  modelProviders?: ModelProvider[] | null
   /** A harness's balance at its vendor, read on its own: DeepSeek Harness's API key or account. */
   balance?: AgentProvider['usage']
   balances?: ProviderBalance[]

@@ -26,6 +26,7 @@ import type {
   InstallOffer,
   InstalledCli,
   McpStatus,
+  ModelProvider,
   PlanLimit,
   PlanResets,
   ProgramMethod,
@@ -524,6 +525,7 @@ class Slot {
   providersError: string | null = null
   providersRun: Promise<void> | null = null
   providersReadAt = 0
+  modelProviders: ModelProvider[] | null = null
   providerActionRun: Promise<void> | null = null
   /** DeepSeek Harness's balance at DeepSeek, on an API key or a DeepSeek account. */
   balance: ProviderUsage | null = null
@@ -3785,6 +3787,11 @@ export class AgentManager {
         }
       },
       account: (account) => this.setAccount(slot, account),
+      modelProviders: (providers) => {
+        if (JSON.stringify(providers) === JSON.stringify(slot.modelProviders)) return
+        slot.modelProviders = providers
+        this.emit(slot)
+      },
       signInShown: (method) => {
         slot.answeredSignIn = method
         slot.signInAnswered = true
@@ -4686,6 +4693,8 @@ export class AgentManager {
     const force = options?.force === true
     if (!slot.def.reportsAccount) {
       if (force && slot.signIn === 'required') await this.checkSignIn(slot)
+      else if (slot.def.id === 'pi' && slot.modelProviders === null)
+        await this.readModelProviders(slot)
       return
     }
     await this.detectAll()
@@ -4699,6 +4708,20 @@ export class AgentManager {
       if (force && error instanceof HostError && error.code === 'auth_required') return
       throw error
     }
+  }
+
+  /**
+   * Pi names no account, only the providers its models come from, which it lists when a session
+   * starts: before any did, a hidden session reads them, once for all who ask meanwhile.
+   */
+  private async readModelProviders(slot: Slot): Promise<void> {
+    await this.detectAll()
+    if (!slot.runtime && (slot.h.detection?.state !== 'available' || !slot.h.detection.spec)) return
+    if (slot.providersRun) return slot.providersRun
+    slot.providersRun = this.readFirstOptions(slot.id).finally(() => {
+      slot.providersRun = null
+    })
+    return slot.providersRun
   }
 
   /**
@@ -5548,6 +5571,7 @@ export class AgentManager {
             providersError: slot.providersError,
           }
         : {}),
+      ...(slot.def.id === 'pi' ? { modelProviders: slot.modelProviders } : {}),
       ...(slot.def.id === 'deepseek' ? { balance: slot.balance } : {}),
       ...(slot.balances.length ? { balances: slot.balances } : {}),
       ...(limitsReason ? { limitsReason } : {}),
