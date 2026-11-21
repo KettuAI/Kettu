@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { ArrowDown01Icon, ArrowReloadHorizontalIcon, Clock01Icon } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
+import type { PlanLimit, ProviderBalance } from '@shared/agent-host'
 import type { AgentId } from '@shared/thread'
 import { Icon } from '@renderer/components/affect/app-shell'
 import { AgentMark } from '@renderer/components/agents/agent-mark'
@@ -12,11 +13,13 @@ import { useLimitView } from '@renderer/hooks/use-limit-view'
 import {
   balanceLabel,
   limitLabel,
+  limitLength,
   limitShort,
   longAgo,
   monthDayTime,
   planAmount,
   planBalance,
+  resetTime,
   shortAgo,
 } from '@renderer/lib/format'
 import { errorMessage } from '@renderer/lib/host'
@@ -35,9 +38,10 @@ import {
 import { planColumns, ringStroke, usageCards, type LimitRead, type UsageCard } from './plan-cards'
 import { SpendResetDialog } from './spend-reset'
 
-const RINGS = 72
+const RINGS = 80
 /** A reading this old says on its card how long ago it was taken. */
 const STALE = 60 * 60_000
+const DAY = 24 * 60 * 60_000
 
 /**
  * The plans as they stand, across the page: a card per account that reports limits, as many to
@@ -147,9 +151,10 @@ function HostPlanLimits({ used }: { used: Readonly<Record<string, readonly Agent
 
 /**
  * An account's card: its mark, name and tier, then a ring per window beside a line per window,
- * the longest outside and first, and with several computers shown, a line of those it is on. A
- * reading over an hour old says how long ago it was taken, on that line or else beside the name.
- * Hovered or focused, it lists when each window resets and what each computer calls the account.
+ * the longest outside and first; then a line of the next reset and what the account holds beyond
+ * its windows, and with several computers shown, a line of those it is on. A reading over an hour
+ * old says how long ago it was taken, on that line or else beside the name. Hovered or focused,
+ * it lists when each window resets and what each computer calls the account.
  */
 function PlanCard({ card, named, now }: { card: UsageCard; named: boolean; now: number }) {
   const { t } = useTranslation('usage')
@@ -163,22 +168,48 @@ function PlanCard({ card, named, now }: { card: UsageCard; named: boolean; now: 
   const resets = card.resets
   const view = useLimitView()
   const where = [...new Set(card.places.map((place) => hostName(place.hostId)))]
+  const amountOf = (balance: ProviderBalance): string =>
+    planBalance(
+      balance.amount,
+      balance.currency,
+      balance.currency === 'credits'
+        ? t('limits.units.credits')
+        : balance.currency === 'requests'
+          ? t('limits.units.premiumRequests')
+          : balance.currency,
+    )
   const balanceRows = (card.balances ?? []).map((balance) => (
     <span key={`${balance.label}/${balance.currency}`} className="k-u-plan__balance">
       <span>{balanceLabel(balance.label)}</span>
-      <b>
-        {planBalance(
-          balance.amount,
-          balance.currency,
-          balance.currency === 'credits'
-            ? t('limits.units.credits')
-            : balance.currency === 'requests'
-              ? t('limits.units.premiumRequests')
-              : balance.currency,
-        )}
-      </b>
+      <b>{amountOf(balance)}</b>
     </span>
   ))
+  // With windows, balances leave their lines for the card's end line; without, they stay by the ring.
+  const holds = card.rings.length > 0 ? (card.balances ?? []) : []
+  const credits = resets && resets.count > 0 ? resets : null
+  const creditsText =
+    credits &&
+    `${t('resets.count', { count: credits.count })} · ${
+      credits.each === null
+        ? t('resets.unknown')
+        : credits.each[0]!.until === null
+          ? t('resets.never')
+          : t('resets.until', { time: monthDayTime(credits.each[0]!.until) })
+    }`
+  const next: PlanLimit | undefined = card.rings
+    .map((ring) => ring.limit)
+    .filter((limit) => limit.resetsAt !== null && limit.resetsAt > now)
+    .sort((a, b) => a.resetsAt! - b.resetsAt!)[0]
+  const nextText =
+    next &&
+    t('limits.nextReset', {
+      window: limitLabel(next),
+      // Past six days resetTime gives the day alone, and the tooltip names the time too.
+      time:
+        next.resetsAt! - now < 6 * DAY
+          ? resetTime(next.resetsAt!, now)
+          : monthDayTime(next.resetsAt!),
+    })
   const age = !failed && card.readAt !== null && now - card.readAt > STALE && (
     <span className="k-u-plan__age" title={t('limits.read', { ago: longAgo(card.readAt, now) })}>
       <Icon icon={Clock01Icon} size={12} />
@@ -274,7 +305,6 @@ function PlanCard({ card, named, now }: { card: UsageCard; named: boolean; now: 
                 </div>
               )
             })}
-            {balanceRows}
             {failed && card.readAt !== null && (
               <span className="k-u-plan__last">
                 {t('limits.lastRead', { ago: longAgo(card.readAt, now) })}
@@ -283,37 +313,61 @@ function PlanCard({ card, named, now }: { card: UsageCard; named: boolean; now: 
           </div>
         </div>
       )}
-      {resets && (
-        <div className="k-u-plan__resets">
-          {resets.count > 0 && (
-            <span className="k-u-plan__reset">
-              <Icon icon={ArrowReloadHorizontalIcon} size={13} />
-              <span>
-                <b>{t('resets.count', { count: resets.count })}</b>
-                {' · '}
-                {resets.each === null
-                  ? t('resets.unknown')
-                  : resets.each[0]!.until === null
-                    ? t('resets.never')
-                    : t('resets.until', { time: monthDayTime(resets.each[0]!.until) })}
-              </span>
-              {resets.each !== null && (
-                <button
-                  type="button"
-                  className="k-u-plan__use"
-                  onClick={(event) => {
-                    event.stopPropagation()
-                    setSpending(true)
-                  }}
-                >
-                  {t('resets.use')}
-                </button>
-              )}
+      {resets?.error && <span className="k-u-plan__last">{t(`resets.error.${resets.error}`)}</span>}
+      {(card.rings.length > 0 || credits) && (
+        <div className="k-u-plan__end">
+          {next ? (
+            <span className="k-u-plan__next" title={nextText}>
+              <Icon icon={Clock01Icon} size={13} />
+              <b aria-hidden className="k-num">
+                {next.resetsAt! - now < DAY
+                  ? countdown(next.resetsAt! - now)
+                  : resetTime(next.resetsAt!, now)}
+              </b>
+              <span aria-hidden>· {limitLength(next)}</span>
+              <span className="sr-only">{nextText}</span>
             </span>
+          ) : (
+            card.rings.length > 0 && (
+              <span className="k-u-plan__next">
+                <Icon icon={Clock01Icon} size={13} />
+                <span>{t('limits.notStarted')}</span>
+              </span>
+            )
           )}
-          {resets.error && (
-            <span className="k-u-plan__last">{t(`resets.error.${resets.error}`)}</span>
-          )}
+          <span className="k-u-plan__extras">
+            {holds.map((balance) => (
+              <span
+                key={`${balance.label}/${balance.currency}`}
+                className="k-u-plan__extra"
+                title={`${balanceLabel(balance.label)} ${amountOf(balance)}`}
+              >
+                <span>{balanceLabel(balance.label)}</span>
+                <b className="k-num">{amountOf(balance)}</b>
+              </span>
+            ))}
+            {credits && (
+              <span className="k-u-plan__extra" title={creditsText!}>
+                <Icon icon={ArrowReloadHorizontalIcon} size={13} />
+                <b aria-hidden className="k-num">
+                  {credits.count}
+                </b>
+                <span className="sr-only">{creditsText}</span>
+              </span>
+            )}
+            {credits?.each && (
+              <button
+                type="button"
+                className="k-u-plan__use"
+                onClick={(event) => {
+                  event.stopPropagation()
+                  setSpending(true)
+                }}
+              >
+                {t('resets.use')}
+              </button>
+            )}
+          </span>
         </div>
       )}
       {named && (
