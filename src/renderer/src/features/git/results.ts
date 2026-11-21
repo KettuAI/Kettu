@@ -125,7 +125,8 @@ export function successNote(
   }
 }
 
-const OPERATION: Record<GitOperationRequest['kind'], OperationName> = {
+/** The name a failure sentence gives each kind of write. */
+export const OPERATION: Record<GitOperationRequest['kind'], OperationName> = {
   fetch: 'fetch',
   pull: 'pull',
   push: 'push',

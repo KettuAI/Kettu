@@ -394,7 +394,7 @@ function CommitForm({
       className="contents"
       onSubmit={(event: FormEvent) => {
         event.preventDefault()
-        void commit(false)
+        void commit(dialog.andPush === true)
       }}
     >
       <Head>{t('dialog.commit.title', { branch: status.head.branch ?? 'HEAD' })}</Head>
@@ -443,7 +443,7 @@ function CommitForm({
             if (event.nativeEvent.isComposing || event.keyCode === 229) return
             if (event.key === 'Enter' && isMod(event)) {
               event.preventDefault()
-              void commit(false)
+              void commit(dialog.andPush === true)
             }
           }}
         />
@@ -474,7 +474,13 @@ function CommitForm({
         <DialogClose render={<Button variant="outline" size="compact" />}>
           {t('common:actions.cancel')}
         </DialogClose>
-        <Button type="submit" variant="outline" size="compact" disabled={!ready}>
+        <Button
+          type="button"
+          variant="outline"
+          size="compact"
+          disabled={!ready}
+          onClick={() => void commit(false)}
+        >
           {busy === 'commit' && <Spinner data-icon="inline-start" />}
           {t('dialog.commit.commit')}
         </Button>

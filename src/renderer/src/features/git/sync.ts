@@ -48,23 +48,6 @@ export interface SyncPlan {
   hint: SyncHint | null
 }
 
-/** How the line under the branch reads: done, on offer, something to do, or a failure. */
-export type NoteTone = 'ok' | 'info' | 'warning' | 'error'
-
-export const HINT_TONE: Record<SyncHint, NoteTone> = {
-  noBranch: 'info',
-  operation: 'warning',
-  publishRepo: 'info',
-  publishBranch: 'info',
-  diverged: 'warning',
-  upToDate: 'ok',
-  ghMissing: 'warning',
-  ghSignedOut: 'warning',
-  unknownRemote: 'warning',
-  localUpstream: 'warning',
-  otherName: 'warning',
-}
-
 export type SyncStep = 'conflicts' | 'merge' | 'rebase' | 'cherryPick' | 'revert'
 
 /** What has to end before a pull or a push: the conflicts first, then the operation itself. */

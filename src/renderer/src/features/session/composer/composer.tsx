@@ -759,7 +759,7 @@ export function Composer({
             <TrayStyles />
             <span className="kettu-tray__group">
               <SessionPlace sessionId={sessionId} projectPath={session.projectPath} />
-              <BranchTrayLink projectPath={folder} />
+              <BranchTrayLink projectPath={folder} sessionId={sessionId} />
             </span>
             {shownError && (
               <p className="kettu-tray__error" role="alert" title={shownError}>
