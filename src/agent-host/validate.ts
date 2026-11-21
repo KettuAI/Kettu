@@ -2185,6 +2185,10 @@ export function createValidators(platform: Platform): Validators {
       const o = fields(params)
       return { projectPath: absolutePath(o, 'projectPath', platform), paths: gitPaths(o, 'paths') }
     },
+    'git.pullRequestDraft': (params) => {
+      const o = fields(params)
+      return { projectPath: absolutePath(o, 'projectPath', platform), base: refName(o, 'base') }
+    },
     'git.incoming': (params) => {
       const o = fields(params)
       if (o.from !== 'upstream' && o.from !== 'base')

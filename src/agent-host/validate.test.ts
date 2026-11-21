@@ -1262,6 +1262,21 @@ describe('computer use requests', () => {
     }
   })
 
+  it('takes only a branch name as the base of a drafted pull request', () => {
+    expect(posix['git.pullRequestDraft']({ projectPath: '/p', base: 'main' })).toEqual({
+      projectPath: '/p',
+      base: 'main',
+    })
+    expect(posix['git.pullRequestDraft']({ projectPath: '/p', base: 'feat/a-b' }).base).toBe(
+      'feat/a-b',
+    )
+    rejects(() => posix['git.pullRequestDraft']({ projectPath: '/p' }))
+    rejects(() => posix['git.pullRequestDraft']({ projectPath: '/p', base: '' }))
+    rejects(() => posix['git.pullRequestDraft']({ projectPath: '/p', base: '--output=x' }))
+    rejects(() => posix['git.pullRequestDraft']({ projectPath: '/p', base: 'main dev' }))
+    rejects(() => posix['git.pullRequestDraft']({ projectPath: 'p', base: 'main' }))
+  })
+
   it('takes what became of a drafted problem report', () => {
     const sent = { kind: 'sent', reportId: 'R-7K2F' }
     expect(

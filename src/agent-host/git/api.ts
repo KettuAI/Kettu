@@ -16,6 +16,7 @@ import type {
 } from '@shared/git'
 import type { GitEntry, ToolKind } from '@shared/thread'
 import type { CommitContext } from './commit-context'
+import type { PullRequestContext } from './pull-request-context'
 import type { StarCheck } from './star'
 
 type DistributiveOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never
@@ -83,6 +84,11 @@ export interface GitServiceApi {
    * names no change, as `commitChanges` does.
    */
   commitContext(projectPath: string, paths: string[]): Promise<CommitContext>
+  /**
+   * What a pull request's title and description are written from: the commits and files of the
+   * branch against `base`, the default branch's remote tracking ref while `base` is that branch.
+   */
+  pullRequestContext(projectPath: string, base: string): Promise<PullRequestContext>
   incoming(projectPath: string, from: 'upstream' | 'base'): Promise<LogCommit[]>
   fileDiff(
     projectPath: string,

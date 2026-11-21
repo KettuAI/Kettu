@@ -23,6 +23,7 @@ import { logText } from '../localized-error'
 import { readBranches, readRemoteBranches, readRemotes } from './branches'
 import { createCoalescer } from './coalesce'
 import { readCommitContext } from './commit-context'
+import { readPullRequestContext } from './pull-request-context'
 import { readChanges, readCommitDetails, readFileDiff, readIncoming } from './details'
 import { canChangeRepository, computeGitEvents, listNewCommits } from './events'
 import { CommandError, createExec, failureText, FETCH_TIMEOUT_MS, type Exec } from './exec'
@@ -1055,6 +1056,19 @@ export function createGitService(
       if (!status.repo) throw new Error(t('git.notRepository'))
       const files = await selectChanges(status, paths)
       return readCommitContext(exec, status.repo.root, files, status.head.oid === null)
+    },
+
+    async pullRequestContext(projectPath, base) {
+      const state = projectFor(projectPath)
+      const status = await knownStatus(state)
+      if (!status.repo || status.head.oid === null) throw new Error(t('git.notRepository'))
+      const baseRef =
+        base === status.defaultBranch && status.base !== null ? status.base.name : base
+      return readPullRequestContext(exec, status.repo.root, {
+        branch: status.head.branch ?? status.head.oid.slice(0, 7),
+        base,
+        baseRef,
+      })
     },
 
     async incoming(projectPath, from) {
