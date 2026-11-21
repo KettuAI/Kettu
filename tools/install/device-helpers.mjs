@@ -1,7 +1,8 @@
-// Puts the device host's helpers in a folder, `out/helpers` by default: scrcpy's server for
-// Android, downloaded at a pinned version and checked by its SHA-256, and on macOS the two iOS
-// helpers built from `native/`. The release run calls it before packaging, which ships the folder
-// as the app's `helpers` resource; `pnpm fetch:device-helpers` does the same for development.
+// Puts the app's helpers in a folder, `out/helpers` by default: scrcpy's server for Android,
+// downloaded at a pinned version and checked by its SHA-256, and on macOS the two iOS helpers and
+// the notch island's helper built from `native/`. The release run calls it before packaging, which
+// ships the folder as the app's `helpers` resource; `pnpm fetch:device-helpers` does the same for
+// development.
 
 import { spawnSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
@@ -53,4 +54,5 @@ await scrcpyServer()
 if (process.platform === 'darwin') {
   build('ios-usb-capture')
   build('ios-device')
+  build('island')
 }

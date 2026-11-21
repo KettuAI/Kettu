@@ -1,0 +1,89 @@
+{
+  "helper": {
+    "label": "Dynamic Island",
+    "status": {
+      "running": "Running",
+      "waiting": "Needs you",
+      "stuck": "Stuck",
+      "unread": "Done",
+      "failed": "Failed",
+      "idle": "Idle",
+      "limited": "Plan limit reached",
+      "starting": "Starting",
+      "signIn": "Sign in needed"
+    },
+    "duration": {
+      "seconds": "{{s}}s",
+      "minutes": "{{m}}m",
+      "hoursMinutes": "{{h}}h {{m}}m",
+      "days": "{{d}}d"
+    },
+    "for": "for {{time}}",
+    "stuck": "No result for {{time}}",
+    "waited": "Waiting {{time}}",
+    "resets": "Resets in {{time}}",
+    "plan": "{{done}} of {{total}}",
+    "offline": "Offline",
+    "answerInKettu": "Answer in Kettu",
+    "answered": "Answered",
+    "answeredElsewhere": "Already answered somewhere else",
+    "answerFailed": "Could not answer: {{message}}",
+    "openKettu": "Open Kettu"
+  },
+  "line": {
+    "run": "Run {{command}}",
+    "read": "Read {{path}}",
+    "edit": "Edit {{path}}",
+    "delete": "Delete {{path}}",
+    "move": "Move {{path}}",
+    "search": "Search {{text}}",
+    "fetch": "Fetch {{text}}",
+    "mcp": "{{server}}: {{tool}}",
+    "working": "Working",
+    "routine": "Routine run",
+    "starting": "Starting",
+    "signIn": "Sign in to {{agent}} to go on",
+    "failed": "Stopped with an error",
+    "unread": "Finished, not seen yet",
+    "idle": "Finished",
+    "limited": "{{window}} limit used up",
+    "subagents_one": "{{count}} sub-agent running",
+    "subagents_other": "{{count}} sub-agents running",
+    "origin": "Wants to open {{origin}}",
+    "app": "Wants to use {{app}}",
+    "question": "Asks: {{question}}"
+  },
+  "request": {
+    "tool": {
+      "read": "Wants to read",
+      "edit": "Wants to edit",
+      "delete": "Wants to delete",
+      "move": "Wants to move",
+      "search": "Wants to search",
+      "execute": "Wants to run",
+      "fetch": "Wants to fetch",
+      "switchMode": "Wants to switch modes",
+      "other": "Wants to use"
+    },
+    "question": "Asks you",
+    "questions": "Asks you several questions",
+    "plan": "Wants to go ahead with a plan",
+    "form": "{{server}} asks for details",
+    "page": "{{server}} asks you to open a page",
+    "origin": "Wants to open",
+    "app": "Wants to use",
+    "setup": "Wants to use your computer",
+    "step": "Needs you to do a step",
+    "other": "Waits for you in Kettu",
+    "originDecision": {
+      "session": "Allow for this session",
+      "project": "Always allow in this project",
+      "deny": "Don’t allow"
+    },
+    "appDecision": {
+      "session": "Allow for this session",
+      "always": "Always allow {{app}}",
+      "deny": "Don’t allow"
+    }
+  }
+}

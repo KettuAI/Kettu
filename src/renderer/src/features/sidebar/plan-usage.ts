@@ -1,36 +1,10 @@
-import type { AgentStatus, PlanLimit } from '@shared/agent-host'
-import type { AgentId } from '@shared/thread'
+import type { PlanLimit } from '@shared/agent-host'
 import { resetTime } from '@renderer/lib/format'
 import { i18n } from '@renderer/lib/i18n'
 
 const MINUTE = 60_000
 const HOUR = 60 * MINUTE
 const DAY = 24 * HOUR
-
-/**
- * The window to show for an agent: a reached one first, then the fullest. A window whose reset
- * time has passed is skipped, because its percentage is from before the reset.
- */
-export function tightestLimit(limits: readonly PlanLimit[], now: number): PlanLimit | null {
-  const current = limits.filter((l) => l.resetsAt === null || l.resetsAt > now)
-  const reached = current.find((l) => l.state === 'reached')
-  if (reached) return reached
-  const known = current.filter((l) => l.usedPercent !== null)
-  const fullest = known.sort((a, b) => (b.usedPercent ?? 0) - (a.usedPercent ?? 0))[0]
-  return fullest ?? current[0] ?? null
-}
-
-/**
- * The agents whose plan limits are worth reading when a surface that lists them opens: added,
- * already running and able to report them, so that no agent starts just for the read.
- */
-export function limitReaders(agents: readonly AgentStatus[]): AgentId[] {
-  return agents
-    .filter(
-      (a) => a.registered !== false && !a.disabled && a.state === 'ready' && a.capabilities.reports,
-    )
-    .map((a) => a.id)
-}
 
 export type UsageTone = 'low' | 'medium' | 'high' | 'critical'
 

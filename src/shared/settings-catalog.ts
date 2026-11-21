@@ -469,6 +469,17 @@ const ENTRIES = {
     part: 'desktop',
     kind: 'action',
   },
+  'notifications.island': {
+    section: 'notifications',
+    row: 'island',
+    name: 'notifications.island.name',
+    description: 'notifications.island.description',
+    keywords: 'notifications.island.keywords',
+    part: 'desktop',
+    access: 'change',
+    on: (ctx) => ctx.desktop && ctx.platform === 'darwin',
+    ...flag('notifications', 'island', (file) => file.notifications.island),
+  },
   'notifications.permission': {
     section: 'notifications',
     row: 'permission',

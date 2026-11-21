@@ -5,7 +5,7 @@ import { i18nOptions, resolveLocale, type LanguageSetting, type Locale } from '@
 // Both languages are bundled: together they are small, and loading one on demand would hold the
 // first paint. Main, the agent host and the artifact type viewers translate their own namespaces.
 const files = import.meta.glob<Record<string, unknown>>(
-  ['@shared/locales/*/*.json', '!@shared/locales/*/{main,host,viewers}.json'],
+  ['@shared/locales/*/*.json', '!@shared/locales/*/{main,host,island,viewers}.json'],
   { eager: true, import: 'default' },
 )
 

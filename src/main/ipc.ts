@@ -68,6 +68,7 @@ import { parseActionBatch } from './action-records'
 import { clearVerboseRecords, dismissUnexpectedExit, unexpectedExitNotice } from './app-log'
 import { grantedPath, type MediaGrants } from './media'
 import { copyImage, ON_HOST, revealMedia, saveMediaAs } from './media-actions'
+import type { IslandBridge } from './island/bridge'
 import { notifyTest } from './notifications'
 import type { QuitFlow } from './quit'
 import type { HostMedia } from './host-media'
@@ -119,6 +120,7 @@ export interface IpcDeps {
   updater: Updater
   quit: QuitFlow
   reports: Reports
+  island: Pick<IslandBridge, 'state' | 'retry'>
 }
 
 interface Caller {
@@ -479,6 +481,7 @@ export function registerIpcHandlers({
   updater,
   quit,
   reports,
+  island,
 }: IpcDeps): void {
   handle('app:get-info', 0, () => appInfo())
   handle('app:default-browser', 0, () => defaultBrowser(app))
@@ -683,6 +686,8 @@ export function registerIpcHandlers({
   })
 
   handle('notifications:test', 0, () => notifyTest(settings.get()))
+  handle('island:status', 0, () => island.state())
+  handle('island:retry', 0, () => island.retry())
 
   handle('update:get-status', 0, () => updater.getStatus())
   handle('update:check', 0, () => updater.check())

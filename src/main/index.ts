@@ -2,6 +2,8 @@ import { homedir, hostname } from 'node:os'
 import { join } from 'node:path'
 import {
   app,
+  BrowserWindow,
+  nativeTheme,
   powerMonitor,
   protocol,
   safeStorage,
@@ -10,6 +12,7 @@ import {
   systemPreferences,
   webContents,
 } from 'electron'
+import { ATTENTION_SETTING } from '@shared/attention'
 import { electronApp, optimizer } from '@electron-toolkit/utils'
 import { ARTIFACT_ID, parseArtifactRef } from '@shared/artifacts'
 import { BROWSER_PARTITION } from '@shared/browser'
@@ -48,7 +51,10 @@ import { broadcast, sendCommand } from './events'
 import { HostAdmin } from './host-admin'
 import { HostMedia } from './host-media'
 import { HostSessions } from './host-sessions'
-import { locale as currentLocale, setLocale, t } from './i18n'
+import { locale as currentLocale, islandHelperStrings, setLocale, t } from './i18n'
+import { IslandBridge } from './island/bridge'
+import { spawnIslandHelper } from './island/helper'
+import { IslandHostPort } from './island/host-port'
 import { mainDiagnostics } from './diagnostics'
 import {
   appInfo,
@@ -427,16 +433,48 @@ async function start(): Promise<void> {
     () => computerHold,
     (url) => rendererPage(url) === 'index',
   )
+  // The notch island: macOS only, started once the first window shows.
+  const island = new IslandBridge({
+    enabled: () => process.platform === 'darwin' && settings.get().notifications.island,
+    kindEnabled: (kind) => settings.get().notifications[ATTENTION_SETTING[kind]],
+    windowFocused: () => BrowserWindow.getFocusedWindow() !== null,
+    colorMode: () => (nativeTheme.shouldUseDarkColors ? 'dark' : 'light'),
+    version: app.getVersion(),
+    locale: () => currentLocale(),
+    strings: () => islandHelperStrings(),
+    spawn: () => spawnIslandHelper(),
+    connectLocal: (onEvent, onClose) => {
+      const port = agentHost.connectMain()
+      if (!port) return null
+      const client = new IslandHostPort(port, onEvent, onClose)
+      return {
+        request: (method, params) => client.request(method, params),
+        close: () => client.close(),
+      }
+    },
+    open: (target) =>
+      target
+        ? openTrayTarget({ kind: 'session', sessionId: target.sessionId })
+        : openTrayTarget({ kind: 'app' }),
+    status: (state) => broadcast('island:changed', state),
+    log: createLogger('island'),
+  })
+  nativeTheme.on('updated', () => island.appearanceChanged())
+  app.on('will-quit', () => island.quit())
   const agentHost = new AgentHost({
     settings: () => hostSettings(settings.get(), systemLocale),
     marketKeys: () => marketKeys.contentsForHost(),
     onMarketOAuth: (serverId, state) => void marketKeys.setOAuth(serverId, state),
     onFirstStart: (harnesses) => settings.firstStart(harnesses),
     onAttention: (message) => {
-      notifyAttention(message, settings.get(), (sessionId, requestId, optionId) => {
-        agentHost.answerPermission(sessionId, requestId, optionId)
-        return true
-      })
+      // While the island runs, it shows what needs the user in place of a notification.
+      island.attention(message)
+      if (!island.shows(message)) {
+        notifyAttention(message, settings.get(), (sessionId, requestId, optionId) => {
+          agentHost.answerPermission(sessionId, requestId, optionId)
+          return true
+        })
+      }
       hostAdmin?.attention(message)
       remoteHost.attention(message)
     },
@@ -457,9 +495,11 @@ async function start(): Promise<void> {
     onReady: () => {
       tray.setConnected(true)
       reconcileSharing?.()
+      island.localHostReady()
     },
     onDown: () => {
       tray.setConnected(false)
+      island.localHostDown()
       // No turn of this computer's host runs now; another host's turns go on with their pages.
       browserTools?.endTurns(
         browserTools.controls.keys().filter((sessionId) => !remoteBrowser.isRemote(sessionId)),
@@ -987,6 +1027,7 @@ async function start(): Promise<void> {
       installMenu(menuDeps)
       tray.updateMenu()
     }
+    island.settingsChanged()
     // The agent host reads `general.sessionTitles` and `general.lightModel`, which `reachesHost`
     // cannot single out.
     if (reachesHost(changed) || localeChanged || changed.has('general')) {
@@ -1065,6 +1106,7 @@ async function start(): Promise<void> {
     updater,
     quit: quitFlow,
     reports,
+    island,
   })
   ipcReady = true
   installMenu(menuDeps)
@@ -1111,7 +1153,10 @@ async function start(): Promise<void> {
   void remoteHost.setEnabled(settings.get().remote.enabled)
   watchPresence((present) => remoteHost.setPresent(present))
   const window = createMainWindow(start)
-  window.once('show', () => updater.start())
+  window.once('show', () => {
+    updater.start()
+    island.firstWindowShown()
+  })
   ready = true
 
   app.on('activate', () => {

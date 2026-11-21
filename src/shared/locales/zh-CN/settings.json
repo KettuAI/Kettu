@@ -375,6 +375,17 @@
       "description": "等待你授权的会话。",
       "keywords": "角标 数字 badge"
     },
+    "island": {
+      "name": "灵动岛",
+      "description": "需要你处理的事会从屏幕顶部的灵动岛里长出来，可以在那里直接回答。开着时，这几类不再发系统通知。",
+      "keywords": "刘海 菜单栏 notch",
+      "retry": "重试",
+      "failed": {
+        "crashed": "灵动岛一分钟内连续退出了三次，已经停下。系统通知照旧。",
+        "protocol": "这个版本的灵动岛和 Kettu 对不上。系统通知照旧。",
+        "missing": "这个版本没有带灵动岛。系统通知照旧。"
+      }
+    },
     "footer": "只在没有 Kettu 窗口位于前台时显示。",
     "groups": {
       "preview": "预览",

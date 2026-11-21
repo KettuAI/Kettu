@@ -11,10 +11,17 @@ import type { IconSvgElement } from '@hugeicons/react'
 import { AnimatePresence, MotionConfig, motion, type Variants } from 'motion/react'
 import { useTranslation } from 'react-i18next'
 import type { AgentId } from '@shared/thread'
-import type { SessionSummary } from '@shared/agent-host'
+import type { SessionActivity, SessionSummary } from '@shared/agent-host'
 import type { BrowserOriginDecision } from '@shared/browser'
 import type { ComputerAppDecision } from '@shared/computer-use'
 import { relaySummary, type RemoteStatus } from '@shared/remote/status'
+import type { PendingTool } from '@shared/pending-requests'
+import {
+  elapsed,
+  groupSessions,
+  limitRows,
+  type SessionGroups as TrayGroups,
+} from '@shared/session-groups'
 import type { TrayTarget } from '@shared/tray'
 import { AgentMark } from '@renderer/components/agents/agent-mark'
 import { BrandIcon } from '@renderer/components/brand'
@@ -38,15 +45,7 @@ import {
   type AnswerChoice,
 } from '@renderer/stores/tray-panel'
 import { ago, when } from './ago'
-import {
-  elapsed,
-  groupSessions,
-  limitRows,
-  type PendingRequest,
-  type PendingTool,
-  type SessionDetail,
-  type TrayGroups,
-} from './model'
+import type { SessionDetail, TrayRequest } from './model'
 
 const ORIGIN_DECISIONS: BrowserOriginDecision[] = ['session', 'project', 'deny']
 const APP_DECISIONS: ComputerAppDecision[] = ['session', 'always', 'deny']
@@ -94,10 +93,7 @@ function mcpText(tool: PendingTool, projectPath: string): string | null {
 }
 
 /** The request's target as the row's second line and the review's box show it. */
-function requestTarget(
-  request: PendingRequest,
-  projectPath: string,
-): { text: string; code: boolean } {
+function requestTarget(request: TrayRequest, projectPath: string): { text: string; code: boolean } {
   if (request.kind === 'origin') return { text: request.origin, code: false }
   if (request.kind === 'app') return { text: request.app, code: false }
   if (request.kind === 'setup') return { text: i18n.t('tray:setupTarget'), code: false }
@@ -279,7 +275,7 @@ function List() {
           )}
           {groups.running.length > 0 && <GroupLabel>{t('group.running')}</GroupLabel>}
           {groups.running.map((s) => (
-            <RunningRow key={s.id} summary={s} detail={details[s.id]}>
+            <RunningRow key={s.id} summary={s}>
               {(line) =>
                 row(
                   s,
@@ -362,14 +358,23 @@ function finishedLine(summary: SessionSummary, detail: SessionDetail | undefined
   return files > 0 ? `${done} · ${i18n.t('tray:files', { count: files })}` : done
 }
 
+/** The call a session's summary says it runs, as the lines of a request's tool read it. */
+function activityTool(activity: SessionActivity): PendingTool {
+  const { toolKind, title, detail } = activity
+  return {
+    toolKind,
+    title,
+    locations: detail && toolKind in VERB_KEY ? [{ path: detail }] : [],
+    ...(detail && toolKind === 'execute' ? { rawInput: detail } : {}),
+  }
+}
+
 /** A running row's second line: the step the agent takes and the turn's time so far. */
 function RunningRow({
   summary,
-  detail,
   children,
 }: {
   summary: SessionSummary
-  detail: SessionDetail | undefined
   children: (line: string) => ReactNode
 }) {
   const { t } = useTranslation('tray')
@@ -377,10 +382,10 @@ function RunningRow({
   const what =
     summary.origin === 'routine'
       ? t('routine')
-      : detail?.activity
-        ? toolLine(detail.activity, summary.projectPath)
+      : summary.activity
+        ? toolLine(activityTool(summary.activity), summary.projectPath)
         : t('working')
-  const started = detail?.turnStartedAt ?? null
+  const started = summary.turnStartedAt ?? null
   if (started === null) return children(what)
   const { h, m } = elapsed(now - started)
   const time = h > 0 ? t('elapsedHours', { h, m }) : t('elapsedMinutes', { count: m })
@@ -686,7 +691,7 @@ function Footer() {
 }
 
 /** The request the user answers here: what the agent wants, and its answers by number. */
-function Review({ summary, request }: { summary: SessionSummary; request: PendingRequest }) {
+function Review({ summary, request }: { summary: SessionSummary; request: TrayRequest }) {
   const { t } = useTranslation(['tray', 'session'])
   const waiting = useTrayPanelStore((s) =>
     groupSessions(Object.values(s.sessions)).needsYou.reduce(

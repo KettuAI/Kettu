@@ -289,6 +289,7 @@ import {
   sideRouteWith,
 } from './side-chat'
 import { SIDE_ENTRIES, type StoredSideChat } from './threads/side-chat'
+import { ToolActivity } from './session-activity'
 import { listedTitle, titleMessageText, writeBranchSlug, writeSessionTitle } from './session-titles'
 import {
   addTokenTotals,
@@ -666,6 +667,10 @@ interface Live {
     entryId: string
     answer: { outcome: ControlOutcome; device: FromDevice | null } | null
   } | null
+  /** When each request that waits began to, by the id `waitingIds` gives it. */
+  waitingSince: Map<string, number>
+  /** The tool calls its thread runs now, for the summary's activity. */
+  activity: ToolActivity
   /** Who sent the latest turn: a window's or a device's port, and the device it serves. */
   sender: TurnSender | null
   failure: Failure | null
@@ -896,6 +901,13 @@ function changesPlan(thread: ThreadState, patch: Patch): boolean {
   if (patch.op === 'entry.add') return patch.entry.kind === 'plan'
   if (patch.op === 'entry.update') return thread.byId[patch.id]?.kind === 'plan'
   return patch.op === 'thread.reset'
+}
+
+/** Notes when each of `ids` began to wait, and forgets the requests that no longer do. */
+function stampWaiting(live: Live, ids: readonly string[], now: number): void {
+  const current = new Set(ids)
+  for (const id of live.waitingSince.keys()) if (!current.has(id)) live.waitingSince.delete(id)
+  for (const id of ids) if (!live.waitingSince.has(id)) live.waitingSince.set(id, now)
 }
 
 /** The ids of what waits: each permission's request id, and the entry id of the others. */
@@ -1427,6 +1439,10 @@ export class SessionManager {
       acpSessionId: record.acpSessionId || null,
       plan: live ? planProgress(live.thread) : null,
       turnStartedAt: live?.thread.session.turnStartedAt ?? null,
+      activity:
+        live && (status === 'running' || status === 'awaiting_permission')
+          ? live.activity.current(live.thread)
+          : null,
       ...(record.worktree ? { worktree: this.worktreeSummary(record.worktree) } : {}),
       ...(record.agentWorktree ? { agentWorktree: { ...record.agentWorktree } } : {}),
       ...(live?.prepared
@@ -1528,10 +1544,12 @@ export class SessionManager {
   private updateBadge(): void {
     let count = 0
     const waiting: Record<string, string[]> = {}
+    const now = this.now()
     for (const live of this.live.values()) {
       count += waitingCount(live)
       const ids = waitingIds(live)
       if (ids.length > 0) waiting[live.id] = ids
+      stampWaiting(live, ids, now)
     }
     // One request can end as another starts, which leaves the count as it was.
     const json = JSON.stringify(waiting)
@@ -1560,6 +1578,7 @@ export class SessionManager {
 
   private emit(live: Live, patches: readonly Patch[]): void {
     let plan = false
+    let activity = false
     for (const patch of patches) {
       if (patch.op === 'thread.reset') {
         const keeper = new ReplayKeeper(live.thread)
@@ -1571,6 +1590,7 @@ export class SessionManager {
       }
       if (!this.apply(live, patch)) continue
       plan ||= changesPlan(live.thread, patch)
+      activity = live.activity.follow(live.thread, patch, this.now()) || activity
       if (keeper && patch.op === 'entry.add') {
         for (const entry of keeper.after(patch.entry)) this.apply(live, { op: 'entry.add', entry })
       }
@@ -1578,7 +1598,7 @@ export class SessionManager {
     this.scheduleFlush(live)
     this.scheduleCheckpoint(live)
     // A replay ends with a summary of its own, which carries the plan it brought back.
-    if (plan && !live.replaying) this.touch(live.id)
+    if ((plan || activity) && !live.replaying) this.touch(live.id)
   }
 
   /** Applies one patch and queues it to send; false for one the thread could not take. */
@@ -3230,7 +3250,14 @@ export class SessionManager {
     return this.withBytes(live, images, () => {
       // Patches go out first, so the patches after the entries are the ones they do not hold.
       this.flushPatches(live)
-      return { entries: waitingEntries(live) }
+      const entries = waitingEntries(live)
+      const askedAt: Record<string, number> = {}
+      for (const entry of entries) {
+        const key = entry.kind === 'tool' ? entry.permission?.requestId : entry.id
+        const at = key === undefined ? undefined : live.waitingSince.get(key)
+        if (at !== undefined) askedAt[entry.id] = at
+      }
+      return { entries, askedAt }
     })
   }
 
@@ -3550,6 +3577,8 @@ export class SessionManager {
       appsAnswered: new Map(),
       setups: new Map(),
       ask: null,
+      waitingSince: new Map(),
+      activity: new ToolActivity(),
       sender: null,
       failure: null,
       signInNotices: [],
@@ -8280,6 +8309,7 @@ export class SessionManager {
     this.deps.diagnostics.turnEnded(live.record.agentId, [live.id, live.record.acpSessionId])
     this.reportTurn(live, turn, stopReason)
     this.closeOpenEntries(live)
+    live.activity.clear()
     this.clearPermissions(live, 'cancelled', true)
     const byAgent = live.archiveAfterTurn
     if (byAgent !== null) {

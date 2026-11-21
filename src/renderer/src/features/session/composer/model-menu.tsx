@@ -12,7 +12,7 @@ import {
 } from '@renderer/components/affect/model-picker'
 import { ShimmerText } from '@renderer/components/affect/shimmer-loader'
 import { joinPlanTier } from '@renderer/features/account/model'
-import { tightestLimit } from '@renderer/features/sidebar/plan-usage'
+import { tightestLimit } from '@shared/session-groups'
 import { useLimitView } from '@renderer/hooks/use-limit-view'
 import { limitPhrase } from '@renderer/lib/format'
 import { limitPercent } from '@renderer/lib/plan-limit'

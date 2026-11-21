@@ -26,6 +26,8 @@ Development builds also list a **Fake agent**, which needs no account or network
 
 Computer use runs Cua Driver's `cua-driver` program, which is not an npm package: `pnpm fetch:cua-driver` downloads the pinned release for your platform into `resources/cua-driver/` and checks its SHA-256. Without it, Settings › Computer use says the build has no driver. The Fake agent's `/computer` scenario calls the `computer_*` tools, for trying the checks, cards and label without a model: calls separated by `;` run in turn, and `wait <ms>` holds the turn between them, such as `/computer computer_get_window_state {"pid": 123, "window_id": 4} ; wait 20000`. Turn computer use off in Settings to see the setup card.
 
+On macOS the Dynamic Island runs a native helper, which `node native/island/build.mjs out/helpers` builds where a development run looks for it; without it, Settings › Notifications says the build has none and notifications show as before. `KETTU_ISLAND_DEBUG=log pnpm dev` has the helper log every row and request it receives; [its README](./native/island/README.md) lists the other development options.
+
 | Command                                               | What it does                                         |
 | ----------------------------------------------------- | ---------------------------------------------------- |
 | `pnpm dev`                                            | Start the app in development mode with hot reload    |

@@ -78,6 +78,9 @@ export interface SettingsFile {
     routines: boolean // a routine's run ended, or its routines paused at a plan limit
     sound: boolean
     badge: boolean // the Dock icon on macOS, the taskbar button on Windows
+    // macOS: the notch island shows what needs the user, in place of the notifications of the
+    // kinds it shows, while it runs
+    island: boolean
   }
   // Keyed by harness: the program picked for it, and its default agent's folder and visibility.
   // configDir: a folder picked before agents could be added, which the default agent keeps.
@@ -267,6 +270,7 @@ export const DEFAULT_SETTINGS: SettingsFile = {
     routines: true,
     sound: false,
     badge: true,
+    island: true,
   },
   agents: {},
   addedAgents: [],

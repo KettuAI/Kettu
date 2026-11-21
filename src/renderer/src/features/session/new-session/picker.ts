@@ -1,7 +1,7 @@
 // What New session's agent picker and its list of recent sessions show.
 
 import type { AgentStatus, SessionSummary } from '@shared/agent-host'
-import { tightestLimit } from '@renderer/features/sidebar/plan-usage'
+import { tightestLimit } from '@shared/session-groups'
 import { limitPhrase } from '@renderer/lib/format'
 import { i18n } from '@renderer/lib/i18n'
 import { limitPercent, type LimitView } from '@renderer/lib/plan-limit'
