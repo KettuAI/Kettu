@@ -71,10 +71,10 @@ export function Note({
   actions?: ReactNode
 }) {
   return (
-    <div className="flex items-center gap-2.5 rounded-xl bg-subtle px-2.5 py-2 text-small text-secondary">
+    <div className="flex flex-wrap items-center gap-x-2.5 gap-y-2 rounded-xl bg-subtle px-2.5 py-2 text-small text-secondary">
       <Glyph icon={icon} size={14} className={cn('shrink-0', TONE[tone])} />
-      <span className="min-w-0 flex-1 [overflow-wrap:anywhere]">{children}</span>
-      {actions && <span className="flex shrink-0 items-center gap-1.5">{actions}</span>}
+      <span className="min-w-40 flex-1 [overflow-wrap:anywhere]">{children}</span>
+      {actions && <span className="flex max-w-full flex-wrap items-center gap-1.5">{actions}</span>}
     </div>
   )
 }

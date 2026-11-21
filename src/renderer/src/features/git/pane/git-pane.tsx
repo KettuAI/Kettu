@@ -1,7 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { Alert02Icon, GitCompareIcon } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
-import type { PullRequestState } from '@shared/git'
 import { emitAppEvent } from '@renderer/app/events'
 import { Skeleton } from '@renderer/components/ui/skeleton'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@renderer/components/ui/tabs'
@@ -104,13 +103,7 @@ export default function GitPane({
                 <TabsTrigger value="pr" className="flex-none">
                   {t('pane.tab.pr')}
                   {pr && (
-                    <span
-                      className={cn(
-                        PILL,
-                        'h-4 px-1.25 tabular',
-                        BADGE[pr.state as PullRequestState],
-                      )}
-                    >
+                    <span className={cn(PILL, 'h-4 px-1.25 tabular', BADGE[pr.state])}>
                       #{pr.number}
                     </span>
                   )}

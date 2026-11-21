@@ -86,10 +86,14 @@ export function CommitBox({
     if (asked.writing || busy || ticked.length === 0 || (auto && asked.drafted)) return
     updateCommitBox(projectPath, { drafted: true, writing: true, problem: null })
     try {
-      const written = await host('git.commitMessage', {
-        projectPath,
-        paths: ticked.map((file) => file.path),
-      })
+      // The list can still be the one from before a commit, so only files that still have changes count.
+      const here = new Set((await host('git.changes', { projectPath })).map((file) => file.path))
+      const paths = ticked.map((file) => file.path).filter((path) => here.has(path))
+      if (paths.length === 0) {
+        updateCommitBox(projectPath, { drafted: false, writing: false })
+        return
+      }
+      const written = await host('git.commitMessage', { projectPath, paths })
       const now = useGitStore.getState().box[projectPath] ?? EMPTY_BOX
       updateCommitBox(
         projectPath,
@@ -110,9 +114,9 @@ export function CommitBox({
     !agentRunning
   useEffect(() => {
     if (wanted) void write(true)
-    // `write` is rebuilt every render; `wanted` says when a draft is called for.
+    // `write` is rebuilt every render; `wanted` and the list say when a draft is called for.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [wanted])
+  }, [wanted, files])
 
   const reason = blocked
     ? t(`sync.step.${stepOf(status)}`)
@@ -149,7 +153,7 @@ export function CommitBox({
   const primary: Then = box.andPush && pushable ? 'push' : 'commit'
 
   return (
-    <div className="mt-2 mb-1 shrink-0 rounded-2xl bg-card p-2.5 shadow-card">
+    <div className="@container mt-2 mb-1 shrink-0 rounded-2xl bg-card p-2.5 shadow-card">
       <div className="relative">
         <Textarea
           ref={textarea}
@@ -204,7 +208,7 @@ export function CommitBox({
           <span className="font-medium text-primary tabular">
             {t('dialog.commit.filesChosen', { count: total, chosen: ticked.length })}
           </span>
-          <Kbd className="ml-2 align-middle">{formatShortcut('Mod+Enter')}</Kbd>
+          <Kbd className="ml-2 align-middle @max-sm:hidden">{formatShortcut('Mod+Enter')}</Kbd>
         </span>
         <CommitButton
           label={t('dialog.commit.commit')}
