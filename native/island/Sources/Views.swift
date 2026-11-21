@@ -205,10 +205,10 @@ struct FactView: View {
     switch fact {
     case .count(let count):
       CountBadge(count: count)
-    case .plan(let done, let total):
+    case .plan(let done, let step, let total):
       HStack(spacing: 5) {
         PlanRing(done: done, total: total, size: 13)
-        Text("\(done)/\(total)")
+        Text("\(step)/\(total)")
       }
       .font(Fonts.ui(13, .semibold))
       .foregroundColor(Theme.text)
@@ -835,7 +835,7 @@ struct TimeText: View {
   }
 }
 
-/// A plan's progress as the session's plan chip draws it: the ring and how many steps are done.
+/// A plan's progress as the session's plan chip draws it: the ring and the step it is on.
 struct PlanProgress: View {
   @ObservedObject var model: IslandModel
   let plan: IslandPlan
@@ -843,7 +843,7 @@ struct PlanProgress: View {
   var body: some View {
     HStack(spacing: 5) {
       PlanRing(done: plan.done, total: plan.total, size: 12)
-      Text(model.text("plan", ["done": "\(plan.done)", "total": "\(plan.total)"]))
+      Text(model.text("plan", ["step": "\(plan.step)", "total": "\(plan.total)"]))
         .foregroundColor(Theme.tertiary)
         .monospacedDigit()
     }

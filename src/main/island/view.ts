@@ -3,7 +3,13 @@
 // every word in the current language. The helper sorts, counts and words nothing itself.
 
 import { basename, isAbsolute, relative } from 'node:path'
-import type { AgentOptions, AgentStatus, SessionActivity, SessionSummary } from '@shared/agent-host'
+import type {
+  AgentOptions,
+  AgentStatus,
+  PlanProgress,
+  SessionActivity,
+  SessionSummary,
+} from '@shared/agent-host'
 import type { BrowserOriginDecision } from '@shared/browser'
 import type { ComputerAppDecision } from '@shared/computer-use'
 import type { PendingRequest, PendingTool } from '@shared/pending-requests'
@@ -462,6 +468,15 @@ function runningLine(summary: SessionSummary): string {
   return islandT(summary.origin === 'routine' ? 'line.routine' : 'line.working')
 }
 
+/**
+ * The plan step a session is on, from 1: the one in progress, else the next to do, else the last.
+ * Between steps the summary names no step, so the next is the one after those done, which is the
+ * chip's next pending step whenever the steps are finished in order.
+ */
+function planStep({ done, total, current }: PlanProgress): number {
+  return current ? current.index + 1 : Math.max(1, Math.min(done + 1, total))
+}
+
 function modelName(options: AgentOptions | undefined, model: string | null): string | null {
   const option = sessionModel(options, model)
   if (!option || model === null) return model
@@ -559,6 +574,7 @@ function buildRow(
       ? {
           done: summary.plan.done,
           total: summary.plan.total,
+          step: planStep(summary.plan),
           current: summary.plan.current?.text ?? null,
         }
       : null,

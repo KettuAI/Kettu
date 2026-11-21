@@ -5,7 +5,7 @@
 import type { ToolKind } from '@shared/thread'
 
 /** Raised whenever either side's messages change in a way the other must know. */
-export const ISLAND_PROTOCOL = 3
+export const ISLAND_PROTOCOL = 4
 
 /** The longest line either side sends, in bytes of UTF-8, the newline excluded. */
 export const MAX_LINE_BYTES = 1024 * 1024
@@ -50,7 +50,8 @@ export interface IslandRow {
   toolSince: number | null
   toolKind: ToolKind | null
   turnStartedAt: number | null
-  plan: { done: number; total: number; current: string | null } | null
+  /** Its plan: the steps done, all of them and the step it is on, from 1, as the plan chip says. */
+  plan: { done: number; total: number; step: number; current: string | null } | null
   /** Its sub-agents running, and the line that says so; null for none. */
   subagents: { running: number; text: string } | null
   /** The used-up window that holds it back, and when that resets. */

@@ -65,7 +65,7 @@ func dump() {
     let host =
       row.host.map { " @\($0.name)\($0.offline ? " (\(store.text("offline")))" : "")" } ?? ""
     let plan =
-      row.plan.map { " " + store.text("plan", ["done": "\($0.done)", "total": "\($0.total)"]) }
+      row.plan.map { " " + store.text("plan", ["step": "\($0.step)", "total": "\($0.total)"]) }
       ?? ""
     let parent = row.parent.map { " ← \($0.kind) \($0.title ?? "?")" } ?? ""
     log("  [\(status)] \(row.agent.name) · \(row.title)\(host)\(parent) — \(row.line)\(plan)")
