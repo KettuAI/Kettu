@@ -60,7 +60,6 @@ import {
   isHarnessId,
   harnessOf,
   MULTI_AGENT_HARNESSES,
-  USER_PROGRAM_HARNESSES,
   type AgentId,
   type HarnessId,
 } from '@shared/thread'
@@ -1251,17 +1250,21 @@ export function withAddedAgent(current: SettingsFile, agent: AddedAgent): Settin
 }
 
 /**
- * Adds the default agents of the harnesses a host's first start found, in the order the list
- * of such harnesses has, and records the first start as done; it does nothing once it is. A
- * harness that was added or removed before is left as it is. The first one added becomes the
- * default agent when none is chosen, so New session can start at once.
+ * Adds the default agents of the harnesses whose own program a host's first start found, in
+ * catalog order, which starts with Claude Code, Codex, OpenCode and Pi, and records the first
+ * start as done; it does nothing once it is. A harness that was added or removed before is left as
+ * it is. The first one added becomes the default agent when none is chosen, so New session can
+ * start at once.
  */
 export function withFirstStart(current: SettingsFile, found: unknown): SettingsFile {
   if (current.initialSetup.done) return current
   const wanted = new Set<unknown>(Array.isArray(found) ? found : [])
   const next = structuredClone(current)
-  const added = USER_PROGRAM_HARNESSES.filter(
-    (id) => wanted.has(id) && next.agents[id]?.enabled === undefined,
+  const added = HARNESS_IDS.filter(
+    (id) =>
+      wanted.has(id) &&
+      !AUTO_AGENT_HARNESSES.includes(id) &&
+      next.agents[id]?.enabled === undefined,
   )
   for (const id of added) next.agents[id] = { ...next.agents[id], enabled: true }
   if (added.length > 0 && next.general.defaultAgent === null) next.general.defaultAgent = added[0]!

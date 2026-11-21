@@ -1992,6 +1992,16 @@
     "programSdk": "你自己装的，由 SDK 运行。",
     "programOwn": "你自己装的，由 Kettu 运行。",
     "programKettu": "Kettu 装的，在 Kettu 的数据目录里。",
+    "programChosen": "你选的，由 Kettu 运行。",
+    "programUnused": "你自己装的，Kettu 没有用它。",
+    "programKettuCopy": "运行的是 Kettu 装的那份。",
+    "unused": {
+      "range": "你的 {{command}} {{version}} 超出 Kettu 支持的 {{range}}。",
+      "manifest": "Kettu 的检查表明你的 {{command}} {{version}} 用不了。",
+      "from": "{{version}} 及以上",
+      "kettuRuns": "正在用 Kettu 装的 {{version}}。",
+      "install": "安装 Kettu 的那份就能用 {{name}}。"
+    },
     "packageGroup": "Kettu 装的包",
     "sdkLine": "{{version}} · 装在 Kettu 的数据目录，不含 CLI",
     "adapterLine": "{{version}} · 装在 Kettu 的数据目录",

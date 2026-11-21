@@ -5,6 +5,6 @@ export const DIMCODE: AgentDefinition = {
   limitsReason: 'not-yet-supported',
   name: 'DimCode',
   registryId: 'dimcode',
-  launch: { kind: 'package', package: 'dimcode', args: ['acp'] },
+  launch: { kind: 'package', package: 'dimcode', command: 'dimcode', args: ['acp'] },
   install: { hint: 'detect.hint.node', url: 'https://nodejs.org/en/download' },
 }

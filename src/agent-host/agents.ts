@@ -70,7 +70,6 @@ import type { Platform } from '@shared/platform'
 import { agentColor, type AddedAgent, type HostSettings } from '@shared/settings'
 import {
   AUTO_AGENT_HARNESSES,
-  USER_PROGRAM_HARNESSES,
   harnessOf,
   type AgentId,
   type ConfigOption,
@@ -593,6 +592,28 @@ function rememberedEntry(slot: Slot): AgentsFile['agents'][AgentId] | null {
 }
 
 /**
+ * The harness's program as its page names it, which one picked in Settings replaces: a binary
+ * harness's command, the user's CLI an SDK runs, an npm package's command, which is looked for on
+ * PATH, or the package Kettu runs, which is not.
+ */
+function programOf(def: AgentDefinition): AgentStatus['program'] {
+  const { launch } = def
+  if (def.cli) return { command: def.cli.command, onPath: true }
+  switch (launch.kind) {
+    case 'binary':
+      return { command: launch.command, onPath: true }
+    case 'package':
+      return launch.command
+        ? { command: launch.command, onPath: true }
+        : { command: launch.package, onPath: false }
+    case 'uvx':
+      return { command: launch.package, onPath: false }
+    case 'node-script':
+      return null
+  }
+}
+
+/**
  * The version that runs: the handshake's, else the program's, else the installed package's, since
  * a package harness has no program to ask and Grok names none in its handshake.
  */
@@ -859,8 +880,9 @@ export class AgentManager {
       adaptersDir: this.deps.adaptersDir,
       sessionRouterPath: this.deps.sessionRouterPath ?? null,
       versions: this.versionChoice(h),
+      manifestRule: this.rule(h),
       isExecutable,
-      probeCli: (program, cliEnv) => this.askVersion(program, cliEnv),
+      probeCli: (program, cliEnv, words) => this.askVersion(program, cliEnv, words),
     })
     const adapter = detection.state === 'available' ? detection.adapter : null
     const running = adapter?.current ?? adapter?.fallback
@@ -960,10 +982,10 @@ export class AgentManager {
   }
 
   /** A program's `--version` answer: the test's probe, or the cache the CLIs are asked through. */
-  private askVersion(program: string, env: Env): Promise<CliVersion> {
+  private askVersion(program: string, env: Env, words?: readonly string[]): Promise<CliVersion> {
     return this.deps.probeCli
-      ? this.deps.probeCli(program, env)
-      : this.cliVersions.probe(program, env)
+      ? this.deps.probeCli(program, env, words)
+      : this.cliVersions.probe(program, env, words)
   }
 
   /**
@@ -1002,14 +1024,13 @@ export class AgentManager {
   }
 
   /**
-   * The harnesses whose user program the last detection found, in the order their agents are
-   * added; call after `detectAll`.
+   * The harnesses whose user program the last detection found, in catalog order; call after
+   * `detectAll`.
    */
   userPrograms(): HarnessId[] {
-    return USER_PROGRAM_HARNESSES.filter((id) => {
-      const h = this.harnesses.get(id)
-      return !!h?.detection && userProgramFound(h.def, h.detection, this.deps.adaptersDir)
-    })
+    return [...this.harnesses.values()]
+      .filter((h) => !!h.detection && userProgramFound(h.def, h.detection, this.deps.adaptersDir))
+      .map((h) => h.def.id)
   }
 
   async check(agentId?: AgentId): Promise<AgentStatus[]> {
@@ -1957,13 +1978,27 @@ export class AgentManager {
 
   /**
    * The rule for the user's own program: a harness that runs it as its program, whose versions the
-   * manifest names. A harness with a package of Kettu's, such as Claude Code's SDK beside the
-   * user's `claude`, has the package's versions there instead.
+   * manifest names, or one whose own program runs in place of Kettu's install of it. A harness with
+   * a package of Kettu's, such as Claude Code's SDK beside the user's `claude`, has the package's
+   * versions there instead.
    */
   private programRule(h: Harness): HarnessRule | null {
     const detection = h.detection
     const own = detection?.state === 'available' && !!detection.release
-    return h.def.launch.kind === 'binary' && !own ? this.rule(h) : null
+    if (h.def.launch.kind === 'binary') return own ? null : this.rule(h)
+    return this.replacesInstall(h) ? this.rule(h) : null
+  }
+
+  /** Whether the user's own program runs in place of what Kettu installs for the harness. */
+  private replacesInstall(h: Harness): boolean {
+    const detection = h.detection
+    const { kind } = h.def.launch
+    return (
+      (kind === 'package' || kind === 'uvx') &&
+      !h.def.cli &&
+      detection?.state === 'available' &&
+      !!detection.cli
+    )
   }
 
   /**
@@ -3082,7 +3117,9 @@ export class AgentManager {
 
   /**
    * Installs a harness that is missing: the user's own program by one of its routes, or a package
-   * harness's pinned adapter now, without starting it. Resolves when done or cancelled.
+   * harness's pinned adapter now, without starting it. A package harness's vendor route, when one
+   * is picked, installs the user's own program, which then runs in place of Kettu's. Resolves when
+   * done or cancelled.
    */
   async install(agentId: AgentId, method?: AgentInstallMethod['id']): Promise<void> {
     const { h } = this.slot(agentId)
@@ -3094,7 +3131,9 @@ export class AgentManager {
     }
     switch (h.def.launch.kind) {
       case 'package':
-        return this.installNow(h)
+        return method && h.def.installs && !h.def.cli
+          ? this.installProgram(h, method)
+          : this.installNow(h)
       case 'binary':
         return this.installProgram(h, method)
       case 'uvx':
@@ -3168,7 +3207,7 @@ export class AgentManager {
     const installs = h.def.installs
     const agent = h.def.name
     if (!installs) throw invalidParams(`${agent} is not installed by Kettu`)
-    if (h.detection?.state === 'available') {
+    if (this.programRuns(h)) {
       throw invalidParams(t('agent.alreadyInstalled', { agent }))
     }
     const plan = methodId
@@ -3216,14 +3255,15 @@ export class AgentManager {
         await this.deps.env.reload()
         this.cliVersions.clear()
         await Promise.all([...this.harnesses.values()].map((other) => this.detect(other)))
-        if (h.detection?.state === 'available') return
+        if (this.programRuns(h)) return
         const folder = await installedFolder(plan, installs, {
           platform,
           home,
           npmPrefix: () => this.npmPrefix(plan.tool),
         })
-        const command =
-          h.def.cli?.command ?? (h.def.launch.kind === 'binary' ? h.def.launch.command : agent)
+        const { launch } = h.def
+        const own = launch.kind === 'binary' || launch.kind === 'package' ? launch.command : null
+        const command = h.def.cli?.command ?? own ?? agent
         throw new Error(
           folder
             ? t('agent.binaryInstall.notOnPath', { agent, command, folder })
@@ -3233,6 +3273,15 @@ export class AgentManager {
       (message) => t('agent.installFailed', { agent, message }),
       plan.id,
     )
+  }
+
+  /**
+   * Whether detection found the harness's program to run: for a package harness, the user's own,
+   * since one without it is available only to install Kettu's.
+   */
+  private programRuns(h: Harness): boolean {
+    const detection = h.detection
+    return detection?.state === 'available' && (h.def.launch.kind !== 'package' || !!detection.cli)
   }
 
   /** Downloads the registry's archive for the harness, then detects again so it turns available. */
@@ -3956,7 +4005,9 @@ export class AgentManager {
     const adapter = detection?.state === 'available' ? detection.adapter : null
     const version =
       slot.init?.version ??
-      (adapter ? (adapter.current?.version ?? adapter.version) : slot.h.binaryVersion)
+      (adapter
+        ? (adapter.current?.version ?? adapter.version)
+        : (detection?.cli?.version ?? slot.h.binaryVersion))
     if (!readerOpen(reader, version)) return
     // A signed-out Cursor is told by its CLI, before any sign-in of its own is looked for.
     if (
@@ -5242,7 +5293,11 @@ export class AgentManager {
     const cliVersion = this.cliUpdateVersion(h)
     const cliCommand = cliVersion ? (this.cliCommands.get(h) ?? null) : null
     const own = this.ownProgram(h, init?.version ?? null)
-    const cliCommandName = slot.def.cli?.command ?? own?.command
+    const replaces = this.replacesInstall(h)
+    const program = programOf(slot.def)
+    const cliCommandName =
+      slot.def.cli?.command ?? own?.command ?? (replaces ? program?.command : undefined)
+    const unused = detection?.unused
     return {
       id: slot.id,
       name: slot.name,
@@ -5265,8 +5320,9 @@ export class AgentManager {
       state: slot.state,
       // Kettu's own install names its release when the program reports no version of its own.
       version: init?.version ?? h.binaryVersion ?? installed?.version ?? null,
+      // None runs while the user's own program runs in its place.
       package:
-        launch.kind === 'package'
+        launch.kind === 'package' && !replaces
           ? {
               name: launch.package,
               version:
@@ -5321,6 +5377,16 @@ export class AgentManager {
       launchCommand: formatCommand(display, platform),
       binaryOverride: harnessSettings?.binaryPath ?? null,
       binaryCommand: launch.kind === 'binary' ? launch.command : null,
+      program,
+      unusedProgram:
+        unused && program
+          ? {
+              command: program.command,
+              path: unused.installed.path,
+              version: unused.installed.version,
+              why: unused.why,
+            }
+          : null,
       binaryPath:
         launch.kind === 'binary' && detection?.state === 'available'
           ? (detection.spec?.command ?? null)
@@ -5401,9 +5467,10 @@ export class AgentManager {
 
   /** How Kettu's own install follows its target, for its page; null for the other harnesses. */
   private automaticStatus(h: Harness): AgentStatus['automatic'] {
-    // The user's own program, found in place of Kettu's archive, keeps its own updates.
+    // The user's own program, found in place of Kettu's install, keeps its own updates.
     const theirs =
-      h.def.launch.kind === 'binary' && h.detection?.state === 'available' && !this.release(h)
+      (h.def.launch.kind === 'binary' && h.detection?.state === 'available' && !this.release(h)) ||
+      this.replacesInstall(h)
     if (!this.targeted(h) || theirs) return null
     const update = this.targetUpdate(h)
     const running = this.ownVersion(h)

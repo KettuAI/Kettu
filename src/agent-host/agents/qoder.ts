@@ -8,6 +8,7 @@ export const QODER: AgentDefinition = {
   launch: {
     kind: 'package',
     package: '@qoder-ai/qodercli',
+    command: 'qodercli',
     args: ['--acp'],
   },
   // The package declares Node.js 20 or later, unlike the registry entry, which names none.

@@ -3,7 +3,7 @@
 
 import { stat } from 'node:fs/promises'
 import path from 'node:path'
-import type { InstalledCli, LimitsReason } from '@shared/agent-host'
+import type { InstalledCli, LimitsReason, UnusedProgramReason } from '@shared/agent-host'
 import type { NodeRuntime } from '@shared/host-control'
 import type { Platform } from '@shared/platform'
 import type { HostSettings } from '@shared/settings'
@@ -62,11 +62,13 @@ import { listArchiveInstalls, programPath, type InstalledArchive } from './archi
 import type { BinaryInstalls } from './binary-install'
 import type { AdapterLookup } from './codex-binary'
 import { findCommand, needsShell, type Env } from './find-command'
+import { inNpmRange, usable, type HarnessRule } from './harness-manifest'
 import { t, type HostKey } from './i18n'
 import {
   CLI_FILES,
   checkCli,
   findInstalledCli,
+  packageCli,
   type AdapterCli,
   type CliFiles,
   type CliProbe,
@@ -104,6 +106,14 @@ export type LaunchKind =
       updates?: string
       args?: string[]
       env?: Record<string, string>
+      /**
+       * The command the package installs for people to run in a terminal. The user's own install
+       * of it runs in place of Kettu's, with `args`, when its version is within `updates` and from
+       * `minimum`, and the compatibility manifest does not hold it back.
+       */
+      command?: string
+      /** Where its vendor's own installer puts the command off Windows, from the home folder. */
+      installedAt?: string[]
     }
   // With `perSession`, through the session router, which starts each session's process in the
   // session's own folder, for a program that runs everything in the folder it started in, and
@@ -409,6 +419,10 @@ export function displayCommand(
   sessionRouterPath: string | null = null,
   version: string | null = null,
 ): CommandWords {
+  const { launch } = def
+  if (binaryOverride && !def.cli && (launch.kind === 'package' || launch.kind === 'uvx')) {
+    return { command: binaryOverride, args: launch.args ?? [], env: chosenEnv(def) }
+  }
   switch (def.launch.kind) {
     case 'package': {
       const entry = version ? (packageDir(adaptersDir, def, version) ?? '') : def.launch.package
@@ -466,38 +480,49 @@ export interface AdapterPlan {
   fallback: { version: string; dir: string; spec: LaunchSpec } | null
 }
 
+/** The user's own program of a package harness, found but not run, and why. */
+export interface UnusedProgram {
+  installed: InstalledCli
+  why: UnusedProgramReason
+}
+
 export type Detection =
   // `spec` is null for a package agent until its pinned version, or a newer one, is installed.
   | {
       state: 'available'
       spec: LaunchSpec | null
       adapter: AdapterPlan | null
-      /** The user's CLI that runs, for a harness with a `cli`. */
+      /**
+       * The user's CLI that runs: for a harness with a `cli`, or the user's own program that runs
+       * in place of what Kettu installs, the one picked in Settings included.
+       */
       cli?: InstalledCli
       /**
        * Kettu's own install of a registry release that a start runs: a release archive and its
        * folder, or a uvx package's version, which uv keeps. Absent when the user's program runs.
        */
       release?: { version: string; dir: string | null }
+      unused?: UnusedProgram
     }
   | {
       state: 'not-installed' | 'node-missing' | 'node-outdated'
       detail: string
       /** The user's CLI when one was found that cannot run, such as one too old. */
       cli?: InstalledCli
+      unused?: UnusedProgram
     }
 
 /**
  * Whether detection found the user's own program: their CLI, or a binary outside `kettuDir`, where
- * Kettu keeps the programs it installs. One that is found but cannot run, such as a CLI too old,
- * counts.
+ * Kettu keeps the programs it installs. One that is found but cannot run, such as a CLI too old or
+ * a package harness's program at a version Kettu does not run, counts.
  */
 export function userProgramFound(
   def: AgentDefinition,
   detection: Detection,
   kettuDir: string,
 ): boolean {
-  if (detection.cli) return true
+  if (detection.cli || detection.unused) return true
   if (detection.state !== 'available') return false
   const command = def.launch.kind === 'binary' ? detection.spec?.command : undefined
   if (!command) return false
@@ -571,6 +596,8 @@ export interface DetectContext {
   adaptersDir: string
   /** Which version of Kettu's own install a start runs; null for a harness Kettu never installs. */
   versions: VersionChoice | null
+  /** The compatibility manifest's rule for the harness, which the user's own program must pass. */
+  manifestRule?: HarnessRule | null
   /** The session router every per-session agent launches through; null in a test without one. */
   sessionRouterPath?: string | null
   isExecutable(file: string): Promise<boolean>
@@ -764,8 +791,108 @@ function checkUserCli(
   return { found: { ...found, installed } }
 }
 
-/** Finds what an agent needs without starting it, so it can run at startup and on demand. */
+/** What every launch of the harness's own program adds. */
+function chosenEnv(def: AgentDefinition): Record<string, string> {
+  return { ...def.env, ...(def.launch.kind === 'package' ? def.launch.env : {}) }
+}
+
+/** A detection that runs the user's own program, in place of what Kettu installs. */
+function ownProgramDetection(
+  def: AgentDefinition,
+  launch: Extract<LaunchKind, { kind: 'package' | 'uvx' }>,
+  found: FoundCli,
+  platform: Platform,
+): Detection {
+  const command = found.runner ?? found.installed.path
+  const args = [...(found.runner ? [found.installed.path] : []), ...(launch.args ?? [])]
+  const env = { ...chosenEnv(def), ...found.env }
+  return {
+    state: 'available',
+    spec: {
+      command,
+      args,
+      env,
+      shell: needsShell(command, platform),
+      display: { command, args, env },
+    },
+    adapter: null,
+    cli: found.installed,
+  }
+}
+
+/** The versions of a package harness's own program Kettu runs, as an npm range; null for any. */
+function programRange(launch: PackageLaunch): string | null {
+  const bounds = [launch.updates, launch.minimum && `>=${launch.minimum}`].filter(Boolean)
+  return bounds.length > 0 ? bounds.join(' ') : null
+}
+
+/**
+ * The user's own install of a package harness's command: the detection that runs it, or why it
+ * does not run; null when none was found.
+ */
+async function userPackageProgram(
+  def: AgentDefinition,
+  launch: PackageLaunch & { command: string },
+  ctx: DetectContext,
+): Promise<{ detection: Detection } | { unused: UnusedProgram } | null> {
+  if (!ctx.probeCli) return null
+  const cli = packageCli(launch.command, launch.installedAt)
+  const files = ctx.cliFiles ?? CLI_FILES
+  const found = await findInstalledCli(cli, {
+    ...ctx,
+    binaryOverride: null,
+    files,
+    probe: ctx.probeCli,
+  })
+  if (!found) return null
+  const { installed } = found
+  const detail = cliDetail(def, cli, installed)
+  if (detail || !installed.version) {
+    return { unused: { installed, why: { kind: 'unusable', detail: detail ?? '' } } }
+  }
+  const range = programRange(launch)
+  if (range && !inNpmRange(installed.version, range)) {
+    return { unused: { installed, why: { kind: 'range', range } } }
+  }
+  if (!usable(ctx.manifestRule ?? null, installed.version)) {
+    return { unused: { installed, why: { kind: 'manifest' } } }
+  }
+  return { detection: ownProgramDetection(def, launch, found, ctx.platform) }
+}
+
+/**
+ * Finds what an agent needs without starting it, so it can run at startup and on demand. Before
+ * what Kettu installs, a package or uvx harness runs the program picked in Settings, whatever its
+ * version, or for Claude Code passes it to the SDK; then a package harness runs the user's own
+ * install of its command when Kettu runs its version.
+ */
 export async function detectAgent(def: AgentDefinition, ctx: DetectContext): Promise<Detection> {
+  const { launch } = def
+  const chosen = ctx.binaryOverride
+  if (chosen && (launch.kind === 'package' || launch.kind === 'uvx')) {
+    if (!(await ctx.isExecutable(chosen))) {
+      return {
+        state: 'not-installed',
+        detail: t('detect.programUnusable', { agent: def.name, path: chosen }),
+      }
+    }
+    if (!def.cli) {
+      const asked = ctx.probeCli ? await ctx.probeCli(chosen, ctx.env) : null
+      const version = asked && 'version' in asked ? asked.version : null
+      const installed = { path: chosen, version, variable: null, problem: null }
+      return ownProgramDetection(def, launch, { installed, env: {} }, ctx.platform)
+    }
+  }
+  if (launch.kind === 'package' && launch.command && !def.cli) {
+    const own = await userPackageProgram(def, { ...launch, command: launch.command }, ctx)
+    if (own && 'detection' in own) return own.detection
+    if (own) return { ...(await detectInstall(def, ctx)), unused: own.unused }
+  }
+  return detectInstall(def, ctx)
+}
+
+/** Finds Kettu's own install of the harness, or its program on PATH. */
+async function detectInstall(def: AgentDefinition, ctx: DetectContext): Promise<Detection> {
   const choice = ctx.versions
   const display = displayCommand(
     def,
