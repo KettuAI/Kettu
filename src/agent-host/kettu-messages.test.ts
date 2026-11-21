@@ -81,3 +81,20 @@ it("gives no failed message of Kettu's back to the composer", async () => {
   expect(await window.request('sessions.takeReturned', { sessionId: id })).toEqual([])
   expect(window.events.some((event) => event.type === 'session.returned')).toBe(false)
 })
+
+it("gives no failed message from another session back to the user's composer", async () => {
+  const host = await startTestHost()
+  hosts.push(host)
+  const window = host.connect()
+  const { id } = await window.request('sessions.create', {
+    agentId: 'fake-agent',
+    projectPath: host.project,
+  })
+  await window.open(id)
+  await window.untilStatus(id, 'ready')
+  const from = { sessionId: 'sender', title: 'Review' }
+  await host.host.sessions.sendFromTool(id, '/error --silent', from, false)
+  await window.untilEntry(id, (entry) => entry.kind === 'notice' && entry.cause === 'turn_failed')
+  expect(await window.request('sessions.takeReturned', { sessionId: id })).toEqual([])
+  expect(window.events.some((event) => event.type === 'session.returned')).toBe(false)
+})

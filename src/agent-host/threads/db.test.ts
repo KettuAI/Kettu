@@ -474,6 +474,116 @@ describe('the thread database', () => {
     again.close()
   })
 
+  it('keeps who sent each marked message through a whole write, a reopen, until the session goes', () => {
+    const file = tempFile()
+    const db = open(file)
+    const kept = [
+      {
+        text: 'Restart browser and check',
+        origin: { from: { sessionId: 'sender', title: 'Review' } },
+      },
+      { text: 'Your step is not reported yet.', origin: { kettu: true as const } },
+    ]
+    for (const origin of kept) db.putOrigin('s1', origin)
+    db.putOrigin('s2', {
+      text: 'Check the result',
+      origin: { device: { id: 'phone', name: 'Phone' } },
+    })
+    // A thread rebuilt from the agent's history is written whole, without the marks.
+    db.write('s1', {
+      head,
+      entries: [user('u0'), user('u1')].map((entry, pos) => ({ pos, entry })),
+    })
+    db.write('s1', {
+      head,
+      entries: [user('v0'), agent('v1')].map((entry, pos) => ({ pos, entry })),
+      replace: true,
+    })
+    expect(db.origins('s1')).toEqual(kept)
+    db.close()
+
+    const again = open(file)
+    expect(again.origins('s1')).toEqual(kept)
+    again.remove(['s1'])
+    expect(again.origins('s1')).toEqual([])
+    expect(again.origins('s2')).toHaveLength(1)
+    again.close()
+  })
+
+  it('keeps who sent the marked messages a database of version 9 holds, ahead of new ones', () => {
+    const file = tempFile()
+    mkdirSync(path.dirname(file), { recursive: true })
+    const raw = new DatabaseSync(file)
+    raw.exec(`BEGIN; ${schemaAt(9)} PRAGMA user_version = 9; COMMIT;`)
+    raw
+      .prepare(
+        'INSERT INTO threads (session_id, agent_id, acp_session_id, session_json, next_pos, updated_at) VALUES (?, ?, ?, ?, ?, 1)',
+      )
+      .run('s1', 'codex', 'acp-1', JSON.stringify(EMPTY_SESSION), 6)
+    const rows: ThreadEntry[] = [
+      user('mine'),
+      {
+        kind: 'user',
+        id: 'report',
+        content: [
+          { type: 'text', text: 'Review finished.' },
+          { type: 'text', text: 'Read its reply.' },
+        ],
+        at: 5,
+        from: {
+          sessionId: 'sender',
+          title: 'Review',
+          ended: { agent: 'Codex', stopReason: 'end_turn' },
+        },
+      },
+      agent('a0'),
+      {
+        kind: 'user',
+        id: 'phone',
+        content: [{ type: 'text', text: 'Check the result' }],
+        device: { id: 'phone', name: 'Phone' },
+      },
+      {
+        kind: 'user',
+        id: 'approved',
+        content: [{ type: 'text', text: 'Implement the plan.' }],
+        approval: true,
+      },
+      {
+        kind: 'user',
+        id: 'reminder',
+        content: [{ type: 'text', text: 'Your step is not reported yet.' }],
+        steered: true,
+        kettu: true,
+      },
+    ]
+    const insert = raw.prepare(
+      'INSERT INTO entries (session_id, pos, turn, entry_id, kind, json) VALUES (?, ?, 0, ?, ?, ?)',
+    )
+    rows.forEach((entry, pos) => insert.run('s1', pos, entry.id, entry.kind, JSON.stringify(entry)))
+    raw.close()
+
+    const db = open(file)
+    db.putOrigin('s1', { text: 'Later', origin: { kettu: true } })
+    expect(db.origins('s1')).toEqual([
+      {
+        text: 'Review finished.\nRead its reply.',
+        origin: {
+          from: {
+            sessionId: 'sender',
+            title: 'Review',
+            ended: { agent: 'Codex', stopReason: 'end_turn' },
+          },
+        },
+      },
+      { text: 'Check the result', origin: { device: { id: 'phone', name: 'Phone' } } },
+      { text: 'Implement the plan.', origin: { approval: true } },
+      { text: 'Your step is not reported yet.', origin: { kettu: true } },
+      { text: 'Later', origin: { kettu: true } },
+    ])
+    db.close()
+  })
+
   it('keeps large images apart, once per session, and reads them back by hash or with bytes', () => {
     const file = tempFile()
     const db = open(file)

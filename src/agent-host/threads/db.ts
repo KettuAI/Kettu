@@ -62,6 +62,7 @@ import {
   type ThreadPage,
   type ThreadWrite,
 } from './model'
+import { originOf, type MessageOrigin, type StoredOrigin } from './origins'
 import type { ThreadDbStatus, ThreadErrorCode } from './protocol'
 import {
   declarationAt,
@@ -72,7 +73,7 @@ import {
   type RuntimeStatements,
 } from './runtime-db'
 
-export const SCHEMA_VERSION = 9
+export const SCHEMA_VERSION = 10
 
 // `turn` is the position of the entry that opened the entry's turn, so a page that starts at a
 // turn is one range of the primary key.
@@ -228,6 +229,32 @@ const WORKFLOW_TASKS = `
   ) STRICT, WITHOUT ROWID;
 `
 
+// Who sent each message Kettu marked as not the user's, in the order they were added, so a thread
+// rebuilt from the agent's own history gets them back. They do not reference threads, so writing a
+// thread whole keeps them. The messages stored before the table came are its first rows, read
+// through the kind index so a large database reads only its user messages, not every entry.
+const ORIGINS = `
+  CREATE TABLE origins (
+    session_id TEXT NOT NULL,
+    seq        INTEGER NOT NULL,
+    text       TEXT NOT NULL,
+    json       TEXT NOT NULL,
+    PRIMARY KEY (session_id, seq)
+  ) STRICT, WITHOUT ROWID;
+  INSERT INTO origins (session_id, seq, text, json)
+    SELECT e.session_id, e.pos,
+      COALESCE((SELECT group_concat(json_extract(part.value, '$.text'), char(10))
+        FROM json_each(e.json, '$.content') AS part
+        WHERE json_extract(part.value, '$.type') = 'text'), ''),
+      json_remove(e.json, '$.kind', '$.id', '$.content', '$.at', '$.steered')
+    FROM threads t CROSS JOIN entries e INDEXED BY entries_by_kind
+      ON e.session_id = t.session_id AND e.kind = 'user'
+    WHERE json_extract(e.json, '$.from') IS NOT NULL
+      OR json_extract(e.json, '$.device') IS NOT NULL
+      OR json_extract(e.json, '$.approval') IS NOT NULL
+      OR json_extract(e.json, '$.kettu') IS NOT NULL;
+`
+
 /** What brings a database of the version before each key up to it; a new one runs them all. */
 const MIGRATIONS: Record<number, string> = {
   2: ARTIFACTS,
@@ -238,6 +265,7 @@ const MIGRATIONS: Record<number, string> = {
   7: RUNTIME_TABLES,
   8: ARTIFACT_TYPES,
   9: WORKFLOW_TASKS,
+  10: ORIGINS,
 }
 
 /** The tables of a database at schema `version`, as a new one made then had them. */
@@ -481,6 +509,11 @@ function prepareAll(db: DatabaseSync) {
         next_pos = excluded.next_pos,
         updated_at = excluded.updated_at`),
     deleteThread: sql('DELETE FROM threads WHERE session_id = ?'),
+    origins: sql('SELECT text, json FROM origins WHERE session_id = ? ORDER BY seq'),
+    putOrigin: sql(`
+      INSERT INTO origins (session_id, seq, text, json)
+      SELECT ?, COALESCE(MAX(seq), -1) + 1, ?, ? FROM origins WHERE session_id = ?`),
+    deleteOrigins: sql('DELETE FROM origins WHERE session_id = ?'),
     insertBlob: sql(
       'INSERT OR IGNORE INTO blobs (session_id, hash, mime, data) VALUES (?, ?, ?, ?)',
     ),
@@ -1073,6 +1106,33 @@ export class ThreadDb {
     }, null)
   }
 
+  /** Who sent the messages Kettu marked in a session, in the order they were added. */
+  origins(sessionId: string): StoredOrigin[] {
+    return this.guard((sql) => {
+      const out: StoredOrigin[] = []
+      for (const row of sql.origins.all(sessionId)) {
+        let origin: MessageOrigin | null = null
+        try {
+          const parsed: unknown = JSON.parse(String(row.json))
+          if (typeof parsed === 'object' && parsed !== null) {
+            origin = originOf({ ...(parsed as MessageOrigin), kind: 'user', id: '', content: [] })
+          }
+        } catch {
+          // A row that does not parse marks nothing.
+        }
+        if (origin) out.push({ text: String(row.text), origin })
+      }
+      return out
+    }, [])
+  }
+
+  /** Keeps who sent a message Kettu marked, after the session's others. */
+  putOrigin(sessionId: string, origin: StoredOrigin): void {
+    this.guard((sql) => {
+      sql.putOrigin.run(sessionId, origin.text, JSON.stringify(origin.origin), sessionId)
+    }, undefined)
+  }
+
   /** Stores the outline's titles of a session's messages; false when it has no stored thread. */
   setOutlineTitles(sessionId: string, titles: readonly { pos: number; title: string }[]): boolean {
     return this.guard(
@@ -1212,7 +1272,10 @@ export class ThreadDb {
   remove(sessionIds: readonly string[]): void {
     this.guard((sql, db) => {
       this.transaction(db, () => {
-        for (const sessionId of sessionIds) sql.deleteThread.run(sessionId)
+        for (const sessionId of sessionIds) {
+          sql.deleteThread.run(sessionId)
+          sql.deleteOrigins.run(sessionId)
+        }
       })
       db.exec('PRAGMA incremental_vacuum')
     }, undefined)

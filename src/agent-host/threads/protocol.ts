@@ -7,6 +7,7 @@ import type { RuntimeCall } from '../artifacts/runtime/calls'
 import type { RoutineCall } from '../routines/calls'
 import type { TaskCall } from '../workflow/model'
 import type { ImageMode, ThreadWrite } from './model'
+import type { StoredOrigin } from './origins'
 
 /**
  * What the worker is started with: the database, and the folder of the artifacts' HTML. A
@@ -66,6 +67,8 @@ export type ThreadRequest =
   | { id: number; op: 'snippets'; words: string[]; picks: { sessionId: string; pos: number }[] }
   | { id: number; op: 'outputs'; sessionId: string }
   | { id: number; op: 'setOutlineTitles'; sessionId: string; titles: OutlineTitle[] }
+  | { id: number; op: 'origins'; sessionId: string }
+  | { id: number; op: 'putOrigin'; sessionId: string; origin: StoredOrigin }
   | { id: number; op: 'artifact'; call: ArtifactCall }
   | { id: number; op: 'runtime'; call: RuntimeCall }
   | { id: number; op: 'routine'; call: RoutineCall }

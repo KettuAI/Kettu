@@ -326,6 +326,7 @@ import {
   type ThreadWrite,
 } from './threads/model'
 import { turnPhase } from '@shared/turn-phase'
+import { originOf, originText, restoredOrigins, type StoredOrigin } from './threads/origins'
 import { ThreadStoreError, type ThreadStore } from './threads/store'
 import type { UsageRow } from './usage/model'
 import { recordRows } from './usage/record'
@@ -980,15 +981,6 @@ function attachmentIds(content: readonly UserContent[]): string[] {
   return content.flatMap((item) =>
     item.type === 'ref' && item.ref.kind === 'attachment' ? [item.ref.attachment.id] : [],
   )
-}
-
-/** The marks of a message Kettu sent itself, its own words or a card's answer; none for others. */
-function kettuMarks(entry: ThreadEntry | undefined): Pick<QueuedPrompt, 'approval' | 'kettu'> {
-  if (entry?.kind !== 'user') return {}
-  return {
-    ...(entry.approval ? { approval: entry.approval } : {}),
-    ...(entry.kettu ? { kettu: entry.kettu } : {}),
-  }
 }
 
 /** Whether the agent added no message, thought, tool call or plan after the user entry `entryId`. */
@@ -5707,6 +5699,8 @@ export class SessionManager {
       throw this.failStart(live, error, { action: useLoad ? 'load' : 'resume' })
     }
     const attach = await this.attachOptions(live.id, live.record, runtime)
+    // Read before the replay empties the thread, which a write in flight may still be storing.
+    const kept = useLoad ? await this.keptOrigins(live.id) : []
     this.attach(live, connection)
     try {
       if (useLoad) {
@@ -5715,10 +5709,10 @@ export class SessionManager {
         try {
           setup = await connection.loadSession(acpSessionId, projectPath, attach)
         } catch (error) {
-          this.finishReplay(live, false)
+          this.finishReplay(live, false, kept)
           throw error
         }
-        this.finishReplay(live, true)
+        this.finishReplay(live, true, kept)
         this.opened(live, setup.config)
         this.seedCache(live)
         await this.noteOutsideTail(live.record)
@@ -5777,12 +5771,14 @@ export class SessionManager {
   }
 
   /**
-   * After a replay, children it did not mention are marked missing. After a failed one,
-   * every child goes back to the index, to come back with the next attempt.
+   * After a replay, its messages get back the origins Kettu kept for them, and children it did not
+   * mention are marked missing. After a failed one, every child goes back to the index, to come
+   * back with the next attempt.
    */
-  private finishReplay(live: Live, ok: boolean): void {
+  private finishReplay(live: Live, ok: boolean, kept: readonly StoredOrigin[]): void {
     live.replaying = false
     live.partial = !ok
+    this.restoreOrigins(live, kept)
     this.restoreKept(live)
     for (const record of this.descendants(live.id, 'subagent')) {
       const child = this.live.get(record.id)
@@ -6653,7 +6649,7 @@ export class SessionManager {
       id: randomUUID(),
       content: turn.content,
       at: now,
-      ...kettuMarks(turn.entryId === null ? undefined : live.thread.byId[turn.entryId]),
+      ...originOf(turn.entryId === null ? undefined : live.thread.byId[turn.entryId]),
     }
     this.update(live, {
       status: 'ready',
@@ -7359,6 +7355,48 @@ export class SessionManager {
     )
   }
 
+  /**
+   * Keeps who sent a message that is not the user's own from this computer, in the thread store
+   * beside the thread, since the agent's history never says and a rebuild would lose it.
+   */
+  private keepOrigin(live: Live, entry: ThreadEntry): void {
+    const origin = originOf(entry)
+    const store = this.deps.threads
+    if (!origin || !store || entry.kind !== 'user') return
+    store
+      .putOrigin(live.id, { text: originText(entry.content), origin })
+      .catch((error: unknown) => {
+        this.deps.diagnostics.log(
+          'warn',
+          `Could not keep who sent a message of session ${live.id}: ${(error as Error).message}`,
+        )
+      })
+  }
+
+  /** The origins kept for a session's messages, for a thread about to be rebuilt; none on failure. */
+  private async keptOrigins(sessionId: string): Promise<StoredOrigin[]> {
+    try {
+      return (await this.deps.threads?.origins(sessionId)) ?? []
+    } catch (error) {
+      this.deps.diagnostics.log(
+        'warn',
+        `Could not read who sent the messages of session ${sessionId}: ${(error as Error).message}`,
+      )
+      return []
+    }
+  }
+
+  /** Puts back who sent each message of a rebuilt thread that matches one Kettu kept. */
+  private restoreOrigins(live: Live, kept: readonly StoredOrigin[]): void {
+    if (kept.length === 0) return
+    const found = restoredOrigins(threadEntries(live.thread), kept)
+    if (found.size === 0) return
+    this.emit(
+      live,
+      [...found].map(([id, changes]): Patch => ({ op: 'entry.update', id, changes })),
+    )
+  }
+
   /** The user entry of a prompt, and the title it gives a session that has none; its entry id. */
   private addPrompt(
     live: Live,
@@ -7370,21 +7408,18 @@ export class SessionManager {
     kettu?: true,
   ): string {
     const entryId = this.nextId(live)
-    this.emit(live, [
-      {
-        op: 'entry.add',
-        entry: {
-          kind: 'user',
-          id: entryId,
-          content,
-          at: now,
-          ...(from ? { from } : {}),
-          ...(device ? { device } : {}),
-          ...(approval ? { approval } : {}),
-          ...(kettu ? { kettu } : {}),
-        },
-      },
-    ])
+    const entry: ThreadEntry = {
+      kind: 'user',
+      id: entryId,
+      content,
+      at: now,
+      ...(from ? { from } : {}),
+      ...(device ? { device } : {}),
+      ...(approval ? { approval } : {}),
+      ...(kettu ? { kettu } : {}),
+    }
+    this.emit(live, [{ op: 'entry.add', entry }])
+    this.keepOrigin(live, entry)
     if (live.thread.session.title === null) {
       const title = fallbackTitle(content)
       if (title) {
@@ -7664,22 +7699,19 @@ export class SessionManager {
       if (canSend(live.thread.session.status)) this.drainQueue(live)
       return false
     }
-    this.emit(live, [
-      {
-        op: 'entry.add',
-        entry: {
-          kind: 'user',
-          id: this.nextId(live),
-          content: resolved.shown,
-          at: this.now(),
-          steered: true,
-          ...(item.from ? { from: item.from } : {}),
-          ...(item.device ? { device: item.device } : {}),
-          ...(item.approval ? { approval: item.approval } : {}),
-          ...(item.kettu ? { kettu: item.kettu } : {}),
-        },
-      },
-    ])
+    const steered: ThreadEntry = {
+      kind: 'user',
+      id: this.nextId(live),
+      content: resolved.shown,
+      at: this.now(),
+      steered: true,
+      ...(item.from ? { from: item.from } : {}),
+      ...(item.device ? { device: item.device } : {}),
+      ...(item.approval ? { approval: item.approval } : {}),
+      ...(item.kettu ? { kettu: item.kettu } : {}),
+    }
+    this.emit(live, [{ op: 'entry.add', entry: steered }])
+    this.keepOrigin(live, steered)
     this.commitAttachments(live, resolved)
     if (resolved.ids.length > 0) void this.deps.attachments?.release(resolved.ids)
     live.queuedBy.delete(itemId)
@@ -8780,9 +8812,10 @@ export class SessionManager {
    * the host still holds; a retried message's were released when it first went.
    */
   private giveBack(live: Live, turn: Turn): void {
-    // Kettu's own message, or the answer a card sent, is not the user's to take back and edit.
-    const sent = kettuMarks(turn.entryId === null ? undefined : live.thread.byId[turn.entryId])
-    if (sent.kettu || sent.approval) return
+    // Only what the user wrote goes back to a composer: never Kettu's own message, a card's answer
+    // or another session's message.
+    const sent = turn.entryId === null ? undefined : live.thread.byId[turn.entryId]
+    if (sent?.kind === 'user' && (sent.kettu || sent.approval || sent.from)) return
     const held = new Set(this.deps.attachments?.held(attachmentIds(turn.written)) ?? [])
     const content = turn.written.filter(
       (item) =>
