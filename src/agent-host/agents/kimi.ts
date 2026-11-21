@@ -16,6 +16,7 @@ export const KIMI: AgentDefinition = {
   install: {
     hint: 'detect.hint.kimi',
     url: 'https://github.com/MoonshotAI/kimi-code',
+    guide: 'https://moonshotai.github.io/kimi-code/en/guides/getting-started',
   },
   installs: { npm: '@moonshot-ai/kimi-code' },
 }

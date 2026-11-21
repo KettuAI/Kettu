@@ -160,7 +160,11 @@ export interface AgentDefinition {
   env?: Record<string, string>
   /** Variables the launch of an added agent adds, which keep it apart from the default agent. */
   addedEnv?: Record<string, string>
-  install: { hint: HostKey; url: string; notice?: HostKey }
+  /**
+   * `url` is where a harness that is not installed or lacks Node.js sends the user; `guide` is
+   * its vendor's install page, which the install window links whatever the state.
+   */
+  install: { hint: HostKey; url: string; notice?: HostKey; guide?: string }
   /** Pushes `_auth/status_update` as it starts, naming its account. */
   reportsAccount?: boolean
   /**

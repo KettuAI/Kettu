@@ -189,8 +189,10 @@ function planRoute(input: OfferInput, plan: InstallPlan): InstallRoute {
 /** The ways to install the harness, the recommended first: Kettu's own copy, then the vendor's. */
 export function installOffer(input: OfferInput): InstallOffer {
   const copy = copyRoute(input)
+  const { guide } = input.def.install
   return {
     routes: [...(copy ? [copy] : []), ...input.plans.map((plan) => planRoute(input, plan))],
+    ...(guide ? { guide } : {}),
   }
 }
 

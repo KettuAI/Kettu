@@ -12,7 +12,13 @@ export const CODEBUDDY: AgentDefinition = {
     command: 'codebuddy',
     args: ['--acp'],
   },
-  install: { hint: 'detect.hint.node', url: 'https://nodejs.org/en/download' },
+  install: {
+    hint: 'detect.hint.node',
+    url: 'https://nodejs.org/en/download',
+    guide: 'https://cnb.cool/codebuddy/codebuddy-code',
+  },
+  // The package managers its install page lists, checked on 2026-11-21; its scripts differ by site.
+  installs: { brew: 'Tencent-CodeBuddy/tap/codebuddy-code', npm: '@tencent-ai/codebuddy-code' },
   configVariable: CONFIG_VARIABLES.codebuddy,
   // Its browser and WeChat sign-in lives in a file under the user's application data, not in the
   // agent's folder. In memory, the process never reads it, so an added agent uses only its own key.

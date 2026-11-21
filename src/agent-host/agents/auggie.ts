@@ -14,5 +14,10 @@ export const AUGGIE: AgentDefinition = {
     env: { AUGMENT_DISABLE_AUTO_UPDATE: '1' },
   },
   requiresNode: '>=20',
-  install: { hint: 'detect.hint.node', url: 'https://nodejs.org/en/download' },
+  install: {
+    hint: 'detect.hint.node',
+    url: 'https://nodejs.org/en/download',
+    guide: 'https://docs.augmentcode.com/cli/setup-auggie/install-auggie-cli',
+  },
+  // Its install page lists only the `prerelease` tag, which an npm route cannot carry.
 }

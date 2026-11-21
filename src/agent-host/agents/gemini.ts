@@ -7,7 +7,13 @@ export const GEMINI: AgentDefinition = {
   registryId: 'gemini',
   launch: { kind: 'package', package: '@google/gemini-cli', command: 'gemini', args: ['--acp'] },
   requiresNode: '>=22',
-  install: { hint: 'detect.hint.node', url: 'https://nodejs.org/en/download' },
+  install: {
+    hint: 'detect.hint.node',
+    url: 'https://nodejs.org/en/download',
+    guide: 'https://geminicli.com/docs/get-started/installation/',
+  },
+  // The npm command its install page lists; its Homebrew formula is disabled on 2026-12-18.
+  installs: { npm: '@google/gemini-cli' },
   // Since 2026-06-18 Google serves personal accounts in Antigravity; Gemini CLI 0.66.0 passes on
   // the Code Assist server's refusal of them.
   movedAccounts: {
