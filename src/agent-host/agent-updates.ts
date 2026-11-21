@@ -92,55 +92,70 @@ async function view(options: LatestOptions, words: string[]): Promise<unknown> {
   return parsed
 }
 
+/** npm's field for the size of a version's own files, without its dependencies. */
+const SIZE_FIELD = 'dist.unpackedSize'
+
+/** What npm says of the version an update moves to, and its own size when npm gives it. */
+export type LatestFound = AgentUpdate & { unpackedSize?: number }
+
+function sizeOf(row: unknown): { unpackedSize?: number } {
+  const size = isObject(row) ? row[SIZE_FIELD] : undefined
+  return typeof size === 'number' && Number.isFinite(size) && size > 0 ? { unpackedSize: size } : {}
+}
+
 /**
  * The adapter version npm's `latest` tag names, and the newest CLI its dependency range allows,
  * which a fresh install takes; for a package that is the CLI itself, its own version. Rejects
  * with a reason the user can read.
  */
-export async function fetchLatest(options: LatestOptions): Promise<AgentUpdate> {
+export async function fetchLatest(options: LatestOptions): Promise<LatestFound> {
   if (options.range !== undefined) return fetchInRange(options, options.range)
-  const manifest = await view(options, [options.package, 'version', 'dependencies'])
-  // With both fields npm prints an object; a version without dependencies prints the version.
+  const manifest = await view(options, [options.package, 'version', 'dependencies', SIZE_FIELD])
+  // With several fields npm prints an object; a version without the others prints the version.
   const version = isObject(manifest) ? manifest.version : manifest
   if (!isVersion(version))
     throw new Error(t('agent.update.noVersion', { package: options.package }))
+  const size = sizeOf(manifest)
   const { cli } = options
-  if (cli?.package === options.package) return { adapterVersion: version, cliVersion: version }
+  if (cli?.package === options.package) {
+    return { adapterVersion: version, cliVersion: version, ...size }
+  }
   const dependencies = isObject(manifest) ? manifest.dependencies : undefined
   const range = cli && isObject(dependencies) ? dependencies[cli.package] : undefined
   if (!cli || typeof range !== 'string' || !RANGE.test(range)) {
-    return { adapterVersion: version, cliVersion: null }
+    return { adapterVersion: version, cliVersion: null, ...size }
   }
   // One matching version prints its field as a string, several as an array.
   const value = await view(options, [`${cli.package}@${range}`, cli.field])
-  return { adapterVersion: version, cliVersion: highestVersion(value) }
+  return { adapterVersion: version, cliVersion: highestVersion(value), ...size }
 }
 
 /**
  * The newest version in `range`, and the CLI it names in its own field when `cli` names the
  * package itself. npm prints one version's fields as an object, several versions as an array.
  */
-async function fetchInRange(options: LatestOptions, range: string): Promise<AgentUpdate> {
+async function fetchInRange(options: LatestOptions, range: string): Promise<LatestFound> {
   if (!RANGE.test(range)) throw new Error(t('agent.update.noVersion', { package: options.package }))
   const own = options.cli?.package === options.package ? options.cli.field : null
-  const fields = own ? ['version', own] : ['version']
+  const fields = own ? ['version', own, SIZE_FIELD] : ['version', SIZE_FIELD]
   const value = await view(options, [`${options.package}@${range}`, ...fields])
   const rows = (Array.isArray(value) ? value : [value]).flatMap((row: unknown) =>
     isObject(row)
-      ? [{ version: row.version, cli: own ? row[own] : undefined }]
-      : [{ version: row, cli: undefined }],
+      ? [{ version: row.version, cli: own ? row[own] : undefined, size: sizeOf(row) }]
+      : [{ version: row, cli: undefined, size: {} }],
   )
-  let best: { version: string; cli: unknown } | null = null
+  let best: { version: string; cli: unknown; size: { unpackedSize?: number } } | null = null
   for (const row of rows) {
     if (!isVersion(row.version)) continue
     if (!best || compareVersions(row.version, best.version) > 0) {
-      best = { version: row.version, cli: row.cli }
+      best = { version: row.version, cli: row.cli, size: row.size }
     }
   }
   if (!best) throw new Error(t('agent.update.noVersion', { package: options.package }))
   return {
     adapterVersion: best.version,
     cliVersion: typeof best.cli === 'string' && isVersion(best.cli) ? best.cli : null,
+    ...best.size,
   }
 }
 

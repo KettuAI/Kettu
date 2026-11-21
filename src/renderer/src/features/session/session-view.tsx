@@ -20,6 +20,7 @@ import { useScrollbarGutter } from '@renderer/hooks/use-scrollbar-gutter'
 import { errorMessage, host } from '@renderer/lib/host'
 import { isMac } from '@renderer/lib/platform'
 import { AccountMovedAlert } from '@renderer/features/agents/moved-accounts'
+import { useMissingCopy } from '@renderer/features/settings/harness-install'
 import { agentName, agentsOn, useAgentsStore } from '@renderer/stores/agents'
 import { ensureFiles, ensureFreshFiles } from '@renderer/stores/files'
 import { isAway, useOtherHost } from '@renderer/stores/hosts'
@@ -47,6 +48,7 @@ import {
   ComposerPlaceholder,
   FailedState,
   HostAway,
+  InstallCopyButton,
   StartingAgent,
   ThreadSkeleton,
 } from './session-states'
@@ -84,6 +86,7 @@ function SessionBody({ summary }: { summary: SessionSummary }) {
     (s) => agentsOn(s, hostId).byId[summary.agentId]?.registered === false,
   )
   const agentStatus = useAgentsStore((s) => agentsOn(s, hostId).byId[summary.agentId])
+  const missingCopy = useMissingCopy(summary.agentId, hostId)
   const movedTo = agentStatus?.movedAccounts?.to
   const movedToName = useAgentsStore(
     (s) => (movedTo && agentsOn(s, hostId).byId[movedTo]?.harnessName) || movedTo,
@@ -261,6 +264,7 @@ function SessionBody({ summary }: { summary: SessionSummary }) {
                     message={session.error?.message ?? t('view.couldNotContinue', { agent: name })}
                     detail={session.error?.detail}
                     onRetry={retry}
+                    action={missingCopy && <InstallCopyButton missing={missingCopy} />}
                     report={{ hostId: otherHost?.id ?? null, sessionId, agentId: summary.agentId }}
                   />
                 ) : null}

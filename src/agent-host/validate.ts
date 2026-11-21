@@ -1344,6 +1344,7 @@ export function createValidators(platform: Platform): Validators {
         ...(method !== undefined ? { method: method as AgentInstallMethod['id'] } : {}),
       }
     },
+    'agents.installOffer': agent,
     'agents.cancelTask': agent,
     'agents.uninstall': (params) => {
       const o = fields(params)

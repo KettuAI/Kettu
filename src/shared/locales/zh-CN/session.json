@@ -538,11 +538,14 @@
   },
   "agentStart": {
     "installing": "正在安装 {{agent}}…",
+    "installingSdk": "正在安装 Claude Agent SDK…",
     "starting": "正在启动 {{agent}}…",
     "loading": "正在加载对话…"
   },
   "failed": {
-    "reportProblem": "报告问题"
+    "reportProblem": "报告问题",
+    "install": "安装…",
+    "installing": "正在安装…"
   },
   "pending": {
     "back": "返回",

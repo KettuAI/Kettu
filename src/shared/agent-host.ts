@@ -363,6 +363,61 @@ export interface AgentInstallMethod {
  */
 export type ProgramMethod = AgentInstallMethod['id'] | 'pnpm' | 'bun' | 'yarn'
 
+/**
+ * Where an install downloads from: the npm registry the user's npm configuration names for the
+ * package (null when it could not be read), a release file the ACP Registry lists at its vendor's
+ * address, the vendor's own address, Homebrew, WinGet, or PyPI through uv.
+ */
+export type InstallSource =
+  | { kind: 'npm'; registry: string | null }
+  | { kind: 'registry'; url: string }
+  | { kind: 'vendor'; url: string }
+  | { kind: 'brew' }
+  | { kind: 'winget' }
+  | { kind: 'pypi' }
+
+/** Something an install needs on the computer, and whether it is there. */
+export type InstallNeed =
+  // `minimum` is the harness's own, such as 22.19.0; `found` the version on PATH.
+  | { kind: 'node'; minimum: string | null; found: string | null; ok: boolean }
+  | { kind: 'npm'; ok: boolean }
+  | { kind: 'uv'; ok: boolean }
+
+/** What one way of installing a harness brings, which the install window shows before it runs. */
+export interface InstallDetails {
+  /** An npm or uvx package or a release archive, by name; a vendor's command, which its route holds. */
+  what: { kind: 'npm' | 'uvx' | 'archive'; name: string } | { kind: 'command' }
+  /** The version it installs; null where the vendor's route takes its newest. */
+  version: string | null
+  source: InstallSource
+  /** The folder it goes into; null where the route does not say, as for uv's cache or WinGet. */
+  folder: string | null
+  /** In bytes, when known; `packageOnly` when the package's dependencies are not counted. */
+  size: { bytes: number; packageOnly: boolean } | null
+  needs: InstallNeed[]
+}
+
+/** A way the install window offers to install a harness. */
+export interface InstallRoute {
+  /**
+   * `copy` is Kettu's own install of the harness's npm or uvx package, which `agents.install` takes
+   * without a method; the others are its methods.
+   */
+  id: 'copy' | AgentInstallMethod['id']
+  /** The command it runs, or the archive's address, quoted for the platform; null for `copy`. */
+  command: string | null
+  /** The tool it runs with was found on the agent environment's PATH. */
+  available: boolean
+  /** Nothing installs now: uv fetches a uvx package the first time a session starts. */
+  firstStart?: true
+  details: InstallDetails
+}
+
+/** The ways to install a harness, the recommended first. */
+export interface InstallOffer {
+  routes: InstallRoute[]
+}
+
 export interface AgentStatus {
   id: AgentId
   name: string // the agent's: the harness's own for its default agent
@@ -957,6 +1012,8 @@ export interface HostContract {
     params: { agentId: AgentId; method?: AgentInstallMethod['id'] }
     result: void
   }
+  // What each way of installing the harness brings, for the install window before it runs.
+  'agents.installOffer': { params: { agentId: AgentId }; result: InstallOffer }
   // Removes Kettu's copy for the harness, and its own program too when asked.
   'agents.uninstall': {
     params: { agentId: AgentId; removeProgram?: boolean }
@@ -1933,6 +1990,7 @@ export const HOST_METHODS = [
   'agents.setApiKey',
   'agents.clearApiKey',
   'agents.install',
+  'agents.installOffer',
   'agents.uninstall',
   'agents.cancelTask',
   'agents.readOptions',

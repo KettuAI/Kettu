@@ -556,11 +556,14 @@
   },
   "agentStart": {
     "installing": "Installing {{agent}}…",
+    "installingSdk": "Installing Claude Agent SDK…",
     "starting": "Starting {{agent}}…",
     "loading": "Loading the conversation…"
   },
   "failed": {
-    "reportProblem": "Report a problem"
+    "reportProblem": "Report a problem",
+    "install": "Install…",
+    "installing": "Installing…"
   },
   "pending": {
     "back": "Back",

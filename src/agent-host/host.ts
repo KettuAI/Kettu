@@ -3102,6 +3102,7 @@ export class AgentHost {
       'agents.install': ({ agentId, method }) => agents.install(agentId, method),
       'agents.uninstall': ({ agentId, removeProgram }) =>
         agents.uninstall(agentId, removeProgram === true),
+      'agents.installOffer': ({ agentId }) => agents.installOffer(agentId),
       'agents.cancelTask': ({ agentId }) => agents.cancelTask(agentId),
       'agents.readOptions': async ({ agentId, projectPath }) => {
         const entry = this.agentOptions.get(agentId)

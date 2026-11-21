@@ -17,6 +17,7 @@ import { NoDrag, TopBar } from '@renderer/features/shell/top-bar'
 import { usePane } from '@renderer/features/split/pane-context'
 import { useScrollbarGutter } from '@renderer/hooks/use-scrollbar-gutter'
 import { routeOf } from '@renderer/lib/host'
+import { useMissingCopy } from '@renderer/features/settings/harness-install'
 import { agentName, agentsOn, useAgentsStore } from '@renderer/stores/agents'
 import { newSessionPanel, openHarnessSettings } from '@renderer/stores/view'
 import { sessionTitle, useSessionsStore } from '@renderer/stores/sessions'
@@ -24,6 +25,7 @@ import {
   ColumnScroller,
   FailedState,
   FirstMessage,
+  InstallCopyButton,
   StartingAgent,
   ThreadSkeleton,
 } from './session-states'
@@ -50,6 +52,7 @@ export function PendingSessionView({ pending }: { pending: PendingSession }) {
   const retry = useCallback(() => retryPendingSession(), [])
   const gutter = useScrollbarGutter()
   const error = pending.error
+  const missing = useMissingCopy(pending.agentId, hostId)
 
   let body
   if (error?.code === 'auth_required') {
@@ -88,6 +91,7 @@ export function PendingSessionView({ pending }: { pending: PendingSession }) {
             title={t('pending.couldntStart', { agent: name })}
             message={error.message}
             onRetry={retry}
+            action={missing && <InstallCopyButton missing={missing} />}
             report={{
               hostId,
               agentId: pending.agentId,
@@ -152,9 +156,11 @@ export function PendingSessionView({ pending }: { pending: PendingSession }) {
                 placeholder={
                   error
                     ? t('pending.notRunning', { agent: name })
-                    : t(installing ? 'agentStart.installing' : 'agentStart.starting', {
-                        agent: name,
-                      })
+                    : installing && status?.package?.isSdk
+                      ? t('agentStart.installingSdk')
+                      : t(installing ? 'agentStart.installing' : 'agentStart.starting', {
+                          agent: name,
+                        })
                 }
                 className="min-h-(--composer-min) py-[15px] pl-4 text-prose leading-[22px] md:text-prose"
               />
