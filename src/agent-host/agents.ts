@@ -2244,20 +2244,23 @@ export class AgentManager {
   }
 
   /**
-   * A newer version of the user's own program than the one it runs: from npm, or, for one too old
-   * to run, at least the oldest that runs, which its own update brings before any check.
+   * A newer version of the user's own program than the one it runs: from npm or Homebrew, or, for
+   * one too old to run, at least the oldest that runs, which its own update brings before any
+   * check. One whose install route tells no newer versions is offered none of them, whatever an
+   * earlier check kept.
    */
   private cliUpdateVersion(h: Harness): string | null {
     const mine = this.userProgram(h)
     const problem = h.detection?.cli?.problem
+    const latest = this.programSource(h) ? h.cliLatest : null
     // A newest version the manifest says does not work is not offered, nor one the harness would
     // not run, such as one an earlier check read before it kept to the range.
-    if (h.cliLatest && !usable(this.programRule(h), h.cliLatest)) return null
+    if (latest && !usable(this.programRule(h), latest)) return null
     const range = this.ownRange(h)
-    if (h.cliLatest && range && !inNpmRange(h.cliLatest, range)) return null
-    if (problem?.kind === 'too-old') return h.cliLatest ?? problem.minimum
-    if (!h.cliLatest || !mine?.version) return null
-    return compareVersions(h.cliLatest, mine.version) > 0 ? h.cliLatest : null
+    if (latest && range && !inNpmRange(latest, range)) return null
+    if (problem?.kind === 'too-old') return latest ?? problem.minimum
+    if (!latest || !mine?.version) return null
+    return compareVersions(latest, mine.version) > 0 ? latest : null
   }
 
   /**
@@ -2426,20 +2429,31 @@ export class AgentManager {
   /**
    * Where the user's own program's newer versions are read, by how it was installed: Homebrew for
    * a formula or cask; npm for a global install of npm, pnpm, bun or yarn, and for any other
-   * program its vendor also publishes on npm, as an install script's is. Null for one whose
-   * install route tells none.
+   * program its vendor also publishes on npm, as an install script's is, at the vendor's dist-tag
+   * when its install names one. Null for one whose install route tells none, such as WinGet's,
+   * which gets new versions after npm does.
    */
   private programSource(
     h: Harness,
-  ): { kind: 'npm'; package: string } | { kind: 'brew'; name: string; cask: boolean } | null {
+  ):
+    | { kind: 'npm'; package: string; tag?: string }
+    | { kind: 'brew'; name: string; cask: boolean }
+    | null {
     if (!this.userProgram(h)) return null
     const installs = h.def.installs
     if (h.cliMethod === 'brew') {
       const name = installs?.brewCask ?? installs?.brew
       return name ? { kind: 'brew', name, cask: !!installs?.brewCask } : null
     }
+    // WinGet gets new versions after npm does, so npm's would offer an upgrade it cannot make.
+    if (h.cliMethod === 'winget') return null
     const npmPackage = h.cliGlobal ? this.programPackage(h) : (installs?.npm ?? null)
-    return npmPackage ? { kind: 'npm', package: npmPackage } : null
+    if (!npmPackage) return null
+    return {
+      kind: 'npm',
+      package: npmPackage,
+      ...(installs?.npm === npmPackage && installs.npmTag ? { tag: installs.npmTag } : {}),
+    }
   }
 
   private checkDue(h: Harness): number {
@@ -2769,7 +2783,13 @@ export class AgentManager {
     const range = this.ownRange(h)
     const readCli = async (): Promise<string | null> => {
       if (source?.kind === 'npm' && npm) {
-        const words = { npm, package: source.package, ...(range ? { range } : {}), cli: null }
+        const words = {
+          npm,
+          package: source.package,
+          ...(range ? { range } : {}),
+          ...(source.tag ? { tag: source.tag } : {}),
+          cli: null,
+        }
         return (await fetch({ ...shared, ...words })).adapterVersion
       }
       if (source?.kind === 'brew' && brew) {

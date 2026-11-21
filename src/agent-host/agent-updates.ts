@@ -24,6 +24,9 @@ import { compareVersions, highestVersion, isVersion } from './versions'
  */
 const RANGE = /^[0-9A-Za-z.+\-^~<>=| *]{1,200}$/
 
+/** A dist-tag name, which reaches the same command line as a range does. */
+const TAG = /^[0-9A-Za-z._-]{1,100}$/
+
 // npm's codes for a registry it could not reach.
 const OFFLINE =
   /\b(?:ENOTFOUND|EAI_AGAIN|ECONNREFUSED|ECONNRESET|ETIMEDOUT|ENETUNREACH|EHOSTUNREACH)\b/
@@ -34,6 +37,8 @@ export interface LatestOptions {
   package: string
   /** The versions an update may move to, as an npm range; the `latest` tag when not given. */
   range?: string
+  /** The dist-tag to read in place of `latest`, which a range, when given, takes precedence over. */
+  tag?: string
   /**
    * The package and `package.json` field that name the CLI the adapter carries: a dependency's,
    * or the adapter's own field when it names the adapter's package.
@@ -104,13 +109,17 @@ function sizeOf(row: unknown): { unpackedSize?: number } {
 }
 
 /**
- * The adapter version npm's `latest` tag names, and the newest CLI its dependency range allows,
- * which a fresh install takes; for a package that is the CLI itself, its own version. Rejects
- * with a reason the user can read.
+ * The adapter version npm's `latest` tag, or the one given, names, and the newest CLI its
+ * dependency range allows, which a fresh install takes; for a package that is the CLI itself, its
+ * own version. Rejects with a reason the user can read.
  */
 export async function fetchLatest(options: LatestOptions): Promise<LatestFound> {
   if (options.range !== undefined) return fetchInRange(options, options.range)
-  const manifest = await view(options, [options.package, 'version', 'dependencies', SIZE_FIELD])
+  if (options.tag !== undefined && !TAG.test(options.tag)) {
+    throw new Error(t('agent.update.noVersion', { package: options.package }))
+  }
+  const spec = options.tag ? `${options.package}@${options.tag}` : options.package
+  const manifest = await view(options, [spec, 'version', 'dependencies', SIZE_FIELD])
   // With several fields npm prints an object; a version without the others prints the version.
   const version = isObject(manifest) ? manifest.version : manifest
   if (!isVersion(version))

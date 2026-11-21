@@ -19,5 +19,6 @@ export const AUGGIE: AgentDefinition = {
     url: 'https://nodejs.org/en/download',
     guide: 'https://docs.augmentcode.com/cli/setup-auggie/install-auggie-cli',
   },
-  // Its install page lists only the `prerelease` tag, which an npm route cannot carry.
+  // Its install page documents only the `prerelease` tag, checked on 2026-11-21.
+  installs: { npm: '@augmentcode/auggie', npmTag: 'prerelease' },
 }

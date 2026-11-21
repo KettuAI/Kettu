@@ -67,6 +67,26 @@ describe("npm's answer for the version an install takes", () => {
     expect(ranged.asked).toHaveLength(1)
   })
 
+  it("reads the dist-tag a vendor's install names instead of latest", async () => {
+    const tagged = answering({ version: '0.1.5-prerelease.3', 'dist.unpackedSize': 7_000 })
+    expect(await fetchLatest({ ...tagged.options, tag: 'prerelease' })).toEqual({
+      adapterVersion: '0.1.5-prerelease.3',
+      cliVersion: null,
+      unpackedSize: 7_000,
+    })
+    expect(tagged.asked[0]?.[1]).toBe('@google/gemini-cli@prerelease')
+
+    const plain = answering({ version: '0.66.0' })
+    await fetchLatest(plain.options)
+    expect(plain.asked[0]?.[1]).toBe('@google/gemini-cli')
+  })
+
+  it('refuses a tag that is not a plain name, since it reaches the command line', async () => {
+    const tagged = answering({ version: '1.0.0' })
+    await expect(fetchLatest({ ...tagged.options, tag: 'beta" & calc' })).rejects.toThrow()
+    expect(tagged.asked).toEqual([])
+  })
+
   it('leaves the size out when npm gives none', async () => {
     const bare = answering('0.66.0')
     expect(await fetchLatest(bare.options)).toEqual({ adapterVersion: '0.66.0', cliVersion: null })
