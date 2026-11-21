@@ -733,9 +733,7 @@
         "usedUp": "{{window}} used up",
         "resets": "{{window}} · {{time}}",
         "used": "{{window}} {{percent}}%",
-        "left": "{{window}} {{percent}}% left",
-        "weeklyOf": "{{model}} 7d",
-        "fiveHourOf": "{{model}} 5h"
+        "left": "{{window}} {{percent}}% left"
       },
       "rowState": "{{name}}, {{state}}",
       "manage": "Manage agents…"

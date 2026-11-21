@@ -24,10 +24,10 @@ import {
   type RunStatus,
   type RunView,
 } from '@shared/routines'
-import { limitsForModel, resetTimeText } from '@shared/plan-limits'
+import { limitsForModel, resetTimeText, windowParts } from '@shared/plan-limits'
 import type { AgentId, ConfigOption } from '@shared/thread'
 import { HostError } from '../errors'
-import { currentLocale, hasMessage, t } from '../i18n'
+import { currentLocale, t } from '../i18n'
 import type { JsonFile, LogFn, RoutinesFile } from '../storage'
 import type { ThreadStore } from '../threads/store'
 import type { RoutineCallName, RoutineCalls, RoutineRunStats } from './calls'
@@ -1127,15 +1127,18 @@ function pauseView({ agentId, limit }: LimitPause): NonNullable<RoutineView['pau
  * own, with a per-model week as "Fable weekly" so it does not read as two windows.
  */
 export function windowName(limit: PlanLimit): string {
-  for (const key of [`planWindowInText.${limit.window}`, `planWindow.${limit.window}`]) {
-    if (hasMessage(key)) return (t as (key: string) => string)(key)
+  const parts = windowParts(limit)
+  if (!parts.kind) return limit.label
+  const say = (table: 'planWindow' | 'planWindowInText'): string => {
+    const key = `${table}.${parts.kind}`
+    return parts.count === null
+      ? (t as (key: string) => string)(key)
+      : (t as (key: string, params: { count: number }) => string)(key, { count: parts.count })
   }
-  // Claude Code names a weekly limit per model, "Weekly · Fable", and Antigravity both its
-  // windows per model group, in English.
-  const weekly = /^Weekly · (.+)$/.exec(limit.label)
-  if (weekly) return t('planWindowInText.weeklyOf', { model: weekly[1]! })
-  const fiveHour = /^5-hour · (.+)$/.exec(limit.label)
-  return fiveHour ? t('planWindowInText.fiveHourOf', { model: fiveHour[1]! }) : limit.label
+  if (parts.scope) {
+    return t('planWindowInText.scoped', { scope: parts.scope, window: say('planWindowInText') })
+  }
+  return parts.provider ? `${parts.provider} · ${say('planWindow')}` : say('planWindow')
 }
 
 /** When a window resets, in the interface language. */

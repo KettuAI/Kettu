@@ -10,7 +10,7 @@ import { LimitViewSwitch } from '@renderer/components/plan-limit-view'
 import { PlanRings } from '@renderer/components/plan-rings'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
 import { useLimitView } from '@renderer/hooks/use-limit-view'
-import { balanceLabel, planBalance } from '@renderer/lib/format'
+import { balanceLabel, planBalance, windowShort } from '@renderer/lib/format'
 import { errorMessage } from '@renderer/lib/host'
 import { hostOfPath } from '@renderer/lib/host-paths'
 import { shownPercent } from '@renderer/lib/plan-limit'
@@ -193,9 +193,7 @@ export function PlanRing() {
         .reverse()
         .map((w) =>
           t(view === 'left' ? 'sidebar:account.ringWindowLeft' : 'sidebar:account.ringWindow', {
-            window: w.model
-              ? `${t(`composer:usage.shortWindow.${w.window}`)} ${w.model}`
-              : t(`composer:usage.shortWindow.${w.window}`),
+            window: windowShort({ kind: w.window, count: null, scope: w.model }),
             percent: shownPercent(w.percent, view),
           }),
         )

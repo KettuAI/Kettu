@@ -12,6 +12,7 @@ import { useLimitView } from '@renderer/hooks/use-limit-view'
 import {
   balanceLabel,
   limitLabel,
+  limitShort,
   longAgo,
   monthDayTime,
   planAmount,
@@ -31,14 +32,7 @@ import {
   useWindowHost,
   useWindowHostAway,
 } from '@renderer/stores/window-host'
-import {
-  planColumns,
-  ringStroke,
-  usageCards,
-  type CardRing,
-  type LimitRead,
-  type UsageCard,
-} from './plan-cards'
+import { planColumns, ringStroke, usageCards, type LimitRead, type UsageCard } from './plan-cards'
 import { SpendResetDialog } from './spend-reset'
 
 const RINGS = 72
@@ -168,7 +162,6 @@ function PlanCard({ card, named, now }: { card: UsageCard; named: boolean; now: 
   const [spending, setSpending] = useState(false)
   const resets = card.resets
   const view = useLimitView()
-  const shortName = useShortWindow()
   const where = [...new Set(card.places.map((place) => hostName(place.hostId)))]
   const balanceRows = (card.balances ?? []).map((balance) => (
     <span key={`${balance.label}/${balance.currency}`} className="k-u-plan__balance">
@@ -252,7 +245,7 @@ function PlanCard({ card, named, now }: { card: UsageCard; named: boolean; now: 
                 <div key={ring.limit.window} className="k-u-plan__window">
                   <span className="k-u-plan__line">
                     <span aria-hidden className="k-u-plan__win">
-                      {shortName(ring.limit)}
+                      {limitShort(ring.limit, ' · ')}
                     </span>
                     <b aria-hidden className="k-num" data-level={ring.level}>
                       {ring.reached && ring.limit.resetsAt! > now
@@ -411,31 +404,4 @@ function PlanCard({ card, named, now }: { card: UsageCard; named: boolean; now: 
       </HoverCard>
     </>
   )
-}
-
-/** A window's short name for its line: 5h, 7d, 7d · Fable, 30d. */
-function useShortWindow(): (limit: CardRing['limit']) => string {
-  const { t, i18n } = useTranslation(['usage', 'composer'])
-  return (limit) => {
-    const known = `composer:usage.shortWindow.${limit.window}`
-    if (limit.window === 'rolling') return t('composer:usage.shortWindow.five_hour')
-    if (limit.window === 'weekly') return t('composer:usage.shortWindow.seven_day')
-    if (limit.window.startsWith('seven_day_')) {
-      const model = /^Weekly · (.+)$/.exec(limit.label)?.[1] ?? limitLabel(limit)
-      return t('usage:limits.weeklyOf', { model })
-    }
-    if (limit.window.startsWith('five_hour_')) {
-      const model = /^5-hour · (.+)$/.exec(limit.label)?.[1] ?? limitLabel(limit)
-      return t('usage:limits.fiveHourOf', { model })
-    }
-    if (i18n.exists(known)) return t(known as 'composer:usage.shortWindow.five_hour')
-    const counted = /^(\d+)_(minute|hour|day)$/.exec(limit.window)
-    if (counted) {
-      const unit = { minute: 'minutes', hour: 'hours', day: 'days' }[counted[2]!]!
-      return t(`usage:limits.short.${unit}` as 'usage:limits.short.hours', {
-        count: Number(counted[1]),
-      })
-    }
-    return limitLabel(limit)
-  }
 }

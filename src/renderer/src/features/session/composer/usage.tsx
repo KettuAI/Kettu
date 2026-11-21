@@ -36,7 +36,15 @@ import { breakdownView, shownUsage } from '@renderer/features/session/composer/c
 import { PANEL } from '@renderer/features/session/entries/helpers'
 import { planReset, usageTone, type UsageTone } from '@renderer/features/sidebar/plan-usage'
 import { useLimitView } from '@renderer/hooks/use-limit-view'
-import { clockTime, countdown, fullTime, limitLabel, money, tokens } from '@renderer/lib/format'
+import {
+  clockTime,
+  countdown,
+  fullTime,
+  limitLabel,
+  limitShort,
+  money,
+  tokens,
+} from '@renderer/lib/format'
 import { errorMessage, host, sessionHost } from '@renderer/lib/host'
 import { limitLevel, limitPercent, shownPercent } from '@renderer/lib/plan-limit'
 import { useNow } from '@renderer/lib/use-now'
@@ -54,18 +62,6 @@ const HOUR = 60 * MINUTE
 /** The context's usage level, which colors its ring: see usageTone for the four. */
 const contextTone = (share: number): UsageTone =>
   usageTone({ usedPercent: share * 100, state: 'ok' })
-
-const SHORT_WINDOW = {
-  five_hour: 'usage.shortWindow.five_hour',
-  seven_day: 'usage.shortWindow.seven_day',
-  seven_day_opus: 'usage.shortWindow.seven_day_opus',
-  seven_day_sonnet: 'usage.shortWindow.seven_day_sonnet',
-  monthly: 'usage.shortWindow.monthly',
-  annual: 'usage.shortWindow.annual',
-} as const
-
-const isShortWindow = (name: string): name is keyof typeof SHORT_WINDOW =>
-  Object.hasOwn(SHORT_WINDOW, name)
 
 /** The limit to warn about in the control row: a reached one first, then the fullest warning. */
 function warningLimit(limits: PlanLimit[]): PlanLimit | null {
@@ -352,7 +348,7 @@ export function ContextButton({
             className="kettu-tray-limit"
             data-level={LIMIT_METER[limitLevel(warning)]}
           >
-            {isShortWindow(warning.window) ? t(SHORT_WINDOW[warning.window]) : limitLabel(warning)}{' '}
+            {limitShort(warning)}{' '}
             {warning.usedPercent !== null && `${limitPercent(warning, limitView)}%`}
           </span>
         )}

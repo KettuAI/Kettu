@@ -82,11 +82,20 @@
     "shortWindow": {
       "five_hour": "5 小时",
       "seven_day": "7 天",
-      "seven_day_opus": "7 天 Opus",
-      "seven_day_sonnet": "7 天 Sonnet",
       "daily": "1 天",
       "monthly": "30 天",
-      "annual": "1 年"
+      "annual": "1 年",
+      "minutes": "{{count}} 分钟",
+      "hours": "{{count}} 小时",
+      "days": "{{count}} 天",
+      "overage": "额外",
+      "auto": "自动",
+      "other_models": "其他模型",
+      "on_demand": "按需",
+      "budget": "预算",
+      "tool_calls": "工具调用",
+      "tokens": "Token",
+      "usage": "用量"
     },
     "context": {
       "title": "上下文",

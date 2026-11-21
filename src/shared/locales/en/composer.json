@@ -82,11 +82,20 @@
     "shortWindow": {
       "five_hour": "5h",
       "seven_day": "7d",
-      "seven_day_opus": "7d Opus",
-      "seven_day_sonnet": "7d Sonnet",
       "daily": "1d",
       "monthly": "30d",
-      "annual": "1y"
+      "annual": "1y",
+      "minutes": "{{count}}m",
+      "hours": "{{count}}h",
+      "days": "{{count}}d",
+      "overage": "Extra",
+      "auto": "Auto",
+      "other_models": "Other models",
+      "on_demand": "On-demand",
+      "budget": "Budget",
+      "tool_calls": "Tool calls",
+      "tokens": "Tokens",
+      "usage": "Usage"
     },
     "context": {
       "title": "Context",

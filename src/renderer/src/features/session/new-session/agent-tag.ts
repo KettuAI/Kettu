@@ -5,7 +5,7 @@ import type { AgentStatus, PlanLimit, ProviderBalance } from '@shared/agent-host
 import { holdingLimit } from '@shared/plan-limits'
 import type { ConfigOption } from '@shared/thread'
 import { harnessProblem } from '@renderer/features/agents/harness-problem'
-import { limitLabel, limitPhrase, resetDay, resetTime } from '@renderer/lib/format'
+import { limitPhrase, limitShort, resetDay, resetTime } from '@renderer/lib/format'
 import { i18n } from '@renderer/lib/i18n'
 import { limitPercent, type LimitView } from '@renderer/lib/plan-limit'
 import { agentNeed } from './start-options'
@@ -24,48 +24,11 @@ const tag = (text: string, tone: LineTone, title: string | null): AgentTag => ({
   title,
 })
 
-// Names some windows go by besides the ones the interface knows.
-const WINDOW_ALIASES: Readonly<Record<string, string>> = {
-  rolling: 'five_hour',
-  weekly: 'seven_day',
-  '1_day': 'daily',
-}
-
-/**
- * A window under the names the interface knows: an OpenCode provider's `opencode:rolling` is its
- * 5-hour window.
- */
+/** A window without its OpenCode provider, whose models are the only ones it holds back. */
 function plain(limit: PlanLimit): PlanLimit {
-  const own = limit.window.slice(limit.window.indexOf(':') + 1)
-  const window = WINDOW_ALIASES[own] ?? own
-  if (window === limit.window) return limit
-  const label = limit.window.includes(':')
-    ? (limit.label.split(' · ').at(-1) ?? limit.label)
-    : limit.label
-  return { ...limit, window, label }
-}
-
-/** A window's short name for a tag: 5h, 7d, 30d, "Fable 7d". */
-function windowName(limit: PlanLimit): string {
-  const short = `composer:usage.shortWindow.${limit.window}`
-  if (i18n.exists(short)) return i18n.t(short as 'composer:usage.shortWindow.five_hour')
-  // A model's or a group's window names it in its label, and a group's name ends in "Models".
-  const named = (pattern: RegExp): string =>
-    (pattern.exec(limit.label)?.[1] ?? limitLabel(limit)).replace(/\s+models?$/i, '')
-  if (limit.window.startsWith('seven_day_')) {
-    return i18n.t('session:newSession.picker.tag.weeklyOf', { model: named(/^Weekly · (.+)$/) })
-  }
-  if (limit.window.startsWith('five_hour_')) {
-    return i18n.t('session:newSession.picker.tag.fiveHourOf', { model: named(/^5-hour · (.+)$/) })
-  }
-  const counted = /^(\d+)_(minute|hour|day)$/.exec(limit.window)
-  if (counted) {
-    const unit = { minute: 'minutes', hour: 'hours', day: 'days' }[counted[2]!]!
-    return i18n.t(`usage:limits.short.${unit}` as 'usage:limits.short.hours', {
-      count: Number(counted[1]),
-    })
-  }
-  return limitLabel(limit)
+  if (!limit.window.includes(':')) return limit
+  const label = limit.label.split(' · ').at(-1) ?? limit.label
+  return { ...limit, window: limit.window.slice(limit.window.indexOf(':') + 1), label }
 }
 
 /** The model's provider, which an OpenCode model value starts with: `deepseek/deepseek-v4-pro`. */
@@ -195,7 +158,7 @@ export function agentTag(
   const held = holdingLimit(limitsOf(status, options.limits, model), model, now)
   if (!held) return null
   const limit = plain(held.limit)
-  const window = windowName(limit)
+  const window = limitShort(limit)
   const phrase = limitPhrase(limit)
   if (held.reached) {
     const at = limit.resetsAt

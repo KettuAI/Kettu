@@ -277,19 +277,32 @@
   "planWindow": {
     "five_hour": "5-hour",
     "seven_day": "Weekly",
-    "seven_day_opus": "Weekly · Opus",
-    "seven_day_sonnet": "Weekly · Sonnet",
+    "daily": "Daily",
     "monthly": "Monthly",
     "annual": "Annual",
+    "minutes": "{{count}}-minute",
+    "hours": "{{count}}-hour",
+    "days": "{{count}}-day",
     "overage": "Extra usage",
-    "weeklyOf": "Weekly · {{model}}",
-    "fiveHourOf": "5-hour · {{model}}"
+    "auto": "Auto",
+    "other_models": "Other models",
+    "on_demand": "On-demand",
+    "budget": "Monthly budget",
+    "tool_calls": "Tool calls",
+    "tokens": "Tokens",
+    "usage": "Usage",
+    "scoped": "{{window}} · {{scope}}"
   },
   "planWindowInText": {
-    "seven_day_opus": "Opus weekly",
-    "seven_day_sonnet": "Sonnet weekly",
-    "weeklyOf": "{{model}} weekly",
-    "fiveHourOf": "{{model}} 5-hour"
+    "five_hour": "5-hour",
+    "seven_day": "weekly",
+    "daily": "daily",
+    "monthly": "monthly",
+    "annual": "annual",
+    "minutes": "{{count}}-minute",
+    "hours": "{{count}}-hour",
+    "days": "{{count}}-day",
+    "scoped": "{{scope}} {{window}}"
   },
   "agent": {
     "stoppedBeforeAnswer": "The agent stopped before it answered",
