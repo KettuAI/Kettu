@@ -18,6 +18,7 @@ function makeFormatters(locale: string) {
       hour: 'numeric',
       minute: '2-digit',
     }),
+    weekday: new Intl.DateTimeFormat(locale, { weekday: 'short' }),
     monthDay: new Intl.DateTimeFormat(locale, { month: 'short', day: 'numeric' }),
     monthDayClock: new Intl.DateTimeFormat(locale, {
       month: 'short',
@@ -87,13 +88,24 @@ export function mediumAgo(at: number, now = Date.now()): string {
   return ago(at, now) ?? format().monthDay.format(at)
 }
 
+/** Calendar days from `now` to a reset at `at`, rounded since a day across a DST change is not 24 hours. */
+function daysAhead(at: number, now: number): number {
+  const day = (t: number): number => new Date(t).setHours(0, 0, 0, 0)
+  return Math.round((day(at) - day(now)) / DAY)
+}
+
 /** When a limit resets: the clock time today, the weekday and time within six days, the date beyond. */
 export function resetTime(at: number, now = Date.now()): string {
-  const day = (t: number): number => new Date(t).setHours(0, 0, 0, 0)
-  // Rounded, since a day across a DST change is not 24 hours.
-  const days = Math.round((day(at) - day(now)) / DAY)
+  const days = daysAhead(at, now)
   if (days === 0) return format().clock.format(at)
   return days > 0 && days <= 6 ? format().weekdayClock.format(at) : format().monthDay.format(at)
+}
+
+/** `resetTime` for a tag that has little room: the weekday alone within six days. */
+export function resetDay(at: number, now = Date.now()): string {
+  const days = daysAhead(at, now)
+  if (days === 0) return format().clock.format(at)
+  return days > 0 && days <= 6 ? format().weekday.format(at) : format().monthDay.format(at)
 }
 
 export function fullTime(at: number): string {

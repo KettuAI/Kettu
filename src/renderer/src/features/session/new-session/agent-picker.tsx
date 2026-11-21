@@ -19,6 +19,7 @@ import {
 } from '@renderer/components/ui/combobox'
 import { InputGroupAddon } from '@renderer/components/ui/input-group'
 import { Skeleton } from '@renderer/components/ui/skeleton'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
 import { SettingsGlyph } from '@renderer/features/account/avatar'
 import { useHostLabel } from '@renderer/features/sidebar/host-label'
 import { useLimitView } from '@renderer/hooks/use-limit-view'
@@ -39,8 +40,10 @@ import { openAgentSettings } from '@renderer/stores/view'
 import { openHarnessPage } from '@renderer/features/agents/problem-fix'
 import { confirmCliUpdate } from '@renderer/features/updates/command-confirm-model'
 import { agentNeed, menuAgents } from './start-options'
-import { agentLine, type LineTone } from './picker'
+import { agentTag, type AgentTag } from './agent-tag'
+import type { LineTone } from './picker'
 import { refreshOnMenu } from './prepared'
+import { useStartModels } from './use-start-config'
 
 const LINE_TONE: Record<LineTone, string> = {
   muted: 'text-tertiary',
@@ -48,10 +51,26 @@ const LINE_TONE: Record<LineTone, string> = {
   danger: 'text-danger',
 }
 
+/** What stops an agent, at the end of its row; the whole sentence shows while the pointer rests on it. */
+function RowTag({ tag }: { tag: AgentTag }) {
+  const label = (
+    <span className={cn('shrink-0 pl-2 text-small whitespace-nowrap', LINE_TONE[tag.tone])}>
+      {tag.text}
+    </span>
+  )
+  if (!tag.title) return label
+  return (
+    <Tooltip>
+      <TooltipTrigger render={label} />
+      <TooltipContent side="top">{tag.title}</TooltipContent>
+    </Tooltip>
+  )
+}
+
 /**
  * New session's agent: a chip naming the chosen agent, and a menu of the agents it can start,
- * each with its account and plan use or what it needs, under one search.
- * Choosing one keeps the model the agent starts with; the model has a menu of its own.
+ * each a row with its mark and name and, only when something stops it, a short tag, under one
+ * search. Choosing one keeps the model the agent starts with; the model has a menu of its own.
  */
 export function AgentPicker({
   agentId,
@@ -77,6 +96,7 @@ export function AgentPicker({
   // This computer's agents are read after launch: until then the list is loading, not empty.
   const agentsRead = useAgentsStore((s) => hostId !== null || s.loaded)
   const ids = useMemo(() => statuses.map((s) => s.id), [statuses])
+  const startModels = useStartModels(hostId, ids)
   const byId = useMemo(() => new Map(statuses.map((s) => [s.id, s])), [statuses])
   const { contains } = useComboboxFilter()
   const [open, setOpen] = useState(false)
@@ -176,7 +196,7 @@ export function AgentPicker({
           {!agentsRead ? (
             <div className="flex flex-col gap-1 px-1.5 pt-0.5 pb-1.5" aria-hidden>
               {[0, 1].map((i) => (
-                <Skeleton key={i} className="h-11 w-full rounded-xl" />
+                <Skeleton key={i} className="h-8 w-full rounded-xl" />
               ))}
             </div>
           ) : statuses.length === 0 ? (
@@ -190,25 +210,31 @@ export function AgentPicker({
               {(id: AgentId) => {
                 const status = byId.get(id)
                 if (!status) return null
-                const line = agentLine(status, now, newestLimits(readings, status), limitView)
+                const tag = agentTag(status, {
+                  now,
+                  view: limitView,
+                  limits: newestLimits(readings, status),
+                  model: startModels.get(id),
+                })
                 return (
                   <ComboboxItem
                     key={id}
                     value={id}
-                    className="group/agent h-11 gap-2.5 rounded-xl py-1 pr-2 pl-2 data-highlighted:bg-hover [&>span.absolute]:hidden"
+                    aria-label={
+                      tag
+                        ? t('newSession.picker.rowState', {
+                            name: status.name,
+                            state: tag.title ?? tag.text,
+                          })
+                        : undefined
+                    }
+                    className="group/agent h-8 gap-2.5 rounded-xl py-1 pr-2 pl-2 data-highlighted:bg-hover [&>span.absolute]:hidden"
                   >
                     <AgentMark agent={id} size={16} className="shrink-0" />
-                    <span className="flex min-w-0 flex-1 flex-col gap-px">
-                      <span className="truncate text-menu text-primary">{status.name}</span>
-                      {line && (
-                        <span
-                          className={cn('truncate text-small', LINE_TONE[line.tone])}
-                          title={line.title ?? line.text}
-                        >
-                          {line.text}
-                        </span>
-                      )}
+                    <span className="min-w-0 flex-1 truncate text-menu text-primary">
+                      {status.name}
                     </span>
+                    {tag && <RowTag tag={tag} />}
                     {id === agentId && (
                       <Glyph icon={Tick02Icon} size={15} className="shrink-0 text-primary" />
                     )}
