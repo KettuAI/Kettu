@@ -2,7 +2,6 @@
 // back or reminded, and the facts it picks from. Agents read these, so they are English whatever
 // the user's language.
 
-import path from 'node:path'
 import { stepIndex, type WorkflowOutcome, type WorkflowStep } from '@shared/workflow'
 import { SERVICE_NAME } from '../service-name'
 import { stepOf } from './graph'
@@ -195,18 +194,31 @@ export function notePrompt(text: string): string {
 
 /**
  * Kettu's message to the agent of the conversation a task started from, when the user asks to
- * publish the workflow it wrote for that task: generalize it in its folder, then publish.
+ * publish the workflow it wrote for that task: generalize it, then publish it by handing the text
+ * to the Marketplace tools, so no file of the agent's own needs a permission. `general` says the
+ * text is the general version the agent made when the user asked before.
  */
-export function publishWorkflowPrompt(task: { id: string; title: string }, folder: string): string {
+export function publishWorkflowPrompt(
+  task: { id: string; title: string },
+  workflow: string,
+  general: boolean,
+): string {
+  const longest = Math.max(0, ...(workflow.match(/`+/g) ?? []).map((run) => run.length))
+  const fence = '`'.repeat(Math.max(3, longest + 1))
   return (
     `The user wants to publish the workflow you wrote for the task "${task.title}" to the Kettu ` +
-    `Marketplace; the task ran on it and ended done. Kettu copied it, as the task ran it, to ` +
-    `${path.join(folder, 'workflow.yaml')}. Make it a general version first, in that file: take ` +
-    `out this project's names and paths and the request's own text, give it a name and ` +
-    `description that fit any similar requirement, and write each step's prompt for one. Keep its ` +
-    `steps and arrows unless they only fit this project. Then check the folder with ` +
-    `marketplace_check and publish it with marketplace_publish, passing from_task "${task.id}" ` +
-    `and, in changes, one sentence on what you took out or changed. The user confirms the publish ` +
-    `in a card.`
+    `Marketplace; the task ran on it and ended done. ` +
+    (general
+      ? `This is the general version you made of it when the user asked before:`
+      : `This is its workflow.yaml as the task ran it:`) +
+    `\n\n${fence}yaml\n${workflow.endsWith('\n') ? workflow : `${workflow}\n`}${fence}\n\n` +
+    `Make it a general version: take out this project's names and paths and the request's own ` +
+    `text, give it a name and description that fit any similar requirement, and write each ` +
+    `step's prompt for one. Keep its steps and arrows unless they only fit this project. Write ` +
+    `no file: Kettu keeps the workflow for the task. Check it with marketplace_check, passing ` +
+    `the whole general workflow.yaml as workflow and from_task "${task.id}", and fix what it ` +
+    `finds. Then publish it with marketplace_publish, passing the same workflow and from_task ` +
+    `and, in changes, one sentence on what you took out or changed. The user confirms the ` +
+    `publish in a card.`
   )
 }
