@@ -752,14 +752,6 @@
       "not-yet-supported": "Kettu does not read this agent's plan usage yet.",
       "console-managed": "With this sign-in, its usage is in Google AI Studio or Google Cloud."
     },
-    "spend": {
-      "group": "Spend",
-      "month": "This month",
-      "description": "{{name}} doesn’t report plan limits for API keys. Kettu counts what it sent.",
-      "descriptionProviders": "What Kettu sent through this agent this month, by its own record.",
-      "descriptionAccount": "This account is billed by use, with no plan limits. Kettu counts what it sent.",
-      "unpriced": "Not priced"
-    },
     "configuration": "Configuration",
     "config": {
       "folder": "Folder",

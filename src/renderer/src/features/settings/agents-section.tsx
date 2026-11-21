@@ -105,7 +105,6 @@ import {
   MovedAccountsNotice,
   ProblemFixButton,
   SignInNotice,
-  SpendGroup,
   UsageGroup,
   WithCode,
 } from './agent-parts'
@@ -1123,11 +1122,12 @@ function AgentPageBody({ status }: { status: AgentStatus }) {
           />
         )}
 
-        {status.disabled ? null : providerMode ? (
-          <SpendGroup status={status} providers />
-        ) : status.account?.kind === 'api_key' || dshAccount ? (
-          <SpendGroup status={status} account={dshAccount} />
-        ) : (
+        {/* Spending is a usage statistic, shown on the Usage page; what is billed by use, as an
+            API key, a provider or a DeepSeek account, has no plan limits to show here. */}
+        {status.disabled ||
+        providerMode ||
+        status.account?.kind === 'api_key' ||
+        dshAccount ? null : (
           <UsageGroup status={status} reading={reading} running={running} />
         )}
 
