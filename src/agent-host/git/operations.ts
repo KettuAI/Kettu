@@ -9,7 +9,7 @@ import {
   type PullRequest,
   type RepositoryVisibility,
 } from '@shared/git'
-import { describeFailure, type Exec, type ExecResult } from './exec'
+import { failureText, type Exec, type ExecResult } from './exec'
 
 export const SYNC_TIMEOUT_MS = 60_000
 export const PUBLISH_TIMEOUT_MS = 120_000
@@ -40,7 +40,7 @@ async function run(
     const command = args.find((arg) => !arg.startsWith('-'))
     throw new Error(`${file} ${command} timed out after ${timeoutMs / 1000} s\n${log}`.trim())
   }
-  if (result.failure !== null || result.code !== 0) throw new Error(log || describeFailure(result))
+  if (result.failure !== null || result.code !== 0) throw new Error(log || failureText(result))
   return log
 }
 

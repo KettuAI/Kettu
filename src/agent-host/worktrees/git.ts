@@ -7,7 +7,14 @@ import { access, constants, lstat, mkdir, realpath, stat } from 'node:fs/promise
 import path from 'node:path'
 import type { Platform } from '@shared/platform'
 import { HostError, invalidParams, notFound } from '../errors'
-import { describeFailure, GIT_TIMEOUT_MS, type Exec, type ExecResult } from '../git/exec'
+import {
+  commandFailureText,
+  failureText,
+  GIT_TIMEOUT_MS,
+  type Exec,
+  type ExecResult,
+} from '../git/exec'
+import { t } from '../i18n'
 import { canonicalizePath, folderName, pathKey, samePath } from '../paths'
 import { processControl, type ProcessControl } from '../process-tree'
 import type { WorktreeRecord } from '../storage'
@@ -44,7 +51,7 @@ export interface WorktreeGitDeps {
 }
 
 function gitError(label: string, result: ExecResult): HostError {
-  return new HostError('git_error', `${label}: ${describeFailure(result)}`)
+  return new HostError('git_error', commandFailureText(label, result))
 }
 
 function ok(result: ExecResult): boolean {
@@ -397,8 +404,12 @@ export function createWorktreeGit(deps: WorktreeGitDeps): WorktreeGit {
       `refs/heads/${record.branch}`,
       state.head,
     ])
-    if (!ok(ref))
-      throw new HostError('conflict', `Could not delete ${record.branch}: ${describeFailure(ref)}`)
+    if (!ok(ref)) {
+      throw new HostError(
+        'conflict',
+        t('worktree.branchDeleteFailed', { branch: record.branch, reason: failureText(ref) }),
+      )
+    }
     return { branchDeleted: true }
   }
 

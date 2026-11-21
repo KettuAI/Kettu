@@ -24,7 +24,7 @@ import { createCoalescer } from './coalesce'
 import { readCommitContext } from './commit-context'
 import { readChanges, readCommitDetails, readFileDiff, readIncoming } from './details'
 import { canChangeRepository, computeGitEvents, listNewCommits } from './events'
-import { CommandError, createExec, describeFailure, FETCH_TIMEOUT_MS, type Exec } from './exec'
+import { CommandError, createExec, failureText, FETCH_TIMEOUT_MS, type Exec } from './exec'
 import {
   listBranchPullRequests,
   probeTools,
@@ -153,6 +153,7 @@ function sameJson(a: unknown, b: unknown): boolean {
 }
 
 function messageOf(error: unknown): string {
+  if (error instanceof CommandError) return error.log
   return error instanceof Error ? error.message : String(error)
 }
 
@@ -505,12 +506,12 @@ export function createGitService(
   function noteGhFailure(
     state: ProjectState,
     what: string,
-    outcome: { ok: false; reason: 'not-installed' | 'failed'; message: string },
+    outcome: { ok: false; reason: 'not-installed' | 'failed'; log: string },
   ): void {
     if (outcome.reason === 'not-installed' && currentTools?.gh.state === 'ready') {
       setTools({ ...currentTools, gh: { state: 'not-installed', version: null, account: null } })
     }
-    logChange(state, `gh ${what}`, 'warn', `gh ${what} failed: ${outcome.message}`)
+    logChange(state, `gh ${what}`, 'warn', `gh ${what} failed: ${outcome.log}`)
   }
 
   function applyCurrentPullRequest(
@@ -667,7 +668,7 @@ export function createGitService(
       throw new Error(
         result.failure === 'timeout'
           ? `git fetch timed out after ${FETCH_TIMEOUT_MS / 1000} s`
-          : result.stderr.trim() || describeFailure(result),
+          : result.stderr.trim() || failureText(result),
       )
     }
     return { status: (await requestRefresh(state)).status, log: logOf(result) }

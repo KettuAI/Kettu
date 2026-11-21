@@ -379,7 +379,21 @@
     "otherName": "此分支跟踪的是名称不同的 {{upstream}}，请在终端中推送",
     "unknownRemote": "此仓库有多个远程仓库，且没有为此分支指定其中一个",
     "commitMessageNoAgent": "没有可用来写提交信息的智能体，请先在设置里添加或开启一个",
-    "commitMessageFailed": "{{agent}} 没能写出提交信息：{{reason}}"
+    "commitMessageFailed": "{{agent}} 没能写出提交信息：{{reason}}",
+    "failure": {
+      "timeout": "超时",
+      "notFound": "找不到命令",
+      "cwdMissing": "命令运行的文件夹不存在",
+      "exitCode": "已退出，退出码 {{code}}",
+      "command": "{{command}}：{{detail}}",
+      "ghNotJson": "gh 输出的内容不是 JSON"
+    }
+  },
+  "files": {
+    "projectMissing": "项目文件夹不存在"
+  },
+  "worktree": {
+    "branchDeleteFailed": "无法删除分支 {{branch}}：{{reason}}"
   },
   "permission": {
     "allowOnce": "允许一次",
