@@ -12,7 +12,7 @@ import {
 import { DeviceAccessStore } from './devices/access'
 import os from 'node:os'
 import path from 'node:path'
-import { cp, mkdir, rename, rm, stat } from 'node:fs/promises'
+import { cp, mkdir, readFile, rename, rm, stat } from 'node:fs/promises'
 import type {
   AgentOptions,
   DiagnosticsBundle,
@@ -233,7 +233,6 @@ import {
   type JsonFile,
   type RegistryListingFile,
   type HarnessManifestFile,
-  writeFileAtomic,
 } from './storage'
 import { GitHubStar, gitHubStarFile } from './github-star'
 import { digestEntries } from './threads/digest'
@@ -617,6 +616,14 @@ export class AgentHost {
         if (!draft) return null
         const text = await this.workflowSuggestions.draftText(draft)
         return { title: this.tasks.get(taskId).title, text }
+      },
+      taskWorkflowFolder: (taskId) => {
+        try {
+          return this.tasks.writtenDraft(taskId) ? this.taskPublishFolder(taskId) : null
+        } catch (error) {
+          if (error instanceof HostError && error.code === 'not_found') return null
+          throw error
+        }
       },
       home: options.homeDir ?? os.homedir(),
     })
@@ -1629,9 +1636,15 @@ export class AgentHost {
     return this.workflowSuggestions.saveDraft(draft)
   }
 
+  /** Where a task's workflow is kept while it is published, as the Marketplace tools write it. */
+  private taskPublishFolder(taskId: string): string {
+    return path.join(this.options.userDataPath, 'workflows-to-publish', taskId)
+  }
+
   /**
-   * Publish to the Marketplace: the task's workflow goes into a folder of its own, and the agent of
-   * the conversation it started from is asked to make it general there and publish it.
+   * Publish to the Marketplace: the agent of the conversation the task started from gets the
+   * task's workflow and is asked to make it general and publish it, handing the text back to the
+   * Marketplace tools, so it writes no file of its own.
    */
   private async publishTaskWorkflow(taskId: string): Promise<void> {
     const draft = this.tasks.writtenDraft(taskId)
@@ -1639,14 +1652,17 @@ export class AgentHost {
     const view = this.tasks.get(taskId)
     const sessionId = view.from?.sessionId
     if (!sessionId || !this.sessions.has(sessionId)) throw notFound(t('tasks.noOrigin'))
-    const folder = path.join(this.options.userDataPath, 'workflows-to-publish', taskId)
-    await mkdir(folder, { recursive: true })
-    const file = path.join(folder, 'workflow.yaml')
     // The agent's general version is kept when the user asks again.
-    if (!(await stat(file).catch(() => null))) {
-      await writeFileAtomic(file, await this.workflowSuggestions.draftText(draft))
-    }
-    await this.sessions.sendCardAnswer(sessionId, publishWorkflowPrompt(view, folder))
+    const kept = await readFile(
+      path.join(this.taskPublishFolder(taskId), 'workflow.yaml'),
+      'utf8',
+    ).catch(() => null)
+    const own = await this.workflowSuggestions.draftText(draft)
+    const general = kept !== null && kept !== own
+    await this.sessions.sendCardAnswer(
+      sessionId,
+      publishWorkflowPrompt(view, general ? kept : own, general),
+    )
     const entry = await this.sessions.taskDelivery(sessionId, taskId)
     if (entry) this.sessions.taskPublishAsked(sessionId, entry.id)
   }
