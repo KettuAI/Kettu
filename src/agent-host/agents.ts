@@ -4823,8 +4823,8 @@ export class AgentManager {
 
   async providerAction(input: AgentProviderAction): Promise<void> {
     const slot = this.registeredSlot(input.agentId)
-    if (slot.def.id !== 'opencode') throw invalidParams('This agent has no provider accounts')
-    if (slot.providerActionRun) throw new HostError('busy', 'A provider account is being changed')
+    if (slot.def.id !== 'opencode') throw invalidParams(t('agent.noProviders'))
+    if (slot.providerActionRun) throw new HostError('busy', t('agent.providerBusy'))
     const run = async (): Promise<void> => {
       await this.detectAll()
       const detection = slot.h.detection

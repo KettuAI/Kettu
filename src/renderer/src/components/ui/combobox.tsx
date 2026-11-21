@@ -138,7 +138,7 @@ function ComboboxContent({
         alignOffset={alignOffset}
         anchor={anchor}
         collisionPadding={windowFrame === 'none' ? undefined : CLEAR_OF_CONTROLS}
-        className="isolate z-50 outline-none"
+        className="isolate z-(--layer-menu) outline-none"
       >
         <ComboboxPrimitive.Popup
           data-slot="combobox-content"

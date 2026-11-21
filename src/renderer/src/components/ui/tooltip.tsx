@@ -53,7 +53,7 @@ function TooltipContent({
         side={side}
         sideOffset={sideOffset}
         collisionPadding={hasBand ? CLEAR_OF_BAND : undefined}
-        className="isolate z-50"
+        className="isolate z-(--layer-menu)"
       >
         <TooltipPrimitive.Popup
           data-slot="tooltip-content"

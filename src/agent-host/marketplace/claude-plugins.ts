@@ -23,6 +23,7 @@ import {
   type ProgramRun,
 } from '../adapter-install'
 import type { Env } from '../find-command'
+import { t } from '../i18n'
 import type { Platform } from '@shared/platform'
 
 export const OFFICIAL_MARKETPLACE = 'claude-plugins-official'
@@ -497,7 +498,7 @@ export async function addMarketplace(cli: ClaudeCli, source: string): Promise<Pl
     after.find((marketplace) => marketplace.name === said) ??
     after.find((marketplace) => !before.has(marketplace.name)) ??
     after.find((marketplace) => marketplace.source === source)
-  if (!added) throw new Error('Claude Code did not list the marketplace it added')
+  if (!added) throw new Error(t('marketPlugins.marketplaceNotListed', { agent: 'Claude Code' }))
   return {
     harness: 'claude-code',
     agentId: cli.agentId,

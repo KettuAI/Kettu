@@ -18,6 +18,7 @@ import type {
   PluginReadResponse,
   SkillsListResponse,
 } from '../codex/protocol'
+import { t } from '../i18n'
 
 /** A request of the agent's app-server. */
 export type CodexRequest = <T>(method: string, params?: unknown) => Promise<T>
@@ -167,7 +168,10 @@ export async function installLocalCodexPlugin(
   await request('plugin/install', { marketplacePath: file, pluginName: name })
   const list = await listCodexPlugins(request, agentId)
   const installed = list.installed.find((plugin) => plugin.id === `${name}@${KETTU_PLUGINS}`)
-  if (!installed) throw new Error(`Codex did not list ${name}@${KETTU_PLUGINS} as installed`)
+  if (!installed)
+    throw new Error(
+      t('marketPlugins.notListedInstalled', { agent: 'Codex', id: `${name}@${KETTU_PLUGINS}` }),
+    )
   return installed
 }
 

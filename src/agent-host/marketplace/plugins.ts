@@ -20,6 +20,7 @@ import { harnessOf, type AgentId } from '@shared/thread'
 import type { ProgramOptions, ProgramRun } from '../adapter-install'
 import { HostError } from '../errors'
 import type { Env } from '../find-command'
+import { t } from '../i18n'
 import { JsonFile, type LogFn, type Migration } from '../storage'
 import * as claude from './claude-plugins'
 import * as codex from './codex-plugins'
@@ -298,7 +299,7 @@ export class MarketPluginsService {
       await codex.installCodexPlugin(request, id, at)
       const list = await codex.listCodexPlugins(request, agentId)
       const installed = list.installed.find((plugin) => plugin.id === id)
-      if (!installed) throw new Error(`Codex did not list ${id} as installed`)
+      if (!installed) throw new Error(t('marketPlugins.notListedInstalled', { agent: 'Codex', id }))
       return installed
     })
   }
@@ -494,7 +495,8 @@ export class MarketPluginsService {
 
   private async cli(agentId: AgentId): Promise<claude.ClaudeCli> {
     const found = await this.deps.program(agentId)
-    if (!found) throw new HostError('agent_unavailable', 'Claude Code is not installed')
+    if (!found)
+      throw new HostError('agent_unavailable', t('agent.notInstalled', { agent: 'Claude Code' }))
     return {
       agentId,
       program: found.program,
@@ -555,7 +557,8 @@ export class MarketPluginsService {
   /** The marketplace file Codex reads a plugin from, which its list gave. */
   private codexPath(entry: AgentPlugins, id: string): string {
     const at = entry.paths[id]
-    if (!at) throw new HostError('not_found', `Codex offers no plugin ${id}`)
+    if (!at)
+      throw new HostError('not_found', t('marketPlugins.noSuchPlugin', { agent: 'Codex', id }))
     return at
   }
 
