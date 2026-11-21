@@ -552,7 +552,7 @@ function StepHover({
         align="start"
         sideOffset={10}
         alignOffset={-4}
-        className="w-[272px] px-3.5 py-3"
+        className="w-[340px] p-0"
       >
         <SessionCard
           summary={summary}
