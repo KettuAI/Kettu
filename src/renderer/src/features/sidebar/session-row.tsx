@@ -49,7 +49,7 @@ import { isReturning, rowVariants } from './row-exit'
 import { rowStatus } from './row-status'
 import { cacheGone, useGoneLabel, useSessionCache } from './session-cache'
 import { SessionCard } from './session-card'
-import { RowEnd, SessionIndicator } from './session-indicator'
+import { RowBody, RowEnd, SessionIndicator } from './session-indicator'
 import {
   DeleteSessionDialog,
   MultiSessionMenuItems,
@@ -257,38 +257,40 @@ export const SessionRow = memo(function SessionRow({
       style={{ paddingLeft: pad }}
     >
       {caret}
-      {mark}
-      <span className="ui-as-side__text" dir="auto">
-        {title}
-      </span>
-      {node.subagents.length > 0 && !away && (
-        <SubagentBadge
-          parent={summary}
-          subagents={node.subagents}
-          onEnter={() => setCardOpen(false)}
-        />
-      )}
-      {summary.worktree && (
-        <WorktreeRowMark worktree={summary.worktree} onEnter={() => setCardOpen(false)} />
-      )}
-      <PrBadge summary={summary} onEnter={() => setCardOpen(false)} />
-      {hasChildren && !expanded && (
-        <span
-          aria-label={t('row.subSessions', { count: children.length })}
-          className="shrink-0 text-[12px] font-normal text-(--faint) tabular-nums"
-        >
-          {children.length}
+      <RowBody>
+        {mark}
+        <span className="ui-as-side__text" dir="auto">
+          {title}
         </span>
-      )}
-      {gone && <span className="sr-only">{gone}</span>}
-      <RowEnd>
-        {showHost && hostName && (
-          <span className="max-w-24 truncate text-[12px] font-normal text-(--faint)">
-            {hostName}
+        {node.subagents.length > 0 && !away && (
+          <SubagentBadge
+            parent={summary}
+            subagents={node.subagents}
+            onEnter={() => setCardOpen(false)}
+          />
+        )}
+        {summary.worktree && (
+          <WorktreeRowMark worktree={summary.worktree} onEnter={() => setCardOpen(false)} />
+        )}
+        <PrBadge summary={summary} onEnter={() => setCardOpen(false)} />
+        {hasChildren && !expanded && (
+          <span
+            aria-label={t('row.subSessions', { count: children.length })}
+            className="shrink-0 text-[12px] font-normal text-(--faint) tabular-nums"
+          >
+            {children.length}
           </span>
         )}
-        {!away && <SessionIndicator status={status} expiring={expiring} />}
-      </RowEnd>
+        {gone && <span className="sr-only">{gone}</span>}
+        <RowEnd>
+          {showHost && hostName && (
+            <span className="max-w-24 truncate text-[12px] font-normal text-(--faint)">
+              {hostName}
+            </span>
+          )}
+          {!away && <SessionIndicator status={status} expiring={expiring} />}
+        </RowEnd>
+      </RowBody>
     </button>
   )
 
@@ -300,6 +302,7 @@ export const SessionRow = memo(function SessionRow({
       onRename={rename.menu.onRename}
       onNewSubSession={rename.menu.onLeave}
       onDelete={() => setDeleting(true)}
+      subagents={away ? undefined : node.subagents}
     />
   )
 

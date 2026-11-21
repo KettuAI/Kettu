@@ -437,11 +437,16 @@
   ) {
   color: revert-layer;
 }
-/* A row with tools always keeps their room at its end, so they show without moving the title or
-   the badges before them: two 24 px tools 2 px apart, 4 px from the edge and 2 px clear of what
-   comes before, less the row's own 6 px padding and 8 px gap. The row's status and host sit in
-   that room and are gone in the frame the tools show; they fade back in when the row is left.
-   A row without tools keeps its status. Touch rows keep App Shell's layout. */
+/* A session's or task's row keeps no room for its tools, More and Pin: the title, badges, status and
+   host run to its end. On hover or focus the tools sit over that end, 54 px wide, and what is under
+   them fades out through a mask on the row's body, since the sidebar's fill is translucent and
+   cannot cover it; nothing moves, and the mask follows the tools' own fade-in. A project's row
+   keeps the room of its tools, which fills as they show. Touch rows keep App Shell's layout. */
+@property --kettu-row-cover {
+  syntax: '<number>';
+  inherits: false;
+  initial-value: 0;
+}
 @media (hover: hover) {
   .ui-as.ui-as .ui-as-chat-row:is(:hover, :has(:focus-visible), [data-menu]) .ui-as-chat-row__link,
   .ui-as.ui-as
@@ -449,11 +454,31 @@
     > .ui-as-chat-folder {
     padding-right: 6px;
   }
-  :is(.ui-as-chat-row, .ui-as-chat-folder-row):has(> .ui-as-chat-row__tools > *) .kettu-row-end {
+  .ui-as-chat-folder-row:has(> .ui-as-chat-row__tools > *) .kettu-row-end {
     min-width: 42px;
   }
+  .ui-as-chat-row:has(> .ui-as-chat-row__tools > *) .kettu-row-body {
+    transition: --kettu-row-cover var(--duration-fast) ease;
+  }
+  .ui-as-chat-row:has(> .ui-as-chat-row__tools > *):is(:hover, :has(:focus-visible), [data-menu])
+    .kettu-row-body {
+    --kettu-row-cover: 1;
+    mask-image: linear-gradient(
+      to right,
+      black calc(100% - 66px),
+      color-mix(in srgb, black calc((1 - var(--kettu-row-cover)) * 100%), transparent)
+        calc(100% - 50px)
+    );
+  }
+  /* The tools go in the frame the row is left, so no tool shows over the title coming back. */
+  .ui-as-chat-row > .ui-as-chat-row__tools {
+    transition: none;
+  }
+  .ui-as-chat-row:is(:hover, :has(:focus-visible), [data-menu]) > .ui-as-chat-row__tools {
+    transition: opacity var(--duration-fast) ease;
+  }
 }
-:is(.ui-as-chat-row, .ui-as-chat-folder-row):has(> .ui-as-chat-row__tools > *):is(
+.ui-as-chat-folder-row:has(> .ui-as-chat-row__tools > *):is(
     :hover,
     :has(:focus-visible),
     [data-menu]

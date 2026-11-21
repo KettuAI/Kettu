@@ -75,8 +75,20 @@ export function SessionIndicator({
 }
 
 /**
- * The end of a row with tools: its host and status, in the room the row always keeps for the
- * tools, so they show in its place without moving what comes before.
+ * What a row shows after its caret. Where the row's tools show over its end, this fades out
+ * under them, so the title and badges keep their places (styles/affect.css).
+ */
+export function RowBody({ children }: { children: ReactNode }) {
+  return (
+    <span className="kettu-row-body flex min-w-0 flex-1 items-center gap-2 self-stretch">
+      {children}
+    </span>
+  )
+}
+
+/**
+ * The end of a row: its host and status. A project's row keeps the room of its tools here, so they
+ * show in its place without moving what comes before.
  */
 export function RowEnd({ children }: { children: ReactNode }) {
   return (

@@ -1,4 +1,4 @@
-import { Alert02Icon, BotIcon, Tick02Icon } from '@hugeicons/core-free-icons'
+import { BotIcon } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
 import type { SessionSummary } from '@shared/agent-host'
 import {
@@ -18,7 +18,8 @@ import { sessionTitle } from '@renderer/stores/sessions'
 import { setShowFinishedSubagents, useViewStore } from '@renderer/stores/view'
 import { SessionMenuItems } from './session-menu'
 import { runSessionMenuAccelerator } from './session-menu-model'
-import { listedSubagents } from './subagents'
+import { SubagentStatus } from './subagent-status'
+import { listedSubagents, subagentFailed } from './subagents'
 
 const nothing = () => {}
 
@@ -98,8 +99,7 @@ function SubagentItem({ parent, child }: { parent: SessionSummary; child: Sessio
   const { t } = useTranslation('sidebar')
   const progress = useSubagentProgress(child)
   const running = subagentRunning(child)
-  const waiting = child.permissionCount > 0
-  const failed = child.attention === 'error' || child.status === 'failed'
+  const failed = subagentFailed(child)
   const elapsed = progress.elapsedMs === null ? null : duration(progress.elapsedMs)
   const meta = running
     ? [progress.tools === null ? null : t('subagents.tools', { count: progress.tools }), elapsed]
@@ -128,28 +128,7 @@ function SubagentItem({ parent, child }: { parent: SessionSummary; child: Sessio
             {meta.filter(Boolean).join(' · ')}
           </span>
         </span>
-        <span className="grid w-4 shrink-0 place-items-center">
-          {waiting ? (
-            <span
-              role="img"
-              aria-label={t('indicator.waiting', { count: child.permissionCount })}
-              className="size-2 rounded-full bg-attention-dot shadow-[0_0_0_3px_var(--attention-halo)]"
-            />
-          ) : failed ? (
-            <span role="img" aria-label={t('indicator.error')} className="grid text-danger">
-              <Glyph icon={Alert02Icon} size={14} />
-            </span>
-          ) : running ? (
-            <RingSpinner
-              aria-label={t('indicator.running')}
-              className="size-[11.5px] border-[1.6px]"
-            />
-          ) : (
-            <span role="img" aria-label={t('subagents.done')} className="grid text-success">
-              <Glyph icon={Tick02Icon} size={12} />
-            </span>
-          )}
-        </span>
+        <SubagentStatus child={child} />
       </ContextMenuTrigger>
       <ContextMenuContent onKeyDown={(event) => runSessionMenuAccelerator(event, isMac)}>
         <SessionMenuItems summary={child} onNewSubSession={nothing} onDelete={nothing} />

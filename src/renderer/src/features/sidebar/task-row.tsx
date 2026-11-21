@@ -54,7 +54,7 @@ import { useRenameHints } from './rename-scope'
 import { isReturning, rowVariants } from './row-exit'
 import { SessionCard } from './session-card'
 import { useSessionCache } from './session-cache'
-import { RowEnd, SessionIndicator } from './session-indicator'
+import { RowBody, RowEnd, SessionIndicator } from './session-indicator'
 import { sessionPullRequests } from './session-prs'
 import { INDENT_PAD, NESTED_STEP, ROW_PAD, TreeLine } from './session-row'
 import { PullRequestsBadge } from './pr-badge'
@@ -197,27 +197,29 @@ export const TaskRow = memo(function TaskRow({
       style={{ paddingLeft: base }}
     >
       {caret}
-      {mark}
-      <span className="ui-as-side__text" dir="auto">
-        {task.title}
-      </span>
-      {prs.length > 0 && <PullRequestsBadge prs={prs} onEnter={() => setCardOpen(false)} />}
-      {progress && (
-        <span
-          aria-label={t('row.stepOf', progress)}
-          className="shrink-0 text-[12px] font-normal text-(--faint) tabular-nums"
-        >
-          {t('progress', progress)}
+      <RowBody>
+        {mark}
+        <span className="ui-as-side__text" dir="auto">
+          {task.title}
         </span>
-      )}
-      <RowEnd>
-        {showHost && hostName && (
-          <span className="max-w-24 truncate text-[12px] font-normal text-(--faint)">
-            {hostName}
+        {prs.length > 0 && <PullRequestsBadge prs={prs} onEnter={() => setCardOpen(false)} />}
+        {progress && (
+          <span
+            aria-label={t('row.stepOf', progress)}
+            className="shrink-0 text-[12px] font-normal text-(--faint) tabular-nums"
+          >
+            {t('progress', progress)}
           </span>
         )}
-        {!away && <SessionIndicator status={status} expiring={null} />}
-      </RowEnd>
+        <RowEnd>
+          {showHost && hostName && (
+            <span className="max-w-24 truncate text-[12px] font-normal text-(--faint)">
+              {hostName}
+            </span>
+          )}
+          {!away && <SessionIndicator status={status} expiring={null} />}
+        </RowEnd>
+      </RowBody>
     </button>
   )
 

@@ -141,6 +141,7 @@
     "rename": "重命名…",
     "renameTitle": "重命名会话",
     "newSubSession": "新建子会话",
+    "subagents": "子智能体",
     "delete": "删除",
     "deleteMenu": "删除…",
     "deleteTitle": "删除“{{title}}”？",
