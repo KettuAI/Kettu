@@ -4551,8 +4551,7 @@ export class SessionManager {
       const inherited = this.recordOf(params.parentId).worktree
       if (inherited) worktree = { ...inherited }
     } else if (params.worktree !== undefined) {
-      const manager = this.deps.worktrees
-      if (!manager || scratch.contains(projectPath)) {
+      if (scratch.contains(projectPath)) {
         throw invalidParams('A worktree needs a project in a Git repository')
       }
       const request: Parameters<WorktreeManager['create']>[1] = {
@@ -4560,11 +4559,8 @@ export class SessionManager {
         ...(params.worktree.branch === undefined ? {} : { branch: params.worktree.branch }),
         text: (prompt && fallbackTitle(prompt)) ?? '',
       }
-      worktree = await manager.create(projectPath, request)
+      worktree = await this.createWorktree(projectPath, request, params, prompt ?? null)
       newWorktree = true
-      if (prompt && !request.branch?.trim()) {
-        this.nameBranch(params.agentId, projectPath, worktree, prompt, request, params.options)
-      }
     }
     const now = this.now()
     const record: SessionRecord = {
@@ -4632,6 +4628,23 @@ export class SessionManager {
       }
     }
     return this.summary(live.id)
+  }
+
+  /** Names the task's branch before it is saved or any step uses it. */
+  async createTaskWorktree(
+    projectPath: string,
+    request: Parameters<WorktreeManager['create']>[1],
+    first: { agentId: AgentId; options: Record<string, string | boolean> },
+  ): Promise<WorktreeRecord> {
+    const message: UserContent[] = [{ type: 'text', text: request.text }]
+    const worktree = await this.createWorktree(
+      projectPath,
+      { ...request, text: fallbackTitle(message) ?? '' },
+      first,
+      message,
+    )
+    await this.finishBranchName(projectPath, worktree)
+    return worktree
   }
 
   /**
@@ -7799,14 +7812,7 @@ export class SessionManager {
       }
       const writer =
         target.agentId === agentId ? runtime : await this.deps.agents.ensureReady(target.agentId)
-      // The reports folder holds every hidden session, made once for the first of them.
-      await mkdir(this.deps.reportsDir, { recursive: true })
-      const title = await writeSessionTitle(writer, {
-        dir: this.deps.reportsDir,
-        model: target.model,
-        message,
-        log: (line) => this.deps.diagnostics.log('warn', line),
-      })
+      const title = await this.askTitle(writer, target.model, message)
       this.applyWrittenTitle(live, title)
     } catch (error) {
       live.titleFailedAt = this.now()
@@ -7817,6 +7823,48 @@ export class SessionManager {
     } finally {
       live.titleWriting = false
     }
+  }
+
+  /** Uses the same title writer for a requirement and falls back to its source session. */
+  async titleTask(sessionId: string, text: string): Promise<string | null> {
+    const live = this.live.get(sessionId)
+    const source = live?.record ?? this.records.get(sessionId)
+    const message: UserContent[] = [{ type: 'text', text }]
+    const firstLine = fallbackTitle(message)
+    function usableTitle(title: string | null): string | null {
+      return listedTitle(listedTitle(title, text), firstLine)
+    }
+    if (source && this.deps.settings().sessionTitles && firstLine) {
+      const target = lightTarget(
+        this.deps.settings().lightModel,
+        source.agentId,
+        live
+          ? (modelOf(live.thread.session.config) ?? source.model ?? null)
+          : (source.model ?? null),
+      )
+      try {
+        const writer = await this.deps.agents.ensureReady(target.agentId)
+        const title = usableTitle(await this.askTitle(writer, target.model, message))
+        if (title) return title
+      } catch (error) {
+        this.deps.diagnostics.log('warn', `Could not title a task: ${(error as Error).message}`)
+      }
+    }
+    return usableTitle(this.title(sessionId) ?? null)
+  }
+
+  private async askTitle(
+    writer: Parameters<typeof writeSessionTitle>[0],
+    model: LightTarget['model'],
+    message: UserContent[],
+  ): Promise<string> {
+    await mkdir(this.deps.reportsDir, { recursive: true })
+    return writeSessionTitle(writer, {
+      dir: this.deps.reportsDir,
+      model,
+      message,
+      log: (line) => this.deps.diagnostics.log('warn', line),
+    })
   }
 
   /** A title a hidden session wrote, under the user's and over the cut first line. */
@@ -10351,37 +10399,39 @@ export class SessionManager {
     })
   }
 
-  /**
-   * Has the session's agent write a name for the new worktree's branch from the first message,
-   * while the worktree is prepared. Only while titles are written, and only for a first message
-   * that waits for preparation, since one that does not goes before a name could come.
-   */
-  private nameBranch(
-    agentId: AgentId,
+  /** Creates a worktree and starts writing its branch name while the caller gets it ready. */
+  private async createWorktree(
     projectPath: string,
-    worktree: WorktreeRecord,
-    message: UserContent[],
-    values: { type?: string; issue?: string },
-    picks: Record<string, string | boolean> = {},
-  ): void {
+    request: Parameters<WorktreeManager['create']>[1],
+    first: { agentId: AgentId; options?: Record<string, string | boolean> },
+    message: UserContent[] | null,
+  ): Promise<WorktreeRecord> {
     const manager = this.deps.worktrees
-    if (!manager || !this.deps.settings().sessionTitles) return
-    if (!manager.settings(projectPath).waitForSetup) return
-    if (titleMessageText(message).trim() === '') return
-    const target = lightTarget(
-      this.deps.settings().lightModel,
-      agentId,
-      this.startModel(agentId, picks),
-    )
-    const naming = new BranchNaming(this.writeBranchSlug(target, message))
-    const { type, issue } = values
-    this.branchNames.set(pathKey(worktree.path, this.deps.platform), {
-      naming,
-      values: {
-        ...(type === undefined ? {} : { type }),
-        ...(issue === undefined ? {} : { issue }),
-      },
-    })
+    if (!manager) throw invalidParams('A worktree needs a project in a Git repository')
+    const worktree = await manager.create(projectPath, request)
+    if (
+      message &&
+      !request.branch?.trim() &&
+      this.deps.settings().sessionTitles &&
+      manager.settings(projectPath).waitForSetup &&
+      titleMessageText(message).trim() !== ''
+    ) {
+      const target = lightTarget(
+        this.deps.settings().lightModel,
+        first.agentId,
+        this.startModel(first.agentId, first.options ?? {}),
+      )
+      const naming = new BranchNaming(this.writeBranchSlug(target, message))
+      const { type, issue } = request
+      this.branchNames.set(pathKey(worktree.path, this.deps.platform), {
+        naming,
+        values: {
+          ...(type === undefined ? {} : { type }),
+          ...(issue === undefined ? {} : { issue }),
+        },
+      })
+    }
+    return worktree
   }
 
   /** The slug the agent's hidden session writes for a branch, or null when it writes none. */
@@ -10421,32 +10471,39 @@ export class SessionManager {
    * agent wrote or keeps its own: at once when no name is being written.
    */
   private afterBranchName(projectPath: string, path: string, release: () => void): void {
-    const key = pathKey(path, this.deps.platform)
-    const entry = this.branchNames.get(key)
-    if (!entry) {
+    const worktree = this.branchNames.has(pathKey(path, this.deps.platform))
+      ? this.worktreeUsers(path)[0]?.worktree
+      : undefined
+    if (!worktree) {
       release()
       return
     }
-    void entry.naming
-      .settle((slug) => this.renameBranch(projectPath, path, { ...entry.values, slug }))
-      .then(() => {
-        if (this.branchNames.get(key) === entry) this.branchNames.delete(key)
-        release()
-      })
+    void this.finishBranchName(projectPath, worktree).then(release)
+  }
+
+  private async finishBranchName(projectPath: string, worktree: WorktreeRecord): Promise<void> {
+    const key = pathKey(worktree.path, this.deps.platform)
+    const entry = this.branchNames.get(key)
+    if (!entry) return
+    await entry.naming.settle((slug) =>
+      this.renameBranch(projectPath, worktree, { ...entry.values, slug }),
+    )
+    if (this.branchNames.get(key) === entry) this.branchNames.delete(key)
   }
 
   /** Names the worktree's branch from the slug, for every session in it; never rejects. */
   private async renameBranch(
     projectPath: string,
-    path: string,
+    worktree: WorktreeRecord,
     values: { slug: string; type?: string; issue?: string },
   ): Promise<void> {
     const manager = this.deps.worktrees
-    const worktree = this.worktreeUsers(path)[0]?.worktree
-    if (!manager || !worktree || worktree.removed !== undefined) return
+    if (!manager || worktree.removed !== undefined) return
+    const { path } = worktree
     try {
       const branch = await manager.renameBranch(projectPath, { ...worktree }, values)
       if (branch === null) return
+      worktree.branch = branch
       this.markWorktree(path, (record) => {
         record.branch = branch
       })

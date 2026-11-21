@@ -103,7 +103,11 @@ export const WORKFLOW_TOOLS: Tool[] = [
           maxLength: TASK_TEXT_CHARS,
           description: 'The requirement, written so that every step can work from it alone.',
         },
-        title: { type: 'string', maxLength: TASK_TITLE_CHARS, description: 'A short name.' },
+        title: {
+          type: 'string',
+          maxLength: TASK_TITLE_CHARS,
+          description: 'A short name. If omitted, Kettu titles the task when it starts.',
+        },
         pace: {
           type: 'string',
           enum: [...PACES],
