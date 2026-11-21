@@ -156,12 +156,15 @@ export const BROWSER_TOOLS: Tool[] = [
     description:
       'Opens a URL in the browser, at a local dev server (localhost, 127.0.0.1, [::1], ' +
       '*.localhost, *.test) or about:blank, and returns the page with a snapshot. Other sites ' +
-      'are the user’s to open.',
+      'are the user’s to open. After you change a web page, open it here to check it before you ' +
+      'finish, without being asked: the user watches this browser.',
     inputSchema: object(
       { url: { type: 'string', maxLength: 8_192, description: 'An absolute http(s) address.' } },
       ['url'],
     ),
     outputSchema: output(PAGE),
+    // Claude Code defers MCP tools behind a search; checking a changed page should not need one.
+    _meta: { 'anthropic/alwaysLoad': true },
   },
   {
     name: 'browser_navigate_back',
