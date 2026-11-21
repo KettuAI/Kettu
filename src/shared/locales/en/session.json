@@ -715,6 +715,7 @@
       "limitReached": "{{limit}} limit reached",
       "limitUsedUp": "{{limit}} limit reached",
       "limitReachedResets": "{{limit}} limit reached · resets {{time}}",
+      "limitExtraUsage": "{{limit}} limit reached · using extra usage",
       "balanceUsedUp": "Balance used up",
       "limit": {
         "used": "{{limit}} limit {{percent}}% used",
@@ -732,6 +733,7 @@
         "noBalance": "No balance",
         "usedUp": "{{window}} used up",
         "resets": "{{window}} · {{time}}",
+        "extraUsage": "Extra usage",
         "used": "{{window}} {{percent}}%",
         "left": "{{window}} {{percent}}% left"
       },

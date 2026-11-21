@@ -553,10 +553,12 @@ export function Composer({
       : awaiting
         ? t(asked ? 'prompt.placeholder.awaitingAnswer' : 'prompt.placeholder.awaiting')
         : !running && reached?.resetsAt
-          ? t('prompt.placeholder.limitReached', {
-              limit: limitPhrase(reached),
-              time: resetTime(reached.resetsAt),
-            })
+          ? t(
+              reached.extraUsage
+                ? 'prompt.placeholder.limitExtraUsage'
+                : 'prompt.placeholder.limitReached',
+              { limit: limitPhrase(reached), time: resetTime(reached.resetsAt) },
+            )
           : !running && rejected
             ? t('prompt.placeholder.denied')
             : running

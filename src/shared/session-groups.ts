@@ -145,7 +145,7 @@ export function sessionModel(
 
 /**
  * The used-up window that holds a session back: one of its agent's that counts on the session's
- * model and has not reset yet; null when none does.
+ * model and has not reset yet, unless extra usage covers it; null when none does.
  */
 export function reachedLimit(
   agent: AgentStatus | undefined,
@@ -155,7 +155,7 @@ export function reachedLimit(
   if (!agent) return null
   return (
     limitsForModel(agent.limits, model).find(
-      (l) => l.state === 'reached' && (l.resetsAt === null || l.resetsAt > now),
+      (l) => l.state === 'reached' && !l.extraUsage && (l.resetsAt === null || l.resetsAt > now),
     ) ?? null
   )
 }

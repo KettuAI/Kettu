@@ -1126,6 +1126,9 @@ const shell: Scenario = async (turn) => {
   return 'end_turn'
 }
 
+// Whether `/extra-usage` left the 5-hour window used up, which `/usage` then reports as well.
+let fiveHourUsedUp = false
+
 // The plan windows of sendUsage, as fractions.
 function planWindows(turns: number): { fiveHour: number; weekly: number } {
   return {
@@ -1196,7 +1199,8 @@ const usage: Scenario = async (turn) => {
     return 'end_turn'
   }
   if (turn.options.plain) return plainUsage(turn)
-  const { fiveHour, weekly } = planWindows(turn.session.turns)
+  const { fiveHour: counted, weekly } = planWindows(turn.session.turns)
+  const fiveHour = fiveHourUsedUp ? 1 : counted
   const now = Date.now()
   const limit = (label: string, share: number, resetsAt: number): string[] => {
     const percent = Math.round(share * 100)
@@ -1222,6 +1226,64 @@ const usage: Scenario = async (turn) => {
     '### This session',
   ].join('\n')
   await stream(turn, report, { chunks: [report], delayMs: 0 })
+  return 'end_turn'
+}
+
+/**
+ * The rate limit events of a used-up 5-hour window that extra usage covers; `off` for the window
+ * reset, `refused` for the window still used up with extra usage no longer letting requests through.
+ */
+const extraUsage: Scenario = async (turn) => {
+  const now = Math.floor(Date.now() / 1000)
+  const mode = turn.text.trim()
+  fiveHourUsedUp = mode !== 'off'
+  const resetsAt = now + 2 * 3600 + 840
+  const weekly = { utilization: 0.31, resetsAt: now + 3 * 86400 + 7200 }
+  const usedUp = {
+    five_hour: { utilization: 1, resetsAt, status: 'rejected' },
+    seven_day: weekly,
+  }
+  const event =
+    mode === 'off'
+      ? {
+          status: 'allowed',
+          rateLimitType: 'five_hour',
+          resetsAt,
+          isUsingOverage: false,
+          unifiedWindows: { five_hour: { utilization: 0.12, resetsAt }, seven_day: weekly },
+        }
+      : mode === 'refused'
+        ? {
+            status: 'rejected',
+            rateLimitType: 'five_hour',
+            resetsAt,
+            overageStatus: 'rejected',
+            overageDisabledReason: 'out_of_credits',
+            isUsingOverage: false,
+            unifiedWindows: usedUp,
+          }
+        : {
+            status: 'rejected',
+            rateLimitType: 'five_hour',
+            resetsAt,
+            overageStatus: 'allowed',
+            overageResetsAt: now + 20 * 86400,
+            isUsingOverage: true,
+            unifiedWindows: usedUp,
+          }
+  await turn.send({
+    sessionUpdate: 'usage_update',
+    used: turn.session.usedTokens,
+    size: 200_000,
+    _meta: { '_claude/rateLimit': event },
+  })
+  const reply =
+    mode === 'off'
+      ? 'The 5-hour window reset, so requests are on the plan again.'
+      : mode === 'refused'
+        ? 'The 5-hour limit is used up and extra usage no longer covers it.'
+        : 'The 5-hour limit is used up, so requests go on extra usage.'
+  await stream(turn, reply, { chunks: [reply], delayMs: 0 })
   return 'end_turn'
 }
 
@@ -1583,6 +1645,7 @@ export const SCENARIO_RUNNERS: Record<ScenarioName, Scenario> = {
   svg,
   shell,
   usage,
+  'extra-usage': extraUsage,
   status,
   context,
   recall,
