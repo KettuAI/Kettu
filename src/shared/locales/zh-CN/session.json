@@ -715,9 +715,7 @@
         "usedUp": "{{window}}已用完",
         "resets": "{{window}} · {{time}}",
         "used": "{{window}} {{percent}}%",
-        "left": "{{window}}剩 {{percent}}%",
-        "weeklyOf": "{{model}} 7 天",
-        "fiveHourOf": "{{model}} 5 小时"
+        "left": "{{window}}剩 {{percent}}%"
       },
       "rowState": "{{name}}，{{state}}",
       "manage": "管理智能体…"

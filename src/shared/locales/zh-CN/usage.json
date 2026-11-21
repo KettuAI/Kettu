@@ -152,13 +152,6 @@
     "neverRead": "读不到套餐用量。",
     "lastRead": "上次读取：{{ago}}",
     "backIn": "{{time}}后恢复",
-    "weeklyOf": "7 天 · {{model}}",
-    "fiveHourOf": "5 小时 · {{model}}",
-    "short": {
-      "minutes": "{{count}} 分钟",
-      "hours": "{{count}} 小时",
-      "days": "{{count}} 天"
-    },
     "windowUsed": "{{window}}：已用 {{percent}}%。",
     "windowLeft": "{{window}}：剩余 {{percent}}%。",
     "prepaidBalance": "预付余额",

@@ -47,7 +47,7 @@ export function agentLine(
     const problem = harnessProblem(status)
     return {
       text: i18n.t('session:newSession.picker.needsUpdate', {
-        problem: problem ? shortLabel(problem.reason) : '',
+        problem: problem ? shortLabel(problem.reason) : i18n.t('agents:problem.tooOld'),
       }),
       tone: 'attention',
       ...(problem ? { title: problem.text } : {}),

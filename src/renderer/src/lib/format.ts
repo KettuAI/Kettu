@@ -1,4 +1,5 @@
 import type { PlanLimit } from '@shared/agent-host'
+import { windowParts, type WindowParts } from '@shared/plan-limits'
 import { currentLocale, i18n } from './i18n'
 import { hostPath } from './host-paths'
 
@@ -185,25 +186,33 @@ export function timeLeft(ms: number): string {
     : countdown(ms)
 }
 
+type WindowTable = 'planWindow' | 'planWindowInText' | 'composer:usage.shortWindow'
+
+/** The window's own name from one of the catalogs, without the model or group it counts. */
+function windowName(parts: Pick<WindowParts, 'kind' | 'count'>, table: WindowTable): string {
+  const key = `${table}.${parts.kind}` as 'planWindow.five_hour'
+  return parts.count === null ? i18n.t(key) : i18n.t(key, { count: parts.count })
+}
+
+type WindowName = Pick<WindowParts, 'kind' | 'count' | 'scope'>
+
+/** A window's long name, the length first and then the model or group it is for: "Weekly · Fable". */
+export function windowLabel(parts: WindowName): string {
+  const name = windowName(parts, 'planWindow')
+  return parts.scope ? i18n.t('planWindow.scoped', { window: name, scope: parts.scope }) : name
+}
+
 /** A plan-limit window's name: Kettu's for the windows it knows, else the agent's own. */
 export function limitLabel(limit: Pick<PlanLimit, 'window' | 'label'>): string {
-  const key = `planWindow.${limit.window}`
-  if (i18n.exists(key)) return i18n.t(key as 'planWindow.five_hour')
-  // Claude Code names a weekly limit per model, "Weekly · Fable", and Antigravity both its
-  // windows per model group, "5-hour · Gemini Models", in English.
-  const weekly = /^Weekly · (.+)$/.exec(limit.label)
-  if (weekly) return i18n.t('planWindow.weeklyOf', { model: weekly[1] })
-  const fiveHour = /^5-hour · (.+)$/.exec(limit.label)
-  return fiveHour ? i18n.t('planWindow.fiveHourOf', { model: fiveHour[1] }) : limit.label
+  const parts = windowParts(limit)
+  if (!parts.kind) return limit.label
+  return parts.provider ? `${parts.provider} · ${windowLabel(parts)}` : windowLabel(parts)
 }
 
 /** A window's name without the model it is for: "Weekly" for "Weekly · Fable". */
 export function limitWindowName(limit: Pick<PlanLimit, 'window' | 'label'>): string {
-  if (limit.window.startsWith('seven_day') || limit.label.startsWith('Weekly · '))
-    return i18n.t('planWindow.seven_day')
-  if (limit.window.startsWith('five_hour') || limit.label.startsWith('5-hour · '))
-    return i18n.t('planWindow.five_hour')
-  return limitLabel(limit)
+  const parts = windowParts(limit)
+  return parts.kind && !parts.provider ? windowName(parts, 'planWindow') : limitLabel(limit)
 }
 
 /**
@@ -211,15 +220,36 @@ export function limitWindowName(limit: Pick<PlanLimit, 'window' | 'label'>): str
  * two windows.
  */
 export function limitPhrase(limit: Pick<PlanLimit, 'window' | 'label'>): string {
-  const key = `planWindowInText.${limit.window}`
-  if (i18n.exists(key)) return i18n.t(key as 'planWindowInText.seven_day_opus')
-  const known = i18n.exists(`planWindow.${limit.window}`)
-  const weekly = known ? null : /^Weekly · (.+)$/.exec(limit.label)
-  if (weekly) return i18n.t('planWindowInText.weeklyOf', { model: weekly[1] })
-  const fiveHour = known ? null : /^5-hour · (.+)$/.exec(limit.label)
-  return fiveHour
-    ? i18n.t('planWindowInText.fiveHourOf', { model: fiveHour[1] })
-    : limitLabel(limit)
+  const parts = windowParts(limit)
+  if (!parts.kind || !parts.scope) return limitLabel(limit)
+  return i18n.t('planWindowInText.scoped', {
+    scope: parts.scope,
+    window: windowName(parts, 'planWindowInText'),
+  })
+}
+
+/**
+ * A window's short name where space is tight, the length first and then the model or group it is
+ * for, without the "Models" a group's name ends in: "5h", "7d Fable", "5h Gemini".
+ */
+export function windowShort(parts: WindowName, separator = ' '): string {
+  const name = windowName(parts, 'composer:usage.shortWindow')
+  const scope = shortScope(parts)
+  return scope ? `${name}${separator}${scope}` : name
+}
+
+const shortScope = (parts: Pick<WindowParts, 'scope'>): string | null =>
+  parts.scope?.replace(/\s+models?$/i, '') ?? null
+
+export function limitShort(limit: Pick<PlanLimit, 'window' | 'label'>, separator = ' '): string {
+  const parts = windowParts(limit)
+  return parts.kind ? windowShort(parts, separator) : limit.label
+}
+
+/** The end of `limitShort` that names a model, group or pool, as written there; null without one. */
+export function limitShortScope(limit: Pick<PlanLimit, 'window' | 'label'>): string | null {
+  const parts = windowParts(limit)
+  return parts.kind ? shortScope(parts) : null
 }
 
 /** A count compactly, for figures, readouts and legends: "980", "1.2K", "41.7B". */
