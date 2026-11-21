@@ -2,6 +2,11 @@ name: Feature request · 功能建议
 description: Something Kettu could do, or do better. · 希望 Kettu 能做的事。
 type: Feature
 body:
+  - type: markdown
+    attributes:
+      value: |
+        Link GitHub to your Kettu account on [kettu.sh](https://www.kettu.sh/account/sign-in/) and you earn points when this issue is accepted.
+        在 [kettu.sh](https://www.kettu.sh/account/sign-in/) 的账号里绑定 GitHub，这条 issue 被采纳后你会得到积分。
   - type: textarea
     id: request
     attributes:

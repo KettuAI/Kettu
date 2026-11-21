@@ -9,6 +9,9 @@ body:
       value: |
         In Kettu, **Report a Problem…** fills in this form for you.
         在 Kettu 里用「报告问题…」，会自动帮你填好这张表。
+
+        Link GitHub to your Kettu account on [kettu.sh](https://www.kettu.sh/account/sign-in/) and you earn points when this issue is accepted.
+        在 [kettu.sh](https://www.kettu.sh/account/sign-in/) 的账号里绑定 GitHub，这条 issue 被采纳后你会得到积分。
   - type: textarea
     id: what-happened
     attributes:
