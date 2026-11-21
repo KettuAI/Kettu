@@ -206,6 +206,13 @@
      tile. Each reaches 3:1 on the page; the tint, which follows it, fills a chosen tile. */
   --control-on: #0060e2;
   --control-on-tint: color-mix(in srgb, var(--control-on) 7%, transparent);
+  /* A commented passage in the thread, at rest and while its row is pointed at, and its number:
+     blue, which no other ground behind thread text uses. The number is opaque so the passage's
+     tint does not deepen under it. */
+  --comment-mark: color-mix(in srgb, var(--control-on) 14%, transparent);
+  --comment-mark-hover: color-mix(in srgb, var(--control-on) 24%, transparent);
+  --comment-num: color-mix(in srgb, var(--control-on) 10%, var(--bg-app));
+  --comment-num-hover: color-mix(in srgb, var(--control-on) 14%, var(--bg-app));
   --switch-on: #3c85e9;
   /* The send button once there is something to send: the same fox in both themes, since the
      lighter dark-theme fox leaves its white arrow under 3:1. */
@@ -817,6 +824,11 @@
 
     --control-on: #5b9aff;
     --control-on-tint: color-mix(in srgb, var(--control-on) 11%, transparent);
+    /* The commented passage and its number, a step stronger. */
+    --comment-mark: color-mix(in srgb, var(--control-on) 22%, transparent);
+    --comment-mark-hover: color-mix(in srgb, var(--control-on) 36%, transparent);
+    --comment-num: color-mix(in srgb, var(--control-on) 16%, var(--bg-app));
+    --comment-num-hover: color-mix(in srgb, var(--control-on) 22%, var(--bg-app));
     --switch-on: #4d8dff;
     --send: #f2581b;
     --switch-thumb: #ffffff;
@@ -1213,6 +1225,11 @@
 
   --control-on: #5b9aff;
   --control-on-tint: color-mix(in srgb, var(--control-on) 11%, transparent);
+  /* The commented passage and its number, a step stronger. */
+  --comment-mark: color-mix(in srgb, var(--control-on) 22%, transparent);
+  --comment-mark-hover: color-mix(in srgb, var(--control-on) 36%, transparent);
+  --comment-num: color-mix(in srgb, var(--control-on) 16%, var(--bg-app));
+  --comment-num-hover: color-mix(in srgb, var(--control-on) 22%, var(--bg-app));
   --switch-on: #4d8dff;
   --send: #f2581b;
   --switch-thumb: #ffffff;
