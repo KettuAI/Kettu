@@ -10,15 +10,17 @@ It draws the island at the top middle of the screen whose menu bar is in use: in
 screen without one, in the middle of the menu bar, growing down from the top as from a notch. It
 shows while it is on:
 
-- **Collapsed**: one signal and one fact. On the left the agent marks of the most urgent group,
-  waiting, failed, running, done, or held by a plan limit, or with none of them Kettu's fox; on the
-  right that group's signal (the waiting dot, the error alert, the turn's nine dots acting out its
-  phase as the thread's do, a clock once every running call is stuck, the unread dot, the limit
-  ring) and a count past one, the running session's plan, the minutes stuck or the reset day. At
-  rest the fact is how long the latest session's prompt cache stays warm, amber with seconds in its
-  last stretch, else how many sessions were used today. Without a notch, the same outline, with the
-  title of the session it is about in the middle. Failed and done rows mark it until they are read
-  in Kettu or the island is opened.
+- **Collapsed**, while something needs a mark: one signal and one fact. On the left the agent marks
+  of the most urgent group, waiting, failed, running, done, or held by a plan limit; on the right
+  that group's signal (the waiting dot, the error alert, the turn's nine dots acting out its phase
+  as the thread's do, a clock once every running call is stuck, the unread dot, the limit ring) and
+  a count past one, the running session's plan, the minutes stuck or the reset day. Without a notch,
+  the same outline, with the title of the session it is about in the middle. Failed and done rows
+  mark it until they are read in Kettu or the island is opened, a used-up limit until the island is
+  opened, once per window.
+- **At rest**, with nothing to mark, the island shrinks back into the notch and draws nothing. The
+  pointer resting on the notch, or a click on it, still opens it; without a notch nothing is left,
+  and the menu bar icon shows the sessions.
 - **Grown**: main's pops, one at a time, for 6 seconds (2 for a finished turn), unless a Kettu window
   in front shows that session: the marks in the
   left wing and the state in the right, the session and what happened under them. A request is no

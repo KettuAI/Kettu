@@ -166,8 +166,14 @@ final class IslandController {
     }
     if let m = NSEvent.addGlobalMonitorForEvents(
       matching: [.leftMouseDown, .rightMouseDown],
-      handler: { [weak self] _ in
-        if self?.model.mode == .open { self?.model.collapse() }
+      handler: { [weak self] event in
+        guard let self else { return }
+        if self.model.mode == .open {
+          self.model.collapse()
+        } else if self.model.mode == .rest, self.inside, event.type == .leftMouseDown {
+          // The island in the notch lets clicks through, so a click on the notch comes here.
+          self.model.expand(byClick: true)
+        }
       })
     {
       monitors.append(m)
@@ -200,9 +206,11 @@ final class IslandController {
     }
     lastPoint = point
     lastMove = time
-    let over =
-      model.mode != .hidden && islandRect().insetBy(dx: -1, dy: -1).contains(NSEvent.mouseLocation)
-    if panel.ignoresMouseEvents == over { panel.ignoresMouseEvents = !over }
+    // Shrunk into the notch, the island is the notch alone; with no notch nothing is left to rest on.
+    let reachable = model.mode != .hidden && (model.mode != .rest || model.geometry.hasNotch)
+    let over = reachable && islandRect().insetBy(dx: -1, dy: -1).contains(NSEvent.mouseLocation)
+    let catches = over && model.mode != .rest
+    if panel.ignoresMouseEvents == catches { panel.ignoresMouseEvents = !catches }
     model.pointerInside = over
     guard over != inside else { return }
     inside = over
@@ -218,7 +226,7 @@ final class IslandController {
 
   private func entered() {
     leaveTimer?.invalidate()
-    guard model.mode == .collapsed || model.mode == .grown else { return }
+    guard [.rest, .collapsed, .grown].contains(model.mode) else { return }
     model.holdPop(paused: true)
     // Laid out now, so the island opens straight to the panel's height.
     model.prepare()
@@ -242,7 +250,7 @@ final class IslandController {
   private func left() {
     hoverTimer?.invalidate()
     if model.mode == .grown { model.holdPop() }
-    if model.mode == .collapsed { model.measuring = false }
+    if model.mode == .collapsed || model.mode == .rest { model.measuring = false }
     // An island a request opened stays until it is answered or dismissed with a click elsewhere.
     if model.mode == .open && model.opener == .hover {
       leaveTimer = Timer.scheduledTimer(withTimeInterval: Self.grace, repeats: false) {

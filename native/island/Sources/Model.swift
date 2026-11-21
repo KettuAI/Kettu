@@ -13,6 +13,8 @@ struct IslandGeometry: Equatable {
 
 enum Mode: Equatable {
   case hidden
+  /// Shrunk into the notch while nothing needs a mark; resting on the notch still opens it.
+  case rest
   case collapsed
   case grown
   case open
@@ -42,17 +44,15 @@ struct Pop: Equatable {
 
 /// The one fact the collapsed island adds to its signal.
 enum Fact: Equatable {
-  /// How many sessions: of its group, or used today while nothing else is said.
+  /// How many sessions of its group.
   case count(Int)
-  /// How long the latest session's prompt cache stays warm; amber in its last stretch.
-  case cache(String, ending: Bool)
   case plan(done: Int, total: Int)
   /// The minutes stuck, or the day a used-up limit resets.
   case word(String)
 }
 
 /// What the collapsed island shows: who it is about, the marks of its most urgent group or Kettu's
-/// fox when nothing needs one, that group's signal and one fact, and the title of the session it is
+/// fox for a task's request, that group's signal and one fact, and the title of the session it is
 /// about where no notch is in the way.
 struct Collapsed: Equatable {
   let agents: [IslandAgent]
@@ -103,8 +103,8 @@ final class IslandModel: ObservableObject {
   private var tick: Timer?
   private var noteTimer: Timer?
   private var stuckTimer: Timer?
-  private var cacheTimer: Timer?
-  /// Failed and finished rows the user saw on the open island, which stop marking the collapsed one.
+  /// Failed, finished and limited rows the user saw on the open island, which stop marking the
+  /// collapsed one.
   private var seen: Set<String> = []
   private var answers: [String: String] = [:]
   private var nextAnswer = 1
@@ -251,14 +251,13 @@ final class IslandModel: ObservableObject {
   func refresh() {
     now = Date()
     let all = rows
-    let live = Set(all.filter { Self.marksDone($0) }.map(seenKey))
+    let live = Set(all.filter { Self.marksUntilSeen($0) }.map(seenKey))
     seen.formIntersection(live)
     collapsed = Self.collapse(all, model: self)
     if let selected, store.rows[selected] == nil { self.selected = nil }
     revision += 1
-    if mode == .hidden { setMode(.collapsed) }
+    if [.hidden, .rest, .collapsed].contains(mode) { setMode(resting) }
     scheduleStuckCheck(all)
-    scheduleCacheTick()
     if let waiting = requestPop, !requests.isEmpty {
       waiting.timer.invalidate()
       requestPop = nil
@@ -275,28 +274,6 @@ final class IslandModel: ObservableObject {
       opener = .hover
     } else {
       collapse()
-    }
-  }
-
-  /// A warm cache counts down with no message from main: the island looks again when the minute
-  /// it shows changes, every second in its last stretch, and when it expires. With no warm cache
-  /// in view, no timer runs; while the island is open its own second's tick does this.
-  private func scheduleCacheTick() {
-    cacheTimer?.invalidate()
-    let nowMs = now.timeIntervalSince1970 * 1000
-    var wait: Double?
-    for cache in rows.prefix(Metrics.listRows).compactMap(\.cache) {
-      let left = cache.expiresAt - nowMs
-      guard left > 0 else { continue }
-      let next =
-        left <= cache.endingMs
-        ? 1000 - left.truncatingRemainder(dividingBy: 1000)
-        : min(left - cache.endingMs, left.truncatingRemainder(dividingBy: 60_000))
-      wait = min(wait ?? next, max(next, 50))
-    }
-    guard let wait else { return }
-    cacheTimer = Timer.scheduledTimer(withTimeInterval: wait / 1000 + 0.01, repeats: false) {
-      [weak self] _ in self?.refresh()
     }
   }
 
@@ -319,20 +296,29 @@ final class IslandModel: ObservableObject {
     }
   }
 
-  private func seenKey(_ row: IslandRow) -> String { "\(row.key)@\(row.status)@\(row.since ?? 0)" }
-
-  /// A turn that ended, failed or done, which the user has not read yet.
-  private static func marksDone(_ row: IslandRow) -> Bool {
-    row.status == "failed" || row.status == "unread"
+  private func seenKey(_ row: IslandRow) -> String {
+    // A used-up window is seen once, however many of its agent's sessions it holds back.
+    if row.status == "limited", let limit = row.limit {
+      return "limit:\(row.agent.id)@\(limit.label)@\(limit.resetsAt ?? 0)"
+    }
+    return "\(row.key)@\(row.status)@\(row.since ?? 0)"
   }
 
+  /// A turn that ended, failed or done, or a used-up limit, which the user has not seen yet.
+  private static func marksUntilSeen(_ row: IslandRow) -> Bool {
+    row.status == "failed" || row.status == "unread" || row.status == "limited"
+  }
+
+  /// Where the island goes when it is neither grown nor open: collapsed while something needs a
+  /// mark, else back into the notch.
+  private var resting: Mode { collapsed == nil ? .rest : .collapsed }
+
   /// The most urgent group decides what the collapsed island shows: waiting, failed, running,
-  /// done, limited, and with none of them Kettu's fox, since the island always shows while it is
-  /// on. Failed and done rows mark it until the user reads them in Kettu or opens the island, so a
-  /// turn that ended while a Kettu window was in front, which pops nothing, still shows. The fact
-  /// beside the signal: a count past one, the running session's plan, and at rest how long the
-  /// latest session's prompt cache stays warm, else how many sessions were used today.
-  private static func collapse(_ rows: [IslandRow], model: IslandModel) -> Collapsed {
+  /// done, limited, and with none of them nil, so the island shrinks into the notch. Failed, done
+  /// and limited rows mark it until the user opens the island, or reads a turn in Kettu, so a turn
+  /// that ended while a Kettu window was in front, which pops nothing, still shows. The fact beside
+  /// the signal: a count past one, the running session's plan, the minutes stuck or the reset.
+  private static func collapse(_ rows: [IslandRow], model: IslandModel) -> Collapsed? {
     func agents(_ list: [IslandRow]) -> [IslandAgent] {
       var seen = Set<String>()
       return list.map(\.agent).filter { seen.insert("\($0.harness)/\($0.color ?? "")").inserted }
@@ -351,7 +337,7 @@ final class IslandModel: ObservableObject {
         agents: lead.map { [$0.agent] } ?? [], signal: .waiting, fact: counted(count),
         title: title(lead) ?? first?.task?.title)
     }
-    let unseen = rows.filter { marksDone($0) && !model.seen.contains(model.seenKey($0)) }
+    let unseen = rows.filter { marksUntilSeen($0) && !model.seen.contains(model.seenKey($0)) }
     let failed = unseen.filter { $0.status == "failed" }
     if !failed.isEmpty {
       return Collapsed(
@@ -381,22 +367,14 @@ final class IslandModel: ObservableObject {
       return Collapsed(
         agents: agents(done), signal: .unread, fact: counted(done.count), title: title(done.first))
     }
-    let limited = rows.filter { $0.status == "limited" }
+    let limited = unseen.filter { $0.status == "limited" }
     if !limited.isEmpty {
       let reset = limited.compactMap { $0.limit?.resetsAt }.min()
       return Collapsed(
         agents: agents(limited), signal: .limited, fact: reset.map { .word(model.resetDay($0)) },
         title: title(limited.first))
     }
-    // Nothing needs a mark: Kettu's fox, and the latest session's warm cache or today's count.
-    let latest = rows.first
-    var fact: Fact?
-    if let left = model.cacheLeft(latest?.cache) {
-      fact = .cache(model.text("cache.short", ["time": left.text]), ending: left.ending)
-    } else if let today = model.store.summary.today, today > 0 {
-      fact = .count(today)
-    }
-    return Collapsed(agents: [], signal: nil, fact: fact, title: title(latest))
+    return nil
   }
 
   /// When a limit resets, as short as the collapsed island needs: a time today, else a weekday.
@@ -474,7 +452,7 @@ final class IslandModel: ObservableObject {
     guard let next = pops.first else {
       pop = nil
       queued = 0
-      setMode(.collapsed)
+      setMode(resting)
       return
     }
     pop = next
@@ -553,8 +531,9 @@ final class IslandModel: ObservableObject {
     pops.removeAll()
     pop = nil
     queued = 0
-    // Opening shows every ended turn, so the collapsed island stops pointing at them.
-    for row in rows where Self.marksDone(row) { seen.insert(seenKey(row)) }
+    // Opening shows every ended turn and used-up limit, so the collapsed island stops pointing at
+    // them.
+    for row in rows where Self.marksUntilSeen(row) { seen.insert(seenKey(row)) }
     collapsed = Self.collapse(rows, model: self)
     now = Date()
     tick?.invalidate()
@@ -575,7 +554,7 @@ final class IslandModel: ObservableObject {
     popTimer?.invalidate()
     pops.removeAll()
     pop = nil
-    setMode(.collapsed)
+    setMode(resting)
   }
 
   /// Shrinks back into the notch, as before the island first showed, when the helper is to quit.
@@ -658,7 +637,7 @@ final class IslandModel: ObservableObject {
     switch to {
     case .open: return .spring(response: 0.3, dampingFraction: 1)
     case .grown: return .spring(response: 0.38, dampingFraction: 1)
-    case .collapsed, .hidden: return .spring(response: 0.3, dampingFraction: 1)
+    case .collapsed, .rest, .hidden: return .spring(response: 0.3, dampingFraction: 1)
     }
   }
 }

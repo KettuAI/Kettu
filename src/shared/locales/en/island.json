@@ -53,7 +53,6 @@
     },
     "recommended": "Recommended",
     "cache": {
-      "short": "Cache {{time}}",
       "about": "~{{time}}",
       "left": "Cache warm for {{time}}"
     },
