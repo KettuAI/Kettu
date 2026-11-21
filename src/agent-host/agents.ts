@@ -150,6 +150,7 @@ import {
   detectAgent,
   displayCommand,
   EXTENSIONS_FOLDER,
+  programRange,
   type AgentDefinition,
   type AgentProtocol,
   type CommandWords,
@@ -173,6 +174,7 @@ import { HostError, invalidParams } from './errors'
 import { findCommand, getEnv, isExecutableFile, type Env } from './find-command'
 import {
   fetchManifest,
+  inNpmRange,
   isBroken,
   MANIFEST_KEYS,
   parseManifest,
@@ -2002,6 +2004,16 @@ export class AgentManager {
   }
 
   /**
+   * The versions of the user's own program the harness runs, as an npm range, which an update of
+   * it stays within: a package harness's, while that program runs in place of Kettu's install.
+   * Null for any version.
+   */
+  private ownRange(h: Harness): string | null {
+    const { launch } = h.def
+    return launch.kind === 'package' && this.replacesInstall(h) ? programRange(launch) : null
+  }
+
+  /**
    * Whether Kettu's own install of the harness moves to a target version: it follows the Registry,
    * or the manifest recommends a version of it. The others keep their bundled version and their
    * vendor's updates.
@@ -2198,8 +2210,11 @@ export class AgentManager {
   private cliUpdateVersion(h: Harness): string | null {
     const mine = this.userProgram(h)
     const problem = h.detection?.cli?.problem
-    // A newest version the manifest says does not work is not offered.
+    // A newest version the manifest says does not work is not offered, nor one the harness would
+    // not run, such as one an earlier check read before it kept to the range.
     if (h.cliLatest && !usable(this.programRule(h), h.cliLatest)) return null
+    const range = this.ownRange(h)
+    if (h.cliLatest && range && !inNpmRange(h.cliLatest, range)) return null
     if (problem?.kind === 'too-old') return h.cliLatest ?? problem.minimum
     if (!h.cliLatest || !mine?.version) return null
     return compareVersions(h.cliLatest, mine.version) > 0 ? h.cliLatest : null
@@ -2710,9 +2725,11 @@ export class AgentManager {
       signal,
     }
     const fetch = this.deps.fetchLatest ?? fetchLatest
+    const range = this.ownRange(h)
     const readCli = async (): Promise<string | null> => {
       if (source?.kind === 'npm' && npm) {
-        return (await fetch({ ...shared, npm, package: source.package, cli: null })).adapterVersion
+        const words = { npm, package: source.package, ...(range ? { range } : {}), cli: null }
+        return (await fetch({ ...shared, ...words })).adapterVersion
       }
       if (source?.kind === 'brew' && brew) {
         return fetchBrewLatest({
@@ -3080,6 +3097,8 @@ export class AgentManager {
     // `npm install -g` updates.
     if (method === 'npm' && !global?.dir) return null
     const platform = this.deps.platform
+    // Within a range, the version on offer, since the package's newest may lie outside it.
+    const version = this.ownRange(h) ? this.cliUpdateVersion(h) : null
     return updatePlan(installs, method, {
       platform,
       env: this.deps.env.agentEnv(h.def.id),
@@ -3088,6 +3107,7 @@ export class AgentManager {
       program: mine.path,
       npmPrefix: method === 'npm' ? (global?.dir ?? null) : null,
       globalDir: method === 'pnpm' || method === 'yarn' ? (global?.dir ?? null) : null,
+      ...(version ? { version } : {}),
     })
   }
 

@@ -74,22 +74,45 @@ export async function findCommand(
   command: string,
   options: FindCommandOptions,
 ): Promise<string | null> {
+  for await (const file of findCommands(command, options)) return file
+  return null
+}
+
+/**
+ * Every file `command` resolves to, in the order the shell would try them: the one each PATH
+ * folder would run, a folder listed twice once. Looked up only as far as the caller reads.
+ */
+export async function* findCommands(
+  command: string,
+  options: FindCommandOptions,
+): AsyncGenerator<string> {
   const { platform, env } = options
   const p = platform === 'win32' ? path.win32 : path.posix
   const names = candidateNames(command, env, platform)
   if (p.isAbsolute(command)) {
-    for (const name of names) if (await options.isExecutable(name)) return name
-    return null
+    for (const name of names) {
+      if (await options.isExecutable(name)) {
+        yield name
+        return
+      }
+    }
+    return
   }
-  if (command.includes('/') || (platform === 'win32' && command.includes('\\'))) return null
+  if (command.includes('/') || (platform === 'win32' && command.includes('\\'))) return
+  const seen = new Set<string>()
   for (const dir of pathEntries(env, platform)) {
     if (!p.isAbsolute(dir)) continue
     for (const name of names) {
       const file = p.join(dir, name)
-      if (await options.isExecutable(file)) return file
+      if (!(await options.isExecutable(file))) continue
+      const key = platform === 'win32' ? file.toLowerCase() : file
+      if (!seen.has(key)) {
+        seen.add(key)
+        yield file
+      }
+      break
     }
   }
-  return null
 }
 
 /** A regular file that the user may execute; on Windows the extension decides, so any file. */

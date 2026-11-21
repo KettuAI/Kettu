@@ -333,7 +333,8 @@
     "uninstalled": "{{agent}} 已卸载。要再次使用，请重新安装。"
   },
   "environment": {
-    "inherited": "Kettu 启动后对 PATH 的修改要在重启后才生效。",
+    "inherited": "Kettu 启动后对 PATH 的修改，点「重新加载环境」后生效。",
+    "registryFailed": "无法从 Windows 读取 PATH（{{error}}），智能体将使用 Kettu 启动时的环境。",
     "fallback": "无法读取 {{shell}} 的环境（{{error}}），智能体将使用 Kettu 启动时的环境。"
   },
   "git": {

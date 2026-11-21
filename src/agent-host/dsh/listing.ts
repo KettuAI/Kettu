@@ -17,6 +17,8 @@ export const LISTING_MODEL = 'kettu-model-list'
 const MODEL_OPTION = 'model'
 const EFFORT_OPTION = 'reasoning_effort'
 const TIMEOUT_MS = 60_000
+/** Longer than an agent process's stop takes, its tree included, before it is killed outright. */
+const EXIT_WAIT_MS = 10_000
 /**
  * dsh answers a new session before every route has registered, often with no model at all, and
  * says nothing when the rest come. The list is asked for again until two answers agree; an empty
@@ -141,8 +143,11 @@ export function listingRows(folder: string): string {
 }
 
 export interface ListingRun {
-  /** Starts `dsh --profile acp` with the patch file that holds the routes and `listingRows`. */
-  spawn(): ChildProcess
+  /**
+   * Starts `dsh --profile acp` with the patch file that holds the routes and `listingRows`, to be
+   * stopped with its tree, as an agent's process is, once `stop` aborts.
+   */
+  spawn(stop: AbortSignal): ChildProcess
   /** The folder the session is opened in. */
   cwd: string
   /** Ends the process early, as when the agent stops. */
@@ -150,12 +155,40 @@ export interface ListingRun {
   timeoutMs?: number
 }
 
+/** Whether the process has exited, or never started, waiting `ms` at most. */
+function exitedWithin(child: ChildProcess, ms: number): Promise<boolean> {
+  const done = child.pid === undefined || child.exitCode !== null || child.signalCode !== null
+  if (done) return Promise.resolve(true)
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => resolve(false), ms)
+    child.once('exit', () => {
+      clearTimeout(timer)
+      resolve(true)
+    })
+  })
+}
+
+/** Ends a listing process that has not exited on its own, then waits for it to. */
+async function ended(child: ChildProcess): Promise<void> {
+  if (await exitedWithin(child, EXIT_WAIT_MS)) return
+  child.kill('SIGKILL')
+  await exitedWithin(child, EXIT_WAIT_MS)
+}
+
+export interface Listing {
+  /** Null when dsh gave no answer. */
+  models: ListedModel[] | null
+  /** Resolves once the process has exited, after which nothing writes to its session's folder. */
+  exited: Promise<void>
+}
+
 /**
  * Asks dsh for its models: opens one session, reads the list, and selects each model in turn to
- * read its levels. Null when it gives no answer; the process is ended either way.
+ * read its levels. The process is ended either way, with its tree.
  */
-export async function readListing(run: ListingRun): Promise<ListedModel[] | null> {
-  const child = run.spawn()
+export async function readListing(run: ListingRun): Promise<Listing> {
+  const stop = new AbortController()
+  const child = run.spawn(stop.signal)
   const { stream, close } = messageStream({
     kind: 'stdio',
     stdin: child.stdin!,
@@ -210,18 +243,20 @@ export async function readListing(run: ListingRun): Promise<ListedModel[] | null
     }
     return models
   }
+  let models: ListedModel[] | null
   try {
-    return await Promise.race([
+    models = await Promise.race([
       read(),
       new Promise<null>((resolve) => {
         timer = setTimeout(() => resolve(null), run.timeoutMs ?? TIMEOUT_MS)
       }),
     ])
   } catch {
-    return null
+    models = null
   } finally {
     if (timer) clearTimeout(timer)
     rpc.close()
-    child.kill()
+    stop.abort()
   }
+  return { models, exited: ended(child) }
 }

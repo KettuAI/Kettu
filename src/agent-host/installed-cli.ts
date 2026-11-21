@@ -9,7 +9,7 @@ import type { InstalledCli } from '@shared/agent-host'
 import type { Platform } from '@shared/platform'
 import { programFailure, runProgram, type ProgramOptions, type ProgramRun } from './adapter-install'
 import { codexBinary, npmCodexEnv } from './codex-binary'
-import { findCommand, getEnv, needsShell, type Env } from './find-command'
+import { findCommand, findCommands, getEnv, needsShell, type Env } from './find-command'
 import { compareVersions } from './versions'
 
 /** File access, injected so tests can lay out any platform's install. */
@@ -58,8 +58,8 @@ export interface AdapterCli {
    */
   variable?: string
   /**
-   * Where its vendor's installer puts it, looked in when PATH has no such command, as for an
-   * install the shell profiles add to PATH only in new shells.
+   * Where its vendor's installer puts it, looked in after PATH, as for an install the shell
+   * profiles add to PATH only in new shells.
    */
   installedAt?(env: Env, platform: Platform): string[]
   /**
@@ -137,10 +137,22 @@ async function readManifest(
   }
 }
 
+/** `~/.local/bin/<command>` off Windows, from the home folder the environment names. */
+function localBin(env: Env, platform: Platform, command: string): string {
+  const home = getEnv(env, 'HOME', platform) ?? os.homedir()
+  return path.posix.join(home, '.local', 'bin', command)
+}
+
+// Its install script puts `claude` in `~/.local/bin`, or `%USERPROFILE%\.local\bin` on Windows.
 export const CLAUDE_CLI: AdapterCli = {
   command: 'claude',
   variable: 'CLAUDE_CODE_EXECUTABLE',
   pinsVersion: true,
+  installedAt: (env, platform) => {
+    if (platform !== 'win32') return [localBin(env, platform, 'claude')]
+    const profile = getEnv(env, 'USERPROFILE', platform)
+    return profile ? [path.win32.join(profile, '.local', 'bin', 'claude')] : []
+  },
   // The SDK spawns it as a program, so on Windows it must be one itself.
   resolve: async (found, platform, files) => {
     const file = await startable(found, platform, files)
@@ -154,12 +166,19 @@ export const CLAUDE_CLI: AdapterCli = {
   },
 }
 
+// Its install scripts put `codex` in `~/.local/bin` by default, and in
+// `%LOCALAPPDATA%\Programs\OpenAI\Codex\bin` on Windows.
 export const CODEX_CLI: AdapterCli = {
   command: 'codex',
   variable: 'CODEX_PATH',
   pinsVersion: false,
   // The app-server protocol the mapping is written against.
   oldest: '0.166.0',
+  installedAt: (env, platform) => {
+    if (platform !== 'win32') return [localBin(env, platform, 'codex')]
+    const local = getEnv(env, 'LOCALAPPDATA', platform)
+    return local ? [path.win32.join(local, 'Programs', 'OpenAI', 'Codex', 'bin', 'codex')] : []
+  },
   resolve: async (found, platform, files) => {
     const file = await startable(found, platform, files)
     if (!file) return null
@@ -193,8 +212,7 @@ export const AGY_CLI: AdapterCli = {
       const local = getEnv(env, 'LOCALAPPDATA', platform)
       return local ? [path.win32.join(local, 'agy', 'bin', 'agy')] : []
     }
-    const home = getEnv(env, 'HOME', platform) ?? os.homedir()
-    return [path.posix.join(home, '.local', 'bin', 'agy')]
+    return [localBin(env, platform, 'agy')]
   },
 }
 
@@ -355,10 +373,25 @@ function answered(
   return { ...found, version: answer?.version ?? null, problem: null }
 }
 
-/** The user's CLI as the adapter would run it, with its version or why it cannot run. */
+/** The programs of the CLI's command: each on PATH in order, then where its installer puts it. */
+async function* candidates(cli: AdapterCli, ctx: FindCliContext): AsyncGenerator<string> {
+  yield* findCommands(cli.command, ctx)
+  for (const file of cli.installedAt?.(ctx.env, ctx.platform) ?? []) {
+    const found = await findCommand(file, ctx)
+    if (found) yield found
+  }
+}
+
+/**
+ * The user's CLI as the adapter would run it, with its version or why it cannot run. The program
+ * the environment names or the one picked in Settings is the only one; otherwise the first program
+ * found that is `usable`, by default one whose version it says, else the first found, which says
+ * why none runs. Programs after the first usable one are never asked.
+ */
 export async function findInstalledCli(
   cli: AdapterCli,
   ctx: FindCliContext,
+  usable: (found: FoundCli) => boolean | Promise<boolean> = (found) => !found.installed.problem,
 ): Promise<FoundCli | null> {
   const named = cli.variable ? getEnv(ctx.env, cli.variable, ctx.platform)?.trim() : undefined
   if (cli.variable && named) {
@@ -367,12 +400,25 @@ export async function findInstalledCli(
     return { installed: answered({ path: named, variable: cli.variable }, answer), env: {} }
   }
   const chosen = ctx.binaryOverride
-  let found = await findCommand(chosen ?? cli.command, ctx)
-  for (const file of found || chosen ? [] : (cli.installedAt?.(ctx.env, ctx.platform) ?? [])) {
-    found = await findCommand(file, ctx)
-    if (found) break
+  if (chosen) {
+    const found = await findCommand(chosen, ctx)
+    return found ? askCli(cli, found, ctx) : null
   }
-  if (!found) return null
+  const seen = new Set<string>()
+  let first: FoundCli | null = null
+  for await (const found of candidates(cli, ctx)) {
+    const key = ctx.platform === 'win32' ? found.toLowerCase() : found
+    if (seen.has(key)) continue
+    seen.add(key)
+    const asked = await askCli(cli, found, ctx)
+    if (await usable(asked)) return asked
+    first ??= asked
+  }
+  return first
+}
+
+/** The program found as the adapter would run it, asked its version. */
+async function askCli(cli: AdapterCli, found: string, ctx: FindCliContext): Promise<FoundCli> {
   const resolved = await cli.resolve(found, ctx.platform, ctx.files, ctx.node?.nodePath ?? null)
   if (!resolved) {
     return {

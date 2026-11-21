@@ -743,15 +743,19 @@ function cliDetail(def: AgentDefinition, cli: AdapterCli, installed: InstalledCl
   }
 }
 
-/** The user's CLI as found, or the detection that says it is missing. */
+/**
+ * The user's CLI as found, the first that is `usable` when several are, or the detection that says
+ * it is missing.
+ */
 async function findUserCli(
   def: AgentDefinition,
   cli: AdapterCli,
   ctx: DetectContext,
+  usable: (found: FoundCli) => boolean | Promise<boolean>,
 ): Promise<{ found: FoundCli } | { missing: Detection }> {
   const files = ctx.cliFiles ?? CLI_FILES
   const found = ctx.probeCli
-    ? await findInstalledCli(cli, { ...ctx, files, probe: ctx.probeCli })
+    ? await findInstalledCli(cli, { ...ctx, files, probe: ctx.probeCli }, usable)
     : null
   if (!found) {
     return {
@@ -771,8 +775,9 @@ async function userCli(
   ctx: DetectContext,
   minimum: string | null | undefined,
 ): Promise<{ found: FoundCli } | { missing: Detection }> {
-  const result = await findUserCli(def, cli, ctx)
-  return 'missing' in result ? result : checkUserCli(def, cli, result.found, minimum)
+  const check = (found: FoundCli) => checkUserCli(def, cli, found, minimum)
+  const result = await findUserCli(def, cli, ctx, (found) => 'found' in check(found))
+  return 'missing' in result ? result : check(result.found)
 }
 
 /** The CLI found, or the detection that says it cannot run, such as one below `minimum`. */
@@ -821,7 +826,7 @@ function ownProgramDetection(
 }
 
 /** The versions of a package harness's own program Kettu runs, as an npm range; null for any. */
-function programRange(launch: PackageLaunch): string | null {
+export function programRange(launch: PackageLaunch): string | null {
   const bounds = [launch.updates, launch.minimum && `>=${launch.minimum}`].filter(Boolean)
   return bounds.length > 0 ? bounds.join(' ') : null
 }
@@ -838,25 +843,22 @@ async function userPackageProgram(
   if (!ctx.probeCli) return null
   const cli = packageCli(launch.command, launch.installedAt)
   const files = ctx.cliFiles ?? CLI_FILES
-  const found = await findInstalledCli(cli, {
-    ...ctx,
-    binaryOverride: null,
-    files,
-    probe: ctx.probeCli,
-  })
-  if (!found) return null
-  const { installed } = found
-  const detail = cliDetail(def, cli, installed)
-  if (detail || !installed.version) {
-    return { unused: { installed, why: { kind: 'unusable', detail: detail ?? '' } } }
-  }
   const range = programRange(launch)
-  if (range && !inNpmRange(installed.version, range)) {
-    return { unused: { installed, why: { kind: 'range', range } } }
+  const why = ({ installed }: FoundCli): UnusedProgramReason | null => {
+    const detail = cliDetail(def, cli, installed)
+    if (detail || !installed.version) return { kind: 'unusable', detail: detail ?? '' }
+    if (range && !inNpmRange(installed.version, range)) return { kind: 'range', range }
+    if (!usable(ctx.manifestRule ?? null, installed.version)) return { kind: 'manifest' }
+    return null
   }
-  if (!usable(ctx.manifestRule ?? null, installed.version)) {
-    return { unused: { installed, why: { kind: 'manifest' } } }
-  }
+  const found = await findInstalledCli(
+    cli,
+    { ...ctx, binaryOverride: null, files, probe: ctx.probeCli },
+    (candidate) => why(candidate) === null,
+  )
+  if (!found) return null
+  const unused = why(found)
+  if (unused) return { unused: { installed: found.installed, why: unused } }
   return { detection: ownProgramDetection(def, launch, found, ctx.platform) }
 }
 
@@ -916,18 +918,27 @@ async function detectInstall(def: AgentDefinition, ctx: DetectContext): Promise<
       // Only the user's own CLI runs: one missing or too old is said before anything installs.
       let cli: FoundCli | null = null
       if (def.cli) {
-        const found = await findUserCli(def, def.cli, ctx)
-        if ('missing' in found) return found.missing
-        const runs = await installForCli(
-          def.cli,
-          launch,
-          choice.wanted,
-          installs,
-          found.found.installed,
-          files,
+        const theirs = def.cli
+        const check = async (found: FoundCli) => {
+          const runs = await installForCli(
+            theirs,
+            launch,
+            choice.wanted,
+            installs,
+            found.installed,
+            files,
+          )
+          return { runs, result: checkUserCli(def, theirs, found, runs.minimum) }
+        }
+        const found = await findUserCli(
+          def,
+          theirs,
+          ctx,
+          async (candidate) => 'found' in (await check(candidate)).result,
         )
+        if ('missing' in found) return found.missing
+        const { runs, result } = await check(found.found)
         current = runs.current
-        const result = checkUserCli(def, def.cli, found.found, runs.minimum)
         if ('missing' in result) return result.missing
         cli = result.found
       }
