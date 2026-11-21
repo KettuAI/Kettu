@@ -52,8 +52,6 @@ export const MARKET_UNLIST = 'marketplace_unlist'
  * unlist wait for the user in Kettu's card, so the card is the only ask.
  */
 export const MARKET_AUTO_ALLOW = [MARKET_CHECK, MARKET_MINE, MARKET_PUBLISH, MARKET_UNLIST]
-/** How long a card waits before what it asked is put off. */
-export const MARKET_WAIT_MS = 10 * 60_000
 
 const PATH_CHARS = 4096
 const LISTING_REF_CHARS = 80
@@ -237,6 +235,11 @@ export interface MarketToolsDeps {
   ask(sessionId: string, ask: MarketAsk): { entryId: string; answer: Promise<MarketAnswer> } | null
   /** What became of a card the user answered. */
   settle(sessionId: string, entryId: string, outcome: MarketPublishOutcome): void
+  /**
+   * Tells the session what became of a card no call of its is left to take, as the answer on a
+   * card it showed: sent now when it is idle, else queued.
+   */
+  tell(sessionId: string, text: string): void
   drafts: {
     put(draft: NewDraft): Promise<PublishDraft>
     published(folder: string, version?: PublishedVersion): Promise<void>
@@ -259,8 +262,9 @@ export interface MarketToolsDeps {
 }
 
 /**
- * A card a call opened and what follows its answer. It outlives the call, so the agent's next call
- * for the same folder or listing picks it up, until one gets its result or the turn ends.
+ * A card a call opened and what follows its answer. It outlives the call and the turn, so the
+ * agent's next call for the same folder or listing picks it up; what comes of it once no call is
+ * left to take it is told to the session.
  */
 interface CardJob {
   action: 'publish' | 'unlist'
@@ -269,7 +273,16 @@ interface CardJob {
   /** The item's name, as a call that returns before the answer says it. */
   name: string
   confirmed: boolean
+  /** It ended with its session, which no one is told. */
+  ended: boolean
   result: Promise<CallToolResult>
+  /** Counts the session's turn ends since it opened; a call takes it only within its own turn. */
+  turn: number
+  /** Calls of the current turn waiting on it. */
+  waiting: number
+  /** What came of it while no call waited, as the session is told. */
+  came: string | null
+  told: boolean
 }
 
 type Code = 'invalid' | 'signed_out' | 'not_found' | 'not_ready' | 'refused'
@@ -459,11 +472,19 @@ export class MarketTools {
   }
 
   /**
-   * The session's turn ended: no call of it comes back for what its cards became, and a later
-   * turn's call for the same folder or listing asks again.
+   * The session's turn ended: its cards wait on for their own time, and what comes of one no call
+   * took is told to the session. A card already told is done once the turn after it ends.
    */
   turnEnded(sessionId: string): void {
-    this.jobs.delete(sessionId)
+    for (const job of this.jobs.get(sessionId) ?? []) {
+      if (job.told) {
+        this.done(sessionId, job)
+        continue
+      }
+      job.turn++
+      job.waiting = 0
+      if (job.came !== null) this.tell(sessionId, job)
+    }
   }
 
   /** Serves a call; a refusal becomes a tool error whose text says why. */
@@ -870,7 +891,7 @@ export class MarketTools {
                 ? 'The user chose Not now. Nothing was uploaded; it is kept as a draft in Marketplace › Published. Do not publish it again unless they ask.'
                 : answer.decision === 'expired'
                   ? 'The user did not answer within 10 minutes. Nothing was uploaded; it is kept as a draft in Marketplace › Published.'
-                  : 'The turn ended before the user answered. Nothing was uploaded; it is kept as a draft in Marketplace › Published.',
+                  : 'The session closed before the user answered. Nothing was uploaded; it is kept as a draft in Marketplace › Published.',
           },
         ],
         structuredContent: { published: false, draft: true },
@@ -1300,15 +1321,51 @@ export class MarketTools {
     answer: Promise<MarketAnswer>,
     then: (answer: MarketAnswer) => Promise<CallToolResult>,
   ): CardJob {
-    const job: CardJob = { action, refs, name, confirmed: false, result: null! }
+    const job: CardJob = {
+      action,
+      refs,
+      name,
+      confirmed: false,
+      ended: false,
+      result: null!,
+      turn: 0,
+      waiting: 0,
+      came: null,
+      told: false,
+    }
     job.result = answer.then((given) => {
       job.confirmed = given.decision === 'confirm'
+      job.ended = given.decision === 'ended'
       return then(given)
     })
-    // A failure no call waits for is still handed to the next one.
-    job.result.catch(() => {})
+    // Before any call's, so a call still waiting is counted when the outcome lands.
+    job.result.then(
+      (result) => this.came(sessionId, job, resultText(result)),
+      (error: unknown) => this.came(sessionId, job, (error as Error).message),
+    )
     this.jobs.set(sessionId, [...(this.jobs.get(sessionId) ?? []), job])
     return job
+  }
+
+  /**
+   * The card has an outcome: a waiting call takes it; else the session is told now if the turn
+   * that opened it ended, or when it ends.
+   */
+  private came(sessionId: string, job: CardJob, text: string): void {
+    job.came = text
+    if (job.waiting === 0 && job.turn > 0) this.tell(sessionId, job)
+  }
+
+  private tell(sessionId: string, job: CardJob): void {
+    if (job.told || job.came === null) return
+    job.told = true
+    if (job.ended) return this.done(sessionId, job)
+    const card = job.action === 'publish' ? 'publish' : 'unlist'
+    this.deps.tell(
+      sessionId,
+      `What became of the card to ${card} ${job.name}, which an earlier turn of yours opened: ` +
+        job.came,
+    )
   }
 
   /** The card's outcome once it has one, or by the deadline that the user has not answered yet. */
@@ -1317,15 +1374,20 @@ export class MarketTools {
     const late = new Promise<null>((resolve) => {
       timer = setTimeout(() => resolve(null), Math.max(0, deadline - Date.now()))
     })
+    const turn = job.turn
+    job.waiting++
+    // A call whose turn ended meanwhile hands its outcome to no one, so the session is told it.
+    const taken = () => job.turn === turn && !job.told
     try {
       const result = await Promise.race([job.result, late])
       if (result === null) return stillWaiting(job)
-      this.done(sessionId, job)
+      if (taken()) this.done(sessionId, job)
       return result
     } catch (error) {
-      this.done(sessionId, job)
+      if (taken()) this.done(sessionId, job)
       throw error
     } finally {
+      if (job.turn === turn) job.waiting--
       clearTimeout(timer)
     }
   }
@@ -1335,6 +1397,10 @@ export class MarketTools {
     if (left.length > 0) this.jobs.set(sessionId, left)
     else this.jobs.delete(sessionId)
   }
+}
+
+function resultText(result: CallToolResult): string {
+  return result.content.flatMap((item) => (item.type === 'text' ? [item.text] : [])).join('\n')
 }
 
 /** A call that returns before the card's outcome, for the agent to call again. */
@@ -1351,7 +1417,9 @@ function stillWaiting(job: CardJob): CallToolResult {
       ? `The user has not answered the card to publish ${job.name} yet, and nothing was uploaded. ${again} to keep waiting on the same card; it shows no second one.`
       : `The user has not answered the card to unlist ${job.name} yet, and it stays listed. ${again} to keep waiting on the same card; it shows no second one.`
   return {
-    content: [{ type: 'text', text }],
+    content: [
+      { type: 'text', text: `${text} If your turn ends first, Kettu tells you the outcome.` },
+    ],
     structuredContent: { waiting: true, confirmed: job.confirmed },
   }
 }

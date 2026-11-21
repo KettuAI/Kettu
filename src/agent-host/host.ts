@@ -73,6 +73,7 @@ import {
 import { listingIdOf } from '@shared/market-community'
 import {
   HANDLE,
+  MARKET_WAIT_MS,
   type MarketAccount,
   type MarketCall,
   type MarketCallAnswer,
@@ -150,7 +151,7 @@ import type { CodexRequest } from './marketplace/codex-plugins'
 import { MarketPluginsService, pluginsFile } from './marketplace/plugins'
 import { MarketSkillsService, skillFor, skillsCatalogFile } from './marketplace/skills'
 import { PublishDrafts } from './marketplace/publish-drafts'
-import { MARKET_WAIT_MS, MarketCallError, MarketTools } from './marketplace/publish-tools'
+import { MarketCallError, MarketTools } from './marketplace/publish-tools'
 import {
   SETTINGS_WAIT_MS,
   SettingsTools,
@@ -607,6 +608,11 @@ export class AgentHost {
       ask: (sessionId, ask) => this.sessions.marketAsked(sessionId, ask, MARKET_WAIT_MS),
       settle: (sessionId, entryId, outcome) =>
         this.sessions.marketSettled(sessionId, entryId, outcome),
+      tell: (sessionId, text) => {
+        this.sessions.sendCardAnswer(sessionId, text).catch((error: unknown) => {
+          log('warn', `Could not tell a session about its card: ${(error as Error).message}`)
+        })
+      },
       drafts: this.publishDrafts,
       changed: () => this.hub.broadcast({ type: 'market.publishedChanged' }),
       agentOf: (sessionId) => this.sessions.sessionAgent(sessionId),
