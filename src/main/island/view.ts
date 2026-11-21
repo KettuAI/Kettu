@@ -23,6 +23,7 @@ import { KETTU_SERVER, mcpCallOf } from '@shared/mcp-call'
 import type { UpdateStatus } from '@shared/updates'
 import { islandT, kettuToolT } from '../i18n'
 import { buildNotices, type NoticeAction } from './notices'
+import { limitLabel, limitPhrase } from './windows'
 import type {
   IslandGroup,
   IslandHost,
@@ -513,7 +514,7 @@ function buildRow(
       line = islandT('line.signIn', { agent: agentName })
       break
     case 'limited':
-      line = islandT('line.limited', { window: limit!.label })
+      line = islandT('line.limited', { window: limitPhrase(limit!) })
       break
     case 'starting':
       line = islandT('line.starting')
@@ -563,7 +564,7 @@ function buildRow(
       : null,
     subagents:
       running > 0 ? { running, text: islandT('line.subagents', { count: running }) } : null,
-    limit: limit ? { label: limit.label, resetsAt: limit.resetsAt } : null,
+    limit: limit ? { label: limitLabel(limit), resetsAt: limit.resetsAt } : null,
     phase,
     cache: expiry
       ? {
