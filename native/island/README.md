@@ -32,8 +32,10 @@ shows while it is on:
   one status at the end. Up to four sessions, each row has a second line: what it is doing or what
   came of it in its state's color, and the plan's progress or a time on its right; with more, every
   row keeps one line with only that progress or time, six of them with the rest folded into one
-  line. Under them, after a hairline, up to three notices: Kettu's update, the agents' updates and
-  the tightest plan limit, each one line with a button that acts in place or a link into Kettu.
+  line. A session whose sub-agents are at work, starting, running or waiting for an answer, shows
+  the sidebar's badge before the progress: a bot, how many and a spinner. Under them, after a
+  hairline, up to three notices: Kettu's update, the agents' updates and the tightest plan limit,
+  each one line with a button that acts in place or a link into Kettu.
   Then New session and Open Kettu. The panel is laid out unseen first, so the outline grows to its height in one critically
   damped spring. A click opens a row; the bare top opens Kettu. An island opened by a click takes
   the keyboard: Esc, the arrows, Return and the digits.
