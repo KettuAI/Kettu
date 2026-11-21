@@ -2,6 +2,7 @@
 
 import type { AgentStatus, SessionSummary } from '@shared/agent-host'
 import { tightestLimit } from '@shared/session-groups'
+import { harnessProblem, programCopy, shortLabel } from '@renderer/features/agents/harness-problem'
 import { limitPhrase } from '@renderer/lib/format'
 import { i18n } from '@renderer/lib/i18n'
 import { limitPercent, type LimitView } from '@renderer/lib/plan-limit'
@@ -12,7 +13,8 @@ export type LineTone = 'muted' | 'attention' | 'danger'
 
 /**
  * The line under an agent in the picker: what it needs before it can start, else its harness when
- * it is another agent on it, its account and its fullest plan limit.
+ * it is another agent on it, its account, its fullest plan limit and which copy of its program
+ * runs.
  */
 export function agentLine(
   status: AgentStatus,
@@ -20,7 +22,7 @@ export function agentLine(
   /** The account's newest reading, which may be another host's. */
   limits = status.limits,
   view: LimitView = 'used',
-): { text: string; tone: LineTone } | null {
+): { text: string; tone: LineTone; title?: string } | null {
   const need = agentNeed(status)
   // A version Kettu's checks say does not work comes before anything else it needs.
   const warning = need === 'update' ? null : status.versionWarning
@@ -42,7 +44,25 @@ export function agentLine(
     if (task?.state === 'running')
       return { text: i18n.t('session:newSession.agentMenu.updating'), tone: 'muted' }
     if (task?.state === 'failed' && task.error) return { text: task.error, tone: 'danger' }
-    return { text: i18n.t('session:newSession.picker.needsUpdate'), tone: 'attention' }
+    const problem = harnessProblem(status)
+    return {
+      text: i18n.t('session:newSession.picker.needsUpdate', {
+        problem: problem ? shortLabel(problem.reason) : '',
+      }),
+      tone: 'attention',
+      ...(problem ? { title: problem.text } : {}),
+    }
+  }
+  if (need === 'blocked') {
+    // The row is narrow, so the whole reason is its tooltip.
+    const problem = harnessProblem(status)
+    return {
+      text: i18n.t('session:newSession.picker.needsFix', {
+        problem: problem ? shortLabel(problem.reason) : '',
+      }),
+      tone: 'danger',
+      ...(problem ? { title: problem.text } : {}),
+    }
   }
   if (need === 'setup')
     return { text: i18n.t('session:newSession.agentMenu.setsUp'), tone: 'muted' }
@@ -66,6 +86,8 @@ export function agentLine(
           ),
     )
   }
+  const copy = programCopy(status)
+  if (copy) parts.push(copy)
   return parts.length > 0 ? { text: parts.join(' · '), tone: 'muted' } : null
 }
 

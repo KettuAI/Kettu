@@ -1,20 +1,39 @@
 {
   "readiness": {
-    "notFound": "未在 PATH 中找到。",
-    "howToInstall": "安装方法",
-    "needsNode": "需要 Node.js 22 或更高版本。",
-    "installNode": "安装 Node.js",
-    "couldNotStart": "无法启动。",
-    "outdated": "版本比 Kettu 要的旧，更新后才能用。",
-    "update": "更新方法"
+    "couldNotStart": "无法启动。"
   },
   "state": {
     "ready": "就绪",
     "signIn": "登录后开始",
     "installing": "正在安装…",
     "starting": "正在启动…",
-    "failed": "失败",
-    "notAvailable": "不可用",
-    "needsUpdate": "需要更新"
+    "failed": "失败"
+  },
+  "problem": {
+    "notInstalled": "未安装",
+    "needsNode": "需要 Node.js",
+    "needsNodeAt": "需要 Node.js {{version}} 或更高版本",
+    "needsNpm": "需要 npm",
+    "needsUv": "需要 uv",
+    "needsUvAt": "需要 uv {{version}} 或更高版本",
+    "tooOld": "版本太旧",
+    "tooOldAt": "版本太旧（需要 {{version}} 或更高版本）",
+    "cannotRun": "无法运行",
+    "cannotRunWhy": "无法运行：{{why}}",
+    "noVersion": "没有适合这台电脑的版本",
+    "fix": {
+      "install": "安装…",
+      "node": "如何安装 Node.js",
+      "npm": "如何安装 npm",
+      "uv": "如何安装 uv",
+      "update": "更新…",
+      "choose": "选择可执行文件…"
+    }
+  },
+  "copy": {
+    "chosen": "你选的程序",
+    "own": "你自己装的",
+    "ownWith": "你自己装的 · {{method}}",
+    "kettu": "Kettu 装的"
   }
 }

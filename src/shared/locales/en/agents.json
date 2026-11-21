@@ -1,20 +1,39 @@
 {
   "readiness": {
-    "notFound": "Not found on PATH.",
-    "howToInstall": "How to install",
-    "needsNode": "Needs Node.js 22 or later.",
-    "installNode": "Install Node.js",
-    "couldNotStart": "Could not start.",
-    "outdated": "Older than Kettu needs; update it to use it.",
-    "update": "How to update"
+    "couldNotStart": "Could not start."
   },
   "state": {
     "ready": "Ready",
     "signIn": "Sign in to start",
     "installing": "Installing…",
     "starting": "Starting…",
-    "failed": "Failed",
-    "notAvailable": "Not available",
-    "needsUpdate": "Needs update"
+    "failed": "Failed"
+  },
+  "problem": {
+    "notInstalled": "Not installed",
+    "needsNode": "Needs Node.js",
+    "needsNodeAt": "Needs Node.js {{version}} or later",
+    "needsNpm": "Needs npm",
+    "needsUv": "Needs uv",
+    "needsUvAt": "Needs uv {{version}} or later",
+    "tooOld": "Too old",
+    "tooOldAt": "Too old (needs {{version}} or later)",
+    "cannotRun": "Can’t run",
+    "cannotRunWhy": "Can’t run: {{why}}",
+    "noVersion": "No version for this computer",
+    "fix": {
+      "install": "Install…",
+      "node": "How to install Node.js",
+      "npm": "How to install npm",
+      "uv": "How to install uv",
+      "update": "Update…",
+      "choose": "Choose binary…"
+    }
+  },
+  "copy": {
+    "chosen": "The program you chose",
+    "own": "Your own",
+    "ownWith": "Your own · {{method}}",
+    "kettu": "Kettu’s copy"
   }
 }

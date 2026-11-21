@@ -1,6 +1,7 @@
 import type { AgentStatus } from '@shared/agent-host'
 import { i18n } from '@renderer/lib/i18n'
 import { awaitsPackage, hasProgram } from '@renderer/stores/agents'
+import { harnessProblem, type HarnessProblem } from './harness-problem'
 
 export type AgentReadiness =
   | { kind: 'ready' }
@@ -8,7 +9,7 @@ export type AgentReadiness =
   | { kind: 'installing' }
   | { kind: 'starting' }
   | { kind: 'failed'; message: string }
-  | { kind: 'missing'; message: string; action: string; url: string | null }
+  | { kind: 'missing'; message: string; problem: HarnessProblem }
 
 /**
  * The oldest version the user's program must be, when it is on the machine but older than Kettu
@@ -22,28 +23,11 @@ export function cliOutdated(status: AgentStatus): string | null {
 export function readiness(status: AgentStatus): AgentReadiness {
   switch (status.state) {
     case 'not-installed':
-      if (cliOutdated(status) !== null) {
-        return {
-          kind: 'missing',
-          message: status.detail ?? i18n.t('agents:readiness.outdated'),
-          action: i18n.t('agents:readiness.update'),
-          url: null,
-        }
-      }
-      return {
-        kind: 'missing',
-        message: status.detail ?? i18n.t('agents:readiness.notFound'),
-        action: i18n.t('agents:readiness.howToInstall'),
-        url: status.installUrl,
-      }
     case 'node-missing':
-    case 'node-outdated':
-      return {
-        kind: 'missing',
-        message: status.detail ?? i18n.t('agents:readiness.needsNode'),
-        action: i18n.t('agents:readiness.installNode'),
-        url: status.installUrl,
-      }
+    case 'node-outdated': {
+      const problem = harnessProblem(status)!
+      return { kind: 'missing', message: problem.text, problem }
+    }
     case 'installing':
       return { kind: 'installing' }
     case 'starting':
@@ -67,11 +51,27 @@ export function listedInstalled(status: AgentStatus): boolean {
 }
 
 /**
+ * The user's own program runs, and how it was installed reports no newer versions, so only its
+ * own installer updates it and no check of Kettu's can say it is current.
+ */
+export function programUnchecked(status: AgentStatus): boolean {
+  return (
+    status.cli?.checkable === false &&
+    !!status.cli.installed &&
+    !status.package &&
+    !status.release?.registry
+  )
+}
+
+/**
  * Up to date only once the harness is on the machine. A check from when it could run does not make
  * a missing program, such as Pi's `pi`, current.
  */
 export function showsCurrent(status: AgentStatus): boolean {
   if (status.uninstalled || !hasProgram(status) || awaitsPackage(status)) return false
-  if (cliOutdated(status) !== null || status.versionWarning) return false
+  // A program that cannot run is not current, whatever a check said.
+  if (readiness(status).kind === 'missing') return false
+  if (cliOutdated(status) !== null || status.versionWarning || programUnchecked(status))
+    return false
   return status.updateCheckedAt !== null || status.cli !== null
 }

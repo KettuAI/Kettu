@@ -60,6 +60,7 @@ import {
 import { Kbd } from '@renderer/components/ui/kbd'
 import { toast } from '@renderer/components/ui/toast'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
+import { harnessReason, shortLabel } from '@renderer/features/agents/harness-problem'
 import { forgetSite } from '@renderer/features/session/link-open'
 import { terminalFontStack } from '@renderer/features/terminal/font-stack'
 import { errorMessage } from '@renderer/lib/host'
@@ -147,14 +148,14 @@ export function DefaultAgent() {
   const options = [
     { value: 'ask', label: t('general.defaultAgent.askEachTime') },
     ...agents.map((agent) => {
-      const absent = !isInstalled(agent)
+      const reason = isInstalled(agent) ? null : harnessReason(agent)
       const off = agent.disabled === true
       return {
         value: agent.id as string,
         label: agent.name,
         icon: <AgentMark agent={agent.id} className="size-4" />,
-        disabled: absent || off,
-        hint: absent ? t('harnesses.groups.notInstalled') : off ? t('agents.turnedOff') : undefined,
+        disabled: !!reason || off,
+        hint: reason ? shortLabel(reason) : off ? t('agents.turnedOff') : undefined,
       }
     }),
   ]

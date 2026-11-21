@@ -244,6 +244,14 @@ function introText(t: SettingsT, status: AgentStatus, offer: InstallOffer | null
     return t('harnesses.install.setupBody', { name })
   }
   const vendor = VENDORS[status.harnessId]
+  // With one route there is nothing to pick.
+  const one = offer ? offer.routes.length === 1 : status.installMethods.length === 1
+  if (one) {
+    return t(vendor ? 'harnesses.install.bodyOne' : 'harnesses.install.bodyOnePlain', {
+      name,
+      vendor,
+    })
+  }
   return t(vendor ? 'harnesses.install.body' : 'harnesses.install.bodyPlain', { name, vendor })
 }
 

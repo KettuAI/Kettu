@@ -3,7 +3,12 @@
 
 import { stat } from 'node:fs/promises'
 import path from 'node:path'
-import type { InstalledCli, LimitsReason, UnusedProgramReason } from '@shared/agent-host'
+import type {
+  HarnessReason,
+  InstalledCli,
+  LimitsReason,
+  UnusedProgramReason,
+} from '@shared/agent-host'
 import type { NodeRuntime } from '@shared/host-control'
 import type { Platform } from '@shared/platform'
 import type { HostSettings } from '@shared/settings'
@@ -512,6 +517,7 @@ export type Detection =
   | {
       state: 'not-installed' | 'node-missing' | 'node-outdated'
       detail: string
+      reason: HarnessReason
       /** The user's CLI when one was found that cannot run, such as one too old. */
       cli?: InstalledCli
       unused?: UnusedProgram
@@ -576,7 +582,7 @@ export async function installedSpec(
     ...extraEnv,
   }
   if (launch.kind === 'package' && launch.library) return librarySpec(installed.entry, env)
-  if (node === null) throw new Error(`${def.name} runs on Node.js, which was not found`)
+  if (node === null) throw new Error(t('detect.nodeMissing', { agent: def.name }))
   const prefix =
     launch.kind === 'package' && launch.perSession && sessionRouterPath
       ? [sessionRouterPath, node]
@@ -730,21 +736,43 @@ async function installForCli(
 
 /** Why the user's CLI cannot run, in the user's terms, or null when it can. */
 function cliDetail(def: AgentDefinition, cli: AdapterCli, installed: InstalledCli): string | null {
+  return cliProblem(def, cli, installed)?.detail ?? null
+}
+
+/** The user's CLI's problem as detection says it: the sentence and its reason. */
+function cliProblem(
+  def: AgentDefinition,
+  cli: AdapterCli,
+  installed: InstalledCli,
+): { detail: string; reason: HarnessReason } | null {
   const problem = installed.problem
   if (!problem) return null
   const agent = def.name
+  const { path: file, version } = installed
   switch (problem.kind) {
     case 'unsupported':
-      return t('detect.cliUnsupported', { agent, path: installed.path })
+      return {
+        detail: t('detect.cliUnsupported', { agent, path: file }),
+        reason: { kind: 'cannot-run', why: t('detect.why.needsShell', { path: file }) },
+      }
     case 'failed':
-      return t('detect.cliFailed', { agent, reason: problem.reason })
+      return {
+        detail: t('detect.cliFailed', { agent, reason: problem.reason }),
+        reason: {
+          kind: 'cannot-run',
+          why: t('detect.why.versionUnread', { command: cli.command, reason: problem.reason }),
+        },
+      }
     case 'too-old':
-      return t('detect.cliOutdated', {
-        agent,
-        command: cli.command,
-        required: problem.minimum,
-        installed: installed.version ?? '?',
-      })
+      return {
+        detail: t('detect.cliOutdated', {
+          agent,
+          command: cli.command,
+          required: problem.minimum,
+          installed: version ?? '?',
+        }),
+        reason: { kind: 'too-old', minimum: problem.minimum, installed: version },
+      }
   }
 }
 
@@ -767,6 +795,7 @@ async function findUserCli(
       missing: {
         state: 'not-installed',
         detail: t('detect.cliMissing', { agent: def.name, command: cli.command }),
+        reason: { kind: 'not-installed' },
       },
     }
   }
@@ -793,10 +822,10 @@ function checkUserCli(
   minimum: string | null | undefined,
 ): { found: FoundCli } | { missing: Detection } {
   const installed = checkCli(found.installed, minimum)
-  const detail = cliDetail(def, cli, installed)
+  const problem = cliProblem(def, cli, installed)
   // A program the environment names is the user's choice, and runs whatever its version.
-  if (detail && !installed.variable) {
-    return { missing: { state: 'not-installed', detail, cli: installed } }
+  if (problem && !installed.variable) {
+    return { missing: { state: 'not-installed', ...problem, cli: installed } }
   }
   return { found: { ...found, installed } }
 }
@@ -867,6 +896,59 @@ async function userPackageProgram(
   return { detection: ownProgramDetection(def, launch, found, ctx.platform) }
 }
 
+type Unavailable = Exclude<Detection, { state: 'available' }>
+
+/** The program picked in Settings cannot be run. */
+function chosenUnusable(def: AgentDefinition, chosen: string): Unavailable {
+  return {
+    state: 'not-installed',
+    detail: t('detect.programUnusable', { agent: def.name, path: chosen }),
+    reason: { kind: 'cannot-run', why: t('detect.why.chosenUnusable', { path: chosen }) },
+  }
+}
+
+/** No version of the harness fits this computer. */
+function noVersion(def: AgentDefinition): Unavailable {
+  return {
+    state: 'not-installed',
+    detail: t('detect.noVersion', { agent: def.name }),
+    reason: { kind: 'no-version' },
+  }
+}
+
+/** The Node.js version the harness needs at least, as `22.19.0`; null when it names none. */
+function nodeMinimum(def: AgentDefinition): string | null {
+  return def.requiresNode?.replace(/^>=\s*/, '') ?? null
+}
+
+/**
+ * Node.js was not found, or the node found did not answer `--version`, which says which. `missing`
+ * is what to say when none was found: the harness runs on it, or only npm, to install it, does.
+ */
+function nodeMissing(
+  def: AgentDefinition,
+  node: NodeProbe,
+  missing: 'detect.nodeMissing' | 'detect.nodeToInstall',
+): Unavailable {
+  const minimum = nodeMinimum(def)
+  if (node.nodePath) {
+    return {
+      state: 'node-missing',
+      detail: t('detect.nodeUnreadable', {
+        agent: def.name,
+        path: node.nodePath,
+        reason: node.nodeError || t('detect.printedNothing'),
+      }),
+      reason: { kind: 'needs-node', minimum, installed: null, unreadable: true },
+    }
+  }
+  return {
+    state: 'node-missing',
+    detail: t(missing, { agent: def.name }),
+    reason: { kind: 'needs-node', minimum, installed: null },
+  }
+}
+
 /**
  * Finds what an agent needs without starting it, so it can run at startup and on demand. Before
  * what Kettu installs, a package or uvx harness runs the program picked in Settings, whatever its
@@ -877,12 +959,7 @@ export async function detectAgent(def: AgentDefinition, ctx: DetectContext): Pro
   const { launch } = def
   const chosen = ctx.binaryOverride
   if (chosen && (launch.kind === 'package' || launch.kind === 'uvx')) {
-    if (!(await ctx.isExecutable(chosen))) {
-      return {
-        state: 'not-installed',
-        detail: t('detect.programUnusable', { agent: def.name, path: chosen }),
-      }
-    }
+    if (!(await ctx.isExecutable(chosen))) return chosenUnusable(def, chosen)
     if (!def.cli) {
       const asked = ctx.probeCli ? await ctx.probeCli(chosen, ctx.env) : null
       const version = asked && 'version' in asked ? asked.version : null
@@ -914,8 +991,7 @@ async function detectInstall(def: AgentDefinition, ctx: DetectContext): Promise<
     case 'package': {
       const { nodePath, nodeVersion, npmPath } = ctx.node
       const { library } = launch
-      if (!choice)
-        return { state: 'not-installed', detail: t('detect.noVersion', { agent: def.name }) }
+      if (!choice) return noVersion(def)
       const installs = await packageInstalls(def, launch, choice, ctx)
       const { other } = installs
       let current: InstalledAdapter | null = installs.atPin[0] ?? null
@@ -949,10 +1025,7 @@ async function detectInstall(def: AgentDefinition, ctx: DetectContext): Promise<
       }
       // A library runs in the host, so the user's Node.js only runs npm, to install it.
       if (!library && (!nodePath || !nodeVersion)) {
-        return {
-          state: 'node-missing',
-          detail: t('detect.nodeMissing', { agent: def.name }),
-        }
+        return nodeMissing(def, ctx.node, 'detect.nodeMissing')
       }
       if (
         !library &&
@@ -960,30 +1033,35 @@ async function detectInstall(def: AgentDefinition, ctx: DetectContext): Promise<
         def.requiresNode &&
         !satisfiesNode(nodeVersion, def.requiresNode)
       ) {
+        const minimum = nodeMinimum(def)
         return {
           state: 'node-outdated',
           detail: t('detect.nodeOutdated', {
             agent: def.name,
-            required: def.requiresNode.replace('>=', ''),
+            required: minimum ?? '',
             installed: nodeVersion,
           }),
+          reason: { kind: 'needs-node', minimum, installed: nodeVersion },
         }
       }
       if (!current && !other && (!nodePath || !nodeVersion)) {
-        return {
-          state: 'node-missing',
-          detail: t('detect.nodeToInstall', { agent: def.name }),
-        }
+        return nodeMissing(def, ctx.node, 'detect.nodeToInstall')
       }
       if (!current && !npmPath && !other) {
         return {
           state: 'not-installed',
           detail: t('detect.npmMissing', { agent: def.name, hint: t(def.install.hint) }),
+          reason: { kind: 'needs-npm' },
         }
       }
       // A per-session agent runs only through the router, which every packaged build carries.
       if (launch.perSession && !ctx.sessionRouterPath) {
-        return { state: 'not-installed', detail: 'The session router is missing from this build.' }
+        const why = t('detect.why.noRouter')
+        return {
+          state: 'not-installed',
+          detail: t('detect.noRouter', { agent: def.name }),
+          reason: { kind: 'cannot-run', why },
+        }
       }
       const prefix =
         launch.perSession && ctx.sessionRouterPath && nodePath
@@ -1070,10 +1148,7 @@ async function detectInstall(def: AgentDefinition, ctx: DetectContext): Promise<
       }
       if (ctx.binaryOverride) {
         if (!(await ctx.isExecutable(ctx.binaryOverride))) {
-          return {
-            state: 'not-installed',
-            detail: t('detect.programUnusable', { agent: def.name, path: ctx.binaryOverride }),
-          }
+          return chosenUnusable(def, ctx.binaryOverride)
         }
         return binaryDetection(ctx.binaryOverride, launch.args, ctx.platform, display, env)
       }
@@ -1103,6 +1178,7 @@ async function detectInstall(def: AgentDefinition, ctx: DetectContext): Promise<
       return {
         state: 'not-installed',
         detail: t('detect.commandMissing', { command: launch.command, hint: t(def.install.hint) }),
+        reason: { kind: 'not-installed' },
       }
     }
     case 'uvx': {
@@ -1111,10 +1187,10 @@ async function detectInstall(def: AgentDefinition, ctx: DetectContext): Promise<
         return {
           state: 'not-installed',
           detail: t('detect.commandMissing', { command: 'uvx', hint: t(def.install.hint) }),
+          reason: { kind: 'needs-uv', minimum: def.requiresUv ?? null, installed: null },
         }
       }
-      if (!choice)
-        return { state: 'not-installed', detail: t('detect.noVersion', { agent: def.name }) }
+      if (!choice) return noVersion(def)
       // An older uv fails on the first run with its resolver's words, so it is said here. A uv
       // that will not say its version is left to start.
       if (def.requiresUv && ctx.probeCli) {
@@ -1127,6 +1203,7 @@ async function detectInstall(def: AgentDefinition, ctx: DetectContext): Promise<
               required: def.requiresUv,
               installed: asked.version,
             }),
+            reason: { kind: 'needs-uv', minimum: def.requiresUv, installed: asked.version },
           }
         }
       }
@@ -1156,10 +1233,8 @@ async function detectInstall(def: AgentDefinition, ctx: DetectContext): Promise<
     }
     case 'node-script': {
       if (!(await (ctx.isFile ?? isFile)(launch.script))) {
-        return {
-          state: 'not-installed',
-          detail: t('detect.scriptMissing', { script: launch.script }),
-        }
+        const detail = t('detect.scriptMissing', { script: launch.script })
+        return { state: 'not-installed', detail, reason: { kind: 'cannot-run', why: detail } }
       }
       return {
         state: 'available',

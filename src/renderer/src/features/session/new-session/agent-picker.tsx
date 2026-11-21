@@ -35,7 +35,8 @@ import {
   usePlanReadings,
 } from '@renderer/stores/agents'
 import { refreshLimits } from '@renderer/stores/usage'
-import { openAgentSettings, openHarnessSettings } from '@renderer/stores/view'
+import { openAgentSettings } from '@renderer/stores/view'
+import { openHarnessPage } from '@renderer/features/agents/problem-fix'
 import { confirmCliUpdate } from '@renderer/features/updates/command-confirm-model'
 import { agentNeed, menuAgents } from './start-options'
 import { agentLine, type LineTone } from './picker'
@@ -107,16 +108,24 @@ export function AgentPicker({
           if (!id) return
           const status = byId.get(id)
           // An agent whose own program is too old is not chosen: a click updates it, once its
-          // command is shown.
-          if (status && agentNeed(status) === 'update') {
-            if (status.cli?.update) {
+          // command is shown. One that cannot run for another reason opens its harness's page,
+          // where that is fixed.
+          const need = status ? agentNeed(status) : null
+          if (status && need === 'update') {
+            if (status.cli?.update && hostId === null) {
               details.cancel()
               setOpen(false)
               void confirmCliUpdate(status)
             } else {
               setOpen(false)
-              openHarnessSettings(status.harnessId)
+              openHarnessPage(status, hostId)
             }
+            return
+          }
+          if (status && need === 'blocked') {
+            details.cancel()
+            setOpen(false)
+            openHarnessPage(status, hostId)
             return
           }
           onChoose(id)
@@ -192,7 +201,10 @@ export function AgentPicker({
                     <span className="flex min-w-0 flex-1 flex-col gap-px">
                       <span className="truncate text-menu text-primary">{status.name}</span>
                       {line && (
-                        <span className={cn('truncate text-small', LINE_TONE[line.tone])}>
+                        <span
+                          className={cn('truncate text-small', LINE_TONE[line.tone])}
+                          title={line.title ?? line.text}
+                        >
                           {line.text}
                         </span>
                       )}

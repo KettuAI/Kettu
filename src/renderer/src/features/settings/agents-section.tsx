@@ -60,6 +60,7 @@ import { Dialog, DialogClose } from '@renderer/components/ui/dialog'
 import { RadioGroup, RadioGroupItem } from '@renderer/components/ui/radio-group'
 import { toast } from '@renderer/components/ui/toast'
 import { AgentStateLine } from '@renderer/features/agents/agent-state'
+import { programCopy } from '@renderer/features/agents/harness-problem'
 import { readiness, type AgentReadiness } from '@renderer/features/agents/readiness'
 import { focusedPane } from '@renderer/features/split/layout'
 import { errorMessage } from '@renderer/lib/host'
@@ -102,6 +103,7 @@ import {
   Fact,
   ListMeter,
   MovedAccountsNotice,
+  ProblemFixButton,
   SignInNotice,
   SpendGroup,
   UsageGroup,
@@ -823,9 +825,15 @@ function AgentPageLine({ status }: { status: AgentStatus }) {
   const { t } = useTranslation(['settings', 'agents'])
   const ready = readiness(status).kind === 'ready'
   const version = harnessVersion(status)
-  const harness = t('agents.onHarness', {
-    harness: version ? `${status.harnessName} ${version}` : status.harnessName,
-  })
+  const copy = programCopy(status)
+  const harness = [
+    t('agents.onHarness', {
+      harness: version ? `${status.harnessName} ${version}` : status.harnessName,
+    }),
+    copy,
+  ]
+    .filter(Boolean)
+    .join(' · ')
   if (status.disabled) {
     return (
       <>
@@ -938,6 +946,9 @@ function AgentPageBody({ status }: { status: AgentStatus }) {
         >
           {t('common:actions.retry')}
         </SetButton>
+      )}
+      {r.kind === 'missing' && r.problem.fix && (
+        <ProblemFixButton status={status} fix={r.problem.fix} />
       )}
     </>
   )

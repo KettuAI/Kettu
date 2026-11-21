@@ -327,6 +327,8 @@ export interface AgentCli {
   // A newer version, from the daily check, and the command that updates it the way it was
   // installed; null when up to date, unchecked, or the way is unknown.
   update: { version: string; command: string } | null
+  // Whether its newer versions can be read, by how it was installed; absent on older hosts.
+  checkable?: boolean
 }
 
 export interface InstalledCli {
@@ -340,6 +342,21 @@ export type InstalledCliProblem =
   | { kind: 'unsupported' } // cannot run without a shell
   | { kind: 'failed'; reason: string } // its version could not be read
   | { kind: 'too-old'; minimum: string }
+
+/**
+ * Why detection found that a harness cannot run. `needs-node` carries the harness's own minimum
+ * (null when it names none) and the version found (null when none was, or `unreadable` when
+ * `node --version` did not answer); `needs-uv` the same for uv; `too-old` the user's program's;
+ * `cannot-run` says why in the user's terms; `no-version` is no version for this computer.
+ */
+export type HarnessReason =
+  | { kind: 'not-installed' }
+  | { kind: 'needs-node'; minimum: string | null; installed: string | null; unreadable?: true }
+  | { kind: 'needs-npm' }
+  | { kind: 'needs-uv'; minimum: string | null; installed: string | null }
+  | { kind: 'too-old'; minimum: string; installed: string | null }
+  | { kind: 'cannot-run'; why: string }
+  | { kind: 'no-version' }
 
 /**
  * Why the user's own program of a harness Kettu also installs does not run: its version is outside
@@ -474,6 +491,9 @@ export interface AgentStatus {
   resets?: PlanResets
   resetsError?: ResetsError
   detail: string | null // install hint or error message
+  // Why it cannot run while `state` is `not-installed`, `node-missing` or `node-outdated`; null
+  // otherwise, and absent on older hosts, which say it in `detail` alone.
+  reason?: HarnessReason | null
   installUrl: string | null
   installNotice?: string | null // the vendor installer's effects, shown before installation
   progress: string[] // latest npm output or stderr lines while installing or starting

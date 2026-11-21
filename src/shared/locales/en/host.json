@@ -222,7 +222,7 @@
     "cliGone": "{{path}} is gone, perhaps because {{agent}} is being updated. {{reason}}",
     "cliRestart": "{{agent}} is now at {{path}}; restart Kettu to use it.",
     "cannotInstall": "{{agent}} cannot be installed",
-    "notInstalled": "{{agent}} is not installed. Install it to start a session.",
+    "notInstalled": "{{agent}} is not installed.",
     "busyInstalling": "{{agent}} is already being installed or started",
     "closeSessionsFirst": "Close the sessions that use {{agent}} first",
     "stillRunning": "{{agent}} did not stop and is still running; try again once it has exited",
@@ -296,13 +296,16 @@
   "detect": {
     "noVersion": "No version of {{agent}} fits this computer, so it cannot be installed.",
     "nodeMissing": "{{agent}} runs on Node.js, and node was not found on PATH.",
-    "nodeToInstall": "{{agent}} is installed with npm on first use, which needs Node.js, and node was not found on PATH.",
+    "nodeUnreadable": "{{agent}} runs on Node.js, and `{{path}} --version` failed: {{reason}}",
+    "printedNothing": "it printed nothing.",
+    "nodeToInstall": "Kettu installs {{agent}} with npm, which needs Node.js, and node was not found on PATH.",
     "nodeOutdated": "{{agent}} needs Node.js {{required}} or later; {{installed}} is installed.",
     "uvOutdated": "{{agent}} needs uv {{required}} or later; {{installed}} is installed. Update it with `uv self update`, or with the tool you installed it with.",
-    "npmMissing": "{{agent}} is installed with npm on first use, and npm was not found on PATH. {{hint}}",
+    "npmMissing": "Kettu installs {{agent}} with npm, and npm was not found on PATH. {{hint}}",
     "programUnusable": "The program chosen for {{agent}} ({{path}}) cannot be run.",
     "commandMissing": "{{command}} was not found on PATH. {{hint}}",
     "scriptMissing": "{{script}} does not exist.",
+    "noRouter": "{{agent}} runs through Kettu's session router, which is missing from this build. Reinstall Kettu.",
     "antigravityInstallNotice": "The official installer puts agy in ~/.local/bin and adds it to PATH in your shell configuration files.",
     "opencodeInstallNotice": "Kettu runs OpenCode 2. OpenCode 1 uses the same command, so remove a Homebrew or npm copy of it before installing; the install script replaces it.",
     "geminiAudience": "Gemini CLI is for Gemini Code Assist Standard and Enterprise, Code Assist for GitHub, and paid Gemini API or Vertex AI keys. Since June 18, 2026, Google serves personal Google accounts, free or Google AI Pro and Ultra, in Google Antigravity.",
@@ -323,7 +326,7 @@
       "hermes": "Install Hermes Agent in Settings › Harnesses on macOS or Linux. On Windows, follow the official guide for WSL2.",
       "muse": "Install Muse Code from dev.meta.ai, or choose its binary in Settings › Harnesses.",
       "codewhale": "Install CodeWhale with the installer at codewhale.net, or choose its binary in Settings › Harnesses.",
-      "deepseek": "Kettu installs DeepSeek Harness from npm on its first use, on Node.js 24.9 or later.",
+      "deepseek": "Install Node.js 24.9 or later from nodejs.org, which brings npm, then reload the environment in Settings.",
       "harn": "Install Harn, or choose its binary in Settings › Harnesses.",
       "kimchi": "Install Kimchi, or choose its binary in Settings › Harnesses.",
       "archive": "Install it in Settings › Harnesses.",
@@ -335,7 +338,14 @@
     "cliUnsupported": "{{agent}} found {{path}}, which cannot be run without a shell.",
     "cliFailed": "{{agent}} could not read the version of its program: {{reason}}",
     "cliOutdated": "{{agent}} needs {{command}} {{required}} or later; {{installed}} is installed. Update it in Settings › Harnesses.",
-    "uninstalled": "{{agent}} was uninstalled. Install it to use it again."
+    "uninstalled": "{{agent}} was uninstalled. Install it to use it again.",
+    "notInstalledByKettu": "{{agent}} is not installed by Kettu.",
+    "why": {
+      "chosenUnusable": "{{path}} is missing or not executable",
+      "needsShell": "{{path}} runs only through a shell",
+      "versionUnread": "{{command}} --version failed: {{reason}}",
+      "noRouter": "this build of Kettu lacks its session router"
+    }
   },
   "environment": {
     "inherited": "Reload environment to pick up changes to PATH made after Kettu started.",

@@ -1,6 +1,7 @@
-import type { AgentOptions, AgentStatus } from '@shared/agent-host'
+import type { AgentOptions, AgentStatus, HarnessReason } from '@shared/agent-host'
 import { isStartMode } from '@shared/agents'
-import { isConfigValue, type AgentId, type ConfigOption } from '@shared/thread'
+import { isConfigValue, type AgentId, type ConfigOption, type HarnessId } from '@shared/thread'
+import { harnessReason, programHere, sharedReason } from '@renderer/features/agents/harness-problem'
 import { cliOutdated, listedInstalled, readiness } from '@renderer/features/agents/readiness'
 import type { OptionValues } from '@renderer/stores/agent-options'
 
@@ -9,16 +10,26 @@ import type { OptionValues } from '@renderer/stores/agent-options'
  * it with. `adapter` is a package agent whose adapter is not installed yet, and `install` one
  * missing from the machine: neither can be chosen until Settings > Harnesses installs it. `update`
  * is the user's own program, found but older than Kettu needs: it cannot start until it is
- * updated. `setup` is an agent with the user's own program but not yet its adapter: the user
- * installed the agent, so it can be chosen, and its first start installs the adapter.
+ * updated. `blocked` is a harness on the machine that cannot run for something else, such as
+ * Node.js or a program that does not answer: it cannot start until that is fixed. `setup` is an
+ * agent with the user's own program but not yet its adapter: the user installed the agent, so it
+ * can be chosen, and its first start installs the adapter.
  */
 export type AgentNeed =
-  'install' | 'update' | 'installing' | 'failed' | 'adapter' | 'setup' | 'sign-in' | null
+  | 'install'
+  | 'update'
+  | 'blocked'
+  | 'installing'
+  | 'failed'
+  | 'adapter'
+  | 'setup'
+  | 'sign-in'
+  | null
 
 export function agentNeed(status: AgentStatus): AgentNeed {
   if (cliOutdated(status) !== null) return 'update'
   const r = readiness(status)
-  if (r.kind === 'missing') return 'install'
+  if (r.kind === 'missing') return programHere(status) ? 'blocked' : 'install'
   if (r.kind === 'installing') return 'installing'
   if (r.kind === 'failed') return 'failed'
   if (!listedInstalled(status)) {
@@ -36,24 +47,46 @@ function listable(status: AgentStatus): boolean {
 
 /** Whether New session can start the agent. */
 export function canStart(status: AgentStatus): boolean {
-  return listable(status) && agentNeed(status) !== 'update'
+  const need = agentNeed(status)
+  return listable(status) && need !== 'update' && need !== 'blocked'
 }
 
-/**
- * While no agent can start, the names of those waiting for Node.js, which installing it fixes;
- * empty when they all need installing. Null once one can start, or while none is known.
- */
-export function noAgentCanStart(statuses: AgentStatus[]): string[] | null {
-  if (statuses.length === 0 || statuses.some(canStart)) return null
-  return statuses
-    .filter((s) => s.state === 'node-missing' || s.state === 'node-outdated')
-    .map((s) => s.name)
+/** What stops every agent New session could start: the reason, and the agents and harnesses. */
+export interface NoAgentReason {
+  /** Null when none has a reason of its harness, as when none is on. */
+  reason: HarnessReason | null
+  agents: string[]
+  harnesses: HarnessId[]
 }
 
-/** The names of the agents whose own program needs updating, while none can start. */
-export function noAgentUntilUpdated(statuses: AgentStatus[]): string[] {
-  if (statuses.some(canStart)) return []
-  return statuses.filter((s) => agentNeed(s) === 'update').map((s) => s.name)
+// Which reason the line names first: installing Node.js serves every agent waiting for it.
+const REASON_ORDER: HarnessReason['kind'][] = [
+  'needs-node',
+  'too-old',
+  'needs-npm',
+  'needs-uv',
+  'cannot-run',
+  'not-installed',
+  'no-version',
+]
+
+/** While no agent can start, what stops them; null once one can start, or while none is known. */
+export function noAgentCanStart(statuses: AgentStatus[]): NoAgentReason | null {
+  if (statuses.some(canStart)) return null
+  const stopped = statuses.flatMap((status) => {
+    const reason = harnessReason(status)
+    return reason ? [{ status, reason }] : []
+  })
+  for (const kind of REASON_ORDER) {
+    const group = stopped.filter((entry) => entry.reason.kind === kind)
+    if (group.length === 0) continue
+    return {
+      reason: sharedReason(group.map((entry) => entry.reason)),
+      agents: group.map((entry) => entry.status.name),
+      harnesses: [...new Set(group.map((entry) => entry.status.harnessId))],
+    }
+  }
+  return { reason: null, agents: [], harnesses: [] }
 }
 
 // The categories whose last chosen values carry over to the next session, as the host keeps them.

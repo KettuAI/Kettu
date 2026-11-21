@@ -30,7 +30,10 @@ import { ConfigSwitchRow } from '@renderer/features/session/composer/config-swit
 import { ChoiceName, EffortSegments } from '@renderer/features/session/composer/control-row'
 import { levelsOf, splitName, type SelectOption } from '@renderer/features/session/composer/levels'
 import { shownChoice, shownValue } from '@renderer/features/session/composer/model-list'
-import { cliOutdated, listedInstalled } from '@renderer/features/agents/readiness'
+import { harnessProblem, shortLabel } from '@renderer/features/agents/harness-problem'
+import { FixButton } from '@renderer/features/agents/fix-button'
+import { fixAction } from '@renderer/features/agents/problem-fix'
+import { listedInstalled } from '@renderer/features/agents/readiness'
 import { Ring } from '@renderer/features/session/composer/usage'
 import { planReset } from '@renderer/features/sidebar/plan-usage'
 import { confirmCliUpdate } from '@renderer/features/updates/command-confirm-model'
@@ -231,6 +234,7 @@ export function AgentMenu({
     // Only this computer's agents are read without a folder.
     if (!open || !folderless || hostId !== null || !shown || !loaded) return
     if (shownNeed === 'sign-in' || shownNeed === 'failed' || shownNeed === 'update') return
+    if (shownNeed === 'blocked') return
     void readFirstOptions(hostId, shown)
   }, [open, folderless, hostId, shown, loaded, shownNeed])
 
@@ -586,11 +590,12 @@ function RailRow({ status }: { status: AgentStatus }) {
   const limits = newestLimits(usePlanReadings(), status)
   const limit = tightestLimit(limits, now)
   const need = agentNeed(status)
+  const reason = need === 'update' || need === 'blocked' ? harnessProblem(status)?.reason : null
   const trailing =
     need === 'setup'
       ? t('newSession.agentMenu.setsUp')
-      : need === 'update'
-        ? t('newSession.agentMenu.needsUpdate')
+      : reason
+        ? shortLabel(reason)
         : need === 'installing'
           ? t('newSession.agentMenu.installing')
           : need === 'failed'
@@ -613,7 +618,7 @@ function RailRow({ status }: { status: AgentStatus }) {
             'shrink-0 pl-2 text-xs',
             need === 'sign-in' || need === 'update'
               ? 'text-warning'
-              : need === 'failed'
+              : need === 'failed' || need === 'blocked'
                 ? 'text-danger'
                 : 'text-muted-foreground',
           )}
@@ -748,6 +753,15 @@ function Pane({
     if (need === 'update') {
       notice = (
         <UpdateNotice status={status} hostId={hostId} hostLabel={hostLabel} onLeave={onLeave} />
+      )
+    } else if (need === 'blocked') {
+      const problem = harnessProblem(status)
+      notice = problem && (
+        <Notice text={problem.text} tone="danger">
+          {hostId === null && problem.fix && (
+            <FixButton action={fixAction(status, problem.fix, hostId, onLeave)} />
+          )}
+        </Notice>
       )
     } else if (status.versionWarning) {
       notice = (
@@ -1041,14 +1055,7 @@ function UpdateNotice({
   const failure = task?.state === 'failed' ? (task.error ?? null) : null
   return (
     <Notice
-      text={
-        failure ??
-        t('newSession.agentMenu.updateLong', {
-          command: status.cli?.command,
-          current: status.cli?.installed?.version ?? '',
-          minimum: cliOutdated(status) ?? '',
-        })
-      }
+      text={failure ?? harnessProblem(status)?.text ?? ''}
       tone={failure ? 'danger' : 'warning'}
     >
       <Button

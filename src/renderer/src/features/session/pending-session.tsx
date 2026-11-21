@@ -11,6 +11,8 @@ import { AgentMark } from '@renderer/components/agents/agent-mark'
 import { Button } from '@renderer/components/ui/button'
 import { InputGroup, InputGroupTextarea } from '@renderer/components/ui/input-group'
 import { AccountMovedAlert } from '@renderer/features/agents/moved-accounts'
+import { HarnessPageButton } from '@renderer/features/agents/fix-button'
+import { harnessAtFault } from '@renderer/features/agents/problem-fix'
 import { openHostSettings } from '@renderer/features/settings/host-sections'
 import { HeaderTools } from '@renderer/features/shell/header-tools'
 import { NoDrag, TopBar } from '@renderer/features/shell/top-bar'
@@ -84,6 +86,8 @@ export function PendingSessionView({ pending }: { pending: PendingSession }) {
       </ColumnScroller>
     )
   } else if (error) {
+    const fromHarness =
+      !!status && (error.code === 'agent_unavailable' || harnessAtFault(status)) ? status : null
     body = (
       <ColumnScroller>
         <div className="ks-thread__column mx-auto w-full px-8 pt-8">
@@ -91,7 +95,13 @@ export function PendingSessionView({ pending }: { pending: PendingSession }) {
             title={t('pending.couldntStart', { agent: name })}
             message={error.message}
             onRetry={retry}
-            action={missing && <InstallCopyButton missing={missing} />}
+            action={
+              missing ? (
+                <InstallCopyButton missing={missing} />
+              ) : (
+                fromHarness && <HarnessPageButton status={fromHarness} hostId={hostId} />
+              )
+            }
             report={{
               hostId,
               agentId: pending.agentId,
