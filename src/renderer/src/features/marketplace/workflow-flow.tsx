@@ -4,7 +4,7 @@
 import { lazy, Suspense } from 'react'
 import { ArrowRight01Icon, SparklesIcon, UndoIcon, UserIcon } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
-import { stepName, type StepPick, type Workflow } from '@shared/workflow'
+import { outcomeName, stepName, type StepPick, type Workflow } from '@shared/workflow'
 import { Icon } from '@renderer/components/affect/app-shell'
 import { Skeleton } from '@renderer/components/ui/skeleton'
 import { backArrowsOf, outcomeTarget } from './workflow-model'
@@ -66,7 +66,7 @@ export function StepsOutline({ workflow }: { workflow: Workflow }) {
                   const back = backs.includes(outcome)
                   return (
                     <li key={outcome.name}>
-                      <span>{outcome.name}</span>
+                      <span>{outcomeName(workflow, step.id, outcome.name, locale)}</span>
                       <Icon icon={back ? UndoIcon : ArrowRight01Icon} size={12} />
                       <span>
                         {target.kind === 'end'

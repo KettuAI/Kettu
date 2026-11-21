@@ -14,7 +14,7 @@ import { Glyph } from '@renderer/features/shell/glyph'
 import { listOf, localStepName } from '@renderer/features/session/new-session/workflow-picks'
 import { cn } from '@renderer/lib/utils'
 import { layoutFlow, sideways, type FlowEdge, type FlowMetrics } from './flow-layout'
-import { whoPicksText } from './model'
+import { outcomeTitle, whoPicksText } from './model'
 import { SidewaysFlow } from './sideways-flow'
 import { wrappedLines } from './wrapped-lines'
 
@@ -130,7 +130,7 @@ export function WorkflowChart({
   // Only the lanes are named, where there is room; a forward arrow's gap is too short.
   const label = (edge: FlowEdge): string | null =>
     (edge.back || (edge.to === 'end:dropped' && edge.points.length > 4)) && edge.outcomes.length > 0
-      ? edge.outcomes.join(t('tasks:or'))
+      ? edge.outcomes.map((o) => outcomeTitle(workflow, edge.from, o)).join(t('tasks:or'))
       : null
   return (
     <div

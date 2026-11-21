@@ -3,6 +3,7 @@
 import type { SessionSummary } from '@shared/agent-host'
 import { harnessOf } from '@shared/agents'
 import {
+  outcomeName,
   stepIndex,
   stepName,
   type BlockedReason,
@@ -102,6 +103,15 @@ export function stepTitle(
 ): string {
   if (!workflow) return fallback ?? stepId
   return stepName(workflow, stepId, i18n.language)
+}
+
+/** An outcome's name in the language shown; a step still reports the file's own name. */
+export function outcomeTitle(
+  workflow: Workflow | undefined,
+  stepId: string,
+  outcome: string,
+): string {
+  return workflow ? outcomeName(workflow, stepId, outcome, i18n.language) : outcome
 }
 
 /** The workflow's name in the language shown. */

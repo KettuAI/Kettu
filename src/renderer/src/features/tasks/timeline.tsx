@@ -21,7 +21,14 @@ import { useNow } from '@renderer/lib/use-now'
 import { cn } from '@renderer/lib/utils'
 import { sessionTitle, useSessionsStore } from '@renderer/stores/sessions'
 import { openSession, taskPanel, toggleArtifactPane, useViewStore } from '@renderer/stores/view'
-import { pickedByText, pickLine, workflowTitle, stepTitle, useModelText } from './model'
+import {
+  outcomeTitle,
+  pickedByText,
+  pickLine,
+  workflowTitle,
+  stepTitle,
+  useModelText,
+} from './model'
 import { Delivered, StepsSummary } from './ended-summary'
 import { NeedCards } from './needs'
 
@@ -195,7 +202,14 @@ function RoundCard({ view, round }: { view: TaskView; round: RoundView }) {
           )}
           <span className="truncate text-hint text-(--thread-muted)">{who}</span>
         </span>
-        <RoundState round={round} sentBack={!!back} backward={backward} />
+        <RoundState
+          round={round}
+          outcome={
+            round.outcome === null ? null : outcomeTitle(view.workflow, round.stepId, round.outcome)
+          }
+          sentBack={!!back}
+          backward={backward}
+        />
         {time && (
           <span className="shrink-0 text-hint text-(--thread-text) tabular-nums">{time}</span>
         )}
@@ -236,10 +250,13 @@ function RoundCard({ view, round }: { view: TaskView; round: RoundView }) {
  */
 function RoundState({
   round,
+  outcome,
   sentBack,
   backward,
 }: {
   round: RoundView
+  /** Its outcome's name in the language shown. */
+  outcome: string | null
   sentBack: boolean
   backward: boolean
 }) {
@@ -248,7 +265,7 @@ function RoundState({
     return (
       <Badge variant="warning">
         <Glyph icon={ArrowTurnBackwardIcon} size={12} />
-        {round.outcome}
+        {outcome}
       </Badge>
     )
   }
@@ -265,7 +282,7 @@ function RoundState({
       return (
         <Badge variant="success">
           <Glyph icon={Tick02Icon} size={12} />
-          {round.outcome ?? t('state.done')}
+          {outcome ?? t('state.done')}
         </Badge>
       )
     case 'stopped':

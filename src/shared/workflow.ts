@@ -74,12 +74,14 @@ export interface WorkflowStep {
   tools: StepTools
 }
 
-/** A workflow's text and step names in another language. */
+/** A workflow's text, step names and outcome names in another language. */
 export interface WorkflowLocale {
   name?: string
   description?: string
   when?: string
   steps?: Record<string, string>
+  /** By step id, each outcome's name in the file to its name here; shown only, never reported. */
+  outcomes?: Record<string, Record<string, string>>
 }
 
 export interface Workflow {
@@ -630,6 +632,21 @@ export function stepName(
 ): string {
   const own = locale === undefined ? undefined : workflow.locales[locale]?.steps?.[stepId]
   return own ?? workflow.steps.find((step) => step.id === stepId)?.name ?? stepId
+}
+
+/**
+ * An outcome's name in the workflow's locale, falling back to the file's own. Only for showing it:
+ * a step reports, and a task stores, the file's own name.
+ */
+export function outcomeName(
+  workflow: Pick<Workflow, 'locales'>,
+  stepId: string,
+  outcome: string,
+  locale?: string,
+): string {
+  const names = locale === undefined ? undefined : workflow.locales[locale]?.outcomes
+  const step = names && Object.hasOwn(names, stepId) ? names[stepId] : undefined
+  return step && Object.hasOwn(step, outcome) ? step[outcome]! : outcome
 }
 
 const PICKED_KINDS: ReadonlySet<string> = new Set([
