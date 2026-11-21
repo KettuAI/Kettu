@@ -4,6 +4,7 @@
 import type { HostEvent, HostParams, HostResult } from '@shared/agent-host'
 import { hostRequestLimit } from '@shared/host-request-limits'
 import type { FromPort, PortError } from '@shared/port-rpc'
+import { t } from '../i18n'
 import { isIslandHostMethod, type IslandHostMethod } from './host-feed'
 
 /** The members of Electron's `MessagePortMain` the client uses, which tests replace. */
@@ -41,7 +42,11 @@ export class IslandHostPort {
       return Promise.reject({ code: 'forbidden', message: `${String(method)} is not allowed` })
     }
     if (this.closed) {
-      return Promise.reject({ code: 'host_restarted', message: 'The agent host is not connected' })
+      return Promise.reject({
+        code: 'host_restarted',
+        message: t('island.hostNotConnected'),
+        log: 'The agent host is not connected',
+      } satisfies PortError)
     }
     const id = this.nextId++
     return new Promise<HostResult<M>>((resolve, reject) => {
@@ -51,7 +56,11 @@ export class IslandHostPort {
           ? null
           : setTimeout(() => {
               this.pending.delete(id)
-              reject({ code: 'timeout', message: `${method} got no answer within ${limit} ms` })
+              reject({
+                code: 'timeout',
+                message: t('island.hostSilent'),
+                log: `${method} got no answer within ${limit} ms`,
+              })
             }, limit)
       this.pending.set(id, { resolve: resolve as (value: unknown) => void, reject, timer })
       this.port.postMessage({ type: 'request', id, method, params })
@@ -84,7 +93,11 @@ export class IslandHostPort {
     this.closed = true
     for (const pending of this.pending.values()) {
       if (pending.timer) clearTimeout(pending.timer)
-      pending.reject({ code: 'host_restarted', message: 'The agent host stopped' })
+      pending.reject({
+        code: 'host_restarted',
+        message: t('island.hostStopped'),
+        log: 'The agent host stopped',
+      })
     }
     this.pending.clear()
     this.onClose()

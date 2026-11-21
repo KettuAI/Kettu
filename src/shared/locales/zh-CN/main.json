@@ -126,5 +126,140 @@
     "zoomOut": "缩小",
     "fit": "适合窗口",
     "empty": "这张画布还没有页面。"
+  },
+  "market": {
+    "unexpected": "Kettu 市场返回的{{what}}无法识别",
+    "answered": {
+      "publisher": "发布者信息",
+      "listing": "条目",
+      "version": "版本",
+      "versionFiles": "版本的文件",
+      "mine": "你发布的条目",
+      "directory": "目录",
+      "request": "内容"
+    },
+    "answeredStatus": "Kettu 返回了状态 {{status}}",
+    "unreachable": "连不上 Kettu 市场：{{reason}}",
+    "signedOut": "没有登录 Kettu 账号，或者 Kettu 的服务已关闭。"
+  },
+  "agentHost": {
+    "down": "智能体后台进程没有运行",
+    "silent": "智能体后台进程没有及时响应"
+  },
+  "terminalHost": {
+    "stopped": "终端后台进程已停止",
+    "silent": "终端没有及时响应"
+  },
+  "deviceHost": {
+    "stopped": "设备后台进程已停止",
+    "silent": "设备没有及时响应"
+  },
+  "hostSessions": {
+    "offline": "这台电脑没有连上",
+    "ended": "和这台电脑的连接已断开"
+  },
+  "hostAdmin": {
+    "starting": "Kettu 正在启动",
+    "deviceNeedsName": "设备需要一个名字",
+    "notProgram": "“{{path}}”不是可以运行的程序",
+    "remoteAlwaysOn": "这台电脑一直开着远程访问",
+    "notFolder": "“{{path}}”不是这台电脑上的文件夹",
+    "noPublish": "这台电脑不支持发布",
+    "noUpdates": "这台电脑不能在设置里更新",
+    "noPreviews": "这台电脑不生成预览图",
+    "noRender": "这台电脑不渲染页面",
+    "noPrint": "这台电脑不支持打印",
+    "noReports": "这台电脑不生成问题报告",
+    "noSubmit": "这台电脑不提交问题报告"
+  },
+  "remoteHost": {
+    "notOn": "远程访问没有打开",
+    "resetFailed": "远程访问没能重置",
+    "noAdmin": "这台电脑不接受这类调用"
+  },
+  "island": {
+    "notWaiting": "这个请求已经不在等待了",
+    "answerPending": "已经有一个回答正在发送",
+    "notConnected": "没有连上",
+    "hostNotConnected": "智能体后台进程没有连上",
+    "hostStopped": "智能体后台进程已停止",
+    "hostSilent": "智能体后台进程没有及时响应"
+  },
+  "browserRemote": {
+    "otherHost": "这个页面属于另一台电脑上的会话。",
+    "forwardFailed": "没能把那台电脑上的 {{port}} 端口转发给浏览器。"
+  },
+  "artifacts": {
+    "hostSilent": "智能体后台进程没有响应",
+    "notFound": "找不到这个产物",
+    "notRendered": "这一页画不出来",
+    "exportFailed": "导出失败：{{reason}}",
+    "hostExportFailed": "导出失败",
+    "hostSentNoFiles": "那台电脑没有发来文件",
+    "printNotReady": "打印还没准备好",
+    "printClosed": "打印窗口已关闭"
+  },
+  "media": {
+    "goneHere": "这个文件在这里已经用不了了",
+    "moved": "这个文件已被移动",
+    "tooLargeToCopy": "这个文件太大，没法从那台电脑复制过来",
+    "goneOnHost": "这个文件在那台电脑上已经用不了了",
+    "changedOnHost": "这个文件在那台电脑上被改过了",
+    "carriedTooLarge": "这个文件超过 20 MB，太大了，没法在这里复制或保存",
+    "onlyPicture": "只能复制图片",
+    "formatNotCopied": "这张图片的格式没法复制",
+    "onHost": "这个文件在另一台电脑上，请先另存一份再在这里打开"
+  },
+  "report": {
+    "gone": "这份报告已经不在了，请重新生成",
+    "noFile": "报告里没有这个文件"
+  },
+  "editors": {
+    "notApp": "“{{path}}”不是可以打开的应用",
+    "notFileOrFolder": "“{{path}}”不是文件或文件夹",
+    "openFailed": "没能用 {{editor}} 打开：{{reason}}"
+  },
+  "updates": {
+    "notYaml": "{{name}} 不是有效的 YAML：{{reason}}",
+    "noVersion": "{{name}} 里没有写明发布的版本",
+    "notSigned": "{{name}} 没有用 Kettu 的发布密钥签名",
+    "versionMismatch": "{{version}} 的 {{name}} 里写的却是 {{named}}",
+    "noFiles": "{{name}} 里没有列出带校验值的文件",
+    "tooLarge": "{{url}} 太大了",
+    "noAnswer": "{{url}} 在 {{seconds}} 秒内没有响应",
+    "noSource": "没有可以检查更新的来源",
+    "checkFirst": "请先检查更新，再下载"
+  },
+  "updater": {
+    "offDevelopment": "开发版不会更新",
+    "offPackageManager": "这份安装的更新由包管理器提供",
+    "linkOnly": "这个版本不能自己安装更新，请打开发布页下载",
+    "nothingToDownload": "没有可下载的更新",
+    "nothingReady": "没有可以安装的更新",
+    "readOnlyVolume": "应用在只读磁盘上的“应用程序”文件夹里",
+    "stalled": "下载已经 {{seconds}} 秒没有进展"
+  },
+  "marketKeys": {
+    "valueEmpty": "“{{name}}”的值是空的；要删除请清除这一项",
+    "valueTooLarge": "“{{name}}”的值超过了 {{bytes}} 字节",
+    "valueNul": "“{{name}}”的值里有空字符（NUL）",
+    "valueLineBreak": "“{{name}}”的值里有换行，请求头里不能有换行",
+    "unreadable": "Kettu 读不了保存密钥的文件",
+    "newer": "这些密钥是更新版本的 Kettu 保存的",
+    "undecryptable": "这个系统现在没法解密这些密钥",
+    "cannotEncrypt": "这个系统没法加密密钥，所以不会保存任何密钥",
+    "noServer": "这个服务器已经不在了"
+  },
+  "settings": {
+    "tooManyServers": "Kettu 最多保存 {{max}} 个服务器",
+    "tooManySkills": "Kettu 最多保存 {{max}} 个 Skill",
+    "repeatedServer": "已经有一个叫“{{name}}”的服务器",
+    "repeatedSkill": "已经有一个叫“{{name}}”的 Skill",
+    "agentName": "智能体的名字要在 1 到 {{max}} 个字符之间"
+  },
+  "signIns": {
+    "tookTooLong": "读取浏览器花的时间太长了",
+    "workerStopped": "读取登录的进程意外停止，退出码 {{code}}",
+    "noProfile": "这台电脑上没有这个浏览器配置文件"
   }
 }

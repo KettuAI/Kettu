@@ -15,6 +15,7 @@ import {
 import { CARRIED_MEDIA_BYTES, type CarriedMedia, type MediaType } from '@shared/media'
 import { safeName } from '@shared/file-name'
 import type { HostMedia } from './host-media'
+import { t } from './i18n'
 import { grantedFile, type MediaGrants } from './media'
 
 const MIME_TYPE = /^(?:image|audio|video)\/[\w.+-]{1,100}$/
@@ -49,7 +50,7 @@ export function carriedMedia(value: unknown): CarriedMedia {
   if (!(bytes instanceof Uint8Array) || bytes.byteLength === 0) {
     throw new Error('Carried media needs its bytes')
   }
-  if (bytes.byteLength > CARRIED_MEDIA_BYTES) throw new Error('Carried media is over 20 MB')
+  if (bytes.byteLength > CARRIED_MEDIA_BYTES) throw new Error(t('media.carriedTooLarge'))
   if (typeof mimeType !== 'string' || !MIME_TYPE.test(mimeType)) {
     throw new Error('Carried media needs an image, audio or video type')
   }
@@ -82,22 +83,22 @@ export async function copyImage(
   let bytes: Uint8Array
   const onHost = hostMedia?.byUrl(source)
   if (onHost) {
-    if (!onHost.mimeType.startsWith('image/')) throw new Error('Only a picture can be copied')
+    if (!onHost.mimeType.startsWith('image/')) throw new Error(t('media.onlyPicture'))
     bytes = await hostMedia!.readAll(onHost, COPIED_HOST_BYTES)
   } else if (typeof source === 'string') {
     const grant = await grantedFile(source, grants)
-    if (!grant.mimeType.startsWith('image/')) throw new Error('Only a picture can be copied')
+    if (!grant.mimeType.startsWith('image/')) throw new Error(t('media.onlyPicture'))
     bytes = await readFile(grant.path)
   } else {
     const carried = carriedMedia(source)
-    if (!carried.mimeType.startsWith('image/')) throw new Error('Only a picture can be copied')
+    if (!carried.mimeType.startsWith('image/')) throw new Error(t('media.onlyPicture'))
     bytes = carried.bytes
   }
   // Electron decodes PNG and JPEG here; the renderer hands carried pictures over as PNG.
   const image = nativeImage.createFromBuffer(
     Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength),
   )
-  if (image.isEmpty()) throw new Error("This picture's format can't be copied")
+  if (image.isEmpty()) throw new Error(t('media.formatNotCopied'))
   const png = new Blob([new Uint8Array(image.toPNG())], { type: 'image/png' })
   await clipboard.write([new ClipboardItem({ 'image/png': png })])
 }
@@ -141,9 +142,11 @@ export async function revealMedia(
   grants: MediaGrants,
   hostMedia?: HostMedia,
 ): Promise<void> {
-  if (hostMedia?.byUrl(url)) throw new Error(ON_HOST)
+  if (hostMedia?.byUrl(url)) throw new Error(onHostText())
   shell.showItemInFolder((await grantedFile(url, grants)).path)
 }
 
 /** Why a file of another host has no place in this computer's file manager or apps. */
-export const ON_HOST = 'The file is on another host; save a copy to open it here'
+export function onHostText(): string {
+  return t('media.onHost')
+}

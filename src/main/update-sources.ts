@@ -268,11 +268,16 @@ export function updaterUserAgent(version: string, platform: string, arch: string
 
 /** A check that no source could answer; `githubUnreachable` when GitHub, the only one, did not. */
 export class SourcesFailed extends Error {
+  /** The message in English, for logs; `message` may be in the user's language. */
+  readonly log: string
+
   constructor(
     message: string,
     readonly githubUnreachable: boolean,
+    log = message,
   ) {
     super(message)
     this.name = 'SourcesFailed'
+    this.log = log
   }
 }

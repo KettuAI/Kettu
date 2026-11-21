@@ -572,7 +572,7 @@ async function start(): Promise<void> {
             request.allowTab,
           )
         : Promise.resolve({
-            error: { code: 'no_page', message: 'Another host’s session has this page.' },
+            error: { code: 'no_page', message: t('browserRemote.otherHost') },
           }),
     settingsCall: (call) =>
       answerSettingsCall(call, {
@@ -856,7 +856,7 @@ async function start(): Promise<void> {
     admin: async (deviceId, method, params) =>
       hostAdmin
         ? hostAdmin.answer(deviceId, method, params)
-        : { error: { code: 'unavailable', message: 'Kettu is starting' } },
+        : { error: { code: 'unavailable', message: t('hostAdmin.starting') } },
     changed: remoteChanged,
     hostsChanged,
     hostOpened: (hostId, port) => hostSessions.opened(hostId, port),

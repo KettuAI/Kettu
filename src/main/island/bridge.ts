@@ -10,7 +10,9 @@ import type { IslandState } from '@shared/island'
 import { limitReaders } from '@shared/session-groups'
 import { harnessOf, type AgentId } from '@shared/thread'
 import type { UpdateStatus } from '@shared/updates'
+import { t } from '../i18n'
 import {
+  errorLog,
   errorText,
   HostFeed,
   isIslandHostMethod,
@@ -656,7 +658,7 @@ export class IslandBridge {
       if (host.host?.offline) continue
       for (const agentId of limitReaders([...host.feed.agents.values()])) {
         host.request('agents.refreshLimits', { agentId }).catch((error: unknown) => {
-          this.deps.log.warn(`Could not read the plan limits of ${agentId}: ${errorText(error)}`)
+          this.deps.log.warn(`Could not read the plan limits of ${agentId}: ${errorLog(error)}`)
         })
       }
     }
@@ -672,7 +674,7 @@ export class IslandBridge {
     const call = sent?.answers.get(optionId)
     if (!sent || !call) {
       this.deps.log.warn('The island answered a request or option it was not sent')
-      reply({ result: 'failed', message: 'Not a request that waits' })
+      reply({ result: 'failed', message: t('island.notWaiting') })
       return
     }
     const host = this.hosts.get(sent.hostKey)
@@ -685,7 +687,7 @@ export class IslandBridge {
       return
     }
     if (this.answering.has(requestKey) || this.answering.size >= MAX_ANSWERS) {
-      reply({ result: 'failed', message: 'An answer to it is already on its way' })
+      reply({ result: 'failed', message: t('island.answerPending') })
       return
     }
     this.answering.add(requestKey)
@@ -709,7 +711,13 @@ export class IslandBridge {
     if (this.local) return
     const feed = new HostFeed({
       request: (method, params) => {
-        if (!this.local) return Promise.reject({ code: 'host_restarted', message: 'Not connected' })
+        if (!this.local) {
+          return Promise.reject({
+            code: 'host_restarted',
+            message: t('island.notConnected'),
+            log: 'Not connected',
+          })
+        }
         return this.local.request(method, params)
       },
       changed: () => this.changed(),
@@ -733,7 +741,7 @@ export class IslandBridge {
         if (this.phase === 'running') this.sendView()
       },
       (error: unknown) =>
-        this.deps.log.warn(`Could not read this computer's sessions: ${errorText(error)}`),
+        this.deps.log.warn(`Could not read this computer's sessions: ${errorLog(error)}`),
     )
   }
 
@@ -757,7 +765,7 @@ export class IslandBridge {
 
   private loadRemote(host: Host): void {
     host.feed.load().catch((error: unknown) => {
-      this.deps.log.warn(`Could not read the sessions of host ${host.key}: ${errorText(error)}`)
+      this.deps.log.warn(`Could not read the sessions of host ${host.key}: ${errorLog(error)}`)
     })
   }
 

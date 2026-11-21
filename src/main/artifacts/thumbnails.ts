@@ -15,6 +15,7 @@ import {
 import { canvasPagePath, versionUrlPath, type CanvasPage } from '@shared/artifact-page'
 import { artifactPathProblem, isHtmlPath } from '@shared/artifact-files'
 import type { ArtifactContentResult } from '@shared/host-control'
+import { t } from '../i18n'
 import { createLogger } from '../log'
 import { restrictPermissions } from '../permissions'
 import { filterArtifactRequests, frameArtifact, mayNavigate } from './guards'
@@ -386,7 +387,7 @@ export class Thumbnails {
    */
   print(id: string, version: number): Promise<Buffer> {
     const run = this.exports.then(() => {
-      if (!this.session) throw new Error('Printing is not ready')
+      if (!this.session) throw new Error(t('artifacts.printNotReady'))
       return printViewer(
         this.session,
         `${this.deps.serve(id).replace(/\/$/, '')}${versionUrlPath(version)}`,

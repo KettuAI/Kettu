@@ -13,6 +13,7 @@ import type { PortError } from '@shared/port-rpc'
 import { DEVICE_ID } from '@shared/remote/device'
 import type { HostStatus } from '@shared/remote/hosts'
 import type { MediaReadParams } from '@shared/remote/streams'
+import { t } from './i18n'
 import { createLogger } from './log'
 
 const log = createLogger('host-sessions')
@@ -98,7 +99,12 @@ export interface HostSessionsOptions {
   media?: HostMediaGrants
 }
 
-const OFFLINE: PortError = { code: 'host_offline', message: 'The host is not connected' }
+/** Built when needed, so its words follow the interface language. */
+const offline = (): PortError => ({
+  code: 'host_offline',
+  message: t('hostSessions.offline'),
+  log: 'The host is not connected',
+})
 
 export class HostSessions {
   private readonly hosts = new Map<string, RelayPort>()
@@ -229,7 +235,11 @@ export class HostSessions {
       this.inFlight.delete(mainId)
       request.asker.answer({
         type: 'error',
-        error: { code: 'host_restarted', message: 'The connection to the host ended' },
+        error: {
+          code: 'host_restarted',
+          message: t('hostSessions.ended'),
+          log: 'The connection to the host ended',
+        },
       })
     }
     for (const window of this.windows) this.post(window, { kind: 'closed', hostId })
@@ -340,14 +350,14 @@ export class HostSessions {
     if (this.hosts.has(hostId)) return this.send(asker, hostId, method, params)
     const list = this.held.get(hostId) ?? []
     if (!this.connecting.has(hostId) || list.length >= MAX_HELD) {
-      return asker.answer({ type: 'error', error: OFFLINE })
+      return asker.answer({ type: 'error', error: offline() })
     }
     const timer = setTimeout(() => {
       const waiting = this.held.get(hostId)
       const at = waiting?.indexOf(held) ?? -1
       if (at < 0) return
       waiting!.splice(at, 1)
-      asker.answer({ type: 'error', error: OFFLINE })
+      asker.answer({ type: 'error', error: offline() })
     }, this.options.holdMs ?? HOLD_MS)
     const held: Held = { asker, method, params, timer }
     list.push(held)
@@ -359,13 +369,13 @@ export class HostSessions {
     this.held.delete(hostId)
     for (const held of list) {
       clearTimeout(held.timer)
-      held.asker.answer({ type: 'error', error: OFFLINE })
+      held.asker.answer({ type: 'error', error: offline() })
     }
   }
 
   private send(asker: Asker, hostId: string, method: string, params: unknown): void {
     const port = this.hosts.get(hostId)
-    if (!port) return asker.answer({ type: 'error', error: OFFLINE })
+    if (!port) return asker.answer({ type: 'error', error: offline() })
     const mainId = this.nextId++
     this.inFlight.set(mainId, { hostId, asker })
     try {

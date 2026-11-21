@@ -23,6 +23,8 @@ export type PortErrorCode =
 export interface PortError {
   code: PortErrorCode
   message: string
+  /** The message in English, for logs, when `message` is in the user's language. */
+  log?: string
   data?: unknown
 }
 

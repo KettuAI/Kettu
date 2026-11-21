@@ -7,6 +7,7 @@ import {
 import type { DeviceHostToMain, MainToDeviceHost } from '@shared/host-control'
 import type { PortDevice } from '@shared/remote/device'
 import deviceHostPath from '../device-host/index?modulePath'
+import { t } from './i18n'
 import { createLogger } from './log'
 import { UtilityHost, type UtilityHostEvent, type UtilityHostState } from './utility-host'
 
@@ -51,7 +52,7 @@ export class DeviceHost {
       onReady: () => this.flushPending(),
       onExit: () => {
         for (const resolve of this.calls.values()) {
-          resolve({ error: { code: 'unavailable', message: 'The device host stopped' } })
+          resolve({ error: { code: 'unavailable', message: t('deviceHost.stopped') } })
         }
         this.calls.clear()
       },
@@ -108,7 +109,7 @@ export class DeviceHost {
     return new Promise((resolve) => {
       const timer = setTimeout(() => {
         this.calls.delete(callId)
-        resolve({ error: { code: 'failed', message: 'The device did not answer in time' } })
+        resolve({ error: { code: 'failed', message: t('deviceHost.silent') } })
       }, DEVICE_CALL_TIMEOUT_MS)
       this.calls.set(callId, (answer) => {
         clearTimeout(timer)

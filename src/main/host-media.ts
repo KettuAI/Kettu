@@ -16,6 +16,7 @@ import {
 import type { MediaReadParams } from '@shared/remote/streams'
 import { mediaToken } from '../agent-host/media'
 import type { HostMediaFile, HostMediaGrants } from './host-sessions'
+import { t } from './i18n'
 
 /** The most one read asks of the host. */
 export const PART_BYTES = 1024 * 1024
@@ -156,9 +157,9 @@ export class HostMedia implements HostMediaGrants {
     let offset = 0
     let size = record.size
     do {
-      if (size > max) throw new Error('The file is too large to copy from its host')
+      if (size > max) throw new Error(t('media.tooLargeToCopy'))
       const part = await this.part(record, offset, PART_BYTES)
-      if (part.kind !== 'granted') throw new Error('The file is no longer available on its host')
+      if (part.kind !== 'granted') throw new Error(t('media.goneOnHost'))
       size = part.media.size
       parts.push(new Uint8Array(part.bytes))
       offset += part.length
@@ -181,7 +182,7 @@ export class HostMedia implements HostMediaGrants {
       let size = record.size
       do {
         const part = await this.part(record, offset, PART_BYTES)
-        if (part.kind !== 'granted') throw new Error('The file is no longer available on its host')
+        if (part.kind !== 'granted') throw new Error(t('media.goneOnHost'))
         size = part.media.size
         if (part.length === 0) break
         await file.write(new Uint8Array(part.bytes))
@@ -211,7 +212,7 @@ export class HostMedia implements HostMediaGrants {
       pull: async (controller) => {
         const part = await this.part(record, next, Math.min(PART_BYTES, end - next + 1))
         if (part.kind !== 'granted' || part.length === 0) {
-          throw new Error('The file changed on its host')
+          throw new Error(t('media.changedOnHost'))
         }
         controller.enqueue(new Uint8Array(part.bytes))
         next += part.length

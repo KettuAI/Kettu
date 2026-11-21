@@ -11,6 +11,7 @@ import {
   type MediaGrantRecord,
 } from '@shared/media'
 import type { HostMedia } from './host-media'
+import { t } from './i18n'
 import { refuseRequests } from './request-filter'
 
 /**
@@ -150,8 +151,8 @@ export async function respondMedia(
 export async function grantedFile(url: unknown, grants: MediaGrants): Promise<MediaGrantRecord> {
   const token = typeof url === 'string' ? mediaUrlToken(url) : null
   const grant = token ? await grants.find(token) : null
-  if (!grant) throw new Error('The file is no longer available here')
-  if ((await realpath(grant.path)) !== grant.path) throw new Error('The file has moved')
+  if (!grant) throw new Error(t('media.goneHere'))
+  if ((await realpath(grant.path)) !== grant.path) throw new Error(t('media.moved'))
   return grant
 }
 

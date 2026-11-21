@@ -132,5 +132,140 @@
     "zoomOut": "Zoom out",
     "fit": "Fit",
     "empty": "This canvas has no pages yet."
+  },
+  "market": {
+    "unexpected": "The Kettu Marketplace answered {{what}} in a form not understood",
+    "answered": {
+      "publisher": "the publisher",
+      "listing": "a listing",
+      "version": "a version",
+      "versionFiles": "the version’s files",
+      "mine": "your listings",
+      "directory": "the directory",
+      "request": "the request"
+    },
+    "answeredStatus": "Kettu answered {{status}}",
+    "unreachable": "Could not reach the Kettu Marketplace: {{reason}}",
+    "signedOut": "Not signed in to a Kettu account, or Kettu’s services are off."
+  },
+  "agentHost": {
+    "down": "The agent host is down",
+    "silent": "The agent host did not answer in time"
+  },
+  "terminalHost": {
+    "stopped": "The terminal host stopped",
+    "silent": "The terminal did not answer in time"
+  },
+  "deviceHost": {
+    "stopped": "The device host stopped",
+    "silent": "The device did not answer in time"
+  },
+  "hostSessions": {
+    "offline": "The host is not connected",
+    "ended": "The connection to the host ended"
+  },
+  "hostAdmin": {
+    "starting": "Kettu is starting",
+    "deviceNeedsName": "A device needs a name",
+    "notProgram": "“{{path}}” is not a program that can be run",
+    "remoteAlwaysOn": "This host always serves remote access",
+    "notFolder": "“{{path}}” is not a folder on this host",
+    "noPublish": "This host does not publish",
+    "noUpdates": "This host is not updated from Settings",
+    "noPreviews": "This host does not capture previews",
+    "noRender": "This host does not render pages",
+    "noPrint": "This host does not print",
+    "noReports": "This host makes no reports",
+    "noSubmit": "This host submits no reports"
+  },
+  "remoteHost": {
+    "notOn": "Remote access is not on",
+    "resetFailed": "The remote host did not reset",
+    "noAdmin": "This host takes no such calls"
+  },
+  "island": {
+    "notWaiting": "Not a request that waits",
+    "answerPending": "An answer to it is already on its way",
+    "notConnected": "Not connected",
+    "hostNotConnected": "The agent host is not connected",
+    "hostStopped": "The agent host stopped",
+    "hostSilent": "The agent host did not answer in time"
+  },
+  "browserRemote": {
+    "otherHost": "Another host’s session has this page.",
+    "forwardFailed": "Port {{port}} on the host could not be forwarded to the browser."
+  },
+  "artifacts": {
+    "hostSilent": "The agent host did not answer",
+    "notFound": "Not found",
+    "notRendered": "The page could not be rendered",
+    "exportFailed": "The export failed: {{reason}}",
+    "hostExportFailed": "Export failed",
+    "hostSentNoFiles": "The host sent no files",
+    "printNotReady": "Printing is not ready",
+    "printClosed": "The print window closed"
+  },
+  "media": {
+    "goneHere": "The file is no longer available here",
+    "moved": "The file has moved",
+    "tooLargeToCopy": "The file is too large to copy from its host",
+    "goneOnHost": "The file is no longer available on its host",
+    "changedOnHost": "The file changed on its host",
+    "carriedTooLarge": "This item is over 20 MB, too large to copy or save here",
+    "onlyPicture": "Only a picture can be copied",
+    "formatNotCopied": "This picture’s format can’t be copied",
+    "onHost": "The file is on another host; save a copy to open it here"
+  },
+  "report": {
+    "gone": "This report is no longer prepared",
+    "noFile": "The bundle has no such file"
+  },
+  "editors": {
+    "notApp": "“{{path}}” is not an app that can be started",
+    "notFileOrFolder": "“{{path}}” is not a file or folder",
+    "openFailed": "Could not open it in {{editor}}: {{reason}}"
+  },
+  "updates": {
+    "notYaml": "{{name}} is not YAML: {{reason}}",
+    "noVersion": "{{name}} names no release version",
+    "notSigned": "{{name}} is not signed with Kettu’s release key",
+    "versionMismatch": "{{name}} of {{version}} names {{named}}",
+    "noFiles": "{{name}} lists no files with their checksums",
+    "tooLarge": "{{url}} is too large",
+    "noAnswer": "No answer from {{url}} within {{seconds}} s",
+    "noSource": "No source to check",
+    "checkFirst": "Check for updates before downloading one"
+  },
+  "updater": {
+    "offDevelopment": "Updates are off in development builds",
+    "offPackageManager": "Updates for this installation come from the package manager",
+    "linkOnly": "This build cannot install updates; open the release page to download it",
+    "nothingToDownload": "There is no update to download",
+    "nothingReady": "No update is ready to install",
+    "readOnlyVolume": "The app is in an Applications folder on a read-only volume",
+    "stalled": "The download made no progress for {{seconds}} s"
+  },
+  "marketKeys": {
+    "valueEmpty": "The value of “{{name}}” is empty; clear it instead",
+    "valueTooLarge": "The value of “{{name}}” is over {{bytes}} bytes",
+    "valueNul": "The value of “{{name}}” holds a NUL character",
+    "valueLineBreak": "The value of “{{name}}” holds a line break, which a header cannot",
+    "unreadable": "Kettu could not read its keys file",
+    "newer": "The keys were saved by a newer version of Kettu",
+    "undecryptable": "This system cannot decrypt the keys now",
+    "cannotEncrypt": "This system cannot encrypt keys, so none are kept",
+    "noServer": "This server is no longer installed"
+  },
+  "settings": {
+    "tooManyServers": "Kettu keeps at most {{max}} servers",
+    "tooManySkills": "Kettu keeps at most {{max}} skills",
+    "repeatedServer": "“{{name}}” repeats another server’s name",
+    "repeatedSkill": "“{{name}}” repeats another skill’s name",
+    "agentName": "An agent’s name must be 1 to {{max}} characters"
+  },
+  "signIns": {
+    "tookTooLong": "Reading the browsers took too long",
+    "workerStopped": "The sign-ins worker stopped with code {{code}}",
+    "noProfile": "That browser profile is not on this computer"
   }
 }

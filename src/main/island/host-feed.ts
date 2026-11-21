@@ -41,6 +41,12 @@ export function errorText(error: unknown): string {
   return String(error)
 }
 
+/** A failed request as a log line says it, in English where the error keeps its words that way. */
+export function errorLog(error: unknown): string {
+  const log = (error as { log?: unknown } | null)?.log
+  return typeof log === 'string' ? log : errorText(error)
+}
+
 export function isIslandHostMethod(method: string): method is IslandHostMethod {
   return (ISLAND_HOST_METHODS as readonly string[]).includes(method)
 }
@@ -224,7 +230,7 @@ export class HostFeed {
     } catch (error) {
       // Read again only once the count moves, so a host that keeps failing is not asked in a loop.
       this.readAt.set(sessionId, count)
-      this.deps.warn(`Could not read the requests of ${sessionId}: ${errorText(error)}`)
+      this.deps.warn(`Could not read the requests of ${sessionId}: ${errorLog(error)}`)
     } finally {
       this.reading.delete(sessionId)
     }
