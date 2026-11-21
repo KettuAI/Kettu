@@ -543,17 +543,23 @@ function StepHover({
   button: ReactElement
 }) {
   const cache = useSessionCache(summary)
+  const [open, setOpen] = useState(false)
   return (
-    <HoverCard>
-      <HoverCardTrigger delay={600} closeDelay={0} render={button} />
+    <HoverCard open={open} onOpenChange={setOpen}>
+      <HoverCardTrigger delay={600} closeDelay={150} render={button} />
       <HoverCardContent
         side="right"
         align="start"
         sideOffset={10}
         alignOffset={-4}
-        className="pointer-events-none w-[272px] px-3.5 py-3"
+        className="w-[340px] p-0"
       >
-        <SessionCard summary={summary} cache={cache} status={status} />
+        <SessionCard
+          summary={summary}
+          cache={cache}
+          status={status}
+          onOpen={() => setOpen(false)}
+        />
       </HoverCardContent>
     </HoverCard>
   )

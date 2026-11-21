@@ -419,7 +419,10 @@
     "done": "Done",
     "took": "took {{time}}",
     "moreReferences_one": "{{count}} more issue or pull request",
-    "moreReferences_other": "{{count}} more issues and pull requests"
+    "moreReferences_other": "{{count}} more issues and pull requests",
+    "moreArtifacts_one": "{{count}} more artifact",
+    "moreArtifacts_other": "{{count}} more artifacts",
+    "artifactFacts": "v{{version}} · {{time}}"
   },
   "subagents": {
     "title": "Sub-agents of this session",

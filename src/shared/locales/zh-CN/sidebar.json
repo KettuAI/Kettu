@@ -383,7 +383,9 @@
     "timeLeftAbout": "大约还剩 {{time}}",
     "done": "已完成",
     "took": "用时 {{time}}",
-    "moreReferences_other": "还有 {{count}} 个 issue 和 PR"
+    "moreReferences_other": "还有 {{count}} 个 issue 和 PR",
+    "moreArtifacts_other": "还有 {{count}} 个产物",
+    "artifactFacts": "v{{version}} · {{time}}"
   },
   "subagents": {
     "title": "这个会话的子智能体",
