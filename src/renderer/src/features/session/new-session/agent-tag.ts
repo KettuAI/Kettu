@@ -99,7 +99,7 @@ function balanceUsedUp(status: AgentStatus, model: ConfigOption | undefined): bo
 }
 
 /** The limits that can hold back the model: an OpenCode provider's windows only its own models. */
-function limitsOf(
+export function limitsOf(
   status: AgentStatus,
   limits: readonly PlanLimit[],
   model: ConfigOption | undefined,

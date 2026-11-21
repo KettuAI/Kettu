@@ -37,6 +37,7 @@ import { listedInstalled } from '@renderer/features/agents/readiness'
 import { Ring } from '@renderer/features/session/composer/usage'
 import { planReset } from '@renderer/features/sidebar/plan-usage'
 import { confirmCliUpdate } from '@renderer/features/updates/command-confirm-model'
+import { limitsForModel } from '@shared/plan-limits'
 import { tightestLimit } from '@shared/session-groups'
 import { useLimitView } from '@renderer/hooks/use-limit-view'
 import { limitLabel } from '@renderer/lib/format'
@@ -79,6 +80,7 @@ import {
   type MenuAgent,
   type MenuGroup,
 } from './start-options'
+import { limitsOf } from './agent-tag'
 import { readFirstOptions, refreshOnMenu, retryPrepare, setOption } from './prepared'
 import { useStartConfig } from './use-start-config'
 import { Glyph } from '@renderer/features/shell/glyph'
@@ -419,7 +421,11 @@ export function AgentMenu({
                     className="max-h-[min(--spacing(96),calc(var(--available-height)---spacing(12)))] w-auto min-w-49 shrink-0 scroll-fade-y justify-start overflow-y-auto overscroll-contain pr-1.5"
                   >
                     {visibleRail.map((status) => (
-                      <RailRow key={status.id} status={status} />
+                      <RailRow
+                        key={status.id}
+                        status={status}
+                        model={agents.find((a) => a.agentId === status.id)?.model ?? undefined}
+                      />
                     ))}
                   </TabsList>
                 )}
@@ -583,11 +589,16 @@ function ModelButtonLabel({
   )
 }
 
-/** One agent on the rail: its mark and name, then its plan usage or what it needs. */
-function RailRow({ status }: { status: AgentStatus }) {
+/**
+ * One agent on the rail: its mark and name, then its plan usage or what it needs. Only the
+ * windows that hold back `model`, the one the menu has the agent on, count; every window does
+ * while it is not known.
+ */
+function RailRow({ status, model }: { status: AgentStatus; model: ConfigOption | undefined }) {
   const { t } = useTranslation('session')
   const now = useNow()
-  const limits = newestLimits(usePlanReadings(), status)
+  const readings = usePlanReadings()
+  const limits = limitsForModel(limitsOf(status, newestLimits(readings, status), model), model)
   const limit = tightestLimit(limits, now)
   const need = agentNeed(status)
   const reason = need === 'update' || need === 'blocked' ? harnessProblem(status)?.reason : null
