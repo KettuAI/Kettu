@@ -392,6 +392,79 @@ describe('changes', () => {
   })
 })
 
+describe('sub-agents', () => {
+  const child = (
+    id: string,
+    status: SessionSummary['status'],
+    over: Partial<SessionSummary> = {},
+  ) => summary(id, { origin: 'subagent', parentId: 'p', status, ...over })
+
+  it('counts a session’s own sub-agents at work as the sidebar badge does', async () => {
+    const s = setup([
+      summary('p', { status: 'running' }),
+      summary('quiet'),
+      child('c1', 'running'),
+      child('c2', 'starting'),
+      child('c3', 'awaiting_permission'),
+      child('done', 'ready'),
+      child('failed', 'failed'),
+      child('gone', 'running', { archivedAt: 5 }),
+      summary('grandchild', { origin: 'subagent', parentId: 'c1', status: 'running' }),
+    ])
+    await started(s)
+    const rows = s.helper().of('view').at(-1)!.rows
+    // Sub-agents are no rows of their own.
+    expect(rows.map((row) => row.sessionId).sort()).toEqual(['p', 'quiet'])
+    expect(rows.find((row) => row.sessionId === 'p')?.subagents).toMatchObject({ running: 3 })
+    expect(rows.find((row) => row.sessionId === 'quiet')?.subagents).toBeNull()
+  })
+
+  it('changes the row of the session when one of its sub-agents starts or ends', async () => {
+    const s = setup([summary('p', { status: 'running' })])
+    await started(s)
+    s.emit({ type: 'session.summary', summary: child('c1', 'starting') })
+    await vi.advanceTimersByTimeAsync(COALESCE_MS)
+    expect(s.helper().of('change').at(-1)!.rows[0]).toMatchObject({
+      sessionId: 'p',
+      subagents: { running: 1 },
+    })
+    s.emit({ type: 'session.summary', summary: child('c1', 'ready') })
+    await vi.advanceTimersByTimeAsync(COALESCE_MS)
+    expect(s.helper().of('change').at(-1)!.rows[0]).toMatchObject({
+      sessionId: 'p',
+      subagents: null,
+    })
+  })
+
+  it('shows none for a host that is not connected', async () => {
+    const studio = 'b'.repeat(32)
+    const s = setup([], {}, [
+      {
+        id: studio,
+        name: 'Studio',
+        sessions: [summary('p', { status: 'running' }), child('c1', 'running')],
+      },
+    ])
+    await started(s)
+    await vi.advanceTimersByTimeAsync(COALESCE_MS)
+    const rowOf = () =>
+      [
+        ...s.helper().of('view').at(-1)!.rows,
+        ...s
+          .helper()
+          .of('change')
+          .flatMap((change) => change.rows),
+      ]
+        .filter((row) => row.sessionId === 'p')
+        .at(-1)
+    expect(rowOf()?.subagents).toMatchObject({ running: 1 })
+    s.remoteOpen.delete(studio)
+    s.bridge.remoteClosed(studio)
+    await vi.advanceTimersByTimeAsync(COALESCE_MS)
+    expect(rowOf()?.subagents).toBeNull()
+  })
+})
+
 describe('answers', () => {
   const waiting = summary('s1', {
     status: 'awaiting_permission',

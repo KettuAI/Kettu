@@ -29,6 +29,26 @@ export function needsYou(summary: SessionSummary): boolean {
   return summary.attention === 'permission' || summary.status === 'awaiting_permission'
 }
 
+/** Whether a sub-agent is at work: starting, running or waiting for an answer. */
+export function subagentRunning(child: Pick<SessionSummary, 'status'>): boolean {
+  return (
+    child.status === 'running' ||
+    child.status === 'awaiting_permission' ||
+    child.status === 'starting'
+  )
+}
+
+/** How many of a session's own sub-agents are at work; archived ones are not counted. */
+export function runningSubagents(summaries: Iterable<SessionSummary>, parentId: string): number {
+  let running = 0
+  for (const s of summaries) {
+    if (s.origin === 'subagent' && s.parentId === parentId && !s.archivedAt && subagentRunning(s)) {
+      running++
+    }
+  }
+  return running
+}
+
 /**
  * The groups: what waits for the user, what runs, what finished out of view, and while none of
  * these has a session, the latest sessions. `finished` and `recent` cap their groups.

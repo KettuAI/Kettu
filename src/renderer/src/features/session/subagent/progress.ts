@@ -1,10 +1,13 @@
 import { useEffect, useMemo, useSyncExternalStore } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import type { SessionSummary } from '@shared/agent-host'
+import { subagentRunning } from '@shared/session-groups'
 import type { StopReason, ThreadEntry, ToolEntry } from '@shared/thread'
 import { errorMessage, host } from '@renderer/lib/host'
 import { secondsTime, subscribeSeconds } from '@renderer/lib/use-now'
 import { focusSession, useThreadsStore } from '@renderer/stores/threads'
+
+export { subagentRunning }
 
 /** A sub-agent's tool call, as its block lists it. */
 export type SubagentStep = Pick<
@@ -32,14 +35,6 @@ export interface SubagentProgress {
   /** How long it has run, or ran; null when unknown. */
   elapsedMs: number | null
   running: boolean
-}
-
-export function subagentRunning(child: Pick<SessionSummary, 'status'>): boolean {
-  return (
-    child.status === 'running' ||
-    child.status === 'awaiting_permission' ||
-    child.status === 'starting'
-  )
 }
 
 /** The digest of a sub-agent's entries; `complete` when they reach back to its thread's start. */

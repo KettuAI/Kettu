@@ -715,7 +715,7 @@ struct SessionRow: View {
         .lineLimit(1)
         .truncationMode(.tail)
         Spacer(minLength: 8)
-        if oneLine { trailing(status) }
+        if oneLine { trailingItems(status) }
         indicator(status).frame(width: 16, height: 16)
       }
       if !oneLine {
@@ -725,7 +725,7 @@ struct SessionRow: View {
             .lineLimit(1)
             .truncationMode(.tail)
           Spacer(minLength: 8)
-          trailing(status)
+          trailingItems(status)
         }
         .padding(.leading, 22)
       }
@@ -745,7 +745,18 @@ struct SessionRow: View {
     .onTapGesture { model.open(row: row.key) }
     .accessibilityElement(children: .ignore)
     .accessibilityLabel(model.rowLabel(row))
+    .accessibilityValue(row.subagents?.text ?? "")
     .accessibilityAddTraits(.isButton)
+  }
+
+  /// The sub-agents at work, then the plan's progress or a time.
+  @ViewBuilder private func trailingItems(_ status: String) -> some View {
+    HStack(spacing: 8) {
+      if let subagents = row.subagents {
+        SubagentBadge(subagents: subagents, reduceMotion: model.reduceMotion)
+      }
+      trailing(status)
+    }
   }
 
   /// What it is doing or what came of it, in its state's color.
@@ -844,6 +855,33 @@ struct PlanProgress: View {
         .monospacedDigit()
     }
     .font(Fonts.ui(12))
+    .fixedSize()
+  }
+}
+
+/// A session's sub-agents at work, as the sidebar's badge draws them: a bot, how many, and a
+/// spinner while any runs.
+struct SubagentBadge: View {
+  let subagents: IslandSubagents
+  let reduceMotion: Bool
+
+  var body: some View {
+    HStack(spacing: 4) {
+      BotShape()
+        .stroke(
+          Theme.tertiary,
+          style: StrokeStyle(lineWidth: 1.9 * 11 / 24, lineCap: .round, lineJoin: .round)
+        )
+        .frame(width: 11, height: 11)
+      Text("\(subagents.running)").monospacedDigit()
+      if subagents.running > 0 { SpinnerRing(reduceMotion: reduceMotion) }
+    }
+    .font(Fonts.ui(11, .medium))
+    .foregroundColor(Theme.secondary)
+    .padding(.leading, 4)
+    .padding(.trailing, 5)
+    .frame(height: 18)
+    .background(Capsule().fill(Theme.card))
     .fixedSize()
   }
 }
@@ -1136,6 +1174,49 @@ struct ActionButton: View {
     }
     .buttonStyle(.plain)
     .onHover { hover = $0 }
+  }
+}
+
+/// The sidebar's bot glyph, on its 24-unit grid. Its tail is left out, so the rest sits lower to
+/// stay centered.
+struct BotShape: Shape {
+  func path(in rect: CGRect) -> Path {
+    let k = min(rect.width, rect.height) / 24
+    func at(_ x: CGFloat, _ y: CGFloat) -> CGPoint {
+      CGPoint(x: rect.minX + x * k, y: rect.minY + (y + 1.3) * k)
+    }
+    func circle(_ x: CGFloat, _ y: CGFloat, _ r: CGFloat) -> CGRect {
+      CGRect(
+        x: rect.minX + (x - r) * k, y: rect.minY + (y - r + 1.3) * k, width: 2 * r * k,
+        height: 2 * r * k)
+    }
+    var p = Path()
+    // Ears.
+    p.move(to: at(4, 15.5))
+    p.addCurve(to: at(2, 13.5), control1: at(2.89543, 15.5), control2: at(2, 14.6046))
+    p.addCurve(to: at(4, 11.5), control1: at(2, 12.3954), control2: at(2.89543, 11.5))
+    p.move(to: at(20, 15.5))
+    p.addCurve(to: at(22, 13.5), control1: at(21.1046, 15.5), control2: at(22, 14.6046))
+    p.addCurve(to: at(20, 11.5), control1: at(22, 12.3954), control2: at(21.1046, 11.5))
+    // Antennas.
+    p.move(to: at(7, 7))
+    p.addLine(to: at(7, 4))
+    p.move(to: at(17, 7))
+    p.addLine(to: at(17, 4))
+    p.addEllipse(in: circle(7, 3, 1))
+    p.addEllipse(in: circle(17, 3, 1))
+    // Head, mouth and eyes.
+    p.addRoundedRect(
+      in: CGRect(x: at(4.5, 7).x, y: at(4.5, 7).y, width: 15 * k, height: 12.4 * k),
+      cornerSize: CGSize(width: 3.5 * k, height: 3.5 * k), style: .continuous)
+    p.move(to: at(9.5, 15))
+    p.addCurve(to: at(12, 16), control1: at(10.0701, 15.6072), control2: at(10.9777, 16))
+    p.addCurve(to: at(14.5, 15), control1: at(13.0223, 16), control2: at(13.9299, 15.6072))
+    p.move(to: at(9, 11))
+    p.addLine(to: at(9.009, 11))
+    p.move(to: at(15, 11))
+    p.addLine(to: at(15.009, 11))
+    return p
   }
 }
 

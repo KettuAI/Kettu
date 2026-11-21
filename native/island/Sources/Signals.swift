@@ -259,6 +259,77 @@ struct WaitingDot: View {
   }
 }
 
+/// A faint ring with a quarter arc turning on it, as the sidebar draws a run in progress. Core
+/// Animation turns it, so the helper itself stays idle.
+struct SpinnerRing: NSViewRepresentable {
+  var size: CGFloat = 9
+  let reduceMotion: Bool
+
+  func makeNSView(context: Context) -> SpinnerView { SpinnerView() }
+
+  func updateNSView(_ view: SpinnerView, context: Context) {
+    view.configure(size: size, reduceMotion: reduceMotion)
+  }
+
+  func sizeThatFits(_ proposal: ProposedViewSize, nsView: SpinnerView, context: Context) -> CGSize? {
+    CGSize(width: size, height: size)
+  }
+}
+
+final class SpinnerView: NSView {
+  private var shown: (CGFloat, Bool)?
+
+  override init(frame: NSRect) {
+    super.init(frame: frame)
+    wantsLayer = true
+  }
+
+  required init?(coder: NSCoder) { nil }
+
+  func configure(size: CGFloat, reduceMotion: Bool) {
+    if let shown, shown.0 == size, shown.1 == reduceMotion { return }
+    shown = (size, reduceMotion)
+    for layer in layer?.sublayers ?? [] { layer.removeFromSuperlayer() }
+    let width = size * 0.14
+    let radius = (size - width) / 2
+    let center = CGPoint(x: size / 2, y: size / 2)
+    let color = NSColor(Theme.secondary)
+    let bounds = CGRect(x: 0, y: 0, width: size, height: size)
+
+    let track = CAShapeLayer()
+    track.frame = bounds
+    track.path = CGPath(
+      ellipseIn: CGRect(x: width / 2, y: width / 2, width: size - width, height: size - width),
+      transform: nil)
+    track.fillColor = nil
+    track.strokeColor = color.withAlphaComponent(0.18).cgColor
+    track.lineWidth = width
+
+    // From the top to the right: the quarter turns clockwise, which is negative in this layer.
+    let arc = CAShapeLayer()
+    arc.frame = bounds
+    let path = CGMutablePath()
+    path.addArc(
+      center: center, radius: radius, startAngle: .pi / 2, endAngle: 0, clockwise: true)
+    arc.path = path
+    arc.fillColor = nil
+    arc.strokeColor = color.cgColor
+    arc.lineWidth = width
+    arc.lineCap = .round
+    if !reduceMotion {
+      let spin = CABasicAnimation(keyPath: "transform.rotation.z")
+      spin.fromValue = 0
+      spin.toValue = -2 * Double.pi
+      spin.duration = 1
+      spin.repeatCount = .infinity
+      spin.isRemovedOnCompletion = false
+      arc.add(spin, forKey: "spin")
+    }
+    layer?.addSublayer(track)
+    layer?.addSublayer(arc)
+  }
+}
+
 struct LimitRing: View {
   var size: CGFloat = 13
 

@@ -8,7 +8,14 @@ import type { BrowserOriginDecision } from '@shared/browser'
 import type { ComputerAppDecision } from '@shared/computer-use'
 import type { PendingRequest, PendingTool } from '@shared/pending-requests'
 import { endingWindow, expiryOf, knownExpiry } from '@shared/prompt-cache'
-import { groupSessions, listed, needsYou, reachedLimit, sessionModel } from '@shared/session-groups'
+import {
+  groupSessions,
+  listed,
+  needsYou,
+  reachedLimit,
+  runningSubagents,
+  sessionModel,
+} from '@shared/session-groups'
 import type { AgentId, PermissionKind, ToolKind } from '@shared/thread'
 import type { TurnPhase } from '@shared/turn-phase'
 import type { StepState } from '@shared/workflow'
@@ -524,9 +531,8 @@ function buildRow(
     ? null
     : knownExpiry(expiryOf(summary.agentId, summary.cache, summary.model, agent?.account ?? null))
   const phase = turnRuns ? phaseOf(summary) : null
-  const running = [...state.sessions.values()].filter(
-    (s) => s.origin === 'subagent' && s.parentId === summary.id && s.status === 'running',
-  ).length
+  // Hidden for an offline host, as the sidebar's badge is: what it last said is stale.
+  const running = state.host?.offline ? 0 : runningSubagents(state.sessions.values(), summary.id)
   return {
     key: rowKey(state, summary.id),
     sessionId: summary.id,
