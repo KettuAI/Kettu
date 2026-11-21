@@ -280,6 +280,24 @@ export function planBalance(amount: number, unit: string, unitLabel = unit): str
   return `${new Intl.NumberFormat(currentLocale(), { maximumFractionDigits: 2 }).format(amount)} ${unitLabel}`
 }
 
+// The host names a balance in English, the same for every client, and each client shows it in its
+// own language. A product's own name, such as G1 credits, stays as sent.
+const BALANCE_LABELS = {
+  Balance: 'usage:limits.balance',
+  'Prepaid balance': 'usage:limits.prepaidBalance',
+  'Extra usage': 'usage:limits.extraUsage',
+  'Add-on credits': 'usage:limits.addOnCredits',
+  'Recharge balance': 'usage:limits.rechargeBalance',
+  'Bonus balance': 'usage:limits.bonusBalance',
+} as const
+
+/** A balance's name in the interface language. */
+export function balanceLabel(label: string): string {
+  return Object.hasOwn(BALANCE_LABELS, label)
+    ? i18n.t(BALANCE_LABELS[label as keyof typeof BALANCE_LABELS])
+    : label
+}
+
 /** The last part of a path, for either separator. */
 export function basename(path: string): string {
   const trimmed = path.replace(/[\\/]+$/, '')

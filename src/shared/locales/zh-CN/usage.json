@@ -163,6 +163,10 @@
     "windowLeft": "{{window}}：剩余 {{percent}}%。",
     "prepaidBalance": "预付余额",
     "extraUsage": "额外用量",
+    "balance": "余额",
+    "addOnCredits": "加购积分",
+    "rechargeBalance": "充值余额",
+    "bonusBalance": "赠送余额",
     "units": {
       "credits": "积分",
       "premiumRequests": "高级请求"

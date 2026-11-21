@@ -9,7 +9,7 @@ import { HoverCard, HoverCardContent, HoverCardTrigger } from '@renderer/compone
 import { PlanPart } from '@renderer/features/session/composer/usage'
 import { ringStroke } from '@renderer/features/usage/plan-cards'
 import { useLimitView } from '@renderer/hooks/use-limit-view'
-import { monthDayTime, planAmount, planBalance } from '@renderer/lib/format'
+import { balanceLabel, monthDayTime, planAmount, planBalance } from '@renderer/lib/format'
 import { LIMIT_TEXT, shownPercent } from '@renderer/lib/plan-limit'
 import type { CardResets } from '@renderer/lib/plan-readings'
 import { cn } from '@renderer/lib/utils'
@@ -201,13 +201,7 @@ function CardFace({ card }: { card: PlanCard }) {
           key={`${balance.label}/${balance.currency}`}
           className="-mt-px flex min-w-0 justify-between gap-0 text-badge leading-3.25 tracking-tight whitespace-nowrap"
         >
-          <span className="min-w-0 truncate text-tertiary">
-            {balance.label === 'Prepaid balance'
-              ? t('usage:limits.prepaidBalance')
-              : balance.label === 'Extra usage'
-                ? t('usage:limits.extraUsage')
-                : balance.label}
-          </span>
+          <span className="min-w-0 truncate text-tertiary">{balanceLabel(balance.label)}</span>
           <span className="shrink-0 text-primary tabular">
             {planBalance(
               balance.amount,

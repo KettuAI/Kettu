@@ -46,13 +46,12 @@ describe('DeepSeek account balance', () => {
       state: 'ready',
       limits: [],
       balances: [
-        { label: expect.any(String), amount: 9.99533096, currency: 'CNY' },
-        { label: expect.any(String), amount: 0, currency: 'CNY' },
+        { label: 'Recharge balance', amount: 9.99533096, currency: 'CNY' },
+        { label: 'Bonus balance', amount: 0, currency: 'CNY' },
       ],
       observedAt: NOW,
       error: null,
     })
-    expect(read.usage.balances[0]!.label).not.toBe(read.usage.balances[1]!.label)
   })
 
   it('reads a 401 or response code 40003 as an expired sign-in', async () => {
