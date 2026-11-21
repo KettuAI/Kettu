@@ -464,7 +464,9 @@
   --face-jetbrains-mono:
     'JetBrains Mono Variable', 'Platform Chinese', 'PingFang SC', 'Microsoft YaHei',
     'Noto Sans CJK SC', ui-monospace, monospace;
-  --face-system-mono: ui-monospace, 'SF Mono', 'Cascadia Code', Menlo, Consolas, monospace;
+  --face-system-mono:
+    ui-monospace, 'SF Mono', 'Cascadia Code', Menlo, Consolas, 'Platform Chinese', 'PingFang SC',
+    'Microsoft YaHei', 'Noto Sans CJK SC', monospace;
   --face-manrope:
     'Manrope Variable', 'Inter Variable', 'Platform Chinese', 'PingFang SC', 'Microsoft YaHei',
     'Noto Sans CJK SC', system-ui, sans-serif;
