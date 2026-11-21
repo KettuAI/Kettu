@@ -355,7 +355,7 @@ export const SessionRow = memo(function SessionRow({
               >
                 <HoverCardTrigger
                   delay={600}
-                  closeDelay={0}
+                  closeDelay={150}
                   render={<ContextMenuTrigger render={button} />}
                 />
                 <HoverCardContent
@@ -363,9 +363,14 @@ export const SessionRow = memo(function SessionRow({
                   align="start"
                   sideOffset={10}
                   alignOffset={-4}
-                  className="pointer-events-none w-[340px] p-0"
+                  className="w-[340px] p-0"
                 >
-                  <SessionCard summary={summary} cache={cache} status={status} />
+                  <SessionCard
+                    summary={summary}
+                    cache={cache}
+                    status={status}
+                    onOpen={() => setCardOpen(false)}
+                  />
                 </HoverCardContent>
               </HoverCard>
               <ContextMenuContent

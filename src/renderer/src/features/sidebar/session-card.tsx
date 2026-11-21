@@ -21,16 +21,19 @@ const HOUR = 60 * MINUTE
 
 /**
  * What a row's hover card says about its session: its whole title, which the row may cut short,
- * the agent and model, what the session made, and where it stands.
+ * the agent and model, what the session made, and where it stands. `onOpen` runs when something
+ * it made is opened from it.
  */
 export function SessionCard({
   summary,
   cache,
   status,
+  onOpen,
 }: {
   summary: SessionSummary
   cache: SessionCache
   status: RowStatus
+  onOpen?: () => void
 }) {
   const model = useModelName(summary)
   const outputs = useOutputs(summary)
@@ -55,7 +58,7 @@ export function SessionCard({
           )}
         </div>
       </div>
-      <CardOutputs summary={summary} outputs={outputs} />
+      <CardOutputs summary={summary} outputs={outputs} onOpen={onOpen} />
       <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 border-t border-subtle px-3.5 py-2 text-hint text-tertiary">
         <State summary={summary} status={status} outputs={outputs} />
         {cache && <Cache cache={cache} />}
