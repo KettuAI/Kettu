@@ -8,7 +8,8 @@ import {
   Store01Icon,
 } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
-import type { TaskDeliveryEntry as Entry } from '@shared/thread'
+import { MARKET_WAIT_MS } from '@shared/market-publish'
+import type { TaskDeliveryEntry as Entry, ThreadState } from '@shared/thread'
 import { Button } from '@renderer/components/ui/button'
 import { Skeleton } from '@renderer/components/ui/skeleton'
 import { Glyph } from '@renderer/features/shell/glyph'
@@ -20,6 +21,7 @@ import { errorMessage, hostAt } from '@renderer/lib/host'
 import { cn } from '@renderer/lib/utils'
 import { agentName } from '@renderer/stores/agents'
 import { hostOfSession, useSessionsStore } from '@renderer/stores/sessions'
+import { useThreadsStore } from '@renderer/stores/threads'
 import { openTask } from '@renderer/stores/view'
 import { useHostWorkflows, useWorkflowsStore } from '@renderer/stores/workflows'
 import { useEntry, useEntryAnimation } from '../use-thread'
@@ -78,15 +80,49 @@ export const TaskDeliveryEntry = memo(function TaskDeliveryEntry({
         className="pl-6"
       />
       {entry.written && (
-        <Written entry={entry} hostId={hostId} agent={agentName(entry.written.agentId, hostId)} />
+        <Written
+          sessionId={sessionId}
+          entry={entry}
+          hostId={hostId}
+          agent={agentName(entry.written.agentId, hostId)}
+        />
       )}
     </section>
   )
 })
 
-function Written({ entry, hostId, agent }: { entry: Entry; hostId: string | null; agent: string }) {
+/**
+ * Whether the publish the user last asked for still waits: the agent has opened no card for it
+ * yet, or the one it opened is unanswered.
+ */
+function publishWaits(thread: ThreadState | null | undefined, entry: Entry): boolean {
+  if (entry.publishAsked === undefined) return false
+  if (!thread) return true
+  // Its cards come after it, so the walk back stops there.
+  for (let i = thread.order.length - 1; i >= 0 && thread.order[i] !== entry.id; i--) {
+    const card = thread.byId[thread.order[i]!]
+    if (card?.kind !== 'market_publish' || card.fromTask?.taskId !== entry.taskId) continue
+    // A card opened before the user asked again answered an earlier ask.
+    if (card.expiresAt - MARKET_WAIT_MS < entry.publishAsked) return true
+    return card.outcome === null
+  }
+  return true
+}
+
+function Written({
+  sessionId,
+  entry,
+  hostId,
+  agent,
+}: {
+  sessionId: string
+  entry: Entry
+  hostId: string | null
+  agent: string
+}) {
   const { t } = useTranslation('session')
   const { view } = useTaskView(entry.taskId)
+  const waits = useThreadsStore((s) => publishWaits(s.replicas[sessionId]?.state, entry))
   const { entries } = useHostWorkflows(hostId)
   const [busy, setBusy] = useState<'save' | 'publish' | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -142,7 +178,7 @@ function Written({ entry, hostId, agent }: { entry: Entry; hostId: string | null
           {t('workflow.delivery.publish')}
         </Button>
       </div>
-      {entry.publishAsked !== undefined && (
+      {waits && (
         <p className="text-hint text-(--thread-faint)">
           {t('workflow.delivery.publishAsked', { agent })}
         </p>
