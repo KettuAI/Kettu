@@ -116,18 +116,41 @@ export function useOtherHost(hostId: string | null): OtherHost | null {
   )
 }
 
-/** The hosts the sidebar lists, this computer (null) first; the one it is narrowed to alone. */
-export function shownHosts(hosts: readonly OtherHost[], filter: string | null): (string | null)[] {
-  const all = [null, ...hosts.map((h) => h.id)]
+/**
+ * The hosts the sidebar lists, this computer (null) first, or in the `order` the user dragged
+ * them into with those it does not name last; the one it is narrowed to alone.
+ */
+export function shownHosts(
+  hosts: readonly OtherHost[],
+  filter: string | null,
+  order: readonly string[] = [],
+): (string | null)[] {
+  const all = orderedHosts([null, ...hosts.map((h) => h.id)], order)
   if (filter === null) return all
   const one = filter === THIS_COMPUTER ? null : filter
   return all.includes(one) ? [one] : all
 }
 
+/** `hosts` in the user's `order`, by id or `THIS_COMPUTER`; those it does not name keep theirs, last. */
+export function orderedHosts(
+  hosts: readonly (string | null)[],
+  order: readonly string[],
+): (string | null)[] {
+  const place = (id: string | null) => {
+    const at = order.indexOf(id ?? THIS_COMPUTER)
+    return at < 0 ? order.length : at
+  }
+  return hosts
+    .map((id, index) => ({ id, index }))
+    .sort((a, b) => place(a.id) - place(b.id) || a.index - b.index)
+    .map(({ id }) => id)
+}
+
 /** The hosts the sidebar lists as it lays them out, or null with no other host to group by. */
 export function sidebarHosts(): (string | null)[] | null {
   const hosts = otherHosts(useHostsStore.getState())
-  return hosts.length > 0 ? shownHosts(hosts, useViewStore.getState().hostFilter) : null
+  const { hostFilter, hostOrder } = useViewStore.getState()
+  return hosts.length > 0 ? shownHosts(hosts, hostFilter, hostOrder) : null
 }
 
 /** The other hosts whose sessions show greyed now. */

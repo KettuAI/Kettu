@@ -544,6 +544,17 @@ describe('createValidators', () => {
     rejects(() => pin({ path: null, pinned: 1 }))
   })
 
+  it('requires absolute project paths, or null for the end, to move a project', () => {
+    const move = posix['projects.move']
+    expect(move({ path: '/a', before: '/b' })).toEqual({ path: '/a', before: '/b' })
+    expect(move({ path: '/a', before: null })).toEqual({ path: '/a', before: null })
+    rejects(() => move({ path: 'a', before: null }))
+    rejects(() => move({ path: '/a', before: 'b' }))
+    rejects(() => move({ path: '/a' }))
+    rejects(() => move({ path: null, before: '/b' }))
+    rejects(() => windows['projects.move']({ path: '/a', before: null }))
+  })
+
   it('keeps optional fields out when absent', () => {
     expect(
       posix['sessions.create']({ agentId: 'codex', projectPath: '/p', parentId: undefined }),

@@ -169,6 +169,11 @@ interface ViewStore {
   collapsedProjects: Record<string, true>
   /** The one host the sidebar lists, by id or `THIS_COMPUTER`; null lists every host. */
   hostFilter: string | null
+  /**
+   * The order the user dragged the sidebar's hosts into, by id or `THIS_COMPUTER`; empty until
+   * then. It is this window's, since each computer connects to hosts of its own.
+   */
+  hostOrder: string[]
   /** Parent sessions the user collapsed or expanded; others follow activity. */
   expandedParents: Record<string, boolean>
   /** Groups whose every row shows, past the first few; by the group's key. Not persisted. */
@@ -202,6 +207,7 @@ interface Persisted {
   sidebarCollapsed: boolean
   collapsedProjects: Record<string, true>
   hostFilter?: string | null
+  hostOrder?: string[]
   expandedParents: Record<string, boolean>
   showFinishedSubagents?: boolean
   /** Per panel; the per-project `sidePane` of earlier versions is not read. */
@@ -237,6 +243,9 @@ export const useViewStore = create<ViewStore>()(() => ({
   sidebarPeek: null,
   collapsedProjects: saved.collapsedProjects ?? {},
   hostFilter: typeof saved.hostFilter === 'string' ? saved.hostFilter : null,
+  hostOrder: Array.isArray(saved.hostOrder)
+    ? saved.hostOrder.filter((id): id is string => typeof id === 'string')
+    : [],
   expandedParents: saved.expandedParents ?? {},
   allRowsShown: {},
   showFinishedSubagents: saved.showFinishedSubagents === true,
@@ -266,6 +275,7 @@ useViewStore.subscribe((state) => {
       sidebarCollapsed: state.sidebarCollapsed,
       collapsedProjects: state.collapsedProjects,
       hostFilter: state.hostFilter,
+      hostOrder: state.hostOrder,
       expandedParents: state.expandedParents,
       showFinishedSubagents: state.showFinishedSubagents,
       // An artifact's pane is not remembered: it opens from the thread, for the work at hand;
