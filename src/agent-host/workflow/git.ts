@@ -1,7 +1,13 @@
 // The git a task needs beyond worktrees: whether a folder is a repository, its commit, what is not
 // committed, and merging a parallel branch into the folder where its steps join.
 
-import { describeFailure, GIT_TIMEOUT_MS, type Exec, type ExecResult } from '../git/exec'
+import {
+  describeFailure,
+  failureText,
+  GIT_TIMEOUT_MS,
+  type Exec,
+  type ExecResult,
+} from '../git/exec'
 
 const MERGE_TIMEOUT_MS = 120_000
 const MAX_LISTED = 50
@@ -78,7 +84,7 @@ export function createTaskGit(exec: Exec): TaskGit {
       if (ok(result)) return { merged: true, conflicts: [], error: null }
       const found = await conflicts(cwd)
       if (found.length > 0) return { merged: false, conflicts: found, error: null }
-      return { merged: false, conflicts: [], error: describeFailure(result) }
+      return { merged: false, conflicts: [], error: failureText(result) }
     },
     async contains(cwd, branch) {
       const result = await git(cwd, ['merge-base', '--is-ancestor', branch, 'HEAD'])

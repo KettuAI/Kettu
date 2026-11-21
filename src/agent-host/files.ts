@@ -32,7 +32,8 @@ import {
 import type { MediaFile, MediaGrant } from '@shared/media'
 import type { Platform } from '@shared/platform'
 import { HostError, invalidParams, notFound } from './errors'
-import { describeFailure, GIT_TIMEOUT_MS, type Exec, type ExecResult } from './git/exec'
+import { commandFailureText, GIT_TIMEOUT_MS, type Exec, type ExecResult } from './git/exec'
+import { t } from './i18n'
 import { isAbsolutePath, pathKey } from './paths'
 
 export interface FilesLimits {
@@ -101,9 +102,8 @@ function sortedUnique(paths: string[]): string[] {
  */
 function gitOutput(label: string, result: ExecResult): string | null {
   if (result.failure === 'not-found') return null
-  if (result.failure === 'cwd-missing') throw notFound('The project folder does not exist')
-  if (result.failure !== null)
-    throw new HostError('git_error', `${label}: ${describeFailure(result)}`)
+  if (result.failure === 'cwd-missing') throw notFound(t('files.projectMissing'))
+  if (result.failure !== null) throw new HostError('git_error', commandFailureText(label, result))
   return result.code === 0 ? result.stdout : null
 }
 

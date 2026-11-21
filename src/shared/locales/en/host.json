@@ -383,7 +383,21 @@
     "otherName": "The branch tracks {{upstream}}, which has another name; push it from the terminal",
     "unknownRemote": "This repository has several remotes and none is set for this branch",
     "commitMessageNoAgent": "No agent is available to write the message; add one or turn one on in Settings",
-    "commitMessageFailed": "{{agent}} could not write the message: {{reason}}"
+    "commitMessageFailed": "{{agent}} could not write the message: {{reason}}",
+    "failure": {
+      "timeout": "timed out",
+      "notFound": "command not found",
+      "cwdMissing": "working directory does not exist",
+      "exitCode": "exited with code {{code}}",
+      "command": "{{command}}: {{detail}}",
+      "ghNotJson": "gh printed output that is not JSON"
+    }
+  },
+  "files": {
+    "projectMissing": "The project folder does not exist"
+  },
+  "worktree": {
+    "branchDeleteFailed": "Could not delete {{branch}}: {{reason}}"
   },
   "permission": {
     "allowOnce": "Allow once",

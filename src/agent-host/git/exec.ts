@@ -3,6 +3,7 @@
 import { execFile, type ChildProcess, type ExecFileException } from 'node:child_process'
 import { stat } from 'node:fs/promises'
 import type { Platform } from '@shared/platform'
+import { t, tEnglish } from '../i18n'
 import { descendantsOf, processControl, type ProcessControl } from '../process-tree'
 import { findWindowsExecutable } from './executable'
 
@@ -203,21 +204,35 @@ async function isDirectory(path: string): Promise<boolean> {
   }
 }
 
-/** The result as one line for logs and error messages. */
-export function describeFailure(result: ExecResult): string {
+function failureLine(result: ExecResult, say: typeof t): string {
   const detail = result.stderr.trim() || result.message
   switch (result.failure) {
     case 'timeout':
-      return 'timed out'
+      return say('git.failure.timeout')
     case 'not-found':
-      return 'command not found'
+      return say('git.failure.notFound')
     case 'cwd-missing':
-      return 'working directory does not exist'
+      return say('git.failure.cwdMissing')
     case null:
-      return detail || `exited with code ${result.code}`
+      return detail || say('git.failure.exitCode', { code: String(result.code) })
     default:
       return detail || result.failure
   }
+}
+
+/** The result as one line for logs, always in English. */
+export function describeFailure(result: ExecResult): string {
+  return failureLine(result, tEnglish)
+}
+
+/** The result as one line for the user, in their language; git's own words stay as it wrote them. */
+export function failureText(result: ExecResult): string {
+  return failureLine(result, t)
+}
+
+/** A failed command as one line for the user: the command, then why. */
+export function commandFailureText(command: string, result: ExecResult): string {
+  return t('git.failure.command', { command, detail: failureText(result) })
 }
 
 export const GIT_TIMEOUT_MS = 10_000
@@ -226,12 +241,16 @@ export const GH_TIMEOUT_MS = 10_000
 
 /** A command that ran but did not succeed, or did not run at all. */
 export class CommandError extends Error {
+  /** The message in English, for logs; `message` is in the user's language. */
+  readonly log: string
+
   constructor(
     readonly label: string,
     readonly result: ExecResult,
   ) {
-    super(`${label}: ${describeFailure(result)}`)
+    super(commandFailureText(label, result))
     this.name = 'CommandError'
+    this.log = `${label}: ${describeFailure(result)}`
   }
 }
 

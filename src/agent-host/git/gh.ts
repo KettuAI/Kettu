@@ -1,8 +1,16 @@
 // Runs the read-only GitHub CLI commands. Nothing here ever writes to GitHub.
 
 import type { GitTools, Issue, PullRequest } from '@shared/git'
+import { t, tEnglish } from '../i18n'
 import type { BranchPullRequest } from './api'
-import { describeFailure, GH_TIMEOUT_MS, GIT_TIMEOUT_MS, type Exec, type ExecResult } from './exec'
+import {
+  describeFailure,
+  failureText,
+  GH_TIMEOUT_MS,
+  GIT_TIMEOUT_MS,
+  type Exec,
+  type ExecResult,
+} from './exec'
 import {
   AUTH_STATUS_ARGS,
   issueArgs,
@@ -16,14 +24,17 @@ import {
 } from './github'
 import { isNoPullRequestMessage, parseGhAccount, parseGhVersion, parseGitVersion } from './parse'
 
+/** A failure has `message` for the user's language and `log` in English. */
 export type GhOutcome<T> =
-  { ok: true; value: T } | { ok: false; reason: 'not-installed' | 'failed'; message: string }
+  | { ok: true; value: T }
+  | { ok: false; reason: 'not-installed' | 'failed'; message: string; log: string }
 
 function failure(result: ExecResult): GhOutcome<never> {
   return {
     ok: false,
     reason: result.failure === 'not-found' ? 'not-installed' : 'failed',
-    message: describeFailure(result),
+    message: failureText(result),
+    log: describeFailure(result),
   }
 }
 
@@ -31,7 +42,12 @@ function parseJson(text: string): GhOutcome<unknown> {
   try {
     return { ok: true, value: JSON.parse(text) as unknown }
   } catch {
-    return { ok: false, reason: 'failed', message: 'gh printed output that is not JSON' }
+    return {
+      ok: false,
+      reason: 'failed',
+      message: t('git.failure.ghNotJson'),
+      log: tEnglish('git.failure.ghNotJson'),
+    }
   }
 }
 
@@ -41,11 +57,8 @@ function mapped<T>(result: ExecResult, map: (json: unknown) => T): GhOutcome<T> 
   try {
     return { ok: true, value: map(json.value) }
   } catch (error) {
-    return {
-      ok: false,
-      reason: 'failed',
-      message: error instanceof Error ? error.message : String(error),
-    }
+    const message = error instanceof Error ? error.message : String(error)
+    return { ok: false, reason: 'failed', message, log: message }
   }
 }
 
