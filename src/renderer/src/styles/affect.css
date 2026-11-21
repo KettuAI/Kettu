@@ -6736,6 +6736,11 @@ li[data-row-exit='dust'] > * {
   --ui-tkc-ring: 0 0 0 0.5px var(--border-default);
   --ui-tkc-focus: var(--focus-ring-color);
 }
+/* The code face in every theme, since the user picks it in Settings. */
+.ui-tcc.ui-tcc,
+.ui-tcc-group.ui-tcc-group {
+  --ui-tcc-mono: var(--font-mono);
+}
 [data-installed-theme] .ui-tcc,
 [data-installed-theme] .ui-tcc-group {
   --ui-tcc-card: var(--shell-card);
