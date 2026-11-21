@@ -155,7 +155,7 @@ final class IslandModel: ObservableObject {
 
   func setPart(_ name: String, _ width: CGFloat) {
     guard abs((parts[name] ?? -1) - width) > 0.5 else { return }
-    withAnimation(animation(from: .collapsed, to: .collapsed)) { parts[name] = width }
+    parts[name] = width
   }
 
   func status(of row: IslandRow) -> String { store.status(of: row, now: now) }
@@ -565,7 +565,7 @@ final class IslandModel: ObservableObject {
 
   func setPanelHeight(_ height: CGFloat) {
     guard abs(height - panelHeight) > 0.5 else { return }
-    withAnimation(animation(from: .open, to: .open)) { panelHeight = height }
+    panelHeight = height
   }
 
   /// Moves the keyboard's row up or down through the rows the panel lists.
@@ -577,16 +577,18 @@ final class IslandModel: ObservableObject {
     selected = keys[max(0, min(keys.count - 1, index + step))]
   }
 
+  /// The view animates the change itself, keyed to the mode: a `withAnimation` here first flushes
+  /// the changes made just before it, such as the pop cleared, and SwiftUI can read the old mode
+  /// in that flush and never draw the new one.
   private func setMode(_ next: Mode) {
     guard next != mode else { return }
-    let previous = mode
-    withAnimation(animation(from: previous, to: next)) { mode = next }
+    mode = next
     onModeChange?(next)
   }
 
   /// The hi-fi's springs, critically damped so nothing overshoots, or a short fade when the
   /// system asks for less motion.
-  func animation(from: Mode, to: Mode) -> Animation {
+  func animation(to: Mode) -> Animation {
     if reduceMotion { return .easeInOut(duration: 0.2) }
     switch to {
     case .open: return .spring(response: 0.3, dampingFraction: 1)

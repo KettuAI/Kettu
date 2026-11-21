@@ -75,6 +75,9 @@ struct IslandRoot: View {
       }
       .frame(width: size.width, height: size.height)
       .opacity(model.mode == .hidden ? 0 : 1)
+      .animation(model.animation(to: .collapsed), value: model.parts)
+      .animation(model.animation(to: .open), value: model.panelHeight)
+      .animation(model.animation(to: model.mode), value: model.mode)
       Spacer(minLength: 0)
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
