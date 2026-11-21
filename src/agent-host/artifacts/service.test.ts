@@ -264,22 +264,22 @@ describe('an agent that drops tools past a budget of its own', () => {
     expect(texts(result)).toContain('Arguments of forget_memory (JSON Schema): {')
   })
 
-  it("runs a tool as a direct call does, and a topic lists the part's tools it calls by it", async () => {
+  it("runs a tool as a direct call does, and a topic lists its part's tools with their arguments", async () => {
     const service = await everythingOn()
     const result = await viaGateway(service, {
       tool: 'read_kettu_guide',
       arguments: { topic: 'devices' },
     })
     expect(result.isError).toBeUndefined()
-    expect(texts(result)).toContain(`## Tools to call with ${GATEWAY_TOOL}`)
     expect(texts(result)).toContain('### device_tap')
-    // A core tool is declared, so the topic does not repeat it.
-    const browser = await viaGateway(service, {
+    expect(texts(result)).toContain('Arguments of device_tap (JSON Schema): {')
+    // The harness may drop a core tool too, so the topic gives its arguments as well.
+    const artifacts = await viaGateway(service, {
       tool: 'read_kettu_guide',
-      arguments: { topic: 'browser' },
+      arguments: { topic: 'artifacts' },
     })
-    expect(texts(browser)).toContain('### browser_click')
-    expect(texts(browser)).not.toContain('### browser_navigate\n')
+    expect(texts(artifacts)).toContain('Arguments of create_artifact (JSON Schema): {')
+    expect(texts(artifacts)).not.toContain(`### ${GATEWAY_TOOL}`)
 
     const direct = await rpc<CallToolResult>(service, 'tools/call', {
       name: 'read_kettu_guide',

@@ -487,7 +487,9 @@ export class ArtifactService {
    * Kettu's tools are, and the skills or the guide's topics that say when to use them.
    */
   guidePrompt(skills: boolean, gateway = false): string {
-    return guidePrompt(this.guideFlags, skills, gateway)
+    const text = guidePrompt(this.guideFlags, skills, gateway)
+    // Another ACP agent reads the plan's rules in set_plan's description, which this one may drop.
+    return gateway ? `${text}\n\n${PLAN_PROMPT}` : text
   }
 
   /** The prompt an agent that reads the servers' prompts puts into its instructions. */
@@ -828,7 +830,9 @@ export class ArtifactService {
     const group = topic === undefined ? undefined : TOPIC_GROUPS[topic]
     if (!grant.gateway || result.isError || group === undefined) return result
     const extra = topicTools(
-      this.allTools(grant).filter((tool) => TOOL_GROUPS.get(tool.name) === group),
+      this.allTools(grant).filter(
+        (tool) => tool.name !== GUIDE_TOOL && TOOL_GROUPS.get(tool.name) === group,
+      ),
     )
     if (!extra) return result
     const text = `${result.structuredContent!.text as string}${extra}`

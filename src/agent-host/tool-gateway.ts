@@ -27,7 +27,7 @@ export const CORE_TOOLS: ReadonlySet<string> = new Set([
 export const GATEWAY: Tool = {
   name: GATEWAY_TOOL,
   description:
-    'Runs a Kettu tool not in your function list. Without arguments, returns its arguments.',
+    "Runs a Kettu tool not in your function list. Leave out arguments to get the tool's arguments.",
   inputSchema: {
     type: 'object',
     properties: { tool: { type: 'string' }, arguments: { type: 'object' } },
@@ -88,16 +88,19 @@ export function unknownTool(name: string, tools: readonly Tool[]): CallToolResul
   return { content: [{ type: 'text', text }], isError: true }
 }
 
-/** What a guide topic ends with for such an agent: its part's tools that go through the gateway. */
+/**
+ * What a guide topic ends with for such an agent: every tool of its part with its arguments, the
+ * core ones too, since the harness may drop them as well under the room other servers take.
+ */
 export function topicTools(tools: readonly Tool[]): string {
-  const hidden = tools.filter((tool) => !CORE_TOOLS.has(tool.name) && tool.name !== GATEWAY_TOOL)
-  if (hidden.length === 0) return ''
-  const blocks = hidden.map(
+  const listed = tools.filter((tool) => tool.name !== GATEWAY_TOOL)
+  if (listed.length === 0) return ''
+  const blocks = listed.map(
     (tool) => `### ${tool.name}\n\n${tool.description ?? ''}\n\n${schemaText(tool)}`,
   )
   return (
-    `\n\n## Tools to call with ${GATEWAY_TOOL}\n\n` +
-    `These are not in your function list: call each with ${GATEWAY_TOOL}, its name as tool and ` +
-    `its arguments as arguments.\n\n${blocks.join('\n\n')}`
+    `\n\n## The tools\n\n` +
+    `Call one missing from your function list with ${GATEWAY_TOOL}, its name as tool and its ` +
+    `arguments as arguments.\n\n${blocks.join('\n\n')}`
   )
 }
