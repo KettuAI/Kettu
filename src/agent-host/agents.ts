@@ -135,10 +135,14 @@ import {
 } from './api-key'
 import {
   clearApiKey as clearDshKey,
+  readAccountToken as readDshAccountToken,
   readApiKey as readDshKey,
   readProvider as readDshProvider,
+  routeAccount,
   writeApiKey as writeDshKey,
+  type Provider as DshRoute,
 } from './dsh/credentials'
+import { readAccountBalance, type AccountBalance } from './dsh/balance'
 import { readClaudeSettings, writeClaudeSetting, type ListedModel } from './claude/user-settings'
 import { readCodebuddySite, shellOverrides, writeCodebuddySite } from './codebuddy/user-settings'
 import { readAutoCompact, writeAutoCompact, type CompactPlace } from './auto-compact/settings'
@@ -521,8 +525,10 @@ class Slot {
   providersRun: Promise<void> | null = null
   providersReadAt = 0
   providerActionRun: Promise<void> | null = null
-  /** DeepSeek Harness's balance at DeepSeek, for an agent on an API key. */
+  /** DeepSeek Harness's balance at DeepSeek, on an API key or a DeepSeek account. */
   balance: ProviderUsage | null = null
+  /** The DeepSeek Harness sign-in route the balance was read for. */
+  balanceRoute: DshRoute | null = null
   balanceRun: Promise<void> | null = null
   balanceReadAt = 0
   limits = new Map<string, PlanLimit>()
@@ -4819,25 +4825,42 @@ export class AgentManager {
   }
 
   /**
-   * Asks DeepSeek for the balance of the key the agent's dsh home holds. The key is read for this
-   * one request to DeepSeek's own endpoint and never kept; the account sign-in has no balance.
+   * Asks DeepSeek for the balance of the sign-in the agent's dsh home holds: an API key's at its
+   * API, an account's at its platform. The credential is read for this one request and never kept.
+   * The route is read again here too, since dsh tells Kettu nothing when the user signs in in its
+   * own page or a terminal.
    */
   private async readBalance(slot: Slot): Promise<void> {
     await this.detectAll()
     const env = { ...this.deps.env.agentEnv(slot.id), DSH_HOME: this.dshFolder(slot) }
-    const key = (await readDshProvider(env)) === 'deepseek-official' ? await readDshKey(env) : null
-    const now = Date.now()
-    const previous = slot.balance
-    if (!key) {
-      slot.balance = null
-    } else {
-      const usage = await readProviderUsage({ providerId: 'deepseek', key, now })
-      // A failed read keeps the last balance, marked as old by its time.
-      slot.balance =
-        usage.state === 'error' && previous && previous.balances.length > 0
-          ? { ...usage, balances: previous.balances, observedAt: previous.observedAt }
-          : usage
+    const route = await readDshProvider(env)
+    // A route that is gone is left to the next session: only dsh's model list tells whether
+    // another one still works.
+    if (route && slot.account?.kind !== routeAccount(route).kind) {
+      this.setAccount(slot, routeAccount(route))
     }
+    const now = Date.now()
+    let read: AccountBalance | null = null
+    if (route === 'deepseek-official') {
+      const key = await readDshKey(env)
+      if (key) {
+        read = {
+          usage: await readProviderUsage({ providerId: 'deepseek', key, now }),
+          expired: false,
+        }
+      }
+    } else if (route === 'deepseek-account') {
+      const token = await readDshAccountToken(env)
+      if (token) read = await readAccountBalance({ token, now })
+    }
+    const previous = slot.balanceRoute === route ? slot.balance : null
+    // A failed read keeps the last balance of the same route, marked as old by its time; an
+    // expired sign-in keeps none, since only signing in again shows it.
+    slot.balance =
+      read?.usage.state === 'error' && !read.expired && previous && previous.balances.length > 0
+        ? { ...read.usage, balances: previous.balances, observedAt: previous.observedAt }
+        : (read?.usage ?? null)
+    slot.balanceRoute = route
     slot.balanceReadAt = now
     this.emit(slot)
   }

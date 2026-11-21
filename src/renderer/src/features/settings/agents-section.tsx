@@ -933,6 +933,8 @@ function AgentPageBody({ status }: { status: AgentStatus }) {
   const signOut = () => act(() => request('agents.logout', { agentId: status.id }))
   const running = status.state === 'ready'
   const providerMode = status.providers !== undefined
+  // A DeepSeek account is billed by use like an API key, with no plan limits.
+  const dshAccount = status.harnessId === 'deepseek' && status.account?.kind === 'account'
   const terminalSignIn = status.authMethods.find((m) => m.type === 'terminal' && m.command)
   const signInPage = useSignInPage(hostId, status.id)
 
@@ -1039,10 +1041,24 @@ function AgentPageBody({ status }: { status: AgentStatus }) {
                 {accountError}
               </p>
             )}
+            {/* A balance read that failed before any balance was shown, as an expired sign-in. */}
+            {!status.disabled &&
+              status.balance?.state === 'error' &&
+              status.balance.balances.length === 0 &&
+              status.balance.error && (
+                <p className="ui-sg-hint k-error" data-wrap="">
+                  {status.balance.error}
+                </p>
+              )}
             <RowGroup>
-              {/* A subscription's label is its plan; the other kinds name how the agent signs in. */}
+              {/* A subscription's label is its plan; the other kinds, and a DeepSeek account,
+                  which has none, name how the agent signs in. */}
               <Fact
-                name={t(status.account?.kind === 'account' ? 'agents.plan' : 'agents.loginMethod')}
+                name={t(
+                  status.account?.kind === 'account' && !dshAccount
+                    ? 'agents.plan'
+                    : 'agents.loginMethod',
+                )}
               >
                 {status.account?.kind === 'none' ? null : status.account?.label}
               </Fact>
@@ -1109,8 +1125,8 @@ function AgentPageBody({ status }: { status: AgentStatus }) {
 
         {status.disabled ? null : providerMode ? (
           <SpendGroup status={status} providers />
-        ) : status.account?.kind === 'api_key' ? (
-          <SpendGroup status={status} />
+        ) : status.account?.kind === 'api_key' || dshAccount ? (
+          <SpendGroup status={status} account={dshAccount} />
         ) : (
           <UsageGroup status={status} reading={reading} running={running} />
         )}

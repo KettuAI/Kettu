@@ -346,10 +346,13 @@ export function LogCopyButton({ task }: { task: AgentTask }) {
 export function SpendGroup({
   status,
   providers = false,
+  account = false,
 }: {
   status: AgentStatus
   /** A provider-based agent: its provider usage is read elsewhere. */
   providers?: boolean
+  /** An account billed by use, with no plan limits, rather than an API key. */
+  account?: boolean
 }) {
   const { request } = useHostScope()
   const { t } = useTranslation('settings')
@@ -380,7 +383,11 @@ export function SpendGroup({
           <RowText
             name={t('agents.spend.month')}
             description={t(
-              providers ? 'agents.spend.descriptionProviders' : 'agents.spend.description',
+              providers
+                ? 'agents.spend.descriptionProviders'
+                : account
+                  ? 'agents.spend.descriptionAccount'
+                  : 'agents.spend.description',
               { name: status.harnessName },
             )}
           />
