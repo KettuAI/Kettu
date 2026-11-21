@@ -1,6 +1,7 @@
 // One status refresh: the commands of the design's table, run for one project folder.
 
-import { stat, readFile } from 'node:fs/promises'
+import { createHash } from 'node:crypto'
+import { lstat, stat, readFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { join, resolve } from 'node:path'
 import type { CommitSummary, GitStatus } from '@shared/git'
@@ -11,6 +12,7 @@ import {
   parseLeftRightCount,
   parseLog,
   parseOidLines,
+  parsePorcelainEntries,
   parsePorcelainStatus,
   parseShortstat,
   pickRemote,
@@ -46,6 +48,9 @@ const COMMIT_LIMIT = 20
 // Bounds the list of unpushed commits; the newest ones are all that can be on screen.
 const UNPUSHED_LIMIT = 1000
 const NOT_A_REPOSITORY = /not a git repository|must be run in a work tree/i
+// The Changes list stops at 500 files; past this many, paths count but their files are not read.
+const FINGERPRINT_FILES = 1000
+const UNTRACKED_LIST_MAX_BUFFER = 1024 * 1024
 
 export function emptyStatus(projectPath: string, now: number): GitStatus {
   return {
@@ -66,10 +71,19 @@ export function emptyStatus(projectPath: string, now: number): GitStatus {
   }
 }
 
+export interface StatusRead {
+  status: GitStatus
+  /**
+   * Changes whenever a changed or untracked file does, though the counts in `status` may not:
+   * a rewritten line, or one file swapped for another.
+   */
+  fingerprint: string
+}
+
 /** Runs one refresh. Throws a CommandError when git fails; a non-repository is a result. */
-export async function readStatus(ctx: StatusContext): Promise<GitStatus> {
+export async function readStatus(ctx: StatusContext): Promise<StatusRead> {
   const info = await resolveRepo(ctx)
-  if (!info) return emptyStatus(ctx.projectPath, ctx.now())
+  if (!info) return { status: emptyStatus(ctx.projectPath, ctx.now()), fingerprint: '' }
 
   const [statusResult, operation, lastFetchedAt, config] = await Promise.all([
     git(ctx, ['status', '--porcelain=v2', '--branch', '-z', '--untracked-files=normal']),
@@ -77,7 +91,8 @@ export async function readStatus(ctx: StatusContext): Promise<GitStatus> {
     readLastFetchedAt(info),
     readConfig(ctx, info),
   ])
-  const parsed = parsePorcelainStatus(expectOk('git status', statusResult).stdout)
+  const porcelain = expectOk('git status', statusResult).stdout
+  const parsed = parsePorcelainStatus(porcelain)
   const unborn = parsed.oid === null
   // An unborn branch has a name in git's output but no commit to show or compare.
   const branch = unborn ? null : parsed.branch
@@ -94,9 +109,10 @@ export async function readStatus(ctx: StatusContext): Promise<GitStatus> {
   }
 
   const hasTrackedChanges = parsed.staged + parsed.unstaged + parsed.conflicted > 0
-  const [diffStat, baseRef] = await Promise.all([
+  const [diffStat, baseRef, fingerprint] = await Promise.all([
     hasTrackedChanges && !unborn ? readShortstat(ctx) : { insertions: 0, deletions: 0 },
     unborn ? null : resolveBaseRef(ctx, remote?.name ?? null),
+    readFingerprint(ctx, info, porcelain),
   ])
 
   const onBase =
@@ -108,20 +124,23 @@ export async function readStatus(ctx: StatusContext): Promise<GitStatus> {
   ])
 
   return {
-    projectPath: ctx.projectPath,
-    repo: { root: info.root, gitDir: info.gitDir },
-    head: { branch, oid: parsed.oid, detached: parsed.detached },
-    upstream,
-    base,
-    changes: changeCounts(parsed, diffStat),
-    operation,
-    commits,
-    remote,
-    defaultBranch: baseRef === null ? null : branchOfRef(baseRef, remote?.name),
-    push: branch === null ? null : resolvePushTarget(config, branch),
-    lastFetchedAt,
-    updatedAt: ctx.now(),
-    stale: false,
+    status: {
+      projectPath: ctx.projectPath,
+      repo: { root: info.root, gitDir: info.gitDir },
+      head: { branch, oid: parsed.oid, detached: parsed.detached },
+      upstream,
+      base,
+      changes: changeCounts(parsed, diffStat),
+      operation,
+      commits,
+      remote,
+      defaultBranch: baseRef === null ? null : branchOfRef(baseRef, remote?.name),
+      push: branch === null ? null : resolvePushTarget(config, branch),
+      lastFetchedAt,
+      updatedAt: ctx.now(),
+      stale: false,
+    },
+    fingerprint,
   }
 }
 
@@ -137,6 +156,49 @@ function changeCounts(
     insertions: stat.insertions,
     deletions: stat.deletions,
   }
+}
+
+// Never throws: a file or listing that cannot be read only makes the comparison coarser.
+async function readFingerprint(
+  ctx: StatusContext,
+  info: RepoInfo,
+  porcelain: string,
+): Promise<string> {
+  const entries = parsePorcelainEntries(porcelain)
+  let untracked = entries.untrackedPaths
+  if (entries.folders.length > 0) {
+    // Status lists an untracked folder as one entry, so its files come from their own listing.
+    const listed = await ctx.exec('git', ['ls-files', '--others', '--exclude-standard', '-z'], {
+      cwd: info.root,
+      timeoutMs: GIT_TIMEOUT_MS,
+      maxBuffer: UNTRACKED_LIST_MAX_BUFFER,
+    })
+    untracked =
+      listed.failure === null && listed.code === 0
+        ? listed.stdout.split('\0').filter(Boolean)
+        : [...untracked, ...entries.folders]
+  }
+  const paths = [...entries.paths, ...untracked]
+  const looked = await Promise.all(
+    paths.slice(0, FINGERPRINT_FILES).map(async (path) => {
+      try {
+        const file = await lstat(join(info.root, path))
+        return `${file.size}:${file.mtimeMs}`
+      } catch {
+        return 'missing'
+      }
+    }),
+  )
+  const hash = createHash('sha1')
+  for (const record of entries.records) hash.update(record).update('\0')
+  paths.forEach((path, i) =>
+    hash
+      .update(path)
+      .update('\0')
+      .update(looked[i] ?? '')
+      .update('\0'),
+  )
+  return hash.digest('hex')
 }
 
 function git(ctx: StatusContext, args: string[]): Promise<ExecResult> {

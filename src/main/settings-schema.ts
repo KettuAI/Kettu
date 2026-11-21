@@ -3,6 +3,7 @@
 import { isStartMode, START_MODE_CHARS, takesStartMode } from '@shared/agents'
 import {
   AGENT_NAME_CHARS,
+  applyListEdit,
   CONFIG_VARIABLES,
   DEFAULT_SETTINGS,
   AGENT_COLORS,
@@ -16,6 +17,7 @@ import {
   ONBOARDING_STEPS,
   type AddedAgent,
   type HostSettings,
+  type ListEdit,
   type ProxySettings,
   type DirectSettings,
   type SettingsFile,
@@ -776,13 +778,47 @@ function readMarketList<T extends { id: string; name: string }>(
   return items
 }
 
-/** `marketplace` in a patch: each list it holds replaces the stored one whole. */
+/** An edit in a patch: each entry to put valid, its id and name once, and ids to remove. */
+function checkMarketEdit<T extends { id: string; name: string }>(
+  raw: unknown,
+  path: string,
+  max: number,
+  parse: MarketParse<T>,
+  kind: string,
+): ListEdit<T> | string {
+  if (!isRecord(raw)) return `"${path}" must be an object`
+  const extra = extraKey(raw, ['put', 'remove'], path, true)
+  if (extra) return extra
+  const checked: ListEdit<T> = {}
+  if (raw.put !== undefined) {
+    const put = checkMarketList(raw.put, `${path}.put`, max, parse, kind)
+    if (typeof put === 'string') return put
+    checked.put = put
+  }
+  if (raw.remove !== undefined) {
+    const { remove } = raw
+    if (
+      !Array.isArray(remove) ||
+      remove.length > max ||
+      remove.some((id) => typeof id !== 'string' || id.length > MAX_MARKET_ID)
+    ) {
+      return `"${path}.remove" must list at most ${max} ids of at most ${MAX_MARKET_ID} characters`
+    }
+    checked.remove = [...(remove as string[])]
+  }
+  return checked
+}
+
+/**
+ * `marketplace` in a patch: each list it holds replaces the stored one whole, then its edit
+ * changes the list as it stands.
+ */
 function checkMarketplace(
   value: unknown,
   path: string,
 ): NonNullable<SettingsPatch['marketplace']> | string {
   if (!isRecord(value)) return `"${path}" must be an object`
-  const extra = extraKey(value, ['mcp', 'skills'], path, true)
+  const extra = extraKey(value, ['mcp', 'skills', 'mcpEdit', 'skillsEdit'], path, true)
   if (extra) return extra
   const checked: NonNullable<SettingsPatch['marketplace']> = {}
   if (value.mcp !== undefined) {
@@ -806,6 +842,28 @@ function checkMarketplace(
     )
     if (typeof skills === 'string') return skills
     checked.skills = skills
+  }
+  if (value.mcpEdit !== undefined) {
+    const edit = checkMarketEdit(
+      value.mcpEdit,
+      `${path}.mcpEdit`,
+      MAX_MARKET_SERVERS,
+      parseMarketServer,
+      'server',
+    )
+    if (typeof edit === 'string') return edit
+    checked.mcpEdit = edit
+  }
+  if (value.skillsEdit !== undefined) {
+    const edit = checkMarketEdit(
+      value.skillsEdit,
+      `${path}.skillsEdit`,
+      MAX_MARKET_SKILLS,
+      parseMarketSkill,
+      'skill',
+    )
+    if (typeof edit === 'string') return edit
+    checked.skillsEdit = edit
   }
   return checked
 }
@@ -1013,9 +1071,29 @@ export function effectiveDirect(settings: SettingsFile, signedIn: boolean): Dire
   return held && !direct.enabled ? { ...direct, enabled: true } : direct
 }
 
+/** A kept list with an edit applied; throws when it would then repeat a name or run past `max`. */
+function editedList<T extends { id: string; name: string }>(
+  list: readonly T[],
+  edit: ListEdit<T>,
+  max: number,
+  kind: string,
+): T[] {
+  const next = applyListEdit(list, edit)
+  if (next.length > max) throw new SettingsError(`Kettu keeps at most ${max} ${kind}s`)
+  const names = new Set<string>()
+  for (const item of next) {
+    if (names.has(item.name)) {
+      throw new SettingsError(`"${item.name}" repeats another ${kind}'s name`)
+    }
+    names.add(item.name)
+  }
+  return next
+}
+
 /**
  * Applies a validated patch. Sections merge key by key; `proxy` is replaced whole. Run in the
- * background and direct connections stay on while remote access is.
+ * background and direct connections stay on while remote access is. Throws a `SettingsError`
+ * when an edit of the servers or skills would leave two with one name.
  */
 export function mergeSettings(current: SettingsFile, patch: SettingsPatch): SettingsFile {
   const next = structuredClone(current)
@@ -1028,6 +1106,22 @@ export function mergeSettings(current: SettingsFile, patch: SettingsPatch): Sett
   if (patch.marketplace?.mcp) next.marketplace.mcp = structuredClone(patch.marketplace.mcp)
   if (patch.marketplace?.skills) {
     next.marketplace.skills = structuredClone(patch.marketplace.skills)
+  }
+  if (patch.marketplace?.mcpEdit) {
+    next.marketplace.mcp = editedList(
+      next.marketplace.mcp,
+      structuredClone(patch.marketplace.mcpEdit),
+      MAX_MARKET_SERVERS,
+      'server',
+    )
+  }
+  if (patch.marketplace?.skillsEdit) {
+    next.marketplace.skills = editedList(
+      next.marketplace.skills,
+      structuredClone(patch.marketplace.skillsEdit),
+      MAX_MARKET_SKILLS,
+      'skill',
+    )
   }
   if (patch.disabledAgents) next.disabledAgents = [...patch.disabledAgents]
   if (patch.startModes) {
