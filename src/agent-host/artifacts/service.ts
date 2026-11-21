@@ -10,6 +10,7 @@ import {
   guideTool,
   serviceInstructions,
   type GuideFlags,
+  type GuideTopic,
 } from '../guide/guide'
 import {
   isTerminalToolName,
@@ -38,6 +39,15 @@ import {
   type MarketTools,
 } from '../marketplace/publish-tools'
 import { SERVICE_NAME } from '../service-name'
+import {
+  described,
+  GATEWAY_TOOL,
+  gatewayInput,
+  gatewayList,
+  topicTools,
+  unknownTool,
+  withArguments,
+} from '../tool-gateway'
 import {
   CHANGE_SETTINGS,
   isSettingsToolName,
@@ -138,6 +148,18 @@ const TOOL_GROUPS: ReadonlyMap<string, McpToolGroup> = new Map(
     .flatMap(([tools, group]) => tools.map((tool) => [tool.name, group] as const))
     .concat([[GUIDE_TOOL, 'sessions']]),
 )
+/** The group of tools each guide topic is about, for the tools it lists to call by the gateway. */
+const TOPIC_GROUPS: Partial<Record<GuideTopic, McpToolGroup>> = {
+  artifacts: 'artifacts',
+  sessions: 'sessions',
+  workflows: 'workflows',
+  browser: 'browser',
+  devices: 'devices',
+  terminals: 'terminal',
+  computer: 'computer',
+  marketplace: 'marketplace',
+  settings: 'settings',
+}
 /** The tools that wait for the user's answer in the session before they act. */
 const ASKING_TOOLS: ReadonlySet<string> = new Set([MARKET_PUBLISH, MARKET_UNLIST, CHANGE_SETTINGS])
 
@@ -223,6 +245,8 @@ interface SessionGrant {
   sessionId: string
   /** Reaches Kettu's own server too, not only the proxy: Kettu's server is on for its agent. */
   own: boolean
+  /** Lists the core tools and the gateway to the rest, for an agent that drops tools. */
+  gateway: boolean
 }
 
 /** A token for one agent process and folder, whose calls name their session in `_meta`. */
@@ -233,6 +257,7 @@ interface FolderGrant {
   /** The sessions in memory that attached through it. */
   sessions: Set<string>
   own: boolean
+  gateway: boolean
 }
 
 type Grant = SessionGrant | FolderGrant
@@ -461,17 +486,23 @@ export class ArtifactService {
    * The paragraph that goes into an agent's own instructions, or ahead of its first prompt: where
    * Kettu's tools are, and the skills or the guide's topics that say when to use them.
    */
-  guidePrompt(skills: boolean): string {
-    return guidePrompt(this.guideFlags, skills)
+  guidePrompt(skills: boolean, gateway = false): string {
+    return guidePrompt(this.guideFlags, skills, gateway)
   }
 
   /** The prompt an agent that reads the servers' prompts puts into its instructions. */
-  private prompt(): string {
-    return `${guidePrompt(this.guideFlags, true)}\n\n${PLAN_PROMPT}`
+  private prompt(gateway: boolean): string {
+    return `${guidePrompt(this.guideFlags, true, gateway)}\n\n${PLAN_PROMPT}`
   }
 
-  /** What `tools/list` answers now; a step's session alone gets the step's tools. */
+  /** What `tools/list` answers now: for an agent that drops tools, the core and the gateway. */
   private listedTools(grant?: Grant): Tool[] {
+    const tools = this.allTools(grant)
+    return grant?.gateway ? gatewayList(tools) : tools
+  }
+
+  /** Every tool the session may use now; a step's session alone gets the step's tools. */
+  private allTools(grant?: Grant): Tool[] {
     const sessionId = grant && 'sessionId' in grant ? grant.sessionId : null
     return [
       guideTool(this.guideFlags),
@@ -497,11 +528,14 @@ export class ArtifactService {
    * What an attach of the session passes in `mcpServers`: the service with the session's token,
    * made at its first attach and kept while it stays in memory, since Codex ignores new servers
    * when it resumes a session it still holds open. Empty while the service is not running.
+   * `gateway` lists only the core tools and the gateway to the rest, for an agent that drops tools.
    */
-  servers(sessionId: string, project: string): McpServer[] {
+  servers(sessionId: string, project: string, gateway = false): McpServer[] {
     const url = this.url
     if (!url) return []
-    return entry(url, this.sessionGrant(sessionId, project, true).token, this.prompt())
+    const grant = this.sessionGrant(sessionId, project, true)
+    grant.gateway = gateway
+    return entry(url, grant.token, this.prompt(gateway))
   }
 
   /**
@@ -526,7 +560,7 @@ export class ArtifactService {
     let grant = held === undefined ? undefined : this.grants.get(held)
     if (!grant || !('sessionId' in grant) || grant.project !== project) {
       this.revoke(sessionId)
-      grant = { token: newToken(), sessionId, project, own }
+      grant = { token: newToken(), sessionId, project, own, gateway: false }
       this.sessions.set(sessionId, this.add(grant))
     }
     if (own) grant.own = true
@@ -538,10 +572,17 @@ export class ArtifactService {
    * each call: one token for the process and folder, kept while a session there stays in memory
    * and the process runs, since each attach there replaces the folder's server for every session.
    */
-  folderServers(process: AgentProcess, folder: string, sessionId: string): McpServer[] {
+  folderServers(
+    process: AgentProcess,
+    folder: string,
+    sessionId: string,
+    gateway = false,
+  ): McpServer[] {
     const url = this.url
     if (!url) return []
-    return entry(url, this.folderGrant(process, folder, sessionId, true).token, this.prompt())
+    const grant = this.folderGrant(process, folder, sessionId, true)
+    grant.gateway = gateway
+    return entry(url, grant.token, this.prompt(gateway))
   }
 
   private folderGrant(
@@ -560,7 +601,14 @@ export class ArtifactService {
     let key = byFolder.get(folder)
     let grant = key === undefined ? undefined : this.grants.get(key)
     if (key === undefined || !grant || 'sessionId' in grant) {
-      grant = { token: newToken(), project: folder, process, sessions: new Set(), own }
+      grant = {
+        token: newToken(),
+        project: folder,
+        process,
+        sessions: new Set(),
+        own,
+        gateway: false,
+      }
       key = this.add(grant)
       byFolder.set(folder, key)
     }
@@ -737,131 +785,189 @@ export class ArtifactService {
           'The call names no session of this agent in this folder',
         )
       }
-      if (name === GUIDE_TOOL) return callGuide(input, flags)
-      if (isSessionToolName(name)) {
-        try {
-          return await this.sessionTools.call(caller, name, input)
-        } catch (error) {
-          this.deps.log('error', `${name} failed: ${(error as Error).message}`)
-          throw new McpError(ErrorCode.InternalError, `${name} failed: ${(error as Error).message}`)
-        }
+      if (name === GATEWAY_TOOL && grant.gateway) {
+        return this.callGateway(sdk, grant, caller, input, flags)
       }
-      if (this.workflowTools && isWorkflowToolName(name)) {
-        try {
-          return await this.workflowTools.call(caller, name, input)
-        } catch (error) {
-          this.deps.log('error', `${name} failed: ${(error as Error).message}`)
-          throw new McpError(ErrorCode.InternalError, `${name} failed: ${(error as Error).message}`)
-        }
-      }
-      if (isPlanToolName(name)) {
-        try {
-          return this.planTools.call(caller, name, input)
-        } catch (error) {
-          this.deps.log('error', `${PLAN_TOOL} failed: ${(error as Error).message}`)
-          throw new McpError(
-            ErrorCode.InternalError,
-            `${PLAN_TOOL} failed: ${(error as Error).message}`,
-          )
-        }
-      }
-      if (isReportToolName(name)) {
-        try {
-          return this.reportTools.call(caller, name, input)
-        } catch (error) {
-          this.deps.log('error', `${REPORT_TOOL} failed: ${(error as Error).message}`)
-          throw new McpError(
-            ErrorCode.InternalError,
-            `${REPORT_TOOL} failed: ${(error as Error).message}`,
-          )
-        }
-      }
-      if (this.memoryTools && isMemoryToolName(name)) {
-        // While memory is off they are not listed, and a call answers that it is off.
-        try {
-          return await this.memoryTools.call(caller, name, input)
-        } catch (error) {
-          this.deps.log('error', `${name} failed: ${(error as Error).message}`)
-          throw new McpError(ErrorCode.InternalError, `${name} failed: ${(error as Error).message}`)
-        }
-      }
-      const market = this.deps.market
-      if (market && isMarketToolName(name)) {
-        // While signed out they are not listed, and a call answers why.
-        try {
-          return await market.call(caller, name, input)
-        } catch (error) {
-          this.deps.log('error', `${name} failed: ${(error as Error).message}`)
-          throw new McpError(ErrorCode.InternalError, `${name} failed: ${(error as Error).message}`)
-        }
-      }
-      const settings = this.deps.settings
-      if (settings && isSettingsToolName(name)) {
-        try {
-          return await settings.call(caller, name, input)
-        } catch (error) {
-          this.deps.log('error', `${name} failed: ${(error as Error).message}`)
-          throw new McpError(ErrorCode.InternalError, `${name} failed: ${(error as Error).message}`)
-        }
-      }
-      if (isBrowserToolName(name)) {
-        try {
-          return await this.browserTools.call(caller, name, input)
-        } catch (error) {
-          this.deps.log('error', `${name} failed: ${(error as Error).message}`)
-          throw new McpError(ErrorCode.InternalError, `${name} failed: ${(error as Error).message}`)
-        }
-      }
-      if (isDeviceToolName(name)) {
-        if (!this.deviceTools) {
-          throw new McpError(ErrorCode.InternalError, `${name} is not available on this host`)
-        }
-        try {
-          return await this.deviceTools.call(caller, name, input)
-        } catch (error) {
-          this.deps.log('error', `${name} failed: ${(error as Error).message}`)
-          throw new McpError(ErrorCode.InternalError, `${name} failed: ${(error as Error).message}`)
-        }
-      }
-      if (isTerminalToolName(name)) {
-        if (!this.terminalTools) {
-          throw new McpError(ErrorCode.InternalError, `${name} is not available on this host`)
-        }
-        try {
-          return await this.terminalTools.call(caller, name, input)
-        } catch (error) {
-          this.deps.log('error', `${name} failed: ${(error as Error).message}`)
-          throw new McpError(ErrorCode.InternalError, `${name} failed: ${(error as Error).message}`)
-        }
-      }
-      const computer = this.deps.computer
-      if (computer && isComputerToolName(name)) {
-        // A subagent uses the computer as the session it runs under.
-        const sessionId = this.deps.browserSession?.(caller.sessionId) ?? caller.sessionId
-        return computer.call(sessionId, name, input)
-      }
-      if (isDataToolName(name)) {
-        if (!this.dataTools) {
-          throw new McpError(ErrorCode.InternalError, `${name} is not available on this host`)
-        }
-        try {
-          return await this.dataTools.call(caller, name, input)
-        } catch (error) {
-          this.deps.log('error', `${name} failed: ${(error as Error).message}`)
-          throw new McpError(ErrorCode.InternalError, `${name} failed: ${(error as Error).message}`)
-        }
-      }
-      if (!isToolName(name)) throw new McpError(ErrorCode.InvalidParams, `Unknown tool ${name}`)
+      return this.callTool(sdk, grant, caller, name, input, flags)
+    })
+    return server
+  }
+
+  /**
+   * A call through the gateway: the tool's description and arguments without `arguments`, else the
+   * tool's own call as if it had been called directly, a failed one with its arguments added.
+   */
+  private async callGateway(
+    sdk: Sdk,
+    grant: Grant,
+    caller: Caller,
+    input: unknown,
+    flags: GuideFlags,
+  ): Promise<CallToolResult> {
+    const call = gatewayInput(input)
+    if ('error' in call) {
+      return { content: [{ type: 'text', text: call.error }], isError: true }
+    }
+    const tools = this.allTools(grant)
+    const tool = tools.find((listed) => listed.name === call.tool)
+    if (!tool) return unknownTool(call.tool, tools)
+    if (call.arguments === undefined) return described(tool)
+    try {
+      const result = await this.callTool(sdk, grant, caller, tool.name, call.arguments, flags)
+      return result.isError ? withArguments(result, tool) : result
+    } catch (error) {
+      const text = (error as Error).message
+      return withArguments({ content: [{ type: 'text', text }], isError: true }, tool)
+    }
+  }
+
+  /** A guide topic; for an agent behind the gateway, with the topic's tools it calls by it. */
+  private guideCall(grant: Grant, input: unknown, flags: GuideFlags): CallToolResult {
+    const result = callGuide(input, flags)
+    const topic = result.structuredContent?.topic as GuideTopic | undefined
+    const group = topic === undefined ? undefined : TOPIC_GROUPS[topic]
+    if (!grant.gateway || result.isError || group === undefined) return result
+    const extra = topicTools(
+      this.allTools(grant).filter((tool) => TOOL_GROUPS.get(tool.name) === group),
+    )
+    if (!extra) return result
+    const text = `${result.structuredContent!.text as string}${extra}`
+    return { content: [{ type: 'text', text }], structuredContent: { topic, text } }
+  }
+
+  /** Runs one of Kettu's tools for the caller. */
+  private async callTool(
+    sdk: Sdk,
+    grant: Grant,
+    caller: Caller,
+    name: string,
+    input: unknown,
+    flags: GuideFlags,
+  ): Promise<CallToolResult> {
+    const { ErrorCode, McpError } = sdk
+    if (name === GUIDE_TOOL) return this.guideCall(grant, input, flags)
+    if (isSessionToolName(name)) {
       try {
-        const result = await this.tools.call(caller, name, input)
-        // Before the answer, while the agent still shows its tool call as running.
-        await this.record(caller.sessionId, name, input, result)
-        return result
+        return await this.sessionTools.call(caller, name, input)
       } catch (error) {
         this.deps.log('error', `${name} failed: ${(error as Error).message}`)
         throw new McpError(ErrorCode.InternalError, `${name} failed: ${(error as Error).message}`)
       }
-    })
-    return server
+    }
+    if (this.workflowTools && isWorkflowToolName(name)) {
+      try {
+        return await this.workflowTools.call(caller, name, input)
+      } catch (error) {
+        this.deps.log('error', `${name} failed: ${(error as Error).message}`)
+        throw new McpError(ErrorCode.InternalError, `${name} failed: ${(error as Error).message}`)
+      }
+    }
+    if (isPlanToolName(name)) {
+      try {
+        return this.planTools.call(caller, name, input)
+      } catch (error) {
+        this.deps.log('error', `${PLAN_TOOL} failed: ${(error as Error).message}`)
+        throw new McpError(
+          ErrorCode.InternalError,
+          `${PLAN_TOOL} failed: ${(error as Error).message}`,
+        )
+      }
+    }
+    if (isReportToolName(name)) {
+      try {
+        return this.reportTools.call(caller, name, input)
+      } catch (error) {
+        this.deps.log('error', `${REPORT_TOOL} failed: ${(error as Error).message}`)
+        throw new McpError(
+          ErrorCode.InternalError,
+          `${REPORT_TOOL} failed: ${(error as Error).message}`,
+        )
+      }
+    }
+    if (this.memoryTools && isMemoryToolName(name)) {
+      // While memory is off they are not listed, and a call answers that it is off.
+      try {
+        return await this.memoryTools.call(caller, name, input)
+      } catch (error) {
+        this.deps.log('error', `${name} failed: ${(error as Error).message}`)
+        throw new McpError(ErrorCode.InternalError, `${name} failed: ${(error as Error).message}`)
+      }
+    }
+    const market = this.deps.market
+    if (market && isMarketToolName(name)) {
+      // While signed out they are not listed, and a call answers why.
+      try {
+        return await market.call(caller, name, input)
+      } catch (error) {
+        this.deps.log('error', `${name} failed: ${(error as Error).message}`)
+        throw new McpError(ErrorCode.InternalError, `${name} failed: ${(error as Error).message}`)
+      }
+    }
+    const settings = this.deps.settings
+    if (settings && isSettingsToolName(name)) {
+      try {
+        return await settings.call(caller, name, input)
+      } catch (error) {
+        this.deps.log('error', `${name} failed: ${(error as Error).message}`)
+        throw new McpError(ErrorCode.InternalError, `${name} failed: ${(error as Error).message}`)
+      }
+    }
+    if (isBrowserToolName(name)) {
+      try {
+        return await this.browserTools.call(caller, name, input)
+      } catch (error) {
+        this.deps.log('error', `${name} failed: ${(error as Error).message}`)
+        throw new McpError(ErrorCode.InternalError, `${name} failed: ${(error as Error).message}`)
+      }
+    }
+    if (isDeviceToolName(name)) {
+      if (!this.deviceTools) {
+        throw new McpError(ErrorCode.InternalError, `${name} is not available on this host`)
+      }
+      try {
+        return await this.deviceTools.call(caller, name, input)
+      } catch (error) {
+        this.deps.log('error', `${name} failed: ${(error as Error).message}`)
+        throw new McpError(ErrorCode.InternalError, `${name} failed: ${(error as Error).message}`)
+      }
+    }
+    if (isTerminalToolName(name)) {
+      if (!this.terminalTools) {
+        throw new McpError(ErrorCode.InternalError, `${name} is not available on this host`)
+      }
+      try {
+        return await this.terminalTools.call(caller, name, input)
+      } catch (error) {
+        this.deps.log('error', `${name} failed: ${(error as Error).message}`)
+        throw new McpError(ErrorCode.InternalError, `${name} failed: ${(error as Error).message}`)
+      }
+    }
+    const computer = this.deps.computer
+    if (computer && isComputerToolName(name)) {
+      // A subagent uses the computer as the session it runs under.
+      const sessionId = this.deps.browserSession?.(caller.sessionId) ?? caller.sessionId
+      return computer.call(sessionId, name, input)
+    }
+    if (isDataToolName(name)) {
+      if (!this.dataTools) {
+        throw new McpError(ErrorCode.InternalError, `${name} is not available on this host`)
+      }
+      try {
+        return await this.dataTools.call(caller, name, input)
+      } catch (error) {
+        this.deps.log('error', `${name} failed: ${(error as Error).message}`)
+        throw new McpError(ErrorCode.InternalError, `${name} failed: ${(error as Error).message}`)
+      }
+    }
+    if (!isToolName(name)) throw new McpError(ErrorCode.InvalidParams, `Unknown tool ${name}`)
+    try {
+      const result = await this.tools.call(caller, name, input)
+      // Before the answer, while the agent still shows its tool call as running.
+      await this.record(caller.sessionId, name, input, result)
+      return result
+    } catch (error) {
+      this.deps.log('error', `${name} failed: ${(error as Error).message}`)
+      throw new McpError(ErrorCode.InternalError, `${name} failed: ${(error as Error).message}`)
+    }
   }
 }

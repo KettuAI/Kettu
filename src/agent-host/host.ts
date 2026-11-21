@@ -1089,10 +1089,12 @@ export class AgentHost {
       reportsDir: path.join(options.userDataPath, 'agent-reports'),
       attachments: this.attachments,
       mcp: {
-        servers: (sessionId, record, connection) =>
-          this.agents.mcpServersByName(record.agentId)
-            ? this.artifactService.folderServers(connection, record.projectPath, sessionId)
-            : this.artifactService.servers(sessionId, record.projectPath),
+        servers: (sessionId, record, connection) => {
+          const gateway = this.agents.toolGateway(record.agentId)
+          return this.agents.mcpServersByName(record.agentId)
+            ? this.artifactService.folderServers(connection, record.projectPath, sessionId, gateway)
+            : this.artifactService.servers(sessionId, record.projectPath, gateway)
+        },
         library: (sessionId, record, connection, transports, taken) =>
           libraryServers(
             this.settings.marketplace.mcp,
@@ -1122,7 +1124,10 @@ export class AgentHost {
           this.browserSites.delete(sessionId)
         },
         guide: (agentId) =>
-          this.artifactService.guidePrompt(this.marketSkills.takesSkills(agentId)),
+          this.artifactService.guidePrompt(
+            this.marketSkills.takesSkills(agentId),
+            this.agents.toolGateway(agentId),
+          ),
         turnEnded: (sessionId) => {
           this.artifacts.stopUsing(sessionId)
           this.computer?.turnEnded(sessionId)

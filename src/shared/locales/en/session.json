@@ -80,6 +80,7 @@
   },
   "kettuTool": {
     "read_kettu_guide": "Read Kettu guide",
+    "call_kettu_tool": "Look up Kettu tool",
     "create_artifact": "Create artifact",
     "read_artifact": "Read artifact",
     "update_artifact": "Update artifact",

@@ -6,12 +6,17 @@
 import type * as acp from '@agentclientprotocol/sdk/unstable'
 import { fenced } from '../codex/mapper'
 import type { McpServer } from '../connection'
+import { GUIDE_TOOL } from '../guide/guide'
+import { SERVICE_NAME } from '../service-name'
 import { toLf, type MapperContext, type TurnScope } from '../session-updates'
+import { GATEWAY_TOOL } from '../tool-gateway'
 
 const RESULT = /^Created At: [^\n]*\nCompleted At: [^\n]*\nCommand exited with code (-?\d+)\.\n\n/
 const OUTPUT = 'Command output:\n'
 const NO_OUTPUT = 'No output from the command.'
 const OWN_FOLDER = /(?:^|\/)\.gemini\/antigravity-cli\/brain\//
+const OWN_PREFIX = `mcp_${SERVICE_NAME}_`
+const GATEWAY_NAME = `${OWN_PREFIX}${GATEWAY_TOOL}`
 
 function record(value: unknown): Record<string, unknown> | null {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -39,14 +44,50 @@ export function agyAutoAllowed(servers: readonly McpServer[] | undefined): Reado
   )
 }
 
-/** The option that allows a call once, for a call of one of those tools; null for any other. */
+/**
+ * A call of Kettu's gateway as the call of the tool it runs, so it asks, shows and is held as a
+ * direct call of that tool is. agy 1.5.14 repeats the name and input on every update of a call. A
+ * call without `arguments`, which only describes a tool, stays the gateway's.
+ */
+export function throughGateway<T extends acp.ToolCallUpdate>(update: T): T {
+  if (toolName(update) !== GATEWAY_NAME) return update
+  const input = record(update.rawInput)
+  const tool = input?.tool
+  const args = record(input?.arguments)
+  if (typeof tool !== 'string' || !args) return update
+  const name = `${OWN_PREFIX}${tool}`
+  const summary = input!.toolSummary
+  const rawInput = typeof summary === 'string' ? { ...args, toolSummary: summary } : args
+  return {
+    ...update,
+    name,
+    title: `Run ${name}`,
+    rawInput,
+    ...('args' in update ? { args: rawInput } : {}),
+  }
+}
+
+/** Whether a call of the gateway only describes a tool, which runs nothing. */
+function describesOnly(toolCall: acp.ToolCallUpdate): boolean {
+  if (toolName(toolCall) !== GATEWAY_NAME) return false
+  const input = record(toolCall.rawInput)
+  return typeof input?.tool === 'string' && input.arguments === undefined
+}
+
+/**
+ * The option that allows a call once, for a call of one of those tools, or of Kettu's gateway that
+ * only describes a tool while Kettu's server is the session's; null for any other. A gateway call
+ * that runs a tool is decided as that tool, after `throughGateway`.
+ */
 export function agyAllowOnce(
   toolCall: acp.ToolCallUpdate,
   options: readonly acp.PermissionOption[],
   allowed: ReadonlySet<string> | undefined,
 ): string | null {
   const name = toolName(toolCall)
-  if (name === null || !allowed?.has(name)) return null
+  if (name === null) return null
+  const lookup = describesOnly(toolCall) && allowed?.has(`${OWN_PREFIX}${GUIDE_TOOL}`) === true
+  if (!lookup && !allowed?.has(name)) return null
   return options.find((option) => option.kind === 'allow_once')?.optionId ?? null
 }
 

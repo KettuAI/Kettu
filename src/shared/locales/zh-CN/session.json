@@ -70,6 +70,7 @@
   },
   "kettuTool": {
     "read_kettu_guide": "读取 Kettu 指南",
+    "call_kettu_tool": "查看 Kettu 工具",
     "create_artifact": "创建产物",
     "read_artifact": "读取产物",
     "update_artifact": "更新产物",

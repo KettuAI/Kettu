@@ -25,6 +25,7 @@ type Target =
 // since it may be a password.
 const TARGETS = {
   read_kettu_guide: ['topic'],
+  call_kettu_tool: ['tool'],
   create_artifact: ['title'],
   read_artifact: ['path'],
   update_artifact: ['title'],

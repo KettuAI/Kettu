@@ -630,6 +630,80 @@ describe("agy's permission requests", () => {
   })
 })
 
+/** A call of Kettu's gateway as agy 1.5.14 sends it, every update repeating its name and input. */
+function gatewayCall(toolCallId: string, tool: string, args?: Record<string, unknown>) {
+  const rawInput = { tool, ...(args ? { arguments: args } : {}), toolSummary: `Use ${tool}` }
+  return {
+    sessionUpdate: 'tool_call',
+    toolCallId,
+    name: 'mcp_kettu_call_kettu_tool',
+    args: rawInput,
+    status: 'pending',
+    kind: 'other',
+    title: 'Run mcp_kettu_call_kettu_tool',
+    rawInput,
+  }
+}
+
+describe("agy's calls through Kettu's gateway", () => {
+  const OPTIONS = [
+    { optionId: 'allow', name: 'Allow', kind: 'allow_once' },
+    { optionId: 'deny', name: 'Deny', kind: 'reject_once' },
+  ]
+
+  async function run(calls: ReturnType<typeof gatewayCall>[], autoAllow: string[]) {
+    const answers: unknown[] = []
+    const { connection } = connect('1.5.14', async (client, sessionId) => {
+      for (const call of calls) {
+        await client.notify(methods.client.session.update, update(sessionId, call))
+        const params = { sessionId, toolCall: call, options: OPTIONS } as never
+        answers.push(await client.request(methods.client.session.requestPermission, params))
+        const done = { ...call, sessionUpdate: 'tool_call_update', status: 'completed' }
+        await client.notify(methods.client.session.update, update(sessionId, done))
+      }
+    })
+    await connection.initialize('1.0.0')
+    const { sessionId } = await connection.newSession('/tmp/agy-probe', {
+      mcpServers: [
+        { type: 'http', name: 'kettu', url: 'http://127.0.0.1:1/mcp', headers: [], autoAllow },
+      ],
+    })
+    const { target, asked, entries } = threadTarget()
+    connection.register(sessionId, target)
+    await connection.prompt(sessionId, [{ type: 'text', text: 'go' }])
+    connection.close()
+    return { answers, asked, entries: entries() }
+  }
+
+  // Allowing the gateway itself would run any tool behind it without the user.
+  it('ask, show and hide as the tool they run, and a lookup runs without a card', async () => {
+    const list = gatewayCall('c1', 'list_sessions', {})
+    const terminal = gatewayCall('c2', 'terminal_run', { command: 'npm test' })
+    const lookup = gatewayCall('c3', 'device_tap')
+    const plan = gatewayCall('c4', 'set_plan', { steps: [{ content: 'A', status: 'pending' }] })
+    const { answers, asked, entries } = await run(
+      [list, terminal, lookup, plan],
+      ['set_plan', 'list_sessions', 'read_kettu_guide'],
+    )
+    expect(answers).toEqual(Array(4).fill({ outcome: { outcome: 'selected', optionId: 'allow' } }))
+    expect(asked).toEqual(['c2'])
+    const rows = entries.map((entry) =>
+      entry.kind === 'tool' ? { title: entry.title, input: entry.rawInput } : entry.kind,
+    )
+    // The plan shows in the top bar, as a direct call of it does.
+    expect(rows).toEqual([
+      { title: 'mcp__kettu__list_sessions', input: expect.not.stringContaining('"tool"') },
+      { title: 'mcp__kettu__terminal_run', input: 'npm test' },
+      { title: 'mcp__kettu__call_kettu_tool', input: expect.stringContaining('"device_tap"') },
+    ])
+  })
+
+  it("ask for a lookup when Kettu's own server is not the session's", async () => {
+    const { asked } = await run([gatewayCall('c1', 'device_tap')], [])
+    expect(asked).toEqual(['c1'])
+  })
+})
+
 describe("agy's edit requests", () => {
   const file = edit.toolCall.content[0]!.path
 
