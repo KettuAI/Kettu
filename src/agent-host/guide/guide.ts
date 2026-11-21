@@ -138,12 +138,16 @@ export function guidePrompt(flags: GuideFlags, skills: boolean): string {
   const intro =
     'You are working in Kettu, a desktop app where the user watches your sessions. ' +
     `Kettu's own tools are on the ${SERVICE_NAME} MCP server, and its`
+  const check =
+    'After you change a web page or web app, even a small change, start its dev server if none ' +
+    "runs and open the page in Kettu's browser with browser_navigate before you finish: check " +
+    'it rather than report that you did not.'
   const diagrams =
     'Kettu draws mermaid and svg code blocks in replies as diagrams: draw a flowchart or any other ' +
     'diagram with one of them, never as ASCII art or box-drawing characters.'
   return skills
-    ? `${intro} kettu-* skills say when and how to use them. Load the matching skill before you ${list}. ${diagrams}`
-    : `${intro} ${GUIDE_TOOL} tool says when and how to use them. Read the matching topic with it before you ${list}. ${diagrams}`
+    ? `${intro} kettu-* skills say when and how to use them. Load the matching skill before you ${list}. ${check} ${diagrams}`
+    : `${intro} ${GUIDE_TOOL} tool says when and how to use them. Read the matching topic with it before you ${list}. ${check} ${diagrams}`
 }
 
 /**

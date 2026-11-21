@@ -284,7 +284,7 @@ Kettu has a browser beside the conversation, which the user watches. Use it to o
 
 ## When
 
-Use it without being asked when it fits: after you change a page or a component, open it and check that it looks and works right; to reproduce a bug the user reports in a web app; whenever the user asks you to look at a page. It costs the user nothing, and they see what you see.
+Use it without being asked when it fits: after you change a page or a component, open it and check that it looks and works right before you end your turn; to reproduce a bug the user reports in a web app; whenever the user asks you to look at a page. It costs the user nothing, and they see what you see.
 
 ## Opening pages
 
@@ -502,8 +502,9 @@ export const SKILL_SPECS: readonly SkillSpec[] = [
     name: 'kettu-browser',
     topic: 'browser',
     description: () =>
-      "Open and check web pages or the web app you build in Kettu's browser, which the user " +
-      'watches: after changing a page, to reproduce a bug, or when asked.',
+      'Load before you change how a web page or web app looks or works, to open and check the ' +
+      "change in Kettu's browser, which the user watches, before you finish; also to reproduce " +
+      'a bug in a web app, or to open a page the user asks for.',
     body: (_, ref) => browser(ref),
   },
   {
