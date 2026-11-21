@@ -164,10 +164,17 @@ func handle(_ line: Data) {
     }
   case "quit":
     log("Kettu asked the helper to quit")
-    exit(0)
+    leave()
   default:
     log("Ignored a \(message.type) message")
   }
+}
+
+/// Shrinks the island back into the notch, then ends; main waits a second before it kills a helper
+/// that is still running.
+func leave() {
+  model.leave()
+  DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { exit(0) }
 }
 
 // An accessory app: no Dock icon, no menu bar of its own, never the active app.
@@ -178,6 +185,7 @@ channel.start(
   onLine: handle,
   onEnd: {
     // Main has gone, so nothing is left to show.
-    exit(0)
+    leave()
   })
+MarkImages.warmUp()
 app.run()

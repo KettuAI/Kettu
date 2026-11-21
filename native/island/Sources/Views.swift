@@ -152,7 +152,7 @@ extension IslandModel {
 /// The icon's shaded fox, which stands in for the marks while nothing needs one.
 struct BrandFox: View {
   var size: CGFloat = Metrics.wingMark
-  private static let image = NSImage(data: Data(brandFoxSVG.utf8))
+  private static let image = Data(base64Encoded: brandFoxPNG).flatMap { NSImage(data: $0) }
 
   var body: some View {
     Group {

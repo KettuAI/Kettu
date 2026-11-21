@@ -35,7 +35,11 @@ shows while it is on:
   the keyboard: Esc, the arrows, Return and the digits.
 
 AppKit draws the agent marks from SVG, which `generate.mjs` renders at build time from the
-renderer's mark components in the dark theme, with the tokens the signals use. The window is a
+renderer's mark components in the dark theme, with the tokens the signals use. Marks with filters or
+masks, which CoreSVG does not draw, and the icon's fox, whose filters take CoreSVG about 140 ms, come
+as PNG instead, drawn by Chromium through `rasterize.mjs` in the repository's Electron. One mark is
+drawn off the main thread at launch, since CoreSVG's first drawing takes about 45 ms. Turned off, the
+island shrinks back into the notch before the helper ends. The window is a
 non-activating panel above the menu bar that lets clicks through outside the island, and a hidden
 island leaves the window list. While it runs, main sends no notifications of the kinds it shows;
 they come back only when the island is turned off or stops after repeated crashes.
@@ -83,6 +87,6 @@ on the helper's stdin send `{ "type": "debug", "kind": ... }` with `expand`, `cl
 
 `build.mjs` compiles `Sources/*.swift`, with the Swift source `generate.mjs` writes, using `swiftc -O`
 for this Mac's architecture, for macOS 13 and later, and copies `kettu-island` into the
-destination. It needs Xcode or the Command Line Tools and the repository's packages, and does nothing
-on other platforms. `tools/install/device-helpers.mjs`, which the release run calls,
+destination. It needs Xcode or the Command Line Tools and the repository's packages, Electron
+included, and does nothing on other platforms. `tools/install/device-helpers.mjs`, which the release run calls,
 builds it with the other helpers.

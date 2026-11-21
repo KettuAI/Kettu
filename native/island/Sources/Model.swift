@@ -539,6 +539,17 @@ final class IslandModel: ObservableObject {
     setMode(.collapsed)
   }
 
+  /// Shrinks back into the notch, as before the island first showed, when the helper is to quit.
+  func leave() {
+    tick?.invalidate()
+    tick = nil
+    popTimer?.invalidate()
+    pops.removeAll()
+    pop = nil
+    measuring = false
+    setMode(.hidden)
+  }
+
   func open(row: String?) {
     send(.open(row: row))
     collapse()

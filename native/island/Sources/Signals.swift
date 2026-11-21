@@ -1,16 +1,35 @@
 import AppKit
 import SwiftUI
 
-/// An agent's mark from the renderer's SVG, with an added agent's dot as the window draws it.
+/// An agent's mark from the renderer's SVG, or the PNG Chromium drew of one CoreSVG cannot draw.
 enum MarkImages {
   private static var cache: [String: NSImage] = [:]
 
   static func image(_ harness: String) -> NSImage? {
     if let hit = cache[harness] { return hit }
-    guard let svg = markSVG[harness], let image = NSImage(data: Data(svg.utf8)), image.isValid
-    else { return nil }
+    let data =
+      markPNG[harness].flatMap { Data(base64Encoded: $0) } ?? markSVG[harness].map { Data($0.utf8) }
+    guard let data, let image = NSImage(data: data), image.isValid else { return nil }
     cache[harness] = image
     return image
+  }
+
+  /// CoreSVG's first drawing in a process takes about 45 ms; one done off the main thread at launch
+  /// keeps it out of the island's first motion.
+  static func warmUp() {
+    guard let svg = markSVG.values.first else { return }
+    DispatchQueue.global(qos: .userInitiated).async {
+      guard let image = NSImage(data: Data(svg.utf8)),
+        let rep = NSBitmapImageRep(
+          bitmapDataPlanes: nil, pixelsWide: 16, pixelsHigh: 16, bitsPerSample: 8,
+          samplesPerPixel: 4, hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB,
+          bytesPerRow: 0, bitsPerPixel: 0)
+      else { return }
+      NSGraphicsContext.saveGraphicsState()
+      NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: rep)
+      image.draw(in: NSRect(x: 0, y: 0, width: 16, height: 16))
+      NSGraphicsContext.restoreGraphicsState()
+    }
   }
 }
 
