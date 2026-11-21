@@ -123,12 +123,29 @@
       "devices": "设备"
     },
     "empty": {
-      "title": "这个会话还没开终端、网页或设备",
-      "text": "它们都开在这一排标签页里，智能体打开的也会出现在这里。",
-      "terminal": "终端",
-      "page": "网页",
-      "device": "移动设备"
+      "title": "在侧边面板里打开",
+      "text": "终端、网页和移动设备排成一排标签，智能体打开的也在这里。"
     },
+    "list": {
+      "terminal": "终端",
+      "browser": "网页",
+      "devices": "移动设备",
+      "files": "文件",
+      "requests": "请求",
+      "computer": "Computer",
+      "live": "正在用",
+      "off": {
+        "terminal": "这台电脑已关闭",
+        "firstMessage": "发出第一条消息后",
+        "webBrowser": "仅桌面应用",
+        "webComputer": "仅桌面应用",
+        "noDevices": "需要 Xcode 或 Android SDK",
+        "otherHost": "仅这台电脑的项目",
+        "noRequests": "此智能体不提供",
+        "computer": "智能体用电脑时"
+      }
+    },
+    "switch": "换窗格",
     "reference": "在对话中引用",
     "stopSharing": "收回 {{agent}} 的使用",
     "shared": "{{agent}} 能用"

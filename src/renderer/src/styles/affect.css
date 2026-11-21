@@ -1088,6 +1088,14 @@ li[data-row-exit='dust'] > * {
   height: 24px;
   border-radius: 7px;
 }
+/* A pane's glyph with the arrow that opens the side panel's list. */
+.kp-tool--switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 1px;
+  width: auto;
+  padding: 0 5px 0 6px;
+}
 .kp-tool:hover {
   background: color-mix(in srgb, var(--bg-hover) 75%, transparent);
   color: var(--text-primary);

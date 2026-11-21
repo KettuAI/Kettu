@@ -32,6 +32,7 @@ import {
   PaneSpinner,
   PanelButton,
 } from '@renderer/features/shell/panel-button'
+import { PaneSwitch } from '@renderer/features/shell/pane-switch'
 import { errorMessage, host } from '@renderer/lib/host'
 import { hostOfPath } from '@renderer/lib/host-paths'
 import { formatShortcut, isMod, isWeb } from '@renderer/lib/platform'
@@ -271,6 +272,7 @@ function FilesPane({ projectPath, panel, maximized }: FilesPanelProps) {
           </>
         }
       >
+        <PaneSwitch panel={panel} projectPath={projectPath} pane="files" />
         {!bare && (
           <PanelButton
             label={(phone ? phoneList : treeShown) ? t('panel.hideTree') : t('panel.showTree')}
