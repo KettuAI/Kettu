@@ -462,7 +462,8 @@
     "label": "Also open on {{names, list}}"
   },
   "userEntry": {
-    "device": "Sent from {{device}}"
+    "device": "Sent from {{device}}",
+    "kettu": "Kettu"
   },
   "sessionReport": {
     "agent": "The session",
@@ -537,6 +538,7 @@
     "attachment": "Attachment",
     "from": "From {{device}}",
     "fromSession": "From {{title}}",
+    "fromKettu": "From Kettu",
     "attachments_one": "{{count}} attachment",
     "attachments_other": "{{count}} attachments",
     "sendNow": "Send now",

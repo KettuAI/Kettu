@@ -450,6 +450,12 @@ describe('the thread database', () => {
         content: [{ type: 'text', text: 'Implement the plan.' }],
         approval: true,
       },
+      {
+        kind: 'user',
+        id: 'reminder',
+        content: [{ type: 'text', text: 'Your step is not reported yet.' }],
+        kettu: true,
+      },
       { kind: 'session_message', id: 'sm', senderId: 'sender', content: [] },
     ]
     db.write('s1', { head, entries: entries.map((entry, pos) => ({ pos, entry })) })

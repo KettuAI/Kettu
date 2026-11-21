@@ -29,7 +29,7 @@ export function useOutline(sessionId: string): {
     const byId = useThreadsStore.getState().replicas[sessionId]?.state?.byId
     return (order ?? []).filter((id) => {
       const entry = byId?.[id]
-      return entry?.kind === 'user' && !entry.from && !entry.approval
+      return entry?.kind === 'user' && !entry.from && !entry.approval && !entry.kettu
     })
   }, [sessionId, order])
   const [listed, setListed] = useState<OutlineEntry[] | null>(null)
@@ -62,7 +62,9 @@ export function useOutline(sessionId: string): {
     const byId = useThreadsStore.getState().replicas[sessionId]?.state?.byId
     for (const id of userIds) {
       const entry = byId?.[id]
-      if (known.has(id) || entry?.kind !== 'user' || entry.from || entry.approval) continue
+      if (known.has(id) || entry?.kind !== 'user' || entry.from || entry.approval || entry.kettu) {
+        continue
+      }
       out.push({
         entryId: id,
         pos: null,

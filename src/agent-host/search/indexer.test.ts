@@ -132,11 +132,12 @@ it('builds the index of threads written before it, newest first, and tells how f
   expect(new Map(s.db.threadMarks())).toEqual(s.index.marks())
 })
 
-it('reads a long session in ranges, tool output left out', async () => {
+it("reads a long session in ranges, tool output and Kettu's own messages left out", async () => {
   const s = setup({ start: true })
   const entries: ThreadWrite['entries'] = []
   for (let pos = 0; pos < 1_000; pos++) entries.push({ pos, entry: tool(`t${pos}`) })
   entries[3] = { pos: 3, entry: say('first', 'needle at the start', {}) }
+  entries[200] = { pos: 200, entry: say('kettu', 'needle from Kettu', { kettu: true }) }
   entries[450] = { pos: 450, entry: reply('mid', 'needle in the middle') }
   entries[999] = { pos: 999, entry: reply('last', 'needle at the end') }
   s.db.write('long', { head, entries })
@@ -152,12 +153,15 @@ it('applies each write as it commits, once a reply is final', async () => {
   expect(s.found('search')).toEqual([['s1', 0, 1]])
   s.write('s1', [{ pos: 1, entry: reply('a0', 'added the search index') }])
   expect(s.found('search')).toEqual([['s1', 1, 2]])
-  // The answer Kettu sends for a card is no message of the user's, and tool output is no text.
+  // The answer Kettu sends for a card and a message Kettu wrote itself are no messages of the
+  // user's, and tool output is no text.
   s.write('s1', [
     { pos: 2, entry: say('u1', 'search approved', { approval: true }) },
     { pos: 3, entry: tool('t0') },
+    { pos: 4, entry: say('u2', 'search reminder', { kettu: true }) },
   ])
   expect(s.found('approved')).toEqual([])
+  expect(s.found('reminder')).toEqual([])
   // A reply written again with other words is found by them.
   s.write('s1', [{ pos: 1, entry: reply('a0', 'built the lookup') }])
   expect(s.found('index')).toEqual([])

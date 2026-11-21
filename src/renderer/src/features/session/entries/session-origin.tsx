@@ -11,6 +11,7 @@ import { useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
 import type { FromSession, StopReason } from '@shared/thread'
 import { AgentMark } from '@renderer/components/agents/agent-mark'
+import { BrandIcon } from '@renderer/components/brand'
 import { cn } from '@renderer/lib/utils'
 import { hostOfSession, sessionTitle, useSessionsStore } from '@renderer/stores/sessions'
 import { openSession } from '@renderer/stores/view'
@@ -63,6 +64,23 @@ export function FromSessionCard({ from, children }: { from: FromSession; childre
           aria-hidden
           className="size-3 shrink-0"
         />
+      </figcaption>
+      {children}
+    </figure>
+  )
+}
+
+/**
+ * A message Kettu itself wrote to the agent, such as a workflow step's prompt or reminder: the same
+ * quoted card on the agent's side, headed by Kettu's own mark, since the user never wrote it.
+ */
+export function KettuCard({ children }: { children: ReactNode }) {
+  const { t } = useTranslation('session')
+  return (
+    <figure className="ks-from">
+      <figcaption className="ks-from__head">
+        <BrandIcon size={14} />
+        <span className="min-w-0 truncate">{t('userEntry.kettu')}</span>
       </figcaption>
       {children}
     </figure>

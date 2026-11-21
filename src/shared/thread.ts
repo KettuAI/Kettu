@@ -195,6 +195,8 @@ export interface QueuedPrompt {
   device?: FromDevice
   /** Set for a message Kettu sends as the answer a card already shows, such as a plan's approval. */
   approval?: true
+  /** Set for a message Kettu itself wrote to the agent, such as a workflow step's reminder. */
+  kettu?: true
 }
 
 /** The session that started or messaged another one through the session tools. */
@@ -320,6 +322,11 @@ export type ThreadEntry =
        * the agent got it, but it is no bubble and no message of the user's own.
        */
       approval?: true
+      /**
+       * Set for a message Kettu itself wrote to the agent, such as a workflow step's prompt or
+       * reminder: drawn as Kettu's, never as the user's own.
+       */
+      kettu?: true
     }
   | {
       kind: 'agent'

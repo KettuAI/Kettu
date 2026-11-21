@@ -120,6 +120,7 @@ import {
   type ProjectHooksEntry,
   type ProjectMcpDecision,
   type ProjectMcpEntry,
+  type QueuedPrompt,
   type SideChatEntry,
   type SideChatRoute,
   type SideChatSaw,
@@ -724,6 +725,7 @@ interface Live {
     entryId: string
     from?: FromSession
     device?: FromDevice
+    kettu?: true
     portId?: string
   } | null
   /** A first message that waits for its worktree's preparation, which sends it. */
@@ -731,10 +733,10 @@ interface Live {
   /** Who queued each waiting prompt, by item id; apart from the queue, which every client sees. */
   queuedBy: Map<string, string>
   /**
-   * The waiting prompts Kettu queued itself, such as a step's reminder, by item id, each with what
-   * says it is still due when its turn comes.
+   * What says each waiting prompt Kettu queued itself, such as a step's reminder, is still due when
+   * its turn comes, by item id.
    */
-  kettuQueued: Map<string, (() => boolean) | null>
+  kettuQueued: Map<string, () => boolean>
   /** The last turn began with the user's own message, which owes no step report. */
   userTurn: boolean
   /** The message that gave the session its first title, for a written title, and its tries. */
@@ -977,6 +979,15 @@ function attachmentIds(content: readonly UserContent[]): string[] {
   return content.flatMap((item) =>
     item.type === 'ref' && item.ref.kind === 'attachment' ? [item.ref.attachment.id] : [],
   )
+}
+
+/** The marks of a message Kettu sent itself, its own words or a card's answer; none for others. */
+function kettuMarks(entry: ThreadEntry | undefined): Pick<QueuedPrompt, 'approval' | 'kettu'> {
+  if (entry?.kind !== 'user') return {}
+  return {
+    ...(entry.approval ? { approval: entry.approval } : {}),
+    ...(entry.kettu ? { kettu: entry.kettu } : {}),
+  }
 }
 
 /** Whether the agent added no message, thought, tool call or plan after the user entry `entryId`. */
@@ -3390,7 +3401,15 @@ export class SessionManager {
     for (const id of current.thread.order) {
       const entry = current.thread.byId[id]
       const pos = current.positions.get(id)
-      if (entry?.kind !== 'user' || entry.from || entry.approval || pos === undefined) continue
+      if (
+        entry?.kind !== 'user' ||
+        entry.from ||
+        entry.approval ||
+        entry.kettu ||
+        pos === undefined
+      ) {
+        continue
+      }
       rows.push({
         pos,
         entryId: id,
@@ -4719,7 +4738,9 @@ export class SessionManager {
     live.used = true
     live.startedMode = { starter: null, wanted: null, ceiling: null }
     const content: UserContent[] = [{ type: 'text', text: params.prompt }]
-    live.first = { content, entryId: this.addPrompt(live, content, now) }
+    // The step's prompt is Kettu's, written from the workflow, not the user's.
+    const entryId = this.addPrompt(live, content, now, undefined, undefined, undefined, true)
+    live.first = { content, entryId, kettu: true }
     this.touch(live.id)
     this.deps.task?.current?.sessionCreated(live.id, params.task)
     if (worktree && params.prepare) this.prepareWorktree(projectPath, worktree)
@@ -4762,8 +4783,8 @@ export class SessionManager {
       throw busyError(status)
     }
     const id = randomUUID()
-    live.kettuQueued.set(id, due ?? null)
-    this.update(live, { queue: [...queue, { id, content, at: this.now() }] })
+    if (due) live.kettuQueued.set(id, due)
+    this.update(live, { queue: [...queue, { id, content, at: this.now(), kettu: true }] })
     this.persist(live)
     this.touch(live.id)
   }
@@ -5279,6 +5300,7 @@ export class SessionManager {
           at: this.now(),
           ...(first.from ? { from: first.from } : {}),
           ...(first.device ? { device: first.device } : {}),
+          ...(first.kettu ? { kettu: first.kettu } : {}),
         },
         ...live.thread.session.queue,
       ],
@@ -5294,7 +5316,7 @@ export class SessionManager {
    */
   private holdFirst(live: Live): void {
     if (!live.saved || !live.first) return
-    const { content, from } = live.first
+    const { content, from, kettu } = live.first
     live.first = null
     this.emit(live, [
       {
@@ -5311,7 +5333,16 @@ export class SessionManager {
     ])
     const queue = live.thread.session.queue
     this.update(live, {
-      queue: [{ id: randomUUID(), content, at: this.now(), ...(from ? { from } : {}) }, ...queue],
+      queue: [
+        {
+          id: randomUUID(),
+          content,
+          at: this.now(),
+          ...(from ? { from } : {}),
+          ...(kettu ? { kettu } : {}),
+        },
+        ...queue,
+      ],
       queuePaused: true,
     })
     this.persist(live)
@@ -6616,13 +6647,19 @@ export class SessionManager {
     if (!turn) return
     this.finishTurn(live, turn, null)
     const now = this.now()
+    const item: QueuedPrompt = {
+      id: randomUUID(),
+      content: turn.content,
+      at: now,
+      ...kettuMarks(turn.entryId === null ? undefined : live.thread.byId[turn.entryId]),
+    }
     this.update(live, {
       status: 'ready',
       turnStartedAt: null,
       turnStartUsed: null,
       updatedAt: now,
       error: { message: notice.title },
-      queue: [{ id: randomUUID(), content: turn.content, at: now }, ...live.thread.session.queue],
+      queue: [item, ...live.thread.session.queue],
       queuePaused: true,
     })
     this.persist(live)
@@ -7023,7 +7060,7 @@ export class SessionManager {
     live.used = true
     live.userTurn = kettu !== true && from === undefined
     const now = this.now()
-    const entryId = this.addPrompt(live, content, now, from, device, approval)
+    const entryId = this.addPrompt(live, content, now, from, device, approval, kettu)
     this.startTurn(live, content, now, entryId, portId)
   }
 
@@ -7328,6 +7365,7 @@ export class SessionManager {
     from?: FromSession,
     device?: FromDevice,
     approval?: true,
+    kettu?: true,
   ): string {
     const entryId = this.nextId(live)
     this.emit(live, [
@@ -7341,6 +7379,7 @@ export class SessionManager {
           ...(from ? { from } : {}),
           ...(device ? { device } : {}),
           ...(approval ? { approval } : {}),
+          ...(kettu ? { kettu } : {}),
         },
       },
     ])
@@ -7635,6 +7674,7 @@ export class SessionManager {
           ...(item.from ? { from: item.from } : {}),
           ...(item.device ? { device: item.device } : {}),
           ...(item.approval ? { approval: item.approval } : {}),
+          ...(item.kettu ? { kettu: item.kettu } : {}),
         },
       },
     ])
@@ -7739,8 +7779,8 @@ export class SessionManager {
     this.update(live, { queue: rest, ...(rest.length === 0 ? { queuePaused: false } : {}) })
     const queuedBy = live.queuedBy.get(next.id)
     live.queuedBy.delete(next.id)
-    const kettu = live.kettuQueued.delete(next.id) ? true : undefined
-    this.sendPrompt(live, next.content, next.from, queuedBy, next.device, next.approval, kettu)
+    live.kettuQueued.delete(next.id)
+    this.sendPrompt(live, next.content, next.from, queuedBy, next.device, next.approval, next.kettu)
   }
 
   private pauseQueue(live: Live): void {
@@ -8738,6 +8778,9 @@ export class SessionManager {
    * the host still holds; a retried message's were released when it first went.
    */
   private giveBack(live: Live, turn: Turn): void {
+    // Kettu's own message, or the answer a card sent, is not the user's to take back and edit.
+    const sent = kettuMarks(turn.entryId === null ? undefined : live.thread.byId[turn.entryId])
+    if (sent.kettu || sent.approval) return
     const held = new Set(this.deps.attachments?.held(attachmentIds(turn.written)) ?? [])
     const content = turn.written.filter(
       (item) =>

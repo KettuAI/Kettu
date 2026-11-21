@@ -324,6 +324,7 @@ export function QueueStack({
                 {t('queue.fromSession', { title: item.from.title })}
               </span>
             )}
+            {item.kettu && <span className="kettu-queue__from">{t('queue.fromKettu')}</span>}
             {i === 0 && queuePaused && (
               <span className="kettu-queue__paused">
                 {t('queue.paused')}
