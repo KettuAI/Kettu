@@ -2,7 +2,7 @@ import { lazy, Suspense, useEffect, useLayoutEffect, useRef, useState } from 're
 import { AnimatePresence } from 'motion/react'
 import { useTranslation } from 'react-i18next'
 import { AppShell } from '@renderer/components/affect/app-shell'
-import { Toaster } from '@renderer/components/ui/toast'
+import { Toaster, useToastArea } from '@renderer/components/ui/toast'
 import { TooltipProvider } from '@renderer/components/ui/tooltip'
 import { ArtifactDialogs } from '@renderer/features/artifacts/artifact-dialogs'
 import { AutoPublishNotice } from '@renderer/features/artifacts/auto-publish-notice'
@@ -241,6 +241,7 @@ function MainFrame() {
   const content = useRef<HTMLDivElement>(null)
   const wing = useRef<HTMLSpanElement>(null)
   const was = useRef(collapsed)
+  useToastArea('main', content)
 
   useLayoutEffect(() => {
     if (was.current === collapsed) return
