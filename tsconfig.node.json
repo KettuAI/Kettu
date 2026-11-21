@@ -9,6 +9,8 @@
     "types": ["node", "electron-vite/node"],
     "strict": true,
     "verbatimModuleSyntax": true,
+    "allowImportingTsExtensions": true,
+    "noEmit": true,
     "isolatedModules": true,
     "skipLibCheck": true,
     "noUnusedLocals": true,
