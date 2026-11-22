@@ -354,30 +354,79 @@
   height: 100%;
 }
 
-/* In the thread: the tile at a width that suits a reply, left-aligned. */
-.k-art:is([data-form='full'], [data-form='half'], [data-form='small']) {
+/* In the thread: every card spans the column, one level above a message; its height and what it
+   holds tell a creation, an update and a deletion apart. */
+.k-art:is([data-form='created'], [data-form='updated'], [data-form='deleted']) {
   width: 100%;
-  max-width: 384px;
 }
-/* An update, or one of several new ones: the panel half as tall, the page cut off by its foot. An
-   update's page lies over a blank sheet behind it, which slides out a little when pointed at. */
-.k-art:is([data-form='half'], [data-form='small']) .k-art__panel {
-  height: 118px;
+.k-art:is([data-form='created'], [data-form='updated'], [data-form='deleted']) .k-art__name {
+  font-size: 14px;
+  line-height: 21px;
+  font-weight: 600;
+}
+
+/* Created: the title on top, then the page large enough to read, cut off by the panel's foot. */
+.k-art[data-form='created'] .k-art__head {
+  padding: 8px 46px 10px 10px;
+}
+.k-art[data-form='created'] .k-art__panel {
+  height: 266px;
+  padding: 18px 7% 0;
+}
+
+/* Updated: half as tall; on the left the new page over a sheet for the one before, on the right
+   the title, the note and what changed. The card's button spans the grid it shares with the
+   changes, which lie outside it so a frame can be a button of its own. As a subgrid, the button
+   adds its 7px edge and rim to the items at its edges; the changes, outside it, add theirs by hand.
+   In a narrow column the panel gives way before the words do. */
+.k-art[data-form='updated'] {
+  display: grid;
+  grid-template-columns: minmax(0, 239px) minmax(45%, 1fr);
+  grid-template-rows: minmax(0, 1fr) auto auto minmax(0, 1fr);
+  column-gap: 16px;
+}
+.k-art[data-form='updated'] .k-art__open {
+  grid-column: 1 / -1;
+  grid-row: 1 / -1;
+  grid-template-columns: subgrid;
+  grid-template-rows: subgrid;
+}
+.k-art[data-form='updated'] .k-art__panel {
+  grid-column: 1;
+  grid-row: 1 / -1;
+  align-self: center;
+  height: 140px;
   padding: 0;
+}
+.k-art[data-form='updated'] .k-art__head {
+  grid-column: 2;
+  grid-row: 2;
+  gap: 1px;
+  padding: 15px 46px 0 0;
+}
+.k-art[data-form='updated']:not(:has(> .k-art__changed)) .k-art__head {
+  padding-bottom: 15px;
+}
+.k-art[data-form='updated'] .k-art__note {
+  display: -webkit-box;
+  margin: 3px 0 0;
+  font-size: 12.5px;
+  line-height: 18px;
+  white-space: normal;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
 }
 .k-art__sheet {
   position: absolute;
-  top: 26px;
-  left: 50%;
-  width: 70%;
+  top: 22px;
+  right: 13%;
+  left: 13%;
   aspect-ratio: 16 / 10;
   overflow: hidden;
-  border-radius: 6px;
+  border-radius: 4px;
   background: var(--card);
   box-shadow: var(--card-shadow);
-  translate: -50% 0;
   transition:
-    translate 420ms var(--ease),
     transform 420ms var(--ease),
     box-shadow 420ms var(--ease);
 }
@@ -386,75 +435,207 @@
   box-shadow: none;
 }
 .k-art__sheet[data-behind] {
-  top: 12px;
-  translate: calc(-50% + 18px) 0;
+  top: 13px;
+  right: 16.5%;
+  left: 16.5%;
+  height: 120px;
+  aspect-ratio: auto;
   opacity: var(--artifact-sheet-behind);
 }
-.k-art:hover .k-art__sheet:not([data-behind], [data-blank]) {
+.k-art:hover .k-art__sheet {
   transform: translateY(-3px);
   box-shadow: var(--artifact-page-lift);
 }
 .k-art:hover .k-art__sheet[data-behind] {
-  translate: calc(-50% + 26px) -2px;
-}
-/* A deletion: the smallest, one gray sheet without a glow, Restore where More would be. */
-.k-art[data-form='small'] .k-art__panel {
-  height: 58px;
-}
-.k-art[data-form='small'] .k-art__sheet {
-  top: 16px;
-}
-.k-art[data-form='small'] .k-art__open:disabled {
-  cursor: default;
-}
-.k-art[data-form='small'][data-gone='deleted'] .k-art__head {
-  padding-right: 104px;
-}
-.k-art[data-form='small'] .k-art__restore {
-  top: 12px;
-  right: 12px;
-  bottom: auto;
-}
-.k-art__sheet[data-blank] {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  padding: 12px 18px;
-}
-.k-art__sheet[data-blank] b {
-  margin-bottom: 3px;
-  overflow: hidden;
-  font-size: 8px;
-  line-height: 10px;
-  font-weight: 600;
-  color: var(--muted);
-  white-space: nowrap;
-  text-overflow: ellipsis;
-}
-.k-art__sheet[data-blank] i {
-  display: block;
-  flex: none;
-  height: 3px;
-  border-radius: 2px;
-  background: var(--chip);
+  transform: translateY(-5px);
+  box-shadow: var(--card-shadow);
 }
 @media (prefers-reduced-motion: reduce) {
-  .k-art:hover .k-art__sheet {
-    transform: none;
-    translate: -50% 0;
-  }
+  .k-art:hover .k-art__sheet,
   .k-art:hover .k-art__sheet[data-behind] {
-    translate: calc(-50% + 18px) 0;
+    transform: none;
   }
 }
 :root[data-reduce-motion='always'] {
-  & .k-art:hover .k-art__sheet {
-    transform: none;
-    translate: -50% 0;
-  }
+  & .k-art:hover .k-art__sheet,
   & .k-art:hover .k-art__sheet[data-behind] {
-    translate: calc(-50% + 18px) 0;
+    transform: none;
   }
+}
+/* Who is there sits on the panel's corner, the panel centred in the card. */
+.k-art[data-form='updated'] .k-art__who {
+  top: calc(50% + 43px);
+  right: auto;
+  bottom: auto;
+  left: 0;
+  justify-content: flex-end;
+  width: 232px;
+}
+
+/* What changed: a canvas's frames as small pictures, else a label and chips. Clicks between them
+   reach the card under them. */
+.k-art__changed {
+  grid-column: 2;
+  grid-row: 3;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  min-width: 0;
+  margin: 6px 51px 13px -2px;
+  padding: 2px;
+  overflow: hidden;
+  pointer-events: none;
+}
+.k-art__frame {
+  display: grid;
+  flex: none;
+  gap: 3px;
+  width: 84px;
+  font-size: 11.5px;
+  line-height: 15px;
+  color: var(--muted);
+  text-align: left;
+  outline: none;
+  pointer-events: auto;
+}
+.k-art__frame-pic {
+  position: relative;
+  display: block;
+  height: 52px;
+  overflow: hidden;
+  border-radius: 5px;
+  background: var(--card);
+  box-shadow: 0 0 0 1px var(--line-strong);
+  transition: box-shadow 160ms ease;
+}
+.k-art__frame-pic[data-blank] {
+  background: var(--subtle);
+}
+.k-art__frame-pic img {
+  position: absolute;
+  max-width: none;
+}
+.k-art__frame-name {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  transition: color 160ms ease;
+}
+.k-art__frame:hover .k-art__frame-pic {
+  box-shadow: 0 0 0 1px var(--edge-active);
+}
+.k-art__frame:hover .k-art__frame-name {
+  color: var(--ink);
+}
+.k-art__frame:focus-visible .k-art__frame-pic {
+  box-shadow:
+    0 0 0 1px var(--line-strong),
+    0 0 0 3px var(--accent-soft);
+}
+.k-art__frame-more {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 52px;
+  height: 52px;
+  border-radius: 5px;
+  background: var(--subtle);
+  box-shadow: inset 0 0 0 1px var(--line);
+  font-size: 12px;
+  color: var(--muted);
+}
+.k-art__changed-label {
+  flex: none;
+  font-size: 12px;
+  line-height: 24px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.k-art__chip {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 5px;
+  max-width: 220px;
+  height: 24px;
+  padding: 0 8px 0 6px;
+  border-radius: 7px;
+  background: var(--subtle);
+  box-shadow: inset 0 0 0 1px var(--line);
+  font: 12px/1 var(--font-mono);
+  color: var(--text);
+}
+.k-art__chip[data-words] {
+  padding: 0 9px;
+  font-family: inherit;
+}
+.k-art__chip > span {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* Deleted: the slimmest, a blank sheet without a glow, Restore at its end while it can be. */
+.k-art[data-form='deleted'] .k-art__open {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 6px 12px 6px 6px;
+}
+.k-art[data-form='deleted'] .k-art__open:disabled {
+  cursor: default;
+}
+.k-art[data-form='deleted'] .k-art__panel {
+  flex: none;
+  order: -1;
+  width: 92px;
+  height: 60px;
+  padding: 9px 14px 0;
+}
+.k-art__blank {
+  display: grid;
+  align-content: start;
+  gap: 4px;
+  height: 60px;
+  padding: 7px 8px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--card) 70%, var(--subtle));
+  box-shadow: 0 0 0 1px var(--line-strong);
+}
+.k-art__blank i {
+  height: 3px;
+  border-radius: 2px;
+  background: var(--line-strong);
+}
+.k-art__blank i:first-child {
+  width: 60%;
+  height: 4px;
+  background: color-mix(in srgb, var(--faint) 45%, transparent);
+}
+.k-art__blank i:last-child {
+  width: 70%;
+}
+.k-art[data-form='deleted'] .k-art__head {
+  flex: 1;
+  padding: 0 46px 0 0;
+}
+.k-art[data-form='deleted'][data-gone='deleted'] .k-art__head {
+  padding-right: 110px;
+}
+.k-art[data-form='deleted'] .k-art__name {
+  color: var(--muted);
+}
+.k-art[data-form='deleted'] .k-art__more {
+  top: 24px;
+}
+.k-art[data-form='deleted'] .k-art__restore {
+  top: 50%;
+  right: 12px;
+  bottom: auto;
+  translate: 0 -50%;
+}
+.k-art__time[data-restored] {
+  color: var(--success);
 }
 
 /* Room for a format's whole name in the Export submenu. */

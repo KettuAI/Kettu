@@ -324,6 +324,8 @@ export const CanvasEditor = memo(function CanvasEditor({
   onViewPage,
   sessionName,
   reloads,
+  show = null,
+  onShown,
 }: {
   artifactId: string
   url: string
@@ -348,10 +350,21 @@ export const CanvasEditor = memo(function CanvasEditor({
   /** The name of the session that drew a note. */
   sessionName: (sessionId: string) => string
   reloads: number
+  /** A page to bring into view, as a frame on a thread's card asks. */
+  show?: { pageId: string; seq: number } | null
+  /** The page asked for is in view, or not in this version. */
+  onShown?: (seq: number) => void
 }) {
   const { t } = useTranslation('artifacts')
   const doc = canvas.doc
   const [activeCanvas, setActiveCanvas] = useState<string | null>(null)
+  // A page asked for shows on its own canvas.
+  const [asked, setAsked] = useState<number | null>(null)
+  if (show && doc && asked !== show.seq) {
+    setAsked(show.seq)
+    const page = doc.pages.find((p) => p.id === show.pageId)
+    if (page) setActiveCanvas(page.canvas)
+  }
   const canvasKey = doc?.canvases.some((c) => c.id === activeCanvas)
     ? activeCanvas!
     : (doc?.canvases[0]?.id ?? '')
@@ -367,6 +380,7 @@ export const CanvasEditor = memo(function CanvasEditor({
   const camera = useRef<Camera>({ x: 0, y: 0, z: 1 })
   const view = useRef<Size>({ width: 0, height: 0 })
   const fitted = useRef(false)
+  const [measured, setMeasured] = useState(false)
   const atFit = useRef(false)
   const glideTo = useRef<AnimationPlaybackControls | null>(null)
   const liveFrame = useRef(0)
@@ -527,6 +541,7 @@ export const CanvasEditor = memo(function CanvasEditor({
       }
       if (!fitted.current && width > 0) {
         fitted.current = true
+        setMeasured(true)
         fitAll(false, rooms)
       } else if (atFit.current) fitAll(false, rooms)
       else draw()
@@ -581,6 +596,20 @@ export const CanvasEditor = memo(function CanvasEditor({
       ),
     })
   }, [controls, pages, shownSelection])
+
+  // A page asked for is fitted once the view has a size and its canvas is shown, and left
+  // unselected, since a selection's properties would cover half of a narrow view; one this version
+  // lacks is done with at once.
+  const shownAsked = useRef<number | null>(null)
+  useEffect(() => {
+    if (!show || !doc || shownAsked.current === show.seq) return
+    const page = layout?.pages.find((p) => p.id === show.pageId)
+    const elsewhere = doc.pages.some((p) => p.id === show.pageId)
+    if ((!page && elsewhere) || (page && !measured)) return
+    shownAsked.current = show.seq
+    if (page) fitBoxGlide(page)
+    onShown?.(show.seq)
+  }, [show, doc, layout, measured, fitBoxGlide, onShown])
 
   // Reload loads every live page again, in place.
   const [mountedAt] = useState(reloads)

@@ -35,10 +35,11 @@ import { useVisitors } from './use-present-agents'
 import './artifact-card.css'
 
 /**
- * How big a card is: the Artifacts page's tile; in the thread a turn's one new artifact in full,
- * any other write with the panel half as tall, and a deletion smallest of all.
+ * How a card is drawn: the Artifacts page's tile; in the thread, across the column, by the write it
+ * records: a creation with its page large, an update half as tall with what changed, and a deletion
+ * slimmest of all.
  */
-export type CardForm = 'tile' | 'full' | 'half' | 'small'
+export type CardForm = 'tile' | 'created' | 'updated' | 'deleted'
 
 /** Who can open its published page besides the user: anyone with its code, or anyone. */
 type Access = 'code' | 'public'
@@ -47,9 +48,9 @@ const FAILED: Thumbnail = { state: 'failed' }
 
 /**
  * One artifact, the same on the Artifacts page and in the thread: its title, then a line of the
- * agent's mark, what it is or what the turn did, and when, with its publish mark; under them a
- * panel where its picture lies as a page over a glow in the kind's colors, and who is at it on the
- * panel's corner. More sits beside the title on hover or focus; a deleted card offers Restore.
+ * agent's mark, what it is or what the turn did, and when, with its publish mark; a panel where its
+ * picture lies as a page over a glow in the kind's colors, and who is at it on the panel's corner.
+ * More sits beside the title on hover or focus; a deleted card offers Restore.
  */
 export const ArtifactCard = memo(function ArtifactCard({
   id,
@@ -65,6 +66,7 @@ export const ArtifactCard = memo(function ArtifactCard({
   at,
   host = null,
   note = null,
+  changes = null,
   current,
   pressed,
   onOpen,
@@ -91,8 +93,10 @@ export const ArtifactCard = memo(function ArtifactCard({
   at: number | null
   /** Another host's name, after the time; never this computer's. */
   host?: string | null
-  /** The version's note, one muted line under the line. */
+  /** The version's note, muted under the line. */
   note?: string | null
+  /** An update's line of what changed, under the note, outside the card's button. */
+  changes?: ReactNode
   /** It stands for the artifact as it is now, so it shows who is at it. */
   current: boolean
   /** Open beside the thread; undefined where it never is. */
@@ -134,37 +138,48 @@ export const ArtifactCard = memo(function ArtifactCard({
   const items = useArtifactMenu(target, options)
   // The thread offers only Restore on a deleted card; the page keeps its menu for Delete permanently.
   const hasMenu = summary !== null && (live || (form === 'tile' && standing === 'deleted'))
-  const opens = form === 'small' ? live : standing !== 'erased'
+  const deletion = form === 'deleted'
+  const opens = deletion ? live : standing !== 'erased'
+  const kindName = kind && t(`page.kinds.${kind}`)
 
   let words: string
   let time: ReactNode = null
-  if (form === 'small') {
-    words = standing === 'erased' ? t('card.erased') : t('card.deleted')
-  } else if (standing === 'erased') {
+  let restored = false
+  if (standing === 'erased') {
     words = t('card.erased')
-  } else if (standing === 'deleted') {
-    words = [kind && t(`page.kinds.${kind}`), t('card.deleted')].filter(Boolean).join(' · ')
+  } else if (standing === 'deleted' || deletion) {
+    words = [kindName, t('card.deleted')].filter(Boolean).join(' · ')
   } else {
     words = what
   }
   if (standing === 'deleted' && summary?.deletedAt != null) {
-    time = <DaysLeft deletedAt={summary.deletedAt} />
-  } else if (live && form !== 'small') {
+    time = deletion ? (
+      <DaysToRestore deletedAt={summary.deletedAt} />
+    ) : (
+      <DaysLeft deletedAt={summary.deletedAt} />
+    )
+  } else if (deletion) {
+    // Only once the lists hold it again; before they are read nothing is known.
+    if (live && summary) {
+      restored = true
+      time = t('card.restored')
+    }
+  } else if (live) {
     if (writing) time = t('card.writing')
     else if (at !== null) time = <Ago at={at} />
   }
 
   const panel =
-    form === 'small' ? (
+    form === 'deleted' ? (
       <span className="k-art__panel">
-        <span className="k-art__sheet" data-blank="">
-          <b>{title}</b>
-          <i style={{ width: '88%' }} />
-          <i style={{ width: '94%' }} />
-          <i style={{ width: '62%' }} />
+        <span aria-hidden className="k-art__blank">
+          <i />
+          <i />
+          <i />
+          <i />
         </span>
       </span>
-    ) : form === 'half' ? (
+    ) : form === 'updated' ? (
       <span className="k-art__panel">
         <Glow />
         {stacked && <span aria-hidden className="k-art__sheet" data-behind="" />}
@@ -208,7 +223,11 @@ export const ArtifactCard = memo(function ArtifactCard({
           )}
           {words && <span className="k-art__what">{time ? `${words} ·` : words}</span>}
           {time && (
-            <span className="k-art__time" data-writing={writing || undefined}>
+            <span
+              className="k-art__time"
+              data-writing={writing || undefined}
+              data-restored={restored || undefined}
+            >
               {time}
             </span>
           )}
@@ -250,7 +269,8 @@ export const ArtifactCard = memo(function ArtifactCard({
       ) : (
         <Tipped tip={page?.tip}>{button}</Tipped>
       )}
-      {current && live && form !== 'small' && (
+      {changes && live && <span className="k-art__changed">{changes}</span>}
+      {current && live && !deletion && (
         <span className="k-art__who">
           <CardFaces sessions={writing ? summary!.editing : []} visitors={visitors} />
         </span>
@@ -413,6 +433,15 @@ function Ago({ at }: { at: number }) {
 function DaysLeft({ deletedAt }: { deletedAt: number }) {
   const { t } = useTranslation('artifacts')
   return <>{t('card.daysLeft', { count: daysLeft(deletedAt, useNow()) })}</>
+}
+
+/** A deletion's line: how long it can still be restored, and when it was deleted. */
+function DaysToRestore({ deletedAt }: { deletedAt: number }) {
+  const { t } = useTranslation('artifacts')
+  const now = useNow()
+  return (
+    <>{`${t('card.daysToRestore', { count: daysLeft(deletedAt, now) })} · ${longAgo(deletedAt, now)}`}</>
+  )
 }
 
 /** A card's place before the list arrives, at its real size. */

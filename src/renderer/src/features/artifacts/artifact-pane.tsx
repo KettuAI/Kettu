@@ -19,7 +19,7 @@ import {
 import { host, learnArtifactHost } from '@renderer/lib/host'
 import { hostOfPath } from '@renderer/lib/host-paths'
 import { restoreArtifact, setPaneSelection, useArtifactsStore } from '@renderer/stores/artifacts'
-import { openArtifact } from '@renderer/stores/view'
+import { artifactPageShown, openArtifact, useViewStore } from '@renderer/stores/view'
 import { anchorOf, pinsOf } from './anchors'
 import { ArtifactMoreButton } from './artifact-menu'
 import { CanvasControls } from './canvas-controls'
@@ -70,6 +70,10 @@ export default function ArtifactPane({
   const listsRead = useListsRead(id)
   const states = useArtifactStates(artifact, listsRead)
   const controls = useMemo(() => new CanvasControls(), [])
+  const pageAsked = useViewStore((s) => {
+    const asked = s.sideArtifactPage[panel]
+    return asked?.artifactId === id ? asked : null
+  })
   const { summary, shown, url } = artifact
   const title = summary?.title ?? shown?.title ?? ''
   const showing = !!(url && shown) && !states.error && !states.gone && !artifact.stopped
@@ -224,6 +228,8 @@ export default function ArtifactPane({
         onViewPage={(page) => void host('artifacts.view', { id, page }).catch(() => {})}
         sessionName={(session) => noteAuthor(agents, session, t('board.note.agent'))}
         reloads={artifact.reloads}
+        show={pageAsked}
+        onShown={(seq) => artifactPageShown(panel, seq)}
       />
     )
   } else if (url && shown) {

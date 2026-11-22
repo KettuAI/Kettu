@@ -1,10 +1,17 @@
-import { memo, useEffect, useRef, useState } from 'react'
+import { memo, useEffect, useRef, useState, type CSSProperties } from 'react'
 import { useTranslation } from 'react-i18next'
-import type { VersionSummary } from '@shared/artifacts'
+import {
+  THUMBNAIL_HEIGHT,
+  THUMBNAIL_WIDTH,
+  type ArtifactSummary,
+  type VersionSummary,
+} from '@shared/artifacts'
 import type { ArtifactEntry as Entry } from '@shared/thread'
-import { ArtifactCard } from '@renderer/features/artifacts/artifact-card'
+import { ArtifactCard, type CardForm } from '@renderer/features/artifacts/artifact-card'
 import { artifactKind } from '@renderer/features/artifacts/model'
+import { useThumbnail, type PageBox } from '@renderer/features/artifacts/thumbnails'
 import { useInView } from '@renderer/features/artifacts/use-in-view'
+import { FileTypeIcon } from '@renderer/features/files/file-type-icon'
 import { host, learnArtifactHost, sessionHost } from '@renderer/lib/host'
 import { cn } from '@renderer/lib/utils'
 import {
@@ -15,13 +22,20 @@ import {
 } from '@renderer/stores/artifacts'
 import { hostOfSession, useSessionsStore } from '@renderer/stores/sessions'
 import { useThreadsStore } from '@renderer/stores/threads'
-import { openArtifact, toggleArtifactPane, useViewStore } from '@renderer/stores/view'
+import {
+  openArtifact,
+  showArtifactPage,
+  toggleArtifactPane,
+  useViewStore,
+} from '@renderer/stores/view'
 import { useEntry, useEntryAnimation } from '../use-thread'
-import { artifactCardSize, isLastArtifactEntry, type ArtifactCardSize } from './artifact-size'
+import { useChanges, type Changes, type ChangedFrame } from './artifact-changes'
+import { isLastArtifactEntry, restoredVersionOf } from './artifact-writes'
 
 /**
- * A write to the artifacts service, as the artifact's card: in full for a turn's main output, the
- * panel half as tall otherwise, and smallest for a deletion. A click opens it beside the thread.
+ * A write to the artifacts service, as the artifact's card across the column: a creation with its
+ * page large, an update or a restore half as tall with what changed, a deletion slimmest. A click
+ * opens it beside the thread.
  */
 export const ArtifactEntry = memo(function ArtifactEntry({
   sessionId,
@@ -34,17 +48,24 @@ export const ArtifactEntry = memo(function ArtifactEntry({
   // A session's artifacts are kept where it runs, which every request for one goes by.
   if (entry) learnArtifactHost(entry.artifactId, sessionHost(sessionId))
   const animation = useEntryAnimation(sessionId, entryId)
-  const size = useThreadsStore((s) => {
-    const state = s.replicas[sessionId]?.state
-    return state ? artifactCardSize(state, entryId) : 'compact'
-  })
   const last = useThreadsStore((s) => {
     const state = s.replicas[sessionId]?.state
     return state ? isLastArtifactEntry(state, entryId) : false
   })
+  // The version a restore brought back, from the call it follows.
+  const restoredFrom = useThreadsStore((s) => {
+    const call = entry?.after ? s.replicas[sessionId]?.state?.byId[entry.after] : undefined
+    return entry?.action === 'restore' && call?.kind === 'tool' ? restoredVersionOf(call) : null
+  })
   if (!entry) return null
   return (
-    <EntryCard entry={entry} sessionId={sessionId} size={size} last={last} className={animation} />
+    <EntryCard
+      entry={entry}
+      sessionId={sessionId}
+      last={last}
+      restoredFrom={restoredFrom}
+      className={animation}
+    />
   )
 })
 
@@ -127,17 +148,24 @@ const DONE = {
   restore: 'artifactEntry.restored',
 } as const
 
+const FORMS: Record<Entry['action'], Exclude<CardForm, 'tile'>> = {
+  create: 'created',
+  update: 'updated',
+  restore: 'updated',
+  delete: 'deleted',
+}
+
 function EntryCard({
   entry,
   sessionId,
-  size,
   last,
+  restoredFrom,
   className,
 }: {
   entry: Entry
   sessionId: string
-  size: ArtifactCardSize
   last: boolean
+  restoredFrom: number | null
   className: string | undefined
 }) {
   const { t } = useTranslation(['session', 'artifacts'])
@@ -166,21 +194,32 @@ function EntryCard({
   )
   const version = versions?.find((v) => v.version === entry.version) ?? null
 
+  const form = FORMS[entry.action]
   const deletion = entry.action === 'delete'
-  const update = entry.action !== 'create' && !deletion
+  const update = form === 'updated'
   const kind = summary ? artifactKind(summary) : null
+  const from = update ? versionBefore(entry, sessionId, versions) : null
+  // Worked out once the versions say which one the turn started from.
+  const changes = useChanges(
+    entry.artifactId,
+    from,
+    entry.version,
+    update && inView && versions !== null && standing === 'live',
+  )
   let what = ''
   if (entry.action !== 'delete' && entry.version !== null) {
-    const from = update ? versionBefore(entry, sessionId, versions) : null
-    what = [
-      !update && kind && t(`artifacts:page.kinds.${kind}`),
-      t(DONE[entry.action]),
-      from === null
-        ? t('artifactEntry.version', { version: entry.version })
-        : t('artifactEntry.versions', { from, to: entry.version }),
-    ]
-      .filter(Boolean)
-      .join(' · ')
+    what =
+      entry.action === 'restore' && restoredFrom !== null && entry.writes === 1
+        ? t('artifactEntry.restoredVersion', { version: restoredFrom })
+        : [
+            !update && kind && t(`artifacts:page.kinds.${kind}`),
+            t(DONE[entry.action]),
+            from === null
+              ? t('artifactEntry.version', { version: entry.version })
+              : t('artifactEntry.versions', { from, to: entry.version }),
+          ]
+            .filter(Boolean)
+            .join(' · ')
   }
 
   return (
@@ -190,7 +229,7 @@ function EntryCard({
         title={entry.title}
         summary={summary}
         standing={standing}
-        form={deletion ? 'small' : size === 'large' ? 'full' : 'half'}
+        form={form}
         still={deletion ? null : entry.version}
         stacked={update}
         agent={agent}
@@ -201,6 +240,18 @@ function EntryCard({
           (summary && summary.version === entry.version ? summary.updatedAt : null)
         }
         note={update ? version?.note : null}
+        changes={
+          changes && entry.version !== null ? (
+            <ChangedLine
+              changes={changes}
+              artifactId={entry.artifactId}
+              version={entry.version}
+              summary={summary}
+              inView={inView}
+              onFrame={(frame) => showArtifactPage(sessionId, entry.artifactId, frame.id)}
+            />
+          ) : null
+        }
         current={last}
         pressed={pressed}
         onOpen={() => toggleArtifactPane(sessionId, entry.artifactId)}
@@ -212,4 +263,151 @@ function EntryCard({
       />
     </div>
   )
+}
+
+/** The most frames or chips the line shows before the rest go into a count. */
+const SHOWN = 4
+
+/** An update's line of what changed: its frames as pictures, else a label and chips. */
+function ChangedLine({
+  changes,
+  artifactId,
+  version,
+  summary,
+  inView,
+  onFrame,
+}: {
+  changes: Changes
+  artifactId: string
+  version: number
+  summary: ArtifactSummary | null
+  inView: boolean
+  onFrame: (frame: ChangedFrame) => void
+}) {
+  const { t } = useTranslation('session')
+  if (changes.kind === 'frames') {
+    const { frames } = changes
+    return (
+      <span
+        role="group"
+        aria-label={t('artifactEntry.changes.frames', { count: frames.length })}
+        className="contents"
+      >
+        {frames.slice(0, SHOWN).map((frame) => (
+          <FrameTile
+            key={frame.id}
+            frame={frame}
+            artifactId={artifactId}
+            version={version}
+            summary={summary}
+            inView={inView}
+            onOpen={() => onFrame(frame)}
+          />
+        ))}
+        {frames.length > SHOWN && (
+          <span className="k-art__frame-more">
+            {t('artifactEntry.changes.more', { count: frames.length - SHOWN })}
+          </span>
+        )}
+      </span>
+    )
+  }
+  let label: string
+  let chips: { key: string; text: string; path?: string }[]
+  if (changes.kind === 'files') {
+    label = t('artifactEntry.changes.files', { count: changes.paths.length })
+    chips = changes.paths.map((path) => ({ key: path, text: path, path }))
+  } else if (changes.kind === 'sections') {
+    label = t('artifactEntry.changes.sections', { count: changes.headings.length })
+    chips = changes.headings.map((heading, i) => ({
+      key: `${i}`,
+      text: heading ?? t('artifactEntry.changes.start'),
+    }))
+  } else {
+    label = t('artifactEntry.changes.slides', { count: changes.slides.length })
+    chips = changes.slides.map((slide) => ({
+      key: `${slide.number}`,
+      text: t('artifactEntry.changes.slide', { number: slide.number }),
+    }))
+  }
+  return (
+    <>
+      <span className="k-art__changed-label">{label}</span>
+      {chips.slice(0, SHOWN).map((chip) => (
+        <span key={chip.key} className="k-art__chip" data-words={chip.path ? undefined : ''}>
+          {chip.path && <FileTypeIcon path={chip.path} className="size-3.5" />}
+          <span>{chip.text}</span>
+        </span>
+      ))}
+      {chips.length > SHOWN && (
+        <span className="k-art__chip" data-words="">
+          {t('artifactEntry.changes.more', { count: chips.length - SHOWN })}
+        </span>
+      )}
+    </>
+  )
+}
+
+const TILE_WIDTH = 84
+const TILE_HEIGHT = 52
+
+/**
+ * A changed frame as the part of the new version's picture it fills, cut to the tile from its top;
+ * a plain tile when the picture does not hold it, as a frame on another canvas.
+ */
+function FrameTile({
+  frame,
+  artifactId,
+  version,
+  summary,
+  inView,
+  onOpen,
+}: {
+  frame: ChangedFrame
+  artifactId: string
+  version: number
+  summary: ArtifactSummary | null
+  inView: boolean
+  onOpen: () => void
+}) {
+  const { t } = useTranslation('session')
+  const thumbnail = useThumbnail(
+    {
+      id: artifactId,
+      version,
+      pages: summary?.pages ?? 0,
+      canvas: summary?.canvas ?? false,
+    },
+    inView && summary !== null,
+  )
+  const box =
+    thumbnail.state === 'ready' ? thumbnail.pages?.find((page) => page.file === frame.file) : null
+  return (
+    <button
+      type="button"
+      className="k-art__frame"
+      aria-label={t('artifactEntry.changes.showFrame', { name: frame.name })}
+      onClick={onOpen}
+    >
+      <span className="k-art__frame-pic" data-blank={box ? undefined : ''}>
+        {box && thumbnail.state === 'ready' && (
+          <img src={thumbnail.src} alt="" draggable={false} style={cropOf(box)} />
+        )}
+      </span>
+      <span className="k-art__frame-name">{frame.name}</span>
+    </button>
+  )
+}
+
+/** Where the picture lies so the box covers the tile, centred across and from its top. */
+function cropOf(box: PageBox): CSSProperties {
+  const width = box.width * THUMBNAIL_WIDTH
+  const height = box.height * THUMBNAIL_HEIGHT
+  const scale = Math.max(TILE_WIDTH / width, TILE_HEIGHT / height)
+  return {
+    width: THUMBNAIL_WIDTH * scale,
+    height: THUMBNAIL_HEIGHT * scale,
+    left: (TILE_WIDTH - width * scale) / 2 - box.left * THUMBNAIL_WIDTH * scale,
+    top: -box.top * THUMBNAIL_HEIGHT * scale,
+  }
 }

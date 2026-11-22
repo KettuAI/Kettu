@@ -485,8 +485,19 @@
     "created": "已创建",
     "updated": "已更新",
     "restored": "已恢复",
+    "restoredVersion": "已恢复 v{{version}}",
     "version": "v{{version}}",
-    "versions": "v{{from}} → v{{to}}"
+    "versions": "v{{from}} → v{{to}}",
+    "changes": {
+      "frames_other": "{{count}} 个画框有改动",
+      "files_other": "{{count}} 个文件有改动",
+      "sections_other": "{{count}} 个小节有改动",
+      "slides_other": "{{count}} 页有改动",
+      "slide": "第 {{number}} 页",
+      "start": "开头",
+      "more": "+{{count}}",
+      "showFrame": "在侧边面板里打开 {{name}}"
+    }
   },
   "planChip": {
     "label": "计划：第 {{step}} 步，共 {{total}} 步，{{content}}",

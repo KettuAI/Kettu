@@ -15,6 +15,8 @@ export interface PageBox {
   top: number
   width: number
   height: number
+  /** A canvas document's page: its HTML file. */
+  file?: string
 }
 
 export type Thumbnail =
@@ -83,6 +85,7 @@ async function render(artifact: ThumbnailOf): Promise<Thumbnail> {
       top: (fit.y + p.y * fit.scale) / THUMBNAIL_HEIGHT,
       width: (p.width * fit.scale) / THUMBNAIL_WIDTH,
       height: (p.height * fit.scale) / THUMBNAIL_HEIGHT,
+      file: p.file,
     })),
   }
 }
