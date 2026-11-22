@@ -228,7 +228,11 @@ export const ArtifactCard = memo(function ArtifactCard({
             opensAtRef={opensAt}
           />
         </span>
-        {unseen && changes && <span className="k-art__chip">{changesLabel(changes)}</span>}
+        {unseen && changes && (
+          <span className="k-art__chip" data-words data-corner>
+            {changesLabel(changes)}
+          </span>
+        )}
       </span>
     ) : (
       <span className="k-art__panel">

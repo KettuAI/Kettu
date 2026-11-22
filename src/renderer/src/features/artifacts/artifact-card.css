@@ -569,6 +569,14 @@
   padding: 0 9px;
   font-family: inherit;
 }
+.k-art__chip[data-corner] {
+  position: absolute;
+  top: 18px;
+  left: 18px;
+  z-index: 1;
+  background: var(--bg-raised);
+  box-shadow: var(--artifact-card-shadow-hover);
+}
 .k-art__chip > span {
   overflow: hidden;
   white-space: nowrap;
