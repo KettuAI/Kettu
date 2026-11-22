@@ -161,7 +161,7 @@ function ValuePicker({
               key={choice.key}
               value={choice}
               disabled={choice.disabled}
-              className="h-9 rounded-lg py-1 pl-2 data-highlighted:bg-hover"
+              className="h-9 rounded-lg py-1 pl-2"
             >
               <span className="truncate text-menu text-primary">{choice.label}</span>
             </ComboboxItem>
@@ -264,7 +264,7 @@ function AddModel({
             <ComboboxItem
               key={choice.id}
               value={choice}
-              className="h-9 gap-2.5 rounded-lg py-1 pr-2 pl-2 data-highlighted:bg-hover [&>span.absolute]:hidden"
+              className="h-9 gap-2.5 rounded-lg py-1 pr-2 pl-2 [&>span.absolute]:hidden"
             >
               <span className="flex min-w-0 flex-1 items-baseline gap-2">
                 <span className="truncate text-menu text-primary">
