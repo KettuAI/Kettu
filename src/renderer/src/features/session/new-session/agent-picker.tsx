@@ -221,7 +221,10 @@ export function AgentPicker({
                 : t('newSession.noAgentOnHost', { host: hostLabel })}
             </p>
           ) : (
-            <ComboboxList className="max-h-[min(--spacing(110),calc(var(--available-height)---spacing(24)))] scroll-fade-y px-1.5 pt-0.5 pb-1.5">
+            <ComboboxList
+              className="max-h-[min(--spacing(110),calc(var(--available-height)---spacing(24)))] scroll-fade-y px-1.5 pt-0.5 pb-1.5"
+              highlight="rounded-xl"
+            >
               {(id: AgentId) => {
                 const status = byId.get(id)
                 if (!status) return null
@@ -243,7 +246,7 @@ export function AgentPicker({
                           })
                         : undefined
                     }
-                    className="group/agent h-8 gap-2.5 rounded-xl py-1 pr-2 pl-2 data-highlighted:bg-hover [&>span.absolute]:hidden"
+                    className="group/agent h-8 gap-2.5 rounded-xl py-1 pr-2 pl-2 [&>span.absolute]:hidden"
                   >
                     <AgentMark agent={id} size={16} className="shrink-0" />
                     <span className="min-w-0 flex-1 truncate text-menu text-primary">
