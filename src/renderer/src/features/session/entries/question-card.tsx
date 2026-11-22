@@ -309,7 +309,7 @@ export function OptionQuestionCard({
           }
           action={{
             label: t('question.submit'),
-            onClick: (variant) => void respond(choices.find((o) => o.id === variant.id)),
+            onClick: (variant) => void respond(choices.find((o) => o.id === variant?.id)),
           }}
         />
       </div>
