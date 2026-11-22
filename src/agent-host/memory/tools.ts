@@ -7,6 +7,7 @@ import type { AgentId } from '@shared/agents'
 import {
   MEMORY_BODY_CHARS,
   MEMORY_DESCRIPTION_CHARS,
+  MEMORY_ENTRIES_PER_LAYER,
   MEMORY_ID,
   MEMORY_PROPOSALS_WAITING,
   MEMORY_TITLE_CHARS,
@@ -73,8 +74,9 @@ export const MEMORY_TOOLS: Tool[] = [
     name: LIST_MEMORIES_TOOL,
     title: 'List memories',
     description:
-      "Lists the entries of Kettu's memory with their ids, when the index the session started " +
-      'with says some were left out or may be out of date.',
+      "Lists the entries of Kettu's memory with their ids and when each was last updated: when " +
+      'the index the session started with says some were left out or may be out of date, and to ' +
+      'go through a whole layer when remember says it is full.',
     inputSchema: {
       type: 'object',
       properties: { layer: { ...LAYER, description: 'One layer; both when left out.' } },
@@ -100,10 +102,12 @@ export const MEMORY_TOOLS: Tool[] = [
     title: 'Remember',
     description:
       'Saves one fact that will help a later session: a preference or correction of the user, or ' +
-      'a decision or non-obvious fact about the project that its files do not show. Project ' +
-      'memory is saved at once and the user can undo it. Global memory is only for things about ' +
-      'the user that hold in every project; it is proposed to the user, who decides. Never save ' +
-      'secrets or what the repository or its git history already records.',
+      'a decision or non-obvious fact about the project that its files do not show, not a log ' +
+      'of finished work. When an entry already covers the fact, change that one with ' +
+      'update_memory instead. Project memory is saved at once and the user can undo it. Global ' +
+      'memory is only for things about the user that hold in every project; it is proposed to ' +
+      'the user, who decides. Never save secrets or what the repository, its git history, issues ' +
+      'or pull requests already record.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -121,8 +125,11 @@ export const MEMORY_TOOLS: Tool[] = [
     name: UPDATE_MEMORY_TOOL,
     title: 'Update a memory',
     description:
-      "Changes an entry of Kettu's memory, rather than adding a near copy. Give only the fields " +
-      'that change. A global entry is changed only once the user accepts.',
+      "Changes an entry of Kettu's memory: to correct it once it turned out wrong or out of " +
+      'date, to merge another entry on the same fact into it (then forget that one), or rather ' +
+      'than adding a near copy. Only for the fact the entry is about; a different fact gets an ' +
+      'entry of its own. Give only the fields that change. A global entry is changed only once ' +
+      'the user accepts.',
     inputSchema: {
       type: 'object',
       properties: { layer: LAYER, id: ID, title: TITLE, description: DESCRIPTION, body: BODY },
@@ -135,8 +142,10 @@ export const MEMORY_TOOLS: Tool[] = [
     name: FORGET_MEMORY_TOOL,
     title: 'Forget a memory',
     description:
-      "Removes an entry of Kettu's memory that turned out wrong or no longer holds. A project " +
-      'entry can be undone by the user; a global one is removed only once the user accepts.',
+      "Removes an entry of Kettu's memory that turned out wrong, no longer holds (a plan " +
+      'changed, drafts were picked, the work is done) or that another entry now covers. A ' +
+      'project entry can be undone by the user; a global one is removed only once the user ' +
+      'accepts.',
     inputSchema: {
       type: 'object',
       properties: { layer: LAYER, id: ID },
@@ -245,6 +254,34 @@ function done(text: string): CallToolResult {
 
 const PROPOSED =
   'nothing is saved unless they accept. Carry on with your task; do not propose it again.'
+
+/** Why a new entry was refused for a full layer, and how the agent makes room. */
+function full(layer: MemoryLayer): MemoryError {
+  const through =
+    layer === 'project'
+      ? 'forget the entries that are wrong, out of date or covered by another, merge entries on ' +
+        `the same fact into one with ${UPDATE_MEMORY_TOOL} and ${FORGET_MEMORY_TOOL}, and ` +
+        'tighten the rest'
+      : 'propose forgetting the entries that no longer hold and merging those on the same fact; ' +
+        `the user decides each, and at most ${MEMORY_PROPOSALS_WAITING} proposals wait at once`
+  return new MemoryError(
+    'full',
+    `This memory holds ${MEMORY_ENTRIES_PER_LAYER} entries, its limit, so nothing was saved. Go ` +
+      `through all of it before saving: list every entry with ${LIST_MEMORIES_TOOL}, then ` +
+      `${through}. Read an entry in full only when its line does not tell. Make room for more ` +
+      'than this one entry, then save it. Never rewrite an unrelated entry to make room.',
+  )
+}
+
+/** A new entry's write, whose refusal for a full layer tells the agent how to make room. */
+async function withRoom<T>(layer: MemoryLayer, write: Promise<T>): Promise<T> {
+  try {
+    return await write
+  } catch (error) {
+    if (error instanceof MemoryError && error.code === 'full') throw full(layer)
+    throw error
+  }
+}
 
 const NO_PROJECT =
   'This session has no project, so it has no project memory. Use global memory only for things ' +
@@ -379,7 +416,7 @@ export class MemoryTools {
   ): Promise<CallToolResult> {
     const scope = this.scope(caller, layer)
     if (scope.layer === 'global') {
-      const checked = await this.deps.service.check(scope, null, draft)
+      const checked = await withRoom(scope.layer, this.deps.service.check(scope, null, draft))
       return this.propose(caller, {
         action: 'remember',
         memoryId: null,
@@ -387,7 +424,10 @@ export class MemoryTools {
         draft: checked,
       })
     }
-    const { entry, undo } = await this.deps.service.save(scope, null, draft, this.by(caller))
+    const { entry, undo } = await withRoom(
+      scope.layer,
+      this.deps.service.save(scope, null, draft, this.by(caller)),
+    )
     this.deps.written(caller.sessionId, {
       layer: 'project',
       action: 'remember',
