@@ -865,7 +865,7 @@ function DocDock({
 }
 
 /** "Editing…", "Saved as v4", or what kept a change from saving, with Retry; the typed words stay. */
-function SaveChip({ save, onRetry }: { save: Save; onRetry: () => void }) {
+export function SaveChip({ save, onRetry }: { save: Save; onRetry: () => void }) {
   const { t } = useTranslation('artifacts')
   const problem = save.state === 'failed' || save.state === 'conflict' || save.state === 'refused'
   const text =

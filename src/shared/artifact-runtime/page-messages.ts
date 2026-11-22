@@ -4,6 +4,7 @@
 
 import { RUNTIME_PATH, RUNTIME_VERSION, type RuntimeAnswer } from '../artifact-capabilities'
 import { artifactPathProblem, isHtmlPath } from '../artifact-files'
+import { parseDeckReport, type DeckDrive, type DeckReport } from './deck-sheet'
 import { parseDocReport, type DocDrive, type DocReport } from './document-sheet'
 
 export { RUNTIME_PATH, RUNTIME_VERSION, type RuntimeAnswer }
@@ -80,6 +81,8 @@ export interface SelectMessage {
   key?: PageKey
   /** What a document's viewer reports instead of a pick, after `select-doc`. */
   doc?: DocReport
+  /** What a deck's viewer reports instead of a pick, after `select-deck`. */
+  deck?: DeckReport
 }
 
 /**
@@ -132,6 +135,8 @@ export type DriveMessage =
   | { v: typeof RUNTIME_VERSION; kind: 'select-keys'; on: boolean; channel: string }
   // How a document's viewer shows its document, and what it does once.
   | DocDrive
+  // Which slide a deck's viewer shows and how, and what it does once.
+  | DeckDrive
 
 /** The properties a direct edit may write into a start tag's `style`, by their CSS names. */
 export const EDITABLE_PROPERTIES = [
@@ -283,6 +288,11 @@ export function parseSelectMessage(value: unknown): SelectMessage | null {
     const doc = parseDocReport(value.doc)
     if (!doc || picked !== null || message.located || message.key) return null
     message.doc = doc
+  }
+  if (value.deck !== undefined) {
+    const deck = parseDeckReport(value.deck)
+    if (!deck || picked !== null || message.located || message.key || message.doc) return null
+    message.deck = deck
   }
   return message
 }

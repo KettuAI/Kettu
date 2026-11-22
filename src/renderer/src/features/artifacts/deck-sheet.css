@@ -1,0 +1,381 @@
+/* A slides artifact: one slide at reading size on the shell's ground, the slides beside it, its
+   notes under it, and the grid of every slide. */
+
+.adk-room {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+}
+.adk-scroll {
+  position: absolute;
+  inset: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+}
+.adk-scroll[data-hidden] {
+  visibility: hidden;
+}
+.adk-content {
+  position: relative;
+}
+
+.adk-slide {
+  position: absolute;
+  background: var(--canvas);
+  box-shadow:
+    0 0 0 0.5px var(--line-strong),
+    var(--elevation-float);
+}
+.adk-frame {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  opacity: 0;
+  transition: opacity var(--duration-fast) ease;
+}
+.adk-frame[data-loaded] {
+  opacity: 1;
+}
+.adk-slide .ads-pin[data-lost] {
+  outline: 1.5px dashed var(--agent-flag);
+  outline-offset: 2px;
+  background: var(--card);
+  color: var(--text);
+}
+
+/* The slides before and after: a slice beside the slide, melting away from it. */
+.adk-ghost {
+  position: absolute;
+  overflow: hidden;
+  padding: 0;
+  opacity: 0.6;
+  cursor: pointer;
+  box-shadow: 0 0 0 0.5px var(--line-strong);
+  transition: opacity var(--duration-fast) ease;
+  animation: adk-fade 320ms var(--ease-out-quint) both;
+}
+.adk-ghost[data-side='before'] {
+  mask-image: linear-gradient(to right, transparent calc(100% - var(--adk-peek)), var(--ink) 100%);
+}
+.adk-ghost[data-side='after'] {
+  mask-image: linear-gradient(to left, transparent calc(100% - var(--adk-peek)), var(--ink) 100%);
+}
+.adk-ghost:hover {
+  opacity: 0.8;
+}
+[data-theme='dark'] .adk-ghost {
+  opacity: 0.35;
+}
+[data-theme='dark'] .adk-ghost:hover {
+  opacity: 0.55;
+}
+
+/* A slide's picture, or its title on the deck's colors where there is none. */
+.adk-thumb {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: var(--adk-sketch-bg);
+}
+.adk-thumb > img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  pointer-events: none;
+}
+.adk-sketch {
+  display: flex;
+  flex-direction: column;
+  gap: 6%;
+  width: 100%;
+  height: 100%;
+  padding: 9% 8%;
+  container-type: inline-size;
+}
+.adk-sketch > i {
+  width: 12%;
+  height: 3%;
+  min-height: 2px;
+  border-radius: 2px;
+  background: var(--adk-sketch-accent);
+}
+.adk-sketch > b {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  font-family: var(--display-face);
+  font-size: 7cqi;
+  font-weight: 650;
+  line-height: 1.15;
+  text-align: left;
+  color: var(--adk-sketch-ink);
+}
+
+/* The speaker notes: under the slide, as wide as it, three lines in view. */
+.adk-notes {
+  position: absolute;
+  z-index: 4;
+  display: flex;
+  flex-direction: column;
+  border-radius: 10px;
+  background: var(--card);
+  box-shadow:
+    0 0 0 0.5px var(--line-strong),
+    var(--elevation-float);
+  animation: adk-up var(--duration-card-in) var(--ease-out-quint) both;
+}
+.adk-notes[data-edit]:focus-within {
+  box-shadow:
+    0 0 0 0.5px var(--line-strong),
+    var(--elevation-float),
+    0 0 0 2px var(--control-on);
+}
+.adk-notes__head {
+  display: flex;
+  flex: none;
+  align-items: baseline;
+  gap: 8px;
+  padding: 10px 14px 0;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--muted);
+}
+.adk-notes__head b {
+  font-weight: 500;
+  color: var(--ink);
+}
+.adk-notes__text {
+  flex: 1;
+  min-height: 0;
+  margin: 4px 0 10px;
+  padding: 0 14px;
+  overflow-y: auto;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: 13px;
+  line-height: 20px;
+  color: var(--text);
+  text-wrap: pretty;
+  white-space: pre-wrap;
+  resize: none;
+  outline: none;
+  scrollbar-width: thin;
+}
+.adk-notes__text[data-empty] {
+  color: var(--muted);
+}
+
+/* The grid: every slide, its number and title above it. */
+.adk-grid {
+  position: absolute;
+  inset: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  animation: adk-pull 260ms var(--ease-out-quint) both;
+}
+.adk-grid__wall {
+  display: grid;
+  grid-template-columns: repeat(var(--adk-cols), minmax(0, 1fr));
+  gap: 28px 24px;
+  padding: 64px 32px 88px;
+}
+[data-tier='narrow'] .adk-grid__wall {
+  gap: 20px 12px;
+  padding: 56px 12px 80px;
+}
+.adk-grid__item {
+  position: relative;
+  min-width: 0;
+}
+.adk-grid__pick {
+  display: grid;
+  gap: 6px;
+  width: 100%;
+  padding: 0;
+  text-align: left;
+  border-radius: 4px;
+}
+.adk-grid__pick:focus-visible {
+  outline: none;
+}
+.adk-grid__label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  height: 18px;
+  font-size: 13px;
+  color: var(--text);
+}
+.adk-grid__label > b {
+  flex: none;
+  min-width: 14px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+}
+.adk-grid__name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.adk-grid__item[data-on] .adk-grid__label,
+.adk-grid__item[data-on] .adk-grid__label > b {
+  color: var(--control-on);
+}
+.adk-grid__tile {
+  display: block;
+  aspect-ratio: var(--adk-ratio);
+  overflow: hidden;
+  box-shadow: 0 0 0 0.5px var(--line-strong);
+  transition: box-shadow var(--duration-fast) ease;
+}
+.adk-grid__pick:hover .adk-grid__tile {
+  box-shadow: 0 0 0 1px var(--line-strong);
+}
+.adk-grid__item[data-on] .adk-grid__tile,
+.adk-grid__pick:focus-visible .adk-grid__tile {
+  box-shadow:
+    0 0 0 2px var(--control-on),
+    0 0 0 5px var(--control-on-tint);
+}
+.adk-grid__bar {
+  top: -10px;
+  left: 50%;
+  --unscale: 1;
+  transform: translate(-50%, -100%);
+}
+
+/* The Slides card's rows. */
+.adk-srows {
+  display: grid;
+  flex: 1;
+  align-content: start;
+  gap: 2px;
+  min-height: 0;
+  padding: 0 6px 8px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+.adk-srows__none {
+  padding: 12px 10px;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+.adk-srow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  min-width: 0;
+  padding: 6px;
+  border-radius: 6px;
+  text-align: left;
+  transition: background-color var(--duration-fast) ease;
+}
+.adk-srow:hover {
+  background: var(--bg-hover);
+}
+.adk-srow[aria-selected='true'] {
+  background: var(--bg-selected);
+}
+.adk-srow:focus-visible {
+  outline: 2px solid var(--focus-ring-color);
+  outline-offset: -2px;
+}
+.adk-srow__n {
+  flex: none;
+  width: 18px;
+  font-size: 12px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+}
+.adk-srow[aria-selected='true'] .adk-srow__n {
+  font-weight: 500;
+  color: var(--ink);
+}
+.adk-srow__th {
+  flex: none;
+  width: 96px;
+  height: 54px;
+  margin-left: 2px;
+  overflow: hidden;
+  border-radius: 4px;
+  box-shadow: 0 0 0 0.5px var(--line-strong);
+}
+.adk-srow[aria-selected='true'] .adk-srow__th {
+  box-shadow: 0 0 0 1.5px var(--control-on);
+}
+.adk-srow__text {
+  display: grid;
+  flex: 1;
+  gap: 3px;
+  min-width: 0;
+  padding-left: 4px;
+}
+.adk-srow__name {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  font-size: 13px;
+  line-height: 17px;
+  color: var(--text);
+}
+.adk-srow[aria-selected='true'] .adk-srow__name {
+  color: var(--ink);
+}
+
+/* The pager's place, with the tag of the version that changed the slide. */
+.adk-where {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+@keyframes adk-fade {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes adk-up {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+@keyframes adk-pull {
+  from {
+    opacity: 0;
+    transform: scale(1.04);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .adk-ghost,
+  .adk-notes,
+  .adk-grid,
+  .adk-frame {
+    animation: none;
+    transition: none;
+  }
+}
+:root[data-reduce-motion='always'] {
+  & .adk-ghost,
+  & .adk-notes,
+  & .adk-grid,
+  & .adk-frame {
+    animation: none;
+    transition: none;
+  }
+}

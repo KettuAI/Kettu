@@ -130,7 +130,9 @@ function pageOf(id: string): HTMLElement | null {
 /** Opens the viewer from a card, its page growing into it; Back returns to the card. */
 function openFromPage(id: string, { history = false, at }: { history?: boolean; at?: OpenAt }) {
   useArtifactsStore.setState({ opened: id })
-  growInto(pageOf(id), viewerArea(), () => openArtifact(id, { history, page: at?.page }))
+  growInto(pageOf(id), viewerArea(), () =>
+    openArtifact(id, { history, page: at?.page, slide: at?.slide }),
+  )
 }
 
 /** In the tooltip only, so it reads the time as it opens. */

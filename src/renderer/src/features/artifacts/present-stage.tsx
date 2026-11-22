@@ -30,6 +30,7 @@ export interface PresentSheet {
   name: string
   /** What it belongs to, such as a canvas's page; the count runs within it. */
   group: string
+  /** Empty for the one group of a deck. */
   groupName: string
 }
 
@@ -204,9 +205,12 @@ export function PresentStage({
       }
     : null
 
-  const where = sheet
-    ? t('present.position', { name: sheet.groupName, number: inGroup + 1, count: group.length })
-    : ''
+  // A deck is one group without a name: its count alone.
+  const where = !sheet
+    ? ''
+    : sheet.groupName
+      ? t('present.position', { name: sheet.groupName, number: inGroup + 1, count: group.length })
+      : t('present.count', { number: inGroup + 1, count: group.length })
 
   return (
     <Dialog open onOpenChange={(open) => !open && escape()}>

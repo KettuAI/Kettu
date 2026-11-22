@@ -64,7 +64,7 @@ export function CanvasPresent({
   )
 }
 
-function PresentFrame({
+export function PresentFrame({
   origin,
   src,
   title,

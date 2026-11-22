@@ -471,7 +471,8 @@
     "previous": "上一个",
     "next": "下一个",
     "grid": "全部",
-    "gridKey": "查看全部画框（G）"
+    "gridKey": "查看全部画框（G）",
+    "count": "{{number}} / {{count}}"
   },
   "consent": {
     "filesTitle": "允许“{{title}}”读取 {{project}} 里的文件？",
@@ -634,5 +635,20 @@
       "retry": "重试",
       "kept": "改的字留在这里，存上之前不会丢。"
     }
+  },
+  "deck": {
+    "slides": "幻灯片",
+    "slide": "第 {{number}} 页",
+    "grid": "全部幻灯片",
+    "gridKey": "网格（G）",
+    "notes": "备注",
+    "notesOf": "第 {{number}} 页的备注",
+    "notesEmpty": "这一页没有备注",
+    "previous": "上一页",
+    "next": "下一页",
+    "previousNamed": "上一页：{{name}}",
+    "nextNamed": "下一页：{{name}}",
+    "noChanged": "这一版没有改动的幻灯片",
+    "noComments": "还没有幻灯片有评论"
   }
 }
