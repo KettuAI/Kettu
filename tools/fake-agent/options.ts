@@ -12,6 +12,7 @@ export const SCENARIOS = [
   'error',
   'auth-required',
   'out-of-credit',
+  'limit-stop',
   'large-history',
   'slow-start',
   'all-updates',
@@ -77,6 +78,9 @@ export const SCENARIO_DESCRIPTIONS: Record<ScenarioName, { description: string; 
   },
   'out-of-credit': {
     description: 'Fails the turn as a provider out of credit does; the retry answers',
+  },
+  'limit-stop': {
+    description: 'Uses up the 5-hour window, then fails the turn as Claude Code does at a limit',
   },
   'large-history': {
     description: 'Makes reopening this session replay 1,000 entries',

@@ -139,6 +139,7 @@ import type {
   SessionSnapshot,
   SessionStatus,
   SlashCommand,
+  StopReason,
   ThreadEntry,
   ToolKind,
   UserContent,
@@ -854,7 +855,9 @@ export interface SessionSummary {
   title: string | null
   status: SessionStatus
   attention: SessionAttention
-  permissionCount: number // pending permission requests in this session alone
+  // What waits for the user in this session alone: its requests, and on newer hosts its workflow
+  // suggestions that wait for an answer, until answered or the session's next turn starts
+  permissionCount: number
   createdAt: number
   updatedAt: number
   parentId: string | null
@@ -883,6 +886,32 @@ export interface SessionSummary {
   // What its running turn does now, as the thread's nine dots act it out; null between turns;
   // absent from older hosts
   phase?: TurnPhase['phase'] | null
+  // How its last turn ended; null while a turn runs and before any ended; absent from older hosts
+  lastTurn?: LastTurn | null
+}
+
+/**
+ * How a session's last turn ended. `failed` and `limit` are turns that ended with an error, the
+ * latter refused by a used-up plan limit window; the others are the agent's own stop reasons.
+ */
+export interface LastTurn {
+  reason: StopReason | 'failed' | 'limit'
+  /** When it ended, in ms since the epoch. */
+  endedAt: number
+  /** The error's first line, for `failed` and `limit`. */
+  error?: string
+  /** The window that stopped it, for `limit`. */
+  limit?: LastTurnLimit
+}
+
+export interface LastTurnLimit {
+  window: PlanLimit['window']
+  /** The window's name, such as "5-hour". */
+  label: string
+  /** The account as the agent names it, or the agent's name without one. */
+  account: string
+  /** When the window resets, in ms since the epoch; null when unknown. */
+  resetsAt: number | null
 }
 
 /**
@@ -1441,11 +1470,18 @@ export interface HostContract {
   // One entry whole, as a device whose page held its tool output as a digest opens it.
   'sessions.entry': { params: { sessionId: string; entryId: string }; result: ThreadEntry }
   // What waits for the user's answer in the session, in thread order: what its summary's
-  // `permissionCount` counts. Empty for a closed session, where nothing waits. `askedAt`: when
+  // `permissionCount` counts. No entries for a closed session, where none waits. `askedAt`: when
   // each began to wait, by entry id, in ms since the epoch; absent from older hosts.
+  // `suggestions`: the workflow suggestions that wait for Start or Do it here, which the count
+  // includes, until answered or the session's next turn starts; `workflows.answerSuggestion`
+  // answers them, and one a turn passed too. Absent from older hosts.
   'sessions.requests': {
     params: { sessionId: string }
-    result: { entries: ThreadEntry[]; askedAt?: Record<string, number> }
+    result: {
+      entries: ThreadEntry[]
+      askedAt?: Record<string, number>
+      suggestions?: WorkflowSuggestion[]
+    }
   }
   'sessions.outline': { params: { sessionId: string }; result: { entries: OutlineEntry[] } }
   // The session's requests to its model, read from the agent's own record of the session: the

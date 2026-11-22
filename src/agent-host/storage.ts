@@ -2,7 +2,13 @@
 
 import { mkdir, open, readFile, rename, rm } from 'node:fs/promises'
 import path from 'node:path'
-import type { AgentAccount, AgentUpdate, PlanLimit, VersionMoveReason } from '@shared/agent-host'
+import type {
+  AgentAccount,
+  AgentUpdate,
+  LastTurn,
+  PlanLimit,
+  VersionMoveReason,
+} from '@shared/agent-host'
 import { GITHUB_PULL_REQUEST_URL, type ProjectWorktreeSettings } from '@shared/git'
 import type { SessionTaskRef } from '@shared/workflow'
 import {
@@ -358,6 +364,8 @@ export interface SessionRecord {
    * guide and memory go ahead of its prompts instead.
    */
   instructionsAhead?: true
+  /** How its last turn ended; cleared when a turn starts. */
+  lastTurn?: LastTurn
 }
 
 /** The values of the last request a session made outside Kettu, as its agent recorded them. */
@@ -719,6 +727,42 @@ function cacheOf(value: unknown): { cache?: PromptCache } {
   return { cache: { lastRequestAt: value.lastRequestAt, ttl: value.ttl } }
 }
 
+const LAST_TURN_REASONS: ReadonlySet<unknown> = new Set<LastTurn['reason']>([
+  'end_turn',
+  'max_tokens',
+  'max_turn_requests',
+  'refusal',
+  'cancelled',
+  'failed',
+  'limit',
+])
+
+function lastTurnOf(value: unknown): { lastTurn?: LastTurn } {
+  if (!isRecord(value) || !LAST_TURN_REASONS.has(value.reason) || !isTime(value.endedAt)) return {}
+  const limit = value.limit
+  return {
+    lastTurn: {
+      reason: value.reason as LastTurn['reason'],
+      endedAt: value.endedAt,
+      ...(isString(value.error) ? { error: value.error } : {}),
+      ...(isRecord(limit) &&
+      isString(limit.window) &&
+      isString(limit.label) &&
+      isString(limit.account) &&
+      isNullable(isTime)(limit.resetsAt)
+        ? {
+            limit: {
+              window: limit.window,
+              label: limit.label,
+              account: limit.account,
+              resetsAt: limit.resetsAt,
+            },
+          }
+        : {}),
+    },
+  }
+}
+
 function taskRefOf(value: unknown): { task?: SessionTaskRef } {
   if (
     !isRecord(value) ||
@@ -956,6 +1000,7 @@ export function parseSessionsFile(data: Record<string, unknown>): SessionsFile |
         ? { outsideTail: item.outsideTail }
         : {}),
       ...(item.instructionsAhead === true ? { instructionsAhead: true as const } : {}),
+      ...lastTurnOf(item.lastTurn),
     })
   }
   return {
