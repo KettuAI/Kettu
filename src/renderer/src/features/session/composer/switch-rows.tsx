@@ -17,7 +17,6 @@ export function SwitchRows({
   running = false,
   valueOf,
   onFlip,
-  onPoint,
   className,
 }: {
   options: readonly ConfigOption[]
@@ -26,8 +25,6 @@ export function SwitchRows({
   running?: boolean
   valueOf: (option: ConfigOption) => boolean
   onFlip: (option: ConfigOption, on: boolean) => void
-  /** The row under the pointer or the focus, then null. */
-  onPoint?: (option: ConfigOption | null) => void
   className?: string
 }) {
   const line = useSwitchLine(agent)
@@ -62,10 +59,6 @@ export function SwitchRows({
             onClick={() => {
               if (!locked) onFlip(o, !on)
             }}
-            onPointerEnter={() => onPoint?.(o)}
-            onPointerLeave={() => onPoint?.(null)}
-            onFocus={() => onPoint?.(o)}
-            onBlur={() => onPoint?.(null)}
           >
             <span className="kettu-switch-row__icon">
               <Glyph

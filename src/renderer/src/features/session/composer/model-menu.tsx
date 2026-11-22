@@ -7,8 +7,7 @@ import {
   WorkflowSquare01Icon,
 } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
-import { MAX_PINNED_MODELS, type AgentAccount, type PlanLimit } from '@shared/agent-host'
-import { tightestLimit } from '@shared/session-groups'
+import { MAX_PINNED_MODELS } from '@shared/agent-host'
 import type { AgentId, ConfigOption } from '@shared/thread'
 import { AgentMark } from '@renderer/components/agents/agent-mark'
 import { GradientFloor } from '@renderer/components/affect/gradient-floor'
@@ -18,15 +17,12 @@ import {
   type PickerToggle,
 } from '@renderer/components/affect/model-picker'
 import { ShimmerText } from '@renderer/components/affect/shimmer-loader'
-import { joinPlanTier } from '@renderer/features/account/model'
+import { toast } from '@renderer/components/ui/toast'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
 import { Glyph } from '@renderer/features/shell/glyph'
 import { usePhoneWindow } from '@renderer/features/shell/narrow'
-import { useLimitView } from '@renderer/hooks/use-limit-view'
-import { limitPhrase } from '@renderer/lib/format'
 import { errorMessage, hostAt } from '@renderer/lib/host'
-import { limitPercent } from '@renderer/lib/plan-limit'
 import { formatShortcut } from '@renderer/lib/platform'
-import { useNow } from '@renderer/lib/use-now'
 import { optionsOn, useAgentOptionsStore } from '@renderer/stores/agent-options'
 import { EffortDial } from './effort-dial'
 import { dialStops, type SelectOption } from './levels'
@@ -34,14 +30,11 @@ import { defaultUses, matchesModel, modelLists, moreInOrder, type ModelRead } fr
 import { ModelMark } from './model-mark'
 import { isSelect } from './options'
 import { SwitchRows } from './switch-rows'
-import { isFast, isUltracode, lockedNow, useSwitchLine } from './switch-options'
+import { isFast, isUltracode, lockedNow } from './switch-options'
 import { useSelectPick, useSwitchPicks, type Select } from './use-pick'
 
 // The gradient's stops take their colors from the tokens (see .kettu-ultra-floor in affect.css).
 const ULTRA_STOPS: [string, string, string] = ['currentColor', 'currentColor', 'currentColor']
-
-/** What the pointer or the focus is on in the picker's slots, which its last row then speaks of. */
-type Point = { kind: 'row'; option: ConfigOption } | { kind: 'switch' } | null
 
 /**
  * The model, its effort and the agent's switches on affectUI's Model Picker: the main models with
@@ -59,10 +52,7 @@ export function ModelMenu({
   open,
   onOpenChange,
   outOfCredit = false,
-  account,
-  limits,
   source,
-  cacheNote = null,
   onSwitchAgent,
   canSwitchAgent = true,
 }: {
@@ -78,12 +68,8 @@ export function ModelMenu({
   open?: boolean
   onOpenChange?: (open: boolean) => void
   outOfCredit?: boolean
-  account: AgentAccount | null
-  limits: readonly PlanLimit[]
   /** The harness and version the models come from. */
   source: string | null
-  /** What a change of model, effort or fast mode would cost while the prompt cache is warm. */
-  cacheNote?: string | null
   /** Opens the agent menu in this one's place; without it the head has no Switch agent. */
   onSwitchAgent?: () => void
   /** Whether the agent can be switched now, which is only between turns. */
@@ -92,8 +78,6 @@ export function ModelMenu({
   // A phone has no number keys to pick a model with.
   const phone = usePhoneWindow()
   const { t } = useTranslation('composer')
-  const limitView = useLimitView()
-  const now = useNow()
   const kept = useAgentOptionsStore((s) => optionsOn(s, hostId)[agentId])
   const pinned = kept?.pinned
   const recent = kept?.recent
@@ -113,15 +97,9 @@ export function ModelMenu({
 
   const [innerOpen, setInnerOpen] = useState(false)
   const isOpen = open ?? innerOpen
-  const [point, setPoint] = useState<Point>(null)
-  const [pinError, setPinError] = useState<string | null>(null)
   // While the dial turns, the trigger follows the level at its mark.
   const [preview, setPreview] = useState<string | null>(null)
   const changeOpen = (next: boolean) => {
-    if (!next) {
-      setPoint(null)
-      setPinError(null)
-    }
     setInnerOpen(next)
     onOpenChange?.(next)
   }
@@ -131,12 +109,11 @@ export function ModelMenu({
   const pin = (read: ModelRead) => {
     const next = !pinnedNow.has(read.value)
     if (next && pinsFull) {
-      setPinError(t('controls.pinsFull', { count: MAX_PINNED_MODELS }))
+      toast(t('controls.pinsFull', { count: MAX_PINNED_MODELS }), undefined, { tone: 'warning' })
       return
     }
-    setPinError(null)
     hostAt(hostId, 'agents.pinModel', { agentId, model: read.value, pinned: next }).catch(
-      (error: unknown) => setPinError(errorMessage(error)),
+      (error: unknown) => toast(errorMessage(error), undefined, { tone: 'warning' }),
     )
   }
   const pinButton = (read: ModelRead) => {
@@ -192,7 +169,6 @@ export function ModelMenu({
   // The trigger shows the level, and none for the agent's Default.
   const efforts = dial?.stops.map((s) => ({ id: s.value, label: s.isDefault ? '' : s.name })) ?? []
 
-  const line = useSwitchLine(harness)
   const toggles: PickerToggle[] = switches.map((o) => {
     const ultra = isUltracode(o)
     return {
@@ -216,32 +192,7 @@ export function ModelMenu({
     }
   })
 
-  const limit = tightestLimit(limits, now)
-  const plan = account?.label ? joinPlanTier(account.label, account.tier) : null
-  const note = [
-    plan,
-    limit?.usedPercent != null &&
-      t(limitView === 'left' ? 'controls.limitLeft' : 'controls.limitUsed', {
-        percent: limitPercent(limit, limitView),
-        limit: limitPhrase(limit),
-      }),
-  ]
-    .filter(Boolean)
-    .join(' · ')
-
-  let caption: { id: string; text: string } | null = null
-  if (pinError) caption = { id: 'pin', text: pinError }
-  else if (point?.kind === 'row') {
-    // The row shows its own line; the footer adds the description only when that line says
-    // something else, such as whom the switch follows.
-    const o = point.option
-    if (o.description && o.description !== line(o, running))
-      caption = { id: `row-${o.id}`, text: `${o.name} · ${o.description}` }
-  } else if (point?.kind === 'switch' && !canSwitchAgent) {
-    caption = { id: 'switch', text: t('switchAgent.betweenTurns') }
-  }
-
-  const switchAgent = onSwitchAgent && (
+  const switchButton = onSwitchAgent && (
     <button
       type="button"
       className="kettu-model-switch"
@@ -251,15 +202,20 @@ export function ModelMenu({
         changeOpen(false)
         onSwitchAgent()
       }}
-      onPointerEnter={() => setPoint({ kind: 'switch' })}
-      onPointerLeave={() => setPoint(null)}
-      onFocus={() => setPoint({ kind: 'switch' })}
-      onBlur={() => setPoint(null)}
     >
       <Glyph icon={ArrowDataTransferHorizontalIcon} size={13} />
       {t('switchAgent.menu')}
     </button>
   )
+  const switchAgent =
+    switchButton && !canSwitchAgent ? (
+      <Tooltip>
+        <TooltipTrigger render={switchButton} />
+        <TooltipContent>{t('switchAgent.betweenTurns')}</TooltipContent>
+      </Tooltip>
+    ) : (
+      switchButton
+    )
 
   return (
     // The composer focuses its field on a press anywhere else in it, which would close the menu
@@ -306,20 +262,9 @@ export function ModelMenu({
             running={running}
             valueOf={flips.valueOf}
             onFlip={flips.pick}
-            onPoint={(option) => setPoint(option ? { kind: 'row', option } : null)}
           />
         }
-        caption={caption}
-        note={
-          cacheNote ? (
-            <>
-              {note && <span className="block truncate">{note}</span>}
-              <span className="block truncate">{cacheNote}</span>
-            </>
-          ) : (
-            note || undefined
-          )
-        }
+        foot={false}
         moreNote={source ? t('controls.modelsFrom', { source }) : undefined}
         open={isOpen}
         onOpenChange={changeOpen}

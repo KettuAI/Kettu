@@ -48,14 +48,11 @@
     "optionValue": "{{name}}: {{value}}",
     "permissionMode": "Permission mode",
     "selected": "{{label}} selected",
-    "limitUsed": "{{percent}}% of {{limit}} limit",
-    "limitLeft": "{{percent}}% of {{limit}} limit left",
     "effortHint": "Higher thinks longer, uses more of your plan · {{shortcut}}",
     "modelSettings": "Model settings",
     "noModels": "No models available",
     "noModelMatch": "No models match",
-    "chooseModel": "Choose a model",
-    "cacheChange": "A change here rewrites ~{{tokens}} cached tokens"
+    "chooseModel": "Choose a model"
   },
   "switchAgent": {
     "menu": "Switch agent…",

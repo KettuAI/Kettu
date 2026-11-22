@@ -163,14 +163,18 @@ export function buildConfig(
     },
   ]
   if (models.length > 0) {
-    // Default is the alias, such as `opus`, that resolves to the same model. Which models are
-    // older is left to the menus, which compare versions within a family.
-    const aliases = models.filter((m) => m.resolvedModel && m.resolvedModel !== m.value)
+    // Default, and a full id such as `claude-fable-5-2` that Claude Code lists beside its alias,
+    // show as the alias, such as `opus` or `fable`, that resolves to the same model. Which models
+    // are older is left to the menus, which compare versions within a family.
+    const aliases = models.filter(
+      (m) => m.value !== DEFAULT_MODEL && m.resolvedModel && m.resolvedModel !== m.value,
+    )
+    const aliasOf = (value: string) => aliases.find((a) => a.resolvedModel === value)
     const listed: NonNullable<ConfigOption['choices']> = models.map((model) => {
       const same =
         model.value === DEFAULT_MODEL
-          ? aliases.find((a) => a.value !== model.value && a.resolvedModel === model.resolvedModel)
-          : undefined
+          ? aliases.find((a) => a.resolvedModel === model.resolvedModel)
+          : aliasOf(model.value)
       const modelId =
         model.resolvedModel ?? (model.value === DEFAULT_MODEL ? undefined : model.value)
       return {
@@ -183,7 +187,12 @@ export function buildConfig(
     })
     // A model the settings name that the list leaves out still shows as the one in use.
     if (!listed.some((choice) => choice.value === choices.model)) {
-      listed.push({ value: choices.model, name: choices.model })
+      const same = aliasOf(choices.model)
+      listed.push({
+        value: choices.model,
+        name: same?.displayName ?? choices.model,
+        ...(same ? { modelId: choices.model, shownAs: same.value } : {}),
+      })
     }
     options.push({
       id: OPTION_IDS.model,

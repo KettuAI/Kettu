@@ -619,8 +619,6 @@ function DraftComposer({
                   }
                   if (status.state === 'ready') refreshOnMenu(hostId, [agentId])
                 }}
-                account={status?.account ?? null}
-                limits={limits ?? []}
                 source={status?.version ? `${status.harnessName} ${status.version}` : null}
               />
             )
