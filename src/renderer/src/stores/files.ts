@@ -7,7 +7,7 @@ import type { FileDiff } from '@shared/git'
 import { errorCode, errorMessage, host } from '@renderer/lib/host'
 import { isWithin, movedPath } from '@renderer/features/files/paths'
 import { useGitStore } from './git'
-import { showSidePane } from './view'
+import { shownPanel, showSidePane, useViewStore } from './view'
 
 export interface ProjectFiles {
   paths: string[]
@@ -91,6 +91,7 @@ interface FilesStore {
   byProject: Record<string, ProjectFiles>
   /** The files open in each project's Files pane. */
   open: Record<string, OpenTabs>
+  selected: Record<string, string>
   /** Markdown files show their source instead of the rendered preview, for every file. */
   markdownSource: boolean
   /** SVG files show their source instead of the picture, for every file. */
@@ -107,6 +108,7 @@ interface FilesStore {
 export const useFilesStore = create<FilesStore>()(() => ({
   byProject: {},
   open: {},
+  selected: {},
   markdownSource: false,
   svgSource: false,
   pending: {},
@@ -256,6 +258,16 @@ function fresh(path: string, line: number | null, content: FileContent | null): 
   }
 }
 
+export const filePanelKey = (projectPath: string, panel: string): string =>
+  `${projectPath}\0${panel}`
+
+function selectInPanel(projectPath: string, path: string): void {
+  const panel = shownPanel(useViewStore.getState())
+  if (!panel) return
+  const key = filePanelKey(projectPath, panel)
+  useFilesStore.setState((s) => ({ selected: { ...s.selected, [key]: path } }))
+}
+
 const tabsOf = (projectPath: string): OpenTabs | undefined =>
   useFilesStore.getState().open[projectPath]
 
@@ -284,6 +296,7 @@ export function openFile(
 ): void {
   showSidePane(projectPath, 'files')
   closeDiff(projectPath)
+  selectInPanel(projectPath, path)
   const tabs = tabsOf(projectPath)
   if (tabs?.files.some((file) => file.path === path)) {
     setTabs(projectPath, {
@@ -308,7 +321,19 @@ export function openFile(
     ...(options.agent && { agent: options.agent }),
   }
   const files = tabs ? [...tabs.files] : []
-  const replaced = options.preview ? files.findIndex((file) => file.preview) : -1
+  const selected = Object.entries(useFilesStore.getState().selected)
+  const panel = shownPanel(useViewStore.getState())
+  const currentKey = panel ? filePanelKey(projectPath, panel) : ''
+  const replaced = options.preview
+    ? files.findIndex(
+        (file) =>
+          file.preview &&
+          !selected.some(
+            ([key, path]) =>
+              key !== currentKey && path === file.path && key.startsWith(`${projectPath}\0`),
+          ),
+      )
+    : -1
   if (replaced >= 0) {
     dropBuffer(projectPath, files[replaced]!.path)
     files[replaced] = added
@@ -348,6 +373,14 @@ export function followMoves(projectPath: string, moves: readonly { from: string;
       return { ...file, path, content: file.content && { ...file.content, path } }
     }),
   })
+  useFilesStore.setState((s) => ({
+    selected: Object.fromEntries(
+      Object.entries(s.selected).map(([key, path]) => [
+        key,
+        key.startsWith(`${projectPath}\0`) ? moved(path) : path,
+      ]),
+    ),
+  }))
   const pending = useFilesStore.getState().pending[projectPath]
   if (pending) setPending(projectPath, { path: moved(pending.path) })
 }
@@ -369,7 +402,9 @@ export function closeRemoved(projectPath: string, paths: readonly string[]): voi
 /** Shows another of the project's open files; one not read since it was left is read again. */
 export function activateTab(projectPath: string, path: string): void {
   const tabs = tabsOf(projectPath)
-  if (!tabs || tabs.active === path || !tabs.files.some((file) => file.path === path)) return
+  if (!tabs || !tabs.files.some((file) => file.path === path)) return
+  selectInPanel(projectPath, path)
+  if (tabs.active === path) return
   setTabs(projectPath, { ...tabs, active: path })
   void readOpenFile(projectPath, path)
 }
@@ -390,6 +425,23 @@ export function moveTab(projectPath: string, from: number, to: number): void {
 
 /** Closes a tab, asking first when it has unsaved edits. */
 export function closeFile(projectPath: string, path: string): void {
+  const panel = shownPanel(useViewStore.getState())
+  const key = panel ? filePanelKey(projectPath, panel) : null
+  const selected = useFilesStore.getState().selected
+  if (
+    key &&
+    Object.entries(selected).some(
+      ([other, value]) => other !== key && other.startsWith(`${projectPath}\0`) && value === path,
+    )
+  ) {
+    useFilesStore.setState((s) => {
+      if (s.selected[key] !== path) return s
+      const selected = { ...s.selected }
+      delete selected[key]
+      return { selected }
+    })
+    return
+  }
   if (findFile(projectPath, path)?.dirty) {
     setPending(projectPath, { path })
     return
@@ -401,7 +453,10 @@ export function closeFile(projectPath: string, path: string): void {
 export function closeActiveFile(projectPath: string): boolean {
   const tabs = tabsOf(projectPath)
   if (!tabs) return false
-  closeFile(projectPath, tabs.active)
+  const panel = shownPanel(useViewStore.getState())
+  const selected = panel && useFilesStore.getState().selected[filePanelKey(projectPath, panel)]
+  if (!selected) return false
+  closeFile(projectPath, selected)
   return true
 }
 
@@ -411,6 +466,19 @@ function closeNow(projectPath: string, path: string): void {
   if (!tabs || index < 0) return
   dropBuffer(projectPath, path)
   const files = tabs.files.filter((file) => file.path !== path)
+  const panel = shownPanel(useViewStore.getState())
+  const currentKey = panel ? filePanelKey(projectPath, panel) : null
+  useFilesStore.setState((s) => {
+    const selected = { ...s.selected }
+    for (const [key, value] of Object.entries(selected)) {
+      if (key.startsWith(`${projectPath}\0`) && value === path) {
+        const next = key === currentKey ? files[Math.min(index, files.length - 1)] : null
+        if (next) selected[key] = next.path
+        else delete selected[key]
+      }
+    }
+    return { selected }
+  })
   if (files.length === 0) {
     setTabs(projectPath, null)
     return
