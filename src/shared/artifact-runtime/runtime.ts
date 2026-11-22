@@ -19,6 +19,7 @@ import {
   type DriveMessage,
   type ElementStyle,
   type PageSelection,
+  PAGE_ERRORS,
   type Pin,
   type RuntimeConfig,
 } from './page-messages'
@@ -177,6 +178,60 @@ export function start(config: RuntimeConfig): void {
     const late = new Promise<null>((resolve) => setTimeout(() => resolve(null), USE_WAIT_MS))
     return Promise.race([answer, late])
   }
+
+  // The page's own uncaught errors, a few per load, for the client to show; what they say is the
+  // page's, which the client checks and shows as text alone.
+  const load = Array.from(crypto.getRandomValues(new Uint8Array(12)), (b) =>
+    (b % 36).toString(36),
+  ).join('')
+  const reported = new Set<string>()
+  function reportError(
+    kind: 'error' | 'rejection',
+    message: string,
+    source: string | null,
+    line: number | null,
+    column: number | null,
+  ): void {
+    const key = `${kind}\0${message}\0${source}\0${line}\0${column}`
+    if (reported.size >= PAGE_ERRORS || reported.has(key)) return
+    reported.add(key)
+    const error: Message = {
+      v: RUNTIME_VERSION,
+      id: nextId(),
+      kind: 'page-error',
+      path: config.path,
+      load,
+      error: { kind, message, source, line, column },
+    }
+    if (config.transport === 'port') viaPort(error)
+    else void request(error).catch(() => {})
+  }
+  const sourceOf = (url: unknown): string | null => {
+    if (typeof url !== 'string' || url === '') return null
+    try {
+      const parsed = new URL(url, location.href)
+      return parsed.origin === location.origin ? parsed.pathname : url
+    } catch {
+      return null
+    }
+  }
+  window.addEventListener('error', (event) => {
+    // A file that failed to load fires here too, on its element, and is no script error.
+    if (!(event instanceof ErrorEvent)) return
+    const text =
+      event.error instanceof Error ? `${event.error.name}: ${event.error.message}` : event.message
+    reportError('error', String(text ?? ''), sourceOf(event.filename), event.lineno, event.colno)
+  })
+  window.addEventListener('unhandledrejection', (event) => {
+    const reason: unknown = event.reason
+    let text: string
+    try {
+      text = reason instanceof Error ? `${reason.name}: ${reason.message}` : String(reason)
+    } catch {
+      text = 'Unhandled rejection'
+    }
+    reportError('rejection', text, null, null, null)
+  })
 
   try {
     Object.defineProperty(window, 'kettu', {
