@@ -15,8 +15,11 @@ import {
   type ContextBreakdown,
   type ImportableSession,
   type ConversationHit,
+  type LastTurn,
+  type LastTurnLimit,
   type OutlineEntry,
   type OutlineTitle,
+  type PlanLimit,
   type PlanProgress,
   type ReturnedMessage,
   type RunningWork,
@@ -34,6 +37,7 @@ import { LOCALES } from '@shared/locale'
 import { PROMPT_BYTES, promptShare } from '@shared/attachments'
 import { CONTEXT_REFRESH_MS, type ContextEstimates } from '@shared/context'
 import { firstLine, outlineText } from '@shared/outline'
+import { reachedLimit } from '@shared/session-groups'
 import { longEnough, queryWords } from '@shared/search-fold'
 import { originLabel, type BrowserOriginAnswer, type BrowserOriginDecision } from '@shared/browser'
 import type {
@@ -902,6 +906,16 @@ function planProgress({ order, byId }: ThreadState): PlanProgress | null {
   return null
 }
 
+/** The window that stopped a turn, as its summary names it. */
+function lastTurnLimit(status: AgentStatus, limit: PlanLimit): LastTurnLimit {
+  return {
+    window: limit.window,
+    label: limit.label,
+    account: status.account?.label || status.name,
+    resetsAt: limit.resetsAt,
+  }
+}
+
 /** Whether a patch can change the latest plan, which the session's summary carries. */
 function changesPlan(thread: ThreadState, patch: Patch): boolean {
   if (patch.op === 'entry.add') return patch.entry.kind === 'plan'
@@ -1450,6 +1464,7 @@ export class SessionManager {
           ? live.activity.current(live.thread)
           : null,
       phase: live && status === 'running' ? turnPhase(live.thread).phase : null,
+      lastTurn: record.lastTurn ?? null,
       ...(record.worktree ? { worktree: this.worktreeSummary(record.worktree) } : {}),
       ...(record.agentWorktree ? { agentWorktree: { ...record.agentWorktree } } : {}),
       ...(live?.prepared
@@ -5909,8 +5924,9 @@ export class SessionManager {
         const now = this.now()
         this.update(live, { updatedAt: now })
         if (this.inFront(live.id)) live.record.lastViewedAt = now
-        this.persist(live)
         const stopped: { message: string } = { message: t('notice.stopped.title', { agent: name }) }
+        if (turn) live.record.lastTurn = this.failedTurn(live, stopped.message, now)
+        this.persist(live)
         const routineTurn =
           (turn
             ? this.reportRun(live, { stopReason: null, error: stopped, usage: null, turn })
@@ -7880,6 +7896,8 @@ export class SessionManager {
       portId === null ? null : { portId, device: this.deps.portDevice?.(portId) ?? null }
     live.scope = newTurnScope()
     live.failure = null
+    // A running turn has no ending, so a list never shows the last one's on it.
+    delete live.record.lastTurn
     this.update(live, {
       status: 'running',
       turnStartedAt: now,
@@ -8399,6 +8417,8 @@ export class SessionManager {
     this.deps.mcp?.turnEnded(live.id)
     this.deps.diagnostics.turnEnded(live.record.agentId, [live.id, live.record.acpSessionId])
     this.reportTurn(live, turn, stopReason)
+    // A turn ended by an error has no stop reason; its failure sets the ending.
+    if (stopReason) live.record.lastTurn = { reason: stopReason, endedAt: this.now() }
     this.closeOpenEntries(live)
     live.activity.clear()
     this.clearPermissions(live, 'cancelled', true)
@@ -8439,6 +8459,34 @@ export class SessionManager {
       },
     ])
     return id
+  }
+
+  /**
+   * The ending of a turn that failed: `limit` when a used-up window of the agent's holds back the
+   * session's model, as a plan refusing the request leaves it.
+   */
+  private failedTurn(live: Live, message: string, now: number): LastTurn {
+    const error = firstLine(message)
+    const { agentId } = live.record
+    const status = this.deps.agents.has(agentId) ? this.deps.agents.status(agentId) : undefined
+    const model = live.thread.session.config.find((option) => option.category === 'model')
+    const limit = reachedLimit(status, model, now)
+    if (!limit || !status) return { reason: 'failed', endedAt: now, error }
+    return { reason: 'limit', endedAt: now, error, limit: lastTurnLimit(status, limit) }
+  }
+
+  /**
+   * A used-up window was noticed just after a session's turn failed: the window stopped it. Only
+   * a failed ending changes, and only while no turn has started since.
+   */
+  turnLimited(sessionId: string, status: AgentStatus, limit: PlanLimit): void {
+    const live = this.live.get(sessionId)
+    const record = live?.record ?? this.records.get(sessionId)
+    if (!record || record.lastTurn?.reason !== 'failed' || live?.turn) return
+    record.lastTurn = { ...record.lastTurn, reason: 'limit', limit: lastTurnLimit(status, limit) }
+    if (live) this.persist(live)
+    else this.saveIndex()
+    this.touch(sessionId)
   }
 
   private endTurn(
@@ -8741,6 +8789,7 @@ export class SessionManager {
     if (givenBack) turn.attachments = []
     this.finishTurn(live, turn, null)
     const now = this.now()
+    live.record.lastTurn = this.failedTurn(live, mapped.message, now)
     const noticeId = this.nextId(live)
     if (authRequired) live.signInNotices.push(noticeId)
     this.emit(live, [
@@ -8860,6 +8909,8 @@ export class SessionManager {
       content: turn.content,
       entryId: turn.entryId,
     })
+    live.record.lastTurn = this.failedTurn(live, failure.message, this.now())
+    this.touch(live.id)
     this.reportRun(live, { stopReason: null, error: failure, usage: null, turn })
     this.persist(live)
     this.checkpoint(live)

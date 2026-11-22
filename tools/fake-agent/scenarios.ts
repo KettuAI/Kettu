@@ -611,6 +611,31 @@ const outOfCredit: Scenario = async (turn) => {
   )
 }
 
+// The plan refuses the request: the rate limit event comes first, then the turn fails with its text.
+const limitStop: Scenario = async (turn) => {
+  const now = Math.floor(Date.now() / 1000)
+  const resetsAt = now + 2 * 3600 + 840
+  fiveHourUsedUp = true
+  await turn.send({
+    sessionUpdate: 'usage_update',
+    used: turn.session.usedTokens,
+    size: 200_000,
+    _meta: {
+      '_claude/rateLimit': {
+        status: 'rejected',
+        rateLimitType: 'five_hour',
+        resetsAt,
+        isUsingOverage: false,
+        unifiedWindows: {
+          five_hour: { utilization: 1, resetsAt, status: 'rejected' },
+          seven_day: { utilization: 0.31, resetsAt: now + 3 * 86400 + 7200 },
+        },
+      },
+    },
+  })
+  throw RequestError.internalError(undefined, "You've hit your limit\nTry again after the reset.")
+}
+
 const largeHistory: Scenario = async (turn) => {
   const entries = turn.options.entries
   turn.session.largeHistory = entries
@@ -1633,6 +1658,7 @@ export const SCENARIO_RUNNERS: Record<ScenarioName, Scenario> = {
   error,
   'auth-required': authRequired,
   'out-of-credit': outOfCredit,
+  'limit-stop': limitStop,
   'large-history': largeHistory,
   'slow-start': slowStart,
   'all-updates': allUpdates,

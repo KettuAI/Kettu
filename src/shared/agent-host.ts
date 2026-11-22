@@ -139,6 +139,7 @@ import type {
   SessionSnapshot,
   SessionStatus,
   SlashCommand,
+  StopReason,
   ThreadEntry,
   ToolKind,
   UserContent,
@@ -883,6 +884,32 @@ export interface SessionSummary {
   // What its running turn does now, as the thread's nine dots act it out; null between turns;
   // absent from older hosts
   phase?: TurnPhase['phase'] | null
+  // How its last turn ended; null while a turn runs and before any ended; absent from older hosts
+  lastTurn?: LastTurn | null
+}
+
+/**
+ * How a session's last turn ended. `failed` and `limit` are turns that ended with an error, the
+ * latter refused by a used-up plan limit window; the others are the agent's own stop reasons.
+ */
+export interface LastTurn {
+  reason: StopReason | 'failed' | 'limit'
+  /** When it ended, in ms since the epoch. */
+  endedAt: number
+  /** The error's first line, for `failed` and `limit`. */
+  error?: string
+  /** The window that stopped it, for `limit`. */
+  limit?: LastTurnLimit
+}
+
+export interface LastTurnLimit {
+  window: PlanLimit['window']
+  /** The window's name, such as "5-hour". */
+  label: string
+  /** The account as the agent names it, or the agent's name without one. */
+  account: string
+  /** When the window resets, in ms since the epoch; null when unknown. */
+  resetsAt: number | null
 }
 
 /**

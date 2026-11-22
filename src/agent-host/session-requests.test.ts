@@ -1,5 +1,6 @@
 import { afterEach, expect, it } from 'vitest'
 import { startTestHost, type TestHost, type TestPort } from './testing/harness'
+import { tempFolder } from './testing/temp'
 
 const hosts: TestHost[] = []
 
@@ -121,4 +122,78 @@ it("carries the tool the running turn calls in the session's summary", async () 
   })
   await window.until(() => window.summary(id)?.status === 'ready')
   expect(window.summary(id)?.activity).toBeNull()
+})
+
+it("says in the session's summary how its last turn ended", async () => {
+  const { window, id } = await readySession()
+  expect(window.summary(id)?.lastTurn).toBeNull()
+  const say = async (text: string) => {
+    await window.request('sessions.prompt', { sessionId: id, content: [{ type: 'text', text }] })
+    await window.until(() => window.summary(id)?.status === 'running')
+  }
+
+  const before = Date.now()
+  await say('/plan --step 50')
+  // A running turn has no ending yet.
+  expect(window.summary(id)?.lastTurn).toBeNull()
+  await window.untilStatus(id, 'ready')
+  const ended = window.summary(id)?.lastTurn
+  expect(ended).toEqual({ reason: 'end_turn', endedAt: expect.any(Number) })
+  expect(ended?.endedAt).toBeGreaterThanOrEqual(before)
+
+  await say('/error --hold 100')
+  expect(window.summary(id)?.lastTurn).toBeNull()
+  await window.until(() => window.summary(id)?.lastTurn?.reason === 'failed')
+  expect(window.summary(id)?.lastTurn).toEqual({
+    reason: 'failed',
+    endedAt: expect.any(Number),
+    error: 'Internal error: The fake agent failed this turn on purpose',
+  })
+
+  await say('/cancel')
+  expect(window.summary(id)?.lastTurn).toBeNull()
+  await window.request('sessions.cancel', { sessionId: id })
+  await window.until(() => window.summary(id)?.lastTurn?.reason === 'cancelled')
+  expect(window.summary(id)?.lastTurn).toEqual({ reason: 'cancelled', endedAt: expect.any(Number) })
+})
+
+it('names the window that stopped a turn at a plan limit, and when it resets', async () => {
+  const { window, id } = await readySession()
+  await window.request('sessions.prompt', {
+    sessionId: id,
+    content: [{ type: 'text', text: '/limit-stop' }],
+  })
+  await window.until(() => window.summary(id)?.lastTurn?.reason === 'limit')
+  const limit = window.summary(id)?.lastTurn?.limit
+  expect(window.summary(id)?.lastTurn).toMatchObject({
+    reason: 'limit',
+    error: "Internal error: You've hit your limit",
+    limit: { window: 'five_hour', label: expect.any(String), account: expect.any(String) },
+  })
+  expect(limit?.resetsAt).toBeGreaterThan(Date.now())
+})
+
+it('keeps how the last turn ended across a restart of the host', async () => {
+  const dir = await tempFolder('kettu-last-turn-')
+  const first = await startTestHost({ userDataPath: dir })
+  hosts.push(first)
+  const window = first.connect()
+  const { id } = await window.request('sessions.create', {
+    agentId: 'fake-agent',
+    projectPath: first.project,
+  })
+  await window.open(id)
+  await window.untilStatus(id, 'ready')
+  await window.request('sessions.prompt', {
+    sessionId: id,
+    content: [{ type: 'text', text: '/error --silent' }],
+  })
+  await window.until(() => window.summary(id)?.lastTurn?.reason === 'failed')
+  const ended = window.summary(id)?.lastTurn
+  await first.stop()
+
+  const second = await startTestHost({ userDataPath: dir })
+  hosts.push(second)
+  const listed = await second.connect().request('sessions.list', {})
+  expect(listed.find((summary) => summary.id === id)?.lastTurn).toEqual(ended)
 })

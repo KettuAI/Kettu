@@ -1663,6 +1663,9 @@ export class AgentHost {
       if (failed && now - failed.at < LIMIT_FAILED_WITHIN_MS) {
         sessionId = failed.sessionId
         this.stoppedBy.set(notice.key, sessionId)
+        if (this.sessions.has(sessionId)) {
+          this.sessions.turnLimited(sessionId, this.agents.status(notice.agentId), notice.limit)
+        }
       }
     } else if (notice.level === 'reset') {
       sessionId = this.stoppedBy.get(notice.key)
