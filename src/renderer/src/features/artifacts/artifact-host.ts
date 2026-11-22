@@ -22,6 +22,17 @@ export function useArtifactShares(id: string): boolean {
   return (isWeb || hostId !== null ? known : true) === true
 }
 
+/**
+ * Whether the artifact's host draws a thumbnail of one frame, slide or theme: the desktop app
+ * does; another host or the web client's as it says.
+ */
+export function usePartThumbnails(id: string): boolean {
+  const hostId = artifactHost(id)
+  const scope = hostId === null ? LOCAL_SCOPE : hostScope(hostId)
+  const known = scope.useInfoStore((s) => (s.info ? s.info.partThumbnails === true : null))
+  return (isWeb || hostId !== null ? known : true) === true
+}
+
 /** Whether the artifact is published by its host, or null until the host has said. */
 export function useArtifactPublished(id: string): boolean | null {
   return artifactSharing(id).useSharingStore((s) =>

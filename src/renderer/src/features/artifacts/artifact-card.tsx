@@ -1,5 +1,6 @@
 import { memo, useRef, useState, type ReactElement, type ReactNode } from 'react'
 import {
+  Comment01Icon,
   Globe02Icon,
   LockPasswordIcon,
   MoreHorizontalIcon,
@@ -22,16 +23,22 @@ import { longAgo } from '@renderer/lib/format'
 import { errorMessage } from '@renderer/lib/host'
 import { useNow } from '@renderer/lib/use-now'
 import { restoreArtifact, type ArtifactStanding } from '@renderer/stores/artifacts'
-import { artifactSharing, useArtifactShares } from './artifact-host'
+import { useChanges } from '@renderer/features/session/entries/artifact-changes'
+import { artifactSharing, useArtifactShares, usePartThumbnails } from './artifact-host'
 import { ArtifactMenuItems } from './artifact-menu'
+import { TileThumb, type OpenAt } from './artifact-tile'
+import { useMetaFit } from './meta-fit'
+import { useOutline } from './card-contents'
+import { changesLabel } from './change-words'
 import { useArtifactMenu, type MenuOptions } from './menu-entries'
-import { artifactKind, daysLeft, type ArtifactKind } from './model'
+import { artifactKind, daysLeft, matchAt, type ArtifactKind } from './model'
 import { CardFaces } from './presence-faces'
 import { ShareButton } from './share-popover'
 import { KindSketch } from './sketch'
 import { useThumbnail, type Thumbnail } from './thumbnails'
 import { useInView } from './use-in-view'
 import { useVisitors } from './use-present-agents'
+import { useWaitingReplies } from './waiting-replies'
 import './artifact-card.css'
 
 /**
@@ -66,7 +73,7 @@ export const ArtifactCard = memo(function ArtifactCard({
   at,
   host = null,
   note = null,
-  changes = null,
+  changes: changed = null,
   current,
   pressed,
   onOpen,
@@ -101,10 +108,14 @@ export const ArtifactCard = memo(function ArtifactCard({
   current: boolean
   /** Open beside the thread; undefined where it never is. */
   pressed?: boolean
-  onOpen: () => void
+  /** On the Artifacts page, with the canvas page a flip shows, which it opens on. */
+  onOpen: (at?: OpenAt) => void
   menu: Omit<MenuOptions, 'onShare'>
-  /** On the Artifacts page: whether the card is the grid's Tab stop, and its tooltip. */
-  page?: { tabbable: boolean; tip: ReactNode }
+  /**
+   * On the Artifacts page: whether the card is the grid's Tab stop, its tooltip, and the search
+   * its title marks.
+   */
+  page?: { tabbable: boolean; tip: ReactNode; query?: string }
 }) {
   const { t } = useTranslation('artifacts')
   const card = useRef<HTMLDivElement>(null)
@@ -120,6 +131,20 @@ export const ArtifactCard = memo(function ArtifactCard({
   const writing = current && live && (summary?.editing.length ?? 0) > 0
   const visitors = useVisitors(id, current && live && access !== null && inView)
   const thumbnail = useStill(id, summary, still, inView, standing === 'erased')
+
+  // The page's card: what changed since the user last opened it, on a host that keeps that.
+  const tile = form === 'tile' && live && summary !== null
+  const seen = summary?.seen
+  const unseen = tile && !writing && seen !== undefined && (seen === null || seen < summary.version)
+  const seenFrom = unseen && seen != null ? seen : null
+  const changes = useChanges(id, seenFrom, summary?.version ?? null, seenFrom !== null && inView)
+  const outlined =
+    kind === 'slides' ? 'slides' : kind === 'canvas' && summary?.canvas ? 'canvas' : null
+  const outline = useOutline(id, summary?.version ?? 0, tile ? outlined : null, inView)
+  const parts = usePartThumbnails(id)
+  const replies = useWaitingReplies(id, tile && inView)
+  const opensAt = useRef<OpenAt | null>(null)
+  const metaFit = useMetaFit()
 
   const target = {
     id,
@@ -187,6 +212,28 @@ export const ArtifactCard = memo(function ArtifactCard({
           <Preview thumbnail={thumbnail} kind={kind} title={title} />
         </span>
       </span>
+    ) : tile ? (
+      <span className="k-art__panel">
+        <Glow />
+        <span className="k-art__page">
+          <TileThumb
+            id={id}
+            version={summary.version}
+            kind={kind}
+            outline={outline}
+            changes={changes}
+            parts={parts}
+            inView={inView}
+            whole={<Preview thumbnail={thumbnail} kind={kind} title={title} />}
+            opensAtRef={opensAt}
+          />
+        </span>
+        {unseen && changes && (
+          <span className="k-art__chip" data-words data-corner>
+            {changesLabel(changes)}
+          </span>
+        )}
+      </span>
     ) : (
       <span className="k-art__panel">
         <Glow />
@@ -203,7 +250,7 @@ export const ArtifactCard = memo(function ArtifactCard({
       tabIndex={page && !page.tabbable ? -1 : undefined}
       disabled={!opens}
       aria-pressed={pressed}
-      onClick={onOpen}
+      onClick={() => onOpen(opensAt.current ?? undefined)}
       onKeyDown={(event) => {
         // The context menu key opens the More menu, the card's menu for the keyboard.
         if (event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10')) {
@@ -214,30 +261,69 @@ export const ArtifactCard = memo(function ArtifactCard({
       className="k-art__open"
     >
       <span className="k-art__head">
-        <b className="k-art__name">{title}</b>
-        <span className="ui-as-meta k-art__meta">
-          {agent && (
-            <span className="k-art__mark">
-              <AgentMark agent={agent} size={12} hostId={agentHost} />
+        <b className="k-art__name">
+          {unseen && <i className="k-art__dot" role="img" aria-label={t('card.unseen')} />}
+          {page?.query ? <Marked text={title} query={page.query} /> : title}
+        </b>
+        {tile ? (
+          <span ref={metaFit} className="ui-as-meta k-art__meta" data-tile="">
+            {agent && (
+              <span className="k-art__mark">
+                <AgentMark agent={agent} size={12} hostId={agentHost} />
+              </span>
+            )}
+            <span className="k-art__kind">{kindName}</span>
+            {outline && (
+              <span className="k-art__count">
+                {`· ${t(outline.kind === 'slides' ? 'card.slides' : 'card.pages', {
+                  count: outline.kind === 'slides' ? outline.slides : outline.pages.length,
+                })}`}
+              </span>
+            )}
+            <span className="k-art__ver">
+              {`· ${
+                seenFrom !== null && summary.version - seenFrom >= 2
+                  ? t('card.versions', { from: seenFrom, to: summary.version })
+                  : t('card.version', { version: summary.version })
+              }`}
             </span>
-          )}
-          {words && <span className="k-art__what">{time ? `${words} ·` : words}</span>}
-          {time && (
-            <span
-              className="k-art__time"
-              data-writing={writing || undefined}
-              data-restored={restored || undefined}
-            >
-              {time}
-            </span>
-          )}
-          {host && live && <span className="k-art__host">{`· ${host}`}</span>}
-          {access && live && (
-            <span className="k-art__shared" role="img" aria-label={t(`card.access.${access}`)}>
-              <Icon icon={access === 'public' ? Globe02Icon : LockPasswordIcon} size={12} />
-            </span>
-          )}
-        </span>
+            {time && (
+              <span className="k-art__time" data-writing={writing || undefined}>
+                · {time}
+              </span>
+            )}
+            {host && <span className="k-art__host">{`· ${host}`}</span>}
+            {access && (
+              <span className="k-art__shared" role="img" aria-label={t(`card.access.${access}`)}>
+                <Icon icon={access === 'public' ? Globe02Icon : LockPasswordIcon} size={12} />
+              </span>
+            )}
+          </span>
+        ) : (
+          <span className="ui-as-meta k-art__meta">
+            {agent && (
+              <span className="k-art__mark">
+                <AgentMark agent={agent} size={12} hostId={agentHost} />
+              </span>
+            )}
+            {words && <span className="k-art__what">{time ? `${words} ·` : words}</span>}
+            {time && (
+              <span
+                className="k-art__time"
+                data-writing={writing || undefined}
+                data-restored={restored || undefined}
+              >
+                {time}
+              </span>
+            )}
+            {host && live && <span className="k-art__host">{`· ${host}`}</span>}
+            {access && live && (
+              <span className="k-art__shared" role="img" aria-label={t(`card.access.${access}`)}>
+                <Icon icon={access === 'public' ? Globe02Icon : LockPasswordIcon} size={12} />
+              </span>
+            )}
+          </span>
+        )}
         {note && live && <span className="k-art__note">{note}</span>}
       </span>
       {panel}
@@ -269,7 +355,17 @@ export const ArtifactCard = memo(function ArtifactCard({
       ) : (
         <Tipped tip={page?.tip}>{button}</Tipped>
       )}
-      {changes && live && <span className="k-art__changed">{changes}</span>}
+      {changed && live && <span className="k-art__changed">{changed}</span>}
+      {tile && !!replies && (
+        <span
+          className="k-art__comments"
+          role="img"
+          aria-label={t('card.replies', { count: replies })}
+        >
+          <Icon icon={Comment01Icon} size={12} />
+          {replies}
+        </span>
+      )}
       {current && live && !deletion && (
         <span className="k-art__who">
           <CardFaces sessions={writing ? summary!.editing : []} visitors={visitors} />
@@ -329,6 +425,19 @@ export const ArtifactCard = memo(function ArtifactCard({
     </div>
   )
 })
+
+/** The title with the search's first match marked. */
+function Marked({ text, query }: { text: string; query: string }) {
+  const at = matchAt(text, query.trim())
+  if (!at) return <>{text}</>
+  return (
+    <>
+      {text.slice(0, at.from)}
+      <mark className="k-art__hit">{text.slice(at.from, at.to)}</mark>
+      {text.slice(at.to)}
+    </>
+  )
+}
 
 /** The page's tooltip, slow to show, over the card's button. */
 function Tipped({ tip, children }: { tip: ReactNode; children: ReactElement }) {

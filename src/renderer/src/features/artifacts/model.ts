@@ -2,18 +2,21 @@
 
 import {
   ARTIFACT_KEEP_DELETED_MS,
-  NO_SESSION,
   type ArtifactSession,
   type ArtifactSummary,
 } from '@shared/artifacts'
 import type { AgentId } from '@shared/thread'
 import { basename } from '@renderer/lib/format'
 
-export type ArtifactGrouping = 'none' | 'project-session'
-export type ArtifactSort = 'recent' | 'updated' | 'name'
+/** How the page lays its cards out: one grid by recency or by name, or a group per project or session. */
+export type ArtifactArrange = 'recent' | 'project' | 'session' | 'name'
 
-export const GROUPINGS: readonly ArtifactGrouping[] = ['none', 'project-session']
-export const SORTS: readonly ArtifactSort[] = ['recent', 'updated', 'name']
+export const ARRANGEMENTS: readonly ArtifactArrange[] = ['recent', 'project', 'session', 'name']
+
+/** What the status filter picks: changed since last opened, waiting for a reply, published. */
+export type ArtifactStatus = 'updated' | 'reply' | 'published'
+
+export const ARTIFACT_STATUSES: readonly ArtifactStatus[] = ['updated', 'reply', 'published']
 
 /** The kinds Kettu makes: the types first, then pages; spreadsheets join when it makes them. */
 export type ArtifactKind = 'document' | 'slides' | 'web' | 'canvas'
@@ -87,36 +90,27 @@ export interface ListFilter {
   agent?: readonly AgentId[]
   /** The agent of an artifact's session, null when it was imported or its session is gone. */
   agentOf?: (sessionId: string) => AgentId | null
+  /** Statuses, any of which keeps an artifact; none keeps every artifact. */
+  status?: readonly ArtifactStatus[]
+  hasStatus?: (artifact: ArtifactSummary, status: ArtifactStatus) => boolean
 }
 
 /** A group's heading; the page names it. */
 export type GroupKind =
-  { kind: 'project'; path: string; name: string } | { kind: 'no-project' } | { kind: 'all' }
-
-/** A session's cards under its row, or a grid without a row. */
-export interface Section {
-  key: string
-  /** The session whose row heads the section, when grouped only. */
-  sessionId: string | null
-  artifacts: ArtifactSummary[]
-}
+  | { kind: 'project'; path: string; name: string }
+  | { kind: 'no-project' }
+  | { kind: 'session'; sessionId: string }
+  | { kind: 'all' }
 
 export interface Group {
   key: string
   of: GroupKind
-  count: number
-  sections: Section[]
+  artifacts: ArtifactSummary[]
 }
 
 export interface ListContext {
   /** The sidebar's projects, in its order. */
   projects: readonly { path: string; name: string }[]
-  /** A session's title and last update, or null for one no longer in the index. */
-  session(id: string): { title: string; updatedAt: number } | null
-  /** What a session no longer in the index is called. */
-  deletedSession: string
-  /** What the artifacts the user imported show under, in place of a session. */
-  imported: string
   /** Names in the interface language, with numbers in numeric order. */
   collator: Intl.Collator
   opened: OpenedTimes
@@ -127,10 +121,22 @@ export function foldForMatch(text: string): string {
   return text.normalize('NFD').replace(/\p{M}/gu, '').toLocaleLowerCase()
 }
 
+/**
+ * Where `query` first stands in `text`, ignoring case, for marking it; null when it does not, as
+ * when only its accents differ, which the filter still matches.
+ */
+export function matchAt(text: string, query: string): { from: number; to: number } | null {
+  if (!query) return null
+  const lower = text.toLocaleLowerCase()
+  if (lower.length !== text.length) return null
+  const from = lower.indexOf(query.toLocaleLowerCase())
+  return from < 0 ? null : { from, to: from + query.length }
+}
+
 /** The artifacts the filter keeps: the title holds its text, of its kind, in its project. */
 export function filterArtifacts(
   list: readonly ArtifactSummary[],
-  { title, kind, project, agent = [], agentOf }: ListFilter,
+  { title, kind, project, agent = [], agentOf, status = [], hasStatus }: ListFilter,
 ): ArtifactSummary[] {
   const wanted = foldForMatch(title.trim())
   return list.filter(
@@ -138,6 +144,7 @@ export function filterArtifacts(
       (!wanted || foldForMatch(artifact.title).includes(wanted)) &&
       (!kind || artifactKind(artifact) === kind) &&
       (agent.length === 0 || agent.includes(agentOf?.(artifact.sessionId) as AgentId)) &&
+      (status.length === 0 || status.some((s) => hasStatus?.(artifact, s))) &&
       (project.length === 0 ||
         (artifact.scratch ? project.includes(NO_PROJECT) : project.includes(artifact.project))),
   )
@@ -165,53 +172,49 @@ export function projectsOf(
   return projectGroups(list, context).map((group) => group.of)
 }
 
-/** The page's groups, from artifacts already filtered. */
+/**
+ * The page's groups, from artifacts already filtered: one grid, or a group per project or session
+ * with the most recently active first. Cards go by recency, or by name.
+ */
 export function groupArtifacts(
   list: readonly ArtifactSummary[],
-  grouping: ArtifactGrouping,
-  sort: ArtifactSort,
+  arrange: ArtifactArrange,
   context: ListContext,
 ): Group[] {
-  const time = (artifact: ArtifactSummary): number =>
-    sort === 'updated' ? artifact.updatedAt : recency(artifact, context.opened)
+  const time = (artifact: ArtifactSummary): number => recency(artifact, context.opened)
   const cards = [...list].sort((a, b) =>
-    sort === 'name'
+    arrange === 'name'
       ? context.collator.compare(a.title, b.title) || time(b) - time(a)
       : time(b) - time(a) || a.id.localeCompare(b.id),
   )
-
-  if (grouping === 'none') {
-    return cards.length
-      ? [
-          {
-            key: 'all',
-            of: { kind: 'all' },
-            count: cards.length,
-            sections: [{ key: 'all', sessionId: null, artifacts: cards }],
-          },
-        ]
-      : []
+  if (cards.length === 0) return []
+  if (arrange === 'recent' || arrange === 'name') {
+    return [{ key: 'all', of: { kind: 'all' }, artifacts: cards }]
   }
-
-  return projectGroups(cards, context).map(({ key, of, artifacts }) => ({
-    key,
-    of,
-    count: artifacts.length,
-    sections: sessionSections(artifacts, sort, time, context).map((s) => ({
-      ...s,
-      key: `${key}\n${s.key}`,
-    })),
-  }))
+  if (arrange === 'session') {
+    // The cards are newest first, so each session's first card sets its place.
+    const bySession = new Map<string, ArtifactSummary[]>()
+    for (const artifact of cards) {
+      const mine = bySession.get(artifact.sessionId)
+      if (mine) mine.push(artifact)
+      else bySession.set(artifact.sessionId, [artifact])
+    }
+    return [...bySession].map(([sessionId, artifacts]) => ({
+      key: `session\n${sessionId}`,
+      of: { kind: 'session', sessionId },
+      artifacts,
+    }))
+  }
+  return projectGroups(cards, context).sort(
+    (a, b) => time(b.artifacts[0]!) - time(a.artifacts[0]!) || a.key.localeCompare(b.key),
+  )
 }
 
-/**
- * Projects in the sidebar's order, then folders no longer in the sidebar by name, then No project;
- * the sort never moves them.
- */
+/** Projects in the sidebar's order, then folders no longer in the sidebar by name, then No project. */
 function projectGroups(
   cards: readonly ArtifactSummary[],
   context: Pick<ListContext, 'projects' | 'collator'>,
-): { key: string; of: GroupKind; artifacts: ArtifactSummary[] }[] {
+): Group[] {
   const byFolder = new Map<string, ArtifactSummary[]>()
   const scratch: ArtifactSummary[] = []
   for (const artifact of cards) {
@@ -223,7 +226,7 @@ function projectGroups(
     if (mine) mine.push(artifact)
     else byFolder.set(artifact.project, [artifact])
   }
-  const groups: { key: string; of: GroupKind; artifacts: ArtifactSummary[] }[] = []
+  const groups: Group[] = []
   for (const project of context.projects) {
     const mine = byFolder.get(project.path)
     if (!mine) continue
@@ -240,46 +243,6 @@ function projectGroups(
   if (scratch.length)
     groups.push({ key: 'no-project', of: { kind: 'no-project' }, artifacts: scratch })
   return groups
-}
-
-/**
- * A project's sessions, each heading its cards: by title, by the session's last update, or by the
- * most recent of its cards.
- */
-function sessionSections(
-  cards: readonly ArtifactSummary[],
-  sort: ArtifactSort,
-  time: (artifact: ArtifactSummary) => number,
-  context: ListContext,
-): Section[] {
-  const bySession = new Map<string, ArtifactSummary[]>()
-  for (const artifact of cards) {
-    const mine = bySession.get(artifact.sessionId)
-    if (mine) mine.push(artifact)
-    else bySession.set(artifact.sessionId, [artifact])
-  }
-  const rows = [...bySession].map(([sessionId, artifacts]) => {
-    const session = sessionId === NO_SESSION ? null : context.session(sessionId)
-    const newest = Math.max(...artifacts.map(time))
-    return {
-      sessionId,
-      artifacts,
-      title:
-        session?.title ?? (sessionId === NO_SESSION ? context.imported : context.deletedSession),
-      // A deleted session, and the imports, last changed with their newest artifact.
-      time: sort === 'updated' ? (session?.updatedAt ?? newest) : newest,
-    }
-  })
-  rows.sort((a, b) =>
-    sort === 'name'
-      ? context.collator.compare(a.title, b.title) || b.time - a.time
-      : b.time - a.time || a.sessionId.localeCompare(b.sessionId),
-  )
-  return rows.map((row) => ({
-    key: row.sessionId,
-    sessionId: row.sessionId,
-    artifacts: row.artifacts,
-  }))
 }
 
 /** New session's draft with the line that asks for a kind: after a blank line when it has text. */

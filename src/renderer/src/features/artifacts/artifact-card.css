@@ -569,6 +569,14 @@
   padding: 0 9px;
   font-family: inherit;
 }
+.k-art__chip[data-corner] {
+  position: absolute;
+  top: 18px;
+  left: 18px;
+  z-index: 1;
+  background: var(--bg-raised);
+  box-shadow: var(--artifact-card-shadow-hover);
+}
 .k-art__chip > span {
   overflow: hidden;
   white-space: nowrap;
@@ -856,4 +864,184 @@
   stroke-width: 0.8;
   stroke-dasharray: 2 1.5;
   vector-effect: non-scaling-stroke;
+}
+
+/* The Artifacts page's card: changed since the user last opened it, what it holds, a flip. */
+.k-art__dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  margin: 0 6px 1px 0;
+  border-radius: 50%;
+  background: var(--accent);
+  vertical-align: middle;
+}
+.k-art__hit {
+  margin: 0 -1px;
+  padding: 0 1px;
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  color: inherit;
+}
+/* The line keeps its parts whole and drops the count, then the version, when it runs short; More
+   covers only the title's line, so this one keeps the card's full width. */
+.k-art__meta[data-tile] {
+  margin-right: -27px;
+}
+.k-art__meta[data-tile] > span:not(.k-art__shared, .k-art__mark) {
+  flex: none;
+}
+.k-art__meta[data-tile] > .k-art__host {
+  flex: 0 1 auto;
+}
+.k-art__meta[data-tile][data-fitting] > .k-art__host {
+  flex: none;
+}
+.k-art__meta[data-tile]:is([data-drop='1'], [data-drop='2']) > .k-art__count,
+.k-art__meta[data-tile][data-drop='2'] > .k-art__ver {
+  display: none;
+}
+.k-art[data-form='tile'] .k-art__more {
+  top: 9px;
+}
+.k-art__chip,
+.k-art__comments,
+.k-tile-flip__label {
+  position: absolute;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  height: 20px;
+  padding: 0 7px;
+  border-radius: 6px;
+  background: var(--card);
+  box-shadow: var(--card-shadow);
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--ink);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.k-art__chip {
+  top: 5px;
+  left: 7px;
+}
+.k-art__comments {
+  left: 14px;
+  bottom: 14px;
+  gap: 4px;
+  padding-left: 6px;
+  pointer-events: none;
+}
+.k-art__comments svg {
+  color: var(--accent);
+}
+.k-tile-flip {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+.k-tile-flip__label {
+  left: 8px;
+  bottom: 9px;
+  max-width: calc(100% - 16px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  pointer-events: none;
+}
+.k-tile-flip__bar {
+  position: absolute;
+  left: 6px;
+  right: 6px;
+  bottom: 3px;
+  z-index: 2;
+  display: flex;
+  gap: 2px;
+  height: 2px;
+  pointer-events: none;
+}
+.k-tile-flip__bar i {
+  flex: 1;
+  border-radius: 1px;
+  background: color-mix(in srgb, var(--ink) 14%, transparent);
+}
+.k-tile-flip__bar i[data-on] {
+  background: var(--ink);
+}
+.k-tile-flip__bar[data-track] {
+  border-radius: 1px;
+  background: color-mix(in srgb, var(--ink) 14%, transparent);
+}
+.k-tile-flip__bar[data-track] i {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  min-width: 6px;
+  background: var(--ink);
+}
+/* A canvas's frames side by side on its dot ground, which is light in either theme. */
+.k-tile-frames {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3.2%;
+  background-color: color-mix(in oklab, var(--canvas-ink) 4%, var(--canvas));
+  background-image: radial-gradient(
+    color-mix(in oklab, var(--canvas-ink) 13%, transparent) 0.8px,
+    transparent 0.8px
+  );
+  background-size: 9px 9px;
+}
+.k-tile-frames__frame {
+  flex: none;
+  overflow: hidden;
+  border-radius: 3px;
+  background: var(--canvas);
+  box-shadow:
+    0 0 0 0.5px color-mix(in oklab, var(--canvas-ink) 12%, transparent),
+    0 3px 8px -3px color-mix(in oklab, var(--canvas-ink) 18%, transparent);
+}
+.k-tile-frames__frame img,
+.k-tile-deck__slide img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: top;
+}
+/* A deck: its front slide over the edges of two more. */
+.k-tile-deck {
+  background: color-mix(in oklab, var(--ink) 3.5%, var(--card));
+}
+.k-tile-deck__slide {
+  position: absolute;
+  width: 80%;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  border-radius: 3px;
+  background: var(--canvas);
+  box-shadow:
+    0 0 0 0.5px var(--line),
+    0 4px 10px -4px color-mix(in oklab, var(--canvas-ink) 20%, transparent);
+}
+.k-tile-deck__slide[data-depth='2'] {
+  left: 14%;
+  top: 6%;
+}
+.k-tile-deck__slide[data-depth='1'] {
+  left: 11%;
+  top: 11%;
+}
+.k-tile-deck__slide[data-depth='0'] {
+  left: 8%;
+  top: 16%;
+}
+.k-tile-deck__slide[data-depth='2'] img {
+  opacity: 0.55;
+}
+.k-tile-deck__slide[data-depth='1'] img {
+  opacity: 0.8;
+}
+.k-tile-deck__slide:not(:has(img)) {
+  background: color-mix(in oklab, var(--ink) 5%, var(--card));
 }
