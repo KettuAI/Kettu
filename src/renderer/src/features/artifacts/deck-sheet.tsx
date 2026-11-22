@@ -222,7 +222,9 @@ export function DeckSheet({
   // The version that came in: its pill, which steps through the slides it changed.
   const showPill = !!arrived && latest && version === arrived.to
   const [pillGone, setPillGone] = useState<number | null>(null)
-  const pill = showPill && pillGone !== arrived.to
+  // A version the user typed here marks its slides, but needs no pill to say so.
+  const [ownVersions, setOwnVersions] = useState<ReadonlySet<number>>(() => new Set())
+  const pill = showPill && pillGone !== arrived.to && !ownVersions.has(arrived.to)
   const changedSlides = useMemo(
     () => (arrived?.changes.kind === 'slides' ? arrived.changes.slides.map((s) => s.number) : []),
     [arrived],
@@ -320,6 +322,10 @@ export function DeckSheet({
           return
         case 'save':
           setSave(report)
+          if (report.state === 'saved' && report.version !== null) {
+            const saved = report.version
+            setOwnVersions((was) => new Set(was).add(saved))
+          }
       }
     }
   })
@@ -400,7 +406,8 @@ export function DeckSheet({
 
   // Keys: the arrows turn, G shows the grid, and in it the arrows pick and Enter opens. Esc lets go
   // of one layer at a time before the viewer's own.
-  const cols = narrow ? 2 : tier === 'middle' ? 3 : 4
+  const carded = insets.left > 0 || insets.right > 0
+  const cols = narrow ? 2 : tier === 'middle' || carded ? 3 : 4
   const keys = useRef<(key: string, shift: boolean) => boolean>(() => false)
   useEffect(() => {
     keys.current = (key, shift) => {
@@ -537,6 +544,8 @@ export function DeckSheet({
       <div
         ref={root}
         className="adk-room"
+        // A click on the ground takes focus, so the keys reach a deck beside a session too.
+        tabIndex={-1}
         data-grid={grid || undefined}
         onPointerDown={() => {
           if (narrow && leftCard?.shown) leftCard.setShown(false)
@@ -665,6 +674,7 @@ export function DeckSheet({
             current={current}
             picked={picked}
             cols={cols}
+            insets={insets}
             changed={changed}
             changedIn={arrived?.to ?? version}
             comments={bySlide}
@@ -844,6 +854,7 @@ function DeckGrid({
   current,
   picked,
   cols,
+  insets,
   changed,
   changedIn,
   comments,
@@ -858,6 +869,8 @@ function DeckGrid({
   current: number
   picked: number | null
   cols: number
+  /** The room the open cards take at either side, which the grid keeps clear of. */
+  insets: { left: number; right: number }
   changed: ReadonlySet<number>
   changedIn: number
   comments: ReadonlyMap<number, number>
@@ -881,7 +894,12 @@ function DeckGrid({
       role="listbox"
       aria-label={t('deck.grid')}
       style={
-        { '--adk-cols': cols, '--adk-ratio': `${deck.width} / ${deck.height}` } as CSSProperties
+        {
+          '--adk-cols': cols,
+          '--adk-ratio': `${deck.width} / ${deck.height}`,
+          '--adk-inset-l': `${insets.left}px`,
+          '--adk-inset-r': `${insets.right}px`,
+        } as CSSProperties
       }
     >
       <div ref={wall} className="adk-grid__wall">

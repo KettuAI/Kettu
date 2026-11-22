@@ -906,6 +906,7 @@ export default function ArtifactViewer(place: ViewerPlace) {
     onSelect: () => setFollowing(followingNow === agent.sessionId ? null : agent.sessionId),
   }))
 
+  const [besideSlides, setBesideSlides] = useState<boolean | null>(null)
   const leftCard = useMemo(
     () =>
       showing && isDocument
@@ -935,10 +936,12 @@ export default function ArtifactViewer(place: ViewerPlace) {
                   <small className="ads-count">{deck.slides.length}</small>
                 </>
               ),
-              // Open in the main area; beside a session it waits to be asked for.
+              // Open in the main area; beside a session it waits to be asked for there, whatever
+              // the main area last did with it.
               byDefault: place.where === 'main',
-              open: state.left,
-              onOpenChange: (open: boolean) => setViewerState(id, { left: open }),
+              open: place.where === 'main' ? state.left : besideSlides,
+              onOpenChange: (open: boolean) =>
+                place.where === 'main' ? setViewerState(id, { left: open }) : setBesideSlides(open),
             }
           : showing && docShown
             ? {
@@ -966,6 +969,7 @@ export default function ArtifactViewer(place: ViewerPlace) {
       docShown,
       doc,
       state.left,
+      besideSlides,
       id,
       t,
     ],

@@ -5,6 +5,7 @@
   position: absolute;
   inset: 0;
   overflow: hidden;
+  outline: none;
 }
 .adk-scroll {
   position: absolute;
@@ -184,11 +185,11 @@
   display: grid;
   grid-template-columns: repeat(var(--adk-cols), minmax(0, 1fr));
   gap: 28px 24px;
-  padding: 64px 32px 88px;
+  padding: 64px calc(32px + var(--adk-inset-r, 0px)) 88px calc(32px + var(--adk-inset-l, 0px));
 }
 [data-tier='narrow'] .adk-grid__wall {
   gap: 20px 12px;
-  padding: 56px 12px 80px;
+  padding: 56px calc(12px + var(--adk-inset-r, 0px)) 80px calc(12px + var(--adk-inset-l, 0px));
 }
 .adk-grid__item {
   position: relative;
