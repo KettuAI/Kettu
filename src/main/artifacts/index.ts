@@ -11,7 +11,7 @@ import {
   type WebContents,
 } from 'electron'
 import type { SelectMessage } from '@shared/artifact-runtime/page-messages'
-import { type ArtifactImportResult, parseArtifactRef } from '@shared/artifacts'
+import { type ArtifactImportResult, parseArtifactRef, parseThumbnailPart } from '@shared/artifacts'
 import type { RuntimeAnswer } from '@shared/artifact-capabilities'
 import {
   type ArtifactExportFormat,
@@ -199,6 +199,14 @@ export class Artifacts {
   async thumbnail(id: unknown, version: unknown, layout: unknown): Promise<string | null> {
     const wanted = parseVersion(id, version)
     return this.thumbnails.thumbnail(wanted.id, wanted.version, parseLayout(layout))
+  }
+
+  /** `artifact:part-thumbnail`: a frame, a slide or a document in one theme. */
+  async partThumbnail(id: unknown, version: unknown, part: unknown): Promise<string | null> {
+    const wanted = parseVersion(id, version)
+    const checked = parseThumbnailPart(part)
+    if (!checked) throw new Error('Not a thumbnail part')
+    return this.thumbnails.part(wanted.id, wanted.version, checked)
   }
 
   /** A page of a version as a PNG at its own size; null when it cannot render. */

@@ -8,7 +8,7 @@ import { Button } from '@renderer/components/ui/button'
 import { Empty, EmptyDescription, EmptyHeader } from '@renderer/components/ui/empty'
 import { Spinner } from '@renderer/components/ui/spinner'
 import { cn } from '@renderer/lib/utils'
-import { markReady, remembered } from '../common/boot'
+import { markReady, readSlide, remembered } from '../common/boot'
 import { EditBar, EditButton, SaveNotice } from '../common/content'
 import { useContent } from '../common/use-content'
 import { deckStyle, withText, type TextPath } from './deck'
@@ -171,9 +171,10 @@ export function SlidesViewer({ config, view }: { config: ViewerConfig; view: Vie
   }
 
   if (view === 'thumbnail') {
+    const shown = Math.min(count, readSlide() ?? 1) - 1
     return (
       <div className="flex h-full bg-(--slide-background)" style={deckStyle(deck)}>
-        <Stage size={size}>{slide(0)}</Stage>
+        <Stage size={size}>{slide(shown)}</Stage>
       </div>
     )
   }

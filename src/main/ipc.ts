@@ -715,6 +715,9 @@ export function registerIpcHandlers({
   handle('artifact:thumbnail', 3, (_, id, version, layout) =>
     artifacts.thumbnail(id, version, layout),
   )
+  handle('artifact:part-thumbnail', 3, (_, id, version, part) =>
+    artifacts.partThumbnail(id, version, part),
+  )
   handle('artifact:open-external', 2, (_, id, version) => artifacts.openExternal(id, version))
   handle('artifact:reveal', 2, (_, id, version) => artifacts.reveal(id, version))
   handle('artifact:export', 2, ({ window }, id, version) => artifacts.export(window, id, version))

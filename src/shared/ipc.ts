@@ -1,6 +1,11 @@
 import type { AccountStatus } from './account'
 import type { AgentsApi, HostMethod } from './agent-host'
-import type { ArtifactImportKind, ArtifactImportResult, ThumbnailPage } from './artifacts'
+import type {
+  ArtifactImportKind,
+  ArtifactImportResult,
+  ThumbnailPage,
+  ThumbnailPart,
+} from './artifacts'
 import type { SelectMessage } from './artifact-runtime/page-messages'
 import type { ArtifactExportFormat } from './artifact-types'
 import type { GrantedAttachment } from './attachments'
@@ -324,6 +329,10 @@ export interface IpcInvokeContract {
     args: [id: string, version: number, layout: ThumbnailPage[] | null]
     result: string | null
   }
+  'artifact:part-thumbnail': {
+    args: [id: string, version: number, part: ThumbnailPart]
+    result: string | null
+  }
   'artifact:open-external': { args: [id: string, version: number]; result: void }
   'artifact:reveal': { args: [id: string, version: number]; result: void }
   'artifact:export': { args: [id: string, version: number]; result: boolean }
@@ -644,6 +653,11 @@ export interface KettuApi {
      * its pages laid out, which main cannot find without parsing the HTML.
      */
     thumbnail(id: string, version: number, layout: ThumbnailPage[] | null): Promise<string | null>
+    /**
+     * The image of one frame, one slide, or a document in one theme, as a `data:` URL; null when
+     * it could not render, or the version has no such part.
+     */
+    partThumbnail(id: string, version: number, part: ThumbnailPart): Promise<string | null>
     /** Opens a copy of the version in the default browser, outside the app's isolation. */
     openExternal(id: string, version: number): Promise<void>
     /** Selects a copy of the version in the system file manager, as `openExternal` would open it. */

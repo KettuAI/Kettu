@@ -160,6 +160,33 @@ export const THUMBNAIL_INSET = 64
 /** The most pages a canvas's thumbnail lays out. */
 export const THUMBNAIL_PAGES = 500
 
+/**
+ * One piece of a version with a thumbnail of its own, beside the version's: a canvas frame by its
+ * id in the canvas document, a slide from 1, or a document drawn in the light or the dark theme.
+ */
+export type ThumbnailPart = { frame: string } | { slide: number } | { theme: 'light' | 'dark' }
+
+const FRAME_ID = /^[A-Za-z0-9_-]{1,64}$/
+const MAX_SLIDE = 10_000
+
+/** A part as a client asked for it, checked; null for anything else. */
+export function parseThumbnailPart(value: unknown): ThumbnailPart | null {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return null
+  const o = value as Record<string, unknown>
+  const keys = Object.keys(o)
+  if (keys.length !== 1) return null
+  if (typeof o.frame === 'string' && FRAME_ID.test(o.frame)) return { frame: o.frame }
+  if (
+    Number.isSafeInteger(o.slide) &&
+    (o.slide as number) >= 1 &&
+    (o.slide as number) <= MAX_SLIDE
+  ) {
+    return { slide: o.slide as number }
+  }
+  if (o.theme === 'light' || o.theme === 'dark') return { theme: o.theme }
+  return null
+}
+
 /** One page of a canvas laid out for its thumbnail, in canvas pixels, from the canvas's origin. */
 export interface ThumbnailPage {
   group: number // the body's `data-page-group` child it is in, from 1, or 0 outside any
