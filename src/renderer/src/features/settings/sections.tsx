@@ -197,7 +197,12 @@ export function GeneralSwitch({
   label,
   disabled,
 }: {
-  field: 'restoreLastSession' | 'confirmQuitWhileRunning' | 'sessionTitles' | 'background'
+  field:
+    | 'restoreLastSession'
+    | 'confirmQuitWhileRunning'
+    | 'sessionTitles'
+    | 'continueAfterLimit'
+    | 'background'
   label: string
   disabled?: boolean
 }) {

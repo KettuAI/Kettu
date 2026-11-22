@@ -6,6 +6,7 @@
       "awaiting": "等待你的授权",
       "awaitingAnswer": "等待你的回答",
       "limitReached": "{{limit}}限额已用完 · {{time}} 重置",
+      "limitReachedContinue": "{{limit}}限额已用完 · {{time}} 自动继续",
       "limitExtraUsage": "{{limit}}限额已用完 · 正在用额外用量",
       "ask": "回复…",
       "taskRunning": "接着聊，不影响需求",

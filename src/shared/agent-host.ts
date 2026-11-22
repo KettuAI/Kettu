@@ -904,6 +904,11 @@ export interface LastTurn {
   error?: string
   /** The window that stopped it, for `limit`. */
   limit?: LastTurnLimit
+  /**
+   * When Kettu sends the session a message to carry on once the window has reset, in ms since the
+   * epoch; null once the user chose not to, absent when none is planned.
+   */
+  continuesAt?: number | null
 }
 
 export interface LastTurnLimit {
@@ -1544,6 +1549,8 @@ export interface HostContract {
     result: { output: string; truncated: boolean }
   }
   'sessions.retry': { params: { sessionId: string }; result: void }
+  // Drops the continuation Kettu planned after the plan window that stopped the last turn resets.
+  'sessions.cancelContinue': { params: { sessionId: string }; result: void }
   // Asks a side question, answered beside the session; the answer arrives in `sideChat` patches.
   // `agentId` picks the agent that answers for a session whose own agent cannot, and is kept.
   'sessions.sideAsk': {
@@ -2212,6 +2219,7 @@ export const HOST_METHODS = [
   'sessions.sideClear',
   'sessions.sideAgents',
   'sessions.retry',
+  'sessions.cancelContinue',
   'sessions.rewind',
   'sessions.putBack',
   'sessions.fork',

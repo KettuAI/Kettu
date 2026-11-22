@@ -76,6 +76,11 @@
       "description": "由小模型为每个会话命名一次，会用掉少量智能体的套餐额度。",
       "keywords": "标题 命名 会话 模型 额度 title name session"
     },
+    "continueAfterLimit": {
+      "name": "套餐限额重置后自动继续",
+      "description": "被套餐限额停下的会话，在窗口重置后自己接着做。",
+      "keywords": "套餐 限额 重置 自动继续 session"
+    },
     "lightModel": {
       "name": "轻量任务的模型",
       "description": "用来写标题、分支名、提交信息和问题报告草稿，用掉这个智能体的套餐额度。",

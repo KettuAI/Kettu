@@ -243,6 +243,14 @@ export function useGeneralSection(): SectionDef {
         ),
       },
       {
+        id: 'continue-after-limit',
+        setting: 'general.continue-after-limit',
+        group: sessions,
+        render: () => (
+          <GeneralSwitch field="continueAfterLimit" label={t('general.continueAfterLimit.name')} />
+        ),
+      },
+      {
         id: 'light-model',
         setting: 'general.light-model',
         group: sessions,

@@ -277,6 +277,26 @@ describe('the host files', () => {
     expect(parseSessionsFile({ sessions: {} })).toBe('sessions is not a list')
   })
 
+  it('keeps when a limit-stopped session is carried on, and its cancellation', () => {
+    const lastTurn = {
+      reason: 'limit' as const,
+      endedAt: 10,
+      limit: { window: 'five_hour', label: '5-hour', account: 'me@example.com', resetsAt: 20 },
+    }
+    const planned = { ...session, lastTurn: { ...lastTurn, continuesAt: 20 } }
+    expect(parseSessionsFile({ sessions: [planned] })).toEqual({ version: 1, sessions: [planned] })
+    const cancelled = { ...session, lastTurn: { ...lastTurn, continuesAt: null } }
+    expect(parseSessionsFile({ sessions: [cancelled] })).toEqual({
+      version: 1,
+      sessions: [cancelled],
+    })
+    const dropped = { ...session, lastTurn: { ...lastTurn, continuesAt: 'soon' } }
+    expect(parseSessionsFile({ sessions: [dropped] })).toEqual({
+      version: 1,
+      sessions: [{ ...session, lastTurn }],
+    })
+  })
+
   it("keeps a session's opened pull requests and drops addresses that are not one", () => {
     const pullRequests = [
       'https://github.com/KettuAI/Kettu/pull/1',

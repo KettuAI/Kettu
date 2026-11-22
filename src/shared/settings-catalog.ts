@@ -317,6 +317,17 @@ const ENTRIES = {
     access: 'change',
     ...flag('general', 'sessionTitles', (file) => file.general.sessionTitles),
   },
+  'general.continue-after-limit': {
+    section: 'general',
+    row: 'continue-after-limit',
+    group: 'general.groups.sessions',
+    name: 'general.continueAfterLimit.name',
+    description: 'general.continueAfterLimit.description',
+    keywords: 'general.continueAfterLimit.keywords',
+    part: 'host',
+    access: 'change',
+    ...flag('general', 'continueAfterLimit', (file) => file.general.continueAfterLimit),
+  },
   'general.light-model': {
     section: 'general',
     row: 'light-model',

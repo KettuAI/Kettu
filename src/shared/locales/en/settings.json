@@ -77,6 +77,11 @@
       "description": "A small model names each session once. Uses a little of the agent’s plan.",
       "keywords": "title name session model credits"
     },
+    "continueAfterLimit": {
+      "name": "Continue after a plan limit resets",
+      "description": "A session stopped by a used-up plan window carries on by itself when the window resets.",
+      "keywords": "plan limit quota reset continue session"
+    },
     "lightModel": {
       "name": "Model for lightweight tasks",
       "description": "Writes titles, branch names, commit messages and report drafts, on that agent’s plan.",

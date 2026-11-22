@@ -857,6 +857,12 @@
     "indexing": "正在为对话建立索引，结果可能不全",
     "unsupported": "这台电脑还不能在会话中查找"
   },
+  "continueLimit": {
+    "planned": "{{time}} 自动继续 · {{limit}}限额",
+    "off": "不会自动继续",
+    "cancel": "不继续",
+    "cancelFailed": "没能取消自动继续"
+  },
   "thread": {
     "label": "对话",
     "olderFailed": "无法加载更早的消息",

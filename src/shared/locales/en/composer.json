@@ -6,6 +6,7 @@
       "awaiting": "Waiting for your approval",
       "awaitingAnswer": "Waiting for your answer",
       "limitReached": "{{limit}} limit reached · resets {{time}}",
+      "limitReachedContinue": "{{limit}} limit reached · continues {{time}}",
       "limitExtraUsage": "{{limit}} limit reached · using extra usage",
       "ask": "Reply…",
       "taskRunning": "Keep chatting; this doesn’t change the task",
