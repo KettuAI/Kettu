@@ -238,6 +238,44 @@ it('counts a workflow suggestion that waits among the requests and returns it ap
   expect((await window.request('sessions.requests', { sessionId: id })).suggestions).toEqual([])
 })
 
+it('names the limit a notice ties to a failed turn, unless a turn started since', async () => {
+  const { window, id } = await readySession()
+  const host = hosts.at(-1)!
+  const agents = host.host.agents
+  const fiveHour = (state: 'ok' | 'reached') => ({
+    window: 'five_hour',
+    label: '5-hour',
+    usedPercent: state === 'reached' ? 100 : 40,
+    resetsAt: Date.now() + 3_600_000,
+    state,
+    observedAt: Date.now(),
+  })
+  const say = async (text: string) => {
+    await window.request('sessions.prompt', { sessionId: id, content: [{ type: 'text', text }] })
+    await window.untilStatus(id, 'ready')
+  }
+  // A window seen for the first time says nothing.
+  agents.setLimit('fake-agent', fiveHour('ok'))
+
+  await say('/error --silent')
+  await window.until(() => window.summary(id)?.lastTurn?.reason === 'failed')
+  agents.setLimit('fake-agent', fiveHour('reached'))
+  await window.until(() => window.summary(id)?.lastTurn?.reason === 'limit')
+  expect(window.summary(id)?.lastTurn?.limit).toMatchObject({
+    window: 'five_hour',
+    label: '5-hour',
+  })
+
+  // The window resets, the next turn fails, and a turn starts before the window is used up again.
+  agents.setLimit('fake-agent', fiveHour('ok'))
+  await say('/error --silent')
+  await window.until(() => window.summary(id)?.lastTurn?.reason === 'failed')
+  await say('/plan --step 10')
+  agents.setLimit('fake-agent', fiveHour('reached'))
+  await new Promise((resolve) => setTimeout(resolve, 2_500))
+  expect(window.summary(id)?.lastTurn?.reason).toBe('end_turn')
+}, 20_000)
+
 const WORKFLOW = `format: 1
 name: Fix a bug
 description: Reproduce, then fix.
