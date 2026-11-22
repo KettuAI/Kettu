@@ -3,6 +3,7 @@
 // passages in them, a deck's slides. Nothing here trusts a writer's own account of its change.
 
 import { markdownBlocks } from './artifact-document'
+import { headingSlug } from './artifact-links'
 import { parseDeck, type Slide } from './artifact-slides'
 import { CONTENT_ENTRIES, type ArtifactTypeName } from './artifact-types'
 import { CANVAS_FILE, parseCanvasDoc } from './canvas-doc'
@@ -131,19 +132,6 @@ export interface DocumentSection {
   level: number
   from: number
   to: number
-}
-
-/**
- * A heading's slug: its words in lower case joined by hyphens, letters and digits of any script
- * kept and other marks dropped; "section" when nothing is left.
- */
-export function headingSlug(heading: string): string {
-  const slug = heading
-    .toLowerCase()
-    .replace(/[^\p{L}\p{N}\s_-]/gu, '')
-    .trim()
-    .replace(/[\s-]+/g, '-')
-  return slug === '' ? 'section' : slug
 }
 
 function headingText(markdown: string, from: number, to: number, kind: string): string {

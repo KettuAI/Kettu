@@ -145,3 +145,64 @@ describe("the host's records of an artifact", () => {
     })
   })
 })
+
+describe('the links in the artifact tools results', () => {
+  const page = (id: string, file: string, x: number) => ({
+    id,
+    canvas: 'c1',
+    name: id.toUpperCase(),
+    file,
+    x,
+    y: 0,
+    width: 390,
+    height: 844,
+    locked: false,
+  })
+
+  it('name every frame on create and read, and the frames a version changed on update', async () => {
+    const doc = {
+      format: 1,
+      canvases: [{ id: 'c1', name: 'Home' }],
+      pages: [page('pa', 'a.html', 0), page('pb', 'b.html', 500)],
+      notes: [],
+    }
+    const { error, value } = await call('create_artifact', {
+      title: 'App',
+      files: [
+        { path: 'canvas.json', content: JSON.stringify(doc) },
+        { path: 'a.html', content: '<p>a</p>' },
+        { path: 'b.html', content: '<p>b</p>' },
+      ],
+    })
+    expect(error).toBeNull()
+    const id = value.id as string
+    expect(value.link).toBe(`kettu://artifact/${id}`)
+    expect(value.places).toEqual([
+      { kind: 'frame', name: 'Home · PA', link: `kettu://artifact/${id}/frame/pa` },
+      { kind: 'frame', name: 'Home · PB', link: `kettu://artifact/${id}/frame/pb` },
+    ])
+    expect(value.places_more).toBe(0)
+    expect((await call('read_artifact', { id })).value.places).toHaveLength(2)
+    const updated = await call('update_artifact', {
+      id,
+      base_version: 1,
+      files: [{ path: 'b.html', content: '<p>b2</p>' }],
+    })
+    expect(updated.value.places).toEqual([
+      { kind: 'frame', name: 'Home · PB', link: `kettu://artifact/${id}/frame/pb` },
+    ])
+  })
+
+  it("name a document's sections", async () => {
+    const { value } = await call('create_artifact_from_type', {
+      type: 'document',
+      title: 'Plan',
+      files: [{ path: 'document.md', content: '# Plan\n\nText.\n\n## Risks\n\nNone.\n' }],
+    })
+    const id = value.id as string
+    expect(value.places).toEqual([
+      { kind: 'section', name: 'Plan', link: `kettu://artifact/${id}/section/plan` },
+      { kind: 'section', name: 'Risks', link: `kettu://artifact/${id}/section/risks` },
+    ])
+  })
+})

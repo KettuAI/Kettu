@@ -310,7 +310,8 @@ export class ArtifactStore {
     to: number,
     { project }: Reach = {},
   ): Promise<ArtifactChanges | null> {
-    const key = `${id}\0${from}\0${to}`
+    // A session reaches only its project's artifacts, so its comparisons are its own.
+    const key = `${project ?? ''}\0${id}\0${from}\0${to}`
     const known = this.compared.get(key)
     if (known) return known
     const reach = project ? { project } : {}
