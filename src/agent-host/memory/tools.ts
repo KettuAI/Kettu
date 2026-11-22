@@ -36,6 +36,9 @@ export const MEMORY_TOOL_NAMES = [
   FORGET_MEMORY_TOOL,
 ] as const
 
+/** Entries per layer in one list_memories call: a page fits any harness's tool output. */
+export const LIST_PAGE = 100
+
 export function isMemoryToolName(name: string): boolean {
   return (MEMORY_TOOL_NAMES as readonly string[]).includes(name)
 }
@@ -74,12 +77,20 @@ export const MEMORY_TOOLS: Tool[] = [
     name: LIST_MEMORIES_TOOL,
     title: 'List memories',
     description:
-      "Lists the entries of Kettu's memory with their ids and when each was last updated: when " +
-      'the index the session started with says some were left out or may be out of date, and to ' +
-      'go through a whole layer when remember says it is full.',
+      "Lists the entries of Kettu's memory with their ids and when each was last updated, " +
+      `${LIST_PAGE} per layer at a time, newest first: when the index the session started with ` +
+      'says some were left out or may be out of date, and to go through a whole layer when ' +
+      'remember says it is full.',
     inputSchema: {
       type: 'object',
-      properties: { layer: { ...LAYER, description: 'One layer; both when left out.' } },
+      properties: {
+        layer: { ...LAYER, description: 'One layer; both when left out.' },
+        offset: {
+          type: 'integer',
+          minimum: 0,
+          description: 'Where the page starts, as the previous page says; 0 when left out.',
+        },
+      },
       additionalProperties: false,
     },
     annotations: { readOnlyHint: true, openWorldHint: false },
@@ -190,7 +201,7 @@ export interface MemoryToolsDeps {
 type Args = Record<string, unknown>
 
 const ALLOWED: Record<string, readonly string[]> = {
-  [LIST_MEMORIES_TOOL]: ['layer'],
+  [LIST_MEMORIES_TOOL]: ['layer', 'offset'],
   [READ_MEMORY_TOOL]: ['layer', 'id'],
   [REMEMBER_TOOL]: ['layer', 'title', 'description', 'body'],
   [UPDATE_MEMORY_TOOL]: ['layer', 'id', 'title', 'description', 'body'],
@@ -237,15 +248,41 @@ function day(at: number): string {
   return new Date(at).toISOString().slice(0, 10)
 }
 
-function listed(heading: string, entries: MemoryEntry[]): string[] {
+function offsetOf(o: Args): number {
+  if (o.offset === undefined) return 0
+  if (typeof o.offset !== 'number' || !Number.isInteger(o.offset) || o.offset < 0) {
+    throw invalid('offset must be a whole number, 0 or more.')
+  }
+  return o.offset
+}
+
+function listed(
+  heading: string,
+  layer: MemoryLayer,
+  entries: MemoryEntry[],
+  offset: number,
+): string[] {
   if (entries.length === 0) return [heading, '(none yet)']
-  return [
-    heading,
-    ...entries.map((entry) => {
+  const page = entries.slice(offset, offset + LIST_PAGE)
+  if (page.length === 0) {
+    return [heading, `(it holds ${entries.length} entries, all before offset ${offset})`]
+  }
+  const range = `entries ${offset + 1} to ${offset + page.length} of ${entries.length}`
+  const lines = [
+    `${heading.replace(/:$/, '')}, ${range}:`,
+    ...page.map((entry) => {
       const text = entry.description === '' ? entry.title : `${entry.title}: ${entry.description}`
       return `- [${entry.id}] ${text} (updated ${day(entry.updatedAt)})`
     }),
   ]
+  const next = offset + page.length
+  if (next < entries.length) {
+    lines.push(
+      `(${entries.length - next} more; ${LIST_MEMORIES_TOOL} with layer ${layer} and offset ` +
+        `${next} shows the next page)`,
+    )
+  }
+  return lines
 }
 
 function done(text: string): CallToolResult {
@@ -267,9 +304,12 @@ function full(layer: MemoryLayer): MemoryError {
   return new MemoryError(
     'full',
     `This memory holds ${MEMORY_ENTRIES_PER_LAYER} entries, its limit, so nothing was saved. Go ` +
-      `through all of it before saving: list every entry with ${LIST_MEMORIES_TOOL}, then ` +
-      `${through}. Read an entry in full only when its line does not tell. Make room for more ` +
-      'than this one entry, then save it. Never rewrite an unrelated entry to make room.',
+      'through all of it now, even if this fact fits an existing entry: read every page of ' +
+      `${LIST_MEMORIES_TOOL} with layer ${layer} before changing anything, then ${through}. ` +
+      'Read an entry in full only when its line does not tell. Aim to free about a tenth of ' +
+      'the limit so the next saves do not hit it again, but never forget an entry that still ' +
+      'holds just to get there; then save the fact. Never rewrite an unrelated entry to make ' +
+      'room.',
   )
 }
 
@@ -303,7 +343,7 @@ export class MemoryTools {
       const o = args(name, input)
       switch (name) {
         case LIST_MEMORIES_TOOL:
-          return await this.list(caller, layerOf(o, null))
+          return await this.list(caller, layerOf(o, null), offsetOf(o))
         case READ_MEMORY_TOOL:
           return await this.read(caller, layerOf(o, null), idOf(o))
         case REMEMBER_TOOL:
@@ -340,22 +380,21 @@ export class MemoryTools {
     return { layer: 'project', project }
   }
 
-  private async list(caller: Caller, layer: MemoryLayer | null): Promise<CallToolResult> {
+  private async list(
+    caller: Caller,
+    layer: MemoryLayer | null,
+    offset: number,
+  ): Promise<CallToolResult> {
     const project = this.deps.projectOf(caller)
     if (layer === 'project' && project === null) throw invalid(NO_PROJECT)
     const lines: string[] = []
     if (layer !== 'global' && project !== null) {
-      lines.push(
-        ...listed('Project memory:', await this.deps.service.list({ layer: 'project', project })),
-      )
+      const entries = await this.deps.service.list({ layer: 'project', project })
+      lines.push(...listed('Project memory:', 'project', entries, offset))
     }
     if (layer !== 'project') {
-      lines.push(
-        ...listed(
-          'Global memory (about the user):',
-          await this.deps.service.list({ layer: 'global' }),
-        ),
-      )
+      const entries = await this.deps.service.list({ layer: 'global' })
+      lines.push(...listed('Global memory (about the user):', 'global', entries, offset))
     }
     return done(lines.join('\n'))
   }

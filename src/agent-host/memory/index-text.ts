@@ -28,7 +28,7 @@ const MAINTAIN =
   'and save what holds now. When two entries say the same thing, often written by different ' +
   'agents, merge them: update one to hold both and forget the other. Update an entry only with ' +
   `its own fact, never to reuse it for another. When ${REMEMBER_TOOL} says the memory is full, ` +
-  'go through all of it before saving.'
+  'go through all of it and make room before going on, even if the fact fits an existing entry.'
 
 const WITH_PROJECT =
   `Read an entry in full with ${READ_MEMORY_TOOL} when it bears on the task. Save what will help ` +
