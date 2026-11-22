@@ -176,7 +176,7 @@ function FontPicker({
               <ComboboxItem
                 key={choice.id ?? ''}
                 value={choice}
-                className="h-9 gap-2.5 rounded-lg py-1 pr-8 pl-2 data-highlighted:bg-hover"
+                className="h-9 gap-2.5 rounded-lg py-1 pr-8 pl-2"
               >
                 <span
                   className="truncate text-menu text-primary"
