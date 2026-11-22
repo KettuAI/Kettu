@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useSyncExternalStore } from 'r
 import {
   RUNTIME_VERSION,
   type PageBox,
+  type PageKey,
   type PageSelection,
   type Pin,
   type PreviewStyle,
@@ -44,6 +45,8 @@ export interface EditorFrame {
   locate(src: number): Promise<PageBox | null>
   /** Sets the page's declared parameters, shown at once and kept until it reloads. */
   params(values: Record<string, string | number | boolean>): void
+  /** Takes the keys the page passes on, until null. */
+  keys(listener: ((key: PageKey) => void) | null): void
 }
 
 function accent(): string {
@@ -110,6 +113,7 @@ export class ArtifactEditor {
           })
         }),
       params: (values) => frame.link.post({ v: RUNTIME_VERSION, kind: 'params', values }),
+      keys: (listener) => frame.link.keys(listener),
       page,
       point: (x, y) => {
         this.pointing = { frame, x, y }

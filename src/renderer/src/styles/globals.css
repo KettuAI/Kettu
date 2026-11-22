@@ -452,6 +452,13 @@
   /* The artifact viewer's floating cards coming in and going, and what follows them. */
   --duration-card-in: 240ms;
   --duration-card-out: 180ms;
+  /* A canvas changing pages: the old page's frames fade out, the new page's rise in turn. */
+  --duration-page-out: 140ms;
+  --duration-open: 320ms;
+  --duration-frame-rise: 200ms;
+  --stagger-frame-rise: 12ms;
+  /* Presenting: a sheet slides in from the side it comes from. */
+  --duration-present-step: 280ms;
   --duration-spin: 0.9s;
   /* One breath of the launch cover's fox, slow enough to read as calm. */
   --duration-breath: 2400ms;

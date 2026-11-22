@@ -268,7 +268,8 @@
     "downloadPng": "Download PNG",
     "presentFrom": "Present from here",
     "focusPage": "Focus",
-    "pngFailed": "The image could not be saved. {{error}}"
+    "pngFailed": "The image could not be saved. {{error}}",
+    "fitWidth": "Fit width"
   },
   "history": {
     "title": "History",
@@ -452,7 +453,11 @@
     "label": "Presenting {{title}}",
     "controls": "Presentation",
     "position": "{{name}} · {{number}} / {{count}}",
-    "exit": "Esc to exit"
+    "exit": "Exit",
+    "previous": "Previous",
+    "next": "Next",
+    "grid": "Grid",
+    "gridKey": "Show every frame (G)"
   },
   "consent": {
     "filesTitle": "Let “{{title}}” read files in {{project}}?",
@@ -466,27 +471,7 @@
   },
   "board": {
     "canvases": {
-      "menu": "Pages",
-      "new": "New page",
-      "rename": "Rename",
-      "duplicate": "Duplicate page",
-      "delete": "Delete page",
-      "newName": "Page {{number}}",
-      "lastOne": "A canvas keeps at least one page",
-      "actions": "Page actions"
-    },
-    "layers": {
-      "title": "Layers",
-      "notes": {
-        "text": "Text",
-        "sticky": "Sticky note",
-        "pen": "Drawing",
-        "rect": "Rectangle",
-        "ellipse": "Ellipse",
-        "line": "Line",
-        "arrow": "Arrow"
-      },
-      "empty": "Nothing on this page yet"
+      "menu": "Pages"
     },
     "props": {
       "title": "Title",
@@ -500,17 +485,12 @@
       "blank": "New frame",
       "blankHint": "Empty until an agent draws it",
       "drawing": "{{agent}} is drawing this frame",
-      "ask": "Hand to the agent",
       "tweak": "Tweaks"
     },
     "note": {
       "doneBy": "Handled by {{agent}}",
       "by": "{{who}}",
       "agent": "An agent"
-    },
-    "selection": {
-      "handOff": "Hand to the agent",
-      "count": "{{count}} selected"
     },
     "agent": {
       "reading": "Reading {{page}}",
@@ -568,6 +548,7 @@
     "fit": "Fit",
     "empty": "This canvas has no pages yet."
   },
+<<<<<<< HEAD
   "changes": {
     "frames_one": "{{count}} frame changed",
     "frames_other": "{{count}} frames changed",
@@ -577,5 +558,38 @@
     "passages_other": "{{count}} passages changed",
     "slides_one": "{{count}} slide changed",
     "slides_other": "{{count}} slides changed"
+=======
+  "pages": {
+    "title": "Pages",
+    "heading": "Pages {{pages}} · {{frames}}",
+    "frames_one": "{{count}} frame",
+    "frames": "{{count}} frames",
+    "search": "Find a frame",
+    "find": "Find a frame…",
+    "filter": "Show",
+    "all": "All",
+    "changed": "Changed",
+    "comments": "Comments",
+    "none": "No frames match",
+    "version": "v{{version}}"
+  },
+  "frame": {
+    "open": "Open",
+    "present": "Present",
+    "ask": "Ask the agent",
+    "count_one": "{{count}} frame",
+    "count": "{{count}} frames",
+    "back": "Back to page",
+    "backShort": "Back"
+  },
+  "reading": {
+    "fit": {
+      "label": "Size",
+      "auto": "Auto",
+      "screen": "Fit screen",
+      "width": "Fit width",
+      "actual": "100%"
+    }
+>>>>>>> 635f2784 (feat(artifacts): canvas at three distances)
   }
 }

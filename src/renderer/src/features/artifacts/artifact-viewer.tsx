@@ -63,7 +63,8 @@ import { isEditable, modeKey } from './keys'
 import { artifactKind, daysLeft } from './model'
 import { Waiting } from './page-frame'
 import { PresenceFaces } from './presence-faces'
-import { Presenter } from './present'
+import { CanvasPresent } from './canvas-present'
+import { canvasSheets } from './canvas-sheets'
 import { PreviewOnly } from './preview-only'
 import {
   canvasPageName,
@@ -75,6 +76,7 @@ import {
 import { useComments } from './use-comments'
 import { staticCanvas, useCanvasDoc } from './use-canvas-doc'
 import { clampSize, useDocActions } from './use-doc-actions'
+import { useChangedFrames } from './use-changed-frames'
 import { noteAuthor, usePresentAgents, useVisitors } from './use-present-agents'
 import { useVersions } from './use-versions'
 import { VersionHistory } from './version-history'
@@ -115,7 +117,8 @@ export default function ArtifactViewer(place: ViewerPlace) {
 
   const state = useViewerState(id, (s) => s)
   const picked = state.version
-  const [presenting, setPresenting] = useState<number | null>(null)
+  // What is presented, from: a document's frame by its id, or a page's place as a string.
+  const [presenting, setPresenting] = useState<string | null>(null)
   const frame = useRef<HTMLDivElement>(null)
   const area = useRef<HTMLDivElement>(null)
   const [since] = useState(() => performance.now())
@@ -245,7 +248,10 @@ export default function ArtifactViewer(place: ViewerPlace) {
     [shown, id, title, pageName, t],
   )
   const actions = useMemo<PageActions>(
-    () => ({ download: renders ? downloadPng : null, present: (index) => setPresenting(index) }),
+    () => ({
+      download: renders ? downloadPng : null,
+      present: (index) => setPresenting(String(index)),
+    }),
     [renders, downloadPng],
   )
   const docActions = useDocActions({
@@ -255,8 +261,21 @@ export default function ArtifactViewer(place: ViewerPlace) {
     doc,
     summary: summary ?? null,
     agents,
-    present: setPresenting,
+    present: (index) => setPresenting(shown?.canvas?.pages[index]?.id ?? null),
   })
+  // Which frames count as changed: those the latest version changed against the one before.
+  const changedFrames = useChangedFrames(id, docShown && shown ? shown.version : null)
+  const frameComments = useMemo(() => {
+    const out = new Map<string, number>()
+    if (!doc || !threads) return out
+    for (const thread of threads) {
+      if (thread.resolvedAt !== null) continue
+      for (const page of doc.pages) {
+        if (page.file === thread.anchor.path) out.set(page.id, (out.get(page.id) ?? 0) + 1)
+      }
+    }
+    return out
+  }, [doc, threads])
 
   // The right card: an element picked in Edit shows its look; otherwise the card chosen.
   const propsShown =
@@ -506,6 +525,8 @@ export default function ArtifactViewer(place: ViewerPlace) {
             reloads={artifact.reloads}
             show={pageAsked}
             onShown={(seq) => artifactPageShown(panel?.panel ?? MAIN_ARTIFACT_PANEL, seq)}
+            changed={changedFrames}
+            comments={frameComments}
           />
         ) : shown.canvas ? (
           <ArtifactSurface
@@ -686,8 +707,9 @@ export default function ArtifactViewer(place: ViewerPlace) {
         const placed = doc?.pages.find((d) => d.id === p.id)
         return placed && placed.canvas === (state.page ?? doc?.canvases[0]?.id)
       })
-      setPresenting(Math.max(0, index >= 0 ? index : first))
-    } else setPresenting(canvasState.focused ?? canvasState.selected)
+      const from = shown.canvas.pages[Math.max(0, index >= 0 ? index : first)]
+      setPresenting(from?.id ?? null)
+    } else setPresenting(String(canvasState.focused ?? canvasState.selected))
   }
 
   const presenceItems: MenuItem[] = agents.map((agent) => ({
@@ -701,13 +723,19 @@ export default function ArtifactViewer(place: ViewerPlace) {
     () =>
       showing && docShown
         ? {
-            title: t('board.canvases.menu'),
-            byDefault: latest,
+            title: doc
+              ? t('pages.heading', {
+                  pages: doc.canvases.length,
+                  frames: t('pages.frames', { count: doc.pages.length }),
+                })
+              : t('pages.title'),
+            // Open by default where there is more than one page or many frames to find.
+            byDefault: !!doc && (doc.canvases.length > 1 || doc.pages.length > 8),
             open: state.left,
             onOpenChange: (open: boolean) => setViewerState(id, { left: open }),
           }
         : null,
-    [showing, docShown, latest, state.left, id, t],
+    [showing, docShown, doc, state.left, id, t],
   )
 
   const bar = (
@@ -833,13 +861,18 @@ export default function ArtifactViewer(place: ViewerPlace) {
         <div className="avs-main">{shell}</div>
       )}
       {presenting !== null && url && shown && (
-        <Presenter
+        <CanvasPresent
+          artifactId={id}
           url={url}
-          version={shown.version}
+          shown={shown}
           title={title}
-          pages={shown.canvas?.pages ?? null}
+          sheets={canvasSheets(
+            docShown ? doc : null,
+            shown.canvas?.pages ?? null,
+            pageName ?? (() => title),
+            title,
+          )}
           start={presenting}
-          pageName={pageName ?? (() => title)}
           onExit={() => setPresenting(null)}
         />
       )}

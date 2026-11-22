@@ -36,3 +36,17 @@ export const cardOut = {
   duration: 0.18,
   ease: [0.22, 1, 0.36, 1],
 } satisfies Transition
+
+/** The artifact canvas's camera moving between frames and places: --ease-out-quint. */
+export const cameraGlide = {
+  type: 'tween',
+  duration: 0.24,
+  ease: [0.22, 1, 0.36, 1],
+} satisfies Transition
+
+/** The artifact canvas's camera moving in to a frame or back out from it. */
+export const openGlide = {
+  type: 'tween',
+  duration: 0.32,
+  ease: [0.22, 1, 0.36, 1],
+} satisfies Transition
