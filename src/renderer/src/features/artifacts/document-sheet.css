@@ -50,23 +50,24 @@
   place-items: center;
   width: 26px;
   height: 26px;
-  border-radius: 13px 13px 13px 3px;
-  background: var(--edit-ring);
+  border-radius: 50%;
+  background: var(--text-primary);
   font-size: 12px;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
   line-height: 1;
-  color: var(--on-fill);
+  color: var(--bg-surface);
   box-shadow: var(--elevation-float);
   animation: ads-in var(--duration-fast) ease both;
 }
 .ads-pin[data-small] {
   width: 20px;
   height: 20px;
-  border-radius: 10px 10px 10px 3px;
   font-size: 11px;
 }
 .ads-pin[data-active] {
+  background: var(--control-on);
+  color: var(--on-fill);
   box-shadow:
     0 0 0 2px var(--bg-surface),
     var(--elevation-float);

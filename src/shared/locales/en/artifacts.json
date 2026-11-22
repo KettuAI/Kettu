@@ -543,6 +543,7 @@
     "autosaveShort": "Every change saves on its own as a new version.",
     "held": "You can edit it when it finishes. Comments still work, and the rest stays editable.",
     "heldTitle": "{{agent}} is writing this",
+    "heldTitleUnknown": "An agent is writing this",
     "path": "Path",
     "less": "Less {{name}}",
     "more": "More {{name}}",

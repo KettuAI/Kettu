@@ -38,6 +38,7 @@ import { useDark } from '@renderer/hooks/use-dark'
 import { isWeb } from '@renderer/lib/platform'
 import { DOC_SIZES, setDocSize, stepDocSize, useDocSize } from '@renderer/stores/artifact-doc-size'
 import type { ViewerMode } from '@renderer/stores/artifact-viewer'
+import { threadNumbers } from './comment-threads'
 import { FrameLink } from './frame-link'
 import { OutlineCard } from './outline-card'
 import { ChangePill, type SheetAgent } from './page-sheet'
@@ -230,9 +231,11 @@ export function DocumentSheet({
   // Pins: the open threads on the document's blocks, numbered as their cards are.
   const pins = useMemo(() => {
     if (!comments.shown || !latest) return []
-    return (comments.threads ?? [])
+    const all = comments.threads ?? []
+    const numbers = threadNumbers(all)
+    return all
       .filter((thread) => thread.resolvedAt === null)
-      .map((thread, i) => ({ thread, n: i + 1 }))
+      .map((thread) => ({ thread, n: numbers.get(thread.id) ?? 0 }))
       .filter(
         ({ thread: { anchor } }) =>
           anchor.path === DOCUMENT_ENTRY && anchor.offset !== null && !anchor.missing,

@@ -26,6 +26,7 @@ import {
   type AskChip,
   type AskMessage,
 } from './ask-subject'
+import { useArtifactRecord } from './artifact-host'
 import { docLayout } from './canvas-model'
 import { CommentDraft, ThreadPop } from './comment-pop'
 import { pinsFor, threadNumbers } from './comment-threads'
@@ -111,6 +112,8 @@ export function useViewerTools(input: ToolsInput) {
       ? picked
       : (targets.sessions[0]?.id ?? NEW_SESSION)
   const targetName = useTargetName()
+  // An older host cannot move a thread's anchor, so it offers no Pin again.
+  const canRepin = useArtifactRecord(id, 'repin') && input.editable === 'yes'
 
   const [tab, setTab] = useState<'open' | 'resolved'>('open')
   const [selected, setSelected] = useState<string | null>(null)
@@ -495,7 +498,7 @@ export function useViewerTools(input: ToolsInput) {
         at={editing.pin!.point ? pointBox(editing.pin!.point) : null}
         onClose={() => editor.clearPin()}
         onRepin={
-          repinSupported(input) && openThread.anchor.missing
+          canRepin && openThread.anchor.missing
             ? () => {
                 setRepinning(openThread.id)
                 editor.clearPin()
@@ -547,10 +550,6 @@ export function useViewerTools(input: ToolsInput) {
   }
 }
 
-function repinSupported(input: ToolsInput): boolean {
-  return input.editable === 'yes'
-}
-
 /** The agent whose running turn wrote what the picked element is in, which it holds until then. */
 function useHeldBy(input: ToolsInput, editing: EditorState): HeldBy | null {
   const sessions = input.presence?.sessions ?? []
@@ -572,9 +571,13 @@ function useHeldBy(input: ToolsInput, editing: EditorState): HeldBy | null {
   if (!holder) return null
   return {
     sessionId: holder.sessionId,
-    name: session ? agentName(session.agentId, hostOfSession(session)) : '',
-    agentId: session?.agentId ?? 'claude-code',
-    hostId: session ? hostOfSession(session) : null,
+    agent: session
+      ? {
+          name: agentName(session.agentId, hostOfSession(session)),
+          id: session.agentId,
+          hostId: hostOfSession(session),
+        }
+      : null,
   }
 }
 

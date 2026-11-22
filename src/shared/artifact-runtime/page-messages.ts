@@ -110,6 +110,15 @@ export interface Pin {
   active?: boolean
 }
 
+/** CSS colors a page draws comment pins in: the badge and its number, the ground under a lost or
+ * resolved pin, and a resolved pin's check. The open thread's pin takes the accent. */
+export interface PinColors {
+  ink: string
+  text: string
+  ground: string
+  done: string
+}
+
 /** What a client posts into a frame. The page only receives these. */
 export type DriveMessage =
   | {
@@ -119,6 +128,8 @@ export type DriveMessage =
       channel: string
       /** The outline's color, a CSS color from the app's theme. */
       accent: string
+      /** The pins' colors from the app's theme; an older client sends none. */
+      pinColors?: PinColors
     }
   | { v: typeof RUNTIME_VERSION; kind: 'select-point'; x: number; y: number }
   | { v: typeof RUNTIME_VERSION; kind: 'select-leave' }

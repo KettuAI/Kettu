@@ -15,7 +15,11 @@ export type ThreadState =
   | { kind: 'gone' }
   | { kind: 'resolved'; version: number | null }
 
-/** The version that was the latest when `at` came: the one a thread was resolved in. */
+/**
+ * The version that was the latest when `at` came: the one a thread was resolved in. The host keeps
+ * no such version, so it is derived from the host's own times alone, the thread's and the versions',
+ * and reads the same on every client.
+ */
 export function versionAt(versions: readonly VersionSummary[] | null, at: number): number | null {
   if (!versions) return null
   return versions.find((v) => v.createdAt <= at)?.version ?? versions.at(-1)?.version ?? null

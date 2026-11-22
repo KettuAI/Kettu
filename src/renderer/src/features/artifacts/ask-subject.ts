@@ -5,6 +5,7 @@ import type { PageBox } from '@shared/artifact-runtime/page-messages'
 import type { UserContent } from '@shared/thread'
 import { artifactRefOf } from '@renderer/lib/host'
 import { anchorLabel, selectionPrompt } from './anchors'
+import { accent } from './editor'
 
 /** What the request goes with, as a chip: a frame, an element, or the whole artifact. */
 export interface AskChip {
@@ -66,9 +67,7 @@ export async function elementPicture(input: {
     canvas.width,
     canvas.height,
   )
-  ctx.strokeStyle = getComputedStyle(document.documentElement)
-    .getPropertyValue('--edit-ring')
-    .trim()
+  ctx.strokeStyle = accent()
   ctx.lineWidth = 2 * scale
   ctx.strokeRect((box.x - x) * scale, (box.y - y) * scale, box.width * scale, box.height * scale)
   const url = canvas.toDataURL('image/png')

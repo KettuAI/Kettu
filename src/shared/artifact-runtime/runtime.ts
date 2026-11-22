@@ -271,14 +271,17 @@ export function start(config: RuntimeConfig): void {
         '.picked{border:2px solid var(--accent);box-shadow:0 0 0 1px rgb(255 255 255 / 60%)}' +
         '.label{position:fixed;display:none;padding:1px 6px;border-radius:4px;' +
         'background:var(--accent);color:white;font:500 11px/16px system-ui,sans-serif;white-space:nowrap}' +
-        '.pin{position:fixed;width:20px;height:20px;border-radius:10px 10px 10px 2px;' +
-        'background:var(--accent);color:white;font:600 11px/20px system-ui,sans-serif;' +
-        'text-align:center;box-shadow:0 1px 3px rgb(0 0 0 / 30%)}' +
-        '.pin.answered{background:#6b7280}' +
-        '.pin.active{box-shadow:0 0 0 2px white,0 6px 16px rgb(0 0 0 / 35%)}' +
-        '.pin.lost{background:white;color:var(--accent);outline:1.5px dashed var(--accent);outline-offset:-1.5px}' +
-        '.pin.done{background:white;color:#1e8a4f;box-shadow:inset 0 0 0 1.5px #1e8a4f;border-radius:10px}' +
-        '.pin.done.active{background:#1e8a4f;color:white}'
+        '.pin{position:fixed;box-sizing:border-box;width:20px;height:20px;border-radius:50%;' +
+        'background:var(--pin);color:var(--pin-text);font:600 11px/20px system-ui,sans-serif;' +
+        // A hairline keeps a light badge, as dark mode draws it, apart from a light page.
+        'text-align:center;box-shadow:0 0 0 1px rgb(0 0 0 / 14%),0 1px 3px rgb(0 0 0 / 30%)}' +
+        '.pin.active{background:var(--accent);color:white;' +
+        'box-shadow:0 0 0 2px var(--pin-ground),0 6px 16px rgb(0 0 0 / 35%)}' +
+        '.pin.lost{background:var(--pin-ground);color:var(--pin);' +
+        'outline:1.5px dashed var(--pin);outline-offset:-1.5px}' +
+        '.pin.done{background:var(--pin-ground);color:var(--pin-done);' +
+        'box-shadow:inset 0 0 0 1.5px var(--pin-done),0 1px 3px rgb(0 0 0 / 20%);line-height:18px}' +
+        '.pin.lost.active,.pin.done.active{background:var(--accent);color:white;outline:none}'
       hoverBox = document.createElement('div')
       hoverBox.className = 'box hover'
       pickedBox = document.createElement('div')
@@ -289,6 +292,7 @@ export function start(config: RuntimeConfig): void {
       layer.append(style, pinLayer, hoverBox, pickedBox, label)
     }
     host.style.setProperty('--accent', accent)
+    for (const [name, value] of Object.entries(pinColors)) host.style.setProperty(name, value)
     document.documentElement.append(host)
   }
 
@@ -296,7 +300,14 @@ export function start(config: RuntimeConfig): void {
 
   let mode: 'select' | 'comment' | null = null
   let channel = ''
-  let accent = '#f2581b'
+  let accent = '#0060e2'
+  // The pins' colors until the client sends its theme's.
+  let pinColors: Record<string, string> = {
+    '--pin': '#1f1f1f',
+    '--pin-text': '#ffffff',
+    '--pin-ground': '#ffffff',
+    '--pin-done': '#2e7550',
+  }
   let hovered: Element | null = null
   let picked: Element | null = null
   let keepScroll = false
@@ -361,7 +372,9 @@ export function start(config: RuntimeConfig): void {
       const key = `${Math.round(x)},${Math.round(y)}`
       const stacked = at.get(key) ?? 0
       at.set(key, stacked + 1)
-      return { pin, x: x - stacked * 22, y }
+      // Pins at an element stack leftwards from its corner; those on the page's own corner go
+      // rightwards, so none leaves the page.
+      return { pin, x: Math.max(2, rect ? x - stacked * 22 : x + stacked * 22), y }
     })
     pinBoxes = shown.map(({ pin, x, y }) => ({ n: pin.n, x, y }))
     while (pinLayer!.children.length > shown.length) pinLayer!.lastChild!.remove()
@@ -561,6 +574,22 @@ export function start(config: RuntimeConfig): void {
         if (typeof message.accent === 'string' && CSS.supports('color', message.accent)) {
           accent = message.accent
           host?.style.setProperty('--accent', accent)
+        }
+        if (message.pinColors && typeof message.pinColors === 'object') {
+          const sent: { readonly [key: string]: unknown } = { ...message.pinColors }
+          const next = { ...pinColors }
+          for (const [key, name] of [
+            ['ink', '--pin'],
+            ['text', '--pin-text'],
+            ['ground', '--pin-ground'],
+            ['done', '--pin-done'],
+          ] as const) {
+            const value = sent[key]
+            if (typeof value === 'string' && CSS.supports('color', value)) next[name] = value
+          }
+          pinColors = next
+          for (const [name, value] of Object.entries(pinColors))
+            host?.style.setProperty(name, value)
         }
         if (!mode) {
           hovered = null

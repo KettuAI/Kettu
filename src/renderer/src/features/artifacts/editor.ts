@@ -5,6 +5,7 @@ import {
   type PageKey,
   type PageSelection,
   type Pin,
+  type PinColors,
   type PreviewStyle,
 } from '@shared/artifact-runtime/page-messages'
 import { FrameLink } from './frame-link'
@@ -64,8 +65,22 @@ export interface EditorFrame {
   typeIn(): void
 }
 
-function accent(): string {
-  return getComputedStyle(document.documentElement).getPropertyValue('--edit-ring').trim()
+const themeColor = (name: string): string =>
+  getComputedStyle(document.documentElement).getPropertyValue(name).trim()
+
+/** The picked element's outline and tag, and the open thread's pin. */
+export function accent(): string {
+  return themeColor('--control-on')
+}
+
+/** Pins take the same look as the comments card's numbers. */
+function pinColors(): PinColors {
+  return {
+    ink: themeColor('--text-primary'),
+    text: themeColor('--bg-surface'),
+    ground: themeColor('--bg-surface'),
+    done: themeColor('--success'),
+  }
 }
 
 /**
@@ -188,8 +203,14 @@ export class ArtifactEditor {
       mode: this.state.mode,
       channel: frame.link.channel,
       accent: accent(),
+      pinColors: pinColors(),
     })
     frame.link.post({ v: RUNTIME_VERSION, kind: 'select-pins', pins: this.pins(frame.page) })
+  }
+
+  /** Sends the theme's colors again, as after the color mode changed. */
+  restyle(): void {
+    for (const frame of this.frames) this.drive(frame)
   }
 
   setMode(mode: EditorMode): void {

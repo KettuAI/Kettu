@@ -200,9 +200,12 @@ function useSource(
 /** The agent whose running turn wrote the piece the element is in, which takes no edit until then. */
 export interface HeldBy {
   sessionId: string
-  name: string
-  agentId: Parameters<typeof AgentMark>[0]['agent']
-  hostId: string | null
+  /** Null for a session this window does not know, which is named as no particular agent. */
+  agent: {
+    name: string
+    id: Parameters<typeof AgentMark>[0]['agent']
+    hostId: string | null
+  } | null
 }
 
 /**
@@ -436,8 +439,16 @@ export function EditPanel({
         head={
           heldBy ? (
             <>
-              <AgentMark agent={heldBy.agentId} size={14} hostId={heldBy.hostId} />
-              <b>{t('edit.heldTitle', { agent: heldBy.name })}</b>
+              {heldBy.agent ? (
+                <AgentMark agent={heldBy.agent.id} size={14} hostId={heldBy.agent.hostId} />
+              ) : (
+                <span aria-hidden className="k-vt-unknown" />
+              )}
+              <b>
+                {heldBy.agent
+                  ? t('edit.heldTitle', { agent: heldBy.agent.name })
+                  : t('edit.heldTitleUnknown')}
+              </b>
             </>
           ) : undefined
         }

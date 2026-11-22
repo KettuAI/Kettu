@@ -518,6 +518,7 @@
     "autosaveShort": "每处改动都会自动存成新版本。",
     "held": "它写完就能改。评论照常能留，别处照常能改。",
     "heldTitle": "{{agent}} 正在写这里",
+    "heldTitleUnknown": "有个智能体正在写这里",
     "path": "路径",
     "less": "减小{{name}}",
     "more": "增大{{name}}",

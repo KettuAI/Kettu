@@ -648,10 +648,31 @@ export const CanvasEditor = memo(function CanvasEditor({
   const tweakPage =
     focusedPage ??
     (shownSelection.length === 1 ? pages.find((p) => p.id === shownSelection[0]) : undefined)
-  // Before and after, on an opened frame the agent's latest version changed.
-  const comparing = !!compare && !!focusedPage && changed.has(focusedPage.id)
+  // Before and after, on the frame opened or else the one selected, when the agent's latest
+  // version changed it; leaving the frame keeps it selected, so what shows stays.
+  const compareSelection = useMemo(
+    () => (shownSelection.length === 1 ? pages.find((p) => p.id === shownSelection[0]) : undefined),
+    [shownSelection, pages],
+  )
+  const comparePage = focusedPage ?? compareSelection
+  const comparing = !!compare && !!comparePage && changed.has(comparePage.id)
   const [before, setBefore] = useState<string | null>(null)
-  const showingBefore = comparing && before === focusedPage?.id
+  // Another frame, or none, lets go of the earlier version: coming back shows the latest.
+  const [compared, setCompared] = useState(comparePage?.id ?? null)
+  if ((comparePage?.id ?? null) !== compared) {
+    setCompared(comparePage?.id ?? null)
+    setBefore(null)
+  }
+  const showingBefore = comparing && before === comparePage?.id
+  const compareSwitch: CompareSwitch | null =
+    comparing && compare && comparePage
+      ? {
+          from: compare.before,
+          to: compare.after,
+          showingBefore,
+          onChange: (on) => setBefore(on ? comparePage.id : null),
+        }
+      : null
   useEffect(() => {
     if (!measured) return
     if (focused && !focusedPage) {
@@ -1165,6 +1186,25 @@ export const CanvasEditor = memo(function CanvasEditor({
                 ) : (
                   <div className="k-ce-page__idle">{p.name}</div>
                 )}
+                {showingBefore && compare && comparePage?.id === p.id && !focused && (
+                  <div className="k-vt-before" data-unscaled="">
+                    <iframe
+                      src={framePageUrl(
+                        url,
+                        { version: compare.before, loadFrom: new Map() },
+                        { group: 0, index: 1, file: p.file },
+                      )}
+                      title={t('compare.beforeTitle', { name: p.name, version: compare.before })}
+                      sandbox={isWeb ? WEB_ARTIFACT_FRAME_SANDBOX : ARTIFACT_FRAME_SANDBOX}
+                      allow=""
+                      referrerPolicy="no-referrer"
+                      style={{ width: p.width, height: p.height }}
+                    />
+                    <span className="k-vt-before__tag">
+                      {t('compare.before', { version: compare.before })}
+                    </span>
+                  </div>
+                )}
               </div>
             )
           })}
@@ -1396,16 +1436,7 @@ export const CanvasEditor = memo(function CanvasEditor({
           }
           onStep={stepOpened}
           onBack={() => setFocused(null)}
-          compare={
-            comparing && compare && focusedPage
-              ? {
-                  from: compare.before,
-                  to: compare.after,
-                  showingBefore,
-                  onChange: (on) => setBefore(on ? focusedPage.id : null),
-                }
-              : null
-          }
+          compare={compareSwitch}
         />
       ) : (
         <CanvasDock
@@ -1415,6 +1446,7 @@ export const CanvasEditor = memo(function CanvasEditor({
           onZoom={(direction) => zoomAround(stepZoom(camera.current.z, direction))}
           onFit={() => land(true)}
           onActual={() => zoomAround(1)}
+          compare={compareSwitch}
         />
       )}
       {opened && opened.long && openedPage && (
@@ -1719,6 +1751,7 @@ function CanvasDock({
   onZoom,
   onFit,
   onActual,
+  compare,
 }: {
   controls: CanvasControls
   narrow: boolean
@@ -1726,6 +1759,7 @@ function CanvasDock({
   onZoom: (direction: 1 | -1) => void
   onFit: () => void
   onActual: () => void
+  compare: CompareSwitch | null
 }) {
   const { t } = useTranslation('artifacts')
   const { zoom } = useCanvasState(controls)
@@ -1799,6 +1833,7 @@ function CanvasDock({
           </>
         )
       )}
+      {compare && <CompareDock compare={compare} />}
     </ViewerSlot>
   )
 }

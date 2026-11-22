@@ -77,8 +77,10 @@ export function Writer({
       {mark &&
         (session ? (
           <AgentMark agent={session.agentId} size={14} hostId={hostOfSession(session)} />
-        ) : (
+        ) : comment.author.session === null ? (
           <span aria-hidden className="k-vt-you" />
+        ) : (
+          <span aria-hidden className="k-vt-unknown" />
         ))}
       {name && <b>{label}</b>}
     </>

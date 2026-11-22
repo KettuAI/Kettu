@@ -23,6 +23,7 @@ import { useChanges } from '@renderer/features/session/entries/artifact-changes'
 import { usePhoneWindow } from '@renderer/features/shell/narrow'
 import { PaneSheet } from '@renderer/features/shell/panel-button'
 import { artifactRefOf, errorMessage, host, learnArtifactHost } from '@renderer/lib/host'
+import { useDark } from '@renderer/hooks/use-dark'
 import { useHostHas, useHostHasRecord } from '@renderer/lib/host-features'
 import { hostOfPath } from '@renderer/lib/host-paths'
 import { longAgo } from '@renderer/lib/format'
@@ -179,6 +180,9 @@ export default function ArtifactViewer(place: ViewerPlace) {
   const renders = useHostHas('thumbnails') === true
   const editor = useMemo(() => (url ? new ArtifactEditor(url.slice(0, -1)) : null), [url])
   useEffect(() => () => editor?.dispose(), [editor])
+  // Pins and the picked outline take the theme's colors, again when the color mode changes.
+  const dark = useDark()
+  useEffect(() => editor?.restyle(), [editor, dark])
   const editing = useEditorState(editor)
   const { threads, error: commentsError } = useComments(id)
   // A version just written counts as the latest while it loads, so editing goes on across it.

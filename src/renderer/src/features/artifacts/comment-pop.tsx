@@ -6,7 +6,7 @@ import {
   Location01Icon,
   Tick02Icon,
 } from '@hugeicons/core-free-icons'
-import { motion, useReducedMotion } from 'motion/react'
+import { motion, useReducedMotionConfig } from 'motion/react'
 import { useTranslation } from 'react-i18next'
 import { COMMENT_CHARS, type CommentAnchor, type CommentThread } from '@shared/artifact-comments'
 import type { VersionSummary } from '@shared/artifacts'
@@ -47,7 +47,7 @@ export function ToolPop({
 }) {
   const ref = useRef<HTMLDivElement>(null)
   usePopPlace(ref, at, width, !inline)
-  const reduce = useReducedMotion()
+  const reduce = useReducedMotionConfig()
   return (
     <motion.div
       ref={ref}

@@ -267,8 +267,10 @@ function VersionRow({
       <span className="k-vt-ver__mark" aria-hidden>
         {session ? (
           <AgentMark agent={session.agentId} size={16} hostId={hostOfSession(session)} />
-        ) : (
+        ) : version.author === null ? (
           <span className="k-vt-you" />
+        ) : (
+          <span className="k-vt-unknown" />
         )}
       </span>
       <span className="k-vt-ver__text">

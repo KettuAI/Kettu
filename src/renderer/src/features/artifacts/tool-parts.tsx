@@ -4,7 +4,7 @@
 import { type ReactNode } from 'react'
 import { Alert02Icon, CheckmarkCircle02Icon, Undo02Icon } from '@hugeicons/core-free-icons'
 import type { IconSvgElement } from '@hugeicons/react'
-import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
+import { AnimatePresence, motion, useReducedMotionConfig } from 'motion/react'
 import { useTranslation } from 'react-i18next'
 import { Icon } from '@renderer/components/affect/app-shell'
 import { Button } from '@renderer/components/affect/button'
@@ -58,7 +58,7 @@ export type SaveState =
 /** The chip in a card's head: "Editing…", then "Saved as v20 · 3 edits", or why it failed. */
 export function SaveChip({ save, onRetry }: { save: SaveState | null; onRetry: () => void }) {
   const { t } = useTranslation('artifacts')
-  const reduce = useReducedMotion()
+  const reduce = useReducedMotionConfig()
   if (!save) return null
   if (save.state === 'failed') {
     return (
