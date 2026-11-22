@@ -5,13 +5,13 @@ import { ShimmerText } from '@renderer/components/affect/shimmer-loader'
 import { Switch } from '@renderer/components/ui/switch'
 import { Glyph } from '@renderer/features/shell/glyph'
 import { cn } from '@renderer/lib/utils'
-import { isFast, isUltracode, lockedNow, useCardLine } from './switch-options'
+import { isFast, isUltracode, lockedNow, useSwitchLine } from './switch-options'
 
 /**
- * The agent's switches as cards, two side by side and an odd last one across: an icon, the name,
- * the app's switch and a line under them. Fast mode turns blue when on and Ultracode violet.
+ * The agent's switches as rows lined up with the model rows: an icon, the name over a line of what
+ * it does, and the app's switch at the end. Fast mode's icon turns blue when on and Ultracode's violet.
  */
-export function SwitchCards({
+export function SwitchRows({
   options,
   agent,
   running = false,
@@ -26,18 +26,14 @@ export function SwitchCards({
   running?: boolean
   valueOf: (option: ConfigOption) => boolean
   onFlip: (option: ConfigOption, on: boolean) => void
-  /** The card under the pointer or the focus, then null. */
+  /** The row under the pointer or the focus, then null. */
   onPoint?: (option: ConfigOption | null) => void
   className?: string
 }) {
-  const line = useCardLine(agent)
+  const line = useSwitchLine(agent)
   if (options.length === 0) return null
   return (
-    <div
-      className={cn('kettu-cards', className)}
-      data-one={options.length === 1 ? '' : undefined}
-      data-mm-line=""
-    >
+    <div className={cn('kettu-switch-rows', className)} data-mm-line="">
       {options.map((o) => {
         const on = valueOf(o)
         const locked = lockedNow(o, running)
@@ -58,7 +54,7 @@ export function SwitchCards({
             role="switch"
             aria-checked={on}
             aria-disabled={locked || undefined}
-            className="kettu-card"
+            className="kettu-switch-row"
             data-kind={isFast(o) ? 'fast' : ultra ? 'ultra' : undefined}
             data-on={on ? '' : undefined}
             data-disabled={locked ? '' : undefined}
@@ -71,21 +67,23 @@ export function SwitchCards({
             onFocus={() => onPoint?.(o)}
             onBlur={() => onPoint?.(null)}
           >
-            <span className="kettu-card__icon">
+            <span className="kettu-switch-row__icon">
               <Glyph
                 icon={isFast(o) ? FlashIcon : ultra ? WorkflowSquare01Icon : Settings02Icon}
                 size={16}
               />
             </span>
-            <span className="kettu-card__name">{name}</span>
+            <span className="kettu-switch-row__text">
+              <span className="kettu-switch-row__name">{name}</span>
+              {said && <span className="kettu-switch-row__line">{said}</span>}
+            </span>
             <Switch
               size="sm"
               checked={on}
               tabIndex={-1}
               aria-hidden
-              className="kettu-card__switch pointer-events-none"
+              className="pointer-events-none"
             />
-            {said && <span className="kettu-card__line">{said}</span>}
           </button>
         )
       })}
