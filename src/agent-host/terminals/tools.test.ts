@@ -1,7 +1,14 @@
+import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { CONTROL_WAIT_MS, type SurfaceAccessAnswer } from '@shared/control'
 import type { AgentTerminal, TerminalCall, TerminalCallAnswer } from '@shared/terminal-agent'
-import { TerminalArgsError, terminalCallOf, TerminalTools, type TerminalToolDeps } from './tools'
+import {
+  TERMINAL_TOOLS,
+  TerminalArgsError,
+  terminalCallOf,
+  TerminalTools,
+  type TerminalToolDeps,
+} from './tools'
 
 const context = { agentId: 'claude-code' as const, folder: '/work/app' }
 
@@ -262,5 +269,73 @@ describe('an agent renaming a terminal', () => {
     expect(
       terminalCallOf('terminal_run', 's1', { command: 'pnpm dev', name: 'Dev server' }, context),
     ).toMatchObject({ kind: 'run', name: 'Dev server' })
+  })
+})
+
+describe('passwords in the terminal tools', () => {
+  const PROMPT: AgentTerminal = { ...USER_TERMINAL, opener: 'agent', usable: true, password: true }
+
+  function tools(passwords: boolean) {
+    const calls: TerminalCall[] = []
+    const terminalTools = new TerminalTools({
+      call: async (call) => {
+        calls.push(call)
+        return { result: { kind: 'terminal', terminal: PROMPT } }
+      },
+      sessionOf: (sessionId) => sessionId,
+      agentOf: () => 'codex',
+      folderOf: () => '/work/app',
+      accessOf: () => ({ fullAccess: false, planning: false }),
+      ask: async () => 'deny',
+      used: () => undefined,
+      shared: () => false,
+      passwords: () => passwords,
+    })
+    return { calls, terminalTools }
+  }
+  const caller = { sessionId: 's1', project: '/work/app' }
+  const text = (result: CallToolResult) =>
+    result.content.map((part) => ('text' in part ? part.text : '')).join('')
+
+  it('leaves them to the user by default', async () => {
+    const { calls, terminalTools } = tools(false)
+    const typed = await terminalTools.call(caller, 'terminal_input', {
+      terminalId: 't1',
+      text: 'x',
+    })
+    await terminalTools.call(caller, 'terminal_stop', { terminalId: 't1' })
+    expect(calls.map((call) => 'passwords' in call)).toEqual([false, false])
+    expect(text(typed)).toContain(
+      'waits for the user to type a password in it; ask them to, then call terminal_wait',
+    )
+    const input = TERMINAL_TOOLS.find((tool) => tool.name === 'terminal_input')!
+    expect(input.description).toContain('Never types a password: only the user does.')
+    expect(terminalTools.listed(TERMINAL_TOOLS)).toBe(TERMINAL_TOOLS)
+  })
+
+  it('says with each input and stop that the user lets agents type them', async () => {
+    const { calls, terminalTools } = tools(true)
+    const typed = await terminalTools.call(caller, 'terminal_input', {
+      terminalId: 't1',
+      text: 'x',
+    })
+    await terminalTools.call(caller, 'terminal_stop', { terminalId: 't1' })
+    await terminalTools.call(caller, 'terminal_read', { terminalId: 't1' })
+    expect(calls).toMatchObject([
+      { kind: 'input', passwords: true },
+      { kind: 'stop', passwords: true },
+      { kind: 'read' },
+    ])
+    expect('passwords' in calls[2]!).toBe(false)
+    expect(text(typed)).toContain(
+      "waits for a password; type it with terminal_input if the user gave it to you for that or the project's files hold it, otherwise ask the user to type it there, then call terminal_wait",
+    )
+    const listed = terminalTools.listed(TERMINAL_TOOLS)
+    expect(listed.map((tool) => tool.name)).toEqual(TERMINAL_TOOLS.map((tool) => tool.name))
+    const input = listed.find((tool) => tool.name === 'terminal_input')!
+    expect(input.description).not.toContain('Never types a password')
+    expect(input.description).toContain(
+      "Types a password only when the user gave it to you for that or the project's files hold it",
+    )
   })
 })

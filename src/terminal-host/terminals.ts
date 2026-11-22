@@ -410,14 +410,14 @@ export class TerminalManager {
             return failure('failed', 'The text must not contain control characters')
           }
           const data = call.enter ? `${call.text}\r` : call.text
-          return await this.agentAct(call.sessionId, call.terminalId, call.readOnly, (terminal) => {
+          return await this.agentAct(call, (terminal) => {
             if (!terminal.pty) throw new TerminalError('internal', t('terminal.shellExited'))
             terminal.pty.write(data)
             return { kind: 'terminal', terminal: agentView(terminal) }
           })
         }
         case 'stop':
-          return await this.agentAct(call.sessionId, call.terminalId, call.readOnly, (terminal) => {
+          return await this.agentAct(call, (terminal) => {
             if (call.close) {
               this.kill(terminal.info.id)
               return { kind: 'closed' }
@@ -627,22 +627,22 @@ export class TerminalManager {
 
   /**
    * Acts on an agent's own terminal once the user does not hold it, or answers `held`; while its
-   * program waits for a password the user types, the call waits too, or answers `password`.
+   * program waits for a password the user types, the call waits too, or answers `password`, unless
+   * the user lets agents type passwords.
    */
   private async agentAct(
-    sessionId: string,
-    id: string,
-    readOnly: boolean | undefined,
+    call: Extract<TerminalCall, { kind: 'input' | 'stop' }>,
     act: (terminal: Terminal) => Extract<TerminalCallAnswer, { result: unknown }>['result'],
   ): Promise<TerminalCallAnswer> {
-    if (readOnly && this.owned(sessionId, id).info.owner === null) {
+    const { sessionId, terminalId: id } = call
+    if (call.readOnly && this.owned(sessionId, id).info.owner === null) {
       return failure(
         'not_allowed',
         "The session plans, so it may only read the user's terminal, not type into or stop it",
       )
     }
     const deadline = this.now() + CONTROL_WAIT_MS
-    while (this.terminals.get(id)?.info.waiting === 'password') {
+    while (!call.passwords && this.terminals.get(id)?.info.waiting === 'password') {
       if (this.now() >= deadline) return { result: { kind: 'password' } }
       await new Promise((resolve) => setTimeout(resolve, WAIT_POLL_MS))
     }

@@ -202,6 +202,7 @@ export function GeneralSwitch({
     | 'confirmQuitWhileRunning'
     | 'sessionTitles'
     | 'continueAfterLimit'
+    | 'agentPasswords'
     | 'background'
   label: string
   disabled?: boolean

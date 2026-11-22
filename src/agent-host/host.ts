@@ -935,6 +935,7 @@ export class AgentHost {
         used: (sessionId, terminal) =>
           this.sessions.surfaceUsed(sessionId, 'terminal', terminal.name ?? terminal.title),
         shared: (sessionId, terminalId) => sharedWith(this.sharedTerminals, terminalId, sessionId),
+        passwords: () => this.settings.agentPasswords,
       },
       sessionProject: (sessionId) => this.sessions.sessionProject(sessionId),
       sessionFolder: (sessionId) => this.sessions.sessionFolder(sessionId),

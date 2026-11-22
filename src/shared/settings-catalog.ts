@@ -328,6 +328,18 @@ const ENTRIES = {
     access: 'change',
     ...flag('general', 'continueAfterLimit', (file) => file.general.continueAfterLimit),
   },
+  'general.agent-passwords': {
+    section: 'general',
+    row: 'agent-passwords',
+    group: 'general.groups.sessions',
+    name: 'general.agentPasswords.name',
+    description: 'general.agentPasswords.description',
+    keywords: 'general.agentPasswords.keywords',
+    part: 'host',
+    access: 'ask',
+    warning: 'agentSettings.warning.passwords',
+    ...flag('general', 'agentPasswords', (file) => file.general.agentPasswords),
+  },
   'general.light-model': {
     section: 'general',
     row: 'light-model',

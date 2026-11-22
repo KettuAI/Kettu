@@ -13,8 +13,20 @@ import {
 } from './guide'
 import { WORKFLOW_EXAMPLE } from './topics'
 
-const ALL: GuideFlags = { computer: true, market: true, suggest: true, memory: true }
-const NONE: GuideFlags = { computer: false, market: false, suggest: false, memory: false }
+const ALL: GuideFlags = {
+  computer: true,
+  market: true,
+  suggest: true,
+  memory: true,
+  passwords: true,
+}
+const NONE: GuideFlags = {
+  computer: false,
+  market: false,
+  suggest: false,
+  memory: false,
+  passwords: false,
+}
 
 const names = (flags: GuideFlags) => kettuSkills(flags).map((skill) => skill.name)
 
@@ -147,5 +159,51 @@ describe("Kettu's MCP server instructions", () => {
   it('name no tools of a feature that is off', () => {
     const text = serviceInstructions(NONE)
     expect(text).not.toMatch(/computer_|marketplace_|suggest_workflow|Memory:/)
+  })
+
+  it('keep passwords with the user unless the user lets agents type them', () => {
+    const off = serviceInstructions({ ...ALL, passwords: false })
+    expect(off).toContain(' Never ask for a password or code in the thread, and never type one. ')
+    const on = serviceInstructions(ALL)
+    expect(on).not.toContain('never type one')
+    expect(on.slice(0, 900)).toContain(
+      " Never ask for a password or code in the thread. Type one only when the user gave it to you for that or the project's files hold it, such as a test account's; never guess one. ",
+    )
+  })
+})
+
+describe('what the guide says about passwords', () => {
+  const off = { ...ALL, passwords: false }
+
+  it('leaves them to the user by default', () => {
+    const terminals = guideText('terminals', off)!
+    expect(terminals).toContain(
+      'When a terminal waits for a password, ask the user to type it in that terminal, then call `terminal_wait` until it goes on. Never type a password yourself and never ask for one in the thread; you never see what the user types there.',
+    )
+    expect(terminals).toContain(
+      'Your `terminal_input` and `terminal_stop` wait while they have it or type a password; when one returns saying they still do, call it again.',
+    )
+    const browser = guideText('browser', off)!
+    expect(browser).toContain(
+      'such as signing in, entering a code sent to them or passing a human check, call `browser_ask_user`',
+    )
+    expect(browser).toContain('call it again. Never ask for passwords or codes in the thread.')
+    expect(`${terminals}${browser}`).not.toContain('gave it to you')
+  })
+
+  it('lets the agent type one the user gave it or the project holds, once the user allows it', () => {
+    const terminals = guideText('terminals', ALL)!
+    expect(terminals).not.toContain('Never type a password yourself')
+    expect(terminals).not.toContain('or type a password;')
+    expect(terminals).toContain(
+      "type it with `terminal_input` only when the user gave it to you for that or the project's files hold it",
+    )
+    expect(terminals).toContain('Never guess a password and never ask for one in the thread.')
+    const browser = guideText('browser', ALL)!
+    expect(browser).toContain('`browser_ask_user`')
+    expect(browser).toContain(
+      "Type a password or code yourself only when the user gave it to you for that or the project's files hold it",
+    )
+    expect(browser).toContain('never ask for passwords or codes in the thread.')
   })
 })

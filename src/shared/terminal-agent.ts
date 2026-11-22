@@ -59,7 +59,10 @@ export type TerminalCall =
   | { kind: 'read'; sessionId: string; terminalId: string; lines: number }
   /** Returns once the command ends, the terminal waits for a password, or it goes quiet. */
   | { kind: 'wait'; sessionId: string; terminalId: string; lines: number }
-  /** `readOnly`: the session plans, so a terminal the user opened is only read. */
+  /**
+   * `readOnly`: the session plans, so a terminal the user opened is only read. `passwords`: the
+   * user lets agents type passwords, so the call does not wait while the terminal waits for one.
+   */
   | {
       kind: 'input'
       sessionId: string
@@ -67,8 +70,16 @@ export type TerminalCall =
       text: string
       enter: boolean
       readOnly?: boolean
+      passwords?: boolean
     }
-  | { kind: 'stop'; sessionId: string; terminalId: string; close: boolean; readOnly?: boolean }
+  | {
+      kind: 'stop'
+      sessionId: string
+      terminalId: string
+      close: boolean
+      readOnly?: boolean
+      passwords?: boolean
+    }
 
 /** A terminal as the agent sees it. */
 export interface AgentTerminal {

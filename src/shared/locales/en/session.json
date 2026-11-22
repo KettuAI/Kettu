@@ -263,6 +263,7 @@
       "revoked": "Allowed for this session, then taken back"
     },
     "where": "Reads its recent output and types commands into it. Passwords stay yours to type.",
+    "whereTypes": "Reads its recent output and types commands into it.",
     "whereRead": "Reads its recent output only, since this session is planning."
   },
   "tabAccess": {

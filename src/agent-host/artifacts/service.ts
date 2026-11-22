@@ -479,6 +479,7 @@ export class ArtifactService {
       market: this.marketOn,
       suggest: this.workflowTools?.suggests ?? false,
       memory: this.memoryOn,
+      passwords: this.deps.terminals?.passwords?.() === true,
     }
   }
 
@@ -508,7 +509,7 @@ export class ArtifactService {
     const sessionId = grant && 'sessionId' in grant ? grant.sessionId : null
     return [
       guideTool(this.guideFlags),
-      ...this.serviceTools,
+      ...(this.terminalTools?.listed(this.serviceTools) ?? this.serviceTools),
       ...(this.memoryOn ? MEMORY_TOOLS : []),
       ...(this.marketOn ? MARKET_TOOLS : []),
       ...(this.workflowTools?.listed(sessionId) ?? []),

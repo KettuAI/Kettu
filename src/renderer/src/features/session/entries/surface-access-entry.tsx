@@ -62,7 +62,13 @@ export const SurfaceAccessEntry = memo(function SurfaceAccessEntry({
         page
           ? t('tabAccess.where')
           : rename === undefined
-            ? t(entry.readOnly ? 'terminalAccess.whereRead' : 'terminalAccess.where')
+            ? t(
+                entry.readOnly
+                  ? 'terminalAccess.whereRead'
+                  : entry.passwords
+                    ? 'terminalAccess.whereTypes'
+                    : 'terminalAccess.where',
+              )
             : rename
               ? t('terminalRename.to', { name: rename })
               : t('terminalRename.toAuto')

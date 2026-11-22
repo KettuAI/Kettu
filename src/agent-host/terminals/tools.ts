@@ -141,6 +141,22 @@ export const TERMINAL_TOOLS: Tool[] = [
  * The tools that only list and read the session's terminals, which run without the agent's own
  * permission prompt: on a terminal of the user's, Kettu asks them in its own card instead.
  */
+// What the tools say instead once the user lets agents type passwords.
+const PASSWORD_DESCRIPTIONS: Partial<Record<TerminalToolName, string>> = {
+  terminal_read:
+    "The latest output of one of this session's terminals, as plain text, whether its command still runs, whether it waits for a password, and the shell's exit code. The output is what the terminal keeps, its last 1 MB, not the shell's history file." +
+    USERS,
+  terminal_wait: `Waits until the terminal's command ends, it waits for a password, or its output has been quiet for ${TERMINAL_QUIET_MS / 1000} s (such as a server that is up), at most ${TERMINAL_WAIT_MS / 1000} s, then answers like terminal_read and says why it returned. Call it again to keep waiting.${USERS}`,
+  terminal_input:
+    "Types text into one of this session's terminals, and presses Enter when `enter` is set, such as the next command in a terminal the user handed you or an answer to a prompt. Types a password only when the user gave it to you for that or the project's files hold it, such as a test account's; otherwise the user types it. While the user has taken the terminal over, the call waits; when it returns that they still have it, call again to keep waiting." +
+    USERS,
+}
+
+const PASSWORD_TOOLS: Tool[] = TERMINAL_TOOLS.map((tool) => {
+  const description = PASSWORD_DESCRIPTIONS[tool.name as TerminalToolName]
+  return description ? { ...tool, description } : tool
+})
+
 export const TERMINAL_READ_TOOLS: readonly TerminalToolName[] = [
   'terminal_list',
   'terminal_read',
@@ -169,12 +185,14 @@ export interface TerminalToolDeps {
   ask(
     sessionId: string,
     terminal: AgentTerminal,
-    ask: { readOnly: boolean; rename?: string },
+    ask: { readOnly: boolean; rename?: string; passwords?: boolean },
   ): Promise<SurfaceAccessAnswer>
   /** Full access let the agent use a terminal the user opened without asking. */
   used(sessionId: string, terminal: AgentTerminal): void
   /** The user referenced the terminal in a message to the session, which allows it. */
   shared(sessionId: string, terminalId: string): boolean
+  /** Whether the user lets agents type passwords, read at each call; without it they do not. */
+  passwords?(): boolean
 }
 
 export class TerminalArgsError extends Error {}
@@ -247,6 +265,7 @@ export function terminalCallOf(
     folder: string | null
     planning?: boolean
     fullAccess?: boolean
+    passwords?: boolean
   },
 ): TerminalCall {
   const given = args(input)
@@ -293,6 +312,7 @@ export function terminalCallOf(
         text: typed(given.text, 'text', true),
         enter: flag(given.enter, 'enter', true),
         ...(context.planning ? { readOnly: true } : {}),
+        ...(context.passwords ? { passwords: true } : {}),
       }
     case 'terminal_stop':
       return {
@@ -301,6 +321,7 @@ export function terminalCallOf(
         terminalId: terminalId(given.terminalId),
         close: flag(given.close, 'close', false),
         ...(context.planning ? { readOnly: true } : {}),
+        ...(context.passwords ? { passwords: true } : {}),
       }
   }
 }
@@ -328,18 +349,21 @@ const NAMERS: Record<NonNullable<AgentTerminal['namedBy']>, string> = {
   agent: ' You named it.',
 }
 
-function listed(terminal: AgentTerminal): string {
+function listed(terminal: AgentTerminal, passwords: boolean): string {
   const use = terminal.usable ? '' : ' Ask first: your first call on it asks the user to allow it.'
   const by = terminal.namedBy ? NAMERS[terminal.namedBy] : ''
-  return `- ${describe(terminal)}${by} ${OPENERS[terminal.opener]}${use}`
+  return `- ${describe(terminal, passwords)}${by} ${OPENERS[terminal.opener]}${use}`
 }
 
-function describe(terminal: AgentTerminal): string {
+/** `passwords`: the user lets agents type passwords. */
+function describe(terminal: AgentTerminal, passwords: boolean): string {
   const state =
     terminal.exitCode !== null
       ? `the shell exited with code ${terminal.exitCode}`
       : terminal.password
-        ? `${terminal.title} waits for the user to type a password in it; ask them to, then call terminal_wait`
+        ? passwords
+          ? `${terminal.title} waits for a password; type it with terminal_input if the user gave it to you for that or the project's files hold it, otherwise ask the user to type it there, then call terminal_wait`
+          : `${terminal.title} waits for the user to type a password in it; ask them to, then call terminal_wait`
         : terminal.busy
           ? `running ${terminal.title}`
           : 'idle at the prompt'
@@ -363,6 +387,16 @@ export class TerminalTools {
 
   constructor(private readonly deps: TerminalToolDeps) {}
 
+  /** `tools` as agents are told them now: the terminal tools say who types a password. */
+  listed(tools: Tool[]): Tool[] {
+    if (!this.passwords) return tools
+    return tools.map((tool) => PASSWORD_TOOLS.find((typed) => typed.name === tool.name) ?? tool)
+  }
+
+  private get passwords(): boolean {
+    return this.deps.passwords?.() === true
+  }
+
   async call(caller: Caller, name: string, input: unknown): Promise<CallToolResult> {
     if (!isTerminalToolName(name)) throw new Error(`Unknown tool ${name}`)
     const sessionId = this.deps.sessionOf(caller.sessionId)
@@ -374,6 +408,7 @@ export class TerminalTools {
         folder: this.deps.folderOf(sessionId),
         planning: access.planning,
         fullAccess: access.fullAccess,
+        passwords: this.passwords,
       })
     } catch (error) {
       if (error instanceof TerminalArgsError) return failure('invalid_params', error.message)
@@ -465,7 +500,10 @@ export class TerminalTools {
         void this.deps.call({ kind: 'asking', sessionId, terminalId: terminal.id, asking: true })
         // The allow is given as the answer comes, so a call made after it finds the terminal open.
         asking = this.deps
-          .ask(sessionId, terminal, { readOnly: access.planning })
+          .ask(sessionId, terminal, {
+            readOnly: access.planning,
+            ...(this.passwords ? { passwords: true } : {}),
+          })
           .then(async (answer) => {
             if (answer === 'allow') return this.grant(sessionId, terminal.id)
             await this.deps.call({
@@ -510,13 +548,12 @@ export class TerminalTools {
     const { result } = answer
     switch (result.kind) {
       case 'terminal': {
-        const status = describe(result.terminal)
+        const status = describe(result.terminal, this.passwords)
         return reply(status, { terminal: result.terminal, status })
       }
       case 'output': {
-        const status = result.reason
-          ? `${describe(result.terminal)} ${WAIT_REASONS[result.reason]}`
-          : describe(result.terminal)
+        const described = describe(result.terminal, this.passwords)
+        const status = result.reason ? `${described} ${WAIT_REASONS[result.reason]}` : described
         const output = result.output || '(no output yet)'
         return reply(`${status}\n\n${output}`, {
           terminal: result.terminal,
@@ -529,7 +566,7 @@ export class TerminalTools {
         const text =
           result.terminals.length === 0
             ? 'This session has no terminals. Open one with terminal_run.'
-            : `This session's terminals:\n${result.terminals.map(listed).join('\n')}`
+            : `This session's terminals:\n${result.terminals.map((terminal) => listed(terminal, this.passwords)).join('\n')}`
         return reply(text, { terminals: result.terminals })
       }
       case 'ask':
