@@ -33,15 +33,15 @@ import { dialStops, type SelectOption } from './levels'
 import { defaultUses, matchesModel, modelLists, moreInOrder, type ModelRead } from './model-list'
 import { ModelMark } from './model-mark'
 import { isSelect } from './options'
-import { SwitchCards } from './switch-cards'
-import { isFast, isUltracode, lockedNow, useCardLine } from './switch-options'
+import { SwitchRows } from './switch-rows'
+import { isFast, isUltracode, lockedNow, useSwitchLine } from './switch-options'
 import { useSelectPick, useSwitchPicks, type Select } from './use-pick'
 
 // The gradient's stops take their colors from the tokens (see .kettu-ultra-floor in affect.css).
 const ULTRA_STOPS: [string, string, string] = ['currentColor', 'currentColor', 'currentColor']
 
 /** What the pointer or the focus is on in the picker's slots, which its last row then speaks of. */
-type Point = { kind: 'card'; option: ConfigOption } | { kind: 'switch' } | null
+type Point = { kind: 'row'; option: ConfigOption } | { kind: 'switch' } | null
 
 /**
  * The model, its effort and the agent's switches on affectUI's Model Picker: the main models with
@@ -192,7 +192,7 @@ export function ModelMenu({
   // The trigger shows the level, and none for the agent's Default.
   const efforts = dial?.stops.map((s) => ({ id: s.value, label: s.isDefault ? '' : s.name })) ?? []
 
-  const line = useCardLine(harness)
+  const line = useSwitchLine(harness)
   const toggles: PickerToggle[] = switches.map((o) => {
     const ultra = isUltracode(o)
     return {
@@ -231,12 +231,12 @@ export function ModelMenu({
 
   let caption: { id: string; text: string } | null = null
   if (pinError) caption = { id: 'pin', text: pinError }
-  else if (point?.kind === 'card') {
+  else if (point?.kind === 'row') {
+    // The row shows its own line; the footer adds the description only when that line says
+    // something else, such as whom the switch follows.
     const o = point.option
-    const said = lockedNow(o, running)
-      ? t('controls.changesBetweenTurns')
-      : (o.description ?? line(o, running))
-    caption = { id: `card-${o.id}`, text: said ? `${o.name} · ${said}` : o.name }
+    if (o.description && o.description !== line(o, running))
+      caption = { id: `row-${o.id}`, text: `${o.name} · ${o.description}` }
   } else if (point?.kind === 'switch' && !canSwitchAgent) {
     caption = { id: 'switch', text: t('switchAgent.betweenTurns') }
   }
@@ -299,14 +299,14 @@ export function ModelMenu({
         }
         toggles={toggles}
         toggleSlot={
-          <SwitchCards
-            className="kettu-model-picker__cards"
+          <SwitchRows
+            className="kettu-model-picker__switches"
             options={switches}
             agent={harness}
             running={running}
             valueOf={flips.valueOf}
             onFlip={flips.pick}
-            onPoint={(option) => setPoint(option ? { kind: 'card', option } : null)}
+            onPoint={(option) => setPoint(option ? { kind: 'row', option } : null)}
           />
         }
         caption={caption}

@@ -40,7 +40,7 @@ import {
   shownValue,
 } from '@renderer/features/session/composer/model-list'
 import { ModelMark } from '@renderer/features/session/composer/model-mark'
-import { SwitchCards } from '@renderer/features/session/composer/switch-cards'
+import { SwitchRows } from '@renderer/features/session/composer/switch-rows'
 import { harnessProblem, shortLabel } from '@renderer/features/agents/harness-problem'
 import { FixButton } from '@renderer/features/agents/fix-button'
 import { fixAction } from '@renderer/features/agents/problem-fix'
@@ -918,12 +918,12 @@ function Pane({
           {isSelect(effort) && (
             <PaneDial effort={effort} onPick={(v) => onOption(status.id, effort.id, v)} />
           )}
-          <SwitchCards
+          <SwitchRows
             options={switches}
             agent={status.harnessName}
             valueOf={(o) => booleanConfigValue(o) === true}
             onFlip={(o, on) => onOption(status.id, o.id, on)}
-            className="kettu-am-cards"
+            className="kettu-am-switches"
           />
         </div>
       )}

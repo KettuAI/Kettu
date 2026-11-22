@@ -673,16 +673,6 @@
   --dial-name: color-mix(in srgb, var(--composer-strong) 50%, transparent);
   --dial-name-on: color-mix(in srgb, var(--composer-strong) 90%, transparent);
   --dial-lens: color-mix(in srgb, var(--control-on) 8%, transparent);
-  /* The model menus' Fast mode card while on, in the switch's blue, and Ultracode's in its violet. */
-  --model-card-fast: color-mix(in srgb, var(--switch-on) 9%, transparent);
-  --model-card-fast-edge: color-mix(in srgb, var(--switch-on) 32%, transparent);
-  --model-card-ultra: linear-gradient(
-    120deg,
-    color-mix(in srgb, var(--composer-ultra-1) 10%, transparent),
-    color-mix(in srgb, var(--composer-ultra-2) 8%, transparent) 50%,
-    color-mix(in srgb, var(--composer-ultra-3) 10%, transparent)
-  );
-  --model-card-ultra-edge: color-mix(in srgb, var(--composer-ultra-2) 32%, transparent);
   /* The GitHub star card: the glow behind its Star button from its crest down, and the colors
      flowing through its ask. */
   --star-glow-1: color-mix(in srgb, var(--tile-amber) 85%, var(--send));
@@ -1105,15 +1095,6 @@
     --dial-name: color-mix(in srgb, var(--composer-strong) 50%, transparent);
     --dial-name-on: color-mix(in srgb, var(--composer-strong) 95%, transparent);
     --dial-lens: color-mix(in srgb, var(--control-on) 14%, transparent);
-    --model-card-fast: color-mix(in srgb, var(--switch-on) 14%, transparent);
-    --model-card-fast-edge: color-mix(in srgb, var(--switch-on) 40%, transparent);
-    --model-card-ultra: linear-gradient(
-      120deg,
-      color-mix(in srgb, var(--composer-ultra-1) 14%, transparent),
-      color-mix(in srgb, var(--composer-ultra-2) 12%, transparent) 50%,
-      color-mix(in srgb, var(--composer-ultra-3) 14%, transparent)
-    );
-    --model-card-ultra-edge: color-mix(in srgb, var(--composer-ultra-text) 40%, transparent);
 
     /* The artifact canvas, as in the light theme. */
     --note-ink: #ededed;
@@ -1525,15 +1506,6 @@
   --dial-name: color-mix(in srgb, var(--composer-strong) 50%, transparent);
   --dial-name-on: color-mix(in srgb, var(--composer-strong) 95%, transparent);
   --dial-lens: color-mix(in srgb, var(--control-on) 14%, transparent);
-  --model-card-fast: color-mix(in srgb, var(--switch-on) 14%, transparent);
-  --model-card-fast-edge: color-mix(in srgb, var(--switch-on) 40%, transparent);
-  --model-card-ultra: linear-gradient(
-    120deg,
-    color-mix(in srgb, var(--composer-ultra-1) 14%, transparent),
-    color-mix(in srgb, var(--composer-ultra-2) 12%, transparent) 50%,
-    color-mix(in srgb, var(--composer-ultra-3) 14%, transparent)
-  );
-  --model-card-ultra-edge: color-mix(in srgb, var(--composer-ultra-text) 40%, transparent);
 
   /* The artifact canvas, as in the light theme. */
   --note-ink: #ededed;

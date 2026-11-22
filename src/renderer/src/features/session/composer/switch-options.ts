@@ -14,8 +14,8 @@ export function lockedNow(option: ConfigOption, running: boolean): boolean {
   return !!option.idleOnly && running
 }
 
-/** What a card's second line says: why it cannot change now, whom it follows, or what it does. */
-export function useCardLine(agent: string) {
+/** What a switch's second line says: why it cannot change now, whom it follows, or what it does. */
+export function useSwitchLine(agent: string) {
   const { t } = useTranslation('composer')
   return (option: ConfigOption, running: boolean): string | undefined => {
     if (lockedNow(option, running)) return t('controls.changesBetweenTurns')
