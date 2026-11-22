@@ -103,7 +103,7 @@ const LABEL_BAND = 24
 const LIVE_MAX = 16
 /** Room kept around the frames when landing on a page and around an opened frame. */
 const SIDE = 48
-const LAND_TOP = 64
+const LAND_TOP = 96
 const OPEN_SIDE = 32
 const OPEN_TOP = 24
 const OPEN_BOTTOM = 72
@@ -1223,6 +1223,7 @@ export const CanvasEditor = memo(function CanvasEditor({
               frames={selectedPages}
               readOnly={readOnly}
               tweaks={selectedPages.length === 1 && frameParams.has(selectedPages[0]!.id)}
+              compact={tier === 'narrow'}
               actions={actions}
               onOpen={(id) => setFocused(id)}
               onTweak={(id) => {
@@ -1540,6 +1541,7 @@ function FrameBar({
   frames,
   readOnly,
   tweaks,
+  compact,
   actions,
   onOpen,
   onTweak,
@@ -1548,6 +1550,8 @@ function FrameBar({
   frames: CanvasPage[]
   readOnly: boolean
   tweaks: boolean
+  /** Narrow: the actions as icons alone, so the bar fits over a frame in the side panel. */
+  compact: boolean
   actions: DocPageActions
   onOpen: (id: string) => void
   onTweak: (id: string) => void
@@ -1564,14 +1568,14 @@ function FrameBar({
         <>
           <BarAct label={t('frame.open')} onClick={() => onOpen(one.id)} primary>
             {t('frame.open')}
-            <Kbd>↵</Kbd>
+            {!compact && <Kbd>↵</Kbd>}
           </BarAct>
           <BarAct
             label={t('canvas.presentFrom')}
             icon={PlayIcon}
             onClick={() => actions.present(one)}
           >
-            {t('frame.present')}
+            {!compact && t('frame.present')}
           </BarAct>
           {!readOnly && (
             <BarAct
@@ -1579,7 +1583,7 @@ function FrameBar({
               icon={AiMagicIcon}
               onClick={() => actions.handOff([one.id])}
             >
-              {t('frame.ask')}
+              {!compact && t('frame.ask')}
             </BarAct>
           )}
           {!readOnly && tweaks && (

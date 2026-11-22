@@ -261,7 +261,7 @@ export default function ArtifactViewer(place: ViewerPlace) {
     doc,
     summary: summary ?? null,
     agents,
-    present: (index) => setPresenting(shown?.canvas?.pages[index]?.id ?? null),
+    present: setPresenting,
   })
   // Which frames count as changed: those the latest version changed against the one before.
   const changedFrames = useChangedFrames(id, docShown && shown ? shown.version : null)
