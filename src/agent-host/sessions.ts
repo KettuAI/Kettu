@@ -548,7 +548,11 @@ export interface SessionManagerDeps {
   /** What a workflow step hears of its session; set once the task engine exists. */
   task?: TaskSessionHooksRef
   /** The workflow suggestions that wait for the user's answer in a session, which it counts. */
-  waitingCards?: (sessionId: string) => number
+  cards?: {
+    waiting(sessionId: string): number
+    /** A turn started, so the suggestions that waited stop waiting on the session. */
+    turnStarted(sessionId: string): void
+  }
   timings?: Partial<SessionTimings>
   now?: () => number
 }
@@ -1423,7 +1427,7 @@ export class SessionManager {
     const status: SessionStatus = session?.status ?? 'closed'
     // A suggestion waits in the cards file, so it counts whether the session is live or not.
     const permissionCount =
-      (live ? waitingCount(live) : 0) + (this.deps.waitingCards?.(record.id) ?? 0)
+      (live ? waitingCount(live) : 0) + (this.deps.cards?.waiting(record.id) ?? 0)
     let attention: SessionAttention = 'none'
     if (permissionCount > 0) attention = 'permission'
     else if (status === 'failed' || (session?.error && status !== 'running' && !live?.errorSeen))
@@ -7902,6 +7906,8 @@ export class SessionManager {
     live.failure = null
     // A running turn has no ending, so a list never shows the last one's on it.
     delete live.record.lastTurn
+    // The touch below sends the count without the suggestions the user talked past.
+    this.deps.cards?.turnStarted(live.id)
     this.update(live, {
       status: 'running',
       turnStartedAt: now,

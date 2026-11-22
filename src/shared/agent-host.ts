@@ -856,7 +856,7 @@ export interface SessionSummary {
   status: SessionStatus
   attention: SessionAttention
   // What waits for the user in this session alone: its requests, and on newer hosts its workflow
-  // suggestions that wait for an answer
+  // suggestions that wait for an answer, until answered or the session's next turn starts
   permissionCount: number
   createdAt: number
   updatedAt: number
@@ -1473,7 +1473,8 @@ export interface HostContract {
   // `permissionCount` counts. No entries for a closed session, where none waits. `askedAt`: when
   // each began to wait, by entry id, in ms since the epoch; absent from older hosts.
   // `suggestions`: the workflow suggestions that wait for Start or Do it here, which the count
-  // includes and `workflows.answerSuggestion` answers; absent from older hosts.
+  // includes, until answered or the session's next turn starts; `workflows.answerSuggestion`
+  // answers them, and one a turn passed too. Absent from older hosts.
   'sessions.requests': {
     params: { sessionId: string }
     result: {

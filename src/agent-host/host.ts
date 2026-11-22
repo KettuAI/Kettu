@@ -1219,7 +1219,10 @@ export class AgentHost {
         ),
       routine: routineHooks,
       task: taskHooks,
-      waitingCards: (sessionId) => this.workflowSuggestions.waitingCount(sessionId),
+      cards: {
+        waiting: (sessionId) => this.workflowSuggestions.waitingCount(sessionId),
+        turnStarted: (sessionId) => void this.workflowSuggestions.turnStarted(sessionId),
+      },
       events: {
         patches: (batch, portIds) => this.hub.send(portIds, { type: 'session.patches', batch }),
         summary: (summary, portIds) => {

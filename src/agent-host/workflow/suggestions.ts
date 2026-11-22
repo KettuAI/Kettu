@@ -74,6 +74,11 @@ export interface SuggestionRecord {
   answer: SuggestionAnswer
   /** The library workflow a Marketplace one became when Start added it. */
   added: string | null
+  /**
+   * When a turn started in its session after it was made: the conversation moved on, so it no
+   * longer counts as waiting on the session, though it can still be answered.
+   */
+  passedAt?: number
   device?: Device
   createdAt: number
 }
@@ -256,6 +261,9 @@ function suggestionOf(raw: unknown): SuggestionRecord | null {
     facts: { pastMs: facts.pastMs, runs: facts.runs, worktree: facts.worktree },
     answer,
     added: raw.added,
+    ...(typeof raw.passedAt === 'number' && Number.isFinite(raw.passedAt)
+      ? { passedAt: raw.passedAt }
+      : {}),
     ...device,
     createdAt: raw.createdAt,
   }
@@ -399,7 +407,10 @@ function sourceKey(source: SuggestedSource): string {
 
 function waitingStart(record: SuggestionRecord, sessionId: string): boolean {
   return (
-    record.sessionId === sessionId && record.purpose === 'start' && record.answer.kind === 'waiting'
+    record.sessionId === sessionId &&
+    record.purpose === 'start' &&
+    record.answer.kind === 'waiting' &&
+    record.passedAt === undefined
   )
 }
 
@@ -748,7 +759,8 @@ export class WorkflowSuggestions {
 
   /**
    * How many of a session's cards wait for Start or Do it here. A card to keep a workflow is left
-   * out, as is one whose Start failed: neither asks before the session can go on.
+   * out, as is one whose Start failed and one a later turn passed: none asks before the session
+   * can go on.
    */
   waitingCount(sessionId: string): number {
     let count = 0
@@ -756,6 +768,18 @@ export class WorkflowSuggestions {
       if (waitingStart(record, sessionId)) count++
     }
     return count
+  }
+
+  /** A turn started in the session: the cards that waited no longer wait on it. True if any did. */
+  turnStarted(sessionId: string): boolean {
+    let passed = false
+    for (const record of Object.values(this.data.suggestions)) {
+      if (!waitingStart(record, sessionId)) continue
+      record.passedAt = this.now()
+      passed = true
+    }
+    if (passed) this.persist()
+    return passed
   }
 
   /** The cards `waitingCount` counts, oldest first. */
@@ -827,6 +851,8 @@ export class WorkflowSuggestions {
       throw new HostError('conflict', t('workflow.cardAnswered'))
     }
     record.answer = { kind: 'waiting' }
+    // Asked for again, it waits on the session again.
+    delete record.passedAt
     this.answered(record)
     return this.publish(id)
   }

@@ -238,6 +238,58 @@ it('counts a workflow suggestion that waits among the requests and returns it ap
   expect((await window.request('sessions.requests', { sessionId: id })).suggestions).toEqual([])
 })
 
+it('stops counting a waiting suggestion once the next turn starts, across a restart', async () => {
+  const dir = await tempFolder('kettu-passed-card-')
+  const first = await startTestHost({ userDataPath: dir })
+  hosts.push(first)
+  const window = first.connect()
+  const { id } = await window.request('sessions.create', {
+    agentId: 'fake-agent',
+    projectPath: first.project,
+  })
+  await window.open(id)
+  await window.untilStatus(id, 'ready')
+  const cards = first.host.workflowSuggestions
+  const draft = await cards.draft(id, WORKFLOW)
+  if (!('draftId' in draft)) throw new Error('The workflow did not read')
+  const card = await cards.suggest(id, {
+    workflowId: draft.draftId,
+    task: 'Fix the flaky login test',
+    title: null,
+    pace: 'balanced',
+    paceReason: null,
+  })
+  await window.until(() => window.summary(id)?.permissionCount === 1)
+
+  // The user talks past it: the next turn starts and the card no longer waits on the session.
+  await window.request('sessions.prompt', {
+    sessionId: id,
+    content: [{ type: 'text', text: '/plan --step 10' }],
+  })
+  await window.until(() => window.summary(id)?.status === 'running')
+  expect(window.summary(id)?.permissionCount).toBe(0)
+  await window.untilStatus(id, 'ready')
+  expect(window.summary(id)?.permissionCount).toBe(0)
+  expect(window.summary(id)?.attention).not.toBe('permission')
+  expect((await window.request('sessions.requests', { sessionId: id })).suggestions).toEqual([])
+  await first.stop()
+
+  const second = await startTestHost({ userDataPath: dir })
+  hosts.push(second)
+  const again = second.connect()
+  const listed = await again.request('sessions.list', {})
+  expect(listed.find((summary) => summary.id === id)?.permissionCount).toBe(0)
+  expect((await again.request('sessions.requests', { sessionId: id })).suggestions).toEqual([])
+  // The card itself still waits and can be answered.
+  const [kept] = await again.request('workflows.suggestions', { sessionId: id })
+  expect(kept?.answer.kind).toBe('waiting')
+  const answered = await again.request('workflows.answerSuggestion', {
+    id: card.id,
+    answer: 'decline',
+  })
+  expect(answered.answer.kind).toBe('declined')
+}, 20_000)
+
 it('names the limit a notice ties to a failed turn, unless a turn started since', async () => {
   const { window, id } = await readySession()
   const host = hosts.at(-1)!
