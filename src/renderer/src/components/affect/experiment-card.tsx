@@ -62,8 +62,9 @@ export type ExperimentCardProps = {
   status?: { label: string; tone?: ExperimentTone };
   /** Short text next to the status, e.g. "Day 9 of 14" */
   note?: string;
-  /** The button that appears in the last row once a winner is picked. `label` gets the picked variant */
-  action?: { label: string | ((variant: ExperimentVariant) => string); onClick: (variant: ExperimentVariant) => void };
+  /** The button that appears in the last row once a winner is picked. `label` and `onClick` get the picked variant,
+   * none for a question that has only the row of your own */
+  action?: { label: string | ((variant: ExperimentVariant) => string); onClick: (variant: ExperimentVariant | undefined) => void };
   /** Replaces the line in the last row while nothing is hovered or picked */
   hint?: ReactNode;
   /** "hover" opens under the pointer (taps and the keyboard still toggle), "click" only on click */
@@ -423,8 +424,8 @@ export function ExperimentCard({
     );
     captionKey = `picked-${picked.id}`;
   }
-  const actionFor = picked ?? variants[0];
-  const actionLabel = ready && action && actionFor ? (typeof action.label === "function" ? action.label(actionFor) : action.label) : null;
+  const actionFor: ExperimentVariant | undefined = picked ?? variants[0];
+  const actionLabel = ready && action ? (typeof action.label === "string" ? action.label : actionFor ? action.label(actionFor) : null) : null;
 
   return (
     <div
@@ -628,8 +629,8 @@ export function ExperimentCard({
                   {secondary.label}
                 </button>
               )}
-              {ready && action && actionFor && (
-                <button type="button" className="ui-xcc__action" key={choice ? "action" : actionFor.id} title={actionLabel ?? undefined} onClick={() => action.onClick(actionFor)}>
+              {action && actionLabel !== null && (
+                <button type="button" className="ui-xcc__action" key={choice ? "action" : actionFor?.id} title={actionLabel ?? undefined} onClick={() => action.onClick(actionFor)}>
                   <span className="ui-xcc__action-text">{actionLabel}</span>
                   {choice && <kbd className="ui-xcc__kbd">⌘↵</kbd>}
                   {!choice && <ArrowIcon />}
