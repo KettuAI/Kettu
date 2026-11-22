@@ -37,7 +37,8 @@
     "cannotList": "{{agent}} cannot list its sessions",
     "notInAgent": "{{agent}} has no such session for this folder. It may have been deleted.",
     "configBetweenTurns": "{{option}} changes between turns",
-    "ultracodeDescription": "Dynamic workflows for substantial tasks",
+    "ultracodeDescription": "Workflows for big tasks",
+    "fastDescription": "Faster output, uses more",
     "promptTooLarge": "The message is over 10 MB with its attachments. Remove some to send.",
     "attachmentGone": "{{name}} is no longer available. Remove it and add it again.",
     "attachmentMissing": "An attachment is no longer available. Remove it and add it again.",
@@ -321,6 +322,8 @@
     "signInCancelled": "The sign-in to {{agent}} was cancelled.",
     "geminiAccountMoved": "Gemini CLI no longer takes personal Google accounts: Google moved them to Google Antigravity. Use this account in Google Antigravity; Gemini CLI still works with Gemini Code Assist Standard or Enterprise and with paid Gemini API or Vertex AI keys.",
     "noOptions": "{{agent}} gave no models within {{seconds}} s",
+    "noModelsKept": "Kettu has not seen {{agent}}’s models yet",
+    "pinsFull": "Up to {{count}} models can be pinned; unpin one first",
     "keychainRefused": "Kettu was not allowed to read {{agent}}’s sign-in from the keychain, so its usage is not shown. It asks again in 10 minutes.",
     "noLimits": "{{agent}} gave no plan limits within {{seconds}} s",
     "noResets": "{{agent}} has no reset to use on this sign-in",
@@ -720,7 +723,7 @@
       "effort": "Reasoning effort",
       "effortDescription": "How much reasoning effort the model uses",
       "fast": "Fast mode",
-      "fastDescription": "1.5x speed, increased usage"
+      "fastDescription": "1.5x speed, more usage"
     },
     "mode": {
       "read-only": {

@@ -163,15 +163,14 @@ export function buildConfig(
     },
   ]
   if (models.length > 0) {
-    // An alias such as `opus` follows the newest model of its family, so a row pinned to a model
-    // id is an older version; Default is the alias that resolves to the same model.
+    // Default is the alias, such as `opus`, that resolves to the same model. Which models are
+    // older is left to the menus, which compare versions within a family.
     const aliases = models.filter((m) => m.resolvedModel && m.resolvedModel !== m.value)
     const listed: NonNullable<ConfigOption['choices']> = models.map((model) => {
       const same =
         model.value === DEFAULT_MODEL
           ? aliases.find((a) => a.value !== model.value && a.resolvedModel === model.resolvedModel)
           : undefined
-      const older = aliases.length > 0 && model.resolvedModel === model.value
       const modelId =
         model.resolvedModel ?? (model.value === DEFAULT_MODEL ? undefined : model.value)
       return {
@@ -180,7 +179,6 @@ export function buildConfig(
         ...(modelId ? { modelId } : {}),
         ...(model.description ? { description: model.description } : {}),
         ...(same ? { shownAs: same.value } : {}),
-        ...(older ? { older: true as const } : {}),
       }
     })
     // A model the settings name that the list leaves out still shows as the one in use.
@@ -217,7 +215,7 @@ export function buildConfig(
     options.push({
       id: OPTION_IDS.fast,
       name: 'Fast mode',
-      description: 'Faster responses on supported models',
+      description: t('session.fastDescription'),
       category: 'model_config',
       type: 'boolean',
       value: choices.fast,

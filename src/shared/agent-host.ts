@@ -621,10 +621,19 @@ export interface AgentOptions {
   defaults?: Record<string, Record<string, string | boolean>>
   observedAt: number
   provisional?: boolean // from a loaded or resumed session, so not the agent's own defaults
+  // The models the user pinned to the top of its model menu, by value, in the order pinned.
+  pinned?: string[]
+  // The models its sessions last started on or switched to, by value, the latest first.
+  recent?: string[]
   // The permission mode its new sessions start in, from the host's settings: sent with the
   // options, never stored with them.
   startMode?: string
 }
+
+/** How many models an agent's model menu may have pinned, all of them in its main list. */
+export const MAX_PINNED_MODELS = 4
+/** How many of an agent's recently used models the host keeps. */
+export const MAX_RECENT_MODELS = 8
 
 /** An agent's page in Settings › Agents: what its status leaves out, read when the page opens. */
 export interface AgentDetails {
@@ -1100,6 +1109,8 @@ export interface HostContract {
     result: { sessions: ImportableSession[]; nextCursor: string | null }
   }
   'agents.options': { params: void; result: AgentOptions[] }
+  // Pins a model to the top of the agent's model menu, or unpins it; a fifth pin is refused.
+  'agents.pinModel': { params: { agentId: AgentId; model: string; pinned: boolean }; result: void }
   // The agents the lightweight tasks' model may be pinned to; older hosts lack it.
   'agents.lightAgents': { params: void; result: { agents: LightAgent[] } }
   // A draft of a problem report's description, written by the agent the report is about, else the
@@ -2053,6 +2064,7 @@ export const HOST_METHODS = [
   'agents.refreshAccount',
   'agents.listSessions',
   'agents.options',
+  'agents.pinModel',
   'agents.lightAgents',
   'agents.draftReport',
   'mcp.status',

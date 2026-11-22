@@ -7066,6 +7066,7 @@ export class SessionManager {
   ): void {
     live.used = true
     live.userTurn = kettu !== true && from === undefined
+    this.deps.options?.used(live.record.agentId, live.thread.session.config)
     const now = this.now()
     const entryId = this.addPrompt(live, content, now, from, device, approval, kettu)
     this.startTurn(live, content, now, entryId, portId)

@@ -2,6 +2,7 @@
 "use client";
 
 import {
+  Fragment,
   memo,
   useCallback,
   useEffect,
@@ -42,6 +43,12 @@ export type PickerModel = {
   latencyMs?: number;
   /** Price per million output tokens, in dollars */
   pricePerM?: number;
+  /** Kettu: a tag after the name, such as Default */
+  badge?: ReactNode;
+  /** Kettu: something at the row's end, such as a pin button */
+  end?: ReactNode;
+  /** Kettu: the heading More models shows the model under, such as its provider */
+  group?: string;
 };
 
 export type ModelEffort = string;
@@ -162,6 +169,18 @@ export type ModelPickerProps = {
   /** The trigger's accessible name in place of "Model: …" */
   triggerLabel?: string;
   labels?: Partial<PickerLabels>;
+  /** Kettu: the trigger's glyph in place of the chosen model's */
+  triggerIcon?: ReactNode;
+  /** Kettu: something on the right of the line on top, such as a button */
+  headingEnd?: ReactNode;
+  /** Kettu: your own effort control in place of the levels' track */
+  effortSlot?: ReactNode;
+  /** Kettu: your own controls in place of the switches' rows; the toggles still flag the trigger */
+  toggleSlot?: ReactNode;
+  /** Kettu: what the last row says while set, before anything else */
+  caption?: { id: string; text: string } | null;
+  /** Kettu: whether a model of More models matches the search, in place of its name containing it */
+  moreFilter?: (model: PickerModel, query: string) => boolean;
 };
 
 /* ---------- Helpers ---------- */
@@ -375,6 +394,7 @@ const Option = memo(function Option({ model: m, index: i, optionId, selected, ac
           <span className="ui-mdpc__title-name" dir="auto" title={m.name}>
             {m.name}
           </span>
+          {m.badge}
           {selected && <CheckIcon />}
         </span>
         {m.description && (
@@ -401,6 +421,7 @@ const Option = memo(function Option({ model: m, index: i, optionId, selected, ac
           {varies}
         </span>
       )}
+      {m.end}
     </div>
   );
 });
@@ -439,6 +460,12 @@ export function ModelPicker({
   triggerLead,
   triggerLabel,
   labels: ownLabels,
+  triggerIcon,
+  headingEnd,
+  effortSlot,
+  toggleSlot,
+  caption: ownCaption,
+  moreFilter,
 }: ModelPickerProps) {
   const labels = { ...defaultLabels, ...ownLabels };
   const uid = useId();
@@ -446,7 +473,8 @@ export function ModelPicker({
   const [flyOpen, setFlyOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [flyActive, setFlyActive] = useState(0);
-  const shownMore = more.filter((m) => m.name.toLowerCase().includes(query.trim().toLowerCase()));
+  const q = query.trim().toLowerCase();
+  const shownMore = more.filter((m) => (moreFilter ? moreFilter(m, q) : m.name.toLowerCase().includes(q)));
   const models = baseModels;
   const anyRated = models.some((m) => m.speed !== undefined || m.quality !== undefined || m.cost !== undefined);
   // An empty list is an agent without levels: no row, and no level on the trigger
@@ -770,7 +798,11 @@ export function ModelPicker({
   let spoken: string;
   const pointedToggle = toggles?.find((t) => hint === `toggle:${t.id}`);
   const pointedAction = actions?.find((a) => hint === `action:${a.id}` && a.hint);
-  if (pointedAction) {
+  if (ownCaption) {
+    caption = ownCaption.text;
+    captionKey = `own-${ownCaption.id}`;
+    spoken = ownCaption.text;
+  } else if (pointedAction) {
     caption = pointedAction.hint;
     captionKey = hint as string;
     spoken = pointedAction.hint as string;
@@ -845,7 +877,14 @@ export function ModelPicker({
         onKeyDown={onTriggerKey}
       >
         {triggerLead}
-        {chosen && <Glyph model={chosen} />}
+        {chosen &&
+          (triggerIcon ? (
+            <span className="ui-mdpc__glyph" aria-hidden="true">
+              {triggerIcon}
+            </span>
+          ) : (
+            <Glyph model={chosen} />
+          ))}
         <span className="ui-mdpc__name" title={chosen?.name}>
           <Swap id={chosen?.id ?? "none"} glide>
             {chosen?.name ?? labels.choose}
@@ -859,7 +898,8 @@ export function ModelPicker({
             </span>
           ))}
         {/* Your own levels always show on the trigger, so the level in use is never a guess */}
-        {ownEffort && (
+        {/* Kettu: a level without a label, such as the agent's default, shows none */}
+        {ownEffort && efforts.find((x) => x.id === effortNow)?.label && (
           <span className="ui-mdpc__detail">
             <Swap id={effortNow} glide>
               {efforts.find((x) => x.id === effortNow)?.label}
@@ -897,8 +937,8 @@ export function ModelPicker({
           </div>
         )}
         <div className="ui-mdpc__card">
-          <div className="ui-mdpc__head" aria-hidden="true" data-keys={keys ? "" : undefined}>
-            <span>{heading ?? labels.model}</span>
+          <div className="ui-mdpc__head" aria-hidden={headingEnd ? undefined : "true"} data-keys={keys ? "" : undefined}>
+            <span aria-hidden={headingEnd ? "true" : undefined}>{heading ?? labels.model}</span>
             {anyRated && (
               <span className="ui-mdpc__cols">
                 {STRENGTHS.map((s) => (
@@ -906,6 +946,7 @@ export function ModelPicker({
                 ))}
               </span>
             )}
+            {headingEnd}
           </div>
 
           {models.length === 0 && <div className="ui-mdpc__empty">{labels.noModels}</div>}
@@ -967,7 +1008,15 @@ export function ModelPicker({
 
           {toggles ? (
             <div className="ui-mdpc__settings">
-              {efforts.length > 0 && (
+              {effortSlot ? (
+                <div
+                  className="ui-mdpc__effort-slot"
+                  onPointerEnter={(e) => e.pointerType === "mouse" && setHint("effort")}
+                  onPointerLeave={() => setHint(null)}
+                >
+                  {effortSlot}
+                </div>
+              ) : efforts.length > 0 && (
                 <div
                   className="ui-mdpc__effort ui-mdpc__effort--own"
                   onPointerEnter={(e) => e.pointerType === "mouse" && setHint("effort")}
@@ -1002,7 +1051,7 @@ export function ModelPicker({
                   </div>
                 </div>
               )}
-              {toggles.map((t) => (
+              {toggleSlot ?? toggles.map((t) => (
                 <button
                   key={t.id}
                   type="button"
@@ -1160,8 +1209,13 @@ export function ModelPicker({
             <div id={`${uid}-more`} className="ui-mdpc__fly-list" role="listbox" aria-label={labels.moreModels}>
               {shownMore.length === 0 && <div className="ui-mdpc__empty">{labels.noMatch}</div>}
               {shownMore.map((m, i) => (
+                <Fragment key={m.id}>
+                {m.group && m.group !== shownMore[i - 1]?.group && (
+                  <div className="ui-mdpc__fly-group" role="presentation">
+                    {m.group}
+                  </div>
+                )}
                 <div
-                  key={m.id}
                   id={`${uid}-more-${i}`}
                   role="option"
                   aria-selected={m.id === chosen?.id}
@@ -1174,8 +1228,11 @@ export function ModelPicker({
                   <span className="ui-mdpc__title-name" dir="auto" title={m.name}>
                     {m.name}
                   </span>
+                  {m.badge}
                   {m.id === chosen?.id && <CheckIcon />}
+                  {m.end}
                 </div>
+                </Fragment>
               ))}
             </div>
             {moreNote && <div className="ui-mdpc__fly-note">{moreNote}</div>}

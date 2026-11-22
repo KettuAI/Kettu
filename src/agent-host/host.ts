@@ -3166,6 +3166,8 @@ export class AgentHost {
       'agents.setCodebuddySite': ({ agentId, change }) => agents.setCodebuddySite(agentId, change),
       'agents.refreshAccount': ({ agentId, force }) => agents.refreshAccount(agentId, { force }),
       'agents.options': () => this.agentOptions.list().map((o) => this.withStartMode(o)),
+      'agents.pinModel': ({ agentId, model, pinned }) =>
+        this.agentOptions.pin(agentId, model, pinned),
       'agents.lightAgents': () => ({ agents: this.sessions.lightAgents() }),
       'agents.draftReport': (params) => this.draftReport(params),
       'mcp.status': () => this.mcpStatus(),

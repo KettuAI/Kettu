@@ -607,6 +607,7 @@ function DraftComposer({
                 agentId={agentId}
                 hostId={hostId}
                 agentName={name ?? ''}
+                harness={status?.harnessName ?? name ?? ''}
                 config={config ?? []}
                 onSelect={pick}
                 onOpenChange={(open) => {

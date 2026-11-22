@@ -1,13 +1,15 @@
 // What New session shows for each agent until its prepared session answers. ACP lists an agent's
 // config options only in answer to `session/new` and the requests that open a session, so the host
 // keeps the last list each agent gave, its own values in each folder, the reasoning levels each
-// model offered, and the values the user last chose.
+// model offered, the values the user last chose, and the models the user pinned or last used.
 
 import path from 'node:path'
-import type { AgentOptions } from '@shared/agent-host'
+import { MAX_PINNED_MODELS, MAX_RECENT_MODELS, type AgentOptions } from '@shared/agent-host'
 import { isStartMode } from '@shared/agents'
 import type { HostSettings } from '@shared/settings'
 import { isAgentId, isConfigValue, type AgentId, type ConfigOption } from '@shared/thread'
+import { HostError, notFound } from './errors'
+import { t } from './i18n'
 import { JsonFile, type LogFn } from './storage'
 
 export interface AgentOptionsFile {
@@ -130,6 +132,8 @@ export class AgentOptionsStore {
       levels: withLevels(current?.levels ?? {}, config),
       remembered,
       ...(defaults ? { defaults } : {}),
+      ...(current?.pinned ? { pinned: current.pinned } : {}),
+      ...(current?.recent ? { recent: current.recent } : {}),
       observedAt: this.now(),
     })
     return replaced
@@ -191,7 +195,32 @@ export class AgentOptionsStore {
     const remembered = REMEMBERED_CATEGORIES.has(option.category)
       ? { ...current.remembered, [option.id]: value }
       : current.remembered
-    this.put({ ...current, remembered, levels: withLevels(current.levels, config) })
+    const next = { ...current, remembered, levels: withLevels(current.levels, config) }
+    const model = option.category === 'model' ? modelInUse(config) : null
+    this.put(model ? withRecent(next, model) : next)
+  }
+
+  /**
+   * Pins `model` to the top of the agent's model menu, after the ones pinned before, or unpins it.
+   * Throws when the agent has no options kept, or when it already has `MAX_PINNED_MODELS` pins.
+   */
+  pin(agentId: AgentId, model: string, pinned: boolean): void {
+    const current = this.byAgent.get(agentId)
+    if (!current) throw notFound(t('agent.noModelsKept', { agent: agentId }))
+    const before = current.pinned ?? []
+    const has = before.includes(model)
+    if (pinned && !has && before.length >= MAX_PINNED_MODELS) {
+      throw new HostError('conflict', t('agent.pinsFull', { count: MAX_PINNED_MODELS }))
+    }
+    const next = pinned ? (has ? before : [...before, model]) : before.filter((v) => v !== model)
+    this.put(withList(current, 'pinned', next))
+  }
+
+  /** A session of the agent with these options is used, so its model leads the recent ones. */
+  used(agentId: AgentId, config: readonly ConfigOption[]): void {
+    const current = this.byAgent.get(agentId)
+    const model = modelInUse(config)
+    if (current && model) this.put(withRecent(current, model))
   }
 
   private put(next: AgentOptions): void {
@@ -209,7 +238,40 @@ export class AgentOptionsStore {
 
 // Everything but the time it was seen, which alone is no reason to write or send.
 const contentOf = (o: AgentOptions): string =>
-  JSON.stringify([o.config, o.levels, o.remembered, o.defaults ?? {}, o.provisional === true])
+  JSON.stringify([
+    o.config,
+    o.levels,
+    o.remembered,
+    o.defaults ?? {},
+    o.provisional === true,
+    o.pinned ?? [],
+    o.recent ?? [],
+  ])
+
+/**
+ * The model a session's options are on, as its model menu lists it: a choice shown as another
+ * counts as that one, as Claude Code's Default does as the model it stands for.
+ */
+export function modelInUse(config: readonly ConfigOption[]): string | null {
+  const option = config.find((o) => o.category === 'model' && o.type === 'select')
+  if (!option || typeof option.value !== 'string') return null
+  return option.choices?.find((c) => c.value === option.value)?.shownAs ?? option.value
+}
+
+/** The entry with `model` first among its recent models. */
+function withRecent(entry: AgentOptions, model: string): AgentOptions {
+  if (entry.recent?.[0] === model) return entry
+  const recent = [model, ...(entry.recent ?? []).filter((value) => value !== model)]
+  return withList(entry, 'recent', recent.slice(0, MAX_RECENT_MODELS))
+}
+
+/** The entry with `list` set to `values`, or without it when they are none. */
+function withList(entry: AgentOptions, list: 'pinned' | 'recent', values: string[]): AgentOptions {
+  const next = { ...entry }
+  if (values.length > 0) next[list] = values
+  else delete next[list]
+  return next
+}
 
 function withDefaults(
   defaults: Record<string, Record<string, string | boolean>>,
@@ -334,6 +396,13 @@ function optionOf(value: unknown): ConfigOption | null {
   return option
 }
 
+/** A kept list of model values: strings only, each once, at most `max` of them. */
+function modelList(value: unknown, max: number): string[] {
+  if (!Array.isArray(value)) return []
+  const values = value.filter((v): v is string => typeof v === 'string' && v.length > 0)
+  return [...new Set(values)].slice(0, max)
+}
+
 // A cache of what the agents offered: an entry that does not parse is dropped, not the file.
 export function parseAgentOptionsFile(data: Record<string, unknown>): AgentOptionsFile | string {
   if (!isRecord(data.agents)) return 'agents is not an object'
@@ -368,6 +437,8 @@ export function parseAgentOptionsFile(data: Record<string, unknown>): AgentOptio
         defaults[folder] = kept
       }
     }
+    const pinned = modelList(entry.pinned, MAX_PINNED_MODELS)
+    const recent = modelList(entry.recent, MAX_RECENT_MODELS)
     agents[agentId] = {
       agentId,
       config,
@@ -376,6 +447,8 @@ export function parseAgentOptionsFile(data: Record<string, unknown>): AgentOptio
       ...(Object.keys(defaults).length > 0 ? { defaults } : {}),
       observedAt,
       ...(entry.provisional === true ? { provisional: true } : {}),
+      ...(pinned.length > 0 ? { pinned } : {}),
+      ...(recent.length > 0 ? { recent } : {}),
     }
   }
   return { version: 1, agents }

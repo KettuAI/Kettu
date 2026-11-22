@@ -1440,6 +1440,14 @@ export function createValidators(platform: Platform): Validators {
     },
     'agents.refreshAccount': agentWithForce,
     'agents.options': none,
+    'agents.pinModel': (params) => {
+      const o = fields(params)
+      return {
+        agentId: agentId(o),
+        model: string(o, 'model', TEXT_CHARS),
+        pinned: flag(o, 'pinned'),
+      }
+    },
     'agents.lightAgents': none,
     'agents.draftReport': (params) => {
       const o = fields(params)

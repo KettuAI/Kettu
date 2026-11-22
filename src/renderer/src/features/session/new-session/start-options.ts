@@ -3,6 +3,13 @@ import { isStartMode } from '@shared/agents'
 import { isConfigValue, type AgentId, type ConfigOption, type HarnessId } from '@shared/thread'
 import { harnessReason, programHere, sharedReason } from '@renderer/features/agents/harness-problem'
 import { cliOutdated, listedInstalled, readiness } from '@renderer/features/agents/readiness'
+import {
+  modelLists,
+  moreInOrder,
+  type KeptModels,
+  type ModelLists,
+  type ModelRead,
+} from '@renderer/features/session/composer/model-list'
 import type { OptionValues } from '@renderer/stores/agent-options'
 
 /**
@@ -212,16 +219,11 @@ export function isMoreKey(key: string): boolean {
   return key.endsWith(SEPARATOR + SEPARATOR)
 }
 
-type Choices = NonNullable<ConfigOption['choices']>
-
-/**
- * An agent's models as the agent menu lists them, split into the current ones and the older ones
- * under More models. A choice shown as another is not listed, and an agent that marks none as
- * older has every model current.
- */
-export function menuModels(choices: Choices): { current: Choices; older: Choices } {
-  const listed = choices.filter((c) => !c.shownAs)
-  return { current: listed.filter((c) => !c.older), older: listed.filter((c) => c.older) }
+/** An agent's model lists by the menus' rule, or null while its models are unknown. */
+export function agentLists(agent: MenuAgent): ModelLists | null {
+  const option = agent.model
+  if (!option?.choices?.length) return null
+  return modelLists(option.choices, String(option.value), agent.kept)
 }
 
 export interface MenuAgent {
@@ -229,6 +231,8 @@ export interface MenuAgent {
   name: string
   /** The model option the session starts with; null when the agent's options are unknown. */
   model: ConfigOption | null
+  /** The models the user pinned for it and used last. */
+  kept?: KeptModels
   /** Whether it can be chosen: see `canStart`. */
   choosable: boolean
 }
@@ -247,10 +251,10 @@ function namedBy(name: string, query: string): boolean {
 }
 
 /**
- * What the agent menu lists. Without a query, the shown agent's current models, then the More
- * models row, then its older models while `expanded` names it. With one, the matching models of
- * every agent, older or not, each agent's under its name; a query that starts a word of the
- * agent's name keeps all its models, and an agent with unknown models is kept by its name alone.
+ * What the agent menu lists. Without a query, the shown agent's main models, then the More models
+ * row, then the rest while `expanded` names it, by provider and family. With one, the matching
+ * models of every agent, each agent's under its name; a query that starts a word of the agent's
+ * name keeps all its models, and an agent with unknown models is kept by its name alone.
  */
 export function menuGroups(
   agents: readonly MenuAgent[],
@@ -273,21 +277,21 @@ export function menuGroups(
         groups.push({ agentId: agent.agentId, items: [itemKey(agent.agentId, null)] })
       continue
     }
-    const { current, older } = menuModels(agent.model.choices)
+    const lists = agentLists(agent)!
     if (!q) {
-      const keys = (list: Choices) => list.map((c) => itemKey(agent.agentId, c.value))
-      const items = keys(current)
-      if (older.length > 0) items.push(moreKey(agent.agentId))
-      if (expanded === agent.agentId) items.push(...keys(older))
+      const keys = (list: readonly ModelRead[]) => list.map((r) => itemKey(agent.agentId, r.value))
+      const items = keys(lists.main)
+      if (lists.more.length > 0) items.push(moreKey(agent.agentId))
+      if (expanded === agent.agentId) items.push(...keys(moreInOrder(lists.more)))
       groups.push({ agentId: agent.agentId, items })
       continue
     }
-    const items = [...current, ...older]
+    const items = lists.all
       .filter(
-        (c) =>
+        ({ choice: c }) =>
           byName || contains(`${c.name} ${c.value} ${c.description ?? ''} ${c.group ?? ''}`, q),
       )
-      .map((c) => itemKey(agent.agentId, c.value))
+      .map((r) => itemKey(agent.agentId, r.value))
     if (items.length > 0) groups.push({ agentId: agent.agentId, items })
   }
   return groups
