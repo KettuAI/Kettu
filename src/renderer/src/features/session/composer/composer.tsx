@@ -28,7 +28,7 @@ import {
   useAgentSwitchStore,
 } from '@renderer/stores/agent-switch'
 import { agentsOn, useAgentsStore, usePlanReadings } from '@renderer/stores/agents'
-import { hostOfSession } from '@renderer/stores/sessions'
+import { hostOfSession, useSessionsStore } from '@renderer/stores/sessions'
 import { taskFrom, useTasksStore } from '@renderer/stores/tasks'
 import { AgentMarkHost } from '@renderer/components/agents/agent-mark-host'
 import { AgentMenu } from '@renderer/features/session/new-session/agent-menu'
@@ -286,6 +286,11 @@ export function Composer({
   // A used-up window of another model does not hold this session back.
   const modelLimits = limitsForModel(limits ?? [], model)
   const reached = modelLimits.find((l) => l.state === 'reached')
+  // The host carries the session on by itself once the window that stopped it resets.
+  const continuesAt = useSessionsStore((s) => {
+    const turn = s.byId[sessionId]?.lastTurn
+    return turn?.reason === 'limit' ? turn.continuesAt : undefined
+  })
   const switches = config.filter((o) => o.type === 'boolean')
   const others = config.filter(
     (o): o is SelectOption => isSelect(o) && o !== mode && o !== model && o !== effort,
@@ -548,8 +553,13 @@ export function Composer({
           ? t(
               reached.extraUsage
                 ? 'prompt.placeholder.limitExtraUsage'
-                : 'prompt.placeholder.limitReached',
-              { limit: limitPhrase(reached), time: resetTime(reached.resetsAt) },
+                : typeof continuesAt === 'number'
+                  ? 'prompt.placeholder.limitReachedContinue'
+                  : 'prompt.placeholder.limitReached',
+              {
+                limit: limitPhrase(reached),
+                time: resetTime(typeof continuesAt === 'number' ? continuesAt : reached.resetsAt),
+              },
             )
           : !running && rejected
             ? t('prompt.placeholder.denied')

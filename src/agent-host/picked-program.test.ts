@@ -42,6 +42,7 @@ async function manager(
     workflow: DEFAULT_SETTINGS.workflow,
     usage: { fromComputer: false },
     sessionTitles: true,
+    continueAfterLimit: true,
     lightModel: { mode: 'small' },
     defaultAgent: null,
     computerUse: DEFAULT_SETTINGS.computerUse,

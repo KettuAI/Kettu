@@ -1881,6 +1881,7 @@ export function createValidators(platform: Platform): Validators {
       return { sessionId: sessionId(o), taskId: string(o, 'taskId', ID_CHARS) }
     },
     'sessions.retry': session,
+    'sessions.cancelContinue': session,
     'sessions.rewind': (params) => {
       const o = fields(params)
       // An empty composer keeps nothing for Put back.

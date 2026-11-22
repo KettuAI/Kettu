@@ -884,6 +884,12 @@
     "indexing": "Indexing conversations, results may be incomplete",
     "unsupported": "This computer can't find in a session yet"
   },
+  "continueLimit": {
+    "planned": "Continues {{time}} · {{limit}} limit",
+    "off": "Won't carry on by itself",
+    "cancel": "Don't continue",
+    "cancelFailed": "Couldn't stop the continuation"
+  },
   "thread": {
     "label": "Thread",
     "olderFailed": "Couldn't load earlier messages",

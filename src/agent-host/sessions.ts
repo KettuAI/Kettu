@@ -856,6 +856,19 @@ const OUTSIDE_WINDOW_MS = 60 * MINUTE
 /** How often a shown Claude Code session is looked at for a program outside Kettu holding it. */
 const FOLLOW_MS = 3_000
 
+/** How long after a window resets Kettu waits before it carries a session on. */
+const CONTINUE_AFTER_RESET_MS = 30_000
+/** How soon after the host starts a continuation that is already due goes, so startup stays fast. */
+const CONTINUE_AFTER_START_MS = 10_000
+/** How long a continuation waits before it reads the limits again while a window still reads reached. */
+const CONTINUE_RETRY_MS = MINUTE
+/** How many times it reads again before it leaves the session to the user. */
+const CONTINUE_RETRIES = 5
+
+/** What a session is sent to carry on once the window that stopped it has reset. */
+const CONTINUE_PROMPT =
+  'The plan limit that stopped your last turn has reset. Continue the work from where you left off.'
+
 /** When the session's prompt cache expires, from its main thread's latest request, if any. */
 function cacheExpiresAt(live: Live): number | null {
   const cache = live.thread.session.usage?.cache
@@ -1247,6 +1260,10 @@ export class SessionManager {
    * is that port's while it is open, which no file keeps.
    */
   private returned: (ReturnedFile['messages'][number] & { portId?: string })[] = []
+  /** The timers that carry sessions on once the window that stopped them resets, by session. */
+  private readonly continues = new Map<string, ReturnType<typeof setTimeout>>()
+  /** How many times a continuation re-armed because its window still read reached. */
+  private readonly continueRetries = new Map<string, number>()
   /** Each window's prepared sessions, by port. */
   private readonly preparedSlots = new Map<string, PreparedSlot>()
   private emptyRemoval: Promise<void> | null = null
@@ -1276,6 +1293,17 @@ export class SessionManager {
     this.returned = (await this.deps.returned.load()).messages
     await this.deps.projectMcp?.load()
     await this.deps.projectHooks?.load()
+    // A limit that reset while Kettu was closed still carries its sessions on, once.
+    if (this.deps.settings().continueAfterLimit) {
+      for (const record of this.records.values()) {
+        const at = record.lastTurn?.reason === 'limit' ? record.lastTurn.continuesAt : undefined
+        if (typeof at !== 'number') continue
+        this.scheduleContinue(
+          record.id,
+          Math.max(at + CONTINUE_AFTER_RESET_MS, this.now() + CONTINUE_AFTER_START_MS),
+        )
+      }
+    }
   }
 
   async flush(): Promise<void> {
@@ -5979,7 +6007,10 @@ export class SessionManager {
         this.update(live, { updatedAt: now })
         if (this.inFront(live.id)) live.record.lastViewedAt = now
         const stopped: { message: string } = { message: t('notice.stopped.title', { agent: name }) }
-        if (turn) live.record.lastTurn = this.failedTurn(live, stopped.message, now)
+        if (turn) {
+          live.record.lastTurn = this.failedTurn(live, stopped.message, now)
+          this.planContinue(live.record)
+        }
         this.persist(live)
         const routineTurn =
           (turn
@@ -7986,6 +8017,8 @@ export class SessionManager {
     live.failure = null
     // A running turn has no ending, so a list never shows the last one's on it.
     delete live.record.lastTurn
+    this.clearContinueTimer(live.id)
+    this.continueRetries.delete(live.id)
     // The touch below sends the count without the suggestions the user talked past.
     this.deps.cards?.turnStarted(live.id)
     this.update(live, {
@@ -8602,9 +8635,164 @@ export class SessionManager {
     const record = live?.record ?? this.records.get(sessionId)
     if (!record || record.lastTurn?.reason !== 'failed' || live?.turn) return
     record.lastTurn = { ...record.lastTurn, reason: 'limit', limit: lastTurnLimit(status, limit) }
+    this.planContinue(record)
     if (live) this.persist(live)
     else this.saveIndex()
     this.touch(sessionId)
+  }
+
+  /**
+   * Plans to carry the session on when the window that stopped its last turn resets, unless the
+   * user turned that off, the window gives no reset, or the session is a subagent's.
+   */
+  private planContinue(record: SessionRecord): void {
+    const turn = record.lastTurn
+    if (turn?.reason !== 'limit' || !turn.limit?.resetsAt) return
+    if (record.origin === 'subagent' || this.isArchived(record)) return
+    if (!this.deps.settings().continueAfterLimit) return
+    turn.continuesAt = turn.limit.resetsAt
+    this.continueRetries.delete(record.id)
+    this.scheduleContinue(record.id, turn.limit.resetsAt + CONTINUE_AFTER_RESET_MS)
+  }
+
+  private scheduleContinue(sessionId: string, at: number): void {
+    this.clearContinueTimer(sessionId)
+    if (this.stopped) return
+    const delay = Math.min(Math.max(at - this.now(), 0), 2 ** 31 - 1)
+    const timer = setTimeout(() => {
+      this.continues.delete(sessionId)
+      void this.continueSession(sessionId)
+    }, delay)
+    timer.unref?.()
+    this.continues.set(sessionId, timer)
+  }
+
+  private clearContinueTimer(sessionId: string): void {
+    const timer = this.continues.get(sessionId)
+    if (timer === undefined) return
+    clearTimeout(timer)
+    this.continues.delete(sessionId)
+  }
+
+  /**
+   * Carries a session on once the window that stopped its last turn has reset. A window that still
+   * holds the model, such as the weekly one behind the 5-hour one, is waited for instead.
+   */
+  private async continueSession(sessionId: string): Promise<void> {
+    const record = this.records.get(sessionId)
+    const turn = record?.lastTurn
+    if (!record || turn?.reason !== 'limit' || typeof turn.continuesAt !== 'number') return
+    if (!this.deps.settings().continueAfterLimit || this.isArchived(record)) {
+      this.dropContinue(sessionId)
+      return
+    }
+    const { agentId } = record
+    if (!this.deps.agents.has(agentId) || this.deps.agents.isDisabled(agentId)) {
+      this.dropContinue(sessionId)
+      return
+    }
+    // Reading the limits costs no model call, and the reading decides whether it can run now.
+    await this.deps.agents.refreshLimits(agentId).catch(() => {})
+    if (!this.deps.agents.has(agentId)) return
+    const page = await this.readPage(record, (store) => store.page(sessionId, null, null, 'refs'))
+    const model = page?.session.config.find((option) => option.category === 'model')
+    const held = reachedLimit(this.deps.agents.status(agentId), model, this.now())
+    if (held) {
+      if (held.resetsAt !== null && held.resetsAt > this.now()) {
+        this.setContinue(sessionId, held.resetsAt)
+        return
+      }
+      // The reset has passed but the reading has not caught up with it; look again shortly.
+      const tried = (this.continueRetries.get(sessionId) ?? 0) + 1
+      if (tried <= CONTINUE_RETRIES) {
+        this.continueRetries.set(sessionId, tried)
+        this.scheduleContinue(sessionId, this.now() + CONTINUE_RETRY_MS)
+        return
+      }
+      this.dropContinue(sessionId)
+      return
+    }
+    let live: Live
+    try {
+      live = await this.revive(sessionId)
+    } catch {
+      this.dropContinue(sessionId)
+      return
+    }
+    const current = live.record.lastTurn
+    if (current?.reason !== 'limit' || current.continuesAt !== turn.continuesAt) return
+    const { status, queue, queuePaused } = live.thread.session
+    if (!canSend(status)) {
+      this.dropContinue(sessionId)
+      return
+    }
+    // What waited in the queue goes first, such as what the user typed during the wait.
+    if (queue.length > 0) {
+      if (queuePaused) this.update(live, { queuePaused: false })
+      this.drainQueue(live)
+      if (live.turn) return
+    }
+    try {
+      await this.sendFromKettu(sessionId, CONTINUE_PROMPT)
+    } catch (error) {
+      this.deps.diagnostics.log(
+        'warn',
+        `Could not carry session ${sessionId} on: ${(error as Error).message}`,
+      )
+      this.dropContinue(sessionId)
+    }
+  }
+
+  /** Moves a session's continuation to a window that resets later, said to clients. */
+  private setContinue(sessionId: string, resetsAt: number): void {
+    const live = this.live.get(sessionId)
+    const record = live?.record ?? this.records.get(sessionId)
+    if (!record?.lastTurn || record.lastTurn.reason !== 'limit') return
+    record.lastTurn = { ...record.lastTurn, continuesAt: resetsAt }
+    if (live) this.persist(live)
+    else this.saveIndex()
+    this.touch(sessionId)
+    this.continueRetries.delete(sessionId)
+    this.scheduleContinue(sessionId, resetsAt + CONTINUE_AFTER_RESET_MS)
+  }
+
+  /**
+   * Stops a session's continuation, leaving the last turn's ending as it was: clients show that
+   * it will not carry on by itself.
+   */
+  private dropContinue(sessionId: string): void {
+    this.clearContinueTimer(sessionId)
+    this.continueRetries.delete(sessionId)
+    const live = this.live.get(sessionId)
+    const record = live?.record ?? this.records.get(sessionId)
+    if (!record?.lastTurn || record.lastTurn.continuesAt == null) return
+    record.lastTurn = { ...record.lastTurn, continuesAt: null }
+    if (live) this.persist(live)
+    else this.saveIndex()
+    this.touch(sessionId)
+  }
+
+  /** Drops the continuation planned for a session, as its Don't continue line asks. */
+  async cancelContinue(sessionId: string): Promise<void> {
+    this.assertRegistered(sessionId)
+    this.dropContinue(sessionId)
+  }
+
+  /** The setting that carries sessions on was turned off: none waits to continue any more. */
+  continueSettingChanged(on: boolean): void {
+    if (on) return
+    let changed = false
+    for (const record of this.records.values()) {
+      if (record.lastTurn?.continuesAt == null) continue
+      record.lastTurn = { ...record.lastTurn, continuesAt: null }
+      this.clearContinueTimer(record.id)
+      this.continueRetries.delete(record.id)
+      const live = this.live.get(record.id)
+      if (live) this.persist(live)
+      else changed = true
+      this.touch(record.id)
+    }
+    if (changed) this.saveIndex()
   }
 
   /** A session's workflow suggestions changed, which its count of what waits includes. */
@@ -8913,6 +9101,7 @@ export class SessionManager {
     this.finishTurn(live, turn, null)
     const now = this.now()
     live.record.lastTurn = this.failedTurn(live, mapped.message, now)
+    this.planContinue(live.record)
     const noticeId = this.nextId(live)
     if (authRequired) live.signInNotices.push(noticeId)
     this.emit(live, [
@@ -9033,6 +9222,7 @@ export class SessionManager {
       entryId: turn.entryId,
     })
     live.record.lastTurn = this.failedTurn(live, failure.message, this.now())
+    this.planContinue(live.record)
     this.touch(live.id)
     this.reportRun(live, { stopReason: null, error: failure, usage: null, turn })
     this.persist(live)
@@ -9091,7 +9281,10 @@ export class SessionManager {
       carried && aside.some((item) => item.entry.id === carried.entryId)
         ? carried.carry
         : prior?.carry
+    // Put back restores the ending, not a continuation planned before the edit.
     const lastTurn = prior ? prior.lastTurn : live.record.lastTurn
+    const stowed = lastTurn ? { ...lastTurn } : undefined
+    if (stowed) delete stowed.continuesAt
     live.record.rewound = {
       entryId,
       turns: turnsFrom(live.thread, at) + (prior?.turns ?? 0),
@@ -9103,9 +9296,11 @@ export class SessionManager {
         occurrence: promptOccurrence(live.thread, at),
       },
       ...(carry ? { carry } : {}),
-      ...(lastTurn ? { lastTurn } : {}),
+      ...(stowed ? { lastTurn: stowed } : {}),
     }
     delete live.record.lastTurn
+    this.clearContinueTimer(live.id)
+    this.continueRetries.delete(live.id)
     live.setAside = [...aside, ...(live.setAside ?? [])].sort((a, b) => a.pos - b.pos)
     live.setAsideDirty = true
     if (aside[0]) live.cutAt = Math.min(live.cutAt ?? aside[0].pos, aside[0].pos)
@@ -10401,6 +10596,7 @@ export class SessionManager {
     )
     const all = [...this.descendants(sessionId).filter((item) => !staying.has(item.id)), record]
     await this.closeAll(all, true)
+    for (const item of all) this.dropContinue(item.id)
     for (const child of left) {
       child.parentId = null
       this.saveRecord(child.id)
@@ -10681,6 +10877,7 @@ export class SessionManager {
     await this.settled(sessionId)
     const all = [...this.descendants(sessionId), record]
     await this.closeAll(all, true)
+    for (const item of all) this.dropContinue(item.id)
     delete record.pinnedAt
     record.archivedAt = this.now()
     this.saveRecord(sessionId)
@@ -11354,6 +11551,7 @@ export class SessionManager {
   /** Closes the live sessions of removed and turned-off agents, keeping their index and transcript. */
   async agentsRemoved(agentIds: readonly AgentId[]): Promise<void> {
     const records = [...this.records.values()].filter((record) => agentIds.includes(record.agentId))
+    for (const record of records) this.dropContinue(record.id)
     await Promise.all(records.map((record) => this.settled(record.id)))
     for (const live of [...this.live.values()]) {
       if (agentIds.includes(live.record.agentId) && live.prepared) {
@@ -11443,6 +11641,10 @@ export class SessionManager {
     }
     await this.settled(sessionId)
     const all = [...this.descendants(sessionId), record]
+    for (const item of all) {
+      this.clearContinueTimer(item.id)
+      this.continueRetries.delete(item.id)
+    }
     await this.closeAll(all, false)
     this.deps.events.ended(all.map((item) => item.id))
     const deleting: {
@@ -11946,6 +12148,9 @@ export class SessionManager {
       this.checkpoint(live, { final: true })
     }
     for (const timer of this.cacheReads.values()) clearTimeout(timer)
+    for (const timer of this.continues.values()) clearTimeout(timer)
+    this.continues.clear()
+    this.continueRetries.clear()
     if (this.followTimer) clearInterval(this.followTimer)
     this.followTimer = null
     this.stopped = true

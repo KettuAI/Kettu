@@ -42,7 +42,7 @@ import { TurnDots } from '../turn-dots'
 import { writingId } from '../turn-phase'
 import { useEntry, useEntryAnimation } from '../use-thread'
 import { CutTurnEnd } from './cut-turn'
-import { FailedTurnActions } from './failed-turn'
+import { FailedTurnActions, LimitContinueLine } from './failed-turn'
 import { OutOfCreditEnd } from './out-of-credit'
 import { splitLinks } from './text-links'
 import { UserActions } from './message-actions'
@@ -316,6 +316,7 @@ export const NoticeEntry = memo(function NoticeEntry({ sessionId, entryId }: Ent
           )}
         </AlertDescription>
       )}
+      {entry.severity === 'error' && <LimitContinueLine sessionId={sessionId} entryId={entryId} />}
       {entry.cause === 'turn_failed' && (
         <FailedTurnActions
           sessionId={sessionId}

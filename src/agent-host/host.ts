@@ -1808,6 +1808,9 @@ export class AgentHost {
     if (previous.workflow.maxWorkingSteps !== next.workflow.maxWorkingSteps) {
       this.tasks.limitChanged()
     }
+    if (previous.continueAfterLimit !== next.continueAfterLimit) {
+      this.sessions.continueSettingChanged(next.continueAfterLimit)
+    }
     // A step held for a tool the host lacked may start once it is installed and on.
     if (JSON.stringify(previous.marketplace) !== JSON.stringify(next.marketplace)) {
       this.tasks.recheck()
@@ -3350,6 +3353,7 @@ export class AgentHost {
       'sessions.stopTask': ({ sessionId, taskId }) => sessions.stopTask(sessionId, taskId),
       'sessions.taskOutput': ({ sessionId, taskId }) => sessions.taskOutput(sessionId, taskId),
       'sessions.retry': ({ sessionId }, { portId }) => sessions.retry(sessionId, portId),
+      'sessions.cancelContinue': ({ sessionId }) => sessions.cancelContinue(sessionId),
       'sessions.rewind': ({ sessionId, entryId, draft }) =>
         sessions.rewind(sessionId, entryId, draft),
       'sessions.putBack': ({ sessionId }) => sessions.putBack(sessionId),

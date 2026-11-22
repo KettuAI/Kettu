@@ -53,6 +53,7 @@ export interface SettingsFile {
     openAtLogin: boolean // start at login, so routines keep their schedule
     background: boolean // keep running with the tray icon after the last window closes
     sessionTitles: boolean // a small model titles a session its agent leaves untitled
+    continueAfterLimit: boolean // a session carries on when the window that stopped it resets
     lightModel: LightModel // replaced whole
   }
   thread: {
@@ -279,6 +280,7 @@ export const DEFAULT_SETTINGS: SettingsFile = {
     openAtLogin: false,
     background: false,
     sessionTitles: true,
+    continueAfterLimit: true,
     lightModel: { mode: 'small' },
   },
   thread: { outlineSummaries: true, confirmLinks: true, openLinksIn: 'browser', alwaysOpenIn: {} },
@@ -440,6 +442,7 @@ export interface HostSettings {
   workflow: SettingsFile['workflow']
   usage: { fromComputer: boolean }
   sessionTitles: boolean // write a title for a session its agent leaves untitled
+  continueAfterLimit: boolean // carry a session on when the window that stopped it resets
   lightModel: LightModel // which model Kettu's own requests ask
   defaultAgent: AgentId | null // the agent new sessions start with, which answers artifacts' questions
   computerUse: ComputerUseSettings

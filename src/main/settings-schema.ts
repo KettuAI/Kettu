@@ -220,6 +220,7 @@ const SECTION_FIELDS = {
     openAtLogin: isBoolean,
     background: isBoolean,
     sessionTitles: isBoolean,
+    continueAfterLimit: isBoolean,
     lightModel: isLightModel,
   },
   thread: {
@@ -1691,6 +1692,7 @@ export function hostSettings(settings: SettingsFile, systemLocale: Locale): Host
     workflow: { ...settings.workflow },
     usage: { fromComputer: settings.usage.fromComputer },
     sessionTitles: settings.general.sessionTitles,
+    continueAfterLimit: settings.general.continueAfterLimit,
     lightModel: structuredClone(settings.general.lightModel),
     defaultAgent: settings.general.defaultAgent,
     computerUse: structuredClone(settings.computerUse),

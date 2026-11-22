@@ -770,6 +770,7 @@ function lastTurnOf(value: unknown): { lastTurn?: LastTurn } {
       reason: value.reason as LastTurn['reason'],
       endedAt: value.endedAt,
       ...(isString(value.error) ? { error: value.error } : {}),
+      ...(isNullable(isTime)(value.continuesAt) ? { continuesAt: value.continuesAt } : {}),
       ...(isRecord(limit) &&
       isString(limit.window) &&
       isString(limit.label) &&

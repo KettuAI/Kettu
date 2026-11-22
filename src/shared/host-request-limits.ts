@@ -143,6 +143,7 @@ export const HOST_REQUEST_LIMITS: Readonly<Record<HostMethod, number | null>> = 
   'sessions.sideClear': HOST_MS,
   'sessions.sideAgents': HOST_MS,
   'sessions.retry': AGENT_MS,
+  'sessions.cancelContinue': HOST_MS,
   'sessions.rewind': AGENT_MS,
   'sessions.putBack': HOST_MS,
   'sessions.fork': AGENT_MS,

@@ -368,6 +368,7 @@ export async function startTestHost(options: TestHostOptions = {}): Promise<Test
       workflow: DEFAULT_SETTINGS.workflow,
       usage: { fromComputer: false },
       sessionTitles: true,
+      continueAfterLimit: true,
       lightModel: { mode: 'small' },
       initialSetupDone: true,
       defaultAgent: null,
