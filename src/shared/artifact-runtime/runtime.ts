@@ -20,6 +20,7 @@ import {
   type ElementStyle,
   type PageSelection,
   PAGE_ERRORS,
+  PAGE_KEYS,
   type Pin,
   type RuntimeConfig,
 } from './page-messages'
@@ -293,6 +294,7 @@ export function start(config: RuntimeConfig): void {
   let hovered: Element | null = null
   let picked: Element | null = null
   let keepScroll = false
+  let passKeys = false
   let pins: Pin[] = []
   let frame = 0
   // What a preview changed on the picked element, to put back.
@@ -578,8 +580,41 @@ export function start(config: RuntimeConfig): void {
       case 'keep-scroll':
         keepScroll = true
         return
+      case 'select-keys':
+        if (typeof message.channel === 'string' && message.channel !== '') channel = message.channel
+        passKeys = message.on === true
+        return
     }
   }
+
+  // Keys the viewer steps with, once the user clicked into the page; typing in a field keeps them.
+  window.addEventListener(
+    'keydown',
+    (event) => {
+      if (!passKeys || !channel || event.metaKey || event.ctrlKey || event.altKey) return
+      const key = event.key.length === 1 ? event.key.toLowerCase() : event.key
+      if (!(PAGE_KEYS as readonly string[]).includes(key)) return
+      const target = event.target as HTMLElement | null
+      if (
+        target?.closest?.(
+          'input, textarea, select, [contenteditable]:not([contenteditable="false"])',
+        )
+      ) {
+        return
+      }
+      const message: Message = {
+        v: RUNTIME_VERSION,
+        id: nextId(),
+        kind: 'select',
+        channel,
+        selection: null,
+        key,
+      }
+      if (config.transport === 'port') viaPort(message)
+      else void request(message).catch(() => {})
+    },
+    true,
+  )
 
   // The parameters the page declares, on its root from the start, as the canvas set them last.
   const params = new Map<string, PageParam>()

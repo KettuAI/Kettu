@@ -7,7 +7,7 @@ import { isWeb } from './platform'
 /** What a host may offer beyond its sessions: the desktop app has each, the daemon none. */
 export type HostFeature = keyof Pick<
   HostInfo,
-  'sharing' | 'updates' | 'remoteSwitch' | 'remoteReset' | 'thumbnails'
+  'sharing' | 'updates' | 'remoteSwitch' | 'remoteReset' | 'thumbnails' | 'partThumbnails'
 >
 
 /**
@@ -16,7 +16,7 @@ export type HostFeature = keyof Pick<
  */
 export function useHostHas(feature: HostFeature): boolean | null {
   const scope = useHostScope()
-  const known = scope.useInfoStore((s) => (s.info ? s.info[feature] : null))
+  const known = scope.useInfoStore((s) => (s.info ? (s.info[feature] ?? false) : null))
   return isWeb || scope.hostId !== null ? known : true
 }
 

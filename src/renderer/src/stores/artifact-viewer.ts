@@ -6,6 +6,15 @@ export type ViewerMode = 'view' | 'comment' | 'edit'
 /** What the right card holds, one at a time; an element picked in Edit shows its look over these. */
 export type RightCard = 'comments' | 'history' | 'tweaks'
 
+/** What a canvas's Pages card lists: every frame, the changed ones, or those with comments. */
+export type PagesFilter = 'all' | 'changed' | 'comments'
+
+/**
+ * How an opened frame or a presented one is sized: the reading size, the whole frame on screen,
+ * its width filling the room, or its own size.
+ */
+export type FitMode = 'auto' | 'screen' | 'width' | 'actual'
+
 /** Where a canvas's camera was, in screen pixels at zoom `z`. */
 export interface ViewerCamera {
   x: number
@@ -32,6 +41,9 @@ export interface ViewerState {
   opened: string | null
   /** The frames selected on the canvas. */
   selection: readonly string[]
+  pagesFilter: PagesFilter
+  /** How an opened frame is sized. */
+  fit: FitMode
 }
 
 export const VIEWER_DEFAULTS: ViewerState = {
@@ -42,6 +54,8 @@ export const VIEWER_DEFAULTS: ViewerState = {
   page: null,
   opened: null,
   selection: [],
+  pagesFilter: 'all',
+  fit: 'auto',
 }
 
 interface ArtifactViewerStore {
@@ -71,6 +85,14 @@ export function setViewerState(
   })
 }
 
+/**
+ * Shows a canvas's page with one of its frames opened at reading size, as a link to the frame or
+ * a landing on a change asks; the camera follows.
+ */
+export function openCanvasFrame(id: string, page: string, frame: string): void {
+  setViewerState(id, { page, opened: frame, selection: [frame] })
+}
+
 // The camera moves every frame, so it is kept apart from what renders.
 const cameras = new Map<string, ViewerCamera>()
 
@@ -81,4 +103,16 @@ export function savedCamera(id: string, page: string): ViewerCamera | null {
 
 export function saveCamera(id: string, page: string, camera: ViewerCamera): void {
   cameras.set(`${id}\0${page}`, camera)
+}
+
+// Where the camera was before a frame opened, which Esc goes back to.
+const before = new Map<string, ViewerCamera>()
+
+export function cameraBeforeOpen(id: string, page: string): ViewerCamera | null {
+  return before.get(`${id}\0${page}`) ?? null
+}
+
+export function keepCameraBeforeOpen(id: string, page: string, camera: ViewerCamera | null): void {
+  if (camera) before.set(`${id}\0${page}`, camera)
+  else before.delete(`${id}\0${page}`)
 }

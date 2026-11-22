@@ -9,6 +9,7 @@ import {
   parseSelectMessage,
   RUNTIME_VERSION,
   type DriveMessage,
+  type PageKey,
   type PageSelection,
   type SelectMessage,
 } from '@shared/artifact-runtime/page-messages'
@@ -19,6 +20,7 @@ import { listenPageErrors, receivePageError } from './page-errors'
 const PICKS_PER_SECOND = 20
 
 type PickListener = (selection: PageSelection | null, located?: SelectMessage['located']) => void
+type KeyListener = (key: PageKey) => void
 type RuntimeRelay = (url: string, port: MessagePort) => () => void
 
 let relay: RuntimeRelay | null = null
@@ -31,12 +33,17 @@ export function setRuntimeRelay(next: RuntimeRelay): void {
   relay = next
 }
 
-const channels = new Map<string, { origin: string; listener: PickListener }>()
+const channels = new Map<
+  string,
+  { origin: string; listener: PickListener; key: () => KeyListener | null }
+>()
 let listening = false
 
 function deliver(origin: string, message: SelectMessage): void {
   const entry = channels.get(message.channel)
-  if (entry && entry.origin === origin) entry.listener(message.selection, message.located)
+  if (!entry || entry.origin !== origin) return
+  if (message.key) entry.key()?.(message.key)
+  else entry.listener(message.selection, message.located)
 }
 
 /** Main's picks, from every frame of an origin this window opened. */
@@ -57,7 +64,7 @@ function newChannel(): string {
     .replace(/=+$/, '')
 }
 
-type Sticky = 'select-mode' | 'select-pins' | 'select-source'
+type Sticky = 'select-mode' | 'select-pins' | 'select-source' | 'select-keys'
 
 /**
  * One frame's link: messages into its page, of which the last mode, pins and pick are sent again
@@ -73,6 +80,7 @@ export class FrameLink {
   private readonly sticky = new Map<Sticky, DriveMessage>()
   private second = 0
   private picks = 0
+  private onKey: KeyListener | null = null
 
   /** `origin` is the artifact's URL as `artifact:open` gave it, without its last slash. */
   constructor(
@@ -82,7 +90,11 @@ export class FrameLink {
 
   /** Takes the frame's picks, until `dispose`. */
   open(): void {
-    channels.set(this.channel, { origin: this.origin, listener: this.listener })
+    channels.set(this.channel, {
+      origin: this.origin,
+      listener: this.listener,
+      key: () => this.onKey,
+    })
     listen()
     listenPageErrors()
   }
@@ -99,11 +111,27 @@ export class FrameLink {
     for (const message of this.sticky.values()) this.send(message)
   }
 
+  /** Takes the keys the page passes on, until null, as `select-keys` asks it to. */
+  keys(listener: KeyListener | null): void {
+    if (listener === this.onKey) return
+    const was = this.onKey !== null
+    this.onKey = listener
+    if (was !== (listener !== null)) {
+      this.post({
+        v: RUNTIME_VERSION,
+        kind: 'select-keys',
+        on: listener !== null,
+        channel: this.channel,
+      })
+    }
+  }
+
   post(message: DriveMessage): void {
     if (
       message.kind === 'select-mode' ||
       message.kind === 'select-pins' ||
-      message.kind === 'select-source'
+      message.kind === 'select-source' ||
+      message.kind === 'select-keys'
     ) {
       this.sticky.set(message.kind, message)
     }

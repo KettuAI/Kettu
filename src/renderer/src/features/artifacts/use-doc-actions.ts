@@ -35,8 +35,8 @@ export function useDocActions({
   doc: ShownVersion['doc']
   summary: ArtifactSummary | null
   agents: readonly CanvasAgent[]
-  /** Presents from the page at this place in reading order. */
-  present: (index: number) => void
+  /** Presents from the frame with this id. */
+  present: (frameId: string) => void
 }): DocPageActions {
   const { t } = useTranslation('artifacts')
   const renders = useHostHas('thumbnails') === true
@@ -62,7 +62,7 @@ export function useDocActions({
                 )
             }
           : null,
-      present: (page) => present(Math.max(0, indexOf(page.id))),
+      present: (page) => present(page.id),
       handOff: (ids) => {
         if (!doc || !summary || !shown) return
         const first = ids[0]

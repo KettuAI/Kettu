@@ -1,0 +1,276 @@
+/* Presenting: the window's own surround, one sheet at a time, its bar and the grid. */
+
+.k-present {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  overflow: hidden;
+  background: var(--bg-app);
+  color: var(--text-primary);
+  outline: none;
+  animation: k-present-fade var(--duration-slow) var(--ease-out-quint) both;
+}
+.k-present:not([data-bar]) {
+  cursor: none;
+}
+.k-present__stage {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  outline: none;
+}
+
+.k-present__layer {
+  position: absolute;
+  inset: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-width: none;
+}
+.k-present__layer::-webkit-scrollbar {
+  display: none;
+}
+.k-present__layer[data-in] {
+  animation: k-present-in var(--duration-present-step) var(--ease-out-quint) both;
+}
+.k-present__layer[data-out] {
+  pointer-events: none;
+  animation: k-present-out var(--duration-present-step) var(--ease-out-quint) forwards;
+}
+.k-present__room {
+  position: relative;
+}
+.k-present__sheet {
+  position: absolute;
+  overflow: hidden;
+  background: var(--canvas);
+  box-shadow: var(--elevation-float);
+}
+.k-present__scaled {
+  transform-origin: 0 0;
+}
+.k-present__scaled > iframe {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border: 0;
+}
+
+.k-present__edge {
+  position: absolute;
+  top: 0;
+  bottom: 80px;
+  display: grid;
+  place-items: center;
+  color: var(--text-tertiary);
+  outline: none;
+}
+.k-present__edge[data-side='left'] {
+  left: 0;
+}
+.k-present__edge[data-side='right'] {
+  right: 0;
+}
+.k-present__edge > svg {
+  opacity: 0;
+  transition:
+    opacity var(--duration-fast) ease,
+    transform var(--duration-fast) var(--ease-out-quint);
+}
+.k-present__edge[data-side='left'] > svg {
+  transform: translateX(-6px);
+}
+.k-present__edge[data-side='right'] > svg {
+  transform: translateX(6px);
+}
+.k-present__edge:hover > svg {
+  opacity: 1;
+  transform: none;
+}
+
+.k-present__bar {
+  position: absolute;
+  bottom: 18px;
+  left: 50%;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 4px;
+  border-radius: 10px;
+  background: var(--card);
+  box-shadow:
+    0 0 0 0.5px var(--line-strong),
+    var(--elevation-float);
+  translate: -50% 0;
+  transition:
+    opacity var(--duration-card-in) ease,
+    transform var(--duration-card-in) var(--ease-out-quint);
+}
+.k-present:not([data-bar]) .k-present__bar {
+  opacity: 0;
+  transform: translateY(8px);
+  pointer-events: none;
+}
+.k-present__where {
+  max-width: 260px;
+  overflow: hidden;
+  padding: 0 8px;
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.k-present__grid {
+  position: absolute;
+  inset: 0 0 80px;
+  display: flex;
+  flex-direction: column;
+  animation: k-present-fade var(--duration-slow) ease both;
+}
+.k-present__tabs {
+  display: flex;
+  flex: none;
+  gap: 2px;
+  max-width: calc(100% - 96px);
+  margin: 16px auto 4px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.k-present__tab {
+  flex: none;
+  height: 28px;
+  padding: 0 10px;
+  border-radius: 7px;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--text-tertiary);
+  white-space: nowrap;
+  transition:
+    background-color var(--duration-fast) ease,
+    color var(--duration-fast) ease;
+}
+.k-present__tab:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+.k-present__tab[aria-selected='true'] {
+  background: var(--bg-selected);
+  color: var(--text-primary);
+}
+.k-present__tab:focus-visible,
+.k-present__item:focus-visible {
+  outline: 2px solid var(--focus-ring-color);
+  outline-offset: 2px;
+}
+.k-present__wall {
+  display: flex;
+  flex: 1;
+  flex-wrap: wrap;
+  align-content: flex-start;
+  justify-content: center;
+  gap: 28px 24px;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 24px 48px 32px;
+}
+.k-present__item {
+  display: grid;
+  justify-items: start;
+  gap: 8px;
+  max-width: 360px;
+  border-radius: 4px;
+  outline: none;
+  animation: k-present-rise var(--duration-frame-rise) var(--ease-out-quint)
+    calc(var(--i) * var(--stagger-frame-rise)) both;
+}
+.k-present__thumb {
+  position: relative;
+  display: block;
+  height: 160px;
+  overflow: hidden;
+  border-radius: 4px;
+  background: var(--canvas);
+  box-shadow: 0 0 0 0.5px var(--line-strong);
+  transition:
+    box-shadow var(--duration-fast) ease,
+    transform var(--duration-fast) var(--ease-out-quint);
+}
+.k-present__item:hover .k-present__thumb {
+  transform: translateY(-2px);
+  box-shadow: 0 0 0 1px var(--border-strong);
+}
+.k-present__item[data-on] .k-present__thumb {
+  box-shadow: 0 0 0 2px var(--control-on);
+}
+.k-present__name {
+  max-width: 100%;
+  overflow: hidden;
+  font-size: 12px;
+  color: var(--text-tertiary);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.k-present__item[data-on] .k-present__name {
+  color: var(--text-primary);
+}
+
+/* The slim position bar beside a long frame. */
+.k-position {
+  position: absolute;
+  z-index: 4;
+  width: 4px;
+  pointer-events: none;
+}
+.k-position > i {
+  display: block;
+  width: 4px;
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--text-primary) 28%, transparent);
+}
+
+@keyframes k-present-fade {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes k-present-in {
+  from {
+    opacity: 0;
+    translate: calc(var(--dir) * 32px) 0;
+  }
+}
+@keyframes k-present-out {
+  to {
+    opacity: 0;
+    translate: calc(var(--dir) * -32px) 0;
+  }
+}
+@keyframes k-present-rise {
+  from {
+    opacity: 0;
+    translate: 0 6px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .k-present,
+  .k-present *,
+  .k-present *::before,
+  .k-present *::after {
+    animation-duration: 1ms !important;
+    animation-delay: 0ms !important;
+    transition-duration: 1ms !important;
+  }
+}
+:root[data-reduce-motion='always'] .k-present,
+:root[data-reduce-motion='always'] .k-present *,
+:root[data-reduce-motion='always'] .k-present *::before,
+:root[data-reduce-motion='always'] .k-present *::after {
+  animation-duration: 1ms !important;
+  animation-delay: 0ms !important;
+  transition-duration: 1ms !important;
+}

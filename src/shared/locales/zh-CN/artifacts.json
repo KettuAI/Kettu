@@ -255,7 +255,8 @@
     "downloadPng": "下载 PNG",
     "presentFrom": "从这页演示",
     "focusPage": "聚焦",
-    "pngFailed": "无法保存图片。{{error}}"
+    "pngFailed": "无法保存图片。{{error}}",
+    "fitWidth": "适合宽度"
   },
   "history": {
     "title": "历史",
@@ -435,7 +436,11 @@
     "label": "正在演示 {{title}}",
     "controls": "演示",
     "position": "{{name}} · {{number}} / {{count}}",
-    "exit": "Esc 退出"
+    "exit": "退出",
+    "previous": "上一个",
+    "next": "下一个",
+    "grid": "全部",
+    "gridKey": "查看全部画框（G）"
   },
   "consent": {
     "filesTitle": "允许“{{title}}”读取 {{project}} 里的文件？",
@@ -449,27 +454,7 @@
   },
   "board": {
     "canvases": {
-      "menu": "页面",
-      "new": "新建页面",
-      "rename": "改名",
-      "duplicate": "复制这个页面",
-      "delete": "删除页面",
-      "newName": "页面 {{number}}",
-      "lastOne": "画布至少保留一个页面",
-      "actions": "页面操作"
-    },
-    "layers": {
-      "title": "图层",
-      "notes": {
-        "text": "文字",
-        "sticky": "便签",
-        "pen": "笔迹",
-        "rect": "矩形",
-        "ellipse": "椭圆",
-        "line": "线",
-        "arrow": "箭头"
-      },
-      "empty": "这个页面上还没有内容"
+      "menu": "页面"
     },
     "props": {
       "title": "标题",
@@ -483,17 +468,12 @@
       "blank": "新画框",
       "blankHint": "智能体画好之前是空的",
       "drawing": "{{agent}} 正在画这个画框",
-      "ask": "交给智能体",
       "tweak": "调节"
     },
     "note": {
       "doneBy": "{{agent}} 已处理",
       "by": "{{who}}",
       "agent": "智能体"
-    },
-    "selection": {
-      "handOff": "交给智能体",
-      "count": "已选 {{count}} 项"
     },
     "agent": {
       "reading": "在看「{{page}}」",
@@ -556,5 +536,37 @@
     "files_other": "改了 {{count}} 个文件",
     "passages_other": "改了 {{count}} 段",
     "slides_other": "改了 {{count}} 张"
+  },
+  "pages": {
+    "title": "页面",
+    "heading": "{{pages}} 个页面 · {{frames}}",
+    "frames": "{{count}} 个画框",
+    "search": "查找画框",
+    "find": "查找画框…",
+    "filter": "显示",
+    "all": "全部",
+    "changed": "有改动",
+    "comments": "有评论",
+    "none": "没有符合的画框",
+    "version": "v{{version}}",
+    "frames_one": "{{count}} 个画框"
+  },
+  "frame": {
+    "open": "打开",
+    "present": "演示",
+    "ask": "让智能体改",
+    "count": "{{count}} 个画框",
+    "back": "返回页面",
+    "backShort": "返回",
+    "count_one": "{{count}} 个画框"
+  },
+  "reading": {
+    "fit": {
+      "label": "大小",
+      "auto": "自动",
+      "screen": "适合屏幕",
+      "width": "适合宽度",
+      "actual": "100%"
+    }
   }
 }

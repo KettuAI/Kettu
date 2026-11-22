@@ -43,15 +43,6 @@
     0 0 0 calc(0.5px * var(--unscale)) var(--border-default),
     0 calc(1px * var(--unscale)) calc(3px * var(--unscale)) var(--border-subtle);
 }
-.k-ce-page__frame {
-  display: block;
-  border: 0;
-  opacity: 0;
-  transition: opacity var(--duration-fast) ease;
-}
-.k-ce-page__frame[data-loaded] {
-  opacity: 1;
-}
 .k-ce-page__idle {
   display: flex;
   align-items: center;
@@ -102,64 +93,12 @@
 .k-ce-label[data-selected] .k-ce-label__name {
   color: var(--control-on);
 }
-.k-ce-label__acts {
-  display: flex;
-  flex: none;
-  gap: calc(2px * var(--unscale));
-  pointer-events: auto;
-}
-.k-ce-label__act {
-  display: grid;
-  place-items: center;
-  width: calc(20px * var(--unscale));
-  height: calc(20px * var(--unscale));
-  border-radius: calc(6px * var(--unscale));
-  color: color-mix(in srgb, var(--text-tertiary) 70%, transparent);
-}
-.k-ce-label__act:hover {
-  background: var(--bg-hover);
-  color: var(--text-primary);
-}
-.k-ce-label__act svg {
-  width: calc(14px * var(--unscale));
-  height: calc(14px * var(--unscale));
-}
 
-/* Selection, handles, guides and the marquee. */
+/* The selection and the bar above it. */
 .k-ce-sel {
   position: absolute;
   box-shadow: 0 0 0 calc(1.5px * var(--unscale)) var(--control-on);
   border-radius: calc(3px * var(--unscale));
-}
-.k-ce-handle {
-  position: absolute;
-  width: calc(8px * var(--unscale));
-  height: calc(8px * var(--unscale));
-  margin: calc(-4px * var(--unscale)) 0 0 calc(-4px * var(--unscale));
-  border-radius: calc(2px * var(--unscale));
-  background: var(--bg-surface);
-  box-shadow: 0 0 0 calc(1.5px * var(--unscale)) var(--control-on);
-}
-.k-ce-guide {
-  position: absolute;
-  background: var(--canvas-guide);
-}
-.k-ce-marquee {
-  position: absolute;
-  border: calc(1px * var(--unscale)) solid var(--control-on);
-  background: var(--control-on-tint);
-}
-.k-ce-size {
-  position: absolute;
-  padding: 0 calc(5px * var(--unscale));
-  border-radius: calc(5px * var(--unscale));
-  background: var(--control-on);
-  font-size: calc(11px * var(--unscale));
-  line-height: calc(18px * var(--unscale));
-  color: var(--on-fill);
-  white-space: nowrap;
-  transform: translateX(-50%);
-  font-variant-numeric: tabular-nums;
 }
 
 /* Agents at work: the element they change outlined in the one ink, a page they draw dashed. */
@@ -282,44 +221,6 @@
 .k-ce-side__empty p:first-child {
   color: var(--ink);
 }
-.k-ce-row {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  width: 100%;
-  height: 28px;
-  padding: 0 8px;
-  border-radius: 7px;
-  font-size: 13px;
-  color: var(--text);
-  white-space: nowrap;
-  text-align: start;
-}
-.k-ce-row:hover {
-  background: var(--hover);
-}
-.k-ce-row[aria-selected='true'] {
-  background: var(--control-on-tint);
-  color: var(--ink);
-}
-.k-ce-row[data-depth='1'] {
-  padding-left: 27px;
-}
-.k-ce-row__icon {
-  flex: none;
-  color: var(--muted);
-}
-.k-ce-row__name {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.k-ce-row__meta {
-  font-size: 11.5px;
-  color: var(--faint);
-  font-variant-numeric: tabular-nums;
-}
 .k-ce-psec {
   padding: 12px 14px;
   border-top: 1px solid var(--line);
@@ -405,16 +306,6 @@
   font-size: 12px;
   color: var(--muted);
 }
-.k-ce-selbar {
-  position: absolute;
-  z-index: 6;
-  display: flex;
-  align-items: center;
-  gap: 2px;
-  height: 38px;
-  padding: 0 4px;
-  white-space: nowrap;
-}
 .k-ce-banner {
   position: absolute;
   top: 12px;
@@ -452,43 +343,271 @@
   font-size: 13px;
   color: var(--text);
 }
-
-/* The left card: the pages, then what the page on screen holds. */
-.k-ce-nav {
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-  padding: 0 6px 8px;
-}
-.k-ce-nav__head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  height: 30px;
-  margin-top: 6px;
-  padding: 0 2px 0 8px;
-  font-size: 11.5px;
-  font-weight: 500;
-  color: var(--muted);
-}
-.k-ce-nav__head:first-child {
-  margin-top: 0;
-}
-.avs-card__acts .k-ce-tool {
-  min-width: 24px;
-  height: 24px;
-  padding: 0;
-  border-radius: 6px;
-  color: var(--muted);
-}
-.k-ce-nav__empty {
-  margin: 0;
-  padding: 6px 8px;
-  font-size: 12px;
-  color: var(--faint);
-}
 .k-ce-tweaks {
   flex: 1;
   min-height: 0;
   overflow: auto;
+}
+
+/* A frame's marks after its name: changed in this version, and its open comments. */
+.k-ce-label__mark {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: calc(3px * var(--unscale));
+  height: calc(16px * var(--unscale));
+  padding: 0 calc(5px * var(--unscale));
+  border-radius: calc(5px * var(--unscale));
+  background: var(--bg-hover);
+  font-size: calc(11px * var(--unscale));
+  font-variant-numeric: tabular-nums;
+  color: var(--text-tertiary);
+}
+.k-ce-label__mark[data-changed] {
+  background: var(--control-on-tint);
+  color: var(--control-on);
+}
+.k-ce-label__mark svg {
+  width: calc(11px * var(--unscale));
+  height: calc(11px * var(--unscale));
+}
+
+/* A frame near the view that is not live shows its picture. */
+.k-ce-page__thumb {
+  width: 100%;
+  height: 100%;
+  background: var(--canvas);
+}
+.k-ce-thumb__img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: top;
+}
+.k-ce-thumb__none {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  padding: 8px;
+  background: var(--bg-subtle);
+  font-size: 12px;
+  color: var(--text-tertiary);
+  text-align: center;
+}
+
+/* The bar above the selected frame, at screen size whatever the zoom. */
+.k-ce-fbar {
+  position: absolute;
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  height: 36px;
+  padding: 0 4px;
+  border-radius: 10px;
+  background: var(--card);
+  box-shadow:
+    0 0 0 0.5px var(--line-strong),
+    var(--elevation-float);
+  white-space: nowrap;
+  pointer-events: auto;
+  transform: scale(var(--unscale)) translateY(-100%);
+  transform-origin: 0 0;
+  animation: k-ce-bar-in var(--duration-card-in) var(--ease-out-quint) both;
+}
+.k-ce-fbar__btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 28px;
+  height: 28px;
+  padding: 0 8px;
+  border-radius: 7px;
+  font-size: 12.5px;
+  color: var(--text);
+  transition:
+    background-color var(--duration-fast) ease,
+    color var(--duration-fast) ease;
+}
+.k-ce-fbar__btn:hover {
+  background: var(--hover);
+  color: var(--ink);
+}
+.k-ce-fbar__btn[data-primary] {
+  color: var(--control-on);
+  font-weight: 500;
+}
+.k-ce-fbar__btn:focus-visible {
+  outline: 2px solid var(--focus-ring-color);
+  outline-offset: 1px;
+}
+.k-ce-fbar__btn kbd {
+  font-size: 11px;
+}
+.k-ce-fbar__count {
+  padding: 0 8px;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+/* An opened frame: the others fade back, and the frame itself is live over its picture. */
+.k-ce-page,
+.k-ce-label {
+  transition: opacity var(--duration-open) var(--ease-out-quint);
+}
+.k-ce-page[data-dim],
+.k-ce-label[data-dim] {
+  opacity: 0.22;
+}
+.k-ce-open {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  z-index: 3;
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-width: none;
+}
+.k-ce-open::-webkit-scrollbar {
+  display: none;
+}
+.k-ce-open > div {
+  position: relative;
+}
+.k-ce-open__frame {
+  position: absolute;
+  left: 0;
+  overflow: hidden;
+  border-radius: 4px;
+  background: var(--canvas);
+  box-shadow: var(--elevation-float);
+}
+.k-ce-open__frame > iframe {
+  display: block;
+  border: 0;
+  transform-origin: 0 0;
+  transition: opacity var(--duration-fast) ease;
+}
+
+/* Changing pages: the old page's frames fade out, the new page's rise in turn. */
+.k-ce[data-phase='out'] .k-ce__layer {
+  opacity: 0;
+  transition: opacity var(--duration-page-out) ease;
+}
+.k-ce[data-phase='in'] .k-ce-page,
+.k-ce[data-phase='in'] .k-ce-label {
+  animation: k-ce-rise var(--duration-frame-rise) var(--ease-out-quint)
+    calc(var(--i, 0) * var(--stagger-frame-rise)) both;
+}
+
+/* The Pages card. */
+.k-pages {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  height: 100%;
+}
+.k-pages__find {
+  flex: none;
+  height: 30px;
+  margin: 0 10px 6px;
+  padding: 0 10px;
+  border-radius: 8px;
+  background: var(--bg-hover);
+  font-size: 12.5px;
+  color: var(--ink);
+  outline: none;
+}
+.k-pages__find:focus-visible {
+  box-shadow: 0 0 0 2px var(--focus-ring-color);
+}
+.k-pages__filter {
+  flex: none;
+  padding: 0 10px 8px;
+}
+.k-pages__tree {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 0 6px 10px;
+}
+.k-pages__meta {
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+  color: var(--faint);
+}
+.k-pages__marks {
+  display: inline-flex;
+  gap: 4px;
+}
+.k-pages__mark {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  height: 16px;
+  padding: 0 5px;
+  border-radius: 5px;
+  background: var(--bg-hover);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-tertiary);
+}
+.k-pages__mark[data-changed] {
+  background: var(--control-on-tint);
+  color: var(--control-on);
+}
+.k-pages__peek {
+  display: grid;
+  gap: 8px;
+  width: 220px;
+  pointer-events: none;
+}
+.k-pages__peekpic {
+  display: block;
+  overflow: hidden;
+  border-radius: 6px;
+  background: var(--canvas);
+  box-shadow: 0 0 0 0.5px var(--line-strong);
+}
+.k-pages__peekname {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--ink);
+}
+.k-pages__peekname span {
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+}
+
+@keyframes k-ce-rise {
+  from {
+    opacity: 0;
+    translate: 0 calc(12px * var(--unscale, 1));
+  }
+}
+@keyframes k-ce-bar-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .k-ce-page,
+  .k-ce-label,
+  .k-ce-fbar,
+  .k-ce[data-phase] .k-ce__layer {
+    animation: none !important;
+    transition: none !important;
+  }
+}
+:root[data-reduce-motion='always'] .k-ce-page,
+:root[data-reduce-motion='always'] .k-ce-label,
+:root[data-reduce-motion='always'] .k-ce-fbar,
+:root[data-reduce-motion='always'] .k-ce[data-phase] .k-ce__layer {
+  animation: none !important;
+  transition: none !important;
 }

@@ -75,7 +75,16 @@ export interface SelectMessage {
   selection: PageSelection | null
   /** An answer to `select-locate` instead of a pick: where the element at `src` lies, if anywhere. */
   located?: { src: number; box: PageBox | null }
+  /** A key pressed in the page, outside its text fields, instead of a pick, after `select-keys`. */
+  key?: PageKey
 }
+
+/**
+ * The keys a page passes on while asked to, so the viewer around it keeps stepping through frames
+ * once the user clicked into one.
+ */
+export const PAGE_KEYS = ['ArrowLeft', 'ArrowRight', 'Escape', 'g'] as const
+export type PageKey = (typeof PAGE_KEYS)[number]
 
 /** A numbered pin on an element, or on the page when `src` is null or the element is gone. */
 export interface Pin {
@@ -116,6 +125,8 @@ export type DriveMessage =
   | { v: typeof RUNTIME_VERSION; kind: 'params'; values: Record<string, string | number | boolean> }
   // The frame loads the next version of this page now, which comes back where this one is scrolled.
   | { v: typeof RUNTIME_VERSION; kind: 'keep-scroll' }
+  // Pass PAGE_KEYS on as select messages with `key`, or stop.
+  | { v: typeof RUNTIME_VERSION; kind: 'select-keys'; on: boolean; channel: string }
 
 /** The properties a direct edit may write into a start tag's `style`, by their CSS names. */
 export const EDITABLE_PROPERTIES = [
@@ -257,6 +268,11 @@ export function parseSelectMessage(value: unknown): SelectMessage | null {
     const located = locatedOf(value.located)
     if (!located || picked !== null) return null
     message.located = located
+  }
+  if (value.key !== undefined) {
+    const key = PAGE_KEYS.find((k) => k === value.key)
+    if (!key || picked !== null || message.located) return null
+    message.key = key
   }
   return message
 }

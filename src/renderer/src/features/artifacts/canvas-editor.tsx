@@ -1,7 +1,9 @@
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import {
   AiMagicIcon,
-  CenterFocusIcon,
+  ArrowLeft01Icon,
+  ArrowRight01Icon,
+  Comment01Icon,
   Download04Icon,
   MinusSignIcon,
   MoreHorizontalIcon,
@@ -12,31 +14,33 @@ import {
   Tick02Icon,
 } from '@hugeicons/core-free-icons'
 import { HugeiconsIcon, type IconSvgElement } from '@hugeicons/react'
-import { animate, type AnimationPlaybackControls } from 'motion/react'
+import { animate, type AnimationPlaybackControls, type Transition } from 'motion/react'
 import { useTranslation } from 'react-i18next'
 import type { TFunction } from 'i18next'
 import type { AgentId } from '@shared/agents'
 import type { ArtifactDoing, ArtifactFocus } from '@shared/artifacts'
+import { ARTIFACT_FRAME_SANDBOX, WEB_ARTIFACT_FRAME_SANDBOX } from '@shared/artifacts'
+import type { PageKey } from '@shared/artifact-runtime/page-messages'
 import { strokePath } from '@shared/canvas-stroke'
 import {
-  canvasId,
   joinedEnds,
   noteBox,
-  PAGE_MAX,
-  PAGE_MIN,
   type Box,
   type CanvasNote,
-  type CanvasOp,
   type CanvasPage,
   type ShapeNote,
 } from '@shared/canvas-doc'
 import { AgentCursorStyles, AgentPointer } from '@renderer/components/affect/agent-cursors'
 import { Dropdown } from '@renderer/components/affect/app-shell'
 import { AgentMark } from '@renderer/components/agents/agent-mark'
-import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
-import { glide } from '@renderer/lib/motion'
+import { Kbd } from '@renderer/components/ui/kbd'
+import { useHostHas } from '@renderer/lib/host-features'
+import { cameraGlide, openGlide } from '@renderer/lib/motion'
+import { isWeb } from '@renderer/lib/platform'
 import { cn } from '@renderer/lib/utils'
 import {
+  cameraBeforeOpen,
+  keepCameraBeforeOpen,
   saveCamera,
   savedCamera,
   setViewerState,
@@ -46,7 +50,6 @@ import {
 import { prefersReducedMotion } from '@renderer/stores/settings'
 import {
   between,
-  fitBox,
   livePages,
   NAME_MIN_WIDTH,
   reveal,
@@ -57,10 +60,16 @@ import {
   type Size,
 } from './camera'
 import { useCanvasState, type CanvasControls } from './canvas-controls'
-import { CanvasFrame, FocusedPage } from './canvas-view'
-import { CanvasNavigator, CanvasTweaks } from './canvas-editor-panels'
-import { contains, docLayout, overlaps, snap, type DocLayout } from './canvas-model'
+import { FrameThumb } from './canvas-present'
+import { CanvasFrame, PickLayer } from './canvas-view'
+import { CanvasTweaks } from './canvas-editor-panels'
+import { contains, docLayout } from './canvas-model'
 import { useEditorState, type ArtifactEditor, type EditorFrame } from './editor'
+import { FitMenu } from './fit-menu'
+import { useKeyedFrame } from './live-frame'
+import { PagesCard } from './pages-card'
+import { PositionBar } from './position-bar'
+import { readingFit, type Reading, type Room } from './reading'
 import type { CanvasDocState } from './use-canvas-doc'
 import { useFrameParams } from './use-frame-params'
 import { framePageUrl } from './use-artifact'
@@ -88,68 +97,36 @@ export interface DocPageActions {
 }
 
 const DRAG_SLOP = 3
-/** How near, in screen pixels, a moved edge snaps to another. */
-const SNAP_PX = 6
-const HANDLE_PX = 8
+/** The band above a frame, in screen pixels, where its name selects the whole frame. */
+const LABEL_BAND = 24
+/** The live frames at most, nearest the middle first; the others near the view show pictures. */
+const LIVE_MAX = 16
+/** Room kept around the frames when landing on a page and around an opened frame. */
+const SIDE = 48
+const LAND_TOP = 96
+const OPEN_SIDE = 32
+const OPEN_TOP = 24
+const OPEN_BOTTOM = 72
+const ZOOM_FLOOR = 0.2
+/** How long the frames of a page that is left take to fade, and those of the next to rise. */
+const PAGE_OUT_MS = 140
+const RISE_MS = 320
+const RISE_STAGGER = 16
 
-type Corner = 'nw' | 'ne' | 'sw' | 'se'
-
-interface Drag {
-  kind: 'pan' | 'move' | 'resize' | 'marquee'
-  sx: number
-  sy: number
-  cx: number
-  cy: number
-  camera: Camera
-  moved: boolean
-  ids?: string[]
-  corner?: Corner
-  /** A press on a frame that picks the element under it unless it turns into a drag. */
-  pick?: { page: string; x: number; y: number; at: { x: number; y: number } }
+/** The ground's dots, 20 canvas pixels apart, doubled until they are at least 12 px apart. */
+function dotGap(z: number): number {
+  let gap = 20 * z
+  while (gap < 12) gap *= 2
+  return gap
 }
 
-/** The ops that move an object by (dx, dy) from where `doc` has it. */
-function moveOps(layout: DocLayout, id: string, dx: number, dy: number): CanvasOp[] {
-  const page = layout.pages.find((p) => p.id === id)
-  if (page) {
-    return [
-      { op: 'set', id, key: 'x', value: Math.round(page.x + dx) },
-      { op: 'set', id, key: 'y', value: Math.round(page.y + dy) },
-    ]
+/** Hides a frame's name row where the frame is too narrow on screen for it. */
+function fitLabels(layer: HTMLElement | undefined, z: number): void {
+  if (!layer) return
+  for (const label of layer.querySelectorAll<HTMLElement>('.k-ce-label')) {
+    const visibility = Number(label.dataset.width) * z < NAME_MIN_WIDTH ? 'hidden' : ''
+    if (label.style.visibility !== visibility) label.style.visibility = visibility
   }
-  const note = layout.notes.find((n) => n.id === id)
-  if (!note) return []
-  switch (note.kind) {
-    case 'text':
-    case 'sticky':
-      return [
-        { op: 'set', id, key: 'x', value: note.x + dx },
-        { op: 'set', id, key: 'y', value: note.y + dy },
-      ]
-    case 'pen':
-      return [
-        {
-          op: 'set',
-          id,
-          key: 'points',
-          value: note.points.map((v, i) => (i % 3 === 0 ? v + dx : i % 3 === 1 ? v + dy : v)),
-        },
-      ]
-    default:
-      return [
-        { op: 'set', id, key: 'x1', value: note.x1 + dx },
-        { op: 'set', id, key: 'y1', value: note.y1 + dy },
-        { op: 'set', id, key: 'x2', value: note.x2 + dx },
-        { op: 'set', id, key: 'y2', value: note.y2 + dy },
-      ]
-  }
-}
-
-function boxOf(layout: DocLayout, id: string): Box | null {
-  const page = layout.pages.find((p) => p.id === id)
-  if (page) return page
-  const note = layout.notes.find((n) => n.id === id)
-  return note ? noteBox(note) : null
 }
 
 function union(boxes: Box[]): Box | null {
@@ -159,30 +136,6 @@ function union(boxes: Box[]): Box | null {
   const right = Math.max(...boxes.map((b) => b.x + b.width))
   const bottom = Math.max(...boxes.map((b) => b.y + b.height))
   return { x: left, y: top, width: right - left, height: bottom - top }
-}
-
-/** The band above a frame, in screen pixels, where its name selects the whole frame. */
-const LABEL_BAND = 24
-
-/** The ground's dots, 20 canvas pixels apart, doubled until they are at least 12 px apart. */
-function dotGap(z: number): number {
-  let gap = 20 * z
-  while (gap < 12) gap *= 2
-  return gap
-}
-
-/** A label's action button and the gap after it, in screen pixels. */
-const LABEL_ACT = 22
-
-/** Hides a page's name row where the page is too narrow on screen for its name and actions. */
-function fitLabels(layer: HTMLElement | undefined, z: number): void {
-  if (!layer) return
-  for (const label of layer.querySelectorAll<HTMLElement>('.k-ce-label')) {
-    const acts = label.querySelector('.k-ce-label__acts')?.childElementCount ?? 0
-    const needs = NAME_MIN_WIDTH + (acts > 0 ? 6 + acts * LABEL_ACT : 0)
-    const visibility = Number(label.dataset.width) * z < needs ? 'hidden' : ''
-    if (label.style.visibility !== visibility) label.style.visibility = visibility
-  }
 }
 
 /** One note, drawn on the canvas at its own place. */
@@ -295,10 +248,21 @@ export function NoteView({
   }
 }
 
+/** An opened frame at reading size: where it lies on screen and the camera that puts it there. */
+interface Opened extends Reading {
+  id: string
+  camera: Camera
+  /** The room below the frame that the dock keeps, which a long frame scrolls clear of. */
+  bottom: number
+  viewHeight: number
+}
+
+type Phase = 'out' | 'in' | null
+
 /**
- * A canvas document's page on screen: its frames and notes on a surface that pans and zooms, in
- * the viewer's mode, with the agents at work on it. Its navigator, tweaks and zoom go into the
- * viewer's left card, right card and dock.
+ * A canvas document's page on screen: its frames as pictures on a ground that pans and zooms,
+ * one camera at three distances, the page, a selected frame and an opened one at reading size.
+ * Its Pages card, tweaks and dock go into the viewer's left card, right card and dock.
  */
 export const CanvasEditor = memo(function CanvasEditor({
   artifactId,
@@ -322,6 +286,8 @@ export const CanvasEditor = memo(function CanvasEditor({
   reloads,
   show = null,
   onShown,
+  changed,
+  comments,
 }: {
   artifactId: string
   url: string
@@ -333,7 +299,7 @@ export const CanvasEditor = memo(function CanvasEditor({
   /** The files of the version on screen; a page whose file is missing shows blank. */
   files: ReadonlySet<string>
   readOnly: boolean
-  /** The viewer's mode: View looks, Comment pins comments, Edit picks and arranges. */
+  /** The viewer's mode: View looks, Comment pins comments, Edit picks elements to change. */
   mode: ViewerMode
   controls: CanvasControls
   top?: number
@@ -352,6 +318,10 @@ export const CanvasEditor = memo(function CanvasEditor({
   show?: { pageId: string; seq: number } | null
   /** The page asked for is in view, or not in this version. */
   onShown?: (seq: number) => void
+  /** The frames that count as changed, by id. */
+  changed: ReadonlySet<string>
+  /** The open comment threads on each frame, by id. */
+  comments: ReadonlyMap<string, number>
 }) {
   const { t } = useTranslation('artifacts')
   const doc = canvas.doc
@@ -359,6 +329,7 @@ export const CanvasEditor = memo(function CanvasEditor({
   const activeCanvas = useViewerState(artifactId, (s) => s.page)
   const selection = useViewerState(artifactId, (s) => s.selection)
   const focused = useViewerState(artifactId, (s) => s.opened)
+  const fit = useViewerState(artifactId, (s) => s.fit)
   const tweaksOpen = useViewerState(artifactId, (s) => s.right === 'tweaks') && !readOnly
   const setSelection = useCallback(
     (ids: readonly string[]) =>
@@ -368,11 +339,8 @@ export const CanvasEditor = memo(function CanvasEditor({
     [artifactId],
   )
   const setFocused = useCallback(
-    (id: string | null) => setViewerState(artifactId, { opened: id }),
-    [artifactId],
-  )
-  const chooseCanvas = useCallback(
-    (id: string) => setViewerState(artifactId, { page: id, selection: [], opened: null }),
+    (id: string | null) =>
+      setViewerState(artifactId, id ? { opened: id, selection: [id] } : { opened: null }),
     [artifactId],
   )
   const toggleTweaks = (open: boolean) =>
@@ -390,12 +358,34 @@ export const CanvasEditor = memo(function CanvasEditor({
   const canvasKey = doc?.canvases.some((c) => c.id === activeCanvas)
     ? activeCanvas!
     : (doc?.canvases[0]?.id ?? '')
-  const layout = useMemo(() => (doc ? docLayout(doc, canvasKey) : null), [doc, canvasKey])
-  const base = useMemo(
-    () => (canvas.base ? docLayout(canvas.base, canvasKey) : null),
-    [canvas.base, canvasKey],
-  )
+
+  // The page on screen lags the one chosen while the old page's frames fade out.
+  const [shownKey, setShownKey] = useState(canvasKey)
+  const [chosenKey, setChosenKey] = useState(canvasKey)
+  const [phase, setPhase] = useState<Phase>(null)
+  if (chosenKey !== canvasKey) {
+    setChosenKey(canvasKey)
+    if (prefersReducedMotion()) setShownKey(canvasKey)
+    else setPhase('out')
+  }
+  useEffect(() => {
+    if (phase !== 'out') return
+    const timer = setTimeout(() => {
+      setShownKey(canvasKey)
+      setPhase('in')
+    }, PAGE_OUT_MS)
+    return () => clearTimeout(timer)
+  }, [phase, canvasKey])
+  useEffect(() => {
+    if (phase !== 'in') return
+    const timer = setTimeout(() => setPhase(null), RISE_MS + RISE_STAGGER * 16)
+    return () => clearTimeout(timer)
+  }, [phase])
+
+  const layout = useMemo(() => (doc ? docLayout(doc, shownKey) : null), [doc, shownKey])
   const pages = useMemo(() => layout?.pages ?? [], [layout])
+  const pageName = doc?.canvases.find((c) => c.id === shownKey)?.name ?? ''
+  const pageNumber = (doc?.canvases.findIndex((c) => c.id === shownKey) ?? 0) + 1
 
   const root = useRef<HTMLDivElement>(null)
   const stage = useRef<HTMLDivElement>(null)
@@ -408,45 +398,59 @@ export const CanvasEditor = memo(function CanvasEditor({
   const glideTo = useRef<AnimationPlaybackControls | null>(null)
   const liveFrame = useRef(0)
   const [live, setLive] = useState<ReadonlySet<string>>(new Set())
+  const [near, setNear] = useState<ReadonlySet<string>>(new Set())
   const liveNow = useRef(live)
   // The live pages that have loaded, or loaded long enough for the next to start.
   const settled = useRef(new Set<string>())
   const frames = useRef(new Map<string, HTMLIFrameElement>())
   const editorFrames = useRef(new Map<string, EditorFrame>())
   const editing = useEditorState(editor)
-  // A frame entered by a double click, whose elements are picked in any mode.
-  const [inside, setInside] = useState<string | null>(null)
-  const [guides, setGuides] = useState<ReturnType<typeof snap>['guides']>([])
-  const [marquee, setMarquee] = useState<Box | null>(null)
-  const [spaceDown, setSpaceDown] = useState(false)
   const [located, setLocated] = useState<Record<string, Box | null>>({})
-  const drag = useRef<Drag | null>(null)
-  // Mirrors of the drag under way for what renders: a pan's cursor, the selection's bar.
+  const drag = useRef<{
+    sx: number
+    sy: number
+    camera: Camera
+    moved: boolean
+    pick?: { page: string; x: number; y: number; at: { x: number; y: number } }
+  } | null>(null)
   const [panning, setPanning] = useState(false)
-  const [dragging, setDragging] = useState(false)
+  const [reading, setOpened] = useState<Opened | null>(null)
+  // The reading place counts only for the frame still open.
+  const opened = reading && reading.id === focused ? reading : null
+  const openedRef = useRef(opened)
+  useEffect(() => {
+    openedRef.current = opened
+  })
+  const scroller = useRef<HTMLDivElement | null>(null)
+  // Bumped when the view's size changes while a frame is open, which sizes it again.
+  const [resized, setResized] = useState(0)
+  // A pinch out of an opened frame leaves it where the camera is instead of going back.
+  const leaveInPlace = useRef(false)
+  const thumbnails = useHostHas('partThumbnails') === true
 
-  const mode = editor ? editing.mode : null
-  const hand = spaceDown
-  // Frames are moved, resized, nudged and removed in Edit only.
-  const arranging = !readOnly && viewerMode === 'edit'
-
-  // Selected ids that are gone drop out.
   const shownSelection = useMemo(
-    () => (layout ? selection.filter((id) => boxOf(layout, id)) : []),
-    [layout, selection],
+    () => selection.filter((id) => pages.some((p) => p.id === id)),
+    [pages, selection],
   )
   const frameParams = useFrameParams(artifactId, version, pages)
+  const indexInDoc = useCallback(
+    (id: string) => (doc ? doc.pages.findIndex((q) => q.id === id) : -1),
+    [doc],
+  )
 
   // Live pages follow the camera, nearest first, one more each time the last has settled; a page
-  // without its file yet has nothing to load.
+  // without its file yet has nothing to load. The others near the view show their pictures.
   const syncLive = useCallback(() => {
     cancelAnimationFrame(liveFrame.current)
     liveFrame.current = requestAnimationFrame(() => {
-      const wanted = livePages(pages, camera.current, view.current)
+      const around = livePages(pages, camera.current, view.current)
         .map((i) => pages[i]!)
         .filter((p) => files.has(p.file))
         .map((p) => p.id)
-      const next = stepLive(liveNow.current, wanted, settled.current)
+      setNear((was) =>
+        was.size === around.length && around.every((id) => was.has(id)) ? was : new Set(around),
+      )
+      const next = stepLive(liveNow.current, around.slice(0, LIVE_MAX), settled.current)
       if (next === liveNow.current) return
       for (const id of settled.current) if (!next.has(id)) settled.current.delete(id)
       liveNow.current = next
@@ -464,7 +468,8 @@ export const CanvasEditor = memo(function CanvasEditor({
 
   const draw = useCallback(() => {
     const { x, y, z } = camera.current
-    if (fitted.current) saveCamera(artifactId, canvasKey, { x, y, z, fitted: atFit.current })
+    if (fitted.current && !openedRef.current)
+      saveCamera(artifactId, shownKey, { x, y, z, fitted: atFit.current })
     for (const el of layers.current) {
       if (!el) continue
       el.style.transform = `translate(${x}px, ${y}px) scale(${z})`
@@ -480,7 +485,7 @@ export const CanvasEditor = memo(function CanvasEditor({
     }
     controls.publish({ zoom: z, fitted: atFit.current })
     syncLive()
-  }, [controls, syncLive, artifactId, canvasKey])
+  }, [controls, syncLive, artifactId, shownKey])
 
   const place = useCallback(
     (next: Camera, fit = false) => {
@@ -493,40 +498,47 @@ export const CanvasEditor = memo(function CanvasEditor({
   )
 
   const moveTo = useCallback(
-    (target: Camera, fit = false) => {
+    (target: Camera, fit = false, transition: Transition = cameraGlide, done?: () => void) => {
       glideTo.current?.stop()
-      if (prefersReducedMotion()) return place(target, fit)
+      if (prefersReducedMotion()) {
+        place(target, fit)
+        done?.()
+        return
+      }
       atFit.current = fit
       const from = camera.current
       glideTo.current = animate(0, 1, {
-        ...glide,
+        ...transition,
         onUpdate: (k) => {
           camera.current = between(from, target, k, view.current)
           draw()
         },
+        onComplete: done,
       })
     },
     [place, draw],
   )
 
-  // Fitting leaves the room of the viewer's open cards free.
   const leftRoom = insets.left
   const rightRoom = insets.right
-  const fitAll = useCallback(
-    (glides: boolean) => {
-      const bounds = layout?.bounds
-      if (!bounds || bounds.width === 0)
-        return place({ x: view.current.width / 2, y: view.current.height / 2, z: 1 }, true)
-      const target = fitBox(bounds, view.current, top + 56, 56, leftRoom, rightRoom)
-      if (glides) moveTo(target, true)
-      else place(target, true)
-    },
-    [layout, top, leftRoom, rightRoom, moveTo, place],
-  )
 
-  const fitBoxGlide = useCallback(
-    (box: Box) => moveTo(fitBox(box, view.current, top + 56, 56, leftRoom, rightRoom)),
-    [top, leftRoom, rightRoom, moveTo],
+  // Landing on a page fits its frames' width from their top, never above 100% or under 20%.
+  const landing = useCallback((): Camera => {
+    const bounds = layout?.bounds
+    const { width, height } = view.current
+    if (!bounds || bounds.width === 0) return { x: width / 2, y: height / 2, z: 1 }
+    const room = Math.max(1, width - leftRoom - rightRoom - 2 * SIDE)
+    const z = Math.min(1, Math.max(ZOOM_FLOOR, room / bounds.width))
+    return {
+      z,
+      x: leftRoom + SIDE + Math.max(0, (room - bounds.width * z) / 2) - bounds.x * z,
+      y: top + LAND_TOP - bounds.y * z,
+    }
+  }, [layout, leftRoom, rightRoom, top])
+
+  const land = useCallback(
+    (glides: boolean) => (glides ? moveTo(landing(), true) : place(landing(), true)),
+    [landing, moveTo, place],
   )
 
   const zoomAround = useCallback(
@@ -537,12 +549,56 @@ export const CanvasEditor = memo(function CanvasEditor({
     [moveTo],
   )
 
-  // The camera the canvas left, when the viewer showed it before, else a fit.
+  const revealFrame = useCallback(
+    (box: Box) => moveTo(reveal(camera.current, box, view.current)),
+    [moveTo],
+  )
+
+  // The camera the page was left at, when the viewer showed it before, else the landing.
   const restore = useCallback(() => {
-    const saved = savedCamera(artifactId, canvasKey)
+    const saved = savedCamera(artifactId, shownKey)
     if (saved && !saved.fitted) place({ x: saved.x, y: saved.y, z: saved.z })
-    else fitAll(false)
-  }, [artifactId, canvasKey, place, fitAll])
+    else land(false)
+  }, [artifactId, shownKey, place, land])
+
+  // The room an opened frame is read in: the view less the cards, the top and the dock.
+  const readingRoom = useCallback(
+    (): Room => ({
+      x: leftRoom + OPEN_SIDE,
+      y: top + OPEN_TOP,
+      width: Math.max(1, view.current.width - leftRoom - rightRoom - 2 * OPEN_SIDE),
+      height: Math.max(1, view.current.height - top - OPEN_TOP - OPEN_BOTTOM),
+    }),
+    [leftRoom, rightRoom, top],
+  )
+
+  // Moves the camera in to a frame at reading size; the live frame takes over once it is there.
+  const openAt = useCallback(
+    (page: CanvasPage, transition: Transition | null) => {
+      const room = readingRoom()
+      const reading = readingFit(page, room, fit)
+      const target = {
+        z: reading.z,
+        x: reading.x - page.x * reading.z,
+        y: reading.y - page.y * reading.z,
+      }
+      const next: Opened = {
+        ...reading,
+        id: page.id,
+        camera: target,
+        bottom: view.current.height - room.y - room.height,
+        viewHeight: view.current.height,
+      }
+      if (!transition) {
+        place(target)
+        setOpened(next)
+        return
+      }
+      openedRef.current = null
+      moveTo(target, false, transition, () => setOpened(next))
+    },
+    [readingRoom, fit, place, moveTo],
+  )
 
   useLayoutEffect(() => {
     const el = stage.current
@@ -556,48 +612,121 @@ export const CanvasEditor = memo(function CanvasEditor({
         fitted.current = true
         setMeasured(true)
         restore()
-      } else if (atFit.current) fitAll(false)
+      } else if (openedRef.current) setResized((n) => n + 1)
+      else if (atFit.current) land(false)
       else draw()
     })
     observer.observe(el)
     return () => observer.disconnect()
-  }, [fitAll, draw, restore])
+  }, [land, draw, restore])
 
-  // A fitted view fits again in the room a panel that opened or closed leaves.
+  // A landed view lands again in the room a card that opened or closed leaves.
   const rooms = `${leftRoom}:${rightRoom}`
   const lastRooms = useRef(rooms)
   useEffect(() => {
     if (lastRooms.current === rooms) return
     lastRooms.current = rooms
-    if (fitted.current && atFit.current) fitAll(true)
-  }, [rooms, fitAll])
+    if (fitted.current && atFit.current && !openedRef.current) land(true)
+  }, [rooms, land])
 
-  // Another canvas takes the camera it was left at, or fits its own pages.
-  const lastCanvas = useRef(canvasKey)
+  // Another page takes the camera it was left at, or lands on its frames.
+  const lastCanvas = useRef(shownKey)
   useEffect(() => {
-    if (lastCanvas.current === canvasKey) return
-    lastCanvas.current = canvasKey
+    if (lastCanvas.current === shownKey) return
+    lastCanvas.current = shownKey
     if (fitted.current) restore()
-  }, [canvasKey, restore])
+  }, [shownKey, restore])
+
+  // Opening a frame moves the camera in; closing it goes back to where the camera was.
+  const lastOpened = useRef<string | null>(null)
+  const focusedPage = focused ? pages.find((p) => p.id === focused) : undefined
+  useEffect(() => {
+    if (!measured) return
+    if (focused && !focusedPage) {
+      // A frame on a page still coming in waits for it; one no page has is let go.
+      if (doc && !doc.pages.some((p) => p.id === focused)) setFocused(null)
+      return
+    }
+    const was = lastOpened.current
+    lastOpened.current = focused
+    if (focused === was) return
+    if (focusedPage) {
+      if (!was) {
+        const c = camera.current
+        keepCameraBeforeOpen(artifactId, shownKey, { ...c, fitted: atFit.current })
+      }
+      openAt(focusedPage, was ? cameraGlide : openGlide)
+      return
+    }
+    const back = cameraBeforeOpen(artifactId, shownKey)
+    keepCameraBeforeOpen(artifactId, shownKey, null)
+    if (leaveInPlace.current) {
+      leaveInPlace.current = false
+      return
+    }
+    if (back) moveTo({ x: back.x, y: back.y, z: back.z }, back.fitted, openGlide)
+    else moveTo(landing(), true, openGlide)
+    requestAnimationFrame(() => stage.current?.focus({ preventScroll: true }))
+  }, [
+    focused,
+    focusedPage,
+    measured,
+    doc,
+    artifactId,
+    shownKey,
+    openAt,
+    moveTo,
+    landing,
+    setFocused,
+  ])
+
+  // An opened frame keeps its reading size as the fit, the room or the window changes.
+  const refitKey = `${fit}:${rooms}:${top}:${resized}`
+  const lastRefit = useRef(refitKey)
+  useEffect(() => {
+    if (lastRefit.current === refitKey) return
+    lastRefit.current = refitKey
+    if (focusedPage && lastOpened.current === focusedPage.id) openAt(focusedPage, cameraGlide)
+  }, [refitKey, focusedPage, openAt])
 
   useEffect(() => {
     draw()
   }, [draw, layout])
 
+  const stepOpened = useCallback(
+    (step: 1 | -1) => {
+      const at = pages.findIndex((p) => p.id === openedRef.current?.id || p.id === focused)
+      const next = pages[at + step]
+      if (next) setFocused(next.id)
+    },
+    [pages, focused, setFocused],
+  )
+
+  // Left and right walk the page's frames: the selection, or the opened frame.
+  const stepSelection = useCallback(
+    (step: 1 | -1) => {
+      const at = pages.findIndex((p) => p.id === shownSelection[0])
+      const next = pages[at < 0 ? (step > 0 ? 0 : pages.length - 1) : at + step]
+      if (!next) return
+      setSelection([next.id])
+      revealFrame(next)
+    },
+    [pages, shownSelection, setSelection, revealFrame],
+  )
+
   useEffect(
     () =>
       controls.attach({
         zoomStep: (direction) => zoomAround(stepZoom(camera.current.z, direction)),
-        fitAll: () => fitAll(true),
+        fitAll: () => land(true),
         fitSelected: () => {
-          const box =
-            layout && union(shownSelection.map((id) => boxOf(layout, id)!).filter(Boolean))
-          if (box) fitBoxGlide(box)
+          const box = union(pages.filter((p) => shownSelection.includes(p.id)))
+          if (box) revealFrame(box)
         },
         actualSize: () => zoomAround(1),
         focus: (index) => setFocused(index === null ? null : (pages[index]?.id ?? null)),
       }),
-    [controls, zoomAround, fitAll, fitBoxGlide, layout, shownSelection, pages, setFocused],
+    [controls, zoomAround, land, revealFrame, pages, shownSelection, setFocused],
   )
 
   useEffect(() => {
@@ -607,12 +736,12 @@ export const CanvasEditor = memo(function CanvasEditor({
         0,
         pages.findIndex((p) => p.id === shownSelection[0]),
       ),
+      focused: focusedPage ? pages.indexOf(focusedPage) : null,
     })
-  }, [controls, pages, shownSelection])
+  }, [controls, pages, shownSelection, focusedPage])
 
-  // A page asked for is fitted once the view has a size and its canvas is shown, and left
-  // unselected, since a selection's properties would cover half of a narrow view; one this version
-  // lacks is done with at once.
+  // A page asked for is brought into view once the view has a size and its canvas is shown; one
+  // this version lacks is done with at once.
   const shownAsked = useRef<number | null>(null)
   useEffect(() => {
     if (!show || !doc || shownAsked.current === show.seq) return
@@ -620,9 +749,20 @@ export const CanvasEditor = memo(function CanvasEditor({
     const elsewhere = doc.pages.some((p) => p.id === show.pageId)
     if ((!page && elsewhere) || (page && !measured)) return
     shownAsked.current = show.seq
-    if (page) fitBoxGlide(page)
+    if (page) revealFrame(page)
     onShown?.(show.seq)
-  }, [show, doc, layout, measured, fitBoxGlide, onShown])
+  }, [show, doc, layout, measured, revealFrame, onShown])
+
+  // A frame chosen on another page in the Pages card is brought into view once that page is in.
+  const revealAsked = useRef<string | null>(null)
+  useEffect(() => {
+    const id = revealAsked.current
+    if (!id || phase === 'out' || !measured) return
+    const page = pages.find((p) => p.id === id)
+    if (!page) return
+    revealAsked.current = null
+    revealFrame(page)
+  }, [pages, phase, measured, revealFrame])
 
   // Reload loads every live page again, in place.
   const [mountedAt] = useState(reloads)
@@ -639,15 +779,25 @@ export const CanvasEditor = memo(function CanvasEditor({
     }
   }, [syncLive])
 
-  // The wheel pans, and zooms with Mod or a pinch.
+  // The wheel pans, and zooms with Mod or a pinch; over an opened frame it scrolls a long one, and
+  // a pinch leaves it for the page where the camera is.
   useEffect(() => {
     const el = stage.current
-    if (!el || focused !== null) return
+    if (!el) return
     const onWheel = (event: WheelEvent): void => {
       event.preventDefault()
       const unit = event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? view.current.height : 1
       const current = camera.current
-      if (event.ctrlKey || event.metaKey) {
+      const zooming = event.ctrlKey || event.metaKey
+      if (openedRef.current && !zooming) {
+        scroller.current?.scrollBy({ top: event.deltaY * unit })
+        return
+      }
+      if (zooming) {
+        if (openedRef.current) {
+          leaveInPlace.current = true
+          setFocused(null)
+        }
         const rect = el.getBoundingClientRect()
         const delta = Math.max(-50, Math.min(50, event.deltaY * unit))
         place(
@@ -668,20 +818,16 @@ export const CanvasEditor = memo(function CanvasEditor({
     }
     el.addEventListener('wheel', onWheel, { passive: false })
     return () => el.removeEventListener('wheel', onWheel)
-  }, [focused, place])
+  }, [place, setFocused])
 
-  // Edit picks what is in the frames, outlined under the pointer; Comment pins comments; View
-  // leaves the frames to show, except one entered with a double click.
+  // Comment pins comments and Edit picks elements, in the frames on the page and in an opened one.
   useEffect(() => {
     if (!editor) return
     editor.setMode(
-      viewerMode === 'comment'
-        ? 'comment'
-        : inside || (viewerMode === 'edit' && !readOnly)
-          ? 'select'
-          : null,
+      viewerMode === 'comment' ? 'comment' : viewerMode === 'edit' && !readOnly ? 'select' : null,
     )
-  }, [editor, viewerMode, inside, readOnly])
+  }, [editor, viewerMode, readOnly])
+  const mode = editor ? editing.mode : null
 
   // The page in the middle of the view, for the faces of the user's other devices.
   const lastViewed = useRef<string | null>(null)
@@ -762,9 +908,9 @@ export const CanvasEditor = memo(function CanvasEditor({
   const followed = following ? agents.find((a) => a.sessionId === following) : undefined
   const followedPage = followed ? agentPages.get(followed.sessionId) : undefined
   useEffect(() => {
-    if (!followedPage) return
-    fitBoxGlide(followedPage)
-  }, [followedPage, fitBoxGlide])
+    if (!followedPage || openedRef.current) return
+    revealFrame(followedPage)
+  }, [followedPage, revealFrame])
 
   /** A spot on the screen in canvas pixels. */
   const toCanvas = (sx: number, sy: number): { x: number; y: number } => {
@@ -776,141 +922,30 @@ export const CanvasEditor = memo(function CanvasEditor({
     return { sx: event.clientX - rect.left, sy: event.clientY - rect.top }
   }
 
-  /** What lies under a canvas point: the topmost note or a page. */
-  const hit = useCallback(
-    (x: number, y: number): string | null => {
-      if (!layout) return null
-      const reach = 6 / camera.current.z
-      for (let i = layout.notes.length - 1; i >= 0; i--) {
-        const n = layout.notes[i]!
-        const b = noteBox(n)
-        if (
-          contains(
-            {
-              x: b.x - reach,
-              y: b.y - reach,
-              width: b.width + 2 * reach,
-              height: b.height + 2 * reach,
-            },
-            x,
-            y,
-          )
-        )
-          return n.id
-      }
-      for (let i = layout.pages.length - 1; i >= 0; i--)
-        if (contains(layout.pages[i]!, x, y)) return layout.pages[i]!.id
-      return null
-    },
-    [layout],
-  )
-
-  const handleAt = (x: number, y: number): { id: string; corner: Corner } | null => {
-    if (!layout || shownSelection.length !== 1) return null
-    const page = layout.pages.find((p) => p.id === shownSelection[0])
-    if (!page || page.locked) return null
-    const r = HANDLE_PX / camera.current.z
-    const corners: Array<[Corner, number, number]> = [
-      ['nw', page.x, page.y],
-      ['ne', page.x + page.width, page.y],
-      ['sw', page.x, page.y + page.height],
-      ['se', page.x + page.width, page.y + page.height],
-    ]
-    for (const [corner, cx, cy] of corners)
-      if (Math.abs(x - cx) <= r && Math.abs(y - cy) <= r) return { id: page.id, corner }
-    return null
-  }
-
-  const apply = useCallback((ops: CanvasOp[]) => !readOnly && canvas.apply(ops), [readOnly, canvas])
-
-  const remove = (): void => {
-    if (!layout) return
-    const ids = shownSelection.filter((id) => {
-      const page = layout.pages.find((p) => p.id === id)
-      const note = layout.notes.find((n) => n.id === id)
-      return !(page?.locked || note?.locked)
-    })
-    if (ids.length === 0) return
-    apply(ids.map((id): CanvasOp => ({ op: 'remove', id })))
-    setSelection([])
-  }
-
-  const duplicate = (): void => {
-    if (!layout || !canvas.base) return
-    const ops: CanvasOp[] = []
-    const fresh: string[] = []
-    for (const id of shownSelection) {
-      const page = layout.pages.find((p) => p.id === id)
-      if (page) {
-        const copy = canvasId('p')
-        ops.push({
-          op: 'add',
-          object: {
-            type: 'page',
-            ...page,
-            id: copy,
-            name: `${page.name} 2`,
-            x: page.x + 48,
-            y: page.y + 48,
-          },
-        })
-        fresh.push(copy)
-        continue
-      }
-      const note = layout.notes.find((n) => n.id === id)
-      if (note) {
-        const copy = canvasId('n')
-        const moved = moveOps({ ...layout, notes: [note] }, note.id, 24, 24).reduce<
-          Record<string, unknown>
-        >((acc, op) => (op.op === 'set' ? { ...acc, [op.key]: op.value } : acc), {})
-        ops.push({
-          op: 'add',
-          object: { type: 'note', ...note, ...moved, id: copy, by: null } as never,
-        })
-        fresh.push(copy)
-      }
+  /** The frame under a canvas point, or its name band above it. */
+  const frameAt = (x: number, y: number): { page: CanvasPage; named: boolean } | null => {
+    const band = LABEL_BAND / camera.current.z
+    for (let i = pages.length - 1; i >= 0; i--) {
+      const p = pages[i]!
+      if (contains(p, x, y)) return { page: p, named: false }
+      if (contains({ ...p, y: p.y - band, height: band }, x, y)) return { page: p, named: true }
     }
-    apply(ops)
-    setSelection(fresh)
-  }
-
-  const nudge = (dx: number, dy: number): void => {
-    if (!layout) return
-    apply(shownSelection.flatMap((id) => moveOps(layout, id, dx, dy)))
+    return null
   }
 
   const onKeyDown = (event: React.KeyboardEvent): void => {
     if (event.target !== event.currentTarget) return
-    const mod = event.metaKey || event.ctrlKey
-    const key = event.key.toLowerCase()
-    if (mod && key === 'z') {
-      if (event.shiftKey) canvas.redo()
-      else canvas.undo()
-    } else if (mod && key === 'd' && arranging) duplicate()
-    else if (mod) return
-    else if (event.key === ' ') {
-      setSpaceDown(true)
-      return event.preventDefault()
-    } else if (key === 'escape') {
-      if (editing.picked) editor?.clearPick()
-      else if (inside) setInside(null)
-      else if (shownSelection.length > 0) setSelection([])
+    if (event.metaKey || event.ctrlKey || event.altKey) return
+    const key = event.key
+    if (opened || focused) {
+      if (key === 'ArrowRight') stepOpened(1)
+      else if (key === 'ArrowLeft') stepOpened(-1)
       else return
-    } else if ((event.key === 'Delete' || event.key === 'Backspace') && arranging) remove()
-    else if (event.key.startsWith('Arrow') && shownSelection.length > 0 && arranging) {
-      const step = event.shiftKey ? 10 : 1
-      nudge(
-        event.key === 'ArrowLeft' ? -step : event.key === 'ArrowRight' ? step : 0,
-        event.key === 'ArrowUp' ? -step : event.key === 'ArrowDown' ? step : 0,
-      )
-    } else if (event.shiftKey && event.code === 'Digit1') fitAll(true)
+    } else if (key === 'ArrowRight') stepSelection(1)
+    else if (key === 'ArrowLeft') stepSelection(-1)
+    else if (key === 'Enter' && shownSelection.length === 1) setFocused(shownSelection[0]!)
+    else if (event.shiftKey && event.code === 'Digit1') land(true)
     else if (event.shiftKey && event.code === 'Digit0') zoomAround(1)
-    else if (
-      key === 'enter' &&
-      shownSelection.length === 1 &&
-      pages.some((p) => p.id === shownSelection[0])
-    )
-      setFocused(shownSelection[0]!)
     else if (key === '+' || key === '=') zoomAround(stepZoom(camera.current.z, 1))
     else if (key === '-') zoomAround(stepZoom(camera.current.z, -1))
     else return
@@ -920,259 +955,94 @@ export const CanvasEditor = memo(function CanvasEditor({
 
   const onPointerDown = (event: React.PointerEvent): void => {
     if (event.button !== 0 && event.button !== 1) return
-    if (!layout) return
     event.currentTarget.setPointerCapture(event.pointerId)
     const { sx, sy } = screenPoint(event)
     const at = toCanvas(sx, sy)
-    const start = { sx, sy, cx: at.x, cy: at.y, camera: camera.current, moved: false }
     stage.current?.focus({ preventScroll: true })
-    if (event.button === 1 || hand) {
-      drag.current = { ...start, kind: 'pan' }
-      setPanning(true)
+    drag.current = { sx, sy, camera: camera.current, moved: false }
+    if (event.button === 1) return
+    const under = frameAt(at.x, at.y)
+    if (focused) {
+      // Outside an opened frame the page comes back, as Esc does.
+      if (under?.page.id !== focused) setFocused(null)
       return
     }
-    if (viewerMode === 'comment' || inside) {
-      // Picking inside pages goes to their runtime.
-      drag.current = null
-      const page = pages.find((p) => contains(p, at.x, at.y))
-      const frame = page && editorFrames.current.get(page.id)
-      if (inside && page?.id !== inside) {
-        setInside(null)
-        return
-      }
-      if (frame && page)
-        frame.pick(at.x - page.x, at.y - page.y, { x: event.clientX, y: event.clientY })
-      else editor?.clearPick()
-      return
-    }
-    const handle = handleAt(at.x, at.y)
-    if (handle && arranging) {
-      drag.current = { ...start, kind: 'resize', ids: [handle.id], corner: handle.corner }
-      return
-    }
-    // A frame's name selects the frame; a press inside it picks the element there on release.
-    const named = pages.find((p) =>
-      contains(
-        { ...p, y: p.y - LABEL_BAND / camera.current.z, height: LABEL_BAND / camera.current.z },
-        at.x,
-        at.y,
-      ),
-    )
-    const id = named?.id ?? hit(at.x, at.y)
-    if (!id) {
+    if (!under) {
       if (!event.shiftKey) setSelection([])
       editor?.clearPick()
-      // Out of Edit, a drag on the empty canvas pans it.
-      drag.current = { ...start, kind: arranging || event.shiftKey ? 'marquee' : 'pan' }
-      if (drag.current.kind === 'pan') setPanning(true)
       return
     }
-    const framed =
-      !named && !event.shiftKey && mode === 'select' ? pages.find((p) => p.id === id) : null
-    if (framed) {
-      drag.current = {
-        ...start,
-        kind: 'move',
-        ids: [framed.id],
-        pick: {
-          page: framed.id,
-          x: at.x - framed.x,
-          y: at.y - framed.y,
-          at: { x: event.clientX, y: event.clientY },
-        },
+    const { page, named } = under
+    // Comment and Edit pick what is in a frame on release, unless the press pans.
+    if (mode && !named && !event.shiftKey) {
+      drag.current.pick = {
+        page: page.id,
+        x: at.x - page.x,
+        y: at.y - page.y,
+        at: { x: event.clientX, y: event.clientY },
       }
       return
     }
     editor?.clearPick()
-    const next = event.shiftKey
-      ? shownSelection.includes(id)
-        ? shownSelection.filter((s) => s !== id)
-        : [...shownSelection, id]
-      : shownSelection.includes(id)
-        ? shownSelection
-        : [id]
-    setSelection(next)
-    drag.current = arranging ? { ...start, kind: 'move', ids: next } : null
+    setSelection(
+      event.shiftKey
+        ? shownSelection.includes(page.id)
+          ? shownSelection.filter((s) => s !== page.id)
+          : [...shownSelection, page.id]
+        : [page.id],
+    )
   }
 
   const onPointerMove = (event: React.PointerEvent): void => {
     const held = drag.current
     const { sx, sy } = screenPoint(event)
-    const at = toCanvas(sx, sy)
     if (!held) {
-      // Outlining what is under the pointer inside a page, as the editor's modes do.
-      if (mode && layout) {
+      // Outlining what is under the pointer inside a frame, as the editor's modes do.
+      if (mode && !focused) {
+        const at = toCanvas(sx, sy)
         const page = pages.find((p) => contains(p, at.x, at.y))
         for (const [pid, frame] of editorFrames.current) if (pid !== page?.id) frame.leave()
-        if (page && (!inside || inside === page.id))
-          editorFrames.current.get(page.id)?.point(at.x - page.x, at.y - page.y)
+        if (page) editorFrames.current.get(page.id)?.point(at.x - page.x, at.y - page.y)
       }
       return
     }
     if (!held.moved && Math.hypot(sx - held.sx, sy - held.sy) > DRAG_SLOP) {
       held.moved = true
-      setDragging(true)
-      // A press on a frame that drags moves the frame, which it selects.
-      if (held.pick) {
-        editor?.clearPick()
-        setSelection(held.ids!)
+      setPanning(true)
+      if (focused) {
+        leaveInPlace.current = true
+        setFocused(null)
       }
     }
-    if (!held.moved || !layout || !base) return
-    const dx = at.x - held.cx
-    const dy = at.y - held.cy
-    switch (held.kind) {
-      case 'pan':
-        place({
-          ...held.camera,
-          x: held.camera.x + (sx - held.sx),
-          y: held.camera.y + (sy - held.sy),
-        })
-        return
-      case 'marquee': {
-        const box = {
-          x: Math.min(at.x, held.cx),
-          y: Math.min(at.y, held.cy),
-          width: Math.abs(dx),
-          height: Math.abs(dy),
-        }
-        setMarquee(box)
-        setSelection([
-          ...layout.pages.filter((p) => overlaps(p, box)).map((p) => p.id),
-          ...layout.notes.filter((n) => overlaps(noteBox(n), box)).map((n) => n.id),
-        ])
-        return
-      }
-      case 'move': {
-        const ids = held.ids!.filter((id) => {
-          const p = base.pages.find((q) => q.id === id)
-          const n = base.notes.find((q) => q.id === id)
-          return !(p?.locked || n?.locked)
-        })
-        const moving = union(ids.map((id) => boxOf(base, id)).filter((b): b is Box => b !== null))
-        if (!moving) return
-        const others = base.pages.filter((p) => !ids.includes(p.id))
-        const snapped = event.metaKey
-          ? { dx: 0, dy: 0, guides: [] }
-          : snap(
-              { ...moving, x: moving.x + dx, y: moving.y + dy },
-              others,
-              SNAP_PX / camera.current.z,
-            )
-        setGuides(snapped.guides)
-        canvas.preview(ids.flatMap((id) => moveOps(base, id, dx + snapped.dx, dy + snapped.dy)))
-        return
-      }
-      case 'resize': {
-        const page = base.pages.find((p) => p.id === held.ids![0])
-        if (!page) return
-        const west = held.corner === 'nw' || held.corner === 'sw'
-        const north = held.corner === 'nw' || held.corner === 'ne'
-        let left = west ? page.x + dx : page.x
-        let right = west ? page.x + page.width : page.x + page.width + dx
-        let topEdge = north ? page.y + dy : page.y
-        let bottom = north ? page.y + page.height : page.y + page.height + dy
-        const others = base.pages.filter((p) => p.id !== page.id)
-        const edge = { x: west ? left : right, y: north ? topEdge : bottom, width: 0, height: 0 }
-        const snapped = event.metaKey
-          ? { dx: 0, dy: 0, guides: [] }
-          : snap(edge, others, SNAP_PX / camera.current.z)
-        if (west) left += snapped.dx
-        else right += snapped.dx
-        if (north) topEdge += snapped.dy
-        else bottom += snapped.dy
-        const width = Math.round(Math.min(PAGE_MAX, Math.max(PAGE_MIN, right - left)))
-        const height = Math.round(Math.min(PAGE_MAX, Math.max(PAGE_MIN, bottom - topEdge)))
-        setGuides(snapped.guides)
-        canvas.preview([
-          { op: 'set', id: page.id, key: 'x', value: Math.round(west ? right - width : left) },
-          {
-            op: 'set',
-            id: page.id,
-            key: 'y',
-            value: Math.round(north ? bottom - height : topEdge),
-          },
-          { op: 'set', id: page.id, key: 'width', value: width },
-          { op: 'set', id: page.id, key: 'height', value: height },
-        ])
-        return
-      }
-    }
+    if (!held.moved) return
+    place({
+      ...held.camera,
+      x: held.camera.x + (sx - held.sx),
+      y: held.camera.y + (sy - held.sy),
+    })
   }
 
   const onPointerUp = (): void => {
     const held = drag.current
     drag.current = null
     setPanning(false)
-    setDragging(false)
-    setGuides([])
-    setMarquee(null)
-    if (!held || !layout) return
-    switch (held.kind) {
-      case 'move':
-      case 'resize':
-        if (!held.moved && held.pick) {
-          setSelection([])
-          editorFrames.current.get(held.pick.page)?.pick(held.pick.x, held.pick.y, held.pick.at)
-          return
-        }
-        if (held.moved && canvas.base) {
-          // The preview under way becomes the change, as one step of undo.
-          const shown = canvas.doc
-          canvas.preview(null)
-          if (shown && base) {
-            const ops: CanvasOp[] = []
-            for (const id of held.ids!) {
-              const before = base.pages.find((p) => p.id === id)
-              const after = shown.pages.find((p) => p.id === id)
-              if (before && after) {
-                for (const key of ['x', 'y', 'width', 'height'] as const) {
-                  if (before[key] !== after[key])
-                    ops.push({ op: 'set', id, key, value: after[key] })
-                }
-                continue
-              }
-              const note = shown.notes.find((n) => n.id === id)
-              const was = base.notes.find((n) => n.id === id)
-              if (note && was) {
-                for (const key of ['x', 'y', 'points', 'x1', 'y1', 'x2', 'y2'] as const) {
-                  const a = (note as unknown as Record<string, unknown>)[key]
-                  const b = (was as unknown as Record<string, unknown>)[key]
-                  if (a !== undefined && JSON.stringify(a) !== JSON.stringify(b))
-                    ops.push({ op: 'set', id, key, value: a })
-                }
-              }
-            }
-            apply(ops)
-          }
-        }
-        return
-      default:
+    if (held && !held.moved && held.pick) {
+      setSelection([])
+      editorFrames.current.get(held.pick.page)?.pick(held.pick.x, held.pick.y, held.pick.at)
     }
   }
 
   const onDoubleClick = (event: React.MouseEvent): void => {
-    if (!layout || viewerMode === 'comment') return
+    if (viewerMode === 'comment' || focused) return
     const { sx, sy } = screenPoint(event)
     const at = toCanvas(sx, sy)
-    const id = hit(at.x, at.y)
-    const page = pages.find((p) => p.id === id)
-    if (page && editor) {
-      setSelection([page.id])
-      setInside(page.id)
-    }
+    const under = frameAt(at.x, at.y)
+    if (under) setFocused(under.page.id)
   }
 
-  const name = (p: CanvasPage) => p.name
   const empty = layout !== null && layout.pages.length === 0 && layout.notes.length === 0
-  const selectedBox = layout
-    ? union(shownSelection.map((id) => boxOf(layout, id)).filter((b): b is Box => b !== null))
-    : null
-  const singlePage =
-    layout && shownSelection.length === 1
-      ? (layout.pages.find((p) => p.id === shownSelection[0]) ?? null)
-      : null
-  const focusedPage = focused ? pages.find((p) => p.id === focused) : undefined
+  const selectedPages = pages.filter((p) => shownSelection.includes(p.id))
+  const selectedBox = union(selectedPages)
   const writingPages = new Set(
     agents
       .filter((a) => a.doing && a.doing !== 'read')
@@ -1184,6 +1054,8 @@ export const CanvasEditor = memo(function CanvasEditor({
     const p = agentPages.get(a.sessionId)
     if (a.doing === 'draw' && p) drawing.set(p.id, a)
   }
+  const openedPage = opened ? pages.find((p) => p.id === opened.id) : undefined
+  const openedAt = focusedPage ? pages.indexOf(focusedPage) : -1
 
   // Pages added or resized since the camera last moved.
   useLayoutEffect(() => fitLabels(layers.current[1], camera.current.z))
@@ -1195,8 +1067,23 @@ export const CanvasEditor = memo(function CanvasEditor({
     if (el) layers.current[1] = el
   }, [])
 
+  const onFrameKey = useCallback(
+    (key: PageKey) => {
+      if (key === 'ArrowRight') stepOpened(1)
+      else if (key === 'ArrowLeft') stepOpened(-1)
+      else if (key === 'Escape' && !editor?.escape()) setFocused(null)
+    },
+    [stepOpened, editor, setFocused],
+  )
+
   return (
-    <div ref={root} className="k-ce" data-narrow={tier === 'narrow' ? '' : undefined}>
+    <div
+      ref={root}
+      className="k-ce"
+      data-narrow={tier === 'narrow' ? '' : undefined}
+      data-phase={phase ?? undefined}
+      data-opened={focused ? '' : undefined}
+    >
       <AgentCursorStyles />
       <div
         ref={stage}
@@ -1205,14 +1092,11 @@ export const CanvasEditor = memo(function CanvasEditor({
         aria-roledescription={t('canvas.role')}
         aria-label={title}
         onKeyDown={onKeyDown}
-        onKeyUp={(event) => {
-          if (event.key === ' ') setSpaceDown(false)
-        }}
         className="k-ce__stage"
       >
-        {/* The pages and notes; they take no pointer, but their scripts keep running. */}
+        {/* The frames and notes; they take no pointer, but their scripts keep running. */}
         <div ref={firstLayer} inert className="k-ce__layer">
-          {pages.map((p) => {
+          {pages.map((p, i) => {
             const blank = !files.has(p.file)
             const agent = drawing.get(p.id)
             return (
@@ -1220,7 +1104,16 @@ export const CanvasEditor = memo(function CanvasEditor({
                 key={p.id}
                 className="k-ce-page"
                 data-working={writingPages.has(p.id) ? '' : undefined}
-                style={{ left: p.x, top: p.y, width: p.width, height: p.height }}
+                data-dim={focused && focused !== p.id ? '' : undefined}
+                style={
+                  {
+                    left: p.x,
+                    top: p.y,
+                    width: p.width,
+                    height: p.height,
+                    '--i': Math.min(i, 16),
+                  } as React.CSSProperties
+                }
               >
                 {blank ? (
                   <div className="k-ce-page__blank" data-agent={agent ? '' : undefined}>
@@ -1238,11 +1131,11 @@ export const CanvasEditor = memo(function CanvasEditor({
                       { version, loadFrom },
                       { group: 0, index: 1, file: p.file },
                     )}
-                    title={name(p)}
+                    title={p.name}
                     width={p.width}
                     height={p.height}
                     editor={editor}
-                    page={doc ? doc.pages.findIndex((q) => q.id === p.id) : -1}
+                    page={indexInDoc(p.id)}
                     onSettled={() => pageSettled(p.id)}
                     register={(frame) => {
                       if (frame) frames.current.set(p.id, frame)
@@ -1253,8 +1146,12 @@ export const CanvasEditor = memo(function CanvasEditor({
                       else editorFrames.current.delete(p.id)
                     }}
                   />
+                ) : thumbnails && near.has(p.id) ? (
+                  <div className="k-ce-page__thumb">
+                    <FrameThumb artifactId={artifactId} version={version} frame={p.id} />
+                  </div>
                 ) : (
-                  <div className="k-ce-page__idle">{name(p)}</div>
+                  <div className="k-ce-page__idle">{p.name}</div>
                 )}
               </div>
             )
@@ -1270,134 +1167,69 @@ export const CanvasEditor = memo(function CanvasEditor({
         </div>
         <div
           aria-hidden
-          className={cn(
-            'k-ce__overlay',
-            panning ? 'cursor-grabbing' : hand ? 'cursor-grab' : 'cursor-default',
-          )}
+          className={cn('k-ce__overlay', panning ? 'cursor-grabbing' : 'cursor-default')}
           onPointerDown={onPointerDown}
           onPointerMove={onPointerMove}
           onPointerUp={onPointerUp}
           onPointerCancel={() => {
             drag.current = null
             setPanning(false)
-            setDragging(false)
-            canvas.preview(null)
-            setGuides([])
-            setMarquee(null)
           }}
           onDoubleClick={onDoubleClick}
         />
-        {/* What draws over the canvas: labels and their actions, the selection, guides, agents. */}
+        {/* What draws over the canvas: names and marks, the selection and its bar, the agents. */}
         <div ref={secondLayer} className="k-ce__layer k-ce__ui">
-          {pages.map((p) => (
-            <div
-              key={p.id}
-              className="k-ce-label"
-              data-width={p.width}
-              data-selected={shownSelection.includes(p.id) ? '' : undefined}
-              style={{ left: p.x, top: `calc(${p.y}px - 24px * var(--unscale))`, width: p.width }}
-            >
-              <span className="k-ce-label__name">{name(p)}</span>
-              {actions && (
-                <span className="k-ce-label__acts">
-                  {!readOnly && frameParams.has(p.id) && (
-                    <LabelAct
-                      label={t('board.page.tweak')}
-                      icon={SlidersHorizontalIcon}
-                      onClick={() => {
-                        setSelection([p.id])
-                        toggleTweaks(true)
-                      }}
-                    />
-                  )}
-                  {!readOnly && (
-                    <LabelAct
-                      label={t('board.page.ask')}
-                      icon={AiMagicIcon}
-                      onClick={() => actions.handOff([p.id])}
-                    />
-                  )}
-                  {actions.download && (
-                    <LabelAct
-                      label={t('canvas.downloadPng')}
-                      icon={Download04Icon}
-                      onClick={() => actions.download?.(p)}
-                    />
-                  )}
-                  <LabelAct
-                    label={t('canvas.presentFrom')}
-                    icon={PlayIcon}
-                    onClick={() => actions.present(p)}
-                  />
-                  <LabelAct
-                    label={t('canvas.focusPage')}
-                    icon={CenterFocusIcon}
-                    onClick={() => setFocused(p.id)}
-                  />
-                </span>
-              )}
-            </div>
-          ))}
-          {shownSelection.map((id) => {
-            const box = layout && boxOf(layout, id)
-            return box ? (
+          {pages.map((p) => {
+            const count = comments.get(p.id) ?? 0
+            return (
               <div
-                key={id}
-                className="k-ce-sel"
-                style={{ left: box.x, top: box.y, width: box.width, height: box.height }}
-              />
-            ) : null
-          })}
-          {singlePage && arranging && !singlePage.locked && (
-            <>
-              {(
-                [
-                  [singlePage.x, singlePage.y],
-                  [singlePage.x + singlePage.width, singlePage.y],
-                  [singlePage.x, singlePage.y + singlePage.height],
-                  [singlePage.x + singlePage.width, singlePage.y + singlePage.height],
-                ] as const
-              ).map(([x, y], i) => (
-                <span key={i} className="k-ce-handle" style={{ left: x, top: y }} />
-              ))}
-              <span
-                className="k-ce-size"
+                key={p.id}
+                className="k-ce-label"
+                data-width={p.width}
+                data-selected={shownSelection.includes(p.id) ? '' : undefined}
+                data-dim={focused && focused !== p.id ? '' : undefined}
                 style={{
-                  left: singlePage.x + singlePage.width / 2,
-                  top: `calc(${singlePage.y + singlePage.height}px + 10px * var(--unscale))`,
+                  left: p.x,
+                  top: `calc(${p.y}px - 24px * var(--unscale))`,
+                  width: p.width,
                 }}
               >
-                {`${singlePage.width} × ${singlePage.height}`}
-              </span>
-            </>
-          )}
-          {guides.map((g, i) => (
-            <span
-              key={i}
-              className="k-ce-guide"
-              style={
-                g.axis === 'x'
-                  ? { left: g.at, top: g.from, width: 'var(--unscale)', height: g.to - g.from }
-                  : { left: g.from, top: g.at, height: 'var(--unscale)', width: g.to - g.from }
-              }
-            />
-          ))}
-          {marquee && (
-            <div
-              className="k-ce-marquee"
-              style={{
-                left: marquee.x,
-                top: marquee.y,
-                width: marquee.width,
-                height: marquee.height,
-              }}
-            />
-          )}
-          {selectedBox && actions && !readOnly && !dragging && (
-            <HandOffBar
+                <span className="k-ce-label__name">{p.name}</span>
+                {changed.has(p.id) && (
+                  <span className="k-ce-label__mark" data-changed="">
+                    {t('pages.version', { version })}
+                  </span>
+                )}
+                {count > 0 && (
+                  <span className="k-ce-label__mark">
+                    <HugeiconsIcon icon={Comment01Icon} size={11} strokeWidth={2} />
+                    {count}
+                  </span>
+                )}
+              </div>
+            )
+          })}
+          {!focused &&
+            selectedPages.map((p) => (
+              <div
+                key={p.id}
+                className="k-ce-sel"
+                style={{ left: p.x, top: p.y, width: p.width, height: p.height }}
+              />
+            ))}
+          {selectedBox && actions && !focused && !panning && (
+            <FrameBar
               box={selectedBox}
-              count={shownSelection.length}
-              onHandOff={() => actions.handOff(shownSelection)}
+              frames={selectedPages}
+              readOnly={readOnly}
+              tweaks={selectedPages.length === 1 && frameParams.has(selectedPages[0]!.id)}
+              compact={tier === 'narrow'}
+              actions={actions}
+              onOpen={(id) => setFocused(id)}
+              onTweak={(id) => {
+                setSelection([id])
+                toggleTweaks(true)
+              }}
             />
           )}
           <div className="ui-agc k-ce-agents">
@@ -1438,25 +1270,61 @@ export const CanvasEditor = memo(function CanvasEditor({
             })}
           </div>
         </div>
+        {opened && openedPage && focused === opened.id && (
+          <OpenedFrame
+            key={openedPage.id}
+            page={openedPage}
+            opened={opened}
+            src={framePageUrl(
+              url,
+              { version, loadFrom },
+              { group: 0, index: 1, file: openedPage.file },
+            )}
+            origin={url.slice(0, -1)}
+            editor={editor}
+            index={indexInDoc(openedPage.id)}
+            mode={mode}
+            reloads={reloads}
+            scroller={scroller}
+            onScroll={(scrolled) => place({ ...opened.camera, y: opened.camera.y - scrolled })}
+            onKey={onFrameKey}
+            onPicked={() => stage.current?.focus({ preventScroll: true })}
+          />
+        )}
       </div>
 
-      {layout && doc && (
+      {doc && (
         <ViewerSlot slot="left">
-          <CanvasNavigator
+          <PagesCard
             doc={doc}
             canvasKey={canvasKey}
-            onCanvas={chooseCanvas}
-            layout={layout}
             selection={shownSelection}
-            onSelect={(ids, reveal) => {
-              setSelection(ids)
-              const box =
-                reveal &&
-                union(ids.map((id) => boxOf(layout, id)).filter((b): b is Box => b !== null))
-              if (box) moveTo(revealBox(camera.current, box, view.current))
+            opened={focused}
+            changed={changed}
+            comments={comments}
+            artifactId={artifactId}
+            version={version}
+            onPage={(id) => setViewerState(artifactId, { page: id, selection: [], opened: null })}
+            onFrame={(frame) => {
+              const page = doc.pages.find((p) => p.id === frame)
+              if (!page) return
+              revealAsked.current = frame
+              setViewerState(artifactId, (s) => ({
+                page: page.canvas,
+                selection: [frame],
+                opened: s.opened && page.canvas === canvasKey ? frame : null,
+              }))
+              if (page.canvas === shownKey && !focused) {
+                revealAsked.current = null
+                const placed = pages.find((p) => p.id === frame)
+                if (placed) revealFrame(placed)
+              }
             }}
-            apply={apply}
-            readOnly={readOnly}
+            onOpen={(frame) => {
+              const page = doc.pages.find((p) => p.id === frame)
+              if (page)
+                setViewerState(artifactId, { page: page.canvas, selection: [frame], opened: frame })
+            }}
           />
         </ViewerSlot>
       )}
@@ -1474,7 +1342,7 @@ export const CanvasEditor = memo(function CanvasEditor({
                 onSelect={(id) => {
                   setSelection([id])
                   const page = layout.pages.find((p) => p.id === id)
-                  if (page) moveTo(revealBox(camera.current, page, view.current))
+                  if (page && !focused) revealFrame(page)
                 }}
                 editorFrame={(page) => editorFrames.current.get(page) ?? null}
                 artifactId={artifactId}
@@ -1498,44 +1366,151 @@ export const CanvasEditor = memo(function CanvasEditor({
           <p>{t('board.empty.body')}</p>
         </div>
       )}
-      <CanvasDock
-        controls={controls}
-        narrow={tier === 'narrow'}
-        tweaks={readOnly ? null : { open: tweaksOpen, toggle: () => toggleTweaks(!tweaksOpen) }}
-        onZoom={(direction) => zoomAround(stepZoom(camera.current.z, direction))}
-        onFit={() => fitAll(true)}
-        onActual={() => zoomAround(1)}
-      />
-      {focusedPage && (
-        <FocusedPage
-          key={focusedPage.id}
-          src={framePageUrl(
-            url,
-            { version, loadFrom },
-            { group: 0, index: 1, file: focusedPage.file },
-          )}
-          page={{ ...focusedPage, number: 0, group: 0, index: 1 }}
-          name={focusedPage.name}
-          top={top}
-          reloads={reloads}
-          editor={editor}
-          index={doc ? doc.pages.findIndex((q) => q.id === focusedPage.id) : 0}
-          onMove={(step) => {
-            const next = pages[pages.indexOf(focusedPage) + step]
-            if (next) setFocused(next.id)
-          }}
-          onLeave={() => {
-            setFocused(null)
-            requestAnimationFrame(() => stage.current?.focus({ preventScroll: true }))
-          }}
+      {focusedPage ? (
+        <PagerDock
+          where={t('present.position', {
+            name: `${pageNumber} ${pageName}`,
+            number: openedAt + 1,
+            count: pages.length,
+          })}
+          first={openedAt <= 0}
+          last={openedAt >= pages.length - 1}
+          fit={fit}
+          onFit={(next) => setViewerState(artifactId, { fit: next })}
+          tweaks={
+            !readOnly && frameParams.has(focusedPage.id)
+              ? { open: tweaksOpen, toggle: () => toggleTweaks(!tweaksOpen) }
+              : null
+          }
+          onStep={stepOpened}
+          onBack={() => setFocused(null)}
         />
+      ) : (
+        <CanvasDock
+          controls={controls}
+          narrow={tier === 'narrow'}
+          tweaks={readOnly ? null : { open: tweaksOpen, toggle: () => toggleTweaks(!tweaksOpen) }}
+          onZoom={(direction) => zoomAround(stepZoom(camera.current.z, direction))}
+          onFit={() => land(true)}
+          onActual={() => zoomAround(1)}
+        />
+      )}
+      {opened && opened.long && openedPage && (
+        <OpenedPosition opened={opened} page={openedPage} scroller={scroller} />
       )}
     </div>
   )
 })
 
-function revealBox(camera: Camera, box: Box, view: Size): Camera {
-  return reveal(camera, box, view)
+/**
+ * An opened frame, live, at reading size over its picture on the canvas: a long one scrolls in
+ * place, which moves the camera with it, so the page around stays where the frame is.
+ */
+function OpenedFrame({
+  page,
+  opened,
+  src,
+  origin,
+  editor,
+  index,
+  mode,
+  reloads,
+  scroller,
+  onScroll,
+  onKey,
+  onPicked,
+}: {
+  page: CanvasPage
+  opened: Opened
+  src: string
+  origin: string
+  editor: ArtifactEditor | undefined
+  index: number
+  mode: 'select' | 'comment' | null
+  reloads: number
+  scroller: React.RefObject<HTMLDivElement | null>
+  onScroll: (scrolled: number) => void
+  onKey: (key: PageKey) => void
+  onPicked: () => void
+}) {
+  const { frame, ref: frameRef, onLoad } = useKeyedFrame(editor, index, origin, onKey)
+  const [loaded, setLoaded] = useState(false)
+  const element = useRef<HTMLIFrameElement | null>(null)
+  const [mountedAt] = useState(reloads)
+  useEffect(() => {
+    if (reloads !== mountedAt && element.current) element.current.src = src
+  }, [reloads, mountedAt, src])
+  const width = page.width * opened.z
+  const height = page.height * opened.z
+  return (
+    <div
+      ref={scroller}
+      className="k-ce-open"
+      style={{ left: opened.x, width }}
+      onScroll={(event) => onScroll(event.currentTarget.scrollTop)}
+    >
+      <div style={{ height: Math.max(opened.viewHeight, opened.y + height + opened.bottom) }}>
+        <div className="k-ce-open__frame" style={{ top: opened.y, width, height }}>
+          <iframe
+            ref={(el) => {
+              element.current = el
+              frameRef(el)
+            }}
+            src={src}
+            title={page.name}
+            sandbox={isWeb ? WEB_ARTIFACT_FRAME_SANDBOX : ARTIFACT_FRAME_SANDBOX}
+            allow=""
+            referrerPolicy="no-referrer"
+            onLoad={() => {
+              setLoaded(true)
+              onLoad()
+            }}
+            style={{
+              width: page.width,
+              height: page.height,
+              transform: `scale(${opened.z})`,
+              opacity: loaded ? 1 : 0,
+            }}
+          />
+          {mode && frame && (
+            <PickLayer frame={frame} scale={opened.z} mode={mode} onDone={onPicked} />
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/** How far down a long opened frame is, beside it. */
+function OpenedPosition({
+  opened,
+  page,
+  scroller,
+}: {
+  opened: Opened
+  page: CanvasPage
+  scroller: React.RefObject<HTMLDivElement | null>
+}) {
+  const [scrolled, setScrolled] = useState(0)
+  useEffect(() => {
+    const el = scroller.current
+    if (!el) return
+    const onScroll = () => setScrolled(el.scrollTop)
+    el.addEventListener('scroll', onScroll, { passive: true })
+    return () => el.removeEventListener('scroll', onScroll)
+  }, [scroller, opened])
+  const height = page.height * opened.z
+  const viewHeight = opened.viewHeight
+  return (
+    <PositionBar
+      left={opened.x + page.width * opened.z + 8}
+      top={opened.y}
+      track={viewHeight - opened.y - opened.bottom}
+      view={viewHeight}
+      range={opened.y + height + opened.bottom - viewHeight}
+      scrolled={scrolled}
+    />
+  )
 }
 
 function doingText(
@@ -1557,30 +1532,141 @@ function doingText(
   }
 }
 
-function LabelAct({
-  label,
-  icon,
-  onClick,
+/**
+ * Above the selected frame: open it, present from it, ask the agent, tweak it and download it;
+ * above several, ask the agent about them. Drawn in the canvas's layer at screen size.
+ */
+function FrameBar({
+  box,
+  frames,
+  readOnly,
+  tweaks,
+  compact,
+  actions,
+  onOpen,
+  onTweak,
 }: {
-  label: string
-  icon: IconSvgElement
-  onClick: () => void
+  box: Box
+  frames: CanvasPage[]
+  readOnly: boolean
+  tweaks: boolean
+  /** Narrow: the actions as icons alone, so the bar fits over a frame in the side panel. */
+  compact: boolean
+  actions: DocPageActions
+  onOpen: (id: string) => void
+  onTweak: (id: string) => void
 }) {
+  const { t } = useTranslation('artifacts')
+  const one = frames.length === 1 ? frames[0]! : null
   return (
-    <Tooltip>
-      <TooltipTrigger
-        render={
-          <button type="button" aria-label={label} className="k-ce-label__act" onClick={onClick} />
-        }
-      >
-        <HugeiconsIcon icon={icon} strokeWidth={1.9} />
-      </TooltipTrigger>
-      <TooltipContent>{label}</TooltipContent>
-    </Tooltip>
+    <div
+      className="k-ce-fbar"
+      onPointerDown={(event) => event.stopPropagation()}
+      style={{ left: box.x, top: `calc(${box.y}px - 30px * var(--unscale))` }}
+    >
+      {one ? (
+        <>
+          <BarAct label={t('frame.open')} onClick={() => onOpen(one.id)} primary>
+            {t('frame.open')}
+            {!compact && <Kbd>↵</Kbd>}
+          </BarAct>
+          <BarAct
+            label={t('canvas.presentFrom')}
+            icon={PlayIcon}
+            onClick={() => actions.present(one)}
+          >
+            {!compact && t('frame.present')}
+          </BarAct>
+          {!readOnly && (
+            <BarAct
+              label={t('frame.ask')}
+              icon={AiMagicIcon}
+              onClick={() => actions.handOff([one.id])}
+            >
+              {!compact && t('frame.ask')}
+            </BarAct>
+          )}
+          {!readOnly && tweaks && (
+            <BarAct
+              label={t('board.page.tweak')}
+              icon={SlidersHorizontalIcon}
+              onClick={() => onTweak(one.id)}
+            />
+          )}
+          {actions.download && (
+            <Dropdown
+              side="bottom"
+              align="end"
+              items={[
+                {
+                  label: t('canvas.downloadPng'),
+                  icon: Download04Icon,
+                  onSelect: () => actions.download?.(one),
+                },
+              ]}
+              trigger={({ open, toggle }) => (
+                <button
+                  type="button"
+                  className="k-ce-fbar__btn"
+                  aria-label={t('viewer.more')}
+                  title={t('viewer.more')}
+                  aria-haspopup="menu"
+                  aria-expanded={open}
+                  onClick={toggle}
+                >
+                  <HugeiconsIcon icon={MoreHorizontalIcon} size={14} strokeWidth={1.9} />
+                </button>
+              )}
+            />
+          )}
+        </>
+      ) : (
+        <>
+          <span className="k-ce-fbar__count">{t('frame.count', { count: frames.length })}</span>
+          {!readOnly && (
+            <BarAct
+              label={t('frame.ask')}
+              icon={AiMagicIcon}
+              onClick={() => actions.handOff(frames.map((f) => f.id))}
+            >
+              {t('frame.ask')}
+            </BarAct>
+          )}
+        </>
+      )}
+    </div>
   )
 }
 
-/** The dock under a canvas: the left card, the zoom, then the tweaks; fewer, with More, narrow. */
+function BarAct({
+  label,
+  icon,
+  primary,
+  children,
+  onClick,
+}: {
+  label: string
+  icon?: IconSvgElement
+  primary?: boolean
+  children?: React.ReactNode
+  onClick: () => void
+}) {
+  return (
+    <button
+      type="button"
+      className="k-ce-fbar__btn"
+      data-primary={primary ? '' : undefined}
+      aria-label={children ? undefined : label}
+      title={label}
+      onClick={onClick}
+    >
+      {icon && <HugeiconsIcon icon={icon} size={14} strokeWidth={1.9} />}
+      {children}
+    </button>
+  )
+}
+
+/** The dock under a page: the Pages card, landing, the zoom, then the tweaks; fewer, narrow. */
 function CanvasDock({
   controls,
   narrow,
@@ -1604,7 +1690,7 @@ function CanvasDock({
       {left && (
         <>
           <DockButton
-            label={t('board.canvases.menu')}
+            label={t('pages.title')}
             icon={SidebarLeftIcon}
             pressed={left.shown}
             onClick={() => left.setShown(!left.shown)}
@@ -1612,8 +1698,13 @@ function CanvasDock({
           <DockRule />
         </>
       )}
+      {!narrow && (
+        <DockButton label={t('canvas.fitWidth')} onClick={onFit}>
+          {t('canvas.fitWidth')}
+        </DockButton>
+      )}
       <DockButton label={t('canvas.zoomOut')} icon={MinusSignIcon} onClick={() => onZoom(-1)} />
-      <DockButton label={t('canvas.fitAll')} onClick={onFit}>
+      <DockButton label={t('canvas.actualSize')} onClick={onActual}>
         <span className="avs-dock__pct">
           {t('canvas.zoom', { percent: Math.round(zoom * 100) })}
         </span>
@@ -1633,7 +1724,7 @@ function CanvasDock({
                   },
                 ]
               : []),
-            { label: t('canvas.fitAll'), divider: !!tweaks, onSelect: onFit },
+            { label: t('canvas.fitWidth'), divider: !!tweaks, onSelect: onFit },
             { label: t('canvas.actualSize'), onSelect: onActual },
           ]}
           trigger={({ open, toggle }) => (
@@ -1667,27 +1758,59 @@ function CanvasDock({
   )
 }
 
-/** Over a selection: hand it to the agent. Drawn in the canvas's layer, at screen size. */
-function HandOffBar({ box, count, onHandOff }: { box: Box; count: number; onHandOff: () => void }) {
+/** The dock while a frame is open: the page's frames one by one, the size, and back. */
+function PagerDock({
+  where,
+  first,
+  last,
+  fit,
+  onFit,
+  tweaks,
+  onStep,
+  onBack,
+}: {
+  where: string
+  first: boolean
+  last: boolean
+  fit: Parameters<typeof FitMenu>[0]['value']
+  onFit: (fit: Parameters<typeof FitMenu>[0]['value']) => void
+  tweaks: { open: boolean; toggle: () => void } | null
+  onStep: (step: 1 | -1) => void
+  onBack: () => void
+}) {
   const { t } = useTranslation('artifacts')
+  const { tier } = useShell()
   return (
-    <div
-      className="k-ce-selbar k-ce-float"
-      style={{
-        // Under the selection, clear of its size, since page labels take the room above it.
-        left: box.x + box.width / 2,
-        top: box.y + box.height,
-        transform: 'scale(var(--unscale)) translate(-50%, 40px)',
-        transformOrigin: '0 0',
-        pointerEvents: 'auto',
-      }}
-    >
-      <span className="px-2 text-xs text-tertiary">{t('board.selection.count', { count })}</span>
-      <button type="button" className="k-ce-tool" aria-pressed onClick={onHandOff}>
-        <HugeiconsIcon icon={AiMagicIcon} size={14} strokeWidth={1.9} />
-        <span className="ml-1 text-ui">{t('board.selection.handOff')}</span>
-      </button>
-    </div>
+    <ViewerSlot slot="dock">
+      <DockButton
+        label={t('canvas.previous')}
+        icon={ArrowLeft01Icon}
+        disabled={first}
+        onClick={() => onStep(-1)}
+      />
+      <span className="avs-dock__count">{where}</span>
+      <DockButton
+        label={t('canvas.next')}
+        icon={ArrowRight01Icon}
+        disabled={last}
+        onClick={() => onStep(1)}
+      />
+      <DockRule />
+      <FitMenu value={fit} onChange={onFit} />
+      {tweaks && (
+        <DockButton
+          label={t('board.top.tweaks')}
+          icon={SlidersHorizontalIcon}
+          pressed={tweaks.open}
+          onClick={tweaks.toggle}
+        />
+      )}
+      <DockRule />
+      <DockButton label={t('frame.back')} onClick={onBack}>
+        {tier === 'narrow' ? t('frame.backShort') : t('frame.back')}
+        <Kbd>Esc</Kbd>
+      </DockButton>
+    </ViewerSlot>
   )
 }
 

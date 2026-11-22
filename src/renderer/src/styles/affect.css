@@ -7240,6 +7240,17 @@ body:has(.ui-mdpc[data-open], .ui-ccc__menu[data-open='true']) .kettu-toasts {
   --ui-segc-accent-soft: var(--control-on-tint);
   --ui-segc-focus: var(--focus-ring-color);
 }
+[data-installed-theme] .ui-tvc {
+  --ui-tvc-ink: var(--text-primary);
+  --ui-tvc-icon: var(--text-tertiary);
+  --ui-tvc-meta: var(--text-tertiary);
+  --ui-tvc-faint: var(--text-disabled);
+  --ui-tvc-wash: var(--bg-hover);
+  --ui-tvc-fill: var(--bg-selected);
+  --ui-tvc-guide: var(--border-subtle);
+  --ui-tvc-guide-on: var(--border-strong);
+  --ui-tvc-focus: var(--focus-ring-color);
+}
 [data-installed-theme] .ui-sgc {
   --ui-sgc-card: var(--shell-card);
   --ui-sgc-strong: var(--text-primary);
