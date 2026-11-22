@@ -1,6 +1,7 @@
 // The host an artifact is kept on, for the parts that show it: its sharing, what it offers and
 // whether it is reached. An artifact of this computer's takes the window's own.
 
+import type { ArtifactRecord } from '@shared/remote/host-admin'
 import { artifactHost } from '@renderer/lib/host'
 import { isWeb } from '@renderer/lib/platform'
 import { useConnectionStore } from '@renderer/stores/connection'
@@ -50,4 +51,15 @@ export function useArtifactHostConnected(id: string | null): boolean {
       s.status?.hosts?.find((h) => h.id === hostId)?.connection.state === 'online',
   )
   return hostId === null ? own : other
+}
+
+/**
+ * Whether the artifact's host keeps `record`: the desktop app keeps every one; another host or the
+ * web client's as it says, and none it has not said.
+ */
+export function useArtifactRecord(id: string, record: ArtifactRecord): boolean {
+  const hostId = artifactHost(id)
+  const scope = hostId === null ? LOCAL_SCOPE : hostScope(hostId)
+  const known = scope.useInfoStore((s) => s.info?.artifactRecords?.includes(record) ?? false)
+  return isWeb || hostId !== null ? known : true
 }

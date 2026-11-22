@@ -2503,6 +2503,10 @@ export function createValidators(platform: Platform): Validators {
       const o = fields(params)
       return { id: artifactId(o), threadId: threadId(o), resolved: flag(o, 'resolved') }
     },
+    'artifacts.repin': (params) => {
+      const o = fields(params)
+      return { id: artifactId(o), threadId: threadId(o), anchor: commentAnchor(o.anchor) }
+    },
     'artifacts.markSent': (params) => {
       const o = fields(params)
       const ids = o.threadIds

@@ -274,7 +274,11 @@ export function start(config: RuntimeConfig): void {
         '.pin{position:fixed;width:20px;height:20px;border-radius:10px 10px 10px 2px;' +
         'background:var(--accent);color:white;font:600 11px/20px system-ui,sans-serif;' +
         'text-align:center;box-shadow:0 1px 3px rgb(0 0 0 / 30%)}' +
-        '.pin.answered{background:#6b7280}'
+        '.pin.answered{background:#6b7280}' +
+        '.pin.active{box-shadow:0 0 0 2px white,0 6px 16px rgb(0 0 0 / 35%)}' +
+        '.pin.lost{background:white;color:var(--accent);outline:1.5px dashed var(--accent);outline-offset:-1.5px}' +
+        '.pin.done{background:white;color:#1e8a4f;box-shadow:inset 0 0 0 1.5px #1e8a4f;border-radius:10px}' +
+        '.pin.done.active{background:#1e8a4f;color:white}'
       hoverBox = document.createElement('div')
       hoverBox.className = 'box hover'
       pickedBox = document.createElement('div')
@@ -298,6 +302,10 @@ export function start(config: RuntimeConfig): void {
   let keepScroll = false
   let passKeys = false
   let pins: Pin[] = []
+  // Where each pin was last drawn, for a pick that lands on one.
+  let pinBoxes: { n: number; x: number; y: number }[] = []
+  // The picked element's text as it was before typing in place began.
+  let typing: { element: HTMLElement; before: string } | null = null
   let frame = 0
   // What a preview changed on the picked element, to put back.
   let original: { element: Element; style: string | null; text: string | null } | null = null
@@ -355,6 +363,7 @@ export function start(config: RuntimeConfig): void {
       at.set(key, stacked + 1)
       return { pin, x: x - stacked * 22, y }
     })
+    pinBoxes = shown.map(({ pin, x, y }) => ({ n: pin.n, x, y }))
     while (pinLayer!.children.length > shown.length) pinLayer!.lastChild!.remove()
     shown.forEach(({ pin, x, y }, i) => {
       let el = pinLayer!.children[i] as HTMLElement | undefined
@@ -362,8 +371,9 @@ export function start(config: RuntimeConfig): void {
         el = document.createElement('div')
         pinLayer!.append(el)
       }
-      el.className = pin.answered ? 'pin answered' : 'pin'
-      el.textContent = String(pin.n)
+      const kind = pin.kind === 'lost' || pin.kind === 'done' ? ` ${pin.kind}` : ''
+      el.className = `pin${pin.answered ? ' answered' : ''}${kind}${pin.active ? ' active' : ''}`
+      el.textContent = pin.kind === 'done' ? '\u2713' : String(pin.n)
       el.style.left = `${x}px`
       el.style.top = `${y}px`
     })
@@ -426,6 +436,11 @@ export function start(config: RuntimeConfig): void {
     const own = raw?.startsWith(`${config.mark}:`) ? raw.slice(config.mark.length + 1) : null
     const src = own !== null && /^\d{1,9}$/.test(own) ? Number(own) : null
     const text = (element as HTMLElement).innerText ?? element.textContent ?? ''
+    const ancestors: string[] = []
+    for (let up = element.parentElement; up && up !== document.body; up = up.parentElement) {
+      if (up === document.documentElement) break
+      ancestors.unshift(up.localName.toLowerCase())
+    }
     return {
       path: config.path,
       src,
@@ -433,6 +448,54 @@ export function start(config: RuntimeConfig): void {
       text: text.trim().slice(0, TEXT_CHARS),
       textOnly: element.childElementCount === 0,
       style: lookOf(element),
+      ancestors: ancestors.slice(-8),
+    }
+  }
+
+  function pinAt(x: number, y: number): number | null {
+    const hit = pinBoxes.findLast(
+      (pin) => x >= pin.x && x <= pin.x + 20 && y >= pin.y && y <= pin.y + 20,
+    )
+    return hit ? hit.n : null
+  }
+
+  function stopTyping(report: boolean): void {
+    const now = typing
+    if (!now) return
+    typing = null
+    now.element.removeAttribute('contenteditable')
+    now.element.removeEventListener('input', onTyped)
+    now.element.removeEventListener('keydown', onTypingKey)
+    if (report) sendTyped(now.element.textContent ?? '', true)
+  }
+
+  function sendTyped(text: string, done: boolean): void {
+    const message: Message = {
+      v: RUNTIME_VERSION,
+      id: nextId(),
+      kind: 'select',
+      channel,
+      selection: null,
+      typed: { text: text.slice(0, 10_000), done },
+    }
+    if (config.transport === 'port') viaPort(message)
+    else void request(message).catch(() => {})
+  }
+
+  function onTyped(): void {
+    if (typing) sendTyped(typing.element.textContent ?? '', false)
+  }
+
+  function onTypingKey(event: KeyboardEvent): void {
+    if (!typing) return
+    if (event.key === 'Escape') {
+      event.preventDefault()
+      typing.element.textContent = typing.before
+      sendTyped(typing.before, false)
+      stopTyping(true)
+    } else if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) {
+      event.preventDefault()
+      stopTyping(true)
     }
   }
 
@@ -501,6 +564,7 @@ export function start(config: RuntimeConfig): void {
         }
         if (!mode) {
           hovered = null
+          stopTyping(true)
           pick(null, false)
         }
         redraw()
@@ -514,10 +578,72 @@ export function start(config: RuntimeConfig): void {
         hovered = null
         redraw()
         return
-      case 'select-pick':
+      case 'select-pick': {
         if (!mode) return
+        const pin = pinAt(message.x, message.y)
+        if (pin !== null) {
+          const answer: Message = {
+            v: RUNTIME_VERSION,
+            id: nextId(),
+            kind: 'select',
+            channel,
+            selection: null,
+            pin,
+          }
+          if (config.transport === 'port') viaPort(answer)
+          else void request(answer).catch(() => {})
+          return
+        }
+        if (typing && typing.element.contains(elementAt(message.x, message.y))) return
+        stopTyping(true)
         pick(elementAt(message.x, message.y), true)
         return
+      }
+      case 'select-reveal':
+        if (Number.isSafeInteger(message.src)) {
+          sourceElement(message.src)?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+        }
+        return
+      case 'select-scroll':
+        if (Number.isFinite(message.dx) && Number.isFinite(message.dy)) {
+          window.scrollBy({ left: message.dx, top: message.dy, behavior: 'instant' })
+          redraw()
+        }
+        return
+      case 'select-up': {
+        if (!mode || !picked) return
+        let up: Element | null = picked
+        for (let i = 0; i < Math.max(1, Math.min(8, Number(message.levels) || 1)); i++) {
+          const next: Element | null = up?.parentElement ?? null
+          if (!next || next === document.body || next === document.documentElement) break
+          up = next
+        }
+        stopTyping(true)
+        if (up && up !== picked) pick(up, true)
+        return
+      }
+      case 'text-edit': {
+        if (message.on !== true) {
+          stopTyping(true)
+          return
+        }
+        if (mode !== 'select' || !picked || picked.childElementCount > 0 || typing) return
+        const element = picked as HTMLElement
+        remember(element)
+        original!.text ??= element.textContent
+        typing = { element, before: element.textContent ?? '' }
+        element.setAttribute('contenteditable', 'plaintext-only')
+        element.addEventListener('input', onTyped)
+        element.addEventListener('keydown', onTypingKey)
+        element.focus()
+        const range = document.createRange()
+        range.selectNodeContents(element)
+        range.collapse(false)
+        const chosen = window.getSelection()
+        chosen?.removeAllRanges()
+        chosen?.addRange(range)
+        return
+      }
       case 'select-source':
         pick(
           message.src === null ? null : sourceElement(message.src),
@@ -540,6 +666,8 @@ export function start(config: RuntimeConfig): void {
       }
       case 'preview-text':
         if (!picked || typeof message.text !== 'string' || picked.childElementCount > 0) return
+        // What is typed in place shows already, and setting it would move the caret.
+        if (typing?.element === picked) return
         remember(picked)
         original!.text ??= picked.textContent
         picked.textContent = message.text
@@ -717,6 +845,7 @@ export function start(config: RuntimeConfig): void {
       data.kind !== 'transport' &&
       data.kind !== 'params' &&
       data.kind !== 'keep-scroll' &&
+      data.kind !== 'text-edit' &&
       !data.kind.startsWith('select') &&
       !data.kind.startsWith('preview')
     ) {

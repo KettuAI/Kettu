@@ -13,9 +13,10 @@ export function SelectionChip({
   onRemove: () => void
 }) {
   const { t } = useTranslation('artifacts')
+  const more = selection.others?.length ?? 0
   const label = t('selection.label', {
     title: selection.title,
-    anchor: anchorLabel(selection.anchor),
+    anchor: more > 0 ? `${anchorLabel(selection.anchor)} +${more}` : anchorLabel(selection.anchor),
   })
   return (
     <div className="flex w-full min-w-0 animate-in pb-0.5 fade-in animation-duration-(--duration-fast)">

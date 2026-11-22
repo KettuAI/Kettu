@@ -240,7 +240,6 @@
   "sheet": {
     "before": "v{{version}} · 改前",
     "changedIn": "v{{version}} {{changes}}",
-    "compare": "和上一版对比",
     "ask": "问 {{agent}}",
     "width": {
       "label": "页面宽度",
@@ -290,7 +289,16 @@
   "history": {
     "title": "历史",
     "you": "你",
-    "latest": "最新"
+    "latest": "最新",
+    "count_other": "{{count}} 个版本",
+    "published": "已发布",
+    "current": "当前",
+    "publishedHere": "已发布：Kettu 上的页面显示这一版",
+    "yourEdits": "你的修改",
+    "fold": "收起你的修改",
+    "showRun_other": "展开这 {{count}} 处改动",
+    "restoreNote": "恢复会把之前的版本再写成最新的一版，中间的都还在。",
+    "restored": "已把 v{{version}} 恢复为 v{{made}}"
   },
   "share": {
     "open": "分享",
@@ -426,7 +434,45 @@
     "resolve": "标为已解决",
     "reopen": "重新打开",
     "reply": "回复",
-    "replyPlaceholder": "回复"
+    "replyPlaceholder": "回复",
+    "agent": "智能体",
+    "emptyTitle": "还没有评论",
+    "emptyText": "打开评论，点一下页面就能钉一条。打开一个画框，可以钉在单个元素上。",
+    "emptyTextPage": "打开评论，点一下想评论的地方就能钉一条。",
+    "noneResolved": "还没有已解决的",
+    "allSentList": "评论都已发出",
+    "noneOpen": "没有未解决的评论",
+    "open": "未解决",
+    "resolvedTab": "已解决",
+    "allPages": "所有页面",
+    "thisPage": "这一页",
+    "unsentOnly": "只看没发的",
+    "filter": "筛选评论",
+    "sending_other": "正在把 {{count}} 条评论发给 {{session}}…",
+    "sendCount": "发送 {{count}} 条",
+    "allSentShort": "都已发出",
+    "newSessionNote": "它们会写进新会话的消息里，在那里发送。",
+    "rowLabel": "评论 {{n}}：{{text}}",
+    "sendOnly": "只发这一条",
+    "saveFailed": "没有保存。{{error}}",
+    "threadLabel": "评论 {{n}}",
+    "close": "关闭",
+    "goneText": "这条评论钉住的元素在最新版本里已经不在了。",
+    "repin": "重新钉",
+    "repinHint": "点一下这条评论该钉的地方。",
+    "repinFailed": "没能重新钉这条评论。{{error}}",
+    "leftUnsent_other": "{{count}} 条评论还没发给 {{session}}",
+    "hintCanvas": "点一个画框钉一条评论",
+    "hintPage": "点一下页面钉一条评论",
+    "hintOff": "打开评论（C）就能钉一条",
+    "state": {
+      "notSent": "没发",
+      "sent": "已发",
+      "needsReply": "等你回复",
+      "gone": "原处已经不在",
+      "resolved": "已解决",
+      "resolvedIn": "在 v{{version}} 解决"
+    }
   },
   "edit": {
     "title": "编辑",
@@ -460,8 +506,47 @@
     "padding": "内边距",
     "radius": "圆角",
     "saving": "正在保存…",
-    "saved": "已保存为 v{{version}}",
-    "failed": "改动没有保存：{{error}}"
+    "saved": "已存为 v{{version}}",
+    "failed": "改动没有保存：{{error}}",
+    "editing": "正在改…",
+    "savedEdits_other": "已存为 v{{version}} · 改了 {{count}} 处",
+    "undone": "已撤销 · v{{version}}",
+    "notSaved": "没能保存",
+    "undo": "撤销",
+    "askAbout": "问 {{agent}} 关于这里…",
+    "askShort": "交给智能体",
+    "autosaveShort": "每处改动都会自动存成新版本。",
+    "held": "它写完就能改。评论照常能留，别处照常能改。",
+    "heldTitle": "{{agent}} 正在写这里",
+    "path": "路径",
+    "less": "减小{{name}}",
+    "more": "增大{{name}}",
+    "scriptedNamed": "这个{{name}}由页面的脚本生成，不能在这里改。",
+    "weightValue": "{{name}} · {{weight}}",
+    "tags": {
+      "heading": "标题",
+      "p": "段落",
+      "button": "按钮",
+      "a": "链接",
+      "img": "图片",
+      "ul": "列表",
+      "ol": "列表",
+      "li": "列表项",
+      "section": "区块",
+      "header": "页头",
+      "footer": "页脚",
+      "nav": "导航",
+      "main": "主体",
+      "article": "文章",
+      "aside": "侧栏",
+      "div": "块",
+      "span": "文字",
+      "table": "表格",
+      "form": "表单",
+      "input": "输入框",
+      "label": "标签",
+      "svg": "图形"
+    }
   },
   "present": {
     "label": "正在演示 {{title}}",
@@ -650,5 +735,35 @@
     "nextNamed": "下一页：{{name}}",
     "noChanged": "这一版没有改动的幻灯片",
     "noComments": "还没有幻灯片有评论"
+  },
+  "send": {
+    "to": "发给",
+    "wrote": "写过这个产物",
+    "thisSession": "这个会话",
+    "writingNow": "正在写",
+    "newSession": "新会话…"
+  },
+  "ask": {
+    "label": "交给智能体",
+    "sentTo": "已发给 {{session}}",
+    "openSession": "打开会话",
+    "remove": "去掉 {{name}}",
+    "placeholder": "要改什么？",
+    "failed": "没有发出。{{error}}",
+    "agent": "智能体",
+    "whole": "问智能体关于这个产物的事",
+    "short": "交给智能体"
+  },
+  "tweak": {
+    "title": "调节",
+    "none": "选中一个声明了参数的画框来调节它。",
+    "note": "每次改动都存成新版本。",
+    "resetAll": "全部还原",
+    "resetOne": "还原{{name}}"
+  },
+  "compare": {
+    "label": "改前改后",
+    "before": "v{{version}} · 改前",
+    "beforeTitle": "{{name}}，版本 {{version}}"
   }
 }

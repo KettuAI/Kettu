@@ -19,7 +19,6 @@ import type { ArtifactChanges } from '@shared/artifact-changes'
 import type { PageErrors } from '@shared/artifact-runtime/page-errors'
 import { Dropdown, Icon, Popover, type MenuItem } from '@renderer/components/affect/app-shell'
 import { Button } from '@renderer/components/affect/button'
-import { SegmentedControl } from '@renderer/components/affect/segmented-control'
 import { toast } from '@renderer/components/ui/toast'
 import { errorMessage } from '@renderer/lib/host'
 import {
@@ -29,6 +28,7 @@ import {
   type PageWidth,
 } from '@renderer/stores/artifact-page-width'
 import { changesLabel } from './change-words'
+import { CompareDock, type CompareSwitch } from './compare-dock'
 import type { ArtifactEditor } from './editor'
 import { errorCount, errorLines, errorPlace } from './page-error-handoff'
 import { clearPageErrors, usePageErrors } from './page-errors'
@@ -217,14 +217,6 @@ function copyErrors(pages: readonly PageErrors[]): void {
     .catch((error: unknown) => toast(errorMessage(error), undefined, { tone: 'warning' }))
 }
 
-/** Swaps the newest version on the sheet with the one before it. */
-export interface CompareSwitch {
-  from: number
-  to: number
-  before: boolean
-  onChange: (before: boolean) => void
-}
-
 function SheetDockRest({
   onBrowser,
   compare,
@@ -263,23 +255,7 @@ function SheetDockRest({
       {!narrow && onBrowser && (
         <DockButton label={t('viewer.openInBrowser')} icon={LinkSquare02Icon} onClick={onBrowser} />
       )}
-      {compare && (
-        <>
-          <DockRule />
-          <SegmentedControl<'before' | 'after'>
-            aria-label={t('sheet.compare')}
-            variant="tray"
-            size="sm"
-            className="aps-compare"
-            value={compare.before ? 'before' : 'after'}
-            onChange={(value) => compare.onChange(value === 'before')}
-            options={[
-              { value: 'before', label: t('viewer.version', { version: compare.from }) },
-              { value: 'after', label: t('viewer.version', { version: compare.to }) },
-            ]}
-          />
-        </>
-      )}
+      {compare && <CompareDock compare={compare} />}
       {errors.length > 0 && <ErrorChip errors={errors} agent={agent} onCopy={onCopy} />}
       {narrow
         ? more.length > 0 && (

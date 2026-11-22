@@ -253,7 +253,6 @@
   "sheet": {
     "before": "v{{version}} · before",
     "changedIn": "{{changes}} in v{{version}}",
-    "compare": "Compare with the version before",
     "ask": "Ask {{agent}}",
     "width": {
       "label": "Page width",
@@ -306,7 +305,18 @@
   "history": {
     "title": "History",
     "you": "You",
-    "latest": "Latest"
+    "latest": "Latest",
+    "count_one": "{{count}} version",
+    "count_other": "{{count}} versions",
+    "published": "published",
+    "current": "Current",
+    "publishedHere": "Published: the page on Kettu shows this version",
+    "yourEdits": "Your edits",
+    "fold": "Fold your edits",
+    "showRun_one": "Show the {{count}} change",
+    "showRun_other": "Show the {{count}} changes",
+    "restoreNote": "Restore adds an earlier version again as the newest one; nothing is lost.",
+    "restored": "Restored v{{version}} as v{{made}}"
   },
   "share": {
     "open": "Share",
@@ -446,7 +456,47 @@
     "resolve": "Mark resolved",
     "reopen": "Reopen",
     "reply": "Reply",
-    "replyPlaceholder": "Reply"
+    "replyPlaceholder": "Reply",
+    "agent": "Agent",
+    "emptyTitle": "No comments yet",
+    "emptyText": "Turn on Comment and click the page to pin one. Open a frame to pin one to a single element.",
+    "emptyTextPage": "Turn on Comment and click what you want to comment on.",
+    "noneResolved": "Nothing resolved yet",
+    "allSentList": "Every comment is sent",
+    "noneOpen": "No open comments",
+    "open": "Open",
+    "resolvedTab": "Resolved",
+    "allPages": "All pages",
+    "thisPage": "This page",
+    "unsentOnly": "Not sent only",
+    "filter": "Filter comments",
+    "sending_one": "Sending {{count}} comment to {{session}}…",
+    "sending_other": "Sending {{count}} comments to {{session}}…",
+    "sendCount": "Send {{count}}",
+    "allSentShort": "All sent",
+    "newSessionNote": "They go into New session as a message; send it from there.",
+    "rowLabel": "Comment {{n}}: {{text}}",
+    "sendOnly": "Send only this",
+    "saveFailed": "Not saved. {{error}}",
+    "threadLabel": "Comment {{n}}",
+    "close": "Close",
+    "goneText": "The element this was pinned to is gone in the latest version.",
+    "repin": "Pin again",
+    "repinHint": "Click where this comment belongs.",
+    "repinFailed": "The comment could not be pinned again. {{error}}",
+    "leftUnsent_one": "{{count}} comment not sent to {{session}}",
+    "leftUnsent_other": "{{count}} comments not sent to {{session}}",
+    "hintCanvas": "Click a frame to pin a comment",
+    "hintPage": "Click the page to pin a comment",
+    "hintOff": "Turn on Comment (C) to pin one",
+    "state": {
+      "notSent": "Not sent",
+      "sent": "Sent",
+      "needsReply": "Needs your reply",
+      "gone": "Original spot is gone",
+      "resolved": "Resolved",
+      "resolvedIn": "Resolved in v{{version}}"
+    }
   },
   "edit": {
     "title": "Edit",
@@ -481,7 +531,47 @@
     "radius": "Radius",
     "saving": "Saving…",
     "saved": "Saved as v{{version}}",
-    "failed": "The change was not saved: {{error}}"
+    "failed": "The change was not saved: {{error}}",
+    "editing": "Editing…",
+    "savedEdits_one": "Saved as v{{version}} · {{count}} edit",
+    "savedEdits_other": "Saved as v{{version}} · {{count}} edits",
+    "undone": "Undone · v{{version}}",
+    "notSaved": "Couldn't save",
+    "undo": "Undo",
+    "askAbout": "Ask {{agent}} about this…",
+    "askShort": "Ask",
+    "autosaveShort": "Every change saves on its own as a new version.",
+    "held": "You can edit it when it finishes. Comments still work, and the rest stays editable.",
+    "heldTitle": "{{agent}} is writing this",
+    "path": "Path",
+    "less": "Less {{name}}",
+    "more": "More {{name}}",
+    "scriptedNamed": "This {{name}} is drawn by the page's script, so it can't be edited here.",
+    "weightValue": "{{name}} · {{weight}}",
+    "tags": {
+      "heading": "Heading",
+      "p": "Paragraph",
+      "button": "Button",
+      "a": "Link",
+      "img": "Image",
+      "ul": "List",
+      "ol": "List",
+      "li": "List item",
+      "section": "Section",
+      "header": "Header",
+      "footer": "Footer",
+      "nav": "Navigation",
+      "main": "Main",
+      "article": "Article",
+      "aside": "Aside",
+      "div": "Block",
+      "span": "Text",
+      "table": "Table",
+      "form": "Form",
+      "input": "Field",
+      "label": "Label",
+      "svg": "Drawing"
+    }
   },
   "present": {
     "label": "Presenting {{title}}",
@@ -675,5 +765,35 @@
     "nextNamed": "Next: {{name}}",
     "noChanged": "No slide changed in this version",
     "noComments": "No slide has comments"
+  },
+  "send": {
+    "to": "To",
+    "wrote": "Wrote this artifact",
+    "thisSession": "This session",
+    "writingNow": "Writing it now",
+    "newSession": "New session…"
+  },
+  "ask": {
+    "label": "Ask an agent",
+    "sentTo": "Sent to {{session}}",
+    "openSession": "Open session",
+    "remove": "Remove {{name}}",
+    "placeholder": "What should change?",
+    "failed": "Not sent. {{error}}",
+    "agent": "the agent",
+    "whole": "Ask an agent about this artifact",
+    "short": "Ask"
+  },
+  "tweak": {
+    "title": "Tweak",
+    "none": "Select a frame that declares settings to tweak it.",
+    "note": "Each change saves as a new version.",
+    "resetAll": "Reset all",
+    "resetOne": "Reset {{name}}"
+  },
+  "compare": {
+    "label": "Before and after",
+    "before": "v{{version}} · before",
+    "beforeTitle": "{{name}}, version {{version}}"
   }
 }

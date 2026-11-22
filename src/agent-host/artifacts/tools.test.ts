@@ -374,3 +374,37 @@ describe('the pieces an agent holds while its turn writes', () => {
     ).resolves.toEqual({ version: 3 })
   })
 })
+
+describe('pinning a thread again', () => {
+  it('keeps the thread with its new anchor, found again from then on', async () => {
+    const id = await create({ html: '<h1>Title</h1><p>Body</p>' })
+    const anchor = {
+      version: 1,
+      path: 'index.html',
+      page: null,
+      offset: null,
+      tag: null,
+      text: '',
+      missing: false,
+    }
+    const thread = await store.addThread(id, {
+      anchor,
+      author: { person: 'owner', session: null },
+      body: 'Shorter',
+    })
+    const placed = await store.repin(id, thread.id, {
+      ...anchor,
+      offset: 0,
+      tag: 'h1',
+      text: 'Title',
+      missing: true,
+    })
+    expect(placed.anchor).toMatchObject({ offset: 0, tag: 'h1', missing: false })
+    const [kept] = await store.threads(id)
+    expect(kept).toMatchObject({ id: thread.id, anchor: { offset: 0, tag: 'h1', missing: false } })
+    expect(kept?.comments).toHaveLength(1)
+    await expect(store.repin(id, 'thr_01J9Z3K4V5W6X7Y8Z9A0B1C2D3', anchor)).rejects.toMatchObject({
+      code: 'not_found',
+    })
+  })
+})

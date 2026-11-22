@@ -42,3 +42,50 @@ describe('a key a page passes on', () => {
     expect(parseSelectMessage(keyMessage({}))).not.toHaveProperty('key')
   })
 })
+
+describe('a pin a pick landed on', () => {
+  it('reads the pin by its number', () => {
+    expect(parseSelectMessage(keyMessage({ pin: 3 }))?.pin).toBe(3)
+  })
+
+  it('drops a pin that is no number or comes with a pick', () => {
+    expect(parseSelectMessage(keyMessage({ pin: 0 }))).toBeNull()
+    expect(parseSelectMessage(keyMessage({ pin: '3' }))).toBeNull()
+    expect(parseSelectMessage(keyMessage({ pin: 2, key: 'g' }))).toBeNull()
+  })
+})
+
+describe('text typed in place', () => {
+  it('reads the text and whether typing ended', () => {
+    expect(parseSelectMessage(keyMessage({ typed: { text: 'Hi', done: true } }))?.typed).toEqual({
+      text: 'Hi',
+      done: true,
+    })
+  })
+
+  it('drops text that is too long or malformed', () => {
+    expect(
+      parseSelectMessage(keyMessage({ typed: { text: 'x'.repeat(10_001), done: false } })),
+    ).toBeNull()
+    expect(parseSelectMessage(keyMessage({ typed: { text: 1, done: false } }))).toBeNull()
+    expect(parseSelectMessage(keyMessage({ typed: 'Hi' }))).toBeNull()
+  })
+})
+
+describe('the ancestors of a pick', () => {
+  it('keeps only tag names', () => {
+    const picked = {
+      path: 'index.html',
+      src: 0,
+      tag: 'h1',
+      text: '',
+      textOnly: true,
+      style: {},
+      ancestors: ['main', 'Bad Tag', 'header'],
+    }
+    expect(parseSelectMessage(keyMessage({ selection: picked }))?.selection?.ancestors).toEqual([
+      'main',
+      'header',
+    ])
+  })
+})

@@ -21,7 +21,9 @@ import { listenPageErrors, receivePageError } from './page-errors'
 /** The picks a frame may report each second over its port; more are dropped. */
 const PICKS_PER_SECOND = 20
 
-type PickListener = (selection: PageSelection | null, located?: SelectMessage['located']) => void
+/** What a select message carries besides the pick: a located element, a pin or typed text. */
+export type PickExtra = Pick<SelectMessage, 'located' | 'pin' | 'typed'>
+type PickListener = (selection: PageSelection | null, extra: PickExtra) => void
 type KeyListener = (key: PageKey) => void
 type DocListener = (report: DocReport) => void
 type DeckListener = (report: DeckReport) => void
@@ -55,7 +57,12 @@ function deliver(origin: string, message: SelectMessage): void {
   if (message.key) entry.key()?.(message.key)
   else if (message.doc) entry.doc()?.(message.doc)
   else if (message.deck) entry.deck()?.(message.deck)
-  else entry.listener(message.selection, message.located)
+  else
+    entry.listener(message.selection, {
+      located: message.located,
+      pin: message.pin,
+      typed: message.typed,
+    })
 }
 
 /** Main's picks, from every frame of an origin this window opened. */
@@ -102,6 +109,11 @@ export class FrameLink {
     private readonly origin: string,
     private readonly listener: PickListener,
   ) {}
+
+  /** Moves the keyboard into the frame, where its page focuses what is typed in place. */
+  focus(): void {
+    this.frame?.focus()
+  }
 
   /** Takes the frame's picks, until `dispose`. */
   open(): void {

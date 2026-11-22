@@ -909,6 +909,15 @@ export function PickLayer({
         frame.pick(at.x, at.y, { x: event.clientX, y: event.clientY })
         onDone?.()
       }}
+      // A double click types the picked element's text in place.
+      onDoubleClick={() => mode === 'select' && frame.typeIn()}
+      // The layer takes the wheel from the page, which it scrolls itself; a frame as tall as its
+      // page has nothing to scroll, and its view moves instead.
+      onWheel={(event) => {
+        if (event.ctrlKey || event.metaKey) return
+        const unit = event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? 800 : 1
+        frame.scroll((event.deltaX * unit) / scale, (event.deltaY * unit) / scale)
+      }}
     />
   )
 }

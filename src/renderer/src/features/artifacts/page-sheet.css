@@ -99,10 +99,6 @@
   display: inline-flex;
   flex: none;
 }
-.aps-compare {
-  flex: none;
-}
-
 .aps-errors {
   position: relative;
   display: inline-flex;
