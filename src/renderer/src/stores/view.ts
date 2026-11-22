@@ -1,12 +1,7 @@
 import { create } from 'zustand'
 import type { Project } from '@shared/agent-host'
 import type { AgentId, HarnessId } from '@shared/thread'
-import {
-  GROUPINGS,
-  SORTS,
-  type ArtifactGrouping,
-  type ArtifactSort,
-} from '@renderer/features/artifacts/model'
+import { ARRANGEMENTS, type ArtifactArrange } from '@renderer/features/artifacts/model'
 import {
   allPanes,
   closePane as closePaneInLayout,
@@ -208,7 +203,7 @@ interface ViewStore {
   /** The sessions whose side chat is open there instead; a session shows one of the two. */
   sideChatOpen: Record<string, true>
   /** How the Artifacts page groups and sorts, for the whole app. */
-  artifactsView: { group: ArtifactGrouping; sort: ArtifactSort }
+  artifactsView: { arrange: ArtifactArrange }
 }
 
 interface Persisted {
@@ -227,7 +222,7 @@ interface Persisted {
   /** One pane per column, the pane in focus; read back as the split a restart opens. */
   layout?: unknown
   /** Under a new name since the page went flat: every run saved the old grouping as it was. */
-  artifactsDisplay?: { group?: string; sort?: string }
+  artifactsDisplay?: { arrange?: string; group?: string; sort?: string }
 }
 
 const KEY = 'view:v1'
@@ -266,14 +261,16 @@ export const useViewStore = create<ViewStore>()(() => ({
   sidePaneMaximized: false,
   boardOpen: saved.boardOpen ?? {},
   sideChatOpen: saved.sideChatOpen ?? {},
-  artifactsView: {
-    group: oneOf(GROUPINGS, saved.artifactsDisplay?.group, 'none'),
-    sort: oneOf(SORTS, saved.artifactsDisplay?.sort, 'recent'),
-  },
+  artifactsView: { arrange: savedArrange(saved.artifactsDisplay) },
 }))
 
-function oneOf<T extends string>(values: readonly T[], value: string | undefined, fallback: T): T {
-  return values.includes(value as T) ? (value as T) : fallback
+/** The arrangement saved, or the one an earlier run's grouping and sort come closest to. */
+function savedArrange(saved: Persisted['artifactsDisplay']): ArtifactArrange {
+  if (ARRANGEMENTS.includes(saved?.arrange as ArtifactArrange)) {
+    return saved!.arrange as ArtifactArrange
+  }
+  if (saved?.group === 'project-session') return 'project'
+  return saved?.sort === 'name' ? 'name' : 'recent'
 }
 
 let saveTimer: ReturnType<typeof setTimeout> | undefined
@@ -670,7 +667,14 @@ export function taskPanel(taskId: string): string {
 
 /** The Artifacts page from the sidebar, with its whole list. */
 export function openArtifacts(): void {
-  useArtifactsStore.setState({ filter: '', kindFilter: null, projectFilter: [], opened: null })
+  useArtifactsStore.setState({
+    filter: '',
+    kindFilter: null,
+    projectFilter: [],
+    statusFilter: [],
+    onlyChanged: false,
+    opened: null,
+  })
   useViewStore.setState((s) => ({
     main: { kind: 'artifacts' },
     settings: { ...s.settings, open: false },
@@ -688,17 +692,33 @@ export function setArtifactsView(patch: Partial<ViewStore['artifactsView']>): vo
   useViewStore.setState((s) => ({ artifactsView: { ...s.artifactsView, ...patch } }))
 }
 
-/** Shows an artifact in the viewer, in place of what the main area shows. */
-export function openArtifact(id: string, { history = false }: { history?: boolean } = {}): void {
-  useViewStore.setState((s) => ({
-    main: {
-      kind: 'artifact',
-      id,
-      back: s.main.kind === 'artifact' ? s.main.back : s.main,
-      ...(history && { history }),
-    },
-    settings: { ...s.settings, open: false },
-  }))
+/** The page requests of the viewer in the main area, beside each panel's. */
+export const MAIN_ARTIFACT_PANEL = 'main'
+
+/**
+ * Shows an artifact in the viewer, in place of what the main area shows; `page`, a canvas page's
+ * id, is the one it opens on.
+ */
+export function openArtifact(
+  id: string,
+  { history = false, page }: { history?: boolean; page?: string } = {},
+): void {
+  useViewStore.setState((s) => {
+    const sideArtifactPage = { ...s.sideArtifactPage }
+    if (page)
+      sideArtifactPage[MAIN_ARTIFACT_PANEL] = { artifactId: id, pageId: page, seq: ++pageRequests }
+    else delete sideArtifactPage[MAIN_ARTIFACT_PANEL]
+    return {
+      main: {
+        kind: 'artifact',
+        id,
+        back: s.main.kind === 'artifact' ? s.main.back : s.main,
+        ...(history && { history }),
+      },
+      settings: { ...s.settings, open: false },
+      sideArtifactPage,
+    }
+  })
 }
 
 /** The viewer's Back: to what the main area showed before the artifact. */

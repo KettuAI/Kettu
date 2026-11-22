@@ -45,6 +45,7 @@ import { useSessionsStore } from '@renderer/stores/sessions'
 import {
   artifactPageShown,
   closeArtifact,
+  MAIN_ARTIFACT_PANEL,
   openSessionWithArtifact,
   toggleSidePane,
   useViewStore,
@@ -155,7 +156,7 @@ export default function ArtifactViewer(place: ViewerPlace) {
   const visitors = useVisitors(id)
   const followingNow = following && agents.some((a) => a.sessionId === following) ? following : null
   const pageAsked = useViewStore((s) => {
-    const asked = panel ? s.sideArtifactPage[panel.panel] : undefined
+    const asked = s.sideArtifactPage[panel?.panel ?? MAIN_ARTIFACT_PANEL]
     return asked?.artifactId === id ? asked : null
   })
   const showing = !!(url && shown) && !states.error && !states.gone && !artifact.stopped
@@ -504,7 +505,7 @@ export default function ArtifactViewer(place: ViewerPlace) {
             sessionName={(session) => noteAuthor(agents, session, t('board.note.agent'))}
             reloads={artifact.reloads}
             show={pageAsked}
-            onShown={panel ? (seq) => artifactPageShown(panel.panel, seq) : undefined}
+            onShown={(seq) => artifactPageShown(panel?.panel ?? MAIN_ARTIFACT_PANEL, seq)}
           />
         ) : shown.canvas ? (
           <ArtifactSurface

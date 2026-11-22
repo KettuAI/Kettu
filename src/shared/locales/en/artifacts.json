@@ -1,7 +1,6 @@
 {
   "page": {
     "title": "Artifacts",
-    "ask": "Ask an agent for one",
     "kinds": {
       "document": "Document",
       "slides": "Slides",
@@ -28,32 +27,12 @@
     "allKinds": "All",
     "project": "Project",
     "allProjects": "All projects",
-    "display": "Display: {{value}}",
-    "layout": "Layout",
-    "layouts": {
-      "none": "Flat",
-      "project-session": "By project and session"
-    },
-    "sort": "Sort",
-    "sorts": {
-      "recent": "Recently opened",
-      "updated": "Recently updated",
-      "name": "Name"
-    },
-    "sortsShort": {
-      "recent": "Recent",
-      "updated": "Updated",
-      "name": "Name"
-    },
     "loading": "Loading artifacts",
     "filter": "Search artifacts",
     "clearFilter": "Clear the filter",
     "clearFilters": "Clear filters",
     "noProject": "No project",
     "deletedSession": "Deleted session",
-    "openSession": "Open the session",
-    "emptyTitle": "No artifacts yet",
-    "emptyDescription": "Pick a kind below to ask an agent for one, or ask in any session; what they make shows here, the most recently opened first.",
     "noMatch": "No matching artifacts",
     "errorTitle": "Artifacts could not be loaded",
     "errorDescription": "{{error}} Your artifacts are safe on this computer.",
@@ -82,8 +61,6 @@
     "dismiss": "Dismiss",
     "recentlyDeleted": "Recently deleted",
     "backToArtifacts": "Back to Artifacts",
-    "deletedDescription": "Deleted artifacts stay here for 30 days, then they and every version of them are removed for good.",
-    "nothingDeleted": "Nothing in Recently deleted",
     "description": "Documents, slide decks, pages and canvases the agents made, in every project.",
     "descriptionOn": "Documents, slide decks, pages and canvases the agents made on {{host}}, in every project.",
     "descriptionThisMac": "Documents, slide decks, pages and canvases the agents made on this Mac, in every project.",
@@ -93,12 +70,52 @@
     "noMatchQuery": "Nothing matches “{{query}}”.",
     "noMatchFilters": "No artifact matches these filters.",
     "importShort": "Import",
-    "askNotes": {
-      "document": "A write-up, spec or notes, exports to Word and Markdown.",
-      "slides": "A deck to present, exports to PowerPoint and PDF.",
-      "web": "A web page you can open in a browser and share.",
-      "canvas": "Screens and flows side by side, to comment on."
-    }
+    "arrange": "Arrange",
+    "arrangeMenu": "Arrange: {{value}}",
+    "arrangements": {
+      "recent": "Recent",
+      "project": "By project",
+      "session": "By session",
+      "name": "Name"
+    },
+    "status": "Status",
+    "statuses": {
+      "updated": "Updated",
+      "reply": "Needs your reply",
+      "published": "Published"
+    },
+    "changedLine_one": "{{count}} artifact changed since you last opened it",
+    "changedLine_other": "{{count}} artifacts changed since you last opened them",
+    "showChanged": "Show",
+    "showingChanged_one": "Showing {{count}} updated",
+    "showingChanged_other": "Showing {{count}} updated",
+    "showAll": "Show all",
+    "matchCount_one": "{{shown}} of {{count}} artifact match “{{query}}”",
+    "matchCount_other": "{{shown}} of {{count}} artifacts match “{{query}}”",
+    "askLabel": "Ask an agent to make one",
+    "askHint": "Pick a kind to start a session with it in mind. Whatever an agent makes, in any session, shows up here.",
+    "askKinds": {
+      "document": {
+        "name": "Document",
+        "line": "A write-up, spec or notes"
+      },
+      "slides": {
+        "name": "Slide deck",
+        "line": "Slides to present or share"
+      },
+      "web": {
+        "name": "Web page",
+        "line": "A page that opens in a browser"
+      },
+      "canvas": {
+        "name": "Canvas",
+        "line": "Screens and flows side by side"
+      }
+    },
+    "importLine": "Or bring in a page you already have",
+    "clearAll": "Clear all",
+    "removeFilter": "Remove {{value}}",
+    "deletedNote": "Deleted artifacts stay here for 30 days, then go for good."
   },
   "card": {
     "canvas_one": "Canvas · {{count}} page",
@@ -118,7 +135,17 @@
     "access": {
       "code": "Published, open with its access code",
       "public": "Published, open to anyone with the link"
-    }
+    },
+    "pages_one": "{{count}} page",
+    "pages_other": "{{count}} pages",
+    "slides_one": "{{count}} slide",
+    "slides_other": "{{count}} slides",
+    "version": "v{{version}}",
+    "versions": "v{{from}} → v{{to}}",
+    "unseen": "Changed since you last opened it",
+    "replies_one": "{{count}} comment needs your reply",
+    "replies_other": "{{count}} comments need your reply",
+    "slideOf": "Slide {{number}} of {{count}}"
   },
   "menu": {
     "open": "Open",
@@ -540,5 +567,15 @@
     "zoomOut": "Zoom out",
     "fit": "Fit",
     "empty": "This canvas has no pages yet."
+  },
+  "changes": {
+    "frames_one": "{{count}} frame changed",
+    "frames_other": "{{count}} frames changed",
+    "files_one": "{{count}} file changed",
+    "files_other": "{{count}} files changed",
+    "passages_one": "{{count}} passage changed",
+    "passages_other": "{{count}} passages changed",
+    "slides_one": "{{count}} slide changed",
+    "slides_other": "{{count}} slides changed"
   }
 }

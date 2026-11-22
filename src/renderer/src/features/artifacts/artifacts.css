@@ -73,138 +73,6 @@
 .k-num {
   font-variant-numeric: tabular-nums;
 }
-.k-arts__back {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  margin: -18px 0 10px -6px;
-  padding: 4px 8px 4px 4px;
-  border-radius: 8px;
-  font-size: 13px;
-  color: var(--muted);
-}
-.k-arts__back:hover {
-  background: var(--hover);
-  color: var(--ink);
-}
-.k-arts__group {
-  margin-top: 28px;
-}
-.k-arts__project {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin: 0;
-  font-size: 14px;
-  font-weight: 500;
-  color: var(--strong);
-}
-.k-arts__project small {
-  font-size: 12px;
-  font-weight: 400;
-  color: var(--faint);
-}
-.k-arts__project .ui-as-tray-link__folder {
-  flex: none;
-  width: 16px;
-  height: 16px;
-}
-.k-arts__session {
-  margin-top: 12px;
-}
-.k-arts__session-row {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  max-width: 100%;
-  height: 26px;
-  padding: 0 8px 0 6px;
-  margin-left: -6px;
-  border-radius: 7px;
-  font-size: 12.5px;
-  color: var(--muted);
-}
-.k-arts__session-row > span {
-  min-width: 0;
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-}
-.k-arts__session-row small {
-  flex: none;
-  font-size: 12px;
-  color: var(--faint);
-}
-button.k-arts__session-row:hover {
-  background: var(--hover);
-  color: var(--ink);
-}
-.k-arts__session .k-arts__grid {
-  margin-top: 8px;
-}
-.k-arts__menu .ui-as-menu {
-  width: 232px;
-}
-.k-arts__empty {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 4px;
-  margin-top: 28px;
-  padding: 40px 24px 36px;
-  border-radius: 12px;
-  background: var(--card);
-  box-shadow: var(--card-shadow);
-  text-align: center;
-}
-.k-arts__empty b {
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--strong);
-}
-.k-arts__empty p {
-  max-width: 440px;
-  margin: 0 0 14px;
-  font-size: 13px;
-  line-height: 20px;
-  color: var(--muted);
-  text-wrap: balance;
-}
-.k-arts__asks {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 14px;
-  margin-top: 12px;
-}
-.k-arts__ask {
-  display: grid;
-  gap: 2px;
-  text-align: left;
-}
-.k-arts__ask .ui-as-template__preview {
-  height: auto;
-  aspect-ratio: 16 / 10;
-  margin-bottom: 6px;
-}
-.k-arts__ask:hover .ui-as-template__preview {
-  box-shadow: inset 0 0 0 0.5px var(--line-strong);
-}
-.k-arts__ask b {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--strong);
-}
-.k-arts__ask b svg {
-  color: var(--muted);
-}
-.k-arts__ask small {
-  font-size: 12px;
-  line-height: 16px;
-  color: var(--muted);
-}
 .k-arts .k-alert {
   margin-top: 16px;
 }
@@ -215,8 +83,345 @@ button.k-arts__session-row:hover {
   background: var(--chip);
 }
 
+/* Ask an agent: a compact line of four tiles over the cards. */
+.k-arts__make {
+  margin-top: 22px;
+}
+.k-arts__make-label {
+  display: block;
+  margin-bottom: 8px;
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--muted);
+}
+.k-arts__make-row {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+.k-arts__make-tile {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  height: 52px;
+  padding: 0 12px 0 10px;
+  border-radius: 12px;
+  background: var(--card);
+  box-shadow: var(--card-shadow);
+  text-align: left;
+  transition: box-shadow var(--duration-fast) var(--ease-standard);
+}
+.k-arts__make-tile:hover {
+  box-shadow: var(--card-shadow-hover);
+}
+.k-arts__make-tile:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.k-arts__make-mark {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  color: var(--k-mark);
+  background: color-mix(in srgb, var(--k-mark) 11%, var(--card));
+}
+[data-kind='web'] > .k-arts__make-mark,
+.k-arts__make-mark[data-kind='web'] {
+  --k-mark: var(--kind-web);
+}
+[data-kind='canvas'] > .k-arts__make-mark,
+.k-arts__make-mark[data-kind='canvas'] {
+  --k-mark: var(--kind-canvas);
+}
+[data-kind='document'] > .k-arts__make-mark,
+.k-arts__make-mark[data-kind='document'] {
+  --k-mark: var(--kind-document);
+}
+[data-kind='slides'] > .k-arts__make-mark,
+.k-arts__make-mark[data-kind='slides'] {
+  --k-mark: var(--kind-slides);
+}
+.k-arts__make-text {
+  display: grid;
+  min-width: 0;
+}
+.k-arts__make-text b {
+  overflow: hidden;
+  font-size: 13px;
+  line-height: 18px;
+  font-weight: 500;
+  color: var(--strong);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.k-arts__make-text small {
+  overflow: hidden;
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--muted);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.k-arts .ui-as-section-head {
+  margin-top: 28px;
+}
+
+/* The filters picked, as chips that each remove one. */
+.k-arts__chips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 12px;
+}
+.k-arts__chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 26px;
+  padding: 0 4px 0 9px;
+  border-radius: 6px;
+  background: var(--card);
+  box-shadow: var(--card-shadow);
+  font-size: 12.5px;
+  color: var(--ink);
+}
+.k-arts__chip-group {
+  color: var(--muted);
+}
+.k-arts__chip button {
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
+  color: var(--muted);
+}
+.k-arts__chip button:hover {
+  background: var(--chip-hover);
+  color: var(--ink);
+}
+.k-arts__link {
+  padding: 2px 4px;
+  border-radius: 5px;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--accent);
+}
+.k-arts__link:hover {
+  background: var(--accent-soft);
+}
+
+/* The quiet lines over the cards: what changed since last opened, how many match the search. */
+.k-arts__line {
+  display: flex;
+  align-items: center;
+  height: 22px;
+  margin: 14px 0 0;
+  font-size: 13px;
+  color: var(--text);
+  animation: k-arts-line var(--duration-fast) var(--ease-standard) both;
+}
+.k-arts__line .k-art__dot {
+  margin: 0 8px 0 2px;
+}
+.k-arts__line .k-arts__link {
+  margin-left: 8px;
+}
+@keyframes k-arts-line {
+  from {
+    opacity: 0;
+  }
+}
+.k-arts__line + .k-arts__cards > .k-arts__grid:first-child {
+  margin-top: 12px;
+}
+
+/* Cards come in 12px up, a few at a time. */
+.k-arts__cell {
+  min-width: 0;
+  animation: k-arts-in 240ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation-delay: calc(var(--i, 0) * 18ms);
+}
+@keyframes k-arts-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+}
+.k-arts .k-art__open:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* By project or session: a heading per group that folds its cards. */
+.k-arts__group {
+  margin-top: 22px;
+}
+.k-arts__group + .k-arts__group {
+  margin-top: 18px;
+}
+.k-arts__group-head {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 100%;
+  height: 28px;
+  padding: 0 8px 0 6px;
+  margin-left: -6px;
+  border-radius: 7px;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--strong);
+}
+.k-arts__group-head:hover {
+  background: var(--hover);
+}
+.k-arts__group-head .ui-as-tray-link__folder {
+  flex: none;
+  width: 16px;
+  height: 16px;
+}
+.k-arts__group-name {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.k-arts__group-head small {
+  flex: none;
+  font-size: 12.5px;
+  font-weight: 400;
+  color: var(--faint);
+}
+.k-arts__group-fold {
+  display: grid;
+  color: var(--faint);
+  transition: transform 240ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.k-arts__group[data-folded] .k-arts__group-fold {
+  transform: rotate(-90deg);
+}
+.k-arts__group .k-arts__grid {
+  margin-top: 10px;
+}
+
+/* Recently deleted: a quiet row at the foot that opens its grayed cards. */
+.k-arts__bin-box {
+  margin-top: 28px;
+  padding-bottom: 8px;
+}
+.k-arts__bin-box .k-arts__bin {
+  margin-top: 0;
+}
+.k-arts__bin-chevron {
+  display: grid;
+  transition: transform 240ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.k-arts__bin-box[data-open] .k-arts__bin-chevron {
+  transform: rotate(90deg);
+}
+.k-arts__bin-body {
+  animation: k-arts-in 240ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.k-arts__bin-note {
+  margin: 2px 0 0;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+.k-arts__bin-body .k-arts__grid {
+  margin-top: 12px;
+}
+
+/* No artifact yet: the four kinds are the page. */
+.k-arts__empty {
+  margin-top: 36px;
+}
+.k-arts__empty h2 {
+  margin: 0;
+  font-size: 15px;
+  line-height: 22px;
+  font-weight: 500;
+  color: var(--strong);
+}
+.k-arts__empty > p {
+  margin: 2px 0 0;
+  font-size: 13px;
+  line-height: 20px;
+  color: var(--muted);
+}
+.k-arts__empty-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+  margin-top: 16px;
+}
+.k-arts__empty-name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.k-arts__empty-name .k-arts__make-mark {
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+}
+.k-arts__empty .k-art__head {
+  padding-right: 9px;
+}
+.k-arts__empty .k-art__meta {
+  margin-top: 4px;
+}
+.k-arts__empty-import {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 24px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+/* A card's page on its way into the viewer, or back. */
+.k-glide {
+  position: fixed;
+  z-index: 60;
+  overflow: hidden;
+  background: var(--bg-surface);
+  pointer-events: none;
+  box-shadow: var(--artifact-page-lift);
+}
+.k-glide > .k-art__page {
+  width: 100% !important;
+  max-width: none !important;
+  height: 100% !important;
+  aspect-ratio: auto !important;
+  border-radius: 0 !important;
+  transform: none !important;
+  box-shadow: none !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .k-arts__cell,
+  .k-arts__line,
+  .k-arts__bin-body {
+    animation: none;
+  }
+}
+:root[data-reduce-motion='always'] {
+  & .k-arts__cell,
+  & .k-arts__line,
+  & .k-arts__bin-body {
+    animation: none;
+  }
+}
+
 @container k-arts (max-width: 900px) {
-  .k-arts__asks {
+  .k-arts__make-row,
+  .k-arts__empty-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }

@@ -53,6 +53,9 @@ export function useChanges(
 }
 
 async function changesBetween(id: string, from: number, to: number): Promise<Changes | null> {
+  // One request to a host that compares them itself; an older host's versions are read here.
+  const asked = await host('artifacts.changes', { id, from, to }).catch(() => null)
+  if (asked) return asked.changes
   const [before, after] = await Promise.all([
     host('artifacts.read', { id, version: from }),
     host('artifacts.read', { id, version: to }),

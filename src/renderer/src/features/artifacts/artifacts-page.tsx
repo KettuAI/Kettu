@@ -7,10 +7,11 @@ import {
   type CSSProperties,
   type KeyboardEvent,
   type ReactElement,
+  type ReactNode,
 } from 'react'
 import {
   Alert02Icon,
-  ArrowLeft01Icon,
+  ArrowDown01Icon,
   ArrowRight01Icon,
   Cancel01Icon,
   Delete02Icon,
@@ -24,7 +25,6 @@ import { useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
 import { NO_SESSION, type ArtifactSummary } from '@shared/artifacts'
 import type { AgentId } from '@shared/thread'
-import { backTo } from '@renderer/app/history'
 import {
   Dropdown,
   FilterButton,
@@ -48,7 +48,6 @@ import {
   DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from '@renderer/components/ui/dropdown-menu'
-import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
 import { Notice } from '@renderer/features/routines/kit'
 import { basename, longAgo } from '@renderer/lib/format'
 import { useHostContext } from '@renderer/lib/host-features'
@@ -69,38 +68,40 @@ import {
   setArtifactsAgentFilter,
   setArtifactsFilter,
   setArtifactsKindFilter,
+  setArtifactsOnlyChanged,
   setArtifactsProjectFilter,
+  setArtifactsStatusFilter,
   useArtifactsStore,
   type ImportFailure,
 } from '@renderer/stores/artifacts'
 import { useProjectsStore } from '@renderer/stores/projects'
+import { localSharing } from '@renderer/stores/sharing'
 import { useSessionsStore } from '@renderer/stores/sessions'
-import {
-  openArtifact,
-  openRecentlyDeleted,
-  openSession,
-  setArtifactsView,
-  useViewStore,
-} from '@renderer/stores/view'
+import { openArtifact, setArtifactsView, useViewStore } from '@renderer/stores/view'
+import { artifactSharing } from './artifact-host'
 import { ArtifactCard, CardSkeleton } from './artifact-card'
+import type { OpenAt } from './artifact-tile'
 import { askForArtifact } from './ask'
+import { growInto, shrinkFrom } from './glide'
 import { isEditable } from './keys'
 import { KIND_ICON } from './kinds'
 import {
   agentsOf,
+  ARRANGEMENTS,
   ARTIFACT_KINDS,
+  ARTIFACT_STATUSES,
   artifactKind,
   filterArtifacts,
   groupArtifacts,
-  GROUPINGS,
   NO_PROJECT,
   projectsOf,
-  SORTS,
-  type ArtifactGrouping,
-  type ArtifactSort,
+  type ArtifactArrange,
+  type ArtifactKind,
+  type ArtifactStatus,
   type Group,
 } from './model'
 import { KindSketch } from './sketch'
+import { readWaitingReplies, useWaitingCounts } from './waiting-replies'
 import './artifacts.css'
 
 interface SessionInfo {
@@ -110,10 +111,26 @@ interface SessionInfo {
   agentId: AgentId
 }
 
-/** Opens the viewer; Back returns to the page with this card focused. */
-function openFromPage(id: string, history = false): void {
+/** Where the list was scrolled when the viewer opened, for Back. */
+let scrolledTo = 0
+
+/** The area the viewer takes, which the page's own scroller covers. */
+function viewerArea(): DOMRect | null {
+  return document.querySelector<HTMLElement>('.k-arts-scroll')?.getBoundingClientRect() ?? null
+}
+
+function pageOf(id: string): HTMLElement | null {
+  return (
+    document
+      .querySelector(`[data-artifact-card="${CSS.escape(id)}"]`)
+      ?.querySelector<HTMLElement>('.k-art__page') ?? null
+  )
+}
+
+/** Opens the viewer from a card, its page growing into it; Back returns to the card. */
+function openFromPage(id: string, { history = false, at }: { history?: boolean; at?: OpenAt }) {
   useArtifactsStore.setState({ opened: id })
-  openArtifact(id, { history })
+  growInto(pageOf(id), viewerArea(), () => openArtifact(id, { history, page: at?.page }))
 }
 
 /** In the tooltip only, so it reads the time as it opens. */
@@ -127,17 +144,29 @@ function VersionTime({ artifact }: { artifact: ArtifactSummary }) {
   )
 }
 
-/** Where the list was scrolled when the viewer opened, for Back. */
-let scrolledTo = 0
+/** Changed since the owner last opened it, on a host that keeps that; never while being written. */
+function isUnseen(artifact: ArtifactSummary): boolean {
+  const seen = artifact.seen
+  return (
+    seen !== undefined &&
+    artifact.deletedAt === null &&
+    artifact.editing.length === 0 &&
+    (seen === null || seen < artifact.version)
+  )
+}
 
-/** Recently deleted's Back: to the whole list. */
-function leaveRecentlyDeleted(): void {
-  backTo({ kind: 'artifacts' }, () => openRecentlyDeleted(false))
+/** Published so that someone else can open it, by its code or its link. */
+function isPublished(id: string): boolean {
+  const pages = artifactSharing(id).useSharingStore.getState().status?.published ?? []
+  return pages.some(
+    (page) => page.id === id && (page.access === 'public' || page.access === 'code'),
+  )
 }
 
 /**
- * Every artifact as a card, the most recently opened first or as the user chooses, under its
- * search and filters; with `deleted`, the page's Recently deleted view.
+ * Every artifact as a card, the most recently opened first or as the user arranges them, under
+ * its search and filters, with what changed since the user last opened it; Recently deleted is a
+ * row at the foot, open with `deleted`.
  */
 export default function ArtifactsPage({ deleted }: { deleted: boolean }) {
   const { t, i18n } = useTranslation(['artifacts', 'common'])
@@ -155,19 +184,37 @@ export default function ArtifactsPage({ deleted }: { deleted: boolean }) {
   const kindFilter = useArtifactsStore((s) => s.kindFilter)
   const projectFilter = useArtifactsStore((s) => s.projectFilter)
   const agentFilter = useArtifactsStore((s) => s.agentFilter)
+  const statusFilter = useArtifactsStore((s) => s.statusFilter)
+  const onlyChanged = useArtifactsStore((s) => s.onlyChanged)
   const openedAt = useArtifactsStore((s) => s.openedAt)
   const importFailed = useArtifactsStore((s) => s.importFailed)
-  const { group, sort } = useViewStore(useShallow((s) => s.artifactsView))
+  const arrange = useViewStore((s) => s.artifactsView.arrange)
   const projects = useProjectsStore((s) => s.projects)
   const sessions = useSessionInfo(list, trash)
-  const now = useNow()
   const scroller = useRef<HTMLDivElement>(null)
+  const bin = useRef<HTMLDivElement>(null)
   const [active, setActive] = useState<string | null>(null)
+  const [binOpen, setBinOpen] = useState(deleted)
+  const [folded, setFolded] = useState<ReadonlySet<string>>(() => new Set())
+  const replies = useWaitingCounts()
+  // Published pages change what the filter keeps; this computer's are read here.
+  const published = localSharing.useSharingStore((s) => s.status?.published)
 
   useEffect(() => {
     artifactListShown(true)
     return () => artifactListShown(false)
   }, [])
+
+  // Recently deleted from elsewhere, such as Back to it: open, and in view.
+  const [deletedWas, setDeletedWas] = useState(deleted)
+  if (deleted !== deletedWas) {
+    setDeletedWas(deleted)
+    if (deleted) setBinOpen(true)
+  }
+  useEffect(() => {
+    if (!deleted) return
+    requestAnimationFrame(() => bin.current?.scrollIntoView({ block: 'start' }))
+  }, [deleted])
 
   useEffect(() => {
     const onKeyDown = (event: globalThis.KeyboardEvent): void => {
@@ -175,47 +222,51 @@ export default function ArtifactsPage({ deleted }: { deleted: boolean }) {
       // Not while a menu or tooltip of the page takes the key.
       const onPage =
         event.target === document.body || scroller.current?.contains(event.target as Node)
-      if (deleted) {
-        if (event.key === 'Escape' && onPage && !isEditable(event.target)) {
-          event.preventDefault()
-          leaveRecentlyDeleted()
-        }
-      } else if (
-        isMod(event) &&
-        !event.shiftKey &&
-        !event.altKey &&
-        event.key.toLowerCase() === 'f'
-      ) {
+      if (isMod(event) && !event.shiftKey && !event.altKey && event.key.toLowerCase() === 'f') {
         event.preventDefault()
         const field = scroller.current?.querySelector<HTMLInputElement>('.ui-as-search input')
         field?.focus()
         field?.select()
-      } else if (event.key === 'Escape' && useArtifactsStore.getState().filter && onPage) {
+      } else if (
+        event.key === 'Escape' &&
+        useArtifactsStore.getState().filter &&
+        onPage &&
+        !isEditable(event.target)
+      ) {
         event.preventDefault()
         setArtifactsFilter('')
       }
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [deleted])
+  }, [])
 
-  // Back from the viewer: the same scroll, and the card it opened has the focus again.
-  const ready = (deleted ? trash : list) !== null
+  // Back from the viewer: the same scroll, the card it opened focused, its page shrinking into it.
+  const ready = list !== null
   useLayoutEffect(() => {
     const view = scroller.current
     if (!view) return
     const { opened } = useArtifactsStore.getState()
     if (!ready || !opened) {
-      view.scrollTop = 0
+      if (!deleted) view.scrollTop = 0
       return
     }
     view.scrollTop = scrolledTo
+    const card = view.querySelector<HTMLElement>(`[data-artifact-card="${CSS.escape(opened)}"]`)
     // Its focus event makes it the cards' Tab stop.
-    view
-      .querySelector<HTMLElement>(`[data-artifact-card="${opened}"]`)
-      ?.focus({ preventScroll: true })
+    card?.focus({ preventScroll: true })
+    shrinkFrom(
+      card?.querySelector<HTMLElement>('.k-art__page') ?? null,
+      view.getBoundingClientRect(),
+    )
     useArtifactsStore.setState({ opened: null })
   }, [ready, deleted])
+
+  // Needs your reply counts every artifact once it is picked; cards in view count their own.
+  const wantsReplies = statusFilter.includes('reply')
+  useEffect(() => {
+    if (wantsReplies && list) readWaitingReplies(list.map((a) => a.id))
+  }, [wantsReplies, list])
 
   const collator = useMemo(
     () => new Intl.Collator(i18n.language, { numeric: true, sensitivity: 'base' }),
@@ -224,35 +275,46 @@ export default function ArtifactsPage({ deleted }: { deleted: boolean }) {
   const agentOf = useMemo(() => {
     return (id: string): AgentId | null => sessions.get(id)?.agentId ?? null
   }, [sessions])
-  const shown = useMemo(
+  const hasStatus = useMemo(
+    () =>
+      (artifact: ArtifactSummary, status: ArtifactStatus): boolean =>
+        status === 'updated'
+          ? isUnseen(artifact)
+          : status === 'reply'
+            ? (replies.get(artifact.id) ?? 0) > 0
+            : isPublished(artifact.id),
+    // Published pages are read when the filter runs; this keeps it in step with them.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [replies, published],
+  )
+  // The search's count is out of what the other filters keep.
+  const filtered = useMemo(
     () =>
       list
         ? filterArtifacts(list, {
-            title: filter,
+            title: '',
             kind: kindFilter,
             project: projectFilter,
             agent: agentFilter,
             agentOf,
-          })
+            status: statusFilter,
+            hasStatus,
+          }).filter((artifact) => !onlyChanged || isUnseen(artifact))
         : [],
-    [list, filter, kindFilter, projectFilter, agentFilter, agentOf],
+    [list, kindFilter, projectFilter, agentFilter, agentOf, statusFilter, hasStatus, onlyChanged],
   )
-  const groups = useMemo(() => {
-    if (!list) return []
-    return groupArtifacts(shown, group, sort, {
-      projects,
-      session: (id) => {
-        const info = sessions.get(id)
-        return info
-          ? { title: info.title ?? t('common:untitledSession'), updatedAt: info.updatedAt }
-          : null
-      },
-      deletedSession: t('page.deletedSession'),
-      imported: t('page.imported'),
-      collator,
-      opened: openedAt,
-    })
-  }, [list, shown, group, sort, projects, sessions, collator, openedAt, t])
+  const shown = useMemo(
+    () =>
+      filter.trim()
+        ? filterArtifacts(filtered, { title: filter, kind: null, project: [] })
+        : filtered,
+    [filtered, filter],
+  )
+  const groups = useMemo(
+    () => groupArtifacts(shown, arrange, { projects, collator, opened: openedAt }),
+    [shown, arrange, projects, collator, openedAt],
+  )
+  const changedCount = useMemo(() => (list ? list.filter(isUnseen).length : 0), [list])
 
   const projectName = (artifact: ArtifactSummary): string =>
     artifact.scratch
@@ -264,47 +326,52 @@ export default function ArtifactsPage({ deleted }: { deleted: boolean }) {
     if (!info) return t('page.deletedSession')
     return info.title ?? t('common:untitledSession')
   }
-  // The time the order goes by: when it was opened here or written, or when it was written.
+  // The time the line ends with: when it was opened here or written, whichever is later.
   const timeOf = (artifact: ArtifactSummary): number => {
     const opened = openedAt[artifact.id] ?? 0
-    return sort !== 'updated' && opened > artifact.updatedAt ? opened : artifact.updatedAt
+    return opened > artifact.updatedAt ? opened : artifact.updatedAt
   }
-  // "Page", "Document", or "Canvas · 6 pages".
-  const kindLine = (artifact: ArtifactSummary): string => {
-    const kind = artifactKind(artifact)
-    return kind === 'canvas' ? t('card.canvas', { count: artifact.pages }) : t(`page.kinds.${kind}`)
-  }
-  const card = (artifact: ArtifactSummary, tabbable: string | null) => (
-    <ArtifactCard
+  const query = filter.trim()
+  const card = (artifact: ArtifactSummary, tabbable: string | null, i: number) => (
+    <div
       key={artifact.id}
-      id={artifact.id}
-      title={artifact.title}
-      summary={artifact}
-      standing={artifact.deletedAt === null ? 'live' : 'deleted'}
-      form="tile"
-      still={artifact.version}
-      agent={agentOf(artifact.sessionId)}
-      agentHost={hostOfPath(sessions.get(artifact.sessionId)?.projectPath ?? '')}
-      what={t('card.kindVersion', { kind: kindLine(artifact), version: artifact.version })}
-      at={timeOf(artifact)}
-      host={hostOf(artifact.id)}
-      current
-      onOpen={() => openFromPage(artifact.id)}
-      menu={{
-        onOpen: () => openFromPage(artifact.id),
-        onVersionHistory: () => openFromPage(artifact.id, true),
-      }}
-      page={{
-        tabbable: artifact.id === tabbable,
-        tip: (
-          <>
-            <span>{projectName(artifact)}</span>
-            <span>{sessionName(artifact.sessionId)}</span>
-            <VersionTime artifact={artifact} />
-          </>
-        ),
-      }}
-    />
+      className="k-arts__cell"
+      style={{ '--i': Math.min(i, 8) } as CSSProperties}
+    >
+      <ArtifactCard
+        id={artifact.id}
+        title={artifact.title}
+        summary={artifact}
+        standing={artifact.deletedAt === null ? 'live' : 'deleted'}
+        form="tile"
+        still={artifact.version}
+        agent={agentOf(artifact.sessionId)}
+        agentHost={hostOfPath(sessions.get(artifact.sessionId)?.projectPath ?? '')}
+        what={t('card.kindVersion', {
+          kind: t(`page.kinds.${artifactKind(artifact)}`),
+          version: artifact.version,
+        })}
+        at={timeOf(artifact)}
+        host={hostOf(artifact.id)}
+        current
+        onOpen={(at) => openFromPage(artifact.id, { at })}
+        menu={{
+          onOpen: () => openFromPage(artifact.id, {}),
+          onVersionHistory: () => openFromPage(artifact.id, { history: true }),
+        }}
+        page={{
+          tabbable: artifact.id === tabbable,
+          query,
+          tip: (
+            <>
+              <span>{projectName(artifact)}</span>
+              <span>{sessionName(artifact.sessionId)}</span>
+              <VersionTime artifact={artifact} />
+            </>
+          ),
+        }}
+      />
+    </div>
   )
   const cardsProps = {
     onKeyDown: moveCardFocus,
@@ -318,6 +385,8 @@ export default function ArtifactsPage({ deleted }: { deleted: boolean }) {
     setArtifactsKindFilter(null)
     setArtifactsProjectFilter([])
     setArtifactsAgentFilter([])
+    setArtifactsStatusFilter([])
+    setArtifactsOnlyChanged(false)
   }
 
   const projectChoices = useMemo(
@@ -325,56 +394,92 @@ export default function ArtifactsPage({ deleted }: { deleted: boolean }) {
     [list, projects, collator],
   )
   const agentChoices = useAgentChoices(list, agentOf)
+  const filterGroups = [
+    {
+      id: 'agent',
+      label: t('page.agent'),
+      options: agentChoices.map((id) => ({ id, label: agentName(id) })),
+    },
+    {
+      id: 'project',
+      label: t('page.project'),
+      options: projectChoices.map((of) =>
+        of.kind === 'project'
+          ? { id: of.path, label: of.name }
+          : { id: NO_PROJECT, label: t('page.noProject') },
+      ),
+    },
+    {
+      id: 'status',
+      label: t('page.status'),
+      options: ARTIFACT_STATUSES.map((id) => ({ id, label: t(`page.statuses.${id}`) })),
+    },
+  ]
+  const chips = filterGroups.flatMap((group) => {
+    const picked: readonly string[] =
+      group.id === 'agent' ? agentFilter : group.id === 'project' ? projectFilter : statusFilter
+    return group.options
+      .filter((option) => picked.includes(option.id))
+      .map((option) => ({ group, option }))
+  })
+  const removeChip = (group: string, id: string) => {
+    if (group === 'agent') setArtifactsAgentFilter(agentFilter.filter((a) => a !== id))
+    else if (group === 'project') setArtifactsProjectFilter(projectFilter.filter((p) => p !== id))
+    else setArtifactsStatusFilter(statusFilter.filter((s) => s !== id))
+  }
 
-  let body
-  if (deleted) {
-    const tabbable = trash?.some((a) => a.id === active) ? active : (trash?.[0]?.id ?? null)
-    if (trash === null && error) body = <ListError error={error} />
-    else if (trash === null) body = <LoadingList />
-    else if (trash.length === 0) body = <NothingDeleted />
-    else {
-      body = (
-        <>
-          {error && <ListError error={error} />}
-          <div {...cardsProps} className="k-arts__grid">
-            {trash.map((artifact) => card(artifact, tabbable))}
-          </div>
-        </>
-      )
-    }
-  } else {
-    const cards = groups.flatMap((g) => g.sections.flatMap((s) => s.artifacts))
-    const tabbable = cards.some((a) => a.id === active) ? active : (cards[0]?.id ?? null)
-    if (away && !read) body = null
-    else if (list === null && error) body = <ListError error={error} />
-    else if (list === null) body = <LoadingList />
-    else if (list.length === 0) body = away ? null : <NoArtifacts />
-    else if (groups.length === 0) body = <NoMatch query={filter} onClear={clearFilters} />
-    else {
-      body = (
-        <>
-          {error && <ListError error={error} />}
-          <div {...cardsProps}>
-            {groups.map((g) => (
+  let body: ReactNode
+  const cards = groups.flatMap((g) => (folded.has(g.key) ? [] : g.artifacts))
+  const tabbable = cards.some((a) => a.id === active) ? active : (cards[0]?.id ?? null)
+  const any = list !== null && list.length > 0
+  const binTabbable = trash?.some((a) => a.id === active) ? active : (trash?.[0]?.id ?? null)
+  if (away && !read) body = null
+  else if (list === null && error) body = <ListError error={error} />
+  else if (list === null) body = <LoadingList />
+  else if (list.length === 0) body = away ? null : <NoArtifacts />
+  else if (shown.length === 0) body = <NoMatch query={filter} onClear={clearFilters} />
+  else {
+    let i = 0
+    body = (
+      <>
+        {error && <ListError error={error} />}
+        <div {...cardsProps} className="k-arts__cards">
+          {groups.map((g) =>
+            g.of.kind === 'all' ? (
+              <div key={g.key} className="k-arts__grid">
+                {g.artifacts.map((artifact) => card(artifact, tabbable, i++))}
+              </div>
+            ) : (
               <GroupView
                 key={g.key}
                 group={g}
-                grouping={group}
-                sessions={sessions}
-                now={now}
-                render={(artifact) => card(artifact, tabbable)}
-              />
-            ))}
-          </div>
-        </>
-      )
-    }
+                info={g.of.kind === 'session' ? sessions.get(g.of.sessionId) : undefined}
+                projectName={(path) =>
+                  projects.find((p) => p.path === path)?.name ?? basename(path)
+                }
+                folded={folded.has(g.key)}
+                onFold={() =>
+                  setFolded((was) => {
+                    const next = new Set(was)
+                    if (next.has(g.key)) next.delete(g.key)
+                    else next.add(g.key)
+                    return next
+                  })
+                }
+              >
+                {g.artifacts.map((artifact) => card(artifact, tabbable, i++))}
+              </GroupView>
+            ),
+          )}
+        </div>
+      </>
+    )
   }
 
-  const any = list !== null && list.length > 0
   const kindTabs = [ALL, ...ARTIFACT_KINDS] as const
   const tabLabel = (kind: (typeof kindTabs)[number]) =>
     kind === ALL ? t('page.allKinds') : t(`page.kindsPlural.${kind}`)
+  const strip = !query && changedCount > 0 && !statusFilter.includes('updated')
 
   return (
     <div
@@ -384,191 +489,201 @@ export default function ArtifactsPage({ deleted }: { deleted: boolean }) {
     >
       <div aria-hidden className="k-arts-drag app-region-drag" />
       <div className="ui-as-page k-arts">
-        {deleted ? (
-          <>
-            <Tooltip>
-              <TooltipTrigger
-                render={
-                  <button type="button" className="k-arts__back" onClick={leaveRecentlyDeleted} />
-                }
-              >
-                <Icon icon={ArrowLeft01Icon} size={15} />
-                {t('page.title')}
-              </TooltipTrigger>
-              <TooltipContent>
-                {t('page.backToArtifacts')} <span className="opacity-60">Esc</span>
-              </TooltipContent>
-            </Tooltip>
-            <h1 className="ui-as-page-title">{t('page.recentlyDeleted')}</h1>
-            <p className="ui-as-page-sub">{t('page.deletedDescription')}</p>
-          </>
-        ) : (
-          <>
-            <h1 className="ui-as-page-title">{t('page.title')}</h1>
-            <p className="ui-as-page-sub">
-              {!namesHosts
-                ? t('page.description')
-                : windowHost.kind === 'all'
-                  ? t('page.descriptionAll')
-                  : windowHost.hostId === null
-                    ? t(isMac ? 'page.descriptionThisMac' : 'page.descriptionThisComputer')
-                    : t('page.descriptionOn', { host: hostName(windowHost.hostId) })}
-            </p>
-            {any && (
-              <SectionHead
-                title={t('page.title')}
-                count={shown.length}
-                left={
-                  <Tabs
-                    items={kindTabs.map(tabLabel)}
-                    value={tabLabel(kindFilter ?? ALL)}
-                    onChange={(label) =>
-                      setArtifactsKindFilter(
-                        ARTIFACT_KINDS.find((kind) => tabLabel(kind) === label) ?? null,
-                      )
-                    }
-                  />
-                }
-                right={
-                  <>
-                    <FilterButton
-                      label={t('page.filterLabel')}
-                      groups={[
-                        {
-                          id: 'agent',
-                          label: t('page.agent'),
-                          options: agentChoices.map((id) => ({ id, label: agentName(id) })),
-                        },
-                        {
-                          id: 'project',
-                          label: t('page.project'),
-                          options: projectChoices.map((of) =>
-                            of.kind === 'project'
-                              ? { id: of.path, label: of.name }
-                              : { id: NO_PROJECT, label: t('page.noProject') },
-                          ),
-                        },
-                      ]}
-                      value={{ agent: [...agentFilter], project: [...projectFilter] }}
-                      onChange={(value) => {
-                        setArtifactsAgentFilter(
-                          agentChoices.filter((id) => value.agent?.includes(id)),
-                        )
-                        setArtifactsProjectFilter(value.project ?? [])
-                      }}
-                    />
-                    <DisplayMenu group={group} sort={sort} />
-                    <SearchField
-                      placeholder={t('page.filter')}
-                      width={172}
-                      value={filter}
-                      onChange={setArtifactsFilter}
-                    />
-                    {!isWeb && <ImportMenu />}
-                  </>
+        <h1 className="ui-as-page-title">{t('page.title')}</h1>
+        <p className="ui-as-page-sub">
+          {!namesHosts
+            ? t('page.description')
+            : windowHost.kind === 'all'
+              ? t('page.descriptionAll')
+              : windowHost.hostId === null
+                ? t(isMac ? 'page.descriptionThisMac' : 'page.descriptionThisComputer')
+                : t('page.descriptionOn', { host: hostName(windowHost.hostId) })}
+        </p>
+        {any && <MakeRow />}
+        {any && (
+          <SectionHead
+            title={t('page.title')}
+            count={shown.length}
+            left={
+              <Tabs
+                items={kindTabs.map(tabLabel)}
+                value={tabLabel(kindFilter ?? ALL)}
+                onChange={(label) =>
+                  setArtifactsKindFilter(
+                    ARTIFACT_KINDS.find((kind) => tabLabel(kind) === label) ?? null,
+                  )
                 }
               />
-            )}
-          </>
+            }
+            right={
+              <>
+                <FilterButton
+                  label={t('page.filterLabel')}
+                  groups={filterGroups}
+                  value={{
+                    agent: [...agentFilter],
+                    project: [...projectFilter],
+                    status: [...statusFilter],
+                  }}
+                  onChange={(value) => {
+                    setArtifactsAgentFilter(agentChoices.filter((id) => value.agent?.includes(id)))
+                    setArtifactsProjectFilter(value.project ?? [])
+                    setArtifactsStatusFilter(
+                      ARTIFACT_STATUSES.filter((s) => value.status?.includes(s)),
+                    )
+                  }}
+                />
+                <ArrangeMenu arrange={arrange} />
+                <SearchField
+                  placeholder={t('page.filter')}
+                  width={172}
+                  value={filter}
+                  onChange={setArtifactsFilter}
+                />
+                {!isWeb && <ImportMenu />}
+              </>
+            }
+          />
         )}
-        {!deleted && importFailed && <ImportError failure={importFailed} />}
+        {any && chips.length > 0 && (
+          <div className="k-arts__chips">
+            {chips.map(({ group, option }) => (
+              <span key={`${group.id}:${option.id}`} className="k-arts__chip">
+                <span className="k-arts__chip-group">{group.label}</span>
+                {option.label}
+                <button
+                  type="button"
+                  aria-label={t('page.removeFilter', { value: option.label })}
+                  onClick={() => removeChip(group.id, option.id)}
+                >
+                  <Icon icon={Cancel01Icon} size={11} />
+                </button>
+              </span>
+            ))}
+            <button
+              type="button"
+              className="k-arts__link"
+              onClick={() => {
+                setArtifactsAgentFilter([])
+                setArtifactsProjectFilter([])
+                setArtifactsStatusFilter([])
+              }}
+            >
+              {t('page.clearAll')}
+            </button>
+          </div>
+        )}
+        {any && query && (
+          <p className="k-arts__line" aria-live="polite">
+            {t('page.matchCount', { shown: shown.length, count: filtered.length, query })}
+          </p>
+        )}
+        {any && strip && (
+          <p className="k-arts__line" key={onlyChanged ? 'only' : 'all'}>
+            <i className="k-art__dot" aria-hidden />
+            {onlyChanged
+              ? t('page.showingChanged', { count: changedCount })
+              : t('page.changedLine', { count: changedCount })}
+            <button
+              type="button"
+              className="k-arts__link"
+              onClick={() => setArtifactsOnlyChanged(!onlyChanged)}
+            >
+              {onlyChanged ? t('page.showAll') : t('page.showChanged')}
+            </button>
+          </p>
+        )}
+        {importFailed && <ImportError failure={importFailed} />}
         <WindowHostAway read={read} className="mt-4" />
         <AwayContent away={away}>{body}</AwayContent>
-        {!deleted && list !== null && trash !== null && trash.length > 0 && (
-          <button type="button" className="k-arts__bin" onClick={() => openRecentlyDeleted(true)}>
-            <Icon icon={Delete02Icon} size={14} />
-            {t('page.recentlyDeleted')}
-            <span className="k-num">{trash.length}</span>
-            <Icon icon={ArrowRight01Icon} size={13} />
-          </button>
+        {list !== null && trash !== null && trash.length > 0 && (
+          <div ref={bin} className="k-arts__bin-box" data-open={binOpen || undefined}>
+            <button
+              type="button"
+              className="k-arts__bin"
+              aria-expanded={binOpen}
+              onClick={() => setBinOpen((open) => !open)}
+            >
+              <Icon icon={Delete02Icon} size={14} />
+              {t('page.recentlyDeleted')}
+              <span className="k-num">{trash.length}</span>
+              <span className="k-arts__bin-chevron">
+                <Icon icon={ArrowRight01Icon} size={13} />
+              </span>
+            </button>
+            {binOpen && (
+              <div className="k-arts__bin-body">
+                <p className="k-arts__bin-note">{t('page.deletedNote')}</p>
+                <div {...cardsProps} className="k-arts__grid">
+                  {trash.map((artifact, i) => card(artifact, binTabbable, i))}
+                </div>
+              </div>
+            )}
+          </div>
         )}
       </div>
     </div>
   )
 }
 
-/** One group: its project and count, then each session's row over its cards, or one grid. */
+/** A project's or a session's heading, which folds its cards, over them. */
 function GroupView({
   group,
-  grouping,
-  sessions,
-  now,
-  render,
+  info,
+  projectName,
+  folded,
+  onFold,
+  children,
 }: {
   group: Group
-  grouping: ArtifactGrouping
-  sessions: Map<string, SessionInfo>
-  now: number
-  render: (artifact: ArtifactSummary) => React.ReactNode
+  info: SessionInfo | undefined
+  projectName: (path: string) => string
+  folded: boolean
+  onFold: () => void
+  children: ReactNode
 }) {
   const { t } = useTranslation(['artifacts', 'common'])
   const of = group.of
-  const label =
-    of.kind === 'project' ? of.name : of.kind === 'no-project' ? t('page.noProject') : null
-  if (label === null) {
-    return group.sections.map((section) => (
-      <div key={section.key} className="k-arts__grid">
-        {section.artifacts.map(render)}
-      </div>
-    ))
+  let mark: ReactNode
+  let label: string
+  let where: string | null = null
+  if (of.kind === 'project') {
+    mark = <FolderClosedMark />
+    label = of.name
+  } else if (of.kind === 'no-project') {
+    mark = <Icon icon={NO_PROJECT_ICON} size={16} />
+    label = t('page.noProject')
+  } else if (of.kind === 'session') {
+    mark = info ? (
+      <AgentMark agent={info.agentId} size={14} hostId={hostOfPath(info.projectPath)} />
+    ) : null
+    label =
+      of.sessionId === NO_SESSION
+        ? t('page.imported')
+        : info
+          ? (info.title ?? t('common:untitledSession'))
+          : t('page.deletedSession')
+    where = info ? projectName(info.projectPath) : null
+  } else {
+    return children
   }
   return (
-    <section aria-label={label} className="k-arts__group">
-      <h3 className="k-arts__project">
-        {of.kind === 'project' ? <FolderClosedMark /> : <Icon icon={NO_PROJECT_ICON} size={16} />}
-        {of.kind === 'project' ? (
-          <Tooltip>
-            <TooltipTrigger render={<span className="truncate" />} delay={700}>
-              {label}
-            </TooltipTrigger>
-            <TooltipContent side="bottom" align="start" className="font-mono">
-              {of.path}
-            </TooltipContent>
-          </Tooltip>
-        ) : (
-          label
-        )}
-        <small className="k-num">{group.count}</small>
-      </h3>
-      {group.sections.map((section) => (
-        <div key={section.key} className="k-arts__session">
-          {grouping === 'project-session' && section.sessionId && (
-            <SessionRow id={section.sessionId} info={sessions.get(section.sessionId)} now={now} />
-          )}
-          <div className="k-arts__grid">{section.artifacts.map(render)}</div>
+    <section aria-label={label} className="k-arts__group" data-folded={folded || undefined}>
+      <button type="button" className="k-arts__group-head" aria-expanded={!folded} onClick={onFold}>
+        {mark}
+        <span className="k-arts__group-name">{label}</span>
+        <small className="k-num">{group.artifacts.length}</small>
+        {where && <small className="k-arts__group-where">{where}</small>}
+        <span className="k-arts__group-fold">
+          <Icon icon={ArrowDown01Icon} size={13} />
+        </span>
+      </button>
+      <div className="k-arts__group-body">
+        <div className="k-arts__group-inner">
+          {!folded && <div className="k-arts__grid">{children}</div>}
         </div>
-      ))}
+      </div>
     </section>
-  )
-}
-
-/** The session's title and last update, as a row that opens it; a deleted one is a label. */
-function SessionRow({ id, info, now }: { id: string; info: SessionInfo | undefined; now: number }) {
-  const { t } = useTranslation(['artifacts', 'common'])
-  if (!info) {
-    return (
-      <span className="k-arts__session-row">
-        <span>{t(id === NO_SESSION ? 'page.imported' : 'page.deletedSession')}</span>
-      </span>
-    )
-  }
-  return (
-    <button
-      type="button"
-      className="k-arts__session-row"
-      title={t('page.openSession')}
-      onClick={() => openSession(id, info.projectPath)}
-    >
-      <AgentMark
-        agent={info.agentId}
-        size={14}
-        hostId={hostOfPath(info.projectPath)}
-        className="shrink-0"
-      />
-      <span>{info.title ?? t('common:untitledSession')}</span>
-      <small>{longAgo(info.updatedAt, now)}</small>
-      <Icon icon={ArrowRight01Icon} size={13} />
-    </button>
   )
 }
 
@@ -583,42 +698,124 @@ function useAgentChoices(
   return useMemo(() => (list ? agentsOf(list, agentOf, order) : []), [list, agentOf, order])
 }
 
-/** The order, named on its button, and flat or grouped. */
-function DisplayMenu({ group, sort }: { group: ArtifactGrouping; sort: ArtifactSort }) {
+/** Recent, By project, By session or Name, named on its button. */
+function ArrangeMenu({ arrange }: { arrange: ArtifactArrange }) {
   const { t } = useTranslation('artifacts')
   return (
     <Dropdown
       align="end"
       className="k-arts__menu"
       items={[
-        { label: t('page.sort'), heading: true },
-        ...SORTS.map((s) => ({
-          label: t(`page.sorts.${s}`),
-          checked: s === sort,
-          onSelect: () => setArtifactsView({ sort: s }),
-        })),
-        { label: t('page.layout'), heading: true, divider: true },
-        ...GROUPINGS.map((g) => ({
-          label: t(`page.layouts.${g}`),
-          checked: g === group,
-          onSelect: () => setArtifactsView({ group: g }),
+        { label: t('page.arrange'), heading: true },
+        ...ARRANGEMENTS.map((a) => ({
+          label: t(`page.arrangements.${a}`),
+          checked: a === arrange,
+          onSelect: () => setArtifactsView({ arrange: a }),
         })),
       ]}
       trigger={({ open, toggle }) => (
         <button
           type="button"
           className="ui-as-tool ui-as-tool--label"
-          aria-label={t('page.display', { value: t(`page.sortsShort.${sort}`) })}
+          aria-label={t('page.arrangeMenu', { value: t(`page.arrangements.${arrange}`) })}
           aria-expanded={open}
           aria-haspopup="menu"
-          data-active={group !== 'none' || sort !== 'recent' || undefined}
+          data-active={arrange !== 'recent' || undefined}
           onClick={toggle}
         >
           <Icon icon={SlidersHorizontalIcon} size={15} />
-          {t(`page.sortsShort.${sort}`)}
+          {t(`page.arrangements.${arrange}`)}
         </button>
       )}
     />
+  )
+}
+
+/** One tile for each kind, which opens New session asking for it. */
+function MakeRow() {
+  const { t } = useTranslation('artifacts')
+  return (
+    <div className="k-arts__make">
+      <span className="k-arts__make-label">{t('page.askLabel')}</span>
+      <div className="k-arts__make-row">
+        {ARTIFACT_KINDS.map((kind) => (
+          <button
+            key={kind}
+            type="button"
+            className="k-arts__make-tile"
+            data-kind={kind}
+            onClick={() => askForArtifact(kind)}
+          >
+            <span className="k-arts__make-mark">
+              <Icon icon={KIND_ICON[kind]} size={15} />
+            </span>
+            <span className="k-arts__make-text">
+              <b>{t(`page.askKinds.${kind}.name`)}</b>
+              <small>{t(`page.askKinds.${kind}.line`)}</small>
+            </span>
+          </button>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+/** No artifacts yet: the four kinds fill the page, each a card that asks an agent for one. */
+function NoArtifacts() {
+  const { t } = useTranslation('artifacts')
+  return (
+    <div className="k-arts__empty">
+      <h2>{t('page.askLabel')}</h2>
+      <p>{t('page.askHint')}</p>
+      <div className="k-arts__empty-grid">
+        {ARTIFACT_KINDS.map((kind: ArtifactKind, i) => (
+          <div
+            key={kind}
+            className="k-art k-arts__cell"
+            data-kind={kind}
+            data-form="tile"
+            style={{ '--i': i } as CSSProperties}
+          >
+            <button type="button" className="k-art__open" onClick={() => askForArtifact(kind)}>
+              <span className="k-art__head">
+                <b className="k-art__name k-arts__empty-name">
+                  <span className="k-arts__make-mark" data-kind={kind}>
+                    <Icon icon={KIND_ICON[kind]} size={13} />
+                  </span>
+                  {t(`page.askKinds.${kind}.name`)}
+                </b>
+                <span className="ui-as-meta k-art__meta">
+                  <span>{t(`page.askKinds.${kind}.line`)}</span>
+                </span>
+              </span>
+              <span className="k-art__panel">
+                <span aria-hidden className="k-art__glow">
+                  <i />
+                  <i />
+                  <i />
+                </span>
+                <span className="k-art__page">
+                  <KindSketch kind={kind} title={t(`page.askKinds.${kind}.name`)} />
+                </span>
+              </span>
+            </button>
+          </div>
+        ))}
+      </div>
+      {!isWeb && (
+        <div className="k-arts__empty-import">
+          <span>{t('page.importLine')}</span>
+          <ImportMenu
+            align="start"
+            trigger={
+              <Button size="md" variant="secondary" icon={<Icon icon={Upload04Icon} size={14} />}>
+                {t('page.importEllipsis')}
+              </Button>
+            }
+          />
+        </div>
+      )}
+    </div>
   )
 }
 
@@ -726,62 +923,6 @@ function LoadingList() {
       {Array.from({ length: 4 }, (_, i) => (
         <CardSkeleton key={i} />
       ))}
-    </div>
-  )
-}
-
-/** The kinds an agent makes, each opening New session to ask for one. */
-function NoArtifacts() {
-  const { t } = useTranslation('artifacts')
-  return (
-    <>
-      <div className="k-arts__empty">
-        <b>{t('page.emptyTitle')}</b>
-        <p>{t('page.emptyDescription')}</p>
-        {!isWeb && (
-          <ImportMenu
-            align="start"
-            trigger={
-              <Button size="md" variant="secondary" icon={<Icon icon={Upload04Icon} size={14} />}>
-                {t('page.importEllipsis')}
-              </Button>
-            }
-          />
-        )}
-      </div>
-      <SectionHead title={t('page.ask')} />
-      <div className="k-arts__asks">
-        {ARTIFACT_KINDS.map((kind, i) => (
-          <button
-            key={kind}
-            type="button"
-            className="k-arts__ask ui-as-rise"
-            style={{ '--i': i } as CSSProperties}
-            onClick={() => askForArtifact(kind)}
-          >
-            <span className="ui-as-template__preview">
-              <KindSketch kind={kind} title={t(`page.kinds.${kind}`)} />
-            </span>
-            <b>
-              <Icon icon={KIND_ICON[kind]} size={14} />
-              {t(`page.kinds.${kind}`)}
-            </b>
-            <small>{t(`page.askNotes.${kind}`)}</small>
-          </button>
-        ))}
-      </div>
-    </>
-  )
-}
-
-function NothingDeleted() {
-  const { t } = useTranslation('artifacts')
-  return (
-    <div className="ui-as-empty" data-tall>
-      <span className="ui-as-empty__icon">
-        <Icon icon={Delete02Icon} size={18} />
-      </span>
-      <b className="ui-as-empty__title">{t('page.nothingDeleted')}</b>
     </div>
   )
 }

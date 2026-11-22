@@ -7,6 +7,7 @@ import {
   parseOpened,
   withOpened,
   type ArtifactKind,
+  type ArtifactStatus,
   type OpenedTimes,
 } from '@renderer/features/artifacts/model'
 import { artifactHost, errorMessage, host, hostAt, learnArtifactHost } from '@renderer/lib/host'
@@ -35,6 +36,10 @@ interface ArtifactsStore {
   projectFilter: readonly string[]
   /** The agents of the sessions the artifacts show under; none keeps every agent. */
   agentFilter: readonly AgentId[]
+  /** Updated, Needs your reply, Published; none keeps every artifact. */
+  statusFilter: readonly ArtifactStatus[]
+  /** Only the artifacts changed since they were last opened, from the line over the cards. */
+  onlyChanged: boolean
   /** When this device last showed each artifact. */
   openedAt: OpenedTimes
   /** The card the viewer was opened from, which takes the focus back. */
@@ -72,6 +77,8 @@ export const useArtifactsStore = create<ArtifactsStore>()(() => ({
   kindFilter: null,
   projectFilter: [],
   agentFilter: [],
+  statusFilter: [],
+  onlyChanged: false,
   openedAt: parseOpened(readJson<unknown>(OPENED_KEY, {})),
   opened: null,
   importFailed: null,
@@ -260,6 +267,14 @@ export function setArtifactsProjectFilter(projectFilter: readonly string[]): voi
 
 export function setArtifactsAgentFilter(agentFilter: readonly AgentId[]): void {
   useArtifactsStore.setState({ agentFilter })
+}
+
+export function setArtifactsStatusFilter(statusFilter: readonly ArtifactStatus[]): void {
+  useArtifactsStore.setState({ statusFilter })
+}
+
+export function setArtifactsOnlyChanged(onlyChanged: boolean): void {
+  useArtifactsStore.setState({ onlyChanged })
 }
 
 /** A viewer or pane shows the artifact: the page lists it as just opened. */

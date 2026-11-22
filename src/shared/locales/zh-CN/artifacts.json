@@ -1,7 +1,6 @@
 {
   "page": {
     "title": "产物",
-    "ask": "让智能体做一份",
     "kinds": {
       "document": "文档",
       "slides": "幻灯片",
@@ -28,32 +27,12 @@
     "allKinds": "全部",
     "project": "项目",
     "allProjects": "全部项目",
-    "display": "显示方式：{{value}}",
-    "layout": "布局",
-    "layouts": {
-      "none": "平铺",
-      "project-session": "按项目和会话分组"
-    },
-    "sort": "排序",
-    "sorts": {
-      "recent": "最近打开",
-      "updated": "最近更新",
-      "name": "名称"
-    },
-    "sortsShort": {
-      "recent": "最近打开",
-      "updated": "最近更新",
-      "name": "名称"
-    },
     "loading": "正在加载产物",
     "filter": "搜索产物",
     "clearFilter": "清除筛选",
     "clearFilters": "清除筛选",
     "noProject": "不属于项目",
     "deletedSession": "已删除的会话",
-    "openSession": "打开会话",
-    "emptyTitle": "还没有产物",
-    "emptyDescription": "点下面的类型让智能体做一份，或在任何会话里让它做；做好的会按最近打开排在这里。",
     "noMatch": "没有匹配的产物",
     "errorTitle": "无法加载产物",
     "errorDescription": "{{error}} 你的产物仍安全地保存在这台电脑上。",
@@ -82,8 +61,6 @@
     "dismiss": "关闭",
     "recentlyDeleted": "最近删除",
     "backToArtifacts": "返回产物",
-    "deletedDescription": "删除的产物会在这里保留 30 天，之后它和它的所有版本都会被永久移除。",
-    "nothingDeleted": "最近删除中没有内容",
     "description": "智能体在各个项目里做的文档、幻灯片、网页和画布。",
     "descriptionOn": "智能体在 {{host}} 上各个项目里做的文档、幻灯片、网页和画布。",
     "descriptionThisMac": "智能体在这台 Mac 上各个项目里做的文档、幻灯片、网页和画布。",
@@ -93,12 +70,49 @@
     "noMatchQuery": "没有与“{{query}}”匹配的产物。",
     "noMatchFilters": "没有符合这些筛选条件的产物。",
     "importShort": "导入",
-    "askNotes": {
-      "document": "报告、方案或笔记，可导出为 Word 和 Markdown。",
-      "slides": "用来演示的幻灯片，可导出为 PowerPoint 和 PDF。",
-      "web": "可以在浏览器里打开和分享的网页。",
-      "canvas": "把多个界面和流程并排放在一起，方便评论。"
-    }
+    "arrange": "排列",
+    "arrangeMenu": "排列：{{value}}",
+    "arrangements": {
+      "recent": "最近",
+      "project": "按项目",
+      "session": "按会话",
+      "name": "名称"
+    },
+    "status": "状态",
+    "statuses": {
+      "updated": "有改动",
+      "reply": "等你回复",
+      "published": "已发布"
+    },
+    "changedLine_other": "上次打开后有 {{count}} 个产物改过",
+    "showChanged": "只看这些",
+    "showingChanged_other": "正在只看 {{count}} 个有改动的",
+    "showAll": "看全部",
+    "matchCount_other": "{{count}} 个产物里有 {{shown}} 个匹配“{{query}}”",
+    "askLabel": "让智能体做一份",
+    "askHint": "选一种，开一个带着它的会话。智能体在任何会话里做出的东西，都会出现在这里。",
+    "askKinds": {
+      "document": {
+        "name": "文档",
+        "line": "一份说明、规格或笔记"
+      },
+      "slides": {
+        "name": "幻灯片",
+        "line": "用来讲解或分享的幻灯片"
+      },
+      "web": {
+        "name": "网页",
+        "line": "在浏览器里打开的页面"
+      },
+      "canvas": {
+        "name": "画布",
+        "line": "并排摆放的界面和流程"
+      }
+    },
+    "importLine": "或者导入你已有的页面",
+    "clearAll": "全部清除",
+    "removeFilter": "去掉 {{value}}",
+    "deletedNote": "删除的产物在这里保留 30 天，然后永久移除。"
   },
   "card": {
     "canvas_other": "画布 · {{count}} 页",
@@ -115,7 +129,14 @@
     "access": {
       "code": "已发布，凭访问码打开",
       "public": "已发布，有链接的人都能打开"
-    }
+    },
+    "pages_other": "{{count}} 页",
+    "slides_other": "{{count}} 张",
+    "version": "v{{version}}",
+    "versions": "v{{from}} → v{{to}}",
+    "unseen": "上次打开后有改动",
+    "replies_other": "{{count}} 条评论等你回复",
+    "slideOf": "第 {{number}} 张，共 {{count}} 张"
   },
   "menu": {
     "open": "打开",
@@ -529,5 +550,11 @@
     "zoomOut": "缩小",
     "fit": "适合窗口",
     "empty": "这张画布还没有页面。"
+  },
+  "changes": {
+    "frames_other": "改了 {{count}} 个画框",
+    "files_other": "改了 {{count}} 个文件",
+    "passages_other": "改了 {{count}} 段",
+    "slides_other": "改了 {{count}} 张"
   }
 }
