@@ -48,14 +48,11 @@
     "optionValue": "{{name}}：{{value}}",
     "permissionMode": "权限模式",
     "selected": "已选择 {{label}}",
-    "limitUsed": "已用 {{limit}}限额的 {{percent}}%",
-    "limitLeft": "{{limit}}限额剩余 {{percent}}%",
     "effortHint": "强度越高，思考越久，消耗的套餐额度也越多 · {{shortcut}}",
     "modelSettings": "模型设置",
     "noModels": "没有可用的模型",
     "noModelMatch": "没有匹配的模型",
-    "chooseModel": "选择模型",
-    "cacheChange": "在这里改动会重写约 {{tokens}} token 的 prompt cache"
+    "chooseModel": "选择模型"
   },
   "switchAgent": {
     "menu": "换智能体…",

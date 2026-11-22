@@ -177,8 +177,8 @@ export type ModelPickerProps = {
   effortSlot?: ReactNode;
   /** Kettu: your own controls in place of the switches' rows; the toggles still flag the trigger */
   toggleSlot?: ReactNode;
-  /** Kettu: what the last row says while set, before anything else */
-  caption?: { id: string; text: string } | null;
+  /** Kettu: false drops the last row, which then only speaks to screen readers */
+  foot?: boolean;
   /** Kettu: whether a model of More models matches the search, in place of its name containing it */
   moreFilter?: (model: PickerModel, query: string) => boolean;
 };
@@ -464,7 +464,7 @@ export function ModelPicker({
   headingEnd,
   effortSlot,
   toggleSlot,
-  caption: ownCaption,
+  foot = true,
   moreFilter,
 }: ModelPickerProps) {
   const labels = { ...defaultLabels, ...ownLabels };
@@ -798,11 +798,7 @@ export function ModelPicker({
   let spoken: string;
   const pointedToggle = toggles?.find((t) => hint === `toggle:${t.id}`);
   const pointedAction = actions?.find((a) => hint === `action:${a.id}` && a.hint);
-  if (ownCaption) {
-    caption = ownCaption.text;
-    captionKey = `own-${ownCaption.id}`;
-    spoken = ownCaption.text;
-  } else if (pointedAction) {
+  if (pointedAction) {
     caption = pointedAction.hint;
     captionKey = hint as string;
     spoken = pointedAction.hint as string;
@@ -1166,18 +1162,24 @@ export function ModelPicker({
         </div>
 
         {/* The last row: what the model you point at costs you */}
-        <div className="ui-mdpc__foot">
-          <span className="ui-mdpc__caption" aria-hidden="true">
-            <Swap id={captionKey}>{caption}</Swap>
-          </span>
-          <span className="ui-mdpc__keys" aria-hidden="true">
-            {keys ? <kbd>1–4</kbd> : <kbd>↑↓</kbd>}
-            <kbd>↵</kbd>
-          </span>
+        {foot ? (
+          <div className="ui-mdpc__foot">
+            <span className="ui-mdpc__caption" aria-hidden="true">
+              <Swap id={captionKey}>{caption}</Swap>
+            </span>
+            <span className="ui-mdpc__keys" aria-hidden="true">
+              {keys ? <kbd>1–4</kbd> : <kbd>↑↓</kbd>}
+              <kbd>↵</kbd>
+            </span>
+            <span className="ui-mdpc__sr" aria-live="polite">
+              {isOpen ? spoken : ""}
+            </span>
+          </div>
+        ) : (
           <span className="ui-mdpc__sr" aria-live="polite">
             {isOpen ? spoken : ""}
           </span>
-        </div>
+        )}
 
         {flyOpen && (
           <div
