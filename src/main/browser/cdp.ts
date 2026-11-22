@@ -67,6 +67,10 @@ export interface BrowserCdpDeps {
   tabs(sessionId: string, args: Record<string, unknown>): Promise<BrowserCallResult>
   /** Who uses each session's page; a call waits there while the user holds it. */
   controls: SurfaceControls
+  /** The scale a tab's page draws at in its view, once the page has its latest size. */
+  pointScale?(tabId: string): Promise<number>
+  /** Runs a screenshot of a tab's page, which the pane goes on showing as it was meanwhile. */
+  steady?<T>(tabId: string, capture: () => Promise<T>): Promise<T>
   /** The agent acts on the page, at a point for a click or a field, for its pointer and light. */
   acted?(sessionId: string, at: { x: number; y: number } | null, click: boolean): void
   log(level: 'warn' | 'error', message: string): void
@@ -761,6 +765,14 @@ export class BrowserCdp {
     const injecting = method.startsWith('Input.')
     const tab = this.tabOf(sessionId)
     const state = tab === null ? undefined : this.pages.get(tab)
+    if (method === 'Input.dispatchMouseEvent' && tab !== null && this.deps.pointScale) {
+      // The debugger takes the point in the view's pixels, and a page of a fixed size draws
+      // scaled there. Nothing runs between reading the scale and sending the event.
+      const scale = await this.deps.pointScale(tab)
+      if (scale !== 1) {
+        params = { ...params, x: Number(params.x) * scale, y: Number(params.y) * scale }
+      }
+    }
     if (injecting && state) state.injecting += 1
     try {
       return (await contents.debugger.sendCommand(method, params)) as T
@@ -1474,16 +1486,20 @@ export class BrowserCdp {
     }
     const longest = clip ? Math.max(clip.width, clip.height) * ratio : 0
     const scale = clip && longest > MAX_SHOT_SIDE ? MAX_SHOT_SIDE / longest : 1
-    const captured = await this.send<{ data: string }>(sessionId, 'Page.captureScreenshot', {
-      format: 'png',
-      ...(clip
-        ? {
-            clip: { ...clip, scale },
-            // The viewport clip stays as the user sees it; the others reach past it.
-            captureBeyondViewport: args.ref !== undefined || fullPage,
-          }
-        : { captureBeyondViewport: false }),
-    })
+    const capture = (): Promise<{ data: string }> =>
+      this.send<{ data: string }>(sessionId, 'Page.captureScreenshot', {
+        format: 'png',
+        ...(clip
+          ? {
+              clip: { ...clip, scale },
+              // The viewport clip stays as the user sees it; the others reach past it.
+              captureBeyondViewport: args.ref !== undefined || fullPage,
+            }
+          : { captureBeyondViewport: false }),
+      })
+    const tab = this.tabOf(sessionId)
+    const captured =
+      tab !== null && this.deps.steady ? await this.deps.steady(tab, capture) : await capture()
     const contents = this.contentsOf(sessionId)
     return {
       text: `Took a screenshot of ${what} at ${contents.getURL() || 'about:blank'}.`,

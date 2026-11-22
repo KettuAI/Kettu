@@ -126,6 +126,11 @@
     "newTab": "New tab",
     "closeTab": "Close {{name}}"
   },
+  "viewport": {
+    "size": "{{width}} × {{height}}",
+    "scaled": "{{width}} × {{height}} · {{percent}}%",
+    "hint": "This page keeps its own size. Resizing the panel only scales it."
+  },
   "notice": {
     "downloadBlocked": "Downloads are blocked in Kettu's browser",
     "loadFailed": "This page did not load: {{error}}",

@@ -74,6 +74,8 @@ export class BrowserTools {
       },
       tabs: (sessionId, args) => this.tabs(sessionId, args),
       controls: this.controls,
+      pointScale: (tabId) => deps.views.pointScale(tabId),
+      steady: (tabId, capture) => deps.views.steady(tabId, capture),
       acted: (sessionId, at, click) => deps.acted?.(sessionId, at, click),
       log: (level, message) => deps.log(level, message),
     })
@@ -180,9 +182,10 @@ export class BrowserTools {
     }
     this.deps.views.setOriginWait(sessionId, callId, wait)
     try {
-      // A released tab loads again before the agent's call reads or acts on it.
+      // The agent's tab keeps the agent's size, and a released one loads again, before the call
+      // reads or acts on it.
       if (tool !== 'browser_navigate' && tool !== 'browser_tabs') {
-        await this.deps.views.reviveAgentTab(sessionId)
+        await this.deps.views.readyAgentTab(sessionId)
       }
       const result = await this.cdp.call(sessionId, tool, args, {
         // Before the harness's own limit for one tool call, from when it reached main.

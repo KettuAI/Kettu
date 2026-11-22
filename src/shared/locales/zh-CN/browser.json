@@ -126,6 +126,11 @@
     "newTab": "新标签页",
     "closeTab": "关闭 {{name}}"
   },
+  "viewport": {
+    "size": "{{width}} × {{height}}",
+    "scaled": "{{width}} × {{height}} · {{percent}}%",
+    "hint": "这个页面保持自己的尺寸，调整面板只会缩放显示。"
+  },
   "notice": {
     "downloadBlocked": "Kettu 的浏览器会拦截下载",
     "loadFailed": "此页面未能加载：{{error}}",

@@ -64,6 +64,7 @@ function OverlayPage() {
   const [bubble, setBubble] = useState<Bubble | null>(null)
   const [clicks, setClicks] = useState<{ id: number; at: ControlPoint }[]>([])
   const [nudge, setNudge] = useState(0)
+  const [still, setStill] = useState<{ id: number; image: string } | null>(null)
   const current = useRef<ControlOverlayState | null>(null)
   const sequence = useRef(0)
   const bubbleTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
@@ -104,6 +105,11 @@ function OverlayPage() {
         const { at, click } = event
         setAct((last) => ({ count: last.count + 1, at }))
         if (at) setPointer((last) => ({ at, clicks: (last?.clicks ?? 0) + (click ? 1 : 0) }))
+        return
+      }
+      if (event.type === 'still') {
+        const { id, image } = event
+        setStill(image === null ? null : { id, image })
         return
       }
       held(event.at)
@@ -194,6 +200,24 @@ function OverlayPage() {
       onWheel={full ? onWheel : undefined}
       onContextMenu={(event) => event.preventDefault()}
     >
+      {/* The surface as it was, while a capture changes how it draws under the overlay. */}
+      {full && still && (
+        <img
+          key={still.id}
+          src={still.image}
+          alt=""
+          aria-hidden
+          draggable={false}
+          className="pointer-events-none absolute inset-0 size-full"
+          onLoad={() => {
+            const { id } = still
+            // Two frames on, the still is on screen.
+            requestAnimationFrame(() =>
+              requestAnimationFrame(() => overlay.request({ type: 'still-shown', id })),
+            )
+          }}
+        />
+      )}
       <AnimatePresence>
         {agentState && (
           <SurfaceLight key="light" act={act.count} at={act.at} radius={state.radius} />
