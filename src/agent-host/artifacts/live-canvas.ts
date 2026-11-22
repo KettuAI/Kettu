@@ -189,6 +189,12 @@ export class LiveCanvases {
   ): Promise<{ seq: number }> {
     return this.serial(id, async () => {
       const live = (await this.load(id)) ?? (await this.split(id))
+      const pages = touchedPages(live.doc, ops)
+      this.store.refuseHeld(
+        id,
+        live.version,
+        (piece) => piece.kind === 'frame' && pages.has(piece.id),
+      )
       let doc: CanvasDoc
       try {
         doc = applyCanvasOps(live.doc, ops)
@@ -320,4 +326,17 @@ export class LiveCanvases {
   async flushAll(): Promise<void> {
     await Promise.all([...this.live.keys()].map((id) => this.flush(id)))
   }
+}
+
+/** The frames the operations change or remove, those on a removed canvas sheet included. */
+function touchedPages(doc: CanvasDoc, ops: readonly CanvasOp[]): Set<string> {
+  const pages = new Set<string>()
+  for (const op of ops) {
+    if (op.op === 'add') continue
+    pages.add(op.id)
+    if (op.op === 'remove') {
+      for (const page of doc.pages) if (page.canvas === op.id) pages.add(page.id)
+    }
+  }
+  return pages
 }

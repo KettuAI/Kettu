@@ -114,7 +114,23 @@ export interface ArtifactSession {
   doing?: ArtifactDoing
   /** Where it did it: a file, the start tag of the element it changed in that file, a canvas page. */
   focus?: ArtifactFocus
+  /**
+   * What its running turn wrote, which takes no direct edit of the user's until the turn ends;
+   * comments are not held. Absent from hosts that hold nothing.
+   */
+  held?: ArtifactPiece[]
 }
+
+/**
+ * A piece of an artifact a turn wrote: a canvas frame by its id and file, a document's section by
+ * its slug, a slide from 1, or the whole artifact, as a web page is one piece and a new artifact
+ * is all its turn's.
+ */
+export type ArtifactPiece =
+  | { kind: 'frame'; id: string; file: string }
+  | { kind: 'section'; slug: string }
+  | { kind: 'slide'; number: number }
+  | { kind: 'whole' }
 
 export type ArtifactDoing = 'read' | 'write' | 'draw' | 'move'
 
@@ -231,4 +247,6 @@ export interface ArtifactState {
   deleted: boolean
   /** For a write refused because someone changed what it writes: those files, since its base. */
   changed?: string[]
+  /** For a direct edit refused because an agent's running turn wrote it: the sessions and pieces. */
+  held?: { sessionId: string; pieces: ArtifactPiece[] }[]
 }

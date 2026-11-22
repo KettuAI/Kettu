@@ -1171,6 +1171,7 @@
       "moreThanText": "The <{{tag}}> at offset {{offset}} holds more than text",
       "styleRefused": "The style has a property or value an edit may not write"
     },
+    "held": "An agent is writing this part in its current turn; it can be changed once the turn ends. Comments still work.",
     "needDatabase": "Artifacts need the thread database",
     "deleted": "{{id}} is in Recently deleted",
     "noHtmlFile": "{{id}} has no HTML file {{path}}",

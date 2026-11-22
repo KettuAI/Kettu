@@ -7,12 +7,14 @@ import { readFile } from 'node:fs/promises'
 import { isStrictDeclaration } from '@shared/artifact-capabilities'
 import type { CommentAnchor, CommentAuthor, CommentThread } from '@shared/artifact-comments'
 import { ARTIFACT_ENTRY, DISK_FILE_BYTES, isHtmlPath } from '@shared/artifact-files'
+import { CANVAS_FILE } from '@shared/canvas-doc'
 import { findAnchor, startTagAt } from '@shared/artifact-source'
 import {
   ARTIFACT_KEEP_DELETED_MS,
   CONTENT_MISSING,
   type ArtifactDoing,
   type ArtifactFocus,
+  type ArtifactPiece,
   type ArtifactSession,
   type ArtifactState,
   type VersionSummary,
@@ -157,7 +159,14 @@ export class ArtifactStore {
   /** The sessions using each artifact, in the order they started, and whether each edits it. */
   private readonly users = new Map<
     string,
-    Map<string, { editing: boolean; last: { doing: ArtifactDoing; focus: ArtifactFocus } | null }>
+    Map<
+      string,
+      {
+        editing: boolean
+        last: { doing: ArtifactDoing; focus: ArtifactFocus } | null
+        held: ArtifactPiece[]
+      }
+    >
   >()
   private timer: ReturnType<typeof setInterval> | null = null
   /** The canvas page each port shows each artifact at. */
@@ -401,7 +410,8 @@ export class ArtifactStore {
     const at = this.now()
     const id = newArtifactId(at)
     const { version } = await this.call('create', { ...rest, id, at })
-    this.used(id, editor, true)
+    // A new artifact is all its turn's.
+    this.used(id, editor, true, undefined, [{ kind: 'whole' }])
     this.deps.changed()
     return { id, version }
   }
@@ -430,7 +440,14 @@ export class ArtifactStore {
       project: project ?? null,
       at: this.now(),
     })
-    this.used(input.id, editor, true, focus ? { doing: doing ?? 'write', focus } : undefined)
+    const pieces = editor ? await this.written(input.id, version) : []
+    this.used(
+      input.id,
+      editor,
+      true,
+      focus ? { doing: doing ?? 'write', focus } : undefined,
+      pieces,
+    )
     this.versioned(input.id, version)
     return { version }
   }
@@ -453,7 +470,8 @@ export class ArtifactStore {
       note: note ?? null,
       at: this.now(),
     })
-    this.used(input.id, editor, true)
+    const pieces = editor ? await this.written(input.id, version) : []
+    this.used(input.id, editor, true, undefined, pieces)
     this.versioned(input.id, version)
     return { version }
   }
@@ -651,6 +669,7 @@ export class ArtifactStore {
         t('artifacts.noHtmlFile', { id: input.id, path: input.path }),
       )
     }
+    this.refuseHeldFile(found, input.path)
     let text: string
     try {
       text = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(
@@ -680,6 +699,15 @@ export class ArtifactStore {
     })
   }
 
+  /** Refuses an edit of a page's file that a frame an agent's running turn wrote holds. */
+  private refuseHeldFile(found: FoundVersion, path: string): void {
+    this.refuseHeld(
+      found.artifact.id,
+      found.artifact.head,
+      (piece) => piece.kind === 'frame' && piece.file === path,
+    )
+  }
+
   /** New values for a page's declared parameters, written into the page as the user's version. */
   async setParams(input: {
     id: string
@@ -703,6 +731,7 @@ export class ArtifactStore {
         t('artifacts.noHtmlFile', { id: input.id, path: input.path }),
       )
     }
+    this.refuseHeldFile(found, input.path)
     let edited: string
     try {
       edited = withParamValues((await this.bytes(found, file)).toString('utf8'), input.values)
@@ -729,6 +758,7 @@ export class ArtifactStore {
           sessionId,
           editing: use.editing,
           ...(use.last ? { doing: use.last.doing, focus: use.last.focus } : {}),
+          held: use.held,
         }))
       : []
   }
@@ -748,6 +778,7 @@ export class ArtifactStore {
     turn: SessionTurn | undefined,
     editing: boolean,
     last?: { doing: ArtifactDoing; focus: ArtifactFocus },
+    pieces: readonly ArtifactPiece[] = [],
   ): void {
     if (!turn?.current()) return
     let sessions = this.users.get(id)
@@ -756,11 +787,74 @@ export class ArtifactStore {
       this.users.set(id, sessions)
     }
     const was = sessions.get(turn.session)
+    const held = withPieces(was?.held ?? [], pieces)
     // A session that read and then wrote is editing; one that only read stays reading.
-    const now = { editing: (was?.editing ?? false) || editing, last: last ?? was?.last ?? null }
-    if (was && was.editing === now.editing && was.last === now.last) return
+    const now = {
+      editing: (was?.editing ?? false) || editing,
+      last: last ?? was?.last ?? null,
+      held,
+    }
+    if (was && was.editing === now.editing && was.last === now.last && was.held === held) return
     sessions.set(turn.session, now)
     this.sendActivity(id)
+  }
+
+  /** The pieces a session's write of `version` wrote, by what changed from the version before. */
+  private async written(id: string, version: number): Promise<ArtifactPiece[]> {
+    if (version < 2) return [{ kind: 'whole' }]
+    try {
+      const changes = await this.changes(id, version - 1, version)
+      if (!changes) return []
+      switch (changes.kind) {
+        case 'frames':
+          return changes.frames.map(({ id: frame, file }) => ({ kind: 'frame', id: frame, file }))
+        case 'sections':
+          return changes.sections.map(({ slug }) => ({ kind: 'section', slug: slug ?? '' }))
+        case 'slides':
+          return changes.slides.map(({ number }) => ({ kind: 'slide', number }))
+        case 'files': {
+          // A canvas's or a typed artifact's other files are no piece of the user's to edit; a web
+          // page is one piece.
+          const found = await this.get(id, { version })
+          const canvas = found.files.some((f) => f.path === CANVAS_FILE)
+          return canvas || found.type ? [] : [{ kind: 'whole' }]
+        }
+      }
+    } catch (error) {
+      // What cannot be compared is held whole, so the user's edit cannot cross the agent's.
+      this.deps.log(
+        'warn',
+        `Could not tell what ${id} version ${version} changed: ${String(error)}`,
+      )
+      return [{ kind: 'whole' }]
+    }
+  }
+
+  /** The pieces of the artifact that agents' running turns wrote, by session. */
+  held(id: string): { sessionId: string; pieces: ArtifactPiece[] }[] {
+    return [...(this.users.get(id) ?? [])]
+      .filter(([, use]) => use.held.length > 0)
+      .map(([sessionId, use]) => ({ sessionId, pieces: use.held }))
+  }
+
+  /**
+   * Refuses a direct edit of the user's that changes a piece an agent's running turn wrote, as
+   * `holds` tells of each held piece; comments are never held.
+   */
+  refuseHeld(id: string, version: number, holds: (piece: ArtifactPiece) => boolean): void {
+    const held = this.held(id)
+      .map(({ sessionId, pieces }) => ({
+        sessionId,
+        pieces: pieces.filter((piece) => piece.kind === 'whole' || holds(piece)),
+      }))
+      .filter(({ pieces }) => pieces.length > 0)
+    if (held.length === 0) return
+    throw new ArtifactError(
+      'conflict',
+      t('artifacts.held'),
+      { version, deleted: false, held },
+      tEnglish('artifacts.held'),
+    )
   }
 
   /** The session's turn ended, or the session went: it uses nothing now. */
@@ -867,4 +961,29 @@ export class ArtifactStore {
     this.canvases.closed(id)
     this.deps.unwatched?.(id)
   }
+}
+
+function pieceKey(piece: ArtifactPiece): string {
+  switch (piece.kind) {
+    case 'frame':
+      return `frame:${piece.id}`
+    case 'section':
+      return `section:${piece.slug}`
+    case 'slide':
+      return `slide:${piece.number}`
+    case 'whole':
+      return 'whole'
+  }
+}
+
+/** `held` with `added` joined to it; `held` itself when it already had them all. */
+function withPieces(held: ArtifactPiece[], added: readonly ArtifactPiece[]): ArtifactPiece[] {
+  const keys = new Set(held.map(pieceKey))
+  const fresh = added.filter((piece) => {
+    const key = pieceKey(piece)
+    if (keys.has(key)) return false
+    keys.add(key)
+    return true
+  })
+  return fresh.length === 0 ? held : [...held, ...fresh]
 }
