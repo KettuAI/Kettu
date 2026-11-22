@@ -290,6 +290,8 @@ Use it without being asked when it fits: after you change a page or a component,
 
 \`browser_navigate\` opens a URL. A local dev server (localhost, 127.0.0.1, [::1], *.localhost or *.test) opens at once; any other site waits for the user to allow it. Run a dev server in a terminal the user sees first (${ref('terminals')}).
 
+A page you use lays out 1280 by 800, whatever room the user's panel has: the panel only shows it smaller, and a screenshot shows all of it.
+
 ## Reading and acting
 
 - \`browser_snapshot\` gives the page as an outline with a ref on each element you can act on. Act by ref with \`browser_click\`, \`browser_type\`, \`browser_select_option\`, \`browser_press_key\` and \`browser_scroll\`; they return the page with a fresh snapshot.

@@ -5,7 +5,9 @@
 import { BrowserWindow, session as electronSession, shell, WebContentsView } from 'electron'
 import type { HandlerDetails, Input, WebContents, WindowOpenHandlerResponse } from 'electron'
 import {
+  AGENT_VIEWPORT,
   BROWSER_PARTITION,
+  fitViewport,
   MAX_SESSION_TABS,
   type BrowserBounds,
   type BrowserNotice,
@@ -13,6 +15,7 @@ import {
   type BrowserOriginDecision,
   type BrowserState,
   type BrowserTab,
+  type BrowserViewport,
 } from '@shared/browser'
 import {
   IDLE_CONTROL,
@@ -49,6 +52,16 @@ const OVERLAY_LEAVE_MS = 480
 /** How long the overlay's page is kept, off screen, after the last turn that used a page ended. */
 const OVERLAY_KEEP_MS = 60_000
 
+/** How often, and how many times, a covered page is checked for looking as its still does again. */
+const COVER_RETRY_MS = 50
+const COVER_TRIES = 6
+
+/** How long a still of a page may take; a page that draws no frame gets no cover. */
+const STILL_MS = 500
+
+/** How long a page may take to confirm its size before what waits on it goes on. */
+const SIZE_MS = 2_000
+
 /** A navigation that ended, or the Chromium error that stopped it. */
 export type NavigateResult =
   | { ok: true; url: string; title: string | null }
@@ -83,6 +96,30 @@ interface Tab {
   asking: boolean
   /** Restarts the pending navigation's time limit, which a site's wait extends. */
   restartWait: (() => void) | null
+  /** The size its page keeps once an agent uses it; null while it fills the pane's frame. */
+  viewport: BrowserViewport | null
+  /** The scale its page was last told to draw at; 0 when its page was told none yet. */
+  scale: number
+  /** The latest size or scale its page was told and has not confirmed yet. */
+  sizing: Promise<void> | null
+}
+
+/** A still of a page that its overlay draws over it while its screenshots are taken. */
+interface Cover {
+  tabId: string
+  /** The still's pixels, which the page's picture matches again once it draws as before. */
+  bitmap: Buffer
+  /** The captures running under it. */
+  uses: number
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+/** What a page's view shows now, or null when it cannot be read in time. */
+function stillOf(contents: WebContents): Promise<Electron.NativeImage | null> {
+  return Promise.race([contents.capturePage().catch(() => null), delay(STILL_MS).then(() => null)])
 }
 
 interface Browser {
@@ -186,6 +223,7 @@ export class BrowserViews {
   private overlayLeave: ReturnType<typeof setTimeout> | null = null
   /** Lets the overlay's page go once no turn has used a page for a while. */
   private overlayDrop: ReturnType<typeof setTimeout> | null = null
+  private cover: Cover | null = null
 
   constructor(private readonly deps: BrowserViewsDeps) {
     this.policy = new BrowserPolicy(this.browserSession, {
@@ -389,6 +427,7 @@ export class BrowserViews {
     const id = browser.strip.agent
     const tab =
       (id ? this.tabs.get(id) : undefined) ?? this.addTab(browser, { select: true, agent: true })
+    await this.fix(tab)
     const asked = await this.askFor(tab, url)
     if (asked) return asked
     return this.navigateAndWait(tab, url)
@@ -463,11 +502,46 @@ export class BrowserViews {
     return wait
   }
 
-  /** The agent's tab was released: it loads its page again before a call acts on it. */
-  async reviveAgentTab(sessionId: string): Promise<void> {
+  /**
+   * Readies the agent's tab for a call that reads or acts on it: from its first use its page keeps
+   * the agent's size, and a released one loads its page again.
+   */
+  async readyAgentTab(sessionId: string): Promise<void> {
     const tab = this.agentTabOf(sessionId)
-    if (!tab?.released || tab.view || !tab.lastUrl) return
-    await this.navigateAndWait(tab, tab.lastUrl)
+    if (!tab) return
+    await this.fix(tab)
+    if (tab.released && !tab.view && tab.lastUrl) await this.navigateAndWait(tab, tab.lastUrl)
+    await this.pointScale(tab.id)
+  }
+
+  /**
+   * The scale a tab's page draws at in its view, once the page has its latest size. The debugger
+   * takes a mouse event's point in the view's pixels, so an agent's point on a page of a fixed
+   * size is scaled by it.
+   */
+  async pointScale(tabId: string): Promise<number> {
+    const tab = this.tabs.get(tabId)
+    if (!tab) return 1
+    while (tab.sizing) await tab.sizing
+    return this.drawnScale(tab)
+  }
+
+  /**
+   * Runs a screenshot of a tab's page. Chromium draws a page of a fixed size unscaled for a moment
+   * to capture it, so while the page's overlay covers it, the overlay draws a still of it
+   * meanwhile. Only another page's view draws over a page's view, and the overlay is one.
+   */
+  async steady<T>(tabId: string, capture: () => Promise<T>): Promise<T> {
+    const tab = this.tabs.get(tabId)
+    if (!tab?.viewport) return capture()
+    await this.coverPage(tab)
+    try {
+      return await capture()
+    } finally {
+      // The capture ends by putting back the scale it began with, which a resize may have changed.
+      this.size(tab, true)
+      void this.uncover(tab)
+    }
   }
 
   /** The session's tabs in the strip's order, the agent's current one and the selected one. */
@@ -517,6 +591,7 @@ export class BrowserViews {
     this.present(browser)
     this.emit(browser)
     this.syncOverlay()
+    await this.fix(tab)
     if (tab.released && !tab.view && tab.lastUrl) await this.navigateAndWait(tab, tab.lastUrl)
   }
 
@@ -565,13 +640,16 @@ export class BrowserViews {
    */
   async capture(sessionId: string): Promise<Uint8Array | null> {
     const browser = this.browsers.get(sessionId)
-    const contents = browser ? this.contentsOf(this.selectedTab(browser)) : null
-    if (!browser?.shown || browser.frozen || !contents) return null
+    const tab = browser ? this.selectedTab(browser) : null
+    const contents = this.contentsOf(tab)
+    if (!browser?.shown || browser.frozen || !tab || !contents) return null
     if (contents.isCrashed() || !contents.getURL() || !contents.debugger.isAttached()) return null
     let timer: NodeJS.Timeout | undefined
     try {
       const shot = (await Promise.race([
-        contents.debugger.sendCommand('Page.captureScreenshot', { format: 'png' }),
+        this.steady(tab.id, () =>
+          contents.debugger.sendCommand('Page.captureScreenshot', { format: 'png' }),
+        ),
         new Promise<never>((_, reject) => {
           timer = setTimeout(() => reject(new Error('timed out')), CAPTURE_MS)
         }),
@@ -676,6 +754,9 @@ export class BrowserViews {
       pending: null,
       asking: false,
       restartWait: null,
+      viewport: how.agent ? AGENT_VIEWPORT : null,
+      scale: 0,
+      sizing: null,
     }
     this.tabs.set(tab.id, tab)
     browser.strip.add(tab.id, how)
@@ -897,6 +978,9 @@ export class BrowserViews {
     this.place(tab)
     this.setVisible(tab, this.isShown(tab))
     this.wire(tab, view)
+    // The page has its size before its first navigation, so it never lays out at another.
+    tab.scale = 0
+    this.size(tab)
     this.deps.created?.(tab.id, view.webContents)
     this.syncOverlay()
     const driving = (this.deps.control?.(tab.sessionId) ?? IDLE_CONTROL).kind !== 'idle'
@@ -944,15 +1028,114 @@ export class BrowserViews {
     const { x, y, width, height, radius } = this.boundsOf(tab)
     view.setBounds({ x, y, width, height })
     view.setBorderRadius(radius)
+    this.size(tab)
     const at = this.overlayParent(tab)
     if (at && this.overlayTab === tab.id) this.overlay.move(at)
   }
 
+  /** The pane's frame for a page that fills it; a page of a fixed size fits inside it, scaled. */
+  private fitOf(tab: Tab): { bounds: BrowserBounds; scale: number } {
+    const frame = this.browsers.get(tab.sessionId)?.bounds ?? DEFAULT_BOUNDS
+    return tab.viewport ? fitViewport(frame, tab.viewport) : { bounds: frame, scale: 1 }
+  }
+
   private boundsOf(tab: Tab): BrowserBounds {
-    return this.browsers.get(tab.sessionId)?.bounds ?? DEFAULT_BOUNDS
+    return this.fitOf(tab).bounds
+  }
+
+  /** The scale the tab's page was last told to draw at. */
+  private drawnScale(tab: Tab): number {
+    return tab.viewport && tab.scale > 0 ? tab.scale : 1
+  }
+
+  /**
+   * A tab an agent uses keeps the agent's size from then on, however the pane's frame changes. Its
+   * page takes the size before its view shrinks to fit, so it never lays out at the smaller box.
+   */
+  private async fix(tab: Tab): Promise<void> {
+    if (tab.viewport) return
+    tab.viewport = AGENT_VIEWPORT
+    this.size(tab)
+    await tab.sizing
+    this.place(tab)
+    this.emitTab(tab)
+  }
+
+  /**
+   * Tells a page of a fixed size how large to lay out and how small to draw in its view, when
+   * either changed or `again` asks. It goes through the page's debugger, whose override every
+   * later navigation of the page keeps.
+   */
+  private size(tab: Tab, again = false): void {
+    const contents = this.contentsOf(tab)
+    if (!tab.viewport || !contents?.debugger.isAttached()) return
+    const { scale } = this.fitOf(tab)
+    if (!again && tab.scale === scale) return
+    tab.scale = scale
+    const command = contents.debugger
+      .sendCommand('Emulation.setDeviceMetricsOverride', {
+        ...tab.viewport,
+        deviceScaleFactor: 0,
+        mobile: false,
+        scale,
+        // The view keeps the box the pane has for it.
+        dontSetVisibleSize: true,
+      })
+      .catch((error: unknown) => {
+        log.warn(`Could not size a page: ${(error as Error).message}`)
+      })
+    // A page that went away meanwhile may never answer, and an agent's call waits on this.
+    const sent: Promise<void> = Promise.race([command, delay(SIZE_MS)]).then(() => {
+      if (tab.sizing === sent) tab.sizing = null
+    })
+    tab.sizing = sent
+  }
+
+  /** Has the tab's overlay draw a still of its page over it, while the overlay covers the page. */
+  private async coverPage(tab: Tab): Promise<void> {
+    const reuse = (): boolean => {
+      if (!this.cover) return false
+      if (this.cover.tabId === tab.id) this.cover.uses += 1
+      return true
+    }
+    const contents = this.contentsOf(tab)
+    if (reuse() || !contents || !this.overlay.covers(contents)) return
+    const image = await stillOf(contents)
+    // The page may have gone, or the overlay left it, while it was captured.
+    if (!image || image.isEmpty() || reuse()) return
+    if (this.contentsOf(tab) !== contents || !this.overlay.covers(contents)) return
+    this.cover = { tabId: tab.id, bitmap: image.toBitmap(), uses: 1 }
+    await this.overlay.showStill(image.toDataURL())
+  }
+
+  /**
+   * Takes the still off once no capture runs under it and the page looks as the still does again;
+   * a page that moves never does, so it is given up after a few looks, by when it has drawn anew.
+   */
+  private async uncover(tab: Tab): Promise<void> {
+    const cover = this.cover
+    if (cover?.tabId !== tab.id) return
+    cover.uses -= 1
+    const left = (): boolean => this.cover !== cover || cover.uses > 0
+    for (let tries = 0; tries < COVER_TRIES && !left(); tries++) {
+      await delay(COVER_RETRY_MS)
+      const contents = this.contentsOf(tab)
+      if (left() || !contents) break
+      const image = await stillOf(contents)
+      if (left()) return
+      if (image?.toBitmap().equals(cover.bitmap)) break
+    }
+    if (!left()) this.dropCover(tab.id)
+  }
+
+  private dropCover(tabId: string): void {
+    if (this.cover?.tabId !== tabId) return
+    this.cover = null
+    this.overlay.dropStill()
   }
 
   private setVisible(tab: Tab, visible: boolean): void {
+    if (!visible) this.dropCover(tab.id)
     tab.view?.setVisible(visible)
   }
 
@@ -961,10 +1144,12 @@ export class BrowserViews {
       this.overlay.hide()
       this.overlayTab = null
     }
+    this.dropCover(tab.id)
     const view = tab.view
     tab.view = null
     tab.loading = false
     tab.asking = false
+    tab.scale = 0
     if (!view) return
     const window = this.deps.window()
     if (window && !window.isDestroyed()) window.contentView.removeChildView(view)
@@ -1153,7 +1338,7 @@ export class BrowserViews {
     contents.on('before-mouse-event', (event, mouse) => {
       if (!isHeldMouse(mouse.type) || !this.holdsInput(tab)) return
       event.preventDefault()
-      if (mouse.type === 'mouseDown') this.held(tab, this.toOverlay(tab, mouse))
+      if (mouse.type === 'mouseDown') this.held(tab, this.toOverlay(tab, mouse, 1))
     })
     this.silenceDialogs(tab.id, contents)
     contents.once('destroyed', () => {
@@ -1165,9 +1350,11 @@ export class BrowserViews {
         this.overlay.hide()
         this.overlayTab = null
       }
+      this.dropCover(tab.id)
       tab.view = null
       tab.loading = false
       tab.asking = false
+      tab.scale = 0
       this.endNavigation(tab, { ok: false, error: 'The page closed.' })
       this.deps.closed?.(tab.id)
       // Nothing of Kettu's closed it, so the page did: `window.close()`.
@@ -1239,7 +1426,11 @@ export class BrowserViews {
   acted(sessionId: string, at: ControlPoint | null, click: boolean): void {
     const tab = this.overlayTab ? this.tabs.get(this.overlayTab) : undefined
     if (!tab || tab.sessionId !== sessionId) return
-    this.overlay.send({ type: 'act', at: at && this.toOverlay(tab, at), click })
+    this.overlay.send({
+      type: 'act',
+      at: at && this.toOverlay(tab, at, this.drawnScale(tab)),
+      click,
+    })
   }
 
   /** The app's settings or themes changed: the overlay's page follows. */
@@ -1276,9 +1467,12 @@ export class BrowserViews {
     return true
   }
 
-  /** A point in a page's CSS pixels, in its overlay's. */
-  private toOverlay(tab: Tab, at: ControlPoint): ControlPoint {
-    const scale = this.zoomOf(tab) / this.overlayZoom()
+  /**
+   * A point in a page's CSS pixels, in its overlay's. `drawn` is the scale the page draws at for a
+   * point on the page itself, and 1 for one an input event gives, which is in the view already.
+   */
+  private toOverlay(tab: Tab, at: ControlPoint, drawn: number): ControlPoint {
+    const scale = (this.zoomOf(tab) * drawn) / this.overlayZoom()
     return { x: at.x * scale, y: at.y * scale }
   }
 
@@ -1425,6 +1619,7 @@ export class BrowserViews {
       agentTab: browser.strip.agent,
       url: selected ? this.urlOf(selected) : null,
       page: contents !== null,
+      viewport: selected?.viewport ?? null,
       title: selected?.lastTitle ?? null,
       loading: selected?.loading ?? false,
       canGoBack: contents?.navigationHistory.canGoBack() ?? false,

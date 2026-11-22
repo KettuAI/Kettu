@@ -13,6 +13,43 @@ export interface BrowserBounds {
   radius: number
 }
 
+/** The size a page lays out at, in its own CSS pixels. */
+export interface BrowserViewport {
+  width: number
+  height: number
+}
+
+/**
+ * The size the pages an agent uses lay out at. It never follows the pane, so the page an agent
+ * reads and clicks stays as it is while the user resizes what is around it.
+ */
+export const AGENT_VIEWPORT: BrowserViewport = { width: 1280, height: 800 }
+
+/**
+ * Where a page of a fixed size shows in the pane's frame: whole, scaled down to fit and never
+ * enlarged, at the top and centred. `scale` is exact for the box's width, so the page's picture
+ * ends where the box does.
+ */
+export function fitViewport(
+  frame: BrowserBounds,
+  viewport: BrowserViewport,
+): { bounds: BrowserBounds; scale: number } {
+  const fit = Math.min(1, frame.width / viewport.width, frame.height / viewport.height)
+  const width = Math.max(1, Math.floor(viewport.width * fit))
+  const scale = width / viewport.width
+  const height = Math.max(1, Math.min(frame.height, Math.round(viewport.height * scale)))
+  return {
+    bounds: {
+      x: frame.x + Math.floor((frame.width - width) / 2),
+      y: frame.y,
+      width,
+      height,
+      radius: frame.radius,
+    },
+    scale,
+  }
+}
+
 /**
  * Something the pane says under its header: a download it refused, a page that did not load, or
  * one whose renderer crashed or stopped responding.
@@ -89,6 +126,8 @@ export interface BrowserState {
   url: string | null
   /** Whether the selected tab has a page, which main shows even before it has an address. */
   page: boolean
+  /** The size the selected tab's page keeps; null when it fills the pane's frame. */
+  viewport: BrowserViewport | null
   title: string | null
   loading: boolean
   canGoBack: boolean

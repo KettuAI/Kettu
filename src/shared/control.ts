@@ -428,6 +428,11 @@ export type ControlOverlayEvent =
   | { type: 'act'; at: ControlPoint | null; click: boolean }
   /** The user's input reached the surface itself and was held back there. */
   | { type: 'held'; at: ControlPoint | null }
+  /**
+   * A still of the surface to draw over all of it while a capture changes how it draws, as a data
+   * URL; null takes the still off.
+   */
+  | { type: 'still'; id: number; image: string | null }
 
 /** What the overlay's page asks of main. */
 export type ControlOverlayRequest =
@@ -442,6 +447,8 @@ export type ControlOverlayRequest =
    * the user put it; without a place it is centred at the bottom.
    */
   | { type: 'pill'; width: number; height: number; at?: PillPlace }
+  /** The still of that id is on screen. */
+  | { type: 'still-shown'; id: number }
 
 const MAX_WHEEL = 10_000
 const MAX_EDGE = 100_000
@@ -486,6 +493,12 @@ export function parseOverlayRequest(value: unknown): ControlOverlayRequest | nul
       if (request.at === undefined || request.at === null) return { type: 'pill', width, height }
       const at = pillPlace(request.at)
       return at ? { type: 'pill', width, height, at } : null
+    }
+    case 'still-shown': {
+      const { id } = request
+      return typeof id === 'number' && Number.isSafeInteger(id) && id > 0
+        ? { type: 'still-shown', id }
+        : null
     }
     default:
       return null

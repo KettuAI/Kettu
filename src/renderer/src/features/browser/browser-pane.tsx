@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useRef } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react'
 import {
   ArrowLeft01Icon,
   ArrowRight01Icon,
@@ -8,9 +8,10 @@ import {
   ReloadIcon,
 } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
-import type { BrowserNotice } from '@shared/browser'
+import { fitViewport, type BrowserNotice, type BrowserViewport } from '@shared/browser'
 import { onAppEvent } from '@renderer/app/events'
 import { useControlAgent } from '@renderer/components/control/use-control-agent'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
 import {
   PaneEmpty,
   PaneHead,
@@ -269,8 +270,12 @@ export function BrowserPane({
               />
             )}
             {state.notice && <Notice notice={state.notice} sessionId={sessionId} />}
-            <div ref={page} className="kp-view">
-              {still && <img src={still} alt="" aria-hidden className="kp-view__still" />}
+            <div ref={page} className="kp-view" data-fitted={state.viewport ? '' : undefined}>
+              {state.viewport ? (
+                <FittedPage frame={page} viewport={state.viewport} zoom={zoom} still={still} />
+              ) : (
+                still && <img src={still} alt="" aria-hidden className="kp-view__still" />
+              )}
             </div>
           </>
         ) : (
@@ -299,6 +304,95 @@ export function BrowserPane({
         )}
       </div>
     </PaneSheet>
+  )
+}
+
+/** How much room under the page's box its size line needs, in CSS pixels. */
+const SIZE_LINE_ROOM = 36
+
+/**
+ * The box of a page that keeps its own size, where main draws it scaled inside the frame, and
+ * under it the size and the scale.
+ */
+function FittedPage({
+  frame,
+  viewport,
+  zoom,
+  still,
+}: {
+  frame: RefObject<HTMLDivElement | null>
+  viewport: BrowserViewport
+  zoom: number
+  still: string | undefined
+}) {
+  const { t } = useTranslation('browser')
+  const [box, setBox] = useState<{
+    left: number
+    width: number
+    height: number
+    percent: number
+    room: number
+  } | null>(null)
+
+  useLayoutEffect(() => {
+    const element = frame.current
+    if (!element) return
+    const measure = () => {
+      const rect = element.getBoundingClientRect()
+      if (rect.width === 0 || rect.height === 0) return
+      // As main fits it, from the frame in the window's own pixels.
+      const { bounds, scale } = fitViewport(
+        {
+          x: 0,
+          y: 0,
+          width: Math.round(rect.width * zoom),
+          height: Math.round(rect.height * zoom),
+          radius: 0,
+        },
+        viewport,
+      )
+      const next = {
+        left: bounds.x / zoom,
+        width: bounds.width / zoom,
+        height: bounds.height / zoom,
+        percent: Math.round(scale * 100),
+        room: rect.height - bounds.height / zoom,
+      }
+      setBox((last) =>
+        last &&
+        last.left === next.left &&
+        last.width === next.width &&
+        last.height === next.height &&
+        last.room === next.room
+          ? last
+          : next,
+      )
+    }
+    measure()
+    const observer = new ResizeObserver(measure)
+    observer.observe(element)
+    return () => observer.disconnect()
+  }, [frame, viewport, zoom])
+
+  if (!box) return null
+  const size = { width: viewport.width, height: viewport.height, percent: box.percent }
+  return (
+    <>
+      <div
+        className="kp-view__page"
+        style={{ left: box.left, width: box.width, height: box.height }}
+      >
+        {still && <img src={still} alt="" aria-hidden className="kp-view__still" />}
+      </div>
+      {box.room >= SIZE_LINE_ROOM && (
+        <Tooltip>
+          <TooltipTrigger render={<span className="kp-view__size" style={{ top: box.height }} />}>
+            {box.percent < 100 ? t('viewport.scaled', size) : t('viewport.size', size)}
+          </TooltipTrigger>
+          <TooltipContent>{t('viewport.hint')}</TooltipContent>
+        </Tooltip>
+      )}
+    </>
   )
 }
 
