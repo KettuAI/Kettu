@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { ArrowLeft01Icon, ArrowRight01Icon, Presentation01Icon } from '@hugeicons/core-free-icons'
 import { HugeiconsIcon } from '@hugeicons/react'
 import { useTranslation } from 'react-i18next'
@@ -12,54 +12,12 @@ import { markReady, readSlide, remembered } from '../common/boot'
 import { EditBar, EditButton, SaveNotice } from '../common/content'
 import { useContent } from '../common/use-content'
 import { deckStyle, withText, type TextPath } from './deck'
+import { DrivenDeck } from './driven-deck'
 import { SlideView } from './slide'
+import { Stage } from './stage'
+import { useDrive, type DeckAsk } from './use-drive'
 
 const REMEMBERED = 'kettu-slide'
-
-/** Fills its box with a slide of `size`, scaled to fit and centred. */
-function Stage({
-  size,
-  children,
-  className,
-  framed = false,
-}: {
-  size: { width: number; height: number }
-  children: ReactNode
-  className?: string
-  /** Sets the slide off from the canvas around it, when it does not fill the frame. */
-  framed?: boolean
-}) {
-  const box = useRef<HTMLDivElement>(null)
-  const [scale, setScale] = useState(0)
-  useLayoutEffect(() => {
-    const element = box.current
-    if (!element) return
-    const fit = () =>
-      setScale(Math.min(element.clientWidth / size.width, element.clientHeight / size.height))
-    fit()
-    const observer = new ResizeObserver(fit)
-    observer.observe(element)
-    return () => observer.disconnect()
-  }, [size.width, size.height])
-  // The padding is outside the measured box, so the slide fits inside it.
-  return (
-    <div className={cn('flex min-h-0 min-w-0 flex-1', className)}>
-      <div ref={box} className="relative grid min-h-0 min-w-0 flex-1 place-items-center">
-        <div
-          className={cn('overflow-hidden', framed && 'rounded-sm shadow-card')}
-          style={{ width: size.width * scale, height: size.height * scale }}
-        >
-          <div
-            className="origin-top-left"
-            style={{ width: size.width, height: size.height, transform: `scale(${scale})` }}
-          >
-            {children}
-          </div>
-        </div>
-      </div>
-    </div>
-  )
-}
 
 function isTyping(target: EventTarget | null): boolean {
   return (
@@ -67,7 +25,30 @@ function isTyping(target: EventTarget | null): boolean {
   )
 }
 
+/**
+ * A deck in the artifact viewer is driven by the window, which draws everything around the slide;
+ * anywhere else, as in a copy, the viewer is a small player of its own. A page in a frame waits a
+ * moment for the window to drive it before it shows the player.
+ */
 export function SlidesViewer({ config, view }: { config: ViewerConfig; view: ViewerView }) {
+  const asks = useRef<(ask: DeckAsk) => void>(() => {})
+  const state = useDrive((ask) => asks.current(ask))
+  const framed = window.parent !== window && view === 'normal'
+  const [waited, setWaited] = useState(!framed)
+  useEffect(() => {
+    if (waited) return
+    const timer = setTimeout(() => setWaited(true), DRIVE_WAIT_MS)
+    return () => clearTimeout(timer)
+  }, [waited])
+  if (state && view === 'normal') return <DrivenDeck config={config} state={state} asksRef={asks} />
+  if (!waited) return null
+  return <PlayerDeck config={config} view={view} />
+}
+
+/** How long a deck in a frame waits to be driven before it shows its own player. */
+const DRIVE_WAIT_MS = 800
+
+function PlayerDeck({ config, view }: { config: ViewerConfig; view: ViewerView }) {
   const { t } = useTranslation('viewers')
   const content = useContent(config)
   const parsed = useMemo(
@@ -144,8 +125,11 @@ export function SlidesViewer({ config, view }: { config: ViewerConfig; view: Vie
 
   const editor = editing
     ? {
-        typing: setTyping,
-        change: (path: TextPath, text: string) => setDraft(withText(deck, path, text)),
+        input: () => setTyping(true),
+        leave: (path: TextPath, text: string) => {
+          setTyping(false)
+          setDraft(withText(deck, path, text))
+        },
       }
     : null
   const slide = (i: number) => (

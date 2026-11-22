@@ -697,16 +697,23 @@ export const MAIN_ARTIFACT_PANEL = 'main'
 
 /**
  * Shows an artifact in the viewer, in place of what the main area shows; `page`, a canvas page's
- * id, is the one it opens on.
+ * id, or `slide`, a deck's slide from 1, is where it opens.
  */
 export function openArtifact(
   id: string,
-  { history = false, page }: { history?: boolean; page?: string } = {},
+  { history = false, page, slide }: { history?: boolean; page?: string; slide?: number } = {},
 ): void {
   useViewStore.setState((s) => {
     const sideArtifactPage = { ...s.sideArtifactPage }
     if (page)
       sideArtifactPage[MAIN_ARTIFACT_PANEL] = { artifactId: id, pageId: page, seq: ++pageRequests }
+    else if (slide)
+      sideArtifactPage[MAIN_ARTIFACT_PANEL] = {
+        artifactId: id,
+        pageId: '',
+        slide,
+        seq: ++pageRequests,
+      }
     else delete sideArtifactPage[MAIN_ARTIFACT_PANEL]
     return {
       main: {
@@ -985,7 +992,10 @@ export function showSidePane(projectPath: string, pane: SidePane): void {
 /** A canvas page the artifact pane brings into view once it has laid it out. */
 export interface ArtifactPageRequest {
   artifactId: string
+  /** A canvas page's id; empty for a deck's slide. */
   pageId: string
+  /** A deck's slide, from 1. */
+  slide?: number
   /** Tells a repeated request for the same page from one already handled. */
   seq: number
 }

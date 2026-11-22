@@ -35,6 +35,7 @@ import {
   type RightCard,
   type ViewerMode,
 } from '@renderer/stores/artifact-viewer'
+import { setDeckSlide, useDeckSlide } from '@renderer/stores/artifact-deck'
 import {
   restoreArtifact,
   restoreVersion,
@@ -59,6 +60,8 @@ import { CanvasEditor } from './canvas-editor'
 import { CanvasControls, useCanvasState } from './canvas-controls'
 import type { PageActions } from './canvas-view'
 import { CommentBox, CommentsPanel, ThreadCard } from './comments'
+import { DeckPresent } from './deck-present'
+import { DeckSheet, type DeckComments } from './deck-sheet'
 import { DocumentSheet, type DocComments } from './document-sheet'
 import { EditPanel } from './edit-panel'
 import { ArtifactEditor, useEditorState, type EditorMode } from './editor'
@@ -79,6 +82,7 @@ import {
   useListsRead,
 } from './use-artifact'
 import { useComments } from './use-comments'
+import { useDeck } from './use-deck'
 import { staticCanvas, useCanvasDoc } from './use-canvas-doc'
 import { clampSize, useDocActions } from './use-doc-actions'
 import { useChangedFrames } from './use-changed-frames'
@@ -141,10 +145,13 @@ export default function ArtifactViewer(place: ViewerPlace) {
   // A web page: one page of its own, neither a canvas nor a typed document or deck.
   const webPage = !!shown && !shown.canvas && !summary?.type
   const isDocument = !!shown && summary?.type === 'document'
-  const arrived = useArrivedChange(id, head, webPage || isDocument)
-  // A document marks the changes in its text and steps through them on its own pill.
+  const isDeck = !!shown && summary?.type === 'slides'
+  const arrived = useArrivedChange(id, head, webPage || isDocument || isDeck)
+  // A document and a deck mark what changed and step through it on their own pill.
   const docArrived = isDocument ? arrived : null
-  const comparing = !isDocument && arrived !== null && earlier === arrived.from
+  const comparing = !isDocument && !isDeck && arrived !== null && earlier === arrived.from
+  const deck = useDeck(id, isDeck && shown ? shown.version : null)
+  const deckSlide = useDeckSlide(id)
   // Publishing takes the account the host keeps, which the daemon has none of.
   const shares = useArtifactShares(id)
   // Only a desktop host renders a page apart from the window.
@@ -187,6 +194,19 @@ export default function ArtifactViewer(place: ViewerPlace) {
   const docBlocks = useHostHasRecord('documentSheet') === true
   const [docHeadings, setDocHeadings] = useState(0)
   const [docFocus, setDocFocus] = useState<{ thread: string; seq: number } | null>(null)
+  const deckComments = useMemo<DeckComments>(
+    () => ({
+      threads,
+      shown: pinsShown,
+      add: async (anchor, body) => {
+        await host('artifacts.comment', { id, anchor, body })
+      },
+      thread: (thread, number) => (
+        <ThreadCard thread={thread} number={number} artifactId={id} onFocus={() => {}} />
+      ),
+    }),
+    [threads, pinsShown, id],
+  )
   const docComments = useMemo<DocComments>(
     () => ({
       threads,
@@ -464,7 +484,7 @@ export default function ArtifactViewer(place: ViewerPlace) {
         ]}
       />
     )
-  } else if (changePill && earlier === null && !isDocument) {
+  } else if (changePill && earlier === null && !isDocument && !isDeck) {
     pill = changePill
   }
 
@@ -584,7 +604,7 @@ export default function ArtifactViewer(place: ViewerPlace) {
     const typed = !!summary?.type
     // A canvas document draws its own dots, which follow its camera.
     if (docShown) layout = 'float'
-    else if (shown.canvas) {
+    else if (shown.canvas || isDeck) {
       layout = 'float'
       ground = 'dots'
     }
@@ -628,6 +648,28 @@ export default function ArtifactViewer(place: ViewerPlace) {
             editor={latest ? (editor ?? undefined) : undefined}
             actions={actions}
             onPageChosen={choosePage}
+          />
+        ) : isDeck ? (
+          <DeckSheet
+            id={id}
+            url={url}
+            shown={shown}
+            title={title}
+            reloads={artifact.reloads}
+            since={since}
+            band={pill !== null}
+            latest={latest}
+            mode={mode}
+            where={place.where}
+            deck={deck ?? null}
+            arrived={latest ? arrived : null}
+            comments={deckComments}
+            agent={sheetAgent}
+            onAsk={askAbout}
+            onPresent={(slide) => setPresenting(String(slide))}
+            asked={pageAsked}
+            onAsked={(seq) => artifactPageShown(panel?.panel ?? MAIN_ARTIFACT_PANEL, seq)}
+            focusThread={docFocus}
           />
         ) : isDocument ? (
           <DocumentSheet
@@ -781,7 +823,7 @@ export default function ArtifactViewer(place: ViewerPlace) {
               summary.sessionId,
             ]}
             onFocus={(thread) => {
-              if (isDocument) {
+              if (isDocument || isDeck) {
                 setDocFocus((was) => ({ thread: thread.id, seq: (was?.seq ?? 0) + 1 }))
                 return
               }
@@ -840,6 +882,10 @@ export default function ArtifactViewer(place: ViewerPlace) {
   }
 
   const present = (): void => {
+    if (isDeck) {
+      if (deck) setPresenting(String(Math.min(deckSlide, deck.slides.length)))
+      return
+    }
     if (!shown?.canvas) return
     if (docShown) {
       const target = state.opened ?? state.selection[0] ?? null
@@ -860,6 +906,7 @@ export default function ArtifactViewer(place: ViewerPlace) {
     onSelect: () => setFollowing(followingNow === agent.sessionId ? null : agent.sessionId),
   }))
 
+  const [besideSlides, setBesideSlides] = useState<boolean | null>(null)
   const leftCard = useMemo(
     () =>
       showing && isDocument
@@ -881,23 +928,40 @@ export default function ArtifactViewer(place: ViewerPlace) {
               },
             }
           : null
-        : showing && docShown
+        : showing && isDeck && deck
           ? {
-              title: doc
-                ? t('pages.heading', {
-                    pages: doc.canvases.length,
-                    frames: t('pages.frames', { count: doc.pages.length }),
-                  })
-                : t('pages.title'),
-              // Open by default where there is more than one page or many frames to find.
-              byDefault: !!doc && (doc.canvases.length > 1 || doc.pages.length > 8),
-              open: state.left,
-              onOpenChange: (open: boolean) => setViewerState(id, { left: open }),
+              title: (
+                <>
+                  {t('deck.slides')}
+                  <small className="ads-count">{deck.slides.length}</small>
+                </>
+              ),
+              // Open in the main area; beside a session it waits to be asked for there, whatever
+              // the main area last did with it.
+              byDefault: place.where === 'main',
+              open: place.where === 'main' ? state.left : besideSlides,
+              onOpenChange: (open: boolean) =>
+                place.where === 'main' ? setViewerState(id, { left: open }) : setBesideSlides(open),
             }
-          : null,
+          : showing && docShown
+            ? {
+                title: doc
+                  ? t('pages.heading', {
+                      pages: doc.canvases.length,
+                      frames: t('pages.frames', { count: doc.pages.length }),
+                    })
+                  : t('pages.title'),
+                // Open by default where there is more than one page or many frames to find.
+                byDefault: !!doc && (doc.canvases.length > 1 || doc.pages.length > 8),
+                open: state.left,
+                onOpenChange: (open: boolean) => setViewerState(id, { left: open }),
+              }
+            : null,
     [
       showing,
       isDocument,
+      isDeck,
+      deck,
       docHeadings,
       rightKey,
       closeRight,
@@ -905,6 +969,7 @@ export default function ArtifactViewer(place: ViewerPlace) {
       docShown,
       doc,
       state.left,
+      besideSlides,
       id,
       t,
     ],
@@ -958,7 +1023,7 @@ export default function ArtifactViewer(place: ViewerPlace) {
           ? () => openSessionWithArtifact(chatSession.id, chatSession.projectPath, id)
           : null
       }
-      onPresent={showing && shown?.canvas ? present : null}
+      onPresent={showing && (shown?.canvas || (isDeck && deck)) ? present : null}
       share={
         showing && shown && shares
           ? { id, title, shown: shown.version, head: head ?? shown.version }
@@ -1032,7 +1097,20 @@ export default function ArtifactViewer(place: ViewerPlace) {
       ) : (
         <div className="avs-main">{shell}</div>
       )}
-      {presenting !== null && url && shown && (
+      {presenting !== null && url && isDeck && deck && (
+        <DeckPresent
+          artifactId={id}
+          url={url}
+          deck={deck}
+          title={title}
+          start={Number(presenting) || 1}
+          onExit={(last) => {
+            setDeckSlide(id, last)
+            setPresenting(null)
+          }}
+        />
+      )}
+      {presenting !== null && url && shown && !isDeck && (
         <CanvasPresent
           artifactId={id}
           url={url}

@@ -13,6 +13,7 @@ import {
   type PageSelection,
   type SelectMessage,
 } from '@shared/artifact-runtime/page-messages'
+import type { DeckReport } from '@shared/artifact-runtime/deck-sheet'
 import type { DocReport } from '@shared/artifact-runtime/document-sheet'
 import { isWeb } from '@renderer/lib/platform'
 import { listenPageErrors, receivePageError } from './page-errors'
@@ -23,6 +24,7 @@ const PICKS_PER_SECOND = 20
 type PickListener = (selection: PageSelection | null, located?: SelectMessage['located']) => void
 type KeyListener = (key: PageKey) => void
 type DocListener = (report: DocReport) => void
+type DeckListener = (report: DeckReport) => void
 type RuntimeRelay = (url: string, port: MessagePort) => () => void
 
 let relay: RuntimeRelay | null = null
@@ -42,6 +44,7 @@ const channels = new Map<
     listener: PickListener
     key: () => KeyListener | null
     doc: () => DocListener | null
+    deck: () => DeckListener | null
   }
 >()
 let listening = false
@@ -51,6 +54,7 @@ function deliver(origin: string, message: SelectMessage): void {
   if (!entry || entry.origin !== origin) return
   if (message.key) entry.key()?.(message.key)
   else if (message.doc) entry.doc()?.(message.doc)
+  else if (message.deck) entry.deck()?.(message.deck)
   else entry.listener(message.selection, message.located)
 }
 
@@ -72,7 +76,8 @@ function newChannel(): string {
     .replace(/=+$/, '')
 }
 
-type Sticky = 'select-mode' | 'select-pins' | 'select-source' | 'select-keys' | 'select-doc'
+type Sticky =
+  'select-mode' | 'select-pins' | 'select-source' | 'select-keys' | 'select-doc' | 'select-deck'
 
 /**
  * One frame's link: messages into its page, of which the last mode, pins and pick are sent again
@@ -90,6 +95,7 @@ export class FrameLink {
   private picks = 0
   private onKey: KeyListener | null = null
   private onDoc: DocListener | null = null
+  private onDeck: DeckListener | null = null
 
   /** `origin` is the artifact's URL as `artifact:open` gave it, without its last slash. */
   constructor(
@@ -104,6 +110,7 @@ export class FrameLink {
       listener: this.listener,
       key: () => this.onKey,
       doc: () => this.onDoc,
+      deck: () => this.onDeck,
     })
     listen()
     listenPageErrors()
@@ -141,13 +148,19 @@ export class FrameLink {
     this.onDoc = listener
   }
 
+  /** Takes what a slides viewer reports, until null. */
+  decks(listener: DeckListener | null): void {
+    this.onDeck = listener
+  }
+
   post(message: DriveMessage): void {
     if (
       message.kind === 'select-mode' ||
       message.kind === 'select-pins' ||
       message.kind === 'select-source' ||
       message.kind === 'select-keys' ||
-      message.kind === 'select-doc'
+      message.kind === 'select-doc' ||
+      message.kind === 'select-deck'
     ) {
       this.sticky.set(message.kind, message)
     }

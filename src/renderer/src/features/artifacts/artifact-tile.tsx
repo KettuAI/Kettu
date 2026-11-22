@@ -17,9 +17,11 @@ import type { Outline, OutlineFrame } from './card-contents'
 import type { ArtifactKind } from './model'
 import { usePartThumbnail } from './thumbnails'
 
-/** Where a click on the card opens it: a canvas page, by the id of its first frame. */
+/** Where a click on the card opens it: a canvas page, by the id of its first frame, or a slide. */
 export interface OpenAt {
   page?: string
+  /** A deck's slide, from 1. */
+  slide?: number
 }
 
 /** The most frames a canvas card lays side by side. */
@@ -315,7 +317,11 @@ export function TileThumb({
             if (next === at) return
             setAt(next)
             opensAtRef.current =
-              outline?.kind === 'canvas' ? { page: outline.pages[next]!.frames[0]!.id } : null
+              outline?.kind === 'canvas'
+                ? { page: outline.pages[next]!.frames[0]!.id }
+                : outline?.kind === 'slides'
+                  ? { slide: next + 1 }
+                  : null
           },
           onPointerLeave: () => {
             setAt(null)

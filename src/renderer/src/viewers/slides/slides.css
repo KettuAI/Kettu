@@ -219,6 +219,31 @@
   outline-color: var(--slide-accent);
 }
 
+/* In the artifact viewer: the slide fills the frame the window sized for it, and in comment mode
+   what can be pinned shows under the pointer. */
+.deck-driven {
+  display: flex;
+  height: 100%;
+  overflow: hidden;
+  background: var(--slide-background);
+}
+body:has(.deck-driven) {
+  overflow: hidden;
+}
+.deck-driven[data-mode='comment'] .slide [data-text],
+.deck-driven[data-mode='comment'] .slide img {
+  border-radius: 4px;
+  outline: 2px dashed transparent;
+  outline-offset: 4px;
+  cursor: crosshair;
+}
+.deck-driven[data-mode='comment'] .slide [data-text]:hover,
+.deck-driven[data-mode='comment'] .slide img:hover,
+.deck-driven .slide [data-focus] {
+  outline: 2px dashed var(--slide-accent);
+  outline-offset: 4px;
+}
+
 /* Printing: each slide on a sheet of its own size, which the page's @page sets. */
 .slide-print {
   break-after: page;

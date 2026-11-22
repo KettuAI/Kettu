@@ -1,22 +1,67 @@
 // One slide, laid out by its layout at the deck's size in CSS pixels, as the PowerPoint export
 // places it; scaled to fit by whoever shows it.
 
-import type { KeyboardEvent } from 'react'
+import { useLayoutEffect, useRef, type KeyboardEvent } from 'react'
 import { bulletParts, type Bullet, type Column, type Slide } from '@shared/artifact-slides'
 import type { TextPath } from './deck'
 
 export interface SlideEditing {
-  /** Tells whether a text is being changed in place, before it is taken on leaving it. */
-  typing(now: boolean): void
-  /** Takes a text the user changed. */
-  change(path: TextPath, text: string): void
+  /** A text was changed in place, as it now reads. */
+  input(path: TextPath, text: string): void
+  /** The user left a text, as it now reads. */
+  leave(path: TextPath, text: string): void
 }
 
 function commitOnEnter(event: KeyboardEvent<HTMLElement>): void {
-  if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) {
+  if (
+    (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) ||
+    event.key === 'Escape'
+  ) {
     event.preventDefault()
     event.currentTarget.blur()
   }
+}
+
+function typedText(element: HTMLElement): string {
+  return element.innerText.replace(/\n$/, '')
+}
+
+type TextTag = 'div' | 'span' | 'li' | 'p' | 'blockquote' | 'figcaption' | 'th' | 'td'
+
+/** A text the user changes in place; what they type stays as typed while a new version comes in. */
+function EditableText({
+  value,
+  path,
+  editing,
+  className,
+  as: Tag,
+}: {
+  value: string
+  path: TextPath
+  editing: SlideEditing
+  className: string
+  as: TextTag
+}) {
+  const ref = useRef<HTMLElement | null>(null)
+  useLayoutEffect(() => {
+    const element = ref.current
+    if (element && document.activeElement !== element && typedText(element) !== value) {
+      element.textContent = value
+    }
+  })
+  return (
+    <Tag
+      ref={ref as never}
+      className={`${className} slide-editable`}
+      data-text=""
+      contentEditable="plaintext-only"
+      suppressContentEditableWarning
+      spellCheck
+      onKeyDown={commitOnEnter}
+      onInput={(event) => editing.input(path, typedText(event.currentTarget))}
+      onBlur={(event) => editing.leave(path, typedText(event.currentTarget))}
+    />
+  )
 }
 
 /** A text of the slide; while editing, one the user can change in place. */
@@ -31,28 +76,17 @@ function Text({
   path: TextPath
   editing: SlideEditing | null
   className: string
-  as?: 'div' | 'span' | 'li' | 'p' | 'blockquote' | 'figcaption' | 'th' | 'td'
+  as?: TextTag
 }) {
   if (value === undefined) return null
-  if (!editing) return <Tag className={className}>{value}</Tag>
-  return (
-    <Tag
-      key={value}
-      className={`${className} slide-editable`}
-      contentEditable="plaintext-only"
-      suppressContentEditableWarning
-      spellCheck
-      onKeyDown={commitOnEnter}
-      onInput={() => editing.typing(true)}
-      onBlur={(event) => {
-        editing.typing(false)
-        const text = event.currentTarget.innerText.replace(/\n$/, '')
-        if (text !== value) editing.change(path, text)
-      }}
-    >
-      {value}
-    </Tag>
-  )
+  if (!editing) {
+    return (
+      <Tag className={className} data-text="">
+        {value}
+      </Tag>
+    )
+  }
+  return <EditableText value={value} path={path} editing={editing} className={className} as={Tag} />
 }
 
 function Bullets({

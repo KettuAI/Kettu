@@ -13,6 +13,7 @@ import {
   type PageParam,
 } from '../artifact-params'
 import { capabilityNamespace, type CapabilityTransport } from './capabilities'
+import { DECK_REPORT_EVENT } from './deck-sheet'
 import { DOC_REPORT_EVENT } from './document-sheet'
 import {
   RUNTIME_PATH,
@@ -586,15 +587,17 @@ export function start(config: RuntimeConfig): void {
         passKeys = message.on === true
         return
       case 'select-doc':
-        // The document viewer reads the state itself; its reports go out on this channel.
+      case 'select-deck':
+        // The document and slides viewers read the state themselves; their reports go out on
+        // this channel.
         if (typeof message.channel === 'string' && message.channel !== '') channel = message.channel
         return
     }
   }
 
-  // What a document viewer reports of itself, once the client drives it as a sheet; the client
-  // checks it like any pick.
-  window.addEventListener(DOC_REPORT_EVENT, (event) => {
+  // What a document or slides viewer reports of itself, once the client drives it in the viewer;
+  // the client checks it like any pick.
+  const passReport = (field: 'doc' | 'deck') => (event: Event) => {
     if (!channel || !(event instanceof CustomEvent)) return
     const message: Message = {
       v: RUNTIME_VERSION,
@@ -602,11 +605,13 @@ export function start(config: RuntimeConfig): void {
       kind: 'select',
       channel,
       selection: null,
-      doc: event.detail as unknown,
+      [field]: event.detail as unknown,
     }
     if (config.transport === 'port') viaPort(message)
     else void request(message).catch(() => {})
-  })
+  }
+  window.addEventListener(DOC_REPORT_EVENT, passReport('doc'))
+  window.addEventListener(DECK_REPORT_EVENT, passReport('deck'))
 
   // Keys the viewer steps with, once the user clicked into the page; typing in a field keeps them.
   window.addEventListener(

@@ -1,11 +1,11 @@
-// The document the viewer shows: the served file at once, then any version the window asks for,
-// read through the page's `content` capability without loading the page again, so the place on
-// the sheet and a block being typed in stay. Writes go through the same capability.
+// The content a driven viewer shows: the served file at once, then any version the window asks
+// for, read through the page's `content` capability without loading the page again, so the place
+// on screen and a text being typed in stay. Writes go through the same capability.
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { ViewerConfig } from '@shared/artifact-types'
 import type { ContentNamespace } from '@shared/artifact-runtime/content'
-import { contentCapability, readServed, writeFailure } from '../common/boot'
+import { contentCapability, readServed, writeFailure } from './boot'
 
 export interface Loaded {
   version: number
@@ -15,7 +15,7 @@ export interface Loaded {
 export type WriteResult =
   { ok: true; version: number } | { ok: false; code: 'conflict' | 'invalid' | 'failed' }
 
-export interface DocumentSource {
+export interface ContentSource {
   loaded: Loaded | null
   failed: boolean
   /** The latest version, once the capability answered; only it may be written from. */
@@ -28,7 +28,7 @@ export interface DocumentSource {
   latest: () => Promise<Loaded | null>
 }
 
-export function useDocument(config: ViewerConfig, wanted: number | null): DocumentSource {
+export function useSource(config: ViewerConfig, wanted: number | null): ContentSource {
   const [loaded, setLoaded] = useState<Loaded | null>(null)
   const [failed, setFailed] = useState(false)
   const [head, setHead] = useState<number | null>(null)

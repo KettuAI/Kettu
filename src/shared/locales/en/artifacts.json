@@ -491,7 +491,8 @@
     "previous": "Previous",
     "next": "Next",
     "grid": "Grid",
-    "gridKey": "Show every frame (G)"
+    "gridKey": "Show every frame (G)",
+    "count": "{{number}} / {{count}}"
   },
   "consent": {
     "filesTitle": "Let “{{title}}” read files in {{project}}?",
@@ -659,5 +660,20 @@
       "retry": "Retry",
       "kept": "What you typed stays here until it saves."
     }
+  },
+  "deck": {
+    "slides": "Slides",
+    "slide": "Slide {{number}}",
+    "grid": "All slides",
+    "gridKey": "Grid (G)",
+    "notes": "Notes",
+    "notesOf": "Notes of slide {{number}}",
+    "notesEmpty": "No notes on this slide",
+    "previous": "Previous slide",
+    "next": "Next slide",
+    "previousNamed": "Previous: {{name}}",
+    "nextNamed": "Next: {{name}}",
+    "noChanged": "No slide changed in this version",
+    "noComments": "No slide has comments"
   }
 }

@@ -32,8 +32,8 @@ import { Skeleton } from '@renderer/components/ui/skeleton'
 import { kettuCodeTheme } from '@renderer/features/session/markdown/code-themes'
 import { cn } from '@renderer/lib/utils'
 import { markReady } from '../common/boot'
+import { useSource, type Loaded } from '../common/use-source'
 import { editedSource, mapSource, type SourceMap } from './edit-source'
-import { useDocument, type Loaded } from './use-document'
 import { report, useDrive } from './use-drive'
 import { wordDiff } from './word-diff'
 
@@ -229,7 +229,7 @@ export function DocumentViewer({ config, view }: { config: ViewerConfig; view: V
   const { t } = useTranslation('viewers')
   const asks = useRef<(ask: 'undo' | 'retry') => void>(() => {})
   const state = useDrive((ask) => asks.current(ask))
-  const doc = useDocument(config, state?.version ?? null)
+  const doc = useSource(config, state?.version ?? null)
   const text = doc.loaded?.text ?? null
   const version = doc.loaded?.version ?? config.version
   const parts = useMemo(() => (text === null ? [] : partsOf(text)), [text])
