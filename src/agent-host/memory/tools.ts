@@ -7,6 +7,7 @@ import type { AgentId } from '@shared/agents'
 import {
   MEMORY_BODY_CHARS,
   MEMORY_DESCRIPTION_CHARS,
+  MEMORY_ENTRIES_PER_LAYER,
   MEMORY_ID,
   MEMORY_PROPOSALS_WAITING,
   MEMORY_TITLE_CHARS,
@@ -34,6 +35,9 @@ export const MEMORY_TOOL_NAMES = [
   UPDATE_MEMORY_TOOL,
   FORGET_MEMORY_TOOL,
 ] as const
+
+/** Entries per layer in one list_memories call: a page fits any harness's tool output. */
+export const LIST_PAGE = 100
 
 export function isMemoryToolName(name: string): boolean {
   return (MEMORY_TOOL_NAMES as readonly string[]).includes(name)
@@ -73,11 +77,20 @@ export const MEMORY_TOOLS: Tool[] = [
     name: LIST_MEMORIES_TOOL,
     title: 'List memories',
     description:
-      "Lists the entries of Kettu's memory with their ids, when the index the session started " +
-      'with says some were left out or may be out of date.',
+      "Lists the entries of Kettu's memory with their ids and when each was last updated, " +
+      `${LIST_PAGE} per layer at a time, newest first: when the index the session started with ` +
+      'says some were left out or may be out of date, and to go through a whole layer when ' +
+      'remember says it is full.',
     inputSchema: {
       type: 'object',
-      properties: { layer: { ...LAYER, description: 'One layer; both when left out.' } },
+      properties: {
+        layer: { ...LAYER, description: 'One layer; both when left out.' },
+        offset: {
+          type: 'integer',
+          minimum: 0,
+          description: 'Where the page starts, as the previous page says; 0 when left out.',
+        },
+      },
       additionalProperties: false,
     },
     annotations: { readOnlyHint: true, openWorldHint: false },
@@ -100,10 +113,12 @@ export const MEMORY_TOOLS: Tool[] = [
     title: 'Remember',
     description:
       'Saves one fact that will help a later session: a preference or correction of the user, or ' +
-      'a decision or non-obvious fact about the project that its files do not show. Project ' +
-      'memory is saved at once and the user can undo it. Global memory is only for things about ' +
-      'the user that hold in every project; it is proposed to the user, who decides. Never save ' +
-      'secrets or what the repository or its git history already records.',
+      'a decision or non-obvious fact about the project that its files do not show, not a log ' +
+      'of finished work. When an entry already covers the fact, change that one with ' +
+      'update_memory instead. Project memory is saved at once and the user can undo it. Global ' +
+      'memory is only for things about the user that hold in every project; it is proposed to ' +
+      'the user, who decides. Never save secrets or what the repository, its git history, issues ' +
+      'or pull requests already record.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -121,8 +136,11 @@ export const MEMORY_TOOLS: Tool[] = [
     name: UPDATE_MEMORY_TOOL,
     title: 'Update a memory',
     description:
-      "Changes an entry of Kettu's memory, rather than adding a near copy. Give only the fields " +
-      'that change. A global entry is changed only once the user accepts.',
+      "Changes an entry of Kettu's memory: to correct it once it turned out wrong or out of " +
+      'date, to merge another entry on the same fact into it (then forget that one), or rather ' +
+      'than adding a near copy. Only for the fact the entry is about; a different fact gets an ' +
+      'entry of its own. Give only the fields that change. A global entry is changed only once ' +
+      'the user accepts.',
     inputSchema: {
       type: 'object',
       properties: { layer: LAYER, id: ID, title: TITLE, description: DESCRIPTION, body: BODY },
@@ -135,8 +153,10 @@ export const MEMORY_TOOLS: Tool[] = [
     name: FORGET_MEMORY_TOOL,
     title: 'Forget a memory',
     description:
-      "Removes an entry of Kettu's memory that turned out wrong or no longer holds. A project " +
-      'entry can be undone by the user; a global one is removed only once the user accepts.',
+      "Removes an entry of Kettu's memory that turned out wrong, no longer holds (a plan " +
+      'changed, drafts were picked, the work is done) or that another entry now covers. A ' +
+      'project entry can be undone by the user; a global one is removed only once the user ' +
+      'accepts.',
     inputSchema: {
       type: 'object',
       properties: { layer: LAYER, id: ID },
@@ -181,7 +201,7 @@ export interface MemoryToolsDeps {
 type Args = Record<string, unknown>
 
 const ALLOWED: Record<string, readonly string[]> = {
-  [LIST_MEMORIES_TOOL]: ['layer'],
+  [LIST_MEMORIES_TOOL]: ['layer', 'offset'],
   [READ_MEMORY_TOOL]: ['layer', 'id'],
   [REMEMBER_TOOL]: ['layer', 'title', 'description', 'body'],
   [UPDATE_MEMORY_TOOL]: ['layer', 'id', 'title', 'description', 'body'],
@@ -228,15 +248,41 @@ function day(at: number): string {
   return new Date(at).toISOString().slice(0, 10)
 }
 
-function listed(heading: string, entries: MemoryEntry[]): string[] {
+function offsetOf(o: Args): number {
+  if (o.offset === undefined) return 0
+  if (typeof o.offset !== 'number' || !Number.isInteger(o.offset) || o.offset < 0) {
+    throw invalid('offset must be a whole number, 0 or more.')
+  }
+  return o.offset
+}
+
+function listed(
+  heading: string,
+  layer: MemoryLayer,
+  entries: MemoryEntry[],
+  offset: number,
+): string[] {
   if (entries.length === 0) return [heading, '(none yet)']
-  return [
-    heading,
-    ...entries.map((entry) => {
+  const page = entries.slice(offset, offset + LIST_PAGE)
+  if (page.length === 0) {
+    return [heading, `(it holds ${entries.length} entries, all before offset ${offset})`]
+  }
+  const range = `entries ${offset + 1} to ${offset + page.length} of ${entries.length}`
+  const lines = [
+    `${heading.replace(/:$/, '')}, ${range}:`,
+    ...page.map((entry) => {
       const text = entry.description === '' ? entry.title : `${entry.title}: ${entry.description}`
       return `- [${entry.id}] ${text} (updated ${day(entry.updatedAt)})`
     }),
   ]
+  const next = offset + page.length
+  if (next < entries.length) {
+    lines.push(
+      `(${entries.length - next} more; ${LIST_MEMORIES_TOOL} with layer ${layer} and offset ` +
+        `${next} shows the next page)`,
+    )
+  }
+  return lines
 }
 
 function done(text: string): CallToolResult {
@@ -245,6 +291,37 @@ function done(text: string): CallToolResult {
 
 const PROPOSED =
   'nothing is saved unless they accept. Carry on with your task; do not propose it again.'
+
+/** Why a new entry was refused for a full layer, and how the agent makes room. */
+function full(layer: MemoryLayer): MemoryError {
+  const through =
+    layer === 'project'
+      ? 'forget the entries that are wrong, out of date or covered by another, merge entries on ' +
+        `the same fact into one with ${UPDATE_MEMORY_TOOL} and ${FORGET_MEMORY_TOOL}, and ` +
+        'tighten the rest'
+      : 'propose forgetting the entries that no longer hold and merging those on the same fact; ' +
+        `the user decides each, and at most ${MEMORY_PROPOSALS_WAITING} proposals wait at once`
+  return new MemoryError(
+    'full',
+    `This memory holds ${MEMORY_ENTRIES_PER_LAYER} entries, its limit, so nothing was saved. Go ` +
+      'through all of it now, even if this fact fits an existing entry: read every page of ' +
+      `${LIST_MEMORIES_TOOL} with layer ${layer} before changing anything, then ${through}. ` +
+      'Read an entry in full only when its line does not tell. Aim to free about a tenth of ' +
+      'the limit so the next saves do not hit it again, but never forget an entry that still ' +
+      'holds just to get there; then save the fact. Never rewrite an unrelated entry to make ' +
+      'room.',
+  )
+}
+
+/** A new entry's write, whose refusal for a full layer tells the agent how to make room. */
+async function withRoom<T>(layer: MemoryLayer, write: Promise<T>): Promise<T> {
+  try {
+    return await write
+  } catch (error) {
+    if (error instanceof MemoryError && error.code === 'full') throw full(layer)
+    throw error
+  }
+}
 
 const NO_PROJECT =
   'This session has no project, so it has no project memory. Use global memory only for things ' +
@@ -266,7 +343,7 @@ export class MemoryTools {
       const o = args(name, input)
       switch (name) {
         case LIST_MEMORIES_TOOL:
-          return await this.list(caller, layerOf(o, null))
+          return await this.list(caller, layerOf(o, null), offsetOf(o))
         case READ_MEMORY_TOOL:
           return await this.read(caller, layerOf(o, null), idOf(o))
         case REMEMBER_TOOL:
@@ -303,22 +380,21 @@ export class MemoryTools {
     return { layer: 'project', project }
   }
 
-  private async list(caller: Caller, layer: MemoryLayer | null): Promise<CallToolResult> {
+  private async list(
+    caller: Caller,
+    layer: MemoryLayer | null,
+    offset: number,
+  ): Promise<CallToolResult> {
     const project = this.deps.projectOf(caller)
     if (layer === 'project' && project === null) throw invalid(NO_PROJECT)
     const lines: string[] = []
     if (layer !== 'global' && project !== null) {
-      lines.push(
-        ...listed('Project memory:', await this.deps.service.list({ layer: 'project', project })),
-      )
+      const entries = await this.deps.service.list({ layer: 'project', project })
+      lines.push(...listed('Project memory:', 'project', entries, offset))
     }
     if (layer !== 'project') {
-      lines.push(
-        ...listed(
-          'Global memory (about the user):',
-          await this.deps.service.list({ layer: 'global' }),
-        ),
-      )
+      const entries = await this.deps.service.list({ layer: 'global' })
+      lines.push(...listed('Global memory (about the user):', 'global', entries, offset))
     }
     return done(lines.join('\n'))
   }
@@ -379,7 +455,7 @@ export class MemoryTools {
   ): Promise<CallToolResult> {
     const scope = this.scope(caller, layer)
     if (scope.layer === 'global') {
-      const checked = await this.deps.service.check(scope, null, draft)
+      const checked = await withRoom(scope.layer, this.deps.service.check(scope, null, draft))
       return this.propose(caller, {
         action: 'remember',
         memoryId: null,
@@ -387,7 +463,10 @@ export class MemoryTools {
         draft: checked,
       })
     }
-    const { entry, undo } = await this.deps.service.save(scope, null, draft, this.by(caller))
+    const { entry, undo } = await withRoom(
+      scope.layer,
+      this.deps.service.save(scope, null, draft, this.by(caller)),
+    )
     this.deps.written(caller.sessionId, {
       layer: 'project',
       action: 'remember',

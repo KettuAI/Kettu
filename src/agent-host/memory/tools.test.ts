@@ -1,13 +1,15 @@
-import { mkdtemp, readdir, rm } from 'node:fs/promises'
+import { mkdtemp, readdir, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import type { AgentId } from '@shared/agents'
+import { MEMORY_ENTRIES_PER_LAYER } from '@shared/memory'
 import type { Caller } from '../artifacts/tools'
-import { MemoryService } from './service'
+import { MemoryService, projectDirName } from './service'
 import {
   FORGET_MEMORY_TOOL,
   LIST_MEMORIES_TOOL,
+  LIST_PAGE,
   MEMORY_TOOL_NAMES,
   MEMORY_TOOLS,
   MemoryTools,
@@ -154,6 +156,40 @@ describe('MemoryTools', () => {
     expect(secret.isError).toBe(true)
     expect(secret.structuredContent).toMatchObject({ code: 'secret' })
     expect(proposed).toEqual([])
+  })
+
+  /** Fills project A's memory with `count` entries, written as files the way the user may. */
+  async function fill(count: number): Promise<void> {
+    await tools.call(inA, REMEMBER_TOOL, FACT)
+    const folder = path.join(dir, 'memory', 'projects', projectDirName(A))
+    await Promise.all(
+      Array.from({ length: count - 1 }, (_, i) =>
+        writeFile(path.join(folder, `e-${i + 1}.md`), `---\ntitle: E${i + 1}\n---\nBody\n`),
+      ),
+    )
+  }
+
+  it('lists a layer a page at a time and refuses a bad offset', async () => {
+    await fill(LIST_PAGE + 5)
+    const first = text(await tools.call(inA, LIST_MEMORIES_TOOL, { layer: 'project' }))
+    expect(first.match(/^- \[/gm)).toHaveLength(LIST_PAGE)
+    expect(first).toContain(`entries 1 to ${LIST_PAGE} of ${LIST_PAGE + 5}`)
+    expect(first).toContain(`offset ${LIST_PAGE} shows the next page`)
+    const next = text(
+      await tools.call(inA, LIST_MEMORIES_TOOL, { layer: 'project', offset: LIST_PAGE }),
+    )
+    expect(next.match(/^- \[/gm)).toHaveLength(5)
+    expect(next).not.toContain('next page')
+    const bad = await tools.call(inA, LIST_MEMORIES_TOOL, { layer: 'project', offset: -1 })
+    expect(bad.isError).toBe(true)
+  })
+
+  it('tells an agent to go through a full layer before saving', async () => {
+    await fill(MEMORY_ENTRIES_PER_LAYER)
+    const result = await tools.call(inA, REMEMBER_TOOL, { ...FACT, title: 'One more' })
+    expect(result.structuredContent).toMatchObject({ code: 'full' })
+    expect(text(result)).toContain('read every page of list_memories with layer project')
+    expect(written).toHaveLength(1)
   })
 
   it('refuses a global proposal while enough wait for the user', async () => {
