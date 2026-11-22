@@ -28,6 +28,7 @@ export function PageFrame({
   since,
   className,
   editor,
+  scale = 1,
 }: {
   /** The artifact's origin, as `artifact:open` gave it. */
   url: string
@@ -39,6 +40,8 @@ export function PageFrame({
   className?: string
   /** Select and comment mode, where the viewer or the pane shows them. */
   editor?: ArtifactEditor
+  /** How much a transform above the frame scales it, so a pick lands where the pointer is. */
+  scale?: number
 }) {
   const { t } = useTranslation('artifacts')
   const frame = useRef<HTMLIFrameElement>(null)
@@ -105,7 +108,7 @@ export function PageFrame({
           loaded && 'opacity-100',
         )}
       />
-      {mode && driven.frame && <PickLayer frame={driven.frame} scale={1} mode={mode} />}
+      {mode && driven.frame && <PickLayer frame={driven.frame} scale={scale} mode={mode} />}
       {!loaded && <Waiting since={since} />}
       {blocked && blockedHost && (
         <div role="status" className="k-av-blocked">

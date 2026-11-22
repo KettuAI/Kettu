@@ -5,10 +5,8 @@ import {
   ArrowRight01Icon,
   ArrowShrink01Icon,
   Delete02Icon,
-  LinkSquare02Icon,
   MinusSignIcon,
   PlusSignIcon,
-  RefreshIcon,
   RotateLeft01Icon,
 } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
@@ -18,6 +16,7 @@ import { Icon, type MenuItem } from '@renderer/components/affect/app-shell'
 import { Button } from '@renderer/components/affect/button'
 import { AgentCursorStyles } from '@renderer/components/affect/agent-cursors'
 import { AgentMark } from '@renderer/components/agents/agent-mark'
+import { emitAppEvent } from '@renderer/app/events'
 import { toast } from '@renderer/components/ui/toast'
 import { usePhoneWindow } from '@renderer/features/shell/narrow'
 import { PaneSheet } from '@renderer/features/shell/panel-button'
@@ -27,7 +26,6 @@ import { hostOfPath } from '@renderer/lib/host-paths'
 import { longAgo } from '@renderer/lib/format'
 import { isWeb } from '@renderer/lib/platform'
 import { useNow } from '@renderer/lib/use-now'
-import { cn } from '@renderer/lib/utils'
 import {
   setViewerState,
   useViewerState,
@@ -41,6 +39,7 @@ import {
   setPaneSelection,
   useArtifactsStore,
 } from '@renderer/stores/artifacts'
+import { agentName } from '@renderer/stores/agents'
 import { useSessionsStore } from '@renderer/stores/sessions'
 import {
   artifactPageShown,
@@ -52,6 +51,7 @@ import {
 } from '@renderer/stores/view'
 import { anchorOf, pinsOf } from './anchors'
 import { useArtifactShares } from './artifact-host'
+import { useArrivedChange } from './use-arrived-change'
 import { atMaxZoom, atMinZoom } from './camera'
 import { CanvasEditor } from './canvas-editor'
 import { CanvasControls, useCanvasState } from './canvas-controls'
@@ -61,7 +61,9 @@ import { EditPanel } from './edit-panel'
 import { ArtifactEditor, useEditorState, type EditorMode } from './editor'
 import { isEditable, modeKey } from './keys'
 import { artifactKind, daysLeft } from './model'
+import { handOffPageErrors } from './page-error-handoff'
 import { Waiting } from './page-frame'
+import { ChangePill, PageSheet, type SheetAgent } from './page-sheet'
 import { PresenceFaces } from './presence-faces'
 import { CanvasPresent } from './canvas-present'
 import { canvasSheets } from './canvas-sheets'
@@ -133,6 +135,10 @@ export default function ArtifactViewer(place: ViewerPlace) {
   const earlier = picked !== null && head !== null && picked < head ? picked : null
   const title = summary?.title ?? shown?.title ?? ''
   const kind = summary ? artifactKind(summary) : null
+  // A web page: one page of its own, neither a canvas nor a typed document or deck.
+  const webPage = !!shown && !shown.canvas && !summary?.type
+  const arrived = useArrivedChange(id, head, webPage)
+  const comparing = arrived !== null && earlier === arrived.from
   // Publishing takes the account the host keeps, which the daemon has none of.
   const shares = useArtifactShares(id)
   // Only a desktop host renders a page apart from the window.
@@ -373,7 +379,19 @@ export default function ArtifactViewer(place: ViewerPlace) {
 
   // The pill at the content's top: an earlier version, Recently deleted, or an old canvas.
   let pill: React.ReactNode = null
-  if (shown && earlier !== null && head !== null) {
+  const changePill = arrived ? (
+    <ChangePill
+      to={arrived.to}
+      changes={arrived.changes}
+      onDismiss={() => {
+        if (comparing) setViewerState(id, { version: null })
+        arrived.dismiss()
+      }}
+    />
+  ) : null
+  if (comparing) {
+    pill = changePill
+  } else if (shown && earlier !== null && head !== null) {
     const record = versions?.find((v) => v.version === earlier)
     pill = (
       <Pill
@@ -422,7 +440,53 @@ export default function ArtifactViewer(place: ViewerPlace) {
         ]}
       />
     )
+  } else if (changePill && earlier === null) {
+    pill = changePill
   }
+
+  // Chat opens the session writing it, or the one that wrote it last, with it beside the thread.
+  const sessionId =
+    artifact.presence?.sessions.find((s) => s.editing)?.sessionId ??
+    (summary && summary.sessionId !== NO_SESSION ? summary.sessionId : null)
+  const chatSession = useSessionsStore((s) => (sessionId ? (s.byId[sessionId] ?? null) : null))
+
+  // A web page asks, and hands its errors to, the session it sits beside, or else the chat's.
+  const besideSession = useSessionsStore((s) => (panel ? (s.byId[panel.panel] ?? null) : null))
+  const target = besideSession ?? chatSession
+  const sheetAgent = useMemo<SheetAgent | null>(() => {
+    if (!target || !summary || !shown) return null
+    const hostId = hostOfPath(target.projectPath)
+    const pageAnchor = {
+      version: shown.version,
+      path: ARTIFACT_ENTRY,
+      page: null,
+      offset: null,
+      tag: null,
+      text: '',
+      missing: false,
+    }
+    return {
+      name: agentName(target.agentId, hostId),
+      mark: <AgentMark agent={target.agentId} size={14} hostId={hostId} />,
+      ask: () => {
+        // The page goes above the composer as what the next message is about.
+        if (place.where === 'main') openSessionWithArtifact(target.id, target.projectPath, id)
+        setPaneSelection({
+          projectPath: target.projectPath,
+          artifactId: id,
+          title,
+          anchor: pageAnchor,
+        })
+        requestAnimationFrame(() => emitAppEvent({ kind: 'focus-composer' }))
+      },
+      fixErrors: (pages) =>
+        handOffPageErrors({
+          artifact: { id, title, version: shown.version, project: summary.project },
+          pages,
+          session: target.id,
+        }),
+    }
+  }, [target, summary, shown, place.where, id, title])
 
   let body: React.ReactNode
   let layout: 'float' | 'beside' = 'beside'
@@ -485,7 +549,7 @@ export default function ArtifactViewer(place: ViewerPlace) {
         </Button>
       </ViewerEmpty>
     )
-  } else if (artifact.stopped) {
+  } else if (artifact.stopped && !(url && webPage)) {
     body = (
       <ViewerEmpty title={t('viewer.stoppedTitle')} text={t('viewer.stoppedDescription')}>
         <Button variant="secondary" size="sm" onClick={artifact.restart}>
@@ -542,8 +606,8 @@ export default function ArtifactViewer(place: ViewerPlace) {
             actions={actions}
             onPageChosen={choosePage}
           />
-        ) : (
-          <div className={cn('avs-paper', typed && 'avs-paper--typed')}>
+        ) : typed ? (
+          <div className="avs-paper avs-paper--typed">
             <ArtifactSurface
               url={url}
               shown={shown}
@@ -555,10 +619,19 @@ export default function ArtifactViewer(place: ViewerPlace) {
               editor={latest ? (editor ?? undefined) : undefined}
             />
           </div>
-        )}
-        {legacyCanvas && pageName && <LegacyCanvasDock controls={controls} />}
-        {!shown.canvas && !typed && (
-          <PageDock
+        ) : (
+          <PageSheet
+            id={id}
+            url={url}
+            shown={shown}
+            title={title}
+            reloads={artifact.reloads}
+            since={since}
+            editor={latest ? (editor ?? undefined) : undefined}
+            band={pill !== null}
+            before={earlier}
+            stopped={artifact.stopped}
+            onRestart={artifact.restart}
             onReload={artifact.reload}
             onBrowser={
               isWeb
@@ -568,8 +641,21 @@ export default function ArtifactViewer(place: ViewerPlace) {
                       .openExternal(artifactRefOf(id), shown.version)
                       .catch((error: unknown) => console.error(`Could not open ${id}`, error))
             }
+            compare={
+              arrived && (earlier === null || comparing)
+                ? {
+                    from: arrived.from,
+                    to: arrived.to,
+                    before: comparing,
+                    onChange: (before) =>
+                      setViewerState(id, { version: before ? arrived.from : null }),
+                  }
+                : null
+            }
+            agent={sheetAgent}
           />
         )}
+        {legacyCanvas && pageName && <LegacyCanvasDock controls={controls} />}
         {editor && mode === 'comment' && editing.picked?.point && (
           <CommentBox
             key={`${editing.picked.point.x},${editing.picked.point.y}`}
@@ -691,12 +777,6 @@ export default function ArtifactViewer(place: ViewerPlace) {
       ],
     }
   }
-
-  // Chat opens the session writing it, or the one that wrote it last, with it beside the thread.
-  const sessionId =
-    artifact.presence?.sessions.find((s) => s.editing)?.sessionId ??
-    (summary && summary.sessionId !== NO_SESSION ? summary.sessionId : null)
-  const chatSession = useSessionsStore((s) => (sessionId ? (s.byId[sessionId] ?? null) : null))
 
   const present = (): void => {
     if (!shown?.canvas) return
@@ -982,25 +1062,6 @@ function LegacyCanvasDock({ controls }: { controls: CanvasControls }) {
             onClick={() => commands?.focus(null)}
           />
         </>
-      )}
-    </ViewerSlot>
-  )
-}
-
-/** A web page's dock: load it again, or open it in the browser. */
-function PageDock({
-  onReload,
-  onBrowser,
-}: {
-  onReload: () => void
-  onBrowser: (() => void) | null
-}) {
-  const { t } = useTranslation('artifacts')
-  return (
-    <ViewerSlot slot="dock">
-      <DockButton label={t('viewer.reload')} icon={RefreshIcon} onClick={onReload} />
-      {onBrowser && (
-        <DockButton label={t('viewer.openInBrowser')} icon={LinkSquare02Icon} onClick={onBrowser} />
       )}
     </ViewerSlot>
   )
