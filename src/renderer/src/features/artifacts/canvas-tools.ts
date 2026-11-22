@@ -1,31 +1,18 @@
-// The canvas editor's tools: their names, icons and the colors notes take.
+// What the canvas draws its notes with: their colors and the icons that name them in lists.
 
 import {
   ArrowUpRight01Icon,
   CircleIcon,
-  Comment01Icon,
-  Cursor01Icon,
   GridIcon,
-  HandGripIcon,
-  HighlighterIcon,
-  Layers01Icon,
   LineIcon,
   Pen01Icon,
   RectangularIcon,
   StickyNote01Icon,
   TextFontIcon,
+  WorkflowSquare10Icon,
 } from '@hugeicons/core-free-icons'
 import type { IconSvgElement } from '@hugeicons/react'
-import type { NoteColor } from '@shared/canvas-doc'
-
-export type Tool = 'move' | 'hand' | 'page' | 'text' | 'sticky' | 'pen' | 'shape' | 'comment'
-export type ShapeKind = 'rect' | 'ellipse' | 'line' | 'arrow'
-
-export interface PenStyle {
-  marker: boolean
-  color: NoteColor
-  width: number
-}
+import type { CanvasNote, NoteColor } from '@shared/canvas-doc'
 
 export const NOTE_COLOR_VAR: Record<NoteColor, string> = {
   ink: 'var(--note-ink)',
@@ -37,21 +24,15 @@ export const NOTE_COLOR_VAR: Record<NoteColor, string> = {
   violet: 'var(--note-violet)',
 }
 
-export const TOOL_ICONS: Record<Tool, IconSvgElement> = {
-  move: Cursor01Icon,
-  hand: HandGripIcon,
-  page: GridIcon,
+export const FRAME_ICON = GridIcon
+
+export const NOTE_ICONS: Record<CanvasNote['kind'] | 'canvas', IconSvgElement> = {
+  canvas: WorkflowSquare10Icon,
   text: TextFontIcon,
   sticky: StickyNote01Icon,
   pen: Pen01Icon,
-  shape: RectangularIcon,
-  comment: Comment01Icon,
-}
-export const SHAPE_ICONS: Record<ShapeKind, IconSvgElement> = {
   rect: RectangularIcon,
   ellipse: CircleIcon,
   line: LineIcon,
   arrow: ArrowUpRight01Icon,
 }
-export const MARKER_ICON = HighlighterIcon
-export const LAYERS_ICON = Layers01Icon

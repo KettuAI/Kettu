@@ -1,0 +1,497 @@
+/* The artifact viewer's one shell, in the main area and in a session's side panel: the bar, then
+   the content on the shell's ground with the left card, the right card, the dock and the pill
+   around it. The shell sets --avs-content-* (the room the content gives the cards) and
+   --avs-chrome-* (the room the dock and the pill keep clear of over a canvas). */
+
+.avs-main {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+.avs {
+  position: relative;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+}
+
+/* ---------- The bar ---------- */
+
+.avs-top {
+  flex: none;
+}
+.avs-head {
+  display: flex;
+  flex: none;
+  align-items: center;
+  height: 48px;
+  padding: 0 8px 0 12px;
+  box-shadow: inset 0 -0.5px 0 var(--line);
+}
+.avs-head--cornered {
+  padding-left: var(--corner-inset);
+}
+.avs-bar {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  height: 100%;
+}
+/* Under 480 px every pixel goes to the title, the switch and More. */
+.avs[data-tight] .avs-bar {
+  gap: 4px;
+}
+.avs[data-tight] .avs-bar__lead {
+  min-width: 44px;
+}
+/* In the main area, wide enough, the mode switch sits in the middle of the bar. */
+.avs-bar[data-centred] {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+}
+.avs-bar__lead {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 6px;
+  /* Room for the start of the title, which gives way last. */
+  min-width: 64px;
+  overflow: hidden;
+}
+.avs-bar[data-centred] .avs-bar__lead {
+  justify-self: start;
+  max-width: 100%;
+}
+.avs-bar__centre {
+  display: flex;
+  flex: none;
+  justify-content: center;
+}
+.avs-bar__tools {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 2px;
+}
+.avs-bar[data-centred] .avs-bar__tools {
+  justify-self: end;
+}
+.avs-bar__mark {
+  display: grid;
+  flex: none;
+  place-items: center;
+  color: var(--muted);
+}
+.avs-bar__mark[data-kind='document'] {
+  color: var(--kind-document);
+}
+.avs-bar__mark[data-kind='slides'] {
+  color: var(--kind-slides);
+}
+.avs-bar__mark[data-kind='web'] {
+  color: var(--kind-web);
+}
+.avs-bar__mark[data-kind='canvas'] {
+  color: var(--kind-canvas);
+}
+/* The title gives way last: the page's name shrinks first. */
+.avs-bar__title {
+  flex: 0 1 auto;
+  min-width: 32px;
+  margin: 0;
+  overflow: hidden;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--ink);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.avs-bar__slash {
+  flex: none;
+  font-style: normal;
+  color: var(--faint);
+}
+.avs-bar__pages {
+  display: flex;
+  flex: 0 4 auto;
+  min-width: 56px;
+}
+.avs-bar__page {
+  display: inline-flex;
+  flex: 0 1 auto;
+  align-items: center;
+  gap: 3px;
+  min-width: 0;
+  max-width: min(200px, 100%);
+  height: 26px;
+  padding: 0 5px 0 6px;
+  border-radius: 6px;
+  font-size: 13px;
+  color: var(--muted);
+  transition:
+    background-color var(--duration-fast) ease,
+    color var(--duration-fast) ease;
+}
+.avs-bar__page span {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.avs-bar__page svg {
+  flex: none;
+  color: var(--faint);
+}
+.avs-bar__page:hover,
+.avs-bar__page[aria-expanded='true'] {
+  background: var(--hover);
+  color: var(--ink);
+}
+.avs-bar__ver {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 4px;
+  height: 22px;
+  padding: 0 7px;
+  border-radius: 6px;
+  background: var(--chip);
+  font-size: 12px;
+  color: var(--muted);
+  white-space: nowrap;
+  transition:
+    background-color var(--duration-fast) ease,
+    color var(--duration-fast) ease;
+}
+.avs-bar__ver b {
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+.avs-bar__ver:hover,
+.avs-bar__ver[aria-pressed='true'] {
+  background: var(--select);
+  color: var(--ink);
+}
+.avs-modes-wrap {
+  display: inline-flex;
+  flex: none;
+}
+.avs-modes {
+  flex: none;
+}
+.avs-bar__btn {
+  position: relative;
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-width: 28px;
+  height: 28px;
+  padding: 0 6px;
+  border-radius: 7px;
+  font-size: 13px;
+  color: var(--muted);
+  white-space: nowrap;
+  transition:
+    background-color var(--duration-fast) ease,
+    color var(--duration-fast) ease;
+}
+.avs-bar__btn[data-labelled] {
+  padding: 0 9px 0 7px;
+  color: var(--text);
+}
+.avs-bar__btn:hover {
+  background: var(--hover);
+  color: var(--ink);
+}
+.avs-bar__btn:is([aria-pressed='true'], [aria-expanded='true']) {
+  background: var(--select);
+  color: var(--ink);
+}
+.avs-bar__share {
+  display: inline-flex;
+  flex: none;
+}
+/* Folded into More, Share keeps only its popover, which opens from where the button was. */
+.avs-bar__share[data-folded] .k-share > :not(.ui-as-popover) {
+  display: none;
+}
+.avs-bar .k-av-faces {
+  margin-right: 2px;
+}
+
+/* ---------- The content and its ground ---------- */
+
+.avs-body {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+/* In the main area its lower corners are the page sheet's, inside the sheet's 1 px border. */
+.avs[data-where='main'] .avs-body {
+  border-bottom-right-radius: calc(var(--radius-card) - 1px);
+  border-bottom-left-radius: calc(var(--radius-card) - 1px);
+}
+.avs-content {
+  position: absolute;
+  inset: 0;
+  padding: 0 var(--avs-content-r) var(--avs-content-b) var(--avs-content-l);
+  border-radius: inherit;
+  background: var(--bg-sidebar);
+}
+.avs-content[data-ground='dots'] {
+  background-image: radial-gradient(circle at 1px 1px, var(--canvas-dot) 0.7px, transparent 1.05px);
+  background-size: 20px 20px;
+}
+.avs-stage {
+  position: relative;
+  height: 100%;
+  border-radius: inherit;
+}
+/* A web page lies on the ground as a sheet, clear of the dock under it. */
+.avs-paper {
+  position: absolute;
+  inset: 8px 8px 58px;
+  overflow: hidden;
+  border-radius: var(--radius-card);
+  background: var(--bg-surface);
+  box-shadow: 0 0 0 0.5px var(--line-strong);
+}
+/* A document or a deck draws its own ground, edge to edge. */
+.avs-paper--typed {
+  inset: 0;
+  border-radius: inherit;
+  box-shadow: none;
+}
+
+/* ---------- The pill and the dock: one shape, centred between the cards ---------- */
+
+.avs-pill,
+.avs-dock {
+  position: absolute;
+  right: calc(var(--avs-chrome-r) + var(--avs-content-r));
+  left: calc(var(--avs-chrome-l) + var(--avs-content-l));
+  z-index: 20;
+  width: max-content;
+  max-width: calc(
+    100% - var(--avs-chrome-l) - var(--avs-chrome-r) - var(--avs-content-l) - var(--avs-content-r) -
+      16px
+  );
+  margin: 0 auto;
+}
+.avs-pill:empty,
+.avs-dock:empty {
+  display: none;
+}
+.avs-pill {
+  top: 12px;
+}
+.avs-dock {
+  bottom: calc(14px + var(--avs-content-b));
+}
+.avs-pill__in,
+.avs-dock {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 4px;
+  border-radius: 10px;
+  background: var(--card);
+  box-shadow:
+    0 0 0 0.5px var(--line-strong),
+    var(--elevation-float);
+}
+.avs-pill__in {
+  gap: 6px;
+  height: 36px;
+  padding-left: 12px;
+  font-size: 12.5px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.avs-pill__dot {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--warning);
+}
+.avs-pill__text {
+  min-width: 0;
+  margin-right: 4px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.avs-pill__text b {
+  font-weight: 500;
+  color: var(--ink);
+}
+.avs-dock__btn {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  color: var(--muted);
+  transition:
+    background-color var(--duration-fast) ease,
+    color var(--duration-fast) ease;
+}
+.avs-dock__btn[data-text] {
+  padding: 0 6px;
+  font-size: 12.5px;
+  color: var(--text);
+}
+.avs-dock__btn:hover:not(:disabled) {
+  background: var(--hover);
+  color: var(--ink);
+}
+.avs-dock__btn:is([aria-pressed='true'], [aria-expanded='true']) {
+  background: var(--select);
+  color: var(--ink);
+}
+.avs-dock__btn:disabled {
+  opacity: 0.4;
+}
+.avs-dock__pct,
+.avs-dock__count {
+  min-width: 40px;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+.avs-dock__count {
+  padding: 0 4px;
+  font-size: 12.5px;
+  color: var(--text);
+}
+.avs-dock__rule {
+  flex: none;
+  width: 0.5px;
+  height: 16px;
+  margin: 0 4px;
+  background: var(--line-strong);
+}
+
+/* ---------- The cards ---------- */
+
+.avs-card {
+  position: absolute;
+  top: 12px;
+  bottom: 12px;
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+  border-radius: 12px;
+  background: var(--card);
+  box-shadow:
+    0 0 0 0.5px var(--line-strong),
+    var(--elevation-float);
+}
+.avs-card[data-side='left'] {
+  left: 12px;
+  width: min(248px, calc(100% - 24px));
+}
+.avs-card[data-side='right'] {
+  right: 12px;
+  width: 320px;
+}
+/* Narrow, the right card docks along the bottom at up to half the height. */
+.avs-card[data-side='bottom'] {
+  top: auto;
+  right: 8px;
+  bottom: 8px;
+  left: 8px;
+  height: 44%;
+  max-height: 50%;
+}
+.avs-card__head {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 8px;
+  height: 40px;
+  padding: 0 6px 0 14px;
+}
+.avs-card__title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--strong);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.avs-card__acts {
+  display: flex;
+  align-items: center;
+}
+.avs-card__acts:empty {
+  display: none;
+}
+.avs-card__close {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  color: var(--muted);
+  transition:
+    background-color var(--duration-fast) ease,
+    color var(--duration-fast) ease;
+}
+.avs-card__close:hover {
+  background: var(--hover);
+  color: var(--ink);
+}
+.avs-card__close--float {
+  position: absolute;
+  top: 11px;
+  right: 8px;
+  z-index: 2;
+}
+.avs-card__body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+.avs-card__swap,
+.avs-card__slot {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
+/* What fills the right card brings its own head and body; the card is its frame. */
+.avs-card .k-av-side {
+  flex: 1;
+  width: auto;
+  background: transparent;
+  box-shadow: none;
+  animation: none;
+}
+.avs-card .k-av-side__head {
+  padding-right: 40px;
+}
+
+/* ---------- In a session's side panel ---------- */
+
+.kp-pane.avs-pane {
+  padding: 0;
+}

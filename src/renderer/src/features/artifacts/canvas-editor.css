@@ -8,7 +8,11 @@
   overflow: hidden;
   /* The viewer area's rounded lower corners, which the canvas fills. */
   border-radius: inherit;
-  background: var(--bg-sidebar);
+  /* The dot grid, which the camera moves and spaces as it pans and zooms. */
+  background-color: var(--bg-sidebar);
+  background-image: radial-gradient(circle at 1px 1px, var(--canvas-dot) 0.7px, transparent 1.05px);
+  background-size: var(--ce-dots, 20px) var(--ce-dots, 20px);
+  background-position: var(--ce-dots-x, 0) var(--ce-dots-y, 0);
 }
 .k-ce__stage {
   position: absolute;
@@ -234,47 +238,14 @@
   background: var(--success);
   color: var(--on-fill);
 }
-.k-ce-edit {
-  position: absolute;
-  pointer-events: auto;
-  border: 0;
-  outline: none;
-  resize: none;
-  overflow: hidden;
-  background: transparent;
-  font: inherit;
-  color: inherit;
-}
 
-/* The floating tools. */
+/* The floating bars over the canvas. */
 .k-ce-float {
   border-radius: 12px;
   background: var(--card);
   box-shadow:
     0 0 0 0.5px var(--line-strong),
     var(--elevation-float);
-}
-.k-ce-tools {
-  position: absolute;
-  top: 12px;
-  left: 12px;
-  /* Over the panels, so its menus open over the layers panel. */
-  z-index: 6;
-  display: flex;
-  align-items: center;
-  gap: 2px;
-  height: 40px;
-  padding: 0 4px;
-}
-/* Room for a canvas's name beside its page count, as the workspace menu has. */
-.k-ce-canvas-menu .ui-as-menu {
-  width: 240px;
-}
-.k-ce-tools__sep {
-  width: 1px;
-  height: 20px;
-  margin: 0 4px;
-  background: var(--line);
 }
 .k-ce-tool {
   position: relative;
@@ -299,76 +270,6 @@
   background: var(--control-on);
   color: var(--on-fill);
 }
-.k-ce-tool--toggle[aria-pressed='true'] {
-  background: var(--hover);
-  color: var(--ink);
-}
-.k-ce-tool__canvas {
-  gap: 4px;
-  padding: 0 8px 0 10px;
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--ink);
-  white-space: nowrap;
-}
-.k-ce-panel {
-  position: absolute;
-  z-index: 5;
-  overflow: auto;
-  padding: 6px;
-}
-.k-ce-layers {
-  top: 62px;
-  left: 12px;
-  width: 232px;
-  max-height: calc(100% - 74px);
-}
-/* The right panel: the selection's properties and the frames' tweaks, docked to the edge. */
-.k-ce-side {
-  position: absolute;
-  top: 0;
-  right: 0;
-  bottom: 0;
-  z-index: 5;
-  display: flex;
-  flex-direction: column;
-  width: 300px;
-  border-left: 1px solid var(--line);
-  background: var(--card);
-}
-.k-ce-side__head {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  height: 52px;
-  padding: 0 8px 0 10px;
-  border-bottom: 1px solid var(--line);
-}
-.k-ce-side__tabs {
-  display: flex;
-  flex: 1;
-  gap: 2px;
-}
-.k-ce-side__tab {
-  height: 30px;
-  padding: 0 10px;
-  border-radius: 8px;
-  font-size: 13px;
-  color: var(--muted);
-}
-.k-ce-side__tab:hover {
-  color: var(--ink);
-}
-.k-ce-side__tab[aria-selected='true'] {
-  background: var(--hover);
-  font-weight: 500;
-  color: var(--ink);
-}
-.k-ce-side__body {
-  flex: 1;
-  min-height: 0;
-  overflow: auto;
-}
 .k-ce-side__empty {
   display: flex;
   flex-direction: column;
@@ -380,16 +281,6 @@
 }
 .k-ce-side__empty p:first-child {
   color: var(--ink);
-}
-.k-ce-panel__head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  height: 30px;
-  padding: 0 4px 0 8px;
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--muted);
 }
 .k-ce-row {
   display: flex;
@@ -464,11 +355,6 @@
 .k-ce-psec[data-selected] .k-ce-psec__frame {
   color: var(--control-on);
 }
-.k-ce-grid2 {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  gap: 8px;
-}
 .k-ce-field {
   display: flex;
   align-items: center;
@@ -510,29 +396,6 @@
   font-size: 12.5px;
   color: var(--text);
 }
-.k-ce-swatches {
-  display: flex;
-  gap: 6px;
-}
-.k-ce-swatch {
-  width: 20px;
-  height: 20px;
-  border-radius: 6px;
-  box-shadow: inset 0 0 0 0.5px var(--border-strong);
-}
-.k-ce-swatch[aria-pressed='true'] {
-  box-shadow:
-    0 0 0 2px var(--card),
-    0 0 0 3.5px var(--control-on);
-}
-.k-ce-swatch[data-round] {
-  border-radius: 50%;
-}
-.k-ce-aligns {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 2px;
-}
 .k-ce-savebar {
   display: flex;
   align-items: center;
@@ -541,29 +404,6 @@
   border-top: 1px solid var(--line);
   font-size: 12px;
   color: var(--muted);
-}
-/* A narrow canvas keeps the zoom at the bottom right, clear of the toolbar. */
-.k-ce[data-narrow] .k-ce-zoom {
-  top: auto;
-  bottom: 12px;
-}
-/* At the top right, beside the right panel when it is open; its right side is set inline. */
-.k-ce-zoom {
-  position: absolute;
-  top: 12px;
-  z-index: 6;
-  display: flex;
-  align-items: center;
-  gap: 2px;
-  height: 40px;
-  padding: 0 4px;
-}
-.k-ce-zoom__pct {
-  min-width: 52px;
-  font-size: 12.5px;
-  color: var(--ink);
-  text-align: center;
-  font-variant-numeric: tabular-nums;
 }
 .k-ce-selbar {
   position: absolute;
@@ -612,9 +452,43 @@
   font-size: 13px;
   color: var(--text);
 }
-.k-ce-empty__acts {
+
+/* The left card: the pages, then what the page on screen holds. */
+.k-ce-nav {
   display: flex;
-  justify-content: center;
-  gap: 8px;
-  margin-top: 18px;
+  flex-direction: column;
+  gap: 1px;
+  padding: 0 6px 8px;
+}
+.k-ce-nav__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 30px;
+  margin-top: 6px;
+  padding: 0 2px 0 8px;
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--muted);
+}
+.k-ce-nav__head:first-child {
+  margin-top: 0;
+}
+.avs-card__acts .k-ce-tool {
+  min-width: 24px;
+  height: 24px;
+  padding: 0;
+  border-radius: 6px;
+  color: var(--muted);
+}
+.k-ce-nav__empty {
+  margin: 0;
+  padding: 6px 8px;
+  font-size: 12px;
+  color: var(--faint);
+}
+.k-ce-tweaks {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
 }

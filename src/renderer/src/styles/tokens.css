@@ -407,6 +407,8 @@
   --kind-web: #2d6e7e;
   --kind-web-tint: #e6f2f4;
   --kind-canvas: #7653c9;
+  /* The dots of a canvas's ground in the artifact viewer. */
+  --canvas-dot: #d2d2d6;
   --kind-canvas-tint: #f1edfb;
   --kind-document: #2f6bd1;
   --kind-document-tint: #e8f0fc;
@@ -885,6 +887,7 @@
     --kind-web: #6cc0d2;
     --kind-web-tint: #1e3236;
     --kind-canvas: #a88beb;
+    --canvas-dot: #3a3a40;
     --kind-canvas-tint: #2b2540;
     --kind-document: #7fa9f2;
     --kind-document-tint: #1f2a3d;
@@ -1296,6 +1299,7 @@
   --kind-web: #6cc0d2;
   --kind-web-tint: #1e3236;
   --kind-canvas: #a88beb;
+  --canvas-dot: #3a3a40;
   --kind-canvas-tint: #2b2540;
   --kind-document: #7fa9f2;
   --kind-document-tint: #1f2a3d;

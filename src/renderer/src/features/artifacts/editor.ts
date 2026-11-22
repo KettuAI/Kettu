@@ -51,13 +51,11 @@ function accent(): string {
 }
 
 /**
- * Select and comment mode over an artifact's frames: the mode they all show, the element picked
+ * Select and comment mode over an artifact's frames, as the viewer's mode sets it: the element picked
  * in one of them and the comment pins on each page, and the preview of an edit on the picked one.
  */
 export class ArtifactEditor {
   private state: EditorState = { mode: null, picked: null }
-  /** The mode it is in unless another is chosen: select on a canvas, none on a live page. */
-  private base: EditorMode = null
   private readonly listeners = new Set<() => void>()
   private readonly frames = new Set<EditorFrame>()
   private pins: (page: number | null) => Pin[] = () => []
@@ -166,23 +164,10 @@ export class ArtifactEditor {
     for (const frame of this.frames) this.drive(frame)
   }
 
-  /** Turns a mode on, or off back to the base mode. */
-  toggle(mode: Exclude<EditorMode, null>): void {
-    this.setMode(this.state.mode === mode ? this.base : mode)
-  }
-
-  /** The base mode, which it moves to when it was in the old one or in none. */
-  setBase(base: EditorMode): void {
-    const was = this.base
-    this.base = base
-    if (this.state.mode === null || this.state.mode === was) this.setMode(base)
-  }
-
-  /** What Esc does here: back to the base mode, else letting go of the pick; false for neither. */
+  /** What Esc does here: letting go of the pick; false when nothing is picked. */
   escape(): boolean {
-    if (this.state.mode !== this.base) this.setMode(this.base)
-    else if (this.state.picked) this.clearPick()
-    else return false
+    if (!this.state.picked) return false
+    this.clearPick()
     return true
   }
 

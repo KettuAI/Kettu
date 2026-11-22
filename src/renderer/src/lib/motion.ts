@@ -22,3 +22,17 @@ export const glide = {
   duration: 0.2,
   ease: [0.165, 0.84, 0.44, 1],
 } satisfies Transition
+
+/** The artifact viewer's floating cards coming in: --duration-card-in and --ease-out-quint. */
+export const cardIn = {
+  type: 'tween',
+  duration: 0.24,
+  ease: [0.22, 1, 0.36, 1],
+} satisfies Transition
+
+/** The artifact viewer's floating cards going: --duration-card-out and --ease-out-quint. */
+export const cardOut = {
+  type: 'tween',
+  duration: 0.18,
+  ease: [0.22, 1, 0.36, 1],
+} satisfies Transition

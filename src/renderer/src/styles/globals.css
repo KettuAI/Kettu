@@ -449,6 +449,9 @@
   --duration-slower: 450ms;
   /* A session becoming the task it started: its mark turns into the ring, its chart grows. */
   --duration-morph: 300ms;
+  /* The artifact viewer's floating cards coming in and going, and what follows them. */
+  --duration-card-in: 240ms;
+  --duration-card-out: 180ms;
   --duration-spin: 0.9s;
   /* One breath of the launch cover's fox, slow enough to read as calm. */
   --duration-breath: 2400ms;

@@ -134,6 +134,8 @@ interface ShareButtonProps {
   /** Opened from elsewhere, as a card's menu does: the panel alone, where it is put. */
   open?: boolean
   onOpenChange?: (open: boolean) => void
+  /** Its icon alone, where the bar has no room for its word. */
+  compact?: boolean
 }
 
 /** Publishing happens on the artifact's host, with that host's accounts. */
@@ -145,7 +147,15 @@ export function ShareButton(props: ShareButtonProps) {
   )
 }
 
-function ShareButtonBody({ id, title, shown, head, open: asked, onOpenChange }: ShareButtonProps) {
+function ShareButtonBody({
+  id,
+  title,
+  shown,
+  head,
+  open: asked,
+  onOpenChange,
+  compact = false,
+}: ShareButtonProps) {
   const { t } = useTranslation('artifacts')
   const onHost = useHostContext()
   const { sharing } = useHostScope()
@@ -530,11 +540,12 @@ function ShareButtonBody({ id, title, shown, head, open: asked, onOpenChange }: 
                     aria-label={t('share.open')}
                     aria-expanded={open}
                     icon={<Icon icon={Share08Icon} size={14} />}
+                    data-compact={compact || undefined}
                     onClick={() => (open ? close() : setOpen(true))}
                   />
                 }
               >
-                {published ? t('share.buttonShared') : t('share.button')}
+                {compact ? null : published ? t('share.buttonShared') : t('share.button')}
               </TooltipTrigger>
               <TooltipContent>{t('share.open')}</TooltipContent>
             </Tooltip>

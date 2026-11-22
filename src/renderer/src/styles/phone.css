@@ -234,14 +234,3 @@
     flex: none;
   }
 }
-
-/* An artifact's page: Back in the corner stands for the way back to the list, which leaves the bar
-   to the title (features/artifacts/artifact-viewer.tsx). */
-@media (max-width: 719px) {
-  :root .k-av__crumbs > :is(.k-av__back, i) {
-    display: none;
-  }
-  :root .k-av-dock__mode kbd {
-    display: none;
-  }
-}

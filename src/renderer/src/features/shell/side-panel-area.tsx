@@ -32,7 +32,7 @@ import { SHEET, SHEET_PANEL } from './sheet'
 import { SurfacesPane } from './surface-tabs'
 
 const FilesPanel = lazy(() => import('@renderer/features/files/files-panel'))
-const ArtifactPane = lazy(() => import('@renderer/features/artifacts/artifact-pane'))
+const ArtifactViewer = lazy(() => import('@renderer/features/artifacts/artifact-viewer'))
 const DevicesPane = lazy(() => import('@renderer/features/devices/devices-pane'))
 const ComputerPane = lazy(() => import('@renderer/features/computer/computer-pane'))
 const RequestsPane = lazy(() => import('@renderer/features/requests/requests-pane'))
@@ -301,8 +301,9 @@ export function SidePanelArea({
                     />
                   ) : (
                     artifactId && (
-                      <ArtifactPane
+                      <ArtifactViewer
                         key={artifactId}
+                        where="panel"
                         projectPath={projectPath}
                         panel={panel}
                         id={artifactId}
