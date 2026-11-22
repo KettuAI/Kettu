@@ -74,7 +74,7 @@ import {
   type RuntimeStatements,
 } from './runtime-db'
 
-export const SCHEMA_VERSION = 10
+export const SCHEMA_VERSION = 11
 
 // `turn` is the position of the entry that opened the entry's turn, so a page that starts at a
 // turn is one range of the primary key.
@@ -256,6 +256,18 @@ const ORIGINS = `
       OR json_extract(e.json, '$.kettu') IS NOT NULL;
 `
 
+// The entries an edit from a message took out of a thread, at the positions they had, until the
+// next send drops them or Put back returns them.
+const SET_ASIDE = `
+  CREATE TABLE set_aside (
+    session_id TEXT NOT NULL REFERENCES threads (session_id) ON DELETE CASCADE,
+    pos        INTEGER NOT NULL,
+    entry_id   TEXT NOT NULL,
+    json       TEXT NOT NULL,
+    PRIMARY KEY (session_id, pos)
+  ) STRICT, WITHOUT ROWID;
+`
+
 /** What brings a database of the version before each key up to it; a new one runs them all. */
 const MIGRATIONS: Record<number, string> = {
   2: ARTIFACTS,
@@ -267,6 +279,7 @@ const MIGRATIONS: Record<number, string> = {
   8: ARTIFACT_TYPES,
   9: WORKFLOW_TASKS,
   10: ORIGINS,
+  11: SET_ASIDE,
 }
 
 /** The tables of a database at schema `version`, as a new one made then had them. */
@@ -512,6 +525,18 @@ function prepareAll(db: DatabaseSync) {
         next_pos = excluded.next_pos,
         updated_at = excluded.updated_at`),
     deleteThread: sql('DELETE FROM threads WHERE session_id = ?'),
+    cutFrom: sql('DELETE FROM entries WHERE session_id = ? AND pos >= ?'),
+    setAside: sql('SELECT pos, json FROM set_aside WHERE session_id = ? ORDER BY pos'),
+    clearSetAside: sql('DELETE FROM set_aside WHERE session_id = ?'),
+    insertSetAside: sql(
+      'INSERT INTO set_aside (session_id, pos, entry_id, json) VALUES (?, ?, ?, ?)',
+    ),
+    // `entries.json`, as in `mentions`; a hash is 64 hex digits, so no other text holds one.
+    namesBlob: sql(
+      'SELECT 1 FROM entries WHERE session_id = ? AND instr(entries.json, ?) > 0 LIMIT 1',
+    ),
+    deleteBlob: sql('DELETE FROM blobs WHERE session_id = ? AND hash = ?'),
+    deleteTitle: sql('DELETE FROM outline_titles WHERE session_id = ? AND pos = ?'),
     origins: sql('SELECT text, json FROM origins WHERE session_id = ? ORDER BY seq'),
     putOrigin: sql(`
       INSERT INTO origins (session_id, seq, text, json)
@@ -1165,9 +1190,51 @@ export class ThreadDb {
         if (!entry) return null
         entries.push({ pos: Number(row.pos), entry })
       }
+      // What does not parse of them is only gone from Put back; the thread opens without it.
+      const setAside: PositionedEntry[] = []
+      for (const row of sql.setAside.all(sessionId)) {
+        const entry = this.entryOf(sql, sessionId, row, 'refs')
+        if (entry) setAside.push({ pos: Number(row.pos), entry })
+      }
       const { session, ...rest } = head
-      return { head: rest, session, entries }
+      return { head: rest, session, entries, setAside }
     }, null)
+  }
+
+  /** The entries an edit set aside as stored, parsed only for the bytes they name. */
+  private storedSetAside(sql: Statements, sessionId: string): PositionedEntry[] {
+    const out: PositionedEntry[] = []
+    for (const row of sql.setAside.all(sessionId)) {
+      try {
+        const value: unknown = JSON.parse(String(row.json))
+        if (isThreadEntry(value)) out.push({ pos: Number(row.pos), entry: value })
+      } catch {
+        // Unreadable, so it names nothing that could be kept.
+      }
+    }
+    return out
+  }
+
+  /**
+   * Writes the set-aside entries whole. The bytes and outline titles that only the earlier ones
+   * named go, unless the thread names them again, as after Put back.
+   */
+  private writeSetAside(sql: Statements, sessionId: string, next: PositionedEntry[]): void {
+    const before = this.storedSetAside(sql, sessionId)
+    sql.clearSetAside.run(sessionId)
+    for (const { pos, entry } of next) {
+      sql.insertSetAside.run(sessionId, pos, entry.id, this.storedJson(sql, sessionId, entry))
+    }
+    const kept = storedBlobs(next.map(({ entry }) => entry))
+    for (const hash of storedBlobs(before.map(({ entry }) => entry))) {
+      if (kept.has(hash) || sql.namesBlob.get(sessionId, hash)) continue
+      sql.deleteBlob.run(sessionId, hash)
+    }
+    const positions = new Set(next.map(({ pos }) => pos))
+    for (const { pos, entry } of before) {
+      if (entry.kind !== 'user' || positions.has(pos) || sql.userAt.get(sessionId, pos)) continue
+      sql.deleteTitle.run(sessionId, pos)
+    }
   }
 
   // Writing.
@@ -1204,8 +1271,11 @@ export class ThreadDb {
         const kept: StoredBlob[] = []
         // So do the outline's titles, whose positions keep their messages.
         let titles: Row[] = []
+        // An edit's set-aside entries, written whole with a replace, keep theirs as well.
+        const aside = change.setAside ?? []
         if (change.replace) {
-          for (const hash of storedBlobs(change.entries.map(({ entry }) => entry))) {
+          const named = [...change.entries, ...aside].map(({ entry }) => entry)
+          for (const hash of storedBlobs(named)) {
             const row = sql.blob.get(sessionId, hash)
             if (row) kept.push({ hash, mime: String(row.mime), data: row.data as Uint8Array })
           }
@@ -1231,6 +1301,7 @@ export class ThreadDb {
         for (const blob of [...kept, ...(change.blobs ?? [])]) {
           sql.insertBlob.run(sessionId, blob.hash, blob.mime, blob.data)
         }
+        if (change.cut !== undefined && !change.replace) sql.cutFrom.run(sessionId, change.cut)
         const entries = [...change.entries].sort((a, b) => a.pos - b.pos)
         for (const { pos, entry } of entries) {
           const json = this.storedJson(sql, sessionId, entry)
@@ -1253,8 +1324,14 @@ export class ThreadDb {
           )
           sql.insertEntry.run(sessionId, pos, turn, entry.id, entry.kind, json)
         }
+        if (change.setAside !== undefined) this.writeSetAside(sql, sessionId, change.setAside)
+        const asideUsers = new Set(
+          aside.flatMap(({ pos, entry }) => (entry.kind === 'user' ? [pos] : [])),
+        )
         for (const { pos, title } of titles) {
-          if (sql.userAt.get(sessionId, pos)) sql.putTitle.run(sessionId, pos, title)
+          if (asideUsers.has(Number(pos)) || sql.userAt.get(sessionId, pos)) {
+            sql.putTitle.run(sessionId, pos, title)
+          }
         }
       })
     }, undefined)

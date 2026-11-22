@@ -27,6 +27,8 @@ import {
   type PermissionAnswer,
   type PromptBlock,
   type PromptResult,
+  type RewindPoint,
+  type RewoundSession,
   type SessionOptions,
   type SessionSetup,
   type SessionTarget,
@@ -86,9 +88,11 @@ import {
   questionOptions,
   QUESTIONS_SKIPPED,
 } from './permissions'
+import { findClaudeTranscript } from '../prompt-cache'
 import { folderHooks } from './project-hooks'
 import { declaredServers } from './project-mcp'
 import { mapAccount, mapAuthStatus, mapContextUsage, mapUsageLimits } from './reports'
+import { forkedUuids, rewindCut, RewindPointMissing, transcriptRecords } from './rewind'
 import { TerminalCommands } from './terminal-commands'
 import { askedQuestions } from './tools'
 import type {
@@ -526,9 +530,23 @@ export class ClaudeConnection implements AgentConnection {
 
   /** Where Claude Code keeps its Plan mode plans: `plans` in its configuration folder. */
   private plansFolder(): string {
+    return path.join(this.configFolder(), 'plans')
+  }
+
+  private configFolder(): string {
     const env = this.env
     const home = env.HOME || env.USERPROFILE || os.homedir()
-    return path.join(env[CONFIG_DIR] || path.join(home, '.claude'), 'plans')
+    return env[CONFIG_DIR] || path.join(home, '.claude')
+  }
+
+  /** A session's transcript as records, read whole; a cut needs the turns a compaction folded. */
+  private async transcript(sessionId: string, cwd: string) {
+    const root = path.join(this.configFolder(), 'projects')
+    const file = await findClaudeTranscript(root, cwd, sessionId)
+    if (!file) {
+      throw new AgentRequestError('agent_error', t('agentRun.noSession', { id: sessionId }))
+    }
+    return transcriptRecords(await readFile(file, 'utf8'))
   }
 
   async initialize(_appVersion: string, signal?: AbortSignal): Promise<AgentInit> {
@@ -581,6 +599,7 @@ export class ClaudeConnection implements AgentConnection {
         ownTitles: 'sent',
         logout: true,
         steering: true,
+        rewind: true,
         mcpHttp: true,
         mcpSse: true,
         mcpStdio: true,
@@ -836,6 +855,37 @@ export class ClaudeConnection implements AgentConnection {
       })),
       nextCursor: infos.length === LIST_PAGE ? String(offset + LIST_PAGE) : null,
     }
+  }
+
+  /**
+   * Cuts before the prompt `point` names with a fork that ends at the record before it, which the
+   * fork copies with new uuids; the session itself is left as it is. Before the first prompt there
+   * is nothing to copy, so the cut is an empty session the host starts.
+   */
+  async rewindSession(
+    sessionId: string,
+    cwd: string,
+    point: RewindPoint,
+    title: string | null,
+  ): Promise<RewoundSession> {
+    const sdk = this.requireSdk()
+    let upTo: string | null
+    try {
+      upTo = rewindCut(await this.transcript(sessionId, cwd), point)
+    } catch (error) {
+      if (!(error instanceof RewindPointMissing)) throw error
+      throw new AgentRequestError('agent_error', t('rewind.noPoint'))
+    }
+    if (upTo === null) return { sessionId: '' }
+    const forked = await this.withConfigDir(() =>
+      sdk.forkSession(sessionId, {
+        dir: cwd,
+        upToMessageId: upTo,
+        ...(title ? { title } : {}),
+      }),
+    )
+    const refs = forkedUuids(await this.transcript(forked.sessionId, cwd))
+    return { sessionId: forked.sessionId, refs }
   }
 
   async copySession(sessionId: string, cwd: string): Promise<string> {
@@ -1635,7 +1685,7 @@ export class ClaudeConnection implements AgentConnection {
     }
   }
 
-  private send(session: Session, blocks: readonly PromptBlock[], priority?: 'now'): void {
+  private send(session: Session, blocks: readonly PromptBlock[], priority?: 'now'): string {
     const content = promptContent(blocks)
     this.context.hooks.traffic('out', {
       method: priority ? 'steer' : 'prompt',
@@ -1644,14 +1694,17 @@ export class ClaudeConnection implements AgentConnection {
     })
     const text = blocks.flatMap((block) => (block.type === 'text' ? [block.text] : [])).join('\n')
     this.noteTitle(session, `\n${text}\n`)
+    // Claude Code keeps it as the message's uuid in the transcript, where a rewind finds it.
+    const uuid = randomUUID()
     session.input!.push({
       type: 'user',
       message: { role: 'user', content },
       parent_tool_use_id: null,
-      uuid: randomUUID(),
+      uuid,
       session_id: session.id,
       ...(priority ? { priority } : {}),
     })
+    return uuid
   }
 
   private startTurn(session: Session, texts: string[] | null): Promise<PromptResult> {
@@ -1692,10 +1745,15 @@ export class ClaudeConnection implements AgentConnection {
     this.deliver({ sessionId: session.id, map: () => ({ patches: [], effects: [effect] }) })
   }
 
-  async prompt(sessionId: string, prompt: readonly PromptBlock[]): Promise<PromptResult> {
+  async prompt(
+    sessionId: string,
+    prompt: readonly PromptBlock[],
+    sent?: (ref: string) => void,
+  ): Promise<PromptResult> {
     const session = await this.ready(sessionId)
     const turn = this.startTurn(session, null)
-    this.send(session, prompt)
+    const uuid = this.send(session, prompt)
+    sent?.(uuid)
     // Asked now, not after the turn: a long run would otherwise keep the raw message as its title.
     void this.title(session)
     return turn

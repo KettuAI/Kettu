@@ -116,7 +116,14 @@ export const UserEntry = memo(function UserEntry({
         </span>
       )}
       {first && routine && <RoutineSent routine={routine} />}
-      <UserActions content={entry.content} at={entry.at} steered={entry.steered} end={end} />
+      <UserActions
+        sessionId={sessionId}
+        entryId={entryId}
+        content={entry.content}
+        at={entry.at}
+        steered={entry.steered}
+        end={end}
+      />
     </div>
   )
 })

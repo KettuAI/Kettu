@@ -22,6 +22,8 @@ export type FeedbackKind = "up" | "down";
 export type MessageActionsProps = {
   /** Buttons of your own after the built-in ones, in the same look with their own tooltip */
   extraActions?: { key: string; tip: string; label: string; icon: ReactNode; onClick?: () => void; disabled?: boolean }[];
+  /** Buttons of your own before the built-in ones, as `extraActions` */
+  leadingActions?: { key: string; tip: string; label: string; icon: ReactNode; onClick?: () => void; disabled?: boolean }[];
   /** Copy's words, for a translation */
   labels?: { copy?: string; copied?: string; copyMessage?: string };
   /** Quiet text at the end of the bar, e.g. when the message was sent */
@@ -176,6 +178,7 @@ export function MessageActions({
   label = "Message actions",
   className,
   extraActions = [],
+  leadingActions = [],
   after,
   labels,
 }: MessageActionsProps) {
@@ -486,6 +489,16 @@ export function MessageActions({
       </style>
 
       <div className="ui-mac__bar" role="group" aria-label={label}>
+        {leadingActions.map((a) =>
+          button({
+            key: a.key,
+            tip: a.tip,
+            labelText: a.label,
+            disabled: a.disabled,
+            onClick: () => a.onClick?.(),
+            children: <span className="ui-mac__icon">{a.icon}</span>,
+          }),
+        )}
         {parts}
         {extraActions.map((a) =>
           button({

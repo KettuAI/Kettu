@@ -414,6 +414,7 @@ describe('answering a problem report', () => {
         },
       },
     ],
+    setAside: [],
   }
 
   it('revives a session that was released, so its card still takes the answer', async () => {

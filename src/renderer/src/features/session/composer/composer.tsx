@@ -59,6 +59,7 @@ import { useModeControl } from './mode-control'
 import { isSelect, onCycleKeys } from './options'
 import { hasMessage } from './drafts'
 import { HistoryHeader } from './history-header'
+import { RewoundHeader } from './rewound-header'
 import { dialStops, type SelectOption } from './levels'
 import { shownChoice } from './model-list'
 import { ModelMenu } from './model-menu'
@@ -649,7 +650,13 @@ export function Composer({
             onKeyDown={onKeyDown}
             top={
               <>
-                {box.historyPosition && <HistoryHeader position={box.historyPosition} />}
+                {box.historyPosition ? (
+                  <HistoryHeader position={box.historyPosition} />
+                ) : (
+                  session.rewound && (
+                    <RewoundHeader sessionId={sessionId} turns={session.rewound.turns} />
+                  )
+                )}
                 <CommentList sessionId={sessionId} />
                 <AnimatePresence initial={false}>
                   {outOfCredit && !starting && (

@@ -5675,6 +5675,7 @@ export class AgentManager {
         forkSession: capabilities?.forkSession ?? false,
         forkAtMessage: capabilities?.forkAtMessage ?? false,
         steering: capabilities?.steering ?? false,
+        ...(capabilities?.rewind ? { rewind: true } : {}),
         reports: this.hasLimits(slot.id) && !consoleSignIn,
         context: this.hasContext(slot.id),
         liveContext: this.driver(slot).reads?.context === true,

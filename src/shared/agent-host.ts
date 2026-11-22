@@ -591,6 +591,7 @@ export interface AgentStatus {
     forkSession: boolean
     forkAtMessage: boolean // `session/fork` up to a message, through the adapters' fork point
     steering: boolean // `_session/steering` into a running turn
+    rewind?: boolean // cuts a session's conversation before a turn, for an edit from a message
     reports: boolean // plan limits from its own report (`/usage`, `/status`)
     context: boolean // what fills the context from its own report (`/context`)
     liveContext: boolean // what fills the context from its connection through a running turn
@@ -1554,6 +1555,15 @@ export interface HostContract {
   'sessions.sideClear': { params: { sessionId: string; undo?: boolean }; result: void }
   // The agents on this host that can answer side questions for a session whose own cannot.
   'sessions.sideAgents': { params: { sessionId: string }; result: { agents: SideChatAgent[] } }
+  // Takes the session back to before `entryId`, one of the user's messages: the turns from it on
+  // are set aside until the next send, and its content comes back for the composer. `draft` is
+  // what the composer held, which Put back gives back.
+  'sessions.rewind': {
+    params: { sessionId: string; entryId: string; draft: UserContent[] }
+    result: { content: UserContent[] }
+  }
+  // Brings back the turns an edit set aside, with the draft the composer held before it.
+  'sessions.putBack': { params: { sessionId: string }; result: { draft: UserContent[] } }
   // `entryId`: a reply's agent message, to fork the session up to its turn; see the session model.
   // A fork of a session in a worktree gets its own, from the source's branch, unless `same`.
   'sessions.fork': {
@@ -2191,6 +2201,8 @@ export const HOST_METHODS = [
   'sessions.sideClear',
   'sessions.sideAgents',
   'sessions.retry',
+  'sessions.rewind',
+  'sessions.putBack',
   'sessions.fork',
   'worktrees.inspect',
   'worktrees.remove',

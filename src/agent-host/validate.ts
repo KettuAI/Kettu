@@ -1881,6 +1881,13 @@ export function createValidators(platform: Platform): Validators {
       return { sessionId: sessionId(o), taskId: string(o, 'taskId', ID_CHARS) }
     },
     'sessions.retry': session,
+    'sessions.rewind': (params) => {
+      const o = fields(params)
+      // An empty composer keeps nothing for Put back.
+      const draft = Array.isArray(o.draft) && o.draft.length === 0 ? [] : promptContent(o.draft)
+      return { sessionId: sessionId(o), entryId: string(o, 'entryId', ACP_ID_CHARS), draft }
+    },
+    'sessions.putBack': session,
     'sessions.sideAsk': (params) => {
       const o = fields(params)
       const question = string(o, 'question', SIDE_QUESTION_CHARS)

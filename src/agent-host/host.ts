@@ -3349,6 +3349,9 @@ export class AgentHost {
       'sessions.stopTask': ({ sessionId, taskId }) => sessions.stopTask(sessionId, taskId),
       'sessions.taskOutput': ({ sessionId, taskId }) => sessions.taskOutput(sessionId, taskId),
       'sessions.retry': ({ sessionId }, { portId }) => sessions.retry(sessionId, portId),
+      'sessions.rewind': ({ sessionId, entryId, draft }) =>
+        sessions.rewind(sessionId, entryId, draft),
+      'sessions.putBack': ({ sessionId }) => sessions.putBack(sessionId),
       'sessions.sideAsk': ({ sessionId, question, quote, agentId }) =>
         sessions.sideAsk(sessionId, question, quote ?? null, agentId ?? null),
       'sessions.sideStop': ({ sessionId }) => sessions.sideStop(sessionId),

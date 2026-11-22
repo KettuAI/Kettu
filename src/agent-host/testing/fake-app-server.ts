@@ -230,6 +230,9 @@ export class FakeAppServer {
       nextCursor: null,
     }))
     this.on('thread/list', () => ({ data: [], nextCursor: null }))
+    this.on('thread/read', (params) => ({
+      thread: threadResponse(params.threadId as string).thread,
+    }))
     this.on('thread/unsubscribe', () => ({ status: 'unsubscribed' }))
     this.on('thread/delete', () => ({}))
     this.on('turn/start', () => ({ turn: turn(this.nextTurnId()) }))

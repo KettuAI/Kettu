@@ -1540,6 +1540,16 @@
     "noMode": "没有模式 {{value}}",
     "noOption": "没有选项 {{option}}"
   },
+  "rewind": {
+    "notEligible": "不能从这条消息重新编辑",
+    "archived": "先恢复这个会话，再重新编辑其中的消息",
+    "unsupported": "{{agent}} 不能回到更早的消息",
+    "olderThread": "这个 Codex 会话太旧，不能回到更早的消息",
+    "starting": "请等会话启动完成",
+    "noPoint": "智能体的历史里已经没有这条消息",
+    "nothing": "没有可以放回原处的内容",
+    "failed": "没能回到重新编辑的消息：{{reason}}"
+  },
   "usageRead": {
     "notSignedIn": "{{vendor}} 尚未登录",
     "signInExpired": "{{vendor}} 的登录已过期",

@@ -252,6 +252,11 @@
   "history": {
     "label": "历史"
   },
+  "rewound": {
+    "turns_other": "已回退 {{count}} 轮",
+    "putBack": "放回原处",
+    "putBackFailed": "没能放回原处：{{error}}"
+  },
   "slash": {
     "loading": "正在列出命令…",
     "chooseProject": "选择一个项目后才能列出命令"

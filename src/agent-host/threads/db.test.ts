@@ -753,6 +753,88 @@ describe('the thread database', () => {
     db.close()
   })
 
+  it('sets entries aside at a cut with their bytes and titles, and returns or drops them', () => {
+    const file = tempFile()
+    const db = open(file)
+    const hash = 'ab'.repeat(32)
+    const data = new Uint8Array([1, 2, 3, 4])
+    const sent: ThreadEntry = {
+      kind: 'user',
+      id: 'u1',
+      content: [
+        { type: 'text', text: 'Look' },
+        {
+          type: 'ref',
+          ref: {
+            kind: 'attachment',
+            attachment: {
+              id: 'a',
+              type: 'image',
+              name: 'Image 1',
+              uri: null,
+              mimeType: 'image/png',
+              size: 4,
+              sent: 'image',
+              thumb: null,
+              blob: hash,
+            },
+          },
+        },
+      ],
+    }
+    const kept = turns(1, 0)
+    const aside: PositionedEntry[] = [
+      { pos: 3, entry: sent },
+      { pos: 4, entry: agent('a1') },
+      { pos: 5, entry: turnEnd('end1') },
+    ]
+    db.write('s1', {
+      head,
+      entries: [...kept, ...aside],
+      blobs: [{ hash, mime: 'image/png', data }],
+    })
+    db.setOutlineTitles('s1', [{ pos: 3, title: 'Look at it' }])
+
+    db.write('s1', { head, entries: [], cut: 3, setAside: aside })
+    const check = (thread: ThreadDb) => {
+      const stored = thread.load('s1')!
+      expect(ids(stored.entries.map(({ entry }) => entry))).toEqual(['u0', 'a0', 'end0'])
+      expect(stored.setAside).toEqual(aside)
+      expect(thread.blob('s1', hash)?.data).toEqual(data)
+      expect(thread.outline('s1')!.entries.map(({ entryId }) => entryId)).toEqual(['u0'])
+    }
+    check(db)
+    db.close()
+    const again = open(file)
+    check(again)
+
+    // Put back: the entries go in again where they were, with the title their message had.
+    again.write('s1', { head, entries: aside, cut: 3, setAside: [] })
+    expect(ids(again.load('s1')!.entries.map(({ entry }) => entry))).toEqual([
+      'u0',
+      'a0',
+      'end0',
+      'u1',
+      'a1',
+      'end1',
+    ])
+    expect(again.load('s1')!.setAside).toEqual([])
+    expect(again.blob('s1', hash)?.data).toEqual(data)
+    expect(again.outline('s1')!.entries.at(-1)).toMatchObject({ pos: 3, title: 'Look at it' })
+
+    // Sent on from the cut: what only the set-aside entries named goes with them.
+    again.write('s1', { head, entries: [], cut: 3, setAside: aside })
+    again.write('s1', { head, entries: [{ pos: 6, entry: user('u2') }], setAside: [] })
+    const stored = again.load('s1')!
+    expect(ids(stored.entries.map(({ entry }) => entry))).toEqual(['u0', 'a0', 'end0', 'u2'])
+    expect(stored.setAside).toEqual([])
+    expect(again.blob('s1', hash)).toBeNull()
+    again.close()
+    const sql = new DatabaseSync(file)
+    expect(sql.prepare('SELECT COUNT(*) AS n FROM outline_titles').get()).toEqual({ n: 0 })
+    sql.close()
+  })
+
   it('tells a write that finds no room apart, and keeps what was stored', () => {
     const db = open()
     db.write('s1', { head, entries: turns(1, 0) })

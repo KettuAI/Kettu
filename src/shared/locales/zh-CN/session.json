@@ -508,7 +508,21 @@
   "userActions": {
     "steered": "已插入当前对话",
     "copyMessage": "复制消息",
-    "label": "消息操作"
+    "label": "消息操作",
+    "edit": "从这里重新编辑",
+    "editShort": "重新编辑"
+  },
+  "editFrom": {
+    "title": "从这里重新编辑？",
+    "body_other": "这条消息和它之后的对话都会拿掉，一共 {{count}} 轮。消息回到输入框。",
+    "files_other": "之后改过的 {{count}} 个文件保持原样",
+    "stopsTurn": "会停掉正在跑的一轮",
+    "stopsTasks_other": "会停掉 {{count}} 个后台任务",
+    "cacheKept": "提示词缓存还在 · 还剩 {{time}}",
+    "cacheExpired": "提示词缓存已过期 · 会重新发送 {{tokens}} 个 token",
+    "cacheExpiredOnly": "提示词缓存已过期",
+    "confirm": "重新编辑",
+    "failed": "没能从这里重新编辑：{{error}}"
   },
   "replyFooter": {
     "copyReply": "复制回复",

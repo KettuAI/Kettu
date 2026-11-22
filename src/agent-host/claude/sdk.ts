@@ -499,7 +499,7 @@ export interface ClaudeSdk {
   deleteSession(sessionId: string, options: { dir?: string }): Promise<void>
   forkSession(
     sessionId: string,
-    options: { dir: string; upToMessageId?: string },
+    options: { dir: string; upToMessageId?: string; title?: string },
   ): Promise<{ sessionId: string }>
   resolveSettings(options: {
     cwd: string

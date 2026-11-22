@@ -71,7 +71,12 @@ export class Indexer {
       if (to === undefined) return
       const changes = messageChanges(change.entries)
       if (change.replace) this.index.replace(sessionId, changes.upserts, to)
-      else this.index.apply(sessionId, changes, { from: before, to })
+      else {
+        // What an edit from a message set aside is no longer in the conversation.
+        const cut = change.cut === undefined ? [] : (change.setAside ?? []).map(({ pos }) => pos)
+        const removed = [...changes.removed, ...cut]
+        this.index.apply(sessionId, { ...changes, removed }, { from: before, to })
+      }
     })
   }
 

@@ -242,6 +242,7 @@ export function usePromptBox({
           const next = readDraft(draft)
           source.set(next, null)
           editor.current?.setText(next)
+          if (event.focus) editor.current?.focus()
         }
         if (
           event.kind === 'insert-into-composer' &&

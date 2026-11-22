@@ -97,6 +97,15 @@ export interface SessionView {
   sideChat?: SideChatView
   /** Ephemeral: a program outside Kettu, such as a terminal, has the agent's session open. */
   heldOutside?: boolean
+  /** Set while an edit from a message holds the turns from it aside, until the next send. */
+  rewound?: RewoundView | null
+  /** The agent said this conversation cannot be cut, as a Codex thread of the older format. */
+  noRewind?: boolean
+}
+
+export interface RewoundView {
+  /** The turns set aside, which Put back brings back. */
+  turns: number
 }
 
 /**
@@ -350,6 +359,11 @@ export type ThreadEntry =
        * reminder: drawn as Kettu's, never as the user's own.
        */
       kettu?: true
+      /**
+       * The agent's own id for the prompt that started the turn, Claude Code's message uuid or
+       * Codex's turn id, which an edit from this message cuts the agent's session at.
+       */
+      agentRef?: string
     }
   | {
       kind: 'agent'
@@ -392,6 +406,7 @@ export type ThreadEntry =
       stopReason: StopReason
       durationMs: number
       after?: string | null // the agent's entry before it, to put it back after a replay
+      used?: number // the context in tokens as the turn ended, which an edit after it goes back to
     }
   | TakeoverEntry // Kettu's own record of another agent taking the session over
   | GitEntry // Kettu's own observation of the repository, see the git design
@@ -1077,6 +1092,7 @@ export type Patch =
   | { op: 'entry.update'; id: string; changes: EntryChanges }
   | { op: 'session.update'; changes: Partial<SessionView> }
   | { op: 'thread.reset' } // before a session/load replay
+  | { op: 'thread.truncate'; id: string } // the entry and all after it leave, as an edit from it does
 
 export interface PatchBatch {
   sessionId: string
@@ -1299,6 +1315,17 @@ export function applyPatches(
         byIdCopied = true
         orderCopied = true
         break
+      case 'thread.truncate': {
+        // One a partial state lacks is on an older page: a snapshot follows, as the cursor moves.
+        const at = patch.id in byId ? order.indexOf(patch.id) : -1
+        if (at < 0) throw new UnknownEntryError(patch.id)
+        const dropped = order.slice(at)
+        order = order.slice(0, at)
+        orderCopied = true
+        const next = writableById()
+        for (const id of dropped) delete next[id]
+        break
+      }
     }
   }
 
@@ -1334,6 +1361,12 @@ export function applyPatchInPlace(state: ThreadState, patch: Patch): ThreadState
       return { ...state, session: { ...state.session, ...patch.changes } }
     case 'thread.reset':
       return { session: state.session, order: [], byId: {} }
+    case 'thread.truncate': {
+      const at = patch.id in state.byId ? state.order.indexOf(patch.id) : -1
+      if (at < 0) throw new UnknownEntryError(patch.id)
+      for (const id of state.order.splice(at)) delete state.byId[id]
+      return state
+    }
   }
 }
 
@@ -1469,6 +1502,10 @@ export function isThreadEntry(value: unknown): value is ThreadEntry {
   if (!isRecord(value) || typeof value.id !== 'string') return false
   switch (value.kind) {
     case 'user':
+      return (
+        isListOf(value.content, isUserContent) &&
+        (value.agentRef === undefined || typeof value.agentRef === 'string')
+      )
     case 'session_message':
       return isListOf(value.content, isUserContent)
     case 'agent':
@@ -1516,7 +1553,8 @@ export function isThreadEntry(value: unknown): value is ThreadEntry {
       return (
         typeof value.stopReason === 'string' &&
         typeof value.durationMs === 'number' &&
-        (value.after === undefined || value.after === null || typeof value.after === 'string')
+        (value.after === undefined || value.after === null || typeof value.after === 'string') &&
+        (value.used === undefined || typeof value.used === 'number')
       )
     case 'takeover':
       return (

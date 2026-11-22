@@ -747,6 +747,13 @@
           }
         ]
       },
+      "TurnItemsView": {
+        "oneOf": [
+          { "type": "string", "enum": ["notLoaded"] },
+          { "type": "string", "enum": ["summary"] },
+          { "type": "string", "enum": ["full"] }
+        ]
+      },
       "TurnStatus": {
         "type": "string",
         "enum": ["completed", "interrupted", "failed", "inProgress"]
@@ -758,6 +765,7 @@
           "error": { "anyOf": [{ "$ref": "#/definitions/v2/TurnError" }, { "type": "null" }] },
           "id": { "type": "string" },
           "items": { "type": "array", "items": { "$ref": "#/definitions/v2/ThreadItem" } },
+          "itemsView": { "allOf": [{ "$ref": "#/definitions/v2/TurnItemsView" }] },
           "rootTurnId": { "type": ["string", "null"] },
           "startedAt": { "type": ["integer", "null"] },
           "status": { "$ref": "#/definitions/v2/TurnStatus" }
@@ -908,6 +916,7 @@
           "approvalsReviewer": {
             "anyOf": [{ "$ref": "#/definitions/v2/ApprovalsReviewer" }, { "type": "null" }]
           },
+          "beforeTurnId": { "type": ["string", "null"] },
           "config": { "type": ["object", "null"] },
           "cwd": { "type": ["string", "null"] },
           "developerInstructions": { "type": ["string", "null"] },
@@ -1051,6 +1060,16 @@
         "required": ["threadId"]
       },
       "ThreadCompactStartResponse": { "type": "object" },
+      "ThreadRevertParams": {
+        "type": "object",
+        "properties": { "beforeTurnId": { "type": "string" }, "threadId": { "type": "string" } },
+        "required": ["beforeTurnId", "threadId"]
+      },
+      "ThreadRevertResponse": {
+        "type": "object",
+        "properties": { "thread": { "allOf": [{ "$ref": "#/definitions/v2/Thread" }] } },
+        "required": ["thread"]
+      },
       "ThreadListCwdFilter": {
         "anyOf": [{ "type": "string" }, { "type": "array", "items": { "type": "string" } }]
       },
@@ -1081,6 +1100,39 @@
         "type": "object",
         "properties": {
           "data": { "type": "array", "items": { "$ref": "#/definitions/v2/Thread" } },
+          "nextCursor": { "type": ["string", "null"] }
+        },
+        "required": ["data"]
+      },
+      "ThreadReadParams": {
+        "type": "object",
+        "properties": { "includeTurns": { "type": "boolean" }, "threadId": { "type": "string" } },
+        "required": ["threadId"]
+      },
+      "ThreadReadResponse": {
+        "type": "object",
+        "properties": { "thread": { "$ref": "#/definitions/v2/Thread" } },
+        "required": ["thread"]
+      },
+      "ThreadTurnsListParams": {
+        "type": "object",
+        "properties": {
+          "cursor": { "type": ["string", "null"] },
+          "itemsView": {
+            "anyOf": [{ "$ref": "#/definitions/v2/TurnItemsView" }, { "type": "null" }]
+          },
+          "limit": { "type": ["integer", "null"] },
+          "sortDirection": {
+            "anyOf": [{ "$ref": "#/definitions/v2/SortDirection" }, { "type": "null" }]
+          },
+          "threadId": { "type": "string" }
+        },
+        "required": ["threadId"]
+      },
+      "ThreadTurnsListResponse": {
+        "type": "object",
+        "properties": {
+          "data": { "type": "array", "items": { "$ref": "#/definitions/v2/Turn" } },
           "nextCursor": { "type": ["string", "null"] }
         },
         "required": ["data"]
@@ -1595,7 +1647,7 @@
         },
         "required": ["data"]
       },
-      "McpServerStatusDetail": { "type": "string", "enum": ["toolsAndAuthOnly"] },
+      "McpServerStatusDetail": { "type": "string", "enum": ["full", "toolsAndAuthOnly"] },
       "ListMcpServerStatusParams": {
         "type": "object",
         "properties": {
@@ -1629,10 +1681,11 @@
         "properties": {
           "_meta": true,
           "description": { "type": ["string", "null"] },
+          "inputSchema": true,
           "name": { "type": "string" },
           "title": { "type": ["string", "null"] }
         },
-        "required": ["name"]
+        "required": ["inputSchema", "name"]
       },
       "McpServerStatus": {
         "type": "object",
@@ -2313,9 +2366,39 @@
           "type": "object",
           "properties": {
             "id": { "$ref": "#/definitions/v2/RequestId" },
+            "method": { "type": "string", "enum": ["thread/revert"] },
+            "params": { "$ref": "#/definitions/v2/ThreadRevertParams" },
+            "result": { "$ref": "#/definitions/v2/ThreadRevertResponse" }
+          },
+          "required": ["id", "method", "params"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "id": { "$ref": "#/definitions/v2/RequestId" },
             "method": { "type": "string", "enum": ["thread/list"] },
             "params": { "$ref": "#/definitions/v2/ThreadListParams" },
             "result": { "$ref": "#/definitions/v2/ThreadListResponse" }
+          },
+          "required": ["id", "method", "params"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "id": { "$ref": "#/definitions/v2/RequestId" },
+            "method": { "type": "string", "enum": ["thread/read"] },
+            "params": { "$ref": "#/definitions/v2/ThreadReadParams" },
+            "result": { "$ref": "#/definitions/v2/ThreadReadResponse" }
+          },
+          "required": ["id", "method", "params"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "id": { "$ref": "#/definitions/v2/RequestId" },
+            "method": { "type": "string", "enum": ["thread/turns/list"] },
+            "params": { "$ref": "#/definitions/v2/ThreadTurnsListParams" },
+            "result": { "$ref": "#/definitions/v2/ThreadTurnsListResponse" }
           },
           "required": ["id", "method", "params"]
         },

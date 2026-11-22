@@ -525,7 +525,24 @@
   "userActions": {
     "steered": "Steered",
     "copyMessage": "Copy message",
-    "label": "Message actions"
+    "label": "Message actions",
+    "edit": "Edit from here",
+    "editShort": "Edit"
+  },
+  "editFrom": {
+    "title": "Edit from here?",
+    "body_one": "This message and everything after it leave the conversation, {{count}} turn in all. The message goes back to the composer.",
+    "body_other": "This message and everything after it leave the conversation, {{count}} turns in all. The message goes back to the composer.",
+    "files_one": "{{count}} file changed since stays as it is",
+    "files_other": "{{count}} files changed since stay as they are",
+    "stopsTurn": "Stops the running turn",
+    "stopsTasks_one": "Stops {{count}} background task",
+    "stopsTasks_other": "Stops {{count}} background tasks",
+    "cacheKept": "Prompt cache kept · {{time}} left",
+    "cacheExpired": "Prompt cache expired · {{tokens}} tokens sent again",
+    "cacheExpiredOnly": "Prompt cache expired",
+    "confirm": "Edit",
+    "failed": "Could not edit from here: {{error}}"
   },
   "replyFooter": {
     "copyReply": "Copy reply",

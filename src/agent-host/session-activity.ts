@@ -98,6 +98,11 @@ export class ToolActivity {
         if (this.started.size === 0) return false
         this.started.clear()
         return true
+      case 'thread.truncate': {
+        const gone = [...this.started.keys()].filter((id) => !(id in thread.byId))
+        for (const id of gone) this.started.delete(id)
+        return gone.length > 0
+      }
       default:
         return false
     }
