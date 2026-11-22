@@ -952,6 +952,11 @@ export class AgentHost {
           this.sessions.archiveWhenIdle(sessionId, agentName),
         archiveNow: (sessionId, agentName) => this.sessions.archiveByAgent(sessionId, agentName),
         start: (callerId, params) => this.sessions.startFromTool(callerId, params),
+        carried: (callerId, agentId) => this.sessions.carriedOptions(callerId, agentId),
+        agentOptions: (agentId) => this.agentOptions.get(agentId),
+        readOptions: (agentId) => this.agents.readFirstOptions(agentId),
+        choices: (sessionId) => this.sessions.toolChoices(sessionId),
+        held: (sessionId) => this.sessions.firstHeld(sessionId),
         send: (sessionId, text, from, now) =>
           this.sessions.sendFromTool(sessionId, text, from, now),
         started: (callerId) => this.sessions.startedBy(callerId),

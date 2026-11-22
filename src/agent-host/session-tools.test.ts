@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
-import type { RunningWork } from '@shared/agent-host'
+import type { AgentOptions, AgentStatus, RunningWork } from '@shared/agent-host'
+import type { ConfigOption } from '@shared/thread'
 import type { Caller } from './artifacts/tools'
 import {
   SessionTools,
@@ -179,5 +180,201 @@ describe('archive_session', () => {
     const out = await t.call(caller, 'archive_session', { id: 'started' })
     expect(out.isError).toBeUndefined()
     expect(archiveNow).toHaveBeenCalledWith('started', 'Claude Code')
+  })
+})
+
+function select(
+  id: string,
+  category: ConfigOption['category'],
+  value: string,
+  values: string[],
+): ConfigOption {
+  return {
+    id,
+    name: id,
+    category,
+    type: 'select',
+    value,
+    choices: values.map((v) => ({ value: v, name: v.toUpperCase() })),
+  }
+}
+
+const CODEX_OPTIONS: AgentOptions = {
+  agentId: 'codex',
+  config: [
+    select('model', 'model', 'gpt-big', ['gpt-big', 'gpt-mini']),
+    select('effort', 'thought_level', 'medium', ['low', 'medium', 'high', 'xhigh']),
+  ],
+  levels: {
+    'gpt-big': select('effort', 'thought_level', 'medium', ['low', 'medium', 'high', 'xhigh']),
+    'gpt-mini': select('effort', 'thought_level', 'medium', ['low', 'medium']),
+  },
+  remembered: {},
+  observedAt: 0,
+}
+
+function starting(
+  opts: {
+    cached?: AgentOptions | null
+    read?: AgentOptions | null
+    carried?: Record<string, string | boolean>
+    held?: boolean
+  } = {},
+) {
+  const sessions = [
+    { ...session('starter', null), status: 'running' as const },
+    { ...session('started', 'starter'), status: 'running' as const },
+  ]
+  let cache = opts.cached === undefined ? CODEX_OPTIONS : opts.cached
+  const start = vi.fn<SessionToolsDeps['start']>(async () => 'started')
+  const readOptions = vi.fn<SessionToolsDeps['readOptions']>(async () => {
+    if (opts.read !== undefined) cache = opts.read
+  })
+  const status = {
+    id: 'codex',
+    name: 'Codex',
+    harnessName: 'Codex',
+    state: 'ready',
+    signIn: 'signed-in',
+  } as unknown as AgentStatus
+  const deps = {
+    info: (id: string) => sessions.find((item) => item.id === id) ?? null,
+    started: () => [],
+    agents: () => [status],
+    startMode: () => undefined,
+    starterRank: () => 3,
+    carried: () => ({ ...(opts.carried ?? {}) }),
+    agentOptions: () => cache,
+    readOptions,
+    start,
+    mode: async () => null,
+    choices: async () => ({
+      model: { id: 'gpt-mini', name: 'GPT-MINI' },
+      effort: { id: 'low', name: 'LOW' },
+    }),
+    held: () => opts.held === true,
+  } as unknown as SessionToolsDeps
+  return { tools: new SessionTools(deps), start, readOptions }
+}
+
+describe('start_session model and effort', () => {
+  it('starts with the carried values when neither is named', async () => {
+    const { tools: t, start, readOptions } = starting({ carried: { model: 'gpt-big' } })
+    const out = await t.call(caller, 'start_session', { prompt: 'Review it' })
+    expect(out.isError).toBeUndefined()
+    expect(start.mock.calls[0]![1].options).toEqual({ model: 'gpt-big' })
+    expect(readOptions).not.toHaveBeenCalled()
+  })
+
+  it('sets the model and effort named over the carried ones', async () => {
+    const { tools: t, start } = starting({ carried: { model: 'gpt-big', effort: 'xhigh' } })
+    const out = await t.call(caller, 'start_session', {
+      prompt: 'Review it',
+      model: 'gpt-mini',
+      effort: 'low',
+    })
+    expect(out.isError).toBeUndefined()
+    expect(start.mock.calls[0]![1].options).toEqual({ model: 'gpt-mini', effort: 'low' })
+    expect(out.structuredContent).toMatchObject({
+      model: { id: 'gpt-mini' },
+      effort: { id: 'low' },
+    })
+  })
+
+  it('refuses a model the agent does not offer, naming the ones it does', async () => {
+    const { tools: t, start } = starting()
+    const out = await t.call(caller, 'start_session', { prompt: 'x', model: 'gpt-huge' })
+    expect(out.isError).toBe(true)
+    expect(text(out)).toContain('gpt-big, gpt-mini')
+    expect(start).not.toHaveBeenCalled()
+  })
+
+  it("refuses an effort the named model does not offer, though the agent's other model does", async () => {
+    const { tools: t, start } = starting()
+    const out = await t.call(caller, 'start_session', {
+      prompt: 'x',
+      model: 'gpt-mini',
+      effort: 'xhigh',
+    })
+    expect(out.isError).toBe(true)
+    expect(text(out)).toContain('low, medium')
+    expect(start).not.toHaveBeenCalled()
+  })
+
+  it('checks an effort alone against the carried model', async () => {
+    const { tools: t, start } = starting({ carried: { model: 'gpt-mini' } })
+    const out = await t.call(caller, 'start_session', { prompt: 'x', effort: 'high' })
+    expect(out.isError).toBe(true)
+    expect(start).not.toHaveBeenCalled()
+  })
+
+  it('drops a carried effort the named model lacks, so its first message is not held', async () => {
+    const { tools: t, start } = starting({ carried: { model: 'gpt-big', effort: 'xhigh' } })
+    await t.call(caller, 'start_session', { prompt: 'x', model: 'gpt-mini' })
+    expect(start.mock.calls[0]![1].options).toEqual({ model: 'gpt-mini' })
+  })
+
+  it('keeps a carried effort the named model offers', async () => {
+    const { tools: t, start } = starting({ carried: { model: 'gpt-big', effort: 'low' } })
+    await t.call(caller, 'start_session', { prompt: 'x', model: 'gpt-mini' })
+    expect(start.mock.calls[0]![1].options).toEqual({ model: 'gpt-mini', effort: 'low' })
+  })
+
+  it("reads an agent's options before checking a pick when none are cached", async () => {
+    const { tools: t, start, readOptions } = starting({ cached: null, read: CODEX_OPTIONS })
+    const out = await t.call(caller, 'start_session', { prompt: 'x', model: 'gpt-mini' })
+    expect(readOptions).toHaveBeenCalledWith('codex')
+    expect(out.isError).toBeUndefined()
+    expect(start).toHaveBeenCalled()
+  })
+
+  it('refuses a pick when the options still cannot be read', async () => {
+    const { tools: t, start } = starting({ cached: null, read: null })
+    const out = await t.call(caller, 'start_session', { prompt: 'x', model: 'gpt-mini' })
+    expect(out.isError).toBe(true)
+    expect(start).not.toHaveBeenCalled()
+  })
+
+  it('says when the first message waits for the user', async () => {
+    const { tools: t } = starting({ held: true })
+    const out = await t.call(caller, 'start_session', { prompt: 'x' })
+    expect(out.structuredContent).toMatchObject({ held: true })
+    expect(text(out)).toContain('waits for the user')
+  })
+
+  it('rejects a model that is not text', async () => {
+    const { tools: t, start } = starting()
+    const out = await t.call(caller, 'start_session', { prompt: 'x', model: 5 })
+    expect(out.isError).toBe(true)
+    expect(start).not.toHaveBeenCalled()
+  })
+})
+
+describe('list_agents models', () => {
+  it("lists each model's efforts", async () => {
+    const { tools: t } = starting()
+    const out = await t.call(caller, 'list_agents', {})
+    const agents = (out.structuredContent as { agents: unknown[] }).agents
+    expect(agents[0]).toMatchObject({
+      models: [
+        { id: 'gpt-big', efforts: ['low', 'medium', 'high', 'xhigh'] },
+        { id: 'gpt-mini', efforts: ['low', 'medium'] },
+      ],
+      efforts: null,
+    })
+  })
+
+  it('reads an agent asked about by name when Kettu has none of its options', async () => {
+    const { tools: t, readOptions } = starting({ cached: null, read: CODEX_OPTIONS })
+    const out = await t.call(caller, 'list_agents', { agent: 'codex' })
+    expect(readOptions).toHaveBeenCalledWith('codex')
+    const agents = (out.structuredContent as { agents: { models: unknown[] }[] }).agents
+    expect(agents[0]!.models).toHaveLength(2)
+  })
+
+  it('refuses an agent that cannot be started here', async () => {
+    const { tools: t } = starting()
+    const out = await t.call(caller, 'list_agents', { agent: 'gemini' })
+    expect(out.isError).toBe(true)
   })
 })

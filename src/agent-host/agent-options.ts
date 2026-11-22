@@ -201,6 +201,15 @@ export class AgentOptionsStore {
   }
 
   /**
+   * A value was set that is not the user's choice, as one an agent picked for a session it
+   * started: only the levels `config` shows for its model are kept.
+   */
+  seen(agentId: AgentId, config: readonly ConfigOption[]): void {
+    const current = this.byAgent.get(agentId)
+    if (current) this.put({ ...current, levels: withLevels(current.levels, config) })
+  }
+
+  /**
    * Pins `model` to the top of the agent's model menu, after the ones pinned before, or unpins it.
    * Throws when the agent has no options kept, or when it already has `MAX_PINNED_MODELS` pins.
    */
