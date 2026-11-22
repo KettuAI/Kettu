@@ -1219,6 +1219,7 @@ export class AgentHost {
         ),
       routine: routineHooks,
       task: taskHooks,
+      waitingCards: (sessionId) => this.workflowSuggestions.waitingCount(sessionId),
       events: {
         patches: (batch, portIds) => this.hub.send(portIds, { type: 'session.patches', batch }),
         summary: (summary, portIds) => {
@@ -1402,7 +1403,11 @@ export class AgentHost {
         tell: (sessionId, text) => this.sessions.sendCardAnswer(sessionId, text),
       },
       isRepo: (projectPath) => taskGit.isRepo(projectPath),
-      changed: (suggestion) => this.broadcast({ type: 'workflows.suggestion', suggestion }),
+      changed: (suggestion) => {
+        this.broadcast({ type: 'workflows.suggestion', suggestion })
+        if (this.sessions.has(suggestion.sessionId))
+          this.sessions.cardsChanged(suggestion.sessionId)
+      },
       log,
     })
     this.consents = new ArtifactConsents({
@@ -3312,8 +3317,10 @@ export class AgentHost {
         digestsFor(device, await sessions.page(sessionId, before, from, imagesFor(device))),
       'sessions.entry': ({ sessionId, entryId }, { device }) =>
         sessions.entry(sessionId, entryId, imagesFor(device)),
-      'sessions.requests': ({ sessionId }, { device }) =>
-        sessions.requests(sessionId, imagesFor(device)),
+      'sessions.requests': async ({ sessionId }, { device }) => ({
+        ...(await sessions.requests(sessionId, imagesFor(device))),
+        suggestions: await this.workflowSuggestions.waitingFor(sessionId),
+      }),
       'sessions.outline': ({ sessionId }) => sessions.outline(sessionId),
       'sessions.modelRequests': ({ sessionId, before }) =>
         sessions.modelRequests(sessionId, before ?? null),

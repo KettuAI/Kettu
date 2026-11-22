@@ -26,6 +26,7 @@ it('reads only what waits for an answer, as many as the summary counts', async (
   expect(await window.request('sessions.requests', { sessionId: id })).toEqual({
     entries: [],
     askedAt: {},
+    suggestions: [],
   })
   await window.request('sessions.prompt', {
     sessionId: id,
@@ -197,3 +198,60 @@ it('keeps how the last turn ended across a restart of the host', async () => {
   const listed = await second.connect().request('sessions.list', {})
   expect(listed.find((summary) => summary.id === id)?.lastTurn).toEqual(ended)
 })
+
+it('counts a workflow suggestion that waits among the requests and returns it apart', async () => {
+  const host = await startTestHost()
+  hosts.push(host)
+  const window = host.connect()
+  const { id } = await window.request('sessions.create', {
+    agentId: 'fake-agent',
+    projectPath: host.project,
+  })
+  await window.open(id)
+  await window.untilStatus(id, 'ready')
+  await window.request('sessions.prompt', {
+    sessionId: id,
+    content: [{ type: 'text', text: '/plan --step 10' }],
+  })
+  await window.untilStatus(id, 'ready')
+  const cards = host.host.workflowSuggestions
+  const draft = await cards.draft(id, WORKFLOW)
+  if (!('draftId' in draft)) throw new Error('The workflow did not read')
+  const card = await cards.suggest(id, {
+    workflowId: draft.draftId,
+    task: 'Fix the flaky login test',
+    title: null,
+    pace: 'balanced',
+    paceReason: null,
+  })
+
+  await window.until(() => window.summary(id)?.permissionCount === 1)
+  expect(window.summary(id)?.attention).toBe('permission')
+  const read = await window.request('sessions.requests', { sessionId: id })
+  expect(read.entries).toEqual([])
+  expect(read.suggestions?.map((s) => [s.id, s.purpose, s.answer.kind])).toEqual([
+    [card.id, 'start', 'waiting'],
+  ])
+
+  await window.request('workflows.answerSuggestion', { id: card.id, answer: 'decline' })
+  await window.until(() => window.summary(id)?.permissionCount === 0)
+  expect((await window.request('sessions.requests', { sessionId: id })).suggestions).toEqual([])
+})
+
+const WORKFLOW = `format: 1
+name: Fix a bug
+description: Reproduce, then fix.
+steps:
+  - id: reproduce
+    name: Reproduce
+    prompt: Reproduce the bug.
+    outcomes:
+      - name: Reproduced
+        to: fix
+  - id: fix
+    name: Fix
+    prompt: Fix it.
+    outcomes:
+      - name: Fixed
+        end: done
+`

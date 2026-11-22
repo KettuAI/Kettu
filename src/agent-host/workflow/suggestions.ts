@@ -397,6 +397,12 @@ function sourceKey(source: SuggestedSource): string {
   }
 }
 
+function waitingStart(record: SuggestionRecord, sessionId: string): boolean {
+  return (
+    record.sessionId === sessionId && record.purpose === 'start' && record.answer.kind === 'waiting'
+  )
+}
+
 function problemLines(
   problems: WorkflowProblem[],
   say: (p: WorkflowProblem) => string = (p) => p.message,
@@ -734,6 +740,28 @@ export class WorkflowSuggestions {
   async forSession(sessionId: string): Promise<WorkflowSuggestion[]> {
     const ids = Object.entries(this.data.suggestions)
       .filter(([, record]) => record.sessionId === sessionId)
+      .sort(([, a], [, b]) => a.createdAt - b.createdAt)
+      .map(([id]) => id)
+    const views = await Promise.all(ids.map((id) => this.view(id).catch(() => null)))
+    return views.filter((view): view is WorkflowSuggestion => view !== null)
+  }
+
+  /**
+   * How many of a session's cards wait for Start or Do it here. A card to keep a workflow is left
+   * out, as is one whose Start failed: neither asks before the session can go on.
+   */
+  waitingCount(sessionId: string): number {
+    let count = 0
+    for (const record of Object.values(this.data.suggestions)) {
+      if (waitingStart(record, sessionId)) count++
+    }
+    return count
+  }
+
+  /** The cards `waitingCount` counts, oldest first. */
+  async waitingFor(sessionId: string): Promise<WorkflowSuggestion[]> {
+    const ids = Object.entries(this.data.suggestions)
+      .filter(([, record]) => waitingStart(record, sessionId))
       .sort(([, a], [, b]) => a.createdAt - b.createdAt)
       .map(([id]) => id)
     const views = await Promise.all(ids.map((id) => this.view(id).catch(() => null)))

@@ -855,7 +855,9 @@ export interface SessionSummary {
   title: string | null
   status: SessionStatus
   attention: SessionAttention
-  permissionCount: number // pending permission requests in this session alone
+  // What waits for the user in this session alone: its requests, and on newer hosts its workflow
+  // suggestions that wait for an answer
+  permissionCount: number
   createdAt: number
   updatedAt: number
   parentId: string | null
@@ -1468,11 +1470,17 @@ export interface HostContract {
   // One entry whole, as a device whose page held its tool output as a digest opens it.
   'sessions.entry': { params: { sessionId: string; entryId: string }; result: ThreadEntry }
   // What waits for the user's answer in the session, in thread order: what its summary's
-  // `permissionCount` counts. Empty for a closed session, where nothing waits. `askedAt`: when
+  // `permissionCount` counts. No entries for a closed session, where none waits. `askedAt`: when
   // each began to wait, by entry id, in ms since the epoch; absent from older hosts.
+  // `suggestions`: the workflow suggestions that wait for Start or Do it here, which the count
+  // includes and `workflows.answerSuggestion` answers; absent from older hosts.
   'sessions.requests': {
     params: { sessionId: string }
-    result: { entries: ThreadEntry[]; askedAt?: Record<string, number> }
+    result: {
+      entries: ThreadEntry[]
+      askedAt?: Record<string, number>
+      suggestions?: WorkflowSuggestion[]
+    }
   }
   'sessions.outline': { params: { sessionId: string }; result: { entries: OutlineEntry[] } }
   // The session's requests to its model, read from the agent's own record of the session: the

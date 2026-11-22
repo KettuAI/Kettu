@@ -547,6 +547,8 @@ export interface SessionManagerDeps {
   routine?: RoutineSessionHooksRef
   /** What a workflow step hears of its session; set once the task engine exists. */
   task?: TaskSessionHooksRef
+  /** The workflow suggestions that wait for the user's answer in a session, which it counts. */
+  waitingCards?: (sessionId: string) => number
   timings?: Partial<SessionTimings>
   now?: () => number
 }
@@ -1419,7 +1421,9 @@ export class SessionManager {
     const record = live?.record ?? this.recordOf(sessionId)
     const session = live?.thread.session
     const status: SessionStatus = session?.status ?? 'closed'
-    const permissionCount = live ? waitingCount(live) : 0
+    // A suggestion waits in the cards file, so it counts whether the session is live or not.
+    const permissionCount =
+      (live ? waitingCount(live) : 0) + (this.deps.waitingCards?.(record.id) ?? 0)
     let attention: SessionAttention = 'none'
     if (permissionCount > 0) attention = 'permission'
     else if (status === 'failed' || (session?.error && status !== 'running' && !live?.errorSeen))
@@ -8486,6 +8490,11 @@ export class SessionManager {
     record.lastTurn = { ...record.lastTurn, reason: 'limit', limit: lastTurnLimit(status, limit) }
     if (live) this.persist(live)
     else this.saveIndex()
+    this.touch(sessionId)
+  }
+
+  /** A session's workflow suggestions changed, which its count of what waits includes. */
+  cardsChanged(sessionId: string): void {
     this.touch(sessionId)
   }
 
