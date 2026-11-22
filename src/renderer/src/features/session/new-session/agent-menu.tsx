@@ -3,7 +3,7 @@ import { ArrowRight01Icon, Search01Icon } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
 import type { AgentStatus } from '@shared/agent-host'
-import type { AgentId, ConfigOption } from '@shared/thread'
+import { booleanConfigValue, type AgentId, type ConfigOption } from '@shared/thread'
 import { AgentMark } from '@renderer/components/agents/agent-mark'
 import { AgentMarkHost } from '@renderer/components/agents/agent-mark-host'
 import { Button } from '@renderer/components/ui/button'
@@ -26,10 +26,21 @@ import { Skeleton } from '@renderer/components/ui/skeleton'
 import { Spinner } from '@renderer/components/ui/spinner'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@renderer/components/ui/tabs'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
-import { ConfigSwitchRow } from '@renderer/features/session/composer/config-switch'
-import { ChoiceName, EffortSegments } from '@renderer/features/session/composer/control-row'
-import { levelsOf, splitName, type SelectOption } from '@renderer/features/session/composer/levels'
-import { shownChoice, shownValue } from '@renderer/features/session/composer/model-list'
+import { ChoiceName } from '@renderer/features/session/composer/control-row'
+import { EffortDial } from '@renderer/features/session/composer/effort-dial'
+import {
+  dialStops,
+  shownLevel,
+  splitName,
+  type SelectOption,
+} from '@renderer/features/session/composer/levels'
+import {
+  defaultUses,
+  shownChoice,
+  shownValue,
+} from '@renderer/features/session/composer/model-list'
+import { ModelMark } from '@renderer/features/session/composer/model-mark'
+import { SwitchCards } from '@renderer/features/session/composer/switch-cards'
 import { harnessProblem, shortLabel } from '@renderer/features/agents/harness-problem'
 import { FixButton } from '@renderer/features/agents/fix-button'
 import { fixAction } from '@renderer/features/agents/problem-fix'
@@ -66,13 +77,13 @@ import { refreshLimits } from '@renderer/stores/usage'
 import { useHostLabel } from '@renderer/features/sidebar/host-label'
 import { openAgentSettings, openHarnessSettings } from '@renderer/stores/view'
 import {
+  agentLists,
   agentNeed,
   canStart,
   isMoreKey,
   itemKey,
   menuAgents,
   menuGroups,
-  menuModels,
   moreKey,
   parseItemKey,
   preparedConfig,
@@ -186,10 +197,12 @@ export function AgentMenu({
   }, [statuses, entries, picks, prepared, values, agentId, hostId])
   const agents: MenuAgent[] = statuses.map((status) => {
     const model = configs.get(status.id)?.find((o) => o.category === 'model')
+    const entry = entries[status.id]
     return {
       agentId: status.id,
       name: status.name,
       model: isSelect(model) ? model : null,
+      kept: { pinned: entry?.pinned, recent: entry?.recent },
       choosable: canStart(status),
     }
   })
@@ -198,25 +211,22 @@ export function AgentMenu({
   const allGroups = useMemo<MenuGroup[]>(
     () =>
       agents.map((a) => {
-        if (!a.model?.choices?.length)
-          return { agentId: a.agentId, items: [itemKey(a.agentId, null)] }
-        const { current, older } = menuModels(a.model.choices)
+        const lists = agentLists(a)
+        if (!lists) return { agentId: a.agentId, items: [itemKey(a.agentId, null)] }
         return {
           agentId: a.agentId,
           items: [
-            ...current.map((c) => itemKey(a.agentId, c.value)),
-            ...(older.length > 0 ? [moreKey(a.agentId)] : []),
-            ...older.map((c) => itemKey(a.agentId, c.value)),
+            ...lists.all.map((r) => itemKey(a.agentId, r.value)),
+            ...(lists.more.length > 0 ? [moreKey(a.agentId)] : []),
           ],
         }
       }),
     // eslint-disable-next-line react-hooks/exhaustive-deps -- agents is derived from these
     [statuses, configs],
   )
-  const chosenModel = agentId ? agents.find((a) => a.agentId === agentId)?.model : null
-  const chosenChoice = chosenModel?.choices
-    ? shownChoice(chosenModel.choices, String(chosenModel.value))
-    : undefined
+  const chosenAgent = agentId ? agents.find((a) => a.agentId === agentId) : undefined
+  const chosenModel = chosenAgent?.model
+  const chosenLists = chosenAgent ? agentLists(chosenAgent) : null
   const value = agentId
     ? itemKey(
         agentId,
@@ -256,7 +266,9 @@ export function AgentMenu({
       return
     }
     setShown(agentsRead ? firstShown(statuses, agentId) : null)
-    setExpanded(chosenChoice?.older ? agentId : null)
+    // A chosen model the main list leaves out shows under More models, opened.
+    const hidden = !!chosenLists?.chosen && !chosenLists.main.includes(chosenLists.chosen)
+    setExpanded(hidden ? agentId : null)
     for (const status of statuses) {
       if (status.state !== 'ready' || !status.capabilities.reports) continue
       refreshLimits(status.id, hostId).catch((error: unknown) =>
@@ -537,10 +549,7 @@ function AgentButtonLabel({
   const modelName = isSelect(model)
     ? (shownChoice(model.choices, String(model.value))?.name ?? String(model.value))
     : null
-  const level = isSelect(effort)
-    ? levelsOf(effort, String(effort.value), isSelect(model) ? String(model.value) : undefined)
-    : null
-  const levelName = level?.levels.find((c) => c.value === level.shown)?.name
+  const levelName = isSelect(effort) ? shownLevel(effort, String(effort.value)) : null
   return (
     <>
       <AgentMark agent={agentId} size={14} />
@@ -575,10 +584,7 @@ function ModelButtonLabel({
   const modelName = isSelect(model)
     ? (shownChoice(model.choices, String(model.value))?.name ?? String(model.value))
     : null
-  const level = isSelect(effort)
-    ? levelsOf(effort, String(effort.value), isSelect(model) ? String(model.value) : undefined)
-    : null
-  const levelName = level?.levels.find((c) => c.value === level.shown)?.name
+  const levelName = isSelect(effort) ? shownLevel(effort, String(effort.value)) : null
   return (
     <>
       <span className="min-w-0 truncate text-secondary" title={modelName ?? undefined}>
@@ -907,34 +913,36 @@ function Pane({
         </p>
       )}
       {!searching && config && (isSelect(effort) || switches.length > 0) && (
-        <div className="flex flex-col">
+        <div className="kettu-am-settings">
+          {isSelect(model) && <ComboboxSeparator />}
           {isSelect(effort) && (
-            <>
-              {isSelect(model) && <ComboboxSeparator />}
-              <EffortSegments
-                effort={effort}
-                value={String(effort.value)}
-                model={isSelect(model) ? String(model.value) : undefined}
-                onPick={(v) => onOption(status.id, effort.id, v)}
-                plain
-              />
-            </>
+            <PaneDial effort={effort} onPick={(v) => onOption(status.id, effort.id, v)} />
           )}
-          {switches.length > 0 && (
-            <>
-              <ComboboxSeparator />
-              {switches.map((o) => (
-                <ConfigSwitchRow
-                  key={o.id}
-                  option={o}
-                  onSelect={(value) => onOption(status.id, o.id, value)}
-                />
-              ))}
-            </>
-          )}
+          <SwitchCards
+            options={switches}
+            agent={status.harnessName}
+            valueOf={(o) => booleanConfigValue(o) === true}
+            onFlip={(o, on) => onOption(status.id, o.id, on)}
+            className="kettu-am-cards"
+          />
         </div>
       )}
     </>
+  )
+}
+
+/** The shown agent's effort on the dial, as the composer's model menu has it. */
+function PaneDial({ effort, onPick }: { effort: SelectOption; onPick: (value: string) => void }) {
+  const { t } = useTranslation('composer')
+  const { stops, shown } = dialStops(effort, String(effort.value))
+  return (
+    <EffortDial
+      label={effort.name || t('controls.effort')}
+      stops={stops}
+      value={shown}
+      onChange={onPick}
+      className="kettu-am-dial"
+    />
   )
 }
 
@@ -947,13 +955,13 @@ function ModelGroup({
   group: MenuGroup
   agent: MenuAgent | undefined
   searching: boolean
-  /** Whether the agent's older models are shown under More models. */
+  /** Whether the models the main list leaves out are shown under More models. */
   expanded: boolean
 }) {
   const { t } = useTranslation('session')
+  const { t: tc } = useTranslation('composer')
   if (!agent) return null
-  const choices = agent.model?.choices ?? []
-  const older = menuModels(choices).older
+  const lists = agentLists(agent)
   return (
     <ComboboxGroup items={group.items}>
       {searching ? (
@@ -967,25 +975,34 @@ function ModelGroup({
       <ComboboxCollection>
         {(key: string) => {
           if (isMoreKey(key)) {
-            return <MoreRow key={key} value={key} count={older.length} expanded={expanded} />
+            return (
+              <MoreRow key={key} value={key} count={lists?.more.length ?? 0} expanded={expanded} />
+            )
           }
           const { model } = parseItemKey(key)
-          const choice = choices.find((c) => c.value === model)
-          return choice ? (
+          const read = lists?.all.find((r) => r.value === model)
+          if (!read || !lists) {
+            return (
+              <ComboboxItem key={key} value={key} className="items-center">
+                <span className="min-w-0 flex-1 truncate font-medium">
+                  {t('newSession.agentMenu.useAgent', { agent: agent.name })}
+                </span>
+              </ComboboxItem>
+            )
+          }
+          const uses = read.isDefault ? defaultUses(read, lists.all) : null
+          const tip = uses ? tc('controls.defaultUses', { model: uses }) : read.choice.description
+          return (
             <Tooltip key={key}>
               <TooltipTrigger render={<ComboboxItem value={key} className="items-center" />}>
-                <ChoiceName name={choice.name} className="flex-1 font-normal" />
+                <ModelMark read={read} agentId={agent.agentId} size={14} />
+                <ChoiceName name={read.choice.name} className="flex-1 font-normal" />
+                {read.value === lists.defaultValue && (
+                  <span className="kettu-model-tag">{tc('controls.defaultTag')}</span>
+                )}
               </TooltipTrigger>
-              {choice.description && (
-                <TooltipContent side="right">{choice.description}</TooltipContent>
-              )}
+              {tip && <TooltipContent side="right">{tip}</TooltipContent>}
             </Tooltip>
-          ) : (
-            <ComboboxItem key={key} value={key} className="items-center">
-              <span className="min-w-0 flex-1 truncate font-medium">
-                {t('newSession.agentMenu.useAgent', { agent: agent.name })}
-              </span>
-            </ComboboxItem>
           )
         }}
       </ComboboxCollection>

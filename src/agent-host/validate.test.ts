@@ -618,6 +618,20 @@ describe('createValidators', () => {
     })
   })
 
+  it('takes a model to pin only with a model value and a pinned flag', () => {
+    const pin = posix['agents.pinModel']
+    expect(pin({ agentId: 'opencode', model: 'deepseek/deepseek-v4-pro', pinned: true })).toEqual({
+      agentId: 'opencode',
+      model: 'deepseek/deepseek-v4-pro',
+      pinned: true,
+    })
+    rejects(() => pin({ agentId: 'opencode', model: '', pinned: true }))
+    rejects(() => pin({ agentId: 'opencode', model: 'x'.repeat(4097), pinned: true }))
+    rejects(() => pin({ agentId: 'opencode', model: 'opus', pinned: 'yes' }))
+    rejects(() => pin({ agentId: 'opencode', model: 'opus' }))
+    rejects(() => pin({ agentId: 'unknown-agent', model: 'opus', pinned: false }))
+  })
+
   it('takes a reset credit to spend only with a credit id and a UUID v4 request id', () => {
     const spend = posix['agents.spendReset']
     const requestId = '0b0e7a52-6d0c-4a6e-9a3b-0d6f6f0c2a11'

@@ -6047,6 +6047,121 @@ body:has(.ui-mdpc[data-open], .ui-ccc__menu[data-open='true']) .kettu-toasts {
     transform 280ms var(--ui-mdpc-ease),
     width 280ms var(--ui-mdpc-ease);
 }
+/* The picker's rows without bars: the whole description on up to two lines, the Default tag after
+   the name and a pin at the end on hover, kept while pinned. No key hints in the last row. */
+.kettu-model-picker .ui-mdpc__desc {
+  display: -webkit-box;
+  white-space: normal;
+  text-overflow: clip;
+  overflow-wrap: anywhere;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+.kettu-model-picker .ui-mdpc__keys {
+  display: none;
+}
+.kettu-model-tag {
+  flex: none;
+  height: 16px;
+  padding: 0 5px;
+  border-radius: 4px;
+  font-size: 10.5px;
+  line-height: 16px;
+  font-weight: var(--weight-medium);
+  color: var(--text-tertiary);
+  box-shadow: inset 0 0 0 var(--hairline) var(--border-default);
+}
+.kettu-model-pin {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 5px;
+  color: var(--ui-mdpc-faint);
+  opacity: 0;
+  transition:
+    opacity var(--duration-fast) var(--ease-standard),
+    color var(--duration-fast) var(--ease-standard);
+}
+.kettu-model-picker :is(.ui-mdpc__option, .ui-mdpc__fly-row):hover .kettu-model-pin,
+.kettu-model-pin[data-on] {
+  opacity: 1;
+}
+.kettu-model-pin:hover,
+.kettu-model-pin[data-on] {
+  color: var(--ui-mdpc-ink);
+}
+.kettu-model-pin[data-on] path {
+  fill: currentColor;
+}
+.kettu-model-picker .ui-mdpc__fly-row .ui-mdpc__title-name {
+  flex: 0 1 auto;
+  margin-right: auto;
+}
+.kettu-model-picker .ui-mdpc__fly-row .ui-mdpc__title-name:has(+ .kettu-model-tag) {
+  margin-right: 0;
+}
+.kettu-model-picker .ui-mdpc__fly-row .kettu-model-tag {
+  margin-right: auto;
+}
+/* More models by provider, when the agent's models come from several. */
+.kettu-model-picker .ui-mdpc__fly-group {
+  padding: 8px 8px 2px;
+  font-size: 10px;
+  font-weight: var(--weight-medium);
+  line-height: 16px;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  color: var(--ui-mdpc-muted);
+}
+.kettu-model-picker .ui-mdpc__fly-group:first-child {
+  padding-top: 2px;
+}
+/* Switch agent on the right of the line on top, dimmed while a turn runs. */
+.kettu-model-picker .ui-mdpc__head:has(.kettu-model-switch) {
+  padding-right: 4px;
+}
+.kettu-model-switch {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 4px;
+  height: 22px;
+  padding: 0 6px;
+  border-radius: 5px;
+  font-size: 12px;
+  font-weight: var(--weight-medium);
+  line-height: 16px;
+  letter-spacing: normal;
+  text-transform: none;
+  color: var(--ui-mdpc-text);
+  transition:
+    background-color 90ms ease-out,
+    color 90ms ease-out;
+}
+.kettu-model-switch:not([aria-disabled]):hover {
+  background: var(--ui-mdpc-fill);
+  color: var(--ui-mdpc-ink);
+}
+.kettu-model-switch:focus-visible {
+  outline: 1.5px solid var(--focus-ring-color);
+  outline-offset: -1px;
+}
+.kettu-model-switch[aria-disabled] {
+  opacity: 0.45;
+  cursor: default;
+}
+/* Effort on the dial and the switches as cards, under the line across the menu. */
+.kettu-model-picker__dial {
+  padding: 2px 0 0 8px;
+}
+.kettu-model-picker .kettu-dial__halo {
+  stroke: var(--ui-mdpc-card);
+}
+.kettu-model-picker__cards {
+  padding: 4px 0;
+}
 .kettu-model-warn {
   flex: none;
   width: 6px;
@@ -6076,6 +6191,247 @@ body:has(.ui-mdpc[data-open], .ui-ccc__menu[data-open='true']) .kettu-toasts {
 .ui-shm-text.kettu-ultra-text {
   --ui-shm-text: var(--composer-ultra-text);
   --ui-shm-text-glow: var(--composer-ultra-shine);
+}
+/* The effort dial of the model menus: a scale of ticks on an arc that turns under a fixed mark. */
+.kettu-dial {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  column-gap: 12px;
+  align-items: center;
+  padding: 2px 4px 2px 8px;
+  -webkit-user-select: none;
+  user-select: none;
+}
+.kettu-dial[data-disabled] {
+  opacity: 0.5;
+}
+.kettu-dial__label {
+  color: var(--composer-text);
+  white-space: nowrap;
+}
+.kettu-dial__dial {
+  position: relative;
+  justify-self: end;
+  width: 100%;
+  max-width: 300px;
+  outline: none;
+  touch-action: none;
+  cursor: grab;
+  -webkit-mask-image: linear-gradient(90deg, transparent, black 9%, black 91%, transparent);
+  mask-image: linear-gradient(90deg, transparent, black 9%, black 91%, transparent);
+}
+.kettu-dial[data-drag] .kettu-dial__dial {
+  cursor: grabbing;
+}
+.kettu-dial[data-disabled] .kettu-dial__dial {
+  cursor: default;
+}
+.kettu-dial:has(.kettu-dial__dial:focus-visible) {
+  border-radius: var(--radius-segments);
+  outline: 1.5px solid var(--focus-ring-color);
+  outline-offset: -1px;
+}
+.kettu-dial__svg {
+  display: block;
+  width: 100%;
+  overflow: visible;
+}
+.kettu-dial__face-top {
+  stop-color: var(--dial-face);
+}
+.kettu-dial__face-bottom {
+  stop-color: var(--dial-face);
+  stop-opacity: 0;
+}
+.kettu-dial__lens-in {
+  stop-color: var(--dial-lens);
+}
+.kettu-dial__lens-out {
+  stop-color: var(--dial-lens);
+  stop-opacity: 0;
+}
+.kettu-dial__rim {
+  fill: none;
+  stroke: var(--dial-rim);
+  stroke-width: 1;
+}
+.kettu-dial__tick {
+  stroke: var(--dial-tick);
+  stroke-width: 1;
+  stroke-linecap: round;
+}
+.kettu-dial__tick--major {
+  stroke: var(--dial-tick-major);
+  stroke-width: 1.5;
+}
+.kettu-dial__tick[data-lit] {
+  stroke: var(--dial-lit);
+}
+.kettu-dial__tick--major[data-lit] {
+  stroke: var(--dial-lit-major);
+}
+/* The Default stop: a hollow circle that lights nothing. */
+.kettu-dial__tick--auto {
+  fill: none;
+  stroke: var(--dial-tick-major);
+  stroke-width: 1.5;
+}
+.kettu-dial__tick[data-flash] {
+  animation: kettu-dial-flash 260ms ease-out;
+}
+@keyframes kettu-dial-flash {
+  0% {
+    stroke: var(--control-on);
+  }
+}
+.kettu-dial__name {
+  font-family: var(--ui-face);
+  font-size: 11.5px;
+  font-weight: var(--weight-medium);
+  fill: var(--dial-name);
+  dominant-baseline: middle;
+  transition: fill 160ms ease;
+}
+.kettu-dial__name:is([data-on], [data-hover]) {
+  fill: var(--dial-name-on);
+}
+.kettu-dial__name[data-on] {
+  font-weight: 600;
+}
+.kettu-dial__name--auto {
+  font-style: italic;
+  font-weight: var(--weight-normal);
+}
+.kettu-dial__line {
+  stroke: var(--control-on);
+  stroke-width: 2;
+  stroke-linecap: round;
+}
+.kettu-dial__halo {
+  stroke: var(--popover);
+  stroke-width: 6;
+  stroke-linecap: round;
+}
+.kettu-dial__tri {
+  fill: var(--control-on);
+}
+.kettu-dial__mark {
+  transform-box: fill-box;
+  transform-origin: 50% 0;
+}
+.kettu-dial__mark[data-tick] {
+  animation: kettu-dial-tick 200ms var(--ease-standard);
+}
+@keyframes kettu-dial-tick {
+  35% {
+    transform: scaleY(1.25);
+  }
+}
+
+/* The agent's switches as cards: Fast mode in a blue tint and Ultracode in violet while on. */
+.kettu-cards {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+}
+.kettu-cards > :last-child:nth-child(odd) {
+  grid-column: 1 / -1;
+}
+.kettu-card {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr) auto;
+  grid-template-rows: 18px 16px;
+  column-gap: 8px;
+  align-items: center;
+  min-height: 48px;
+  padding: 7px 8px;
+  border-radius: var(--radius-segments);
+  box-shadow: inset 0 0 0 var(--hairline) var(--composer-line-strong);
+  text-align: left;
+  transition:
+    background-color 160ms ease,
+    box-shadow 160ms ease;
+}
+.kettu-card:not([data-disabled]):hover {
+  background: var(--composer-hover-fill);
+}
+.kettu-card:focus-visible {
+  outline: 1.5px solid var(--focus-ring-color);
+  outline-offset: 1px;
+}
+.kettu-card[data-disabled] {
+  opacity: 0.5;
+  cursor: default;
+}
+.kettu-card__icon {
+  display: grid;
+  grid-row: 1;
+  place-items: center;
+  color: var(--icon-default);
+  transition: color 160ms ease;
+}
+.kettu-card__name {
+  grid-row: 1;
+  min-width: 0;
+  overflow: hidden;
+  font-weight: var(--weight-medium);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--composer-ink);
+}
+.kettu-card__switch {
+  grid-row: 1;
+  grid-column: 3;
+}
+.kettu-card__line {
+  grid-row: 2;
+  grid-column: 2 / 4;
+  overflow: hidden;
+  font-size: 11px;
+  line-height: 16px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--composer-muted);
+}
+.kettu-card[data-kind='fast'][data-on] {
+  background: var(--model-card-fast);
+  box-shadow: inset 0 0 0 var(--hairline) var(--model-card-fast-edge);
+}
+.kettu-card[data-kind='fast'][data-on] .kettu-card__icon {
+  color: var(--switch-on);
+}
+.kettu-card[data-kind='ultra'][data-on] {
+  background: var(--model-card-ultra);
+  box-shadow: inset 0 0 0 var(--hairline) var(--model-card-ultra-edge);
+}
+.kettu-card[data-kind='ultra'][data-on] .kettu-card__icon {
+  color: var(--composer-ultra-text);
+}
+
+/* New session's agent menu: the dial and the cards under its models. */
+.kettu-am-settings {
+  display: flex;
+  flex-direction: column;
+}
+.kettu-am-dial {
+  padding: 4px 0 2px 8px;
+}
+.kettu-am-cards {
+  padding: 2px 0 2px;
+}
+@media (prefers-reduced-motion: reduce) {
+  :is(.kettu-dial, .kettu-cards),
+  :is(.kettu-dial, .kettu-cards) :is(*, *::before, *::after) {
+    animation: none !important;
+    transition: none !important;
+  }
+}
+:root[data-reduce-motion='always'] {
+  & :is(.kettu-dial, .kettu-cards),
+  & :is(.kettu-dial, .kettu-cards) :is(*, *::before, *::after) {
+    animation: none !important;
+    transition: none !important;
+  }
 }
 
 /* Queued messages tucked behind the composer: the next one in front, the next two peeking above,

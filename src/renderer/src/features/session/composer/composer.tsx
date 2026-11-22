@@ -1,5 +1,4 @@
 import { useEffect, useEffectEvent, useMemo, useRef, useState } from 'react'
-import { ArrowDataTransferHorizontalIcon } from '@hugeicons/core-free-icons'
 import { AnimatePresence } from 'motion/react'
 import { useTranslation } from 'react-i18next'
 import { cacheExpiry, knownExpiry } from '@shared/prompt-cache'
@@ -36,7 +35,6 @@ import { AgentMarkHost } from '@renderer/components/agents/agent-mark-host'
 import { AgentMenu } from '@renderer/features/session/new-session/agent-menu'
 import { readFirstOptions } from '@renderer/features/session/new-session/prepared'
 import { startConfig } from '@renderer/features/session/new-session/start-options'
-import { Glyph } from '@renderer/features/shell/glyph'
 import { runningWorkOf, workItems, type WorkItem } from '@renderer/features/sidebar/running-work'
 import { setPaneSelection, useArtifactsStore } from '@renderer/stores/artifacts'
 import { useSettingsStore } from '@renderer/stores/settings'
@@ -61,7 +59,7 @@ import { useModeControl } from './mode-control'
 import { isSelect, onCycleKeys } from './options'
 import { hasMessage } from './drafts'
 import { HistoryHeader } from './history-header'
-import { levelsOf, type SelectOption } from './levels'
+import { dialStops, type SelectOption } from './levels'
 import { shownChoice } from './model-list'
 import { ModelMenu } from './model-menu'
 import { nextChoice, nextMode } from './modes'
@@ -477,14 +475,8 @@ export function Composer({
     const reported = option.value === undefined ? undefined : String(option.value)
     const asked = stepped.current[option.id]
     const current = asked && asked.from === reported ? asked.to : reported
-    const model = config.find((o) => o.category === 'model')?.value
-    const levels =
-      category === 'mode'
-        ? null
-        : levelsOf(option as SelectOption, current, typeof model === 'string' ? model : undefined)
-    const next = levels
-      ? nextChoice(levels.levels, levels.shown)
-      : nextMode(option.choices, current)
+    const levels = category === 'mode' ? null : dialStops(option as SelectOption, current)
+    const next = levels ? nextChoice(levels.stops, levels.shown) : nextMode(option.choices, current)
     if (next === undefined || next === current) return true
     stepped.current[option.id] = { from: reported, to: next }
     if (pending) {
@@ -723,6 +715,7 @@ export function Composer({
               agentId={session.agentId}
               hostId={hostId}
               agentName={agent?.name ?? agentName}
+              harness={agent?.harnessName ?? agentName}
               config={config}
               running={running}
               onSelect={set}
@@ -733,16 +726,8 @@ export function Composer({
               limits={limits ?? []}
               source={agent?.version ? `${agent.harnessName} ${agent.version}` : null}
               cacheNote={cacheNote}
-              actions={[
-                {
-                  id: 'switch-agent',
-                  label: t('switchAgent.menu'),
-                  icon: <Glyph icon={ArrowDataTransferHorizontalIcon} />,
-                  disabled: !idle,
-                  ...(idle ? {} : { hint: t('switchAgent.betweenTurns') }),
-                  onSelect: () => setChoosingAgent(true),
-                },
-              ]}
+              onSwitchAgent={() => setChoosingAgent(true)}
+              canSwitchAgent={idle}
             />
           ))
         }
