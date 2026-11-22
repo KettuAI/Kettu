@@ -742,7 +742,14 @@ export function DeckSheet({
               : null
           }
           agent={agent}
-          save={mode === 'edit' || (save && save.state !== 'saved') ? save : null}
+          save={
+            // A save a later version has passed says nothing about the deck shown.
+            save?.state === 'saved' && save.version !== null && save.version < version
+              ? null
+              : mode === 'edit' || (save && save.state !== 'saved')
+                ? save
+                : null
+          }
           onStep={(d) => go(current + d)}
           onFit={(next) => setViewerState(id, { fit: next })}
           onNotes={() => setDeckNotes(id, !notesOn)}

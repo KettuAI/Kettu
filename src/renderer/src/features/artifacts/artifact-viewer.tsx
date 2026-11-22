@@ -174,6 +174,14 @@ export default function ArtifactViewer(place: ViewerPlace) {
         : null
       : null
   const comparing = pageCompare !== null && earlier === pageCompare.before
+  // The slide "before" was asked on: turning to another goes back to the latest, as leaving a
+  // compared frame does.
+  const comparedSlide = useRef<number | null>(null)
+  useEffect(() => {
+    if (comparedSlide.current === null || comparedSlide.current === deckSlide) return
+    comparedSlide.current = null
+    setViewerState(id, { version: null })
+  }, [id, deckSlide])
   // Publishing takes the account the host keeps, which the daemon has none of.
   const shares = useArtifactShares(id)
   // Only a desktop host renders a page apart from the window.
@@ -738,8 +746,10 @@ export default function ArtifactViewer(place: ViewerPlace) {
                     from: pageCompare.before,
                     to: pageCompare.after,
                     showingBefore: comparing,
-                    onChange: (before) =>
-                      setViewerState(id, { version: before ? pageCompare.before : null }),
+                    onChange: (before) => {
+                      comparedSlide.current = before ? deckSlide : null
+                      setViewerState(id, { version: before ? pageCompare.before : null })
+                    },
                   }
                 : null
             }

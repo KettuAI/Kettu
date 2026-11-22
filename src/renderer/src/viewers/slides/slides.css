@@ -216,7 +216,7 @@
 }
 .slide-editable:focus {
   outline-style: solid;
-  outline-color: var(--slide-accent);
+  outline-color: var(--control-on);
 }
 
 /* In the artifact viewer: the slide fills the frame the window sized for it, and in comment mode
@@ -238,9 +238,13 @@ body:has(.deck-driven) {
   cursor: crosshair;
 }
 .deck-driven[data-mode='comment'] .slide [data-text]:hover,
-.deck-driven[data-mode='comment'] .slide img:hover,
-.deck-driven .slide [data-focus] {
-  outline: 2px dashed var(--slide-accent);
+.deck-driven[data-mode='comment'] .slide img:hover {
+  outline: 2px dashed var(--control-on);
+  outline-offset: 4px;
+}
+/* Above the comment mode's resting outline, which is as specific. */
+.deck-driven[data-mode] .slide [data-focus] {
+  outline: 2px solid var(--control-on);
   outline-offset: 4px;
 }
 

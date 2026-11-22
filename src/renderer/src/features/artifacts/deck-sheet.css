@@ -339,6 +339,7 @@
 /* The pager's place, with the tag of the version that changed the slide. */
 .adk-where {
   display: inline-flex;
+  white-space: nowrap;
   align-items: center;
   justify-content: center;
   gap: 6px;
