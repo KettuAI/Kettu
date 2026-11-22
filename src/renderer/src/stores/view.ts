@@ -200,6 +200,8 @@ interface ViewStore {
   sidePane: Record<string, SidePane>
   /** The artifact each panel's artifact pane shows. */
   sideArtifact: Record<string, string>
+  /** A canvas page asked to be shown in a panel's artifact pane, until it is. Not persisted. */
+  sideArtifactPage: Record<string, ArtifactPageRequest>
   sidePaneMaximized: boolean
   /** The sessions whose board is open at the right of their thread. */
   boardOpen: Record<string, true>
@@ -260,6 +262,7 @@ export const useViewStore = create<ViewStore>()(() => ({
   renamingIn: null,
   sidePane: saved.sidePanes ?? {},
   sideArtifact: {},
+  sideArtifactPage: {},
   sidePaneMaximized: false,
   boardOpen: saved.boardOpen ?? {},
   sideChatOpen: saved.sideChatOpen ?? {},
@@ -959,6 +962,16 @@ export function showSidePane(projectPath: string, pane: SidePane): void {
   if (panel && view.projectPath === projectPath) toggleSidePane(panel, pane, true)
 }
 
+/** A canvas page the artifact pane brings into view once it has laid it out. */
+export interface ArtifactPageRequest {
+  artifactId: string
+  pageId: string
+  /** Tells a repeated request for the same page from one already handled. */
+  seq: number
+}
+
+let pageRequests = 0
+
 /** Shows the artifact beside a session's thread, or closes the pane when it already shows it. */
 export function toggleArtifactPane(panel: string, id: string, open?: boolean): void {
   useViewStore.setState((s) => {
@@ -969,6 +982,27 @@ export function toggleArtifactPane(panel: string, id: string, open?: boolean): v
       sideArtifact: shown ? s.sideArtifact : { ...s.sideArtifact, [panel]: id },
       sidePaneMaximized: false,
     }
+  })
+}
+
+/** Shows a canvas artifact beside a session's thread with one of its pages in view. */
+export function showArtifactPage(panel: string, id: string, pageId: string): void {
+  toggleArtifactPane(panel, id, true)
+  useViewStore.setState((s) => ({
+    sideArtifactPage: {
+      ...s.sideArtifactPage,
+      [panel]: { artifactId: id, pageId, seq: ++pageRequests },
+    },
+  }))
+}
+
+/** The pane showed the page it was asked for. */
+export function artifactPageShown(panel: string, seq: number): void {
+  useViewStore.setState((s) => {
+    if (s.sideArtifactPage[panel]?.seq !== seq) return s
+    const sideArtifactPage = { ...s.sideArtifactPage }
+    delete sideArtifactPage[panel]
+    return { sideArtifactPage }
   })
 }
 

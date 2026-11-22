@@ -1,4 +1,5 @@
 import type { ThreadEntry, ThreadState } from '@shared/thread'
+import { isArtifactWrite } from './entries/artifact-writes'
 import { workflowCardOf } from './entries/workflow-tools'
 import { FOLDED_LINES, FOLD_OVER } from './markdown/code-meta'
 
@@ -6,9 +7,11 @@ import { FOLDED_LINES, FOLD_OVER } from './markdown/code-meta'
 // streamed token: u user, s user message steered into a running turn, a agent, h thought, g
 // groupable lookup, t other tool, w tool waiting for permission, r tool whose request was answered,
 // p compaction, n plan, which the thread leaves out for the top bar, v a message Kettu sent as a
-// card's answer, which the thread leaves out as the card shows it, e turn end, m an agent's write
-// to project memory, which folds as work, o anything else, which a new site's request, an agent's
-// question and a proposed write to global memory are: of their own, never folded into a run.
+// card's answer, which the thread leaves out as the card shows it, x a finished write to an
+// artifact, which the thread leaves out as its artifact's card stands for it, e turn end, m an
+// agent's write to project memory, which folds as work, o anything else, which a new site's
+// request, an agent's question and a proposed write to global memory are: of their own, never
+// folded into a run.
 export function signatureOf(state: ThreadState | null | undefined): string {
   if (!state) return ''
   let signature = ''
@@ -16,17 +19,20 @@ export function signatureOf(state: ThreadState | null | undefined): string {
   return signature
 }
 
+const HIDDEN = /[nvx]/g
+
 /**
  * The entries and their signature without the ones the thread does not draw: the plans, which
- * only the top bar shows, and the messages Kettu sent as a card's answer.
+ * only the top bar shows, the messages Kettu sent as a card's answer, and the finished writes to
+ * artifacts, whose cards show them.
  */
 export function withoutHidden(
   order: string[],
   signature: string,
 ): { order: string[]; signature: string } {
-  if (!/[nv]/.test(signature)) return { order, signature }
-  const shown = order.filter((_, i) => signature[i] !== 'n' && signature[i] !== 'v')
-  return { order: shown, signature: signature.replace(/[nv]/g, '') }
+  if (signature.search(HIDDEN) === -1) return { order, signature }
+  const shown = order.filter((_, i) => !'nvx'.includes(signature[i]!))
+  return { order: shown, signature: signature.replace(HIDDEN, '') }
 }
 
 function charOf(entry: ThreadEntry | undefined): string {
@@ -50,6 +56,8 @@ function charOf(entry: ThreadEntry | undefined): string {
   if (entry.permission) return 'w'
   // A call of Kettu's workflow tools that ended is a card of its own, like a question.
   if (workflowCardOf(entry)) return 'o'
+  // A write to an artifact that succeeded is its card; a failed one stays a step.
+  if (entry.status === 'completed' && isArtifactWrite(entry)) return 'x'
   // An answered request keeps its folded card, so it stands on its own as the request did; a
   // routine's own answer is the routine's, and folds as work.
   const result = entry.permissionResult
@@ -214,6 +222,8 @@ const ENDING_PX = 24
 const CHANGES_HEAD_PX = 62
 const CHANGE_ROW_PX = 36
 const SHOWN_CHANGES = 3
+// An artifact's card by the write it records: a new artifact's page, an update, a deletion.
+const ARTIFACT_CARD_PX = { create: 335, update: 154, restore: 154, delete: 74 } as const
 
 /** A line's width in Latin characters, where a character of a wide script takes about two. */
 function lineUnits(line: string): number {
@@ -318,8 +328,10 @@ export function estimateOf(item: Item, byId: Record<string, ThreadEntry> | undef
     case 'p':
       return 28
     // A notice, a marker, a git event or a card.
-    default:
-      return 20
+    default: {
+      const entry = byId?.[item.id]
+      return entry?.kind === 'artifact' ? ARTIFACT_CARD_PX[entry.action] : 20
+    }
   }
 }
 
