@@ -192,18 +192,10 @@
     "daysLeft_other": " · {{count}} days left",
     "goneTitle": "This artifact was deleted",
     "goneDescription": "It stays in Recently deleted for 30 days.",
-    "editingLabel": "{{session}} is editing this artifact. Open the session",
-    "readingLabel": "{{session}} is reading this artifact. Open the session",
-    "stateEditing": "Editing",
-    "stateReading": "Reading",
     "using": "Using this artifact",
-    "moreSessions_other": "{{count}} more sessions",
-    "places_other": "Open in {{count}} places",
-    "placesTip_other": "This artifact is open in {{count}} places in Kettu",
     "history": "History",
     "versionChip": "Version {{version}}, history",
     "present": "Present",
-    "sideLabel": "History and comments",
     "previewOnly": {
       "title": "Live pages open on your computer",
       "body": "In the browser, an artifact shows its preview. Its live page opens in Kettu on the computer, or in the web client the computer serves on its own network.",
@@ -213,6 +205,22 @@
       "older": "The published page shows version {{published}}; the latest is version {{latest}}.",
       "open": "Open published page",
       "publish": "Publish to open"
+    },
+    "backToLatest": "Back to latest",
+    "showPages": "Show all pages",
+    "chat": "Chat",
+    "expand": "Expand",
+    "restore": "Restore",
+    "modes": {
+      "label": "Mode",
+      "view": "View",
+      "comment": "Comment",
+      "edit": "Edit",
+      "commentOpen_one": "Comment ({{count}} open thread)",
+      "commentOpen_other": "Comment ({{count}} open threads)",
+      "off": "Comment and Edit work once the page shows",
+      "deleted": "Restore it to comment or edit",
+      "earlier": "Comment and Edit work on the latest version, v{{version}}"
     }
   },
   "canvas": {
@@ -225,13 +233,10 @@
     "zoomToFit": "Zoom to fit",
     "previous": "Previous page",
     "next": "Next page",
-    "pages": "Pages",
     "counter": "{{number}} / {{count}}",
     "backToCanvas": "Back to the canvas",
     "fit": "Fit",
-    "zoomMenu": "Zoom, {{percent}}%",
     "fitAll": "Fit all",
-    "fitSelection": "Fit selection",
     "actualSize": "100%",
     "downloadPng": "Download PNG",
     "presentFrom": "Present from here",
@@ -336,9 +341,7 @@
     }
   },
   "tools": {
-    "label": "Tools",
-    "select": "Select",
-    "comment": "Comment"
+    "label": "Tools"
   },
   "anchor": {
     "element": "{{tag}} “{{text}}”",
@@ -435,48 +438,18 @@
     "failed": "Your answer could not be saved: {{error}}"
   },
   "board": {
-    "tools": {
-      "move": "Move",
-      "hand": "Hand",
-      "page": "Frame",
-      "text": "Text",
-      "sticky": "Sticky note",
-      "pen": "Pen",
-      "marker": "Highlighter",
-      "shape": "Shapes",
-      "rect": "Rectangle",
-      "ellipse": "Ellipse",
-      "line": "Line",
-      "arrow": "Arrow",
-      "comment": "Comment",
-      "toolbar": "Canvas tools",
-      "penStyle": "Pen style",
-      "thickness": "Thickness",
-      "colors": {
-        "ink": "Ink",
-        "red": "Red",
-        "orange": "Orange",
-        "yellow": "Yellow",
-        "green": "Green",
-        "blue": "Blue",
-        "violet": "Violet"
-      }
-    },
     "canvases": {
       "menu": "Pages",
-      "pages": "{{count}} frames",
-      "pages_one": "{{count}} frame",
       "new": "New page",
       "rename": "Rename",
       "duplicate": "Duplicate page",
       "delete": "Delete page",
       "newName": "Page {{number}}",
-      "lastOne": "A canvas keeps at least one page"
+      "lastOne": "A canvas keeps at least one page",
+      "actions": "Page actions"
     },
     "layers": {
       "title": "Layers",
-      "close": "Close layers",
-      "open": "Layers",
       "notes": {
         "text": "Text",
         "sticky": "Sticky note",
@@ -485,61 +458,25 @@
         "ellipse": "Ellipse",
         "line": "Line",
         "arrow": "Arrow"
-      }
+      },
+      "empty": "Nothing on this page yet"
     },
     "props": {
       "title": "Title",
-      "page": "Frame",
-      "name": "Name",
-      "size": "Size",
-      "width": "W",
-      "height": "H",
-      "x": "X",
-      "y": "Y",
-      "presets": {
-        "desktop": "Desktop",
-        "laptop": "Laptop",
-        "tablet": "Tablet",
-        "phone": "Phone",
-        "custom": "Custom"
-      },
       "params": "Tweaks",
       "paramsHint": "Parameters the frame declares",
       "saving": "Saving…",
       "saved": "Saved as v{{version}}, history can restore the one before",
-      "note": "Note",
-      "color": "Color",
-      "strokeWidth": "Thickness",
-      "fontSize": "Size",
-      "done": "Handled",
-      "selected": "{{count}} selected",
-      "arrange": "Arrange",
-      "alignLeft": "Align left",
-      "alignCenter": "Align centers",
-      "alignRight": "Align right",
-      "alignTop": "Align tops",
-      "alignMiddle": "Align middles",
-      "alignBottom": "Align bottoms",
-      "distributeH": "Distribute horizontally",
-      "distributeV": "Distribute vertically",
-      "duplicate": "Duplicate",
-      "delete": "Delete",
-      "lock": "Lock",
-      "unlock": "Unlock",
-      "bringFront": "Bring to front",
-      "sendBack": "Send to back",
       "paramsFailed": "The tweak was not saved. {{error}}"
     },
     "page": {
       "blank": "New frame",
       "blankHint": "Empty until an agent draws it",
       "drawing": "{{agent}} is drawing this frame",
-      "newName": "Frame {{number}}",
       "ask": "Hand to the agent",
       "tweak": "Tweaks"
     },
     "note": {
-      "text": "Text",
       "doneBy": "Handled by {{agent}}",
       "by": "{{who}}",
       "agent": "An agent"
@@ -575,8 +512,7 @@
     },
     "empty": {
       "title": "This page has no frames yet",
-      "body": "Drag out a blank frame with the frame tool, or ask an agent to draw one. Lay frames out and mark them up here, then hand them to the agent.",
-      "pageTool": "Frame tool",
+      "body": "Ask an agent to draw a frame on it. Mark it up here, then hand it back to the agent.",
       "ask": "Ask an agent for a frame"
     },
     "legacy": "An older canvas: the first change you make on it splits it into a file per frame, as a new version.",
@@ -592,16 +528,11 @@
       "hint": "Ask the agent to add some, such as a theme, an accent color or a density."
     },
     "side": {
-      "props": "Properties",
-      "tweaks": "Tweaks",
-      "close": "Close the panel",
-      "none": "Select a frame or a note to see its properties.",
-      "tabs": "Panel"
+      "tweaks": "Tweaks"
     },
     "top": {
       "present": "Present",
-      "tweaks": "Tweaks",
-      "toolbar": "View"
+      "tweaks": "Tweaks"
     }
   },
   "overview": {

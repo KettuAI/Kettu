@@ -116,7 +116,7 @@ export function MainArea() {
     return (
       <PageSheet>
         <Suspense fallback={null}>
-          <ArtifactViewer key={main.id} id={main.id} history={main.history === true} />
+          <ArtifactViewer key={main.id} where="main" id={main.id} history={main.history === true} />
         </Suspense>
       </PageSheet>
     )

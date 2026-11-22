@@ -34,7 +34,6 @@ import {
 import type { CanvasLayout, PlacedPage } from './canvas'
 import type { CanvasControls } from './canvas-controls'
 import { useEditorFrame, useEditorState, type ArtifactEditor, type EditorFrame } from './editor'
-import { isModeKey } from './keys'
 import { framePageUrl } from './use-artifact'
 import { BarButton } from './viewer-parts'
 
@@ -443,10 +442,8 @@ export const CanvasView = memo(function CanvasView({
     }
     const key = event.key
     const count = pages.length
-    const modeKey = editor ? isModeKey(event.nativeEvent) : null
-    if (modeKey) editor!.toggle(modeKey)
-    else if (key === 'Escape' && editor?.escape()) {
-      // Back to the base mode, or the pick let go of, before Esc means anything else.
+    if (key === 'Escape' && editor?.escape()) {
+      // The pick let go of, before Esc means anything else.
     } else if (event.shiftKey && event.code === 'Digit1') fitAll(true)
     else if (event.shiftKey && event.code === 'Digit2') fitPage(selected)
     else if (event.shiftKey && event.code === 'Digit0') zoomAround(1)
@@ -828,10 +825,8 @@ export function FocusedPage({
       onKeyDown={(event) => {
         // Keys typed in the page stay there.
         if (event.target !== event.currentTarget) return
-        const modeKey = editor ? isModeKey(event.nativeEvent) : null
-        if (modeKey) editor!.toggle(modeKey)
-        else if (event.key === 'Escape' && editor?.escape()) {
-          // Back to the base mode, or the pick let go of, before leaving the page.
+        if (event.key === 'Escape' && editor?.escape()) {
+          // The pick let go of, before leaving the page.
         } else if (event.key === 'Escape') onLeave()
         else if (event.key === 'ArrowRight') onMove(1)
         else if (event.key === 'ArrowLeft') onMove(-1)

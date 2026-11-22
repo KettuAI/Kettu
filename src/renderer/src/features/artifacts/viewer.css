@@ -1,126 +1,6 @@
-/* One artifact on affectUI: the viewer as a sheet with App Shell's chat bar, its tools at the foot,
-   its column of Settings' cards, and the artifact pane beside a session. Colors come from the
-   shell's variables inside the frame and from the theme's tokens outside it. */
-
-.k-av {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-  min-height: 0;
-}
-
-/* ---------- The bar ---------- */
-
-.k-av__crumbs {
-  flex: 0 1 auto;
-  gap: 8px;
-  min-width: 0;
-  font-size: 13px;
-  color: var(--muted);
-}
-.k-av__crumbs > * {
-  flex: none;
-}
-.k-av__crumbs i {
-  font-style: normal;
-  color: var(--faint);
-}
-.k-av__back {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  height: 28px;
-  padding: 0 8px 0 5px;
-  border-radius: 8px;
-  color: var(--muted);
-  transition:
-    background-color 140ms ease,
-    color 140ms ease;
-}
-.k-av__back:hover {
-  background: var(--hover);
-  color: var(--ink);
-}
-.k-av__mark {
-  display: grid;
-  place-items: center;
-  color: var(--muted);
-}
-.k-av__mark[data-kind='document'] {
-  color: var(--kind-document);
-}
-.k-av__mark[data-kind='slides'] {
-  color: var(--kind-slides);
-}
-.k-av__mark[data-kind='web'] {
-  color: var(--kind-web);
-}
-.k-av__mark[data-kind='canvas'] {
-  color: var(--kind-canvas);
-}
-/* The artifact's name gives way before the page's, and both before the chip after them. */
-.k-av__crumbs > :is(.k-av__title, .k-av__crumb) {
-  flex: 0 1 auto;
-  min-width: 0;
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-}
-.k-av__title {
-  margin: 0;
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--ink);
-}
-.k-av__crumbs > .k-av__crumb {
-  flex-shrink: 4;
-  max-width: 220px;
-  border-radius: 6px;
-  color: var(--muted);
-  transition: color 140ms ease;
-}
-.k-av__crumb:hover {
-  color: var(--ink);
-}
-.k-av__gap {
-  flex: 1;
-  min-width: 8px;
-}
-.k-av__tools {
-  flex: none;
-  gap: 2px;
-  min-width: 0;
-}
-
-.k-av-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  height: 24px;
-  padding: 0 7px 0 8px;
-  border-radius: 7px;
-  background: var(--chip);
-  font-size: 12px;
-  color: var(--muted);
-  white-space: nowrap;
-  transition:
-    background-color 140ms ease,
-    color 140ms ease;
-}
-.k-av-chip:hover,
-.k-av-chip[aria-expanded='true'] {
-  background: var(--select);
-  color: var(--ink);
-}
-.k-av-chip__num {
-  font-weight: 500;
-  font-variant-numeric: tabular-nums;
-  color: var(--text);
-}
-.k-av-chip__dim,
-.k-av-chip svg {
-  color: var(--faint);
-}
+/* Parts of the artifact viewer on affectUI: its menus, its empty states, the column of
+   history, comments and the picked element's look, and the faces of who is here. The shell
+   around them is in viewer-shell.css. Colors come from the shell's variables. */
 
 .k-av-btn {
   position: relative;
@@ -135,129 +15,13 @@
   opacity: 0.4;
   pointer-events: none;
 }
-.k-av-btn--group {
-  width: 26px;
-  height: 26px;
-  border-radius: 7px;
-}
-:is(
-  .k-av__back,
-  .k-av__crumb,
-  .k-av-chip,
-  .k-av-btn,
-  .k-av-avatar,
-  .k-av-dock__mode,
-  .k-av-dock__zoom,
-  .k-av-ver,
-  .k-av-link,
-  .k-av-thread__anchor
-):focus-visible {
+:is(.k-av-btn, .k-av-ver, .k-av-link, .k-av-thread__anchor):focus-visible {
   outline: 2px solid var(--accent, var(--focus-ring-color));
   outline-offset: 1px;
 }
 
-.k-av-rule {
-  flex: none;
-  width: 0.5px;
-  height: 16px;
-  margin: 0 6px;
-  background: var(--line-strong, var(--border-default));
-}
-.k-av-rule[data-size='pane'] {
-  height: 14px;
-  margin: 0 4px;
-}
-.k-av-group {
-  display: inline-flex;
-  flex: none;
-  align-items: center;
-  height: 28px;
-  padding: 0 1px;
-  border-radius: 8px;
-  box-shadow: inset 0 0 0 0.5px var(--line-strong);
-}
-.k-av-group[data-size='pane'] {
-  height: 26px;
-}
-.k-av-group__count {
-  min-width: 44px;
-  font-size: 12px;
-  font-variant-numeric: tabular-nums;
-  color: var(--muted);
-  text-align: center;
-}
-.k-av-pagename {
-  max-width: 160px;
-  padding: 0 6px;
-  overflow: hidden;
-  font-size: 12.5px;
-  font-weight: 500;
-  color: var(--ink);
-  white-space: nowrap;
-  text-overflow: ellipsis;
-}
-
-/* Who is at the artifact: overlapping round marks, the first on top. */
-.k-av-people {
-  display: flex;
-  flex: none;
-  align-items: center;
-}
-.k-av-people__one {
-  position: relative;
-  z-index: var(--stack, 0);
-  display: flex;
-}
-.k-av-people__one + .k-av-people__one {
-  margin-left: -6px;
-}
-.k-av-people__one:is(:hover, :focus-within) {
-  z-index: 20;
-}
-.k-av-avatar {
-  display: grid;
-  place-items: center;
-  width: 24px;
-  height: 24px;
-  border-radius: 50%;
-  background: var(--card);
-  box-shadow:
-    inset 0 0 0 0.5px var(--line-strong),
-    0 0 0 2px var(--bg-app);
-  transition: box-shadow 140ms ease;
-}
-.k-av-avatar:hover {
-  box-shadow:
-    inset 0 0 0 0.5px var(--faint),
-    0 0 0 2px var(--bg-app);
-}
-.k-av-avatar--more {
-  font-size: 11px;
-  font-weight: 500;
-  font-variant-numeric: tabular-nums;
-  color: var(--muted);
-}
-.k-av-avatar__spin {
-  position: absolute;
-  inset: -4px;
-  z-index: 1;
-  width: 32px;
-  height: 32px;
-  margin: auto;
-  color: var(--accent);
-  pointer-events: none;
-}
-.k-av-places {
-  flex: none;
-  padding: 0 8px;
-  font-size: 12px;
-  color: var(--faint);
-  white-space: nowrap;
-}
-
 .k-av-more .ui-as-popover,
-.k-av-more .ui-as-menu__subpanel,
-.k-av-zoom .ui-as-popover {
+.k-av-more .ui-as-menu__subpanel {
   min-width: 220px;
 }
 /* The pane's menu is end-aligned at the window's right edge, so Export opens on its left. */
@@ -268,26 +32,6 @@
 .k-av-more [data-align='end'] .ui-as-menu__subpanel::before {
   right: -8px;
   left: auto;
-}
-
-/* ---------- The area ---------- */
-
-.k-av__body {
-  position: relative;
-  display: flex;
-  flex: 1;
-  min-height: 0;
-}
-/* Its lower corners are the page sheet's, inside the sheet's 1 px border. */
-.k-av__area {
-  position: relative;
-  flex: 1;
-  min-width: 0;
-  border-bottom-left-radius: calc(var(--radius-card) - 1px);
-  background: var(--bg-app);
-}
-.k-av__area:last-child {
-  border-bottom-right-radius: calc(var(--radius-card) - 1px);
 }
 
 .k-av-empty {
@@ -308,39 +52,6 @@
   justify-content: center;
   gap: 8px;
   margin-top: 18px;
-}
-
-/* What shows instead of the latest version, floating over the page's top. */
-.k-av-status {
-  position: absolute;
-  top: 14px;
-  left: 50%;
-  z-index: 10;
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  max-width: calc(100% - 24px);
-  height: 40px;
-  padding: 0 5px 0 14px;
-  border-radius: 12px;
-  background: var(--card);
-  box-shadow:
-    0 0 0 0.5px var(--line-strong),
-    var(--elevation-float);
-  font-size: 12.5px;
-  color: var(--muted);
-  white-space: nowrap;
-  translate: -50% 0;
-  animation: k-av-in 180ms var(--ease);
-}
-.k-av-status__text {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.k-av-status__text b {
-  font-weight: 500;
-  color: var(--ink);
 }
 
 /* A navigation the page tried and main blocked. */
@@ -376,76 +87,6 @@
 }
 .k-av-blocked > a {
   flex: none;
-}
-
-/* ---------- The tools at the foot ---------- */
-
-.k-av-dock {
-  position: absolute;
-  bottom: 20px;
-  left: 50%;
-  z-index: 10;
-  display: flex;
-  align-items: center;
-  gap: 2px;
-  height: 40px;
-  padding: 0 4px;
-  border-radius: 12px;
-  background: var(--card);
-  box-shadow:
-    0 0 0 0.5px var(--line-strong),
-    var(--elevation-float);
-  translate: -50% 0;
-}
-.k-av-dock[data-aside] {
-  left: 20px;
-  translate: none;
-}
-.k-av-dock__mode,
-.k-av-dock__zoom {
-  display: inline-flex;
-  align-items: center;
-  height: 32px;
-  border-radius: 9px;
-  font-size: 13px;
-  color: var(--text);
-  white-space: nowrap;
-  transition:
-    background-color 140ms ease,
-    color 140ms ease;
-}
-.k-av-dock__mode {
-  gap: 6px;
-  padding: 0 10px;
-}
-.k-av-dock__mode svg {
-  color: var(--muted);
-}
-.k-av-dock__mode kbd {
-  font: inherit;
-  font-size: 11px;
-  color: var(--faint);
-}
-.k-av-dock__zoom {
-  justify-content: center;
-  gap: 4px;
-  min-width: 64px;
-  padding: 0 8px;
-  font-variant-numeric: tabular-nums;
-}
-.k-av-dock__zoom svg {
-  color: var(--faint);
-}
-:is(.k-av-dock__mode, .k-av-dock__zoom):hover {
-  background: var(--hover);
-  color: var(--ink);
-}
-:is(.k-av-dock__mode[aria-pressed='true'], .k-av-dock__zoom[aria-expanded='true']) {
-  background: var(--select);
-  color: var(--ink);
-}
-.k-av-dock__mode[aria-pressed='true'] svg {
-  color: var(--ink);
 }
 
 /* ---------- The column: history, comments, or the picked element's look ---------- */
@@ -1178,42 +819,6 @@
   outline: 2px solid var(--focus-ring-color);
 }
 
-/* ---------- The artifact pane beside a session ---------- */
-
-.k-av-pane__title {
-  min-width: 0;
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-}
-.k-av-pane__version {
-  flex: none;
-  font-size: 12px;
-  font-variant-numeric: tabular-nums;
-  color: var(--text-tertiary);
-}
-.k-av-frame {
-  position: relative;
-  flex: 1;
-  min-height: 0;
-  overflow: hidden;
-  border-radius: 10px;
-  background: var(--bg-app);
-  box-shadow: 0 0 0 var(--hairline) var(--border-default);
-}
-/* A canvas document in a session's side panel: the editor edge to edge, as in the main area, with
-   the edit panel of a picked element beside it. */
-.kp-body.k-av-pane__canvas {
-  flex-direction: row;
-  gap: 0;
-  margin: 0 -10px -10px -12px;
-  padding: 0;
-}
-.k-av-frame[data-canvas] {
-  border-radius: 0;
-  box-shadow: inset 0 0.5px 0 var(--line-strong);
-}
-
 @keyframes k-av-in {
   from {
     opacity: 0;
@@ -1226,7 +831,6 @@
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  .k-av-status,
   .k-av-compose[data-placed],
   .k-av-side {
     animation: none;

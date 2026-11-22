@@ -186,18 +186,10 @@
     "daysLeft_other": " · 剩 {{count}} 天",
     "goneTitle": "这个产物已被删除",
     "goneDescription": "它会在最近删除中保留 30 天。",
-    "editingLabel": "{{session}} 正在编辑这个产物。打开会话",
-    "readingLabel": "{{session}} 正在读取这个产物。打开会话",
-    "stateEditing": "编辑中",
-    "stateReading": "读取中",
     "using": "正在使用这个产物",
-    "moreSessions_other": "还有 {{count}} 个会话",
-    "places_other": "在 {{count}} 处打开",
-    "placesTip_other": "这个产物在 Kettu 中的 {{count}} 处打开",
     "history": "历史",
     "versionChip": "版本 {{version}}，历史",
     "present": "演示",
-    "sideLabel": "历史与评论",
     "previewOnly": {
       "title": "实时页面在电脑上打开",
       "body": "在浏览器里，产物显示它的预览图。实时页面在电脑上的 Kettu 里打开，或在电脑自己的网络里打开它提供的网页版。",
@@ -207,6 +199,21 @@
       "older": "已发布的页面是版本 {{published}}，最新是版本 {{latest}}。",
       "open": "打开已发布页面",
       "publish": "发布后打开"
+    },
+    "backToLatest": "回到最新",
+    "showPages": "显示所有页面",
+    "chat": "对话",
+    "expand": "展开",
+    "restore": "还原",
+    "modes": {
+      "label": "模式",
+      "view": "查看",
+      "comment": "评论",
+      "edit": "编辑",
+      "commentOpen_other": "评论（{{count}} 条未解决）",
+      "off": "页面显示后才能评论和编辑",
+      "deleted": "恢复后才能评论和编辑",
+      "earlier": "评论和编辑只作用于最新版本 v{{version}}"
     }
   },
   "canvas": {
@@ -219,13 +226,10 @@
     "zoomToFit": "缩放至适合",
     "previous": "上一页",
     "next": "下一页",
-    "pages": "页面",
     "counter": "{{number}} / {{count}}",
     "backToCanvas": "返回画布",
     "fit": "适应窗口",
-    "zoomMenu": "缩放，{{percent}}%",
     "fitAll": "适合全部",
-    "fitSelection": "适合选中",
     "actualSize": "100%",
     "downloadPng": "下载 PNG",
     "presentFrom": "从这页演示",
@@ -330,9 +334,7 @@
     }
   },
   "tools": {
-    "label": "工具",
-    "select": "选择",
-    "comment": "评论"
+    "label": "工具"
   },
   "anchor": {
     "element": "{{tag}}“{{text}}”",
@@ -425,48 +427,18 @@
     "failed": "没能保存你的选择：{{error}}"
   },
   "board": {
-    "tools": {
-      "move": "移动",
-      "hand": "抓手",
-      "page": "画框",
-      "text": "文字",
-      "sticky": "便签",
-      "pen": "画笔",
-      "marker": "荧光笔",
-      "shape": "形状",
-      "rect": "矩形",
-      "ellipse": "椭圆",
-      "line": "线",
-      "arrow": "箭头",
-      "comment": "评论",
-      "toolbar": "画布工具",
-      "penStyle": "画笔样式",
-      "thickness": "粗细",
-      "colors": {
-        "ink": "墨色",
-        "red": "红",
-        "orange": "橙",
-        "yellow": "黄",
-        "green": "绿",
-        "blue": "蓝",
-        "violet": "紫"
-      }
-    },
     "canvases": {
       "menu": "页面",
-      "pages": "{{count}} 个画框",
-      "pages_one": "{{count}} 个画框",
       "new": "新建页面",
       "rename": "改名",
       "duplicate": "复制这个页面",
       "delete": "删除页面",
       "newName": "页面 {{number}}",
-      "lastOne": "画布至少保留一个页面"
+      "lastOne": "画布至少保留一个页面",
+      "actions": "页面操作"
     },
     "layers": {
       "title": "图层",
-      "close": "关闭图层",
-      "open": "图层",
       "notes": {
         "text": "文字",
         "sticky": "便签",
@@ -475,61 +447,25 @@
         "ellipse": "椭圆",
         "line": "线",
         "arrow": "箭头"
-      }
+      },
+      "empty": "这个页面上还没有内容"
     },
     "props": {
       "title": "标题",
-      "page": "画框",
-      "name": "名字",
-      "size": "尺寸",
-      "width": "W",
-      "height": "H",
-      "x": "X",
-      "y": "Y",
-      "presets": {
-        "desktop": "桌面",
-        "laptop": "笔记本",
-        "tablet": "平板",
-        "phone": "手机",
-        "custom": "自定义"
-      },
       "params": "调节",
       "paramsHint": "画框声明的参数",
       "saving": "正在保存…",
       "saved": "已保存为 v{{version}}，历史里能恢复之前的",
-      "note": "标注",
-      "color": "颜色",
-      "strokeWidth": "粗细",
-      "fontSize": "字号",
-      "done": "已处理",
-      "selected": "已选 {{count}} 项",
-      "arrange": "排列",
-      "alignLeft": "左对齐",
-      "alignCenter": "水平居中",
-      "alignRight": "右对齐",
-      "alignTop": "顶对齐",
-      "alignMiddle": "垂直居中",
-      "alignBottom": "底对齐",
-      "distributeH": "水平等距",
-      "distributeV": "垂直等距",
-      "duplicate": "复制",
-      "delete": "删除",
-      "lock": "锁定",
-      "unlock": "解锁",
-      "bringFront": "移到最前",
-      "sendBack": "移到最后",
       "paramsFailed": "调节没有保存。{{error}}"
     },
     "page": {
       "blank": "新画框",
       "blankHint": "智能体画好之前是空的",
       "drawing": "{{agent}} 正在画这个画框",
-      "newName": "画框 {{number}}",
       "ask": "交给智能体",
       "tweak": "调节"
     },
     "note": {
-      "text": "文字",
       "doneBy": "{{agent}} 已处理",
       "by": "{{who}}",
       "agent": "智能体"
@@ -565,8 +501,7 @@
     },
     "empty": {
       "title": "这个页面还没有画框",
-      "body": "用画框工具拉一个空白画框，或者让智能体来画。画框画好后在这里排版、标注，再交给智能体改。",
-      "pageTool": "画框工具",
+      "body": "让智能体在这里画一个画框，标注后再交给智能体改。",
       "ask": "让智能体画一个画框"
     },
     "legacy": "这是旧格式的画布：你在上面第一次改动时，会拆成每个画框一个文件，写成新版本。",
@@ -582,16 +517,11 @@
       "hint": "可以让智能体加上，比如主题、强调色或密度。"
     },
     "side": {
-      "props": "属性",
-      "tweaks": "调节",
-      "close": "关闭面板",
-      "none": "选中一个画框或标注，查看它的属性。",
-      "tabs": "面板"
+      "tweaks": "调节"
     },
     "top": {
       "present": "演示",
-      "tweaks": "调节",
-      "toolbar": "视图"
+      "tweaks": "调节"
     }
   },
   "overview": {

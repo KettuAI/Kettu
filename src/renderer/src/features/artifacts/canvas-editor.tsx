@@ -3,11 +3,11 @@ import {
   AiMagicIcon,
   CenterFocusIcon,
   Download04Icon,
-  GridIcon,
   MinusSignIcon,
-  Cancel01Icon,
+  MoreHorizontalIcon,
   PlayIcon,
   PlusSignIcon,
+  SidebarLeftIcon,
   SlidersHorizontalIcon,
   Tick02Icon,
 } from '@hugeicons/core-free-icons'
@@ -31,10 +31,18 @@ import {
   type ShapeNote,
 } from '@shared/canvas-doc'
 import { AgentCursorStyles, AgentPointer } from '@renderer/components/affect/agent-cursors'
+import { Dropdown } from '@renderer/components/affect/app-shell'
 import { AgentMark } from '@renderer/components/agents/agent-mark'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
 import { glide } from '@renderer/lib/motion'
 import { cn } from '@renderer/lib/utils'
+import {
+  saveCamera,
+  savedCamera,
+  setViewerState,
+  useViewerState,
+  type ViewerMode,
+} from '@renderer/stores/artifact-viewer'
 import { prefersReducedMotion } from '@renderer/stores/settings'
 import {
   between,
@@ -50,14 +58,15 @@ import {
 } from './camera'
 import { useCanvasState, type CanvasControls } from './canvas-controls'
 import { CanvasFrame, FocusedPage } from './canvas-view'
-import { CanvasLayers, CanvasProps, CanvasToolbar, CanvasTweaks } from './canvas-editor-panels'
+import { CanvasNavigator, CanvasTweaks } from './canvas-editor-panels'
 import { contains, docLayout, overlaps, snap, type DocLayout } from './canvas-model'
 import { useEditorState, type ArtifactEditor, type EditorFrame } from './editor'
-import { isModeKey } from './keys'
 import type { CanvasDocState } from './use-canvas-doc'
 import { useFrameParams } from './use-frame-params'
 import { framePageUrl } from './use-artifact'
-import { NOTE_COLOR_VAR, type PenStyle, type ShapeKind, type Tool } from './canvas-tools'
+import { NOTE_COLOR_VAR } from './canvas-tools'
+import { DockButton, DockRule, ViewerSlot } from './viewer-shell'
+import { useShell } from './viewer-shell-context'
 import './canvas-editor.css'
 
 /** An agent working on the artifact, as its pointer shows it. */
@@ -82,21 +91,11 @@ const DRAG_SLOP = 3
 /** How near, in screen pixels, a moved edge snaps to another. */
 const SNAP_PX = 6
 const HANDLE_PX = 8
-const NEW_PAGE = { width: 1440, height: 900 }
-const TOOL_KEYS: Record<string, Tool> = {
-  v: 'move',
-  h: 'hand',
-  f: 'page',
-  t: 'text',
-  s: 'sticky',
-  p: 'pen',
-  r: 'shape',
-}
 
 type Corner = 'nw' | 'ne' | 'sw' | 'se'
 
 interface Drag {
-  kind: 'pan' | 'move' | 'resize' | 'marquee' | 'create' | 'pen'
+  kind: 'pan' | 'move' | 'resize' | 'marquee'
   sx: number
   sy: number
   cx: number
@@ -105,7 +104,6 @@ interface Drag {
   moved: boolean
   ids?: string[]
   corner?: Corner
-  points?: number[]
   /** A press on a frame that picks the element under it unless it turns into a drag. */
   pick?: { page: string; x: number; y: number; at: { x: number; y: number } }
 }
@@ -166,14 +164,12 @@ function union(boxes: Box[]): Box | null {
 /** The band above a frame, in screen pixels, where its name selects the whole frame. */
 const LABEL_BAND = 24
 
-/** The width from which the panels take room beside the pages instead of covering them. */
-const WIDE_PX = 900
-
-/** The room the right panel takes, which fitting leaves free. */
-const SIDE_ROOM = 300
-
-/** The room the open layers panel takes at the left, which fitting leaves free. */
-const LAYERS_ROOM = 256
+/** The ground's dots, 20 canvas pixels apart, doubled until they are at least 12 px apart. */
+function dotGap(z: number): number {
+  let gap = 20 * z
+  while (gap < 12) gap *= 2
+  return gap
+}
 
 /** A label's action button and the gap after it, in screen pixels. */
 const LABEL_ACT = 22
@@ -193,18 +189,16 @@ function fitLabels(layer: HTMLElement | undefined, z: number): void {
 export function NoteView({
   note,
   pages,
-  editing,
   doneBy,
 }: {
   note: CanvasNote
   pages: readonly CanvasPage[]
-  editing: boolean
   doneBy: string | null
 }) {
   const color = NOTE_COLOR_VAR[note.color]
   switch (note.kind) {
     case 'text':
-      return editing ? null : (
+      return (
         <div
           className="k-ce-text"
           style={{ left: note.x, top: note.y, fontSize: note.size, color }}
@@ -219,7 +213,7 @@ export function NoteView({
           data-done={note.done ? '' : undefined}
           style={{ left: note.x, top: note.y, width: note.width, minHeight: noteBox(note).height }}
         >
-          {!editing && note.text}
+          {note.text}
           {doneBy && <div className="k-ce-sticky__by">{doneBy}</div>}
           {note.done && (
             <span className="k-ce-sticky__done">
@@ -302,8 +296,9 @@ export function NoteView({
 }
 
 /**
- * A canvas document's active canvas, edited like a design app: its pages and notes on a
- * surface that pans and zooms, the floating tools over it, and the agents at work on it.
+ * A canvas document's page on screen: its frames and notes on a surface that pans and zooms, in
+ * the viewer's mode, with the agents at work on it. Its navigator, tweaks and zoom go into the
+ * viewer's left card, right card and dock.
  */
 export const CanvasEditor = memo(function CanvasEditor({
   artifactId,
@@ -314,6 +309,7 @@ export const CanvasEditor = memo(function CanvasEditor({
   canvas,
   files,
   readOnly,
+  mode: viewerMode,
   controls,
   top = 0,
   editor,
@@ -337,6 +333,8 @@ export const CanvasEditor = memo(function CanvasEditor({
   /** The files of the version on screen; a page whose file is missing shows blank. */
   files: ReadonlySet<string>
   readOnly: boolean
+  /** The viewer's mode: View looks, Comment pins comments, Edit picks and arranges. */
+  mode: ViewerMode
   controls: CanvasControls
   top?: number
   editor?: ArtifactEditor
@@ -357,14 +355,38 @@ export const CanvasEditor = memo(function CanvasEditor({
 }) {
   const { t } = useTranslation('artifacts')
   const doc = canvas.doc
-  const [activeCanvas, setActiveCanvas] = useState<string | null>(null)
+  const { insets, tier } = useShell()
+  const activeCanvas = useViewerState(artifactId, (s) => s.page)
+  const selection = useViewerState(artifactId, (s) => s.selection)
+  const focused = useViewerState(artifactId, (s) => s.opened)
+  const tweaksOpen = useViewerState(artifactId, (s) => s.right === 'tweaks') && !readOnly
+  const setSelection = useCallback(
+    (ids: readonly string[]) =>
+      setViewerState(artifactId, (s) =>
+        s.selection.length === 0 && ids.length === 0 ? {} : { selection: ids },
+      ),
+    [artifactId],
+  )
+  const setFocused = useCallback(
+    (id: string | null) => setViewerState(artifactId, { opened: id }),
+    [artifactId],
+  )
+  const chooseCanvas = useCallback(
+    (id: string) => setViewerState(artifactId, { page: id, selection: [], opened: null }),
+    [artifactId],
+  )
+  const toggleTweaks = (open: boolean) =>
+    setViewerState(artifactId, (s) => ({
+      right: open ? 'tweaks' : s.right === 'tweaks' ? null : s.right,
+    }))
   // A page asked for shows on its own canvas.
-  const [asked, setAsked] = useState<number | null>(null)
-  if (show && doc && asked !== show.seq) {
-    setAsked(show.seq)
+  const askedSeq = useRef<number | null>(null)
+  useLayoutEffect(() => {
+    if (!show || !doc || askedSeq.current === show.seq) return
+    askedSeq.current = show.seq
     const page = doc.pages.find((p) => p.id === show.pageId)
-    if (page) setActiveCanvas(page.canvas)
-  }
+    if (page) setViewerState(artifactId, { page: page.canvas, opened: null })
+  }, [show, doc, artifactId])
   const canvasKey = doc?.canvases.some((c) => c.id === activeCanvas)
     ? activeCanvas!
     : (doc?.canvases[0]?.id ?? '')
@@ -375,6 +397,7 @@ export const CanvasEditor = memo(function CanvasEditor({
   )
   const pages = useMemo(() => layout?.pages ?? [], [layout])
 
+  const root = useRef<HTMLDivElement>(null)
   const stage = useRef<HTMLDivElement>(null)
   const layers = useRef<HTMLDivElement[]>([])
   const camera = useRef<Camera>({ x: 0, y: 0, z: 1 })
@@ -391,35 +414,21 @@ export const CanvasEditor = memo(function CanvasEditor({
   const frames = useRef(new Map<string, HTMLIFrameElement>())
   const editorFrames = useRef(new Map<string, EditorFrame>())
   const editing = useEditorState(editor)
-  const [tool, setTool] = useState<Tool>('move')
-  const [shape, setShape] = useState<ShapeKind>('rect')
-  const [pen, setPen] = useState<PenStyle>({ marker: false, color: 'red', width: 3 })
-  const [selection, setSelection] = useState<string[]>([])
+  // A frame entered by a double click, whose elements are picked in any mode.
   const [inside, setInside] = useState<string | null>(null)
-  const [focused, setFocused] = useState<string | null>(null)
-  const [textEdit, setTextEdit] = useState<string | null>(null)
-  // Open in the full editor, as the list of what the canvas holds; the side panel has no room.
-  // Whether the canvas has room for its panels beside the pages, as in the main area; narrower,
-  // as in a session's side panel, they open over the pages and the layers start closed.
-  const [wide, setWide] = useState(true)
-  const [layersChoice, setLayersOpen] = useState<boolean | null>(null)
-  const layersOpen = layersChoice ?? (!readOnly && wide)
-  // The right panel's tab the user chose; without one it shows the selection's properties.
-  const [side, setSide] = useState<'props' | 'tweaks' | null>(null)
   const [guides, setGuides] = useState<ReturnType<typeof snap>['guides']>([])
   const [marquee, setMarquee] = useState<Box | null>(null)
-  const [stroke, setStroke] = useState<number[] | null>(null)
-  const [creating, setCreating] = useState<Box | null>(null)
   const [spaceDown, setSpaceDown] = useState(false)
   const [located, setLocated] = useState<Record<string, Box | null>>({})
   const drag = useRef<Drag | null>(null)
   // Mirrors of the drag under way for what renders: a pan's cursor, the selection's bar.
   const [panning, setPanning] = useState(false)
   const [dragging, setDragging] = useState(false)
-  const pageNumber = useRef(0)
 
   const mode = editor ? editing.mode : null
-  const hand = tool === 'hand' || spaceDown
+  const hand = spaceDown
+  // Frames are moved, resized, nudged and removed in Edit only.
+  const arranging = !readOnly && viewerMode === 'edit'
 
   // Selected ids that are gone drop out.
   const shownSelection = useMemo(
@@ -427,10 +436,6 @@ export const CanvasEditor = memo(function CanvasEditor({
     [layout, selection],
   )
   const frameParams = useFrameParams(artifactId, version, pages)
-  // The right panel: the tab chosen, else the selection's properties while there is one.
-  const shownSide = readOnly
-    ? null
-    : (side ?? (shownSelection.length > 0 && !inside ? 'props' : null))
 
   // Live pages follow the camera, nearest first, one more each time the last has settled; a page
   // without its file yet has nothing to load.
@@ -459,15 +464,23 @@ export const CanvasEditor = memo(function CanvasEditor({
 
   const draw = useCallback(() => {
     const { x, y, z } = camera.current
+    if (fitted.current) saveCamera(artifactId, canvasKey, { x, y, z, fitted: atFit.current })
     for (const el of layers.current) {
       if (!el) continue
       el.style.transform = `translate(${x}px, ${y}px) scale(${z})`
       el.style.setProperty('--unscale', String(1 / z))
     }
     fitLabels(layers.current[1], z)
+    const ground = root.current
+    if (ground) {
+      const gap = dotGap(z)
+      ground.style.setProperty('--ce-dots', `${gap}px`)
+      ground.style.setProperty('--ce-dots-x', `${x % gap}px`)
+      ground.style.setProperty('--ce-dots-y', `${y % gap}px`)
+    }
     controls.publish({ zoom: z, fitted: atFit.current })
     syncLive()
-  }, [controls, syncLive])
+  }, [controls, syncLive, artifactId, canvasKey])
 
   const place = useCallback(
     (next: Camera, fit = false) => {
@@ -496,15 +509,15 @@ export const CanvasEditor = memo(function CanvasEditor({
     [place, draw],
   )
 
-  // Fitting leaves the open panels' room free.
-  const leftRoom = layersOpen && wide ? LAYERS_ROOM : 0
-  const rightRoom = shownSide && wide ? SIDE_ROOM : 0
+  // Fitting leaves the room of the viewer's open cards free.
+  const leftRoom = insets.left
+  const rightRoom = insets.right
   const fitAll = useCallback(
-    (glides: boolean, rooms = { left: leftRoom, right: rightRoom }) => {
+    (glides: boolean) => {
       const bounds = layout?.bounds
       if (!bounds || bounds.width === 0)
         return place({ x: view.current.width / 2, y: view.current.height / 2, z: 1 }, true)
-      const target = fitBox(bounds, view.current, top + 56, 56, rooms.left, rooms.right)
+      const target = fitBox(bounds, view.current, top + 56, 56, leftRoom, rightRoom)
       if (glides) moveTo(target, true)
       else place(target, true)
     },
@@ -524,6 +537,13 @@ export const CanvasEditor = memo(function CanvasEditor({
     [moveTo],
   )
 
+  // The camera the canvas left, when the viewer showed it before, else a fit.
+  const restore = useCallback(() => {
+    const saved = savedCamera(artifactId, canvasKey)
+    if (saved && !saved.fitted) place({ x: saved.x, y: saved.y, z: saved.z })
+    else fitAll(false)
+  }, [artifactId, canvasKey, place, fitAll])
+
   useLayoutEffect(() => {
     const el = stage.current
     if (!el) return
@@ -532,23 +552,16 @@ export const CanvasEditor = memo(function CanvasEditor({
       const { width, height } = entry.contentRect
       if (width === view.current.width && height === view.current.height) return
       view.current = { width, height }
-      const isWide = width >= WIDE_PX
-      setWide(isWide)
-      // The rooms this width gives, before the state above renders.
-      const rooms = {
-        left: (layersChoice ?? (!readOnly && isWide)) && isWide ? LAYERS_ROOM : 0,
-        right: shownSide && isWide ? SIDE_ROOM : 0,
-      }
       if (!fitted.current && width > 0) {
         fitted.current = true
         setMeasured(true)
-        fitAll(false, rooms)
-      } else if (atFit.current) fitAll(false, rooms)
+        restore()
+      } else if (atFit.current) fitAll(false)
       else draw()
     })
     observer.observe(el)
     return () => observer.disconnect()
-  }, [fitAll, draw, layersChoice, readOnly, shownSide])
+  }, [fitAll, draw, restore])
 
   // A fitted view fits again in the room a panel that opened or closed leaves.
   const rooms = `${leftRoom}:${rightRoom}`
@@ -559,13 +572,13 @@ export const CanvasEditor = memo(function CanvasEditor({
     if (fitted.current && atFit.current) fitAll(true)
   }, [rooms, fitAll])
 
-  // Another canvas fits its own pages.
+  // Another canvas takes the camera it was left at, or fits its own pages.
   const lastCanvas = useRef(canvasKey)
   useEffect(() => {
     if (lastCanvas.current === canvasKey) return
     lastCanvas.current = canvasKey
-    if (fitted.current) fitAll(false)
-  }, [canvasKey, fitAll])
+    if (fitted.current) restore()
+  }, [canvasKey, restore])
 
   useEffect(() => {
     draw()
@@ -584,7 +597,7 @@ export const CanvasEditor = memo(function CanvasEditor({
         actualSize: () => zoomAround(1),
         focus: (index) => setFocused(index === null ? null : (pages[index]?.id ?? null)),
       }),
-    [controls, zoomAround, fitAll, fitBoxGlide, layout, shownSelection, pages],
+    [controls, zoomAround, fitAll, fitBoxGlide, layout, shownSelection, pages, setFocused],
   )
 
   useEffect(() => {
@@ -657,15 +670,18 @@ export const CanvasEditor = memo(function CanvasEditor({
     return () => el.removeEventListener('wheel', onWheel)
   }, [focused, place])
 
-  // The move tool selects what is in the frames, outlined under the pointer, as design tools do;
-  // the comment tool is comment mode; a read-only canvas selects only in a page entered.
+  // Edit picks what is in the frames, outlined under the pointer; Comment pins comments; View
+  // leaves the frames to show, except one entered with a double click.
   useEffect(() => {
     if (!editor) return
-    editor.setBase(null)
     editor.setMode(
-      tool === 'comment' ? 'comment' : inside || (tool === 'move' && !readOnly) ? 'select' : null,
+      viewerMode === 'comment'
+        ? 'comment'
+        : inside || (viewerMode === 'edit' && !readOnly)
+          ? 'select'
+          : null,
     )
-  }, [editor, tool, inside, readOnly])
+  }, [editor, viewerMode, inside, readOnly])
 
   // The page in the middle of the view, for the faces of the user's other devices.
   const lastViewed = useRef<string | null>(null)
@@ -807,37 +823,6 @@ export const CanvasEditor = memo(function CanvasEditor({
 
   const apply = useCallback((ops: CanvasOp[]) => !readOnly && canvas.apply(ops), [readOnly, canvas])
 
-  const newPage = (box: Box): void => {
-    if (!layout) return
-    const id = canvasId('p')
-    pageNumber.current = Math.max(pageNumber.current, layout.pages.length) + 1
-    apply([
-      {
-        op: 'add',
-        object: {
-          type: 'page',
-          id,
-          canvas: canvasKey,
-          name: t('board.page.newName', { number: pageNumber.current }),
-          file: `page-${id}.html`,
-          x: Math.round(box.x),
-          y: Math.round(box.y),
-          width: Math.round(Math.min(PAGE_MAX, Math.max(PAGE_MIN, box.width))),
-          height: Math.round(Math.min(PAGE_MAX, Math.max(PAGE_MIN, box.height))),
-          locked: false,
-        },
-      },
-    ])
-    setSelection([id])
-    setTool('move')
-  }
-
-  const newNote = (object: Record<string, unknown>): string => {
-    const id = canvasId('n')
-    apply([{ op: 'add', object: { type: 'note', id, canvas: canvasKey, ...object } as never }])
-    return id
-  }
-
   const remove = (): void => {
     if (!layout) return
     const ids = shownSelection.filter((id) => {
@@ -901,7 +886,7 @@ export const CanvasEditor = memo(function CanvasEditor({
     if (mod && key === 'z') {
       if (event.shiftKey) canvas.redo()
       else canvas.undo()
-    } else if (mod && key === 'd') duplicate()
+    } else if (mod && key === 'd' && arranging) duplicate()
     else if (mod) return
     else if (event.key === ' ') {
       setSpaceDown(true)
@@ -910,10 +895,9 @@ export const CanvasEditor = memo(function CanvasEditor({
       if (editing.picked) editor?.clearPick()
       else if (inside) setInside(null)
       else if (shownSelection.length > 0) setSelection([])
-      else if (tool !== 'move') setTool('move')
       else return
-    } else if (event.key === 'Delete' || event.key === 'Backspace') remove()
-    else if (event.key.startsWith('Arrow') && shownSelection.length > 0) {
+    } else if ((event.key === 'Delete' || event.key === 'Backspace') && arranging) remove()
+    else if (event.key.startsWith('Arrow') && shownSelection.length > 0 && arranging) {
       const step = event.shiftKey ? 10 : 1
       nudge(
         event.key === 'ArrowLeft' ? -step : event.key === 'ArrowRight' ? step : 0,
@@ -927,9 +911,6 @@ export const CanvasEditor = memo(function CanvasEditor({
       pages.some((p) => p.id === shownSelection[0])
     )
       setFocused(shownSelection[0]!)
-    else if (editor && isModeKey(event.nativeEvent) === 'comment')
-      setTool(tool === 'comment' ? 'move' : 'comment')
-    else if (!readOnly && TOOL_KEYS[key]) setTool(TOOL_KEYS[key]!)
     else if (key === '+' || key === '=') zoomAround(stepZoom(camera.current.z, 1))
     else if (key === '-') zoomAround(stepZoom(camera.current.z, -1))
     else return
@@ -950,8 +931,7 @@ export const CanvasEditor = memo(function CanvasEditor({
       setPanning(true)
       return
     }
-    if (readOnly && tool !== 'move' && tool !== 'comment') return
-    if (tool === 'comment' || inside || (mode && tool !== 'move')) {
+    if (viewerMode === 'comment' || inside) {
       // Picking inside pages goes to their runtime.
       drag.current = null
       const page = pages.find((p) => contains(p, at.x, at.y))
@@ -965,37 +945,8 @@ export const CanvasEditor = memo(function CanvasEditor({
       else editor?.clearPick()
       return
     }
-    if (tool === 'pen') {
-      drag.current = { ...start, kind: 'pen', points: [at.x, at.y, event.pressure || 0.5] }
-      setStroke(drag.current.points!)
-      return
-    }
-    if (tool === 'page' || tool === 'shape') {
-      drag.current = { ...start, kind: 'create' }
-      return
-    }
-    if (tool === 'text' || tool === 'sticky') {
-      const id = newNote(
-        tool === 'text'
-          ? {
-              kind: 'text',
-              x: at.x,
-              y: at.y,
-              text: t('board.note.text'),
-              size: 24,
-              color: pen.color === 'yellow' ? 'ink' : pen.color,
-            }
-          : { kind: 'sticky', x: at.x, y: at.y, width: 240, text: '', color: 'yellow' },
-      )
-      setSelection([id])
-      setTextEdit(id)
-      setTool('move')
-      drag.current = null
-      return
-    }
-    // Move tool.
     const handle = handleAt(at.x, at.y)
-    if (handle && !readOnly) {
+    if (handle && arranging) {
       drag.current = { ...start, kind: 'resize', ids: [handle.id], corner: handle.corner }
       return
     }
@@ -1011,7 +962,9 @@ export const CanvasEditor = memo(function CanvasEditor({
     if (!id) {
       if (!event.shiftKey) setSelection([])
       editor?.clearPick()
-      drag.current = { ...start, kind: 'marquee' }
+      // Out of Edit, a drag on the empty canvas pans it.
+      drag.current = { ...start, kind: arranging || event.shiftKey ? 'marquee' : 'pan' }
+      if (drag.current.kind === 'pan') setPanning(true)
       return
     }
     const framed =
@@ -1039,7 +992,7 @@ export const CanvasEditor = memo(function CanvasEditor({
         ? shownSelection
         : [id]
     setSelection(next)
-    drag.current = readOnly ? null : { ...start, kind: 'move', ids: next }
+    drag.current = arranging ? { ...start, kind: 'move', ids: next } : null
   }
 
   const onPointerMove = (event: React.PointerEvent): void => {
@@ -1076,11 +1029,6 @@ export const CanvasEditor = memo(function CanvasEditor({
           y: held.camera.y + (sy - held.sy),
         })
         return
-      case 'pen':
-        held.points!.push(at.x, at.y, event.pressure || 0.5)
-        setStroke([...held.points!])
-        return
-      case 'create':
       case 'marquee': {
         const box = {
           x: Math.min(at.x, held.cx),
@@ -1088,14 +1036,11 @@ export const CanvasEditor = memo(function CanvasEditor({
           width: Math.abs(dx),
           height: Math.abs(dy),
         }
-        if (held.kind === 'marquee') {
-          setMarquee(box)
-          const ids = [
-            ...layout.pages.filter((p) => overlaps(p, box)).map((p) => p.id),
-            ...layout.notes.filter((n) => overlaps(noteBox(n), box)).map((n) => n.id),
-          ]
-          setSelection(ids)
-        } else setCreating(box)
+        setMarquee(box)
+        setSelection([
+          ...layout.pages.filter((p) => overlaps(p, box)).map((p) => p.id),
+          ...layout.notes.filter((n) => overlaps(noteBox(n), box)).map((n) => n.id),
+        ])
         return
       }
       case 'move': {
@@ -1155,7 +1100,7 @@ export const CanvasEditor = memo(function CanvasEditor({
     }
   }
 
-  const onPointerUp = (event: React.PointerEvent): void => {
+  const onPointerUp = (): void => {
     const held = drag.current
     drag.current = null
     setPanning(false)
@@ -1163,58 +1108,7 @@ export const CanvasEditor = memo(function CanvasEditor({
     setGuides([])
     setMarquee(null)
     if (!held || !layout) return
-    const { sx, sy } = screenPoint(event)
-    const at = toCanvas(sx, sy)
     switch (held.kind) {
-      case 'pen': {
-        setStroke(null)
-        const points = held.points!
-        if (points.length >= 6) {
-          newNote({
-            kind: 'pen',
-            points: points.map((v) => Math.round(v * 100) / 100),
-            width: pen.width,
-            marker: pen.marker,
-            color: pen.color,
-          })
-        }
-        return
-      }
-      case 'create': {
-        setCreating(null)
-        const box = held.moved
-          ? {
-              x: Math.min(at.x, held.cx),
-              y: Math.min(at.y, held.cy),
-              width: Math.abs(at.x - held.cx),
-              height: Math.abs(at.y - held.cy),
-            }
-          : null
-        if (tool === 'page') newPage(box ?? { x: held.cx, y: held.cy, ...NEW_PAGE })
-        else if (tool === 'shape' && box) {
-          const from =
-            shape === 'line' || shape === 'arrow'
-              ? (pages.find((p) => contains(p, held.cx, held.cy))?.id ?? null)
-              : null
-          const to =
-            shape === 'line' || shape === 'arrow'
-              ? (pages.find((p) => contains(p, at.x, at.y))?.id ?? null)
-              : null
-          const id = newNote({
-            kind: shape,
-            x1: held.cx,
-            y1: held.cy,
-            x2: at.x,
-            y2: at.y,
-            width: pen.width,
-            color: pen.color,
-            from: from === to ? null : from,
-            to: from === to ? null : to,
-          })
-          setSelection([id])
-        }
-        return
-      }
       case 'move':
       case 'resize':
         if (!held.moved && held.pick) {
@@ -1258,16 +1152,10 @@ export const CanvasEditor = memo(function CanvasEditor({
   }
 
   const onDoubleClick = (event: React.MouseEvent): void => {
-    if (!layout || readOnly || tool === 'comment') return
+    if (!layout || viewerMode === 'comment') return
     const { sx, sy } = screenPoint(event)
     const at = toCanvas(sx, sy)
     const id = hit(at.x, at.y)
-    const note = layout.notes.find((n) => n.id === id)
-    if (note && (note.kind === 'text' || note.kind === 'sticky')) {
-      setSelection([note.id])
-      setTextEdit(note.id)
-      return
-    }
     const page = pages.find((p) => p.id === id)
     if (page && editor) {
       setSelection([page.id])
@@ -1285,7 +1173,6 @@ export const CanvasEditor = memo(function CanvasEditor({
       ? (layout.pages.find((p) => p.id === shownSelection[0]) ?? null)
       : null
   const focusedPage = focused ? pages.find((p) => p.id === focused) : undefined
-  const editingNote = layout?.notes.find((n) => n.id === textEdit)
   const writingPages = new Set(
     agents
       .filter((a) => a.doing && a.doing !== 'read')
@@ -1309,7 +1196,7 @@ export const CanvasEditor = memo(function CanvasEditor({
   }, [])
 
   return (
-    <div className="k-ce" data-narrow={wide ? undefined : ''}>
+    <div ref={root} className="k-ce" data-narrow={tier === 'narrow' ? '' : undefined}>
       <AgentCursorStyles />
       <div
         ref={stage}
@@ -1377,31 +1264,15 @@ export const CanvasEditor = memo(function CanvasEditor({
               key={n.id}
               note={n}
               pages={pages}
-              editing={textEdit === n.id}
               doneBy={n.kind === 'sticky' && n.by ? sessionName(n.by) : null}
             />
           ))}
-          {stroke && (
-            <svg className="k-ce-note" style={{ left: 0, top: 0 }} width={1} height={1} aria-hidden>
-              <path
-                d={strokePath(stroke, pen.width, pen.marker)}
-                fill={NOTE_COLOR_VAR[pen.color]}
-                opacity={pen.marker ? 0.35 : 1}
-              />
-            </svg>
-          )}
         </div>
         <div
           aria-hidden
           className={cn(
             'k-ce__overlay',
-            hand
-              ? panning
-                ? 'cursor-grabbing'
-                : 'cursor-grab'
-              : tool === 'move'
-                ? 'cursor-default'
-                : 'cursor-crosshair',
+            panning ? 'cursor-grabbing' : hand ? 'cursor-grab' : 'cursor-default',
           )}
           onPointerDown={onPointerDown}
           onPointerMove={onPointerMove}
@@ -1413,8 +1284,6 @@ export const CanvasEditor = memo(function CanvasEditor({
             canvas.preview(null)
             setGuides([])
             setMarquee(null)
-            setCreating(null)
-            setStroke(null)
           }}
           onDoubleClick={onDoubleClick}
         />
@@ -1437,7 +1306,7 @@ export const CanvasEditor = memo(function CanvasEditor({
                       icon={SlidersHorizontalIcon}
                       onClick={() => {
                         setSelection([p.id])
-                        setSide('tweaks')
+                        toggleTweaks(true)
                       }}
                     />
                   )}
@@ -1479,7 +1348,7 @@ export const CanvasEditor = memo(function CanvasEditor({
               />
             ) : null
           })}
-          {singlePage && !readOnly && !singlePage.locked && (
+          {singlePage && arranging && !singlePage.locked && (
             <>
               {(
                 [
@@ -1524,33 +1393,7 @@ export const CanvasEditor = memo(function CanvasEditor({
               }}
             />
           )}
-          {creating && (
-            <div
-              className="k-ce-marquee"
-              style={{
-                left: creating.x,
-                top: creating.y,
-                width: creating.width,
-                height: creating.height,
-              }}
-            />
-          )}
-          {editingNote && (editingNote.kind === 'text' || editingNote.kind === 'sticky') && (
-            <NoteEditor
-              key={editingNote.id}
-              note={editingNote}
-              onDone={(text) => {
-                setTextEdit(null)
-                if (text !== editingNote.text) {
-                  if (editingNote.kind === 'text' && text.trim() === '')
-                    apply([{ op: 'remove', id: editingNote.id }])
-                  else apply([{ op: 'set', id: editingNote.id, key: 'text', value: text }])
-                }
-                stage.current?.focus({ preventScroll: true })
-              }}
-            />
-          )}
-          {selectedBox && actions && !readOnly && !dragging && !textEdit && (
+          {selectedBox && actions && !readOnly && !dragging && (
             <HandOffBar
               box={selectedBox}
               count={shownSelection.length}
@@ -1597,72 +1440,33 @@ export const CanvasEditor = memo(function CanvasEditor({
         </div>
       </div>
 
-      {!readOnly && (
-        <CanvasToolbar
-          doc={doc}
-          canvasKey={canvasKey}
-          onCanvas={setActiveCanvas}
-          apply={apply}
-          tool={tool}
-          onTool={(next) => {
-            setTool(next)
-            if (next !== 'move') setInside(null)
-          }}
-          shape={shape}
-          onShape={setShape}
-          pen={pen}
-          onPen={setPen}
-          layersOpen={layersOpen}
-          onLayers={() => setLayersOpen(!layersOpen)}
-          comment={Boolean(editor)}
-        />
+      {layout && doc && (
+        <ViewerSlot slot="left">
+          <CanvasNavigator
+            doc={doc}
+            canvasKey={canvasKey}
+            onCanvas={chooseCanvas}
+            layout={layout}
+            selection={shownSelection}
+            onSelect={(ids, reveal) => {
+              setSelection(ids)
+              const box =
+                reveal &&
+                union(ids.map((id) => boxOf(layout, id)).filter((b): b is Box => b !== null))
+              if (box) moveTo(revealBox(camera.current, box, view.current))
+            }}
+            apply={apply}
+            readOnly={readOnly}
+          />
+        </ViewerSlot>
       )}
-      {layersOpen && layout && doc && (
-        <CanvasLayers
-          layout={layout}
-          selection={shownSelection}
-          onSelect={(ids, reveal) => {
-            setSelection(ids)
-            const box =
-              reveal &&
-              union(ids.map((id) => boxOf(layout, id)).filter((b): b is Box => b !== null))
-            if (box) moveTo(revealBox(camera.current, box, view.current))
-          }}
-          apply={apply}
-          onClose={() => setLayersOpen(false)}
-        />
-      )}
-      {layout && shownSide && (
-        <aside className="k-ce-side" aria-label={t('board.side.tabs')}>
-          <div className="k-ce-side__head">
-            <div role="tablist" className="k-ce-side__tabs">
-              {(['props', 'tweaks'] as const).map((tab) => (
-                <button
-                  key={tab}
-                  type="button"
-                  role="tab"
-                  aria-selected={shownSide === tab}
-                  className="k-ce-side__tab"
-                  onClick={() => setSide(tab)}
-                >
-                  {t(`board.side.${tab}`)}
-                </button>
-              ))}
+      {layout && tweaksOpen && (
+        <ViewerSlot slot="right">
+          <aside className="k-av-side" aria-label={t('board.side.tweaks')}>
+            <div className="k-av-side__head">
+              <h2 className="k-av-side__title">{t('board.side.tweaks')}</h2>
             </div>
-            <button
-              type="button"
-              aria-label={t('board.side.close')}
-              className="k-ce-tool"
-              onClick={() => {
-                setSide(null)
-                setSelection([])
-              }}
-            >
-              <HugeiconsIcon icon={Cancel01Icon} size={14} strokeWidth={1.9} />
-            </button>
-          </div>
-          <div className="k-ce-side__body">
-            {shownSide === 'tweaks' ? (
+            <div className="k-ce-tweaks">
               <CanvasTweaks
                 layout={layout}
                 params={frameParams}
@@ -1676,21 +1480,9 @@ export const CanvasEditor = memo(function CanvasEditor({
                 artifactId={artifactId}
                 version={version}
               />
-            ) : shownSelection.length > 0 && !inside ? (
-              <CanvasProps
-                layout={layout}
-                selection={shownSelection}
-                apply={apply}
-                remove={remove}
-                duplicate={duplicate}
-              />
-            ) : (
-              <div className="k-ce-side__empty">
-                <p>{t('board.side.none')}</p>
-              </div>
-            )}
-          </div>
-        </aside>
+            </div>
+          </aside>
+        </ViewerSlot>
       )}
       {following && followed && (
         <FollowBanner
@@ -1704,43 +1496,16 @@ export const CanvasEditor = memo(function CanvasEditor({
         <div className="k-ce-empty">
           <h3>{t('board.empty.title')}</h3>
           <p>{t('board.empty.body')}</p>
-          <div className="k-ce-empty__acts">
-            <button type="button" className="k-ce-tool k-ce-float" onClick={() => setTool('page')}>
-              <HugeiconsIcon icon={GridIcon} size={16} strokeWidth={1.9} />
-              {t('board.empty.pageTool')}
-            </button>
-          </div>
         </div>
       )}
-      <div
-        className="k-ce-zoom k-ce-float"
-        role="toolbar"
-        aria-label={t('board.top.toolbar')}
-        style={{ right: (shownSide ? SIDE_ROOM : 0) + 12 }}
-      >
-        {!readOnly && (
-          <>
-            <ZoomButton
-              label={t('board.top.tweaks')}
-              icon={SlidersHorizontalIcon}
-              pressed={shownSide === 'tweaks'}
-              onClick={() => setSide(shownSide === 'tweaks' ? null : 'tweaks')}
-            />
-            <span className="k-ce-tools__sep" />
-          </>
-        )}
-        <ZoomButton
-          label={t('canvas.zoomOut')}
-          icon={MinusSignIcon}
-          onClick={() => zoomAround(stepZoom(camera.current.z, -1))}
-        />
-        <ZoomPct controls={controls} onFit={() => fitAll(true)} />
-        <ZoomButton
-          label={t('canvas.zoomIn')}
-          icon={PlusSignIcon}
-          onClick={() => zoomAround(stepZoom(camera.current.z, 1))}
-        />
-      </div>
+      <CanvasDock
+        controls={controls}
+        narrow={tier === 'narrow'}
+        tweaks={readOnly ? null : { open: tweaksOpen, toggle: () => toggleTweaks(!tweaksOpen) }}
+        onZoom={(direction) => zoomAround(stepZoom(camera.current.z, direction))}
+        onFit={() => fitAll(true)}
+        onActual={() => zoomAround(1)}
+      />
       {focusedPage && (
         <FocusedPage
           key={focusedPage.id}
@@ -1815,89 +1580,90 @@ function LabelAct({
   )
 }
 
-function ZoomButton({
-  label,
-  icon,
-  pressed,
-  onClick,
+/** The dock under a canvas: the left card, the zoom, then the tweaks; fewer, with More, narrow. */
+function CanvasDock({
+  controls,
+  narrow,
+  tweaks,
+  onZoom,
+  onFit,
+  onActual,
 }: {
-  label: string
-  icon: IconSvgElement
-  /** A panel's switch, shown on while the panel is open. */
-  pressed?: boolean
-  onClick: () => void
+  controls: CanvasControls
+  narrow: boolean
+  tweaks: { open: boolean; toggle: () => void } | null
+  onZoom: (direction: 1 | -1) => void
+  onFit: () => void
+  onActual: () => void
 }) {
-  return (
-    <Tooltip>
-      <TooltipTrigger
-        render={
-          <button
-            type="button"
-            aria-label={label}
-            aria-pressed={pressed}
-            className={cn('k-ce-tool', pressed !== undefined && 'k-ce-tool--toggle')}
-            onClick={onClick}
-          />
-        }
-      >
-        <HugeiconsIcon icon={icon} size={14} strokeWidth={1.9} />
-      </TooltipTrigger>
-      <TooltipContent>{label}</TooltipContent>
-    </Tooltip>
-  )
-}
-
-function ZoomPct({ controls, onFit }: { controls: CanvasControls; onFit: () => void }) {
   const { t } = useTranslation('artifacts')
   const { zoom } = useCanvasState(controls)
+  const left = useShell().leftCard
   return (
-    <button
-      type="button"
-      className="k-ce-zoom__pct"
-      aria-label={t('canvas.fitAll')}
-      onClick={onFit}
-    >
-      {t('canvas.zoom', { percent: Math.round(zoom * 100) })}
-    </button>
-  )
-}
-
-/** Writes a text or sticky note's text in place. */
-function NoteEditor({
-  note,
-  onDone,
-}: {
-  note: Extract<CanvasNote, { kind: 'text' | 'sticky' }>
-  onDone: (text: string) => void
-}) {
-  const [text, setText] = useState(note.text)
-  const sticky = note.kind === 'sticky'
-  return (
-    <textarea
-      autoFocus
-      value={text}
-      onChange={(event) => setText(event.target.value)}
-      onBlur={() => onDone(text)}
-      onKeyDown={(event) => {
-        event.stopPropagation()
-        if (event.key === 'Escape' || (event.key === 'Enter' && (event.metaKey || event.ctrlKey))) {
-          event.preventDefault()
-          onDone(text)
-        }
-      }}
-      className={cn('k-ce-edit', sticky ? 'k-ce-sticky' : 'k-ce-text')}
-      style={
-        sticky
-          ? { left: note.x, top: note.y, width: note.width, minHeight: noteBox(note).height }
-          : {
-              left: note.x,
-              top: note.y,
-              fontSize: note.size,
-              color: NOTE_COLOR_VAR[note.color],
-              width: Math.max(120, noteBox(note).width + 40),
-            }
-      }
-    />
+    <ViewerSlot slot="dock">
+      {left && (
+        <>
+          <DockButton
+            label={t('board.canvases.menu')}
+            icon={SidebarLeftIcon}
+            pressed={left.shown}
+            onClick={() => left.setShown(!left.shown)}
+          />
+          <DockRule />
+        </>
+      )}
+      <DockButton label={t('canvas.zoomOut')} icon={MinusSignIcon} onClick={() => onZoom(-1)} />
+      <DockButton label={t('canvas.fitAll')} onClick={onFit}>
+        <span className="avs-dock__pct">
+          {t('canvas.zoom', { percent: Math.round(zoom * 100) })}
+        </span>
+      </DockButton>
+      <DockButton label={t('canvas.zoomIn')} icon={PlusSignIcon} onClick={() => onZoom(1)} />
+      {narrow ? (
+        <Dropdown
+          align="end"
+          side="top"
+          items={[
+            ...(tweaks
+              ? [
+                  {
+                    label: t('board.top.tweaks'),
+                    icon: SlidersHorizontalIcon,
+                    onSelect: tweaks.toggle,
+                  },
+                ]
+              : []),
+            { label: t('canvas.fitAll'), divider: !!tweaks, onSelect: onFit },
+            { label: t('canvas.actualSize'), onSelect: onActual },
+          ]}
+          trigger={({ open, toggle }) => (
+            <button
+              type="button"
+              aria-label={t('viewer.more')}
+              title={t('viewer.more')}
+              aria-haspopup="menu"
+              aria-expanded={open}
+              onClick={toggle}
+              className="avs-dock__btn"
+            >
+              <HugeiconsIcon icon={MoreHorizontalIcon} size={15} strokeWidth={1.9} />
+            </button>
+          )}
+        />
+      ) : (
+        tweaks && (
+          <>
+            <DockRule />
+            <DockButton
+              label={t('board.top.tweaks')}
+              icon={SlidersHorizontalIcon}
+              pressed={tweaks.open}
+              onClick={tweaks.toggle}
+            />
+          </>
+        )
+      )}
+    </ViewerSlot>
   )
 }
 
