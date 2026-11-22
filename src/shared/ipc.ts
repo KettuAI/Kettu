@@ -341,7 +341,8 @@ export interface IpcInvokeContract {
   }
   'artifact:open-external': { args: [id: string, version: number]; result: void }
   'artifact:reveal': { args: [id: string, version: number]; result: void }
-  'artifact:export': { args: [id: string, version: number]; result: boolean }
+  // The path written; false when the user cancelled the save dialog.
+  'artifact:export': { args: [id: string, version: number]; result: string | false }
   // A page's image as a base64 PNG, for a message to an agent; null when it cannot render.
   'artifact:page-image': {
     args: [
@@ -365,7 +366,7 @@ export interface IpcInvokeContract {
   }
   'artifact:export-as': {
     args: [id: string, version: number, format: ArtifactExportFormat]
-    result: boolean
+    result: string | false
   }
   // `project`: a registered project's folder, or null for No project.
   'artifact:import': {
@@ -671,14 +672,14 @@ export interface KettuApi {
     reveal(id: string, version: number): Promise<void>
     /**
      * Asks where to save the version: its HTML file, or a folder for its files when it has
-     * several; false when the user cancelled.
+     * several. The path written, true where a browser saved it, or false when the user cancelled.
      */
-    export(id: string, version: number): Promise<boolean>
+    export(id: string, version: number): Promise<string | boolean>
     /**
      * Asks where to save a typed version in one of its type's formats, converted on the host:
-     * one file, or a folder for Markdown with pictures; false when the user cancelled.
+     * one file, or a folder for Markdown with pictures. Resolves as `export` does.
      */
-    exportAs(id: string, version: number, format: ArtifactExportFormat): Promise<boolean>
+    exportAs(id: string, version: number, format: ArtifactExportFormat): Promise<string | boolean>
     /**
      * Asks for an HTML file or a folder with an `index.html` and makes it an artifact in the
      * project, or in No project when null; null when the user cancelled.

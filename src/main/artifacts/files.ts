@@ -128,9 +128,13 @@ export class ArtifactFiles {
 
   /**
    * `artifact:export`: the version's files, as stored, where the save dialog says: one HTML file,
-   * or a folder for a version of several. False when the user cancelled.
+   * or a folder for a version of several. The path written; false when the user cancelled.
    */
-  async export(window: BrowserWindow | null, id: unknown, version: unknown): Promise<boolean> {
+  async export(
+    window: BrowserWindow | null,
+    id: unknown,
+    version: unknown,
+  ): Promise<string | false> {
     const found = await this.find(id, version)
     const overview = await overviewOf(found.files, found.title)
     const single = found.files.length === 1 && !overview
@@ -153,12 +157,13 @@ export class ArtifactFiles {
       await copyInto(result.filePath, found.files)
       if (overview) await writeFile(path.join(result.filePath, ARTIFACT_ENTRY), overview)
     }
-    return true
+    return result.filePath
   }
 
   /**
    * `artifact:export-as`: a typed version in one of its type's formats, `make` converting it once
-   * the user chose where: one file, or a folder for Markdown with pictures. False when cancelled.
+   * the user chose where: one file, or a folder for Markdown with pictures. The path written;
+   * false when cancelled.
    */
   async exportAs(
     window: BrowserWindow | null,
@@ -170,7 +175,7 @@ export class ArtifactFiles {
       type: ArtifactTypeInfo,
       format: ArtifactExportFormat,
     ) => Promise<ExportedFile[]>,
-  ): Promise<boolean> {
+  ): Promise<string | false> {
     const wanted = parseVersion(id, version)
     const found = await this.deps.content(wanted.id, wanted.version)
     if (found.kind === 'failed') throw new Error(t('artifacts.hostSilent'))
@@ -196,14 +201,14 @@ export class ArtifactFiles {
     const files = await make(wanted, type, format)
     if (!folder) {
       await writeFile(result.filePath, files[0]!.bytes)
-      return true
+      return result.filePath
     }
     const targets = placed(result.filePath, files)
     for (const [i, file] of files.entries()) {
       await mkdir(path.dirname(targets[i]!), { recursive: true })
       await writeFile(targets[i]!, file.bytes)
     }
-    return true
+    return result.filePath
   }
 
   /**

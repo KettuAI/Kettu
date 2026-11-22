@@ -35,11 +35,30 @@ function canSaveFolders(): boolean {
   )
 }
 
-/** Saves a copy where the user chooses, saying how it went; `save` is false when cancelled. */
-function exportWith(title: string, save: () => Promise<boolean>): void {
+/**
+ * Saves a copy where the user chooses, saying how it went; `save` gives the path written, true
+ * where there is none to show, or false when cancelled.
+ */
+function exportWith(title: string, save: () => Promise<string | boolean>): void {
   const shown = progressToast(i18n.t('artifacts:menu.exporting', { title }))
   save().then(
-    (saved) => (saved ? shown.done(i18n.t('artifacts:menu.exported', { title })) : shown.close()),
+    (saved) => {
+      if (saved === false) return shown.close()
+      shown.done(
+        i18n.t('artifacts:menu.exported', { title }),
+        typeof saved === 'string'
+          ? {
+              label: i18n.t('artifacts:menu.showIn', { name: fileManagerName() }),
+              onClick: () =>
+                void window.kettu.shell
+                  .showItem(saved)
+                  .catch((error: unknown) =>
+                    toast(errorMessage(error), undefined, { tone: 'warning' }),
+                  ),
+            }
+          : undefined,
+      )
+    },
     (error: unknown) =>
       shown.failed(i18n.t('artifacts:menu.exportFailed', { title, error: errorMessage(error) }), {
         label: i18n.t('common:actions.retry'),

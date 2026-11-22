@@ -105,14 +105,21 @@ export function lastingToast(title: string, action: { label: string; onClick: ()
 }
 
 /**
- * A toast that spins while work goes on and turns into its outcome in place: `done`, or `failed`
- * with an action such as Retry; `close` takes it away, as when the work was cancelled.
+ * A toast that spins while work goes on and turns into its outcome in place: `done`, with an
+ * action on what it made when given, or `failed` with an action such as Retry; `close` takes it
+ * away, as when the work was cancelled.
  */
 export function progressToast(title: string) {
   const id = track((options) => affectToast.loading(title, options), { duration: Infinity })
   return {
     // Undefined in place of the spinner's Infinity: the toaster's own time on screen.
-    done: (next: string) => affectToast.success(next, { id, duration: undefined, onDismiss }),
+    done: (next: string, action?: { label: string; onClick: () => void }) =>
+      affectToast.success(next, {
+        id,
+        duration: action ? 6000 : undefined,
+        ...(action && { action: actionOf(action) }),
+        onDismiss,
+      }),
     failed: (next: string, action: { label: string; onClick: () => void }) =>
       affectToast(next, {
         id,
