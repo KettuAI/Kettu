@@ -214,3 +214,10 @@
     animation: none;
   }
 }
+.aps-pill__count {
+  min-width: 36px;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+  color: var(--muted);
+}

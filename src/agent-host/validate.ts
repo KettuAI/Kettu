@@ -5,6 +5,7 @@ import type { AgentInstallMethod, HostMethod, HostParams } from '@shared/agent-h
 import { MAX_TERMINAL_COMMAND, replyCommandProblem } from '@shared/terminal-agent'
 import { COMMENT_CHARS, THREAD_ID, type CommentAnchor } from '@shared/artifact-comments'
 import { artifactPathProblem, isHtmlPath } from '@shared/artifact-files'
+import { DOCUMENT_ENTRY } from '@shared/artifact-document-anchors'
 import {
   checkedStyle,
   EDIT_TEXT_CHARS,
@@ -884,6 +885,11 @@ function commentBody(o: Fields): string {
   return value
 }
 
+/** An anchor's file: one of the artifact's HTML files, or a document's Markdown. */
+function anchorPath(o: Fields): string {
+  return o.path === DOCUMENT_ENTRY ? DOCUMENT_ENTRY : htmlPath(o, 'path')
+}
+
 /** A new thread's anchor: what the page reported, checked and capped; never already missing. */
 function commentAnchor(value: unknown): CommentAnchor {
   const o = fields(value)
@@ -908,7 +914,7 @@ function commentAnchor(value: unknown): CommentAnchor {
   }
   return {
     version: version(o, 'version'),
-    path: htmlPath(o, 'path'),
+    path: anchorPath(o),
     page,
     offset: o.offset === null ? null : offset(o, 'offset'),
     tag: tag as string | null,

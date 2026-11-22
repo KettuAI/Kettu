@@ -277,7 +277,10 @@
       "fix": "Ask {{agent}} to fix",
       "sent": "Sent to {{agent}}",
       "failed": "Could not send the errors: {{error}}"
-    }
+    },
+    "previousChange": "Previous change",
+    "nextChange": "Next change",
+    "changeAt": "{{number}} / {{count}}"
   },
   "canvas": {
     "role": "Canvas",
@@ -619,6 +622,42 @@
       "screen": "Fit screen",
       "width": "Fit width",
       "actual": "100%"
+    }
+  },
+  "outline": {
+    "title": "Outline",
+    "count_one": "{{count}} heading",
+    "count_other": "{{count}} headings",
+    "search": "Find a heading",
+    "find": "Find a heading…",
+    "filter": "Show",
+    "noMatch": "No headings match “{{query}}”",
+    "noChanges": "Nothing changed in this version",
+    "noComments": "No comments yet",
+    "none": "No headings"
+  },
+  "doc": {
+    "pin": "Comment {{number}}",
+    "selection": "Selected text",
+    "comment": "Comment",
+    "changes": "Changes",
+    "changesFrom": "Changes from v{{version}}",
+    "showingFrom": "Showing changes from v{{version}}",
+    "size": "{{percent}}%",
+    "sizeLabel": "Text size",
+    "sizeButton": "Text size: {{percent}}%",
+    "smaller": "Smaller text",
+    "larger": "Larger text",
+    "undo": "Undo",
+    "save": {
+      "editing": "Editing…",
+      "saving": "Saving…",
+      "saved": "Saved as v{{version}}",
+      "failed": "Couldn’t save",
+      "conflict": "A newer version came first",
+      "refused": "This can’t be changed here",
+      "retry": "Retry",
+      "kept": "What you typed stays here until it saves."
     }
   }
 }

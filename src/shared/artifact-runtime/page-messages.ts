@@ -4,6 +4,7 @@
 
 import { RUNTIME_PATH, RUNTIME_VERSION, type RuntimeAnswer } from '../artifact-capabilities'
 import { artifactPathProblem, isHtmlPath } from '../artifact-files'
+import { parseDocReport, type DocDrive, type DocReport } from './document-sheet'
 
 export { RUNTIME_PATH, RUNTIME_VERSION, type RuntimeAnswer }
 
@@ -77,6 +78,8 @@ export interface SelectMessage {
   located?: { src: number; box: PageBox | null }
   /** A key pressed in the page, outside its text fields, instead of a pick, after `select-keys`. */
   key?: PageKey
+  /** What a document's viewer reports instead of a pick, after `select-doc`. */
+  doc?: DocReport
 }
 
 /**
@@ -127,6 +130,8 @@ export type DriveMessage =
   | { v: typeof RUNTIME_VERSION; kind: 'keep-scroll' }
   // Pass PAGE_KEYS on as select messages with `key`, or stop.
   | { v: typeof RUNTIME_VERSION; kind: 'select-keys'; on: boolean; channel: string }
+  // How a document's viewer shows its document, and what it does once.
+  | DocDrive
 
 /** The properties a direct edit may write into a start tag's `style`, by their CSS names. */
 export const EDITABLE_PROPERTIES = [
@@ -273,6 +278,11 @@ export function parseSelectMessage(value: unknown): SelectMessage | null {
     const key = PAGE_KEYS.find((k) => k === value.key)
     if (!key || picked !== null || message.located) return null
     message.key = key
+  }
+  if (value.doc !== undefined) {
+    const doc = parseDocReport(value.doc)
+    if (!doc || picked !== null || message.located || message.key) return null
+    message.doc = doc
   }
   return message
 }

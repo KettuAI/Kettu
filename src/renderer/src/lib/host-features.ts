@@ -1,4 +1,4 @@
-import type { HostInfo } from '@shared/remote/host-admin'
+import type { ArtifactRecord, HostInfo } from '@shared/remote/host-admin'
 import { useHostScope } from '@renderer/stores/host-scope'
 import { useOtherHost } from '@renderer/stores/hosts'
 import { useWebHostStore } from '@renderer/stores/web-host'
@@ -17,6 +17,18 @@ export type HostFeature = keyof Pick<
 export function useHostHas(feature: HostFeature): boolean | null {
   const scope = useHostScope()
   const known = scope.useInfoStore((s) => (s.info ? (s.info[feature] ?? false) : null))
+  return isWeb || scope.hostId !== null ? known : true
+}
+
+/**
+ * Whether the host the section shows keeps `record` of its artifacts: this computer in the desktop
+ * app always; another host as it says, and null until it has.
+ */
+export function useHostHasRecord(record: ArtifactRecord): boolean | null {
+  const scope = useHostScope()
+  const known = scope.useInfoStore((s) =>
+    s.info ? (s.info.artifactRecords?.includes(record) ?? false) : null,
+  )
   return isWeb || scope.hostId !== null ? known : true
 }
 

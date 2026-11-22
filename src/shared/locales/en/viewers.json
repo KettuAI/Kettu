@@ -17,9 +17,7 @@
     "invalid": "This content does not fit its format: {{reason}}"
   },
   "document": {
-    "label": "Document",
-    "editHint": "Click a paragraph, heading or list to change its text.",
-    "blockLabel": "Edit this part"
+    "label": "Document"
   },
   "slides": {
     "label": "Slides",

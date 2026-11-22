@@ -2,12 +2,169 @@
 @import 'streamdown/styles.css';
 @import '../common/viewer.css';
 
+/* Driven as a sheet, the window scrolls it, so the page is as tall as the document and no taller. */
+html[data-embed],
+html[data-embed] body,
+html[data-embed] #root {
+  height: auto;
+}
+html[data-embed] body {
+  overflow: hidden;
+}
+/* A short document's frame still fills the sheet, on the sheet's own surface. */
+html[data-embed] {
+  background: var(--bg-surface);
+}
+
+/* The sheet: the theme's surface in the app; a copy or an export stays on white. */
+.kd-page {
+  min-height: 100%;
+  background: var(--bg-surface);
+}
+
+/* Reading width: about 680 px of text, the room around it the window's. */
+.kd-doc {
+  --doc-pad: 40px;
+  --prose-scale: var(--doc-scale, 1);
+  max-width: calc(680px + 2 * var(--doc-pad));
+  margin: 0 auto;
+  padding: 56px var(--doc-pad) 72px;
+}
+.kd-doc[data-narrow] {
+  padding-top: 32px;
+}
+
+/* A document's headings stand out more than a reply's. */
+.kd-doc [data-streamdown='heading-1'] {
+  font-size: 2em;
+}
+.kd-doc [data-streamdown='heading-2'] {
+  font-size: 1.2667em;
+}
+.kd-doc [data-streamdown='heading-3'] {
+  font-size: 1.0333em;
+}
+
 /* Tables, code and pictures stand apart like the prose's other blocks; each is a block of its own
    here, whose first child the renderer gives no margin. */
 .markdown [data-streamdown='table-wrapper'],
 .markdown [data-streamdown='code-block'],
 .markdown [data-streamdown='image-wrapper'] {
   margin-block: 0.8em;
+}
+
+/* The object is a block: outlined under the pointer while comments are pinned or text typed. */
+.kd-block {
+  position: relative;
+  scroll-margin-top: 32px;
+}
+.kd-doc[data-mode='comment'] .kd-block {
+  cursor: crosshair;
+}
+.kd-doc[data-mode='edit'] .kd-block:not([data-fixed]) {
+  cursor: text;
+}
+.kd-block::before {
+  content: '';
+  position: absolute;
+  inset: -5px -8px;
+  border-radius: 6px;
+  pointer-events: none;
+}
+.kd-doc[data-mode='comment'] .kd-block:hover::before,
+.kd-doc[data-mode='edit'] .kd-block:not([data-fixed], [data-editing]):hover::before {
+  outline: 1.5px dashed var(--control-on);
+  outline-offset: -0.75px;
+}
+.kd-block[data-on]::before {
+  outline: 1.5px solid var(--control-on);
+  outline-offset: -0.75px;
+  background: var(--control-on-tint);
+}
+.kd-block[data-editing]::before {
+  outline: 2px solid var(--control-on);
+  outline-offset: -1px;
+}
+.kd-block[data-editing] {
+  outline: none;
+  caret-color: var(--control-on);
+}
+.kd-block ::selection {
+  background: var(--control-on-tint);
+}
+
+/* What a new version changed: a bar in the left margin, the section's heading tagged. */
+.kd-block[data-changed]::after,
+.kd-gone {
+  content: '';
+  position: absolute;
+  top: 2px;
+  bottom: 2px;
+  left: calc(-1 * var(--doc-pad) / 2 - 1.5px);
+  width: 3px;
+  border-radius: 2px;
+  background: var(--control-on);
+}
+.kd-gone {
+  position: relative;
+  display: block;
+  height: 6px;
+  margin-block: -3px;
+}
+.kd-block[data-step]::after {
+  box-shadow: 0 0 0 3px var(--control-on-tint);
+  animation: kd-flash 0.9s ease 2;
+}
+@keyframes kd-flash {
+  50% {
+    opacity: 0.35;
+  }
+}
+.kd-block[style*='--kd-tag'] [data-streamdown^='heading-']::after {
+  content: var(--kd-tag);
+  margin-left: 8px;
+  padding: 1px 5px;
+  border-radius: 5px;
+  background: var(--control-on-tint);
+  font-family: var(--font-sans);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0;
+  vertical-align: 0.3em;
+  color: var(--control-on);
+}
+
+/* Changes: the earlier words struck through, the new ones marked, in the text. */
+.kd-del,
+.kd-ins {
+  padding: 0 2px;
+  border-radius: 3px;
+  text-decoration-thickness: 1px;
+}
+.kd-del {
+  background: var(--diff-del);
+  color: var(--danger);
+  text-decoration: line-through;
+}
+.kd-ins {
+  background: var(--diff-add);
+  text-decoration: none;
+}
+.kd-doc[data-changes] .kd-block[data-changed='added'] {
+  border-radius: 4px;
+  background: var(--diff-add);
+}
+.kd-block[data-removed] {
+  border-radius: 4px;
+  background: var(--diff-del);
+  color: var(--danger);
+  text-decoration: line-through;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .kd-block[data-step]::after {
+    animation: none;
+  }
 }
 
 /* A card's thumbnail is drawn 1280 px wide, where the reading column would be a narrow strip;

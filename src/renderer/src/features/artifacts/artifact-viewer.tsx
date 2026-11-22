@@ -10,6 +10,8 @@ import {
   RotateLeft01Icon,
 } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
+import type { CommentAnchor } from '@shared/artifact-comments'
+import { DOCUMENT_ENTRY } from '@shared/artifact-document-anchors'
 import { ARTIFACT_ENTRY } from '@shared/artifact-files'
 import { NO_SESSION } from '@shared/artifacts'
 import { Icon, type MenuItem } from '@renderer/components/affect/app-shell'
@@ -21,7 +23,7 @@ import { toast } from '@renderer/components/ui/toast'
 import { usePhoneWindow } from '@renderer/features/shell/narrow'
 import { PaneSheet } from '@renderer/features/shell/panel-button'
 import { artifactRefOf, errorMessage, host, learnArtifactHost } from '@renderer/lib/host'
-import { useHostHas } from '@renderer/lib/host-features'
+import { useHostHas, useHostHasRecord } from '@renderer/lib/host-features'
 import { hostOfPath } from '@renderer/lib/host-paths'
 import { longAgo } from '@renderer/lib/format'
 import { isWeb } from '@renderer/lib/platform'
@@ -56,7 +58,8 @@ import { atMaxZoom, atMinZoom } from './camera'
 import { CanvasEditor } from './canvas-editor'
 import { CanvasControls, useCanvasState } from './canvas-controls'
 import type { PageActions } from './canvas-view'
-import { CommentBox, CommentsPanel } from './comments'
+import { CommentBox, CommentsPanel, ThreadCard } from './comments'
+import { DocumentSheet, type DocComments } from './document-sheet'
 import { EditPanel } from './edit-panel'
 import { ArtifactEditor, useEditorState, type EditorMode } from './editor'
 import { isEditable, modeKey } from './keys'
@@ -137,8 +140,11 @@ export default function ArtifactViewer(place: ViewerPlace) {
   const kind = summary ? artifactKind(summary) : null
   // A web page: one page of its own, neither a canvas nor a typed document or deck.
   const webPage = !!shown && !shown.canvas && !summary?.type
-  const arrived = useArrivedChange(id, head, webPage)
-  const comparing = arrived !== null && earlier === arrived.from
+  const isDocument = !!shown && summary?.type === 'document'
+  const arrived = useArrivedChange(id, head, webPage || isDocument)
+  // A document marks the changes in its text and steps through them on its own pill.
+  const docArrived = isDocument ? arrived : null
+  const comparing = !isDocument && arrived !== null && earlier === arrived.from
   // Publishing takes the account the host keeps, which the daemon has none of.
   const shares = useArtifactShares(id)
   // Only a desktop host renders a page apart from the window.
@@ -177,6 +183,24 @@ export default function ArtifactViewer(place: ViewerPlace) {
   }, [editor, mode, docShown])
 
   const pinsShown = latest && (state.right === 'comments' || mode === 'comment')
+  // A document's pins lie beside its blocks on the host that anchors threads on them.
+  const docBlocks = useHostHasRecord('documentSheet') === true
+  const [docHeadings, setDocHeadings] = useState(0)
+  const [docFocus, setDocFocus] = useState<{ thread: string; seq: number } | null>(null)
+  const docComments = useMemo<DocComments>(
+    () => ({
+      threads,
+      shown: pinsShown,
+      blocks: docBlocks,
+      add: async (anchor, body) => {
+        await host('artifacts.comment', { id, anchor, body })
+      },
+      thread: (thread, number) => (
+        <ThreadCard thread={thread} number={number} artifactId={id} onFocus={() => {}} />
+      ),
+    }),
+    [threads, pinsShown, docBlocks, id],
+  )
   useEffect(() => {
     if (!editor || !shown) return
     editor.setPins(pinsShown ? pinsOf(threads, shown) : () => [])
@@ -440,7 +464,7 @@ export default function ArtifactViewer(place: ViewerPlace) {
         ]}
       />
     )
-  } else if (changePill && earlier === null) {
+  } else if (changePill && earlier === null && !isDocument) {
     pill = changePill
   }
 
@@ -453,8 +477,17 @@ export default function ArtifactViewer(place: ViewerPlace) {
   // A web page asks, and hands its errors to, the session it sits beside, or else the chat's.
   const besideSession = useSessionsStore((s) => (panel ? (s.byId[panel.panel] ?? null) : null))
   const target = besideSession ?? chatSession
+  // What the next message is about goes above the composer of the session that is asked.
+  const askAbout = useMemo(() => {
+    if (!target) return null
+    return (anchor: CommentAnchor) => {
+      if (place.where === 'main') openSessionWithArtifact(target.id, target.projectPath, id)
+      setPaneSelection({ projectPath: target.projectPath, artifactId: id, title, anchor })
+      requestAnimationFrame(() => emitAppEvent({ kind: 'focus-composer' }))
+    }
+  }, [target, place.where, id, title])
   const sheetAgent = useMemo<SheetAgent | null>(() => {
-    if (!target || !summary || !shown) return null
+    if (!target || !summary || !shown || !askAbout) return null
     const hostId = hostOfPath(target.projectPath)
     const pageAnchor = {
       version: shown.version,
@@ -468,17 +501,7 @@ export default function ArtifactViewer(place: ViewerPlace) {
     return {
       name: agentName(target.agentId, hostId),
       mark: <AgentMark agent={target.agentId} size={14} hostId={hostId} />,
-      ask: () => {
-        // The page goes above the composer as what the next message is about.
-        if (place.where === 'main') openSessionWithArtifact(target.id, target.projectPath, id)
-        setPaneSelection({
-          projectPath: target.projectPath,
-          artifactId: id,
-          title,
-          anchor: pageAnchor,
-        })
-        requestAnimationFrame(() => emitAppEvent({ kind: 'focus-composer' }))
-      },
+      ask: () => askAbout(pageAnchor),
       fixErrors: (pages) =>
         handOffPageErrors({
           artifact: { id, title, version: shown.version, project: summary.project },
@@ -486,7 +509,7 @@ export default function ArtifactViewer(place: ViewerPlace) {
           session: target.id,
         }),
     }
-  }, [target, summary, shown, place.where, id, title])
+  }, [target, summary, shown, askAbout, id, title])
 
   let body: React.ReactNode
   let layout: 'float' | 'beside' = 'beside'
@@ -606,6 +629,40 @@ export default function ArtifactViewer(place: ViewerPlace) {
             actions={actions}
             onPageChosen={choosePage}
           />
+        ) : isDocument ? (
+          <DocumentSheet
+            id={id}
+            url={url}
+            shown={shown}
+            title={title}
+            reloads={artifact.reloads}
+            since={since}
+            band={pill !== null}
+            latest={latest}
+            mode={mode}
+            onMode={setMode}
+            arrived={docArrived}
+            comments={docComments}
+            agent={sheetAgent}
+            onAsk={
+              askAbout
+                ? (anchor) =>
+                    askAbout(
+                      anchor ?? {
+                        version: shown.version,
+                        path: docBlocks ? DOCUMENT_ENTRY : ARTIFACT_ENTRY,
+                        page: null,
+                        offset: null,
+                        tag: null,
+                        text: '',
+                        missing: false,
+                      },
+                    )
+                : null
+            }
+            onHeadings={setDocHeadings}
+            focusThread={docFocus}
+          />
         ) : typed ? (
           <div className="avs-paper avs-paper--typed">
             <ArtifactSurface
@@ -724,6 +781,10 @@ export default function ArtifactViewer(place: ViewerPlace) {
               summary.sessionId,
             ]}
             onFocus={(thread) => {
+              if (isDocument) {
+                setDocFocus((was) => ({ thread: thread.id, seq: (was?.seq ?? 0) + 1 }))
+                return
+              }
               const number = thread.anchor.page?.number
               const index = shown?.canvas?.pages.findIndex((p) => p.number === number) ?? -1
               if (index >= 0) controls.commands?.focus(index)
@@ -801,21 +862,52 @@ export default function ArtifactViewer(place: ViewerPlace) {
 
   const leftCard = useMemo(
     () =>
-      showing && docShown
-        ? {
-            title: doc
-              ? t('pages.heading', {
-                  pages: doc.canvases.length,
-                  frames: t('pages.frames', { count: doc.pages.length }),
-                })
-              : t('pages.title'),
-            // Open by default where there is more than one page or many frames to find.
-            byDefault: !!doc && (doc.canvases.length > 1 || doc.pages.length > 8),
-            open: state.left,
-            onOpenChange: (open: boolean) => setViewerState(id, { left: open }),
-          }
-        : null,
-    [showing, docShown, doc, state.left, id, t],
+      showing && isDocument
+        ? docHeadings > 0
+          ? {
+              title: (
+                <>
+                  {t('outline.title')}
+                  <small className="ads-count">{t('outline.count', { count: docHeadings })}</small>
+                </>
+              ),
+              // Open from six headings up, except beside a session; a right card folds it.
+              byDefault: docHeadings >= 6 && place.where === 'main',
+              open: rightKey !== null ? false : state.left,
+              onOpenChange: (open: boolean) => {
+                // The Outline comes back in place of a right card at every width.
+                if (open && rightKey !== null) closeRight()
+                setViewerState(id, { left: open })
+              },
+            }
+          : null
+        : showing && docShown
+          ? {
+              title: doc
+                ? t('pages.heading', {
+                    pages: doc.canvases.length,
+                    frames: t('pages.frames', { count: doc.pages.length }),
+                  })
+                : t('pages.title'),
+              // Open by default where there is more than one page or many frames to find.
+              byDefault: !!doc && (doc.canvases.length > 1 || doc.pages.length > 8),
+              open: state.left,
+              onOpenChange: (open: boolean) => setViewerState(id, { left: open }),
+            }
+          : null,
+    [
+      showing,
+      isDocument,
+      docHeadings,
+      rightKey,
+      closeRight,
+      place.where,
+      docShown,
+      doc,
+      state.left,
+      id,
+      t,
+    ],
   )
 
   const bar = (

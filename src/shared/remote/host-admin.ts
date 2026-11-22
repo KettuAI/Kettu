@@ -174,9 +174,18 @@ export interface HostInfo extends AppInfo {
  * `seen`: the owner's seen version (`artifacts.seen`, `seen` in summaries and reads). `changes`:
  * `artifacts.changes`. `held`: direct edits refused for what an agent's running turn wrote, and
  * `held` in presence. `links`: `places` in the artifact tools' results. `pageErrors`: the page
- * script the host serves its pages with reports their uncaught errors.
+ * script the host serves its pages with reports their uncaught errors. `documentSheet`: comment
+ * threads anchor on a document's blocks in its Markdown, and the page script passes on what the
+ * document viewer reports of its layout.
  */
-export const ARTIFACT_RECORDS = ['seen', 'changes', 'held', 'links', 'pageErrors'] as const
+export const ARTIFACT_RECORDS = [
+  'seen',
+  'changes',
+  'held',
+  'links',
+  'pageErrors',
+  'documentSheet',
+] as const
 export type ArtifactRecord = (typeof ARTIFACT_RECORDS)[number]
 
 /** The host's themes folder: the themes it holds, and why the others fail. */

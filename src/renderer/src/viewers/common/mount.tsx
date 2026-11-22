@@ -5,11 +5,14 @@ import { createRoot } from 'react-dom/client'
 import type { ViewerConfig, ViewerView } from '@shared/artifact-types'
 import { followColorMode, readConfig, readView, startI18n } from './boot'
 
-export function mount(render: (config: ViewerConfig, view: ViewerView) => ReactNode): void {
+export function mount(
+  render: (config: ViewerConfig, view: ViewerView) => ReactNode,
+  { light = false }: { light?: boolean } = {},
+): void {
   const root = document.getElementById('root')
   const config = readConfig()
   if (!root || !config) return
   startI18n(config)
-  followColorMode()
+  followColorMode(light)
   createRoot(root).render(<StrictMode>{render(config, readView())}</StrictMode>)
 }
