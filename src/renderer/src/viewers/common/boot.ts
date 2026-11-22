@@ -49,8 +49,22 @@ export function startI18n(config: ViewerConfig): void {
     )
 }
 
-/** Follows the color mode, as the theme's own dark variant needs on the root. */
+/** The slide a thumbnail of one slide shows, from 1, from its address; null for the first. */
+export function readSlide(): number | null {
+  const slide = Number(new URLSearchParams(location.search).get('slide'))
+  return Number.isSafeInteger(slide) && slide >= 1 ? slide : null
+}
+
+/**
+ * Follows the color mode, as the theme's own dark variant needs on the root; a thumbnail drawn in
+ * one theme names it in its address and keeps it.
+ */
 export function followColorMode(): void {
+  const asked = new URLSearchParams(location.search).get('theme')
+  if (asked === 'light' || asked === 'dark') {
+    document.documentElement.dataset.theme = asked
+    return
+  }
   const dark = matchMedia('(prefers-color-scheme: dark)')
   const apply = () => (document.documentElement.dataset.theme = dark.matches ? 'dark' : 'light')
   apply()

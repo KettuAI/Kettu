@@ -2452,6 +2452,13 @@ export function createValidators(platform: Platform): Validators {
       }
     },
     'artifacts.versions': artifact,
+    'artifacts.changes': (params) => {
+      const o = fields(params)
+      const from = version(o, 'from')
+      const to = version(o, 'to')
+      if (from === to) throw invalidParams('from and to must be two different versions')
+      return { id: artifactId(o), from, to }
+    },
     'artifacts.rename': (params) => {
       const o = fields(params)
       const title = o.title
@@ -2528,6 +2535,10 @@ export function createValidators(platform: Platform): Validators {
         throw invalidParams('page must be a canvas page id or null')
       }
       return { id: artifactId(o), page: page as string | null }
+    },
+    'artifacts.seen': (params) => {
+      const o = fields(params)
+      return { id: artifactId(o), version: version(o, 'version') }
     },
     'artifacts.setParams': (params) => {
       const o = fields(params)

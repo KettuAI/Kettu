@@ -808,6 +808,7 @@ export class AgentHost {
         }
       },
       comments: (portIds, id) => this.hub.send(portIds, { type: 'artifacts.comments', id }),
+      seen: (id, version) => this.hub.broadcast({ type: 'artifacts.seen', id, version }),
       canvas: (portIds, event) => this.hub.send(portIds, { type: 'artifacts.canvas', ...event }),
       unwatched: (id) => this.consents.unwatched(id),
     })
@@ -3631,6 +3632,7 @@ export class AgentHost {
               ? ''
               : await artifacts.entryText(read),
           type: read.type,
+          seen: read.artifact.seen,
           files: read.files.map((file) => ({
             path: file.path,
             size: file.size,
@@ -3656,6 +3658,9 @@ export class AgentHost {
         return artifacts.content(id, version)
       },
       'artifacts.versions': async ({ id }) => (await artifacts.versions(id)).map(versionSummary),
+      'artifacts.changes': async ({ id, from, to }) => ({
+        changes: await artifacts.changes(id, from, to),
+      }),
       'artifacts.rename': ({ id, title }) => artifacts.rename(id, title),
       'artifacts.delete': async ({ id, permanently }) => {
         if (permanently) await artifacts.erase(id)
@@ -3697,6 +3702,7 @@ export class AgentHost {
       'artifacts.editElement': ({ id, baseVersion, path, offset, style, text }) =>
         artifacts.editElement({ id, baseVersion, path, offset, change: { style, text } }),
       'artifacts.view': ({ id, page }, { portId }) => artifacts.view(id, portId, page),
+      'artifacts.seen': async ({ id, version }) => ({ seen: await artifacts.see(id, version) }),
       'artifacts.setParams': ({ id, baseVersion, path, values }) =>
         artifacts.setParams({ id, baseVersion, path, values }),
       'artifacts.canvas': ({ id }) => artifacts.canvases.state(id),

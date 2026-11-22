@@ -409,6 +409,7 @@ function stateKey(value: unknown): string | null {
     case 'git.reference':
       return idKey('git.reference', fields.url)
     case 'artifacts.version':
+    case 'artifacts.seen':
     case 'artifacts.activity':
     case 'artifacts.comments':
       return idKey(kind, fields.id)

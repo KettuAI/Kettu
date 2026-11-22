@@ -13,6 +13,7 @@ import {
   type SelectMessage,
 } from '@shared/artifact-runtime/page-messages'
 import { isWeb } from '@renderer/lib/platform'
+import { listenPageErrors, receivePageError } from './page-errors'
 
 /** The picks a frame may report each second over its port; more are dropped. */
 const PICKS_PER_SECOND = 20
@@ -83,6 +84,7 @@ export class FrameLink {
   open(): void {
     channels.set(this.channel, { origin: this.origin, listener: this.listener })
     listen()
+    listenPageErrors()
   }
 
   attach(frame: HTMLIFrameElement | null): void {
@@ -147,6 +149,10 @@ export class FrameLink {
       if (parsed.kind === 'select') {
         if (parsed.message.channel !== this.channel || !this.allowPick()) return
         deliver(this.origin, parsed.message)
+        return
+      }
+      if (parsed.kind === 'error') {
+        receivePageError(this.origin, parsed.message)
         return
       }
       if (relays || parsed.message.kind === 'cancel') return

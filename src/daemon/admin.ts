@@ -5,6 +5,7 @@
 import { mkdir, rename } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
+import { ARTIFACT_RECORDS } from '@shared/remote/host-admin'
 import { AGENTS_FOLDER, KETTU_HOME_FOLDER } from '@shared/storage'
 import { BUILTIN_THEME_ID } from '@shared/themes'
 import { AgentFolders } from '../main/agent-folders'
@@ -150,6 +151,8 @@ export async function startDaemonAdmin({
       remoteSwitch: false,
       remoteReset: true,
       thumbnails: false,
+      partThumbnails: false,
+      artifactRecords: [...ARTIFACT_RECORDS],
     }),
     restart: (which) => void hosts.restart(which),
     sharing: null,

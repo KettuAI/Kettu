@@ -207,11 +207,11 @@ function style(value: unknown): ElementStyle {
 }
 
 /** Text from a page as one line, capped; it is only ever shown as plain text. */
-export function snippet(value: unknown): string {
+export function snippet(value: unknown, max = SNIPPET_CHARS): string {
   if (typeof value !== 'string') return ''
   // eslint-disable-next-line no-control-regex
   const line = value.replace(/[\u0000-\u001f\u007f\s]+/g, ' ').trim()
-  return Array.from(line).slice(0, SNIPPET_CHARS).join('')
+  return Array.from(line).slice(0, max).join('')
 }
 
 function selection(value: unknown): PageSelection | null | undefined {
@@ -282,9 +282,74 @@ function locatedOf(value: unknown): { src: number; box: PageBox | null } | null 
   return { src: src as number, box: { x: box.x, y: box.y, width: box.width, height: box.height } }
 }
 
+/** The most uncaught errors a page reports in one load; the runtime sends no more. */
+export const PAGE_ERRORS = 20
+export const ERROR_MESSAGE_CHARS = 300
+const SOURCE_CHARS = 200
+const MAX_LINE = 10_000_000
+const LOAD = /^[A-Za-z0-9_-]{8,32}$/
+
+/**
+ * An uncaught error or unhandled rejection in a page's own script, as the page said it: only ever
+ * shown as plain text and handed to an agent as data.
+ */
+export interface PageError {
+  kind: 'error' | 'rejection'
+  message: string
+  /** The script's path on the artifact's origin, where the page named one. */
+  source: string | null
+  line: number | null
+  column: number | null
+}
+
+/** A page's report of one error: the served file it is in and the page load it happened in. */
+export interface PageErrorMessage {
+  v: typeof RUNTIME_VERSION
+  id: string
+  kind: 'page-error'
+  path: string
+  /** The page's own random name for the load, which a reload replaces. */
+  load: string
+  error: PageError
+}
+
+function position(value: unknown): number | null {
+  return Number.isSafeInteger(value) && (value as number) >= 0 && (value as number) <= MAX_LINE
+    ? (value as number)
+    : null
+}
+
+/** A page's `page-error` message, its fields capped, or null for anything else. */
+export function parsePageError(value: unknown): PageErrorMessage | null {
+  if (!isRecord(value) || value.v !== RUNTIME_VERSION || value.kind !== 'page-error') return null
+  const { id, path, load, error } = value
+  if (typeof id !== 'string' || id.length === 0 || id.length > ID_CHARS) return null
+  if (typeof path !== 'string' || artifactPathProblem(path) !== null || !isHtmlPath(path)) {
+    return null
+  }
+  if (typeof load !== 'string' || !LOAD.test(load) || !isRecord(error)) return null
+  const message = snippet(error.message, ERROR_MESSAGE_CHARS)
+  const source = snippet(error.source, SOURCE_CHARS)
+  return {
+    v: RUNTIME_VERSION,
+    id,
+    kind: 'page-error',
+    path,
+    load,
+    error: {
+      kind: error.kind === 'rejection' ? 'rejection' : 'error',
+      message: message === '' ? 'Error' : message,
+      source: source === '' ? null : source,
+      line: position(error.line),
+      column: position(error.column),
+    },
+  }
+}
+
 /** A page's message by its kind: phase-owned `select` and `preview` ones, or a capability's. */
 export type PageMessage =
   | { kind: 'select'; message: SelectMessage }
+  | { kind: 'error'; message: PageErrorMessage }
   | { kind: 'capability'; message: Fields & { v: 1; id: string; kind: string } }
 
 /** A message's text from a page, parsed and sorted, or null when it is not a version 1 message. */
@@ -296,6 +361,10 @@ export function parsePageMessage(value: unknown): PageMessage | null {
   if (kind.startsWith('select') || kind.startsWith('preview')) {
     const message = parseSelectMessage(value)
     return message ? { kind: 'select', message } : null
+  }
+  if (kind === 'page-error') {
+    const message = parsePageError(value)
+    return message ? { kind: 'error', message } : null
   }
   return { kind: 'capability', message: value as Fields & { v: 1; id: string; kind: string } }
 }

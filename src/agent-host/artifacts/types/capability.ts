@@ -59,7 +59,9 @@ function refusal(error: unknown): unknown {
       error.reason === 'deleted'
         ? 'The artifact is in Recently deleted'
         : error.reason === 'conflict'
-          ? `The artifact is at version ${error.state?.version}`
+          ? error.state?.held
+            ? error.english
+            : `The artifact is at version ${error.state?.version}`
           : 'No such artifact',
     )
   }

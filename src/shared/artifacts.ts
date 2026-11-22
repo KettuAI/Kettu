@@ -99,6 +99,11 @@ export interface ArtifactSummary {
   deletedAt: number | null
   editing: string[] // the sessions whose running turn changed it
   type: ArtifactTypeName | null // the type it was made from, shown by the type's viewer
+  /**
+   * The newest version its owner had open in a viewer, on any device; a card in a thread does not
+   * count. Null until they open it; absent from hosts that keep no such record.
+   */
+  seen?: number | null
 }
 
 /** A session using an artifact now: its running turn read it, or changed it. */
@@ -109,7 +114,23 @@ export interface ArtifactSession {
   doing?: ArtifactDoing
   /** Where it did it: a file, the start tag of the element it changed in that file, a canvas page. */
   focus?: ArtifactFocus
+  /**
+   * What its running turn wrote, which takes no direct edit of the user's until the turn ends;
+   * comments are not held. Absent from hosts that hold nothing.
+   */
+  held?: ArtifactPiece[]
 }
+
+/**
+ * A piece of an artifact a turn wrote: a canvas frame by its id and file, a document's section by
+ * its slug, a slide from 1, or the whole artifact, as a web page is one piece and a new artifact
+ * is all its turn's.
+ */
+export type ArtifactPiece =
+  | { kind: 'frame'; id: string; file: string }
+  | { kind: 'section'; slug: string }
+  | { kind: 'slide'; number: number }
+  | { kind: 'whole' }
 
 export type ArtifactDoing = 'read' | 'write' | 'draw' | 'move'
 
@@ -143,6 +164,8 @@ export interface ArtifactContent {
   html: string
   files: ArtifactFileInfo[]
   type?: ArtifactTypeInfo | null
+  /** As the summary's `seen`; absent from hosts that keep no such record. */
+  seen?: number | null
 }
 
 /** A card's thumbnail renders at this size, a page's viewport, before main scales it down. */
@@ -152,6 +175,33 @@ export const THUMBNAIL_HEIGHT = 800
 export const THUMBNAIL_INSET = 64
 /** The most pages a canvas's thumbnail lays out. */
 export const THUMBNAIL_PAGES = 500
+
+/**
+ * One piece of a version with a thumbnail of its own, beside the version's: a canvas frame by its
+ * id in the canvas document, a slide from 1, or a document drawn in the light or the dark theme.
+ */
+export type ThumbnailPart = { frame: string } | { slide: number } | { theme: 'light' | 'dark' }
+
+const FRAME_ID = /^[A-Za-z0-9_-]{1,64}$/
+const MAX_SLIDE = 10_000
+
+/** A part as a client asked for it, checked; null for anything else. */
+export function parseThumbnailPart(value: unknown): ThumbnailPart | null {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return null
+  const o = value as Record<string, unknown>
+  const keys = Object.keys(o)
+  if (keys.length !== 1) return null
+  if (typeof o.frame === 'string' && FRAME_ID.test(o.frame)) return { frame: o.frame }
+  if (
+    Number.isSafeInteger(o.slide) &&
+    (o.slide as number) >= 1 &&
+    (o.slide as number) <= MAX_SLIDE
+  ) {
+    return { slide: o.slide as number }
+  }
+  if (o.theme === 'light' || o.theme === 'dark') return { theme: o.theme }
+  return null
+}
 
 /** One page of a canvas laid out for its thumbnail, in canvas pixels, from the canvas's origin. */
 export interface ThumbnailPage {
@@ -197,4 +247,6 @@ export interface ArtifactState {
   deleted: boolean
   /** For a write refused because someone changed what it writes: those files, since its base. */
   changed?: string[]
+  /** For a direct edit refused because an agent's running turn wrote it: the sessions and pieces. */
+  held?: { sessionId: string; pieces: ArtifactPiece[] }[]
 }

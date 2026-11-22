@@ -185,6 +185,8 @@ function artifact(db: ThreadDb, call: ArtifactCall): unknown {
       return db.replyThread(call.params)
     case 'resolve':
       return db.resolveThread(call.params)
+    case 'see':
+      return db.seeArtifact(call.params)
     case 'markSent':
       return db.markThreadsSent(call.params)
     case 'reanchor':

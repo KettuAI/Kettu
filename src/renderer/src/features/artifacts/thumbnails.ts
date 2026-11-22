@@ -3,7 +3,7 @@
 
 import { useEffect, useSyncExternalStore } from 'react'
 import { fitThumbnail, THUMBNAIL_HEIGHT, THUMBNAIL_WIDTH } from '@shared/artifacts'
-import type { ArtifactSummary } from '@shared/artifacts'
+import type { ArtifactSummary, ThumbnailPart } from '@shared/artifacts'
 import { CANVAS_FILE, parseCanvasDoc } from '@shared/canvas-doc'
 import { artifactRefOf, host } from '@renderer/lib/host'
 import { parseCanvas, thumbnailLayout } from './canvas'
@@ -33,7 +33,7 @@ const KEPT = 200
 const AT_ONCE = 3
 
 const made = new Map<string, Thumbnail>()
-const waiting: { key: string; artifact: ThumbnailOf }[] = []
+const waiting: { key: string; id: string; run: () => Promise<Thumbnail> }[] = []
 const listeners = new Set<() => void>()
 let asking = 0
 
@@ -95,9 +95,10 @@ function pump(): void {
   const next = waiting.shift()
   if (!next) return
   asking++
-  render(next.artifact)
+  next
+    .run()
     .catch((error: unknown) => {
-      console.warn(`Could not show a thumbnail of ${next.artifact.id}`, error)
+      console.warn(`Could not show a thumbnail of ${next.id}`, error)
       return { state: 'failed' } as const
     })
     .then((thumbnail) => settle(next.key, thumbnail))
@@ -108,17 +109,16 @@ function pump(): void {
   pump()
 }
 
-/** Queues the card's thumbnail, unless it is made or already waits. */
-function ask(artifact: ThumbnailOf): void {
-  const key = keyOf(artifact)
+/** Queues a thumbnail, unless it is made or already waits. */
+function ask(key: string, id: string, run: () => Promise<Thumbnail>): void {
   if (made.has(key) || waiting.some((w) => w.key === key)) return
-  waiting.push({ key, artifact })
+  waiting.push({ key, id, run })
   pump()
 }
 
 /** A card that left the view before its turn waits no more. */
-function drop(artifact: ThumbnailOf): void {
-  const at = waiting.findIndex((w) => w.key === keyOf(artifact))
+function drop(key: string): void {
+  const at = waiting.findIndex((w) => w.key === key)
   if (at >= 0) waiting.splice(at, 1)
 }
 
@@ -133,9 +133,34 @@ export function useThumbnail(artifact: ThumbnailOf, inView: boolean): Thumbnail 
   const thumbnail = useSyncExternalStore(subscribe, () => made.get(key) ?? LOADING)
   useEffect(() => {
     if (!inView) return
-    ask(artifact)
-    return () => drop(artifact)
+    ask(key, artifact.id, () => render(artifact))
+    return () => drop(key)
     // The key names the version; the rest of the summary does not change what renders.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key, inView])
+  return thumbnail
+}
+
+/**
+ * The thumbnail of one frame, one slide, or a document in one theme, asked for while `inView`; it
+ * fails at once where the host draws none.
+ */
+export function usePartThumbnail(
+  id: string,
+  version: number,
+  part: ThumbnailPart,
+  inView: boolean,
+): Thumbnail {
+  const key = `${id}:${version}:${JSON.stringify(part)}`
+  const thumbnail = useSyncExternalStore(subscribe, () => made.get(key) ?? LOADING)
+  useEffect(() => {
+    if (!inView) return
+    ask(key, id, async () => {
+      const src = await window.kettu.artifacts.partThumbnail(artifactRefOf(id), version, part)
+      return src ? { state: 'ready', src, pages: null } : { state: 'failed' }
+    })
+    return () => drop(key)
+    // The key names the part.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key, inView])
   return thumbnail

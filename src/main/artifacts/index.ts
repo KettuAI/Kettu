@@ -10,8 +10,8 @@ import {
   type Session,
   type WebContents,
 } from 'electron'
-import type { SelectMessage } from '@shared/artifact-runtime/page-messages'
-import { type ArtifactImportResult, parseArtifactRef } from '@shared/artifacts'
+import type { PageErrorMessage, SelectMessage } from '@shared/artifact-runtime/page-messages'
+import { type ArtifactImportResult, parseArtifactRef, parseThumbnailPart } from '@shared/artifacts'
 import type { RuntimeAnswer } from '@shared/artifact-capabilities'
 import {
   type ArtifactExportFormat,
@@ -35,6 +35,8 @@ const MAX_URL_CHARS = 2_048
 const NAME_CHARS = 200
 /** The picks a page may report each second; a page that sends more loses the rest. */
 export const PICKS_PER_SECOND = 20
+/** The errors the frames of one artifact may report each second; more are dropped. */
+export const PAGE_ERRORS_PER_SECOND = 10
 
 /** Counts each origin's reports per second, so a page cannot flood the windows that show it. */
 export class ReportLimit {
@@ -97,6 +99,7 @@ export class Artifacts {
   private readonly files: ArtifactFiles
   private readonly windows = new Set<WebContents>()
   private readonly picks = new ReportLimit(PICKS_PER_SECOND)
+  private readonly errors = new ReportLimit(PAGE_ERRORS_PER_SECOND)
   /** The origin ids whose latest version declares what reads beyond the page, as last served. */
   private readonly declaredStrict = new Set<string>()
   /**
@@ -113,6 +116,7 @@ export class Artifacts {
       content: (id, version) => deps.content(id, version),
       ...(deps.ready && { ready: deps.ready }),
       selected: (host, message) => this.selected(host, message),
+      pageError: (host, message) => this.pageError(host, message),
       runtime: {
         send: (id, message, answer) => deps.runtime(id, message, answer),
         reading: (id) => this.reading.add(originId(id)),
@@ -167,6 +171,17 @@ export class Artifacts {
     }
   }
 
+  /** A page's error, for the windows that opened its origin; the page's data is checked already. */
+  private pageError(host: string, message: PageErrorMessage): void {
+    if (!this.errors.allow(host)) return
+    const origin = `${ARTIFACT_SCHEME}://${host}`
+    for (const contents of this.windows) {
+      if (!contents.isDestroyed() && this.origins.isOpenedIn(contents, origin)) {
+        sendEvent(contents, 'artifact:page-error', { origin, message })
+      }
+    }
+  }
+
   /** Whether the artifact on this origin id loads nothing from the CDNs, whatever its policy. */
   private isStrict(host: string): boolean {
     return this.declaredStrict.has(host) || this.reading.has(host)
@@ -199,6 +214,14 @@ export class Artifacts {
   async thumbnail(id: unknown, version: unknown, layout: unknown): Promise<string | null> {
     const wanted = parseVersion(id, version)
     return this.thumbnails.thumbnail(wanted.id, wanted.version, parseLayout(layout))
+  }
+
+  /** `artifact:part-thumbnail`: a frame, a slide or a document in one theme. */
+  async partThumbnail(id: unknown, version: unknown, part: unknown): Promise<string | null> {
+    const wanted = parseVersion(id, version)
+    const checked = parseThumbnailPart(part)
+    if (!checked) throw new Error('Not a thumbnail part')
+    return this.thumbnails.part(wanted.id, wanted.version, checked)
   }
 
   /** A page of a version as a PNG at its own size; null when it cannot render. */

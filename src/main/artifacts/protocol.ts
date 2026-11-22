@@ -13,6 +13,7 @@ import {
   MESSAGE_BYTES,
   parsePageMessage,
   received,
+  type PageErrorMessage,
   type SelectMessage,
 } from '@shared/artifact-runtime/page-messages'
 import { VIEWER_PREFIX, viewerBase, viewerPage } from '@shared/artifact-types'
@@ -63,6 +64,8 @@ export interface ArtifactSource {
   ready?(id: string, version: number, paths: readonly string[] | null): Promise<void>
   /** A page on this origin id reported a pick, checked; null where no window takes them. */
   selected: ((host: string, message: SelectMessage) => void) | null
+  /** A page on this origin id reported an error of its own script, checked. */
+  pageError?: ((host: string, message: PageErrorMessage) => void) | null
   /** Where a page's capability requests go; none, as for thumbnails, offers no capability. */
   runtime?: RuntimeRelay | null
   /** What the latest version declares makes the artifact's pages strict, or no longer. */
@@ -135,7 +138,7 @@ function json(status: number, body: RuntimeAnswer): Response {
   return new Response(JSON.stringify(body), { status, headers })
 }
 
-/** A page's message for the editor rather than a capability: a pick, for the windows of `host`. */
+/** A page's message for the editor rather than a capability: a pick or an error, for `host`'s windows. */
 function editorMessage(
   host: string,
   source: ArtifactSource,
@@ -143,6 +146,10 @@ function editorMessage(
   bytes: number,
 ): Response {
   const parsed = bytes > MESSAGE_BYTES ? null : parsePageMessage(message)
+  if (parsed?.kind === 'error') {
+    source.pageError?.(host, parsed.message)
+    return json(200, received(parsed.message.id))
+  }
   if (parsed?.kind !== 'select') {
     return json(400, errorAnswer({ v: 1, id: '' }, 'invalid', 'Not a page runtime message.'))
   }

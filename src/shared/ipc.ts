@@ -1,7 +1,12 @@
 import type { AccountStatus } from './account'
 import type { AgentsApi, HostMethod } from './agent-host'
-import type { ArtifactImportKind, ArtifactImportResult, ThumbnailPage } from './artifacts'
-import type { SelectMessage } from './artifact-runtime/page-messages'
+import type {
+  ArtifactImportKind,
+  ArtifactImportResult,
+  ThumbnailPage,
+  ThumbnailPart,
+} from './artifacts'
+import type { PageErrorMessage, SelectMessage } from './artifact-runtime/page-messages'
 import type { ArtifactExportFormat } from './artifact-types'
 import type { GrantedAttachment } from './attachments'
 import type { BrowserBounds, BrowserOriginDecision, BrowserState } from './browser'
@@ -190,6 +195,12 @@ export interface ArtifactSelectedEvent {
   message: SelectMessage
 }
 
+/** An uncaught error of a page's own script, from a frame of an origin the window opened. */
+export interface ArtifactPageErrorEvent {
+  origin: string // as `artifact:open` gave it, without the path
+  message: PageErrorMessage
+}
+
 /** One page of a canvas, by the protocol's numbers, at its own size, for `artifact:png`. */
 export interface ArtifactPngPage {
   page: { group: number; index: number; file?: string } | null
@@ -322,6 +333,10 @@ export interface IpcInvokeContract {
   'artifact:close': { args: [url: string]; result: void }
   'artifact:thumbnail': {
     args: [id: string, version: number, layout: ThumbnailPage[] | null]
+    result: string | null
+  }
+  'artifact:part-thumbnail': {
+    args: [id: string, version: number, part: ThumbnailPart]
     result: string | null
   }
   'artifact:open-external': { args: [id: string, version: number]; result: void }
@@ -530,6 +545,7 @@ export interface IpcEventContract {
   'artifact:blocked': ArtifactBlockedEvent
   'artifact:stopped': ArtifactStoppedEvent
   'artifact:selected': ArtifactSelectedEvent
+  'artifact:page-error': ArtifactPageErrorEvent
   'account:changed': AccountStatus
   'sharing:changed': SharingStatus
   'remote:changed': RemoteStatus
@@ -644,6 +660,11 @@ export interface KettuApi {
      * its pages laid out, which main cannot find without parsing the HTML.
      */
     thumbnail(id: string, version: number, layout: ThumbnailPage[] | null): Promise<string | null>
+    /**
+     * The image of one frame, one slide, or a document in one theme, as a `data:` URL; null when
+     * it could not render, or the version has no such part.
+     */
+    partThumbnail(id: string, version: number, part: ThumbnailPart): Promise<string | null>
     /** Opens a copy of the version in the default browser, outside the app's isolation. */
     openExternal(id: string, version: number): Promise<void>
     /** Selects a copy of the version in the system file manager, as `openExternal` would open it. */
@@ -667,6 +688,8 @@ export interface KettuApi {
     onStopped(listener: (event: ArtifactStoppedEvent) => void): () => void
     /** A page's pick, from a frame of an origin this window opened. */
     onSelected(listener: (event: ArtifactSelectedEvent) => void): () => void
+    /** The errors of the pages' own scripts in frames of the origins this window opened. */
+    onPageError(listener: (event: ArtifactPageErrorEvent) => void): () => void
     /**
      * Renders a page of the version at its own size, apart from the window, and saves it as a PNG
      * where the user says; false when they cancelled. Only a desktop host renders one.

@@ -1166,6 +1166,7 @@
       "moreThanText": "偏移量 {{offset}} 处的 <{{tag}}> 里不只有文字",
       "styleRefused": "样式里有不允许修改的属性或值"
     },
+    "held": "智能体正在这一轮里写这一处，这一轮结束后才能修改。评论照常能留。",
     "needDatabase": "产物需要对话数据库",
     "deleted": "{{id}} 在最近删除中",
     "noHtmlFile": "{{id}} 里没有 HTML 文件 {{path}}",

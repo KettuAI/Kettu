@@ -6,6 +6,8 @@ import { startThreadService } from '../threads/service'
 import { ThreadStoreError, type ThreadStore } from '../threads/store'
 import { ArtifactStore } from './store'
 import { ArtifactTools, type Caller } from './tools'
+import { ArtifactTypes } from './types/registry'
+import { writeContent } from './types/writes'
 
 let dir: string
 let work: string
@@ -123,5 +125,252 @@ describe('the artifact tools', () => {
     expect(error?.code).toBe('invalid')
     expect(error?.message).toContain(says)
     expect(await count()).toBe(0)
+  })
+})
+
+describe("the host's records of an artifact", () => {
+  it('compares any two of its versions from their stored files', async () => {
+    const id = await create({ html: '<p>1</p>', files: [{ path: 'a.css', content: 'a' }] })
+    for (const [base, html] of [
+      [1, '<p>2</p>'],
+      [2, '<p>3</p>'],
+    ] as const) {
+      const { error } = await call('update_artifact', { id, base_version: base, html })
+      expect(error).toBeNull()
+    }
+    expect(await store.changes(id, 1, 3)).toEqual({ kind: 'files', paths: ['index.html'] })
+    expect(await store.changes(id, 3, 1)).toEqual({ kind: 'files', paths: ['index.html'] })
+    await expect(store.changes(id, 1, 9)).rejects.toMatchObject({ reason: 'not_found' })
+    // Another project's session reaches none of it.
+    await expect(store.changes(id, 1, 2, { project: '/elsewhere' })).rejects.toMatchObject({
+      reason: 'not_found',
+    })
+  })
+})
+
+describe('the links in the artifact tools results', () => {
+  const page = (id: string, file: string, x: number) => ({
+    id,
+    canvas: 'c1',
+    name: id.toUpperCase(),
+    file,
+    x,
+    y: 0,
+    width: 390,
+    height: 844,
+    locked: false,
+  })
+
+  it('name every frame on create and read, and the frames a version changed on update', async () => {
+    const doc = {
+      format: 1,
+      canvases: [{ id: 'c1', name: 'Home' }],
+      pages: [page('pa', 'a.html', 0), page('pb', 'b.html', 500)],
+      notes: [],
+    }
+    const { error, value } = await call('create_artifact', {
+      title: 'App',
+      files: [
+        { path: 'canvas.json', content: JSON.stringify(doc) },
+        { path: 'a.html', content: '<p>a</p>' },
+        { path: 'b.html', content: '<p>b</p>' },
+      ],
+    })
+    expect(error).toBeNull()
+    const id = value.id as string
+    expect(value.link).toBe(`kettu://artifact/${id}`)
+    expect(value.places).toEqual([
+      { kind: 'frame', name: 'Home · PA', link: `kettu://artifact/${id}/frame/pa` },
+      { kind: 'frame', name: 'Home · PB', link: `kettu://artifact/${id}/frame/pb` },
+    ])
+    expect(value.places_more).toBe(0)
+    expect((await call('read_artifact', { id })).value.places).toHaveLength(2)
+    const updated = await call('update_artifact', {
+      id,
+      base_version: 1,
+      files: [{ path: 'b.html', content: '<p>b2</p>' }],
+    })
+    expect(updated.value.places).toEqual([
+      { kind: 'frame', name: 'Home · PB', link: `kettu://artifact/${id}/frame/pb` },
+    ])
+  })
+
+  it("name a document's sections", async () => {
+    const { value } = await call('create_artifact_from_type', {
+      type: 'document',
+      title: 'Plan',
+      files: [{ path: 'document.md', content: '# Plan\n\nText.\n\n## Risks\n\nNone.\n' }],
+    })
+    const id = value.id as string
+    expect(value.places).toEqual([
+      { kind: 'section', name: 'Plan', link: `kettu://artifact/${id}/section/plan` },
+      { kind: 'section', name: 'Risks', link: `kettu://artifact/${id}/section/risks` },
+    ])
+  })
+})
+
+describe('the pieces an agent holds while its turn writes', () => {
+  let turn: object | null
+  let held: unknown[]
+
+  beforeEach(() => {
+    turn = {}
+    held = []
+    store = new ArtifactStore({
+      threads: threadsAt(dir),
+      contentDir: path.join(dir, 'content'),
+      log: () => {},
+      changed: () => {},
+      version: () => {},
+      activity: (_, activity) => held.push(activity.sessions.map((s) => s.held ?? [])),
+      canvasQuietMs: 60_000,
+    })
+    tools = new ArtifactTools({ store, sessionTitle: () => 'Session', runningTurn: () => turn })
+  })
+
+  /** Ends the turn, which lets go of what it held, and starts the next one. */
+  function nextTurn(): void {
+    store.stopUsing('s1')
+    turn = {}
+  }
+
+  const page = (id: string, file: string) => ({
+    id,
+    canvas: 'c1',
+    name: id,
+    file,
+    x: 0,
+    y: 0,
+    width: 390,
+    height: 844,
+    locked: false,
+  })
+
+  it("refuses the user's edits of a frame the turn wrote, and lets the rest and comments be", async () => {
+    const doc = {
+      format: 1,
+      canvases: [{ id: 'c1', name: 'Home' }],
+      pages: [page('pa', 'a.html'), page('pb', 'b.html')],
+      notes: [],
+    }
+    const id = await create({
+      files: [
+        { path: 'canvas.json', content: JSON.stringify(doc) },
+        { path: 'a.html', content: '<p>a</p>' },
+        { path: 'b.html', content: '<p>b</p>' },
+      ],
+    })
+    // A new artifact is the turn's whole.
+    expect(store.held(id)).toEqual([{ sessionId: 's1', pieces: [{ kind: 'whole' }] }])
+    await expect(
+      store.canvases.apply(id, [{ op: 'set', id: 'pa', key: 'x', value: 9 }], 'c', 1),
+    ).rejects.toMatchObject({ reason: 'conflict' })
+    nextTurn()
+    expect(store.held(id)).toEqual([])
+
+    const { error } = await call('update_artifact', {
+      id,
+      base_version: 1,
+      files: [{ path: 'b.html', content: '<p>b2</p>' }],
+    })
+    expect(error).toBeNull()
+    expect(store.held(id)).toEqual([
+      { sessionId: 's1', pieces: [{ kind: 'frame', id: 'pb', file: 'b.html' }] },
+    ])
+    const refused = { reason: 'conflict', state: { version: 2, held: [{ sessionId: 's1' }] } }
+    await expect(
+      store.editElement({
+        id,
+        baseVersion: 2,
+        path: 'b.html',
+        offset: 0,
+        change: { style: null, text: 'x' },
+      }),
+    ).rejects.toMatchObject(refused)
+    await expect(
+      store.canvases.apply(id, [{ op: 'remove', id: 'pb' }], 'c', 2),
+    ).rejects.toMatchObject(refused)
+    // Removing the sheet would remove the held frame with it.
+    await expect(
+      store.canvases.apply(id, [{ op: 'remove', id: 'c1' }], 'c', 3),
+    ).rejects.toMatchObject(refused)
+    // The frame the turn did not write stays the user's.
+    await expect(
+      store.canvases.apply(id, [{ op: 'set', id: 'pa', key: 'x', value: 9 }], 'c', 4),
+    ).resolves.toMatchObject({ seq: expect.any(Number) })
+    const anchor = { version: 2, path: 'b.html', page: null, offset: null, tag: null, text: '' }
+    await expect(
+      store.addThread(id, {
+        anchor: { ...anchor, missing: false },
+        author: { person: 'owner', session: null },
+        body: 'Nice',
+      }),
+    ).resolves.toMatchObject({ comments: [{ body: 'Nice' }] })
+
+    nextTurn()
+    await expect(
+      store.canvases.apply(id, [{ op: 'remove', id: 'pb' }], 'c', 5),
+    ).resolves.toMatchObject({ seq: expect.any(Number) })
+  })
+
+  it("refuses the user's edits of a section the turn wrote, by what the edit changes", async () => {
+    const types = new ArtifactTypes()
+    const { value } = await call('create_artifact_from_type', {
+      type: 'document',
+      title: 'Plan',
+      files: [{ path: 'document.md', content: '# Plan\n\nText.\n\n## Risks\n\nNone.\n' }],
+    })
+    const id = value.id as string
+    nextTurn()
+    await store.watch(id, 'port')
+    const { error } = await call('update_artifact', {
+      id,
+      base_version: 1,
+      files: [{ path: 'document.md', content: '# Plan\n\nText.\n\n## Risks\n\nSome.\n' }],
+    })
+    expect(error).toBeNull()
+    expect(store.held(id)[0]?.pieces).toEqual([{ kind: 'section', slug: 'risks' }])
+    expect(held.at(-1)).toEqual([[{ kind: 'section', slug: 'risks' }]])
+
+    await expect(
+      writeContent(store, types, {
+        id,
+        baseVersion: 2,
+        text: '# Plan\n\nText.\n\n## Risks\n\nMany.\n',
+      }),
+    ).rejects.toMatchObject({ reason: 'conflict', english: expect.stringContaining('turn') })
+    await expect(
+      writeContent(store, types, {
+        id,
+        baseVersion: 2,
+        text: '# Plan\n\nMore text.\n\n## Risks\n\nSome.\n',
+      }),
+    ).resolves.toEqual({ version: 3 })
+  })
+
+  it('holds the slides a turn wrote, one removed from the end included', async () => {
+    const types = new ArtifactTypes()
+    const deck = (...titles: string[]) =>
+      JSON.stringify({ slides: titles.map((title) => ({ layout: 'title', title })) })
+    const { value, error } = await call('create_artifact_from_type', {
+      type: 'slides',
+      title: 'Deck',
+      files: [{ path: 'slides.json', content: deck('A', 'B', 'C') }],
+    })
+    expect(error).toBeNull()
+    const id = value.id as string
+    nextTurn()
+    await call('update_artifact', {
+      id,
+      base_version: 1,
+      files: [{ path: 'slides.json', content: deck('A', 'B', 'C2') }],
+    })
+    expect(store.held(id)[0]?.pieces).toEqual([{ kind: 'slide', number: 3 }])
+    await expect(
+      writeContent(store, types, { id, baseVersion: 2, text: deck('A', 'B') }),
+    ).rejects.toMatchObject({ reason: 'conflict' })
+    await expect(
+      writeContent(store, types, { id, baseVersion: 2, text: deck('A2', 'B', 'C2') }),
+    ).resolves.toEqual({ version: 3 })
   })
 })

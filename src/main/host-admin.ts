@@ -187,6 +187,7 @@ export interface HostAdminDeps {
   }
   /** An artifact version's preview as a data URL; null where the host cannot capture, as the daemon. */
   thumbnail: ((id: unknown, version: unknown, layout: unknown) => Promise<string | null>) | null
+  partThumbnail?: ((id: unknown, version: unknown, part: unknown) => Promise<string | null>) | null
   /** A page as a PNG; the host's own windows render it, so the daemon has none. */
   png:
     ((id: unknown, version: unknown, page: unknown, size: unknown) => Promise<Buffer | null>) | null
@@ -562,6 +563,13 @@ export class HostAdmin {
         }
         const { id, version, layout } = fields(params)
         return this.deps.thumbnail(id, version, layout)
+      }
+      case 'artifacts.partThumbnail': {
+        if (!this.deps.partThumbnail) {
+          throw new AdminError('unavailable', t('hostAdmin.noPreviews'))
+        }
+        const { id, version, part } = fields(params)
+        return this.deps.partThumbnail(id, version, part)
       }
       case 'artifacts.png': {
         if (!this.deps.png) throw new AdminError('unavailable', t('hostAdmin.noRender'))

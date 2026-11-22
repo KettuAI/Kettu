@@ -61,6 +61,7 @@ import { readSource, SourceError } from './sources'
 import { HostError } from '../errors'
 import { ArtifactError, type ArtifactStore, type FoundVersion, type SessionTurn } from './store'
 import { ArtifactTypes, ContentError } from './types/registry'
+import { changedPlaces, placeFields, placesOf, placesText } from './places'
 
 export const NOTE_CHARS = 200
 export const EDITS = 50
@@ -207,6 +208,31 @@ const PAGES: Schema = {
   description: `The pages its ${CANVAS_FILE} lays out, or an older canvas marks with data-page.`,
 }
 
+const LINK: Schema = {
+  type: 'string',
+  description: 'The link to the artifact, to write in a reply as a Markdown link.',
+}
+const PLACE_LIST: Schema = {
+  type: 'array',
+  items: {
+    type: 'object',
+    properties: {
+      kind: { type: 'string', enum: ['frame', 'section', 'slide'] },
+      name: { type: 'string' },
+      link: { type: 'string' },
+    },
+    required: ['kind', 'name', 'link'],
+  },
+  description:
+    "A canvas's frames, a document's sections or a deck's slides, each with the link to write in " +
+    'a reply as [name](link) to point the user at it.',
+}
+const PLACES_MORE: Schema = {
+  type: 'integer',
+  minimum: 0,
+  description: 'How many more places there are than places lists.',
+}
+
 interface ObjectSchema {
   [key: string]: unknown
   type: 'object'
@@ -270,7 +296,14 @@ export const TOOLS: Tool[] = [
       },
       ['title'],
     ),
-    outputSchema: output({ id: ID, version: VERSION, pages: PAGES }),
+    outputSchema: output({
+      id: ID,
+      version: VERSION,
+      pages: PAGES,
+      link: LINK,
+      places: PLACE_LIST,
+      places_more: PLACES_MORE,
+    }),
     annotations: { ...ON_ARTIFACTS, destructiveHint: false, idempotentHint: false },
     // Claude Code defers MCP tools behind a search; an entry tool must be listed from the start.
     _meta: { 'anthropic/alwaysLoad': true },
@@ -334,6 +367,9 @@ export const TOOLS: Tool[] = [
         type: ['integer', 'null'],
         description: "The version of its type's content format; null for a page.",
       },
+      link: LINK,
+      places: PLACE_LIST,
+      places_more: PLACES_MORE,
     }),
     annotations: { ...ON_ARTIFACTS, readOnlyHint: true },
   },
@@ -392,7 +428,17 @@ export const TOOLS: Tool[] = [
       },
       ['id'],
     ),
-    outputSchema: output({ id: ID, version: VERSION, pages: PAGES }),
+    outputSchema: output({
+      id: ID,
+      version: VERSION,
+      pages: PAGES,
+      link: LINK,
+      places: {
+        ...PLACE_LIST,
+        description: `${PLACE_LIST.description} Only the places this version changed.`,
+      },
+      places_more: PLACES_MORE,
+    }),
     annotations: { ...ON_ARTIFACTS, destructiveHint: false, idempotentHint: false },
   },
   {
@@ -546,7 +592,15 @@ export const TOOLS: Tool[] = [
       'title',
       'files',
     ]),
-    outputSchema: output({ id: ID, version: VERSION, type: TYPE, format: FORMAT }),
+    outputSchema: output({
+      id: ID,
+      version: VERSION,
+      type: TYPE,
+      format: FORMAT,
+      link: LINK,
+      places: PLACE_LIST,
+      places_more: PLACES_MORE,
+    }),
     annotations: { ...ON_ARTIFACTS, destructiveHint: false, idempotentHint: false },
   },
 ]
@@ -1368,9 +1422,14 @@ export class ArtifactTools {
         pages: draft.pages,
         ...(editor ? { editor } : {}),
       })
+      const places = await placesOf(
+        this.deps.store,
+        await this.deps.store.get(id, { project: caller.project }),
+      )
       return result(
-        `Created ${id} version ${version}, ${pagesText(draft.pages, draft.canvas)}${filesText(draft.files)}.`,
-        { id, version, pages: draft.pages },
+        `Created ${id} version ${version}, ${pagesText(draft.pages, draft.canvas)}${filesText(draft.files)}.` +
+          placesText(id, places, 'Its places'),
+        { id, version, pages: draft.pages, ...placeFields(id, places) },
       )
     })
   }
@@ -1428,9 +1487,11 @@ export class ArtifactTools {
     const viewed = canvas ? this.deps.store.viewedPages(artifactId) : []
     const looking =
       viewed.length > 0 ? ` The user is looking at the canvas page ${viewed.join(', ')} now.` : ''
+    const places = await placesOf(this.deps.store, found)
     return result(
       `${artifactId}, "${artifact.title}", version ${n} of ${artifact.head}, ` +
-        `${kind}${filesText(found.files.length)}. ${about}.${looking}`,
+        `${kind}${filesText(found.files.length)}. ${about}.${looking}` +
+        placesText(artifactId, places, 'Its places'),
       {
         id: artifactId,
         title: artifact.title,
@@ -1450,6 +1511,7 @@ export class ArtifactTools {
         next_offset: nextOffset,
         type: found.type?.name ?? null,
         format: found.type?.format ?? null,
+        ...placeFields(artifactId, places),
       },
     )
   }
@@ -1483,6 +1545,7 @@ export class ArtifactTools {
           id: artifactId,
           version: version.version,
           pages: version.pages,
+          ...placeFields(artifactId, []),
         },
       )
     }
@@ -1592,10 +1655,16 @@ export class ArtifactTools {
         ...(canvas ? { unchecked: [CANVAS_FILE] } : {}),
         ...(editor ? { editor, ...pointer(draft.focus, input.ops) } : {}),
       })
+      const written = await store.get(artifactId, { project: caller.project, version })
+      const changes = await store
+        .changes(artifactId, version - 1, version, { project: caller.project })
+        .catch(() => null)
+      const changed = changedPlaces(await placesOf(store, written), changes)
       return result(
         `Updated ${artifactId} to version ${version}, ${pagesText(draft.pages, draft.canvas)}` +
-          `${filesText(draft.files)}.`,
-        { id: artifactId, version, pages: draft.pages },
+          `${filesText(draft.files)}.` +
+          placesText(artifactId, changed, 'The places it changed'),
+        { id: artifactId, version, pages: draft.pages, ...placeFields(artifactId, changed) },
       )
     }
   }
@@ -1857,10 +1926,15 @@ export class ArtifactTools {
         type,
         ...(editor ? { editor } : {}),
       })
+      const places = await placesOf(
+        this.deps.store,
+        await this.deps.store.get(id, { project: caller.project }),
+      )
       return result(
         `Created ${id} version ${version} from the ${name} type${filesText(draft.files)}. Kettu shows it ` +
-          'with its viewer; change it with update_artifact.',
-        { id, version, type: name, format: type.format },
+          'with its viewer; change it with update_artifact.' +
+          placesText(id, places, 'Its places'),
+        { id, version, type: name, format: type.format, ...placeFields(id, places) },
       )
     })
   }

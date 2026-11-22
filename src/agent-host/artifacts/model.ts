@@ -14,6 +14,8 @@ export interface ArtifactRecord {
   createdAt: number
   updatedAt: number
   deletedAt: number | null
+  /** The newest version its owner had open in a viewer; null until they open it. */
+  seen: number | null
 }
 
 export interface VersionRecord {
@@ -160,6 +162,11 @@ export interface ArtifactCalls {
   resolve: {
     params: { id: string; project: string | null; threadId: string; resolved: boolean; at: number }
     result: CommentThread
+  }
+  /** The owner had `version` open in a viewer; the newer of it and the record, up to the latest. */
+  see: {
+    params: { id: string; version: number }
+    result: { seen: number | null; changed: boolean }
   }
   /** The user sent the threads to a session. */
   markSent: {

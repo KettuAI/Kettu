@@ -74,7 +74,7 @@ import {
   type RuntimeStatements,
 } from './runtime-db'
 
-export const SCHEMA_VERSION = 11
+export const SCHEMA_VERSION = 12
 
 // `turn` is the position of the entry that opened the entry's turn, so a page that starts at a
 // turn is one range of the primary key.
@@ -268,6 +268,14 @@ const SET_ASIDE = `
   ) STRICT, WITHOUT ROWID;
 `
 
+// The newest version of each artifact its owner had open in a viewer, kept with the artifact and
+// outside its versions; null until they open it. The artifacts made before it count as seen, so an
+// upgrade marks nothing as changed.
+const ARTIFACT_SEEN = `
+  ALTER TABLE artifacts ADD COLUMN seen INTEGER;
+  UPDATE artifacts SET seen = head;
+`
+
 /** What brings a database of the version before each key up to it; a new one runs them all. */
 const MIGRATIONS: Record<number, string> = {
   2: ARTIFACTS,
@@ -280,6 +288,7 @@ const MIGRATIONS: Record<number, string> = {
   9: WORKFLOW_TASKS,
   10: ORIGINS,
   11: SET_ASIDE,
+  12: ARTIFACT_SEEN,
 }
 
 /** The tables of a database at schema `version`, as a new one made then had them. */
@@ -363,7 +372,7 @@ type Row = Record<string, SQLOutputValue>
 // under its creator when the user made it.
 const LISTING = `
   SELECT a.id, a.title, a.project, COALESCE(v.author, a.session_id) AS shown_under, a.head,
-    v.pages, v.size, a.created_at, a.updated_at, a.deleted_at,
+    v.pages, v.size, a.created_at, a.updated_at, a.deleted_at, a.seen,
     (SELECT COUNT(*) FROM artifact_files f WHERE f.artifact_id = a.id AND f.n = a.head) AS files,
     EXISTS (SELECT 1 FROM artifact_files f
       WHERE f.artifact_id = a.id AND f.n = a.head AND f.path = '${CANVAS_FILE}') AS canvas
@@ -382,6 +391,7 @@ function artifactRecord(row: Row): ArtifactRecord {
     createdAt: Number(row.created_at),
     updatedAt: Number(row.updated_at),
     deletedAt: row.deleted_at === null ? null : Number(row.deleted_at),
+    seen: row.seen === null || row.seen === undefined ? null : Number(row.seen),
   }
 }
 
@@ -414,6 +424,7 @@ function listing(row: Row): ArtifactListing {
     createdAt: Number(row.created_at),
     updatedAt: Number(row.updated_at),
     deletedAt: row.deleted_at === null ? null : Number(row.deleted_at),
+    seen: row.seen === null ? null : Number(row.seen),
     type: null,
   }
 }
@@ -557,7 +568,7 @@ function prepareAll(db: DatabaseSync) {
       ))
     ) LIMIT 1`),
     artifact: sql(
-      'SELECT id, project, title, head, session_id, created_at, updated_at, deleted_at FROM artifacts WHERE id = ?',
+      'SELECT id, project, title, head, session_id, created_at, updated_at, deleted_at, seen FROM artifacts WHERE id = ?',
     ),
     version: sql(
       'SELECT n, size, pages, author, note, created_at FROM artifact_versions WHERE artifact_id = ? AND n = ?',
@@ -576,8 +587,9 @@ function prepareAll(db: DatabaseSync) {
       `${LISTING} WHERE a.deleted_at IS NOT NULL ORDER BY a.deleted_at DESC, a.id DESC`,
     ),
     insertArtifact: sql(`
-      INSERT INTO artifacts (id, project, title, head, session_id, created_at, updated_at)
-      VALUES (?, ?, ?, 1, ?, ?, ?)`),
+      INSERT INTO artifacts (id, project, title, head, session_id, created_at, updated_at, seen)
+      VALUES (?, ?, ?, 1, ?, ?, ?, ?)`),
+    setSeen: sql('UPDATE artifacts SET seen = ? WHERE id = ?'),
     insertVersion: sql(`
       INSERT INTO artifact_versions (artifact_id, n, size, pages, author, note, created_at)
       VALUES (?, ?, ?, ?, ?, ?, ?)`),
@@ -1540,8 +1552,9 @@ export class ThreadDb {
       this.transaction(db, () => {
         const { id, project, sessionId, title, pages, note, at } = params
         const files = params.files.map((file) => this.putFile(file.path, file.data))
-        sql.insertArtifact.run(id, project, title, sessionId, at, at)
+        // What the user imported they have seen; what an agent made waits for them to open it.
         const author = sessionId === NO_SESSION ? null : sessionId
+        sql.insertArtifact.run(id, project, title, sessionId, at, at, author === null ? 1 : null)
         this.insertVersion(sql, id, 1, files, { pages, author, note, at, type: params.type })
         putDeclaration(
           this.runtimeStatements(db),
@@ -1607,6 +1620,8 @@ export class ThreadDb {
           params.declaration ?? declarationAt(runtime, artifact.id, artifact.head),
         )
         sql.setHead.run(n, at, artifact.id)
+        // The user writes only what a viewer shows them, so their own version is seen.
+        if (author === null) sql.setSeen.run(n, artifact.id)
         return { version: n }
       }),
     )
@@ -1652,9 +1667,24 @@ export class ThreadDb {
           declarationAt(runtime, artifact.id, restored.version),
         )
         sql.setHead.run(n, at, artifact.id)
+        if (author === null) sql.setSeen.run(n, artifact.id)
         return { version: n }
       }),
     )
+  }
+
+  /**
+   * The owner had `version` open in a viewer: it becomes the seen version when it is newer than
+   * the one recorded, never past the latest. `changed` is false when the record stayed.
+   */
+  seeArtifact({ id, version }: ArtifactCalls['see']['params']): ArtifactCalls['see']['result'] {
+    return this.must((sql) => {
+      const artifact = this.artifactIn(sql, id, null, false)
+      const next = Math.min(artifact.head, Math.max(artifact.seen ?? 0, version))
+      if (next === artifact.seen || next < 1) return { seen: artifact.seen, changed: false }
+      sql.setSeen.run(next, id)
+      return { seen: next, changed: true }
+    })
   }
 
   /** The title is not versioned: renaming changes the artifact, not a version or its time. */

@@ -11,6 +11,7 @@ import {
   THUMBNAIL_PAGES,
   THUMBNAIL_WIDTH,
   type ThumbnailPage,
+  type ThumbnailPart,
 } from '@shared/artifacts'
 import { canvasPagePath, versionUrlPath, type CanvasPage } from '@shared/artifact-page'
 import { artifactPathProblem, isHtmlPath } from '@shared/artifact-files'
@@ -21,6 +22,7 @@ import { restrictPermissions } from '../permissions'
 import { filterArtifactRequests, frameArtifact, mayNavigate } from './guards'
 import { artifactHost } from './origins'
 import { WINDOW_PROXY } from './policy'
+import { partPlan, type Size, type ViewerPart } from './part-thumbnails'
 import { printViewer } from './print'
 import { serveArtifacts, type ArtifactSource } from './protocol'
 
@@ -40,17 +42,15 @@ const SETTLE_MS = 400
 /** Enough for a card two across on a 2x display. */
 const OUTPUT_WIDTH = 720
 const JPEG_QUALITY = 82
-/** The thumbnails kept on disk; older ones render again when asked for. */
-export const KEPT_THUMBNAILS = 500
+/** The thumbnails kept on disk, frames and slides among them; older ones render again when asked for. */
+export const KEPT_THUMBNAILS = 1500
 /** Thumbnails rendering at once, each in its own offscreen window. */
 const THUMBNAILS_AT_ONCE = 3
 
 const HASH = /^[0-9a-f]{64}$/
+/** A frame's thumbnail shows its top, at most this many times as tall as it is wide. */
+const FRAME_ASPECT = 3
 
-export interface Size {
-  width: number
-  height: number
-}
 const MAX_SIZE = 8_000
 const MIN_SIZE = 64
 const MAX_OFFSET = 10_000_000
@@ -115,10 +115,16 @@ export function thumbnailDocument(
   version: number,
   layout: ThumbnailPage[] | null,
   view: 'thumbnail' | null = null,
+  part: ViewerPart = {},
 ): string {
   // A type's viewer draws its content alone for a thumbnail, without its controls.
   const root = origin.replace(/\/$/, '')
-  const page = `${root}${versionUrlPath(version)}${view ? `?view=${view}` : ''}`
+  const query = new URLSearchParams()
+  if (view) query.set('view', view)
+  if (part.slide !== undefined) query.set('slide', String(part.slide))
+  if (part.theme) query.set('theme', part.theme)
+  const search = query.size > 0 ? `?${query.toString().replace(/&/g, '&amp;')}` : ''
+  const page = `${root}${versionUrlPath(version)}${search}`
   // A page file's path is escaped segment by segment, so it cannot leave the attribute.
   const frame = (src: string, style: string): string =>
     `<iframe src="${src}" ${FRAME_ATTRIBUTES} style="${style}"></iframe>`
@@ -269,6 +275,61 @@ export class Thumbnails {
       if (next) next()
       else this.running--
     }
+  }
+
+  /**
+   * `artifact:part-thumbnail`: one frame of a canvas at its own size, one slide of a deck, or a
+   * document in one theme, kept on disk under what it is drawn from, so a frame or slide that a new
+   * version leaves alone keeps its image. Null when the version has no such part or it cannot render.
+   */
+  part(id: string, version: number, part: ThumbnailPart): Promise<string | null> {
+    const key = `${id}\0${version}\0${JSON.stringify(part)}`
+    const made = this.making.get(key)
+    if (made) return made
+    const run = this.slot(() => this.makePart(id, version, part)).finally(() =>
+      this.making.delete(key),
+    )
+    this.making.set(key, run)
+    return run
+  }
+
+  private async makePart(id: string, version: number, part: ThumbnailPart): Promise<string | null> {
+    const found = await this.deps.content(id, version)
+    if (found.kind !== 'found' || !HASH.test(found.key)) return null
+    const plan = await partPlan(found, part, app.getVersion())
+    if (!plan) return null
+    const file = path.join(this.deps.dir, `${plan.name}.jpg`)
+    const cached = await readFile(file).catch(() => null)
+    if (cached) return dataUrl('jpeg', cached)
+    const origin = this.deps.serve(id)
+    const document =
+      plan.kind === 'frame'
+        ? pageDocument(origin, version, { group: 0, index: 1, file: plan.file }, plan.size)
+        : thumbnailDocument(origin, version, null, 'thumbnail', plan.viewer)
+    const window =
+      plan.kind === 'frame'
+        ? {
+            width: plan.size.width,
+            height: Math.min(plan.size.height, plan.size.width * FRAME_ASPECT),
+          }
+        : { width: THUMBNAIL_WIDTH, height: THUMBNAIL_HEIGHT }
+    const image = await this.capture(document, window, false, 1)
+      .then((captured) => {
+        if (!captured) return null
+        const wide = captured.getSize().width > OUTPUT_WIDTH
+        return (wide ? captured.resize({ width: OUTPUT_WIDTH, quality: 'good' }) : captured).toJPEG(
+          JPEG_QUALITY,
+        )
+      })
+      .catch((error: unknown) => {
+        log.warn(`Could not render a part thumbnail of ${id} version ${version}: ${String(error)}`)
+        return null
+      })
+    if (!image) return null
+    await this.keep(file, image).catch((error: unknown) => {
+      log.warn(`Could not keep a thumbnail: ${String(error)}`)
+    })
+    return dataUrl('jpeg', image)
   }
 
   /**

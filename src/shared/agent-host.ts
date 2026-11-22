@@ -3,6 +3,7 @@
 import type { CodebuddyShellOverride, CodebuddySite, PromptCacheTtl } from './agents'
 import type { CompactUnit } from './auto-compact'
 import type { DeviceAccessDecision } from './device-agent'
+import type { ArtifactChanges } from './artifact-changes'
 import type { ArtifactConsentAsk, ArtifactConsentRow, RuntimeAnswer } from './artifact-capabilities'
 import type { ArtifactContent, ArtifactSession, ArtifactSummary, VersionSummary } from './artifacts'
 import type { CommentAnchor, CommentThread } from './artifact-comments'
@@ -1854,6 +1855,12 @@ export interface HostContract {
   }
   // Newest first.
   'artifacts.versions': { params: { id: string }; result: VersionSummary[] }
+  // What changed from version `from` to `to`, any two versions, worked out from their content as
+  // the shared comparison does; null when nothing did.
+  'artifacts.changes': {
+    params: { id: string; from: number; to: number }
+    result: { changes: ArtifactChanges | null }
+  }
   'artifacts.rename': { params: { id: string; title: string }; result: void }
   // Permanently only from Recently deleted.
   'artifacts.delete': { params: { id: string; permanently?: boolean }; result: void }
@@ -1888,6 +1895,10 @@ export interface HostContract {
   }
   // The canvas page this client shows the artifact at, for the others' faces and agents' reads.
   'artifacts.view': { params: { id: string; page: string | null }; result: void }
+  // A viewer of the owner's, in the main area or a side panel, has `version` open; a card in a
+  // thread is no viewer. The seen version moves forward to it, never past the latest, and every
+  // port hears `artifacts.seen`. The answer is the version now recorded.
+  'artifacts.seen': { params: { id: string; version: number }; result: { seen: number | null } }
   // New values for the parameters a page declares, written into its file as the user's version;
   // `conflict` when the file changed since `baseVersion`.
   'artifacts.setParams': {
@@ -2322,6 +2333,7 @@ export const HOST_METHODS = [
   'artifacts.file',
   'artifacts.content',
   'artifacts.versions',
+  'artifacts.changes',
   'artifacts.rename',
   'artifacts.delete',
   'artifacts.undelete',
@@ -2335,6 +2347,7 @@ export const HOST_METHODS = [
   'artifacts.markSent',
   'artifacts.editElement',
   'artifacts.view',
+  'artifacts.seen',
   'artifacts.setParams',
   'artifacts.canvas',
   'artifacts.canvasOps',
@@ -2420,6 +2433,8 @@ export type HostEvent =
   | { type: 'idleRelease.changed'; state: IdleReleaseState }
   | { type: 'artifacts.changed' } // the list changed; a page showing it reads again
   | { type: 'artifacts.version'; id: string; version: number }
+  // To every port: the owner's seen version of the artifact moved, as `artifacts.seen` recorded it.
+  | { type: 'artifacts.seen'; id: string; version: number }
   // `clients` are the other clients showing it, as `session.viewers` names them for the receiver.
   | {
       type: 'artifacts.activity'

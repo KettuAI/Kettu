@@ -2,7 +2,12 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { MESSAGE_BYTES, type SelectMessage } from '@shared/artifact-runtime/page-messages'
+import {
+  ERROR_MESSAGE_CHARS,
+  MESSAGE_BYTES,
+  type PageErrorMessage,
+  type SelectMessage,
+} from '@shared/artifact-runtime/page-messages'
 import type { RuntimeAnswer } from '@shared/artifact-capabilities'
 import type { ArtifactContentFile } from '@shared/host-control'
 import { ARTIFACT_CSP, ARTIFACT_STRICT_CSP } from './policy'
@@ -137,6 +142,40 @@ describe('the page runtime on an artifact origin', () => {
     ['a message too large', JSON.stringify({ ...pick, pad: 'x'.repeat(MESSAGE_BYTES) })],
   ])('refuses %s', async (_, body) => {
     expect((await post(body)).status).toBe(400)
+    expect(picks).toEqual([])
+  })
+
+  it("passes a page's own error on, as plain data capped in length", async () => {
+    const errors: PageErrorMessage[] = []
+    source.pageError = (_, message) => errors.push(message)
+    const report = {
+      v: 1,
+      id: 'k2',
+      kind: 'page-error',
+      path: 'index.html',
+      load: 'abcdefgh12',
+      error: {
+        kind: 'error',
+        message: `TypeError: <b>x</b>\n${'y'.repeat(1000)}`,
+        source: '/_kettu/v/3/app.js',
+        line: 12,
+        column: -1,
+      },
+    }
+    expect((await post(JSON.stringify(report))).status).toBe(200)
+    expect(errors).toHaveLength(1)
+    const [error] = errors
+    expect(error!.error.message).toHaveLength(ERROR_MESSAGE_CHARS)
+    expect(error!.error.message.startsWith('TypeError: <b>x</b> yyy')).toBe(true)
+    expect(error!.error).toMatchObject({ source: '/_kettu/v/3/app.js', line: 12, column: null })
+    for (const bad of [
+      { ...report, path: '../x.html' },
+      { ...report, load: 'short' },
+      { ...report, error: 'boom' },
+    ]) {
+      expect((await post(JSON.stringify(bad))).status).toBe(400)
+    }
+    expect(errors).toHaveLength(1)
     expect(picks).toEqual([])
   })
 

@@ -20,7 +20,7 @@ import { IDLE_CONTROL } from '@shared/control'
 import { guardKettuFetch } from '@shared/kettu-hosts'
 import { matchLocale, resolveLocale, type Locale } from '@shared/locale'
 import type { MarketAccount } from '@shared/market-publish'
-import type { HostAttention } from '@shared/remote/host-admin'
+import { ARTIFACT_RECORDS, type HostAttention } from '@shared/remote/host-admin'
 import type { UpdateStatus } from '@shared/updates'
 import { HOSTS_FILE, type HostsStatus } from '@shared/remote/hosts'
 import { PUSH_URL, PUSH_URL_ENV, pushUrlFrom } from '@shared/remote/push'
@@ -1054,6 +1054,8 @@ async function start(): Promise<void> {
       remoteSwitch: true,
       remoteReset: true,
       thumbnails: true,
+      partThumbnails: true,
+      artifactRecords: [...ARTIFACT_RECORDS],
     }),
     restart: (which) => (which === 'agent' ? agentHost.restart() : terminalHost.restart()),
     sharing,
@@ -1061,6 +1063,7 @@ async function start(): Promise<void> {
     themes,
     marketKeys,
     thumbnail: (id, version, layout) => artifacts.thumbnail(ownArtifact(id), version, layout),
+    partThumbnail: (id, version, part) => artifacts.partThumbnail(ownArtifact(id), version, part),
     png: (id, version, page, size) => artifacts.png(ownArtifact(id), version, page, size),
     printPdf: (id, version) => artifacts.printPdf(ownArtifact(id), version),
     report: (request) => reports.forDevice(request),

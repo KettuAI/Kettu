@@ -279,6 +279,10 @@ export function webApi(link: HostLink, settings: WebSettings, context: WebHostCo
         if (known && !known.thumbnails) return null
         return admin('artifacts.thumbnail', { id, version, layout }).catch(() => null)
       },
+      partThumbnail: async (id, version, part) => {
+        if (!useWebHostStore.getState().info?.partThumbnails) return null
+        return admin('artifacts.partThumbnail', { id, version, part }).catch(() => null)
+      },
       openExternal: () => unsupported('open an artifact outside the app'),
       reveal: () => unsupported('show an artifact in the file manager'),
       export: async (id, version) => {
@@ -296,6 +300,8 @@ export function webApi(link: HostLink, settings: WebSettings, context: WebHostCo
       onStopped: never,
       // A frame's picks come over the port the page hands it, never from the host.
       onSelected: never,
+      // A frame's errors come over its port too.
+      onPageError: never,
       png: async (id, version, page, size, name) => {
         const url = await admin('artifacts.png', { id, version, page, size })
         if (!url) throw new Error('The host could not render the page')

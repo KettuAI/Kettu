@@ -2,7 +2,10 @@
 // of its content to a newer format when it is opened.
 
 import { INLINE_FILE_BYTES, VERSION_BYTES } from '@shared/artifact-files'
-import { CONTENT_ENTRIES } from '@shared/artifact-types'
+import { compareDecks, compareDocuments } from '@shared/artifact-changes'
+import type { ArtifactPiece } from '@shared/artifacts'
+import { parseDeck } from '@shared/artifact-slides'
+import { CONTENT_ENTRIES, type ArtifactTypeName } from '@shared/artifact-types'
 import type { LogFn } from '../../storage'
 import { t } from '../../i18n'
 import type { FileChange } from '../model'
@@ -60,6 +63,11 @@ export async function writeContent(
     entry: input.text,
     changed: new Map([[entry, bytes]]),
   })
+  if (store.held(input.id).length > 0) {
+    const file = base.files.find((f) => f.path === entry)
+    const before = file ? (await store.bytes(base, file)).toString('utf8') : ''
+    store.refuseHeld(input.id, base.artifact.head, touches(type.name, before, input.text))
+  }
   return store.write({
     id: input.id,
     baseVersion: input.baseVersion,
@@ -69,6 +77,28 @@ export async function writeContent(
     note: null,
     type,
   })
+}
+
+/** Whether an edit from `before` to `after` changes a held section or slide. */
+function touches(
+  type: ArtifactTypeName,
+  before: string,
+  after: string,
+): (piece: ArtifactPiece) => boolean {
+  if (type === 'document') {
+    const slugs = new Set(compareDocuments(before, after).sections.map((s) => s.slug ?? ''))
+    return (piece) => piece.kind === 'section' && slugs.has(piece.slug)
+  }
+  const changed = compareDecks(before, after)
+  if (!changed) return (piece) => piece.kind === 'slide'
+  const numbers = new Set(changed.map((s) => s.number))
+  const old = parseDeck(before)
+  const now = parseDeck(after)
+  // Slides removed from the end are changed too, though the later version has no number for them.
+  if ('deck' in old && 'deck' in now) {
+    for (let n = now.deck.slides.length + 1; n <= old.deck.slides.length; n++) numbers.add(n)
+  }
+  return (piece) => piece.kind === 'slide' && numbers.has(piece.number)
 }
 
 /**
