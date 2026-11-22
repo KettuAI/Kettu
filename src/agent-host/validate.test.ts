@@ -1161,6 +1161,13 @@ describe('comment and direct edit requests', () => {
     rejects(() => posix['artifacts.markSent']({ id, threadIds: ['nope'], sessionId: 's' }))
   })
 
+  it('takes a seen version of an artifact as a version number only', () => {
+    expect(posix['artifacts.seen']({ id, version: 4 })).toEqual({ id, version: 4 })
+    rejects(() => posix['artifacts.seen']({ id, version: 0 }))
+    rejects(() => posix['artifacts.seen']({ id, version: 1.5 }))
+    rejects(() => posix['artifacts.seen']({ id: 'art_x', version: 1 }))
+  })
+
   it('takes a usage summary by hour of the day only over zones that cover it', () => {
     const base = { dayStarts: [0, 900_000], from: 0, to: 900_000, scope: 'computer' }
     expect(posix['usage.summary'](base)).toEqual(base)

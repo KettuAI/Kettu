@@ -1436,6 +1436,97 @@ describe("the thread database's artifacts", () => {
     expect(columns.map((c) => c.name)).not.toContain('hash')
     check.close()
   })
+
+  const write = (db: ThreadDb, base: number, author: string | null): number =>
+    db.writeArtifact({
+      id: ID,
+      project: null,
+      baseVersion: base,
+      changes: [{ path: 'index.html', data: bytes(`v${base + 1}`) }],
+      pages: 0,
+      author,
+      note: null,
+      at: base + 1,
+    }).version
+  const seenOf = (db: ThreadDb): number | null | undefined => {
+    const listed = db.listArtifacts({ project: null, deleted: false }).find((a) => a.id === ID)
+    expect(listed?.seen).toBe(
+      db.getArtifact({ id: ID, version: null, project: null }).artifact.seen,
+    )
+    return listed?.seen
+  }
+
+  it("keeps the owner's seen version apart from the versions, moving only forward to the latest", () => {
+    const { db } = withContent()
+    create(db, { 'index.html': 'v1' })
+    // An agent's artifact waits for the owner to open it.
+    expect(seenOf(db)).toBeNull()
+    write(db, 1, 's1')
+    write(db, 2, 's1')
+    expect(db.seeArtifact({ id: ID, version: 2 })).toEqual({ seen: 2, changed: true })
+    expect(seenOf(db)).toBe(2)
+    // An older version open in a viewer moves nothing back.
+    expect(db.seeArtifact({ id: ID, version: 1 })).toEqual({ seen: 2, changed: false })
+    // Never past the latest, whatever a client says.
+    expect(db.seeArtifact({ id: ID, version: 99 })).toEqual({ seen: 3, changed: true })
+    expect(db.seeArtifact({ id: ID, version: 3 })).toEqual({ seen: 3, changed: false })
+    // An agent's new version is unseen; the user's own is seen.
+    write(db, 3, 's1')
+    expect(seenOf(db)).toBe(3)
+    write(db, 4, null)
+    expect(seenOf(db)).toBe(5)
+    // Seeing writes no version.
+    expect(db.artifactVersions({ id: ID, project: null })).toHaveLength(5)
+    db.close()
+  })
+
+  it('counts an import as seen, and reaches no artifact that does not exist', () => {
+    const { db } = withContent()
+    db.createArtifact({
+      id: ID,
+      project: '/p',
+      sessionId: '',
+      title: 'Imported',
+      files: [{ path: 'index.html', data: bytes('x') }],
+      pages: 0,
+      note: null,
+      at: 1,
+    })
+    expect(seenOf(db)).toBe(1)
+    expect(() => db.seeArtifact({ id: 'art_01J9Z3K4V5W6X7Y8Z9A0B1C2D4', version: 1 })).toThrow(
+      ThreadDbError,
+    )
+    db.close()
+  })
+
+  it('counts every artifact of a database before the seen record as seen at its latest', () => {
+    const file = tempFile()
+    mkdirSync(path.dirname(file), { recursive: true })
+    const raw = new DatabaseSync(file)
+    raw.exec(`BEGIN; ${schemaAt(11)} PRAGMA user_version = 11; COMMIT;`)
+    raw
+      .prepare(
+        'INSERT INTO artifacts (id, project, title, head, session_id, created_at, updated_at) VALUES (?, ?, ?, 2, ?, 1, 2)',
+      )
+      .run(ID, '/p', 'Old', 's1')
+    for (const n of [1, 2]) {
+      raw
+        .prepare(
+          "INSERT INTO artifact_versions (artifact_id, n, size, pages, author, note, created_at) VALUES (?, ?, 1, 0, 's1', NULL, ?)",
+        )
+        .run(ID, n, n)
+      raw
+        .prepare(
+          "INSERT INTO artifact_files (artifact_id, n, path, hash, size) VALUES (?, ?, 'index.html', ?, 1)",
+        )
+        .run(ID, n, contentHash(bytes(`v${n}`)))
+    }
+    raw.close()
+    const { db } = withContent(file)
+    expect(db.status).toBe('ok')
+    expect(seenOf(db)).toBe(2)
+    db.close()
+  })
 })
 
 describe("the thread database's comments", () => {

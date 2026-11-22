@@ -277,6 +277,7 @@ export const HOST_REQUEST_LIMITS: Readonly<Record<HostMethod, number | null>> = 
   'artifacts.markSent': AGENT_MS,
   'artifacts.editElement': AGENT_MS,
   'artifacts.view': HOST_MS,
+  'artifacts.seen': HOST_MS,
   'artifacts.setParams': HOST_MS,
   'artifacts.canvas': HOST_MS,
   'artifacts.canvasOps': HOST_MS,

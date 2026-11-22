@@ -2529,6 +2529,10 @@ export function createValidators(platform: Platform): Validators {
       }
       return { id: artifactId(o), page: page as string | null }
     },
+    'artifacts.seen': (params) => {
+      const o = fields(params)
+      return { id: artifactId(o), version: version(o, 'version') }
+    },
     'artifacts.setParams': (params) => {
       const o = fields(params)
       const values = o.values

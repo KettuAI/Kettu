@@ -99,6 +99,11 @@ export interface ArtifactSummary {
   deletedAt: number | null
   editing: string[] // the sessions whose running turn changed it
   type: ArtifactTypeName | null // the type it was made from, shown by the type's viewer
+  /**
+   * The newest version its owner had open in a viewer, on any device; a card in a thread does not
+   * count. Null until they open it; absent from hosts that keep no such record.
+   */
+  seen?: number | null
 }
 
 /** A session using an artifact now: its running turn read it, or changed it. */
@@ -143,6 +148,8 @@ export interface ArtifactContent {
   html: string
   files: ArtifactFileInfo[]
   type?: ArtifactTypeInfo | null
+  /** As the summary's `seen`; absent from hosts that keep no such record. */
+  seen?: number | null
 }
 
 /** A card's thumbnail renders at this size, a page's viewport, before main scales it down. */

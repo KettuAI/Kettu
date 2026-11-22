@@ -216,6 +216,20 @@ type ArtifactEventListener = (event: ArtifactEvent, hostId: string | null) => vo
 
 const eventListeners = new Set<ArtifactEventListener>()
 
+/** The host recorded a newer seen version: the lists take it without being read again. */
+function markSeen(hostId: string | null, id: string, version: number): void {
+  const held = lists.get(hostId)
+  if (!held) return
+  const patch = (items: ArtifactSummary[]): ArtifactSummary[] =>
+    items.some((a) => a.id === id && (a.seen ?? 0) < version)
+      ? items.map((a) => (a.id === id ? { ...a, seen: version } : a))
+      : items
+  const next = { list: patch(held.list), deleted: patch(held.deleted) }
+  if (next.list === held.list && next.deleted === held.deleted) return
+  lists.set(hostId, next)
+  publish()
+}
+
 /** Each host's events about its artifacts, with the host, null for this computer. */
 export function onArtifactEvent(listener: ArtifactEventListener): () => void {
   eventListeners.add(listener)
@@ -224,6 +238,7 @@ export function onArtifactEvent(listener: ArtifactEventListener): () => void {
 
 export function receiveArtifactEvent(event: HostEvent, hostId: string | null): void {
   if (!event.type.startsWith('artifacts.')) return
+  if (event.type === 'artifacts.seen') markSeen(hostId, event.id, event.version)
   for (const listener of [...eventListeners]) listener(event as ArtifactEvent, hostId)
 }
 

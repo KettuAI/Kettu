@@ -242,6 +242,18 @@ export function useArtifact(id: string, version: number | null) {
     }
   }, [id, connected, attempt])
 
+  // The latest version on screen is seen, on the host, for every device of the owner's; a host that
+  // keeps no such record lists none.
+  const shownVersion = shown?.version ?? null
+  const seenBefore = summary?.seen
+  useEffect(() => {
+    if (shownVersion === null || seenBefore === undefined || summary?.version !== shownVersion) {
+      return
+    }
+    if ((seenBefore ?? 0) >= shownVersion) return
+    void host('artifacts.seen', { id, version: shownVersion }).catch(() => {})
+  }, [id, shownVersion, seenBefore, summary?.version])
+
   useEffect(() => {
     if (!url) return
     const origin = url.slice(0, -1)

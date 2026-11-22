@@ -82,6 +82,8 @@ export interface ArtifactStoreDeps {
   activity(portIds: Iterable<string>, activity: ArtifactActivity): void
   /** Its comments changed, for the ports watching the artifact. */
   comments?(portIds: Iterable<string>, id: string): void
+  /** The owner's seen version of it moved, for every port, since every device lists it. */
+  seen?(id: string, version: number): void
   /** The last port watching the artifact stopped. */
   unwatched?(id: string): void
   /** A canvas being worked on changed, for the ports watching the artifact. */
@@ -415,6 +417,16 @@ export class ArtifactStore {
     const ports = this.watches.get(id)
     if (ports) this.deps.version(ports.keys(), id, version)
     this.canvases.versioned(id)
+  }
+
+  /**
+   * The owner has `version` open in a viewer, on any of their devices. Returns the version now
+   * recorded as seen, which only moves forward and never past the latest.
+   */
+  async see(id: string, version: number): Promise<number | null> {
+    const { seen, changed } = await this.call('see', { id, version })
+    if (changed && seen !== null) this.deps.seen?.(id, seen)
+    return seen
   }
 
   /** Changes the title, which is not versioned. */
