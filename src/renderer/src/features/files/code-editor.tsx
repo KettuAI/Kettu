@@ -315,12 +315,16 @@ function reload(
   buffer.base = view.state.doc
 }
 
+const viewScroll = new Map<string, ReturnType<EditorView['scrollSnapshot']>>()
+
 export default function CodeEditor({
   projectPath,
+  panel,
   file,
   content,
 }: {
   projectPath: string
+  panel: string
   file: OpenFile
   content: TextContent
 }) {
@@ -341,8 +345,9 @@ export default function CodeEditor({
       return
     }
     editor.setState(buffer.state)
+    const scroll = viewScroll.get(`${projectPath}\0${panel}\0${file.path}`)
     editor.dispatch({
-      effects: [theme.reconfigure(colors.current), ...(buffer.scroll ? [buffer.scroll] : [])],
+      effects: [theme.reconfigure(colors.current), ...(scroll ? [scroll] : [])],
     })
   })
 
@@ -355,7 +360,10 @@ export default function CodeEditor({
     // Taken as it scrolls: by the time this cleans up, the editor may be off the page and read 0.
     const remember = () => {
       const buffer = getBuffer(projectPath, file.path)
-      if (buffer) buffer.scroll = editor.scrollSnapshot()
+      if (buffer) {
+        buffer.scroll = editor.scrollSnapshot()
+        viewScroll.set(`${projectPath}\0${panel}\0${file.path}`, buffer.scroll)
+      }
     }
     editor.scrollDOM.addEventListener('scroll', remember, { passive: true })
     return () => {
@@ -363,7 +371,7 @@ export default function CodeEditor({
       editor.destroy()
       view.current = null
     }
-  }, [projectPath, file.path, file.resets])
+  }, [projectPath, panel, file.path, file.resets])
 
   useEffect(() => {
     let latest = true

@@ -1,4 +1,13 @@
-import { lazy, Suspense, useCallback, useEffect, useState, type ReactNode } from 'react'
+import {
+  lazy,
+  Suspense,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from 'react'
 import { File01Icon, FileNotFoundIcon, FloppyDiskIcon } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
 import type { ChangeStatus } from '@shared/git'
@@ -59,11 +68,13 @@ const PANE_FIT_MARGIN = 24
 /** The open file in the editor, or what stands in for it, under its bar. */
 export function FilePreview({
   projectPath,
+  panel,
   file,
   changes,
   onShowDiff,
 }: {
   projectPath: string
+  panel: string
   file: OpenFile | null
   changes: ReadonlyMap<string, ChangeStatus>
   /** Shows the file's uncommitted change instead, offered while it has one. */
@@ -142,7 +153,7 @@ export function FilePreview({
       </div>
       <Notes projectPath={projectPath} file={file} />
       <div className="kp-doc__body">
-        <Body projectPath={projectPath} file={file} onPicture={onPicture} />
+        <Body projectPath={projectPath} panel={panel} file={file} onPicture={onPicture} />
       </div>
     </div>
   )
@@ -282,10 +293,12 @@ function Bar({ tone, children }: { tone: 'notice' | 'error' | 'muted'; children:
 
 function Body({
   projectPath,
+  panel,
   file,
   onPicture,
 }: {
   projectPath: string
+  panel: string
   file: OpenFile
   onPicture: (path: string, picture: Picture | null) => void
 }) {
@@ -354,21 +367,36 @@ function Body({
   }
   if (rendered(file, source)) {
     return (
-      <div
-        className="absolute inset-0 overflow-y-auto overscroll-contain px-6 py-5"
-        data-selectable=""
-      >
-        <Markdown
-          markdown={editedText(projectPath, file) ?? content.text}
-          className="mx-auto max-w-[50em]"
-        />
-      </div>
+      <RenderedMarkdown
+        key={`${projectPath}\0${panel}\0${file.path}`}
+        viewKey={`${projectPath}\0${panel}\0${file.path}`}
+        text={editedText(projectPath, file) ?? content.text}
+      />
     )
   }
   return (
     <Suspense fallback={<Lines />}>
-      <CodeEditor projectPath={projectPath} file={file} content={content} />
+      <CodeEditor projectPath={projectPath} panel={panel} file={file} content={content} />
     </Suspense>
+  )
+}
+
+const markdownScroll = new Map<string, number>()
+
+function RenderedMarkdown({ viewKey, text }: { viewKey: string; text: string }) {
+  const box = useRef<HTMLDivElement>(null)
+  useLayoutEffect(() => {
+    if (box.current) box.current.scrollTop = markdownScroll.get(viewKey) ?? 0
+  }, [viewKey])
+  return (
+    <div
+      ref={box}
+      className="absolute inset-0 overflow-y-auto overscroll-contain px-6 py-5"
+      data-selectable=""
+      onScroll={(event) => markdownScroll.set(viewKey, event.currentTarget.scrollTop)}
+    >
+      <Markdown markdown={text} className="mx-auto max-w-[50em]" />
+    </div>
   )
 }
 
