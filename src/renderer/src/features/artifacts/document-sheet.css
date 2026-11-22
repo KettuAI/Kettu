@@ -42,7 +42,7 @@
   opacity: 1;
 }
 
-/* A thread's pin in the margin beside its block: round, its point at the block. */
+/* A thread's pin in the margin beside its block, drawn as the pins on pages and in the card. */
 .ads-pin {
   position: absolute;
   z-index: 2;
@@ -51,12 +51,12 @@
   width: 26px;
   height: 26px;
   border-radius: 50%;
-  background: var(--agent-flag);
+  background: var(--text-primary);
   font-size: 12px;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
   line-height: 1;
-  color: var(--agent-flag-ink);
+  color: var(--bg-surface);
   box-shadow: var(--elevation-float);
   animation: ads-in var(--duration-fast) ease both;
 }
@@ -64,9 +64,6 @@
   width: 20px;
   height: 20px;
   font-size: 11px;
-}
-.ads-pin[data-answered] {
-  background: var(--text-tertiary);
 }
 .ads-pin[data-active] {
   background: var(--control-on);
@@ -80,21 +77,12 @@
   outline-offset: 2px;
 }
 
-/* A thread opens under its block, at the pins' column, and never over the block. */
-.ads-thread {
+/* A thread or a draft opens under its block, at the pins' column, and never over the block. */
+.ads-pop {
   position: absolute;
   z-index: 3;
-  width: min(340px, calc(100% - 32px));
-  border-radius: 12px;
-  background: var(--card);
-  box-shadow:
-    0 0 0 0.5px var(--line-strong),
-    var(--elevation-float);
+  width: min(320px, calc(100% - 32px));
   animation: ads-in var(--duration-fast) ease both;
-}
-.ads-thread > .k-av-thread {
-  margin: 0;
-  box-shadow: none;
 }
 
 /* The small bar over words selected in View. */
@@ -115,29 +103,6 @@
   animation: ads-in var(--duration-fast) ease both;
 }
 
-/* How a typed change is saving, at the dock's end. */
-.ads-save {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 0 4px 0 6px;
-  font-size: 12.5px;
-  white-space: nowrap;
-  color: var(--muted);
-}
-.ads-save[data-state='saved'] > svg {
-  color: var(--success);
-}
-.ads-save:is([data-state='failed'], [data-state='conflict'], [data-state='refused']) {
-  color: var(--danger);
-}
-.ads-save__dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--control-on);
-}
-
 @keyframes ads-in {
   from {
     opacity: 0;
@@ -147,7 +112,7 @@
 @media (prefers-reduced-motion: reduce) {
   .ads-sheet,
   .ads-pin,
-  .ads-thread,
+  .ads-pop,
   .ads-selbar {
     transition: none;
     animation: none;
@@ -156,7 +121,7 @@
 :root[data-reduce-motion='always'] {
   & .ads-sheet,
   & .ads-pin,
-  & .ads-thread,
+  & .ads-pop,
   & .ads-selbar {
     transition: none;
     animation: none;

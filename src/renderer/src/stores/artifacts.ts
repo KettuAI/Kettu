@@ -58,6 +58,8 @@ export interface PaneSelection {
   artifactId: string
   title: string
   anchor: CommentAnchor
+  /** More frames selected with the first, which go with it. */
+  others?: CommentAnchor[]
 }
 
 export type ArtifactDialog =

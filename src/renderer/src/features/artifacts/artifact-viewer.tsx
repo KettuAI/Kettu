@@ -8,9 +8,9 @@ import {
   MinusSignIcon,
   PlusSignIcon,
   RotateLeft01Icon,
+  SparklesIcon,
 } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
-import type { CommentAnchor } from '@shared/artifact-comments'
 import { DOCUMENT_ENTRY } from '@shared/artifact-document-anchors'
 import { ARTIFACT_ENTRY } from '@shared/artifact-files'
 import { NO_SESSION } from '@shared/artifacts'
@@ -18,11 +18,12 @@ import { Icon, type MenuItem } from '@renderer/components/affect/app-shell'
 import { Button } from '@renderer/components/affect/button'
 import { AgentCursorStyles } from '@renderer/components/affect/agent-cursors'
 import { AgentMark } from '@renderer/components/agents/agent-mark'
-import { emitAppEvent } from '@renderer/app/events'
 import { toast } from '@renderer/components/ui/toast'
+import { useChanges } from '@renderer/features/session/entries/artifact-changes'
 import { usePhoneWindow } from '@renderer/features/shell/narrow'
 import { PaneSheet } from '@renderer/features/shell/panel-button'
 import { artifactRefOf, errorMessage, host, learnArtifactHost } from '@renderer/lib/host'
+import { useDark } from '@renderer/hooks/use-dark'
 import { useHostHas, useHostHasRecord } from '@renderer/lib/host-features'
 import { hostOfPath } from '@renderer/lib/host-paths'
 import { longAgo } from '@renderer/lib/format'
@@ -32,7 +33,6 @@ import {
   setViewerState,
   useViewerState,
   viewerStateOf,
-  type RightCard,
   type ViewerMode,
 } from '@renderer/stores/artifact-viewer'
 import { setDeckSlide, useDeckSlide } from '@renderer/stores/artifact-deck'
@@ -52,18 +52,17 @@ import {
   toggleSidePane,
   useViewStore,
 } from '@renderer/stores/view'
-import { anchorOf, pinsOf } from './anchors'
+import { anchorOf } from './anchors'
 import { useArtifactShares } from './artifact-host'
 import { useArrivedChange } from './use-arrived-change'
 import { atMaxZoom, atMinZoom } from './camera'
 import { CanvasEditor } from './canvas-editor'
 import { CanvasControls, useCanvasState } from './canvas-controls'
+import { changeCount } from './change-words'
 import type { PageActions } from './canvas-view'
-import { CommentBox, CommentsPanel, ThreadCard } from './comments'
 import { DeckPresent } from './deck-present'
-import { DeckSheet, type DeckComments } from './deck-sheet'
-import { DocumentSheet, type DocComments } from './document-sheet'
-import { EditPanel } from './edit-panel'
+import { DeckSheet } from './deck-sheet'
+import { DocumentSheet } from './document-sheet'
 import { ArtifactEditor, useEditorState, type EditorMode } from './editor'
 import { isEditable, modeKey } from './keys'
 import { artifactKind, daysLeft } from './model'
@@ -88,7 +87,7 @@ import { clampSize, useDocActions } from './use-doc-actions'
 import { useChangedFrames } from './use-changed-frames'
 import { noteAuthor, usePresentAgents, useVisitors } from './use-present-agents'
 import { useVersions } from './use-versions'
-import { VersionHistory } from './version-history'
+import { canvasContent, useViewerTools, type ToolContent } from './viewer-tools'
 import { ViewerBar, type BarPage } from './viewer-bar'
 import { ArtifactSurface, ViewerEmpty } from './viewer-parts'
 import { ArtifactShell, DockButton, DockRule, ViewerSlot, type RightContent } from './viewer-shell'
@@ -149,15 +148,49 @@ export default function ArtifactViewer(place: ViewerPlace) {
   const arrived = useArrivedChange(id, head, webPage || isDocument || isDeck)
   // A document and a deck mark what changed and step through it on their own pill.
   const docArrived = isDocument ? arrived : null
-  const comparing = !isDocument && !isDeck && arrived !== null && earlier === arrived.from
   const deck = useDeck(id, isDeck && shown ? shown.version : null)
   const deckSlide = useDeckSlide(id)
+  // An agent's newest version, which what it changed compares with the version before: a frame,
+  // the web page, a slide.
+  const lastWrite = versions?.[0] ?? null
+  const agentWrite =
+    lastWrite && lastWrite.author !== null && lastWrite.version > 1 && lastWrite.version === head
+      ? { before: lastWrite.version - 1, after: lastWrite.version }
+      : null
+  const pageChanges = useChanges(
+    id,
+    agentWrite?.before ?? null,
+    agentWrite?.after ?? null,
+    (webPage || isDeck) && agentWrite !== null,
+  )
+  // A web page compares when the agent changed it at all, a deck when it changed the slide shown.
+  const pageCompare =
+    agentWrite && pageChanges && changeCount(pageChanges).count > 0
+      ? webPage ||
+        (isDeck &&
+          pageChanges.kind === 'slides' &&
+          pageChanges.slides.some((s) => s.number === deckSlide))
+        ? agentWrite
+        : null
+      : null
+  const comparing = pageCompare !== null && earlier === pageCompare.before
+  // The slide "before" was asked on: turning to another goes back to the latest, as leaving a
+  // compared frame does.
+  const comparedSlide = useRef<number | null>(null)
+  useEffect(() => {
+    if (comparedSlide.current === null || comparedSlide.current === deckSlide) return
+    comparedSlide.current = null
+    setViewerState(id, { version: null })
+  }, [id, deckSlide])
   // Publishing takes the account the host keeps, which the daemon has none of.
   const shares = useArtifactShares(id)
   // Only a desktop host renders a page apart from the window.
   const renders = useHostHas('thumbnails') === true
   const editor = useMemo(() => (url ? new ArtifactEditor(url.slice(0, -1)) : null), [url])
   useEffect(() => () => editor?.dispose(), [editor])
+  // Pins and the picked outline take the theme's colors, again when the color mode changes.
+  const dark = useDark()
+  useEffect(() => editor?.restyle(), [editor, dark])
   const editing = useEditorState(editor)
   const { threads, error: commentsError } = useComments(id)
   // A version just written counts as the latest while it loads, so editing goes on across it.
@@ -189,42 +222,10 @@ export default function ArtifactViewer(place: ViewerPlace) {
     editor.setMode(editorMode(mode))
   }, [editor, mode, docShown])
 
-  const pinsShown = latest && (state.right === 'comments' || mode === 'comment')
-  // A document's pins lie beside its blocks on the host that anchors threads on them.
+  // A document lays out its own pins beside its blocks, on a host that anchors threads on them.
   const docBlocks = useHostHasRecord('documentSheet') === true
   const [docHeadings, setDocHeadings] = useState(0)
   const [docFocus, setDocFocus] = useState<{ thread: string; seq: number } | null>(null)
-  const deckComments = useMemo<DeckComments>(
-    () => ({
-      threads,
-      shown: pinsShown,
-      add: async (anchor, body) => {
-        await host('artifacts.comment', { id, anchor, body })
-      },
-      thread: (thread, number) => (
-        <ThreadCard thread={thread} number={number} artifactId={id} onFocus={() => {}} />
-      ),
-    }),
-    [threads, pinsShown, id],
-  )
-  const docComments = useMemo<DocComments>(
-    () => ({
-      threads,
-      shown: pinsShown,
-      blocks: docBlocks,
-      add: async (anchor, body) => {
-        await host('artifacts.comment', { id, anchor, body })
-      },
-      thread: (thread, number) => (
-        <ThreadCard thread={thread} number={number} artifactId={id} onFocus={() => {}} />
-      ),
-    }),
-    [threads, pinsShown, docBlocks, id],
-  )
-  useEffect(() => {
-    if (!editor || !shown) return
-    editor.setPins(pinsShown ? pinsOf(threads, shown) : () => [])
-  }, [editor, shown, threads, pinsShown])
 
   // What is picked beside a session is the context its composer offers, until something else is.
   const projectPath = panel?.projectPath ?? null
@@ -327,37 +328,90 @@ export default function ArtifactViewer(place: ViewerPlace) {
     return out
   }, [doc, threads])
 
-  // The right card: an element picked in Edit shows its look; otherwise the card chosen.
-  const propsShown =
-    mode === 'edit' && editing.mode === 'select' && !!editing.picked && !!editor && !!head
-  const chosen: RightCard | null =
-    state.right === 'tweaks' && !docShown
-      ? null
-      : state.right === 'comments' && !summary
-        ? null
-        : state.right
-  const rightKey = propsShown ? 'props' : chosen
+  const content = useMemo<ToolContent>(
+    () =>
+      shown?.canvas
+        ? canvasContent({
+            id,
+            doc,
+            shown,
+            panel: panel?.panel ?? MAIN_ARTIFACT_PANEL,
+            editor,
+            focusLegacy: (index) => controls.commands?.focus(index),
+          })
+        : isDocument || isDeck
+          ? {
+              reveal: (_anchor, thread) => {
+                if (thread) setDocFocus((was) => ({ thread, seq: (was?.seq ?? 0) + 1 }))
+              },
+            }
+          : { reveal: (anchor) => anchor.offset !== null && editor?.reveal(null, anchor.offset) },
+    [id, doc, shown, panel?.panel, editor, controls, isDocument, isDeck],
+  )
+  const tools = useViewerTools({
+    id,
+    title,
+    summary: summary ?? null,
+    shown: shown ?? null,
+    head,
+    latest,
+    editable: states.inTrash ? 'deleted' : earlier !== null ? 'earlier' : 'yes',
+    mode,
+    right: state.right,
+    picked,
+    editor,
+    editing,
+    threads,
+    commentsError,
+    versions,
+    versionsError,
+    presence: artifact.presence ?? null,
+    doc,
+    page: state.page,
+    beside: panel && projectPath ? { panel: panel.panel, projectPath } : null,
+    content,
+    area,
+    root: frame,
+  })
+  // The frame bar's and the sheets' Ask open the tools' Ask, beside what it is about or above the
+  // composer; read when pressed, so what holds them is not made again on every render.
+  const toolsNow = useRef(tools)
+  useEffect(() => {
+    toolsNow.current = tools
+  })
+  const canvasActions = useMemo<typeof docActions>(
+    () => ({ ...docActions, handOff: (ids) => toolsNow.current.askFrames(ids) }),
+    [docActions],
+  )
+  const agentBefore = agentWrite?.before ?? null
+  const compare = useMemo(
+    () => (latest && agentBefore !== null ? { before: agentBefore, after: agentBefore + 1 } : null),
+    [latest, agentBefore],
+  )
+  const right: RightContent | null =
+    tools.right ??
+    (state.right === 'tweaks' && docShown
+      ? { key: 'tweaks', body: null, onClose: () => setViewerState(id, { right: null }) }
+      : null)
+  const rightKey = right?.key ?? null
 
   const setMode = useCallback(
-    (next: ViewerMode) =>
+    (next: ViewerMode) => {
+      tools.leftComment(next)
       setViewerState(id, (s) => ({
         mode: next,
         // Comment opens the comments, and leaving it puts them away.
         right: next === 'comment' ? 'comments' : s.right === 'comments' ? null : s.right,
-      })),
-    [id],
+      }))
+    },
+    [id, tools],
   )
-  const closeRight = useCallback(() => {
-    if (rightKey === 'props') {
-      editor?.clearPick()
-      return
-    }
-    setViewerState(id, (s) => ({
-      right: null,
-      // Closing the history goes back to the latest version.
-      version: s.right === 'history' ? null : s.version,
-    }))
-  }, [rightKey, editor, id])
+  // Read when called, from a key or the Outline opening in its place.
+  const rightNow = useRef(right)
+  useEffect(() => {
+    rightNow.current = right
+  })
+  const closeRight = useCallback(() => rightNow.current?.onClose(), [])
   const toggleHistory = () =>
     setViewerState(id, (s) =>
       s.right === 'history' ? { right: null, version: null } : { right: 'history' },
@@ -384,9 +438,17 @@ export default function ArtifactViewer(place: ViewerPlace) {
         setMode(key)
         return
       }
+      // Enter types the picked element's text in place.
+      if (event.key === 'Enter' && mode === 'edit' && editor?.get().picked?.selection.textOnly) {
+        event.preventDefault()
+        editor.textEdit(true)
+        return
+      }
       if (event.key !== 'Escape') return
       const now = viewerStateOf(id)
-      if (editor?.escape()) {
+      if (tools.escape()) {
+        // A popover closed.
+      } else if (editor?.escape()) {
         // The pick let go of.
       } else if (now.opened !== null) setViewerState(id, { opened: null })
       else if (now.selection.length > 0) setViewerState(id, { selection: [] })
@@ -409,6 +471,8 @@ export default function ArtifactViewer(place: ViewerPlace) {
     maximized,
     phone,
     place.where,
+    tools,
+    mode,
   ])
 
   // One restore at a time: a second click would restore over the version the first one wrote.
@@ -434,6 +498,7 @@ export default function ArtifactViewer(place: ViewerPlace) {
     />
   ) : null
   if (comparing) {
+    // The dock's switch and the sheet's tag say which version this is.
     pill = changePill
   } else if (shown && earlier !== null && head !== null) {
     const record = versions?.find((v) => v.version === earlier)
@@ -447,9 +512,26 @@ export default function ArtifactViewer(place: ViewerPlace) {
             busy: restoring,
             restores: true,
             run: () =>
-              restore(() =>
-                restoreVersion(id, earlier, head).then(() => setViewerState(id, { version: null })),
-              ),
+              restore(async () => {
+                // No dialog: the version is written as the newest, which Undo takes back.
+                const { version: made } = await host('artifacts.restoreVersion', {
+                  id,
+                  version: earlier,
+                  baseVersion: head,
+                })
+                setViewerState(id, { version: null })
+                toast(
+                  t('history.restored', { version: earlier, made }),
+                  {
+                    label: t('edit.undo'),
+                    onClick: () =>
+                      void restoreVersion(id, head, made).catch((error: unknown) =>
+                        toast(errorMessage(error), undefined, { tone: 'warning' }),
+                      ),
+                  },
+                  { tone: 'success' },
+                )
+              }),
           },
           { label: t('viewer.backToLatest'), run: () => setViewerState(id, { version: null }) },
         ]}
@@ -497,31 +579,13 @@ export default function ArtifactViewer(place: ViewerPlace) {
   // A web page asks, and hands its errors to, the session it sits beside, or else the chat's.
   const besideSession = useSessionsStore((s) => (panel ? (s.byId[panel.panel] ?? null) : null))
   const target = besideSession ?? chatSession
-  // What the next message is about goes above the composer of the session that is asked.
-  const askAbout = useMemo(() => {
-    if (!target) return null
-    return (anchor: CommentAnchor) => {
-      if (place.where === 'main') openSessionWithArtifact(target.id, target.projectPath, id)
-      setPaneSelection({ projectPath: target.projectPath, artifactId: id, title, anchor })
-      requestAnimationFrame(() => emitAppEvent({ kind: 'focus-composer' }))
-    }
-  }, [target, place.where, id, title])
   const sheetAgent = useMemo<SheetAgent | null>(() => {
-    if (!target || !summary || !shown || !askAbout) return null
+    if (!target || !summary || !shown) return null
     const hostId = hostOfPath(target.projectPath)
-    const pageAnchor = {
-      version: shown.version,
-      path: ARTIFACT_ENTRY,
-      page: null,
-      offset: null,
-      tag: null,
-      text: '',
-      missing: false,
-    }
     return {
       name: agentName(target.agentId, hostId),
       mark: <AgentMark agent={target.agentId} size={14} hostId={hostId} />,
-      ask: () => askAbout(pageAnchor),
+      ask: () => toolsNow.current.askWhole(),
       fixErrors: (pages) =>
         handOffPageErrors({
           artifact: { id, title, version: shown.version, project: summary.project },
@@ -529,7 +593,7 @@ export default function ArtifactViewer(place: ViewerPlace) {
           session: target.id,
         }),
     }
-  }, [target, summary, shown, askAbout, id, title])
+  }, [target, summary, shown, id, title])
 
   let body: React.ReactNode
   let layout: 'float' | 'beside' = 'beside'
@@ -623,7 +687,7 @@ export default function ArtifactViewer(place: ViewerPlace) {
             mode={mode}
             controls={controls}
             editor={latest ? (editor ?? undefined) : undefined}
-            actions={docActions}
+            actions={canvasActions}
             agents={latest ? agents : []}
             following={followingNow}
             onFollowDone={() => setFollowing(null)}
@@ -634,6 +698,7 @@ export default function ArtifactViewer(place: ViewerPlace) {
             onShown={(seq) => artifactPageShown(panel?.panel ?? MAIN_ARTIFACT_PANEL, seq)}
             changed={changedFrames}
             comments={frameComments}
+            compare={compare}
           />
         ) : shown.canvas ? (
           <ArtifactSurface
@@ -663,13 +728,31 @@ export default function ArtifactViewer(place: ViewerPlace) {
             where={place.where}
             deck={deck ?? null}
             arrived={latest ? arrived : null}
-            comments={deckComments}
+            comments={{
+              threads,
+              shown: latest && (state.right === 'comments' || mode === 'comment'),
+              draft: tools.docDraft,
+              thread: tools.docThread,
+            }}
             agent={sheetAgent}
-            onAsk={askAbout}
+            onAsk={(anchor) => toolsNow.current.askAnchor(anchor, null)}
             onPresent={(slide) => setPresenting(String(slide))}
             asked={pageAsked}
             onAsked={(seq) => artifactPageShown(panel?.panel ?? MAIN_ARTIFACT_PANEL, seq)}
             focusThread={docFocus}
+            compare={
+              pageCompare && (earlier === null || comparing)
+                ? {
+                    from: pageCompare.before,
+                    to: pageCompare.after,
+                    showingBefore: comparing,
+                    onChange: (before) => {
+                      comparedSlide.current = before ? deckSlide : null
+                      setViewerState(id, { version: before ? pageCompare.before : null })
+                    },
+                  }
+                : null
+            }
           />
         ) : isDocument ? (
           <DocumentSheet
@@ -684,23 +767,16 @@ export default function ArtifactViewer(place: ViewerPlace) {
             mode={mode}
             onMode={setMode}
             arrived={docArrived}
-            comments={docComments}
+            comments={{
+              threads,
+              shown: latest && (state.right === 'comments' || mode === 'comment'),
+              blocks: docBlocks,
+              draft: tools.docDraft,
+              thread: tools.docThread,
+            }}
             agent={sheetAgent}
-            onAsk={
-              askAbout
-                ? (anchor) =>
-                    askAbout(
-                      anchor ?? {
-                        version: shown.version,
-                        path: docBlocks ? DOCUMENT_ENTRY : ARTIFACT_ENTRY,
-                        page: null,
-                        offset: null,
-                        tag: null,
-                        text: '',
-                        missing: false,
-                      },
-                    )
-                : null
+            onAsk={(anchor, at) =>
+              toolsNow.current.askAnchor(anchor, at, docBlocks ? DOCUMENT_ENTRY : ARTIFACT_ENTRY)
             }
             onHeadings={setDocHeadings}
             focusThread={docFocus}
@@ -727,7 +803,7 @@ export default function ArtifactViewer(place: ViewerPlace) {
             reloads={artifact.reloads}
             since={since}
             editor={latest ? (editor ?? undefined) : undefined}
-            band={pill !== null}
+            band={pill !== null || comparing}
             before={earlier}
             stopped={artifact.stopped}
             onRestart={artifact.restart}
@@ -741,13 +817,13 @@ export default function ArtifactViewer(place: ViewerPlace) {
                       .catch((error: unknown) => console.error(`Could not open ${id}`, error))
             }
             compare={
-              arrived && (earlier === null || comparing)
+              pageCompare && (earlier === null || comparing)
                 ? {
-                    from: arrived.from,
-                    to: arrived.to,
-                    before: comparing,
+                    from: pageCompare.before,
+                    to: pageCompare.after,
+                    showingBefore: comparing,
                     onChange: (before) =>
-                      setViewerState(id, { version: before ? arrived.from : null }),
+                      setViewerState(id, { version: before ? pageCompare.before : null }),
                   }
                 : null
             }
@@ -755,89 +831,11 @@ export default function ArtifactViewer(place: ViewerPlace) {
           />
         )}
         {legacyCanvas && pageName && <LegacyCanvasDock controls={controls} />}
-        {editor && mode === 'comment' && editing.picked?.point && (
-          <CommentBox
-            key={`${editing.picked.point.x},${editing.picked.point.y}`}
-            anchor={anchorOf(editing.picked, shown)}
-            point={editing.picked.point}
-            onCancel={() => editor.clearPick()}
-            onSubmit={async (text) => {
-              await host('artifacts.comment', {
-                id,
-                anchor: anchorOf(editing.picked!, shown),
-                body: text,
-              })
-              editor.clearPick()
-            }}
-          />
-        )}
+        {typed && latest && summary && <AskDock onAsk={() => tools.askWhole()} />}
       </>
     )
   } else {
     body = <Waiting since={since} />
-  }
-
-  let right: RightContent | null = null
-  if (rightKey === 'props' && editor && shown && editing.picked) {
-    right = {
-      key: `props:${editing.picked.page}:${editing.picked.selection.path}:${editing.picked.selection.src}`,
-      body: (
-        <EditPanel
-          id={id}
-          version={shown.version}
-          editable={states.inTrash ? 'deleted' : earlier !== null ? 'earlier' : 'yes'}
-          picked={editing.picked}
-          editor={editor}
-        />
-      ),
-      onClose: closeRight,
-    }
-  } else if (rightKey === 'history') {
-    right = {
-      key: 'history',
-      body: (
-        <VersionHistory
-          versions={versions}
-          error={versionsError}
-          shown={picked}
-          onPick={(version) => setViewerState(id, { version: version === head ? null : version })}
-        />
-      ),
-      onClose: closeRight,
-    }
-  } else if (rightKey === 'comments' && summary) {
-    right = {
-      key: 'comments',
-      body: (
-        <aside aria-label={t('comments.title')} className="k-av-side">
-          <div className="k-av-side__head">
-            <h2 className="k-av-side__title">{t('comments.title')}</h2>
-          </div>
-          <CommentsPanel
-            artifact={{ id, title, version: head ?? summary.version, project: summary.project }}
-            threads={threads}
-            error={commentsError}
-            preferred={[
-              ...(artifact.presence?.sessions.filter((s) => s.editing).map((s) => s.sessionId) ??
-                []),
-              summary.sessionId,
-            ]}
-            onFocus={(thread) => {
-              if (isDocument || isDeck) {
-                setDocFocus((was) => ({ thread: thread.id, seq: (was?.seq ?? 0) + 1 }))
-                return
-              }
-              const number = thread.anchor.page?.number
-              const index = shown?.canvas?.pages.findIndex((p) => p.number === number) ?? -1
-              if (index >= 0) controls.commands?.focus(index)
-            }}
-          />
-        </aside>
-      ),
-      onClose: closeRight,
-    }
-  } else if (rightKey === 'tweaks') {
-    right = { key: 'tweaks', body: null, onClose: closeRight }
   }
 
   // The page on screen after the title, for a canvas: a document's page, or the frame in focus.
@@ -1078,6 +1076,7 @@ export default function ArtifactViewer(place: ViewerPlace) {
       <div ref={area} className="avs-stage">
         {showing && <AgentCursorStyles />}
         {body}
+        {showing && tools.overlay}
       </div>
       {pill && <ViewerSlot slot="pill">{pill}</ViewerSlot>}
     </ArtifactShell>
@@ -1233,6 +1232,17 @@ function LegacyCanvasDock({ controls }: { controls: CanvasControls }) {
           />
         </>
       )}
+    </ViewerSlot>
+  )
+}
+/** A document's or a deck's dock: asking an agent about the whole of it. */
+function AskDock({ onAsk }: { onAsk: () => void }) {
+  const { t } = useTranslation('artifacts')
+  return (
+    <ViewerSlot slot="dock">
+      <DockButton label={t('ask.whole')} icon={SparklesIcon} onClick={onAsk}>
+        {t('ask.short')}
+      </DockButton>
     </ViewerSlot>
   )
 }

@@ -1895,6 +1895,11 @@ export interface HostContract {
     params: { id: string; threadId: string; resolved: boolean }
     result: CommentThread
   }
+  // Pins the user's thread, whose element is gone, to another place of the latest version.
+  'artifacts.repin': {
+    params: { id: string; threadId: string; anchor: CommentAnchor }
+    result: CommentThread
+  }
   // The user sent the threads to a session.
   'artifacts.markSent': {
     params: { id: string; threadIds: string[]; sessionId: string }
@@ -2353,6 +2358,7 @@ export const HOST_METHODS = [
   'artifacts.reply',
   'artifacts.resolve',
   'artifacts.markSent',
+  'artifacts.repin',
   'artifacts.editElement',
   'artifacts.view',
   'artifacts.seen',

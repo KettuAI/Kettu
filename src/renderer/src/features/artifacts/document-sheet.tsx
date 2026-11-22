@@ -8,9 +8,7 @@ import {
   type ReactNode,
 } from 'react'
 import {
-  Alert02Icon,
   ArrowDown01Icon,
-  CheckmarkCircle02Icon,
   Comment01Icon,
   GitCompareIcon,
   MinusSignIcon,
@@ -40,11 +38,13 @@ import { useDark } from '@renderer/hooks/use-dark'
 import { isWeb } from '@renderer/lib/platform'
 import { DOC_SIZES, setDocSize, stepDocSize, useDocSize } from '@renderer/stores/artifact-doc-size'
 import type { ViewerMode } from '@renderer/stores/artifact-viewer'
-import { CommentBox } from './comments'
+import { threadNumbers } from './comment-threads'
 import { FrameLink } from './frame-link'
 import { OutlineCard } from './outline-card'
 import { ChangePill, type SheetAgent } from './page-sheet'
 import { Waiting } from './page-frame'
+import { sheetSave } from './sheet-save'
+import { SaveChip } from './tool-parts'
 import { framePageUrl, type ShownVersion } from './use-artifact'
 import { DockButton, DockRule, ViewerSlot } from './viewer-shell'
 import { useShell } from './viewer-shell-context'
@@ -95,10 +95,14 @@ export interface DocComments {
   shown: boolean
   /** Whether the host anchors threads on a document's blocks; an older one takes the page alone. */
   blocks: boolean
-  add: (anchor: CommentAnchor, body: string) => Promise<void>
+  /** The comment being written under a block, pinned to `anchor`, until it saves or `close`. */
+  draft: (anchor: CommentAnchor, close: () => void) => ReactNode
   /** What opens under a block for one of its threads, numbered as its pin. */
-  thread: (thread: CommentThread, number: number) => ReactNode
+  thread: (thread: CommentThread, number: number, close: () => void) => ReactNode
 }
+
+/** A box in the window, for a popover beside it. */
+export type WindowBox = { left: number; top: number; right: number; bottom: number }
 
 /** How a typed change is saving, as the document reports it. */
 type Save = Extract<DocReport, { t: 'save' }>
@@ -150,8 +154,8 @@ export function DocumentSheet({
   arrived: ArrivedChange | null
   comments: DocComments
   agent: SheetAgent | null
-  /** Asks the agent about the document, or about the words or block in `anchor`. */
-  onAsk: ((anchor: CommentAnchor | null) => void) | null
+  /** Asks the agent about the document, or about the words or block in `anchor`, beside `at`. */
+  onAsk: ((anchor: CommentAnchor | null, at: WindowBox | null) => void) | null
   onHeadings: (count: number) => void
   /** A thread chosen in the comments card, to open under its block and scroll to. */
   focusThread: { thread: string; seq: number } | null
@@ -227,9 +231,11 @@ export function DocumentSheet({
   // Pins: the open threads on the document's blocks, numbered as their cards are.
   const pins = useMemo(() => {
     if (!comments.shown || !latest) return []
-    return (comments.threads ?? [])
+    const all = comments.threads ?? []
+    const numbers = threadNumbers(all)
+    return all
       .filter((thread) => thread.resolvedAt === null)
-      .map((thread, i) => ({ thread, n: i + 1 }))
+      .map((thread) => ({ thread, n: numbers.get(thread.id) ?? 0 }))
       .filter(
         ({ thread: { anchor } }) =>
           anchor.path === DOCUMENT_ENTRY && anchor.offset !== null && !anchor.missing,
@@ -357,6 +363,14 @@ export function DocumentSheet({
     (at: number) => layout?.places.find((p) => p.at === at) ?? null,
     [layout],
   )
+  // A box on the sheet's content in the window, read when a popover opens beside it.
+  const windowBox = (box: DocBox): WindowBox | null => {
+    const rect = content.current?.getBoundingClientRect()
+    if (!rect) return null
+    const left = rect.left + box.x
+    const top = rect.top + box.y
+    return { left, top, right: left + box.width, bottom: top + box.height }
+  }
   const scrollTo = useCallback(
     (y: number) =>
       scroller.current?.scrollTo({
@@ -451,7 +465,7 @@ export function DocumentSheet({
     if (shownAt === null) return
     const frame = requestAnimationFrame(() =>
       content.current
-        ?.querySelector('.ads-thread, .k-av-compose')
+        ?.querySelector('.ads-pop')
         ?.scrollIntoView({ block: 'nearest', behavior: reduce ? 'auto' : 'smooth' }),
     )
     return () => cancelAnimationFrame(frame)
@@ -513,7 +527,6 @@ export function DocumentSheet({
                     type="button"
                     className="ads-pin"
                     data-active={active || undefined}
-                    data-answered={thread.comments.length > 1 || undefined}
                     data-small={pinSize === PIN_SMALL || undefined}
                     style={{ right: pinRight, top: place.y + 2 + before * PIN_GAP }}
                     aria-label={t('doc.pin', { number: n })}
@@ -533,10 +546,10 @@ export function DocumentSheet({
                   if (!place) return null
                   return (
                     <div
-                      className="ads-thread"
+                      className="ads-pop"
                       style={{ top: place.y + place.height + 8, right: pinRight }}
                     >
-                      {comments.thread(open.thread, open.n)}
+                      {comments.thread(open.thread, open.n, () => setOpenThread(null))}
                     </div>
                   )
                 })()}
@@ -547,17 +560,13 @@ export function DocumentSheet({
                   const place = placeOf(draft.at)
                   const bottom = place ? place.y + place.height : draft.box.y + draft.box.height
                   return (
-                    <CommentBox
+                    <div
                       key={`${draft.at}`}
-                      anchor={anchor}
-                      point={{ x: g.width - g.pad / 2 + 24 - 340, y: bottom - 6 }}
-                      inArea
-                      onCancel={() => setDraft(null)}
-                      onSubmit={async (body) => {
-                        await comments.add(anchor, body)
-                        setDraft(null)
-                      }}
-                    />
+                      className="ads-pop"
+                      style={{ top: bottom + 8, right: pinRight }}
+                    >
+                      {comments.draft(anchor, () => setDraft(null))}
+                    </div>
                   )
                 })()}
               {selection && mode === 'view' && (
@@ -569,17 +578,21 @@ export function DocumentSheet({
                   onComment={() => {
                     setSelection(null)
                     onMode('comment')
+                    // The words selected are what the comment is on, as for Ask.
                     setDraft({
                       at: selection.at,
                       tag: selection.tag,
-                      text: selection.text,
+                      text: snippet(selection.quote) || selection.text,
                       box: selection.box,
                     })
                   }}
                   onAsk={
                     onAsk
                       ? () => {
-                          onAsk(anchorAt(selection.at, selection.tag, snippet(selection.quote)))
+                          onAsk(
+                            anchorAt(selection.at, selection.tag, snippet(selection.quote)),
+                            windowBox(selection.box),
+                          )
                           setSelection(null)
                         }
                       : null
@@ -648,7 +661,7 @@ export function DocumentSheet({
             : null
         }
         agent={agent}
-        onAsk={onAsk ? () => onAsk(null) : null}
+        onAsk={onAsk ? () => onAsk(null, null) : null}
         save={mode === 'edit' || (save && save.state !== 'saved') ? save : null}
         onRetry={() => link.post({ v: RUNTIME_VERSION, kind: 'select-doc-do', do: 'retry' })}
         onUndo={() => link.post({ v: RUNTIME_VERSION, kind: 'select-doc-do', do: 'undo' })}
@@ -851,7 +864,7 @@ function DocDock({
       {save && (
         <>
           <DockRule />
-          <SaveChip save={save} onRetry={onRetry} />
+          <SaveChip save={sheetSave(save, t)} onRetry={onRetry} />
           <DockButton
             label={t('doc.undo')}
             icon={Undo02Icon}
@@ -861,37 +874,5 @@ function DocDock({
         </>
       )}
     </ViewerSlot>
-  )
-}
-
-/** "Editing…", "Saved as v4", or what kept a change from saving, with Retry; the typed words stay. */
-export function SaveChip({ save, onRetry }: { save: Save; onRetry: () => void }) {
-  const { t } = useTranslation('artifacts')
-  const problem = save.state === 'failed' || save.state === 'conflict' || save.state === 'refused'
-  const text =
-    save.state === 'saved' && save.version !== null
-      ? t('doc.save.saved', { version: save.version })
-      : t(`doc.save.${save.state === 'saved' ? 'editing' : save.state}`)
-  return (
-    <span
-      className="ads-save"
-      data-state={save.state}
-      role={problem ? 'alert' : 'status'}
-      title={problem ? t('doc.save.kept') : undefined}
-    >
-      {problem ? (
-        <Icon icon={Alert02Icon} size={14} />
-      ) : save.state === 'saved' ? (
-        <Icon icon={CheckmarkCircle02Icon} size={14} />
-      ) : (
-        <span className="ads-save__dot" aria-hidden />
-      )}
-      {text}
-      {(save.state === 'failed' || save.state === 'conflict') && (
-        <button type="button" className="avs-dock__btn" data-text="" onClick={onRetry}>
-          {t('doc.save.retry')}
-        </button>
-      )}
-    </span>
   )
 }

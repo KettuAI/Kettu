@@ -642,6 +642,19 @@ export class ArtifactStore {
     return thread
   }
 
+  /** Pins a thread to another place, where it is found again from now on. */
+  async repin(id: string, threadId: string, anchor: CommentAnchor): Promise<CommentThread> {
+    const threads = await this.call('threads', { id, project: null })
+    const thread = threads.find((one) => one.id === threadId)
+    if (!thread) {
+      throw new HostError('not_found', t('artifacts.noThread', { id, thread: threadId }))
+    }
+    const placed: CommentAnchor = { ...anchor, missing: false }
+    await this.call('reanchor', { id, anchors: [{ threadId, anchor: placed }] })
+    this.commented(id)
+    return { ...thread, anchor: placed }
+  }
+
   /** The user sent the threads to the session; they wait no more until the user writes again. */
   async markSent(id: string, threadIds: string[], sessionId: string): Promise<void> {
     await this.call('markSent', { id, threadIds, sessionId, at: this.now() })

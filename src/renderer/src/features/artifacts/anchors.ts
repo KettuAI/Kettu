@@ -2,8 +2,7 @@
 // the user's words as they are, and what the page reported inside a block whose random boundary
 // says it is data, so a page's text cannot pass for the user's.
 
-import { isAnswered, type CommentAnchor, type CommentThread } from '@shared/artifact-comments'
-import { ARTIFACT_ENTRY } from '@shared/artifact-files'
+import type { CommentAnchor, CommentThread } from '@shared/artifact-comments'
 import { snippet } from '@shared/artifact-runtime/page-messages'
 import { i18n } from '@renderer/lib/i18n'
 import type { Picked } from './editor'
@@ -37,25 +36,6 @@ export function anchorLabel(anchor: CommentAnchor): string {
         : anchor.tag
   if (page && element) return i18n.t('artifacts:anchor.inPage', { page, element })
   return element ?? page ?? i18n.t('artifacts:anchor.page')
-}
-
-/** The pins each page of the version shows: its open threads, numbered as their cards. */
-export function pinsOf(
-  threads: readonly CommentThread[] | null,
-  shown: ShownVersion,
-): (page: number | null) => { n: number; src: number | null; answered: boolean }[] {
-  const open = threads?.filter((thread) => thread.resolvedAt === null) ?? []
-  return (page) =>
-    open.flatMap((thread, i) => {
-      const { anchor } = thread
-      const number = page === null ? null : (shown.canvas?.pages[page]?.number ?? null)
-      if (page !== null && anchor.page?.number !== number) return []
-      // A frame shows its page's own file, or the entry page of an old canvas; an element of
-      // another file pins its page.
-      const file = (page === null ? null : shown.canvas?.pages[page]?.file) ?? ARTIFACT_ENTRY
-      const src = anchor.missing || anchor.path !== file ? null : anchor.offset
-      return [{ n: i + 1, src, answered: isAnswered(thread) }]
-    })
 }
 
 /** A line around data that no text inside it holds, so the data cannot end it. */
@@ -112,9 +92,13 @@ export function commentsPrompt(
 /** The user's message with the element they selected beside the session. */
 export function selectionPrompt(
   text: string,
-  selected: { artifactId: string; title: string; anchor: CommentAnchor },
+  selected: { artifactId: string; title: string; anchor: CommentAnchor; others?: CommentAnchor[] },
 ): string {
-  const data = [`artifact: "${snippet(selected.title)}"`, dataLine(selected.anchor)]
+  const data = [
+    `artifact: "${snippet(selected.title)}"`,
+    dataLine(selected.anchor),
+    ...(selected.others ?? []).map(dataLine),
+  ]
   const mark = boundary([text, ...data])
   return [
     text,

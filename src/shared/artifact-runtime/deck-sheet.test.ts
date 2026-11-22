@@ -75,5 +75,7 @@ describe("a slides viewer's report", () => {
         message(layout, { doc: { t: 'save', state: 'saved', version: 2, undo: false } }),
       ),
     ).toBeNull()
+    expect(parseSelectMessage(message(layout, { pin: 2 }))).toBeNull()
+    expect(parseSelectMessage(message(layout, { typed: { text: 'Hi', done: true } }))).toBeNull()
   })
 })

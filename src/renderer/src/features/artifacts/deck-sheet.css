@@ -40,10 +40,10 @@
   opacity: 1;
 }
 .adk-slide .ads-pin[data-lost] {
-  outline: 1.5px dashed var(--agent-flag);
-  outline-offset: 2px;
-  background: var(--card);
-  color: var(--text);
+  outline: 1.5px dashed var(--text-primary);
+  outline-offset: -1.5px;
+  background: var(--bg-surface);
+  color: var(--text-primary);
 }
 
 /* The slides before and after: a slice beside the slide, melting away from it. */
@@ -339,6 +339,7 @@
 /* The pager's place, with the tag of the version that changed the slide. */
 .adk-where {
   display: inline-flex;
+  white-space: nowrap;
   align-items: center;
   justify-content: center;
   gap: 6px;

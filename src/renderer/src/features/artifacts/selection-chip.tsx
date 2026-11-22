@@ -13,10 +13,16 @@ export function SelectionChip({
   onRemove: () => void
 }) {
   const { t } = useTranslation('artifacts')
-  const label = t('selection.label', {
-    title: selection.title,
-    anchor: anchorLabel(selection.anchor),
-  })
+  const more = selection.others?.length ?? 0
+  const { anchor } = selection
+  // Asking about the whole artifact names it alone.
+  const whole = more === 0 && anchor.page === null && anchor.tag === null
+  const label = whole
+    ? selection.title
+    : t('selection.label', {
+        title: selection.title,
+        anchor: more > 0 ? `${anchorLabel(anchor)} +${more}` : anchorLabel(anchor),
+      })
   return (
     <div className="flex w-full min-w-0 animate-in pb-0.5 fade-in animation-duration-(--duration-fast)">
       <span className="flex h-6.5 min-w-0 items-center gap-1.5 rounded-lg bg-subtle pr-0.5 pl-2 text-small text-secondary">

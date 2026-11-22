@@ -4,18 +4,11 @@
 import { snippet } from '@shared/artifact-runtime/page-messages'
 import { joinedEnds, noteBox, type CanvasNote, type CanvasPage } from '@shared/canvas-doc'
 import type { UserContent } from '@shared/thread'
-import { emitAppEvent } from '@renderer/app/events'
-import {
-  flushDraft,
-  NEW_SESSION_DRAFT,
-  readDraft,
-  writeDraft,
-} from '@renderer/features/session/composer/drafts'
-import { artifactRefOf, host } from '@renderer/lib/host'
+import { artifactRefOf } from '@renderer/lib/host'
 import { i18n } from '@renderer/lib/i18n'
-import { openNewSession } from '@renderer/stores/view'
 import { block, boundary } from './anchors'
 import { contains, overlaps, type DocLayout } from './canvas-model'
+import { NEW_SESSION, sendToSession } from './send-targets'
 
 /** The widest a page's image goes into a message; a larger page is scaled down. */
 const IMAGE_WIDTH = 1600
@@ -175,15 +168,16 @@ function wrap(
 }
 
 /**
- * Sends the selection to a session as one user message, or opens New session with its text
- * drafted when there is no session to send to.
+ * The message that hands frames and the notes on them to an agent: `ask`, the user's own words, or
+ * a request to change them, the data block, and each frame drawn with its notes, up to four.
  */
-export async function handOff(input: {
-  artifact: { id: string; title: string; version: number; project: string }
+export async function frameHandOff(input: {
+  artifact: { id: string; title: string; version: number }
   layout: DocLayout
   ids: readonly string[]
-  session: string | null
-}): Promise<boolean> {
+  ask?: string
+  images?: boolean
+}): Promise<{ text: string; images: UserContent[] }> {
   const { artifact, layout } = input
   const { pages, notes } = handOffSet(layout, input.ids)
   const data = [
@@ -193,22 +187,15 @@ export async function handOff(input: {
     ),
     ...notes.map((n) => noteLine(n, pages)),
   ]
-  const mark = boundary(data)
+  const mark = boundary([...data, input.ask ?? ''])
   const text = [
-    i18n.t('artifacts:board.handOffPrompt'),
+    input.ask?.trim() || i18n.t('artifacts:board.handOffPrompt'),
     i18n.t('artifacts:prompt.selection', { id: artifact.id, version: artifact.version }),
     i18n.t('artifacts:prompt.data', { mark }),
     block(mark, data),
   ].join('\n\n')
-  if (!input.session) {
-    const draft = readDraft(NEW_SESSION_DRAFT)
-    writeDraft(NEW_SESSION_DRAFT, draft.trim() ? `${draft}\n\n${text}` : text)
-    flushDraft(NEW_SESSION_DRAFT)
-    openNewSession(artifact.project, null)
-    emitAppEvent({ kind: 'draft-written', draft: NEW_SESSION_DRAFT })
-    return false
-  }
   const images: UserContent[] = []
+  if (input.images === false) return { text, images }
   for (const page of pages.slice(0, 4)) {
     const data64 = await pageWithNotes(
       artifact.id,
@@ -220,9 +207,25 @@ export async function handOff(input: {
     if (data64)
       images.push({ type: 'ref', ref: { kind: 'image', mimeType: 'image/png', data: data64 } })
   }
-  await host('sessions.queue', {
-    sessionId: input.session,
-    content: [{ type: 'text', text }, ...images],
-  })
-  return true
+  return { text, images }
+}
+
+/**
+ * Sends the selection to a session as one user message, or opens New session with its text
+ * drafted when there is no session to send to.
+ */
+export async function handOff(input: {
+  artifact: { id: string; title: string; version: number; project: string }
+  layout: DocLayout
+  ids: readonly string[]
+  session: string | null
+}): Promise<boolean> {
+  const { text, images } = await frameHandOff({ ...input, images: !!input.session })
+  const how = await sendToSession(
+    input.artifact.project,
+    input.session ?? NEW_SESSION,
+    text,
+    images,
+  )
+  return how === 'sent'
 }

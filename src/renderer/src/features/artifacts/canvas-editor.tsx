@@ -62,9 +62,10 @@ import {
 import { useCanvasState, type CanvasControls } from './canvas-controls'
 import { FrameThumb } from './canvas-present'
 import { CanvasFrame, PickLayer } from './canvas-view'
-import { CanvasTweaks } from './canvas-editor-panels'
+import { TweakCard } from './canvas-editor-panels'
 import { contains, docLayout } from './canvas-model'
 import { useEditorState, type ArtifactEditor, type EditorFrame } from './editor'
+import { CompareDock, type CompareSwitch } from './compare-dock'
 import { FitMenu } from './fit-menu'
 import { useKeyedFrame } from './live-frame'
 import { PagesCard } from './pages-card'
@@ -288,6 +289,7 @@ export const CanvasEditor = memo(function CanvasEditor({
   onShown,
   changed,
   comments,
+  compare = null,
 }: {
   artifactId: string
   url: string
@@ -322,6 +324,8 @@ export const CanvasEditor = memo(function CanvasEditor({
   changed: ReadonlySet<string>
   /** The open comment threads on each frame, by id. */
   comments: ReadonlyMap<string, number>
+  /** The version an agent wrote and the one before it, which a frame it changed compares with. */
+  compare?: { before: number; after: number } | null
 }) {
   const { t } = useTranslation('artifacts')
   const doc = canvas.doc
@@ -640,6 +644,35 @@ export const CanvasEditor = memo(function CanvasEditor({
   // Opening a frame moves the camera in; closing it goes back to where the camera was.
   const lastOpened = useRef<string | null>(null)
   const focusedPage = focused ? pages.find((p) => p.id === focused) : undefined
+  // The frame Tweak changes: the opened one, or the one selected.
+  const tweakPage =
+    focusedPage ??
+    (shownSelection.length === 1 ? pages.find((p) => p.id === shownSelection[0]) : undefined)
+  // Before and after, on the frame opened or else the one selected, when the agent's latest
+  // version changed it; leaving the frame keeps it selected, so what shows stays.
+  const compareSelection = useMemo(
+    () => (shownSelection.length === 1 ? pages.find((p) => p.id === shownSelection[0]) : undefined),
+    [shownSelection, pages],
+  )
+  const comparePage = focusedPage ?? compareSelection
+  const comparing = !!compare && !!comparePage && changed.has(comparePage.id)
+  const [before, setBefore] = useState<string | null>(null)
+  // Another frame, or none, lets go of the earlier version: coming back shows the latest.
+  const [compared, setCompared] = useState(comparePage?.id ?? null)
+  if ((comparePage?.id ?? null) !== compared) {
+    setCompared(comparePage?.id ?? null)
+    setBefore(null)
+  }
+  const showingBefore = comparing && before === comparePage?.id
+  const compareSwitch: CompareSwitch | null =
+    comparing && compare && comparePage
+      ? {
+          from: compare.before,
+          to: compare.after,
+          showingBefore,
+          onChange: (on) => setBefore(on ? comparePage.id : null),
+        }
+      : null
   useEffect(() => {
     if (!measured) return
     if (focused && !focusedPage) {
@@ -1153,6 +1186,25 @@ export const CanvasEditor = memo(function CanvasEditor({
                 ) : (
                   <div className="k-ce-page__idle">{p.name}</div>
                 )}
+                {showingBefore && compare && comparePage?.id === p.id && !focused && (
+                  <div className="k-vt-before" data-unscaled="">
+                    <iframe
+                      src={framePageUrl(
+                        url,
+                        { version: compare.before, loadFrom: new Map() },
+                        { group: 0, index: 1, file: p.file },
+                      )}
+                      title={t('compare.beforeTitle', { name: p.name, version: compare.before })}
+                      sandbox={isWeb ? WEB_ARTIFACT_FRAME_SANDBOX : ARTIFACT_FRAME_SANDBOX}
+                      allow=""
+                      referrerPolicy="no-referrer"
+                      style={{ width: p.width, height: p.height }}
+                    />
+                    <span className="k-vt-before__tag">
+                      {t('compare.before', { version: compare.before })}
+                    </span>
+                  </div>
+                )}
               </div>
             )
           })}
@@ -1289,6 +1341,18 @@ export const CanvasEditor = memo(function CanvasEditor({
             onScroll={(scrolled) => place({ ...opened.camera, y: opened.camera.y - scrolled })}
             onKey={onFrameKey}
             onPicked={() => stage.current?.focus({ preventScroll: true })}
+            before={
+              showingBefore && compare
+                ? {
+                    version: compare.before,
+                    src: framePageUrl(
+                      url,
+                      { version: compare.before, loadFrom: new Map() },
+                      { group: 0, index: 1, file: openedPage.file },
+                    ),
+                  }
+                : null
+            }
           />
         )}
       </div>
@@ -1330,26 +1394,14 @@ export const CanvasEditor = memo(function CanvasEditor({
       )}
       {layout && tweaksOpen && (
         <ViewerSlot slot="right">
-          <aside className="k-av-side" aria-label={t('board.side.tweaks')}>
-            <div className="k-av-side__head">
-              <h2 className="k-av-side__title">{t('board.side.tweaks')}</h2>
-            </div>
-            <div className="k-ce-tweaks">
-              <CanvasTweaks
-                layout={layout}
-                params={frameParams}
-                selection={shownSelection}
-                onSelect={(id) => {
-                  setSelection([id])
-                  const page = layout.pages.find((p) => p.id === id)
-                  if (page && !focused) revealFrame(page)
-                }}
-                editorFrame={(page) => editorFrames.current.get(page) ?? null}
-                artifactId={artifactId}
-                version={version}
-              />
-            </div>
-          </aside>
+          <TweakCard
+            artifactId={artifactId}
+            version={version}
+            page={tweakPage ?? null}
+            params={tweakPage ? (frameParams.get(tweakPage.id) ?? null) : null}
+            frameOf={() => (tweakPage ? (editorFrames.current.get(tweakPage.id) ?? null) : null)}
+            readOnly={readOnly}
+          />
         </ViewerSlot>
       )}
       {following && followed && (
@@ -1384,6 +1436,7 @@ export const CanvasEditor = memo(function CanvasEditor({
           }
           onStep={stepOpened}
           onBack={() => setFocused(null)}
+          compare={compareSwitch}
         />
       ) : (
         <CanvasDock
@@ -1393,6 +1446,7 @@ export const CanvasEditor = memo(function CanvasEditor({
           onZoom={(direction) => zoomAround(stepZoom(camera.current.z, direction))}
           onFit={() => land(true)}
           onActual={() => zoomAround(1)}
+          compare={compareSwitch}
         />
       )}
       {opened && opened.long && openedPage && (
@@ -1419,6 +1473,7 @@ function OpenedFrame({
   onScroll,
   onKey,
   onPicked,
+  before,
 }: {
   page: CanvasPage
   opened: Opened
@@ -1432,7 +1487,10 @@ function OpenedFrame({
   onScroll: (scrolled: number) => void
   onKey: (key: PageKey) => void
   onPicked: () => void
+  /** The version before, shown over the frame instead of it. */
+  before: { version: number; src: string } | null
 }) {
+  const { t } = useTranslation('artifacts')
   const { frame, ref: frameRef, onLoad } = useKeyedFrame(editor, index, origin, onKey)
   const [loaded, setLoaded] = useState(false)
   const element = useRef<HTMLIFrameElement | null>(null)
@@ -1472,8 +1530,27 @@ function OpenedFrame({
               opacity: loaded ? 1 : 0,
             }}
           />
-          {mode && frame && (
+          {mode && frame && !before && (
             <PickLayer frame={frame} scale={opened.z} mode={mode} onDone={onPicked} />
+          )}
+          {before && (
+            <div className="k-vt-before">
+              <iframe
+                src={before.src}
+                title={t('compare.beforeTitle', { name: page.name, version: before.version })}
+                sandbox={isWeb ? WEB_ARTIFACT_FRAME_SANDBOX : ARTIFACT_FRAME_SANDBOX}
+                allow=""
+                referrerPolicy="no-referrer"
+                style={{
+                  width: page.width,
+                  height: page.height,
+                  transform: `scale(${opened.z})`,
+                }}
+              />
+              <span className="k-vt-before__tag">
+                {t('compare.before', { version: before.version })}
+              </span>
+            </div>
           )}
         </div>
       </div>
@@ -1674,6 +1751,7 @@ function CanvasDock({
   onZoom,
   onFit,
   onActual,
+  compare,
 }: {
   controls: CanvasControls
   narrow: boolean
@@ -1681,6 +1759,7 @@ function CanvasDock({
   onZoom: (direction: 1 | -1) => void
   onFit: () => void
   onActual: () => void
+  compare: CompareSwitch | null
 }) {
   const { t } = useTranslation('artifacts')
   const { zoom } = useCanvasState(controls)
@@ -1754,6 +1833,7 @@ function CanvasDock({
           </>
         )
       )}
+      {compare && <CompareDock compare={compare} />}
     </ViewerSlot>
   )
 }
@@ -1768,6 +1848,7 @@ function PagerDock({
   tweaks,
   onStep,
   onBack,
+  compare,
 }: {
   where: string
   first: boolean
@@ -1777,6 +1858,7 @@ function PagerDock({
   tweaks: { open: boolean; toggle: () => void } | null
   onStep: (step: 1 | -1) => void
   onBack: () => void
+  compare: CompareSwitch | null
 }) {
   const { t } = useTranslation('artifacts')
   const { tier } = useShell()
@@ -1797,6 +1879,7 @@ function PagerDock({
       />
       <DockRule />
       <FitMenu value={fit} onChange={onFit} />
+      {compare && <CompareDock compare={compare} />}
       {tweaks && (
         <DockButton
           label={t('board.top.tweaks')}

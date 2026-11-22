@@ -50,8 +50,11 @@ import {
 } from '@renderer/stores/artifact-viewer'
 import { prefersReducedMotion } from '@renderer/stores/settings'
 import type { ArtifactPageRequest } from '@renderer/stores/view'
-import { CommentBox } from './comments'
-import { SaveChip, type ArrivedChange } from './document-sheet'
+import { threadNumbers } from './comment-threads'
+import { CompareDock, type CompareSwitch } from './compare-dock'
+import type { ArrivedChange } from './document-sheet'
+import { sheetSave } from './sheet-save'
+import { SaveChip } from './tool-parts'
 import { FitMenu } from './fit-menu'
 import { FrameLink } from './frame-link'
 import { isEditable } from './keys'
@@ -62,6 +65,7 @@ import { pageUrl, type ShownVersion } from './use-artifact'
 import { slideAnchor, slideName, type DeckOutline } from './use-deck'
 import { DockButton, DockRule, ViewerSlot } from './viewer-shell'
 import { useShell } from './viewer-shell-context'
+import './document-sheet.css'
 import './deck-sheet.css'
 
 /** Room around the slide: at its sides, above it, above it under a pill, and the dock's below. */
@@ -85,9 +89,10 @@ export interface DeckComments {
   threads: CommentThread[] | null
   /** Pins show while comments are on screen: in Comment, or with the comments card open. */
   shown: boolean
-  add: (anchor: CommentAnchor, body: string) => Promise<void>
+  /** The comment being written under an element, pinned to `anchor`, until it saves or `close`. */
+  draft: (anchor: CommentAnchor, close: () => void) => ReactNode
   /** What opens under an element for one of its threads, numbered as its pin. */
-  thread: (thread: CommentThread, number: number) => ReactNode
+  thread: (thread: CommentThread, number: number, close: () => void) => ReactNode
 }
 
 interface Draft {
@@ -164,6 +169,7 @@ export function DeckSheet({
   asked,
   onAsked,
   focusThread,
+  compare,
 }: {
   id: string
   url: string
@@ -188,6 +194,8 @@ export function DeckSheet({
   onAsked: (seq: number) => void
   /** A thread chosen in the comments card, to go to and open. */
   focusThread: { thread: string; seq: number } | null
+  /** Before and after, where an agent's version changed the slide shown. */
+  compare: CompareSwitch | null
 }) {
   const { t } = useTranslation('artifacts')
   const { tier, insets, leftCard } = useShell()
@@ -252,13 +260,13 @@ export function DeckSheet({
   }, [reloads, mountedAt, src])
 
   // Pins: the open threads on the slide shown, numbered as their cards are.
-  const numbered = useMemo(
-    () =>
-      (comments.threads ?? [])
-        .filter((thread) => thread.resolvedAt === null)
-        .map((thread, i) => ({ thread, n: i + 1 })),
-    [comments.threads],
-  )
+  const numbered = useMemo(() => {
+    const all = comments.threads ?? []
+    const numbers = threadNumbers(all)
+    return all
+      .filter((thread) => thread.resolvedAt === null)
+      .map((thread) => ({ thread, n: numbers.get(thread.id) ?? 0 }))
+  }, [comments.threads])
   const bySlide = useMemo(() => {
     const out = new Map<number, number>()
     for (const { thread } of numbered) {
@@ -578,6 +586,11 @@ export function DeckSheet({
                 className="adk-frame"
                 data-loaded={(loaded && ready) || undefined}
               />
+              {compare?.showingBefore && (
+                <span className="k-vt-before__tag" style={{ zIndex: 1 }}>
+                  {t('compare.before', { version: compare.from })}
+                </span>
+              )}
               {pins.map(({ thread, n }, i) => {
                 // An element not found on the slide, or a comment on the whole slide, pins to its
                 // top right corner, one under another.
@@ -596,7 +609,6 @@ export function DeckSheet({
                     type="button"
                     className="ads-pin"
                     data-active={active || undefined}
-                    data-answered={thread.comments.length > 1 || undefined}
                     data-lost={(!found && !!thread.anchor.tag) || undefined}
                     style={{ left, top: topAt }}
                     aria-label={t('doc.pin', { number: n })}
@@ -617,10 +629,10 @@ export function DeckSheet({
                   const x = found ? found.box.x * place.z : shownW - 348
                   return (
                     <div
-                      className="ads-thread"
-                      style={{ top: y, left: Math.max(8, Math.min(x, shownW - 348)) }}
+                      className="ads-pop"
+                      style={{ top: y, left: Math.max(8, Math.min(x, shownW - 328)) }}
                     >
-                      {comments.thread(open.thread, open.n)}
+                      {comments.thread(open.thread, open.n, () => setOpenThread(null))}
                     </div>
                   )
                 })()}
@@ -650,20 +662,16 @@ export function DeckSheet({
               />
             )}
             {draft && draft.slide === current && (
-              <CommentBox
+              <div
                 key={`${draft.slide}:${draft.tag}:${draft.text}`}
-                anchor={anchorOf(draft.slide, draft)}
-                point={{
-                  x: place.x + draft.box.x * place.z,
-                  y: place.y + (draft.box.y + draft.box.height) * place.z,
+                className="ads-pop"
+                style={{
+                  left: Math.max(8, place.x + draft.box.x * place.z),
+                  top: place.y + (draft.box.y + draft.box.height) * place.z + 8,
                 }}
-                inArea
-                onCancel={() => setDraft(null)}
-                onSubmit={async (body) => {
-                  await comments.add(anchorOf(draft.slide, draft), body)
-                  setDraft(null)
-                }}
-              />
+              >
+                {comments.draft(anchorOf(draft.slide, draft), () => setDraft(null))}
+              </div>
             )}
           </div>
         </div>
@@ -734,7 +742,14 @@ export function DeckSheet({
               : null
           }
           agent={agent}
-          save={mode === 'edit' || (save && save.state !== 'saved') ? save : null}
+          save={
+            // A save a later version has passed says nothing about the deck shown.
+            save?.state === 'saved' && save.version !== null && save.version < version
+              ? null
+              : mode === 'edit' || (save && save.state !== 'saved')
+                ? save
+                : null
+          }
           onStep={(d) => go(current + d)}
           onFit={(next) => setViewerState(id, { fit: next })}
           onNotes={() => setDeckNotes(id, !notesOn)}
@@ -743,6 +758,7 @@ export function DeckSheet({
           onRetry={() => link.post({ v: RUNTIME_VERSION, kind: 'select-deck-do', do: 'retry' })}
           onUndo={() => link.post({ v: RUNTIME_VERSION, kind: 'select-deck-do', do: 'undo' })}
           linked={linked}
+          compare={grid ? null : compare}
         />
       )}
     </>
@@ -1012,6 +1028,7 @@ function DeckDock({
   onAsk,
   onRetry,
   onUndo,
+  compare,
 }: {
   count: number
   current: number
@@ -1031,6 +1048,7 @@ function DeckDock({
   onAsk: (() => void) | null
   onRetry: () => void
   onUndo: () => void
+  compare: CompareSwitch | null
 }) {
   const { t } = useTranslation('artifacts')
   const { tier } = useShell()
@@ -1083,7 +1101,7 @@ function DeckDock({
   const saveParts = save && (
     <>
       <DockRule />
-      <SaveChip save={save} onRetry={onRetry} />
+      <SaveChip save={sheetSave(save, t)} onRetry={onRetry} />
       <DockButton
         label={t('doc.undo')}
         icon={Undo02Icon}
@@ -1131,6 +1149,7 @@ function DeckDock({
           )}
         />
         {saveParts}
+        {compare && <CompareDock compare={compare} />}
       </ViewerSlot>
     )
   }
@@ -1168,6 +1187,7 @@ function DeckDock({
         </>
       )}
       {saveParts}
+      {compare && <CompareDock compare={compare} />}
     </ViewerSlot>
   )
 }
