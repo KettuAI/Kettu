@@ -113,6 +113,22 @@ describe('applyPatches', () => {
     expect(threadEntries(after).map((e) => e.id)).toEqual(['m:2'])
   })
 
+  it('cuts the thread at an entry, which goes with all after it, and accepts new ones', () => {
+    const reply: ThreadEntry = { ...agent, id: 'm:2', markdown: 'Bye', streaming: false }
+    const before = state([user, agent, { ...user, id: 'e:2' }, reply])
+    const after = applyPatches(before, [
+      { op: 'thread.truncate', id: 'e:2' },
+      { op: 'entry.add', entry: { ...user, id: 'e:3' } },
+    ])
+    expect(after.order).toEqual(['e:1', 'm:1', 'e:3'])
+    expect(Object.keys(after.byId).sort()).toEqual(['e:1', 'e:3', 'm:1'])
+    expect(before.order).toEqual(['e:1', 'm:1', 'e:2', 'm:2'])
+    // A cut at an entry on an older page, which a partial state lacks, asks for a snapshot.
+    expect(() =>
+      applyPatches(state([agent]), [{ op: 'thread.truncate', id: 'e:1' }], { partial: true }),
+    ).toThrow(UnknownEntryError)
+  })
+
   it('throws for an unknown entry', () => {
     expect(() =>
       applyPatches(state(), [{ op: 'entry.appendText', id: 'nope', text: 'x' }]),
@@ -184,6 +200,15 @@ describe('applyPatchInPlace', () => {
     applyPatchInPlace(owned, patches[0])
     expect(agent.kind === 'agent' && agent.markdown).toBe('Hel')
     expect(owned.byId['m:1']).toMatchObject({ markdown: 'Hello' })
+  })
+
+  it('cuts the thread at an entry', () => {
+    const after = applyPatchInPlace(state(), { op: 'thread.truncate', id: 'm:1' })
+    expect(after.order).toEqual(['e:1'])
+    expect(after.byId).toEqual({ 'e:1': user })
+    expect(() => applyPatchInPlace(state(), { op: 'thread.truncate', id: 'nope' })).toThrow(
+      UnknownEntryError,
+    )
   })
 
   it('clears the thread on reset', () => {

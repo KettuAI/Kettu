@@ -36,6 +36,7 @@ import {
 import { LOCALES } from '@shared/locale'
 import { PROMPT_BYTES, promptShare } from '@shared/attachments'
 import { CONTEXT_REFRESH_MS, type ContextEstimates } from '@shared/context'
+import { canEditAt, promptLine, promptOccurrence, turnsFrom, usedAtEnd } from '@shared/rewind'
 import { firstLine, outlineText } from '@shared/outline'
 import { reachedLimit } from '@shared/session-groups'
 import { longEnough, queryWords } from '@shared/search-fold'
@@ -106,6 +107,7 @@ import {
   type SessionView,
   type StopReason,
   type Attachment,
+  type ContentRef,
   type BrowserOriginEntry,
   type ControlAskEntry,
   type ControlNoteEntry,
@@ -185,6 +187,7 @@ import {
   SideQuestionUnsupported,
   type AgentConnection,
   type ForkPoint,
+  type RewoundSession,
   type McpServer,
   type ModelTokens,
   type PermissionAnswer,
@@ -588,6 +591,8 @@ interface Turn {
   requested: boolean
   /** The agent started it between the host's turns, with no message, and says when it ends. */
   byAgent: boolean
+  /** Told once it has ended, as an edit from a message waits for the turn it stops. */
+  ends: (() => void)[]
 }
 
 /** What `sessions.prepare` asks for: the agent and where the session will work. */
@@ -813,6 +818,14 @@ interface Live {
   archiveAfterTurn: string | null
   /** Send now stopped the running turn, so the queue's first prompt goes when the turn ends. */
   sendNext: boolean
+  /** The entries an edit from a message took out, at their positions, while `record.rewound` holds. */
+  setAside: PositionedEntry[] | null
+  /** The set-aside entries changed since the last checkpoint, which writes them whole. */
+  setAsideDirty: boolean
+  /** The position the next checkpoint drops the stored thread from, as an edit cut it there. */
+  cutAt: number | null
+  /** The cut of the agent's own session for an edit, while it runs. */
+  rewinding: Promise<void> | null
 }
 
 const TITLE_LENGTH = 60
@@ -926,7 +939,7 @@ function lastTurnLimit(status: AgentStatus, limit: PlanLimit): LastTurnLimit {
 function changesPlan(thread: ThreadState, patch: Patch): boolean {
   if (patch.op === 'entry.add') return patch.entry.kind === 'plan'
   if (patch.op === 'entry.update') return thread.byId[patch.id]?.kind === 'plan'
-  return patch.op === 'thread.reset'
+  return patch.op === 'thread.reset' || patch.op === 'thread.truncate'
 }
 
 /** Notes when each of `ids` began to wait, and forgets the requests that no longer do. */
@@ -2874,6 +2887,14 @@ export class SessionManager {
         live.dirty.clear()
         live.rewrite = true
         break
+      case 'thread.truncate':
+        // The cut entries keep their positions in `setAside`; the next ones are numbered after them.
+        for (const id of [...live.positions.keys()]) {
+          if (id in live.thread.byId) continue
+          live.positions.delete(id)
+          live.dirty.delete(id)
+        }
+        break
     }
   }
 
@@ -2918,7 +2939,14 @@ export class SessionManager {
   // Checkpoints: each session's thread goes to the thread store, so it opens without its agent.
 
   private hasChanges(live: Live): boolean {
-    return live.rewrite || live.sessionDirty || live.dirty.size > 0 || live.blobs.size > 0
+    return (
+      live.rewrite ||
+      live.sessionDirty ||
+      live.dirty.size > 0 ||
+      live.blobs.size > 0 ||
+      live.cutAt !== null ||
+      live.setAsideDirty
+    )
   }
 
   private scheduleCheckpoint(live: Live): void {
@@ -2965,11 +2993,15 @@ export class SessionManager {
       ...(replace || live.sessionDirty ? { session: storedSession(live.thread.session) } : {}),
       ...(replace ? { replace: true } : {}),
       ...(blobs.length > 0 ? { blobs } : {}),
+      ...(!replace && live.cutAt !== null ? { cut: live.cutAt } : {}),
+      ...(replace || live.setAsideDirty ? { setAside: live.setAside ?? [] } : {}),
     }
     live.dirty = new Set()
     live.sessionDirty = false
     live.rewrite = false
     live.blobs = new Map()
+    live.cutAt = null
+    live.setAsideDirty = false
     const write = ++live.writes
     store.write(live.id, change).then(
       () => {
@@ -2987,7 +3019,15 @@ export class SessionManager {
    */
   private writeFailed(live: Live, change: ThreadWrite, write: number, error: unknown): void {
     const code = error instanceof ThreadStoreError ? error.code : null
-    if (change.replace || write !== live.writes || code === 'conflict' || code === 'corrupt') {
+    // A cut or the set-aside entries go again with the whole thread, which carries both.
+    const edit = change.cut !== undefined || change.setAside !== undefined
+    if (
+      change.replace ||
+      edit ||
+      write !== live.writes ||
+      code === 'conflict' ||
+      code === 'corrupt'
+    ) {
       live.rewrite = true
     } else {
       for (const { entry } of change.entries) live.dirty.add(entry.id)
@@ -3563,6 +3603,8 @@ export class SessionManager {
       queue: record.queue ?? [],
       // A queue from before a close or a restart waits until the user resumes it.
       queuePaused: (record.queue?.length ?? 0) > 0,
+      ...(record.rewound ? { rewound: { turns: record.rewound.turns } } : {}),
+      ...(record.noRewind ? { noRewind: true } : {}),
       ...(record.origin === 'subagent'
         ? {}
         : {
@@ -3683,6 +3725,10 @@ export class SessionManager {
       contextReadAt: 0,
       archiveAfterTurn: null,
       sendNext: false,
+      setAside: null,
+      setAsideDirty: false,
+      cutAt: null,
+      rewinding: null,
     }
     this.live.set(record.id, live)
     this.deps.agents.sessionsChanged(record.agentId)
@@ -6497,11 +6543,29 @@ export class SessionManager {
     const order: string[] = []
     const byId: Record<string, ThreadEntry> = {}
     let { entries } = stored
+    let aside = stored.setAside
+    const rewound = live.record.rewound
+    const cutAt = rewound ? entries.findIndex(({ entry }) => entry.id === rewound.entryId) : -1
+    if (cutAt >= 0) {
+      // The cut was not stored before the host stopped, so it is made again.
+      aside = [...entries.slice(cutAt), ...aside].sort((a, b) => a.pos - b.pos)
+      entries = entries.slice(0, cutAt)
+      live.cutAt = aside[0]!.pos
+      live.setAsideDirty = true
+    }
     const split = splitLinks(entries.map((item) => item.entry))
     if (split) {
       // New entries between stored ones: the thread is stored again whole, numbered afresh.
       entries = split.map((entry, pos) => ({ pos, entry }))
+      aside = aside.map(({ entry }, i) => ({ pos: entries.length + i, entry }))
       live.rewrite = true
+    }
+    if (rewound) live.setAside = aside
+    // Left by an edit whose next message went before they were dropped.
+    else if (aside.length > 0) live.setAsideDirty = true
+    for (const { pos, entry } of aside) {
+      live.nextPos = Math.max(live.nextPos, pos + 1)
+      live.counter = Math.max(live.counter, idNumber(entry.id))
     }
     for (const { pos, entry } of entries) {
       const shown = settled(entry)
@@ -6632,6 +6696,7 @@ export class SessionManager {
     if (connection.isClosed) throw new AgentRequestError('closed', 'The agent connection closed')
     this.attach(live, connection)
     this.attachedOn(live, version, resumed)
+    this.checkRewind(live, connection)
     this.opened(live, config)
     await this.takeOutside(live, connection)
     for (const child of this.descendants(live.id, 'subagent')) {
@@ -7105,6 +7170,8 @@ export class SessionManager {
     const record = this.recordOf(sessionId)
     if (this.stopped || record.origin === 'subagent' || this.isArchived(record)) return
     if (harnessOf(record.agentId) !== 'claude-code') return
+    // An edit waiting to be sent may carry on in another session of the agent's.
+    if (record.rewound) return
     // A worktree that is not there yet, or no longer, is the send's to make or refuse.
     if (record.worktree && this.worktreeSummary(record.worktree).state !== 'ready') return
     if (!this.attachable(this.live.get(sessionId))) return
@@ -7158,6 +7225,12 @@ export class SessionManager {
     const live = await this.revive(sessionId)
     const { status } = live.thread.session
     if (!canSend(status) || live.turn || waitingCount(live) > 0) throw busyError(status)
+    // The agent it had keeps its session cut where the edit went back to, should it come back.
+    if (live.record.agentId !== agentId && live.record.rewound) {
+      await this.applyRewind(live).catch((error: unknown) => {
+        throw agentError(error)
+      })
+    }
     if (live.record.agentId !== agentId || live.record.carry) {
       await this.handOver(live, agentId, params.options ?? {}, params.summarize === true)
     }
@@ -7178,6 +7251,8 @@ export class SessionManager {
     const from = record.agentId
     await this.closeAll(this.descendants(live.id, 'subagent'), true)
     await this.letGo(live)
+    delete record.carried
+    delete record.noRewind
     // A takeover whose turn never went keeps its line in the thread, now for this agent.
     const pending = record.carry
     const entryId = pending?.entryId ?? this.nextId(live)
@@ -7314,6 +7389,7 @@ export class SessionManager {
     connection: AgentConnection,
     carry: PendingCarry,
     wire: PromptBlock[],
+    entryId: string | null,
   ): Promise<PromptBlock[]> {
     const { record } = live
     const carried = this.carriedFor(live, carry)
@@ -7341,6 +7417,9 @@ export class SessionManager {
       ])
     }
     delete record.carry
+    // An edit from this message gives the conversation to the agent again with the next one.
+    if (entryId) record.carried = { entryId, carry }
+    else delete record.carried
     // The session it had is its current one now, no longer an earlier agent's to take back.
     record.earlier = record.earlier?.map((item) =>
       item.agentId === record.agentId && item.acpSessionId === record.acpSessionId
@@ -7898,6 +7977,7 @@ export class SessionManager {
       fallback: null,
       requested: false,
       byAgent,
+      ends: [],
     }
     live.turn = turn
     live.sender =
@@ -8079,6 +8159,12 @@ export class SessionManager {
       throw new HostError('restricted', t('session.subagent.noFork'))
     }
     const source = await this.revive(sessionId)
+    // The fork copies the agent's session, which an edit not yet sent has not cut.
+    if (source.record.rewound) {
+      await this.applyRewind(source).catch((error: unknown) => {
+        throw agentError(error)
+      })
+    }
     const status = source.thread.session.status
     const turnRuns = status === 'running' || status === 'awaiting_permission'
     if (status !== 'closed' && !turnRuns && (status !== 'ready' || !source.connection)) {
@@ -8166,6 +8252,8 @@ export class SessionManager {
     }
     // A queued prompt, the attachments it holds, and the source's pin or archive stay with it.
     delete record.queue
+    delete record.rewound
+    delete record.carried
     delete record.pinnedAt
     delete record.archivedAt
     delete record.leftSubSessions
@@ -8335,6 +8423,16 @@ export class SessionManager {
   }
 
   private async runTurn(live: Live, turn: Turn): Promise<void> {
+    if (live.record.rewound) {
+      // An edit waits to be sent: the agent's session is cut there before the message goes.
+      try {
+        await this.applyRewind(live)
+      } catch (error) {
+        if (!turn.ended) this.failTurn(live, turn, error)
+        return
+      }
+      if (turn.ended) return
+    }
     let connection: AgentConnection
     try {
       connection = await this.connect(live)
@@ -8358,7 +8456,7 @@ export class SessionManager {
       }
       const carry = live.record.carry
       const carried = carry
-        ? await this.withCarried(live, connection, carry, resolved.wire)
+        ? await this.withCarried(live, connection, carry, resolved.wire, turn.entryId)
         : resolved.wire
       // A slash command must open the prompt to be one, so what goes ahead waits for the next.
       const ahead = opensWithCommand(resolved.wire) ? null : await this.aheadText(live, connection)
@@ -8366,10 +8464,17 @@ export class SessionManager {
       let wire = carried
       if (ahead) {
         live.record.memorySentTo = live.record.acpSessionId
+        if (turn.entryId) live.record.memorySentAt = turn.entryId
+        else delete live.record.memorySentAt
         this.persist(live)
         wire = [{ type: 'text', text: `${ahead}\n\n` }, ...carried]
       }
-      const sending = connection.prompt(live.record.acpSessionId, wire).finally(() => {
+      const entryId = turn.entryId
+      const sent = (ref: string): void => {
+        if (!entryId || live.thread.byId[entryId]?.kind !== 'user') return
+        this.emit(live, [{ op: 'entry.update', id: entryId, changes: { agentRef: ref } }])
+      }
+      const sending = connection.prompt(live.record.acpSessionId, wire, sent).finally(() => {
         if (live.unansweredCancel === turn) live.unansweredCancel = null
       })
       this.refreshContext(live)
@@ -8418,6 +8523,7 @@ export class SessionManager {
   /** Settles the turn; returns its `turn_end` entry's id when there is a stop reason. */
   private finishTurn(live: Live, turn: Turn, stopReason: StopReason | null): string | null {
     turn.ended = true
+    for (const ended of turn.ends.splice(0)) ended()
     if (turn.fallback) clearTimeout(turn.fallback)
     turn.fallback = null
     if (live.turn === turn) live.turn = null
@@ -8456,6 +8562,7 @@ export class SessionManager {
     }
     if (!stopReason) return null
     const id = this.nextId(live)
+    const used = live.thread.session.usage?.used
     this.emit(live, [
       {
         op: 'entry.add',
@@ -8465,6 +8572,7 @@ export class SessionManager {
           stopReason,
           durationMs: Math.max(0, this.now() - turn.startedAt),
           after: agentEntryBefore(live.thread),
+          ...(used ? { used } : {}),
         },
       },
     ])
@@ -8931,6 +9039,331 @@ export class SessionManager {
     this.checkpoint(live)
   }
 
+  // Edit from a message: the turns from it leave the thread at once and are set aside, kept on
+  // disk, until the next message cuts the agent's own session there and drops them, or Put back
+  // returns them.
+
+  /**
+   * Takes the turns from `entryId` on out of the thread and hands back the message for the
+   * composer, its attachments as new records; `draft` is what the composer held, for Put back.
+   * What runs stops first, as for an agent switch: the turn, its subagents and background work.
+   */
+  async rewind(
+    sessionId: string,
+    entryId: string,
+    draft: UserContent[],
+  ): Promise<{ content: UserContent[] }> {
+    this.assertRegistered(sessionId)
+    const record = this.recordOf(sessionId)
+    if (record.origin === 'subagent') {
+      throw new HostError('restricted', t('session.subagent.noPrompt'))
+    }
+    if (this.isArchived(record)) throw new HostError('restricted', t('rewind.archived'))
+    const live = await this.revive(sessionId)
+    if (live.prepared || live.first || live.heldFirst || live.rewinding) {
+      throw new HostError('busy', t('rewind.starting'))
+    }
+    const agent = this.deps.agents.name(live.record.agentId)
+    if (!this.deps.agents.status(live.record.agentId).capabilities.rewind) {
+      throw new HostError('restricted', t('rewind.unsupported', { agent }))
+    }
+    if (live.record.noRewind) throw new HostError('restricted', t('rewind.olderThread'))
+    const editable = (): boolean => {
+      const at = live.thread.order.indexOf(entryId)
+      return at >= 0 && canEditAt(live.thread, at)
+    }
+    if (!editable()) throw new HostError('restricted', t('rewind.notEligible'))
+    await this.stopForRewind(live)
+    const { status } = live.thread.session
+    if (status === 'starting' || status === 'auth_required') throw busyError(status)
+    if (!editable()) throw new HostError('restricted', t('rewind.notEligible'))
+    const entry = live.thread.byId[entryId] as Extract<ThreadEntry, { kind: 'user' }>
+    const content = await this.composerCopy(live, entry.content)
+    const at = live.thread.order.indexOf(entryId)
+    const aside = live.thread.order.slice(at).flatMap((id) => {
+      const item = live.thread.byId[id]
+      const pos = live.positions.get(id)
+      return item && pos !== undefined ? [{ pos, entry: item }] : []
+    })
+    const prior = live.record.rewound
+    const carried = live.record.carried
+    const carry =
+      carried && aside.some((item) => item.entry.id === carried.entryId)
+        ? carried.carry
+        : prior?.carry
+    const lastTurn = prior ? prior.lastTurn : live.record.lastTurn
+    live.record.rewound = {
+      entryId,
+      turns: turnsFrom(live.thread, at) + (prior?.turns ?? 0),
+      draft: prior?.draft ?? draft,
+      used: prior ? prior.used : (live.thread.session.usage?.used ?? null),
+      point: {
+        ref: entry.agentRef ?? null,
+        text: promptLine(entry.content),
+        occurrence: promptOccurrence(live.thread, at),
+      },
+      ...(carry ? { carry } : {}),
+      ...(lastTurn ? { lastTurn } : {}),
+    }
+    delete live.record.lastTurn
+    live.setAside = [...aside, ...(live.setAside ?? [])].sort((a, b) => a.pos - b.pos)
+    live.setAsideDirty = true
+    if (aside[0]) live.cutAt = Math.min(live.cutAt ?? aside[0].pos, aside[0].pos)
+    live.failure = null
+    this.emit(live, [{ op: 'thread.truncate', id: entryId }])
+    const used = usedAtEnd(live.thread)
+    const usage = live.thread.session.usage
+    this.update(live, {
+      rewound: { turns: live.record.rewound.turns },
+      ...(usage && used !== null ? { usage: { ...usage, used } } : {}),
+      context: undefined,
+      error: null,
+      updatedAt: this.now(),
+    })
+    this.persist(live)
+    this.touch(live.id)
+    this.checkpoint(live)
+    this.deps.diagnostics.event(live.record.agentId, 'session rewound', live.id)
+    return { content }
+  }
+
+  /** Stops what runs in a session an edit goes back in: its turn, subagents and its agent's session. */
+  private async stopForRewind(live: Live): Promise<void> {
+    this.pauseQueue(live)
+    const turn = live.turn
+    if (turn && !turn.ended) {
+      const ended = new Promise<void>((resolve) => turn.ends.push(resolve))
+      await this.cancel(live.id)
+      await ended
+    }
+    this.clearPermissions(live, 'cancelled')
+    await this.closeAll(this.descendants(live.id, 'subagent'), true)
+    await this.letGo(live)
+    if (live.thread.session.status === 'ready') this.update(live, { status: 'closed' })
+  }
+
+  /**
+   * The message an edit gives back, with each attachment as a record of its own: the thread's
+   * copy goes once the next message is sent. A file or folder is added again from where it is;
+   * one that is no longer there is left out.
+   */
+  private async composerCopy(live: Live, content: readonly UserContent[]): Promise<UserContent[]> {
+    const out: UserContent[] = []
+    let images = 0
+    for (const item of content) {
+      if (item.type === 'text') {
+        out.push(item)
+        continue
+      }
+      const copy = await this.attachmentCopy(live, item.ref, () => ++images).catch(
+        (error: unknown) => {
+          this.deps.diagnostics.log(
+            'warn',
+            `Could not give back an attachment of session ${live.id}: ${(error as Error).message}`,
+          )
+          return null
+        },
+      )
+      if (copy) out.push({ type: 'ref', ref: { kind: 'attachment', attachment: copy } })
+    }
+    return out
+  }
+
+  private async attachmentCopy(
+    live: Live,
+    ref: ContentRef,
+    nextImage: () => number,
+  ): Promise<Attachment | null> {
+    const store = this.deps.attachments
+    if (!store) return null
+    const bytes = async (hash: string | null): Promise<ArrayBuffer | null> => {
+      const stored = hash ? await this.storedBlob(live.id, hash) : null
+      return stored ? new Uint8Array(stored.data).slice().buffer : null
+    }
+    if (ref.kind === 'image') {
+      const data =
+        'data' in ref
+          ? new Uint8Array(Buffer.from(ref.data, 'base64')).buffer
+          : await bytes(ref.blob)
+      if (!data) return null
+      const name = t('content.image', { number: nextImage() })
+      return store.add({ bytes: data, mimeType: ref.mimeType, name }, null)
+    }
+    if (ref.kind !== 'attachment') return null
+    const { attachment } = ref
+    // Not sent, as a message held back before it went: its record is still the one it names.
+    if (!attachment.sent) return store.held([attachment.id]).length > 0 ? attachment : null
+    if (attachment.blob) {
+      const data = await bytes(attachment.blob)
+      if (data) {
+        const mimeType = attachment.mimeType ?? 'application/octet-stream'
+        return store.add({ bytes: data, mimeType, name: attachment.name }, attachment.thumb)
+      }
+    }
+    if (!attachment.uri) return null
+    const kind = attachment.type === 'folder' ? 'folder' : 'file'
+    return store.addPath(fileURLToPath(attachment.uri), kind, attachment.thumb)
+  }
+
+  /**
+   * Put back: the turns an edit set aside return where they were, with the context and the last
+   * turn's ending they had; what the composer held before is handed back.
+   */
+  async putBack(sessionId: string): Promise<{ draft: UserContent[] }> {
+    this.assertRegistered(sessionId)
+    const live = await this.revive(sessionId)
+    const rewound = live.record.rewound
+    const aside = live.setAside
+    if (!rewound || !aside) throw new HostError('restricted', t('rewind.nothing'))
+    if (live.rewinding || (live.turn && !live.turn.ended)) {
+      throw busyError(live.thread.session.status)
+    }
+    const from = aside[0]?.pos ?? live.nextPos
+    // Entries added since, as a notice, follow the returned ones as they followed the cut.
+    const later = live.thread.order.flatMap((id) => {
+      const entry = live.thread.byId[id]
+      const pos = live.positions.get(id)
+      return entry && pos !== undefined && pos > from ? [{ pos, entry }] : []
+    })
+    if (later[0]) this.emit(live, [{ op: 'thread.truncate', id: later[0].entry.id }])
+    const back = [...aside, ...later].sort((a, b) => a.pos - b.pos)
+    for (const { pos, entry } of back) live.positions.set(entry.id, pos)
+    this.emit(
+      live,
+      back.map(({ entry }): Patch => ({ op: 'entry.add', entry })),
+    )
+    live.cutAt = Math.min(live.cutAt ?? from, from)
+    live.setAside = null
+    live.setAsideDirty = true
+    delete live.record.rewound
+    if (rewound.lastTurn) live.record.lastTurn = rewound.lastTurn
+    const usage = live.thread.session.usage
+    this.update(live, {
+      rewound: null,
+      ...(usage && rewound.used !== null ? { usage: { ...usage, used: rewound.used } } : {}),
+      context: undefined,
+      updatedAt: this.now(),
+    })
+    this.persist(live)
+    this.touch(live.id)
+    this.checkpoint(live)
+    const held = new Set(this.deps.attachments?.held(attachmentIds(rewound.draft)) ?? [])
+    const draft = rewound.draft.filter(
+      (item) =>
+        item.type !== 'ref' || item.ref.kind !== 'attachment' || held.has(item.ref.attachment.id),
+    )
+    return { draft }
+  }
+
+  /** Cuts the agent's own session where an edit went back to, once, before anything else reaches it. */
+  private applyRewind(live: Live): Promise<void> {
+    if (!live.record.rewound) return Promise.resolve()
+    live.rewinding ??= this.cutAgentSession(live).finally(() => {
+      live.rewinding = null
+    })
+    return live.rewinding
+  }
+
+  /**
+   * The agent's session is cut before the edited message, the same one or a new one carrying on
+   * with what came before; only then are the set-aside entries dropped. A cut that fails leaves
+   * everything as it was, for Put back or another try.
+   */
+  private async cutAgentSession(live: Live): Promise<void> {
+    const { record } = live
+    const rewound = record.rewound
+    if (!rewound) return
+    const agent = this.deps.agents.name(record.agentId)
+    const from = record.acpSessionId
+    let cut: RewoundSession = { sessionId: from }
+    if (from !== '') {
+      const runtime = await this.deps.agents.ensureReady(record.agentId)
+      const { connection } = runtime
+      if (!runtime.init.capabilities.rewind || !connection.rewindSession) {
+        throw new HostError('restricted', t('rewind.unsupported', { agent }))
+      }
+      try {
+        cut = await connection.rewindSession(
+          from,
+          await this.cwdOf(live),
+          rewound.point,
+          record.customTitle ?? live.thread.session.title,
+        )
+      } catch (error) {
+        const mapped = agentError(error)
+        throw new HostError(
+          mapped.code,
+          t('rewind.failed', { reason: mapped.message }),
+          mapped.data,
+        )
+      }
+    }
+    if (live.record !== record || record.rewound !== rewound) return
+    const aside = new Set((live.setAside ?? []).map(({ entry }) => entry.id))
+    if (record.memorySentAt && aside.has(record.memorySentAt)) {
+      delete record.memorySentTo
+      delete record.memorySentAt
+    }
+    if (cut.sessionId !== from) {
+      await this.letGo(live)
+      record.acpSessionId = cut.sessionId
+      // The copy keeps what the session was started with, as its system prompt.
+      if (cut.sessionId === '') {
+        delete record.systemPromptSentTo
+        delete record.memorySentTo
+      } else {
+        if (record.systemPromptSentTo === from) record.systemPromptSentTo = cut.sessionId
+        if (record.memorySentTo === from) record.memorySentTo = cut.sessionId
+      }
+      const renamed = Object.entries(cut.refs ?? {})
+      const refs = new Map(renamed)
+      const patches = live.thread.order.flatMap((id): Patch[] => {
+        const entry = live.thread.byId[id]
+        const ref = entry?.kind === 'user' && entry.agentRef ? refs.get(entry.agentRef) : undefined
+        return ref ? [{ op: 'entry.update', id, changes: { agentRef: ref } }] : []
+      })
+      if (patches.length > 0) this.emit(live, patches)
+      this.update(live, {
+        acpSessionId: cut.sessionId || null,
+        ...(live.thread.session.status === 'ready' ? { status: 'closed' } : {}),
+      })
+    }
+    if (rewound.carry) record.carry = rewound.carry
+    delete record.rewound
+    live.setAside = null
+    live.setAsideDirty = true
+    this.update(live, { rewound: null })
+    this.save(live)
+    // A session cut to nothing gets its new one as the turn attaches, which writes it whole.
+    if (record.acpSessionId) this.checkpoint(live)
+    this.deps.diagnostics.event(record.agentId, 'session cut for an edit', live.id)
+  }
+
+  /** An agent that cannot cut every session it has says which, as for an older Codex thread. */
+  private checkRewind(live: Live, connection: AgentConnection): void {
+    const { record } = live
+    const id = record.acpSessionId
+    if (!connection.canRewind || record.noRewind || id === '' || record.origin === 'subagent') {
+      return
+    }
+    void this.cwdOf(live)
+      .then((cwd) => connection.canRewind!(id, cwd))
+      .then(
+        (can) => {
+          if (can || record.acpSessionId !== id || this.live.get(live.id) !== live) return
+          record.noRewind = true
+          this.persist(live)
+          this.update(live, { noRewind: true })
+        },
+        (error: unknown) => {
+          this.deps.diagnostics.log(
+            'warn',
+            `Could not ask whether session ${live.id} can be cut: ${(error as Error).message}`,
+          )
+        },
+      )
+  }
+
   async cancel(sessionId: string): Promise<void> {
     const live = this.live.get(sessionId)
     // Nothing runs in a session that is not live.
@@ -9109,6 +9542,12 @@ export class SessionManager {
     const live = await this.revive(sessionId)
     // Another request may have started one while the session came back.
     if (this.sideRuns.has(sessionId)) throw new HostError('busy', t('session.side.busy'))
+    // The side question sees the conversation as the thread shows it, cut where an edit went.
+    if (live.record.rewound) {
+      await this.applyRewind(live).catch((error: unknown) => {
+        throw agentError(error)
+      })
+    }
     const side = this.sideOf(live)!
     const answerAgent = borrowed ? agentId : side.answerAgent
     const answering = borrowed || own === 'none' ? answerAgent : record.agentId

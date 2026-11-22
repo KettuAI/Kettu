@@ -35,7 +35,7 @@ import {
   type Routine,
   type RoutineRef,
 } from '@shared/routines'
-import type { AgentInit } from './connection'
+import type { AgentInit, RewindPoint } from './connection'
 import { isVersion } from './versions'
 
 export type LogFn = (level: 'info' | 'warn' | 'error', message: string) => void
@@ -365,6 +365,31 @@ export interface SessionRecord {
    */
   instructionsAhead?: true
   /** How its last turn ended; cleared when a turn starts. */
+  lastTurn?: LastTurn
+  /** An edit from a message set the turns from it aside; its agent's session is cut at the next send. */
+  rewound?: RewoundRecord
+  /** The latest takeover's carry and the prompt it went with, for an edit from that prompt. */
+  carried?: { entryId: string; carry: PendingCarry }
+  /** The prompt Kettu's guide and memory last went ahead of, by its entry id. */
+  memorySentAt?: string
+  /** Its agent said the conversation cannot be cut, as for an older Codex thread. */
+  noRewind?: true
+}
+
+/** An edit from a message, until the next send cuts the agent's own session or Put back undoes it. */
+export interface RewoundRecord {
+  /** The edited message, the first of the entries set aside. */
+  entryId: string
+  turns: number
+  /** What the composer held before, which Put back gives back. */
+  draft: UserContent[]
+  /** The context in tokens before, which Put back restores. */
+  used: number | null
+  /** Where the agent's own session is cut. */
+  point: RewindPoint
+  /** The takeover's carry the edited prompt took, which goes again with the next one. */
+  carry?: PendingCarry
+  /** How the last turn set aside ended, which Put back restores. */
   lastTurn?: LastTurn
 }
 
@@ -831,6 +856,52 @@ function outsideOf(value: unknown): { outside?: OutsideValues } {
   return Object.keys(outside).length > 0 ? { outside } : {}
 }
 
+const isContentList = (value: unknown): value is UserContent[] =>
+  Array.isArray(value) && value.every(isUserContent)
+
+function rewoundOf(value: unknown): { rewound?: RewoundRecord } {
+  if (
+    !isRecord(value) ||
+    !isString(value.entryId) ||
+    value.entryId === '' ||
+    typeof value.turns !== 'number' ||
+    !Number.isInteger(value.turns) ||
+    value.turns < 1 ||
+    !isContentList(value.draft) ||
+    !(value.used === null || typeof value.used === 'number') ||
+    !isRecord(value.point) ||
+    !(value.point.ref === null || isString(value.point.ref)) ||
+    !isString(value.point.text) ||
+    typeof value.point.occurrence !== 'number' ||
+    !Number.isInteger(value.point.occurrence) ||
+    value.point.occurrence < 1
+  ) {
+    return {}
+  }
+  const { carry } = carryOf(value.carry)
+  return {
+    rewound: {
+      entryId: value.entryId,
+      turns: value.turns,
+      draft: value.draft,
+      used: value.used,
+      point: {
+        ref: value.point.ref,
+        text: value.point.text,
+        occurrence: value.point.occurrence,
+      },
+      ...(carry ? { carry } : {}),
+      ...lastTurnOf(value.lastTurn),
+    },
+  }
+}
+
+function carriedOf(value: unknown): { carried?: SessionRecord['carried'] } {
+  if (!isRecord(value) || !isString(value.entryId) || value.entryId === '') return {}
+  const { carry } = carryOf(value.carry)
+  return carry ? { carried: { entryId: value.entryId, carry } } : {}
+}
+
 function carryOf(value: unknown): { carry?: PendingCarry } {
   if (
     !isRecord(value) ||
@@ -1001,6 +1072,12 @@ export function parseSessionsFile(data: Record<string, unknown>): SessionsFile |
         : {}),
       ...(item.instructionsAhead === true ? { instructionsAhead: true as const } : {}),
       ...lastTurnOf(item.lastTurn),
+      ...rewoundOf(item.rewound),
+      ...carriedOf(item.carried),
+      ...(isString(item.memorySentAt) && item.memorySentAt !== ''
+        ? { memorySentAt: item.memorySentAt }
+        : {}),
+      ...(item.noRewind === true ? { noRewind: true as const } : {}),
     })
   }
   return {

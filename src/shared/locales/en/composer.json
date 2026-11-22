@@ -260,6 +260,12 @@
   "history": {
     "label": "History"
   },
+  "rewound": {
+    "turns_one": "Rewound {{count}} turn",
+    "turns_other": "Rewound {{count}} turns",
+    "putBack": "Put back",
+    "putBackFailed": "Could not put back: {{error}}"
+  },
   "slash": {
     "loading": "Listing commands…",
     "chooseProject": "Choose a project to list its commands"

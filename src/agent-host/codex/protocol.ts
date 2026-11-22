@@ -176,6 +176,39 @@ export interface ThreadItemsListResponse {
   nextCursor: string | null
 }
 
+export interface ThreadReadParams {
+  threadId: string
+  includeTurns?: boolean
+}
+
+export interface ThreadReadResponse {
+  thread: Thread
+}
+
+export interface ThreadTurnsListParams {
+  threadId: string
+  cursor?: string | null
+  limit?: number | null
+  sortDirection?: 'asc' | 'desc' | null
+  itemsView?: 'notLoaded' | 'summary' | 'full' | null
+}
+
+export interface ThreadTurnsListResponse {
+  data: Turn[]
+  nextCursor: string | null
+}
+
+/** Cuts a paginated thread's history before a turn; the files it changed stay as they are. */
+export interface ThreadRevertParams {
+  threadId: string
+  /** The first turn the cut leaves out, with every later one. */
+  beforeTurnId: string
+}
+
+export interface ThreadRevertResponse {
+  thread: Thread
+}
+
 export type TurnStatus = 'completed' | 'interrupted' | 'failed' | 'inProgress'
 
 export interface TurnError {

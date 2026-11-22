@@ -1,5 +1,5 @@
-import { memo, useState } from 'react'
-import { ArrowTurnDownIcon } from '@hugeicons/core-free-icons'
+import { memo, useRef, useState } from 'react'
+import { ArrowTurnDownIcon, PencilEdit02Icon } from '@hugeicons/core-free-icons'
 import { HugeiconsIcon } from '@hugeicons/react'
 import { useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
@@ -12,12 +12,14 @@ import { longAgo, mediumAgo } from '@renderer/lib/format'
 import { errorMessage } from '@renderer/lib/host'
 import { useNow } from '@renderer/lib/use-now'
 import { cn } from '@renderer/lib/utils'
+import { Glyph } from '@renderer/features/shell/glyph'
 import { agentsOn, useAgentsStore } from '@renderer/stores/agents'
 import { hostOfSession } from '@renderer/stores/sessions'
 import { useThreadsStore } from '@renderer/stores/threads'
 import { useReplyHover } from '../reply-hover'
 import { useEntry, useEntryAnimation } from '../use-thread'
 import { ChangesCard } from './changes-card'
+import { useEditable, useEditFrom } from './edit-from-here'
 import { forkBlocked, forkEntry } from './helpers'
 import { TurnEndTag } from './turn-end-tag'
 
@@ -52,13 +54,20 @@ function userText(content: UserContent[]): string {
     .join('\n')
 }
 
-/** Under a message you sent, while the pointer is on it: the time and Copy. */
+/**
+ * Under a message you sent, while the pointer is on it: the time, Edit from here where the message
+ * can be edited from, and Copy. A turn cancelled before any reply also offers Edit beside its end.
+ */
 export function UserActions({
+  sessionId,
+  entryId,
   content,
   at,
   steered,
   end,
 }: {
+  sessionId: string
+  entryId: string
   content: UserContent[]
   at?: number
   steered?: boolean
@@ -67,8 +76,23 @@ export function UserActions({
 }) {
   const { t } = useTranslation('session')
   const labels = useCopyLabels(t('userActions.copyMessage'))
+  const editable = useEditable(sessionId, entryId)
+  const edit = useEditFrom(sessionId, entryId)
+  const row = useRef<HTMLSpanElement>(null)
+  const cancelled = useRef<HTMLButtonElement>(null)
+  // Only the last turn's message stands for a cancelled turn still waiting to be written again.
+  const lastTurn = useThreadsStore((s) => {
+    const order = s.replicas[sessionId]?.state?.order
+    const byId = s.replicas[sessionId]?.state?.byId
+    if (!order || !byId) return false
+    for (let i = order.length - 1; i >= 0; i--) {
+      const entry = byId[order[i]!]
+      if (entry?.kind === 'user' && !entry.steered) return entry.id === entryId
+    }
+    return false
+  })
   const meta = (
-    <span className="ks-user__meta">
+    <span ref={row} className="ks-user__meta" data-open={edit.open ? '' : undefined}>
       {steered && (
         <span className="inline-flex shrink-0 items-center gap-1">
           <HugeiconsIcon
@@ -87,7 +111,23 @@ export function UserActions({
         actions={['copy']}
         label={t('userActions.label')}
         labels={labels}
+        className={editable ? 'ks-user__actions--edit' : undefined}
+        leadingActions={
+          editable
+            ? [
+                {
+                  key: 'edit',
+                  tip: t('userActions.edit'),
+                  label: t('userActions.edit'),
+                  icon: <Glyph icon={PencilEdit02Icon} />,
+                  onClick: () =>
+                    edit.start(row.current?.querySelector('.ui-mac__btn--edit') ?? null),
+                },
+              ]
+            : []
+        }
       />
+      {edit.popover}
     </span>
   )
   if (!end) return meta
@@ -95,6 +135,16 @@ export function UserActions({
     <span className="ks-user__foot">
       {meta}
       <TurnEndTag stopReason={end.stopReason} durationMs={end.durationMs} />
+      {editable && lastTurn && end.stopReason === 'cancelled' && (
+        <button
+          ref={cancelled}
+          type="button"
+          className="ks-user__edit"
+          onClick={() => edit.start(cancelled.current)}
+        >
+          {t('userActions.editShort')}
+        </button>
+      )}
     </span>
   )
 }

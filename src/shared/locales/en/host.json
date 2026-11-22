@@ -1545,6 +1545,16 @@
     "noMode": "No mode {{value}}",
     "noOption": "No option {{option}}"
   },
+  "rewind": {
+    "notEligible": "This message cannot be edited from",
+    "archived": "Restore the session to edit a message in it",
+    "unsupported": "{{agent}} cannot go back to an earlier message",
+    "olderThread": "This Codex session is too old to go back in",
+    "starting": "Wait until the session has started",
+    "noPoint": "The agent's history no longer has this message",
+    "nothing": "There is nothing to put back",
+    "failed": "Could not go back to the edited message: {{reason}}"
+  },
   "usageRead": {
     "notSignedIn": "{{vendor}} is not signed in",
     "signInExpired": "{{vendor}}'s sign-in has expired",

@@ -154,6 +154,13 @@ export interface ThreadWrite {
   entries: PositionedEntry[]
   /** Drops everything stored for the session first, as after a replay from the agent. */
   replace?: boolean
+  /** An edit from a message: the entries from this position on leave the thread first. */
+  cut?: number
+  /**
+   * The entries an edit set aside, written whole; empty once they come back or go for good, when
+   * the bytes only they named go too.
+   */
+  setAside?: PositionedEntry[]
   /** The bytes of attachments the entries name by hash: a sent image or pasted text. */
   blobs?: StoredBlob[]
 }
@@ -204,6 +211,8 @@ export interface StoredThread {
   head: ThreadHead
   session: StoredSession
   entries: PositionedEntry[]
+  /** What an edit from a message set aside, until the next send. */
+  setAside: PositionedEntry[]
 }
 
 /**

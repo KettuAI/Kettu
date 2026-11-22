@@ -583,6 +583,23 @@ export function releaseResent(draft: string, content: readonly UserContent[]): v
   for (const item of items) if (item.attachment && sent.has(item.attachment.id)) removeRecord(item)
 }
 
+/**
+ * Makes a composer's attachments `content`'s again, as Put back does: the others go with their
+ * records, and one of `content` the composer no longer shows comes back.
+ */
+export function resetAttachments(draft: string, content: readonly UserContent[]): void {
+  const wanted = contentAttachments(content)
+  const ids = new Set(wanted.map((attachment) => attachment.id))
+  const items = draftAttachments(draft)
+  const kept = items.filter((item) => item.attachment && ids.has(item.attachment.id))
+  for (const item of items) if (!kept.includes(item)) removeRecord(item)
+  const shown = new Set(kept.map((item) => item.attachment!.id))
+  const back = wanted
+    .filter((attachment) => !shown.has(attachment.id))
+    .map((attachment) => readyTile({ attachment, pixels: null, scaled: null }))
+  setDraftAttachments(draft, [...kept, ...back])
+}
+
 /** Drops a composer's attachments with their records, as when its session is deleted. */
 export function dropAttachments(draft: string): void {
   const items = draftAttachments(draft)
