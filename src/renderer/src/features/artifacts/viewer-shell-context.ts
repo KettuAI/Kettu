@@ -18,7 +18,7 @@ export const RIGHT_W = 320
 export const EDGE = 12
 
 /** A place in the shell a kind fills: the left card, its own right card, the dock or the pill. */
-export type Slot = 'left' | 'right' | 'dock' | 'pill'
+export type Slot = 'left' | 'leftHead' | 'right' | 'dock' | 'pill'
 
 /** The room the cards take beside the content, which a canvas keeps clear when it fits. */
 export interface Insets {
@@ -41,7 +41,7 @@ export const NO_SHELL: ShellValue = {
   tier: 'wide',
   tight: false,
   insets: { left: 0, right: 0 },
-  targets: { left: null, right: null, dock: null, pill: null },
+  targets: { left: null, leftHead: null, right: null, dock: null, pill: null },
   leftCard: null,
 }
 

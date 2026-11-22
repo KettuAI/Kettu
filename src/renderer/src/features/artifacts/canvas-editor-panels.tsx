@@ -16,6 +16,7 @@ import { Switch } from '@renderer/components/ui/switch'
 import { errorCode, host } from '@renderer/lib/host'
 import { toast } from '@renderer/components/ui/toast'
 import { FRAME_ICON, NOTE_ICONS } from './canvas-tools'
+import { ViewerSlot } from './viewer-shell'
 import type { DocLayout } from './canvas-model'
 import type { EditorFrame } from './editor'
 
@@ -132,9 +133,8 @@ export function CanvasNavigator({
   }
   return (
     <div className="k-ce-nav">
-      <div className="k-ce-nav__head">
-        <span>{t('board.canvases.menu')}</span>
-        {!readOnly && (
+      {!readOnly && (
+        <ViewerSlot slot="leftHead">
           <Dropdown
             align="end"
             items={[
@@ -180,8 +180,8 @@ export function CanvasNavigator({
               </button>
             )}
           />
-        )}
-      </div>
+        </ViewerSlot>
+      )}
       <div role="tree" aria-label={t('board.canvases.menu')}>
         {doc.canvases.map((c) => (
           <NavRow

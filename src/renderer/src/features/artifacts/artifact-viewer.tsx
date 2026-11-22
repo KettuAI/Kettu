@@ -363,6 +363,7 @@ export default function ArtifactViewer(place: ViewerPlace) {
           {
             label: t('viewer.restoreVersion'),
             busy: restoring,
+            restores: true,
             run: () =>
               restore(() =>
                 restoreVersion(id, earlier, head).then(() => setViewerState(id, { version: null })),
@@ -381,6 +382,7 @@ export default function ArtifactViewer(place: ViewerPlace) {
           {
             label: t('menu.restore'),
             busy: restoring,
+            restores: true,
             run: () => restore(() => restoreArtifact(id)),
           },
         ]}
@@ -856,7 +858,7 @@ function Pill({
 }: {
   lead: string
   rest: React.ReactNode
-  actions: Array<{ label: string; busy?: boolean; run: () => void }>
+  actions: Array<{ label: string; busy?: boolean; restores?: boolean; run: () => void }>
 }) {
   const { tier } = useShell()
   return (
@@ -871,7 +873,7 @@ function Pill({
           key={action.label}
           variant={i === 0 ? 'secondary' : 'ghost'}
           size="sm"
-          icon={i === 0 ? <Icon icon={RotateLeft01Icon} size={14} /> : undefined}
+          icon={action.restores ? <Icon icon={RotateLeft01Icon} size={14} /> : undefined}
           loading={action.busy}
           onClick={action.run}
         >

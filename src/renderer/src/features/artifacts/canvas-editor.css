@@ -474,7 +474,7 @@
 .k-ce-nav__head:first-child {
   margin-top: 0;
 }
-.k-ce-nav__head .k-ce-tool {
+.avs-card__acts .k-ce-tool {
   min-width: 24px;
   height: 24px;
   padding: 0;

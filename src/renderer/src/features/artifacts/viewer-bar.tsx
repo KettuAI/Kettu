@@ -128,9 +128,13 @@ function BarRow({
       iconsOnly={!labels || where === 'panel'}
     />
   )
-  const folded = tight
+  // Narrow, Present and who is here go into More; under 480 px, Share and Chat too.
+  const folded = tight || tier === 'narrow'
   const extra: MenuItem[] = folded
     ? [
+        ...(tight && onChat
+          ? [{ label: t('viewer.chat'), icon: Message01Icon, onSelect: onChat }]
+          : []),
         ...(onPresent ? [{ label: t('viewer.present'), icon: PlayIcon, onSelect: onPresent }] : []),
         ...presenceItems,
       ]
@@ -147,7 +151,8 @@ function BarRow({
         <h1 className="avs-bar__title" title={title}>
           {title}
         </h1>
-        {page && <PageCrumb page={page} />}
+        {/* Narrow, the page is chosen in the left card, which leaves the bar to the title. */}
+        {page && tier !== 'narrow' && <PageCrumb page={page} />}
         {version && (
           <Tooltip>
             <TooltipTrigger
@@ -167,12 +172,11 @@ function BarRow({
             <TooltipContent>{t('viewer.history')}</TooltipContent>
           </Tooltip>
         )}
-        {!centred && modes}
       </NoDrag>
-      {centred && <NoDrag className="avs-bar__centre">{modes}</NoDrag>}
+      <NoDrag className="avs-bar__centre">{modes}</NoDrag>
       <NoDrag className="avs-bar__tools">
         {!folded && presence}
-        {onChat && (
+        {onChat && !tight && (
           <BarAction
             label={t('viewer.chat')}
             icon={Message01Icon}
@@ -189,11 +193,11 @@ function BarRow({
           />
         )}
         {share && (
-          <span className="avs-bar__share">
+          <span className="avs-bar__share" data-folded={tight || undefined}>
             <ShareButton
               {...share}
               compact={!labels}
-              {...(folded ? { open: sharing, onOpenChange: setSharing } : {})}
+              {...(tight ? { open: sharing, onOpenChange: setSharing } : {})}
             />
           </span>
         )}
@@ -202,7 +206,7 @@ function BarRow({
             target={menu.target}
             options={{
               ...menu.options,
-              onShare: folded && share ? () => setSharing(true) : undefined,
+              onShare: tight && share ? () => setSharing(true) : undefined,
             }}
             extra={extra}
           />

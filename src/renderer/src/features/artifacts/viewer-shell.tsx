@@ -110,7 +110,8 @@ export function ArtifactShell({
   // Beside content gives the cards room; over a canvas they only move the fit and the chrome.
   const contentRoom: Insets =
     layout === 'beside' && !narrow ? { left: leftRoom, right: rightRoom } : { left: 0, right: 0 }
-  const insetLeft = layout === 'float' ? leftRoom : contentRoom.left
+  // Narrow, the left card lies over the content, which keeps its fit.
+  const insetLeft = layout === 'float' && !narrow ? leftRoom : contentRoom.left
   const insetRight = layout === 'float' ? rightRoom : contentRoom.right
   const chromeLeft = layout === 'float' || narrow ? leftRoom : 0
   const chromeRight = layout === 'float' ? rightRoom : 0
@@ -119,6 +120,7 @@ export function ArtifactShell({
   const setTarget = (slot: Slot, el: HTMLElement | null) =>
     setTargets((was) => (was[slot] === el ? was : { ...was, [slot]: el }))
   const leftTarget = useCallback((el: HTMLElement | null) => setTarget('left', el), [])
+  const leftHeadTarget = useCallback((el: HTMLElement | null) => setTarget('leftHead', el), [])
   const rightTarget = useCallback((el: HTMLElement | null) => setTarget('right', el), [])
   const dockTarget = useCallback((el: HTMLElement | null) => setTarget('dock', el), [])
   const pillTarget = useCallback((el: HTMLElement | null) => setTarget('pill', el), [])
@@ -212,6 +214,7 @@ export function ArtifactShell({
               <motion.div key="left" className="avs-card" data-side="left" {...slide('left')}>
                 <div className="avs-card__head">
                   <div className="avs-card__title">{left.title}</div>
+                  <div ref={leftHeadTarget} className="avs-card__acts" />
                   <CardClose
                     label={t('common:actions.close')}
                     onClick={() => left.onOpenChange(false)}
