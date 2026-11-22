@@ -9282,6 +9282,7 @@ export class SessionManager {
       if (!runtime.init.capabilities.rewind || !connection.rewindSession) {
         throw new HostError('restricted', t('rewind.unsupported', { agent }))
       }
+      if (connection.rewindsOpen) await this.connect(live)
       try {
         cut = await connection.rewindSession(
           from,

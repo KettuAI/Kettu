@@ -111,7 +111,12 @@ it('sets the turns from an edited message aside and cuts the agent there at the 
     { threadId: started.get('one')!.threadId, beforeTurnId: turnOfTwo },
   ])
   const methods = server.requests.map((request) => request.method)
-  expect(methods.lastIndexOf('thread/revert')).toBeLessThan(methods.lastIndexOf('turn/start'))
+  // Codex reverts only a loaded thread: the session is resumed with its own options first.
+  const resumed = methods.indexOf('thread/resume', methods.lastIndexOf('thread/unsubscribe'))
+  const reverted = methods.lastIndexOf('thread/revert')
+  expect(resumed).toBeGreaterThan(-1)
+  expect(reverted).toBeGreaterThan(resumed)
+  expect(methods.lastIndexOf('turn/start')).toBeGreaterThan(reverted)
   expect(said(window.entries(id))).toEqual(['one', 'two again'])
   expect(window.thread(id).session.rewound).toBeNull()
 })

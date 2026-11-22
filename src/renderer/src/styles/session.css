@@ -245,6 +245,9 @@
 .ks-user__meta[data-open] {
   opacity: 1;
 }
+.ks-user__meta[data-open] .ui-mac__item .ui-mac__tip {
+  opacity: 0;
+}
 /* A turn cancelled before any reply: Edit stays in view after its end, in the primary blue. */
 .ks-user__edit {
   height: 24px;

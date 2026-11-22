@@ -470,9 +470,12 @@ export interface AgentConnection {
    * may not take it. Asked without opening the session.
    */
   canRewind?(sessionId: string, cwd: string): Promise<boolean>
+  /** `rewindSession` cuts only a session that is open. */
+  readonly rewindsOpen?: boolean
   /**
-   * Cuts the conversation of a session that is not open before the prompt `point` names, for an
-   * agent with `rewind`; `title` is the session's, for a new one the cut makes.
+   * Cuts the conversation of a session before the prompt `point` names, for an agent with
+   * `rewind`: one that is not open, or with `rewindsOpen` one opened with its options first;
+   * `title` is the session's, for a new one the cut makes.
    */
   rewindSession?(
     sessionId: string,

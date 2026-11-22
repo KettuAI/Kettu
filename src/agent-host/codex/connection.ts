@@ -880,6 +880,10 @@ export class CodexConnection implements AgentConnection {
     throw new AgentRequestError('agent_error', t('codex.noForkPoint'))
   }
 
+  // `thread/revert` finds only a thread the app-server has loaded; one it loaded itself would keep
+  // the options it last ran with, without Kettu's MCP server.
+  readonly rewindsOpen = true
+
   /** Only a paginated thread's history can be cut; a legacy one keeps it in one rollout. */
   async canRewind(sessionId: string): Promise<boolean> {
     const { thread } = await this.call<ThreadReadResponse>('thread/read', { threadId: sessionId })
