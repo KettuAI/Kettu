@@ -81,6 +81,11 @@
       "description": "被套餐限额停下的会话，在窗口重置后自己接着做。",
       "keywords": "套餐 限额 重置 自动继续 session"
     },
+    "agentPasswords": {
+      "name": "允许智能体输入密码",
+      "description": "智能体可以输入你给它的或项目里写着的密码和验证码，比如测试账号的。它输入的内容会经过它的模型服务商。",
+      "keywords": "密码 登录 验证码 测试账号 password sudo ssh sign in login test account code"
+    },
     "lightModel": {
       "name": "轻量任务的模型",
       "description": "用来写标题、分支名、提交信息和问题报告草稿，用掉这个智能体的套餐额度。",
@@ -2222,6 +2227,7 @@
     "warning": {
       "cloud": "Kettu 的账号、中继、推送、分享到 Kettu 和问题报告会跟着开或关。",
       "computer": "智能体将能读取并操作这台电脑上的应用。",
+      "passwords": "智能体将可以在终端、网页和设备里输入密码和验证码。",
       "agentOff": "停用的智能体会停下正在运行的对话，也不再开始新会话。",
       "startMode": "这个智能体的新会话会直接以这个模式开始。",
       "kettuMcp": "关掉后，这个智能体就没有 Kettu 的工具和随附的说明了。",

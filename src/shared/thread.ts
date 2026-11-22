@@ -574,6 +574,8 @@ export interface SurfaceAccessEntry {
   targetName: string
   /** The session planned when it asked, so the agent would only read it. */
   readOnly?: true
+  /** The user let agents type passwords when it asked, so the terminal's are not theirs alone. */
+  passwords?: true
   /** It asked to give the terminal this name, which an allow does this once, and nothing else. */
   rename?: string
   decision: SurfaceAccessAnswer | null

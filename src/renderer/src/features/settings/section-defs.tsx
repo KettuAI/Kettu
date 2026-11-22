@@ -251,6 +251,14 @@ export function useGeneralSection(): SectionDef {
         ),
       },
       {
+        id: 'agent-passwords',
+        setting: 'general.agent-passwords',
+        group: sessions,
+        render: () => (
+          <GeneralSwitch field="agentPasswords" label={t('general.agentPasswords.name')} />
+        ),
+      },
+      {
         id: 'light-model',
         setting: 'general.light-model',
         group: sessions,

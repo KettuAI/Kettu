@@ -369,6 +369,7 @@ export async function startTestHost(options: TestHostOptions = {}): Promise<Test
       usage: { fromComputer: false },
       sessionTitles: true,
       continueAfterLimit: true,
+      agentPasswords: false,
       lightModel: { mode: 'small' },
       initialSetupDone: true,
       defaultAgent: null,

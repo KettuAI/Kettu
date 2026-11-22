@@ -82,6 +82,11 @@
       "description": "A session stopped by a used-up plan window carries on by itself when the window resets.",
       "keywords": "plan limit quota reset continue session"
     },
+    "agentPasswords": {
+      "name": "Let agents type passwords",
+      "description": "Agents type passwords and codes you gave them or the project holds, such as a test account’s. What they type goes through their model provider.",
+      "keywords": "password sudo ssh sign in login test account code"
+    },
     "lightModel": {
       "name": "Model for lightweight tasks",
       "description": "Writes titles, branch names, commit messages and report drafts, on that agent’s plan.",
@@ -2250,6 +2255,7 @@
     "warning": {
       "cloud": "Kettu’s account, relay, push, sharing to Kettu and problem reports go on or off with it.",
       "computer": "Agents will be able to read and operate the apps on this computer.",
+      "passwords": "Agents will be able to type passwords and codes into terminals, pages and devices.",
       "agentOff": "A turned-off agent stops its running turns and starts no more sessions.",
       "startMode": "New sessions of this agent will start in this mode without asking.",
       "kettuMcp": "Without it, this agent loses Kettu’s tools and the guide that comes with them.",

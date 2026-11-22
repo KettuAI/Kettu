@@ -58,6 +58,7 @@ async function manager(version: string, published: string[]) {
     usage: { fromComputer: false },
     sessionTitles: true,
     continueAfterLimit: true,
+    agentPasswords: false,
     lightModel: { mode: 'small' },
     defaultAgent: null,
     computerUse: DEFAULT_SETTINGS.computerUse,

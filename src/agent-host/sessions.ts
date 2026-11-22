@@ -2032,7 +2032,7 @@ export class SessionManager {
   surfaceAccessAsked(
     sessionId: string,
     target: { surface: 'terminal' | 'browser'; id: string; name: string },
-    ask: { readOnly: boolean; rename?: string },
+    ask: { readOnly: boolean; rename?: string; passwords?: boolean },
     waitMs: number,
   ): Promise<SurfaceAccessAnswer> {
     const live = this.live.get(sessionId)
@@ -2044,6 +2044,7 @@ export class SessionManager {
       targetId: target.id,
       targetName: target.name,
       ...(ask.readOnly ? { readOnly: true as const } : {}),
+      ...(ask.passwords ? { passwords: true as const } : {}),
       ...(ask.rename !== undefined ? { rename: ask.rename } : {}),
       decision: null,
       expiresAt: Date.now() + waitMs,

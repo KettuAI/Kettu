@@ -269,6 +269,22 @@ describe('the model of lightweight tasks', () => {
   })
 })
 
+describe('letting agents type passwords', () => {
+  it('is off until the user turns it on', () => {
+    expect(DEFAULT_SETTINGS.general.agentPasswords).toBe(false)
+    expect(hostSettings(DEFAULT_SETTINGS, 'en').agentPasswords).toBe(false)
+  })
+
+  it('is kept by the host, so a client never turns it on for its own computer instead', () => {
+    expect(splitSettingsPatch({ general: { agentPasswords: true } })).toEqual({
+      host: { general: { agentPasswords: true } },
+      client: null,
+    })
+    const settings = mergeSettings(DEFAULT_SETTINGS, { general: { agentPasswords: true } })
+    expect(hostSettings(settings, 'en').agentPasswords).toBe(true)
+  })
+})
+
 describe('when idle sessions let their agent go', () => {
   it('releases by memory until the user picks, with Custom at 5 and 30 minutes and no limit', async () => {
     const store = await SettingsStore.load(dir)

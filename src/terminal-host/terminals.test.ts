@@ -586,6 +586,49 @@ describe('a terminal waiting for a password', () => {
     expect(ptys[0]!.written).toEqual(['pnpm dev\r'])
   })
 
+  it("types the agent's input at once when the user lets agents type passwords", async () => {
+    const { manager, ptys } = host({ echo: false, icanon: true })
+    const id = terminalOf(await manager.agentCall(RUN))
+    await promptShown(ptys[0]!)
+    await prompts(ptys[0]!, 'sudo', 'Password: ')
+    const typed = await manager.agentCall({
+      kind: 'input',
+      sessionId: 's1',
+      terminalId: id,
+      text: 'test-account',
+      enter: true,
+      passwords: true,
+    })
+    expect(typed).toMatchObject({ result: { kind: 'terminal', terminal: { id } } })
+    expect(ptys[0]!.written).toEqual(['pnpm dev\r', 'test-account\r'])
+  })
+
+  it("holds the agent's stop until the password is typed, unless agents may type them", async () => {
+    const { manager, ptys } = host({ echo: false, icanon: true })
+    const id = terminalOf(await manager.agentCall(RUN))
+    await promptShown(ptys[0]!)
+    await prompts(ptys[0]!, 'sudo', 'Password: ')
+    const stop = { kind: 'stop', sessionId: 's1', terminalId: id, close: false } as const
+    const held = manager.agentCall(stop)
+    await vi.advanceTimersByTimeAsync(60_000)
+    expect(await held).toEqual({ result: { kind: 'password' } })
+    expect(ptys[0]!.written).toEqual(['pnpm dev\r'])
+    expect(await manager.agentCall({ ...stop, passwords: true })).toMatchObject({
+      result: { kind: 'terminal' },
+    })
+    expect(ptys[0]!.written).toEqual(['pnpm dev\r', '\x03'])
+  })
+
+  it('still tells a wait about the password when agents may type them', async () => {
+    const { manager, ptys } = host({ echo: false, icanon: true })
+    const id = terminalOf(await manager.agentCall(RUN))
+    await promptShown(ptys[0]!)
+    await prompts(ptys[0]!, 'sudo', 'Password: ')
+    expect(
+      await manager.agentCall({ kind: 'wait', sessionId: 's1', terminalId: id, lines: 5 }),
+    ).toMatchObject({ result: { reason: 'password', terminal: { password: true } } })
+  })
+
   it('ends a wait with the reason', async () => {
     const { manager, ptys } = host({ echo: false, icanon: true })
     const id = terminalOf(await replyRun(manager, ptys))

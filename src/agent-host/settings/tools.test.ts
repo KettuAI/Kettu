@@ -203,6 +203,15 @@ describe('change_settings', () => {
     expect(asked[0]!.items[0]!.warning).toContain('run any command')
   })
 
+  it('still asks in Full access before agents may type passwords', async () => {
+    const { tools, asked, applied, recorded } = harness({ fullAccess: true })
+    void change(tools, [{ id: 'general.agent-passwords', value: true }])
+    await vi.waitFor(() => expect(asked).toHaveLength(1))
+    expect(applied).toEqual([])
+    expect(recorded).toEqual([])
+    expect(asked[0]!.items[0]!.warning).toContain('type passwords and codes')
+  })
+
   it('never changes secrets, paths or actions', async () => {
     const { tools, applied, asked } = harness({ fullAccess: true })
     for (const id of [

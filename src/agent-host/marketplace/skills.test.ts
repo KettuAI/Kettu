@@ -204,7 +204,13 @@ describe('adding a skill', () => {
 })
 
 describe("Kettu's own skills", () => {
-  const flags: GuideFlags = { computer: false, market: false, suggest: true, memory: false }
+  const flags: GuideFlags = {
+    computer: false,
+    market: false,
+    suggest: true,
+    memory: false,
+    passwords: false,
+  }
   const handed = [
     'kettu-artifacts',
     'kettu-sessions',
