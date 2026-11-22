@@ -548,7 +548,6 @@
     "fit": "Fit",
     "empty": "This canvas has no pages yet."
   },
-<<<<<<< HEAD
   "changes": {
     "frames_one": "{{count}} frame changed",
     "frames_other": "{{count}} frames changed",
@@ -558,7 +557,7 @@
     "passages_other": "{{count}} passages changed",
     "slides_one": "{{count}} slide changed",
     "slides_other": "{{count}} slides changed"
-=======
+  },
   "pages": {
     "title": "Pages",
     "heading": "Pages {{pages}} · {{frames}}",
@@ -590,6 +589,5 @@
       "width": "Fit width",
       "actual": "100%"
     }
->>>>>>> 635f2784 (feat(artifacts): canvas at three distances)
   }
 }

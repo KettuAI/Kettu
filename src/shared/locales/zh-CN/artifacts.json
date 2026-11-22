@@ -531,13 +531,12 @@
     "fit": "适合窗口",
     "empty": "这张画布还没有页面。"
   },
-<<<<<<< HEAD
   "changes": {
     "frames_other": "改了 {{count}} 个画框",
     "files_other": "改了 {{count}} 个文件",
     "passages_other": "改了 {{count}} 段",
     "slides_other": "改了 {{count}} 张"
-=======
+  },
   "pages": {
     "title": "页面",
     "heading": "{{pages}} 个页面 · {{frames}}",
@@ -569,6 +568,5 @@
       "width": "适合宽度",
       "actual": "100%"
     }
->>>>>>> 635f2784 (feat(artifacts): canvas at three distances)
   }
 }
