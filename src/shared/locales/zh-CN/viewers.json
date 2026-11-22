@@ -17,9 +17,7 @@
     "invalid": "这份内容不符合它的格式：{{reason}}"
   },
   "document": {
-    "label": "文档",
-    "editHint": "点击段落、标题或列表来修改文字。",
-    "blockLabel": "编辑这一部分"
+    "label": "文档"
   },
   "slides": {
     "label": "幻灯片",

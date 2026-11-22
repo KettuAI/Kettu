@@ -93,6 +93,10 @@ describe('the changes between two versions', () => {
       ['removed', 'risks', ''],
       ['removed', 'risks', ''],
     ])
+    // What each changed or removed passage was in the earlier version, for its old words.
+    expect(
+      changes.passages.map((p) => (p.before ? before.slice(p.before.from, p.before.to) : null)),
+    ).toEqual(['Two.', null, '## Old', 'Gone.'])
     expect(changes.sections).toEqual([
       { heading: 'Plan', slug: 'plan', passages: 2 },
       { heading: 'Risks', slug: 'risks', passages: 2 },

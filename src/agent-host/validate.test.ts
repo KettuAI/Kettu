@@ -1147,6 +1147,18 @@ describe('comment and direct edit requests', () => {
     rejects(() => posix['artifacts.comment']({ id, anchor, body: '  ' }))
   })
 
+  it("takes an anchor on a document's block in its Markdown, and no other Markdown file", () => {
+    const block = { ...anchor, path: 'document.md', page: null, tag: 'p', text: 'Between' }
+    expect(posix['artifacts.comment']({ id, anchor: block, body: 'Hi' })).toEqual({
+      id,
+      anchor: { ...block, missing: false },
+      body: 'Hi',
+    })
+    rejects(() =>
+      posix['artifacts.comment']({ id, anchor: { ...block, path: 'notes.md' }, body: 'x' }),
+    )
+  })
+
   it('takes an edit of the editable properties only, to values that stay in the attribute', () => {
     const edit = { id, baseVersion: 3, path: 'index.html', offset: 0, text: null }
     expect(posix['artifacts.editElement']({ ...edit, style: { color: '#ffffff' } })).toEqual({

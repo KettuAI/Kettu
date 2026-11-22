@@ -261,7 +261,10 @@
       "fix": "让 {{agent}} 修复",
       "sent": "已发给 {{agent}}",
       "failed": "没能发送这些错误：{{error}}"
-    }
+    },
+    "previousChange": "上一处改动",
+    "nextChange": "下一处改动",
+    "changeAt": "{{number}} / {{count}}"
   },
   "canvas": {
     "role": "画布",
@@ -595,6 +598,41 @@
       "screen": "适合屏幕",
       "width": "适合宽度",
       "actual": "100%"
+    }
+  },
+  "outline": {
+    "title": "大纲",
+    "count_other": "{{count}} 个标题",
+    "search": "查找标题",
+    "find": "查找标题…",
+    "filter": "显示",
+    "noMatch": "没有标题包含“{{query}}”",
+    "noChanges": "这一版没有改动",
+    "noComments": "还没有评论",
+    "none": "没有标题"
+  },
+  "doc": {
+    "pin": "评论 {{number}}",
+    "selection": "选中的文字",
+    "comment": "评论",
+    "changes": "改动",
+    "changesFrom": "相对 v{{version}} 的改动",
+    "showingFrom": "正在显示相对 v{{version}} 的改动",
+    "size": "{{percent}}%",
+    "sizeLabel": "字号",
+    "sizeButton": "字号：{{percent}}%",
+    "smaller": "缩小字号",
+    "larger": "放大字号",
+    "undo": "撤销",
+    "save": {
+      "editing": "正在改…",
+      "saving": "正在保存…",
+      "saved": "已存为 v{{version}}",
+      "failed": "没存上",
+      "conflict": "有更新的版本先到了",
+      "refused": "这里不能直接改",
+      "retry": "重试",
+      "kept": "改的字留在这里，存上之前不会丢。"
     }
   }
 }

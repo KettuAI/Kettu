@@ -67,16 +67,19 @@ function sendKey(event: React.KeyboardEvent): boolean {
 
 /**
  * The box a comment is written in, beside the element picked in comment mode: its anchor, the
- * text, and Comment, which Mod+Enter presses too. `point` is where the pick was, in the window.
+ * text, and Comment, which Mod+Enter presses too. `point` is where the pick was, in the window,
+ * or in the box's own area when `inArea`, as on a document sheet that scrolls.
  */
 export function CommentBox({
   anchor,
   point,
+  inArea = false,
   onCancel,
   onSubmit,
 }: {
   anchor: CommentAnchor
   point: { x: number; y: number }
+  inArea?: boolean
   onCancel: () => void
   onSubmit: (body: string) => Promise<void>
 }) {
@@ -87,17 +90,20 @@ export function CommentBox({
   const [error, setError] = useState<string | null>(null)
   const [at, setAt] = useState<{ left: number; top: number } | null>(null)
 
-  // Under the pick, inside the area, or above it when it would run off the bottom.
+  // Under the pick, inside the area, or above it when it would run off the bottom; an area that
+  // scrolls makes room for it below instead.
   useLayoutEffect(() => {
     const el = box.current
     const area = el?.offsetParent?.getBoundingClientRect()
     if (!el || !area) return
     const height = el.offsetHeight
-    const left = Math.min(Math.max(12, point.x - area.left - 24), area.width - BOX_WIDTH - 12)
-    const below = point.y - area.top + BOX_GAP
-    const top = below + height > area.height - 12 ? point.y - area.top - height - BOX_GAP : below
+    const x = inArea ? point.x : point.x - area.left
+    const y = inArea ? point.y : point.y - area.top
+    const left = Math.min(Math.max(12, x - 24), area.width - BOX_WIDTH - 12)
+    const below = y + BOX_GAP
+    const top = !inArea && below + height > area.height - 12 ? y - height - BOX_GAP : below
     setAt({ left, top: Math.max(12, top) })
-  }, [point])
+  }, [point, inArea])
 
   const submit = () => {
     if (!body.trim() || busy) return
@@ -410,7 +416,7 @@ function Author({ comment }: { comment: ArtifactComment }) {
 }
 
 /** One thread: its comments, its anchor, Resolve, and a reply of the user's own. */
-function ThreadCard({
+export function ThreadCard({
   thread,
   number,
   artifactId,

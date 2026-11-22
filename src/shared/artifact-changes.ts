@@ -36,6 +36,11 @@ export interface ChangedPassage {
   section: string | null
   from: number
   to: number
+  /**
+   * Where the block it replaces or removes lies in the earlier version's text, so its old words
+   * can be shown beside the new ones; absent for an added block and from hosts before it.
+   */
+  before?: { from: number; to: number }
 }
 
 export interface ChangedSlide {
@@ -249,21 +254,25 @@ export function changedPassages(before: string, after: string): ChangedPassage[]
     const added = toB - fromB
     for (let k = 0; k < added; k++) {
       const block = b[fromB + k]!
+      const old = k < removed ? a[fromA + k]! : null
       passages.push({
-        change: k < removed ? 'changed' : 'added',
+        change: old ? 'changed' : 'added',
         section: sectionAt(block.from),
         from: block.from,
         to: block.to,
+        ...(old ? { before: { from: old.from, to: old.to } } : {}),
       })
     }
     // What was removed without anything in its place lies between the blocks around it.
     const at = toB < b.length ? b[toB]!.from : after.length
     for (let k = added; k < removed; k++) {
+      const old = a[fromA + k]!
       passages.push({
         change: 'removed',
         section: sectionAt(Math.max(0, at - 1)),
         from: at,
         to: at,
+        before: { from: old.from, to: old.to },
       })
     }
   }

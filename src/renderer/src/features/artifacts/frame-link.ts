@@ -13,6 +13,7 @@ import {
   type PageSelection,
   type SelectMessage,
 } from '@shared/artifact-runtime/page-messages'
+import type { DocReport } from '@shared/artifact-runtime/document-sheet'
 import { isWeb } from '@renderer/lib/platform'
 import { listenPageErrors, receivePageError } from './page-errors'
 
@@ -21,6 +22,7 @@ const PICKS_PER_SECOND = 20
 
 type PickListener = (selection: PageSelection | null, located?: SelectMessage['located']) => void
 type KeyListener = (key: PageKey) => void
+type DocListener = (report: DocReport) => void
 type RuntimeRelay = (url: string, port: MessagePort) => () => void
 
 let relay: RuntimeRelay | null = null
@@ -35,7 +37,12 @@ export function setRuntimeRelay(next: RuntimeRelay): void {
 
 const channels = new Map<
   string,
-  { origin: string; listener: PickListener; key: () => KeyListener | null }
+  {
+    origin: string
+    listener: PickListener
+    key: () => KeyListener | null
+    doc: () => DocListener | null
+  }
 >()
 let listening = false
 
@@ -43,6 +50,7 @@ function deliver(origin: string, message: SelectMessage): void {
   const entry = channels.get(message.channel)
   if (!entry || entry.origin !== origin) return
   if (message.key) entry.key()?.(message.key)
+  else if (message.doc) entry.doc()?.(message.doc)
   else entry.listener(message.selection, message.located)
 }
 
@@ -64,7 +72,7 @@ function newChannel(): string {
     .replace(/=+$/, '')
 }
 
-type Sticky = 'select-mode' | 'select-pins' | 'select-source' | 'select-keys'
+type Sticky = 'select-mode' | 'select-pins' | 'select-source' | 'select-keys' | 'select-doc'
 
 /**
  * One frame's link: messages into its page, of which the last mode, pins and pick are sent again
@@ -81,6 +89,7 @@ export class FrameLink {
   private second = 0
   private picks = 0
   private onKey: KeyListener | null = null
+  private onDoc: DocListener | null = null
 
   /** `origin` is the artifact's URL as `artifact:open` gave it, without its last slash. */
   constructor(
@@ -94,6 +103,7 @@ export class FrameLink {
       origin: this.origin,
       listener: this.listener,
       key: () => this.onKey,
+      doc: () => this.onDoc,
     })
     listen()
     listenPageErrors()
@@ -126,12 +136,18 @@ export class FrameLink {
     }
   }
 
+  /** Takes what a document viewer reports, until null. */
+  docs(listener: DocListener | null): void {
+    this.onDoc = listener
+  }
+
   post(message: DriveMessage): void {
     if (
       message.kind === 'select-mode' ||
       message.kind === 'select-pins' ||
       message.kind === 'select-source' ||
-      message.kind === 'select-keys'
+      message.kind === 'select-keys' ||
+      message.kind === 'select-doc'
     ) {
       this.sticky.set(message.kind, message)
     }

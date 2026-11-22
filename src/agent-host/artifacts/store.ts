@@ -8,6 +8,7 @@ import { isStrictDeclaration } from '@shared/artifact-capabilities'
 import type { CommentAnchor, CommentAuthor, CommentThread } from '@shared/artifact-comments'
 import { ARTIFACT_ENTRY, DISK_FILE_BYTES, isHtmlPath } from '@shared/artifact-files'
 import { CANVAS_FILE } from '@shared/canvas-doc'
+import { DOCUMENT_ENTRY, findDocumentAnchor } from '@shared/artifact-document-anchors'
 import { findAnchor, startTagAt } from '@shared/artifact-source'
 import {
   ARTIFACT_KEEP_DELETED_MS,
@@ -534,7 +535,8 @@ export class ArtifactStore {
 
   /**
    * The artifact's threads, oldest first, each anchored in its latest version: an element a new
-   * version moved is found again by its tag, text and page, and one no longer there is marked so.
+   * version moved is found again by its tag, text and page, a document's block by its element and
+   * words, and one no longer there is marked so.
    */
   async threads(id: string, { project }: Reach = {}): Promise<CommentThread[]> {
     const threads = await this.call('threads', { id, project: project ?? null })
@@ -558,11 +560,16 @@ export class ArtifactStore {
       const text = await textOf(anchor.path)
       const old = { offset: anchor.offset!, tag: anchor.tag ?? '', text: anchor.text }
       const offset =
-        text === null ? null : findAnchor(text, { ...old, page: anchor.page?.number ?? null })
+        text === null
+          ? null
+          : anchor.path === DOCUMENT_ENTRY
+            ? findDocumentAnchor(text, old)
+            : findAnchor(text, { ...old, page: anchor.page?.number ?? null })
       // Without text to match, an element whose tag is still where it was stays.
       const kept =
         offset === null &&
         text !== null &&
+        anchor.path !== DOCUMENT_ENTRY &&
         anchor.text === '' &&
         startTagAt(text, old.offset)?.name === anchor.tag
       const next: CommentAnchor =

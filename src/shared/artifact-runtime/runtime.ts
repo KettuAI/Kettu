@@ -13,6 +13,7 @@ import {
   type PageParam,
 } from '../artifact-params'
 import { capabilityNamespace, type CapabilityTransport } from './capabilities'
+import { DOC_REPORT_EVENT } from './document-sheet'
 import {
   RUNTIME_PATH,
   RUNTIME_VERSION,
@@ -584,8 +585,28 @@ export function start(config: RuntimeConfig): void {
         if (typeof message.channel === 'string' && message.channel !== '') channel = message.channel
         passKeys = message.on === true
         return
+      case 'select-doc':
+        // The document viewer reads the state itself; its reports go out on this channel.
+        if (typeof message.channel === 'string' && message.channel !== '') channel = message.channel
+        return
     }
   }
+
+  // What a document viewer reports of itself, once the client drives it as a sheet; the client
+  // checks it like any pick.
+  window.addEventListener(DOC_REPORT_EVENT, (event) => {
+    if (!channel || !(event instanceof CustomEvent)) return
+    const message: Message = {
+      v: RUNTIME_VERSION,
+      id: nextId(),
+      kind: 'select',
+      channel,
+      selection: null,
+      doc: event.detail as unknown,
+    }
+    if (config.transport === 'port') viaPort(message)
+    else void request(message).catch(() => {})
+  })
 
   // Keys the viewer steps with, once the user clicked into the page; typing in a field keeps them.
   window.addEventListener(

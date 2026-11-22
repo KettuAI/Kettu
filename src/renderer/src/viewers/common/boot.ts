@@ -57,12 +57,13 @@ export function readSlide(): number | null {
 
 /**
  * Follows the color mode, as the theme's own dark variant needs on the root; a thumbnail drawn in
- * one theme names it in its address and keeps it.
+ * one theme names it in its address and keeps it, and a viewer that is `light` unless asked, as a
+ * document's copies are, stays light.
  */
-export function followColorMode(): void {
+export function followColorMode(light = false): void {
   const asked = new URLSearchParams(location.search).get('theme')
-  if (asked === 'light' || asked === 'dark') {
-    document.documentElement.dataset.theme = asked
+  if (asked === 'light' || asked === 'dark' || light) {
+    document.documentElement.dataset.theme = asked ?? 'light'
     return
   }
   const dark = matchMedia('(prefers-color-scheme: dark)')
