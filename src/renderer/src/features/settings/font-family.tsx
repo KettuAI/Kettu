@@ -22,6 +22,10 @@ import { useHostScope } from '@renderer/stores/host-scope'
 import { ControlError } from './controls'
 import { useApply } from './use-apply'
 
+// Rows are drawn a page at a time, more as the list scrolls: hundreds of rows at once block the
+// window on their own.
+const PAGE = 50
+
 /** A face in the menu; `id` null is the default face, `custom` a name typed in the search. */
 interface FontChoice {
   id: string | null
@@ -100,14 +104,17 @@ function FontPicker({
   const { t } = useTranslation('settings')
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
+  const [drawn, setDrawn] = useState(PAGE)
   const [fonts, setFonts] = useState<FontList | null>(null)
   const asked = useRef(false)
 
   // Listed when the menu first opens: the browser's prompt, if any, answers a click.
   const onOpenChange = (next: boolean): void => {
     setOpen(next)
-    if (!next) setQuery('')
-    else if (!asked.current) {
+    if (!next) {
+      setQuery('')
+      setDrawn(PAGE)
+    } else if (!asked.current) {
       asked.current = true
       void listInstalledFonts(monospace).then(setFonts)
     }
@@ -132,18 +139,24 @@ function FontPicker({
       ? [{ id: typed, label: t('fonts.use', { name: typed }), custom: true }]
       : matches
   const chosen = family ? { id: family, label: family } : defaultChoice
+  // The menu opens scrolled to the chosen face, so its row is always drawn.
+  const limit = Math.max(drawn, choices.findIndex((choice) => choice.id === chosen.id) + PAGE)
+  const rows = choices.slice(0, limit)
 
   return (
     <>
       <ControlError error={error} />
       <Combobox<FontChoice>
-        items={choices}
-        filteredItems={choices}
+        items={rows}
+        filteredItems={rows}
         value={chosen}
         open={open}
         onOpenChange={onOpenChange}
         inputValue={query}
-        onInputValueChange={setQuery}
+        onInputValueChange={(value) => {
+          setQuery(value)
+          setDrawn(PAGE)
+        }}
         onValueChange={(choice) => {
           if (choice && choice.id !== family) onPick(choice.id)
         }}
@@ -171,12 +184,19 @@ function FontPicker({
             spellCheck={false}
             className="h-10.5! px-2"
           />
-          <ComboboxList className="max-h-72 px-1.5 pt-0.5 pb-1.5">
+          <ComboboxList
+            className="max-h-72 px-1.5 pt-0.5 pb-1.5"
+            onScroll={(event) => {
+              const list = event.currentTarget
+              const ahead = list.scrollHeight - list.scrollTop - list.clientHeight
+              if (limit < choices.length && ahead < list.clientHeight) setDrawn(limit + PAGE)
+            }}
+          >
             {(choice: FontChoice) => (
               <ComboboxItem
                 key={choice.id ?? ''}
                 value={choice}
-                className="h-9 gap-2.5 rounded-lg py-1 pr-8 pl-2"
+                className="h-9 gap-2.5 rounded-lg py-1 pr-8 pl-2 [content-visibility:auto]"
               >
                 <span
                   className="truncate text-menu text-primary"
