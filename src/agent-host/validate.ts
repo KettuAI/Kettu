@@ -2452,6 +2452,13 @@ export function createValidators(platform: Platform): Validators {
       }
     },
     'artifacts.versions': artifact,
+    'artifacts.changes': (params) => {
+      const o = fields(params)
+      const from = version(o, 'from')
+      const to = version(o, 'to')
+      if (from === to) throw invalidParams('from and to must be two different versions')
+      return { id: artifactId(o), from, to }
+    },
     'artifacts.rename': (params) => {
       const o = fields(params)
       const title = o.title

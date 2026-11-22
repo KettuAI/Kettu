@@ -3,6 +3,7 @@
 import type { CodebuddyShellOverride, CodebuddySite, PromptCacheTtl } from './agents'
 import type { CompactUnit } from './auto-compact'
 import type { DeviceAccessDecision } from './device-agent'
+import type { ArtifactChanges } from './artifact-changes'
 import type { ArtifactConsentAsk, ArtifactConsentRow, RuntimeAnswer } from './artifact-capabilities'
 import type { ArtifactContent, ArtifactSession, ArtifactSummary, VersionSummary } from './artifacts'
 import type { CommentAnchor, CommentThread } from './artifact-comments'
@@ -1854,6 +1855,12 @@ export interface HostContract {
   }
   // Newest first.
   'artifacts.versions': { params: { id: string }; result: VersionSummary[] }
+  // What changed from version `from` to `to`, any two versions, worked out from their content as
+  // the shared comparison does; null when nothing did.
+  'artifacts.changes': {
+    params: { id: string; from: number; to: number }
+    result: { changes: ArtifactChanges | null }
+  }
   'artifacts.rename': { params: { id: string; title: string }; result: void }
   // Permanently only from Recently deleted.
   'artifacts.delete': { params: { id: string; permanently?: boolean }; result: void }
@@ -2326,6 +2333,7 @@ export const HOST_METHODS = [
   'artifacts.file',
   'artifacts.content',
   'artifacts.versions',
+  'artifacts.changes',
   'artifacts.rename',
   'artifacts.delete',
   'artifacts.undelete',

@@ -20,6 +20,7 @@ import {
 import type { ArtifactTypeInfo } from '@shared/artifact-types'
 import type { CanvasEvent } from '@shared/artifact-canvas'
 import { withParamValues, type ParamValue } from '@shared/artifact-params'
+import { compareVersions, type ArtifactChanges } from '@shared/artifact-changes'
 import { HostError } from '../errors'
 import { t, tEnglish } from '../i18n'
 import type { LogFn } from '../storage'
@@ -41,6 +42,8 @@ import type {
 import type { Declaration, RuntimeCallName, RuntimeCalls } from './runtime/calls'
 
 const PURGE_EVERY_MS = 24 * 60 * 60 * 1000
+/** Comparisons kept; versions never change, so each pair is worked out once while it is here. */
+const KEPT_CHANGES = 200
 
 export type ArtifactErrorCode = 'not_found' | 'deleted' | 'conflict'
 
@@ -161,6 +164,7 @@ export class ArtifactStore {
   private readonly views = new Map<string, Map<string, string | null>>()
   /** The canvas documents clients are working on, with their changes not yet in a version. */
   readonly canvases: LiveCanvases
+  private readonly compared = new Map<string, Promise<ArtifactChanges | null>>()
 
   constructor(private readonly deps: ArtifactStoreDeps) {
     this.canvases = new LiveCanvases(this, {
@@ -294,6 +298,47 @@ export class ArtifactStore {
     const records = await this.call('versions', { id, project: project ?? null })
     this.used(id, reader, false)
     return records
+  }
+
+  /**
+   * What changed from version `from` to `to` of the artifact, any two of its versions, as every
+   * client works it out: null when nothing did.
+   */
+  changes(
+    id: string,
+    from: number,
+    to: number,
+    { project }: Reach = {},
+  ): Promise<ArtifactChanges | null> {
+    const key = `${id}\0${from}\0${to}`
+    const known = this.compared.get(key)
+    if (known) return known
+    const reach = project ? { project } : {}
+    const run = Promise.all([
+      this.get(id, { ...reach, version: from }),
+      this.get(id, { ...reach, version: to }),
+    ]).then(([before, after]) => {
+      const found = new Map([
+        [from, before],
+        [to, after],
+      ])
+      const version = (of: FoundVersion) => ({
+        version: of.version.version,
+        files: of.files,
+        type: of.type?.name ?? null,
+      })
+      return compareVersions(version(before), version(after), async (n, path) => {
+        const of = found.get(n)!
+        const file = of.files.find((f) => f.path === path)
+        if (!file) throw new Error(`${id} version ${n} has no ${path}`)
+        return (await this.bytes(of, file)).toString('utf8')
+      })
+    })
+    this.compared.set(key, run)
+    if (this.compared.size > KEPT_CHANGES) this.compared.delete(this.compared.keys().next().value!)
+    // A failed comparison, such as of a version not there yet, is tried again next time.
+    run.catch(() => this.compared.delete(key))
+    return run
   }
 
   /**

@@ -125,3 +125,23 @@ describe('the artifact tools', () => {
     expect(await count()).toBe(0)
   })
 })
+
+describe("the host's records of an artifact", () => {
+  it('compares any two of its versions from their stored files', async () => {
+    const id = await create({ html: '<p>1</p>', files: [{ path: 'a.css', content: 'a' }] })
+    for (const [base, html] of [
+      [1, '<p>2</p>'],
+      [2, '<p>3</p>'],
+    ] as const) {
+      const { error } = await call('update_artifact', { id, base_version: base, html })
+      expect(error).toBeNull()
+    }
+    expect(await store.changes(id, 1, 3)).toEqual({ kind: 'files', paths: ['index.html'] })
+    expect(await store.changes(id, 3, 1)).toEqual({ kind: 'files', paths: ['index.html'] })
+    await expect(store.changes(id, 1, 9)).rejects.toMatchObject({ reason: 'not_found' })
+    // Another project's session reaches none of it.
+    await expect(store.changes(id, 1, 2, { project: '/elsewhere' })).rejects.toMatchObject({
+      reason: 'not_found',
+    })
+  })
+})

@@ -3658,6 +3658,9 @@ export class AgentHost {
         return artifacts.content(id, version)
       },
       'artifacts.versions': async ({ id }) => (await artifacts.versions(id)).map(versionSummary),
+      'artifacts.changes': async ({ id, from, to }) => ({
+        changes: await artifacts.changes(id, from, to),
+      }),
       'artifacts.rename': ({ id, title }) => artifacts.rename(id, title),
       'artifacts.delete': async ({ id, permanently }) => {
         if (permanently) await artifacts.erase(id)

@@ -264,6 +264,7 @@ export const HOST_REQUEST_LIMITS: Readonly<Record<HostMethod, number | null>> = 
   'artifacts.file': HOST_MS,
   'artifacts.content': HOST_MS,
   'artifacts.versions': HOST_MS,
+  'artifacts.changes': HOST_MS,
   'artifacts.rename': HOST_MS,
   'artifacts.delete': HOST_MS,
   'artifacts.undelete': HOST_MS,
