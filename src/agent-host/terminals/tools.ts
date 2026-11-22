@@ -137,16 +137,8 @@ export const TERMINAL_TOOLS: Tool[] = [
   },
 ]
 
-/**
- * The tools that only list and read the session's terminals, which run without the agent's own
- * permission prompt: on a terminal of the user's, Kettu asks them in its own card instead.
- */
-// What the tools say instead once the user lets agents type passwords.
+// What terminal_input says instead once the user lets agents type passwords.
 const PASSWORD_DESCRIPTIONS: Partial<Record<TerminalToolName, string>> = {
-  terminal_read:
-    "The latest output of one of this session's terminals, as plain text, whether its command still runs, whether it waits for a password, and the shell's exit code. The output is what the terminal keeps, its last 1 MB, not the shell's history file." +
-    USERS,
-  terminal_wait: `Waits until the terminal's command ends, it waits for a password, or its output has been quiet for ${TERMINAL_QUIET_MS / 1000} s (such as a server that is up), at most ${TERMINAL_WAIT_MS / 1000} s, then answers like terminal_read and says why it returned. Call it again to keep waiting.${USERS}`,
   terminal_input:
     "Types text into one of this session's terminals, and presses Enter when `enter` is set, such as the next command in a terminal the user handed you or an answer to a prompt. Types a password only when the user gave it to you for that or the project's files hold it, such as a test account's; otherwise the user types it. While the user has taken the terminal over, the call waits; when it returns that they still have it, call again to keep waiting." +
     USERS,
@@ -157,6 +149,10 @@ const PASSWORD_TOOLS: Tool[] = TERMINAL_TOOLS.map((tool) => {
   return description ? { ...tool, description } : tool
 })
 
+/**
+ * The tools that only list and read the session's terminals, which run without the agent's own
+ * permission prompt: on a terminal of the user's, Kettu asks them in its own card instead.
+ */
 export const TERMINAL_READ_TOOLS: readonly TerminalToolName[] = [
   'terminal_list',
   'terminal_read',
