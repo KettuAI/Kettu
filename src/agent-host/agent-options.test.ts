@@ -96,6 +96,25 @@ describe('the models an agent keeps for its model menu', () => {
     expect(saved).toHaveLength(writes)
   })
 
+  it("keeps a value an agent set as seen levels only, never as the user's choice", () => {
+    const { options } = store()
+    const option = modelOption('opus')
+    options.chose('claude-code', option, 'opus', [option])
+    const haiku = modelOption('haiku')
+    const level: ConfigOption = {
+      id: 'effort',
+      name: 'Effort',
+      category: 'thought_level',
+      type: 'select',
+      value: 'low',
+      choices: [{ value: 'low', name: 'Low' }],
+    }
+    options.seen('claude-code', [haiku, level])
+    expect(options.rememberedOf('claude-code')).toEqual({ model: 'opus' })
+    expect(options.get('claude-code')?.recent).toEqual(['opus'])
+    expect(options.get('claude-code')?.levels.haiku).toEqual(level)
+  })
+
   it('keeps pins and recent models when a new session reports the agent’s options again', () => {
     const { options } = store()
     options.pin('claude-code', 'sonnet', true)

@@ -239,6 +239,7 @@ import { missedCache, type IdleRelease } from './idle-release'
 import {
   REPORT_LIMIT,
   reportText,
+  type ToolChoices,
   type ToolDelivery,
   type ToolMode,
   type ToolSession,
@@ -5308,6 +5309,7 @@ export class SessionManager {
     })
     this.save(live)
     const config = await this.applyStartOptions(live, runtime.connection, live.startValues, {
+      remember: live.record.startedBy === undefined,
       stop: () => gone() || runtime.connection.isClosed,
     })
     if (gone()) {
@@ -5473,11 +5475,14 @@ export class SessionManager {
     options: Record<string, string | boolean>,
     {
       restore = false,
+      remember = true,
       from,
       stop,
       resend,
     }: {
       restore?: boolean
+      /** Whether the values count as the user's choice; not those an agent picked for a session. */
+      remember?: boolean
       from?: ConfigOption[]
       stop?: () => boolean
       /** Options sent even when they look unchanged, since the agent may not have kept them. */
@@ -5518,7 +5523,8 @@ export class SessionManager {
         if (stop?.()) break
         if (held) held = next
         else this.update(live, { config: next })
-        if (!restore) this.deps.options?.chose(agentId, option, value, next)
+        if (!restore && remember) this.deps.options?.chose(agentId, option, value, next)
+        else if (!restore) this.deps.options?.seen(agentId, next)
       } catch (error) {
         this.deps.diagnostics.log(
           'warn',
@@ -7155,7 +7161,7 @@ export class SessionManager {
   ): void {
     live.used = true
     live.userTurn = kettu !== true && from === undefined
-    this.deps.options?.used(live.record.agentId, live.thread.session.config)
+    if (live.userTurn) this.deps.options?.used(live.record.agentId, live.thread.session.config)
     const now = this.now()
     const entryId = this.addPrompt(live, content, now, from, device, approval, kettu)
     this.startTurn(live, content, now, entryId, portId)
@@ -10553,13 +10559,38 @@ export class SessionManager {
     return { fullAccess: rank === 4, planning }
   }
 
+  /** A session's options, from memory or its stored thread. */
+  private async toolConfig(record: SessionRecord): Promise<ConfigOption[]> {
+    const live = this.live.get(record.id)
+    return live
+      ? live.thread.session.config
+      : ((await this.readThread(record))?.session.config ?? [])
+  }
+
+  /** A session's model and level as the session tools show them. */
+  async toolChoices(sessionId: string): Promise<ToolChoices> {
+    const config = await this.toolConfig(this.recordOf(sessionId))
+    const shown = (category: ConfigOption['category']): ToolMode | null => {
+      const option = config.find((o) => o.category === category && o.type === 'select')
+      if (typeof option?.value !== 'string') return null
+      const name = option.choices?.find((choice) => choice.value === option.value)?.name
+      return { id: option.value, name: name ?? option.value }
+    }
+    return { model: shown('model'), effort: shown('thought_level') }
+  }
+
+  /** Whether a started session's first message waits in its paused queue for the user. */
+  firstHeld(sessionId: string): boolean {
+    const live = this.live.get(sessionId)
+    const starter = live?.record.startedBy
+    if (!live || !starter || !live.thread.session.queuePaused) return false
+    return live.thread.session.queue.some((item) => item.from?.sessionId === starter)
+  }
+
   /** A session's permission mode, from memory or its stored thread; null when it has none. */
   async toolMode(sessionId: string): Promise<ToolMode | null> {
     const record = this.recordOf(sessionId)
-    const live = this.live.get(sessionId)
-    const config = live
-      ? live.thread.session.config
-      : ((await this.readThread(record))?.session.config ?? [])
+    const config = await this.toolConfig(record)
     const optionId = modeOptionId(record.agentId)
     const option = config.find((candidate) =>
       optionId === null
@@ -10740,13 +10771,36 @@ export class SessionManager {
   }
 
   /**
-   * Starts a sub-session of the caller with its first prompt, as New sub-session would: the
-   * caller's project and parent, and with the caller's agent its model and level. Its mode is the
-   * one asked for or the start mode, never wider than the caller's or than full access allows.
+   * The model and level a session the caller starts with `agentId` takes when the caller names
+   * none: with the caller's agent its own, with another the ones New session remembers.
+   */
+  carriedOptions(callerId: string, agentId: AgentId): Record<string, string | boolean> {
+    const caller = this.recordOf(callerId)
+    if (agentId !== caller.agentId) return this.deps.options?.rememberedOf(agentId) ?? {}
+    const options: Record<string, string | boolean> = {}
+    const config = this.live.get(callerId)?.thread.session.config ?? []
+    for (const option of config) {
+      if (option.category !== 'model' && option.category !== 'thought_level') continue
+      options[option.id] = option.value
+    }
+    return options
+  }
+
+  /**
+   * Starts a sub-session of the caller with its first prompt and start values, as New sub-session
+   * would: the caller's project and parent. Its mode is the one asked for or the start mode, never
+   * wider than the caller's or than full access allows.
    */
   async startFromTool(
     callerId: string,
-    params: { prompt: string; title?: string; agentId?: AgentId; mode?: string; report: boolean },
+    params: {
+      prompt: string
+      title?: string
+      agentId?: AgentId
+      mode?: string
+      options: Record<string, string | boolean>
+      report: boolean
+    },
   ): Promise<string> {
     const caller = this.recordOf(callerId)
     const agentId = params.agentId ?? caller.agentId
@@ -10755,18 +10809,7 @@ export class SessionManager {
       title: this.toolName(callerId),
       ...(params.report ? {} : { report: false }),
     }
-    const options: Record<string, string | boolean> = {}
-    if (agentId === caller.agentId) {
-      const live = this.live.get(callerId)
-      const config = live?.thread.session.config ?? []
-      for (const option of config) {
-        if (option.category !== 'model' && option.category !== 'thought_level') continue
-        options[option.id] = option.value
-      }
-    } else {
-      Object.assign(options, this.deps.options?.rememberedOf(agentId) ?? {})
-    }
-    Object.assign(options, this.startModeOf(agentId))
+    const options = { ...params.options, ...this.startModeOf(agentId) }
     const summary = await this.create({
       agentId,
       projectPath: caller.projectPath,

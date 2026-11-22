@@ -172,8 +172,8 @@ A Kettu session is a conversation the user sees in Kettu's sidebar and can open,
 
 ## Starting one
 
-1. \`list_agents\` shows the agents a session can be started with, whether each can start now, and the permission modes you may give it. For a review, pick an agent other than yours when there is one.
-2. Call \`start_session\` with \`prompt\`, and \`agent\`, \`mode\` and \`title\` as needed. The new session sees nothing of this conversation, so write a first message that stands alone: the goal, the files, branch or commits, what to check, and what to answer with.
+1. \`list_agents\` shows the agents a session can be started with, whether each can start now, the permission modes you may give it, and its models with the efforts each offers. For a review, pick an agent other than yours when there is one.
+2. Call \`start_session\` with \`prompt\`, and \`agent\`, \`model\`, \`effort\`, \`mode\` and \`title\` as needed. Name a model or effort when the work calls for one, such as a small model for a simple job or a higher effort for a review; left out, it runs on yours with your agent, else on the one the user's New session would pick. The new session sees nothing of this conversation, so write a first message that stands alone: the goal, the files, branch or commits, what to check, and what to answer with.
 3. For a review, ask for a read-only mode so it leaves the files alone. Its mode is never wider than yours or than the mode the user set for the agent's new sessions, and the result says when Kettu started it narrower.
 4. Set \`report\` to false for work whose result you do not need.
 

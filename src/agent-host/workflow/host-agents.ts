@@ -10,7 +10,7 @@ import type { AgentId, ConfigOption } from '@shared/thread'
 import { modelNoteOf, type AgentDefinition } from '../catalog'
 import type { WorkflowAgent, WorkflowModel } from './picks'
 
-function modelOption(options: AgentOptions | null): ConfigOption | undefined {
+export function modelOption(options: AgentOptions | null): ConfigOption | undefined {
   return options?.config.find((o) => o.category === 'model' && o.type === 'select')
 }
 
