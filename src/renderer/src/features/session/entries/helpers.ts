@@ -18,6 +18,7 @@ import { i18n } from '@renderer/lib/i18n'
 import { sessionTitle, useSessionsStore } from '@renderer/stores/sessions'
 import { useTerminalsStore } from '@renderer/stores/terminals'
 import { nameHints } from '../project-names'
+import { agyLabel, type AgentSessionName } from './agy-tools'
 import { mcpLabel, type CallNames } from './mcp-tools'
 
 /**
@@ -56,6 +57,16 @@ const CALL_NAMES: CallNames = {
   },
 }
 
+// agy names its sub-agents and the sessions it messages by its own ids for them.
+const AGY_SESSION_NAME: AgentSessionName = (agentSessionId) => {
+  for (const summary of Object.values(useSessionsStore.getState().byId)) {
+    if (summary.agentId === 'antigravity' && summary.acpSessionId === agentSessionId) {
+      return sessionTitle(summary)
+    }
+  }
+  return null
+}
+
 export type ToolLabel = {
   verb: string | null
   target: string | null
@@ -71,7 +82,7 @@ export function toolLabel(
   projectPath: string,
   done = false,
 ): ToolLabel {
-  const mcp = mcpLabel(entry, projectPath, CALL_NAMES)
+  const mcp = mcpLabel(entry, projectPath, CALL_NAMES) ?? agyLabel(entry, AGY_SESSION_NAME)
   if (mcp) return mcp
   const verbs = done ? 'session:tool.verbDone' : 'session:tool.verb'
   const fileKind = FILE_KINDS[entry.toolKind]

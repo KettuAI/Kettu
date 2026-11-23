@@ -167,6 +167,23 @@
     "open_settings": "打开设置",
     "change_settings": "修改设置"
   },
+  "agyTool": {
+    "invoke_subagent": "启动子智能体",
+    "send_message": "发送消息",
+    "wait": "等待",
+    "cron": "定时",
+    "manage_task": {
+      "list": "列出后台任务",
+      "status": "查看后台任务",
+      "kill": "停止后台任务",
+      "send_input": "向后台任务输入"
+    },
+    "manage_subagents": {
+      "list": "列出子智能体",
+      "kill": "停止子智能体",
+      "kill_all": "停止所有子智能体"
+    }
+  },
   "permission": {
     "outsideScope": "超出此定时任务的权限：{{level}}。",
     "answer": {

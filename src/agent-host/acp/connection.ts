@@ -98,6 +98,13 @@ import {
 import { AgyCommands } from './agy-commands'
 import { systemPromptMeta, takesSystemPromptAppend } from './agy-prompt'
 import { AGY_ELICITATION, askInCard, asksQuestions } from './agy-questions'
+import {
+  AgySubagents,
+  agyStore,
+  followsSubagents,
+  PARENT_SESSION_META,
+  type AgyStore,
+} from './agy-subagents'
 import { PromptChain, steersAgy, type ChainAnswer } from './agy-steering'
 import {
   agyAllowOnce,
@@ -175,6 +182,8 @@ export interface AcpOptions {
   name?: string
   /** Accounts its vendor moved to another harness, whose refusal is no sign-in to ask for. */
   movedAccounts?: MovedAccounts
+  /** Where agy's sub-agents are read from, its own conversation store unless given. */
+  agyStore?: AgyStore
 }
 
 export type AcpHooks = ConnectionHooks & AcpOptions
@@ -410,6 +419,14 @@ export class AcpConnection implements AgentConnection {
   private readonly chains = new Map<string, PromptChain>()
   /** agy's commands, by session: the turn's, and those that outlived theirs. */
   private readonly agyCommands = new Map<string, AgyCommands>()
+  /** agy's sub-agents, once `initialize` named a version they were measured on. */
+  private subagents: AgySubagents | null = null
+  /** Where each agy session was opened and with which servers, which its sub-agents load with. */
+  private readonly agyOpened = new Map<string, { cwd: string; options: SessionOptions }>()
+  /** The session each of agy's sub-agents was loaded under. */
+  private readonly subagentParents = new Map<string, string>()
+  /** Sub-agents opened again whose replay Kettu already shows. */
+  private readonly muted = new Set<string>()
 
   private constructor(
     private readonly transport: AcpTransport,
@@ -575,12 +592,14 @@ export class AcpConnection implements AgentConnection {
   }
 
   private deliver(sessionId: string, update: SessionUpdate): void {
+    if (this.muted.has(sessionId)) return
     this.learnChild(sessionId, update)
     const target = this.targets.get(sessionId)
     if (target) {
       this.notePlanWrite(sessionId, update)
       target.apply(this.withAccess(sessionId, this.map(update, target.context())))
       this.noteCommand(sessionId, update, target)
+      this.subagents?.noted(sessionId, update, target.context().replaying)
       return
     }
     const collector = this.collectors.get(sessionId)
@@ -779,7 +798,52 @@ export class AcpConnection implements AgentConnection {
     this.appendsSystemPrompt = this.agy && takesSystemPromptAppend(result.version, caps)
     this.naming = mcpNaming(init.agentInfo)
     this.removal = hiddenRemoval(this.hooks.agentId, result.capabilities, result.version)
+    this.subagents?.stop()
+    this.subagents =
+      this.agy && followsSubagents(result.version)
+        ? new AgySubagents(this.hooks.agyStore ?? agyStore(), {
+            target: (id) => this.targets.get(id),
+            prompting: (id) => this.prompting.has(id),
+            load: (childId, parentId, quiet) => this.loadSubagent(childId, parentId, quiet),
+            settled: (id) => void this.switchPending(id),
+            log: (level, message) => this.hooks.log(level, message),
+          })
+        : null
+    if (this.subagents) {
+      const subagents = this.subagents
+      void this.connection.closed.then(() => subagents.stop())
+    }
     return result
+  }
+
+  /**
+   * Opens one of agy's sub-agents in the process of the session that started it, with the servers
+   * and folder of the session it all runs under, and the same tools allowed without asking.
+   */
+  private async loadSubagent(childId: string, parentId: string, quiet: boolean): Promise<void> {
+    let root = parentId
+    while (!this.agyOpened.has(root) && this.subagentParents.has(root)) {
+      root = this.subagentParents.get(root)!
+    }
+    const opened = this.agyOpened.get(root)
+    if (!opened) throw new Error(`${parentId} was not opened here`)
+    this.subagentParents.set(childId, parentId)
+    const allowed = this.autoAllowed.get(root)
+    if (allowed) this.autoAllowed.set(childId, allowed)
+    // The replay comes before the answer, and what agy sends after it is new.
+    if (quiet) this.muted.add(childId)
+    try {
+      await this.call(() =>
+        this.connection.agent.request(methods.agent.session.load, {
+          sessionId: childId,
+          cwd: opened.cwd,
+          mcpServers: mcpServers(opened.options.mcpServers),
+          _meta: { [PARENT_SESSION_META]: parentId },
+        }),
+      )
+    } finally {
+      this.muted.delete(childId)
+    }
   }
 
   private meta(options: SessionOptions): Record<string, unknown> | undefined {
@@ -816,6 +880,7 @@ export class AcpConnection implements AgentConnection {
     this.readPlan(response._meta)
     this.allowWithoutAsking(response.sessionId, options)
     if (options.hidden && !promptsHidden(this.removal)) this.unprompted.add(response.sessionId)
+    else this.openedAgy(response.sessionId, cwd, options)
     return {
       sessionId: response.sessionId,
       config: this.opened(
@@ -834,6 +899,8 @@ export class AcpConnection implements AgentConnection {
     options: SessionOptions = {},
   ): Promise<SessionSetup> {
     const meta = this.meta(options)
+    // The replay shows its sub-agents again, below.
+    this.subagents?.forget(sessionId)
     const response = await this.call(() =>
       this.connection.agent.request(methods.agent.session.load, {
         sessionId,
@@ -844,6 +911,8 @@ export class AcpConnection implements AgentConnection {
     )
     this.readPlan(response._meta)
     this.allowWithoutAsking(sessionId, options)
+    this.openedAgy(sessionId, cwd, options)
+    await this.subagents?.replay(sessionId)
     return {
       config: this.opened(
         sessionId,
@@ -870,6 +939,9 @@ export class AcpConnection implements AgentConnection {
     )
     this.readPlan(response._meta)
     this.allowWithoutAsking(sessionId, options)
+    this.openedAgy(sessionId, cwd, options)
+    // Its process started again, without the sub-agents it ran.
+    this.subagents?.restarted(sessionId)
     return {
       config: this.opened(
         sessionId,
@@ -878,6 +950,11 @@ export class AcpConnection implements AgentConnection {
         this.config(response.configOptions, response.modes),
       ),
     }
+  }
+
+  /** Notes where an agy session opened, for the sub-agents it starts. */
+  private openedAgy(sessionId: string, cwd: string, options: SessionOptions): void {
+    if (this.subagents) this.agyOpened.set(sessionId, { cwd, options })
   }
 
   /**
@@ -909,18 +986,23 @@ export class AcpConnection implements AgentConnection {
 
   async closeSession(sessionId: string): Promise<void> {
     await this.call(() => this.connection.agent.request(methods.agent.session.close, { sessionId }))
-    this.autoAllowed.delete(sessionId)
-    this.agyAccess.delete(sessionId)
-    this.agyCommands.delete(sessionId)
+    this.forgetSession(sessionId)
   }
 
   async deleteSession(sessionId: string): Promise<void> {
     await this.call(() =>
       this.connection.agent.request(methods.agent.session.delete, { sessionId }),
     )
+    this.forgetSession(sessionId)
+  }
+
+  private forgetSession(sessionId: string): void {
     this.autoAllowed.delete(sessionId)
     this.agyAccess.delete(sessionId)
     this.agyCommands.delete(sessionId)
+    this.agyOpened.delete(sessionId)
+    this.subagentParents.delete(sessionId)
+    this.subagents?.forget(sessionId)
   }
 
   async listSessions(
@@ -978,6 +1060,7 @@ export class AcpConnection implements AgentConnection {
     } finally {
       this.prompting.delete(sessionId)
       this.carryCommands(sessionId)
+      this.subagents?.turnEnded(sessionId)
       await this.switchPending(sessionId)
     }
     const { response } = answer
@@ -1040,9 +1123,15 @@ export class AcpConnection implements AgentConnection {
     })
   }
 
-  /** Whether one of agy's commands outlived its turn and runs on, which a restart would stop. */
+  /**
+   * Whether one of agy's commands outlived its turn and runs on, or one of its sub-agents runs,
+   * which a restart would stop.
+   */
   private runsCommands(sessionId: string): boolean {
-    return this.agyCommands.get(sessionId)?.running === true
+    return (
+      this.agyCommands.get(sessionId)?.running === true ||
+      this.subagents?.running(sessionId) === true
+    )
   }
 
   /** The divider for a compaction agy ran without saying so, as the entry every agent gets. */
@@ -1417,6 +1506,7 @@ export class AcpConnection implements AgentConnection {
       ...(Object.keys(meta).length > 0 ? { _meta: meta } : {}),
     })
     access.full = full
+    this.subagents?.restarted(sessionId)
     this.readPlan(response._meta)
     this.allowWithoutAsking(sessionId, access.options)
     let config = this.config(response.configOptions, response.modes)
