@@ -3,8 +3,10 @@
 // what a browser can do itself. What needs the desktop app's own window is never offered: the
 // page hides it, and a call that comes anyway is refused.
 
+import { pushedAttention } from '@shared/attention'
 import type { DeviceEvent } from '@shared/device-host'
 import type { HostEvent } from '@shared/agent-host'
+import type { HostToMain } from '@shared/host-control'
 import type { ArtifactContent } from '@shared/artifacts'
 import { CANVAS_FILE } from '@shared/canvas-doc'
 import { DEBUG_OFF } from '@shared/debug'
@@ -32,6 +34,7 @@ import type { HostLink, LinkError, LinkState } from '@shared/remote/link'
 import { relayUrl } from './hosted/config'
 import { downloadFile, mediaRequest, saveMedia, type SaveProgress } from './media'
 import { browserNotifications, notifyAttention, notifyTest } from './notifications'
+import { pushProblem, type WebPush } from './push'
 import type { WebSettings } from './settings'
 import { followTabFront, noteTabAttention } from './tab-attention'
 import { webReports } from './report'
@@ -47,6 +50,8 @@ function unsupported(what: string): Promise<never> {
 }
 
 const never = (): (() => void) => () => {}
+
+type AttentionMessage = Extract<HostToMain, { type: 'host:attention' }>
 
 /** A save the page reads itself shows its progress in a toast, whose Cancel gives it up. */
 async function saveProgress(name: string, cancel: () => void): Promise<SaveProgress> {
@@ -98,6 +103,8 @@ export interface WebHostContext {
   forget(): Promise<void>
   /** This browser's storage for the host, which serves the page from its own origin. */
   storage: Pick<Storage, 'getItem' | 'setItem'> | null
+  /** The host's Web Push to this browser, absent in tests. */
+  push?: WebPush
 }
 
 /** The page's address as a direct one, with the port its scheme implies when it names none. */
@@ -224,18 +231,25 @@ export function webApi(link: HostLink, settings: WebSettings, context: WebHostCo
   const commands = new Set<(command: AppCommand) => void>()
   const inFront = (): boolean => document.visibilityState === 'visible' && document.hasFocus()
   followTabFront(inFront)
+  const open = (command: AppCommand): void => {
+    window.focus()
+    for (const listener of commands) listener(command)
+  }
   adminEvent('attention', ({ attention }) => {
     noteTabAttention(attention, { settings: () => settings.current(), inFront })
     notifyAttention(attention, {
       notifications: browserNotifications(),
       settings: () => settings.current(),
       inFront,
-      open: (command) => {
-        window.focus()
-        for (const listener of commands) listener(command)
-      },
+      open,
+      // The host pushes a page out of view what it pushes any device.
+      pushed: (attention) =>
+        document.visibilityState === 'hidden' &&
+        context.push?.active === true &&
+        pushedAttention({ type: 'host:attention', ...attention } as AttentionMessage) !== null,
     })
   })
+  context.push?.onOpen(open)
 
   const connectionListener = (listener: (state: PortConnectionState) => void): (() => void) => {
     let last: PortConnectionState | null = null
@@ -483,13 +497,18 @@ export function webApi(link: HostLink, settings: WebSettings, context: WebHostCo
     notifications: {
       test: async () => {
         const { i18n } = await import('@renderer/lib/i18n')
-        return notifyTest(
+        const shown = await notifyTest(
           { notifications: browserNotifications(), settings: () => settings.current() },
           {
             title: i18n.t('web:notifications.testTitle'),
-            body: i18n.t('web:notifications.testBody'),
+            body: i18n.t(
+              pushProblem() ? 'web:notifications.testBody' : 'web:notifications.testBodyPush',
+            ),
           },
         )
+        // Allowed just now, maybe: the host gets this browser's subscription.
+        if (shown) void context.push?.sync()
+        return shown
       },
     },
     // A browser has no notch island: its switch shows only in the macOS app.

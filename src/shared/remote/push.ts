@@ -22,6 +22,12 @@
 
 import { currentPrimitives, type KeyPair } from './primitives'
 import { decodeRelayBytes, encodeRelayBytes, relayOrigin, type RelayKey } from './relay'
+import {
+  parseStoredWebPush,
+  parseWebPushSubscription,
+  type StoredWebPush,
+  type WebPushSubscription,
+} from './web-push'
 
 /** The first protocol version in which a device may ask the host for notifications. */
 export const PUSH_VERSION = 4
@@ -129,12 +135,18 @@ export const MAX_MUTED = 500
 /** A device's notifications, as the host stores them with the device. */
 export interface DevicePush {
   target: PushTarget | null
+  /** A browser's Web Push subscription (see web-push.ts), which it takes in place of APNs. */
+  web?: StoredWebPush
   choices: NotificationChoices
 }
 
-/** `notifications.set`: a new target, none (`null`), or the same (absent), and choices to change. */
+/**
+ * `notifications.set`: a new target, none (`null`), or the same (absent), a browser's Web Push
+ * subscription the same way, and choices to change.
+ */
 export interface NotificationsUpdate {
   target?: PushTarget | null
+  web?: WebPushSubscription | null
   choices?: Partial<NotificationChoices>
 }
 
@@ -143,7 +155,13 @@ export interface NotificationsState {
   choices: NotificationChoices
   /** Whether a target is set, and which Live Activity tokens. */
   target: { apns: boolean; activityStart: boolean; activityUpdate: boolean }
-  /** Whether the host is signed in to a Kettu account, which it needs to send any. */
+  /**
+   * From a host with the `web-push` feature, the endpoint of the browser's subscription it keeps
+   * and the tags of the notifications it withdrew since it last sent one of the same, which the
+   * browser closes if it still shows them; null while it keeps none.
+   */
+  web?: { endpoint: string; withdrawn: string[] } | null
+  /** Whether the host is signed in to a Kettu account, which it needs to send any through APNs. */
   signedIn: boolean
   /** The host's id and its Ed25519 public key in base64url, which signs what it sends. */
   host: { id: string; key: string }
@@ -211,13 +229,19 @@ export function parseChoices(value: unknown): Partial<NotificationChoices> | nul
 /** `notifications.set`'s params, or null when they are not ones. */
 export function parseNotificationsUpdate(value: unknown): NotificationsUpdate | null {
   if (typeof value !== 'object' || value === null) return null
-  const { target, choices } = value as Record<string, unknown>
+  const { target, web, choices } = value as Record<string, unknown>
   const update: NotificationsUpdate = {}
   if (target === null) update.target = null
   else if (target !== undefined) {
     const parsed = parsePushTarget(target)
     if (!parsed) return null
     update.target = parsed
+  }
+  if (web === null) update.web = null
+  else if (web !== undefined) {
+    const parsed = parseWebPushSubscription(web)
+    if (!parsed) return null
+    update.web = parsed
   }
   if (choices !== undefined) {
     const parsed = parseChoices(choices)
@@ -230,12 +254,18 @@ export function parseNotificationsUpdate(value: unknown): NotificationsUpdate | 
 /** A device's stored notifications, or null when they are not ones. */
 export function parseDevicePush(value: unknown): DevicePush | null {
   if (typeof value !== 'object' || value === null) return null
-  const { target, choices } = value as Record<string, unknown>
+  const { target, web, choices } = value as Record<string, unknown>
   const parsedTarget = target === null ? null : parsePushTarget(target)
   if (target !== null && !parsedTarget) return null
+  const parsedWeb = web === undefined ? null : parseStoredWebPush(web)
+  if (web !== undefined && !parsedWeb) return null
   const parsedChoices = parseChoices(choices)
   if (!parsedChoices) return null
-  return { target: parsedTarget, choices: { ...DEFAULT_CHOICES, ...parsedChoices } }
+  return {
+    target: parsedTarget,
+    ...(parsedWeb ? { web: parsedWeb } : {}),
+    choices: { ...DEFAULT_CHOICES, ...parsedChoices },
+  }
 }
 
 /** The one-time answers a notification offers, by the agent's own names for them. */

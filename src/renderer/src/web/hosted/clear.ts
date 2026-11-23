@@ -1,11 +1,14 @@
 // Signing out and clearing the browser, for a shared computer: each host this browser can reach now
-// removes it first, so its key is gone on both sides; then the sign-in is revoked and everything the
-// web client keeps in this browser is deleted. A host that does not answer in a moment keeps the
-// device until its owner removes it or it goes unseen.
+// removes it first, so its key and push subscription are gone on both sides; then the sign-in is
+// revoked and everything the web client keeps in this browser is deleted, the subscription too. A
+// host that does not answer in a moment keeps the device until its owner removes it or it goes
+// unseen.
 
 import type { KeyPair } from '@shared/remote/noise'
 import type { Hello } from '@shared/remote/protocol'
 import { hello, HostLink } from '@shared/remote/link'
+import { unsubscribePush } from '../push'
+import { clearPushStore } from '../push-store'
 import { clearAll } from '../storage'
 import type { HostedAccount } from './account'
 import { relayDial, type HostedHost } from './hosts'
@@ -76,7 +79,11 @@ export async function clearBrowser(options: ClearOptions): Promise<void> {
   })
   await Promise.all([...(options.link ? [removeOver(options.link, REMOVE_MS)] : []), ...others])
   await account.signOut()
-  await clearAll().catch((error: unknown) => console.error('Could not clear IndexedDB', error))
+  // The hosts forgot the subscription with the device; the browser forgets it too.
+  await unsubscribePush()
+  await Promise.all([clearAll(), clearPushStore()]).catch((error: unknown) =>
+    console.error('Could not clear IndexedDB', error),
+  )
   try {
     localStorage.clear()
     sessionStorage.clear()

@@ -1,7 +1,9 @@
 // The web client's service worker: it answers the page's media URLs, every part read by the page
-// that holds the channel, and lets every other request through untouched.
+// that holds the channel, and lets every other request through untouched; and it shows the hosts'
+// Web Push.
 
 import { mediaToken, respondMedia, type Part, type PartAsk } from './media-ranges'
+import { handlePush, type PushWorkerScope } from './push-worker'
 
 // The DOM library has no service worker types, and the WebWorker one clashes with it; these are
 // the parts this worker uses.
@@ -30,6 +32,8 @@ interface WorkerScope {
 }
 
 const worker = self as unknown as WorkerScope
+
+handlePush(self as unknown as PushWorkerScope)
 
 /** How long the page has to answer for a part before the read fails. */
 const PART_TIMEOUT_MS = 120_000

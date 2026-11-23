@@ -80,7 +80,9 @@ import { openReport, useReportStore } from '@renderer/stores/report'
 import { hostOfSession, useSessionsStore } from '@renderer/stores/sessions'
 import { loadSiteIcons, useDefaultBrowser } from '@renderer/stores/site-icons'
 import { loadBrought } from '@renderer/stores/sign-ins'
+import { browserDevice } from '@renderer/web/device-name'
 import { browserNotifications, notificationsProblem } from '@renderer/web/notifications'
+import { pushProblem } from '@renderer/web/push'
 import {
   CONFIRM,
   ControlError,
@@ -927,14 +929,20 @@ export function NotificationPreview() {
 // How long the test button shows that the notification went out.
 const SENT_MS = 2000
 
-/** In a browser: why it shows no notifications, if it shows none, and that they need the page open. */
+/** In a browser: why it shows no notifications, if so, and whether a closed page gets them. */
 export function WebNotificationsNote() {
   const { t } = useTranslation('web')
-  const problem = notificationsProblem(browserNotifications())
+  const push = pushProblem()
+  // Safari on iPhone and iPad has no notifications in a tab at all, which is no matter of https.
+  const problem = push === 'home-screen' ? null : notificationsProblem(browserNotifications())
+  const chrome = browserDevice(navigator.userAgent).browser === 'Chrome'
   return (
     <>
       {problem && <GroupNote>{t(`notifications.${problem}`)}</GroupNote>}
-      <GroupNote>{t('notifications.openOnly')}</GroupNote>
+      {push === 'home-screen' && <GroupNote>{t('notifications.homeScreen')}</GroupNote>}
+      {push === 'unsupported' && <GroupNote>{t('notifications.openOnly')}</GroupNote>}
+      {push === null && <GroupNote>{t('notifications.closed')}</GroupNote>}
+      {push === null && chrome && <GroupNote>{t('notifications.chinaChrome')}</GroupNote>}
     </>
   )
 }

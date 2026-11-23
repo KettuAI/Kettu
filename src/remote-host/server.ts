@@ -83,6 +83,7 @@ import {
   PUSH_VERSION,
   parseNotificationsUpdate,
 } from '@shared/remote/push'
+import { WEB_PUSH_FEATURE, type NotificationsWithdrawn } from '@shared/remote/web-push'
 import { removalAt } from '@shared/remote/status'
 import {
   BYTES_FEATURE,
@@ -283,6 +284,21 @@ export class RemoteServer {
       if (session.device.id === deviceId && session.showing(sessionId)) return true
     }
     return false
+  }
+
+  /** Whether the device is connected and in the foreground now, as a page in view. */
+  foreground(deviceId: string): boolean {
+    for (const session of this.sessions) {
+      if (session.device.id === deviceId && session.foreground) return true
+    }
+    return false
+  }
+
+  /** Tells the device's sessions that go on which notifications it should close. */
+  withdrawn(deviceId: string, message: NotificationsWithdrawn): void {
+    for (const session of this.sessions) {
+      if (session.device.id === deviceId) session.withdrawn(message)
+    }
   }
 
   /** The ids of the devices connected to a session now. */
@@ -1109,9 +1125,14 @@ class DeviceSession {
     return this.state === 'open'
   }
 
+  /** Whether the device is connected and in the foreground, not asking for the background pace. */
+  get foreground(): boolean {
+    return this.connected && this.paceMs < BACKGROUND_PACE_MS
+  }
+
   /** Whether the device shows the session in front: connected, in the foreground and showing it. */
   showing(sessionId: string): boolean {
-    return this.connected && this.paceMs < BACKGROUND_PACE_MS && this.shown.has(sessionId)
+    return this.foreground && this.shown.has(sessionId)
   }
 
   /** Whether the session goes on, connected or waiting for its device. */
@@ -1329,6 +1350,10 @@ class DeviceSession {
     if (this.live) this.send({ type: 'host.renamed', name } satisfies HostRenamed)
   }
 
+  withdrawn(message: NotificationsWithdrawn): void {
+    if (this.live) this.send(message)
+  }
+
   /** The device's name changed: its sessions hear the new one. */
   renamed(name: string): void {
     this.device = { ...this.device, name }
@@ -1366,7 +1391,7 @@ class DeviceSession {
       features: [
         BYTES_FEATURE,
         ...(this.version >= PUSH_VERSION && this.server.options.notifications?.()
-          ? [PUSH_FEATURE]
+          ? [PUSH_FEATURE, WEB_PUSH_FEATURE]
           : []),
         ...(this.regionsOffered ? [REGIONS_CHANNEL_FEATURE] : []),
         ...(this.standbys ? [STANDBY_FEATURE] : []),
@@ -1519,6 +1544,7 @@ class DeviceSession {
     const update = parseNotificationsUpdate(params)
     if (!update) return fail('invalid_params', 'The target or the choices are not ones')
     const state = await notifications.update(this.device.id, update)
+    if (state === 'invalid') return fail('invalid_params', 'The subscription keys are not ones')
     if (!state) return fail('not_found', t('remote.notPaired'))
     reply({ type: 'response', id, result: state })
   }

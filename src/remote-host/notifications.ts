@@ -1,21 +1,32 @@
 // A host's notifications to its devices: what each device set over the channel, kept with it in
 // the device file, what the agent host reports through the host's parent, and the notifier and the
-// sender between them. Only a host with its Ed25519 key has them, since every push is signed.
+// senders between them, the push gateway's for APNs and Web Push's for browsers. Only a host with
+// its Ed25519 key has them, since every push is signed.
 
 import { addLogSecret } from '@shared/log/process-log'
 import {
   DEFAULT_CHOICES,
   encodeSealed,
+  pushTag,
   type DevicePush,
   type NotificationsState,
   type NotificationsUpdate,
   type PushActions,
 } from '@shared/remote/push'
 import type { RelayKey } from '@shared/remote/relay'
+import { MAX_WITHDRAWN, type NotificationsWithdrawn } from '@shared/remote/web-push'
 import type { LogFn } from '../agent-host/storage'
-import type { DeviceStore } from './devices'
-import { Notifier, type Attention, type AttentionKind, type NotifierDevice } from './notifier'
+import { publicKeyBytes, type DeviceStore } from './devices'
+import {
+  Notifier,
+  type Attention,
+  type AttentionKind,
+  type NotifierDevice,
+  type PushJob,
+} from './notifier'
 import { PushSender, type PushSenderOptions, type PushTokenKind } from './push-sender'
+import { isUsableSubscription, openWebPushSecrets, storeWebPush } from './web-push'
+import { WebPushSender } from './web-push-sender'
 
 export interface DeviceNotificationsOptions {
   devices: DeviceStore
@@ -27,6 +38,12 @@ export interface DeviceNotificationsOptions {
   token(): string | null
   /** Whether the device shows the session in front now. */
   showing(deviceId: string, sessionId: string): boolean
+  /** Whether the device is connected and in the foreground, as a browser's page in view. */
+  foreground(deviceId: string): boolean
+  /** Sends a message to the device's connected sessions, if it has any. */
+  tell(deviceId: string, message: NotificationsWithdrawn): void
+  /** The key browsers' subscriptions are sealed with in the device file. */
+  storeKey: Uint8Array
   log: LogFn
   fetch?: typeof fetch
   mergeMs?: number
@@ -115,7 +132,13 @@ export function parseWaiting(value: unknown): Record<string, string[]> | null {
 export class DeviceNotifications {
   private readonly notifier: Notifier
   private readonly sender: PushSender
+  private readonly webSender: WebPushSender
   private readonly publicKey: string
+  /**
+   * Per browser, the tags of its notifications withdrawn since one of the same subject was sent,
+   * by subject, oldest first. A push cannot withdraw a notification, so the page closes these.
+   */
+  private readonly withdrawn = new Map<string, Map<string, string>>()
 
   constructor(private readonly options: DeviceNotificationsOptions) {
     const { devices } = options
@@ -136,6 +159,23 @@ export class DeviceNotifications {
       ...(options.fetch ? { fetch: options.fetch } : {}),
       ...(options.retry ? { retry: options.retry } : {}),
     })
+    this.webSender = new WebPushSender({
+      key: options.key,
+      hostId: options.hostId,
+      hostName: options.hostName,
+      device: (id) => {
+        const device = devices.get(id)
+        const push = devices.push(id)
+        return device && push?.web
+          ? { publicKey: device.publicKey, web: push.web, details: push.choices.details }
+          : null
+      },
+      secrets: (deviceId, web) => openWebPushSecrets(web, deviceId, options.storeKey),
+      gone: (deviceId, endpoint) => void this.webGone(deviceId, endpoint),
+      log: options.log,
+      ...(options.fetch ? { fetch: options.fetch } : {}),
+      ...(options.retry ? { retry: options.retry } : {}),
+    })
     this.notifier = new Notifier({
       devices: () =>
         devices.list().flatMap((device): NotifierDevice[] => {
@@ -143,8 +183,15 @@ export class DeviceNotifications {
           return push ? [{ id: device.id, push }] : []
         }),
       showing: options.showing,
+      // A browser's page in view shows what the host tells it; Web Push is for a page in the
+      // background or closed, which then shows none of its own.
+      notifiesItself: (deviceId) => {
+        const push = devices.push(deviceId)
+        return Boolean(push?.web && !push.target && options.foreground(deviceId))
+      },
       send: (job) => {
         this.sender.send(job)
+        this.sendWeb(job)
         // An ended activity's token is spent; the next activity brings its own.
         if (job.type === 'activity' && job.action === 'end') {
           void this.dropActivityToken(job.deviceId)
@@ -158,6 +205,7 @@ export class DeviceNotifications {
   state(deviceId: string): NotificationsState {
     const push = this.options.devices.push(deviceId)
     const target = push?.target
+    const withdrawn = this.withdrawn.get(deviceId)
     return {
       choices: push?.choices ?? DEFAULT_CHOICES,
       target: {
@@ -165,21 +213,41 @@ export class DeviceNotifications {
         activityStart: Boolean(target?.activity?.start),
         activityUpdate: Boolean(target?.activity?.update),
       },
+      web: push?.web
+        ? { endpoint: push.web.endpoint, withdrawn: withdrawn ? [...withdrawn.values()] : [] }
+        : null,
       signedIn: this.options.token() !== null,
       host: { id: this.options.hostId, key: this.publicKey },
     }
   }
 
-  /** `notifications.set`: the device's new target or choices, kept with it; null when it is gone. */
-  async update(deviceId: string, update: NotificationsUpdate): Promise<NotificationsState | null> {
+  /**
+   * `notifications.set`: the device's new target, subscription or choices, kept with it; null when
+   * the device is gone, `invalid` for a subscription whose keys are not ones.
+   */
+  async update(
+    deviceId: string,
+    update: NotificationsUpdate,
+  ): Promise<NotificationsState | 'invalid' | null> {
     const { devices } = this.options
     const before = devices.push(deviceId)
     const target = update.target === undefined ? (before?.target ?? null) : update.target
     for (const token of [target?.apns.token, target?.activity?.start, target?.activity?.update]) {
       if (token) addLogSecret(token)
     }
+    let web = before?.web
+    if (update.web === null) web = undefined
+    else if (update.web) {
+      if (!isUsableSubscription(update.web)) return 'invalid'
+      const { endpoint, auth, vapid } = update.web
+      for (const secret of [endpoint, auth, vapid.privateKey]) addLogSecret(secret)
+      web = storeWebPush(update.web, deviceId, this.options.storeKey)
+    }
+    // A new subscription shows none of the old one's notifications.
+    if (web?.endpoint !== before?.web?.endpoint) this.withdrawn.delete(deviceId)
     const next: DevicePush = {
       target,
+      ...(web ? { web } : {}),
       choices: { ...(before?.choices ?? DEFAULT_CHOICES), ...update.choices },
     }
     if (!(await devices.setPush(deviceId, next))) return null
@@ -206,11 +274,53 @@ export class DeviceNotifications {
   /** A device was removed, and its notifications with it. */
   forget(deviceId: string): void {
     this.notifier.forget(deviceId)
+    this.withdrawn.delete(deviceId)
   }
 
   stop(): void {
     this.notifier.stop()
     this.sender.stop()
+    this.webSender.stop()
+  }
+
+  /**
+   * A job for a browser: an alert goes as Web Push. A withdrawal cannot, since every push shows
+   * something, so its tag is kept for the page to close and sent to it if it is connected.
+   */
+  private sendWeb(job: PushJob): void {
+    if (job.type === 'activity' || !this.options.devices.push(job.deviceId)?.web) return
+    const kept = this.withdrawn.get(job.deviceId)
+    if (job.type === 'alert') {
+      kept?.delete(job.subject)
+      this.webSender.send(job)
+      return
+    }
+    void this.withdraw(job.deviceId, job.subject)
+  }
+
+  private async withdraw(deviceId: string, subject: string): Promise<void> {
+    const key = publicKeyBytes(this.options.devices.get(deviceId)?.publicKey)
+    if (!key) return
+    const tag = await pushTag(key, this.options.hostId, subject)
+    const kept = this.withdrawn.get(deviceId) ?? new Map<string, string>()
+    kept.delete(subject)
+    kept.set(subject, tag)
+    for (const oldest of kept.keys()) {
+      if (kept.size <= MAX_WITHDRAWN) break
+      kept.delete(oldest)
+    }
+    this.withdrawn.set(deviceId, kept)
+    this.options.tell(deviceId, { type: 'notifications.withdrawn', tags: [tag] })
+  }
+
+  /** The push service dropped the subscription: the browser hears nothing until it sends one. */
+  private async webGone(deviceId: string, endpoint: string): Promise<void> {
+    const { devices } = this.options
+    const push = devices.push(deviceId)
+    if (push?.web?.endpoint !== endpoint) return
+    await devices.setPush(deviceId, { target: push.target, choices: push.choices })
+    this.withdrawn.delete(deviceId)
+    this.notifier.deviceChanged()
   }
 
   private async unregistered(deviceId: string, token: PushTokenKind): Promise<void> {
