@@ -13,7 +13,8 @@ import type { Transport } from '@shared/remote/transport'
 import installScript from '../../tools/daemon/install.sh?raw'
 import uninstallScript from '../../tools/daemon/uninstall.sh?raw'
 import { quotePosix } from '../agent-host/quote'
-import { RELEASES_ENV } from '../daemon/update'
+import { signedChecksums, type SignedRequests } from '../daemon/signed-release'
+import { CHECKSUMS_ENV, RELEASES_ENV, releaseSources } from '../daemon/update'
 import { CLOSE_GRACE_MS } from './limits'
 import { streamTransport } from './stream-transport'
 
@@ -290,17 +291,39 @@ export function unsupportedSystem(system: SshSetupReport['system']): string | nu
 }
 
 /**
- * The release's install script for `version`, with its output on one stream so its last lines
- * read in order, and the download place of `KETTU_RELEASES_URL` when this computer names one.
+ * The release's install script for `version`, which checks the package against `checksums`, the
+ * text of the release's checksums as this computer verified it, instead of downloading them. Its
+ * output is on one stream so its last lines read in order, and the download place of
+ * `KETTU_RELEASES_URL` is passed on when this computer names one.
  */
-export function installRun(version: string, env: NodeJS.ProcessEnv = process.env): string {
+export function installRun(
+  version: string,
+  checksums: string,
+  env: NodeJS.ProcessEnv = process.env,
+): string {
   const releases = env[RELEASES_ENV]?.trim()
   return [
     'exec 2>&1',
     `set -- --version ${quotePosix(version)}`,
+    `${CHECKSUMS_ENV}=${quotePosix(checksums)}`,
+    `export ${CHECKSUMS_ENV}`,
     ...(releases ? [`${RELEASES_ENV}=${quotePosix(releases)}`, `export ${RELEASES_ENV}`] : []),
     installScript,
   ].join('\n')
+}
+
+/**
+ * `installRun` for `version` with the checksums taken, signed, from the first place that serves
+ * them, which are the places the machine downloads the package from. Rejects, saying why, when
+ * none does, so nothing runs there on the word of a place alone.
+ */
+export async function verifiedInstallRun(
+  version: string,
+  requests: SignedRequests,
+  env: NodeJS.ProcessEnv = process.env,
+): Promise<string> {
+  const checksums = await signedChecksums(requests, releaseSources(env[RELEASES_ENV]), version)
+  return installRun(version, checksums, env)
 }
 
 /**

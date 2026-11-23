@@ -208,13 +208,17 @@ async function terminal(
 }
 
 /** Runs an install script with its output on this terminal, and resolves to its exit code. */
-async function runInstallScript(script: string, args: string[]): Promise<number> {
+async function runInstallScript(
+  script: string,
+  args: string[],
+  env: Record<string, string>,
+): Promise<number> {
   const dir = await mkdtemp(path.join(os.tmpdir(), 'kettu-update-'))
   try {
     const file = path.join(dir, 'install.sh')
     await writeFile(file, script)
     return await new Promise<number>((resolve, reject) => {
-      spawn('/bin/sh', [file, ...args], { stdio: 'inherit' })
+      spawn('/bin/sh', [file, ...args], { stdio: 'inherit', env: { ...process.env, ...env } })
         .once('error', reject)
         .once('exit', (code, signal) => resolve(code ?? (signal ? 128 : 1)))
     })

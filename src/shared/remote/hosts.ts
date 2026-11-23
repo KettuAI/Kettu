@@ -160,7 +160,7 @@ export type SshAddFailure =
   | 'ssh_forwarding'
   /** Its system or processor has no daemon package; the detail names them. */
   | 'ssh_unsupported'
-  /** The install script failed; the detail is the end of its output. */
+  /** The install script failed, or no place served signed checksums; the detail says why. */
   | 'ssh_install'
   /** The daemon is installed but not running. */
   | 'ssh_not_running'

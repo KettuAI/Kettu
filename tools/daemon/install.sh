@@ -12,6 +12,8 @@
 #   --no-service         Do not set up the service, as in a container; run `kettu run` instead
 #
 # KETTU_RELEASES_URL names the one place to download releases from, laid out as GitHub's.
+# KETTU_CHECKSUMS holds the text of kettu-daemon-sha256sums.txt that the caller has already
+# verified; the checksums are then not downloaded, and the package must match them.
 set -eu
 
 downloads=https://download.kettu.sh
@@ -41,7 +43,7 @@ while [ $# -gt 0 ]; do
       shift
       ;;
     -h | --help)
-      sed -n '2,15s/^# \{0,1\}//p' "$0" 2>/dev/null || say 'See https://kettu.sh/install'
+      sed -n '2,/^set -eu$/s/^# \{0,1\}//p' "$0" 2>/dev/null || say 'See https://kettu.sh/install'
       exit 0
       ;;
     *) fail "Unknown option $1" ;;
@@ -125,7 +127,15 @@ trap 'exit 130' INT
 trap 'exit 143' TERM
 
 file=kettu-daemon-$os-$arch.tar.gz
-# Downloads the package and the checksums from one place and checks them, or sets why not.
+# Set, even to nothing, the checksums are the caller's, who verified them; an empty list names no
+# package, so the install fails instead of falling back to downloaded ones.
+given=0
+if [ -n "${KETTU_CHECKSUMS+set}" ]; then
+  given=1
+  printf '%s\n' "$KETTU_CHECKSUMS" > "$work/sums"
+fi
+# Downloads the package from one place, and the checksums too unless the caller gave them, and
+# checks the package, or sets why not.
 fetch() {
   if [ -n "$wanted" ]; then
     from=$1/download/v$wanted
@@ -137,13 +147,17 @@ fetch() {
     why="Could not download $from/$file"
     return 1
   fi
-  if ! download "$from/kettu-daemon-sha256sums.txt" "$work/sums"; then
+  if [ "$given" = 0 ] && ! download "$from/kettu-daemon-sha256sums.txt" "$work/sums"; then
     why="Could not download $from/kettu-daemon-sha256sums.txt"
     return 1
   fi
   expected=$(awk -v name="$file" '$2 == name || $2 == "*" name { print $1; exit }' "$work/sums")
   if [ -z "$expected" ]; then
-    why="The checksums at $from list no $file"
+    if [ "$given" = 1 ]; then
+      why="The checksums given list no $file"
+    else
+      why="The checksums at $from list no $file"
+    fi
     return 1
   fi
   if [ "$(sha256 "$work/$file")" != "$expected" ]; then

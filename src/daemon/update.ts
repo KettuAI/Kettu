@@ -1,15 +1,19 @@
 // `kettu update`: moves a daemon the install script installed to the latest release by running that
 // release's install script, which checks the package, moves ~/.local/bin/kettu to it and points the
-// service at it.
+// service at it. The script and the checksums it checks the package against are taken from a place
+// only with the release key's signature on both.
 
 import path from 'node:path'
+import { signedRelease, type SignedRelease } from './signed-release'
 
 /** Names the one place to download releases from, laid out as GitHub's, as for install.sh. */
 export const RELEASES_ENV = 'KETTU_RELEASES_URL'
 export const DOWNLOADS = 'https://download.kettu.sh'
 export const RELEASES = 'https://github.com/KettuAI/Kettu/releases'
+/** Holds the checksums `kettu update` verified, which the install script then takes as they are. */
+export const CHECKSUMS_ENV = 'KETTU_CHECKSUMS'
 
-// The latest release's redirect and its install script are small; a place this slow is down.
+// The latest release's redirect is small; a place this slow is down.
 const REQUEST_TIMEOUT_MS = 20_000
 
 /** Kettu's download service and then GitHub, or only the place `pinned` names. */
@@ -65,12 +69,14 @@ export interface UpdateDeps {
   releases: string[]
   userAgent: string
   fetch: typeof fetch
+  /** The keys the signatures must hold under; the release keys the app has built in by default. */
+  keys?: readonly string[]
   /** Whether the daemon's service is installed, so the install sets it up again. */
   service: boolean
   /** Whether a daemon runs in the foreground, outside the service, which the update leaves be. */
   foreground: boolean
-  /** Runs the downloaded install script with `args` and resolves to its exit code. */
-  install(script: string, args: string[]): Promise<number>
+  /** Runs the verified install script with `args` and `env` and resolves to its exit code. */
+  install(script: string, args: string[], env: Record<string, string>): Promise<number>
   write(text: string): void
 }
 
@@ -99,14 +105,15 @@ export async function latestVersion(deps: Releases) {
 }
 
 /**
- * The latest release, with its install script when it is newer than the one running, from the
- * first place that answers with both. A place whose latest is older than the one running lags
- * behind, so the next is asked, and only when every place that answered has nothing newer is
- * there no update.
+ * The latest release, with its verified install script and checksums when it is newer than the one
+ * running, from the first place that answers with them. A place whose latest is older than the one
+ * running lags behind, so the next is asked, and a place whose files carry no signature that holds
+ * is skipped as one that is down; only when every place that answered has nothing newer is there no
+ * update.
  */
 async function latestRelease(
   deps: UpdateDeps,
-): Promise<{ version: string; script: string | null }> {
+): Promise<{ version: string; release: SignedRelease | null }> {
   let failure: unknown = new UpdateError('No place to download releases from')
   let stale: string | null = null
   for (const [index, releases] of deps.releases.entries()) {
@@ -119,24 +126,15 @@ async function latestRelease(
           deps.write(`${releases} offers ${version}, older than ${deps.version}; trying ${next}\n`)
         continue
       }
-      if (!isNewer(version, deps.version)) return { version, script: null }
-      const url = `${releases}/download/v${version}/install.sh`
-      let script: string
-      try {
-        const response = await request(deps, url)
-        if (!response.ok) throw new Error(`it answered ${response.status}`)
-        script = await response.text()
-      } catch (error) {
-        throw new UpdateError(`Could not download ${url}: ${(error as Error).message}`)
-      }
-      return { version, script }
+      if (!isNewer(version, deps.version)) return { version, release: null }
+      return { version, release: await signedRelease(deps, releases, version) }
     } catch (error) {
       failure = error
       const next = deps.releases[index + 1]
       if (next) deps.write(`${(error as Error).message}; trying ${next}\n`)
     }
   }
-  if (stale) return { version: stale, script: null }
+  if (stale) return { version: stale, release: null }
   throw failure
 }
 
@@ -148,18 +146,19 @@ export async function update(deps: UpdateDeps): Promise<number> {
         path.dirname(deps.bundleDir),
     )
   }
-  const { version: latest, script } = await latestRelease(deps)
-  if (script === null) {
+  const { version: latest, release } = await latestRelease(deps)
+  if (release === null) {
     deps.write(`The Kettu daemon ${deps.version} is up to date.\n`)
     return 0
   }
   deps.write(`Updating the Kettu daemon from ${deps.version} to ${latest}\n`)
-  // The script tries the same places in the same order for the package and its checksums.
-  const code = await deps.install(script, [
-    '--version',
-    latest,
-    ...(deps.service ? [] : ['--no-service']),
-  ])
+  // The script tries the same places in the same order for the package alone, which it checks
+  // against the checksums verified here.
+  const code = await deps.install(
+    release.script,
+    ['--version', latest, ...(deps.service ? [] : ['--no-service'])],
+    { [CHECKSUMS_ENV]: release.checksums },
+  )
   if (code === 0 && deps.foreground) {
     deps.write(`The daemon running in the foreground runs ${latest} once you start it again.\n`)
   }
