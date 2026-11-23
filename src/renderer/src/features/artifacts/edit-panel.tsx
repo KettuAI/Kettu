@@ -22,9 +22,10 @@ import { SegmentedControl } from '@renderer/components/affect/segmented-control'
 import { AgentMark } from '@renderer/components/agents/agent-mark'
 import { Skeleton } from '@renderer/components/ui/skeleton'
 import { Select, SettingsStyles } from '@renderer/features/routines/kit'
-import { errorCode, host } from '@renderer/lib/host'
+import { errorCode, errorMessage, host } from '@renderer/lib/host'
 import { i18n } from '@renderer/lib/i18n'
 import { cn } from '@renderer/lib/utils'
+import { dropUnsaved, keepUnsaved, unsavedAt, unsavedSlot } from '@renderer/stores/artifact-unsaved'
 import type { ArtifactEditor, Picked } from './editor'
 import { CardHead, KeptNote, Notice, SaveChip, UndoButton } from './tool-parts'
 import { useEditRun } from './use-edit-run'
@@ -152,6 +153,15 @@ function changes(start: Fields, now: Fields): { style: PreviewStyle; text: strin
     if (css !== null) style[PROPERTY[field]] = css
   }
   return { style, text: now.text !== null && now.text !== start.text ? now.text : null }
+}
+
+/** The fields of `now` that differ from `from`, as typed. */
+function typedFields(from: Fields, now: Fields): Partial<Fields> {
+  const typed: Partial<Fields> = {}
+  for (const field of Object.keys(now) as (keyof Fields)[]) {
+    if (now[field] !== from[field]) typed[field] = now[field] as never
+  }
+  return typed
 }
 
 /** The element a write changes: its file, where its start tag is and the version that says so. */
@@ -284,11 +294,26 @@ export function EditPanel({
       radius: style.radius === null ? '' : trimmed(style.radius),
     }
   }, [element, source, selection])
-  const [fields, setFields] = useState<Fields>(start)
+  // A change to this element that did not save before the viewer was left, shown again.
+  const slot = unsavedSlot({
+    kind: 'element',
+    page: picked.page,
+    path: selection.path,
+    src: selection.src ?? -1,
+  })
+  const [kept, setKept] = useState(() => {
+    const change = unsavedAt(id, slot)
+    return change?.kind === 'element' ? change : null
+  })
+  const [fields, setFields] = useState<Fields>(() => ({ ...start, ...kept?.fields }))
   // What the latest version holds, as far as this card knows.
   const [written, setWritten] = useState<Fields>(start)
   const [refused, setRefused] = useState<'held' | null>(null)
-  const run = useEditRun(id)
+  const run = useEditRun(id, kept ? { state: 'failed', error: kept.error } : null)
+  // The change on screen failed to save and has not changed since: it waits for Retry.
+  const resting = useRef(kept !== null)
+  // The version a kept change was made on, so a newer one is a conflict before it is written over.
+  const keptBase = useRef(kept?.version ?? null)
   // The fields as they were before this card's run of saves, which Undo puts back.
   const runStart = useRef<Fields | null>(null)
   const [ran, setRan] = useState(false)
@@ -297,7 +322,10 @@ export function EditPanel({
   const [shownStart, setShownStart] = useState(start)
   if (shownStart !== start) {
     setShownStart(start)
-    if (!ran && sameFields(fields, written)) {
+    if (kept && !ran) {
+      setFields({ ...start, ...kept.fields })
+      setWritten(start)
+    } else if (!ran && sameFields(fields, written)) {
       setFields(start)
       setWritten(start)
     }
@@ -315,11 +343,19 @@ export function EditPanel({
   // What is typed in place goes into the Text field, which saves as the other fields do.
   useEffect(
     () =>
-      editor.onTyped((text) => setFields((now) => (now.text === null ? now : { ...now, text }))),
+      editor.onTyped((text) => {
+        resting.current = false
+        setKept(null)
+        setFields((now) => (now.text === null ? now : { ...now, text }))
+      }),
     [editor],
   )
 
-  const set = (patch: Partial<Fields>) => setFields((now) => ({ ...now, ...patch }))
+  const set = (patch: Partial<Fields>) => {
+    resting.current = false
+    setKept(null)
+    setFields((now) => ({ ...now, ...patch }))
+  }
 
   const target: Target | null =
     element && loaded && editable === 'yes' && !heldBy
@@ -346,8 +382,9 @@ export function EditPanel({
     run.pending()
     runStart.current ??= from
     setRan(true)
+    resting.current = false
     writing = writing.then(async () => {
-      const base = Math.max(to.version, wrote.current)
+      const base = keptBase.current ?? Math.max(to.version, wrote.current)
       try {
         const { version: made } = await host('artifacts.editElement', {
           id,
@@ -359,15 +396,32 @@ export function EditPanel({
           text: change.text,
         })
         wrote.current = made
+        keptBase.current = null
+        dropUnsaved(id, slot)
         run.wrote(made, base)
         if (live.current) setWritten(snapshot)
       } catch (reason) {
         // Nothing typed is lost: the fields keep it and the chip offers to try again.
         queued.current = from
+        // The next try is made on the version shown by then.
+        if (errorCode(reason) === 'conflict') keptBase.current = null
         if (errorCode(reason) === 'conflict' && hasHeld(reason)) {
           if (live.current) setRefused('held')
           run.settle()
-        } else run.failed(reason)
+        } else {
+          // Kept beyond this card, which may be gone by now, until it saves or is discarded.
+          keepUnsaved(id, {
+            kind: 'element',
+            page: picked.page,
+            path: to.path,
+            src: selection.src ?? -1,
+            fields: typedFields(from, snapshot),
+            version: base,
+            error: errorMessage(reason),
+          })
+          resting.current = sameFields(snapshot, now.current.fields)
+          run.failed(reason)
+        }
       }
     })
   }
@@ -375,7 +429,7 @@ export function EditPanel({
   const dirty = !sameFields(fields, written)
   const fieldsKey = JSON.stringify(fields)
   useEffect(() => {
-    if (!dirty || !target) return
+    if (!dirty || !target || resting.current) return
     run.pending()
     const timer = setTimeout(() => {
       const at = now.current
@@ -392,10 +446,22 @@ export function EditPanel({
     return () => {
       live.current = false
       const at = now.current
-      if (at.target && !sameFields(at.fields, at.written)) save(at.fields, at.written, at.target)
+      if (at.target && !resting.current && !sameFields(at.fields, at.written)) {
+        save(at.fields, at.written, at.target)
+      }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  // Put back by hand, a change that failed is no longer there to save.
+  const failed = run.save?.state === 'failed'
+  const dismiss = run.dismiss
+  useEffect(() => {
+    if (dirty || !failed) return
+    resting.current = false
+    dropUnsaved(id, slot)
+    dismiss()
+  }, [dirty, failed, id, slot, dismiss])
 
   const retry = () => {
     const at = now.current

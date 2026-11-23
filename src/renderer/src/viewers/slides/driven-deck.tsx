@@ -8,14 +8,17 @@ import {
   useLayoutEffect,
   useMemo,
   useRef,
+  useState,
   type MouseEvent,
   type RefObject,
 } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
+  DECK_KEPT_TEXTS,
   DECK_TEXT_CHARS,
   DECK_TRACKED,
   type DeckBox,
+  type DeckKept,
   type DeckPlace,
   type DeckReport,
   type DeckSaveState,
@@ -62,6 +65,21 @@ function withTyped(deck: Deck, path: TextPath, text: string): Deck {
     return copy
   }
   return withText(deck, path, text)
+}
+
+/** Whether `path` names a text of the deck, or the notes of one of its slides. */
+function hasText(deck: Deck, path: TextPath): boolean {
+  let at: unknown = deck
+  for (const key of path.slice(0, -1)) {
+    if (typeof at !== 'object' || at === null || !Object.hasOwn(at, key)) return false
+    at = (at as Record<string | number, unknown>)[key]
+  }
+  if (typeof at !== 'object' || at === null) return false
+  const last = path.at(-1)!
+  if (last === 'notes' && path.length === 3 && path[0] === 'slides') return true
+  return (
+    Object.hasOwn(at, last) && typeof (at as Record<string | number, unknown>)[last] === 'string'
+  )
 }
 
 function deckOf(text: string | undefined): Deck | null {
@@ -113,9 +131,21 @@ export function DrivenDeck({
     sourceRef.current = source
   })
 
+  // What an earlier frame typed and could not save, shown over the deck until it saves.
+  const [shownKept, setShownKept] = useState<readonly DeckKept[] | null>(null)
+  const showsKept = useRef(false)
+
   const tell = useCallback((next: DeckSaveState, saved: number | null = run.current.last) => {
     run.current.state = next
-    report({ t: 'save', state: next, version: saved, undo: run.current.before !== null })
+    // Once a save ends, what still waits is the window's to keep; nothing, once all is written.
+    const ended = next !== 'editing' && next !== 'saving'
+    report({
+      t: 'save',
+      state: next,
+      version: saved,
+      undo: run.current.before !== null,
+      ...(ended && { kept: [...run.current.pending.values()].slice(0, DECK_KEPT_TEXTS) }),
+    })
   }, [])
 
   // A save asked for while one ran, once it is done.
@@ -174,6 +204,8 @@ export function DrivenDeck({
       for (const [key, change] of typed) {
         if (now.pending.get(key)?.text === change.text) now.pending.delete(key)
       }
+      showsKept.current = false
+      setShownKept(null)
       tell('saved', written.version)
     }
     if (now.again) {
@@ -192,6 +224,8 @@ export function DrivenDeck({
     if (!before || src.head === null || now.busy) return
     clearTimeout(now.timer)
     now.pending.clear()
+    showsKept.current = false
+    setShownKept(null)
     now.busy = true
     tell('saving')
     const written = await src.write(src.head, before.text)
@@ -208,6 +242,7 @@ export function DrivenDeck({
     (path: TextPath, text: string, at: 'input' | 'leave') => {
       const now = run.current
       now.pending.set(JSON.stringify(path), { path, text })
+      if (showsKept.current) setShownKept([...now.pending.values()])
       clearTimeout(now.timer)
       if (at === 'leave') {
         void save()
@@ -235,6 +270,32 @@ export function DrivenDeck({
       if (run.current.pending.size === 0) run.current.before = null
     })
   }, [mode, save])
+
+  const keptAsked = state.kept
+  const restored = useRef(false)
+  useEffect(() => {
+    if (restored.current || !keptAsked?.length || !deck || mode !== 'edit') return
+    if (source.head === null || source.head !== version) return
+    restored.current = true
+    const now = run.current
+    if (now.pending.size > 0) return
+    // A text a newer version no longer has is left out; with none left, nothing can show.
+    const found = keptAsked.filter(({ path }) => hasText(deck, path))
+    for (const change of found) now.pending.set(JSON.stringify(change.path), change)
+    showsKept.current = found.length > 0
+    // After this pass, as typing would set it.
+    queueMicrotask(() => {
+      if (found.length > 0) setShownKept(found)
+      tell(found.length > 0 ? 'failed' : 'conflict')
+    })
+  }, [keptAsked, deck, mode, source.head, version, tell])
+  const shownDeck = useMemo(() => {
+    if (!deck || !shownKept) return deck
+    let next = deck
+    for (const { path, text } of shownKept)
+      if (hasText(next, path)) next = withText(next, path, text)
+    return next
+  }, [deck, shownKept])
 
   const editing = useMemo<SlideEditing | null>(
     () =>
@@ -333,7 +394,7 @@ export function DrivenDeck({
     >
       <Stage size={size}>
         <SlideView
-          slide={deck.slides[index]!}
+          slide={(shownDeck ?? deck).slides[index]!}
           index={index}
           editing={editing}
           label={t('slides.slide', { number: index + 1 })}

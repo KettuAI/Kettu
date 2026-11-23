@@ -7,7 +7,11 @@ import { useUnsaved } from './unsaved'
  * A run of the user's own saves from one card: what the chip says, and Undo, which writes the
  * version before the run again as the newest one, so nothing in between is lost.
  */
-export function useEditRun(id: string): {
+export function useEditRun(
+  id: string,
+  /** What the chip says from the start: a change kept from before that did not save. */
+  initial: SaveState | null = null,
+): {
   save: SaveState | null
   /** A change waits to be written, or is on its way. */
   pending: () => void
@@ -16,10 +20,12 @@ export function useEditRun(id: string): {
   failed: (reason: unknown) => void
   /** Clears what the chip says, as nothing waits any more. */
   settle: () => void
+  /** Clears a failure, as its change is no longer there to save. */
+  dismiss: () => void
   /** Undo, while the run has a save to take back. */
   undo: (() => Promise<number | null>) | null
 } {
-  const [save, setSave] = useState<SaveState | null>(null)
+  const [save, setSave] = useState<SaveState | null>(initial)
   useUnsaved(id, save?.state === 'failed')
   const run = useRef<{ base: number; head: number; edits: number } | null>(null)
   const [undoable, setUndoable] = useState(false)
@@ -45,6 +51,7 @@ export function useEditRun(id: string): {
     if (live.current) setSave({ state: 'failed', error: errorMessage(reason) })
   }, [])
   const settle = useCallback(() => setSave((was) => (was?.state === 'pending' ? null : was)), [])
+  const dismiss = useCallback(() => setSave((was) => (was?.state === 'failed' ? null : was)), [])
   const undo = useCallback(async (): Promise<number | null> => {
     const now = run.current
     if (!now) return null
@@ -61,5 +68,5 @@ export function useEditRun(id: string): {
     return version
   }, [id])
 
-  return { save, pending, wrote, failed, settle, undo: undoable ? undo : null }
+  return { save, pending, wrote, failed, settle, dismiss, undo: undoable ? undo : null }
 }

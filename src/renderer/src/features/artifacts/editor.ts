@@ -55,8 +55,11 @@ export interface EditorFrame {
   release(): void
   /** Where the element whose start tag lies at `src` is in the page, or null; null after a while. */
   locate(src: number): Promise<PageBox | null>
-  /** Sets the page's declared parameters, shown at once and kept until it reloads. */
-  params(values: Record<string, string | number | boolean>): void
+  /**
+   * Sets the page's declared parameters, shown at once and kept until it reloads; `hold` sets
+   * them on each page the frame loads too, until they are set without it.
+   */
+  params(values: Record<string, string | number | boolean>, hold?: boolean): void
   /** Takes the keys the page passes on, until null. */
   keys(listener: ((key: PageKey) => void) | null): void
   /** Scrolls the page under a pick layer, which takes the wheel. */
@@ -96,6 +99,7 @@ export class ArtifactEditor {
   private pickedBy: EditorFrame | null = null
   private pointing: { frame: EditorFrame; x: number; y: number } | null = null
   private pointFrame = 0
+  private wanted: { page: number | null; src: number } | null = null
 
   /** `origin` is the artifact's URL as `artifact:open` gave it, without its last slash. */
   constructor(private readonly origin: string) {}
@@ -154,7 +158,12 @@ export class ArtifactEditor {
             channel: frame.link.channel,
           })
         }),
-      params: (values) => frame.link.post({ v: RUNTIME_VERSION, kind: 'params', values }),
+      params: (values, hold) => {
+        const message = { v: RUNTIME_VERSION, kind: 'params', values } as const
+        if (hold) frame.link.keep(message)
+        else frame.link.forget('params')
+        frame.link.post(message)
+      },
       keys: (listener) => frame.link.keys(listener),
       scroll: (dx, dy) => frame.link.post({ v: RUNTIME_VERSION, kind: 'select-scroll', dx, dy }),
       typeIn: () => {
@@ -206,6 +215,22 @@ export class ArtifactEditor {
       pinColors: pinColors(),
     })
     frame.link.post({ v: RUNTIME_VERSION, kind: 'select-pins', pins: this.pins(frame.page) })
+    this.want(frame)
+  }
+
+  /**
+   * Picks the element whose start tag lies at `src` on `page`, once a frame shows the page in
+   * select mode, as a pick by pointer would; until something else is picked or the pick let go.
+   */
+  repick(page: number | null, src: number): void {
+    this.wanted = { page, src }
+    for (const frame of this.frames) this.want(frame)
+  }
+
+  private want(frame: EditorFrame): void {
+    const wanted = this.wanted
+    if (!wanted || wanted.page !== frame.page || this.state.mode !== 'select') return
+    frame.link.post({ v: RUNTIME_VERSION, kind: 'select-source', src: wanted.src, tell: true })
   }
 
   /** Sends the theme's colors again, as after the color mode changed. */
@@ -215,7 +240,12 @@ export class ArtifactEditor {
 
   setMode(mode: EditorMode): void {
     if (mode === this.state.mode) return
-    if (mode === null || this.state.mode === null) this.clearPick()
+    if (mode === null || this.state.mode === null) {
+      // Entering a mode lets go of nothing asked for meanwhile.
+      const wanted = mode ? this.wanted : null
+      this.clearPick()
+      this.wanted = wanted
+    }
     this.set({ mode, pin: null })
     for (const frame of this.frames) this.drive(frame)
   }
@@ -284,6 +314,7 @@ export class ArtifactEditor {
     point: { x: number; y: number } | null,
   ): void {
     if (!this.state.mode) return
+    if (selection) this.wanted = null
     const was = this.state.picked
     if (this.pickedBy && this.pickedBy !== frame) {
       this.pickedBy.link.post({ v: RUNTIME_VERSION, kind: 'select-source', src: null })
@@ -309,6 +340,7 @@ export class ArtifactEditor {
 
   /** Lets go of the picked element, putting back any preview on it. */
   clearPick(): void {
+    this.wanted = null
     if (this.pickedBy) {
       if (this.state.typing) {
         this.pickedBy.link.post({ v: RUNTIME_VERSION, kind: 'text-edit', on: false })

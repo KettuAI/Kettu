@@ -19,6 +19,9 @@ export const DOC_TRACKED = 400
 export const DOC_TEXT_CHARS = 120
 export const DOC_QUOTE_CHARS = 300
 
+/** The most characters of a block a failed save carries, as it was and as typed. */
+export const DOC_KEPT_CHARS = 8000
+
 const MAX_OFFSET = 64 * 1024 * 1024
 const MAX_PX = 1_000_000
 const SLUG = /^[\p{L}\p{N}_-]{1,80}$/u
@@ -48,6 +51,13 @@ export interface DocPlace {
   height: number
 }
 
+/** A block typed in that did not save: where it starts, its Markdown as it was and as typed. */
+export interface DocKept {
+  at: number
+  was: string
+  now: string
+}
+
 /** How a typed change is saving: the version it saved as, and whether Undo can take it back. */
 export type DocSaveState = 'editing' | 'saving' | 'saved' | 'failed' | 'conflict' | 'refused'
 
@@ -65,7 +75,17 @@ export type DocReport =
   /** Words selected in one block, or the selection gone when `at` is null. */
   | { t: 'select'; at: number; tag: string; text: string; quote: string; box: DocBox }
   | { t: 'select'; at: null }
-  | { t: 'save'; state: DocSaveState; version: number | null; undo: boolean }
+  | {
+      t: 'save'
+      state: DocSaveState
+      version: number | null
+      undo: boolean
+      /**
+       * What was typed and did not save, for the window to hand back in a later frame; null once
+       * nothing waits. Older viewers leave it out.
+       */
+      kept?: DocKept | null
+    }
 
 /** How the window wants the document shown. */
 export interface DocState {
@@ -103,6 +123,8 @@ export interface DocState {
    * of its tag; left out or null when no agent writes. Older windows leave it out.
    */
   writing?: { section: string | null; tag: string } | null
+  /** What an earlier frame typed and could not save, to show again as typed. */
+  kept?: DocKept | null
 }
 
 export type DocDrive =
@@ -150,6 +172,16 @@ function box(value: unknown): DocBox | null {
   return x === null || y === null || width === null || height === null
     ? null
     : { x, y, width, height }
+}
+
+/** What the page says it typed, or null when it is not that or too long to keep. */
+export function parseDocKept(value: unknown): DocKept | null {
+  if (!isRecord(value)) return null
+  const at = offset(value.at)
+  const { was, now } = value
+  if (at === null || typeof was !== 'string' || typeof now !== 'string') return null
+  if (was.length > DOC_KEPT_CHARS || now.length > DOC_KEPT_CHARS) return null
+  return { at, was, now }
 }
 
 function heading(value: unknown): DocHeading | null {
@@ -230,7 +262,14 @@ export function parseDocReport(value: unknown): DocReport | null {
       if (version !== null && (!Number.isSafeInteger(version) || (version as number) < 1)) {
         return null
       }
-      return { t: 'save', state, version: version as number | null, undo: value.undo }
+      const save = {
+        t: 'save',
+        state,
+        version: version as number | null,
+        undo: value.undo,
+      } as const
+      if (value.kept === undefined) return save
+      return { ...save, kept: value.kept === null ? null : parseDocKept(value.kept) }
     }
     default:
       return null

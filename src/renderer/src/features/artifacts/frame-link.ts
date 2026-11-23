@@ -84,7 +84,13 @@ function newChannel(): string {
 }
 
 type Sticky =
-  'select-mode' | 'select-pins' | 'select-source' | 'select-keys' | 'select-doc' | 'select-deck'
+  | 'select-mode'
+  | 'select-pins'
+  | 'select-source'
+  | 'select-keys'
+  | 'select-doc'
+  | 'select-deck'
+  | 'params'
 
 /**
  * One frame's link: messages into its page, of which the last mode, pins and pick are sent again
@@ -182,6 +188,11 @@ export class FrameLink {
   /** Keeps a message for the next page the frame loads, without sending it to this one. */
   keep(message: DriveMessage & { kind: Sticky }): void {
     this.sticky.set(message.kind, message)
+  }
+
+  /** Sends a kept kind of message to no later page. */
+  forget(kind: Sticky): void {
+    this.sticky.delete(kind)
   }
 
   dispose(): void {

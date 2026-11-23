@@ -35,6 +35,20 @@ describe("a document viewer's report", () => {
     expect(parseDocReport(save)).toEqual(save)
   })
 
+  it('carries a block that did not save as typed, and drops one that is not a block', () => {
+    const save = { t: 'save', state: 'failed', version: null, undo: false }
+    const kept = { at: 12, was: 'Old\n*words*', now: 'New\n*words*' }
+    expect(parseDocReport({ ...save, kept })).toEqual({ ...save, kept })
+    expect(parseDocReport({ ...save, kept: { ...kept, run: 'x' } })).toEqual({ ...save, kept })
+    expect(parseDocReport({ ...save, kept: null })).toEqual({ ...save, kept: null })
+    expect(parseDocReport({ ...save, kept: { ...kept, at: -1 } })).toEqual({ ...save, kept: null })
+    expect(parseDocReport({ ...save, kept: { ...kept, now: 4 } })).toEqual({ ...save, kept: null })
+    expect(parseDocReport({ ...save, kept: { ...kept, now: 'x'.repeat(8001) } })).toEqual({
+      ...save,
+      kept: null,
+    })
+  })
+
   it('makes what the page wrote one line of plain text, capped', () => {
     const select = parseDocReport({
       t: 'select',

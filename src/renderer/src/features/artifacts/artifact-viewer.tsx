@@ -43,6 +43,7 @@ import {
   type ViewerMode,
 } from '@renderer/stores/artifact-viewer'
 import { setDeckSlide, useDeckSlide } from '@renderer/stores/artifact-deck'
+import { unsavedOf } from '@renderer/stores/artifact-unsaved'
 import {
   restoreArtifact,
   restoreVersion,
@@ -211,6 +212,17 @@ export default function ArtifactViewer(place: ViewerPlace) {
   const renders = useHostHas('thumbnails') === true
   const editor = useMemo(() => (url ? new ArtifactEditor(url.slice(0, -1)) : null), [url])
   useEffect(() => () => editor?.dispose(), [editor])
+  // A change that did not save before the viewer was left shows again where it was made.
+  useEffect(() => {
+    const kept = unsavedOf(id)
+    if (kept.length === 0) return
+    const params = kept.find((change) => change.kind === 'params')
+    if (params?.kind === 'params')
+      setViewerState(id, { right: 'tweaks', selection: [params.frame] })
+    if (kept.some((change) => change.kind !== 'params')) setViewerState(id, { mode: 'edit' })
+    const element = kept.find((change) => change.kind === 'element')
+    if (editor && element?.kind === 'element') editor.repick(element.page, element.src)
+  }, [id, editor])
   // Pins and the picked outline take the theme's colors, again when the color mode changes.
   const dark = useDark()
   useEffect(() => editor?.restyle(), [editor, dark])

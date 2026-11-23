@@ -19,9 +19,11 @@ import { documentSections, type ChangedPassage } from '@shared/artifact-changes'
 import { MESSAGE_BYTES } from '@shared/artifact-runtime/page-messages'
 import {
   DOC_HEADINGS,
+  DOC_KEPT_CHARS,
   DOC_PLACES,
   DOC_QUOTE_CHARS,
   type DocHeading,
+  type DocKept,
   type DocPlace,
   type DocReport,
   type DocSaveState,
@@ -206,6 +208,8 @@ interface Editing {
   saved: string
   /** Where the click that began it landed, for the caret. */
   point: { x: number; y: number } | null
+  /** Its text as typed in an earlier frame, which it shows from the start; else as saved. */
+  typed?: string
 }
 
 /** The document with a block replaced, found again nearest its place when a new version moved it. */
@@ -315,10 +319,20 @@ export function DocumentViewer({ config, view }: { config: ViewerConfig; view: V
     editingRef.current = editing
   })
 
-  const tell = useCallback((next: DocSaveState, saved: number | null = edit.current.last) => {
-    edit.current.state = next
-    report({ t: 'save', state: next, version: saved, undo: edit.current.before !== null })
-  }, [])
+  /** `kept` is what did not save, for the window to keep; null once nothing waits. */
+  const tell = useCallback(
+    (next: DocSaveState, saved: number | null = edit.current.last, kept?: DocKept | null) => {
+      edit.current.state = next
+      report({
+        t: 'save',
+        state: next,
+        version: saved,
+        undo: edit.current.before !== null,
+        ...(kept !== undefined && { kept }),
+      })
+    },
+    [],
+  )
 
   const docRef = useRef(doc)
   useEffect(() => {
@@ -343,11 +357,18 @@ export function DocumentViewer({ config, view }: { config: ViewerConfig; view: V
     const block = editedSource(element, run.map)
     if (block === null) return tell('refused')
     if (block === now.saved) {
-      if (run.state === 'editing') tell(run.last === null ? 'editing' : 'saved')
+      // Typed back to what it was, nothing waits to save any more.
+      if (run.state === 'editing' || run.state === 'failed' || run.state === 'conflict') {
+        tell(run.last === null ? 'editing' : 'saved', undefined, null)
+      }
       return
     }
+    const kept =
+      block.length <= DOC_KEPT_CHARS && now.saved.length <= DOC_KEPT_CHARS
+        ? { at: now.at, was: now.saved, now: block }
+        : null
     const base = loaded.current
-    if (!base || doc.head === null) return tell('failed')
+    if (!base || doc.head === null) return tell('failed', undefined, kept)
     run.busy = true
     tell('saving')
     let next = withBlock(now.saved, now.at, block, base.text)
@@ -366,14 +387,16 @@ export function DocumentViewer({ config, view }: { config: ViewerConfig; view: V
           : written
             ? 'failed'
             : 'conflict',
+        undefined,
+        kept,
       )
     } else {
       run.before ??= base
       run.last = written.version
-      const kept = { ...now, at: next.at, saved: block }
-      editingRef.current = kept
-      setEditing(kept)
-      tell('saved', written.version)
+      const typing = { ...now, at: next.at, saved: block }
+      editingRef.current = typing
+      setEditing(typing)
+      tell('saved', written.version, null)
     }
     if (run.again) {
       run.again = false
@@ -397,7 +420,7 @@ export function DocumentViewer({ config, view }: { config: ViewerConfig; view: V
     run.last = written.version
     editingRef.current = null
     setEditing(null)
-    tell('saved', written.version)
+    tell('saved', written.version, null)
   }, [tell])
 
   useEffect(() => {
@@ -428,8 +451,9 @@ export function DocumentViewer({ config, view }: { config: ViewerConfig; view: V
     if (!editing) return
     const element = blockElement(editing.index)
     if (!element || edit.current.map) return
-    edit.current.map = mapSource(element, editing.saved)
-    element.focus()
+    edit.current.map = mapSource(element, editing.typed ?? editing.saved)
+    // A block shown again as typed takes the keyboard once it is clicked.
+    if (editing.typed === undefined) element.focus()
     const point = editing.point
     const range = point ? document.caretRangeFromPoint(point.x, point.y) : null
     const selection = window.getSelection()
@@ -453,6 +477,43 @@ export function DocumentViewer({ config, view }: { config: ViewerConfig; view: V
       tell('editing')
     })
   }
+
+  // What an earlier frame typed and could not save: its block shows it again, as it failed.
+  const keptAsked = state?.kept ?? null
+  const restored = useRef(false)
+  useEffect(() => {
+    if (restored.current || !keptAsked || text === null || mode !== 'edit') return
+    if (doc.head === null || doc.head !== version) return
+    restored.current = true
+    if (editingRef.current) return
+    let index = -1
+    parts.forEach((part, i) => {
+      if (part.raw !== keptAsked.was || !TYPED_IN_PLACE.test(part.kind)) return
+      if (
+        index < 0 ||
+        Math.abs(part.from - keptAsked.at) < Math.abs(parts[index]!.from - keptAsked.at)
+      )
+        index = i
+    })
+    const part = parts[index]
+    // A newer version changed the block: what was typed has no place to show.
+    if (!part) return tell('conflict', undefined, keptAsked)
+    const next = {
+      index,
+      at: part.from,
+      source: keptAsked.now + part.source.slice(part.raw.length),
+      saved: part.raw,
+      point: null,
+      typed: keptAsked.now,
+    }
+    edit.current.map = null
+    editingRef.current = next
+    // After this pass, as a click that starts typing does.
+    queueMicrotask(() => {
+      setEditing(next)
+      tell('failed', undefined, keptAsked)
+    })
+  }, [keptAsked, text, mode, doc.head, version, parts, tell])
 
   // The layout the window lays its pins, outline and scroll on.
   const lastLayout = useRef('')

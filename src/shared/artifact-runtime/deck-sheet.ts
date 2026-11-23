@@ -15,6 +15,11 @@ export const DECK_NOTES_CHARS = 5000
 /** The most slides a deck has, as its format caps them. */
 export const DECK_MAX_SLIDE = 200
 
+/** The most texts a failed save carries, and how deep in the deck one may lie. */
+export const DECK_KEPT_TEXTS = 40
+const KEPT_PATH_DEPTH = 8
+const UNSAFE_KEYS = new Set(['__proto__', 'constructor', 'prototype'])
+
 const MAX_PX = 100_000
 const KEY = /^[A-Za-z0-9_-]{1,64}$/
 const TAG = /^[a-z][a-z0-9-]{0,31}$/
@@ -41,6 +46,12 @@ export interface DeckPlace {
 }
 
 /** How a typed change is saving: the version it saved as, and whether Undo can take it back. */
+/** A text typed on a slide that did not save: where it lies in the deck, and the text. */
+export interface DeckKept {
+  path: (string | number)[]
+  text: string
+}
+
 export type DeckSaveState = 'editing' | 'saving' | 'saved' | 'failed' | 'conflict' | 'refused'
 
 export type DeckReport =
@@ -48,7 +59,17 @@ export type DeckReport =
   | { t: 'layout'; version: number; slide: number; places: DeckPlace[] }
   /** An element clicked in comment mode: its slide, its tag, the start of its words and place. */
   | { t: 'pick'; slide: number; tag: string; text: string; box: DeckBox }
-  | { t: 'save'; state: DeckSaveState; version: number | null; undo: boolean }
+  | {
+      t: 'save'
+      state: DeckSaveState
+      version: number | null
+      undo: boolean
+      /**
+       * The texts typed that did not save, for the window to hand back in a later frame; empty
+       * once nothing waits. Older viewers leave it out.
+       */
+      kept?: DeckKept[]
+    }
 
 /** How the window wants the deck shown. */
 export interface DeckState {
@@ -61,6 +82,8 @@ export interface DeckState {
   track: DeckTrack[]
   /** The element a comment is being written on or a thread is open for, outlined; by its key. */
   focus: string | null
+  /** What an earlier frame typed and could not save, to show again as typed. */
+  kept?: DeckKept[]
 }
 
 export type DeckDrive =
@@ -121,6 +144,25 @@ function place(value: unknown): DeckPlace | null {
   return { key: value.key, box: where }
 }
 
+/** The texts the page says it typed; one that is not a text of a deck is left out. */
+export function parseDeckKept(value: unknown): DeckKept[] {
+  if (!Array.isArray(value)) return []
+  const out: DeckKept[] = []
+  for (const item of value.slice(0, DECK_KEPT_TEXTS)) {
+    if (!isRecord(item) || typeof item.text !== 'string' || !Array.isArray(item.path)) continue
+    if (item.text.length > DECK_NOTES_CHARS) continue
+    const path = item.path as unknown[]
+    if (path.length === 0 || path.length > KEPT_PATH_DEPTH) continue
+    const named = path.every(
+      (step) =>
+        (typeof step === 'string' && KEY.test(step) && !UNSAFE_KEYS.has(step)) ||
+        (Number.isSafeInteger(step) && (step as number) >= 0 && (step as number) < 10_000),
+    )
+    if (named) out.push({ path: path as (string | number)[], text: item.text })
+  }
+  return out
+}
+
 const SAVE_STATES: readonly DeckSaveState[] = [
   'editing',
   'saving',
@@ -162,7 +204,13 @@ export function parseDeckReport(value: unknown): DeckReport | null {
       if (version !== null && (!Number.isSafeInteger(version) || (version as number) < 1)) {
         return null
       }
-      return { t: 'save', state, version: version as number | null, undo: value.undo }
+      const save = {
+        t: 'save',
+        state,
+        version: version as number | null,
+        undo: value.undo,
+      } as const
+      return value.kept === undefined ? save : { ...save, kept: parseDeckKept(value.kept) }
     }
     default:
       return null

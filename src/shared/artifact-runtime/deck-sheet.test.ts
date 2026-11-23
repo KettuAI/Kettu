@@ -65,6 +65,29 @@ describe("a slides viewer's report", () => {
     expect(parseDeckReport(null)).toBeNull()
   })
 
+  it('carries the texts that did not save, leaving out what is not a text of a deck', () => {
+    const save = { t: 'save', state: 'failed', version: null, undo: false }
+    const title = { path: ['slides', 2, 'title'], text: 'Requests\nlead' }
+    expect(parseDeckReport({ ...save, kept: [title] })).toEqual({ ...save, kept: [title] })
+    expect(parseDeckReport({ ...save, kept: [] })).toEqual({ ...save, kept: [] })
+    expect(
+      parseDeckReport({
+        ...save,
+        kept: [
+          title,
+          { path: ['slides', '__proto__'], text: 'a' },
+          { path: ['slides', 'a b'], text: 'a' },
+          { path: [], text: 'a' },
+          { path: ['slides', -1], text: 'a' },
+          { path: ['slides', 0, 'notes'], text: 'x'.repeat(5001) },
+          { path: ['slides', 0, 'title'], text: 4 },
+          'title',
+        ],
+      }),
+    ).toEqual({ ...save, kept: [title] })
+    expect(parseDeckReport({ ...save, kept: 'all' })).toEqual({ ...save, kept: [] })
+  })
+
   it('comes in a select message alone, never with a pick, a key or a document report', () => {
     expect(parseSelectMessage(message(layout))?.deck).toEqual(layout)
     expect(parseSelectMessage(message({ t: 'nope' }))).toBeNull()
