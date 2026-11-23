@@ -2,6 +2,7 @@ import { mkdtemp, realpath, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { DOCX_TYPE, XLS_TYPE, XLSX_TYPE } from '@shared/media'
 import { MediaGrants, respondMedia } from './media'
 
 const TOKEN = 'abcdefghijklmnopqrstuvwxyz'
@@ -77,4 +78,36 @@ describe('respondMedia for a PDF', () => {
     await symlink(path.join(folder, 'other.pdf'), file)
     expect((await get()).status).toBe(404)
   })
+})
+
+describe('respondMedia for Word and Excel files', () => {
+  let folder: string
+  let grants: MediaGrants
+  const BYTES = Buffer.from('PK\x03\x04 not read here', 'latin1')
+
+  beforeEach(async () => {
+    folder = await realpath(await mkdtemp(path.join(tmpdir(), 'kettu-serve-')))
+    grants = new MediaGrants(10)
+  })
+
+  afterEach(() => rm(folder, { recursive: true, force: true }))
+
+  it.each([
+    ['report.docx', DOCX_TYPE],
+    ['numbers.xlsx', XLSX_TYPE],
+    ['old.xls', XLS_TYPE],
+  ] as const)(
+    'serves %s with its own type, never sniffed into anything else',
+    async (name, type) => {
+      const file = path.join(folder, name)
+      await writeFile(file, BYTES)
+      grants.add({ token: TOKEN, path: file, mimeType: type, sessionId: null })
+      const response = await respondMedia(new Request(`kettu-media://${TOKEN}/${name}?v=1`), grants)
+      expect(response.status).toBe(200)
+      expect(response.headers.get('content-type')).toBe(type)
+      expect(response.headers.get('x-content-type-options')).toBe('nosniff')
+      expect(response.headers.get('content-security-policy')).toContain('sandbox')
+      expect(Buffer.from(await response.arrayBuffer()).equals(BYTES)).toBe(true)
+    },
+  )
 })
