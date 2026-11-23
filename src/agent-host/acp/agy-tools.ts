@@ -130,6 +130,11 @@ export function fromAgy<T extends acp.ToolCallUpdate>(update: T): T {
   if (typeof input?.CommandLine === 'string') {
     return command(update, input.CommandLine, input.toolSummary) as T
   }
+  // An ask is titled by its first question, as Claude Code's is, not "Run ask_question".
+  if (toolName(update) === 'ask_question' && Array.isArray(input?.questions)) {
+    const first = record(input.questions[0])?.question
+    if (typeof first === 'string' && first !== '') return { ...update, title: first }
+  }
   return update
 }
 
