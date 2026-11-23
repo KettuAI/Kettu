@@ -1,11 +1,11 @@
-// Kettu's own catalog, installers and version order, loaded from the source through Vite's module
-// runner, so a check installs and compares versions exactly as the app does and reads whatever
-// layout the catalog has.
+// Kettu's own catalog, installers, version order and the connections of the preferred interfaces,
+// loaded from the source through Vite's module runner, so a check installs, compares versions and
+// talks to a harness exactly as the app does and reads whatever layout the catalog has.
 
 import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
-import { runnerImport } from 'vite'
+import { build, runnerImport } from 'vite'
 
 export const ROOT = path.resolve(import.meta.dirname, '../..')
 
@@ -18,7 +18,11 @@ const MODULES = {
   'src/agent-host/versions.ts': ['compareVersions', 'versionAtLeast'],
   'src/agent-host/dsh/options.ts': ['DEFAULT_MODEL', 'DEFAULT_EFFORT'],
   'src/agent-host/harness-versions.ts': ['BUNDLED'],
+  'src/agent-host/opencode/connection.ts': ['OpenCodeConnection'],
+  'src/agent-host/cline/connection.ts': ['ClineConnection'],
 }
+
+const ALIASES = [{ find: '@shared', replacement: path.join(ROOT, 'src/shared') }]
 
 /** The modules above, as one object. */
 export async function loadKettu() {
@@ -34,12 +38,36 @@ export async function loadKettu() {
       root: ROOT,
       configFile: false,
       logLevel: 'silent',
-      resolve: { alias: [{ find: '@shared', replacement: path.join(ROOT, 'src/shared') }] },
+      resolve: { alias: ALIASES },
     })
     return module
   } finally {
     await rm(dir, { recursive: true, force: true })
   }
+}
+
+/**
+ * A script of Kettu's own that the app builds into a bundle of its own and runs as a process, such
+ * as the one that loads Cline's SDK, built into `outDir`; the path to the bundle.
+ */
+export async function bundle(file, outDir) {
+  const name = `${path.basename(file, path.extname(file))}.cjs`
+  await build({
+    root: ROOT,
+    configFile: false,
+    logLevel: 'silent',
+    resolve: { alias: ALIASES },
+    ssr: { noExternal: true },
+    build: {
+      ssr: path.join(ROOT, file),
+      outDir,
+      emptyOutDir: true,
+      minify: false,
+      copyPublicDir: false,
+      rolldownOptions: { output: { format: 'cjs', entryFileNames: name } },
+    },
+  })
+  return path.join(outDir, name)
 }
 
 /**

@@ -1,11 +1,12 @@
 name: Harness checks
 
-# Once a day, the new versions of the harnesses Kettu installs or drives that the ACP Registry
-# does not check: each goes as far as it can without signing in, and the results are this run's
-# harness-checks artifact, as tools/harness-checks/README.md describes. Apart from pull request CI.
+# Every 6 hours, the new versions of the harnesses Kettu installs or drives that the ACP Registry
+# does not check, and of the harnesses' preferred interfaces: each goes as far as it can without
+# signing in, and the results are this run's harness-checks artifact, as
+# tools/harness-checks/README.md describes. Apart from pull request CI.
 on:
   schedule:
-    - cron: '23 5 * * *'
+    - cron: '23 */6 * * *'
   workflow_dispatch:
 
 permissions:
@@ -38,7 +39,7 @@ jobs:
         with:
           node-version: 24
           cache: pnpm
-      # Only the tools the checks load from the repository: TypeScript, Vite and Prettier.
+      # The packages the checks load from the repository, with Vite and Prettier; no native builds.
       - run: pnpm install --frozen-lockfile --ignore-scripts
       # The last successful run's results on this branch, which say what was checked and failed
       # before. Without one, or once it has expired, the run starts afresh.

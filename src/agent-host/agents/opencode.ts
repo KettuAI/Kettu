@@ -6,8 +6,9 @@ export const OPENCODE: AgentDefinition = {
   name: 'OpenCode',
   registryId: 'opencode',
   launch: { kind: 'binary', command: 'opencode', args: ['acp'] },
-  // Its own server, which OpenCode marks experimental: checked on 2.3.2.
-  preferred: { protocol: 'opencode-server', checked: '>=2.3.2 <2.4.0' },
+  // Its own server, which OpenCode marks experimental: checked on 2.3.2, and taken up to the next
+  // major version, whose versions the harness checks and the manifest let through or hold back.
+  preferred: { protocol: 'opencode-server', checked: '>=2.3.2 <3.0.0' },
   // Seen in OpenCode 2.0.32: every attach adds its servers to the folder, replacing a same name,
   // and every tool call carries `_meta["ai.opencode/sessionID"]`.
   mcpServersByName: true,

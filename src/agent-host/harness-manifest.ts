@@ -32,6 +32,8 @@ export interface HarnessRule {
   broken: string[]
   /** The versions whose preferred interface does not work, which run on the harness's other one. */
   fallback?: string
+  /** Versions past the range the catalog checked the preferred interface on that take it too. */
+  preferred?: string
   /** An archive's SHA-256 by `<platform>-<arch>`, as the ACP Registry keys its archives. */
   sha256: Record<string, string>
 }
@@ -71,9 +73,10 @@ const isRange = (value: unknown): value is string =>
  */
 function readRule(value: unknown): HarnessRule | null {
   if (!isRecord(value) || !isRange(value.kettu)) return null
-  const { supported, recommended, broken, sha256, fallback } = value
+  const { supported, recommended, broken, sha256, fallback, preferred } = value
   if (supported !== undefined && !isRange(supported)) return null
   if (fallback !== undefined && !isRange(fallback)) return null
+  if (preferred !== undefined && !isRange(preferred)) return null
   if (recommended !== undefined && !isVersion(recommended)) return null
   if (broken !== undefined) {
     if (!Array.isArray(broken)) return null
@@ -93,6 +96,7 @@ function readRule(value: unknown): HarnessRule | null {
     ...(recommended !== undefined ? { recommended } : {}),
     broken: (broken as string[] | undefined) ?? [],
     ...(fallback !== undefined ? { fallback } : {}),
+    ...(preferred !== undefined ? { preferred } : {}),
     sha256: hashes,
   }
 }
@@ -197,6 +201,11 @@ export function usable(rule: HarnessRule | null, version: string): boolean {
 /** Whether the rule holds the version back from the harness's preferred interface. */
 export function heldBack(rule: HarnessRule | null, version: string): boolean {
   return rule?.fallback !== undefined && satisfies(version, rule.fallback, OPTIONS)
+}
+
+/** Whether the rule lets a version past the catalog's checked range take the preferred interface. */
+export function letThrough(rule: HarnessRule | null, version: string): boolean {
+  return rule?.preferred !== undefined && satisfies(version, rule.preferred, OPTIONS)
 }
 
 /** Whether the version satisfies an npm range, pre-releases included. */

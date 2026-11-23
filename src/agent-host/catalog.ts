@@ -135,13 +135,16 @@ export type AgentProtocol =
 
 /**
  * An interface of the harness's own that an agent runs on in place of the definition's protocol
- * whenever it can. The definition's protocol runs instead for a version of the program the
- * interface was not checked on, one the compatibility manifest holds back, or after a start over
- * it failed. A session opens the same either way.
+ * whenever it can. The definition's protocol runs instead for a version of the program outside
+ * `checked` that the compatibility manifest does not let through, one it holds back, or after a
+ * start over it failed. A session opens the same either way.
  */
 export interface PreferredProtocol {
   protocol: AgentProtocol
-  /** The versions of the harness's program it was checked on, as an npm range. */
+  /**
+   * The versions of the harness's program it takes by default, as an npm range: from the one it
+   * was checked on to the next major version, which the harness checks watch.
+   */
   checked: string
 }
 
