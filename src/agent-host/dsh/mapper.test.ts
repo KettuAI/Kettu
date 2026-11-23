@@ -275,7 +275,7 @@ describe('dsh mapper', () => {
     expect(effects.some((effect) => effect.kind === 'request')).toBe(true)
   })
 
-  it('counts cache reads into input, as dsh’s counts do not overlap', () => {
+  it('keeps cache reads out of input, as dsh’s counts do not overlap', () => {
     expect(
       tokenTotals({
         inputTokens: 1200,
@@ -285,7 +285,7 @@ describe('dsh mapper', () => {
       }),
     ).toEqual({
       total: 1542,
-      input: 1500,
+      input: 1200,
       output: 42,
       thought: 5,
       cacheRead: 300,

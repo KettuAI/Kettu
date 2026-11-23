@@ -461,7 +461,7 @@ describe('a turn', () => {
     const result = await connection.prompt(sessionId, text('Reply with exactly: pong'))
     expect(result).toEqual({
       stopReason: 'end_turn',
-      tokens: { total: 3216, input: 3212, output: 4, thought: 0, cacheRead: 256, cacheWrite: 0 },
+      tokens: { total: 3216, input: 2956, output: 4, thought: 0, cacheRead: 256, cacheWrite: 0 },
       models: [{ model: 'example/small-model', tokens: expect.objectContaining({ total: 3216 }) }],
     })
     expect(spawned[0]!.sent('prompt')[0]).toMatchObject({ message: 'Reply with exactly: pong' })

@@ -1833,3 +1833,80 @@ describe('Workflow tasks', () => {
     check.close()
   })
 })
+
+describe("the thread database's token counts", () => {
+  type Counts = {
+    total: number
+    input: number
+    output: number
+    thought: number | null
+    cacheRead: number | null
+    cacheWrite: number | null
+  }
+  const counts = (
+    total: number,
+    input: number,
+    output: number,
+    cacheRead: number | null,
+    cacheWrite: number | null = 0,
+    thought: number | null = null,
+  ): Counts => ({ total, input, output, thought, cacheRead, cacheWrite })
+
+  it('takes the cache out of the input of counts that held it, and leaves the rest', () => {
+    const sessions: Record<string, { before: Counts; input: number }> = {
+      // Pi, DeepSeek Harness and Cline held the cache in their input.
+      pi: { before: counts(1_588_772, 1_584_482, 4290, 1_402_752, 0, 120), input: 181_730 },
+      dsh: { before: counts(1542, 1500, 42, 300, null, 5), input: 1200 },
+      cline: { before: counts(120, 100, 20, 60, 5), input: 35 },
+      // An ACP agent whose input held the cache reads but counted the writes apart.
+      partial: { before: counts(150, 110, 20, 80, 20), input: 30 },
+      // Claude Code and Codex kept it apart; OpenCode counts its reasoning apart as well.
+      claude: { before: counts(166_135, 8, 421, 80_289, 85_417), input: 8 },
+      codex: { before: counts(3170, 100, 20, 3000, 50, 5), input: 100 },
+      opencode: { before: counts(3175, 100, 20, 3000, 50, 5), input: 100 },
+      // Nothing cached, or a total that adds up neither way, as after a switch of agent.
+      plain: { before: counts(120, 100, 20, 0, 0), input: 100 },
+      mixed: { before: counts(1000, 400, 20, 300, 0), input: 400 },
+    }
+    const file = tempFile()
+    mkdirSync(path.dirname(file), { recursive: true })
+    const raw = new DatabaseSync(file)
+    raw.exec(`BEGIN; ${schemaAt(12)} PRAGMA user_version = 12; COMMIT;`)
+    const insert = raw.prepare(
+      'INSERT INTO threads (session_id, agent_id, acp_session_id, session_json, next_pos, updated_at) VALUES (?, ?, ?, ?, 0, 0)',
+    )
+    for (const [id, { before }] of Object.entries(sessions)) {
+      const usage = { used: 1, size: 2, cost: null, tokens: before }
+      insert.run(id, id, `acp-${id}`, JSON.stringify({ id, title: id, usage }))
+    }
+    insert.run('none', 'pi', 'acp-none', JSON.stringify({ id: 'none', usage: null }))
+    const run = (id: string, usage: Counts | null) =>
+      raw
+        .prepare(
+          "INSERT INTO routine_runs (routine_id, seq, run_id, session_id, status, json) VALUES ('r', ?, ?, NULL, 'done', ?)",
+        )
+        .run(id === 'held' ? 1 : 2, id, JSON.stringify({ id, usage }))
+    run('held', counts(120, 100, 20, 60, 5))
+    run('none', null)
+    raw.close()
+
+    open(file).close()
+    const check = new DatabaseSync(file)
+    const stored = (sql: string, id: string) =>
+      JSON.parse(String((check.prepare(sql).get(id) as { json: string }).json))
+    for (const [id, { before, input }] of Object.entries(sessions)) {
+      const tokens = stored('SELECT session_json AS json FROM threads WHERE session_id = ?', id)
+        .usage.tokens
+      expect(tokens, id).toEqual({ ...before, input })
+    }
+    expect(stored('SELECT session_json AS json FROM threads WHERE session_id = ?', 'none')).toEqual(
+      { id: 'none', usage: null },
+    )
+    const runUsage = (id: string) =>
+      stored('SELECT json FROM routine_runs WHERE run_id = ?', id).usage
+    expect(runUsage('held')).toEqual(counts(120, 35, 20, 60, 5))
+    expect(runUsage('none')).toBeNull()
+    expect(check.prepare('PRAGMA user_version').get()!.user_version).toBe(SCHEMA_VERSION)
+    check.close()
+  })
+})

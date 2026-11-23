@@ -17,7 +17,7 @@ import { transaction } from '../sqlite'
 import { PRICES, type FileCursor, type UsageRow } from './model'
 import { keepsNewer } from './rows'
 
-export const SCHEMA_VERSION = 2
+export const SCHEMA_VERSION = 3
 
 /** Every time zone's offset is a multiple of 15 minutes, so a local day is a range of these. */
 export const QUARTER_MS = 900_000
@@ -69,6 +69,18 @@ const SCHEMA = `
   CREATE INDEX cursors_by_agent ON cursors (agent_id);
 `
 
+/** Kettu's buckets summed again from its rows. */
+const KETTU_BUCKETS = `
+  DELETE FROM buckets WHERE source = 'kettu';
+  INSERT INTO buckets (quarter, source, agent_id, model, project, rows, input, output, reasoning,
+    cache_read, cache_write, cache_write_1h, turns)
+  SELECT CAST(at / ${QUARTER_MS} AS INTEGER), source, agent_id, model, COALESCE(project, ''),
+    COUNT(*), SUM(input), SUM(output), COALESCE(SUM(reasoning), 0), SUM(cache_read),
+    SUM(cache_write), SUM(cache_write_1h), SUM(turn)
+  FROM usage WHERE source = 'kettu'
+  GROUP BY CAST(at / ${QUARTER_MS} AS INTEGER), source, agent_id, model, COALESCE(project, '');
+`
+
 // Version 1 kept no split of the cache writes and no turns. Claude Code's rows are dropped, since
 // its reader is the one that fills the hour's cache writes, and Kettu's buckets are rebuilt
 // from its rows so their turns match.
@@ -84,14 +96,24 @@ const UPGRADE_1 = `
     SELECT MIN(key) FROM usage WHERE source = 'kettu'
     GROUP BY substr(key, 1, length(key) - length(model))
   );
-  DELETE FROM buckets WHERE source = 'kettu';
-  INSERT INTO buckets (quarter, source, agent_id, model, project, rows, input, output, reasoning,
-    cache_read, cache_write, cache_write_1h, turns)
-  SELECT CAST(at / ${QUARTER_MS} AS INTEGER), source, agent_id, model, COALESCE(project, ''),
-    COUNT(*), SUM(input), SUM(output), COALESCE(SUM(reasoning), 0), SUM(cache_read),
-    SUM(cache_write), SUM(cache_write_1h), SUM(turn)
-  FROM usage WHERE source = 'kettu'
-  GROUP BY CAST(at / ${QUARTER_MS} AS INTEGER), source, agent_id, model, COALESCE(project, '');
+  ${KETTU_BUCKETS}
+`
+
+/**
+ * The harnesses whose input held the cache in Kettu's record before version 3: Pi, DeepSeek
+ * Harness and Cline through their own interfaces, and the ACP agents that count it in their input.
+ */
+const CACHE_IN_INPUT = ['pi', 'deepseek', 'cline', 'gemini', 'mistral-vibe', 'qoder', 'qoder-cn']
+
+// Version 2 took the input of these harnesses' rows as it was reported, cache included, while
+// every other row and the page count the cache apart from it.
+const UPGRADE_2 = `
+  UPDATE usage SET input = input - cache_read - cache_write
+  WHERE source = 'kettu'
+    AND substr(agent_id, 1, instr(agent_id || '~', '~') - 1)
+      IN (${CACHE_IN_INPUT.map((harness) => `'${harness}'`).join(', ')})
+    AND cache_read + cache_write > 0 AND input >= cache_read + cache_write;
+  ${KETTU_BUCKETS}
 `
 
 /** The price list the queries join, in a temporary table of this connection. */
@@ -356,6 +378,7 @@ export class UsageDb {
   private upgrade(db: DatabaseSync, from: number): void {
     transaction(db, () => {
       if (from === 1) db.exec(UPGRADE_1)
+      if (from <= 2) db.exec(UPGRADE_2)
       db.exec(`PRAGMA user_version = ${SCHEMA_VERSION}`)
     })
   }

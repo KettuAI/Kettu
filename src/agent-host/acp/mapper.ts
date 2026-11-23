@@ -639,9 +639,37 @@ export function mapReportedAuthStatus(params: unknown): {
   }
 }
 
+/**
+ * How much of a report's input is the cache's, which Kettu's totals count apart from it. ACP
+ * leaves open whether `inputTokens` holds the cache reads and writes, and agents differ; its
+ * total, the sum of every kind, tells them apart, since a count kept apart adds to it. Without a
+ * total that adds up, the input is taken as it stands.
+ */
+export function cachedInInput(counts: {
+  total: number | null
+  input: number
+  output: number
+  thought: number | null
+  cacheRead: number | null
+  cacheWrite: number | null
+}): number {
+  const { total, input, output } = counts
+  const read = counts.cacheRead ?? 0
+  const write = counts.cacheWrite ?? 0
+  if (total === null || read + write === 0) return 0
+  const thought = counts.thought ?? 0
+  // Apart first, so a total that fits more than one reading keeps the input whole.
+  for (const held of [0, read + write, read, write]) {
+    if (held > input) continue
+    const sum = input + output + read + write - held
+    if (total === sum || total === sum + thought) return held
+  }
+  return 0
+}
+
 export function mapTokenTotals(usage: acp.Usage | null | undefined): TokenTotals | null {
   if (!usage) return null
-  return {
+  const tokens = {
     total: usage.totalTokens,
     input: usage.inputTokens,
     output: usage.outputTokens,
@@ -649,6 +677,7 @@ export function mapTokenTotals(usage: acp.Usage | null | undefined): TokenTotals
     cacheRead: usage.cachedReadTokens ?? null,
     cacheWrite: usage.cachedWriteTokens ?? null,
   }
+  return { ...tokens, input: tokens.input - cachedInInput(tokens) }
 }
 
 const count = (value: unknown): number | null =>
@@ -676,13 +705,16 @@ export function mapModelUsage(meta: unknown): ModelTokens[] {
     if (input === null || output === null) continue
     const cacheRead = count(fields.cachedInputTokens)
     const cacheWrite = count(fields.cachedWriteTokens) ?? count(fields.cacheWriteInputTokens)
+    const thought = count(fields.reasoningOutputTokens)
+    const total = count(fields.totalTokens)
+    const counts = { total, input, output, thought, cacheRead, cacheWrite }
     models.push({
       model,
       tokens: {
-        total: count(fields.totalTokens) ?? input + output + (cacheRead ?? 0) + (cacheWrite ?? 0),
-        input,
+        total: total ?? input + output + (cacheRead ?? 0) + (cacheWrite ?? 0),
+        input: input - cachedInInput(counts),
         output,
-        thought: count(fields.reasoningOutputTokens),
+        thought,
         cacheRead,
         cacheWrite,
       },
