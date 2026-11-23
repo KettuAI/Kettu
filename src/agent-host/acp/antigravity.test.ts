@@ -4,6 +4,7 @@
 import {
   agent,
   methods,
+  RequestError,
   type AgentContext,
   type SessionUpdate,
   type ToolCallUpdate,
@@ -23,7 +24,7 @@ import {
   type PermissionRequest,
   type SessionTarget,
 } from '../connection'
-import { newTurnScope } from '../session-updates'
+import { newTurnScope, type MapperEffect } from '../session-updates'
 import { AcpConnection, inProcessTransport } from './connection'
 import { mapConfig } from './mapper'
 import edit from './fixtures/agy-edit-request.json'
@@ -1100,5 +1101,308 @@ describe("agy's system prompt", () => {
       expect(opened).toEqual([{ method: 'new', meta: undefined }])
       connection.close()
     }
+  })
+})
+
+const WAITING = 'the running prompt is waiting for a permission or question answer'
+const USAGE = { inputTokens: 10, outputTokens: 2, totalTokens: 12 }
+
+/**
+ * agy 1.5.15 as measured: a prompt sent while one runs ends that one with `end_turn` and is
+ * answered itself, one sent while a card waits for the user is refused, and a cancel ends the
+ * prompt that runs. A prompt runs until the test ends it, or a later prompt or a cancel does.
+ */
+function steeringAgy(version = '1.5.15') {
+  const prompts: string[] = []
+  const state = { asking: false }
+  let running: ((reason: 'end_turn' | 'cancelled') => void) | null = null
+  let client: AgentContext | null = null
+  const app = agent({ name: 'agy-test' })
+    .onRequest(methods.agent.initialize, () => ({
+      protocolVersion: 1,
+      agentCapabilities: { loadSession: true, sessionCapabilities: { resume: {}, close: {} } },
+      agentInfo: { name: 'Antigravity ACP Server', version },
+      authMethods: [],
+    }))
+    .onRequest(methods.agent.session.new, () => ({ sessionId: 's-1' }))
+    .onRequest(methods.agent.session.prompt, async (ctx) => {
+      if (state.asking) throw new RequestError(-32603, `${WAITING}; answer it first`)
+      const [block] = ctx.params.prompt
+      prompts.push(block?.type === 'text' ? block.text : '')
+      client = ctx.client
+      running?.('end_turn')
+      const stopReason = await new Promise<'end_turn' | 'cancelled'>((resolve) => {
+        running = resolve
+      })
+      return { stopReason, usage: USAGE }
+    })
+    .onNotification(methods.agent.session.cancel, () => {
+      running?.('cancelled')
+      running = null
+    })
+  const connection = AcpConnection.connect(inProcessTransport(app), {
+    traffic: () => {},
+    account: () => {},
+    ignored: () => {},
+    log: () => {},
+    agentId: 'antigravity',
+    name: 'Google Antigravity',
+  })
+  return {
+    connection,
+    prompts,
+    state,
+    say: (text: string) =>
+      client!.notify(
+        methods.client.session.update,
+        update('s-1', {
+          sessionUpdate: 'agent_message_chunk',
+          content: { type: 'text', text },
+        }),
+      ),
+    end: () => {
+      running?.('end_turn')
+      running = null
+    },
+  }
+}
+
+const text = (value: string) => [{ type: 'text' as const, text: value }]
+
+describe("agy's steering", () => {
+  it('takes a message into the running turn, which ends with the last prompt and both their tokens', async () => {
+    const agy = steeringAgy()
+    const { connection } = agy
+    expect((await connection.initialize('1.0.0')).capabilities.steering).toBe(true)
+    const { sessionId } = await connection.newSession('/repo')
+    const thread = threadTarget()
+    connection.register(sessionId, thread.target)
+    let ended = false
+    const turn = connection.prompt(sessionId, text('go')).finally(() => (ended = true))
+    await vi.waitFor(() => expect(agy.prompts).toEqual(['go']))
+
+    await expect(connection.steer(sessionId, text('and this'))).resolves.toBe('injected')
+    expect(agy.prompts).toEqual(['go', 'and this'])
+    await agy.say('Both done.')
+    // agy answered the first prompt as it took the second; the turn is the second's too.
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    expect(ended).toBe(false)
+    agy.end()
+    const result = await turn
+    expect(result.stopReason).toBe('end_turn')
+    expect(result.tokens).toMatchObject({ total: 24, output: 4 })
+    const replies = thread.entries().filter((entry) => entry.kind === 'agent')
+    expect(replies.map((entry) => entry.kind === 'agent' && entry.markdown)).toEqual(['Both done.'])
+    connection.close()
+  })
+
+  it('leaves the message out with no turn running, or while a card waits for the user', async () => {
+    const agy = steeringAgy()
+    const { connection } = agy
+    await connection.initialize('1.0.0')
+    const { sessionId } = await connection.newSession('/repo')
+    connection.register(sessionId, threadTarget().target)
+    await expect(connection.steer(sessionId, text('early'))).resolves.toBe('promptRequired')
+    expect(agy.prompts).toEqual([])
+
+    const turn = connection.prompt(sessionId, text('go'))
+    await vi.waitFor(() => expect(agy.prompts).toEqual(['go']))
+    agy.state.asking = true
+    await expect(connection.steer(sessionId, text('meanwhile'))).resolves.toBe('promptRequired')
+    agy.state.asking = false
+    agy.end()
+    const result = await turn
+    expect(result).toMatchObject({ stopReason: 'end_turn', tokens: { total: 12 } })
+    expect(agy.prompts).toEqual(['go'])
+    await expect(connection.steer(sessionId, text('late'))).resolves.toBe('promptRequired')
+    connection.close()
+  })
+
+  it('cancels the turn in the prompt steered into it', async () => {
+    const agy = steeringAgy()
+    const { connection } = agy
+    await connection.initialize('1.0.0')
+    const { sessionId } = await connection.newSession('/repo')
+    connection.register(sessionId, threadTarget().target)
+    const turn = connection.prompt(sessionId, text('go'))
+    await vi.waitFor(() => expect(agy.prompts).toEqual(['go']))
+    await expect(connection.steer(sessionId, text('more'))).resolves.toBe('injected')
+    await connection.cancel(sessionId)
+    expect((await turn).stopReason).toBe('cancelled')
+    connection.close()
+  })
+
+  it('is not offered before 1.5.15', async () => {
+    const { connection } = steeringAgy('1.5.14')
+    expect((await connection.initialize('1.0.0')).capabilities.steering).toBe(false)
+    connection.close()
+  })
+})
+
+const DAEMON = {
+  CommandLine: 'python3 -m http.server 8765',
+  IsDaemon: true,
+  WaitMsBeforeAsync: 1000,
+  toolSummary: 'Start HTTP server',
+}
+
+/** agy's `run_command` call of the server as 1.5.15 reports it, with `result` as its content. */
+function daemon(status: 'in_progress' | 'completed' | 'failed', result?: string) {
+  return {
+    sessionUpdate: status === 'in_progress' ? 'tool_call' : 'tool_call_update',
+    toolCallId: 'call-1',
+    name: 'run_command',
+    kind: 'execute',
+    title: DAEMON.CommandLine,
+    rawInput: DAEMON,
+    status,
+    ...(result === undefined
+      ? {}
+      : { content: [{ type: 'content', content: { type: 'text', text: result } }] }),
+  }
+}
+
+/** A thread target that also keeps the effects applied to it. */
+function recording() {
+  const thread = threadTarget()
+  const effects: MapperEffect[] = []
+  const apply = thread.target.apply
+  thread.target.apply = (output) => {
+    effects.push(...output.effects)
+    apply(output)
+  }
+  const last = <K extends MapperEffect['kind']>(kind: K) =>
+    effects.findLast((effect): effect is Extract<MapperEffect, { kind: K }> => effect.kind === kind)
+  const row = () => thread.entries().find((entry) => entry.id === 't:call-1')
+  return { ...thread, effects, last, row }
+}
+
+describe("agy's commands that outlive their turn", () => {
+  it("keep a server's call running past its turn on the board, until agy reports its end", async () => {
+    let client!: AgentContext
+    const { connection } = connect('1.5.15', async (agent, sessionId) => {
+      client = agent
+      await agent.notify(methods.client.session.update, update(sessionId, daemon('in_progress')))
+      // A command that ends in its turn is no task.
+      const echo = {
+        ...daemon('in_progress'),
+        toolCallId: 'call-2',
+        rawInput: { CommandLine: 'echo hi' },
+      }
+      await agent.notify(methods.client.session.update, update(sessionId, echo))
+      await agent.notify(
+        methods.client.session.update,
+        update(sessionId, { ...echo, sessionUpdate: 'tool_call_update', status: 'completed' }),
+      )
+    })
+    await connection.initialize('1.0.0')
+    const { sessionId } = await connection.newSession('/repo')
+    const thread = recording()
+    connection.register(sessionId, thread.target)
+    await connection.prompt(sessionId, text('serve it'))
+
+    expect(thread.row()).toMatchObject({ status: 'in_progress' })
+    expect(thread.last('tasks')?.tasks).toEqual([
+      {
+        id: 'call-1',
+        kind: 'shell',
+        title: 'Start HTTP server',
+        command: 'python3 -m http.server 8765',
+        status: 'running',
+        startedAt: expect.any(Number),
+        endedAt: null,
+        summary: null,
+        entryId: 't:call-1',
+      },
+    ])
+    expect(thread.last('backgroundRunning')).toMatchObject({ running: true, listed: false })
+
+    // The server stops between turns, and agy says so on the call that started it.
+    const output = 'Serving HTTP on :: port 8765 (http://[::]:8765/) ...\r\n'
+    await client.notify(
+      methods.client.session.update,
+      update(
+        sessionId,
+        daemon(
+          'failed',
+          `Command was terminated by signal or canceled.\n\nCommand output:\n${output}`,
+        ),
+      ),
+    )
+    await vi.waitFor(() => expect(thread.row()).toMatchObject({ status: 'failed' }))
+    expect(thread.row()).toMatchObject({
+      content: [
+        {
+          type: 'markdown',
+          markdown: '```\nServing HTTP on :: port 8765 (http://[::]:8765/) ...\n```',
+        },
+      ],
+    })
+    expect(thread.last('tasks')?.tasks).toMatchObject([
+      {
+        id: 'call-1',
+        status: 'failed',
+        endedAt: expect.any(Number),
+        summary: 'Command was terminated by signal or canceled.',
+      },
+    ])
+    expect(thread.last('backgroundRunning')).toMatchObject({ running: false })
+    connection.close()
+  })
+
+  it('end in a later turn, on the call that started them', async () => {
+    let turns = 0
+    const { connection } = connect('1.5.15', async (agent, sessionId) => {
+      const value =
+        ++turns === 1
+          ? daemon('in_progress')
+          : daemon('completed', 'Command exited with code 0.\n\nCommand output:\nfinished-bg\r\n')
+      await agent.notify(methods.client.session.update, update(sessionId, value))
+    })
+    await connection.initialize('1.0.0')
+    const { sessionId } = await connection.newSession('/repo')
+    const thread = recording()
+    connection.register(sessionId, thread.target)
+    await connection.prompt(sessionId, text('start it'))
+    expect(thread.last('backgroundRunning')).toMatchObject({ running: true })
+
+    await connection.prompt(sessionId, text('anything else?'))
+    expect(thread.row()).toMatchObject({
+      status: 'completed',
+      content: [{ type: 'markdown', markdown: '```\nfinished-bg\n```' }],
+    })
+    expect(thread.last('tasks')?.tasks).toMatchObject([
+      { id: 'call-1', status: 'completed', summary: 'Command exited with code 0.' },
+    ])
+    expect(thread.last('backgroundRunning')).toMatchObject({ running: false })
+    connection.close()
+  })
+
+  it('hold a switch of full access until they end, since the restart would stop them', async () => {
+    const agy = flaggedAgy('1.5.9', '--dangerously-skip-permissions')
+    const { connection, sent } = agy
+    await connection.initialize('1.0.0')
+    const { sessionId } = await connection.newSession('/repo')
+    const { target } = threadTarget()
+    let config = await connection.setConfigOption(sessionId, 'mode', 'default')
+    target.apply({ patches: [{ op: 'session.update', changes: { config } }], effects: [] })
+    connection.register(sessionId, target)
+    let client!: AgentContext
+    agy.send(async (agent, id) => {
+      client = agent
+      await agent.notify(methods.client.session.update, update(id, daemon('in_progress')))
+    })
+    await connection.prompt(sessionId, text('serve it'))
+    sent.length = 0
+
+    config = await connection.setConfigOption(sessionId, 'mode', FULL)
+    expect(valueOf(config, 'mode')).toBe('default')
+    expect(agy.methods()).toEqual([])
+    await client.notify(methods.client.session.update, update(sessionId, daemon('failed')))
+    await vi.waitFor(() =>
+      expect(valueOf(target.context().thread.session.config, 'mode')).toBe(FULL),
+    )
+    expect(agy.methods()).toEqual(['resume'])
+    connection.close()
   })
 })

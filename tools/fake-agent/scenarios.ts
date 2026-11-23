@@ -988,6 +988,52 @@ const background: Scenario = async (turn) => {
   return 'end_turn'
 }
 
+/**
+ * A server Google Antigravity 1.5.15 starts as a daemon: its call is still in progress as the turn
+ * ends, and agy reports it once more as the server ends, `--then` ms after the turn.
+ */
+const agyDaemon: Scenario = async (turn) => {
+  const input = {
+    CommandLine: 'python3 -m http.server 8765',
+    IsDaemon: true,
+    WaitMsBeforeAsync: 1000,
+    toolSummary: 'Start HTTP server',
+  }
+  const call = {
+    toolCallId: `daemon-${turn.id}`,
+    name: 'run_command',
+    kind: 'execute' as const,
+    title: input.CommandLine,
+    rawInput: input,
+  }
+  await turn.send({ sessionUpdate: 'tool_call', ...call, status: 'in_progress' })
+  if (!(await stream(turn, 'up'))) return 'cancelled'
+  const thenMs = turn.options.thenMs
+  if (thenMs !== null) {
+    const output = 'Serving HTTP on :: port 8765 (http://[::]:8765/) ...\r\n'
+    setTimeout(() => {
+      // The client may have gone by then.
+      void turn
+        .send({
+          sessionUpdate: 'tool_call_update',
+          ...call,
+          status: 'failed',
+          content: [
+            {
+              type: 'content',
+              content: {
+                type: 'text',
+                text: `Command was terminated by signal or canceled.\n\nCommand output:\n${output}`,
+              },
+            },
+          ],
+        })
+        .catch(() => {})
+    }, thenMs)
+  }
+  return 'end_turn'
+}
+
 /** Waits without the delay scale, for time that has to pass; false once the turn is cancelled. */
 function waitUnscaled(ms: number, signal: AbortSignal): Promise<boolean> {
   return new Promise((resolve) => {
@@ -1665,6 +1711,7 @@ export const SCENARIO_RUNNERS: Record<ScenarioName, Scenario> = {
   subagent,
   plan,
   background,
+  'agy-daemon': agyDaemon,
   requests,
   thinking,
   reasoning,

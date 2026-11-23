@@ -8550,17 +8550,23 @@ export class SessionManager {
     }
   }
 
-  /** Ends streaming on the turn's messages, closes open thoughts and stops unfinished tools. */
+  /**
+   * Ends streaming on the turn's messages, closes open thoughts and stops unfinished tools, but for
+   * the calls of commands that run on past the turn.
+   */
   private closeOpenEntries(live: Live): void {
     const now = this.now()
     const patches: Patch[] = []
+    const runningOn = callsRunningOn(live.thread.session)
     for (const id of live.thread.order) {
       const entry = live.thread.byId[id]
       if (
         entry?.kind === 'tool' &&
         (entry.status === 'pending' || entry.status === 'in_progress')
       ) {
-        patches.push({ op: 'entry.update', id, changes: { status: 'cancelled' } })
+        if (!runningOn.has(id)) {
+          patches.push({ op: 'entry.update', id, changes: { status: 'cancelled' } })
+        }
       } else if ((entry?.kind === 'agent' || entry?.kind === 'thought') && entry.streaming) {
         const startedAt = live.scope.thoughts.get(id)
         patches.push({
@@ -9644,10 +9650,36 @@ export class SessionManager {
 
   /** The agent's background work ended with its process: its tasks are gone from the list. */
   private endBackground(live: Live): void {
+    this.endCallsRunningOn(live)
     live.background = false
     live.backgroundListed = false
     live.scheduled = 0
     if (live.thread.session.background?.length) this.update(live, { background: [] })
+  }
+
+  /** The commands that ran on past their turn in their calls stop with the agent's session. */
+  private endCallsRunningOn(live: Live): void {
+    const running = callsRunningOn(live.thread.session)
+    if (running.size === 0) return
+    const patches: Patch[] = []
+    for (const id of running) {
+      const entry = live.thread.byId[id]
+      if (
+        entry?.kind === 'tool' &&
+        (entry.status === 'pending' || entry.status === 'in_progress')
+      ) {
+        patches.push({ op: 'entry.update', id, changes: { status: 'cancelled' } })
+      }
+    }
+    if (patches.length > 0) this.emit(live, patches)
+    const now = this.now()
+    this.update(live, {
+      background: (live.thread.session.background ?? []).map((task) =>
+        task.entryId !== undefined && running.has(task.entryId)
+          ? { ...task, status: 'stopped', endedAt: now }
+          : task,
+      ),
+    })
   }
 
   /** The live session, with its connection, when the agent lists `taskId` as a background task. */
@@ -11685,6 +11717,7 @@ export class SessionManager {
         )
       })
     }
+    this.endCallsRunningOn(live)
     if (kept) {
       // A renderer still showing it keeps it, closed.
       if (live.thread.session.status !== 'closed') {
@@ -12250,6 +12283,15 @@ function compacted(thread: Pick<ThreadState, 'byId'>, patch: Patch): boolean {
 /** Whether a session in this status takes a prompt: an attached one that is free, or one to attach. */
 function canSend(status: SessionStatus): boolean {
   return status === 'ready' || status === 'closed'
+}
+
+/** The entries of the tool calls whose commands the session lists as running on past their turn. */
+function callsRunningOn(session: SessionView): Set<string> {
+  const ids = new Set<string>()
+  for (const task of session.background ?? []) {
+    if (task.status === 'running' && task.entryId !== undefined) ids.add(task.entryId)
+  }
+  return ids
 }
 
 /** A connection to an agent that reports background tasks and can stop and read them. */

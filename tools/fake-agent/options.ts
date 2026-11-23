@@ -19,6 +19,7 @@ export const SCENARIOS = [
   'subagent',
   'plan',
   'background',
+  'agy-daemon',
   'requests',
   'thinking',
   'reasoning',
@@ -95,6 +96,10 @@ export const SCENARIO_DESCRIPTIONS: Record<ScenarioName, { description: string; 
   },
   background: {
     description: 'Starts a command in the background, as Claude Code does with run_in_background',
+  },
+  'agy-daemon': {
+    description: 'Starts a server whose call runs on past the turn, as Google Antigravity does',
+    hint: '--then <ms after the turn the server ends>',
   },
   requests: {
     description: "Reports a request's usage as claude-agent-acp does, then the result's",
@@ -185,7 +190,8 @@ export interface ScenarioOptions {
   unreadable: boolean
   stepMs: number // plan: how long each step's tool call runs
   holdMs: number // requests: open after its request; error: before it fails; not scaled
-  thenMs: number | null // requests: when it answers by itself after the turn, not scaled
+  // requests: when it answers by itself after the turn; agy-daemon: when the server ends; not scaled
+  thenMs: number | null
   atEnd: boolean // requests: usage only as the turn ends, as OpenCode reports it
   read: string | null // artifacts: the artifact to read instead
   site: string | null // artifacts: an image of the project, for a page of several files instead

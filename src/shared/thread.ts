@@ -175,6 +175,11 @@ export interface BackgroundTaskView {
   endedAt: number | null
   /** How it ended, as the agent reported it; null while it runs. */
   summary: string | null
+  /**
+   * Set for a command that runs on in its own tool call: that call's entry, which stays running
+   * while it does. Kettu can neither stop it nor read its output before the call ends.
+   */
+  entryId?: string
 }
 
 /** A session's hold on the computer, which the label on its composer shows. */
