@@ -1137,7 +1137,12 @@ export const CanvasEditor = memo(function CanvasEditor({
     if (under) setFocused(under.page.id)
   }
 
-  const empty = layout !== null && layout.pages.length === 0 && layout.notes.length === 0
+  // Until the shown page is one of the document's, its empty layout says nothing about the board.
+  const empty =
+    layout !== null &&
+    layout.pages.length === 0 &&
+    layout.notes.length === 0 &&
+    (doc!.canvases.length === 0 || doc!.canvases.some((c) => c.id === shownKey))
   const { failed: failedFrames, forget: forgetFailed } = useFailedFrames(url)
   // Retry loads a failed frame again, in a new frame.
   const [retries, setRetries] = useState<ReadonlyMap<string, number>>(() => new Map())

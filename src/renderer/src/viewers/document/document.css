@@ -61,7 +61,7 @@ html[data-embed] {
 .kd-doc[data-mode='comment'] .kd-block {
   cursor: crosshair;
 }
-.kd-doc[data-mode='edit'] .kd-block:not([data-fixed]) {
+.kd-doc[data-mode='edit'] .kd-block:not([data-fixed], [data-writing]) {
   cursor: text;
 }
 .kd-block::before {
@@ -72,7 +72,8 @@ html[data-embed] {
   pointer-events: none;
 }
 .kd-doc[data-mode='comment'] .kd-block:hover::before,
-.kd-doc[data-mode='edit'] .kd-block:not([data-fixed], [data-editing]):hover::before {
+.kd-doc[data-mode='edit']
+  .kd-block:not([data-fixed], [data-editing], [data-writing]):hover::before {
   outline: 1.5px dashed var(--control-on);
   outline-offset: -0.75px;
 }

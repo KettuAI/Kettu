@@ -43,6 +43,12 @@
     0 0 0 calc(0.5px * var(--unscale)) var(--border-default),
     0 calc(1px * var(--unscale)) calc(3px * var(--unscale)) var(--border-subtle);
 }
+/* A live frame still loading: the idle ground with the band crossing it. */
+.k-ce-page__wait {
+  position: absolute;
+  inset: 0;
+  background: var(--bg-subtle);
+}
 .k-ce-page__idle {
   display: flex;
   align-items: center;

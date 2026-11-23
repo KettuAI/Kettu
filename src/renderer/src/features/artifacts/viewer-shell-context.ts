@@ -13,8 +13,8 @@ export function tierOf(width: number): Tier {
 /** Under this width the bar folds Present, Share and who is here into More. */
 export const TIGHT_PX = 480
 /**
- * From this width the bar's buttons take their words: below it the centred modes and the labelled
- * tools on their right meet once who is here shows.
+ * From this width the tools on the bar's right take their words too: below it, with the modes'
+ * words and who is here, they would meet the centred modes.
  */
 export const LABELLED_PX = 1200
 /** The cards' widths and the gap they keep from the edges, in pixels. */
@@ -34,7 +34,7 @@ export interface Insets {
 export interface ShellValue {
   tier: Tier
   tight: boolean
-  /** Whether the bar has room for its buttons' words. */
+  /** Whether the bar has room for the words of the tools on its right. */
   labelled: boolean
   insets: Insets
   targets: Record<Slot, HTMLElement | null>

@@ -44,6 +44,7 @@ import type { PlaceAsk, SheetWalk } from './change-walk'
 import type { SheetAgent } from './page-sheet'
 import { Waiting } from './page-frame'
 import { sheetSave } from './sheet-save'
+import { useUnsaved } from './unsaved'
 import { SaveChip } from './tool-parts'
 import { framePageUrl, type ShownVersion } from './use-artifact'
 import { DockButton, DockRule, ViewerSlot } from './viewer-shell'
@@ -196,6 +197,7 @@ export function DocumentSheet({
   const [openThread, setOpenThread] = useState<string | null>(null)
   const [selection, setSelection] = useState<Selection | null>(null)
   const [save, setSave] = useState<Save | null>(null)
+  useUnsaved(id, !!save && ['failed', 'conflict', 'refused'].includes(save.state))
   const [loaded, setLoaded] = useState(false)
 
   // The document's frame, loaded once for the artifact; versions come in through the viewer.

@@ -465,7 +465,11 @@ export function useViewerTools(input: ToolsInput) {
               ? t(input.doc ? 'comments.hintCanvas' : 'comments.hintPage')
               : t('comments.hintOff')
           }
-          emptyText={t(input.doc ? 'comments.emptyText' : 'comments.emptyTextPage')}
+          emptyText={
+            input.mode === 'comment'
+              ? t(input.doc ? 'comments.emptyTextOn' : 'comments.emptyTextPageOn')
+              : t(input.doc ? 'comments.emptyText' : 'comments.emptyTextPage')
+          }
         />
       ),
       onClose: close,
@@ -570,23 +574,31 @@ export function useViewerTools(input: ToolsInput) {
 function useHeldBy(input: ToolsInput, editing: EditorState): HeldBy | null {
   const sessions = input.presence?.sessions ?? []
   const pick = editing.picked
+  const type = input.summary?.type ?? null
+  let piece: HeldBy['piece'] = 'page'
   const holder = pick
     ? sessions.find((s) =>
-        (s.held ?? []).some((piece) =>
-          piece.kind === 'whole'
-            ? true
-            : piece.kind === 'frame'
-              ? piece.file === pick.selection.path
-              : // A section or a slide: the document's or the deck's viewer knows which; the card
-                // holds every element of a typed artifact while its turn writes any of it.
-                !!input.summary?.type,
-        ),
+        (s.held ?? []).some((held) => {
+          if (held.kind === 'whole') return true
+          if (held.kind === 'frame' && held.file === pick.selection.path) {
+            piece = 'frame'
+            return true
+          }
+          // A section or a slide: the document's or the deck's viewer knows which; the card
+          // holds every element of a typed artifact while its turn writes any of it.
+          if ((held.kind === 'section' || held.kind === 'slide') && !!type) {
+            piece = held.kind
+            return true
+          }
+          return false
+        }),
       )
     : undefined
   const session = useSessionsStore((s) => (holder ? (s.byId[holder.sessionId] ?? null) : null))
   if (!holder) return null
   return {
     sessionId: holder.sessionId,
+    piece,
     agent: session
       ? {
           name: agentName(session.agentId, hostOfSession(session)),

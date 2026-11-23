@@ -10,6 +10,7 @@ import { usePartThumbnail } from './thumbnails'
 import { slideName, type DeckOutline, type DeckSlide } from './use-deck'
 import { useInView } from './use-in-view'
 import { ViewerSlot } from './viewer-shell'
+import { NoneHere } from './viewer-states'
 
 /**
  * A slide's picture as the host draws it; where it draws none, or until it has, the slide's title
@@ -118,9 +119,10 @@ export function SlidesCard({
         </div>
         <div ref={list} className="adk-srows" role="listbox" aria-label={t('deck.slides')}>
           {shown.length === 0 ? (
-            <p className="adk-srows__none">
-              {filter === 'changed' ? t('deck.noChanged') : t('deck.noComments')}
-            </p>
+            <NoneHere
+              text={filter === 'changed' ? t('deck.noChanged') : t('deck.noComments')}
+              onShowAll={() => setViewerState(artifactId, { pagesFilter: 'all' })}
+            />
           ) : (
             shown.map((slide) => {
               const count = comments.get(slide.number) ?? 0

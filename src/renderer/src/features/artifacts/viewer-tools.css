@@ -396,17 +396,10 @@
   text-overflow: ellipsis;
 }
 .k-vt-send__fail {
-  display: flex;
-  align-items: center;
-  gap: 8px;
+  margin: 0;
   font-size: 12px;
   line-height: 17px;
   color: var(--danger);
-}
-.k-vt-send__fail span {
-  flex: 1;
-  min-width: 0;
-  overflow-wrap: anywhere;
 }
 .k-vt-send__note {
   margin: 0;
@@ -1181,7 +1174,7 @@
   margin: 0;
   font-size: 12px;
   line-height: 17px;
-  color: var(--artifact-fault);
+  color: var(--muted);
 }
 
 /* A comment written while the computer is away: when it will be saved. */

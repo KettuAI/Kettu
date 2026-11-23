@@ -176,8 +176,8 @@ export function useArtifact(id: string, version: number | null) {
     // The lists naming the version just read as the latest is no new version.
     if (version === null && wanted !== null && lastRead.current === wanted) return
     let live = true
-    host('artifacts.read', wanted === null ? { id } : { id, version: wanted }).then(
-      async (read) => {
+    host('artifacts.read', wanted === null ? { id } : { id, version: wanted })
+      .then(async (read) => {
         if (!live) return
         const paths = new Set(read.files.map((f) => f.path))
         // A canvas document is the entry when there is one.
@@ -210,11 +210,11 @@ export function useArtifact(id: string, version: number | null) {
         lastShown.current = { id, shown: next }
         setShown(next)
         setReadError(null)
-      },
-      (reason: unknown) => {
+      })
+      // A canvas document that cannot be read fails the version as its list would.
+      .catch((reason: unknown) => {
         if (live) setReadError(readFailure(reason))
-      },
-    )
+      })
     return () => {
       live = false
     }

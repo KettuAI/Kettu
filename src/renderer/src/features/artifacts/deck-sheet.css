@@ -54,22 +54,39 @@
   /* A white slide on the light ground shows by its edge and shadow, so it is dimmed less. */
   opacity: 0.85;
   cursor: pointer;
-  box-shadow:
-    0 0 0 1px var(--line-strong),
-    var(--card-shadow);
   transition: opacity var(--duration-fast) ease;
   animation: adk-fade 320ms var(--ease-out-quint) both;
+  /* On the light ground the far edge keeps some ink so a white slide still reads. */
+  --adk-melt: color-mix(in srgb, var(--ink) 55%, transparent);
+}
+/* The mask clips outer shadows, so the edge is drawn inside, over the picture. */
+.adk-ghost::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border: 1px solid var(--line-strong);
+  border-radius: inherit;
+  pointer-events: none;
 }
 .adk-ghost[data-side='before'] {
-  mask-image: linear-gradient(to right, transparent calc(100% - var(--adk-peek)), var(--ink) 100%);
+  mask-image: linear-gradient(
+    to right,
+    var(--adk-melt) calc(100% - var(--adk-peek)),
+    var(--ink) 100%
+  );
 }
 .adk-ghost[data-side='after'] {
-  mask-image: linear-gradient(to left, transparent calc(100% - var(--adk-peek)), var(--ink) 100%);
+  mask-image: linear-gradient(
+    to left,
+    var(--adk-melt) calc(100% - var(--adk-peek)),
+    var(--ink) 100%
+  );
 }
 .adk-ghost:hover {
   opacity: 1;
 }
 [data-theme='dark'] .adk-ghost {
+  --adk-melt: transparent;
   opacity: 0.35;
 }
 [data-theme='dark'] .adk-ghost:hover {
@@ -268,11 +285,6 @@
   padding: 0 6px 8px;
   overflow-y: auto;
   scrollbar-width: thin;
-}
-.adk-srows__none {
-  padding: 12px 10px;
-  font-size: 12.5px;
-  color: var(--muted);
 }
 .adk-srow {
   display: flex;

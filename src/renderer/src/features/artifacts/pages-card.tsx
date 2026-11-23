@@ -17,6 +17,7 @@ import { useHostHas } from '@renderer/lib/host-features'
 import { setViewerState, useViewerState, type PagesFilter } from '@renderer/stores/artifact-viewer'
 import { FrameThumb } from './canvas-present'
 import { ViewerSlot } from './viewer-shell'
+import { NoneHere } from './viewer-states'
 
 /** Frames up to this wide are drawn as phones; taller than wide by this much, as documents. */
 const PHONE_WIDTH = 520
@@ -235,16 +236,32 @@ export function PagesCard({
             setHover(null)
           }}
         >
-          <TreeView
-            items={items}
-            expanded={shownExpanded}
-            onExpandedChange={narrowed ? undefined : setExpanded}
-            selected={selected}
-            onSelect={(id) => (frameIds.has(id) ? onFrame(id) : onPage(id))}
-            guides={false}
-            emptyText={t('pages.none')}
-            aria-label={t('pages.title')}
-          />
+          {narrowed && items.length === 0 ? (
+            <NoneHere
+              text={
+                needle
+                  ? t('pages.noMatch', { query: query.trim() })
+                  : filter === 'changed'
+                    ? t('pages.noChanged')
+                    : t('pages.noComments')
+              }
+              onShowAll={() => {
+                setQuery('')
+                setViewerState(artifactId, { pagesFilter: 'all' })
+              }}
+            />
+          ) : (
+            <TreeView
+              items={items}
+              expanded={shownExpanded}
+              onExpandedChange={narrowed ? undefined : setExpanded}
+              selected={selected}
+              onSelect={(id) => (frameIds.has(id) ? onFrame(id) : onPage(id))}
+              guides={false}
+              emptyText={t('pages.none')}
+              aria-label={t('pages.title')}
+            />
+          )}
         </div>
       </div>
       {hover && hovered && (

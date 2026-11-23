@@ -5,10 +5,13 @@ import { useEffect, useState, type CSSProperties, type ReactNode } from 'react'
 import { Alert02Icon } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
 import { Icon } from '@renderer/components/affect/app-shell'
+import { Button } from '@renderer/components/affect/button'
+import { useDark } from '@renderer/hooks/use-dark'
 import { useArtifactsStore } from '@renderer/stores/artifacts'
 import { artifactKind, type ArtifactKind } from './model'
 import { KindSketch } from './sketch'
-import { useThumbnail } from './thumbnails'
+import { usePartThumbnail, useThumbnail } from './thumbnails'
+import { usePartThumbnails } from './artifact-host'
 import './artifact-card.css'
 import './viewer-states.css'
 
@@ -63,6 +66,7 @@ export function OpeningCover({
 function CoverPicture({ id }: { id: string }) {
   const summary = useArtifactsStore((s) => s.list?.find((a) => a.id === id) ?? null)
   const kind = summary ? artifactKind(summary) : null
+  const parts = usePartThumbnails(id)
   const thumbnail = useThumbnail(
     {
       id,
@@ -72,6 +76,12 @@ function CoverPicture({ id }: { id: string }) {
     },
     summary !== null,
   )
+  // A document's sheet follows the theme, so in the dark one its cover does too.
+  const darkDoc = useDark() && kind === 'document' && parts && summary !== null
+  const dark = usePartThumbnail(id, summary?.version ?? 0, { theme: 'dark' }, darkDoc)
+  if (darkDoc && dark.state === 'ready') {
+    return <img className="k-vs-cover__pic" src={dark.src} alt="" draggable={false} />
+  }
   if (thumbnail.state === 'ready') {
     return <img className="k-vs-cover__pic" src={thumbnail.src} alt="" draggable={false} />
   }
@@ -195,5 +205,20 @@ export function WriterTag({
       </span>
       {name}
     </span>
+  )
+}
+
+/** A navigator narrowed to nothing: what it holds, in one line, and the one way back. */
+export function NoneHere({ text, onShowAll }: { text: string; onShowAll: (() => void) | null }) {
+  const { t } = useTranslation('artifacts')
+  return (
+    <div className="k-vs-none">
+      <span>{text}</span>
+      {onShowAll && (
+        <Button variant="ghost" size="sm" onClick={onShowAll}>
+          {t('viewer.showAll')}
+        </Button>
+      )}
+    </div>
   )
 }

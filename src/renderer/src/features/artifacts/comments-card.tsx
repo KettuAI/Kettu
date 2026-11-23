@@ -295,16 +295,9 @@ export function CommentsCard({
       {open.length > 0 && (
         <div className="k-vt-send">
           {failed ? (
-            <div role="alert" className="k-vt-send__fail">
-              <span>{t('comments.sendFailed', { error: failed.error })}</span>
-              <Button
-                variant="secondary"
-                size="sm"
-                onClick={() => send(open.filter((th) => failed.ids.includes(th.id)))}
-              >
-                {t('viewer.retry')}
-              </Button>
-            </div>
+            <p role="alert" className="k-vt-send__fail" title={failed.error}>
+              {t('comments.sendFailedCount', { count: failed.ids.length })}
+            </p>
           ) : null}
           <div className="k-vt-send__row">
             {sending ? (
@@ -314,7 +307,14 @@ export function CommentsCard({
             ) : (
               <ToMenu targets={targets} target={target} onPick={onTarget} />
             )}
-            {pending.length > 0 ? (
+            {failed && !sending ? (
+              <Button
+                size="sm"
+                onClick={() => send(open.filter((th) => failed.ids.includes(th.id)))}
+              >
+                {t('viewer.retry')}
+              </Button>
+            ) : pending.length > 0 ? (
               <Button
                 size="sm"
                 icon={<Icon icon={SentIcon} size={14} />}

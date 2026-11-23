@@ -595,7 +595,10 @@ export function DocumentViewer({ config, view }: { config: ViewerConfig; view: V
         text: blockWords(part.raw),
         box: docBox(block.getBoundingClientRect()),
       })
-    } else startEditing(index, { x: event.clientX, y: event.clientY })
+    } else if (!heldAt(part.from)) {
+      // A section an agent is writing takes no typing until its turn ends.
+      startEditing(index, { x: event.clientX, y: event.clientY })
+    }
   }
 
   const onInput = (): void => {

@@ -251,15 +251,15 @@
     },
     "offline": {
       "named": "{{host}} is offline",
-      "local": "Kettu's host is offline",
+      "local": "The agent host is offline",
       "reconnecting": " · Reconnecting…",
       "retryNow": "Retry now",
       "editPaused": "Edit is paused until {{host}} is back",
-      "editPausedLocal": "Edit is paused until Kettu's host is back",
+      "editPausedLocal": "Edit is paused until the agent host is back",
       "waiting": "Waiting for {{host}}",
-      "waitingLocal": "Waiting for Kettu's host",
+      "waitingLocal": "Waiting for the agent host",
       "sendsLater": "Sends when {{host}} is back",
-      "sendsLaterLocal": "Sends when Kettu's host is back"
+      "sendsLaterLocal": "Sends when the agent host is back"
     },
     "deletedLead": "Deleted",
     "writing": {
@@ -286,7 +286,8 @@
     "noFramesHint": "Ask {{agent}} to add the first screens.",
     "noFramesHintAny": "Ask an agent to add the first screens.",
     "keptUntilSaved": "Your change is kept here until it saves.",
-    "leaveUnsaved": "A change to this artifact wasn't saved. Leave anyway?"
+    "leaveUnsaved": "A change to this artifact wasn't saved. Leave anyway?",
+    "showAll": "Show all"
   },
   "sheet": {
     "before": "v{{version}} · before",
@@ -493,6 +494,8 @@
     "sent_one": "Sent {{count}} comment to {{session}}",
     "sent_other": "Sent {{count}} comments to {{session}}",
     "sendFailed": "The comments could not be sent. {{error}}",
+    "sendFailedCount_one": "Couldn't send {{count}} comment",
+    "sendFailedCount_other": "Couldn't send {{count}} comments",
     "you": "You",
     "failed": "That did not work. {{error}}",
     "resolve": "Mark resolved",
@@ -503,6 +506,8 @@
     "emptyTitle": "No comments yet",
     "emptyText": "Turn on Comment and click the page to pin one. Open a frame to pin one to a single element.",
     "emptyTextPage": "Turn on Comment and click what you want to comment on.",
+    "emptyTextOn": "Click a frame to pin a comment. Open a frame to pin one to a single element.",
+    "emptyTextPageOn": "Click what you want to comment on to pin a comment.",
     "noneResolved": "Nothing resolved yet",
     "allSentList": "Every comment is sent",
     "noneOpen": "No open comments",
@@ -583,7 +588,7 @@
     "askAbout": "Ask {{agent}} about this…",
     "askShort": "Ask",
     "autosaveShort": "Every change saves on its own as a new version.",
-    "held": "You can edit it when it finishes. Comments still work, and the rest stays editable.",
+    "held": "You can edit it when it finishes. Comments stay open, and the rest stays editable.",
     "heldTitle": "{{agent}} is writing this",
     "heldTitleUnknown": "An agent is writing this",
     "path": "Path",
@@ -614,7 +619,17 @@
       "input": "Field",
       "label": "Label",
       "svg": "Drawing"
-    }
+    },
+    "heldWhole": "You can edit it when it finishes. Comments stay open.",
+    "heldTitlePage": "{{agent}} is writing this page",
+    "heldTitleFrame": "{{agent}} is writing this frame",
+    "heldTitleSection": "{{agent}} is writing this section",
+    "heldTitleSlide": "{{agent}} is writing this slide",
+    "heldSub": "Locked while the agent writes it",
+    "heldPage": "Page",
+    "heldFrame": "Frame",
+    "heldSection": "Section",
+    "heldSlide": "Slide"
   },
   "present": {
     "label": "Presenting {{title}}",
@@ -733,7 +748,10 @@
     "changed": "Changed",
     "comments": "Comments",
     "none": "No frames match",
-    "version": "v{{version}}"
+    "version": "v{{version}}",
+    "noMatch": "No frames match “{{query}}”",
+    "noChanged": "No frame changed in this version",
+    "noComments": "No frame has comments"
   },
   "frame": {
     "open": "Open",

@@ -7,6 +7,7 @@ import {
   MinusSignIcon,
   PlusSignIcon,
   RotateLeft01Icon,
+  SidebarLeftIcon,
   SparklesIcon,
 } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
@@ -75,6 +76,7 @@ import { ArtifactEditor, useEditorState, type EditorMode } from './editor'
 import { isEditable, modeKey } from './keys'
 import { artifactKind, daysLeft } from './model'
 import { mayLeave } from './unsaved'
+import { HeldCard } from './edit-panel'
 import { handOffPageErrors, handOffRepair } from './page-error-handoff'
 import { Waiting } from './page-frame'
 import { PageSheet, type SheetAgent } from './page-sheet'
@@ -458,8 +460,45 @@ export default function ArtifactViewer(place: ViewerPlace) {
         : null,
     [latest, compareBefore, compareAfter],
   )
+  // Edit on a document section or a slide an agent is writing: the card says it is locked, until
+  // closed for this writer.
+  const [heldClosed, setHeldClosed] = useState<string | null>(null)
+  const heldPiece = writer?.pieces?.find(
+    (p) => p.kind === 'section' || (p.kind === 'slide' && p.number === deckSlide),
+  )
+  const heldShown =
+    mode === 'edit' &&
+    !!writer &&
+    (isDocument || isDeck) &&
+    !!heldPiece &&
+    heldClosed !== writer.sessionId
+  const heldRight: RightContent | null =
+    heldShown && writer && heldPiece
+      ? {
+          key: `held:${writer.sessionId}`,
+          body: (
+            <HeldCard
+              heldBy={{
+                sessionId: writer.sessionId,
+                piece: heldPiece.kind === 'slide' ? 'slide' : 'section',
+                agent: {
+                  name: writer.name,
+                  id: writer.agentId,
+                  hostId: writer.hostId,
+                },
+              }}
+              onOpenSession={(sessionId) => {
+                const session = useSessionsStore.getState().byId[sessionId]
+                if (session) openSessionWithArtifact(session.id, session.projectPath, id)
+              }}
+            />
+          ),
+          onClose: () => setHeldClosed(writer.sessionId),
+        }
+      : null
   const right: RightContent | null =
     tools.right ??
+    heldRight ??
     (state.right === 'tweaks' && docShown
       ? { key: 'tweaks', body: null, onClose: () => setViewerState(id, { right: null }) }
       : null)
@@ -586,6 +625,7 @@ export default function ArtifactViewer(place: ViewerPlace) {
       <Pill
         lead={hostName ? t('viewer.offline.named', { host: hostName }) : t('viewer.offline.local')}
         rest={<span>{t('viewer.offline.reconnecting')}</span>}
+        keepRest
         mark={<span aria-hidden className="k-vs-pulse" />}
         actions={
           remoteHost !== null && !isWeb
@@ -681,11 +721,7 @@ export default function ArtifactViewer(place: ViewerPlace) {
       <Pill
         lead={writingLead(t, writer, head, doc?.pages ?? null)}
         rest={null}
-        mark={
-          <span aria-hidden className="avs-pill__agent">
-            <AgentMark agent={writer.agentId} size={14} hostId={writer.hostId} dot={null} />
-          </span>
-        }
+        mark={<span aria-hidden className="k-vs-pulse" data-tone="writing" />}
         actions={
           panel?.panel === writer.sessionId
             ? []
@@ -825,6 +861,7 @@ export default function ArtifactViewer(place: ViewerPlace) {
   if (states.error === 'previewOnly') {
     body = <PreviewOnly id={id} title={title} summary={summary ?? null} />
   } else if (states.error) {
+    if (kind === 'canvas' || kind === 'slides') ground = 'dots'
     // The shell stays: the kind's sketch, why, Retry or what else may open, and the agent's repair.
     const missing = states.error === 'missing'
     const shownNumber = picked ?? head
@@ -1101,6 +1138,8 @@ export default function ArtifactViewer(place: ViewerPlace) {
       </>
     )
   } else {
+    // The ground the canvas opens on, so nothing jumps when it arrives.
+    if (kind === 'canvas' || kind === 'slides') ground = 'dots'
     body = (
       <Waiting
         since={since}
@@ -1290,7 +1329,7 @@ export default function ArtifactViewer(place: ViewerPlace) {
       modesOff={
         !showing
           ? t('viewer.modes.off')
-          : states.inTrash
+          : states.inTrash || states.gone
             ? t('viewer.modes.deleted')
             : earlier !== null
               ? t('viewer.modes.earlier', { version: head })
@@ -1323,9 +1362,9 @@ export default function ArtifactViewer(place: ViewerPlace) {
           ? () => openSessionWithArtifact(chatSession.id, chatSession.projectPath, id)
           : null
       }
-      onPresent={showing && (shown?.canvas || (isDeck && deck)) ? present : null}
+      onPresent={showing && !states.gone && (shown?.canvas || (isDeck && deck)) ? present : null}
       share={
-        showing && shown && shares
+        showing && shown && shares && !states.gone && !states.inTrash
           ? { id, title, shown: shown.version, head: head ?? shown.version }
           : null
       }
@@ -1453,11 +1492,14 @@ function Pill({
   lead,
   rest,
   mark,
+  keepRest = false,
   actions,
 }: {
   lead: string
   rest: React.ReactNode
   mark?: React.ReactNode
+  /** Keep the rest when narrow too, as a short word that something is under way. */
+  keepRest?: boolean
   actions: Array<{
     label: string
     busy?: boolean
@@ -1472,7 +1514,7 @@ function Pill({
       {mark ?? <span className="avs-pill__dot" aria-hidden />}
       <span className="avs-pill__text">
         <b>{lead}</b>
-        {tier !== 'narrow' && rest}
+        {(keepRest || tier !== 'narrow') && rest}
       </span>
       {actions.map((action, i) => (
         <Button
@@ -1589,11 +1631,28 @@ function LegacyCanvasDock({ controls }: { controls: CanvasControls }) {
 function OpeningDock({ canvas }: { canvas: boolean }) {
   const { t } = useTranslation('artifacts')
   const none = () => {}
+  const { tier, leftCard: left } = useShell()
   return (
     <ViewerSlot slot="dock">
+      {canvas && left && (
+        <>
+          <DockButton
+            label={t('pages.title')}
+            icon={SidebarLeftIcon}
+            pressed={left.shown}
+            onClick={() => left.setShown(!left.shown)}
+          />
+          <DockRule />
+        </>
+      )}
       <span className="avs-dock__off" aria-disabled>
         {canvas ? (
           <>
+            {tier === 'wide' && (
+              <DockButton label={t('canvas.fitWidth')} disabled onClick={none}>
+                {t('canvas.fitWidth')}
+              </DockButton>
+            )}
             <DockButton label={t('canvas.zoomOut')} icon={MinusSignIcon} disabled onClick={none} />
             <span className="avs-dock__pct">{t('canvas.zoom', { percent: 100 })}</span>
             <DockButton label={t('canvas.zoomIn')} icon={PlusSignIcon} disabled onClick={none} />

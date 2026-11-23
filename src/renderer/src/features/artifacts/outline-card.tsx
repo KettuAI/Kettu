@@ -7,6 +7,7 @@ import { SegmentedControl } from '@renderer/components/affect/segmented-control'
 import { TreeView, type TreeNode } from '@renderer/components/affect/tree-view'
 import { setViewerState, useViewerState, type PagesFilter } from '@renderer/stores/artifact-viewer'
 import { ViewerSlot } from './viewer-shell'
+import { NoneHere } from './viewer-states'
 
 /**
  * The left card of a document: its headings as a tree, the section on screen picked out, found by
@@ -166,31 +167,47 @@ export function OutlineCard({
             />
           </div>
           <div className="k-pages__tree">
-            <TreeView
-              items={items}
-              expanded={expanded}
-              onExpandedChange={
-                narrowed
-                  ? undefined
-                  : (next) => setFolded([...parents].filter((slug) => !next.includes(slug)))
-              }
-              selected={current}
-              onSelect={(slug) => {
-                const heading = headings.find((h) => h.slug === slug)
-                if (heading) onPick(heading)
-              }}
-              guides={false}
-              emptyText={
-                needle
-                  ? t('outline.noMatch', { query: query.trim() })
-                  : filter === 'changed'
-                    ? t('outline.noChanges')
-                    : filter === 'comments'
-                      ? t('outline.noComments')
-                      : t('outline.none')
-              }
-              aria-label={t('outline.title')}
-            />
+            {narrowed && items.length === 0 ? (
+              <NoneHere
+                text={
+                  needle
+                    ? t('outline.noMatch', { query: query.trim() })
+                    : filter === 'changed'
+                      ? t('outline.noChanges')
+                      : t('outline.noComments')
+                }
+                onShowAll={() => {
+                  setQuery('')
+                  setViewerState(artifactId, { pagesFilter: 'all' })
+                }}
+              />
+            ) : (
+              <TreeView
+                items={items}
+                expanded={expanded}
+                onExpandedChange={
+                  narrowed
+                    ? undefined
+                    : (next) => setFolded([...parents].filter((slug) => !next.includes(slug)))
+                }
+                selected={current}
+                onSelect={(slug) => {
+                  const heading = headings.find((h) => h.slug === slug)
+                  if (heading) onPick(heading)
+                }}
+                guides={false}
+                emptyText={
+                  needle
+                    ? t('outline.noMatch', { query: query.trim() })
+                    : filter === 'changed'
+                      ? t('outline.noChanges')
+                      : filter === 'comments'
+                        ? t('outline.noComments')
+                        : t('outline.none')
+                }
+                aria-label={t('outline.title')}
+              />
+            )}
           </div>
         </div>
       </ViewerSlot>

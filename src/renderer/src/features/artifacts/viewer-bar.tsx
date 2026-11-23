@@ -118,6 +118,8 @@ function BarRow({
   const { tier, tight, labelled } = useShell()
   const now = useNow()
   const wide = tier === 'wide' && where === 'main'
+  // From the wide tier the modes keep their words, which say at a glance whether edits save;
+  // the tools on the right take theirs only once there is room for both.
   const labels = tier === 'wide' && labelled
   const centred = where === 'main' && tier !== 'narrow'
   const [sharing, setSharing] = useState(false)
@@ -129,7 +131,7 @@ function BarRow({
       comments={comments}
       off={modesOff}
       editOff={editOff}
-      iconsOnly={!labels || where === 'panel'}
+      iconsOnly={tier !== 'wide' || where === 'panel'}
     />
   )
   // Narrow, Present and who is here go into More; under 480 px, Share and Chat too.

@@ -53,6 +53,7 @@ import { threadNumbers } from './comment-threads'
 import { CompareDock, type CompareSwitch } from './compare-dock'
 import type { PlaceAsk, SheetWalk } from './change-walk'
 import { sheetSave } from './sheet-save'
+import { useUnsaved } from './unsaved'
 import { SaveChip } from './tool-parts'
 import { FitMenu } from './fit-menu'
 import { FrameLink } from './frame-link'
@@ -160,7 +161,7 @@ export function DeckSheet({
   since,
   band,
   latest,
-  mode,
+  mode: modeAsked,
   where,
   deck,
   walk,
@@ -214,6 +215,10 @@ export function DeckSheet({
   const count = deck?.slides.length ?? 0
   const current = Math.min(Math.max(1, kept), Math.max(1, count))
   const slide = deck?.slides[current - 1] ?? null
+  // The slide an agent is writing takes no edit of the user's until its turn ends; comments stay.
+  const writesShown =
+    !!writing && latest && (writing.slides === null || writing.slides.includes(current))
+  const mode: ViewerMode = modeAsked === 'edit' && writesShown ? 'view' : modeAsked
   const version = shown.version
   const [grid, setGrid] = useState(false)
   const [picked, setPicked] = useState<number | null>(null)
@@ -309,6 +314,7 @@ export function DeckSheet({
   // What the viewer reported last.
   const [layout, setLayout] = useState<Extract<DeckReport, { t: 'layout' }> | null>(null)
   const [save, setSave] = useState<Save | null>(null)
+  useUnsaved(id, !!save && ['failed', 'conflict', 'refused'].includes(save.state))
 
   useEffect(() => {
     if (!deck) return
@@ -546,9 +552,6 @@ export function DeckSheet({
 
   const anchorOf = (n: number, element: { tag: string; text: string } | null) =>
     slideAnchor(version, n, deck?.slides[n - 1]?.title ?? null, element)
-
-  const writesShown =
-    !!writing && latest && (writing.slides === null || writing.slides.includes(current))
 
   const placeOf = (i: number) => {
     const key = `p${i}`
