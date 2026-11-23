@@ -813,7 +813,7 @@ describe("agy's ACP mode", () => {
  * `session/resume` starts the session's process again, at agy's own model and in Default, as agy
  * 1.5.9 does. `turn` holds a prompt open until the test lets it end.
  */
-function flaggedAgy(version: string, flag: string | null) {
+function flaggedAgy(version: string, flag: string | null, refusesFlag = false) {
   const sent: { method: string; params: Record<string, unknown> }[] = []
   let turn: Promise<void> = Promise.resolve()
   let during: ((client: AgentContext, sessionId: string) => Promise<void>) | null = null
@@ -853,6 +853,8 @@ function flaggedAgy(version: string, flag: string | null) {
     }))
     .onRequest(methods.agent.session.new, (ctx) => {
       sent.push({ method: 'new', params: ctx.params as never })
+      const meta = ctx.params._meta as Record<string, unknown> | undefined
+      if (refusesFlag && meta?.['sh.kettu/session-flag']) throw new Error('agy exited')
       return { sessionId: 's-1', configOptions: options() }
     })
     .onRequest(methods.agent.session.resume, (ctx) => {
@@ -956,6 +958,40 @@ describe("agy's full access", () => {
     expect(valueOf(auto, 'mode')).toBe('auto')
     expect(auto.find((option) => option.id === 'mode')!.choices!.at(-1)!.value).toBe(FULL)
     connection.close()
+  })
+
+  it('opens a session asked for in full access with the flag, without a restart', async () => {
+    const agy = flaggedAgy('1.5.9', '--dangerously-skip-permissions')
+    const { connection, sent } = agy
+    await connection.initialize('1.0.0')
+    const { sessionId, config } = await connection.newSession('/repo', { fullAccess: true })
+    expect(agy.methods()).toEqual(['new'])
+    expect((sent[0]!.params._meta as Record<string, unknown>)['sh.kettu/session-flag']).toBe(true)
+    expect(valueOf(config, 'mode')).toBe(FULL)
+    sent.length = 0
+
+    await connection.setConfigOption(sessionId, 'mode', FULL)
+    expect(agy.methods()).toEqual([])
+    const auto = await connection.setConfigOption(sessionId, 'mode', 'auto')
+    expect(agy.methods()).toEqual(['resume', 'set mode=auto'])
+    expect(valueOf(auto, 'mode')).toBe('auto')
+    connection.close()
+  })
+
+  it('opens without the flag when agy will not start with it, or the router found none', async () => {
+    const refused = flaggedAgy('1.5.9', '--dangerously-skip-permissions', true)
+    await refused.connection.initialize('1.0.0')
+    const opened = await refused.connection.newSession('/repo', { fullAccess: true })
+    expect(refused.methods()).toEqual(['new', 'new'])
+    expect(refused.sent[1]!.params._meta).toBeUndefined()
+    expect(valueOf(opened.config, 'mode')).toBe('default')
+    refused.connection.close()
+
+    const unlisted = flaggedAgy('1.5.9', null)
+    await unlisted.connection.initialize('1.0.0')
+    await unlisted.connection.newSession('/repo', { fullAccess: true })
+    expect(unlisted.sent[0]!.params._meta).toBeUndefined()
+    unlisted.connection.close()
   })
 
   it('switches only once the running turn ends, and a later choice replaces it', async () => {

@@ -195,6 +195,7 @@ describe('the mode new sessions start in', () => {
     'claude-code': 'bypassPermissions',
     codex: 'agent-full-access',
     deepseek: 'danger-full-access',
+    antigravity: 'dangerously-skip-permissions',
   }
 
   it('keeps any mode the user chose on load, full access included', async () => {

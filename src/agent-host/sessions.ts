@@ -33,6 +33,7 @@ import {
   type LightAgent,
   type StartNotice,
 } from '@shared/agent-host'
+import { isFullAccessMode } from '@shared/agents'
 import { LOCALES } from '@shared/locale'
 import { PROMPT_BYTES, promptShare } from '@shared/attachments'
 import { CONTEXT_REFRESH_MS, type ContextEstimates } from '@shared/context'
@@ -5105,6 +5106,9 @@ export class SessionManager {
     let attach: SessionOptions
     try {
       attach = await this.attachOptions(live.id, live.record, runtime)
+      if (this.startsInFullAccess(live, { ...this.startModeOf(agentId), ...picks })) {
+        attach = { ...attach, fullAccess: true }
+      }
       setup = await runtime.connection.newSession(workDir(live.record), attach)
     } catch (error) {
       if (gone()) throw removedWhileStarting()
@@ -5283,6 +5287,7 @@ export class SessionManager {
     let attach: SessionOptions
     try {
       attach = await this.attachOptions(live.id, live.record, runtime)
+      if (this.startsInFullAccess(live, live.startValues)) attach = { ...attach, fullAccess: true }
       setup = await runtime.connection.newSession(await this.cwdOf(live), attach)
     } catch (error) {
       // Its failure, such as the agent's exit, no longer belongs to a session that went meanwhile.
@@ -5954,6 +5959,17 @@ export class SessionManager {
     const mode = startModeIn(this.deps.settings(), agentId)
     const optionId = modeOptionId(agentId)
     return mode === undefined || optionId === null ? {} : { [optionId]: mode }
+  }
+
+  /**
+   * Whether a session the user starts takes full access from `values`, so its agent can open it in
+   * full access at once; a session another one started, a workflow step's and a routine's never do.
+   */
+  private startsInFullAccess(live: Live, values: Record<string, string | boolean>): boolean {
+    if (live.startedMode || live.routineMode !== null) return false
+    const optionId = modeOptionId(live.record.agentId)
+    const mode = optionId === null ? undefined : values[optionId]
+    return typeof mode === 'string' && isFullAccessMode(mode)
   }
 
   /**

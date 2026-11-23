@@ -773,13 +773,27 @@ export class AcpConnection implements AgentConnection {
       this.appendsSystemPrompt && options.systemPromptAppend
         ? { ...started, ...systemPromptMeta(options.systemPromptAppend) }
         : started
-    const response = await this.call(() =>
-      this.connection.agent.request(methods.agent.session.new, {
-        cwd,
-        mcpServers: mcpServers(options.mcpServers),
-        ...(meta ? { _meta: meta } : {}),
-      }),
-    )
+    const open = (flagged: boolean) => {
+      const sent = flagged ? { ...meta, [SESSION_FLAG_META]: true } : meta
+      return this.call(() =>
+        this.connection.agent.request(methods.agent.session.new, {
+          cwd,
+          mcpServers: mcpServers(options.mcpServers),
+          ...(sent ? { _meta: sent } : {}),
+        }),
+      )
+    }
+    let full = this.fullAccess && options.fullAccess === true && !options.hidden
+    let response: Awaited<ReturnType<typeof open>>
+    try {
+      response = await open(full)
+    } catch (error) {
+      if (!full) throw error
+      // Opened without the flag, the session enters full access by a restart as its mode is set.
+      this.hooks.log('warn', `agy did not start with full access: ${(error as Error).message}`)
+      full = false
+      response = await open(false)
+    }
     this.readPlan(response._meta)
     this.allowWithoutAsking(response.sessionId, options)
     if (options.hidden && !promptsHidden(this.removal)) this.unprompted.add(response.sessionId)
@@ -790,6 +804,7 @@ export class AcpConnection implements AgentConnection {
         cwd,
         options,
         this.config(response.configOptions, response.modes),
+        full,
       ),
     }
   }
@@ -1163,21 +1178,22 @@ export class AcpConnection implements AgentConnection {
   // agy's full access.
 
   /**
-   * Notes an agy session that was just opened, its process started without the flag, and returns
-   * its options with Full access among them.
+   * Notes an agy session that was just opened, its process started with the flag when `full`, and
+   * returns its options with Full access among them.
    */
   private opened(
     sessionId: string,
     cwd: string,
     options: SessionOptions,
     config: ConfigOption[],
+    full = false,
   ): ConfigOption[] {
     if (!this.fullAccess) return config
-    const shown = withFullAccess(config, false)
+    const shown = withFullAccess(config, full)
     this.agyAccess.set(sessionId, {
       cwd,
       options,
-      full: false,
+      full,
       config: shown,
       pending: null,
       restarting: null,
