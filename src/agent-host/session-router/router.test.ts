@@ -18,7 +18,11 @@ if (process.argv.includes('--help')) {
   process.stdout.write(process.env.AGENT_HELP ?? '')
   process.exit(0)
 }
-const where = () => ({ cwd: process.cwd(), electron: process.env.ELECTRON_RUN_AS_NODE ?? null })
+const where = () => ({
+  cwd: process.cwd(),
+  electron: process.env.ELECTRON_RUN_AS_NODE ?? null,
+  pid: process.pid,
+})
 createInterface({ input: process.stdin }).on('line', (line) => {
   const message = JSON.parse(line)
   if (message.id === undefined) return
@@ -38,6 +42,7 @@ interface Seen {
   args: string[]
   cwd: string
   electron: string | null
+  pid: number
 }
 
 const dirs: string[] = []
@@ -195,6 +200,61 @@ describe('the session router', () => {
     })
     expect((alsoRefused._meta as unknown as { error?: unknown }).error).toBeDefined()
     expect(alsoRefused.sessionId).toBeUndefined()
+  })
+
+  it("loads a sub-agent in its parent's process, which keeps it until the parent goes", async () => {
+    const { request } = await startRouter()
+    await request('initialize', { protocolVersion: 1 })
+    const parent = await request('session/new', { cwd: '/repo', mcpServers: [] })
+    const other = await request('session/new', { cwd: '/repo', mcpServers: [] })
+    const parentId = parent.sessionId!
+    const asParent = { _meta: { 'sh.kettu/parent-session': parentId, other: 1 } }
+
+    const loaded = await request('session/load', {
+      sessionId: 'child',
+      cwd: '/repo',
+      mcpServers: [],
+      ...asParent,
+    })
+    expect(loaded._meta.pid).toBe(parent._meta.pid)
+    expect(loaded._meta.params).toEqual({
+      sessionId: 'child',
+      cwd: '/repo',
+      mcpServers: [],
+      _meta: { other: 1 },
+    })
+    const prompted = await request('session/prompt', { sessionId: 'child', prompt: [] })
+    expect(prompted._meta.pid).toBe(parent._meta.pid)
+    // A sub-agent of the sub-agent lives in the same process.
+    const nested = await request('session/load', {
+      sessionId: 'grandchild',
+      cwd: '/repo',
+      mcpServers: [],
+      _meta: { 'sh.kettu/parent-session': 'child' },
+    })
+    expect(nested._meta.pid).toBe(parent._meta.pid)
+
+    // Closing the sub-agent leaves the parent's process running.
+    await request('session/close', { sessionId: 'child' })
+    const still = await request('session/prompt', { sessionId: parentId, prompt: [] })
+    expect(still._meta.pid).toBe(parent._meta.pid)
+    const gone = await request('session/prompt', { sessionId: 'child', prompt: [] })
+    expect((gone._meta as unknown as { error?: unknown }).error).toBeDefined()
+
+    // The parent's process going takes its sub-agents with it, and leaves the other session's.
+    await request('session/close', { sessionId: parentId })
+    const orphan = await request('session/prompt', { sessionId: 'grandchild', prompt: [] })
+    expect((orphan._meta as unknown as { error?: unknown }).error).toBeDefined()
+    const unrelated = await request('session/prompt', { sessionId: other.sessionId, prompt: [] })
+    expect(unrelated._meta.pid).toBe(other._meta.pid)
+
+    const unknown = await request('session/load', {
+      sessionId: 'lost',
+      cwd: '/repo',
+      mcpServers: [],
+      _meta: { 'sh.kettu/parent-session': 'nobody' },
+    })
+    expect((unknown._meta as unknown as { error?: unknown }).error).toBeDefined()
   })
 
   it('keeps the runtime switch for a child that is the runtime itself', async () => {

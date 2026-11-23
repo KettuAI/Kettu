@@ -177,6 +177,23 @@
     "open_settings": "Open settings",
     "change_settings": "Change settings"
   },
+  "agyTool": {
+    "invoke_subagent": "Start sub-agent",
+    "send_message": "Send message",
+    "wait": "Wait",
+    "cron": "Schedule",
+    "manage_task": {
+      "list": "List background tasks",
+      "status": "Check background task",
+      "kill": "Stop background task",
+      "send_input": "Type into background task"
+    },
+    "manage_subagents": {
+      "list": "List sub-agents",
+      "kill": "Stop sub-agents",
+      "kill_all": "Stop all sub-agents"
+    }
+  },
   "permission": {
     "outsideScope": "Outside this routine's permissions: {{level}}.",
     "answer": {
