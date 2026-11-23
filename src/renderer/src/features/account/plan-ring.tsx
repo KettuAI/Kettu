@@ -4,7 +4,7 @@ import { isSortable } from '@dnd-kit/react/sortable'
 import { ArrowRight01Icon, PieChartIcon } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
 import type { ProviderBalance } from '@shared/agent-host'
-import type { AgentId, ConfigOption } from '@shared/thread'
+import type { AgentId } from '@shared/thread'
 import { Icon, Popover } from '@renderer/components/affect/app-shell'
 import { LimitViewSwitch } from '@renderer/components/plan-limit-view'
 import { PlanRings } from '@renderer/components/plan-rings'
@@ -24,11 +24,8 @@ import {
 import { readJson, writeJson } from '@renderer/lib/storage'
 import { useNow } from '@renderer/lib/use-now'
 import { cn } from '@renderer/lib/utils'
-import { isSelect } from '@renderer/features/session/composer/options'
-import { useStartConfig } from '@renderer/features/session/new-session/use-start-config'
 import { agentsOn, planReadingsOf, useAgentsStore, usePlanReadings } from '@renderer/stores/agents'
 import { hostOfSession, useSessionsStore } from '@renderer/stores/sessions'
-import { useThreadsStore } from '@renderer/stores/threads'
 import { planLimitWays, readLimitsThrough } from '@renderer/stores/usage'
 import { openUsage, useViewStore } from '@renderer/stores/view'
 import {
@@ -38,14 +35,7 @@ import {
   useWindowHost,
 } from '@renderer/stores/window-host'
 import { closeAccountMenu } from './menu-close'
-import {
-  balanceTotal,
-  currentCard,
-  planCards,
-  popoverCards,
-  ringWindows,
-  type PlanCard,
-} from './model'
+import { balanceTotal, currentCard, planCards, popoverCards, type PlanCard } from './model'
 import { PlanLimitCard } from './plan-limit-card'
 
 /**
@@ -77,15 +67,8 @@ function useAccountsWithLimits(): AccountAgent[] {
   )
 }
 
-/**
- * The agent of the session shown, the focused pane's in a split, or New session's choice, with
- * the session when one is shown.
- */
-function useShownAgent(): {
-  hostId: string | null
-  agentId: AgentId
-  sessionId: string | null
-} | null {
+/** The agent of the focused session or New session's choice. */
+function useShownAgent(): { hostId: string | null; agentId: AgentId } | null {
   const main = useViewStore((s) => s.main)
   const projectPath = useViewStore((s) => s.projectPath)
   const summary = useSessionsStore((s) =>
@@ -93,7 +76,7 @@ function useShownAgent(): {
   )
   return useMemo(() => {
     if (summary) {
-      return { hostId: hostOfSession(summary), agentId: summary.agentId, sessionId: summary.id }
+      return { hostId: hostOfSession(summary), agentId: summary.agentId }
     }
     if (main.kind !== 'new' || !main.agentId) return null
     const hostId = main.noProject
@@ -101,17 +84,12 @@ function useShownAgent(): {
       : projectPath
         ? hostOfPath(projectPath)
         : (main.hostId ?? null)
-    return { hostId, agentId: main.agentId, sessionId: null }
+    return { hostId, agentId: main.agentId }
   }, [main, projectPath, summary])
 }
 
-const isModel = (option: ConfigOption): boolean => option.category === 'model' && isSelect(option)
-
-/**
- * The account the ring follows, by its card key, and the model its session runs, or New session's
- * pick; on a page with no agent of its own, the ones followed last.
- */
-function useCurrentAccount(): { key: string; model: ConfigOption | undefined } | null {
+/** The last account stays selected on pages with no agent of their own. */
+function useCurrentAccountKey(): string | null {
   const agent = useShownAgent()
   const key = useAgentsStore((s) => {
     if (!agent) return null
@@ -120,19 +98,9 @@ function useCurrentAccount(): { key: string; model: ConfigOption | undefined } |
     const account = accountKey(status)
     return account === null ? ownKey(agent.hostId, agent.agentId) : accountCardKey(account)
   })
-  const sessionModel = useThreadsStore((s) =>
-    agent?.sessionId ? s.replicas[agent.sessionId]?.state?.session.config.find(isModel) : undefined,
-  )
-  const startConfig = useStartConfig(
-    agent && !agent.sessionId ? agent.agentId : null,
-    undefined,
-    agent?.hostId ?? null,
-  )
-  const model = agent?.sessionId ? sessionModel : startConfig?.find(isModel)
-  const found = useMemo(() => (key === null ? null : { key, model }), [key, model])
-  const [kept, setKept] = useState(found)
-  if (found !== null && found !== kept) setKept(found)
-  return found ?? kept
+  const [kept, setKept] = useState(key)
+  if (key !== null && key !== kept) setKept(key)
+  return key ?? kept
 }
 
 /** Rings that fit 20 px, by how many there are. */
@@ -140,7 +108,8 @@ function ringSizes(count: number): { stroke: number; gap: number } {
   if (count <= 1) return { stroke: 2.5, gap: 0 }
   if (count === 2) return { stroke: 2.2, gap: 1.2 }
   if (count === 3) return { stroke: 1.8, gap: 1 }
-  return { stroke: 1.5, gap: 0.75 }
+  const scale = 4 / count
+  return { stroke: 1.5 * scale, gap: 0.75 * scale }
 }
 
 /** A balance in its currency, or in its own units, such as credits, by their shown name. */
@@ -151,21 +120,16 @@ function balanceText(
   return planBalance(balance.amount, balance.currency, units[balance.currency] ?? balance.currency)
 }
 
-/**
- * The account row's plan button for the current session's account: a ring per window that holds
- * its model back, as the plan cards draw them, or the balance of an account that reports only one;
- * gone when it reports neither. It opens every account's plan cards where the account menu opens.
- */
+/** The current account's plan windows or balance, with a popover for all accounts. */
 export function PlanRing() {
   const { t } = useTranslation(['sidebar', 'composer', 'usage'])
-  const now = useNow()
-  const cards = planCards(useAccountsWithLimits(), now)
-  const current = useCurrentAccount()
+  const cards = planCards(useAccountsWithLimits(), useNow())
+  const currentKey = useCurrentAccountKey()
   const view = useLimitView()
   const [open, setOpen] = useState(false)
 
-  const card = current ? currentCard(cards, current.key) : null
-  const windows = card ? ringWindows(card, current?.model, now) : []
+  const card = currentKey ? currentCard(cards, currentKey) : null
+  const windows = card?.windows ?? []
   const balance = card && windows.length === 0 ? balanceTotal(card.balances) : null
   if (!card || (windows.length === 0 && !balance)) return null
 
