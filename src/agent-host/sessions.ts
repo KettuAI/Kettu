@@ -4756,7 +4756,13 @@ export class SessionManager {
     this.touch(live.id)
     if (newWorktree && worktree) this.prepareWorktree(projectPath, worktree)
     try {
-      live.startValues = options
+      // As a prepared session starts: the settings' start mode and the agent's remembered values
+      // under what the caller picked, which a client sends only when changed.
+      live.startValues = {
+        ...this.startModeOf(params.agentId),
+        ...this.deps.options?.rememberedOf(params.agentId),
+        ...options,
+      }
       await this.startNew(live)
     } catch (error) {
       if (!(error instanceof HostError && error.code === 'auth_required')) {
