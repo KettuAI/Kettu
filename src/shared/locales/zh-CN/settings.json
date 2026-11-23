@@ -1289,7 +1289,7 @@
     },
     "auto": {
       "name": "默认私有发布",
-      "description": "新建的产物会以私有方式发布到 Kettu，发布到 Kettu 的每个页面都会跟着产物的最新版本更新。私有页面只有你登录自己的 Kettu 账号才能打开。",
+      "description": "打开后，新建的产物会以私有方式发布到 Kettu，发布到 Kettu 的每个页面都会跟着产物的最新版本更新。私有页面只有你登录自己的 Kettu 账号才能打开。",
       "keywords": "分享 发布 自动 私有 默认 同步 最新版本 kettu",
       "blockedFull_other": "有 {{count}} 个产物没有发布：云端存储已满。",
       "blockedLarge_other": "有 {{count}} 个产物没有发布：太大了。"

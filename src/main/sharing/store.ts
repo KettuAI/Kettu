@@ -84,6 +84,8 @@ export interface AutoState {
   enabled: boolean
   /** The one-time notice before the first upload was answered. */
   confirmed: boolean
+  /** The user turned the switch on; without it, on and unanswered is the earlier default. */
+  chosen: boolean
   /** Artifacts made at or after this are published on their own; null while signed out. */
   since: number | null
   /** The Kettu account `since` is for. */
@@ -128,6 +130,7 @@ function parseAuto(raw: unknown): AutoState | null | undefined {
   return {
     enabled,
     confirmed,
+    chosen: raw.chosen === true,
     since: since as number | null,
     accountId: accountId as string | null,
     declined: [...new Set(declined as string[])],
