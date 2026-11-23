@@ -532,6 +532,14 @@
     0 0 0 1px var(--line-strong),
     0 0 0 3px var(--accent-soft);
 }
+.k-art__frame[data-on] .k-art__frame-pic {
+  box-shadow:
+    0 0 0 1.5px var(--control-on),
+    0 0 0 4px var(--control-on-tint);
+}
+.k-art__frame[data-on] .k-art__frame-name {
+  color: var(--ink);
+}
 .k-art__frame-more {
   display: grid;
   flex: none;

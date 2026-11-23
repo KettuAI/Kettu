@@ -81,11 +81,18 @@ export interface DocState {
   version: number
   /** The blocks whose places the layout reports, by where they start in the Markdown. */
   track: number[]
-  /** What the shown version changed from `from`, to mark; null for nothing. */
-  marks: { from: number; passages: ChangedPassage[] } | null
+  /**
+   * What the shown version changed from `from`, to mark; null for nothing. `sections` is the
+   * version that last changed each section, by its slug, when it is not the shown one.
+   */
+  marks: {
+    from: number
+    passages: ChangedPassage[]
+    sections?: Readonly<Record<string, number>>
+  } | null
   /** Show the earlier words beside the new ones in the text. */
   changes: boolean
-  /** The changed passage being visited, by where it starts. */
+  /** The block being visited, a changed passage or a heading landed on, by where it starts. */
   step: number | null
   /** The block a comment is being written on or a thread is open under, outlined. */
   focus: number | null

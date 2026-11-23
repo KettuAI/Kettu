@@ -655,7 +655,10 @@ export function DocumentViewer({ config, view }: { config: ViewerConfig; view: V
               const passage = passages.changed.get(part.from)
               const typing = editing?.index === index
               const slug = headingAt.get(part.from)
-              const tag = slug && changedSlugs.has(slug) ? `"v${version}"` : undefined
+              const tag =
+                slug && changedSlugs.has(slug)
+                  ? `"v${marks?.sections?.[slug] ?? version}"`
+                  : undefined
               const words =
                 showChanges && passage?.change === 'changed' && passage.before && oldText !== null
                   ? oldText.slice(passage.before.from, passage.before.to)

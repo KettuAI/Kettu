@@ -12,7 +12,7 @@ import { useNow } from '@renderer/lib/use-now'
 import { setViewerState } from '@renderer/stores/artifact-viewer'
 import { hostOfSession, useSessionsStore } from '@renderer/stores/sessions'
 import { artifactSharing, useArtifactRecord } from './artifact-host'
-import { changesLabel } from './change-words'
+import { changeLine } from './change-words'
 import { CardHead } from './tool-parts'
 import { useAuthor } from './use-versions'
 
@@ -33,20 +33,6 @@ function changesOf(id: string, version: number): Promise<ArtifactChanges | null>
     changesRead.set(key, read)
   }
   return read
-}
-
-/** "4 frames changed · Home, Search": the count, then the first names. */
-function changeLine(changes: ArtifactChanges): string {
-  const names =
-    changes.kind === 'frames'
-      ? changes.frames.map((f) => f.name)
-      : changes.kind === 'files'
-        ? changes.paths
-        : changes.kind === 'slides'
-          ? changes.slides.map((s) => String(s.number))
-          : changes.headings.filter((h): h is string => !!h)
-  const shown = names.slice(0, 3).join(', ')
-  return shown ? `${changesLabel(changes)} · ${shown}` : changesLabel(changes)
 }
 
 /** A row: one version, or a run of the user's own edits folded into one. */

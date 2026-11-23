@@ -1,10 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import {
   ArrowDown01Icon,
-  ArrowLeft01Icon,
   ArrowReloadHorizontalIcon,
-  ArrowRight01Icon,
-  Cancel01Icon,
   ComputerIcon,
   Copy01Icon,
   FitToScreenIcon,
@@ -15,7 +12,6 @@ import {
   Tick02Icon,
 } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
-import type { ArtifactChanges } from '@shared/artifact-changes'
 import type { PageErrors } from '@shared/artifact-runtime/page-errors'
 import { Dropdown, Icon, Popover, type MenuItem } from '@renderer/components/affect/app-shell'
 import { Button } from '@renderer/components/affect/button'
@@ -27,7 +23,6 @@ import {
   usePageWidth,
   type PageWidth,
 } from '@renderer/stores/artifact-page-width'
-import { changesLabel } from './change-words'
 import { CompareDock, type CompareSwitch } from './compare-dock'
 import type { ArtifactEditor } from './editor'
 import { errorCount, errorLines, errorPlace } from './page-error-handoff'
@@ -475,71 +470,5 @@ function ErrorChip({
         </Popover>
       </span>
     </>
-  )
-}
-
-/** The pill a new version puts over the sheet: "2 files changed in v4", and its dismiss. */
-export function ChangePill({
-  to,
-  changes,
-  onDismiss,
-  label,
-  steps,
-}: {
-  to: number
-  changes: ArtifactChanges
-  onDismiss: () => void
-  /** Said in place of what changed, such as which version the changes are shown from. */
-  label?: string
-  /** Stepping through the changes, where the content can land on each: "‹ 1 / 3 ›". */
-  steps?: { at: number; count: number; onStep: (direction: 1 | -1) => void } | null
-}) {
-  const { t } = useTranslation(['artifacts', 'common'])
-  const { tier } = useShell()
-  const changed = changesLabel(changes)
-  const text =
-    label ?? (tier === 'narrow' ? changed : t('sheet.changedIn', { changes: changed, version: to }))
-  return (
-    <div role="status" className="avs-pill__in aps-pill">
-      <span className="avs-pill__dot aps-pill__dot" aria-hidden />
-      <span className="avs-pill__text">
-        <b>{text}</b>
-      </span>
-      {steps && steps.count > 1 && (
-        <>
-          <span aria-hidden className="avs-dock__rule" />
-          <button
-            type="button"
-            aria-label={t('sheet.previousChange')}
-            title={t('sheet.previousChange')}
-            onClick={() => steps.onStep(-1)}
-            className="avs-dock__btn"
-          >
-            <Icon icon={ArrowLeft01Icon} size={14} />
-          </button>
-          <span className="aps-pill__count">
-            {t('sheet.changeAt', { number: steps.at + 1, count: steps.count })}
-          </span>
-          <button
-            type="button"
-            aria-label={t('sheet.nextChange')}
-            title={t('sheet.nextChange')}
-            onClick={() => steps.onStep(1)}
-            className="avs-dock__btn"
-          >
-            <Icon icon={ArrowRight01Icon} size={14} />
-          </button>
-        </>
-      )}
-      <button
-        type="button"
-        aria-label={t('viewer.dismiss')}
-        title={t('viewer.dismiss')}
-        onClick={onDismiss}
-        className="avs-dock__btn"
-      >
-        <Icon icon={Cancel01Icon} size={14} />
-      </button>
-    </div>
   )
 }

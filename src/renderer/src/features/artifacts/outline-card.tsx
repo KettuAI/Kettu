@@ -19,6 +19,7 @@ export function OutlineCard({
   current,
   changed,
   version,
+  marks,
   comments,
   onPick,
 }: {
@@ -29,6 +30,8 @@ export function OutlineCard({
   /** The slugs of the sections the latest version changed, tagged with that version. */
   changed: ReadonlySet<string>
   version: number
+  /** The version that last changed each changed section, when not `version`. */
+  marks?: ReadonlyMap<string, number>
   /** Open threads by the slug of the section each is in. */
   comments: ReadonlyMap<string, number>
   onPick: (heading: DocHeading) => void
@@ -58,7 +61,7 @@ export function OutlineCard({
             <span className="k-pages__marks">
               {changed.has(h.slug) && (
                 <span className="k-pages__mark" data-changed="">
-                  {t('pages.version', { version })}
+                  {t('pages.version', { version: marks?.get(h.slug) ?? version })}
                 </span>
               )}
               {count > 0 && (
@@ -98,7 +101,7 @@ export function OutlineCard({
       stack.push(entry)
     }
     return { items: narrowed ? prune(roots, kept) : roots, parents: withChildren }
-  }, [headings, filter, needle, narrowed, changed, comments, version, t])
+  }, [headings, filter, needle, narrowed, changed, comments, version, marks, t])
 
   const expanded = narrowed ? [...parents] : [...parents].filter((slug) => !folded.includes(slug))
 

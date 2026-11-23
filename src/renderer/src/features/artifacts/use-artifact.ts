@@ -242,17 +242,17 @@ export function useArtifact(id: string, version: number | null) {
     }
   }, [id, connected, attempt])
 
-  // The latest version on screen is seen, on the host, for every device of the owner's; a host that
-  // keeps no such record lists none.
+  // The latest version on screen is seen, on the host, for every device of the owner's, once the
+  // window is visible too, so a version that arrives in a hidden window still counts as new; a host
+  // that keeps no such record lists none.
   const shownVersion = shown?.version ?? null
   const seenBefore = summary?.seen
+  const visible = useWindowVisible()
   useEffect(() => {
-    if (shownVersion === null || seenBefore === undefined || summary?.version !== shownVersion) {
-      return
-    }
-    if ((seenBefore ?? 0) >= shownVersion) return
+    if (!visible || shownVersion === null || seenBefore === undefined) return
+    if (summary?.version !== shownVersion || (seenBefore ?? 0) >= shownVersion) return
     void host('artifacts.seen', { id, version: shownVersion }).catch(() => {})
-  }, [id, shownVersion, seenBefore, summary?.version])
+  }, [id, visible, shownVersion, seenBefore, summary?.version])
 
   useEffect(() => {
     if (!url) return
@@ -384,4 +384,14 @@ export function canvasPageName(
     const page = shown.canvas?.pages[index]
     return page?.name ?? numbered(page?.number ?? index + 1)
   }
+}
+
+function useWindowVisible(): boolean {
+  const [visible, setVisible] = useState(() => document.visibilityState === 'visible')
+  useEffect(() => {
+    const change = () => setVisible(document.visibilityState === 'visible')
+    document.addEventListener('visibilitychange', change)
+    return () => document.removeEventListener('visibilitychange', change)
+  }, [])
+  return visible
 }

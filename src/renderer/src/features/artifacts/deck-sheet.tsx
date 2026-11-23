@@ -49,17 +49,16 @@ import {
   type ViewerMode,
 } from '@renderer/stores/artifact-viewer'
 import { prefersReducedMotion } from '@renderer/stores/settings'
-import type { ArtifactPageRequest } from '@renderer/stores/view'
 import { threadNumbers } from './comment-threads'
 import { CompareDock, type CompareSwitch } from './compare-dock'
-import type { ArrivedChange } from './document-sheet'
+import type { PlaceAsk, SheetWalk } from './change-walk'
 import { sheetSave } from './sheet-save'
 import { SaveChip } from './tool-parts'
 import { FitMenu } from './fit-menu'
 import { FrameLink } from './frame-link'
 import { isEditable } from './keys'
 import { Waiting } from './page-frame'
-import { ChangePill, type SheetAgent } from './page-sheet'
+import type { SheetAgent } from './page-sheet'
 import { SlidesCard, SlideThumb } from './slides-card'
 import { pageUrl, type ShownVersion } from './use-artifact'
 import { slideAnchor, slideName, type DeckOutline } from './use-deck'
@@ -79,6 +78,8 @@ const PEEK = 88
 const GHOST_GAP = 32
 /** The notes strip under the slide, and the gap above it. */
 const NOTES_H = 102
+/** How long a slide landed on flashes: two pulses. */
+const FLASH_MS = 1000
 const NOTES_GAP = 12
 /** How long the notes rest before what was typed goes to the deck. */
 const NOTES_AFTER_MS = 900
@@ -161,7 +162,7 @@ export function DeckSheet({
   mode,
   where,
   deck,
-  arrived,
+  walk,
   comments,
   agent,
   onAsk,
@@ -183,14 +184,15 @@ export function DeckSheet({
   mode: ViewerMode
   where: 'main' | 'panel'
   deck: DeckOutline | null
-  arrived: ArrivedChange | null
+  /** What changed, which the deck marks and the viewer's pill walks. */
+  walk: SheetWalk | null
   comments: DeckComments
   agent: SheetAgent | null
   /** Asks the agent about a slide, or an element on it. */
   onAsk: ((anchor: CommentAnchor) => void) | null
   onPresent: (slide: number) => void
-  /** A slide asked for by a link or a card, until it is shown. */
-  asked: ArtifactPageRequest | null
+  /** A slide asked for by a link, a card or the pill, until it is shown. */
+  asked: (Pick<PlaceAsk, 'seq' | 'slide'> & { flash?: boolean }) | null
   onAsked: (seq: number) => void
   /** A thread chosen in the comments card, to go to and open. */
   focusThread: { thread: string; seq: number } | null
@@ -227,23 +229,23 @@ export function DeckSheet({
     return () => observer.disconnect()
   }, [])
 
-  // The version that came in: its pill, which steps through the slides it changed.
-  const showPill = !!arrived && latest && version === arrived.to
-  const [pillGone, setPillGone] = useState<number | null>(null)
-  // A version the user typed here marks its slides, but needs no pill to say so.
-  const [ownVersions, setOwnVersions] = useState<ReadonlySet<number>>(() => new Set())
-  const pill = showPill && pillGone !== arrived.to && !ownVersions.has(arrived.to)
-  const changedSlides = useMemo(
-    () => (arrived?.changes.kind === 'slides' ? arrived.changes.slides.map((s) => s.number) : []),
-    [arrived],
+  // What changed, marked on the slides that changed.
+  const marking = !!walk && latest && version === walk.to && walk.changes.kind === 'slides'
+  const changed = useMemo(
+    () =>
+      new Set(
+        marking && walk.changes.kind === 'slides' ? walk.changes.slides.map((s) => s.number) : [],
+      ),
+    [marking, walk],
   )
-  const changed = useMemo(() => new Set(changedSlides), [changedSlides])
-  const [step, setStep] = useState(0)
-  const [stepsOf, setStepsOf] = useState(arrived?.to ?? null)
-  if (stepsOf !== (arrived?.to ?? null)) {
-    setStepsOf(arrived?.to ?? null)
-    setStep(0)
-  }
+  const marks = marking ? walk.marks : undefined
+  const changedIn = walk?.to ?? version
+  const [flash, setFlash] = useState<number | null>(null)
+  useEffect(() => {
+    if (flash === null) return
+    const timer = setTimeout(() => setFlash(null), FLASH_MS)
+    return () => clearTimeout(timer)
+  }, [flash])
 
   // The deck's frame, loaded once for the artifact; versions come in through the viewer.
   const origin = url.slice(0, -1)
@@ -330,10 +332,6 @@ export function DeckSheet({
           return
         case 'save':
           setSave(report)
-          if (report.state === 'saved' && report.version !== null) {
-            const saved = report.version
-            setOwnVersions((was) => new Set(was).add(saved))
-          }
       }
     }
   })
@@ -379,12 +377,17 @@ export function DeckSheet({
     })
   }, [current])
 
-  // A slide asked for by a card or a link opens once the deck is read.
+  // A slide asked for by a card, a link or the pill opens once the deck is read.
+  const [askedSeen, setAskedSeen] = useState(0)
+  if (asked?.slide && deck && askedSeen !== asked.seq) {
+    setAskedSeen(asked.seq)
+    setGrid(false)
+    if (asked.flash) setFlash(asked.seq)
+  }
   const askedSeq = useRef(0)
   useEffect(() => {
     if (!asked?.slide || !deck || askedSeq.current === asked.seq) return
     askedSeq.current = asked.seq
-    setGrid(false)
     setDeckSlide(id, Math.min(asked.slide, deck.slides.length))
     onAsked(asked.seq)
   }, [asked, deck, id, onAsked])
@@ -524,7 +527,7 @@ export function DeckSheet({
   const ready = room.width > 0 && !!deck && !!slide
   const peek =
     !narrow && fit === 'auto' && insets.left === 0 && insets.right === 0 && !leftCard?.shown
-  const top = band || pill ? BAND : TOP
+  const top = band ? BAND : TOP
   const place = ready
     ? slidePlace(deck, room, insets, fit, narrow, top, notesOn, peek)
     : { x: 0, y: 0, z: 1 }
@@ -567,6 +570,7 @@ export function DeckSheet({
             <div
               ref={slideBox}
               className="adk-slide"
+              data-flash={flash !== null || undefined}
               style={{ left: place.x, top: place.y, width: shownW, height: shownH }}
             >
               <iframe
@@ -684,7 +688,8 @@ export function DeckSheet({
             cols={cols}
             insets={insets}
             changed={changed}
-            changedIn={arrived?.to ?? version}
+            changedIn={changedIn}
+            marks={marks}
             comments={bySlide}
             agent={agent}
             onPick={setPicked}
@@ -701,38 +706,17 @@ export function DeckSheet({
           deck={deck}
           current={current}
           changed={changed}
-          changedIn={arrived?.to ?? version}
+          changedIn={changedIn}
+          marks={marks}
           comments={bySlide}
           onPick={openSlide}
         />
-      )}
-      {pill && arrived && (
-        <ViewerSlot slot="pill">
-          <ChangePill
-            to={arrived.to}
-            changes={arrived.changes}
-            steps={
-              changedSlides.length
-                ? {
-                    at: step,
-                    count: changedSlides.length,
-                    onStep: (direction) => {
-                      const next = (step + direction + changedSlides.length) % changedSlides.length
-                      setStep(next)
-                      openSlide(changedSlides[next]!)
-                    },
-                  }
-                : null
-            }
-            onDismiss={() => setPillGone(arrived.to)}
-          />
-        </ViewerSlot>
       )}
       {deck && (
         <DeckDock
           count={count}
           current={current}
-          tag={changed.has(current) ? (arrived?.to ?? null) : null}
+          tag={changed.has(current) ? (marks?.get(`${current}`) ?? changedIn) : null}
           grid={grid}
           fit={fit}
           notes={notesOn}
@@ -873,6 +857,7 @@ function DeckGrid({
   insets,
   changed,
   changedIn,
+  marks,
   comments,
   agent,
   onPick,
@@ -889,6 +874,7 @@ function DeckGrid({
   insets: { left: number; right: number }
   changed: ReadonlySet<number>
   changedIn: number
+  marks: ReadonlyMap<string, number> | undefined
   comments: ReadonlyMap<number, number>
   agent: SheetAgent | null
   onPick: (slide: number) => void
@@ -987,7 +973,9 @@ function DeckGrid({
                   <span className="adk-grid__name">{slideName(slide)}</span>
                   {changed.has(slide.number) && (
                     <span className="k-pages__mark" data-changed="">
-                      {t('pages.version', { version: changedIn })}
+                      {t('pages.version', {
+                        version: marks?.get(`${slide.number}`) ?? changedIn,
+                      })}
                     </span>
                   )}
                   {count > 0 && (
