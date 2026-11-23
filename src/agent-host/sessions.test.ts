@@ -511,5 +511,6 @@ describe('starting a session without a prepared one', () => {
     await sessions.load()
     await sessions.create({ agentId: 'antigravity', projectPath: '/repo' })
     await vi.waitFor(() => expect(setConfigOption).toHaveBeenCalledWith('acp-1', 'mode', 'auto'))
+    await sessions.flush()
   })
 })
