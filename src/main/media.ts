@@ -82,6 +82,8 @@ const HEADERS = {
   'Accept-Ranges': 'bytes',
   // Safe for any origin: the request filter, not CORS, decides who may read, the app's page alone.
   'Access-Control-Allow-Origin': '*',
+  // A request from the page may read these, which a PDF's range loading asks of the answer.
+  'Access-Control-Expose-Headers': 'Accept-Ranges, Content-Range',
   'X-Content-Type-Options': 'nosniff',
   'Cache-Control': 'no-store',
   // Should a response ever open as a document, it runs nothing.

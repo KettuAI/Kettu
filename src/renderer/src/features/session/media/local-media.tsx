@@ -133,6 +133,7 @@ const LOADING: Record<MediaKind, string> = {
   image: 'inline-block h-24 w-40',
   video: 'block w-full',
   audio: 'block h-13.5 w-full max-w-[420px]',
+  document: 'block w-full',
 }
 
 /** A file that is missing or unreadable, as a file card that can ask again. */

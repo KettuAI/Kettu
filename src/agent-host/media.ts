@@ -8,10 +8,12 @@ import { open, realpath, stat } from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import {
+  MEDIA_DOCUMENT_NAME,
   mediaKindOfName,
   mediaUrl,
   type MediaAudioType,
   type MediaAuthorization,
+  type MediaDocumentType,
   type MediaFile,
   type MediaGrant,
   type MediaGrantRecord,
@@ -241,6 +243,23 @@ export function avType(b: Buffer, name: string): AvType | null {
   return null
 }
 
+/** A PDF reader looks for `%PDF-` within the first kilobyte, so a header may precede it. */
+const PDF_SIGNATURE_BYTES = 1024
+
+/** A document's format by its first bytes and its name; null when it is none the pane shows. */
+export function documentType(
+  head: Buffer,
+  name: string,
+): { kind: 'document'; mimeType: MediaDocumentType } | null {
+  if (
+    MEDIA_DOCUMENT_NAME.test(name) &&
+    head.subarray(0, PDF_SIGNATURE_BYTES).includes('%PDF-', 0, 'latin1')
+  ) {
+    return { kind: 'document', mimeType: 'application/pdf' }
+  }
+  return null
+}
+
 function isMissing(error: unknown): boolean {
   const code = (error as NodeJS.ErrnoException | undefined)?.code
   return code === 'ENOENT' || code === 'ENOTDIR'
@@ -276,17 +295,23 @@ export class MediaService {
   ): Promise<MediaAuthorization> {
     const found = await this.find(root, written, sessionId)
     if (found.kind !== 'found') return found
-    const file = await this.describe(found.real, found.info)
+    // Without a session the read is the Files pane's, which alone shows documents.
+    const file = await this.describe(found.real, found.info, sessionId === null)
     return file ? { kind: 'granted', file: { path: found.real, ...file } } : { kind: 'not_media' }
   }
 
   /**
    * A grant for the regular file at `real`, a real path the caller has allowed, when its name
    * nominates it as media and its first bytes say which kind; null when it is no media. The
-   * Files pane's grants have no session.
+   * Files pane's grants have no session, and only they may be for `documents`.
    */
-  async grantFile(real: string, info: Stats, sessionId: string | null): Promise<MediaGrant | null> {
-    const file = await this.describe(real, info)
+  async grantFile(
+    real: string,
+    info: Stats,
+    sessionId: string | null,
+    documents = false,
+  ): Promise<MediaGrant | null> {
+    const file = await this.describe(real, info, documents)
     if (!file) return null
     const { name, ...grant } = file
     const token = mediaToken((this.deps.random ?? randomBytes)(16))
@@ -346,14 +371,22 @@ export class MediaService {
 
   /**
    * The regular file at `real`, a real path the caller has allowed, as media, by its name and its
-   * first bytes; null when it is none. Nothing is granted.
+   * first bytes; null when it is none. Nothing is granted. A document is one only for the Files
+   * pane, which asks for `documents`; a thread never names one.
    */
-  async describe(real: string, info: Stats): Promise<Omit<MediaFile, 'path'> | null> {
+  async describe(
+    real: string,
+    info: Stats,
+    documents = false,
+  ): Promise<Omit<MediaFile, 'path'> | null> {
     const name = this.paths.basename(real)
     const nominated = mediaKindOfName(name)
-    if (!nominated) return null
+    if (!nominated && !(documents && MEDIA_DOCUMENT_NAME.test(name))) return null
     const head = await readHead(real, Math.min(info.size, HEAD_BYTES))
-    const type = nominated === 'image' ? imageOf(head) : avType(head, name)
+    let type
+    if (nominated === 'image') type = imageOf(head)
+    else if (nominated) type = avType(head, name)
+    else type = documentType(head, name)
     if (!type) return null
     return {
       name,

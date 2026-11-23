@@ -41,6 +41,7 @@ const EXTENSIONS: Record<MediaType, string> = {
   'video/quicktime': 'mov',
   'video/webm': 'webm',
   'video/x-matroska': 'mkv',
+  'application/pdf': 'pdf',
 }
 
 /** Media the thread carries, from the renderer: untrusted input, checked. */

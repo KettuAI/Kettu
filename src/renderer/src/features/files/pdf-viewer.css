@@ -1,0 +1,140 @@
+/* The parts of PDF.js's viewer styles the Files pane needs, scoped to .kp-pdf so nothing else is
+   restyled; pages, the text layer and links, adapted from pdfjs-dist's web/pdf_viewer.css
+   (Apache-2.0, Mozilla Foundation). Forms, editing and XFA are never drawn, so they have none. */
+.kp-pdf__scroll {
+  position: absolute;
+  inset: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  outline: none;
+}
+.kp-pdf__scroll:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: -2px;
+}
+.kp-pdf .pdfViewer {
+  --scale-factor: 1;
+  padding: 24px;
+}
+.kp-pdf .page {
+  --user-unit: 1;
+  --total-scale-factor: calc(var(--scale-factor) * var(--user-unit));
+  --scale-round-x: 1px;
+  --scale-round-y: 1px;
+  position: relative;
+  direction: ltr;
+  overflow: visible;
+  margin: 0 auto 12px;
+  background: var(--canvas);
+  box-shadow: var(--elevation-page);
+}
+.kp-pdf .canvasWrapper {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+.kp-pdf .canvasWrapper canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  contain: content;
+}
+
+.kp-pdf .textLayer {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  overflow: clip;
+  line-height: 1;
+  text-align: initial;
+  text-size-adjust: none;
+  forced-color-adjust: none;
+  transform-origin: 0 0;
+  --min-font-size: 1;
+  --text-scale-factor: calc(var(--total-scale-factor) * var(--min-font-size));
+  --min-font-size-inv: calc(1 / var(--min-font-size));
+}
+.kp-pdf .textLayer :is(span, br) {
+  position: absolute;
+  color: transparent;
+  white-space: pre;
+  cursor: text;
+  transform-origin: 0% 0%;
+  user-select: text;
+}
+.kp-pdf .textLayer > :not(.markedContent),
+.kp-pdf .textLayer .markedContent span:not(.markedContent) {
+  z-index: 1;
+  --font-height: 0;
+  --scale-x: 1;
+  --rotate: 0deg;
+  font-size: calc(var(--text-scale-factor) * var(--font-height));
+  transform: rotate(var(--rotate)) scaleX(var(--scale-x)) scale(var(--min-font-size-inv));
+}
+.kp-pdf .textLayer .markedContent {
+  display: contents;
+}
+.kp-pdf .textLayer span[role='img'] {
+  cursor: default;
+  user-select: none;
+}
+.kp-pdf .textLayer ::selection {
+  background: var(--selection);
+  color: transparent;
+}
+.kp-pdf .textLayer br::selection {
+  background: transparent;
+}
+.kp-pdf .textLayer .endOfContent {
+  position: absolute;
+  inset: 100% 0 0;
+  z-index: 0;
+  display: block;
+  cursor: default;
+  user-select: none;
+}
+.kp-pdf .textLayer.selecting .endOfContent {
+  top: 0;
+}
+
+/* Only links are drawn: a note's icon and a form field's box have no picture here. */
+.kp-pdf .annotationLayer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  pointer-events: none;
+  transform-origin: 0 0;
+}
+.kp-pdf .annotationLayer section {
+  position: absolute;
+  box-sizing: border-box;
+  pointer-events: auto;
+  text-align: initial;
+  transform-origin: 0 0;
+  user-select: none;
+}
+.kp-pdf .annotationLayer section:not(.linkAnnotation),
+.kp-pdf .annotationLayer .popup {
+  display: none;
+}
+.kp-pdf .annotationLayer .linkAnnotation > a {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  font-size: 1em;
+}
+.kp-pdf .annotationLayer .linkAnnotation > a:hover {
+  background: var(--selection);
+}
+.kp-pdf .annotationLayer .linkAnnotation > a:focus-visible {
+  outline: 2px solid var(--color-focus);
+}
+.kp-pdf .textLayer.selecting ~ .annotationLayer section {
+  pointer-events: none;
+}

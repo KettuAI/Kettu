@@ -8,6 +8,7 @@ import type { DeviceFileContent, FileContent } from '@shared/files'
 import type { MediaGrant, MediaOpenResult } from '@shared/media'
 import type { MediaReadParams, MediaReadResult } from '@shared/remote/streams'
 import type { HostLink } from '@shared/remote/link'
+import { holdBlob, releaseBlob } from '@renderer/lib/media-blobs'
 import { MEDIA_PATH, mediaToken, PART_BYTES, type Part, type PartAsk } from './media-ranges'
 
 /** Blob URLs kept alive; older ones are revoked, and a view that still shows one asks again. */
@@ -44,7 +45,11 @@ let worker: Promise<boolean> = Promise.resolve(false)
 
 function keep(url: string): void {
   urls.push(url)
-  while (urls.length > MAX_URLS) URL.revokeObjectURL(urls.shift()!)
+  while (urls.length > MAX_URLS) {
+    const old = urls.shift()!
+    URL.revokeObjectURL(old)
+    releaseBlob(old)
+  }
 }
 
 function remember(known: Known): string {
@@ -179,8 +184,10 @@ async function grant(link: HostLink, params: MediaReadParams): Promise<MediaOpen
   if (read.media.size > MAX_MEDIA_BYTES) {
     return { kind: 'granted', grant: { ...shown, size: read.media.size, tooLarge: true } }
   }
-  const url = URL.createObjectURL(new Blob([read.bytes], { type: read.media.mimeType }))
+  const blob = new Blob([read.bytes], { type: read.media.mimeType })
+  const url = URL.createObjectURL(blob)
   keep(url)
+  holdBlob(url, blob)
   return { kind: 'granted', grant: { ...shown, url, size: read.media.size } }
 }
 
