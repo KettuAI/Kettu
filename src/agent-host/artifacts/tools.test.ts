@@ -453,3 +453,68 @@ describe('a thread whose element a version removed', () => {
     expect(stored?.anchor).toMatchObject({ version: 4, offset: 14, missing: false })
   })
 })
+
+describe('a thread in a frame the canvas no longer lists', () => {
+  it('is marked removed though the file stays, and placed once the frame is back', async () => {
+    const page = (id: string, file: string) => ({
+      id,
+      canvas: 'c1',
+      name: id,
+      file,
+      x: 0,
+      y: 0,
+      width: 390,
+      height: 844,
+      locked: false,
+    })
+    const doc = {
+      format: 1,
+      canvases: [{ id: 'c1', name: 'Home' }],
+      pages: [page('pa', 'a.html'), page('pb', 'b.html')],
+      notes: [],
+    }
+    const id = await create({
+      files: [
+        { path: 'canvas.json', content: JSON.stringify(doc) },
+        { path: 'a.html', content: '<p>a</p>' },
+        { path: 'b.html', content: '<h1>B</h1><p>Body</p>' },
+      ],
+    })
+    const anchor = { version: 1, page: null, missing: false }
+    const author = { person: 'owner' as const, session: null }
+    const inB = await store.addThread(id, {
+      anchor: { ...anchor, path: 'b.html', offset: 10, tag: 'p', text: 'Body' },
+      author,
+      body: 'Shorter',
+    })
+    const inA = await store.addThread(id, {
+      anchor: { ...anchor, path: 'a.html', offset: 0, tag: 'p', text: 'a' },
+      author,
+      body: 'Longer',
+    })
+    const removed = await call('update_artifact', {
+      id,
+      base_version: 1,
+      canvas: [{ op: 'remove', id: 'pb' }],
+    })
+    expect(removed.error).toBeNull()
+    const found = await store.get(id)
+    expect(found.files.map((f) => f.path)).toContain('b.html')
+
+    const gone = await store.threads(id)
+    expect(gone.find((t) => t.id === inB.id)?.anchor).toMatchObject({ version: 2, missing: true })
+    expect(gone.find((t) => t.id === inA.id)?.anchor).toMatchObject({
+      version: 2,
+      offset: 0,
+      missing: false,
+    })
+
+    await store.restore({ id, version: 1, baseVersion: 2, author: null })
+    const back = await store.threads(id)
+    expect(back.find((t) => t.id === inB.id)?.anchor).toMatchObject({
+      version: 3,
+      offset: 10,
+      missing: false,
+    })
+  })
+})
