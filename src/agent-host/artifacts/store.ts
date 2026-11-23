@@ -7,7 +7,7 @@ import { readFile } from 'node:fs/promises'
 import { isStrictDeclaration } from '@shared/artifact-capabilities'
 import type { CommentAnchor, CommentAuthor, CommentThread } from '@shared/artifact-comments'
 import { ARTIFACT_ENTRY, DISK_FILE_BYTES, isHtmlPath } from '@shared/artifact-files'
-import { CANVAS_FILE } from '@shared/canvas-doc'
+import { CANVAS_FILE, parseCanvasDoc } from '@shared/canvas-doc'
 import { DOCUMENT_ENTRY, findDocumentAnchor } from '@shared/artifact-document-anchors'
 import { findAnchor, startTagAt } from '@shared/artifact-source'
 import {
@@ -536,7 +536,8 @@ export class ArtifactStore {
   /**
    * The artifact's threads, oldest first, each anchored in its latest version: an element a new
    * version moved is found again by its tag, text and page, a document's block by its element and
-   * words, and one no longer there is marked so until a later version has it again.
+   * words, and one no longer there, or in a frame its canvas no longer lists, is marked so until a
+   * later version has it again.
    */
   async threads(id: string, { project }: Reach = {}): Promise<CommentThread[]> {
     const threads = await this.call('threads', { id, project: project ?? null })
@@ -546,9 +547,21 @@ export class ArtifactStore {
     if (!found) return threads
     const head = found.version.version
     const texts = new Map<string, string | null>()
+    // A frame removed from a canvas leaves its file in the version, so the file alone cannot tell.
+    const sheet = found.type ? undefined : found.files.find((f) => f.path === CANVAS_FILE)
+    let frames: Set<string> | null = null
+    if (sheet && stale.some((t) => t.anchor.version !== head)) {
+      try {
+        const doc = parseCanvasDoc((await this.bytes(found, sheet)).toString('utf8'))
+        frames = new Set(doc.pages.map((page) => page.file))
+      } catch {
+        // A canvas that does not read leaves the files to tell.
+      }
+    }
     const textOf = async (path: string): Promise<string | null> => {
       if (!texts.has(path)) {
-        const file = found.files.find((f) => f.path === path)
+        const file =
+          frames && !frames.has(path) ? undefined : found.files.find((f) => f.path === path)
         texts.set(path, file ? (await this.bytes(found, file)).toString('utf8') : null)
       }
       return texts.get(path)!
