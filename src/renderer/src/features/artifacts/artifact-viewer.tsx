@@ -44,6 +44,7 @@ import {
   viewerStateOf,
   type ViewerMode,
 } from '@renderer/stores/artifact-viewer'
+import { useSaysHostAway } from '@renderer/features/shell/host-notice'
 import { setDeckSlide, useDeckSlide } from '@renderer/stores/artifact-deck'
 import { unsavedOf } from '@renderer/stores/artifact-unsaved'
 import {
@@ -634,6 +635,8 @@ export default function ArtifactViewer(place: ViewerPlace) {
       />
     ) : null
   const remoteHost = artifactHost(id)
+  // The pill says the agent host is away, so the window's notice leaves the bar alone.
+  useSaysHostAway(offline && !states.error && remoteHost === null)
   if (offline && !states.error) {
     pill = (
       <Pill
