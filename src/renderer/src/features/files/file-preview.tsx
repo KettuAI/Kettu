@@ -9,9 +9,16 @@ import {
   type ReactNode,
 } from 'react'
 import { File01Icon, FileNotFoundIcon, FloppyDiskIcon } from '@hugeicons/core-free-icons'
+import type { TFunction } from 'i18next'
 import { useTranslation } from 'react-i18next'
 import type { ChangeStatus } from '@shared/git'
-import type { MediaGrant } from '@shared/media'
+import {
+  DOCX_TYPE,
+  OFFICE_PREVIEW_LIMIT,
+  XLS_TYPE,
+  XLSX_TYPE,
+  type MediaGrant,
+} from '@shared/media'
 import { Skeleton } from '@renderer/components/ui/skeleton'
 import { PaneEmpty, PaneIcon, PanelButton } from '@renderer/features/shell/panel-button'
 import { bytes, clock } from '@renderer/lib/format'
@@ -53,10 +60,12 @@ import { ChangeBadge } from './change-badge'
 import { DiffFileToggle, PathCopy, PreviewEditToggle } from './file-header'
 import { openInEditor } from './open-in-editor'
 import { nameOf } from './paths'
-import type { PdfFailure } from './pdf-viewer'
+import type { DocumentFailure } from './document-failure'
 
 const CodeEditor = lazy(() => import('./code-editor'))
 const PdfStage = lazy(() => import('./pdf-viewer'))
+const WordStage = lazy(() => import('./word-viewer'))
+const SheetStage = lazy(() => import('./sheet-viewer'))
 
 /** The picture's controls and zoom, which its stage hands up to the header. */
 export interface Picture {
@@ -432,9 +441,10 @@ export function Lines() {
 }
 
 /**
- * A document from the media scheme: a PDF's pages on a stage of their own. One that is protected,
- * damaged or too large to show says why and offers the file to another app; one that cannot be
- * read is asked for again once first, since main may have dropped its grant.
+ * A document from the media scheme: a PDF's or a Word file's pages, or a workbook's sheets, on a
+ * stage of their own. One that is protected, damaged or too large to show says why and offers the
+ * file to another app; one that cannot be read is asked for again once first, since main may have
+ * dropped its grant.
  */
 function FileDocument({
   projectPath,
@@ -454,13 +464,14 @@ function FileDocument({
   const [failure, setFailure] = useState<'encrypted' | 'damaged' | null>(null)
   const [error, setError] = useState<string | null>(null)
 
-  const failed = (reason: PdfFailure) => {
+  const failed = (reason: DocumentFailure) => {
     if (reason === 'unreadable' && !renewed) {
       setRenewed(true)
       renewOpenFile(projectPath, path)
     } else setFailure(reason === 'encrypted' ? 'encrypted' : 'damaged')
   }
-  if (grant.mimeType !== 'application/pdf') {
+  const kind = documentKind(grant.mimeType)
+  if (!kind) {
     return (
       <Notice
         title={t('preview.binaryTitle')}
@@ -468,25 +479,17 @@ function FileDocument({
       />
     )
   }
-  if (grant.tooLarge || failure) {
+  const tooLarge = grant.tooLarge || (kind !== 'pdf' && grant.size > OFFICE_PREVIEW_LIMIT)
+  if (tooLarge || failure) {
+    const [title, text] = tooLarge
+      ? tooLargeText(t, kind, grant.size)
+      : failureText(t, kind, failure === 'encrypted')
     return (
       <PaneEmpty
         className="absolute inset-0"
         icon={<PaneIcon icon={FileNotFoundIcon} size={20} />}
-        title={
-          grant.tooLarge
-            ? t('preview.mediaTooLargeTitle')
-            : failure === 'encrypted'
-              ? t('preview.pdfEncryptedTitle')
-              : t('preview.pdfFailedTitle')
-        }
-        text={
-          grant.tooLarge
-            ? bytes(grant.size)
-            : failure === 'encrypted'
-              ? t('preview.pdfEncryptedDescription')
-              : t('preview.pdfFailedDescription')
-        }
+        title={title}
+        text={text}
       >
         <span className="mt-3 flex flex-wrap justify-center gap-1.5">
           <PlayElsewhere url={grant.url} projectPath={projectPath} onError={setError} />
@@ -495,18 +498,58 @@ function FileDocument({
       </PaneEmpty>
     )
   }
+  const stage = {
+    viewKey: `${projectPath}\0${panel}\0${path}`,
+    url: grant.url,
+    name: nameOf(path),
+    onFailed: failed,
+  }
   return (
     <Suspense fallback={<Lines />}>
-      <PdfStage
-        viewKey={`${projectPath}\0${panel}\0${path}`}
-        path={path}
-        url={grant.url}
-        name={nameOf(path)}
-        onPicture={onPicture}
-        onFailed={failed}
-      />
+      {kind === 'pdf' && <PdfStage {...stage} path={path} onPicture={onPicture} />}
+      {kind === 'word' && <WordStage {...stage} path={path} onPicture={onPicture} />}
+      {kind === 'sheet' && <SheetStage {...stage} />}
     </Suspense>
   )
+}
+
+type DocumentKind = 'pdf' | 'word' | 'sheet'
+
+function documentKind(mimeType: MediaGrant['mimeType']): DocumentKind | null {
+  if (mimeType === 'application/pdf') return 'pdf'
+  if (mimeType === DOCX_TYPE) return 'word'
+  return mimeType === XLSX_TYPE || mimeType === XLS_TYPE ? 'sheet' : null
+}
+
+/** The title and the words under it for a document too large to preview. */
+function tooLargeText(t: TFunction<'files'>, kind: DocumentKind, size: number): [string, string] {
+  if (kind === 'pdf') return [t('preview.mediaTooLargeTitle'), bytes(size)]
+  const description = t('preview.tooLargeDescription', {
+    size: bytes(size),
+    limit: bytes(OFFICE_PREVIEW_LIMIT),
+  })
+  return [t('preview.tooLargeTitle'), description]
+}
+
+/** The title and the words under it for a document that is protected or cannot be read. */
+function failureText(
+  t: TFunction<'files'>,
+  kind: DocumentKind,
+  protectedFile: boolean,
+): [string, string] {
+  if (kind === 'pdf') {
+    return protectedFile
+      ? [t('preview.pdfEncryptedTitle'), t('preview.pdfEncryptedDescription')]
+      : [t('preview.pdfFailedTitle'), t('preview.pdfFailedDescription')]
+  }
+  if (kind === 'word') {
+    return protectedFile
+      ? [t('preview.wordEncryptedTitle'), t('preview.wordEncryptedDescription')]
+      : [t('preview.wordFailedTitle'), t('preview.wordFailedDescription')]
+  }
+  return protectedFile
+    ? [t('preview.sheetEncryptedTitle'), t('preview.sheetEncryptedDescription')]
+    : [t('preview.sheetFailedTitle'), t('preview.sheetFailedDescription')]
 }
 
 /**

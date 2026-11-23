@@ -12,7 +12,14 @@ import {
   nativeImage,
   shell,
 } from 'electron'
-import { CARRIED_MEDIA_BYTES, type CarriedMedia, type MediaType } from '@shared/media'
+import {
+  CARRIED_MEDIA_BYTES,
+  DOCX_TYPE,
+  XLS_TYPE,
+  XLSX_TYPE,
+  type CarriedMedia,
+  type MediaType,
+} from '@shared/media'
 import { safeName } from '@shared/file-name'
 import type { HostMedia } from './host-media'
 import { t } from './i18n'
@@ -42,6 +49,9 @@ const EXTENSIONS: Record<MediaType, string> = {
   'video/webm': 'webm',
   'video/x-matroska': 'mkv',
   'application/pdf': 'pdf',
+  [DOCX_TYPE]: 'docx',
+  [XLSX_TYPE]: 'xlsx',
+  [XLS_TYPE]: 'xls',
 }
 
 /** Media the thread carries, from the renderer: untrusted input, checked. */

@@ -5,13 +5,13 @@ import * as pdfjs from 'pdfjs-dist'
 import PdfWorker from 'pdfjs-dist/build/pdf.worker.min.mjs?worker'
 import type { PDFDocumentProxy } from 'pdfjs-dist'
 import { mediaUrlToken } from '@shared/media'
-import { blobOf } from '@renderer/lib/media-blobs'
+import { readMedia, readRange } from '@renderer/lib/media-bytes'
+import type { DocumentFailure } from './document-failure'
 
 /** Where the build puts the files PDF.js reads at run time, which it builds its requests from. */
 const DATA_URL = () => new URL(`${import.meta.env.BASE_URL}assets/pdfjs/`, document.baseURI).href
 
-/** Why a document did not open: the file is protected, is no PDF, or could not be read. */
-export type PdfFailure = 'encrypted' | 'invalid' | 'unreadable'
+export type PdfFailure = DocumentFailure
 
 export function pdfFailure(error: unknown): PdfFailure {
   const name = (error as { name?: unknown } | null)?.name
@@ -41,45 +41,6 @@ export interface OpenedPdf {
 
 /** The first read of a file on the media scheme, and the most one range asks beyond it. */
 const FIRST_BYTES = 64 * 1024
-
-/**
- * Reads `begin` to `end` (exclusive) of a file on the media scheme, and how long the file is.
- * PDF.js reads ranges from http(s) URLs alone, so it reads these through `RangeTransport`; an
- * XHR, since the page may not fetch the scheme.
- */
-function readRange(
-  url: string,
-  begin: number,
-  end: number,
-  requests: Set<XMLHttpRequest>,
-): Promise<{ bytes: Uint8Array; total: number }> {
-  return new Promise((resolve, reject) => {
-    const request = new XMLHttpRequest()
-    requests.add(request)
-    request.open('GET', url)
-    request.responseType = 'arraybuffer'
-    request.setRequestHeader('Range', `bytes=${begin}-${end - 1}`)
-    request.onload = () => {
-      requests.delete(request)
-      const body = request.response as ArrayBuffer
-      if (request.status === 206) {
-        const total = Number(/\/(\d+)$/.exec(request.getResponseHeader('Content-Range') ?? '')?.[1])
-        if (Number.isSafeInteger(total)) return resolve({ bytes: new Uint8Array(body), total })
-      } else if (request.status === 200) {
-        // A server that ignored the range sent the whole file.
-        const whole = new Uint8Array(body)
-        return resolve({ bytes: whole.subarray(begin, end), total: whole.length })
-      }
-      reject(new Error(`The file could not be read: ${request.status}`))
-    }
-    request.onerror = () => {
-      requests.delete(request)
-      reject(new Error('The file could not be read'))
-    }
-    request.onabort = () => requests.delete(request)
-    request.send()
-  })
-}
 
 /** PDF.js's own way to take a file from anywhere: it asks for the ranges it needs. */
 class RangeTransport extends pdfjs.PDFDataRangeTransport {
@@ -115,10 +76,8 @@ class RangeTransport extends pdfjs.PDFDataRangeTransport {
  * read that fails once the document is open.
  */
 export async function openPdf(url: string, lost: (error: unknown) => void): Promise<OpenedPdf> {
-  const blob = url.startsWith('blob:') ? blobOf(url) : undefined
-  if (url.startsWith('blob:') && !blob) throw new Error('The file is no longer held')
   let source: { data: Uint8Array } | { range: RangeTransport } | { url: string } = { url }
-  if (blob) source = { data: new Uint8Array(await blob.arrayBuffer()) }
+  if (url.startsWith('blob:')) source = { data: await readMedia(url) }
   else if (mediaUrlToken(url)) {
     const first = await readRange(url, 0, FIRST_BYTES, new Set())
     source =

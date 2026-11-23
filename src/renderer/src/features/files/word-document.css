@@ -1,0 +1,29 @@
+/* Inside the shadow root a Word document is drawn in, after the styles its own library writes
+   there. Nothing in here reaches the app, and the app's inherited styles stop at the host. */
+:host {
+  all: initial;
+  display: block;
+  -webkit-user-select: text;
+  user-select: text;
+}
+.docx-wrapper {
+  box-sizing: border-box;
+  width: max-content;
+  min-width: 100%;
+  padding: 24px 24px 12px;
+  align-items: flex-start;
+  background: transparent;
+}
+/* Margins that are auto keep a page wider than the pane reachable by scrolling to its left. */
+.docx-wrapper > section.docx {
+  flex: none;
+  margin: 0 auto 12px;
+  background: var(--canvas);
+  box-shadow: var(--elevation-page);
+}
+.docx a[href] {
+  cursor: pointer;
+}
+::selection {
+  background: var(--selection);
+}

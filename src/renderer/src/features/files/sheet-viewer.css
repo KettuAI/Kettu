@@ -1,0 +1,85 @@
+/* The spreadsheet grid: white in both themes, like the pages of a document, with the labels
+   and the sheet tabs around it following the theme's own surfaces. */
+.kp-sheet__tabs {
+  border-bottom: var(--hairline) solid var(--border-subtle);
+}
+.kp-sheet__scroll {
+  --sheet-head: color-mix(in srgb, var(--canvas-ink) 5%, var(--canvas));
+  --sheet-line: color-mix(in srgb, var(--canvas-ink) 12%, var(--canvas));
+  position: absolute;
+  inset: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  outline: none;
+  background: var(--canvas);
+  color: var(--canvas-ink);
+  font-size: var(--text-meta);
+}
+.kp-sheet__scroll:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: -2px;
+}
+.kp-sheet__sizer {
+  position: relative;
+}
+.kp-sheet__cells {
+  position: absolute;
+  inset: 0;
+}
+.kp-sheet__cell {
+  position: absolute;
+  box-sizing: border-box;
+  padding: 0 6px;
+  overflow: hidden;
+  border-right: var(--hairline) solid var(--sheet-line);
+  border-bottom: var(--hairline) solid var(--sheet-line);
+  line-height: 19px;
+  text-overflow: ellipsis;
+  white-space: pre;
+}
+.kp-sheet__cell[data-kind='1'] {
+  text-align: right;
+}
+.kp-sheet__cell[data-kind='2'] {
+  text-align: center;
+}
+
+/* The labels stick to the edges from zero-sized bars, whose children lie at their own places. */
+.kp-sheet__bar {
+  position: sticky;
+  z-index: 2;
+  height: 0;
+}
+.kp-sheet__bar--top {
+  top: 0;
+}
+.kp-sheet__bar--left {
+  left: 0;
+}
+.kp-sheet__head {
+  position: absolute;
+  top: 0;
+  box-sizing: border-box;
+  overflow: hidden;
+  background: var(--sheet-head);
+  border-right: var(--hairline) solid var(--sheet-line);
+  border-bottom: var(--hairline) solid var(--sheet-line);
+  color: color-mix(in srgb, var(--canvas-ink) 60%, var(--canvas));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  user-select: none;
+}
+.kp-sheet__head--row {
+  left: 0;
+}
+.kp-sheet__corner {
+  position: sticky;
+  top: 0;
+  left: 0;
+  z-index: 3;
+  box-sizing: border-box;
+  background: var(--sheet-head);
+  border-right: var(--hairline) solid var(--sheet-line);
+  border-bottom: var(--hairline) solid var(--sheet-line);
+}
