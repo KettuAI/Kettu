@@ -97,7 +97,7 @@ import {
 } from './agy-access'
 import { AgyCommands } from './agy-commands'
 import { systemPromptMeta, takesSystemPromptAppend } from './agy-prompt'
-import { AGY_ELICITATION, askInCard, asksQuestions } from './agy-questions'
+import { AGY_ELICITATION, askInCard, asksQuestions, OpenAsks } from './agy-questions'
 import {
   AgySubagents,
   agyStore,
@@ -403,6 +403,7 @@ export class AcpConnection implements AgentConnection {
   private signIn: SignInClient | null = null
   /** The sign-in each `authenticate` in flight runs for, by its JSON-RPC id as a string. */
   private readonly signInRequests = new Map<string, SignInClient>()
+  private readonly openAsks = new OpenAsks()
   /** Sessions with a prompt in flight. */
   private readonly prompting = new Set<string>()
   /** agy's plan files, by session. */
@@ -434,6 +435,7 @@ export class AcpConnection implements AgentConnection {
   ) {
     const app = client({ name: 'Kettu' })
       .onNotification(methods.client.session.update, (ctx) => {
+        this.openAsks.ended(ctx.params.sessionId, ctx.params.update)
         this.deliver(ctx.params.sessionId, ctx.params.update)
       })
       .onRequest(methods.client.session.requestPermission, async (ctx) => {
@@ -482,7 +484,9 @@ export class AcpConnection implements AgentConnection {
         // agy's questions are shown in the question card, in the session they were asked in.
         const asked = typeof sessionId === 'string' ? this.targets.get(sessionId) : undefined
         if (this.agy && asksQuestions(this.version) && asked) {
-          const answer = await askInCard(ctx.params, asked, ctx.signal)
+          const answer = await this.openAsks.run(ctx.params, ctx.signal, (signal) =>
+            askInCard(ctx.params, asked, signal),
+          )
           if (answer) return answer
         }
         // Otherwise only a sign-in's page is taken, on the client that asked for that sign-in.

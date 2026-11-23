@@ -4,7 +4,11 @@
 // own words. It answers the call once the form is accepted and goes on in the same turn; a form
 // declined or not offered, it asks in the chat.
 
-import type { CreateElicitationResponse, ToolCallUpdate } from '@agentclientprotocol/sdk/unstable'
+import type {
+  CreateElicitationResponse,
+  SessionUpdate,
+  ToolCallUpdate,
+} from '@agentclientprotocol/sdk/unstable'
 import type { PendingQuestion, PermissionOption, QuestionAnswer } from '@shared/thread'
 import type { SessionTarget } from '../connection'
 import { t } from '../i18n'
@@ -180,4 +184,44 @@ export async function askInCard(
   }
   const content = askContent(ask, answers)
   return Object.keys(content).length > 0 ? { action: 'accept', content } : { action: 'decline' }
+}
+
+/**
+ * The asks whose card waits for the user, by session and call. agy can stop waiting for an answer
+ * without cancelling its request, as it did for a sub-agent's question not answered in time: it
+ * only fails the call. Its card is then withdrawn, so a late answer is not shown as given.
+ */
+export class OpenAsks {
+  private readonly open = new Map<string, AbortController>()
+
+  /** Runs `ask` with a signal that also aborts once agy ends the call the form belongs to. */
+  async run<T>(
+    params: unknown,
+    signal: AbortSignal,
+    ask: (signal: AbortSignal) => Promise<T>,
+  ): Promise<T> {
+    const { sessionId, toolCallId } = record(params) ?? {}
+    if (typeof sessionId !== 'string' || typeof toolCallId !== 'string') return ask(signal)
+    const key = `${sessionId}\n${toolCallId}`
+    const controller = new AbortController()
+    const stop = (): void => controller.abort(signal.reason)
+    if (signal.aborted) stop()
+    else signal.addEventListener('abort', stop, { once: true })
+    this.open.set(key, controller)
+    try {
+      return await ask(controller.signal)
+    } finally {
+      signal.removeEventListener('abort', stop)
+      if (this.open.get(key) === controller) this.open.delete(key)
+    }
+  }
+
+  /** Withdraws the card of an ask whose call agy finished or failed while the card waited. */
+  ended(sessionId: string, update: SessionUpdate): void {
+    if (update.sessionUpdate !== 'tool_call_update') return
+    if (update.status !== 'completed' && update.status !== 'failed') return
+    this.open
+      .get(`${sessionId}\n${update.toolCallId}`)
+      ?.abort(new Error('agy ended the call its question belongs to'))
+  }
 }
