@@ -28,3 +28,25 @@ export function changesLabel(changes: ArtifactChanges): string {
   const { unit, count } = changeCount(changes)
   return i18n.t(`artifacts:changes.${unit}`, { count })
 }
+
+/** What changed, by name: the frames, the files, the slides or the sections. */
+export function changeNames(changes: ArtifactChanges): string[] {
+  switch (changes.kind) {
+    case 'frames':
+      return changes.frames.map((f) => f.name)
+    case 'files':
+      return changes.paths
+    case 'slides':
+      return changes.slides.map(
+        (s) => s.title ?? i18n.t('session:artifactEntry.changes.slide', { number: s.number }),
+      )
+    case 'sections':
+      return changes.headings.map((h) => h ?? i18n.t('session:artifactEntry.changes.start'))
+  }
+}
+
+/** "4 frames changed · Home, Search": the count, then the first names. */
+export function changeLine(changes: ArtifactChanges): string {
+  const shown = changeNames(changes).slice(0, 3).join(', ')
+  return shown ? `${changesLabel(changes)} · ${shown}` : changesLabel(changes)
+}

@@ -1,3 +1,4 @@
+import { parseArtifactLink } from '@shared/artifact-links'
 import 'streamdown/styles.css'
 import {
   createContext,
@@ -50,6 +51,7 @@ import { Blockquote } from './alert'
 import { splitIntoChunks } from './chunks'
 import { codeThemeInput, useCodeThemes, type CodeThemes } from './code-themes'
 import { localImageTarget, pictureRun, spacedImages } from './local-images'
+import { ArtifactLink } from './artifact-link'
 import { INCOMPLETE_LINK, localTarget, unopenedTarget } from './local-links'
 import { githubAlerts } from './github-alerts'
 import { bareReferenceNumber } from './github-refs'
@@ -118,6 +120,8 @@ export function Link(props: ComponentProps<'a'> & ExtraProps) {
   // Any other local path has nowhere to go, and main opens nothing but web links.
   if (local !== null) return <span title={local}>{props.children}</span>
   const unopened = unopenedTarget(raw)
+  const artifact = unopened !== null ? parseArtifactLink(unopened) : null
+  if (artifact) return <ArtifactLink location={artifact}>{props.children}</ArtifactLink>
   if (unopened !== null) return <span title={unopened}>{props.children}</span>
   // A link still streaming in, drawn as a link that opens nothing.
   if (raw === INCOMPLETE_LINK) return <span className="thread-link">{props.children}</span>

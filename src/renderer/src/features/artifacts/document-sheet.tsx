@@ -19,7 +19,6 @@ import {
 } from '@hugeicons/core-free-icons'
 import { useReducedMotion } from 'motion/react'
 import { useTranslation } from 'react-i18next'
-import type { ArtifactChanges } from '@shared/artifact-changes'
 import type { CommentAnchor, CommentThread } from '@shared/artifact-comments'
 import { DOCUMENT_ENTRY } from '@shared/artifact-document-anchors'
 import { ARTIFACT_ENTRY } from '@shared/artifact-files'
@@ -41,7 +40,8 @@ import type { ViewerMode } from '@renderer/stores/artifact-viewer'
 import { threadNumbers } from './comment-threads'
 import { FrameLink } from './frame-link'
 import { OutlineCard } from './outline-card'
-import { ChangePill, type SheetAgent } from './page-sheet'
+import type { PlaceAsk, SheetWalk } from './change-walk'
+import type { SheetAgent } from './page-sheet'
 import { Waiting } from './page-frame'
 import { sheetSave } from './sheet-save'
 import { SaveChip } from './tool-parts'
@@ -79,13 +79,6 @@ function geometry(room: number, narrow: boolean, band: boolean): Geometry {
   const width = Math.max(320, Math.min(SHEET_MAX, room - 32))
   const pad = Math.max(40, Math.min(80, (width - TEXT) / 2))
   return { left: Math.max(EDGE, (room - width) / 2), top, width, pad }
-}
-
-/** A version that arrived while the document was open, as `useArrivedChange` gives it. */
-export interface ArrivedChange {
-  from: number
-  to: number
-  changes: ArtifactChanges
 }
 
 /** What the sheet does with comments, which the viewer's comment tools take over from here. */
@@ -133,7 +126,10 @@ export function DocumentSheet({
   latest,
   mode,
   onMode,
-  arrived,
+  walk,
+  asked,
+  onAsked,
+  onChangesShown,
   comments,
   agent,
   onAsk,
@@ -151,7 +147,13 @@ export function DocumentSheet({
   latest: boolean
   mode: ViewerMode
   onMode: (mode: ViewerMode) => void
-  arrived: ArrivedChange | null
+  /** What changed, which the sheet marks and the viewer's pill walks. */
+  walk: SheetWalk | null
+  /** A section or a changed passage to bring into view, until it is. */
+  asked: PlaceAsk | null
+  onAsked: (seq: number) => void
+  /** Whether Changes shows the earlier words, which the viewer's pill says. */
+  onChangesShown: (on: boolean) => void
   comments: DocComments
   agent: SheetAgent | null
   /** Asks the agent about the document, or about the words or block in `anchor`, beside `at`. */
@@ -181,10 +183,8 @@ export function DocumentSheet({
     observer.observe(el)
     return () => observer.disconnect()
   }, [])
-  const showPill = !!arrived && latest && version === arrived.to
-  const [pillGone, setPillGone] = useState<number | null>(null)
-  const pill = showPill && pillGone !== arrived.to
-  const g = geometry(room || 1280, narrow, band || pill)
+  const marking = !!walk && latest && version === walk.to
+  const g = geometry(room || 1280, narrow, band)
 
   // What the viewer reported last.
   const [layout, setLayout] = useState<Extract<DocReport, { t: 'layout' }> | null>(null)
@@ -209,20 +209,23 @@ export function DocumentSheet({
     frame.current.src = src
   }, [reloads, mountedAt, src])
 
-  // Marks of the version that arrived, and Changes, which shows its earlier words in the text.
+  // What changed, and Changes, which shows its earlier words in the text.
   const passages = useMemo(
-    () => (arrived?.changes.kind === 'sections' && showPill ? arrived.changes.passages : []),
-    [arrived, showPill],
+    () => (walk?.changes.kind === 'sections' && marking ? walk.changes.passages : []),
+    [walk, marking],
   )
   const [changesOn, setChangesOn] = useState(false)
-  const [step, setStep] = useState(0)
-  // Another version starts at its first change, with Changes off.
-  const [stepsOf, setStepsOf] = useState(arrived?.to ?? null)
-  if (stepsOf !== (arrived?.to ?? null)) {
-    setStepsOf(arrived?.to ?? null)
-    setStep(0)
+  // The block landed on: a changed passage the pill walks to, or a heading a link names.
+  const [step, setStep] = useState<number | null>(null)
+  // Another walk starts with Changes off.
+  const walkKey = walk ? `${walk.from}:${walk.to}` : null
+  const [stepsOf, setStepsOf] = useState(walkKey)
+  if (stepsOf !== walkKey) {
+    setStepsOf(walkKey)
+    setStep(null)
     setChangesOn(false)
   }
+  useEffect(() => onChangesShown(changesOn), [changesOn, onChangesShown])
   const changedSlugs = useMemo(
     () => new Set(passages.map((p) => p.section).filter((s) => s !== null)),
     [passages],
@@ -252,8 +255,12 @@ export function DocumentSheet({
     return [...offsets].slice(0, DOC_TRACKED)
   }, [pins, passages, draft])
 
-  const marksFrom = arrived?.from ?? 0
-  const docStep = changesOn || pill ? (passages[step]?.from ?? null) : null
+  const marksFrom = walk?.from ?? 0
+  const sectionVersions = useMemo(
+    () => (walk && marking ? Object.fromEntries(walk.marks) : undefined),
+    [walk, marking],
+  )
+  const docStep = step
   useEffect(() => {
     const state: DocState = {
       embed: embedded,
@@ -263,7 +270,7 @@ export function DocumentSheet({
       mode: latest ? mode : 'view',
       version,
       track,
-      marks: passages.length ? { from: marksFrom, passages } : null,
+      marks: passages.length ? { from: marksFrom, passages, sections: sectionVersions } : null,
       changes: changesOn,
       step: docStep,
       focus,
@@ -281,6 +288,7 @@ export function DocumentSheet({
     track,
     passages,
     marksFrom,
+    sectionVersions,
     changesOn,
     docStep,
     focus,
@@ -404,12 +412,37 @@ export function DocumentSheet({
     scrolledFor.current = focusThread.seq
     scrollTo(place.y)
   }, [focusThread, pins, placeOf, scrollTo])
-  const stepTo = (direction: 1 | -1) => {
-    const next = (step + direction + passages.length) % passages.length
-    setStep(next)
-    const place = placeOf(passages[next]!.from)
-    if (place) scrollTo(place.y)
+
+  // A place asked for: a changed passage once its place is known, or a section's heading.
+  const [askedSeen, setAskedSeen] = useState<{ seq: number; y: number | null } | null>(null)
+  if (asked && layout && askedSeen?.seq !== asked.seq) {
+    let y: number | null = null
+    let at: number | null = null
+    let waits = false
+    if (asked.at !== undefined) {
+      at = asked.at
+      y = placeOf(asked.at)?.y ?? null
+      // A passage not laid out yet waits for the next layout.
+      waits = y === null && passages.some((p) => p.from === asked.at)
+    } else if (asked.section !== undefined) {
+      const heading = outline.find((h) => h.slug === asked.section)
+      if (heading) {
+        at = heading.at
+        y = heading.y
+      }
+    }
+    if (!waits) {
+      setAskedSeen({ seq: asked.seq, y })
+      setStep(asked.flash ? at : null)
+    }
   }
+  const askScrolled = useRef(0)
+  useEffect(() => {
+    if (!askedSeen || askScrolled.current === askedSeen.seq) return
+    askScrolled.current = askedSeen.seq
+    if (askedSeen.y !== null) scrollTo(askedSeen.y)
+    onAsked(askedSeen.seq)
+  }, [askedSeen, scrollTo, onAsked])
 
   // Esc lets go of one layer at a time: the selected words, the comment being written, the thread
   // open, then Changes.
@@ -610,33 +643,14 @@ export function DocumentSheet({
           headings={outline}
           current={current}
           changed={changedSlugs}
-          version={arrived?.to ?? version}
+          version={walk?.to ?? version}
+          marks={marking ? walk?.marks : undefined}
           comments={sectionComments(
             outline,
             pins.map((p) => p.thread.anchor.offset!),
           )}
           onPick={goTo}
         />
-      )}
-      {pill && arrived && (
-        <ViewerSlot slot="pill">
-          <ChangePill
-            to={arrived.to}
-            changes={arrived.changes}
-            label={
-              changesOn
-                ? narrow
-                  ? t('doc.changesFrom', { version: arrived.from })
-                  : t('doc.showingFrom', { version: arrived.from })
-                : undefined
-            }
-            steps={passages.length ? { at: step, count: passages.length, onStep: stepTo } : null}
-            onDismiss={() => {
-              setPillGone(arrived.to)
-              setChangesOn(false)
-            }}
-          />
-        </ViewerSlot>
       )}
       <DocDock
         id={id}
@@ -653,10 +667,7 @@ export function DocumentSheet({
           passages.length
             ? {
                 on: changesOn,
-                toggle: () => {
-                  setPillGone(null)
-                  setChangesOn((on) => !on)
-                },
+                toggle: () => setChangesOn((on) => !on),
               }
             : null
         }

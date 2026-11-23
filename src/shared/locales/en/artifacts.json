@@ -253,6 +253,8 @@
   "sheet": {
     "before": "v{{version}} · before",
     "changedIn": "{{changes}} in v{{version}}",
+    "changedSince": "{{changes}} since v{{version}}",
+    "changedShort": "{{count}} changed",
     "ask": "Ask {{agent}}",
     "width": {
       "label": "Page width",
@@ -796,5 +798,12 @@
     "label": "Before and after",
     "before": "v{{version}} · before",
     "beforeTitle": "{{name}}, version {{version}}"
+  },
+  "link": {
+    "slide": "Slide {{number}}",
+    "unknown": "An artifact",
+    "deleted": "This artifact was deleted. It can still be restored.",
+    "erased": "This artifact no longer exists.",
+    "placeGone": "This place is no longer in the latest version; the link opens the artifact."
   }
 }

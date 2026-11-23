@@ -8,6 +8,7 @@ import {
 } from '@shared/artifacts'
 import type { ArtifactEntry as Entry } from '@shared/thread'
 import { ArtifactCard, type CardForm } from '@renderer/features/artifacts/artifact-card'
+import { changesLabel } from '@renderer/features/artifacts/change-words'
 import { artifactKind } from '@renderer/features/artifacts/model'
 import { useThumbnail, type PageBox } from '@renderer/features/artifacts/thumbnails'
 import { useInView } from '@renderer/features/artifacts/use-in-view'
@@ -20,14 +21,10 @@ import {
   useArtifactsStore,
   type ArtifactStanding,
 } from '@renderer/stores/artifacts'
+import { landArtifact, useArtifactWalk } from '@renderer/stores/artifact-walk'
 import { hostOfSession, useSessionsStore } from '@renderer/stores/sessions'
 import { useThreadsStore } from '@renderer/stores/threads'
-import {
-  openArtifact,
-  showArtifactPage,
-  toggleArtifactPane,
-  useViewStore,
-} from '@renderer/stores/view'
+import { openArtifact, toggleArtifactPane, useViewStore } from '@renderer/stores/view'
 import { useEntry, useEntryAnimation } from '../use-thread'
 import { useChanges, type Changes, type ChangedFrame } from './artifact-changes'
 import { isLastArtifactEntry, restoredVersionOf } from './artifact-writes'
@@ -206,6 +203,13 @@ function EntryCard({
     entry.version,
     update && inView && versions !== null && standing === 'live',
   )
+  const range = from !== null && entry.version !== null ? { from, to: entry.version } : null
+  // The frame the open viewer's pill is at, which this card rings while it shows the artifact.
+  const walkAt = useArtifactWalk((s) => (pressed ? (s.at[entry.artifactId] ?? null) : null))
+  const open = () => {
+    if (!pressed) landArtifact(sessionId, entry.artifactId, { range })
+    toggleArtifactPane(sessionId, entry.artifactId)
+  }
   let what = ''
   if (entry.action !== 'delete' && entry.version !== null) {
     what =
@@ -248,15 +252,26 @@ function EntryCard({
               version={entry.version}
               summary={summary}
               inView={inView}
-              onFrame={(frame) => showArtifactPage(sessionId, entry.artifactId, frame.id)}
+              ringed={walkAt}
+              onFrame={(frame) => {
+                landArtifact(sessionId, entry.artifactId, {
+                  range,
+                  place: { kind: 'frame', id: frame.id },
+                  open: true,
+                })
+                toggleArtifactPane(sessionId, entry.artifactId, true)
+              }}
             />
           ) : null
         }
         current={last}
         pressed={pressed}
-        onOpen={() => toggleArtifactPane(sessionId, entry.artifactId)}
+        onOpen={open}
         menu={{
-          onOpen: () => toggleArtifactPane(sessionId, entry.artifactId, true),
+          onOpen: () => {
+            if (!pressed) landArtifact(sessionId, entry.artifactId, { range })
+            toggleArtifactPane(sessionId, entry.artifactId, true)
+          },
           onVersionHistory: () => openArtifact(entry.artifactId, { history: true }),
           inSession: true,
         }}
@@ -275,6 +290,7 @@ function ChangedLine({
   version,
   summary,
   inView,
+  ringed,
   onFrame,
 }: {
   changes: Changes
@@ -282,6 +298,7 @@ function ChangedLine({
   version: number
   summary: ArtifactSummary | null
   inView: boolean
+  ringed: string | null
   onFrame: (frame: ChangedFrame) => void
 }) {
   const { t } = useTranslation('session')
@@ -301,6 +318,7 @@ function ChangedLine({
             version={version}
             summary={summary}
             inView={inView}
+            on={ringed === frame.id}
             onOpen={() => onFrame(frame)}
           />
         ))}
@@ -318,7 +336,8 @@ function ChangedLine({
     label = t('artifactEntry.changes.files', { count: changes.paths.length })
     chips = changes.paths.map((path) => ({ key: path, text: path, path }))
   } else if (changes.kind === 'sections') {
-    label = t('artifactEntry.changes.sections', { count: changes.headings.length })
+    // Counted as the viewer's pill and History count it, by passage.
+    label = changesLabel(changes)
     chips = changes.headings.map((heading, i) => ({
       key: `${i}`,
       text: heading ?? t('artifactEntry.changes.start'),
@@ -361,6 +380,7 @@ function FrameTile({
   version,
   summary,
   inView,
+  on,
   onOpen,
 }: {
   frame: ChangedFrame
@@ -368,6 +388,7 @@ function FrameTile({
   version: number
   summary: ArtifactSummary | null
   inView: boolean
+  on: boolean
   onOpen: () => void
 }) {
   const { t } = useTranslation('session')
@@ -386,6 +407,8 @@ function FrameTile({
     <button
       type="button"
       className="k-art__frame"
+      data-on={on ? '' : undefined}
+      aria-pressed={on}
       aria-label={t('artifactEntry.changes.showFrame', { name: frame.name })}
       onClick={onOpen}
     >

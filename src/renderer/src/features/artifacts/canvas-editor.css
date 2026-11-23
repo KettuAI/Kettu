@@ -611,3 +611,32 @@
   animation: none !important;
   transition: none !important;
 }
+
+/* A frame landed on: its outline flashes twice; held still for a moment without motion. */
+.k-ce-flash {
+  position: absolute;
+  pointer-events: none;
+  border-radius: calc(3px * var(--unscale));
+  box-shadow:
+    0 0 0 calc(2px * var(--unscale)) var(--control-on),
+    0 0 0 calc(6px * var(--unscale)) var(--control-on-tint);
+  animation: k-ce-flash 460ms ease-in-out 2 both;
+}
+@keyframes k-ce-flash {
+  0%,
+  100% {
+    opacity: 0;
+  }
+  45%,
+  60% {
+    opacity: 1;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .k-ce-flash {
+    animation: none;
+  }
+}
+:root[data-reduce-motion='always'] .k-ce-flash {
+  animation: none;
+}

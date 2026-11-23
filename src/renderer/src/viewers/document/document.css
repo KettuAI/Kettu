@@ -95,6 +95,7 @@ html[data-embed] {
 
 /* What a new version changed: a bar in the left margin, the section's heading tagged. */
 .kd-block[data-changed]::after,
+.kd-block[data-step]::after,
 .kd-gone {
   content: '';
   position: absolute;

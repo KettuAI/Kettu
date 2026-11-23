@@ -492,7 +492,6 @@
     "changes": {
       "frames_other": "{{count}} 个画框有改动",
       "files_other": "{{count}} 个文件有改动",
-      "sections_other": "{{count}} 个小节有改动",
       "slides_other": "{{count}} 页有改动",
       "slide": "第 {{number}} 页",
       "start": "开头",

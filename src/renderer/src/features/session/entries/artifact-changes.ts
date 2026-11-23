@@ -15,6 +15,32 @@ const KEPT = 200
 // A version never changes once written, so each pair is worked out once.
 const reads = new Map<string, { changes: Changes | null | undefined; done: Promise<void> }>()
 
+function readOf(id: string, from: number, to: number) {
+  const key = `${id}:${from}:${to}`
+  let read = reads.get(key)
+  if (!read) {
+    const next = { changes: undefined as Changes | null | undefined, done: Promise.resolve() }
+    next.done = changesBetween(id, from, to).then(
+      (changes) => void (next.changes = changes),
+      (error: unknown) => {
+        console.warn(`Could not compare versions ${from} and ${to} of ${id}`, error)
+        next.changes = null
+      },
+    )
+    reads.set(key, next)
+    if (reads.size > KEPT) reads.delete(reads.keys().next().value!)
+    read = next
+  }
+  return read
+}
+
+/** What changed from `from` to `to`, read once and shared with the cards that say it. */
+export async function changesOf(id: string, from: number, to: number): Promise<Changes | null> {
+  const read = readOf(id, from, to)
+  await read.done
+  return read.changes ?? null
+}
+
 /**
  * What changed from version `from` to `to`, once `enabled`: undefined while it is worked out, null
  * when it cannot be, as for an older host whose files carry no hash, or when nothing changed.
@@ -29,20 +55,7 @@ export function useChanges(
   const [, setDone] = useState(0)
   useEffect(() => {
     if (!enabled || key === null) return
-    let read = reads.get(key)
-    if (!read) {
-      const next = { changes: undefined as Changes | null | undefined, done: Promise.resolve() }
-      next.done = changesBetween(id, from!, to!).then(
-        (changes) => void (next.changes = changes),
-        (error: unknown) => {
-          console.warn(`Could not compare versions ${from} and ${to} of ${id}`, error)
-          next.changes = null
-        },
-      )
-      reads.set(key, next)
-      if (reads.size > KEPT) reads.delete(reads.keys().next().value!)
-      read = next
-    }
+    const read = readOf(id, from!, to!)
     let live = true
     void read.done.then(() => live && setDone((n) => n + 1))
     return () => {

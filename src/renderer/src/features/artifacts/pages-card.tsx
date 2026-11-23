@@ -42,6 +42,7 @@ export function PagesCard({
   comments,
   artifactId,
   version,
+  marks,
   onPage,
   onFrame,
   onOpen,
@@ -54,6 +55,8 @@ export function PagesCard({
   comments: ReadonlyMap<string, number>
   artifactId: string
   version: number
+  /** The version that last changed each changed frame, when not `version`. */
+  marks?: ReadonlyMap<string, number>
   onPage: (id: string) => void
   onFrame: (id: string) => void
   onOpen: (id: string) => void
@@ -103,7 +106,7 @@ export function PagesCard({
                   <span className="k-pages__marks">
                     {changed.has(p.id) && (
                       <span className="k-pages__mark" data-changed="">
-                        {t('pages.version', { version })}
+                        {t('pages.version', { version: marks?.get(p.id) ?? version })}
                       </span>
                     )}
                     {count > 0 && (
@@ -119,7 +122,7 @@ export function PagesCard({
         },
       ]
     })
-  }, [doc, filter, needle, narrowed, changed, comments, version, t])
+  }, [doc, filter, needle, narrowed, changed, comments, version, marks, t])
 
   // Narrowing opens every page that still holds a frame.
   const shownExpanded = narrowed ? items.map((n) => n.id) : expanded

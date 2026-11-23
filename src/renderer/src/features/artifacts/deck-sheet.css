@@ -381,3 +381,34 @@
     transition: none;
   }
 }
+
+/* A slide landed on: its outline flashes twice; held still for a moment without motion. */
+.adk-slide[data-flash]::after {
+  content: '';
+  position: absolute;
+  inset: -3px;
+  pointer-events: none;
+  border-radius: 3px;
+  box-shadow:
+    0 0 0 2px var(--control-on),
+    0 0 0 6px var(--control-on-tint);
+  animation: adk-flash 460ms ease-in-out 2 both;
+}
+@keyframes adk-flash {
+  0%,
+  100% {
+    opacity: 0;
+  }
+  45%,
+  60% {
+    opacity: 1;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .adk-slide[data-flash]::after {
+    animation: none;
+  }
+}
+:root[data-reduce-motion='always'] .adk-slide[data-flash]::after {
+  animation: none;
+}

@@ -507,8 +507,6 @@
       "frames_other": "{{count}} frames changed",
       "files_one": "{{count}} file changed",
       "files_other": "{{count}} files changed",
-      "sections_one": "{{count}} section changed",
-      "sections_other": "{{count}} sections changed",
       "slides_one": "{{count}} slide changed",
       "slides_other": "{{count}} slides changed",
       "slide": "Slide {{number}}",

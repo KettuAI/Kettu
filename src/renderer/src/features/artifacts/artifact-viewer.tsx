@@ -54,7 +54,9 @@ import {
 } from '@renderer/stores/view'
 import { anchorOf } from './anchors'
 import { useArtifactShares } from './artifact-host'
-import { useArrivedChange } from './use-arrived-change'
+import { useArtifactWalk } from '@renderer/stores/artifact-walk'
+import { useChangeWalk } from './use-change-walk'
+import { ChangePill } from './change-pill'
 import { atMaxZoom, atMinZoom } from './camera'
 import { CanvasEditor } from './canvas-editor'
 import { CanvasControls, useCanvasState } from './canvas-controls'
@@ -68,7 +70,7 @@ import { isEditable, modeKey } from './keys'
 import { artifactKind, daysLeft } from './model'
 import { handOffPageErrors } from './page-error-handoff'
 import { Waiting } from './page-frame'
-import { ChangePill, PageSheet, type SheetAgent } from './page-sheet'
+import { PageSheet, type SheetAgent } from './page-sheet'
 import { PresenceFaces } from './presence-faces'
 import { CanvasPresent } from './canvas-present'
 import { canvasSheets } from './canvas-sheets'
@@ -84,7 +86,6 @@ import { useComments } from './use-comments'
 import { useDeck } from './use-deck'
 import { staticCanvas, useCanvasDoc } from './use-canvas-doc'
 import { clampSize, useDocActions } from './use-doc-actions'
-import { useChangedFrames } from './use-changed-frames'
 import { noteAuthor, usePresentAgents, useVisitors } from './use-present-agents'
 import { useVersions } from './use-versions'
 import { canvasContent, useViewerTools, type ToolContent } from './viewer-tools'
@@ -145,9 +146,6 @@ export default function ArtifactViewer(place: ViewerPlace) {
   const webPage = !!shown && !shown.canvas && !summary?.type
   const isDocument = !!shown && summary?.type === 'document'
   const isDeck = !!shown && summary?.type === 'slides'
-  const arrived = useArrivedChange(id, head, webPage || isDocument || isDeck)
-  // A document and a deck mark what changed and step through it on their own pill.
-  const docArrived = isDocument ? arrived : null
   const deck = useDeck(id, isDeck && shown ? shown.version : null)
   const deckSlide = useDeckSlide(id)
   // An agent's newest version, which what it changed compares with the version before: a frame,
@@ -157,20 +155,26 @@ export default function ArtifactViewer(place: ViewerPlace) {
     lastWrite && lastWrite.author !== null && lastWrite.version > 1 && lastWrite.version === head
       ? { before: lastWrite.version - 1, after: lastWrite.version }
       : null
+  // While the pill counts a range, before and after compares the same versions.
+  const walkRange = useArtifactWalk((s) => s.ranges[id] ?? null)
+  const compareRange =
+    walkRange && walkRange.to === head
+      ? { before: walkRange.from, after: walkRange.to }
+      : agentWrite
   const pageChanges = useChanges(
     id,
-    agentWrite?.before ?? null,
-    agentWrite?.after ?? null,
-    (webPage || isDeck) && agentWrite !== null,
+    compareRange?.before ?? null,
+    compareRange?.after ?? null,
+    (webPage || isDeck || !!shown?.canvas) && compareRange !== null,
   )
   // A web page compares when the agent changed it at all, a deck when it changed the slide shown.
   const pageCompare =
-    agentWrite && pageChanges && changeCount(pageChanges).count > 0
+    compareRange && pageChanges && changeCount(pageChanges).count > 0
       ? webPage ||
         (isDeck &&
           pageChanges.kind === 'slides' &&
           pageChanges.slides.some((s) => s.number === deckSlide))
-        ? agentWrite
+        ? compareRange
         : null
       : null
   const comparing = pageCompare !== null && earlier === pageCompare.before
@@ -195,6 +199,44 @@ export default function ArtifactViewer(place: ViewerPlace) {
   const { threads, error: commentsError } = useComments(id)
   // A version just written counts as the latest while it loads, so editing goes on across it.
   const latest = !!shown && earlier === null && !states.inTrash
+  const pageAsked = useViewStore((s) => {
+    const asked = s.sideArtifactPage[panel?.panel ?? MAIN_ARTIFACT_PANEL]
+    return asked?.artifactId === id ? asked : null
+  })
+  // What changed, walked by the one pill every kind shares, and where the viewer lands.
+  const changeWalk = useChangeWalk({
+    id,
+    panel: panel?.panel ?? MAIN_ARTIFACT_PANEL,
+    summary: summary ?? null,
+    versions,
+    ready: !!shown && (latest || comparing) && !states.error,
+    positioned: pageAsked !== null,
+    latest: !states.inTrash && (earlier === null || comparing),
+  })
+  const walk = changeWalk.walk
+  const walkAsk = changeWalk.ask
+  const sheetWalk = useMemo(
+    () =>
+      walk
+        ? {
+            from: walk.range.from,
+            to: walk.range.to,
+            changes: walk.changes,
+            at: walk.at,
+            marks: walk.marks,
+          }
+        : null,
+    [walk],
+  )
+  const [docChangesShown, setDocChangesShown] = useState(false)
+  const doneAsk = changeWalk.done
+  const askShown = useCallback(
+    (seq: number) => {
+      if (seq < 0) doneAsk(seq)
+      else artifactPageShown(panel?.panel ?? MAIN_ARTIFACT_PANEL, seq)
+    },
+    [doneAsk, panel?.panel],
+  )
   // Comment and Edit act on the latest version only; elsewhere the viewer only shows.
   const mode: ViewerMode = latest ? state.mode : 'view'
   // A canvas document: the latest is edited live on the host, an earlier one only shown.
@@ -210,10 +252,6 @@ export default function ArtifactViewer(place: ViewerPlace) {
   const agents = usePresentAgents(artifact.presence, summary?.deletedAt != null)
   const visitors = useVisitors(id)
   const followingNow = following && agents.some((a) => a.sessionId === following) ? following : null
-  const pageAsked = useViewStore((s) => {
-    const asked = s.sideArtifactPage[panel?.panel ?? MAIN_ARTIFACT_PANEL]
-    return asked?.artifactId === id ? asked : null
-  })
   const showing = !!(url && shown) && !states.error && !states.gone && !artifact.stopped
 
   // The canvas document sets the editor's mode itself, as a frame it enters is picked in.
@@ -314,8 +352,12 @@ export default function ArtifactViewer(place: ViewerPlace) {
     agents,
     present: setPresenting,
   })
-  // Which frames count as changed: those the latest version changed against the one before.
-  const changedFrames = useChangedFrames(id, docShown && shown ? shown.version : null)
+  // Which frames count as changed: those the pill walks, else those the agent's last write changed.
+  const frameChanges = walk?.changes ?? pageChanges
+  const changedFrames = useMemo<ReadonlySet<string>>(
+    () => new Set(frameChanges?.kind === 'frames' ? frameChanges.frames.map((f) => f.id) : []),
+    [frameChanges],
+  )
   const frameComments = useMemo(() => {
     const out = new Map<string, number>()
     if (!doc || !threads) return out
@@ -383,10 +425,14 @@ export default function ArtifactViewer(place: ViewerPlace) {
     () => ({ ...docActions, handOff: (ids) => toolsNow.current.askFrames(ids) }),
     [docActions],
   )
-  const agentBefore = agentWrite?.before ?? null
+  const compareBefore = compareRange?.before ?? null
+  const compareAfter = compareRange?.after ?? null
   const compare = useMemo(
-    () => (latest && agentBefore !== null ? { before: agentBefore, after: agentBefore + 1 } : null),
-    [latest, agentBefore],
+    () =>
+      latest && compareBefore !== null && compareAfter !== null
+        ? { before: compareBefore, after: compareAfter }
+        : null,
+    [latest, compareBefore, compareAfter],
   )
   const right: RightContent | null =
     tools.right ??
@@ -485,22 +531,29 @@ export default function ArtifactViewer(place: ViewerPlace) {
       .finally(() => setRestoring(false))
   }
 
-  // The pill at the content's top: an earlier version, Recently deleted, or an old canvas.
+  // The pill at the content's top, one at a time and in this order for every kind: an earlier
+  // version picked in History, Recently deleted, an old canvas, then what changed, which stays
+  // while the before-and-after switch shows the version before, since it says what that compares.
   let pill: React.ReactNode = null
-  const changePill = arrived ? (
-    <ChangePill
-      to={arrived.to}
-      changes={arrived.changes}
-      onDismiss={() => {
-        if (comparing) setViewerState(id, { version: null })
-        arrived.dismiss()
-      }}
-    />
-  ) : null
-  if (comparing) {
-    // The dock's switch and the sheet's tag say which version this is.
-    pill = changePill
-  } else if (shown && earlier !== null && head !== null) {
+  const changePill =
+    walk && !walk.dismissed ? (
+      <ChangePill
+        walk={{
+          ...walk,
+          dismiss: () => {
+            if (comparing) setViewerState(id, { version: null })
+            walk.dismiss()
+          },
+        }}
+        label={
+          isDocument && docChangesShown
+            ? t(phone ? 'doc.changesFrom' : 'doc.showingFrom', { version: walk.range.from })
+            : undefined
+        }
+        onStep={(direction) => changeWalk.step(direction, state.opened !== null)}
+      />
+    ) : null
+  if (shown && earlier !== null && head !== null && !comparing) {
     const record = versions?.find((v) => v.version === earlier)
     pill = (
       <Pill
@@ -566,7 +619,7 @@ export default function ArtifactViewer(place: ViewerPlace) {
         ]}
       />
     )
-  } else if (changePill && earlier === null && !isDocument && !isDeck) {
+  } else if (changePill) {
     pill = changePill
   }
 
@@ -694,9 +747,20 @@ export default function ArtifactViewer(place: ViewerPlace) {
             onViewPage={(page) => void host('artifacts.view', { id, page }).catch(() => {})}
             sessionName={(session) => noteAuthor(agents, session, t('board.note.agent'))}
             reloads={artifact.reloads}
-            show={pageAsked}
-            onShown={(seq) => artifactPageShown(panel?.panel ?? MAIN_ARTIFACT_PANEL, seq)}
+            show={
+              walkAsk?.frame
+                ? {
+                    pageId: walkAsk.frame,
+                    seq: walkAsk.seq,
+                    open: walkAsk.open,
+                    flash: walkAsk.flash,
+                  }
+                : pageAsked
+            }
+            onShown={askShown}
+            pill={pill !== null}
             changed={changedFrames}
+            marks={walk?.marks}
             comments={frameComments}
             compare={compare}
           />
@@ -727,7 +791,7 @@ export default function ArtifactViewer(place: ViewerPlace) {
             mode={mode}
             where={place.where}
             deck={deck ?? null}
-            arrived={latest ? arrived : null}
+            walk={sheetWalk}
             comments={{
               threads,
               shown: latest && (state.right === 'comments' || mode === 'comment'),
@@ -737,8 +801,8 @@ export default function ArtifactViewer(place: ViewerPlace) {
             agent={sheetAgent}
             onAsk={(anchor) => toolsNow.current.askAnchor(anchor, null)}
             onPresent={(slide) => setPresenting(String(slide))}
-            asked={pageAsked}
-            onAsked={(seq) => artifactPageShown(panel?.panel ?? MAIN_ARTIFACT_PANEL, seq)}
+            asked={walkAsk?.slide !== undefined ? walkAsk : pageAsked}
+            onAsked={askShown}
             focusThread={docFocus}
             compare={
               pageCompare && (earlier === null || comparing)
@@ -766,7 +830,10 @@ export default function ArtifactViewer(place: ViewerPlace) {
             latest={latest}
             mode={mode}
             onMode={setMode}
-            arrived={docArrived}
+            walk={sheetWalk}
+            asked={walkAsk?.at !== undefined || walkAsk?.section !== undefined ? walkAsk : null}
+            onAsked={askShown}
+            onChangesShown={setDocChangesShown}
             comments={{
               threads,
               shown: latest && (state.right === 'comments' || mode === 'comment'),

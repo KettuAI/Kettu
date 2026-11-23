@@ -62,6 +62,7 @@ export function SlidesCard({
   current,
   changed,
   changedIn,
+  marks,
   comments,
   onPick,
 }: {
@@ -71,6 +72,8 @@ export function SlidesCard({
   /** The slides the version that came in changed, tagged with that version. */
   changed: ReadonlySet<number>
   changedIn: number
+  /** The version that last changed each changed slide, by its number, when not `changedIn`. */
+  marks?: ReadonlyMap<string, number>
   /** Open threads by slide. */
   comments: ReadonlyMap<number, number>
   onPick: (slide: number) => void
@@ -140,7 +143,9 @@ export function SlidesCard({
                       <span className="k-pages__marks">
                         {tagged && (
                           <span className="k-pages__mark" data-changed="">
-                            {t('pages.version', { version: changedIn })}
+                            {t('pages.version', {
+                              version: marks?.get(`${slide.number}`) ?? changedIn,
+                            })}
                           </span>
                         )}
                         {count > 0 && (

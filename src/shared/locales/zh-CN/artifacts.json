@@ -240,6 +240,8 @@
   "sheet": {
     "before": "v{{version}} · 改前",
     "changedIn": "v{{version}} {{changes}}",
+    "changedSince": "自 v{{version}} 以来{{changes}}",
+    "changedShort": "{{count}} 处改动",
     "ask": "问 {{agent}}",
     "width": {
       "label": "页面宽度",
@@ -766,5 +768,12 @@
     "label": "改前改后",
     "before": "v{{version}} · 改前",
     "beforeTitle": "{{name}}，版本 {{version}}"
+  },
+  "link": {
+    "slide": "第 {{number}} 张",
+    "unknown": "一个产物",
+    "deleted": "这个产物已删除，还能恢复。",
+    "erased": "这个产物已不存在。",
+    "placeGone": "最新版本里已没有这一处，点开会打开整个产物。"
   }
 }

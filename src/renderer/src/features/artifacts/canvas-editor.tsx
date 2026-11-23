@@ -107,10 +107,14 @@ const SIDE = 48
 const LAND_TOP = 96
 const OPEN_SIDE = 32
 const OPEN_TOP = 24
+/** Room an opened frame keeps under a pill at the content's top. */
+const OPEN_PILL = 44
 const OPEN_BOTTOM = 72
 const ZOOM_FLOOR = 0.2
 /** How long the frames of a page that is left take to fade, and those of the next to rise. */
 const PAGE_OUT_MS = 140
+/** How long a frame landed on flashes: two pulses. */
+const FLASH_MS = 1000
 const RISE_MS = 320
 const RISE_STAGGER = 16
 
@@ -277,6 +281,7 @@ export const CanvasEditor = memo(function CanvasEditor({
   mode: viewerMode,
   controls,
   top = 0,
+  pill = false,
   editor,
   actions,
   agents,
@@ -288,6 +293,7 @@ export const CanvasEditor = memo(function CanvasEditor({
   show = null,
   onShown,
   changed,
+  marks,
   comments,
   compare = null,
 }: {
@@ -305,6 +311,8 @@ export const CanvasEditor = memo(function CanvasEditor({
   mode: ViewerMode
   controls: CanvasControls
   top?: number
+  /** A pill shows at the content's top, which an opened frame starts below. */
+  pill?: boolean
   editor?: ArtifactEditor
   actions: DocPageActions | null
   agents: readonly CanvasAgent[]
@@ -316,12 +324,17 @@ export const CanvasEditor = memo(function CanvasEditor({
   /** The name of the session that drew a note. */
   sessionName: (sessionId: string) => string
   reloads: number
-  /** A page to bring into view, as a frame on a thread's card asks. */
-  show?: { pageId: string; seq: number } | null
+  /**
+   * A page to bring into view, as a frame on a thread's card asks; `open` opens it at reading
+   * size, and `flash` flashes its outline once it is there.
+   */
+  show?: { pageId: string; seq: number; open?: boolean; flash?: boolean } | null
   /** The page asked for is in view, or not in this version. */
   onShown?: (seq: number) => void
   /** The frames that count as changed, by id. */
   changed: ReadonlySet<string>
+  /** The version that last changed each changed frame, when not this one. */
+  marks?: ReadonlyMap<string, number>
   /** The open comment threads on each frame, by id. */
   comments: ReadonlyMap<string, number>
   /** The version an agent wrote and the one before it, which a frame it changed compares with. */
@@ -357,7 +370,13 @@ export const CanvasEditor = memo(function CanvasEditor({
     if (!show || !doc || askedSeq.current === show.seq) return
     askedSeq.current = show.seq
     const page = doc.pages.find((p) => p.id === show.pageId)
-    if (page) setViewerState(artifactId, { page: page.canvas, opened: null })
+    if (!page) return
+    setViewerState(
+      artifactId,
+      show.open
+        ? { page: page.canvas, opened: page.id, selection: [page.id] }
+        : { page: page.canvas, opened: null },
+    )
   }, [show, doc, artifactId])
   const canvasKey = doc?.canvases.some((c) => c.id === activeCanvas)
     ? activeCanvas!
@@ -524,6 +543,7 @@ export const CanvasEditor = memo(function CanvasEditor({
   )
 
   const leftRoom = insets.left
+  const openTop = OPEN_TOP + (pill ? OPEN_PILL : 0)
   const rightRoom = insets.right
 
   // Landing on a page fits its frames' width from their top, never above 100% or under 20%.
@@ -569,11 +589,11 @@ export const CanvasEditor = memo(function CanvasEditor({
   const readingRoom = useCallback(
     (): Room => ({
       x: leftRoom + OPEN_SIDE,
-      y: top + OPEN_TOP,
+      y: top + openTop,
       width: Math.max(1, view.current.width - leftRoom - rightRoom - 2 * OPEN_SIDE),
-      height: Math.max(1, view.current.height - top - OPEN_TOP - OPEN_BOTTOM),
+      height: Math.max(1, view.current.height - top - openTop - OPEN_BOTTOM),
     }),
-    [leftRoom, rightRoom, top],
+    [leftRoom, rightRoom, top, openTop],
   )
 
   // Moves the camera in to a frame at reading size; the live frame takes over once it is there.
@@ -714,7 +734,7 @@ export const CanvasEditor = memo(function CanvasEditor({
   ])
 
   // An opened frame keeps its reading size as the fit, the room or the window changes.
-  const refitKey = `${fit}:${rooms}:${top}:${resized}`
+  const refitKey = `${fit}:${rooms}:${top}:${openTop}:${resized}`
   const lastRefit = useRef(refitKey)
   useEffect(() => {
     if (lastRefit.current === refitKey) return
@@ -773,6 +793,15 @@ export const CanvasEditor = memo(function CanvasEditor({
     })
   }, [controls, pages, shownSelection, focusedPage])
 
+  const [flash, setFlash] = useState<{ id: string; seq: number } | null>(null)
+  const [flashedFor, setFlashedFor] = useState(0)
+  if (show?.flash && flashedFor !== show.seq && measured) {
+    const page = layout?.pages.find((p) => p.id === show.pageId)
+    if (page) {
+      setFlashedFor(show.seq)
+      setFlash({ id: page.id, seq: show.seq })
+    }
+  }
   // A page asked for is brought into view once the view has a size and its canvas is shown; one
   // this version lacks is done with at once.
   const shownAsked = useRef<number | null>(null)
@@ -782,9 +811,15 @@ export const CanvasEditor = memo(function CanvasEditor({
     const elsewhere = doc.pages.some((p) => p.id === show.pageId)
     if ((!page && elsewhere) || (page && !measured)) return
     shownAsked.current = show.seq
-    if (page) revealFrame(page)
+    // An opened frame is moved in by the opening itself.
+    if (page && !show.open) revealFrame(page)
     onShown?.(show.seq)
   }, [show, doc, layout, measured, revealFrame, onShown])
+  useEffect(() => {
+    if (!flash) return
+    const timer = setTimeout(() => setFlash(null), FLASH_MS)
+    return () => clearTimeout(timer)
+  }, [flash])
 
   // A frame chosen on another page in the Pages card is brought into view once that page is in.
   const revealAsked = useRef<string | null>(null)
@@ -1075,6 +1110,7 @@ export const CanvasEditor = memo(function CanvasEditor({
 
   const empty = layout !== null && layout.pages.length === 0 && layout.notes.length === 0
   const selectedPages = pages.filter((p) => shownSelection.includes(p.id))
+  const flashedPage = flash ? pages.find((p) => p.id === flash.id) : undefined
   const selectedBox = union(selectedPages)
   const writingPages = new Set(
     agents
@@ -1249,7 +1285,7 @@ export const CanvasEditor = memo(function CanvasEditor({
                 <span className="k-ce-label__name">{p.name}</span>
                 {changed.has(p.id) && (
                   <span className="k-ce-label__mark" data-changed="">
-                    {t('pages.version', { version })}
+                    {t('pages.version', { version: marks?.get(p.id) ?? version })}
                   </span>
                 )}
                 {count > 0 && (
@@ -1261,6 +1297,19 @@ export const CanvasEditor = memo(function CanvasEditor({
               </div>
             )
           })}
+          {flashedPage && (
+            <span
+              key={flash!.seq}
+              aria-hidden
+              className="k-ce-flash"
+              style={{
+                left: flashedPage.x,
+                top: flashedPage.y,
+                width: flashedPage.width,
+                height: flashedPage.height,
+              }}
+            />
+          )}
           {!focused &&
             selectedPages.map((p) => (
               <div
@@ -1365,6 +1414,7 @@ export const CanvasEditor = memo(function CanvasEditor({
             selection={shownSelection}
             opened={focused}
             changed={changed}
+            marks={marks}
             comments={comments}
             artifactId={artifactId}
             version={version}
