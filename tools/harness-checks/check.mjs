@@ -1,5 +1,6 @@
-// The daily check of the harness versions the ACP Registry does not check: which new versions to
-// check, the checks, and the results file. See README.md.
+// The check, every 6 hours, of the harness versions the ACP Registry does not check and of the
+// harnesses' preferred interfaces: which new versions to check, the checks, and the results file.
+// See README.md.
 //
 //   node tools/harness-checks/check.mjs [--previous <file>] [--out <file>]
 //       [--only <harness>[,<harness>...]] [--version <version>]
@@ -11,14 +12,27 @@ import path from 'node:path'
 import { parseArgs } from 'node:util'
 import { autohand } from './autohand.mjs'
 import { claudeCode } from './claude-code.mjs'
+import { clineSdk } from './cline-sdk.mjs'
 import { codex } from './codex.mjs'
 import { expect, Log } from './common.mjs'
 import { deepseek } from './deepseek.mjs'
+import { beyondCatalog } from './hosted.mjs'
 import { loadKettu, ROOT } from './kettu.mjs'
 import { muse } from './muse.mjs'
+import { opencodeServer } from './opencode-server.mjs'
 import { qoderCn } from './qoder-cn.mjs'
 
-export const HARNESSES = [claudeCode, codex, deepseek, qoderCn, autohand, muse]
+/** The checks; one with a `protocol` checks a harness's preferred interface, kept apart. */
+export const HARNESSES = [
+  claudeCode,
+  codex,
+  deepseek,
+  qoderCn,
+  autohand,
+  muse,
+  opencodeServer,
+  clineSdk,
+]
 
 /** How long after publishing a version waits, so npm has every platform package of it. */
 const WAIT_MS = 6 * 60 * 60_000
@@ -49,15 +63,21 @@ if (options.version && chosen.length !== 1)
 
 const seen = structuredClone(previous.seen)
 const outcomes = await Promise.all(chosen.map((harness) => checkHarness(harness)))
-const results = [
-  ...outcomes.flat(),
+const listed = (list) => [
+  ...chosen.flatMap((harness, at) => (listOf(harness) === list ? outcomes[at] : [])),
   // A harness left out with --only keeps what the previous run found.
-  ...previous.results.filter((result) => !chosen.some((harness) => harness.id === result.harness)),
-].sort((a, b) => order(a.harness) - order(b.harness) || kettu.compareVersions(b.version, a.version))
+  ...previous[list].filter(
+    (result) =>
+      !chosen.some((harness) => listOf(harness) === list && harness.id === result.harness),
+  ),
+]
+const byVersion = (a, b) =>
+  order(a.harness) - order(b.harness) || kettu.compareVersions(b.version, a.version)
 const report = {
   generatedAt: now.toISOString(),
   commit: commitOf(),
-  results,
+  results: listed('results').sort(byVersion),
+  interfaces: listed('interfaces').sort(byVersion),
   seen,
 }
 const out = path.resolve(options.out)
@@ -70,6 +90,11 @@ function order(id) {
   return at < 0 ? HARNESSES.length : at
 }
 
+/** Where a check's results go: a harness's versions, or the versions of its preferred interface. */
+function listOf(harness) {
+  return harness.protocol ? 'interfaces' : 'results'
+}
+
 async function checkHarness(harness) {
   const def = catalog.get(harness.id)
   if (!def) throw new Error(`The catalog has no ${harness.id}`)
@@ -79,7 +104,7 @@ async function checkHarness(harness) {
   } catch (error) {
     // Its versions could not be read, from npm or the vendor: the run keeps what it knew.
     console.log(`::warning::${harness.id}: its versions could not be read: ${error.message}`)
-    return previous.results.filter((result) => result.harness === harness.id)
+    return previous[listOf(harness)].filter((result) => result.harness === harness.id)
   }
   const published = new Map()
   const firstSeen = {}
@@ -91,7 +116,7 @@ async function checkHarness(harness) {
   }
   if (Object.keys(firstSeen).length > 0) seen[harness.id] = firstSeen
   else delete seen[harness.id]
-  const prior = previous.results.filter(
+  const prior = previous[listOf(harness)].filter(
     (result) => result.harness === harness.id && listing.inRange(result.version),
   )
   const candidates = options.version ? [options.version] : pick(harness, prior, published)
@@ -176,6 +201,9 @@ async function runCheck(harness, def, version, publishedAt, before) {
   const failures = failure ? (before?.status === 'fail' ? before.failures : 0) + 1 : 0
   return {
     harness: harness.id,
+    ...(harness.protocol
+      ? { protocol: harness.protocol, beyondCatalog: beyondCatalog(def, version) }
+      : {}),
     version,
     publishedAt,
     status: failure ? 'fail' : 'pass',
@@ -220,17 +248,20 @@ function requireNode(ctx, def) {
 }
 
 async function readPrevious(file) {
-  if (!file) return { results: [], seen: {} }
+  const none = { results: [], interfaces: [], seen: {} }
+  if (!file) return none
   let text
   try {
     text = await readFile(file, 'utf8')
   } catch (error) {
-    if (error.code === 'ENOENT') return { results: [], seen: {} }
+    if (error.code === 'ENOENT') return none
     throw error
   }
   const data = JSON.parse(text)
   if (!Array.isArray(data.results)) throw new Error(`${file} holds no results`)
-  return { results: data.results, seen: data.seen ?? {} }
+  // A run from before the preferred interfaces were checked has none of theirs.
+  const interfaces = Array.isArray(data.interfaces) ? data.interfaces : []
+  return { results: data.results, interfaces, seen: data.seen ?? {} }
 }
 
 function commitOf() {
@@ -240,11 +271,12 @@ function commitOf() {
 
 function summarize(data) {
   const lines = ['| Harness | Version | Result | Checked |', '| --- | --- | --- | --- |']
-  for (const result of data.results) {
+  for (const result of [...data.results, ...data.interfaces]) {
     const status =
       result.status === 'pass' ? 'pass' : `fail at ${result.step} (${result.failures} in a row)`
     const fresh = result.checkedAt === data.generatedAt ? 'this run' : result.checkedAt
-    lines.push(`| ${result.harness} | ${result.version} | ${status} | ${fresh} |`)
+    const subject = result.protocol ? `${result.harness} (${result.protocol})` : result.harness
+    lines.push(`| ${subject} | ${result.version} | ${status} | ${fresh} |`)
   }
   const text = `${lines.join('\n')}\n`
   console.log(text)

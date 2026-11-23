@@ -1,5 +1,6 @@
-// Opens one issue for each harness version whose check failed twice in a row, unless an issue of
-// the same title exists, open or closed. A run that could not open one tries again the next day.
+// Opens one issue for each harness version, or version of a harness's preferred interface, whose
+// check failed twice in a row, unless an issue of the same title exists, open or closed. A run
+// that could not open one tries again in the next run.
 //
 //   node tools/harness-checks/report.mjs <harness-checks.json> [--dry-run]
 //
@@ -20,6 +21,12 @@ const NAMES = {
   muse: 'Muse Code',
 }
 
+/** The preferred interfaces, whose failures send a version back to the harness's other protocol. */
+const INTERFACES = {
+  'opencode-server': 'OpenCode server',
+  'cline-sdk': 'Cline SDK',
+}
+
 const { values, positionals } = parseArgs({
   allowPositionals: true,
   options: { 'dry-run': { type: 'boolean', default: false } },
@@ -36,10 +43,10 @@ const runUrl =
     : null
 
 let failed = 0
-for (const result of data.results.filter(
-  (entry) => entry.status === 'fail' && entry.failures >= 2,
-)) {
-  const title = `Harness check fails: ${NAMES[result.harness] ?? result.harness} ${result.version}`
+// A run from before the preferred interfaces were checked has none of theirs.
+const all = [...data.results, ...(data.interfaces ?? [])]
+for (const result of all.filter((entry) => entry.status === 'fail' && entry.failures >= 2)) {
+  const title = `Harness check fails: ${subjectOf(result)} ${result.version}`
   try {
     if (await exists(title)) {
       console.log(`Already filed: ${title}`)
@@ -77,12 +84,18 @@ async function exists(title) {
   return JSON.parse(stdout).some((issue) => issue.title === title)
 }
 
+function subjectOf(result) {
+  if (result.protocol) return INTERFACES[result.protocol] ?? `${result.harness} ${result.protocol}`
+  return NAMES[result.harness] ?? result.harness
+}
+
 function bodyOf(result) {
   const lines = [
-    `The daily harness check failed for ${NAMES[result.harness] ?? result.harness} ${result.version} ` +
+    `The harness check failed for ${subjectOf(result)} ${result.version} ` +
       `${result.failures} times in a row, at the \`${result.step}\` step. ` +
       `It was published ${result.publishedAt} and last checked ${result.checkedAt}` +
-      (runUrl ? ` in ${runUrl}.` : '.'),
+      (runUrl ? ` in ${runUrl}.` : '.') +
+      (result.protocol ? ' Its sessions go back to the harness’s other protocol.' : ''),
     '',
     'The end of its log:',
     '',

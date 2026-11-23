@@ -8,7 +8,7 @@ import { protocolOf, type AgentDefinition, type AgentProtocol } from './catalog'
 import { CODEX_DRIVER } from './codex/driver'
 import { DSH_DRIVER } from './dsh/driver'
 import type { AgentDriver } from './driver'
-import { heldBack, inNpmRange, type HarnessRule } from './harness-manifest'
+import { heldBack, inNpmRange, letThrough, type HarnessRule } from './harness-manifest'
 import { OPENCODE_SERVER_DRIVER } from './opencode/driver'
 import { PI_DRIVER } from './pi/driver'
 
@@ -31,8 +31,9 @@ export interface DriverOverrides {
 
 /**
  * The harness's preferred interface when a start can run on it: its program is a `version` the
- * interface was checked on, the manifest's `rule` does not hold that version back, and a start
- * over it has not `failed` for that version. Null for a start on the definition's protocol.
+ * catalog checked the interface on or the manifest's `rule` lets through, the rule does not hold
+ * that version back, and a start over it has not `failed` for that version. Null for a start on
+ * the definition's protocol.
  */
 export function preferredProtocol(
   def: AgentDefinition,
@@ -42,7 +43,8 @@ export function preferredProtocol(
 ): AgentProtocol | null {
   const preferred = def.preferred
   if (!preferred || version === null || failed === version) return null
-  if (!inNpmRange(version, preferred.checked) || heldBack(rule, version)) return null
+  const checked = inNpmRange(version, preferred.checked) || letThrough(rule, version)
+  if (!checked || heldBack(rule, version)) return null
   return preferred.protocol
 }
 

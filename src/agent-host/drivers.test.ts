@@ -9,15 +9,16 @@ import type { HostedDriver } from './driver'
 import { startTestHost, type TestHost } from './testing/harness'
 
 describe('the preferred interface', () => {
-  it('runs a version it was checked on', () => {
+  it('runs a version it was checked on, and the later ones of that major version', () => {
     expect(preferredProtocol(OPENCODE, '2.3.2', null, null)).toBe('opencode-server')
+    expect(preferredProtocol(OPENCODE, '2.4.1', null, null)).toBe('opencode-server')
     expect(protocolFor(OPENCODE, {}, 'opencode-server')).toBe('opencode-server')
     expect(driverOf(OPENCODE, {}, 'opencode-server').kind).toBe('hosted')
   })
 
   it('gives way to the harness’s protocol for a version it was not checked on, or not read', () => {
     expect(preferredProtocol(OPENCODE, '2.0.32', null, null)).toBeNull()
-    expect(preferredProtocol(OPENCODE, '2.4.0', null, null)).toBeNull()
+    expect(preferredProtocol(OPENCODE, '3.0.0', null, null)).toBeNull()
     expect(preferredProtocol(OPENCODE, null, null, null)).toBeNull()
     expect(protocolFor(OPENCODE, {}, null)).toBe('acp')
     expect(driverOf(OPENCODE).kind).toBe('process')
@@ -27,6 +28,14 @@ describe('the preferred interface', () => {
     const rule = { kettu: '*', broken: [], sha256: {}, fallback: '>=2.3.2 <2.3.4' }
     expect(preferredProtocol(OPENCODE, '2.3.3', rule, null)).toBeNull()
     expect(preferredProtocol(OPENCODE, '2.3.4', rule, null)).toBe('opencode-server')
+  })
+
+  it('runs a version past its range that the manifest lets through, unless it also holds it back', () => {
+    const rule = { kettu: '*', broken: [], sha256: {}, preferred: '3.0.0 || 3.0.1' }
+    expect(preferredProtocol(OPENCODE, '3.0.1', rule, null)).toBe('opencode-server')
+    expect(preferredProtocol(OPENCODE, '3.0.2', rule, null)).toBeNull()
+    expect(preferredProtocol(OPENCODE, '3.0.1', { ...rule, fallback: '3.0.1' }, null)).toBeNull()
+    expect(preferredProtocol(OPENCODE, '3.0.0', rule, '3.0.0')).toBeNull()
   })
 
   it('gives way for the version it failed to start on, until the program changes', () => {
@@ -50,7 +59,8 @@ describe('a start over the preferred interface', () => {
   it('goes by the version of Kettu’s own install for a harness it installs from npm', async () => {
     expect(preferredProtocol(CLINE, '3.0.74', null, null)).toBe('cline-sdk')
     expect(preferredProtocol(CLINE, '3.0.73', null, null)).toBeNull()
-    expect(preferredProtocol(CLINE, '3.1.0', null, null)).toBeNull()
+    expect(preferredProtocol(CLINE, '3.1.0', null, null)).toBe('cline-sdk')
+    expect(preferredProtocol(CLINE, '4.0.0', null, null)).toBeNull()
 
     let tries = 0
     const failing: HostedDriver = {
