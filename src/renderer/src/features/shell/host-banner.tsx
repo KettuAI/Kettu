@@ -12,17 +12,22 @@ import { cn } from '@renderer/lib/utils'
 import { useConnectionStore } from '@renderer/stores/connection'
 import { openReport } from '@renderer/stores/report'
 import { Glyph } from './glyph'
+import { useHostAwaySaid } from './host-notice'
 
 /**
  * The agent host's state while it is away, and a recording of steps to reproduce: small status
  * pills centred over the top bar, or on Windows and Linux in the band above it. They float instead
- * of pushing the window down, so the macOS traffic lights never sit on them.
+ * of pushing the window down, so the macOS traffic lights never sit on them. Where a view says
+ * itself that the host is away, as the artifact viewer does in its bar's own place, the restart is
+ * not said again over that bar, and the stopped host's actions go under it.
  */
 export function HostBanner() {
   const { t } = useTranslation('shell')
   const state = useConnectionStore((s) => s.agentHost)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const said = useHostAwaySaid()
+  const waiting = state === 'reconnecting' || state === 'resuming'
 
   const restart = async () => {
     setBusy(true)
@@ -40,13 +45,15 @@ export function HostBanner() {
     <div
       className={cn(
         'pointer-events-none absolute inset-x-0 z-50 flex justify-center gap-2',
-        hasBand
-          ? 'top-[calc((var(--title-bar)-26px)/2)]'
-          : 'top-[calc(var(--sheet-gap)+(var(--top-bar)-26px)/2)]',
+        said && !hasBand
+          ? 'top-[calc(var(--sheet-gap)+var(--top-bar)+8px)]'
+          : hasBand
+            ? 'top-[calc((var(--title-bar)-26px)/2)]'
+            : 'top-[calc(var(--sheet-gap)+(var(--top-bar)-26px)/2)]',
       )}
     >
       <AnimatePresence initial={false}>
-        {state !== 'connected' && (
+        {state !== 'connected' && !(waiting && said) && (
           <motion.div
             key={state}
             role="status"
@@ -55,7 +62,7 @@ export function HostBanner() {
             exit={fadeExit}
             className="app-region-no-drag pointer-events-auto flex h-[26px] items-center gap-1.5 rounded-full bg-popover pr-1 pl-3 text-xs text-secondary shadow-menu"
           >
-            {state === 'reconnecting' || state === 'resuming' ? (
+            {waiting ? (
               <>
                 <Spinner className="size-3" />
                 <span className="pr-2">

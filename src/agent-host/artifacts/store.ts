@@ -536,11 +536,11 @@ export class ArtifactStore {
   /**
    * The artifact's threads, oldest first, each anchored in its latest version: an element a new
    * version moved is found again by its tag, text and page, a document's block by its element and
-   * words, and one no longer there is marked so.
+   * words, and one no longer there is marked so until a later version has it again.
    */
   async threads(id: string, { project }: Reach = {}): Promise<CommentThread[]> {
     const threads = await this.call('threads', { id, project: project ?? null })
-    const stale = threads.filter((t) => t.anchor.offset !== null && !t.anchor.missing)
+    const stale = threads.filter((t) => t.anchor.offset !== null)
     if (stale.length === 0) return threads
     const found = await this.get(id, project ? { project } : {}).catch(() => null)
     if (!found) return threads
@@ -574,9 +574,9 @@ export class ArtifactStore {
         startTagAt(text, old.offset)?.name === anchor.tag
       const next: CommentAnchor =
         offset !== null
-          ? { ...anchor, version: head, offset }
+          ? { ...anchor, version: head, offset, missing: false }
           : kept
-            ? { ...anchor, version: head }
+            ? { ...anchor, version: head, missing: false }
             : { ...anchor, version: head, missing: true }
       moved.push({ threadId: thread.id, anchor: next })
       thread.anchor = next

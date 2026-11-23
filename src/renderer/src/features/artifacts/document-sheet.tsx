@@ -36,6 +36,11 @@ import { Dropdown, Icon, type MenuItem } from '@renderer/components/affect/app-s
 import { useDark } from '@renderer/hooks/use-dark'
 import { isWeb } from '@renderer/lib/platform'
 import { DOC_SIZES, setDocSize, stepDocSize, useDocSize } from '@renderer/stores/artifact-doc-size'
+import {
+  dropUnsaved,
+  keepUnsaved,
+  useArtifactUnsavedStore,
+} from '@renderer/stores/artifact-unsaved'
 import type { ViewerMode } from '@renderer/stores/artifact-viewer'
 import { threadNumbers } from './comment-threads'
 import { FrameLink } from './frame-link'
@@ -199,6 +204,11 @@ export function DocumentSheet({
   const [save, setSave] = useState<Save | null>(null)
   useUnsaved(id, !!save && ['failed', 'conflict', 'refused'].includes(save.state))
   const [loaded, setLoaded] = useState(false)
+  // A block typed in that did not save before the viewer was left, which the frame shows again.
+  const kept = useArtifactUnsavedStore((s) => {
+    const change = s.byId[id]?.document
+    return change?.kind === 'document' ? change.kept : null
+  })
 
   // The document's frame, loaded once for the artifact; versions come in through the viewer.
   const origin = url.slice(0, -1)
@@ -281,6 +291,7 @@ export function DocumentSheet({
       focus,
       still: !!reduce,
       writing,
+      kept,
     }
     link.post({ v: RUNTIME_VERSION, kind: 'select-doc', channel: link.channel, state })
   }, [
@@ -301,6 +312,7 @@ export function DocumentSheet({
     focus,
     reduce,
     writing,
+    kept,
   ])
 
   const onReport = useRef<(doc: DocReport) => void>(() => {})
@@ -321,6 +333,9 @@ export function DocumentSheet({
           return
         case 'save':
           setSave(doc)
+          // What did not save is kept beyond this viewer, until it saves or is discarded.
+          if (doc.kept) keepUnsaved(id, { kind: 'document', kept: doc.kept })
+          else if (doc.kept === null || doc.state === 'saved') dropUnsaved(id, 'document')
       }
     }
   })

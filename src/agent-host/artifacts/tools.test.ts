@@ -408,3 +408,48 @@ describe('pinning a thread again', () => {
     })
   })
 })
+
+describe('a thread whose element a version removed', () => {
+  it('is looked for again in each new version, and placed once the element is back', async () => {
+    const id = await create({ html: '<h1>Title</h1><p>Body</p>' })
+    const thread = await store.addThread(id, {
+      anchor: {
+        version: 1,
+        path: 'index.html',
+        page: null,
+        offset: 14,
+        tag: 'p',
+        text: 'Body',
+        missing: false,
+      },
+      author: { person: 'owner', session: null },
+      body: 'Shorter',
+    })
+    await call('update_artifact', { id, base_version: 1, html: '<h1>Title</h1>' })
+    const [gone] = await store.threads(id)
+    expect(gone?.anchor).toMatchObject({ version: 2, missing: true })
+
+    // A version that still lacks the element is recorded once, not on every read.
+    await call('update_artifact', { id, base_version: 2, html: '<h1>Other</h1>' })
+    await store.threads(id)
+    const calls: string[] = []
+    const threads = (store as unknown as { deps: { threads: ThreadStore } }).deps.threads
+    const artifact = threads.artifact
+    threads.artifact = ((name: string, params: unknown) => {
+      calls.push(name)
+      return artifact(name as never, params as never)
+    }) as ThreadStore['artifact']
+    const [still] = await store.threads(id)
+    expect(still?.anchor).toMatchObject({ version: 3, missing: true })
+    expect(calls).not.toContain('reanchor')
+
+    await store.restore({ id, version: 1, baseVersion: 3, author: null })
+    const [back] = await store.threads(id)
+    expect(back).toMatchObject({
+      id: thread.id,
+      anchor: { version: 4, offset: 14, tag: 'p', text: 'Body', missing: false },
+    })
+    const [stored] = await store.threads(id)
+    expect(stored?.anchor).toMatchObject({ version: 4, offset: 14, missing: false })
+  })
+})

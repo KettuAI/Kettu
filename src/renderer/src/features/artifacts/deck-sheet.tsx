@@ -43,6 +43,11 @@ import {
   useDeckSlide,
 } from '@renderer/stores/artifact-deck'
 import {
+  dropUnsaved,
+  keepUnsaved,
+  useArtifactUnsavedStore,
+} from '@renderer/stores/artifact-unsaved'
+import {
   setViewerState,
   useViewerState,
   type FitMode,
@@ -315,6 +320,11 @@ export function DeckSheet({
   const [layout, setLayout] = useState<Extract<DeckReport, { t: 'layout' }> | null>(null)
   const [save, setSave] = useState<Save | null>(null)
   useUnsaved(id, !!save && ['failed', 'conflict', 'refused'].includes(save.state))
+  // Texts typed that did not save before the viewer was left, which the frame shows again.
+  const keptTexts = useArtifactUnsavedStore((s) => {
+    const change = s.byId[id]?.slides
+    return change?.kind === 'slides' ? change.kept : null
+  })
 
   useEffect(() => {
     if (!deck) return
@@ -324,9 +334,10 @@ export function DeckSheet({
       version,
       track,
       focus: focusKey,
+      ...(keptTexts && { kept: [...keptTexts] }),
     }
     link.post({ v: RUNTIME_VERSION, kind: 'select-deck', channel: link.channel, state })
-  }, [link, deck, current, latest, mode, version, track, focusKey])
+  }, [link, deck, current, latest, mode, version, track, focusKey, keptTexts])
 
   const onReport = useRef<(report: DeckReport) => void>(() => {})
   useEffect(() => {
@@ -342,6 +353,9 @@ export function DeckSheet({
           return
         case 'save':
           setSave(report)
+          // What did not save is kept beyond this viewer, until it saves or is discarded.
+          if (report.kept?.length) keepUnsaved(id, { kind: 'slides', kept: report.kept })
+          else if (report.kept || report.state === 'saved') dropUnsaved(id, 'slides')
       }
     }
   })
@@ -516,7 +530,13 @@ export function DeckSheet({
 
   // The notes typed under the slide go to the deck after a rest; what is typed stays meanwhile.
   const notesEditable = mode === 'edit' && latest
-  const [notesDraft, setNotesDraft] = useState<{ slide: number; text: string } | null>(null)
+  const [notesDraft, setNotesDraft] = useState<{ slide: number; text: string } | null>(() => {
+    // Notes that did not save before the viewer was left show as typed.
+    const notes = keptTexts?.find(({ path }) => path.length === 3 && path[2] === 'notes')
+    return notes && typeof notes.path[1] === 'number'
+      ? { slide: notes.path[1] + 1, text: notes.text }
+      : null
+  })
   const notesTimer = useRef(0)
   const sendNotes = useCallback(
     (at: number, text: string) => {

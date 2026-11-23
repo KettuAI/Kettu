@@ -2,6 +2,7 @@
 
 import { useEffect } from 'react'
 import { i18n } from '@renderer/lib/i18n'
+import { dropUnsaved, unsavedOf } from '@renderer/stores/artifact-unsaved'
 
 const unsaved = new Map<string, number>()
 
@@ -18,8 +19,13 @@ export function useUnsaved(id: string, failed: boolean): void {
   }, [id, failed])
 }
 
-/** Whether to leave the artifact: at once, or once the user agrees to drop what did not save. */
+/**
+ * Whether to close the artifact: at once, or once the user agrees to drop what did not save, which
+ * is then not shown again. Going elsewhere in the window asks nothing, since the change is kept.
+ */
 export function mayLeave(id: string): boolean {
-  if (!unsaved.has(id)) return true
-  return window.confirm(i18n.t('artifacts:viewer.leaveUnsaved'))
+  if (!unsaved.has(id) && unsavedOf(id).length === 0) return true
+  if (!window.confirm(i18n.t('artifacts:viewer.leaveUnsaved'))) return false
+  dropUnsaved(id)
+  return true
 }

@@ -8,6 +8,8 @@ import {
   PlusSignIcon,
   RotateLeft01Icon,
   SidebarLeftIcon,
+  ArrowReloadHorizontalIcon,
+  LinkSquare02Icon,
   SparklesIcon,
 } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
@@ -42,7 +44,9 @@ import {
   viewerStateOf,
   type ViewerMode,
 } from '@renderer/stores/artifact-viewer'
+import { useSaysHostAway } from '@renderer/features/shell/host-notice'
 import { setDeckSlide, useDeckSlide } from '@renderer/stores/artifact-deck'
+import { unsavedOf } from '@renderer/stores/artifact-unsaved'
 import {
   restoreArtifact,
   restoreVersion,
@@ -211,6 +215,17 @@ export default function ArtifactViewer(place: ViewerPlace) {
   const renders = useHostHas('thumbnails') === true
   const editor = useMemo(() => (url ? new ArtifactEditor(url.slice(0, -1)) : null), [url])
   useEffect(() => () => editor?.dispose(), [editor])
+  // A change that did not save before the viewer was left shows again where it was made.
+  useEffect(() => {
+    const kept = unsavedOf(id)
+    if (kept.length === 0) return
+    const params = kept.find((change) => change.kind === 'params')
+    if (params?.kind === 'params')
+      setViewerState(id, { right: 'tweaks', selection: [params.frame] })
+    if (kept.some((change) => change.kind !== 'params')) setViewerState(id, { mode: 'edit' })
+    const element = kept.find((change) => change.kind === 'element')
+    if (editor && element?.kind === 'element') editor.repick(element.page, element.src)
+  }, [id, editor])
   // Pins and the picked outline take the theme's colors, again when the color mode changes.
   const dark = useDark()
   useEffect(() => editor?.restyle(), [editor, dark])
@@ -620,6 +635,8 @@ export default function ArtifactViewer(place: ViewerPlace) {
       />
     ) : null
   const remoteHost = artifactHost(id)
+  // The pill says the agent host is away, so the window's notice leaves the bar alone.
+  useSaysHostAway(offline && !states.error && remoteHost === null)
   if (offline && !states.error) {
     pill = (
       <Pill
@@ -1134,7 +1151,10 @@ export default function ArtifactViewer(place: ViewerPlace) {
           />
         )}
         {legacyCanvas && pageName && <LegacyCanvasDock controls={controls} />}
-        {typed && latest && summary && <AskDock onAsk={() => tools.askWhole()} />}
+        {/* A document's own dock asks its session's agent; without one, this asks. */}
+        {typed && latest && summary && !(isDocument && target) && (
+          <AskDock onAsk={() => tools.askWhole()} />
+        )}
       </>
     )
   } else {
@@ -1427,7 +1447,15 @@ export default function ArtifactViewer(place: ViewerPlace) {
           <ViewerSlot slot="left">
             <SkeletonRows nested={kind === 'canvas'} />
           </ViewerSlot>
-          <OpeningDock canvas={kind === 'canvas' || kind === 'slides'} />
+          <OpeningDock
+            kind={
+              kind === 'canvas' || kind === 'slides'
+                ? 'canvas'
+                : kind === 'document'
+                  ? 'document'
+                  : 'web'
+            }
+          />
         </>
       )}
     </ArtifactShell>
@@ -1627,17 +1655,26 @@ function LegacyCanvasDock({ controls }: { controls: CanvasControls }) {
     </ViewerSlot>
   )
 }
-/** The dock while the content loads: what it will offer, dimmed and out of reach. */
-function OpeningDock({ canvas }: { canvas: boolean }) {
+/** The dock while the content loads: what its kind will offer, dimmed and out of reach. */
+function OpeningDock({ kind }: { kind: 'canvas' | 'document' | 'web' }) {
   const { t } = useTranslation('artifacts')
   const none = () => {}
   const { tier, leftCard: left } = useShell()
+  const narrow = tier === 'narrow'
+  const ask = (
+    <>
+      <DockRule />
+      <DockButton label={t('ask.whole')} icon={SparklesIcon} disabled onClick={none}>
+        {t('ask.short')}
+      </DockButton>
+    </>
+  )
   return (
     <ViewerSlot slot="dock">
-      {canvas && left && (
+      {kind !== 'web' && left && (
         <>
           <DockButton
-            label={t('pages.title')}
+            label={t(kind === 'canvas' ? 'pages.title' : 'outline.title')}
             icon={SidebarLeftIcon}
             pressed={left.shown}
             onClick={() => left.setShown(!left.shown)}
@@ -1646,7 +1683,7 @@ function OpeningDock({ canvas }: { canvas: boolean }) {
         </>
       )}
       <span className="avs-dock__off" aria-disabled>
-        {canvas ? (
+        {kind === 'canvas' ? (
           <>
             {tier === 'wide' && (
               <DockButton label={t('canvas.fitWidth')} disabled onClick={none}>
@@ -1657,10 +1694,39 @@ function OpeningDock({ canvas }: { canvas: boolean }) {
             <span className="avs-dock__pct">{t('canvas.zoom', { percent: 100 })}</span>
             <DockButton label={t('canvas.zoomIn')} icon={PlusSignIcon} disabled onClick={none} />
           </>
+        ) : kind === 'document' ? (
+          <>
+            {!narrow && (
+              <DockButton label={t('doc.smaller')} icon={MinusSignIcon} disabled onClick={none} />
+            )}
+            <span className="avs-dock__pct">{t('doc.size', { percent: 100 })}</span>
+            {!narrow && (
+              <DockButton label={t('doc.larger')} icon={PlusSignIcon} disabled onClick={none} />
+            )}
+            {!narrow && ask}
+          </>
         ) : (
-          <DockButton label={t('ask.whole')} icon={SparklesIcon} disabled onClick={none}>
-            {t('ask.short')}
-          </DockButton>
+          <>
+            <DockButton label={t('sheet.width.label')} disabled onClick={none}>
+              {t('sheet.width.fill')}
+            </DockButton>
+            <DockRule />
+            <DockButton
+              label={t('viewer.reload')}
+              icon={ArrowReloadHorizontalIcon}
+              disabled
+              onClick={none}
+            />
+            {!narrow && (
+              <DockButton
+                label={t('viewer.openInBrowser')}
+                icon={LinkSquare02Icon}
+                disabled
+                onClick={none}
+              />
+            )}
+            {!narrow && ask}
+          </>
         )}
       </span>
     </ViewerSlot>

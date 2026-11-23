@@ -6,7 +6,8 @@ import type { CanvasPage } from '@shared/canvas-doc'
 import { Button } from '@renderer/components/affect/button'
 import { SegmentedControl } from '@renderer/components/affect/segmented-control'
 import { Switch } from '@renderer/components/ui/switch'
-import { host } from '@renderer/lib/host'
+import { errorCode, errorMessage, host } from '@renderer/lib/host'
+import { dropUnsaved, keepUnsaved, unsavedAt, unsavedSlot } from '@renderer/stores/artifact-unsaved'
 import { ColorInput } from './edit-panel'
 import type { EditorFrame } from './editor'
 import { CardHead, KeptNote, Notice, SaveChip, UndoButton } from './tool-parts'
@@ -84,11 +85,36 @@ function TweakBody({
   const { t } = useTranslation('artifacts')
   // What the frame held when the card opened, which a row's dot and Reset all put back.
   const [baseline] = useState<Values>(() => valuesOf(params))
-  const [values, setValues] = useState<Values>(baseline)
-  const run = useEditRun(artifactId)
-  const pending = useRef<Values>({})
+  // Tweaks of this frame that did not save before the viewer was left, shown again.
+  const slot = unsavedSlot({ kind: 'params', frame: page.id })
+  const [kept] = useState(() => {
+    const change = unsavedAt(artifactId, slot)
+    return change?.kind === 'params' ? change : null
+  })
+  const [values, setValues] = useState<Values>(() => ({ ...baseline, ...kept?.values }))
+  const run = useEditRun(artifactId, kept ? { state: 'failed', error: kept.error } : null)
+  const pending = useRef<Values>({ ...kept?.values })
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   const wrote = useRef(0)
+  // The version kept tweaks were made on, so a newer one is a conflict before it is written over.
+  const keptBase = useRef(kept?.version ?? null)
+  // The frame shows the kept tweaks again, on the page it loads too, until they change or save.
+  useEffect(() => {
+    if (!kept) return
+    let tries = 0
+    const show = (): boolean => {
+      const frame = frameOf()
+      frame?.params(kept.values, true)
+      return !!frame
+    }
+    if (show()) return
+    const poll = setInterval(() => {
+      if (show() || ++tries > 40) clearInterval(poll)
+    }, 100)
+    return () => clearInterval(poll)
+    // Once, for the frame the card opened on.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
   const versionRef = useRef(version)
   useEffect(() => {
     versionRef.current = version
@@ -98,7 +124,7 @@ function TweakBody({
   const write = () => {
     const send = pending.current
     if (Object.keys(send).length === 0) return
-    const base = Math.max(versionRef.current, wrote.current)
+    const base = keptBase.current ?? Math.max(versionRef.current, wrote.current)
     host('artifacts.setParams', {
       id: artifactId,
       baseVersion: base,
@@ -107,14 +133,28 @@ function TweakBody({
     })
       .then(({ version: made }) => {
         wrote.current = made
+        keptBase.current = null
         // Only what was sent is written; a change typed since waits for its own turn.
         for (const name of Object.keys(send)) {
           if (pending.current[name] === send[name]) delete pending.current[name]
         }
+        dropUnsaved(artifactId, slot)
         run.wrote(made, base)
       })
       // Nothing changed is lost: the values stay on screen and the chip offers to try again.
-      .catch((reason: unknown) => run.failed(reason))
+      .catch((reason: unknown) => {
+        // The next try is made on the version shown by then.
+        if (errorCode(reason) === 'conflict') keptBase.current = null
+        // Kept beyond this card, which may be gone by now, until it saves or is discarded.
+        keepUnsaved(artifactId, {
+          kind: 'params',
+          frame: page.id,
+          values: { ...pending.current },
+          version: base,
+          error: errorMessage(reason),
+        })
+        run.failed(reason)
+      })
   }
 
   const change = (next: Values) => {
@@ -135,6 +175,7 @@ function TweakBody({
     ? () => {
         clearTimeout(timer.current)
         pending.current = {}
+        dropUnsaved(artifactId, slot)
         void run.undo?.().then(
           (made) => {
             if (made === null) return
