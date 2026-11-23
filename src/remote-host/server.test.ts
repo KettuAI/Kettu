@@ -98,6 +98,9 @@ async function setup(
         hostName: () => 'Studio',
         token: () => null,
         showing: () => false,
+        foreground: () => false,
+        tell: () => {},
+        storeKey: new Uint8Array(32),
         log,
       })
     : null
@@ -409,7 +412,7 @@ describe("a device's notifications", () => {
     const device = await t.connect(undefined, { protocol: { min: 1, max: PROTOCOL_VERSION } })
     expect(await device.first).toMatchObject({
       protocol: 4,
-      features: ['bytes', 'push', 'standby'],
+      features: ['bytes', 'push', 'web-push', 'standby'],
     })
     const state = await ask(device, 'notifications.set', {
       target,

@@ -38,6 +38,7 @@ import { DirectListener } from './direct'
 import { HostStore, uniqueAddresses } from './hosts'
 import { LoopbackListener } from './loopback'
 import { DeviceNotifications, parseAttention, parseWaiting } from './notifications'
+import { webPushStoreKey } from './web-push'
 import { PairingCodes } from './pairing'
 import { jsonOf, openRelaySocket, relayRequest } from './relay-net'
 import { RemoteRegions } from './relay-regions'
@@ -261,6 +262,9 @@ export function startRemoteHost(
             hostName: () => server.options.host.name,
             token: () => relayToken,
             showing: (deviceId, sessionId) => server.showing(deviceId, sessionId),
+            foreground: (deviceId) => server.foreground(deviceId),
+            tell: (deviceId, message) => server.withdrawn(deviceId, message),
+            storeKey: webPushStoreKey(Buffer.from(options.privateKey, 'base64')),
             log,
           })
         : null

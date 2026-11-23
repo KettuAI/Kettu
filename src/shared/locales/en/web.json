@@ -74,6 +74,10 @@
     "testTitle": "Kettu",
     "testBody": "Notifications are on. This is how an agent that needs you will reach you while this page is open.",
     "openOnly": "Notifications need this page open in the browser, even in a background tab; a closed page gets none.",
+    "testBodyPush": "Notifications are on. This is how an agent that needs you will reach you, even with this page closed.",
+    "closed": "Once allowed, notifications reach this browser even when this page is closed. Send a test notification to allow them.",
+    "homeScreen": "On iPhone and iPad, notifications come only to this page added to the Home Screen and opened from there: tap Share, then Add to Home Screen.",
+    "chinaChrome": "Chrome gets them through Google's push service, which mainland China cannot reach; there they come only while this page is open.",
     "insecure": "Browsers give notifications only to pages on https or localhost. Open this page through an SSH tunnel to localhost, or over HTTPS such as Tailscale's, to get them.",
     "denied": "This browser blocks notifications for this page. Allow them in the browser's settings for this site, then try again."
   },

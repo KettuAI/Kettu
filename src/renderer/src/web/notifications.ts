@@ -1,6 +1,7 @@
 // The web client's notifications: what the host would notify its own window about, shown by the
 // browser while this page is open and not in front, by this browser's own choices. Browsers give
-// them only on https and localhost; reaching a closed page takes push, which is not here.
+// them only on https and localhost. A page in the background that the host reaches by Web Push
+// leaves them to the push (push.ts), which also reaches it closed.
 
 import { ATTENTION_SETTING, attentionTarget, attentionText } from '@shared/attention'
 import type { AppCommand } from '@shared/ipc'
@@ -19,6 +20,8 @@ export interface WebNotifyDeps {
   inFront(): boolean
   /** Brings the page forward and runs what a click opens. */
   open(command: AppCommand): void
+  /** Whether the host pushes this one to this browser instead. */
+  pushed?(attention: HostAttention): boolean
 }
 
 /** This browser's notifications here: none outside https and localhost. */
@@ -41,7 +44,7 @@ export function notifyAttention(attention: HostAttention, deps: WebNotifyDeps): 
   if (!target || !notifications || notifications.permission !== 'granted') return false
   const settings = deps.settings()
   if (!settings.notifications[ATTENTION_SETTING[attention.kind]]) return false
-  if (deps.inFront()) return false
+  if (deps.inFront() || deps.pushed?.(attention)) return false
   const { title, body } = attentionText(attention)
   // The tag makes a newer notice for the same session replace the older one.
   const shown = new notifications(title, {
@@ -68,9 +71,10 @@ export async function notifyTest(
       ? await notifications.requestPermission()
       : notifications.permission
   if (permission !== 'granted') return false
-  new notifications(text.title, {
-    body: text.body,
-    silent: !deps.settings().notifications.sound,
-  })
+  const options = { body: text.body, silent: !deps.settings().notifications.sound }
+  // Safari on iPhone and iPad shows only a service worker's notifications.
+  const registration = await navigator.serviceWorker?.getRegistration().catch(() => undefined)
+  if (registration) await registration.showNotification(text.title, options)
+  else new notifications(text.title, options)
   return true
 }

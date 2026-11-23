@@ -15,6 +15,7 @@ import { hello, HostLink, type Dial, type LinkRoute } from '@shared/remote/link'
 import { startMediaWorker } from './media'
 import mediaWorker from './media-worker.ts?worker&url'
 import type { Paired } from '@shared/remote/pair'
+import { WebPush, type WebPushOptions } from './push'
 import type { WebSettings } from './settings'
 
 export interface LaunchOptions {
@@ -40,6 +41,12 @@ export interface LaunchOptions {
   removed(): void
   /** The names, or the welcome, changed: what the next start shows until the host says. */
   remember(known: { name: string; deviceName: string }, welcome: Welcome | null): void
+  /** The host's id on the relay as this browser paired with it, which its push key must give. */
+  relayId?: string
+  /** The account's other hosts, which a click on one's notification opens. */
+  others?: WebPushOptions['others']
+  /** The browser's push subscription went to the host. */
+  pushSynced?(): void
   /** What the hosted build puts in place of the served page's own, given the link and that API. */
   overrides?: (link: HostLink, api: KettuApi) => Partial<KettuApi>
   /** Called once `window.kettu` is set, before the app starts. */
@@ -60,11 +67,23 @@ export async function launchApp(options: LaunchOptions, root: HTMLElement): Prom
     visible: () => document.visibilityState === 'visible',
   })
   options.settings.attach(link)
+  const push = new WebPush({
+    link,
+    settings: () => options.settings.current(),
+    onSettingsChanged: (listener) => options.settings.onChanged(listener),
+    hostId: options.relayId ?? null,
+    ...(options.others ? { others: options.others } : {}),
+    ...(options.pushSynced ? { synced: options.pushSynced } : {}),
+  })
   const api = webApi(link, options.settings, {
     address: options.address,
     known,
-    forget: () => options.forget(link),
+    forget: async () => {
+      await push.forget()
+      await options.forget(link)
+    },
     storage: options.storage,
+    push,
   })
   Object.assign(window.kettu, api, options.overrides?.(link, api))
   options.ready?.()
@@ -98,7 +117,7 @@ export async function launchApp(options: LaunchOptions, root: HTMLElement): Prom
         state.welcome,
       )
     } else if (state.kind === 'stopped' && state.reason === 'removed') {
-      options.removed()
+      void push.forget().finally(() => options.removed())
     }
   })
   link.onMessage((message) => {
@@ -120,6 +139,7 @@ export async function launchApp(options: LaunchOptions, root: HTMLElement): Prom
   setRuntimeRelay((url, port) => attachRuntimePort(link, url, port))
   await bootstrap()
   renderApp(root)
+  push.start()
   return link
 }
 

@@ -71,7 +71,7 @@ interface Entry {
 /** Why a try failed: to try again, maybe after a wait the gateway asked for, or to give up. */
 type Failure = { retry: true; afterMs: number | null; reason: string } | { retry: false }
 
-function clip(text: string, max: number): string {
+export function clip(text: string, max: number): string {
   return text.length > max ? `${text.slice(0, max - 1)}…` : text
 }
 
@@ -282,7 +282,8 @@ export class PushSender {
   }
 }
 
-function withoutActions(event: PushEvent): PushEvent {
+/** The event without the answers a notification offers, which need its details to be seen. */
+export function withoutActions(event: PushEvent): PushEvent {
   if (event.kind !== 'permission' || !event.actions) return event
   const { kind, sessionId, requestId } = event
   return { kind, sessionId, ...(requestId === undefined ? {} : { requestId }) }
@@ -309,7 +310,7 @@ async function refusalOf(response: Response): Promise<PushRefusal | null> {
 }
 
 /** The wait a 429 or 503 asks for in seconds, as milliseconds; null when it asks none. */
-function retryAfter(response: Response): number | null {
+export function retryAfter(response: Response): number | null {
   const value = Number(response.headers.get('Retry-After'))
   return Number.isFinite(value) && value > 0 ? value * 1000 : null
 }
