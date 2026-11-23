@@ -1,7 +1,8 @@
 import { app, BrowserWindow, dialog, type WebContents } from 'electron'
 import type { BusySession, BusyTerminal } from '@shared/host-control'
-import type { QuitRequest, UnsavedFile } from '@shared/ipc'
+import type { QuitRequest, RunningWork, UnsavedFile } from '@shared/ipc'
 import type { SettingsFile } from '@shared/settings'
+import { restartWaitsFor } from '@shared/updates'
 import { sendEvent } from './events'
 import { t } from './i18n'
 import { createLogger } from './log'
@@ -22,13 +23,18 @@ export interface QuitDeps {
   installUpdate(): Promise<void>
   /** Update on a read-only volume: moves the app to /Applications; false when it stays. */
   moveApp(): Promise<boolean>
+  /** The user chose to restart to update once the working sessions finish. */
+  restartWhenIdle(): void
 }
 
 type Phase = 'idle' | 'asking' | 'stopping' | 'done'
 type QuitReason = Exclude<QuitRequest['reason'], 'close'> | 'move'
 
-/** Stop and go on, stay, or close the windows and keep the work running in the background. */
-export type QuitAnswer = boolean | 'background'
+/**
+ * Stop and go on, stay, close the windows and keep the work running in the background, or restart
+ * to update once the working sessions finish.
+ */
+export type QuitAnswer = boolean | 'background' | 'when-idle'
 
 interface PendingAnswer {
   request: QuitRequest
@@ -72,6 +78,15 @@ export class QuitFlow {
     return this.background || this.deps.settings().general.background
   }
 
+  /** What a restart would stop now, which the update dialog shows before it asks. */
+  async runningWork(): Promise<RunningWork> {
+    const [sessions, terminals] = await Promise.all([
+      this.deps.busySessions(BUSY_TIMEOUT_MS),
+      this.deps.busyTerminals(BUSY_TIMEOUT_MS),
+    ])
+    return { sessions, terminals }
+  }
+
   /** Quits and starts Kettu again with `relaunch`'s arguments, asking first as quitting does. */
   restart(relaunch: () => Electron.RelaunchOptions): void {
     if (this.phase !== 'idle') return
@@ -79,19 +94,25 @@ export class QuitFlow {
     this.request('restart')
   }
 
-  request(reason: QuitReason): void {
-    if (this.phase !== 'idle') return
-    void this.run(reason).catch((error: unknown) => {
+  /**
+   * Starts quitting, or restarting, unless that is under way already. `confirmed`: the user saw
+   * the running work and chose to stop it, so only unsaved files are asked about.
+   */
+  request(reason: QuitReason, confirmed = false): boolean {
+    if (this.phase !== 'idle') return false
+    void this.run(reason, confirmed).catch((error: unknown) => {
       log.error('Quit failed; quitting anyway', error)
       this.phase = 'done'
       app.quit()
     })
+    return true
   }
 
   /** The renderer's answer to `app:confirm-quit`. */
   respond(id: number, answer: QuitAnswer): void {
     if (this.pending?.request.id !== id) return
     if (answer === 'background' && !this.pending.request.keepRunning) return
+    if (answer === 'when-idle' && !this.pending.request.whenIdle) return
     this.pending.resolve(answer)
   }
 
@@ -170,6 +191,7 @@ export class QuitFlow {
         terminals: [],
         unsaved,
         keepRunning: false,
+        whenIdle: false,
       },
       window,
     )
@@ -179,17 +201,18 @@ export class QuitFlow {
     window.close()
   }
 
-  private async run(reason: QuitReason): Promise<void> {
+  private async run(reason: QuitReason, confirmed: boolean): Promise<void> {
     this.phase = 'asking'
     if (!this.systemShuttingDown) {
       // Unsaved edits are lost on quitting, so they ask whatever the setting says.
       const unsaved = this.unsavedFiles()
-      const [sessions, terminals] = this.deps.settings().general.confirmQuitWhileRunning
-        ? await Promise.all([
-            this.deps.busySessions(BUSY_TIMEOUT_MS),
-            this.deps.busyTerminals(BUSY_TIMEOUT_MS),
-          ])
-        : [[], []]
+      const [sessions, terminals] =
+        this.deps.settings().general.confirmQuitWhileRunning && !confirmed
+          ? await Promise.all([
+              this.deps.busySessions(BUSY_TIMEOUT_MS),
+              this.deps.busyTerminals(BUSY_TIMEOUT_MS),
+            ])
+          : [[], []]
       if (sessions.length > 0 || terminals.length > 0 || unsaved.length > 0) {
         const answer = await this.ask({
           id: this.nextId++,
@@ -198,9 +221,16 @@ export class QuitFlow {
           sessions,
           terminals,
           unsaved,
-          // Closing the windows would lose unsaved edits, and a restart cannot wait.
+          // Closing the windows would lose unsaved edits.
           keepRunning: reason === 'quit' && unsaved.length === 0,
+          whenIdle: reason === 'update' && sessions.some(restartWaitsFor),
         })
+        if (answer === 'when-idle') {
+          log.info('Restart to update turned into restarting once the working sessions finish')
+          this.phase = 'idle'
+          this.deps.restartWhenIdle()
+          return
+        }
         if (answer === 'background') {
           log.info('Quit turned into keeping the work running in the background')
           this.phase = 'idle'
@@ -226,8 +256,9 @@ export class QuitFlow {
     log.info(`Hosts stopped and state flushed in ${(performance.now() - started).toFixed(1)} ms`)
     this.phase = 'done'
     if (reason === 'update') {
-      setTimeout(() => app.quit(), INSTALL_FALLBACK_MS).unref()
+      // After the install starts: it may first wait for the update to be prepared.
       await this.deps.installUpdate()
+      setTimeout(() => app.quit(), INSTALL_FALLBACK_MS).unref()
     } else {
       if (reason === 'restart') app.relaunch(this.relaunch?.())
       app.quit()
@@ -284,10 +315,14 @@ export class QuitFlow {
 
   private async askNatively(pending: PendingAnswer): Promise<void> {
     pending.webContents = null
-    const { reason, sessions, terminals, unsaved, keepRunning } = pending.request
+    const { reason, sessions, terminals, unsaved, keepRunning, whenIdle } = pending.request
     const window = shownWindow()
-    const buttons = [t('quit.cancel'), confirmLabel(reason, unsaved.length > 0, keepRunning)]
+    const buttons = [
+      t('quit.cancel'),
+      confirmLabel(reason, unsaved.length > 0, keepRunning, whenIdle),
+    ]
     if (keepRunning) buttons.push(t('quit.keepRunning'))
+    else if (whenIdle) buttons.push(t('quit.restartWhenIdle'))
     const restarts = reason === 'update' || reason === 'restart'
     const options: Electron.MessageBoxOptions = {
       type: 'warning',
@@ -299,17 +334,17 @@ export class QuitFlow {
             : reason === 'close'
               ? t('quit.titleClose')
               : t('quit.titleQuit', { name: app.name }),
-      detail: describeWork(sessions, terminals, restarts, unsaved, reason, keepRunning),
+      detail: describeWork(sessions, terminals, restarts, unsaved, reason, keepRunning, whenIdle),
       buttons,
       cancelId: 0,
-      // Stopping can lose work, so keeping it running is the default where it is offered.
-      defaultId: keepRunning ? 2 : 1,
+      // Stopping can lose work, so keeping it running, or waiting for it, is the default.
+      defaultId: keepRunning || whenIdle ? 2 : 1,
       noLink: true,
     }
     const { response } = window
       ? await dialog.showMessageBox(window, options)
       : await dialog.showMessageBox(options)
-    pending.resolve(response === 2 ? 'background' : response === 1)
+    pending.resolve(response === 2 ? (keepRunning ? 'background' : 'when-idle') : response === 1)
   }
 }
 
@@ -323,8 +358,10 @@ function confirmLabel(
   reason: QuitRequest['reason'],
   unsaved: boolean,
   keepRunning: boolean,
+  whenIdle: boolean,
 ): string {
   if (keepRunning) return t('quit.stopAndQuit')
+  if (whenIdle && !unsaved) return t('quit.restartNow')
   if (reason === 'close') return t('quit.closeWithoutSaving')
   if (reason === 'update' || reason === 'restart') {
     return unsaved ? t('quit.restartWithoutSaving') : t('quit.restart')
@@ -339,6 +376,7 @@ export function describeWork(
   unsaved: UnsavedFile[] = [],
   reason: QuitRequest['reason'] = update ? 'update' : 'quit',
   keepRunning = false,
+  whenIdle = false,
 ): string {
   const lines: string[] = []
   const separator = t('quit.listSeparator')
@@ -354,7 +392,13 @@ export function describeWork(
   }
   if (lines.length > 0) {
     lines.push(
-      update ? t('quit.stopsForUpdate') : keepRunning ? t('quit.keepsRunning') : t('quit.stops'),
+      whenIdle
+        ? t('quit.waitsForUpdate')
+        : update
+          ? t('quit.stopsForUpdate')
+          : keepRunning
+            ? t('quit.keepsRunning')
+            : t('quit.stops'),
     )
   }
   if (unsaved.length > 0) {

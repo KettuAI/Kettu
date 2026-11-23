@@ -132,6 +132,14 @@ export interface QuitRequest {
   unsaved: UnsavedFile[]
   /** The work may keep running in the background, with the windows closed, instead of stopping. */
   keepRunning: boolean
+  /** A restart to update may wait for the working sessions to finish instead of stopping them. */
+  whenIdle: boolean
+}
+
+/** What a restart would stop, as the update dialog shows it. */
+export interface RunningWork {
+  sessions: BusySession[]
+  terminals: BusyTerminal[]
 }
 
 /** A project and the origins it always lets agents open, as Settings › Browser lists them. */
@@ -243,7 +251,10 @@ export interface IpcInvokeContract {
   'app:default-browser': { args: []; result: DefaultBrowser }
   'app:capture-rect': { args: [rect: PageRect]; result: Uint8Array | null }
   // true stops the work and goes on, false stays, 'background' closes the windows and keeps it running.
-  'app:respond-quit': { args: [id: number, answer: boolean | 'background']; result: void }
+  'app:respond-quit': {
+    args: [id: number, answer: boolean | 'background' | 'when-idle']
+    result: void
+  }
   'settings:get': { args: []; result: SettingsFile }
   'settings:update': { args: [patch: SettingsPatch]; result: SettingsFile }
   'login-item:status': { args: []; result: LoginItemStatus }
@@ -328,6 +339,10 @@ export interface IpcInvokeContract {
   'update:download': { args: []; result: void }
   'update:cancel': { args: []; result: void }
   'update:restart': { args: []; result: void }
+  'update:running-work': { args: []; result: RunningWork }
+  'update:restart-confirmed': { args: []; result: void }
+  'update:restart-when-idle': { args: []; result: void }
+  'update:cancel-restart-when-idle': { args: []; result: void }
   'update:dismiss': { args: []; result: void }
   'agent-host:restart': { args: []; result: void }
   'terminal-host:restart': { args: []; result: void }
@@ -652,7 +667,7 @@ export interface KettuApi {
     defaultBrowser(): Promise<DefaultBrowser>
     /** That part of this window as it is on screen, as PNG bytes; null where it cannot be read. */
     captureRect(rect: PageRect): Promise<Uint8Array | null>
-    respondQuit(id: number, answer: boolean | 'background'): Promise<void>
+    respondQuit(id: number, answer: boolean | 'background' | 'when-idle'): Promise<void>
     onConfirmQuit(listener: (request: QuitRequest) => void): () => void
     setUnsaved(files: UnsavedFile[]): void
     closeWindow(): void
@@ -981,7 +996,16 @@ export interface KettuApi {
     download(): Promise<void>
     /** Stops a download that `download()` started. */
     cancel(): Promise<void>
+    /** Restart into the ready update, asking first about the work it would stop. */
     restart(): Promise<void>
+    /** What a restart would stop now, for the update dialog to show before it asks. */
+    runningWork(): Promise<RunningWork>
+    /** Restart into the ready update from the dialog that showed the work it stops. */
+    restartConfirmed(): Promise<void>
+    /** Restart into the ready update by itself once the working sessions finish. */
+    restartWhenIdle(): Promise<void>
+    /** Stops waiting to restart; the update stays ready. */
+    cancelRestartWhenIdle(): Promise<void>
     dismiss(): Promise<void>
     onChanged(listener: (status: UpdateStatus) => void): () => void
   }

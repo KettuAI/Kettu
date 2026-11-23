@@ -3,7 +3,8 @@ import { i18n } from '@renderer/lib/i18n'
 
 /** The app's update notice, shown only when there is something to do. */
 export type AppUpdateNotice =
-  | { kind: 'ready'; version: string }
+  // waiting: the restart waits for this many working sessions to finish.
+  | { kind: 'ready'; version: string; waiting: number | null }
   // moves: on a read-only volume, Update moves the app to Applications first.
   | { kind: 'available'; version: string; moves: boolean }
   | { kind: 'moving'; version: string }
@@ -18,10 +19,19 @@ export function appUpdateNotice(
   if (!status) return null
   const { state } = status
   if (state.kind === 'moving') return { kind: 'moving', version: state.version }
-  if (state.kind === 'downloading' && state.manual && status.dismissed !== state.version)
+  // A newer release replacing a ready update keeps its notice up as the download.
+  if (
+    state.kind === 'downloading' &&
+    (state.manual || state.replaces) &&
+    status.dismissed !== state.version
+  )
     return { kind: 'downloading', version: state.version, percent: state.percent }
   if (state.kind === 'ready' && status.dismissed !== state.version)
-    return { kind: 'ready', version: state.version }
+    return {
+      kind: 'ready',
+      version: state.version,
+      waiting: status.restartWhenIdle?.sessions ?? null,
+    }
   if (state.kind === 'available' && status.dismissed !== state.version) {
     return state.mode === 'install'
       ? { kind: 'available', version: state.version, moves: status.readOnly }
@@ -61,14 +71,22 @@ export function appUpdateText(notice: AppUpdateNotice): AppUpdateText {
     href: string | null = null,
   ): AppUpdateText => ({ title, note, rowNote, action, actionLabel, href })
   switch (notice.kind) {
-    case 'ready':
+    case 'ready': {
+      const { waiting } = notice
+      const waitingNote =
+        waiting === null
+          ? null
+          : waiting > 0
+            ? i18n.t('updates:app.waiting', { count: waiting })
+            : i18n.t('updates:app.waitingSoon')
       return text(
         i18n.t('updates:app.ready', { version }),
-        i18n.t('updates:app.readyNote'),
-        i18n.t('updates:app.readyRow'),
+        waitingNote ?? i18n.t('updates:app.readyNote'),
+        waitingNote ?? i18n.t('updates:app.readyRow'),
         'restart',
         i18n.t('updates:app.restart'),
       )
+    }
     case 'available': {
       const note = i18n.t(notice.moves ? 'updates:app.moveNote' : 'updates:app.updateNote')
       return text(

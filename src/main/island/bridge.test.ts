@@ -725,6 +725,7 @@ describe('notices', () => {
       current: '0.1.13',
       updatedFrom: null,
       dismissed: null,
+      restartWhenIdle: null,
     }
     const s = setup([summary('s1')], {}, [], { updateStatus: () => status })
     await started(s)

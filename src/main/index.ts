@@ -21,7 +21,7 @@ import { guardKettuFetch } from '@shared/kettu-hosts'
 import { matchLocale, resolveLocale, type Locale } from '@shared/locale'
 import type { MarketAccount } from '@shared/market-publish'
 import { ARTIFACT_RECORDS, type HostAttention } from '@shared/remote/host-admin'
-import type { UpdateStatus } from '@shared/updates'
+import { restartWaitsFor, type UpdateStatus } from '@shared/updates'
 import { HOSTS_FILE, type HostsStatus } from '@shared/remote/hosts'
 import { PUSH_URL, PUSH_URL_ENV, pushUrlFrom } from '@shared/remote/push'
 import { RELAY_TOKENS_FEATURE, RELAY_URL, RELAY_URL_ENV, relayUrlFrom } from '@shared/remote/relay'
@@ -939,7 +939,8 @@ async function start(): Promise<void> {
   const updater = new Updater({
     appState,
     settings: () => settings.get(),
-    requestRestart: () => quit?.request('update'),
+    requestRestart: (confirmed) => quit?.request('update', confirmed) ?? false,
+    waitableSessions: async () => (await agentHost.busy(2000)).filter(restartWaitsFor).length,
     requestMove: () => quit?.request('move'),
     changed: (status) => {
       hostAdmin?.updatesChanged(status)
@@ -991,6 +992,10 @@ async function start(): Promise<void> {
     },
     installUpdate: () => updater.installNow(),
     moveApp: () => updater.moveNow(),
+    restartWhenIdle: () =>
+      void updater.restartWhenIdle().catch((error: unknown) => {
+        log.warn(`Could not wait to restart to update: ${String(error)}`)
+      }),
   })
   const quitFlow = quit
   checkForUpdates = () => void updater.check()

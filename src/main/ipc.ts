@@ -502,8 +502,13 @@ export function registerIpcHandlers({
   })
 
   handle('app:respond-quit', 2, (_, id, answer) => {
-    if (!Number.isSafeInteger(id) || (typeof answer !== 'boolean' && answer !== 'background')) {
-      throw new Error('"app:respond-quit" takes a request id and a boolean or "background"')
+    if (
+      !Number.isSafeInteger(id) ||
+      (typeof answer !== 'boolean' && answer !== 'background' && answer !== 'when-idle')
+    ) {
+      throw new Error(
+        '"app:respond-quit" takes a request id and a boolean, "background" or "when-idle"',
+      )
     }
     quit.respond(id as number, answer)
   })
@@ -694,6 +699,10 @@ export function registerIpcHandlers({
   handle('update:download', 0, () => updater.download())
   handle('update:cancel', 0, () => updater.cancel())
   handle('update:restart', 0, () => updater.restart())
+  handle('update:running-work', 0, () => quit.runningWork())
+  handle('update:restart-confirmed', 0, () => updater.restartConfirmed())
+  handle('update:restart-when-idle', 0, () => updater.restartWhenIdle())
+  handle('update:cancel-restart-when-idle', 0, () => updater.cancelRestartWhenIdle())
   handle('update:dismiss', 0, () => updater.dismiss())
 
   handle('agent-host:restart', 0, () => {

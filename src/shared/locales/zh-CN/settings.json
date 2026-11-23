@@ -1198,7 +1198,9 @@
       "none_web": "{{host}} 上的 Kettu 不在这里更新",
       "noneDetail": "这台电脑上的 Kettu 按安装它的方式更新。",
       "noneDetail_web": "{{host}} 上的 Kettu 按安装它的方式更新。",
-      "readyDetail": "重启后完成更新。你的会话会回来。"
+      "readyDetail": "重启后完成更新。你的会话会回来。",
+      "readyWaiting_other": "{{count}} 个会话完成后会自己重启。",
+      "readyWaitingSoon": "马上会自己重启。"
     },
     "automatic": {
       "name": "自动更新",
