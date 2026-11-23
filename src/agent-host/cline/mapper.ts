@@ -306,7 +306,10 @@ function resultContent(name: string, text: string): ToolContent[] {
   return [{ type: 'markdown', markdown: name === SHELL_TOOL ? fenced(body) : body }]
 }
 
-/** A request's tokens in Kettu's totals: Cline's input count holds what its cache served. */
+/**
+ * A request's tokens in Kettu's totals. Cline's input holds what its cache served and took, except
+ * from a provider of the user's own that counts it apart, whose input can then be under it.
+ */
 export function tokenTotals(usage: {
   inputTokens: number
   outputTokens: number
@@ -314,9 +317,11 @@ export function tokenTotals(usage: {
   cacheWriteTokens?: number
   reasoningTokenCount?: number
 }): TokenTotals {
+  const cached = (usage.cacheReadTokens ?? 0) + (usage.cacheWriteTokens ?? 0)
+  const held = usage.inputTokens >= cached ? cached : 0
   return {
-    total: usage.inputTokens + usage.outputTokens,
-    input: usage.inputTokens,
+    total: usage.inputTokens + usage.outputTokens + cached - held,
+    input: usage.inputTokens - held,
     output: usage.outputTokens,
     thought: usage.reasoningTokenCount ?? null,
     cacheRead: usage.cacheReadTokens ?? null,

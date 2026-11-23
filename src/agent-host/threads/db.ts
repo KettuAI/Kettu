@@ -74,7 +74,7 @@ import {
   type RuntimeStatements,
 } from './runtime-db'
 
-export const SCHEMA_VERSION = 12
+export const SCHEMA_VERSION = 13
 
 // `turn` is the position of the entry that opened the entry's turn, so a page that starts at a
 // turn is one range of the primary key.
@@ -276,6 +276,38 @@ const ARTIFACT_SEEN = `
   UPDATE artifacts SET seen = head;
 `
 
+/**
+ * How much of the input of the token counts at `at` in `json` is the cache's, read as the ACP
+ * mapper's `cachedInInput` reads a report: from what makes the total add up.
+ */
+function cachedInStored(json: string, at: string): string {
+  const count = (key: string) => `COALESCE(json_extract(${json}, '${at}.${key}'), 0)`
+  const [input, output, thought] = [count('input'), count('output'), count('thought')]
+  const [read, write] = [count('cacheRead'), count('cacheWrite')]
+  const fits = (apart: string) =>
+    `json_extract(${json}, '${at}.total') IN (${input} + ${output} + ${apart}, ${input} + ${output} + ${apart} + ${thought})`
+  return `(CASE
+    WHEN ${read} + ${write} = 0 OR ${fits(`${read} + ${write}`)} THEN 0
+    WHEN ${read} + ${write} <= ${input} AND ${fits('0')} THEN ${read} + ${write}
+    WHEN ${read} <= ${input} AND ${fits(write)} THEN ${read}
+    WHEN ${write} <= ${input} AND ${fits(read)} THEN ${write}
+    ELSE 0 END)`
+}
+
+/** Takes the cache out of the input of the token counts at `at` in `table`'s `json` column. */
+function cacheApart(table: string, json: string, at: string): string {
+  const held = cachedInStored(json, at)
+  return `
+  UPDATE ${table} SET ${json} = json_set(${json}, '${at}.input', json_extract(${json}, '${at}.input') - ${held})
+  WHERE json_type(${json}, '${at}') = 'object' AND ${held} > 0;`
+}
+
+// Token counts keep the cache apart from their input. Pi's, DeepSeek Harness's and Cline's, and
+// some ACP agents', held it in their input too, which counted it twice.
+const TOKENS_APART =
+  cacheApart('threads', 'session_json', '$.usage.tokens') +
+  cacheApart('routine_runs', 'json', '$.usage')
+
 /** What brings a database of the version before each key up to it; a new one runs them all. */
 const MIGRATIONS: Record<number, string> = {
   2: ARTIFACTS,
@@ -289,6 +321,7 @@ const MIGRATIONS: Record<number, string> = {
   10: ORIGINS,
   11: SET_ASIDE,
   12: ARTIFACT_SEEN,
+  13: TOKENS_APART,
 }
 
 /** The tables of a database at schema `version`, as a new one made then had them. */

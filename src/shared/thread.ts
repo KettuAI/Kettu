@@ -265,6 +265,7 @@ export interface PromptCache {
 
 export interface TokenTotals {
   total: number
+  /** Input neither read from nor written to the cache, which `cacheRead` and `cacheWrite` count. */
   input: number
   output: number
   thought: number | null

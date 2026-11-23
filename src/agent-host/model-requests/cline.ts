@@ -72,9 +72,10 @@ function tokens(metrics: Rec | null): RequestTokens {
   const read = num(metrics.cacheReadTokens)
   const written = num(metrics.cacheWriteTokens)
   const input = num(metrics.inputTokens)
+  const cached = (read ?? 0) + (written ?? 0)
   return {
-    // Cline's input count holds what the cache served and took.
-    input: input === null ? null : Math.max(0, input - (read ?? 0) - (written ?? 0)),
+    // Cline's input count holds what the cache served and took, unless it is under it.
+    input: input === null ? null : input >= cached ? input - cached : input,
     cacheRead: read,
     cacheWrite: written,
     cacheWrite1h: null,

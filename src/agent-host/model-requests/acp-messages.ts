@@ -13,6 +13,7 @@ import {
   type RequestTurn,
 } from '@shared/model-requests'
 import type { AgentId } from '@shared/thread'
+import { cachedInInput } from '../acp/mapper'
 import { t } from '../i18n'
 import { arr, emptyTokens, num, obj, preview, str, summarizeActions } from './claude-transcript'
 import { foldAll, type ModelRequestsReader } from './reader'
@@ -101,13 +102,29 @@ const TOOL_KINDS: Record<string, RequestActionKind> = {
 /** ACP's draft usage on a prompt's result, when the agent reports it. */
 function acpTokens(usage: Rec | null): RequestTokens {
   if (!usage) return emptyTokens()
+  const input = num(usage.inputTokens)
+  const cacheRead = num(usage.cachedReadTokens)
+  const cacheWrite = num(usage.cachedWriteTokens)
+  const output = num(usage.outputTokens)
+  const reasoning = num(usage.thoughtTokens)
+  const held =
+    input === null || output === null
+      ? 0
+      : cachedInInput({
+          total: num(usage.totalTokens),
+          input,
+          output,
+          thought: reasoning,
+          cacheRead,
+          cacheWrite,
+        })
   return {
-    input: num(usage.inputTokens),
-    cacheRead: num(usage.cachedReadTokens),
-    cacheWrite: num(usage.cachedWriteTokens),
+    input: input === null ? null : input - held,
+    cacheRead,
+    cacheWrite,
     cacheWrite1h: null,
-    output: num(usage.outputTokens),
-    reasoning: num(usage.thoughtTokens),
+    output,
+    reasoning,
   }
 }
 

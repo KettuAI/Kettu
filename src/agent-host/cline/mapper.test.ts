@@ -398,9 +398,13 @@ describe('Cline tool facts', () => {
     expect(outputText('plain')).toBe('plain')
   })
 
-  it("counts a request's tokens with the cache inside its input", () => {
+  it("takes the cache out of a request's input, which Cline counts inside it", () => {
     expect(
       tokenTotals({ inputTokens: 100, outputTokens: 20, cacheReadTokens: 60, cacheWriteTokens: 5 }),
-    ).toEqual({ total: 120, input: 100, output: 20, thought: null, cacheRead: 60, cacheWrite: 5 })
+    ).toEqual({ total: 120, input: 35, output: 20, thought: null, cacheRead: 60, cacheWrite: 5 })
+    // A provider of the user's own that counts the cache apart.
+    expect(
+      tokenTotals({ inputTokens: 10, outputTokens: 20, cacheReadTokens: 60, cacheWriteTokens: 5 }),
+    ).toEqual({ total: 95, input: 10, output: 20, thought: null, cacheRead: 60, cacheWrite: 5 })
   })
 })

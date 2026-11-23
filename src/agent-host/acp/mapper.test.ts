@@ -1690,6 +1690,47 @@ describe('extensions and helpers', () => {
     expect(mapModelUsage({ quota: { model_usage: 'x' } })).toEqual([])
   })
 
+  it('keeps the cache out of the input, whichever way the agent counted it', () => {
+    const usage = (totalTokens: number, inputTokens: number, more: object = {}) => ({
+      totalTokens,
+      inputTokens,
+      outputTokens: 20,
+      cachedReadTokens: 3000,
+      cachedWriteTokens: 50,
+      ...more,
+    })
+    const input = (u: ReturnType<typeof usage>) => mapTokenTotals(u)?.input
+    // Counted apart, with the reasoning inside the output or beside it.
+    expect(input(usage(3170, 100))).toBe(100)
+    expect(input(usage(3175, 100, { thoughtTokens: 5 }))).toBe(100)
+    // Held in the input, as an OpenAI or Gemini count holds it.
+    expect(input(usage(3170, 3150))).toBe(100)
+    expect(input(usage(3175, 3150, { thoughtTokens: 5 }))).toBe(100)
+    // The reads held, the writes apart.
+    expect(input(usage(3170, 3100))).toBe(100)
+    // A total that adds up neither way, or an input under its cache, is taken as it stands.
+    expect(input(usage(9999, 3150))).toBe(3150)
+    expect(input(usage(120, 100))).toBe(100)
+    expect(input(usage(120, 100, { cachedReadTokens: null, cachedWriteTokens: null }))).toBe(100)
+    const codex = {
+      quota: {
+        model_usage: [
+          {
+            model: 'gpt-5.6-sol',
+            token_count: {
+              inputTokens: 3100,
+              cachedInputTokens: 3000,
+              outputTokens: 20,
+              reasoningOutputTokens: 5,
+              totalTokens: 3120,
+            },
+          },
+        ],
+      },
+    }
+    expect(mapModelUsage(codex)[0]?.tokens).toMatchObject({ total: 3120, input: 100 })
+  })
+
   it('maps token totals and prompt content', () => {
     expect(mapTokenTotals(null)).toBeNull()
     expect(

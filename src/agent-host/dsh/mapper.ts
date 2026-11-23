@@ -228,15 +228,14 @@ function resultContent(name: string, text: string): ToolContent[] {
   return [{ type: 'markdown', markdown: cut(toLf(text)) }]
 }
 
-/** A step's tokens in Kettu's totals: dsh's counts do not overlap. */
+/** A step's tokens in Kettu's totals: dsh's counts do not overlap, as Kettu's do not. */
 export function tokenTotals(usage: EventData['assistant/message']['usage']): TokenTotals | null {
   if (!usage) return null
   const cacheRead = usage.cacheReadTokens ?? null
   const cacheWrite = usage.cacheWriteTokens ?? null
-  const input = usage.inputTokens + (cacheRead ?? 0) + (cacheWrite ?? 0)
   return {
-    total: input + usage.outputTokens,
-    input,
+    total: usage.inputTokens + (cacheRead ?? 0) + (cacheWrite ?? 0) + usage.outputTokens,
+    input: usage.inputTokens,
     output: usage.outputTokens,
     thought: usage.reasoningTokens ?? null,
     cacheRead,
