@@ -147,6 +147,8 @@ jobs:
       - run: pnpm build
         env:
           MAIN_VITE_UPDATE_MODE: ${{ matrix.update_mode }}
+          # The renderer type check needs about 2.5 GB, over Node's default heap on the macOS runners.
+          NODE_OPTIONS: --max-old-space-size=4096
       # The daemon has no Intel macOS package; the Intel build ships the desktop app only.
       - name: Package the daemon
         if: runner.os != 'Windows' && matrix.target != '--mac --x64'
