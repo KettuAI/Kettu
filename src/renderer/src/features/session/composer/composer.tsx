@@ -722,8 +722,6 @@ export function Composer({
           ) : (
             <ModelMenu
               agentId={session.agentId}
-              hostId={hostId}
-              agentName={agent?.name ?? agentName}
               harness={agent?.harnessName ?? agentName}
               config={config}
               running={running}

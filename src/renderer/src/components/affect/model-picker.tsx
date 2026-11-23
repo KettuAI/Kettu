@@ -43,49 +43,46 @@ export type PickerModel = {
   latencyMs?: number;
   /** Price per million output tokens, in dollars */
   pricePerM?: number;
-  /** Kettu: a tag after the name, such as Default */
-  badge?: ReactNode;
-  /** Kettu: something at the row's end, such as a pin button */
-  end?: ReactNode;
   /** Kettu: the heading More models shows the model under, such as its provider */
   group?: string;
+  /** Kettu: the name its row shows; the trigger and the row's tooltip keep `name` */
+  short?: string;
 };
 
+// Kettu: an agent's own levels, such as max, so any id
 export type ModelEffort = string;
 
-/** A switch of your own in place of Extended thinking and Web search */
+/** Kettu: a switch of the agent's own in place of Extended thinking and Web search */
 export type PickerToggle = {
   id: string;
   label: string;
   icon?: ReactNode;
   /** What the last row says while the switch is pointed at */
   hint?: string;
-  defaultOn?: boolean;
+  on: boolean;
   disabled?: boolean;
-  /** Shows "· label" on the trigger while on, unfolding and folding away like a flag */
-  indicator?: boolean;
   /** Unfolds the switch's icon next to the model name while on, like the thinking bulb */
   flag?: boolean;
-  /** The label as the row and the trigger show it while on, such as words with a light running through them */
+  /** Kettu: shows "· label" on the trigger while on, unfolding and folding away like a flag */
+  indicator?: boolean;
+  /** Kettu: the label as the row and the trigger show it while on, such as words with a light running through them */
   onLabel?: ReactNode;
-  /** A background for the menu while the switch is on, such as a glow rising from its bottom edge; it fades in and out */
+  /** Kettu: a background for the menu while the switch is on, such as a glow rising from its bottom edge; it fades in and out */
   effect?: ReactNode;
-  /** Whether it is on (controlled); report changes through `onToggle` */
-  on?: boolean;
 };
 
-/** A row under the switches that does something else, such as opening another menu; the picker closes first. */
+/** Kettu: a row under the switches that does something else, such as Switch agent; the picker closes first */
 export type PickerAction = {
   id: string;
   label: string;
   icon?: ReactNode;
-  /** The caption while it is pointed at, such as why it is unavailable. */
+  /** The caption while it is pointed at, such as why it is unavailable */
   hint?: string;
   disabled?: boolean;
   onSelect: () => void;
 };
 
-/** Words the picker shows and says – pass your own to translate them */
+/** Kettu: the words the picker shows and says, translated */
 export type PickerLabels = {
   model: string;
   settings: string;
@@ -139,49 +136,34 @@ export type ModelPickerProps = {
   onOpenChange?: (open: boolean) => void;
   /** Which edge of the trigger the menu lines up with */
   align?: "start" | "end";
-  /** Whether the menu opens below or above the trigger – above suits a composer at the bottom of the screen. When that
-   * side has too little room and the other has more, it opens on the other side */
+  /** Whether the menu opens below or above the trigger – above suits a composer at the bottom of the screen */
+  /** Kettu: when that side has too little room and the other has more, it opens on the other side */
   side?: "bottom" | "top";
   className?: string;
-  /** Your own line on top of the list, in place of "Model" */
-  heading?: ReactNode;
-  /** Your own effort levels; the first one is the default and the control shows without thinking */
-  /** Kettu: `trigger: false` keeps a level off the trigger, such as the agent's default */
+  /** Kettu: the agent's levels; the effort control then shows without thinking and the trigger names the level */
+  /** `trigger: false` keeps a level off the trigger, such as the agent's default */
   efforts?: { id: string; label: string; trigger?: false }[];
   effortLabel?: string;
-  /** What the last row says while the effort control is pointed at */
+  /** Kettu: what the last row says while the effort control is pointed at */
   effortHint?: string;
-  /** Your own switches in place of Extended thinking and Web search */
-  toggles?: PickerToggle[];
-  /** Rows after the switches that act rather than choose. */
-  actions?: PickerAction[];
-  /** Models behind a "More models" row, with a search field */
-  more?: PickerModel[];
-  /** Number keys 1–4 on the first rows */
-  keys?: boolean;
-  /** What the last row says for models without first-token time or price, in place of their description */
-  note?: ReactNode;
-  /** A switch was flipped; with `on` on the toggles the parent keeps their values */
-  onToggle?: (id: string, on: boolean) => void;
-  /** A quiet line at the foot of the More models card, such as where the list comes from */
-  moreNote?: ReactNode;
-  /** Something before the glyph on the trigger, such as a warning dot */
-  triggerLead?: ReactNode;
-  /** The trigger's accessible name in place of "Model: …" */
-  triggerLabel?: string;
-  labels?: Partial<PickerLabels>;
-  /** Kettu: the trigger's glyph in place of the chosen model's */
-  triggerIcon?: ReactNode;
-  /** Kettu: something on the right of the line on top, such as a button */
-  headingEnd?: ReactNode;
-  /** Kettu: your own effort control in place of the levels' track */
+  /** Kettu: your own effort control in place of the levels */
   effortSlot?: ReactNode;
-  /** Kettu: your own controls in place of the switches' rows; the toggles still flag the trigger */
-  toggleSlot?: ReactNode;
-  /** Kettu: false drops the last row, which then only speaks to screen readers */
-  foot?: boolean;
+  /** Kettu: the agent's switches in place of Extended thinking and Web search */
+  toggles?: PickerToggle[];
+  onToggle?: (id: string, on: boolean) => void;
+  /** Kettu: rows after the switches that act rather than choose */
+  actions?: PickerAction[];
+  /** Kettu: models behind a More models row, in a card beside the menu with a search field */
+  more?: PickerModel[];
   /** Kettu: whether a model of More models matches the search, in place of its name containing it */
   moreFilter?: (model: PickerModel, query: string) => boolean;
+  /** Kettu: a quiet line at the foot of the More models card, such as where the list comes from */
+  moreNote?: ReactNode;
+  /** Kettu: something before the glyph on the trigger, such as a warning dot */
+  triggerLead?: ReactNode;
+  /** Kettu: the trigger's accessible name in place of "Model: …" */
+  triggerLabel?: string;
+  labels?: Partial<PickerLabels>;
 };
 
 /* ---------- Helpers ---------- */
@@ -192,7 +174,7 @@ const EFFORTS: { id: ModelEffort; label: string }[] = [
   { id: "high", label: "High" },
 ];
 /** How much longer the first token takes while the model thinks first */
-const THINK_FACTOR: Record<ModelEffort, number> = { low: 1.6, medium: 2.5, high: 4 };
+const THINK_FACTOR: Record<ModelEffort, number | undefined> = { low: 1.6, medium: 2.5, high: 4 };
 const STRENGTHS = [
   { key: "speed", label: "Speed" },
   { key: "quality", label: "Quality" },
@@ -257,9 +239,9 @@ function useRolling(target: Record<string, number>, duration: number) {
 
 /**
  * Text that changes without a jump: the old line stays for a moment and fades out underneath while the new one fades in.
- * Quick changes just retarget – nothing piles up. With `glide` its width also glides to the new text's, as the flags do.
+ * Quick changes just retarget – nothing piles up.
  */
-function Swap({ id, children, glide = false }: { id: string; children: ReactNode; glide?: boolean }) {
+function Swap({ id, children }: { id: string; children: ReactNode }) {
   type Line = { id: string; node: ReactNode };
   const last = useRef<Line>({ id, node: children });
   const [shownId, setShownId] = useState(id);
@@ -274,52 +256,18 @@ function Swap({ id, children, glide = false }: { id: string; children: ReactNode
     const timer = window.setTimeout(() => setOut(null), 260);
     return () => window.clearTimeout(timer);
   }, [out]);
-  // The new line's own width, read before paint; the box then glides there from the old one
-  const inRef = useRef<HTMLSpanElement>(null);
-  const [width, setWidth] = useState<number | null>(null);
-  useLayoutEffect(() => {
-    if (glide && inRef.current) setWidth(inRef.current.scrollWidth);
-  }, [glide, id]);
   return (
-    <span className="ui-mdpc__swap" data-glide={glide ? "" : undefined} style={glide && width !== null ? { width } : undefined}>
+    <span className="ui-mdpc__swap">
       {out && (
         <span key={`out-${out.id}`} className="ui-mdpc__swap-item" data-out="" aria-hidden="true">
           {out.node}
         </span>
       )}
-      <span key={id} ref={inRef} className="ui-mdpc__swap-item" dir="auto">
+      <span key={id} className="ui-mdpc__swap-item" dir="auto">
         {children}
       </span>
     </span>
   );
-}
-
-/** Kettu: where the menu can show – the window, narrowed by any ancestor that clips, such as a pane of a split view or a screen's scroller. */
-function shownBounds(el: Element | null): { left: number; right: number; top: number; bottom: number } {
-  let left = 0;
-  let right = document.documentElement.clientWidth;
-  let top = 0;
-  let bottom = document.documentElement.clientHeight;
-  for (let e = el?.parentElement; e; e = e.parentElement) {
-    const style = getComputedStyle(e);
-    const box = e.getBoundingClientRect();
-    if (style.overflowX !== "visible") {
-      left = Math.max(left, box.left);
-      right = Math.min(right, box.right);
-    }
-    if (style.overflowY !== "visible") {
-      top = Math.max(top, box.top);
-      bottom = Math.min(bottom, box.bottom);
-    }
-  }
-  return { left, right, top, bottom };
-}
-
-/** Kettu: right of the menu when the card fits there, else the side with more room. */
-function flySideFor(menuLeft: number, menuRight: number, start: number, end: number, width: number): "right" | "left" {
-  const right = end - 12 - (menuRight + 6);
-  const left = menuLeft - 6 - (start + 12);
-  return right >= width || right >= left ? "right" : "left";
 }
 
 /* ---------- Icons ---------- */
@@ -360,6 +308,34 @@ function Glyph({ model }: { model: PickerModel }) {
   );
 }
 
+/** Kettu: where the menu can show – the window, narrowed by any ancestor that clips, such as a pane of a split view or a screen's scroller. */
+function shownBounds(el: Element | null): { left: number; right: number; top: number; bottom: number } {
+  let left = 0;
+  let right = document.documentElement.clientWidth;
+  let top = 0;
+  let bottom = document.documentElement.clientHeight;
+  for (let e = el?.parentElement; e; e = e.parentElement) {
+    const style = getComputedStyle(e);
+    const box = e.getBoundingClientRect();
+    if (style.overflowX !== "visible") {
+      left = Math.max(left, box.left);
+      right = Math.min(right, box.right);
+    }
+    if (style.overflowY !== "visible") {
+      top = Math.max(top, box.top);
+      bottom = Math.min(bottom, box.bottom);
+    }
+  }
+  return { left, right, top, bottom };
+}
+
+/** Kettu: right of the menu when the More models card fits there, else the side with more room. */
+function flySideFor(menuLeft: number, menuRight: number, start: number, end: number, width: number): "right" | "left" {
+  const right = end - 12 - (menuRight + 6);
+  const left = menuLeft - 6 - (start + 12);
+  return right >= width || right >= left ? "right" : "left";
+}
+
 type OptionProps = {
   model: PickerModel;
   index: number;
@@ -367,19 +343,20 @@ type OptionProps = {
   selected: boolean;
   active: boolean;
   lit: boolean;
+  labels: PickerLabels;
   onPoint: (index: number) => void;
   onPick: (index: number) => void;
 };
 
 /** One model row – memoized, so pointing at a row in a long list stays quick */
-const Option = memo(function Option({ model: m, index: i, optionId, selected, active, lit, varies, onPoint, onPick }: OptionProps & { varies: string }) {
+const Option = memo(function Option({ model: m, index: i, optionId, selected, active, lit, labels, onPoint, onPick }: OptionProps) {
   const rated = m.speed !== undefined || m.quality !== undefined || m.cost !== undefined;
   return (
     <div
       id={optionId}
       role="option"
       aria-selected={selected}
-      aria-label={`${m.name}${m.description ? `, ${m.description}` : ""}${rated ? `. Speed ${clamp(m.speed ?? 0)}, quality ${clamp(m.quality ?? 0)}, cost ${clamp(m.cost ?? 0)} of 5` : ""}`}
+      aria-label={`${m.name}${m.description ? `, ${m.description}` : ""}${rated ? `. ${labels.speed} ${clamp(m.speed ?? 0)}/5, ${labels.quality} ${clamp(m.quality ?? 0)}/5, ${labels.cost} ${clamp(m.cost ?? 0)}/5` : ""}`}
       className="ui-mdpc__option"
       data-active={active ? "" : undefined}
       data-lit={lit ? "" : undefined}
@@ -393,9 +370,8 @@ const Option = memo(function Option({ model: m, index: i, optionId, selected, ac
       <span className="ui-mdpc__text">
         <span className="ui-mdpc__title">
           <span className="ui-mdpc__title-name" dir="auto" title={m.name}>
-            {m.name}
+            {m.short ?? m.name}
           </span>
-          {m.badge}
           {selected && <CheckIcon />}
         </span>
         {m.description && (
@@ -419,16 +395,15 @@ const Option = memo(function Option({ model: m, index: i, optionId, selected, ac
         </span>
       ) : (
         <span className="ui-mdpc__varies" aria-hidden="true">
-          {varies}
+          {labels.varies}
         </span>
       )}
-      {m.end}
     </div>
   );
 });
 
 export function ModelPicker({
-  models: baseModels,
+  models,
   value,
   defaultValue,
   onChange,
@@ -447,50 +422,34 @@ export function ModelPicker({
   align = "start",
   side = "bottom",
   className,
-  heading,
-  efforts = EFFORTS,
+  efforts,
   effortLabel = "Effort",
   effortHint,
+  effortSlot,
   toggles,
-  actions,
-  more = [],
-  keys = false,
-  note,
   onToggle,
-  moreNote,
+  actions,
   triggerLead,
   triggerLabel,
   labels: ownLabels,
-  triggerIcon,
-  headingEnd,
-  effortSlot,
-  toggleSlot,
-  foot = true,
+  more = [],
   moreFilter,
+  moreNote,
 }: ModelPickerProps) {
   const labels = { ...defaultLabels, ...ownLabels };
-  const uid = useId();
-  // More models open in a second card beside the menu, with a search field
+  // Kettu: More models open in a second card beside the menu, with a search field
   const [flyOpen, setFlyOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [flyActive, setFlyActive] = useState(0);
   const q = query.trim().toLowerCase();
   const shownMore = more.filter((m) => (moreFilter ? moreFilter(m, q) : m.name.toLowerCase().includes(q)));
-  const models = baseModels;
+  // Kettu: an agent's own levels, or none for an agent without them
+  const levels: { id: string; label: string; trigger?: false }[] = efforts ?? EFFORTS;
+  const ownEffort = efforts !== undefined && efforts.length > 0;
+  // The levels' ids, so the thumb is measured again when they change but not on every render
+  const levelIds = levels.map((x) => x.id).join(" ");
   const anyRated = models.some((m) => m.speed !== undefined || m.quality !== undefined || m.cost !== undefined);
-  // An empty list is an agent without levels: no row, and no level on the trigger
-  const ownEffort = efforts !== EFFORTS && efforts.length > 0;
-  const [ownToggleOn, setToggleOn] = useState<Record<string, boolean>>(() =>
-    Object.fromEntries((toggles ?? []).map((t) => [t.id, !!t.defaultOn])),
-  );
-  // A switch given `on` follows it; the others keep their own value
-  const toggleOn: Record<string, boolean> = { ...ownToggleOn };
-  for (const t of toggles ?? []) if (t.on !== undefined) toggleOn[t.id] = t.on;
-  const flip = (id: string) => {
-    const next = !toggleOn[id];
-    setToggleOn((on) => ({ ...on, [id]: next }));
-    onToggle?.(id, next);
-  };
+  const uid = useId();
   const rootRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
@@ -499,7 +458,7 @@ export function ModelPicker({
   const [innerValue, setInnerValue] = useState(defaultValue ?? models[0]?.id);
   const [innerThinking, setInnerThinking] = useState(defaultThinking);
   const [innerSearch, setInnerSearch] = useState(defaultWebSearch);
-  const [innerEffort, setInnerEffort] = useState<ModelEffort>(ownEffort && defaultEffort === "medium" ? efforts[0].id : defaultEffort);
+  const [innerEffort, setInnerEffort] = useState<ModelEffort>(defaultEffort);
   const [innerOpen, setInnerOpen] = useState(defaultOpen);
   const chosenId = value ?? innerValue;
   const isThinking = thinking ?? innerThinking;
@@ -507,8 +466,8 @@ export function ModelPicker({
   const effortNow = effort ?? innerEffort;
   const isOpen = open ?? innerOpen;
 
-  // The chosen model may be one of the more models; then no row of the main list is checked
-  const chosen = baseModels.concat(more).find((m) => m.id === chosenId) ?? models[0];
+  // Kettu: the chosen model may be one of More models; then no row of the list is checked
+  const chosen = models.concat(more).find((m) => m.id === chosenId) ?? models[0];
   const chosenIndex = models.findIndex((m) => m.id === chosen?.id);
   const startIndex = Math.max(0, chosenIndex);
 
@@ -516,6 +475,7 @@ export function ModelPicker({
   const [active, setActive] = useState(startIndex);
   const [pointing, setPointing] = useState(false);
   /** A switch under the pointer or the focus – the last row then talks about it */
+  /** Kettu: also `toggle:<id>`, `action:<id>` and `effort` */
   const [hint, setHint] = useState<string | null>(null);
 
   const lit = models[pointing ? active : chosenIndex] ?? chosen;
@@ -552,9 +512,12 @@ export function ModelPicker({
   // Near the edge of the screen the menu slides in just enough to stay whole
   const popRef = useRef<HTMLDivElement>(null);
   const [shift, setShift] = useState(0);
+  // Kettu: the side the menu opens on, and the height it may take when neither side has room for all of it
   const [placedSide, setPlacedSide] = useState(side);
-  // A switch's effect shows while the menu is open and the switch is on, and stays a moment to fade out
-  const glowId = isOpen ? toggles?.find((t) => t.effect && toggleOn[t.id])?.id : undefined;
+  const [room, setRoom] = useState<number | null>(null);
+  const [lift, setLift] = useState(0);
+  // Kettu: a switch's effect shows while the menu is open and the switch is on, and stays a moment to fade out
+  const glowId = isOpen ? toggles?.find((t) => t.effect && t.on)?.id : undefined;
   const [glow, setGlow] = useState<{ id: string; leaving?: boolean } | null>(null);
   useEffect(() => {
     if (glowId) {
@@ -565,8 +528,6 @@ export function ModelPicker({
     const timer = window.setTimeout(() => setGlow(null), 420);
     return () => window.clearTimeout(timer);
   }, [glowId]);
-  // The height the menu may take when neither side has room for all of it; its list of models scrolls
-  const [room, setRoom] = useState<number | null>(null);
   const [flySide, setFlySide] = useState<"right" | "left">("right");
   useLayoutEffect(() => {
     if (!isOpen) return;
@@ -574,11 +535,10 @@ export function ModelPicker({
       const trigger = triggerRef.current?.getBoundingClientRect();
       const width = popRef.current?.offsetWidth ?? 0;
       if (!trigger || !width) return;
-      const { left: start, right: room, top: ceiling, bottom: floor } = shownBounds(rootRef.current);
+      const { left: start, right: end, top: ceiling, bottom: floor } = shownBounds(rootRef.current);
       const left = align === "end" ? trigger.right - width : trigger.left;
       const margin = 12;
-      // The asked-for side unless the menu doesn't fit there and the other side has more room; measured at its full
-      // height, without the limit an earlier measure set
+      // Measured at its full height, without the limit an earlier measure set
       const pop = popRef.current;
       const limit = pop?.style.getPropertyValue("--ui-mdpc-room") ?? "";
       pop?.style.removeProperty("--ui-mdpc-room");
@@ -586,20 +546,27 @@ export function ModelPicker({
       if (limit) pop?.style.setProperty("--ui-mdpc-room", limit);
       const above = trigger.top - ceiling - 6 - margin;
       const below = floor - trigger.bottom - 6 - margin;
-      const fits = (side === "top" ? above : below) >= height;
+      // A menu a little taller than the room reaches into the margin rather than flip, staying 2px off the
+      // edge so it adds no scroll to a scroller it sits in
+      const reach = margin - 2;
+      const fits = (side === "top" ? above : below) + reach >= height;
       const placed = fits ? side : side === "top" ? (below > above ? "bottom" : "top") : above > below ? "top" : "bottom";
-      const avail = placed === "top" ? above : below;
+      const avail = (placed === "top" ? above : below) + reach;
+      // Taller still, it slides towards its trigger to stay whole; only a view too short for all of it scrolls it
+      const span = floor - ceiling - 4;
+      const over = height > avail ? Math.min(height, span) - avail : 0;
       setPlacedSide(placed);
-      setRoom(height > avail ? Math.max(200, avail) : null);
+      setLift(placed === "top" ? over : -over);
+      setRoom(height > span ? Math.max(200, span) : null);
       const next =
         left < start + margin
           ? start + margin - left
-          : left + width > room - margin
-            ? Math.min(0, room - margin - (left + width))
+          : left + width > end - margin
+            ? Math.min(0, end - margin - (left + width))
             : 0;
       setShift(next);
-      // The more models card (260px) goes right of the menu when it fits, else left; the row's chevron points there
-      setFlySide(flySideFor(left + next, left + next + width, start, room, 260));
+      // The More models card (260px) goes right of the menu when it fits, else left; its row's chevron points there
+      setFlySide(flySideFor(left + next, left + next + width, start, end, 260));
     };
     measure();
     window.addEventListener("resize", measure);
@@ -628,7 +595,7 @@ export function ModelPicker({
   };
   const pick = (index: number) => pickModel(models[index]);
 
-  /* ---------- The more models card ---------- */
+  /* ---------- Kettu: the More models card ---------- */
 
   const moreRef = useRef<HTMLDivElement>(null);
   const moreBtnRef = useRef<HTMLButtonElement>(null);
@@ -637,7 +604,7 @@ export function ModelPicker({
   const flyTimer = useRef(0);
   const [flyTop, setFlyTop] = useState(0);
   const [flyNudge, setFlyNudge] = useState(0);
-  const openFly =(focus: boolean) => {
+  const openFly = (focus: boolean) => {
     window.clearTimeout(flyTimer.current);
     if (!flyOpen) setFlyActive(0);
     setFlyOpen(true);
@@ -673,7 +640,7 @@ export function ModelPicker({
     const width = fly.offsetWidth;
     const placed = flySideFor(box.left, box.right, start, end, width);
     setFlySide(placed);
-    // Kettu: with too little room on either side the card slides over the menu's edge to stay whole
+    // With too little room on either side the card slides over the menu's edge to stay whole
     setFlyNudge(
       placed === "right"
         ? Math.min(0, end - 12 - (box.right + 6 + width))
@@ -759,26 +726,17 @@ export function ModelPicker({
   useLayoutEffect(() => {
     const btn = segRef.current?.querySelector<HTMLElement>(`[data-effort="${effortNow}"]`);
     if (btn) setThumb({ x: btn.offsetLeft, w: btn.offsetWidth });
-  }, [effortNow, isOpen, isThinking]);
+  }, [effortNow, isOpen, isThinking, levelIds]);
   const onEffortKey = (e: KeyboardEvent) => {
-    const i = efforts.findIndex((x) => x.id === effortNow);
+    const i = levels.findIndex((x) => x.id === effortNow);
     const step = e.key === "ArrowRight" || e.key === "ArrowDown" ? 1 : e.key === "ArrowLeft" || e.key === "ArrowUp" ? -1 : 0;
     if (!step) return;
     e.preventDefault();
-    const next = efforts[(i + step + efforts.length) % efforts.length];
+    const next = levels[(i + step + levels.length) % levels.length];
     chooseEffort(next.id);
     rootRef.current?.querySelector<HTMLElement>(`[data-effort="${next.id}"]`)?.focus();
   };
   const onRootKey = (e: KeyboardEvent) => {
-    // 1 to 4 pick the first rows, as their keys show, except while typing in the search field
-    if (keys && isOpen && /^[1-4]$/.test(e.key) && !e.metaKey && !e.ctrlKey && !e.altKey && !(e.target instanceof HTMLInputElement)) {
-      const index = Number(e.key) - 1;
-      if (models[index]) {
-        e.preventDefault();
-        pick(index);
-      }
-      return;
-    }
     if (e.key !== "Escape" || !isOpen) return;
     e.stopPropagation();
     setOpen(false, "trigger");
@@ -786,7 +744,7 @@ export function ModelPicker({
 
   /* ---------- What the last row says ---------- */
 
-  const factor = isThinking ? THINK_FACTOR[effortNow] : 1;
+  const factor = (isThinking ? THINK_FACTOR[effortNow] : 1) ?? 1;
   const litLatency = finite(lit?.latencyMs);
   const litPrice = finite(lit?.pricePerM);
   const latency = (litLatency ?? 0) * factor;
@@ -799,13 +757,13 @@ export function ModelPicker({
   let spoken: string;
   const pointedToggle = toggles?.find((t) => hint === `toggle:${t.id}`);
   const pointedAction = actions?.find((a) => hint === `action:${a.id}` && a.hint);
-  if (pointedAction) {
+  if (pointedAction?.hint) {
     caption = pointedAction.hint;
-    captionKey = hint as string;
-    spoken = pointedAction.hint as string;
+    captionKey = `action-${pointedAction.id}`;
+    spoken = pointedAction.hint;
   } else if (pointedToggle) {
     caption = pointedToggle.hint ?? pointedToggle.label;
-    captionKey = hint as string;
+    captionKey = `toggle-${pointedToggle.id}-${pointedToggle.on}`;
     spoken = caption as string;
   } else if (hint === "effort" && effortHint) {
     caption = effortHint;
@@ -815,10 +773,6 @@ export function ModelPicker({
     caption = isSearching ? "Looks things up on the web when it helps" : "Answers from what it already knows";
     captionKey = `search-${isSearching}`;
     spoken = caption as string;
-  } else if (!hasStats && note != null) {
-    caption = note;
-    captionKey = "note";
-    spoken = typeof note === "string" ? note : "";
   } else if (!hasStats) {
     caption = lit?.description ?? lit?.name ?? "";
     captionKey = `plain-${lit?.id}`;
@@ -866,48 +820,41 @@ export function ModelPicker({
         aria-haspopup="dialog"
         aria-expanded={isOpen}
         aria-controls={`${uid}-menu`}
-        aria-label={triggerLabel ?? `${labels.model}: ${chosen?.name ?? "none"}${isThinking ? ", extended thinking" : ""}${(toggles ?? [])
-          .filter((t) => (t.flag || t.indicator) && toggleOn[t.id])
-          .map((t) => `, ${t.label}`)
-          .join("")}`}
+        aria-label={
+          triggerLabel ??
+          `${labels.model}: ${chosen?.name ?? "none"}${isThinking ? ", extended thinking" : ""}${(toggles ?? [])
+            .filter((t) => t.flag && t.on)
+            .map((t) => `, ${t.label}`)
+            .join("")}`
+        }
         onClick={() => setOpen(!isOpen, isOpen ? undefined : "list")}
         onKeyDown={onTriggerKey}
       >
         {triggerLead}
-        {chosen &&
-          (triggerIcon ? (
-            <span className="ui-mdpc__glyph" aria-hidden="true">
-              {triggerIcon}
-            </span>
-          ) : (
-            <Glyph model={chosen} />
-          ))}
+        {chosen && <Glyph model={chosen} />}
         <span className="ui-mdpc__name" title={chosen?.name}>
-          <Swap id={chosen?.id ?? "none"} glide>
-            {chosen?.name ?? labels.choose}
-          </Swap>
+          <Swap id={chosen?.id ?? "none"}>{chosen?.name ?? labels.choose}</Swap>
         </span>
+        {/* Kettu: a switch's icon unfolds like the bulb while it is on */}
         {toggles
           ?.filter((t) => t.flag)
           .map((t) => (
-            <span key={t.id} className="ui-mdpc__flag" data-on={toggleOn[t.id] ? "" : undefined} aria-hidden="true">
+            <span key={t.id} className="ui-mdpc__flag" data-on={t.on ? "" : undefined} aria-hidden="true">
               <span>{t.icon ?? <ThinkIcon />}</span>
             </span>
           ))}
-        {/* Your own levels always show on the trigger, so the level in use is never a guess */}
-        {/* Kettu: a level without a label or marked off the trigger shows none */}
-        {ownEffort && efforts.find((x) => x.id === effortNow && x.trigger !== false)?.label && (
+        {/* Kettu: the agent's level in use, so it is never a guess */}
+        {ownEffort && levels.find((x) => x.id === effortNow && x.trigger !== false)?.label && (
           <span className="ui-mdpc__detail">
-            <Swap id={effortNow} glide>
-              {efforts.find((x) => x.id === effortNow)?.label}
-            </Swap>
+            <Swap id={effortNow}>{levels.find((x) => x.id === effortNow)?.label}</Swap>
           </span>
         )}
+        {/* Kettu: a switch the agent marks shows its name while on */}
         {toggles
           ?.filter((t) => t.indicator)
           .map((t) => (
-            <span key={t.id} className="ui-mdpc__unfold" data-id={t.id} data-on={toggleOn[t.id] ? "" : undefined} aria-hidden="true">
-              <span className="ui-mdpc__detail">· {toggleOn[t.id] && t.onLabel ? t.onLabel : t.label}</span>
+            <span key={t.id} className="ui-mdpc__unfold" data-on={t.on ? "" : undefined} aria-hidden="true">
+              <span className="ui-mdpc__detail">· {t.on && t.onLabel ? t.onLabel : t.label}</span>
             </span>
           ))}
         {/* A small bulb unfolds next to the name while extended thinking is on */}
@@ -923,7 +870,12 @@ export function ModelPicker({
         id={`${uid}-menu`}
         ref={popRef}
         className="ui-mdpc__pop"
-        style={shift || room ? ({ ...(shift ? { translate: `${shift}px 0` } : {}), ...(room ? { "--ui-mdpc-room": `${room}px` } : {}) } as CSSProperties) : undefined}
+        data-tight={room ? "" : undefined}
+        style={
+          shift || lift || room
+            ? ({ ...(shift || lift ? { translate: `${shift}px ${lift}px` } : {}), ...(room ? { "--ui-mdpc-room": `${room}px` } : {}) } as CSSProperties)
+            : undefined
+        }
         role="dialog"
         aria-label={labels.settings}
         inert={!isOpen}
@@ -934,8 +886,9 @@ export function ModelPicker({
           </div>
         )}
         <div className="ui-mdpc__card">
-          <div className="ui-mdpc__head" aria-hidden={headingEnd ? undefined : "true"} data-keys={keys ? "" : undefined}>
-            <span aria-hidden={headingEnd ? "true" : undefined}>{heading ?? labels.model}</span>
+          <div className="ui-mdpc__head" aria-hidden="true">
+            <span>{labels.model}</span>
+            {/* Kettu: no model rated, no columns – and no "Varies" on every row */}
             {anyRated && (
               <span className="ui-mdpc__cols">
                 {STRENGTHS.map((s) => (
@@ -943,7 +896,6 @@ export function ModelPicker({
                 ))}
               </span>
             )}
-            {headingEnd}
           </div>
 
           {models.length === 0 && <div className="ui-mdpc__empty">{labels.noModels}</div>}
@@ -956,7 +908,6 @@ export function ModelPicker({
             aria-activedescendant={isOpen ? activeId : undefined}
             data-pointing={pointing ? "" : undefined}
             data-unrated={anyRated ? undefined : ""}
-            data-keys={keys ? "" : undefined}
             onKeyDown={onListKey}
             onPointerLeave={() => setPointing(false)}
             onPointerEnter={() => flyOpen && closeFlySoon()}
@@ -970,7 +921,7 @@ export function ModelPicker({
                 selected={i === chosenIndex}
                 active={i === active}
                 lit={m.id === lit?.id}
-                varies={labels.varies}
+                labels={labels}
                 onPoint={onPoint}
                 onPick={onPick}
               />
@@ -1004,6 +955,7 @@ export function ModelPicker({
           )}
 
           {toggles ? (
+            // Kettu: the agent's effort and switches in the same rows, and actions after them
             <div className="ui-mdpc__settings">
               {effortSlot ? (
                 <div
@@ -1013,58 +965,59 @@ export function ModelPicker({
                 >
                   {effortSlot}
                 </div>
-              ) : efforts.length > 0 && (
-                <div
-                  className="ui-mdpc__effort ui-mdpc__effort--own"
-                  onPointerEnter={(e) => e.pointerType === "mouse" && setHint("effort")}
-                  onPointerLeave={() => setHint(null)}
-                >
-                  <span className="ui-mdpc__effort-label" id={`${uid}-effort`}>
-                    {effortLabel}
-                  </span>
+              ) : (
+                ownEffort && (
                   <div
-                    ref={segRef}
-                    className="ui-mdpc__segmented"
-                    role="radiogroup"
-                    aria-labelledby={`${uid}-effort`}
-                    style={thumb ? { ["--x" as string]: `${thumb.x}px`, ["--w" as string]: `${thumb.w}px` } : undefined}
-                    onKeyDown={onEffortKey}
+                    className="ui-mdpc__effort ui-mdpc__effort--own"
+                    onPointerEnter={(e) => e.pointerType === "mouse" && setHint("effort")}
+                    onPointerLeave={() => setHint(null)}
                   >
-                    <span className="ui-mdpc__thumb" aria-hidden="true" />
-                    {efforts.map((x) => (
-                      <button
-                        key={x.id}
-                        type="button"
-                        role="radio"
-                        aria-checked={x.id === effortNow}
-                        tabIndex={x.id === effortNow ? 0 : -1}
-                        data-effort={x.id}
-                        className="ui-mdpc__seg-btn"
-                        onClick={() => chooseEffort(x.id)}
-                      >
-                        {x.label}
-                      </button>
-                    ))}
+                    <span className="ui-mdpc__effort-label" id={`${uid}-effort`}>
+                      {effortLabel}
+                    </span>
+                    <div
+                      ref={segRef}
+                      className="ui-mdpc__segmented"
+                      role="radiogroup"
+                      aria-labelledby={`${uid}-effort`}
+                      style={thumb ? { ["--x" as string]: `${thumb.x}px`, ["--w" as string]: `${thumb.w}px` } : undefined}
+                      onKeyDown={onEffortKey}
+                    >
+                      <span className="ui-mdpc__thumb" aria-hidden="true" />
+                      {levels.map((x) => (
+                        <button
+                          key={x.id}
+                          type="button"
+                          role="radio"
+                          aria-checked={x.id === effortNow}
+                          tabIndex={x.id === effortNow ? 0 : -1}
+                          data-effort={x.id}
+                          className="ui-mdpc__seg-btn"
+                          onClick={() => chooseEffort(x.id)}
+                        >
+                          {x.label}
+                        </button>
+                      ))}
+                    </div>
                   </div>
-                </div>
+                )
               )}
-              {toggleSlot ?? toggles.map((t) => (
+              {toggles.map((t) => (
                 <button
                   key={t.id}
                   type="button"
                   role="switch"
-                  aria-checked={!!toggleOn[t.id]}
+                  aria-checked={t.on}
                   disabled={t.disabled}
                   className="ui-mdpc__toggle"
-                  data-id={t.id}
-                  onClick={() => flip(t.id)}
+                  onClick={() => onToggle?.(t.id, !t.on)}
                   onPointerEnter={(e) => e.pointerType === "mouse" && setHint(`toggle:${t.id}`)}
                   onPointerLeave={() => setHint(null)}
                   onFocus={() => setHint(`toggle:${t.id}`)}
                   onBlur={() => setHint(null)}
                 >
                   <span className="ui-mdpc__toggle-icon">{t.icon ?? <ThinkIcon />}</span>
-                  <span className="ui-mdpc__toggle-label">{toggleOn[t.id] && t.onLabel ? t.onLabel : t.label}</span>
+                  <span className="ui-mdpc__toggle-label">{t.on && t.onLabel ? t.onLabel : t.label}</span>
                   <span className="ui-mdpc__switch" aria-hidden="true" />
                 </button>
               ))}
@@ -1163,24 +1116,18 @@ export function ModelPicker({
         </div>
 
         {/* The last row: what the model you point at costs you */}
-        {foot ? (
-          <div className="ui-mdpc__foot">
-            <span className="ui-mdpc__caption" aria-hidden="true">
-              <Swap id={captionKey}>{caption}</Swap>
-            </span>
-            <span className="ui-mdpc__keys" aria-hidden="true">
-              {keys ? <kbd>1–4</kbd> : <kbd>↑↓</kbd>}
-              <kbd>↵</kbd>
-            </span>
-            <span className="ui-mdpc__sr" aria-live="polite">
-              {isOpen ? spoken : ""}
-            </span>
-          </div>
-        ) : (
+        <div className="ui-mdpc__foot">
+          <span className="ui-mdpc__caption" aria-hidden="true">
+            <Swap id={captionKey}>{caption}</Swap>
+          </span>
+          <span className="ui-mdpc__keys" aria-hidden="true">
+            <kbd>↑↓</kbd>
+            <kbd>↵</kbd>
+          </span>
           <span className="ui-mdpc__sr" aria-live="polite">
             {isOpen ? spoken : ""}
           </span>
-        )}
+        </div>
 
         {flyOpen && (
           <div
@@ -1213,28 +1160,26 @@ export function ModelPicker({
               {shownMore.length === 0 && <div className="ui-mdpc__empty">{labels.noMatch}</div>}
               {shownMore.map((m, i) => (
                 <Fragment key={m.id}>
-                {m.group && m.group !== shownMore[i - 1]?.group && (
-                  <div className="ui-mdpc__fly-group" role="presentation">
-                    {m.group}
+                  {m.group && m.group !== shownMore[i - 1]?.group && (
+                    <div className="ui-mdpc__fly-group" role="presentation">
+                      {m.group}
+                    </div>
+                  )}
+                  <div
+                    id={`${uid}-more-${i}`}
+                    role="option"
+                    aria-selected={m.id === chosen?.id}
+                    className="ui-mdpc__fly-row"
+                    data-active={i === flyActive ? "" : undefined}
+                    onPointerEnter={() => setFlyActive(i)}
+                    onClick={() => pickModel(m)}
+                  >
+                    <Glyph model={m} />
+                    <span className="ui-mdpc__title-name" dir="auto" title={m.name}>
+                      {m.name}
+                    </span>
+                    {m.id === chosen?.id && <CheckIcon />}
                   </div>
-                )}
-                <div
-                  id={`${uid}-more-${i}`}
-                  role="option"
-                  aria-selected={m.id === chosen?.id}
-                  className="ui-mdpc__fly-row"
-                  data-active={i === flyActive ? "" : undefined}
-                  onPointerEnter={() => setFlyActive(i)}
-                  onClick={() => pickModel(m)}
-                >
-                  <Glyph model={m} />
-                  <span className="ui-mdpc__title-name" dir="auto" title={m.name}>
-                    {m.name}
-                  </span>
-                  {m.badge}
-                  {m.id === chosen?.id && <CheckIcon />}
-                  {m.end}
-                </div>
                 </Fragment>
               ))}
             </div>
@@ -1250,31 +1195,31 @@ const css = /* css */ `
 /* Colors and motion as variables – override them on .ui-mdpc */
 .ui-mdpc {
   --ui-mdpc-card: #ffffff;
-  --ui-mdpc-strong: #000000;
-  --ui-mdpc-ink: rgba(0, 0, 0, 0.88);
-  --ui-mdpc-text: rgba(0, 0, 0, 0.61);
-  --ui-mdpc-muted: rgba(0, 0, 0, 0.45);
-  --ui-mdpc-faint: rgba(0, 0, 0, 0.27);
-  --ui-mdpc-icon: rgba(0, 0, 0, 0.447);
-  --ui-mdpc-line: rgba(0, 0, 0, 0.06);
+  --ui-mdpc-strong: var(--aui-ink, #000000);
+  --ui-mdpc-ink: var(--aui-ink, rgba(0, 0, 0, 0.88));
+  --ui-mdpc-text: var(--aui-muted, rgba(0, 0, 0, 0.61));
+  --ui-mdpc-muted: var(--aui-muted, rgba(0, 0, 0, 0.45));
+  --ui-mdpc-faint: var(--aui-placeholder, rgba(0, 0, 0, 0.27));
+  --ui-mdpc-icon: var(--aui-muted, rgba(0, 0, 0, 0.447));
+  --ui-mdpc-line: var(--aui-border, rgba(0, 0, 0, 0.06));
   --ui-mdpc-line-strong: rgba(0, 0, 0, 0.1);
   --ui-mdpc-fill: rgba(0, 0, 0, 0.06);
-  --ui-mdpc-wash: rgba(0, 0, 0, 0.03);
+  --ui-mdpc-wash: var(--aui-subtle, rgba(0, 0, 0, 0.03));
   --ui-mdpc-bar: rgba(0, 0, 0, 0.2);
   --ui-mdpc-bar-off: rgba(0, 0, 0, 0.06);
   --ui-mdpc-switch: rgba(0, 0, 0, 0.1);
   --ui-mdpc-knob: #ffffff;
   --ui-mdpc-accent: rgba(0, 96, 226, 0.765);
-  --ui-mdpc-focus: rgba(0, 96, 226, 0.35);
+  --ui-mdpc-focus: var(--aui-focus, rgba(0, 96, 226, 0.7));
   /* Strokes are shadows: a 0.5px hairline plus a soft lift */
   --ui-mdpc-shadow-tile: 0 0 0 0.5px rgba(0, 0, 0, 0.1), 0 1px 1px -1px rgba(0, 0, 0, 0.1);
-  --ui-mdpc-shadow-pop: 0 0 0 0.5px rgba(0, 0, 0, 0.08), 0 12px 28px -10px rgba(0, 0, 0, 0.16), 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  --ui-mdpc-shadow-pop: var(--aui-shadow-popover, 0 0 0 0.5px rgba(0, 0, 0, 0.08), 0 12px 28px -10px rgba(0, 0, 0, 0.16), 0 1px 2px 0 rgba(0, 0, 0, 0.05));
   --ui-mdpc-ease: cubic-bezier(0.32, 0.72, 0.24, 1);
   position: relative;
   display: inline-block;
   max-width: 100%;
   min-width: 0;
-  font-family: "Inter", "InterVariable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font-family: var(--aui-font, "Inter", "InterVariable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif);
   font-size: 13px;
   line-height: 20px;
   font-weight: 400;
@@ -1284,23 +1229,21 @@ const css = /* css */ `
 }
 .ui-mdpc *, .ui-mdpc *::before, .ui-mdpc *::after { box-sizing: border-box; }
 :where(.ui-mdpc) button { appearance: none; margin: 0; padding: 0; border: 0; background: none; font: inherit; color: inherit; text-align: inherit; cursor: pointer; -webkit-tap-highlight-color: transparent; }
-.ui-mdpc button:focus-visible { outline: 2px solid var(--ui-mdpc-focus); outline-offset: 1px; }
+.ui-mdpc button:focus-visible { outline: 2px solid var(--ui-mdpc-focus); outline-offset: 2px; }
 .ui-mdpc svg { display: block; flex: none; }
 .ui-mdpc b { font-weight: 500; color: var(--ui-mdpc-ink); }
 .ui-mdpc__sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 
 /* ----- Trigger: a quiet button – glyph, name and a small chevron ----- */
-.ui-mdpc__trigger { display: inline-flex; align-items: center; gap: 6px; max-width: 100%; height: 28px; padding: 0 6px 0 6px; border-radius: 6px; font-weight: 500; color: var(--ui-mdpc-text); white-space: nowrap; transition: background-color 160ms ease, color 160ms ease; }
+.ui-mdpc__trigger { display: inline-flex; align-items: center; gap: 6px; max-width: 100%; height: 28px; padding: 0 6px 0 6px; border-radius: calc(var(--aui-radius, 7px) - 1px); font-weight: 500; color: var(--ui-mdpc-text); white-space: nowrap; transition: background-color 160ms ease, color 160ms ease; }
 .ui-mdpc__trigger:hover, .ui-mdpc[data-open] .ui-mdpc__trigger { background: var(--ui-mdpc-wash); color: var(--ui-mdpc-ink); }
 .ui-mdpc__trigger .ui-mdpc__glyph { width: 18px; height: 18px; border-radius: 5px; font-size: 10px; }
 .ui-mdpc__trigger .ui-mdpc__glyph > svg { width: 10px; height: 10px; }
-/* Kettu: the track may shrink below the gliding width, so a long name ends in an ellipsis rather than running under the effort in a narrow composer. */
-.ui-mdpc__name { display: grid; grid-template-columns: minmax(0, 1fr); min-width: 0; }
+.ui-mdpc__name { display: grid; min-width: 0; }
 .ui-mdpc__chevron { margin-left: -2px; color: var(--ui-mdpc-icon); transition: transform 300ms var(--ui-mdpc-ease); }
 .ui-mdpc[data-open] .ui-mdpc__chevron { transform: rotate(180deg); }
 .ui-mdpc__flag { display: grid; grid-template-columns: 0fr; margin-left: -6px; opacity: 0; color: var(--ui-mdpc-accent); transition: grid-template-columns 360ms var(--ui-mdpc-ease), margin 360ms var(--ui-mdpc-ease), opacity 220ms ease; }
 .ui-mdpc__flag > span { min-width: 0; overflow: hidden; }
-.ui-mdpc__flag svg { width: 14px; height: 14px; }
 .ui-mdpc__flag[data-on] { grid-template-columns: 1fr; margin-left: -2px; opacity: 1; transition: grid-template-columns 360ms var(--ui-mdpc-ease), margin 360ms var(--ui-mdpc-ease), opacity 280ms ease 80ms; }
 
 /* Glyph: a small white tile with a hairline */
@@ -1315,8 +1258,8 @@ const css = /* css */ `
   left: 0;
   width: min(320px, calc(100vw - 32px));
   container-type: inline-size;
-  border-radius: 10px;
-  background: var(--ui-mdpc-card);
+  border-radius: var(--aui-radius-lg, 10px);
+  background: var(--aui-overlay, var(--ui-mdpc-card));
   box-shadow: var(--ui-mdpc-shadow-pop);
   transform-origin: top left;
   opacity: 0;
@@ -1330,29 +1273,19 @@ const css = /* css */ `
 .ui-mdpc[data-open] .ui-mdpc__pop { opacity: 1; visibility: visible; transform: none; transition: opacity 200ms ease, transform 320ms var(--ui-mdpc-ease), visibility 0s; }
 
 .ui-mdpc__card { padding: 4px; }
-/* With too little room on either side the menu takes what there is, and only its list of models gives way and scrolls */
-.ui-mdpc__pop { display: flex; flex-direction: column; max-height: var(--ui-mdpc-room, none); }
-.ui-mdpc__card { display: flex; flex: 1 1 auto; flex-direction: column; min-height: 0; }
-.ui-mdpc__card > *, .ui-mdpc__foot { flex: none; }
-.ui-mdpc__card > .ui-mdpc__list { flex: 0 1 auto; min-height: 48px; }
-/* A switch's effect sits behind the menu's rows, clipped to its corners */
-.ui-mdpc__glow { position: absolute; inset: 0; z-index: 0; overflow: hidden; border-radius: inherit; pointer-events: none; animation: ui-mdpc-glow-in 420ms ease both; transition: opacity 400ms ease; }
-.ui-mdpc__glow[data-leaving] { opacity: 0; animation: none; }
-.ui-mdpc__card, .ui-mdpc__foot { position: relative; z-index: 1; }
-@keyframes ui-mdpc-glow-in { from { opacity: 0; } to { opacity: 1; } }
 .ui-mdpc__head { display: flex; align-items: center; justify-content: space-between; gap: 12px; height: 28px; padding: 4px 8px 0; font-size: 10px; font-weight: 500; line-height: 16px; letter-spacing: 0.5px; text-transform: uppercase; color: var(--ui-mdpc-muted); }
 .ui-mdpc__cols { display: grid; grid-template-columns: repeat(3, 40px); gap: 8px; }
 .ui-mdpc__cols > span { display: flex; justify-content: center; white-space: nowrap; }
 
 /* ----- Rows ----- */
-.ui-mdpc__list { display: grid; gap: 0; border-radius: 6px; outline: none; position: relative; max-height: min(360px, 50vh); overflow-y: auto; overscroll-behavior: contain; }
+.ui-mdpc__list { display: grid; gap: 0; border-radius: calc(var(--aui-radius-sm, 5px) + 1px); outline: none; position: relative; max-height: min(360px, 50vh); overflow-y: auto; overscroll-behavior: contain; }
 /* No models: one quiet line instead of an empty menu */
 .ui-mdpc__empty { padding: 14px 8px; font-size: 12px; line-height: 16px; color: var(--ui-mdpc-muted); text-align: center; }
-.ui-mdpc__option { display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 6px 8px; border-radius: 6px; cursor: pointer; transition: background-color 90ms ease-out, opacity 200ms ease; }
+.ui-mdpc__option { display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 6px 8px; border-radius: calc(var(--aui-radius-sm, 5px) + 1px); cursor: pointer; transition: background-color 90ms ease-out, opacity 200ms ease; }
 /* The fill appears crisply on the row under the pointer and fades out when the pointer leaves the list */
 .ui-mdpc__list[data-pointing] .ui-mdpc__option[data-active] { background: var(--ui-mdpc-fill); }
 .ui-mdpc__list:focus-visible { outline: none; }
-.ui-mdpc__list:focus-visible .ui-mdpc__option[data-active] { background: var(--ui-mdpc-fill); box-shadow: inset 0 0 0 1px var(--ui-mdpc-focus); }
+.ui-mdpc__list:focus-visible .ui-mdpc__option[data-active] { background: var(--ui-mdpc-fill); outline: 2px solid var(--ui-mdpc-focus); outline-offset: -2px; }
 .ui-mdpc__list[data-pointing] .ui-mdpc__option:not([data-active]) { opacity: 0.55; }
 .ui-mdpc__text { display: grid; flex: 1; min-width: 0; }
 .ui-mdpc__title { display: flex; align-items: center; gap: 4px; min-width: 0; font-weight: 500; color: var(--ui-mdpc-strong); }
@@ -1370,7 +1303,7 @@ const css = /* css */ `
 
 /* ----- Switches and effort ----- */
 .ui-mdpc__settings { margin: 4px -4px 0; padding: 4px 4px 0; border-top: 0.5px solid var(--ui-mdpc-line); }
-.ui-mdpc__toggle { display: flex; align-items: center; gap: 10px; width: 100%; height: 32px; padding: 0 8px; border-radius: 6px; color: var(--ui-mdpc-ink); transition: background-color 90ms ease-out; }
+.ui-mdpc__toggle { display: flex; align-items: center; gap: 10px; width: 100%; height: 32px; padding: 0 8px; border-radius: calc(var(--aui-radius-sm, 5px) + 1px); color: var(--ui-mdpc-ink); transition: background-color 90ms ease-out; }
 .ui-mdpc__toggle:hover { background: var(--ui-mdpc-fill); }
 .ui-mdpc__toggle-icon { display: grid; flex: none; place-items: center; width: 20px; color: var(--ui-mdpc-icon); transition: color 200ms ease; }
 .ui-mdpc__toggle[aria-checked="true"] .ui-mdpc__toggle-icon { color: var(--ui-mdpc-ink); }
@@ -1389,73 +1322,22 @@ const css = /* css */ `
 .ui-mdpc__effort-label { flex: 1; min-width: 0; color: var(--ui-mdpc-text); }
 /* Each level is as wide as its word; the fill is measured and glides from one to the next */
 .ui-mdpc__segmented { position: relative; display: flex; flex: none; gap: 4px; }
-.ui-mdpc__thumb { position: absolute; top: 0; bottom: 0; left: 0; width: var(--w, 0); border-radius: 5px; background: var(--ui-mdpc-fill); transform: translateX(var(--x, 0)); transition: transform 220ms var(--ui-mdpc-ease), width 220ms var(--ui-mdpc-ease); }
-.ui-mdpc__seg-btn { position: relative; height: 22px; padding: 0 7px; border-radius: 5px; box-shadow: inset 0 0 0 0.5px var(--ui-mdpc-line); font-size: 12px; font-weight: 500; line-height: 16px; color: var(--ui-mdpc-text); text-align: center !important; transition: color 160ms ease, background-color 160ms ease; }
+.ui-mdpc__thumb { position: absolute; top: 0; bottom: 0; left: 0; width: var(--w, 0); border-radius: var(--aui-radius-sm, 5px); background: var(--ui-mdpc-fill); transform: translateX(var(--x, 0)); transition: transform 220ms var(--ui-mdpc-ease), width 220ms var(--ui-mdpc-ease); }
+.ui-mdpc__seg-btn { position: relative; height: 22px; padding: 0 7px; border-radius: var(--aui-radius-sm, 5px); box-shadow: inset 0 0 0 0.5px var(--ui-mdpc-line); font-size: 12px; font-weight: 500; line-height: 16px; color: var(--ui-mdpc-text); text-align: center !important; transition: color 160ms ease, background-color 160ms ease; }
 .ui-mdpc__seg-btn[aria-checked="true"] { color: var(--ui-mdpc-ink); }
 .ui-mdpc__seg-btn[aria-checked="false"]:hover { background: var(--ui-mdpc-wash); color: var(--ui-mdpc-ink); }
-
-/* Your own effort levels: the label on top, the levels across the menu */
-.ui-mdpc__effort--own { flex-wrap: wrap; gap: 6px 10px; padding: 6px 8px 8px; }
-.ui-mdpc__effort--own .ui-mdpc__effort-label { flex-basis: 100%; }
-.ui-mdpc__effort--own .ui-mdpc__segmented { flex: 1; }
-.ui-mdpc__effort--own .ui-mdpc__seg-btn { flex: 1; padding: 0 4px; }
-.ui-mdpc__toggle:disabled { opacity: 0.45; cursor: default; }
-.ui-mdpc__action[aria-disabled] { opacity: 0.45; cursor: default; }
-.ui-mdpc__action[aria-disabled]:hover { background: none; }
-.ui-mdpc__action .ui-mdpc__chevron, .ui-mdpc[data-open] .ui-mdpc__action .ui-mdpc__chevron { flex: none; transform: rotate(-90deg); }
-.ui-mdpc__fly-note { margin: 4px -4px -4px; padding: 6px 12px 8px; border-top: 0.5px solid var(--ui-mdpc-line); font-size: 12px; line-height: 16px; color: var(--ui-mdpc-muted); }
-.ui-mdpc__toggle:disabled:hover { background: none; }
-/* No ratings anywhere: no "Varies" column either */
-.ui-mdpc__list[data-unrated] .ui-mdpc__varies { display: none; }
-.ui-mdpc__list[data-unrated] .ui-mdpc__option { min-height: 40px; }
-/* Number keys on the first four rows */
-.ui-mdpc__list[data-keys] { counter-reset: ui-mdpc-key; }
-.ui-mdpc__list[data-keys] .ui-mdpc__option { counter-increment: ui-mdpc-key; }
-.ui-mdpc__list[data-keys] .ui-mdpc__option::after { content: ""; flex: none; width: 16px; font-size: 11px; line-height: 16px; text-align: center; color: var(--ui-mdpc-faint); }
-.ui-mdpc__list[data-keys] .ui-mdpc__option:nth-child(-n + 4)::after { content: counter(ui-mdpc-key); }
-/* The key column (16px and its gap) also sits right of the column names, so they stay over their bars */
-.ui-mdpc__head[data-keys] { padding-right: 34px; }
-.ui-mdpc__detail { flex: none; margin-left: -2px; color: var(--ui-mdpc-muted); font-weight: 400; }
-/* A switch's "· label" opens and closes in the flags' motion: its width glides from nothing, then the words fade in */
-.ui-mdpc__unfold { display: grid; grid-template-columns: 0fr; margin-left: -6px; opacity: 0; transition: grid-template-columns 360ms var(--ui-mdpc-ease), margin 360ms var(--ui-mdpc-ease), opacity 220ms ease; }
-.ui-mdpc__unfold > .ui-mdpc__detail { min-width: 0; overflow: hidden; margin-left: 0; }
-.ui-mdpc__unfold[data-on] { grid-template-columns: 1fr; margin-left: -2px; opacity: 1; transition: grid-template-columns 360ms var(--ui-mdpc-ease), margin 360ms var(--ui-mdpc-ease), opacity 280ms ease 80ms; }
-/* More models: one quiet row that turns into a search field */
-.ui-mdpc__more { padding: 2px 0 0; }
-.ui-mdpc__more-btn { display: flex; align-items: center; gap: 8px; width: 100%; height: 32px; padding: 0 8px; border-radius: 6px; color: var(--ui-mdpc-text); }
-.ui-mdpc__more-btn:hover { background: var(--ui-mdpc-fill); color: var(--ui-mdpc-ink); }
-.ui-mdpc__more-btn > span:first-child { flex: 1; text-align: left; }
-.ui-mdpc__more-btn .ui-mdpc__chevron, .ui-mdpc[data-open] .ui-mdpc__more-btn .ui-mdpc__chevron { transform: rotate(-90deg); }
-.ui-mdpc__more-count { font-size: 12px; color: var(--ui-mdpc-muted); font-variant-numeric: tabular-nums; }
-.ui-mdpc__more-btn[data-open] { background: var(--ui-mdpc-fill); color: var(--ui-mdpc-ink); }
-.ui-mdpc__more-btn[data-side="left"] .ui-mdpc__chevron, .ui-mdpc[data-open] .ui-mdpc__more-btn[data-side="left"] .ui-mdpc__chevron { transform: rotate(90deg); }
-/* More models: a second card beside the menu */
-.ui-mdpc__fly { position: absolute; z-index: 1; left: calc(100% + 6px); width: 260px; padding: 4px; border-radius: 10px; background: var(--ui-mdpc-card); box-shadow: var(--ui-mdpc-shadow-pop); animation: ui-mdpc-fly-in 200ms var(--ui-mdpc-ease) both; }
-.ui-mdpc__fly[data-side="left"] { left: auto; right: calc(100% + 6px); animation-name: ui-mdpc-fly-in-left; }
-.ui-mdpc__fly-list { display: grid; max-height: 240px; margin-top: 4px; overflow-y: auto; overscroll-behavior: contain; }
-.ui-mdpc__fly-row { display: flex; align-items: center; gap: 10px; min-height: 32px; padding: 0 8px; border-radius: 6px; font-weight: 500; color: var(--ui-mdpc-strong); cursor: pointer; }
-.ui-mdpc__fly-row[data-active] { background: var(--ui-mdpc-fill); }
-.ui-mdpc__fly-row .ui-mdpc__title-name { flex: 1; }
-@keyframes ui-mdpc-fly-in { from { opacity: 0; transform: translateX(-4px) scale(0.98); } }
-@keyframes ui-mdpc-fly-in-left { from { opacity: 0; transform: translateX(4px) scale(0.98); } }
-.ui-mdpc__search { width: 100%; height: 30px; margin: 0; padding: 0 8px; border: 0; border-radius: 6px; outline: 0; background: var(--ui-mdpc-wash); box-shadow: inset 0 0 0 0.5px var(--ui-mdpc-line-strong); font: inherit; font-size: 13px; color: var(--ui-mdpc-ink); }
-.ui-mdpc__search::placeholder { color: var(--ui-mdpc-faint); }
 
 /* ----- Last row: what the model you point at costs you ----- */
 .ui-mdpc__foot { display: flex; align-items: center; gap: 8px; min-height: 36px; padding: 6px 8px 6px 12px; border-top: 0.5px solid var(--ui-mdpc-line); }
 .ui-mdpc__caption { flex: 1; min-width: 0; overflow: hidden; font-size: 12px; line-height: 16px; color: var(--ui-mdpc-muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
 .ui-mdpc__dot { color: var(--ui-mdpc-faint); }
 .ui-mdpc__swap { display: grid; min-width: 0; }
-/* Gliding: the box takes the new text's width over the flags' 360ms; each line keeps its own width inside it, so the
-   old one fades out whole and the new one is measured as it is */
-.ui-mdpc__swap[data-glide] { max-width: 100%; overflow: hidden; transition: width 360ms var(--ui-mdpc-ease); }
-.ui-mdpc__swap[data-glide] > .ui-mdpc__swap-item { justify-self: start; }
 .ui-mdpc__swap-item { grid-area: 1 / 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; animation: ui-mdpc-swap-in 320ms ease both; }
 .ui-mdpc__swap-item[data-out] { animation: ui-mdpc-swap-out 220ms ease both; }
 /* The caption may take two lines – a price or a long description is never cut off on one */
 .ui-mdpc__caption .ui-mdpc__swap-item { display: -webkit-box; white-space: normal; text-overflow: clip; overflow-wrap: anywhere; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
 .ui-mdpc__keys { display: flex; flex: none; gap: 2px; }
-.ui-mdpc__keys kbd { display: grid; place-items: center; min-width: 20px; height: 20px; padding: 0 5px; border-radius: 5px; box-shadow: inset 0 0 0 0.5px var(--ui-mdpc-line-strong); font-family: inherit; font-size: 11px; font-weight: 500; line-height: 16px; color: var(--ui-mdpc-muted); }
+.ui-mdpc__keys kbd { display: grid; place-items: center; min-width: 20px; height: 20px; padding: 0 5px; border-radius: var(--aui-radius-sm, 5px); box-shadow: inset 0 0 0 0.5px var(--ui-mdpc-line-strong); font-family: inherit; font-size: 11px; font-weight: 500; line-height: 16px; color: var(--ui-mdpc-muted); }
 
 @keyframes ui-mdpc-swap-in { from { opacity: 0; filter: blur(2px); } }
 @keyframes ui-mdpc-swap-out { from { opacity: 1; } to { opacity: 0; filter: blur(2px); } }
@@ -1484,24 +1366,73 @@ const css = /* css */ `
 /* Dark mode: follows a .dark class or data-theme="dark" on any ancestor, e.g. <html> */
 :where(.dark, [data-theme="dark"]) .ui-mdpc {
   --ui-mdpc-card: #1c1c1e;
-  --ui-mdpc-strong: #ffffff;
-  --ui-mdpc-ink: rgba(255, 255, 255, 0.9);
-  --ui-mdpc-text: rgba(255, 255, 255, 0.62);
-  --ui-mdpc-muted: rgba(255, 255, 255, 0.46);
-  --ui-mdpc-faint: rgba(255, 255, 255, 0.3);
-  --ui-mdpc-icon: rgba(255, 255, 255, 0.5);
-  --ui-mdpc-line: rgba(255, 255, 255, 0.08);
+  --ui-mdpc-strong: var(--aui-ink, #ffffff);
+  --ui-mdpc-ink: var(--aui-ink, rgba(255, 255, 255, 0.9));
+  --ui-mdpc-text: var(--aui-muted, rgba(255, 255, 255, 0.62));
+  --ui-mdpc-muted: var(--aui-muted, rgba(255, 255, 255, 0.46));
+  --ui-mdpc-faint: var(--aui-placeholder, rgba(255, 255, 255, 0.3));
+  --ui-mdpc-icon: var(--aui-muted, rgba(255, 255, 255, 0.5));
+  --ui-mdpc-line: var(--aui-border, rgba(255, 255, 255, 0.08));
   --ui-mdpc-line-strong: rgba(255, 255, 255, 0.12);
   --ui-mdpc-fill: rgba(255, 255, 255, 0.08);
-  --ui-mdpc-wash: rgba(255, 255, 255, 0.04);
+  --ui-mdpc-wash: var(--aui-subtle, rgba(255, 255, 255, 0.04));
   --ui-mdpc-bar: rgba(255, 255, 255, 0.24);
   --ui-mdpc-bar-off: rgba(255, 255, 255, 0.08);
   --ui-mdpc-switch: rgba(255, 255, 255, 0.14);
   --ui-mdpc-knob: #ffffff;
-  --ui-mdpc-accent: #4d8dff;
-  --ui-mdpc-focus: rgba(77, 141, 255, 0.5);
+  --ui-mdpc-accent: var(--aui-blue, #4fb0fe);
+  --ui-mdpc-focus: var(--aui-focus, rgba(77, 141, 255, 0.8));
   --ui-mdpc-shadow-tile: 0 0 0 0.5px rgba(255, 255, 255, 0.12), 0 1px 2px rgba(0, 0, 0, 0.4);
-  --ui-mdpc-shadow-pop: 0 0 0 0.5px rgba(255, 255, 255, 0.12), 0 12px 28px -10px rgba(0, 0, 0, 0.6), 0 1px 2px 0 rgba(0, 0, 0, 0.4);
+  --ui-mdpc-shadow-pop: var(--aui-shadow-popover, 0 0 0 0.5px rgba(255, 255, 255, 0.12), 0 12px 28px -10px rgba(0, 0, 0, 0.6), 0 1px 2px 0 rgba(0, 0, 0, 0.4));
 }
 :where(.dark, [data-theme="dark"]) .ui-mdpc__glyph { background: #2a2a2d; }
+
+/* ----- Kettu ----- */
+/* The list of models never scrolls; only a window too short for the whole menu scrolls the menu above its last row */
+.ui-mdpc__pop { display: flex; flex-direction: column; max-height: var(--ui-mdpc-room, none); }
+.ui-mdpc__card { display: flex; flex: 1 1 auto; flex-direction: column; min-height: 0; }
+.ui-mdpc__pop[data-tight] .ui-mdpc__card { overflow-y: auto; overscroll-behavior: contain; }
+.ui-mdpc__card > *, .ui-mdpc__foot { flex: none; }
+.ui-mdpc__card > .ui-mdpc__list { max-height: none; overflow: visible; }
+/* A switch's effect sits behind the menu's rows, clipped to its corners */
+.ui-mdpc__glow { position: absolute; inset: 0; z-index: 0; overflow: hidden; border-radius: inherit; pointer-events: none; animation: ui-mdpc-glow-in 420ms ease both; transition: opacity 400ms ease; }
+.ui-mdpc__glow[data-leaving] { opacity: 0; animation: none; }
+.ui-mdpc__card, .ui-mdpc__foot { position: relative; z-index: 1; }
+@keyframes ui-mdpc-glow-in { from { opacity: 0; } to { opacity: 1; } }
+/* A switch's name unfolds on the trigger while it is on */
+.ui-mdpc__unfold { display: grid; grid-template-columns: 0fr; margin-left: -6px; opacity: 0; transition: grid-template-columns 360ms var(--ui-mdpc-ease), margin 360ms var(--ui-mdpc-ease), opacity 220ms ease; }
+.ui-mdpc__unfold > .ui-mdpc__detail { min-width: 0; overflow: hidden; margin-left: 0; white-space: nowrap; }
+.ui-mdpc__unfold[data-on] { grid-template-columns: 1fr; margin-left: -2px; opacity: 1; transition: grid-template-columns 360ms var(--ui-mdpc-ease), margin 360ms var(--ui-mdpc-ease), opacity 280ms ease 80ms; }
+.ui-mdpc__list[data-unrated] .ui-mdpc__varies { display: none; }
+/* The level on the trigger */
+.ui-mdpc__detail { flex: none; margin-left: -2px; color: var(--ui-mdpc-muted); font-weight: 400; }
+/* The agent's own levels: the label on top, the levels across the menu */
+.ui-mdpc__effort--own { flex-wrap: wrap; gap: 6px 10px; padding: 6px 8px 8px; }
+.ui-mdpc__effort--own .ui-mdpc__effort-label { flex-basis: 100%; }
+.ui-mdpc__effort--own .ui-mdpc__segmented { flex: 1; }
+.ui-mdpc__effort--own .ui-mdpc__seg-btn { flex: 1; padding: 0 4px; }
+.ui-mdpc__toggle:disabled, .ui-mdpc__action[aria-disabled] { opacity: 0.45; cursor: default; }
+.ui-mdpc__toggle:disabled:hover, .ui-mdpc__action[aria-disabled]:hover { background: none; }
+.ui-mdpc__action .ui-mdpc__chevron, .ui-mdpc[data-open] .ui-mdpc__action .ui-mdpc__chevron { flex: none; transform: rotate(-90deg); }
+/* More models: one quiet row under the list */
+.ui-mdpc__more { padding: 2px 0 0; }
+.ui-mdpc__more-btn { display: flex; align-items: center; gap: 8px; width: 100%; height: 32px; padding: 0 8px; border-radius: 6px; color: var(--ui-mdpc-text); }
+.ui-mdpc__more-btn:hover { background: var(--ui-mdpc-fill); color: var(--ui-mdpc-ink); }
+.ui-mdpc__more-btn > span:first-child { flex: 1; text-align: left; }
+.ui-mdpc__more-btn .ui-mdpc__chevron, .ui-mdpc[data-open] .ui-mdpc__more-btn .ui-mdpc__chevron { transform: rotate(-90deg); }
+.ui-mdpc__more-count { font-size: 12px; color: var(--ui-mdpc-muted); font-variant-numeric: tabular-nums; }
+.ui-mdpc__more-btn[data-open] { background: var(--ui-mdpc-fill); color: var(--ui-mdpc-ink); }
+.ui-mdpc__more-btn[data-side="left"] .ui-mdpc__chevron, .ui-mdpc[data-open] .ui-mdpc__more-btn[data-side="left"] .ui-mdpc__chevron { transform: rotate(90deg); }
+/* More models: a second card beside the menu */
+.ui-mdpc__fly { position: absolute; z-index: 1; left: calc(100% + 6px); width: 260px; padding: 4px; border-radius: 10px; background: var(--ui-mdpc-card); box-shadow: var(--ui-mdpc-shadow-pop); animation: ui-mdpc-fly-in 200ms var(--ui-mdpc-ease) both; }
+.ui-mdpc__fly[data-side="left"] { left: auto; right: calc(100% + 6px); animation-name: ui-mdpc-fly-in-left; }
+.ui-mdpc__fly-list { display: grid; max-height: 240px; margin-top: 4px; overflow-y: auto; overscroll-behavior: contain; }
+.ui-mdpc__fly-row { display: flex; align-items: center; gap: 10px; min-height: 32px; padding: 0 8px; border-radius: 6px; font-weight: 500; color: var(--ui-mdpc-strong); cursor: pointer; }
+.ui-mdpc__fly-row[data-active] { background: var(--ui-mdpc-fill); }
+.ui-mdpc__fly-row .ui-mdpc__title-name { flex: 1; }
+.ui-mdpc__fly-note { margin: 4px -4px -4px; padding: 6px 12px 8px; border-top: 0.5px solid var(--ui-mdpc-line); font-size: 12px; line-height: 16px; color: var(--ui-mdpc-muted); }
+@keyframes ui-mdpc-fly-in { from { opacity: 0; transform: translateX(-4px) scale(0.98); } }
+@keyframes ui-mdpc-fly-in-left { from { opacity: 0; transform: translateX(4px) scale(0.98); } }
+.ui-mdpc__search { width: 100%; height: 30px; margin: 0; padding: 0 8px; border: 0; border-radius: 6px; outline: 0; background: var(--ui-mdpc-wash); box-shadow: inset 0 0 0 0.5px var(--ui-mdpc-line-strong); font: inherit; font-size: 13px; color: var(--ui-mdpc-ink); }
+.ui-mdpc__search::placeholder { color: var(--ui-mdpc-faint); }
 `;

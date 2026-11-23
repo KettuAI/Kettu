@@ -46,6 +46,14 @@ const isDefaultChoice = (c: Choice): boolean =>
 
 // What follows a model's name and qualifies it, as in "GPT-6.2-Sol · Codex" or "(Thinking)".
 const QUALIFIER = /\s+(?:·|\()/
+
+/** A name without its qualifier, and the qualifier bare, as "1M context" from "Opus (1M context)". */
+export function splitQualifier(name: string): [main: string, qualifier: string] {
+  const at = QUALIFIER.exec(name)
+  if (!at) return [name, '']
+  const rest = name.slice(at.index).trim().replace(/^·\s*/, '')
+  return [name.slice(0, at.index), /^\(.*\)$/.test(rest) ? rest.slice(1, -1) : rest]
+}
 // A version, as in 5.5, V4.1 or 6; three digits at most, so a build such as 1017 is no version.
 const NUMBER = /^[vV]?(\d{1,3}(?:\.\d+)*)$/
 // A version written onto its family's word, as in Qwen3.6 or K2.
