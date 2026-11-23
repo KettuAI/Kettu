@@ -2242,9 +2242,16 @@ export class HostClient {
     return run && { run, report: parseSetupReport(run.stdout) }
   }
 
-  /** Runs an action of the page of a host added over SSH; one at a time for each host. */
+  /**
+   * Runs an action of the page of a host added over SSH; one at a time for each host. Reconnect
+   * also tries any other known host at once, as a view waiting for it asks.
+   */
   async manageSsh(id: string, action: SshManageAction): Promise<SshManageResult> {
     const host = this.options.hosts.get(id)
+    if (!this.stopped && host && !host.ssh && action.kind === 'reconnect') {
+      await this.reconnect(id)
+      return { ok: true }
+    }
     if (this.stopped || !host?.ssh) return failure('unknown_host')
     if (this.managing.has(id)) return failure('busy')
     const aborting = new AbortController()

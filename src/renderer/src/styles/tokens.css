@@ -1658,6 +1658,20 @@
    its own, such as the theme previews in Settings, resolves them against its own values. */
 :root,
 [data-theme] {
+  /* An artifact's states: the orange of an agent writing a piece, the warning of a piece that
+     cannot show, the amber dot of a computer being reached, and the band of light over a wait,
+     a sheen of the text's own color so it reads over light and dark pictures alike. */
+  --artifact-writing: var(--pane-agent);
+  --artifact-writing-ink: var(--pane-agent-ink);
+  --artifact-writing-tint: color-mix(in srgb, var(--pane-agent) 12%, transparent);
+  --artifact-fault: var(--danger);
+  --artifact-fault-tint: color-mix(in srgb, var(--danger) 12%, transparent);
+  --artifact-wait: var(--warning);
+  --artifact-wait-halo: color-mix(in srgb, var(--warning) 20%, transparent);
+  --artifact-band: color-mix(in srgb, var(--text-primary) 9%, transparent);
+  --artifact-band-duration: 1.6s;
+  --artifact-pulse-duration: 1.6s;
+
   /* shadcn/ui's names, so its components pick the palette up unchanged. */
   --background: var(--bg-app);
   --foreground: var(--text-primary);

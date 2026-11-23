@@ -7,6 +7,7 @@ import { SegmentedControl } from '@renderer/components/affect/segmented-control'
 import { TreeView, type TreeNode } from '@renderer/components/affect/tree-view'
 import { setViewerState, useViewerState, type PagesFilter } from '@renderer/stores/artifact-viewer'
 import { ViewerSlot } from './viewer-shell'
+import { NoneHere } from './viewer-states'
 
 /**
  * The left card of a document: its headings as a tree, the section on screen picked out, found by
@@ -22,6 +23,7 @@ export function OutlineCard({
   marks,
   comments,
   onPick,
+  writing,
 }: {
   artifactId: string
   headings: readonly DocHeading[]
@@ -35,6 +37,8 @@ export function OutlineCard({
   /** Open threads by the slug of the section each is in. */
   comments: ReadonlyMap<string, number>
   onPick: (heading: DocHeading) => void
+  /** The section an agent is writing, by its slug. */
+  writing?: string | null
 }) {
   const { t } = useTranslation('artifacts')
   const filter = useViewerState(artifactId, (s) => s.pagesFilter)
@@ -53,12 +57,18 @@ export function OutlineCard({
       (needle === '' || h.text.toLocaleLowerCase().includes(needle))
     const node = (h: DocHeading): TreeNode => {
       const count = comments.get(h.slug) ?? 0
+      const held = !!writing && writing === h.slug
       return {
         id: h.slug,
         label: h.text,
         meta:
-          changed.has(h.slug) || count > 0 ? (
+          changed.has(h.slug) || count > 0 || held ? (
             <span className="k-pages__marks">
+              {held && (
+                <span className="k-pages__mark" data-writing="">
+                  {t('viewer.writing.row')}
+                </span>
+              )}
               {changed.has(h.slug) && (
                 <span className="k-pages__mark" data-changed="">
                   {t('pages.version', { version: marks?.get(h.slug) ?? version })}
@@ -101,7 +111,7 @@ export function OutlineCard({
       stack.push(entry)
     }
     return { items: narrowed ? prune(roots, kept) : roots, parents: withChildren }
-  }, [headings, filter, needle, narrowed, changed, comments, version, marks, t])
+  }, [headings, filter, needle, narrowed, changed, comments, version, marks, writing, t])
 
   const expanded = narrowed ? [...parents] : [...parents].filter((slug) => !folded.includes(slug))
 
@@ -157,31 +167,47 @@ export function OutlineCard({
             />
           </div>
           <div className="k-pages__tree">
-            <TreeView
-              items={items}
-              expanded={expanded}
-              onExpandedChange={
-                narrowed
-                  ? undefined
-                  : (next) => setFolded([...parents].filter((slug) => !next.includes(slug)))
-              }
-              selected={current}
-              onSelect={(slug) => {
-                const heading = headings.find((h) => h.slug === slug)
-                if (heading) onPick(heading)
-              }}
-              guides={false}
-              emptyText={
-                needle
-                  ? t('outline.noMatch', { query: query.trim() })
-                  : filter === 'changed'
-                    ? t('outline.noChanges')
-                    : filter === 'comments'
-                      ? t('outline.noComments')
-                      : t('outline.none')
-              }
-              aria-label={t('outline.title')}
-            />
+            {narrowed && items.length === 0 ? (
+              <NoneHere
+                text={
+                  needle
+                    ? t('outline.noMatch', { query: query.trim() })
+                    : filter === 'changed'
+                      ? t('outline.noChanges')
+                      : t('outline.noComments')
+                }
+                onShowAll={() => {
+                  setQuery('')
+                  setViewerState(artifactId, { pagesFilter: 'all' })
+                }}
+              />
+            ) : (
+              <TreeView
+                items={items}
+                expanded={expanded}
+                onExpandedChange={
+                  narrowed
+                    ? undefined
+                    : (next) => setFolded([...parents].filter((slug) => !next.includes(slug)))
+                }
+                selected={current}
+                onSelect={(slug) => {
+                  const heading = headings.find((h) => h.slug === slug)
+                  if (heading) onPick(heading)
+                }}
+                guides={false}
+                emptyText={
+                  needle
+                    ? t('outline.noMatch', { query: query.trim() })
+                    : filter === 'changed'
+                      ? t('outline.noChanges')
+                      : filter === 'comments'
+                        ? t('outline.noComments')
+                        : t('outline.none')
+                }
+                aria-label={t('outline.title')}
+              />
+            )}
           </div>
         </div>
       </ViewerSlot>

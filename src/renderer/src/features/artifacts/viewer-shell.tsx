@@ -9,13 +9,14 @@ import {
 } from 'react'
 import { createPortal } from 'react-dom'
 import { Cancel01Icon } from '@hugeicons/core-free-icons'
-import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
+import { AnimatePresence, motion, useReducedMotionConfig } from 'motion/react'
 import { useTranslation } from 'react-i18next'
 import { Icon } from '@renderer/components/affect/app-shell'
 import { cardIn, cardOut } from '@renderer/lib/motion'
 import { cn } from '@renderer/lib/utils'
 import {
   EDGE,
+  LABELLED_PX,
   LEFT_W,
   NO_SHELL,
   RIGHT_W,
@@ -82,7 +83,7 @@ export function ArtifactShell({
   children: ReactNode
 }) {
   const { t } = useTranslation(['artifacts', 'common'])
-  const reduce = useReducedMotion()
+  const reduce = useReducedMotionConfig()
   const root = useRef<HTMLDivElement>(null)
   const [width, setWidth] = useState(0)
   const [bottomH, setBottomH] = useState(0)
@@ -137,15 +138,17 @@ export function ArtifactShell({
     now.left?.onOpenChange(shown)
   }, [])
   const tight = width > 0 && width < TIGHT_PX
+  const labelled = (width || 1280) >= LABELLED_PX
   const value = useMemo<ShellValue>(
     () => ({
       tier,
       tight,
+      labelled,
       insets: { left: insetLeft, right: insetRight },
       targets,
       leftCard: hasLeft ? { shown: leftShown, setShown: setLeft } : null,
     }),
-    [tier, tight, insetLeft, insetRight, targets, leftShown, hasLeft, setLeft],
+    [tier, tight, labelled, insetLeft, insetRight, targets, leftShown, hasLeft, setLeft],
   )
 
   const bottomCard = useRef<ResizeObserver | null>(null)

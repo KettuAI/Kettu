@@ -43,6 +43,12 @@
     0 0 0 calc(0.5px * var(--unscale)) var(--border-default),
     0 calc(1px * var(--unscale)) calc(3px * var(--unscale)) var(--border-subtle);
 }
+/* A live frame still loading: the idle ground with the band crossing it. */
+.k-ce-page__wait {
+  position: absolute;
+  inset: 0;
+  background: var(--bg-subtle);
+}
 .k-ce-page__idle {
   display: flex;
   align-items: center;
@@ -72,7 +78,7 @@
   color: var(--text-primary);
 }
 .k-ce-page__blank[data-agent] {
-  border-color: var(--agent-ink);
+  border-color: var(--artifact-writing);
 }
 .k-ce-label {
   position: absolute;
@@ -101,16 +107,16 @@
   border-radius: calc(3px * var(--unscale));
 }
 
-/* Agents at work: the element they change outlined in the one ink, a page they draw dashed. */
+/* Agents at work: the element they change outlined in the one orange, a page they draw dashed. */
 .k-ce-working {
   position: absolute;
   border-radius: calc(3px * var(--unscale));
-  box-shadow: 0 0 0 calc(1.5px * var(--unscale)) var(--agent-ink);
-  background: color-mix(in srgb, var(--agent-ink) 5%, transparent);
+  box-shadow: 0 0 0 calc(1.5px * var(--unscale)) var(--artifact-writing);
+  background: color-mix(in srgb, var(--artifact-writing) 6%, transparent);
 }
 .k-ce-page[data-working] {
   box-shadow:
-    0 0 0 calc(1.5px * var(--unscale)) var(--agent-ink),
+    0 0 0 calc(1.5px * var(--unscale)) var(--artifact-writing),
     var(--elevation-page-drop);
 }
 /* No size container: in the zoomed layer it would have no width, and the flags size by it. */
@@ -324,24 +330,6 @@
 .k-ce-banner b {
   font-weight: 500;
   color: var(--ink);
-}
-.k-ce-empty {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  width: 380px;
-  text-align: center;
-  transform: translate(-50%, -50%);
-}
-.k-ce-empty h3 {
-  font-size: 16px;
-  font-weight: 600;
-  color: var(--ink);
-}
-.k-ce-empty p {
-  margin-top: 6px;
-  font-size: 13px;
-  color: var(--text);
 }
 .k-ce-tweaks {
   flex: 1;
@@ -558,6 +546,16 @@
   background: var(--control-on-tint);
   color: var(--control-on);
 }
+.k-pages__mark[data-writing] {
+  background: var(--artifact-writing-tint);
+  color: var(--artifact-writing-ink);
+}
+/* The mark of the agent writing a frame, in a row's end. */
+.k-pages__writer {
+  display: inline-flex;
+  flex: none;
+  color: var(--artifact-writing-ink);
+}
 .k-pages__peek {
   display: grid;
   gap: 8px;
@@ -639,4 +637,30 @@
 }
 :root[data-reduce-motion='always'] .k-ce-flash {
   animation: none;
+}
+
+/* An agent writing a frame: its edge and its tag in the one orange. */
+.k-ce-label__writer {
+  flex: none;
+  height: calc(18px * var(--unscale));
+  padding: 0 calc(6px * var(--unscale)) 0 calc(4px * var(--unscale));
+  border-radius: calc(5px * var(--unscale));
+  font-size: calc(11px * var(--unscale));
+  gap: calc(3px * var(--unscale));
+}
+/* A frame that cannot show: its words at the screen's size over its place, or only the mark. */
+.k-ce-fault {
+  position: absolute;
+  border-radius: calc(3px * var(--unscale));
+  overflow: hidden;
+}
+.k-ce-fault__screen {
+  position: absolute;
+  top: 0;
+  left: 0;
+  transform: scale(var(--unscale));
+  transform-origin: 0 0;
+}
+.k-ce-fault__screen button {
+  pointer-events: auto;
 }

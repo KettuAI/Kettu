@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { PAGE_ERRORS_PER_SECOND, PageErrorLog } from './page-errors'
+import { PAGE_ERRORS_PER_SECOND, PAGES_KEPT, PageErrorLog } from './page-errors'
 import { PAGE_ERRORS, type PageErrorMessage } from './page-messages'
 
 const report = (load: string, n: number, path = 'index.html'): PageErrorMessage => ({
@@ -48,5 +48,23 @@ describe("the log of a page's errors", () => {
     log.clear('o')
     expect(log.of('o')).toEqual([])
     expect(log.of('p')).toHaveLength(1)
+  })
+
+  it('ignores a late report of a load it forgot, and keeps no record of forgotten pages', () => {
+    const log = new PageErrorLog(() => 0)
+    log.add('o', report('loadAAAA1', 1))
+    log.add('o', report('loadBBBB2', 2))
+    log.clear('o')
+    // The page reloads; the load cleared before it reports late, while it unloads.
+    expect(log.add('o', report('loadBBBB2', 3))).toBe(false)
+    expect(log.of('o')).toEqual([])
+    log.add('o', report('loadCCCC3', 4))
+    expect(log.of('o')[0]!.load).toBe('loadCCCC3')
+    // Pages forgotten and never shown again leave nothing behind.
+    for (let n = 0; n < 500; n++) {
+      log.add(`x${n}`, report('loadAAAA1', n))
+      log.clear(`x${n}`)
+    }
+    expect(log.size()).toBeLessThanOrEqual(PAGES_KEPT * 2)
   })
 })

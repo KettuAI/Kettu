@@ -1,0 +1,311 @@
+/* The viewer's states: a wait, a piece that cannot show, the whole artifact failing, and an agent
+   writing. Said where they happen, in the theme's own colors. */
+
+/* The band of light: one crossing, then again; still, a little in from the left, without motion. */
+.k-vs-band {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  border-radius: inherit;
+  pointer-events: none;
+}
+.k-vs-band::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 40%;
+  background: linear-gradient(90deg, transparent, var(--artifact-band) 50%, transparent);
+  animation: k-vs-band var(--artifact-band-duration) var(--ease-out-quint) infinite;
+}
+@keyframes k-vs-band {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(280%);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .k-vs-band::after {
+    left: 20%;
+    animation: none;
+  }
+}
+:root[data-reduce-motion='always'] .k-vs-band::after {
+  left: 20%;
+  animation: none;
+}
+
+/* Opening: the card's picture, enlarged and soft, fading in once the wait shows. */
+.k-vs-cover {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+  animation: k-vs-fade var(--duration-fast) var(--ease-out-quint) both;
+}
+.k-vs-cover__in {
+  position: relative;
+  display: block;
+  overflow: hidden;
+  border-radius: inherit;
+  background: var(--bg-subtle);
+}
+.k-vs-cover[data-look='sheet'] .k-vs-cover__in {
+  width: 100%;
+  height: 100%;
+}
+.k-vs-cover[data-look='card'] .k-vs-cover__in {
+  width: min(46%, 760px);
+  min-width: min(240px, 80%);
+  aspect-ratio: 16 / 10;
+  border-radius: var(--radius-card);
+}
+.k-vs-cover__pic {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: top;
+  filter: blur(7px);
+  transform: scale(1.04);
+  opacity: 0.85;
+}
+.k-vs-cover__pic .k-th {
+  border-radius: 0;
+}
+.k-vs-cover__blank {
+  position: absolute;
+  inset: 0;
+}
+@keyframes k-vs-fade {
+  from {
+    opacity: 0;
+  }
+}
+
+/* A navigator's rows while it waits. */
+.k-vs-skel {
+  display: flex;
+  flex-direction: column;
+  padding: 4px 8px 12px;
+}
+.k-vs-skel__row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 28px;
+  padding: 0 12px 0 8px;
+}
+.k-vs-skel__row[data-nested] {
+  padding-left: 32px;
+}
+.k-vs-skel__icon {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 4px;
+  background: var(--chip);
+}
+
+/* The whole content failed, or holds nothing: in the middle of the ground. */
+.k-vs-note {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 20px;
+  padding: 24px 24px 64px;
+  text-align: center;
+}
+.k-vs-note__sketch {
+  display: block;
+  width: 168px;
+  aspect-ratio: 16 / 10;
+  overflow: hidden;
+  border-radius: 10px;
+  opacity: 0.6;
+  box-shadow: 0 0 0 0.5px var(--line-strong);
+}
+.k-vs-note__sketch .k-th {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+.k-vs-note__words {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-width: 360px;
+}
+.k-vs-note__words b {
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 20px;
+  color: var(--ink);
+}
+.k-vs-note__words span {
+  font-size: 13px;
+  line-height: 19px;
+  color: var(--muted);
+  text-wrap: balance;
+}
+.k-vs-note__acts {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+.k-vs-note__row {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+}
+
+/* One piece that cannot show, in its own place; its words give way to the mark when small. */
+.k-vs-fault {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  container-type: size;
+  background: var(--bg-subtle);
+}
+.k-vs-fault__in {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  max-width: calc(100% - 24px);
+  text-align: center;
+}
+.k-vs-fault__in b {
+  margin-top: 4px;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 18px;
+  color: var(--ink);
+}
+.k-vs-fault__why {
+  font-size: 12px;
+  line-height: 17px;
+  color: var(--muted);
+  text-wrap: balance;
+  overflow-wrap: anywhere;
+}
+.k-vs-fault__acts {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px;
+  margin-top: 8px;
+}
+.k-vs-fault > .k-vs-fault__small {
+  display: none;
+}
+@container (max-width: 200px) or (max-height: 150px) {
+  .k-vs-fault > .k-vs-fault__in {
+    display: none;
+  }
+  .k-vs-fault > .k-vs-fault__small {
+    display: grid;
+  }
+}
+.k-vs-warn {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 9px;
+  background: var(--artifact-fault-tint);
+  color: var(--artifact-fault);
+}
+.k-vs-fault__small {
+  width: 24px;
+  height: 24px;
+  border-radius: 7px;
+}
+/* A navigator row's mark for a piece that cannot show. */
+.k-vs-row-warn {
+  display: inline-flex;
+  flex: none;
+  color: var(--artifact-fault);
+}
+
+/* An agent writing a piece: its tag, in the one orange. */
+.k-vs-writer {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 100%;
+  height: 22px;
+  padding: 0 7px 0 5px;
+  border-radius: 6px;
+  background: var(--artifact-writing);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1;
+  color: var(--on-fill);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.k-vs-writer__mark {
+  display: inline-flex;
+  flex: none;
+}
+
+/* The pill's dot for a computer being reached, pulsing; still without motion. */
+.k-vs-pulse {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--artifact-wait);
+  box-shadow: 0 0 0 3px var(--artifact-wait-halo);
+  animation: k-vs-pulse var(--artifact-pulse-duration) ease-in-out infinite;
+}
+.k-vs-pulse[data-tone='writing'] {
+  background: var(--artifact-writing);
+  box-shadow: 0 0 0 3px var(--artifact-writing-tint);
+}
+@keyframes k-vs-pulse {
+  50% {
+    opacity: 0.35;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .k-vs-pulse {
+    animation: none;
+  }
+}
+:root[data-reduce-motion='always'] .k-vs-pulse {
+  animation: none;
+}
+
+/* A navigator narrowed to nothing: one line and the way back. */
+.k-vs-none {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 10px 10px 12px;
+  font-size: 12.5px;
+  line-height: 18px;
+  color: var(--muted);
+}
+.k-vs-none > button {
+  margin-left: -8px;
+}

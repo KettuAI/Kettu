@@ -298,6 +298,7 @@ export function webApi(link: HostLink, settings: WebSettings, context: WebHostCo
       import: () => unsupported('import an artifact'),
       onBlocked: never,
       onStopped: never,
+      onFrameFailed: never,
       // A frame's picks come over the port the page hands it, never from the host.
       onSelected: never,
       // A frame's errors come over its port too.

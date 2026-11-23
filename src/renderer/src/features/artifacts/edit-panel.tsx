@@ -26,7 +26,7 @@ import { errorCode, host } from '@renderer/lib/host'
 import { i18n } from '@renderer/lib/i18n'
 import { cn } from '@renderer/lib/utils'
 import type { ArtifactEditor, Picked } from './editor'
-import { CardHead, Notice, SaveChip, UndoButton } from './tool-parts'
+import { CardHead, KeptNote, Notice, SaveChip, UndoButton } from './tool-parts'
 import { useEditRun } from './use-edit-run'
 
 const WEIGHTS = [100, 200, 300, 400, 500, 600, 700, 800, 900] as const
@@ -198,8 +198,23 @@ function useSource(
 }
 
 /** The agent whose running turn wrote the piece the element is in, which takes no edit until then. */
+const HELD_TITLE = {
+  page: 'edit.heldTitlePage',
+  frame: 'edit.heldTitleFrame',
+  section: 'edit.heldTitleSection',
+  slide: 'edit.heldTitleSlide',
+} as const
+const HELD_NAME = {
+  page: 'edit.heldPage',
+  frame: 'edit.heldFrame',
+  section: 'edit.heldSection',
+  slide: 'edit.heldSlide',
+} as const
+
 export interface HeldBy {
   sessionId: string
+  /** What the agent's turn holds of the artifact, which the card names. */
+  piece: 'page' | 'frame' | 'section' | 'slide'
   /** Null for a session this window does not know, which is named as no particular agent. */
   agent: {
     name: string
@@ -446,7 +461,7 @@ export function EditPanel({
               )}
               <b>
                 {heldBy.agent
-                  ? t('edit.heldTitle', { agent: heldBy.agent.name })
+                  ? t(HELD_TITLE[heldBy.piece], { agent: heldBy.agent.name })
                   : t('edit.heldTitleUnknown')}
               </b>
             </>
@@ -473,7 +488,7 @@ export function EditPanel({
           </>
         }
       >
-        {t('edit.held')}
+        {t(heldBy?.piece === 'page' ? 'edit.heldWhole' : 'edit.held')}
       </Notice>
     )
   } else if (source === null) {
@@ -630,23 +645,27 @@ export function EditPanel({
       <SettingsStyles />
       <CardHead
         icon={PencilEdit02Icon}
-        title={name}
+        title={heldBy ? t(HELD_NAME[heldBy.piece]) : name}
         sub={
-          <span className="k-vt-path" aria-label={t('edit.path')}>
-            {path.map((tag, i) => (
-              <span key={i} className="k-vt-path__step">
-                <button
-                  type="button"
-                  className="k-vt-path__up"
-                  onClick={() => editor.up(path.length - i)}
-                >
-                  {elementName(tag)}
-                </button>
-                <Icon icon={ArrowRight01Icon} size={11} />
-              </span>
-            ))}
-            <b className="k-vt-path__tag">{selection.tag}</b>
-          </span>
+          heldBy ? (
+            t('edit.heldSub')
+          ) : (
+            <span className="k-vt-path" aria-label={t('edit.path')}>
+              {path.map((tag, i) => (
+                <span key={i} className="k-vt-path__step">
+                  <button
+                    type="button"
+                    className="k-vt-path__up"
+                    onClick={() => editor.up(path.length - i)}
+                  >
+                    {elementName(tag)}
+                  </button>
+                  <Icon icon={ArrowRight01Icon} size={11} />
+                </span>
+              ))}
+              <b className="k-vt-path__tag">{selection.tag}</b>
+            </span>
+          )
         }
         status={
           <SaveChip
@@ -657,7 +676,10 @@ export function EditPanel({
       >
         <UndoButton onUndo={undo} />
       </CardHead>
-      <div className="k-vt-body">{body}</div>
+      <div className="k-vt-body">
+        <KeptNote save={run.save} />
+        {body}
+      </div>
       <div className="k-vt-foot">
         {editable === 'yes' && !heldBy && !refused && element && (
           <button type="button" className="k-vt-askrow" onClick={onAsk}>
@@ -766,5 +788,53 @@ export function ColorInput({
         className="k-vt-color__hex"
       />
     </span>
+  )
+}
+
+/**
+ * Edit's card on a document section or a slide an agent is writing: what it holds, that it is
+ * locked until the turn ends while comments stay open, and the way to its session.
+ */
+export function HeldCard({
+  heldBy,
+  onOpenSession,
+}: {
+  heldBy: HeldBy
+  onOpenSession: (sessionId: string) => void
+}) {
+  const { t } = useTranslation('artifacts')
+  return (
+    <aside aria-label={t('edit.title')} className="k-av-side k-vt-card">
+      <CardHead
+        icon={PencilEdit02Icon}
+        title={t(HELD_NAME[heldBy.piece])}
+        sub={t('edit.heldSub')}
+      />
+      <div className="k-vt-body">
+        <Notice
+          head={
+            <>
+              {heldBy.agent ? (
+                <AgentMark agent={heldBy.agent.id} size={14} hostId={heldBy.agent.hostId} />
+              ) : (
+                <span aria-hidden className="k-vt-unknown" />
+              )}
+              <b>
+                {heldBy.agent
+                  ? t(HELD_TITLE[heldBy.piece], { agent: heldBy.agent.name })
+                  : t('edit.heldTitleUnknown')}
+              </b>
+            </>
+          }
+          actions={
+            <Button variant="ghost" size="sm" onClick={() => onOpenSession(heldBy.sessionId)}>
+              {t('ask.openSession')}
+            </Button>
+          }
+        >
+          {t(heldBy.piece === 'page' ? 'edit.heldWhole' : 'edit.held')}
+        </Notice>
+      </div>
+    </aside>
   )
 }

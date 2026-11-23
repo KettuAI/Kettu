@@ -103,6 +103,13 @@ export function SaveChip({ save, onRetry }: { save: SaveState | null; onRetry: (
   )
 }
 
+/** Under a card's head while its save failed: the change stays on screen until it saves. */
+export function KeptNote({ save }: { save: SaveState | null }) {
+  const { t } = useTranslation('artifacts')
+  if (save?.state !== 'failed') return null
+  return <p className="k-vt-kept">{t('viewer.keptUntilSaved')}</p>
+}
+
 /** Undo in a card's head, which Mod+Z presses too. */
 export function UndoButton({ onUndo }: { onUndo: (() => void) | null }) {
   const { t } = useTranslation('artifacts')

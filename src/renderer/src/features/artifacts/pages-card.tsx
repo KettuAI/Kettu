@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import {
+  Alert02Icon,
   Comment01Icon,
   File01Icon,
   Layers01Icon,
@@ -16,6 +17,7 @@ import { useHostHas } from '@renderer/lib/host-features'
 import { setViewerState, useViewerState, type PagesFilter } from '@renderer/stores/artifact-viewer'
 import { FrameThumb } from './canvas-present'
 import { ViewerSlot } from './viewer-shell'
+import { NoneHere } from './viewer-states'
 
 /** Frames up to this wide are drawn as phones; taller than wide by this much, as documents. */
 const PHONE_WIDTH = 520
@@ -43,6 +45,8 @@ export function PagesCard({
   artifactId,
   version,
   marks,
+  faults,
+  writing,
   onPage,
   onFrame,
   onOpen,
@@ -57,6 +61,10 @@ export function PagesCard({
   version: number
   /** The version that last changed each changed frame, when not `version`. */
   marks?: ReadonlyMap<string, number>
+  /** The frames that cannot show, which say so on their rows. */
+  faults?: ReadonlySet<string>
+  /** The frames an agent writes now, with its mark. */
+  writing?: ReadonlyMap<string, ReactNode>
   onPage: (id: string) => void
   onFrame: (id: string) => void
   onOpen: (id: string) => void
@@ -97,13 +105,25 @@ export function PagesCard({
           meta: <span className="k-pages__meta">{frames.length}</span>,
           children: shown.map((p) => {
             const count = comments.get(p.id) ?? 0
+            const fault = faults?.has(p.id) ?? false
+            const writer = writing?.get(p.id)
             return {
               id: p.id,
               label: p.name,
               icon: <HugeiconsIcon icon={frameIcon(p)} size={14} strokeWidth={1.9} />,
               meta:
-                changed.has(p.id) || count > 0 ? (
+                changed.has(p.id) || count > 0 || fault || writer ? (
                   <span className="k-pages__marks">
+                    {writer && (
+                      <span className="k-pages__writer" title={t('viewer.writing.row')}>
+                        {writer}
+                      </span>
+                    )}
+                    {fault && (
+                      <span className="k-vs-row-warn" title={t('viewer.frameFailed')}>
+                        <HugeiconsIcon icon={Alert02Icon} size={13} strokeWidth={2} />
+                      </span>
+                    )}
                     {changed.has(p.id) && (
                       <span className="k-pages__mark" data-changed="">
                         {t('pages.version', { version: marks?.get(p.id) ?? version })}
@@ -122,7 +142,7 @@ export function PagesCard({
         },
       ]
     })
-  }, [doc, filter, needle, narrowed, changed, comments, version, marks, t])
+  }, [doc, filter, needle, narrowed, changed, comments, version, marks, faults, writing, t])
 
   // Narrowing opens every page that still holds a frame.
   const shownExpanded = narrowed ? items.map((n) => n.id) : expanded
@@ -216,16 +236,32 @@ export function PagesCard({
             setHover(null)
           }}
         >
-          <TreeView
-            items={items}
-            expanded={shownExpanded}
-            onExpandedChange={narrowed ? undefined : setExpanded}
-            selected={selected}
-            onSelect={(id) => (frameIds.has(id) ? onFrame(id) : onPage(id))}
-            guides={false}
-            emptyText={t('pages.none')}
-            aria-label={t('pages.title')}
-          />
+          {narrowed && items.length === 0 ? (
+            <NoneHere
+              text={
+                needle
+                  ? t('pages.noMatch', { query: query.trim() })
+                  : filter === 'changed'
+                    ? t('pages.noChanged')
+                    : t('pages.noComments')
+              }
+              onShowAll={() => {
+                setQuery('')
+                setViewerState(artifactId, { pagesFilter: 'all' })
+              }}
+            />
+          ) : (
+            <TreeView
+              items={items}
+              expanded={shownExpanded}
+              onExpandedChange={narrowed ? undefined : setExpanded}
+              selected={selected}
+              onSelect={(id) => (frameIds.has(id) ? onFrame(id) : onPage(id))}
+              guides={false}
+              emptyText={t('pages.none')}
+              aria-label={t('pages.title')}
+            />
+          )}
         </div>
       </div>
       {hover && hovered && (

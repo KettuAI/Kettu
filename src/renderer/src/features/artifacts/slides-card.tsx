@@ -10,6 +10,7 @@ import { usePartThumbnail } from './thumbnails'
 import { slideName, type DeckOutline, type DeckSlide } from './use-deck'
 import { useInView } from './use-in-view'
 import { ViewerSlot } from './viewer-shell'
+import { NoneHere } from './viewer-states'
 
 /**
  * A slide's picture as the host draws it; where it draws none, or until it has, the slide's title
@@ -65,6 +66,7 @@ export function SlidesCard({
   marks,
   comments,
   onPick,
+  writing,
 }: {
   artifactId: string
   deck: DeckOutline
@@ -77,6 +79,8 @@ export function SlidesCard({
   /** Open threads by slide. */
   comments: ReadonlyMap<number, number>
   onPick: (slide: number) => void
+  /** The slides an agent is writing, by number. */
+  writing?: readonly number[] | null
 }) {
   const { t } = useTranslation('artifacts')
   const filter = useViewerState(artifactId, (s) => s.pagesFilter)
@@ -115,14 +119,16 @@ export function SlidesCard({
         </div>
         <div ref={list} className="adk-srows" role="listbox" aria-label={t('deck.slides')}>
           {shown.length === 0 ? (
-            <p className="adk-srows__none">
-              {filter === 'changed' ? t('deck.noChanged') : t('deck.noComments')}
-            </p>
+            <NoneHere
+              text={filter === 'changed' ? t('deck.noChanged') : t('deck.noComments')}
+              onShowAll={() => setViewerState(artifactId, { pagesFilter: 'all' })}
+            />
           ) : (
             shown.map((slide) => {
               const count = comments.get(slide.number) ?? 0
               const tagged = changed.has(slide.number)
               const on = slide.number === current
+              const held = !!writing?.includes(slide.number)
               return (
                 <button
                   key={slide.number}
@@ -139,8 +145,13 @@ export function SlidesCard({
                   </span>
                   <span className="adk-srow__text">
                     <span className="adk-srow__name">{slideName(slide)}</span>
-                    {(tagged || count > 0) && (
+                    {(tagged || count > 0 || held) && (
                       <span className="k-pages__marks">
+                        {held && (
+                          <span className="k-pages__mark" data-writing="">
+                            {t('viewer.writing.row')}
+                          </span>
+                        )}
                         {tagged && (
                           <span className="k-pages__mark" data-changed="">
                             {t('pages.version', {

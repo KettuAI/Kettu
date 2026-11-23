@@ -74,3 +74,39 @@ export async function handOffPageErrors(input: {
   await host('sessions.queue', { sessionId: input.session, content: [{ type: 'text', text }] })
   return true
 }
+
+/**
+ * Asks a session to repair what of the artifact cannot show, the whole of it or one frame, as one
+ * user message; or opens New session with it drafted when there is no session; true when sent.
+ */
+export async function handOffRepair(input: {
+  artifact: { id: string; title: string; version: number; project: string }
+  /** The frame's file, when only it cannot show. */
+  file: string | null
+  reason: string
+  session: string | null
+}): Promise<boolean> {
+  const { artifact } = input
+  const text = input.file
+    ? i18n.t('artifacts:prompt.repairFrame', {
+        id: artifact.id,
+        version: artifact.version,
+        file: input.file,
+        reason: input.reason,
+      })
+    : i18n.t('artifacts:prompt.repair', {
+        id: artifact.id,
+        version: artifact.version,
+        reason: input.reason,
+      })
+  if (!input.session) {
+    const draft = readDraft(NEW_SESSION_DRAFT)
+    writeDraft(NEW_SESSION_DRAFT, draft.trim() ? `${draft}\n\n${text}` : text)
+    flushDraft(NEW_SESSION_DRAFT)
+    openNewSession(artifact.project, null)
+    emitAppEvent({ kind: 'draft-written', draft: NEW_SESSION_DRAFT })
+    return false
+  }
+  await host('sessions.queue', { sessionId: input.session, content: [{ type: 'text', text }] })
+  return true
+}

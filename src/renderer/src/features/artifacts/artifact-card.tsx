@@ -18,6 +18,7 @@ import {
   ContextMenuTrigger,
 } from '@renderer/components/ui/context-menu'
 import { toast } from '@renderer/components/ui/toast'
+import { useDark } from '@renderer/hooks/use-dark'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
 import { longAgo } from '@renderer/lib/format'
 import { errorMessage } from '@renderer/lib/host'
@@ -26,7 +27,7 @@ import { restoreArtifact, type ArtifactStanding } from '@renderer/stores/artifac
 import { useChanges } from '@renderer/features/session/entries/artifact-changes'
 import { artifactSharing, useArtifactShares, usePartThumbnails } from './artifact-host'
 import { ArtifactMenuItems } from './artifact-menu'
-import { TileThumb, type OpenAt } from './artifact-tile'
+import { DarkDocument, TileThumb, type OpenAt } from './artifact-tile'
 import { useMetaFit } from './meta-fit'
 import { useOutline } from './card-contents'
 import { changesLabel } from './change-words'
@@ -142,6 +143,15 @@ export const ArtifactCard = memo(function ArtifactCard({
     kind === 'slides' ? 'slides' : kind === 'canvas' && summary?.canvas ? 'canvas' : null
   const outline = useOutline(id, summary?.version ?? 0, tile ? outlined : null, inView)
   const parts = usePartThumbnails(id)
+  const dark = useDark()
+  // A document follows the theme as its sheet does; the version's own picture is the light one.
+  const preview = <Preview thumbnail={thumbnail} kind={kind} title={title} />
+  const picture =
+    parts && dark && kind === 'document' && still !== null && standing !== 'erased' ? (
+      <DarkDocument id={id} version={still} inView={inView} fallback={preview} />
+    ) : (
+      preview
+    )
   const replies = useWaitingReplies(id, tile && inView)
   const opensAt = useRef<OpenAt | null>(null)
   const metaFit = useMetaFit()
@@ -208,9 +218,7 @@ export const ArtifactCard = memo(function ArtifactCard({
       <span className="k-art__panel">
         <Glow />
         {stacked && <span aria-hidden className="k-art__sheet" data-behind="" />}
-        <span className="k-art__sheet">
-          <Preview thumbnail={thumbnail} kind={kind} title={title} />
-        </span>
+        <span className="k-art__sheet">{picture}</span>
       </span>
     ) : tile ? (
       <span className="k-art__panel">
@@ -224,7 +232,7 @@ export const ArtifactCard = memo(function ArtifactCard({
             changes={changes}
             parts={parts}
             inView={inView}
-            whole={<Preview thumbnail={thumbnail} kind={kind} title={title} />}
+            whole={preview}
             opensAtRef={opensAt}
           />
         </span>
@@ -237,9 +245,7 @@ export const ArtifactCard = memo(function ArtifactCard({
     ) : (
       <span className="k-art__panel">
         <Glow />
-        <span className="k-art__page">
-          <Preview thumbnail={thumbnail} kind={kind} title={title} />
-        </span>
+        <span className="k-art__page">{picture}</span>
       </span>
     )
 

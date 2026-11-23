@@ -94,6 +94,7 @@ function guarded(platform: NodeJS.Platform = 'win32') {
     platform,
     blocked: (event) => blocked.push(event),
     stopped: (event) => stopped.push(event),
+    failed: () => {},
     shortcut: (key) => keys.push(key),
   })
   const child = frame(contents.mainFrame, ORIGIN, 2)

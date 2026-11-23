@@ -26,7 +26,12 @@ import {
   type AskChip,
   type AskMessage,
 } from './ask-subject'
-import { useArtifactRecord } from './artifact-host'
+import {
+  useArtifactHostConnected,
+  useArtifactHostName,
+  useArtifactRecord,
+  whenArtifactHostConnected,
+} from './artifact-host'
 import { docLayout } from './canvas-model'
 import { CommentDraft, ThreadPop } from './comment-pop'
 import { pinsFor, threadNumbers } from './comment-threads'
@@ -95,6 +100,14 @@ export function useViewerTools(input: ToolsInput) {
   const { t } = useTranslation('artifacts')
   const { id, title, summary, shown, head, latest, editor, editing, threads, versions } = input
   const beside = input.beside
+  const offline = !useArtifactHostConnected(id)
+  const hostName = useArtifactHostName(id)
+  // A comment written while the computer is away stays in its draft and is saved once it is back.
+  const waiting = offline
+    ? hostName
+      ? t('viewer.offline.sendsLater', { host: hostName })
+      : t('viewer.offline.sendsLaterLocal')
+    : null
   const besideSession = useSessionsStore((s) =>
     beside && s.byId[beside.panel] ? beside.panel : null,
   )
@@ -278,6 +291,7 @@ export function useViewerTools(input: ToolsInput) {
 
   /** A saved comment shows in the card, on its tab, picked. */
   const saveComment = async (anchor: CommentAnchor, body: string) => {
+    await whenArtifactHostConnected(id)
     const thread = await host('artifacts.comment', { id, anchor, body })
     setViewerState(id, { right: 'comments' })
     setSelected(thread.id)
@@ -289,6 +303,7 @@ export function useViewerTools(input: ToolsInput) {
     <CommentDraft
       anchor={anchor}
       at={null}
+      waiting={waiting}
       inline
       onCancel={close}
       onSave={async (body) => {
@@ -450,7 +465,11 @@ export function useViewerTools(input: ToolsInput) {
               ? t(input.doc ? 'comments.hintCanvas' : 'comments.hintPage')
               : t('comments.hintOff')
           }
-          emptyText={t(input.doc ? 'comments.emptyText' : 'comments.emptyTextPage')}
+          emptyText={
+            input.mode === 'comment'
+              ? t(input.doc ? 'comments.emptyTextOn' : 'comments.emptyTextPageOn')
+              : t(input.doc ? 'comments.emptyText' : 'comments.emptyTextPage')
+          }
         />
       ),
       onClose: close,
@@ -515,6 +534,7 @@ export function useViewerTools(input: ToolsInput) {
         key={`${draftPick.page}:${draftPick.selection.src}:${draftPick.point?.x},${draftPick.point?.y}`}
         anchor={anchor}
         at={draftPick.point ? pointBox(draftPick.point) : null}
+        waiting={waiting}
         onCancel={() => editor.clearPick()}
         onSave={async (body) => {
           await saveComment(anchor, body)
@@ -554,23 +574,31 @@ export function useViewerTools(input: ToolsInput) {
 function useHeldBy(input: ToolsInput, editing: EditorState): HeldBy | null {
   const sessions = input.presence?.sessions ?? []
   const pick = editing.picked
+  const type = input.summary?.type ?? null
+  let piece: HeldBy['piece'] = 'page'
   const holder = pick
     ? sessions.find((s) =>
-        (s.held ?? []).some((piece) =>
-          piece.kind === 'whole'
-            ? true
-            : piece.kind === 'frame'
-              ? piece.file === pick.selection.path
-              : // A section or a slide: the document's or the deck's viewer knows which; the card
-                // holds every element of a typed artifact while its turn writes any of it.
-                !!input.summary?.type,
-        ),
+        (s.held ?? []).some((held) => {
+          if (held.kind === 'whole') return true
+          if (held.kind === 'frame' && held.file === pick.selection.path) {
+            piece = 'frame'
+            return true
+          }
+          // A section or a slide: the document's or the deck's viewer knows which; the card
+          // holds every element of a typed artifact while its turn writes any of it.
+          if ((held.kind === 'section' || held.kind === 'slide') && !!type) {
+            piece = held.kind
+            return true
+          }
+          return false
+        }),
       )
     : undefined
   const session = useSessionsStore((s) => (holder ? (s.byId[holder.sessionId] ?? null) : null))
   if (!holder) return null
   return {
     sessionId: holder.sessionId,
+    piece,
     agent: session
       ? {
           name: agentName(session.agentId, hostOfSession(session)),

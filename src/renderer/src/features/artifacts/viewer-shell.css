@@ -311,6 +311,11 @@
     0 0 0 0.5px var(--line-strong),
     var(--elevation-float);
 }
+/* In dark the floating pieces are told apart by their hairline alone: a shadow would smudge the
+   light pages under them. */
+[data-theme='dark'] :is(.avs-pill__in, .avs-dock, .avs-card) {
+  box-shadow: 0 0 0 0.5px var(--line-strong);
+}
 .avs-pill__in {
   gap: 6px;
   height: 36px;
@@ -494,4 +499,35 @@
 
 .kp-pane.avs-pane {
   padding: 0;
+}
+
+/* ---------- The whole artifact's states ---------- */
+
+/* The pill's mark in place of its dot: a deletion's icon. */
+.avs-pill__icon {
+  display: inline-flex;
+  flex: none;
+  color: var(--muted);
+}
+.avs-pill__in[data-actions] {
+  padding-right: 4px;
+}
+/* Deleted while it shows: the content stays, dimmed. */
+.avs-stage[data-fault='deleted'] > * {
+  opacity: 0.55;
+  transition: opacity var(--duration-fast) ease;
+}
+/* Opening a page or a document: its picture where its sheet will lie. */
+.avs-stage > .k-vs-cover[data-look='sheet'] {
+  inset: 8px 8px 58px;
+  overflow: hidden;
+  border-radius: var(--radius-card);
+}
+/* The dock while the content loads: what it will offer, dimmed and out of reach. */
+.avs-dock__off {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  opacity: 0.4;
+  pointer-events: none;
 }

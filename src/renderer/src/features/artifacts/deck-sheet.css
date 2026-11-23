@@ -51,22 +51,42 @@
   position: absolute;
   overflow: hidden;
   padding: 0;
-  opacity: 0.6;
+  /* A white slide on the light ground shows by its edge and shadow, so it is dimmed less. */
+  opacity: 0.85;
   cursor: pointer;
-  box-shadow: 0 0 0 0.5px var(--line-strong);
   transition: opacity var(--duration-fast) ease;
   animation: adk-fade 320ms var(--ease-out-quint) both;
+  /* On the light ground the far edge keeps some ink so a white slide still reads. */
+  --adk-melt: color-mix(in srgb, var(--ink) 55%, transparent);
+}
+/* The mask clips outer shadows, so the edge is drawn inside, over the picture. */
+.adk-ghost::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border: 1px solid var(--line-strong);
+  border-radius: inherit;
+  pointer-events: none;
 }
 .adk-ghost[data-side='before'] {
-  mask-image: linear-gradient(to right, transparent calc(100% - var(--adk-peek)), var(--ink) 100%);
+  mask-image: linear-gradient(
+    to right,
+    var(--adk-melt) calc(100% - var(--adk-peek)),
+    var(--ink) 100%
+  );
 }
 .adk-ghost[data-side='after'] {
-  mask-image: linear-gradient(to left, transparent calc(100% - var(--adk-peek)), var(--ink) 100%);
+  mask-image: linear-gradient(
+    to left,
+    var(--adk-melt) calc(100% - var(--adk-peek)),
+    var(--ink) 100%
+  );
 }
 .adk-ghost:hover {
-  opacity: 0.8;
+  opacity: 1;
 }
 [data-theme='dark'] .adk-ghost {
+  --adk-melt: transparent;
   opacity: 0.35;
 }
 [data-theme='dark'] .adk-ghost:hover {
@@ -266,11 +286,6 @@
   overflow-y: auto;
   scrollbar-width: thin;
 }
-.adk-srows__none {
-  padding: 12px 10px;
-  font-size: 12.5px;
-  color: var(--muted);
-}
 .adk-srow {
   display: flex;
   align-items: center;
@@ -411,4 +426,15 @@
 }
 :root[data-reduce-motion='always'] .adk-slide[data-flash]::after {
   animation: none;
+}
+
+/* An agent writing the slide shown: one orange edge and its tag above the slide. */
+.adk-slide[data-writing] {
+  box-shadow:
+    0 0 0 1.5px var(--artifact-writing),
+    var(--elevation-float);
+}
+.adk-writer {
+  position: absolute;
+  z-index: 2;
 }

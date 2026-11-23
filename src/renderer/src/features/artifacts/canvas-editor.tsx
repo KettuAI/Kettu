@@ -1,4 +1,13 @@
-import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import {
+  memo,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from 'react'
 import {
   AiMagicIcon,
   ArrowLeft01Icon,
@@ -32,6 +41,7 @@ import {
 } from '@shared/canvas-doc'
 import { AgentCursorStyles, AgentPointer } from '@renderer/components/affect/agent-cursors'
 import { Dropdown } from '@renderer/components/affect/app-shell'
+import { Button } from '@renderer/components/affect/button'
 import { AgentMark } from '@renderer/components/agents/agent-mark'
 import { Kbd } from '@renderer/components/ui/kbd'
 import { useHostHas } from '@renderer/lib/host-features'
@@ -77,7 +87,24 @@ import { framePageUrl } from './use-artifact'
 import { NOTE_COLOR_VAR } from './canvas-tools'
 import { DockButton, DockRule, ViewerSlot } from './viewer-shell'
 import { useShell } from './viewer-shell-context'
+import { useFailedFrames } from './frame-failures'
+import { PieceFault, StageNote, WriterTag } from './viewer-states'
 import './canvas-editor.css'
+
+/** What the viewer knows of the canvas besides its document: who writes which frame, and more. */
+export interface CanvasStates {
+  /** The frames an agent's running turn holds, which take no direct edit until it ends. */
+  held: ReadonlyMap<string, { name: string; mark: ReactNode }>
+  /** What a frame not loaded says while the computer is offline, or null while it answers. */
+  waitingFor: string | null
+  /** Asking the agent: the whole canvas, or to repair a frame that cannot show; null for none. */
+  ask: {
+    agent: string
+    mark: ReactNode
+    whole: () => void
+    repair: (file: string, reason: string) => void
+  } | null
+}
 
 /** An agent working on the artifact, as its pointer shows it. */
 export interface CanvasAgent {
@@ -296,6 +323,7 @@ export const CanvasEditor = memo(function CanvasEditor({
   marks,
   comments,
   compare = null,
+  states = null,
 }: {
   artifactId: string
   url: string
@@ -339,6 +367,7 @@ export const CanvasEditor = memo(function CanvasEditor({
   comments: ReadonlyMap<string, number>
   /** The version an agent wrote and the one before it, which a frame it changed compares with. */
   compare?: { before: number; after: number } | null
+  states?: CanvasStates | null
 }) {
   const { t } = useTranslation('artifacts')
   const doc = canvas.doc
@@ -1108,16 +1137,34 @@ export const CanvasEditor = memo(function CanvasEditor({
     if (under) setFocused(under.page.id)
   }
 
-  const empty = layout !== null && layout.pages.length === 0 && layout.notes.length === 0
+  // Until the shown page is one of the document's, its empty layout says nothing about the board.
+  const empty =
+    layout !== null &&
+    layout.pages.length === 0 &&
+    layout.notes.length === 0 &&
+    (doc!.canvases.length === 0 || doc!.canvases.some((c) => c.id === shownKey))
+  const { failed: failedFrames, forget: forgetFailed } = useFailedFrames(url)
+  // Retry loads a failed frame again, in a new frame.
+  const [retries, setRetries] = useState<ReadonlyMap<string, number>>(() => new Map())
+  const retryFrame = (p: { id: string; file: string }) => {
+    forgetFailed(p.file)
+    setRetries((was) => new Map(was).set(p.id, (was.get(p.id) ?? 0) + 1))
+  }
   const selectedPages = pages.filter((p) => shownSelection.includes(p.id))
   const flashedPage = flash ? pages.find((p) => p.id === flash.id) : undefined
   const selectedBox = union(selectedPages)
-  const writingPages = new Set(
-    agents
+  const writingPages = new Set([
+    ...(agents
       .filter((a) => a.doing && a.doing !== 'read')
       .map((a) => agentPages.get(a.sessionId)?.id)
-      .filter(Boolean) as string[],
-  )
+      .filter(Boolean) as string[]),
+    ...(states?.held.keys() ?? []),
+  ])
+  // A frame whose file the host answered with an error: it says why in its place.
+  const faultOf = (p: { file: string }): number | null =>
+    files.has(p.file) ? (failedFrames.get(p.file) ?? null) : null
+  const faults = new Set(pages.filter((p) => faultOf(p) !== null).map((p) => p.id))
+  const writingMarks = states ? new Map([...states.held].map(([id, w]) => [id, w.mark])) : undefined
   const drawing = new Map<string, CanvasAgent>()
   for (const a of agents) {
     const p = agentPages.get(a.sessionId)
@@ -1193,8 +1240,9 @@ export const CanvasEditor = memo(function CanvasEditor({
                     </b>
                     {!agent && <span>{t('board.page.blankHint')}</span>}
                   </div>
-                ) : live.has(p.id) ? (
+                ) : live.has(p.id) && faultOf(p) === null ? (
                   <CanvasFrame
+                    key={retries.get(p.id) ?? 0}
                     src={framePageUrl(
                       url,
                       { version, loadFrom },
@@ -1220,7 +1268,9 @@ export const CanvasEditor = memo(function CanvasEditor({
                     <FrameThumb artifactId={artifactId} version={version} frame={p.id} />
                   </div>
                 ) : (
-                  <div className="k-ce-page__idle">{p.name}</div>
+                  <div className="k-ce-page__idle">
+                    {faultOf(p) === null && (states?.waitingFor ?? p.name)}
+                  </div>
                 )}
                 {showingBefore && compare && comparePage?.id === p.id && !focused && (
                   <div className="k-vt-before" data-unscaled="">
@@ -1282,6 +1332,13 @@ export const CanvasEditor = memo(function CanvasEditor({
                   width: p.width,
                 }}
               >
+                {states?.held.get(p.id) && (
+                  <WriterTag
+                    className="k-ce-label__writer"
+                    mark={states.held.get(p.id)!.mark}
+                    name={states.held.get(p.id)!.name}
+                  />
+                )}
                 <span className="k-ce-label__name">{p.name}</span>
                 {changed.has(p.id) && (
                   <span className="k-ce-label__mark" data-changed="">
@@ -1294,6 +1351,48 @@ export const CanvasEditor = memo(function CanvasEditor({
                     {count}
                   </span>
                 )}
+              </div>
+            )
+          })}
+          {pages.map((p) => {
+            const status = faultOf(p)
+            if (status === null) return null
+            const reason = t('viewer.frameFailedWhy', { file: p.file, version })
+            return (
+              <div
+                key={`fault:${p.id}`}
+                className="k-ce-fault"
+                style={{ left: p.x, top: p.y, width: p.width, height: p.height }}
+              >
+                <div
+                  className="k-ce-fault__screen"
+                  style={{
+                    width: `calc(${p.width}px / var(--unscale))`,
+                    height: `calc(${p.height}px / var(--unscale))`,
+                  }}
+                >
+                  <PieceFault
+                    title={t('viewer.frameFailed')}
+                    reason={status === 503 ? t('viewer.error.unavailable') : reason}
+                    actions={
+                      <>
+                        <Button size="sm" variant="secondary" onClick={() => retryFrame(p)}>
+                          {t('viewer.retry')}
+                        </Button>
+                        {states?.ask && (
+                          <Button
+                            size="sm"
+                            variant="secondary"
+                            icon={<span className="aps-ask__mark">{states.ask.mark}</span>}
+                            onClick={() => states.ask!.repair(p.file, reason)}
+                          >
+                            {t('sheet.ask', { agent: states.ask.agent })}
+                          </Button>
+                        )}
+                      </>
+                    }
+                  />
+                </div>
               </div>
             )
           })}
@@ -1371,7 +1470,7 @@ export const CanvasEditor = memo(function CanvasEditor({
             })}
           </div>
         </div>
-        {opened && openedPage && focused === opened.id && (
+        {opened && openedPage && focused === opened.id && faultOf(openedPage) === null && (
           <OpenedFrame
             key={openedPage.id}
             page={openedPage}
@@ -1416,6 +1515,8 @@ export const CanvasEditor = memo(function CanvasEditor({
             changed={changed}
             marks={marks}
             comments={comments}
+            faults={faults}
+            writing={writingMarks}
             artifactId={artifactId}
             version={version}
             onPage={(id) => setViewerState(artifactId, { page: id, selection: [], opened: null })}
@@ -1463,10 +1564,26 @@ export const CanvasEditor = memo(function CanvasEditor({
         />
       )}
       {empty && !readOnly && (
-        <div className="k-ce-empty">
-          <h3>{t('board.empty.title')}</h3>
-          <p>{t('board.empty.body')}</p>
-        </div>
+        <StageNote
+          kind={null}
+          title={t('viewer.noFrames')}
+          text={
+            states?.ask
+              ? t('viewer.noFramesHint', { agent: states.ask.agent })
+              : t('viewer.noFramesHintAny')
+          }
+        >
+          {states?.ask && (
+            <Button
+              size="sm"
+              variant="secondary"
+              icon={<span className="aps-ask__mark">{states.ask.mark}</span>}
+              onClick={states.ask.whole}
+            >
+              {t('sheet.ask', { agent: states.ask.agent })}
+            </Button>
+          )}
+        </StageNote>
       )}
       {focusedPage ? (
         <PagerDock

@@ -96,6 +96,13 @@ export interface DocState {
   step: number | null
   /** The block a comment is being written on or a thread is open under, outlined. */
   focus: number | null
+  /** Motion is reduced: nothing flashes. Older windows leave it out. */
+  still?: boolean
+  /**
+   * An agent writing the document, by the section's slug, or null for all of it, with the words
+   * of its tag; left out or null when no agent writes. Older windows leave it out.
+   */
+  writing?: { section: string | null; tag: string } | null
 }
 
 export type DocDrive =

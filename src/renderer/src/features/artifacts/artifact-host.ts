@@ -63,3 +63,35 @@ export function useArtifactRecord(id: string, record: ArtifactRecord): boolean {
   const known = scope.useInfoStore((s) => s.info?.artifactRecords?.includes(record) ?? false)
   return isWeb || hostId !== null ? known : true
 }
+
+/** Whether the artifact's host answers now, outside any component. */
+function hostConnected(hostId: string | null): boolean {
+  return hostId === null
+    ? useConnectionStore.getState().agentHost === 'connected'
+    : useHostsStore.getState().status?.hosts?.find((h) => h.id === hostId)?.connection.state ===
+        'online'
+}
+
+/** Resolves once the artifact's host answers, at once when it does now. */
+export function whenArtifactHostConnected(id: string): Promise<void> {
+  const hostId = artifactHost(id)
+  if (hostConnected(hostId)) return Promise.resolve()
+  return new Promise((resolve) => {
+    const check = () => {
+      if (!hostConnected(hostId)) return
+      offOwn()
+      offOther()
+      resolve()
+    }
+    const offOwn = useConnectionStore.subscribe(check)
+    const offOther = useHostsStore.subscribe(check)
+  })
+}
+
+/** The name of the computer the artifact is kept on: another host's own, or null for this one. */
+export function useArtifactHostName(id: string | null): string | null {
+  const hostId = id === null ? null : artifactHost(id)
+  return useHostsStore((s) =>
+    hostId === null ? null : (s.status?.hosts?.find((h) => h.id === hostId)?.name ?? null),
+  )
+}

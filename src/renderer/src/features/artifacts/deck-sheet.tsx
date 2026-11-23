@@ -53,6 +53,7 @@ import { threadNumbers } from './comment-threads'
 import { CompareDock, type CompareSwitch } from './compare-dock'
 import type { PlaceAsk, SheetWalk } from './change-walk'
 import { sheetSave } from './sheet-save'
+import { useUnsaved } from './unsaved'
 import { SaveChip } from './tool-parts'
 import { FitMenu } from './fit-menu'
 import { FrameLink } from './frame-link'
@@ -64,6 +65,7 @@ import { pageUrl, type ShownVersion } from './use-artifact'
 import { slideAnchor, slideName, type DeckOutline } from './use-deck'
 import { DockButton, DockRule, ViewerSlot } from './viewer-shell'
 import { useShell } from './viewer-shell-context'
+import { WriterTag } from './viewer-states'
 import './document-sheet.css'
 import './deck-sheet.css'
 
@@ -159,7 +161,7 @@ export function DeckSheet({
   since,
   band,
   latest,
-  mode,
+  mode: modeAsked,
   where,
   deck,
   walk,
@@ -171,6 +173,7 @@ export function DeckSheet({
   onAsked,
   focusThread,
   compare,
+  writing = null,
 }: {
   id: string
   url: string
@@ -198,6 +201,8 @@ export function DeckSheet({
   focusThread: { thread: string; seq: number } | null
   /** Before and after, where an agent's version changed the slide shown. */
   compare: CompareSwitch | null
+  /** An agent writing it: the slides it holds, or null for every slide, and its name and mark. */
+  writing?: { slides: readonly number[] | null; name: string; mark: ReactNode } | null
 }) {
   const { t } = useTranslation('artifacts')
   const { tier, insets, leftCard } = useShell()
@@ -210,6 +215,10 @@ export function DeckSheet({
   const count = deck?.slides.length ?? 0
   const current = Math.min(Math.max(1, kept), Math.max(1, count))
   const slide = deck?.slides[current - 1] ?? null
+  // The slide an agent is writing takes no edit of the user's until its turn ends; comments stay.
+  const writesShown =
+    !!writing && latest && (writing.slides === null || writing.slides.includes(current))
+  const mode: ViewerMode = modeAsked === 'edit' && writesShown ? 'view' : modeAsked
   const version = shown.version
   const [grid, setGrid] = useState(false)
   const [picked, setPicked] = useState<number | null>(null)
@@ -305,6 +314,7 @@ export function DeckSheet({
   // What the viewer reported last.
   const [layout, setLayout] = useState<Extract<DeckReport, { t: 'layout' }> | null>(null)
   const [save, setSave] = useState<Save | null>(null)
+  useUnsaved(id, !!save && ['failed', 'conflict', 'refused'].includes(save.state))
 
   useEffect(() => {
     if (!deck) return
@@ -567,10 +577,19 @@ export function DeckSheet({
             {ready && peek && (
               <Neighbours artifactId={id} deck={deck} current={current} place={place} onGo={go} />
             )}
+            {writesShown && writing && (
+              <WriterTag
+                className="adk-writer"
+                mark={writing.mark}
+                name={t('viewer.writing.tag', { agent: writing.name })}
+                style={{ left: place.x, top: place.y - 28 }}
+              />
+            )}
             <div
               ref={slideBox}
               className="adk-slide"
               data-flash={flash !== null || undefined}
+              data-writing={writesShown || undefined}
               style={{ left: place.x, top: place.y, width: shownW, height: shownH }}
             >
               <iframe
@@ -698,7 +717,7 @@ export function DeckSheet({
             onAsk={onAsk ? (n) => onAsk(anchorOf(n, null)) : null}
           />
         )}
-        {!(loaded && deck) && <Waiting since={since} />}
+        {!(loaded && deck) && <Waiting since={since} id={id} look="card" />}
       </div>
       {deck && (
         <SlidesCard
@@ -710,6 +729,7 @@ export function DeckSheet({
           marks={marks}
           comments={bySlide}
           onPick={openSlide}
+          writing={latest ? writing?.slides : null}
         />
       )}
       {deck && (
