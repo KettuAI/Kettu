@@ -44,6 +44,7 @@ function manager(
       sessionsChanged: () => {},
       restoreConfig: (_agentId: string, config: unknown[]) => config,
       status: () => ({ capabilities: null }),
+      whileOpening: (_agentId: string, start: Promise<unknown>) => start,
       ...extra.agents,
     } as unknown as AgentManager,
     projects: {

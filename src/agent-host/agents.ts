@@ -306,6 +306,8 @@ export interface AgentTimings {
   limitsReadMs: number
   /** How long the hidden `session/new` that reads an agent's options may take. */
   optionsMs: number
+  /** How long a read of a per-session agent's own waits for its sessions that are opening. */
+  openingWaitMs: number
   /** How long one `npm view` of the update check may take. */
   updateViewMs: number
   /** How long after the host starts a due update check waits, so it stays out of startup. */
@@ -332,6 +334,7 @@ export const AGENT_TIMINGS: AgentTimings = {
   limitsBackgroundMs: 5 * 60_000,
   limitsReadMs: 90_000,
   optionsMs: 30_000,
+  openingWaitMs: 30_000,
   updateViewMs: 20_000,
   updateDelayMs: 60_000,
   updateIntervalMs: 24 * 60 * 60_000,
@@ -558,6 +561,8 @@ class Slot {
   resetsReadAt = 0
   resetsRetry: ReturnType<typeof setTimeout> | null = null
   optionsRun: Promise<void> | null = null
+  /** Its sessions opening now, each settled once its start has. */
+  openings = new Set<Promise<void>>()
   /** The removal of the hidden session that read the options, once its `session/new` answered. */
   optionsRemoval: Promise<void> | null = null
   progress = new TextRing(8 * 1024)
@@ -593,6 +598,11 @@ class Slot {
   get name(): string {
     return this.added?.name ?? this.h.def.name
   }
+}
+
+/** Whether the agent runs each session in a process of its own, through the session router. */
+function runsPerSession(def: AgentDefinition): boolean {
+  return (def.launch.kind === 'binary' || def.launch.kind === 'package') && !!def.launch.perSession
 }
 
 // For diagnostics, which stay in English.
@@ -3926,6 +3936,37 @@ export class AgentManager {
   }
 
   /**
+   * Notes a session of the agent opening until `start` settles. Meanwhile the agent's own reads
+   * wait when each session runs in a process of its own: every read starts another such process,
+   * which competes with the session's start (agy's `session/new` took up to twice as long beside
+   * its `/usage`).
+   */
+  whileOpening<T>(agentId: AgentId, start: Promise<T>): Promise<T> {
+    const slot = this.slots.get(agentId)
+    if (!slot) return start
+    const settled = start.then(
+      () => {},
+      () => {},
+    )
+    slot.openings.add(settled)
+    void settled.then(() => slot.openings.delete(settled))
+    return start
+  }
+
+  /** Waits for the agent's sessions that are opening now, at most `openingWaitMs`. */
+  private async afterOpenings(slot: Slot): Promise<void> {
+    if (!runsPerSession(slot.def) || slot.openings.size === 0) return
+    let timer: ReturnType<typeof setTimeout> | null = null
+    await Promise.race([
+      Promise.all(slot.openings),
+      new Promise<void>((resolve) => {
+        timer = setTimeout(resolve, this.timings.openingWaitMs)
+      }),
+    ])
+    if (timer) clearTimeout(timer)
+  }
+
+  /**
    * Reads the current use of every plan limit from the agent's report (`/usage`, `/status`), at
    * most once a minute, starting the agent if needed; the windows arrive in its status. Rate-limit
    * events report a window only when it changes, so without this most windows would stay unknown.
@@ -3943,7 +3984,8 @@ export class AgentManager {
     if (!force && slot.signIn === 'required') return
     if (slot.limitsRun) return slot.limitsRun
     if (!force && Date.now() - slot.limitsReadAt < this.timings.limitsMs) return
-    slot.limitsRun = this.limitedRead(slot, this.readLimits(slot, force))
+    slot.limitsRun = this.afterOpenings(slot)
+      .then(() => this.limitedRead(slot, this.readLimits(slot, force)))
       .then(
         () => this.limitsReadEnded(slot, null),
         (error: unknown) => {
@@ -4519,6 +4561,7 @@ export class AgentManager {
     const agentId = slot.id
     const log = (message: string): void =>
       this.deps.diagnostics.log('warn', `${slot.name}: ${message}`)
+    await this.afterOpenings(slot)
     // A limits report running meanwhile reads them too.
     await slot.limitsRun?.catch(() => {})
     if (slot.signIn === 'required') return null
@@ -4547,6 +4590,7 @@ export class AgentManager {
     if (this.isDisabled(agentId)) return
     const slot = this.slot(agentId)
     const runtime = await this.ensureReady(agentId)
+    await this.afterOpenings(slot)
     await slot.limitsRun?.catch(() => {})
     if (slot.signIn === 'required' || !runtime.connection.unpromptedSessions) return
     const log = (message: string): void =>

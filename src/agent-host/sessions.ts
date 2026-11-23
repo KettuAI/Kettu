@@ -5081,10 +5081,12 @@ export class SessionManager {
       unwatch: null,
     }
     live.prepared = prepared
-    prepared.opening = this.runPrepare(live, options).catch(async (error: unknown) => {
-      if (live.prepared === prepared) await this.dropPrepared(live)
-      throw error
-    })
+    prepared.opening = this.deps.agents
+      .whileOpening(record.agentId, this.runPrepare(live, options))
+      .catch(async (error: unknown) => {
+        if (live.prepared === prepared) await this.dropPrepared(live)
+        throw error
+      })
     // A failure reaches the caller that waits; a replacement nobody waits for only logs it.
     prepared.opening.catch((error: unknown) => {
       if (error instanceof HostError && error.code === 'not_found') return
@@ -5273,7 +5275,11 @@ export class SessionManager {
    * deleted, or whose project is removed, before or while it starts is not saved again, and the
    * start fails with `not_found`.
    */
-  private async startNew(live: Live): Promise<void> {
+  private startNew(live: Live): Promise<void> {
+    return this.deps.agents.whileOpening(live.record.agentId, this.openNew(live))
+  }
+
+  private async openNew(live: Live): Promise<void> {
     const gone = (): boolean => live.closing || this.live.get(live.id) !== live
     let runtime: AgentRuntime
     try {
