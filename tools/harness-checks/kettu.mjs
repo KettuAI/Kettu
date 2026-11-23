@@ -16,7 +16,7 @@ const MODULES = {
   'src/agent-host/find-command.ts': ['findCommand', 'isExecutableFile'],
   'src/agent-host/shell-env.ts': ['satisfiesNode'],
   'src/agent-host/versions.ts': ['compareVersions', 'versionAtLeast'],
-  'src/agent-host/dsh/options.ts': ['DEFAULT_MODEL', 'DEFAULT_EFFORT'],
+  'src/agent-host/dsh/listing.ts': ['readListing', 'listingRows'],
   'src/agent-host/harness-versions.ts': ['BUNDLED'],
   'src/agent-host/opencode/connection.ts': ['OpenCodeConnection'],
   'src/agent-host/cline/connection.ts': ['ClineConnection'],
