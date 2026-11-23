@@ -1,11 +1,12 @@
 // @ts-check
-// Signs a release's update files with the Ed25519 release key in UPDATE_SIGNING_KEY, a PKCS#8 PEM,
-// writing <file>.sig beside each: the standard base64 of the signature of the file's name, a
-// newline and its bytes, and a newline. The app takes an update file only with a signature under a
-// key it has built in, so the release fails without the key, or when the app's current key would
-// refuse a signature:
+// Signs a release's update files, the daemon's install script and its packages' checksums with the
+// Ed25519 release key in UPDATE_SIGNING_KEY, a PKCS#8 PEM, writing <file>.sig beside each: the
+// standard base64 of the signature of the file's name, a newline and its bytes, and a newline. The
+// app and the daemon take these files only with a signature under a key they have built in, so the
+// release fails without the key, or when the current key would refuse a signature:
 //
-//   UPDATE_SIGNING_KEY="$(cat release.pem)" node tools/workflow/sign-update-files.mjs release/latest*.yml
+//   UPDATE_SIGNING_KEY="$(cat release.pem)" node tools/workflow/sign-update-files.mjs \
+//     release/latest*.yml release/install.sh release/kettu-daemon-sha256sums.txt
 //
 // No dependencies.
 
@@ -19,8 +20,10 @@ function fail(message) {
   process.exit(1)
 }
 
+const SIGNED_NAMES = /^(latest.*\.yml|install\.sh|kettu-daemon-sha256sums\.txt)$/
+
 const files = process.argv.slice(2)
-if (files.length === 0) fail('Name the update files to sign')
+if (files.length === 0) fail('Name the files to sign')
 const pem = process.env.UPDATE_SIGNING_KEY ?? ''
 if (!pem.trim()) {
   fail('UPDATE_SIGNING_KEY is not set, and a release never ships unsigned update files')
@@ -49,8 +52,8 @@ const current = createPublicKey({
 })
 
 for (const file of files) {
-  if (!/^latest.*\.yml$/.test(basename(file))) fail(`${file} is not an update file`)
-  // Signed with its name, as the app checks it, so no channel's file passes as another's.
+  if (!SIGNED_NAMES.test(basename(file))) fail(`${file} is not a file the release signs`)
+  // Signed with its name, as the app checks it, so no file passes as another's.
   const message = Buffer.concat([Buffer.from(`${basename(file)}\n`, 'utf8'), readFileSync(file)])
   const signature = sign(null, message, key)
   if (!verify(null, message, current, signature)) {
