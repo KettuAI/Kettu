@@ -24,9 +24,73 @@ function textNodes(root: Element): Text[] {
   return nodes
 }
 
+/** The end of the bracketed part that opens at `open`, or -1 when it never closes. */
+function closing(source: string, open: number, left: string, right: string): number {
+  let depth = 0
+  let quote = ''
+  for (let i = open; i < source.length; i++) {
+    const char = source[i]!
+    if (char === '\\') i++
+    else if (quote) quote = char === quote ? '' : quote
+    else if (left === '(' && (char === '"' || char === "'" || char === '<')) {
+      // A title or a bracketed address may hold parentheses of its own.
+      if (/[\s(]/.test(source[i - 1]!)) quote = char === '<' ? '>' : char
+    } else if (char === left) depth++
+    else if (char === right && --depth === 0) return i + 1
+  }
+  return -1
+}
+
+/**
+ * The stretches of the source that are never shown as words: the address and title of a link, its
+ * reference label, and an image whole.
+ */
+function hidden(source: string): [number, number][] {
+  const spans: [number, number][] = []
+  if (/^\s*(```|~~~)/.test(source)) return spans
+  for (let i = 0; i < source.length; i++) {
+    const char = source[i]!
+    if (char === '\\') {
+      i++
+    } else if (char === '`') {
+      const ticks = /^`+/.exec(source.slice(i))![0]
+      const end = source.indexOf(ticks, i + ticks.length)
+      i = end < 0 ? i + ticks.length - 1 : end + ticks.length - 1
+    } else if (char === '!' && source[i + 1] === '[') {
+      const alt = closing(source, i + 1, '[', ']')
+      if (alt < 0) continue
+      const rest =
+        source[alt] === '('
+          ? closing(source, alt, '(', ')')
+          : source[alt] === '['
+            ? closing(source, alt, '[', ']')
+            : alt
+      spans.push([i, rest < 0 ? alt : rest])
+      i = (rest < 0 ? alt : rest) - 1
+    } else if (char === ']' && (source[i + 1] === '(' || source[i + 1] === '[')) {
+      const end =
+        source[i + 1] === '(' ? closing(source, i + 1, '(', ')') : closing(source, i + 1, '[', ']')
+      if (end < 0) continue
+      spans.push([i + 1, end])
+      i = end - 1
+    }
+  }
+  return spans
+}
+
+/** Where `text` is written as words at or after `from`, or -1. */
+function find(source: string, text: string, from: number, spans: [number, number][]): number {
+  let at = source.indexOf(text, from)
+  while (at >= 0 && spans.some(([start, end]) => at < end && at + text.length > start)) {
+    at = source.indexOf(text, at + 1)
+  }
+  return at
+}
+
 /** Finds the block's rendered words in its source, in order. */
 export function mapSource(root: Element, source: string): SourceMap {
   const runs: Run[] = []
+  const spans = hidden(source)
   let cursor = 0
   for (const node of textNodes(root)) {
     const text = node.data
@@ -35,7 +99,7 @@ export function mapSource(root: Element, source: string): SourceMap {
       runs.push({ node, from: null, to: cursor, text, code })
       continue
     }
-    const at = source.indexOf(text, cursor)
+    const at = find(source, text, cursor, spans)
     if (at < 0) {
       runs.push({ node, from: null, to: cursor, text, code })
       continue
