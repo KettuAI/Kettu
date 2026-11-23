@@ -80,10 +80,14 @@ function hidden(source: string): [number, number][] {
 
 /** Where `text` is written as words at or after `from`, or -1. */
 function find(source: string, text: string, from: number, spans: [number, number][]): number {
+  // A match that holds a span whole shows it as words, so the brackets were no link there.
+  const inside = (at: number): boolean =>
+    spans.some(
+      ([start, end]) =>
+        at < end && at + text.length > start && !(at <= start && at + text.length >= end),
+    )
   let at = source.indexOf(text, from)
-  while (at >= 0 && spans.some(([start, end]) => at < end && at + text.length > start)) {
-    at = source.indexOf(text, at + 1)
-  }
+  while (at >= 0 && inside(at)) at = source.indexOf(text, at + 1)
   return at
 }
 

@@ -118,4 +118,18 @@ describe('typing into a block with links', () => {
       }),
     ).toBe('Type `[x](y.zz)` here.z')
   })
+
+  it('keeps brackets written as words editable', () => {
+    expect(
+      edit('As shown in [1][2].', ['As shown in [1][2].'], (nodes) => {
+        nodes[0]!.data = 'As seen in [1][2].'
+      }),
+    ).toBe('As seen in [1][2].')
+    expect(
+      edit('Use arr[i][j] here.', ['Use arr[i][j] here.'], (nodes) => {
+        nodes[0]!.data = 'Use arr[i][j] there.'
+      }),
+    ).toBe('Use arr[i][j] there.')
+    expect(edit('a](b) c', ['a](b) c'], (nodes) => (nodes[0]!.data = 'a](b) d'))).toBe('a](b) d')
+  })
 })
