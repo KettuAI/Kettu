@@ -624,6 +624,26 @@ export function ReduceMotion() {
   )
 }
 
+export function EffortControl() {
+  const { t } = useTranslation('settings')
+  const value = useSettings().appearance.effortControl
+  const [apply, error] = useApply()
+  return (
+    <>
+      <ControlError error={error} />
+      <Segmented
+        label={t('appearance.effortControl.name')}
+        value={value}
+        options={[
+          { value: 'dial', label: t('appearance.effortControl.dial') },
+          { value: 'segments', label: t('appearance.effortControl.segments') },
+        ]}
+        onChange={(v) => apply({ appearance: { effortControl: v } })}
+      />
+    </>
+  )
+}
+
 export function SidebarHover({ label }: { label: string }) {
   const checked = useSettings().appearance.sidebarHover
   const [apply, error] = useApply()

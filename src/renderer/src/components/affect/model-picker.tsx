@@ -146,7 +146,8 @@ export type ModelPickerProps = {
   /** Your own line on top of the list, in place of "Model" */
   heading?: ReactNode;
   /** Your own effort levels; the first one is the default and the control shows without thinking */
-  efforts?: { id: string; label: string }[];
+  /** Kettu: `trigger: false` keeps a level off the trigger, such as the agent's default */
+  efforts?: { id: string; label: string; trigger?: false }[];
   effortLabel?: string;
   /** What the last row says while the effort control is pointed at */
   effortHint?: string;
@@ -894,8 +895,8 @@ export function ModelPicker({
             </span>
           ))}
         {/* Your own levels always show on the trigger, so the level in use is never a guess */}
-        {/* Kettu: a level without a label, such as the agent's default, shows none */}
-        {ownEffort && efforts.find((x) => x.id === effortNow)?.label && (
+        {/* Kettu: a level without a label or marked off the trigger shows none */}
+        {ownEffort && efforts.find((x) => x.id === effortNow && x.trigger !== false)?.label && (
           <span className="ui-mdpc__detail">
             <Swap id={effortNow} glide>
               {efforts.find((x) => x.id === effortNow)?.label}

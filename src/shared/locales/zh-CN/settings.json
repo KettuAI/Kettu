@@ -251,6 +251,13 @@
       "previewLabel": "预览",
       "preview": "回复和你发送的消息在这个字号下就是这样。行内代码，比如 <code>settings.json</code>，是这样显示的。"
     },
+    "effortControl": {
+      "name": "思考强度",
+      "description": "模型菜单和智能体菜单里思考强度的显示方式。",
+      "keywords": "思考强度 推理 刻度盘 分段 模型菜单 effort dial segments",
+      "dial": "刻度盘",
+      "segments": "分段"
+    },
     "reduceMotion": {
       "name": "减弱动态效果",
       "description": "“跟随系统”遵循 macOS 的设置；“始终”会去掉所有动态效果。",
@@ -280,7 +287,8 @@
       "scale": "缩放与文字",
       "sidebar": "侧边栏",
       "motion": "动态效果",
-      "fonts": "字体"
+      "fonts": "字体",
+      "modelMenu": "模型菜单"
     },
     "zoom": {
       "name": "界面缩放",

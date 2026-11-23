@@ -240,6 +240,7 @@ const SECTION_FIELDS = {
     sidebarOrder: isSidebarOrder,
     sidebarHidden: isSidebarPages,
     fonts: isUserFonts,
+    effortControl: oneOf('dial', 'segments'),
   },
   notifications: {
     permission: isBoolean,

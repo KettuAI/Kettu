@@ -127,6 +127,7 @@ import {
   LogsFolderActions,
   DataFolderText,
   DefaultAgent,
+  EffortControl,
   FontSize,
   GeneralSwitch,
   LightModelChoice,
@@ -377,6 +378,12 @@ export function useAppearanceSection(): SectionDef {
         group: sidebar,
         render: () => null,
       })),
+      {
+        id: 'effort-control',
+        setting: 'appearance.effort-control',
+        group: group('model-menu', t('appearance.groups.modelMenu')),
+        render: () => <EffortControl />,
+      },
       {
         id: 'reduce-motion',
         setting: 'appearance.reduce-motion',

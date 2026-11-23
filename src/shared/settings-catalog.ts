@@ -490,6 +490,22 @@ const ENTRIES = {
   'appearance.sidebar-routines': sidebarPage('routines'),
   'appearance.sidebar-marketplace': sidebarPage('marketplace'),
   'appearance.sidebar-usage': sidebarPage('usage'),
+  'appearance.effort-control': {
+    section: 'appearance',
+    row: 'effort-control',
+    group: 'appearance.groups.modelMenu',
+    name: 'appearance.effortControl.name',
+    description: 'appearance.effortControl.description',
+    keywords: 'appearance.effortControl.keywords',
+    part: 'desktop',
+    access: 'change',
+    ...pick(
+      'appearance',
+      'effortControl',
+      (file) => file.appearance.effortControl,
+      choices(['dial', 'segments'], (style) => `appearance.effortControl.${style}`),
+    ),
+  },
   'appearance.reduce-motion': {
     section: 'appearance',
     row: 'reduce-motion',
