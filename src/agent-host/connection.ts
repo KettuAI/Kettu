@@ -387,6 +387,11 @@ export interface SessionOptions {
    * `newSession` takes it.
    */
   systemPromptAppend?: string
+  /**
+   * The session starts in full access, for an agent that takes it only as its process starts:
+   * agy's flag, which would otherwise cost a restart right after `session/new`.
+   */
+  fullAccess?: boolean
 }
 
 /** Kettu's memory as a session starts with it. */

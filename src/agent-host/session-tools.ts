@@ -20,6 +20,7 @@ import {
   defaultMode,
   isRanked,
   modeLabel,
+  modeRank,
   startableModes,
   startedCeiling,
   STARTED_MAX,
@@ -971,6 +972,34 @@ export class SessionTools {
     return startableModes(harness, ceiling).map((id) => ({ id, ...modeLabel(harness, id) }))
   }
 
+  /**
+   * Why a started session got a narrower mode than `wanted`: the caller's own mode, the mode the
+   * agent's new sessions start in, or both.
+   */
+  private loweredText(callerId: string, agentId: AgentId, wanted: string): string {
+    const harness = harnessOf(agentId)
+    if (!isRanked(harness)) return ' That is narrower than asked.'
+    const asked = modeRank(harness, wanted) ?? 1
+    const reasons: string[] = []
+    const starter = this.deps.starterRank(callerId)
+    if (starter !== null && starter < asked) reasons.push('your own mode allows no wider')
+    const set = this.deps.startMode(agentId)
+    const agentMode = set ?? defaultMode(harness)
+    if (agentMode !== null && (modeRank(harness, agentMode) ?? 1) < asked) {
+      const name = this.deps.agents().find((status) => status.id === agentId)?.name ?? agentId
+      const label = modeLabel(harness, agentMode).name
+      reasons.push(
+        set === undefined
+          ? `${name} starts its sessions in ${label}, and the user set no mode for its new ` +
+              'sessions in Settings > Agents'
+          : `the user set ${name}'s new sessions to start in ${label} in Settings > Agents`,
+      )
+    }
+    return reasons.length === 0
+      ? ' That is narrower than asked.'
+      : ` That is narrower than asked: ${reasons.join(', and ')}.`
+  }
+
   /** Refuses a mode no started session of the agent can have. */
   private checkMode(agentId: AgentId, value: string): void {
     const harness = harnessOf(agentId)
@@ -1120,7 +1149,7 @@ export class SessionTools {
     const held = this.deps.held(started)
     return result(
       `Started "${titleOf(session)}"${modeText(current)}${choicesText(choices)}.` +
-        (lowered ? ' That is narrower than asked, to stay within your permissions.' : '') +
+        (lowered ? this.loweredText(caller.sessionId, target, wanted) : '') +
         (held
           ? ' Kettu could not set every value it starts with, so its first message waits for ' +
             'the user in that session, and no report comes until they send it.'

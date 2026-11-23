@@ -6,8 +6,10 @@ import {
   SessionTools,
   type SessionToolsDeps,
   type ToolDelivery,
+  type ToolMode,
   type ToolSession,
 } from './session-tools'
+import type { ModeRank } from './started-mode'
 
 const caller: Caller = { sessionId: 'starter', project: '/repo' }
 
@@ -219,6 +221,10 @@ function starting(
     read?: AgentOptions | null
     carried?: Record<string, string | boolean>
     held?: boolean
+    agent?: { id: string; name: string }
+    startMode?: string
+    starterRank?: ModeRank | null
+    mode?: ToolMode
   } = {},
 ) {
   const sessions = [
@@ -231,9 +237,9 @@ function starting(
     if (opts.read !== undefined) cache = opts.read
   })
   const status = {
-    id: 'codex',
-    name: 'Codex',
-    harnessName: 'Codex',
+    id: opts.agent?.id ?? 'codex',
+    name: opts.agent?.name ?? 'Codex',
+    harnessName: opts.agent?.name ?? 'Codex',
     state: 'ready',
     signIn: 'signed-in',
   } as unknown as AgentStatus
@@ -241,13 +247,13 @@ function starting(
     info: (id: string) => sessions.find((item) => item.id === id) ?? null,
     started: () => [],
     agents: () => [status],
-    startMode: () => undefined,
-    starterRank: () => 3,
+    startMode: () => opts.startMode,
+    starterRank: () => (opts.starterRank === undefined ? 3 : opts.starterRank),
     carried: () => ({ ...(opts.carried ?? {}) }),
     agentOptions: () => cache,
     readOptions,
     start,
-    mode: async () => null,
+    mode: async () => opts.mode ?? null,
     choices: async () => ({
       model: { id: 'gpt-mini', name: 'GPT-MINI' },
       effort: { id: 'low', name: 'LOW' },
@@ -347,6 +353,46 @@ describe('start_session model and effort', () => {
     const out = await t.call(caller, 'start_session', { prompt: 'x', model: 5 })
     expect(out.isError).toBe(true)
     expect(start).not.toHaveBeenCalled()
+  })
+})
+
+describe('start_session mode', () => {
+  it("names the caller's own mode when it lowered the mode asked for", async () => {
+    const { tools: t } = starting({
+      starterRank: 1,
+      mode: { id: 'read-only', name: 'Read-only' },
+    })
+    const out = await t.call(caller, 'start_session', { prompt: 'x', mode: 'agent' })
+    expect(out.structuredContent).toMatchObject({ mode_lowered: true })
+    expect(text(out)).toContain('narrower than asked: your own mode allows no wider.')
+  })
+
+  it("names the agent's mode for new sessions when the user set it", async () => {
+    const { tools: t } = starting({
+      startMode: 'read-only',
+      mode: { id: 'read-only', name: 'Read-only' },
+    })
+    const out = await t.call(caller, 'start_session', { prompt: 'x', mode: 'agent' })
+    expect(text(out)).toContain(
+      "narrower than asked: the user set Codex's new sessions to start in Read-only",
+    )
+    expect(text(out)).not.toContain('your own mode')
+  })
+
+  it("names an agent's own start when no mode for its new sessions is set", async () => {
+    const { tools: t } = starting({
+      agent: { id: 'antigravity', name: 'Google Antigravity' },
+      mode: { id: 'default', name: 'Default' },
+    })
+    const out = await t.call(caller, 'start_session', {
+      prompt: 'x',
+      agent: 'antigravity',
+      mode: 'auto',
+    })
+    expect(text(out)).toContain(
+      'narrower than asked: Google Antigravity starts its sessions in Default, and the user ' +
+        'set no mode for its new sessions in Settings > Agents.',
+    )
   })
 })
 

@@ -785,7 +785,8 @@
       "follow": {
         "claude-code": "Follow Claude Code",
         "codex": "Follow Codex (Auto review)",
-        "deepseek": "Follow DeepSeek Harness"
+        "deepseek": "Follow DeepSeek Harness",
+        "antigravity": "Follow Antigravity (Default)"
       },
       "unused": "Available once this agent has been used.",
       "unoffered": "{{mode}} (no longer offered)",

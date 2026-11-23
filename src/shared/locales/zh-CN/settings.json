@@ -781,7 +781,8 @@
       "follow": {
         "claude-code": "跟随 Claude Code",
         "codex": "跟随 Codex（自动审查）",
-        "deepseek": "跟随 DeepSeek Harness"
+        "deepseek": "跟随 DeepSeek Harness",
+        "antigravity": "跟随 Antigravity（Default）"
       },
       "unused": "这个智能体用过之后才能选择。",
       "unoffered": "{{mode}}（已不再提供）",
