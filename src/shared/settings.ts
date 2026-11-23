@@ -297,7 +297,7 @@ export const DEFAULT_SETTINGS: SettingsFile = {
     sidebarOrder: [...SIDEBAR_PAGES],
     sidebarHidden: [],
     fonts: {},
-    effortControl: 'dial',
+    effortControl: 'segments',
   },
   notifications: {
     permission: true,
