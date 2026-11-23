@@ -107,6 +107,8 @@ const SIDE = 48
 const LAND_TOP = 96
 const OPEN_SIDE = 32
 const OPEN_TOP = 24
+/** Room an opened frame keeps under a pill at the content's top. */
+const OPEN_PILL = 44
 const OPEN_BOTTOM = 72
 const ZOOM_FLOOR = 0.2
 /** How long the frames of a page that is left take to fade, and those of the next to rise. */
@@ -279,6 +281,7 @@ export const CanvasEditor = memo(function CanvasEditor({
   mode: viewerMode,
   controls,
   top = 0,
+  pill = false,
   editor,
   actions,
   agents,
@@ -308,6 +311,8 @@ export const CanvasEditor = memo(function CanvasEditor({
   mode: ViewerMode
   controls: CanvasControls
   top?: number
+  /** A pill shows at the content's top, which an opened frame starts below. */
+  pill?: boolean
   editor?: ArtifactEditor
   actions: DocPageActions | null
   agents: readonly CanvasAgent[]
@@ -538,6 +543,7 @@ export const CanvasEditor = memo(function CanvasEditor({
   )
 
   const leftRoom = insets.left
+  const openTop = OPEN_TOP + (pill ? OPEN_PILL : 0)
   const rightRoom = insets.right
 
   // Landing on a page fits its frames' width from their top, never above 100% or under 20%.
@@ -583,11 +589,11 @@ export const CanvasEditor = memo(function CanvasEditor({
   const readingRoom = useCallback(
     (): Room => ({
       x: leftRoom + OPEN_SIDE,
-      y: top + OPEN_TOP,
+      y: top + openTop,
       width: Math.max(1, view.current.width - leftRoom - rightRoom - 2 * OPEN_SIDE),
-      height: Math.max(1, view.current.height - top - OPEN_TOP - OPEN_BOTTOM),
+      height: Math.max(1, view.current.height - top - openTop - OPEN_BOTTOM),
     }),
-    [leftRoom, rightRoom, top],
+    [leftRoom, rightRoom, top, openTop],
   )
 
   // Moves the camera in to a frame at reading size; the live frame takes over once it is there.
@@ -728,7 +734,7 @@ export const CanvasEditor = memo(function CanvasEditor({
   ])
 
   // An opened frame keeps its reading size as the fit, the room or the window changes.
-  const refitKey = `${fit}:${rooms}:${top}:${resized}`
+  const refitKey = `${fit}:${rooms}:${top}:${openTop}:${resized}`
   const lastRefit = useRef(refitKey)
   useEffect(() => {
     if (lastRefit.current === refitKey) return

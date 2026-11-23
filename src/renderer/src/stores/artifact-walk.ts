@@ -21,9 +21,11 @@ interface WalkStore {
   landings: Record<string, Landing>
   /** By artifact: the key of the change the pill is at, while one walks its changes. */
   at: Record<string, string>
+  /** By artifact: the versions its pill counts, while one shows, which before and after compares. */
+  ranges: Record<string, { from: number; to: number }>
 }
 
-export const useArtifactWalk = create<WalkStore>(() => ({ landings: {}, at: {} }))
+export const useArtifactWalk = create<WalkStore>(() => ({ landings: {}, at: {}, ranges: {} }))
 
 let seq = 0
 
@@ -59,5 +61,16 @@ export function setWalkAt(artifactId: string, key: string | null): void {
     if (key === null) delete at[artifactId]
     else at[artifactId] = key
     return { at }
+  })
+}
+
+export function setWalkRange(artifactId: string, range: { from: number; to: number } | null): void {
+  useArtifactWalk.setState((s) => {
+    const was = s.ranges[artifactId]
+    if (was?.from === range?.from && was?.to === range?.to) return s
+    const ranges = { ...s.ranges }
+    if (range === null) delete ranges[artifactId]
+    else ranges[artifactId] = { from: range.from, to: range.to }
+    return { ranges }
   })
 }

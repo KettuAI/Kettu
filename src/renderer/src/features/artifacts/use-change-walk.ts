@@ -6,6 +6,7 @@ import { changesOf, useChanges } from '@renderer/features/session/entries/artifa
 import {
   landingTaken,
   setWalkAt,
+  setWalkRange,
   useArtifactWalk,
   type Landing,
 } from '@renderer/stores/artifact-walk'
@@ -212,6 +213,15 @@ export function useChangeWalk({
     setWalkAt(id, current)
   }, [id, current])
   useEffect(() => () => setWalkAt(id, null), [id])
+  const shownFrom = shown ? range.from : null
+  const shownTo = shown ? range.to : null
+  useEffect(() => {
+    setWalkRange(
+      id,
+      shownFrom !== null && shownTo !== null ? { from: shownFrom, to: shownTo } : null,
+    )
+  }, [id, shownFrom, shownTo])
+  useEffect(() => () => setWalkRange(id, null), [id])
 
   const walk: ChangeWalk | null =
     range && changes && places.length > 0 && latest

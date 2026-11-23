@@ -51,6 +51,22 @@ async function outlineOf(
   return { sections: sections.map((s) => ({ slug: s.slug, heading: s.heading })) }
 }
 
+/** The outline of an artifact's version, read now when it is not kept; null when it cannot be. */
+export async function readPlaceOutline(
+  id: string,
+  version: number,
+  kind: 'canvas' | 'document' | 'slides',
+): Promise<ArtifactOutline | null> {
+  const key = `${id}:${version}:${kind}`
+  const kept = read.get(key)
+  if (kept !== undefined) return kept
+  const outline = await outlineOf(id, version, kind).catch(() => null)
+  read.set(key, outline)
+  if (read.size > KEPT) read.delete(read.keys().next().value!)
+  for (const listener of listeners) listener()
+  return outline
+}
+
 /**
  * The outline of an artifact's version, asked for once `enabled`: undefined while it is read,
  * null when it cannot be.

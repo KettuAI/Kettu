@@ -7,7 +7,8 @@ import { HoverCard, HoverCardContent, HoverCardTrigger } from '@renderer/compone
 import { usePartThumbnails } from '@renderer/features/artifacts/artifact-host'
 import { KIND_ICON } from '@renderer/features/artifacts/kinds'
 import { artifactKind, type ArtifactKind } from '@renderer/features/artifacts/model'
-import { usePlaceOutline } from '@renderer/features/artifacts/place-outline'
+import { landingPlace } from '@renderer/features/artifacts/change-walk'
+import { readPlaceOutline, usePlaceOutline } from '@renderer/features/artifacts/place-outline'
 import { usePartThumbnail, useThumbnail } from '@renderer/features/artifacts/thumbnails'
 import { SessionIdContext } from '@renderer/features/session/media/grants'
 import { learnArtifactHost, sessionHost } from '@renderer/lib/host'
@@ -64,14 +65,17 @@ export function ArtifactLink({
 
   const open = (): void => {
     if (erased) return
-    const where = resolved ? place : null
-    if (sessionId) {
-      toggleArtifactPane(sessionId, artifactId, true)
-      landArtifact(sessionId, artifactId, { place: where ?? place })
-    } else {
-      openArtifact(artifactId)
-      landArtifact(MAIN_ARTIFACT_PANEL, artifactId, { place: where ?? place })
+    const panel = sessionId ?? MAIN_ARTIFACT_PANEL
+    if (sessionId) toggleArtifactPane(sessionId, artifactId, true)
+    else openArtifact(artifactId)
+    if (place?.kind !== 'slide' || place.slug === null || !summary) {
+      landArtifact(panel, artifactId, { place })
+      return
     }
+    // A slide is found by its title in the version shown, as the hover card names it.
+    void readPlaceOutline(artifactId, summary.version, 'slides').then((read) =>
+      landArtifact(panel, artifactId, { place: landingPlace(place, read) }),
+    )
   }
 
   const name =

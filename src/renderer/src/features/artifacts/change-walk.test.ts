@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { ArtifactChanges } from '@shared/artifact-changes'
 import {
+  landingPlace,
   markVersions,
   startAt,
   stepFrom,
@@ -126,5 +127,42 @@ describe('startAt and stepFrom', () => {
   it('steps round', () => {
     expect(stepFrom(2, 3, 1)).toBe(0)
     expect(stepFrom(0, 3, -1)).toBe(2)
+  })
+})
+
+describe('landingPlace', () => {
+  const outline = {
+    slides: [
+      { number: 1, title: 'Intro' },
+      { number: 2, title: 'Results' },
+      { number: 3, title: 'Plan' },
+      { number: 6, title: 'Results' },
+    ],
+  }
+  it('finds a moved slide by its slug', () => {
+    expect(landingPlace({ kind: 'slide', number: 2, slug: 'plan' }, outline)).toEqual({
+      kind: 'slide',
+      number: 3,
+      slug: 'plan',
+    })
+  })
+  it('takes the match nearest the number', () => {
+    expect(landingPlace({ kind: 'slide', number: 5, slug: 'results' }, outline)).toMatchObject({
+      number: 6,
+    })
+    expect(landingPlace({ kind: 'slide', number: 1, slug: 'results' }, outline)).toMatchObject({
+      number: 2,
+    })
+  })
+  it('falls back to the number', () => {
+    expect(landingPlace({ kind: 'slide', number: 4, slug: 'gone' }, outline)).toMatchObject({
+      number: 4,
+    })
+    expect(landingPlace({ kind: 'slide', number: 3, slug: null }, outline)).toMatchObject({
+      number: 3,
+    })
+    expect(landingPlace({ kind: 'slide', number: 3, slug: 'plan' }, null)).toMatchObject({
+      number: 3,
+    })
   })
 })

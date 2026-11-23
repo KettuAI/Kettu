@@ -2,6 +2,7 @@
 // two versions it compares, the places it steps through and the version that last changed each.
 
 import type { ArtifactChanges } from '@shared/artifact-changes'
+import { resolvePlace, type ArtifactOutline, type ArtifactPlace } from '@shared/artifact-links'
 
 /** Two versions the pill compares; `since` when it counts from one the user saw, not the one before. */
 export interface WalkRange {
@@ -145,4 +146,18 @@ export interface PlaceAsk {
   /** A document's section, by its slug, or a block of it, by where it starts. */
   section?: string
   at?: number
+}
+
+/**
+ * Where a link lands in a version: a slide found by its title's slug, nearest its number when
+ * several match, so a link still finds its slide after slides move; by number when it has no slug,
+ * none matches, or the version could not be read. Other places land as written.
+ */
+export function landingPlace(
+  place: ArtifactPlace,
+  outline: ArtifactOutline | null | undefined,
+): ArtifactPlace {
+  if (place.kind !== 'slide' || !outline) return place
+  const found = resolvePlace(place, outline)
+  return found?.kind === 'slide' ? { ...place, number: found.number } : place
 }

@@ -54,6 +54,7 @@ import {
 } from '@renderer/stores/view'
 import { anchorOf } from './anchors'
 import { useArtifactShares } from './artifact-host'
+import { useArtifactWalk } from '@renderer/stores/artifact-walk'
 import { useChangeWalk } from './use-change-walk'
 import { ChangePill } from './change-pill'
 import { atMaxZoom, atMinZoom } from './camera'
@@ -154,20 +155,26 @@ export default function ArtifactViewer(place: ViewerPlace) {
     lastWrite && lastWrite.author !== null && lastWrite.version > 1 && lastWrite.version === head
       ? { before: lastWrite.version - 1, after: lastWrite.version }
       : null
+  // While the pill counts a range, before and after compares the same versions.
+  const walkRange = useArtifactWalk((s) => s.ranges[id] ?? null)
+  const compareRange =
+    walkRange && walkRange.to === head
+      ? { before: walkRange.from, after: walkRange.to }
+      : agentWrite
   const pageChanges = useChanges(
     id,
-    agentWrite?.before ?? null,
-    agentWrite?.after ?? null,
-    (webPage || isDeck) && agentWrite !== null,
+    compareRange?.before ?? null,
+    compareRange?.after ?? null,
+    (webPage || isDeck || !!shown?.canvas) && compareRange !== null,
   )
   // A web page compares when the agent changed it at all, a deck when it changed the slide shown.
   const pageCompare =
-    agentWrite && pageChanges && changeCount(pageChanges).count > 0
+    compareRange && pageChanges && changeCount(pageChanges).count > 0
       ? webPage ||
         (isDeck &&
           pageChanges.kind === 'slides' &&
           pageChanges.slides.some((s) => s.number === deckSlide))
-        ? agentWrite
+        ? compareRange
         : null
       : null
   const comparing = pageCompare !== null && earlier === pageCompare.before
@@ -345,10 +352,11 @@ export default function ArtifactViewer(place: ViewerPlace) {
     agents,
     present: setPresenting,
   })
-  // Which frames count as changed: those the pill walks.
+  // Which frames count as changed: those the pill walks, else those the agent's last write changed.
+  const frameChanges = walk?.changes ?? pageChanges
   const changedFrames = useMemo<ReadonlySet<string>>(
-    () => new Set(walk?.changes.kind === 'frames' ? walk.changes.frames.map((f) => f.id) : []),
-    [walk],
+    () => new Set(frameChanges?.kind === 'frames' ? frameChanges.frames.map((f) => f.id) : []),
+    [frameChanges],
   )
   const frameComments = useMemo(() => {
     const out = new Map<string, number>()
@@ -417,10 +425,14 @@ export default function ArtifactViewer(place: ViewerPlace) {
     () => ({ ...docActions, handOff: (ids) => toolsNow.current.askFrames(ids) }),
     [docActions],
   )
-  const agentBefore = agentWrite?.before ?? null
+  const compareBefore = compareRange?.before ?? null
+  const compareAfter = compareRange?.after ?? null
   const compare = useMemo(
-    () => (latest && agentBefore !== null ? { before: agentBefore, after: agentBefore + 1 } : null),
-    [latest, agentBefore],
+    () =>
+      latest && compareBefore !== null && compareAfter !== null
+        ? { before: compareBefore, after: compareAfter }
+        : null,
+    [latest, compareBefore, compareAfter],
   )
   const right: RightContent | null =
     tools.right ??
@@ -746,6 +758,7 @@ export default function ArtifactViewer(place: ViewerPlace) {
                 : pageAsked
             }
             onShown={askShown}
+            pill={pill !== null}
             changed={changedFrames}
             marks={walk?.marks}
             comments={frameComments}
