@@ -1,7 +1,9 @@
 // agy's tool calls in the shape the ACP mapper reads every agent's. agy 1.5.9 sends its tool's own
 // name beside each call, a command's input as `{ CommandLine, toolSummary }`, its output under a
-// header of times and the exit code, and an MCP server's tool as `mcp_<server>_<tool>`. It keeps
-// what it writes for itself, such as a Plan mode plan, in `~/.gemini/antigravity-cli/brain/`.
+// header of times and the exit code, and an MCP server's tool as `mcp_<server>_<tool>`. A command
+// that went on in the background ends without the times (1.5.15), and one a signal ended says so in
+// place of its exit code. It keeps what it writes for itself, such as a Plan mode plan, in
+// `~/.gemini/antigravity-cli/brain/`.
 
 import type * as acp from '@agentclientprotocol/sdk/unstable'
 import { fenced } from '../codex/mapper'
@@ -11,7 +13,8 @@ import { SERVICE_NAME } from '../service-name'
 import { toLf, type MapperContext, type TurnScope } from '../session-updates'
 import { GATEWAY_TOOL } from '../tool-gateway'
 
-const RESULT = /^Created At: [^\n]*\nCompleted At: [^\n]*\nCommand exited with code (-?\d+)\.\n\n/
+const RESULT =
+  /^(?:Created At: [^\n]*\n)?(?:Completed At: [^\n]*\n)?(Command exited with code (-?\d+)\.|Command was terminated by signal or canceled\.)\n\n/
 const OUTPUT = 'Command output:\n'
 const NO_OUTPUT = 'No output from the command.'
 const OWN_FOLDER = /(?:^|\/)\.gemini\/antigravity-cli\/brain\//
@@ -91,8 +94,13 @@ export function agyAllowOnce(
   return options.find((option) => option.kind === 'allow_once')?.optionId ?? null
 }
 
-/** What a finished command printed, and its exit code; null for a result of another shape. */
-function commandResult(text: string): { output: string; exitCode: number } | null {
+/**
+ * What a finished command printed, the line that says how it ended, and its exit code, null for
+ * one a signal ended; null for a result of another shape.
+ */
+function commandResult(
+  text: string,
+): { output: string; ending: string; exitCode: number | null } | null {
   const match = RESULT.exec(toLf(text))
   if (!match) return null
   const rest = toLf(text).slice(match[0].length)
@@ -102,7 +110,23 @@ function commandResult(text: string): { output: string; exitCode: number } | nul
       ? ''
       : null
   if (output === null) return null
-  return { output: output.replace(/\n+$/, ''), exitCode: Number(match[1]) }
+  return {
+    output: output.replace(/\n+$/, ''),
+    ending: match[1]!,
+    exitCode: match[2] === undefined ? null : Number(match[2]),
+  }
+}
+
+/** The text of a command call's result, when it carries one. */
+function resultText(update: acp.ToolCallUpdate): string | null {
+  const block = update.content?.length === 1 ? update.content[0] : undefined
+  return block?.type === 'content' && block.content.type === 'text' ? block.content.text : null
+}
+
+/** The line that says how a finished command of agy's ended, such as its exit code; null for none. */
+export function commandEnding(update: acp.ToolCallUpdate): string | null {
+  const text = resultText(update)
+  return text === null ? null : (commandResult(text)?.ending ?? null)
 }
 
 /** A command's call: its command line with what it says it does, and what it printed. */
@@ -112,9 +136,8 @@ function command(update: acp.ToolCallUpdate, line: string, summary: unknown): ac
     rawInput:
       typeof summary === 'string' ? { command: line, description: summary } : { command: line },
   }
-  const block = update.content?.length === 1 ? update.content[0] : undefined
-  if (block?.type !== 'content' || block.content.type !== 'text') return shaped
-  const result = commandResult(block.content.text)
+  const text = resultText(update)
+  const result = text === null ? null : commandResult(text)
   if (!result) return shaped
   shaped.content = result.output
     ? [{ type: 'content', content: { type: 'text', text: fenced(result.output) } }]

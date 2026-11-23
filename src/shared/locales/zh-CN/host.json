@@ -655,7 +655,7 @@
       },
       "fullAccess": {
         "name": "完全访问",
-        "description": "什么都不问。两轮之间生效，会重启 agy"
+        "description": "什么都不问。两轮之间、它在跑的命令结束后生效，会重启 agy"
       }
     },
     "fullAccess": {

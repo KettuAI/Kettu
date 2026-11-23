@@ -105,14 +105,18 @@ export function EndedAgent({
 
 const TASK_STATE = { completed: 'done', failed: 'failed', stopped: 'stopped' } as const
 
-/** A command that ended. A click opens what it ran and the end of its output in place. */
+/**
+ * A command that ended. A click opens what it ran and the end of its output in place; a command
+ * that ran on in its tool call shows its output in that call instead.
+ */
 export function EndedTask({ sessionId, task }: { sessionId: string; task: BackgroundTaskView }) {
   const { t } = useTranslation('board')
   const id = useId()
   const [open, setOpen] = useState(false)
   // Kept once opened, so closing folds it away instead of dropping it.
   const [made, setMade] = useState(false)
-  const output = useTaskOutput(sessionId, task.id, { enabled: open, live: false })
+  const inCall = task.entryId !== undefined
+  const output = useTaskOutput(sessionId, task.id, { enabled: open && !inCall, live: false })
   const state = task.status === 'running' ? 'done' : TASK_STATE[task.status]
   const took =
     state === 'failed'
@@ -143,7 +147,7 @@ export function EndedTask({ sessionId, task }: { sessionId: string; task: Backgr
         <span className="kb-end__took">{took}</span>
       </button>
       <Fold id={id} open={open}>
-        {made && <TaskDetail task={task} output={output} command />}
+        {made && <TaskDetail task={task} output={inCall ? null : output} command />}
       </Fold>
     </div>
   )

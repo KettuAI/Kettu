@@ -95,8 +95,10 @@ import {
   restoreOrder,
   withFullAccess,
 } from './agy-access'
+import { AgyCommands } from './agy-commands'
 import { systemPromptMeta, takesSystemPromptAppend } from './agy-prompt'
 import { AGY_ELICITATION, askInCard, asksQuestions } from './agy-questions'
+import { PromptChain, steersAgy, type ChainAnswer } from './agy-steering'
 import {
   agyAllowOnce,
   agyAutoAllowed,
@@ -404,6 +406,10 @@ export class AcpConnection implements AgentConnection {
   private appendsSystemPrompt = false
   /** agy's sessions while it offers full access. */
   private readonly agyAccess = new Map<string, AgyAccess>()
+  /** The prompts of each agy turn running, for an agy that takes a message into one. */
+  private readonly chains = new Map<string, PromptChain>()
+  /** agy's commands, by session: the turn's, and those that outlived theirs. */
+  private readonly agyCommands = new Map<string, AgyCommands>()
 
   private constructor(
     private readonly transport: AcpTransport,
@@ -574,6 +580,7 @@ export class AcpConnection implements AgentConnection {
     if (target) {
       this.notePlanWrite(sessionId, update)
       target.apply(this.withAccess(sessionId, this.map(update, target.context())))
+      this.noteCommand(sessionId, update, target)
       return
     }
     const collector = this.collectors.get(sessionId)
@@ -642,6 +649,7 @@ export class AcpConnection implements AgentConnection {
     this.pending.delete(sessionId)
     this.agyPlans.delete(sessionId)
     this.agyBuildModes.delete(sessionId)
+    this.agyCommands.delete(sessionId)
     this.unregistered.add(sessionId)
     if (this.unregistered.size > CLOSED_SESSIONS) {
       this.unregistered.delete(this.unregistered.values().next().value!)
@@ -746,10 +754,12 @@ export class AcpConnection implements AgentConnection {
         ownTitles: ownTitles(init.agentInfo),
         logout: caps.auth?.logout != null,
         authStatus: caps.auth?.status != null,
-        // `_session/steering`, an extension advertised in the response's own `_meta`.
+        // `_session/steering`, an extension advertised in the response's own `_meta`; agy takes a
+        // prompt into the running turn instead.
         steering:
           (init._meta as { steering?: { supported?: unknown } } | null | undefined)?.steering
-            ?.supported === true,
+            ?.supported === true ||
+          (this.agy && steersAgy(init.agentInfo?.version ?? null)),
         mcpHttp:
           caps.mcpCapabilities?.http === true || takesHttpUndeclared(this.hooks.agentId, init),
         mcpSse: caps.mcpCapabilities?.sse === true,
@@ -901,6 +911,7 @@ export class AcpConnection implements AgentConnection {
     await this.call(() => this.connection.agent.request(methods.agent.session.close, { sessionId }))
     this.autoAllowed.delete(sessionId)
     this.agyAccess.delete(sessionId)
+    this.agyCommands.delete(sessionId)
   }
 
   async deleteSession(sessionId: string): Promise<void> {
@@ -909,6 +920,7 @@ export class AcpConnection implements AgentConnection {
     )
     this.autoAllowed.delete(sessionId)
     this.agyAccess.delete(sessionId)
+    this.agyCommands.delete(sessionId)
   }
 
   async listSessions(
@@ -944,28 +956,93 @@ export class AcpConnection implements AgentConnection {
       this.agyPlans.set(sessionId, { calls: new Map(), written: null, last: plans?.last ?? null })
     }
     this.prompting.add(sessionId)
-    let response: PromptResponse
+    let answer: ChainAnswer
     try {
-      response = await this.call(() =>
-        this.connection.agent.request(methods.agent.session.prompt, {
-          sessionId,
-          prompt: contentBlocks(prompt),
-        }),
-      )
+      const sent = this.sendPrompt(sessionId, prompt)
+      if (this.agy && steersAgy(this.version)) {
+        const chain = new PromptChain(sent)
+        this.chains.set(sessionId, chain)
+        try {
+          answer = await chain.settle()
+        } finally {
+          if (this.chains.get(sessionId) === chain) this.chains.delete(sessionId)
+        }
+      } else {
+        const response = await sent
+        answer = {
+          response,
+          tokens: mapTokenTotals(response.usage),
+          models: mapModelUsage(response._meta),
+        }
+      }
     } finally {
       this.prompting.delete(sessionId)
+      this.carryCommands(sessionId)
       await this.switchPending(sessionId)
     }
+    const { response } = answer
     const result: PromptResult = {
       stopReason: isStopReason(response.stopReason) ? response.stopReason : 'end_turn',
-      tokens: mapTokenTotals(response.usage),
-      models: mapModelUsage(response._meta),
+      tokens: answer.tokens,
+      models: answer.models,
     }
     if (planning && result.stopReason === 'end_turn') await this.showPlan(sessionId)
     if (this.agy && result.stopReason === 'end_turn' && compactsAgy(this.version)) {
       if (sentCompact(prompt)) this.showCompaction(sessionId)
     }
     return result
+  }
+
+  private sendPrompt(sessionId: string, prompt: readonly PromptBlock[]): Promise<PromptResponse> {
+    return this.call(() =>
+      this.connection.agent.request(methods.agent.session.prompt, {
+        sessionId,
+        prompt: contentBlocks(prompt),
+      }),
+    )
+  }
+
+  /**
+   * Follows agy's commands in a session, and shows those that outlived their turn on its board
+   * while they run on. Once the last ends, a full access switch that waited for it is made.
+   */
+  private noteCommand(sessionId: string, update: SessionUpdate, target: SessionTarget): void {
+    if (!this.agy) return
+    if (update.sessionUpdate !== 'tool_call' && update.sessionUpdate !== 'tool_call_update') return
+    if (target.context().replaying) return
+    const inTurn = this.prompting.has(sessionId)
+    let commands = this.agyCommands.get(sessionId)
+    if (!commands) {
+      if (!inTurn) return
+      commands = new AgyCommands()
+      this.agyCommands.set(sessionId, commands)
+    }
+    if (!commands.follow(update, inTurn, Date.now())) return
+    this.showCommands(target, commands)
+    if (!inTurn && !commands.running) void this.switchPending(sessionId)
+  }
+
+  /** The turn ended: the commands still running carry on, on the session board. */
+  private carryCommands(sessionId: string): void {
+    const commands = this.agyCommands.get(sessionId)
+    const target = this.targets.get(sessionId)
+    if (!commands || !target || !commands.turnEnded()) return
+    this.showCommands(target, commands)
+  }
+
+  private showCommands(target: SessionTarget, commands: AgyCommands): void {
+    target.apply({
+      patches: [],
+      effects: [
+        { kind: 'tasks', tasks: commands.tasks() },
+        { kind: 'backgroundRunning', running: commands.running, listed: false },
+      ],
+    })
+  }
+
+  /** Whether one of agy's commands outlived its turn and runs on, which a restart would stop. */
+  private runsCommands(sessionId: string): boolean {
+    return this.agyCommands.get(sessionId)?.running === true
   }
 
   /** The divider for a compaction agy ran without saying so, as the entry every agent gets. */
@@ -1118,6 +1195,11 @@ export class AcpConnection implements AgentConnection {
     sessionId: string,
     prompt: readonly PromptBlock[],
   ): Promise<'injected' | 'promptRequired'> {
+    if (this.agy && steersAgy(this.version)) {
+      // agy takes the message as a prompt of its own, which ends the one before it.
+      const chain = this.chains.get(sessionId)
+      return chain ? chain.steer(() => this.sendPrompt(sessionId, prompt)) : 'promptRequired'
+    }
     const response = await this.call(() =>
       this.connection.agent.request<{ outcome?: unknown }>('_session/steering', {
         sessionId,
@@ -1237,7 +1319,8 @@ export class AcpConnection implements AgentConnection {
       access.pending = null
       return full ? access.config : null
     }
-    if (this.prompting.has(sessionId)) {
+    // A restart would stop the turn, and the commands that outlived theirs.
+    if (this.prompting.has(sessionId) || this.runsCommands(sessionId)) {
       access.pending = mode
       return access.config
     }
@@ -1245,11 +1328,14 @@ export class AcpConnection implements AgentConnection {
     return this.restartAgy(sessionId, access, full, mode)
   }
 
-  /** The switch chosen while the turn ran, now that it has ended; a failure goes in the thread. */
+  /**
+   * The switch chosen while the turn or a command ran, now that nothing does; a failure goes in
+   * the thread.
+   */
   private async switchPending(sessionId: string): Promise<void> {
     const access = this.agyAccess.get(sessionId)
     const mode = access?.pending
-    if (!access || !mode) return
+    if (!access || !mode || this.prompting.has(sessionId) || this.runsCommands(sessionId)) return
     access.pending = null
     const full = mode === FULL_ACCESS
     if (full === access.full || this.isClosed) return

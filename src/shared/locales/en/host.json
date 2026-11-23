@@ -659,7 +659,7 @@
       },
       "fullAccess": {
         "name": "Full access",
-        "description": "Never asks. Applies between turns, restarting agy"
+        "description": "Never asks. Applies between turns, once its commands end, restarting agy"
       }
     },
     "fullAccess": {
