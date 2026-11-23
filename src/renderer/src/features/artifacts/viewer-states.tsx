@@ -164,10 +164,13 @@ export function PieceFault({
   title,
   reason,
   actions,
+  retry,
 }: {
   title: string
   reason: ReactNode
   actions: ReactNode
+  /** What the mark does where there is no room for the actions. */
+  retry?: { label: string; run: () => void }
 }) {
   return (
     <div role="alert" className="k-vs-fault">
@@ -179,9 +182,21 @@ export function PieceFault({
         <span className="k-vs-fault__why">{reason}</span>
         <span className="k-vs-fault__acts">{actions}</span>
       </span>
-      <span aria-hidden className="k-vs-warn k-vs-fault__small" title={title}>
-        <Icon icon={Alert02Icon} size={14} />
-      </span>
+      {retry ? (
+        <button
+          type="button"
+          className="k-vs-warn k-vs-fault__small"
+          title={`${title} · ${retry.label}`}
+          aria-label={retry.label}
+          onClick={retry.run}
+        >
+          <Icon icon={Alert02Icon} size={14} />
+        </button>
+      ) : (
+        <span aria-hidden className="k-vs-warn k-vs-fault__small" title={title}>
+          <Icon icon={Alert02Icon} size={14} />
+        </span>
+      )}
     </div>
   )
 }

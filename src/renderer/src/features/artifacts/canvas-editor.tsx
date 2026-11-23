@@ -18,6 +18,7 @@ import {
   MoreHorizontalIcon,
   PlayIcon,
   PlusSignIcon,
+  ArrowReloadHorizontalIcon,
   SidebarLeftIcon,
   SlidersHorizontalIcon,
   Tick02Icon,
@@ -160,6 +161,11 @@ function fitLabels(layer: HTMLElement | undefined, z: number): void {
     if (label.style.visibility !== visibility) label.style.visibility = visibility
   }
 }
+
+/** The most room the selected frame's bar takes over the frame, in screen pixels: wide, narrow, up. */
+const FBAR_WIDE = 380
+const FBAR_NARROW = 220
+const FBAR_RISE = 70
 
 function union(boxes: Box[]): Box | null {
   if (boxes.length === 0) return null
@@ -1373,6 +1379,7 @@ export const CanvasEditor = memo(function CanvasEditor({
                 >
                   <PieceFault
                     title={t('viewer.frameFailed')}
+                    retry={{ label: t('viewer.retry'), run: () => retryFrame(p) }}
                     reason={status === 503 ? t('viewer.error.unavailable') : reason}
                     actions={
                       <>
@@ -1424,6 +1431,13 @@ export const CanvasEditor = memo(function CanvasEditor({
               readOnly={readOnly}
               tweaks={selectedPages.length === 1 && frameParams.has(selectedPages[0]!.id)}
               compact={tier === 'narrow'}
+              controls={controls}
+              faulted={pages.filter((p) => faults.has(p.id) && !shownSelection.includes(p.id))}
+              onRetry={
+                selectedPages.length === 1 && faults.has(selectedPages[0]!.id)
+                  ? () => retryFrame(selectedPages[0]!)
+                  : null
+              }
               actions={actions}
               onOpen={(id) => setFocused(id)}
               onTweak={(id) => {
@@ -1786,6 +1800,9 @@ function FrameBar({
   readOnly,
   tweaks,
   compact,
+  controls,
+  faulted,
+  onRetry,
   actions,
   onOpen,
   onTweak,
@@ -1796,20 +1813,45 @@ function FrameBar({
   tweaks: boolean
   /** Narrow: the actions as icons alone, so the bar fits over a frame in the side panel. */
   compact: boolean
+  controls: CanvasControls
+  /** The other frames that cannot show, whose marks the bar leaves in sight. */
+  faulted: readonly Box[]
+  /** Loads the one frame again, when it could not show. */
+  onRetry: (() => void) | null
   actions: DocPageActions
   onOpen: (id: string) => void
   onTweak: (id: string) => void
 }) {
   const { t } = useTranslation('artifacts')
   const one = frames.length === 1 ? frames[0]! : null
+  const { zoom } = useCanvasState(controls)
+  // Over the selection, the bar would cover a frame that cannot show: it goes under instead.
+  const below = faulted.some(
+    (p) =>
+      p.x < box.x + (compact ? FBAR_NARROW : FBAR_WIDE) / zoom &&
+      p.x + p.width > box.x &&
+      p.y < box.y &&
+      p.y + p.height > box.y - FBAR_RISE / zoom,
+  )
   return (
     <div
       className="k-ce-fbar"
       onPointerDown={(event) => event.stopPropagation()}
-      style={{ left: box.x, top: `calc(${box.y}px - 30px * var(--unscale))` }}
+      data-below={below ? '' : undefined}
+      style={{
+        left: box.x,
+        top: below
+          ? `calc(${box.y + box.height}px + 8px * var(--unscale))`
+          : `calc(${box.y}px - 30px * var(--unscale))`,
+      }}
     >
       {one ? (
         <>
+          {onRetry && (
+            <BarAct label={t('viewer.retry')} icon={ArrowReloadHorizontalIcon} onClick={onRetry}>
+              {!compact && t('viewer.retry')}
+            </BarAct>
+          )}
           <BarAct label={t('frame.open')} onClick={() => onOpen(one.id)} primary>
             {t('frame.open')}
             {!compact && <Kbd>↵</Kbd>}

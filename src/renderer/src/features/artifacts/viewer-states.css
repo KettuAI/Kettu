@@ -237,6 +237,11 @@
   height: 24px;
   border-radius: 7px;
 }
+button.k-vs-fault__small {
+  padding: 0;
+  border: 0;
+  cursor: pointer;
+}
 /* A navigator row's mark for a piece that cannot show. */
 .k-vs-row-warn {
   display: inline-flex;

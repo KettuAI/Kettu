@@ -8,6 +8,8 @@ import {
   PlusSignIcon,
   RotateLeft01Icon,
   SidebarLeftIcon,
+  ArrowReloadHorizontalIcon,
+  LinkSquare02Icon,
   SparklesIcon,
 } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
@@ -1146,7 +1148,10 @@ export default function ArtifactViewer(place: ViewerPlace) {
           />
         )}
         {legacyCanvas && pageName && <LegacyCanvasDock controls={controls} />}
-        {typed && latest && summary && <AskDock onAsk={() => tools.askWhole()} />}
+        {/* A document's own dock asks its session's agent; without one, this asks. */}
+        {typed && latest && summary && !(isDocument && target) && (
+          <AskDock onAsk={() => tools.askWhole()} />
+        )}
       </>
     )
   } else {
@@ -1439,7 +1444,15 @@ export default function ArtifactViewer(place: ViewerPlace) {
           <ViewerSlot slot="left">
             <SkeletonRows nested={kind === 'canvas'} />
           </ViewerSlot>
-          <OpeningDock canvas={kind === 'canvas' || kind === 'slides'} />
+          <OpeningDock
+            kind={
+              kind === 'canvas' || kind === 'slides'
+                ? 'canvas'
+                : kind === 'document'
+                  ? 'document'
+                  : 'web'
+            }
+          />
         </>
       )}
     </ArtifactShell>
@@ -1639,17 +1652,26 @@ function LegacyCanvasDock({ controls }: { controls: CanvasControls }) {
     </ViewerSlot>
   )
 }
-/** The dock while the content loads: what it will offer, dimmed and out of reach. */
-function OpeningDock({ canvas }: { canvas: boolean }) {
+/** The dock while the content loads: what its kind will offer, dimmed and out of reach. */
+function OpeningDock({ kind }: { kind: 'canvas' | 'document' | 'web' }) {
   const { t } = useTranslation('artifacts')
   const none = () => {}
   const { tier, leftCard: left } = useShell()
+  const narrow = tier === 'narrow'
+  const ask = (
+    <>
+      <DockRule />
+      <DockButton label={t('ask.whole')} icon={SparklesIcon} disabled onClick={none}>
+        {t('ask.short')}
+      </DockButton>
+    </>
+  )
   return (
     <ViewerSlot slot="dock">
-      {canvas && left && (
+      {kind !== 'web' && left && (
         <>
           <DockButton
-            label={t('pages.title')}
+            label={t(kind === 'canvas' ? 'pages.title' : 'outline.title')}
             icon={SidebarLeftIcon}
             pressed={left.shown}
             onClick={() => left.setShown(!left.shown)}
@@ -1658,7 +1680,7 @@ function OpeningDock({ canvas }: { canvas: boolean }) {
         </>
       )}
       <span className="avs-dock__off" aria-disabled>
-        {canvas ? (
+        {kind === 'canvas' ? (
           <>
             {tier === 'wide' && (
               <DockButton label={t('canvas.fitWidth')} disabled onClick={none}>
@@ -1669,10 +1691,39 @@ function OpeningDock({ canvas }: { canvas: boolean }) {
             <span className="avs-dock__pct">{t('canvas.zoom', { percent: 100 })}</span>
             <DockButton label={t('canvas.zoomIn')} icon={PlusSignIcon} disabled onClick={none} />
           </>
+        ) : kind === 'document' ? (
+          <>
+            {!narrow && (
+              <DockButton label={t('doc.smaller')} icon={MinusSignIcon} disabled onClick={none} />
+            )}
+            <span className="avs-dock__pct">{t('doc.size', { percent: 100 })}</span>
+            {!narrow && (
+              <DockButton label={t('doc.larger')} icon={PlusSignIcon} disabled onClick={none} />
+            )}
+            {!narrow && ask}
+          </>
         ) : (
-          <DockButton label={t('ask.whole')} icon={SparklesIcon} disabled onClick={none}>
-            {t('ask.short')}
-          </DockButton>
+          <>
+            <DockButton label={t('sheet.width.label')} disabled onClick={none}>
+              {t('sheet.width.fill')}
+            </DockButton>
+            <DockRule />
+            <DockButton
+              label={t('viewer.reload')}
+              icon={ArrowReloadHorizontalIcon}
+              disabled
+              onClick={none}
+            />
+            {!narrow && (
+              <DockButton
+                label={t('viewer.openInBrowser')}
+                icon={LinkSquare02Icon}
+                disabled
+                onClick={none}
+              />
+            )}
+            {!narrow && ask}
+          </>
         )}
       </span>
     </ViewerSlot>

@@ -405,6 +405,9 @@
   transform-origin: 0 0;
   animation: k-ce-bar-in var(--duration-card-in) var(--ease-out-quint) both;
 }
+.k-ce-fbar[data-below] {
+  transform: scale(var(--unscale));
+}
 .k-ce-fbar__btn {
   display: inline-flex;
   align-items: center;
