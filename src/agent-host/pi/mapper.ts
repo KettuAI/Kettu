@@ -269,9 +269,15 @@ function resultContent(
 
 /** A reply's tokens in Kettu's totals, which count cached input apart from `input` as pi does. */
 export function tokenTotals(usage: PiUsage | undefined): TokenTotals | null {
-  if (!usage || !(usage.totalTokens > 0)) return null
+  if (!usage) return null
+  // pi takes some providers' own total and reports 0 when one leaves it out.
+  const total =
+    usage.totalTokens > 0
+      ? usage.totalTokens
+      : usage.input + usage.output + usage.cacheRead + usage.cacheWrite
+  if (!(total > 0)) return null
   return {
-    total: usage.totalTokens,
+    total,
     input: usage.input,
     output: usage.output,
     thought: usage.reasoning ?? null,
