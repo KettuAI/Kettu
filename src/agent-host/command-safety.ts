@@ -3,6 +3,8 @@
 // read with confidence counts as unsafe, since a wrong "safe" persists a rule that runs such a
 // command without asking, while a wrong "unsafe" only leaves the user to allow it once.
 
+import type { ToolKind } from '@shared/thread'
+
 /** How a command's text is quoted: as in a POSIX shell, or as in PowerShell, where `\` is literal. */
 export type Shell = 'posix' | 'powershell'
 
@@ -84,6 +86,19 @@ export function commandSteps(command: string, shell: Shell = 'posix'): string[][
 /** Whether running `command` as written could delete, change rights, stop or run what it hides. */
 export function unsafeCommand(command: string, shell: Shell = 'posix'): boolean {
   return unsafeLine(command, false, shell)
+}
+
+/**
+ * Whether a permission request earns the Risky label: a deletion, or a command that is unsafe or
+ * has no text to judge. Every other kind of call, edits included, does not.
+ */
+export function riskyRequest(
+  toolKind: ToolKind,
+  command: string | undefined,
+  shell: Shell = 'posix',
+): boolean {
+  if (toolKind === 'delete') return true
+  return toolKind === 'execute' && (command === undefined || unsafeCommand(command, shell))
 }
 
 /** The same for a rule that allows `command` and anything after it, such as `pnpm dev:*`. */

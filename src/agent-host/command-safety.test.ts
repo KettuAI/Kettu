@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   commandSteps,
+  riskyRequest,
   unsafeArgvPrefix,
   unsafeCommand,
   unsafeCommandPrefix,
@@ -490,5 +491,31 @@ describe('unsafeArgvPrefix', () => {
     expect(unsafeArgvPrefix(['echo', 'a b'])).toBe(true)
     expect(unsafeArgvPrefix(['echo', '`x`'])).toBe(true)
     expect(unsafeArgvPrefix(['echo', 'x\ny'])).toBe(true)
+  })
+})
+
+describe('riskyRequest', () => {
+  it('leaves a command the safety check finds safe unlabelled', () => {
+    expect(riskyRequest('execute', 'git diff --stat')).toBe(false)
+    expect(riskyRequest('execute', 'pnpm test && git status')).toBe(false)
+  })
+
+  it('labels a command that deletes, or whose text does not show what runs', () => {
+    expect(riskyRequest('execute', 'rm -rf build')).toBe(true)
+    expect(riskyRequest('execute', 'git diff && rm -rf build')).toBe(true)
+    expect(riskyRequest('execute', 'echo $(rm -rf build)')).toBe(true)
+    expect(riskyRequest('execute', 'Remove-Item -Recurse build', 'powershell')).toBe(true)
+  })
+
+  it('labels a command with no text to judge', () => {
+    expect(riskyRequest('execute', undefined)).toBe(true)
+    expect(riskyRequest('execute', '')).toBe(true)
+  })
+
+  it('labels a deletion and nothing else that is not a command', () => {
+    expect(riskyRequest('delete', undefined)).toBe(true)
+    expect(riskyRequest('edit', undefined)).toBe(false)
+    expect(riskyRequest('move', 'rm -rf build')).toBe(false)
+    expect(riskyRequest('fetch', undefined)).toBe(false)
   })
 })
