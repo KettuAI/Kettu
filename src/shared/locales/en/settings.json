@@ -252,6 +252,13 @@
       "previewLabel": "Preview",
       "preview": "This is how replies and your messages read at this size. Inline code, like <code>settings.json</code>, looks like this."
     },
+    "effortControl": {
+      "name": "Effort",
+      "description": "How the model menu and the agent menu show the effort levels.",
+      "keywords": "effort reasoning thinking dial segments model menu",
+      "dial": "Dial",
+      "segments": "Segments"
+    },
     "reduceMotion": {
       "name": "Reduce motion",
       "description": "System follows macOS. Always removes movement everywhere.",
@@ -281,7 +288,8 @@
       "scale": "Zoom and text",
       "sidebar": "Sidebar",
       "motion": "Motion",
-      "fonts": "Fonts"
+      "fonts": "Fonts",
+      "modelMenu": "Model menu"
     },
     "zoom": {
       "name": "Zoom",

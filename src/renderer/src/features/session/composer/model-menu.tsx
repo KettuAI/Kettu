@@ -24,6 +24,7 @@ import { usePhoneWindow } from '@renderer/features/shell/narrow'
 import { errorMessage, hostAt } from '@renderer/lib/host'
 import { formatShortcut } from '@renderer/lib/platform'
 import { optionsOn, useAgentOptionsStore } from '@renderer/stores/agent-options'
+import { useSettingsStore } from '@renderer/stores/settings'
 import { EffortDial } from './effort-dial'
 import { dialStops, type SelectOption } from './levels'
 import { defaultUses, matchesModel, modelLists, moreInOrder, type ModelRead } from './model-list'
@@ -39,7 +40,8 @@ const ULTRA_STOPS: [string, string, string] = ['currentColor', 'currentColor', '
 /**
  * The model, its effort and the agent's switches on affectUI's Model Picker: the main models with
  * number keys and a pin on each row, More models in a card beside it by provider and family, effort
- * on a dial and the switches as cards, with Fast mode as a flag and Ultracode in its own colors.
+ * on a dial or as segments, as Appearance sets, and the switches as rows, with Fast mode as a flag
+ * and Ultracode in its own colors.
  */
 export function ModelMenu({
   agentId,
@@ -89,6 +91,7 @@ export function ModelMenu({
   const [modelValue, pickModel] = useSelectPick(model, onSelect)
   const [effortValue, pickEffort] = useSelectPick(effort, onSelect)
   const flips = useSwitchPicks(onSelect)
+  const effortControl = useSettingsStore((s) => s.settings.appearance.effortControl)
   const choices = model?.choices
   const lists = useMemo(
     () => modelLists(choices ?? [], modelValue, { pinned, recent }),
@@ -167,7 +170,12 @@ export function ModelMenu({
 
   const dial = effort ? dialStops(effort, effortValue) : null
   // The trigger shows the level, and none for the agent's Default.
-  const efforts = dial?.stops.map((s) => ({ id: s.value, label: s.isDefault ? '' : s.name })) ?? []
+  const efforts =
+    dial?.stops.map((s) => ({
+      id: s.value,
+      label: s.name,
+      ...(s.isDefault ? { trigger: false as const } : {}),
+    })) ?? []
 
   const toggles: PickerToggle[] = switches.map((o) => {
     const ultra = isUltracode(o)
@@ -242,7 +250,8 @@ export function ModelMenu({
         effortLabel={effort?.name || t('controls.effort')}
         effortHint={t('controls.effortHint', { shortcut: formatShortcut('Alt+E') })}
         effortSlot={
-          effort && dial ? (
+          // On segments, the picker draws the levels as a track of its own.
+          effort && dial && effortControl === 'dial' ? (
             <EffortDial
               className="kettu-model-picker__dial"
               label={effort.name || t('controls.effort')}

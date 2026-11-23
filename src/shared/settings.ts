@@ -74,6 +74,7 @@ export interface SettingsFile {
     sidebarOrder: SidebarPage[] // every page once, as the sidebar lists them; replaced whole
     sidebarHidden: SidebarPage[] // pages the sidebar leaves out; replaced whole
     fonts: UserFonts // replaced whole; a role left out keeps the theme's face
+    effortControl: 'dial' | 'segments' // how the model and agent menus show the effort levels
   }
   notifications: {
     permission: boolean
@@ -296,6 +297,7 @@ export const DEFAULT_SETTINGS: SettingsFile = {
     sidebarOrder: [...SIDEBAR_PAGES],
     sidebarHidden: [],
     fonts: {},
+    effortControl: 'dial',
   },
   notifications: {
     permission: true,

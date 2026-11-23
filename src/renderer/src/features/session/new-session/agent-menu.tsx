@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { ArrowRight01Icon, Search01Icon } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
@@ -6,6 +6,7 @@ import type { AgentStatus } from '@shared/agent-host'
 import { booleanConfigValue, type AgentId, type ConfigOption } from '@shared/thread'
 import { AgentMark } from '@renderer/components/agents/agent-mark'
 import { AgentMarkHost } from '@renderer/components/agents/agent-mark-host'
+import { SegmentedControl } from '@renderer/components/segmented-control'
 import { Button } from '@renderer/components/ui/button'
 import {
   Combobox,
@@ -73,6 +74,7 @@ import {
   useAgentsStore,
   usePlanReadings,
 } from '@renderer/stores/agents'
+import { useSettingsStore } from '@renderer/stores/settings'
 import { refreshLimits } from '@renderer/stores/usage'
 import { useHostLabel } from '@renderer/features/sidebar/host-label'
 import { openAgentSettings, openHarnessSettings } from '@renderer/stores/view'
@@ -916,7 +918,7 @@ function Pane({
         <div className="kettu-am-settings">
           {isSelect(model) && <ComboboxSeparator />}
           {isSelect(effort) && (
-            <PaneDial effort={effort} onPick={(v) => onOption(status.id, effort.id, v)} />
+            <PaneEffort effort={effort} onPick={(v) => onOption(status.id, effort.id, v)} />
           )}
           <SwitchRows
             options={switches}
@@ -931,18 +933,42 @@ function Pane({
   )
 }
 
-/** The shown agent's effort on the dial, as the composer's model menu has it. */
-function PaneDial({ effort, onPick }: { effort: SelectOption; onPick: (value: string) => void }) {
+/** The shown agent's effort on the dial or as segments, as the composer's model menu has it. */
+function PaneEffort({ effort, onPick }: { effort: SelectOption; onPick: (value: string) => void }) {
   const { t } = useTranslation('composer')
+  const labelId = useId()
+  const control = useSettingsStore((s) => s.settings.appearance.effortControl)
   const { stops, shown } = dialStops(effort, String(effort.value))
+  const label = effort.name || t('controls.effort')
+  if (control === 'dial')
+    return (
+      <EffortDial
+        label={label}
+        stops={stops}
+        value={shown}
+        onChange={onPick}
+        className="kettu-am-dial"
+      />
+    )
   return (
-    <EffortDial
-      label={effort.name || t('controls.effort')}
-      stops={stops}
-      value={shown}
-      onChange={onPick}
-      className="kettu-am-dial"
-    />
+    <div>
+      <div
+        id={labelId}
+        className="flex h-7 items-center px-2 text-xs font-medium text-muted-foreground"
+      >
+        {label}
+      </div>
+      <div className="px-2 pt-0.5 pb-1.5">
+        <SegmentedControl
+          aria-labelledby={labelId}
+          value={shown ?? ''}
+          segments={stops.map((s) => ({ value: s.value, label: s.name }))}
+          onChange={onPick}
+          className="w-full"
+          itemClassName="px-1.5"
+        />
+      </div>
+    </div>
   )
 }
 
