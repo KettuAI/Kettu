@@ -64,6 +64,8 @@ const SCHEMA = {
   },
 }
 
+const GAVE_UP = 'The user did not respond to the clarifying questions in time.'
+
 const CALL = {
   toolCallId: 'call_1',
   name: 'ask_question',
@@ -165,7 +167,11 @@ interface Seen {
 }
 
 /** A fake agy that asks `SCHEMA` for the call `CALL` in its one turn, as 1.5.15 does. */
-function connect(version: string, agentId: 'antigravity' | 'gemini' = 'antigravity') {
+function connect(
+  version: string,
+  agentId: 'antigravity' | 'gemini' = 'antigravity',
+  { givesUp = false } = {},
+) {
   const seen: Seen = { capabilities: {}, responses: [] }
   const turn = async (client: AgentContext, sessionId: string) => {
     const update = (value: object) => ({ sessionId, update: value as SessionUpdate })
@@ -173,15 +179,27 @@ function connect(version: string, agentId: 'antigravity' | 'gemini' = 'antigravi
       methods.client.session.update,
       update({ sessionUpdate: 'tool_call', ...CALL }),
     )
-    seen.responses.push(
-      await client.request(methods.client.elicitation.create, {
-        sessionId,
-        toolCallId: CALL.toolCallId,
-        mode: 'form',
-        message: 'The agent has 2 questions.',
-        requestedSchema: SCHEMA,
-      } as never),
-    )
+    const asked = client.request(methods.client.elicitation.create, {
+      sessionId,
+      toolCallId: CALL.toolCallId,
+      mode: 'form',
+      message: 'The agent has 2 questions.',
+      requestedSchema: SCHEMA,
+    } as never)
+    if (givesUp) {
+      // What agy sent when a sub-agent's question was not answered in time: the call failed with
+      // its own words, and no cancel of the request.
+      const failed = {
+        sessionUpdate: 'tool_call_update',
+        ...CALL,
+        status: 'failed',
+        content: [{ type: 'content', content: { type: 'text', text: GAVE_UP } }],
+      }
+      await client.notify(methods.client.session.update, update(failed))
+      seen.responses.push(await asked)
+      return
+    }
+    seen.responses.push(await asked)
     const done = { sessionUpdate: 'tool_call_update', ...CALL, status: 'completed' }
     await client.notify(methods.client.session.update, update(done))
   }
@@ -211,7 +229,9 @@ function connect(version: string, agentId: 'antigravity' | 'gemini' = 'antigravi
 }
 
 /** A session whose card is answered by `answer`, recording the requests it was shown. */
-function threadTarget(answer: (request: PermissionRequest) => Promise<PermissionAnswer>) {
+function threadTarget(
+  answer: (request: PermissionRequest, signal: AbortSignal) => Promise<PermissionAnswer>,
+) {
   let thread: ThreadState = threadFromSnapshot({
     session: {
       id: 's',
@@ -254,10 +274,10 @@ function threadTarget(answer: (request: PermissionRequest) => Promise<Permission
     apply: (output) => {
       thread = applyPatches(thread, output.patches)
     },
-    requestPermission: async (request) => {
+    requestPermission: async (request, signal) => {
       requests.push(request)
       target.apply(request.output)
-      return answer(request)
+      return answer(request, signal)
     },
     send: () => {},
     startMode: () => null,
@@ -267,9 +287,10 @@ function threadTarget(answer: (request: PermissionRequest) => Promise<Permission
 
 async function ask(
   version: string,
-  answer: (request: PermissionRequest) => Promise<PermissionAnswer>,
+  answer: (request: PermissionRequest, signal: AbortSignal) => Promise<PermissionAnswer>,
+  options: { givesUp?: boolean } = {},
 ) {
-  const { connection, seen } = connect(version)
+  const { connection, seen } = connect(version, 'antigravity', options)
   await connection.initialize('1.0.0')
   const { sessionId } = await connection.newSession('/tmp/agy-probe')
   const session = threadTarget(answer)
@@ -334,6 +355,26 @@ describe("agy's questions in the question card", () => {
       throw new Error('withdrawn')
     })
     expect(withdrawn.seen.responses).toEqual([{ action: 'cancel' }])
+  })
+
+  it('withdraws the card once agy ends the call without the answer', async () => {
+    let withdrawn = false
+    const { seen, tools } = await ask(
+      '1.5.15',
+      (_request, signal) =>
+        new Promise((_resolve, reject) => {
+          signal.addEventListener('abort', () => {
+            withdrawn = true
+            reject(signal.reason)
+          })
+        }),
+      { givesUp: true },
+    )
+    expect(withdrawn).toBe(true)
+    expect(seen.responses).toEqual([{ action: 'cancel' }])
+    const rows = tools() as ToolEntry[]
+    expect(rows).toHaveLength(1)
+    expect(rows[0]).toMatchObject({ status: 'failed' })
   })
 
   it('asks nothing of a version it was not measured on', async () => {
