@@ -363,6 +363,8 @@
 }
 .kb-ended {
   display: grid;
+  /* A long failure note shortens instead of widening the row past the board. */
+  grid-template-columns: minmax(0, 1fr);
   padding-bottom: 4px;
 }
 .kb-end {
