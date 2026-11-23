@@ -94,7 +94,7 @@ export function decide(present) {
  */
 export function summary(decision) {
   if (!decision.signed) {
-    return 'macOS: no signing secrets are set, so the builds are ad-hoc signed and updates link to the release (Link mode).'
+    return 'macOS: no signing secrets are set, so the builds are ad-hoc signed and updates download the disk image to open (Link mode).'
   }
   return [
     `macOS: signed with the Developer ID from ${label('certificate')} and notarized with ${label(decision.notarize)}, so updates install in place (Install mode).`,

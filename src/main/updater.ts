@@ -1,6 +1,6 @@
 import { access, constants } from 'node:fs/promises'
-import { resolve } from 'node:path'
-import { app } from 'electron'
+import { join, resolve } from 'node:path'
+import { app, shell } from 'electron'
 import type { AppUpdater, CancellationToken, ProgressInfo, UpdateFileInfo } from 'electron-updater'
 import type { SettingsFile } from '@shared/settings'
 import type { UpdateStatus } from '@shared/updates'
@@ -11,6 +11,7 @@ import { t } from './i18n'
 import { createLogger } from './log'
 import { sessionProxy } from './proxy'
 import type { SettingsSection } from './settings-schema'
+import { diskImageFor, downloadDiskImage, type DownloadFile } from './update-dmg'
 import {
   GITHUB_SOURCE,
   SourceRun,
@@ -20,7 +21,6 @@ import {
 } from './update-sources'
 import {
   dismissTarget,
-  dmgDownloadUrl,
   errorMessage,
   installOnQuit,
   moveCancelled,
@@ -76,12 +76,13 @@ export class Updater {
   private manual = false
   private lastCheckedAt: number | null = null
   private lastAvailable: string | null = null
-  private lastDownloadUrl: string | null = null
   private lastFiles: readonly UpdateFileInfo[] = []
   /** The sources of the last check that found an update; a download moves along them. */
   private run: SourceRun | null = null
   /** Stops the download attempt on a source other than GitHub, while one runs. */
   private leaveSource: (() => void) | null = null
+  /** The provider's way to download one file, once electron-updater has loaded. */
+  private downloadFile: DownloadFile | null = null
   private checking: Promise<void> | null = null
   private started = false
   private errorEvents = 0
@@ -152,9 +153,6 @@ export class Updater {
       throw new Error(
         off.reason === 'development' ? t('updater.offDevelopment') : t('updater.offPackageManager'),
       )
-    }
-    if (this.mode === 'link') {
-      throw new Error(t('updater.linkOnly'))
     }
     const { state } = this.status
     if (state.kind !== 'available') throw new Error(t('updater.nothingToDownload'))
@@ -259,9 +257,8 @@ export class Updater {
   }
 
   /**
-   * Once GitHub only is chosen, an update a check found elsewhere downloads from GitHub, and Link
-   * mode's link names GitHub's disk image, so nothing more goes to another source. Once it is not,
-   * a check that GitHub failed runs again.
+   * Once GitHub only is chosen, an update a check found elsewhere downloads from GitHub, so nothing
+   * more goes to another source. Once it is not, a check that GitHub failed runs again.
    */
   private sourceChanged(): void {
     const { state } = this.status
@@ -273,15 +270,6 @@ export class Updater {
     if (this.sourceChoice() !== 'github' || !this.run || this.run.githubOnly) return
     this.run = SourceRun.githubOnly(this.run.stallMs)
     this.leaveSource?.()
-    if (state.kind !== 'available' || this.mode !== 'link') return
-    this.lastDownloadUrl = this.linkUrl()
-    this.publish({ ...this.status, state: { ...state, downloadUrl: this.lastDownloadUrl } })
-  }
-
-  /** Link mode's disk image for the update found, on the source that served the check. */
-  private linkUrl(): string | null {
-    if (this.mode !== 'link' || !this.run || !this.lastAvailable) return null
-    return dmgDownloadUrl(this.run.current.url, this.lastAvailable, this.lastFiles, process.arch)
   }
 
   private autoDownload(settings: SettingsFile): boolean {
@@ -377,6 +365,9 @@ export class Updater {
               this.run = run
             },
             downloadSource: () => this.run?.current ?? null,
+            downloader: (download) => {
+              this.downloadFile = download
+            },
           }),
         })
         autoUpdater.allowPrerelease = false
@@ -392,7 +383,6 @@ export class Updater {
         autoUpdater.on('update-available', (info) => {
           this.lastAvailable = info.version
           this.lastFiles = info.files
-          this.lastDownloadUrl = this.linkUrl()
           // An automatic download, which the check starts as it ends, is the updater's own.
           this.startedBy = 'auto'
           this.dispatch({ type: 'available', version: info.version })
@@ -400,7 +390,6 @@ export class Updater {
         })
         autoUpdater.on('update-not-available', () => {
           this.lastAvailable = null
-          this.lastDownloadUrl = null
           this.lastCheckedAt = Date.now()
           this.dispatch({ type: 'not-available', at: this.lastCheckedAt })
         })
@@ -513,7 +502,8 @@ export class Updater {
     try {
       const updater = await this.load()
       this.applyInstallOnQuit(updater, this.deps.settings())
-      await this.downloadFromSources(updater, token)
+      if (this.mode === 'link') await this.downloadDiskImage(token)
+      else await this.downloadFromSources(updater, token)
     } catch (error) {
       if (token?.cancelled) {
         this.dispatch({ type: 'download-cancelled' })
@@ -526,6 +516,48 @@ export class Updater {
       this.downloadActive = false
       if (this.cancellation === token) this.cancellation = null
     }
+  }
+
+  /**
+   * Link mode's Update: downloads the release's disk image from the sources, checks it against the
+   * checksum of the signed update file and opens it, so the user drags the app into Applications.
+   */
+  private async downloadDiskImage(cancellation: CancellationToken | null): Promise<void> {
+    const { run, downloadFile, lastAvailable: version } = this
+    if (!run || !downloadFile || !version) throw new Error(t('updates.checkFirst'))
+    const image = diskImageFor(this.lastFiles, process.arch)
+    if (!image) throw new Error(t('updater.noDiskImage'))
+    const abort = new AbortController()
+    const cancel = (): void => abort.abort()
+    cancellation?.once('cancel', cancel)
+    let file: string
+    try {
+      file = await downloadDiskImage({
+        run: run.again(),
+        version,
+        image,
+        folder: join(app.getPath('userData'), 'updates'),
+        download: downloadFile,
+        signal: abort.signal,
+        githubOnly: () => this.sourceChoice() === 'github',
+        setLeave: (leave) => {
+          this.leaveSource = leave
+        },
+        progress: (percent) => this.dispatch({ type: 'progress', percent }),
+        log,
+      })
+    } finally {
+      cancellation?.off('cancel', cancel)
+    }
+    // Cancel pressed while the file was being checked.
+    if (abort.signal.aborted) throw new Error('Download cancelled')
+    const failure = await shell.openPath(file)
+    if (failure) {
+      log.warn(`Could not open ${file}: ${failure}`)
+      throw new Error(t('updater.openFailed', { reason: failure }))
+    }
+    log.info(`Opened ${file}`)
+    this.dispatch({ type: 'disk-image-opened' })
   }
 
   /**
@@ -618,7 +650,6 @@ export class Updater {
       autoDownload: this.autoDownload(this.deps.settings()),
       lastCheckedAt: this.lastCheckedAt,
       lastAvailable: this.lastAvailable,
-      downloadUrl: this.lastDownloadUrl,
     })
     if (state !== this.status.state) this.publish({ ...this.status, state })
   }

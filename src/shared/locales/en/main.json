@@ -260,11 +260,13 @@
   "updater": {
     "offDevelopment": "Updates are off in development builds",
     "offPackageManager": "Updates for this installation come from the package manager",
-    "linkOnly": "This build cannot install updates; open the release page to download it",
     "nothingToDownload": "There is no update to download",
     "nothingReady": "No update is ready to install",
     "readOnlyVolume": "The app is in an Applications folder on a read-only volume",
-    "stalled": "The download made no progress for {{seconds}} s"
+    "stalled": "The download made no progress for {{seconds}} s",
+    "noDiskImage": "This update has no installer for this Mac",
+    "diskImageMismatch": "The downloaded installer does not match the release’s checksum",
+    "openFailed": "Could not open the downloaded installer: {{reason}}"
   },
   "marketKeys": {
     "valueEmpty": "The value of “{{name}}” is empty; clear it instead",
