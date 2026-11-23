@@ -597,8 +597,8 @@ export class AgentHost {
     this.files = new FilesService({
       exec: this.execRunner.exec,
       platform,
-      media: (real, info) => this.media.grantFile(real, info, null),
-      describeMedia: (real, info) => this.media.describe(real, info),
+      media: (real, info) => this.media.grantFile(real, info, null, true),
+      describeMedia: (real, info) => this.media.describe(real, info, true),
       trash: (paths) => this.trash(paths),
     })
     this.agentFiles = new AgentFiles({

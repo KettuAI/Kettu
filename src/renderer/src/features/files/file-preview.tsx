@@ -53,13 +53,17 @@ import { ChangeBadge } from './change-badge'
 import { DiffFileToggle, PathCopy, PreviewEditToggle } from './file-header'
 import { openInEditor } from './open-in-editor'
 import { nameOf } from './paths'
+import type { PdfFailure } from './pdf-viewer'
 
 const CodeEditor = lazy(() => import('./code-editor'))
+const PdfStage = lazy(() => import('./pdf-viewer'))
 
 /** The picture's controls and zoom, which its stage hands up to the header. */
-interface Picture {
+export interface Picture {
   controls: PictureControls
   zoom: ZoomLevel
+  /** The page a document is at, for the header to say. */
+  pages?: { current: number; total: number }
 }
 
 /** The room a fitted picture leaves on each side of the pane, as it always has. */
@@ -128,6 +132,11 @@ export function FilePreview({
             >
               <PaneIcon icon={FloppyDiskIcon} />
             </PanelButton>
+          )}
+          {picture?.pages && (
+            <span className="px-1.5 text-xs text-tertiary tabular">
+              {t('preview.pageOf', picture.pages)}
+            </span>
           )}
           {picture && <ZoomControls zoom={picture.zoom} controls={picture.controls} size="xs" />}
           {onShowDiff && (
@@ -353,6 +362,18 @@ function Body({
       </Notice>
     )
   }
+  if (content.kind === 'media' && content.grant.kind === 'document') {
+    return (
+      <FileDocument
+        key={`${content.path}\0${mediaVersion(content.grant.url)}`}
+        projectPath={projectPath}
+        panel={panel}
+        path={content.path}
+        grant={content.grant}
+        onPicture={onPicture}
+      />
+    )
+  }
   if (content.kind === 'media') {
     return (
       <FileMedia
@@ -407,6 +428,84 @@ export function Lines() {
       <Skeleton className="h-3 w-4/5" />
       <Skeleton className="h-3 w-2/5" />
     </div>
+  )
+}
+
+/**
+ * A document from the media scheme: a PDF's pages on a stage of their own. One that is protected,
+ * damaged or too large to show says why and offers the file to another app; one that cannot be
+ * read is asked for again once first, since main may have dropped its grant.
+ */
+function FileDocument({
+  projectPath,
+  panel,
+  path,
+  grant,
+  onPicture,
+}: {
+  projectPath: string
+  panel: string
+  path: string
+  grant: MediaGrant
+  onPicture: (path: string, picture: Picture | null) => void
+}) {
+  const { t } = useTranslation('files')
+  const [renewed, setRenewed] = useState(false)
+  const [failure, setFailure] = useState<'encrypted' | 'damaged' | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  const failed = (reason: PdfFailure) => {
+    if (reason === 'unreadable' && !renewed) {
+      setRenewed(true)
+      renewOpenFile(projectPath, path)
+    } else setFailure(reason === 'encrypted' ? 'encrypted' : 'damaged')
+  }
+  if (grant.mimeType !== 'application/pdf') {
+    return (
+      <Notice
+        title={t('preview.binaryTitle')}
+        description={t('preview.binaryDescription', { size: bytes(grant.size) })}
+      />
+    )
+  }
+  if (grant.tooLarge || failure) {
+    return (
+      <PaneEmpty
+        className="absolute inset-0"
+        icon={<PaneIcon icon={FileNotFoundIcon} size={20} />}
+        title={
+          grant.tooLarge
+            ? t('preview.mediaTooLargeTitle')
+            : failure === 'encrypted'
+              ? t('preview.pdfEncryptedTitle')
+              : t('preview.pdfFailedTitle')
+        }
+        text={
+          grant.tooLarge
+            ? bytes(grant.size)
+            : failure === 'encrypted'
+              ? t('preview.pdfEncryptedDescription')
+              : t('preview.pdfFailedDescription')
+        }
+      >
+        <span className="mt-3 flex flex-wrap justify-center gap-1.5">
+          <PlayElsewhere url={grant.url} projectPath={projectPath} onError={setError} />
+        </span>
+        {error && <span className="text-xs text-danger">{error}</span>}
+      </PaneEmpty>
+    )
+  }
+  return (
+    <Suspense fallback={<Lines />}>
+      <PdfStage
+        viewKey={`${projectPath}\0${panel}\0${path}`}
+        path={path}
+        url={grant.url}
+        name={nameOf(path)}
+        onPicture={onPicture}
+        onFailed={failed}
+      />
+    </Suspense>
   )
 }
 

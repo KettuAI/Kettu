@@ -57,4 +57,5 @@ export const REASONS = {
   image: 'media.unsupportedShort',
   video: 'media.unsupportedPlayShort',
   audio: 'media.unsupportedPlayShort',
+  document: 'media.unsupportedShort',
 } as const satisfies Record<CardReason, string>

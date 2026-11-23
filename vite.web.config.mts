@@ -12,6 +12,7 @@ import tailwindcss from '@tailwindcss/vite'
 import { cn } from 'cn/vite'
 import { pageRuntime } from './tools/build/page-runtime'
 import { integrity } from './tools/build/integrity'
+import { pdfjsData } from './tools/build/pdfjs-data'
 import { agentMarkNotice, standaloneThirdPartyNotices } from './tools/build/third-party-notices'
 
 const source = (file: string): string => fileURLToPath(new URL(file, import.meta.url))
@@ -63,6 +64,7 @@ export default defineConfig(({ mode }) => {
       // The daemon's package ships the web client too.
       standaloneThirdPartyNotices(source('.'), [], [agentMarkNotice(source('.'))]),
       pageRuntime(source('src/shared/artifact-runtime/runtime.ts')),
+      pdfjsData(),
       ...(hosted ? [integrity()] : []),
     ],
     server: {

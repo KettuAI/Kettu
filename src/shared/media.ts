@@ -40,12 +40,18 @@ export const MEDIA_VIDEO_TYPES = [
 
 export type MediaVideoType = (typeof MEDIA_VIDEO_TYPES)[number]
 
-export type MediaType = MediaImageType | MediaAudioType | MediaVideoType
+/** Documents the Files pane shows; the conversation never grants them. */
+export const MEDIA_DOCUMENT_TYPES = ['application/pdf'] as const
+
+export type MediaDocumentType = (typeof MEDIA_DOCUMENT_TYPES)[number]
+
+export type MediaType = MediaImageType | MediaAudioType | MediaVideoType | MediaDocumentType
 
 const MEDIA_TYPES: ReadonlySet<string> = new Set([
   ...MEDIA_IMAGE_TYPES,
   ...MEDIA_AUDIO_TYPES,
   ...MEDIA_VIDEO_TYPES,
+  ...MEDIA_DOCUMENT_TYPES,
 ])
 
 /** Whether a value is a type the scheme serves, as a grant from the host must carry. */
@@ -53,12 +59,14 @@ export function isMediaType(value: unknown): value is MediaType {
   return typeof value === 'string' && MEDIA_TYPES.has(value)
 }
 
-export type MediaKind = 'image' | 'audio' | 'video'
+export type MediaKind = 'image' | 'audio' | 'video' | 'document'
 
 /** A file's name that nominates it as an image; its first bytes decide. */
 export const MEDIA_IMAGE_NAME = /\.(png|jpe?g|gif|webp|avif|bmp|ico|svg)$/i
 export const MEDIA_AUDIO_NAME = /\.(mp3|wav|m4a|aac|ogg|oga|opus|flac|weba)$/i
 export const MEDIA_VIDEO_NAME = /\.(mp4|m4v|webm|mov|mkv)$/i
+/** A name that nominates a document; apart from `mediaKindOfName`, so no thread names one. */
+export const MEDIA_DOCUMENT_NAME = /\.pdf$/i
 
 /** The kind a file's name nominates it as, or null when it names no media. */
 export function mediaKindOfName(name: string): MediaKind | null {

@@ -108,6 +108,7 @@
     "katex": "0.16.47",
     "material-icon-theme": "5.39.0",
     "motion": "^14.4.0",
+    "pdfjs-dist": "6.5.438",
     "perfect-freehand": "^1.2.3",
     "pptxgenjs": "4.0.1",
     "prettier": "^3.9.10",

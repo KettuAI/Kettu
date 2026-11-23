@@ -4,6 +4,7 @@ import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import { cn } from 'cn/vite'
 import { pageRuntime } from './tools/build/page-runtime'
+import { pdfjsData } from './tools/build/pdfjs-data'
 import { thirdPartyNotices } from './tools/build/third-party-notices'
 
 const sharedAlias = { '@shared': resolve('src/shared') }
@@ -48,6 +49,7 @@ export default defineConfig({
       cn({ full: true, out: 'src/lib/cn-tables.ts' }),
       notices(),
       runtime(),
+      pdfjsData(),
     ],
     build: {
       minify: true,

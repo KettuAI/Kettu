@@ -77,9 +77,9 @@ export interface FilesServiceDeps {
   /** Runs git; it must give git the agent environment. */
   exec: Exec
   platform: Platform
-  /** A grant on the media scheme for a file at its real path, or null when it is no media. */
+  /** A grant on the media scheme for a file at its real path, or null when it is no media or document. */
   media(real: string, info: Stats): Promise<MediaGrant | null>
-  /** The same file described as media for a paired device, granting nothing. */
+  /** The same file described as media or a document for a paired device, granting nothing. */
   describeMedia(real: string, info: Stats): Promise<Omit<MediaFile, 'path'> | null>
   /** Moves these absolute paths to the system's trash; throws when it could not. */
   trash(paths: string[]): Promise<void>
@@ -302,8 +302,9 @@ export class FilesService {
   }
 
   /**
-   * A file's text, or its grant when it is media, or why there is none. `relativePath` uses `/`
-   * between segments. A file named as media is one only if its first bytes say so; `asText` reads
+   * A file's text, or its grant when it is media or a document, or why there is none.
+   * `relativePath` uses `/` between segments. A file named as media is one only if its first
+   * bytes say so; `asText` reads
    * it as any other file. A paired `device` gets media described instead of granted.
    */
   read(root: string, relativePath: string, asText?: boolean): Promise<FileContent>
