@@ -1,9 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
-import { ComputerTerminal01Icon } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
-import type { BackgroundWork } from '@shared/host-control'
 import type { QuitRequest } from '@shared/ipc'
-import { AgentMark } from '@renderer/components/agents/agent-mark'
+import { restartWaitsFor } from '@shared/updates'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -15,29 +13,18 @@ import {
   AlertDialogTitle,
 } from '@renderer/components/ui/alert-dialog'
 import { Button } from '@renderer/components/ui/button'
-import { RingSpinner, Spinner } from '@renderer/components/ui/spinner'
+import { Spinner } from '@renderer/components/ui/spinner'
 import { FileTypeIcon } from '@renderer/features/files/file-type-icon'
 import { folderOf, nameOf } from '@renderer/features/files/paths'
-import { runningFor } from '@renderer/lib/format'
-import { i18n } from '@renderer/lib/i18n'
 import { saveAll } from '@renderer/stores/files'
-import { sessionTitle } from '@renderer/stores/sessions'
 import { useSettingsStore } from '@renderer/stores/settings'
-import { Glyph } from '@renderer/features/shell/glyph'
-
-/** What a session runs beside a turn, which the quit stops too: its names, then its jobs. */
-function backgroundText(work: BackgroundWork): string {
-  const parts = [...work.commands, ...work.tasks, ...work.subagents]
-  if (work.scheduled > 0) parts.push(i18n.t('updates:quit.scheduled', { count: work.scheduled }))
-  if (work.unnamed) parts.push(i18n.t('updates:quit.backgroundWork'))
-  return parts.join(i18n.t('updates:quit.workSeparator'))
-}
+import { RunningWorkList } from './running-work'
 
 /**
  * Main asks before a quit or an update restart would stop agents or terminal commands, or would
  * lose unsaved files; on macOS, also before closing the window with unsaved files. A quit with
- * work running offers to keep it running in the background, the default, since stopping can lose
- * work.
+ * work running offers to keep it running in the background, and a restart to update with sessions
+ * working offers to wait for them; either is the default, since stopping can lose work.
  */
 export function QuitConfirm() {
   const { t } = useTranslation(['updates', 'common'])
@@ -47,6 +34,7 @@ export function QuitConfirm() {
   const [now, setNow] = useState(() => Date.now())
   const remote = useSettingsStore((s) => s.settings.remote.enabled)
   const keep = useRef<HTMLButtonElement>(null)
+  const wait = useRef<HTMLButtonElement>(null)
   useEffect(
     () =>
       window.kettu.app.onConfirmQuit((next) => {
@@ -63,7 +51,7 @@ export function QuitConfirm() {
     return () => clearInterval(timer)
   }, [open])
 
-  const answer = (value: boolean | 'background') => {
+  const answer = (value: boolean | 'background' | 'when-idle') => {
     if (!request) return
     void window.kettu.app.respondQuit(request.id, value)
     setRequest(null)
@@ -84,6 +72,9 @@ export function QuitConfirm() {
   const busy = sessions.length + terminals.length > 0
   const unsaved = request?.unsaved ?? []
   const keepRunning = !!request?.keepRunning
+  const whenIdle = !!request?.whenIdle && unsaved.length === 0
+  // Waiting covers turns and subagents; terminal commands and background tasks still stop.
+  const notWaited = terminals.length > 0 || sessions.some((s) => !restartWaitsFor(s))
   const title =
     reason === 'update'
       ? t('quit.titleUpdate')
@@ -99,7 +90,7 @@ export function QuitConfirm() {
   return (
     <AlertDialog open={open} onOpenChange={(open) => !open && !saving && answer(false)}>
       <AlertDialogContent
-        initialFocus={keepRunning ? keep : true}
+        initialFocus={keepRunning ? keep : whenIdle ? wait : true}
         className="gap-0 px-5.5 pt-5 pb-4.5 data-[size=default]:sm:max-w-[440px]"
       >
         <AlertDialogHeader>
@@ -107,48 +98,16 @@ export function QuitConfirm() {
           {!keepRunning && (
             <AlertDialogDescription>
               {busy
-                ? restarts
-                  ? t('quit.stopsUpdate')
-                  : t('quit.stopsQuit')
+                ? whenIdle
+                  ? t('quit.stillWorking')
+                  : restarts
+                    ? t('quit.stopsUpdate')
+                    : t('quit.stopsQuit')
                 : t('quit.unsavedFiles')}
             </AlertDialogDescription>
           )}
         </AlertDialogHeader>
-        {busy && (
-          <ul className="mt-3.5 flex min-w-0 flex-col text-ui">
-            {sessions.map((s) => (
-              <li
-                key={s.sessionId}
-                className="flex h-8.5 items-center gap-2.5 border-b border-border-soft"
-              >
-                <AgentMark agent={s.agentId} size={16} />
-                <span className="min-w-0 flex-1 truncate">{sessionTitle(s)}</span>
-                {s.turnStartedAt !== null ? (
-                  <span className="flex shrink-0 items-center gap-2 text-small text-tertiary tabular">
-                    <RingSpinner aria-hidden />
-                    {runningFor(now - s.turnStartedAt)}
-                  </span>
-                ) : (
-                  s.background && (
-                    <span className="max-w-1/2 min-w-0 truncate text-small text-tertiary">
-                      {t('quit.background', { work: backgroundText(s.background) })}
-                    </span>
-                  )
-                )}
-              </li>
-            ))}
-            {terminals.map((terminal) => (
-              <li
-                key={terminal.id}
-                className="flex h-8.5 items-center gap-2.5 border-b border-border-soft"
-              >
-                <Glyph icon={ComputerTerminal01Icon} className="text-icon" />
-                <span className="min-w-0 flex-1 truncate font-mono text-xs">{terminal.title}</span>
-                <span className="text-small text-tertiary">{t('quit.terminal')}</span>
-              </li>
-            ))}
-          </ul>
-        )}
+        {busy && <RunningWorkList sessions={sessions} terminals={terminals} now={now} />}
         {busy && unsaved.length > 0 && (
           <p className="mt-3 text-control leading-normal text-secondary">
             {t('quit.unsavedFiles')}
@@ -181,7 +140,11 @@ export function QuitConfirm() {
         ) : (
           busy && (
             <p className="mt-3 text-control leading-normal text-secondary">
-              {restarts ? t('quit.comeBackUpdate') : t('quit.comeBackQuit')}
+              {whenIdle
+                ? `${t('quit.waitHint')}${notWaited ? t('quit.notWaited') : ''}`
+                : restarts
+                  ? t('quit.comeBackUpdate')
+                  : t('quit.comeBackQuit')}
             </p>
           )
         )}
@@ -216,6 +179,15 @@ export function QuitConfirm() {
               </Button>
               <AlertDialogAction ref={keep} onClick={() => answer('background')}>
                 {t('quit.keepRunningAction')}
+              </AlertDialogAction>
+            </>
+          ) : whenIdle ? (
+            <>
+              <Button variant="outline" size="dialog" onClick={() => answer(true)}>
+                {t('quit.restartNow')}
+              </Button>
+              <AlertDialogAction ref={wait} onClick={() => answer('when-idle')}>
+                {t('quit.restartWhenIdle')}
               </AlertDialogAction>
             </>
           ) : (

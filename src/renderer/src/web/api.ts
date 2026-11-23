@@ -523,6 +523,11 @@ export function webApi(link: HostLink, settings: WebSettings, context: WebHostCo
       download: () => done(admin('updates.download')),
       cancel: () => done(admin('updates.cancel')),
       restart: () => done(admin('updates.restart')),
+      // The computer's own window asks about its running work; a browser cannot see it.
+      runningWork: () => Promise.resolve({ sessions: [], terminals: [] }),
+      restartConfirmed: () => done(admin('updates.restart')),
+      restartWhenIdle: () => unsupported('restart the computer once its sessions finish'),
+      cancelRestartWhenIdle: () => Promise.resolve(),
       dismiss: () => done(admin('updates.dismiss')),
       onChanged: (listener) => adminEvent('updates.changed', (event) => listener(event.status)),
     },

@@ -12,7 +12,7 @@ import { errorMessage } from '@renderer/lib/host'
 import { useHostContext } from '@renderer/lib/host-features'
 import { useNow } from '@renderer/lib/use-now'
 import { useSettingsStore } from '@renderer/stores/settings'
-import { checkForUpdates, useUpdatesStore } from '@renderer/stores/updates'
+import { checkForUpdates, restartToUpdate, useUpdatesStore } from '@renderer/stores/updates'
 import { AboutStarButton } from '@renderer/features/github-star/star-prompts'
 import { ControlError, LinkButton, SetButton, SettingSelect, Skel, Spin } from './controls'
 import { FlashMark, PageHeader, RowText } from './rows'
@@ -139,18 +139,25 @@ export function UpdateRow({ status }: { status: UpdateStatus | null }) {
         </span>
       )
       break
-    case 'ready':
+    case 'ready': {
+      const waiting = status.restartWhenIdle?.sessions ?? null
       title = t('about.updates.ready', { version: state.version })
-      detail = t('about.updates.readyDetail')
+      detail =
+        waiting === null
+          ? t('about.updates.readyDetail')
+          : waiting > 0
+            ? t('about.updates.readyWaiting', { count: waiting })
+            : t('about.updates.readyWaitingSoon')
       action = (
         <>
           {whatsNew(state.version)}
-          <SetButton variant="primary" onClick={() => run(window.kettu.updates.restart)}>
+          <SetButton variant="primary" onClick={restartToUpdate}>
             {t('about.updates.restart')}
           </SetButton>
         </>
       )
       break
+    }
     case 'available':
       title = t('about.updates.available', { version: state.version })
       if (state.mode === 'install' && status.readOnly) detail = t('about.updates.movesFirst')

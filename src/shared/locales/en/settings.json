@@ -1208,7 +1208,10 @@
       "none_web": "Kettu on {{host}} is not updated from here",
       "noneDetail": "Kettu on this computer is updated the way it was installed.",
       "noneDetail_web": "Kettu on {{host}} is updated the way it was installed.",
-      "readyDetail": "Restart to finish. Your sessions come back."
+      "readyDetail": "Restart to finish. Your sessions come back.",
+      "readyWaiting_one": "Restarts by itself once {{count}} working session finishes.",
+      "readyWaiting_other": "Restarts by itself once {{count}} working sessions finish.",
+      "readyWaitingSoon": "Restarts by itself in a moment."
     },
     "automatic": {
       "name": "Automatic updates",

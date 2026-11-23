@@ -100,7 +100,8 @@ export type UpdaterEvent =
   | { type: 'checking'; manual: boolean }
   | { type: 'available'; version: string }
   | { type: 'not-available'; at: number }
-  | { type: 'download-started'; version: string; manual: boolean }
+  // replaces: the downloaded version this newer one replaces.
+  | { type: 'download-started'; version: string; manual: boolean; replaces?: string }
   | { type: 'progress'; percent: number }
   | { type: 'downloaded'; version: string; notes?: Partial<Record<Locale, string[]>> }
   | { type: 'download-cancelled' }
@@ -124,6 +125,12 @@ function available(version: string, context: TransitionContext): UpdateState {
   return { kind: 'available', version, mode: context.mode }
 }
 
+function downloading(version: string, manual: boolean, replaces?: string): UpdateState {
+  return replaces
+    ? { kind: 'downloading', version, percent: 0, manual, replaces }
+    : { kind: 'downloading', version, percent: 0, manual }
+}
+
 export function nextState(
   state: UpdateState,
   event: UpdaterEvent,
@@ -132,18 +139,28 @@ export function nextState(
   if (state.kind === 'off') return state
   switch (event.type) {
     case 'checking':
-      // Keep an available update visible while a background check runs.
+      // A downloaded update stays ready through any check; an available one through a background
+      // check.
+      if (state.kind === 'ready') return state
       if (!event.manual && state.kind === 'available') return state
       return { kind: 'checking', manual: event.manual }
-    case 'available':
+    case 'available': {
+      // A check compares with the running version, so it finds the downloaded update again.
+      if (state.kind === 'ready' && !(compareVersions(event.version, state.version) > 0)) {
+        return state
+      }
+      const replaces = state.kind === 'ready' ? state.version : undefined
       if (context.mode === 'install' && context.autoDownload) {
-        return { kind: 'downloading', version: event.version, percent: 0, manual: false }
+        return downloading(event.version, false, replaces)
       }
       return available(event.version, context)
+    }
     case 'not-available':
+      // A release taken down since does not undo the download.
+      if (state.kind === 'ready') return state
       return { kind: 'idle', checkedAt: event.at }
     case 'download-started':
-      return { kind: 'downloading', version: event.version, percent: 0, manual: event.manual }
+      return downloading(event.version, event.manual, event.replaces)
     case 'progress': {
       if (state.kind !== 'downloading' || !Number.isFinite(event.percent)) return state
       // A download that moves on to another source starts that file again; the bar holds.
