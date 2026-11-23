@@ -425,17 +425,22 @@ export class Sharing {
     }
   }
 
-  /** The switch for publishing to Kettu on its own, and the answer to the one-time notice. */
+  /**
+   * The switch for publishing to Kettu on its own, and the answer to the one-time notice: on counts
+   * as that answer only while the notice shows, so the switch alone never lets an upload through.
+   */
   setAuto(raw: unknown): SharingResult {
     if (typeof raw !== 'boolean') return failed('failed', 'Not a switch position.')
     const auto = this.autoState()
     const owner = this.deps.kettu.account()
     // Switching on starts from now: what was made while it was off is not published.
     const restart = raw && !auto.enabled
+    const answered = raw && this.autoStatus().notice
     this.store.setAuto({
       ...auto,
       enabled: raw,
-      confirmed: true,
+      confirmed: auto.confirmed || answered,
+      chosen: true,
       ...(restart ? { since: owner ? this.now() : null, accountId: owner?.id ?? null } : {}),
     })
     this.skipped.clear()
@@ -470,18 +475,24 @@ export class Sharing {
     return this.store.flush()
   }
 
-  /** The state of automatic publishing; a file from before it starts with it on and unanswered. */
+  /**
+   * The state of automatic publishing, off until the user turns it on. One left on by the earlier
+   * default and never answered uploaded nothing, and is off too.
+   */
   private autoState(): AutoState {
     const existing = this.store.auto()
-    if (existing) return existing
+    if (existing && (!existing.enabled || existing.confirmed || existing.chosen)) return existing
     const owner = this.deps.kettu.account()
-    const started: AutoState = {
-      enabled: true,
-      confirmed: false,
-      since: owner ? this.now() : null,
-      accountId: owner?.id ?? null,
-      declined: [],
-    }
+    const started: AutoState = existing
+      ? { ...existing, enabled: false }
+      : {
+          enabled: false,
+          confirmed: false,
+          chosen: false,
+          since: owner ? this.now() : null,
+          accountId: owner?.id ?? null,
+          declined: [],
+        }
     this.store.setAuto(started)
     return started
   }
