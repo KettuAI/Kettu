@@ -960,6 +960,9 @@ export interface PendingPermission {
   plan?: { markdown: string; previous: string | null }
   // An MCP server's request: a form to fill in, or a page to open.
   elicitation?: PendingElicitation
+  // Whether the card labels the request Risky, as the host judged it; a request stored without
+  // it is judged by its tool kind alone.
+  risky?: boolean
 }
 
 export interface PermissionOption {

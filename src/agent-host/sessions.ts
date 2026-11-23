@@ -147,6 +147,7 @@ import {
   type ArtifactWrite,
 } from './artifacts/entries'
 import { allowOnceOption, changedFiles, replySummary, requestText } from './attention'
+import { riskyRequest } from './command-safety'
 import type { MarketAnswer, MarketAsk } from './marketplace/publish-tools'
 import type { SettingsAnswer, SettingsAsk } from './settings/tools'
 import { MODE_OPTION as AGY_MODE_OPTION } from './acp/agy-plan'
@@ -10161,6 +10162,9 @@ export class SessionManager {
     const requestId = `${this.requestPrefix}${++this.requestCounter}`
     const { elicitation } = request
     const plan = request.plan === undefined ? null : planRevision(live.thread, request.toolEntryId)
+    const asked = live.thread.byId[request.toolEntryId]
+    const risky =
+      asked?.kind === 'tool' && riskyRequest(asked.toolKind, asked.rawInput, request.shell)
     return new Promise<PermissionAnswer>((resolve, reject) => {
       const onAbort = (): void => {
         this.settlePermission(live, requestId, 'withdrawn')
@@ -10198,6 +10202,7 @@ export class SessionManager {
               ...(request.questions ? { questions: request.questions } : {}),
               ...(plan ? { plan: { markdown: request.plan!, previous: plan.previous } } : {}),
               ...(elicitation ? { elicitation } : {}),
+              risky,
             },
             permissionResult: null,
             ...(plan ? { planVersion: plan.version } : {}),

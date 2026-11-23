@@ -186,6 +186,8 @@ export function PermissionEntry({
   useDiffStats(entry.content)
   const permission = entry.permission
   const result = entry.permissionResult
+  // A request stored before the host marked it keeps the old rule: every command and deletion.
+  const risky = permission?.risky ?? (entry.toolKind === 'execute' || entry.toolKind === 'delete')
   const answers = useMemo(() => answersOf(permission?.options ?? []), [permission])
   const label = toolLabel(entry, projectPath)
   const command = label.kind === 'command' ? label.target : null
@@ -342,7 +344,7 @@ export function PermissionEntry({
           action={action}
           target={target ?? undefined}
           toolIcon={<Icon icon={KIND_GLYPH[entry.toolKind]} size={12} />}
-          risk={entry.toolKind === 'execute' || entry.toolKind === 'delete' ? 'risky' : 'safe'}
+          risk={risky ? 'risky' : 'safe'}
           reason={entry.description}
           previewTitle={t('permission.card.touches')}
           preview={preview}

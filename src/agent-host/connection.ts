@@ -23,6 +23,7 @@ import type {
   TokenTotals,
   UserContent,
 } from '@shared/thread'
+import type { Shell } from './command-safety'
 import type { MapperContext, MapperOutput } from './session-updates'
 
 export interface PermissionRequest {
@@ -37,6 +38,8 @@ export interface PermissionRequest {
   plan?: string
   /** An MCP server's request: a form, answered with its values, or a page to open. */
   elicitation?: PendingElicitation
+  /** The shell a command runs in, when it is not a POSIX one. */
+  shell?: Shell
   /**
    * The agent does not wait for the answer, so its turn goes on or ends and the card stays until
    * the user answers it or the session closes.
