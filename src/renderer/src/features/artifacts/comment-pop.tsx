@@ -79,6 +79,7 @@ export function CommentDraft({
   anchor,
   at,
   inline = false,
+  waiting = null,
   onCancel,
   onSave,
 }: {
@@ -86,6 +87,8 @@ export function CommentDraft({
   /** What it is beside; null for the middle of the content area. */
   at: Box | null
   inline?: boolean
+  /** Said while the computer is away: the comment is saved once it is back. */
+  waiting?: string | null
   onCancel: () => void
   onSave: (body: string) => Promise<void>
 }) {
@@ -139,6 +142,7 @@ export function CommentDraft({
               {t('comments.saveFailed', { error })}
             </p>
           )}
+          {waiting && !error && <p className="k-vt-waiting">{waiting}</p>}
           <span className="k-vt-pop__foot">
             <Button variant="ghost" size="sm" onClick={onCancel}>
               {t('comments.cancel')}

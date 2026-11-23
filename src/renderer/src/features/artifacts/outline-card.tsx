@@ -22,6 +22,7 @@ export function OutlineCard({
   marks,
   comments,
   onPick,
+  writing,
 }: {
   artifactId: string
   headings: readonly DocHeading[]
@@ -35,6 +36,8 @@ export function OutlineCard({
   /** Open threads by the slug of the section each is in. */
   comments: ReadonlyMap<string, number>
   onPick: (heading: DocHeading) => void
+  /** The section an agent is writing, by its slug. */
+  writing?: string | null
 }) {
   const { t } = useTranslation('artifacts')
   const filter = useViewerState(artifactId, (s) => s.pagesFilter)
@@ -53,12 +56,18 @@ export function OutlineCard({
       (needle === '' || h.text.toLocaleLowerCase().includes(needle))
     const node = (h: DocHeading): TreeNode => {
       const count = comments.get(h.slug) ?? 0
+      const held = !!writing && writing === h.slug
       return {
         id: h.slug,
         label: h.text,
         meta:
-          changed.has(h.slug) || count > 0 ? (
+          changed.has(h.slug) || count > 0 || held ? (
             <span className="k-pages__marks">
+              {held && (
+                <span className="k-pages__mark" data-writing="">
+                  {t('viewer.writing.row')}
+                </span>
+              )}
               {changed.has(h.slug) && (
                 <span className="k-pages__mark" data-changed="">
                   {t('pages.version', { version: marks?.get(h.slug) ?? version })}
@@ -101,7 +110,7 @@ export function OutlineCard({
       stack.push(entry)
     }
     return { items: narrowed ? prune(roots, kept) : roots, parents: withChildren }
-  }, [headings, filter, needle, narrowed, changed, comments, version, marks, t])
+  }, [headings, filter, needle, narrowed, changed, comments, version, marks, writing, t])
 
   const expanded = narrowed ? [...parents] : [...parents].filter((slug) => !folded.includes(slug))
 

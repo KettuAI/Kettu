@@ -173,3 +173,37 @@ html[data-embed] {
 .document-thumbnail {
   zoom: 1.6;
 }
+
+/* An agent writing a section: one orange bar in the left margin and its tag after the heading. */
+.kd-writing {
+  position: absolute;
+  top: 2px;
+  bottom: 2px;
+  left: calc(-1 * var(--doc-pad) / 2 - 1.5px);
+  width: 3px;
+  border-radius: 2px;
+  background: var(--artifact-writing);
+  pointer-events: none;
+}
+.kd-block[data-writer] [data-streamdown^='heading-']::after {
+  content: var(--kd-writer);
+  margin-left: 8px;
+  padding: 1px 6px;
+  border-radius: 5px;
+  background: var(--artifact-writing-tint);
+  font-family: var(--font-sans);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0;
+  vertical-align: 0.3em;
+  color: var(--artifact-writing-ink);
+}
+
+/* The app's Reduced motion, which the frame's own media query does not see. */
+.kd-doc[data-still] .kd-block[data-step]::after {
+  animation: none;
+}
+/* One bar down the whole section, across the room between its blocks. */
+.kd-block[data-writing] + .kd-block[data-writing] > .kd-writing {
+  top: -1.5em;
+}

@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
 import type { SessionSummary } from '@shared/agent-host'
+import type { ArtifactPiece } from '@shared/artifacts'
+import { agentName } from '@renderer/stores/agents'
 import { useCloudOff } from '@renderer/lib/cloud'
 import { hostOfSession, sessionTitle, useSessionsStore } from '@renderer/stores/sessions'
 import { artifactHost } from '@renderer/lib/host'
@@ -37,6 +39,34 @@ export function usePresentAgents(presence: Presence | null, deleted: boolean): C
         })),
     [sessions, summaries, t],
   )
+}
+
+/** An agent whose running turn writes the artifact, and the pieces it holds while it does. */
+export interface Writer {
+  sessionId: string
+  /** The agent's name, as the agent menu shows it. */
+  name: string
+  agentId: SessionSummary['agentId']
+  hostId: string | null
+  /** What it holds; null from a host that holds nothing, where only the whole is known. */
+  pieces: readonly ArtifactPiece[] | null
+}
+
+/** The first agent writing the artifact now that this window knows, or null. */
+export function useWriter(presence: Presence | null, deleted: boolean): Writer | null {
+  const editing = deleted ? undefined : presence?.sessions.find((s) => s.editing)
+  const summary = useSessionsStore((s) => (editing ? (s.byId[editing.sessionId] ?? null) : null))
+  return useMemo(() => {
+    if (!editing || !summary) return null
+    const hostId = hostOfSession(summary)
+    return {
+      sessionId: editing.sessionId,
+      name: agentName(summary.agentId, hostId),
+      agentId: summary.agentId,
+      hostId,
+      pieces: editing.held ?? null,
+    }
+  }, [editing, summary])
 }
 
 /**

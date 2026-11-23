@@ -10,7 +10,12 @@ import type { ArtifactEntry as Entry } from '@shared/thread'
 import { ArtifactCard, type CardForm } from '@renderer/features/artifacts/artifact-card'
 import { changesLabel } from '@renderer/features/artifacts/change-words'
 import { artifactKind } from '@renderer/features/artifacts/model'
-import { useThumbnail, type PageBox } from '@renderer/features/artifacts/thumbnails'
+import { usePartThumbnails } from '@renderer/features/artifacts/artifact-host'
+import {
+  usePartThumbnail,
+  useThumbnail,
+  type PageBox,
+} from '@renderer/features/artifacts/thumbnails'
 import { useInView } from '@renderer/features/artifacts/use-in-view'
 import { FileTypeIcon } from '@renderer/features/files/file-type-icon'
 import { host, learnArtifactHost, sessionHost } from '@renderer/lib/host'
@@ -227,7 +232,7 @@ function EntryCard({
   }
 
   return (
-    <div ref={card} className={cn('w-full', className)}>
+    <div ref={card} className={cn('k-art-room w-full', className)}>
       <ArtifactCard
         id={entry.artifactId}
         title={entry.title}
@@ -403,6 +408,14 @@ function FrameTile({
   )
   const box =
     thumbnail.state === 'ready' ? thumbnail.pages?.find((page) => page.file === frame.file) : null
+  // The version's picture holds only its first canvas page; a frame elsewhere is drawn on its own.
+  const parts = usePartThumbnails(artifactId)
+  const own = usePartThumbnail(
+    artifactId,
+    version,
+    { frame: frame.id },
+    inView && parts && thumbnail.state !== 'loading' && !box,
+  )
   return (
     <button
       type="button"
@@ -412,9 +425,13 @@ function FrameTile({
       aria-label={t('artifactEntry.changes.showFrame', { name: frame.name })}
       onClick={onOpen}
     >
-      <span className="k-art__frame-pic" data-blank={box ? undefined : ''}>
-        {box && thumbnail.state === 'ready' && (
+      <span className="k-art__frame-pic" data-blank={box || own.state === 'ready' ? undefined : ''}>
+        {box && thumbnail.state === 'ready' ? (
           <img src={thumbnail.src} alt="" draggable={false} style={cropOf(box)} />
+        ) : (
+          own.state === 'ready' && (
+            <img src={own.src} alt="" draggable={false} className="k-art__frame-own" />
+          )
         )}
       </span>
       <span className="k-art__frame-name">{frame.name}</span>

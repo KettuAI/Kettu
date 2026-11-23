@@ -26,7 +26,7 @@ import { errorCode, host } from '@renderer/lib/host'
 import { i18n } from '@renderer/lib/i18n'
 import { cn } from '@renderer/lib/utils'
 import type { ArtifactEditor, Picked } from './editor'
-import { CardHead, Notice, SaveChip, UndoButton } from './tool-parts'
+import { CardHead, KeptNote, Notice, SaveChip, UndoButton } from './tool-parts'
 import { useEditRun } from './use-edit-run'
 
 const WEIGHTS = [100, 200, 300, 400, 500, 600, 700, 800, 900] as const
@@ -657,7 +657,10 @@ export function EditPanel({
       >
         <UndoButton onUndo={undo} />
       </CardHead>
-      <div className="k-vt-body">{body}</div>
+      <div className="k-vt-body">
+        <KeptNote save={run.save} />
+        {body}
+      </div>
       <div className="k-vt-foot">
         {editable === 'yes' && !heldBy && !refused && element && (
           <button type="button" className="k-vt-askrow" onClick={onAsk}>

@@ -9,7 +9,7 @@ import { Switch } from '@renderer/components/ui/switch'
 import { host } from '@renderer/lib/host'
 import { ColorInput } from './edit-panel'
 import type { EditorFrame } from './editor'
-import { CardHead, Notice, SaveChip, UndoButton } from './tool-parts'
+import { CardHead, KeptNote, Notice, SaveChip, UndoButton } from './tool-parts'
 import { useEditRun } from './use-edit-run'
 
 /** A tweak is written once the user stops changing it this long. */
@@ -158,6 +158,7 @@ function TweakBody({
         <UndoButton onUndo={undo} />
       </CardHead>
       <div className="k-vt-body">
+        <KeptNote save={run.save} />
         <div className="k-vt-fields">
           {params.map((p) => {
             const value = values[p.name]

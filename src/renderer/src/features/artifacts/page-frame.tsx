@@ -4,16 +4,14 @@ import { Trans, useTranslation } from 'react-i18next'
 import { RUNTIME_VERSION, type DriveMessage } from '@shared/artifact-runtime/page-messages'
 import { ARTIFACT_FRAME_SANDBOX, WEB_ARTIFACT_FRAME_SANDBOX } from '@shared/artifacts'
 import { Icon } from '@renderer/components/affect/app-shell'
-import { Spinner } from '@renderer/components/ui/spinner'
 import { isWeb } from '@renderer/lib/platform'
 import { cn } from '@renderer/lib/utils'
 import { PickLayer } from './canvas-view'
 import { useEditorFrame, useEditorState, type ArtifactEditor } from './editor'
+import { OpeningCover } from './viewer-states'
 
 /** The page shows once it has loaded, or after this long when a CDN never answers. */
 const SHOW_BY_MS = 3_000
-/** A wait shorter than this shows nothing, so a quick load does not flash a spinner. */
-const SPINNER_AFTER_MS = 200
 
 /**
  * A single page's frame, filling its area, with the bar for a navigation main blocked. One frame
@@ -29,6 +27,8 @@ export function PageFrame({
   className,
   editor,
   scale = 1,
+  cover,
+  onReady,
 }: {
   /** The artifact's origin, as `artifact:open` gave it. */
   url: string
@@ -42,6 +42,10 @@ export function PageFrame({
   editor?: ArtifactEditor
   /** How much a transform above the frame scales it, so a pick lands where the pointer is. */
   scale?: number
+  /** The artifact whose picture covers the wait; false where the one holding the frame shows it. */
+  cover?: string | false
+  /** Whether the page shows yet, for a cover drawn outside the frame. */
+  onReady?: (ready: boolean) => void
 }) {
   const { t } = useTranslation('artifacts')
   const frame = useRef<HTMLIFrameElement>(null)
@@ -68,6 +72,7 @@ export function PageFrame({
     const show = setTimeout(() => setLoaded(true), SHOW_BY_MS)
     return () => clearTimeout(show)
   }, [])
+  useEffect(() => onReady?.(loaded), [loaded, onReady])
 
   useEffect(
     () =>
@@ -109,7 +114,7 @@ export function PageFrame({
         )}
       />
       {mode && driven.frame && <PickLayer frame={driven.frame} scale={scale} mode={mode} />}
-      {!loaded && <Waiting since={since} />}
+      {!loaded && cover !== false && <Waiting since={since} id={cover ?? null} />}
       {blocked && blockedHost && (
         <div role="status" className="k-av-blocked">
           <span className="k-av-blocked__text">
@@ -145,27 +150,19 @@ export function PageFrame({
 }
 
 /**
- * A spinner once the wait that began at `since` passes SPINNER_AFTER_MS, so a quick load shows
- * nothing, and opening and loading show one wait.
+ * The content's wait, from `since`, so opening and loading show one wait: the artifact's picture,
+ * soft, with a band of light crossing it, once the wait passes 0.2 s.
  */
-export function Waiting({ since }: { since: number }) {
-  const { t } = useTranslation('artifacts')
-  const [shown, setShown] = useState(false)
-
-  useEffect(() => {
-    const timer = setTimeout(
-      () => setShown(true),
-      Math.max(0, since + SPINNER_AFTER_MS - performance.now()),
-    )
-    return () => clearTimeout(timer)
-  }, [since])
-
-  if (!shown) return null
-  return (
-    <div className="absolute inset-0 flex items-center justify-center">
-      <Spinner className="text-muted-foreground" aria-label={t('viewer.loading')} />
-    </div>
-  )
+export function Waiting({
+  since,
+  id = null,
+  look = 'sheet',
+}: {
+  since: number
+  id?: string | null
+  look?: 'sheet' | 'card'
+}) {
+  return <OpeningCover id={id} since={since} look={look} />
 }
 
 /** A host cut from its start when it does not fit, since its end names the site. */

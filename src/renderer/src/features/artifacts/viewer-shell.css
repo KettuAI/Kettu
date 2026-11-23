@@ -495,3 +495,35 @@
 .kp-pane.avs-pane {
   padding: 0;
 }
+
+/* ---------- The whole artifact's states ---------- */
+
+/* The pill's mark in place of its dot: a deletion's icon, the writing agent's mark. */
+.avs-pill__icon,
+.avs-pill__agent {
+  display: inline-flex;
+  flex: none;
+  color: var(--muted);
+}
+.avs-pill__in[data-actions] {
+  padding-right: 4px;
+}
+/* Deleted while it shows: the content stays, dimmed. */
+.avs-stage[data-fault='deleted'] > * {
+  opacity: 0.55;
+  transition: opacity var(--duration-fast) ease;
+}
+/* Opening a page or a document: its picture where its sheet will lie. */
+.avs-stage > .k-vs-cover[data-look='sheet'] {
+  inset: 8px 8px 58px;
+  overflow: hidden;
+  border-radius: var(--radius-card);
+}
+/* The dock while the content loads: what it will offer, dimmed and out of reach. */
+.avs-dock__off {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  opacity: 0.4;
+  pointer-events: none;
+}

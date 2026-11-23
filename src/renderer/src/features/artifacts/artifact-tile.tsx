@@ -153,7 +153,7 @@ function DeckThumb({
 }
 
 /** A document as the viewer draws it in the dark theme; `fallback`, the light one, otherwise. */
-function DarkDocument({
+export function DarkDocument({
   id,
   version,
   inView,

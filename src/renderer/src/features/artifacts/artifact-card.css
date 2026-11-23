@@ -472,6 +472,41 @@
   width: 232px;
 }
 
+/* In a narrow column the card stacks: the pages on top, then the words, then what changed in a row
+   of its own across the card, so neither squeezes the other. */
+.k-art-room {
+  container-type: inline-size;
+}
+@container (max-width: 480px) {
+  .k-art[data-form='updated'] {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto auto auto;
+  }
+  .k-art[data-form='updated'] .k-art__panel {
+    grid-column: 1;
+    grid-row: 1;
+  }
+  .k-art[data-form='updated'] .k-art__head {
+    grid-column: 1;
+    grid-row: 2;
+    padding: 10px 46px 0 13px;
+  }
+  .k-art[data-form='updated']:not(:has(> .k-art__changed)) .k-art__head {
+    padding-bottom: 13px;
+  }
+  .k-art[data-form='updated'] > .k-art__changed {
+    grid-column: 1;
+    grid-row: 3;
+    margin: 6px 20px 13px;
+  }
+  .k-art[data-form='updated'] .k-art__who {
+    top: 112px;
+    right: 14px;
+    left: auto;
+    width: auto;
+  }
+}
+
 /* What changed: a canvas's frames as small pictures, else a label and chips. Clicks between them
    reach the card under them. */
 .k-art__changed {
@@ -1052,4 +1087,12 @@
 }
 .k-tile-deck__slide:not(:has(img)) {
   background: color-mix(in oklab, var(--ink) 5%, var(--card));
+}
+/* A frame drawn on its own: across the tile, from its top. */
+.k-art__frame-pic img.k-art__frame-own {
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: top;
 }

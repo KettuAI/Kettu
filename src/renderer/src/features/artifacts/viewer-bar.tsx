@@ -58,6 +58,8 @@ export interface BarProps {
   comments: number
   /** Why Comment and Edit are off, such as an earlier version on screen; null when they are on. */
   modesOff: string | null
+  /** Why Edit alone is paused, as while the artifact's computer is offline. */
+  editOff?: string | null
   /** Who is here, and the same as menu items for a bar too narrow for faces. */
   presence: ReactNode
   presenceItems: MenuItem[]
@@ -103,6 +105,7 @@ function BarRow({
   onMode,
   comments,
   modesOff,
+  editOff = null,
   presence,
   presenceItems,
   onChat,
@@ -112,10 +115,10 @@ function BarRow({
   panel,
 }: BarProps) {
   const { t } = useTranslation(['artifacts', 'common'])
-  const { tier, tight } = useShell()
+  const { tier, tight, labelled } = useShell()
   const now = useNow()
   const wide = tier === 'wide' && where === 'main'
-  const labels = tier === 'wide'
+  const labels = tier === 'wide' && labelled
   const centred = where === 'main' && tier !== 'narrow'
   const [sharing, setSharing] = useState(false)
 
@@ -125,6 +128,7 @@ function BarRow({
       onMode={onMode}
       comments={comments}
       off={modesOff}
+      editOff={editOff}
       iconsOnly={!labels || where === 'panel'}
     />
   )
@@ -237,12 +241,14 @@ function ModeSwitch({
   onMode,
   comments,
   off,
+  editOff,
   iconsOnly,
 }: {
   mode: ViewerMode
   onMode: (mode: ViewerMode) => void
   comments: number
   off: string | null
+  editOff: string | null
   iconsOnly: boolean
 }) {
   const { t } = useTranslation('artifacts')
@@ -264,15 +270,16 @@ function ModeSwitch({
             : `${label(m.value)} (${m.key})`,
         icon: <Icon icon={m.icon} size={14} />,
         count: !iconsOnly && m.value === 'comment' && comments > 0 ? comments : undefined,
-        disabled: off !== null && m.value !== 'view',
+        disabled: (off !== null && m.value !== 'view') || (editOff !== null && m.value === 'edit'),
       }))}
     />
   )
-  if (off === null) return control
+  const why = off ?? editOff
+  if (why === null) return control
   return (
     <Tooltip>
       <TooltipTrigger render={<span className="avs-modes-wrap" />}>{control}</TooltipTrigger>
-      <TooltipContent>{off}</TooltipContent>
+      <TooltipContent>{why}</TooltipContent>
     </Tooltip>
   )
 }

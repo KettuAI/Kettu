@@ -189,6 +189,15 @@ export interface ArtifactStoppedEvent {
   origin: string
 }
 
+/** A frame the app's page holds on an artifact origin loaded an error answer instead of its page. */
+export interface ArtifactFrameFailedEvent {
+  origin: string
+  /** The address the frame loaded, its file's. */
+  url: string
+  /** The answer's HTTP status: 404 for a file the host cannot read, 503 for a host not reached. */
+  status: number
+}
+
 /** A page on an artifact origin the window opened reported a pick; the page's data, checked. */
 export interface ArtifactSelectedEvent {
   origin: string // as `artifact:open` gave it, without the path
@@ -545,6 +554,7 @@ export interface IpcEventContract {
   'app:shortcut': ForwardedKey
   'artifact:blocked': ArtifactBlockedEvent
   'artifact:stopped': ArtifactStoppedEvent
+  'artifact:frame-failed': ArtifactFrameFailedEvent
   'artifact:selected': ArtifactSelectedEvent
   'artifact:page-error': ArtifactPageErrorEvent
   'account:changed': AccountStatus
@@ -687,6 +697,7 @@ export interface KettuApi {
     import(project: string | null, kind: ArtifactImportKind): Promise<ArtifactImportResult>
     onBlocked(listener: (event: ArtifactBlockedEvent) => void): () => void
     onStopped(listener: (event: ArtifactStoppedEvent) => void): () => void
+    onFrameFailed(listener: (event: ArtifactFrameFailedEvent) => void): () => void
     /** A page's pick, from a frame of an origin this window opened. */
     onSelected(listener: (event: ArtifactSelectedEvent) => void): () => void
     /** The errors of the pages' own scripts in frames of the origins this window opened. */

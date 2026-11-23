@@ -85,6 +85,7 @@ const onRecordingChanged = subscribe('report:recording-changed')
 const onShortcut = subscribe('app:shortcut')
 const onArtifactBlocked = subscribe('artifact:blocked')
 const onArtifactStopped = subscribe('artifact:stopped')
+const onArtifactFrameFailed = subscribe('artifact:frame-failed')
 const onArtifactSelected = subscribe('artifact:selected')
 const onArtifactPageError = subscribe('artifact:page-error')
 const onAccountChanged = subscribe('account:changed')
@@ -160,6 +161,7 @@ const api: KettuApi = {
     pageImage: (id, version, page, size) => invoke('artifact:page-image', id, version, page, size),
     onBlocked: onArtifactBlocked,
     onStopped: onArtifactStopped,
+    onFrameFailed: onArtifactFrameFailed,
   },
   remote: {
     status: () => invoke('remote:status'),

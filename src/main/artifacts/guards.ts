@@ -2,7 +2,12 @@
 // navigation guard, forwarded shortcuts and the watch for a page whose process stopped.
 
 import type { Input, Session, WebContents, WebFrameMain } from 'electron'
-import type { ArtifactBlockedEvent, ArtifactStoppedEvent, ForwardedKey } from '@shared/ipc'
+import type {
+  ArtifactBlockedEvent,
+  ArtifactFrameFailedEvent,
+  ArtifactStoppedEvent,
+  ForwardedKey,
+} from '@shared/ipc'
 import { ARTIFACT_SCHEME, artifactHost } from './origins'
 import { refuseRequests } from '../request-filter'
 import { mayRequest } from './policy'
@@ -105,6 +110,7 @@ export interface ArtifactFrameDeps {
   platform: NodeJS.Platform
   blocked(event: ArtifactBlockedEvent): void
   stopped(event: ArtifactStoppedEvent): void
+  failed(event: ArtifactFrameFailedEvent): void
   shortcut(key: ForwardedKey): void
 }
 
@@ -162,21 +168,20 @@ export function guardArtifactFrames(contents: WebContents, deps: ArtifactFrameDe
       poll = null
     }
   }
-  contents.on(
-    'did-frame-navigate',
-    (_, _url, _code, _status, isMainFrame, processId, routingId) => {
-      if (isMainFrame) return shown.clear()
-      // Only the frames the app's page holds; a page's own frames share its process.
-      const frame = contents.mainFrame.frames.find(
-        (f) => f.processId === processId && f.routingId === routingId,
-      )
-      if (!frame) return
-      const host = frameArtifact(frame)
-      if (!host) return void shown.delete(frame.frameTreeNodeId)
-      shown.set(frame.frameTreeNodeId, `${ARTIFACT_SCHEME}://${host}`)
-      poll ??= setInterval(check, STOPPED_POLL_MS)
-    },
-  )
+  contents.on('did-frame-navigate', (_, url, code, _status, isMainFrame, processId, routingId) => {
+    if (isMainFrame) return shown.clear()
+    // Only the frames the app's page holds; a page's own frames share its process.
+    const frame = contents.mainFrame.frames.find(
+      (f) => f.processId === processId && f.routingId === routingId,
+    )
+    if (!frame) return
+    const host = frameArtifact(frame)
+    if (!host) return void shown.delete(frame.frameTreeNodeId)
+    // A page the host could not give, as a version's file gone from its store.
+    if (code >= 400) deps.failed({ origin: `${ARTIFACT_SCHEME}://${host}`, url, status: code })
+    shown.set(frame.frameTreeNodeId, `${ARTIFACT_SCHEME}://${host}`)
+    poll ??= setInterval(check, STOPPED_POLL_MS)
+  })
   contents.once('destroyed', () => {
     if (poll) clearInterval(poll)
   })

@@ -284,6 +284,15 @@ export function DocumentViewer({ config, view }: { config: ViewerConfig; view: V
     return out
   }, [sections])
   const oldText = earlier && marks && earlier.version === marks.from ? earlier.text : null
+  // The blocks an agent is writing, by where they start; the first of them takes its tag.
+  const writing = state?.writing ?? null
+  const heldSpan = useMemo(() => {
+    if (!writing) return null
+    if (writing.section === null) return { from: 0, to: Infinity }
+    const section = sections.find((s) => s.slug === writing.section)
+    return section ? { from: section.from, to: section.to } : null
+  }, [writing, sections])
+  const heldAt = (from: number) => !!heldSpan && from >= heldSpan.from && from < heldSpan.to
 
   // Typing in place.
   const [editing, setEditing] = useState<Editing | null>(null)
@@ -637,6 +646,7 @@ export function DocumentViewer({ config, view }: { config: ViewerConfig; view: V
         data-mode={state ? mode : 'view'}
         data-narrow={narrow || undefined}
         data-changes={showChanges || undefined}
+        data-still={state?.still || undefined}
         aria-busy={text === null}
         style={style}
         onClick={onClick}
@@ -659,6 +669,10 @@ export function DocumentViewer({ config, view }: { config: ViewerConfig; view: V
                 slug && changedSlugs.has(slug)
                   ? `"v${marks?.sections?.[slug] ?? version}"`
                   : undefined
+              const held = heldAt(part.from)
+              // A section's tag sits after its heading; all of it being written, the pill says so.
+              const firstHeld =
+                held && writing?.section != null && !heldAt(parts[index - 1]?.from ?? -1)
               const words =
                 showChanges && passage?.change === 'changed' && passage.before && oldText !== null
                   ? oldText.slice(passage.before.from, passage.before.to)
@@ -676,13 +690,23 @@ export function DocumentViewer({ config, view }: { config: ViewerConfig; view: V
                   data-changed={passage?.change}
                   data-step={state?.step === part.from || undefined}
                   data-on={state?.focus === part.from || undefined}
+                  data-writing={held || undefined}
                   data-editing={typing || undefined}
                   data-fixed={TYPED_IN_PLACE.test(part.kind) ? undefined : ''}
-                  style={tag ? ({ '--kd-tag': tag } as CSSProperties) : undefined}
+                  data-writer={firstHeld || undefined}
+                  style={
+                    tag || firstHeld
+                      ? ({
+                          ...(tag && { '--kd-tag': tag }),
+                          ...(firstHeld && { '--kd-writer': JSON.stringify(writing!.tag) }),
+                        } as CSSProperties)
+                      : undefined
+                  }
                   contentEditable={typing && mode === 'edit' ? 'plaintext-only' : undefined}
                   suppressContentEditableWarning
                   spellCheck={typing ? false : undefined}
                 >
+                  {held && <span aria-hidden className="kd-writing" />}
                   {typing ? (
                     <Block source={editing.source} />
                   ) : words !== null ? (

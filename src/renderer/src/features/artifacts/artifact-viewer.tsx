@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
-  AlertCircleIcon,
   ArrowLeft01Icon,
   ArrowRight01Icon,
   ArrowShrink01Icon,
@@ -11,6 +10,7 @@ import {
   SparklesIcon,
 } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
+import type { TFunction } from 'i18next'
 import { DOCUMENT_ENTRY } from '@shared/artifact-document-anchors'
 import { ARTIFACT_ENTRY } from '@shared/artifact-files'
 import { NO_SESSION } from '@shared/artifacts'
@@ -22,7 +22,13 @@ import { toast } from '@renderer/components/ui/toast'
 import { useChanges } from '@renderer/features/session/entries/artifact-changes'
 import { usePhoneWindow } from '@renderer/features/shell/narrow'
 import { PaneSheet } from '@renderer/features/shell/panel-button'
-import { artifactRefOf, errorMessage, host, learnArtifactHost } from '@renderer/lib/host'
+import {
+  artifactHost,
+  artifactRefOf,
+  errorMessage,
+  host,
+  learnArtifactHost,
+} from '@renderer/lib/host'
 import { useDark } from '@renderer/hooks/use-dark'
 import { useHostHas, useHostHasRecord } from '@renderer/lib/host-features'
 import { hostOfPath } from '@renderer/lib/host-paths'
@@ -53,12 +59,12 @@ import {
   useViewStore,
 } from '@renderer/stores/view'
 import { anchorOf } from './anchors'
-import { useArtifactShares } from './artifact-host'
+import { useArtifactHostConnected, useArtifactHostName, useArtifactShares } from './artifact-host'
 import { useArtifactWalk } from '@renderer/stores/artifact-walk'
 import { useChangeWalk } from './use-change-walk'
 import { ChangePill } from './change-pill'
 import { atMaxZoom, atMinZoom } from './camera'
-import { CanvasEditor } from './canvas-editor'
+import { CanvasEditor, type CanvasStates } from './canvas-editor'
 import { CanvasControls, useCanvasState } from './canvas-controls'
 import { changeCount } from './change-words'
 import type { PageActions } from './canvas-view'
@@ -68,7 +74,8 @@ import { DocumentSheet } from './document-sheet'
 import { ArtifactEditor, useEditorState, type EditorMode } from './editor'
 import { isEditable, modeKey } from './keys'
 import { artifactKind, daysLeft } from './model'
-import { handOffPageErrors } from './page-error-handoff'
+import { mayLeave } from './unsaved'
+import { handOffPageErrors, handOffRepair } from './page-error-handoff'
 import { Waiting } from './page-frame'
 import { PageSheet, type SheetAgent } from './page-sheet'
 import { PresenceFaces } from './presence-faces'
@@ -86,13 +93,20 @@ import { useComments } from './use-comments'
 import { useDeck } from './use-deck'
 import { staticCanvas, useCanvasDoc } from './use-canvas-doc'
 import { clampSize, useDocActions } from './use-doc-actions'
-import { noteAuthor, usePresentAgents, useVisitors } from './use-present-agents'
+import {
+  noteAuthor,
+  usePresentAgents,
+  useVisitors,
+  useWriter,
+  type Writer,
+} from './use-present-agents'
 import { useVersions } from './use-versions'
 import { canvasContent, useViewerTools, type ToolContent } from './viewer-tools'
 import { ViewerBar, type BarPage } from './viewer-bar'
 import { ArtifactSurface, ViewerEmpty } from './viewer-parts'
 import { ArtifactShell, DockButton, DockRule, ViewerSlot, type RightContent } from './viewer-shell'
 import { useShell } from './viewer-shell-context'
+import { SkeletonRows, StageNote } from './viewer-states'
 import './viewer.css'
 
 /** Where the viewer shows: the main area, or a session's side panel beside its thread. */
@@ -139,6 +153,9 @@ export default function ArtifactViewer(place: ViewerPlace) {
   const head = summary?.version ?? null
   const { versions, error: versionsError } = useVersions(id, head)
   const states = useArtifactStates(artifact, listsRead)
+  // Offline: the computer the artifact is kept on, another host or this one's agent host.
+  const offline = !useArtifactHostConnected(id)
+  const hostName = useArtifactHostName(id)
   const earlier = picked !== null && head !== null && picked < head ? picked : null
   const title = summary?.title ?? shown?.title ?? ''
   const kind = summary ? artifactKind(summary) : null
@@ -198,7 +215,7 @@ export default function ArtifactViewer(place: ViewerPlace) {
   const editing = useEditorState(editor)
   const { threads, error: commentsError } = useComments(id)
   // A version just written counts as the latest while it loads, so editing goes on across it.
-  const latest = !!shown && earlier === null && !states.inTrash
+  const latest = !!shown && earlier === null && !states.inTrash && !states.gone
   const pageAsked = useViewStore((s) => {
     const asked = s.sideArtifactPage[panel?.panel ?? MAIN_ARTIFACT_PANEL]
     return asked?.artifactId === id ? asked : null
@@ -237,8 +254,13 @@ export default function ArtifactViewer(place: ViewerPlace) {
     },
     [doneAsk, panel?.panel],
   )
-  // Comment and Edit act on the latest version only; elsewhere the viewer only shows.
-  const mode: ViewerMode = latest ? state.mode : 'view'
+  // Comment and Edit act on the latest version only; elsewhere the viewer only shows. Edit pauses
+  // while the computer is away, and comes back on its own when it returns.
+  const mode: ViewerMode = !latest
+    ? 'view'
+    : offline && state.mode === 'edit'
+      ? 'comment'
+      : state.mode
   // A canvas document: the latest is edited live on the host, an earlier one only shown.
   const docShown = shown?.doc ?? null
   const legacyCanvas = !!shown?.canvas && !docShown
@@ -250,9 +272,11 @@ export default function ArtifactViewer(place: ViewerPlace) {
   const doc = shownCanvas.doc
   const [following, setFollowing] = useState<string | null>(null)
   const agents = usePresentAgents(artifact.presence, summary?.deletedAt != null)
+  const writer = useWriter(artifact.presence, summary?.deletedAt != null)
   const visitors = useVisitors(id)
   const followingNow = following && agents.some((a) => a.sessionId === following) ? following : null
-  const showing = !!(url && shown) && !states.error && !states.gone && !artifact.stopped
+  // Deleted while it shows, it stays on screen, dimmed, until it is restored or left.
+  const showing = !!(url && shown) && !states.error && !artifact.stopped
 
   // The canvas document sets the editor's mode itself, as a frame it enters is picked in.
   useEffect(() => {
@@ -397,7 +421,7 @@ export default function ArtifactViewer(place: ViewerPlace) {
     shown: shown ?? null,
     head,
     latest,
-    editable: states.inTrash ? 'deleted' : earlier !== null ? 'earlier' : 'yes',
+    editable: states.inTrash || states.gone ? 'deleted' : earlier !== null ? 'earlier' : 'yes',
     mode,
     right: state.right,
     picked,
@@ -457,7 +481,9 @@ export default function ArtifactViewer(place: ViewerPlace) {
   useEffect(() => {
     rightNow.current = right
   })
-  const closeRight = useCallback(() => rightNow.current?.onClose(), [])
+  const closeRight = useCallback(() => {
+    if (mayLeave(id)) rightNow.current?.onClose()
+  }, [id])
   const toggleHistory = () =>
     setViewerState(id, (s) =>
       s.right === 'history' ? { right: null, version: null } : { right: 'history' },
@@ -531,9 +557,10 @@ export default function ArtifactViewer(place: ViewerPlace) {
       .finally(() => setRestoring(false))
   }
 
-  // The pill at the content's top, one at a time and in this order for every kind: an earlier
-  // version picked in History, Recently deleted, an old canvas, then what changed, which stays
-  // while the before-and-after switch shows the version before, since it says what that compares.
+  // The pill at the content's top, one at a time and in this order for every kind: the computer
+  // offline, the artifact deleted while it shows, an earlier version picked in History, Recently
+  // deleted, an agent writing it, an old canvas, then what changed, which stays while the
+  // before-and-after switch shows the version before, since it says what that compares.
   let pill: React.ReactNode = null
   const changePill =
     walk && !walk.dismissed ? (
@@ -553,7 +580,51 @@ export default function ArtifactViewer(place: ViewerPlace) {
         onStep={(direction) => changeWalk.step(direction, state.opened !== null)}
       />
     ) : null
-  if (shown && earlier !== null && head !== null && !comparing) {
+  const remoteHost = artifactHost(id)
+  if (offline && !states.error) {
+    pill = (
+      <Pill
+        lead={hostName ? t('viewer.offline.named', { host: hostName }) : t('viewer.offline.local')}
+        rest={<span>{t('viewer.offline.reconnecting')}</span>}
+        mark={<span aria-hidden className="k-vs-pulse" />}
+        actions={
+          remoteHost !== null && !isWeb
+            ? [
+                {
+                  label: t('viewer.offline.retryNow'),
+                  quiet: true,
+                  run: () =>
+                    void window.kettu.hosts
+                      .reconnect(remoteHost)
+                      .catch((error: unknown) =>
+                        console.error(`Could not reach ${remoteHost}`, error),
+                      ),
+                },
+              ]
+            : []
+        }
+      />
+    )
+  } else if (states.gone && summary?.deletedAt != null) {
+    pill = (
+      <Pill
+        lead={t('viewer.deletedLead')}
+        rest={<DeletedAgo deletedAt={summary.deletedAt} />}
+        mark={
+          <span aria-hidden className="avs-pill__icon">
+            <Icon icon={Delete02Icon} size={15} />
+          </span>
+        }
+        actions={[
+          {
+            label: t('menu.restore'),
+            busy: restoring,
+            run: () => restore(() => restoreArtifact(id)),
+          },
+        ]}
+      />
+    )
+  } else if (shown && earlier !== null && head !== null && !comparing) {
     const record = versions?.find((v) => v.version === earlier)
     pill = (
       <Pill
@@ -605,6 +676,32 @@ export default function ArtifactViewer(place: ViewerPlace) {
         ]}
       />
     )
+  } else if (writer && latest && head !== null) {
+    pill = (
+      <Pill
+        lead={writingLead(t, writer, head, doc?.pages ?? null)}
+        rest={null}
+        mark={
+          <span aria-hidden className="avs-pill__agent">
+            <AgentMark agent={writer.agentId} size={14} hostId={writer.hostId} dot={null} />
+          </span>
+        }
+        actions={
+          panel?.panel === writer.sessionId
+            ? []
+            : [
+                {
+                  label: t('viewer.writing.openSession'),
+                  quiet: true,
+                  run: () => {
+                    const session = useSessionsStore.getState().byId[writer.sessionId]
+                    if (session) openSessionWithArtifact(session.id, session.projectPath, id)
+                  },
+                },
+              ]
+        }
+      />
+    )
   } else if (showing && latest && legacyCanvas && liveCanvas.legacy) {
     pill = (
       <Pill
@@ -647,67 +744,161 @@ export default function ArtifactViewer(place: ViewerPlace) {
         }),
     }
   }, [target, summary, shown, id, title])
+  const targetName = target ? agentName(target.agentId, hostOfPath(target.projectPath)) : ''
+  const repair = useCallback(
+    (file: string | null, reason: string) => {
+      if (!summary || !shown) return
+      void handOffRepair({
+        artifact: { id, title, version: shown.version, project: summary.project },
+        file,
+        reason,
+        session: target?.id ?? null,
+      })
+        .then((sent) => {
+          if (sent) toast(t('viewer.repairSent', { agent: targetName }))
+        })
+        .catch((error: unknown) => toast(errorMessage(error), undefined, { tone: 'warning' }))
+    },
+    [summary, shown, id, title, target, targetName, t],
+  )
+  const writerMark = writer ? (
+    <AgentMark agent={writer.agentId} size={13} hostId={writer.hostId} mono dot={null} />
+  ) : null
+  // What a document or a deck marks while an agent writes it; a piece of another kind holds all.
+  const writerName = writer && latest ? writer.name : null
+  const writerPieces = writer?.pieces ?? null
+  const docWriting = useMemo(() => {
+    if (writerName === null) return null
+    const section = writerPieces?.find((p) => p.kind === 'section')
+    return {
+      section: section?.kind === 'section' ? section.slug : null,
+      tag: t('viewer.writing.tag', { agent: writerName }),
+    }
+  }, [writerName, writerPieces, t])
+  const deckWriting = useMemo(() => {
+    if (writerName === null) return null
+    const slides = (writerPieces ?? []).flatMap((p) => (p.kind === 'slide' ? [p.number] : []))
+    return slides.length ? slides : null
+  }, [writerName, writerPieces])
+  const waitingFor = offline
+    ? hostName
+      ? t('viewer.offline.waiting', { host: hostName })
+      : t('viewer.offline.waitingLocal')
+    : null
+  const hasDoc = !!docShown
+  const askWhole = useCallback(() => toolsNow.current.askWhole(), [])
+  const canvasStates = useMemo<CanvasStates | null>(() => {
+    if (!hasDoc) return null
+    const mark = writer ? (
+      <AgentMark agent={writer.agentId} size={13} hostId={writer.hostId} mono dot={null} />
+    ) : null
+    return {
+      held: new Map(
+        writer && latest && mark
+          ? (writer.pieces ?? []).flatMap((piece) =>
+              piece.kind === 'frame' ? [[piece.id, { name: writer.name, mark }] as const] : [],
+            )
+          : [],
+      ),
+      waitingFor,
+      ask:
+        target && summary
+          ? {
+              agent: targetName,
+              mark: (
+                <AgentMark
+                  agent={target.agentId}
+                  size={14}
+                  hostId={hostOfPath(target.projectPath)}
+                />
+              ),
+              whole: askWhole,
+              repair,
+            }
+          : null,
+    }
+  }, [hasDoc, writer, latest, waitingFor, target, summary, targetName, askWhole, repair])
 
   let body: React.ReactNode
   let layout: 'float' | 'beside' = 'beside'
   let ground: 'dots' | 'plain' = 'plain'
   if (states.error === 'previewOnly') {
     body = <PreviewOnly id={id} title={title} summary={summary ?? null} />
-  } else if (states.error === 'missing') {
-    // Trying again reads the same missing files; an earlier version may still have its own.
-    body = (
-      <ViewerEmpty
-        icon={AlertCircleIcon}
-        danger
-        title={t('viewer.missingTitle')}
-        text={t('viewer.error.missing')}
-      >
-        <Button
-          variant="secondary"
-          size="sm"
-          onClick={() => setViewerState(id, { right: 'history' })}
-        >
-          {t('menu.versionHistory')}
-        </Button>
-        <Button variant="secondary" size="sm" onClick={() => reportMissing(id, picked)}>
-          {t('viewer.reportProblem')}
-        </Button>
-      </ViewerEmpty>
-    )
   } else if (states.error) {
+    // The shell stays: the kind's sketch, why, Retry or what else may open, and the agent's repair.
+    const missing = states.error === 'missing'
+    const shownNumber = picked ?? head
+    const previous = shownNumber !== null && shownNumber > 1 ? shownNumber - 1 : null
+    const reason = t(`viewer.error.${states.error}`)
     body = (
-      <ViewerEmpty
-        icon={AlertCircleIcon}
+      <StageNote
+        kind={kind}
         danger
-        title={t('viewer.errorTitle')}
-        text={t(`viewer.error.${states.error}`)}
+        title={kind ? t(`viewer.failed.${kind}`) : t('viewer.errorTitle')}
+        text={missing ? t('viewer.error.missing') : reason}
+        quiet={
+          summary && target && states.error !== 'notFound' ? (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() =>
+                void handOffRepair({
+                  artifact: {
+                    id,
+                    title,
+                    version: shownNumber ?? summary.version,
+                    project: summary.project,
+                  },
+                  file: null,
+                  reason,
+                  session: target.id,
+                })
+                  .then((sent) => {
+                    if (sent) toast(t('viewer.repairSent', { agent: targetName }))
+                  })
+                  .catch((error: unknown) =>
+                    toast(errorMessage(error), undefined, { tone: 'warning' }),
+                  )
+              }
+            >
+              {t('viewer.repair', { agent: targetName })}
+            </Button>
+          ) : null
+        }
       >
-        <Button variant="secondary" size="sm" onClick={artifact.retry}>
-          {t('viewer.retry')}
-        </Button>
-      </ViewerEmpty>
-    )
-  } else if (states.gone) {
-    body = (
-      <ViewerEmpty
-        icon={Delete02Icon}
-        title={t('viewer.goneTitle')}
-        text={t('viewer.goneDescription')}
-      >
-        {place.where === 'main' && (
+        {missing ? (
+          <>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => setViewerState(id, { right: 'history' })}
+            >
+              {t('menu.versionHistory')}
+            </Button>
+            <Button variant="secondary" size="sm" onClick={() => reportMissing(id, picked)}>
+              {t('viewer.reportProblem')}
+            </Button>
+          </>
+        ) : (
+          states.error !== 'notFound' && (
+            <Button size="sm" onClick={artifact.retry}>
+              {t('viewer.retry')}
+            </Button>
+          )
+        )}
+        {previous !== null && states.error !== 'notFound' && (
           <Button
             variant="secondary"
             size="sm"
-            icon={<Icon icon={ArrowLeft01Icon} size={14} />}
-            onClick={closeArtifact}
+            onClick={() => {
+              artifact.retry()
+              setViewerState(id, { version: previous })
+            }}
           >
-            {t('viewer.back')}
+            {t('viewer.openVersion', { version: previous })}
           </Button>
         )}
-        <Button size="sm" loading={restoring} onClick={() => restore(() => restoreArtifact(id))}>
-          {t('menu.restore')}
-        </Button>
-      </ViewerEmpty>
+      </StageNote>
     )
   } else if (artifact.stopped && !(url && webPage)) {
     body = (
@@ -763,6 +954,7 @@ export default function ArtifactViewer(place: ViewerPlace) {
             marks={walk?.marks}
             comments={frameComments}
             compare={compare}
+            states={canvasStates}
           />
         ) : shown.canvas ? (
           <ArtifactSurface
@@ -804,6 +996,11 @@ export default function ArtifactViewer(place: ViewerPlace) {
             asked={walkAsk?.slide !== undefined ? walkAsk : pageAsked}
             onAsked={askShown}
             focusThread={docFocus}
+            writing={
+              writerName !== null && writerMark
+                ? { slides: deckWriting, name: writerName, mark: writerMark }
+                : null
+            }
             compare={
               pageCompare && (earlier === null || comparing)
                 ? {
@@ -847,6 +1044,7 @@ export default function ArtifactViewer(place: ViewerPlace) {
             }
             onHeadings={setDocHeadings}
             focusThread={docFocus}
+            writing={docWriting}
           />
         ) : typed ? (
           <div className="avs-paper avs-paper--typed">
@@ -895,6 +1093,7 @@ export default function ArtifactViewer(place: ViewerPlace) {
                 : null
             }
             agent={sheetAgent}
+            writer={writer && latest && writerMark ? { name: writer.name, mark: writerMark } : null}
           />
         )}
         {legacyCanvas && pageName && <LegacyCanvasDock controls={controls} />}
@@ -902,7 +1101,13 @@ export default function ArtifactViewer(place: ViewerPlace) {
       </>
     )
   } else {
-    body = <Waiting since={since} />
+    body = (
+      <Waiting
+        since={since}
+        id={id}
+        look={kind === 'web' || kind === 'document' ? 'sheet' : 'card'}
+      />
+    )
   }
 
   // The page on screen after the title, for a canvas: a document's page, or the frame in focus.
@@ -972,6 +1177,8 @@ export default function ArtifactViewer(place: ViewerPlace) {
   }))
 
   const [besideSlides, setBesideSlides] = useState<boolean | null>(null)
+  // Waiting for the content: the shell shows, its cards hold placeholder rows.
+  const opening = !showing && !states.error && !artifact.stopped
   const leftCard = useMemo(
     () =>
       showing && isDocument
@@ -1021,8 +1228,29 @@ export default function ArtifactViewer(place: ViewerPlace) {
                 open: state.left,
                 onOpenChange: (open: boolean) => setViewerState(id, { left: open }),
               }
-            : null,
+            : opening && summary && kind !== 'web'
+              ? {
+                  title:
+                    kind === 'document'
+                      ? t('outline.title')
+                      : kind === 'slides'
+                        ? t('deck.slides')
+                        : t('pages.title'),
+                  // As each kind opens it once it shows, so nothing jumps when it does.
+                  byDefault:
+                    kind === 'canvas'
+                      ? summary.canvas && summary.pages > 8
+                      : kind === 'slides'
+                        ? place.where === 'main'
+                        : false,
+                  open: state.left,
+                  onOpenChange: (open: boolean) => setViewerState(id, { left: open }),
+                }
+              : null,
     [
+      opening,
+      summary,
+      kind,
       showing,
       isDocument,
       isDeck,
@@ -1067,6 +1295,13 @@ export default function ArtifactViewer(place: ViewerPlace) {
             : earlier !== null
               ? t('viewer.modes.earlier', { version: head })
               : null
+      }
+      editOff={
+        offline
+          ? hostName
+            ? t('viewer.offline.editPaused', { host: hostName })
+            : t('viewer.offline.editPausedLocal')
+          : null
       }
       presence={
         showing ? (
@@ -1123,7 +1358,9 @@ export default function ArtifactViewer(place: ViewerPlace) {
           ? {
               maximized,
               onExpand: phone ? null : () => setMaximized(!maximized),
-              onClose: () => toggleSidePane(panel.panel, 'artifact', false),
+              onClose: () => {
+                if (mayLeave(id)) toggleSidePane(panel.panel, 'artifact', false)
+              },
             }
           : null
       }
@@ -1140,12 +1377,20 @@ export default function ArtifactViewer(place: ViewerPlace) {
       right={right}
       expanded={maximized}
     >
-      <div ref={area} className="avs-stage">
+      <div ref={area} className="avs-stage" data-fault={states.gone ? 'deleted' : undefined}>
         {showing && <AgentCursorStyles />}
         {body}
         {showing && tools.overlay}
       </div>
       {pill && <ViewerSlot slot="pill">{pill}</ViewerSlot>}
+      {opening && (
+        <>
+          <ViewerSlot slot="left">
+            <SkeletonRows nested={kind === 'canvas'} />
+          </ViewerSlot>
+          <OpeningDock canvas={kind === 'canvas' || kind === 'slides'} />
+        </>
+      )}
     </ArtifactShell>
   )
 
@@ -1200,20 +1445,31 @@ export default function ArtifactViewer(place: ViewerPlace) {
 const PILL_ROOM = 56
 const DOCK_ROOM = 48
 
-/** The pill at the content's top: what shows instead of the latest version, and what to do. */
+/**
+ * The pill at the content's top: what shows instead of the latest version, or what happens to the
+ * whole artifact, and what to do. `mark` takes the dot's place; a quiet action is a ghost button.
+ */
 function Pill({
   lead,
   rest,
+  mark,
   actions,
 }: {
   lead: string
   rest: React.ReactNode
-  actions: Array<{ label: string; busy?: boolean; restores?: boolean; run: () => void }>
+  mark?: React.ReactNode
+  actions: Array<{
+    label: string
+    busy?: boolean
+    restores?: boolean
+    quiet?: boolean
+    run: () => void
+  }>
 }) {
   const { tier } = useShell()
   return (
-    <div role="status" className="avs-pill__in">
-      <span className="avs-pill__dot" aria-hidden />
+    <div role="status" className="avs-pill__in" data-actions={actions.length > 0 || undefined}>
+      {mark ?? <span className="avs-pill__dot" aria-hidden />}
       <span className="avs-pill__text">
         <b>{lead}</b>
         {tier !== 'narrow' && rest}
@@ -1221,7 +1477,7 @@ function Pill({
       {actions.map((action, i) => (
         <Button
           key={action.label}
-          variant={i === 0 ? 'secondary' : 'ghost'}
+          variant={i === 0 && !action.quiet ? 'secondary' : 'ghost'}
           size="sm"
           icon={action.restores ? <Icon icon={RotateLeft01Icon} size={14} /> : undefined}
           loading={action.busy}
@@ -1238,6 +1494,33 @@ function Pill({
 function EarlierRest({ createdAt, note }: { createdAt: number; note: string | null }) {
   const now = useNow()
   return <span>{` · ${longAgo(createdAt, now)}${note ? ` · ${note}` : ''}`}</span>
+}
+
+/** " · just now", after "Deleted". */
+function DeletedAgo({ deletedAt }: { deletedAt: number }) {
+  const now = useNow()
+  return <span>{` · ${longAgo(deletedAt, now)}`}</span>
+}
+
+/** What the writing pill says: the slide, section or frame the agent holds, else its next version. */
+function writingLead(
+  t: TFunction<['artifacts', 'common']>,
+  writer: Writer,
+  head: number,
+  frames: readonly { id: string; name: string }[] | null,
+): string {
+  const piece = writer.pieces?.find((p) => p.kind !== 'whole')
+  if (piece?.kind === 'slide') {
+    return t('viewer.writing.slide', { agent: writer.name, number: piece.number })
+  }
+  if (piece?.kind === 'frame') {
+    const name = frames?.find((f) => f.id === piece.id)?.name
+    if (name) return t('viewer.writing.piece', { agent: writer.name, name })
+  }
+  if (piece?.kind === 'section') {
+    return t('viewer.writing.section', { agent: writer.name })
+  }
+  return t('viewer.writing.version', { agent: writer.name, version: head + 1 })
 }
 
 function DaysLeft({ deletedAt }: { deletedAt: number }) {
@@ -1302,6 +1585,29 @@ function LegacyCanvasDock({ controls }: { controls: CanvasControls }) {
     </ViewerSlot>
   )
 }
+/** The dock while the content loads: what it will offer, dimmed and out of reach. */
+function OpeningDock({ canvas }: { canvas: boolean }) {
+  const { t } = useTranslation('artifacts')
+  const none = () => {}
+  return (
+    <ViewerSlot slot="dock">
+      <span className="avs-dock__off" aria-disabled>
+        {canvas ? (
+          <>
+            <DockButton label={t('canvas.zoomOut')} icon={MinusSignIcon} disabled onClick={none} />
+            <span className="avs-dock__pct">{t('canvas.zoom', { percent: 100 })}</span>
+            <DockButton label={t('canvas.zoomIn')} icon={PlusSignIcon} disabled onClick={none} />
+          </>
+        ) : (
+          <DockButton label={t('ask.whole')} icon={SparklesIcon} disabled onClick={none}>
+            {t('ask.short')}
+          </DockButton>
+        )}
+      </span>
+    </ViewerSlot>
+  )
+}
+
 /** A document's or a deck's dock: asking an agent about the whole of it. */
 function AskDock({ onAsk }: { onAsk: () => void }) {
   const { t } = useTranslation('artifacts')

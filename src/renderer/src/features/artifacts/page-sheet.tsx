@@ -27,10 +27,11 @@ import { CompareDock, type CompareSwitch } from './compare-dock'
 import type { ArtifactEditor } from './editor'
 import { errorCount, errorLines, errorPlace } from './page-error-handoff'
 import { clearPageErrors, usePageErrors } from './page-errors'
-import { PageFrame } from './page-frame'
+import { PageFrame, Waiting } from './page-frame'
 import { framePageUrl, type ShownVersion } from './use-artifact'
 import { DockButton, DockRule, ViewerSlot } from './viewer-shell'
 import { useShell } from './viewer-shell-context'
+import { WriterTag } from './viewer-states'
 import './page-sheet.css'
 
 /** The ground around the sheet, the band a pill takes above it and the room the dock takes. */
@@ -87,6 +88,7 @@ export function PageSheet({
   onBrowser,
   compare,
   agent,
+  writer,
 }: {
   id: string
   url: string
@@ -105,9 +107,13 @@ export function PageSheet({
   onBrowser: (() => void) | null
   compare: CompareSwitch | null
   agent: SheetAgent | null
+  /** The agent whose running turn writes the page, which holds it whole until the turn ends. */
+  writer: { name: string; mark: ReactNode } | null
 }) {
   const { t } = useTranslation('artifacts')
   const root = useRef<HTMLDivElement>(null)
+  // The cover lies over the sheet, outside the page's scale.
+  const [ready, setReady] = useState(false)
   const [room, setRoom] = useState(0)
   const width = usePageWidth(id)
   const origin = url.slice(0, -1)
@@ -138,6 +144,7 @@ export function PageSheet({
           <div
             className="aps-sheet"
             data-stopped={stopped || undefined}
+            data-writing={writer ? '' : undefined}
             style={{ left: g.left, top: g.top, width: g.width, bottom: DOCK }}
           >
             {stopped ? (
@@ -174,10 +181,21 @@ export function PageSheet({
                   since={since}
                   editor={editor}
                   scale={g.scale}
+                  cover={false}
+                  onReady={setReady}
                 />
               </div>
             )}
+            {!stopped && !ready && <Waiting since={since} id={id} />}
           </div>
+        )}
+        {room > 0 && writer && (
+          <WriterTag
+            mark={writer.mark}
+            name={writer.name}
+            className="aps-writer"
+            style={{ left: g.left, top: g.top - 12 }}
+          />
         )}
         {/* Narrow, the pill above takes the band's width and says which version this is. */}
         {room > 0 && before !== null && tier !== 'narrow' && (

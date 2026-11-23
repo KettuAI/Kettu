@@ -35,9 +35,7 @@ export class PageErrorLog {
     const key = `${origin}\0${message.path}`
     if (this.replaced.get(key)?.includes(message.load)) return false
     const was = this.pages.get(key)
-    if (was && was.load !== message.load) {
-      this.replaced.set(key, [...(this.replaced.get(key) ?? []), was.load].slice(-8))
-    }
+    if (was && was.load !== message.load) this.replace(key, was.load)
     const page: PageErrors =
       was && was.load === message.load
         ? was
@@ -69,13 +67,29 @@ export class PageErrorLog {
       .map(([, page]) => page)
   }
 
-  /** Forgets one page's errors, as when it loads again, or every page of the origin. */
+  /**
+   * Forgets one page's errors, as when it loads again, or every page of the origin. The load
+   * forgotten still counts as replaced, so what it reports while it unloads shows nothing.
+   */
   clear(origin: string, path?: string): void {
-    for (const key of [...this.pages.keys()]) {
+    for (const [key, page] of [...this.pages]) {
       if (path === undefined ? key.startsWith(`${origin}\0`) : key === `${origin}\0${path}`) {
         this.pages.delete(key)
         this.second.delete(key)
+        this.replace(key, page.load)
       }
     }
+  }
+
+  /** How many pages the log keeps anything of. */
+  size(): number {
+    return new Set([...this.pages.keys(), ...this.second.keys(), ...this.replaced.keys()]).size
+  }
+
+  private replace(key: string, load: string): void {
+    const loads = [...(this.replaced.get(key) ?? []), load].slice(-8)
+    this.replaced.delete(key)
+    this.replaced.set(key, loads)
+    while (this.replaced.size > PAGES_KEPT) this.replaced.delete(this.replaced.keys().next().value!)
   }
 }

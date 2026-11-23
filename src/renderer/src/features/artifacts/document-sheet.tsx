@@ -17,7 +17,7 @@ import {
   SidebarLeftIcon,
   Undo02Icon,
 } from '@hugeicons/core-free-icons'
-import { useReducedMotion } from 'motion/react'
+import { useReducedMotionConfig } from 'motion/react'
 import { useTranslation } from 'react-i18next'
 import type { CommentAnchor, CommentThread } from '@shared/artifact-comments'
 import { DOCUMENT_ENTRY } from '@shared/artifact-document-anchors'
@@ -135,6 +135,7 @@ export function DocumentSheet({
   onAsk,
   onHeadings,
   focusThread,
+  writing = null,
 }: {
   id: string
   url: string
@@ -161,10 +162,12 @@ export function DocumentSheet({
   onHeadings: (count: number) => void
   /** A thread chosen in the comments card, to open under its block and scroll to. */
   focusThread: { thread: string; seq: number } | null
+  /** An agent writing it: the section's slug, or null for all of it, and the tag's words. */
+  writing?: { section: string | null; tag: string } | null
 }) {
   const { t } = useTranslation('artifacts')
   const { tier, leftCard } = useShell()
-  const reduce = useReducedMotion()
+  const reduce = useReducedMotionConfig()
   const dark = useDark()
   const root = useRef<HTMLDivElement>(null)
   const scroller = useRef<HTMLDivElement>(null)
@@ -274,6 +277,8 @@ export function DocumentSheet({
       changes: changesOn,
       step: docStep,
       focus,
+      still: !!reduce,
+      writing,
     }
     link.post({ v: RUNTIME_VERSION, kind: 'select-doc', channel: link.channel, state })
   }, [
@@ -292,6 +297,8 @@ export function DocumentSheet({
     changesOn,
     docStep,
     focus,
+    reduce,
+    writing,
   ])
 
   const onReport = useRef<(doc: DocReport) => void>(() => {})
@@ -633,7 +640,7 @@ export function DocumentSheet({
                 />
               )}
             </div>
-            {!loaded && <Waiting since={since} />}
+            {!loaded && <Waiting since={since} id={id} />}
           </div>
         )}
       </div>
@@ -650,6 +657,7 @@ export function DocumentSheet({
             pins.map((p) => p.thread.anchor.offset!),
           )}
           onPick={goTo}
+          writing={latest ? writing?.section : null}
         />
       )}
       <DocDock

@@ -217,3 +217,15 @@
   text-align: center;
   color: var(--muted);
 }
+
+/* An agent writing the page holds it whole: the sheet's edge and its tag, in the one orange. */
+.aps-sheet[data-writing] {
+  box-shadow:
+    0 0 0 1.5px var(--artifact-writing),
+    var(--elevation-float);
+}
+.aps-writer {
+  position: absolute;
+  z-index: 3;
+  max-width: 50%;
+}

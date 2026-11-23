@@ -1175,3 +1175,19 @@
     animation: none;
   }
 }
+
+/* A change that did not save stays on screen; said under the card's head. */
+.k-vt-kept {
+  margin: 0;
+  font-size: 12px;
+  line-height: 17px;
+  color: var(--artifact-fault);
+}
+
+/* A comment written while the computer is away: when it will be saved. */
+.k-vt-waiting {
+  margin: 0;
+  font-size: 12px;
+  line-height: 17px;
+  color: var(--muted);
+}

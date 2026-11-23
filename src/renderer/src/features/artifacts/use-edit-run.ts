@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { errorMessage, host } from '@renderer/lib/host'
 import type { SaveState } from './tool-parts'
+import { useUnsaved } from './unsaved'
 
 /**
  * A run of the user's own saves from one card: what the chip says, and Undo, which writes the
@@ -19,6 +20,7 @@ export function useEditRun(id: string): {
   undo: (() => Promise<number | null>) | null
 } {
   const [save, setSave] = useState<SaveState | null>(null)
+  useUnsaved(id, save?.state === 'failed')
   const run = useRef<{ base: number; head: number; edits: number } | null>(null)
   const [undoable, setUndoable] = useState(false)
   const live = useRef(true)

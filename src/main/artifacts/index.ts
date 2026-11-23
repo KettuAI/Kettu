@@ -197,6 +197,7 @@ export class Artifacts {
       platform: process.platform,
       blocked: (event) => sendEvent(contents, 'artifact:blocked', event),
       stopped: (event) => sendEvent(contents, 'artifact:stopped', event),
+      failed: (event) => sendEvent(contents, 'artifact:frame-failed', event),
       shortcut: (key) => sendEvent(contents, 'app:shortcut', key),
     })
   }

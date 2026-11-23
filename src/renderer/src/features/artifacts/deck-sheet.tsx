@@ -64,6 +64,7 @@ import { pageUrl, type ShownVersion } from './use-artifact'
 import { slideAnchor, slideName, type DeckOutline } from './use-deck'
 import { DockButton, DockRule, ViewerSlot } from './viewer-shell'
 import { useShell } from './viewer-shell-context'
+import { WriterTag } from './viewer-states'
 import './document-sheet.css'
 import './deck-sheet.css'
 
@@ -171,6 +172,7 @@ export function DeckSheet({
   onAsked,
   focusThread,
   compare,
+  writing = null,
 }: {
   id: string
   url: string
@@ -198,6 +200,8 @@ export function DeckSheet({
   focusThread: { thread: string; seq: number } | null
   /** Before and after, where an agent's version changed the slide shown. */
   compare: CompareSwitch | null
+  /** An agent writing it: the slides it holds, or null for every slide, and its name and mark. */
+  writing?: { slides: readonly number[] | null; name: string; mark: ReactNode } | null
 }) {
   const { t } = useTranslation('artifacts')
   const { tier, insets, leftCard } = useShell()
@@ -543,6 +547,9 @@ export function DeckSheet({
   const anchorOf = (n: number, element: { tag: string; text: string } | null) =>
     slideAnchor(version, n, deck?.slides[n - 1]?.title ?? null, element)
 
+  const writesShown =
+    !!writing && latest && (writing.slides === null || writing.slides.includes(current))
+
   const placeOf = (i: number) => {
     const key = `p${i}`
     return layout && layout.slide === current
@@ -567,10 +574,19 @@ export function DeckSheet({
             {ready && peek && (
               <Neighbours artifactId={id} deck={deck} current={current} place={place} onGo={go} />
             )}
+            {writesShown && writing && (
+              <WriterTag
+                className="adk-writer"
+                mark={writing.mark}
+                name={t('viewer.writing.tag', { agent: writing.name })}
+                style={{ left: place.x, top: place.y - 28 }}
+              />
+            )}
             <div
               ref={slideBox}
               className="adk-slide"
               data-flash={flash !== null || undefined}
+              data-writing={writesShown || undefined}
               style={{ left: place.x, top: place.y, width: shownW, height: shownH }}
             >
               <iframe
@@ -698,7 +714,7 @@ export function DeckSheet({
             onAsk={onAsk ? (n) => onAsk(anchorOf(n, null)) : null}
           />
         )}
-        {!(loaded && deck) && <Waiting since={since} />}
+        {!(loaded && deck) && <Waiting since={since} id={id} look="card" />}
       </div>
       {deck && (
         <SlidesCard
@@ -710,6 +726,7 @@ export function DeckSheet({
           marks={marks}
           comments={bySlide}
           onPick={openSlide}
+          writing={latest ? writing?.slides : null}
         />
       )}
       {deck && (
