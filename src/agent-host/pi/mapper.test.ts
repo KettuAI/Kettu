@@ -434,6 +434,19 @@ describe('the usage', () => {
     ).toBeNull()
   })
 
+  it("sums a reply's total from its parts when the provider reported none", () => {
+    expect(
+      tokenTotals({ input: 100, output: 20, cacheRead: 3000, cacheWrite: 50, totalTokens: 0 }),
+    ).toEqual({
+      total: 3170,
+      input: 100,
+      output: 20,
+      thought: null,
+      cacheRead: 3000,
+      cacheWrite: 50,
+    })
+  })
+
   it("takes pi's own count of the context and the session's cost once a turn settled", () => {
     let thread = fresh()
     const mapper = new SessionMapper(CWD)
