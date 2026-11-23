@@ -993,7 +993,7 @@ export function PlanPart({
         return (
           <div key={limit.window} className="mt-2 flex flex-col gap-1.25">
             <div className="flex text-secondary tabular">
-              <span className="min-w-0 flex-1 truncate">{limitLabel(limit)}</span>
+              <span className="min-w-0 flex-1 [overflow-wrap:anywhere]">{limitLabel(limit)}</span>
               <span className="text-primary">{limit.usedPercent === null ? '—' : `${shown}%`}</span>
               {limit.resetsAt ? (
                 <Tooltip>

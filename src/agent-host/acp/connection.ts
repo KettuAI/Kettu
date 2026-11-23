@@ -96,6 +96,7 @@ import {
   withFullAccess,
 } from './agy-access'
 import { systemPromptMeta, takesSystemPromptAppend } from './agy-prompt'
+import { AGY_ELICITATION, askInCard, asksQuestions } from './agy-questions'
 import {
   agyAllowOnce,
   agyAutoAllowed,
@@ -453,12 +454,18 @@ export class AcpConnection implements AgentConnection {
           ? { outcome: { outcome: 'cancelled' } }
           : { outcome: { outcome: 'selected', optionId: picked.optionId } }
       })
-      .onRequest(methods.client.elicitation.create, (ctx) => {
-        // Only a sign-in's page is taken, on the client that asked for that sign-in.
+      .onRequest(methods.client.elicitation.create, async (ctx) => {
+        const sessionId = (ctx.params as { sessionId?: unknown }).sessionId
+        // agy's questions are shown in the question card, in the session they were asked in.
+        const asked = typeof sessionId === 'string' ? this.targets.get(sessionId) : undefined
+        if (this.agy && asksQuestions(this.version) && asked) {
+          const answer = await askInCard(ctx.params, asked, ctx.signal)
+          if (answer) return answer
+        }
+        // Otherwise only a sign-in's page is taken, on the client that asked for that sign-in.
         const page = requestUrlElicitation(ctx.params)
         const signIn = page ? this.signInRequests.get(page.requestId) : undefined
         if (!page || !signIn) {
-          const sessionId = (ctx.params as { sessionId?: unknown }).sessionId
           hooks.ignored(
             typeof sessionId === 'string' ? sessionId : null,
             `elicitation/create (${String(ctx.params.mode)}) outside a sign-in`,
@@ -707,7 +714,9 @@ export class AcpConnection implements AgentConnection {
         {
           protocolVersion: PROTOCOL_VERSION,
           clientInfo: { name: 'Kettu', title: 'Kettu', version: appVersion },
-          clientCapabilities: CLIENT_CAPABILITIES,
+          clientCapabilities: this.agy
+            ? { ...CLIENT_CAPABILITIES, elicitation: AGY_ELICITATION }
+            : CLIENT_CAPABILITIES,
         },
         signal ? { cancellationSignal: signal } : undefined,
       ),

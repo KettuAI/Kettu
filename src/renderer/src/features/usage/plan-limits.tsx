@@ -416,14 +416,14 @@ function PlanCard({ card, named, now }: { card: UsageCard; named: boolean; now: 
         >
           {face}
         </HoverCardTrigger>
-        <HoverCardContent side="bottom" align="start" sideOffset={6} className="w-72">
+        <HoverCardContent side="bottom" align="start" sideOffset={6} className="w-80">
           <div className="grid grid-cols-[minmax(0,1fr)_auto_auto] items-baseline gap-x-3 gap-y-1.5 text-hint">
             <span className="col-span-3 truncate font-medium text-primary">
               {card.plan ? `${card.name} · ${card.plan}` : card.name}
             </span>
             {card.rings.map((ring) => (
               <span key={ring.limit.window} className="contents">
-                <span className="truncate text-tertiary">{limitLabel(ring.limit)}</span>
+                <span className="text-tertiary">{limitLabel(ring.limit)}</span>
                 <span className="text-right font-medium text-primary tabular-nums">
                   {shownPercent(ring.percent, view)}%
                 </span>
