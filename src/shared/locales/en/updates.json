@@ -8,7 +8,7 @@
     "available": "Kettu {{version}} is out",
     "updateNote": "Downloads, then restarts",
     "moveNote": "Moves to Applications, then restarts",
-    "downloadNote": "From the release page",
+    "downloadNote": "Downloads, then opens the installer",
     "updated": "Kettu {{version}}",
     "updatedNote": "Updated from {{version}}",
     "installing": "Updating Kettu",

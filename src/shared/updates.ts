@@ -6,8 +6,7 @@ export type UpdateState =
   | { kind: 'off'; reason: 'development' | 'unsupported' }
   | { kind: 'idle'; checkedAt: number | null } // up to date, or not checked yet
   | { kind: 'checking'; manual: boolean }
-  // Found, not downloading. In Link mode downloadUrl is the .dmg for this Mac, when there is one.
-  | { kind: 'available'; version: string; mode: 'install' | 'link'; downloadUrl: string | null }
+  | { kind: 'available'; version: string; mode: 'install' | 'link' } // found, not downloading
   | { kind: 'moving'; version: string } // Update on a read-only volume, moving the app first
   | { kind: 'downloading'; version: string; percent: number; manual: boolean } // manual: Update
   // Downloaded and verified; notes: the release's highlights in each language it has them in.

@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from 'react'
-import { ArrowUpRight01Icon, GithubIcon, Tick02Icon } from '@hugeicons/core-free-icons'
+import { GithubIcon, Tick02Icon } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
 import type { AppInfo } from '@shared/ipc'
 import type { SettingsFile } from '@shared/settings'
@@ -154,21 +154,13 @@ export function UpdateRow({ status }: { status: UpdateStatus | null }) {
     case 'available':
       title = t('about.updates.available', { version: state.version })
       if (state.mode === 'install' && status.readOnly) detail = t('about.updates.movesFirst')
+      if (state.mode === 'link') detail = t('about.updates.downloadDetail')
       action = (
         <>
           {whatsNew(state.version)}
-          {state.mode === 'link' ? (
-            <LinkButton
-              href={state.downloadUrl ?? releaseUrl(state.version)}
-              icon={<Icon icon={ArrowUpRight01Icon} size={14} />}
-            >
-              {t('about.updates.download')}
-            </LinkButton>
-          ) : (
-            <SetButton variant="primary" onClick={() => run(window.kettu.updates.download)}>
-              {t('about.updates.update')}
-            </SetButton>
-          )}
+          <SetButton variant="primary" onClick={() => run(window.kettu.updates.download)}>
+            {state.mode === 'link' ? t('about.updates.download') : t('about.updates.update')}
+          </SetButton>
         </>
       )
       break

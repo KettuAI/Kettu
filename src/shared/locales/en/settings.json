@@ -1202,6 +1202,7 @@
       "restart": "Restart to update",
       "update": "Update",
       "download": "Download",
+      "downloadDetail": "Kettu downloads the installer and opens it. Drag Kettu to Applications to update.",
       "whatsNew": "What’s new",
       "none": "Kettu on this computer is not updated from here",
       "none_web": "Kettu on {{host}} is not updated from here",

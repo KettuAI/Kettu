@@ -7,7 +7,7 @@ export type AppUpdateNotice =
   // moves: on a read-only volume, Update moves the app to Applications first.
   | { kind: 'available'; version: string; moves: boolean }
   | { kind: 'moving'; version: string }
-  | { kind: 'link'; version: string; downloadUrl: string | null }
+  | { kind: 'link'; version: string }
   | { kind: 'downloading'; version: string; percent: number }
   | { kind: 'updated'; version: string; from: string }
 
@@ -25,7 +25,7 @@ export function appUpdateNotice(
   if (state.kind === 'available' && status.dismissed !== state.version) {
     return state.mode === 'install'
       ? { kind: 'available', version: state.version, moves: status.readOnly }
-      : { kind: 'link', version: state.version, downloadUrl: state.downloadUrl }
+      : { kind: 'link', version: state.version }
   }
   if (status.updatedFrom && !updatedSeen)
     return { kind: 'updated', version: status.current, from: status.updatedFrom }
@@ -45,7 +45,7 @@ export interface AppUpdateText {
   /** Null while it downloads or moves, which nothing but its own corner stops. */
   action: AppUpdateAction | null
   actionLabel: string
-  /** The page an action opens in the browser. */
+  /** The page an action opens in the browser; the actions that run here have none. */
   href: string | null
 }
 
@@ -87,7 +87,6 @@ export function appUpdateText(notice: AppUpdateNotice): AppUpdateText {
         note,
         'download',
         i18n.t('updates:app.download'),
-        notice.downloadUrl ?? releaseUrl(version),
       )
     }
     case 'updated':

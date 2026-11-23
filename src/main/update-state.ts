@@ -23,25 +23,9 @@ export function installOnQuit({
 }
 
 /**
- * Link mode's download: the release's .dmg for this Mac on the source `base` that served the
- * check, picked by the architecture in its name, or null when the update lists none.
- */
-export function dmgDownloadUrl(
-  base: string,
-  version: string,
-  files: readonly { url: string }[],
-  arch: string,
-): string | null {
-  if (arch !== 'arm64' && arch !== 'x64') return null
-  const name = files
-    .map((file) => file.url.slice(file.url.lastIndexOf('/') + 1))
-    .find((file) => file.endsWith(`-${arch}.dmg`))
-  return name ? `${base}/download/v${version}/${encodeURIComponent(name)}` : null
-}
-
-/**
- * Install replaces the app; Link only opens the release page. The release workflow sets
- * MAIN_VITE_UPDATE_MODE; without it, macOS builds link because unsigned builds cannot install.
+ * Install replaces the app; Link downloads the release's disk image and opens it. The release
+ * workflow sets MAIN_VITE_UPDATE_MODE; without it, macOS builds link because unsigned builds
+ * cannot install.
  */
 export function updateMode(platform: Platform, configured: string | undefined): UpdateMode {
   if (configured === 'install' || configured === 'link') return configured
@@ -120,6 +104,7 @@ export type UpdaterEvent =
   | { type: 'progress'; percent: number }
   | { type: 'downloaded'; version: string; notes?: Partial<Record<Locale, string[]>> }
   | { type: 'download-cancelled' }
+  | { type: 'disk-image-opened' }
   | { type: 'moving'; version: string }
   | { type: 'move-cancelled' }
   | { type: 'move-failed'; message: string }
@@ -133,13 +118,10 @@ export interface TransitionContext {
   lastCheckedAt: number | null
   /** The version found last, to fall back to after a failed automatic download. */
   lastAvailable: string | null
-  /** In Link mode, the .dmg to open for `lastAvailable`. */
-  downloadUrl: string | null
 }
 
 function available(version: string, context: TransitionContext): UpdateState {
-  const downloadUrl = context.mode === 'link' ? context.downloadUrl : null
-  return { kind: 'available', version, mode: context.mode, downloadUrl }
+  return { kind: 'available', version, mode: context.mode }
 }
 
 export function nextState(
@@ -172,7 +154,9 @@ export function nextState(
       return event.notes && Object.keys(event.notes).length > 0
         ? { kind: 'ready', version: event.version, notes: event.notes }
         : { kind: 'ready', version: event.version }
+    // Once the disk image is open, the user finishes in Finder; nothing here restarts.
     case 'download-cancelled':
+    case 'disk-image-opened':
       return state.kind === 'downloading' ? available(state.version, context) : state
     case 'moving':
       return { kind: 'moving', version: event.version }

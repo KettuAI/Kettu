@@ -13,6 +13,7 @@ import type { ProviderRuntimeOptions } from 'electron-updater/out/providers/Prov
 import { parse } from 'yaml'
 import { t, tEnglish } from './i18n'
 import type { Logger } from './log'
+import type { DownloadFile } from './update-dmg'
 import { compareVersions, errorMessage } from './update-state'
 import {
   BUILT_IN_SOURCES,
@@ -48,6 +49,8 @@ export interface FeedDeps {
   checked(run: SourceRun): void
   /** Where the next download goes, which the updater moves on when a source fails. */
   downloadSource(): UpdateSource | null
+  /** Hands over the provider's way to download one file, with the headers and proxy of a check. */
+  downloader(download: DownloadFile): void
 }
 
 /** Why one source could not answer a check: it was not reached, or what it gave was not usable. */
@@ -138,6 +141,23 @@ export function sourcesProvider(
     // electron-updater passes a custom provider its options and itself before these.
     constructor(_options: unknown, _updater: unknown, runtime: ProviderRuntimeOptions) {
       super(runtime)
+      deps.downloader((url, destination, { signal, onProgress }) => {
+        const token = new Token()
+        const cancel = (): void => token.cancel()
+        signal.addEventListener('abort', cancel, { once: true })
+        if (signal.aborted) cancel()
+        return this.executor
+          .download(new URL(url), destination, {
+            headers: this.fileExtraDownloadHeaders,
+            cancellationToken: token,
+            onProgress: ({ percent }) => onProgress(percent),
+          })
+          .then(() => undefined)
+          .finally(() => {
+            signal.removeEventListener('abort', cancel)
+            token.dispose()
+          })
+      })
     }
 
     // GitHub answers one range per request; the download service answers several.

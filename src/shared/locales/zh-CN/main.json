@@ -254,11 +254,13 @@
   "updater": {
     "offDevelopment": "开发版不会更新",
     "offPackageManager": "这份安装的更新由包管理器提供",
-    "linkOnly": "这个版本不能自己安装更新，请打开发布页下载",
     "nothingToDownload": "没有可下载的更新",
     "nothingReady": "没有可以安装的更新",
     "readOnlyVolume": "应用在只读磁盘上的“应用程序”文件夹里",
-    "stalled": "下载已经 {{seconds}} 秒没有进展"
+    "stalled": "下载已经 {{seconds}} 秒没有进展",
+    "noDiskImage": "这个更新没有适用于这台 Mac 的安装程序",
+    "diskImageMismatch": "下载的安装程序与发布版的校验和不一致",
+    "openFailed": "无法打开已下载的安装程序：{{reason}}"
   },
   "marketKeys": {
     "valueEmpty": "“{{name}}”的值是空的；要删除请清除这一项",

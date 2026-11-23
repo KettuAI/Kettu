@@ -54,7 +54,7 @@ export function CardButton({
   )
 }
 
-/** The app's action: Restart and Update run here, Download and What's new open the browser. */
+/** The app's action: Restart, Update and Download run here, What's new opens the browser. */
 export function AppAction({ notice }: { notice: AppUpdateNotice }) {
   const text = appUpdateText(notice)
   if (!text.action) return null
