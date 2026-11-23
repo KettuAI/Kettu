@@ -9,7 +9,7 @@
 
 [![Release](https://img.shields.io/github/v/release/KettuAI/Kettu?include_prereleases&label=release&style=flat-square&labelColor=3f3f46&color=fa5615)](https://github.com/KettuAI/Kettu/releases/latest)
 [![Downloads](https://img.shields.io/github/downloads/KettuAI/Kettu/total?label=downloads&style=flat-square&labelColor=3f3f46&color=15803d)](https://github.com/KettuAI/Kettu/releases)
-[![Platforms](https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux%20%7C%20iOS%20%7C%20Web-2563eb?style=flat-square&labelColor=3f3f46)](#install)
+[![Platforms](https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux%20%7C%20iOS%20%7C%20Android%20%7C%20Web-2563eb?style=flat-square&labelColor=3f3f46)](#install)
 [![Agents](https://img.shields.io/badge/agents-48-0f766e?style=flat-square&labelColor=3f3f46)](#agents)
 [![License](https://img.shields.io/github/license/KettuAI/Kettu?style=flat-square&labelColor=3f3f46&color=71717a)](./LICENSE)
 [![LINUX DO](https://img.shields.io/badge/LINUX-DO-ffb003?style=flat-square&labelColor=3f3f46)](https://linux.do)
@@ -102,13 +102,17 @@ All your coding agents, side by side in one window that looks good and feels rig
 - **Notifications**: know when a session needs you, and answer from the lock screen.
 - **Artifacts, Routines and usage**: open what your agents made, run a routine and see your plan limits.
 
+### Android
+
+- **Kettu on Android**: [download the app](https://download.kettu.sh/android/latest/download/Kettu.apk) to open app.kettu.sh full screen with its own icon, signed in to your Kettu account.
+
 ### Looks
 
 - Light and dark modes that follow your system and fade across the whole window at once, themes from the catalog or your own, English and Simplified Chinese, and the frosted macOS sidebar.
 
 ### Coming soon
 
-- **Android app**: after the iPhone and iPad app.
+- **Native Android app**: after the iPhone and iPad app.
 
 ## Privacy
 
@@ -127,6 +131,8 @@ Download from [Releases](https://github.com/KettuAI/Kettu/releases/latest):
 - **Linux** (x64 and Arm): the `.AppImage`; make it executable and run it. It needs FUSE 2 (`libfuse2`, or `libfuse2t64` on Ubuntu 24.04 and later).
 
 On an iPhone or iPad: join the [public beta on TestFlight](https://testflight.apple.com/join/zsbFyAPQ). It needs iOS 26 or later, and Kettu on a computer.
+
+On an Android phone or tablet: download [Kettu.apk](https://download.kettu.sh/android/latest/download/Kettu.apk) and allow the install when Android asks. It needs Android 8.0 or later with Chrome, and Kettu on a computer.
 
 In a browser: [app.kettu.sh](https://app.kettu.sh), signed in to the same Kettu account as Kettu on your computer.
 

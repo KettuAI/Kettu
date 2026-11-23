@@ -9,7 +9,7 @@
 
 [![版本](https://img.shields.io/github/v/release/KettuAI/Kettu?include_prereleases&label=%E7%89%88%E6%9C%AC&style=flat-square&labelColor=3f3f46&color=fa5615)](https://github.com/KettuAI/Kettu/releases/latest)
 [![下载量](https://img.shields.io/github/downloads/KettuAI/Kettu/total?label=%E4%B8%8B%E8%BD%BD%E9%87%8F&style=flat-square&labelColor=3f3f46&color=15803d)](https://github.com/KettuAI/Kettu/releases)
-[![平台](https://img.shields.io/badge/%E5%B9%B3%E5%8F%B0-macOS%20%7C%20Windows%20%7C%20Linux%20%7C%20iOS%20%7C%20Web-2563eb?style=flat-square&labelColor=3f3f46)](#安装)
+[![平台](https://img.shields.io/badge/%E5%B9%B3%E5%8F%B0-macOS%20%7C%20Windows%20%7C%20Linux%20%7C%20iOS%20%7C%20Android%20%7C%20Web-2563eb?style=flat-square&labelColor=3f3f46)](#安装)
 [![Agent](https://img.shields.io/badge/Agent-48-0f766e?style=flat-square&labelColor=3f3f46)](#支持的-agent)
 [![许可证](https://img.shields.io/github/license/KettuAI/Kettu?label=%E8%AE%B8%E5%8F%AF%E8%AF%81&style=flat-square&labelColor=3f3f46&color=71717a)](./LICENSE)
 [![LINUX DO](https://img.shields.io/badge/LINUX-DO-ffb003?style=flat-square&labelColor=3f3f46)](https://linux.do)
@@ -102,13 +102,17 @@
 - **通知**：会话需要你时提醒你，在锁屏上就能回应。
 - **Artifacts、Routines 和用量**：打开 Agent 做的东西，运行一个 Routine，查看套餐额度。
 
+### Android
+
+- **在 Android 上用 Kettu**：[下载应用](https://download.kettu.sh/android/latest/download/Kettu.apk)，全屏打开 app.kettu.sh，有自己的图标，登录你的 Kettu 账号就能用。
+
 ### 外观
 
 - 跟着系统切换、整个窗口一起平滑过渡的浅色和深色模式，主题库里的主题或你自己的主题，简体中文和英文，macOS 毛玻璃侧边栏。
 
 ### 即将推出
 
-- **Android 应用**：排在 iPhone 和 iPad 应用之后。
+- **原生 Android 应用**：排在 iPhone 和 iPad 应用之后。
 
 ## 隐私
 
@@ -127,6 +131,8 @@
 - **Linux**（x64 和 Arm）：`.AppImage`，加上执行权限后运行；需要 FUSE 2（`libfuse2`，Ubuntu 24.04 起为 `libfuse2t64`）。
 
 在 iPhone 或 iPad 上：加入 [TestFlight 公开测试](https://testflight.apple.com/join/zsbFyAPQ)。需要 iOS 26 或更高版本，电脑上需要有 Kettu。
+
+在 Android 手机或平板上：下载 [Kettu.apk](https://download.kettu.sh/android/latest/download/Kettu.apk)，系统询问时允许安装。需要 Android 8.0 或更高版本并装有 Chrome，电脑上需要有 Kettu。
 
 在浏览器里：[app.kettu.sh](https://app.kettu.sh)，登录和你电脑上的 Kettu 同一个 Kettu 账号。
 
