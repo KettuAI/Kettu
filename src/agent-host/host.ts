@@ -958,7 +958,7 @@ export class AgentHost {
         work: (sessionId) => this.sessions.runningWork([sessionId]),
         archiveAfterTurn: (sessionId, agentName) =>
           this.sessions.archiveWhenIdle(sessionId, agentName),
-        archiveNow: (sessionId, agentName) => this.sessions.archiveByAgent(sessionId, agentName),
+        archiveNow: (sessionId, agentName) => this.sessions.archiveStarted(sessionId, agentName),
         start: (callerId, params) => this.sessions.startFromTool(callerId, params),
         carried: (callerId, agentId) => this.sessions.carriedOptions(callerId, agentId),
         agentOptions: (agentId) => this.agentOptions.get(agentId),
