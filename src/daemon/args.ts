@@ -26,6 +26,9 @@ export type Command =
   | { kind: 'direct-remove'; address: DirectAddress }
   | { kind: 'terminal' }
   | { kind: 'terminal-set'; allowed: boolean }
+  | { kind: 'relay' }
+  | { kind: 'relay-use'; link: string }
+  | { kind: 'relay-set'; choice: 'kettu' | 'off' }
   | { kind: 'service-install' }
   | { kind: 'service-uninstall' }
   | { kind: 'update' }
@@ -77,6 +80,10 @@ Commands:
   terminal                     Say whether devices may use this computer's terminal
   terminal on                  Let devices use the terminal, which runs any command
   terminal off                 Stop it; devices' terminals close but keep running here
+  relay status                 Say which relay devices reach this computer through
+  relay use <link>             Check your own relay from the link it printed, then use it
+  relay kettu                  Use the Kettu relay, with the Kettu account kettu login signed in
+  relay off                    Use no relay; devices connect directly, over a VPN or over SSH
   service install              Run the daemon as a service that starts with the computer
   service uninstall            Stop the service and remove it
   update                       Update to the latest release, and the service with it
@@ -116,9 +123,10 @@ Environment:
   KETTU_ACCOUNT_URL            The account service to sign in to instead of https://www.kettu.sh
   KETTU_DIRECT_PORT            The port for direct connections, applied at every start; without
                                it the first start picks one at random and keeps it
+  KETTU_RELAY_LINK             The link your own relay printed, checked and used at every start
 
 Write an IPv6 address in brackets, as [fd00::1]:4567.
-kettu status and the devices, pair, direct, terminal and verbose commands exit with 3 when the
+kettu status and the devices, pair, direct, terminal, relay and verbose commands exit with 3 when the
 daemon is not running. kettu direct exits with 1 when direct connections cannot listen. kettu
 report without a running daemon saves the logs and settings alone.
 `
@@ -346,6 +354,18 @@ function parseWords(words: string[], yes: boolean): Command {
         return { kind: 'usage', message: `Unknown terminal command ${quote(rest[0])}` }
       }
       return extra(1) ?? { kind: 'terminal-set', allowed: rest[0] === 'on' }
+    case 'relay':
+      if (rest[0] === undefined) return { kind: 'relay' }
+      if (rest[0] === 'status') return extra(1) ?? { kind: 'relay' }
+      if (rest[0] === 'use') {
+        if (rest[1] === undefined)
+          return { kind: 'usage', message: 'Name the link the relay printed' }
+        return extra(2) ?? { kind: 'relay-use', link: rest[1] }
+      }
+      if (rest[0] === 'kettu' || rest[0] === 'off') {
+        return extra(1) ?? { kind: 'relay-set', choice: rest[0] }
+      }
+      return { kind: 'usage', message: `Unknown relay command ${quote(rest[0])}` }
     case 'service':
       if (rest[0] === 'install') return extra(1) ?? { kind: 'service-install' }
       if (rest[0] === 'uninstall') return extra(1) ?? { kind: 'service-uninstall' }

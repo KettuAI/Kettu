@@ -21,9 +21,11 @@
       "update_client": "This page is older than Kettu on the computer. Reload the page.",
       "update_host": "Kettu on the computer is too old for this page. Update Kettu on the computer.",
       "failed": "Pairing did not finish. Try again.",
-      "relay_off": "This code is for the computer’s own network: it is not using the Kettu relay. Turn on Use the Kettu relay in its Settings › Remote access, or open the browser link from Add device on the same network.",
+      "relay_off": "This code is for the computer’s own network: it uses no relay. Choose Kettu relay under Relay in its Settings › Remote access, or open the browser link from Add device on the same network.",
       "wrong_account": "The computer is signed in to another Kettu account. Sign in here with the account the computer uses.",
-      "host_offline": "The computer is not on the Kettu relay now. Check that it is on, Kettu is running with remote access on, and it is signed in to your Kettu account."
+      "host_offline": "The computer is not on the Kettu relay now. Check that it is on, Kettu is running with remote access on, and it is signed in to your Kettu account.",
+      "own_relay": "This computer uses its own relay, not the Kettu relay. Open the browser link from Add device: it goes to the web client that relay serves.",
+      "other_relay": "This code doesn’t go through this relay. Open the browser link from Add device on the computer, which goes to the relay it uses."
     },
     "removed": "This browser was removed from the computer. Pair it again to use it here."
   },

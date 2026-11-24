@@ -50,7 +50,56 @@ export interface RemoteStatus {
  * remote access is off.
  */
 export type RelayReport =
-  { state: 'off' } | { state: 'signed_out' } | { state: 'on'; relays: RelayStatus[] }
+  | { state: 'off' }
+  | { state: 'signed_out' }
+  /** With `own` on the owner's own relay, the one entry of `relays`; older clients see a relay. */
+  | { state: 'on'; relays: RelayStatus[]; own?: OwnRelayReport }
+
+/** The owner's own relay as Settings shows it, while it is the one chosen. */
+export interface OwnRelayReport {
+  url: string
+  /** Its certificate is trusted by its pin alone, which browsers cannot check. */
+  pinned: boolean
+  /** The relay program's version, null until it says. */
+  version: string | null
+  /** The host's round trip to it in milliseconds, null before the first. */
+  rtt: number | null
+  /** It serves the web client, which a browser pairs on. */
+  web: boolean
+  /** The access key's last four characters, for telling keys apart; never the key. */
+  keyEnd: string | null
+}
+
+/** The relay part of a host's report: the owner's own relay, the Kettu relay, or none. */
+export function relayReport(options: {
+  choice: 'kettu' | 'own' | 'off'
+  /** The Kettu relay may be used here: Kettu's services are on. */
+  cloud: boolean
+  signedIn: boolean
+  relays: RelayStatus[]
+  own: { url: string; pin: string | null } | null
+  ownStatus: { version: string | null; rtt: number | null; web: boolean } | null
+  keyEnd: string | null
+}): RelayReport {
+  const { choice, own } = options
+  if (choice === 'own' && own) {
+    return {
+      state: 'on',
+      relays: options.relays,
+      own: {
+        url: own.url,
+        pinned: own.pin !== null,
+        version: options.ownStatus?.version ?? null,
+        rtt: options.ownStatus?.rtt ?? null,
+        web: options.ownStatus?.web ?? false,
+        keyEnd: options.keyEnd,
+      },
+    }
+  }
+  if (choice !== 'kettu' || !options.cloud) return { state: 'off' }
+  if (!options.signedIn) return { state: 'signed_out' }
+  return { state: 'on', relays: options.relays }
+}
 
 /** The relay as one state: connected once any relay is, else how the others are doing. */
 export type RelaySummary = 'off' | 'signed_out' | 'connected' | 'connecting' | 'conflict' | 'failed'

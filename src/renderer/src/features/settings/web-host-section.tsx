@@ -15,6 +15,7 @@ import {
 import { Icon } from '@renderer/components/affect/app-shell'
 import { Spinner } from '@renderer/components/ui/spinner'
 import { errorMessage } from '@renderer/lib/host'
+import { isRelayPage } from '@renderer/lib/platform'
 import { useLiveLoad, useLoadWatch } from '@renderer/stores/host-load'
 import { useWebHostStore, type WebHost } from '@renderer/stores/web-host'
 import { CONFIRM, ControlError, DangerButton, SetButton, SetInput, Spin } from './controls'
@@ -79,7 +80,13 @@ export function OtherWebHosts() {
           mark={<DeviceTile icon={<Icon icon={Add01Icon} size={16} />} />}
           name={t('hosts.web.others.add')}
         >
-          <ItemLine>{t('hosts.web.others.addDescription')}</ItemLine>
+          <ItemLine>
+            {t(
+              isRelayPage
+                ? 'hosts.web.others.addDescriptionRelay'
+                : 'hosts.web.others.addDescription',
+            )}
+          </ItemLine>
         </Thing>
         <span className="ui-sg-control">
           <SetButton onClick={() => actions?.add?.()}>{t('hosts.web.others.add')}</SetButton>

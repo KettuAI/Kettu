@@ -3,6 +3,7 @@
 // tokens as the relay does. Not for production.
 
 import {
+  ACCESS_KEY_FEATURE,
   DRAIN_FEATURE,
   HOSTS_FEATURE,
   MAX_DEVICE_CONNECTIONS,
@@ -145,6 +146,13 @@ export class FakeRelayServer {
   regions: RelayRegion[] = []
   /** What `GET /v1` says the relay offers; without HOSTS_FEATURE it takes no profile. */
   features: string[] = [HOSTS_FEATURE]
+  /**
+   * A relay the owner runs: set, hosts sign in with this key alone and devices connect with no
+   * token, as `kettu-relay` does; `useAccessKey` sets it with the features such a relay lists.
+   */
+  accessKey: string | null = null
+  /** The tokens devices sent in their `connect`, in order, none for those without one. */
+  readonly deviceTokens: (string | null)[] = []
   /** Hosts signed in, by id. */
   readonly hosts = new Map<string, Host>()
   /** Every socket made, in order. */
@@ -161,9 +169,19 @@ export class FakeRelayServer {
     private readonly accounts: Map<string, string>,
   ) {}
 
+  /** Makes this the owner's own relay, taking `key` from hosts and no token from devices. */
+  useAccessKey(key: string): void {
+    this.accessKey = key
+    this.features = [ACCESS_KEY_FEATURE, DRAIN_FEATURE]
+    this.regions = []
+  }
+
   /** What `GET /v1` answers. */
   info(): unknown {
     if (this.mode !== 'up') throw new Error(`${this.origin} cannot be reached`)
+    if (this.accessKey !== null) {
+      return { relay: 'kettu', protocol: RELAY_PROTOCOL, features: this.features, version: '0.1.0' }
+    }
     return {
       relay: 'kettu',
       protocol: RELAY_PROTOCOL,
@@ -245,7 +263,7 @@ export class FakeRelayServer {
         return
       }
       if (message.type === 'token') {
-        if (!signedIn) return this.refuse(socket, RELAY_CLOSE.malformed)
+        if (!signedIn || this.accessKey !== null) return this.refuse(socket, RELAY_CLOSE.malformed)
         const account = this.accounts.get(message.token)
         if (!account || account !== this.hosts.get(id)?.account) {
           return this.refuse(socket, RELAY_CLOSE.unauthorized)
@@ -257,7 +275,13 @@ export class FakeRelayServer {
       const publicKey = decodeRelayBytes(message.publicKey)!
       const signature = decodeRelayBytes(message.signature)!
       const text = signInText(this.origin, id, nonce)
-      const account = this.accounts.get(message.token)
+      // The owner's relay takes its key and no account's token; Kettu's takes no key.
+      const account =
+        this.accessKey === null
+          ? this.accounts.get(message.token)
+          : message.token === this.accessKey
+            ? 'owner'
+            : undefined
       if (
         (await relayHostId(publicKey)) !== id ||
         !(await verifyRelaySignature(publicKey, signature, text)) ||
@@ -289,11 +313,13 @@ export class FakeRelayServer {
         return this.refuse(socket, RELAY_CLOSE.malformed)
       }
       if (message.features?.includes(DRAIN_FEATURE)) this.drainable.add(socket)
+      this.deviceTokens.push(message.token ?? null)
       const host = this.hosts.get(id)
       if (!host) return this.refuse(socket, RELAY_CLOSE.offline)
-      if (this.accounts.get(message.token) !== host.account) {
-        return this.refuse(socket, RELAY_CLOSE.forbidden)
-      }
+      const allowed =
+        this.accessKey !== null ||
+        (message.token !== undefined && this.accounts.get(message.token) === host.account)
+      if (!allowed) return this.refuse(socket, RELAY_CLOSE.forbidden)
       if (this.devices(id) >= MAX_DEVICE_CONNECTIONS) {
         return this.refuse(socket, RELAY_CLOSE.tooMany)
       }

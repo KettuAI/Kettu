@@ -32,6 +32,7 @@ import { Segmented, SetButton, SettingSelect, Spin } from './controls'
 import { closeRequest } from './pair-close'
 import { HOSTED_WEB_URL } from '@shared/remote/pairing'
 import { browserLinks } from './pair-links'
+import { relayHostName } from './relay-text'
 import { QrCode } from './qr-code'
 import { DeviceIcon, DeviceTile } from './remote-parts'
 import { deviceLine } from './remote-text'
@@ -215,7 +216,7 @@ function PairHeader() {
  * or for a browser, which opens the web client at one of this computer's addresses.
  */
 export function CodeBody({ shown, link: appLink }: { shown: Shown; link: string | null }) {
-  const { useSettingsStore } = useHostScope()
+  const { useSettingsStore, useRemoteStore } = useHostScope()
   const { t } = useTranslation('settings')
   const pairing = shown.kind === 'pairing' ? shown.pairing : null
   const end = pairing?.state === 'void' ? pairing.reason : null
@@ -223,8 +224,11 @@ export function CodeBody({ shown, link: appLink }: { shown: Shown; link: string 
   const [target, setTarget] = useState<'app' | 'browser'>('app')
   const [chosen, setChosen] = useState<string | null>(null)
   const own = useSettingsStore((s) => s.settings.remote.direct.addresses)
+  const ownRelay = useRemoteStore((s) =>
+    s.status?.relay?.state === 'on' ? (s.status.relay.own ?? null) : null,
+  )
   const cloudOff = useCloudOffHere()
-  const browsers = browserLinks(appLink, own, !cloudOff)
+  const browsers = browserLinks(appLink, own, !cloudOff, ownRelay)
   const browser = browsers.find((b) => b.address === chosen) ?? browsers[0] ?? null
   const link = target === 'browser' ? (browser?.link ?? null) : appLink
   return (
@@ -266,9 +270,11 @@ export function CodeBody({ shown, link: appLink }: { shown: Shown; link: string 
             <p>
               {t('remote.pair.browserScan')}{' '}
               {t(
-                browser?.link.startsWith(HOSTED_WEB_URL)
-                  ? 'remote.pair.browserHintHosted'
-                  : 'remote.pair.browserHint',
+                browser?.relay
+                  ? 'remote.pair.browserHintOwnRelay'
+                  : browser?.link.startsWith(HOSTED_WEB_URL)
+                    ? 'remote.pair.browserHintHosted'
+                    : 'remote.pair.browserHint',
               )}
             </p>
             {browsers.length > 1 && browser && (
@@ -286,6 +292,7 @@ export function CodeBody({ shown, link: appLink }: { shown: Shown; link: string 
         ) : (
           <p>
             {t('remote.pair.scan')} {t('remote.pair.otherComputer')}
+            {ownRelay && <> {t('remote.pair.ownRelay', { host: relayHostName(ownRelay.url) })}</>}
           </p>
         )}
       </div>

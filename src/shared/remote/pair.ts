@@ -18,6 +18,10 @@ export type PairFailure =
   | 'relay_off'
   | 'wrong_account'
   | 'host_offline'
+  /** The hosted client's: the code goes through a relay the computer's owner runs. */
+  | 'own_relay'
+  /** A relay's own page: the code does not go through this relay. */
+  | 'other_relay'
 
 export type PairProgress =
   | { state: 'connecting' }

@@ -2,7 +2,8 @@
 // the encrypted channel, into out/web/. The remote host serves it on its direct port. With
 // `--mode hosted` it is the hosted build instead, into out/web-hosted/: signed in to a Kettu
 // account, it reaches the hosts through the relay. `KETTU_ACCOUNT_URL` and `KETTU_RELAY_URL` point
-// a development build of it at other copies of the services.
+// a development build of it at other copies of the services. With `--mode relay` it is the build a
+// relay the owner runs serves, into out/web-relay/: no account, the relay is the page's own origin.
 
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
@@ -36,13 +37,43 @@ const devSourceLinks = (): Plugin => ({
   },
 })
 
+// The relay's build reaches nothing but its own origin, which the page says itself too.
+const relayPagePolicy = (): Plugin => ({
+  name: 'kettu-web-relay-csp',
+  transformIndexHtml: () => [
+    {
+      tag: 'meta',
+      attrs: {
+        'http-equiv': 'Content-Security-Policy',
+        content: [
+          "default-src 'self'",
+          "script-src 'self'",
+          "style-src 'self' 'unsafe-inline'",
+          "img-src 'self' data: blob:",
+          "media-src 'self' data: blob:",
+          "font-src 'self' data:",
+          "connect-src 'self'",
+          "frame-src 'self'",
+          "worker-src 'self' blob:",
+          "object-src 'none'",
+          "base-uri 'none'",
+          "form-action 'none'",
+        ].join('; '),
+      },
+      injectTo: 'head-prepend',
+    },
+  ],
+})
+
 export default defineConfig(({ mode }) => {
   const hosted = mode === 'hosted'
+  const relay = mode === 'relay'
   return {
     root: source('src/renderer/web'),
     define: {
       __KETTU_VERSION__: JSON.stringify(version),
       __KETTU_HOSTED__: JSON.stringify(hosted),
+      __KETTU_RELAY_BUILD__: JSON.stringify(relay),
       __KETTU_ACCOUNT_URL__: JSON.stringify(hosted ? (process.env.KETTU_ACCOUNT_URL ?? '') : ''),
       __KETTU_RELAY_URL__: JSON.stringify(hosted ? (process.env.KETTU_RELAY_URL ?? '') : ''),
       __KETTU_REGION_KEYS__: JSON.stringify(hosted ? (process.env.KETTU_REGION_KEYS ?? '') : ''),
@@ -65,7 +96,8 @@ export default defineConfig(({ mode }) => {
       standaloneThirdPartyNotices(source('.'), [], [agentMarkNotice(source('.'))]),
       pageRuntime(source('src/shared/artifact-runtime/runtime.ts')),
       pdfjsData(),
-      ...(hosted ? [integrity()] : []),
+      ...(hosted || relay ? [integrity()] : []),
+      ...(relay ? [relayPagePolicy()] : []),
     ],
     server: {
       // A dev server beside the app: the channel and the artifact frames go on to the host's direct
@@ -79,7 +111,7 @@ export default defineConfig(({ mode }) => {
           : undefined,
     },
     build: {
-      outDir: source(hosted ? 'out/web-hosted' : 'out/web'),
+      outDir: source(hosted ? 'out/web-hosted' : relay ? 'out/web-relay' : 'out/web'),
       emptyOutDir: true,
       minify: true,
     },

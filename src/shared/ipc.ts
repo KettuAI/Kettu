@@ -34,6 +34,7 @@ import type {
 import type { PairingState } from './remote/pairing'
 import type { DirectAddress } from './remote/protocol'
 import type { RemoteStatus } from './remote/status'
+import type { OwnRelayCheck, OwnRelayInput } from './remote/own-relay'
 import type { AgentColor, SettingsFile, SettingsPatch } from './settings'
 import type {
   BroughtSite,
@@ -452,6 +453,7 @@ export interface IpcInvokeContract {
   'remote:retry-direct': { args: []; result: void }
   // Tries every relay now, as after a conflict with another copy of Kettu or an error.
   'remote:retry-relay': { args: []; result: void }
+  'remote:use-own-relay': { args: [input: OwnRelayInput]; result: OwnRelayCheck }
   'hosts:status': { args: []; result: HostsStatus }
   // Pairs with the host of a pasted link, its progress as `hosts:pairing` under the id.
   'hosts:pair': { args: [link: string]; result: HostPairStart }
@@ -657,6 +659,8 @@ export interface KettuApi {
   client: 'desktop' | 'web'
   /** The hosted web client, signed in to a Kettu account and reaching its hosts through the relay. */
   hosted?: true
+  /** The web client a relay the owner runs serves, with no account: it reaches hosts through it. */
+  relayPage?: true
   /** The system of the host whose paths the page shows: this computer's, or the one connected. */
   hostPlatform(): Platform
   /** The interface language the system's preferred languages pick, for Language › System. */
@@ -825,6 +829,11 @@ export interface KettuApi {
     retryDirect(): Promise<void>
     /** Tries every relay again. */
     retryRelay(): Promise<void>
+    /**
+     * Checks the owner's own relay and its key, and makes it the one in use once both pass; the
+     * key is written to the host alone and never read back.
+     */
+    useOwnRelay(input: OwnRelayInput): Promise<OwnRelayCheck>
     onChanged(listener: (status: RemoteStatus) => void): () => void
     onPairing(listener: (event: RemotePairingEvent) => void): () => void
   }

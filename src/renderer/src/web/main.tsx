@@ -43,6 +43,7 @@ window.kettu = {
   platform: devicePlatform(navigator),
   client: 'web',
   ...(__KETTU_HOSTED__ ? { hosted: true } : {}),
+  ...(__KETTU_RELAY_BUILD__ ? { relayPage: true } : {}),
   systemLocale: matchLocale(navigator.languages),
   settings: {
     get: async () => settings.get(),
@@ -137,6 +138,10 @@ async function start(): Promise<void> {
   if (__KETTU_HOSTED__) {
     const { startHosted } = await import('./hosted/start')
     return startHosted({ settings, browser, client, root })
+  }
+  if (__KETTU_RELAY_BUILD__) {
+    const { startRelayPage } = await import('./relay/start')
+    return startRelayPage({ settings, browser, client, root })
   }
   const payload =
     location.pathname === BROWSER_PAIRING_PATH ? parseBrowserPairingLink(location.href) : null

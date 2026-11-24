@@ -1636,7 +1636,9 @@
         "keywords": "computers hosts switch open other add pair",
         "open": "Open",
         "add": "Add a computer…",
-        "addDescription": "Pair this browser with another computer signed in to this account."
+        "addDescription": "Pair this browser with another computer signed in to this account.",
+        "descriptionRelay": "The other computers this browser is paired with through this relay. Open one to use it here in place of {{name}}.",
+        "addDescriptionRelay": "Pair this browser with another computer that uses this relay."
       }
     },
     "account": {
@@ -1743,7 +1745,8 @@
       "serviceKey_web": "{{host}}’s key is kept in a file only its user can read, because a service that starts with the computer cannot count on an unlocked keyring.",
       "offLine": "Off",
       "firewall": "Devices on the same network connect to it directly, so the system may ask once whether Kettu can accept incoming connections.",
-      "relay": "reachable from anywhere"
+      "relay": "reachable from anywhere",
+      "ownRelay": "through {{host}}"
     },
     "hostName": {
       "name": "This computer’s name",
@@ -1888,7 +1891,9 @@
       "added": "“{{name}}” is added",
       "description": "It adds one device. Anyone who sees the code before then could use it.",
       "description_web": "It adds one device. Anyone who sees the code before then could use it.",
-      "expiresIn": "Expires in {{time}}"
+      "expiresIn": "Expires in {{time}}",
+      "ownRelay": "It goes through {{host}}: the code carries your relay, so the device needs no account and nothing set up.",
+      "browserHintOwnRelay": "Or open the link in a browser on any network: your relay serves the web client."
     },
     "device": {
       "rename": "Rename",
@@ -1965,13 +1970,10 @@
     "groups": {
       "permissions": "Permissions",
       "danger": "Danger zone",
-      "advanced": "Advanced"
+      "relay": "Relay"
     },
     "relay": {
-      "name": "Use the Kettu relay",
-      "description": "While this computer is signed in to your Kettu account, your devices signed in to the same account reach it from anywhere. Off, they connect directly.",
-      "description_web": "While {{host}} is signed in to your Kettu account, your devices signed in to the same account reach it from anywhere. Off, they connect directly.",
-      "keywords": "relay cloud anywhere internet region account kettu",
+      "keywords": "relay cloud anywhere internet region account kettu self-hosted own server access key",
       "regions": "Relays",
       "regionsDescription": "Signed in to each at once; a device uses whichever joins first.",
       "regionsNone": "Shown once signed in to the relay.",
@@ -1996,7 +1998,90 @@
         "busy": "Too many connections for now. Kettu tries again in a moment."
       },
       "signInHint": "Sign in to your Kettu account to reach this computer from anywhere. Direct connections still work.",
-      "signInHint_web": "Sign in to a Kettu account on {{host}} to reach it from anywhere. Direct connections still work."
+      "signInHint_web": "Sign in to a Kettu account on {{host}} to reach it from anywhere. Direct connections still work.",
+      "group": "Relay",
+      "groupDescription": "How your devices reach this computer from other networks: the Kettu relay, a relay you run yourself, or none.",
+      "groupDescription_web": "How your devices reach {{host}} from other networks: the Kettu relay, a relay you run yourself, or none.",
+      "inUse": "In use",
+      "onlyKettu": "Only with the Kettu relay.",
+      "choice": {
+        "kettu": {
+          "name": "Kettu relay",
+          "description": "Run by Kettu. This computer and your devices sign in to one Kettu account."
+        },
+        "own": {
+          "name": "Your own relay",
+          "description": "A relay you run on your own server. No Kettu account needed.",
+          "descriptionLocal": "A relay you run on your own server. Nothing goes to Kettu.",
+          "older": "Update Kettu on this computer to use a relay of your own."
+        },
+        "off": {
+          "name": "No relay",
+          "description": "Devices connect on the same network, over a VPN or SSH."
+        }
+      },
+      "note": {
+        "switch": "Kettu checks the relay and the key before it switches. Devices online now move over at once; the others the next time they reach this computer on the same network, or when you add them again.",
+        "own": "Only one relay at a time. Your Kettu account still sends this computer’s notifications to your iPhone.",
+        "pinned": "The Kettu apps on computers and iPhones reach it. Browsers can’t check a pinned certificate, so they need a relay with a domain.",
+        "local": "In Local mode Kettu sends nothing to its own services. Your relay is yours, so it stays."
+      },
+      "own": {
+        "address": "Address",
+        "addressHint": "Paste the link the relay printed when it started; its key comes with it.",
+        "pinnedHint": "Its certificate is pinned from the link, as for a relay at an IP address.",
+        "key": "Access key",
+        "keyHint": "Kept on this computer only. Devices never get it.",
+        "keyKept": "Leave it empty to keep the key ending in {{end}}.",
+        "noKey": "None kept",
+        "showKey": "Show key",
+        "hideKey": "Hide key",
+        "docs": "How to run a relay",
+        "docsUrl": "https://kettu.sh/docs/devices/own-relay",
+        "cancel": "Cancel",
+        "use": "Use this relay",
+        "checking": "Checking…",
+        "checks": "Checks",
+        "change": "Change…",
+        "replace": "Replace…",
+        "pasteLink": "Paste new link…",
+        "connecting": "Connecting to {{host}}…",
+        "lineFailed": "Can’t reach {{host}}",
+        "refusedHint": "The relay refused this computer’s access key. Paste the link it prints now under Relay.",
+        "state": {
+          "noKey": "No access key kept · paste the relay’s link",
+          "connecting": "Connecting…",
+          "connected": "Connected",
+          "rtt": "{{ms}} ms",
+          "version": "relay {{version}}",
+          "pinned": "certificate pinned",
+          "refused": "Refused · the relay has a new access key",
+          "busy": "Too many connections · trying again",
+          "unreachable": "Can’t reach · trying again"
+        },
+        "step": {
+          "address": "An address Kettu may use",
+          "reach": "Reachable, with a valid certificate",
+          "kettu": "A Kettu relay that takes access keys",
+          "key": "Accepts the access key",
+          "done": "passed",
+          "failed": "failed"
+        },
+        "problem": {
+          "address": "Enter the relay’s address, such as https://relay.example.com.",
+          "kettu": "That’s the Kettu relay. Choose Kettu relay above to use it.",
+          "http": "Use https. Only a relay on this computer itself may use http.",
+          "key": "Enter the access key the relay printed.",
+          "unreachable": "Can’t reach {{host}}. Check that the relay runs and that port {{port}} is open to the internet.",
+          "certificate": "The certificate of {{host}} isn’t valid. A relay at an IP address prints a link with its certificate’s pin.",
+          "certificatePinned": "Its certificate is not the pinned one. Paste the link the relay prints now.",
+          "not_kettu": "This address doesn’t answer as a Kettu relay.",
+          "protocol": "This relay speaks another version of the relay protocol. Update the relay, or Kettu.",
+          "no_access_key": "This relay takes no access key. Update kettu-relay on the server.",
+          "key_refused": "The relay refused this key. On the relay,",
+          "key_refusedEnd": "prints the link with its current key."
+        }
+      }
     },
     "discoverable": {
       "name": "Let devices on your account find this computer",
@@ -2318,7 +2403,7 @@
       "direct": "Devices on the same network, a VPN or a forwarded port will reach this computer directly.",
       "terminal": "Paired devices will be able to run any command on this computer.",
       "discoverable": "Devices signed in to your Kettu account will be able to find this computer and ask to be added.",
-      "relay": "Devices will reach this computer through the Kettu relay from any network.",
+      "relay": "Changes which relay your devices reach this computer through from other networks.",
       "proxy": "Agents, npx and updates will go through this proxy.",
       "source": "Changes where Kettu downloads its updates from."
     }

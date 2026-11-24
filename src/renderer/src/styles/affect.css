@@ -4382,6 +4382,132 @@ li[data-row-exit='dust'] > * {
 :is(.kettu-settings, .kettu-sd) .k-dot[data-tone='ok'] {
   background: var(--success);
 }
+:is(.kettu-settings, .kettu-sd) .k-dot[data-tone='bad'] {
+  background: var(--danger);
+}
+
+/* Relay: three cards, the own relay's form or its state drawn inside its card */
+.kettu-settings .k-relay {
+  display: grid;
+  gap: 8px;
+}
+.kettu-settings .k-relay-choices {
+  gap: 8px;
+}
+.kettu-settings .k-relay-choice {
+  border-radius: 12px;
+  background: var(--card);
+  box-shadow: inset 0 0 0 0.5px var(--line-strong);
+  transition:
+    background-color var(--duration-fast) ease,
+    box-shadow var(--duration-fast) ease;
+}
+.kettu-settings .k-relay-choice:not([data-checked]):not([data-disabled]):hover {
+  box-shadow: inset 0 0 0 0.5px var(--edge-active);
+}
+.kettu-settings .k-relay-choice[data-checked] {
+  background: var(--accent-soft);
+  box-shadow: inset 0 0 0 1.5px var(--switch-on);
+}
+.kettu-settings .k-relay-choice > .k-relay-tile,
+.kettu-settings .k-relay-choice > .k-relay-tile:hover,
+.kettu-settings .k-relay-choice > .k-relay-tile[data-checked] {
+  gap: 10px;
+  padding: 11px 12px;
+  border-radius: 12px;
+  background: transparent;
+  box-shadow: none;
+  font-size: 13px;
+  line-height: 18px;
+  color: var(--ink);
+  cursor: default;
+}
+.kettu-settings .k-relay-choice > .k-relay-tile > [aria-hidden] {
+  margin-top: 1px;
+}
+.kettu-settings .k-relay-tile .k-row-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.kettu-settings .k-relay-body {
+  display: grid;
+  gap: 12px;
+  padding: 0 12px 12px 38px;
+}
+.kettu-settings .k-relay-field .k-relay-input.ui-sg-input {
+  width: 100%;
+}
+.kettu-settings .k-relay-secret {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.kettu-settings .k-relay-hint {
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 16px;
+  color: var(--muted);
+}
+.kettu-settings .k-relay-hint[data-bad] {
+  color: var(--danger);
+}
+.kettu-settings .k-relay-hint .k-mono {
+  font-family: var(--code-face);
+  font-size: 11.5px;
+}
+.kettu-settings .k-relay-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.kettu-settings .k-relay-docs {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+.kettu-settings .k-relay-buttons {
+  display: inline-flex;
+  gap: 8px;
+}
+.kettu-settings .k-relay-table {
+  border-radius: 10px;
+  background: var(--card);
+  box-shadow: inset 0 0 0 0.5px var(--line);
+}
+.kettu-settings .k-relay-line {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-height: 52px;
+  padding: 8px 10px 8px 14px;
+}
+.kettu-settings .k-relay-line + .k-relay-line {
+  box-shadow: inset 0 0.5px 0 var(--line);
+}
+.kettu-settings .k-relay-line > .ui-sg-label {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+.kettu-settings .k-relay-line .k-mono {
+  font-family: var(--code-face);
+  font-size: 12.5px;
+}
+.kettu-settings .k-relay-line .k-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.kettu-settings .k-relay-body .k-inset {
+  margin: 0;
+}
+.kettu-settings .k-relay .kettu-sd__steps {
+  padding-top: 4px;
+}
 :is(.kettu-settings, .kettu-sd) .k-row-note {
   margin: -6px 12px 0 16px;
   padding-bottom: 12px;
@@ -4622,7 +4748,7 @@ li[data-row-exit='dust'] > * {
   font-weight: 500;
   color: var(--ink);
 }
-.kettu-sd .kettu-sd__steps {
+:is(.kettu-settings, .kettu-sd) .kettu-sd__steps {
   display: flex;
   flex-direction: column;
   margin: 0;
@@ -4630,7 +4756,7 @@ li[data-row-exit='dust'] > * {
   list-style: none;
   box-shadow: inset 0 0.5px 0 var(--line);
 }
-.kettu-sd .kettu-sd__step {
+:is(.kettu-settings, .kettu-sd) .kettu-sd__step {
   display: flex;
   align-items: flex-start;
   gap: 10px;
@@ -4639,29 +4765,29 @@ li[data-row-exit='dust'] > * {
   line-height: 18px;
   color: var(--ink);
 }
-.kettu-sd .kettu-sd__step-mark {
+:is(.kettu-settings, .kettu-sd) .kettu-sd__step-mark {
   display: grid;
   flex: none;
   width: 16px;
   height: 18px;
   place-items: center;
 }
-.kettu-sd .kettu-sd__step[data-state='done'] .kettu-sd__step-mark {
+:is(.kettu-settings, .kettu-sd) .kettu-sd__step[data-state='done'] .kettu-sd__step-mark {
   color: var(--success);
 }
-.kettu-sd .kettu-sd__step[data-state='failed'] .kettu-sd__step-mark {
+:is(.kettu-settings, .kettu-sd) .kettu-sd__step[data-state='failed'] .kettu-sd__step-mark {
   color: var(--danger);
 }
-.kettu-sd .kettu-sd__step[data-state='pending'] {
+:is(.kettu-settings, .kettu-sd) .kettu-sd__step[data-state='pending'] {
   color: var(--muted);
 }
-.kettu-sd .kettu-sd__step-ring {
+:is(.kettu-settings, .kettu-sd) .kettu-sd__step-ring {
   width: 8px;
   height: 8px;
   border-radius: 50%;
   box-shadow: inset 0 0 0 1.5px var(--line-strong);
 }
-.kettu-sd .kettu-sd__step-text {
+:is(.kettu-settings, .kettu-sd) .kettu-sd__step-text {
   display: flex;
   min-width: 0;
   flex-direction: column;

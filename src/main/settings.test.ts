@@ -2,10 +2,16 @@ import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { splitSettingsPatch } from '@shared/remote/host-admin'
+import { hostSettingsPart, splitSettingsPatch, withHostSettings } from '@shared/remote/host-admin'
 import { DEFAULT_SETTINGS } from '@shared/settings'
 import { SettingsStore } from './settings'
-import { hostSettings, mergeSettings, validateSettingsPatch } from './settings-schema'
+import {
+  effectiveDirect,
+  hostSettings,
+  mergeSettings,
+  validateSettingsPatch,
+  withOwnRelay,
+} from './settings-schema'
 
 let dir: string
 
@@ -751,5 +757,90 @@ describe('the pages the sidebar lists', () => {
     const shown = mergeSettings(hidden, { appearance: { sidebarHidden: ['overview'] } })
     expect(shown.appearance.sidebarHidden).toEqual(['overview'])
     expect(shown.appearance.sidebarOrder).toEqual(ALL)
+  })
+})
+
+describe('the relay a host uses', () => {
+  const own = { url: 'https://relay.example.com', pin: null }
+
+  it('reads a file from before the own relay, whose relay is a switch', async () => {
+    await save({ version: 1, remote: { relay: true } })
+    expect((await SettingsStore.load(dir)).get().remote.relay).toBe('kettu')
+    await save({ version: 1, remote: { relay: false } })
+    expect((await SettingsStore.load(dir)).get().remote.relay).toBe('off')
+  })
+
+  it('keeps the own relay with its address, and goes without a relay without one', async () => {
+    await save({ version: 1, remote: { relay: 'own', ownRelay: own } })
+    expect((await SettingsStore.load(dir)).get().remote).toMatchObject({
+      relay: 'own',
+      ownRelay: own,
+    })
+    await save({ version: 1, remote: { relay: 'own' } })
+    expect((await SettingsStore.load(dir)).get().remote.relay).toBe('off')
+    // A Kettu address or plain http to another computer is never kept as the owner's relay.
+    for (const url of ['https://relay.kettu.sh', 'http://203.0.113.7:8080']) {
+      await save({ version: 1, remote: { relay: 'own', ownRelay: { url, pin: null } } })
+      expect((await SettingsStore.load(dir)).get().remote).toMatchObject({
+        relay: 'off',
+        ownRelay: null,
+      })
+    }
+  })
+
+  it('takes the switch of older clients and the choice in a change', () => {
+    const before = structuredClone(DEFAULT_SETTINGS)
+    expect(
+      mergeSettings(before, validateSettingsPatch({ remote: { relay: false } })).remote.relay,
+    ).toBe('off')
+    expect(
+      mergeSettings(before, validateSettingsPatch({ remote: { relay: true } })).remote.relay,
+    ).toBe('kettu')
+    expect(() => validateSettingsPatch({ remote: { relay: 'elsewhere' } })).toThrow()
+    // The own relay is chosen only once its check passed, which gives it its address.
+    expect(() =>
+      mergeSettings(before, validateSettingsPatch({ remote: { relay: 'own' } })),
+    ).toThrow()
+    expect(() => validateSettingsPatch({ remote: { ownRelay: own } })).toThrow()
+    const checked = withOwnRelay(before, own)
+    expect(checked.remote).toMatchObject({ relay: 'own', ownRelay: own })
+    expect(
+      mergeSettings(checked, validateSettingsPatch({ remote: { relay: 'kettu' } })).remote,
+    ).toMatchObject({ relay: 'kettu', ownRelay: own })
+    expect(() => withOwnRelay(before, { url: 'https://relay.kettu.sh', pin: null })).toThrow()
+  })
+
+  it('holds direct connections on with no relay, and frees them on the own relay', () => {
+    const on = structuredClone(DEFAULT_SETTINGS)
+    on.remote.enabled = true
+    on.remote.direct.enabled = false
+    expect(effectiveDirect({ ...on, remote: { ...on.remote, relay: 'off' } }, true).enabled).toBe(
+      true,
+    )
+    expect(
+      effectiveDirect({ ...on, remote: { ...on.remote, relay: 'kettu' } }, false).enabled,
+    ).toBe(true)
+    expect(
+      effectiveDirect({ ...on, remote: { ...on.remote, relay: 'own', ownRelay: own } }, false)
+        .enabled,
+    ).toBe(false)
+  })
+
+  it('tells older clients a switch and newer ones the choice', () => {
+    const file = withOwnRelay(structuredClone(DEFAULT_SETTINGS), own)
+    const part = hostSettingsPart(file)
+    expect(part.remote).toMatchObject({ relay: false, relayChoice: 'own', ownRelay: own })
+    expect(withHostSettings(structuredClone(DEFAULT_SETTINGS), part).remote).toMatchObject({
+      relay: 'own',
+      ownRelay: own,
+    })
+    // A host from before sends its switch alone.
+    const older = { ...part, remote: { ...part.remote, relay: true } }
+    delete (older.remote as { relayChoice?: unknown }).relayChoice
+    delete (older.remote as { ownRelay?: unknown }).ownRelay
+    expect(withHostSettings(structuredClone(DEFAULT_SETTINGS), older).remote).toMatchObject({
+      relay: 'kettu',
+      ownRelay: null,
+    })
   })
 })

@@ -578,8 +578,9 @@ export type MainToRemoteHost =
       /** The Ed25519 seed to sign in to the relay with, in base64. Never logged. */
       relayKey?: string
     }
-  // Use the Kettu relay turned on or off.
-  | { type: 'remote-host:relay'; enabled: boolean }
+  // Use the Kettu relay turned on or off, or the owner's own relay chosen, changed or left, which
+  // `own` gives in place of the Kettu relay.
+  | { type: 'remote-host:relay'; enabled: boolean; own?: OwnRelayInit | null }
   // Whether devices of the account find this host on the relay; off ends the open request.
   | { type: 'remote-host:discoverable'; enabled: boolean }
   // The owner's answer to a discovery request, with the name to add the device under.
@@ -662,6 +663,14 @@ export type MainToRemoteHost =
   // Tells every device why, then stops.
   | { type: 'remote-host:shutdown'; reason: RemoteHostStopReason }
 
+/** A relay the owner runs, which the host signs in to alone, with its access key. */
+export interface OwnRelayInit {
+  url: string
+  pin: string | null
+  /** The relay's access key. Never logged. */
+  key: string
+}
+
 /** What the remote host starts the relay with. */
 export interface RelayInit {
   /** The main relay's origin, which lists the regions. */
@@ -680,6 +689,8 @@ export interface RelayInit {
    * null or absent before. Never logged.
    */
   relayToken?: string | null
+  /** The owner's own relay, used in place of the Kettu relay; null or absent for none. */
+  own?: OwnRelayInit | null
 }
 
 /** What the remote host reports to main, for Settings. */
@@ -703,6 +714,18 @@ export interface RemoteHostStatus {
   sshPort?: number | null
   /** Each relay the host signs in to and how it is doing; none while it signs in to none. */
   relays: RelayStatus[]
+  /** The owner's own relay while it is the one in use, as its `GET /v1` and pings say. */
+  ownRelay?: OwnRelayStatus
+}
+
+/** What Settings shows of the owner's own relay beside its connection. */
+export interface OwnRelayStatus {
+  /** The relay program's version, null until it says. */
+  version: string | null
+  /** The host's round trip to it in milliseconds, null before the first. */
+  rtt: number | null
+  /** It serves the web client, which a browser pairs on. */
+  web: boolean
 }
 
 /** Direct connections, as the remote host runs them. */
