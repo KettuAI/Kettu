@@ -94,8 +94,7 @@ export const MARKET_TOOLS: Tool[] = [
     description:
       'Checks a folder before it is published to the Kettu Marketplace, uploading nothing. It ' +
       'tells what the folder is (a skill with SKILL.md, a workflow with workflow.yaml and an ' +
-      'optional README.md, a Claude Code plugin with .claude-plugin/plugin.json, a Codex plugin ' +
-      'with .codex-plugin/plugin.json, an MCP server with server.json, or an MCP bundle .mcpb ' +
+      'optional README.md, an MCP server with server.json, or an MCP bundle .mcpb ' +
       'file), its name, description and version, the files that would upload and their size, ' +
       'what an install adds and runs (for a workflow, its steps, those that wait for the user and ' +
       'the MCP servers and Skills they name), whether the user published it before, and every ' +
@@ -125,7 +124,7 @@ export const MARKET_TOOLS: Tool[] = [
       'answered yet, call it again with the same arguments, which shows no second card and returns ' +
       'what became of this one, even when they answered between calls. If they choose Not now or ' +
       'do not answer, nothing is uploaded and it is kept as a draft they can publish later: do ' +
-      'not publish it again unless they ask. Plugins and MCP servers take the version in their ' +
+      'not publish it again unless they ask. An MCP server takes the version in its ' +
       'manifest; a skill or a workflow gets 1.0.0 first, then the next patch version unless you ' +
       'pass one. For a new version, write short notes on what changed. Pass path, or for a ' +
       'task’s workflow Kettu asked you to publish, workflow and from_task.',
@@ -725,7 +724,7 @@ export class MarketTools {
     }
     const same = mine?.listings.find((listing) => listing.slug === check.slug) ?? null
     let listing: MineListing | null = null
-    if (same && (same.kind !== check.kind || (same.harness ?? null) !== check.harness)) {
+    if (same && same.kind !== check.kind) {
       problems.push(
         problemWith(undefined, (say) =>
           say('marketPublish.check.otherKind', { listing: listingName(same) }),
@@ -802,9 +801,7 @@ export class MarketTools {
     const { check, listing, problems } = plan
     const lines: string[] = []
     if (check.kind && check.name) {
-      const kind = check.harness
-        ? `${check.harness === 'codex' ? 'Codex' : 'Claude Code'} plugin`
-        : KIND_NAMES[check.kind]
+      const kind = KIND_NAMES[check.kind]
       lines.push(
         `${problems.length === 0 ? 'Ready to publish' : 'Not ready to publish'}: the ${kind} ` +
           `"${check.name}" (${check.slug}) ${plan.version ?? ''}, ${check.files.length} files, ` +
@@ -829,7 +826,6 @@ export class MarketTools {
       structuredContent: {
         ready: problems.length === 0,
         kind: check.kind,
-        harness: check.harness,
         name: check.name,
         slug: check.slug,
         description: check.description,
@@ -986,7 +982,7 @@ export class MarketTools {
         name: check.name,
         slug: check.slug,
         kind: check.kind,
-        harness: check.harness,
+        harness: null,
         description: check.description ?? '',
       },
       listingId: listing?.id ?? null,
@@ -1050,7 +1046,6 @@ export class MarketTools {
       slug: check.slug!,
       name: check.name!,
       kind: check.kind!,
-      ...(check.harness ? { harness: check.harness } : {}),
       description: check.description ?? '',
       ...(check.about ? { about: check.about } : {}),
       version: plan.version!,

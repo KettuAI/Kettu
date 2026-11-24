@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { REMOVED_PLUGIN_METHODS } from '@shared/agent-host'
 import type { PortChannel } from '@shared/port-channel'
 import type { PortDevice } from '@shared/remote/device'
 import {
@@ -16,7 +17,7 @@ interface Answer {
   type: string
   id: number
   result?: unknown
-  error?: { code: string }
+  error?: { code: string; message?: string }
 }
 
 class FakePort implements PortChannel<unknown> {
@@ -64,6 +65,26 @@ function hub(): {
 const settle = () => new Promise((resolve) => setTimeout(resolve, 0))
 
 const SUMMARY = { dayStarts: [1, 2, 3], from: 1, to: 4, scope: 'computer' }
+
+describe('a method that managed harness plugins', () => {
+  it('answers that Kettu no longer manages them, and runs nothing', async () => {
+    const { hub: h, calls } = hub()
+    const port = new FakePort()
+    h.add(port, DEVICE)
+    REMOVED_PLUGIN_METHODS.forEach((method, id) => port.request(id, method, {}))
+    await settle()
+    expect(calls).toEqual([])
+    REMOVED_PLUGIN_METHODS.forEach((_, id) => {
+      expect(port.answer(id)).toMatchObject({
+        type: 'error',
+        error: {
+          code: 'unavailable',
+          message: expect.stringMatching(/no longer manages .* plugins/) as string,
+        },
+      })
+    })
+  })
+})
 
 describe("a paired device's requests", () => {
   it('share one answer while the same read with the same params is in flight', async () => {

@@ -25,23 +25,18 @@ import type { DeviceFileContent, FileContent, FileList, FileSearch, FileWritten 
 import type { ArtifactContentFile, BackgroundWork } from './host-control'
 import type { IdleReleaseState } from './idle-release'
 import type {
+  AgentOwnPlugins,
   CatalogServer,
   ConnectStart,
-  InstalledPlugin,
   MarketCatalog,
   MarketConnection,
   MarketConnections,
   MarketKeyState,
-  MarketPlugins,
   MarketSearch,
   MarketSkill,
   MarketSkillRepository,
   MarketSkills,
   McpOAuth,
-  PluginDetails,
-  PluginLogo,
-  PluginMarketplace,
-  PluginScope,
   SkillSource,
 } from './marketplace'
 import type {
@@ -1190,35 +1185,8 @@ export interface HostContract {
   // Clears a server's tokens and keeps the server; every agent loses it at once.
   'market.disconnect': { params: { serverId: string }; result: void }
   'market.connections': { params: void; result: MarketConnections }
-  // Plugins from Claude Code's and Codex's own marketplaces, and the ones each agent has installed;
-  // adds Claude's official marketplace to an agent that has none, as Claude Code does on first start.
-  'market.plugins': { params: { refresh?: boolean; cached?: boolean }; result: MarketPlugins }
-  'market.pluginDetails': { params: { agentId: AgentId; pluginId: string }; result: PluginDetails }
-  'market.pluginLogo': { params: { pluginId: string }; result: PluginLogo }
-  // Installs, removes or switches a plugin through the agent's own harness, in its configuration.
-  'market.installPlugin': {
-    params: { agentId: AgentId; pluginId: string; scope: PluginScope; projectPath?: string }
-    result: InstalledPlugin
-  }
-  'market.uninstallPlugin': {
-    params: { agentId: AgentId; pluginId: string; scope: PluginScope; projectPath?: string }
-    result: void
-  }
-  'market.setPluginEnabled': {
-    params: {
-      agentId: AgentId
-      pluginId: string
-      enabled: boolean
-      scope: PluginScope
-      projectPath?: string
-    }
-    result: void
-  }
-  'market.addMarketplace': {
-    params: { agentId: AgentId; source: string }
-    result: PluginMarketplace
-  }
-  'market.removeMarketplace': { params: { agentId: AgentId; name: string }; result: void }
+  // The plugins each Claude Code and Codex agent has of its own, which Kettu only lists.
+  'market.ownPlugins': { params: { refresh?: boolean }; result: AgentOwnPlugins }
   // The skills catalog and each agent's own skills.
   'market.skills': { params: { refresh?: boolean; cached?: boolean }; result: MarketSkills }
   // One repository of the skills catalog, `<owner>/<repo>`, read as market.skills reads each.
@@ -1264,14 +1232,8 @@ export interface HostContract {
   // A workflow listing's flow for its page, before it is added: only the current version's
   // `workflow.yaml` is read, checked and parsed; nothing is kept on the host or run.
   'market.communityWorkflow': { params: { id: string }; result: CommunityWorkflow }
-  // The plugins installed from the Kettu Marketplace, and where every installed item stands.
+  // Where every item installed from the Kettu Marketplace stands with its listing.
   'market.communityInstalled': { params: { refresh?: boolean }; result: CommunityInstalled }
-  // Downloads a plugin listing's current version, checks every file, and installs or updates it
-  // in the agent through its harness. Skills come through market.addSkill.
-  'market.installCommunityPlugin': {
-    params: { id: string; agentId: AgentId; scope: PluginScope; projectPath?: string }
-    result: InstalledPlugin
-  }
   // Downloads a workflow listing's current version, checks every file and the workflow, and writes
   // it into the workflow library unapproved, in place of the version it has of the listing.
   'market.addCommunityWorkflow': { params: { id: string }; result: WireWorkflowEntry }
@@ -2098,6 +2060,22 @@ export type DeviceResult<M extends HostMethod> = HostContract[M] extends { devic
   ? R
   : HostResult<M>
 
+/**
+ * The methods that managed Claude Code's and Codex's plugins, which Kettu no longer does. A host
+ * answers them with an error that says so.
+ */
+export const REMOVED_PLUGIN_METHODS = [
+  'market.plugins',
+  'market.pluginDetails',
+  'market.pluginLogo',
+  'market.installPlugin',
+  'market.uninstallPlugin',
+  'market.setPluginEnabled',
+  'market.addMarketplace',
+  'market.removeMarketplace',
+  'market.installCommunityPlugin',
+] as const
+
 export const HOST_METHODS = [
   'agents.list',
   'agents.check',
@@ -2148,14 +2126,7 @@ export const HOST_METHODS = [
   'market.cancelConnect',
   'market.disconnect',
   'market.connections',
-  'market.plugins',
-  'market.pluginDetails',
-  'market.pluginLogo',
-  'market.installPlugin',
-  'market.uninstallPlugin',
-  'market.setPluginEnabled',
-  'market.addMarketplace',
-  'market.removeMarketplace',
+  'market.ownPlugins',
   'market.skills',
   'market.skillRepository',
   'market.addSkill',
@@ -2168,7 +2139,6 @@ export const HOST_METHODS = [
   'market.communityListing',
   'market.communityWorkflow',
   'market.communityInstalled',
-  'market.installCommunityPlugin',
   'market.addCommunityWorkflow',
   'market.reportCommunity',
   'market.bundlePrepare',

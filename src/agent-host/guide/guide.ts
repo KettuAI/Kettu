@@ -211,8 +211,8 @@ export function serviceInstructions(flags: GuideFlags): string {
       : []),
     ...(flags.market
       ? [
-          "Marketplace: the marketplace_* tools publish the user's own skills, workflows, " +
-            'plugins and MCP servers to the Kettu Marketplace, only when the user asks; each ' +
+          "Marketplace: the marketplace_* tools publish the user's own skills, workflows " +
+            'and MCP servers to the Kettu Marketplace, only when the user asks; each ' +
             "publish waits for the user's answer in a card. Topic marketplace.",
         ]
       : []),

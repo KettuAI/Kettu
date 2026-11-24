@@ -3,21 +3,18 @@ import type { KettuApi } from '@shared/ipc'
 import type { HostEvent } from '@shared/agent-host'
 import {
   MARKET_KEPT_MS,
+  type AgentOwnPlugins,
   type ConnectStart,
   type MarketCatalog,
   type MarketConnections,
   type MarketKeyState,
   type MarketKeysPatch,
-  type MarketPlugins,
   type MarketSearch,
   type MarketSkillRepository,
   type MarketSkills,
-  type PluginDetails,
-  type PluginLogo,
 } from '@shared/marketplace'
 import type { CommunityInstalled, CommunityItem, CommunityListing } from '@shared/market-community'
 import type { PublishKind } from '@shared/market-publish'
-import type { AgentId } from '@shared/thread'
 import { errorMessage, host, type HostRequest } from '@renderer/lib/host'
 
 /** How long the directory's Community and the installed items' standings are shown before a visit reads them again. */
@@ -81,12 +78,6 @@ export interface ConnectFlow {
 
 export type ConnectionEvent = Extract<HostEvent, { type: 'market.connectionChanged' }>
 
-/** What a plugin adds as one agent's harness reports it, or why it could not say. */
-export interface DetailsState {
-  details: PluginDetails | null
-  error: string | null
-}
-
 export interface MarketplaceStore {
   /** The MCP catalog the host last answered with; null until it has. */
   catalog: MarketCatalog | null
@@ -102,14 +93,10 @@ export interface MarketplaceStore {
   connectionsError: string | null
   /** By server id. */
   connecting: Record<string, ConnectFlow>
-  /** The harnesses' plugins, installed ones and marketplaces; null until the host answers. */
-  plugins: MarketPlugins | null
-  pluginsError: string | null
-  pluginsLoading: boolean
-  /** By `detailsKey`. */
-  details: Record<string, DetailsState>
-  /** Codex plugins' own logos, by plugin id. */
-  logos: Record<string, PluginLogo | 'loading'>
+  /** The plugins the agents have of their own; null until the host answers. */
+  ownPlugins: AgentOwnPlugins | null
+  ownPluginsError: string | null
+  ownPluginsLoading: boolean
   /** The skills catalog and the agents' own skills; null until the host answers. */
   skills: MarketSkills | null
   skillsError: string | null
@@ -138,9 +125,7 @@ export interface MarketplaceStore {
   loadKeys(): Promise<void>
   setKeys(patch: MarketKeysPatch): Promise<void>
   loadConnections(): Promise<void>
-  loadPlugins(refresh?: boolean, cached?: boolean): Promise<void>
-  loadDetails(agentId: AgentId, pluginId: string): Promise<void>
-  loadLogo(pluginId: string): Promise<void>
+  loadOwnPlugins(refresh?: boolean): Promise<void>
   /** A `cached` answer that lacks a repository, or holds an old one, has each read on its own. */
   loadSkills(refresh?: boolean, cached?: boolean): Promise<void>
   /** Reads one repository of the skills catalog into the skills shown, such as on Retry. */
@@ -159,8 +144,6 @@ export interface MarketplaceStore {
 
 export type MarketplaceStoreHook = UseBoundStore<StoreApi<MarketplaceStore>>
 
-export const detailsKey = (agentId: AgentId, pluginId: string): string => `${agentId}|${pluginId}`
-
 /** The skills shown with one repository's as just read, in the catalog's order. */
 function withRepository(skills: MarketSkills, read: MarketSkillRepository): MarketSkills {
   const repositories = (skills.repositories ?? []).map((r) =>
@@ -176,9 +159,8 @@ function withRepository(skills: MarketSkills, read: MarketSkillRepository): Mark
   }
 }
 
-/** The key of an install or change under way: an MCP server's, a plugin's or a skill's. */
-export const busyKey = (kind: 'mcp' | 'plugin' | 'skill' | 'community', id: string): string =>
-  `${kind}:${id}`
+/** The key of an install or change under way: an MCP server's or a skill's. */
+export const busyKey = (kind: 'mcp' | 'skill' | 'community', id: string): string => `${kind}:${id}`
 
 /** The Marketplace of the host `request` reaches, whose keys `storeKeys` fills or clears. */
 export function createMarketplaceStore(
@@ -190,7 +172,7 @@ export function createMarketplaceStore(
   let searchRead = 0
   let keysRead = 0
   let connectionsRead = 0
-  let pluginsRead = 0
+  let ownPluginsRead = 0
   let skillsRead = 0
   // By scope key; a first page read voids any read of the same scope still on its way.
   const communityReads = new Map<string, number>()
@@ -199,7 +181,7 @@ export function createMarketplaceStore(
   let installedRead = 0
   let installedAt = 0
   // When each list was last known to be within the host's keeping time.
-  const readAt = { catalog: 0, plugins: 0, skills: 0 }
+  const readAt = { catalog: 0, skills: 0 }
   const params = (refresh: boolean, cached: boolean) =>
     refresh ? { refresh } : cached ? { cached } : {}
   const old = (kind: keyof typeof readAt) => Date.now() - readAt[kind] >= MARKET_KEPT_MS[kind]
@@ -213,11 +195,9 @@ export function createMarketplaceStore(
     connections: null,
     connectionsError: null,
     connecting: {},
-    plugins: null,
-    pluginsError: null,
-    pluginsLoading: false,
-    details: {},
-    logos: {},
+    ownPlugins: null,
+    ownPluginsError: null,
+    ownPluginsLoading: false,
     skills: null,
     skillsError: null,
     skillsLoading: false,
@@ -233,10 +213,6 @@ export function createMarketplaceStore(
       if (!s.catalogLoading) {
         if (!s.catalog) void s.loadCatalog(false, true)
         else if (s.catalog.error || old('catalog')) void s.loadCatalog()
-      }
-      if (!s.pluginsLoading) {
-        if (!s.plugins) void s.loadPlugins(false, true)
-        else if (s.pluginsError || old('plugins')) void s.loadPlugins()
       }
       if (!s.skillsLoading) {
         if (!s.skills) void s.loadSkills(false, true)
@@ -300,45 +276,16 @@ export function createMarketplaceStore(
         if (id === connectionsRead) set({ connectionsError: errorMessage(e) })
       }
     },
-    async loadPlugins(refresh = false, cached = false) {
-      const id = ++pluginsRead
-      set({ pluginsLoading: true, pluginsError: null })
+    async loadOwnPlugins(refresh = false) {
+      const id = ++ownPluginsRead
+      set({ ownPluginsLoading: true, ownPluginsError: null })
       try {
-        const plugins = await request('market.plugins', params(refresh, cached))
-        if (id !== pluginsRead) return
-        set({ plugins, pluginsLoading: !!plugins.stale })
-        if (plugins.stale) void get().loadPlugins()
-        else readAt.plugins = Date.now()
+        const ownPlugins = await request('market.ownPlugins', refresh ? { refresh } : {})
+        if (id === ownPluginsRead) set({ ownPlugins, ownPluginsLoading: false })
       } catch (e) {
-        if (id === pluginsRead) set({ pluginsError: errorMessage(e), pluginsLoading: false })
+        if (id === ownPluginsRead)
+          set({ ownPluginsError: errorMessage(e), ownPluginsLoading: false })
       }
-    },
-    async loadDetails(agentId, pluginId) {
-      const key = detailsKey(agentId, pluginId)
-      const known = get().details[key]
-      if (known && (known.details || !known.error)) return
-      set((s) => ({ details: { ...s.details, [key]: { details: null, error: null } } }))
-      try {
-        const details = await request('market.pluginDetails', { agentId, pluginId })
-        set((s) => ({ details: { ...s.details, [key]: { details, error: null } } }))
-      } catch (e) {
-        set((s) => ({
-          details: { ...s.details, [key]: { details: null, error: errorMessage(e) } },
-        }))
-      }
-    },
-    async loadLogo(pluginId) {
-      if (get().logos[pluginId]) return
-      set((s) => ({ logos: { ...s.logos, [pluginId]: 'loading' } }))
-      let logo: PluginLogo
-      try {
-        logo = await request('market.pluginLogo', { pluginId })
-      } catch (e) {
-        // The tile falls back to the plugin's glyph; the reason goes to the console.
-        console.warn(`Could not read the logo of ${pluginId}: ${errorMessage(e)}`)
-        logo = { light: null, dark: null }
-      }
-      set((s) => ({ logos: { ...s.logos, [pluginId]: logo } }))
     },
     async loadCommunity(scope, refresh = false) {
       const key = communityScopeKey(scope)
@@ -534,14 +481,6 @@ export function setBusy(store: MarketplaceStoreHook, key: string, busy: boolean)
 export function marketKeysChanged(store: MarketplaceStoreHook = useMarketplaceStore): void {
   const state = store.getState()
   if (state.keys !== null) void state.loadKeys()
-}
-
-/** Changes the plugins the host last listed, as an install, uninstall or switch answered. */
-export function updatePlugins(
-  store: MarketplaceStoreHook,
-  change: (plugins: MarketPlugins) => MarketPlugins,
-): void {
-  store.setState((s) => (s.plugins ? { plugins: change(s.plugins) } : s))
 }
 
 /** Shows a Connect's progress; null ends it. */

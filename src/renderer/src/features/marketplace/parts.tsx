@@ -17,9 +17,7 @@ import { useWindowHostAway } from '@renderer/stores/window-host'
 export function MarketAway({ children }: { children: ReactNode }) {
   const { useMarketplaceStore } = useHostScope()
   const away = useWindowHostAway() !== null
-  const read = useMarketplaceStore(
-    (s) => s.catalog !== null || s.plugins !== null || s.skills !== null,
-  )
+  const read = useMarketplaceStore((s) => s.catalog !== null || s.skills !== null)
   return (
     <>
       <WindowHostAway read={read} className="mb-4" />

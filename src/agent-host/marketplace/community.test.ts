@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto'
-import { lstat, mkdir, mkdtemp, readdir, readFile, realpath, rm, writeFile } from 'node:fs/promises'
+import { mkdtemp, readdir, readFile, rm } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
@@ -10,16 +10,8 @@ import type {
   MineListing,
   VersionFile,
 } from '@shared/market-publish'
-import type { InstalledPlugin } from '@shared/marketplace'
-import type { AgentId } from '@shared/thread'
 import { setLocale } from '../i18n'
-import {
-  communityFile,
-  MarketCommunityService,
-  safeFilePath,
-  writeFolder,
-  type LocalMarketplace,
-} from './community'
+import { MarketCommunityService, safeFilePath, writeFolder } from './community'
 import { WorkflowLibrary, workflowsFile } from '../workflow/library'
 import { WorkflowTools } from '../workflow/tools'
 import { MarketCallError } from './publish-tools'
@@ -77,9 +69,6 @@ function mineListing(over: Partial<MineListing> = {}): MineListing {
   }
 }
 
-/** `~/.kettu/plugins` in the tests' home, beside the host's data. */
-const pluginsRoot = () => path.join(root, 'home', '.kettu', 'plugins')
-
 const sha = (data: string | Buffer) => createHash('sha256').update(data).digest('hex')
 
 const SKILL = '---\nname: changelog-writer\ndescription: One line per change.\n---\n\nWrite it.\n'
@@ -110,16 +99,12 @@ function service(
   f: Fake,
   extra: {
     account?: MarketAccount | null
-    installs?: { agentId: AgentId; local: LocalMarketplace; name: string }[]
-    installed?: boolean
     workflows?: WorkflowLibrary
     now?: () => number
   } = {},
 ) {
   return new MarketCommunityService({
     userDataPath: root,
-    pluginsRoot: pluginsRoot(),
-    file: communityFile(root, log),
     log,
     now: extra.now,
     account: () => (extra.account === undefined ? ACCOUNT : extra.account),
@@ -165,20 +150,6 @@ function service(
           throw new Error(`unexpected ${call.kind}`)
       }
     }) as never,
-    installPlugin: (agentId, local, name, scope) => {
-      extra.installs?.push({ agentId, local, name })
-      const plugin: InstalledPlugin = {
-        id: `${name}@kettu-marketplace`,
-        harness: 'claude-code',
-        agentId,
-        version: '1.0.0',
-        scope,
-        enabled: true,
-        projectPath: null,
-      }
-      return Promise.resolve(plugin)
-    },
-    pluginInstalled: () => Promise.resolve(extra.installed ?? false),
     installWorkflow: (text, origin) => {
       if (!extra.workflows) throw new Error('no workflow library')
       return extra.workflows.installListing(text, origin)
@@ -268,12 +239,10 @@ describe('writeFolder', () => {
 describe('MarketCommunityService', () => {
   it('reads no file and runs nothing before Install', async () => {
     const f = fake({ directory: [listing()] })
-    const installs: { agentId: AgentId; local: LocalMarketplace; name: string }[] = []
-    const community = service(f, { installs })
+    const community = service(f)
     await community.directory({})
     await community.listing('abcdefgh23')
     expect(f.calls.map((call) => call.kind).sort()).toEqual(['directory', 'listing', 'mine'])
-    expect(installs).toEqual([])
     expect(await written()).toEqual([])
   })
 
@@ -425,182 +394,16 @@ describe('MarketCommunityService', () => {
     expect(await written()).toEqual([])
   })
 
-  describe('plugins', () => {
-    const manifest = JSON.stringify({ name: 'hello', version: '1.0.0' })
-    const plugin = () =>
-      fake({
-        listings: {
-          abcdefgh23: listing({ kind: 'plugin', harness: 'claude-code', slug: 'hello' }),
-        },
-        files: { '.claude-plugin/plugin.json': manifest, 'commands/hi.md': 'Say hi' },
-      })
-
-    it('keeps the files in the harness’s local marketplace, which installs it', async () => {
-      const f = plugin()
-      const installs: { agentId: AgentId; local: LocalMarketplace; name: string }[] = []
-      const community = service(f, { installs })
-      await community.installPlugin('abcdefgh23', 'claude-code', 'user', null)
-      expect(installs).toHaveLength(1)
-      expect(installs[0]!.name).toBe('hello')
-      const local = community.local('claude-code')
-      const market = JSON.parse(await readFile(local.file, 'utf8')) as {
-        name: string
-        plugins: { name: string; source: string; version: string }[]
-      }
-      expect(market.name).toBe('kettu-marketplace')
-      expect(market.plugins).toEqual([
-        expect.objectContaining({ name: 'hello', source: './plugins/hello', version: '1.0.0' }),
-      ])
-      expect(
-        await readFile(path.join(local.dir, 'plugins', 'hello', 'commands', 'hi.md'), 'utf8'),
-      ).toBe('Say hi')
-      await community.flush()
-      const counts = f.calls.filter((call) => call.kind === 'install')
-      expect(counts).toEqual([
-        { kind: 'install', id: 'abcdefgh23', version: '1.0.0', reason: 'install' },
-      ])
-    })
-
-    it('counts a second install of the listing as an update', async () => {
-      const f = plugin()
-      const community = service(f)
-      await community.installPlugin('abcdefgh23', 'claude-code', 'user', null)
-      await community.installPlugin('abcdefgh23', 'claude-code', 'user', null)
-      await new Promise((resolve) => setTimeout(resolve, 0))
-      expect(f.calls.flatMap((call) => (call.kind === 'install' ? [call.reason] : []))).toEqual([
-        'install',
-        'update',
-      ])
-    })
-
-    it('refuses a tampered plugin before its harness or its folder sees it', async () => {
-      const f = plugin()
-      f.sent = { 'commands/hi.md': sha('other') }
-      const installs: { agentId: AgentId; local: LocalMarketplace; name: string }[] = []
-      await expect(
-        service(f, { installs }).installPlugin('abcdefgh23', 'claude-code', 'user', null),
-      ).rejects.toThrow()
-      expect(installs).toEqual([])
-      expect(await written()).toEqual([])
-    })
-
-    it('refuses a plugin for another harness', async () => {
-      const f = plugin()
-      await expect(service(f).installPlugin('abcdefgh23', 'codex', 'user', null)).rejects.toThrow()
-      expect(await written()).toEqual([])
-    })
-
-    it('keeps another listing’s plugin of the same name while an agent has it', async () => {
-      const f = plugin()
-      f.listings.otheraaaa2 = listing({
-        id: 'otheraaaa2',
-        kind: 'plugin',
-        harness: 'claude-code',
-        handle: 'mallory',
-        slug: 'hello',
-      })
-      const community = service(f, { installed: true })
-      await community.installPlugin('abcdefgh23', 'claude-code', 'user', null)
-      await expect(
-        community.installPlugin('otheraaaa2', 'claude-code', 'user', null),
-      ).rejects.toThrow(/@amigoer\/hello/)
-      const local = community.local('claude-code')
-      const market = JSON.parse(await readFile(local.file, 'utf8')) as {
-        plugins: { author: { name: string } }[]
-      }
-      expect(market.plugins.map((p) => p.author.name)).toEqual(['amigoer'])
-    })
-
-    it('keeps the local marketplace outside the app’s data, which may be removed without it', async () => {
-      const community = service(plugin())
-      await community.installPlugin('abcdefgh23', 'claude-code', 'user', null)
-      const local = community.local('claude-code')
-      expect(local.dir).toBe(path.join(pluginsRoot(), 'claude-code'))
-      expect(
-        await readFile(path.join(local.dir, 'plugins', 'hello', 'commands', 'hi.md'), 'utf8'),
-      ).toBe('Say hi')
-      expect((await written()).filter((file) => file.startsWith('marketplace'))).toEqual([])
-    })
-
-    it('keeps the plugins another Kettu data folder listed whose folders are still there', async () => {
-      const local = service(plugin()).local('claude-code')
-      await mkdir(path.join(local.dir, 'plugins', 'theirs'), { recursive: true })
-      await mkdir(path.dirname(local.file), { recursive: true })
-      await writeFile(
-        local.file,
-        JSON.stringify({
-          name: 'kettu-marketplace',
-          plugins: [
-            { name: 'theirs', source: './plugins/theirs', version: '2.0.0' },
-            { name: 'gone', source: './plugins/gone', version: '1.0.0' },
-          ],
-        }),
-      )
-      await service(plugin()).installPlugin('abcdefgh23', 'claude-code', 'user', null)
-      const market = JSON.parse(await readFile(local.file, 'utf8')) as {
-        plugins: { name: string; version: string }[]
-      }
-      expect(market.plugins.map((p) => [p.name, p.version])).toEqual([
-        ['hello', '1.0.0'],
-        ['theirs', '2.0.0'],
-      ])
-    })
-
-    it('moves the local marketplace kept in the app’s data before, leaving a link there', async () => {
-      const legacy = path.join(root, 'marketplace', 'kettu-plugins', 'claude-code')
-      await mkdir(path.join(legacy, 'plugins', 'hello'), { recursive: true })
-      await mkdir(path.join(legacy, '.claude-plugin'), { recursive: true })
-      await writeFile(path.join(legacy, 'plugins', 'hello', 'README.md'), 'Hi')
-      await writeFile(path.join(legacy, '.claude-plugin', 'marketplace.json'), '{"plugins":[]}')
-      const community = service(plugin())
-      expect(await community.moveLegacy()).toEqual(['claude-code'])
-      const local = community.local('claude-code')
-      expect(await readFile(path.join(local.dir, 'plugins', 'hello', 'README.md'), 'utf8')).toBe(
-        'Hi',
-      )
-      expect((await lstat(legacy)).isSymbolicLink()).toBe(true)
-      expect(await realpath(legacy)).toBe(await realpath(local.dir))
-      expect(await community.moveLegacy()).toEqual([])
-    })
-
-    it('adds what it moves to a local marketplace another data folder moved first', async () => {
-      const legacy = path.join(root, 'marketplace', 'kettu-plugins', 'claude-code')
-      await mkdir(path.join(legacy, 'plugins', 'hello', '.claude-plugin'), { recursive: true })
-      await writeFile(path.join(legacy, 'plugins', 'hello', '.claude-plugin', 'plugin.json'), '{}')
-      await mkdir(path.join(root, 'state'), { recursive: true })
-      await writeFile(
-        path.join(root, 'state', 'market-community.json'),
-        JSON.stringify({
-          version: 1,
-          plugins: {
-            abcdefgh23: {
-              listingId: 'abcdefgh23',
-              harness: 'claude-code',
-              name: 'hello',
-              version: '1.0.0',
-              handle: 'amigoer',
-              slug: 'hello',
-            },
-          },
-        }),
-      )
-      const community = service(plugin())
-      const local = community.local('claude-code')
-      await mkdir(path.join(local.dir, 'plugins', 'theirs'), { recursive: true })
-      await mkdir(path.dirname(local.file), { recursive: true })
-      await writeFile(
-        local.file,
-        JSON.stringify({ plugins: [{ name: 'theirs', source: './plugins/theirs' }] }),
-      )
-      expect(await community.moveLegacy()).toEqual(['claude-code'])
-      expect((await readdir(path.join(local.dir, 'plugins'))).sort()).toEqual(['hello', 'theirs'])
-      const market = JSON.parse(await readFile(local.file, 'utf8')) as {
-        plugins: { name: string }[]
-      }
-      expect(market.plugins.map((p) => p.name)).toEqual(['hello', 'theirs'])
-      expect(await realpath(legacy)).toBe(await realpath(local.dir))
-    })
+  it('offers no plugin listing: it is neither listed nor downloaded', async () => {
+    const plugin = listing({ kind: 'plugin', harness: 'claude-code', slug: 'hello' })
+    const f = fake({ listings: { abcdefgh23: plugin }, directory: [plugin] })
+    const community = service(f)
+    expect((await community.directory({})).items).toEqual([])
+    expect(await community.listing('abcdefgh23')).toEqual({ state: 'gone' })
+    await expect(community.download('abcdefgh23', 'plugin')).rejects.toThrow()
+    expect(f.calls.some((call) => call.kind === 'version' || call.kind === 'file')).toBe(false)
   })
+
   describe('workflows', () => {
     const WORKFLOW = `format: 1
 name: Release notes

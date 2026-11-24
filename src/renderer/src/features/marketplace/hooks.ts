@@ -1,17 +1,15 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
-import type { InstalledPlugin, MarketConnection, PluginHarness } from '@shared/marketplace'
+import type { MarketConnection } from '@shared/marketplace'
 import type { AgentId } from '@shared/thread'
 import { agentName, menuAgents, usableAgents } from '@renderer/stores/agents'
 import { useHostScope } from '@renderer/stores/host-scope'
 import { busyKey } from '@renderer/stores/marketplace'
-import { useProjectsStore } from '@renderer/stores/projects'
 import { count } from '@renderer/lib/format'
-import { hostOfPath } from '@renderer/lib/host-paths'
 import { listingIdOf } from '@shared/market-community'
 import { errorMessage } from '@renderer/lib/host'
-import { pluginInstalls, updateFor } from './model'
+import { updateFor } from './model'
 
 /** An agent's name on the host the page shows. */
 export function useAgentName(): (agentId: AgentId) => string {
@@ -23,14 +21,6 @@ export function useAgentName(): (agentId: AgentId) => string {
 export function useChoosableAgents() {
   const { useAgentsStore } = useHostScope()
   return useAgentsStore(useShallow((s) => menuAgents(s.order, s.byId)))
-}
-
-/** The agents of a harness that installs plugins itself. */
-export function useHarnessAgents(harness: PluginHarness) {
-  const { useAgentsStore } = useHostScope()
-  return useAgentsStore(
-    useShallow((s) => menuAgents(s.order, s.byId).filter((a) => a.harnessId === harness)),
-  )
 }
 
 /** Whether Kettu keeps the server with this id. */
@@ -52,20 +42,6 @@ export function useInstalling(id: string): boolean {
 export function useBusy(key: string): boolean {
   const { useMarketplaceStore } = useHostScope()
   return useMarketplaceStore((s) => s.busy.includes(key))
-}
-
-/** The agents' installs of a plugin, as the host last listed them. */
-export function usePluginInstalls(harness: PluginHarness, id: string): InstalledPlugin[] {
-  const { useMarketplaceStore } = useHostScope()
-  return useMarketplaceStore(useShallow((s) => pluginInstalls(s.plugins?.installed, harness, id)))
-}
-
-/** The host's projects, for a plugin installed into one project. */
-export function useHostProjects() {
-  const { hostId } = useHostScope()
-  return useProjectsStore(
-    useShallow((s) => s.projects.filter((p) => !p.missing && hostOfPath(p.path) === hostId)),
-  )
 }
 
 /** "12.3K installs" as the marketplace counts them. */

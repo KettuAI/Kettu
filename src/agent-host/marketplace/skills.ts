@@ -43,7 +43,6 @@ import { t } from '../i18n'
 import { JsonFile, type LogFn } from '../storage'
 import { kettuId } from '@shared/market-community'
 import type { MarketListing } from '@shared/market-publish'
-import { codexOwnSkills } from './codex-plugins'
 import { skillRoute, type SessionSkill } from './skill-tools'
 import { modeOf, type DownloadedFile } from './community'
 import { frontmatter } from './frontmatter'
@@ -1131,4 +1130,28 @@ async function readText(file: string): Promise<string | null> {
   } finally {
     await handle?.close()
   }
+}
+
+/**
+ * The skills Codex has of its own: the user's, the admin's and its plugins', without Codex's
+ * built-in ones and without those `isKettus` says Kettu hands it.
+ */
+function codexOwnSkills(
+  response: SkillsListResponse,
+  agentId: AgentId,
+  isKettus: (path: string) => boolean,
+): AgentOwnSkill[] {
+  const seen = new Set<string>()
+  return response.data
+    .flatMap((entry) => entry.skills)
+    .filter((skill) => skill.scope !== 'system' && !isKettus(skill.path))
+    .filter((skill) => !seen.has(skill.path) && seen.add(skill.path))
+    .map((skill) => ({
+      agentId,
+      name: skill.name,
+      description: skill.shortDescription ?? skill.description,
+      path: skill.path,
+      enabled: skill.enabled,
+      plugin: skill.pluginId ?? null,
+    }))
 }

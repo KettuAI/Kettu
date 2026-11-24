@@ -1301,10 +1301,10 @@
       "pathIsLink": "The path is a link. Give the folder it points to instead.",
       "folderOrBundle": "Publish a folder, or an MCP bundle (.mcpb) file.",
       "bundleTooLarge": "The bundle is larger than {{mb}} MB, the most a version may be.",
-      "bothPlugins": "The folder is both a Claude Code and a Codex plugin. Publish each from a folder of its own.",
+      "harnessPlugin": "Claude Code and Codex plugins are no longer published to the Kettu Marketplace.",
       "manyBundles": "The folder holds more than one MCP bundle. Keep one.",
       "fileTooLarge": "It is larger than {{mb}} MB, the most a version may be.",
-      "unknownFolder": "Kettu cannot tell what this folder is. A skill has a SKILL.md, a workflow a workflow.yaml, a plugin a .claude-plugin/plugin.json or .codex-plugin/plugin.json, and an MCP server a server.json.",
+      "unknownFolder": "Kettu cannot tell what this folder is. A skill has a SKILL.md, a workflow a workflow.yaml, and an MCP server a server.json.",
       "manifestTooLarge": "It is too large to be a manifest.",
       "aboutTooLong": "The description is longer than {{count}} characters.",
       "manifestName": "A file at the top may not be named manifest. Rename it.",
@@ -1325,9 +1325,6 @@
     "badPath": "The Kettu Marketplace named a file Kettu won’t write, {{path}}, so nothing was installed.",
     "tooLarge": "This version is larger than a version may be, so nothing was installed.",
     "otherKind": "This listing is another kind of item.",
-    "otherHarness": "This plugin is for another agent.",
-    "noManifest": "The plugin has no {{file}} with a name, so it can’t be installed.",
-    "nameTaken": "Another plugin named {{name}} from the Kettu Marketplace is installed ({{other}}). Uninstall it first.",
     "noWorkflow": "The listing has no workflow.yaml in UTF-8 text, so nothing was installed.",
     "notListing": "Not a listing of the Kettu Marketplace"
   },
@@ -1389,18 +1386,9 @@
     }
   },
   "marketPlugins": {
-    "notListedInstalled": "{{agent}} did not list {{id}} as installed",
-    "marketplaceNotListed": "{{agent}} did not list the marketplace it added",
-    "noSuchPlugin": "{{agent}} offers no plugin {{id}}",
-    "noPlugins": "Only Claude Code and Codex have plugins",
-    "codexUserOnly": "Codex installs plugins for the user only",
-    "scopeNeedsProject": "A project or local scope needs the project, and only it",
-    "marketplaceListNotJson": "Claude Code's marketplace list was not JSON",
-    "marketplaceListNotList": "Claude Code's marketplace list was not a list",
+    "removed": "Kettu no longer manages Claude Code and Codex plugins. Manage them in Claude Code or Codex.",
     "pluginListNotJson": "Claude Code's plugin list was not JSON",
     "pluginListNotObject": "Claude Code's plugin list was not an object",
-    "claudeNoResult": "Claude Code gave no result",
-    "claudeOutcome": "Claude Code answered {{outcome}}",
     "claudeFailed": "claude failed"
   },
   "report": {

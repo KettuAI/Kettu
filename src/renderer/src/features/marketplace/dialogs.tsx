@@ -12,8 +12,6 @@ import {
   type McpSpec,
   type McpValue,
 } from '@shared/marketplace'
-import type { AgentId } from '@shared/thread'
-import { AgentMark } from '@renderer/components/agents/agent-mark'
 import { Icon } from '@renderer/components/affect/app-shell'
 import { TextField } from '@renderer/components/affect/text-field'
 import {
@@ -42,7 +40,6 @@ import {
 import { errorMessage } from '@renderer/lib/host'
 import { useHostScope } from '@renderer/stores/host-scope'
 import {
-  addMarketplace,
   addServer,
   installSkill,
   setServerAgents,
@@ -50,7 +47,6 @@ import {
   uninstallServer,
   type AgentChoice,
 } from './actions'
-import { useHarnessAgents } from './hooks'
 import { AgentPicker, InputLabel } from './install'
 import { nameProblem, splitCommand } from './model'
 
@@ -387,117 +383,6 @@ export function ConfirmDialog({
   )
 }
 
-/** Adds a plugin marketplace to one Claude Code or Codex agent, from owner/repo or a Git URL. */
-export function AddMarketplaceDialog({
-  open,
-  onOpenChange,
-}: {
-  open: boolean
-  onOpenChange: (open: boolean) => void
-}) {
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <SettingsDialogContent>
-        {open && <AddMarketplaceForm onDone={() => onOpenChange(false)} />}
-      </SettingsDialogContent>
-    </Dialog>
-  )
-}
-
-function AddMarketplaceForm({ onDone }: { onDone: () => void }) {
-  const { t } = useTranslation(['marketplace', 'common'])
-  const scope = useHostScope()
-  const claude = useHarnessAgents('claude-code')
-  const codex = useHarnessAgents('codex')
-  const agents = [...claude, ...codex]
-  const id = useId()
-  const [agentId, setAgentId] = useState<AgentId | null>(agents[0]?.id ?? null)
-  const [source, setSource] = useState('')
-  const [busy, setBusy] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const ready = agentId !== null && source.trim() !== ''
-  const submit = async (event: FormEvent) => {
-    event.preventDefault()
-    if (!ready) return
-    setBusy(true)
-    setError(null)
-    try {
-      await addMarketplace(scope, agentId, source.trim())
-      onDone()
-    } catch (e) {
-      setError(errorMessage(e))
-    } finally {
-      setBusy(false)
-    }
-  }
-  return (
-    <form onSubmit={(event) => void submit(event)}>
-      <SettingsDialogHeader title={t('dialogs.marketplace.title')}>
-        {t('dialogs.marketplace.description')}
-      </SettingsDialogHeader>
-      <SettingsDialogBody>
-        <div className="kettu-sd__field">
-          <span className="k-mkt-values__label">{t('dialogs.marketplace.agent')}</span>
-          {agents.length === 0 ? (
-            <span className="kettu-sd__hint">{t('dialogs.marketplace.noAgents')}</span>
-          ) : (
-            <div
-              className="k-mkt-agents"
-              role="radiogroup"
-              aria-label={t('dialogs.marketplace.agent')}
-            >
-              {agents.map((agent) => (
-                <button
-                  key={agent.id}
-                  type="button"
-                  role="radio"
-                  aria-checked={agent.id === agentId}
-                  className="k-mkt-agents__agent"
-                  onClick={() => setAgentId(agent.id)}
-                >
-                  <AgentMark agent={agent.id} size={13} />
-                  <span className="k-mkt-agents__name">{agent.name}</span>
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-        <SettingsField
-          label={t('dialogs.marketplace.source')}
-          htmlFor={`${id}-source`}
-          hint={t('dialogs.marketplace.sourceHint')}
-        >
-          <input
-            id={`${id}-source`}
-            className={DIALOG_MONO_FIELD}
-            autoFocus
-            autoComplete="off"
-            spellCheck={false}
-            autoCapitalize="off"
-            placeholder={t('dialogs.marketplace.sourcePlaceholder')}
-            value={source}
-            onChange={(event) => setSource(event.target.value)}
-          />
-        </SettingsField>
-        {error && (
-          <p role="alert" className="kettu-sd__error" data-selectable="">
-            {t('dialogs.failed', { error })}
-          </p>
-        )}
-      </SettingsDialogBody>
-      <SettingsDialogFooter>
-        <DialogClose render={<SetButton size="md" variant="ghost" />}>
-          {t('common:actions.cancel')}
-        </DialogClose>
-        <SetButton size="md" variant="primary" type="submit" loading={busy} disabled={!ready}>
-          {t('dialogs.marketplace.submit')}
-        </SetButton>
-      </SettingsDialogFooter>
-    </form>
-  )
-}
-
-/** Adds a skill from a repository, or one folder of it, on GitHub. */
 export function AddSkillDialog({
   open,
   onOpenChange,

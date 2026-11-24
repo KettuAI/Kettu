@@ -201,3 +201,6 @@ export class RpcPeer {
 export function methodNotFound(method: string): RpcError {
   return new RpcError(METHOD_NOT_FOUND, `Kettu does not handle ${method}`)
 }
+
+/** A request of the agent's app-server. */
+export type CodexRequest = <T>(method: string, params?: unknown) => Promise<T>
