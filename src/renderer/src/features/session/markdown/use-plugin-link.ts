@@ -10,20 +10,32 @@ export interface PluginLink {
   card: PluginLinkCard
 }
 
+/** What a plugin said when its card did not come, for the plain link to say. */
+export interface PluginLinkFailure {
+  plugin: string
+  message: string
+}
+
 /**
- * Whether a link is one a plugin draws as a reference, and the card the plugin gave for it. The
- * card is asked for the first time the link scrolls into view, and never blocks the reply.
+ * Whether a link is one a plugin draws as a reference, and the card the plugin gave for it, or what
+ * the plugin said when it gave none. The card is asked for the first time the link scrolls into
+ * view, and never blocks the reply.
  */
 export function usePluginLink(
   url: string,
   anchor: RefObject<HTMLElement | null>,
-): PluginLink | null {
+): { link: PluginLink | null; failure: PluginLinkFailure | null } {
   const sessionId = useContext(SessionIdContext)
   const hostId = sessionId ? sessionHost(sessionId) : null
   const found = useLinkMatch(hostId, url)
   const seen = useOnScreen(anchor, found !== null)
   const state = useLinkCard(hostId, found, url, seen)
-  return found && state?.status === 'ready' ? { found, card: state.card } : null
+  if (!found) return { link: null, failure: null }
+  if (state?.status === 'ready') return { link: { found, card: state.card }, failure: null }
+  // Only what the plugin itself said: a timeout or a dropped request has nothing of its own.
+  const error = state?.status === 'failed' ? state.error : null
+  const said = error?.code === 'failed' || error?.code === 'invalid' ? error.detail : undefined
+  return { link: null, failure: said ? { plugin: found.source.title, message: said } : null }
 }
 
 /** Whether the element has been in view yet, which it stays once it has. */

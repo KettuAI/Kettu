@@ -294,7 +294,8 @@
       "timeout": "The plugin took too long to answer",
       "unavailable": "Plugins aren’t running right now",
       "failed": "The plugin couldn’t search",
-      "invalid": "The plugin sent something Kettu can’t use"
+      "invalid": "The plugin sent something Kettu can’t use",
+      "request_failed": "Couldn’t search"
     }
   },
   "chips": {

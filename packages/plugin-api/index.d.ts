@@ -270,7 +270,7 @@ export interface ViewRow {
   id: string
   /** At most 200 characters. */
   title: string
-  /** At most 300 characters. */
+  /** At most 300 characters; line breaks are kept, up to three lines shown. */
   subtitle?: string
   /** The subtitle in the code face. */
   mono?: boolean
@@ -292,10 +292,11 @@ export interface ListViewData extends ViewCommon {
 /** For a view of kind `detail`. */
 export interface DetailViewData extends ViewCommon {
   title?: string
+  /** Line breaks are kept. */
   subtitle?: string
   icon?: ViewIcon
   badges?: ViewBadge[]
-  /** Up to 50 labels with values of at most 500 characters. */
+  /** Up to 50 labels with values of at most 500 characters; line breaks in a value are kept. */
   fields?: { label: string; value: string; mono?: boolean }[]
   /** Plain Markdown of at most 20,000 characters, drawn as a reply is; HTML is not drawn. */
   body?: string
@@ -578,7 +579,8 @@ export interface KettuEvents {
    * A hook that needs no permission, for a source the manifest declares under `mentions`, which
    * needs `prompt.attach`: the user typed an `@` in the composer. The first listener that returns
    * items answers; the menu shows them in a group of the plugin's own, beside the project's files,
-   * and never waits for it. A listener that is not done in 3 seconds is skipped.
+   * and never waits for it. A listener that is not done in 3 seconds is skipped. When none returns
+   * items and one threw, the menu shows its message, as plain text cut at 300 characters.
    */
   'mention.search': MentionSearchRequest
   /**
@@ -592,7 +594,8 @@ export interface KettuEvents {
    * A hook for a link the manifest declares under `links`, whose patterns name only hosts the
    * plugin has `network:` access to: a reply holds an address of that kind and is on screen. The
    * first listener that returns a card answers; replies draw the link as a reference with that
-   * card on hover. A listener that is not done in 3 seconds is skipped and the link stays plain.
+   * card on hover. A listener that is not done in 3 seconds is skipped and the link stays plain; one
+   * that throws leaves it plain too, and its message, cut at 300 characters, shows on hover.
    */
   'link.card': LinkCardRequest
 }

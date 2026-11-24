@@ -61,7 +61,12 @@ function ListRow({ row, handle }: { row: PluginViewRow; handle: ActionHandle }) 
           <Badges badges={row.badges} />
         </span>
         {row.subtitle && (
-          <span className="kpv-row__sub" data-mono={row.mono || undefined} title={row.subtitle}>
+          <span
+            className="kpv-row__sub"
+            data-mono={row.mono || undefined}
+            data-lines={row.subtitle.includes('\n') || undefined}
+            title={row.subtitle}
+          >
             {row.subtitle}
           </span>
         )}

@@ -19,20 +19,20 @@ import {
   type PluginRefSource,
 } from '@shared/plugin-refs'
 import type { PluginViewError } from '@shared/plugin-views'
-import type { PluginDeadline } from '@shared/plugin-host'
+import type { PluginDeadline, PluginHookReply } from '@shared/plugin-host'
 import { parseLinkCard, parseMentionContent, parseMentionItems } from './ref-data'
-import { cut, failure } from './views'
+import { cut, failure, silence } from './views'
 import { ViewDataError } from './view-data'
 
 /** The plugin host, as the references use it. */
 export interface RefsClient {
   activate(pluginId: string, trigger: string): Promise<void>
-  hook(
+  hookReply(
     pluginId: string,
     name: string,
     payload: unknown,
     deadline?: PluginDeadline,
-  ): Promise<unknown[]>
+  ): Promise<PluginHookReply>
 }
 
 export interface PluginRefsDeps {
@@ -47,7 +47,7 @@ export interface PluginRefsDeps {
 
 type Asked = { ok: true; answer: unknown } | { ok: false; error: PluginViewError }
 
-const NO_ANSWER = 'No listener gave an answer; the plugin’s log says why if one threw'
+const NO_ANSWER = 'No listener gave an answer'
 
 export type PluginMentionContentResult =
   { ok: true; content: PluginMentionContent } | { ok: false; error: PluginViewError }
@@ -165,10 +165,10 @@ export class PluginRefs {
     const run = (async (): Promise<Asked> => {
       try {
         await this.deps.client.activate(pluginId, trigger)
-        const answers = await this.deps.client.hook(pluginId, event, payload, 'call')
-        const answer = answers.find((item) => item !== null && item !== undefined)
+        const reply = await this.deps.client.hookReply(pluginId, event, payload, 'call')
+        const answer = reply.answers.find((item) => item !== null && item !== undefined)
         return answer === undefined
-          ? { ok: false, error: { code: 'failed', detail: NO_ANSWER } }
+          ? { ok: false, error: silence(reply, NO_ANSWER) }
           : { ok: true, answer }
       } catch (error) {
         return { ok: false, error: failure(error) }

@@ -986,7 +986,8 @@
     "alwaysSiteSession": "始终在会话浏览器中打开 {{site}} 的链接",
     "alwaysHost": "始终在 {{browser}} 中打开这个站点",
     "alwaysHostSession": "始终在会话浏览器中打开这个站点",
-    "openFailed": "无法打开链接：{{error}}"
+    "openFailed": "无法打开链接：{{error}}",
+    "pluginFailed": "{{plugin}} 没能显示这个链接：{{message}}"
   },
   "alert": {
     "note": "说明",

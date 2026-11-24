@@ -18,6 +18,7 @@ kettu.on('mention.search', ({ source, query, locale }) => {
   console.log('SEARCH ' + JSON.stringify({ source, query, locale }))
   if (query === 'broken') return { items: [{ id: 1, title: 'A' }] }
   if (query === 'throws') throw new Error('boom')
+  if (query === 'loud') throw new TypeError('<b>bad</b> ' + 'x'.repeat(1000))
   if (query === 'slow') return new Promise(() => {})
   if (query === 'silent') return
   if (query === 'many') {
@@ -42,6 +43,7 @@ kettu.on('mention.content', ({ source, item, locale }) => {
 kettu.on('link.card', ({ link, url, match, locale }) => {
   console.log('CARD ' + JSON.stringify({ link, url, match, locale }))
   if (match.key === 'T-0') return { title: 42 }
+  if (match.key === 'T-9') throw new Error('No such issue')
   return {
     label: match.key,
     title: 'Sync drops',
@@ -138,17 +140,26 @@ describe('searching a mention source', () => {
     expect(logs.join('\n')).toContain('answered mention.search badly')
   })
 
-  it('gives an error for a script that throws or has nothing to say, and stays usable', async () => {
+  it('gives the script’s own message when it throws, and says when it has nothing to say', async () => {
     const { refs } = setup()
-    expect(await refs.search('tracker', 'issues', 'throws')).toMatchObject({
+    expect(await refs.search('tracker', 'issues', 'throws')).toEqual({
       ok: false,
-      error: { code: 'failed' },
+      error: { code: 'failed', detail: 'boom' },
     })
-    expect(await refs.search('tracker', 'issues', 'silent')).toMatchObject({
+    expect(await refs.search('tracker', 'issues', 'silent')).toEqual({
       ok: false,
-      error: { code: 'failed' },
+      error: { code: 'failed', detail: 'No listener gave an answer' },
     })
     expect(await refs.search('tracker', 'issues', 'x')).toMatchObject({ ok: true })
+  })
+
+  it('cuts a long message and keeps the name of an error that is not a plain Error', async () => {
+    const { refs } = setup()
+    const out = await refs.search('tracker', 'issues', 'loud')
+    expect(out).toMatchObject({ ok: false, error: { code: 'failed' } })
+    const detail = (out as { error: { detail: string } }).error.detail
+    expect(detail).toHaveLength(300)
+    expect(detail.startsWith('TypeError: <b>bad</b> xxx')).toBe(true)
   })
 
   it('stops waiting at the deadline for a script that does not answer', async () => {
@@ -233,6 +244,14 @@ describe('asking for a link’s card', () => {
       })
     }
     expect(told(host.logs, 'CARD')).toEqual([])
+  })
+
+  it('gives the script’s own message when it throws', async () => {
+    const { refs } = setup()
+    expect(await refs.card('tracker', 'issue', 'https://tracker.example.com/issues/T-9')).toEqual({
+      ok: false,
+      error: { code: 'failed', detail: 'No such issue' },
+    })
   })
 
   it('refuses a card whose shape does not fit', async () => {
