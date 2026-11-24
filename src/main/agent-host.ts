@@ -132,6 +132,8 @@ export interface AgentHostDeps {
   browser?: (request: BrowserCallRequest) => Promise<BrowserCallAnswer>
   /** An agent's device tool call, run by the device host. Set after construction, like `browser`. */
   device?: (call: DeviceCall) => Promise<DeviceCallAnswer>
+  /** Starts the plugin host when a plugin's script needs it, and stops it when none does. */
+  pluginHost?: (run: boolean) => void
   /** Runs an agent's terminal call on the terminal host. */
   terminal?: (call: TerminalCall) => Promise<TerminalCallAnswer>
   /** A window's or device's answer to the new origin a page of main's asked for. */
@@ -663,6 +665,11 @@ export class AgentHost {
     })
   }
 
+  /** Hands the host its port to the plugin host; false while the host is not running. */
+  pluginPort(port: MessagePortMain): boolean {
+    return this.host.post({ type: 'host:plugin-port' }, [port])
+  }
+
   /** `host:terminal-handed-back`: the user handed a terminal back; the thread says for how long. */
   terminalHandedBack(sessionId: string, durationMs: number): void {
     this.host.post({
@@ -759,6 +766,10 @@ export class AgentHost {
     switch (message.type) {
       case 'host:browser-call': {
         this.browserCall(message)
+        break
+      }
+      case 'host:plugin-host': {
+        this.deps.pluginHost?.(message.run === true)
         break
       }
       case 'host:device-call': {
@@ -1040,6 +1051,8 @@ export class AgentHost {
   }
 
   private exited(clean: boolean): void {
+    // The plugins it woke are gone with it; its next process asks again.
+    this.deps.pluginHost?.(false)
     for (const resolve of this.busyRequests.values()) resolve([])
     this.busyRequests.clear()
     this.grants.failAll()

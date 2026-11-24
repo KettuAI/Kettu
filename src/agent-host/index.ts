@@ -32,6 +32,10 @@ const host = startAgentHost({
   onMessage: (listener) =>
     parentPort.on('message', ({ data, ports }) => {
       const message = data as MainToHost
+      if (message.type === 'host:plugin-port') {
+        if (ports[0]) host.connectPluginHost(channel(ports[0]))
+        return
+      }
       if (message.type !== 'host:connect') return listener(message)
       const port = ports[0]
       if (!port) return

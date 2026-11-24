@@ -145,6 +145,16 @@ export class UtilityHost<ToChild, FromChild extends { type: string }> {
     return true
   }
 
+  /** Kills a process that stopped answering; it restarts as after a crash. */
+  kill(): void {
+    if (this.status !== 'ready' || !this.child) return
+    this.log.error('It stopped answering; killing it')
+    const pid = this.child.pid
+    // kill() sends SIGTERM on macOS and Linux, which a stuck process never handles.
+    if (pid && process.platform !== 'win32') process.kill(pid, 'SIGKILL')
+    else this.child.kill()
+  }
+
   /**
    * Asks the process to exit with `shutdownMessage` and waits for it; kills it after 6 s. Nothing
    * restarts afterwards.

@@ -9,6 +9,7 @@ import { setLogLevel, setVerboseRecords, writeLog } from '@shared/log/process-lo
 import { ARTIFACT_ID } from '@shared/artifacts'
 import type { AttachmentGrant } from '@shared/attachments'
 import type { HostToMain, MainToHost } from '@shared/host-control'
+import type { AgentToPluginHost } from '@shared/plugin-host'
 import type { ControlChannel, PortChannel } from '@shared/port-channel'
 import type { FromPort } from '@shared/port-rpc'
 import type { PortDevice } from '@shared/remote/device'
@@ -23,6 +24,8 @@ export interface StartedAgentHost {
    * started, and closed if it never was.
    */
   connect(port: PortChannel<FromPort<HostEvent>>, device: PortDevice | null): void
+  /** The plugin host's port, once that process is ready. */
+  connectPluginHost(port: PortChannel<AgentToPluginHost>): void
 }
 
 function isGrant(value: unknown): value is AttachmentGrant {
@@ -278,6 +281,9 @@ export function startAgentHost(control: ControlChannel<MainToHost, HostToMain>):
   return {
     connect: (port, device) => {
       if (!withHost((h) => h.connect(port, device))) port.close()
+    },
+    connectPluginHost: (port) => {
+      if (!withHost((h) => h.connectPluginHost(port))) port.close()
     },
   }
 }

@@ -202,6 +202,9 @@ export type MainToHost =
   | { type: 'host:device-handed-back'; sessionId: string; durationMs: number }
   // The user handed back a terminal the session's agent started.
   | { type: 'host:terminal-handed-back'; sessionId: string; durationMs: number }
+  // The plugin host is ready. In the desktop app its port travels in the transfer list; under
+  // Node.js `socketPath` names the socket to connect to.
+  | { type: 'host:plugin-port'; socketPath?: string }
   | { type: 'host:shutdown' }
 
 /**
@@ -421,6 +424,8 @@ export type HostToMain =
   | { type: 'host:computer-hold'; hold: ComputerHold | null }
   // Null when no session holds a window, or the driver could not find it.
   | { type: 'host:computer-frame'; requestId: number; frame: ComputerFrame | null }
+  // Whether a plugin's script needs the plugin host; answered by host:plugin-port once it runs.
+  | { type: 'host:plugin-host'; run: boolean }
   | { type: 'host:stopped' }
 
 export type MainToTerminalHost =

@@ -102,6 +102,7 @@ import { answerSettingsCall } from './settings-call'
 import { effectiveDirect, hostSettings, reachesHost, terminalSettings } from './settings-schema'
 import { hasPendingFrame, isRevoked, watchSubframes } from './subframes'
 import { DeviceHost } from './device-host'
+import { PluginHost } from './plugin-host'
 import { TerminalHost } from './terminal-host'
 import { ThemeCatalog } from './theme-catalog'
 import { readThemeFolder, readThemeSources, ThemeStore } from './themes'
@@ -403,6 +404,9 @@ async function start(): Promise<void> {
     allowDevices: () => true,
     onHandedBack: (sessionId, ms) => hostRef.current?.deviceHandedBack(sessionId, ms),
   })
+  const pluginHost = new PluginHost({
+    handPort: (port) => hostRef.current?.pluginPort(port) ?? false,
+  })
   // Set once the sharing service exists; the host reports ready only after that, at each start.
   let reconcileSharing: (() => void) | null = null
   let sharingArtifactsChanged: (() => void) | null = null
@@ -590,6 +594,7 @@ async function start(): Promise<void> {
           account.withAccessToken(run, (error) => error instanceof MarketUnauthorized),
         signedOut: (error) => error instanceof NotSignedIn,
       }),
+    pluginHost: (run) => pluginHost.setWanted(run),
     device: (call) =>
       deviceHost.call(call).then((answer) => {
         const opened =
@@ -977,6 +982,7 @@ async function start(): Promise<void> {
         remoteHost.stop().then(() => agentHost.stop()),
         terminalHost.stop(),
         deviceHost.stop(),
+        pluginHost.stop(),
       ])
       hostSessions.close()
       await Promise.all([

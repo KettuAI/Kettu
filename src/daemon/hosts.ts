@@ -46,6 +46,7 @@ import {
   type SettingsSection,
 } from '../main/settings-schema'
 import { ControlError, type DeviceSummary, type HostName, type HostStatus } from './control'
+import { PluginHost } from './plugin-host'
 import { ForkedHost, type HostTimings } from './forked-host'
 import { daemonUserAgent } from './update'
 
@@ -162,6 +163,7 @@ export class Hosts {
   private readonly terminal: ForkedHost<MainToTerminalHost, TerminalHostToMain>
   private readonly deviceHost: ForkedHost<MainToDeviceHost, DeviceHostToMain>
   private readonly remote: ForkedHost<MainToRemoteHost, RemoteHostToMain>
+  private readonly pluginHost: PluginHost
   private projects: string[] = []
   private authCommands: string[] = []
   private agentProcesses: ProcessId[] = []
@@ -317,6 +319,15 @@ export class Hosts {
           }
         }
       },
+    })
+    // Plugins' scripts: started when the agent host wakes the first one.
+    this.pluginHost = new PluginHost({
+      modulePath: bundle('plugin-host.cjs'),
+      wasmPath: bundle('quickjs.wasm'),
+      env: options.env,
+      inspector: (url) => options.inspector?.('plugin-host', url),
+      timings: options.timings,
+      ready: (socketPath) => this.agent.post({ type: 'host:plugin-port', socketPath }),
     })
     // Devices reach it through its direct connections, as in the desktop app, not a socket.
     this.remote = new ForkedHost<MainToRemoteHost, RemoteHostToMain>({
@@ -913,6 +924,7 @@ export class Hosts {
       this.remote.stop().then(() => this.agent.stop()),
       this.terminal.stop(),
       this.deviceHost.stop(),
+      this.pluginHost.stop(),
     ])
   }
 
@@ -998,6 +1010,9 @@ export class Hosts {
             sessionIds: message.sessionIds,
           })
         }
+        break
+      case 'host:plugin-host':
+        this.pluginHost.setWanted(message.run === true)
         break
       case 'host:device-call':
         if (Number.isSafeInteger(message.callId) && typeof message.call === 'object') {
@@ -1100,6 +1115,8 @@ export class Hosts {
   }
 
   private agentExited(clean: boolean): void {
+    // The plugins it woke are gone with it; its next process asks again.
+    this.pluginHost.setWanted(false)
     // No turn of the agent host runs now, so none uses a device or a terminal.
     this.deviceHost.post({ type: 'device-host:turn-ended', sessionId: null })
     this.terminal.post({ type: 'terminal-host:turn-ended', sessionId: null })
