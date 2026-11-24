@@ -52,6 +52,7 @@ import {
   historyOf,
   type PickFacts,
   type PickInput,
+  type RoleHint,
   type WorkflowAgent,
 } from './picks'
 import { againPrompt, notePrompt, reminderPrompt, resumePrompt, stepPrompt } from './prompts'
@@ -71,6 +72,8 @@ export interface TaskStepStart {
   prompt: string
   title: string
   task: SessionTaskRef
+  /** The step's role, by its reference; its session is given the role's instructions. */
+  role?: string
 }
 
 export interface TaskSessions {
@@ -141,6 +144,8 @@ export interface TaskEngineDeps {
   optionsOf(pick: StepPick): Record<string, string | boolean>
   /** The pick the tray's option values stand for. */
   pickOf(agentId: AgentId, options: Record<string, string | boolean>): StepPick
+  /** What a role, by its reference, suggests; null when no role has it. */
+  roleHint?(ref: string): Promise<RoleHint | null>
   events: TaskEvents
   /** Step sessions working at once across every task, as the user set it. */
   workingLimit?(): number
@@ -665,6 +670,7 @@ export class TaskEngine implements TaskSessionHooks {
           prompt: stepPrompt(task, round, where),
           title: `${task.title} · ${step.name}`,
           task: { taskId, stepId: round.stepId, roundId },
+          ...(step.role === undefined ? {} : { role: step.role }),
         })
         sessionId = summary.id
         round.sessionId = summary.id
@@ -984,7 +990,7 @@ export class TaskEngine implements TaskSessionHooks {
           accepted: true,
           checks,
           next: { kind: 'pick', steps: needed },
-          facts: this.factsFor(task, needed),
+          facts: await this.factsFor(task, needed),
         }
       }
       const next = await this.afterReport(task, round)
@@ -1548,14 +1554,20 @@ export class TaskEngine implements TaskSessionHooks {
 
   // Helpers.
 
-  private factsFor(task: TaskRecord, stepIds: string[]): PickFacts {
+  private async factsFor(task: TaskRecord, stepIds: string[]): Promise<PickFacts> {
     const steps = stepIds.map((id) => stepOf(task.workflow, id)!).filter(Boolean)
+    const roles = new Map<string, RoleHint>()
+    for (const ref of new Set(steps.flatMap((step) => (step.role ? [step.role] : [])))) {
+      const hint = await this.deps.roleHint?.(ref)
+      if (hint) roles.set(ref, hint)
+    }
     return factsFor(
       task,
       steps,
       this.deps.agents(),
       (agent) => this.deps.library.autoPick(agent.id, agent.apiKey).allowed,
       (stepId) => historyOf(this.tasks.values(), task.workflowId, stepId),
+      roles,
     )
   }
 

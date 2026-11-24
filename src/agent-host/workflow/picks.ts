@@ -2,7 +2,7 @@
 // or kept person can start now. Kettu checks only what can be told right or wrong, never whether a
 // pick is a good one, and never picks itself.
 
-import type { AgentAccount, PlanLimit } from '@shared/agent-host'
+import type { AgentAccount, PlanLimit, RoleSuggests } from '@shared/agent-host'
 import type {
   BlockedReason,
   CheckLine,
@@ -63,6 +63,12 @@ export function missingTools(agent: WorkflowAgent, tools: StepTools): string[] {
   ]
 }
 
+/** A step's role and what it suggests, for whoever picks the step's agent. */
+export interface RoleHint {
+  name: string
+  suggests: RoleSuggests
+}
+
 export interface PickFacts {
   steps: {
     id: string
@@ -70,6 +76,8 @@ export interface PickFacts {
     prompt: string
     hint: string | null
     tools: StepTools
+    /** What the step's role suggests; a hint for the pick, never a pin. */
+    role?: RoleHint
     reviews: { stepId: string; name: string; agentId: AgentId; model: string | null }[]
   }[]
   task: { text: string; pace: Pace; paceReason: string | null }
@@ -328,6 +336,7 @@ export function factsFor(
   agents: readonly WorkflowAgent[],
   allowed: (agent: WorkflowAgent) => boolean,
   history: (stepId: string) => PickFacts['history'],
+  roles: ReadonlyMap<string, RoleHint> = new Map(),
 ): PickFacts {
   const offered = agents.filter(
     (agent) =>
@@ -340,6 +349,7 @@ export function factsFor(
       prompt: step.prompt,
       hint: step.hint,
       tools: structuredClone(step.tools),
+      ...(step.role !== undefined && roles.has(step.role) ? { role: roles.get(step.role)! } : {}),
       reviews: reviewed(task, step).map((done) => ({
         ...done,
         name: task.workflow.steps.find((s) => s.id === done.stepId)?.name ?? done.stepId,

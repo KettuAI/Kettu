@@ -51,13 +51,14 @@ const ARGUMENT_NAME = /^[A-Za-z][A-Za-z0-9_-]{0,31}$/
 const WHOLE = 'arguments'
 const FRONT_MATTER = /^\uFEFF?---[ \t]*\r?\n([\s\S]*?)\r?\n(?:---|\.\.\.)[ \t]*(?:\r?\n|$)/
 
-const isRecord = (value: unknown): value is Record<string, unknown> =>
+export const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value)
 
-const oneLine = (value: string, max: number): string =>
+export const oneLine = (value: string, max: number): string =>
   value.replace(/\s+/g, ' ').trim().slice(0, max)
 
-function names(value: unknown, field: string): string[] | string {
+/** A list of names from front matter, or what is wrong with it. */
+export function names(value: unknown, field: string): string[] | string {
   if (value === undefined || value === null) return []
   if (!Array.isArray(value) || value.length > MAX_NEEDS) return `${field} is not a short list`
   const out: string[] = []
@@ -98,8 +99,10 @@ function argumentsOf(value: unknown): CommandArgument[] | string {
   return out
 }
 
-/** Reads a command's file; `ok` false with the reason when it does not read. */
-export function parseCommand(text: string): ParsedCommand {
+/** A Markdown file's front matter as a map, and the text after it; the reason when it is no map. */
+export function readFrontMatter(
+  text: string,
+): { data: Record<string, unknown>; body: string } | { reason: string } {
   let data: unknown = {}
   let body = text.replace(/^\uFEFF/, '')
   const front = FRONT_MATTER.exec(text)
@@ -107,11 +110,20 @@ export function parseCommand(text: string): ParsedCommand {
     try {
       data = parse(front[1]!) ?? {}
     } catch (error) {
-      return { ok: false, reason: `the front matter is not YAML: ${(error as Error).message}` }
+      return { reason: `the front matter is not YAML: ${(error as Error).message}` }
     }
     body = text.slice(front[0].length)
   }
-  if (!isRecord(data)) return { ok: false, reason: 'the front matter is not a map' }
+  if (!isRecord(data)) return { reason: 'the front matter is not a map' }
+  return { data, body }
+}
+
+/** Reads a command's file; `ok` false with the reason when it does not read. */
+export function parseCommand(text: string): ParsedCommand {
+  const read = readFrontMatter(text)
+  if ('reason' in read) return { ok: false, reason: read.reason }
+  const { data } = read
+  let { body } = read
   if (data.description !== undefined && typeof data.description !== 'string') {
     return { ok: false, reason: 'description is not text' }
   }

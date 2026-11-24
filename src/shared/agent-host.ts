@@ -1008,6 +1008,25 @@ export interface KettuCommand {
   origin: CommandOrigin
 }
 
+/** What a role suggests for the session it starts; each is a hint the person starting it may change. */
+export interface RoleSuggests {
+  /** An agent's id, or a harness's id for the first agent of that harness. */
+  agent?: string
+  /** A model's id or name as the agent lists it. */
+  model?: string
+  effort?: string
+}
+
+/** One of Kettu's roles that a file holds, a plugin's or the user's own. */
+export interface KettuRole {
+  /** What names it where a session starts as it: its own name, qualified when two share it. */
+  ref: string
+  title: string
+  description: string
+  suggests: RoleSuggests
+  origin: CommandOrigin
+}
+
 /**
  * What only a prepared session carries: New session shows its options and slash commands before
  * the first message.
@@ -1315,6 +1334,8 @@ export interface HostContract {
       preparedId?: string
       // A new worktree, cut from `base`, to work in; `branch` is the user's name for its branch.
       worktree?: { base: string; branch?: string }
+      // A role to start as, by its `ref`: its instructions go to the agent with the session.
+      role?: string
     }
     result: SessionSummary
   }
@@ -1368,6 +1389,8 @@ export interface HostContract {
   }
   // Kettu's commands that the plugins that are on and the user's own folder hold, for the slash list.
   'commands.list': { params: void; result: { commands: KettuCommand[] } }
+  // Kettu's roles that the plugins that are on and the user's own folder hold, for New session.
+  'roles.list': { params: void; result: { roles: KettuRole[] } }
   // Workflows: the user's library. See workflow; an older host also sends the ones it shipped with.
   'workflows.list': { params: void; result: WireWorkflowEntry[] }
   'workflows.read': {
@@ -2295,6 +2318,7 @@ export const HOST_METHODS = [
   'plugins.rollBack',
   'plugins.resources',
   'commands.list',
+  'roles.list',
   'workflows.list',
   'workflows.read',
   'workflows.add',

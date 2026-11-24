@@ -155,6 +155,7 @@ import type { CodexRequest } from './codex/rpc'
 import { OwnPluginsService } from './marketplace/own-plugins'
 import { MarketSkillsService, skillFor, skillsCatalogFile } from './marketplace/skills'
 import { CommandsService } from './commands/service'
+import { RolesService } from './roles/service'
 import { PluginsService } from './plugins/service'
 import { pluginsFile as kettuPluginsFile } from './plugins/store'
 import { PublishDrafts } from './marketplace/publish-drafts'
@@ -558,6 +559,8 @@ export class AgentHost {
   private readonly plugins: PluginsService
   /** Kettu's own slash commands: the plugins' and the user's own. */
   private readonly commands: CommandsService
+  /** Kettu's own roles: the plugins' and the user's own. */
+  private readonly roles: RolesService
   /** The host's Kettu account from main, while signed in with Kettu's services on. */
   private marketAccount: MarketAccount | null = null
   /** Marketplace API calls awaiting main's answer. */
@@ -936,6 +939,15 @@ export class AgentHost {
         this.hub.broadcast({ type: 'plugins.changed' })
       },
     })
+    this.roles = new RolesService({
+      userDataPath: options.userDataPath,
+      plugins: () => this.plugins.resources('roles'),
+      kept: () => ({
+        skills: this.settings.marketplace.skills,
+        mcp: this.settings.marketplace.mcp,
+      }),
+      log,
+    })
     this.commands = new CommandsService({
       userDataPath: options.userDataPath,
       plugins: () => this.plugins.resources('commands'),
@@ -1055,6 +1067,8 @@ export class AgentHost {
         agentName: (sessionId) => this.sessions.agentName(sessionId),
         agentLabel: (agentId) => this.agents.name(agentId),
         agents: () => this.agents.statuses(),
+        roles: () => this.roles.list(),
+        role: (ref) => this.roles.get(ref),
         history: (sessionId) => this.sessions.historyTurns(sessionId),
         mode: (sessionId) => this.sessions.toolMode(sessionId),
         starterRank: (sessionId) => this.sessions.starterRank(sessionId),
@@ -1249,6 +1263,7 @@ export class AgentHost {
           ...(record.task ? (this.tasks.toolsOf(record.task)?.skills ?? []) : []),
           ...(record.commandTools?.skills ?? []),
         ]),
+      roles: { resolve: (ref) => this.roles.resolve(ref) },
       commands: {
         expand: (text, own) => this.commands.expand(text, own),
         extra: (agentId, needs) => {
@@ -1480,6 +1495,10 @@ export class AgentHost {
           catalog: this.catalog,
           marketplace: this.settings.marketplace,
         }),
+      roleHint: async (ref) => {
+        const role = await this.roles.get(ref)
+        return role ? { name: role.title, suggests: role.suggests } : null
+      },
       optionsOf: (pick) => optionsOfPick(this.agentOptions.get(pick.agentId), pick),
       pickOf: (agentId, values) => pickOfOptions(this.agentOptions.get(agentId), agentId, values),
       events: {
@@ -3538,6 +3557,7 @@ export class AgentHost {
       'plugins.rollBack': ({ pluginId }) => this.plugins.rollBack(pluginId),
       'plugins.resources': async ({ kind }) => ({ items: await this.plugins.resources(kind) }),
       'commands.list': async () => ({ commands: await this.commands.list() }),
+      'roles.list': async () => ({ roles: await this.roles.list() }),
       'workflows.list': () => this.workflowLibrary.list(),
       'workflows.read': ({ workflowId }) => this.workflowLibrary.read(workflowId),
       'workflows.add': (source) => this.workflowLibrary.add(source),

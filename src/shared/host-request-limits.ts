@@ -187,6 +187,7 @@ export const HOST_REQUEST_LIMITS: Readonly<Record<HostMethod, number | null>> = 
   'plugins.rollBack': AGENT_MS,
   'plugins.resources': HOST_MS,
   'commands.list': HOST_MS,
+  'roles.list': HOST_MS,
   'workflows.list': HOST_MS,
   'workflows.read': HOST_MS,
   'workflows.add': AGENT_MS,

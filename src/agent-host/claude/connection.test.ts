@@ -447,6 +447,39 @@ describe('the Claude Agent SDK driver', () => {
     })
   })
 
+  it("adds a session's role to the system prompt after the guide and memory, on every start", async () => {
+    const { sdk, connection } = await setup()
+    const kettu = {
+      type: 'http' as const,
+      name: 'kettu',
+      url: 'http://127.0.0.1:9/mcp',
+      headers: [],
+      prompt: 'Plan first.',
+    }
+    const role = '<kettu-role name="Reviewer">\nReview it.\n</kettu-role>'
+    const options = { mcpServers: [kettu], memory: { text: 'Memory index.' }, role }
+    const append = `Plan first.\n\nMemory index.\n\n${role}`
+    const opened = await connection.newSession('/repo', options)
+    expect(sdk.last.options.systemPrompt).toEqual({ type: 'preset', preset: 'claude_code', append })
+    await connection.closeSession(opened.sessionId)
+    await connection.resumeSession(opened.sessionId, '/repo', options)
+    expect(sdk.last.options.systemPrompt).toEqual({ type: 'preset', preset: 'claude_code', append })
+    await connection.forkSession(opened.sessionId, '/repo', options)
+    expect(sdk.last.options.systemPrompt).toEqual({ type: 'preset', preset: 'claude_code', append })
+    // With nothing else of Kettu's, the role stands alone; a page's question gets none.
+    await connection.newSession('/repo', { role })
+    expect(sdk.last.options.systemPrompt).toEqual({
+      type: 'preset',
+      preset: 'claude_code',
+      append: role,
+    })
+    await connection.newSession('/repo', { hidden: 'sample', role })
+    expect(sdk.last.options.systemPrompt).toEqual({ type: 'preset', preset: 'claude_code' })
+    // A session whose guide goes ahead of its prompts has the role there too, not here.
+    await connection.resumeSession('from-terminal', '/repo', { ...options, promptAhead: true })
+    expect(sdk.last.options.systemPrompt).toEqual({ type: 'preset', preset: 'claude_code' })
+  })
+
   it('keeps a server that holds a key off the command line and adds it once the query starts', async () => {
     const { sdk, connection } = await setup()
     await connection.newSession('/repo', {

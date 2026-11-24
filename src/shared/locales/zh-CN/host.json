@@ -1385,6 +1385,11 @@
       "mcp": "MCP 服务器 {{name}}"
     }
   },
+  "roles": {
+    "unknown": "没有叫 {{role}} 的角色。",
+    "notStarted": "角色 {{role}} 没有启用：它需要 {{items}}。",
+    "started": "以角色 {{role}} 开始"
+  },
   "marketBundle": {
     "invalid": "这个 MCP 包装不了：{{reason}}",
     "notZip": "它不是 zip 压缩包。",
@@ -1522,6 +1527,7 @@
     "personNoAgent": "由人完成的步骤不用选智能体",
     "personNoReview": "由人完成的步骤不审核别的步骤",
     "personNoTools": "由人完成的步骤没有会话可以交付工具",
+    "personNoRole": "由人完成的步骤没有智能体可以指定角色",
     "twoOutcomes": "交出结果的步骤至少要有两个结果",
     "outcomesMapping": "必须把步骤 id 映射到各自的结果",
     "outcomeNames": "必须把结果名映射到名称",

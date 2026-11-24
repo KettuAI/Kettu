@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import type { AgentOptions, AgentStatus, RunningWork } from '@shared/agent-host'
+import type { AgentOptions, AgentStatus, KettuRole, RunningWork } from '@shared/agent-host'
 import type { ConfigOption } from '@shared/thread'
 import type { Caller } from './artifacts/tools'
 import {
@@ -225,6 +225,8 @@ function starting(
     startMode?: string
     starterRank?: ModeRank | null
     mode?: ToolMode
+    roles?: KettuRole[]
+    others?: { id: string; name: string }[]
   } = {},
 ) {
   const sessions = [
@@ -243,10 +245,21 @@ function starting(
     state: 'ready',
     signIn: 'signed-in',
   } as unknown as AgentStatus
+  const others = (opts.others ?? []).map(
+    (other) =>
+      ({
+        ...status,
+        id: other.id,
+        name: other.name,
+        harnessName: other.name,
+      }) as unknown as AgentStatus,
+  )
   const deps = {
     info: (id: string) => sessions.find((item) => item.id === id) ?? null,
     started: () => [],
-    agents: () => [status],
+    agents: () => [status, ...others],
+    roles: async () => opts.roles ?? [],
+    role: async (ref: string) => (opts.roles ?? []).find((role) => role.ref === ref) ?? null,
     startMode: () => opts.startMode,
     starterRank: () => (opts.starterRank === undefined ? 3 : opts.starterRank),
     carried: () => ({ ...(opts.carried ?? {}) }),
@@ -422,5 +435,79 @@ describe('list_agents models', () => {
     const { tools: t } = starting()
     const out = await t.call(caller, 'list_agents', { agent: 'gemini' })
     expect(out.isError).toBe(true)
+  })
+})
+
+function role(ref: string, suggests: KettuRole['suggests'] = {}): KettuRole {
+  return { ref, title: `Role ${ref}`, description: '', suggests, origin: { kind: 'user' } }
+}
+
+describe('start_session role', () => {
+  it('hands the role to the new session and applies what it suggests', async () => {
+    const { tools: t, start } = starting({
+      roles: [role('reviewer', { model: 'GPT-MINI', effort: 'low' })],
+    })
+    const out = await t.call(caller, 'start_session', { prompt: 'x', role: 'reviewer' })
+    expect(out.isError).toBeUndefined()
+    expect(start.mock.calls[0]![1]).toMatchObject({
+      role: 'reviewer',
+      options: { model: 'gpt-mini', effort: 'low' },
+    })
+    expect(text(out)).toContain('The role Role reviewer set the model GPT-MINI and the effort low.')
+    expect(out.structuredContent).toMatchObject({ role: 'Role reviewer' })
+  })
+
+  it('starts on the agent the role suggests when the caller names none', async () => {
+    const { tools: t, start } = starting({
+      others: [{ id: 'claude-code', name: 'Claude Code' }],
+      roles: [role('reviewer', { agent: 'claude-code' })],
+    })
+    await t.call(caller, 'start_session', { prompt: 'x', role: 'reviewer' })
+    expect(start.mock.calls[0]![1]).toMatchObject({ agentId: 'claude-code', role: 'reviewer' })
+  })
+
+  it("keeps the caller's own agent, model and effort over the role's", async () => {
+    const { tools: t, start } = starting({
+      others: [{ id: 'claude-code', name: 'Claude Code' }],
+      roles: [role('reviewer', { agent: 'claude-code', model: 'gpt-mini', effort: 'low' })],
+    })
+    const out = await t.call(caller, 'start_session', {
+      prompt: 'x',
+      role: 'reviewer',
+      agent: 'codex',
+      model: 'gpt-big',
+    })
+    expect(out.isError).toBeUndefined()
+    const params = start.mock.calls[0]![1]
+    expect(params.agentId).toBe('codex')
+    expect(params.options).toEqual({ model: 'gpt-big' })
+  })
+
+  it('leaves out what the agent cannot take and says so', async () => {
+    const { tools: t, start } = starting({
+      roles: [role('reviewer', { agent: 'missing-agent', model: 'gpt-huge' })],
+    })
+    const out = await t.call(caller, 'start_session', { prompt: 'x', role: 'reviewer' })
+    expect(out.isError).toBeUndefined()
+    const params = start.mock.calls[0]![1]
+    expect(params.agentId).toBeUndefined()
+    expect(params.options).toEqual({})
+    expect(text(out)).toContain('suggested the agent missing-agent')
+  })
+
+  it('refuses a role that does not exist', async () => {
+    const { tools: t, start } = starting()
+    const out = await t.call(caller, 'start_session', { prompt: 'x', role: 'nobody' })
+    expect(out.isError).toBe(true)
+    expect(text(out)).toContain('No role nobody')
+    expect(start).not.toHaveBeenCalled()
+  })
+
+  it('lists the roles beside the agents', async () => {
+    const { tools: t } = starting({ roles: [role('reviewer', { agent: 'codex' })] })
+    const out = await t.call(caller, 'list_agents', {})
+    expect(out.structuredContent).toMatchObject({
+      roles: [{ id: 'reviewer', name: 'Role reviewer', agent: 'codex' }],
+    })
   })
 })

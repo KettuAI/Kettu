@@ -383,6 +383,11 @@ export interface SessionOptions {
    */
   promptAhead?: boolean
   /**
+   * The instructions of the role the session started as, in the block Kettu's guide stands in:
+   * handed over the way the guide and memory are, and ahead of its prompts in the cases they are.
+   */
+  role?: string
+  /**
    * Kettu's guide and memory worded for an agent with `systemPromptAppend`, which adds them to the
    * system prompt of a session it starts; the agent keeps them with the session, so only
    * `newSession` takes it.

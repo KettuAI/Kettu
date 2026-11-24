@@ -356,6 +356,7 @@ function isLockedWorkflow(value: unknown): value is Workflow {
         isRecord(step.tools) &&
         isStringList(step.tools.mcp) &&
         isStringList(step.tools.skills) &&
+        (step.role === undefined || isString(step.role)) &&
         Array.isArray(step.outcomes) &&
         step.outcomes.every(
           (outcome) =>

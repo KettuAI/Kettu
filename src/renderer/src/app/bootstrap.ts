@@ -59,6 +59,7 @@ import { loadGitHubStar, receiveGitHubStar } from '@renderer/stores/github-star'
 import { marketConnectionChanged, marketKeysChanged } from '@renderer/stores/marketplace'
 import { marketPublishedChanged } from '@renderer/stores/market-published'
 import { loadKettuCommands } from '@renderer/stores/kettu-commands'
+import { loadKettuRoles } from '@renderer/stores/kettu-roles'
 import { memoryChanged } from '@renderer/stores/memory'
 import { useProjectsStore } from '@renderer/stores/projects'
 import { routinesHostClosed, routinesHostOpened, useRoutinesStore } from '@renderer/stores/routines'
@@ -183,7 +184,10 @@ function onHostEvent(event: HostEvent, hostId: string | null = null): void {
   receiveArtifactEvent(event, hostId)
   if (event.type === 'artifacts.changed') artifactsChanged(hostId)
   if (event.type === 'memory.changed') memoryChanged(hostId)
-  if (event.type === 'plugins.changed') void loadKettuCommands(hostId)
+  if (event.type === 'plugins.changed') {
+    void loadKettuCommands(hostId)
+    void loadKettuRoles(hostId)
+  }
   // The rest is each host's own: another host's goes to its Settings, if they have shown it.
   if (hostId !== null && event.type === 'usage.changed') usageChanged(hostId)
   // Only this window's own host is asked to star, as the prompts show its record.

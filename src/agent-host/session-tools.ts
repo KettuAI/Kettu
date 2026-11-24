@@ -3,7 +3,13 @@
 // project come from the service, which knows them from the token or the call's `_meta`.
 
 import type { CallToolResult, Tool } from '@modelcontextprotocol/sdk/types.js'
-import type { AgentOptions, AgentStatus, RunningWork } from '@shared/agent-host'
+import type {
+  AgentOptions,
+  AgentStatus,
+  KettuRole,
+  RoleSuggests,
+  RunningWork,
+} from '@shared/agent-host'
 import { harnessOf, START_MODE_CHARS } from '@shared/agents'
 import { longer } from '@shared/artifacts'
 import {
@@ -15,6 +21,7 @@ import {
 } from '@shared/thread'
 import { folded, type Caller } from './artifacts/tools'
 import { cutStart, historyPage, HISTORY_TOOL, type RenderedTurn } from './carried-context'
+import { HostError } from './errors'
 import { offered, pickedValues, type OfferedModel, type StartPick } from './started-options'
 import {
   defaultMode,
@@ -99,6 +106,8 @@ export interface SessionToolsDeps {
       mode?: string
       options: Record<string, string | boolean>
       report: boolean
+      /** The role it starts as, by its reference. */
+      role?: string
     },
   ): Promise<string>
   /**
@@ -129,6 +138,10 @@ export interface SessionToolsDeps {
   agentLabel(agentId: AgentId): string
   /** The host's agents as Settings lists them, for list_agents and the agent a start names. */
   agents(): AgentStatus[]
+  /** The roles a session can start as. */
+  roles(): Promise<KettuRole[]>
+  /** The role a reference names; null when none does. */
+  role(ref: string): Promise<KettuRole | null>
   /** A session's permission mode, from memory or its stored thread. */
   mode(sessionId: string): Promise<ToolMode | null>
   /** The rank the caller's mode holds the sessions it starts to; null when Kettu cannot rank it. */
@@ -325,6 +338,14 @@ const MODE: Schema = {
     'The permission mode to start it in, one list_agents gives for the agent; without it, the ' +
     'mode the user set for its new sessions. Kettu starts it no wider than yours.',
 }
+const ROLE: Schema = {
+  type: 'string',
+  minLength: 1,
+  maxLength: ID_CHARS,
+  description:
+    'A role from list_agents to start it as: its instructions go to the agent, and its ' +
+    'suggested agent, model and effort apply where you name none.',
+}
 const MODE_INFO = object({ id: { type: 'string' }, name: { type: 'string' } }, ['id', 'name'])
 const EFFORTS: Schema = { type: ['array', 'null'], items: { type: 'string' } }
 const REPORT: Schema = {
@@ -402,7 +423,8 @@ export const SESSION_TOOLS: Tool[] = [
     title: 'List agents',
     description:
       "Lists the user's agents on this computer that start_session can run, whether each " +
-      'can start now, the permission modes you can start it in, and its models and efforts.',
+      'can start now, the permission modes you can start it in, its models and efforts, and the ' +
+      'roles start_session can take.',
     inputSchema: object({
       agent: { type: 'string', description: 'Lists only this agent, as its id.' },
     }),
@@ -432,6 +454,20 @@ export const SESSION_TOOLS: Tool[] = [
           },
           efforts: EFFORTS,
         }),
+      },
+      roles: {
+        type: 'array',
+        items: object(
+          {
+            id: { type: 'string' },
+            name: { type: 'string' },
+            description: { type: 'string' },
+            agent: { type: 'string' },
+            model: { type: 'string' },
+            effort: { type: 'string' },
+          },
+          ['id', 'name', 'description'],
+        ),
       },
     }),
     annotations: { readOnlyHint: true },
@@ -495,12 +531,18 @@ export const SESSION_TOOLS: Tool[] = [
         model: MODEL,
         effort: EFFORT,
         mode: MODE,
+        role: ROLE,
         report: REPORT,
       },
       ['prompt'],
     ),
     outputSchema: output(
-      { ...INFO, mode_lowered: { type: 'boolean' }, held: { type: 'boolean' } },
+      {
+        ...INFO,
+        mode_lowered: { type: 'boolean' },
+        held: { type: 'boolean' },
+        role: { type: 'string' },
+      },
       INFO_REQUIRED,
     ),
     annotations: { destructiveHint: false, openWorldHint: true },
@@ -724,6 +766,15 @@ function option(o: Args, key: 'model' | 'effort'): string | undefined {
   return value
 }
 
+function roleRef(o: Args): string | undefined {
+  const value = o.role
+  if (value === undefined) return undefined
+  if (typeof value !== 'string' || value.length === 0 || longer(value, ID_CHARS)) {
+    throw invalid('role must be a role id, as list_agents gives it.')
+  }
+  return value
+}
+
 function mode(o: Args): string | undefined {
   const value = o.mode
   if (value === undefined) return undefined
@@ -852,7 +903,7 @@ export class SessionTools {
       case 'start_session':
         return this.start(
           caller,
-          args(input, ['prompt', 'title', 'agent', 'model', 'effort', 'mode', 'report']),
+          args(input, ['prompt', 'title', 'agent', 'model', 'effort', 'mode', 'role', 'report']),
         )
       case 'send_message':
         return this.send(caller, args(input, ['id', 'text', 'report', 'now']))
@@ -902,6 +953,13 @@ export class SessionTools {
       modes: this.modesOf(status.id, starter),
       ...offered(this.deps.agentOptions(status.id)),
     }))
+    const roles = (await this.deps.roles()).map((role) => ({
+      id: role.ref,
+      name: role.title,
+      description: role.description,
+      ...role.suggests,
+    }))
+    const roleLines = roles.map((role) => `${role.id}: ${role.name}`)
     const text =
       agents.length === 0
         ? 'No agent can be started here.'
@@ -920,7 +978,10 @@ export class SessionTools {
                     : ''),
             )
             .join('\n')
-    return result(text, { agents })
+    return result(roleLines.length > 0 ? `${text}\nRoles:\n${roleLines.join('\n')}` : text, {
+      agents,
+      roles,
+    })
   }
 
   /** The start values with the model and effort asked for, checked against what the agent offers. */
@@ -1111,10 +1172,18 @@ export class SessionTools {
   private async start(caller: Caller, o: Args): Promise<CallToolResult> {
     const prompt = text(o, 'prompt')
     const value = o.title === undefined ? undefined : title(o)
-    const agentId = agent(o)
+    const asked = agent(o)
     const pick: StartPick = { model: option(o, 'model'), effort: option(o, 'effort') }
     const wanted = mode(o)
     const reported = report(o)
+    const named = roleRef(o)
+    const role = named === undefined ? null : await this.deps.role(named)
+    if (named !== undefined && !role) {
+      throw new SessionToolError(
+        'not_found',
+        `No role ${named}. list_agents lists the roles you can name.`,
+      )
+    }
     const callerInfo = this.deps.info(caller.sessionId)
     if (!callerInfo) throw notFound(caller.sessionId)
     if (callerInfo.startedBy !== null) {
@@ -1125,22 +1194,59 @@ export class SessionTools {
     }
     const limit = startLimit(caller.sessionId, this.deps.started(caller.sessionId), this.now())
     if (limit) throw limitError(limit)
+    // What the role suggests applies where the caller named nothing, and only when it can be used.
+    const set: string[] = []
+    const left: string[] = []
+    let agentId = asked
+    const wantedAgent = role?.suggests.agent
+    const suggested = wantedAgent === undefined ? null : this.startableAgent(wantedAgent)
+    if (asked === undefined && wantedAgent !== undefined) {
+      if (suggested) {
+        agentId = suggested.id
+        if (suggested.id !== callerInfo.agentId) set.push(`the agent ${suggested.name}`)
+      } else {
+        left.push(`the agent ${wantedAgent}`)
+      }
+    }
     if (agentId !== undefined && agentId !== callerInfo.agentId) this.checkAgent(agentId)
     const target = agentId ?? callerInfo.agentId
     if (wanted !== undefined) this.checkMode(target, wanted)
     const carried = this.deps.carried(caller.sessionId, target)
-    const options =
-      pick.model === undefined && pick.effort === undefined
-        ? carried
-        : await this.picked(target, carried, pick)
-    const started = await this.deps.start(caller.sessionId, {
-      prompt,
-      ...(value === undefined ? {} : { title: value }),
-      ...(agentId === undefined ? {} : { agentId }),
-      ...(wanted === undefined ? {} : { mode: wanted }),
-      options,
-      report: reported,
-    })
+    // Its model and effort belong to the agent it suggests, or to any agent when it names none.
+    const fits = role !== null && (wantedAgent === undefined || suggested?.id === target)
+    const wished = fits ? await this.wishedPick(target, role.suggests, pick) : null
+    let options: Record<string, string | boolean>
+    if (wished && (wished.pick.model !== pick.model || wished.pick.effort !== pick.effort)) {
+      try {
+        options = await this.picked(target, carried, wished.pick)
+        set.push(...wished.set)
+      } catch (error) {
+        if (!(error instanceof SessionToolError)) throw error
+        left.push(...wished.set)
+        options = await this.pickedOrCarried(target, carried, pick)
+      }
+    } else {
+      options = await this.pickedOrCarried(target, carried, pick)
+    }
+    left.push(...(wished?.left ?? []))
+    let started: string
+    try {
+      started = await this.deps.start(caller.sessionId, {
+        prompt,
+        ...(value === undefined ? {} : { title: value }),
+        ...(agentId === undefined ? {} : { agentId }),
+        ...(wanted === undefined ? {} : { mode: wanted }),
+        ...(role ? { role: role.ref } : {}),
+        options,
+        report: reported,
+      })
+    } catch (error) {
+      // A role whose skills or servers are missing is refused with what it needs.
+      if (role && error instanceof HostError && error.code === 'invalid_params') {
+        throw new SessionToolError('invalid', error.message)
+      }
+      throw error
+    }
     const session = this.deps.info(started)
     if (!session) throw notFound(started)
     const current = await this.deps.mode(started)
@@ -1149,6 +1255,11 @@ export class SessionTools {
     const held = this.deps.held(started)
     return result(
       `Started "${titleOf(session)}"${modeText(current)}${choicesText(choices)}.` +
+        (role && set.length > 0 ? ` The role ${role.title} set ${listed(set)}.` : '') +
+        (role && left.length > 0
+          ? ` The role ${role.title} suggested ${listed(left)}, which is not available here, ` +
+            'so the usual values apply.'
+          : '') +
         (lowered ? this.loweredText(caller.sessionId, target, wanted) : '') +
         (held
           ? ' Kettu could not set every value it starts with, so its first message waits for ' +
@@ -1158,8 +1269,77 @@ export class SessionTools {
         ...infoOf(session, caller.sessionId, undefined, current, choices),
         ...(lowered ? { mode_lowered: true } : {}),
         ...(held ? { held: true } : {}),
+        ...(role ? { role: role.title } : {}),
       },
     )
+  }
+
+  /** An agent a role may suggest: a startable one by its id, or the first of a harness. */
+  private startableAgent(value: string): AgentStatus | null {
+    const usable = this.deps.agents().filter((status) => {
+      const state = toolAgentStatus(status)
+      return state !== null && state !== 'not_installed'
+    })
+    return (
+      usable.find((status) => status.id === value) ??
+      usable.find((status) => harnessOf(status.id) === value) ??
+      null
+    )
+  }
+
+  /**
+   * The model and effort a role suggests where the caller named none, matched to what the agent
+   * offers; `set` says what would apply and `left` what the agent does not offer.
+   */
+  private async wishedPick(
+    agentId: AgentId,
+    suggests: RoleSuggests,
+    pick: StartPick,
+  ): Promise<{ pick: StartPick; set: string[]; left: string[] }> {
+    const wished: StartPick = { ...pick }
+    const set: string[] = []
+    const left: string[] = []
+    if (suggests.model === undefined && suggests.effort === undefined) return { pick, set, left }
+    if (!this.deps.agentOptions(agentId)) await this.deps.readOptions(agentId).catch(() => {})
+    const offer = offered(this.deps.agentOptions(agentId))
+    let chosen: OfferedModel | undefined
+    if (pick.model === undefined && suggests.model !== undefined) {
+      const wanted = suggests.model.toLowerCase()
+      chosen = offer.models?.find(
+        (model) =>
+          model.id === suggests.model ||
+          [model.id, model.name].some((v) => v.toLowerCase() === wanted),
+      )
+      if (chosen) {
+        wished.model = chosen.id
+        set.push(`the model ${chosen.name}`)
+      } else {
+        left.push(`the model ${suggests.model}`)
+      }
+    }
+    if (pick.effort === undefined && suggests.effort !== undefined) {
+      const known = chosen?.efforts ?? offer.efforts
+      const wanted = suggests.effort.toLowerCase()
+      const match = known?.find((effort) => effort.toLowerCase() === wanted)
+      if (known && !match) {
+        left.push(`the effort ${suggests.effort}`)
+      } else {
+        wished.effort = match ?? suggests.effort
+        set.push(`the effort ${wished.effort}`)
+      }
+    }
+    return { pick: wished, set, left }
+  }
+
+  /** The start values with the caller's own model and effort picked over the carried ones. */
+  private pickedOrCarried(
+    agentId: AgentId,
+    carried: Record<string, string | boolean>,
+    pick: StartPick,
+  ): Promise<Record<string, string | boolean>> {
+    return pick.model === undefined && pick.effort === undefined
+      ? Promise.resolve(carried)
+      : this.picked(agentId, carried, pick)
   }
 
   /** The caller's turns or a started session's: no other conversation is the agent's to read. */

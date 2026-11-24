@@ -180,17 +180,24 @@ export class CommandsService {
 
   /** What a command needs that the Marketplace does not keep or has turned off, one line each. */
   private unmet(needs: CommandNeeds): string[] {
-    const kept = this.deps.kept()
-    const lines: string[] = []
-    const check = (names: readonly string[], list: readonly KeptTool[], kind: 'skill' | 'mcp') => {
-      for (const name of names) {
-        const tool = list.find((item) => item.name === name || item.id === name)
-        if (!tool) lines.push(t(`commands.missing.${kind}`, { name }))
-        else if (!tool.on) lines.push(t(`commands.off.${kind}`, { name }))
-      }
-    }
-    check(needs.skills, kept.skills, 'skill')
-    check(needs.mcp, kept.mcp, 'mcp')
-    return lines
+    return unmetNeeds(this.deps.kept(), needs)
   }
+}
+
+/** What `needs` names that the Marketplace does not keep or has turned off, one line each. */
+export function unmetNeeds(
+  kept: { skills: readonly KeptTool[]; mcp: readonly KeptTool[] },
+  needs: CommandNeeds,
+): string[] {
+  const lines: string[] = []
+  const check = (names: readonly string[], list: readonly KeptTool[], kind: 'skill' | 'mcp') => {
+    for (const name of names) {
+      const tool = list.find((item) => item.name === name || item.id === name)
+      if (!tool) lines.push(t(`commands.missing.${kind}`, { name }))
+      else if (!tool.on) lines.push(t(`commands.off.${kind}`, { name }))
+    }
+  }
+  check(needs.skills, kept.skills, 'skill')
+  check(needs.mcp, kept.mcp, 'mcp')
+  return lines
 }
