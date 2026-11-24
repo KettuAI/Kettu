@@ -97,6 +97,11 @@ const IPV4 = /^(25[0-5]|2[0-4]\d|1?\d?\d)(\.(25[0-5]|2[0-4]\d|1?\d?\d)){3}$/
 // eslint-disable-next-line no-control-regex
 const CONTROL = /[\u0000-\u001f\u007f-\u009f]/
 const MAX_NAME = 64
+
+/** A region's name as its signed list gives it, the words a device shows for it. */
+export const isRegionName = (value: unknown): value is string =>
+  typeof value === 'string' && value.length > 0 && value.length <= MAX_NAME && !CONTROL.test(value)
+
 /** The longest payload taken: 16 regions and their names fit well within it. */
 const MAX_PAYLOAD = 16 * 1024
 const SHA256_BYTES = 32
@@ -167,8 +172,7 @@ function parseRegion(value: unknown, main: string): ListedRegion | null {
   if (!fields) return null
   const { id, name, country, url, pin, state } = fields
   if (typeof id !== 'string' || !REGION_ID.test(id)) return null
-  if (typeof name !== 'string' || name.length === 0 || name.length > MAX_NAME) return null
-  if (CONTROL.test(name)) return null
+  if (!isRegionName(name)) return null
   if (country !== undefined && (typeof country !== 'string' || !COUNTRY.test(country))) return null
   if (state !== 'active' && state !== 'probe') return null
   if (pin !== undefined && !isPin(pin)) return null

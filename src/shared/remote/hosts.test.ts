@@ -145,4 +145,16 @@ describe('parseHostStatus', () => {
       relay: 'https://relay.kettu.sh',
     })
   })
+
+  it('keeps the relay region a host is reached through', () => {
+    const relay = 'https://relay.kettu.sh'
+    expect(connection({ state: 'online', relay, region: 'Tokyo' })).toEqual({
+      state: 'online',
+      relay,
+      region: 'Tokyo',
+    })
+    for (const region of ['', 'x'.repeat(65), 'Tokyo\nHong Kong', 'Tokyo\u0085', 42]) {
+      expect(connection({ state: 'online', relay, region })).toEqual({ state: 'online', relay })
+    }
+  })
 })

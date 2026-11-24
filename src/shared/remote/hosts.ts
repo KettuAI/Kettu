@@ -6,6 +6,7 @@ import { parseDirectAddress } from './address'
 import { DEVICE_ID, isDeviceName } from './device'
 import type { DirectAddress } from './protocol'
 import { parseHostRelay, relayOrigin, type HostRelay } from './relay'
+import { isRegionName } from './relay-regions'
 
 /** How long pairing waits for a finished handshake before the host counts as unreachable. */
 export const PAIR_HOST_TIMEOUT_MS = 15_000
@@ -399,7 +400,7 @@ const STOPS: readonly string[] = ['removed', 'update_client', 'update_host']
 
 function parseConnection(value: unknown): HostConnection | null {
   if (typeof value !== 'object' || value === null) return null
-  const { state, address, relay, own, reason, terminal } = value as Record<string, unknown>
+  const { state, address, relay, region, own, reason, terminal } = value as Record<string, unknown>
   if (state === 'connecting') return { state }
   if (state === 'offline') {
     return RELAY_PROBLEMS.includes(relay as string)
@@ -410,7 +411,8 @@ function parseConnection(value: unknown): HostConnection | null {
     const extra = terminal === true ? { terminal: true as const } : {}
     if (typeof relay === 'string') {
       if (relayOrigin(relay) !== relay) return null
-      return own === true ? { state, relay, own: true, ...extra } : { state, relay, ...extra }
+      if (own === true) return { state, relay, own: true, ...extra }
+      return { state, relay, ...(isRegionName(region) ? { region } : {}), ...extra }
     }
     const parsed = parseDirectAddress(address)
     return parsed ? { state, address: parsed, ...extra } : null
