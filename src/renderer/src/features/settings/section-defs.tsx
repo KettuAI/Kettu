@@ -89,7 +89,7 @@ import { AddHostButton, HostRow, HostsLoading, HostsNote, SelfRow } from './host
 import { DevicePage } from './remote-device'
 import { DirectPortField, FoundAddresses, OwnAddresses } from './remote-direct'
 import { DirectSwitch, DiscoverableSwitch } from './remote-relay'
-import { RelayChoices, RelayNote } from './remote-relay-choice'
+import { RelayCard, RelayNote } from './remote-relay-choice'
 import { relayInUse } from './relay-text'
 import {
   AddDeviceButton,
@@ -1378,8 +1378,11 @@ export function useRemoteSection(): SectionDef {
   if (!enabled)
     return { ...base, rows: devices.length > 0 ? [switchRow, ...deviceRows] : [switchRow] }
   const direct = group('direct', t('remote.direct.group'))
-  // The choices are cards of their own, so the group draws on the page.
-  const relayGroup = group('relay', t('remote.relay.group'), { plain: true, note: <RelayNote /> })
+  // The card draws its rows itself, since the choice decides which rows follow it.
+  const relayGroup = group('relay', t('remote.relay.group'), {
+    note: <RelayNote />,
+    card: () => <RelayCard />,
+  })
   const permissions = group('permissions', t('remote.groups.permissions'))
   const rows: RowDef[] = [
     switchRow,
@@ -1396,8 +1399,7 @@ export function useRemoteSection(): SectionDef {
       setting: 'remote.relay',
       params: onHost,
       group: relayGroup,
-      layout: 'custom',
-      render: () => <RelayChoices />,
+      render: () => null,
     },
     ...(relayChoice === 'kettu' && !cloudOff
       ? [
@@ -1405,7 +1407,7 @@ export function useRemoteSection(): SectionDef {
             id: 'relay-regions',
             setting: 'remote.relay-regions',
             group: relayGroup,
-            // Drawn in the Kettu relay's card, which search lands on.
+            // Drawn by the relay's card, under the Relay row.
             searchOnly: true,
             render: () => null,
           } satisfies RowDef,

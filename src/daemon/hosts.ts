@@ -438,6 +438,7 @@ export class Hosts {
       service: true,
       direct: status?.direct ?? { state: 'off' },
       relay: this.relayReport(),
+      ownRelayKeyEnd: accessKeyEnd(this.options.accessKey()),
     }
   }
 

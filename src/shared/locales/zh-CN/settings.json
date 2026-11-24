@@ -1985,22 +1985,24 @@
       "group": "中继",
       "groupDescription": "设备在别的网络里怎么连到这台电脑：Kettu 中继、你自己运行的中继，或者不用中继。",
       "groupDescription_web": "设备在别的网络里怎么连到 {{host}}：Kettu 中继、你自己运行的中继，或者不用中继。",
-      "inUse": "正在用",
       "onlyKettu": "只在用 Kettu 中继时可用。",
       "choice": {
         "kettu": {
           "name": "Kettu 中继",
+          "short": "Kettu 中继",
           "description": "由 Kettu 运行。这台电脑和你的设备登录同一个 Kettu 账号。",
           "description_web": "由 Kettu 运行。{{host}} 和你的设备登录同一个 Kettu 账号。"
         },
         "own": {
           "name": "自己的中继",
+          "short": "自己的中继",
           "description": "在你自己的服务器上运行的中继，不需要 Kettu 账号。",
           "descriptionLocal": "在你自己的服务器上运行的中继，什么都不发给 Kettu。",
           "older": "把这台电脑上的 Kettu 更新后才能用自己的中继。"
         },
         "off": {
           "name": "不用中继",
+          "short": "不用中继",
           "description": "设备在同一网络、经 VPN 或 SSH 连接。"
         }
       },
@@ -2020,14 +2022,11 @@
         "keyHint": "只存在这台电脑上，设备拿不到。",
         "keyKept": "留空就继续用结尾是 {{end}} 的密钥。",
         "noKey": "没有保存",
-        "showKey": "显示密钥",
-        "hideKey": "隐藏密钥",
         "docs": "怎么运行中继",
         "docsUrl": "https://github.com/KettuAI/relay/blob/main/docs/deploy.zh-CN.md",
         "cancel": "取消",
         "use": "使用这个中继",
         "checking": "正在检查…",
-        "checks": "检查",
         "change": "更换…",
         "replace": "更换…",
         "pasteLink": "粘贴新链接…",
@@ -2044,14 +2043,6 @@
           "refused": "被拒绝 · 中继换了访问密钥",
           "busy": "连接太多 · 稍后再试",
           "unreachable": "连不上 · 稍后再试"
-        },
-        "step": {
-          "address": "Kettu 能用的地址",
-          "reach": "连得上，证书有效",
-          "kettu": "是 Kettu 的中继，收访问密钥",
-          "key": "接受这个访问密钥",
-          "done": "通过",
-          "failed": "没通过"
         },
         "problem": {
           "address": "填中继的地址，比如 https://relay.example.com。",

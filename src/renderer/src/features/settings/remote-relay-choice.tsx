@@ -1,27 +1,21 @@
-// Settings › Remote access › Relay: the Kettu relay, the owner's own relay or none, one at a time.
-// Your own relay is filled in on its card and checked by the host before it switches; once in use,
-// its card shows the address, how the host's sign-in is doing and the end of its access key.
+// Settings › Remote access › Relay: one row picks the Kettu relay, the owner's own relay or none.
+// Your own relay is filled in under it and checked by the host before it switches; once in use,
+// its address with how the host's sign-in is doing and the end of its access key are rows under it.
 
-import { useId, useState, type ReactNode } from 'react'
-import {
-  Alert02Icon,
-  BookOpen01Icon,
-  Tick02Icon,
-  ViewIcon,
-  ViewOffSlashIcon,
-} from '@hugeicons/core-free-icons'
+import { useState, type ReactNode } from 'react'
+import { BookOpen01Icon } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
 import { parseRelayLink, type OwnRelayCheck, type OwnRelayProblem } from '@shared/remote/own-relay'
 import type { OwnRelayReport } from '@shared/remote/status'
 import type { RelayChoice } from '@shared/settings'
 import { Icon } from '@renderer/components/affect/app-shell'
-import { RadioGroup, RadioGroupTile } from '@renderer/components/ui/radio-group'
+import { TextField } from '@renderer/components/affect/text-field'
 import { errorMessage } from '@renderer/lib/host'
 import { useHostContext, useHostHas } from '@renderer/lib/host-features'
 import { useHostScope } from '@renderer/stores/host-scope'
-import { ControlError, IconAction, Pill, SetButton, SetInput } from './controls'
+import { ControlError, Segmented, SetButton } from './controls'
 import { RelayRegions, RetryRelay } from './remote-relay'
-import { GroupNote } from './rows'
+import { BlockLine, GroupNote, RowGroup, RowLine, RowShell, RowText } from './rows'
 import { errorGroup, relayHostName } from './relay-text'
 import { useApply } from './use-apply'
 import { useCloudOffHere } from './use-cloud-off-here'
@@ -29,22 +23,8 @@ import { useCloudOffHere } from './use-cloud-off-here'
 /** What the own relay's form is for: a first relay, a new address, or a new key for the same. */
 type FormMode = 'new' | 'change' | 'replace'
 
-/** The checks the host runs, in its order; a problem fails the first it belongs to. */
-const STEPS = ['address', 'reach', 'kettu', 'key'] as const
-type Step = (typeof STEPS)[number]
-
-const STEP_OF: Record<OwnRelayProblem, Step> = {
-  address: 'address',
-  kettu: 'address',
-  http: 'address',
-  unreachable: 'reach',
-  certificate: 'reach',
-  not_kettu: 'kettu',
-  protocol: 'kettu',
-  no_access_key: 'kettu',
-  key: 'key',
-  key_refused: 'key',
-}
+/** The problems the access key causes; the others are the address's. */
+const KEY_PROBLEMS: ReadonlySet<OwnRelayProblem> = new Set(['key', 'key_refused'])
 
 /** The own relay is in use, as the host reports it; null on another relay or before it says. */
 function useOwnReport(): OwnRelayReport | null {
@@ -54,8 +34,22 @@ function useOwnReport(): OwnRelayReport | null {
   )
 }
 
-/** The three cards; in Local mode the Kettu relay, a service of Kettu's, is left out. */
-export function RelayChoices() {
+/**
+ * The end of the access key the host keeps for its own relay, whichever relay is in use; older
+ * hosts report it only while their own relay is.
+ */
+function useKeptKeyEnd(): string | null {
+  const { useRemoteStore } = useHostScope()
+  const kept = useRemoteStore((s) => s.status?.ownRelayKeyEnd)
+  const own = useOwnReport()
+  return kept !== undefined ? kept : (own?.keyEnd ?? null)
+}
+
+/**
+ * The group's card: the Relay row with its choices, then what the choice brings, the own relay's
+ * form or rows, or the Kettu relay's regions. In Local mode the Kettu relay is left out.
+ */
+export function RelayCard() {
   const { t } = useTranslation('settings')
   const { useSettingsStore, useRemoteStore } = useHostScope()
   const choice = useSettingsStore((s) => s.settings.remote.relay)
@@ -84,65 +78,68 @@ export function RelayChoices() {
     if (next !== current) apply({ remote: { relay: next === 'kettu' } })
   }
 
+  const description = t(
+    value === 'own' && cloudOff
+      ? 'remote.relay.choice.own.descriptionLocal'
+      : `remote.relay.choice.${value}.description`,
+    onHost,
+  )
+
   return (
-    <div className="k-relay">
-      <ControlError error={error} wrap />
-      <RadioGroup
-        aria-label={t('remote.relay.group')}
-        value={value}
-        onValueChange={(next) => pick(next as RelayChoice)}
-        className="k-relay-choices"
-      >
-        {options.map((option) => (
-          <div
-            key={option}
-            className="k-relay-choice"
-            data-checked={value === option || undefined}
-            data-disabled={(option === 'own' && !canOwn) || undefined}
-          >
-            <RadioGroupTile
-              value={option}
-              disabled={option === 'own' && !canOwn}
-              className="k-relay-tile"
-            >
-              <span className="ui-sg-label">
-                <b className="k-row-title">
-                  {t(`remote.relay.choice.${option}.name`)}
-                  {editing && option === current && (
-                    <Pill className="k-relay-in-use">{t('remote.relay.inUse')}</Pill>
-                  )}
-                </b>
-                <small>
-                  {option === 'own' && !canOwn
-                    ? t('remote.relay.choice.own.older')
-                    : t(
-                        option === 'own' && cloudOff
-                          ? 'remote.relay.choice.own.descriptionLocal'
-                          : `remote.relay.choice.${option}.description`,
-                        onHost,
-                      )}
-                </small>
-              </span>
-            </RadioGroupTile>
-            {option === 'own' &&
-              (editing ? (
-                <OwnRelayForm
-                  mode={editing}
-                  onCancel={() => setEditing(null)}
-                  onDone={() => setEditing(null)}
-                />
-              ) : (
-                current === 'own' && <OwnRelayInUse onEdit={setEditing} />
-              ))}
-            {option === 'kettu' && current === 'kettu' && !editing && regions && (
-              <div className="k-relay-body">
-                <RelayRegions />
-              </div>
-            )}
-          </div>
-        ))}
-      </RadioGroup>
-    </div>
+    <RowGroup>
+      <RowShell id="relay">
+        <RowLine
+          text={
+            <RowText
+              name={t('remote.relay.group')}
+              description={
+                canOwn ? description : `${description} ${t('remote.relay.choice.own.older')}`
+              }
+            />
+          }
+        >
+          <ControlError error={error} />
+          <Segmented
+            label={t('remote.relay.group')}
+            value={value}
+            options={options.map((option) => ({
+              value: option,
+              label: t(`remote.relay.choice.${option}.short`),
+              disabled: option === 'own' && !canOwn,
+            }))}
+            onChange={pick}
+          />
+        </RowLine>
+      </RowShell>
+      {editing ? (
+        <RowShell>
+          <OwnRelayForm
+            mode={editing}
+            onCancel={() => setEditing(null)}
+            onDone={() => setEditing(null)}
+          />
+        </RowShell>
+      ) : current === 'own' ? (
+        <OwnRelayInUse onEdit={setEditing} />
+      ) : (
+        current === 'kettu' &&
+        regions && (
+          <RowShell id="relay-regions">
+            <div className="k-block">
+              <BlockLine
+                text={
+                  <RowText
+                    name={t('remote.relay.regions')}
+                    description={t('remote.relay.regionsDescription')}
+                  />
+                }
+              />
+              <RelayRegions />
+            </div>
+          </RowShell>
+        )
+      )}
+    </RowGroup>
   )
 }
 
@@ -175,32 +172,42 @@ function OwnRelayInUse({ onEdit }: { onEdit: (mode: FormMode) => void }) {
   const own = useOwnReport()
   const url = own?.url ?? saved?.url ?? ''
   return (
-    <div className="k-relay-body">
-      <div className="k-relay-table">
-        <div className="k-relay-line">
-          <span className="ui-sg-label">
-            <b className="k-mono">{relayHostName(url)}</b>
-            <small>
-              <OwnRelayState own={own} />
-            </small>
-          </span>
+    <>
+      <RowShell>
+        <RowLine
+          text={
+            <RowText
+              name={<span className="k-mono">{relayHostName(url)}</span>}
+              description={<OwnRelayState own={own} />}
+            />
+          }
+        >
           <OwnRelayAction own={own} onEdit={onEdit} />
-        </div>
-        <div className="k-relay-line">
-          <span className="ui-sg-label">
-            <b>{t('remote.relay.own.key')}</b>
-            <small className="k-mono">
-              {own?.keyEnd ? `krk_••••${own.keyEnd}` : t('remote.relay.own.noKey')}
-            </small>
-          </span>
+        </RowLine>
+      </RowShell>
+      <RowShell>
+        <RowLine
+          text={
+            <RowText
+              name={t('remote.relay.own.key')}
+              description={
+                own?.keyEnd ? (
+                  <span className="k-mono">krk_••••{own.keyEnd}</span>
+                ) : (
+                  t('remote.relay.own.noKey')
+                )
+              }
+            />
+          }
+        >
           <SetButton onClick={() => onEdit('replace')}>{t('remote.relay.own.replace')}</SetButton>
-        </div>
-      </div>
-    </div>
+        </RowLine>
+      </RowShell>
+    </>
   )
 }
 
-/** The host's sign-in to its own relay, in a few words. */
+/** The host's sign-in to its own relay, in a few words after a dot of its state. */
 function OwnRelayState({ own }: { own: OwnRelayReport | null }) {
   const { t } = useTranslation('settings')
   const { useRemoteStore } = useHostScope()
@@ -209,14 +216,19 @@ function OwnRelayState({ own }: { own: OwnRelayReport | null }) {
   )
   if (!own) {
     return (
-      <span className="k-status">
+      <>
         <span aria-hidden className="k-dot" data-tone="bad" />
         {t('remote.relay.own.state.noKey')}
-      </span>
+      </>
     )
   }
   if (!connection || connection.state === 'connecting') {
-    return <span className="k-status">{t('remote.relay.own.state.connecting')}</span>
+    return (
+      <>
+        <span aria-hidden className="k-dot" />
+        {t('remote.relay.own.state.connecting')}
+      </>
+    )
   }
   if (connection.state === 'connected') {
     const parts = [t('remote.relay.own.state.connected')]
@@ -224,10 +236,10 @@ function OwnRelayState({ own }: { own: OwnRelayReport | null }) {
     if (own.pinned) parts.push(t('remote.relay.own.state.pinned'))
     else if (own.version) parts.push(t('remote.relay.own.state.version', { version: own.version }))
     return (
-      <span className="k-status">
+      <>
         <span aria-hidden className="k-dot" data-tone="ok" />
         {parts.join(' · ')}
-      </span>
+      </>
     )
   }
   const text =
@@ -235,7 +247,7 @@ function OwnRelayState({ own }: { own: OwnRelayReport | null }) {
       ? t('remote.relay.state.conflict')
       : t(`remote.relay.own.state.${errorGroup(connection.error)}`)
   return (
-    <span className="k-status">
+    <span className="k-relay-bad">
       <span aria-hidden className="k-dot" data-tone="bad" />
       {text}
     </span>
@@ -261,7 +273,9 @@ function OwnRelayAction({
       errorGroup(connection.error) === 'refused')
   if (refused) {
     return (
-      <SetButton onClick={() => onEdit('replace')}>{t('remote.relay.own.pasteLink')}</SetButton>
+      <SetButton variant="primary" onClick={() => onEdit('replace')}>
+        {t('remote.relay.own.pasteLink')}
+      </SetButton>
     )
   }
   if (connection?.state === 'retrying' || connection?.state === 'conflict') return <RetryRelay />
@@ -282,7 +296,8 @@ function withScheme(text: string): string {
 
 /**
  * Address and access key, filled in by hand or from the link the relay printed; Use this relay
- * has the host check both and switch once they pass. Nothing changes until then.
+ * has the host check both and switch once they pass. Nothing changes until then, and a check
+ * that fails says why under the field it concerns.
  */
 function OwnRelayForm({
   mode,
@@ -296,22 +311,19 @@ function OwnRelayForm({
   const { t } = useTranslation('settings')
   const { api, useSettingsStore } = useHostScope()
   const saved = useSettingsStore((s) => s.settings.remote.ownRelay)
-  const current = useSettingsStore((s) => s.settings.remote.relay)
-  const own = useOwnReport()
+  const keptEnd = useKeptKeyEnd()
   const onHost = useHostContext()
-  const id = useId()
   const [address, setAddress] = useState(saved?.url ?? '')
   const [key, setKey] = useState('')
   // A pin comes with the address it was printed with, and only holds for that address.
   const [pinned, setPinned] = useState<{ url: string; pin: string } | null>(
     saved?.pin ? { url: saved.url, pin: saved.pin } : null,
   )
-  const [shown, setShown] = useState(false)
   const [phase, setPhase] = useState<CheckPhase>({ kind: 'idle' })
   const url = withScheme(address)
   const pin = pinned && pinned.url === url ? pinned.pin : null
-  // The key kept now is used again for a new address, when the field is left empty.
-  const keepsKey = mode === 'change' && current === 'own' && own?.keyEnd != null
+  // The key kept now is used again when the field is left empty, unless it is being replaced.
+  const keepsKey = mode !== 'replace' && keptEnd !== null
   const checking = phase.kind === 'checking'
 
   /** Splits a pasted link into its address, key and pin; other text is typed as it is. */
@@ -343,7 +355,6 @@ function OwnRelayForm({
       .catch((e: unknown) => setPhase({ kind: 'error', message: errorMessage(e) }))
   }
 
-  const failedAt = phase.kind === 'failed' ? STEP_OF[phase.problem] : null
   const host = relayHostName(url)
   const port = URL.parse(url)?.port || (url.startsWith('http:') ? '80' : '443')
   const problemText = (problem: OwnRelayProblem): ReactNode =>
@@ -360,95 +371,57 @@ function OwnRelayForm({
         { host, port },
       )
     )
-  const addressProblem =
-    phase.kind === 'failed' && STEP_OF[phase.problem] !== 'key' ? phase.problem : null
-  const keyProblem =
-    phase.kind === 'failed' && STEP_OF[phase.problem] === 'key' ? phase.problem : null
+  const problem = phase.kind === 'failed' ? phase.problem : null
+  const keyProblem = problem && KEY_PROBLEMS.has(problem) ? problem : null
+  const addressProblem = problem && !keyProblem ? problem : null
 
   return (
     <form
-      className="k-relay-body"
+      className="k-block k-relay-form"
       onSubmit={(event) => {
         event.preventDefault()
         submit()
       }}
-      // The card's radio takes Space and the arrows; typing here stays in the fields.
-      onKeyDown={(event) => event.stopPropagation()}
     >
-      <label className="k-field k-relay-field" htmlFor={`${id}-address`}>
-        {t('remote.relay.own.address')}
-        <SetInput
-          id={`${id}-address`}
-          className="k-mono k-relay-input"
-          value={address}
-          placeholder="https://relay.example.com"
-          spellCheck={false}
-          autoCapitalize="off"
-          autoCorrect="off"
-          autoFocus={mode !== 'replace'}
-          readOnly={checking}
-          aria-invalid={addressProblem ? true : undefined}
-          aria-describedby={`${id}-address-hint`}
-          onChange={(event) => take(event.target.value, 'address')}
-        />
-        <span
-          id={`${id}-address-hint`}
-          className="k-relay-hint"
-          data-bad={addressProblem ? '' : undefined}
-          role={addressProblem ? 'alert' : undefined}
-        >
-          {addressProblem
-            ? problemText(addressProblem)
-            : pin
-              ? t('remote.relay.own.pinnedHint')
-              : t('remote.relay.own.addressHint')}
-        </span>
-      </label>
-      <label className="k-field k-relay-field" htmlFor={`${id}-key`}>
-        {t('remote.relay.own.key')}
-        <span className="k-relay-secret">
-          <SetInput
-            id={`${id}-key`}
-            className="k-mono k-relay-input"
-            type={shown ? 'text' : 'password'}
-            value={key}
-            placeholder={keepsKey ? `krk_••••${own?.keyEnd ?? ''}` : 'krk_…'}
-            spellCheck={false}
-            autoCapitalize="off"
-            autoCorrect="off"
-            autoComplete="off"
-            autoFocus={mode === 'replace'}
-            readOnly={checking}
-            aria-invalid={keyProblem ? true : undefined}
-            aria-describedby={`${id}-key-hint`}
-            onChange={(event) => take(event.target.value, 'key')}
-          />
-          <IconAction
-            label={t(shown ? 'remote.relay.own.hideKey' : 'remote.relay.own.showKey')}
-            icon={shown ? ViewOffSlashIcon : ViewIcon}
-            onClick={() => setShown((value) => !value)}
-          />
-        </span>
-        <span
-          id={`${id}-key-hint`}
-          className="k-relay-hint"
-          data-bad={keyProblem ? '' : undefined}
-          role={keyProblem ? 'alert' : undefined}
-        >
-          {keyProblem
-            ? problemText(keyProblem)
-            : keepsKey
-              ? t('remote.relay.own.keyKept', { end: own?.keyEnd })
-              : t('remote.relay.own.keyHint', onHost)}
-        </span>
-      </label>
-      {(checking || phase.kind === 'failed') && (
-        <ChecksList checking={checking} failedAt={failedAt} />
-      )}
+      <TextField
+        label={t('remote.relay.own.address')}
+        inputClassName="k-mono"
+        value={address}
+        placeholder="https://relay.example.com"
+        spellCheck={false}
+        autoCapitalize="off"
+        autoCorrect="off"
+        autoComplete="off"
+        autoFocus={mode !== 'replace'}
+        readOnly={checking}
+        hint={pin ? t('remote.relay.own.pinnedHint') : t('remote.relay.own.addressHint')}
+        error={addressProblem && problemText(addressProblem)}
+        onChange={(event) => take(event.target.value, 'address')}
+      />
+      <TextField
+        label={t('remote.relay.own.key')}
+        inputClassName="k-mono"
+        type="password"
+        value={key}
+        placeholder={keepsKey ? `krk_••••${keptEnd}` : 'krk_…'}
+        spellCheck={false}
+        autoCapitalize="off"
+        autoCorrect="off"
+        autoComplete="off"
+        autoFocus={mode === 'replace'}
+        readOnly={checking}
+        hint={
+          keepsKey
+            ? t('remote.relay.own.keyKept', { end: keptEnd })
+            : t('remote.relay.own.keyHint', onHost)
+        }
+        error={keyProblem && problemText(keyProblem)}
+        onChange={(event) => take(event.target.value, 'key')}
+      />
       {phase.kind === 'error' && <ControlError error={phase.message} wrap />}
-      <div className="k-relay-actions">
+      <div className="k-block-foot">
         <a
-          className="k-link k-relay-docs"
+          className="k-relay-docs"
           href={t('remote.relay.own.docsUrl')}
           target="_blank"
           rel="noreferrer"
@@ -466,45 +439,5 @@ function OwnRelayForm({
         </span>
       </div>
     </form>
-  )
-}
-
-/**
- * The host's checks, each passed, failed or still to come. The host answers once for all of them,
- * so while it checks none is marked passed; a failure passed the ones before it.
- */
-function ChecksList({ checking, failedAt }: { checking: boolean; failedAt: Step | null }) {
-  const { t } = useTranslation('settings')
-  const at = failedAt ? STEPS.indexOf(failedAt) : -1
-  return (
-    <ol aria-label={t('remote.relay.own.checks')} aria-live="polite" className="kettu-sd__steps">
-      {STEPS.map((step, index) => {
-        const state = checking
-          ? 'active'
-          : index < at
-            ? 'done'
-            : index === at
-              ? 'failed'
-              : 'pending'
-        return (
-          <li key={step} className="kettu-sd__step" data-state={state}>
-            <span aria-hidden className="kettu-sd__step-mark">
-              {state === 'done' && <Icon icon={Tick02Icon} size={14} />}
-              {state === 'active' && <span className="ui-ss-spinner" />}
-              {state === 'failed' && <Icon icon={Alert02Icon} size={14} />}
-              {state === 'pending' && <span className="kettu-sd__step-ring" />}
-            </span>
-            <span className="kettu-sd__step-text">
-              <span className="k-name">
-                {t(`remote.relay.own.step.${step}`)}
-                {(state === 'done' || state === 'failed') && (
-                  <span className="sr-only"> {t(`remote.relay.own.step.${state}`)}</span>
-                )}
-              </span>
-            </span>
-          </li>
-        )
-      })}
-    </ol>
   )
 }
