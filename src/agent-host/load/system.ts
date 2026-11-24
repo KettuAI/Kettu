@@ -666,9 +666,10 @@ export class SystemReader {
     if (platform === 'darwin') return parseNetstat(await run('/usr/sbin/netstat', ['-ibn']))
     if (platform === 'linux') {
       const text = await readFile('/proc/net/dev', 'utf8')
-      return (await this.limits())
-        ? parseNetDev(text)
-        : parseNetDev(text, await physicalInterfaces())
+      if (await this.limits()) return parseNetDev(text)
+      // An unmarked container (LXC, some Kubernetes runtimes) has only virtual interfaces.
+      const physical = await physicalInterfaces()
+      return parseNetDev(text, physical.size > 0 ? physical : undefined)
     }
     if (platform === 'win32') {
       const system = process.env.SystemRoot ?? 'C:\\Windows'
