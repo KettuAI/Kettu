@@ -12,7 +12,6 @@
       "all": "All",
       "mcp": "MCP servers",
       "installed": "Installed",
-      "plugins": "Plugins",
       "skills": "Skills",
       "workflow": "Workflows",
       "published": "Published"
@@ -24,8 +23,6 @@
     "heading": "Add your own",
     "mcp": "An MCP server…",
     "mcpLine": "A command to run, or a URL",
-    "marketplace": "A marketplace…",
-    "marketplaceLine": "A GitHub repository or Git URL",
     "skillGithub": "A skill from GitHub…",
     "skillGithubLine": "A repository, or a folder in one",
     "skillFolder": "A skill from a folder…",
@@ -44,10 +41,7 @@
     "other": "More servers",
     "results": "From the MCP Registry",
     "anthropic": "From Anthropic",
-    "codex": "For Codex",
-    "otherPlugins": "Other plugins",
     "from": "From {{publisher}}",
-    "plugins": "Plugins",
     "skills": "Skills",
     "mcp": "MCP servers",
     "workflow": "Workflows",
@@ -113,10 +107,6 @@
     "changeFailed": "Couldn’t change {{name}}: {{error}}",
     "uninstalled": "{{name}} uninstalled",
     "keysSaved": "Keys for {{name}} saved",
-    "pluginReady": "{{name}} is installed in {{agent}}",
-    "uninstalledFrom": "{{name}} uninstalled from {{agent}}",
-    "marketplaceAdded": "{{name}} added to {{agent}}",
-    "marketplaceRemoved": "{{name}} removed",
     "skillFailed": "Couldn’t add the skill: {{error}}",
     "connected": "Connected to {{name}}; every chosen agent can use it",
     "disconnected": "Disconnected from {{name}}",
@@ -189,17 +179,12 @@
     "forAgents_one": "For {{count}} agent",
     "forAgents_other": "For {{count}} agents",
     "plugins": "Plugins",
-    "noPlugins": "No agent has a plugin yet. Install one from Plugins.",
-    "marketplaces": "Plugin marketplaces",
-    "marketplacesNote": "Where each agent finds plugins. Its harness’s own marketplace stays.",
-    "marketplaceKept": "Built in",
-    "removeMarketplace": "Remove {{name}}",
     "skills": "Skills",
     "noSkills": "Kettu keeps no skills yet. Install one from Skills.",
     "noServers": "Kettu keeps no MCP servers yet. Install one from MCP servers.",
     "noWorkflows": "Kettu has no workflows yet. Add one from Workflows.",
     "own": "From your agents",
-    "ownNote": "The skills and MCP servers each agent keeps itself. Kettu shows them; change them in the agent.",
+    "ownNote": "The skills, plugins and MCP servers each agent keeps itself. Kettu shows them; change them in the agent.",
     "mcpConfig": "MCP configuration",
     "offIn": "Off in {{agents}}",
     "notCreated": "{{path}} · not created yet",
@@ -296,29 +281,10 @@
       "failed": "Couldn’t add the server: {{error}}"
     },
     "failed": "It didn’t work: {{error}}",
-    "uninstallPlugin": {
-      "title": "Uninstall {{name}}?",
-      "body": "{{agent}} removes it from its configuration; its sessions start without it."
-    },
     "removeSkill": {
       "title": "Remove {{name}}?",
       "body": "Agents’ new sessions start without it, and its files are deleted from this computer.",
       "confirm": "Remove"
-    },
-    "removeMarketplace": {
-      "title": "Remove {{name}}?",
-      "body": "{{agent}} stops listing its plugins; plugins already installed from it may stop working.",
-      "confirm": "Remove"
-    },
-    "marketplace": {
-      "title": "Add a plugin marketplace",
-      "description": "A marketplace lists plugins for Claude Code or Codex. The agent you pick keeps it in its own configuration.",
-      "agent": "Agent",
-      "noAgents": "Add a Claude Code or Codex agent first.",
-      "source": "Source",
-      "sourceHint": "A GitHub repository as owner/repo, or a Git URL.",
-      "sourcePlaceholder": "owner/repo",
-      "submit": "Add"
     },
     "skill": {
       "title": "Add a skill from GitHub",
@@ -342,7 +308,6 @@
     "workflow": "Workflow"
   },
   "notes": {
-    "plugins": "Couldn’t list the plugins: {{error}}",
     "agentPlugins": "Couldn’t read {{agent}}’s plugins: {{error}}",
     "skills": "Couldn’t read the skills catalog, so it may be out of date: {{error}}",
     "catalog": "Couldn’t reach the MCP Registry: {{error}}",
@@ -350,55 +315,26 @@
     "community": "Couldn’t read the Kettu Marketplace: {{error}}",
     "communityMore": "Couldn’t read more of the Kettu Marketplace: {{error}}",
     "skillRepository": "Couldn’t read {{repository}}: {{error}}",
-    "skillRepositoryStale": "Couldn’t read {{repository}} again, so these may be out of date: {{error}}"
+    "skillRepositoryStale": "Couldn’t read {{repository}} again, so these may be out of date: {{error}}",
+    "harnessPlugins": "Claude Code and Codex plugins are now managed in Claude Code and Codex. The ones you installed keep working.",
+    "harnessPluginsDismiss": "Got it"
   },
   "empty": {
-    "pluginsTitle": "No plugins to show",
-    "plugins": "Claude Code and Codex list no plugins yet. Add a marketplace with Add.",
     "skillsTitle": "No skills to show",
     "skills": "The skills catalog is empty. Add a skill from GitHub or a folder with Add."
   },
   "plugin": {
     "installs_one": "{{value}} install",
     "installs_other": "{{value}} installs",
-    "installNote": "{{harness}} installs it into the agent’s own configuration, so its terminal sees it too.",
-    "agent": "Agent",
-    "noAgents": "Add a {{harness}} agent first.",
-    "scope": "Scope",
     "scopeUser": "Every project",
-    "scopeProject": "One project",
-    "project": "Project",
     "scopeProjectIn": "In {{project}}",
     "scopeLocalIn": "In {{project}}, for you only",
     "hooksWarning": "Has hooks: they run commands on this computer by themselves, outside the agent’s sandbox.",
-    "hooksUnchecked": "Couldn’t check it for hooks: {{error}}",
     "facts": {
-      "installs": "Installs",
-      "category": "Category"
+      "installs": "Installs"
     },
-    "side": {
-      "marketplace": "Marketplace",
-      "id": "Plugin",
-      "homepage": "Homepage"
-    },
-    "installAnother": "Install for another agent",
-    "installedIn": "Installed in",
-    "switch": "{{name}} in {{agent}}",
-    "uninstall": "Uninstall",
-    "uninstallFrom": "Uninstall {{name}} from {{agent}}",
     "adds": "Adds",
-    "willAdd": "Will add",
-    "detailsFailed": "Couldn’t read what it adds: {{error}}",
-    "parts": {
-      "skills": "Skills",
-      "commands": "Commands",
-      "agents": "Subagents",
-      "hooks": "Hooks",
-      "mcpServers": "MCP servers",
-      "lspServers": "LSP servers",
-      "context": "Context"
-    },
-    "tokensEachTurn": "About {{value}} tokens in every session"
+    "willAdd": "Will add"
   },
   "skill": {
     "installNote": "Kettu keeps it on this computer and hands it to these agents when a session starts.",
@@ -642,7 +578,6 @@
   },
   "community": {
     "skillNote": "Kettu downloads it from the Kettu Marketplace, checks every file, keeps it on this computer and hands it to these agents when a session starts.",
-    "pluginNote": "Kettu downloads it from the Kettu Marketplace and checks every file, then {{harness}} installs it into the agent’s configuration.",
     "signedOut": "Sign in to Kettu to see what the community published.",
     "servicesOff": "Turn on Kettu’s services to see what the community published.",
     "signIn": "Sign in",
@@ -670,7 +605,6 @@
     "source": "Kettu Marketplace",
     "onlyMe": "Only me",
     "cannotRun": "Kettu can’t run this MCP server: it names no package or https remote that Kettu runs.",
-    "pluginFor": "Plugin for {{harness}}",
     "kinds": {
       "mcp": "MCP server",
       "plugin": "Plugin",

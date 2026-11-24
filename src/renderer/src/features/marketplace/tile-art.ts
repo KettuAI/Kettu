@@ -1,6 +1,5 @@
-// What a Marketplace item's tile shows, in order: a bundled brand mark; a plugin's own logo, which
-// the host reads from the package on its computer; the icon of the site a remote MCP server
-// connects to; a glyph and color Kettu gives the items it knows; a plugin's category glyph on its
+// What a Marketplace item's tile shows, in order: a bundled brand mark; the icon of the site a
+// remote MCP server connects to; a glyph and color Kettu gives the items it knows; a plugin's category glyph on its
 // harness's color; else its kind's glyph and color.
 
 import {
@@ -43,7 +42,7 @@ import {
 import type { IconSvgElement } from '@hugeicons/react'
 import type { McpSpec, PluginHarness } from '@shared/marketplace'
 import type { WireWorkflowEntry } from '@shared/workflow'
-import { KETTU_PLUGINS, kettuId, type CommunityItem } from '@shared/market-community'
+import { kettuId, type CommunityItem } from '@shared/market-community'
 import { brandMark, type Mark } from './brand-marks'
 import { pluginName } from './model'
 
@@ -113,7 +112,7 @@ export function communitySubject(
   if (item.kind === 'plugin') {
     return pluginSubject({
       harness: item.harness ?? 'claude-code',
-      id: `${item.slug}@${KETTU_PLUGINS}`,
+      id: item.slug,
       marks: false,
     })
   }

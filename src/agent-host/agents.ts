@@ -147,7 +147,7 @@ import { readAccountBalance, type AccountBalance } from './dsh/balance'
 import { readClaudeSettings, writeClaudeSetting, type ListedModel } from './claude/user-settings'
 import { readCodebuddySite, shellOverrides, writeCodebuddySite } from './codebuddy/user-settings'
 import { readAutoCompact, writeAutoCompact, type CompactPlace } from './auto-compact/settings'
-import type { CodexRequest } from './marketplace/codex-plugins'
+import type { CodexRequest } from './codex/rpc'
 import { takesSkills } from './marketplace/skill-tools'
 import {
   globalInstallOf,

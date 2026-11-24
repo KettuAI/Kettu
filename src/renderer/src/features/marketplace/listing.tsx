@@ -52,7 +52,6 @@ import {
   type Listing,
 } from './model'
 import { ExternalLink, ListingFrame, ListingSkeleton, Missing } from './parts'
-import { PluginListing } from './plugins'
 import { BuiltinServerPage } from './builtin'
 import { PublishedListingPage } from './published-listing'
 import { KETTU_ITEM, previewIdOf, publishedIdOf } from './published-keys'
@@ -74,7 +73,7 @@ function leave(tab: MarketplaceTab): void {
   backTo({ kind: 'marketplace', ...(tab !== 'all' ? { tab } : {}) }, () => openMarketplace({ tab }))
 }
 
-/** A listing by its view's `item`: an MCP server's, a plugin's, a skill's or a workflow's. */
+/** A listing by its view's `item`: an MCP server's, a skill's or a workflow's. */
 export function ListingPage({ item, tab }: { item: string; tab: MarketplaceTab }) {
   const ref = parseItem(item)
   const back = () => leave(tab)
@@ -83,9 +82,6 @@ export function ListingPage({ item, tab }: { item: string; tab: MarketplaceTab }
   if (publishedId) return <PublishedListingPage id={publishedId} back={back} />
   const previewId = previewIdOf(item)
   if (previewId) return <CommunityPreviewPage id={previewId} tab={tab} />
-  if (ref?.kind === 'plugin') {
-    return <PluginListing harness={ref.harness} id={ref.id} tab={tab} back={back} />
-  }
   if (ref?.kind === 'skill') return <SkillListing id={ref.id} tab={tab} back={back} />
   if (ref?.kind === 'workflow') return <WorkflowListing id={ref.id} tab={tab} back={back} />
   if (ref?.kind === 'community') return <CommunityPage id={ref.id} tab={tab} back={back} />

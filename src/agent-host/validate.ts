@@ -27,12 +27,7 @@ import {
   type MemoryDraft,
   type MemoryScope,
 } from '@shared/memory'
-import {
-  catalogSkillId,
-  skillRepositoryId,
-  type PluginScope,
-  type SkillSource,
-} from '@shared/marketplace'
+import { catalogSkillId, skillRepositoryId, type SkillSource } from '@shared/marketplace'
 import {
   DIRECTORY_CURSOR,
   HANDLE,
@@ -1057,9 +1052,6 @@ function marketRead(params: unknown): { refresh?: boolean; cached?: boolean } {
 // What a report to the Kettu Marketplace says at most, as the service takes it.
 const REPORT_CHARS = 2_000
 
-// A plugin's or marketplace's name; never one that could pass for a command line flag.
-const PLUGIN_PART = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/
-
 /** A server Kettu keeps: a registry name, `manual:` and a UUID, or `kettu:` and a listing id. */
 function marketServerId(o: Fields): string {
   const id = string(o, 'serverId', ID_CHARS)
@@ -1111,37 +1103,6 @@ function probeHeaders(raw: unknown): { name: string; value: string }[] {
     }
     return { name, value }
   })
-}
-
-/** `<name>@<marketplace>`, as Claude Code and Codex name a plugin. */
-function pluginId(o: Fields): string {
-  const id = string(o, 'pluginId', ID_CHARS)
-  const at = id.lastIndexOf('@')
-  if (at <= 0 || !PLUGIN_PART.test(id.slice(0, at)) || !PLUGIN_PART.test(id.slice(at + 1))) {
-    throw invalidParams('pluginId must be <name>@<marketplace>')
-  }
-  return id
-}
-
-/** Where a plugin is installed: for the user, or a project's folder for the others. */
-function pluginPlace(o: Fields, platform: Platform): { scope: PluginScope; projectPath?: string } {
-  const scope = o.scope as PluginScope
-  if (scope !== 'user' && scope !== 'project' && scope !== 'local') {
-    throw invalidParams('scope must be user, project or local')
-  }
-  if (scope === 'user') {
-    if (o.projectPath !== undefined) throw invalidParams('A user scope takes no projectPath')
-    return { scope }
-  }
-  return { scope, projectPath: absolutePath(o, 'projectPath', platform) }
-}
-
-/** A plugin and where it is installed. */
-function pluginChange(
-  o: Fields,
-  platform: Platform,
-): { agentId: AgentId; pluginId: string; scope: PluginScope; projectPath?: string } {
-  return { agentId: agentId(o), pluginId: pluginId(o), ...pluginPlace(o, platform) }
 }
 
 /** A listing of the Kettu Marketplace, by its opaque id. */
@@ -1504,31 +1465,12 @@ export function createValidators(platform: Platform): Validators {
     },
     'market.disconnect': (params) => ({ serverId: marketServerId(fields(params)) }),
     'market.connections': none,
-    'market.plugins': marketRead,
-    'market.pluginDetails': (params) => {
-      const o = fields(params)
-      return { agentId: agentId(o), pluginId: pluginId(o) }
-    },
-    'market.pluginLogo': (params) => ({ pluginId: pluginId(fields(params)) }),
-    'market.installPlugin': (params) => pluginChange(fields(params), platform),
-    'market.uninstallPlugin': (params) => pluginChange(fields(params), platform),
-    'market.setPluginEnabled': (params) => {
-      const o = fields(params)
-      return { ...pluginChange(o, platform), enabled: flag(o, 'enabled') }
-    },
-    'market.addMarketplace': (params) => {
-      const o = fields(params)
-      const source = string(o, 'source', URL_CHARS).trim()
-      if (source === '' || source.startsWith('-') || /\p{Cc}/u.test(source)) {
-        throw invalidParams('source must be owner/repo, a Git URL or a path, on one line')
-      }
-      return { agentId: agentId(o), source }
-    },
-    'market.removeMarketplace': (params) => {
-      const o = fields(params)
-      const name = string(o, 'name', ID_CHARS)
-      if (!PLUGIN_PART.test(name)) throw invalidParams('name is not a marketplace name')
-      return { agentId: agentId(o), name }
+    'market.ownPlugins': (params) => {
+      const refresh = optionalFlag(
+        params === undefined || params === null ? {} : fields(params),
+        'refresh',
+      )
+      return refresh === undefined ? {} : { refresh }
     },
     'market.skills': marketRead,
     'market.skillRepository': (params) => {
@@ -1617,10 +1559,6 @@ export function createValidators(platform: Platform): Validators {
         'refresh',
       )
       return refresh === undefined ? {} : { refresh }
-    },
-    'market.installCommunityPlugin': (params) => {
-      const o = fields(params)
-      return { id: listingId(o), agentId: agentId(o), ...pluginPlace(o, platform) }
     },
     'market.addCommunityWorkflow': (params) => ({ id: listingId(fields(params)) }),
     'market.reportCommunity': (params) => {

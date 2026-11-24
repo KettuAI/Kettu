@@ -1296,10 +1296,10 @@
       "pathIsLink": "这个路径是链接，请改为提供它指向的文件夹。",
       "folderOrBundle": "请发布一个文件夹，或一个 MCP 包（.mcpb）文件。",
       "bundleTooLarge": "这个包超过了 {{mb}} MB，这是一个版本的上限。",
-      "bothPlugins": "这个文件夹同时是 Claude Code 插件和 Codex 插件，请把它们分别放进各自的文件夹再发布。",
+      "harnessPlugin": "Kettu 市场不再发布 Claude Code 和 Codex 的插件。",
       "manyBundles": "文件夹里有不止一个 MCP 包，只留一个。",
       "fileTooLarge": "它超过了 {{mb}} MB，这是一个版本的上限。",
-      "unknownFolder": "Kettu 认不出这个文件夹是什么。技能要有 SKILL.md，工作流要有 workflow.yaml，插件要有 .claude-plugin/plugin.json 或 .codex-plugin/plugin.json，MCP 服务器要有 server.json。",
+      "unknownFolder": "Kettu 认不出这个文件夹是什么。技能要有 SKILL.md，工作流要有 workflow.yaml，MCP 服务器要有 server.json。",
       "manifestTooLarge": "它太大了，不像是清单文件。",
       "aboutTooLong": "描述超过了 {{count}} 个字符。",
       "manifestName": "最上层的文件不能叫 manifest，请改名。",
@@ -1320,9 +1320,6 @@
     "badPath": "Kettu 市场给了一个 Kettu 不会写入的文件 {{path}}，所以什么都没装。",
     "tooLarge": "这个版本超过了一个版本的大小上限，所以什么都没装。",
     "otherKind": "这一项是另一种东西。",
-    "otherHarness": "这个插件是给另一种智能体的。",
-    "noManifest": "这个插件没有带名字的 {{file}}，装不了。",
-    "nameTaken": "已经装了 Kettu 市场里另一个叫 {{name}} 的插件（{{other}}）。先卸载它。",
     "noWorkflow": "这一项没有 UTF-8 文本的 workflow.yaml，所以什么都没装。",
     "notListing": "这不是 Kettu 市场里的条目"
   },
@@ -1384,18 +1381,9 @@
     }
   },
   "marketPlugins": {
-    "notListedInstalled": "{{agent}} 的已安装列表里没有 {{id}}",
-    "marketplaceNotListed": "{{agent}} 的列表里没有它刚添加的市场",
-    "noSuchPlugin": "{{agent}} 没有提供插件 {{id}}",
-    "noPlugins": "只有 Claude Code 和 Codex 有插件",
-    "codexUserOnly": "Codex 的插件只能装给当前用户",
-    "scopeNeedsProject": "项目范围和本地范围必须指定项目，其他范围不能指定",
-    "marketplaceListNotJson": "Claude Code 的市场列表不是 JSON",
-    "marketplaceListNotList": "Claude Code 的市场列表不是列表",
+    "removed": "Kettu 不再管理 Claude Code 和 Codex 的插件，请在 Claude Code 或 Codex 里管理。",
     "pluginListNotJson": "Claude Code 的插件列表不是 JSON",
     "pluginListNotObject": "Claude Code 的插件列表格式不对",
-    "claudeNoResult": "Claude Code 没有给出结果",
-    "claudeOutcome": "Claude Code 返回了 {{outcome}}",
     "claudeFailed": "claude 运行失败"
   },
   "report": {

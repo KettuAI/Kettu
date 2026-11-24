@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import type { ConfigOption, HarnessId } from '@shared/thread'
-import type { CodexRequest } from '../marketplace/codex-plugins'
+import type { CodexRequest } from '../codex/rpc'
 import { checkAutoCompact, readAutoCompact, writeAutoCompact, type CompactPlace } from './settings'
 
 let dir: string

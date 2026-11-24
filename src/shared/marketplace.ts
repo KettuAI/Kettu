@@ -107,7 +107,6 @@ export interface CatalogSection {
 /** How long the host keeps each list before it reads it again, in ms. */
 export const MARKET_KEPT_MS = {
   catalog: 24 * 60 * 60_000,
-  plugins: 60 * 60_000,
   skills: 24 * 60 * 60_000,
 } as const
 
@@ -285,30 +284,13 @@ export interface MarketSkills {
   builtIn?: BuiltinSkill[] // Kettu's own, for the features that are on; absent from older hosts
 }
 
-/** The harnesses that install plugins themselves. */
+/** The harnesses with plugins of their own, which Kettu only lists. */
 export type PluginHarness = 'claude-code' | 'codex'
 export type PluginScope = 'user' | 'project' | 'local'
 
-/** A plugin one of the harnesses' marketplaces offers. */
-export interface CatalogPlugin {
+/** A plugin in one agent's own configuration. */
+export interface AgentOwnPlugin {
   id: string // <name>@<marketplace>, as the harness names it
-  harness: PluginHarness
-  name: string
-  title: string
-  description: string
-  publisher: string | null
-  official: boolean // in the harness maker's own marketplace
-  marketplace: string
-  category: string | null
-  homepage: string | null // https URL
-  installs: number | null // as the marketplace counts them
-  version: string | null
-  featured: boolean
-}
-
-/** A plugin installed in one agent's configuration. */
-export interface InstalledPlugin {
-  id: string
   harness: PluginHarness
   agentId: AgentId
   version: string | null
@@ -317,40 +299,9 @@ export interface InstalledPlugin {
   projectPath: string | null // for a project or local scope
 }
 
-export interface PluginMarketplace {
-  harness: PluginHarness
-  agentId: AgentId
-  name: string
-  source: string // owner/repo, a Git URL or a path, as the harness reports it
-  official: boolean
-}
-
-export interface MarketPlugins {
-  catalog: CatalogPlugin[]
-  installed: InstalledPlugin[]
-  marketplaces: PluginMarketplace[]
+export interface AgentOwnPlugins {
+  plugins: AgentOwnPlugin[]
   errors: { agentId: AgentId; message: string }[]
-  stale?: boolean // as MarketCatalog's, for any agent's lists
-}
-
-/** A plugin's own logo as data URLs, read from its package on the host; null without one. */
-export interface PluginLogo {
-  light: string | null
-  dark: string | null
-}
-
-/** What a plugin adds, as its harness reports it. */
-export interface PluginDetails {
-  id: string
-  agentId: AgentId
-  description: string | null
-  skills: string[]
-  commands: string[]
-  agents: string[]
-  hooks: string[]
-  mcpServers: string[]
-  lspServers: string[]
-  alwaysOnTokens: number | null // what it adds to every session, when the harness says
 }
 
 // Words a lowercase name holds that read wrong with only their first letter capitalized.

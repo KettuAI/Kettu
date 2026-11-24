@@ -39,7 +39,6 @@ describe('checkFolder', () => {
     expect(check.problems).toEqual([])
     expect(check).toMatchObject({
       kind: 'skill',
-      harness: null,
       manifest: 'SKILL.md',
       slug: 'changelog-writer',
       name: 'Changelog writer',
@@ -61,60 +60,19 @@ describe('checkFolder', () => {
     ])
   })
 
-  it('reads a Claude Code plugin: its version, what it adds and the commands its hooks run', async () => {
-    await put({
-      '.claude-plugin/plugin.json': JSON.stringify({
-        name: 'release-tools',
-        version: '1.2.0',
-        description: 'Release helpers.',
-      }),
-      'commands/ship.md': '# Ship\n',
-      'agents/reviewer.md': '# Reviewer\n',
-      'skills/notes/SKILL.md': SKILL,
-      'hooks/hooks.json': JSON.stringify({
-        hooks: { PostToolUse: [{ hooks: [{ type: 'command', command: 'node lint.js' }] }] },
-      }),
-      '.mcp.json': JSON.stringify({
-        mcpServers: { docs: { command: 'npx', args: ['-y', 'docs'] } },
-      }),
-    })
-    const check = await checkFolder(root)
-    expect(check.problems).toEqual([])
-    expect(check).toMatchObject({
-      kind: 'plugin',
-      harness: 'claude-code',
-      slug: 'release-tools',
-      name: 'Release tools',
-      version: '1.2.0',
-      runs: ['node lint.js', 'npx -y docs'],
-    })
-    expect(check.adds).toEqual([
-      { label: 'commands', items: ['ship'] },
-      { label: 'agents', items: ['reviewer'] },
-      { label: 'skills', items: ['notes'] },
-      { label: 'hooks', items: ['PostToolUse'] },
-      { label: 'servers', items: ['docs'] },
-    ])
-  })
-
-  it('tells a Codex plugin, and needs a plugin’s version', async () => {
-    await put({
-      '.codex-plugin/plugin.json': JSON.stringify({
-        name: 'linear',
-        description: 'Linear for Codex.',
-        interface: { displayName: 'Linear' },
-      }),
-    })
-    const check = await checkFolder(root)
-    expect(check).toMatchObject({ kind: 'plugin', harness: 'codex', name: 'Linear' })
-    expect(check.problems).toEqual([
-      { path: '.codex-plugin/plugin.json', message: 'It has no version.' },
-    ])
-  })
-
-  it('refuses a folder that is both kinds of plugin, and one that is nothing it knows', async () => {
-    await put({ '.claude-plugin/plugin.json': '{}', '.codex-plugin/plugin.json': '{}' })
-    expect((await checkFolder(root)).problems).toHaveLength(1)
+  it('refuses a Claude Code or Codex plugin, and a folder that is nothing it knows', async () => {
+    for (const manifest of ['.claude-plugin/plugin.json', '.codex-plugin/plugin.json']) {
+      const folder = await put(
+        { [manifest]: JSON.stringify({ name: 'tools', version: '1.0.0' }), 'SKILL.md': SKILL },
+        path.join(root, manifest.split('/')[0]!),
+      )
+      const plugin = await checkFolder(folder)
+      expect(plugin.kind).toBeNull()
+      expect(plugin.files).toEqual([])
+      expect(plugin.problems.map((p) => p.message)).toEqual([
+        'Claude Code and Codex plugins are no longer published to the Kettu Marketplace.',
+      ])
+    }
     const other = await put({ 'README.md': 'hi' }, path.join(root, 'other'))
     const check = await checkFolder(other)
     expect(check.kind).toBeNull()
@@ -151,7 +109,6 @@ steps:
       expect(check.problems).toEqual([])
       expect(check).toMatchObject({
         kind: 'workflow',
-        harness: null,
         manifest: 'workflow.yaml',
         slug: 'release-notes',
         name: 'Release notes',

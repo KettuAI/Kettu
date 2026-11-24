@@ -17,7 +17,6 @@ import {
   toHandle,
   type MarketProblem,
   type PublishAdds,
-  type PublishHarness,
   type PublishKind,
 } from '@shared/market-publish'
 import type { HostKey } from '../i18n'
@@ -40,7 +39,6 @@ export interface FolderCheck {
   /** The folder, or the MCP bundle, as it was found. */
   path: string
   kind: PublishKind | null
-  harness: PublishHarness | null
   /** The file it was told from, such as `SKILL.md`. */
   manifest: string | null
   slug: string | null
@@ -69,8 +67,8 @@ const TEXT_SNIFF = 8000
 const SECRETS_PER_FILE = 5
 const BUNDLE = '.mcpb'
 
-const CLAUDE_PLUGIN = '.claude-plugin/plugin.json'
-const CODEX_PLUGIN = '.codex-plugin/plugin.json'
+// A Claude Code or Codex plugin, which the Kettu Marketplace no longer takes.
+const HARNESS_PLUGINS = ['.claude-plugin/plugin.json', '.codex-plugin/plugin.json']
 const SKILL_FILE = 'SKILL.md'
 const SERVER_FILE = 'server.json'
 export const WORKFLOW_FILE = 'workflow.yaml'
@@ -284,56 +282,6 @@ function json(file: CheckedFile | undefined, problems: MarketProblem[]): Fields 
   }
 }
 
-/** The commands, agents, skills, hooks and servers a plugin's files add, and what they run. */
-function pluginParts(
-  files: readonly CheckedFile[],
-  manifest: Fields,
-  problems: MarketProblem[],
-): { adds: PublishAdds[]; runs: string[] } {
-  const byPath = new Map(files.map((file) => [file.path, file]))
-  const names = (dir: string, deep: boolean): string[] =>
-    files
-      .filter((file) => file.path.startsWith(`${dir}/`) && file.path.endsWith('.md'))
-      .map((file) => file.path.slice(dir.length + 1, -3))
-      .filter((name) => deep || !name.includes('/'))
-      .sort()
-  const skills = files
-    .filter((file) => /^skills\/[^/]+\/SKILL\.md$/.test(file.path))
-    .map((file) => file.path.split('/')[1]!)
-    .sort()
-  const hooksFile = record(json(byPath.get('hooks/hooks.json'), problems)?.hooks)
-  const hooks = { ...(hooksFile ?? {}), ...(record(manifest.hooks) ?? {}) }
-  const serversFile = record(json(byPath.get('.mcp.json'), problems)?.mcpServers)
-  const servers = { ...(serversFile ?? {}), ...(record(manifest.mcpServers) ?? {}) }
-  const runs: string[] = []
-  for (const groups of Object.values(hooks)) {
-    for (const group of Array.isArray(groups) ? groups : []) {
-      for (const hook of Array.isArray(record(group)?.hooks)
-        ? (record(group)!.hooks as unknown[])
-        : []) {
-        const command = text(record(hook)?.command)
-        if (command) runs.push(command)
-      }
-    }
-  }
-  for (const server of Object.values(servers)) {
-    const fields = record(server)
-    const url = text(fields?.url)
-    const command = text(fields?.command)
-    const args = Array.isArray(fields?.args) ? fields.args.filter((a) => typeof a === 'string') : []
-    if (url) runs.push(url)
-    else if (command) runs.push([command, ...args].join(' '))
-  }
-  const adds: PublishAdds[] = [
-    { label: 'commands', items: names('commands', true) },
-    { label: 'agents', items: names('agents', false) },
-    { label: 'skills', items: skills },
-    { label: 'hooks', items: Object.keys(hooks).sort() },
-    { label: 'servers', items: Object.keys(servers).sort() },
-  ].filter((group) => group.items.length > 0)
-  return { adds, runs: [...new Set(runs)] }
-}
-
 function missing(
   file: string,
   field: 'name' | 'description' | 'version' | 'versionNumber' | 'nameFront' | 'descriptionFront',
@@ -419,28 +367,6 @@ function readWorkflow(check: FolderCheck, file: CheckedFile): void {
     { label: 'servers', items: named('mcp') },
     { label: 'skills', items: named('skills') },
   ].filter((group) => group.items.length > 0)
-}
-
-function readPlugin(check: FolderCheck, file: CheckedFile, harness: PublishHarness): void {
-  const manifest = json(file, check.problems)
-  if (!manifest) return
-  const ui = record(manifest.interface)
-  const name = text(manifest.name)
-  const description = text(manifest.description) ?? text(ui?.shortDescription)
-  const version = text(manifest.version)
-  if (!name) check.problems.push(missing(file.path, 'name'))
-  if (!description) check.problems.push(missing(file.path, 'description'))
-  if (!version) check.problems.push(missing(file.path, 'version'))
-  else if (!VERSION.test(version)) {
-    check.problems.push(problem(file.path, 'marketPublish.check.badVersion', { version }))
-  } else check.version = version
-  if (name) {
-    check.slug = toHandle(name)
-    check.name = text(ui?.displayName) ?? displayTitle(name)
-  }
-  if (description) Object.assign(check, describe(description))
-  check.harness = harness
-  Object.assign(check, pluginParts(check.files, manifest, check.problems))
 }
 
 /** An MCP server's `server.json`, which the registry's schema describes. */
@@ -540,7 +466,6 @@ export async function checkFolder(target: string): Promise<FolderCheck> {
   const check: FolderCheck = {
     path: target,
     kind: null,
-    harness: null,
     manifest: null,
     slug: null,
     name: null,
@@ -589,25 +514,24 @@ export async function checkFolder(target: string): Promise<FolderCheck> {
     return check
   }
   const at = (file: string) => path.join(target, ...file.split('/'))
-  const [claude, codex, skill, server, workflow] = await Promise.all(
-    [CLAUDE_PLUGIN, CODEX_PLUGIN, SKILL_FILE, SERVER_FILE, WORKFLOW_FILE].map((file) =>
-      exists(at(file)),
+  const [plugin, skill, server, workflow] = await Promise.all([
+    Promise.all(HARNESS_PLUGINS.map((file) => exists(at(file)))).then((found) =>
+      found.some(Boolean),
     ),
-  )
-  if (claude && codex) {
-    check.problems.push(problem(undefined, 'marketPublish.check.bothPlugins'))
+    ...[SKILL_FILE, SERVER_FILE, WORKFLOW_FILE].map((file) => exists(at(file))),
+  ])
+  if (plugin) {
+    check.problems.push(problem(undefined, 'marketPublish.check.harnessPlugin'))
     return check
   }
-  if (claude || codex || skill) {
+  if (skill) {
     check.files = await walk(target, check.problems)
     check.bytes = check.files.reduce((sum, file) => sum + file.size, 0)
-    const manifest = claude ? CLAUDE_PLUGIN : codex ? CODEX_PLUGIN : SKILL_FILE
-    check.kind = skill && !claude && !codex ? 'skill' : 'plugin'
-    check.manifest = manifest
-    const file = check.files.find((item) => item.path === manifest)
+    check.kind = 'skill'
+    check.manifest = SKILL_FILE
+    const file = check.files.find((item) => item.path === SKILL_FILE)
     // Past the limits the walk stopped before reaching it; that problem is said already.
-    if (file && check.kind === 'skill') readSkill(check, file)
-    else if (file) readPlugin(check, file, claude ? 'claude-code' : 'codex')
+    if (file) readSkill(check, file)
     return finish(check)
   }
   if (server) {

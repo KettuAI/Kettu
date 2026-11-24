@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { HOST_METHODS } from '@shared/agent-host'
+import { HOST_METHODS, REMOVED_PLUGIN_METHODS } from '@shared/agent-host'
 import { createValidators, promptContent } from './validate'
 
 const posix = createValidators('darwin')
@@ -246,47 +246,10 @@ describe('createValidators', () => {
     rejects(() => posix['market.keys']({ serverId: 'x' }))
   })
 
-  it('checks the plugin methods: ids that cannot pass for a flag, and a project for its scopes', () => {
-    const plugin = { agentId: 'claude-code', pluginId: 'commit-commands@claude-plugins-official' }
-    expect(posix['market.plugins']({ refresh: true })).toEqual({ refresh: true })
-    expect(posix['market.pluginDetails']({ ...plugin, other: 1 })).toEqual(plugin)
-    rejects(() => posix['market.pluginDetails']({ ...plugin, pluginId: '--yes@x' }))
-    rejects(() => posix['market.pluginDetails']({ ...plugin, pluginId: 'no-marketplace' }))
-    rejects(() => posix['market.pluginDetails']({ ...plugin, pluginId: 'a@b c' }))
-    expect(posix['market.pluginLogo']({ pluginId: 'pdf@openai-primary-runtime', x: 1 })).toEqual({
-      pluginId: 'pdf@openai-primary-runtime',
-    })
-    rejects(() => posix['market.pluginLogo']({ pluginId: '../../.ssh/id_rsa' }))
-    expect(posix['market.installPlugin']({ ...plugin, scope: 'user' })).toEqual({
-      ...plugin,
-      scope: 'user',
-    })
-    expect(
-      posix['market.uninstallPlugin']({ ...plugin, scope: 'project', projectPath: '/repo' }),
-    ).toEqual({ ...plugin, scope: 'project', projectPath: '/repo' })
-    rejects(() => posix['market.installPlugin']({ ...plugin, scope: 'local' }))
-    rejects(() => posix['market.installPlugin']({ ...plugin, scope: 'user', projectPath: '/repo' }))
-    rejects(() =>
-      posix['market.installPlugin']({ ...plugin, scope: 'project', projectPath: 'repo' }),
-    )
-    rejects(() => posix['market.installPlugin']({ ...plugin, scope: 'global' }))
-    expect(posix['market.setPluginEnabled']({ ...plugin, scope: 'user', enabled: false })).toEqual({
-      ...plugin,
-      scope: 'user',
-      enabled: false,
-    })
-    rejects(() => posix['market.setPluginEnabled']({ ...plugin, scope: 'user' }))
-    expect(posix['market.addMarketplace']({ agentId: 'codex', source: ' owner/repo ' })).toEqual({
-      agentId: 'codex',
-      source: 'owner/repo',
-    })
-    rejects(() => posix['market.addMarketplace']({ agentId: 'codex', source: '--scope=user' }))
-    rejects(() => posix['market.addMarketplace']({ agentId: 'codex', source: 'a\nb' }))
-    expect(posix['market.removeMarketplace']({ agentId: 'codex', name: 'team-tools' })).toEqual({
-      agentId: 'codex',
-      name: 'team-tools',
-    })
-    rejects(() => posix['market.removeMarketplace']({ agentId: 'codex', name: '-rf' }))
+  it('validates no method that managed harness plugins, and takes only refresh to list them', () => {
+    for (const method of REMOVED_PLUGIN_METHODS) expect(posix).not.toHaveProperty([method])
+    expect(posix['market.ownPlugins']({ refresh: true, other: 1 })).toEqual({ refresh: true })
+    expect(posix['market.ownPlugins'](undefined)).toEqual({})
   })
 
   it('checks where a skill to add comes from', () => {
@@ -342,16 +305,6 @@ describe('createValidators', () => {
     expect(posix['market.communityListing']({ id: 'abcdefgh23' })).toEqual({ id: 'abcdefgh23' })
     rejects(() => posix['market.communityListing']({ id: 'abc/../x' }))
     expect(posix['market.communityInstalled']({ refresh: true })).toEqual({ refresh: true })
-    const plugin = { id: 'abcdefgh23', agentId: 'claude-code' }
-    expect(posix['market.installCommunityPlugin']({ ...plugin, scope: 'user' })).toEqual({
-      ...plugin,
-      scope: 'user',
-    })
-    expect(
-      posix['market.installCommunityPlugin']({ ...plugin, scope: 'project', projectPath: '/repo' }),
-    ).toEqual({ ...plugin, scope: 'project', projectPath: '/repo' })
-    rejects(() => posix['market.installCommunityPlugin']({ ...plugin, scope: 'project' }))
-    rejects(() => posix['market.installCommunityPlugin']({ ...plugin, id: 'x', scope: 'user' }))
     expect(posix['market.reportCommunity']({ id: 'abcdefgh23', message: ' Broken. ' })).toEqual({
       id: 'abcdefgh23',
       message: 'Broken.',

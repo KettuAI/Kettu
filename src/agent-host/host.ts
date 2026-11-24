@@ -80,7 +80,7 @@ import {
   type MarketCallAnswer,
   type MarketResults,
 } from '@shared/market-publish'
-import { HARNESSES_FOLDER, KETTU_HOME_FOLDER, PLUGINS_FOLDER } from '@shared/storage'
+import { HARNESSES_FOLDER, KETTU_HOME_FOLDER } from '@shared/storage'
 import type {
   AgentId,
   DigestedThreadEntry,
@@ -145,13 +145,13 @@ import { MemoryError, type MemoryErrorCode } from './memory/errors'
 import { MemoryService } from './memory/service'
 import { catalogFile, MarketCatalogService } from './marketplace/catalog'
 import { bundlesFile, MarketBundlesService } from './marketplace/bundles'
-import { communityFile, MarketCommunityService } from './marketplace/community'
+import { MarketCommunityService } from './marketplace/community'
 import { MarketConnectionsService } from './marketplace/connections'
 import { logText } from './localized-error'
 import { parseSignIns } from './marketplace/oauth'
 import { McpProxy } from './marketplace/proxy'
-import type { CodexRequest } from './marketplace/codex-plugins'
-import { MarketPluginsService, pluginsFile } from './marketplace/plugins'
+import type { CodexRequest } from './codex/rpc'
+import { OwnPluginsService } from './marketplace/own-plugins'
 import { MarketSkillsService, skillFor, skillsCatalogFile } from './marketplace/skills'
 import { PublishDrafts } from './marketplace/publish-drafts'
 import { MarketCallError, MarketTools } from './marketplace/publish-tools'
@@ -541,11 +541,11 @@ export class AgentHost {
   private readonly mcpProxy: McpProxy
   /** The sign-ins sent to main that no push has carried back yet, by server id. */
   private readonly unkept = new Map<string, { state: string | null; pushes: number }>()
-  /** Claude Code's and Codex's plugins, through each agent's harness. */
-  private readonly marketPlugins: MarketPluginsService
+  /** The plugins Claude Code and Codex agents have of their own, which Kettu only lists. */
+  private readonly ownPlugins: OwnPluginsService
   /** The skills catalog, the skills Kettu keeps, and what each agent gets of them. */
   private readonly marketSkills: MarketSkillsService
-  /** The Kettu Marketplace's listings, the downloads of their files and its plugins. */
+  /** The Kettu Marketplace's listings and the downloads of their files. */
   private readonly marketCommunity: MarketCommunityService
   private readonly marketBundles: MarketBundlesService
   /** The host's Kettu account from main, while signed in with Kettu's services on. */
@@ -697,9 +697,7 @@ export class AgentHost {
       refused: (serverId, used) => this.marketConnections.refused(serverId, used),
     })
     const home = options.homeDir ?? os.homedir()
-    this.marketPlugins = new MarketPluginsService({
-      file: pluginsFile(options.userDataPath, log),
-      log,
+    this.ownPlugins = new OwnPluginsService({
       platform,
       agents: () => this.installedAgents(['claude-code', 'codex']),
       program: (agentId) => this.agents.harnessProgram(agentId),
@@ -707,8 +705,6 @@ export class AgentHost {
     })
     this.marketCommunity = new MarketCommunityService({
       userDataPath: options.userDataPath,
-      pluginsRoot: path.join(home, KETTU_HOME_FOLDER, PLUGINS_FOLDER),
-      file: communityFile(options.userDataPath, log),
       log,
       account: () => this.marketAccount,
       call: (call) => this.marketCall(call),
@@ -718,10 +714,6 @@ export class AgentHost {
         ),
         ...this.workflowLibrary.listingIds(),
       ],
-      installPlugin: (agentId, local, name, scope, projectPath) =>
-        this.marketPlugins.installLocal(agentId, local, name, scope, projectPath),
-      pluginInstalled: (harness, pluginId) =>
-        this.marketPlugins.installedAnywhere(harness, pluginId),
       installWorkflow: (text, origin) => this.workflowLibrary.installListing(text, origin),
     })
     this.marketBundles = new MarketBundlesService({
@@ -1525,7 +1517,6 @@ export class AgentHost {
     host.agents.restoreRegistry(listing)
     host.agents.restoreManifest(manifest)
     host.agents.restoreUpdates(updates)
-    void host.moveLocalMarketplaces()
     host.routines.start()
     void host.marketSkills.sync()
     host.sendFolders()
@@ -2312,27 +2303,6 @@ export class AgentHost {
     }
   }
 
-  /**
-   * Moves the Kettu Marketplace's local marketplaces out of the app's data, once, then points the
-   * agents that registered them at the new place.
-   */
-  private async moveLocalMarketplaces(): Promise<void> {
-    for (const harness of await this.marketCommunity.moveLegacy()) {
-      try {
-        await this.marketPlugins.pointLocal(
-          harness,
-          await this.marketCommunity.resolvedLocal(harness),
-        )
-      } catch (error) {
-        writeLog(
-          'warn',
-          'host',
-          `Could not point the agents at the moved ${harness} marketplace: ${(error as Error).message}`,
-        )
-      }
-    }
-  }
-
   /** The agents of these harnesses that are turned on and whose program is installed. */
   private async installedAgents(
     harnesses: readonly HarnessId[],
@@ -3012,9 +2982,7 @@ export class AgentHost {
         this.preparedRecords.flush(),
         this.attachments.flush(),
         this.marketCatalog.flush(),
-        this.marketPlugins.flush(),
         this.marketSkills.flush(),
-        this.marketCommunity.flush(),
         this.marketBundles.flush(),
         this.publishDrafts.flush(),
         this.workflowSuggestions.flush(),
@@ -3215,21 +3183,7 @@ export class AgentHost {
       'market.cancelConnect': ({ loginId }) => this.marketConnections.cancel(loginId),
       'market.disconnect': ({ serverId }) => this.marketConnections.disconnect(serverId),
       'market.connections': () => this.marketConnections.view(),
-      'market.plugins': ({ refresh, cached }) =>
-        this.marketPlugins.plugins(refresh === true, cached === true),
-      'market.pluginDetails': ({ agentId, pluginId }) =>
-        this.marketPlugins.details(agentId, pluginId),
-      'market.pluginLogo': ({ pluginId }) => this.marketPlugins.logo(pluginId),
-      'market.installPlugin': ({ agentId, pluginId, scope, projectPath }) =>
-        this.marketPlugins.install(agentId, pluginId, scope, projectPath ?? null),
-      'market.uninstallPlugin': ({ agentId, pluginId, scope, projectPath }) =>
-        this.marketPlugins.uninstall(agentId, pluginId, scope, projectPath ?? null),
-      'market.setPluginEnabled': ({ agentId, pluginId, enabled, scope, projectPath }) =>
-        this.marketPlugins.setEnabled(agentId, pluginId, enabled, scope, projectPath ?? null),
-      'market.addMarketplace': ({ agentId, source }) =>
-        this.marketPlugins.addMarketplace(agentId, source),
-      'market.removeMarketplace': ({ agentId, name }) =>
-        this.marketPlugins.removeMarketplace(agentId, name),
+      'market.ownPlugins': ({ refresh }) => this.ownPlugins.plugins(refresh === true),
       'market.skills': ({ refresh, cached }) =>
         this.marketSkills.skills(refresh === true, cached === true),
       'market.skillRepository': ({ id, refresh }) =>
@@ -3284,8 +3238,6 @@ export class AgentHost {
       'market.communityWorkflow': ({ id }) => this.marketCommunity.workflow(id),
       'market.communityInstalled': ({ refresh }) =>
         this.marketCommunity.installed(refresh === true),
-      'market.installCommunityPlugin': ({ id, agentId, scope, projectPath }) =>
-        this.marketCommunity.installPlugin(id, agentId, scope, projectPath ?? null),
       'market.addCommunityWorkflow': ({ id }) => this.marketCommunity.installWorkflow(id),
       'market.reportCommunity': ({ id, message }) => this.marketCommunity.report(id, message),
       'market.bundlePrepare': ({ id }) => this.marketBundles.prepare(id),

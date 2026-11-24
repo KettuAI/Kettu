@@ -671,23 +671,3 @@ export interface PluginListResponse {
   marketplaceLoadErrors: { marketplacePath: string; message: string }[]
   featuredPluginIds: string[]
 }
-
-export interface PluginDetail {
-  marketplaceName: string
-  marketplacePath: string | null
-  summary: PluginSummary
-  description: string | null
-  skills: { name: string }[]
-  hooks: { key: string; eventName: string }[]
-  mcpServers: string[]
-}
-
-export interface PluginReadResponse {
-  plugin: PluginDetail
-}
-
-export interface MarketplaceAddResponse {
-  marketplaceName: string
-  installedRoot: string
-  alreadyAdded: boolean
-}
