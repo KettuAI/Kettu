@@ -60,7 +60,7 @@
     "results_other": "{{count}} results",
     "noMatch": "No results for “{{query}}”",
     "noConversation": "No conversation mentions “{{query}}”",
-    "searchedAll": "Searched sessions, conversations, artifacts, routines, projects and settings.",
+    "searchedAll": "Searched sessions, conversations, artifacts, routines, projects, settings and actions.",
     "searchedScope": "Searched {{scope}} only. Press Tab to search more.",
     "none": {
       "all": "Nothing here yet.",
@@ -96,7 +96,8 @@
     "indexing": "Indexing conversations ({{percent}}%). What is built can be searched.",
     "hostsSlow": "Still waiting for: {{hosts}}",
     "announce_one": "{{count}} conversation found",
-    "announce_other": "{{count}} conversations found"
+    "announce_other": "{{count}} conversations found",
+    "pluginAction": "Action"
   },
   "project": {
     "missing": "Missing",

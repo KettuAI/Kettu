@@ -307,7 +307,8 @@ export const diffId = (target: Pick<DiffTarget, 'path' | 'ref'>): string =>
 
 /** Forgets what a closed tab read, unless another panel of the project still has the tab. */
 function release(panel: string, projectPath: string, tab: DocTab): void {
-  if (tab.kind === 'artifact' || heldElsewhere(projectPath, docKey(tab), panel)) return
+  if (tab.kind === 'artifact' || tab.kind === 'plugin') return
+  if (heldElsewhere(projectPath, docKey(tab), panel)) return
   if (tab.kind === 'file') {
     dropBuffer(projectPath, tab.id)
     setFiles(

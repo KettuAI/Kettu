@@ -66,6 +66,9 @@ import { artifactKind } from '@renderer/features/artifacts/model'
 import { mayLeave } from '@renderer/features/artifacts/unsaved'
 import { AgentMark } from '@renderer/components/agents/agent-mark'
 import { FileTypeIcon } from '@renderer/features/files/file-type-icon'
+import { PluginTile } from '@renderer/features/plugin-views/plugin-tile'
+import { languageText, surfaceTitle } from '@renderer/features/plugin-views/plugin-text'
+import { useGonePluginPanes } from '@renderer/features/plugin-views/use-gone-panes'
 import { folderOf, nameOf } from '@renderer/features/files/paths'
 import { UnsavedPrompt } from '@renderer/features/files/unsaved-prompt'
 import { useBoardActivity, useBoardNews } from '@renderer/features/board/use-board-activity'
@@ -90,6 +93,7 @@ import {
 } from '@renderer/stores/devices'
 import { asksBeforeClose, closeFileDoc, notePanel, useFilesStore } from '@renderer/stores/files'
 import { useTerminalAllowed } from '@renderer/stores/hosts'
+import { usePluginSurfaces } from '@renderer/stores/plugin-surfaces'
 import { useSessionsStore } from '@renderer/stores/sessions'
 import { useSideChatNews } from '@renderer/stores/side-chat'
 import {
@@ -132,9 +136,11 @@ import { SurfaceList, SurfaceMenuItems } from './surface-list'
 import {
   focusSurfaceList,
   startArtifact,
+  startPluginPane,
   startSurface,
   SURFACE_ICON,
   useArtifactChoices,
+  usePluginPaneChoices,
   useSurfaceRows,
   type SurfaceRowId,
 } from './surface-rows'
@@ -247,7 +253,8 @@ const NO_DOCS: DocTab[] = []
 
 /** The panel's file, diff and artifact tabs. */
 function useDocItems(panel: string, projectPath: string, hostId: string | null): SurfaceItem[] {
-  const { t } = useTranslation(['shell', 'files'])
+  const { t, i18n } = useTranslation(['shell', 'files'])
+  const surfaces = usePluginSurfaces(hostId)
   const docs = useViewStore((s) => s.sideDocs[panel] ?? NO_DOCS)
   const shown = useViewStore((s) => (isDocKind(s.sidePane[panel]) ? s.sideDoc[panel] : undefined))
   const files = useFilesStore((s) => s.open[projectPath])
@@ -261,7 +268,7 @@ function useDocItems(panel: string, projectPath: string, hostId: string | null):
     const fileOf = (tab: DocTab) => (tab.kind === 'diff' ? tab.path : tab.id)
     const names = new Map<string, number>()
     for (const tab of docs) {
-      if (tab.kind === 'artifact') continue
+      if (tab.kind === 'artifact' || tab.kind === 'plugin') continue
       const name = `${tab.kind}:${nameOf(fileOf(tab))}`
       names.set(name, (names.get(name) ?? 0) + 1)
     }
@@ -292,6 +299,26 @@ function useDocItems(panel: string, projectPath: string, hostId: string | null):
           note: '',
           title: name,
           icon: <PaneIcon icon={kind ? KIND_ICON[kind] : ShapesIcon} size={14} />,
+          dot: null,
+        }
+      }
+      if (tab.kind === 'plugin') {
+        // A plugin that is gone has no name to give, so the tab goes by its view's id.
+        const surface = surfaces.plugins.find((plugin) => plugin.pluginId === tab.pluginId)
+        const pane = surface?.panes.find((view) => view.id === tab.viewId)
+        const name = (pane && languageText(pane.title, i18n.language)) || tab.viewId
+        return {
+          ...item,
+          name,
+          note: '',
+          title: surface ? `${name} \u00b7 ${surfaceTitle(surface, i18n.language)}` : name,
+          icon: (
+            <PluginTile
+              name={surface?.name ?? tab.pluginId}
+              icon={surface?.icon ?? null}
+              size={14}
+            />
+          ),
           dot: null,
         }
       }
@@ -327,7 +354,7 @@ function useDocItems(panel: string, projectPath: string, hostId: string | null):
         dot: dirty ? { tone: 'neutral', label: t('files:preview.unsaved') } : null,
       }
     })
-  }, [t, docs, shown, files, artifacts, sessionAgent, hostId])
+  }, [t, i18n.language, docs, shown, files, artifacts, surfaces.plugins, sessionAgent, hostId])
 }
 
 /** The tabs of the kinds a session has one of, in the order they opened. */
@@ -695,6 +722,7 @@ export function SurfaceTabs({
   const sessionId = panelSession(panel)
   const kinds = useSurfaceKinds(panel, projectPath)
   const items = useSurfaceItems(panel, projectPath, kinds)
+  useGonePluginPanes(panel, hostOfPath(projectPath))
   const browserTabs = useBrowserStore((s) => (sessionId ? s.bySession[sessionId]?.tabs.length : 0))
   // Tabs whose close waits for the user's answer, the first one asked about.
   const [closing, setClosing] = useState<SurfaceItem[]>([])
@@ -748,8 +776,9 @@ export function SurfaceTabs({
         else void window.kettu.browser.close(sessionId)
       } else if (item.kind === 'devices') {
         if (sessionId) void closeDevice(sessionId, item.id)
-      } else if (item.doc?.kind === 'artifact') closeDoc(panel, item.key)
-      else if (item.doc) closeFileDoc(panel, projectPath, item.doc)
+      } else if (item.doc?.kind === 'artifact' || item.doc?.kind === 'plugin') {
+        closeDoc(panel, item.key)
+      } else if (item.doc) closeFileDoc(panel, projectPath, item.doc)
       else if (!isDocKind(item.kind)) removeSideTab(panel, item.kind)
     },
     [panel, projectPath, sessionId],
@@ -1228,6 +1257,7 @@ export function SurfaceMenu({
   const sessionId = panelSession(panel)
   const rows = useSurfaceRows(panel, projectPath)
   const artifacts = useArtifactChoices(panel)
+  const panes = usePluginPaneChoices(panel, projectPath)
   const open = useDevicesStore((s) => devicesOf(s.devices, sessionId).length)
   const full = open >= SESSION_DEVICE_LIMIT
   const devicesOn = rows.some((row) => row.id === 'devices' && !row.off)
@@ -1239,10 +1269,12 @@ export function SurfaceMenu({
     <SurfaceMenuItems
       rows={rows}
       artifacts={artifacts}
+      panes={panes}
       onPick={(id: SurfaceRowId) =>
         id === 'terminal' && onTerminal ? onTerminal() : startSurface(panel, projectPath, id)
       }
       onArtifact={(id) => startArtifact(panel, id)}
+      onPane={(pane) => startPluginPane(panel, pane)}
       devices={(row) =>
         sessionId && (
           <DropdownMenuSub key={row.id}>

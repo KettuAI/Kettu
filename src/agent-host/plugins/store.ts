@@ -23,7 +23,7 @@ import {
 import { SKILL_NAME } from '@shared/marketplace'
 import { isAbsolutePath } from '../paths'
 import { JsonFile, type LogFn, type Migration } from '../storage'
-import { parseViews } from './manifest'
+import { parseActions, parseViews } from './manifest'
 import { safePackagePath } from './package'
 
 export const PLUGINS_VERSION = 1
@@ -125,6 +125,15 @@ function viewsOf(value: unknown): PluginContents['views'] {
   }
 }
 
+/** The Search actions a stored package declares; ones that no longer read are left out. */
+function actionsOf(value: unknown): NonNullable<PluginContents['actions']> {
+  try {
+    return parseActions(value ?? undefined, 'actions', [])
+  } catch {
+    return []
+  }
+}
+
 function contentsOf(value: unknown): PluginContents | null {
   if (!isRecord(value) || typeof value.name !== 'string' || !PLUGIN_NAME.test(value.name)) {
     return null
@@ -196,6 +205,7 @@ function contentsOf(value: unknown): PluginContents | null {
         )
       : [],
     views: viewsOf(value.views),
+    actions: actionsOf(value.actions),
     hooks: value.hooks === true,
     warnings: Array.isArray(value.warnings)
       ? value.warnings.filter((item): item is string => text(item)).slice(0, MAX_ITEMS)

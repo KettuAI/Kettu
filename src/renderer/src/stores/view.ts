@@ -1,5 +1,7 @@
 import { create } from 'zustand'
 import type { Project } from '@shared/agent-host'
+import { PLUGIN_ID } from '@shared/plugins'
+import { PLUGIN_VIEW_ID, type PluginViewParams } from '@shared/plugin-views'
 import type { AgentId, HarnessId } from '@shared/thread'
 import { ARRANGEMENTS, type ArtifactArrange } from '@renderer/features/artifacts/model'
 import {
@@ -126,11 +128,15 @@ export type SidePane =
   | 'file'
   | 'diff'
   | 'artifact'
+  | 'plugin'
   | 'board'
   | 'sideChat'
 
-/** The kinds opened from a list, each a tab of its own: files, their changes and artifacts. */
-export type DocKind = 'file' | 'diff' | 'artifact'
+/**
+ * The kinds opened from a list, each a tab of its own: files, their changes, artifacts and the
+ * panes of plugins.
+ */
+export type DocKind = 'file' | 'diff' | 'artifact' | 'plugin'
 
 /** The kinds a session has one tab of. */
 export type SingleTab = Exclude<SidePane, 'terminal' | 'browser' | 'devices' | 'surfaces' | DocKind>
@@ -156,11 +162,19 @@ export type DocTarget =
       projectFile: string | null
     }
   | { kind: 'artifact'; id: string }
+  | {
+      // A pane of a plugin, which draws one of its views; `id` joins the plugin's and the view's.
+      kind: 'plugin'
+      id: string
+      pluginId: string
+      viewId: string
+      params?: PluginViewParams
+    }
 
 /** A tab of those kinds; the preview tab is the one the next single click replaces. */
 export type DocTab = DocTarget & { preview: boolean }
 
-const DOC_KINDS: readonly SidePane[] = ['file', 'diff', 'artifact']
+const DOC_KINDS: readonly SidePane[] = ['file', 'diff', 'artifact', 'plugin']
 
 export function isDocKind(pane: SidePane | null | undefined): pane is DocKind {
   return !!pane && DOC_KINDS.includes(pane)
@@ -342,7 +356,9 @@ type SidePanels = Pick<
 function savedPanels(from: Partial<Persisted>): SidePanels {
   const sideDocs: Record<string, DocTab[]> = {}
   for (const [panel, docs] of Object.entries(from.sideDocs ?? {})) {
-    if (Array.isArray(docs) && docs.length > 0) sideDocs[panel] = docs
+    if (!Array.isArray(docs)) continue
+    const kept = docs.filter(validPluginTab)
+    if (kept.length > 0) sideDocs[panel] = kept
   }
   const sideDoc = { ...from.sideDoc }
   const sideOrder = { ...from.sideOrder }
@@ -375,6 +391,16 @@ function savedPanels(from: Partial<Persisted>): SidePanels {
     }
   }
   return { sidePane, sideLast, sideTabs, sideOrder, sideDocs, sideDoc }
+}
+
+/** Whether a saved tab can be one: any tab but a plugin's, which must name a plugin and its view. */
+function validPluginTab(tab: DocTab): boolean {
+  if (tab.kind !== 'plugin') return true
+  return (
+    PLUGIN_ID.test(String(tab.pluginId)) &&
+    PLUGIN_VIEW_ID.test(String(tab.viewId)) &&
+    tab.id === pluginPaneId(tab.pluginId, tab.viewId)
+  )
 }
 
 /** The arrangement saved, or the one an earlier run's grouping and sort come closest to. */
@@ -1307,12 +1333,60 @@ export function closeDoc(panel: string, key: string): void {
       if (sideLast[panel] === tab.kind) delete sideLast[panel]
       return { sideDocs, sideDoc, sideLast }
     }
-    const order = s.sideOrder[panel] ?? []
+    // The order may still name tabs closed a moment ago; those are no neighbour.
+    const open = new Set(docs.map(docKey))
+    const order = (s.sideOrder[panel] ?? []).filter(
+      (other) =>
+        other === key ||
+        !isDocKind(other.slice(0, other.indexOf(':')) as SidePane) ||
+        open.has(other),
+    )
     const index = order.indexOf(key)
     const next = index < 0 ? undefined : (order[index + 1] ?? order[index - 1])
     const pane = (next?.slice(0, next.indexOf(':')) ?? 'surfaces') as SidePane
     if (next && isDocKind(pane)) sideDoc[panel] = next
     return { sideDocs, sideDoc, sidePane: withPane(s.sidePane, panel, pane) }
+  })
+}
+
+/** A plugin pane's id in the tab row: one tab per plugin and view. */
+export function pluginPaneId(pluginId: string, viewId: string): string {
+  return `${pluginId}/${viewId}`
+}
+
+/**
+ * Shows a pane of a plugin in a tab of the panel's row: its own when it has one, else a new tab.
+ * Opened with other `params` than the tab holds, the tab starts over with them.
+ */
+export function openPluginPane(
+  panel: string,
+  pane: { pluginId: string; viewId: string; params?: PluginViewParams },
+  options?: Pick<OpenDocOptions, 'fromPanel'>,
+): void {
+  const id = pluginPaneId(pane.pluginId, pane.viewId)
+  const params = pane.params && Object.keys(pane.params).length > 0 ? pane.params : undefined
+  openDoc(
+    panel,
+    {
+      kind: 'plugin',
+      id,
+      pluginId: pane.pluginId,
+      viewId: pane.viewId,
+      ...(params && { params }),
+    },
+    { ...options, preview: false },
+  )
+  changeDocs(panel, (tab) => {
+    if (tab.kind !== 'plugin' || tab.id !== id) return tab
+    if (JSON.stringify(tab.params ?? null) === JSON.stringify(params ?? null)) return tab
+    return {
+      kind: 'plugin',
+      id,
+      pluginId: tab.pluginId,
+      viewId: tab.viewId,
+      preview: false,
+      ...(params && { params }),
+    }
   })
 }
 

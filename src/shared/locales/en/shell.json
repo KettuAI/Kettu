@@ -131,6 +131,7 @@
       "requests": "Requests",
       "computer": "Computer",
       "artifact": "Artifact",
+      "plugins": "Plugins",
       "artifacts": "Artifacts",
       "open": "Open",
       "live": "In use",

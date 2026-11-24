@@ -20,7 +20,8 @@
           "id": "states",
           "kind": "list",
           "title": "Working sessions",
-          "icon": "list"
+          "icon": "list",
+          "pane": true
         },
         {
           "id": "state",
@@ -35,7 +36,24 @@
         {
           "id": "post",
           "kind": "actions",
-          "title": "Post"
+          "title": "Post",
+          "pane": true
+        }
+      ],
+      "actions": [
+        {
+          "id": "show-states",
+          "title": {
+            "en": "Show working sessions",
+            "zh-CN": "查看进行中的会话"
+          },
+          "description": "Opens the list of sessions by state in the side panel",
+          "icon": "list"
+        },
+        {
+          "id": "post-now",
+          "title": "Post the digest now",
+          "icon": "play"
         }
       ]
     }

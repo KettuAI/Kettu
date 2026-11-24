@@ -1,12 +1,20 @@
 // What Search can find and how a query narrows it: entries, matching, groups and limits.
 
 import { fold, foldText, queryWords } from '@shared/search-fold'
+import type { PluginViewIcon } from '@shared/plugin-views'
 import type { AgentId } from '@shared/thread'
 import type { ArtifactKind } from '@renderer/features/artifacts/model'
 import type { SettingsSection } from '@renderer/stores/view'
 
 export type SearchKind =
-  'session' | 'conversation' | 'artifact' | 'routine' | 'project' | 'section' | 'action'
+  | 'session'
+  | 'conversation'
+  | 'artifact'
+  | 'routine'
+  | 'project'
+  | 'section'
+  | 'action'
+  | 'pluginAction'
 
 export type SearchAction =
   | 'newSession'
@@ -65,6 +73,7 @@ const GROUP_ORDER: readonly SearchKind[] = [
   'routine',
   'project',
   'action',
+  'pluginAction',
   'section',
 ]
 
@@ -118,15 +127,63 @@ export type SearchEntry = EntryBase &
     | { kind: 'project'; path: string }
     | { kind: 'section'; section: SettingsSection }
     | { kind: 'action'; action: SearchAction; shortcut: string | null }
+    | {
+        /** An action a plugin declares, which its script runs on the host that has it. */
+        kind: 'pluginAction'
+        hostId: string | null
+        pluginId: string
+        actionId: string
+        icon: PluginViewIcon | null
+        plugin: SearchPlugin
+      }
   )
 
-export type GroupKey = SearchKind | 'recent'
+/** The plugin a group of its actions is named for. */
+export interface SearchPlugin {
+  /** The package's name, which picks its tile's color when it has no icon. */
+  name: string
+  title: string
+  icon: string | null
+}
+
+/** A plugin's group is keyed by its host and its id: one plugin can be on several hosts. */
+export type GroupKey = SearchKind | 'recent' | `plugin:${string}`
 
 export interface ResultGroup {
   key: GroupKey
   items: SearchEntry[]
   /** Every match of the group, past the rows shown. */
   total: number
+  /** The plugin whose actions the group lists, which names it. */
+  plugin?: SearchPlugin
+}
+
+/**
+ * A group of one kind, or for plugin actions a group for each plugin that has some; a plugin's
+ * group in `expanded` lists all its matches.
+ */
+function groupsOf(
+  kind: SearchKind,
+  found: readonly SearchEntry[],
+  limit: number,
+  expanded: ReadonlySet<string>,
+): ResultGroup[] {
+  if (found.length === 0) return []
+  if (kind !== 'pluginAction') {
+    return [{ key: kind, items: found.slice(0, limit), total: found.length }]
+  }
+  const byPlugin = new Map<GroupKey, SearchEntry[]>()
+  for (const entry of found) {
+    if (entry.kind !== 'pluginAction') continue
+    const key: GroupKey = `plugin:${entry.hostId ?? ''}/${entry.pluginId}`
+    byPlugin.set(key, [...(byPlugin.get(key) ?? []), entry])
+  }
+  return [...byPlugin].map(([key, items]) => ({
+    key,
+    items: expanded.has(key) ? items : items.slice(0, limit),
+    total: items.length,
+    ...(items[0]?.kind === 'pluginAction' && { plugin: items[0].plugin }),
+  }))
 }
 
 export interface SearchResults {
@@ -136,6 +193,8 @@ export interface SearchResults {
   /** The folded words of the query, for marking. */
   words: string[]
 }
+
+const NO_GROUPS: ReadonlySet<string> = new Set()
 
 /** The text that matching reads for an entry: its title, meta and anything else it is found by. */
 export function haystackOf(...parts: readonly (string | null | undefined)[]): string {
@@ -177,6 +236,7 @@ export function runSearch(
   entries: readonly SearchEntry[],
   query: string,
   scope: SearchScope,
+  expanded: ReadonlySet<string> = NO_GROUPS,
 ): SearchResults {
   const words = queryWords(query)
   const found =
@@ -221,11 +281,12 @@ export function runSearch(
     }
     const actions = byKind.get('action') ?? []
     if (actions.length > 0) groups.push({ key: 'action', items: actions, total: actions.length })
+    groups.push(
+      ...groupsOf('pluginAction', byKind.get('pluginAction') ?? [], ALL_GROUP_LIMIT, expanded),
+    )
   } else {
     for (const kind of GROUP_ORDER) {
-      const items = byKind.get(kind)
-      if (items)
-        groups.push({ key: kind, items: items.slice(0, ALL_GROUP_LIMIT), total: items.length })
+      groups.push(...groupsOf(kind, byKind.get(kind) ?? [], ALL_GROUP_LIMIT, expanded))
     }
   }
   return { groups, counts, words }

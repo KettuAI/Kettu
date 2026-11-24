@@ -172,6 +172,13 @@ export interface ViewActionRequest extends ViewRequest {
   values?: Record<string, string | boolean>
 }
 
+/** What an action a manifest declares under `actions` is told when it runs from Search. */
+export interface ActionRunRequest {
+  /** The id the manifest declares the action by. */
+  action: string
+  locale: 'en' | 'zh-CN'
+}
+
 /**
  * A button, or a row's action. It runs the script's `view.action` listener, or with `open` goes to
  * another view of the same plugin without running it. Within one list `id`s are unique and at most
@@ -283,7 +290,9 @@ export type ViewData = ListViewData | DetailViewData | FormViewData | ActionsVie
 
 /**
  * What an action may answer. `error` refuses it, in the script's own words; `notice` is shown after
- * it; `open` goes to another view of the plugin instead of reloading the one that was shown.
+ * it; `open` goes to another view of the plugin instead of reloading the one that was shown. For
+ * an action run from Search, `open` names a view the manifest marks as a `pane`, which opens as a
+ * tab of the side panel.
  */
 export interface ViewActionResult {
   notice?: string
@@ -424,6 +433,12 @@ export interface KettuEvents {
    * view is read again unless the answer opens another.
    */
   'view.action': ViewActionRequest
+  /**
+   * A hook that needs no permission: an action the manifest declares under `actions` was run from
+   * Search. The first listener that returns decides what the window shows; one that returns
+   * nothing means it went well. Answered like `view.action`, within the same limits.
+   */
+  'action.run': ActionRunRequest
 }
 
 export interface Attachment {
@@ -442,6 +457,7 @@ export interface KettuHookResults {
   'session.permissionRequested': { deny: string } | void
   'view.data': ViewData | void
   'view.action': ViewActionResult | void
+  'action.run': ViewActionResult | void
 }
 
 /**

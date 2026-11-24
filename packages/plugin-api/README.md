@@ -82,6 +82,24 @@ confirmed first. Texts are cut at their limits, rows past 200 are dropped, and a
 its limit is refused; `index.d.ts` states the limits. An unknown icon is left out, and a field a later
 version adds is ignored.
 
+## Panes and Search actions
+
+A view with `"pane": true` is also a pane: the side panel lists it under its title, with the plugin's
+icon, and opens it as a tab of the session's panel, drawn like any view. Opening one wakes the script
+as `view.data` does, and a pane of a plugin that is turned off or removed shows that view's error.
+
+A manifest may declare `actions` for Search, each with an `id`, a `title` by language of at most 60
+characters and optionally a `description` and an `icon`. Search lists them in a group of their own,
+named for the plugin. Running one wakes the script and calls its `action.run` listener, which needs
+no permission and answers like `view.action`: nothing means it went well, `notice` is shown, `error`
+refuses it, and `open` names a pane of the plugin, which opens in the side panel of the session in
+view. A plugin that declares actions needs a script.
+
+```json
+"views": [{ "id": "issues", "kind": "list", "title": "Issues", "icon": "list", "pane": true }],
+"actions": [{ "id": "show-issues", "title": "Show my issues", "icon": "list" }]
+```
+
 ## Versions
 
 A plugin names the API version it was written for in `api`. Kettu adds calls inside one version and

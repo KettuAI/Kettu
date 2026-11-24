@@ -23,9 +23,11 @@ import {
 import {
   isPluginViewIcon,
   isPluginViewKind,
+  PLUGIN_ACTION_ID,
   PLUGIN_VIEW_ID,
   PLUGIN_VIEW_KINDS,
   PLUGIN_VIEW_LIMITS,
+  type PluginActionDecl,
   type PluginViewDecl,
 } from '@shared/plugin-views'
 import { HostError } from '../errors'
@@ -57,6 +59,7 @@ const KETTU_FIELDS = new Set([
   'settings',
   'tools',
   'views',
+  'actions',
   'script',
   'api',
   'permissions',
@@ -66,7 +69,8 @@ const MAX_TEXT = 2_000
 const MAX_LIST = 64
 const LANGUAGE = /^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$/
 const SETTING_TYPES = ['boolean', 'string', 'select', 'secret'] as const
-const VIEW_FIELDS = new Set(['id', 'kind', 'title', 'description', 'icon'])
+const VIEW_FIELDS = new Set(['id', 'kind', 'title', 'description', 'icon', 'pane'])
+const ACTION_FIELDS = new Set(['id', 'title', 'description', 'icon'])
 
 /** Kettu's entry of the manifest, at format 1. */
 export interface KettuEntry {
@@ -78,6 +82,7 @@ export interface KettuEntry {
   /** The tools it gives agents; left out unless the entry asks for the `tools` permission. */
   tools: PluginTool[]
   views: PluginViewDecl[]
+  actions: PluginActionDecl[]
   /** The script's path inside the package, without the leading `./`; null without a script. */
   script: string | null
   api: number | null
@@ -236,6 +241,63 @@ export function parseViews(value: unknown, where: string, warnings: string[]): P
     if (raw.icon !== undefined) {
       if (isPluginViewIcon(raw.icon)) decl.icon = raw.icon
       else warnings.push(t('plugins.warn.viewIcon', { view: id }))
+    }
+    if (raw.pane !== undefined) {
+      if (typeof raw.pane !== 'boolean') throw badField(`${at}.pane`)
+      if (raw.pane) decl.pane = true
+    }
+    return decl
+  })
+}
+
+/** A text by language whose every language is within `max`. */
+function shortTexts(value: unknown, field: string, max: number): PluginTexts {
+  const out = texts(value, field)
+  for (const [language, text] of Object.entries(out)) {
+    if (text.length > max) throw badField(`${field}.${language}`)
+  }
+  return out
+}
+
+/**
+ * The actions a manifest declares for Search. Each has a title in at least one language, and an
+ * icon or a field a later Kettu may add is passed over with a warning.
+ */
+export function parseActions(
+  value: unknown,
+  where: string,
+  warnings: string[],
+): PluginActionDecl[] {
+  if (value === undefined) return []
+  if (!Array.isArray(value) || value.length > PLUGIN_VIEW_LIMITS.searchActions) {
+    throw badField(where)
+  }
+  const ids = new Set<string>()
+  return value.map((raw: unknown, index): PluginActionDecl => {
+    const at = `${where}[${index}]`
+    if (!isRecord(raw)) throw badField(at)
+    const { id } = raw
+    if (typeof id !== 'string' || !PLUGIN_ACTION_ID.test(id) || ids.has(id)) {
+      throw badField(`${at}.id`)
+    }
+    ids.add(id)
+    for (const key of Object.keys(raw)) {
+      if (!ACTION_FIELDS.has(key)) {
+        warnings.push(t('plugins.warn.actionField', { action: id, field: key.slice(0, 100) }))
+      }
+    }
+    const title = shortTexts(raw.title, `${at}.title`, PLUGIN_VIEW_LIMITS.actionLabel)
+    if (Object.values(title).every((text) => text.trim() === '')) throw badField(`${at}.title`)
+    const decl: PluginActionDecl = { id, title }
+    const description = shortTexts(
+      raw.description,
+      `${at}.description`,
+      PLUGIN_VIEW_LIMITS.actionDescription,
+    )
+    if (Object.keys(description).length > 0) decl.description = description
+    if (raw.icon !== undefined) {
+      if (isPluginViewIcon(raw.icon)) decl.icon = raw.icon
+      else warnings.push(t('plugins.warn.actionIcon', { action: id }))
     }
     return decl
   })
@@ -435,6 +497,10 @@ function kettuEntry(raw: Record<string, unknown>, appVersion: string, warnings: 
     toolList = []
   }
   if (toolList.length > 0 && script === null) throw badField(`${where}.script`)
+  const actions = parseActions(raw.actions, `${where}.actions`, warnings)
+  if (actions.length > 0 && script === null) {
+    throw refusal(t('plugins.actionsNeedScript', { action: actions[0]!.id }))
+  }
   const entry: KettuEntry = {
     kettu: range,
     titles: texts(raw.title, `${where}.title`),
@@ -442,6 +508,7 @@ function kettuEntry(raw: Record<string, unknown>, appVersion: string, warnings: 
     settings: settings(raw.settings, `${where}.settings`),
     tools: toolList,
     views,
+    actions,
     script,
     api,
     permissions,

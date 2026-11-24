@@ -665,6 +665,7 @@ export class AgentHost {
   private readonly pluginViews = new PluginViews({
     client: this.pluginHost,
     views: (pluginId) => this.plugins.views(pluginId),
+    actions: (pluginId) => this.plugins.actions(pluginId),
     locale: () => this.settings.locale,
     log: (level, message) => writeLog(level, 'plugins', message),
   })
@@ -3886,6 +3887,7 @@ export class AgentHost {
         this.pluginViews.data(pluginId, viewId, params ?? {}),
       'plugins.viewAction': ({ pluginId, viewId, params, ...input }) =>
         this.pluginViews.act(pluginId, viewId, params ?? {}, input),
+      'plugins.actionRun': ({ pluginId, actionId }) => this.pluginViews.run(pluginId, actionId),
       'plugins.resources': async ({ kind }) => ({ items: await this.plugins.resources(kind) }),
       'commands.list': async () => ({ commands: await this.commands.list() }),
       'roles.list': async () => ({ roles: await this.roles.list() }),

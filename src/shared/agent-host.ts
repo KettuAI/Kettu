@@ -1425,6 +1425,12 @@ export interface HostContract {
     params: { pluginId: string; viewId: string; params?: PluginViewParams } & PluginViewActionInput
     result: PluginViewActionResult
   }
+  // Runs an action a plugin declares for Search. Its answer may open a pane of the plugin; like a
+  // view's, a failure is `ok: false` with why, never an error.
+  'plugins.actionRun': {
+    params: { pluginId: string; actionId: string }
+    result: PluginViewActionResult
+  }
   // The commands, roles, themes or templates of the plugins that are on, with each one's file.
   'plugins.resources': {
     params: { kind: 'commands' | 'roles' | 'themes' | 'templates' }
@@ -2375,6 +2381,7 @@ export const HOST_METHODS = [
   'plugins.rollBack',
   'plugins.viewData',
   'plugins.viewAction',
+  'plugins.actionRun',
   'plugins.resources',
   'commands.list',
   'roles.list',

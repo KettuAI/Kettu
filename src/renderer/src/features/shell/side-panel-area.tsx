@@ -39,6 +39,7 @@ const RequestsPane = lazy(() => import('@renderer/features/requests/requests-pan
 const BoardPane = lazy(() => import('@renderer/features/board/board-pane'))
 const SideChatPane = lazy(() => import('@renderer/features/side-chat/side-chat-rail'))
 const GitPane = lazy(() => import('@renderer/features/git/pane/git-pane'))
+const PluginPane = lazy(() => import('@renderer/features/plugin-views/plugin-pane'))
 const BrowserPane = lazy(() =>
   import('@renderer/features/browser/browser-pane').then((module) => ({
     default: module.BrowserPane,
@@ -290,6 +291,8 @@ export function SidePanelArea({
                       <BoardPane sessionId={panel} />
                     ) : held === 'sideChat' ? (
                       <SideChatPane key={panel} sessionId={panel} />
+                    ) : held === 'plugin' ? (
+                      <PluginPane panel={panel} projectPath={projectPath} />
                     ) : (
                       artifactId && (
                         <ArtifactViewer

@@ -1182,6 +1182,14 @@ function pluginView(params: unknown): { pluginId: string; viewId: string } {
   return { pluginId, viewId }
 }
 
+function pluginActionRun(params: unknown): HostParams<'plugins.actionRun'> {
+  const o = fields(params)
+  const { pluginId } = installedPlugin(params)
+  const actionId = string(o, 'actionId', 64)
+  if (!PLUGIN_ACTION_ID.test(actionId)) throw invalidParams('actionId is not an id')
+  return { pluginId, actionId }
+}
+
 function viewParams(params: unknown): PluginViewParams {
   try {
     return parseViewParams(fields(params).params, 'params')
@@ -2148,6 +2156,7 @@ export function createValidators(platform: Platform): Validators {
     'plugins.rollBack': installedPlugin,
     'plugins.viewData': (params) => ({ ...pluginView(params), params: viewParams(params) }),
     'plugins.viewAction': pluginViewAction,
+    'plugins.actionRun': pluginActionRun,
     'plugins.resources': (params) => {
       const { kind } = fields(params)
       if (kind !== 'commands' && kind !== 'roles' && kind !== 'themes' && kind !== 'templates') {

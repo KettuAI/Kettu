@@ -20,6 +20,7 @@
     "failed": "The plugin couldn’t show this view",
     "invalid": "The plugin sent something Kettu can’t show"
   },
+  "actionNoPanel": "“{{label}}” has a pane to show, but no session on the same computer is open. Open one and run it again.",
   "actionError": {
     "not_found": "{{label}} isn’t available anymore",
     "disabled": "{{label}} didn’t run: the plugin was turned off after it crashed too often",
