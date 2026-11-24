@@ -1,11 +1,15 @@
 // Opening a plugin's view and running its actions: the host wakes the plugin's script for the view,
 // asks it for the view's data or tells it the action, checks the answer against the format and
-// hands a window either the view or why it did not come out. Nothing here throws for what a
-// plugin does: a script that fails, hangs or answers badly gives an error that one view shows.
+// hands a window either the view or why it did not come out. The actions a plugin declares for
+// Search run the same way. Nothing here throws for what a plugin does: a script that fails, hangs
+// or answers badly gives an error that one view or one action shows.
 
 import {
+  actionTrigger,
   PLUGIN_VIEW_LIMITS,
   viewTrigger,
+  type PluginActionDecl,
+  type PluginActionRunRequest,
   type PluginViewActionInput,
   type PluginViewActionRequest,
   type PluginViewActionResult,
@@ -33,6 +37,8 @@ export interface PluginViewsDeps {
   client: ViewClient
   /** The views of a plugin that is installed and on; none for one that is off or has no script. */
   views(pluginId: string): PluginViewDecl[]
+  /** The Search actions of a plugin that is installed and on; none for one that is off. */
+  actions(pluginId: string): PluginActionDecl[]
   locale(): string
   log(level: 'info' | 'warn', message: string): void
 }
@@ -41,6 +47,7 @@ export interface PluginViewsDeps {
 // alike here; the plugin's own log says which.
 const NO_VIEW = 'No listener of view.data gave a view; the plugin’s log says why if one threw'
 const NO_ACTION = 'No listener of view.action answered; the plugin’s log says why if one threw'
+const NO_RUN = 'No listener of action.run answered; the plugin’s log says why if one threw'
 
 type Asked = { ok: true; answers: unknown[] } | { ok: false; error: PluginViewError }
 
@@ -90,7 +97,7 @@ export class PluginViews {
       params,
       locale: this.deps.locale(),
     }
-    const asked = await this.ask(pluginId, viewId, 'view.data', request)
+    const asked = await this.ask(pluginId, viewTrigger(viewId), 'view.data', request)
     if (!asked.ok) return asked
     const answer = asked.answers.find((item) => item !== null && item !== undefined)
     if (answer === undefined) {
@@ -127,7 +134,7 @@ export class PluginViews {
       ...(input.row === undefined ? {} : { row: input.row }),
       ...(input.values === undefined ? {} : { values: input.values }),
     }
-    const asked = await this.ask(pluginId, viewId, 'view.action', request)
+    const asked = await this.ask(pluginId, viewTrigger(viewId), 'view.action', request)
     if (!asked.ok) return asked
     if (asked.answers.length === 0) {
       return {
@@ -148,20 +155,47 @@ export class PluginViews {
     }
   }
 
+  /**
+   * Runs one of the actions a plugin declares for Search. The answer may open a pane of the
+   * plugin, which is the only view it may name.
+   */
+  async run(pluginId: string, actionId: string): Promise<PluginViewActionResult> {
+    if (!this.deps.actions(pluginId).some((action) => action.id === actionId)) {
+      return { ok: false, error: { code: 'not_found' } }
+    }
+    const request: PluginActionRunRequest = { action: actionId, locale: this.deps.locale() }
+    const asked = await this.ask(pluginId, actionTrigger(actionId), 'action.run', request)
+    if (!asked.ok) return asked
+    if (asked.answers.length === 0) {
+      return { ok: false, error: { code: 'failed', detail: NO_RUN } }
+    }
+    try {
+      const panes = this.deps.views(pluginId).filter((view) => view.pane)
+      return parseActionResult(
+        asked.answers.find((item) => item !== null && item !== undefined),
+        { views: new Set(panes.map((view) => view.id)) },
+      )
+    } catch (error) {
+      if (!(error instanceof ViewDataError)) throw error
+      this.deps.log('warn', `${pluginId} answered the action ${actionId} badly: ${error.message}`)
+      return { ok: false, error: { code: 'invalid', detail: cut(error.message) } }
+    }
+  }
+
   private async ask(
     pluginId: string,
-    viewId: string,
-    event: 'view.data' | 'view.action',
+    trigger: string,
+    event: 'view.data' | 'view.action' | 'action.run',
     payload: unknown,
   ): Promise<Asked> {
     try {
-      await this.deps.client.activate(pluginId, viewTrigger(viewId))
+      await this.deps.client.activate(pluginId, trigger)
       return { ok: true, answers: await this.deps.client.hook(pluginId, event, payload, 'call') }
     } catch (error) {
       const out = failure(error)
       this.deps.log(
         'warn',
-        `${pluginId} did not answer ${event} for ${viewId}: ${out.code}${out.detail ? `: ${out.detail}` : ''}`,
+        `${pluginId} did not answer ${event} for ${trigger}: ${out.code}${out.detail ? `: ${out.detail}` : ''}`,
       )
       return { ok: false, error: out }
     }

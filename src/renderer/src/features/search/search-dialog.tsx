@@ -5,6 +5,7 @@ import {
   Clock01Icon,
   DashboardSquare02Icon,
   File01Icon,
+  FlashIcon,
   FolderOpenIcon,
   Globe02Icon,
   KanbanIcon,
@@ -30,6 +31,9 @@ import {
   type CommandGroup,
 } from '@renderer/components/affect/command-menu'
 import { AgentMark } from '@renderer/components/agents/agent-mark'
+import { VIEW_ICONS } from '@renderer/features/plugin-views/icons'
+import { PluginTile } from '@renderer/features/plugin-views/plugin-tile'
+import { runPluginAction } from '@renderer/features/plugin-views/run-action'
 import { Button } from '@renderer/components/ui/button'
 import { Dialog } from '@renderer/components/ui/dialog'
 import { Skeleton } from '@renderer/components/ui/skeleton'
@@ -61,6 +65,7 @@ import {
   type ResultGroup,
   type SearchAction,
   type SearchEntry,
+  type SearchKind,
   type SearchScope,
 } from './search-model'
 import { useConversationHits } from './use-conversation-hits'
@@ -152,16 +157,30 @@ function openEntry(entry: SearchEntry): void {
     case 'action':
       runAction(entry.action)
       break
+    case 'pluginAction':
+      void runPluginAction({
+        hostId: entry.hostId,
+        pluginId: entry.pluginId,
+        actionId: entry.actionId,
+        label: entry.title,
+      })
+      break
   }
 }
 
-const SCOPE_OF_KIND: Partial<Record<ResultGroup['key'], Exclude<SearchScope, 'all'>>> = {
+const SCOPE_OF_KIND: Partial<Record<SearchKind, Exclude<SearchScope, 'all'>>> = {
   session: 'sessions',
   conversation: 'conversations',
   artifact: 'artifacts',
   routine: 'routines',
   project: 'projects',
   section: 'settings',
+  action: 'actions',
+}
+
+/** The scope that lists a group in full; each plugin's group is one of Actions'. */
+function scopeOfGroup(key: ResultGroup['key']): Exclude<SearchScope, 'all'> | undefined {
+  return key.startsWith('plugin:') ? 'actions' : SCOPE_OF_KIND[key as SearchKind]
 }
 
 // A row that switches to its group's scope, "Show all 12".
@@ -199,10 +218,13 @@ function SearchPalette() {
   const artifactsLoaded = useArtifactsStore((s) => s.list !== null)
 
   const groups: CommandGroup[] = results.groups.map((group) => {
-    const scopeOf = SCOPE_OF_KIND[group.key]
-    const label =
-      scope === 'all'
-        ? t(`search.group.${group.key}`)
+    const scopeOf = scopeOfGroup(group.key)
+    // Actions has several groups, so each keeps its own name; any other scope has one.
+    const named = scope === 'all' || scope === 'actions'
+    const label = group.plugin
+      ? group.plugin.title
+      : named
+        ? t(`search.group.${group.key as Exclude<SearchKind, 'pluginAction'> | 'recent'}`)
         : trimmed
           ? t('search.results', { count: group.total })
           : t(`search.latest.${scope}`)
@@ -216,7 +238,10 @@ function SearchPalette() {
             },
           ]
         : []
-    return { id: group.key, label, commands: [...group.items.map(commandOf), ...more] }
+    const logo = group.plugin && (
+      <PluginTile name={group.plugin.name} icon={group.plugin.icon} size={14} />
+    )
+    return { id: group.key, label, logo, commands: [...group.items.map(commandOf), ...more] }
   })
 
   const scopes = SCOPES.map((id) => ({
@@ -404,6 +429,11 @@ function commandOf(entry: SearchEntry): Command {
         ...base,
         icon: <Icon icon={ACTION_ICON[entry.action]} size={16} />,
         keys: entry.shortcut ? keyCaps(entry.shortcut) : undefined,
+      }
+    case 'pluginAction':
+      return {
+        ...base,
+        icon: <Icon icon={entry.icon ? VIEW_ICONS[entry.icon] : FlashIcon} size={16} />,
       }
   }
 }

@@ -72,3 +72,12 @@ kettu.on('view.action', async ({ action }) => {
   if (action === 'save') return { notice: 'Saved' }
   return { error: `No action ${action}` }
 })
+
+// Search actions: `action.run` answers like an action of a view. `open` names a pane the manifest
+// marks, which opens in the side panel.
+kettu.on('action.run', async ({ action }) => {
+  if (action === 'show-states') return { open: { view: 'states' } }
+  if (action === 'post-now')
+    return { notice: `Posted, the webhook answered ${await exports.post()}` }
+  return { error: `No action ${action}` }
+})

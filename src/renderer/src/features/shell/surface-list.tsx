@@ -7,16 +7,20 @@ import {
   DropdownMenuSeparator,
   DropdownMenuShortcut,
 } from '@renderer/components/ui/dropdown-menu'
+import { PluginTile } from '@renderer/features/plugin-views/plugin-tile'
 import { cn } from '@renderer/lib/utils'
 import { PaneIcon } from './panel-button'
 import {
   MENU_ITEM,
   startArtifact,
+  startPluginPane,
   startSurface,
   takePendingSurfaceListFocus,
   useArtifactChoices,
+  usePluginPaneChoices,
   useSurfaceRows,
   type ArtifactChoice,
+  type PluginPaneChoice,
   type SurfaceRow,
   type SurfaceRowId,
 } from './surface-rows'
@@ -40,6 +44,7 @@ export function SurfaceList({ panel, projectPath }: { panel: string; projectPath
   const { t } = useTranslation('shell')
   const rows = useSurfaceRows(panel, projectPath)
   const artifacts = useArtifactChoices(panel)
+  const panes = usePluginPaneChoices(panel, projectPath)
   const onPick = (id: SurfaceRowId) => startSurface(panel, projectPath, id)
   const ref = useRef<HTMLDivElement>(null)
   useEffect(() => takePendingSurfaceListFocus(panel), [panel])
@@ -117,6 +122,33 @@ export function SurfaceList({ panel, projectPath }: { panel: string; projectPath
           ))}
         </div>
       ))}
+      {panes.length > 0 && (
+        <div role="group" aria-label={t('surfaces.list.plugins')} className={GROUP}>
+          <div className="px-2.25 pt-0.5 pb-1 text-hint text-(--text-tertiary)">
+            {t('surfaces.list.plugins')}
+          </div>
+          {panes.map((pane) => (
+            <button
+              key={`${pane.plugin.pluginId}/${pane.viewId}`}
+              type="button"
+              role="menuitem"
+              onClick={() => startPluginPane(panel, pane)}
+              className={cn(ROW, ROW_ON)}
+            >
+              <span className="grid shrink-0">
+                <PluginTile name={pane.plugin.name} icon={pane.plugin.icon} size={16} />
+              </span>
+              <span className="flex-1 truncate">{pane.label}</span>
+              <span
+                title={pane.pluginTitle}
+                className="min-w-0 shrink truncate text-small text-(--text-disabled)"
+              >
+                {pane.open ? t('surfaces.list.open') : pane.pluginTitle}
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
       {artifacts.length > 0 && (
         <div role="group" aria-label={t('surfaces.list.artifacts')} className={GROUP}>
           <div className="px-2.25 pt-0.5 pb-1 text-hint text-(--text-tertiary)">
@@ -149,14 +181,18 @@ export function SurfaceList({ panel, projectPath }: { panel: string; projectPath
 export function SurfaceMenuItems({
   rows,
   artifacts,
+  panes,
   onPick,
   onArtifact,
+  onPane,
   devices,
 }: {
   rows: SurfaceRow[]
   artifacts: ArtifactChoice[]
+  panes: PluginPaneChoice[]
   onPick: (id: SurfaceRowId) => void
   onArtifact: (id: string) => void
+  onPane: (pane: PluginPaneChoice) => void
   devices?: (row: SurfaceRow, item: ReactNode) => ReactNode
 }) {
   const { t } = useTranslation('shell')
@@ -199,6 +235,26 @@ export function SurfaceMenuItems({
           </DropdownMenuGroup>
         </Fragment>
       ))}
+      {panes.length > 0 && (
+        <>
+          <DropdownMenuSeparator />
+          <DropdownMenuGroup>
+            <DropdownMenuLabel>{t('surfaces.list.plugins')}</DropdownMenuLabel>
+            {panes.map((pane) => (
+              <DropdownMenuItem
+                key={`${pane.plugin.pluginId}/${pane.viewId}`}
+                onClick={() => onPane(pane)}
+              >
+                <PluginTile name={pane.plugin.name} icon={pane.plugin.icon} size={16} />
+                <span className="truncate">{pane.label}</span>
+                <span className="ml-auto pl-3 text-small text-(--text-disabled)">
+                  {pane.open ? t('surfaces.list.open') : pane.pluginTitle}
+                </span>
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuGroup>
+        </>
+      )}
       {artifacts.length > 0 && (
         <>
           <DropdownMenuSeparator />

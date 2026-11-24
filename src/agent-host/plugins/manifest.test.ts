@@ -134,6 +134,52 @@ describe('the sh.kettu entry', () => {
     expect(parsed.warnings).toHaveLength(2)
   })
 
+  it('reads which views are panes and the actions Search lists', () => {
+    const parsed = read(
+      kettu({
+        script: './main.js',
+        api: 1,
+        views: [
+          { id: 'issues', kind: 'list', title: 'Issues', pane: true },
+          { id: 'issue', kind: 'detail', title: 'Issue', pane: false },
+          { id: 'label', kind: 'form', title: 'Label' },
+        ],
+        actions: [
+          {
+            id: 'show-issues',
+            title: { en: 'Show issues', 'zh-CN': '查看问题' },
+            description: 'Opens them',
+            icon: 'list',
+          },
+          { id: 'create', title: 'Create an issue' },
+        ],
+      }),
+    )
+    expect(parsed.kettu?.views.map((view) => view.pane)).toEqual([true, undefined, undefined])
+    expect(parsed.kettu?.actions).toEqual([
+      {
+        id: 'show-issues',
+        title: { en: 'Show issues', 'zh-CN': '查看问题' },
+        description: { en: 'Opens them' },
+        icon: 'list',
+      },
+      { id: 'create', title: { en: 'Create an issue' } },
+    ])
+    expect(parsed.warnings).toEqual([])
+  })
+
+  it('passes over an action field and an icon a later Kettu may add, with a warning', () => {
+    const parsed = read(
+      kettu({
+        script: './main.js',
+        api: 1,
+        actions: [{ id: 'a', title: 'A', icon: 'unicorn', keys: 'mod+k' }],
+      }),
+    )
+    expect(parsed.kettu?.actions).toEqual([{ id: 'a', title: { en: 'A' } }])
+    expect(parsed.warnings).toHaveLength(2)
+  })
+
   it('reads the events that wake the script, only those whose permission it asks for', () => {
     const parsed = read(
       kettu({
@@ -299,6 +345,33 @@ describe('the sh.kettu entry', () => {
       'views without a script to give them data',
       kettu({ views: [{ id: 'a', kind: 'list', title: 'A' }] }),
     ],
+    [
+      'a pane flag that is not a boolean',
+      kettu({
+        script: './m.js',
+        api: 1,
+        views: [{ id: 'a', kind: 'list', title: 'A', pane: 'yes' }],
+      }),
+    ],
+    ['actions that are not objects', kettu({ script: './m.js', api: 1, actions: ['run'] })],
+    ['an action without a title', kettu({ script: './m.js', api: 1, actions: [{ id: 'a' }] })],
+    [
+      'an action whose id is not an id',
+      kettu({ script: './m.js', api: 1, actions: [{ id: 'a b', title: 'A' }] }),
+    ],
+    [
+      'two actions with one id',
+      kettu({
+        script: './m.js',
+        api: 1,
+        actions: [1, 2].map(() => ({ id: 'a', title: 'A' })),
+      }),
+    ],
+    [
+      'an action title past its limit',
+      kettu({ script: './m.js', api: 1, actions: [{ id: 'a', title: 'x'.repeat(61) }] }),
+    ],
+    ['actions without a script to run them', kettu({ actions: [{ id: 'a', title: 'A' }] })],
   ])('refuses %s', (_, text) => {
     expect(() => read(text)).toThrowError(expect.objectContaining({ code: 'invalid_params' }))
   })

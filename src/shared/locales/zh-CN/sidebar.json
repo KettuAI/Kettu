@@ -28,7 +28,8 @@
       "artifacts": "产物",
       "routines": "定时任务",
       "projects": "项目",
-      "settings": "设置"
+      "settings": "设置",
+      "actions": "操作"
     },
     "group": {
       "recent": "最近",
@@ -58,7 +59,7 @@
     "results_other": "{{count}} 个结果",
     "noMatch": "没有结果匹配“{{query}}”",
     "noConversation": "没有对话提到“{{query}}”",
-    "searchedAll": "搜了会话、对话、产物、定时任务、项目和设置。",
+    "searchedAll": "搜了会话、对话、产物、定时任务、项目、设置和操作。",
     "searchedScope": "只搜了{{scope}}，按 Tab 搜更多。",
     "none": {
       "all": "这里还没有内容。",
@@ -67,7 +68,8 @@
       "artifacts": "还没有产物。",
       "routines": "还没有定时任务。",
       "projects": "还没有项目。",
-      "settings": "这里没有内容。"
+      "settings": "这里没有内容。",
+      "actions": "还没有操作。"
     },
     "loading": "正在加载…",
     "searching": "正在搜索对话…",
@@ -86,12 +88,14 @@
       "artifacts": "最近的产物",
       "routines": "最近的定时任务",
       "projects": "最近的项目",
-      "settings": "全部设置"
+      "settings": "全部设置",
+      "actions": "全部操作"
     },
     "matches_other": "{{count}} 条消息",
     "indexing": "正在为对话建立索引（{{percent}}%），已建好的部分可以搜。",
     "hostsSlow": "还在等：{{hosts}}",
-    "announce_other": "找到 {{count}} 个会话"
+    "announce_other": "找到 {{count}} 个会话",
+    "pluginAction": "操作"
   },
   "project": {
     "missing": "未找到",

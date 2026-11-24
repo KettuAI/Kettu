@@ -1,11 +1,11 @@
 import { afterEach, describe, expect, it } from 'vitest'
-import type { PluginViewDecl } from '@shared/plugin-views'
-import { viewTrigger } from '@shared/plugin-views'
+import type { PluginActionDecl, PluginViewDecl } from '@shared/plugin-views'
+import { actionTrigger, viewTrigger } from '@shared/plugin-views'
 import { pluginClient } from '../testing/plugin-host'
 import { PluginViews } from './views'
 
 const DECLS: PluginViewDecl[] = [
-  { id: 'issues', kind: 'list', title: { en: 'Issues' } },
+  { id: 'issues', kind: 'list', title: { en: 'Issues' }, pane: true },
   { id: 'issue', kind: 'detail', title: { en: 'Issue' } },
   { id: 'label', kind: 'form', title: { en: 'Label' } },
   { id: 'broken', kind: 'list', title: { en: 'Broken' } },
@@ -13,6 +13,17 @@ const DECLS: PluginViewDecl[] = [
   { id: 'slow', kind: 'detail', title: { en: 'Slow' } },
   { id: 'spins', kind: 'detail', title: { en: 'Spins' } },
   { id: 'silent', kind: 'detail', title: { en: 'Silent' } },
+]
+
+const ACTIONS: PluginActionDecl[] = [
+  { id: 'show-issues', title: { en: 'Show issues' } },
+  { id: 'show-issue', title: { en: 'Show one issue' } },
+  { id: 'create', title: { en: 'Create an issue' } },
+  { id: 'quiet', title: { en: 'Do nothing' } },
+  { id: 'refuse', title: { en: 'Refuse' } },
+  { id: 'throw', title: { en: 'Throw' } },
+  { id: 'wander', title: { en: 'Go nowhere' } },
+  { id: 'stall', title: { en: 'Stall' } },
 ]
 
 const SCRIPT = `
@@ -54,6 +65,17 @@ kettu.on('view.action', ({ view, action, row, values, params }) => {
   if (action === 'wander') return { open: { view: 'nowhere' } }
   if (action === 'throw') throw new Error('nope')
 })
+
+kettu.on('action.run', ({ action, locale }) => {
+  console.log('RUN ' + JSON.stringify({ action, locale }))
+  if (action === 'show-issues') return { open: { view: 'issues', params: { team: 'ENG' } } }
+  if (action === 'show-issue') return { open: { view: 'issue' } }
+  if (action === 'create') return { notice: 'Created in ' + locale }
+  if (action === 'refuse') return { error: 'The API key is not set' }
+  if (action === 'wander') return { open: { view: 'nowhere' } }
+  if (action === 'throw') throw new Error('nope')
+  if (action === 'stall') return new Promise(() => {})
+})
 `
 
 let stop: (() => void) | null = null
@@ -71,11 +93,15 @@ function setup(decls: PluginViewDecl[] = DECLS) {
   client.register({
     id: 'views',
     scriptPath: '/views.js',
-    activation: DECLS.map((view) => viewTrigger(view.id)),
+    activation: [
+      ...DECLS.map((view) => viewTrigger(view.id)),
+      ...ACTIONS.map((action) => actionTrigger(action.id)),
+    ],
   })
   const views = new PluginViews({
     client,
     views: (id) => (id === 'views' ? decls : []),
+    actions: (id) => (id === 'views' ? ACTIONS : []),
     locale: () => 'zh-CN',
     log: (level, message) => logs.push(`${level} ${message}`),
   })
@@ -223,5 +249,62 @@ describe('running an action', () => {
       ok: false,
       error: { code: 'not_found' },
     })
+  })
+})
+
+describe('running an action Search lists', () => {
+  it('wakes the script for the action and says what it answered, in the interface language', async () => {
+    const { views, host } = setup()
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    expect(host.logs).toEqual([])
+    expect(await views.run('views', 'create')).toEqual({ ok: true, notice: 'Created in zh-CN' })
+    expect(await views.run('views', 'quiet')).toEqual({ ok: true })
+    expect(told(host.logs, 'RUN')).toEqual([
+      { action: 'create', locale: 'zh-CN' },
+      { action: 'quiet', locale: 'zh-CN' },
+    ])
+  })
+
+  it('may open a pane, with the parameters it names', async () => {
+    const { views } = setup()
+    expect(await views.run('views', 'show-issues')).toEqual({
+      ok: true,
+      open: { view: 'issues', params: { team: 'ENG' } },
+    })
+  })
+
+  it('may not open a view that is no pane, nor one the plugin does not have', async () => {
+    const { views } = setup()
+    expect(await views.run('views', 'show-issue')).toEqual({
+      ok: false,
+      error: { code: 'invalid', detail: 'open.view is not a view of this plugin' },
+    })
+    expect(await views.run('views', 'wander')).toMatchObject({
+      ok: false,
+      error: { code: 'invalid' },
+    })
+  })
+
+  it('refuses in the script’s own words, or when it throws or does not answer', async () => {
+    const { views } = setup()
+    expect(await views.run('views', 'refuse')).toEqual({
+      ok: false,
+      error: { code: 'failed', detail: 'The API key is not set' },
+    })
+    expect(await views.run('views', 'throw')).toMatchObject({
+      ok: false,
+      error: { code: 'failed' },
+    })
+    expect(await views.run('views', 'stall')).toEqual({ ok: false, error: { code: 'timeout' } })
+  })
+
+  it('runs only an action the plugin declares, and only while it is on', async () => {
+    const { views, host } = setup()
+    expect(await views.run('views', 'nowhere')).toEqual({ ok: false, error: { code: 'not_found' } })
+    expect(await views.run('someone-else', 'create')).toEqual({
+      ok: false,
+      error: { code: 'not_found' },
+    })
+    expect(told(host.logs, 'RUN')).toEqual([])
   })
 })

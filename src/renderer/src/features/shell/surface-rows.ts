@@ -10,9 +10,11 @@ import {
   GitBranchIcon,
   ShapesIcon,
 } from '@hugeicons/core-free-icons'
+import { useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
 import { KIND_ICON } from '@renderer/features/artifacts/kinds'
+import { languageText, surfaceTitle } from '@renderer/features/plugin-views/plugin-text'
 import { artifactKind } from '@renderer/features/artifacts/model'
 import { threadArtifacts, type BoardArtifact } from '@renderer/features/board/board-model'
 import { REQUESTS_ICON } from '@renderer/features/requests/icon'
@@ -24,6 +26,7 @@ import { formatShortcut, isWeb } from '@renderer/lib/platform'
 import { artifactStanding, useArtifactsStore } from '@renderer/stores/artifacts'
 import { useDevicesStore } from '@renderer/stores/devices'
 import { useTerminalAllowed } from '@renderer/stores/hosts'
+import { usePluginSurfaces, type PluginSurface } from '@renderer/stores/plugin-surfaces'
 import { hostOfSession, useSessionsStore } from '@renderer/stores/sessions'
 import { openSideChat } from '@renderer/stores/side-chat'
 import { createTerminal } from '@renderer/stores/terminals'
@@ -31,6 +34,8 @@ import { useThreadsStore } from '@renderer/stores/threads'
 import {
   panelSession,
   openArtifactTab,
+  openPluginPane,
+  pluginPaneId,
   toggleSidePane,
   toggleTerminal,
   useViewStore,
@@ -207,6 +212,42 @@ export function useArtifactChoices(panel: string): ArtifactChoice[] {
       icon: kind ? KIND_ICON[kind as keyof typeof KIND_ICON] : ShapesIcon,
     }
   })
+}
+
+/** A pane a plugin on the panel's host gives the side panel. */
+export interface PluginPaneChoice {
+  plugin: PluginSurface
+  viewId: string
+  label: string
+  /** The plugin's name, which tells panes of one name apart. */
+  pluginTitle: string
+  /** A tab of the panel already shows it, which picking the row selects. */
+  open: boolean
+}
+
+/** The panes of the plugins that are on, on the host the panel's session runs on. */
+export function usePluginPaneChoices(panel: string, projectPath: string): PluginPaneChoice[] {
+  const { i18n } = useTranslation()
+  const { plugins } = usePluginSurfaces(hostOfPath(projectPath))
+  const docs = useViewStore((s) => s.sideDocs[panel])
+  return useMemo(
+    () =>
+      plugins.flatMap((plugin) =>
+        plugin.panes.map((pane) => ({
+          plugin,
+          viewId: pane.id,
+          label: languageText(pane.title, i18n.language) || pane.id,
+          pluginTitle: surfaceTitle(plugin, i18n.language),
+          open: !!docs?.some((tab) => tab.id === pluginPaneId(plugin.pluginId, pane.id)),
+        })),
+      ),
+    [plugins, docs, i18n.language],
+  )
+}
+
+/** Shows a plugin's pane in a tab of the panel. */
+export function startPluginPane(panel: string, choice: PluginPaneChoice): void {
+  openPluginPane(panel, { pluginId: choice.plugin.pluginId, viewId: choice.viewId })
 }
 
 /** Shows one of the session's artifacts in the panel's preview tab. */

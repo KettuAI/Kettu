@@ -28,7 +28,8 @@
       "artifacts": "Artifacts",
       "routines": "Routines",
       "projects": "Projects",
-      "settings": "Settings"
+      "settings": "Settings",
+      "actions": "Actions"
     },
     "group": {
       "recent": "Recent",
@@ -60,7 +61,7 @@
     "results_other": "{{count}} results",
     "noMatch": "No results for “{{query}}”",
     "noConversation": "No conversation mentions “{{query}}”",
-    "searchedAll": "Searched sessions, conversations, artifacts, routines, projects and settings.",
+    "searchedAll": "Searched sessions, conversations, artifacts, routines, projects, settings and actions.",
     "searchedScope": "Searched {{scope}} only. Press Tab to search more.",
     "none": {
       "all": "Nothing here yet.",
@@ -69,7 +70,8 @@
       "artifacts": "No artifacts yet.",
       "routines": "No routines yet.",
       "projects": "No projects yet.",
-      "settings": "Nothing here."
+      "settings": "Nothing here.",
+      "actions": "No actions."
     },
     "loading": "Loading…",
     "searching": "Searching conversations…",
@@ -89,14 +91,16 @@
       "artifacts": "Latest artifacts",
       "routines": "Latest routines",
       "projects": "Latest projects",
-      "settings": "All settings"
+      "settings": "All settings",
+      "actions": "All actions"
     },
     "matches_one": "{{count}} message",
     "matches_other": "{{count}} messages",
     "indexing": "Indexing conversations ({{percent}}%). What is built can be searched.",
     "hostsSlow": "Still waiting for: {{hosts}}",
     "announce_one": "{{count}} conversation found",
-    "announce_other": "{{count}} conversations found"
+    "announce_other": "{{count}} conversations found",
+    "pluginAction": "Action"
   },
   "project": {
     "missing": "Missing",

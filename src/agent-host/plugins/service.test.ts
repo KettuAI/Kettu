@@ -594,6 +594,26 @@ describe('updating a plugin', () => {
     expect(h.plugins.views(id)).toEqual([])
   })
 
+  it('wakes a script for the actions it declares, and lists panes and actions only while it is on', async () => {
+    const h = await host()
+    h.market.files = packageFiles(main, {
+      ...script,
+      views: [{ id: 'issues', kind: 'list', title: 'Issues', pane: true }],
+      actions: [{ id: 'create', title: 'Create an issue' }],
+    })
+    const { id, contents } = await h.plugins.install((await h.plugins.inspect(fromMarket)).token)
+    expect(contents.views).toEqual([
+      { id: 'issues', kind: 'list', title: { en: 'Issues' }, pane: true },
+    ])
+    expect(h.plugins.scripts()[0]!.activation).toEqual(['view:issues', 'action:create'])
+    expect(h.plugins.actions(id)).toEqual([{ id: 'create', title: { en: 'Create an issue' } }])
+    // What the host keeps comes back as it was declared.
+    const [kept] = await h.plugins.list()
+    expect(kept!.contents.actions).toEqual([{ id: 'create', title: { en: 'Create an issue' } }])
+    await h.plugins.setEnabled(id, false)
+    expect(h.plugins.actions(id)).toEqual([])
+  })
+
   it('holds an update that adds a script, and stays where it is once declined', async () => {
     const { h, id } = await installed()
     next(h, '1.1.0', packageFiles(main, script))

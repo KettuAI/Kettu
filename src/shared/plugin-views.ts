@@ -1,6 +1,8 @@
 // Plugin views, format 1. A plugin declares its views in its manifest, and its script answers with
 // the data of one when it is opened; Kettu draws that data with its own components and never runs
 // the plugin's code in a window. A view has one of four kinds, and each draws one shape of data.
+// A view may also be a pane, which opens as a tab of the side panel, and a plugin may declare
+// actions that Search lists and that run its script.
 
 /** The version of the view format. A version only ever adds fields, so Kettu passes over ones it does not know. */
 export const PLUGIN_VIEW_FORMAT = 1
@@ -13,7 +15,7 @@ export function isPluginViewKind(value: unknown): value is PluginViewKind {
 }
 
 /** What a script is asked, as events its listeners answer. */
-export const PLUGIN_VIEW_EVENTS = ['view.data', 'view.action'] as const
+export const PLUGIN_VIEW_EVENTS = ['view.data', 'view.action', 'action.run'] as const
 
 /** The icons a view may use, by name; one it does not know is left out. */
 export const PLUGIN_VIEW_ICONS = [
@@ -69,6 +71,13 @@ export function viewTrigger(viewId: string): string {
   return `${PLUGIN_VIEW_TRIGGER}${viewId}`
 }
 
+/** What a script is told of the declared action that wakes it: `action:` and its id. */
+export const PLUGIN_ACTION_TRIGGER = 'action:'
+
+export function actionTrigger(actionId: string): string {
+  return `${PLUGIN_ACTION_TRIGGER}${actionId}`
+}
+
 export const PLUGIN_VIEW_PARAM_KEY = /^[a-z][A-Za-z0-9_]{0,31}$/
 export const PLUGIN_ACTION_ID = /^[A-Za-z0-9_.:-]{1,64}$/
 export const PLUGIN_FIELD_KEY = /^[a-z][a-zA-Z0-9_]{0,63}$/
@@ -80,6 +89,8 @@ export const PLUGIN_FIELD_KEY = /^[a-z][a-zA-Z0-9_]{0,63}$/
 export const PLUGIN_VIEW_LIMITS = {
   /** Views one plugin declares. */
   views: 16,
+  /** Actions one plugin declares for Search. */
+  searchActions: 24,
   params: 8,
   paramValue: 200,
   rows: 200,
@@ -121,6 +132,18 @@ export interface PluginViewDecl {
   kind: PluginViewKind
   /** By language tag, such as `en` and `zh-CN`; at least one. */
   title: Record<string, string>
+  description?: Record<string, string>
+  icon?: PluginViewIcon
+  /** The view is a pane: the side panel lists it and opens it as a tab. */
+  pane?: true
+}
+
+/** What a manifest declares of an action Search lists; its script runs it. */
+export interface PluginActionDecl {
+  id: string
+  /** By language tag, such as `en` and `zh-CN`; at least one, each at most `actionLabel` long. */
+  title: Record<string, string>
+  /** Each at most `actionDescription` long. */
   description?: Record<string, string>
   icon?: PluginViewIcon
 }
@@ -275,6 +298,12 @@ export interface PluginViewActionRequest extends PluginViewDataRequest {
   row?: string
   /** The form's values, for an action of a form view. */
   values?: PluginFormValues
+}
+
+/** What the script is asked on `action.run`. */
+export interface PluginActionRunRequest {
+  action: string
+  locale: string
 }
 
 /** What `plugins.viewAction` takes beyond the view. */

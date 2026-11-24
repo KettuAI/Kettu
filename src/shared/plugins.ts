@@ -3,7 +3,7 @@
 // `sh.kettu`: that entry of the manifest's `extensions`, and the top-level `sh.kettu/` folder.
 
 import type { McpSpec } from './marketplace'
-import type { PluginViewDecl } from './plugin-views'
+import type { PluginActionDecl, PluginViewDecl } from './plugin-views'
 
 export const PLUGIN_NAMESPACE = 'sh.kettu'
 /** The only version of the `sh.kettu` entry this app reads. */
@@ -390,6 +390,8 @@ export interface PluginContents {
   tools: PluginTool[]
   /** The views the package declares; its script gives their data. */
   views: PluginViewDecl[]
+  /** The actions Search lists for it and its script runs; absent from a host older than them. */
+  actions?: PluginActionDecl[]
   /** Portable hooks in the package, which never run in Kettu. */
   hooks: boolean
   /** What was reported and left out: unknown manifest fields, items that do not read. */

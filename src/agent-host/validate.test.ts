@@ -333,6 +333,17 @@ describe('createValidators', () => {
     )
   })
 
+  it('checks which plugin action Search runs', () => {
+    const pluginId = 'p0123456789ab'
+    expect(posix['plugins.actionRun']({ pluginId, actionId: 'create', junk: 1 })).toEqual({
+      pluginId,
+      actionId: 'create',
+    })
+    rejects(() => posix['plugins.actionRun']({ pluginId }))
+    rejects(() => posix['plugins.actionRun']({ pluginId, actionId: 'a b' }))
+    rejects(() => posix['plugins.actionRun']({ pluginId: 'x', actionId: 'create' }))
+  })
+
   it('checks where a skill to add comes from', () => {
     expect(posix['market.skills'](undefined)).toEqual({})
     const add = (source: unknown) => posix['market.addSkill']({ source })

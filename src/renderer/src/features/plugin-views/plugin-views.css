@@ -379,3 +379,27 @@ button.kpv-row__main:disabled {
 .kpv-arow[data-danger] .kpv-icon {
   color: inherit;
 }
+
+/* A plugin's tile in a tab, a row of the side panel's list and a group of Search */
+.kpv-tile {
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  overflow: hidden;
+  border-radius: 28%;
+  color: var(--tile-ink);
+}
+.kpv-tile[data-filled] {
+  box-shadow: inset 0 0 0 0.5px var(--border-subtle);
+}
+.kpv-tile__logo {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+/* A pane of the side panel: the view fills what is left under the row of tabs */
+.kp-tabpane > .kpv {
+  flex: 1;
+  height: auto;
+}
