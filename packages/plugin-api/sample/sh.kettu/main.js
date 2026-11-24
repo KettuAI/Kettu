@@ -81,3 +81,38 @@ kettu.on('action.run', async ({ action }) => {
     return { notice: `Posted, the webhook answered ${await exports.post()}` }
   return { error: `No action ${action}` }
 })
+
+// Mentions: `mention.search` lists what an `@` offers, and `mention.content` gives what the item
+// the user chose adds to the message.
+kettu.on('mention.search', async ({ query }) => {
+  const byState = await exports.digest()
+  const wanted = query.trim().toLowerCase()
+  return {
+    items: Object.entries(byState)
+      .filter(([state]) => state.includes(wanted))
+      .map(([state, count]) => ({
+        id: state,
+        title: state,
+        subtitle: 'sessions',
+        end: String(count),
+      })),
+  }
+})
+
+kettu.on('mention.content', async ({ item }) => {
+  const byState = await exports.digest()
+  return {
+    title: `Sessions that are ${item}`,
+    text: `${byState[item] ?? 0} sessions are ${item} now.`,
+  }
+})
+
+// Links: `link.card` gives the card an address of a declared pattern shows in a reply.
+kettu.on('link.card', async ({ match }) => {
+  const byState = await exports.digest()
+  return {
+    label: match.state,
+    title: `Sessions that are ${match.state}`,
+    badges: [{ text: String(byState[match.state ?? ''] ?? 0), tone: 'info' }],
+  }
+})

@@ -8,6 +8,7 @@ import {
 } from 'react'
 import { useTranslation } from 'react-i18next'
 import { ATTACHMENT_LIMIT } from '@shared/attachments'
+import type { PluginMentionRef } from '@shared/plugin-refs'
 import { putBackDraft } from '@renderer/app/actions'
 import { onAppEvent, type AppEvent } from '@renderer/app/events'
 import { usePane } from '@renderer/features/split/pane-context'
@@ -32,6 +33,12 @@ import {
 } from './attachments'
 import { clearDraft, flushDraft, readDraft, writeDraft } from './drafts'
 import type { ComposerEditorHandle } from './editor'
+import {
+  draftMentions,
+  hydrateDraftMentions,
+  restoreDraftMentions,
+  setDraftMentions,
+} from './plugin-mentions'
 import { useInputHistory } from './use-input-history'
 
 // The state of the box both composers share, the session's and New session's; see PromptBox.
@@ -40,6 +47,7 @@ import { useInputHistory } from './use-input-history'
 export interface Taken {
   prompt: string
   held: DraftAttachment[]
+  mentions: readonly PluginMentionRef[]
 }
 
 export type PromptBoxState = ReturnType<typeof usePromptBox>
@@ -106,7 +114,10 @@ export function usePromptBox({
   onActivity?: () => void
 }) {
   const { t } = useTranslation('composer')
-  const [source] = useState(() => new BoxText(readDraft(draft)))
+  const [source] = useState(() => {
+    hydrateDraftMentions(draft)
+    return new BoxText(readDraft(draft))
+  })
   const [error, setError] = useState<string | null>(null)
   // Each Mod+Shift+A for this composer asks the plus menu to open once more.
   const [addRequest, setAddRequest] = useState(0)
@@ -283,20 +294,23 @@ export function usePromptBox({
     // The editor's own text: keys typed just before the send may not have reached a render.
     const prompt = editor.current?.text() ?? source.text
     const held = attachments
+    const mentions = draftMentions(draft)
     editor.current?.setText('')
     // A draft put back after a failed send opens no mention until the caret moves.
     source.set('', null)
     clearDraft(draft)
     setDraftAttachments(draft, [])
+    setDraftMentions(draft, [])
     setError(null)
-    return { prompt, held }
+    return { prompt, held, mentions }
   }
   /** A failed send's handler: its error, and its message back in the draft above what is there. */
   const restore =
-    ({ prompt, held }: Taken) =>
+    ({ prompt, held, mentions }: Taken) =>
     (e: unknown) => {
       setError(errorMessage(e))
       putBackDraft(draft, prompt, held)
+      restoreDraftMentions(draft, mentions)
     }
 
   const onPaste = (event: ClipboardEvent): boolean => {

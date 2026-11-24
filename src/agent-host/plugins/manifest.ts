@@ -30,6 +30,14 @@ import {
   type PluginActionDecl,
   type PluginViewDecl,
 } from '@shared/plugin-views'
+import {
+  parseLinkPattern,
+  patternHostAllowed,
+  PLUGIN_REF_ID,
+  PLUGIN_REF_LIMITS,
+  type PluginLinkDecl,
+  type PluginMentionDecl,
+} from '@shared/plugin-refs'
 import { HostError } from '../errors'
 import { t } from '../i18n'
 
@@ -64,6 +72,8 @@ const KETTU_FIELDS = new Set([
   'api',
   'permissions',
   'events',
+  'mentions',
+  'links',
 ])
 const MAX_TEXT = 2_000
 const MAX_LIST = 64
@@ -71,6 +81,8 @@ const LANGUAGE = /^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$/
 const SETTING_TYPES = ['boolean', 'string', 'select', 'secret'] as const
 const VIEW_FIELDS = new Set(['id', 'kind', 'title', 'description', 'icon', 'pane'])
 const ACTION_FIELDS = new Set(['id', 'title', 'description', 'icon'])
+const MENTION_FIELDS = new Set(['id', 'title', 'icon'])
+const LINK_FIELDS = new Set(['id', 'patterns', 'icon'])
 
 /** Kettu's entry of the manifest, at format 1. */
 export interface KettuEntry {
@@ -83,6 +95,10 @@ export interface KettuEntry {
   tools: PluginTool[]
   views: PluginViewDecl[]
   actions: PluginActionDecl[]
+  /** The mention sources of the composer's `@` menu; left out unless the entry holds `prompt.attach`. */
+  mentions: PluginMentionDecl[]
+  /** The kinds of link in replies that the plugin draws as references. */
+  links: PluginLinkDecl[]
   /** The script's path inside the package, without the leading `./`; null without a script. */
   script: string | null
   api: number | null
@@ -303,6 +319,90 @@ export function parseActions(
   })
 }
 
+/** The mention sources a manifest declares: an id, a title by language and optionally an icon. */
+export function parseMentions(
+  value: unknown,
+  where: string,
+  warnings: string[],
+): PluginMentionDecl[] {
+  if (value === undefined) return []
+  if (!Array.isArray(value) || value.length > PLUGIN_REF_LIMITS.mentions) throw badField(where)
+  const ids = new Set<string>()
+  return value.map((raw: unknown, index): PluginMentionDecl => {
+    const at = `${where}[${index}]`
+    if (!isRecord(raw)) throw badField(at)
+    const { id } = raw
+    if (typeof id !== 'string' || !PLUGIN_REF_ID.test(id) || ids.has(id)) {
+      throw badField(`${at}.id`)
+    }
+    ids.add(id)
+    for (const key of Object.keys(raw)) {
+      if (!MENTION_FIELDS.has(key)) {
+        warnings.push(t('plugins.warn.refField', { id, field: key.slice(0, 100) }))
+      }
+    }
+    const title = texts(raw.title, `${at}.title`)
+    if (Object.values(title).every((text) => text.trim() === '')) throw badField(`${at}.title`)
+    const decl: PluginMentionDecl = { id, title }
+    if (raw.icon !== undefined) {
+      if (isPluginViewIcon(raw.icon)) decl.icon = raw.icon
+      else warnings.push(t('plugins.warn.refIcon', { id }))
+    }
+    return decl
+  })
+}
+
+/**
+ * The kinds of link a manifest declares. A pattern that is not one is refused, and so is one on a
+ * host the plugin has no network permission for, since a plugin only hears of addresses on hosts
+ * it may connect to.
+ */
+export function parseLinks(
+  value: unknown,
+  where: string,
+  permissions: readonly string[],
+  warnings: string[],
+): PluginLinkDecl[] {
+  if (value === undefined) return []
+  if (!Array.isArray(value) || value.length > PLUGIN_REF_LIMITS.links) throw badField(where)
+  const ids = new Set<string>()
+  return value.map((raw: unknown, index): PluginLinkDecl => {
+    const at = `${where}[${index}]`
+    if (!isRecord(raw)) throw badField(at)
+    const { id, patterns } = raw
+    if (typeof id !== 'string' || !PLUGIN_REF_ID.test(id) || ids.has(id)) {
+      throw badField(`${at}.id`)
+    }
+    ids.add(id)
+    for (const key of Object.keys(raw)) {
+      if (!LINK_FIELDS.has(key)) {
+        warnings.push(t('plugins.warn.refField', { id, field: key.slice(0, 100) }))
+      }
+    }
+    if (
+      !Array.isArray(patterns) ||
+      patterns.length === 0 ||
+      patterns.length > PLUGIN_REF_LIMITS.patterns
+    ) {
+      throw badField(`${at}.patterns`)
+    }
+    const list = patterns.map((text: unknown, n) => {
+      const pattern = typeof text === 'string' ? parseLinkPattern(text) : null
+      if (typeof text !== 'string' || pattern === null) throw badField(`${at}.patterns[${n}]`)
+      if (!patternHostAllowed(pattern, permissions)) {
+        throw refusal(t('plugins.linkHost', { pattern: text.slice(0, 200), host: pattern.host }))
+      }
+      return text
+    })
+    const decl: PluginLinkDecl = { id, patterns: [...new Set(list)] }
+    if (raw.icon !== undefined) {
+      if (isPluginViewIcon(raw.icon)) decl.icon = raw.icon
+      else warnings.push(t('plugins.warn.refIcon', { id }))
+    }
+    return decl
+  })
+}
+
 const TOOL_ARGUMENT_TYPES = ['string', 'number', 'integer', 'boolean'] as const
 
 function toolArgument(raw: unknown, at: string): PluginToolArgument {
@@ -498,8 +598,17 @@ function kettuEntry(raw: Record<string, unknown>, appVersion: string, warnings: 
   }
   if (toolList.length > 0 && script === null) throw badField(`${where}.script`)
   const actions = parseActions(raw.actions, `${where}.actions`, warnings)
+  let mentionList = parseMentions(raw.mentions, `${where}.mentions`, warnings)
+  if (mentionList.length > 0 && !permissions.includes('prompt.attach')) {
+    warnings.push(t('plugins.warn.mentionsPermission'))
+    mentionList = []
+  }
+  const linkList = parseLinks(raw.links, `${where}.links`, permissions, warnings)
   if (actions.length > 0 && script === null) {
     throw refusal(t('plugins.actionsNeedScript', { action: actions[0]!.id }))
+  }
+  if ((mentionList.length > 0 || linkList.length > 0) && script === null) {
+    throw badField(`${where}.script`)
   }
   const entry: KettuEntry = {
     kettu: range,
@@ -509,6 +618,8 @@ function kettuEntry(raw: Record<string, unknown>, appVersion: string, warnings: 
     tools: toolList,
     views,
     actions,
+    mentions: mentionList,
+    links: linkList,
     script,
     api,
     permissions,

@@ -64,6 +64,7 @@ import type {
 } from '@shared/host-control'
 import type { Platform } from '@shared/platform'
 import { pluginStarter, type PluginHookEvent } from '@shared/plugins'
+import type { PluginMentionRef } from '@shared/plugin-refs'
 import type { PortDevice } from '@shared/remote/device'
 import type { PermissionScope } from '@shared/routines'
 import type { HostSettings } from '@shared/settings'
@@ -485,6 +486,11 @@ export interface SessionPlugins {
   ): void
   /** What plugins attach to a message about to be sent, within a deadline Kettu never exceeds. */
   attachments(session: SessionSummary, text: string): Promise<PluginAttachment[]>
+  /** What the items the user mentioned add to the message, or why one could not be added. */
+  mentions(
+    session: SessionSummary,
+    mentioned: readonly PluginMentionRef[],
+  ): Promise<PluginAttachment[]>
   /** The plugin that denies a permission request, when one does within the deadline. */
   check(session: SessionSummary, facts: RequestFacts): Promise<PluginDenial | null>
 }
@@ -8876,18 +8882,28 @@ export class SessionManager {
     const plugins = this.deps.plugins
     const entry = turn.entryId ? live.thread.byId[turn.entryId] : undefined
     if (
-      !plugins?.wants('session.beforeSend') ||
+      !plugins ||
       live.record.origin !== 'user' ||
       entry?.kind !== 'user' ||
       entry.approval ||
       entry.kettu ||
-      entry.from ||
-      opensWithCommand(wire)
+      entry.from
     ) {
       return []
     }
+    const mentioned = entry.content.flatMap((item) =>
+      item.type === 'ref' && item.ref.kind === 'plugin' ? [item.ref] : [],
+    )
+    // A command of the agent's own is not offered to the hooks, but what the user mentioned goes.
+    const hooked = plugins.wants('session.beforeSend') && !opensWithCommand(wire)
+    if (!hooked && mentioned.length === 0) return []
     const text = wire.flatMap((block) => (block.type === 'text' ? [block.text] : [])).join('\n\n')
-    const given = await plugins.attachments(this.summary(live.id), text)
+    const summary = this.summary(live.id)
+    const [chosen, hooks] = await Promise.all([
+      mentioned.length > 0 ? plugins.mentions(summary, mentioned) : [],
+      hooked ? plugins.attachments(summary, text) : [],
+    ])
+    const given = [...chosen, ...hooks]
     if (given.length === 0 || turn.ended) return []
     // What the message already holds counts toward the prompt's limit; what does not fit is left out.
     let bytes = wire.reduce((sum, block) => sum + blockBytes(block), 0)
@@ -8911,6 +8927,7 @@ export class SessionManager {
       group.items.push({
         ...(item.title === undefined ? {} : { title: item.title }),
         text: item.text,
+        ...(item.failed === undefined ? {} : { failed: item.failed }),
       })
       byPlugin.set(item.pluginId, group)
     }

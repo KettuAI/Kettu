@@ -204,10 +204,12 @@ const PILL = {
   open: 'bg-[color-mix(in_srgb,var(--success)_13%,transparent)] text-success',
   merged: 'bg-[color-mix(in_srgb,var(--merged)_13%,transparent)] text-merged',
   closed: 'bg-[color-mix(in_srgb,var(--danger)_12%,transparent)] text-danger',
+  info: 'bg-[color-mix(in_srgb,var(--info)_13%,transparent)] text-info',
+  warning: 'bg-[color-mix(in_srgb,var(--warning)_13%,transparent)] text-warning',
   gray: 'bg-hover text-secondary',
 } as const
 
-function Pill({ tone, children }: { tone: keyof typeof PILL; children: ReactNode }) {
+export function Pill({ tone, children }: { tone: keyof typeof PILL; children: ReactNode }) {
   return (
     <span
       className={cn(
@@ -250,7 +252,7 @@ function Head({
   )
 }
 
-function Title({ url, title }: { url: string; title: string }) {
+export function Title({ url, title }: { url: string; title: string }) {
   return (
     <a
       href={url}
@@ -264,7 +266,7 @@ function Title({ url, title }: { url: string; title: string }) {
   )
 }
 
-function Stat({ children }: { children: ReactNode }) {
+export function Stat({ children }: { children: ReactNode }) {
   return (
     <span className="inline-flex shrink-0 items-center gap-1 text-xs text-tertiary tabular">
       {children}

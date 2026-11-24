@@ -23,7 +23,7 @@ import {
 import { SKILL_NAME } from '@shared/marketplace'
 import { isAbsolutePath } from '../paths'
 import { JsonFile, type LogFn, type Migration } from '../storage'
-import { parseActions, parseViews } from './manifest'
+import { parseActions, parseLinks, parseMentions, parseViews } from './manifest'
 import { safePackagePath } from './package'
 
 export const PLUGINS_VERSION = 1
@@ -134,6 +134,26 @@ function actionsOf(value: unknown): NonNullable<PluginContents['actions']> {
   }
 }
 
+/** The mention sources and link kinds a stored package declares; ones that no longer read are left out. */
+function refsOf(
+  value: Record<string, unknown>,
+  permissions: readonly string[],
+): Pick<PluginContents, 'mentions' | 'links'> {
+  const read = <T>(parse: () => T[]): T[] => {
+    try {
+      return parse()
+    } catch {
+      return []
+    }
+  }
+  return {
+    mentions: permissions.includes('prompt.attach')
+      ? read(() => parseMentions(value.mentions ?? undefined, 'mentions', []))
+      : [],
+    links: read(() => parseLinks(value.links ?? undefined, 'links', permissions, [])),
+  }
+}
+
 function contentsOf(value: unknown): PluginContents | null {
   if (!isRecord(value) || typeof value.name !== 'string' || !PLUGIN_NAME.test(value.name)) {
     return null
@@ -148,6 +168,11 @@ function contentsOf(value: unknown): PluginContents | null {
   const folders = Object.fromEntries(
     PLUGIN_FOLDERS.map((kind) => [kind, items(value[kind], PLUGIN_ITEM_NAME)]),
   ) as Pick<PluginContents, (typeof PLUGIN_FOLDERS)[number]>
+  const permissions = Array.isArray(value.permissions)
+    ? value.permissions.filter(
+        (item): item is string => typeof item === 'string' && isPluginPermission(item),
+      )
+    : []
   return {
     name: value.name,
     title: text(value.title, 200) && value.title !== '' ? value.title : value.name,
@@ -181,11 +206,7 @@ function contentsOf(value: unknown): PluginContents | null {
       : [],
     ...folders,
     script,
-    permissions: Array.isArray(value.permissions)
-      ? value.permissions.filter(
-          (item): item is string => typeof item === 'string' && isPluginPermission(item),
-        )
-      : [],
+    permissions,
     events: Array.isArray(value.events)
       ? value.events.filter(
           (item): item is string => typeof item === 'string' && isPluginHookEvent(item),
@@ -206,6 +227,7 @@ function contentsOf(value: unknown): PluginContents | null {
       : [],
     views: viewsOf(value.views),
     actions: actionsOf(value.actions),
+    ...refsOf(value, permissions),
     hooks: value.hooks === true,
     warnings: Array.isArray(value.warnings)
       ? value.warnings.filter((item): item is string => text(item)).slice(0, MAX_ITEMS)

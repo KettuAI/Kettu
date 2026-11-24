@@ -2215,7 +2215,12 @@ describe('a plugin that checks a request', () => {
       ['requests.check'],
     )
     const target = new Checked(
-      new PluginHooks({ client, title: () => 'Command guard', log: () => {} }),
+      new PluginHooks({
+        client,
+        refs: { content: () => Promise.reject(new Error('Not used')) },
+        title: () => 'Command guard',
+        log: () => {},
+      }),
     )
     const sessionId = (await s.connection.newSession('/repo')).sessionId
     s.connection.register(sessionId, target)

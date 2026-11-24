@@ -292,7 +292,9 @@ export type PromptBlock =
   | { type: 'resource'; resource: { uri: string; mimeType: string; text: string } }
 
 export function promptBlocks(content: readonly UserContent[]): PromptBlock[] {
-  return content.map((item): PromptBlock => {
+  // What a mentioned item adds is read as the message is sent, and goes as blocks of its own.
+  const own = content.filter((item) => item.type !== 'ref' || item.ref.kind !== 'plugin')
+  return own.map((item): PromptBlock => {
     // A command of Kettu's goes as the message it expands to.
     if (item.type === 'text') return { type: 'text', text: item.command?.sent ?? item.text }
     const ref = item.ref
@@ -317,6 +319,9 @@ export function promptBlocks(content: readonly UserContent[]): PromptBlock[] {
       case 'audio':
       case 'video':
         return { type: 'text', text: ref.mimeType }
+      // Left out above; never reached.
+      case 'plugin':
+        return { type: 'text', text: ref.name }
       default:
         return { type: 'text', text: ref.label }
     }

@@ -32,6 +32,7 @@ import {
   type SavedAttachment,
 } from './drafts'
 import { prepareImage } from './image-work'
+import { contentMentions, restoreDraftMentions, setDraftMentions } from './plugin-mentions'
 
 let nextKey = 1
 
@@ -560,6 +561,7 @@ export function contentAttachments(content: readonly UserContent[]): Attachment[
  * did not fit under the limit; their records go.
  */
 export function restoreAttachments(draft: string, content: readonly UserContent[]): number {
+  restoreDraftMentions(draft, contentMentions(content))
   const restored = contentAttachments(content).map((attachment) =>
     readyTile({ attachment, pixels: null, scaled: null }),
   )
@@ -588,6 +590,7 @@ export function releaseResent(draft: string, content: readonly UserContent[]): v
  * records, and one of `content` the composer no longer shows comes back.
  */
 export function resetAttachments(draft: string, content: readonly UserContent[]): void {
+  setDraftMentions(draft, contentMentions(content))
   const wanted = contentAttachments(content)
   const ids = new Set(wanted.map((attachment) => attachment.id))
   const items = draftAttachments(draft)

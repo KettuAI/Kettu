@@ -8,6 +8,7 @@ import {
   type PluginHostToAgent,
 } from '@shared/plugin-host'
 import { PLUGIN_HOOK_EVENTS, PLUGIN_PERMISSIONS } from '@shared/plugins'
+import { PLUGIN_REF_EVENTS } from '@shared/plugin-refs'
 import { PLUGIN_VIEW_EVENTS } from '@shared/plugin-views'
 import type { PortChannel } from '@shared/port-channel'
 import { loadEngine, type Engine } from '../../plugin-host/engine'
@@ -488,6 +489,10 @@ describe('the sample plugin and the published types', () => {
       'network:hooks.example.com',
     ])
     expect(pkg.contents.events).toEqual(['session.beforeSend', 'session.permissionRequested'])
+    expect(pkg.contents.mentions).toMatchObject([{ id: 'states' }])
+    expect(pkg.contents.links).toMatchObject([
+      { id: 'state', patterns: ['https://hooks.example.com/digest/{state}'] },
+    ])
     expect(pkg.manifest.kettu).toMatchObject({ api: 1, script: 'sh.kettu/main.js' })
   })
 
@@ -543,6 +548,47 @@ describe('the sample plugin and the published types', () => {
     ])
   })
 
+  it('lists its sessions’ states for an @, and what one adds and shows as a link, through the hooks', async () => {
+    const source = await readFile(path.join(folder, 'sample/sh.kettu/main.js'), 'utf8')
+    const { deps, sessions } = apiDeps()
+    sessions.list.mockReturnValue([
+      { id: 'a', status: 'running', origin: 'user', archivedAt: null },
+      { id: 'b', status: 'ready', origin: 'user', archivedAt: null },
+    ] as never)
+    const { client, add } = setup(createPluginApi(deps))
+    add('sample', source, ['mention:states', 'link:state'], ['sessions.summary'])
+    await client.activate('sample', 'mention:states')
+    expect(
+      await client.hook('sample', 'mention.search', {
+        source: 'states',
+        query: 'ru',
+        locale: 'en',
+      }),
+    ).toEqual([{ items: [{ id: 'running', title: 'running', subtitle: 'sessions', end: '1' }] }])
+    expect(
+      await client.hook('sample', 'mention.content', {
+        source: 'states',
+        item: 'ready',
+        locale: 'en',
+      }),
+    ).toEqual([{ title: 'Sessions that are ready', text: '1 sessions are ready now.' }])
+    await client.activate('sample', 'link:state')
+    expect(
+      await client.hook('sample', 'link.card', {
+        link: 'state',
+        url: 'https://hooks.example.com/digest/running',
+        match: { state: 'running' },
+        locale: 'en',
+      }),
+    ).toEqual([
+      {
+        label: 'running',
+        title: 'Sessions that are running',
+        badges: [{ text: '1', tone: 'info' }],
+      },
+    ])
+  })
+
   it('lists the calls and events the host answers, no more and no fewer', async () => {
     const types = await readFile(path.join(folder, 'index.d.ts'), 'utf8')
     const names = (block: string): string[] => {
@@ -551,7 +597,12 @@ describe('the sample plugin and the published types', () => {
     }
     expect(names('KettuCalls').sort()).toEqual(Object.keys(createPluginApi(apiDeps().deps)).sort())
     expect(names('KettuEvents').sort()).toEqual(
-      [...PLUGIN_EVENTS, ...PLUGIN_VIEW_EVENTS, ...Object.keys(PLUGIN_HOOK_EVENTS)].sort(),
+      [
+        ...PLUGIN_EVENTS,
+        ...PLUGIN_VIEW_EVENTS,
+        ...PLUGIN_REF_EVENTS,
+        ...Object.keys(PLUGIN_HOOK_EVENTS),
+      ].sort(),
     )
   })
 })

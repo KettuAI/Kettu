@@ -2,11 +2,14 @@
 // or project files and of the session's terminals, and links. Chips are only how the text looks;
 // the text is what is sent, with a ref for each terminal it mentions.
 
+import type { PluginMentionRef } from '@shared/plugin-refs'
 import { leadingCommand } from './slash'
 
 /** What an `@` mention names, once resolved against the attachments and the project. */
 export interface MentionTarget {
-  kind: 'file' | 'folder' | 'image' | SurfaceMention
+  kind: 'file' | 'folder' | 'image' | 'plugin' | SurfaceMention
+  /** The item of a plugin it stands for; `name` is its title. */
+  plugin?: PluginMentionRef
   /** The terminal, browser tab or device it stands for, and the name its tab shows. */
   surfaceId?: string
   name?: string
@@ -157,11 +160,13 @@ export function findChips(text: string, context: ChipContext): Chip[] {
     const { token, name, lines, target } = found
     const label = isSurfaceMention(target.kind)
       ? (target.name ?? name)
-      : target.kind === 'folder'
-        ? name.endsWith('/')
-          ? name
-          : `${name}/`
-        : basename(name)
+      : target.kind === 'plugin'
+        ? name
+        : target.kind === 'folder'
+          ? name.endsWith('/')
+            ? name
+            : `${name}/`
+          : basename(name)
     chips.push({ ...target, from, to: from + 1 + token.length, label, lines })
   }
   const taken = (from: number, to: number) => chips.some((c) => from < c.to && to > c.from)
@@ -273,6 +278,20 @@ export function surfaceRefs(
   return [...refs.values()]
 }
 
+/** The items of plugins the text mentions, as a prompt carries them, each once. */
+export function pluginRefs(
+  text: string,
+  resolve: (token: string) => MentionTarget | null,
+): PluginMentionRef[] {
+  const refs = new Map<string, PluginMentionRef>()
+  for (const chip of findChips(text, { commands: [], resolve })) {
+    if (chip.kind !== 'plugin' || !chip.plugin) continue
+    const { pluginId, source, item } = chip.plugin
+    refs.set(`${pluginId}\n${source}\n${item}`, chip.plugin)
+  }
+  return [...refs.values()]
+}
+
 export type SurfaceRef =
   | { kind: 'terminal'; terminalId: string; name: string }
   | { kind: 'page'; tabId: string; name: string }
@@ -292,6 +311,7 @@ export function mentionResolver(
   }[],
   project: { files: ReadonlySet<string>; folders: ReadonlySet<string> } | null,
   surfaces: MentionSurfaces = NO_SURFACES,
+  plugins: readonly PluginMentionRef[] = [],
 ): (token: string) => MentionTarget | null {
   return (token) => {
     const surface = surfaceOf(token, surfaces)
@@ -308,6 +328,8 @@ export function mentionResolver(
         missing: item.status === 'failed',
       }
     }
+    const mentioned = plugins.find((ref) => ref.word === token)
+    if (mentioned) return { kind: 'plugin', name: mentioned.name, plugin: mentioned }
     if (!project) return null
     const path = token.replace(/^\.\//, '')
     if (project.files.has(path)) return { kind: 'file', path }

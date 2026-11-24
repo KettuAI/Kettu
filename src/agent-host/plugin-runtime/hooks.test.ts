@@ -3,6 +3,7 @@ import type { SessionSummary } from '@shared/agent-host'
 import { PLUGIN_BEFORE_SEND_DEADLINE_MS } from '@shared/plugin-host'
 import { pluginClient, type TestPluginHost } from '../testing/plugin-host'
 import { ATTACH_ITEMS, PluginHooks, requestFacts, type RequestFacts } from './hooks'
+import { PluginRefs } from './refs'
 
 const session = {
   id: 's1',
@@ -34,10 +35,12 @@ function setup() {
     client.stop()
     host.stop()
   }
+  const log = (level: 'info' | 'warn', message: string) => logs.push(`${level} ${message}`)
   const hooks = new PluginHooks({
     client,
+    refs: new PluginRefs({ client, source: () => null, locale: () => 'en', log }),
     title: (id) => `Plugin ${id}`,
-    log: (level, message) => logs.push(`${level} ${message}`),
+    log,
   })
   const add = (
     id: string,

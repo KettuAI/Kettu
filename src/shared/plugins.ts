@@ -3,6 +3,7 @@
 // `sh.kettu`: that entry of the manifest's `extensions`, and the top-level `sh.kettu/` folder.
 
 import type { McpSpec } from './marketplace'
+import type { PluginLinkDecl, PluginMentionDecl } from './plugin-refs'
 import type { PluginActionDecl, PluginViewDecl } from './plugin-views'
 
 export const PLUGIN_NAMESPACE = 'sh.kettu'
@@ -392,6 +393,10 @@ export interface PluginContents {
   views: PluginViewDecl[]
   /** The actions Search lists for it and its script runs; absent from a host older than them. */
   actions?: PluginActionDecl[]
+  /** The sources of the composer's `@` menu; empty without the `prompt.attach` permission. */
+  mentions: PluginMentionDecl[]
+  /** The kinds of link in replies the plugin draws as references. */
+  links: PluginLinkDecl[]
   /** Portable hooks in the package, which never run in Kettu. */
   hooks: boolean
   /** What was reported and left out: unknown manifest fields, items that do not read. */

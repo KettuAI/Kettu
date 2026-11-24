@@ -5,8 +5,10 @@
 
 import type { SessionSummary } from '@shared/agent-host'
 import { PLUGIN_BEFORE_SEND_DEADLINE_MS } from '@shared/plugin-host'
+import { PLUGIN_REF_LIMITS, type PluginMentionRef } from '@shared/plugin-refs'
 import { PLUGIN_HOOK_EVENTS, type PluginHookEvent } from '@shared/plugins'
 import type { PermissionOption, ToolEntry, ToolKind } from '@shared/thread'
+import type { PluginRefs } from './refs'
 import { sessionInfo } from './sessions-api'
 
 /** The most of a message a plugin is sent, cut at its end. */
@@ -26,6 +28,8 @@ export interface PluginAttachment {
   plugin: string
   title?: string
   text: string
+  /** Why a mentioned item could not be added, when it could not; `text` is then empty. */
+  failed?: string
 }
 
 export interface PluginDenial {
@@ -44,8 +48,21 @@ export interface RequestFacts {
   paths: string[]
 }
 
+const FAILURES: Readonly<Record<string, string>> = {
+  timeout: 'it did not answer in time',
+  unavailable: 'it was not available',
+  disabled: 'it is turned off after crashing too often',
+  crashed: 'it was stopped for passing a limit',
+  not_found: 'it is no longer installed or no longer offers this item',
+  too_large: 'the message already holds as much as plugins may add',
+}
+
 /** What the agent reads where a plugin attached to the user's message. */
 export function attachmentText(item: PluginAttachment): string {
+  if (item.failed !== undefined) {
+    const why = FAILURES[item.failed] ?? 'it could not give it'
+    return `[The plugin "${item.plugin}" could not add ${item.title ?? 'an item'} the user mentioned: ${why}.]`
+  }
   return `[Added by the plugin "${item.plugin}"${item.title ? `: ${item.title}` : ''}]\n${item.text}`
 }
 
@@ -80,6 +97,8 @@ export interface HookClient {
 
 export interface PluginHooksDeps {
   client: HookClient
+  /** What the items the user mentioned add to a message. */
+  refs: Pick<PluginRefs, 'content'>
   /** A plugin's title for the thread's lines; null when it is not installed. */
   title(pluginId: string): string | null
   log(level: 'info' | 'warn', message: string): void
@@ -161,6 +180,36 @@ export class PluginHooks {
       }
     }
     return out
+  }
+
+  /**
+   * What the items the user mentioned add to the message, each read from its plugin within its
+   * deadline. An item that could not be read, or that would take the message past what plugins may
+   * add, is still listed, with why, so the message and the agent say it was left out.
+   */
+  async mentions(
+    session: SessionSummary,
+    mentioned: readonly PluginMentionRef[],
+  ): Promise<PluginAttachment[]> {
+    if (session.origin !== 'user') return []
+    const read = await Promise.all(
+      mentioned.slice(0, PLUGIN_REF_LIMITS.perMessage).map(async (ref) => ({
+        ref,
+        answer: await this.deps.refs.content(ref.pluginId, ref.source, ref.item),
+      })),
+    )
+    let room: number = PLUGIN_REF_LIMITS.total
+    return read.map(({ ref, answer }): PluginAttachment => {
+      const base = {
+        pluginId: ref.pluginId,
+        plugin: this.deps.title(ref.pluginId) ?? ref.pluginId,
+      }
+      if (!answer.ok) return { ...base, title: ref.name, text: '', failed: answer.error.code }
+      const text = answer.content.text.slice(0, room)
+      if (text === '') return { ...base, title: ref.name, text: '', failed: 'too_large' }
+      room -= text.length
+      return { ...base, title: answer.content.title ?? ref.name, text }
+    })
   }
 
   /**

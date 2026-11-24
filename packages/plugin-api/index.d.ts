@@ -300,6 +300,80 @@ export interface ViewActionResult {
   open?: { view: string; params?: Record<string, string> }
 }
 
+/** What the script is asked on `mention.search`: the user typed `@` and then `query`. */
+export interface MentionSearchRequest {
+  /** The id the manifest declares the source by. */
+  source: string
+  /** What follows the `@`, at most 200 characters; empty right after the `@`. */
+  query: string
+  locale: 'en' | 'zh-CN'
+}
+
+/** What the script is asked on `mention.content`: the user chose one of the items it listed. */
+export interface MentionContentRequest {
+  source: string
+  /** The `id` of the item. */
+  item: string
+  locale: 'en' | 'zh-CN'
+}
+
+/** What the script is asked on `link.card`: an address the manifest's patterns name. */
+export interface LinkCardRequest {
+  /** The id the manifest declares the kind of link by. */
+  link: string
+  url: string
+  /** What the pattern's `{name}` parts matched, decoded, at most 200 characters each. */
+  match: Record<string, string>
+  locale: 'en' | 'zh-CN'
+}
+
+export interface MentionItem {
+  /** Unique in the answer, at most 128 characters; sent back as `mention.content`'s `item`. */
+  id: string
+  /** At most 200 characters. */
+  title: string
+  /** At most 300 characters, in the code face. */
+  subtitle?: string
+  /** A short figure at the row's end, such as a state, at most 40 characters. */
+  end?: string
+  icon?: ViewIcon
+  /**
+   * The word written after the `@` in the message: letters and digits, with `.`, `_`, `#`, `/` and
+   * `-` between them, at most 40 characters. Made from the id or the title when left out or unusable.
+   */
+  word?: string
+}
+
+/** What `mention.search` answers: up to 20 items, the rest dropped. */
+export interface MentionSearchResult {
+  items: MentionItem[]
+}
+
+/** What `mention.content` answers: what the agent reads of the item. */
+export interface MentionContent {
+  /** At most 16,000 characters; one message takes 48,000 of all the items it mentions. */
+  text: string
+  /** At most 200 characters, shown beside the plugin's name; the item's title when left out. */
+  title?: string
+}
+
+/** What `link.card` answers: the card the link shows on hover, and its label in a line. */
+export interface LinkCard {
+  /** At most 60 characters; the short form of a bare address in a line, such as an issue key. */
+  label?: string
+  /** At most 200 characters. */
+  title: string
+  /** At most 300 characters. */
+  subtitle?: string
+  icon?: ViewIcon
+  /** Up to 3 are drawn; the first is the state in the card's head. */
+  badges?: ViewBadge[]
+  /** Up to 4. */
+  fields?: { label: string; value: string; mono?: boolean }[]
+  /** Plain text of at most 400 characters. */
+  body?: string
+}
+
 export type StopReason = 'end_turn' | 'max_tokens' | 'max_turn_requests' | 'refusal' | 'cancelled'
 
 export type ToolKind =
@@ -439,6 +513,27 @@ export interface KettuEvents {
    * nothing means it went well. Answered like `view.action`, within the same limits.
    */
   'action.run': ActionRunRequest
+  /**
+   * A hook that needs no permission, for a source the manifest declares under `mentions`, which
+   * needs `prompt.attach`: the user typed an `@` in the composer. The first listener that returns
+   * items answers; the menu shows them in a group of the plugin's own, beside the project's files,
+   * and never waits for it. A listener that is not done in 3 seconds is skipped.
+   */
+  'mention.search': MentionSearchRequest
+  /**
+   * A hook for the same sources: the message that mentions one of the items is being sent. The
+   * first listener that returns text adds it to the message as an attachment of the plugin, which
+   * the thread shows under the message; what the user wrote is never changed. Answered within 5
+   * seconds, or the message goes with a line saying the item could not be added.
+   */
+  'mention.content': MentionContentRequest
+  /**
+   * A hook for a link the manifest declares under `links`, whose patterns name only hosts the
+   * plugin has `network:` access to: a reply holds an address of that kind and is on screen. The
+   * first listener that returns a card answers; replies draw the link as a reference with that
+   * card on hover. A listener that is not done in 3 seconds is skipped and the link stays plain.
+   */
+  'link.card': LinkCardRequest
 }
 
 export interface Attachment {
@@ -458,6 +553,9 @@ export interface KettuHookResults {
   'view.data': ViewData | void
   'view.action': ViewActionResult | void
   'action.run': ViewActionResult | void
+  'mention.search': MentionSearchResult | void
+  'mention.content': MentionContent | void
+  'link.card': LinkCard | void
 }
 
 /**

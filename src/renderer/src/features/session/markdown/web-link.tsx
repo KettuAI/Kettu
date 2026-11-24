@@ -62,6 +62,8 @@ import {
   type LinkPlan,
 } from '../link-open'
 import { openLinkIn, rememberDestination } from '../open-link'
+import { PluginReferenceCard, PluginReferenceText } from './plugin-link'
+import { usePluginLink } from './use-plugin-link'
 
 /** What the "Open link?" dialog is given; `link-confirm.tsx` draws it. */
 export interface LinkConfirmProps {
@@ -242,6 +244,8 @@ function OuterWebLink({ url, children, confirm: Confirm }: WebLinkProps) {
 
   const label = children ?? url
   const reference = useMemo<GitHubReference | null>(() => githubReferenceFromLink(url), [url])
+  // A link a plugin knows, which is plain until the plugin's card for it has come.
+  const pluginLink = usePluginLink(url, link)
   const primary = defaultDestination(url, thread, context)
   const browserName = browser.name ?? t('link.yourBrowser')
 
@@ -303,6 +307,10 @@ function OuterWebLink({ url, children, confirm: Confirm }: WebLinkProps) {
         <ReferenceText reference={reference} bare={isBareLink(textOf(label), url)}>
           {label}
         </ReferenceText>
+      ) : pluginLink ? (
+        <PluginReferenceText link={pluginLink} bare={isBareLink(textOf(label), url)}>
+          {label}
+        </PluginReferenceText>
       ) : (
         <LinkText url={url}>{label}</LinkText>
       )}
@@ -312,7 +320,7 @@ function OuterWebLink({ url, children, confirm: Confirm }: WebLinkProps) {
   return (
     <>
       <ContextMenu open={menuOpen} onOpenChange={setMenuOpen}>
-        {reference ? (
+        {reference || pluginLink ? (
           <HoverCard>
             <HoverCardTrigger delay={400} render={anchor}>
               {text}
@@ -323,7 +331,11 @@ function OuterWebLink({ url, children, confirm: Confirm }: WebLinkProps) {
               sideOffset={6}
               className={REFERENCE_CARD_CLASS}
             >
-              <ReferenceCard reference={reference} />
+              {reference ? (
+                <ReferenceCard reference={reference} />
+              ) : (
+                <PluginReferenceCard link={pluginLink!} url={url} />
+              )}
             </HoverCardContent>
           </HoverCard>
         ) : (
