@@ -95,6 +95,26 @@ describe('MarketApi requests', () => {
     expect((form.get('examples/a.md') as Blob).size).toBe(2)
   })
 
+  it('answers a held version with the version the service holds, and nothing else without one', async () => {
+    const manifest: PublishManifest = {
+      slug: 'changelog-writer',
+      name: 'Changelog writer',
+      kind: 'skill',
+      description: 'One line per change.',
+      version: '1.1.0',
+    }
+    const held = fake(() => json(202, { listing: LISTING, held: '1.1.0' }))
+    expect((await api(held.fetch).publish(manifest, [])).held).toBe('1.1.0')
+    const listed = fake(() => json(201, { listing: LISTING }))
+    expect((await api(listed.fetch).publish(manifest, [])).held).toBeUndefined()
+    for (const body of [{ listing: LISTING }, { listing: LISTING, held: 7 }]) {
+      const odd = fake(() => json(202, body))
+      await expect(api(odd.fetch).publish(manifest, [])).rejects.toMatchObject({
+        failure: { code: 'unexpected' },
+      })
+    }
+  })
+
   it('sends the token with every request, a file download included', async () => {
     const { fetch, sent } = fake(({ url }) =>
       url.includes('/files/') ? new Response('old') : json(200, { files: [] }),
@@ -161,6 +181,44 @@ describe('MarketApi listings', () => {
     expect(mine.listings[0]!.versions[0]!.checks).toEqual([
       { check: 'skill', target: 'SKILL.md', result: 'passed' },
       { check: 'package', target: 'npm x@1.0.0', result: 'skipped', note: 'npm did not answer' },
+    ])
+  })
+})
+
+describe('MarketApi versions', () => {
+  it('reads held and refused versions, and treats a state it does not know as not live', async () => {
+    const versions = [
+      { ...LISTING.versions[0], version: '1.1.0', status: 'held' },
+      {
+        ...LISTING.versions[0],
+        version: '1.2.0',
+        status: 'refused',
+        refusal: { reason: 'It reads a secret.', at: '2026-11-25' },
+      },
+      { ...LISTING.versions[0], version: '1.3.0', status: 'refused', refusal: 'no' },
+      { ...LISTING.versions[0], version: '1.4.0', status: 'archived' },
+      // Only a refused version carries a refusal.
+      {
+        ...LISTING.versions[0],
+        version: '1.5.0',
+        status: 'live',
+        refusal: { reason: 'x', at: 'y' },
+      },
+    ]
+    const { fetch } = fake(() =>
+      json(200, {
+        publisher: null,
+        listings: [{ ...LISTING, versions }],
+        storage: { bytes: 1, limit: 2 },
+      }),
+    )
+    const read = (await api(fetch).mine()).listings[0]!.versions
+    expect(read.map((v) => [v.version, v.status, v.refusal])).toEqual([
+      ['1.1.0', 'held', undefined],
+      ['1.2.0', 'refused', { reason: 'It reads a secret.', at: '2026-11-25' }],
+      ['1.3.0', 'refused', undefined],
+      ['1.4.0', 'unknown', undefined],
+      ['1.5.0', 'live', undefined],
     ])
   })
 })

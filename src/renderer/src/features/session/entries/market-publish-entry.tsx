@@ -705,18 +705,22 @@ function PublishSettled({ entry }: { entry: Entry }) {
   const name = entry.item.name
   const unlist = entry.action === 'unlist'
   const busy = outcome.kind === 'publishing' || outcome.kind === 'unlisting'
-  const done = outcome.kind === 'published' || outcome.kind === 'unlisted'
+  const held = outcome.kind === 'published' && outcome.held === true
+  const done = (outcome.kind === 'published' && !held) || outcome.kind === 'unlisted'
   const failed = outcome.kind === 'failed'
   const glyph = done
     ? CheckmarkCircle02Icon
     : failed
       ? Alert02Icon
-      : outcome.kind === 'later'
+      : held || outcome.kind === 'later'
         ? Clock01Icon
         : Cancel01Icon
   const title =
     outcome.kind === 'published'
-      ? t('marketPublish.outcome.published', { name, version: outcome.version })
+      ? t(held ? 'marketPublish.outcome.held' : 'marketPublish.outcome.published', {
+          name,
+          version: outcome.version,
+        })
       : outcome.kind === 'unlisted'
         ? t('marketPublish.outcome.unlisted', { name })
         : outcome.kind === 'publishing'
@@ -730,7 +734,14 @@ function PublishSettled({ entry }: { entry: Entry }) {
               : t(`marketPublish.outcome.${outcome.kind}`, { name })
   const meta =
     outcome.kind === 'published'
-      ? `@${outcome.handle}/${entry.item.slug} · ${t(`marketPublish.visibility.${entry.visibility}`)}`
+      ? held
+        ? [
+            t('marketPublish.heldMeta'),
+            entry.previous ? t('marketPublish.heldStays', { previous: entry.previous }) : null,
+          ]
+            .filter(Boolean)
+            .join(' · ')
+        : `@${outcome.handle}/${entry.item.slug} · ${t(`marketPublish.visibility.${entry.visibility}`)}`
       : !busy && !done && !failed && !unlist
         ? t('marketPublish.keptDraft')
         : null

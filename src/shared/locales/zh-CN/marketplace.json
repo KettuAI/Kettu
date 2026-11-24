@@ -850,6 +850,15 @@
       "withdraw": "撤回 {{version}}",
       "checkAgain": "重新检查"
     },
+    "review": {
+      "waiting": "等待审核",
+      "refused": "未通过",
+      "heldLine": "{{version}} 审核通过后才会上架。",
+      "refusedLine": "{{version}} 没有通过审核：{{reason}}",
+      "refusedBare": "{{version}} 没有通过审核。",
+      "heldNote": "审核通过后才会上架。",
+      "open": "打开"
+    },
     "table": {
       "title": "已发布",
       "label": "你发布的",
@@ -862,6 +871,8 @@
       "week": "近 7 天 +{{count}}",
       "noNew": "近 7 天没有新安装",
       "needsFix": "{{version}} 需要修改",
+      "waiting": "{{version}} 等待审核",
+      "refused": "{{version}} 未通过",
       "more": "{{name}} 的更多操作",
       "noMatch": "你发布的里没有和“{{query}}”匹配的。"
     },
@@ -875,7 +886,8 @@
       "public": "已上架",
       "private": "只有我",
       "unlisted": "已下架",
-      "takenDown": "已被下架"
+      "takenDown": "已被下架",
+      "held": "等待审核"
     },
     "menu": {
       "newVersion": "新版本…",
@@ -910,6 +922,7 @@
     "readFailed": "读不到你发布的内容：{{error}}",
     "toast": {
       "published": "已发布 {{name}} {{version}}",
+      "held": "{{name}} {{version}} 等待审核",
       "unlisted": "已下架 {{name}}",
       "listed": "{{name}} 已重新上架",
       "deleted": "已删除 {{name}}",

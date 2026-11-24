@@ -179,20 +179,24 @@ function PublishFolderForm({ choice, onDone }: { choice: FolderChoice; onDone: (
     setBusy(true)
     setFailure(null)
     try {
-      await scope.request('market.publishFolder', {
+      const result = await scope.request('market.publishFolder', {
         path: target,
         ...(choice.draftId ? { draftId: choice.draftId } : {}),
         ...(fresh ? { visibility } : {}),
         ...(newVersion ? { notes } : {}),
         ...(ask.publisher ? { handle: handle.trim() } : {}),
       })
-      toast(
-        t('published.toast.published', { name: ask.item.name, version: ask.version }),
-        undefined,
-        {
-          tone: 'success',
-        },
-      )
+      if (result.held !== undefined) {
+        toast(t('published.toast.held', { name: ask.item.name, version: result.held }))
+      } else {
+        toast(
+          t('published.toast.published', { name: ask.item.name, version: ask.version }),
+          undefined,
+          {
+            tone: 'success',
+          },
+        )
+      }
       void store.getState().load()
       onDone()
     } catch (error) {

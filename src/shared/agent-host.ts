@@ -56,6 +56,7 @@ import type {
   MineListing,
   PublishDraft,
   PublishKind,
+  PublishResult,
   PublishVisibility,
 } from './market-publish'
 import type { PluginNoticeKind } from './plugin-channels'
@@ -1321,7 +1322,8 @@ export interface HostContract {
       notes?: string
       handle?: string
     }
-    result: MineListing
+    // `held` is the version the service holds for review, which it lists only after it.
+    result: PublishResult
   }
   'projects.list': { params: void; result: Project[] }
   'projects.add': { params: { path: string }; result: Project }

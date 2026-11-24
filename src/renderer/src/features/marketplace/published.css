@@ -72,6 +72,9 @@
 .k-pub-dot[data-tone='danger'] {
   background: var(--danger);
 }
+.k-pub-dot[data-tone='attention'] {
+  background: var(--warning);
+}
 .k-pub-vis {
   display: inline-flex;
   align-items: center;
@@ -621,6 +624,11 @@
   line-height: 20px;
   color: var(--ink);
   overflow-wrap: anywhere;
+}
+.k-pub-vrow p.k-pub-vrow__note {
+  font-size: 12.5px;
+  line-height: 18px;
+  color: var(--muted);
 }
 .k-pub-vrow p.k-pub-vrow__error {
   font-size: 12.5px;

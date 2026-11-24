@@ -129,7 +129,8 @@ function utcDay(at: number): number {
 
 /**
  * Each day of the last 30 that a version was published on, by its place in `days` (oldest first,
- * today last), the highest version of a day winning.
+ * today last), the highest version of a day winning. A version held or not approved was not
+ * published.
  */
 export function releaseDays(
   listing: Pick<MineListing, 'versions'>,
@@ -139,6 +140,7 @@ export function releaseDays(
   const today = utcDay(now)
   const marks = new Map<number, string>()
   for (const version of [...listing.versions].reverse()) {
+    if (version.status !== 'live' && version.status !== 'withdrawn') continue
     const at = Date.parse(version.publishedAt)
     if (Number.isNaN(at)) continue
     const index = length - 1 - (today - utcDay(at))
