@@ -299,7 +299,7 @@ export function ExperimentCard({
 
   const onKeyDown = (e: KeyboardEvent) => {
     if (choice && isOpen) {
-      const typing = (e.target as HTMLElement).tagName === "INPUT";
+      const typing = ["INPUT", "TEXTAREA"].includes((e.target as HTMLElement).tagName);
       // ⌘↵ runs the action, a digit picks its answer, the next digit goes to the row of your own
       if (e.key === "Enter" && (e.metaKey || e.ctrlKey) && action && ready) {
         e.preventDefault();
@@ -315,7 +315,7 @@ export function ExperimentCard({
         }
         if (other && e.key === otherKey) {
           e.preventDefault();
-          rootRef.current?.querySelector<HTMLInputElement>(".ui-xcc__input")?.focus();
+          rootRef.current?.querySelector<HTMLElement>(".ui-xcc__input")?.focus();
           return;
         }
       }
@@ -382,6 +382,17 @@ export function ExperimentCard({
   const chosen = multiple ? variants.filter((v) => pickIds.includes(v.id)).length : picked ? 1 : 0;
   // Your own answer counts once it has words
   const own = otherOn && otherText.trim() !== "";
+  const otherField = {
+    className: "ui-xcc__input",
+    autoComplete: "off",
+    value: otherText,
+    placeholder: other?.placeholder,
+    "aria-label": other?.placeholder,
+    // Clicking into the field picks it, leaving it empty lets it go
+    onFocus: () => !otherOn && pick(otherId),
+    onBlur: () => otherOn && !otherText.trim() && pick(otherId),
+    onChange: (e: { target: { value: string } }) => setOther(e.target.value),
+  };
   const ready = choice ? chosen > 0 || own || actionReady : Boolean(picked);
   let caption: ReactNode = hint ?? (picked ? null : choice ? (multiple ? (labels?.pickAny ?? "Pick any that apply") : (labels?.pickOne ?? "Pick one")) : "Pick a winner");
   let captionKey = "rest";
@@ -598,18 +609,8 @@ export function ExperimentCard({
                       <span>{otherKey}</span>
                       {multiple ? <CheckIcon /> : <DotIcon />}
                     </span>
-                    <input
-                      className="ui-xcc__input"
-                      type={other.secret ? "password" : "text"}
-                      autoComplete="off"
-                      value={otherText}
-                      placeholder={other.placeholder}
-                      aria-label={other.placeholder}
-                      // Clicking into the field picks it, leaving it empty lets it go
-                      onFocus={() => !otherOn && pick(otherId)}
-                      onBlur={() => otherOn && !otherText.trim() && pick(otherId)}
-                      onChange={(e) => setOther(e.target.value)}
-                    />
+                    {/* A long answer wraps and grows the row; only a secret stays on one masked line */}
+                    {other.secret ? <input type="password" {...otherField} /> : <textarea rows={1} {...otherField} />}
                   </label>
                 )}
               </div>
@@ -779,11 +780,12 @@ const css = /* css */ `
 .ui-xcc[data-kind="choice"]:not([data-multiple]) .ui-xcc__badge { width: 20px; min-width: 20px; padding: 0; border-radius: 50%; }
 .ui-xcc__desc { grid-column: 2; overflow: hidden; font-size: 12px; line-height: 16px; color: var(--ui-xcc-muted); white-space: nowrap; text-overflow: ellipsis; }
 /* Several answers: the badge turns into a check box once picked, like the single answer's */
-.ui-xcc__other { cursor: text; }
+.ui-xcc__other { cursor: text; align-items: start; }
 .ui-xcc__other[data-picked] .ui-xcc__badge { background: var(--ui-xcc-color); color: #fff; }
 .ui-xcc__other[data-picked] .ui-xcc__badge span { opacity: 0; transform: scale(0.5); }
 .ui-xcc__other[data-picked] .ui-xcc__badge svg { opacity: 1; transform: none; }
 .ui-xcc__input { min-width: 0; height: 20px; padding: 0; border: 0; outline: 0; background: none; font: inherit; color: var(--ui-xcc-ink); }
+textarea.ui-xcc__input { display: block; width: 100%; height: auto; min-height: 20px; max-height: 160px; field-sizing: content; resize: none; line-height: 20px; overflow-wrap: anywhere; }
 .ui-xcc__input::placeholder { color: var(--ui-xcc-faint); }
 .ui-xcc__secondary { flex: none; height: 28px; padding: 0 10px; border-radius: 6px; font-size: 13px; line-height: 20px; font-weight: 500; color: var(--ui-xcc-text); transition: background-color 140ms ease, color 140ms ease; }
 .ui-xcc__secondary:hover { background: var(--ui-xcc-wash); color: var(--ui-xcc-ink); }
