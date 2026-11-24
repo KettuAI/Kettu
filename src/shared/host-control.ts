@@ -445,6 +445,8 @@ export type HostToMain =
   | { type: 'host:computer-frame'; requestId: number; frame: ComputerFrame | null }
   // Whether a plugin's script needs the plugin host; answered by host:plugin-port once it runs.
   | { type: 'host:plugin-host'; run: boolean }
+  // The index of the themes plugins bring changed, so the themes are read again.
+  | { type: 'host:plugin-themes' }
   | { type: 'host:stopped' }
 
 export type MainToTerminalHost =

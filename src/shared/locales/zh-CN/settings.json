@@ -177,6 +177,7 @@
       "builtIn": "内置",
       "file": "文件",
       "catalog": "主题库",
+      "plugin": "来自 {{plugin}}",
       "more": "“{{name}}”的更多操作",
       "export": "导出为文件…",
       "exported": "已将 {{file}} 保存到 {{folder}}",

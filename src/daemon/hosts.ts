@@ -132,6 +132,8 @@ export interface HostsOptions {
   pluginSecret?(pluginId: unknown, key: unknown, value: unknown): Promise<string | null>
   /** The agent host's first start found the programs of these harnesses; the daemon adds their agents. */
   firstStart?(harnesses: unknown): void
+  /** The themes plugins bring changed, so the daemon reads them again. */
+  pluginThemes?(): void
   /** The host's X25519 private key, in base64, for the remote host alone. */
   privateKey: string
   /** Replaces the host's identity with a new key, as resetting remote access does; its private key. */
@@ -1040,6 +1042,9 @@ export class Hosts {
         break
       case 'host:plugin-host':
         this.pluginHost.setWanted(message.run === true)
+        break
+      case 'host:plugin-themes':
+        this.options.pluginThemes?.()
         break
       case 'host:device-call':
         if (Number.isSafeInteger(message.callId) && typeof message.call === 'object') {

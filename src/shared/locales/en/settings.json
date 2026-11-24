@@ -178,6 +178,7 @@
       "builtIn": "Built in",
       "file": "File",
       "catalog": "Catalog",
+      "plugin": "From {{plugin}}",
       "more": "More for “{{name}}”",
       "export": "Export…",
       "exported": "Saved {{file}} to {{folder}}",

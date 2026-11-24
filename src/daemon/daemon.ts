@@ -478,6 +478,7 @@ export async function startDaemon(options: DaemonOptions): Promise<RunningDaemon
         (error: unknown) => (error as Error).message,
       ),
     firstStart: (harnesses) => settings.firstStart(harnesses),
+    pluginThemes: () => admin?.refreshThemes(),
     privateKey: identity.privateKey,
     newIdentity: async () => (await newHostKey(options.dataPath)).privateKey,
     relayKey: relayKey?.privateKey ?? null,

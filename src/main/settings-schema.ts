@@ -1157,29 +1157,38 @@ export function effectiveDirect(settings: SettingsFile, signedIn: boolean): Dire
   return held && !direct.enabled ? { ...direct, enabled: true } : direct
 }
 
-/** The first item a plugin brought that `next` no longer has, which only the plugin may remove. */
-function droppedPluginItem<T extends { id: string; name: string }>(
-  list: readonly T[],
-  next: readonly T[],
-): T | undefined {
-  const kept = new Set(next.map((item) => item.id))
-  return list.find((item) => pluginItem(item.id) !== null && !kept.has(item.id))
+/**
+ * The list a patch leaves, unless it is the plugin service's own: an item a plugin brought stays,
+ * none is added, and only its switch and agents take what the patch says.
+ */
+function settledPluginItems<
+  T extends { id: string; name: string; on: boolean; agents: 'all' | AgentId[] },
+>(list: readonly T[], next: readonly T[]): T[] {
+  const dropped = list.find(
+    (item) => pluginItem(item.id) !== null && !next.some((other) => other.id === item.id),
+  )
+  if (dropped) throw new SettingsError(t('settings.pluginItem', { name: dropped.name }))
+  return next.map((item) => {
+    if (pluginItem(item.id) === null) return item
+    const before = list.find((other) => other.id === item.id)
+    if (!before) throw new SettingsError(t('settings.pluginItemAdded', { name: item.name }))
+    return { ...before, on: item.on, agents: item.agents }
+  })
 }
 
 /**
  * A kept list with an edit applied; throws when it would then repeat a name or run past `max`,
- * or, unless it is the plugin service's own, drop an item a plugin brought.
+ * or, unless it is the plugin service's own, drop or add an item a plugin brought.
  */
-function editedList<T extends { id: string; name: string }>(
+function editedList<T extends { id: string; name: string; on: boolean; agents: 'all' | AgentId[] }>(
   list: readonly T[],
   edit: ListEdit<T>,
   max: number,
   kind: 'server' | 'skill',
   own: boolean,
 ): T[] {
-  const next = applyListEdit(list, edit)
-  const dropped = own ? undefined : droppedPluginItem(list, next)
-  if (dropped) throw new SettingsError(t('settings.pluginItem', { name: dropped.name }))
+  const edited = applyListEdit(list, edit)
+  const next = own ? edited : settledPluginItems(list, edited)
   if (next.length > max) {
     throw new SettingsError(
       kind === 'server'
@@ -1204,8 +1213,9 @@ function editedList<T extends { id: string; name: string }>(
 /**
  * Applies a validated patch. Sections merge key by key; `proxy` is replaced whole. Run in the
  * background and direct connections stay on while remote access is. Throws a `SettingsError`
- * when an edit of the servers or skills would leave two with one name, or drop an item a plugin
- * brought, which only the plugin service's own patch (`plugins`) may do.
+ * when an edit of the servers or skills would leave two with one name, or drop or add an item a
+ * plugin brought, which only the plugin service's own patch (`plugins`) may do; any other patch
+ * changes such an item's switch and agents alone.
  */
 export function mergeSettings(
   current: SettingsFile,
@@ -1222,15 +1232,11 @@ export function mergeSettings(
   if (patch.mcp) next.mcp = { kettu: { off: [...patch.mcp.kettu.off] } }
   if (patch.marketplace?.mcp) {
     const whole = structuredClone(patch.marketplace.mcp)
-    const dropped = own ? undefined : droppedPluginItem(next.marketplace.mcp, whole)
-    if (dropped) throw new SettingsError(t('settings.pluginItem', { name: dropped.name }))
-    next.marketplace.mcp = whole
+    next.marketplace.mcp = own ? whole : settledPluginItems(next.marketplace.mcp, whole)
   }
   if (patch.marketplace?.skills) {
     const whole = structuredClone(patch.marketplace.skills)
-    const dropped = own ? undefined : droppedPluginItem(next.marketplace.skills, whole)
-    if (dropped) throw new SettingsError(t('settings.pluginItem', { name: dropped.name }))
-    next.marketplace.skills = whole
+    next.marketplace.skills = own ? whole : settledPluginItems(next.marketplace.skills, whole)
   }
   if (patch.marketplace?.mcpEdit) {
     next.marketplace.mcp = editedList(

@@ -111,7 +111,7 @@ import { DeviceHost } from './device-host'
 import { PluginHost } from './plugin-host'
 import { TerminalHost } from './terminal-host'
 import { ThemeCatalog } from './theme-catalog'
-import { readThemeFolder, readThemeSources, ThemeStore } from './themes'
+import { readPluginThemes, readThemeFolder, readThemeSources, ThemeStore } from './themes'
 import { KettuTray } from './tray'
 import { openTrayTarget, TrayPanel } from './tray-panel'
 import { Updater } from './updater'
@@ -126,6 +126,7 @@ import {
 } from './app-log'
 import { redactLogText } from '@shared/log/process-log'
 import { writeReport } from '@shared/log/report-bundle'
+import { PLUGIN_THEMES_FILE } from '@shared/plugin-themes'
 import {
   applyTheme,
   applyWindowTheme,
@@ -177,6 +178,7 @@ async function start(): Promise<void> {
   const userDataPath = app.getPath('userData')
   const themesDir = join(userDataPath, 'themes')
   const themeSourcesFile = join(userDataPath, 'theme-sources.json')
+  const pluginThemesFile = join(userDataPath, PLUGIN_THEMES_FILE)
   // Read while Electron starts, so the first window already has the right theme and bounds.
   const loading = Promise.all([
     SettingsStore.load(userDataPath),
@@ -184,6 +186,7 @@ async function start(): Promise<void> {
     AppStateStore.load(userDataPath),
     readThemeFolder(themesDir),
     readThemeSources(themeSourcesFile),
+    readPluginThemes(pluginThemesFile),
   ])
   let ready = false
   app.on('second-instance', (_event, _argv, _cwd, data) => {
@@ -210,7 +213,7 @@ async function start(): Promise<void> {
     (contents) => isRevoked(contents) || hasPendingFrame(contents),
     () => !!computerHold?.window,
   )
-  const [settings, windowState, appState, themeFolder, themeSources] = await loading
+  const [settings, windowState, appState, themeFolder, themeSources, pluginThemes] = await loading
   syncLoginItem(settings.get().general.openAtLogin)
   const start = startMode(
     process.platform,
@@ -267,19 +270,26 @@ async function start(): Promise<void> {
   // The overlays follow the themes as the window does; they are made after them.
   const browserViewsRef: { current: BrowserViews | null } = { current: null }
   const computerOverlayRef: { current: ComputerOverlay | null } = { current: null }
-  const themes = new ThemeStore(themeFolder, themeSources, settings.get().appearance.colorTheme, {
-    dir: themesDir,
-    sourcesFile: themeSourcesFile,
-    catalog,
-    select: (id) => settings.update({ appearance: { colorTheme: id } }),
-    changed: (state, chosen) => {
-      applyWindowTheme(chosen)
-      broadcast('themes:changed', state)
-      browserViewsRef.current?.lookChanged()
-      computerOverlayRef.current?.settingsChanged()
-      hostAdmin?.themesChanged(themes.hostThemes())
+  const themes = new ThemeStore(
+    themeFolder,
+    themeSources,
+    pluginThemes,
+    settings.get().appearance.colorTheme,
+    {
+      dir: themesDir,
+      sourcesFile: themeSourcesFile,
+      pluginFile: pluginThemesFile,
+      catalog,
+      select: (id) => settings.update({ appearance: { colorTheme: id } }),
+      changed: (state, chosen) => {
+        applyWindowTheme(chosen)
+        broadcast('themes:changed', state)
+        browserViewsRef.current?.lookChanged()
+        computerOverlayRef.current?.settingsChanged()
+        hostAdmin?.themesChanged(themes.hostThemes())
+      },
     },
-  })
+  )
   applyWindowTheme(themes.chosenTheme())
   watchTheme()
   configureWindows({ state: windowState, systemLocale })
@@ -519,6 +529,10 @@ async function start(): Promise<void> {
         (error: unknown) => (error as Error).message,
       ),
     onFirstStart: (harnesses) => settings.firstStart(harnesses),
+    onPluginThemes: () =>
+      void themes.refresh().catch((error: unknown) => {
+        log.error('Could not read the themes plugins bring', error)
+      }),
     onAttention: (message) => {
       // While the island runs, it shows what needs the user in place of a notification.
       if (!repeatedNotices.repeated(message)) {

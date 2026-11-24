@@ -31,8 +31,9 @@ import { ExternalLink, ListingFrame, ListingSkeleton, Missing } from './parts'
 import { AddControl, ItemRow, KindTag, OfficialBadge, Publisher } from './rows'
 import { skillSubject } from './tile-art'
 import { ItemTile } from './tiles'
+import { usePluginItemOff } from './plugin-hooks'
 import { isPluginItem } from './plugin-model'
-import { PluginItemControls } from './plugin-ui'
+import { FromPlugin } from './plugin-ui'
 
 export function SkillRow({
   skill,
@@ -389,7 +390,8 @@ export function KeptSkillControls({
   const { t } = useTranslation('marketplace')
   const scope = useHostScope()
   const [dialog, setDialog] = useState<'agents' | 'remove' | null>(null)
-  if (isPluginItem(skill.id)) return <PluginItemControls itemId={skill.id} />
+  const fromPlugin = isPluginItem(skill.id)
+  const pluginOff = usePluginItemOff(skill.id)
   return (
     <>
       {!compact && (
@@ -398,9 +400,11 @@ export function KeptSkillControls({
           {t('listing.installed')}
         </span>
       )}
+      {fromPlugin && <FromPlugin itemId={skill.id} />}
       <SettingSwitch
         label={t('listing.switch', { name: skill.name })}
         checked={skill.on}
+        disabled={pluginOff}
         onChange={(on) => void setSkillOn(scope, skill.id, on)}
       />
       <Dropdown
@@ -411,13 +415,18 @@ export function KeptSkillControls({
             icon: UserMultiple02Icon,
             onSelect: () => setDialog('agents'),
           },
-          {
-            label: t('skill.remove'),
-            icon: Delete02Icon,
-            danger: true,
-            divider: true,
-            onSelect: () => setDialog('remove'),
-          },
+          // What came with a plugin leaves with it, so there is nothing to remove alone.
+          ...(fromPlugin
+            ? []
+            : [
+                {
+                  label: t('skill.remove'),
+                  icon: Delete02Icon,
+                  danger: true,
+                  divider: true,
+                  onSelect: () => setDialog('remove'),
+                },
+              ]),
         ]}
         trigger={({ open, toggle }) => (
           <button

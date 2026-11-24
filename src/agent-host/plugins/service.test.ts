@@ -504,6 +504,33 @@ describe('updating a plugin', () => {
   const script = { script: './sh.kettu/main.js', api: 1 }
   const main = { 'sh.kettu/main.js': 'export {}' }
 
+  it('keeps the switch and the agents chosen for an item through an update', async () => {
+    const { h } = await installed()
+    h.settings.skills = h.settings.skills.map((skill) => ({
+      ...skill,
+      on: false,
+      agents: ['codex'],
+    }))
+    h.settings.servers = h.settings.servers.map((server) =>
+      server.name === 'local' ? { ...server, on: false, agents: ['claude-code'] } : server,
+    )
+    next(
+      h,
+      '1.1.0',
+      packageFiles({ 'skills/review/SKILL.md': '---\nname: review\ndescription: Better.\n---\n' }),
+    )
+    await h.plugins.checkUpdates()
+    expect(h.settings.skills[0]).toMatchObject({
+      description: 'Better.',
+      on: false,
+      agents: ['codex'],
+    })
+    expect(h.settings.servers.map(({ name, on, agents }) => [name, on, agents])).toEqual([
+      ['local', false, ['claude-code']],
+      ['tracker', true, 'all'],
+    ])
+  })
+
   it('holds an update that asks for more permissions, with what it adds', async () => {
     const h = await host()
     h.market.files = packageFiles(main, { ...script, permissions: ['tools'] })

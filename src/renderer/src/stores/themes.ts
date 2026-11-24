@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { BUILTIN_THEME_ID, type Theme, type ThemesState } from '@shared/themes'
 import { applyThemeStyle } from '@renderer/lib/theme-style'
+import { useSettingsStore } from './settings'
 
 interface ThemesStore {
   state: ThemesState
@@ -15,6 +16,15 @@ export const useThemesStore = create<ThemesStore>()(() => ({
 
 /** Takes main's answer; the shown theme's colors are written before anyone is told. */
 export function receiveThemes(state: ThemesState): void {
+  const was = useThemesStore.getState().state.installed.find(({ id }) => id === state.chosen)
+  // A plugin's theme leaves with its plugin, so the built-in theme takes its place for good,
+  // as it does when the chosen theme is removed.
+  if (was?.plugin && state.failed?.id === state.chosen) {
+    useSettingsStore
+      .getState()
+      .update({ appearance: { colorTheme: BUILTIN_THEME_ID } })
+      .catch((error: unknown) => console.error("Could not leave a plugin's theme", error))
+  }
   const chosen = state.failed ? undefined : state.installed.find(({ id }) => id === state.chosen)
   const next = chosen?.theme ?? null
   const { shown } = useThemesStore.getState()

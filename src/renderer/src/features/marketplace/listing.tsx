@@ -53,7 +53,8 @@ import {
 } from './model'
 import { ExternalLink, ListingFrame, ListingSkeleton, Missing } from './parts'
 import { BuiltinServerPage } from './builtin'
-import { PluginItemControls, PluginPage } from './plugin-ui'
+import { FromPlugin, PluginPage } from './plugin-ui'
+import { usePluginItemOff } from './plugin-hooks'
 import { isPluginItem } from './plugin-model'
 import { PublishedListingPage } from './published-listing'
 import { KETTU_ITEM, previewIdOf, publishedIdOf } from './published-keys'
@@ -267,7 +268,8 @@ export function KeptControls({
   const scope = useHostScope()
   const [dialog, setDialog] = useState<'keys' | 'agents' | 'uninstall' | null>(null)
   const inputs = specInputs(server.spec)
-  if (isPluginItem(server.id)) return <PluginItemControls itemId={server.id} />
+  const fromPlugin = isPluginItem(server.id)
+  const pluginOff = usePluginItemOff(server.id)
   const close = (open: boolean) => {
     if (!open) setDialog(null)
   }
@@ -277,9 +279,11 @@ export function KeptControls({
         <Icon icon={Tick02Icon} size={14} />
         {t('listing.installed')}
       </span>
+      {fromPlugin && <FromPlugin itemId={server.id} />}
       <SettingSwitch
         label={t('listing.switch', { name: server.title })}
         checked={server.on}
+        disabled={pluginOff}
         onChange={(on) => void setServerOn(scope, server.id, on)}
       />
       <Dropdown
@@ -299,13 +303,18 @@ export function KeptControls({
             icon: UserMultiple02Icon,
             onSelect: () => setDialog('agents'),
           },
-          {
-            label: t('listing.uninstall'),
-            icon: Delete02Icon,
-            danger: true,
-            divider: true,
-            onSelect: () => setDialog('uninstall'),
-          },
+          // What came with a plugin leaves with it, so there is nothing to uninstall alone.
+          ...(fromPlugin
+            ? []
+            : [
+                {
+                  label: t('listing.uninstall'),
+                  icon: Delete02Icon,
+                  danger: true,
+                  divider: true,
+                  onSelect: () => setDialog('uninstall'),
+                },
+              ]),
         ]}
         trigger={({ open, toggle }) => (
           <button

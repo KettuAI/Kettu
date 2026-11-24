@@ -24,6 +24,7 @@ import type {
 import { OWNER } from '@shared/artifact-comments'
 import { flushLog, logFolder, redactLogText, writeLog } from '@shared/log/process-log'
 import { channelTrigger, PLUGIN_CHANNEL_EVENT } from '@shared/plugin-channels'
+import { PLUGIN_THEMES_FILE } from '@shared/plugin-themes'
 import type { AgentToPluginHost } from '@shared/plugin-host'
 import { pluginText, type InstalledKettuPlugin } from '@shared/plugins'
 import { toolId, type CatalogPlugin } from '@shared/settings-catalog'
@@ -161,6 +162,7 @@ import { MarketSkillsService, skillFor, skillsCatalogFile } from './marketplace/
 import { CommandsService } from './commands/service'
 import { RolesService } from './roles/service'
 import { PluginsService } from './plugins/service'
+import { PluginThemeIndex } from './plugins/theme-index'
 import { pluginsFile as kettuPluginsFile } from './plugins/store'
 import { PublishDrafts } from './marketplace/publish-drafts'
 import { PluginConverter } from './marketplace/plugin-conversions'
@@ -607,6 +609,8 @@ export class AgentHost {
     (pluginId) => this.plugins.folderOf(pluginId),
     (level, message) => writeLog(level, 'plugins', message),
   )
+  /** The themes the plugins that are on bring, listed where main or the daemon reads them. */
+  private readonly pluginThemes: PluginThemeIndex
   /** The plugin host, which runs the scripts of the installed plugins that are on. */
   private readonly pluginHost = new PluginHostClient({
     want: (run) => this.options.send({ type: 'host:plugin-host', run }),
@@ -999,6 +1003,12 @@ export class AgentHost {
       changed: () => this.broadcast({ type: 'workflows.changed' }),
       pluginOn: (pluginId) => this.plugins.on(pluginId),
     })
+    this.pluginThemes = new PluginThemeIndex({
+      file: path.join(options.userDataPath, PLUGIN_THEMES_FILE),
+      resources: () => this.plugins.resources('themes'),
+      changed: () => options.send({ type: 'host:plugin-themes' }),
+      log: (level, message) => writeLog(level, 'plugins', message),
+    })
     this.plugins = new PluginsService({
       userDataPath: options.userDataPath,
       file: kettuPluginsFile(options.userDataPath, log),
@@ -1037,6 +1047,7 @@ export class AgentHost {
       changed: () => {
         this.pluginScripts.sync(this.plugins.scripts())
         this.hub.broadcast({ type: 'plugins.changed' })
+        void this.pluginThemes.sync()
       },
     })
     this.roles = new RolesService({
@@ -1798,6 +1809,7 @@ export class AgentHost {
     void host.marketSkills.sync()
     host.plugins.start()
     host.pluginScripts.sync(host.plugins.scripts())
+    void host.pluginThemes.sync()
     host.sendFolders()
     void host.sessions.checkWorktrees()
     host.usage.start()

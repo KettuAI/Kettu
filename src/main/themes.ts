@@ -4,12 +4,15 @@
 
 import { createHash, randomUUID } from 'node:crypto'
 import { open, readdir, rm } from 'node:fs/promises'
-import { basename, join } from 'node:path'
+import { basename, isAbsolute, join } from 'node:path'
+import { PLUGIN_THEMES_VERSION, type PluginThemeEntry } from '@shared/plugin-themes'
+import { PLUGIN_ID } from '@shared/plugins'
 import type { HostThemes } from '@shared/remote/host-admin'
 import {
   BUILTIN_THEME_ID,
   parseColor,
   parseThemeFile,
+  plainText,
   THEME_ID,
   THEME_MAX_BYTES,
   themeField,
@@ -151,10 +154,75 @@ export async function readThemeFolder(dir: string): Promise<ThemeFolder> {
   return folder
 }
 
-const snapshot = (folder: ThemeFolder) => JSON.stringify([folder.installed, [...folder.failed]])
+const snapshot = (...folders: ThemeFolder[]) =>
+  JSON.stringify(folders.map((folder) => [folder.installed, [...folder.failed]]))
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value)
+
+/** The entries of the plugin themes index that are well formed, each id once. */
+function pluginThemeEntries(value: unknown): PluginThemeEntry[] {
+  if (!isRecord(value) || value['version'] !== PLUGIN_THEMES_VERSION) return []
+  const list = value['themes']
+  if (!Array.isArray(list)) return []
+  const seen = new Set<string>()
+  return list.flatMap((raw: unknown): PluginThemeEntry[] => {
+    if (!isRecord(raw)) return []
+    const { id, pluginId, file } = raw
+    const plugin = plainText(raw['plugin'], 100)
+    if (
+      typeof id !== 'string' ||
+      typeof pluginId !== 'string' ||
+      typeof file !== 'string' ||
+      plugin === null ||
+      !PLUGIN_ID.test(pluginId) ||
+      // The id a plugin's theme has, which no theme installed from a file can have.
+      !id.startsWith(`${pluginId}--`) ||
+      !THEME_ID.test(id) ||
+      !isAbsolute(file) ||
+      seen.has(id)
+    ) {
+      return []
+    }
+    seen.add(id)
+    return [{ id, pluginId, plugin, file }]
+  })
+}
+
+/**
+ * Reads the themes the plugins that are on bring, from the index the agent host keeps. Each file
+ * is checked in full, as a file installed by the user is, and a missing index holds no themes.
+ */
+export async function readPluginThemes(indexFile: string): Promise<ThemeFolder> {
+  const folder: ThemeFolder = { installed: [], failed: new Map() }
+  const read = await readJsonFile(indexFile)
+  if (read.kind === 'unreadable') log.warn(`plugin-themes.json is unreadable: ${read.reason}`)
+  if (read.kind !== 'ok') return folder
+  const entries = pluginThemeEntries(read.value)
+  const results = await Promise.all(entries.map((entry) => readThemeFile(entry.file)))
+  entries.forEach((entry, i) => {
+    const result = results[i]!
+    if (result.ok) {
+      folder.installed.push({
+        id: entry.id,
+        theme: result.theme,
+        ignored: result.ignored,
+        plugin: { id: entry.pluginId, title: entry.plugin },
+      })
+      return
+    }
+    const failure: ThemeLoadFailure =
+      result.error.code === 'unreadable'
+        ? { code: 'unreadable' }
+        : { code: 'invalid', error: result.error }
+    folder.failed.set(entry.id, failure)
+    log.warn(`Skipped the plugin theme ${entry.id}: ${describeFailure(failure)}`)
+  })
+  folder.installed.sort(
+    (a, b) => a.theme.name.localeCompare(b.theme.name) || a.id.localeCompare(b.id),
+  )
+  return folder
+}
 
 /** Which installed themes came from the catalog, by id, and the version each was installed at. */
 export type ThemeSources = Map<string, string>
@@ -182,6 +250,8 @@ export interface ThemeStoreDeps {
   dir: string
   /** `theme-sources.json` in the data folder, beside `themes/`. */
   sourcesFile: string
+  /** `plugin-themes.json` in the data folder, the index of the themes plugins bring. */
+  pluginFile: string
   catalog: ThemeCatalog
   /** Makes `id` the setting; the change comes back through `choose`. */
   select(id: string): void
@@ -210,6 +280,8 @@ export class ThemeStore {
   constructor(
     private folder: ThemeFolder,
     private sources: ThemeSources,
+    // The themes plugins bring, which only the plugins add or remove.
+    private plugin: ThemeFolder,
     private chosen: string,
     private readonly deps: ThemeStoreDeps,
   ) {
@@ -217,27 +289,33 @@ export class ThemeStore {
   }
 
   state(): ThemesState {
-    const { chosen, folder, sources } = this
+    const { chosen, folder, plugin, sources } = this
     const failure: ThemeLoadFailure | null =
-      chosen === BUILTIN_THEME_ID || this.find(chosen)
+      chosen === BUILTIN_THEME_ID || this.shown(chosen)
         ? null
-        : (folder.failed.get(chosen) ?? { code: 'missing' })
-    const installed = folder.installed.map((theme) => {
+        : (folder.failed.get(chosen) ?? plugin.failed.get(chosen) ?? { code: 'missing' })
+    const files = folder.installed.map((theme) => {
       const catalog = sources.get(theme.id)
       return catalog === undefined ? theme : { ...theme, catalog }
     })
+    const installed = [...files, ...plugin.installed].sort(
+      (a, b) => a.theme.name.localeCompare(b.theme.name) || a.id.localeCompare(b.id),
+    )
     return { installed, chosen, failed: failure && { id: chosen, failure } }
   }
 
-  /** What a device lists: every theme the folder holds, whichever one this host shows. */
+  /** What a device lists: every theme the host holds, whichever one this host shows. */
   hostThemes(): HostThemes {
-    const failed = [...this.folder.failed].map(([id, failure]) => ({ id, failure }))
+    const failed = [...this.folder.failed, ...this.plugin.failed].map(([id, failure]) => ({
+      id,
+      failure,
+    }))
     return { installed: this.state().installed, failed }
   }
 
   /** The chosen theme, or null while the built-in one shows. */
   chosenTheme(): Theme | null {
-    return this.find(this.chosen)?.theme ?? null
+    return this.shown(this.chosen)?.theme ?? null
   }
 
   /** The setting changed, perhaps to another theme. */
@@ -250,9 +328,14 @@ export class ThemeStore {
 
   /** `themes:get`: reads the folder again, so a file changed by hand shows. */
   async refresh(): Promise<ThemesState> {
-    const before = snapshot(this.folder)
-    this.folder = await readThemeFolder(this.deps.dir)
-    if (snapshot(this.folder) !== before) this.publish()
+    const before = snapshot(this.folder, this.plugin)
+    const [folder, plugin] = await Promise.all([
+      readThemeFolder(this.deps.dir),
+      readPluginThemes(this.deps.pluginFile),
+    ])
+    this.folder = folder
+    this.plugin = plugin
+    if (snapshot(this.folder, this.plugin) !== before) this.publish()
     return this.state()
   }
 
@@ -379,8 +462,14 @@ export class ThemeStore {
     return parsed.theme.name
   }
 
+  /** An installed theme from a file or the catalog; the ones plugins bring are not these. */
   private find(id: string): InstalledTheme | undefined {
     return this.folder.installed.find((theme) => theme.id === id)
+  }
+
+  /** A theme that can show: an installed one, or one a plugin brings. */
+  private shown(id: string): InstalledTheme | undefined {
+    return this.find(id) ?? this.plugin.installed.find((theme) => theme.id === id)
   }
 
   /** The file of a theme the folder holds, for an id from a window or a device. */
