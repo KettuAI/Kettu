@@ -7,6 +7,8 @@ import { access, copyFile, mkdtemp, realpath, rm, writeFile } from 'node:fs/prom
 import os from 'node:os'
 import path from 'node:path'
 import { addressText } from '@shared/remote/address'
+import type { OwnRelayProblem } from '@shared/remote/own-relay'
+import type { RelayReport } from '@shared/remote/status'
 import {
   parseReportRequest,
   reportIssueUrl,
@@ -117,6 +119,8 @@ async function pair(socket: string): Promise<number> {
   const questions = terminalQuestions(process.stdin, process.stdout)
   try {
     const { status } = await client.call('direct.get', undefined)
+    const relay = await client.call('relay.get', undefined)
+    const own = relay.state === 'on' ? relay.own : undefined
     const ssh =
       status?.state === 'listening'
         ? {
@@ -128,7 +132,7 @@ async function pair(socket: string): Promise<number> {
       client,
       { write: out, live: process.stdout.isTTY === true, ask: questions.ask },
       stop.signal,
-      { ssh },
+      { ssh, ownRelayWeb: own?.web ? own.url : null },
     )
   } catch (error) {
     if (error instanceof ControlError) throw new Failure(error.message)
@@ -199,6 +203,72 @@ async function terminal(
         ? await callControl(socket, 'terminal.get', undefined)
         : await callControl(socket, 'terminal.set', { allowed: command.allowed })
     out(terminalReport(report.allowed))
+    return 0
+  } catch (error) {
+    if (error instanceof NotRunning) throw new Failure(error.message, NOT_RUNNING)
+    if (error instanceof ControlError) throw new Failure(error.message)
+    throw error
+  }
+}
+
+/** What a check of the owner's relay that did not pass says, by its problem. */
+const RELAY_PROBLEMS: Record<OwnRelayProblem, string> = {
+  address: 'That is not a relay address. Paste the link the relay printed.',
+  kettu: 'That is the Kettu relay. Run kettu relay kettu to use it.',
+  http: 'Use https. Only a relay on this computer itself may use http.',
+  key: 'The link has no access key. On the relay, kettu-relay link prints the link with its key.',
+  unreachable: 'Cannot reach the relay. Check that it runs and that its port is open.',
+  certificate: 'The relay showed a certificate that is not valid, or not the pinned one.',
+  not_kettu: 'That address does not answer as a Kettu relay.',
+  protocol: 'That relay speaks another protocol. Update the relay or this computer.',
+  no_access_key: 'That relay takes no access key, so it is not a relay of your own.',
+  key_refused:
+    'The relay refused this key. On the relay, kettu-relay link prints the link with its current key.',
+}
+
+/** The relay as `kettu relay` says it. */
+function relayLine(report: RelayReport): string {
+  if (report.state === 'off') return 'No relay: devices connect directly, over a VPN or over SSH.\n'
+  if (report.state === 'signed_out') {
+    return 'The Kettu relay, once this computer is signed in: run kettu login.\n'
+  }
+  const state = report.relays[0]?.connection.state ?? 'connecting'
+  if (report.own) {
+    const { url, rtt, version, pinned } = report.own
+    const facts = [
+      state === 'connected' ? 'connected' : state,
+      ...(rtt === null ? [] : [`${rtt} ms`]),
+      ...(version ? [`relay ${version}`] : []),
+      ...(pinned ? ['certificate pinned'] : []),
+    ]
+    return `Your own relay at ${url}: ${facts.join(', ')}.\n`
+  }
+  const connected = report.relays.some(({ connection }) => connection.state === 'connected')
+  return `The Kettu relay: ${connected ? 'connected' : state}.\n`
+}
+
+/** `kettu relay`, with `use`, `kettu` or `off` to change it, through the running daemon. */
+async function relay(
+  socket: string,
+  command: Extract<Command, { kind: 'relay' | 'relay-use' | 'relay-set' }>,
+): Promise<number> {
+  try {
+    if (command.kind === 'relay-use') {
+      const result = await callControl(socket, 'relay.use', { link: command.link }, 60_000)
+      if (!result.ok) {
+        process.stderr.write(`kettu: ${RELAY_PROBLEMS[result.problem]}\n`)
+        return 1
+      }
+      out(
+        `Using your own relay at ${result.url}. Devices online now moved over with this computer.\n`,
+      )
+      return 0
+    }
+    const report =
+      command.kind === 'relay'
+        ? await callControl(socket, 'relay.get', undefined)
+        : await callControl(socket, 'relay.set', { choice: command.choice })
+    out(relayLine(report))
     return 0
   } catch (error) {
     if (error instanceof NotRunning) throw new Failure(error.message, NOT_RUNNING)
@@ -631,6 +701,11 @@ async function run(command: Exclude<Command, { kind: 'help' | 'version' | 'usage
     case 'terminal':
     case 'terminal-set':
       return terminal(socket, command)
+
+    case 'relay':
+    case 'relay-use':
+    case 'relay-set':
+      return relay(socket, command)
 
     case 'report':
       return report(socket, data, logDir, command)

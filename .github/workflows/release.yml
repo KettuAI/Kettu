@@ -153,13 +153,16 @@ jobs:
       - name: Package the daemon
         if: runner.os != 'Windows' && matrix.target != '--mac --x64'
         run: node tools/daemon/package.mjs --out daemon-package
-      # The hosted web client is the same on every runner, so one of them builds it.
-      - name: Package the hosted web client
+      # The hosted web client and the one a self-hosted relay serves are the same on every runner,
+      # so one of them builds both; the relay downloads its own and checks it against this list.
+      - name: Package the web clients
         if: matrix.target == '--linux --x64'
         run: |
           pnpm build:web:hosted
           tar -czf kettu-web.tar.gz -C out/web-hosted .
-          sha256sum kettu-web.tar.gz > kettu-web-sha256sums.txt
+          pnpm build:web:relay
+          tar -czf kettu-web-relay.tar.gz -C out/web-relay .
+          sha256sum kettu-web.tar.gz kettu-web-relay.tar.gz > kettu-web-sha256sums.txt
       # The Icon Composer app icon compiles only with Xcode 26's actool or later, which the macOS 15
       # image has but does not select.
       - name: Select Xcode 26 or later
@@ -264,6 +267,7 @@ jobs:
           name: release-web
           path: |
             kettu-web.tar.gz
+            kettu-web-relay.tar.gz
             kettu-web-sha256sums.txt
           if-no-files-found: error
 
@@ -320,8 +324,9 @@ jobs:
             echo "The checksums list $packages daemon packages, expected 3" >&2
             exit 1
           fi
-          # The hosted web client, with its checksum.
-          cp artifacts/release-web/kettu-web.tar.gz artifacts/release-web/kettu-web-sha256sums.txt release/
+          # The web clients, the hosted one and the relays', with their checksums.
+          cp artifacts/release-web/kettu-web.tar.gz artifacts/release-web/kettu-web-relay.tar.gz \
+            artifacts/release-web/kettu-web-sha256sums.txt release/
           # A signed macOS build lists its zip next to its dmg and ships the zip's blockmap.
           mac_files=2
           if [ "$MAC_SIGNED" = true ]; then

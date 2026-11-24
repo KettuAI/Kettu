@@ -6428,28 +6428,6 @@ export class SessionManager {
    * What ending these sessions and their sub-sessions would stop, for the ones with any: a session
    * not in memory runs nothing. Subagents count with the session that started them.
    */
-  /** The listed sessions attached to their agent now, for what uses the computer. */
-  attachedSessions(): {
-    sessionId: string
-    agentId: AgentId
-    acpSessionId: string
-    connection: AgentConnection
-  }[] {
-    const attached = []
-    for (const live of this.live.values()) {
-      const { connection, record } = live
-      if (!connection || connection.isClosed || live.prepared || live.closing) continue
-      if (record.origin === 'subagent' || !record.acpSessionId) continue
-      attached.push({
-        sessionId: live.id,
-        agentId: record.agentId,
-        acpSessionId: record.acpSessionId,
-        connection,
-      })
-    }
-    return attached
-  }
-
   runningWork(sessionIds: readonly string[]): RunningWork[] {
     const seen = new Set<string>()
     const out: RunningWork[] = []
@@ -11471,6 +11449,24 @@ export class SessionManager {
     record.archivedAt = this.now()
     this.saveRecord(sessionId)
     this.deps.events.ended(all.map((item) => item.id))
+  }
+
+  /**
+   * Archives a session for the session that started it, which is done with it, so the reports of
+   * its turns still waiting in that session's queue go too. A session that archives itself, or one
+   * the user archives, still reports: its starter may be waiting for that.
+   */
+  async archiveStarted(sessionId: string, byAgent: string): Promise<void> {
+    const starterId = this.recordOf(sessionId).startedBy
+    await this.archiveByAgent(sessionId, byAgent)
+    const starter = starterId ? this.live.get(starterId) : undefined
+    if (!starter) return
+    const { queue } = starter.thread.session
+    const rest = queue.filter((item) => !item.from?.ended || item.from.sessionId !== sessionId)
+    if (rest.length === queue.length) return
+    this.update(starter, { queue: rest, ...(rest.length === 0 ? { queuePaused: false } : {}) })
+    this.persist(starter)
+    this.touch(starter.id)
   }
 
   /**

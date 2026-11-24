@@ -70,12 +70,7 @@ import { memoryChanged } from '@renderer/stores/memory'
 import { useProjectsStore } from '@renderer/stores/projects'
 import { routinesHostClosed, routinesHostOpened, useRoutinesStore } from '@renderer/stores/routines'
 import { useIdleReleaseStore } from '@renderer/stores/idle-release'
-import {
-  hostLoadClosed,
-  hostLoadOpened,
-  receiveLoad,
-  receiveStrains,
-} from '@renderer/stores/host-load'
+import { hostLoadClosed, hostLoadOpened, receiveLoad } from '@renderer/stores/host-load'
 import { useWorkflowsStore } from '@renderer/stores/workflows'
 import { useSuggestionsStore } from '@renderer/stores/workflow-suggestions'
 import { tasksHostClosed, tasksHostOpened, useTasksStore } from '@renderer/stores/tasks'
@@ -193,10 +188,7 @@ function onHostEvent(event: HostEvent, hostId: string | null = null): void {
       useIdleReleaseStore.getState().receive(hostId, event.state)
       return
     case 'host.load':
-      receiveLoad(hostId, event.load, event.point, event.usage)
-      return
-    case 'host.status':
-      receiveStrains(hostId, event.status.strains)
+      receiveLoad(hostId, event.load)
       return
   }
   receiveArtifactEvent(event, hostId)
@@ -485,7 +477,6 @@ export function bootstrap(): Promise<unknown> {
   void loadAgents()
   void loadGitTools()
   void loadGitHubStar()
-  hostLoadOpened(null)
   // Leaving the launch view waits for the session list, not for the agents or git tools, whose
   // detection and `gh auth status` can take seconds.
   void Promise.allSettled([settingsReady, sessionState]).then(finishLaunch)

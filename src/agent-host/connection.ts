@@ -460,11 +460,6 @@ export interface AgentConnection {
   readonly systemPromptAppend?: boolean
   readonly isClosed: boolean
   close(): void
-  /**
-   * The process that runs one session alone, for an agent that starts one per session; absent or
-   * null where the session shares the agent's process.
-   */
-  processOf?(sessionId: string): number | null
 
   initialize(appVersion: string, signal?: AbortSignal): Promise<AgentInit>
   authenticate(methodId: string, client?: SignInClient): Promise<void>

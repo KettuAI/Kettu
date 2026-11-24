@@ -11,6 +11,9 @@ export const isWeb = window.kettu.client === 'web'
 /** The hosted web client, which signs in to a Kettu account and reaches its hosts through the relay. */
 export const isHosted = isWeb && window.kettu.hosted === true
 
+/** The web client a relay the owner runs serves, which reaches its hosts through that relay. */
+export const isRelayPage = isWeb && window.kettu.relayPage === true
+
 /**
  * The window's frame: macOS's traffic lights over the content, the band beside the window controls
  * on Windows and Linux, or none in a browser.

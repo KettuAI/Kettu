@@ -1,5 +1,5 @@
-// The Kettu relay in Settings › Remote access: its part of the status line, Use the Kettu relay,
-// each region's state, and the direct connections' switch, which it frees while it is in use.
+// The relay in Settings › Remote access: its part of the status line, each region of the Kettu
+// relay, and the direct connections' switch, which a relay in use frees.
 
 import { useState } from 'react'
 import { AlertCircleIcon, RefreshIcon, Tick02Icon } from '@hugeicons/core-free-icons'
@@ -49,28 +49,16 @@ export function RelaySignIn() {
   return <SetButton onClick={() => void signIn()}>{t('account.signIn')}</SetButton>
 }
 
-/** Use the Kettu relay. */
-export function RelaySwitch({ label }: { label: string }) {
-  const { useSettingsStore } = useHostScope()
-  const checked = useSettingsStore((s) => s.settings.remote.relay)
-  const [apply, error] = useApply()
-  return (
-    <>
-      <ControlError error={error} />
-      <SettingSwitch
-        label={label}
-        checked={checked}
-        onChange={(v) => apply({ remote: { relay: v } })}
-      />
-    </>
-  )
-}
-
-/** Let devices on the account find this computer and ask to be added. */
+/**
+ * Let devices on the account find this computer and ask to be added; only through the Kettu
+ * relay, which names the computer to the account.
+ */
 export function DiscoverableSwitch({ label }: { label: string }) {
   const { useSettingsStore } = useHostScope()
   const checked = useSettingsStore((s) => s.settings.remote.discoverable)
+  const ownRelay = useSettingsStore((s) => s.settings.remote.relay === 'own')
   const [apply, error] = useApply()
+  if (ownRelay) return <SettingSwitch label={label} checked={false} disabled onChange={() => {}} />
   return (
     <>
       <ControlError error={error} />
@@ -137,7 +125,9 @@ export function DirectSwitch({ label }: { label: string }) {
   const { useSettingsStore, useRemoteStore } = useHostScope()
   const enabled = useSettingsStore((s) => s.settings.remote.direct.enabled)
   const cloudOff = useCloudOffHere()
-  const free = useRemoteStore((s) => relayInUse(s.status)) && !cloudOff
+  const own = useSettingsStore((s) => s.settings.remote.relay === 'own')
+  // Local mode keeps the owner's own relay, so only the Kettu relay is off there.
+  const free = useRemoteStore((s) => relayInUse(s.status)) && (!cloudOff || own)
   const [apply, error] = useApply()
   if (!free) return <SettingSwitch label={label} checked disabled onChange={() => {}} />
   return (

@@ -281,13 +281,6 @@ export class PiConnection implements AgentConnection {
     return this.done
   }
 
-  processOf(sessionId: string): number | null {
-    const child = this.sessions.get(sessionId)?.proc?.child
-    return child && child.exitCode === null && child.signalCode === null
-      ? (child.pid ?? null)
-      : null
-  }
-
   /** A session Kettu opens for itself is never saved, so nothing of it stays in pi's history. */
   get hiddenSessions(): boolean {
     return true

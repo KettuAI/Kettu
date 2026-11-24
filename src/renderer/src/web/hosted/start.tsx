@@ -11,6 +11,7 @@ import {
   type PairingPayload,
 } from '@shared/remote/pairing'
 import type { RelayProblem } from '@shared/remote/hosts'
+import { isOwnRelay } from '@shared/remote/relay'
 import type { Hello } from '@shared/remote/protocol'
 import { useWebHostStore } from '@renderer/stores/web-host'
 import { deviceName, type BrowserDevice } from '../device-name'
@@ -226,6 +227,11 @@ async function showPairing(
   ): Promise<boolean> => {
     if (!code.relay) {
       progress({ state: 'failed', reason: 'relay_off' })
+      return false
+    }
+    // A relay the computer's owner runs has its own web client; this page never dials it.
+    if (isOwnRelay(code.relay, relayUrl)) {
+      progress({ state: 'failed', reason: 'own_relay' })
       return false
     }
     const key = device?.key ?? (await generateKeyPair())

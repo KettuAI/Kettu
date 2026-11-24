@@ -15,6 +15,7 @@ import {
   NEW_SESSION_LISTS,
   ZOOM_LEVELS,
   type SidebarPage,
+  type RelayChoice,
   type SettingsFile,
   type SettingsPatch,
 } from './settings'
@@ -1647,20 +1648,27 @@ const ENTRIES = {
   'remote.relay': {
     section: 'remote',
     row: 'relay',
-    group: 'remote.groups.advanced',
-    name: 'remote.relay.name',
-    description: 'remote.relay.description',
+    group: 'remote.groups.relay',
+    name: 'remote.relay.group',
+    description: 'remote.relay.groupDescription',
     keywords: 'remote.relay.keywords',
     part: 'host',
     access: 'ask',
     warning: 'agentSettings.warning.relay',
-    on: (ctx) => ctx.cloud,
-    ...flag('remote', 'relay', (file) => file.remote.relay),
+    kind: 'choice',
+    // Your own relay is chosen once its check passed, which Use this relay runs.
+    options: (ctx) =>
+      choices(
+        ctx.cloud ? ['kettu', 'own', 'off'] : ['own', 'off'],
+        (value) => `remote.relay.choice.${value}.name`,
+      ),
+    get: (file) => file.remote.relay,
+    patch: (value) => ({ remote: { relay: value as RelayChoice } }),
   },
   'remote.relay-regions': {
     section: 'remote',
     row: 'relay-regions',
-    group: 'remote.groups.advanced',
+    group: 'remote.groups.relay',
     name: 'remote.relay.regions',
     description: 'remote.relay.regionsDescription',
     keywords: 'remote.relay.keywords',

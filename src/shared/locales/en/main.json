@@ -286,6 +286,7 @@
   },
   "settings": {
     "tooManyServers": "Kettu keeps at most {{max}} servers",
+    "ownRelayUnset": "Choose your own relay with Use this relay first, so Kettu can check it.",
     "tooManySkills": "Kettu keeps at most {{max}} skills",
     "repeatedServer": "“{{name}}” repeats another server’s name",
     "repeatedSkill": "“{{name}}” repeats another skill’s name",

@@ -64,8 +64,8 @@ export const IMAGE_REFS_FEATURE = 'image-refs'
 export const TOOL_DIGESTS_FEATURE = 'tool-digests'
 
 /**
- * The welcome's feature of a host that reads its load: `host.load.watch`, `host.load.unwatch` and
- * `host.status`. An older host has none of them.
+ * The welcome's feature of a host that reads its load: `host.load.watch` and `host.load.unwatch`.
+ * An older host has neither.
  */
 export const LOAD_FEATURE = 'load'
 
@@ -190,6 +190,24 @@ export interface Pace {
  */
 export interface Resync {
   type: 'resync'
+}
+
+/**
+ * The host moves to another relay, or to none: sent to each welcomed device before it signs out of
+ * the one it used, so the device reaches it through the new one from then on. Older devices
+ * ignore it and learn the new relay from their next welcome.
+ */
+export interface RelayMoved {
+  type: 'relay'
+  relay: HostRelay | null
+}
+
+/** The relay of a `relay` message: a relay, null for none, or undefined when it is not one. */
+export function parseRelayMoved(value: unknown): HostRelay | null | undefined {
+  const { type, relay } = (value ?? {}) as Record<string, unknown>
+  if (type !== 'relay') return undefined
+  if (relay === null) return null
+  return parseHostRelay(relay) ?? undefined
 }
 
 /** The host's direct addresses again, sent to each welcomed device whenever they change. */

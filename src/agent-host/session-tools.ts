@@ -94,7 +94,7 @@ export interface SessionToolsDeps {
   work(sessionId: string): RunningWork[]
   /** Archives the caller once its running turn ends, unless that turn left work running. */
   archiveAfterTurn(sessionId: string, agentName: string): void
-  /** Archives a session that is not working, at once. */
+  /** Archives a session the caller started, not working, at once; its waiting reports go too. */
   archiveNow(sessionId: string, agentName: string): Promise<void>
   /** Starts a sub-session of the caller with its first prompt and start values; returns its id. */
   start(

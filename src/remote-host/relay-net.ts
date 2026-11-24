@@ -9,6 +9,12 @@ import net from 'node:net'
 import type { Duplex } from 'node:stream'
 import tls from 'node:tls'
 import { WebSocket as WsWebSocket } from 'ws'
+import {
+  RelayReachError,
+  checkOwnRelay,
+  type OwnRelayCheck,
+  type OwnRelayCheckOptions,
+} from '@shared/remote/own-relay'
 import { MAX_RELAY_MESSAGE, encodeRelayBytes } from '@shared/remote/relay'
 
 /** The pin of a certificate: the base64url SHA-256 of its SubjectPublicKeyInfo in DER. */
@@ -159,4 +165,52 @@ export function jsonOf(text: string): unknown {
   } catch {
     return null
   }
+}
+
+/** The errors Node.js gives for a certificate it does not trust, by their codes. */
+const CERTIFICATE_CODES = new Set([
+  'CERT_HAS_EXPIRED',
+  'CERT_NOT_YET_VALID',
+  'DEPTH_ZERO_SELF_SIGNED_CERT',
+  'SELF_SIGNED_CERT_IN_CHAIN',
+  'UNABLE_TO_VERIFY_LEAF_SIGNATURE',
+  'UNABLE_TO_GET_ISSUER_CERT_LOCALLY',
+  'ERR_TLS_CERT_ALTNAME_INVALID',
+])
+
+function certificateFailure(error: unknown): boolean {
+  for (let at = error as { code?: unknown; cause?: unknown } | undefined; at;) {
+    if (at instanceof PinMismatch) return true
+    if (typeof at.code === 'string' && CERTIFICATE_CODES.has(at.code)) return true
+    at = at.cause as typeof at
+  }
+  return false
+}
+
+/** How long reading a relay's `GET /v1` may take. */
+const RELAY_INFO_TIMEOUT_MS = 15_000
+
+/**
+ * A relay's `GET /v1`, through its pin when it has one; rejects with a RelayReachError that says
+ * whether the relay could not be reached or showed a certificate that is not valid or pinned.
+ */
+export async function readRelayInfo(url: string, pin?: string): Promise<unknown> {
+  let response: RelayResponse
+  try {
+    response = await relayRequest(url, {
+      ...(pin ? { pin } : {}),
+      timeoutMs: RELAY_INFO_TIMEOUT_MS,
+    })
+  } catch (error) {
+    throw new RelayReachError(certificateFailure(error) ? 'certificate' : 'unreachable')
+  }
+  if (response.status !== 200) return null
+  return jsonOf(response.text)
+}
+
+/** Checks the owner's relay from this computer, as `checkOwnRelay` does. */
+export function checkRelayHere(
+  options: Omit<OwnRelayCheckOptions, 'fetchInfo' | 'openSocket'>,
+): Promise<OwnRelayCheck> {
+  return checkOwnRelay({ ...options, fetchInfo: readRelayInfo, openSocket: openRelaySocket })
 }

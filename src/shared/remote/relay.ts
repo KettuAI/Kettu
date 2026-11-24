@@ -156,6 +156,15 @@ export const DRAIN_FEATURE = 'drain'
 /** The main relay takes the daily round trip reports on `POST /v1/reports`. */
 export const REPORTS_FEATURE = 'reports'
 
+/**
+ * A relay the owner runs: hosts sign in with its access key in place of an account's token, and
+ * devices connect with no token, since the host alone decides inside the channel who may connect.
+ */
+export const ACCESS_KEY_FEATURE = 'access-key'
+
+/** The relay serves the web client on its own origin, its pairing page at `/pair`. */
+export const WEB_FEATURE = 'web'
+
 /** The longest name a profile carries. */
 export const MAX_PROFILE_NAME = 64
 
@@ -172,9 +181,10 @@ const MAX_FEATURE = 32
 
 /**
  * What a device sends first, and what the relay answers once the host accepted; with DRAIN_FEATURE
- * among its features, the relay may later send `drain` on the joined socket as text.
+ * among its features, the relay may later send `drain` on the joined socket as text. A device
+ * sends no token to a relay with ACCESS_KEY_FEATURE, which joins any device to the host.
  */
-export type DeviceToRelay = { type: 'connect'; token: string; features?: string[] }
+export type DeviceToRelay = { type: 'connect'; token?: string; features?: string[] }
 export type RelayToDevice = { type: 'joined' } | { type: 'drain' }
 
 /** A region `GET /v1` lists, or one of the signed list with the pin of its certificate. */
@@ -195,6 +205,8 @@ export interface RelayInfo {
   regions: RelayRegion[]
   /** What the relay offers beyond the protocol, as HOSTS_FEATURE; none from an older relay. */
   features: string[]
+  /** The relay program's version, which a relay the owner runs says; null when it says none. */
+  version: string | null
 }
 
 function toBase64Url(bytes: Uint8Array): string {
@@ -329,9 +341,11 @@ const REGION_ID = /^[a-z0-9][a-z0-9-]{0,31}$/
 export function parseRelayInfo(value: unknown): RelayInfo | null {
   if (typeof value !== 'object' || value === null) return null
   const { relay, protocol, regions, features } = value as Record<string, unknown>
-  if (relay !== 'kettu' || protocol !== RELAY_PROTOCOL || !Array.isArray(regions)) return null
+  // A relay the owner runs has no regions, and may leave the list out.
+  if (relay !== 'kettu' || protocol !== RELAY_PROTOCOL) return null
+  if (regions !== undefined && !Array.isArray(regions)) return null
   const kept: RelayRegion[] = []
-  for (const region of regions.slice(0, MAX_REGIONS)) {
+  for (const region of (regions ?? []).slice(0, MAX_REGIONS)) {
     const { id, url } = (region ?? {}) as Record<string, unknown>
     if (typeof id !== 'string' || !REGION_ID.test(id) || typeof url !== 'string') continue
     const origin = relayOrigin(url)
@@ -345,7 +359,10 @@ export function parseRelayInfo(value: unknown): RelayInfo | null {
             typeof feature === 'string' && feature.length > 0 && feature.length <= MAX_FEATURE,
         )
     : []
-  return { relay, protocol, regions: kept, features: offered }
+  const { version } = value as Record<string, unknown>
+  const said =
+    typeof version === 'string' && /^[0-9A-Za-z.+-]{1,32}$/.test(version) ? version : null
+  return { relay, protocol, regions: kept, features: offered, version: said }
 }
 
 const isProfileName = (value: unknown): value is string =>
@@ -457,11 +474,12 @@ export function parseHostToRelay(text: unknown): HostToRelay | null {
   return { type: 'sign-in', publicKey, signature, token }
 }
 
-/** A device's first message, as the relay reads it. */
+/** A device's first message, as the relay reads it; without a token for a relay that takes none. */
 export function parseDeviceToRelay(text: unknown): DeviceToRelay | null {
   const message = parseJson(text)
-  if (message?.type !== 'connect' || !isAccessToken(message.token)) return null
-  const { features } = message
+  if (message?.type !== 'connect') return null
+  const { token, features } = message
+  if (token !== undefined && !isAccessToken(token)) return null
   if (features !== undefined && !Array.isArray(features)) return null
   const kept = (features ?? [])
     .slice(0, MAX_FEATURES)
@@ -469,14 +487,21 @@ export function parseDeviceToRelay(text: unknown): DeviceToRelay | null {
       (feature): feature is string =>
         typeof feature === 'string' && feature.length > 0 && feature.length <= MAX_FEATURE,
     )
-  return kept.length > 0
-    ? { type: 'connect', token: message.token, features: kept }
-    : { type: 'connect', token: message.token }
+  return {
+    type: 'connect',
+    ...(token === undefined ? {} : { token }),
+    ...(kept.length > 0 ? { features: kept } : {}),
+  }
 }
 
-/** A device's `connect`, asking the relay to say when the region drains. */
-export function connectMessage(token: string): DeviceToRelay {
-  return { type: 'connect', token, features: [DRAIN_FEATURE] }
+/**
+ * A device's `connect`, asking the relay to say when the region drains; with no token for a relay
+ * the host's owner runs, which must never get the account's.
+ */
+export function connectMessage(token: string | null): DeviceToRelay {
+  return token === null
+    ? { type: 'connect', features: [DRAIN_FEATURE] }
+    : { type: 'connect', token, features: [DRAIN_FEATURE] }
 }
 
 /** Whether a text message from the relay on a device's socket is `joined`. */
@@ -494,21 +519,36 @@ export function newRelayToken(): string {
   return toBase64Url(crypto.getRandomValues(new Uint8Array(32)))
 }
 
-/** Where a host is on the relay: its id and its relays' origins in order. */
+/**
+ * Where a host is on the relay: its id and its relays' origins in order. A host on a relay its
+ * owner runs names that one alone, with the pin of its certificate when it is at an address.
+ */
 export interface HostRelay {
   id: string
   urls: string[]
+  /** The pin of the first relay's certificate, which alone vouches for it. */
+  pin?: string
 }
 
 /** A host's relay as a welcome or a stored host carries it, or null when it is not one. */
 export function parseHostRelay(value: unknown): HostRelay | null {
   if (typeof value !== 'object' || value === null) return null
-  const { id, urls } = value as Record<string, unknown>
+  const { id, urls, pin } = value as Record<string, unknown>
   if (typeof id !== 'string' || !RELAY_HOST_ID.test(id) || !Array.isArray(urls)) return null
   const kept = urls
     .slice(0, MAX_REGIONS)
     .filter((url): url is string => typeof url === 'string' && relayOrigin(url) === url)
-  return { id, urls: kept }
+  const pinned =
+    typeof pin === 'string' && decodeRelayBytes(pin)?.length === 32 && kept[0]?.startsWith('https:')
+  return pinned ? { id, urls: kept, pin: pin as string } : { id, urls: kept }
+}
+
+/**
+ * Whether a host's relay is one its owner runs rather than the Kettu relay: none of the relays it
+ * names is under the main relay's domain. Such a relay is dialed with no token.
+ */
+export function isOwnRelay(relay: HostRelay, main: string): boolean {
+  return relay.urls.length > 0 && !relay.urls.some((url) => trustedRelay(url, main))
 }
 
 export const isRelayHostId = (value: unknown): value is string =>

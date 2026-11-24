@@ -9,7 +9,7 @@ import { useHostsStore } from '@renderer/stores/hosts'
 import { openSettings, openSettingsItem } from '@renderer/stores/view'
 import { AddHostDialog } from './host-add'
 import { connectionText, platformName, routeText } from './host-text'
-import { HostStrainTag, LoadColumns } from './host-load'
+import { LoadColumns } from './host-load'
 import { DeviceTile, HostIcon } from './remote-parts'
 import { deviceShape } from './remote-text'
 import { Pill, SetButton, Spin } from './controls'
@@ -78,7 +78,7 @@ export function HostState({
  */
 function HostEnd({ host }: { host: HostStatus }) {
   const online = host.connection.state === 'online'
-  useLoadWatch(host.id, false, online)
+  useLoadWatch(host.id, online)
   const live = useLiveLoad(host.id)
   return online && live ? <LoadColumns load={live.load} /> : <HostState host={host} />
 }
@@ -87,7 +87,7 @@ function HostEnd({ host }: { host: HostStatus }) {
 export function SelfRow({ self }: { self: HostsStatus['self'] }) {
   const { t } = useTranslation('settings')
   const laptop = deviceShape({ kind: 'desktop', model: self.model }) === 'laptop'
-  useLoadWatch(null, false)
+  useLoadWatch(null)
   const live = useLiveLoad(null)
   return (
     <div className="ui-sg-row">
@@ -97,7 +97,6 @@ export function SelfRow({ self }: { self: HostsStatus['self'] }) {
           <span className="k-host-title">
             <span className="k-name">{self.name || t('hosts.self.label')}</span>
             <Pill>{t('hosts.self.badge')}</Pill>
-            <HostStrainTag hostId={null} />
           </span>
         }
       >
@@ -127,12 +126,7 @@ export function HostRow({ host }: { host: HostStatus }) {
       label={host.name}
       onOpen={() => openSettingsItem('hosts', host.id)}
       tile={<DeviceTile icon={<HostIcon platform={host.platform} />} />}
-      name={
-        <span className="k-host-title">
-          <span className="k-name">{host.name}</span>
-          {host.connection.state === 'online' && <HostStrainTag hostId={host.id} />}
-        </span>
-      }
+      name={<span className="k-name">{host.name}</span>}
       right={<HostEnd host={host} />}
     >
       <ItemLine>{routeText(t, host)}</ItemLine>

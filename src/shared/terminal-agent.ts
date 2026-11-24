@@ -81,18 +81,6 @@ export type TerminalCall =
       passwords?: boolean
     }
 
-/** A terminal's shell, for what uses the computer. */
-export interface TerminalProcess {
-  id: string
-  /** The session it serves; null for its project's New session. */
-  sessionId: string | null
-  /** As its tab names it. */
-  name: string
-  /** The shell's program, such as "zsh", which names it where the tab's name may not go. */
-  shell: string
-  pid: number
-}
-
 /** A terminal as the agent sees it. */
 export interface AgentTerminal {
   id: string
@@ -134,22 +122,6 @@ export type TerminalCallErrorCode =
 
 export type TerminalCallAnswer =
   { result: TerminalCallResult } | { error: { code: TerminalCallErrorCode; message: string } }
-
-/**
- * What the agent host asks of the terminal host: an agent's tool call, or every terminal's shell
- * for what uses the computer, which only the agent host's own reads ask for.
- */
-export type TerminalHostCall = TerminalCall | { kind: 'processes' }
-
-/** `devices`: the owner lets devices use the terminals, so they may see the tabs' names. */
-export type TerminalHostAnswer =
-  | TerminalCallAnswer
-  | { result: { kind: 'processes'; terminals: TerminalProcess[]; devices: boolean } }
-
-/** The answer for a terminal host that is not running. */
-export const NO_TERMINAL_PROCESSES: TerminalHostAnswer = {
-  result: { kind: 'processes', terminals: [], devices: false },
-}
 
 /** How long main waits for the terminal host's answer: a held call returns after CONTROL_WAIT_MS. */
 export const TERMINAL_CALL_TIMEOUT_MS = CONTROL_WAIT_MS + 15_000

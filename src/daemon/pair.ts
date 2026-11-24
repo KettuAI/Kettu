@@ -5,6 +5,7 @@
 import { renderUnicodeCompact } from 'uqr'
 import {
   browserPairingLink,
+  ownRelayPairingLink,
   parsePairingLink,
   type PairingDevice,
   type PairingEnd,
@@ -43,6 +44,8 @@ export interface SshForward {
 export interface PairOptions {
   now?: () => number
   ssh?: SshForward | null
+  /** The owner's own relay when it serves the web client, which a browser pairs on. */
+  ownRelayWeb?: string | null
 }
 
 const KINDS: Record<string, string> = { ios: 'iOS app', desktop: 'Desktop app', web: 'Web' }
@@ -75,10 +78,26 @@ export function sshTarget(
   return `${user}@${server || name}`
 }
 
-/** The browser links for the code's addresses, then the SSH forward and its localhost link. */
-export function browserText(payload: PairingPayload, ssh: SshForward | null): string {
+/**
+ * The browser links: the owner's own relay's when it serves the web client, then the code's
+ * addresses, then the SSH forward and its localhost link.
+ */
+export function browserText(
+  payload: PairingPayload,
+  ssh: SshForward | null,
+  ownRelayWeb: string | null = null,
+): string {
   const links = payload.addresses.flatMap((address) => browserPairingLink(address, payload) ?? [])
   let text = ''
+  const relayLink =
+    ownRelayWeb && payload.relay?.urls[0] === ownRelayWeb
+      ? ownRelayPairingLink(payload, ownRelayWeb)
+      : null
+  if (relayLink) {
+    text +=
+      'Or open this link in a browser on any network; your relay serves the web client:\n\n' +
+      `  ${relayLink}\n\n`
+  }
   if (links.length > 0) {
     text +=
       'Or open one of these links in a browser on a device on the same network or VPN:\n\n' +
@@ -108,7 +127,7 @@ export function pairDevice(
   client: ControlClient,
   terminal: PairTerminal,
   signal: AbortSignal,
-  { now = Date.now, ssh = null }: PairOptions = {},
+  { now = Date.now, ssh = null, ownRelayWeb = null }: PairOptions = {},
 ): Promise<number> {
   return new Promise((resolve, reject) => {
     let codeId: number | null = null
@@ -144,9 +163,12 @@ export function pairDevice(
         `${terminalQr(pairing.link)}\n\n` +
           'Scan it with Kettu on an iPhone or iPad. The same code as a link, which another computer\n' +
           `pastes in Kettu's Settings › Hosts › Add host…:\n\n  ${pairing.link}\n\n` +
-          (payload ? browserText(payload, ssh) : '') +
-          'It adds one device, which must reach this computer directly: on the same network, the\n' +
-          'same VPN, or at an address of your own.\n\n',
+          (payload ? browserText(payload, ssh, ownRelayWeb) : '') +
+          (payload?.relay
+            ? 'It adds one device, which reaches this computer through the relay, or directly on the\n' +
+              'same network, the same VPN or at an address of your own.\n\n'
+            : 'It adds one device, which must reach this computer directly: on the same network, the\n' +
+              'same VPN, or at an address of your own.\n\n'),
       )
       const line = (): string =>
         `Waiting for a device… the code expires in ${timeLeft(pairing.expiresAt - now())}.`

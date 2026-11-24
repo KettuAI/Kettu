@@ -29,7 +29,7 @@ import type {
 import type { PairingState } from './remote/pairing'
 import type { DirectAddress } from './remote/protocol'
 import type { ReportBuildResult, ReportRequest } from './report'
-import type { TerminalHostAnswer, TerminalHostCall } from './terminal-agent'
+import type { TerminalCall, TerminalCallAnswer } from './terminal-agent'
 import type { RelayStatus } from './remote/relay-host'
 import type {
   DirectSettings,
@@ -182,7 +182,7 @@ export type MainToHost =
   // The answer to a host:device-call, from the device host.
   | { type: 'device-result'; callId: number; answer: DeviceCallAnswer }
   // The answer to a host:terminal-call, from the terminal host.
-  | { type: 'terminal-result'; callId: number; answer: TerminalHostAnswer }
+  | { type: 'terminal-result'; callId: number; answer: TerminalCallAnswer }
   // The host's Kettu account while it is signed in with Kettu's services on, which lists the
   // Marketplace tools: right after host:init at every start, and whenever it changes.
   | { type: 'host:market-account'; account: MarketAccount | null }
@@ -415,7 +415,7 @@ export type HostToMain =
   // The turn of a session whose agent used a device ended: its devices are nobody's now.
   | { type: 'host:device-turn-ended'; sessionId: string }
   // An agent's terminal tool call for the terminal host; answered by terminal-result.
-  | { type: 'host:terminal-call'; callId: number; call: TerminalHostCall }
+  | { type: 'host:terminal-call'; callId: number; call: TerminalCall }
   // The turn of a session whose agent used a terminal ended: its terminals are nobody's now.
   | { type: 'host:terminal-turn-ended'; sessionId: string }
   // A Marketplace API call, which main or the daemon makes with the account's access token;
@@ -469,7 +469,7 @@ export type MainToTerminalHost =
   | { type: 'terminal-host:auth-commands'; commands: string[] }
   | { type: 'terminal-host:busy-request'; requestId: number }
   // An agent's terminal tool call; answered by terminal-host:answer.
-  | { type: 'terminal-host:call'; callId: number; call: TerminalHostCall }
+  | { type: 'terminal-host:call'; callId: number; call: TerminalCall }
   // The turn of a session whose agent used a terminal ended; null: every turn of the host.
   | { type: 'terminal-host:turn-ended'; sessionId: string | null }
   | { type: 'terminal-host:shutdown' }
@@ -477,7 +477,7 @@ export type MainToTerminalHost =
 export type TerminalHostToMain =
   | { type: 'terminal-host:ready' }
   | { type: 'terminal-host:busy'; requestId: number; terminals: BusyTerminal[] }
-  | { type: 'terminal-host:answer'; callId: number; answer: TerminalHostAnswer }
+  | { type: 'terminal-host:answer'; callId: number; answer: TerminalCallAnswer }
   | { type: 'terminal-host:handed-back'; sessionId: string; durationMs: number }
   | { type: 'terminal-host:stopped' }
 
@@ -600,8 +600,9 @@ export type MainToRemoteHost =
       /** The Ed25519 seed to sign in to the relay with, in base64. Never logged. */
       relayKey?: string
     }
-  // Use the Kettu relay turned on or off.
-  | { type: 'remote-host:relay'; enabled: boolean }
+  // Use the Kettu relay turned on or off, or the owner's own relay chosen, changed or left, which
+  // `own` gives in place of the Kettu relay.
+  | { type: 'remote-host:relay'; enabled: boolean; own?: OwnRelayInit | null }
   // Whether devices of the account find this host on the relay; off ends the open request.
   | { type: 'remote-host:discoverable'; enabled: boolean }
   // The owner's answer to a discovery request, with the name to add the device under.
@@ -684,6 +685,14 @@ export type MainToRemoteHost =
   // Tells every device why, then stops.
   | { type: 'remote-host:shutdown'; reason: RemoteHostStopReason }
 
+/** A relay the owner runs, which the host signs in to alone, with its access key. */
+export interface OwnRelayInit {
+  url: string
+  pin: string | null
+  /** The relay's access key. Never logged. */
+  key: string
+}
+
 /** What the remote host starts the relay with. */
 export interface RelayInit {
   /** The main relay's origin, which lists the regions. */
@@ -702,6 +711,8 @@ export interface RelayInit {
    * null or absent before. Never logged.
    */
   relayToken?: string | null
+  /** The owner's own relay, used in place of the Kettu relay; null or absent for none. */
+  own?: OwnRelayInit | null
 }
 
 /** What the remote host reports to main, for Settings. */
@@ -725,6 +736,18 @@ export interface RemoteHostStatus {
   sshPort?: number | null
   /** Each relay the host signs in to and how it is doing; none while it signs in to none. */
   relays: RelayStatus[]
+  /** The owner's own relay while it is the one in use, as its `GET /v1` and pings say. */
+  ownRelay?: OwnRelayStatus
+}
+
+/** What Settings shows of the owner's own relay beside its connection. */
+export interface OwnRelayStatus {
+  /** The relay program's version, null until it says. */
+  version: string | null
+  /** The host's round trip to it in milliseconds, null before the first. */
+  rtt: number | null
+  /** It serves the web client, which a browser pairs on. */
+  web: boolean
 }
 
 /** Direct connections, as the remote host runs them. */

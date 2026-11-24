@@ -3,10 +3,13 @@
 // id there; and `remote/device-key.json`: the pair this computer connects to other hosts with as a
 // device, separate so that resetting remote access leaves those hosts connected. Main makes each
 // the first time it is needed, keeps the private key encrypted by the system, and hands it to the
-// remote host alone.
+// remote host alone. `remote/relay-access-key.json` keeps the access key of the owner's own relay
+// the same way, once one was given.
 
 import { join } from 'node:path'
 import { generateKeyPair } from '@shared/remote/noise'
+import { rm } from 'node:fs/promises'
+import { isAccessKey } from '@shared/remote/own-relay'
 import { newRelaySeed } from '@shared/remote/relay'
 import { quarantineFile, readJsonFile, writeFileAtomic } from './json-file'
 import { createLogger } from './log'
@@ -16,6 +19,7 @@ const log = createLogger('remote-identity')
 const IDENTITY_FILE = 'identity.json'
 const RELAY_KEY_FILE = 'relay-key.json'
 const DEVICE_KEY_FILE = 'device-key.json'
+const ACCESS_KEY_FILE = 'relay-access-key.json'
 
 /** X25519 for the channel, Ed25519 for the relay; both kept as their 32 private bytes. */
 type KeyKind = 'x25519' | 'ed25519'
@@ -56,14 +60,14 @@ function isKey(text: unknown): text is string {
   return bytes.length === KEY_BYTES && bytes.toString('base64') === text
 }
 
-function parseFile(raw: unknown): IdentityFile | null {
+function parseFile(raw: unknown, valid: (text: unknown) => boolean = isKey): IdentityFile | null {
   if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return null
   const { version, privateKey, encrypted, plainText } = raw as Record<string, unknown>
   if (version !== VERSION || typeof encrypted !== 'boolean' || typeof plainText !== 'boolean') {
     return null
   }
   if (typeof privateKey !== 'string' || privateKey.length > MAX_STORED_CHARS) return null
-  if (!encrypted && !isKey(privateKey)) return null
+  if (!encrypted && !valid(privateKey)) return null
   return { version, privateKey, encrypted, plainText }
 }
 
@@ -179,4 +183,40 @@ export async function newRelayKey(
   cipher: IdentityCipher,
 ): Promise<RemoteIdentity> {
   return keep(join(userDataPath, 'remote', RELAY_KEY_FILE), await newKey('ed25519'), cipher)
+}
+
+/**
+ * The access key of the owner's own relay, kept like the private keys; null when none was given,
+ * or the file is not one, which then waits for the owner to give the key again.
+ */
+export async function loadAccessKey(
+  userDataPath: string,
+  cipher: IdentityCipher,
+): Promise<string | null> {
+  const path = join(userDataPath, 'remote', ACCESS_KEY_FILE)
+  const read = await readJsonFile(path)
+  if (read.kind === 'missing') return null
+  const file = read.kind === 'ok' ? parseFile(read.value, isAccessKey) : null
+  if (!file) {
+    log.warn(`remote/${ACCESS_KEY_FILE} is invalid; the relay's access key is needed again`)
+    log.warn(`Moved the invalid file to ${await quarantineFile(path)}`)
+    return null
+  }
+  if (!file.encrypted) return file.privateKey
+  const { result, shouldReEncrypt } = await cipher.decrypt(Buffer.from(file.privateKey, 'base64'))
+  if (!isAccessKey(result)) throw new Error(`remote/${ACCESS_KEY_FILE} does not decrypt to a key`)
+  if (shouldReEncrypt) await keep(path, result, cipher)
+  return result
+}
+
+/** Keeps the own relay's access key in place of the one before, or removes it for null. */
+export async function saveAccessKey(
+  userDataPath: string,
+  cipher: IdentityCipher,
+  key: string | null,
+): Promise<void> {
+  const path = join(userDataPath, 'remote', ACCESS_KEY_FILE)
+  if (key === null) return rm(path, { force: true })
+  if (!isAccessKey(key)) throw new Error('Not an access key')
+  await keep(path, key, cipher)
 }
