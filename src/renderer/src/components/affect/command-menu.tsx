@@ -416,7 +416,6 @@ export function CommandMenu({
   const id = "ui-cmc" + useId().replace(/[^a-zA-Z0-9_-]/g, "");
   const input = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
-  const scopesRef = useRef<HTMLDivElement>(null);
   const innerRef = useRef<HTMLDivElement>(null);
   const [listHeight, setListHeight] = useState(0);
   const [query, setQuery] = useState("");
@@ -517,11 +516,6 @@ export function CommandMenu({
   useEffect(() => {
     if (autoFocus) input.current?.focus();
   }, [autoFocus]);
-
-  // The scope row scrolls when its tabs do not fit; the chosen one stays in view
-  useEffect(() => {
-    scopesRef.current?.querySelector<HTMLElement>('[aria-selected="true"]')?.scrollIntoView({ block: "nearest", inline: "nearest" });
-  }, [scope]);
 
   // A short confirmation in the last row after running a command
   useEffect(() => {
@@ -630,7 +624,7 @@ export function CommandMenu({
         </label>
 
         {scopes?.length ? (
-          <div ref={scopesRef} className="ui-cmc__scopes" role="tablist" aria-label={labels?.scopes ?? "Search in"}>
+          <div className="ui-cmc__scopes" role="tablist" aria-label={labels?.scopes ?? "Search in"}>
             {scopes.map((s) => (
               <button
                 key={s.id}

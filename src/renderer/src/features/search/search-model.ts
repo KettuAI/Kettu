@@ -44,14 +44,7 @@ export const SEARCH_ACTIONS: readonly SearchAction[] = [
 ]
 
 export type SearchScope =
-  | 'all'
-  | 'sessions'
-  | 'conversations'
-  | 'artifacts'
-  | 'routines'
-  | 'projects'
-  | 'settings'
-  | 'actions'
+  'all' | 'sessions' | 'conversations' | 'artifacts' | 'routines' | 'projects' | 'settings'
 
 export const SCOPES: readonly SearchScope[] = [
   'all',
@@ -61,17 +54,15 @@ export const SCOPES: readonly SearchScope[] = [
   'routines',
   'projects',
   'settings',
-  'actions',
 ]
 
-const SCOPE_KINDS: Record<Exclude<SearchScope, 'all'>, readonly SearchKind[]> = {
-  sessions: ['session'],
-  conversations: ['conversation'],
-  artifacts: ['artifact'],
-  routines: ['routine'],
-  projects: ['project'],
-  settings: ['section'],
-  actions: ['action', 'pluginAction'],
+const SCOPE_KIND: Record<Exclude<SearchScope, 'all'>, SearchKind> = {
+  sessions: 'session',
+  conversations: 'conversation',
+  artifacts: 'artifact',
+  routines: 'routine',
+  projects: 'project',
+  settings: 'section',
 }
 
 /** The order of the groups while All shows matches. */
@@ -167,8 +158,16 @@ export interface ResultGroup {
   plugin?: SearchPlugin
 }
 
-/** A group of one kind, or for plugin actions a group for each plugin that has some. */
-function groupsOf(kind: SearchKind, found: readonly SearchEntry[], limit: number): ResultGroup[] {
+/**
+ * A group of one kind, or for plugin actions a group for each plugin that has some; a plugin's
+ * group in `expanded` lists all its matches.
+ */
+function groupsOf(
+  kind: SearchKind,
+  found: readonly SearchEntry[],
+  limit: number,
+  expanded: ReadonlySet<string>,
+): ResultGroup[] {
   if (found.length === 0) return []
   if (kind !== 'pluginAction') {
     return [{ key: kind, items: found.slice(0, limit), total: found.length }]
@@ -181,7 +180,7 @@ function groupsOf(kind: SearchKind, found: readonly SearchEntry[], limit: number
   }
   return [...byPlugin].map(([key, items]) => ({
     key,
-    items: items.slice(0, limit),
+    items: expanded.has(key) ? items : items.slice(0, limit),
     total: items.length,
     ...(items[0]?.kind === 'pluginAction' && { plugin: items[0].plugin }),
   }))
@@ -194,6 +193,8 @@ export interface SearchResults {
   /** The folded words of the query, for marking. */
   words: string[]
 }
+
+const NO_GROUPS: ReadonlySet<string> = new Set()
 
 /** The text that matching reads for an entry: its title, meta and anything else it is found by. */
 export function haystackOf(...parts: readonly (string | null | undefined)[]): string {
@@ -235,6 +236,7 @@ export function runSearch(
   entries: readonly SearchEntry[],
   query: string,
   scope: SearchScope,
+  expanded: ReadonlySet<string> = NO_GROUPS,
 ): SearchResults {
   const words = queryWords(query)
   const found =
@@ -261,14 +263,16 @@ export function runSearch(
     routines: byKind.get('routine')?.length ?? 0,
     projects: byKind.get('project')?.length ?? 0,
     settings: byKind.get('section')?.length ?? 0,
-    actions: (byKind.get('action')?.length ?? 0) + (byKind.get('pluginAction')?.length ?? 0),
   }
 
   const groups: ResultGroup[] = []
   if (scope !== 'all') {
-    const limit = words.length === 0 ? SCOPE_EMPTY_LIMIT : SCOPE_LIMIT
-    for (const kind of SCOPE_KINDS[scope])
-      groups.push(...groupsOf(kind, byKind.get(kind) ?? [], limit))
+    const kind = SCOPE_KIND[scope]
+    const items = byKind.get(kind) ?? []
+    if (items.length > 0) {
+      const limit = words.length === 0 ? SCOPE_EMPTY_LIMIT : SCOPE_LIMIT
+      groups.push({ key: kind, items: items.slice(0, limit), total: items.length })
+    }
   } else if (words.length === 0) {
     const recent = found.filter((entry) => RECENT_KINDS.has(entry.kind)).sort(byRecency)
     if (recent.length > 0) {
@@ -277,10 +281,12 @@ export function runSearch(
     }
     const actions = byKind.get('action') ?? []
     if (actions.length > 0) groups.push({ key: 'action', items: actions, total: actions.length })
-    groups.push(...groupsOf('pluginAction', byKind.get('pluginAction') ?? [], ALL_GROUP_LIMIT))
+    groups.push(
+      ...groupsOf('pluginAction', byKind.get('pluginAction') ?? [], ALL_GROUP_LIMIT, expanded),
+    )
   } else {
     for (const kind of GROUP_ORDER) {
-      groups.push(...groupsOf(kind, byKind.get(kind) ?? [], ALL_GROUP_LIMIT))
+      groups.push(...groupsOf(kind, byKind.get(kind) ?? [], ALL_GROUP_LIMIT, expanded))
     }
   }
   return { groups, counts, words }

@@ -168,34 +168,34 @@ function openEntry(entry: SearchEntry): void {
   }
 }
 
-const SCOPE_OF_KIND: Partial<Record<SearchKind, Exclude<SearchScope, 'all'>>> = {
+const SCOPE_OF_KIND: Partial<Record<ResultGroup['key'], Exclude<SearchScope, 'all'>>> = {
   session: 'sessions',
   conversation: 'conversations',
   artifact: 'artifacts',
   routine: 'routines',
   project: 'projects',
   section: 'settings',
-  action: 'actions',
-}
-
-/** The scope that lists a group in full; each plugin's group is one of Actions'. */
-function scopeOfGroup(key: ResultGroup['key']): Exclude<SearchScope, 'all'> | undefined {
-  return key.startsWith('plugin:') ? 'actions' : SCOPE_OF_KIND[key as SearchKind]
 }
 
 // A row that switches to its group's scope, "Show all 12".
 const SHOW_ALL = 'scope:'
+// A row that lists the rest of a plugin's actions in place, "Show all 12".
+const EXPAND = 'expand:'
 
 function SearchPalette() {
   const { t } = useTranslation(['sidebar', 'common'])
   const found = useSearchEntries()
   const [query, setQuery] = useState('')
   const [scope, setScope] = useState<SearchScope>('all')
+  const [expanded, setExpanded] = useState<ReadonlySet<string>>(new Set())
   const conversations = useConversationHits(query)
   const others = useOtherHosts()
   const said = useConversationEntries(conversations.hits)
   const entries = useMemo(() => [...found, ...said], [found, said])
-  const results = useMemo(() => runSearch(entries, query, scope), [entries, query, scope])
+  const results = useMemo(
+    () => runSearch(entries, query, scope, expanded),
+    [entries, query, scope, expanded],
+  )
   const byKey = useMemo(() => new Map(entries.map((entry) => [entry.key, entry])), [entries])
   const trimmed = query.trim()
   const { words } = results
@@ -218,26 +218,30 @@ function SearchPalette() {
   const artifactsLoaded = useArtifactsStore((s) => s.list !== null)
 
   const groups: CommandGroup[] = results.groups.map((group) => {
-    const scopeOf = scopeOfGroup(group.key)
-    // Actions has several groups, so each keeps its own name; any other scope has one.
-    const named = scope === 'all' || scope === 'actions'
+    const scopeOf = SCOPE_OF_KIND[group.key]
     const label = group.plugin
       ? group.plugin.title
-      : named
+      : scope === 'all'
         ? t(`search.group.${group.key as Exclude<SearchKind, 'pluginAction'> | 'recent'}`)
         : trimmed
           ? t('search.results', { count: group.total })
           : t(`search.latest.${scope}`)
+    const rest = group.total > group.items.length
+    const showAll = (id: string): Command[] => [
+      {
+        id,
+        label: t('search.showAll', { count: group.total }),
+        icon: <Icon icon={ArrowRight01Icon} size={16} />,
+      },
+    ]
     const more: Command[] =
-      scope === 'all' && scopeOf && group.total > group.items.length
-        ? [
-            {
-              id: `${SHOW_ALL}${scopeOf}`,
-              label: t('search.showAll', { count: group.total }),
-              icon: <Icon icon={ArrowRight01Icon} size={16} />,
-            },
-          ]
-        : []
+      scope !== 'all' || !rest
+        ? []
+        : group.plugin
+          ? showAll(`${EXPAND}${group.key}`)
+          : scopeOf
+            ? showAll(`${SHOW_ALL}${scopeOf}`)
+            : []
     const logo = group.plugin && (
       <PluginTile name={group.plugin.name} icon={group.plugin.icon} size={14} />
     )
@@ -366,6 +370,9 @@ function SearchPalette() {
       onClose={() => showSearch(false)}
       onRun={(id) => {
         if (id.startsWith(SHOW_ALL)) return setScope(id.slice(SHOW_ALL.length) as SearchScope)
+        if (id.startsWith(EXPAND)) {
+          return setExpanded((open) => new Set(open).add(id.slice(EXPAND.length)))
+        }
         const entry = byKey.get(id)
         if (!entry) return
         showSearch(false)

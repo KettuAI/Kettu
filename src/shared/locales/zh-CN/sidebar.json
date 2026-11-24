@@ -28,8 +28,7 @@
       "artifacts": "产物",
       "routines": "定时任务",
       "projects": "项目",
-      "settings": "设置",
-      "actions": "操作"
+      "settings": "设置"
     },
     "group": {
       "recent": "最近",
@@ -68,8 +67,7 @@
       "artifacts": "还没有产物。",
       "routines": "还没有定时任务。",
       "projects": "还没有项目。",
-      "settings": "这里没有内容。",
-      "actions": "还没有操作。"
+      "settings": "这里没有内容。"
     },
     "loading": "正在加载…",
     "searching": "正在搜索对话…",
@@ -88,8 +86,7 @@
       "artifacts": "最近的产物",
       "routines": "最近的定时任务",
       "projects": "最近的项目",
-      "settings": "全部设置",
-      "actions": "全部操作"
+      "settings": "全部设置"
     },
     "matches_other": "{{count}} 条消息",
     "indexing": "正在为对话建立索引（{{percent}}%），已建好的部分可以搜。",

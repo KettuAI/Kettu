@@ -28,8 +28,7 @@
       "artifacts": "Artifacts",
       "routines": "Routines",
       "projects": "Projects",
-      "settings": "Settings",
-      "actions": "Actions"
+      "settings": "Settings"
     },
     "group": {
       "recent": "Recent",
@@ -70,8 +69,7 @@
       "artifacts": "No artifacts yet.",
       "routines": "No routines yet.",
       "projects": "No projects yet.",
-      "settings": "Nothing here.",
-      "actions": "No actions."
+      "settings": "Nothing here."
     },
     "loading": "Loading…",
     "searching": "Searching conversations…",
@@ -91,8 +89,7 @@
       "artifacts": "Latest artifacts",
       "routines": "Latest routines",
       "projects": "Latest projects",
-      "settings": "All settings",
-      "actions": "All actions"
+      "settings": "All settings"
     },
     "matches_one": "{{count}} message",
     "matches_other": "{{count}} messages",
