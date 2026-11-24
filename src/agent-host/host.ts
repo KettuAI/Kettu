@@ -100,6 +100,7 @@ import { listedModels } from './claude/user-settings'
 import { STOP_TIMINGS } from './agent-process'
 import { AgentTrees } from './agent-trees'
 import { readImport } from './artifacts/import'
+import { PluginTemplates } from './artifacts/plugin-templates'
 import { ArtifactConsents } from './artifacts/runtime/consent'
 import type { DeclaredArtifact } from './artifacts/runtime/calls'
 import { ArtifactData } from './artifacts/runtime/data'
@@ -1079,6 +1080,7 @@ export class AgentHost {
       data: this.artifactData,
       store: this.artifacts,
       types: this.artifactTypes,
+      templates: new PluginTemplates({ resources: () => this.plugins.resources('templates'), log }),
       sessionTitle: (sessionId) => this.sessions.title(sessionId),
       runningTurn: (sessionId) => this.sessions.runningTurn(sessionId),
       sessionOf: (process, id) => this.sessions.sessionOf(process, id),
