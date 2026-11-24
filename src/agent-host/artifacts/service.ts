@@ -106,6 +106,8 @@ import {
   SkillTools,
   type SkillToolsDeps,
 } from '../marketplace/skill-tools'
+import { isPluginToolName } from '@shared/plugins'
+import type { PluginTools } from '../plugin-runtime/tools'
 import { artifactWrite, type ArtifactWrite } from './entries'
 import type { ArtifactData } from './runtime/data'
 import { DATA_TOOLS, DataTools, isDataToolName } from './runtime/data-tools'
@@ -239,6 +241,8 @@ export interface ArtifactServiceDeps extends ArtifactToolsDeps {
   market?: MarketTools
   /** Kettu's settings tools; without them the service lists none. */
   settings?: SettingsTools
+  /** The tools the plugins that are on give agents; without it the service lists none. */
+  plugins?: PluginTools
   /** The skills behind the skill tools, which only an agent that loads no skill folders gets. */
   skills?: SkillToolsDeps
   /** The proxy to the Marketplace's OAuth servers, under its own paths; without it none. */
@@ -531,6 +535,7 @@ export class ArtifactService {
       ...(this.marketOn ? MARKET_TOOLS : []),
       ...(this.workflowTools?.listed(sessionId) ?? []),
       ...(this.deps.settings ? SETTINGS_TOOLS : []),
+      ...(this.deps.plugins?.listed() ?? []),
     ]
   }
 
@@ -539,7 +544,9 @@ export class ArtifactService {
     return this.listedTools().map((tool) => ({
       name: tool.name,
       description: firstSentence(tool.description ?? ''),
-      group: TOOL_GROUPS.get(tool.name) ?? 'sessions',
+      group: this.deps.plugins?.has(tool.name)
+        ? 'plugins'
+        : (TOOL_GROUPS.get(tool.name) ?? 'sessions'),
       asks: ASKING_TOOLS.has(tool.name),
     }))
   }
@@ -935,6 +942,8 @@ export class ArtifactService {
         throw new McpError(ErrorCode.InternalError, `${name} failed: ${(error as Error).message}`)
       }
     }
+    // A plugin that was turned off since the agent listed its tools answers that it is off.
+    if (this.deps.plugins && isPluginToolName(name)) return this.deps.plugins.call(name, input)
     if (isBrowserToolName(name)) {
       try {
         return await this.browserTools.call(caller, name, input)

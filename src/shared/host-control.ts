@@ -127,6 +127,8 @@ export type MainToHost =
       values: Record<string, Record<string, string>>
       oauth?: Record<string, string>
       agentEnv?: Record<string, Record<string, string>>
+      // The secrets the plugins declare, by plugin id then key; read by the plugin's own script only.
+      pluginSecrets?: Record<string, Record<string, string>>
     }
   | { type: 'host:busy-request'; requestId: number }
   // A problem report's bundle, answered by host:report. The parent adds its own part; the host
@@ -190,6 +192,8 @@ export type MainToHost =
   | { type: 'trash-result'; callId: number; error: string | null }
   // The answer to a host:settings-call.
   | { type: 'settings-result'; callId: number; answer: SettingsCallAnswer }
+  // The answer to a host:plugin-secret: null once the key store holds the change, else why not.
+  | { type: 'plugin-secret-result'; callId: number; error: string | null }
   // A browser call now waits for the user to answer a new origin, so its limit grows to that wait.
   | { type: 'host:browser-waiting'; callId: number; waiting: boolean }
   // A page waits for a new origin: the session's thread shows it, waiting for the user.
@@ -419,6 +423,15 @@ export type HostToMain =
   | { type: 'host:market-call'; callId: number; call: MarketCall }
   // Absolute paths for the system's trash, which only main reaches; answered by trash-result.
   | { type: 'host:trash-call'; callId: number; paths: string[] }
+  // Keeps a plugin's secret in the key store, or with a null value clears it; with a null key it
+  // clears every secret of the plugin. Answered by plugin-secret-result, after host:market-keys.
+  | {
+      type: 'host:plugin-secret'
+      callId: number
+      pluginId: string
+      key: string | null
+      value: string | null
+    }
   // An agent's settings tool reads the settings, or changes them through the same checks as the
   // Settings page, from whoever keeps the file: main or the daemon. Answered by settings-result.
   | { type: 'host:settings-call'; callId: number; call: SettingsCall }

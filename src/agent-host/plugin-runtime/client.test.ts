@@ -1,4 +1,4 @@
-import { readFile } from 'node:fs/promises'
+import { mkdir, readFile } from 'node:fs/promises'
 import path from 'node:path'
 import { createRequire } from 'node:module'
 import { beforeAll, describe, expect, it, vi } from 'vitest'
@@ -17,6 +17,8 @@ import type { PluginApiCall } from './call'
 import { PluginHostClient } from './client'
 import { PLUGIN_EVENTS, createPluginApi, type PluginApiDeps } from './functions'
 import type { HttpTransport } from './network'
+import { PluginStorage } from './storage'
+import { tempFolder } from '../testing/temp'
 
 let engine: Engine
 
@@ -312,6 +314,11 @@ function apiDeps() {
     locale: () => 'zh-CN',
     colorMode: () => null,
     sessions: sessions as unknown as PluginApiDeps['sessions'],
+    own: {
+      setting: vi.fn(() => 'on'),
+      secret: vi.fn(() => null),
+      storage: { get: vi.fn(), set: vi.fn(), delete: vi.fn(), keys: vi.fn() },
+    },
     transport,
   }
   return { deps, sessions, transport }
@@ -372,6 +379,46 @@ describe('the plugin API', () => {
     expect(await client.call('bare', 'call', ['app.colorMode'])).toEqual({ ok: null })
   })
 
+  it('gives each plugin its own settings, secrets and storage, with no permission, and no other plugin’s', async () => {
+    const dir = await tempFolder('kettu-plugin-own-')
+    await mkdir(path.join(dir, 'one'))
+    await mkdir(path.join(dir, 'two'))
+    const { deps } = apiDeps()
+    deps.own = {
+      setting: (pluginId, key) => {
+        if (key !== 'mode') throw new Error(`${pluginId} declares no setting ${key}`)
+        return pluginId === 'one' ? 'deep' : 'fast'
+      },
+      secret: (pluginId, key) => (pluginId === 'one' && key === 'token' ? 'tok-1' : null),
+      storage: new PluginStorage(
+        (id) => path.join(dir, id),
+        () => {},
+      ),
+    }
+    const { client, add } = setup(createPluginApi(deps))
+    add('one', RELAY)
+    add('two', RELAY)
+    await client.activate('one', 'command:run')
+    await client.activate('two', 'command:run')
+    const call = (id: string, ...args: unknown[]) => client.call(id, 'call', args)
+    expect(await call('one', 'settings.get', 'mode')).toEqual({ ok: 'deep' })
+    expect(await call('two', 'settings.get', 'mode')).toEqual({ ok: 'fast' })
+    expect(await call('one', 'settings.get', 'other')).toEqual({
+      error: 'one declares no setting other',
+    })
+    expect(await call('one', 'settings.secret', 'token')).toEqual({ ok: 'tok-1' })
+    expect(await call('two', 'settings.secret', 'token')).toEqual({ ok: null })
+    expect(await call('one', 'storage.set', 'seen', { n: 3 })).toEqual({ ok: null })
+    expect(await call('one', 'storage.get', 'seen')).toEqual({ ok: { n: 3 } })
+    expect(await call('two', 'storage.get', 'seen')).toEqual({ ok: null })
+    expect(await call('one', 'storage.keys')).toEqual({ ok: ['seen'] })
+    expect(await call('one', 'storage.delete', 'seen')).toEqual({ ok: null })
+    expect(await call('one', 'storage.keys')).toEqual({ ok: [] })
+    expect(await call('one', 'storage.get', 7)).toEqual({
+      error: expect.stringContaining('storage key'),
+    })
+  })
+
   it('has no call that runs commands, reads files or reaches credentials, whatever is granted', async () => {
     const { deps } = apiDeps()
     const api = createPluginApi(deps)
@@ -410,6 +457,12 @@ describe('the plugin API', () => {
       'api.version': null,
       'app.locale': null,
       'app.colorMode': null,
+      'settings.get': null,
+      'settings.secret': null,
+      'storage.get': null,
+      'storage.set': null,
+      'storage.delete': null,
+      'storage.keys': null,
       'network.fetch': 'network',
       'sessions.list': 'sessions.summary',
       'sessions.read': 'sessions.content',

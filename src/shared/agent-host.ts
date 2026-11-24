@@ -752,6 +752,7 @@ export type McpToolGroup =
   | 'reports'
   | 'workflows'
   | 'settings'
+  | 'plugins'
 
 export interface McpToolSummary {
   name: string
@@ -1387,6 +1388,17 @@ export interface HostContract {
   'plugins.uninstall': { params: { pluginId: string }; result: void }
   'plugins.setEnabled': {
     params: { pluginId: string; enabled: boolean }
+    result: InstalledKettuPlugin
+  }
+  // Sets a setting the plugin declares, other than a secret, to a value its declaration takes.
+  'plugins.setSetting': {
+    params: { pluginId: string; key: string; value: string | boolean }
+    result: InstalledKettuPlugin
+  }
+  // Sets a secret the plugin declares, or with null clears it. The host keeps it in the system's
+  // key store and never gives it back: the plugin's `secretsSet` only says it is set.
+  'plugins.setSecret': {
+    params: { pluginId: string; key: string; value: string | null }
     result: InstalledKettuPlugin
   }
   // Copies a development plugin's folder again, in place of the copy installed.
@@ -2354,6 +2366,8 @@ export const HOST_METHODS = [
   'plugins.discard',
   'plugins.uninstall',
   'plugins.setEnabled',
+  'plugins.setSetting',
+  'plugins.setSecret',
   'plugins.reload',
   'plugins.checkUpdates',
   'plugins.applyUpdate',

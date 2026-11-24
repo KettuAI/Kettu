@@ -13,6 +13,7 @@
     "artifacts": "Artifacts",
     "sharing": "Sharing",
     "remote": "Remote access",
+    "plugins": "Plugins",
     "browser": "Browser",
     "harnesses": "Harnesses",
     "memory": "Memory",
@@ -1263,6 +1264,7 @@
     "sharing": "Publish artifacts to links, on Kettu or through your own Cloudflare account; choose who can open a page on Kettu.",
     "remote": "Use this computer’s sessions from Kettu on an iPhone, an iPad or another computer.",
     "remote_web": "Use {{host}}’s sessions from Kettu on an iPhone, an iPad or another computer.",
+    "plugins": "The settings of the plugins you installed, and what each plugin’s script can do. Install and remove plugins in the Marketplace.",
     "browser": "Sign-ins, how links from agents open, and the sites they may use.",
     "browserWeb": "Links in agents’ replies open in a new tab.",
     "harnesses": "The programs agents run on: Claude Code, Codex and the rest. Kettu uses what is already on your computer, and installs a copy only when there is none.",
@@ -2377,5 +2379,58 @@
     "noMonospaceMatch": "No monospace font matches.",
     "loading": "Reading the installed fonts…",
     "unavailable": "This browser cannot list fonts. Type a name to use it."
+  },
+  "plugins": {
+    "back": "Plugins",
+    "loading": "Reading plugins…",
+    "readFailed": "Couldn’t read the plugins: {{error}}",
+    "retry": "Try again",
+    "empty": {
+      "title": "No plugins installed",
+      "hint": "Plugins you install in the Marketplace show up here with their settings."
+    },
+    "notInstalled": "This plugin isn’t installed.",
+    "row": {
+      "open": "Open {{name}}",
+      "settings_one": "{{count}} setting",
+      "settings_other": "{{count}} settings",
+      "noSettings": "No settings"
+    },
+    "state": {
+      "off": "Off",
+      "noScript": "No script",
+      "idle": "Script ready",
+      "active": "Script running",
+      "disabled": "Script stopped after crashing too often"
+    },
+    "settings": {
+      "heading": "Settings",
+      "none": "This plugin has no settings."
+    },
+    "secret": {
+      "set": "Set",
+      "notSet": "Not set",
+      "setAction": "Set…",
+      "change": "Change…",
+      "clear": "Clear",
+      "save": "Save",
+      "cancel": "Cancel",
+      "placeholder": "Paste the secret",
+      "note": "Kept on this computer. Only this plugin’s script can read it; agents can’t."
+    },
+    "script": {
+      "heading": "What its script can do",
+      "none": "This plugin runs no script.",
+      "nothing": "Its script asks for nothing beyond its own settings and storage.",
+      "high": "High risk"
+    },
+    "manage": {
+      "heading": "Manage",
+      "enabled": "Enabled",
+      "uninstallName": "Uninstall",
+      "uninstallHint": "Removes the plugin with its settings, secrets and stored data.",
+      "uninstall": "Uninstall…"
+    },
+    "changeFailed": "Couldn’t change {{name}}: {{error}}"
   }
 }

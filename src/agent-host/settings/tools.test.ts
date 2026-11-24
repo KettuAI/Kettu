@@ -1,7 +1,9 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js'
 import type { SettingFacts, SettingsSnapshot } from '@shared/host-control'
+import type { CatalogPlugin } from '@shared/settings-catalog'
 import { DEFAULT_SETTINGS, type SettingsFile, type SettingsPatch } from '@shared/settings'
+import type { SettingScalar } from '@shared/settings-catalog'
 import type { SettingChangeItem, SettingsChangeOutcome } from '@shared/thread'
 import { setLocale, tSettings, tSettingsEnglish } from '../i18n'
 import { mergeSettings, validateSettingsPatch } from '../../main/settings-schema'
@@ -24,7 +26,14 @@ function text(result: CallToolResult): string {
 }
 
 function harness(
-  options: { fullAccess?: boolean; file?: Partial<SettingsFile>; facts?: SettingFacts } = {},
+  options: {
+    fullAccess?: boolean
+    file?: Partial<SettingsFile>
+    facts?: SettingFacts
+    plugins?: CatalogPlugin[]
+    /** What the host reads of the plugins' settings, by tool id. */
+    pluginFacts?: SettingFacts
+  } = {},
 ) {
   let file: SettingsFile = { ...structuredClone(DEFAULT_SETTINGS), ...options.file }
   const applied: SettingsPatch[] = []
@@ -41,9 +50,11 @@ function harness(
     agents: [{ id: 'codex', name: 'Codex', harnessId: 'codex' }],
     harnesses: [{ id: 'codex', name: 'Codex' }],
     modes: { codex: [{ value: 'agent', name: 'Auto' }] },
+    plugins: options.plugins ?? [],
     // The host itself only ever sends whether a key is set; a string here must not leak either.
-    facts: { 'agents.api-key:codex': SECRET },
+    facts: { 'agents.api-key:codex': SECRET, ...options.pluginFacts },
   }
+  const pluginSets: [string, string, SettingScalar][] = []
   const tools = new SettingsTools({
     platform: 'darwin',
     read: async () => snapshot(),
@@ -52,6 +63,12 @@ function harness(
       file = mergeSettings(file, validateSettingsPatch(patch))
       applied.push(patch)
       return snapshot()
+    },
+    setPluginSetting: async (pluginId, key, value) => {
+      pluginSets.push([pluginId, key, value])
+      // The host reads the value back from its own record, which the next call sees.
+      const id = typeof value === 'boolean' ? 'plugins.switch' : 'plugins.text'
+      local.facts[`${id}:${pluginId}:${key}`] = value
     },
     local: async () => local,
     fullAccess: () => options.fullAccess === true,
@@ -74,6 +91,7 @@ function harness(
     asked,
     recorded,
     settled,
+    pluginSets,
     file: () => file,
     answer: (given: SettingsAnswer) => answer(given),
   }
@@ -269,5 +287,118 @@ describe('undo', () => {
     await change(tools, [{ id: 'appearance.color-mode', value: 'light' }])
     await change(tools, [{ id: 'appearance.color-mode', value: 'dark' }])
     await expect(tools.undo(recorded[1]!)).rejects.toBeInstanceOf(StaleUndo)
+  })
+})
+
+describe("a plugin's settings", () => {
+  const PLUGIN = 'p0123456789ab'
+  const plugins: CatalogPlugin[] = [
+    {
+      id: PLUGIN,
+      title: 'Acme',
+      settings: [
+        { key: 'verbose', type: 'boolean', title: 'Verbose logging', description: 'Logs more.' },
+        {
+          key: 'mode',
+          type: 'select',
+          title: 'Mode',
+          options: [
+            { value: 'fast', title: 'Fast' },
+            { value: 'deep', title: 'Deep' },
+          ],
+        },
+        { key: 'name', type: 'string', title: 'Display name' },
+        { key: 'token', type: 'secret', title: 'Access token' },
+      ],
+    },
+  ]
+  const pluginFacts: SettingFacts = {
+    [`plugins.switch:${PLUGIN}:verbose`]: false,
+    [`plugins.choice:${PLUGIN}:mode`]: 'fast',
+    [`plugins.text:${PLUGIN}:name`]: 'Ada',
+    [`plugins.secret:${PLUGIN}:token`]: true,
+  }
+
+  it('are found with the plugin’s own words, the place and the values they take', async () => {
+    const { tools } = harness({ plugins, pluginFacts })
+    const found = text(await tools.call(CALLER, FIND_SETTINGS, { query: 'verbose' }))
+    expect(found).toContain(`plugins.switch:${PLUGIN}:verbose`)
+    expect(found).toContain('Plugins › Acme › Verbose logging')
+    expect(found).toContain('Logs more.')
+    expect(found).toContain('value: Off')
+    const mode = text(await tools.call(CALLER, FIND_SETTINGS, { query: 'acme mode' }))
+    expect(mode).toContain('takes "fast" (Fast), "deep" (Deep)')
+  })
+
+  it('give a secret only as set or not set, and never to be changed', async () => {
+    const { tools, pluginSets } = harness({ fullAccess: true, plugins, pluginFacts })
+    const found = text(await tools.call(CALLER, FIND_SETTINGS, { query: 'access token' }))
+    expect(found).toContain('value: Set')
+    expect(found).toContain('a secret')
+    const result = await change(tools, [{ id: `plugins.secret:${PLUGIN}:token`, value: 'x' }])
+    expect(result.isError).toBe(true)
+    expect(pluginSets).toEqual([])
+  })
+
+  it('are listed only for a plugin the host has, and none without', async () => {
+    const { tools } = harness()
+    const all = text(await tools.call(CALLER, FIND_SETTINGS, {}))
+    expect(all).not.toContain('plugins.switch')
+    const result = await change(tools, [{ id: `plugins.switch:${PLUGIN}:verbose`, value: true }])
+    expect(result.isError).toBe(true)
+  })
+
+  it('change in a card outside Full access, and through the plugin’s own record', async () => {
+    const { tools, pluginSets, applied, asked, answer } = harness({ plugins, pluginFacts })
+    const pending = change(tools, [{ id: `plugins.switch:${PLUGIN}:verbose`, value: true }])
+    await vi.waitFor(() => expect(asked).toHaveLength(1))
+    expect(asked[0]!.items[0]).toMatchObject({
+      id: `plugins.switch:${PLUGIN}:verbose`,
+      place: 'Plugins › Acme',
+      name: 'Verbose logging',
+      from: { value: false, text: 'Off' },
+      to: { value: true, text: 'On' },
+      section: 'plugins',
+      item: PLUGIN,
+      row: 'setting-verbose',
+    })
+    expect(pluginSets).toEqual([])
+    answer({ decision: 'change' })
+    expect((await pending).isError).toBeUndefined()
+    // Not a patch of the settings file: the plugin's record holds it.
+    expect(applied).toEqual([])
+    expect(pluginSets).toEqual([[PLUGIN, 'verbose', true]])
+  })
+
+  it('change at once in Full access, with a line, and refuse a choice the plugin does not offer', async () => {
+    const { tools, pluginSets, recorded } = harness({ fullAccess: true, plugins, pluginFacts })
+    const bad = await change(tools, [{ id: `plugins.choice:${PLUGIN}:mode`, value: 'slow' }])
+    expect(bad.isError).toBe(true)
+    expect(text(bad)).toContain('"fast", "deep"')
+    const ok = await change(tools, [
+      { id: `plugins.choice:${PLUGIN}:mode`, value: 'deep' },
+      { id: `plugins.text:${PLUGIN}:name`, value: 'Bea' },
+    ])
+    expect(ok.isError).toBeUndefined()
+    expect(pluginSets).toEqual([
+      [PLUGIN, 'mode', 'deep'],
+      [PLUGIN, 'name', 'Bea'],
+    ])
+    expect(recorded[0]!.map((item) => item.name)).toEqual(['Mode', 'Display name'])
+  })
+
+  it('are put back by Undo, unless one changed again since', async () => {
+    const { tools, pluginSets, recorded } = harness({ fullAccess: true, plugins, pluginFacts })
+    await change(tools, [{ id: `plugins.switch:${PLUGIN}:verbose`, value: true }])
+    await tools.undo(recorded[0]!)
+    expect(pluginSets.at(-1)).toEqual([PLUGIN, 'verbose', false])
+    // It holds false again, so a second undo of the same line finds it changed since.
+    await expect(tools.undo(recorded[0]!)).rejects.toBeInstanceOf(StaleUndo)
+  })
+
+  it('open at the plugin’s page and the row on it', async () => {
+    const { tools } = harness({ plugins, pluginFacts })
+    const result = await tools.call(CALLER, OPEN_SETTINGS, { id: `plugins.secret:${PLUGIN}:token` })
+    expect(text(result)).toContain('Plugins › Acme › Access token')
   })
 })

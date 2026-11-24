@@ -26,6 +26,8 @@ import type {
 import { OWNER } from '@shared/artifact-comments'
 import { flushLog, logFolder, redactLogText, writeLog } from '@shared/log/process-log'
 import type { AgentToPluginHost } from '@shared/plugin-host'
+import { pluginText, type InstalledKettuPlugin } from '@shared/plugins'
+import { toolId, type CatalogPlugin } from '@shared/settings-catalog'
 import { writeReport } from '@shared/log/report-bundle'
 import { parseReportRequest } from '@shared/report'
 import { harnessOf, takesStartMode, type HarnessId } from '@shared/agents'
@@ -190,6 +192,8 @@ import { PluginHooks } from './plugin-runtime/hooks'
 import { InstalledScripts } from './plugin-runtime/installed'
 import { PluginViews } from './plugin-runtime/views'
 import { createPluginApi, type ColorMode, type PLUGIN_EVENTS } from './plugin-runtime/functions'
+import { PluginStorage } from './plugin-runtime/storage'
+import { PluginTools } from './plugin-runtime/tools'
 import { PreparedRecords, preparedFile, settingsTargets } from './prepared'
 import { processControl, type ProcessControl } from './process-tree'
 import { ProjectHooksAnswers } from './project-hooks'
@@ -557,6 +561,11 @@ export class AgentHost {
   /** The values of the Marketplace servers' inputs from main, held only in memory. */
   private marketKeys: MarketKeys = new Map()
   private agentEnvKeys: Record<string, Record<string, string>> = {}
+  /** The secrets the plugins declare, by plugin then key, as main's key store holds them. */
+  private pluginSecrets: Record<string, Record<string, string>> = {}
+  /** Plugin secret changes awaiting main's answer: null once the store holds it, else why not. */
+  private readonly pluginSecretCalls = new Map<number, (error: string | null) => void>()
+  private nextPluginSecretCall = 1
   /** The Marketplace's catalog of MCP servers, from the registry. */
   private readonly marketCatalog: MarketCatalogService
   /** The sign-ins of the Marketplace's OAuth servers. */
@@ -595,6 +604,11 @@ export class AgentHost {
   /** The Marketplace tools of Kettu's MCP service. */
   private readonly marketTools: MarketTools
   private readonly pluginConverter: PluginConverter
+  /** What each plugin's script keeps for itself, in its own folder. */
+  private readonly pluginStorage = new PluginStorage(
+    (pluginId) => this.plugins.folderOf(pluginId),
+    (level, message) => writeLog(level, 'plugins', message),
+  )
   /** The plugin host, which runs the scripts of the installed plugins that are on. */
   private readonly pluginHost = new PluginHostClient({
     want: (run) => this.options.send({ type: 'host:plugin-host', run }),
@@ -621,7 +635,19 @@ export class AgentHost {
           this.sessions.sendFromPlugin(pluginId, sessionId, text),
         now: () => Date.now(),
       },
+      own: {
+        setting: (pluginId, key) => this.plugins.settingValue(pluginId, key),
+        secret: (pluginId, key) => this.pluginSecret(pluginId, key),
+        storage: this.pluginStorage,
+      },
     }),
+    onStatus: () => this.hub.broadcast({ type: 'plugins.changed' }),
+    log: (level, message) => writeLog(level, 'plugins', message),
+  })
+  /** The tools of the plugins that are on, which Kettu's MCP service lists. */
+  private readonly pluginTools = new PluginTools({
+    installed: () => this.plugins.tools(),
+    client: this.pluginHost,
     log: (level, message) => writeLog(level, 'plugins', message),
   })
   /** The window's color mode, from main; null under the daemon, which has no window. */
@@ -734,6 +760,9 @@ export class AgentHost {
       platform,
       read: () => this.settingsCall({ kind: 'read' }),
       apply: (patch) => this.settingsCall({ kind: 'change', patch }),
+      setPluginSetting: async (pluginId, key, value) => {
+        await this.plugins.setSetting(pluginId, key, value)
+      },
       local: () => this.settingsLocal(),
       fullAccess: (sessionId) => this.sessions.settingsFullAccess(sessionId),
       ask: (sessionId, ask) => this.sessions.settingsAsked(sessionId, ask, SETTINGS_WAIT_MS),
@@ -972,6 +1001,11 @@ export class AgentHost {
       kettu: (id) => this.marketCommunity.download(id, 'agent-plugin'),
       listing: (id) => this.marketCommunity.listing(id),
       count: (id, version, reason) => void this.marketCommunity.count(id, version, reason),
+      scriptState: (pluginId) =>
+        this.pluginHost.status().find((plugin) => plugin.id === pluginId)?.state ?? 'idle',
+      secretsSet: (pluginId) => Object.keys(this.pluginSecrets[pluginId] ?? {}),
+      removed: (pluginId) => this.pluginRemoved(pluginId),
+      settingChanged: (pluginId, key) => this.pluginSettingEvent(pluginId, key, false),
       changed: () => {
         this.pluginScripts.sync(this.plugins.scripts())
         this.hub.broadcast({ type: 'plugins.changed' })
@@ -1072,6 +1106,7 @@ export class AgentHost {
       ...(this.computer ? { computer: this.computer } : {}),
       market: this.marketTools,
       settings: this.settingsTools,
+      plugins: this.pluginTools,
       skills: {
         of: (sessionId) => {
           const agentId = this.sessions.sessionAgent(sessionId)
@@ -2373,6 +2408,37 @@ export class AgentHost {
     } catch {
       // As above.
     }
+    const plugins: CatalogPlugin[] = []
+    for (const plugin of await this.plugins.list()) {
+      const { contents } = plugin
+      if (contents.settings.length === 0) continue
+      plugins.push({
+        id: plugin.id,
+        title: pluginText(contents.titles, contents.title, this.settings.locale),
+        settings: contents.settings.map((setting) => ({
+          key: setting.key,
+          type: setting.type,
+          title: setting.title,
+          ...(setting.description ? { description: setting.description } : {}),
+          ...(setting.options ? { options: setting.options } : {}),
+        })),
+      })
+      for (const setting of contents.settings) {
+        const row = `${plugin.id}:${setting.key}`
+        // A secret only as whether it is set.
+        if (setting.type === 'secret') {
+          facts[toolId('plugins.secret', row)] = (plugin.secretsSet ?? []).includes(setting.key)
+        } else {
+          const id =
+            setting.type === 'boolean'
+              ? 'plugins.switch'
+              : setting.type === 'select'
+                ? 'plugins.choice'
+                : 'plugins.text'
+          facts[toolId(id, row)] = plugin.values?.[setting.key] ?? null
+        }
+      }
+    }
     return {
       agents: statuses.map((status) => ({
         id: status.id,
@@ -2381,6 +2447,7 @@ export class AgentHost {
       })),
       harnesses: [...harnesses].map(([id, name]) => ({ id, name })),
       modes,
+      plugins,
       facts,
     }
   }
@@ -2432,7 +2499,12 @@ export class AgentHost {
    * `host:market-keys`: every value of the Marketplace servers' inputs, replacing those before.
    * They stay in memory and go only into what agents are handed; a malformed message is dropped.
    */
-  setMarketKeys(values: unknown, oauth?: unknown, agentEnv?: unknown): void {
+  setMarketKeys(
+    values: unknown,
+    oauth?: unknown,
+    agentEnv?: unknown,
+    pluginSecrets?: unknown,
+  ): void {
     const keys = parseMarketKeys(values)
     const signIns = oauth === undefined ? undefined : parseSignIns(oauth)
     if (!keys || signIns === null) {
@@ -2479,6 +2551,16 @@ export class AgentHost {
     this.marketChanged(this.settings.marketplace.mcp, previous)
     if (signIns) this.signInsPushed(signIns)
     this.hub.broadcast({ type: 'market.keysChanged' })
+    const secrets = parseMarketKeys(pluginSecrets ?? {})
+    if (secrets) {
+      const held = Object.fromEntries(
+        [...secrets].map(([id, inputs]) => [id, Object.fromEntries(inputs)]),
+      )
+      if (JSON.stringify(held) !== JSON.stringify(this.pluginSecrets)) {
+        this.pluginSecrets = held
+        this.hub.broadcast({ type: 'plugins.changed' })
+      }
+    }
   }
 
   /**
@@ -2650,6 +2732,79 @@ export class AgentHost {
         )
       })
     }
+  }
+
+  /** A secret a plugin's script reads; null while it is not set. */
+  private pluginSecret(pluginId: string, key: string): string | null {
+    if (!this.plugins.declaresSecret(pluginId, key)) {
+      throw new Error(t('plugins.noSecret', { key: key.slice(0, 100) }))
+    }
+    return this.pluginSecrets[pluginId]?.[key] ?? null
+  }
+
+  /** Sets or, with null, clears a secret of a plugin in the key store, which main or the daemon keeps. */
+  async setPluginSecret(
+    pluginId: string,
+    key: string,
+    value: string | null,
+  ): Promise<InstalledKettuPlugin> {
+    if (!this.plugins.declaresSecret(pluginId, key)) {
+      throw new HostError('invalid_params', t('plugins.noSecret', { key }))
+    }
+    await this.askPluginSecret(pluginId, key, value)
+    this.pluginSettingEvent(pluginId, key, true)
+    return this.plugins.view(pluginId)
+  }
+
+  /** A removed plugin takes what it kept: its secrets and its storage. */
+  private pluginRemoved(pluginId: string): void {
+    this.pluginStorage.forget(pluginId)
+    if (this.pluginSecrets[pluginId] === undefined) return
+    this.askPluginSecret(pluginId, null, null).catch((error: unknown) =>
+      writeLog(
+        'warn',
+        'plugins',
+        `Could not clear the secrets of ${pluginId}: ${(error as Error).message}`,
+      ),
+    )
+  }
+
+  private async askPluginSecret(
+    pluginId: string,
+    key: string | null,
+    value: string | null,
+  ): Promise<void> {
+    const callId = this.nextPluginSecretCall++
+    const error = await new Promise<string | null>((resolve) => {
+      this.pluginSecretCalls.set(callId, resolve)
+      this.options.send({ type: 'host:plugin-secret', callId, pluginId, key, value })
+    })
+    if (error !== null) throw new HostError('unavailable', `${t('plugins.secretNotKept')} ${error}`)
+  }
+
+  /** `plugin-secret-result`: main's or the daemon's answer to a secret's change. */
+  pluginSecretResult(callId: number, error: string | null): void {
+    const resolve = this.pluginSecretCalls.get(callId)
+    if (!resolve) return
+    this.pluginSecretCalls.delete(callId)
+    resolve(error)
+  }
+
+  /** Tells a plugin whose script is loaded that one of its settings changed; a secret only by key. */
+  private pluginSettingEvent(pluginId: string, key: string, secret: boolean): void {
+    if (this.pluginHost.status().find((plugin) => plugin.id === pluginId)?.state !== 'active') {
+      return
+    }
+    const value = secret ? null : this.plugins.settingValue(pluginId, key)
+    this.pluginHost
+      .deliverEvent(pluginId, 'settings.changed', { key, secret, value })
+      .catch((error: unknown) =>
+        writeLog(
+          'warn',
+          'plugins',
+          `Could not tell ${pluginId} of ${key}: ${(error as Error).message}`,
+        ),
+      )
   }
 
   /** The computer slept or woke, so the routines' timer starts over from the wall clock. */
@@ -3265,6 +3420,9 @@ export class AgentHost {
     this.marketCalls.clear()
     for (const resolve of this.trashCalls.values()) resolve('Kettu stopped before it answered.')
     this.trashCalls.clear()
+    for (const resolve of this.pluginSecretCalls.values())
+      resolve('Kettu stopped before it answered.')
+    this.pluginSecretCalls.clear()
   }
 
   /** Stops every agent with the documented sequence, flushes the state files, then reports. */
@@ -3714,6 +3872,9 @@ export class AgentHost {
       'plugins.discard': ({ token }) => this.plugins.discard(token),
       'plugins.uninstall': ({ pluginId }) => this.plugins.uninstall(pluginId),
       'plugins.setEnabled': ({ pluginId, enabled }) => this.plugins.setEnabled(pluginId, enabled),
+      'plugins.setSetting': ({ pluginId, key, value }) =>
+        this.plugins.setSetting(pluginId, key, value),
+      'plugins.setSecret': ({ pluginId, key, value }) => this.setPluginSecret(pluginId, key, value),
       'plugins.reload': ({ pluginId }) => this.plugins.reload(pluginId),
       'plugins.checkUpdates': async ({ pluginId }) => ({
         plugins: await this.plugins.checkUpdates(pluginId),

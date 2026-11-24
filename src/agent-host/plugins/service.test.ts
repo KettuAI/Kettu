@@ -86,6 +86,8 @@ async function host(data: PluginsFile = emptyPluginsFile()) {
   // What the Kettu Marketplace lists under the one listing, as the service would download it.
   const market = { version: '1.0.0', files: packageFiles() }
   const counted: string[] = []
+  // What the host is told of a plugin's settings and removal, and the secrets its store holds.
+  const told = { removed: [] as string[], settings: [] as string[], secrets: [] as string[] }
   const skills = new MarketSkillsService({
     userDataPath: root,
     file: skillsCatalogFile(root, log),
@@ -167,12 +169,15 @@ async function host(data: PluginsFile = emptyPluginsFile()) {
       bundle: null,
     }),
     count: (id, version, reason) => counted.push(`${reason} ${id} ${version}`),
+    secretsSet: () => told.secrets,
+    removed: (id) => told.removed.push(id),
+    settingChanged: (id, key) => told.settings.push(`${id}:${key}`),
     changed: () => {},
   })
   await plugins.load()
   const skillFile = (id: string, name: string): string =>
     path.join(root, 'marketplace', 'skills', skillFolder(id), name, 'SKILL.md')
-  return { plugins, settings, library, market, counted, saved: () => saved, skillFile }
+  return { plugins, settings, library, market, counted, told, saved: () => saved, skillFile }
 }
 
 async function installFolder(h: Awaited<ReturnType<typeof host>>, files = packageFiles()) {
@@ -724,5 +729,129 @@ describe('a Claude Code plugin converted to a Kettu plugin', () => {
       commands: [{ name: 'ship' }],
       roles: [{ name: 'reviewer' }],
     })
+  })
+})
+
+describe("a plugin's tools, settings and storage", () => {
+  const TOOL = {
+    name: 'lookup',
+    description: 'Looks a word up.',
+    inputSchema: { type: 'object', properties: { query: { type: 'string' } } },
+  }
+  const SETTINGS = [
+    { key: 'verbose', type: 'boolean', title: 'Verbose', default: true },
+    {
+      key: 'mode',
+      type: 'select',
+      title: 'Mode',
+      options: [
+        { value: 'fast', title: 'Fast' },
+        { value: 'deep', title: 'Deep' },
+      ],
+    },
+    { key: 'name', type: 'string', title: 'Name' },
+    { key: 'token', type: 'secret', title: 'Token' },
+  ]
+  const entry = {
+    script: './sh.kettu/main.js',
+    api: 1,
+    permissions: ['tools'],
+    tools: [TOOL],
+    settings: SETTINGS,
+  }
+  const files = packageFiles({ 'sh.kettu/main.js': 'exports.lookup = () => 1' }, entry)
+
+  it('lists the tools of a plugin that is on, has a script and holds the permission', async () => {
+    const h = await host()
+    expect(h.plugins.tools()).toEqual([])
+    const { plugin } = await installFolder(h, files)
+    expect(h.plugins.tools()).toMatchObject([
+      { name: 'lookup', pluginId: plugin.id, pluginName: 'review-kit' },
+    ])
+    await h.plugins.setEnabled(plugin.id, false)
+    expect(h.plugins.tools()).toEqual([])
+    await h.plugins.setEnabled(plugin.id, true)
+    expect(h.plugins.tools()).toHaveLength(1)
+    await h.plugins.uninstall(plugin.id)
+    expect(h.plugins.tools()).toEqual([])
+    expect(h.told.removed).toEqual([plugin.id])
+  })
+
+  it('wakes the script for a call of one of its tools, which its manifest declares', async () => {
+    const h = await host()
+    const { plugin } = await installFolder(h, files)
+    expect(h.plugins.scripts()[0]?.activation).toEqual(['tool:lookup'])
+    // Without the permission the tool is not declared, so nothing is listed or woken for it.
+    await h.plugins.uninstall(plugin.id)
+    const bare = packageFiles(
+      { 'sh.kettu/main.js': 'exports.lookup = () => 1' },
+      { script: './sh.kettu/main.js', api: 1, tools: [TOOL] },
+    )
+    await installFolder(h, bare)
+    expect(h.plugins.tools()).toEqual([])
+    expect(h.plugins.scripts()[0]?.activation).toEqual([])
+  })
+
+  it('holds a setting at its default until one is set, then keeps what was set', async () => {
+    const h = await host()
+    const { plugin } = await installFolder(h, files)
+    expect(plugin.values).toEqual({ verbose: true, mode: 'fast', name: '' })
+    const next = await h.plugins.setSetting(plugin.id, 'mode', 'deep')
+    await h.plugins.setSetting(plugin.id, 'verbose', false)
+    expect(next.values?.mode).toBe('deep')
+    expect(h.plugins.settingValue(plugin.id, 'mode')).toBe('deep')
+    expect(h.plugins.settingValue(plugin.id, 'verbose')).toBe(false)
+    expect(h.told.settings).toEqual([`${plugin.id}:mode`, `${plugin.id}:verbose`])
+    // Set to what it holds already, nothing changes and nobody is told.
+    await h.plugins.setSetting(plugin.id, 'mode', 'deep')
+    expect(h.told.settings).toHaveLength(2)
+    expect(h.saved().plugins[plugin.id]?.values).toEqual({ mode: 'deep', verbose: false })
+  })
+
+  it.each([
+    ['a key it does not declare', 'nothing', 'x'],
+    ['a text for a switch', 'verbose', 'yes'],
+    ['a choice it does not offer', 'mode', 'slow'],
+    ['a text past the cap', 'name', 'x'.repeat(2049)],
+    ['a secret, which the key store keeps', 'token', 'hunter2'],
+  ])('refuses %s', async (_, key, value) => {
+    const h = await host()
+    const { plugin } = await installFolder(h, files)
+    await expect(h.plugins.setSetting(plugin.id, key, value)).rejects.toMatchObject({
+      code: 'invalid_params',
+    })
+    expect(h.told.settings).toEqual([])
+  })
+
+  it('reads a setting at its default again when a reload no longer offers the value', async () => {
+    const h = await host()
+    const { plugin, folder } = await installFolder(h, files)
+    await h.plugins.setSetting(plugin.id, 'mode', 'deep')
+    const only = SETTINGS.map((item) =>
+      item.key === 'mode' ? { ...item, options: [{ value: 'fast', title: 'Fast' }] } : item,
+    )
+    await writeTree(
+      folder,
+      packageFiles(
+        { 'sh.kettu/main.js': 'exports.lookup = () => 1' },
+        { ...entry, settings: only },
+      ),
+    )
+    const reloaded = await h.plugins.reload(plugin.id)
+    expect(reloaded.values?.mode).toBe('fast')
+    expect(h.plugins.settingValue(plugin.id, 'mode')).toBe('fast')
+  })
+
+  it('says which secrets are set by key, for the ones declared only, never their values', async () => {
+    const h = await host()
+    const { plugin } = await installFolder(h, files)
+    expect((await h.plugins.view(plugin.id)).secretsSet).toEqual([])
+    h.told.secrets.push('token', 'gone')
+    const view = await h.plugins.view(plugin.id)
+    expect(view.secretsSet).toEqual(['token'])
+    expect(JSON.stringify(view)).not.toContain('hunter2')
+    expect(h.plugins.declaresSecret(plugin.id, 'token')).toBe(true)
+    expect(h.plugins.declaresSecret(plugin.id, 'name')).toBe(false)
+    expect(() => h.plugins.settingValue(plugin.id, 'token')).toThrow()
   })
 })

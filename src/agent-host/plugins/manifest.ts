@@ -10,10 +10,15 @@ import {
   PLUGIN_NAME,
   PLUGIN_HOOK_EVENTS,
   PLUGIN_NAMESPACE,
+  PLUGIN_SETTING_KEY,
+  PLUGIN_TOOL_LIMITS,
+  PLUGIN_TOOL_NAME,
   isPluginHookEvent,
   isPluginPermission,
   type PluginSetting,
   type PluginTexts,
+  type PluginTool,
+  type PluginToolArgument,
 } from '@shared/plugins'
 import {
   isPluginViewIcon,
@@ -50,6 +55,7 @@ const KETTU_FIELDS = new Set([
   'title',
   'description',
   'settings',
+  'tools',
   'views',
   'script',
   'api',
@@ -59,7 +65,6 @@ const KETTU_FIELDS = new Set([
 const MAX_TEXT = 2_000
 const MAX_LIST = 64
 const LANGUAGE = /^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$/
-const SETTING_KEY = /^[a-z][a-zA-Z0-9_]{0,63}$/
 const SETTING_TYPES = ['boolean', 'string', 'select', 'secret'] as const
 const VIEW_FIELDS = new Set(['id', 'kind', 'title', 'description', 'icon'])
 
@@ -70,6 +75,8 @@ export interface KettuEntry {
   titles: PluginTexts
   descriptions: PluginTexts
   settings: PluginSetting[]
+  /** The tools it gives agents; left out unless the entry asks for the `tools` permission. */
+  tools: PluginTool[]
   views: PluginViewDecl[]
   /** The script's path inside the package, without the leading `./`; null without a script. */
   script: string | null
@@ -151,7 +158,7 @@ function settings(value: unknown, field: string): PluginSetting[] {
     const at = `${field}[${index}]`
     if (!isRecord(raw)) throw badField(at)
     const { key, type, options } = raw
-    if (typeof key !== 'string' || !SETTING_KEY.test(key) || keys.has(key)) {
+    if (typeof key !== 'string' || !PLUGIN_SETTING_KEY.test(key) || keys.has(key)) {
       throw badField(`${at}.key`)
     }
     keys.add(key)
@@ -234,6 +241,124 @@ export function parseViews(value: unknown, where: string, warnings: string[]): P
   })
 }
 
+const TOOL_ARGUMENT_TYPES = ['string', 'number', 'integer', 'boolean'] as const
+
+function toolArgument(raw: unknown, at: string): PluginToolArgument {
+  if (!isRecord(raw)) throw badField(at)
+  const type = (TOOL_ARGUMENT_TYPES as readonly unknown[]).includes(raw.type)
+    ? (raw.type as PluginToolArgument['type'])
+    : null
+  if (type === null) throw badField(`${at}.type`)
+  for (const key of Object.keys(raw)) {
+    if (!['type', 'description', 'enum', 'minimum', 'maximum'].includes(key)) {
+      throw badField(`${at}.${key.slice(0, 100)}`)
+    }
+  }
+  const argument: PluginToolArgument = { type }
+  const description = optionalText(raw, 'description', `${at}.description`)
+  if (description !== null) argument.description = description
+  if (raw.enum !== undefined) {
+    const values = raw.enum
+    if (
+      type !== 'string' ||
+      !Array.isArray(values) ||
+      values.length === 0 ||
+      values.length > PLUGIN_TOOL_LIMITS.enumValues ||
+      !values.every(
+        (value) => typeof value === 'string' && value.length <= PLUGIN_TOOL_LIMITS.enumChars,
+      )
+    ) {
+      throw badField(`${at}.enum`)
+    }
+    argument.enum = values as string[]
+  }
+  for (const bound of ['minimum', 'maximum'] as const) {
+    const value = raw[bound]
+    if (value === undefined) continue
+    if (
+      type === 'string' ||
+      type === 'boolean' ||
+      typeof value !== 'number' ||
+      !Number.isFinite(value)
+    ) {
+      throw badField(`${at}.${bound}`)
+    }
+    argument[bound] = value
+  }
+  return argument
+}
+
+/** The tools a plugin gives agents: a name, a description and the arguments each takes. */
+function tools(value: unknown, field: string): PluginTool[] {
+  if (value === undefined) return []
+  if (!Array.isArray(value) || value.length > PLUGIN_TOOL_LIMITS.tools) throw badField(field)
+  const names = new Set<string>()
+  return value.map((raw: unknown, index): PluginTool => {
+    const at = `${field}[${index}]`
+    if (!isRecord(raw)) throw badField(at)
+    const { name, inputSchema } = raw
+    if (typeof name !== 'string' || !PLUGIN_TOOL_NAME.test(name) || names.has(name)) {
+      throw badField(`${at}.name`)
+    }
+    names.add(name)
+    const description = optionalText(raw, 'description', `${at}.description`)
+    if (
+      description === null ||
+      description.trim() === '' ||
+      description.length > PLUGIN_TOOL_LIMITS.description
+    ) {
+      throw badField(`${at}.description`)
+    }
+    const properties: Record<string, PluginToolArgument> = {}
+    let required: string[] = []
+    if (inputSchema !== undefined) {
+      if (!isRecord(inputSchema) || inputSchema.type !== 'object') {
+        throw badField(`${at}.inputSchema`)
+      }
+      for (const key of Object.keys(inputSchema)) {
+        if (!['type', 'properties', 'required', 'additionalProperties'].includes(key)) {
+          throw badField(`${at}.inputSchema.${key.slice(0, 100)}`)
+        }
+      }
+      if (
+        inputSchema.additionalProperties !== undefined &&
+        inputSchema.additionalProperties !== false
+      ) {
+        throw badField(`${at}.inputSchema.additionalProperties`)
+      }
+      const declared = inputSchema.properties ?? {}
+      if (!isRecord(declared) || Object.keys(declared).length > PLUGIN_TOOL_LIMITS.arguments) {
+        throw badField(`${at}.inputSchema.properties`)
+      }
+      for (const [key, argument] of Object.entries(declared)) {
+        if (!PLUGIN_SETTING_KEY.test(key))
+          throw badField(`${at}.inputSchema.properties.${key.slice(0, 100)}`)
+        properties[key] = toolArgument(argument, `${at}.inputSchema.properties.${key}`)
+      }
+      if (inputSchema.required !== undefined) {
+        const list = inputSchema.required
+        if (
+          !Array.isArray(list) ||
+          !list.every((key) => typeof key === 'string' && Object.hasOwn(properties, key))
+        ) {
+          throw badField(`${at}.inputSchema.required`)
+        }
+        required = [...new Set(list as string[])]
+      }
+    }
+    return {
+      name,
+      description,
+      inputSchema: {
+        type: 'object',
+        properties,
+        ...(required.length > 0 ? { required } : {}),
+        additionalProperties: false,
+      },
+    }
+  })
+}
+
 function kettuEntry(raw: Record<string, unknown>, appVersion: string, warnings: string[]) {
   const where = `extensions["${PLUGIN_NAMESPACE}"]`
   const { format } = raw
@@ -304,11 +429,18 @@ function kettuEntry(raw: Record<string, unknown>, appVersion: string, warnings: 
   if (views.length > 0 && script === null) {
     throw refusal(t('plugins.viewsNeedScript', { view: views[0]!.id }))
   }
+  let toolList = tools(raw.tools, `${where}.tools`)
+  if (toolList.length > 0 && !permissions.includes('tools')) {
+    warnings.push(t('plugins.warn.toolsPermission'))
+    toolList = []
+  }
+  if (toolList.length > 0 && script === null) throw badField(`${where}.script`)
   const entry: KettuEntry = {
     kettu: range,
     titles: texts(raw.title, `${where}.title`),
     descriptions: texts(raw.description, `${where}.description`),
     settings: settings(raw.settings, `${where}.settings`),
+    tools: toolList,
     views,
     script,
     api,

@@ -1084,7 +1084,8 @@
       "memory": "Memory",
       "reports": "Problem reports",
       "workflows": "Workflows",
-      "settings": "Settings"
+      "settings": "Settings",
+      "plugins": "Plugins"
     },
     "new": "New",
     "whileSignedIn": "While you’re signed in to Kettu",

@@ -104,6 +104,8 @@ export interface AgentHostDeps {
   market?: (call: MarketCall) => Promise<MarketCallAnswer>
   /** An agent's settings tool reads or changes the settings. */
   settingsCall?: (call: unknown) => SettingsCallAnswer
+  /** Keeps a plugin's secret in the key store, or clears it; null once the store holds it. */
+  pluginSecret?: (pluginId: unknown, key: unknown, value: unknown) => Promise<string | null>
   /** The host's first start found the programs of these harnesses; main adds their agents. */
   onFirstStart?(harnesses: unknown): void
   onAttention(message: Extract<HostToMain, { type: 'host:attention' }>): void
@@ -810,6 +812,17 @@ export class AgentHost {
         void trashAll(paths).then((error) =>
           this.host.post({ type: 'trash-result', callId, error }),
         )
+        break
+      }
+      case 'host:plugin-secret': {
+        const { callId } = message
+        if (!Number.isSafeInteger(callId)) break
+        const run = this.deps.pluginSecret
+        void (
+          run
+            ? run(message.pluginId, message.key, message.value)
+            : Promise.resolve('This build keeps no secrets for plugins.')
+        ).then((error) => this.host.post({ type: 'plugin-secret-result', callId, error }))
         break
       }
       case 'host:settings-call': {

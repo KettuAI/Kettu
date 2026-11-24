@@ -438,6 +438,11 @@ export async function startDaemon(options: DaemonOptions): Promise<RunningDaemon
     settings: () => settings.get(),
     marketKeys: () => marketKeys.contentsForHost(),
     marketOAuth: (serverId, state) => void marketKeys.setOAuth(serverId, state),
+    pluginSecret: (pluginId, key, value) =>
+      marketKeys.setPluginSecret(pluginId, key, value).then(
+        () => null,
+        (error: unknown) => (error as Error).message,
+      ),
     firstStart: (harnesses) => settings.firstStart(harnesses),
     privateKey: identity.privateKey,
     newIdentity: async () => (await newHostKey(options.dataPath)).privateKey,

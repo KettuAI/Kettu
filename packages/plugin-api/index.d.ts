@@ -71,6 +71,23 @@ export interface KettuCalls {
   /** The window's color mode; null where Kettu runs without a window. */
   'app.colorMode': { args: []; result: 'light' | 'dark' | null }
   /**
+   * What one of the settings the manifest declares holds now, its default until the user or an
+   * agent sets it. Fails for a key the manifest does not declare and for a secret.
+   */
+  'settings.get': { args: [key: string]; result: string | boolean }
+  /** A secret the manifest declares, or null while it is not set. */
+  'settings.secret': { args: [key: string]; result: string | null }
+  /**
+   * The plugin's own storage, kept on the host and removed with the plugin: a value is any JSON,
+   * null for a key not set. All of it holds at most 256 KB of JSON and 1,000 keys of at most 128
+   * characters, past which `storage.set` fails.
+   */
+  'storage.get': { args: [key: string]; result: unknown }
+  'storage.set': { args: [key: string, value: unknown]; result: null }
+  'storage.delete': { args: [key: string]; result: null }
+  /** Every key, sorted. */
+  'storage.keys': { args: []; result: string[] }
+  /**
    * Needs `network:<domain>` for the address's host. Https only, on the default port, with no
    * redirect followed and no address on this computer or a private network.
    */
@@ -322,6 +339,11 @@ export interface TaskStepInfo {
 export interface KettuEvents {
   'app.locale': { locale: 'en' | 'zh-CN' }
   'app.colorMode': { colorMode: 'light' | 'dark' }
+  /**
+   * One of the plugin's settings was set, in Settings or by an agent. A secret's value is never
+   * sent: `value` is null and `secret` true, and the script reads it with `settings.secret`.
+   */
+  'settings.changed': { key: string; secret: boolean; value: string | boolean | null }
   /** Needs `sessions.summary`: a session came into the sidebar. */
   'session.started': { session: SessionInfo }
   /**
@@ -422,6 +444,15 @@ export interface KettuHookResults {
   'view.action': ViewActionResult | void
 }
 
+/**
+ * A tool the manifest declares under `tools`, which needs the `tools` permission, is a function the
+ * script exports under the tool's name. It gets the arguments as one object, already checked
+ * against the declared schema, and answers with the text the agent reads: a string, or any value,
+ * which is sent as JSON. A throw, a crash or an answer past the time limit is an error the agent
+ * reads; it never waits for ever. Agents may call it only while the plugin is on.
+ *
+ *     exports.lookup = async ({ query }) => `Nothing found for ${query}`
+ */
 export interface Kettu {
   call<N extends keyof KettuCalls>(
     name: N,

@@ -1353,6 +1353,9 @@
     "notDevelopment": "只有从文件夹添加的插件能重新加载。",
     "noUpdate": "这个插件没有等着的更新。",
     "noPrevious": "这个插件没有可以退回的上一个版本。",
+    "noSetting": "这个插件没有可设置的 {{key}}。",
+    "noSecret": "这个插件没有密钥 {{key}}。",
+    "secretNotKept": "Kettu 没能保存这个密钥，请再试一次。",
     "updateChanged": "这个更新要的比上次显示的更多了，请重新看一下它多要了什么。",
     "fromPlugin": "它是插件 {{plugin}} 带来的，跟着插件一起移除。",
     "warn": {
@@ -1363,6 +1366,7 @@
       "eventPermission": "没有带上事件 {{event}}：它需要权限 {{permission}}，而插件没有申请。",
       "viewField": "视图 {{view}} 有一个这个 Kettu 不认识的字段：{{field}}。已忽略。",
       "viewIcon": "视图 {{view}} 用了一个这个 Kettu 没有的图标。已略去。",
+      "toolsPermission": "没有带上工具：它们需要权限 tools，而插件没有申请。",
       "item": "没有带上 {{path}}：{{reason}}",
       "server": "没有带上 MCP 服务器 {{name}}：{{reason}}",
       "cwd": "MCP 服务器 {{name}} 要在 {{cwd}} 里启动，智能体会在会话的文件夹里启动它。",

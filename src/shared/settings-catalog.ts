@@ -7,6 +7,7 @@ import { takesAutoCompact } from './auto-compact'
 import { IDLE_RELEASE_MODES } from './idle-release'
 import { LOCALE_NAMES, LOCALES } from './locale'
 import type { Platform } from './platform'
+import { PLUGIN_SETTING_CHARS } from './plugins'
 import {
   isFontFamilyName,
   MAX_FONT_FAMILY_CHARS,
@@ -35,6 +36,7 @@ export const SETTINGS_SECTIONS = [
   'artifacts',
   'sharing',
   'remote',
+  'plugins',
   'hosts',
   'browser',
   'devices',
@@ -79,6 +81,22 @@ export interface SettingOption {
   label: OptionLabel
 }
 
+/** A setting a plugin declares, as the catalog lists it: its words are the plugin's own. */
+export interface CatalogPluginSetting {
+  key: string
+  type: 'boolean' | 'string' | 'select' | 'secret'
+  title: string
+  description?: string
+  options?: readonly { value: string; title: string }[]
+}
+
+export interface CatalogPlugin {
+  id: string
+  /** In the interface language. */
+  title: string
+  settings: readonly CatalogPluginSetting[]
+}
+
 /** What the host knows when it lists its entries: its system, whether it draws a window. */
 export interface CatalogContext {
   platform: Platform
@@ -92,6 +110,8 @@ export interface CatalogContext {
   harnesses: readonly { id: HarnessId; name: string }[]
   /** The modes each agent's new sessions may start in, by agent; absent before it was used. */
   modes: Readonly<Partial<Record<AgentId, readonly { value: string; name: string }[]>>>
+  /** The plugins that are installed, with the settings each declares. */
+  plugins: readonly CatalogPlugin[]
 }
 
 export interface CatalogEntry {
@@ -110,8 +130,20 @@ export interface CatalogEntry {
   warning?: TextKey
   /** Values for its words' placeholders, such as a shortcut's keys, on the host's system. */
   params?(platform: Platform): Record<string, string>
-  /** A row of each agent's or harness's own page, named by its id. */
-  item?: 'agent' | 'harness'
+  /**
+   * A row of each agent's, harness's or plugin's own page, named by its id. A plugin's row is
+   * named `pluginId:key`, one per setting the plugin declares.
+   */
+  item?: 'agent' | 'harness' | 'plugin'
+  /**
+   * For a row whose words are the plugin's own: its name and description as they are, in place of
+   * the catalog's keys.
+   */
+  literal?(ctx: CatalogContext, item: string | null): { name: string; description?: string }
+  /** Where the page shows the row, when it is not `row` on the section's page. */
+  target?(item: string | null): { item: string | null; row: string }
+  /** The value lives in the plugin's own record, which the host sets, not in the settings file. */
+  store?: 'plugin'
   /** Whether the host has the row; always when absent. */
   on?(ctx: CatalogContext, item: string | null): boolean
   options?:
@@ -138,6 +170,47 @@ function choices(
   key: (value: string) => TextKey,
 ): SettingOption[] {
   return values.map((value) => ({ value, label: { key: key(String(value)) } }))
+}
+
+/** The plugin and the setting a plugin row's item names, `pluginId:key`; null when none does. */
+export function pluginSettingOf(
+  ctx: CatalogContext,
+  item: string | null,
+): { plugin: CatalogPlugin; setting: CatalogPluginSetting } | null {
+  const at = item?.indexOf(':') ?? -1
+  if (item === null || at < 0) return null
+  const plugin = ctx.plugins.find((each) => each.id === item.slice(0, at))
+  const setting = plugin?.settings.find((each) => each.key === item.slice(at + 1))
+  return plugin && setting ? { plugin, setting } : null
+}
+
+/** A row of the plugin settings: one entry per kind of setting, for the settings that are of it. */
+function pluginSetting(
+  type: CatalogPluginSetting['type'],
+  rest: Pick<CatalogEntry, 'kind'> & Partial<CatalogEntry>,
+): CatalogEntry {
+  return {
+    section: 'plugins',
+    row: 'setting',
+    // Never read: `literal` gives the plugin's own words.
+    name: 'sections.plugins',
+    part: 'host',
+    item: 'plugin',
+    store: 'plugin',
+    on: (ctx, item) => pluginSettingOf(ctx, item)?.setting.type === type,
+    literal: (ctx, item) => {
+      const found = pluginSettingOf(ctx, item)
+      return {
+        name: found?.setting.title ?? '',
+        ...(found?.setting.description ? { description: found.setting.description } : {}),
+      }
+    },
+    target: (item) => ({
+      item: item?.slice(0, item.indexOf(':')) ?? null,
+      row: `setting-${item?.slice(item.indexOf(':') + 1) ?? ''}`,
+    }),
+    ...rest,
+  }
 }
 
 const isAgent = (ctx: CatalogContext, item: string | null): boolean =>
@@ -1606,6 +1679,28 @@ const ENTRIES = {
     kind: 'action',
   },
 
+  // ---- Plugins
+  'plugins.switch': pluginSetting('boolean', {
+    access: 'change',
+    kind: 'switch',
+    options: ON_OFF,
+  }),
+  'plugins.choice': pluginSetting('select', {
+    access: 'change',
+    kind: 'choice',
+    options: (ctx, item) =>
+      (pluginSettingOf(ctx, item)?.setting.options ?? []).map((option) => ({
+        value: option.value,
+        label: { text: option.title },
+      })),
+  }),
+  'plugins.text': pluginSetting('string', {
+    access: 'change',
+    kind: 'text',
+    chars: PLUGIN_SETTING_CHARS,
+  }),
+  'plugins.secret': pluginSetting('secret', { kind: 'secret' }),
+
   // ---- Advanced
   'advanced.proxy': {
     section: 'advanced',
@@ -1765,7 +1860,7 @@ export function isSettingId(value: unknown): value is SettingId {
 export function changeable(entry: CatalogEntry): boolean {
   return (
     (entry.access === 'change' || entry.access === 'ask') &&
-    entry.patch !== undefined &&
+    (entry.patch !== undefined || entry.store === 'plugin') &&
     (entry.kind === 'switch' ||
       entry.kind === 'choice' ||
       entry.kind === 'number' ||
@@ -1811,6 +1906,23 @@ export function optionsOf(
   return typeof entry.options === 'function' ? entry.options(ctx, item) : [...entry.options]
 }
 
+/** The words of a row whose plugin wrote them; undefined for a row that has the catalog's. */
+export function literalWords(
+  entry: CatalogEntry,
+  ctx: CatalogContext,
+  item: string | null,
+): { name: string; description?: string } | undefined {
+  return entry.literal?.(ctx, item)
+}
+
+/** Where the page shows a row: its section's page, or the item's page with the row on it. */
+export function rowTarget(
+  entry: CatalogEntry,
+  item: string | null,
+): { item: string | null; row: string } {
+  return entry.target ? entry.target(item) : { item, row: entry.row }
+}
+
 /** A row's id as the tools name it: `section.row`, with `:item` for an agent's or a harness's. */
 export function toolId(id: SettingId, item: string | null): string {
   return item === null ? id : `${id}:${item}`
@@ -1843,7 +1955,11 @@ export function presentRows(ctx: CatalogContext): { id: SettingId; item: string 
         ? ctx.agents.map((agent) => agent.id as string)
         : entry.item === 'harness'
           ? ctx.harnesses.map((harness) => harness.id as string)
-          : [null]
+          : entry.item === 'plugin'
+            ? ctx.plugins.flatMap((plugin) =>
+                plugin.settings.map((setting) => `${plugin.id}:${setting.key}`),
+              )
+            : [null]
     for (const item of items) if (present(entry, ctx, item)) rows.push({ id, item })
   }
   return rows

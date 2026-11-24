@@ -13,12 +13,31 @@ export const PLUGIN_API_VERSIONS: readonly number[] = [1]
 
 /** An installed plugin's id: `p` and 12 hex digits. */
 export const PLUGIN_ID = /^p[0-9a-f]{12}$/
+/** A key a plugin's setting is declared and addressed by. */
+export const PLUGIN_SETTING_KEY = /^[a-z][a-zA-Z0-9_]{0,63}$/
 /** A plugin's name as the format has it: lowercase letters, digits, `-` and `.`. */
 export const PLUGIN_NAME = /^(?!.*(?:--|\.\.))[a-z0-9](?:[a-z0-9.-]{0,62}[a-z0-9])?$/
 /** The name of an item in a `sh.kettu/` subfolder, and of an MCP server in `mcp.json`. */
 export const PLUGIN_ITEM_NAME = /^[A-Za-z0-9](?:[A-Za-z0-9._-]{0,62}[A-Za-z0-9])?$/
 /** What names a package held between inspect and install. */
 export const PLUGIN_TOKEN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
+
+/** What a plugin's tool is called by its own script: letters, digits and `_`, 24 characters at most. */
+export const PLUGIN_TOOL_NAME = /^[a-z][a-z0-9_]{0,23}$/
+/** A tool as Kettu's MCP service lists it: the plugin's short name, `__`, then the tool's name. */
+const PLUGIN_TOOL_LISTED = /^[a-z0-9_]{1,24}__[a-z][a-z0-9_]{0,23}$/
+export const PLUGIN_TOOL_LIMITS = {
+  tools: 16,
+  arguments: 16,
+  description: 1_000,
+  enumValues: 64,
+  enumChars: 200,
+} as const
+/** What a plugin's own storage may hold: the JSON of its values in all, the keys and each key. */
+export const PLUGIN_STORAGE_LIMITS = { bytes: 256 * 1024, keys: 1_000, keyChars: 128 } as const
+/** A text setting's length at most, and a secret's size in bytes. */
+export const PLUGIN_SETTING_CHARS = 2_048
+export const PLUGIN_SECRET_BYTES = 8_192
 
 const ITEM_PREFIX = 'plugin:'
 
@@ -206,7 +225,7 @@ export interface PluginServer {
   runs: string
 }
 
-/** A setting the plugin declares; drawn and stored once plugin settings are. */
+/** A setting the plugin declares: drawn on its page in Settings and listed in the settings catalog. */
 export interface PluginSetting {
   key: string
   type: 'boolean' | 'string' | 'select' | 'secret'
@@ -216,8 +235,124 @@ export interface PluginSetting {
   options?: { value: string; title: string }[]
 }
 
+export type PluginSettingValue = string | boolean
+
+/**
+ * What a setting holds now: the value set when it still fits the declaration, else the default,
+ * else the type's own (off, empty, or a select's first option). A secret has none: its value
+ * only ever lives in the key store.
+ */
+export function effectiveSetting(
+  setting: PluginSetting,
+  stored: unknown,
+): PluginSettingValue | null {
+  switch (setting.type) {
+    case 'secret':
+      return null
+    case 'boolean':
+      return typeof stored === 'boolean'
+        ? stored
+        : typeof setting.default === 'boolean'
+          ? setting.default
+          : false
+    case 'string':
+      return typeof stored === 'string'
+        ? stored
+        : typeof setting.default === 'string'
+          ? setting.default
+          : ''
+    case 'select': {
+      const options = setting.options ?? []
+      const has = (value: unknown): value is string =>
+        typeof value === 'string' && options.some((option) => option.value === value)
+      if (has(stored)) return stored
+      if (has(setting.default)) return setting.default
+      return options[0]?.value ?? ''
+    }
+  }
+}
+
+/** A value for a setting as the declaration takes it, or why not. */
+export function checkSetting(
+  setting: PluginSetting,
+  value: unknown,
+): { value: PluginSettingValue } | { error: string } {
+  switch (setting.type) {
+    case 'secret':
+      return { error: 'A secret is set apart from the other settings.' }
+    case 'boolean':
+      return typeof value === 'boolean' ? { value } : { error: 'It takes true or false.' }
+    case 'string':
+      if (typeof value !== 'string') return { error: 'It takes a text.' }
+      return value.length <= PLUGIN_SETTING_CHARS
+        ? { value }
+        : { error: `It takes at most ${PLUGIN_SETTING_CHARS} characters.` }
+    case 'select': {
+      const values = (setting.options ?? []).map((option) => option.value)
+      return typeof value === 'string' && values.includes(value)
+        ? { value }
+        : { error: `It takes one of ${values.map((item) => JSON.stringify(item)).join(', ')}.` }
+    }
+  }
+}
+
+/** One argument of a plugin's tool: the part of JSON Schema Kettu checks a call against. */
+export interface PluginToolArgument {
+  type: 'string' | 'number' | 'integer' | 'boolean'
+  description?: string
+  /** For a string: the only values it takes. */
+  enum?: string[]
+  minimum?: number
+  maximum?: number
+}
+
+/** What `tools/list` shows of a tool's arguments: an object that takes only the ones named. */
+export interface PluginToolSchema {
+  type: 'object'
+  properties: Record<string, PluginToolArgument>
+  required?: string[]
+  additionalProperties: false
+}
+
+/**
+ * A tool the plugin's script gives agents. The script exports a function of the same name, which
+ * gets the arguments as one object and answers with the text the agent reads.
+ */
+export interface PluginTool {
+  name: string
+  description: string
+  inputSchema: PluginToolSchema
+}
+
+/** The name a plugin's tool has on Kettu's MCP service: its plugin's short name, `__`, its own. */
+export function pluginToolName(pluginName: string, tool: string): string {
+  const short = pluginName
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+/, '')
+    .slice(0, 24)
+    .replace(/_+$/, '')
+  return `${short || 'plugin'}__${tool}`
+}
+
+/** Whether a tool name has the shape of a plugin's tool on Kettu's MCP service. */
+export function isPluginToolName(name: string): boolean {
+  return PLUGIN_TOOL_LISTED.test(name)
+}
+
+/** The token that wakes a plugin for a call of one of its tools, which its activation lists. */
+export function toolTrigger(tool: string): string {
+  return `tool:${tool}`
+}
+
 /** A text by language tag, such as `en` and `zh-CN`. */
 export type PluginTexts = Record<string, string>
+
+/** A text in the language shown, else English, else the package's own field. */
+export function pluginText(texts: PluginTexts, own: string, locale: string): string {
+  const short = locale.split('-')[0] ?? locale
+  return texts[locale] ?? texts[short] ?? texts.en ?? own
+}
 
 /** What a package holds and would run, read without installing or running any of it. */
 export interface PluginContents {
@@ -251,6 +386,8 @@ export interface PluginContents {
   /** The events of `PLUGIN_HOOK_EVENTS` that wake the script, as declared. */
   events: string[]
   settings: PluginSetting[]
+  /** The tools the script gives agents; empty without the `tools` permission. */
+  tools: PluginTool[]
   /** The views the package declares; its script gives their data. */
   views: PluginViewDecl[]
   /** Portable hooks in the package, which never run in Kettu. */
@@ -305,6 +442,16 @@ export interface InstalledKettuPlugin {
   held: PluginHeldUpdate | null
   /** Why the last check for an update failed; null when it did not. */
   updateError: string | null
+  /** What each declared setting but a secret holds now; absent from older hosts. */
+  values?: Record<string, PluginSettingValue>
+  /** The secrets that are set, by key, never their values; absent from older hosts. */
+  secretsSet?: string[]
+  /**
+   * What its script is doing: `active` while loaded, `idle` until something wakes it, `disabled`
+   * after crashing too often; null without a script or while the plugin is off. Absent from older
+   * hosts.
+   */
+  scriptState?: 'idle' | 'active' | 'disabled' | null
 }
 
 /** A plugin's command, role, theme or template as its own feature reads it. */

@@ -153,6 +153,83 @@ describe('the sh.kettu entry', () => {
     expect(parsed.warnings[1]).toContain('session.fromTheFuture')
   })
 
+  describe('tools', () => {
+    const script = { script: './main.js', api: 1, permissions: ['tools'] }
+    const lookup = {
+      name: 'lookup',
+      description: 'Looks a word up.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          query: { type: 'string', enum: ['a', 'b'] },
+          n: { type: 'integer', minimum: 1 },
+        },
+        required: ['query'],
+      },
+    }
+
+    it('are read with the arguments each takes, closed to any other', () => {
+      const parsed = read(kettu({ ...script, tools: [lookup] }))
+      expect(parsed.kettu?.tools).toEqual([
+        {
+          name: 'lookup',
+          description: 'Looks a word up.',
+          inputSchema: {
+            type: 'object',
+            properties: {
+              query: { type: 'string', enum: ['a', 'b'] },
+              n: { type: 'integer', minimum: 1 },
+            },
+            required: ['query'],
+            additionalProperties: false,
+          },
+        },
+      ])
+    })
+
+    it('are left out, and said so, without the permission', () => {
+      const parsed = read(kettu({ script: './main.js', api: 1, tools: [lookup] }))
+      expect(parsed.kettu?.tools).toEqual([])
+      expect(parsed.warnings).toHaveLength(1)
+      expect(parsed.warnings[0]).toContain('tools')
+    })
+
+    it.each([
+      ['without a script', { permissions: ['tools'], tools: [lookup] }],
+      ['with a name that is not a name', { ...script, tools: [{ ...lookup, name: 'Look-up' }] }],
+      ['named twice', { ...script, tools: [lookup, lookup] }],
+      ['with no description', { ...script, tools: [{ ...lookup, description: ' ' }] }],
+      [
+        'with an argument of a type it does not take',
+        {
+          ...script,
+          tools: [
+            { ...lookup, inputSchema: { type: 'object', properties: { a: { type: 'array' } } } },
+          ],
+        },
+      ],
+      [
+        'that allows other arguments',
+        {
+          ...script,
+          tools: [{ ...lookup, inputSchema: { type: 'object', additionalProperties: true } }],
+        },
+      ],
+      [
+        'that requires an argument it does not have',
+        { ...script, tools: [{ ...lookup, inputSchema: { type: 'object', required: ['x'] } }] },
+      ],
+      [
+        'more than sixteen',
+        { ...script, tools: Array.from({ length: 17 }, (_, i) => ({ ...lookup, name: `t${i}` })) },
+      ],
+    ])('are refused %s', (_, entry) => {
+      expect(() => read(kettu(entry))).toThrowError(
+        expect.objectContaining({ code: 'invalid_params' }),
+      )
+    })
+  })
+
   it('refuses events that are not a list of names', () => {
     expect(() => read(kettu({ events: 'session.turnEnded' }))).toThrowError(
       expect.objectContaining({ code: 'invalid_params' }),

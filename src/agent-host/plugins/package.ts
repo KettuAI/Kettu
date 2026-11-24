@@ -290,6 +290,7 @@ export function readPackage(files: readonly PackageFile[], appVersion: string): 
     permissions: kettu?.permissions ?? [],
     events: kettu?.events ?? [],
     settings: kettu?.settings ?? [],
+    tools: kettu?.tools ?? [],
     views: kettu?.views ?? [],
     hooks,
     warnings,
