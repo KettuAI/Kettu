@@ -8,7 +8,7 @@ import {
 } from '@renderer/components/ui/dropdown-menu'
 import { HostChip } from '@renderer/features/session/composer/host-chip'
 import { useHostInfo } from '@renderer/features/session/composer/host-info'
-import { HostStrainTag } from '@renderer/features/settings/host-load'
+import { HostMenuLoad } from '@renderer/features/settings/host-load'
 import { HostIcon } from '@renderer/features/settings/remote-parts'
 import { isAway, useOtherHosts } from '@renderer/stores/hosts'
 import { THIS_COMPUTER } from '@renderer/stores/view'
@@ -53,7 +53,7 @@ export function HostMenu({
           <DropdownMenuRadioItem value={THIS_COMPUTER}>
             <HostIcon platform={here.platform} />
             <span className="min-w-0 flex-1 truncate">{here.name}</span>
-            <HostStrainTag hostId={null} className="mr-1" />
+            <HostMenuLoad hostId={null} />
           </DropdownMenuRadioItem>
           {hosts.map((host) => (
             <DropdownMenuRadioItem key={host.id} value={host.id} disabled={isAway(host.connection)}>
@@ -64,7 +64,7 @@ export function HostMenu({
                   {t('newSession.hostOffline')}
                 </span>
               ) : (
-                <HostStrainTag hostId={host.id} className="mr-1" />
+                host.connection.state === 'online' && <HostMenuLoad hostId={host.id} />
               )}
             </DropdownMenuRadioItem>
           ))}

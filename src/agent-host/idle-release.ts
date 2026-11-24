@@ -1,5 +1,5 @@
-// When idle Claude Code sessions let their agent go: the host's setting, the system's memory as
-// the load monitor reads it, and the Claude Code versions whose resumes lost the prompt cache.
+// When idle Claude Code sessions let their agent go: the host's setting, the system's memory read
+// once a minute, and the Claude Code versions whose resumes lost the prompt cache.
 
 import { execFile } from 'node:child_process'
 import { readFile } from 'node:fs/promises'
@@ -13,6 +13,8 @@ import type {
 import type { Platform } from '@shared/platform'
 import type { AgentId } from '@shared/thread'
 
+const MINUTE = 60_000
+export const MEMORY_READ_MS = MINUTE
 /** About what one idle Claude Code process holds: 173 to 294 MB were measured. */
 const PROCESS_BYTES = 300 * 1024 * 1024
 /** Idle processes together stay under this share of the memory while it is not critical. */
@@ -181,19 +183,30 @@ export interface IdleReleaseDeps {
   log(level: 'info' | 'warn', message: string): void
   /** The rule, the memory state or the fallback changed. */
   changed(): void
+  read?: (platform: Platform) => Promise<MemoryReading>
   totalBytes?: () => number
 }
 
-/** Follows the memory the load monitor reads, at least once a minute while agents run. */
 export class IdleRelease {
   readonly guard = new CacheGuard()
   private memory: MemoryReading = UNKNOWN
-  private stopped = false
+  private timer: ReturnType<typeof setInterval> | null = null
+  private reading = false
+  private failed = false
 
   constructor(private readonly deps: IdleReleaseDeps) {}
 
+  /** Reads the memory now and once a minute, never waiting on it. */
+  start(): void {
+    if (this.timer) return
+    void this.readNow()
+    this.timer = setInterval(() => void this.readNow(), MEMORY_READ_MS)
+    this.timer.unref?.()
+  }
+
   stop(): void {
-    this.stopped = true
+    if (this.timer) clearInterval(this.timer)
+    this.timer = null
   }
 
   memoryState(): MemoryState {
@@ -214,9 +227,24 @@ export class IdleRelease {
     this.deps.changed()
   }
 
-  /** A reading of the memory, unknown when it failed. */
-  observe(next: MemoryReading): void {
-    if (this.stopped) return
+  private async readNow(): Promise<void> {
+    if (this.reading) return
+    this.reading = true
+    let next: MemoryReading
+    try {
+      next = await (this.deps.read ?? readMemory)(this.deps.platform)
+      this.failed = false
+    } catch (error) {
+      if (!this.failed) {
+        this.deps.log('warn', `Could not read the system's memory: ${(error as Error).message}`)
+      }
+      this.failed = true
+      next = UNKNOWN
+    } finally {
+      this.reading = false
+    }
+    // Stopped meanwhile.
+    if (!this.timer) return
     const before = this.memory.state
     this.memory = next
     if (next.state === before) return

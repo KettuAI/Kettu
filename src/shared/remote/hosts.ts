@@ -106,11 +106,11 @@ export type HostConnection =
   | { state: 'connecting' }
   /**
    * Welcomed, through the address whose handshake finished first, or through the relay at
-   * `relay`, in the `region` its signed list names; `terminal` while its owner allows devices the
-   * terminal.
+   * `relay`, in the `region` its signed list names or, with `own`, the relay the host's owner runs;
+   * `terminal` while its owner allows devices the terminal.
    */
   | { state: 'online'; address: DirectAddress; terminal?: true }
-  | { state: 'online'; relay: string; region?: string; terminal?: true }
+  | { state: 'online'; relay: string; region?: string; own?: true; terminal?: true }
   /** Not reached; tried again with backoff. `relay` says what the relay answered, if anything. */
   | { state: 'offline'; relay?: RelayProblem }
   | { state: 'stopped'; reason: HostStop }
@@ -399,7 +399,7 @@ const STOPS: readonly string[] = ['removed', 'update_client', 'update_host']
 
 function parseConnection(value: unknown): HostConnection | null {
   if (typeof value !== 'object' || value === null) return null
-  const { state, address, relay, reason, terminal } = value as Record<string, unknown>
+  const { state, address, relay, own, reason, terminal } = value as Record<string, unknown>
   if (state === 'connecting') return { state }
   if (state === 'offline') {
     return RELAY_PROBLEMS.includes(relay as string)
@@ -409,7 +409,8 @@ function parseConnection(value: unknown): HostConnection | null {
   if (state === 'online') {
     const extra = terminal === true ? { terminal: true as const } : {}
     if (typeof relay === 'string') {
-      return relayOrigin(relay) === relay ? { state, relay, ...extra } : null
+      if (relayOrigin(relay) !== relay) return null
+      return own === true ? { state, relay, own: true, ...extra } : { state, relay, ...extra }
     }
     const parsed = parseDirectAddress(address)
     return parsed ? { state, address: parsed, ...extra } : null

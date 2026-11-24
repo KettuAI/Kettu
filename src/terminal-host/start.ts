@@ -150,15 +150,6 @@ export function startTerminalHost(
         break
       case 'terminal-host:call': {
         const { callId, call } = message
-        if (call.kind === 'processes') {
-          const terminals = manager?.processes() ?? []
-          send({
-            type: 'terminal-host:answer',
-            callId,
-            answer: { result: { kind: 'processes', terminals, devices: allowDevices } },
-          })
-          break
-        }
         if (call.kind === 'reply' && call.fromDevice && !allowDevices) {
           send({
             type: 'terminal-host:answer',

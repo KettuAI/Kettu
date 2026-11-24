@@ -24,6 +24,7 @@ import {
 } from '@shared/report'
 import type { DirectAddress } from '@shared/remote/protocol'
 import type { RelayReport } from '@shared/remote/status'
+import type { OwnRelayCheck } from '@shared/remote/own-relay'
 import { connectPort, listenPorts } from '@shared/socket-port'
 import { publicKeyBytes } from '../remote-host/devices'
 import type { HostState } from './forked-host'
@@ -119,6 +120,12 @@ export interface ControlCalls {
   'terminal.get': { params: undefined; result: TerminalReport }
   /** Allows devices the terminal, or stops allowing it, which closes their terminals at once. */
   'terminal.set': { params: { allowed: boolean }; result: TerminalReport }
+  /** The relay devices reach this computer through, as Settings shows it. */
+  'relay.get': { params: undefined; result: RelayReport }
+  /** Checks the owner's own relay from the link it printed, and uses it once the check passed. */
+  'relay.use': { params: { link: string }; result: OwnRelayCheck }
+  /** Uses the Kettu relay, or no relay. */
+  'relay.set': { params: { choice: 'kettu' | 'off' }; result: RelayReport }
   /**
    * What a computer adding this one over SSH connects with, after adding its `device`, whose key
    * came over the login, as a device of the owner's.
@@ -262,6 +269,21 @@ const validators: { [M in ControlMethod]: (raw: unknown) => Params<M> } = {
   'direct.add': address,
   'direct.remove': address,
   'terminal.get': none,
+  'relay.get': none,
+  'relay.use': (raw) => {
+    const { link } = record(raw)
+    if (typeof link !== 'string' || link.length > 2048) {
+      throw new ControlError('invalid_params', 'link must be the link the relay printed')
+    }
+    return { link }
+  },
+  'relay.set': (raw) => {
+    const { choice } = record(raw)
+    if (choice !== 'kettu' && choice !== 'off') {
+      throw new ControlError('invalid_params', 'choice must be kettu or off')
+    }
+    return { choice }
+  },
   'account.reload': none,
   'terminal.set': (raw) => {
     const { allowed } = record(raw)

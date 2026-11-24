@@ -24,6 +24,9 @@ import {
   type ListEdit,
   type ProxySettings,
   type DirectSettings,
+  type OwnRelaySettings,
+  RELAY_CHOICES,
+  type RelayChoice,
   type SettingsFile,
   type SettingsPatch,
   type TerminalSettings,
@@ -50,6 +53,7 @@ import { PLUGIN_NAME, pluginItem } from '@shared/plugins'
 import { addressKey, isPort, MAX_OWN_ADDRESSES, parseDirectAddress } from '@shared/remote/address'
 import type { DirectAddress } from '@shared/remote/protocol'
 import { DEVICE_NAME_CHARS, isDeviceName } from '@shared/remote/device'
+import { isRelayPin, ownRelayProblem } from '@shared/remote/own-relay'
 import { THEME_ID } from '@shared/themes'
 import { WORKING_STEP_LIMITS } from '@shared/workflow'
 import { isAbsolutePath } from '../agent-host/paths'
@@ -961,6 +965,30 @@ function checkOwnAddresses(value: unknown, path: string): string | null {
 const isOwnPort: Check = (value, path) =>
   isPort(value) && value >= 1024 ? null : `"${path}" must be a port from 1024 to 65535`
 
+/** The own relay as kept: an origin the own relay may be at, and a pin or null. */
+const isOwnRelaySettings: Check = (value, path) => {
+  if (value === null) return null
+  if (!isRecord(value)) return `"${path}" must be an object or null`
+  const { url, pin } = value
+  if (typeof url !== 'string' || ownRelayProblem(url) !== null) {
+    return `"${path}.url" must be the origin of a relay of the owner's`
+  }
+  if (pin !== null && !isRelayPin(pin)) return `"${path}.pin" must be a certificate pin or null`
+  return Object.keys(value).every((key) => key === 'url' || key === 'pin')
+    ? null
+    : `"${path}" has unknown fields`
+}
+
+/** The own relay a check passed, now the one in use. */
+export function withOwnRelay(current: SettingsFile, own: OwnRelaySettings): SettingsFile {
+  if (isOwnRelaySettings(own, 'ownRelay')) throw new SettingsError(t('settings.ownRelayUnset'))
+  const next = structuredClone(current)
+  next.remote.ownRelay = { url: own.url, pin: own.pin }
+  next.remote.relay = 'own'
+  holdForRemote(next)
+  return next
+}
+
 /** `remote` in a patch. */
 function checkRemote(value: unknown, problems: string[]): void {
   if (!isRecord(value)) {
@@ -968,11 +996,14 @@ function checkRemote(value: unknown, problems: string[]): void {
     return
   }
   for (const [key, fieldValue] of Object.entries(value)) {
-    if (
+    if (key === 'relay') {
+      if (typeof fieldValue !== 'boolean' && !RELAY_CHOICES.includes(fieldValue as RelayChoice)) {
+        problems.push('"remote.relay" must be "kettu", "own", "off" or a boolean')
+      }
+    } else if (
       key === 'enabled' ||
       key === 'name' ||
       key === 'terminal' ||
-      key === 'relay' ||
       key === 'discoverable'
     ) {
       const problem = (key === 'name' ? isHostName : isBoolean)(fieldValue, `remote.${key}`)
@@ -1116,13 +1147,13 @@ export function validateSettingsPatch(raw: unknown): SettingsPatch {
 function holdForRemote(settings: SettingsFile): void {
   if (!settings.remote.enabled) return
   settings.general.background = true
-  if (!settings.remote.relay) settings.remote.direct.enabled = true
+  if (settings.remote.relay === 'off') settings.remote.direct.enabled = true
 }
 
 /** The direct connections as the remote host applies them: on as well while the relay is not in use. */
 export function effectiveDirect(settings: SettingsFile, signedIn: boolean): DirectSettings {
   const { enabled, relay, direct } = settings.remote
-  const held = enabled && !(relay && signedIn)
+  const held = enabled && !((relay === 'kettu' && signedIn) || relay === 'own')
   return held && !direct.enabled ? { ...direct, enabled: true } : direct
 }
 
@@ -1256,7 +1287,14 @@ export function mergeSettings(
     if (enabled !== undefined) next.remote.enabled = enabled
     if (name !== undefined) next.remote.name = name
     if (terminal !== undefined) next.remote.terminal = terminal
-    if (relay !== undefined) next.remote.relay = relay
+    if (relay !== undefined) {
+      const choice = relay === true ? 'kettu' : relay === false ? 'off' : relay
+      // Only a relay that passed its check has an address to sign in to.
+      if (choice === 'own' && !next.remote.ownRelay) {
+        throw new SettingsError(t('settings.ownRelayUnset'))
+      }
+      next.remote.relay = choice
+    }
     if (discoverable !== undefined) next.remote.discoverable = discoverable
     if (direct?.enabled !== undefined) next.remote.direct.enabled = direct.enabled
     if (direct?.port !== undefined) next.remote.direct.port = direct.port
@@ -1635,7 +1673,17 @@ function readRemote(raw: Record<string, unknown>, problems: string[]): SettingsF
   read(raw.terminal, 'remote.terminal', isBoolean, () => {
     remote.terminal = raw.terminal as boolean
   })
-  read(raw.relay, 'remote.relay', isBoolean, () => (remote.relay = raw.relay as boolean))
+  // A file from before the own relay keeps Use the Kettu relay as a boolean.
+  if (typeof raw.relay === 'boolean') remote.relay = raw.relay ? 'kettu' : 'off'
+  else
+    read(raw.relay, 'remote.relay', oneOf(...RELAY_CHOICES), () => {
+      remote.relay = raw.relay as RelayChoice
+    })
+  read(raw.ownRelay, 'remote.ownRelay', isOwnRelaySettings, () => {
+    remote.ownRelay = raw.ownRelay as OwnRelaySettings | null
+  })
+  // Without an address the own relay cannot be used, so the host is reached without a relay.
+  if (remote.relay === 'own' && !remote.ownRelay) remote.relay = 'off'
   read(
     raw.discoverable,
     'remote.discoverable',

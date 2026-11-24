@@ -23,13 +23,7 @@ import type { ControlOutcome, SurfaceAccessDecision } from './control'
 import type { ContextBreakdown, ContextEstimates } from './context'
 import type { DeviceFileContent, FileContent, FileList, FileSearch, FileWritten } from './files'
 import type { ArtifactContentFile, BackgroundWork } from './host-control'
-import type {
-  HostLoad,
-  HostLoadPoint,
-  HostLoadStatus,
-  HostLoadUsage,
-  HostLoadWatch,
-} from './host-load'
+import type { HostLoad, HostLoadWatch } from './host-load'
 import type { IdleReleaseState } from './idle-release'
 import type {
   AgentOwnPlugins,
@@ -1647,13 +1641,10 @@ export interface HostContract {
   'sessions.runningWork': { params: { sessionIds: string[] }; result: { sessions: RunningWork[] } }
   // The memory state, the rule idle Claude Code sessions follow and any version in fallback.
   'sessions.idleRelease': { params: void; result: IdleReleaseState }
-  // The host's load now and its last hour, then `host.load` every LOAD_READ_MS to this port
-  // until the watch's lease of LOAD_LEASE_MS ends; asking again renews it. With `detail`, what
-  // uses the computer comes along every LOAD_DETAIL_MS, from the second `host.load` on.
-  'host.load.watch': { params: { detail: boolean }; result: HostLoadWatch }
+  // The host's load now, then `host.load` every LOAD_READ_MS to this port until the watch's lease
+  // of LOAD_LEASE_MS ends; asking again renews it. The host reads its load only while watched.
+  'host.load.watch': { params: void; result: HostLoadWatch }
   'host.load.unwatch': { params: void; result: void }
-  // What runs low on the host, which `host.status` then tells every port as it changes.
-  'host.status': { params: void; result: HostLoadStatus }
   // Stops one background task of the session, as the session board's Stop does.
   'sessions.stopTask': { params: { sessionId: string; taskId: string }; result: void }
   // The end of a background task's output, at most 8 KiB, for the session board.
@@ -2342,7 +2333,6 @@ export const HOST_METHODS = [
   'sessions.idleRelease',
   'host.load.watch',
   'host.load.unwatch',
-  'host.status',
   'sessions.stopTask',
   'sessions.taskOutput',
   'sessions.sideAsk',
@@ -2595,10 +2585,8 @@ export type HostEvent =
     }
   | { type: 'usage.status'; status: UsageStatus }
   | { type: 'idleRelease.changed'; state: IdleReleaseState }
-  // To a port watching the host's load: the reading, the minute it adds to, and with a detail
-  // watch what uses the computer whenever it was read again.
-  | { type: 'host.load'; load: HostLoad; point: HostLoadPoint; usage?: HostLoadUsage }
-  | { type: 'host.status'; status: HostLoadStatus }
+  // To a port watching the host's load: the reading.
+  | { type: 'host.load'; load: HostLoad }
   | { type: 'artifacts.changed' } // the list changed; a page showing it reads again
   | { type: 'artifacts.version'; id: string; version: number }
   // To every port: the owner's seen version of the artifact moved, as `artifacts.seen` recorded it.

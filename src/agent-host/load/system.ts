@@ -1,15 +1,18 @@
 // The whole computer's load as the host reads it with Node.js and the system's own small tools:
-// CPU from the cores' times, memory as idle release reads it, each volume's free space, the
-// battery (`pmset` on macOS, `/sys/class/power_supply` on Linux, only whether it is on battery
-// on Windows) and the uptime. A daemon in a container reads its cgroup v2 CPU and memory limits.
-// On macOS a volume's free space adds the purgeable space Finder counts as available, which
-// `statfs` leaves out.
+// CPU from the cores' times, memory as idle release reads it, the free space of the fullest volume
+// that holds a project or Kettu's data, disk reads and writes (IOKit's block storage statistics on
+// macOS, `/proc/diskstats` on Linux), network traffic (`netstat` over the `en*` interfaces on
+// macOS, `/proc/net/dev` over those backed by a device on Linux, `netstat -e` on Windows) and the
+// battery (`pmset` on macOS, `/sys/class/power_supply` on Linux, only whether it is on battery on
+// Windows). A daemon in a container reads its cgroup v2 CPU, memory and disk activity and its own
+// network. On macOS a volume's free space adds the purgeable space Finder counts as available,
+// which `statfs` leaves out.
 
 import { execFile } from 'node:child_process'
 import { access, readdir, readFile, readlink, stat, statfs } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
-import type { HostBattery, HostDisk, HostLoad } from '@shared/host-load'
+import type { HostBattery, HostLoad } from '@shared/host-load'
 import type { MemoryState } from '@shared/idle-release'
 import type { Platform } from '@shared/platform'
 import { readMemory, type MemoryReading } from '../idle-release'
@@ -42,6 +45,163 @@ export function cpuPercent(from: CpuSample, to: CpuSample): number {
 }
 
 const clampPercent = (value: number): number => Math.min(100, Math.max(0, value))
+
+/** Two byte counters, such as read and written, of each disk or interface, at one moment. */
+export interface Counters {
+  at: number
+  values: Map<string, [number, number]>
+}
+
+/**
+ * Bytes per second of the two counters between two readings, over the disks or interfaces both
+ * have. Null when a counter went back, which a reset or a wrap does, so a reading is skipped
+ * rather than shown negative or as a spike; and when the two share none.
+ */
+export function counterRates(from: Counters, to: Counters): [number, number] | null {
+  const seconds = (to.at - from.at) / 1000
+  if (!(seconds > 0)) return null
+  let first = 0
+  let second = 0
+  let shared = 0
+  for (const [key, [a, b]] of to.values) {
+    const before = from.values.get(key)
+    if (!before) continue
+    const da = a - before[0]
+    const db = b - before[1]
+    if (!(da >= 0 && db >= 0)) return null
+    first += da
+    second += db
+    shared++
+  }
+  if (shared === 0) return null
+  return [Math.round(first / seconds), Math.round(second / seconds)]
+}
+
+const num = (text: string | undefined): number | null => {
+  if (text === undefined || !/^\d+$/.test(text)) return null
+  const value = Number(text)
+  return Number.isSafeInteger(value) ? value : null
+}
+
+/**
+ * `ioreg -c IOBlockStorageDriver -r -k Statistics -d 1`: the bytes each block storage driver, one
+ * per physical disk, has read and written, by the driver's registry id.
+ */
+export function parseIoreg(text: string): Map<string, [number, number]> {
+  const values = new Map<string, [number, number]>()
+  for (const block of text.split('+-o ').slice(1)) {
+    const id = /\bid (0x[0-9a-f]+)/i.exec(block)?.[1]
+    const read = num(/"Bytes \(Read\)"=(\d+)/.exec(block)?.[1])
+    const written = num(/"Bytes \(Write\)"=(\d+)/.exec(block)?.[1])
+    if (id && read !== null && written !== null) values.set(id, [read, written])
+  }
+  return values
+}
+
+// `/proc/diskstats` counts in sectors of 512 bytes, whatever the disk's own sector size.
+const SECTOR_BYTES = 512
+
+/**
+ * `/proc/diskstats`: the bytes read and written of the whole disks named, so a partition, or a
+ * mapped or RAID device over the disks, is not counted twice.
+ */
+export function parseDiskstats(
+  text: string,
+  disks: ReadonlySet<string>,
+): Map<string, [number, number]> {
+  const values = new Map<string, [number, number]>()
+  for (const line of text.split('\n')) {
+    const fields = line.trim().split(/\s+/)
+    const name = fields[2]
+    if (!name || !disks.has(name)) continue
+    const read = num(fields[5])
+    const written = num(fields[9])
+    if (read !== null && written !== null) {
+      values.set(name, [read * SECTOR_BYTES, written * SECTOR_BYTES])
+    }
+  }
+  return values
+}
+
+/** cgroup v2 `io.stat`: the bytes the group read and wrote, by device. */
+export function parseIoStat(text: string): Map<string, [number, number]> {
+  const values = new Map<string, [number, number]>()
+  for (const line of text.split('\n')) {
+    const [device, ...pairs] = line.trim().split(/\s+/)
+    if (!device || !/^\d+:\d+$/.test(device)) continue
+    const field = (key: string) =>
+      num(pairs.find((pair) => pair.startsWith(`${key}=`))?.slice(key.length + 1))
+    const read = field('rbytes')
+    const written = field('wbytes')
+    if (read !== null && written !== null) values.set(device, [read, written])
+  }
+  return values
+}
+
+const isLoopback = (name: string): boolean => /^lo\d*$/.test(name)
+
+/**
+ * `netstat -ibn` on macOS: the bytes each physical interface (`en*`: Wi-Fi, Ethernet, USB and
+ * Thunderbolt adapters, tethering) received and sent, from its link row, which every interface has
+ * once. A VPN's or proxy's tunnel, a bridge and AWDL carry traffic an `en*` already counts, and a
+ * bridge's members are `en*` themselves. The address may be blank, so the columns are read from
+ * the right: Ibytes, Opkts, Oerrs, Obytes, Coll.
+ */
+export function parseNetstat(text: string): Map<string, [number, number]> {
+  const values = new Map<string, [number, number]>()
+  for (const line of text.split('\n')) {
+    const fields = line.trim().split(/\s+/)
+    if (fields.length < 8 || !fields[2]?.startsWith('<Link#')) continue
+    const name = fields[0]!.replace(/\*$/, '')
+    if (!/^en\d+$/.test(name)) continue
+    const received = num(fields.at(-5))
+    const sent = num(fields.at(-2))
+    if (received !== null && sent !== null) values.set(name, [received, sent])
+  }
+  return values
+}
+
+/**
+ * `/proc/net/dev`: the bytes the interfaces named received and sent, or, with none named, every
+ * interface but loopback, as a container's own are.
+ */
+export function parseNetDev(
+  text: string,
+  physical?: ReadonlySet<string>,
+): Map<string, [number, number]> {
+  const values = new Map<string, [number, number]>()
+  for (const line of text.split('\n')) {
+    const colon = line.indexOf(':')
+    if (colon < 0) continue
+    const name = line.slice(0, colon).trim()
+    if (!name || (physical ? !physical.has(name) : isLoopback(name))) continue
+    const fields = line
+      .slice(colon + 1)
+      .trim()
+      .split(/\s+/)
+    const received = num(fields[0])
+    const sent = num(fields[8])
+    if (received !== null && sent !== null) values.set(name, [received, sent])
+  }
+  return values
+}
+
+/**
+ * `netstat -e` on Windows: the bytes received and sent, which are the first row of two numbers
+ * whatever the language the system writes its labels in.
+ */
+export function parseNetstatE(text: string): Map<string, [number, number]> {
+  for (const line of text.split('\n')) {
+    const match = /^\D+?\s(\d+)\s+(\d+)\s*$/.exec(line.trim())
+    if (!match) continue
+    const received = num(match[1])
+    const sent = num(match[2])
+    return received !== null && sent !== null
+      ? new Map([['all', [received, sent]]])
+      : new Map<string, [number, number]>()
+  }
+  return new Map()
+}
 
 // cgroup v2, as a container sees its own group at the root of the mount.
 const CGROUP = '/sys/fs/cgroup'
@@ -136,9 +296,9 @@ export interface PowerSupply {
 export function parseSupplies(supplies: PowerSupply[]): HostBattery | null {
   const batteries = supplies.filter((supply) => supply.type.trim() === 'Battery')
   if (batteries.length === 0) return null
-  const num = (value: string | undefined): number | null => {
-    const n = Number(value?.trim())
-    return value !== undefined && Number.isFinite(n) ? n : null
+  const value = (text: string | undefined): number | null => {
+    const n = Number(text?.trim())
+    return text !== undefined && Number.isFinite(n) ? n : null
   }
   let now = 0
   let full = 0
@@ -146,15 +306,15 @@ export function parseSupplies(supplies: PowerSupply[]): HostBattery | null {
   let capacities = 0
   let counted = 0
   for (const battery of batteries) {
-    const energy = num(battery.energy_now) ?? num(battery.charge_now)
-    const top = num(battery.energy_full) ?? num(battery.charge_full)
-    const flow = num(battery.power_now) ?? num(battery.current_now)
+    const energy = value(battery.energy_now) ?? value(battery.charge_now)
+    const top = value(battery.energy_full) ?? value(battery.charge_full)
+    const flow = value(battery.power_now) ?? value(battery.current_now)
     if (energy !== null && top !== null && top > 0) {
       now += energy
       full += top
     }
     if (flow !== null) rate += Math.abs(flow)
-    const capacity = num(battery.capacity)
+    const capacity = value(battery.capacity)
     if (capacity !== null) {
       capacities += capacity
       counted++
@@ -223,15 +383,36 @@ function run(file: string, args: string[]): Promise<string> {
   })
 }
 
-/** `/proc/<pid>/stat`'s start time, the 22nd field, in clock ticks after boot. */
-export function procStartTicks(text: string): number | null {
-  const fields = text.slice(text.lastIndexOf(')') + 2).split(' ')
-  const ticks = Number(fields[19])
-  return Number.isFinite(ticks) ? ticks : null
+/** The whole disks, which have a device under `/sys/block`, unlike loop, RAM and mapped ones. */
+async function wholeDisks(): Promise<Set<string>> {
+  const names = await readdir('/sys/block').catch(() => [] as string[])
+  const found = await Promise.all(
+    names.map((name) =>
+      access(`/sys/block/${name}/device`).then(
+        () => name,
+        () => null,
+      ),
+    ),
+  )
+  return new Set(found.filter((name): name is string => name !== null))
 }
 
-// The kernel reports times to user space in USER_HZ, 100 on every architecture Linux runs on.
-export const CLOCK_TICKS = 100
+/**
+ * The interfaces backed by a device, virtio's included. A tunnel, bridge, bond, VLAN or veth has
+ * none, and what it carries is counted on the interfaces under it.
+ */
+async function physicalInterfaces(): Promise<Set<string>> {
+  const names = await readdir('/sys/class/net').catch(() => [] as string[])
+  const found = await Promise.all(
+    names.map((name) =>
+      access(`/sys/class/net/${name}/device`).then(
+        () => name,
+        () => null,
+      ),
+    ),
+  )
+  return new Set(found.filter((name): name is string => name !== null))
+}
 
 interface Mount {
   dev: number
@@ -315,6 +496,8 @@ const MAC_AVAILABLE_SCRIPT = `function run(argv) {
 
 // The purgeable space changes slowly and reading it starts a process, so once a minute is enough.
 const PURGEABLE_MS = 60_000
+// The battery changes slowly too, and `pmset` costs about as much as the rest of a reading.
+const BATTERY_MS = 10_000
 
 /** Each volume's space available to important files, null where it could not be read. */
 async function macAvailable(paths: string[]): Promise<(number | null)[]> {
@@ -333,6 +516,13 @@ async function macAvailable(paths: string[]): Promise<(number | null)[]> {
   })
 }
 
+interface Volume {
+  path: string
+  name: string
+  free: number
+  total: number
+}
+
 /** What reading the computer needs from the host. */
 export interface SystemReaderDeps {
   platform: Platform
@@ -341,16 +531,17 @@ export interface SystemReaderDeps {
   /** Whether the computer runs on battery, as main says on Windows; null when unknown. */
   onBattery(): boolean | null
   readMemory?: (platform: Platform) => Promise<MemoryReading>
-  log(level: 'info' | 'warn', message: string): void
+  log(level: 'warn', message: string): void
 }
 
-/** The memory as read, for idle release too, and the load's figures. */
-export interface SystemRead {
-  load: HostLoad
-  memory: MemoryReading
+/** The counters a load is measured between: the CPU's, the disks' and the network's. */
+export interface LoadSample {
+  cpu: CpuSample
+  io: Counters | null
+  network: Counters | null
 }
 
-/** Reads the whole computer; each instance keeps its own CPU sample to measure from. */
+/** Reads the whole computer; only the purgeable space and the battery are kept, until `forget`. */
 export class SystemReader {
   private readonly mounts: Mounts
   private container: Promise<ContainerLimits | null> | null = null
@@ -359,19 +550,64 @@ export class SystemReader {
   private purgeable = new Map<string, number>()
   private purgeableAt = 0
   private purgeableRead: Promise<void> | null = null
+  private batteryRead: { at: number; battery: Promise<HostBattery | null> } | null = null
 
   constructor(private readonly deps: SystemReaderDeps) {
     this.mounts = new Mounts(deps.platform)
   }
 
-  /** The cores in use: the container's limit, else the computer's. */
-  async cores(): Promise<number> {
+  forgetMounts(): void {
+    this.mounts.forget()
+  }
+
+  /** Drops what it kept, once nobody watches. */
+  forget(): void {
+    this.purgeable.clear()
+    this.purgeableAt = 0
+    this.batteryRead = null
+  }
+
+  /** The counters now. */
+  async sample(): Promise<LoadSample> {
+    const [cpu, io, network] = await Promise.all([
+      this.cpuSample(),
+      this.counters('io', () => this.ioValues()),
+      this.counters('network', () => this.networkValues()),
+    ])
+    return { cpu, io, network }
+  }
+
+  /** The load between two samples, and the rest as it is now. */
+  async read(from: LoadSample, to: LoadSample): Promise<HostLoad> {
     const limits = await this.limits()
-    return limits?.cores ?? Math.max(1, os.availableParallelism())
+    const [memory, disk, battery] = await Promise.all([
+      this.memory(limits),
+      this.disk(),
+      limits ? Promise.resolve(null) : this.recentBattery(),
+    ])
+    const io = from.io && to.io ? counterRates(from.io, to.io) : null
+    const network = from.network && to.network ? counterRates(from.network, to.network) : null
+    return {
+      at: Date.now(),
+      cpu: {
+        percent: Math.round(cpuPercent(from.cpu, to.cpu) * 10) / 10,
+        cores: limits?.cores ?? Math.max(1, os.availableParallelism()),
+      },
+      memory: { used: memory.used, total: memory.total, state: memory.state },
+      ...(disk ? { disk: { name: disk.name, free: disk.free, total: disk.total } } : {}),
+      ...(io ? { io: { readPerSecond: io[0], writePerSecond: io[1] } } : {}),
+      ...(network ? { network: { receivePerSecond: network[0], sendPerSecond: network[1] } } : {}),
+      ...(battery ? { battery } : {}),
+      ...(limits ? { container: true as const } : {}),
+    }
+  }
+
+  private limits(): Promise<ContainerLimits | null> {
+    return (this.container ??= containerLimits(this.deps.platform))
   }
 
   /** A sample to measure the CPU from, the container's when it has a CPU limit. */
-  async cpuSample(): Promise<CpuSample> {
+  private async cpuSample(): Promise<CpuSample> {
     const limits = await this.limits()
     if (limits?.cores) {
       const usage = parseCpuUsage(await readFile(`${CGROUP}/cpu.stat`, 'utf8'))
@@ -384,49 +620,72 @@ export class SystemReader {
     return coresSample()
   }
 
-  forgetMounts(): void {
-    this.mounts.forget()
-  }
-
-  /** Reads everything but the CPU, which the caller measures between two samples. */
-  async read(cpu: number): Promise<SystemRead> {
-    const { platform } = this.deps
-    const limits = await this.limits()
-    const [memory, disks, battery, uptime] = await Promise.all([
-      this.memory(limits),
-      this.disks(),
-      limits ? Promise.resolve(null) : this.battery(),
-      limits ? containerUptime() : Promise.resolve(os.uptime()),
-    ])
-    const average = os.loadavg()
-    const load: HostLoad = {
-      at: Date.now(),
-      cpu: {
-        percent: Math.round(cpu * 10) / 10,
-        cores: limits?.cores ?? Math.max(1, os.availableParallelism()),
-        ...(platform !== 'win32' ? { loadAverage: average as [number, number, number] } : {}),
-      },
-      memory: { used: memory.used, total: memory.total, state: memory.reading.state },
-      disks,
-      ...(battery ? { battery } : {}),
-      uptime: Math.round(uptime),
-      ...(limits ? { container: true as const } : {}),
+  private async counters(
+    what: 'io' | 'network',
+    read: () => Promise<Map<string, [number, number]> | null>,
+  ): Promise<Counters | null> {
+    try {
+      const values = await read()
+      return values ? { at: Date.now(), values } : null
+    } catch (error) {
+      this.warnOnce(what, `Could not read the ${what} counters: ${(error as Error).message}`)
+      return null
     }
-    return { load, memory: memory.reading }
   }
 
-  private limits(): Promise<ContainerLimits | null> {
-    return (this.container ??= containerLimits(this.deps.platform))
+  /** The disks' counters; null where they are not read, on Windows. */
+  private async ioValues(): Promise<Map<string, [number, number]> | null> {
+    const { platform } = this.deps
+    if (await this.limits()) {
+      const text = await readFile(`${CGROUP}/io.stat`, 'utf8').catch(() => null)
+      return text === null ? null : parseIoStat(text)
+    }
+    if (platform === 'darwin') {
+      return parseIoreg(
+        await run('/usr/sbin/ioreg', [
+          '-c',
+          'IOBlockStorageDriver',
+          '-r',
+          '-k',
+          'Statistics',
+          '-d',
+          '1',
+        ]),
+      )
+    }
+    if (platform === 'linux') {
+      const [text, disks] = await Promise.all([readFile('/proc/diskstats', 'utf8'), wholeDisks()])
+      return parseDiskstats(text, disks)
+    }
+    return null
+  }
+
+  /** The network's counters, a container's its own since `/proc/net/dev` follows its namespace. */
+  private async networkValues(): Promise<Map<string, [number, number]> | null> {
+    const { platform } = this.deps
+    if (platform === 'darwin') return parseNetstat(await run('/usr/sbin/netstat', ['-ibn']))
+    if (platform === 'linux') {
+      const text = await readFile('/proc/net/dev', 'utf8')
+      if (await this.limits()) return parseNetDev(text)
+      // An unmarked container (LXC, some Kubernetes runtimes) has only virtual interfaces.
+      const physical = await physicalInterfaces()
+      return parseNetDev(text, physical.size > 0 ? physical : undefined)
+    }
+    if (platform === 'win32') {
+      const system = process.env.SystemRoot ?? 'C:\\Windows'
+      return parseNetstatE(await run(path.win32.join(system, 'System32', 'netstat.exe'), ['-e']))
+    }
+    return null
   }
 
   private async memory(
     limits: ContainerLimits | null,
-  ): Promise<{ reading: MemoryReading; used: number; total: number }> {
+  ): Promise<{ state: MemoryState; used: number; total: number }> {
     if (limits?.memory) {
       const read = await readCgroupMemory()
       if (read) {
         const available = ((read.total - read.used) / read.total) * 100
-        return { reading: { state: stateByShare(available), available }, ...read }
+        return { state: stateByShare(available), ...read }
       }
     }
     const total = os.totalmem()
@@ -442,11 +701,12 @@ export class SystemReader {
       reading.available === null
         ? total - os.freemem()
         : Math.round(total * (1 - reading.available / 100))
-    return { reading, used: Math.max(0, used), total }
+    return { state: reading.state, used: Math.max(0, used), total }
   }
 
-  private async disks(): Promise<HostDisk[]> {
-    const seen = new Map<number, HostDisk>()
+  /** Of the volumes with a project or Kettu's data, the one with the least free space. */
+  private async disk(): Promise<Volume | null> {
+    const seen = new Map<number, Volume>()
     const folders = [...new Set(this.deps.folders())]
     await Promise.all(
       folders.map(async (folder) => {
@@ -462,37 +722,47 @@ export class SystemReader {
         })
       }),
     )
-    const disks = [...seen.values()]
-    if (this.deps.platform === 'darwin' && disks.length > 0) await this.addPurgeable(disks)
-    return disks.sort((a, b) => a.free - b.free)
+    const volumes = [...seen.values()]
+    if (this.deps.platform === 'darwin' && volumes.length > 0) await this.addPurgeable(volumes)
+    return volumes.sort((a, b) => a.free - b.free)[0] ?? null
   }
 
-  private async addPurgeable(disks: HostDisk[]): Promise<void> {
+  private async addPurgeable(volumes: Volume[]): Promise<void> {
     const stale = Date.now() - this.purgeableAt >= PURGEABLE_MS
-    const unread = disks.some((disk) => !this.purgeable.has(disk.path))
+    const unread = volumes.some((volume) => !this.purgeable.has(volume.path))
     if ((stale || unread) && !this.purgeableRead) {
-      const read = this.readPurgeable(disks.map((disk) => ({ ...disk })))
+      const read = this.readPurgeable(volumes.map((volume) => ({ ...volume })))
       this.purgeableRead = read.finally(() => (this.purgeableRead = null))
     }
     // Only the first read waits, so the free space never jumps once shown.
     if (unread && this.purgeableRead) await this.purgeableRead
-    for (const disk of disks) disk.free += this.purgeable.get(disk.path) ?? 0
+    for (const volume of volumes) volume.free += this.purgeable.get(volume.path) ?? 0
   }
 
-  private async readPurgeable(disks: HostDisk[]): Promise<void> {
+  private async readPurgeable(volumes: Volume[]): Promise<void> {
     this.purgeableAt = Date.now()
     try {
-      const available = await macAvailable(disks.map((disk) => disk.path))
+      const available = await macAvailable(volumes.map((volume) => volume.path))
       this.purgeable.clear()
-      disks.forEach((disk, i) => {
+      volumes.forEach((volume, i) => {
         const value = available[i]
-        this.purgeable.set(disk.path, value == null ? 0 : Math.max(0, value - disk.free))
+        this.purgeable.set(volume.path, value == null ? 0 : Math.max(0, value - volume.free))
       })
       this.failed.delete('purgeable')
     } catch (error) {
-      for (const disk of disks) this.purgeable.set(disk.path, this.purgeable.get(disk.path) ?? 0)
+      for (const volume of volumes) {
+        this.purgeable.set(volume.path, this.purgeable.get(volume.path) ?? 0)
+      }
       this.warnOnce('purgeable', `Could not read the purgeable space: ${(error as Error).message}`)
     }
+  }
+
+  private recentBattery(): Promise<HostBattery | null> {
+    const now = Date.now()
+    if (!this.batteryRead || now - this.batteryRead.at >= BATTERY_MS) {
+      this.batteryRead = { at: now, battery: this.battery() }
+    }
+    return this.batteryRead.battery
   }
 
   private async battery(): Promise<HostBattery | null> {
@@ -547,11 +817,4 @@ async function readCgroupMemory(): Promise<{ used: number; total: number } | nul
     ),
   )
   return parseCgroupMemory(max!, current!, statText!)
-}
-
-/** Seconds since the container's first process started, which the boot's uptime counts from. */
-async function containerUptime(): Promise<number> {
-  const ticks = procStartTicks(await readFile('/proc/1/stat', 'utf8').catch(() => ''))
-  const uptime = os.uptime()
-  return ticks === null ? uptime : Math.max(0, uptime - ticks / CLOCK_TICKS)
 }

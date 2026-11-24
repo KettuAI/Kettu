@@ -1971,13 +1971,8 @@ export function createValidators(platform: Platform): Validators {
       }
     },
     'sessions.idleRelease': none,
-    'host.load.watch': (params) => {
-      const { detail } = fields(params)
-      if (typeof detail !== 'boolean') throw invalidParams('detail must be a boolean')
-      return { detail }
-    },
+    'host.load.watch': none,
     'host.load.unwatch': none,
-    'host.status': none,
     'sessions.stopTask': (params) => {
       const o = fields(params)
       return { sessionId: sessionId(o), taskId: string(o, 'taskId', ID_CHARS) }

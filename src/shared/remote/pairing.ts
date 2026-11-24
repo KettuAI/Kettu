@@ -3,13 +3,20 @@
 
 import type { PairedDevice } from './device'
 import type { DirectAddress } from './protocol'
-import { relayIdBytes, relayOrigin, base32 } from './relay'
+import { relayIdBytes, relayOrigin, base32, decodeRelayBytes, encodeRelayBytes } from './relay'
 
 /**
- * The newest version of a code: 2 adds the host's relay id and relays, and is made only while the
- * host uses the relay, so a code without them stays readable by devices that know only 1.
+ * The version of a code with the relay: 2 adds the host's relay id and relays, and is made only
+ * while the host uses the relay, so a code without them stays readable by devices that know only 1.
  */
 export const PAIRING_VERSION = 2
+
+/**
+ * The version of a code whose relay is pinned: 3 adds the pin of the first relay's certificate
+ * after the relays, made only for a relay the owner runs at an address, so every other code stays
+ * readable by devices that know only 1 and 2.
+ */
+export const PINNED_PAIRING_VERSION = 3
 
 /** The version of a code without the relay. */
 export const DIRECT_PAIRING_VERSION = 1
@@ -35,6 +42,7 @@ export const MAX_PAIRING_RELAYS = 4
 const KEY_BYTES = 32
 const HEADER_BYTES = 1 + KEY_BYTES + PAIRING_SECRET_BYTES
 const RELAY_ID_BYTES = 16
+const PIN_BYTES = 32
 const MAX_HOST_BYTES = 253
 const MAX_RELAY_BYTES = 255
 
@@ -53,6 +61,8 @@ export interface PairingRelay {
   id: string
   /** Each relay's origin, the main one first. */
   urls: string[]
+  /** From version 3: the pin of the first relay's certificate, base64url. */
+  pin?: string
 }
 
 function toBase64Url(bytes: Uint8Array): string {
@@ -78,7 +88,8 @@ function isPort(port: number): boolean {
 /**
  * The payload as bytes in base64url: the version, the host's key and the secret; from version 2
  * the relay id's 16 bytes, the number of relays and each as its length and its origin in ASCII;
- * then each address as its length, its host in ASCII and its port in two bytes, big-endian.
+ * from version 3 the first relay's pin, its 32 bytes; then each address as its length, its host
+ * in ASCII and its port in two bytes, big-endian.
  */
 export function encodePairing(payload: PairingPayload): string {
   if (payload.hostKey.length !== KEY_BYTES || payload.secret.length !== PAIRING_SECRET_BYTES) {
@@ -90,7 +101,11 @@ export function encodePairing(payload: PairingPayload): string {
   const length =
     HEADER_BYTES + (relay?.length ?? 0) + hosts.reduce((sum, host) => sum + 3 + host.length, 0)
   const bytes = new Uint8Array(length)
-  bytes[0] = relay ? PAIRING_VERSION : DIRECT_PAIRING_VERSION
+  bytes[0] = !relay
+    ? DIRECT_PAIRING_VERSION
+    : payload.relay?.pin
+      ? PINNED_PAIRING_VERSION
+      : PAIRING_VERSION
   bytes.set(payload.hostKey, 1)
   bytes.set(payload.secret, 1 + KEY_BYTES)
   let offset = HEADER_BYTES
@@ -118,6 +133,11 @@ export function encodePairing(payload: PairingPayload): string {
 function relayPart(relay: PairingRelay): Uint8Array {
   const id = relayIdBytes(relay.id)
   if (!id) throw new RangeError(`"${relay.id}" is not a relay id`)
+  const pin = relay.pin === undefined ? null : decodeRelayBytes(relay.pin)
+  if (pin !== null && pin?.length !== PIN_BYTES) throw new RangeError('A pin is 32 bytes')
+  if (pin && !relay.urls[0]?.startsWith('https:')) {
+    throw new RangeError('Only an https relay is pinned')
+  }
   const urls = relay.urls.slice(0, MAX_PAIRING_RELAYS).map((url) => {
     if (relayOrigin(url) !== url) throw new RangeError(`"${url}" is not a relay origin`)
     const encoded = new TextEncoder().encode(url)
@@ -125,7 +145,7 @@ function relayPart(relay: PairingRelay): Uint8Array {
     return encoded
   })
   const bytes = new Uint8Array(
-    RELAY_ID_BYTES + 1 + urls.reduce((sum, url) => sum + 1 + url.length, 0),
+    RELAY_ID_BYTES + 1 + urls.reduce((sum, url) => sum + 1 + url.length, 0) + (pin?.length ?? 0),
   )
   bytes.set(id, 0)
   bytes[RELAY_ID_BYTES] = urls.length
@@ -135,6 +155,7 @@ function relayPart(relay: PairingRelay): Uint8Array {
     bytes.set(url, offset + 1)
     offset += 1 + url.length
   }
+  if (pin) bytes.set(pin, offset)
   return bytes
 }
 
@@ -143,10 +164,16 @@ export function decodePairing(text: string): PairingPayload | null {
   const bytes = fromBase64Url(text)
   if (!bytes || bytes.length < HEADER_BYTES) return null
   const version = bytes[0]
-  if (version !== DIRECT_PAIRING_VERSION && version !== PAIRING_VERSION) return null
+  if (
+    version !== DIRECT_PAIRING_VERSION &&
+    version !== PAIRING_VERSION &&
+    version !== PINNED_PAIRING_VERSION
+  ) {
+    return null
+  }
   let offset = HEADER_BYTES
   let relay: PairingRelay | undefined
-  if (version === PAIRING_VERSION) {
+  if (version !== DIRECT_PAIRING_VERSION) {
     if (offset + RELAY_ID_BYTES + 1 > bytes.length) return null
     const id = base32(bytes.subarray(offset, offset + RELAY_ID_BYTES))
     offset += RELAY_ID_BYTES
@@ -163,6 +190,11 @@ export function decodePairing(text: string): PairingPayload | null {
       urls.push(url)
     }
     relay = { id, urls }
+    if (version === PINNED_PAIRING_VERSION) {
+      if (offset + PIN_BYTES > bytes.length || !urls[0]?.startsWith('https:')) return null
+      relay.pin = encodeRelayBytes(bytes.subarray(offset, offset + PIN_BYTES))
+      offset += PIN_BYTES
+    }
   }
   const addresses: DirectAddress[] = []
   while (offset < bytes.length) {
@@ -207,6 +239,15 @@ export const HOSTED_WEB_URL = 'https://app.kettu.sh'
 export function hostedPairingLink(payload: PairingPayload): string | null {
   if (!payload.relay) return null
   return `${HOSTED_WEB_URL}${BROWSER_PAIRING_PATH}#${encodePairing(payload)}`
+}
+
+/**
+ * The link a browser opens a code on a relay the owner runs with: the web client that relay
+ * serves at `origin`. Null for a pinned relay, whose certificate a browser cannot check.
+ */
+export function ownRelayPairingLink(payload: PairingPayload, origin: string): string | null {
+  if (!payload.relay || payload.relay.pin) return null
+  return `${origin}${BROWSER_PAIRING_PATH}#${encodePairing(payload)}`
 }
 
 /**

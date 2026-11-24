@@ -4,7 +4,7 @@
 // and so are its direct connections.
 
 import type { DeviceCall } from '@shared/device-agent'
-import { NO_TERMINAL_PROCESSES, type TerminalHostCall } from '@shared/terminal-agent'
+import type { TerminalCall } from '@shared/terminal-agent'
 import path from 'node:path'
 import type {
   AdminAnswer,
@@ -15,6 +15,7 @@ import type {
   MainToTerminalHost,
   MainToDeviceHost,
   DeviceHostToMain,
+  OwnRelayInit,
   RelayInit,
   RemoteHostStatus,
   RemoteHostToMain,
@@ -30,7 +31,8 @@ import { deviceId, type NewDevice } from '@shared/remote/device'
 import type { HostAdminEvent } from '@shared/remote/host-admin'
 import { isPairingState, type PairingState } from '@shared/remote/pairing'
 import { parseRelayStatuses } from '@shared/remote/relay-host'
-import type { RelayReport, RemoteStatus } from '@shared/remote/status'
+import { relayReport, type RelayReport, type RemoteStatus } from '@shared/remote/status'
+import { accessKeyEnd, relayChoiceInit } from '@shared/remote/own-relay'
 import type { MarketAccount, MarketCall, MarketCallAnswer } from '@shared/market-publish'
 import { reportBuildResult, type ReportBuildResult } from '@shared/report'
 import type { DirectSettings, SettingsFile } from '@shared/settings'
@@ -136,6 +138,8 @@ export interface HostsOptions {
   newIdentity(): Promise<string>
   /** The Ed25519 seed the host signs in to the relay with, in base64; null without one. */
   relayKey: string | null
+  /** The own relay's access key now, null for none. */
+  accessKey(): string | null
   /** Replaces the relay key, as resetting remote access does; its seed. */
   newRelayKey(): Promise<string>
   /** The main relay's origin. */
@@ -178,8 +182,8 @@ export class Hosts {
   private relayToken: string | null = null
   /** The language the hosts were last told, for the text they write. */
   private sentLocale: Locale
-  /** Use the Kettu relay, as the remote host was last told. */
-  private sentRelay: boolean | null = null
+  /** The relay, as the remote host was last told, in JSON. */
+  private sentRelay: string | null = null
   private resetting: Promise<void> | null = null
   private sshPort: number | null
   /** The direct settings the remote host was last given, as JSON. */
@@ -435,11 +439,35 @@ export class Hosts {
     }
   }
 
-  /** The Kettu relay as Settings and `kettu status` show it. */
+  /** The relay as Settings and `kettu status` show it. */
   relayReport(): RelayReport {
-    if (!this.settings().remote.relay) return { state: 'off' }
-    if (!this.options.signedIn()) return { state: 'signed_out' }
-    return { state: 'on', relays: this.remoteStatus?.relays ?? [] }
+    const { relay, ownRelay } = this.settings().remote
+    return relayReport({
+      choice: relay,
+      // The daemon has no switch for Kettu's services.
+      cloud: true,
+      signedIn: this.options.signedIn(),
+      relays: this.remoteStatus?.relays ?? [],
+      own: ownRelay,
+      ownStatus: this.remoteStatus?.ownRelay ?? null,
+      keyEnd: accessKeyEnd(this.options.accessKey()),
+    })
+  }
+
+  /** The relay to sign in to, as the settings and the key are now. */
+  private relayInit(): { enabled: boolean; own: OwnRelayInit | null } {
+    return relayChoiceInit(this.settings().remote, true, this.options.accessKey())
+  }
+
+  /** Tells the remote host when the relay to use changed; each start reads it. */
+  relayChanged(): void {
+    const relay = this.relayInit()
+    const sent = JSON.stringify(relay)
+    if (sent === this.sentRelay) return
+    if (this.remote.post({ type: 'remote-host:relay', enabled: relay.enabled, own: relay.own })) {
+      this.sentRelay = sent
+    }
+    for (const listener of [...this.statusListeners]) listener()
   }
 
   /**
@@ -590,13 +618,7 @@ export class Hosts {
     if (changed.has('remote')) {
       this.directChanged()
       this.terminalChanged()
-      const relay = settings.remote.relay
-      if (
-        relay !== this.sentRelay &&
-        this.remote.post({ type: 'remote-host:relay', enabled: relay })
-      ) {
-        this.sentRelay = relay
-      }
+      this.relayChanged()
       const name = this.hostName()
       if (name !== this.sentHostName && this.remote.post({ type: 'remote-host:host-name', name })) {
         this.sentHostName = name
@@ -721,7 +743,8 @@ export class Hosts {
   /** The direct connections as the remote host applies them, held on while the relay is not used. */
   private direct(): DirectSettings {
     const { direct, relay } = this.settings().remote
-    return relay && this.options.signedIn() ? direct : { ...direct, enabled: true }
+    const relayUsed = (relay === 'kettu' && this.options.signedIn()) || relay === 'own'
+    return relayUsed ? direct : { ...direct, enabled: true }
   }
 
   /** Passes the direct connections' settings on when they changed; each start reads them anew. */
@@ -846,12 +869,7 @@ export class Hosts {
   }
 
   /** Runs an agent's terminal call on the terminal host, starting it on the first one. */
-  private async terminalCall(callId: number, call: TerminalHostCall): Promise<void> {
-    // A host that is not running has no terminals, and is not started to say so.
-    if (call.kind === 'processes' && this.terminal.state !== 'ready') {
-      this.agent.post({ type: 'terminal-result', callId, answer: NO_TERMINAL_PROCESSES })
-      return
-    }
+  private async terminalCall(callId: number, call: TerminalCall): Promise<void> {
     try {
       await this.terminal.ready()
       if (this.terminal.post({ type: 'terminal-host:call', callId, call })) return
@@ -901,10 +919,12 @@ export class Hosts {
   }
 
   private initRelay(): RelayInit {
-    this.sentRelay = this.settings().remote.relay
+    const relay = this.relayInit()
+    this.sentRelay = JSON.stringify(relay)
     return {
       url: this.options.relayUrl,
-      enabled: this.sentRelay,
+      enabled: relay.enabled,
+      own: relay.own,
       token: this.token,
       relayToken: this.relayToken,
       ...(this.relayKey ? { key: this.relayKey } : {}),
