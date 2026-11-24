@@ -191,6 +191,13 @@ function heldOf(value: unknown): PluginHeldUpdate | null {
           (item): item is string => typeof item === 'string' && isPluginPermission(item),
         )
       : [],
+    ...(Array.isArray(value.declared)
+      ? {
+          declared: value.declared.filter(
+            (item): item is string => typeof item === 'string' && isPluginPermission(item),
+          ),
+        }
+      : {}),
     foundAt: value.foundAt,
   }
 }

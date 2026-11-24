@@ -183,7 +183,7 @@ import { completePath } from './path-completion'
 import { pathKey } from './paths'
 import { PluginHostClient } from './plugin-runtime/client'
 import { InstalledScripts } from './plugin-runtime/installed'
-import { PLUGIN_FUNCTIONS } from './plugin-runtime/functions'
+import { createPluginApi, type ColorMode, type PLUGIN_EVENTS } from './plugin-runtime/functions'
 import { PreparedRecords, preparedFile, settingsTargets } from './prepared'
 import { processControl, type ProcessControl } from './process-tree'
 import { ProjectHooksAnswers } from './project-hooks'
@@ -578,9 +578,34 @@ export class AgentHost {
   /** The plugin host, which runs the scripts of the installed plugins that are on. */
   private readonly pluginHost = new PluginHostClient({
     want: (run) => this.options.send({ type: 'host:plugin-host', run }),
-    functions: PLUGIN_FUNCTIONS,
+    functions: createPluginApi({
+      locale: () => this.settings.locale,
+      colorMode: () => this.colorMode,
+      sessions: {
+        list: () => this.sessions.list(),
+        turns: (sessionId) => this.sessions.historyTurns(sessionId),
+        info: (sessionId) => this.sessions.sessionInfo(sessionId),
+        summary: (sessionId) => this.sessions.summary(sessionId),
+        startedBy: (starter) => this.sessions.startedBy(starter),
+        agents: () => this.agents.statuses(),
+        defaultAgent: () => this.settings.defaultAgent,
+        project: (path) => {
+          try {
+            return this.projects.match(path).path
+          } catch {
+            throw new Error(`${path.slice(0, 200)} is not a project of the user's`)
+          }
+        },
+        start: (pluginId, params) => this.sessions.startFromPlugin(pluginId, params),
+        send: (pluginId, sessionId, text) =>
+          this.sessions.sendFromPlugin(pluginId, sessionId, text),
+        now: () => Date.now(),
+      },
+    }),
     log: (level, message) => writeLog(level, 'plugins', message),
   })
+  /** The window's color mode, from main; null under the daemon, which has no window. */
+  private colorMode: ColorMode | null = null
   private readonly pluginScripts = new InstalledScripts(this.pluginHost, (pluginId, error) =>
     writeLog('warn', 'plugins', `Could not unload ${pluginId}: ${(error as Error).message}`),
   )
@@ -1880,8 +1905,10 @@ export class AgentHost {
   async updateSettings(next: HostSettings): Promise<void> {
     const previous = this.settings
     this.settings = next
-    if (setLocale(next.locale))
+    if (setLocale(next.locale)) {
       this.broadcast({ type: 'environment.changed', info: this.env.info() })
+      this.pluginEvent('app.locale', { locale: next.locale })
+    }
     if (JSON.stringify(previous.proxy) !== JSON.stringify(next.proxy)) {
       this.env.setProxy(next.proxy)
       this.git?.setEnvironment(this.env.agentEnv() as NodeJS.ProcessEnv)
@@ -2427,6 +2454,27 @@ export class AgentHost {
       this.sessions.startModeChanged(agentId)
       const entry = this.agentOptions.get(agentId)
       if (entry) this.hub.broadcast({ type: 'agent.options', options: this.withStartMode(entry) })
+    }
+  }
+
+  /** `host:color-mode`: the window's color mode, from main at start and whenever it changes. */
+  setColorMode(mode: ColorMode): void {
+    if (this.colorMode === mode) return
+    this.colorMode = mode
+    this.pluginEvent('app.colorMode', { colorMode: mode })
+  }
+
+  /** Tells every plugin whose script is loaded; one that is not loaded reads the value when it is. */
+  private pluginEvent(name: (typeof PLUGIN_EVENTS)[number], payload: unknown): void {
+    for (const plugin of this.pluginHost.status()) {
+      if (plugin.state !== 'active') continue
+      this.pluginHost.deliverEvent(plugin.id, name, payload).catch((error: unknown) => {
+        writeLog(
+          'warn',
+          'plugins',
+          `Could not tell ${plugin.id} of ${name}: ${(error as Error).message}`,
+        )
+      })
     }
   }
 

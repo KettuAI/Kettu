@@ -63,6 +63,7 @@ export type PluginErrorCode =
   | 'timeout' // it did not answer in time
   | 'too_large' // a value is past what may cross
   | 'unknown_function' // no host function has this name
+  | 'permission_denied' // the plugin was not given the permission the function needs
   | 'unavailable' // the plugin host is not running
   | 'failed' // the plugin's own code threw
 

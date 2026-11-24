@@ -1,15 +1,21 @@
 import { readFile } from 'node:fs/promises'
+import path from 'node:path'
 import { createRequire } from 'node:module'
-import { beforeAll, describe, expect, it } from 'vitest'
+import { beforeAll, describe, expect, it, vi } from 'vitest'
 import {
   PluginRequestError,
   type AgentToPluginHost,
   type PluginHostToAgent,
 } from '@shared/plugin-host'
+import { PLUGIN_PERMISSIONS } from '@shared/plugins'
 import type { PortChannel } from '@shared/port-channel'
 import { loadEngine, type Engine } from '../../plugin-host/engine'
+import { readPackage, readPackageFolder } from '../plugins/package'
 import { createPluginService, type PluginService } from '../../plugin-host/start'
-import { PluginHostClient, type PluginFunction } from './client'
+import type { PluginApiCall } from './call'
+import { PluginHostClient } from './client'
+import { PLUGIN_EVENTS, createPluginApi, type PluginApiDeps } from './functions'
+import type { HttpRequest } from './network'
 
 let engine: Engine
 
@@ -72,10 +78,10 @@ interface Setup {
   agentEnd(): End<AgentToPluginHost>
   /** Ends the plugin host's process, as a crash does. */
   crashHost(): void
-  add(id: string, source: string, activation?: string[]): void
+  add(id: string, source: string, activation?: string[], permissions?: string[]): void
 }
 
-function setup(functions: Record<string, PluginFunction> = {}): Setup {
+function setup(functions: Record<string, PluginApiCall> = {}): Setup {
   const scripts = new Map<string, string>()
   const wants: boolean[] = []
   const logs: string[] = []
@@ -112,9 +118,9 @@ function setup(functions: Record<string, PluginFunction> = {}): Setup {
       service?.stop()
       queueMicrotask(startHost)
     },
-    add: (id, source, activation = ['command:run']) => {
+    add: (id, source, activation = ['command:run'], permissions = []) => {
       scripts.set(`/${id}.js`, source)
-      client.register({ id, scriptPath: `/${id}.js`, activation })
+      client.register({ id, scriptPath: `/${id}.js`, activation }, permissions)
     },
   }
 }
@@ -152,9 +158,12 @@ describe('the plugin host over its port', () => {
   it('round-trips calls and events and answers host functions from its own list only', async () => {
     const seen: unknown[] = []
     const { client, add } = setup({
-      'sessions.count': (pluginId, args) => {
-        seen.push([pluginId, args])
-        return 3
+      'sessions.count': {
+        permission: null,
+        run: ({ pluginId }, args) => {
+          seen.push([pluginId, args])
+          return 3
+        },
       },
     })
     add(
@@ -272,5 +281,189 @@ describe('the plugin host over its port', () => {
     expect(await waiting).toBe('unavailable')
     expect(wants).toEqual([true, false])
     expect(await code(client.start())).toBe('unavailable')
+  })
+})
+
+/** A script that passes a call on and reports what became of it. */
+const RELAY = `exports.call = (name, ...args) =>
+  kettu.call(name, ...args).then((value) => ({ ok: value }), (error) => ({ error: error.message }))`
+
+function apiDeps() {
+  const sessions = {
+    list: vi.fn(() => []),
+    turns: vi.fn(async () => []),
+    info: vi.fn(() => null),
+    summary: vi.fn(),
+    startedBy: vi.fn(() => []),
+    agents: vi.fn(() => []),
+    defaultAgent: vi.fn(() => null),
+    project: vi.fn(),
+    start: vi.fn(async () => 'new'),
+    send: vi.fn(async () => ({ delivered: 'sent' as const })),
+    now: () => 0,
+  }
+  const transport = vi.fn(async (_request: HttpRequest) => ({
+    status: 200,
+    headers: {},
+    body: 'fine',
+  }))
+  const deps: PluginApiDeps = {
+    locale: () => 'zh-CN',
+    colorMode: () => null,
+    sessions: sessions as unknown as PluginApiDeps['sessions'],
+    transport,
+  }
+  return { deps, sessions, transport }
+}
+
+describe('the plugin API', () => {
+  it('answers a call only to a plugin that has its permission, naming the one it lacks', async () => {
+    const { deps, sessions, transport } = apiDeps()
+    const api = createPluginApi(deps)
+    const { client, add } = setup(api)
+    add('bare', RELAY)
+    await client.activate('bare', 'command:run')
+    let gated = 0
+    for (const [name, call] of Object.entries(api)) {
+      if (call.permission === null) continue
+      gated++
+      const needs = call.permission === 'network' ? 'network:<domain>' : call.permission
+      expect(
+        await client.call('bare', 'call', [name, 'https://api.example.com/', {}]),
+        name,
+      ).toEqual({ error: expect.stringContaining(`"${needs}"`) })
+    }
+    expect(gated).toBeGreaterThan(0)
+    expect(transport).not.toHaveBeenCalled()
+    for (const fn of Object.values(sessions)) {
+      if (vi.isMockFunction(fn)) expect(fn).not.toHaveBeenCalled()
+    }
+  })
+
+  it('opens each permission to its own calls and no others', async () => {
+    const { deps } = apiDeps()
+    const api = createPluginApi(deps)
+    const { client, add } = setup(api)
+    for (const permission of PLUGIN_PERMISSIONS) {
+      add(`only-${permission}`, RELAY, ['command:run'], [permission])
+      await client.activate(`only-${permission}`, 'command:run')
+      for (const [name, call] of Object.entries(api)) {
+        if (call.permission === null || call.permission === permission) continue
+        const answer = (await client.call(`only-${permission}`, 'call', [name, {}])) as {
+          error?: string
+        }
+        expect(answer.error, `${permission} for ${name}`).toContain('needs the permission')
+      }
+    }
+    // Every call asks for a permission a plugin can declare.
+    for (const call of Object.values(api)) {
+      if (call.permission === null || call.permission === 'network') continue
+      expect(PLUGIN_PERMISSIONS as readonly string[]).toContain(call.permission)
+    }
+  })
+
+  it('answers the calls that need no permission', async () => {
+    const { client, add } = setup(createPluginApi(apiDeps().deps))
+    add('bare', RELAY)
+    await client.activate('bare', 'command:run')
+    expect(await client.call('bare', 'call', ['api.version'])).toEqual({ ok: 1 })
+    expect(await client.call('bare', 'call', ['app.locale'])).toEqual({ ok: 'zh-CN' })
+    expect(await client.call('bare', 'call', ['app.colorMode'])).toEqual({ ok: null })
+  })
+
+  it('has no call that runs commands, reads files or reaches credentials, whatever is granted', async () => {
+    const { deps } = apiDeps()
+    const api = createPluginApi(deps)
+    const { client, add } = setup(api)
+    add('all', RELAY, ['command:run'], [...PLUGIN_PERMISSIONS, 'network:example.com'])
+    await client.activate('all', 'command:run')
+    for (const name of [
+      'shell.run',
+      'process.exec',
+      'child_process.spawn',
+      'fs.readFile',
+      'fs.writeFile',
+      'projects.readFile',
+      'files.read',
+      'system.permissions',
+      'camera.capture',
+      'credentials.get',
+      'agent.credentials',
+      'github.token',
+      'plugins.data',
+      'plugins.list',
+      'window.eval',
+      'sessions.delete',
+      'constructor',
+      '__proto__',
+    ]) {
+      expect(await client.call('all', 'call', [name]), name).toEqual({
+        error: `No host function "${name}"`,
+      })
+    }
+  })
+
+  it('only adds calls within a version', () => {
+    // The calls version 1 shipped with; one that goes missing or changes its permission breaks plugins.
+    const shipped: Record<string, string | null> = {
+      'api.version': null,
+      'app.locale': null,
+      'app.colorMode': null,
+      'network.fetch': 'network',
+      'sessions.list': 'sessions.summary',
+      'sessions.read': 'sessions.content',
+      'sessions.start': 'sessions.start',
+      'sessions.send': 'sessions.start',
+    }
+    const api = createPluginApi(apiDeps().deps)
+    for (const [name, permission] of Object.entries(shipped)) {
+      expect(api[name]?.permission, name).toBe(permission)
+    }
+  })
+})
+
+describe('the sample plugin and the published types', () => {
+  const folder = path.resolve('packages/plugin-api')
+
+  it('is a package Kettu installs, asking for what its script uses', async () => {
+    const pkg = readPackage(await readPackageFolder(path.join(folder, 'sample')), '0.0.0')
+    expect(pkg.contents.permissions).toEqual(['sessions.summary', 'network:hooks.example.com'])
+    expect(pkg.manifest.kettu).toMatchObject({ api: 1, script: 'sh.kettu/main.js' })
+  })
+
+  it('runs through the engine and reaches only what its manifest names', async () => {
+    const source = await readFile(path.join(folder, 'sample/sh.kettu/main.js'), 'utf8')
+    const { deps, sessions, transport } = apiDeps()
+    sessions.list.mockReturnValue([
+      { id: 'a', status: 'running', origin: 'user', archivedAt: null },
+      { id: 'b', status: 'running', origin: 'user', archivedAt: null },
+      { id: 'c', status: 'ready', origin: 'user', archivedAt: null },
+    ] as never)
+    const { client, add } = setup(createPluginApi(deps))
+    add('sample', source, ['command:run'], ['sessions.summary', 'network:hooks.example.com'])
+    await client.activate('sample', 'command:run')
+    expect(await client.call('sample', 'digest', [])).toEqual({ running: 2, ready: 1 })
+    expect(await client.call('sample', 'post', [])).toBe(200)
+    expect(transport).toHaveBeenCalledTimes(1)
+    const sent = transport.mock.calls[0]![0]
+    expect(sent.url.href).toBe('https://hooks.example.com/digest')
+    expect(sent).toMatchObject({ method: 'POST', body: '{"running":2,"ready":1}' })
+
+    add('narrow', source, ['command:run'], ['sessions.summary'])
+    await client.activate('narrow', 'command:run')
+    await expect(client.call('narrow', 'post', [])).rejects.toMatchObject({
+      message: expect.stringContaining('needs the permission "network:<domain>"'),
+    })
+    expect(transport).toHaveBeenCalledTimes(1)
+  })
+
+  it('lists the calls and events the host answers, no more and no fewer', async () => {
+    const types = await readFile(path.join(folder, 'index.d.ts'), 'utf8')
+    const names = (block: string): string[] => {
+      const body = types.split(`export interface ${block} {`)[1]!.split('\n}\n')[0]!
+      return [...body.matchAll(/^ {2}'([A-Za-z.]+)': \{/gm)].map((match) => match[1]!)
+    }
+    expect(names('KettuCalls').sort()).toEqual(Object.keys(createPluginApi(apiDeps().deps)).sort())
+    expect(names('KettuEvents').sort()).toEqual([...PLUGIN_EVENTS].sort())
   })
 })

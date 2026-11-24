@@ -63,6 +63,7 @@ import type {
   BusySession,
 } from '@shared/host-control'
 import type { Platform } from '@shared/platform'
+import { pluginStarter } from '@shared/plugins'
 import type { PortDevice } from '@shared/remote/device'
 import type { PermissionScope } from '@shared/routines'
 import type { HostSettings } from '@shared/settings'
@@ -11217,13 +11218,47 @@ export class SessionManager {
   }
 
   /**
+   * Starts a top-level session for a plugin in `projectPath`, or in a scratch folder of its own
+   * when that is null. As for a session an agent starts, its mode is held to Auto at most and
+   * never full access, and it is marked as started by the plugin.
+   */
+  async startFromPlugin(
+    pluginId: string,
+    params: {
+      prompt: string
+      projectPath: string | null
+      agentId: AgentId
+      mode?: string
+      title?: string
+    },
+  ): Promise<string> {
+    const summary = await this.create({
+      agentId: params.agentId,
+      projectPath: params.projectPath,
+      prompt: [{ type: 'text', text: params.prompt }],
+      startedBy: pluginStarter(pluginId),
+      startedMode: { starter: null, wanted: params.mode ?? null },
+      ...(params.title === undefined ? {} : { title: params.title }),
+    })
+    return summary.id
+  }
+
+  /** Prompts a session the plugin started, as an agent's message to one it started goes. */
+  async sendFromPlugin(pluginId: string, sessionId: string, text: string): Promise<ToolDelivery> {
+    if (this.recordOf(sessionId).startedBy !== pluginStarter(pluginId)) {
+      throw new HostError('restricted', 'The plugin can message only the sessions it started')
+    }
+    return this.sendFromTool(sessionId, text, undefined, false)
+  }
+
+  /**
    * Prompts a session the caller started, or queues the prompt while that session works.
    * Unlike a message from the user, this brings an archived session back.
    */
   async sendFromTool(
     sessionId: string,
     text: string,
-    from: FromSession,
+    from: FromSession | undefined,
     now: boolean,
   ): Promise<ToolDelivery> {
     const content: UserContent[] = [{ type: 'text', text }]
@@ -11236,7 +11271,7 @@ export class SessionManager {
     }
     const working = status === 'running' || status === 'awaiting_permission'
     if (!canSend(status) && !working) throw busyError(status)
-    const item = { id: randomUUID(), content, at: this.now(), from }
+    const item = { id: randomUUID(), content, at: this.now(), ...(from ? { from } : {}) }
     this.update(live, { queue: [...queue, item] })
     this.persist(live)
     this.touch(live.id)

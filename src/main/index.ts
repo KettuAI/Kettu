@@ -444,6 +444,7 @@ async function start(): Promise<void> {
   const islandLog = createLogger('island')
   // Every host signed in to an account says its plan limit notices; this computer says each once.
   const repeatedNotices = new RepeatedNotices()
+  const colorMode = (): 'light' | 'dark' => (nativeTheme.shouldUseDarkColors ? 'dark' : 'light')
   // The notch island: macOS only, started once the first window shows.
   const island = new IslandBridge({
     enabled: () => process.platform === 'darwin' && settings.get().notifications.island,
@@ -452,7 +453,7 @@ async function start(): Promise<void> {
         ? settings.get().notifications.updates
         : settings.get().notifications[ATTENTION_SETTING[kind]],
     windowFocused: () => BrowserWindow.getFocusedWindow() !== null,
-    colorMode: () => (nativeTheme.shouldUseDarkColors ? 'dark' : 'light'),
+    colorMode,
     version: app.getVersion(),
     locale: () => currentLocale(),
     strings: () => islandHelperStrings(),
@@ -498,9 +499,11 @@ async function start(): Promise<void> {
     log: islandLog,
   })
   nativeTheme.on('updated', () => island.appearanceChanged())
+  nativeTheme.on('updated', () => agentHost.pushColorMode(colorMode()))
   app.on('will-quit', () => island.quit())
   const agentHost = new AgentHost({
     settings: () => hostSettings(settings.get(), systemLocale),
+    colorMode,
     marketKeys: () => marketKeys.contentsForHost(),
     onMarketOAuth: (serverId, state) => void marketKeys.setOAuth(serverId, state),
     onFirstStart: (harnesses) => settings.firstStart(harnesses),

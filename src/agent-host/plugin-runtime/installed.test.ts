@@ -8,8 +8,8 @@ function registry() {
   return {
     calls,
     known,
-    register(plugin: PluginScript) {
-      calls.push(`register ${plugin.id}`)
+    register(plugin: PluginScript, permissions: readonly string[]) {
+      calls.push(`register ${plugin.id} ${permissions.join(',')}`.trim())
       known.set(plugin.id, plugin)
     },
     async unregister(pluginId: string) {
@@ -19,11 +19,12 @@ function registry() {
   }
 }
 
-const script = (id: string, revision = '1'): InstalledScript => ({
+const script = (id: string, revision = '1', permissions: string[] = []): InstalledScript => ({
   id,
   scriptPath: `/plugins/${id}/main.js`,
   activation: [],
   revision,
+  permissions,
 })
 
 /** Waits for the queued syncs to apply. */
@@ -63,5 +64,18 @@ describe('InstalledScripts', () => {
     await settle()
     expect(failed).toEqual(['a'])
     expect(client.calls).toEqual(['register a', 'unregister a', 'register a'])
+  })
+
+  it('hands the client the permissions of the version in place, and the new ones with a new package', async () => {
+    const client = registry()
+    const scripts = new InstalledScripts(client, () => {})
+    scripts.sync([script('a', '1', ['tools'])])
+    scripts.sync([script('a', '2', ['tools', 'sessions.start'])])
+    await settle()
+    expect(client.calls).toEqual([
+      'register a tools',
+      'unregister a',
+      'register a tools,sessions.start',
+    ])
   })
 })

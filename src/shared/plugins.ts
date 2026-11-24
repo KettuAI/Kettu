@@ -26,6 +26,11 @@ export function pluginItemId(pluginId: string, name: string): string {
   return `${ITEM_PREFIX}${pluginId}:${name}`
 }
 
+/** What a session's `startedBy` holds when a plugin started it: not the id of a session. */
+export function pluginStarter(pluginId: string): string {
+  return `${ITEM_PREFIX}${pluginId}`
+}
+
 /** The plugin and name a kept skill's or server's id names; null for any other source. */
 export function pluginItem(id: string): { pluginId: string; name: string } | null {
   if (!id.startsWith(ITEM_PREFIX)) return null
@@ -47,6 +52,7 @@ export const PLUGIN_PERMISSIONS = [
   'requests.answer',
   'sessions.start',
 ] as const
+type FixedPermission = (typeof PLUGIN_PERMISSIONS)[number]
 const NETWORK_PREFIX = 'network:'
 // A host name, or one with a leading `*.` for its subdomains.
 const NETWORK_DOMAIN = /^(?:\*\.)?(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/
@@ -57,11 +63,86 @@ export function isPluginPermission(text: string): boolean {
   return text.startsWith(NETWORK_PREFIX) && NETWORK_DOMAIN.test(text.slice(NETWORK_PREFIX.length))
 }
 
+/** The domain a `network:<domain>` permission names, `*.` included; null for any other. */
+export function networkDomain(permission: string): string | null {
+  if (!permission.startsWith(NETWORK_PREFIX)) return null
+  const domain = permission.slice(NETWORK_PREFIX.length)
+  return NETWORK_DOMAIN.test(domain) ? domain : null
+}
+
+/** Whether a host name is one a granted domain covers: it, or under it for a `*.` domain. */
+export function domainCovers(domain: string, host: string): boolean {
+  if (!domain.startsWith('*.')) return host === domain
+  return host.endsWith(domain.slice(1)) && host.length > domain.length - 1
+}
+
 /** How much a permission lets a script do; the high ones show in red on the consent. */
-export function permissionRisk(permission: string): 'normal' | 'caution' | 'high' {
-  if (['sessions.content', 'requests.answer', 'sessions.start'].includes(permission)) return 'high'
-  if (['prompt.attach', 'requests.check'].includes(permission)) return 'caution'
-  return 'normal'
+export type PermissionRisk = 'normal' | 'caution' | 'high'
+
+const PERMISSION_RISK: Readonly<Record<FixedPermission, PermissionRisk>> = {
+  'sessions.summary': 'normal',
+  tools: 'normal',
+  'prompt.attach': 'caution',
+  'requests.check': 'caution',
+  'sessions.content': 'high',
+  'requests.answer': 'high',
+  'sessions.start': 'high',
+}
+
+export function permissionRisk(permission: string): PermissionRisk {
+  return Object.hasOwn(PERMISSION_RISK, permission)
+    ? PERMISSION_RISK[permission as FixedPermission]
+    : 'normal'
+}
+
+// The catalog's names for each permission, under `plugin.permission` in the `marketplace` texts.
+const PERMISSION_TEXT = {
+  'sessions.summary': 'sessionsSummary',
+  tools: 'tools',
+  'prompt.attach': 'promptAttach',
+  'requests.check': 'requestsCheck',
+  'sessions.content': 'sessionsContent',
+  'requests.answer': 'requestsAnswer',
+  'sessions.start': 'sessionsStart',
+} as const satisfies Record<FixedPermission, string>
+
+type PermissionText = (typeof PERMISSION_TEXT)[FixedPermission] | 'network' | 'networkSubdomains'
+
+/** A permission as the consent card lists it: its risk and the keys of its texts. */
+export interface PluginPermissionInfo {
+  permission: string
+  risk: PermissionRisk
+  /** Keys in the `marketplace` texts, in English and Chinese alike. */
+  nameKey: `plugin.permission.${PermissionText}.name`
+  descriptionKey: `plugin.permission.${PermissionText}.description`
+  /** What the description fills in: a network permission's domain, without a leading `*.`. */
+  params: { domain?: string }
+}
+
+/** Describes a permission for the consent card; null for one a plugin may not declare. */
+export function describePermission(permission: string): PluginPermissionInfo | null {
+  if (!isPluginPermission(permission)) return null
+  const risk = permissionRisk(permission)
+  const domain = networkDomain(permission)
+  if (domain === null) {
+    const text = PERMISSION_TEXT[permission as FixedPermission]
+    return {
+      permission,
+      risk,
+      nameKey: `plugin.permission.${text}.name`,
+      descriptionKey: `plugin.permission.${text}.description`,
+      params: {},
+    }
+  }
+  const wildcard = domain.startsWith('*.')
+  const text = wildcard ? 'networkSubdomains' : 'network'
+  return {
+    permission,
+    risk,
+    nameKey: `plugin.permission.${text}.name`,
+    descriptionKey: `plugin.permission.${text}.description`,
+    params: { domain: wildcard ? domain.slice(2) : domain },
+  }
 }
 
 /** Where a plugin comes from. */
@@ -170,7 +251,10 @@ export interface PluginHeldUpdate {
   /** The commit or listing version that names it. */
   revision: string
   script: boolean
+  /** The permissions it asks for that the installed version does not have. */
   permissions: string[]
+  /** Every permission it declares, the ones the installed version has too; absent from older hosts. */
+  declared?: string[]
   foundAt: number
 }
 

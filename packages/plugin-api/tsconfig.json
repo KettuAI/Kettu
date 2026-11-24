@@ -1,0 +1,16 @@
+{
+  // The sample plugin's script, checked against the API's types.
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022"],
+    "types": [],
+    "module": "CommonJS",
+    "strict": true,
+    "allowJs": true,
+    "checkJs": true,
+    "noEmit": true,
+    "skipLibCheck": false
+  },
+  "files": ["index.d.ts"],
+  "include": ["sample/**/*.js"]
+}

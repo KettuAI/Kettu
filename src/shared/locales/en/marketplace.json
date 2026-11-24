@@ -334,7 +334,45 @@
       "installs": "Installs"
     },
     "adds": "Adds",
-    "willAdd": "Will add"
+    "willAdd": "Will add",
+    "permission": {
+      "sessionsSummary": {
+        "name": "See sessions",
+        "description": "See each session’s title, project, agent, state and what it is doing, but not what was said in it."
+      },
+      "tools": {
+        "name": "Give agents tools",
+        "description": "Add tools to Kettu’s tool service. An agent asks you before it calls one, as it does for any tool."
+      },
+      "promptAttach": {
+        "name": "Attach to messages",
+        "description": "Add text to a message before it is sent. What it adds shows on the message."
+      },
+      "requestsCheck": {
+        "name": "Check permission requests",
+        "description": "Look at an agent’s permission request first and deny it or leave it to you. It can never allow one."
+      },
+      "sessionsContent": {
+        "name": "Read conversations",
+        "description": "Read everything said in your sessions."
+      },
+      "requestsAnswer": {
+        "name": "Relay answers",
+        "description": "Pass on your answer to a permission request given somewhere else, such as a chat app. It can allow once or deny, never always allow."
+      },
+      "sessionsStart": {
+        "name": "Start sessions and send messages",
+        "description": "Start sessions and send messages to them, with agents that work in Auto mode at most."
+      },
+      "network": {
+        "name": "Network",
+        "description": "Connect to {{domain}} over https."
+      },
+      "networkSubdomains": {
+        "name": "Network",
+        "description": "Connect to any subdomain of {{domain}} over https."
+      }
+    }
   },
   "skill": {
     "installNote": "Kettu keeps it on this computer and hands it to these agents when a session starts.",
