@@ -3,7 +3,8 @@
 // folder of the plugin's own under the Marketplace's data; its skills and MCP servers go into
 // the lists Kettu already keeps and its workflows into the workflow library, each marked with
 // the plugin, and leave with it. Commands, roles, themes and templates are kept in the package
-// and read from there. A script, its permissions and the views are kept and never run here.
+// and read from there. A script, its permissions and the views are kept and never run here: the
+// plugin host runs a script, from what `scripts` lists.
 
 import { createHash, randomBytes, randomUUID } from 'node:crypto'
 import { mkdir, rename, rm, stat, writeFile } from 'node:fs/promises'
@@ -207,6 +208,25 @@ export class PluginsService {
   /** Whether a plugin is installed and on; its workflows cannot start a task while it is off. */
   on(id: string): boolean {
     return this.data?.plugins[id]?.enabled === true
+  }
+
+  /**
+   * The scripts of the plugins that are on, each with its file on the host. The manifest has no
+   * list of what wakes a script yet, so none is given and nothing loads one.
+   */
+  scripts(): { id: string; scriptPath: string; activation: string[]; revision: string }[] {
+    return Object.values(this.data?.plugins ?? {}).flatMap((record) =>
+      record.enabled && record.contents.script
+        ? [
+            {
+              id: record.id,
+              scriptPath: path.join(this.packageDir(record), record.contents.script.entry),
+              activation: [],
+              revision: `${record.dir}:${record.updatedAt}`,
+            },
+          ]
+        : [],
+    )
   }
 
   /**

@@ -181,6 +181,7 @@ import type { SkillsListResponse } from './codex/protocol'
 import { completePath } from './path-completion'
 import { pathKey } from './paths'
 import { PluginHostClient } from './plugin-runtime/client'
+import { InstalledScripts } from './plugin-runtime/installed'
 import { PLUGIN_FUNCTIONS } from './plugin-runtime/functions'
 import { PreparedRecords, preparedFile, settingsTargets } from './prepared'
 import { processControl, type ProcessControl } from './process-tree'
@@ -571,15 +572,15 @@ export class AgentHost {
   private readonly publishDrafts: PublishDrafts
   /** The Marketplace tools of Kettu's MCP service. */
   private readonly marketTools: MarketTools
-  /**
-   * The plugin host, which runs plugins' scripts: a plugin is registered with its id, the path of
-   * its bundled script and what its manifest says wakes it, and loaded only when woken.
-   */
-  readonly plugins = new PluginHostClient({
+  /** The plugin host, which runs the scripts of the installed plugins that are on. */
+  private readonly pluginHost = new PluginHostClient({
     want: (run) => this.options.send({ type: 'host:plugin-host', run }),
     functions: PLUGIN_FUNCTIONS,
     log: (level, message) => writeLog(level, 'plugins', message),
   })
+  private readonly pluginScripts = new InstalledScripts(this.pluginHost, (pluginId, error) =>
+    writeLog('warn', 'plugins', `Could not unload ${pluginId}: ${(error as Error).message}`),
+  )
   private lastProcesses = '[]'
   private sentFolders: string | null = null
   private stopping: Promise<void> | null = null
@@ -902,7 +903,10 @@ export class AgentHost {
       kettu: (id) => this.marketCommunity.download(id, 'agent-plugin'),
       listing: (id) => this.marketCommunity.listing(id),
       count: (id, version, reason) => void this.marketCommunity.count(id, version, reason),
-      changed: () => this.hub.broadcast({ type: 'plugins.changed' }),
+      changed: () => {
+        this.pluginScripts.sync(this.plugins.scripts())
+        this.hub.broadcast({ type: 'plugins.changed' })
+      },
     })
     this.artifactService = new ArtifactService({
       workflow: {
@@ -1568,6 +1572,7 @@ export class AgentHost {
     host.routines.start()
     void host.marketSkills.sync()
     host.plugins.start()
+    host.pluginScripts.sync(host.plugins.scripts())
     host.sendFolders()
     void host.sessions.checkWorktrees()
     host.usage.start()
@@ -2953,7 +2958,7 @@ export class AgentHost {
 
   /** `host:plugin-port`: the plugin host is ready and this is its port. */
   connectPluginHost(port: PortChannel<AgentToPluginHost>): void {
-    this.plugins.attach(port)
+    this.pluginHost.attach(port)
   }
 
   /** `device-result`: the device host's answer to a call this host forwarded. */
@@ -3009,6 +3014,7 @@ export class AgentHost {
       this.sessions.shutdown()
       this.idleRelease.stop()
       this.plugins.stop()
+      this.pluginHost.stop()
       this.usage.stop()
       this.artifacts.stop()
       this.execRunner.killAll()
