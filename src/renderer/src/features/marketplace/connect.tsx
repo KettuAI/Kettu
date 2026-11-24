@@ -32,6 +32,8 @@ import { AgentsDialog, UninstallDialog } from './dialogs'
 import { useConnectFlow, useConnection } from './hooks'
 import { AgentPicker } from './install'
 import { oauthFlow } from './model'
+import { isPluginItem } from './plugin-model'
+import { PluginItemControls } from './plugin-ui'
 
 /** Copies `text`; the button says so for a moment. */
 function CopyButton({ text, label }: { text: string; label: string }) {
@@ -333,6 +335,7 @@ export function ConnectionControls({
   const close = (next: boolean) => {
     if (!next) setDialog(null)
   }
+  if (isPluginItem(server.id)) return <PluginItemControls itemId={server.id} />
   return (
     <span className="k-mkt-row-end">
       {flow?.phase === 'failed' && !open ? (

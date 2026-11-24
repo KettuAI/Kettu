@@ -31,6 +31,8 @@ import { ExternalLink, ListingFrame, ListingSkeleton, Missing } from './parts'
 import { AddControl, ItemRow, KindTag, OfficialBadge, Publisher } from './rows'
 import { skillSubject } from './tile-art'
 import { ItemTile } from './tiles'
+import { isPluginItem } from './plugin-model'
+import { PluginItemControls } from './plugin-ui'
 
 export function SkillRow({
   skill,
@@ -204,15 +206,20 @@ export function SkillListing({
   const repository = entry?.repository ?? (kept?.source === 'github' ? kept.origin : null)
   const version = kept?.version ?? entry?.version ?? null
   const marks = kept && kept.agents !== 'all' ? kept.agents : allAgents.map((a) => a.id)
-  const related = (loaded?.catalog ?? [])
-    .filter((s) => s.id !== id && (publisher ? s.publisher === publisher : true))
-    .slice(0, 4)
+  const related =
+    kept?.source === 'plugin'
+      ? []
+      : (loaded?.catalog ?? [])
+          .filter((s) => s.id !== id && (publisher ? s.publisher === publisher : true))
+          .slice(0, 4)
   const source =
-    kept?.source === 'local'
-      ? t('skill.source.local')
-      : kept?.source === 'github'
-        ? t('skill.source.github')
-        : (entry?.publisher ?? t('skill.source.catalog'))
+    kept?.source === 'plugin'
+      ? t('plugin.from.source')
+      : kept?.source === 'local'
+        ? t('skill.source.local')
+        : kept?.source === 'github'
+          ? t('skill.source.github')
+          : (entry?.publisher ?? t('skill.source.catalog'))
   return (
     <ListingFrame back={back} rise>
       <header className="k-mkt-head">
@@ -382,6 +389,7 @@ export function KeptSkillControls({
   const { t } = useTranslation('marketplace')
   const scope = useHostScope()
   const [dialog, setDialog] = useState<'agents' | 'remove' | null>(null)
+  if (isPluginItem(skill.id)) return <PluginItemControls itemId={skill.id} />
   return (
     <>
       {!compact && (

@@ -67,6 +67,7 @@ import {
 } from './workflow-model'
 import { workflowSubject } from './tile-art'
 import { PlainTile } from './tiles'
+import { PluginByline } from './plugin-ui'
 
 /**
  * Who a workflow comes from, after its name: a publisher of the Kettu Marketplace, with the Kettu
@@ -84,6 +85,7 @@ export function WorkflowByline({ entry }: { entry: WireWorkflowEntry }) {
       </>
     )
   }
+  if (origin?.kind === 'plugin') return <PluginByline origin={origin} />
   const text =
     origin?.kind === 'community'
       ? t('workflow.by.community', { handle: origin.handle })

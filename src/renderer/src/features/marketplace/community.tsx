@@ -37,7 +37,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui
 import { backTo } from '@renderer/app/history'
 import { count, mediumAgo } from '@renderer/lib/format'
 import { errorMessage } from '@renderer/lib/host'
-import { i18n } from '@renderer/lib/i18n'
+import { currentLocale, i18n } from '@renderer/lib/i18n'
 import { isWeb } from '@renderer/lib/platform'
 import { signIn, useAccountStore } from '@renderer/stores/account'
 import { AGENT_NAMES } from '@renderer/stores/agents'
@@ -73,6 +73,17 @@ import {
   type ItemKind,
 } from './rows'
 import { KeptSkillControls } from './skills'
+import {
+  PluginFacts,
+  PluginListingAction,
+  PluginControls,
+  PluginListingBody,
+  PluginRowAction,
+  PluginSideExtra,
+  PluginTags,
+} from './plugin-ui'
+import { usePluginOfListing } from './plugin-hooks'
+import { addsTags, pluginTitle } from './plugin-model'
 import { communitySubject } from './tile-art'
 import { ItemTile } from './tiles'
 import { addCommunityWorkflow, useListingWorkflow } from './workflow-actions'
@@ -106,6 +117,7 @@ export function CommunityRow({
   const installs = useInstallsLabel()(item.installs)
   const open = () => openMarketplace({ item: itemKey({ kind: 'community', id: item.id }), tab })
   const steps = item.kind === 'workflow' ? (item.steps ?? []) : []
+  const tags = item.kind === 'agent-plugin' ? addsTags(item.adds) : []
   return (
     <ItemRow
       title={item.name}
@@ -119,7 +131,13 @@ export function CommunityRow({
         </>
       }
       line={item.description || null}
-      extra={steps.length > 0 ? <StepsLine names={steps} waits={item.waits ?? []} /> : undefined}
+      extra={
+        steps.length > 0 ? (
+          <StepsLine names={steps} waits={item.waits ?? []} />
+        ) : tags.length > 0 ? (
+          <PluginTags tags={tags} limit={card ? 3 : undefined} />
+        ) : undefined
+      }
       fresh={fresh}
       card={card}
       onOpen={open}
@@ -143,6 +161,7 @@ function CommunityAction({
 }) {
   if (item.kind === 'skill') return <SkillAction item={item} onOpen={onOpen} />
   if (item.kind === 'workflow') return <WorkflowAction item={item} tab={tab} onOpen={onOpen} />
+  if (item.kind === 'agent-plugin') return <PluginRowAction item={item} onOpen={onOpen} />
   return <ServerAction item={item} onOpen={onOpen} />
 }
 
@@ -508,7 +527,12 @@ function Unlisted({ id, takenDown, back }: { id: string; takenDown: boolean; bac
   const key = kettuId(id)
   const skill = useSettingsStore((s) => s.settings.marketplace.skills.find((x) => x.id === key))
   const server = useSettingsStore((s) => s.settings.marketplace.mcp.find((x) => x.id === key))
-  const name = skill ? displayTitle(skill.name) : (server?.title ?? null)
+  const plugin = usePluginOfListing(id)
+  const name = skill
+    ? displayTitle(skill.name)
+    : plugin
+      ? pluginTitle(plugin.contents, currentLocale())
+      : (server?.title ?? null)
   return (
     <>
       <ListingProblem
@@ -521,8 +545,9 @@ function Unlisted({ id, takenDown, back }: { id: string; takenDown: boolean; bac
               : t('community.gone')
         }
       />
-      {(skill || server) && (
+      {(skill || server || plugin) && (
         <div className="k-mkt-head__act k-mkt-unlisted">
+          {plugin && <PluginControls plugin={plugin} onRemoved={back} />}
           {skill && <KeptSkillControls skill={skill} onRemoved={back} />}
           {server &&
             (oauthFlow(server.spec) ? (
@@ -585,13 +610,23 @@ function Listed({
         </span>
       </header>
 
-      <Facts listing={listing} />
+      {listing.kind === 'agent-plugin' ? (
+        <PluginFacts
+          version={listing.version}
+          updated={Date.parse(listing.updatedAt)}
+          script={addsTags(listing.adds).some((tag) => tag.kind === 'script')}
+        />
+      ) : (
+        <Facts listing={listing} />
+      )}
 
       <div className="k-mkt-body">
         <div className="k-mkt-body__main">
           {listing.about && <p className="k-mkt-about k-mkt-about--text">{listing.about}</p>}
           {listing.kind === 'workflow' ? (
             <WorkflowFlow listing={listing} />
+          ) : listing.kind === 'agent-plugin' ? (
+            <PluginListingBody listing={listing} preview={preview} />
           ) : (
             <Adds adds={listing.adds} kind={listing.kind} installed={installed} />
           )}
@@ -625,6 +660,9 @@ function Listed({
             </dd>
             <dt>{t('listing.side.listedIn')}</dt>
             <dd>{t('community.source')}</dd>
+            {listing.kind === 'agent-plugin' && !preview && (
+              <PluginSideExtra listingId={listing.id} />
+            )}
           </dl>
           {/* No one reports their own listing; the preview draws it where others see it, off. */}
           {(preview || !listing.mine) && (
@@ -658,7 +696,8 @@ function useInstalledHere(listing: MarketListing): boolean {
       s.settings.marketplace.mcp.some((x) => x.id === id),
   )
   const workflow = useListingWorkflow(listing.id)
-  return kept || workflow !== null
+  const plugin = usePluginOfListing(listing.id)
+  return kept || workflow !== null || plugin !== null
 }
 
 /** Others of the same publisher, else of the same kind, from the directory. */
@@ -977,6 +1016,8 @@ function Actions({
     current: listing.version,
     versions: listing.versions,
   }
+
+  if (listing.kind === 'agent-plugin') return <PluginListingAction listing={listing} back={back} />
 
   if (listing.kind === 'skill') {
     const update = skill ? updateFor(standing, skill.version) : null

@@ -1,6 +1,7 @@
 import { create, type StoreApi, type UseBoundStore } from 'zustand'
 import type { KettuApi } from '@shared/ipc'
 import type { HostEvent } from '@shared/agent-host'
+import type { InstalledKettuPlugin } from '@shared/plugins'
 import {
   MARKET_KEPT_MS,
   type AgentOwnPlugins,
@@ -93,6 +94,9 @@ export interface MarketplaceStore {
   connectionsError: string | null
   /** By server id. */
   connecting: Record<string, ConnectFlow>
+  /** The Kettu plugins installed on the host; null until it answers. */
+  plugins: InstalledKettuPlugin[] | null
+  pluginsError: string | null
   /** The plugins the agents have of their own; null until the host answers. */
   ownPlugins: AgentOwnPlugins | null
   ownPluginsError: string | null
@@ -126,6 +130,10 @@ export interface MarketplaceStore {
   setKeys(patch: MarketKeysPatch): Promise<void>
   loadConnections(): Promise<void>
   loadOwnPlugins(refresh?: boolean): Promise<void>
+  loadPlugins(): Promise<void>
+  /** A plugin as the host just changed it, in place of the one shown. */
+  putPlugin(plugin: InstalledKettuPlugin): void
+  removePlugin(pluginId: string): void
   /** A `cached` answer that lacks a repository, or holds an old one, has each read on its own. */
   loadSkills(refresh?: boolean, cached?: boolean): Promise<void>
   /** Reads one repository of the skills catalog into the skills shown, such as on Retry. */
@@ -159,8 +167,9 @@ function withRepository(skills: MarketSkills, read: MarketSkillRepository): Mark
   }
 }
 
-/** The key of an install or change under way: an MCP server's or a skill's. */
-export const busyKey = (kind: 'mcp' | 'skill' | 'community', id: string): string => `${kind}:${id}`
+/** The key of an install or change under way: an MCP server's, a skill's or a plugin's. */
+export const busyKey = (kind: 'mcp' | 'skill' | 'community' | 'plugin', id: string): string =>
+  `${kind}:${id}`
 
 /** The Marketplace of the host `request` reaches, whose keys `storeKeys` fills or clears. */
 export function createMarketplaceStore(
@@ -173,6 +182,7 @@ export function createMarketplaceStore(
   let keysRead = 0
   let connectionsRead = 0
   let ownPluginsRead = 0
+  let pluginsRead = 0
   let skillsRead = 0
   // By scope key; a first page read voids any read of the same scope still on its way.
   const communityReads = new Map<string, number>()
@@ -195,6 +205,8 @@ export function createMarketplaceStore(
     connections: null,
     connectionsError: null,
     connecting: {},
+    plugins: null,
+    pluginsError: null,
     ownPlugins: null,
     ownPluginsError: null,
     ownPluginsLoading: false,
@@ -218,6 +230,7 @@ export function createMarketplaceStore(
         if (!s.skills) void s.loadSkills(false, true)
         else if (s.skills.error || old('skills')) void s.loadSkills()
       }
+      if (s.plugins === null) void s.loadPlugins()
       s.ensureCommunity({})
       if (!s.communityInstalled || Date.now() - installedAt >= COMMUNITY_MS) {
         void s.loadCommunityInstalled()
@@ -286,6 +299,33 @@ export function createMarketplaceStore(
         if (id === ownPluginsRead)
           set({ ownPluginsError: errorMessage(e), ownPluginsLoading: false })
       }
+    },
+    async loadPlugins() {
+      const id = ++pluginsRead
+      set({ pluginsError: null })
+      try {
+        const { plugins } = await request('plugins.list', undefined)
+        if (id === pluginsRead) set({ plugins })
+      } catch (e) {
+        if (id === pluginsRead) set({ pluginsError: errorMessage(e) })
+      }
+    },
+    putPlugin(plugin) {
+      // A read under way would bring back what was there before this change.
+      pluginsRead++
+      set((s) => {
+        const known = s.plugins ?? []
+        const at = known.findIndex((item) => item.id === plugin.id)
+        const plugins =
+          at < 0 ? [...known, plugin] : known.map((item, i) => (i === at ? plugin : item))
+        return {
+          plugins: plugins.sort((a, b) => a.contents.title.localeCompare(b.contents.title)),
+        }
+      })
+    },
+    removePlugin(pluginId) {
+      pluginsRead++
+      set((s) => ({ plugins: s.plugins?.filter((item) => item.id !== pluginId) ?? s.plugins }))
     },
     async loadCommunity(scope, refresh = false) {
       const key = communityScopeKey(scope)
@@ -481,6 +521,12 @@ export function setBusy(store: MarketplaceStoreHook, key: string, busy: boolean)
 export function marketKeysChanged(store: MarketplaceStoreHook = useMarketplaceStore): void {
   const state = store.getState()
   if (state.keys !== null) void state.loadKeys()
+}
+
+/** The host says a plugin changed: a page that read them reads them again. */
+export function marketPluginsChanged(store: MarketplaceStoreHook = useMarketplaceStore): void {
+  const state = store.getState()
+  if (state.plugins !== null) void state.loadPlugins()
 }
 
 /** Shows a Connect's progress; null ends it. */

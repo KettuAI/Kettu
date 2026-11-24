@@ -56,7 +56,11 @@ import {
   useGitStore,
 } from '@renderer/stores/git'
 import { loadGitHubStar, receiveGitHubStar } from '@renderer/stores/github-star'
-import { marketConnectionChanged, marketKeysChanged } from '@renderer/stores/marketplace'
+import {
+  marketConnectionChanged,
+  marketKeysChanged,
+  marketPluginsChanged,
+} from '@renderer/stores/marketplace'
 import { marketPublishedChanged } from '@renderer/stores/market-published'
 import { loadKettuCommands } from '@renderer/stores/kettu-commands'
 import { memoryChanged } from '@renderer/stores/memory'
@@ -210,6 +214,9 @@ function onHostEvent(event: HostEvent, hostId: string | null = null): void {
       break
     case 'market.connectionChanged':
       marketConnectionChanged(event)
+      break
+    case 'plugins.changed':
+      marketPluginsChanged()
       break
     case 'market.publishedChanged':
       marketPublishedChanged(null)

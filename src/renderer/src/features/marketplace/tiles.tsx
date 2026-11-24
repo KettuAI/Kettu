@@ -49,6 +49,13 @@ export function ItemTile({
     !quiet && art.type === 'glyph' && subject.kind === 'mcp' ? (subject.site ?? null) : null
   const logo = useServerIcon(site)
   const sized = size === 'row' ? undefined : size
+  if (subject.kind === 'kettu-plugin' && subject.icon) {
+    return (
+      <span aria-hidden className="ui-as-int-logo k-mkt-tile" data-size={sized}>
+        <SiteIconImage className="k-mkt-tile__logo" src={subject.icon} />
+      </span>
+    )
+  }
   if (art.type === 'mark') {
     const { mark } = art
     const style = {

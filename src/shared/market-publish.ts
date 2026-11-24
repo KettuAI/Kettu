@@ -36,7 +36,9 @@ export interface MarketPublisher {
 /**
  * One group of what an install adds, by a key the clients translate: `skills`, `commands`,
  * `agents`, `hooks` or `servers`; a workflow's are `steps`, `waits` and the `servers` and `skills`
- * its steps name.
+ * its steps name; a plugin's are `skills`, `servers`, `commands`, `roles`, `workflows`, `themes`
+ * and `templates`, each with the names of what it holds, and `script`, the permissions of a
+ * script it runs, present only when it runs one.
  */
 export interface PublishAdds {
   label: string

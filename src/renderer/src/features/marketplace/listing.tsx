@@ -53,6 +53,8 @@ import {
 } from './model'
 import { ExternalLink, ListingFrame, ListingSkeleton, Missing } from './parts'
 import { BuiltinServerPage } from './builtin'
+import { PluginItemControls, PluginPage } from './plugin-ui'
+import { isPluginItem } from './plugin-model'
 import { PublishedListingPage } from './published-listing'
 import { KETTU_ITEM, previewIdOf, publishedIdOf } from './published-keys'
 import { AddButton, ItemRow, KindTag, OfficialBadge, Publisher } from './rows'
@@ -73,7 +75,7 @@ function leave(tab: MarketplaceTab): void {
   backTo({ kind: 'marketplace', ...(tab !== 'all' ? { tab } : {}) }, () => openMarketplace({ tab }))
 }
 
-/** A listing by its view's `item`: an MCP server's, a skill's or a workflow's. */
+/** A listing by its view's `item`: a plugin's, an MCP server's, a skill's or a workflow's. */
 export function ListingPage({ item, tab }: { item: string; tab: MarketplaceTab }) {
   const ref = parseItem(item)
   const back = () => leave(tab)
@@ -82,6 +84,7 @@ export function ListingPage({ item, tab }: { item: string; tab: MarketplaceTab }
   if (publishedId) return <PublishedListingPage id={publishedId} back={back} />
   const previewId = previewIdOf(item)
   if (previewId) return <CommunityPreviewPage id={previewId} tab={tab} />
+  if (ref?.kind === 'plugin') return <PluginPage id={ref.id} tab={tab} back={back} />
   if (ref?.kind === 'skill') return <SkillListing id={ref.id} tab={tab} back={back} />
   if (ref?.kind === 'workflow') return <WorkflowListing id={ref.id} tab={tab} back={back} />
   if (ref?.kind === 'community') return <CommunityPage id={ref.id} tab={tab} back={back} />
@@ -264,6 +267,7 @@ export function KeptControls({
   const scope = useHostScope()
   const [dialog, setDialog] = useState<'keys' | 'agents' | 'uninstall' | null>(null)
   const inputs = specInputs(server.spec)
+  if (isPluginItem(server.id)) return <PluginItemControls itemId={server.id} />
   const close = (open: boolean) => {
     if (!open) setDialog(null)
   }
@@ -355,7 +359,13 @@ function Facts({ listing, server }: { listing: Listing; server: MarketServer | n
       </span>
       <span>
         <small>{t('listing.facts.source')}</small>
-        <b>{listing.source === 'manual' ? t('listing.manual') : t('listing.registry')}</b>
+        <b>
+          {listing.source === 'manual'
+            ? t('listing.manual')
+            : listing.source === 'plugin'
+              ? t('plugin.from.source')
+              : t('listing.registry')}
+        </b>
       </span>
       {listing.version && (
         <span>
@@ -473,7 +483,8 @@ function Side({ listing }: { listing: Listing }) {
       <dl>
         <dt>{t('listing.side.publisher')}</dt>
         <dd>
-          {publisherOf(listing) ?? t('listing.registry')}
+          {publisherOf(listing) ??
+            (listing.source === 'plugin' ? t('plugin.from.source') : t('listing.registry'))}
           {listing.official && <OfficialBadge />}
         </dd>
         {listing.source === 'registry' && (
@@ -501,7 +512,13 @@ function Side({ listing }: { listing: Listing }) {
           </>
         )}
         <dt>{t('listing.side.listedIn')}</dt>
-        <dd>{listing.source === 'manual' ? t('listing.manual') : t('listing.registry')}</dd>
+        <dd>
+          {listing.source === 'manual'
+            ? t('listing.manual')
+            : listing.source === 'plugin'
+              ? t('plugin.from.source')
+              : t('listing.registry')}
+        </dd>
       </dl>
     </aside>
   )

@@ -9,6 +9,7 @@ import {
   LISTING_ID,
   type ListingVisibility,
   type MarketListing,
+  type PublishAdds,
   type PublishHarness,
   type PublishKind,
 } from './market-publish'
@@ -46,6 +47,8 @@ export interface CommunityItem {
   /** A workflow's step names in order and those that wait for the user, as its publisher's check listed them. */
   steps?: string[]
   waits?: string[]
+  /** What a plugin's version holds, as its publisher's check listed it; only for a plugin. */
+  adds?: PublishAdds[]
 }
 
 export interface CommunityDirectory {
