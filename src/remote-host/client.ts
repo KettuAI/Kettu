@@ -61,6 +61,7 @@ import {
   parseRelayHosts,
   parseRelayInfo,
   relayInfoPath,
+  isOwnRelay,
   relayList,
   trustedRelay,
   type HostRelay,
@@ -83,6 +84,7 @@ import {
   parseAddresses,
   parseClosing,
   parseHostRenamed,
+  parseRelayMoved,
   parseWelcome,
   type ClosingReason,
   type DirectAddress,
@@ -454,6 +456,7 @@ const IGNORED: SessionHandlers = {
 /** The session's own messages, which main never hears. */
 const OWN: ReadonlySet<unknown> = new Set([
   'addresses',
+  'relay',
   'renamed',
   'host.renamed',
   'terminal',
@@ -619,8 +622,11 @@ class HostLink {
    */
   leaveRelay(): void {
     if (this.closed) return
-    for (const kept of [this.aside, this.standby]) if (kept && 'relay' in kept.via) kept.close()
-    if (this.session && 'relay' in this.session.via) return this.session.close()
+    // A relay of the host's owner takes no account, so a session through it goes on.
+    const kettu = (via: Via): boolean => 'relay' in via && !this.client.ownRelayUrl(via.relay)
+    for (const kept of [this.aside, this.standby]) if (kept && kettu(kept.via)) kept.close()
+    if (this.session && kettu(this.session.via)) return this.session.close()
+    if (this.host?.relay && this.client.isOwnRelay(this.host.relay)) return
     if (this.trying) {
       this.cancel()
       this.retry()
@@ -1161,6 +1167,18 @@ class HostLink {
     const value = message.value
     if (typeof value !== 'object' || value === null) return
     const { type, allowed } = value as { type?: unknown; allowed?: unknown }
+    // The host moves to another relay: reached through that one from now on.
+    if (type === 'relay') {
+      const moved = parseRelayMoved(value)
+      if (moved === undefined || !this.host || this.host.ssh) return
+      this.client.options.hosts.update(this.id, { relay: moved ?? undefined })
+      this.client.options.changed()
+      this.client.options.log(
+        'info',
+        `Host ${this.id} moves to ${moved ? 'another relay' : 'no relay'}`,
+      )
+      return
+    }
     if (type === 'relay.regions') {
       const regions = this.client.options.relay?.regions
       if (regions && session.welcome!.features.includes(REGIONS_CHANNEL_FEATURE)) {
@@ -1289,6 +1307,9 @@ class HostLink {
   private online(via: Via, terminal: boolean): HostConnection {
     const allowed = terminal ? { terminal: true as const } : {}
     if (!('relay' in via)) return { state: 'online', address: via.address, ...allowed }
+    if (this.client.ownRelayUrl(via.relay)) {
+      return { state: 'online', relay: via.relay, own: true, ...allowed }
+    }
     const region = this.client.options.relay?.regions?.regionName?.(via.relay) ?? null
     return { state: 'online', relay: via.relay, ...(region ? { region } : {}), ...allowed }
   }
@@ -1994,6 +2015,12 @@ export class HostClient {
   ): RelayRoute | RelayProblem | null {
     const client = this.options.relay
     if (!relay || !client) return null
+    // A relay the host's owner runs takes no token and no account: it is dialed as it is, through
+    // its pin, and never gets the account's token.
+    if (isOwnRelay(relay, client.main)) {
+      const url = relay.urls[0]!
+      return this.relayVia(relay.id, null, [relay.pin ? { url, pin: relay.pin } : { url }], drained)
+    }
     const token = client.token()
     if (!token) return 'signed_out'
     // The account's token goes only to the project's relays, whatever a code or a host names.
@@ -2024,7 +2051,7 @@ export class HostClient {
   ): { url: string; rtt: number | null; route: RelayRoute }[] {
     const token = this.options.relay?.token()
     const ranked = this.relayRegions(hostId)
-    if (!relay || !token || !ranked) return []
+    if (!relay || !token || !ranked || this.isOwnRelay(relay)) return []
     return ranked.map((region) => ({
       url: region.url,
       rtt: region.rtt,
@@ -2064,12 +2091,13 @@ export class HostClient {
    */
   relayVia(
     id: string,
-    token: string,
+    token: string | null,
     relays: RelayEndpoint[],
     drained: RegionDrained = (_url, leave) => leave(),
   ): RelayRoute {
     const client = this.options.relay!
-    const regions = client.regions
+    // The owner's relay is not Kettu's: it is never counted in the day's report.
+    const regions = token === null ? undefined : client.regions
     return async (signal) => {
       let joined: { close(): void } | null = null
       const result = await dialRelay({
@@ -2101,6 +2129,22 @@ export class HostClient {
           throw new RelayMissed('unreachable')
       }
     }
+  }
+
+  /** Whether a host's relay is one its owner runs rather than the Kettu relay. */
+  isOwnRelay(relay: HostRelay): boolean {
+    const main = this.options.relay?.main
+    return main !== undefined && isOwnRelay(relay, main)
+  }
+
+  /**
+   * Whether a relay a session joined through is the owner's: neither under the Kettu relay's
+   * domain nor a region its signed list names, as one reached by its IP address.
+   */
+  ownRelayUrl(url: string): boolean {
+    const relay = this.options.relay
+    if (!relay || trustedRelay(url, relay.main)) return false
+    return !relay.regions?.regionName?.(url)
   }
 
   /** Starts a connection to each known host, and watches the network for a change. */

@@ -42,6 +42,8 @@ import { t } from './i18n'
 import { MarketKeysError } from './market-keys'
 import type { SettingsStore } from './settings'
 import { SettingsError } from './settings-schema'
+import { parseOwnRelayInput } from './own-relay'
+import type { OwnRelayCheck, OwnRelayInput } from '@shared/remote/own-relay'
 import { checkThemeText, type ThemeReadResult, type ThemeSelect } from './themes'
 
 // Windows extended-length paths go up to 32,767 characters.
@@ -126,6 +128,8 @@ export interface AdminRemote {
   reset(): Promise<void>
   retryDirect(): void
   retryRelay(): void
+  /** Checks the owner's own relay and switches to it once it passed; the key is never answered. */
+  useOwnRelay(input: OwnRelayInput): Promise<OwnRelayCheck>
 }
 
 /** Publishing artifacts, whose methods check their own arguments. */
@@ -461,6 +465,11 @@ export class HostAdmin {
       case 'remote.retryRelay':
         remote.retryRelay()
         return null
+      case 'remote.useOwnRelay': {
+        const input = parseOwnRelayInput(params)
+        if (!input) throw invalid('params must be an address, a key or null, and a pin or null')
+        return remote.useOwnRelay(input)
+      }
       case 'host.info':
         return this.deps.info()
       case 'host.restart': {

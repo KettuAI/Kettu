@@ -70,10 +70,11 @@
   "deviceMessages": {
     "valid": [
       "{\"type\":\"connect\",\"token\":\"access-token\"}",
-      "{\"type\":\"connect\",\"token\":\"access-token\",\"features\":[\"drain\"]}"
+      "{\"type\":\"connect\",\"token\":\"access-token\",\"features\":[\"drain\"]}",
+      "{\"type\":\"connect\"}",
+      "{\"type\":\"connect\",\"features\":[\"drain\"]}"
     ],
     "invalid": [
-      "{\"type\":\"connect\"}",
       "{\"type\":\"connect\",\"token\":7}",
       "ping",
       "{\"type\":\"connect\",\"token\":\"access-token\",\"features\":\"drain\"}"
@@ -526,6 +527,41 @@
     "answer": {
       "token": "kr1.opaque-relay-token",
       "expiresAt": 1763203600000
+    }
+  },
+  "ownRelay": {
+    "accessKey": "krk_AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8",
+    "pin": "AAcOFRwjKjE4P0ZNVFtiaXB3foWMk5qhqK-2vcTL0tk",
+    "info": {
+      "relay": "kettu",
+      "protocol": 1,
+      "regions": [],
+      "features": ["access-key", "drain"],
+      "version": "dev"
+    },
+    "invalidLinks": [
+      "relay.example.com#key=krk_AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8",
+      "https://relay.example.com/v1#key=krk_AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8",
+      "https://relay.example.com#key=short",
+      "https://relay.example.com#key=krk_AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8&pin=AAAA",
+      "https://user@relay.example.com#key=krk_AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8",
+      "ftp://relay.example.com"
+    ],
+    "pairing": {
+      "hostKey": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+      "secret": "fffefdfcfbfaf9f8f7f6f5f4f3f2f1f0efeeedecebeae9e8e7e6e5e4e3e2e1e0",
+      "relay": {
+        "id": "aeiscmkbkfqxdamrugy4dupb6e",
+        "urls": ["https://203.0.113.7:7443"],
+        "pin": "AAcOFRwjKjE4P0ZNVFtiaXB3foWMk5qhqK-2vcTL0tk"
+      },
+      "addresses": [
+        {
+          "host": "192.168.1.8",
+          "port": 47821
+        }
+      ],
+      "text": "AwABAgMEBQYHCAkKCwwNDg8QERITFBUWFxgZGhscHR4f__79_Pv6-fj39vX08_Lx8O_u7ezr6uno5-bl5OPi4eABESExQVFhcYGRobHB0eHxARhodHRwczovLzIwMy4wLjExMy43Ojc0NDMABw4VHCMqMTg_Rk1UW2JpcHd-hYyTmqGor7a9xMvS2QsxOTIuMTY4LjEuOLrN"
     }
   }
 }

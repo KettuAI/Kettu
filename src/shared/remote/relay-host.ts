@@ -122,6 +122,11 @@ export interface RelayHostOptions {
   log(level: 'info' | 'warn' | 'error', message: string): void
   /** The regions a run before read, until the main relay answers. */
   regions?: RelayRegion[]
+  /**
+   * A relay the owner runs, the only one signed in to, with the access key as the token: no
+   * regions are read and no plan applies. `main` is its origin.
+   */
+  own?: RelayRegion
   timings?: Partial<RelayHostTimings>
   now?: () => number
 }
@@ -536,6 +541,7 @@ export class RelayHost {
     this.timings = { ...RELAY_HOST_TIMINGS, ...options.timings }
     this.now = options.now ?? Date.now
     this.listed = options.regions ?? []
+    if (options.own) this.plan = [options.own]
     this.apply()
   }
 
@@ -560,13 +566,13 @@ export class RelayHost {
   start(): void {
     if (this.started || this.stopped) return
     this.started = true
-    void this.readRegions()
+    if (!this.options.own) void this.readRegions()
     for (const control of this.controls) control.start()
   }
 
   /** The regions the region rules picked, the main relay first; null to use `GET /v1`'s. */
   setPlan(regions: RelayRegion[] | null): void {
-    if (this.stopped) return
+    if (this.stopped || this.options.own) return
     if (JSON.stringify(regions) === JSON.stringify(this.plan)) return
     this.plan = regions
     this.apply()

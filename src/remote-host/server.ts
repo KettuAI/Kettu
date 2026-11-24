@@ -67,6 +67,7 @@ import {
   STANDBY_FEATURE,
   TOOL_DIGESTS_FEATURE,
   type Addresses,
+  type RelayMoved,
   type Closing,
   type ClosingReason,
   type DirectAddress,
@@ -367,6 +368,11 @@ export class RemoteServer {
     for (const session of this.sessions) {
       if (deviceId === null || session.device.id === deviceId) session.adminEvent(event)
     }
+  }
+
+  /** The host is about to move to another relay, or to none: every device connected hears it. */
+  relayMoved(relay: HostRelay | null): void {
+    for (const session of this.sessions) session.relayMoved(relay)
   }
 
   /** The region list or the host's regions changed: the devices that read them hear it. */
@@ -1329,6 +1335,10 @@ class DeviceSession {
     connection?.drop()
     standby?.drop()
     this.server.sessionEnded(this)
+  }
+
+  relayMoved(relay: HostRelay | null): void {
+    if (this.live) this.send({ type: 'relay', relay } satisfies RelayMoved)
   }
 
   sendAddresses(addresses: DirectAddress[]): void {

@@ -83,12 +83,18 @@ import {
   loadDeviceKey,
   loadIdentity,
   loadRelayKey,
+  loadAccessKey,
+  saveAccessKey,
   newIdentity,
   newRelayKey,
   type IdentityCipher,
 } from './remote-identity'
 import { watchPresence } from './presence'
 import { RelayFeatures, RelayToken, readRelayFeatures } from './relay-token'
+import { useOwnRelay } from './own-relay'
+import { checkRelayHere } from '../remote-host/relay-net'
+import { accessKeyEnd, relayChoiceInit } from '@shared/remote/own-relay'
+import { relayReport } from '@shared/remote/status'
 import { readJsonFile } from './json-file'
 import { MarketKeys, marketKeysFile } from './market-keys'
 import { MarketUnauthorized, runMarketCall } from './market-api'
@@ -657,7 +663,12 @@ async function start(): Promise<void> {
   }
   // What the relay, push and the account's hosts go by: a sign-in with Kettu's services on.
   const accountInUse = (): boolean => cloudOn() && signedIn()
-  const relayOn = (): boolean => settings.get().remote.relay && cloudOn()
+  // The own relay's access key, kept like the host's private key; one that cannot be read is
+  // given again on the page.
+  let ownRelayKey = await loadAccessKey(userDataPath, identityCipher).catch((error: unknown) => {
+    log.error('The own relay access key cannot be read', error)
+    return null
+  })
   const mainRelay = new RelayFeatures(() => readRelayFeatures(relayUrl))
   const relayToken = new RelayToken({
     current: () => account.currentToken(),
@@ -686,11 +697,15 @@ async function start(): Promise<void> {
       online: status?.online ?? [],
       plainTextKey: status?.plainTextKey ?? false,
       direct: status?.direct ?? { state: 'off' },
-      relay: !relayOn()
-        ? { state: 'off' }
-        : !signedIn()
-          ? { state: 'signed_out' }
-          : { state: 'on', relays: status?.relays ?? [] },
+      relay: relayReport({
+        choice: settings.get().remote.relay,
+        cloud: cloudOn(),
+        signedIn: signedIn(),
+        relays: status?.relays ?? [],
+        own: settings.get().remote.ownRelay,
+        ownStatus: status?.ownRelay ?? null,
+        keyEnd: accessKeyEnd(ownRelayKey),
+      }),
     }
   }
   const remoteChanged = (): void => {
@@ -833,7 +848,22 @@ async function start(): Promise<void> {
     newRelayKey: () => newRelayKey(userDataPath, identityCipher),
     relayUrl,
     pushUrl,
-    relay: relayOn,
+    relay: () => relayChoiceInit(settings.get().remote, cloudOn(), ownRelayKey),
+    useOwnRelay: (input) =>
+      useOwnRelay(input, {
+        key: () => ownRelayKey,
+        saveKey: async (key) => {
+          await saveAccessKey(userDataPath, identityCipher, key)
+          ownRelayKey = key
+        },
+        current: () => settings.get().remote.ownRelay,
+        apply: (own) => settings.useOwnRelay(own),
+        changed: () => {
+          remoteHost.relayChanged()
+          remoteChanged()
+        },
+        check: checkRelayHere,
+      }),
     discoverable: () => settings.get().remote.discoverable,
     discoveryChanged: (event) => {
       broadcast('remote:discovery', event)
@@ -1059,6 +1089,7 @@ async function start(): Promise<void> {
       updates: updater.getStatus().state.kind !== 'off',
       remoteSwitch: true,
       remoteReset: true,
+      ownRelay: true,
       thumbnails: true,
       partThumbnails: true,
       artifactRecords: [...ARTIFACT_RECORDS],

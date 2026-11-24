@@ -192,6 +192,24 @@ export interface Resync {
   type: 'resync'
 }
 
+/**
+ * The host moves to another relay, or to none: sent to each welcomed device before it signs out of
+ * the one it used, so the device reaches it through the new one from then on. Older devices
+ * ignore it and learn the new relay from their next welcome.
+ */
+export interface RelayMoved {
+  type: 'relay'
+  relay: HostRelay | null
+}
+
+/** The relay of a `relay` message: a relay, null for none, or undefined when it is not one. */
+export function parseRelayMoved(value: unknown): HostRelay | null | undefined {
+  const { type, relay } = (value ?? {}) as Record<string, unknown>
+  if (type !== 'relay') return undefined
+  if (relay === null) return null
+  return parseHostRelay(relay) ?? undefined
+}
+
 /** The host's direct addresses again, sent to each welcomed device whenever they change. */
 export interface Addresses {
   type: 'addresses'

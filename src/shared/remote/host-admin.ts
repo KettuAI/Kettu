@@ -9,6 +9,7 @@ import type { MarketKeysPatch, MarketKeyState } from '../marketplace'
 import {
   DEFAULT_SETTINGS,
   type AgentColor,
+  type RelayChoice,
   type SettingsFile,
   type SettingsPatch,
 } from '../settings'
@@ -31,6 +32,7 @@ import type {
 } from '../themes'
 import type { UpdateStatus } from '../updates'
 import type { DeviceActivity } from './activity'
+import type { OwnRelayCheck, OwnRelayInput } from './own-relay'
 import type { RemoteStatus } from './status'
 
 /**
@@ -74,7 +76,15 @@ export interface HostSettingsPart {
   workflow: SettingsFile['workflow']
   updates: SettingsFile['updates']
   usage: Pick<SettingsFile['usage'], 'fromComputer'>
-  remote: SettingsFile['remote']
+  /**
+   * `relay` as the boolean clients before the own relay read, true for the Kettu relay alone, and
+   * the whole choice in `relayChoice`; absent from older hosts, whose `relay` is the choice.
+   */
+  remote: Omit<SettingsFile['remote'], 'relay' | 'ownRelay'> & {
+    relay: boolean
+    relayChoice?: RelayChoice
+    ownRelay?: SettingsFile['remote']['ownRelay']
+  }
 }
 
 type Keys = 'all' | readonly string[]
@@ -94,7 +104,22 @@ export function hostSettingsPart(file: SettingsFile): HostSettingsPart {
     const value = file[section]
     part[section] = keys === 'all' ? structuredClone(value) : pick(value as object, keys, true)
   }
+  const remote = part.remote as SettingsFile['remote']
+  part.remote = { ...remote, relay: remote.relay === 'kettu', relayChoice: remote.relay }
   return part as unknown as HostSettingsPart
+}
+
+/** The host's remote section as a client keeps it, from a host of any version. */
+function remoteOf(part: HostSettingsPart['remote'] | undefined): SettingsFile['remote'] {
+  if (!part) return structuredClone(DEFAULT_SETTINGS.remote)
+  const { relayChoice, relay, ownRelay, ...rest } = part
+  const choice =
+    relayChoice === 'kettu' || relayChoice === 'own' || relayChoice === 'off'
+      ? relayChoice
+      : relay
+        ? 'kettu'
+        : 'off'
+  return { ...structuredClone(rest), relay: choice, ownRelay: ownRelay ?? null }
 }
 
 /** A client's settings file with the host's part in place of its own. */
@@ -102,6 +127,10 @@ export function withHostSettings(file: SettingsFile, part: HostSettingsPart): Se
   const next = structuredClone(file) as unknown as Record<string, unknown>
   for (const [section, keys] of Object.entries(HOST_SETTING_KEYS) as [string, Keys][]) {
     const value = (part as unknown as Record<string, unknown>)[section]
+    if (section === 'remote') {
+      next.remote = remoteOf(value as HostSettingsPart['remote'] | undefined)
+      continue
+    }
     if (keys === 'all') {
       // A host older than a section has none, and works as its default.
       const fallback = DEFAULT_SETTINGS[section as keyof SettingsFile]
@@ -161,6 +190,8 @@ export interface HostInfo extends AppInfo {
   remoteReset: boolean
   /** Capturing artifact previews, which the desktop app does and the daemon cannot. */
   thumbnails: boolean
+  /** Choosing the owner's own relay, with `remote.useOwnRelay`; absent from hosts before it. */
+  ownRelay?: boolean
   /**
    * Capturing a preview of one frame, one slide, or a document in one theme, as
    * `artifacts.partThumbnail`; absent from hosts before it.
@@ -253,6 +284,8 @@ export interface HostAdminContract {
   'remote.reset': { params: undefined; result: null }
   'remote.retryDirect': { params: undefined; result: null }
   'remote.retryRelay': { params: undefined; result: null }
+  /** The key goes to the host alone, which never answers with it. */
+  'remote.useOwnRelay': { params: OwnRelayInput; result: OwnRelayCheck }
   'host.info': { params: undefined; result: HostInfo }
   'host.restart': { params: { process: 'agent' | 'terminal' }; result: null }
   'sharing.status': { params: undefined; result: SharingStatus }
@@ -348,6 +381,7 @@ const METHODS: Record<HostAdminMethod, true> = {
   'remote.reset': true,
   'remote.retryDirect': true,
   'remote.retryRelay': true,
+  'remote.useOwnRelay': true,
   'host.info': true,
   'host.restart': true,
   'sharing.status': true,

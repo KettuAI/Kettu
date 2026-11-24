@@ -12,6 +12,7 @@ import type {
   RemoteHostStatus,
   RemoteHostStopReason,
   RemoteHostToMain,
+  OwnRelayInit,
 } from '@shared/host-control'
 import { pushedAttention } from '@shared/attention'
 import type { BrowserForward } from '@shared/browser'
@@ -42,6 +43,7 @@ import {
 import { isPairingState, type PairingState } from '@shared/remote/pairing'
 import type { HostAdminEvent } from '@shared/remote/host-admin'
 import type { DirectAddress } from '@shared/remote/protocol'
+import type { OwnRelayCheck, OwnRelayInput } from '@shared/remote/own-relay'
 import { parseRelayStatuses } from '@shared/remote/relay-host'
 import type { DirectSettings } from '@shared/settings'
 import remoteHostPath from '../remote-host/index?modulePath'
@@ -82,8 +84,13 @@ export interface RemoteHostDeps {
   relayUrl: string
   /** The push gateway's origin. */
   pushUrl: string
-  /** Use the Kettu relay, as the setting is now. */
-  relay(): boolean
+  /**
+   * The relay to sign in to, as the settings are now: the Kettu relay while it may be used, or
+   * the owner's own relay with its access key.
+   */
+  relay(): { enabled: boolean; own: OwnRelayInit | null }
+  /** Checks the owner's own relay and switches to it once it passed. */
+  useOwnRelay(input: OwnRelayInput): Promise<OwnRelayCheck>
   /** Whether devices of the account find this computer on the relay, as the setting is now. */
   discoverable(): boolean
   /** A device of the account asks to be added, or that request ended. */
@@ -170,8 +177,8 @@ export class RemoteHost {
   private direct: string | null = null
   /** Whether devices may use the terminal, as the running process was last told. */
   private terminal: boolean | null = null
-  /** Use the Kettu relay, as the running process was last told. */
-  private relayOn: boolean | null = null
+  /** The relay, as the running process was last told, in JSON. */
+  private relayOn: string | null = null
   /** Whether devices of the account find this computer, as the running process was last told. */
   private discoverableOn: boolean | null = null
   /** Listings of the account's hosts under way, which keep the process running. */
@@ -309,11 +316,14 @@ export class RemoteHost {
     if (this.host?.post({ type: 'remote-host:terminal', allowed })) this.terminal = allowed
   }
 
-  /** Tells the process when Use the Kettu relay changed; each start reads it. */
+  /** Tells the process when the relay to use changed; each start reads it. */
   relayChanged(): void {
-    const enabled = this.deps.relay()
-    if (enabled === this.relayOn) return
-    if (this.host?.post({ type: 'remote-host:relay', enabled })) this.relayOn = enabled
+    const relay = this.deps.relay()
+    const sent = JSON.stringify(relay)
+    if (sent === this.relayOn) return
+    if (this.host?.post({ type: 'remote-host:relay', enabled: relay.enabled, own: relay.own })) {
+      this.relayOn = sent
+    }
   }
 
   /** Tells the process when Let devices of the account find it changed; each start reads it. */
@@ -387,6 +397,11 @@ export class RemoteHost {
     this.token = token
     this.relayToken = relay
     this.host?.post({ type: 'remote-host:token', token, relay })
+  }
+
+  /** Checks the owner's own relay and its key, and switches to it once both pass. */
+  useOwnRelay(input: OwnRelayInput): Promise<OwnRelayCheck> {
+    return this.deps.useOwnRelay(input)
   }
 
   /** Tries every relay now, after a conflict or an error. */
@@ -822,11 +837,13 @@ export class RemoteHost {
   private initRelay(
     serving: boolean,
   ): NonNullable<Extract<MainToRemoteHost, { type: 'remote-host:init' }>['relay']> {
-    this.relayOn = this.deps.relay()
+    const relay = this.deps.relay()
+    this.relayOn = JSON.stringify(relay)
     const key = serving ? this.relayIdentity?.privateKey : undefined
     return {
       url: this.deps.relayUrl,
-      enabled: this.relayOn,
+      enabled: relay.enabled,
+      own: relay.own,
       token: this.token,
       relayToken: this.relayToken,
       ...(key ? { key } : {}),

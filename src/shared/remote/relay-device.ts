@@ -43,8 +43,11 @@ export interface RelayDialOptions {
   relays: (string | RelayEndpoint)[]
   /** The host's relay id. */
   id: string
-  /** This device's relay token, or its access token where the relays take no other. */
-  token: string
+  /**
+   * This device's relay token, or its access token where the relays take no other; null for a
+   * relay the host's owner runs, which takes none.
+   */
+  token: string | null
   openSocket(url: string, pin?: string): WebSocket
   /** A relay's try ended: it joined, it could not be reached, or it answered without joining. */
   attempted?(relay: string, outcome: RelayAttempt): void

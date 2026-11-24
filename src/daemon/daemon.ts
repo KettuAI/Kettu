@@ -25,6 +25,15 @@ import type { MarketAccount } from '@shared/market-publish'
 import { addressKey, MAX_OWN_ADDRESSES, parsePort } from '@shared/remote/address'
 import { PUSH_URL, PUSH_URL_ENV, pushUrlFrom } from '@shared/remote/push'
 import { RELAY_TOKENS_FEATURE, RELAY_URL, RELAY_URL_ENV, relayUrlFrom } from '@shared/remote/relay'
+import {
+  RELAY_LINK_ENV,
+  parseRelayLink,
+  type OwnRelayCheck,
+  type OwnRelayInput,
+} from '@shared/remote/own-relay'
+import { useOwnRelay } from '../main/own-relay'
+import { loadAccessKey, saveAccessKey } from '../main/remote-identity'
+import { checkRelayHere } from '../remote-host/relay-net'
 import type { HostAdmin } from '../main/host-admin'
 import { Account, NotSignedIn } from '../main/account'
 import { accountBaseUrl, AccountApi, clientInfo, DAEMON_CLIENT } from '../main/account/service'
@@ -171,6 +180,12 @@ export async function startDaemon(options: DaemonOptions): Promise<RunningDaemon
     if (!hosts) throw new ControlError('unavailable', 'The daemon is starting')
     return hosts
   }
+  // Set once the settings and the keys are read: checks the owner's relay and switches to it.
+  let ownRelay: ((input: OwnRelayInput) => Promise<OwnRelayCheck>) | null = null
+  const useOwn = (input: OwnRelayInput): Promise<OwnRelayCheck> => {
+    if (!ownRelay) throw new ControlError('unavailable', 'The daemon is starting')
+    return ownRelay(input)
+  }
   // Only the connection that opened a code may answer for it.
   const codeOwners = new Map<number, ControlConnection>()
   const handlers: ControlHandlers = {
@@ -257,6 +272,18 @@ export async function startDaemon(options: DaemonOptions): Promise<RunningDaemon
       changeSettings({ remote: { terminal: allowed } })
       return terminalReport()
     },
+    'relay.get': async () => starting().relayReport(),
+    'relay.use': async ({ link }) => {
+      starting()
+      const parsed = parseRelayLink(link)
+      if (!parsed) return { ok: false, problem: 'address' }
+      return useOwn({ url: parsed.url, key: parsed.key, pin: parsed.pin })
+    },
+    'relay.set': async ({ choice }) => {
+      const running = starting()
+      changeSettings({ remote: { relay: choice } })
+      return running.relayReport()
+    },
     'report.build': async ({ request }) =>
       daemonReport(
         starting(),
@@ -327,6 +354,13 @@ export async function startDaemon(options: DaemonOptions): Promise<RunningDaemon
   } catch (error) {
     log.error(`The relay cannot be used without its key: ${(error as Error).message}`)
   }
+  // The own relay's key, in a file only the user can read, as the host's private key is.
+  let accessKey = await loadAccessKey(options.dataPath, NO_SYSTEM_ENCRYPTION).catch(
+    (error: unknown) => {
+      log.error(`The own relay's access key cannot be read: ${(error as Error).message}`)
+      return null
+    },
+  )
   let relayUrl = RELAY_URL
   try {
     relayUrl = relayUrlFrom(options.env[RELAY_URL_ENV])
@@ -442,6 +476,7 @@ export async function startDaemon(options: DaemonOptions): Promise<RunningDaemon
     privateKey: identity.privateKey,
     newIdentity: async () => (await newHostKey(options.dataPath)).privateKey,
     relayKey: relayKey?.privateKey ?? null,
+    accessKey: () => accessKey,
     newRelayKey: async () => (await newRelayHostKey(options.dataPath)).privateKey,
     relayUrl,
     pushUrl,
@@ -499,6 +534,18 @@ export async function startDaemon(options: DaemonOptions): Promise<RunningDaemon
       send: (token, relay) => running.setToken(token, relay),
     })
   }
+  ownRelay = (input) =>
+    useOwnRelay(input, {
+      key: () => accessKey,
+      saveKey: async (key) => {
+        await saveAccessKey(options.dataPath, NO_SYSTEM_ENCRYPTION, key)
+        accessKey = key
+      },
+      current: () => settings.get().remote.ownRelay,
+      apply: (own) => settings.useOwnRelay(own),
+      changed: () => running.relayChanged(),
+      check: checkRelayHere,
+    })
   admin = await startDaemonAdmin({
     dataPath: options.dataPath,
     version: options.version,
@@ -506,6 +553,7 @@ export async function startDaemon(options: DaemonOptions): Promise<RunningDaemon
     hosts: running,
     env: options.env,
     marketKeys,
+    useOwnRelay: useOwn,
     report: async (request) =>
       bundleForDevice(
         await daemonReport(
@@ -553,6 +601,29 @@ export async function startDaemon(options: DaemonOptions): Promise<RunningDaemon
   })
   running.start()
   relayToken?.update()
+  // A container names its relay in the environment, checked and applied at every start.
+  const relayLink = options.env[RELAY_LINK_ENV]?.trim()
+  if (relayLink) void applyRelayLink(relayLink)
+
+  async function applyRelayLink(link: string): Promise<void> {
+    const parsed = parseRelayLink(link)
+    if (!parsed?.key) {
+      log.error(`${RELAY_LINK_ENV} must be the link the relay printed, with its key`)
+      return
+    }
+    const current = settings.get().remote
+    if (
+      current.relay === 'own' &&
+      current.ownRelay?.url === parsed.url &&
+      current.ownRelay.pin === parsed.pin &&
+      accessKey === parsed.key
+    ) {
+      return
+    }
+    const result = await useOwn({ url: parsed.url, key: parsed.key, pin: parsed.pin })
+    if (result.ok) log.info(`Using the relay at ${parsed.url}`)
+    else log.error(`The relay in ${RELAY_LINK_ENV} did not pass its check: ${result.problem}`)
+  }
   log.info(
     `Kettu daemon ${options.version} running (pid ${process.pid}), data in ${options.dataPath}`,
   )

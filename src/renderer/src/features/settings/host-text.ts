@@ -5,9 +5,10 @@ import type { HostChangeFailure, HostStatus } from '@shared/remote/hosts'
 import type { DirectAddress } from '@shared/remote/protocol'
 import { mediumAgo } from '@renderer/lib/format'
 import { errorMessage } from '@renderer/lib/host'
-import { isWeb } from '@renderer/lib/platform'
+import { isRelayPage, isWeb } from '@renderer/lib/platform'
 import { useSettingsStore } from '@renderer/stores/settings'
 import type { WebHost } from '@renderer/stores/web-host'
+import { relayHostName } from './relay-text'
 
 /** "iOS", "macOS", "Windows": what a host or device runs, by the platform it sent. */
 export function platformName(platform: Platform | string): string {
@@ -39,6 +40,7 @@ export function routeText(
   const { connection } = host
   if (connection.state !== 'online') return t('hosts.via.direct')
   if (!('relay' in connection)) return directAt(t, connection.address)
+  if (connection.own) return t('hosts.via.ownRelayAt', { host: relayHostName(connection.relay) })
   return connection.region
     ? t('hosts.via.relayAt', { region: connection.region })
     : t('hosts.via.relay')
@@ -52,7 +54,7 @@ export function routeName(
   if (host.ssh) return t('hosts.via.ssh')
   const { connection } = host
   if (connection.state !== 'online') return t('hosts.via.direct')
-  if ('relay' in connection) return t('hosts.via.relay')
+  if ('relay' in connection) return t(connection.own ? 'hosts.via.ownRelay' : 'hosts.via.relay')
   return isLocalHost(connection.address.host) ? t('hosts.via.lan') : t('hosts.via.direct')
 }
 
@@ -113,7 +115,9 @@ export function webHostLine(t: TFunction<'settings'>, host: WebHost): string {
   return [
     host.platform && platformName(host.platform),
     host.version && t('hosts.version', { version: host.version }),
-    host.address ? directAt(t, host.address) : t('hosts.via.relay'),
+    host.address
+      ? directAt(t, host.address)
+      : t(isRelayPage ? 'hosts.via.ownRelay' : 'hosts.via.relay'),
   ]
     .filter((part): part is string => !!part)
     .join(' · ')

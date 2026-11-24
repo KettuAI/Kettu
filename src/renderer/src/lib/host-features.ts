@@ -7,7 +7,13 @@ import { isWeb } from './platform'
 /** What a host may offer beyond its sessions: the desktop app has each, the daemon none. */
 export type HostFeature = keyof Pick<
   HostInfo,
-  'sharing' | 'updates' | 'remoteSwitch' | 'remoteReset' | 'thumbnails' | 'partThumbnails'
+  | 'sharing'
+  | 'updates'
+  | 'remoteSwitch'
+  | 'remoteReset'
+  | 'thumbnails'
+  | 'partThumbnails'
+  | 'ownRelay'
 >
 
 /**

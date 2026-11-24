@@ -9,9 +9,15 @@ import {
   parseBrowserPairingLink,
   parsePairingLink,
   DIRECT_PAIRING_VERSION,
+  ownRelayPairingLink,
   PAIRING_VERSION,
+  PINNED_PAIRING_VERSION,
   type PairingPayload,
 } from './pairing'
+import vectors from './relay-vectors.json'
+
+const hex = (text: string): Uint8Array =>
+  Uint8Array.from(text.match(/../g)!, (byte) => parseInt(byte, 16))
 
 const payload: PairingPayload = {
   version: DIRECT_PAIRING_VERSION,
@@ -57,7 +63,7 @@ describe('pairing codes', () => {
         .replace(/\+/g, '-')
         .replace(/\//g, '_')
         .replace(/=+$/, '')
-    expect(decodePairing(encode(Uint8Array.of(3, ...bytes.subarray(1))))).toBeNull()
+    expect(decodePairing(encode(Uint8Array.of(4, ...bytes.subarray(1))))).toBeNull()
     expect(decodePairing(encode(bytes.subarray(0, 64)))).toBeNull()
     expect(decodePairing(encode(bytes.subarray(0, bytes.length - 1)))).toBeNull()
     expect(decodePairing('not base64!')).toBeNull()
@@ -117,6 +123,48 @@ describe('pairing codes', () => {
       }),
     ).toThrow()
     expect(() => encodePairing({ ...payload, relay: { id: 'NOT-AN-ID', urls: [] } })).toThrow()
+  })
+
+  it('carry a pinned relay as version 3, its pin after the relays', () => {
+    const vector = vectors.ownRelay.pairing
+    const pinned: PairingPayload = {
+      version: PINNED_PAIRING_VERSION,
+      hostKey: hex(vector.hostKey),
+      secret: hex(vector.secret),
+      relay: vector.relay,
+      addresses: vector.addresses,
+    }
+    expect(encodePairing(pinned)).toBe(vector.text)
+    expect(decodePairing(vector.text)).toEqual(pinned)
+    // Without a pin the code stays version 2, which devices before the own relay read.
+    const plain = encodePairing({
+      ...pinned,
+      relay: { id: vector.relay.id, urls: vector.relay.urls },
+    })
+    expect(atob(plain.slice(0, 2) + '==').charCodeAt(0)).toBe(PAIRING_VERSION)
+    // A pin is cut short, or pins a relay a browser or a device reaches over plain http.
+    expect(decodePairing(vector.text.slice(0, 160))).toBeNull()
+    expect(() =>
+      encodePairing({ ...pinned, relay: { ...vector.relay, urls: ['http://127.0.0.1:8798'] } }),
+    ).toThrow()
+    expect(() => encodePairing({ ...pinned, relay: { ...vector.relay, pin: 'AAAA' } })).toThrow()
+  })
+
+  it('give a browser the own relay’s web client, unless the relay is pinned', () => {
+    const vector = vectors.ownRelay.pairing
+    const code: PairingPayload = {
+      version: PAIRING_VERSION,
+      hostKey: hex(vector.hostKey),
+      secret: hex(vector.secret),
+      relay: { id: vector.relay.id, urls: ['https://relay.example.com'] },
+      addresses: [],
+    }
+    const link = ownRelayPairingLink(code, 'https://relay.example.com')
+    expect(link?.startsWith('https://relay.example.com/pair#')).toBe(true)
+    expect(parseBrowserPairingLink(link!)).toEqual(code)
+    expect(
+      ownRelayPairingLink({ ...code, relay: vector.relay }, 'https://203.0.113.7:7443'),
+    ).toBeNull()
   })
 
   it('refuses to carry a host that is not one', () => {

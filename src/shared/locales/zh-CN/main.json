@@ -278,6 +278,7 @@
   },
   "settings": {
     "tooManyServers": "Kettu 最多保存 {{max}} 个服务器",
+    "ownRelayUnset": "先用“使用这个中继”选上自己的中继，让 Kettu 检查它。",
     "tooManySkills": "Kettu 最多保存 {{max}} 个 Skill",
     "repeatedServer": "已经有一个叫“{{name}}”的服务器",
     "repeatedSkill": "已经有一个叫“{{name}}”的 Skill",

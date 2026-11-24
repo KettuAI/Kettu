@@ -25,6 +25,7 @@ import {
 } from '@shared/remote/hosts'
 import { parsePairingLink } from '@shared/remote/pairing'
 import { isRelayHostId } from '@shared/remote/relay'
+import { parseOwnRelayInput } from './own-relay'
 import type { DirectAddress } from '@shared/remote/protocol'
 import type { RemoteStatus } from '@shared/remote/status'
 import type { BrowserBounds, BrowserOriginDecision } from '@shared/browser'
@@ -827,6 +828,11 @@ export function registerIpcHandlers({
   handle('remote:reset', 0, () => remoteHost.reset())
   handle('remote:retry-direct', 0, () => remoteHost.retryDirect())
   handle('remote:retry-relay', 0, () => remoteHost.retryRelay())
+  handle('remote:use-own-relay', 1, (_, input) => {
+    const parsed = parseOwnRelayInput(input)
+    if (!parsed) throw new Error('"remote:use-own-relay" takes an address, a key and a pin')
+    return remoteHost.useOwnRelay(parsed)
+  })
 
   handle('hosts:status', 0, () => hostsStatus())
   // Each pairing belongs to the page that pasted its link or typed the SSH address, which alone
