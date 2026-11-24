@@ -65,6 +65,15 @@ export type TileSubject =
     }
   | { kind: 'skill'; name: string }
   | { kind: 'workflow'; id: string; source: WireWorkflowEntry['source'] }
+  | {
+      // A Kettu plugin: the icon its package carries, else a glyph on a color its name picks.
+      kind: 'kettu-plugin'
+      name: string
+      /** False for a plugin anyone may publish, whose name earns it no maker's mark. */
+      marks: boolean
+      /** The package's own icon, as a data URL. */
+      icon: string | null
+    }
 
 export type TileSize = 'small' | 'row' | 'big'
 
@@ -94,6 +103,17 @@ export const pluginSubject = (plugin: {
 
 export const skillSubject = (name: string): TileSubject => ({ kind: 'skill', name })
 
+export const kettuPluginSubject = (plugin: {
+  name: string
+  official?: boolean
+  icon?: string | null
+}): TileSubject => ({
+  kind: 'kettu-plugin',
+  name: plugin.name,
+  marks: plugin.official === true,
+  icon: plugin.icon ?? null,
+})
+
 export const workflowSubject = (workflow: {
   id: string
   source: WireWorkflowEntry['source']
@@ -105,10 +125,12 @@ export const workflowSubject = (workflow: {
 
 /** A listing's tile: its kind's glyph, never a maker's mark, since anyone may take a name. */
 export function communitySubject(
-  item: Pick<CommunityItem, 'id' | 'kind' | 'harness' | 'slug'>,
+  item: Pick<CommunityItem, 'id' | 'kind' | 'harness' | 'slug'> & { official?: boolean },
 ): TileSubject {
+  const official = item.official === true
   if (item.kind === 'skill') return skillSubject(item.slug)
   if (item.kind === 'workflow') return workflowSubject({ id: item.slug, source: 'community' })
+  if (item.kind === 'agent-plugin') return kettuPluginSubject({ name: item.slug, official })
   if (item.kind === 'plugin') {
     return pluginSubject({
       harness: item.harness ?? 'claude-code',
@@ -211,7 +233,30 @@ function categoryGlyph(category: string | null): IconSvgElement {
   return CATEGORIES.find(([pattern]) => pattern.test(words))?.[1] ?? PuzzleIcon
 }
 
+// The colors a Kettu plugin's tile picks from by its name, the draft's mix of warm and cool.
+const KETTU_PLUGIN_COLORS = [
+  'var(--tile-violet)',
+  'var(--tile-sky)',
+  'var(--tile-teal)',
+  'var(--tile-emerald)',
+  'var(--tile-pink)',
+  'var(--tile-cyan)',
+  'var(--tile-amber)',
+  'var(--tile-slate)',
+]
+
+function nameColor(name: string): string {
+  let hash = 0
+  for (const char of name) hash = (hash * 31 + char.charCodeAt(0)) >>> 0
+  return KETTU_PLUGIN_COLORS[hash % KETTU_PLUGIN_COLORS.length]!
+}
+
 export function tileArt(subject: TileSubject): Art {
+  if (subject.kind === 'kettu-plugin') {
+    const mark = subject.marks ? brandMark(subject.name) : null
+    if (mark) return { type: 'mark', mark }
+    return { type: 'glyph', icon: PuzzleIcon, color: nameColor(subject.name) }
+  }
   if (subject.kind === 'mcp') {
     const mark = brandMark(subject.brand)
     if (mark) return { type: 'mark', mark }

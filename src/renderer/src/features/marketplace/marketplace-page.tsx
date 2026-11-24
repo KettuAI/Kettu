@@ -13,6 +13,7 @@ import { useWindowHostAway, useWindowScope } from '@renderer/stores/window-host'
 import { Directory } from './directory'
 import { ListingPage } from './listing'
 import './marketplace.css'
+import './plugins.css'
 
 /** How many places of the directory keep their scroll; the most recently scrolled win. */
 const REMEMBERED = 50

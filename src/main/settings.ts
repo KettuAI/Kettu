@@ -199,9 +199,12 @@ export class SettingsStore {
     return this.current
   }
 
-  /** Applies a patch from the renderer; throws a `SettingsError` and changes nothing if invalid. */
-  update(patch: unknown): SettingsFile {
-    const merged = mergeSettings(this.current, validateSettingsPatch(patch))
+  /**
+   * Applies a patch from the renderer; throws a `SettingsError` and changes nothing if invalid.
+   * Only the plugin service's own patch (`plugins`) may remove an item a plugin brought.
+   */
+  update(patch: unknown, options: { plugins?: boolean } = {}): SettingsFile {
+    const merged = mergeSettings(this.current, validateSettingsPatch(patch), options)
     return this.replace(withDirectPort(merged, randomDirectPort))
   }
 

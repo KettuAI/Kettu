@@ -16,6 +16,7 @@ import {
   type MarketSkill,
 } from '@shared/marketplace'
 import type { AgentId } from '@shared/thread'
+import type { InstalledKettuPlugin } from '@shared/plugins'
 import { EmptyState, Icon, Popover } from '@renderer/components/affect/app-shell'
 import { Button } from '@renderer/components/affect/button'
 import { AgentMark } from '@renderer/components/agents/agent-mark'
@@ -23,6 +24,7 @@ import { BrandIcon } from '@renderer/components/brand'
 import { Pill, SettingSwitch } from '@renderer/features/settings/controls'
 import { PlaceAction } from '@renderer/features/settings/places'
 import { currentLocale } from '@renderer/lib/i18n'
+import { isWeb } from '@renderer/lib/platform'
 import { useHostScope, type HostScope } from '@renderer/stores/host-scope'
 import { openMarketplace } from '@renderer/stores/view'
 import { setServerOn, setSkillOn } from './actions'
@@ -56,6 +58,9 @@ import { useWorkflows } from './workflow-actions'
 import { InstalledWorkflows } from './workflows'
 import { pluginSubject, serverSubject, skillSubject } from './tile-art'
 import { PlainTile } from './tiles'
+import { isPluginItem, pluginDescription, pluginTitle } from './plugin-model'
+import { useInstalledPlugins, usePluginPublisher } from './plugin-hooks'
+import { FromPlugin, PluginInstalledRow } from './plugin-ui'
 
 /** Rows a group of the agents' own skills shows before "and N more". */
 const GROUP_ROWS = 6
@@ -74,6 +79,7 @@ export function InstalledView({ query }: { query: string }) {
   const skills = useKeptSkills(query)
   const builtIn = useBuiltinSkills(query)
   const own = useOwn(query)
+  const plugins = useKeptPlugins(query)
   const workflows = useWorkflows().entries.filter((entry) =>
     workflowMatches(entry, query, currentLocale()),
   )
@@ -81,7 +87,8 @@ export function InstalledView({ query }: { query: string }) {
   const nothing =
     searching &&
     !matchesText(['Kettu'], query) &&
-    servers.length + builtIn.length + skills.length + workflows.length === 0 &&
+    plugins.list.length + servers.length + builtIn.length + skills.length + workflows.length ===
+      0 &&
     own.folders.length + own.plugins.length + own.places.length === 0
   if (nothing) {
     return (
@@ -93,7 +100,8 @@ export function InstalledView({ query }: { query: string }) {
   return (
     <>
       {(!searching || matchesText(['Kettu'], query)) && <KettuSection />}
-      <Section title={t('installed.kept')} count={servers.length} index={1} hide={searching}>
+      <PluginsSection plugins={plugins} searching={searching} />
+      <Section title={t('installed.kept')} count={servers.length} index={2} hide={searching}>
         {servers.length === 0 ? (
           <p className="k-mkt-section-note">{t('installed.noServers')}</p>
         ) : (
@@ -107,7 +115,7 @@ export function InstalledView({ query }: { query: string }) {
       <Section
         title={t('installed.skills')}
         count={builtIn.length + skills.length}
-        index={2}
+        index={3}
         hide={searching}
       >
         {builtIn.length + skills.length === 0 ? (
@@ -123,7 +131,7 @@ export function InstalledView({ query }: { query: string }) {
           </div>
         )}
       </Section>
-      <InstalledWorkflows query={query} index={3} />
+      <InstalledWorkflows query={query} index={4} />
       <OwnSection own={own} searching={searching} />
     </>
   )
@@ -388,9 +396,12 @@ function KeptRow({ server, listing }: { server: MarketServer; listing: Listing }
       subject={serverSubject({ ...listing, spec: server.spec })}
       meta={<Facts facts={[listing.publisher, ...state]} />}
       line={listing.description ?? specRuns(server.spec)}
+      oneLine={!listing.description}
       onOpen={() => openMarketplace({ item: keptItemKey('mcp', server.id), tab: 'installed' })}
       end={
-        oauth ? (
+        isPluginItem(server.id) ? (
+          <FromPlugin itemId={server.id} />
+        ) : oauth ? (
           <ConnectionControls server={server} compact />
         ) : (
           <SettingSwitch
@@ -401,6 +412,81 @@ function KeptRow({ server, listing }: { server: MarketServer; listing: Listing }
         )
       }
     />
+  )
+}
+
+/** The Kettu plugins installed here, matching the search; null while the host has not answered. */
+function useKeptPlugins(query: string): {
+  list: InstalledKettuPlugin[]
+  loading: boolean
+  failure: string | null
+} {
+  const { useMarketplaceStore } = useHostScope()
+  const plugins = useInstalledPlugins()
+  const failure = useMarketplaceStore((s) => s.pluginsError)
+  const locale = currentLocale()
+  const publisher = usePluginPublisher()
+  const list = (plugins ?? []).filter((plugin) =>
+    matchesText(
+      [
+        pluginTitle(plugin.contents, locale),
+        plugin.contents.name,
+        pluginDescription(plugin.contents, locale),
+        publisher(plugin),
+      ],
+      query,
+    ),
+  )
+  return { list, loading: plugins === null && !failure, failure: plugins === null ? failure : null }
+}
+
+/** Kettu's own plugins, after Kettu's server: each with its switch, and an update that asks for more. */
+function PluginsSection({
+  plugins,
+  searching,
+}: {
+  plugins: ReturnType<typeof useKeptPlugins>
+  searching: boolean
+}) {
+  const { t } = useTranslation(['marketplace', 'common'])
+  const { useMarketplaceStore } = useHostScope()
+  const { list, loading, failure } = plugins
+  return (
+    <Section
+      title={t('installed.kettuPlugins')}
+      count={loading ? null : list.length}
+      index={1}
+      hide={searching}
+    >
+      {failure ? (
+        <QuietNote
+          action={
+            <Button
+              size="md"
+              variant="ghost"
+              icon={<Icon icon={RefreshIcon} size={14} />}
+              onClick={() => void useMarketplaceStore.getState().loadPlugins()}
+            >
+              {t('common:actions.retry')}
+            </Button>
+          }
+        >
+          {t('notes.plugins', { error: failure })}
+        </QuietNote>
+      ) : loading ? (
+        <SkeletonRows rows={1} />
+      ) : list.length === 0 ? (
+        <p className="k-mkt-section-note">
+          {t(isWeb ? 'installed.noPluginsWeb' : 'installed.noPlugins')}
+        </p>
+      ) : (
+        <div className="ui-as-int-grid k-plug-grid">
+          {list.map((plugin) => (
+            <PluginInstalledRow key={plugin.id} plugin={plugin} />
+          ))}
+        </div>
+      )}
+    </Section>
   )
 }
 
@@ -448,11 +534,15 @@ function KeptSkillRow({ skill }: { skill: MarketSkill }) {
       line={skill.description || null}
       onOpen={() => openMarketplace({ item: keptItemKey('skill', skill.id), tab: 'installed' })}
       end={
-        <SettingSwitch
-          label={t('listing.switch', { name: skill.name })}
-          checked={skill.on}
-          onChange={(on) => void setSkillOn(scope, skill.id, on)}
-        />
+        isPluginItem(skill.id) ? (
+          <FromPlugin itemId={skill.id} />
+        ) : (
+          <SettingSwitch
+            label={t('listing.switch', { name: skill.name })}
+            checked={skill.on}
+            onChange={(on) => void setSkillOn(scope, skill.id, on)}
+          />
+        )
       }
     />
   )
@@ -569,7 +659,7 @@ function OwnSection({ own, searching }: { own: Own; searching: boolean }) {
     <Section
       title={t('installed.own')}
       count={own.loading ? null : count}
-      index={4}
+      index={5}
       note={t('installed.ownNote')}
     >
       {own.failure && (

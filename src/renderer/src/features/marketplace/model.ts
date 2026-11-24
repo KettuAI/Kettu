@@ -24,6 +24,7 @@ import { workflowsKey, useWorkflowsStore } from '@renderer/stores/workflows'
 import { workflowName } from './workflow-model'
 import { publishedStore } from '@renderer/stores/market-published'
 import { publishedTitle } from './published-keys'
+import { pluginTitle } from './plugin-model'
 
 /** A server as its listing shows it; what only the catalog knows is null for one added by hand. */
 export interface Listing {
@@ -129,12 +130,16 @@ export function findListing(scope: HostScope, id: string, kept: MarketServer[]):
  * Marketplace, by the listing's.
  */
 export type ItemRef =
+  | { kind: 'plugin'; id: string }
   | { kind: 'mcp'; id: string }
   | { kind: 'skill'; id: string }
   | { kind: 'workflow'; id: string }
   | { kind: 'community'; id: string }
 
-/** The `item` of a listing's view: `mcp:<id>`, `skill:<id>`, `workflow:<id>` or `community:<listing>`. */
+/**
+ * The `item` of a listing's view: `plugin:<id>` for an installed Kettu plugin, `mcp:<id>`,
+ * `skill:<id>`, `workflow:<id>` or `community:<listing>`.
+ */
 export function itemKey(ref: ItemRef): string {
   return `${ref.kind}:${ref.id}`
 }
@@ -144,7 +149,13 @@ export function parseItem(key: string): ItemRef | null {
   const kind = key.slice(0, colon)
   const rest = key.slice(colon + 1)
   if (colon < 0 || !rest) return null
-  if (kind === 'mcp' || kind === 'skill' || kind === 'workflow' || kind === 'community') {
+  if (
+    kind === 'plugin' ||
+    kind === 'mcp' ||
+    kind === 'skill' ||
+    kind === 'workflow' ||
+    kind === 'community'
+  ) {
     return { kind, id: rest }
   }
   return null
@@ -156,6 +167,10 @@ export function listingTitle(scope: HostScope, key: string): string | null {
   if (own !== undefined) return own
   const ref = parseItem(key)
   if (!ref) return null
+  if (ref.kind === 'plugin') {
+    const plugin = scope.useMarketplaceStore.getState().plugins?.find((p) => p.id === ref.id)
+    return plugin ? pluginTitle(plugin.contents, currentLocale()) : null
+  }
   if (ref.kind === 'workflow') {
     const entry = useWorkflowsStore
       .getState()

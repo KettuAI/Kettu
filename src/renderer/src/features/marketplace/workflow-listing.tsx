@@ -76,6 +76,7 @@ import { FlowChart } from './workflow-flow'
 import { WorkflowByline, WorkflowRow, WorkflowStateBadge, WorkflowUpdateButton } from './workflows'
 import { workflowSubject } from './tile-art'
 import { ItemTile } from './tiles'
+import { FromPluginOrigin } from './plugin-ui'
 
 /** Other workflows of its group shown under a page. */
 const RELATED = 4
@@ -239,6 +240,8 @@ function WorkflowMenu({
   const [checking, setChecking] = useState(false)
   // An older host's own workflows are neither removed nor updated.
   if (entry.source === LEGACY_OFFICIAL) return null
+  // A plugin's workflow leaves with the plugin; the host refuses to remove it alone.
+  if (entry.origin?.kind === 'plugin') return <FromPluginOrigin origin={entry.origin} />
   const check = async () => {
     setChecking(true)
     try {

@@ -14,7 +14,8 @@
       "installed": "Installed",
       "skills": "Skills",
       "workflow": "Workflows",
-      "published": "Published"
+      "published": "Published",
+      "plugins": "Plugins"
     },
     "searchPublished": "Search what you published"
   },
@@ -30,7 +31,11 @@
     "workflowGithub": "A workflow from GitHub…",
     "workflowGithubLine": "A file in a GitHub repository",
     "workflowFile": "A workflow from a file…",
-    "workflowFileLine": "A .yaml file on this computer"
+    "workflowFileLine": "A .yaml file on this computer",
+    "pluginGithub": "A plugin from GitHub…",
+    "pluginGithubLine": "A repository, or a folder in one",
+    "pluginFolder": "A plugin from a folder…",
+    "pluginFolderLine": "A folder with a plugin.json, for developing one"
   },
   "sections": {
     "featured": "Featured",
@@ -54,7 +59,8 @@
       "official": "Official",
       "verified": "Verified publisher",
       "community": "Community"
-    }
+    },
+    "plugins": "Plugins"
   },
   "row": {
     "install": "Install",
@@ -188,7 +194,10 @@
     "mcpConfig": "MCP configuration",
     "offIn": "Off in {{agents}}",
     "notCreated": "{{path}} · not created yet",
-    "workflows": "Workflows"
+    "workflows": "Workflows",
+    "kettuPlugins": "Plugins",
+    "noPlugins": "Kettu has no plugins yet. Install one from Plugins, or add one from GitHub or a folder with Add.",
+    "noPluginsWeb": "Kettu has no plugins yet. Install one from Plugins, or add one from GitHub with Add."
   },
   "kettu": {
     "note": "Artifacts, sessions and the browser reach every agent through Kettu’s own server.",
@@ -316,12 +325,16 @@
     "communityMore": "Couldn’t read more of the Kettu Marketplace: {{error}}",
     "skillRepository": "Couldn’t read {{repository}}: {{error}}",
     "skillRepositoryStale": "Couldn’t read {{repository}} again, so these may be out of date: {{error}}",
-    "harnessPlugins": "Claude Code and Codex plugins are now managed in Claude Code and Codex. The ones you installed keep working.",
-    "harnessPluginsDismiss": "Got it"
+    "harnessPlugins": "Claude Code and Codex plugins are now managed by Claude Code and Codex. The ones you installed keep working there. Kettu plugins work on every agent.",
+    "harnessPluginsDismiss": "Got it",
+    "plugins": "Couldn’t read the plugins: {{error}}"
   },
   "empty": {
     "skillsTitle": "No skills to show",
-    "skills": "The skills catalog is empty. Add a skill from GitHub or a folder with Add."
+    "skills": "The skills catalog is empty. Add a skill from GitHub or a folder with Add.",
+    "pluginsTitle": "No plugins to show",
+    "plugins": "A Kettu plugin works on every agent you run. Add one from GitHub or a folder with Add.",
+    "pluginsWeb": "A Kettu plugin works on every agent you run. Add one from GitHub with Add."
   },
   "plugin": {
     "installs_one": "{{value}} install",
@@ -331,7 +344,10 @@
     "scopeLocalIn": "In {{project}}, for you only",
     "hooksWarning": "Has hooks: they run commands on this computer by themselves, outside the agent’s sandbox.",
     "facts": {
-      "installs": "Installs"
+      "installs": "Installs",
+      "script": "Runs a script",
+      "scriptYes": "Yes",
+      "scriptNo": "No"
     },
     "adds": "Adds",
     "willAdd": "Will add",
@@ -372,6 +388,151 @@
         "name": "Network",
         "description": "Connect to any subdomain of {{domain}} over https."
       }
+    },
+    "install": {
+      "title": "Install {{name}}",
+      "replaceTitle": "Replace {{name}}",
+      "fromFolder": "A folder on this computer",
+      "dev": "Dev",
+      "failed": "Couldn’t install it: {{error}}"
+    },
+    "holds": {
+      "heading": "What it adds",
+      "skills_one": "{{count}} skill",
+      "skills_other": "{{count}} skills",
+      "commands_one": "{{count}} command",
+      "commands_other": "{{count}} commands",
+      "roles_one": "{{count}} role",
+      "roles_other": "{{count}} roles",
+      "workflows_one": "{{count}} Workflow",
+      "workflows_other": "{{count}} Workflows",
+      "themes_one": "{{count}} theme",
+      "themes_other": "{{count}} themes",
+      "templates_one": "{{count}} template",
+      "templates_other": "{{count}} templates",
+      "workflowNote": "Each waits for your approval before it starts a task",
+      "settings": "Settings of its own",
+      "views_one": "{{count}} view",
+      "views_other": "{{count}} views",
+      "viewsNote": "Declared by the plugin; Kettu doesn’t draw them yet",
+      "connects": "Where it connects",
+      "server": "MCP server {{name}}",
+      "connectsTo": "Connects to {{host}}",
+      "runs": "Runs {{command}}"
+    },
+    "script": {
+      "heading": "What its script may do",
+      "noPermissions": "Asks for nothing beyond its own settings and storage",
+      "runs": "Runs a script on this computer",
+      "runsNote": "In an isolated sandbox of its own, reaching only what the permissions below allow.",
+      "listedNote": "Its permissions are listed before you install it, and an update that asks for more waits for you.",
+      "none": "Runs no code",
+      "noneNote": "It only adds its items; nothing of it runs on its own."
+    },
+    "risk": {
+      "high": "High"
+    },
+    "note": {
+      "script": "A script can’t read your files, run commands or reach other sites than those listed. An update that asks for more waits for your answer.",
+      "noScript": "It adds the items above and runs no code.",
+      "hooksTitle": "Hooks",
+      "hooks": "Its hooks are written for other tools. Kettu doesn’t run them.",
+      "warnings": "Left out: {{list}}"
+    },
+    "update": {
+      "title": "Update {{name}} to {{version}}",
+      "titleNoVersion": "Update {{name}}",
+      "line": "From {{version}}, and it asks for more",
+      "lineNoVersion": "It asks for more than the version you have",
+      "newIn": "New in {{version}}",
+      "newInNoVersion": "New in this update",
+      "nowScript": "Now runs a script",
+      "unchanged": "Unchanged permissions",
+      "unchangedCount_one": "{{count}} permission",
+      "unchangedCount_other": "{{count}} permissions",
+      "stay": "Stay on current version",
+      "apply": "Update"
+    },
+    "add": {
+      "githubTitle": "Add a plugin from GitHub",
+      "githubDescription": "Kettu reads the plugin and shows what it adds and may do before anything is installed.",
+      "url": "Address",
+      "urlHint": "A repository, or a folder in one, on github.com.",
+      "urlInvalid": "Enter an address on github.com.",
+      "urlPlaceholder": "https://github.com/owner/repo",
+      "githubSubmit": "Continue"
+    },
+    "toast": {
+      "inspectFailed": "Couldn’t read the plugin: {{error}}",
+      "installed": "{{name}} installed",
+      "reloaded": "{{name}} reloaded",
+      "reloadFailed": "Couldn’t reload {{name}}: {{error}}",
+      "updateCheckFailed": "Couldn’t check {{name}} for an update: {{error}}",
+      "updateHeld": "{{name}} has an update that asks for more. Review it to update.",
+      "updated": "{{name}} updated to {{version}}",
+      "upToDate": "{{name}} is up to date",
+      "rollBackFailed": "Couldn’t roll {{name}} back: {{error}}",
+      "rolledBack": "{{name}} rolled back to {{version}}"
+    },
+    "tags": {
+      "skill_one": "{{count}} skill",
+      "skill_other": "{{count}} skills",
+      "server_one": "{{count}} MCP server",
+      "server_other": "{{count}} MCP servers",
+      "command_one": "{{count}} command",
+      "command_other": "{{count}} commands",
+      "role_one": "{{count}} role",
+      "role_other": "{{count}} roles",
+      "workflow_one": "{{count}} Workflow",
+      "workflow_other": "{{count}} Workflows",
+      "theme_one": "{{count}} theme",
+      "theme_other": "{{count}} themes",
+      "template_one": "{{count}} template",
+      "template_other": "{{count}} templates",
+      "script": "Script"
+    },
+    "item": {
+      "heading": "In this plugin",
+      "skill": "Skill",
+      "server": "MCP server",
+      "command": "Command",
+      "role": "Role",
+      "workflow": "Workflow",
+      "theme": "Theme",
+      "template": "Template"
+    },
+    "row": {
+      "asksForMore": "{{version}} asks for more",
+      "asksForMoreNoVersion": "An update asks for more",
+      "asksNote": "It needs permissions the installed version doesn’t have. Nothing changes until you update.",
+      "viewUpdate": "View update",
+      "items_one": "{{count}} item",
+      "items_other": "{{count}} items",
+      "devNote": "Added from {{path}}. Changes show after Reload.",
+      "updateError": "Couldn’t check for an update: {{error}}"
+    },
+    "menu": {
+      "reload": "Reload",
+      "reloadName": "Reload {{name}}",
+      "checkUpdates": "Check for updates",
+      "rollBack": "Roll back",
+      "rollBackTo": "Roll back to {{version}}"
+    },
+    "remove": {
+      "title": "Uninstall {{name}}?",
+      "body": "It leaves with everything it brought: its skills, MCP servers, commands, roles and Workflows.",
+      "confirm": "Uninstall"
+    },
+    "from": {
+      "name": "From {{plugin}}",
+      "unknown": "a plugin",
+      "note": "It leaves only with its plugin.",
+      "source": "A Kettu plugin"
+    },
+    "side": {
+      "license": "License",
+      "format": "Format",
+      "formatValue": "Agent Plugins, Kettu {{version}}"
     }
   },
   "skill": {

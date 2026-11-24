@@ -197,6 +197,7 @@ function itemOf(listing: MarketListing): CommunityItem {
     installs: listing.visibility === 'private' ? null : listing.installs,
     updatedAt: listing.updatedAt,
     ...(listing.kind === 'workflow' ? flowOf(listing) : {}),
+    ...(listing.kind === 'agent-plugin' && listing.adds ? { adds: listing.adds } : {}),
   }
 }
 

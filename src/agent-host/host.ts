@@ -917,6 +917,7 @@ export class AgentHost {
       editSettings: async ({ skills, servers }) => {
         await this.settingsCall({
           kind: 'change',
+          plugins: true,
           patch: {
             marketplace: {
               ...(skills ? { skillsEdit: skills } : {}),

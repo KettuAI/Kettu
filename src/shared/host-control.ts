@@ -223,7 +223,9 @@ export interface SettingsSnapshot {
   facts: SettingFacts
 }
 
-export type SettingsCall = { kind: 'read' } | { kind: 'change'; patch: SettingsPatch }
+/** `plugins`: the change is the plugin service's own, the only one that may remove a plugin's items. */
+export type SettingsCall =
+  { kind: 'read' } | { kind: 'change'; patch: SettingsPatch; plugins?: true }
 
 /** The snapshot after the call, or why the owner refused the change, which changed nothing. */
 export type SettingsCallAnswer = { result: SettingsSnapshot } | { error: string }

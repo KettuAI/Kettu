@@ -52,6 +52,8 @@ import { useHostName, useNamesHosts, useWindowHost } from '@renderer/stores/wind
 import { installSkill } from './actions'
 import { CommunityRow, CommunitySignedOut } from './community'
 import { AddServerDialog, AddSkillDialog } from './dialogs'
+import { usePluginInstall } from './plugin-hooks'
+import { AddPluginGithubDialog } from './plugin-install'
 import { MarketAway } from './parts'
 import { InstalledView } from './installed'
 import { PublishedView, PublishMenu } from './published'
@@ -86,7 +88,7 @@ import {
   type TileSubject,
 } from './tile-art'
 
-const TABS: readonly MarketplaceTab[] = ['all', 'skills', 'mcp', 'workflow', 'installed']
+const TABS: readonly MarketplaceTab[] = ['all', 'plugins', 'skills', 'mcp', 'workflow', 'installed']
 /** With Published last, while the host's Kettu account is signed in with Kettu's services on. */
 const SIGNED_IN_TABS: readonly MarketplaceTab[] = [...TABS, 'published']
 
@@ -96,6 +98,9 @@ const MORE_STEP = 60
 
 /** How long the search field rests before the lists are filtered and the registry asked. */
 const SEARCH_DELAY_MS = 300
+
+/** How many of Kettu's own plugins the Plugins tab's Featured section shows as cards. */
+const FEATURED_PLUGINS = 3
 
 /** How many official skills the All tab's Featured section mixes in. */
 const FEATURED_SKILLS = 3
@@ -197,7 +202,63 @@ interface Sources {
 
 /** The Community kind a tab lists; null for all of them. */
 const tabKind = (tab: MarketplaceTab): PublishKind | null =>
-  tab === 'skills' ? 'skill' : tab === 'mcp' ? 'mcp-server' : tab === 'workflow' ? 'workflow' : null
+  tab === 'plugins'
+    ? 'agent-plugin'
+    : tab === 'skills'
+      ? 'skill'
+      : tab === 'mcp'
+        ? 'mcp-server'
+        : tab === 'workflow'
+          ? 'workflow'
+          : null
+
+/**
+ * The Plugins tab without a query: Kettu's own plugins as cards under Featured, the account's own
+ * Only me items, then the Community's by installs. A service that lists no plugins yet shows no
+ * section, and the tab its empty state.
+ */
+function pluginSections(src: Sources, t: TFunction<'marketplace'>): Section[] {
+  const scope = communityScope('plugins', '')
+  const pages = src.communityPages[communityScopeKey(scope)]
+  if (!pages || (pages.at === 0 && pages.loading)) {
+    return [{ id: 'plugins-pending', title: t('sections.plugins'), entries: [], pending: 3 }]
+  }
+  if (!pages.signedIn) {
+    return [
+      {
+        id: 'community',
+        title: t('sections.community'),
+        entries: [],
+        pending: 0,
+        note: <CommunitySignedOut />,
+      },
+    ]
+  }
+  const featured = pages.items.filter((item) => item.official).slice(0, FEATURED_PLUGINS)
+  const shown = new Set(featured.map((item) => item.id))
+  return [
+    {
+      id: 'featured',
+      title: t('sections.featured'),
+      entries: featured.map(communityEntry),
+      pending: 0,
+      cards: true,
+    },
+    {
+      id: 'yours',
+      title: t('sections.yours'),
+      entries: pages.yours.map(communityEntry),
+      pending: 0,
+    },
+    {
+      id: 'community',
+      title: t('sections.community'),
+      entries: pages.items.filter((item) => !shown.has(item.id)).map(communityEntry),
+      pending: 0,
+      more: moreOf(src, scope, pages),
+    },
+  ]
+}
 
 /** The part of the Kettu Marketplace's directory a tab shows for a query, or without one. */
 function communityScope(tab: MarketplaceTab, query: string): CommunityScope {
@@ -552,7 +613,8 @@ export function Directory({ tab }: { tab: MarketplaceTab }) {
   const scope = useHostScope()
   const { useMarketplaceStore } = scope
   const query = useMarketplaceStore((s) => s.query)
-  const [dialog, setDialog] = useState<'mcp' | 'skill' | 'workflow' | null>(null)
+  const [dialog, setDialog] = useState<'mcp' | 'skill' | 'workflow' | 'plugin' | null>(null)
+  const pluginInstall = usePluginInstall()
   const namesHosts = useNamesHosts()
   const windowHost = useWindowHost()
   const hostName = useHostName()
@@ -561,6 +623,7 @@ export function Directory({ tab }: { tab: MarketplaceTab }) {
   const published = tab === 'published'
   const labels: Record<MarketplaceTab, string> = {
     all: t('page.tabs.all'),
+    plugins: t('page.tabs.plugins'),
     skills: t('page.tabs.skills'),
     mcp: t('page.tabs.mcp'),
     workflow: t('page.tabs.workflow'),
@@ -623,6 +686,15 @@ export function Directory({ tab }: { tab: MarketplaceTab }) {
     const path = await scope.api.dialogs.openProject()
     if (path) void installSkill(scope, { kind: 'local', path }, 'all', `local:${path}`)
   }
+  const addPluginFolder = async () => {
+    const path = await scope.api.dialogs.openProject()
+    if (path) {
+      void pluginInstall.start(
+        { kind: 'local', path },
+        { onInstalled: () => setMarketplaceTab('installed') },
+      )
+    }
+  }
 
   return (
     <div className="ui-as-integrations k-mkt">
@@ -661,6 +733,28 @@ export function Directory({ tab }: { tab: MarketplaceTab }) {
                 items={[
                   { label: t('add.heading'), heading: true },
                   {
+                    label: t('add.pluginGithub'),
+                    description: t('add.pluginGithubLine'),
+                    icon: GithubIcon,
+                    onSelect: () => setDialog('plugin'),
+                  },
+                  ...(isWeb
+                    ? []
+                    : [
+                        {
+                          label: t('add.pluginFolder'),
+                          description: t('add.pluginFolderLine'),
+                          icon: Folder01Icon,
+                          onSelect: () => void addPluginFolder(),
+                        },
+                      ]),
+                  {
+                    label: t('add.mcp'),
+                    description: t('add.mcpLine'),
+                    icon: PlugSocketIcon,
+                    onSelect: () => setDialog('mcp'),
+                  },
+                  {
                     label: t('add.skillGithub'),
                     description: t('add.skillGithubLine'),
                     icon: GithubIcon,
@@ -676,12 +770,6 @@ export function Directory({ tab }: { tab: MarketplaceTab }) {
                           onSelect: () => void addFolder(),
                         },
                       ]),
-                  {
-                    label: t('add.mcp'),
-                    description: t('add.mcpLine'),
-                    icon: PlugSocketIcon,
-                    onSelect: () => setDialog('mcp'),
-                  },
                   {
                     label: t('add.workflowGithub'),
                     description: t('add.workflowGithubLine'),
@@ -741,6 +829,12 @@ export function Directory({ tab }: { tab: MarketplaceTab }) {
           open={dialog === 'workflow'}
           onOpenChange={(open) => setDialog(open ? 'workflow' : null)}
         />
+        <AddPluginGithubDialog
+          open={dialog === 'plugin'}
+          onOpenChange={(open) => setDialog(open ? 'plugin' : null)}
+          install={pluginInstall}
+        />
+        {pluginInstall.dialogs}
       </MarketAway>
     </div>
   )
@@ -794,7 +888,9 @@ function Sections({
         ? allSections(src, t)
         : tab === 'skills'
           ? skillSections(src, t)
-          : [...mcpSections(src, t, null), ...communitySections(src, t, 'mcp-server')]
+          : tab === 'plugins'
+            ? pluginSections(src, t)
+            : [...mcpSections(src, t, null), ...communitySections(src, t, 'mcp-server')]
     return built.filter(
       (section) => section.entries.length > 0 || section.pending > 0 || section.note,
     )
@@ -1013,7 +1109,9 @@ function Empty({ tab, query }: { tab: MarketplaceTab; query: string }) {
     ? [t('search.noneTitle'), t('search.none', { query })]
     : tab === 'skills'
       ? [t('empty.skillsTitle'), t('empty.skills')]
-      : [t('catalog.emptyTitle'), t('catalog.emptyText')]
+      : tab === 'plugins'
+        ? [t('empty.pluginsTitle'), t(isWeb ? 'empty.pluginsWeb' : 'empty.plugins')]
+        : [t('catalog.emptyTitle'), t('catalog.emptyText')]
   return (
     <div className="ui-as-rise ui-as-int-empty">
       <EmptyState title={title} text={text} />
