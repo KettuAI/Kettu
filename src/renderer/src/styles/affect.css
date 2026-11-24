@@ -4392,81 +4392,10 @@ li[data-row-exit='dust'] > * {
   background: var(--danger);
 }
 
-/* Relay: three cards, the own relay's form or its state drawn inside its card */
-.kettu-settings .k-relay {
-  display: grid;
-  gap: 8px;
-}
-.kettu-settings .k-relay-choices {
-  gap: 8px;
-}
-.kettu-settings .k-relay-choice {
-  border-radius: 12px;
-  background: var(--card);
-  box-shadow: inset 0 0 0 0.5px var(--line-strong);
-  transition:
-    background-color var(--duration-fast) ease,
-    box-shadow var(--duration-fast) ease;
-}
-.kettu-settings .k-relay-choice:not([data-checked]):not([data-disabled]):hover {
-  box-shadow: inset 0 0 0 0.5px var(--edge-active);
-}
-.kettu-settings .k-relay-choice[data-checked] {
-  background: var(--accent-soft);
-  box-shadow: inset 0 0 0 1.5px var(--switch-on);
-}
-.kettu-settings .k-relay-choice > .k-relay-tile,
-.kettu-settings .k-relay-choice > .k-relay-tile:hover,
-.kettu-settings .k-relay-choice > .k-relay-tile[data-checked] {
-  gap: 10px;
-  padding: 11px 12px;
-  border-radius: 12px;
-  background: transparent;
-  box-shadow: none;
-  font-size: 13px;
-  line-height: 18px;
-  color: var(--ink);
-  cursor: default;
-}
-.kettu-settings .k-relay-choice > .k-relay-tile > [aria-hidden] {
-  margin-top: 1px;
-}
-.kettu-settings .k-relay-tile .k-row-title {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-}
-.kettu-settings .k-relay-body {
-  display: grid;
-  gap: 12px;
-  padding: 0 12px 12px 38px;
-}
-.kettu-settings .k-relay-field .k-relay-input.ui-sg-input {
-  width: 100%;
-}
-.kettu-settings .k-relay-secret {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-.kettu-settings .k-relay-hint {
-  font-size: 12px;
-  font-weight: 400;
-  line-height: 16px;
-  color: var(--muted);
-}
-.kettu-settings .k-relay-hint[data-bad] {
-  color: var(--danger);
-}
-.kettu-settings .k-relay-hint .k-mono {
-  font-family: var(--code-face);
-  font-size: 11.5px;
-}
-.kettu-settings .k-relay-actions {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
+/* Relay: the own relay's form under the Relay row, and its state when the sign-in fails */
+.kettu-settings .k-relay-form {
+  gap: 14px;
+  padding-block: 12px 14px;
 }
 .kettu-settings .k-relay-docs {
   display: inline-flex;
@@ -4475,44 +4404,19 @@ li[data-row-exit='dust'] > * {
   font-size: 12.5px;
   color: var(--muted);
 }
+.kettu-settings .k-relay-docs:hover {
+  color: var(--ink);
+}
 .kettu-settings .k-relay-buttons {
   display: inline-flex;
   gap: 8px;
 }
-.kettu-settings .k-relay-table {
-  border-radius: 10px;
-  background: var(--card);
-  box-shadow: inset 0 0 0 0.5px var(--line);
+.kettu-settings .k-relay-bad {
+  color: var(--danger);
 }
-.kettu-settings .k-relay-line {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  min-height: 52px;
-  padding: 8px 10px 8px 14px;
-}
-.kettu-settings .k-relay-line + .k-relay-line {
-  box-shadow: inset 0 0.5px 0 var(--line);
-}
-.kettu-settings .k-relay-line > .ui-sg-label {
-  min-width: 0;
-  flex: 1 1 auto;
-}
-.kettu-settings .k-relay-line .k-mono {
-  font-family: var(--code-face);
-  font-size: 12.5px;
-}
-.kettu-settings .k-relay-line .k-status {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-.kettu-settings .k-relay-body .k-inset {
-  margin: 0;
-}
-.kettu-settings .k-relay .kettu-sd__steps {
-  padding-top: 4px;
+.kettu-settings .k-relay-bad > .k-dot {
+  display: inline-block;
+  margin: 0 6px 1px 0;
 }
 :is(.kettu-settings, .kettu-sd) .k-row-note {
   margin: -6px 12px 0 16px;

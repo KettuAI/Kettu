@@ -2007,22 +2007,24 @@
       "group": "Relay",
       "groupDescription": "How your devices reach this computer from other networks: the Kettu relay, a relay you run yourself, or none.",
       "groupDescription_web": "How your devices reach {{host}} from other networks: the Kettu relay, a relay you run yourself, or none.",
-      "inUse": "In use",
       "onlyKettu": "Only with the Kettu relay.",
       "choice": {
         "kettu": {
           "name": "Kettu relay",
+          "short": "Kettu relay",
           "description": "Run by Kettu. This computer and your devices sign in to one Kettu account.",
           "description_web": "Run by Kettu. {{host}} and your devices sign in to one Kettu account."
         },
         "own": {
           "name": "Your own relay",
+          "short": "Your own",
           "description": "A relay you run on your own server. No Kettu account needed.",
           "descriptionLocal": "A relay you run on your own server. Nothing goes to Kettu.",
           "older": "Update Kettu on this computer to use a relay of your own."
         },
         "off": {
           "name": "No relay",
+          "short": "None",
           "description": "Devices connect on the same network, over a VPN or SSH."
         }
       },
@@ -2042,14 +2044,11 @@
         "keyHint": "Kept on this computer only. Devices never get it.",
         "keyKept": "Leave it empty to keep the key ending in {{end}}.",
         "noKey": "None kept",
-        "showKey": "Show key",
-        "hideKey": "Hide key",
         "docs": "How to run a relay",
         "docsUrl": "https://github.com/KettuAI/relay/blob/main/docs/deploy.md",
         "cancel": "Cancel",
         "use": "Use this relay",
         "checking": "Checking…",
-        "checks": "Checks",
         "change": "Change…",
         "replace": "Replace…",
         "pasteLink": "Paste new link…",
@@ -2066,14 +2065,6 @@
           "refused": "Refused · the relay has a new access key",
           "busy": "Too many connections · trying again",
           "unreachable": "Can’t reach · trying again"
-        },
-        "step": {
-          "address": "An address Kettu may use",
-          "reach": "Reachable, with a valid certificate",
-          "kettu": "A Kettu relay that takes access keys",
-          "key": "Accepts the access key",
-          "done": "passed",
-          "failed": "failed"
         },
         "problem": {
           "address": "Enter the relay’s address, such as https://relay.example.com.",

@@ -733,6 +733,7 @@ async function start(): Promise<void> {
         ownStatus: status?.ownRelay ?? null,
         keyEnd: accessKeyEnd(ownRelayKey),
       }),
+      ownRelayKeyEnd: accessKeyEnd(ownRelayKey),
     }
   }
   const remoteChanged = (): void => {

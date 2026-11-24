@@ -42,6 +42,11 @@ export interface RemoteStatus {
   direct: DirectStatus
   /** The Kettu relay; absent from older daemons. */
   relay?: RelayReport
+  /**
+   * The last four characters of the access key kept for the owner's own relay, whichever relay is
+   * in use, so switching back can keep it; null for none, absent from older hosts.
+   */
+  ownRelayKeyEnd?: string | null
 }
 
 /**
