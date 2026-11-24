@@ -299,13 +299,14 @@ export function mcpConfig(server: McpServer): Record<string, unknown> | null {
   }
 }
 
-/** The servers' paragraphs and Kettu's memory, as a session's instructions take them. */
+/** The servers' paragraphs, Kettu's memory and the role, as a session's instructions take them. */
 function instructionsFor(options: SessionOptions): string | null {
   const parts = [
     ...(options.mcpServers ?? []).flatMap((server) =>
       server.type === 'stdio' ? [] : (server.prompt ?? []),
     ),
     ...(options.memory ? [options.memory.text] : []),
+    ...(options.role ? [options.role] : []),
   ]
   return parts.length > 0 ? parts.join('\n\n') : null
 }

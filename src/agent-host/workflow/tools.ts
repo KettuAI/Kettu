@@ -139,7 +139,8 @@ export const WORKFLOW_TOOLS: Tool[] = [
       'order, the first being the start. A step has `id` (kebab-case), `name`, `prompt`, `by` ' +
       '(agent or you), `hand_in` (document, outcome or note), `outcomes` (each a `name` with `to` ' +
       'naming one step, several steps to run at once, or `end: done` / `end: dropped`), and ' +
-      'optionally `you_review`, `hint`, `review_of` and `tools`: `mcp` and `skills`, each a name ' +
+      "optionally `you_review`, `hint`, `review_of`, `role` (a role of Kettu's, whose " +
+      "instructions the step's session is given) and `tools`: `mcp` and `skills`, each a name " +
       'Kettu has installed or a Marketplace entry that Start installs (an MCP Registry server ' +
       'name, a skills catalog id such as owner/repo:name, or kettu:<listing>). Never name an ' +
       'agent, harness or model.',
@@ -223,7 +224,8 @@ export const WORKFLOW_TOOLS: Tool[] = [
     title: 'Pick who does the next steps',
     description:
       'Picks the agent, model and effort for each step your report listed, from the facts it ' +
-      'gave: what each step needs, the pace, the agents you may pick with their models, ' +
+      "gave: what each step needs (a role's suggestions are only hints), the pace, the agents " +
+      'you may pick with their models, ' +
       "efforts and plan limits, Kettu's notes on the models and who did the step before. Give a " +
       'one-line reason for each. Kettu checks that each pick can run, never whether it is a good ' +
       'one; a refused pick says why.',

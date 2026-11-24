@@ -211,6 +211,16 @@ function readTools(value: unknown, path: string, p: Problems): WorkflowStep['too
   return tools
 }
 
+/** A step's role: the reference of a role, a name or a plugin's name and the role's, or null. */
+function readRole(value: unknown, path: string, p: Problems): string | null {
+  if (value === undefined || value === null) return null
+  if (typeof value !== 'string' || !TOOL_NAME.test(value)) {
+    p.add(path, 'workflowFile.name')
+    return null
+  }
+  return value
+}
+
 function readStep(value: unknown, index: number, p: Problems): WorkflowStep | null {
   const path = join('steps', index)
   if (!isData(value)) {
@@ -231,6 +241,7 @@ function readStep(value: unknown, index: number, p: Problems): WorkflowStep | nu
       'hint',
       'review_of',
       'tools',
+      'role',
     ],
     p,
   )
@@ -257,6 +268,7 @@ function readStep(value: unknown, index: number, p: Problems): WorkflowStep | nu
   const hint = text(value, 'hint', path, STEP_HINT_CHARS, p, true)
   const reviewOf = names(own(value, 'review_of'), join(path, 'review_of'), p)
   const tools = readTools(own(value, 'tools'), join(path, 'tools'), p)
+  const role = readRole(own(value, 'role'), join(path, 'role'), p)
 
   const outcomesValue = own(value, 'outcomes')
   const outcomes: WorkflowOutcome[] = []
@@ -285,12 +297,25 @@ function readStep(value: unknown, index: number, p: Problems): WorkflowStep | nu
     if (tools.mcp.length + tools.skills.length > 0) {
       p.add(join(path, 'tools'), 'workflowFile.personNoTools')
     }
+    if (role !== null) p.add(join(path, 'role'), 'workflowFile.personNoRole')
   }
   if (handIn === 'outcome' && outcomes.length < 2) {
     p.add(join(path, 'outcomes'), 'workflowFile.twoOutcomes')
   }
   if (id === null || name === null || prompt === null) return null
-  return { id, name, prompt, by, handIn, outcomes, youReview, hint, reviewOf, tools }
+  return {
+    id,
+    name,
+    prompt,
+    by,
+    handIn,
+    outcomes,
+    youReview,
+    hint,
+    reviewOf,
+    tools,
+    ...(role === null ? {} : { role }),
+  }
 }
 
 /** A locale's outcome names: step ids to each outcome's name in the file and its translation. */

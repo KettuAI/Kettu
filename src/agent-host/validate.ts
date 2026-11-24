@@ -1728,6 +1728,7 @@ export function createValidators(platform: Platform): Validators {
       const o = fields(params)
       const parentId = optionalString(o, 'parentId', ID_CHARS)
       const preparedId = optionalString(o, 'preparedId', ID_CHARS)
+      const role = optionalString(o, 'role', ID_CHARS)
       const options = o.options === undefined ? undefined : configValues(o.options)
       return {
         agentId: agentId(o),
@@ -1737,6 +1738,7 @@ export function createValidators(platform: Platform): Validators {
         ...(options !== undefined ? { options } : {}),
         ...(o.prompt !== undefined ? { prompt: promptContent(o.prompt) } : {}),
         ...(preparedId !== undefined ? { preparedId } : {}),
+        ...(role !== undefined ? { role } : {}),
         ...(o.worktree !== undefined ? { worktree: worktreeRequest(o.worktree) } : {}),
       }
     },
@@ -2054,6 +2056,7 @@ export function createValidators(platform: Platform): Validators {
       return { kind }
     },
     'commands.list': none,
+    'roles.list': none,
     'workflows.list': none,
     'workflows.read': (params) => ({ workflowId: workflowId(fields(params)) }),
     'workflows.add': workflowAddSource,

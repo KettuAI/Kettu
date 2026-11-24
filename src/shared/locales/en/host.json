@@ -1390,6 +1390,11 @@
       "mcp": "the MCP server {{name}}"
     }
   },
+  "roles": {
+    "unknown": "There is no role named {{role}}.",
+    "notStarted": "The role {{role}} wasn’t started. It needs {{items}}.",
+    "started": "Started as the role {{role}}"
+  },
   "marketBundle": {
     "invalid": "This MCP bundle can’t be installed: {{reason}}",
     "notZip": "it isn’t a zip archive.",
@@ -1527,6 +1532,7 @@
     "personNoAgent": "a person's step has no agent to pick",
     "personNoReview": "a person's step reviews nothing",
     "personNoTools": "a person's step has no session to hand tools to",
+    "personNoRole": "a person's step has no agent to give a role to",
     "twoOutcomes": "a step that hands in an outcome needs at least two outcomes",
     "outcomesMapping": "must map step ids to their outcomes",
     "outcomeNames": "must map outcome names to names",

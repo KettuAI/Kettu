@@ -3,7 +3,7 @@ import { Alert02Icon, GitBranchIcon, GitCommitIcon } from '@hugeicons/core-free-
 import { useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
 import { StarLine } from '@renderer/features/github-star/star-prompts'
-import type { Project, SessionSummary, StartNotice } from '@shared/agent-host'
+import type { KettuRole, Project, SessionSummary, StartNotice } from '@shared/agent-host'
 import type { AgentId, SlashCommand, UserContent } from '@shared/thread'
 import { usableWorkflow, type Workflow, type WireWorkflowEntry } from '@shared/workflow'
 import { limitsForModel } from '@shared/plan-limits'
@@ -57,6 +57,7 @@ import { shownHosts, useOtherHosts } from '@renderer/stores/hosts'
 import { useProjectsStore } from '@renderer/stores/projects'
 import { hostOfSession, sessionTitle, useSessionsStore } from '@renderer/stores/sessions'
 import { useSettingsStore } from '@renderer/stores/settings'
+import { useKettuRoles } from '@renderer/stores/kettu-roles'
 import { useHostWorkflows } from '@renderer/stores/workflows'
 import { useTasksStore } from '@renderer/stores/tasks'
 import { branchHold, useWorktreeChoice, worktreeRequest } from '@renderer/stores/worktree-choice'
@@ -117,6 +118,7 @@ import {
   startValues,
   type NoAgentReason,
 } from './new-session/start-options'
+import { applyRole, suggestedAgent, toggleRole, useRoleChoice } from './new-session/role-choice'
 import { useStartConfig } from './new-session/use-start-config'
 import { openTask } from './new-session/open-task'
 import { chooseWorkflow, taskStarted, useWorkflowChoice } from './new-session/workflow-choice'
@@ -369,6 +371,14 @@ function DraftComposer({
     ? !!agentId && !!taskProject && holdsMessage && !held && attachments.length === 0 && !firstOff
     : !!agentId && ready && holdsMessage && !held && !branchHeld
   const config = useStartConfig(agentId, undefined, hostId)
+  // The role chosen for the next session, which a workflow's steps replace with their own.
+  const roles = useKettuRoles(hostId)
+  const roleRef = useRoleChoice((s) => s.ref)
+  const role = workflow ? null : (roles.find((r) => r.ref === roleRef) ?? null)
+  const roleAgents = useMemo(() => (onAgents ?? []).filter(canStart), [onAgents])
+  useEffect(() => {
+    if (role) applyRole(role, agentId, roleAgents, hostId, config)
+  }, [role, agentId, roleAgents, hostId, config])
   const model = config?.find((o) => o.category === 'model' && isSelect(o))
   // A used-up window of another model does not hold the picked one back.
   const tightest = limits ? tightestLimit(limitsForModel(limits, model), now) : null
@@ -503,7 +513,15 @@ function DraftComposer({
         project && !inScratch
           ? worktreeRequest(project.path, gitStatus ? currentBase(gitStatus) : null)
           : null
-      void startNewSession(agentId, projectPath, content, options, preparedId, worktree)
+      void startNewSession(
+        agentId,
+        projectPath,
+        content,
+        options,
+        preparedId,
+        worktree,
+        role?.ref ?? null,
+      )
     } finally {
       sending.current = false
     }
@@ -548,6 +566,15 @@ function DraftComposer({
 
   const choose = (id: AgentId) => {
     if (paneId) choosePaneAgent(paneId, id)
+    requestAnimationFrame(() => editor.current?.focus())
+  }
+
+  // The role's suggested agent, when this computer has it, is the tray's agent; the user may change it.
+  const chooseRole = (picked: KettuRole, suggested: AgentId | null) => {
+    toggleRole(picked.ref)
+    if (useRoleChoice.getState().ref !== null && suggested && paneId) {
+      choosePaneAgent(paneId, suggested)
+    }
     requestAnimationFrame(() => editor.current?.focus())
   }
 
@@ -676,7 +703,12 @@ function DraftComposer({
                     />
                   </>
                 )}
-                <AgentPicker agentId={agentId} onChoose={choose} hostId={hostId} />
+                <AgentPicker
+                  agentId={agentId}
+                  onChoose={choose}
+                  onChooseRole={chooseRole}
+                  hostId={hostId}
+                />
                 {taskProject && (
                   <WorkflowMenu
                     hostId={hostId}
@@ -718,6 +750,9 @@ function DraftComposer({
         ) : (
           gitStatus && project && <WorktreeNote projectPath={project.path} status={gitStatus} />
         )}
+        {agentId && role && (
+          <RoleNotices role={role} agentId={agentId} agents={roleAgents} hostId={hostId} />
+        )}
         {agentId && <StartNotices agentId={agentId} hostId={hostId} />}
         {stopped && !(noAgent && guide) && <NoAgentLine stopped={stopped} hostId={hostId} />}
       </div>
@@ -727,6 +762,53 @@ function DraftComposer({
 }
 
 const NO_NOTICES: StartNotice[] = []
+
+/** What the chosen role suggests that the tray could not take, and what the session starts with. */
+function RoleNotices({
+  role,
+  agentId,
+  agents,
+  hostId,
+}: {
+  role: KettuRole
+  agentId: AgentId
+  agents: readonly { id: AgentId }[]
+  hostId: string | null
+}) {
+  const { t } = useTranslation('session')
+  const notices = useRoleChoice((s) => s.notices)
+  const { agent } = role.suggests
+  const lines = [
+    ...(agent && !suggestedAgent(agents, agent)
+      ? [
+          t('newSession.role.notice.agent', {
+            role: role.title,
+            wanted: agent,
+            actual: agentName(agentId, hostId),
+          }),
+        ]
+      : []),
+    ...notices.map((notice) =>
+      t(`newSession.role.notice.${notice.kind}`, {
+        role: role.title,
+        wanted: notice.wanted,
+        actual: notice.actual,
+        agent: agentName(agentId, hostId),
+      }),
+    ),
+  ]
+  if (lines.length === 0) return null
+  return (
+    <ul className="flex flex-col gap-0.5 px-2.75">
+      {lines.map((line) => (
+        <li key={line} className="flex min-w-0 items-start gap-1.5 text-xs text-secondary">
+          <Glyph icon={Alert02Icon} size={12} className="mt-0.5 shrink-0 text-warning" />
+          <span className="min-w-0">{line}</span>
+        </li>
+      ))}
+    </ul>
+  )
+}
 
 /** Each value the session will not start with as chosen, and why, before the first message. */
 function StartNotices({ agentId, hostId }: { agentId: AgentId; hostId: string | null }) {

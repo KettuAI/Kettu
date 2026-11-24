@@ -72,6 +72,8 @@ export interface WorkflowStep {
   /** The steps it reviews, whose agent and model it must not share. */
   reviewOf: string[]
   tools: StepTools
+  /** A role, by its reference, whose instructions the step's session is given. */
+  role?: string
 }
 
 /** A workflow's text, step names and outcome names in another language. */

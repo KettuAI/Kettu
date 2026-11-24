@@ -327,7 +327,7 @@ export function sideStep(item: ThreadItem): SideChatStep | null {
   }
 }
 
-/** The servers' paragraphs and Kettu's memory for the model, as a thread takes them. */
+/** The servers' paragraphs, Kettu's memory and the role for the model, as a thread takes them. */
 function developerInstructions(
   options: SessionOptions,
 ): { developerInstructions: string } | Record<string, never> {
@@ -336,6 +336,7 @@ function developerInstructions(
       server.type === 'stdio' ? [] : (server.prompt ?? []),
     ),
     ...(options.memory ? [options.memory.text] : []),
+    ...(options.role ? [options.role] : []),
   ]
   return prompts.length > 0 ? { developerInstructions: prompts.join('\n\n') } : {}
 }

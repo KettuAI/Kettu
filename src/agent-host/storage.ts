@@ -302,6 +302,13 @@ export interface ProjectsFile {
 /** How many opened pull requests a session keeps; the oldest go first. */
 export const MAX_SESSION_PULL_REQUESTS = 20
 
+/** A role a session started as; `name` is the role's own name, `title` what the user sees. */
+export interface SessionRole {
+  name: string
+  title: string
+  instructions: string
+}
+
 export interface SessionRecord {
   id: string
   agentId: AgentId
@@ -375,6 +382,11 @@ export interface SessionRecord {
    * the names the Marketplace keeps them under: every attach of the session gets them.
    */
   commandTools?: { skills: string[]; mcp: string[] }
+  /**
+   * The role the session started as: its instructions go to every agent that runs it, the way
+   * Kettu's guide does, so they are kept whole, whatever becomes of the role's file.
+   */
+  role?: SessionRole
   /** The prompt Kettu's guide and memory last went ahead of, by its entry id. */
   memorySentAt?: string
   /** Its agent said the conversation cannot be cut, as for an older Codex thread. */
@@ -752,6 +764,13 @@ function withFrom(item: QueuedPrompt): QueuedPrompt {
     : rest
 }
 
+function roleOf(value: unknown): { role?: SessionRole } {
+  if (!isRecord(value)) return {}
+  const { name, title, instructions } = value
+  if (!isString(name) || !isString(title) || !isString(instructions)) return {}
+  return name !== '' && instructions.trim() !== '' ? { role: { name, title, instructions } } : {}
+}
+
 function commandToolsOf(value: unknown): { commandTools?: SessionRecord['commandTools'] } {
   if (!isRecord(value)) return {}
   const names = (list: unknown): string[] =>
@@ -1090,6 +1109,7 @@ export function parseSessionsFile(data: Record<string, unknown>): SessionsFile |
       ...rewoundOf(item.rewound),
       ...carriedOf(item.carried),
       ...commandToolsOf(item.commandTools),
+      ...roleOf(item.role),
       ...(isString(item.memorySentAt) && item.memorySentAt !== ''
         ? { memorySentAt: item.memorySentAt }
         : {}),

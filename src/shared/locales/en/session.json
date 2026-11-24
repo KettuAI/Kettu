@@ -753,6 +753,18 @@
       "opens": "Opens",
       "open": "Open"
     },
+    "role": {
+      "group": "Roles",
+      "agents": "Agents",
+      "yours": "Yours",
+      "anyAgent": "Any agent",
+      "agentMissing": "{{agent}} is not on this computer",
+      "notice": {
+        "agent": "The role {{role}} suggests {{wanted}}, which this computer does not have, so it starts with {{actual}}.",
+        "model": "The role {{role}} suggests {{wanted}}, which {{agent}} does not offer, so it starts with {{actual}}.",
+        "effort": "The role {{role}} suggests the effort {{wanted}}, which {{agent}} does not offer here, so it starts with {{actual}}."
+      }
+    },
     "picker": {
       "search": "Search agents",
       "noMatch": "No matching agents",

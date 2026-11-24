@@ -729,6 +729,18 @@
       "opens": "将打开",
       "open": "打开"
     },
+    "role": {
+      "group": "角色",
+      "agents": "智能体",
+      "yours": "你的",
+      "anyAgent": "任意智能体",
+      "agentMissing": "这台电脑上没有 {{agent}}",
+      "notice": {
+        "agent": "角色 {{role}} 建议用 {{wanted}}，这台电脑上没有，所以用 {{actual}} 开始。",
+        "model": "角色 {{role}} 建议用 {{wanted}}，{{agent}} 没有这个模型，所以用 {{actual}} 开始。",
+        "effort": "角色 {{role}} 建议的推理强度 {{wanted}}，{{agent}} 这里没有，所以用 {{actual}} 开始。"
+      }
+    },
     "picker": {
       "search": "搜索智能体",
       "noMatch": "没有匹配的智能体",

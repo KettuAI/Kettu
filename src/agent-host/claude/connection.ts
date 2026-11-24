@@ -1025,6 +1025,7 @@ export class ClaudeConnection implements AgentConnection {
       : [
           ...servers.flatMap((server) => (server.type === 'stdio' ? [] : (server.prompt ?? []))),
           ...(options.memory ? [options.memory.text] : []),
+          ...(options.role ? [options.role] : []),
         ]
     const queryOptions: QueryOptions = {
       cwd,

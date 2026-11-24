@@ -218,6 +218,8 @@ import { HostError, invalidParams, notFound } from './errors'
 import { listOf, t } from './i18n'
 import type { CommandNeeds } from './commands/format'
 import type { CommandExpansion } from './commands/service'
+import { roleBlock } from './roles/format'
+import type { FoundRole } from './roles/service'
 import { logText } from './localized-error'
 import {
   GITHUB_PULL_REQUEST_URL,
@@ -285,6 +287,7 @@ import {
   type PendingCarry,
   type ReturnedFile,
   type SessionRecord,
+  type SessionRole,
   type SessionsFile,
   type WorktreeRecord,
 } from './storage'
@@ -460,6 +463,15 @@ export interface SessionCommands {
   extra(agentId: AgentId, needs: CommandNeeds): CommandNeeds
 }
 
+/** Kettu's own roles, as sessions start as them. */
+export interface SessionRoles {
+  /**
+   * The role a reference names. Throws when none does, or when a skill or MCP server it names is
+   * not installed or is turned off.
+   */
+  resolve(ref: string): Promise<FoundRole>
+}
+
 /** Kettu's memory as sessions hand it to their agents and write what their agents propose. */
 export interface SessionMemoryDeps {
   readonly enabled: boolean
@@ -559,6 +571,8 @@ export interface SessionManagerDeps {
   ) => Promise<Pick<SessionOptions, 'skillRoots' | 'localPlugins'>>
   /** Kettu's own slash commands; without it a text goes as typed. */
   commands?: SessionCommands
+  /** Kettu's own roles; without it no session starts as one. */
+  roles?: SessionRoles
   /** Kettu's memory; without it no session is handed any. */
   memory?: SessionMemoryDeps
   /** The prepared sessions not yet adopted or removed, kept for the host after a crash. */
@@ -3806,7 +3820,7 @@ export class SessionManager {
    * while the session reaches Kettu's server, the MCP servers, the artifacts service to an agent
    * that takes MCP over HTTP while Kettu's server is on for it, then the Marketplace's servers
    * meant for its agent, and Kettu's memory while it is on. An agent that adds to its system
-   * prompt when a session starts gets the guide and memory as one text.
+   * prompt when a session starts gets the guide, memory and role as one text.
    */
   private async attachOptions(
     sessionId: string,
@@ -3819,10 +3833,12 @@ export class SessionManager {
     const reached = own.length > 0
     const skills = (await this.deps.skills?.(record, reached)) ?? {}
     const memory = await this.memoryFor(sessionId, record, reached)
+    const role = record.role ? roleBlock(record.role.title, record.role.instructions) : null
     const append = runtime?.connection.systemPromptAppend
       ? kettuAhead(
           reached ? (this.deps.mcp?.guide(record.agentId) ?? null) : null,
           memory?.text ?? null,
+          role,
         )
       : null
     return {
@@ -3832,6 +3848,7 @@ export class SessionManager {
       ...(projectHooks ? { projectHooks } : {}),
       ...(memory ? { memory } : {}),
       ...(record.instructionsAhead ? { promptAhead: true } : {}),
+      ...(role ? { role } : {}),
       ...(append ? { systemPromptAppend: append } : {}),
     }
   }
@@ -4687,6 +4704,8 @@ export class SessionManager {
       title?: string
       /** A new worktree to work in, cut from `base`; a sub-session takes its parent's instead. */
       worktree?: { base: string; branch?: string }
+      /** A role to start as, by its reference. */
+      role?: string
     },
     portId?: string,
   ): Promise<SessionSummary> {
@@ -4706,9 +4725,16 @@ export class SessionManager {
       commandTools = found.fresh
       commandRun = found.run
     }
+    const role = params.role === undefined ? null : await this.resolveRole(params.role)
+    const roleTools = role ? this.deps.commands?.extra(params.agentId, role.needs) : undefined
     // A prepared session's agent already works in the project's folder, so a worktree starts anew,
-    // and it is attached already, so a command that names more tools starts anew too.
-    if (params.preparedId !== undefined && params.worktree === undefined && !commandTools) {
+    // and it is attached already, so a command that names more tools or a role starts anew too.
+    if (
+      params.preparedId !== undefined &&
+      params.worktree === undefined &&
+      !commandTools &&
+      !role
+    ) {
       const adopted = await this.adopt({
         agentId: params.agentId,
         preparedId: params.preparedId,
@@ -4766,7 +4792,9 @@ export class SessionManager {
       branch: null,
     }
     if (params.startedBy !== undefined) record.startedBy = params.startedBy
-    if (commandTools) record.commandTools = commandTools
+    const kept = joinNeeds(commandTools, roleTools)
+    if (kept) record.commandTools = kept
+    if (role) record.role = sessionRole(role)
     const options = params.options ?? {}
     const live = this.makeLive(record, false, 'starting')
     live.unread = false
@@ -4784,6 +4812,7 @@ export class SessionManager {
       }
       if (commandTools && commandRun) this.noteCommandTools(live, commandRun.name, commandTools)
     }
+    if (role) this.noteRole(live, role.title, roleTools)
     this.touch(live.id)
     if (newWorktree && worktree) this.prepareWorktree(projectPath, worktree)
     try {
@@ -4853,6 +4882,8 @@ export class SessionManager {
       throw invalidParams(t('agent.unknown', { agent: params.agentId }))
     agents.assertEnabled(params.agentId)
     const projectPath = await projects.resolveDirectory(params.projectPath)
+    const role = params.role === undefined ? null : await this.resolveRole(params.role)
+    const roleTools = role ? this.deps.commands?.extra(params.agentId, role.needs) : undefined
     const now = this.now()
     const worktree = params.worktree ? { ...params.worktree } : undefined
     if (worktree) delete worktree.pending
@@ -4873,6 +4904,9 @@ export class SessionManager {
       description: null,
       branch: null,
     }
+    const kept = joinNeeds(null, roleTools)
+    if (kept) record.commandTools = kept
+    if (role) record.role = sessionRole(role)
     const live = this.makeLive(record, false, 'starting')
     live.unread = false
     live.used = true
@@ -4881,6 +4915,7 @@ export class SessionManager {
     // The step's prompt is Kettu's, written from the workflow, not the user's.
     const entryId = this.addPrompt(live, content, now, undefined, undefined, undefined, true)
     live.first = { content, entryId, kettu: true }
+    if (role) this.noteRole(live, role.title, roleTools)
     this.touch(live.id)
     this.deps.task?.current?.sessionCreated(live.id, params.task)
     if (worktree && params.prepare) this.prepareWorktree(projectPath, worktree)
@@ -7325,6 +7360,34 @@ export class SessionManager {
     ])
   }
 
+  /** The role a reference names, or why the session cannot start as it. */
+  private resolveRole(ref: string): Promise<FoundRole> {
+    const roles = this.deps.roles
+    if (!roles) throw invalidParams(t('roles.unknown', { role: ref }))
+    return roles.resolve(ref)
+  }
+
+  /** The thread says which role the session started as and what the role added to it. */
+  private noteRole(live: Live, title: string, added: CommandNeeds | undefined): void {
+    const items = [
+      ...(added?.skills ?? []).map((name) => t('commands.added.skill', { name })),
+      ...(added?.mcp ?? []).map((name) => t('commands.added.mcp', { name })),
+    ]
+    this.emit(live, [
+      {
+        op: 'entry.add',
+        entry: {
+          kind: 'notice',
+          id: this.nextId(live),
+          severity: 'info',
+          title: t('roles.started', { role: title }),
+          ...(items.length > 0 ? { description: listOf(items) } : {}),
+          after: agentEntryBefore(live.thread),
+        },
+      },
+    ])
+  }
+
   /** Sends a prompt; `kettu` when Kettu sends it itself, as a step's reminder. */
   private sendPrompt(
     live: Live,
@@ -7614,9 +7677,10 @@ export class SessionManager {
 
   /**
    * What goes ahead of the prompt, before anything carried, for an agent that takes no
-   * instructions of the session's own: Kettu's guide while the session reaches Kettu's server, and
-   * Kettu's memory while it is on. With the first prompt its own session gets, and again after its
-   * context was compacted; the thread shows the message as the user wrote it.
+   * instructions of the session's own: Kettu's guide while the session reaches Kettu's server,
+   * Kettu's memory while it is on, and the instructions of the role it started as. With the first
+   * prompt its own session gets, and again after its context was compacted; the thread shows the
+   * message as the user wrote it.
    */
   private async aheadText(live: Live, connection: AgentConnection): Promise<string | null> {
     const { record } = live
@@ -7634,7 +7698,8 @@ export class SessionManager {
           .join('\n\n')
       : (this.deps.mcp?.guide(record.agentId) ?? '')
     const memory = (await this.memoryFor(live.id, record, tools))?.text ?? null
-    return kettuAhead(tools && this.deps.mcp && text ? text : null, memory)
+    const role = record.role ? roleBlock(record.role.title, record.role.instructions) : null
+    return kettuAhead(tools && this.deps.mcp && text ? text : null, memory, role)
   }
 
   /** The agent that had the session before any takeover. */
@@ -11188,6 +11253,8 @@ export class SessionManager {
       mode?: string
       options: Record<string, string | boolean>
       report: boolean
+      /** A role to start as, by its reference. */
+      role?: string
     },
   ): Promise<string> {
     const caller = this.recordOf(callerId)
@@ -11207,6 +11274,7 @@ export class SessionManager {
       startedBy: callerId,
       startedMode: { starter: this.starterRank(callerId), wanted: params.mode ?? null },
       from,
+      ...(params.role === undefined ? {} : { role: params.role }),
       ...(params.title === undefined ? {} : { title: params.title }),
     })
     const live = this.live.get(callerId)
@@ -12499,9 +12567,24 @@ const UNUSABLE_STATES: ReadonlySet<AgentStatus['state']> = new Set([
   'node-outdated',
 ])
 
-/** Kettu's guide, marked as such, then its memory; null when there is neither. */
-function kettuAhead(guide: string | null, memory: string | null): string | null {
-  const parts = [guide ? `<kettu-guide>\n${guide}\n</kettu-guide>` : null, memory].filter(
+/** What a command and a role each added, as one list; null when neither added any. */
+function joinNeeds(a: CommandNeeds | null | undefined, b: CommandNeeds | null | undefined) {
+  const skills = [...new Set([...(a?.skills ?? []), ...(b?.skills ?? [])])]
+  const mcp = [...new Set([...(a?.mcp ?? []), ...(b?.mcp ?? [])])]
+  return skills.length + mcp.length > 0 ? { skills, mcp } : null
+}
+
+function sessionRole(role: FoundRole): SessionRole {
+  return { name: role.ref, title: role.title, instructions: role.instructions }
+}
+
+/** Kettu's guide, marked as such, then its memory and a role's block; null when there is none. */
+function kettuAhead(
+  guide: string | null,
+  memory: string | null,
+  role: string | null = null,
+): string | null {
+  const parts = [guide ? `<kettu-guide>\n${guide}\n</kettu-guide>` : null, memory, role].filter(
     (part): part is string => part !== null,
   )
   return parts.length > 0 ? parts.join('\n\n') : null
