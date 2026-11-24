@@ -1,11 +1,12 @@
 // The whole computer's load as the host reads it with Node.js and the system's own small tools:
 // CPU from the cores' times, memory as idle release reads it, the free space of the fullest volume
 // that holds a project or Kettu's data, disk reads and writes (IOKit's block storage statistics on
-// macOS, `/proc/diskstats` on Linux), network traffic (`netstat` on macOS and Windows,
-// `/proc/net/dev` on Linux) and the battery (`pmset` on macOS, `/sys/class/power_supply` on Linux,
-// only whether it is on battery on Windows). A daemon in a container reads its cgroup v2 CPU,
-// memory and disk activity and its own network. On macOS a volume's free space adds the purgeable
-// space Finder counts as available, which `statfs` leaves out.
+// macOS, `/proc/diskstats` on Linux), network traffic (`netstat` over the `en*` interfaces on
+// macOS, `/proc/net/dev` over those backed by a device on Linux, `netstat -e` on Windows) and the
+// battery (`pmset` on macOS, `/sys/class/power_supply` on Linux, only whether it is on battery on
+// Windows). A daemon in a container reads its cgroup v2 CPU, memory and disk activity and its own
+// network. On macOS a volume's free space adds the purgeable space Finder counts as available,
+// which `statfs` leaves out.
 
 import { execFile } from 'node:child_process'
 import { access, readdir, readFile, readlink, stat, statfs } from 'node:fs/promises'
@@ -140,9 +141,11 @@ export function parseIoStat(text: string): Map<string, [number, number]> {
 const isLoopback = (name: string): boolean => /^lo\d*$/.test(name)
 
 /**
- * `netstat -ibn` on macOS: the bytes each interface but loopback received and sent, from its link
- * row, which every interface has once. The address may be blank, so the columns are read from the
- * right: Ibytes, Opkts, Oerrs, Obytes, Coll.
+ * `netstat -ibn` on macOS: the bytes each physical interface (`en*`: Wi-Fi, Ethernet, USB and
+ * Thunderbolt adapters, tethering) received and sent, from its link row, which every interface has
+ * once. A VPN's or proxy's tunnel, a bridge and AWDL carry traffic an `en*` already counts, and a
+ * bridge's members are `en*` themselves. The address may be blank, so the columns are read from
+ * the right: Ibytes, Opkts, Oerrs, Obytes, Coll.
  */
 export function parseNetstat(text: string): Map<string, [number, number]> {
   const values = new Map<string, [number, number]>()
@@ -150,7 +153,7 @@ export function parseNetstat(text: string): Map<string, [number, number]> {
     const fields = line.trim().split(/\s+/)
     if (fields.length < 8 || !fields[2]?.startsWith('<Link#')) continue
     const name = fields[0]!.replace(/\*$/, '')
-    if (isLoopback(name)) continue
+    if (!/^en\d+$/.test(name)) continue
     const received = num(fields.at(-5))
     const sent = num(fields.at(-2))
     if (received !== null && sent !== null) values.set(name, [received, sent])
@@ -158,14 +161,20 @@ export function parseNetstat(text: string): Map<string, [number, number]> {
   return values
 }
 
-/** `/proc/net/dev`: the bytes each interface but loopback received and sent. */
-export function parseNetDev(text: string): Map<string, [number, number]> {
+/**
+ * `/proc/net/dev`: the bytes the interfaces named received and sent, or, with none named, every
+ * interface but loopback, as a container's own are.
+ */
+export function parseNetDev(
+  text: string,
+  physical?: ReadonlySet<string>,
+): Map<string, [number, number]> {
   const values = new Map<string, [number, number]>()
   for (const line of text.split('\n')) {
     const colon = line.indexOf(':')
     if (colon < 0) continue
     const name = line.slice(0, colon).trim()
-    if (!name || isLoopback(name)) continue
+    if (!name || (physical ? !physical.has(name) : isLoopback(name))) continue
     const fields = line
       .slice(colon + 1)
       .trim()
@@ -380,6 +389,23 @@ async function wholeDisks(): Promise<Set<string>> {
   const found = await Promise.all(
     names.map((name) =>
       access(`/sys/block/${name}/device`).then(
+        () => name,
+        () => null,
+      ),
+    ),
+  )
+  return new Set(found.filter((name): name is string => name !== null))
+}
+
+/**
+ * The interfaces backed by a device, virtio's included. A tunnel, bridge, bond, VLAN or veth has
+ * none, and what it carries is counted on the interfaces under it.
+ */
+async function physicalInterfaces(): Promise<Set<string>> {
+  const names = await readdir('/sys/class/net').catch(() => [] as string[])
+  const found = await Promise.all(
+    names.map((name) =>
+      access(`/sys/class/net/${name}/device`).then(
         () => name,
         () => null,
       ),
@@ -638,7 +664,12 @@ export class SystemReader {
   private async networkValues(): Promise<Map<string, [number, number]> | null> {
     const { platform } = this.deps
     if (platform === 'darwin') return parseNetstat(await run('/usr/sbin/netstat', ['-ibn']))
-    if (platform === 'linux') return parseNetDev(await readFile('/proc/net/dev', 'utf8'))
+    if (platform === 'linux') {
+      const text = await readFile('/proc/net/dev', 'utf8')
+      return (await this.limits())
+        ? parseNetDev(text)
+        : parseNetDev(text, await physicalInterfaces())
+    }
     if (platform === 'win32') {
       const system = process.env.SystemRoot ?? 'C:\\Windows'
       return parseNetstatE(await run(path.win32.join(system, 'System32', 'netstat.exe'), ['-e']))

@@ -50,7 +50,10 @@ export interface HostLoad {
   disk?: { name: string; free: number; total: number }
   /** The whole computer's disk reads and writes, in bytes per second; absent where not read. */
   io?: { readPerSecond: number; writePerSecond: number }
-  /** Received and sent over every interface but loopback, in bytes per second. */
+  /**
+   * Received and sent over the physical interfaces, so a VPN or a proxy's tunnel is not counted
+   * twice, in bytes per second; a container's over its own interfaces but loopback.
+   */
   network?: { receivePerSecond: number; sendPerSecond: number }
   /** Absent without a battery, and on Windows while it runs on mains. */
   battery?: HostBattery

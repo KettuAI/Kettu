@@ -238,7 +238,7 @@ describe('disk counters', () => {
 })
 
 describe('network counters', () => {
-  it("reads each interface's link row from netstat -ibn, without loopback", () => {
+  it("reads only the en* interfaces' link rows from netstat -ibn", () => {
     const text = [
       'Name       Mtu   Network       Address            Ipkts Ierrs     Ibytes    Opkts Oerrs     Obytes  Coll',
       'lo0        16384 <Link#1>                      187191703     0 568862669365 187191703     0 568862669365     0',
@@ -246,25 +246,34 @@ describe('network counters', () => {
       'gif0*      1280  <Link#2>                             0     0          0        0     0          0     0',
       'en0        1500  <Link#14>   6e:e9:dd:e9:3c:1e 386246856     0 407539575552 291831320     0 194834695766     0',
       'en0        1500  192.168.1     192.168.1.20    386246856     - 407539575552 291831320     - 194834695766     -',
-      'utun3      1380  <Link#21>                        1200     0     345678      900     0     123456     0',
+      'bridge0    1500  <Link#18>   36:2c:a8:10:4e:c0   1000000     0 300000000000   900000     0 150000000000     0',
+      'utun0      1380  <Link#19>                          50     0       4000       40     0       3000     0',
+      'utun1      2000  <Link#20>                          60     0       5000       50     0       4000     0',
+      'utun2      1000  <Link#21>                          70     0       6000       60     0       5000     0',
+      'utun3      1500  <Link#22>                   300000000     0 380000000000 250000000     0 180000000000     0',
+      'utun3      1500  198.18.0.1    198.18.0.1      300000000     - 380000000000 250000000     - 180000000000     -',
     ].join('\n')
-    expect(parseNetstat(text)).toEqual(
-      new Map([
-        ['gif0', [0, 0]],
-        ['en0', [407_539_575_552, 194_834_695_766]],
-        ['utun3', [345_678, 123_456]],
-      ]),
+    expect(parseNetstat(text)).toEqual(new Map([['en0', [407_539_575_552, 194_834_695_766]]]))
+  })
+
+  const netDev = [
+    'Inter-|   Receive                                                |  Transmit',
+    ' face |bytes    packets errs drop fifo frame compressed multicast|bytes    packets errs drop fifo colls carrier compressed',
+    '    lo: 1000      10    0    0    0     0          0         0     1000      10    0    0    0     0       0          0',
+    '  eth0:123456789 1000    0    0    0     0          0         0 98765432    900    0    0    0     0       0          0',
+    'docker0: 5000000   400    0    0    0     0          0         0  6000000    500    0    0    0     0       0          0',
+    'veth1a2b3c: 6000000 500    0    0    0     0          0         0  5000000    400    0    0    0     0       0          0',
+    '   wg0: 70000000  6000    0    0    0     0          0         0 60000000   5000    0    0    0     0       0          0',
+  ].join('\n')
+
+  it('reads /proc/net/dev over the physical interfaces named', () => {
+    expect(parseNetDev(netDev, new Set(['eth0']))).toEqual(
+      new Map([['eth0', [123_456_789, 98_765_432]]]),
     )
   })
 
-  it('reads /proc/net/dev without loopback', () => {
-    const text = [
-      'Inter-|   Receive                                                |  Transmit',
-      ' face |bytes    packets errs drop fifo frame compressed multicast|bytes    packets errs drop fifo colls carrier compressed',
-      '    lo: 1000      10    0    0    0     0          0         0     1000      10    0    0    0     0       0          0',
-      '  eth0:123456789 1000    0    0    0     0          0         0 98765432    900    0    0    0     0       0          0',
-    ].join('\n')
-    expect(parseNetDev(text)).toEqual(new Map([['eth0', [123_456_789, 98_765_432]]]))
+  it("reads a container's own interfaces from /proc/net/dev, without loopback", () => {
+    expect([...parseNetDev(netDev).keys()]).toEqual(['eth0', 'docker0', 'veth1a2b3c', 'wg0'])
   })
 
   it("reads netstat -e's byte row whatever the language of its labels", () => {
