@@ -1,20 +1,11 @@
-// Each host's load as the window shows it. A view that shows the numbers watches its host, the
-// list of hosts without what uses them and a host's page with it; the host sends `host.load` every
-// 2 s while the lease is renewed, and stops when the last view goes. Whether a host runs low comes
-// with its status, read when its connection opens and pushed as it changes, so the sidebar and New
-// session's host menu show it without a watch.
+// Each host's load as the window shows it. A view that shows the numbers watches its host: the
+// list of computers, a computer's page and New session's host menu while it is open. The host
+// sends `host.load` every 2 s while the lease is renewed and stops when the last view goes. The
+// CPU line is drawn from the readings since the watch started, kept only here and dropped with it.
 
 import { useEffect } from 'react'
 import { create } from 'zustand'
-import {
-  LOAD_HISTORY_POINTS,
-  LOAD_LEASE_MS,
-  type HostLoad,
-  type HostLoadPoint,
-  type HostLoadUsage,
-  type HostLoadWatch,
-  type HostStrain,
-} from '@shared/host-load'
+import { LOAD_LEASE_MS, type HostLoad, type HostLoadWatch } from '@shared/host-load'
 import { errorCode, errorMessage, hostAt } from '@renderer/lib/host'
 
 /** A host's key in the store: its id, or '' for this computer. */
@@ -27,32 +18,25 @@ export const SPARK_MS = 10 * 60_000
 
 export interface LiveLoad {
   load: HostLoad
-  /** One point a minute for the last hour. */
-  history: HostLoadPoint[]
   /** The CPU of each reading since the watch started, within SPARK_MS. */
   recent: { at: number; cpu: number }[]
-  /** What uses the computer, once a watch with it has been answered. */
-  usage: HostLoadUsage | null
 }
 
 interface HostLoadStore {
   live: Record<string, LiveLoad>
   /** Hosts older than the load, which cannot report it. */
   unsupported: Record<string, true>
-  strains: Record<string, HostStrain[]>
 }
 
 export const useHostLoadStore = create<HostLoadStore>()(() => ({
   live: {},
   unsupported: {},
-  strains: {},
 }))
 
 interface Watch {
   hostId: string | null
-  /** Views watching, and those of them that show what uses the computer. */
+  /** Views watching. */
   count: number
-  detail: number
   timer: ReturnType<typeof setInterval>
 }
 
@@ -76,7 +60,6 @@ function setKey<K extends keyof HostLoadStore>(
 function failed(key: string, error: unknown): void {
   if (errorCode(error) === 'unknown_method') {
     setKey('unsupported', key, true)
-    setKey('strains', key, undefined)
     return
   }
   if (warned.has(key)) return
@@ -87,77 +70,57 @@ function failed(key: string, error: unknown): void {
 function ask(key: string): void {
   const watch = watches.get(key)
   if (!watch) return
-  const detail = watch.detail > 0
-  hostAt(watch.hostId, 'host.load.watch', { detail }).then(
-    (answer) => {
+  hostAt(watch.hostId, 'host.load.watch', undefined).then(
+    (answer: HostLoadWatch) => {
       warned.delete(key)
-      if (watches.get(key) === watch) took(key, answer, detail)
+      setKey('unsupported', key, undefined)
+      if (watches.get(key) === watch) receive(key, answer.load)
     },
     (error: unknown) => failed(key, error),
   )
 }
 
-function took(key: string, answer: HostLoadWatch, detail: boolean): void {
-  const before = useHostLoadStore.getState().live[key]
-  setKey('unsupported', key, undefined)
+function receive(key: string, load: HostLoad): void {
+  const recent = useHostLoadStore.getState().live[key]?.recent ?? []
+  const last = recent.at(-1)
+  const next =
+    last && last.at >= load.at ? recent : [...recent, { at: load.at, cpu: load.cpu.percent }]
   setKey('live', key, {
-    load: answer.load,
-    history: answer.history,
-    recent: withReading(before?.recent ?? [], answer.load),
-    usage: detail ? (answer.usage ?? before?.usage ?? null) : null,
+    load,
+    recent: next.filter((point) => point.at > load.at - SPARK_MS),
   })
 }
 
-function withReading(recent: LiveLoad['recent'], load: HostLoad): LiveLoad['recent'] {
-  const last = recent.at(-1)
-  const kept =
-    last && last.at >= load.at ? recent : [...recent, { at: load.at, cpu: load.cpu.percent }]
-  return kept.filter((point) => point.at > load.at - SPARK_MS)
-}
-
-/**
- * Watches a host's load until the returned function is called; `detail` adds what uses it. Views
- * that watch one host share its watch, which asks for the detail while any of them shows it.
- */
-export function watchLoad(hostId: string | null, detail: boolean): () => void {
+/** Watches a host's load until the returned function is called; views of one host share it. */
+export function watchLoad(hostId: string | null): () => void {
   const key = keyOf(hostId)
   let watch = watches.get(key)
-  const hadDetail = (watch?.detail ?? 0) > 0
   if (!watch) {
-    watch = { hostId, count: 0, detail: 0, timer: setInterval(() => ask(key), RENEW_MS) }
+    watch = { hostId, count: 0, timer: setInterval(() => ask(key), RENEW_MS) }
     watches.set(key, watch)
   }
   watch.count++
-  if (detail) watch.detail++
-  if (watch.count === 1 || (detail && !hadDetail)) ask(key)
+  if (watch.count === 1) ask(key)
   let released = false
   return () => {
     if (released) return
     released = true
     const current = watches.get(key)
-    if (current !== watch) return
-    current.count--
-    if (detail) current.detail--
-    if (current.count === 0) {
-      clearInterval(current.timer)
-      watches.delete(key)
-      setKey('live', key, undefined)
-      void hostAt(hostId, 'host.load.unwatch', undefined).catch(() => {})
-    } else if (detail && current.detail === 0) {
-      ask(key)
-    }
+    if (current !== watch || --current.count > 0) return
+    clearInterval(current.timer)
+    watches.delete(key)
+    setKey('live', key, undefined)
+    void hostAt(hostId, 'host.load.unwatch', undefined).catch(() => {})
   }
 }
 
 /** Watches a host's load while the calling view shows it. */
-export function useLoadWatch(hostId: string | null, detail: boolean, enabled = true): void {
+export function useLoadWatch(hostId: string | null, enabled = true): void {
   useEffect(() => {
     if (!enabled) return
-    return watchLoad(hostId, detail)
-  }, [hostId, detail, enabled])
+    return watchLoad(hostId)
+  }, [hostId, enabled])
 }
-
-const NO_STRAINS: HostStrain[] = []
 
 export const useLiveLoad = (hostId: string | null): LiveLoad | null =>
   useHostLoadStore((s) => s.live[keyOf(hostId)] ?? null)
@@ -165,51 +128,19 @@ export const useLiveLoad = (hostId: string | null): LiveLoad | null =>
 export const useLoadUnsupported = (hostId: string | null): boolean =>
   useHostLoadStore((s) => s.unsupported[keyOf(hostId)] === true)
 
-export const useStrains = (hostId: string | null): HostStrain[] =>
-  useHostLoadStore((s) => s.strains[keyOf(hostId)] ?? NO_STRAINS)
-
 /** One of a host's `host.load` events, heard while it is watched. */
-export function receiveLoad(
-  hostId: string | null,
-  load: HostLoad,
-  point: HostLoadPoint,
-  usage: HostLoadUsage | undefined,
-): void {
+export function receiveLoad(hostId: string | null, load: HostLoad): void {
   const key = keyOf(hostId)
-  const watch = watches.get(key)
-  const live = useHostLoadStore.getState().live[key]
-  if (!watch || !live) return
-  const history = live.history.at(-1)?.at === point.at ? live.history.slice(0, -1) : live.history
-  setKey('live', key, {
-    load,
-    history: [...history, point].slice(-LOAD_HISTORY_POINTS),
-    recent: withReading(live.recent, load),
-    usage: watch.detail > 0 ? (usage ?? live.usage) : null,
-  })
+  if (watches.has(key) && useHostLoadStore.getState().live[key]) receive(key, load)
 }
 
-export function receiveStrains(hostId: string | null, strains: HostStrain[]): void {
-  setKey('strains', keyOf(hostId), strains)
-}
-
-/**
- * A new connection to the host, or this computer's host started again: whether it runs low is
- * read, and a watch it lost with the old connection is asked for again.
- */
+/** A new connection to the host, or this computer's host started again: a watch is asked again. */
 export function hostLoadOpened(hostId: string | null): void {
-  const key = keyOf(hostId)
-  hostAt(hostId, 'host.status', undefined).then(
-    (status) => {
-      setKey('unsupported', key, undefined)
-      receiveStrains(hostId, status.strains)
-    },
-    (error: unknown) => failed(key, error),
-  )
-  if (watches.has(key)) ask(key)
+  if (watches.has(keyOf(hostId))) ask(keyOf(hostId))
 }
 
-/** The connection to the host ended: what it said no longer holds. */
+/** The connection to the host ended: what it said no longer holds, and it may come back newer. */
 export function hostLoadClosed(hostId: string): void {
-  setKey('strains', hostId, undefined)
   setKey('live', hostId, undefined)
+  setKey('unsupported', hostId, undefined)
 }

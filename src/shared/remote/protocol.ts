@@ -64,8 +64,8 @@ export const IMAGE_REFS_FEATURE = 'image-refs'
 export const TOOL_DIGESTS_FEATURE = 'tool-digests'
 
 /**
- * The welcome's feature of a host that reads its load: `host.load.watch`, `host.load.unwatch` and
- * `host.status`. An older host has none of them.
+ * The welcome's feature of a host that reads its load: `host.load.watch` and `host.load.unwatch`.
+ * An older host has neither.
  */
 export const LOAD_FEATURE = 'load'
 

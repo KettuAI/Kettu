@@ -6265,28 +6265,6 @@ export class SessionManager {
    * What ending these sessions and their sub-sessions would stop, for the ones with any: a session
    * not in memory runs nothing. Subagents count with the session that started them.
    */
-  /** The listed sessions attached to their agent now, for what uses the computer. */
-  attachedSessions(): {
-    sessionId: string
-    agentId: AgentId
-    acpSessionId: string
-    connection: AgentConnection
-  }[] {
-    const attached = []
-    for (const live of this.live.values()) {
-      const { connection, record } = live
-      if (!connection || connection.isClosed || live.prepared || live.closing) continue
-      if (record.origin === 'subagent' || !record.acpSessionId) continue
-      attached.push({
-        sessionId: live.id,
-        agentId: record.agentId,
-        acpSessionId: record.acpSessionId,
-        connection,
-      })
-    }
-    return attached
-  }
-
   runningWork(sessionIds: readonly string[]): RunningWork[] {
     const seen = new Set<string>()
     const out: RunningWork[] = []

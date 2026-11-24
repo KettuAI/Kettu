@@ -138,7 +138,6 @@ export const HOST_REQUEST_LIMITS: Readonly<Record<HostMethod, number | null>> = 
   'sessions.idleRelease': HOST_MS,
   'host.load.watch': HOST_MS,
   'host.load.unwatch': HOST_MS,
-  'host.status': HOST_MS,
   'sessions.stopTask': AGENT_MS,
   'sessions.taskOutput': AGENT_MS,
   'sessions.sideAsk': AGENT_MS,

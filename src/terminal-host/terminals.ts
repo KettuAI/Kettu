@@ -12,7 +12,6 @@ import {
   type TerminalCall,
   type TerminalCallAnswer,
   type TerminalCallErrorCode,
-  type TerminalProcess,
   type TerminalWaitReason,
 } from '@shared/terminal-agent'
 import type { TerminalCommand, TerminalInfo, TerminalParams } from '@shared/terminal-host'
@@ -84,7 +83,7 @@ class AskFirst extends Error {
 }
 
 /** The session a terminal serves: the one it belongs to, else the one whose agent started it. */
-function sessionOf(terminal: Pick<Terminal, 'info'>): string | null {
+function sessionOf(terminal: Terminal): string | null {
   return terminal.info.sessionId ?? terminal.info.owner?.sessionId ?? null
 }
 
@@ -437,23 +436,6 @@ export class TerminalManager {
         (error as Error).message,
       )
     }
-  }
-
-  /** Each terminal whose shell runs, with its process. */
-  processes(): TerminalProcess[] {
-    return [...this.terminals.values()].flatMap(({ info, pty }) =>
-      pty && info.exitCode === null
-        ? [
-            {
-              id: info.id,
-              sessionId: sessionOf({ info }),
-              name: info.name ?? info.title,
-              shell: info.shell,
-              pid: pty.pid,
-            },
-          ]
-        : [],
-    )
   }
 
   /** The terminals of `sessionId`, oldest first, as its agent sees them. */

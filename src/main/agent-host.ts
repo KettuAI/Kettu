@@ -1,5 +1,5 @@
 import type { DeviceCall, DeviceCallAnswer } from '@shared/device-agent'
-import type { TerminalHostAnswer, TerminalHostCall } from '@shared/terminal-agent'
+import type { TerminalCall, TerminalCallAnswer } from '@shared/terminal-agent'
 import { isAbsolute, join } from 'node:path'
 import { app, MessageChannelMain, shell, type MessagePortMain, type WebContents } from 'electron'
 import {
@@ -135,7 +135,7 @@ export interface AgentHostDeps {
   /** An agent's device tool call, run by the device host. Set after construction, like `browser`. */
   device?: (call: DeviceCall) => Promise<DeviceCallAnswer>
   /** Runs an agent's terminal call on the terminal host. */
-  terminal?: (call: TerminalHostCall) => Promise<TerminalHostAnswer>
+  terminal?: (call: TerminalCall) => Promise<TerminalCallAnswer>
   /** A window's or device's answer to the new origin a page of main's asked for. */
   onOriginDecided?(sessionId: string, requestId: number, decision: BrowserOriginDecision): void
   /** The last running turn that used a page of main's ended. */
@@ -831,7 +831,7 @@ export class AgentHost {
         void (
           run
             ? run(call)
-            : Promise.resolve<TerminalHostAnswer>({
+            : Promise.resolve<TerminalCallAnswer>({
                 error: { code: 'unavailable', message: 'This build has no terminal host.' },
               })
         ).then((answer) => this.host.post({ type: 'terminal-result', callId, answer }))

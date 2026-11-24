@@ -224,11 +224,6 @@ export class PortHub {
     return this.ports.has(portId)
   }
 
-  /** How many ports are open: windows' and devices'. */
-  get size(): number {
-    return this.ports.size
-  }
-
   /** The paired device an open port serves; null for a window's and for a closed port. */
   deviceOf(portId: string): PortDevice | null {
     return this.devices.get(portId) ?? null
