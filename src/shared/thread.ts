@@ -32,6 +32,7 @@ import type {
   PublishKind,
 } from './market-publish'
 import type { MemoryAction, MemoryDraft, MemoryLayer, MemoryWriteStatus } from './memory'
+import type { PluginConversion } from './plugin-convert'
 import type { RoutineRef } from './routines'
 import type { SettingScalar, SettingsSection } from './settings-catalog'
 import type { TaskDeliverable, Workflow } from './workflow'
@@ -827,6 +828,17 @@ export interface MarketPublishEntry {
   publisher: { suggested: string } | null
   /** A workflow's flowchart, as its `workflow.yaml` reads; absent for the other kinds. */
   workflow?: Workflow
+  /**
+   * A Kettu plugin's script, if it has one, with the permissions it declares, and what an install
+   * would leave out of the package; absent for the other kinds.
+   */
+  plugin?: {
+    script: { entry: string; api: number } | null
+    permissions: string[]
+    notes: string[]
+  }
+  /** A plugin Kettu made from a Claude Code or Codex plugin: what came over and what did not. */
+  converted?: PluginConversion
   /**
    * The task whose workflow this generalizes, when its agent says so: whether the steps and arrows
    * stayed, the agent's sentence on what it changed, and both files to compare.

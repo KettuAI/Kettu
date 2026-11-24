@@ -886,7 +886,10 @@
       "unlist": "下架…",
       "unlistLine": "装了的人照常能用",
       "listAgain": "重新上架",
-      "delete": "删除…"
+      "delete": "删除…",
+      "convert": "转换成 Kettu 插件",
+      "convertLine": "用它的文件做出一个 Kettu 插件，检查后再发布",
+      "viewAsOthersClosed": "Claude Code 和 Codex 的插件不再上架"
     },
     "foot": "智能体用 Kettu 内置 MCP 服务器的市场工具发布，每次都等你在会话里确认。",
     "seeTools": "看这些工具",
@@ -920,7 +923,10 @@
         "nothingText": "Kettu 能发布带 SKILL.md、.claude-plugin 或 .codex-plugin 文件夹、或 server.json 的文件夹。",
         "problems": "先改好这些，再重新检查：",
         "checkAgain": "重新检查",
-        "failed": "没能发布：{{error}}"
+        "failed": "没能发布：{{error}}",
+        "convertTitle": "这是 {{harness}} 的插件",
+        "convertText": "Kettu 市场收的是 Kettu 插件。Kettu 可以在它旁边的新文件夹里做出一个，这个文件夹不会改动。发布之前，你先看过带过来了什么。",
+        "convert": "转换成 Kettu 插件"
       },
       "profile": {
         "title": "编辑发布者资料",
@@ -1007,7 +1013,8 @@
       "takenDown": "Kettu 已把它下架：{{reason}} 它不在市场里了，也不能再发新版本；你仍能修改它、撤回版本或删除它。",
       "missingTitle": "这不是你发布的",
       "missingText": "它可能已被删除。",
-      "backToPublished": "回到已发布"
+      "backToPublished": "回到已发布",
+      "closed": "这个 Claude Code 或 Codex 的插件不再接收新版本，也不能再安装。转换成 Kettu 插件就能接着发布；这一项本身保持原样。"
     },
     "checks": {
       "paths": {
@@ -1067,6 +1074,7 @@
     "more": "+ 其他 {{count}} 个",
     "marketTools": {
       "marketplace_check": "读一个文件夹，认出它是什么，跑一遍发布时的检查。不上传。",
+      "marketplace_convert": "把 Claude Code 或 Codex 的插件转换成 Kettu 插件，写到它旁边的新文件夹里，原来的不会改动。",
       "marketplace_publish": "把一个文件夹发布成新的一项，或者你已有一项的新版本。",
       "marketplace_mine": "列出你发布的：版本、谁能看到、安装数和问题。",
       "marketplace_unlist": "把你的一项从市场下架，装了的人照常能用。"

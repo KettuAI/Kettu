@@ -218,6 +218,7 @@ describe('the Marketplace tools', () => {
     signedIn.current = true
     expect(listed()).toEqual([
       'marketplace_check',
+      'marketplace_convert',
       'marketplace_publish',
       'marketplace_mine',
       'marketplace_unlist',

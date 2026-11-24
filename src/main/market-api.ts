@@ -146,6 +146,7 @@ function listingBase(value: unknown, what: Answered) {
       name,
       kind,
       ...harnessOf(fields.harness),
+      ...(fields.installable === false ? { installable: false as const } : {}),
       description: text(fields.description) ?? '',
       ...optionalText('about', fields.about),
       visibility,
@@ -187,6 +188,10 @@ function parseVersion(value: unknown): MineVersion {
     checks: parseChecks(fields.checks),
     ...(typeof fields.agent === 'string' ? { agent: fields.agent } : {}),
     ...(typeof fields.session === 'string' ? { session: fields.session } : {}),
+    ...(typeof fields.script === 'boolean' ? { script: fields.script } : {}),
+    ...(Array.isArray(fields.permissions)
+      ? { permissions: fields.permissions.filter((p): p is string => typeof p === 'string') }
+      : {}),
     publishedAt,
   }
 }
@@ -332,6 +337,10 @@ function failureText(
       return t('market.failure.tooManyListings')
     case 'conflict':
       return t('market.failure.conflict')
+    case 'script_not_allowed':
+      return t('market.failure.scriptNotAllowed')
+    case 'kind_closed':
+      return t('market.failure.kindClosed')
     default:
       return null
   }

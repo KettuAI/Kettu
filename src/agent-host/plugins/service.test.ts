@@ -10,7 +10,10 @@ import { pluginItemId } from '@shared/plugins'
 import { applyListEdit } from '@shared/settings'
 import { usableWorkflow } from '@shared/workflow'
 import { MarketSkillsService, skillFolder, skillsCatalogFile } from '../marketplace/skills'
+import { checkFolder } from '../marketplace/publish-check'
 import { emptyWorkflowsFile, WorkflowLibrary } from '../workflow/library'
+import { claudePluginFiles } from './claude-plugin-fixture'
+import { convertFolder } from './convert'
 import { addedAccess, PluginsService } from './service'
 import { emptyPluginsFile, parsePluginsFile, type PluginsFile } from './store'
 
@@ -661,5 +664,52 @@ describe('the plugins file', () => {
     expect(plugins[plugin.id]!.contents.commands.map((item) => item.name)).toEqual(['ship'])
     expect(plugins[plugin.id]!.kept.skills).toEqual(good.kept.skills)
     expect(plugins[plugin.id]).toEqual({ ...good })
+  })
+})
+
+describe('a Claude Code plugin converted to a Kettu plugin', () => {
+  it('passes the publish check, and what would upload installs from a folder and from the Marketplace', async () => {
+    const h = await host()
+    const source = path.join(root, 'release-tools')
+    await writeTree(source, claudePluginFiles())
+    const converted = await convertFolder(source, '0.3.0')
+    const check = await checkFolder(converted.path, '0.3.0')
+    expect(check.problems).toEqual([])
+    expect(check).toMatchObject({ kind: 'agent-plugin', slug: 'release-tools', version: '1.2.0' })
+
+    const plan = await h.plugins.inspect({ kind: 'local', path: converted.path })
+    expect(plan.blocked).toBeNull()
+    expect(plan.contents).toMatchObject({
+      name: 'release-tools',
+      skills: [{ name: 'changelog' }],
+      servers: [{ name: 'local' }, { name: 'tracker' }],
+      commands: [{ name: 'ship' }],
+      roles: [{ name: 'reviewer' }],
+      script: null,
+    })
+    const plugin = await h.plugins.install(plan.token)
+    expect(h.settings.skills.map((skill) => skill.id)).toEqual([
+      pluginItemId(plugin.id, 'changelog'),
+    ])
+    expect(h.settings.servers.map((server) => server.name).sort()).toEqual(['local', 'tracker'])
+    expect(await h.plugins.resources('commands')).toEqual([
+      expect.objectContaining({ name: 'ship', pluginName: 'release-tools' }),
+    ])
+    expect(await h.plugins.resources('roles')).toEqual([
+      expect.objectContaining({ name: 'reviewer' }),
+    ])
+
+    // The files the publish would upload are what an install from the Marketplace reads.
+    h.market.version = '1.2.0'
+    h.market.files = Object.fromEntries(
+      check.files.map((file) => [file.path, file.data.toString('utf8')]),
+    )
+    const fromListing = await h.plugins.inspect(fromMarket)
+    expect(fromListing.contents).toMatchObject({
+      name: 'release-tools',
+      skills: [{ name: 'changelog' }],
+      commands: [{ name: 'ship' }],
+      roles: [{ name: 'reviewer' }],
+    })
   })
 })

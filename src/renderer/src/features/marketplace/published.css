@@ -791,6 +791,11 @@
 .k-pub-dialog.kettu-sd {
   max-width: min(600px, calc(100% - 64px));
 }
+/* The dialog's buttons stay in view; a long card scrolls under its header. */
+.k-pub-body {
+  max-height: max(240px, calc(100vh - 372px));
+  overflow-y: auto;
+}
 .k-pub-checking {
   display: flex;
   align-items: center;

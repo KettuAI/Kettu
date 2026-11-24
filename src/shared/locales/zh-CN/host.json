@@ -1249,7 +1249,9 @@
       "no_publisher": "先定一个发布者名。",
       "not_found": "它已经不在 Kettu 市场里了。",
       "check_failed": "没有通过 Kettu 市场的检查。",
-      "conflict": "同时有别的改动，再试一次。"
+      "conflict": "同时有别的改动，再试一次。",
+      "script_not_allowed": "带脚本的插件暂时只有 Kettu 自己的发布者能发布。",
+      "kind_closed": "Harness 插件不再接收新版本，请转换成 Kettu 插件再发布。"
     },
     "check": {
       "link": "这是一个链接，请换成文件本身，或者删掉它。",
@@ -1296,10 +1298,10 @@
       "pathIsLink": "这个路径是链接，请改为提供它指向的文件夹。",
       "folderOrBundle": "请发布一个文件夹，或一个 MCP 包（.mcpb）文件。",
       "bundleTooLarge": "这个包超过了 {{mb}} MB，这是一个版本的上限。",
-      "harnessPlugin": "Kettu 市场不再发布 Claude Code 和 Codex 的插件。",
+      "harnessPlugin": "这是 {{harness}} 的插件，Kettu 市场收的是 Kettu 插件，请先把它转换成 Kettu 插件。原来的文件夹不会被改动。",
       "manyBundles": "文件夹里有不止一个 MCP 包，只留一个。",
       "fileTooLarge": "它超过了 {{mb}} MB，这是一个版本的上限。",
-      "unknownFolder": "Kettu 认不出这个文件夹是什么。技能要有 SKILL.md，工作流要有 workflow.yaml，MCP 服务器要有 server.json。",
+      "unknownFolder": "Kettu 认不出这个文件夹是什么。技能要有 SKILL.md，工作流要有 workflow.yaml，MCP 服务器要有 server.json，插件要有 plugin.json。",
       "manifestTooLarge": "它太大了，不像是清单文件。",
       "aboutTooLong": "描述超过了 {{count}} 个字符。",
       "manifestName": "最上层的文件不能叫 manifest，请改名。",
@@ -1307,7 +1309,13 @@
       "takenDown": "{{listing}} 已被 Kettu 下架：{{reason}}",
       "versionInManifest": "版本号是 {{version}}，以清单里写的为准；要改请改清单，不要另外指定 {{wanted}}。",
       "versionTakenNumbered": "{{listing}} 的 {{version}} 版已经发布过了，请换更高的版本号。",
-      "versionTaken": "{{listing}} 的 {{version}} 版已经发布过了，请在 {{manifest}} 里调高版本号。"
+      "versionTaken": "{{listing}} 的 {{version}} 版已经发布过了，请在 {{manifest}} 里调高版本号。",
+      "pluginSkill": "{{folder}} 里的技能读不出来，安装时会被略过。它的 SKILL.md 的 front matter 里要有 name 和 description，也不能和包里别的技能重名。",
+      "pluginServer": "MCP 服务器 {{name}} 读不出来，安装时会被略过。请写明 type（stdio、streamable-http 或 sse）：stdio 要给一个程序或包里的文件，远程的要给 https 地址。",
+      "scriptNotAllowed": "带脚本的插件暂时只有 Kettu 自己的发布者能发布。",
+      "pluginRead": "这个包按现在的样子装不了：{{reason}}",
+      "pluginTitle": "显示名称超过了 {{count}} 个字符。",
+      "closedPlugin": "{{listing}} 是你发布过的 Harness 插件，不再接收新版本。请给这个插件换个名字，作为新条目发布。"
     }
   },
   "marketCommunity": {
@@ -1367,6 +1375,46 @@
       "command": "它的命令只能是一个程序的名字，或包里以 ./ 开头的路径",
       "url": "它的网址只能是 https 地址，或这台电脑上的 http 地址",
       "unknownFolder": "Kettu 不认识这个文件夹"
+    },
+    "convert": {
+      "refused": "这个插件转换不了：{{reason}}",
+      "badManifest": "{{path}} 不是 Kettu 能读的 JSON 对象。",
+      "noName": "它没有 Kettu 能用的名字。",
+      "unreadable": "转换出来的包读不出来：{{reason}}",
+      "noFolder": "{{path}} 旁边找不到没被占用的文件夹名。",
+      "notHarness": "{{path}} 里没有 Claude Code 或 Codex 的插件。",
+      "note": {
+        "renamed": "名字 {{from}} 改成了 {{to}}，Kettu 插件的名字只能用小写字母、数字、连字符和点。",
+        "noVersion": "它没有写版本号，Kettu 插件从 1.0.0 开始。",
+        "badVersion": "它的版本号 {{version}} 不是 1.2.3 这样的写法，Kettu 插件从 1.0.0 开始。",
+        "skillName": "它的 front matter 里没有 name，已按文件夹名补上 {{name}}，条目需要它。",
+        "serverFields": "没有带上 {{fields}}，Kettu 插件的 MCP 服务器里没有它们的位置。",
+        "serverEnv": "它引用了环境变量 {{vars}}。Kettu 不会代为填入，会按原样交给服务器。",
+        "commandFields": "没有带上 {{fields}}，Kettu 命令里没有它们的位置。",
+        "commandShell": "它的 !`命令` 行在 Claude Code 里会运行 shell 命令，在 Kettu 里只会当作文字交给智能体。",
+        "pluginRoot": "它用 {{variable}} 指插件的文件夹，Kettu 只在 MCP 服务器里替换它。",
+        "roleAgent": "它建议用 Claude Code，因为它写的模型是 Claude Code 的。",
+        "roleFields": "没有带上 {{fields}}，Kettu 角色里没有它们的位置。",
+        "bin": "bin 文件夹带过来了，但 Kettu 不会把它加到智能体的 PATH 里。"
+      },
+      "left": {
+        "hookCommand": "Kettu 不会在智能体的事件上运行插件的 shell 命令。",
+        "hookBeforeTool": "Kettu 不会在工具调用之前拦住它（只有部分智能体拦得住），也不运行插件的 shell 命令。",
+        "hookModel": "Kettu 不运行需要问模型或智能体的 hook。",
+        "hookWeb": "Kettu 不运行要访问网址的 hook。",
+        "hookOther": "Kettu 不运行这种 hook。",
+        "hookMore": "另外还有 {{count}} 个 hook，原因相同。",
+        "hookScript": "只有 hook 用到这个文件，而 Kettu 不运行 hook。",
+        "lsp": "Kettu 不为智能体运行语言服务器。",
+        "outputStyles": "Kettu 没有输出样式。",
+        "apps": "应用是 Codex 的，Kettu 没有对应的东西。",
+        "settings": "Kettu 不应用插件自带的默认设置。",
+        "serverEntry": "它不是 MCP 服务器的配置。",
+        "serverType": "它的类型不是 Kettu 能运行的 stdio、http 或 sse。",
+        "serverNone": "它既没有命令，也没有网址。",
+        "nameTaken": "另一项也叫 {{name}}。",
+        "nameTakenFile": "这个名字是 Kettu 插件自己的文件占着的。"
+      }
     }
   },
   "commands": {

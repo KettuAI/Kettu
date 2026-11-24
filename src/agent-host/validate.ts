@@ -1653,6 +1653,8 @@ export function createValidators(platform: Platform): Validators {
         ...(draftId !== undefined ? { draftId } : {}),
       }
     },
+    'market.convertFolder': (params) => ({ path: absolutePath(fields(params), 'path', platform) }),
+    'market.convertListing': (params) => ({ id: listingId(fields(params)) }),
     'market.publishFolder': (params) => {
       const o = fields(params)
       const draftId = optionalString(o, 'draftId', ID_CHARS)

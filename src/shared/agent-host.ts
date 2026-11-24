@@ -51,6 +51,7 @@ import type {
   PublishKind,
   PublishVisibility,
 } from './market-publish'
+import type { ConvertFrom, PluginConverted } from './plugin-convert'
 import type {
   BundlePlan,
   CommunityDirectory,
@@ -755,6 +756,8 @@ export interface McpToolSummary {
 export interface PublishPlan {
   ask: MarketPublishAsk | null
   problems: MarketProblem[]
+  /** The folder is a plugin of this harness, which converts into a Kettu plugin. */
+  convertible?: ConvertFrom
 }
 
 /** For Marketplace › Installed: Kettu's own server, and where each agent keeps its own servers. */
@@ -1290,6 +1293,10 @@ export interface HostContract {
   // From a folder: the check and what to confirm, then the publish once the user confirmed it, as
   // a session's card does; a draft's own notes, visibility and session go with it.
   'market.checkFolder': { params: { path: string; draftId?: string }; result: PublishPlan }
+  // A Claude Code or Codex plugin's folder, or one of the account's own listings of such a plugin,
+  // written as a Kettu plugin into a new folder; the original is not changed.
+  'market.convertFolder': { params: { path: string }; result: PluginConverted }
+  'market.convertListing': { params: { id: string }; result: PluginConverted }
   'market.publishFolder': {
     params: {
       path: string
@@ -2222,6 +2229,8 @@ export const HOST_METHODS = [
   'market.deleteListing',
   'market.versionFiles',
   'market.checkFolder',
+  'market.convertFolder',
+  'market.convertListing',
   'market.publishFolder',
   'projects.list',
   'projects.add',

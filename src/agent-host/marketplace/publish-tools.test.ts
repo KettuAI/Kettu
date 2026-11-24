@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
@@ -12,10 +13,13 @@ import type {
 } from '@shared/market-publish'
 import type { MarketPublishOutcome } from '@shared/thread'
 import type { Caller } from '../artifacts/tools'
+import { claudePluginFiles, writeFiles } from '../plugins/claude-plugin-fixture'
+import { PluginConverter } from './plugin-conversions'
 import type { NewDraft } from './publish-drafts'
 import {
   lineChanges,
   MARKET_CHECK,
+  MARKET_CONVERT,
   MARKET_MINE,
   MARKET_PUBLISH,
   MARKET_UNLIST,
@@ -25,6 +29,8 @@ import {
   type MarketAsk,
   type MarketToolsDeps,
 } from './publish-tools'
+
+const APP = '0.3.0'
 
 let root: string
 
@@ -118,13 +124,20 @@ function harness(
   const published: Harness['published'] = []
   const account = { current: ACCOUNT as MarketAccount | null }
   let resolve: ((answer: MarketAnswer) => void) | null = null
+  const call = (async (made: MarketCall) => {
+    calls.push(made)
+    if (made.kind === 'mine') return mine
+    return serve(made)
+  }) as never
   const tools = new MarketTools({
     account: () => account.current,
-    call: (async (call: MarketCall) => {
-      calls.push(call)
-      if (call.kind === 'mine') return mine
-      return serve(call)
-    }) as never,
+    call,
+    converter: new PluginConverter({
+      call,
+      appVersion: APP,
+      folder: path.join(root, 'conversions'),
+    }),
+    appVersion: APP,
     ask: (_sessionId, ask) => {
       asks.push(ask)
       return {
@@ -756,6 +769,181 @@ describe('the tools while signed out or in Local mode', () => {
     }
     expect(h.calls).toEqual([])
     expect(h.asks).toEqual([])
+  })
+})
+
+describe('plugins', () => {
+  const SCHEMA = 'https://agent-plugins.org/schemas/1.0.0/plugin.schema.json'
+  const scriptPlugin = (folder: string) =>
+    writeFiles(path.join(root, folder), {
+      'plugin.json': JSON.stringify({
+        $schema: SCHEMA,
+        name: 'scripted',
+        version: '1.0.0',
+        description: 'Runs a script.',
+        extensions: {
+          'sh.kettu': { format: 1, script: './sh.kettu/main.js', api: 1, permissions: ['tools'] },
+        },
+      }),
+      'sh.kettu/main.js': 'export default {}',
+    })
+  const somebody = (handle: string): MarketMine => ({
+    publisher: { handle, since: 'x' },
+    listings: [],
+    storage: { bytes: 0, limit: 1 },
+  })
+
+  it('converts a Claude Code plugin, then publishes it as a Kettu plugin once confirmed', async () => {
+    await writeFiles(path.join(root, 'release-tools'), claudePluginFiles())
+    const h = harness()
+    const original = await h.tools.call(caller(), MARKET_CHECK, { path: 'release-tools' })
+    expect(original.structuredContent).toMatchObject({ ready: false, convertible: 'claude-code' })
+    expect(h.asks).toEqual([])
+
+    const converted = await h.tools.call(caller(), MARKET_CONVERT, { path: 'release-tools' })
+    expect(converted.isError).toBeUndefined()
+    const made = converted.structuredContent as {
+      path: string
+      leftOut: { kind: string }[]
+    }
+    expect(made.path).toBe(path.join(root, 'release-tools-kettu'))
+    expect(made.leftOut.filter((item) => item.kind === 'hook')).toHaveLength(2)
+
+    const checked = await h.tools.call(caller(), MARKET_CHECK, { path: 'release-tools-kettu' })
+    expect(checked.structuredContent).toMatchObject({
+      ready: true,
+      kind: 'agent-plugin',
+      slug: 'release-tools',
+      version: '1.2.0',
+    })
+    const call = h.tools.call(caller(), MARKET_PUBLISH, { path: 'release-tools-kettu' })
+    await asked(h)
+    expect(h.asks[0]).toMatchObject({
+      item: { kind: 'agent-plugin', slug: 'release-tools', harness: null },
+      version: '1.2.0',
+      plugin: { script: null, permissions: [] },
+      converted: { from: 'claude-code' },
+    })
+    expect(h.asks[0]!.converted!.leftOut.map((item) => item.kind)).toContain('hook')
+    expect(uploads(h)).toEqual([])
+    h.answer({ decision: 'confirm', visibility: 'public', notes: null })
+    expect((await call).isError).toBeUndefined()
+    const upload = uploads(h)[0] as Extract<MarketCall, { kind: 'publish' }>
+    expect(upload.manifest).toMatchObject({
+      kind: 'agent-plugin',
+      slug: 'release-tools',
+      version: '1.2.0',
+    })
+    expect(upload.manifest.harness).toBeUndefined()
+    expect(upload.files.map((file) => file.path)).toContain('plugin.json')
+    expect(upload.files.map((file) => file.path)).not.toContain('hooks/hooks.json')
+  })
+
+  it('leaves the original folder as it was', async () => {
+    await writeFiles(path.join(root, 'release-tools'), claudePluginFiles())
+    const h = harness()
+    await h.tools.call(caller(), MARKET_CONVERT, { path: 'release-tools' })
+    const again = await h.tools.call(caller(), MARKET_CHECK, { path: 'release-tools' })
+    expect(again.structuredContent).toMatchObject({ convertible: 'claude-code' })
+  })
+
+  it('refuses a script from anyone but Kettu’s own publisher before a card or an upload', async () => {
+    await scriptPlugin('scripted')
+    const h = harness(somebody('bea'))
+    const checked = await h.tools.call(caller(), MARKET_CHECK, { path: 'scripted' })
+    expect(checked.structuredContent).toMatchObject({ ready: false, script: expect.anything() })
+    const refused = await h.tools.call(caller(), MARKET_PUBLISH, { path: 'scripted' })
+    expect(refused.isError).toBe(true)
+    expect(JSON.stringify(refused.structuredContent)).toContain('Kettu’s own publisher')
+    expect(h.asks).toEqual([])
+    expect(uploads(h)).toEqual([])
+    await expect(h.tools.checkFolder(path.join(root, 'scripted'), null)).resolves.toMatchObject({
+      ask: expect.anything(),
+      problems: [expect.objectContaining({ message: expect.stringContaining('own publisher') })],
+    })
+  })
+
+  it('shows a script and its permissions on the card of Kettu’s own publisher', async () => {
+    await scriptPlugin('scripted')
+    const h = harness(somebody('kettu-labs'))
+    const call = h.tools.call(caller(), MARKET_PUBLISH, { path: 'scripted' })
+    await asked(h)
+    expect(h.asks[0]).toMatchObject({
+      plugin: { script: { entry: 'sh.kettu/main.js', api: 1 }, permissions: ['tools'] },
+    })
+    h.answer({ decision: 'later' })
+    await call
+  })
+
+  it('shows the service’s own refusal of a script plainly, and keeps a draft', async () => {
+    await scriptPlugin('scripted')
+    const h = harness(somebody('kettu-labs'), () => {
+      throw new MarketCallError({
+        code: 'script_not_allowed',
+        status: 403,
+        message: 'Only Kettu may publish a script.',
+      })
+    })
+    const call = h.tools.call(caller(), MARKET_PUBLISH, { path: 'scripted' })
+    await asked(h)
+    h.answer({ decision: 'confirm', visibility: null, notes: null })
+    const result = await call
+    expect(result.isError).toBe(true)
+    expect(h.outcomes).toEqual([
+      expect.objectContaining({ kind: 'failed', message: expect.stringContaining('script') }),
+    ])
+    expect(h.drafts).toHaveLength(1)
+  })
+
+  it('names a listing of the closed kind when a plugin takes its name', async () => {
+    await writeFiles(path.join(root, 'release-tools'), claudePluginFiles())
+    const h = harness({
+      publisher: { handle: 'bea', since: 'x' },
+      listings: [listing({ slug: 'release-tools', kind: 'plugin', harness: 'claude-code' })],
+      storage: { bytes: 0, limit: 1 },
+    })
+    await h.tools.call(caller(), MARKET_CONVERT, { path: 'release-tools' })
+    const checked = await h.tools.call(caller(), MARKET_CHECK, { path: 'release-tools-kettu' })
+    expect(checked.structuredContent).toMatchObject({ ready: false })
+    expect(JSON.stringify(checked.structuredContent)).toContain('takes no new versions')
+  })
+
+  it('converts a closed listing from the files the service still serves', async () => {
+    const source = claudePluginFiles()
+    const mine: MarketMine = {
+      publisher: { handle: 'bea', since: 'x' },
+      listings: [listing({ slug: 'release-tools', kind: 'plugin', harness: 'claude-code' })],
+      storage: { bytes: 0, limit: 1 },
+    }
+    const serve = (call: MarketCall): unknown => {
+      if (call.kind === 'version') {
+        return {
+          files: Object.entries(source).map(([name, text]) => ({
+            path: name,
+            size: Buffer.byteLength(text),
+            sha256: createHash('sha256').update(text).digest('hex'),
+          })),
+        }
+      }
+      if (call.kind === 'file') {
+        const text = source[call.path]!
+        return {
+          data: Buffer.from(text).toString('base64'),
+          sha256: createHash('sha256').update(text).digest('hex'),
+        }
+      }
+      return null
+    }
+    const converter = new PluginConverter({
+      call: (async (call: MarketCall) => (call.kind === 'mine' ? mine : serve(call))) as never,
+      appVersion: APP,
+      folder: path.join(root, 'conversions'),
+    })
+    const made = await converter.listing('abcdefgh23')
+    expect(made.path).toBe(path.join(root, 'conversions', 'release-tools'))
+    expect(made.conversion.leftOut.filter((item) => item.kind === 'hook')).toHaveLength(2)
+    expect(converter.conversionOf(made.path)).toBe(made.conversion)
+    await expect(converter.listing('zzzzzzzzzz')).rejects.toMatchObject({ code: 'not_found' })
   })
 })
 

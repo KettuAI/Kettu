@@ -84,6 +84,9 @@ export interface MineVersion {
   checks: VersionCheck[]
   agent?: string
   session?: string
+  /** For a Kettu plugin: whether the version runs a script, and the permissions it declares. */
+  script?: boolean
+  permissions?: string[]
   publishedAt: string
 }
 
@@ -95,6 +98,8 @@ export interface MineListing {
   name: string
   kind: PublishKind
   harness?: PublishHarness
+  /** False for a Claude Code or Codex plugin, which takes no new versions and cannot be installed. */
+  installable?: false
   description: string
   about?: string
   visibility: ListingVisibility
@@ -124,6 +129,7 @@ export interface MarketListing {
   name: string
   kind: PublishKind
   harness?: PublishHarness
+  installable?: false
   description: string
   about?: string
   visibility: ListingVisibility

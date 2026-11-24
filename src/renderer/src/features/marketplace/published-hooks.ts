@@ -1,12 +1,13 @@
 // Marketplace › Published's hooks and menus: the host's Published store, whether it shows the
 // tab, picking a folder, and a listing's New version and ⋯ items.
 
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import {
   Delete02Icon,
   Folder01Icon,
   Message01Icon,
   PencilEdit02Icon,
+  PlugSocketIcon,
   ViewIcon,
   ViewOffSlashIcon,
 } from '@hugeicons/core-free-icons'
@@ -22,7 +23,7 @@ import { publishedStore, type PublishedStoreHook } from '@renderer/stores/market
 import { openMarketplace } from '@renderer/stores/view'
 import type { ListingDialog } from './publish-dialogs'
 import { previewItem } from './published-keys'
-import { askAgent, folderShown, listingName } from './published-model'
+import { askAgent, folderShown, isClosed, listingName } from './published-model'
 
 /** The Published store of the page's host. */
 export function usePublishedStore(): PublishedStoreHook {
@@ -53,6 +54,44 @@ export interface FolderChoice {
 export function usePickFolder(): () => Promise<string | null> {
   const scope = useHostScope()
   return () => scope.api.dialogs.openProject()
+}
+
+/**
+ * Turns a closed listing's files into a Kettu plugin written to a folder of its own, which is handed
+ * on to be checked and published; `converting` while the files are fetched and converted.
+ */
+export function useConvertListing(onConverted: (choice: FolderChoice) => void): {
+  convert: (listing: MineListing) => void
+  converting: boolean
+} {
+  const scope = useHostScope()
+  const [converting, setConverting] = useState(false)
+  const convert = (listing: MineListing) => {
+    setConverting(true)
+    scope
+      .request('market.convertListing', { id: listing.id })
+      .then(
+        (converted) => onConverted({ path: converted.path, draftId: null }),
+        (error: unknown) => toast(errorMessage(error), undefined, { tone: 'warning' }),
+      )
+      .finally(() => setConverting(false))
+  }
+  return { convert, converting }
+}
+
+/** A closed listing's one way on: converting it, as its menu offers. */
+export function convertItem(
+  t: TFunction<'marketplace'>,
+  convert: () => void,
+  converting: boolean,
+): MenuItem {
+  return {
+    label: t('published.menu.convert'),
+    description: t('published.menu.convertLine'),
+    icon: PlugSocketIcon,
+    disabled: converting,
+    onSelect: convert,
+  }
 }
 
 /** A listing's New version items: an agent in a new session, its last folder, or another one. */
@@ -117,11 +156,15 @@ export function listingMenu(
       icon: PencilEdit02Icon,
       onSelect: () => open({ kind: 'details', listing }),
     },
-    // Others can open neither an Only me listing nor one with no version yet.
-    listing.visibility === 'private' || listing.current === null
+    // Others can open neither an Only me listing, nor one with no version yet, nor a closed one.
+    listing.visibility === 'private' || listing.current === null || isClosed(listing)
       ? {
           label: t('published.menu.viewAsOthers'),
-          description: t('published.menu.viewAsOthersPrivate'),
+          description: t(
+            isClosed(listing)
+              ? 'published.menu.viewAsOthersClosed'
+              : 'published.menu.viewAsOthersPrivate',
+          ),
           icon: ViewIcon,
           disabled: true,
           onSelect: () => {},

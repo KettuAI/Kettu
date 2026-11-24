@@ -159,6 +159,7 @@ import { RolesService } from './roles/service'
 import { PluginsService } from './plugins/service'
 import { pluginsFile as kettuPluginsFile } from './plugins/store'
 import { PublishDrafts } from './marketplace/publish-drafts'
+import { PluginConverter } from './marketplace/plugin-conversions'
 import { MarketCallError, MarketTools } from './marketplace/publish-tools'
 import {
   SETTINGS_WAIT_MS,
@@ -579,6 +580,7 @@ export class AgentHost {
   private readonly publishDrafts: PublishDrafts
   /** The Marketplace tools of Kettu's MCP service. */
   private readonly marketTools: MarketTools
+  private readonly pluginConverter: PluginConverter
   /** The plugin host, which runs the scripts of the installed plugins that are on. */
   private readonly pluginHost = new PluginHostClient({
     want: (run) => this.options.send({ type: 'host:plugin-host', run }),
@@ -669,6 +671,11 @@ export class AgentHost {
     })
     this.deviceAccess = new DeviceAccessStore(options.userDataPath, log)
     this.publishDrafts = new PublishDrafts(options.userDataPath, log)
+    this.pluginConverter = new PluginConverter({
+      call: (call) => this.marketCall(call),
+      appVersion: options.appVersion,
+      folder: path.join(options.userDataPath, 'plugin-conversions'),
+    })
     this.marketTools = new MarketTools({
       account: () => this.marketAccount,
       call: (call) => this.marketCall(call),
@@ -698,6 +705,8 @@ export class AgentHost {
           throw error
         }
       },
+      converter: this.pluginConverter,
+      appVersion: options.appVersion,
       home: options.homeDir ?? os.homedir(),
     })
     this.settingsTools = new SettingsTools({
@@ -3414,6 +3423,8 @@ export class AgentHost {
         await this.publishDrafts.ready
         return this.marketTools.checkFolder(folder, draftId ?? null)
       },
+      'market.convertFolder': ({ path: folder }) => this.pluginConverter.folder(folder),
+      'market.convertListing': ({ id }) => this.pluginConverter.listing(id),
       'market.publishFolder': async ({ path: folder, draftId, visibility, notes, handle }) => {
         await this.publishDrafts.ready
         // A first publish sets the publisher name before anything is uploaded, as the card does.

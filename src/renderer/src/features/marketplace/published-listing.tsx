@@ -27,6 +27,7 @@ import { useHostScope } from '@renderer/stores/host-scope'
 import { ListingDialogs, PublishFolderDialog, type ListingDialog } from './publish-dialogs'
 import {
   listingMenu,
+  useConvertListing,
   useNewVersionItems,
   usePublishedStore,
   useRelist,
@@ -38,6 +39,7 @@ import {
   dayAt,
   folderShown,
   harnessName,
+  isClosed,
   isHarness,
   kindOf,
   knownSession,
@@ -106,6 +108,8 @@ function Listing({
   const [folder, setFolder] = useState<FolderChoice | null>(null)
   const relist = useRelist()
   const versionItems = useNewVersionItems(listing, published, setFolder)
+  const { convert, converting } = useConvertListing(setFolder)
+  const closed = isClosed(listing)
   const state = stateOf(listing)
   const current = listing.versions.find((v) => v.version === listing.current) ?? null
   const origin = published.origins[listing.id]
@@ -136,7 +140,17 @@ function Listing({
         </span>
         <span className="k-mkt-head__act">
           <StatePill tone={state.tone}>{t(`published.state.${state.key}`)}</StatePill>
-          {!listing.takenDown && (
+          {!listing.takenDown && closed && (
+            <Button
+              size="md"
+              variant="secondary"
+              loading={converting}
+              onClick={() => convert(listing)}
+            >
+              {t('published.menu.convert')}
+            </Button>
+          )}
+          {!listing.takenDown && !closed && (
             <Dropdown
               align="end"
               className="k-mkt-add"
@@ -162,6 +176,13 @@ function Listing({
         <div className="k-pub-alert k-pub-taken" role="status">
           <Icon icon={Alert02Icon} size={15} />
           <span>{t('published.listing.takenDown', { reason: listing.takenDown.reason })}</span>
+        </div>
+      )}
+
+      {closed && !listing.takenDown && (
+        <div className="k-pub-alert" role="status">
+          <Icon icon={Alert02Icon} size={15} />
+          <span>{t('published.listing.closed')}</span>
         </div>
       )}
 
