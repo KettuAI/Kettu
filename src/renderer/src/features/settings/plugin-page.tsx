@@ -1,5 +1,5 @@
 import { useState, type KeyboardEvent } from 'react'
-import { PlugSocketIcon } from '@hugeicons/core-free-icons'
+import { PuzzleIcon } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
 import { PLUGIN_NOTICE_KINDS, type PluginNoticeKind } from '@shared/plugin-channels'
 import type { InstalledKettuPlugin, PluginSetting, PluginSettingValue } from '@shared/plugins'
@@ -46,12 +46,12 @@ import {
   RowText,
 } from './rows'
 
-/** A plugin's icon, or the plug that stands for one without. */
+/** A plugin's icon, or the puzzle piece that stands for one without. */
 export function PluginMark({ plugin }: { plugin: InstalledKettuPlugin }) {
   return plugin.contents.icon ? (
     <img src={plugin.contents.icon} alt="" width={24} height={24} />
   ) : (
-    <Icon icon={PlugSocketIcon} size={20} />
+    <Icon icon={PuzzleIcon} size={20} />
   )
 }
 
