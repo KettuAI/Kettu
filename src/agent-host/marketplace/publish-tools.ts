@@ -11,6 +11,7 @@ import {
   LISTING_NOTES_CHARS,
   VERSION,
   nextPatch,
+  reviewVersions,
   suggestHandle,
   type ListingChange,
   type MarketAccount,
@@ -28,6 +29,7 @@ import {
   type PublishKind,
   type PublishManifest,
   type PublishOrigin,
+  type PublishResult,
   type PublishVisibility,
 } from '@shared/market-publish'
 import type { Platform } from '@shared/platform'
@@ -158,10 +160,12 @@ export const MARKET_TOOLS: Tool[] = [
       'answered yet, call it again with the same arguments, which shows no second card and returns ' +
       'what became of this one, even when they answered between calls. If they choose Not now or ' +
       'do not answer, nothing is uploaded and it is kept as a draft they can publish later: do ' +
-      'not publish it again unless they ask. An MCP server takes the version in its ' +
-      'manifest; a skill or a workflow gets 1.0.0 first, then the next patch version unless you ' +
-      'pass one. For a new version, write short notes on what changed. Pass path, or for a ' +
-      'task’s workflow Kettu asked you to publish, workflow and from_task.',
+      'not publish it again unless they ask. A version can be held for review: the answer then ' +
+      'says it is stored but not listed yet and the previous version stays listed; tell the ' +
+      'user it waits for review, and do not publish it again. An MCP server takes the version ' +
+      'in its manifest; a skill or a workflow gets 1.0.0 first, then the next patch version ' +
+      'unless you pass one. For a new version, write short notes on what changed. Pass path, or ' +
+      'for a task’s workflow Kettu asked you to publish, workflow and from_task.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -205,7 +209,8 @@ export const MARKET_TOOLS: Tool[] = [
     description:
       'Lists what the user published to the Kettu Marketplace: each listing’s name, kind, who ' +
       'can see it, versions, installs and whether it was taken down, and the drafts waiting to ' +
-      'be published.',
+      'be published. A version is live, withdrawn, held for review (stored, not listed until it ' +
+      'is reviewed) or not approved, with the reason it gave.',
     inputSchema: { type: 'object', properties: {}, additionalProperties: false },
     annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
   },
@@ -619,7 +624,7 @@ export class MarketTools {
   async publishFolder(
     target: string,
     answer: { draftId: string | null; visibility: PublishVisibility | null; notes: string | null },
-  ): Promise<MineListing> {
+  ): Promise<PublishResult> {
     this.signedIn()
     const draft = this.draftFor(answer.draftId, target)
     const plan = await this.plan(target, null, draftVersion(draft), true)
@@ -1017,7 +1022,7 @@ export class MarketTools {
     if (answer.notes !== null) manifest.notes = answer.notes
     else delete manifest.notes
     if (!listing && answer.visibility) manifest.visibility = answer.visibility
-    let published: MineListing
+    let published: PublishResult
     try {
       published = await this.upload(plan, manifest, caller.sessionId)
     } catch (error) {
@@ -1036,18 +1041,50 @@ export class MarketTools {
         problems,
       )
     }
-    this.deps.settle(caller.sessionId, entryId, {
-      kind: 'published',
-      listingId: published.id,
-      handle: published.handle,
-      version: manifest.version,
-    })
     const who =
       published.visibility === 'public'
         ? 'listed for everyone'
         : published.visibility === 'private'
           ? 'only for the user’s own computers'
           : 'unlisted, for the people who have it'
+    if (published.held !== undefined) {
+      const stays = published.current
+        ? `${published.current} stays listed`
+        : 'Nothing of it is listed yet'
+      this.deps.settle(caller.sessionId, entryId, {
+        kind: 'published',
+        listingId: published.id,
+        handle: published.handle,
+        version: published.held,
+        held: true,
+      })
+      return {
+        content: [
+          {
+            type: 'text',
+            text:
+              `Not published yet: ${listingName(published)} ${published.held} is held for review ` +
+              `before it lists, and ${stays}. Tell the user it waits for review; Marketplace › ` +
+              'Published shows where it stands. Do not publish it again.',
+          },
+        ],
+        structuredContent: {
+          published: false,
+          held: true,
+          listing: listingName(published),
+          id: published.id,
+          version: published.held,
+          visibility: published.visibility,
+          current: published.current,
+        },
+      }
+    }
+    this.deps.settle(caller.sessionId, entryId, {
+      kind: 'published',
+      listingId: published.id,
+      handle: published.handle,
+      version: manifest.version,
+    })
     return {
       content: [
         {
@@ -1191,7 +1228,7 @@ export class MarketTools {
     plan: Plan,
     manifest: PublishManifest,
     sessionId: string | null,
-  ): Promise<MineListing> {
+  ): Promise<PublishResult> {
     const published = await this.deps.call({
       kind: 'publish',
       manifest,
@@ -1202,7 +1239,7 @@ export class MarketTools {
     })
     await this.deps.drafts.published(plan.check.path, {
       listingId: published.id,
-      version: manifest.version,
+      version: published.held ?? manifest.version,
       sessionId,
       path: plan.target,
     })
@@ -1300,6 +1337,7 @@ export class MarketTools {
         version: v.version,
         status: v.status,
         publishedAt: v.publishedAt,
+        ...(v.refusal ? { refusal: v.refusal } : {}),
       })),
       installs: { total: listing.installs.total, week: listing.installs.week },
       takenDown: listing.takenDown,
@@ -1308,8 +1346,8 @@ export class MarketTools {
       listings.length === 0
         ? ['The user has published nothing to the Kettu Marketplace yet.']
         : listings.map(
-            (l) =>
-              `${l.listing} (${l.id}): ${l.name}, ${l.kind}, ${l.visibility}, version ${l.current ?? 'none live'}, ${l.installs.total} installs${l.takenDown ? ', taken down' : ''}`,
+            (l, i) =>
+              `${l.listing} (${l.id}): ${l.name}, ${l.kind}, ${l.visibility}, version ${l.current ?? 'none live'}, ${l.installs.total} installs${l.takenDown ? ', taken down' : ''}${reviewText(mine.listings[i]!)}`,
           )
     if (drafts.length > 0) {
       lines.push(
@@ -1622,6 +1660,17 @@ function convertedLines({ path: folder, name, conversion }: PluginConverted): st
       'publish it if the user asks; the card shows them what came over and what did not.',
   )
   return lines
+}
+
+/** The versions of a listing that wait for review or were not approved, for a line about it. */
+function reviewText(listing: MineListing): string {
+  return reviewVersions(listing)
+    .map((v) =>
+      v.status === 'held'
+        ? `, ${v.version} held for review, not listed yet`
+        : `, ${v.version} not approved${v.refusal ? `: ${v.refusal.reason}` : ''}`,
+    )
+    .join('')
 }
 
 function comparable(file: CheckedFile, oldSize: number): boolean {

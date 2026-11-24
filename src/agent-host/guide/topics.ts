@@ -433,6 +433,7 @@ A folder that holds a skill (\`SKILL.md\`), a workflow (\`workflow.yaml\`, with 
 2. \`marketplace_publish\` with the same path. For a new listing, \`visibility\` is \`public\` for everyone or \`private\` for the user's own computers; the user can change it in the card. For a new version, write short \`notes\` on what changed. An MCP server or a plugin takes the version in its manifest; a skill or a workflow gets 1.0.0 first, then the next patch version unless you pass \`version\`.
 3. Every publish waits for the user to confirm it in a card in this session, for up to 10 minutes, and nothing uploads until they press Publish. The call returns within a minute: when it says the user has not answered yet, call it again with the same path, which keeps waiting on the same card.
 4. When they choose Not now or do not answer, it is kept as a draft they can publish later: do not publish it again unless they ask.
+5. A version can be held for review. The answer then says it is stored but not listed yet, and the previous version stays listed: tell the user it waits for review, and do not publish it again. \`marketplace_mine\` shows which versions are held for review or not approved, and why.
 
 ## Managing what the user published
 

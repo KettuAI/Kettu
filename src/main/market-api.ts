@@ -24,8 +24,10 @@ import {
   type PublishHarness,
   type PublishKind,
   type PublishManifest,
+  type PublishResult,
   type VersionCheck,
   type VersionFile,
+  type VersionStatus,
 } from '@shared/market-publish'
 import { locale, t } from './i18n'
 
@@ -174,15 +176,32 @@ function parseChecks(value: unknown): VersionCheck[] {
   })
 }
 
+const STATUSES: readonly VersionStatus[] = ['live', 'withdrawn', 'held', 'refused']
+
+/** A status this app does not know is `unknown`, which counts as not live. */
+function statusOf(value: unknown): VersionStatus {
+  return STATUSES.includes(value as VersionStatus) ? (value as VersionStatus) : 'unknown'
+}
+
+function parseRefusal(value: unknown): { refusal?: { reason: string; at: string } } {
+  const fields = record(value)
+  const reason = text(fields?.reason)
+  const at = text(fields?.at)
+  return reason === null || at === null
+    ? {}
+    : { refusal: { reason: reason.slice(0, MAX_MESSAGE), at } }
+}
+
 function parseVersion(value: unknown): MineVersion {
   const fields = record(value)
   const version = text(fields?.version)
   const publishedAt = text(fields?.publishedAt)
   if (!fields || version === null || publishedAt === null) throw unexpected('version')
+  const status = statusOf(fields.status)
   return {
     version,
     notes: text(fields.notes) ?? '',
-    status: fields.status === 'withdrawn' ? 'withdrawn' : 'live',
+    status,
     bytes: isCount(fields.bytes) ? fields.bytes : 0,
     files: isCount(fields.files) ? fields.files : 0,
     checks: parseChecks(fields.checks),
@@ -192,6 +211,7 @@ function parseVersion(value: unknown): MineVersion {
     ...(Array.isArray(fields.permissions)
       ? { permissions: fields.permissions.filter((p): p is string => typeof p === 'string') }
       : {}),
+    ...(status === 'refused' ? parseRefusal(fields.refusal) : {}),
     publishedAt,
   }
 }
@@ -416,19 +436,26 @@ export class MarketApi {
     return parsePublisher(body?.publisher)
   }
 
-  /** A new listing, or a new version of one: one part per file, named by its path. */
-  async publish(manifest: PublishManifest, files: readonly PublishFile[]): Promise<MineListing> {
+  /**
+   * A new listing, or a new version of one: one part per file, named by its path. A 202 answers
+   * that the version is stored and held for review, which `held` names.
+   */
+  async publish(manifest: PublishManifest, files: readonly PublishFile[]): Promise<PublishResult> {
     const data = new FormData()
     data.append('manifest', JSON.stringify(manifest))
     for (const file of files) {
       data.append(file.path, new Blob([file.bytes as Uint8Array<ArrayBuffer>]), file.path)
     }
-    const body = await this.json(
+    const { status, body } = await this.answer(
       '/versions',
       { method: 'POST', body: data },
       { version: manifest.version },
     )
-    return parseMineListing(body?.listing)
+    const listing = parseMineListing(body?.listing)
+    if (status !== 202) return listing
+    const held = text(body?.held)
+    if (held === null || !VERSION.test(held)) throw unexpected('listing')
+    return { ...listing, held }
   }
 
   async update(id: string, change: ListingChange): Promise<MineListing> {
@@ -554,9 +581,18 @@ export class MarketApi {
   /** The answer's JSON, null for an empty one. */
   private async json(
     path: string,
-    { json, ...init }: RequestInit & { json?: unknown },
+    init: RequestInit & { json?: unknown },
     sent: Sent = {},
   ): Promise<Fields | null> {
+    return (await this.answer(path, init, sent)).body
+  }
+
+  /** The status of a successful answer with its JSON, null for an empty one. */
+  private async answer(
+    path: string,
+    { json, ...init }: RequestInit & { json?: unknown },
+    sent: Sent = {},
+  ): Promise<{ status: number; body: Fields | null }> {
     const headers: Record<string, string> = { accept: 'application/json' }
     if (json !== undefined) headers['content-type'] = 'application/json'
     const response = await this.send(path, {
@@ -566,11 +602,11 @@ export class MarketApi {
     })
     if (!response.ok) return this.refused(response, sent)
     const raw = await response.text().catch(() => '')
-    if (!raw) return null
+    if (!raw) return { status: response.status, body: null }
     try {
       const body = record(JSON.parse(raw))
       if (!body) throw new Error('not an object')
-      return body
+      return { status: response.status, body }
     } catch {
       throw unexpected('request')
     }

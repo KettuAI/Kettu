@@ -790,7 +790,8 @@ export interface MarketPublishChange {
  */
 export type MarketPublishOutcome =
   | { kind: 'publishing' | 'unlisting' }
-  | { kind: 'published'; listingId: string; handle: string; version: string }
+  // `held`: the service stored the version and lists it only after a review.
+  | { kind: 'published'; listingId: string; handle: string; version: string; held?: true }
   | { kind: 'unlisted' }
   | { kind: 'failed'; message: string; problems: MarketProblem[] }
   | { kind: 'later' | 'expired' | 'ended' | 'interrupted' }

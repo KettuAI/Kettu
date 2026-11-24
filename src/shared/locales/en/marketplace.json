@@ -869,6 +869,15 @@
       "withdraw": "Withdraw {{version}}",
       "checkAgain": "Check again"
     },
+    "review": {
+      "waiting": "Waiting for review",
+      "refused": "Not approved",
+      "heldLine": "{{version}} isn’t listed until it’s been reviewed.",
+      "refusedLine": "{{version}} wasn’t approved: {{reason}}",
+      "refusedBare": "{{version}} wasn’t approved.",
+      "heldNote": "Not listed until it’s been reviewed.",
+      "open": "Open"
+    },
     "table": {
       "title": "Published",
       "label": "What you published",
@@ -881,6 +890,8 @@
       "week": "+{{count}} in 7 days",
       "noNew": "No new installs",
       "needsFix": "{{version}} needs a fix",
+      "waiting": "{{version}} is waiting for review",
+      "refused": "{{version}} wasn’t approved",
       "more": "More for {{name}}",
       "noMatch": "Nothing you published matches “{{query}}”."
     },
@@ -894,7 +905,8 @@
       "public": "Listed",
       "private": "Only me",
       "unlisted": "Unlisted",
-      "takenDown": "Taken down"
+      "takenDown": "Taken down",
+      "held": "Waiting for review"
     },
     "menu": {
       "newVersion": "New version…",
@@ -929,6 +941,7 @@
     "readFailed": "Couldn’t read what you published: {{error}}",
     "toast": {
       "published": "Published {{name}} {{version}}",
+      "held": "{{name}} {{version}} is waiting for review",
       "unlisted": "Unlisted {{name}}",
       "listed": "{{name}} is listed again",
       "deleted": "Deleted {{name}}",

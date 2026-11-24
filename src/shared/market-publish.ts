@@ -75,10 +75,16 @@ export interface VersionCheck {
   note?: string
 }
 
+/**
+ * A version's state: `held` is stored but listed only after a review, `refused` was not approved,
+ * and `unknown` is any state this app does not know, treated as not live.
+ */
+export type VersionStatus = 'live' | 'withdrawn' | 'held' | 'refused' | 'unknown'
+
 export interface MineVersion {
   version: string
   notes: string
-  status: 'live' | 'withdrawn'
+  status: VersionStatus
   bytes: number
   files: number
   checks: VersionCheck[]
@@ -87,6 +93,8 @@ export interface MineVersion {
   /** For a Kettu plugin: whether the version runs a script, and the permissions it declares. */
   script?: boolean
   permissions?: string[]
+  /** Why a `refused` version was not approved, and when. */
+  refusal?: { reason: string; at: string }
   publishedAt: string
 }
 
@@ -113,6 +121,26 @@ export interface MineListing {
   takenDown: { reason: string; at: string } | null
   createdAt: string
   updatedAt: string
+}
+
+/** What a publish answers: the listing, and the version held for review when it is not listed yet. */
+export type PublishResult = MineListing & { held?: string }
+
+/**
+ * The versions of a listing that wait for review or were not approved, which its publisher still
+ * has to look at: a version not approved is left out once a later one is live or held.
+ */
+export function reviewVersions(listing: Pick<MineListing, 'versions'>): MineVersion[] {
+  const { versions } = listing
+  return versions.filter((version) => {
+    if (version.status === 'held') return true
+    if (version.status !== 'refused') return false
+    return !versions.some(
+      (other) =>
+        (other.status === 'live' || other.status === 'held') &&
+        compareVersions(other.version, version.version) > 0,
+    )
+  })
 }
 
 export interface MarketMine {
@@ -216,7 +244,7 @@ export interface MarketResults {
   publisher: MarketPublisher | null
   'set-publisher': MarketPublisher
   mine: MarketMine
-  publish: MineListing
+  publish: PublishResult
   update: MineListing
   withdraw: MineListing
   delete: null
