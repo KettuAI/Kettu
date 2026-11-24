@@ -15,7 +15,7 @@ import { createPluginService, type PluginService } from '../../plugin-host/start
 import type { PluginApiCall } from './call'
 import { PluginHostClient } from './client'
 import { PLUGIN_EVENTS, createPluginApi, type PluginApiDeps } from './functions'
-import type { HttpRequest } from './network'
+import type { HttpTransport } from './network'
 
 let engine: Engine
 
@@ -302,7 +302,7 @@ function apiDeps() {
     send: vi.fn(async () => ({ delivered: 'sent' as const })),
     now: () => 0,
   }
-  const transport = vi.fn(async (_request: HttpRequest) => ({
+  const transport = vi.fn<HttpTransport>(async () => ({
     status: 200,
     headers: {},
     body: 'fine',
