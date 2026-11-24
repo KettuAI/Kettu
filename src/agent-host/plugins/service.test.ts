@@ -534,6 +534,45 @@ describe('updating a plugin', () => {
     await expect(h.plugins.applyUpdate(id)).rejects.toMatchObject({ code: 'conflict' })
   })
 
+  it('keeps what a script may do at the installed version while an update waits', async () => {
+    const h = await host()
+    h.market.files = packageFiles(main, {
+      ...script,
+      permissions: ['tools', 'network:a.example.com'],
+    })
+    const { id } = await h.plugins.install((await h.plugins.inspect(fromMarket)).token)
+    next(
+      h,
+      '1.1.0',
+      packageFiles(main, {
+        ...script,
+        permissions: ['tools', 'network:a.example.com', 'sessions.start', 'network:b.example.com'],
+      }),
+    )
+    const [held] = await h.plugins.checkUpdates()
+    expect(held!.held).toMatchObject({
+      permissions: ['sessions.start', 'network:b.example.com'],
+      declared: ['tools', 'network:a.example.com', 'sessions.start', 'network:b.example.com'],
+    })
+    // The script that runs and is answered is the old version's, with the old grants.
+    const before = h.plugins.scripts()
+    expect(before).toHaveLength(1)
+    expect(before[0]).toMatchObject({
+      id,
+      revision: expect.stringContaining(':'),
+      permissions: ['tools', 'network:a.example.com'],
+    })
+    await h.plugins.applyUpdate(id)
+    const after = h.plugins.scripts()
+    expect(after[0]!.permissions).toEqual([
+      'tools',
+      'network:a.example.com',
+      'sessions.start',
+      'network:b.example.com',
+    ])
+    expect(after[0]!.revision).not.toBe(before[0]!.revision)
+  })
+
   it('holds an update that adds a script, and stays where it is once declined', async () => {
     const { h, id } = await installed()
     next(h, '1.1.0', packageFiles(main, script))

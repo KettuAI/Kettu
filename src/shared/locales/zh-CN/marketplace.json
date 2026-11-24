@@ -333,7 +333,45 @@
       "installs": "安装次数"
     },
     "adds": "包含",
-    "willAdd": "将会加入"
+    "willAdd": "将会加入",
+    "permission": {
+      "sessionsSummary": {
+        "name": "查看会话",
+        "description": "查看每个会话的标题、项目、智能体、状态和正在做什么，不含对话内容。"
+      },
+      "tools": {
+        "name": "给智能体工具",
+        "description": "往 Kettu 的工具服务里加工具。智能体调用前会像用其他工具一样先问你。"
+      },
+      "promptAttach": {
+        "name": "给消息附内容",
+        "description": "在消息发出前附上文字，附了什么在消息上看得到。"
+      },
+      "requestsCheck": {
+        "name": "预检授权请求",
+        "description": "先看一遍智能体的授权请求，可以拒绝或交给你，不能批准。"
+      },
+      "sessionsContent": {
+        "name": "读取对话",
+        "description": "读取你的会话里说过的所有内容。"
+      },
+      "requestsAnswer": {
+        "name": "转达回答",
+        "description": "转达你在别处（比如聊天应用里）对授权请求的回答，只能允许一次或拒绝，不能总是允许。"
+      },
+      "sessionsStart": {
+        "name": "开会话、发消息",
+        "description": "开会话并给它们发消息，智能体最多在 Auto 模式下工作。"
+      },
+      "network": {
+        "name": "网络",
+        "description": "通过 https 连接 {{domain}}。"
+      },
+      "networkSubdomains": {
+        "name": "网络",
+        "description": "通过 https 连接 {{domain}} 的任何子域名。"
+      }
+    }
   },
   "skill": {
     "installNote": "由 Kettu 保存在这台电脑上，在会话开始时交给这些智能体。",

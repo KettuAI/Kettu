@@ -7,10 +7,12 @@ import type { PluginScript } from '@shared/plugin-host'
 export interface InstalledScript extends PluginScript {
   /** Changes whenever the package in place does, also when it is read again from one folder. */
   revision: string
+  /** What the version in place declares: all the plugin may do, held updates not counted. */
+  permissions: string[]
 }
 
 interface ScriptRegistry {
-  register(plugin: PluginScript): void
+  register(plugin: PluginScript, permissions: readonly string[]): void
   unregister(pluginId: string): Promise<void>
 }
 
@@ -35,9 +37,9 @@ export class InstalledScripts {
       this.registered.delete(id)
       await this.client.unregister(id).catch((error: unknown) => this.failed(id, error))
     }
-    for (const { revision, ...script } of wanted.values()) {
+    for (const { revision, permissions, ...script } of wanted.values()) {
       if (this.registered.has(script.id)) continue
-      this.client.register(script)
+      this.client.register(script, permissions)
       this.registered.set(script.id, revision)
     }
   }

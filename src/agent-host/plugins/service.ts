@@ -35,6 +35,7 @@ import {
   type TarLimits,
 } from '../marketplace/tarball'
 import type { JsonFile, LogFn } from '../storage'
+import type { InstalledScript } from '../plugin-runtime/installed'
 import { refusal } from './manifest'
 import { serverSpec } from './mcp'
 import {
@@ -211,10 +212,12 @@ export class PluginsService {
   }
 
   /**
-   * The scripts of the plugins that are on, each with its file on the host. The manifest has no
-   * list of what wakes a script yet, so none is given and nothing loads one.
+   * The scripts of the plugins that are on, each with its file on the host and the permissions
+   * of the version in place. An update that waits for the user is not in place, so a script
+   * never has what only that update asks for. The manifest has no list of what wakes a script
+   * yet, so none is given and nothing loads one.
    */
-  scripts(): { id: string; scriptPath: string; activation: string[]; revision: string }[] {
+  scripts(): InstalledScript[] {
     return Object.values(this.data?.plugins ?? {}).flatMap((record) =>
       record.enabled && record.contents.script
         ? [
@@ -223,6 +226,7 @@ export class PluginsService {
               scriptPath: path.join(this.packageDir(record), record.contents.script.entry),
               activation: [],
               revision: `${record.dir}:${record.updatedAt}`,
+              permissions: [...record.contents.permissions],
             },
           ]
         : [],
@@ -442,6 +446,7 @@ export class PluginsService {
         version: fetched.pkg.contents.version,
         revision: fetched.revision ?? '',
         ...added,
+        declared: [...fetched.pkg.contents.permissions],
         foundAt: shown?.revision === fetched.revision ? shown.foundAt : this.now(),
       }
       this.save()

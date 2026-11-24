@@ -16,12 +16,7 @@ import {
   type PluginStatus,
 } from '@shared/plugin-host'
 import type { PortChannel } from '@shared/port-channel'
-
-/**
- * A host function a plugin may call that the agent host answers. `args` come from the plugin's
- * script: validate each one.
- */
-export type PluginFunction = (pluginId: string, args: unknown[]) => unknown
+import { missingPermission, type PluginApiCall } from './call'
 
 export interface PluginHostClientTimings {
   startMs: number
@@ -33,10 +28,10 @@ export interface PluginHostClientOptions {
   /** Tells the process that runs the hosts whether the plugin host is needed. */
   want(run: boolean): void
   /**
-   * Every host function plugins may call here, by name; only own keys are looked up. The plugin
-   * API's calls are added to this object, each behind the permission it needs.
+   * Every host function plugins may call here, by name; only own keys are looked up. A call is
+   * answered only to a plugin that has the permission the entry names.
    */
-  functions: Readonly<Record<string, PluginFunction>>
+  functions: Readonly<Record<string, PluginApiCall>>
   log(level: 'info' | 'warn', message: string): void
   /** Called with every plugin's status whenever one changes. */
   onStatus?(plugins: PluginStatus[]): void
@@ -84,6 +79,7 @@ export class PluginHostClient {
   private readonly pending = new Map<number, Pending>()
   private readonly waiters = new Set<Waiter>()
   private readonly plugins = new Map<string, PluginScript>()
+  private readonly grants = new Map<string, readonly string[]>()
   private statuses = new Map<string, PluginStatus>()
   private idleTimer: ReturnType<typeof setTimeout> | null = null
   private readonly timings: PluginHostClientTimings
@@ -94,15 +90,18 @@ export class PluginHostClient {
 
   /**
    * Makes an installed plugin's script known, or replaces what was known of it; nothing is
-   * loaded until something it declares wakes it.
+   * loaded until something it declares wakes it. `permissions` are the ones the user agreed to
+   * for this version, which its calls are checked against.
    */
-  register(plugin: PluginScript): void {
+  register(plugin: PluginScript, permissions: readonly string[] = []): void {
     this.plugins.set(plugin.id, { ...plugin, activation: [...plugin.activation] })
+    this.grants.set(plugin.id, [...permissions])
   }
 
   /** Forgets a plugin, as when it is removed or turned off, and unloads its script. */
   async unregister(pluginId: string): Promise<void> {
     this.plugins.delete(pluginId)
+    this.grants.delete(pluginId)
     if (this.port && this.statuses.get(pluginId)?.state === 'active') {
       await this.request({ type: 'deactivate', pluginId })
     }
@@ -311,9 +310,19 @@ export class PluginHostClient {
       fail({ code: 'unknown_function', message: `No host function "${String(name)}"` })
       return
     }
+    const call = functions[name]!
+    const permissions = this.grants.get(pluginId) ?? []
+    const missing = missingPermission(call.permission, permissions)
+    if (missing !== null) {
+      fail({
+        code: 'permission_denied',
+        message: `"${name}" needs the permission "${missing}", which this plugin does not have`,
+      })
+      return
+    }
     let timer: ReturnType<typeof setTimeout> | undefined
     Promise.race([
-      Promise.resolve().then(() => functions[name]!(pluginId, args)),
+      Promise.resolve().then(() => call.run({ pluginId, permissions }, args)),
       new Promise<never>((_, reject) => {
         timer = setTimeout(() => reject(new Error('It took too long')), PLUGIN_ANSWER_TIMEOUT_MS)
       }),

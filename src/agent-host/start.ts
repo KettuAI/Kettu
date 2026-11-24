@@ -234,6 +234,11 @@ export function startAgentHost(control: ControlChannel<MainToHost, HostToMain>):
       case 'host:power':
         withHost((h) => h.power(message.state))
         break
+      case 'host:color-mode':
+        if (message.mode === 'light' || message.mode === 'dark') {
+          withHost((h) => h.setColorMode(message.mode))
+        }
+        break
       case 'host:computer-control':
         if (
           typeof message.sessionId === 'string' &&

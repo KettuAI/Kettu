@@ -327,7 +327,7 @@ export interface SessionRecord {
   archivedAt?: number // when the user archived it; off the sidebar while set
   /** Archived alone: the sub-sessions it left in the list, which restoring it puts back under it. */
   leftSubSessions?: string[]
-  startedBy?: string // the session whose agent started it through start_session
+  startedBy?: string // the session whose agent started it through start_session, or `plugin:<id>`
   configDir?: string // the configuration folder picked for its agent when it was created
   pullRequests?: string[] // the pull requests it opened, oldest first, by their github.com URL
   /** The agents that had the session before its current one took over, oldest first. */

@@ -96,6 +96,8 @@ export interface AgentHostDeps {
   onMarketOAuth?(serverId: unknown, state: unknown): void
   /** The Kettu account the Marketplace tools publish with, which follows init at each start. */
   marketAccount(): MarketAccount | null
+  /** The window's color mode, which follows init at each start. */
+  colorMode(): 'light' | 'dark'
   /** Makes a Marketplace API call of the host's with the account's access token. */
   market?: (call: MarketCall) => Promise<MarketCallAnswer>
   /** An agent's settings tool reads or changes the settings. */
@@ -397,6 +399,7 @@ export class AgentHost {
       startMessages: () => [
         { type: 'host:market-keys', ...deps.marketKeys() },
         { type: 'host:market-account', account: deps.marketAccount() },
+        { type: 'host:color-mode', mode: deps.colorMode() },
       ],
       connectMessage: (windowId) => ({ type: 'host:connect', windowId }),
       shutdownMessage: { type: 'host:shutdown' },
@@ -465,6 +468,11 @@ export class AgentHost {
   /** The Marketplace's key store, whole; a host started later gets it too. */
   pushMarketKeys(contents: MarketKeysPush): void {
     this.host.post({ type: 'host:market-keys', ...contents })
+  }
+
+  /** The window's color mode, after the system's or the user's choice changed it. */
+  pushColorMode(mode: 'light' | 'dark'): void {
+    this.host.post({ type: 'host:color-mode', mode })
   }
 
   /** The Kettu account the Marketplace tools publish with, after a sign-in or a switch changed it. */

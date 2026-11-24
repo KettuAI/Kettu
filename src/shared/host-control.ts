@@ -167,6 +167,8 @@ export type MainToHost =
       format: ArtifactExportFormat
     }
   | { type: 'host:power'; state: 'suspend' | 'resume' }
+  // The window's color mode, right after host:init at every start and whenever it changes.
+  | { type: 'host:color-mode'; mode: 'light' | 'dark' }
   /** `verbose`: detailed records, which the debug level alone does not write. */
   | { type: 'host:log-level'; level: 'debug' | 'info'; verbose: boolean }
   // Allow once, from a request's notification: answered as one of the host's own windows would.
