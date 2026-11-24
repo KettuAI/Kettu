@@ -55,6 +55,10 @@ const HostPathDialog = lazy(() => import('@renderer/web/host-path-dialog'))
 const Onboarding = lazy(() => import('@renderer/features/onboarding/onboarding'))
 // What an install of a harness brings, shown before it runs; loaded once an Install first opens it.
 const InstallWindow = lazy(() => import('@renderer/features/settings/install-window'))
+// Development only: a plugin's view in a sheet, named by the address' hash.
+const PluginViewPreview = import.meta.env.DEV
+  ? lazy(() => import('@renderer/features/plugin-views/dev-preview'))
+  : null
 
 export function App() {
   const settingsOpen = useViewStore((s) => s.settings.open)
@@ -148,6 +152,11 @@ export function App() {
           </Suspense>
         )}
         <GitDialogsHost />
+        {PluginViewPreview && (
+          <Suspense fallback={null}>
+            <PluginViewPreview />
+          </Suspense>
+        )}
         <Toaster />
         <QuitHint />
       </div>

@@ -296,6 +296,43 @@ describe('createValidators', () => {
     rejects(() => posix['plugins.resources']({ kind: 'scripts' }))
   })
 
+  it('checks which plugin view is opened and what an action sends', () => {
+    const pluginId = 'p0123456789ab'
+    expect(posix['plugins.viewData']({ pluginId, viewId: 'issues' })).toEqual({
+      pluginId,
+      viewId: 'issues',
+      params: {},
+    })
+    expect(
+      posix['plugins.viewData']({ pluginId, viewId: 'issue', params: { id: '3' } }).params,
+    ).toEqual({ id: '3' })
+    rejects(() => posix['plugins.viewData']({ pluginId, viewId: '../x' }))
+    rejects(() => posix['plugins.viewData']({ pluginId: 'x', viewId: 'issues' }))
+    rejects(() => posix['plugins.viewData']({ pluginId, viewId: 'issues', params: { id: 3 } }))
+    expect(
+      posix['plugins.viewAction']({
+        pluginId,
+        viewId: 'label',
+        action: 'save',
+        row: 'r1',
+        values: { on: true, note: 'x' },
+        junk: 1,
+      }),
+    ).toEqual({
+      pluginId,
+      viewId: 'label',
+      params: {},
+      action: 'save',
+      row: 'r1',
+      values: { on: true, note: 'x' },
+    })
+    rejects(() => posix['plugins.viewAction']({ pluginId, viewId: 'label' }))
+    rejects(() => posix['plugins.viewAction']({ pluginId, viewId: 'label', action: 'a b' }))
+    rejects(() =>
+      posix['plugins.viewAction']({ pluginId, viewId: 'label', action: 'save', values: { a: 1 } }),
+    )
+  })
+
   it('checks where a skill to add comes from', () => {
     expect(posix['market.skills'](undefined)).toEqual({})
     const add = (source: unknown) => posix['market.addSkill']({ source })

@@ -15,6 +15,14 @@ import {
   type PluginSetting,
   type PluginTexts,
 } from '@shared/plugins'
+import {
+  isPluginViewIcon,
+  isPluginViewKind,
+  PLUGIN_VIEW_ID,
+  PLUGIN_VIEW_KINDS,
+  PLUGIN_VIEW_LIMITS,
+  type PluginViewDecl,
+} from '@shared/plugin-views'
 import { HostError } from '../errors'
 import { t } from '../i18n'
 
@@ -53,6 +61,7 @@ const MAX_LIST = 64
 const LANGUAGE = /^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$/
 const SETTING_KEY = /^[a-z][a-zA-Z0-9_]{0,63}$/
 const SETTING_TYPES = ['boolean', 'string', 'select', 'secret'] as const
+const VIEW_FIELDS = new Set(['id', 'kind', 'title', 'description', 'icon'])
 
 /** Kettu's entry of the manifest, at format 1. */
 export interface KettuEntry {
@@ -61,7 +70,7 @@ export interface KettuEntry {
   titles: PluginTexts
   descriptions: PluginTexts
   settings: PluginSetting[]
-  views: Record<string, unknown>[]
+  views: PluginViewDecl[]
   /** The script's path inside the package, without the leading `./`; null without a script. */
   script: string | null
   api: number | null
@@ -182,6 +191,49 @@ function settings(value: unknown, field: string): PluginSetting[] {
   })
 }
 
+/**
+ * The views a manifest declares. An unknown kind is refused, since the script's data would not be
+ * drawn; a field or an icon a later Kettu may add is passed over with a warning.
+ */
+export function parseViews(value: unknown, where: string, warnings: string[]): PluginViewDecl[] {
+  if (value === undefined) return []
+  if (!Array.isArray(value) || value.length > PLUGIN_VIEW_LIMITS.views) throw badField(where)
+  const ids = new Set<string>()
+  return value.map((raw: unknown, index): PluginViewDecl => {
+    const at = `${where}[${index}]`
+    if (!isRecord(raw)) throw badField(at)
+    const { id, kind } = raw
+    if (typeof id !== 'string' || !PLUGIN_VIEW_ID.test(id) || ids.has(id)) {
+      throw badField(`${at}.id`)
+    }
+    ids.add(id)
+    if (!isPluginViewKind(kind)) {
+      throw refusal(
+        t('plugins.viewKind', {
+          id,
+          kind: String(kind).slice(0, 40),
+          kinds: PLUGIN_VIEW_KINDS.join(', '),
+        }),
+      )
+    }
+    for (const key of Object.keys(raw)) {
+      if (!VIEW_FIELDS.has(key)) {
+        warnings.push(t('plugins.warn.viewField', { view: id, field: key.slice(0, 100) }))
+      }
+    }
+    const title = texts(raw.title, `${at}.title`)
+    if (Object.values(title).every((text) => text.trim() === '')) throw badField(`${at}.title`)
+    const decl: PluginViewDecl = { id, kind, title }
+    const description = texts(raw.description, `${at}.description`)
+    if (Object.keys(description).length > 0) decl.description = description
+    if (raw.icon !== undefined) {
+      if (isPluginViewIcon(raw.icon)) decl.icon = raw.icon
+      else warnings.push(t('plugins.warn.viewIcon', { view: id }))
+    }
+    return decl
+  })
+}
+
 function kettuEntry(raw: Record<string, unknown>, appVersion: string, warnings: string[]) {
   const where = `extensions["${PLUGIN_NAMESPACE}"]`
   const { format } = raw
@@ -248,12 +300,9 @@ function kettuEntry(raw: Record<string, unknown>, appVersion: string, warnings: 
       }
     }
   }
-  let views: Record<string, unknown>[] = []
-  if (raw.views !== undefined) {
-    if (!Array.isArray(raw.views) || raw.views.length > MAX_LIST || !raw.views.every(isRecord)) {
-      throw badField(`${where}.views`)
-    }
-    views = raw.views as Record<string, unknown>[]
+  const views = parseViews(raw.views, `${where}.views`, warnings)
+  if (views.length > 0 && script === null) {
+    throw refusal(t('plugins.viewsNeedScript', { view: views[0]!.id }))
   }
   const entry: KettuEntry = {
     kettu: range,

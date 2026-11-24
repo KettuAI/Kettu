@@ -103,6 +103,177 @@ export interface KettuCalls {
   }
 }
 
+export type ViewIcon =
+  | 'alert'
+  | 'bell'
+  | 'branch'
+  | 'bug'
+  | 'calendar'
+  | 'chart'
+  | 'check'
+  | 'clock'
+  | 'code'
+  | 'comment'
+  | 'database'
+  | 'file'
+  | 'flag'
+  | 'folder'
+  | 'globe'
+  | 'info'
+  | 'link'
+  | 'list'
+  | 'lock'
+  | 'mail'
+  | 'play'
+  | 'plus'
+  | 'pull-request'
+  | 'reload'
+  | 'rocket'
+  | 'search'
+  | 'settings'
+  | 'sparkles'
+  | 'star'
+  | 'tag'
+  | 'tool'
+  | 'trash'
+  | 'user'
+
+/** What a view is told when it opens, and what an action is told when it runs. */
+export interface ViewRequest {
+  /** The id the manifest declares the view by. */
+  view: string
+  /** What the view was opened with, from an action's `open.params`; at most 8 entries of 200 characters. */
+  params: Record<string, string>
+  locale: 'en' | 'zh-CN'
+}
+
+export interface ViewActionRequest extends ViewRequest {
+  action: string
+  /** The row whose action it is, in a list. */
+  row?: string
+  /** A form's values: switches as booleans, choices and texts as text. */
+  values?: Record<string, string | boolean>
+}
+
+/**
+ * A button, or a row's action. It runs the script's `view.action` listener, or with `open` goes to
+ * another view of the same plugin without running it. Within one list `id`s are unique and at most
+ * one action is `primary`; `destructive` ones are confirmed before they run.
+ */
+export interface ViewAction {
+  id: string
+  /** At most 60 characters. */
+  label: string
+  icon?: ViewIcon
+  /** At most 200 characters, shown where the view has room for it. */
+  description?: string
+  primary?: boolean
+  destructive?: boolean
+  /** The question of the confirmation, at most 300 characters. */
+  confirm?: string
+  disabled?: boolean
+  open?: { view: string; params?: Record<string, string> }
+}
+
+export interface ViewBadge {
+  /** At most 40 characters. */
+  text: string
+  tone?: 'neutral' | 'info' | 'success' | 'warning' | 'danger'
+}
+
+interface ViewCommon {
+  /** Up to 4 short parts of what is shown, such as a project and a period, of at most 80 characters. */
+  scope?: string[]
+  /** Up to 12 buttons at the foot. */
+  actions?: ViewAction[]
+}
+
+export interface ViewRow {
+  /** Unique in the list, at most 128 characters. */
+  id: string
+  /** At most 200 characters. */
+  title: string
+  /** At most 300 characters. */
+  subtitle?: string
+  /** The subtitle in the code face. */
+  mono?: boolean
+  icon?: ViewIcon
+  /** At most 4. */
+  badges?: ViewBadge[]
+  /** A figure at the row's end, at most 40 characters. */
+  end?: string
+  /** At most 4. The first runs when the row is clicked; every one is in the row's menu. */
+  actions?: ViewAction[]
+}
+
+/** For a view of kind `list`. Rows past 200 are dropped. */
+export interface ListViewData extends ViewCommon {
+  rows: ViewRow[]
+  empty?: { title: string; description?: string }
+}
+
+/** For a view of kind `detail`. */
+export interface DetailViewData extends ViewCommon {
+  title?: string
+  subtitle?: string
+  icon?: ViewIcon
+  badges?: ViewBadge[]
+  /** Up to 50 labels with values of at most 500 characters. */
+  fields?: { label: string; value: string; mono?: boolean }[]
+  /** Plain Markdown of at most 20,000 characters, drawn as a reply is; HTML is not drawn. */
+  body?: string
+}
+
+interface FormFieldBase {
+  /** Unique in the form, as `values` names it. */
+  key: string
+  label: string
+  description?: string
+}
+
+export type FormField =
+  | (FormFieldBase & { type: 'switch'; value?: boolean })
+  | (FormFieldBase & {
+      type: 'choice'
+      /** Up to 50. */
+      options: { value: string; label: string }[]
+      value?: string
+    })
+  | (FormFieldBase & {
+      type: 'text'
+      value?: string
+      placeholder?: string
+      /** At most 2,000; 500 when left out. */
+      maxLength?: number
+      /** The form cannot be sent while it is empty. */
+      required?: boolean
+    })
+
+/** For a view of kind `form`: up to 30 fields. Every action of the view is told the values. */
+export interface FormViewData extends ViewCommon {
+  fields: FormField[]
+  /** The button that sends the values; it may not open a view. */
+  submit: ViewAction
+}
+
+/** For a view of kind `actions`: one to 12 buttons, one per line. */
+export interface ActionsViewData extends ViewCommon {
+  text?: string
+  actions: ViewAction[]
+}
+
+export type ViewData = ListViewData | DetailViewData | FormViewData | ActionsViewData
+
+/**
+ * What an action may answer. `error` refuses it, in the script's own words; `notice` is shown after
+ * it; `open` goes to another view of the plugin instead of reloading the one that was shown.
+ */
+export interface ViewActionResult {
+  notice?: string
+  error?: string
+  open?: { view: string; params?: Record<string, string> }
+}
+
 export type StopReason = 'end_turn' | 'max_tokens' | 'max_turn_requests' | 'refusal' | 'cancelled'
 
 export type ToolKind =
@@ -217,6 +388,20 @@ export interface KettuEvents {
   'task.stepStarted': TaskStepInfo
   /** Needs `sessions.summary`: a step ended, with its outcome followed or sent back by the user. */
   'task.stepEnded': TaskStepInfo
+  /**
+   * A hook that needs no permission: a view the manifest declares under `views` was opened or
+   * refreshed. The first listener that returns data answers, in the shape the view's kind takes;
+   * a window draws it with Kettu's own components. The script is woken by the view, and the
+   * answer may take as long as a call (30 seconds); one that does not fit shows as an error in
+   * that view alone.
+   */
+  'view.data': ViewRequest
+  /**
+   * A hook that needs no permission: one of a view's actions ran. The first listener that returns
+   * decides what the window shows, and a listener that returns nothing means it went well; the
+   * view is read again unless the answer opens another.
+   */
+  'view.action': ViewActionRequest
 }
 
 export interface Attachment {
@@ -233,6 +418,8 @@ export interface Attachment {
 export interface KettuHookResults {
   'session.beforeSend': { attach?: Attachment[] } | void
   'session.permissionRequested': { deny: string } | void
+  'view.data': ViewData | void
+  'view.action': ViewActionResult | void
 }
 
 export interface Kettu {

@@ -109,8 +109,16 @@ export type AgentToPluginHost =
       deadline: PluginDeadline
     }
   | { type: 'event'; requestId: number; pluginId: string; name: string; payload: unknown }
-  // An event whose listeners answer: what each returned or resolved to, within the hook deadline.
-  | { type: 'hook'; requestId: number; pluginId: string; name: string; payload: unknown }
+  // An event whose listeners answer: what each returned or resolved to, within the hook deadline,
+  // or within the call's when `deadline` says `call`.
+  | {
+      type: 'hook'
+      requestId: number
+      pluginId: string
+      name: string
+      payload: unknown
+      deadline?: PluginDeadline
+    }
   | { type: 'deactivate'; requestId: number; pluginId: string }
   | { type: 'enable'; requestId: number; pluginId: string }
   // The plugins disabled before this process started, which a restart must not enable.

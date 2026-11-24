@@ -39,6 +39,30 @@ agent does not ask.
 Whatever is granted, a script cannot run commands, read project files, ask for system permissions,
 read an agent's or GitHub's credentials, reach another plugin's data or touch Kettu's window.
 
+## Views
+
+A manifest declares views under `extensions["sh.kettu"].views`, each with an `id`, a `kind` (`list`,
+`detail`, `form` or `actions`), a `title` by language and optionally a `description` and an `icon`.
+A plugin that declares views needs a script. Opening a view wakes the script, which answers the
+`view.data` hook with the data of the declared kind, and an action the user runs reaches its
+`view.action` hook. Neither needs a permission. Kettu checks the answer and draws it with its own
+components, in the desktop app and in the web client, so a script only gives data and never
+draws; an answer that does not fit, a script that throws or one that is not done in 30 seconds
+shows as an error in that view and nothing else.
+
+| Kind      | Data                                                                |
+| --------- | ------------------------------------------------------------------- |
+| `list`    | `rows` with a title, subtitle, icon, badges, end figure and actions |
+| `detail`  | a title, fields and a Markdown `body`                               |
+| `form`    | switch, choice and text `fields` and a `submit` action              |
+| `actions` | a line of text and the buttons that run the script's actions        |
+
+Every kind may also carry a `scope` for its context bar and `actions` as buttons at its foot. An
+action runs the script, or with `open` goes to another view of the plugin; a `destructive` one is
+confirmed first. Texts are cut at their limits, rows past 200 are dropped, and any other list past
+its limit is refused; `index.d.ts` states the limits. An unknown icon is left out, and a field a later
+version adds is ignored.
+
 ## Versions
 
 A plugin names the API version it was written for in `api`. Kettu adds calls inside one version and

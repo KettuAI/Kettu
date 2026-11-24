@@ -77,7 +77,7 @@ describe('the sh.kettu entry', () => {
             options: [{ value: 'kind', title: 'Kind' }],
           },
         ],
-        views: [{ kind: 'panel' }],
+        views: [{ id: 'issues', kind: 'list', title: 'Issues', icon: 'bug' }],
         script: './sh.kettu/main.js',
         api: 1,
         permissions: ['network:api.example.com', 'tools', 'tools'],
@@ -92,6 +92,46 @@ describe('the sh.kettu entry', () => {
       permissions: ['network:api.example.com', 'tools'],
     })
     expect(parsed.kettu?.settings).toHaveLength(2)
+    expect(parsed.kettu?.views).toEqual([
+      { id: 'issues', kind: 'list', title: { en: 'Issues' }, icon: 'bug' },
+    ])
+  })
+
+  it('reads views of every kind, with titles by language', () => {
+    const parsed = read(
+      kettu({
+        script: './main.js',
+        api: 1,
+        views: ['list', 'detail', 'form', 'actions'].map((kind) => ({
+          id: `my-${kind}`,
+          kind,
+          title: { en: 'A', 'zh-CN': '甲' },
+          description: 'About it',
+        })),
+      }),
+    )
+    expect(parsed.kettu?.views.map((view) => view.kind)).toEqual([
+      'list',
+      'detail',
+      'form',
+      'actions',
+    ])
+    expect(parsed.kettu?.views[0]).toMatchObject({
+      title: { en: 'A', 'zh-CN': '甲' },
+      description: { en: 'About it' },
+    })
+  })
+
+  it('passes over a view field and an icon a later Kettu may add, with a warning', () => {
+    const parsed = read(
+      kettu({
+        script: './main.js',
+        api: 1,
+        views: [{ id: 'a', kind: 'list', title: 'A', icon: 'unicorn', badge: 'new' }],
+      }),
+    )
+    expect(parsed.kettu?.views).toEqual([{ id: 'a', kind: 'list', title: { en: 'A' } }])
+    expect(parsed.warnings).toHaveLength(2)
   })
 
   it('reads the events that wake the script, only those whose permission it asks for', () => {
@@ -157,7 +197,31 @@ describe('the sh.kettu entry', () => {
       'a secret with a default',
       kettu({ settings: [{ key: 'a', type: 'secret', title: 'A', default: 'x' }] }),
     ],
-    ['views that are not objects', kettu({ views: ['panel'] })],
+    ['views that are not objects', kettu({ script: './m.js', api: 1, views: ['panel'] })],
+    [
+      'a view of a kind it does not draw',
+      kettu({ script: './m.js', api: 1, views: [{ id: 'a', kind: 'panel', title: 'A' }] }),
+    ],
+    [
+      'a view without a title',
+      kettu({ script: './m.js', api: 1, views: [{ id: 'a', kind: 'list' }] }),
+    ],
+    [
+      'a view whose id is not an id',
+      kettu({ script: './m.js', api: 1, views: [{ id: 'A b', kind: 'list', title: 'A' }] }),
+    ],
+    [
+      'two views with one id',
+      kettu({
+        script: './m.js',
+        api: 1,
+        views: [1, 2].map(() => ({ id: 'a', kind: 'list', title: 'A' })),
+      }),
+    ],
+    [
+      'views without a script to give them data',
+      kettu({ views: [{ id: 'a', kind: 'list', title: 'A' }] }),
+    ],
   ])('refuses %s', (_, text) => {
     expect(() => read(text)).toThrowError(expect.objectContaining({ code: 'invalid_params' }))
   })

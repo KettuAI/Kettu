@@ -186,6 +186,7 @@ import { pathKey } from './paths'
 import { PluginHostClient } from './plugin-runtime/client'
 import { PluginHooks } from './plugin-runtime/hooks'
 import { InstalledScripts } from './plugin-runtime/installed'
+import { PluginViews } from './plugin-runtime/views'
 import { createPluginApi, type ColorMode, type PLUGIN_EVENTS } from './plugin-runtime/functions'
 import { PreparedRecords, preparedFile, settingsTargets } from './prepared'
 import { processControl, type ProcessControl } from './process-tree'
@@ -619,6 +620,13 @@ export class AgentHost {
   private readonly pluginHooks = new PluginHooks({
     client: this.pluginHost,
     title: (pluginId) => this.plugins.titleOf(pluginId),
+    log: (level, message) => writeLog(level, 'plugins', message),
+  })
+  /** What a plugin's views are asked of its script, and what it answers. */
+  private readonly pluginViews = new PluginViews({
+    client: this.pluginHost,
+    views: (pluginId) => this.plugins.views(pluginId),
+    locale: () => this.settings.locale,
     log: (level, message) => writeLog(level, 'plugins', message),
   })
   private lastProcesses = '[]'
@@ -3596,6 +3604,10 @@ export class AgentHost {
       'plugins.applyUpdate': ({ pluginId }) => this.plugins.applyUpdate(pluginId),
       'plugins.declineUpdate': ({ pluginId }) => this.plugins.declineUpdate(pluginId),
       'plugins.rollBack': ({ pluginId }) => this.plugins.rollBack(pluginId),
+      'plugins.viewData': ({ pluginId, viewId, params }) =>
+        this.pluginViews.data(pluginId, viewId, params ?? {}),
+      'plugins.viewAction': ({ pluginId, viewId, params, ...input }) =>
+        this.pluginViews.act(pluginId, viewId, params ?? {}, input),
       'plugins.resources': async ({ kind }) => ({ items: await this.plugins.resources(kind) }),
       'commands.list': async () => ({ commands: await this.commands.list() }),
       'roles.list': async () => ({ roles: await this.roles.list() }),

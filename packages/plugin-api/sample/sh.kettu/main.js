@@ -32,3 +32,43 @@ kettu.on('session.permissionRequested', ({ request }) => {
   if (request.command?.includes('rm -rf'))
     return { deny: 'A recursive delete is not allowed here.' }
 })
+
+// Views: `view.data` answers with what a view shows, in the shape of the kind the manifest gives it.
+kettu.on('view.data', async ({ view, params }) => {
+  const byState = await exports.digest()
+  if (view === 'states') {
+    return {
+      rows: Object.entries(byState).map(([state, count]) => ({
+        id: state,
+        title: state,
+        end: String(count),
+        actions: [{ id: 'open', label: 'Details', open: { view: 'state', params: { state } } }],
+      })),
+      empty: { title: 'No sessions yet' },
+    }
+  }
+  if (view === 'state') {
+    return {
+      title: params.state,
+      fields: [{ label: 'Sessions', value: String(byState[params.state ?? ''] ?? 0) }],
+      body: `Sessions that are **${params.state}** now.`,
+    }
+  }
+  if (view === 'label') {
+    return {
+      fields: [{ type: 'text', key: 'label', label: 'Label', value: 'digest', required: true }],
+      submit: { id: 'save', label: 'Save', primary: true },
+    }
+  }
+  return {
+    text: 'Send the digest to the webhook.',
+    actions: [{ id: 'post', label: 'Post now', primary: true }],
+  }
+})
+
+// An action's answer is a notice to show, or an error that refuses it.
+kettu.on('view.action', async ({ action }) => {
+  if (action === 'post') return { notice: `Posted, the webhook answered ${await exports.post()}` }
+  if (action === 'save') return { notice: 'Saved' }
+  return { error: `No action ${action}` }
+})

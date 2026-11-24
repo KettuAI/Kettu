@@ -18,6 +18,7 @@ import type island from './locales/en/island.json'
 import type main from './locales/en/main.json'
 import type marketplace from './locales/en/marketplace.json'
 import type onboarding from './locales/en/onboarding.json'
+import type pluginViews from './locales/en/plugin-views.json'
 import type report from './locales/en/report.json'
 import type overview from './locales/en/overview.json'
 import type routines from './locales/en/routines.json'
@@ -57,6 +58,7 @@ declare module 'i18next' {
       main: typeof main
       marketplace: typeof marketplace
       onboarding: typeof onboarding
+      'plugin-views': typeof pluginViews
       report: typeof report
       overview: typeof overview
       routines: typeof routines

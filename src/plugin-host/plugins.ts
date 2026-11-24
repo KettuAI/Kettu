@@ -81,8 +81,13 @@ export class PluginManager {
     this.active(pluginId).event(name, payload)
   }
 
-  hook(pluginId: string, name: string, payload: unknown): Promise<unknown[]> {
-    return this.active(pluginId).hook(name, payload)
+  hook(
+    pluginId: string,
+    name: string,
+    payload: unknown,
+    deadline: PluginDeadline = 'before-send',
+  ): Promise<unknown[]> {
+    return this.active(pluginId).hook(name, payload, deadline)
   }
 
   /** Unloads the plugin; it stays known, with its crashes. */

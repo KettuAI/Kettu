@@ -576,6 +576,19 @@ describe('updating a plugin', () => {
     expect(after[0]!.revision).not.toBe(before[0]!.revision)
   })
 
+  it('wakes a script for the views it declares, and lists them only while it is on', async () => {
+    const h = await host()
+    h.market.files = packageFiles(main, {
+      ...script,
+      views: [{ id: 'issues', kind: 'list', title: 'Issues' }],
+    })
+    const { id } = await h.plugins.install((await h.plugins.inspect(fromMarket)).token)
+    expect(h.plugins.scripts()[0]!.activation).toEqual(['view:issues'])
+    expect(h.plugins.views(id)).toEqual([{ id: 'issues', kind: 'list', title: { en: 'Issues' } }])
+    await h.plugins.setEnabled(id, false)
+    expect(h.plugins.views(id)).toEqual([])
+  })
+
   it('holds an update that adds a script, and stays where it is once declined', async () => {
     const { h, id } = await installed()
     next(h, '1.1.0', packageFiles(main, script))
