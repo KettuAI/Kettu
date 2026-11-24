@@ -1500,6 +1500,7 @@
 .ks-answered__answer {
   color: var(--thread-ink);
   overflow-wrap: anywhere;
+  white-space: pre-wrap;
 }
 .ks-answered__answer--quiet {
   display: inline-flex;
