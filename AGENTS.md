@@ -38,6 +38,8 @@ Electron 44, electron-vite 6 (Vite 8), React 19, TypeScript 6 in strict mode, Ta
 
 Beyond the UI stack: `@agentclientprotocol/sdk` for ACP (protocol v1 through the SDK's `unstable` entrypoint, whose schema carries the subagent updates), `@modelcontextprotocol/sdk` for the artifacts service's MCP server, `electron-updater` for updates, Vitest for tests, `react-day-picker` for the usage page's date range picker, `uqr` for the pairing QR code in Settings › Remote access, `perfect-freehand` for the strokes of the artifact canvas's pen, `tldts` for the registrable domain the link confirmation names and the public names a link's site icon is asked for, `country-flag-icons` for the flags of the interface languages in Settings › General, `pdfjs-dist` for PDF previews in the Files pane, `docx-preview` for Word previews there, SheetJS Community Edition (`xlsx`, installed from SheetJS's own distribution since npm's copy is old) for Excel previews, `semver` for matching harness versions against the npm ranges of Kettu's signed harness compatibility manifest, `jsonc-parser` and `@decimalturn/toml-patch` for changing one key of a harness's JSONC or TOML configuration file while keeping the user's comments, and the Inter, Manrope, Source Serif 4 and JetBrains Mono faces from `@fontsource-variable`: the built-in theme sets the interface and replies in Inter, page and dialog titles in Manrope and code in JetBrains Mono, and a theme may choose others.
 
+Plugins' scripts run in the plugin host on QuickJS compiled to WebAssembly (`quickjs-emscripten-core` with `@jitl/quickjs-wasmfile-release-sync`), one instance per plugin. A script reaches only the host functions listed in `src/plugin-host/host-functions.ts` and `src/agent-host/plugin-runtime/functions.ts`; nothing else of the host is passed in, and every value crosses as JSON.
+
 Computer use runs Cua Driver's `cua-driver` program (MIT) as a child of the agent host, in its direct MCP mode with its usage reports and update checks off. It is no npm dependency: `tools/install/cua-driver.mjs` fetches the pinned release for the target into `resources/cua-driver/`, checked by SHA-256, and the app ships it in its resources.
 
 Claude Code's `@anthropic-ai/claude-agent-sdk` is never a dependency: Kettu installs it into its data folder on first use and loads it at runtime, because the SDK's license grants no right to redistribute it. Codex's `@openai/codex` is not one either: Kettu runs the user's own `codex`. The repository holds only its own types for the parts of the SDK it uses, and lint rejects a value import of the package.
@@ -77,6 +79,7 @@ src/
 ├── preload/           Sandboxed bridges exposed as window.kettu: the window's and the menu bar panel's
 ├── agent-host/        Utility process: agents, sessions, projects, git
 ├── terminal-host/     Utility process: the terminal's shells through node-pty
+├── plugin-host/       Utility process: plugins' scripts, each in a QuickJS engine of its own
 ├── remote-host/       Utility process: paired devices' encrypted connections to the agent host
 ├── daemon/            The `kettu` CLI: runs the hosts under Node.js on a computer without the app
 ├── renderer/src/      React UI

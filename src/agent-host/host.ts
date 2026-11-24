@@ -23,6 +23,7 @@ import type {
 } from '@shared/agent-host'
 import { OWNER } from '@shared/artifact-comments'
 import { flushLog, logFolder, redactLogText, writeLog } from '@shared/log/process-log'
+import type { AgentToPluginHost } from '@shared/plugin-host'
 import { writeReport } from '@shared/log/report-bundle'
 import { parseReportRequest } from '@shared/report'
 import { harnessOf, takesStartMode, type HarnessId } from '@shared/agents'
@@ -179,6 +180,8 @@ import { GitRetains } from './git/retains'
 import type { SkillsListResponse } from './codex/protocol'
 import { completePath } from './path-completion'
 import { pathKey } from './paths'
+import { PluginHostClient } from './plugin-runtime/client'
+import { PLUGIN_FUNCTIONS } from './plugin-runtime/functions'
 import { PreparedRecords, preparedFile, settingsTargets } from './prepared'
 import { processControl, type ProcessControl } from './process-tree'
 import { ProjectHooksAnswers } from './project-hooks'
@@ -568,6 +571,15 @@ export class AgentHost {
   private readonly publishDrafts: PublishDrafts
   /** The Marketplace tools of Kettu's MCP service. */
   private readonly marketTools: MarketTools
+  /**
+   * The plugin host, which runs plugins' scripts: a plugin is registered with its id, the path of
+   * its bundled script and what its manifest says wakes it, and loaded only when woken.
+   */
+  readonly plugins = new PluginHostClient({
+    want: (run) => this.options.send({ type: 'host:plugin-host', run }),
+    functions: PLUGIN_FUNCTIONS,
+    log: (level, message) => writeLog(level, 'plugins', message),
+  })
   private lastProcesses = '[]'
   private sentFolders: string | null = null
   private stopping: Promise<void> | null = null
@@ -2937,6 +2949,11 @@ export class AgentHost {
   /** `host:terminal-handed-back`: the user handed a terminal back; the thread says for how long. */
   terminalHandedBack(sessionId: string, durationMs: number): void {
     this.sessions.controlHandedBack(sessionId, 'terminal', durationMs)
+  }
+
+  /** `host:plugin-port`: the plugin host is ready and this is its port. */
+  connectPluginHost(port: PortChannel<AgentToPluginHost>): void {
+    this.plugins.attach(port)
   }
 
   /** `device-result`: the device host's answer to a call this host forwarded. */

@@ -37,6 +37,7 @@ export default defineConfig([
       'src/preload/**/*.ts',
       'src/agent-host/**/*.ts',
       'src/terminal-host/**/*.ts',
+      'src/plugin-host/**/*.ts',
       'src/remote-host/**/*.ts',
       'src/daemon/**/*.ts',
       'tools/**/*.{ts,mjs}',
@@ -58,10 +59,16 @@ export default defineConfig([
     files: [
       'src/agent-host/**/*.ts',
       'src/terminal-host/**/*.ts',
+      'src/plugin-host/**/*.ts',
       'src/remote-host/**/*.ts',
       'src/daemon/**/*.ts',
     ],
-    ignores: ['src/agent-host/index.ts', 'src/terminal-host/index.ts', 'src/remote-host/index.ts'],
+    ignores: [
+      'src/agent-host/index.ts',
+      'src/terminal-host/index.ts',
+      'src/plugin-host/index.ts',
+      'src/remote-host/index.ts',
+    ],
     rules: {
       'no-restricted-imports': [
         'error',
