@@ -15,7 +15,8 @@ export async function openAttachmentPath(
   if (!path) return
   if (attachment.type === 'file' && projectPath) {
     const inside = relativePath(path, projectPath)
-    if (inside !== path) return openFile(projectPath, inside.replace(/\\/g, '/'))
+    if (inside !== path)
+      return openFile(projectPath, inside.replace(/\\/g, '/'), null, { preview: true })
   }
   await window.kettu.shell.showItem(path)
 }

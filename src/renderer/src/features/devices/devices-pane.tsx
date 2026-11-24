@@ -49,11 +49,10 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui
 import { PillDock } from '@renderer/components/control/pill-dock'
 import { SurfacePill } from '@renderer/components/control/surface-pill'
 import { useControlAgent } from '@renderer/components/control/use-control-agent'
-import { SurfaceTabs } from '@renderer/features/shell/surface-tabs'
 import {
-  PaneHead,
+  PaneBody,
+  PaneContext,
   PaneIcon,
-  PaneSheet,
   PaneSpinner,
   PanelButton,
 } from '@renderer/features/shell/panel-button'
@@ -101,16 +100,11 @@ const BUTTONS: {
   [{ button: 'rotate', platforms: ['ios', 'android'], icon: RotateClockwiseIcon }],
 ]
 
-/** The side panel's Mobile devices pane: the devices a session holds, one tab each. */
-export function DevicesPane({
-  panel,
-  projectPath,
-  maximized,
-}: {
-  panel: string
-  projectPath: string
-  maximized: boolean
-}) {
+/**
+ * What a device's tab shows in the side panel: the context bar with the device and its tools,
+ * and its screen. With no device selected it lists the ones the session can open.
+ */
+export function DevicesPane({ panel }: { panel: string }) {
   const { t } = useTranslation('devices')
   const sessionId = panelSession(panel)
   const devices = useDevicesStore((s) => s.devices)
@@ -224,51 +218,57 @@ export function DevicesPane({
   }
 
   return (
-    <PaneSheet pane="devices" maximized={maximized} data-devices-panel="">
-      <PaneHead
-        panel={panel}
-        pane="devices"
-        maximized={maximized}
-        tools={
-          <>
-            <PanelButton
-              label={t('actions.screenshot')}
-              disabled={!live || !sessionId}
-              onClick={() => selected && sessionId && void saveScreenshot(selected, sessionId)}
-            >
-              <PaneIcon icon={Camera01Icon} />
-            </PanelButton>
-            {recording ? (
-              <>
-                <Elapsed since={recording.since} />
-                <PanelButton
-                  label={t('actions.stopRecording')}
-                  className="kp-tool--stop"
-                  onClick={stopRecording}
-                >
-                  <PaneIcon icon={StopIcon} />
-                </PanelButton>
-              </>
-            ) : (
+    <PaneBody data-devices-panel="">
+      {selected && (
+        <PaneContext
+          tools={
+            <>
               <PanelButton
-                label={t('actions.record')}
-                disabled={!live || !canRecord()}
-                onClick={() => selected && startRecording(selected)}
+                label={t('actions.screenshot')}
+                disabled={!live || !sessionId}
+                onClick={() => selected && sessionId && void saveScreenshot(selected, sessionId)}
               >
-                <PaneIcon icon={RecordIcon} />
+                <PaneIcon icon={Camera01Icon} />
               </PanelButton>
+              {recording ? (
+                <>
+                  <Elapsed since={recording.since} />
+                  <PanelButton
+                    label={t('actions.stopRecording')}
+                    className="kp-tool--stop"
+                    onClick={stopRecording}
+                  >
+                    <PaneIcon icon={StopIcon} />
+                  </PanelButton>
+                </>
+              ) : (
+                <PanelButton
+                  label={t('actions.record')}
+                  disabled={!live || !canRecord()}
+                  onClick={() => selected && startRecording(selected)}
+                >
+                  <PaneIcon icon={RecordIcon} />
+                </PanelButton>
+              )}
+              <MoreMenu device={selected} sessionId={sessionId} running={running} />
+            </>
+          }
+        >
+          <span className="kp-ctx__place" title={selected.name}>
+            <b>{selected.name}</b>
+            {selected.osVersion && (
+              <span>
+                {selected.platform === 'ios' ? 'iOS' : 'Android'} {selected.osVersion}
+              </span>
             )}
-            <MoreMenu device={selected} sessionId={sessionId} running={running} />
-          </>
-        }
-      >
-        <SurfaceTabs panel={panel} projectPath={projectPath} />
-      </PaneHead>
+          </span>
+        </PaneContext>
+      )}
       <div className="kp-body">
         {sessionId && <DeviceRequest sessionId={sessionId} />}
         {body}
       </div>
-    </PaneSheet>
+    </PaneBody>
   )
 }
 

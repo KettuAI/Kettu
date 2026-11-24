@@ -15,7 +15,7 @@ export function showFileAction(path: string, projectPath: string | null, url: st
     inFiles: !!ref,
     show: (): Promise<void> => {
       if (ref && projectPath) {
-        openFile(projectPath, ref.path)
+        openFile(projectPath, ref.path, null, { preview: true })
         return Promise.resolve()
       }
       return window.kettu.media.reveal(url)

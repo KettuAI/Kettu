@@ -1,22 +1,11 @@
 import { useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from 'react'
 import type { IconSvgElement } from '@hugeicons/react'
-import {
-  BrowserIcon,
-  BubbleChatQuestionIcon,
-  Cancel01Icon,
-  ComputerIcon,
-  DashboardSquare02Icon,
-  File01Icon,
-  GitCompareIcon,
-  MoreHorizontalIcon,
-  SidebarRightIcon,
-} from '@hugeicons/core-free-icons'
+import { Cancel01Icon, MoreHorizontalIcon, SidebarRightIcon } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
 import type { SessionSummary } from '@shared/agent-host'
 import type { SessionView } from '@shared/thread'
 import {
   DropdownMenu,
-  DropdownMenuCheckboxItem,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
@@ -24,7 +13,6 @@ import {
   DropdownMenuTrigger,
 } from '@renderer/components/ui/dropdown-menu'
 import { leaveSession } from '@renderer/app/actions'
-import { Kbd } from '@renderer/components/ui/kbd'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
 import { summaryParts } from '@renderer/features/board/board-model'
 import { useBoardActivity, useBoardNews } from '@renderer/features/board/use-board-activity'
@@ -38,64 +26,28 @@ import { runSessionMenuAccelerator } from '@renderer/features/sidebar/session-me
 import { formatShortcut, isMac, isWeb } from '@renderer/lib/platform'
 import { useDevicesStore } from '@renderer/stores/devices'
 import { useBrowserStore } from '@renderer/stores/browser'
-import { useTerminalAllowed } from '@renderer/stores/hosts'
-import { isSurfacePane, type SurfaceKind } from '@renderer/stores/surface-tabs'
-import { hostOfSession, sessionTitle, useSessionsStore } from '@renderer/stores/sessions'
+import { sessionTitle, useSessionsStore } from '@renderer/stores/sessions'
+import { useSideChatNews } from '@renderer/stores/side-chat'
 import {
   closeSplitPane,
   focusPane,
   panelSession,
   shownPanel,
-  toggleBoard,
-  toggleSideChat,
   toggleSidePane,
   useViewStore,
-  type SidePane,
 } from '@renderer/stores/view'
-import { openSideChat, useSideChatNews } from '@renderer/stores/side-chat'
-import { REQUESTS_ICON } from '@renderer/features/requests/icon'
-import { readsModelRequests } from '@renderer/features/requests/support'
-import { usePhoneWindow } from './narrow'
-import { openSurfaces } from './open-surfaces'
-import { requestSurfaceListFocus } from './surface-rows'
+import { reopenSidePanel } from './open-surfaces'
+import { requestSurfaceListFocus, SURFACE_ICON } from './surface-rows'
+import { SurfaceMenu } from './surface-tabs'
 import { PaneIcon } from './panel-button'
 import { NoDrag } from './top-bar'
 
-type Pane = Exclude<SidePane, 'artifact'>
-
-// The pane each panel showed last, which the side panel button opens again.
-const lastPanes = new Map<string, Pane>()
-let tracking = false
-function trackLastPanes(): void {
-  if (tracking) return
-  tracking = true
-  const record = (panes: Record<string, SidePane>) => {
-    for (const [panel, pane] of Object.entries(panes))
-      if (pane !== 'artifact') lastPanes.set(panel, pane)
-  }
-  record(useViewStore.getState().sidePane)
-  useViewStore.subscribe((state, previous) => {
-    if (state.sidePane !== previous.sidePane) record(state.sidePane)
-  })
-}
-
-function isSurfaceKind(pane: Pane): pane is SurfaceKind {
-  return pane === 'terminal' || pane === 'browser' || pane === 'devices'
-}
-
-/** The kind of the row the panel showed last, which its button opens again. */
-function lastSurface(panel: string): SurfaceKind | undefined {
-  trackLastPanes()
-  const last = lastPanes.get(panel)
-  return last && isSurfaceKind(last) ? last : undefined
-}
-
 /**
- * The right end of the top bar: the buttons of the side panes in common use, which open a pane or
- * fold it away when it already shows, then the side panel button while none shows and a More menu.
- * A pane that is in use or has news keeps its button; the others, and **Leave session** or **Close
- * pane**, wait in the More menu. A session's More menu leads them while the bar does not place it
- * after the title itself.
+ * The right end of a session's top bar: the shortcuts to the Board and Files tabs, which open the
+ * side panel on their tab and never fold it away, then More tools with the side panel's list, and
+ * last the side panel's button while the panel is closed. Open, the panel's own row ends with
+ * that button in the same place, so the bar has none. A session's More menu leads them while the
+ * bar does not place it after the title itself.
  */
 export function HeaderTools({
   projectPath,
@@ -117,7 +69,6 @@ export function HeaderTools({
   /** The More menu's close hands the focus on, as the title field needs after Rename. */
   menu?: { finalFocus: () => boolean; onOpenChangeComplete: (open: boolean) => void }
 }) {
-  const terminal = useTerminalAllowed(projectPath)
   const sessionId = panelSession(panel)
   // A session has a board; New session has no session yet, and a sub-agent's page shows its
   // parent's work.
@@ -125,99 +76,61 @@ export function HeaderTools({
     const origin = sessionId ? s.byId[sessionId]?.origin : undefined
     return origin !== undefined && origin !== 'subagent'
   })
-  // An agent opened the session's page while another pane showed: a dot says to look.
-  const dot = useBrowserStore((s) => (sessionId ? !!s.unseen[sessionId] : false))
-  const deviceDot = useDevicesStore((s) => (sessionId ? !!s.unseen[sessionId] : false))
-  // The session holds a device: its pane is in use, not just possible.
-  const deviceHeld = useDevicesStore(
-    (s) => !!sessionId && s.devices.some((device) => device.sessionId === sessionId),
-  )
-  // Hidden only once the host says it can run no device and the session holds none.
-  const devices = useDevicesStore(
-    (s) => !s.environment || s.environment.ios || s.environment.android || deviceHeld,
-  )
-  // The browser runs in the desktop app, for another host's agents too; a web page has no such
-  // view. A session has one, so a session still being created does not.
-  const browser = !isWeb && !!sessionId
-  // The window an agent uses shows only on the computer whose apps it uses, while it uses them.
-  const computer = !isWeb && !!session?.computer && !!summary && hostOfSession(summary) === null
-  const requests = !!sessionId && readsModelRequests(summary?.agentId)
-  const available: Pane[] = [
-    ...(computer ? (['computer'] as const) : []),
-    ...(terminal ? (['terminal'] as const) : []),
-    ...(browser ? (['browser'] as const) : []),
-    ...(sessionId && devices ? (['devices'] as const) : []),
-    // The row the three share, which one bar button opens.
-    ...(terminal || browser || (sessionId && devices) ? (['surfaces'] as const) : []),
-    ...(requests ? (['requests'] as const) : []),
-    'files',
-    'git',
-  ]
-  const phone = usePhoneWindow()
-  const more =
-    summary && onRename && onNewSubSession ? (
-      <SessionMoreMenu
-        summary={summary}
-        session={session}
-        onRename={onRename}
-        onNewSubSession={onNewSubSession}
-        menu={menu}
-      />
-    ) : null
-  if (phone) {
-    return (
-      <NoDrag className="kp-bar-tools">
-        {more}
-        <PhonePanelMenu
-          panel={panel}
-          projectPath={projectPath}
-          sessionId={board ? sessionId : null}
-          panes={available.filter((pane) => pane !== 'computer' && !isSurfaceKind(pane))}
-          dot={dot || deviceDot}
-        />
-      </NoDrag>
-    )
-  }
+  const ref = useRef<HTMLDivElement>(null)
+  const slots = useToolSlots(ref)
+  const tools = useBarTools({ panel, sessionId, board })
+  const buttons = tools.slice(0, slots)
+  const hidden = tools.filter((tool) => !buttons.includes(tool))
   return (
-    <DesktopTools
-      panel={panel}
-      projectPath={projectPath}
-      sessionId={sessionId}
-      board={board}
-      available={available}
-      news={{ browser: dot, devices: deviceDot }}
-    >
-      {more}
-    </DesktopTools>
+    <NoDrag ref={ref} className="kp-bar-tools">
+      {summary && onRename && onNewSubSession && (
+        <SessionMoreMenu
+          summary={summary}
+          session={session}
+          onRename={onRename}
+          onNewSubSession={onNewSubSession}
+          menu={menu}
+        />
+      )}
+      {buttons.map((tool) => (
+        <BarButton key={tool.id} label={tool.label} pressed={tool.open} onClick={tool.onSelect}>
+          <PaneIcon icon={tool.icon} size={16} />
+          {tool.dot && <span aria-hidden className={dotClass(tool.dot)} />}
+        </BarButton>
+      ))}
+      <MoreToolsMenu
+        panel={panel}
+        projectPath={projectPath}
+        dot={
+          hidden.some((tool) => tool.dot === 'needs')
+            ? 'needs'
+            : hidden.some((tool) => tool.dot)
+              ? 'news'
+              : undefined
+        }
+      />
+      <SidePanelButton panel={panel} projectPath={projectPath} />
+    </NoDrag>
   )
 }
 
-/** One of the bar's tools: a side pane, the board or the side chat. */
+/** One of the bar's shortcuts: a tab of the side panel in common use. */
 interface Tool {
-  id: 'board' | 'sideChat' | Pane
+  id: 'board' | 'files'
   /** The button's tooltip, with what runs in it where that matters. */
   label: string
-  /** The name in the More menu. */
-  name: string
-  shortcut?: string
   icon: IconSvgElement
-  /** Shown now: its pane is the side panel's, or its column is open. */
+  /** Its tab is the one the side panel shows. */
   open: boolean
   dot?: 'news' | 'needs'
-  /** In common use: it has a button unless the bar is too narrow. */
-  common: boolean
-  /** In use or with news: it keeps its button over the common ones. */
-  pinned: boolean
-  /** The order the bar keeps buttons in when it has room for only some, first kept. */
-  rank: number
   onSelect: () => void
 }
 
-/** A tool's button and the gap after it, and what the title, the More menu and the panel button take. */
+/** A shortcut's button and the gap after it, and what the title takes. */
 const TOOL_SLOT = 30
 const BAR_RESERVE = 150
 
-/** How many tool buttons the bar has room for beside the title, which gives way last. */
+/** How many shortcuts the bar has room for beside the title, which gives way last. */
 function useToolSlots(ref: RefObject<HTMLElement | null>): number {
   const [slots, setSlots] = useState(Number.POSITIVE_INFINITY)
   useLayoutEffect(() => {
@@ -230,7 +143,7 @@ function useToolSlots(ref: RefObject<HTMLElement | null>): number {
         parseFloat(style.paddingLeft) -
         parseFloat(style.paddingRight) -
         BAR_RESERVE
-      // Two of the slots go to the side panel button and the More menu.
+      // Two of the slots go to More tools and the side panel's button.
       setSlots(Math.max(0, Math.floor(room / TOOL_SLOT) - 2))
     }
     measure()
@@ -241,306 +154,80 @@ function useToolSlots(ref: RefObject<HTMLElement | null>): number {
   return slots
 }
 
-/** The bar's tools in the order it draws them: the board, side chat and the panes. */
+/** The bar's shortcuts in the order it draws them: the Board, then Files. */
 function useBarTools({
   panel,
   sessionId,
   board,
-  available,
 }: {
   panel: string
   sessionId: string | null
   board: boolean
-  available: Pane[]
 }): Tool[] {
   const { t } = useTranslation('shell')
   const { t: tb } = useTranslation('board')
   const context = usePane()
   const shownPane = useViewStore((s) => (shownPanel(s) === panel ? s.sidePane[panel] : undefined))
-  const boardOpen = useViewStore((s) => (sessionId ? !!s.boardOpen[sessionId] : false))
-  const chatOpen = useViewStore((s) => (sessionId ? !!s.sideChatOpen[sessionId] : false))
   const activity = useBoardActivity(sessionId ?? '')
-  const busy = activity.running + activity.needs > 0
   const boardNews = useBoardNews(sessionId)
-  const chatNews = useSideChatNews(sessionId)
+  // Selects the tab, opening the panel for it; in a pane out of focus that pane takes the focus.
+  const select = (id: Tool['id']) => () => {
+    if (context && !context.focused) focusPane(context.paneId)
+    toggleSidePane(panel, id, true)
+  }
   const tools: Tool[] = []
-  // In a pane out of focus a button shows its tool there and never closes it.
-  const outOfFocus = !!context && !context.focused
   if (board && sessionId) {
     const parts = summaryParts(tb, activity)
     tools.push({
       id: 'board',
-      label: [t('headerTools.board'), parts.running, parts.needs].filter(Boolean).join(' · '),
-      name: t('headerTools.board'),
-      icon: DashboardSquare02Icon,
-      open: boardOpen,
+      label: [t('headerTools.board'), parts.running, parts.needs].filter(Boolean).join(' \u00b7 '),
+      icon: SURFACE_ICON.board,
+      open: shownPane === 'board',
       dot: boardNews,
-      common: true,
-      pinned: boardOpen || busy,
-      rank: 4,
-      onSelect: () => {
-        if (outOfFocus) {
-          focusPane(context.paneId)
-          toggleBoard(sessionId, true)
-          return
-        }
-        toggleBoard(sessionId)
-      },
-    })
-    tools.push({
-      id: 'sideChat',
-      label: chatNews
-        ? `${t('headerTools.sideChat')} \u00b7 ${t('headerTools.sideChatNews')}`
-        : t('headerTools.sideChat'),
-      name: t('headerTools.sideChat'),
-      shortcut: 'Mod+J',
-      icon: BubbleChatQuestionIcon,
-      open: chatOpen,
-      dot: chatNews ? 'news' : undefined,
-      common: false,
-      pinned: chatOpen || chatNews,
-      rank: 7,
-      onSelect: () => {
-        if (outOfFocus) focusPane(context.paneId)
-        if (chatOpen && !outOfFocus) toggleSideChat(sessionId, false)
-        else openSideChat(sessionId)
-      },
+      onSelect: select('board'),
     })
   }
-  const pane = (
-    id: Pane,
-    label: string,
-    icon: IconSvgElement,
-    rank: number,
-    options: { shortcut?: string; common: boolean; dot?: boolean; held?: boolean },
-  ): void => {
-    if (!available.includes(id)) return
-    const open = shownPane === id
-    tools.push({
-      id,
-      label,
-      name: label,
-      shortcut: options.shortcut,
-      icon,
-      open,
-      dot: options.dot && !open ? 'news' : undefined,
-      common: options.common,
-      pinned: open || !!options.dot || !!options.held,
-      rank,
-      onSelect: () => {
-        if (outOfFocus) {
-          focusPane(context.paneId)
-          toggleSidePane(panel, id, true)
-          return
-        }
-        toggleSidePane(panel, id)
-      },
-    })
-  }
-  // The computer's window exists only while an agent uses the computer, so it is always in use.
-  pane('computer', t('headerTools.computer'), ComputerIcon, 6, { common: false, held: true })
-  pane('files', t('headerTools.files'), File01Icon, 1, { common: true })
-  const order: Tool['id'][] = ['board', 'sideChat', 'computer', 'files']
-  return tools.sort((a, b) => order.indexOf(a.id) - order.indexOf(b.id))
-}
-
-/** The tools that keep a button: the common ones and those in use, the most useful if few fit. */
-function toolsWithButtons(tools: Tool[], slots: number): Tool[] {
-  const wanted = tools.filter((tool) => tool.common || tool.pinned)
-  if (wanted.length <= slots) return wanted
-  const kept = new Set(
-    [...wanted]
-      .sort((a, b) => Number(b.pinned) - Number(a.pinned) || a.rank - b.rank)
-      .slice(0, slots),
-  )
-  return wanted.filter((tool) => kept.has(tool))
-}
-
-/** The desktop bar's right end: the tools with a button, the side panel button and the More menu. */
-function DesktopTools({
-  panel,
-  projectPath,
-  sessionId,
-  board,
-  available,
-  news,
-  children,
-}: {
-  panel: string
-  projectPath: string
-  sessionId: string | null
-  board: boolean
-  available: Pane[]
-  news: { browser: boolean; devices: boolean }
-  /** The session's More menu, which leads the bar's own. */
-  children?: ReactNode
-}) {
-  const ref = useRef<HTMLDivElement>(null)
-  const slots = useToolSlots(ref)
-  const tools = useBarTools({ panel, sessionId, board, available })
-  const buttons = toolsWithButtons(tools, slots)
-  return (
-    <NoDrag ref={ref} className="kp-bar-tools">
-      {children}
-      {buttons.map((tool) => (
-        <BarButton
-          key={tool.id}
-          label={tool.label}
-          shortcut={tool.shortcut}
-          pressed={tool.open}
-          onClick={tool.onSelect}
-        >
-          <PaneIcon icon={tool.icon} size={16} />
-          {tool.dot && <span aria-hidden className={dotClass(tool.dot)} />}
-        </BarButton>
-      ))}
-      <SidePanelButton
-        panel={panel}
-        projectPath={projectPath}
-        available={available}
-        news={news.browser || news.devices}
-      />
-      <MoreToolsMenu tools={tools.filter((tool) => !buttons.includes(tool))} />
-    </NoDrag>
-  )
+  tools.push({
+    id: 'files',
+    label: t('headerTools.files'),
+    icon: SURFACE_ICON.files,
+    open: shownPane === 'files',
+    onSelect: select('files'),
+  })
+  return tools
 }
 
 function dotClass(dot: 'news' | 'needs'): string {
   return dot === 'needs' ? 'kp-bar-dot kp-bar-dot--needs' : 'kp-bar-dot'
 }
 
-const PANE_ITEMS = {
-  surfaces: { icon: BrowserIcon, label: 'headerTools.surfaces' },
-  requests: { icon: REQUESTS_ICON, label: 'headerTools.requests' },
-  files: { icon: File01Icon, label: 'headerTools.files' },
-  git: { icon: GitCompareIcon, label: 'headerTools.git' },
-} as const
-
 /**
- * A phone's one button for what the bar's buttons open beside the thread, each over the whole
- * screen there, with Leave session or Close pane after them.
+ * More tools: the side panel's list, as its **+** shows it, then **Close pane** in a split or, on
+ * a session's only pane, **Leave session**, which does what Mod+W does there: New session, with
+ * the session kept and its turn running. Without a panel it holds only those, and has no button
+ * where it would hold nothing.
  */
-function PhonePanelMenu({
+export function MoreToolsMenu({
   panel,
   projectPath,
-  sessionId,
-  panes,
   dot,
 }: {
-  panel: string
-  projectPath: string
-  /** The session whose board and side chat it opens, or null where there are none. */
-  sessionId: string | null
-  panes: Pane[]
-  /** A pane has news. */
-  dot: boolean
+  panel?: string
+  projectPath?: string
+  /** A shortcut the bar has no room for has news. */
+  dot?: 'news' | 'needs'
 }) {
   const { t } = useTranslation('shell')
-  const { t: tc } = useTranslation('common')
   const pane = usePane()
-  const shownPane = useViewStore((s) => (shownPanel(s) === panel ? s.sidePane[panel] : undefined))
-  const boardOpen = useViewStore((s) => (sessionId ? !!s.boardOpen[sessionId] : false))
-  const chatOpen = useViewStore((s) => (sessionId ? !!s.sideChatOpen[sessionId] : false))
-  const boardNews = useBoardNews(sessionId)
-  const chatNews = useSideChatNews(sessionId)
   const view = pane?.view
+  const chatNews = useSideChatNews(panel ? panelSession(panel) : null)
   const leave =
     pane && !pane.split && view?.kind === 'session'
       ? () => leaveSession(useSessionsStore.getState().byId[view.sessionId])
       : null
-  return (
-    <DropdownMenu>
-      <DropdownMenuTrigger
-        render={<button type="button" aria-label={tc('pane.open')} className="kp-tool" />}
-      >
-        <PaneIcon icon={SidebarRightIcon} size={18} />
-        {(dot || boardNews || chatNews) && (
-          <span
-            aria-hidden
-            className={boardNews === 'needs' ? 'kp-bar-dot kp-bar-dot--needs' : 'kp-bar-dot'}
-          />
-        )}
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-56">
-        {sessionId && (
-          <>
-            <DropdownMenuCheckboxItem
-              closeOnClick
-              checked={boardOpen}
-              onCheckedChange={(open) => toggleBoard(sessionId, open)}
-            >
-              <PaneIcon icon={DashboardSquare02Icon} size={16} />
-              {t('headerTools.board')}
-            </DropdownMenuCheckboxItem>
-            <DropdownMenuCheckboxItem
-              closeOnClick
-              checked={chatOpen}
-              onCheckedChange={(open) =>
-                open ? openSideChat(sessionId) : toggleSideChat(sessionId, false)
-              }
-            >
-              <PaneIcon icon={BubbleChatQuestionIcon} size={16} />
-              {t('headerTools.sideChat')}
-            </DropdownMenuCheckboxItem>
-          </>
-        )}
-        {panes.map((id) => {
-          if (!(id in PANE_ITEMS)) return null
-          const item = PANE_ITEMS[id as keyof typeof PANE_ITEMS]
-          return (
-            <DropdownMenuCheckboxItem
-              closeOnClick
-              key={id}
-              checked={id === 'surfaces' ? isSurfacePane(shownPane) : shownPane === id}
-              onCheckedChange={(open) => {
-                if (id !== 'surfaces') toggleSidePane(panel, id, open)
-                else if (open) openSurfaces(panel, projectPath, lastSurface(panel))
-                else if (shownPane) toggleSidePane(panel, shownPane, false)
-              }}
-            >
-              <PaneIcon icon={item.icon} size={16} />
-              {t(item.label)}
-            </DropdownMenuCheckboxItem>
-          )
-        })}
-        {(leave || pane?.split) && <DropdownMenuSeparator />}
-        {pane?.split ? (
-          <DropdownMenuItem onClick={() => closeSplitPane(pane.paneId, pane.focused)}>
-            <PaneIcon icon={Cancel01Icon} size={16} />
-            {t('headerTools.closePane')}
-          </DropdownMenuItem>
-        ) : (
-          leave && (
-            <DropdownMenuItem onClick={leave}>
-              <PaneIcon icon={Cancel01Icon} size={16} />
-              {t('headerTools.leaveSession')}
-            </DropdownMenuItem>
-          )
-        )}
-      </DropdownMenuContent>
-    </DropdownMenu>
-  )
-}
-
-/**
- * The More menu: the tools without a button, then **Close pane** in a split or, on a session's
- * only pane, **Leave session**, which does what Mod+W does there: New session, with the session
- * kept and its turn running. It has no button where it would hold nothing.
- */
-export function MoreToolsMenu({ tools = [] }: { tools?: Tool[] }) {
-  const { t } = useTranslation('shell')
-  const pane = usePane()
-  const view = pane?.view
-  const leave =
-    pane && !pane.split && view?.kind === 'session'
-      ? () => leaveSession(useSessionsStore.getState().byId[view.sessionId])
-      : null
-  if (tools.length === 0 && !pane?.split && !leave) return null
-  const dot = tools.some((tool) => tool.dot === 'needs')
-    ? 'needs'
-    : tools.some((tool) => tool.dot)
-      ? 'news'
-      : undefined
+  const list = panel !== undefined && projectPath !== undefined
+  if (!list && !pane?.split && !leave) return null
+  const mark = dot ?? (chatNews ? 'news' : undefined)
   return (
     <DropdownMenu>
       <Tooltip>
@@ -554,26 +241,25 @@ export function MoreToolsMenu({ tools = [] }: { tools?: Tool[] }) {
           }
         >
           <PaneIcon icon={MoreHorizontalIcon} size={16} />
-          {dot && <span aria-hidden className={dotClass(dot)} />}
+          {mark && <span aria-hidden className={dotClass(mark)} />}
         </TooltipTrigger>
         <TooltipContent>{t('headerTools.more')}</TooltipContent>
       </Tooltip>
-      <DropdownMenuContent align="end" className="w-56">
-        {tools.map((tool) => (
-          <DropdownMenuCheckboxItem
-            closeOnClick
-            key={tool.id}
-            checked={tool.open}
-            onCheckedChange={tool.onSelect}
+      <DropdownMenuContent
+        align="end"
+        className="w-68"
+        onKeyDown={(event) => runSessionMenuAccelerator(event, isMac)}
+      >
+        {list && (
+          <span
+            className="contents"
+            // Picking from the list in a pane out of focus brings its panel into view.
+            onClickCapture={() => pane && !pane.focused && focusPane(pane.paneId)}
           >
-            <PaneIcon icon={tool.icon} size={16} />
-            {tool.name}
-            {tool.shortcut && (
-              <DropdownMenuShortcut>{formatShortcut(tool.shortcut)}</DropdownMenuShortcut>
-            )}
-          </DropdownMenuCheckboxItem>
-        ))}
-        {tools.length > 0 && (pane?.split || leave) && <DropdownMenuSeparator />}
+            <SurfaceMenu panel={panel} projectPath={projectPath} />
+          </span>
+        )}
+        {list && (pane?.split || leave) && <DropdownMenuSeparator />}
         {pane?.split ? (
           <DropdownMenuItem onClick={() => closeSplitPane(pane.paneId, pane.focused)}>
             <PaneIcon icon={Cancel01Icon} size={16} />
@@ -594,16 +280,14 @@ export function MoreToolsMenu({ tools = [] }: { tools?: Tool[] }) {
   )
 }
 
-/** A 28 px button of the bar, with its name and shortcut on hover. */
+/** A 28 px button of the bar, with its name on hover. */
 function BarButton({
   label,
-  shortcut,
   pressed,
   onClick,
   children,
 }: {
   label: string
-  shortcut?: string
   pressed?: boolean
   onClick: () => void
   children: ReactNode
@@ -623,53 +307,35 @@ function BarButton({
       >
         {children}
       </TooltipTrigger>
-      <TooltipContent>
-        {label}
-        {shortcut && <Kbd>{formatShortcut(shortcut)}</Kbd>}
-      </TooltipContent>
+      <TooltipContent>{label}</TooltipContent>
     </Tooltip>
   )
 }
 
 /**
- * The side panel's button, always on the bar: pressed while the panel shows, when it folds the
- * panel away; otherwise it opens the pane shown last, or the side panel's list when there is none.
+ * The side panel's button at the end of the bar, in the window's top right corner, while the
+ * panel is closed: it opens the tab shown last, or the side panel's list when there is none. The
+ * open panel's row ends with the same button in the same place, which folds it away.
  */
-function SidePanelButton({
-  panel,
-  projectPath,
-  available,
-  news,
-}: {
-  panel: string
-  projectPath: string
-  available: Pane[]
-  /** An agent opened a page or a device while another pane showed. */
-  news: boolean
-}) {
+function SidePanelButton({ panel, projectPath }: { panel: string; projectPath: string }) {
   const { t } = useTranslation('common')
   const context = usePane()
-  trackLastPanes()
-  const shownPane = useViewStore((s) => (shownPanel(s) === panel ? s.sidePane[panel] : undefined))
+  const sessionId = panelSession(panel)
+  const shown = useViewStore((s) => shownPanel(s) === panel && !!s.sidePane[panel])
+  // An agent opened a page or a device while the panel showed something else.
+  const pageNews = useBrowserStore((s) => (sessionId ? !!s.unseen[sessionId] : false))
+  const deviceNews = useDevicesStore((s) => (sessionId ? !!s.unseen[sessionId] : false))
+  if (shown) return null
   return (
     <BarButton
-      label={shownPane ? t('pane.collapse') : t('pane.open')}
-      pressed={!!shownPane}
+      label={t('pane.open')}
       onClick={() => {
         if (context && !context.focused) focusPane(context.paneId)
-        if (shownPane) {
-          toggleSidePane(panel, shownPane, false)
-          return
-        }
-        const last = lastPanes.get(panel)
-        const pane = last && (last === 'surfaces' || available.includes(last)) ? last : 'surfaces'
-        if (isSurfacePane(pane)) openSurfaces(panel, projectPath, lastSurface(panel))
-        else toggleSidePane(panel, pane, true)
-        if (useViewStore.getState().sidePane[panel] === 'surfaces') requestSurfaceListFocus(panel)
+        if (reopenSidePanel(panel, projectPath)) requestSurfaceListFocus(panel)
       }}
     >
       <PaneIcon icon={SidebarRightIcon} size={16} />
-      {news && !isSurfacePane(shownPane) && <span aria-hidden className="kp-bar-dot" />}
+      {(pageNews || deviceNews) && <span aria-hidden className="kp-bar-dot" />}
     </BarButton>
   )
 }

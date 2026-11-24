@@ -11,7 +11,7 @@ import { ConfirmedLink } from '@renderer/features/session/link-confirm'
 import { Glyph } from '@renderer/features/shell/glyph'
 import { cn } from '@renderer/lib/utils'
 import { openFile } from '@renderer/stores/files'
-import { toggleArtifactPane } from '@renderer/stores/view'
+import { openArtifactTab } from '@renderer/stores/view'
 
 function deliverableKey(item: TaskDeliverable): string {
   switch (item.kind) {
@@ -83,7 +83,7 @@ function Row({
           <button
             type="button"
             className="text-left"
-            onClick={() => toggleArtifactPane(panel, item.artifactId, true)}
+            onClick={() => openArtifactTab(panel, item.artifactId, { preview: true })}
           >
             <span className="thread-link">
               <Glyph
@@ -101,7 +101,7 @@ function Row({
       const inside = projectPath ? parseFileRef(item.path, projectPath, true) : null
       const open =
         projectPath && inside
-          ? () => openFile(projectPath, inside.path)
+          ? () => openFile(projectPath, inside.path, null, { preview: true })
           : local
             ? () => void window.kettu.shell.showItem(item.path)
             : null

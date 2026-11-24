@@ -13,8 +13,13 @@ function paneOf(target: Element | null): UsedPane | null {
   return null
 }
 
+// Whether the side panel was used last, whatever its tab shows.
+let panelUsed = false
+
 function track(event: Event): void {
-  used = paneOf(event.target instanceof Element ? event.target : null)
+  const target = event.target instanceof Element ? event.target : null
+  used = paneOf(target)
+  panelUsed = !!target?.closest('[data-side-panel]')
 }
 
 document.addEventListener('pointerdown', track, true)
@@ -34,4 +39,9 @@ function onScreen(pane: UsedPane): boolean {
 export function usedPane(browserFocused = false): UsedPane | null {
   const pane = browserFocused ? ({ kind: 'browser' } as const) : used
   return pane && onScreen(pane) ? pane : null
+}
+
+/** Whether the side panel is what the user used last, while it is on screen. */
+export function sidePanelUsed(browserFocused = false): boolean {
+  return (browserFocused || panelUsed) && !!document.querySelector('[data-side-panel]')
 }

@@ -211,6 +211,7 @@
     "history": "历史",
     "versionChip": "版本 {{version}}，历史",
     "present": "演示",
+    "openInMain": "在主区打开",
     "previewOnly": {
       "title": "实时页面在电脑上打开",
       "body": "在浏览器里，产物显示它的预览图。实时页面在电脑上的 Kettu 里打开，或在电脑自己的网络里打开它提供的网页版。",
@@ -224,8 +225,6 @@
     "backToLatest": "回到最新",
     "showPages": "显示所有页面",
     "chat": "对话",
-    "expand": "展开",
-    "restore": "还原",
     "modes": {
       "label": "模式",
       "view": "查看",

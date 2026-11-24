@@ -14,7 +14,7 @@ import { SessionIdContext } from '@renderer/features/session/media/grants'
 import { learnArtifactHost, sessionHost } from '@renderer/lib/host'
 import { landArtifact } from '@renderer/stores/artifact-walk'
 import { artifactListShown, artifactStanding, useArtifactsStore } from '@renderer/stores/artifacts'
-import { MAIN_ARTIFACT_PANEL, openArtifact, toggleArtifactPane } from '@renderer/stores/view'
+import { MAIN_ARTIFACT_PANEL, openArtifact, openArtifactTab } from '@renderer/stores/view'
 
 /** The kind a place belongs to, for a link whose artifact is not listed. */
 const PLACE_KIND = { frame: 'canvas', section: 'document', slide: 'slides' } as const
@@ -66,7 +66,7 @@ export function ArtifactLink({
   const open = (): void => {
     if (erased) return
     const panel = sessionId ?? MAIN_ARTIFACT_PANEL
-    if (sessionId) toggleArtifactPane(sessionId, artifactId, true)
+    if (sessionId) openArtifactTab(sessionId, artifactId, { preview: true })
     else openArtifact(artifactId)
     if (place?.kind !== 'slide' || place.slug === null || !summary) {
       landArtifact(panel, artifactId, { place })

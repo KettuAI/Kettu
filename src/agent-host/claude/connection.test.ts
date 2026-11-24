@@ -4127,6 +4127,62 @@ describe('background tasks', () => {
   })
 })
 
+describe('prompt suggestions', () => {
+  const suggestions = (target: Target) =>
+    target.effects.flatMap((effect) => (effect.kind === 'suggestion' ? [effect.text] : []))
+
+  it('asks Claude Code for them only for a session that wants them, never a hidden one', async () => {
+    const s = await setup()
+    await s.connection.newSession('/repo')
+    expect(s.sdk.last.options.promptSuggestions).toBeUndefined()
+    await s.connection.newSession('/repo', { suggestions: true })
+    expect(s.sdk.last.options.promptSuggestions).toBe(true)
+    await s.connection.newSession('/repo', { suggestions: true, hidden: 'side' })
+    expect(s.sdk.last.options.promptSuggestions).toBeUndefined()
+  })
+
+  it('passes on the suggestion that comes after the turn went idle', async () => {
+    const s = await setup()
+    const target = new Target()
+    const { sessionId } = await s.connection.newSession('/repo', { suggestions: true })
+    s.connection.register(sessionId, target)
+    s.sdk.script = (query) => {
+      query.running()
+      query.finish()
+    }
+    await s.connection.prompt(sessionId, [{ type: 'text', text: 'Hi' }])
+    s.sdk.last.emit({
+      type: 'prompt_suggestion',
+      suggestion: 'run the tests',
+      session_id: sessionId,
+    })
+    await settle()
+    expect(suggestions(target)).toEqual(['run the tests'])
+    expect(s.ignored).not.toContain('prompt_suggestion')
+  })
+
+  it('drops a suggestion that comes once the next turn started, and an empty one', async () => {
+    const s = await setup()
+    const target = new Target()
+    const { sessionId } = await s.connection.newSession('/repo', { suggestions: true })
+    s.connection.register(sessionId, target)
+    let prompts = 0
+    s.sdk.script = (query) => {
+      query.running()
+      if (++prompts === 1) query.finish()
+    }
+    await s.connection.prompt(sessionId, [{ type: 'text', text: 'Hi' }])
+    s.sdk.last.emit({ type: 'prompt_suggestion', suggestion: '  ', session_id: sessionId })
+    const next = s.connection.prompt(sessionId, [{ type: 'text', text: 'Go on' }])
+    await settle()
+    s.sdk.last.emit({ type: 'prompt_suggestion', suggestion: 'go on', session_id: sessionId })
+    await settle()
+    expect(suggestions(target)).toEqual([])
+    s.sdk.last.finish()
+    await next
+  })
+})
+
 describe('prompt content', () => {
   it('sends images as base64 and files as links, an embedded one with its text', () => {
     expect(

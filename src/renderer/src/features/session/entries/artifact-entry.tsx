@@ -29,10 +29,13 @@ import {
 import { landArtifact, useArtifactWalk } from '@renderer/stores/artifact-walk'
 import { hostOfSession, useSessionsStore } from '@renderer/stores/sessions'
 import { useThreadsStore } from '@renderer/stores/threads'
-import { openArtifact, toggleArtifactPane, useViewStore } from '@renderer/stores/view'
+import { artifactShown, openArtifact, openArtifactTab, useViewStore } from '@renderer/stores/view'
 import { useEntry, useEntryAnimation } from '../use-thread'
 import { useChanges, type Changes, type ChangedFrame } from './artifact-changes'
 import { isLastArtifactEntry, restoredVersionOf } from './artifact-writes'
+
+// A click on a card opens the preview tab, which the next card's click replaces.
+const PREVIEW = { preview: true }
 
 /**
  * A write to the artifacts service, as the artifact's card across the column: a creation with its
@@ -179,9 +182,7 @@ function EntryCard({
       s.deleted?.find((a) => a.id === entry.artifactId) ??
       null,
   )
-  const pressed = useViewStore(
-    (s) => s.sidePane[sessionId] === 'artifact' && s.sideArtifact[sessionId] === entry.artifactId,
-  )
+  const pressed = useViewStore((s) => artifactShown(s, sessionId, entry.artifactId))
   const agent = useSessionsStore((s) => s.byId[sessionId]?.agentId ?? null)
   const agentHost = useSessionsStore((s) => {
     const session = s.byId[sessionId]
@@ -213,7 +214,7 @@ function EntryCard({
   const walkAt = useArtifactWalk((s) => (pressed ? (s.at[entry.artifactId] ?? null) : null))
   const open = () => {
     if (!pressed) landArtifact(sessionId, entry.artifactId, { range })
-    toggleArtifactPane(sessionId, entry.artifactId)
+    openArtifactTab(sessionId, entry.artifactId, PREVIEW)
   }
   let what = ''
   if (entry.action !== 'delete' && entry.version !== null) {
@@ -232,7 +233,12 @@ function EntryCard({
   }
 
   return (
-    <div ref={card} className={cn('k-art-room w-full', className)}>
+    <div
+      ref={card}
+      className={cn('k-art-room w-full', className)}
+      // A double click keeps the tab the first click opened.
+      onDoubleClick={() => openArtifactTab(sessionId, entry.artifactId)}
+    >
       <ArtifactCard
         id={entry.artifactId}
         title={entry.title}
@@ -264,7 +270,7 @@ function EntryCard({
                   place: { kind: 'frame', id: frame.id },
                   open: true,
                 })
-                toggleArtifactPane(sessionId, entry.artifactId, true)
+                openArtifactTab(sessionId, entry.artifactId, PREVIEW)
               }}
             />
           ) : null
@@ -275,7 +281,7 @@ function EntryCard({
         menu={{
           onOpen: () => {
             if (!pressed) landArtifact(sessionId, entry.artifactId, { range })
-            toggleArtifactPane(sessionId, entry.artifactId, true)
+            openArtifactTab(sessionId, entry.artifactId)
           },
           onVersionHistory: () => openArtifact(entry.artifactId, { history: true }),
           inSession: true,

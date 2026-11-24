@@ -110,6 +110,7 @@ import type {
   PermissionMode,
   PermissionResult,
   PostModelSwitchHookInput,
+  PromptSuggestionMessage,
   Query,
   QueryOptions,
   ResultMessage,
@@ -491,6 +492,13 @@ export class ClaudeConnection implements AgentConnection {
 
   get isClosed(): boolean {
     return this.done
+  }
+
+  processOf(sessionId: string): number | null {
+    const child = this.sessions.get(sessionId)?.process
+    return child && child.exitCode === null && child.signalCode === null
+      ? (child.pid ?? null)
+      : null
   }
 
   get ownInstructions(): boolean {
@@ -1052,6 +1060,7 @@ export class ClaudeConnection implements AgentConnection {
       includePartialMessages: true,
       forwardSubagentText: true,
       perTaskStopAffordance: true,
+      ...(options.suggestions && !hidden ? { promptSuggestions: true } : {}),
       settingSources: sources,
       systemPrompt: {
         type: 'preset',
@@ -1337,6 +1346,9 @@ export class ClaudeConnection implements AgentConnection {
     } else if (message.type === 'result') {
       if (turn) turn.running = true
       this.result(session, message as ResultMessage)
+      return
+    } else if (message.type === 'prompt_suggestion') {
+      this.suggested(session, message as PromptSuggestionMessage)
       return
     } else if (message.type === 'stream_event' && turn?.onText) {
       const event = (message as StreamEvent).event
@@ -1983,6 +1995,20 @@ export class ClaudeConnection implements AgentConnection {
       throw new AgentRequestError('agent_error', t('claude.ultracodeUnknown'), INVALID_PARAMS)
     }
     return session.ultracodeDefault
+  }
+
+  /**
+   * Claude Code's guess at the next prompt, which comes after the turn went idle. One that comes
+   * once the next turn started is about the turn before it.
+   */
+  private suggested(session: Session, message: PromptSuggestionMessage): void {
+    if (session.options.hidden || session.turn || session.busy) return
+    if (typeof message.suggestion !== 'string' || !message.suggestion.trim()) return
+    const text = message.suggestion
+    this.deliver({
+      sessionId: session.id,
+      map: () => ({ patches: [], effects: [{ kind: 'suggestion', text }] }),
+    })
   }
 
   /** Tells the session how many jobs will wake it later, when that changed. */

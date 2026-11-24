@@ -3,9 +3,10 @@ import type { BusyTerminal, MainToTerminalHost, TerminalHostToMain } from '@shar
 import type { PortDevice } from '@shared/remote/device'
 import type { TerminalSettings } from '@shared/settings'
 import {
+  NO_TERMINAL_PROCESSES,
   TERMINAL_CALL_TIMEOUT_MS,
-  type TerminalCall,
-  type TerminalCallAnswer,
+  type TerminalHostAnswer,
+  type TerminalHostCall,
 } from '@shared/terminal-agent'
 import terminalHostPath from '../terminal-host/index?modulePath'
 import { locale as currentLocale, t } from './i18n'
@@ -34,8 +35,8 @@ export class TerminalHost {
   private authCommands: string[] = []
   private readonly busyRequests = new Map<number, (terminals: BusyTerminal[]) => void>()
   private nextBusyId = 1
-  private readonly calls = new Map<number, (answer: TerminalCallAnswer) => void>()
-  private readonly pending: { callId: number; call: TerminalCall }[] = []
+  private readonly calls = new Map<number, (answer: TerminalHostAnswer) => void>()
+  private readonly pending: { callId: number; call: TerminalHostCall }[] = []
   private nextCall = 1
 
   constructor(deps: TerminalHostDeps) {
@@ -143,7 +144,11 @@ export class TerminalHost {
   }
 
   /** Runs an agent's terminal call, starting the host when it is not running. */
-  call(call: TerminalCall): Promise<TerminalCallAnswer> {
+  call(call: TerminalHostCall): Promise<TerminalHostAnswer> {
+    // A host that is not running has no terminals, and is not started to say so.
+    if (call.kind === 'processes' && this.host.state !== 'ready') {
+      return Promise.resolve(NO_TERMINAL_PROCESSES)
+    }
     this.host.start()
     const callId = this.nextCall++
     return new Promise((resolve) => {

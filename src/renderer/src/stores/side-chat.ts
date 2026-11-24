@@ -3,7 +3,7 @@ import { create } from 'zustand'
 import type { AgentId, SideChatView } from '@shared/thread'
 import { host } from '@renderer/lib/host'
 import { useThreadsStore } from '@renderer/stores/threads'
-import { toggleSideChat, useViewStore } from '@renderer/stores/view'
+import { closeSidePanel, toggleSideChat, useViewStore } from '@renderer/stores/view'
 
 /** What is being written in a session's side chat: the question and the passage it quotes. */
 export interface SideDraft {
@@ -34,7 +34,7 @@ export function setSideDraft(sessionId: string, changes: Partial<SideDraft>): vo
   }))
 }
 
-/** Opens a session's side chat with the focus in its input, a passage quoted when given. */
+/** Selects a session's side chat tab with the focus in its input, a passage quoted when given. */
 export function openSideChat(sessionId: string, quote?: string): void {
   toggleSideChat(sessionId, true)
   useSideChatStore.setState((s) => ({
@@ -51,12 +51,12 @@ export function openSideChat(sessionId: string, quote?: string): void {
 }
 
 /**
- * Mod+J: opens the side chat, moves the focus into it when it is open elsewhere, and closes it
+ * Mod+J: selects the side chat's tab and moves the focus into it, and folds the side panel away
  * when the focus is already in it.
  */
 export function toggleSideChatFocus(sessionId: string, focused: boolean): void {
-  const open = !!useViewStore.getState().sideChatOpen[sessionId]
-  if (open && focused) toggleSideChat(sessionId, false)
+  const open = useViewStore.getState().sidePane[sessionId] === 'sideChat'
+  if (open && focused) closeSidePanel(sessionId)
   else openSideChat(sessionId)
 }
 
@@ -72,14 +72,14 @@ function latestAnswerEnd(side: SideChatView | null | undefined): number {
 }
 
 /**
- * Whether a side question ended while the side chat was closed, for the dot on its button. What is
- * there when the button first shows, and everything while the chat is open, counts as seen.
+ * Whether a side question ended while the side chat was not shown, for the dot on its tab. What is
+ * there when the mark first shows, and everything while the chat shows, counts as seen.
  */
 export function useSideChatNews(sessionId: string | null): boolean {
   const key = sessionId ?? ''
   const latest = useThreadsStore((s) => latestAnswerEnd(s.replicas[key]?.state?.session.sideChat))
   const seen = useSideChatStore((s) => s.seen[key])
-  const open = useViewStore((s) => !!s.sideChatOpen[key])
+  const open = useViewStore((s) => s.sidePane[key] === 'sideChat')
   useEffect(() => {
     if (key !== '' && (open || seen === undefined) && seen !== latest) {
       useSideChatStore.setState((s) => ({ seen: { ...s.seen, [key]: latest } }))

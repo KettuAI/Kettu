@@ -3882,6 +3882,7 @@ export class SessionManager {
       ...(record.instructionsAhead ? { promptAhead: true } : {}),
       ...(role ? { role } : {}),
       ...(append ? { systemPromptAppend: append } : {}),
+      ...(this.deps.settings().promptSuggestions ? { suggestions: true } : {}),
     }
   }
 
@@ -4335,6 +4336,13 @@ export class SessionManager {
       case 'tasks':
         this.update(live, { background: effect.tasks })
         break
+      case 'suggestion': {
+        // One that comes once the next turn started, as a queued message, is about the last one.
+        const text = effect.text.trim()
+        if (live.turn || !text || !this.deps.settings().promptSuggestions) break
+        this.update(live, { suggestion: text })
+        break
+      }
       case 'agentTurn':
         this.agentTurn(live, effect)
         break
@@ -6409,6 +6417,28 @@ export class SessionManager {
    * What ending these sessions and their sub-sessions would stop, for the ones with any: a session
    * not in memory runs nothing. Subagents count with the session that started them.
    */
+  /** The listed sessions attached to their agent now, for what uses the computer. */
+  attachedSessions(): {
+    sessionId: string
+    agentId: AgentId
+    acpSessionId: string
+    connection: AgentConnection
+  }[] {
+    const attached = []
+    for (const live of this.live.values()) {
+      const { connection, record } = live
+      if (!connection || connection.isClosed || live.prepared || live.closing) continue
+      if (record.origin === 'subagent' || !record.acpSessionId) continue
+      attached.push({
+        sessionId: live.id,
+        agentId: record.agentId,
+        acpSessionId: record.acpSessionId,
+        connection,
+      })
+    }
+    return attached
+  }
+
   runningWork(sessionIds: readonly string[]): RunningWork[] {
     const seen = new Set<string>()
     const out: RunningWork[] = []
@@ -7657,6 +7687,7 @@ export class SessionManager {
       // Speed is the old agent's model; the new one may not be timed at all.
       speed: undefined,
       lastRequest: undefined,
+      ...(live.thread.session.suggestion ? { suggestion: null } : {}),
       // The side chat stays; the new agent answers it its own way.
       ...(live.thread.session.sideChat
         ? { sideChat: { ...live.thread.session.sideChat, route: this.sideRouteOf(agentId) } }
@@ -8329,6 +8360,7 @@ export class SessionManager {
       turnStartUsed: live.thread.session.usage?.used ?? null,
       error: null,
       updatedAt: now,
+      ...(live.thread.session.suggestion ? { suggestion: null } : {}),
     })
     this.persist(live)
     this.touch(live.id)
@@ -9688,6 +9720,7 @@ export class SessionManager {
     this.update(live, {
       rewound: { turns: live.record.rewound.turns },
       ...(usage && used !== null ? { usage: { ...usage, used } } : {}),
+      ...(live.thread.session.suggestion ? { suggestion: null } : {}),
       context: undefined,
       error: null,
       updatedAt: this.now(),

@@ -398,6 +398,8 @@ export interface SessionOptions {
    * agy's flag, which would otherwise cost a restart right after `session/new`.
    */
   fullAccess?: boolean
+  /** Ask the agent for a guess at the user's next message after each turn, where it offers one. */
+  suggestions?: boolean
 }
 
 /** Kettu's memory as a session starts with it. */
@@ -453,6 +455,11 @@ export interface AgentConnection {
   readonly systemPromptAppend?: boolean
   readonly isClosed: boolean
   close(): void
+  /**
+   * The process that runs one session alone, for an agent that starts one per session; absent or
+   * null where the session shares the agent's process.
+   */
+  processOf?(sessionId: string): number | null
 
   initialize(appVersion: string, signal?: AbortSignal): Promise<AgentInit>
   authenticate(methodId: string, client?: SignInClient): Promise<void>

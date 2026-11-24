@@ -1,14 +1,6 @@
-/* The board: what a session has going, at the right of its thread. Colors and motion come from
+/* The board: what a session has going, as a tab of its side panel. Colors and motion come from
    the theme's tokens. */
 
-.kb-rail {
-  display: flex;
-  flex: none;
-  flex-direction: column;
-  width: clamp(280px, 30%, 380px);
-  min-height: 0;
-  border-left: var(--hairline) solid var(--border-subtle);
-}
 .kb-body {
   display: flex;
   flex: 1;
@@ -24,27 +16,14 @@
   scrollbar-width: thin;
 }
 
-/* The head: the pane's mark, its name and what is going on, in a line. */
+/* The first line: what is going on, in words. */
 .kb-head {
   display: flex;
+  flex: none;
   align-items: center;
-  gap: 8px;
   min-width: 0;
-  height: 44px;
-  padding: 0 8px 0 16px;
-}
-.kb-head__close {
-  margin-left: auto;
-  flex: none;
-}
-.kb-head > svg {
-  color: var(--pane-muted);
-}
-.kb-head__title {
-  flex: none;
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text-primary);
+  height: 36px;
+  padding: 0 16px;
 }
 .kb-head__sum {
   min-width: 0;

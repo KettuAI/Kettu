@@ -35,6 +35,28 @@
 .avs-head--cornered {
   padding-left: var(--corner-inset);
 }
+/* In the side panel the bar is the context bar of the artifact's tab, under the row of tabs. */
+.avs-head--ctx {
+  height: 32px;
+  padding: 0 6px 0 8px;
+}
+.avs-head--ctx .avs-bar {
+  gap: 4px;
+}
+.avs-head--ctx .avs-bar__lead {
+  min-width: 0;
+}
+.avs-head--ctx .avs-bar__btn {
+  min-width: 24px;
+  height: 24px;
+  padding: 0 4px;
+  border-radius: 6px;
+}
+.avs-head--ctx .avs-bar__page {
+  height: 24px;
+  margin-left: -2px;
+  font-size: 12px;
+}
 .avs-bar {
   display: flex;
   flex: 1;
@@ -493,12 +515,6 @@
 }
 .avs-card .k-av-side__head {
   padding-right: 40px;
-}
-
-/* ---------- In a session's side panel ---------- */
-
-.kp-pane.avs-pane {
-  padding: 0;
 }
 
 /* ---------- The whole artifact's states ---------- */

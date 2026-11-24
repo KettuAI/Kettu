@@ -505,6 +505,7 @@ async function start(): Promise<void> {
     settings: () => hostSettings(settings.get(), systemLocale),
     colorMode,
     marketKeys: () => marketKeys.contentsForHost(),
+    onBattery: () => (process.platform === 'win32' ? powerMonitor.isOnBatteryPower() : null),
     onMarketOAuth: (serverId, state) => void marketKeys.setOAuth(serverId, state),
     onFirstStart: (harnesses) => settings.firstStart(harnesses),
     onAttention: (message) => {
@@ -1231,6 +1232,11 @@ async function start(): Promise<void> {
     updater.systemShutdown()
   })
   powerMonitor.on('suspend', () => agentHost.power('suspend'))
+  // Elsewhere the host reads the battery itself.
+  if (process.platform === 'win32') {
+    powerMonitor.on('on-battery', () => agentHost.battery(true))
+    powerMonitor.on('on-ac', () => agentHost.battery(false))
+  }
   powerMonitor.on('resume', () => {
     agentHost.power('resume')
     remoteHost.resume()

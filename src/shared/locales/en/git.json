@@ -100,7 +100,6 @@
     "openInPane": "Open in the Git pane"
   },
   "pane": {
-    "title": "Git",
     "more": "More",
     "copyBranch": "Copy branch name",
     "openRepository": "Open repository on GitHub",
@@ -130,12 +129,8 @@
       "discard": "Discard…",
       "discardBlocked": "Finish the operation in progress first",
       "discardTicked": "Discard the changes of the ticked files",
-      "openInFiles": "Open in Files",
-      "discardFile": "Discard changes",
-      "binary": "Binary file, no preview.",
-      "tooLarge": "Too large to preview.",
-      "same": "No difference to show.",
-      "showFullDiff": "Show full diff"
+      "openInFiles": "Open file",
+      "discardFile": "Discard changes"
     },
     "box": {
       "tickFiles": "Tick the files to commit",

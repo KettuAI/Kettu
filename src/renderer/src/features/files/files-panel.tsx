@@ -6,92 +6,78 @@ import {
   Folder01Icon,
   FolderAddIcon,
   MinusSignSquareIcon,
+  MoreHorizontalIcon,
   Search01Icon,
-  SidebarLeftIcon,
 } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
-import { useDefaultLayout, usePanelRef } from 'react-resizable-panels'
 import type { FileSearch } from '@shared/files'
 import type { ChangeStatus } from '@shared/git'
 import { SegmentedControl } from '@renderer/components/affect/segmented-control'
 import {
-  ResizableHandle,
-  ResizablePanel,
-  ResizablePanelGroup,
-} from '@renderer/components/ui/resizable'
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuShortcut,
+  DropdownMenuTrigger,
+} from '@renderer/components/ui/dropdown-menu'
 import { Skeleton } from '@renderer/components/ui/skeleton'
 import { toast } from '@renderer/components/ui/toast'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
 import { LineCounts } from '@renderer/features/git/rows'
 import { MENTION_LIMIT } from '@renderer/features/session/composer/mentions'
 import {
+  PaneBody,
+  PaneContext,
   PaneEmpty,
-  PaneHead,
   PaneIcon,
-  PaneSheet,
   PaneSpinner,
   PanelButton,
 } from '@renderer/features/shell/panel-button'
-import { PaneSwitch } from '@renderer/features/shell/pane-switch'
 import { errorMessage, host } from '@renderer/lib/host'
 import { hostOfPath } from '@renderer/lib/host-paths'
 import { formatShortcut, isMod, isWeb } from '@renderer/lib/platform'
-import { layoutStorage } from '@renderer/lib/storage'
-import {
-  activateTab,
-  activeFile,
-  filePanelKey,
-  closeDiff,
-  openDiff,
-  openFile,
-  useFilesStore,
-  watchFiles,
-} from '@renderer/stores/files'
+import { diffId, openDiff, openFile, useFilesStore, watchFiles } from '@renderer/stores/files'
+import { useViewStore } from '@renderer/stores/view'
 import { openGitPane } from '@renderer/features/git/pane/open-pane'
 import { openGitDialog, useGitStore } from '@renderer/stores/git'
 import { ChangeBadge } from './change-badge'
 import { useFileChanges, type FileChanges, type ProjectChange } from './changes'
 import { columnOf, saveColumn } from './column'
 import { FileTree, type TreeEdit } from './file-tree'
-import { DiffPreview } from './diff-preview'
-import { FilePreview } from './file-preview'
 import { openInEditor } from './open-in-editor'
-import { FileTabs } from './file-tabs'
 import { FileTypeIcon } from './file-type-icon'
-import { UnsavedPrompt } from './unsaved-prompt'
 import { folderOf, nameOf, rankPaths, type PathMatch } from './paths'
-import { usePhoneWindow } from '@renderer/features/shell/narrow'
 import { VirtualRows } from './virtual-rows'
 
 const SEARCH_DELAY_MS = 250
-// A single click in a list opens the preview tab, which the next single click replaces.
-const PREVIEW = { preview: true }
+// A single click in a list opens the preview tab, which the next single click replaces, right
+// after the Files tab; a double click opens a tab that stays.
+const PREVIEW = { preview: true, fromPanel: true }
+const KEPT = { fromPanel: true }
 // A change's row: its name, its folder under it.
 const CHANGE_ROW = 40
 
 interface FilesPanelProps {
   projectPath: string
-  /** The side panel it shows in; the open files are the project's, whichever panel shows them. */
+  /** The side panel it shows in, whose row the files it opens become tabs of. */
   panel: string
-  maximized: boolean
 }
 
 /**
- * The side panel's Files pane: the changes or the project's files, beside the open files. Its head
- * switches between Changes and All files, or holds the filter while one is typed.
+ * What the Files tab shows in the side panel: the changes or the project's files, each of which
+ * opens in a tab of its own. Its context bar switches between Changes and All files, or holds the
+ * filter while one is typed.
  */
 export default function FilesPanel(props: FilesPanelProps) {
   // Each side panel has its own column, so another session's pane starts from its own.
   return <FilesPane key={`${props.panel}\0${props.projectPath}`} {...props} />
 }
 
-function FilesPane({ projectPath, panel, maximized }: FilesPanelProps) {
+function FilesPane({ projectPath, panel }: FilesPanelProps) {
   const { t } = useTranslation(['files', 'common'])
   const columnKey = `${panel}\0${projectPath}`
-  const tabs = useFilesStore((s) => s.open[projectPath] ?? null)
-  const selected = useFilesStore((s) => s.selected[filePanelKey(projectPath, panel)])
-  const open = activeFile(tabs && selected ? { ...tabs, active: selected } : null)
-  const diff = useFilesStore((s) => s.diffs[projectPath] ?? null)
+  // The file the panel showed last, which the lists mark.
+  const openPath = useViewStore((s) => fileOfKey(s.sideDoc[panel]))
   const isRepo = useGitStore((s) => !!s.status[projectPath]?.repo)
   // Editors open folders on this computer only.
   const local = !isWeb && hostOfPath(projectPath) === null
@@ -107,9 +93,6 @@ function FilesPane({ projectPath, panel, maximized }: FilesPanelProps) {
     setMode(opening)
   }
   const mode = !isRepo || searching ? 'all' : (chosenMode ?? opening)
-  const layout = useDefaultLayout({ id: 'files-pane', storage: layoutStorage })
-  const tree = usePanelRef()
-  const [treeShown, setTreeShown] = useState(true)
   // A name typed in the tree for a new file or folder or a rename, and Collapse all's count.
   const [edit, setEdit] = useState<TreeEdit | null>(null)
   const [collapsed, setCollapsed] = useState(0)
@@ -118,21 +101,13 @@ function FilesPane({ projectPath, panel, maximized }: FilesPanelProps) {
   const bare =
     useFilesStore((s) => {
       const files = s.byProject[projectPath]
-      return (
-        !!files &&
-        !files.error &&
-        files.paths.length === 0 &&
-        files.folders.length === 0 &&
-        !s.open[projectPath] &&
-        !s.diffs[projectPath]
-      )
+      return !!files && !files.error && files.paths.length === 0 && files.folders.length === 0
     }) && edit === null
   const listed = useFilesStore((s) => !!s.byProject[projectPath] && !s.byProject[projectPath].error)
   // New file and New folder go into the project's folder, in the tree, shown for them.
   const startNew = (type: 'file' | 'folder') => {
     stopSearching()
     setMode('all')
-    if (tree.current?.isCollapsed()) tree.current.expand()
     setEdit({ kind: 'new', folder: '', type })
   }
 
@@ -149,31 +124,16 @@ function FilesPane({ projectPath, panel, maximized }: FilesPanelProps) {
     setSearching(false)
   }
 
-  // The tab the open files show: the active one, unless a change from elsewhere covers them.
-  const shownTab =
-    !diff || (diff.ref === null && diff.projectFile === open?.path) ? (open?.path ?? null) : null
-
-  // A phone shows the list or the open file, not both: opening a file or a change shows it, and
-  // the tree's button brings the list back over it.
-  const phone = usePhoneWindow()
-  const opened = diff ? `diff:${diff.path}` : (open?.path ?? null)
-  const [phoneList, setPhoneList] = useState(opened === null)
-  const [seenOpened, setSeenOpened] = useState(opened)
-  if (opened !== seenOpened) {
-    setSeenOpened(opened)
-    setPhoneList(opened === null)
-  }
-
   const treeList =
     mode === 'changes' ? (
-      <ChangesList projectPath={projectPath} changes={changes} openPath={open?.path} />
+      <ChangesList projectPath={projectPath} panel={panel} changes={changes} />
     ) : (
       <Browser
         projectPath={projectPath}
         panel={panel}
         columnKey={columnKey}
         query={query}
-        openPath={open?.path}
+        openPath={openPath}
         changes={changes.byPath}
         local={local}
         edit={edit}
@@ -181,43 +141,9 @@ function FilesPane({ projectPath, panel, maximized }: FilesPanelProps) {
         collapsed={collapsed}
       />
     )
-  const preview = (
-    <section className="kp-doc" aria-label={t('tabs.label')}>
-      {!!tabs?.files.length && (
-        <div className="kp-doc__tabs">
-          <FileTabs
-            projectPath={projectPath}
-            files={tabs.files}
-            active={shownTab}
-            onSelect={(path) => {
-              if (path !== shownTab) closeDiff(projectPath)
-              activateTab(projectPath, path)
-            }}
-          />
-        </div>
-      )}
-      {diff ? (
-        <DiffPreview projectPath={projectPath} diff={diff} />
-      ) : (
-        <FilePreview
-          projectPath={projectPath}
-          panel={panel}
-          file={open}
-          changes={changes.byPath}
-          onShowDiff={
-            open && changes.byPath.has(open.path)
-              ? () => showChange(projectPath, changes, open.path, false)
-              : undefined
-          }
-        />
-      )}
-    </section>
-  )
 
   return (
-    <PaneSheet
-      pane="files"
-      maximized={maximized}
+    <PaneBody
       data-files-panel={projectPath}
       onKeyDown={(event) => {
         if (event.nativeEvent.isComposing) return
@@ -227,10 +153,7 @@ function FilesPane({ projectPath, panel, maximized }: FilesPanelProps) {
         }
       }}
     >
-      <PaneHead
-        panel={panel}
-        pane="files"
-        maximized={maximized}
+      <PaneContext
         tools={
           <>
             {listed && (mode === 'all' || bare) && (
@@ -251,45 +174,54 @@ function FilesPane({ projectPath, panel, maximized }: FilesPanelProps) {
                 )}
               </>
             )}
-            {!bare && (
-              <PanelButton
-                label={t('panel.findFile')}
-                shortcut={formatShortcut('Mod+P')}
-                pressed={searching}
-                onClick={() => (searching ? stopSearching() : setSearching(true))}
-              >
-                <PaneIcon icon={Search01Icon} />
-              </PanelButton>
-            )}
-            {local && (
-              <PanelButton
-                label={t('panel.openInEditor')}
-                onClick={() =>
-                  void openInEditor(projectPath).catch((failure: unknown) =>
-                    toast(errorMessage(failure)),
-                  )
-                }
-              >
-                <PaneIcon icon={CodeIcon} />
-              </PanelButton>
+            {(!bare || local) && (
+              <DropdownMenu>
+                <Tooltip>
+                  <TooltipTrigger
+                    render={
+                      <DropdownMenuTrigger
+                        render={
+                          <button
+                            type="button"
+                            aria-label={t('panel.more')}
+                            className="kp-tool app-region-no-drag"
+                          />
+                        }
+                      />
+                    }
+                  >
+                    <PaneIcon icon={MoreHorizontalIcon} />
+                  </TooltipTrigger>
+                  <TooltipContent>{t('panel.more')}</TooltipContent>
+                </Tooltip>
+                <DropdownMenuContent align="end" className="w-56">
+                  {!bare && (
+                    <DropdownMenuItem
+                      onClick={() => (searching ? stopSearching() : setSearching(true))}
+                    >
+                      <PaneIcon icon={Search01Icon} size={16} />
+                      {t('panel.findFile')}
+                      <DropdownMenuShortcut>{formatShortcut('Mod+P')}</DropdownMenuShortcut>
+                    </DropdownMenuItem>
+                  )}
+                  {local && (
+                    <DropdownMenuItem
+                      onClick={() =>
+                        void openInEditor(projectPath).catch((failure: unknown) =>
+                          toast(errorMessage(failure)),
+                        )
+                      }
+                    >
+                      <PaneIcon icon={CodeIcon} size={16} />
+                      {t('panel.openInEditor')}
+                    </DropdownMenuItem>
+                  )}
+                </DropdownMenuContent>
+              </DropdownMenu>
             )}
           </>
         }
       >
-        <PaneSwitch panel={panel} projectPath={projectPath} pane="files" />
-        {!bare && (
-          <PanelButton
-            label={(phone ? phoneList : treeShown) ? t('panel.hideTree') : t('panel.showTree')}
-            pressed={phone ? phoneList : treeShown}
-            onClick={() => {
-              if (phone) setPhoneList(!phoneList || opened === null)
-              else if (tree.current?.isCollapsed()) tree.current.expand()
-              else tree.current?.collapse()
-            }}
-          >
-            <PaneIcon icon={SidebarLeftIcon} />
-          </PanelButton>
-        )}
         {searching ? (
           <label className="kp-find">
             <PaneIcon icon={Search01Icon} size={14} />
@@ -309,7 +241,7 @@ function FilesPane({ projectPath, panel, maximized }: FilesPanelProps) {
           <SegmentedControl
             aria-label={t('panel.show')}
             variant="tray"
-            size="md"
+            size="sm"
             value={mode}
             onChange={setMode}
             options={[
@@ -322,9 +254,11 @@ function FilesPane({ projectPath, panel, maximized }: FilesPanelProps) {
             ]}
           />
         ) : (
-          <span className="kp-head__title">{t('panel.title')}</span>
+          <span className="kp-ctx__place">
+            <b>{t('panel.title')}</b>
+          </span>
         )}
-      </PaneHead>
+      </PaneContext>
       <div className="kp-body">
         {bare ? (
           <PaneEmpty
@@ -332,84 +266,58 @@ function FilesPane({ projectPath, panel, maximized }: FilesPanelProps) {
             title={t('panel.emptyTitle')}
             text={t('panel.emptyDescription')}
           />
-        ) : phone ? (
-          <div className="flex min-h-0 flex-1 flex-col">{phoneList ? treeList : preview}</div>
         ) : (
-          <ResizablePanelGroup
-            orientation="horizontal"
-            defaultLayout={layout.defaultLayout}
-            onLayoutChanged={layout.onLayoutChanged}
-            className="min-h-0 flex-1"
-          >
-            <ResizablePanel
-              id="files-tree"
-              panelRef={tree}
-              defaultSize="30%"
-              minSize="132px"
-              collapsible
-              collapsedSize="0px"
-              onResize={(size) => setTreeShown(size.inPixels > 0)}
-              className="min-w-0"
-            >
-              {treeList}
-            </ResizablePanel>
-            <ResizableHandle className="kp-resizer kp-files-handle" />
-            <ResizablePanel id="files-preview" minSize="200px" className="min-w-0">
-              {preview}
-            </ResizablePanel>
-          </ResizablePanelGroup>
+          <div className="flex min-h-0 flex-1 flex-col">{treeList}</div>
         )}
         {mode === 'changes' && !bare && (
           <ChangesFoot projectPath={projectPath} panel={panel} changes={changes} />
         )}
       </div>
-      <UnsavedPrompt projectPath={projectPath} />
-    </PaneSheet>
+    </PaneBody>
   )
 }
 
-/**
- * Opens the working tree's change to a listed file: from the list, in the preview tab with the
- * diff over it; from the File view's toggle, over the tab it already has.
- */
-function showChange(
-  projectPath: string,
-  changes: FileChanges,
-  path: string,
-  fromList: boolean,
-): void {
-  const change = changes.list?.find((c) => c.path === path)
-  if (!change) return
-  const deleted = change.file.status === 'deleted'
-  if (fromList && !deleted) openFile(projectPath, change.path, null, PREVIEW)
-  openDiff(projectPath, {
-    path: change.file.path,
-    oldPath: change.file.oldPath,
-    ref: null,
-    projectFile: deleted ? null : change.path,
-  })
+/** The file a tab's key names, when it is a file's. */
+const fileOfKey = (key: string | undefined): string | undefined =>
+  key?.startsWith('file:') ? key.slice('file:'.length) : undefined
+
+/** The listed change the panel's tab shows or showed last: its diff, or the file itself. */
+function useShownChange(panel: string, list: ProjectChange[] | null): ProjectChange | undefined {
+  const key = useViewStore((s) => s.sideDoc[panel])
+  return list?.find(
+    (change) =>
+      key === `diff:${diffId({ path: change.file.path, ref: null })}` ||
+      key === `file:${change.path}`,
+  )
+}
+
+/** Opens the working tree's change to a listed file in a diff tab. */
+function showChange(projectPath: string, change: ProjectChange, kept: boolean): void {
+  openDiff(
+    projectPath,
+    {
+      path: change.file.path,
+      oldPath: change.file.oldPath,
+      ref: null,
+      projectFile: change.file.status === 'deleted' ? null : change.path,
+    },
+    kept ? KEPT : PREVIEW,
+  )
 }
 
 /** The uncommitted changes, one row each: the file's name with its folder under it. */
 function ChangesList({
   projectPath,
+  panel,
   changes,
-  openPath,
 }: {
   projectPath: string
+  panel: string
   changes: FileChanges
-  openPath: string | undefined
 }) {
   const { t } = useTranslation('files')
-  const diff = useFilesStore((s) => s.diffs[projectPath] ?? null)
   const list = changes.list
-  // The working tree's change shown in the preview, or the open file's when it is one.
-  const selectedPath =
-    diff && diff.ref === null
-      ? ((list ?? []).find((c) => c.file.path === diff.path)?.path ?? null)
-      : !diff && openPath
-        ? openPath
-        : null
+  const shown = useShownChange(panel, list)
 
   if (!list) {
     return changes.error ? <Message tone="error">{changes.error}</Message> : <LoadingRows />
@@ -425,10 +333,10 @@ function ChangesList({
           <ChangeRow
             key={change.path}
             change={change}
-            selected={change.path === selectedPath}
+            selected={change === shown}
             tabIndex={tabIndex}
-            onOpen={() => showChange(projectPath, changes, change.path, true)}
-            onKeep={() => openFile(projectPath, change.path)}
+            onOpen={() => showChange(projectPath, change, false)}
+            onKeep={() => showChange(projectPath, change, true)}
           />
         )
       }}
@@ -458,7 +366,7 @@ function ChangeRow({
       aria-current={selected || undefined}
       title={change.file.oldPath ? `${change.file.oldPath} → ${change.path}` : change.path}
       onClick={onOpen}
-      onDoubleClick={change.file.status === 'deleted' ? undefined : onKeep}
+      onDoubleClick={onKeep}
     >
       <FileTypeIcon path={change.path} className="size-4" />
       <span className="kp-node__name">
@@ -481,24 +389,14 @@ function ChangesFoot({
   changes: FileChanges
 }) {
   const { t } = useTranslation('files')
-  const diff = useFilesStore((s) => s.diffs[projectPath] ?? null)
-  const openPath = useFilesStore((s) => s.selected[filePanelKey(projectPath, panel)] ?? null)
+  const selected = useShownChange(panel, changes.list)
   const totals = useGitStore((s) => s.status[projectPath]?.changes ?? null)
   const blocked = useGitStore(
     (s) =>
       !!s.status[projectPath]?.operation || (s.status[projectPath]?.changes.conflicted ?? 0) > 0,
   )
   const list = changes.list
-  const byPath = useMemo(() => new Map((list ?? []).map((c) => [c.path, c])), [list])
   if (!list || list.length === 0) return null
-  // The working tree's change shown in the preview, or the open file's when it is one.
-  const selectedPath =
-    diff && diff.ref === null
-      ? (list.find((c) => c.file.path === diff.path)?.path ?? null)
-      : !diff && openPath && byPath.has(openPath)
-        ? openPath
-        : null
-  const selected = selectedPath ? byPath.get(selectedPath) : undefined
   return (
     <div className="kp-files__foot">
       <span className="inline-flex items-center gap-1.5 tabular">
@@ -671,7 +569,7 @@ function FileRow({
       title={path}
       tabIndex={tabIndex}
       onClick={() => openFile(projectPath, path, null, PREVIEW)}
-      onDoubleClick={() => openFile(projectPath, path)}
+      onDoubleClick={() => openFile(projectPath, path, null, KEPT)}
     >
       <FileTypeIcon path={path} className="size-4" />
       <span className="flex min-w-0 flex-1 items-baseline gap-1.5">
@@ -758,7 +656,7 @@ function SearchResults({ projectPath, query }: { projectPath: string; query: str
               key={`l:${row.path}:${row.line}`}
               title={row.text}
               onClick={() => openFile(projectPath, row.path, row.line, PREVIEW)}
-              onDoubleClick={() => openFile(projectPath, row.path, row.line)}
+              onDoubleClick={() => openFile(projectPath, row.path, row.line, KEPT)}
             >
               <span className="kp-node__line">{row.line}</span>
               <span className="kp-mono truncate text-caption text-secondary">
