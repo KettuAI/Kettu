@@ -347,6 +347,16 @@ const KETTU: McpServer = {
 }
 
 describe('starting a session', () => {
+  it('hands pi each skill folder of the session with --skill', async () => {
+    const { connection, spawned, cwd } = await connect()
+    await connection.newSession(cwd, { skillRoots: ['/data/skills/a', '/data/skills/b'] })
+    const { args } = spawned[0]!.options
+    expect(args.filter((_, i) => args[i - 1] === '--skill')).toEqual([
+      '/data/skills/a',
+      '/data/skills/b',
+    ])
+  })
+
   it("runs the user's pi in RPC mode with Kettu's extension, and takes pi's id for it", async () => {
     const { connection, spawned, cwd } = await connect()
     const opened = await connection.newSession(cwd, { mcpServers: [KETTU] })

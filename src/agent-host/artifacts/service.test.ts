@@ -76,6 +76,9 @@ describe('the servers a session attaches with', () => {
       'open_settings',
       'change_settings',
       'read_kettu_guide',
+      // They only read the skills the user turned on for the session's agent.
+      'list_skills',
+      'read_skill',
     ]
     for (const server of [
       ...service.servers('s1', '/repo'),
@@ -147,6 +150,7 @@ async function everythingOn(): Promise<ArtifactService> {
     market: { on: true },
     computer: { call: () => Promise.reject(new Error('not in this test')) },
     workflow: { library: { suggest: true }, isStep: () => false },
+    skills: { of: () => [] },
   } as unknown as ArtifactServiceDeps
   const service = new ArtifactService(deps)
   services.push(service)

@@ -19,8 +19,6 @@ import {
 import type { TFunction } from 'i18next'
 import { listingIdOf, type CommunityItem, type CommunityStanding } from '@shared/market-community'
 import { compareVersions } from '@shared/market-publish'
-import { harnessOf } from '@shared/agents'
-import type { AgentId, HarnessId } from '@shared/thread'
 import { basename } from '@renderer/lib/format'
 import { currentLocale } from '@renderer/lib/i18n'
 import type { HostScope } from '@renderer/stores/host-scope'
@@ -375,14 +373,6 @@ export function relatedServers(id: string, catalog: MarketCatalog | null, limit 
   const near = sections.flatMap((s) => s.items).filter((item) => item.id !== id)
   const items = [...new Map((near.length ? near : all).map((item) => [item.id, item])).values()]
   return { byPublisher: false, items: items.slice(0, limit) }
-}
-
-// Kettu hands Pi no skills folder yet.
-const NO_SKILLS: readonly HarnessId[] = ['pi']
-
-/** Whether Kettu can hand an agent the skills it keeps. */
-export function takesSkills(agentId: AgentId): boolean {
-  return !NO_SKILLS.includes(harnessOf(agentId))
 }
 
 /** Where a plugin is installed: every project, or the one project. */

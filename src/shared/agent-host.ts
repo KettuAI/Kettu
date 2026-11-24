@@ -583,6 +583,8 @@ export interface AgentStatus {
   // Whether a start gets Kettu's MCP server, and whether the running process got it (null
   // while none runs).
   kettuServer: { runs: boolean; active: boolean | null }
+  // Whether a session of the agent gets the skills turned on for it; absent on older hosts.
+  skills?: boolean
   capabilities: {
     loadSession: boolean
     listSessions: boolean

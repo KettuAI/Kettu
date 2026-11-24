@@ -101,7 +101,7 @@
     "valueHint": "保存在这台电脑上。",
     "submit": "安装",
     "installing": "正在安装",
-    "noSkills": "暂不支持 Skills"
+    "noSkills": "Kettu 的工具已关闭"
   },
   "toast": {
     "ready": "{{name}} 已可供所有智能体使用",

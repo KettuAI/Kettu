@@ -11,7 +11,6 @@ import { TextField } from '@renderer/components/affect/text-field'
 import { AgentMark } from '@renderer/components/agents/agent-mark'
 import type { AgentChoice } from './actions'
 import { useChoosableAgents } from './hooks'
-import { takesSkills } from './model'
 
 /**
  * All agents, or some of them: All takes in agents added later; picking an agent narrows the
@@ -59,12 +58,12 @@ export function AgentPicker({
           role="checkbox"
           aria-checked={value !== 'all' && value.includes(agent.id)}
           className="k-mkt-agents__agent"
-          disabled={forSkills && !takesSkills(agent.id)}
+          disabled={forSkills && agent.skills === false}
           onClick={() => pick(agent.id)}
         >
           <AgentMark agent={agent.id} size={13} />
           <span className="k-mkt-agents__name">{agent.name}</span>
-          {forSkills && !takesSkills(agent.id) && (
+          {forSkills && agent.skills === false && (
             <span className="k-mkt-agents__note">{t('install.noSkills')}</span>
           )}
         </button>

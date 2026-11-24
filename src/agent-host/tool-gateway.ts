@@ -12,6 +12,7 @@ export const GATEWAY_TOOL = 'call_kettu_tool'
  */
 export const CORE_TOOLS: ReadonlySet<string> = new Set([
   'read_kettu_guide',
+  'list_skills',
   'create_artifact',
   'update_artifact',
   'read_artifact',

@@ -10899,6 +10899,11 @@ export class SessionManager {
     return (this.live.get(sessionId)?.record ?? this.records.get(sessionId))?.agentId ?? null
   }
 
+  /** The workflow task whose step the session does; null for any other session. */
+  sessionTask(sessionId: string): SessionRecord['task'] | null {
+    return (this.live.get(sessionId)?.record ?? this.records.get(sessionId))?.task ?? null
+  }
+
   /** The folder the session works in, its worktree or its project; null for one Kettu does not hold. */
   workFolder(sessionId: string): string | null {
     const record = this.live.get(sessionId)?.record ?? this.records.get(sessionId)

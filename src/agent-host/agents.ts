@@ -148,6 +148,7 @@ import { readClaudeSettings, writeClaudeSetting, type ListedModel } from './clau
 import { readCodebuddySite, shellOverrides, writeCodebuddySite } from './codebuddy/user-settings'
 import { readAutoCompact, writeAutoCompact, type CompactPlace } from './auto-compact/settings'
 import type { CodexRequest } from './marketplace/codex-plugins'
+import { takesSkills } from './marketplace/skill-tools'
 import {
   globalInstallOf,
   installedFolder,
@@ -5710,6 +5711,7 @@ export class AgentManager {
         runs: this.kettuOn(slot.id),
         active: this.running(slot) ? (slot.runtime?.kettu ?? null) : null,
       },
+      skills: takesSkills(slot.id, this.kettuOn(slot.id)),
       capabilities: {
         loadSession: capabilities?.loadSession ?? false,
         listSessions: capabilities?.listSessions ?? false,
