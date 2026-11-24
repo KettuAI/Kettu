@@ -5,18 +5,7 @@ import type { TFunction } from 'i18next'
 import type { HostLoad, HostStrain } from '@shared/host-load'
 import type { LimitLevel } from '@renderer/lib/plan-limit'
 
-/** Disk space in decimal units, as Finder and drive makers count it: "6.4 GB", "994 GB". */
-export function diskBytes(n: number): string {
-  const units = ['B', 'KB', 'MB', 'GB', 'TB']
-  let value = n
-  let unit = 0
-  while (unit < units.length - 1 && Math.round(value * 10) / 10 >= 1000) {
-    value /= 1000
-    unit++
-  }
-  const digits = unit === 0 || value >= 100 ? 0 : 1
-  return `${value.toFixed(digits).replace(/\.0$/, '')} ${units[unit]}`
-}
+export { diskBytes } from '@shared/host-load'
 
 /** The short words of a strain's tag: "Memory low", "Disk almost full", "Battery 18%". */
 export function strainText(t: TFunction<'settings'>, strain: HostStrain): string {

@@ -265,9 +265,11 @@ export function startRemoteHost(
             foreground: (deviceId) => server.foreground(deviceId),
             tell: (deviceId, message) => server.withdrawn(deviceId, message),
             storeKey: webPushStoreKey(Buffer.from(options.privateKey, 'base64')),
+            lowWatch: (wanted) => send({ type: 'remote-host:low-watch', wanted }),
             log,
           })
         : null
+    notifications?.checkLowWatch()
     notifications?.setWaiting(waiting)
     if (present !== null) notifications?.setPresent(present)
     const relay = new RelaySwitch(() => {

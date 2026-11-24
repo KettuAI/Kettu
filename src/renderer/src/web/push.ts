@@ -75,8 +75,8 @@ export async function pushEndpoint(): Promise<string | null> {
 
 /** What a host is asked to push, from this browser's own switches. */
 function choicesOf(settings: SettingsFile): Partial<NotificationChoices> {
-  const { permission, turnEnded, error, routines } = settings.notifications
-  return { permission, turnEnded, errors: error, routines }
+  const { permission, turnEnded, error, routines, computerLow } = settings.notifications
+  return { permission, turnEnded, errors: error, routines, computerLow }
 }
 
 function sameChoices(host: NotificationChoices, wanted: Partial<NotificationChoices>): boolean {

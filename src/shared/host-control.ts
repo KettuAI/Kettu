@@ -9,6 +9,7 @@ import type { AttachmentGrant } from './attachments'
 import type { BrowserForward, BrowserOriginAnswer, BrowserOriginDecision } from './browser'
 import type { ComputerApp, ComputerFrame, ComputerHold } from './computer-use'
 import type { ControlOutcome } from './control'
+import type { HostStrain } from './host-load'
 import type { Locale } from './locale'
 import type { MarketAccount, MarketCall, MarketCallAnswer } from './market-publish'
 import type { MediaGrantRecord } from './media'
@@ -169,6 +170,9 @@ export type MainToHost =
   | { type: 'host:power'; state: 'suspend' | 'resume' }
   // On Windows, whether the computer runs on battery, for its load; sent at start and on change.
   | { type: 'host:battery'; onBattery: boolean }
+  // Whether a paired device wants to hear when the computer runs low, so the host reads its disks
+  // and battery while nothing else would; sent at start when it does, and on change.
+  | { type: 'host:low-watch'; wanted: boolean }
   /** `verbose`: detailed records, which the debug level alone does not write. */
   | { type: 'host:log-level'; level: 'debug' | 'info'; verbose: boolean }
   // Allow once, from a request's notification: answered as one of the host's own windows would.
@@ -347,6 +351,15 @@ export type HostToMain =
       title: string
       body: string
     }
+  // The computer's disk or battery went under a line, or a deeper one: for devices only, never a
+  // notification of this computer's own. The parent writes its words, with the host's name.
+  | {
+      type: 'host:attention'
+      kind: 'computer-low'
+      strain: HostStrain
+      title: string
+      body: string
+    }
   // A workflow task starts to need the user, or it ended or was cancelled; it opens the task.
   | {
       type: 'host:attention'
@@ -358,6 +371,8 @@ export type HostToMain =
       sessionId?: string
       front?: AttentionFront
     }
+  // A disk or the battery went under a line or a deeper one, which the parent tells devices of.
+  | { type: 'host:running-low'; strain: HostStrain }
   | { type: 'host:badge'; count: number } // pending permission requests across sessions
   // What waits for the user, by session: the ids of the requests, new sites, apps and setups.
   | { type: 'host:waiting'; sessions: Record<string, string[]> }
@@ -739,6 +754,8 @@ export type RemoteHostToMain =
   // The port remote-host:forward listens on, null when the host's session or the port is not there.
   | { type: 'remote-host:forwarding'; requestId: number; port: number | null }
   | { type: 'remote-host:ssh-managed'; requestId: number; result: SshManageResult }
+  // Whether a paired device wants to hear when this computer runs low; sent as it changes.
+  | { type: 'remote-host:low-watch'; wanted: boolean }
   // A call an owner's device makes of the host beyond its sessions; answered by
   // remote-host:admin-result.
   | {

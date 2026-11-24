@@ -152,7 +152,8 @@ export interface AllowedSites {
 export type AppCommand =
   | { kind: 'open-project' }
   | { kind: 'new-session' }
-  | { kind: 'open-settings'; section?: string }
+  /** `item` opens one of the section's pages, as a host's in Computers. */
+  | { kind: 'open-settings'; section?: string; item?: string }
   /** Kettu was started again to debug, while this run is a normal one. */
   | { kind: 'confirm-debug-restart' }
   | { kind: 'toggle-sidebar' }

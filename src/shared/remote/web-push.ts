@@ -14,6 +14,7 @@
 //   S       = Ed25519 signature, 64 bytes, over "kettu-web-push/1\n" || P || B, P being the
 //             subscription's P-256 public key, 65 bytes, so a signature fits this browser alone
 
+import { isHostStrain, type HostStrain } from '../host-load'
 import type { PushContent } from './push'
 import { decodeRelayBytes, encodeRelayBytes, verifyRelaySignature, type RelayKey } from './relay'
 
@@ -172,6 +173,7 @@ export type WebPushContent = PushContent &
   (
     | { kind: 'permission' | 'turn-ended' | 'error' | 'routine-ended'; sessionId: string }
     | { kind: 'routine-paused'; agentId: string }
+    | { kind: 'computer-low'; strain: HostStrain }
   )
 
 function parseContent(value: unknown): WebPushContent | null {
@@ -190,6 +192,8 @@ function parseContent(value: unknown): WebPushContent | null {
       return isId(content.sessionId) ? (content as WebPushContent) : null
     case 'routine-paused':
       return isId(content.agentId) ? (content as WebPushContent) : null
+    case 'computer-low':
+      return isHostStrain(content.strain) ? (content as WebPushContent) : null
     default:
       return null
   }

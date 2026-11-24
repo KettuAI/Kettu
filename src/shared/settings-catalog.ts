@@ -623,6 +623,17 @@ const ENTRIES = {
     on: (ctx) => ctx.desktop,
     ...flag('notifications', 'planLimits', (file) => file.notifications.planLimits),
   },
+  'notifications.computer-low': {
+    section: 'notifications',
+    row: 'computer-low',
+    group: 'notifications.groups.when',
+    name: 'notifications.computerLow.name',
+    description: 'notifications.computerLow.description',
+    keywords: 'notifications.computerLow.keywords',
+    part: 'desktop',
+    access: 'change',
+    ...flag('notifications', 'computerLow', (file) => file.notifications.computerLow),
+  },
   'notifications.sound': {
     section: 'notifications',
     row: 'sound',

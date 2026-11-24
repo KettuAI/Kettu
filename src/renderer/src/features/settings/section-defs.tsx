@@ -456,6 +456,14 @@ export function useNotificationsSection(): SectionDef {
       group: when,
       render: () => <NotificationSwitch field="error" label={t('notifications.error.name')} />,
     },
+    {
+      id: 'computer-low',
+      setting: 'notifications.computer-low',
+      group: when,
+      render: () => (
+        <NotificationSwitch field="computerLow" label={t('notifications.computerLow.name')} />
+      ),
+    },
     // Kettu's own update and the agents' plan limits are the desktop app's to say.
     ...(isWeb
       ? []

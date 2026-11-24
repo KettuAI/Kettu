@@ -137,6 +137,35 @@ export interface HostStrain {
   path?: string
 }
 
+const isFiniteNumber = (value: unknown): value is number =>
+  typeof value === 'number' && Number.isFinite(value)
+
+/** A strain as another process or a push sends it; false when it is not one. */
+export function isHostStrain(value: unknown): value is HostStrain {
+  if (typeof value !== 'object' || value === null) return false
+  const { kind, level, value: figure, path } = value as Record<string, unknown>
+  return (
+    (kind === 'memory' || kind === 'disk' || kind === 'battery') &&
+    (level === 'warn' || level === 'critical') &&
+    isFiniteNumber(figure) &&
+    figure >= 0 &&
+    (path === undefined || (typeof path === 'string' && path.length > 0 && path.length <= 4096))
+  )
+}
+
+/** Disk space in decimal units, as Finder and drive makers count it: "6.4 GB", "994 GB". */
+export function diskBytes(n: number): string {
+  const units = ['B', 'KB', 'MB', 'GB', 'TB']
+  let value = n
+  let unit = 0
+  while (unit < units.length - 1 && Math.round(value * 10) / 10 >= 1000) {
+    value /= 1000
+    unit++
+  }
+  const digits = unit === 0 || value >= 100 ? 0 : 1
+  return `${value.toFixed(digits).replace(/\.0$/, '')} ${units[unit]}`
+}
+
 /** What a host tells every client of its load without a watch. */
 export interface HostLoadStatus {
   strains: HostStrain[]

@@ -1,5 +1,6 @@
 import { BrowserWindow, Notification } from 'electron'
 import type { HostToMain } from '@shared/host-control'
+import type { AppCommand } from '@shared/ipc'
 import type { DiscoveryRequestEvent } from '@shared/remote/discovery'
 import { ATTENTION_SETTING, attentionTarget, attentionText } from '@shared/attention'
 import type { HostAttention } from '@shared/remote/host-admin'
@@ -38,17 +39,23 @@ export function notifyAttention(
     log.warn('Ignored a malformed attention message')
     return
   }
+  // This computer's own disk and battery the system warns of itself.
+  if (message.kind === 'computer-low' && !host) return
   if (!settings.notifications[ATTENTION_SETTING[message.kind]]) return
   if (BrowserWindow.getFocusedWindow()) return
   if (!Notification.isSupported()) return
 
-  const { command } = target
+  const low = message.kind === 'computer-low'
+  // Another computer running low opens its own page, whose title already names it.
+  const command: AppCommand =
+    low && host ? { kind: 'open-settings', section: 'hosts', item: host.id } : target.command
   // Agent ids repeat across hosts, so a pause on one never replaces another's.
   const key = host ? `${host.id}:${target.key}` : target.key
   const answer = message.kind === 'permission' ? validAnswer(message.allowOnce) : null
-  const title = host
-    ? t('notifications.onHost', { host: host.name, title: message.title })
-    : message.title
+  const title =
+    host && !low
+      ? t('notifications.onHost', { host: host.name, title: message.title })
+      : message.title
   shown.get(key)?.close()
   const notification = new Notification({
     ...attentionText({ ...message, title }),

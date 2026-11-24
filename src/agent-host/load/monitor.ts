@@ -1,8 +1,10 @@
 // When the host reads its load, and who hears it. A client watches with a lease it renews: every
 // LOAD_READ_MS the whole computer, and every LOAD_DETAIL_MS what uses it while a client shows that.
 // Otherwise once a minute while a client is connected or an agent runs, which also gives idle
-// release its memory reading, and not at all when nobody could see it. The last hour stays in
-// memory, one point a minute; the strains go to every client as they change.
+// release its memory reading; while only a device that wants to hear the computer runs low could
+// see it, once a minute its disks and battery alone; and not at all when nobody could. The last
+// hour stays in memory, one point a minute; the strains go to every client as they change, and a
+// disk or battery going under a line, or a deeper one, goes to the devices.
 
 import type { HostEvent } from '@shared/agent-host'
 import type { Platform } from '@shared/platform'
@@ -17,11 +19,12 @@ import {
   type HostLoadStatus,
   type HostLoadUsage,
   type HostLoadWatch,
+  type HostStrain,
 } from '@shared/host-load'
 import type { MemoryReading } from '../idle-release'
 import { attributeUsage, type Listing, type UsageOwners } from './processes'
 import { Strains } from './strains'
-import { cpuPercent, type CpuSample, type SystemRead } from './system'
+import { cpuPercent, type CpuSample, type LowRead, type SystemRead } from './system'
 
 const MINUTE = 60_000
 /** A CPU sample older than this is no base to measure from: a short one is taken instead. */
@@ -41,6 +44,8 @@ export interface LoadSource {
   cores(): Promise<number>
   /** Everything but the CPU, given as measured. */
   read(cpu: number): Promise<SystemRead>
+  /** The disks and the battery alone. */
+  readLow(): Promise<LowRead>
   /** Every process now, or null where they are not read. */
   list(): Promise<Listing> | null
 }
@@ -58,6 +63,10 @@ export interface LoadMonitorDeps {
   source: LoadSource
   /** Whether a read is worth it without a watch: a client is connected, or an agent runs. */
   active(): boolean
+  /** Whether a device wants to hear the computer runs low, which keeps the disks and battery read. */
+  lowWatch(): boolean
+  /** A disk or the battery went under a line, or a deeper one; memory never comes here. */
+  low(strain: HostStrain): void
   owners(): Promise<OwnersRead>
   /** Whether the port serves a paired device, which sees the terminals only as the owner allows. */
   isDevice(portId: string): boolean
@@ -90,6 +99,8 @@ export class LoadMonitor {
   private stopped = true
   private lastLoad: HostLoad | null = null
   private lastReadAt = -Infinity
+  /** When the disks and battery were last read alone. */
+  private lastLowAt = -Infinity
   /** When a minute's check last found nothing worth reading. */
   private idleCheckAt = -Infinity
   private cpuFrom: CpuSample | null = null
@@ -199,7 +210,7 @@ export class LoadMonitor {
       // A lease that runs out stops the reads then.
       for (const watcher of this.watchers.values()) due = Math.min(due, watcher.until)
     } else {
-      due = Math.max(this.lastReadAt, this.idleCheckAt) + LOAD_IDLE_MS
+      due = Math.max(this.lastReadAt, this.lastLowAt, this.idleCheckAt) + LOAD_IDLE_MS
     }
     this.timer = setTimeout(() => void this.tick(), Math.max(0, due - now))
     this.timer.unref?.()
@@ -216,6 +227,8 @@ export class LoadMonitor {
         this.detailFrom = null
         this.lastUsage = null
         if (this.deps.active()) await this.readLoad()
+        // Only a push needs it: the disks and the battery, nothing more.
+        else if (this.deps.lowWatch()) await this.readLow()
         // Nothing to see: the next check is a minute away, as a read would be.
         else this.idleCheckAt = now
         return
@@ -271,14 +284,35 @@ export class LoadMonitor {
     this.lastReadAt = this.now()
     this.addPoint(load, Math.max(1, to.at - from.at))
     this.deps.memory(memory)
-    this.strains.read(load)
-    const strains = this.status()
-    const sent = JSON.stringify(strains.strains)
+    this.takeStrains(() => this.strains.read(load))
+    return load
+  }
+
+  private async readLow(): Promise<void> {
+    const read = await this.deps.source.readLow()
+    this.lastLowAt = this.now()
+    this.takeStrains(() => this.strains.readLow(read))
+  }
+
+  /**
+   * Reads the strains: every port hears when they changed, and the devices of each disk or battery
+   * level that is new. A level ends only once its reading stays back over the line, so each
+   * crossing is told once. Memory is not, since idle release makes room first.
+   */
+  private takeStrains(read: () => void): void {
+    const before = this.strains.list()
+    read()
+    const after = this.strains.list()
+    const sent = JSON.stringify(after)
     if (sent !== this.sentStrains) {
       this.sentStrains = sent
-      this.deps.broadcast({ type: 'host.status', status: strains })
+      this.deps.broadcast({ type: 'host.status', status: { strains: after } })
     }
-    return load
+    for (const strain of after) {
+      if (strain.kind === 'memory') continue
+      const was = before.find((s) => s.kind === strain.kind && s.path === strain.path)
+      if (!was || (was.level === 'warn' && strain.level === 'critical')) this.deps.low(strain)
+    }
   }
 
   /**

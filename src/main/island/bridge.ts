@@ -199,7 +199,7 @@ export class IslandBridge {
 
   /** Whether it shows this in place of a notification: all but a workflow task's, while it runs. */
   shows(message: HostAttention): boolean {
-    return this.showing() && !('taskId' in message)
+    return this.showing() && !('taskId' in message) && message.kind !== 'computer-low'
   }
 
   state(): IslandState {
@@ -346,7 +346,8 @@ export class IslandBridge {
       })
       return
     }
-    if ('taskId' in message) return
+    // Another computer running low names no session, and comes as a notification.
+    if ('taskId' in message || message.kind === 'computer-low') return
     const row = message.kind === 'routine-paused' ? null : this.rowKeyOf(hostKey, message.sessionId)
     this.send({ type: 'pop', row, kind: message.kind, title, body })
   }

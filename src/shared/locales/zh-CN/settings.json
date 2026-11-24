@@ -409,6 +409,11 @@
       "description": "某个额度用到 90%、用完，或者用完后重置了。",
       "keywords": "额度 限额 套餐 用量 limit"
     },
+    "computerLow": {
+      "name": "电脑资源不足",
+      "description": "你不在电脑前时，它的磁盘快满了或电量低。",
+      "keywords": "磁盘 空间 存储 满 电池 电量 低 电脑 主机"
+    },
     "sound": {
       "name": "播放提示音",
       "description": "系统的通知提示音。"

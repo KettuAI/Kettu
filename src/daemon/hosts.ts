@@ -23,6 +23,7 @@ import type {
 } from '@shared/host-control'
 import { pushedAttention } from '@shared/attention'
 import { BROWSER_UNAVAILABLE } from '@shared/browser'
+import { isHostStrain } from '@shared/host-load'
 import { resolveLocale, type Locale } from '@shared/locale'
 import type { DeviceActivity } from '@shared/remote/activity'
 import { isDirectStatus, isPort } from '@shared/remote/address'
@@ -38,6 +39,7 @@ import { processControl, stopTrees, type ProcessId } from '../agent-host/process
 import { t } from '../main/i18n'
 import { createLogger } from '../main/log'
 import { marketCallOf } from '../main/market-api'
+import { runningLowAttention } from '../main/running-low'
 import type { MarketKeysPush } from '../main/market-keys'
 import {
   hostSettings,
@@ -190,6 +192,8 @@ export class Hosts {
   private readonly attentionListeners = new Set<(message: Attention) => void>()
   /** What waits for the user by session, which each remote host process starts with. */
   private waiting: Record<string, string[]> = {}
+  /** Whether a paired device wants to hear when this computer runs low, as the remote host said. */
+  private lowWatched = false
   private readonly askers = new Map<number, (pairing: PairingState) => void>()
   private nextCode = 1
   private readonly reportRequests = new Map<number, (result: ReportBuildResult) => void>()
@@ -230,6 +234,7 @@ export class Hosts {
       startMessages: () => [
         { type: 'host:market-keys', ...options.marketKeys() },
         { type: 'host:market-account', account: options.marketAccount() },
+        ...(this.lowWatched ? [{ type: 'host:low-watch' as const, wanted: true }] : []),
       ],
       shutdownMessage: { type: 'host:shutdown' },
       readyType: 'host:ready',
@@ -352,6 +357,7 @@ export class Hosts {
       onMessage: (message) => this.receiveRemote(message),
       onExit: () => {
         this.setRemoteStatus(null)
+        this.setLowWatch(false)
         this.voidCodes()
         for (const answer of [...this.requests.values()]) answer(null)
       },
@@ -921,6 +927,19 @@ export class Hosts {
     ])
   }
 
+  /** What needs the user, for the owner's devices and their notifications. */
+  private attention(message: Attention): void {
+    for (const listener of this.attentionListeners) listener(message)
+    const attention = pushedAttention(message)
+    if (attention) this.remote.post({ type: 'remote-host:attention', attention })
+  }
+
+  private setLowWatch(wanted: boolean): void {
+    if (wanted === this.lowWatched) return
+    this.lowWatched = wanted
+    this.agent.post({ type: 'host:low-watch', wanted })
+  }
+
   private setRemoteStatus(status: RemoteHostStatus | null): void {
     this.remoteStatus = status
     for (const listener of [...this.statusListeners]) listener()
@@ -963,6 +982,9 @@ export class Hosts {
         break
       case 'remote-host:admin-call':
         void this.answerAdmin(message)
+        break
+      case 'remote-host:low-watch':
+        if (typeof message.wanted === 'boolean') this.setLowWatch(message.wanted)
         break
       default:
         log.warn(`Ignored unknown message "${(message as { type: string }).type}"`)
@@ -1062,12 +1084,15 @@ export class Hosts {
           })
         }
         break
-      case 'host:attention': {
-        for (const listener of this.attentionListeners) listener(message)
-        const attention = pushedAttention(message)
-        if (attention) this.remote.post({ type: 'remote-host:attention', attention })
+      case 'host:attention':
+        this.attention(message)
         break
-      }
+      // A daemon cannot tell whether anyone is at the computer, so it always tells the devices.
+      case 'host:running-low':
+        if (isHostStrain(message.strain)) {
+          this.attention(runningLowAttention(message.strain, this.hostName()))
+        }
+        break
       case 'host:waiting':
         if (typeof message.sessions === 'object' && message.sessions !== null) {
           this.waiting = message.sessions

@@ -139,6 +139,35 @@ describe("a push's signature", () => {
     expect(await openWebPush(payload.subarray(0, 60), t.browser, t.keys)).toBeNull()
   })
 
+  it('shows a computer running low with its words, and only a strain that is one', async () => {
+    const t = await setup()
+    const low = {
+      v: 1,
+      host: t.hostId,
+      hostName: 'build-box',
+      at: 1,
+      tag: 'tag_2',
+      title: 'build-box 资源不足',
+      body: '电量 18%，没在充电',
+      kind: 'computer-low',
+      strain: { kind: 'battery', level: 'warn', value: 18 },
+    } satisfies PushContent
+    const payload = await signWebPush(low, t.browser, t.key)
+    expect(await openWebPush(payload, t.browser, t.keys)).toEqual(low)
+    for (const strain of [
+      { kind: 'cpu', level: 'warn', value: 99 },
+      { kind: 'disk', level: 'low', value: 1 },
+      { kind: 'disk', level: 'warn', value: -1 },
+      { kind: 'disk', level: 'warn', value: 1, path: '' },
+      undefined,
+    ]) {
+      const bad = { ...low, strain } as unknown as PushContent
+      expect(await openWebPush(await signWebPush(bad, t.browser, t.key), t.browser, t.keys)).toBe(
+        null,
+      )
+    }
+  })
+
   it('drops content that is not an alert, though signed', async () => {
     const t = await setup()
     const withdraw = { ...t.content, kind: 'withdraw' } as unknown as PushContent

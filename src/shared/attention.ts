@@ -3,6 +3,7 @@
 // notifications and the web client's both follow it.
 
 import type { HostToMain } from './host-control'
+import { isHostStrain } from './host-load'
 import type { AppCommand } from './ipc'
 import type { PlanLimitNoticeLevel } from './plan-limits'
 import type { HostAttention } from './remote/host-admin'
@@ -18,6 +19,7 @@ export const ATTENTION_SETTING = {
   'plan-limit': 'planLimits',
   'task-needs-you': 'permission',
   'task-ended': 'turnEnded',
+  'computer-low': 'computerLow',
 } as const satisfies Record<HostAttention['kind'], keyof SettingsFile['notifications']>
 
 const MAX_TITLE = 120
@@ -35,8 +37,9 @@ const PLAN_LIMIT_LEVELS: readonly PlanLimitNoticeLevel[] = ['near', 'reached', '
 
 /**
  * What a well-formed attention message stands for, which a newer one of the same replaces, and
- * what a click opens: its session, the Routines page for a pause, a workflow task, or the Usage
- * page for a plan limit that names no session. Null for a malformed one.
+ * what a click opens: its session, the Routines page for a pause, a workflow task, the Usage page
+ * for a plan limit that names no session, or the host's load for a computer running low. Null for
+ * a malformed one.
  */
 export function attentionTarget(
   message: HostAttention,
@@ -57,6 +60,14 @@ export function attentionTarget(
         : null
     }
     return { key: `limit:${message.key}`, command: { kind: 'open-usage' } }
+  }
+  if (message.kind === 'computer-low') {
+    if (!isHostStrain(message.strain)) return null
+    // A deeper level of the same kind replaces the earlier notice.
+    return {
+      key: `computer-low:${message.strain.kind}`,
+      command: { kind: 'open-settings', section: 'hosts' },
+    }
   }
   if (message.kind === 'routine-paused') {
     return isId(message.agentId)

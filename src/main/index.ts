@@ -88,6 +88,7 @@ import {
   type IdentityCipher,
 } from './remote-identity'
 import { watchPresence } from './presence'
+import { runningLowAttention } from './running-low'
 import { RelayFeatures, RelayToken, readRelayFeatures } from './relay-token'
 import { readJsonFile } from './json-file'
 import { MarketKeys, marketKeysFile } from './market-keys'
@@ -495,10 +496,21 @@ async function start(): Promise<void> {
   })
   nativeTheme.on('updated', () => island.appearanceChanged())
   app.on('will-quit', () => island.quit())
+  // Whether the user is at this computer, and whether a paired device wants to hear it runs low.
+  let present = false
+  let lowWatched = false
   const agentHost = new AgentHost({
     settings: () => hostSettings(settings.get(), systemLocale),
     marketKeys: () => marketKeys.contentsForHost(),
     onBattery: () => (process.platform === 'win32' ? powerMonitor.isOnBatteryPower() : null),
+    lowWatch: () => lowWatched,
+    onRunningLow: (strain) => {
+      // At the computer the system warns of its own disk and battery, so nothing goes out.
+      if (present) return
+      const message = runningLowAttention(strain, hostName())
+      hostAdmin?.attention(message)
+      remoteHost.attention(message)
+    },
     onMarketOAuth: (serverId, state) => void marketKeys.setOAuth(serverId, state),
     onFirstStart: (harnesses) => settings.firstStart(harnesses),
     onAttention: (message) => {
@@ -862,6 +874,10 @@ async function start(): Promise<void> {
     hostsChanged,
     hostOpened: (hostId, port) => hostSessions.opened(hostId, port),
     hostClosed: (hostId, port) => hostSessions.closed(hostId, port),
+    lowWatchChanged: (wanted) => {
+      lowWatched = wanted
+      agentHost.lowWatch(wanted)
+    },
   })
   const artifacts = new Artifacts({
     content: (ref, version) => {
@@ -1238,7 +1254,10 @@ async function start(): Promise<void> {
   if (!cloudOn() && account.status().state !== 'signed-out') void account.signOut()
   relayToken.update()
   void remoteHost.setEnabled(settings.get().remote.enabled)
-  watchPresence((present) => remoteHost.setPresent(present))
+  watchPresence((now) => {
+    present = now
+    remoteHost.setPresent(now)
+  })
   const window = createMainWindow(start)
   window.once('show', () => {
     updater.start()

@@ -49,6 +49,7 @@ import {
   type ComputerHold,
 } from '@shared/computer-use'
 import { isControlOutcome, type ControlOutcome } from '@shared/control'
+import { isHostStrain, type HostStrain } from '@shared/host-load'
 import type { MarketAccount, MarketCall, MarketCallAnswer } from '@shared/market-publish'
 import { isMediaType, MEDIA_TOKEN, type MediaGrantRecord } from '@shared/media'
 import type { PortDevice } from '@shared/remote/device'
@@ -98,6 +99,10 @@ export interface AgentHostDeps {
   marketAccount(): MarketAccount | null
   /** On Windows, whether the computer runs on battery, which follows init at each start. */
   onBattery?(): boolean | null
+  /** Whether a paired device wants to hear when the computer runs low, which follows init too. */
+  lowWatch?(): boolean
+  /** A disk or the battery went under a line, or a deeper one, for the devices. */
+  onRunningLow?(strain: HostStrain): void
   /** Makes a Marketplace API call of the host's with the account's access token. */
   market?: (call: MarketCall) => Promise<MarketCallAnswer>
   /** An agent's settings tool reads or changes the settings. */
@@ -400,6 +405,7 @@ export class AgentHost {
           { type: 'host:market-keys', ...deps.marketKeys() },
           { type: 'host:market-account', account: deps.marketAccount() },
           ...(onBattery === null ? [] : [{ type: 'host:battery' as const, onBattery }]),
+          ...(deps.lowWatch?.() ? [{ type: 'host:low-watch' as const, wanted: true }] : []),
         ]
       },
       connectMessage: (windowId) => ({ type: 'host:connect', windowId }),
@@ -489,6 +495,11 @@ export class AgentHost {
   /** The computer moved to or from battery, which the host reads itself except on Windows. */
   battery(onBattery: boolean): void {
     this.host.post({ type: 'host:battery', onBattery })
+  }
+
+  /** Whether a paired device wants to hear when the computer runs low. */
+  lowWatch(wanted: boolean): void {
+    this.host.post({ type: 'host:low-watch', wanted })
   }
 
   /** The log level and detailed records; a host started later takes both from its environment. */
@@ -881,6 +892,9 @@ export class AgentHost {
       }
       case 'host:attention':
         this.deps.onAttention(message)
+        break
+      case 'host:running-low':
+        if (isHostStrain(message.strain)) this.deps.onRunningLow?.(message.strain)
         break
       case 'host:badge':
         if (typeof message.count === 'number') this.deps.onBadge(message.count)

@@ -410,6 +410,11 @@
       "description": "A plan limit at 90%, used up, or reset after it was used up.",
       "keywords": "limit quota plan usage"
     },
+    "computerLow": {
+      "name": "Computer running low",
+      "description": "A computer’s disk is almost full or its battery low, while you’re away from it.",
+      "keywords": "disk space storage full battery low power computer host"
+    },
     "sound": {
       "name": "Play a sound",
       "description": "The system’s notification sound."

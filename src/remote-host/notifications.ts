@@ -3,6 +3,7 @@
 // senders between them, the push gateway's for APNs and Web Push's for browsers. Only a host with
 // its Ed25519 key has them, since every push is signed.
 
+import { isHostStrain } from '@shared/host-load'
 import { addLogSecret } from '@shared/log/process-log'
 import {
   DEFAULT_CHOICES,
@@ -44,6 +45,8 @@ export interface DeviceNotificationsOptions {
   tell(deviceId: string, message: NotificationsWithdrawn): void
   /** The key browsers' subscriptions are sealed with in the device file. */
   storeKey: Uint8Array
+  /** Whether a device wants to hear when the computer runs low, each time that changes. */
+  lowWatch?(wanted: boolean): void
   log: LogFn
   fetch?: typeof fetch
   mergeMs?: number
@@ -56,6 +59,7 @@ const KINDS: readonly string[] = [
   'error',
   'routine-ended',
   'routine-paused',
+  'computer-low',
 ] satisfies AttentionKind[]
 
 const MAX_TEXT = 4000
@@ -78,7 +82,10 @@ function parseAnswer(value: unknown): { optionId: string; label: string } | null
  */
 export function parseAttention(value: unknown): Attention | null {
   if (typeof value !== 'object' || value === null) return null
-  const { kind, sessionId, agentId, title, body, request, front } = value as Record<string, unknown>
+  const { kind, sessionId, agentId, strain, title, body, request, front } = value as Record<
+    string,
+    unknown
+  >
   if (typeof kind !== 'string' || !KINDS.includes(kind)) return null
   if (typeof title !== 'string' || typeof body !== 'string') return null
   if (title.length > MAX_TEXT || body.length > MAX_TEXT) return null
@@ -92,6 +99,10 @@ export function parseAttention(value: unknown): Attention | null {
   if (kind === 'routine-paused') {
     if (!isId(agentId)) return null
     attention.agentId = agentId
+  } else if (kind === 'computer-low') {
+    if (!isHostStrain(strain) || strain.kind === 'memory') return null
+    attention.strain = strain
+    return attention
   } else {
     if (!isId(sessionId)) return null
     attention.sessionId = sessionId
@@ -139,6 +150,8 @@ export class DeviceNotifications {
    * by subject, oldest first. A push cannot withdraw a notification, so the page closes these.
    */
   private readonly withdrawn = new Map<string, Map<string, string>>()
+  private lowWatched = false
+  private stopped = false
 
   constructor(private readonly options: DeviceNotificationsOptions) {
     const { devices } = options
@@ -252,7 +265,28 @@ export class DeviceNotifications {
     }
     if (!(await devices.setPush(deviceId, next))) return null
     this.notifier.deviceChanged()
+    this.checkLowWatch()
     return this.state(deviceId)
+  }
+
+  /**
+   * Whether a device that a push reaches wants to hear when the computer runs low, which keeps
+   * the host reading its disks and battery while nothing else would.
+   */
+  wantsLow(): boolean {
+    const { devices } = this.options
+    return devices.list().some((device) => {
+      const push = devices.push(device.id)
+      return Boolean(push?.choices.computerLow && (push.target || push.web))
+    })
+  }
+
+  /** Tells the host's parent when `wantsLow` changed, and the first time. */
+  checkLowWatch(): void {
+    const wanted = !this.stopped && this.wantsLow()
+    if (wanted === this.lowWatched) return
+    this.lowWatched = wanted
+    this.options.lowWatch?.(wanted)
   }
 
   attention(attention: Attention): void {
@@ -275,9 +309,12 @@ export class DeviceNotifications {
   forget(deviceId: string): void {
     this.notifier.forget(deviceId)
     this.withdrawn.delete(deviceId)
+    this.checkLowWatch()
   }
 
   stop(): void {
+    this.stopped = true
+    this.checkLowWatch()
     this.notifier.stop()
     this.sender.stop()
     this.webSender.stop()
@@ -321,6 +358,7 @@ export class DeviceNotifications {
     await devices.setPush(deviceId, { target: push.target, choices: push.choices })
     this.withdrawn.delete(deviceId)
     this.notifier.deviceChanged()
+    this.checkLowWatch()
   }
 
   private async unregistered(deviceId: string, token: PushTokenKind): Promise<void> {
@@ -340,6 +378,7 @@ export class DeviceNotifications {
           })
     await devices.setPush(deviceId, { ...push, target })
     this.notifier.deviceChanged()
+    this.checkLowWatch()
   }
 
   private async dropActivityToken(deviceId: string): Promise<void> {

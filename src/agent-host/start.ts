@@ -237,6 +237,12 @@ export function startAgentHost(control: ControlChannel<MainToHost, HostToMain>):
           withHost((h) => h.battery(onBattery))
         }
         break
+      case 'host:low-watch':
+        if (typeof message.wanted === 'boolean') {
+          const { wanted } = message
+          withHost((h) => h.lowWatch(wanted))
+        }
+        break
       case 'host:computer-control':
         if (
           typeof message.sessionId === 'string' &&

@@ -10,6 +10,7 @@ import {
   openRoutines,
   openSession,
   openSettings,
+  openSettingsItem,
   openTask,
   openUsage,
   toggleSidebar,
@@ -40,7 +41,9 @@ export function useAppCommands(): void {
             newSession()
             break
           case 'open-settings':
-            openSettings((command.section as SettingsSection | undefined) ?? null)
+            if (command.section && command.item) {
+              openSettingsItem(command.section as SettingsSection, command.item)
+            } else openSettings((command.section as SettingsSection | undefined) ?? null)
             if (command.section === 'about') void checkForUpdates()
             break
           case 'toggle-sidebar':

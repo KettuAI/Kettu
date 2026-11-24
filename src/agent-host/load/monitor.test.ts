@@ -1,31 +1,61 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { HostEvent } from '@shared/agent-host'
-import { LOAD_DETAIL_MS, LOAD_IDLE_MS, LOAD_LEASE_MS, LOAD_READ_MS } from '@shared/host-load'
-import type { HostLoad } from '@shared/host-load'
+import {
+  LOAD_DETAIL_MS,
+  LOAD_IDLE_MS,
+  LOAD_LEASE_MS,
+  LOAD_READ_MS,
+  STRAIN_CLEAR_MS,
+} from '@shared/host-load'
+import type { HostBattery, HostLoad, HostStrain } from '@shared/host-load'
+import type { MemoryState } from '@shared/idle-release'
 import { LoadMonitor, type LoadSource, type OwnersRead } from './monitor'
 import type { Listing } from './processes'
 
 const GB = 1024 ** 3
 
-function setup(options: { active?: boolean; freeGb?: () => number; devices?: boolean } = {}) {
+function setup(
+  options: {
+    active?: boolean
+    freeGb?: () => number
+    devices?: boolean
+    lowWatch?: () => boolean
+    battery?: () => HostBattery | undefined
+    memory?: () => MemoryState
+  } = {},
+) {
   let busy = 0
   let reads = 0
+  let lowReads = 0
+  let samples = 0
   let listings = 0
+  const disks = () => [
+    { path: '/', name: 'Disk', free: (options.freeGb?.() ?? 100) * GB, total: 500 * GB },
+  ]
   const source: LoadSource = {
-    cpuSample: () => Promise.resolve({ at: Date.now(), busy: (busy += 100), total: busy * 4 }),
+    cpuSample: () => {
+      samples++
+      return Promise.resolve({ at: Date.now(), busy: (busy += 100), total: busy * 4 })
+    },
     cores: () => Promise.resolve(4),
     read: (cpu) => {
       reads++
+      const battery = options.battery?.()
+      const state = options.memory?.() ?? 'plenty'
       const load: HostLoad = {
         at: Date.now(),
         cpu: { percent: cpu, cores: 4 },
-        memory: { used: 8 * GB, total: 16 * GB, state: 'plenty' },
-        disks: [
-          { path: '/', name: 'Disk', free: (options.freeGb?.() ?? 100) * GB, total: 500 * GB },
-        ],
+        memory: { used: 8 * GB, total: 16 * GB, state },
+        disks: disks(),
+        ...(battery ? { battery } : {}),
         uptime: 100,
       }
-      return Promise.resolve({ load, memory: { state: 'plenty', available: 50 } })
+      return Promise.resolve({ load, memory: { state, available: 50 } })
+    },
+    readLow: () => {
+      lowReads++
+      const battery = options.battery?.()
+      return Promise.resolve({ at: Date.now(), disks: disks(), ...(battery ? { battery } : {}) })
     },
     list: () => {
       listings++
@@ -60,10 +90,13 @@ function setup(options: { active?: boolean; freeGb?: () => number; devices?: boo
   const sent: { portId: string; event: HostEvent }[] = []
   const broadcasts: HostEvent[] = []
   const memory: unknown[] = []
+  const lows: HostStrain[] = []
   const monitor = new LoadMonitor({
     platform: 'darwin',
     source,
     active: () => options.active ?? false,
+    lowWatch: () => options.lowWatch?.() ?? false,
+    low: (strain) => lows.push(strain),
     owners: () => Promise.resolve(owners),
     isDevice: (portId) => portId.startsWith('device'),
     send: (portIds, event) => portIds.forEach((portId) => sent.push({ portId, event })),
@@ -74,7 +107,15 @@ function setup(options: { active?: boolean; freeGb?: () => number; devices?: boo
   })
   const loads = (portId: string) =>
     sent.filter((entry) => entry.portId === portId && entry.event.type === 'host.load')
-  return { monitor, sent, broadcasts, memory, loads, counts: () => ({ reads, listings }) }
+  return {
+    monitor,
+    sent,
+    broadcasts,
+    memory,
+    lows,
+    loads,
+    counts: () => ({ reads, lowReads, samples, listings }),
+  }
 }
 
 describe('LoadMonitor', () => {
@@ -191,5 +232,63 @@ describe('LoadMonitor', () => {
       status: { strains: [{ kind: 'disk', level: 'warn', path: '/' }] },
     })
     expect(monitor.status().strains).toHaveLength(1)
+  })
+
+  it('reads only the disks and battery once a minute while only a device wants to hear', async () => {
+    let wanted = true
+    const { monitor, counts } = setup({ lowWatch: () => wanted })
+    monitor.start()
+    await vi.advanceTimersByTimeAsync(LOAD_IDLE_MS * 3 + 1000)
+    // At start, then once a minute; never the CPU, memory or the processes.
+    expect(counts()).toEqual({ reads: 0, lowReads: 4, samples: 0, listings: 0 })
+    wanted = false
+    await vi.advanceTimersByTimeAsync(LOAD_IDLE_MS * 3)
+    expect(counts().lowReads).toBe(4)
+    monitor.stop()
+  })
+
+  it('tells devices once each time a disk crosses a line, again only after it cleared', async () => {
+    let free = 100
+    const { monitor, lows } = setup({ lowWatch: () => true, freeGb: () => free })
+    monitor.start()
+    free = 8
+    await vi.advanceTimersByTimeAsync(LOAD_IDLE_MS * 5)
+    expect(lows).toMatchObject([{ kind: 'disk', level: 'warn', path: '/' }])
+    free = 1.5
+    await vi.advanceTimersByTimeAsync(LOAD_IDLE_MS * 5)
+    expect(lows.map((strain) => strain.level)).toEqual(['warn', 'critical'])
+    // Back over the critical line, but not past its margin: still critical, nothing new.
+    free = 3
+    await vi.advanceTimersByTimeAsync(STRAIN_CLEAR_MS * 2)
+    free = 1
+    await vi.advanceTimersByTimeAsync(LOAD_IDLE_MS * 5)
+    expect(lows).toHaveLength(2)
+    // Cleared for good, then under the line again.
+    free = 100
+    await vi.advanceTimersByTimeAsync(STRAIN_CLEAR_MS + LOAD_IDLE_MS * 2)
+    expect(monitor.status().strains).toEqual([])
+    free = 8
+    await vi.advanceTimersByTimeAsync(LOAD_IDLE_MS * 3)
+    expect(lows.map((strain) => strain.level)).toEqual(['warn', 'critical', 'warn'])
+    monitor.stop()
+  })
+
+  it('tells devices of a low battery again once it was plugged in, and never of memory', async () => {
+    let battery: HostBattery = { percent: 18, charging: false, onBattery: true }
+    const { monitor, lows } = setup({
+      active: true,
+      battery: () => battery,
+      memory: () => 'critical',
+    })
+    monitor.start()
+    await vi.advanceTimersByTimeAsync(LOAD_IDLE_MS * 3)
+    expect(monitor.status().strains.map((strain) => strain.kind)).toEqual(['memory', 'battery'])
+    expect(lows).toEqual([{ kind: 'battery', level: 'warn', value: 18 }])
+    battery = { percent: 30, charging: true, onBattery: false }
+    await vi.advanceTimersByTimeAsync(LOAD_IDLE_MS)
+    battery = { percent: 17, charging: false, onBattery: true }
+    await vi.advanceTimersByTimeAsync(LOAD_IDLE_MS * 3)
+    expect(lows.map((strain) => strain.kind)).toEqual(['battery', 'battery'])
+    monitor.stop()
   })
 })

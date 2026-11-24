@@ -98,19 +98,34 @@ export class Strains {
 
   /** Takes a load; true when the strains changed. */
   read(load: HostLoad): boolean {
-    const now = load.at
-    let changed = false
+    const memory = this.readMemory(load)
+    return this.readLow(load) || memory
+  }
+
+  /** Takes the disks and battery alone, as read while only a push needs them; memory is kept. */
+  readLow({ at, disks, battery }: Pick<HostLoad, 'at' | 'disks' | 'battery'>): boolean {
+    const disk = this.readDisks(at, disks)
+    return this.readBattery(at, battery) || disk
+  }
+
+  private readMemory(load: HostLoad): boolean {
     const memoryLeft =
       load.memory.total > 0
         ? Math.round(((load.memory.total - load.memory.used) / load.memory.total) * 100)
         : 0
     const critical: Level = load.memory.state === 'critical' ? 2 : 0
-    changed =
-      this.memory.read({ level: critical, held: critical, value: memoryLeft }, now) || changed
+    const changed = this.memory.read(
+      { level: critical, held: critical, value: memoryLeft },
+      load.at,
+    )
     if (this.memory.current > 0 || critical) this.memoryValue = memoryLeft
+    return changed
+  }
 
+  private readDisks(now: number, disks: HostLoad['disks']): boolean {
+    let changed = false
     const seen = new Set<string>()
-    for (const disk of load.disks) {
+    for (const disk of disks) {
       seen.add(disk.path)
       let kept = this.disks.get(disk.path)
       if (!kept) {
@@ -138,28 +153,25 @@ export class Strains {
       if (kept.level.current > 0) changed = true
       this.disks.delete(key)
     }
-
-    const battery = load.battery
-    if (!battery?.onBattery || battery.percent === undefined) {
-      // Plugged in, the battery is no longer a worry.
-      changed = this.battery.clear() || changed
-    } else {
-      this.batteryValue = battery.percent
-      changed =
-        this.battery.read(
-          {
-            level: byLines(battery.percent, BATTERY_WARN_PERCENT, BATTERY_CRITICAL_PERCENT),
-            held: byLines(
-              battery.percent,
-              BATTERY_WARN_PERCENT + BATTERY_MARGIN_PERCENT,
-              BATTERY_CRITICAL_PERCENT + BATTERY_MARGIN_PERCENT,
-            ),
-            value: battery.percent,
-          },
-          now,
-        ) || changed
-    }
     return changed
+  }
+
+  private readBattery(now: number, battery: HostLoad['battery']): boolean {
+    // Plugged in, the battery is no longer a worry.
+    if (!battery?.onBattery || battery.percent === undefined) return this.battery.clear()
+    this.batteryValue = battery.percent
+    return this.battery.read(
+      {
+        level: byLines(battery.percent, BATTERY_WARN_PERCENT, BATTERY_CRITICAL_PERCENT),
+        held: byLines(
+          battery.percent,
+          BATTERY_WARN_PERCENT + BATTERY_MARGIN_PERCENT,
+          BATTERY_CRITICAL_PERCENT + BATTERY_MARGIN_PERCENT,
+        ),
+        value: battery.percent,
+      },
+      now,
+    )
   }
 
   list(): HostStrain[] {

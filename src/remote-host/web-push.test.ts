@@ -18,7 +18,7 @@ import {
   type WebPushSubscription,
 } from '@shared/remote/web-push'
 import { DeviceStore } from './devices'
-import { DeviceNotifications } from './notifications'
+import { DeviceNotifications, parseAttention } from './notifications'
 import {
   encryptWebPush,
   isUsableSubscription,
@@ -251,6 +251,7 @@ describe("a browser's notifications", () => {
     const requests: { url: string; headers: Record<string, string>; body: Uint8Array }[] = []
     const told: NotificationsWithdrawn[] = []
     const state = { foreground: false }
+    const watched: boolean[] = []
     let heard: () => void = () => {}
     const notifications = new DeviceNotifications({
       devices,
@@ -263,6 +264,7 @@ describe("a browser's notifications", () => {
       foreground: () => state.foreground,
       tell: (_, message) => told.push(message),
       storeKey,
+      lowWatch: (wanted) => watched.push(wanted),
       log,
       mergeMs: 1,
       retry: { firstMs: 1, maxMs: 5, attempts: 3 },
@@ -288,6 +290,7 @@ describe("a browser's notifications", () => {
       requests,
       told,
       state,
+      watched,
       logs,
       request,
     }
@@ -344,6 +347,81 @@ describe("a browser's notifications", () => {
     })
     expect(request!.headers.Topic).toBe(tag)
     t.notifications.stop()
+  })
+
+  const low = (level: 'warn' | 'critical', free: number) => ({
+    kind: 'computer-low' as const,
+    strain: { kind: 'disk' as const, level, value: free, path: '/home' },
+    title: 'build-box is running low',
+    body: `Disk almost full: ${free / 1e9} GB free on /home`,
+    inFront: false,
+    devices: [],
+  })
+
+  it('push a computer running low with its words, a deeper level under the same tag', async () => {
+    const t = await setup()
+    const { subscription: given, ua } = await subscription()
+    // A device that set its choices before this kind existed hears it too.
+    await t.notifications.update(t.browser.id, { web: given, choices: { turnEnded: true } })
+    expect(t.notifications.state(t.browser.id).choices.computerLow).toBe(true)
+    const opened = async (index: number) => {
+      const payload = await decryptAsBrowser(t.requests[index]!.body, ua, bytes(given.auth))
+      return openWebPush(payload, ua.publicKey, (id) => (id === t.hostId ? t.key.publicKey : null))
+    }
+    let sent = t.request()
+    t.notifications.attention(parseAttention(low('warn', 6.4e9))!)
+    await sent
+    const tag = await pushTag(t.browserKey.publicKey, t.hostId, 'computer-low:disk')
+    expect(await opened(0)).toMatchObject({
+      kind: 'computer-low',
+      strain: { kind: 'disk', level: 'warn', value: 6.4e9, path: '/home' },
+      title: 'build-box is running low',
+      body: 'Disk almost full: 6.4 GB free on /home',
+      tag,
+    })
+    sent = t.request()
+    t.notifications.attention(parseAttention(low('critical', 1.5e9))!)
+    await sent
+    expect(await opened(1)).toMatchObject({ strain: { level: 'critical' }, tag })
+    t.notifications.stop()
+  })
+
+  it('push no computer running low while the owner is at it, nor later', async () => {
+    const t = await setup()
+    const { subscription: given } = await subscription()
+    // Even for a device that wants the rest while the owner is there too.
+    await t.notifications.update(t.browser.id, { web: given, choices: { onlyAway: false } })
+    t.notifications.setPresent(true)
+    t.notifications.attention(parseAttention(low('warn', 6.4e9))!)
+    await new Promise((resolve) => setTimeout(resolve, 30))
+    t.notifications.setPresent(false)
+    await new Promise((resolve) => setTimeout(resolve, 30))
+    expect(t.requests).toEqual([])
+    // The other kinds still reach a device that wants them while the owner is there.
+    t.notifications.setPresent(true)
+    const sent = t.request()
+    t.notifications.attention(attention('s1'))
+    await sent
+    expect(t.requests).toHaveLength(1)
+    t.notifications.stop()
+  })
+
+  it('push no computer running low to a device that turned it off, nor of memory', async () => {
+    const t = await setup()
+    const { subscription: given } = await subscription()
+    const memory = { kind: 'memory', level: 'critical', value: 4 }
+    expect(parseAttention({ ...low('warn', 6.4e9), strain: memory })).toBeNull()
+    expect(parseAttention({ ...low('warn', 6.4e9), strain: { ...memory, kind: 'cpu' } })).toBeNull()
+    await t.notifications.update(t.browser.id, { web: given, choices: { computerLow: false } })
+    t.notifications.attention(parseAttention(low('warn', 6.4e9))!)
+    await new Promise((resolve) => setTimeout(resolve, 30))
+    expect(t.requests).toEqual([])
+    // The host reads its disks and battery for the push only while a device wants it.
+    expect(t.watched).toEqual([])
+    await t.notifications.update(t.browser.id, { choices: { computerLow: true } })
+    expect(t.watched).toEqual([true])
+    t.notifications.stop()
+    expect(t.watched).toEqual([true, false])
   })
 
   it('push nothing while the page is in view, which shows its own', async () => {

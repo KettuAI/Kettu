@@ -477,6 +477,8 @@ export class AgentHost {
   private readonly system: SystemReader
   /** Whether the computer runs on battery, as main says on Windows; null until it has. */
   private onBattery: boolean | null = null
+  /** A paired device wants to hear when this computer runs low. */
+  private lowWatched = false
   /** The saved routines and the lifecycle of their runs. */
   readonly routines: RoutinesManager
   /** The user's workflow library. */
@@ -1099,12 +1101,18 @@ export class AgentHost {
         cpuSample: () => this.system.cpuSample(),
         cores: () => this.system.cores(),
         read: (cpu) => this.system.read(cpu),
+        readLow: () => this.system.readLow(),
         list: () => {
           const at = Date.now()
           return listProcesses(platform)?.then((rows) => ({ at, rows })) ?? null
         },
       },
       active: () => this.hub.size > 0 || this.agents.processes().length > 0,
+      lowWatch: () => this.lowWatched,
+      low: (strain) => {
+        log('info', `Running low: ${strain.kind} ${strain.level}`)
+        options.send({ type: 'host:running-low', strain })
+      },
       owners: () => this.loadOwners(),
       isDevice: (portId) => this.hub.deviceOf(portId) !== null,
       send: (portIds, event) => this.hub.send(portIds, event),
@@ -1883,6 +1891,11 @@ export class AgentHost {
   /** `host:battery`: whether the computer runs on battery, which main reads on Windows. */
   battery(onBattery: boolean): void {
     this.onBattery = onBattery
+  }
+
+  /** `host:low-watch`: whether a paired device wants to hear when this computer runs low. */
+  lowWatch(wanted: boolean): void {
+    this.lowWatched = wanted
   }
 
   private portClosed(portId: string): void {

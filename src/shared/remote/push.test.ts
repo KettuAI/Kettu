@@ -141,6 +141,8 @@ describe("a device's notifications", () => {
       muted: ['a', 'b'],
     })
     expect(parseChoices({ muted: Array.from({ length: 501 }, (_, i) => `s${i}`) })).toBeNull()
+    expect(parseChoices({ computerLow: false })).toEqual({ computerLow: false })
+    expect(parseChoices({ computerLow: 'no' })).toBeNull()
   })
 
   it('read an update that clears the target, changes it or leaves it', () => {
@@ -161,6 +163,12 @@ describe("a device's notifications", () => {
     expect(parseDevicePush({ target: null, choices: {} })).toEqual({
       target: null,
       choices: DEFAULT_CHOICES,
+    })
+    // Choices stored before a computer running low was pushed hear of it.
+    const before = { permission: true, turnEnded: false, errors: true, routines: false }
+    expect(parseDevicePush({ target, choices: before })?.choices).toMatchObject({
+      ...before,
+      computerLow: true,
     })
     expect(parseDevicePush({ target: { apns: {} }, choices: {} })).toBeNull()
   })

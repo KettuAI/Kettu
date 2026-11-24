@@ -20,6 +20,7 @@
 // of the host's Ed25519 public key in base32. A device checks S against the key the host gave it
 // over the channel, which hashes to that id.
 
+import type { HostStrain } from '../host-load'
 import { currentPrimitives, type KeyPair } from './primitives'
 import { decodeRelayBytes, encodeRelayBytes, relayOrigin, type RelayKey } from './relay'
 import {
@@ -111,6 +112,8 @@ export interface NotificationChoices {
   errors: boolean
   /** A routine's run ended, or the routines paused near a plan limit. */
   routines: boolean
+  /** The host's disk is almost full, or its battery low on battery; never while the user is at it. */
+  computerLow: boolean
   /** Only while the user is not at the host, when the host can tell: the desktop app can. */
   onlyAway: boolean
   /** Titles and text; without them a notification says only which host needs the user. */
@@ -124,6 +127,7 @@ export const DEFAULT_CHOICES: NotificationChoices = {
   turnEnded: true,
   errors: true,
   routines: false,
+  computerLow: true,
   onlyAway: true,
   details: true,
   muted: [],
@@ -204,6 +208,7 @@ const SWITCHES = [
   'turnEnded',
   'errors',
   'routines',
+  'computerLow',
   'onlyAway',
   'details',
 ] as const satisfies readonly (keyof NotificationChoices)[]
@@ -286,6 +291,11 @@ export type PushEvent =
   | { kind: 'turn-ended' | 'error' | 'routine-ended'; sessionId: string }
   /** An agent's routines paused near a plan limit; it opens the Routines page. */
   | { kind: 'routine-paused'; agentId: string }
+  /**
+   * The host's disk or battery went under a line, or a deeper one; it opens the host's load. Its
+   * tag's subject is `computer-low:<kind>`, so a deeper level replaces the earlier notification.
+   */
+  | { kind: 'computer-low'; strain: HostStrain }
   /** Removes the notification of the same tag, which no longer applies. */
   | { kind: 'withdraw'; sessionId?: string }
   /** A Live Activity's state: how many requests wait, and the session of the latest. */

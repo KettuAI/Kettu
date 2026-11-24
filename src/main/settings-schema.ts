@@ -250,6 +250,7 @@ const SECTION_FIELDS = {
     routines: isBoolean,
     updates: isBoolean,
     planLimits: isBoolean,
+    computerLow: isBoolean,
     sound: isBoolean,
     badge: isBoolean,
     island: isBoolean,

@@ -119,6 +119,8 @@ export interface RemoteHostDeps {
   changed?(): void
   /** The known hosts, their connections or the device key changed, for Settings › Hosts. */
   hostsChanged?(): void
+  /** Whether a paired device wants to hear when this computer runs low; false once it is gone. */
+  lowWatchChanged?(wanted: boolean): void
   /** A new session with another host opened, on main's end of its port. */
   hostOpened?(hostId: string, port: MessagePortMain): void
   /** That session ended, or the process went; the port is closed. */
@@ -210,6 +212,7 @@ export class RemoteHost {
   /** What waits for the user and whether they are at the computer, for each process to start with. */
   private waiting: Record<string, string[]> = {}
   private present: boolean | null = null
+  private lowWatched = false
 
   constructor(private readonly deps: RemoteHostDeps) {}
 
@@ -886,9 +889,16 @@ export class RemoteHost {
     }
   }
 
+  private setLowWatch(wanted: boolean): void {
+    if (wanted === this.lowWatched) return
+    this.lowWatched = wanted
+    this.deps.lowWatchChanged?.(wanted)
+  }
+
   /** The process is gone: its codes, pairings, ports and unanswered requests with it. */
   private lost(): void {
     this.voidCodes()
+    this.setLowWatch(false)
     for (const pairId of [...this.hostPairings.keys()]) {
       this.finishPairing(pairId, { state: 'failed', reason: 'unreachable' })
     }
@@ -1071,6 +1081,11 @@ export class RemoteHost {
         break
       case 'remote-host:admin-call':
         if (this.host === host) void this.answerAdmin(host, message)
+        break
+      case 'remote-host:low-watch':
+        if (this.host === host && typeof message.wanted === 'boolean') {
+          this.setLowWatch(message.wanted)
+        }
         break
       default:
         log.warn(`Ignored unknown message "${(message as { type: string }).type}"`)

@@ -33,9 +33,15 @@ export interface PushWorkerScope {
 }
 
 function commandOf(content: WebPushContent): AppCommand {
-  return content.kind === 'routine-paused'
-    ? { kind: 'open-routines' }
-    : { kind: 'open-session', sessionId: content.sessionId }
+  switch (content.kind) {
+    case 'routine-paused':
+      return { kind: 'open-routines' }
+    // The host's page in Settings shows its load.
+    case 'computer-low':
+      return { kind: 'open-settings', section: 'hosts' }
+    default:
+      return { kind: 'open-session', sessionId: content.sessionId }
+  }
 }
 
 async function show(worker: PushWorkerScope, event: PushEvent): Promise<void> {

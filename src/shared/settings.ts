@@ -84,6 +84,7 @@ export interface SettingsFile {
     routines: boolean // a routine's run ended, or its routines paused at a plan limit
     updates: boolean // Kettu's new version downloaded, or waiting for a step of the user's
     planLimits: boolean // a plan limit window at 90%, used up, or reset after it was used up
+    computerLow: boolean // a computer's disk almost full, or its battery low on battery
     sound: boolean
     badge: boolean // the Dock icon on macOS, the taskbar button on Windows
     // macOS: the notch island shows what needs the user, in place of the notifications of the
@@ -308,6 +309,7 @@ export const DEFAULT_SETTINGS: SettingsFile = {
     routines: true,
     updates: true,
     planLimits: true,
+    computerLow: true,
     sound: false,
     badge: true,
     island: true,

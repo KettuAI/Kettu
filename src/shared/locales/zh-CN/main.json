@@ -90,6 +90,11 @@
   "notifications": {
     "testTitle": "Kettu",
     "testBody": "通知已开启。智能体需要你时，会这样提醒你。",
+    "lowTitle": "{{host}} 资源不足",
+    "lowDisk": "磁盘快满了：{{path}} 上还剩 {{free}}",
+    "lowDiskCritical": "磁盘就要满了：{{path}} 上只剩 {{free}}",
+    "lowBattery": "电量 {{percent}}%，没在充电",
+    "lowBatteryCritical": "电量 {{percent}}%，没在充电。在它关机前接上电源。",
     "onHost": "{{host}} · {{title}}",
     "allowOnce": "允许一次",
     "open": "打开",

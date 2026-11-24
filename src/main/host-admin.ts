@@ -290,6 +290,8 @@ export class HostAdmin {
     let attention: HostAttention
     if (message.kind === 'routine-paused') {
       attention = { kind: message.kind, agentId: message.agentId, title, body }
+    } else if (message.kind === 'computer-low') {
+      attention = { kind: message.kind, strain: message.strain, title, body }
     } else if (message.kind === 'plan-limit') {
       const { agentId, level, key, usedPercent, sessionId } = message
       attention = {

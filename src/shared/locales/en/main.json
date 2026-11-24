@@ -93,6 +93,11 @@
   "notifications": {
     "testTitle": "Kettu",
     "testBody": "Notifications are on. This is how an agent that needs you will reach you.",
+    "lowTitle": "{{host}} is running low",
+    "lowDisk": "Disk almost full: {{free}} free on {{path}}",
+    "lowDiskCritical": "Disk full soon: only {{free}} free on {{path}}",
+    "lowBattery": "Battery {{percent}}%, not charging",
+    "lowBatteryCritical": "Battery {{percent}}%, not charging. Plug it in before it shuts down.",
     "onHost": "{{host}} · {{title}}",
     "allowOnce": "Allow once",
     "open": "Open",

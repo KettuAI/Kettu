@@ -13,7 +13,8 @@
   "tags": {
     "4f0d6c2e-6a1b-4c55-9a7e-0f3b8f2d9c11": "37pgYdiTlBTQktcCV9qP7g",
     "activity": "mSX11RJGemqpuCq5B_zlDg",
-    "routines:claude-code": "uEmTvdx5C_4uYHGJEBBFaA"
+    "routines:claude-code": "uEmTvdx5C_4uYHGJEBBFaA",
+    "computer-low:disk": "3lV3Y0AT2ExhMiKvUfrNzw"
   },
   "sealed": [
     {
@@ -87,6 +88,32 @@
       "signed": "a2V0dHUtcHVzaC1jb250ZW50LzEK3p7bfXt9wbTTW2HC7OQ1Nz-DQ8hbeGdNrfx-FG-IK0-FIPAJiTCnVHSLfdy0PvdaDb86DSY4GvTrpKmOqptOansidiI6MSwiaG9zdCI6ImVoN2RkeDVia3NyZ2N5dGw3YmthaTM2c2U0IiwiaG9zdE5hbWUiOiJTdHVkaW8iLCJhdCI6MTc2MjU2MDAwMDAwMCwidGFnIjoibVNYMTFSSkdlbXFwdUNxNUJfemxEZyIsInRpdGxlIjoiRml4IHRoZSBsb2dpbiBmb3JtIiwia2luZCI6IndhaXRpbmciLCJjb3VudCI6Miwic2Vzc2lvbklkIjoiNGYwZDZjMmUtNmExYi00YzU1LTlhN2UtMGYzYjhmMmQ5YzExIn0",
       "signature": "OYyAU5NZvo1IupXMWaoOE7OKGrxXR9CPuCwGGeC6gvvJG69XqMKuEFxiWKvsN3sOo3CJfV7XM4mjgYLRADR5CA",
       "envelope": "AYUg8AmJMKdUdIt93LQ-91oNvzoNJjga9OukqY6qm05qiC2BzKXrqxhng71QdxsX9VGnMycyqyxBTXqBvBYqXNj41cJrgt28Axe7dU1PGvVh0YzsgXXLlDUO4IxZlY8uDzW6MUex6i0weSSnDYMrllnIVYEja1vm6T8EM0w0tDi4C07mrMTE7yL1Gr1HaqV0mxchKrDwIk5WoJSdt8ZvxrCLJEqxscXiEwFFpdLAmjzh0rxDuwlq2MV1apN3WlbLs10Xqg1xx5-8DxAWyXhyTWXPUoPTWhxKie4AiouN7r99_qqTV2fPM8F6tA1RRJ_I_mug37umV819yeY72lesUbu1PNoxItY4Ey9Hk9oM_MXKKzqVM2kHy0MtyKtqoT2jDEnex6ohcVrZL85XQ8HZFltvjoFTxTHfDoxQxCVLp99oHHl7wstbjBbXdtBe"
+    },
+    {
+      "name": "computer-low",
+      "content": {
+        "v": 1,
+        "host": "eh7ddx5bksrgcytl7bkai36se4",
+        "hostName": "build-box",
+        "at": 1762560000000,
+        "tag": "3lV3Y0AT2ExhMiKvUfrNzw",
+        "title": "build-box is running low",
+        "body": "Disk almost full: 6.4 GB free on /home",
+        "kind": "computer-low",
+        "strain": {
+          "kind": "disk",
+          "level": "warn",
+          "value": 6400000000,
+          "path": "/home"
+        }
+      },
+      "body": "{\"v\":1,\"host\":\"eh7ddx5bksrgcytl7bkai36se4\",\"hostName\":\"build-box\",\"at\":1762560000000,\"tag\":\"3lV3Y0AT2ExhMiKvUfrNzw\",\"title\":\"build-box is running low\",\"body\":\"Disk almost full: 6.4 GB free on /home\",\"kind\":\"computer-low\",\"strain\":{\"kind\":\"disk\",\"level\":\"warn\",\"value\":6400000000,\"path\":\"/home\"}}",
+      "shared": "Sl2dW6TOLeFyjjv0gDUPJeB-IclH0Z4zdvCbPB4WF0I",
+      "key": "_N7HS4WiamrVouEqCh4Tair1yw4wjyGcWXhF-IDhq2I",
+      "nonce": "9x6IYrBOxm8RwyZP",
+      "signed": "a2V0dHUtcHVzaC1jb250ZW50LzEK3p7bfXt9wbTTW2HC7OQ1Nz-DQ8hbeGdNrfx-FG-IK0-FIPAJiTCnVHSLfdy0PvdaDb86DSY4GvTrpKmOqptOansidiI6MSwiaG9zdCI6ImVoN2RkeDVia3NyZ2N5dGw3YmthaTM2c2U0IiwiaG9zdE5hbWUiOiJidWlsZC1ib3giLCJhdCI6MTc2MjU2MDAwMDAwMCwidGFnIjoiM2xWM1kwQVQyRXhoTWlLdlVmck56dyIsInRpdGxlIjoiYnVpbGQtYm94IGlzIHJ1bm5pbmcgbG93IiwiYm9keSI6IkRpc2sgYWxtb3N0IGZ1bGw6IDYuNCBHQiBmcmVlIG9uIC9ob21lIiwia2luZCI6ImNvbXB1dGVyLWxvdyIsInN0cmFpbiI6eyJraW5kIjoiZGlzayIsImxldmVsIjoid2FybiIsInZhbHVlIjo2NDAwMDAwMDAwLCJwYXRoIjoiL2hvbWUifX0",
+      "signature": "Dq1y1Ko7uG_p010VUDwT_XYRBFU69SC3HqsNd9st5gZhTAhA1gA5DbHjYar9UbUhE7Rcvo3Q3zWMjI4IR3ghBw",
+      "envelope": "AYUg8AmJMKdUdIt93LQ-91oNvzoNJjga9OukqY6qm05qvwxzS5yJrfrG6nWJfo0KG5Q8Lc5fGdx56_2K0i29OCVQgmV8_B8rHvo6TExefDtOYUg5QqbMeIkh7YCA0sN2ADW6MUex6i0weSSnDYMrllnIVYEja1vm6T8EM0w0tDi4C07mrMTE7yL1Gr1HaqV0mxchKrDwIk5noYiVuoQvherIfErq9NDuEANFp9fGmjzh0qBR_0Qvjp4wJfoNWAvPykNChigz96SldzsCxUFQWAmZB9WWDARG37hH7tjXrL589-7SWm_efYhv-w1JCN2D-2Xu1_brV5Y-wv02zRK0X92_IMR_N5hvTnARwNkK48CfZUXfJXNivQV73vhsszfgGgeHyupwMEPOaZ5YEIbOBF4zgclAgzCUQNEOkXroSRIPSmxpkYfg1RfevmDCcwSMFBQzijYEMYzqvAbfN4y5vs7C66uvORoyqVyAJvyO7PysjfblMuldT3ZkaB5mOcKSnpiE8-r6991aCMfqAeGEh7zzwzrbkXac"
     }
   ],
   "request": {
@@ -185,6 +212,9 @@
       {
         "onlyAway": false,
         "details": false
+      },
+      {
+        "computerLow": false
       }
     ],
     "invalid": [
@@ -197,7 +227,10 @@
       {
         "muted": [""]
       },
-      []
+      [],
+      {
+        "computerLow": "no"
+      }
     ]
   }
 }

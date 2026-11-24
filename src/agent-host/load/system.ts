@@ -9,7 +9,13 @@ import { execFile } from 'node:child_process'
 import { access, readdir, readFile, readlink, stat, statfs } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
-import type { HostBattery, HostDisk, HostLoad } from '@shared/host-load'
+import {
+  DISK_MARGIN_BYTES,
+  DISK_WARN_BYTES,
+  type HostBattery,
+  type HostDisk,
+  type HostLoad,
+} from '@shared/host-load'
 import type { MemoryState } from '@shared/idle-release'
 import type { Platform } from '@shared/platform'
 import { readMemory, type MemoryReading } from '../idle-release'
@@ -350,6 +356,12 @@ export interface SystemRead {
   memory: MemoryReading
 }
 
+/** The disks and the battery alone: what telling devices the computer runs low needs. */
+export type LowRead = Pick<HostLoad, 'at' | 'disks' | 'battery'>
+
+// Over this a volume is neither low nor still held low, whatever its purgeable space adds.
+const NEAR_LINE_BYTES = DISK_WARN_BYTES + DISK_MARGIN_BYTES
+
 /** Reads the whole computer; each instance keeps its own CPU sample to measure from. */
 export class SystemReader {
   private readonly mounts: Mounts
@@ -415,6 +427,19 @@ export class SystemReader {
     return { load, memory: memory.reading }
   }
 
+  /**
+   * The disks and the battery alone, with no CPU, memory or process read. On macOS the purgeable
+   * space, which only adds to the free figure, is read only for a volume `statfs` puts near a line.
+   */
+  async readLow(): Promise<LowRead> {
+    const limits = await this.limits()
+    const [disks, battery] = await Promise.all([
+      this.disks(true),
+      limits ? Promise.resolve(null) : this.battery(),
+    ])
+    return { at: Date.now(), disks, ...(battery ? { battery } : {}) }
+  }
+
   private limits(): Promise<ContainerLimits | null> {
     return (this.container ??= containerLimits(this.deps.platform))
   }
@@ -445,7 +470,7 @@ export class SystemReader {
     return { reading, used: Math.max(0, used), total }
   }
 
-  private async disks(): Promise<HostDisk[]> {
+  private async disks(low = false): Promise<HostDisk[]> {
     const seen = new Map<number, HostDisk>()
     const folders = [...new Set(this.deps.folders())]
     await Promise.all(
@@ -463,19 +488,23 @@ export class SystemReader {
       }),
     )
     const disks = [...seen.values()]
-    if (this.deps.platform === 'darwin' && disks.length > 0) await this.addPurgeable(disks)
+    if (this.deps.platform === 'darwin' && disks.length > 0) {
+      const read = !low || disks.some((disk) => disk.free < NEAR_LINE_BYTES)
+      await this.addPurgeable(disks, read)
+    }
     return disks.sort((a, b) => a.free - b.free)
   }
 
-  private async addPurgeable(disks: HostDisk[]): Promise<void> {
+  /** Adds the purgeable space as last read; `read` reads it again when it is due. */
+  private async addPurgeable(disks: HostDisk[], read: boolean): Promise<void> {
     const stale = Date.now() - this.purgeableAt >= PURGEABLE_MS
     const unread = disks.some((disk) => !this.purgeable.has(disk.path))
-    if ((stale || unread) && !this.purgeableRead) {
+    if (read && (stale || unread) && !this.purgeableRead) {
       const read = this.readPurgeable(disks.map((disk) => ({ ...disk })))
       this.purgeableRead = read.finally(() => (this.purgeableRead = null))
     }
     // Only the first read waits, so the free space never jumps once shown.
-    if (unread && this.purgeableRead) await this.purgeableRead
+    if (read && unread && this.purgeableRead) await this.purgeableRead
     for (const disk of disks) disk.free += this.purgeable.get(disk.path) ?? 0
   }
 
