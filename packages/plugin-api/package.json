@@ -4,5 +4,5 @@
   "private": true,
   "description": "Types for the scripts of Kettu plugins, API version 1",
   "types": "index.d.ts",
-  "license": "AGPL-3.0-only"
+  "license": "MIT"
 }

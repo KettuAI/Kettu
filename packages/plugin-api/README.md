@@ -152,3 +152,7 @@ for as long as Kettu lists it.
 
 `sample/` is a complete plugin: a manifest and a script that counts the sessions that work and
 posts the count to a webhook. `pnpm typecheck` checks its script against `index.d.ts`.
+
+## License
+
+This folder, the types, this README and the sample, is under the [MIT license](./LICENSE), so a plugin may copy `index.d.ts` into its own repository. The rest of Kettu is under AGPL-3.0.
