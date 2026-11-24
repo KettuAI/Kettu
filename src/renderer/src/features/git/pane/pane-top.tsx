@@ -36,16 +36,14 @@ import { pushNow, runStep } from '../steps'
 import { planSync, PUSHING, stepOf } from '../sync'
 import { ActionBtn, Note } from './pane-ui'
 
-/** The branch, its worktree, an operation stopped midway, and Fetch and More. */
+/** The branch, its worktree and an operation stopped midway. */
 export function PaneTop({ status }: { status: GitStatus }) {
   const { t } = useTranslation('git')
   const [switching, setSwitching] = useState(false)
   const anchor = useRef<HTMLButtonElement>(null)
-  const { head, operation, remote } = status
-  const failed = useGitStore((s) => s.failed[status.projectPath] ?? null)
+  const { head, operation } = status
   const linked = isLinkedWorktree(status)
   const name = branchName(status)
-  const github = remote?.github
   return (
     <div className="flex items-center gap-1.5 pb-2">
       <Tooltip>
@@ -77,7 +75,24 @@ export function PaneTop({ status }: { status: GitStatus }) {
           {operation.step && ` ${operation.step[0]}/${operation.step[1]}`}
         </span>
       )}
-      <span className="flex-1" />
+      <BranchSwitcher
+        status={status}
+        open={switching}
+        anchor={anchor}
+        onOpenChange={setSwitching}
+      />
+    </div>
+  )
+}
+
+/** Fetch and More, at the end of the Git tab's context bar. */
+export function PaneTools({ status }: { status: GitStatus }) {
+  const { t } = useTranslation('git')
+  const failed = useGitStore((s) => s.failed[status.projectPath] ?? null)
+  const name = branchName(status)
+  const github = status.remote?.github
+  return (
+    <>
       <FetchButton status={status} />
       <DropdownMenu>
         <Tooltip>
@@ -126,13 +141,7 @@ export function PaneTop({ status }: { status: GitStatus }) {
           )}
         </DropdownMenuContent>
       </DropdownMenu>
-      <BranchSwitcher
-        status={status}
-        open={switching}
-        anchor={anchor}
-        onOpenChange={setSwitching}
-      />
-    </div>
+    </>
   )
 }
 

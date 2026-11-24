@@ -943,9 +943,10 @@ li[data-row-exit='dust'] > * {
   }
 }
 
-/* ---------- panes: the side panel's Terminal, Browser, Mobile devices and Files ---------- */
+/* ---------- the side panel: one row of tabs, the selected tab's context bar and content ---------- */
 
-/* A pane is a sheet of its own: its head on top, its body under it, each a column. */
+/* The panel is a sheet of its own: the row on top, what its selected tab shows under it, out to
+   the sheet's edges. */
 .kp-pane {
   position: relative;
   display: flex;
@@ -953,9 +954,17 @@ li[data-row-exit='dust'] > * {
   height: 100%;
   min-width: 0;
   min-height: 0;
-  padding: 10px 10px 10px 12px;
+  overflow: hidden;
   font-size: 13px;
   color: var(--text-secondary);
+}
+.kp-tabpane {
+  position: relative;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
 }
 /* Maximized, it leaves its slot and covers the whole area. */
 .kp-pane[data-maximized] {
@@ -1008,13 +1017,24 @@ li[data-row-exit='dust'] > * {
   translate: 16px 0;
   transition-duration: 200ms, 420ms;
 }
+/* The row: as tall as a session's top bar, whose line it continues, and padded as that bar is on
+   the right so the side panel's button sits where the bar's does. */
 .kp-head {
+  position: relative;
   display: flex;
   flex: none;
   align-items: center;
   gap: 2px;
-  /* A failure in the head wraps onto more lines, which the head grows to hold. */
-  min-height: 28px;
+  height: var(--top-bar);
+  padding: 0 12px 0 8px;
+}
+.kp-head::after {
+  content: '';
+  position: absolute;
+  inset: auto 0 0;
+  height: var(--hairline);
+  background: var(--border-subtle);
+  pointer-events: none;
 }
 .kp-head--cornered {
   padding-left: var(--corner-inset);
@@ -1023,7 +1043,7 @@ li[data-row-exit='dust'] > * {
   display: flex;
   flex: 1;
   align-items: center;
-  gap: 4px;
+  gap: 2px;
   min-width: 0;
   height: 28px;
 }
@@ -1034,45 +1054,72 @@ li[data-row-exit='dust'] > * {
   display: flex;
   flex: none;
   align-items: center;
+  gap: 2px;
   margin-left: auto;
+  padding-left: 6px;
 }
-.kp-head__tools > :last-child {
-  margin-left: 2px;
+/* The side panel's button, drawn as the top bar's is while the panel is closed. */
+.kp-head__toggle[aria-pressed='true'] {
+  background: var(--bg-selected);
 }
-.kp-head__tabs {
+
+/* The context bar under the row: where the selected tab is, then the tab's own tools. */
+.kp-ctx {
+  position: relative;
   display: flex;
+  flex: none;
+  align-items: center;
+  gap: 2px;
+  height: 32px;
+  padding: 0 6px 0 8px;
+  border-bottom: var(--hairline) solid var(--border-subtle);
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+.kp-ctx__main {
+  display: flex;
+  flex: 1;
   align-items: center;
   gap: 2px;
   min-width: 0;
-  overflow-x: auto;
-  scrollbar-width: none;
+  height: 100%;
 }
-.kp-head__tabs::-webkit-scrollbar {
-  display: none;
+.kp-ctx__tools {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 2px;
+  margin-left: auto;
 }
-.kp-head__title {
-  padding-left: 6px;
-  font-size: 13px;
+.kp-ctx .kp-tool {
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+}
+.kp-ctx__place {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  padding: 0 4px;
+  white-space: nowrap;
+}
+.kp-ctx__place > * {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.kp-ctx__place b {
+  flex: none;
   font-weight: 500;
   color: var(--text-primary);
-}
-.kp-head__error {
-  min-width: 0;
-  max-width: 40%;
-  padding: 7px 0;
-  font-size: 12px;
-  line-height: 14px;
-  color: var(--danger);
-  overflow-wrap: anywhere;
 }
 .kp-body {
   position: relative;
   display: flex;
   flex: 1;
   flex-direction: column;
-  gap: 8px;
   min-height: 0;
-  padding: 10px 0 4px;
 }
 
 .kp-tool {
@@ -1092,14 +1139,6 @@ li[data-row-exit='dust'] > * {
   width: 24px;
   height: 24px;
   border-radius: 7px;
-}
-/* A pane's glyph with the arrow that opens the side panel's list. */
-.kp-tool--switch {
-  display: inline-flex;
-  align-items: center;
-  gap: 1px;
-  width: auto;
-  padding: 0 5px 0 6px;
 }
 .kp-tool:hover {
   background: color-mix(in srgb, var(--bg-hover) 75%, transparent);
@@ -1273,12 +1312,12 @@ li[data-row-exit='dust'] > * {
   color: var(--text-primary);
 }
 
-/* ---------- the side panel's row of tabs: terminals, pages and devices ---------- */
+/* ---------- the side panel's row of tabs ---------- */
 /* The row pads itself so the light of a tab someone uses is not cut off at its edges. */
 .kp-stabs {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 2px;
   min-width: 0;
   margin: -6px -4px;
   padding: 6px 4px;
@@ -1300,7 +1339,7 @@ li[data-row-exit='dust'] > * {
   align-items: center;
   max-width: 184px;
   height: 28px;
-  border-radius: 8px;
+  border-radius: 7px;
   font-size: 12.5px;
   color: var(--text-secondary);
   white-space: nowrap;
@@ -1344,7 +1383,7 @@ li[data-row-exit='dust'] > * {
   gap: 6px;
   min-width: 0;
   height: 100%;
-  padding: 0 9px 0 6px;
+  padding: 0 9px 0 5px;
   border-radius: inherit;
   text-align: left;
   outline: none;
@@ -1379,6 +1418,13 @@ li[data-row-exit='dust'] > * {
 }
 .kp-stab__code[data-failed] {
   color: var(--danger);
+}
+/* How many of the board's sub-agents wait for the user. */
+.kp-stab__needs {
+  flex: none;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  color: var(--attention);
 }
 .kp-stab__dot,
 .kp-stab__badge {
@@ -1797,26 +1843,7 @@ li[data-row-exit='dust'] > * {
 }
 
 /* ---------- panes: Terminal ---------- */
-/* The terminal lies on the pane's sheet with no box of its own: a hairline from edge to edge
-   under the head and the screen out to the sheet's edges. Its tabs are names in a row, the chosen
-   one on a gray pill, each with its close button. */
-.kp-pane:is([data-pane='terminal'], [data-pane='surfaces']) > .kp-head {
-  position: relative;
-  margin-bottom: 8px;
-}
-/* Out past the pane's padding, which is 10px 10px 10px 12px. */
-.kp-pane:is([data-pane='terminal'], [data-pane='surfaces']) > .kp-head::after {
-  content: '';
-  position: absolute;
-  inset: auto -10px -8px -12px;
-  height: var(--hairline);
-  background: var(--border-subtle);
-  pointer-events: none;
-}
-.kp-pane[data-pane='terminal'] > .kp-body {
-  margin: 0 -10px -10px -12px;
-  padding: 0;
-}
+/* The terminal lies on the panel's sheet with no box of its own, out to the sheet's edges. */
 .kp-tview {
   display: flex;
   flex-direction: column;
@@ -1989,6 +2016,15 @@ li[data-row-exit='dust'] > * {
   color: var(--text-disabled);
   transition: box-shadow 140ms ease;
 }
+/* In the context bar the address is a quiet field of the bar's height. */
+.kp-ctx .kp-addr {
+  height: 24px;
+  margin: 0 4px;
+  padding: 0 9px;
+  border-radius: 7px;
+  background: var(--bg-hover);
+  box-shadow: none;
+}
 .kp-addr:focus-within {
   box-shadow:
     inset 0 0 0 1px var(--border-default),
@@ -2108,9 +2144,7 @@ li[data-row-exit='dust'] > * {
   position: relative;
   flex: 1;
   min-height: 0;
-  border-radius: 10px;
   background: var(--bg-app);
-  box-shadow: 0 0 0 var(--hairline) var(--border-default);
 }
 .kp-view__still {
   position: absolute;
@@ -2362,7 +2396,7 @@ li[data-row-exit='dust'] > * {
   opacity: 0.4;
 }
 /* Over the device, so the light around it passes under them. */
-.kp-pane[data-pane='devices'] > .kp-head,
+.kp-pane[data-pane='devices'] :is(.kp-head, .kp-ctx),
 .kp-device-ask {
   position: relative;
   z-index: 1;
@@ -2429,14 +2463,11 @@ li[data-row-exit='dust'] > * {
   gap: 7px;
   min-width: 0;
   max-width: 340px;
-  height: 28px;
+  height: 24px;
   margin-left: 2px;
   padding: 0 8px;
-  border-radius: 8px;
-  background: var(--bg-surface);
-  box-shadow:
-    inset 0 0 0 var(--hairline) var(--border-default),
-    var(--elevation-control);
+  border-radius: 7px;
+  background: var(--bg-hover);
   color: var(--text-disabled);
 }
 .kp-find input {
@@ -2656,6 +2687,7 @@ li[data-row-exit='dust'] > * {
   width: 8px;
   background: transparent;
 }
+/* The open files lie on the panel's sheet, out to its edges. */
 .kp-doc {
   position: relative;
   display: flex;
@@ -2664,18 +2696,8 @@ li[data-row-exit='dust'] > * {
   min-width: 0;
   min-height: 0;
   overflow: hidden;
-  border-radius: 10px;
+  border-left: var(--hairline) solid var(--border-subtle);
   background: var(--bg-surface);
-}
-/* Drawn over the content, whose own backgrounds would cover an inset ring. */
-.kp-doc::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  z-index: 5;
-  border-radius: inherit;
-  box-shadow: inset 0 0 0 var(--hairline) var(--border-default);
-  pointer-events: none;
 }
 .kp-doc__tabs {
   display: flex;
@@ -2837,7 +2859,8 @@ li[data-row-exit='dust'] > * {
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  padding: 2px 2px 0 4px;
+  padding: 6px 8px;
+  border-top: var(--hairline) solid var(--border-subtle);
   font-size: 12px;
   color: var(--text-tertiary);
 }

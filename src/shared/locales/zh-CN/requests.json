@@ -1,5 +1,4 @@
 {
-  "title": "请求",
   "summary_one": "{{count}} 次请求 · 读自 {{source}}",
   "summary_other": "{{count}} 次请求 · 读自 {{source}}",
   "summaryLive_one": "{{count}} 次请求 · 实时",

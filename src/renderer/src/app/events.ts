@@ -5,8 +5,7 @@ export type AppEvent =
   | { kind: 'focus-browser-address'; sessionId: string } // Mod+L typed in a session's browser page
   | { kind: 'ask-selection' } // Mod+L with text selected in the terminal
   | { kind: 'new-terminal' }
-  | { kind: 'close-terminal' } // Mod+W with the terminal used last
-  | { kind: 'close-browser' } // Mod+W with the browser used last
+  | { kind: 'close-side-tab' } // Mod+W with the side panel used last
   | { kind: 'new-browser-tab' } // Mod+T with the browser used last
   | { kind: 'insert-into-composer'; sessionId: string | null; text: string }
   // A mention, such as a terminal's, put after the text of the composer of `draft`.

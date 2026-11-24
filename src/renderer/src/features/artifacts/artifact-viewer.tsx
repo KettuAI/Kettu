@@ -24,7 +24,7 @@ import { AgentMark } from '@renderer/components/agents/agent-mark'
 import { toast } from '@renderer/components/ui/toast'
 import { useChanges } from '@renderer/features/session/entries/artifact-changes'
 import { usePhoneWindow } from '@renderer/features/shell/narrow'
-import { PaneSheet } from '@renderer/features/shell/panel-button'
+import { PaneBody } from '@renderer/features/shell/panel-button'
 import {
   artifactHost,
   artifactRefOf,
@@ -60,7 +60,6 @@ import {
   closeArtifact,
   MAIN_ARTIFACT_PANEL,
   openSessionWithArtifact,
-  toggleSidePane,
   useViewStore,
 } from '@renderer/stores/view'
 import { anchorOf } from './anchors'
@@ -1412,17 +1411,6 @@ export default function ArtifactViewer(place: ViewerPlace) {
             }
           : null
       }
-      panel={
-        panel
-          ? {
-              maximized,
-              onExpand: phone ? null : () => setMaximized(!maximized),
-              onClose: () => {
-                if (mayLeave(id)) toggleSidePane(panel.panel, 'artifact', false)
-              },
-            }
-          : null
-      }
     />
   )
 
@@ -1464,14 +1452,9 @@ export default function ArtifactViewer(place: ViewerPlace) {
   return (
     <div ref={frame} className="contents">
       {panel ? (
-        <PaneSheet
-          pane="artifact"
-          maximized={maximized}
-          aria-label={title || undefined}
-          className="avs-pane"
-        >
+        <PaneBody aria-label={title || undefined} className="avs-pane">
           {shell}
-        </PaneSheet>
+        </PaneBody>
       ) : (
         <div className="avs-main">{shell}</div>
       )}

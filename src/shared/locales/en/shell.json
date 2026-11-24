@@ -2,18 +2,10 @@
   "headerTools": {
     "board": "Board",
     "files": "Files",
-    "computer": "Computer",
-    "terminal": "Terminal",
-    "browser": "Browser",
-    "devices": "Mobile devices",
     "closePane": "Close pane",
     "leaveSession": "Leave session",
-    "sideChat": "Side chat",
     "sideChatNews": "New answer",
-    "more": "More tools",
-    "git": "Git",
-    "requests": "Requests",
-    "surfaces": "Terminal, browser and devices"
+    "more": "More tools"
   },
   "hostBanner": {
     "restarting": "Restarting the agent host. Your sessions come back by themselves.",
@@ -115,17 +107,18 @@
     "nothingRead": "Nothing has been read from it yet. It shows here once the host is back."
   },
   "surfaces": {
-    "tabs": "Terminals, pages and devices",
-    "add": "New terminal, page or device",
+    "tabs": "Side panel tabs",
+    "add": "Open in the side panel",
     "recording": "Recording",
     "kinds": {
       "terminal": "Terminals",
       "browser": "Pages",
-      "devices": "Devices"
+      "devices": "Devices",
+      "panes": "Panels"
     },
     "empty": {
       "title": "Open in the side panel",
-      "text": "Terminals, pages and devices sit in one row of tabs. What the agent opens shows here too."
+      "text": "Everything open beside the session sits in one row of tabs. What the agent opens shows here too."
     },
     "list": {
       "terminal": "Terminal",
@@ -133,8 +126,13 @@
       "devices": "Mobile device",
       "files": "Files",
       "git": "Git",
+      "board": "Board",
+      "sideChat": "Side chat",
       "requests": "Requests",
       "computer": "Computer",
+      "artifact": "Artifact",
+      "artifacts": "Artifacts",
+      "open": "Open",
       "live": "In use",
       "off": {
         "terminal": "Off on this computer",
@@ -147,9 +145,11 @@
         "computer": "While an agent uses it"
       }
     },
-    "switch": "Change pane",
     "reference": "Reference in conversation",
     "stopSharing": "Stop {{agent}} using it",
-    "shared": "{{agent}} may use it"
+    "shared": "{{agent}} may use it",
+    "news": "New activity",
+    "closeOthers": "Close others",
+    "closeRight": "Close to the right"
   }
 }

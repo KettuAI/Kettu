@@ -5,7 +5,7 @@ import { errorMessage } from '@renderer/lib/host'
 import { i18n } from '@renderer/lib/i18n'
 import { isWeb } from '@renderer/lib/platform'
 import { useSessionsStore } from '@renderer/stores/sessions'
-import { isSurfacePane } from '@renderer/stores/surface-tabs'
+import { isSurfaceKind } from '@renderer/stores/surface-tabs'
 import { useViewStore } from '@renderer/stores/view'
 
 interface DevicesStore {
@@ -173,7 +173,7 @@ export function initDevices(): void {
     const shown = useViewStore.getState().sidePane[sessionId]
     if (shown === undefined || shown === 'surfaces') {
       useViewStore.setState((s) => ({ sidePane: { ...s.sidePane, [sessionId]: 'devices' } }))
-    } else if (!isSurfacePane(shown)) {
+    } else if (!isSurfaceKind(shown)) {
       // A terminal or a page showing has the device's tab beside its own in the row.
       useDevicesStore.setState((s) => ({ unseen: { ...s.unseen, [sessionId]: true } }))
     }

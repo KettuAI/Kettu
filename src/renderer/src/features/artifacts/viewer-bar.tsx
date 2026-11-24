@@ -2,14 +2,11 @@ import { useState, type ReactNode } from 'react'
 import type { IconSvgElement } from '@hugeicons/react'
 import {
   ArrowDown01Icon,
-  ArrowExpand01Icon,
-  ArrowShrink01Icon,
   Comment01Icon,
   Message01Icon,
   MoreHorizontalIcon,
   PencilEdit02Icon,
   PlayIcon,
-  SidebarRightIcon,
   ViewIcon,
 } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
@@ -17,14 +14,10 @@ import { Dropdown, Icon, type MenuItem } from '@renderer/components/affect/app-s
 import { SegmentedControl } from '@renderer/components/affect/segmented-control'
 import { Kbd } from '@renderer/components/ui/kbd'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
-import { CornerControlsSpace, NoDrag, TopBar } from '@renderer/features/shell/top-bar'
-import { usePhoneWindow } from '@renderer/features/shell/narrow'
+import { NoDrag, TopBar } from '@renderer/features/shell/top-bar'
 import { longAgo } from '@renderer/lib/format'
-import { hasBand } from '@renderer/lib/platform'
 import { useNow } from '@renderer/lib/use-now'
-import { cn } from '@renderer/lib/utils'
 import type { ViewerMode } from '@renderer/stores/artifact-viewer'
-import { useViewStore } from '@renderer/stores/view'
 import { KIND_ICON } from './kinds'
 import { useArtifactMenu, type MenuOptions, type MenuTarget } from './menu-entries'
 import type { ArtifactKind } from './model'
@@ -68,29 +61,20 @@ export interface BarProps {
   onPresent: (() => void) | null
   share: { id: string; title: string; shown: number; head: number } | null
   menu: { target: MenuTarget; options: MenuOptions } | null
-  /** In a session's side panel, its panel and whether it covers the main area. */
-  panel: { maximized: boolean; onExpand: (() => void) | null; onClose: () => void } | null
 }
 
 /**
  * The viewer's bar, the same in the main area and the side panel: the kind's mark, the title and
- * version, the View / Comment / Edit switch, then who is here, Chat, Present, Share and More; the
- * side panel adds Expand and Close. It drops words, then buttons, as the viewer narrows.
+ * version, the View / Comment / Edit switch, then who is here, Chat, Present, Share and More. In
+ * the side panel it sits under the row of tabs, which maximizes and folds the panel. It drops
+ * words, then buttons, as the viewer narrows.
  */
 export function ViewerBar(props: BarProps) {
-  const phone = usePhoneWindow()
-  const cornered = useViewStore((s) => s.sidebarCollapsed) || phone
   const row = <BarRow {...props} />
   if (props.where === 'main') {
     return <TopBar className="avs-top">{row}</TopBar>
   }
-  const headCornered = cornered && !!props.panel?.maximized && !hasBand
-  return (
-    <div className={cn('avs-head app-region-drag', headCornered && 'avs-head--cornered')}>
-      {headCornered && <CornerControlsSpace className="mr-1" />}
-      {row}
-    </div>
-  )
+  return <div className="avs-head">{row}</div>
 }
 
 function BarRow({
@@ -112,7 +96,6 @@ function BarRow({
   onPresent,
   share,
   menu,
-  panel,
 }: BarProps) {
   const { t } = useTranslation(['artifacts', 'common'])
   const { tier, tight, labelled } = useShell()
@@ -216,22 +199,6 @@ function BarRow({
             }}
             extra={extra}
           />
-        )}
-        {panel && (
-          <>
-            {panel.onExpand && (
-              <BarAction
-                label={panel.maximized ? t('viewer.restore') : t('viewer.expand')}
-                icon={panel.maximized ? ArrowShrink01Icon : ArrowExpand01Icon}
-                onClick={panel.onExpand}
-              />
-            )}
-            <BarAction
-              label={t('common:pane.collapse')}
-              icon={SidebarRightIcon}
-              onClick={panel.onClose}
-            />
-          </>
         )}
       </NoDrag>
     </div>
