@@ -14,9 +14,9 @@ export interface McpCall {
 // Claude Code, dsh's own names and the ACP agents that title a call as Claude Code does.
 const CLAUDE = /^mcp__(\S+?)__(\S+)$/
 // Codex, Cline, dsh and Pi as Kettu's hosts title them, with a full-width colon in Chinese.
-const COLON = /^kettu\s*[:：]\s*([a-z_]+)$/
+const COLON = /^kettu\s*[:：]\s*([a-z0-9_]+)$/
 // Other agents' spellings; a dot is OpenCode's Code Mode, whose script calls `tools.kettu.<tool>`.
-const OTHER = /^kettu([_./])([a-z_]+)$/
+const OTHER = /^kettu([_./])([a-z0-9_]+)$/
 
 /** The tool a call's title names, or null for a title that names no MCP tool. */
 export function mcpCallOf(title: string): McpCall | null {

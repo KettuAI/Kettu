@@ -13,16 +13,16 @@ A manifest asks for permissions under `extensions["sh.kettu"].permissions`, and 
 only the calls of the permissions the user agreed to for the installed version. A call without its
 permission fails with an error that names it.
 
-| Permission                          | Risk    | Calls                                                                                        |
-| ----------------------------------- | ------- | -------------------------------------------------------------------------------------------- |
-| none                                |         | `api.version`, `app.locale`, `app.colorMode`, `settings.get`, `settings.secret`, `storage.*` |
-| `network:<domain>`, `network:*.<d>` | normal  | `network.fetch` for that host, or any host under `<d>`                                       |
-| `sessions.summary`                  | normal  | `sessions.list`                                                                              |
-| `sessions.content`                  | high    | `sessions.read`                                                                              |
-| `sessions.start`                    | high    | `sessions.start`, `sessions.send`                                                            |
-| `tools`                             | normal  | the functions the manifest's `tools` name, which agents call                                 |
-| `requests.answer`                   | high    | `requests.answer`; the commands and paths of the requests a channel tells it of              |
-| `prompt.attach`, `requests.check`   | caution | `session.beforeSend` and `session.permissionRequested`; with `prompt.attach`, `@` sources    |
+| Permission                          | Risk    | Calls                                                                                                        |
+| ----------------------------------- | ------- | ------------------------------------------------------------------------------------------------------------ |
+| none                                |         | `api.version`, `app.locale`, `app.colorMode`, `settings.get`, `settings.secret`, `storage.*`, `random.bytes` |
+| `network:<domain>`, `network:*.<d>` | normal  | `network.fetch` for that host, or any host under `<d>`                                                       |
+| `sessions.summary`                  | normal  | `sessions.list`                                                                                              |
+| `sessions.content`                  | high    | `sessions.read`                                                                                              |
+| `sessions.start`                    | high    | `sessions.start`, `sessions.send`                                                                            |
+| `tools`                             | normal  | the functions the manifest's `tools` name, which agents call                                                 |
+| `requests.answer`                   | high    | `requests.answer`; the commands and paths of the requests a channel tells it of                              |
+| `prompt.attach`, `requests.check`   | caution | `session.beforeSend` and `session.permissionRequested`; with `prompt.attach`, `@` sources                    |
 
 ## Tools, settings and storage
 
@@ -41,6 +41,32 @@ script reads them with `settings.get` and `settings.secret`, and hears of a chan
 Each plugin also has a small storage of its own, read and written with `storage.get`,
 `storage.set`, `storage.delete` and `storage.keys`: at most 256 KB of JSON and 1,000 keys. It is
 removed with the plugin.
+
+The sandbox has no source of randomness but `Math.random`, which is no good for a secret.
+`random.bytes(length)` gives 1 to 256 bytes from the system's cryptographic source as lowercase
+hex, so `2 * length` characters, and needs no permission.
+
+## When a script runs
+
+The first thing that wakes a plugin loads its script into a sandbox: an event, view, Search action,
+mention source, kind of link, tool or notification channel that its manifest declares. A load runs
+the script from the top, so whatever is outside a listener runs again each time. Once loaded, the
+sandbox stays loaded between calls, with its variables and its pending timers, until one of these:
+
+- the plugin is turned off, removed, updated, rolled back or reloaded from its folder;
+- the script passes a limit, which stops it: a call, listener or timer callback that runs too long
+  without yielding (2 seconds, 500 ms for the two hooks that answer in 500 ms) or memory past
+  64 MB. Three such stops in a minute turn the plugin off until the user turns it on again;
+- Kettu's plugin host or agent host restarts, as when the app quits or is updated, or crashes.
+
+Nothing unloads a script for being idle, and a timer neither keeps a script loaded nor drops it:
+Kettu stops its plugin host only when no script is loaded. So a script that polls with
+`setTimeout` can rely on staying loaded for as long as none of the above happens, and on nothing
+more. Its timers and everything in memory go with the sandbox, which no listener can see coming,
+and a script that was dropped runs again only when something it declares wakes it. A script that
+must keep going therefore starts its timers from code a declared trigger runs, keeps what it needs
+to resume in `storage`, and reads that when it loads. A script holds at most 256 pending timers
+and 256 calls that have not been answered.
 
 ## Events
 
@@ -67,14 +93,15 @@ A plugin that declares views needs a script. Opening a view wakes the script, wh
 `view.action` hook. Neither needs a permission. Kettu checks the answer and draws it with its own
 components, in the desktop app and in the web client, so a script only gives data and never
 draws; an answer that does not fit, a script that throws or one that is not done in 30 seconds
-shows as an error in that view and nothing else.
+shows as an error in that view and nothing else. A script that throws is shown its own message,
+as plain text cut at 300 characters, so a thrown `Error` should say what the user can do.
 
-| Kind      | Data                                                                |
-| --------- | ------------------------------------------------------------------- |
-| `list`    | `rows` with a title, subtitle, icon, badges, end figure and actions |
-| `detail`  | a title, fields and a Markdown `body`                               |
-| `form`    | switch, choice and text `fields` and a `submit` action              |
-| `actions` | a line of text and the buttons that run the script's actions        |
+| Kind      | Data                                                                                      |
+| --------- | ----------------------------------------------------------------------------------------- |
+| `list`    | `rows` with a title, subtitle, icon, badges, end figure and actions                       |
+| `detail`  | a title, fields and a Markdown `body`                                                     |
+| `form`    | switch, choice and text `fields` and a `submit` action                                    |
+| `actions` | a line of text, whose line breaks are kept, and the buttons that run the script's actions |
 
 Every kind may also carry a `scope` for its context bar and `actions` as buttons at its foot. An
 action runs the script, or with `open` goes to another view of the plugin; a `destructive` one is

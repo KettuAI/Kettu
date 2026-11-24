@@ -78,6 +78,12 @@ export interface KettuCalls {
   /** A secret the manifest declares, or null while it is not set. */
   'settings.secret': { args: [key: string]; result: string | null }
   /**
+   * `length` bytes from the system's cryptographic random source, as lowercase hex, so
+   * `2 * length` characters: for secrets such as one-time tokens, which `Math.random` is no good
+   * for. `length` is a whole number of 1 to 256.
+   */
+  'random.bytes': { args: [length: number]; result: string }
+  /**
    * The plugin's own storage, kept on the host and removed with the plugin: a value is any JSON,
    * null for a key not set. All of it holds at most 256 KB of JSON and 1,000 keys of at most 128
    * characters, past which `storage.set` fails.
@@ -329,6 +335,7 @@ export interface FormViewData extends ViewCommon {
 
 /** For a view of kind `actions`: one to 12 buttons, one per line. */
 export interface ActionsViewData extends ViewCommon {
+  /** At most 500 characters; line breaks are kept. */
   text?: string
   actions: ViewAction[]
 }

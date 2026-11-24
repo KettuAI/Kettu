@@ -57,6 +57,15 @@ export function isPluginScript(value: unknown): value is PluginScript {
 
 export type PluginDeadline = 'call' | 'before-send'
 
+/**
+ * What the listeners of a hook gave: what each one returned or resolved to, and the message of
+ * each that threw or rejected, for a caller that says why nothing answered.
+ */
+export interface PluginHookReply {
+  answers: unknown[]
+  errors: string[]
+}
+
 export type PluginErrorCode =
   | 'invalid' // the request itself is malformed
   | 'not_declared' // the plugin's manifest does not name what would wake it

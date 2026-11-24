@@ -201,9 +201,12 @@ it('answers a failing, a never-ending and a missing tool with an error, and a to
   const plugin = await install(await writePlugin(dir, 'acme'))
   const id = await ready(window, 'fake-agent', host.project)
 
-  expect(await viaAgent(window, id, 'acme__boom')).toContain('the script broke')
+  // The script's own message, with neither a code nor the name of a plain Error.
+  expect(await viaAgent(window, id, 'acme__boom')).toContain('acme__boom failed: the script broke')
   // The call ends at its deadline, with the plugin stopped, instead of leaving the agent waiting.
-  expect(await viaAgent(window, id, 'acme__spin')).toMatch(/spin failed/)
+  expect(await viaAgent(window, id, 'acme__spin')).toContain(
+    'acme__spin failed: the plugin was stopped for using too much time or memory',
+  )
   // Arguments the manifest does not take are refused before the script runs.
   expect(await viaAgent(window, id, 'acme__lookup', { query: 3 })).toContain(
     'The argument "query" must be a string',

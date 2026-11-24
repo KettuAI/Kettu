@@ -32,14 +32,20 @@ describe('describing a permission', () => {
     expect(describePermission('sessions.summary')!.risk).toBe('normal')
   })
 
-  it('names the domain of a network permission, the base one of a wildcard', () => {
+  it('names the domain of a network permission as declared, a wildcard with its star', () => {
     expect(describePermission('network:api.example.com')!.params).toEqual({
       domain: 'api.example.com',
     })
     expect(describePermission('network:*.example.org')!).toMatchObject({
-      params: { domain: 'example.org' },
+      params: { domain: '*.example.org' },
       nameKey: 'plugin.permission.networkSubdomains.name',
     })
+  })
+
+  it('tells a wildcard permission from the plain one of its base domain', () => {
+    const plain = describePermission('network:example.org')!
+    const wildcard = describePermission('network:*.example.org')!
+    expect(wildcard.params.domain).not.toBe(plain.params.domain)
   })
 
   it('says nothing of a permission a plugin may not declare', () => {

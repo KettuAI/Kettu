@@ -104,17 +104,38 @@ describe("a plugin's tools on Kettu's MCP service", () => {
   })
 
   it.each([
-    ['throws', new PluginRequestError({ code: 'failed', message: 'boom' }), '(failed): boom'],
-    ['runs too long', new PluginRequestError({ code: 'timeout', message: 'slow' }), '(timeout)'],
-    ['crashes', new PluginRequestError({ code: 'crashed', message: 'gone' }), '(crashed)'],
-    ['is not reachable', new PluginRequestError({ code: 'unavailable', message: 'none' }), 'none'],
+    [
+      'throws',
+      new PluginRequestError({ code: 'failed', message: 'Error: boom' }),
+      'acme_tools__lookup failed: boom',
+    ],
+    [
+      'throws another kind of error',
+      new PluginRequestError({ code: 'failed', message: 'TypeError: boom' }),
+      'acme_tools__lookup failed: TypeError: boom',
+    ],
+    [
+      'runs too long',
+      new PluginRequestError({ code: 'timeout', message: 'slow' }),
+      'acme_tools__lookup failed: the plugin did not answer in time',
+    ],
+    [
+      'crashes',
+      new PluginRequestError({ code: 'crashed', message: 'gone' }),
+      'acme_tools__lookup failed: the plugin was stopped for using too much time or memory',
+    ],
+    [
+      'is not reachable',
+      new PluginRequestError({ code: 'unavailable', message: 'none' }),
+      'acme_tools__lookup failed: the plugin could not be started',
+    ],
   ])('answer with an error the agent reads when the script %s', async (_, error, text) => {
     const { tools: listed } = tools([installed()], async () => {
       throw error
     })
     const result = await listed.call('acme_tools__lookup', { query: 'a' })
     expect(result.isError).toBe(true)
-    expect(JSON.stringify(result.content)).toContain(text)
+    expect(result.content).toEqual([{ type: 'text', text }])
   })
 
   it('answer that the plugin is off, rather than fail, for a tool that is gone', async () => {

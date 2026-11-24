@@ -375,6 +375,8 @@ it('never lets a notice wait for a stuck channel', async () => {
       .slice(before)
       .filter((message) => message.type === 'host:attention' && message.kind === 'turn-ended'),
   ).toHaveLength(1)
-  await vi.waitFor(() => expect(notices(fine)).toHaveLength(1))
+  // The plugin host runs in this process, so the stuck loop holds every timer until it is stopped
+  // at its deadline; wait for the notice itself, not for a second of wall time.
+  await vi.waitFor(() => expect(notices(fine)).toHaveLength(1), { timeout: 15_000 })
   expect(notices(fine)[0]).toMatchObject({ kind: 'turnEnded' })
 })

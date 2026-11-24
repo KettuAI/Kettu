@@ -10,6 +10,7 @@ const DECLS: PluginViewDecl[] = [
   { id: 'label', kind: 'form', title: { en: 'Label' } },
   { id: 'broken', kind: 'list', title: { en: 'Broken' } },
   { id: 'throws', kind: 'detail', title: { en: 'Throws' } },
+  { id: 'loud', kind: 'detail', title: { en: 'Loud' } },
   { id: 'slow', kind: 'detail', title: { en: 'Slow' } },
   { id: 'spins', kind: 'detail', title: { en: 'Spins' } },
   { id: 'silent', kind: 'detail', title: { en: 'Silent' } },
@@ -53,6 +54,7 @@ kettu.on('view.data', ({ view, params, locale }) => {
   }
   if (view === 'broken') return { rows: [{ id: 1, title: 'A' }] }
   if (view === 'throws') throw new Error('boom')
+  if (view === 'loud') throw new TypeError('<b>bad</b> ' + 'x'.repeat(1000))
   if (view === 'slow') return new Promise(() => {})
   if (view === 'spins') for (;;) {}
 })
@@ -174,17 +176,26 @@ describe('opening a view', () => {
     expect(logs.join('\n')).toContain('does not fit')
   })
 
-  it('gives an error for a script that throws, and for one that has nothing to say', async () => {
+  it('gives the script’s own message when it throws, and an error for one that has nothing to say', async () => {
     const { views, host } = setup()
     expect(await views.data('views', 'throws', {})).toEqual({
       ok: false,
-      error: { code: 'failed', detail: expect.stringContaining('log says why') },
+      error: { code: 'failed', detail: 'boom' },
     })
-    expect(await views.data('views', 'silent', {})).toMatchObject({
+    expect(await views.data('views', 'silent', {})).toEqual({
       ok: false,
-      error: { code: 'failed' },
+      error: { code: 'failed', detail: 'No listener of view.data gave a view' },
     })
     expect(host.logs.join('\n')).toContain('A listener of "view.data" failed: Error: boom')
+  })
+
+  it('cuts a long message and keeps the name of an error that is not a plain Error', async () => {
+    const { views } = setup()
+    const out = await views.data('views', 'loud', {})
+    expect(out).toMatchObject({ ok: false, error: { code: 'failed' } })
+    const detail = (out as { error: { detail: string } }).error.detail
+    expect(detail).toHaveLength(300)
+    expect(detail.startsWith('TypeError: <b>bad</b> xxx')).toBe(true)
   })
 
   it('gives a timeout for a script that does not answer, and the script stays usable', async () => {
@@ -199,6 +210,18 @@ describe('opening a view', () => {
       ok: false,
       error: { code: 'crashed' },
     })
+  })
+
+  it('does not call a script stopped by another request a plugin host that is not running', async () => {
+    const { views } = setup()
+    const both = await Promise.all([
+      views.data('views', 'spins', {}),
+      views.data('views', 'spins', {}),
+    ])
+    expect(both.map((result) => (result.ok ? 'ok' : result.error.code))).toEqual([
+      'crashed',
+      'crashed',
+    ])
   })
 })
 
@@ -231,7 +254,7 @@ describe('running an action', () => {
     })
     expect(await views.act('views', 'issues', {}, { action: 'throw' })).toEqual({
       ok: false,
-      error: { code: 'failed', detail: expect.stringContaining('log says why') },
+      error: { code: 'failed', detail: 'nope' },
     })
   })
 
@@ -291,9 +314,9 @@ describe('running an action Search lists', () => {
       ok: false,
       error: { code: 'failed', detail: 'The API key is not set' },
     })
-    expect(await views.run('views', 'throw')).toMatchObject({
+    expect(await views.run('views', 'throw')).toEqual({
       ok: false,
-      error: { code: 'failed' },
+      error: { code: 'failed', detail: 'nope' },
     })
     expect(await views.run('views', 'stall')).toEqual({ ok: false, error: { code: 'timeout' } })
   })

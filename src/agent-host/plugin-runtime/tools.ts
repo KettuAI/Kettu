@@ -77,6 +77,29 @@ function failed(text: string): CallToolResult {
   return { content: [{ type: 'text', text }], isError: true }
 }
 
+/** Why a call failed, in words the agent can pass on: the script's own message when it threw. */
+function reasonOf(error: unknown): string {
+  if (!(error instanceof PluginRequestError)) {
+    return error instanceof Error ? error.message : String(error)
+  }
+  switch (error.code) {
+    case 'failed':
+      // The script's error arrives as `Error: message`; the name says nothing for a plain one.
+      return error.message.replace(/^Error: /, '')
+    case 'timeout':
+      return 'the plugin did not answer in time'
+    case 'crashed':
+      return 'the plugin was stopped for using too much time or memory'
+    case 'disabled':
+      return 'the plugin was turned off after it crashed too often'
+    case 'unavailable':
+    case 'not_active':
+      return 'the plugin could not be started'
+    default:
+      return error.message
+  }
+}
+
 /** What the script answered, as the text the agent reads. */
 function answerText(answer: unknown): string {
   const text =
@@ -126,6 +149,12 @@ export class PluginTools {
     return this.named().has(name)
   }
 
+  /** Whether a call's arguments are not what the tool's declaration takes. */
+  argumentsWrong(name: string, input: unknown): boolean {
+    const tool = this.named().get(name)
+    return tool !== undefined && 'error' in checkToolArguments(tool.inputSchema, input)
+  }
+
   async call(name: string, input: unknown): Promise<CallToolResult> {
     const tool = this.named().get(name)
     if (!tool) return failed(`${name} is not available: its plugin is off or removed.`)
@@ -136,13 +165,9 @@ export class PluginTools {
       const answer = await this.deps.client.call(tool.pluginId, tool.name, [checked.value])
       return { content: [{ type: 'text', text: answerText(answer) }] }
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error)
-      this.deps.log('warn', `The tool ${name} of ${tool.pluginId} failed: ${message}`)
-      return failed(
-        error instanceof PluginRequestError
-          ? `${name} failed (${error.code}): ${message}`
-          : `${name} failed: ${message}`,
-      )
+      const reason = reasonOf(error)
+      this.deps.log('warn', `The tool ${name} of ${tool.pluginId} failed: ${reason}`)
+      return failed(`${name} failed: ${reason}`)
     }
   }
 }

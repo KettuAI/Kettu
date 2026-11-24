@@ -14,7 +14,7 @@
   "error": {
     "not_found": "This view isn’t available",
     "disabled": "The plugin was turned off after it crashed too often",
-    "crashed": "The plugin was stopped for using too much time or memory",
+    "crashed": "The plugin was stopped for using too much time or memory. Try again starts it again.",
     "timeout": "The plugin took too long to answer",
     "unavailable": "Plugins aren’t running right now",
     "failed": "The plugin couldn’t show this view",

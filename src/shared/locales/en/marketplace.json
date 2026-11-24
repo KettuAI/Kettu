@@ -386,7 +386,7 @@
       },
       "networkSubdomains": {
         "name": "Network",
-        "description": "Connect to any subdomain of {{domain}} over https."
+        "description": "Connect to any host matching {{domain}} over https."
       }
     },
     "install": {
@@ -417,7 +417,19 @@
       "channels_one": "{{count}} notification channel",
       "channels_other": "{{count}} notification channels",
       "channelsNote": "Gets only the notices you pick, none by default",
-      "viewsNote": "Declared by the plugin; Kettu doesn’t draw them yet",
+      "viewsNote": "Drawn by Kettu; the plugin only gives the data",
+      "tools_one": "{{count}} tool for agents",
+      "tools_other": "{{count}} tools for agents",
+      "toolsNote": "Agents ask you before each call, as with any tool",
+      "mentions_one": "{{count}} source for @ mentions",
+      "mentions_other": "{{count}} sources for @ mentions",
+      "mentionsNote": "Searched when you type @ in the message box",
+      "links_one": "{{count}} kind of link",
+      "links_other": "{{count}} kinds of link",
+      "linksNote": "Drawn as references in replies",
+      "actions_one": "{{count}} Search action",
+      "actions_other": "{{count}} Search actions",
+      "actionsNote": "Listed in Search",
       "connects": "Where it connects",
       "server": "MCP server {{name}}",
       "connectsTo": "Connects to {{host}}",

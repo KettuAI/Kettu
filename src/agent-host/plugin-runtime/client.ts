@@ -11,6 +11,7 @@ import {
   type AgentToPluginHost,
   type PluginDeadline,
   type PluginError,
+  type PluginHookReply,
   type PluginHostToAgent,
   type PluginScript,
   type PluginStatus,
@@ -188,8 +189,25 @@ export class PluginHostClient {
     payload: unknown,
     deadline: PluginDeadline = 'before-send',
   ): Promise<unknown[]> {
-    const answers = await this.request({ type: 'hook', pluginId, name, payload, deadline })
-    return Array.isArray(answers) ? answers : []
+    return (await this.hookReply(pluginId, name, payload, deadline)).answers
+  }
+
+  /** The same, with the message of each listener that threw beside what the others returned. */
+  async hookReply(
+    pluginId: string,
+    name: string,
+    payload: unknown,
+    deadline: PluginDeadline = 'before-send',
+  ): Promise<PluginHookReply> {
+    const reply = await this.request({ type: 'hook', pluginId, name, payload, deadline })
+    if (typeof reply !== 'object' || reply === null) return { answers: [], errors: [] }
+    const { answers, errors } = reply as Partial<Record<keyof PluginHookReply, unknown>>
+    return {
+      answers: Array.isArray(answers) ? answers : [],
+      errors: Array.isArray(errors)
+        ? errors.filter((error): error is string => typeof error === 'string')
+        : [],
+    }
   }
 
   /**

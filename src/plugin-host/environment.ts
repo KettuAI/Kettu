@@ -18,6 +18,7 @@ import {
   PluginRequestError,
   type PluginCrashReason,
   type PluginDeadline,
+  type PluginHookReply,
 } from '@shared/plugin-host'
 import type { Engine } from './engine'
 
@@ -54,6 +55,9 @@ export interface EnvironmentOptions {
 const OUT_OF_MEMORY = 'InternalError: out of memory'
 const LOG_LEVELS: readonly string[] = ['debug', 'info', 'warn', 'error']
 const MAX_TIMER_MS = 2 ** 31 - 1
+// What a hook keeps of the listeners that threw: how many messages, and how long each.
+const HOOK_ERRORS_KEPT = 5
+const HOOK_ERROR_CHARS = 500
 
 // Runs inside the engine, before the plugin's script. `native` holds the host functions, which
 // only this closure keeps; it returns the one function the host enters the script through.
@@ -161,7 +165,12 @@ const BOOTSTRAP = `(function (native) {
     } else if (kind === 'hook') {
       const set = listeners.get(b)
       const payload = JSON.parse(c)
-      const failed = (error) => native.log('error', 'A listener of "' + b + '" failed: ' + describe(error))
+      const errors = []
+      const failed = (error) => {
+        const text = describe(error)
+        if (errors.length < ${HOOK_ERRORS_KEPT}) errors.push(text.slice(0, ${HOOK_ERROR_CHARS}))
+        native.log('error', 'A listener of "' + b + '" failed: ' + text)
+      }
       const runs = []
       for (const listener of set ? [...set] : []) {
         try {
@@ -179,7 +188,7 @@ const BOOTSTRAP = `(function (native) {
         }
         let text
         try {
-          text = json(answers)
+          text = json({ answers, errors })
         } catch (error) {
           fail(a, error)
           return
@@ -308,16 +317,19 @@ export class PluginEnvironment {
   /**
    * Asks the listeners the script registered for an event, within the hook deadline unless
    * `deadline` is `call`: what each returned or resolved to, in the order they were added. A
-   * listener that throws is left out.
+   * listener that throws is left out of the answers and its message is kept beside them.
    */
   hook(
     name: string,
     payload: unknown,
     deadline: PluginDeadline = 'before-send',
-  ): Promise<unknown[]> {
-    return this.request('hook', name, payload ?? null, deadline === 'before-send') as Promise<
-      unknown[]
-    >
+  ): Promise<PluginHookReply> {
+    return this.request(
+      'hook',
+      name,
+      payload ?? null,
+      deadline === 'before-send',
+    ) as Promise<PluginHookReply>
   }
 
   private request(

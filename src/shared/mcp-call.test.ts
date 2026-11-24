@@ -27,6 +27,20 @@ describe('mcpCallOf', () => {
     expect(mcpCallOf('  kettu : find_settings ')).toEqual(call)
   })
 
+  it('reads the tools of plugins, whose names may hold digits', () => {
+    for (const title of [
+      'mcp__kettu__s3__list_files',
+      'kettu: s3__list_files',
+      'kettu_s3__list_files',
+    ]) {
+      expect(mcpCallOf(title), title).toEqual({
+        server: 'kettu',
+        tool: 's3__list_files',
+        direct: true,
+      })
+    }
+  })
+
   it("reads other agents' spellings of Kettu's tools", () => {
     expect(mcpCallOf('kettu_read_memory')).toEqual({
       server: 'kettu',

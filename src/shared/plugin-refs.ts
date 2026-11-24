@@ -95,7 +95,10 @@ export interface PluginLinkDecl {
   icon?: PluginViewIcon
 }
 
-/** An installed plugin as the composer and the thread know it: what it declares for them. */
+/**
+ * An installed plugin as the composer and the thread know it: what it declares for them, and the
+ * tools whose calls the thread names by it.
+ */
 export interface PluginRefSource {
   pluginId: string
   /** The plugin's name, which its tile is drawn from. */
@@ -106,6 +109,8 @@ export interface PluginRefSource {
   icon: string | null
   mentions: PluginMentionDecl[]
   links: PluginLinkDecl[]
+  /** The names the plugin's tools have on Kettu's MCP service; absent from an older host. */
+  tools?: string[]
 }
 
 /** One item a mention source found. */

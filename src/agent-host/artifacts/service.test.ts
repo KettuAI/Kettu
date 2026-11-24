@@ -324,6 +324,8 @@ describe("a plugin's tools", () => {
   const plugins = {
     listed: () => [tool],
     has: (name: string) => name === tool.name,
+    argumentsWrong: (_name: string, input: unknown) =>
+      Object.keys(input as object).some((key) => key !== 'query'),
     call: (name: string, input: unknown): CallToolResult => {
       calls.push([name, input])
       if ((input as { query?: string }).query === 'boom') {
@@ -331,6 +333,9 @@ describe("a plugin's tools", () => {
           content: [{ type: 'text', text: 'lookup failed: the script broke' }],
           isError: true,
         }
+      }
+      if (Object.keys(input as object).some((key) => key !== 'query')) {
+        return { content: [{ type: 'text', text: 'Unknown argument "word".' }], isError: true }
       }
       return { content: [{ type: 'text', text: 'found' }] }
     },
@@ -384,5 +389,15 @@ describe("a plugin's tools", () => {
     expect(texts(described)).toContain(`Arguments of ${tool.name} (JSON Schema): {`)
     const ran = await viaGateway(service, { tool: tool.name, arguments: { query: 'clock' } })
     expect(texts(ran)).toBe('found')
+  })
+
+  it('come back through the gateway with their arguments only when the call was wrong', async () => {
+    const service = await withPlugins()
+    const broke = await viaGateway(service, { tool: tool.name, arguments: { query: 'boom' } })
+    expect(broke.isError).toBe(true)
+    expect(texts(broke)).toBe('lookup failed: the script broke')
+    const wrong = await viaGateway(service, { tool: tool.name, arguments: { word: 'clock' } })
+    expect(wrong.isError).toBe(true)
+    expect(texts(wrong)).toContain(`Arguments of ${tool.name} (JSON Schema): {`)
   })
 })
