@@ -28,6 +28,7 @@ import { useMentionSurfaces } from './mention-surfaces'
 import type { ComposerEditorHandle } from './editor'
 import type { ChipHooks } from './editor-chips'
 import { useLinkOpener } from './link-opener'
+import { commandSourceName } from './command-source'
 import { leadingCommand } from './slash'
 import { useBoxText, type BoxText } from './use-prompt-box'
 
@@ -318,7 +319,9 @@ export function usePromptChips({
                   <ChipView chip={leading} />
                   <span className="min-w-0 flex-1 truncate">{command.description}</span>
                   <span className="shrink-0 text-tertiary">
-                    {[agentName, command.inputHint].filter(Boolean).join(' · ')}
+                    {[commandSourceName(command.source, t) ?? agentName, command.inputHint]
+                      .filter(Boolean)
+                      .join(' · ')}
                   </span>
                 </>
               )}

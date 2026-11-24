@@ -258,8 +258,11 @@
     "putBackFailed": "没能放回原处：{{error}}"
   },
   "slash": {
+    "heading": "命令",
     "loading": "正在列出命令…",
-    "chooseProject": "选择一个项目后才能列出命令"
+    "chooseProject": "选择一个项目后才能列出命令",
+    "yours": "你的",
+    "kettu": "Kettu"
   },
   "mentions": {
     "used": "本会话用过",

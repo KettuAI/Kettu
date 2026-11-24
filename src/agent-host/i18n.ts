@@ -73,3 +73,8 @@ export function setLocale(locale: Locale): boolean {
   void i18next.changeLanguage(locale)
   return true
 }
+
+/** Words as a list the user's language writes: `a, b and c`. */
+export function listOf(items: readonly string[]): string {
+  return new Intl.ListFormat(i18next.language, { type: 'conjunction' }).format(items)
+}

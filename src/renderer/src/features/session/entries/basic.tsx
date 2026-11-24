@@ -47,6 +47,7 @@ import { OutOfCreditEnd } from './out-of-credit'
 import { splitLinks } from './text-links'
 import { UserActions } from './message-actions'
 import { ReplyRunChip } from './reply-run-chip'
+import { SentCommandNote } from './sent-command'
 import { FromSessionCard, KettuCard, ReportLine } from './session-origin'
 import { TurnEndTag } from './turn-end-tag'
 import { RefChip, SentAttachments, UserContentView } from './user-content'
@@ -77,6 +78,7 @@ export const UserEntry = memo(function UserEntry({
   )
   const rest = entry.content.filter((c) => c.type !== 'ref' || c.ref.kind !== 'attachment')
   const only = rest.length === 1 ? rest[0] : undefined
+  const command = rest.flatMap((c) => (c.type === 'text' && c.command ? [c.command] : []))[0]
   const runNotice = only?.type === 'text' ? parseReplyRunNotice(only.text) : null
   // Kettu's report of a turn another session ended is an event, not a message.
   if (entry.from?.ended) {
@@ -109,6 +111,7 @@ export const UserEntry = memo(function UserEntry({
             )}
           </div>
         ))}
+      {command && !entry.from && !entry.kettu && <SentCommandNote command={command} />}
       {/* A message from a paired device names it; the host's own windows send unmarked ones. */}
       {entry.device && (
         <span className="ks-user__note">

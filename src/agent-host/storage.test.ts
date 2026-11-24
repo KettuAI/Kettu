@@ -501,6 +501,25 @@ describe('the host files', () => {
     ).toEqual({ version: 1, sessions: [{ ...session, outside: { effort: 'high' } }] })
   })
 
+  it('keeps the skills and servers commands added to a session, and drops what does not read', () => {
+    const added = { ...session, commandTools: { skills: ['code-review'], mcp: ['github'] } }
+    expect(parseSessionsFile({ sessions: [added] })).toEqual({ version: 1, sessions: [added] })
+    expect(
+      parseSessionsFile({
+        sessions: [{ ...session, commandTools: { skills: ['a', '', 3], mcp: 'github' } }],
+      }),
+    ).toEqual({
+      version: 1,
+      sessions: [{ ...session, commandTools: { skills: ['a'], mcp: [] } }],
+    })
+    for (const commandTools of [null, 'x', { skills: [], mcp: [] }]) {
+      expect(parseSessionsFile({ sessions: [{ ...session, commandTools }] })).toEqual({
+        version: 1,
+        sessions: [session],
+      })
+    }
+  })
+
   it('keeps the last outside message its thread holds, and drops what does not read', () => {
     const taken = { ...session, outsideTail: 'uuid-1' }
     expect(parseSessionsFile({ sessions: [taken] })).toEqual({ version: 1, sessions: [taken] })

@@ -197,6 +197,19 @@
   white-space: nowrap;
   text-overflow: ellipsis;
 }
+.ks-user__sent {
+  max-width: 80%;
+  max-height: 240px;
+  overflow: auto;
+  padding: 8px 12px;
+  border: 1px solid var(--thread-chip);
+  border-radius: 10px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--thread-muted);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
 .ks-user__meta {
   display: flex;
   align-items: center;

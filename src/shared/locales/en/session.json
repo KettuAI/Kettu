@@ -482,7 +482,11 @@
   },
   "userEntry": {
     "device": "Sent from {{device}}",
-    "kettu": "Kettu"
+    "kettu": "Kettu",
+    "commandFrom": "From {{source}}",
+    "commandFromYours": "From Yours",
+    "showSent": "Show what was sent",
+    "hideSent": "Hide what was sent"
   },
   "sessionReport": {
     "agent": "The session",

@@ -108,7 +108,9 @@ import {
   type SessionView,
   type StopReason,
   type Attachment,
+  type CommandRun,
   type ContentRef,
+  type SlashCommand,
   type BrowserOriginEntry,
   type ControlAskEntry,
   type ControlNoteEntry,
@@ -212,7 +214,9 @@ import { holdsNothing, mayBeEmpty } from './empty-sessions'
 import type { McpTransports } from './marketplace/servers'
 import { questionsResult } from './question-answers'
 import { HostError, invalidParams, notFound } from './errors'
-import { t } from './i18n'
+import { listOf, t } from './i18n'
+import type { CommandNeeds } from './commands/format'
+import type { CommandExpansion } from './commands/service'
 import { logText } from './localized-error'
 import {
   GITHUB_PULL_REQUEST_URL,
@@ -444,6 +448,17 @@ export interface SessionMcp {
   guide(agentId: AgentId): string
 }
 
+/** Kettu's own slash commands, as sessions use them. */
+export interface SessionCommands {
+  /**
+   * The message a text starting with one of the commands expands to; null when it starts with
+   * none, or with a name the agent has itself. Throws when the command cannot go.
+   */
+  expand(text: string, agentOwn: ReadonlySet<string>): Promise<CommandExpansion | null>
+  /** What of `needs` the agent is not handed anyway, which its session must be given. */
+  extra(agentId: AgentId, needs: CommandNeeds): CommandNeeds
+}
+
 /** Kettu's memory as sessions hand it to their agents and write what their agents propose. */
 export interface SessionMemoryDeps {
   readonly enabled: boolean
@@ -541,6 +556,8 @@ export interface SessionManagerDeps {
     record: SessionRecord,
     kettu: boolean,
   ) => Promise<Pick<SessionOptions, 'skillRoots' | 'localPlugins'>>
+  /** Kettu's own slash commands; without it a text goes as typed. */
+  commands?: SessionCommands
   /** Kettu's memory; without it no session is handed any. */
   memory?: SessionMemoryDeps
   /** The prepared sessions not yet adopted or removed, kept for the host after a crash. */
@@ -4676,10 +4693,21 @@ export class SessionManager {
     if (!agents.has(params.agentId))
       throw invalidParams(t('agent.unknown', { agent: params.agentId }))
     agents.assertEnabled(params.agentId)
-    // Before a prepared session is taken over, so a refused prompt leaves it prepared.
-    const prompt = params.prompt && this.hydrate(params.prompt)
-    // A prepared session's agent already works in the project's folder, so a worktree starts anew.
-    if (params.preparedId !== undefined && params.worktree === undefined) {
+    // Before a prepared session is taken over, so a refused prompt leaves it prepared. What
+    // another session's agent sends is no command of the user's.
+    let prompt = params.prompt && this.hydrate(params.prompt)
+    let commandTools: CommandNeeds | null = null
+    let commandRun: CommandRun | null = null
+    if (prompt && params.from === undefined && params.startedBy === undefined) {
+      const own = this.live.get(params.preparedId ?? '')?.thread.session.commands ?? []
+      const found = await this.commandContent(params.agentId, null, own, prompt)
+      prompt = found.content
+      commandTools = found.fresh
+      commandRun = found.run
+    }
+    // A prepared session's agent already works in the project's folder, so a worktree starts anew,
+    // and it is attached already, so a command that names more tools starts anew too.
+    if (params.preparedId !== undefined && params.worktree === undefined && !commandTools) {
       const adopted = await this.adopt({
         agentId: params.agentId,
         preparedId: params.preparedId,
@@ -4737,6 +4765,7 @@ export class SessionManager {
       branch: null,
     }
     if (params.startedBy !== undefined) record.startedBy = params.startedBy
+    if (commandTools) record.commandTools = commandTools
     const options = params.options ?? {}
     const live = this.makeLive(record, false, 'starting')
     live.unread = false
@@ -4752,6 +4781,7 @@ export class SessionManager {
         ...(params.device ? { device: params.device } : {}),
         ...(portId === undefined ? {} : { portId }),
       }
+      if (commandTools && commandRun) this.noteCommandTools(live, commandRun.name, commandTools)
     }
     this.touch(live.id)
     if (newWorktree && worktree) this.prepareWorktree(projectPath, worktree)
@@ -7202,12 +7232,96 @@ export class SessionManager {
     }
     this.refuseIfCannotSend(sessionId)
     this.reportsSent.delete(sessionId)
-    const hydrated = this.hydrate(content)
-    const live = await this.revive(sessionId)
+    const revived = await this.revive(sessionId)
+    const { live, content: hydrated } = await this.withCommand(revived, this.hydrate(content))
     if (!canSend(live.thread.session.status) || this.waitsForWorktree(live)) {
       throw busyError(live.thread.session.status)
     }
     this.sendPrompt(live, hydrated, undefined, portId, device)
+  }
+
+  /**
+   * A text that starts with one of Kettu's commands, as the message it expands to, with what it
+   * names that the agent is not handed anyway in `fresh`; any other content as it is. Throws when
+   * the command cannot go. `own` is what the agent calls its own commands, whose names it takes
+   * as typed; `record` holds what an earlier command added, so it is not added twice.
+   */
+  private async commandContent(
+    agentId: AgentId,
+    record: Pick<SessionRecord, 'commandTools'> | null,
+    own: readonly SlashCommand[],
+    content: UserContent[],
+  ): Promise<{ content: UserContent[]; fresh: CommandNeeds | null; run: CommandRun | null }> {
+    const first = content[0]
+    const commands = this.deps.commands
+    if (!commands || first?.type !== 'text' || !first.text.startsWith('/')) {
+      return { content, fresh: null, run: null }
+    }
+    const found = await commands.expand(first.text, new Set(own.map((command) => command.name)))
+    if (!found) return { content, fresh: null, run: null }
+    const extra = commands.extra(agentId, found.needs)
+    const kept = record?.commandTools
+    const fresh = {
+      skills: extra.skills.filter((name) => !kept?.skills.includes(name)),
+      mcp: extra.mcp.filter((name) => !kept?.mcp.includes(name)),
+    }
+    return {
+      content: [{ ...first, command: found.run }, ...content.slice(1)],
+      fresh: fresh.skills.length + fresh.mcp.length > 0 ? fresh : null,
+      run: found.run,
+    }
+  }
+
+  /**
+   * `content` with its leading command expanded, and the session given the skills and MCP servers
+   * the command names: an attached one lets its agent go and attaches it again, which only an idle
+   * session can.
+   */
+  private async withCommand(
+    live: Live,
+    content: UserContent[],
+  ): Promise<{ live: Live; content: UserContent[] }> {
+    const found = await this.commandContent(
+      live.record.agentId,
+      live.record,
+      live.thread.session.commands,
+      content,
+    )
+    if (!found.fresh || !found.run) return { live, content: found.content }
+    const attached = !!live.connection
+    if (attached && (this.holdReason(live) !== null || !live.saved)) {
+      throw new HostError('busy', t('commands.addsBusy', { command: found.run.name }))
+    }
+    const kept = live.record.commandTools
+    live.record.commandTools = {
+      skills: [...(kept?.skills ?? []), ...found.fresh.skills],
+      mcp: [...(kept?.mcp ?? []), ...found.fresh.mcp],
+    }
+    this.saveRecord(live.id)
+    const target = attached ? await this.attachAgain(live, 'a command added tools') : live
+    this.noteCommandTools(target, found.run.name, found.fresh)
+    return { live: target, content: found.content }
+  }
+
+  /** The thread says which skills and MCP servers a command added to the session. */
+  private noteCommandTools(live: Live, command: string, added: CommandNeeds): void {
+    const items = [
+      ...added.skills.map((name) => t('commands.added.skill', { name })),
+      ...added.mcp.map((name) => t('commands.added.mcp', { name })),
+    ]
+    this.emit(live, [
+      {
+        op: 'entry.add',
+        entry: {
+          kind: 'notice',
+          id: this.nextId(live),
+          severity: 'info',
+          title: t('commands.added.title', { command }),
+          description: listOf(items),
+          after: agentEntryBefore(live.thread),
+        },
+      },
+    ])
   }
 
   /** Sends a prompt; `kettu` when Kettu sends it itself, as a step's reminder. */
@@ -7814,8 +7928,8 @@ export class SessionManager {
     }
     this.refuseIfCannotSend(sessionId)
     this.reportsSent.delete(sessionId)
-    const content = this.hydrate(input)
-    const live = await this.revive(sessionId)
+    const revived = await this.revive(sessionId)
+    const { live, content } = await this.withCommand(revived, this.hydrate(input))
     const { status, queue, queuePaused } = live.thread.session
     if (canSend(status) && (queue.length === 0 || queuePaused) && !this.waitsForWorktree(live)) {
       // At once: another prompt waiting on the same revive must see this turn running.
@@ -10625,8 +10739,8 @@ export class SessionManager {
   }
 
   /** Lets the session's agent go and attaches it again, which then lists what it offers now. */
-  private async attachAgain(live: Live): Promise<Live> {
-    this.release(live, 'models listed again')
+  private async attachAgain(live: Live, why = 'models listed again'): Promise<Live> {
+    this.release(live, why)
     await this.releasing.get(live.id)
     const again = await this.revive(live.id)
     await this.attachClosed(again)
@@ -10902,6 +11016,11 @@ export class SessionManager {
   /** The workflow task whose step the session does; null for any other session. */
   sessionTask(sessionId: string): SessionRecord['task'] | null {
     return (this.live.get(sessionId)?.record ?? this.records.get(sessionId))?.task ?? null
+  }
+
+  /** The skills and MCP servers commands added to the session; null when none did. */
+  sessionCommandTools(sessionId: string): SessionRecord['commandTools'] | null {
+    return (this.live.get(sessionId)?.record ?? this.records.get(sessionId))?.commandTools ?? null
   }
 
   /** The folder the session works in, its worktree or its project; null for one Kettu does not hold. */

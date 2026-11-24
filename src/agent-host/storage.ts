@@ -370,6 +370,11 @@ export interface SessionRecord {
   rewound?: RewoundRecord
   /** The latest takeover's carry and the prompt it went with, for an edit from that prompt. */
   carried?: { entryId: string; carry: PendingCarry }
+  /**
+   * The skills and MCP servers commands of Kettu's named that its agent is not handed anyway, by
+   * the names the Marketplace keeps them under: every attach of the session gets them.
+   */
+  commandTools?: { skills: string[]; mcp: string[] }
   /** The prompt Kettu's guide and memory last went ahead of, by its entry id. */
   memorySentAt?: string
   /** Its agent said the conversation cannot be cut, as for an older Codex thread. */
@@ -747,6 +752,15 @@ function withFrom(item: QueuedPrompt): QueuedPrompt {
     : rest
 }
 
+function commandToolsOf(value: unknown): { commandTools?: SessionRecord['commandTools'] } {
+  if (!isRecord(value)) return {}
+  const names = (list: unknown): string[] =>
+    Array.isArray(list) ? list.filter((name): name is string => isString(name) && name !== '') : []
+  const skills = names(value.skills)
+  const mcp = names(value.mcp)
+  return skills.length + mcp.length > 0 ? { commandTools: { skills, mcp } } : {}
+}
+
 function cacheOf(value: unknown): { cache?: PromptCache } {
   if (!isRecord(value) || !isTime(value.lastRequestAt) || !isNullable(isTime)(value.ttl)) return {}
   return { cache: { lastRequestAt: value.lastRequestAt, ttl: value.ttl } }
@@ -1075,6 +1089,7 @@ export function parseSessionsFile(data: Record<string, unknown>): SessionsFile |
       ...lastTurnOf(item.lastTurn),
       ...rewoundOf(item.rewound),
       ...carriedOf(item.carried),
+      ...commandToolsOf(item.commandTools),
       ...(isString(item.memorySentAt) && item.memorySentAt !== ''
         ? { memorySentAt: item.memorySentAt }
         : {}),

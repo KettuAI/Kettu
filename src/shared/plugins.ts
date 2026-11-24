@@ -200,6 +200,8 @@ export interface InstalledKettuPlugin {
 /** A plugin's command, role, theme or template as its own feature reads it. */
 export interface PluginResource extends PluginItem {
   pluginId: string
+  /** The plugin's name, which qualifies its commands. */
+  pluginName: string
   plugin: string
   /** The file on the host. */
   file: string

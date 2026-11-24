@@ -241,6 +241,7 @@ export class PluginsService {
         record.contents[kind].map((item) => ({
           ...item,
           pluginId: record.id,
+          pluginName: record.contents.name,
           plugin: record.contents.title,
           file: path.join(this.packageDir(record), ...item.path.split('/')),
         })),

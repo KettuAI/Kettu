@@ -1372,6 +1372,24 @@
       "unknownFolder": "Kettu doesn’t know this folder"
     }
   },
+  "commands": {
+    "missingArguments": "/{{command}} wasn’t sent. It needs a value for {{names}}, typed after it.",
+    "notSent": "/{{command}} wasn’t sent. It needs {{items}}.",
+    "missing": {
+      "skill": "the skill {{name}}, which isn’t installed",
+      "mcp": "the MCP server {{name}}, which isn’t installed"
+    },
+    "off": {
+      "skill": "the skill {{name}}, which is turned off",
+      "mcp": "the MCP server {{name}}, which is turned off"
+    },
+    "addsBusy": "/{{command}} adds skills or MCP servers to this session, which can only be done while it’s idle. Try again once its work is done.",
+    "added": {
+      "title": "Added for /{{command}}",
+      "skill": "the skill {{name}}",
+      "mcp": "the MCP server {{name}}"
+    }
+  },
   "marketBundle": {
     "invalid": "This MCP bundle can’t be installed: {{reason}}",
     "notZip": "it isn’t a zip archive.",

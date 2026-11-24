@@ -340,6 +340,31 @@ export interface SlashCommand {
   name: string
   description: string
   inputHint?: string
+  /** Set on Kettu's own commands; an agent's carry none. */
+  source?: CommandSource
+}
+
+/**
+ * Where a command Kettu keeps in a file comes from: a plugin, whose `name` qualifies its commands
+ * as `name:command`, or the user's own folder.
+ */
+export type CommandOrigin =
+  { kind: 'plugin'; id: string; name: string; title: string } | { kind: 'user' }
+
+/** What qualifies a command's name where two share it: `name:command`. */
+export function commandQualifier(origin: CommandOrigin): string {
+  return origin.kind === 'plugin' ? origin.name : 'user'
+}
+
+/** Where a command in the slash list comes from; `kettu` is one the app itself provides. */
+export type CommandSource = CommandOrigin | { kind: 'kettu' }
+
+/** A command of Kettu's as the host expanded it: the message the agent got in its place. */
+export interface CommandRun {
+  /** The command's own name, without any plugin before it. */
+  name: string
+  origin: CommandOrigin
+  sent: string
 }
 
 export type ThreadEntry =
@@ -1056,7 +1081,10 @@ export interface AnsweredQuestion {
 
 export type PermissionKind = 'allow_once' | 'allow_always' | 'reject_once' | 'reject_always'
 export type StopReason = 'end_turn' | 'max_tokens' | 'max_turn_requests' | 'refusal' | 'cancelled'
-export type UserContent = { type: 'text'; text: string } | { type: 'ref'; ref: ContentRef }
+export type UserContent =
+  // `command`: the text starts with one of Kettu's commands, which the host expanded; the text
+  // stays what the user typed.
+  { type: 'text'; text: string; command?: CommandRun } | { type: 'ref'; ref: ContentRef }
 export type ContentRef =
   | { kind: 'image'; mimeType: string; data: string }
   // An image the host keeps in its thread store, whose bytes `sessions.blob` reads by `blob`,
@@ -1453,9 +1481,33 @@ export function isAttachment(value: unknown): value is Attachment {
   )
 }
 
+function isCommandOrigin(value: unknown): value is CommandOrigin {
+  if (!isRecord(value)) return false
+  if (value.kind === 'user') return true
+  return (
+    value.kind === 'plugin' &&
+    typeof value.id === 'string' &&
+    typeof value.name === 'string' &&
+    typeof value.title === 'string'
+  )
+}
+
+function isCommandRun(value: unknown): value is CommandRun {
+  return (
+    isRecord(value) &&
+    typeof value.name === 'string' &&
+    typeof value.sent === 'string' &&
+    isCommandOrigin(value.origin)
+  )
+}
+
 export function isUserContent(value: unknown): value is UserContent {
   if (!isRecord(value)) return false
-  if (value.type === 'text') return typeof value.text === 'string'
+  if (value.type === 'text') {
+    return (
+      typeof value.text === 'string' && (value.command === undefined || isCommandRun(value.command))
+    )
+  }
   return value.type === 'ref' && isContentRef(value.ref)
 }
 

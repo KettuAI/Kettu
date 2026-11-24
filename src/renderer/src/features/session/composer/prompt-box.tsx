@@ -1,9 +1,11 @@
-import { useId, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { Popover } from '@base-ui/react/popover'
 import { useTranslation } from 'react-i18next'
 import type { AgentId, SlashCommand } from '@shared/thread'
+import { AgentMark } from '@renderer/components/agents/agent-mark'
 import { Spinner } from '@renderer/components/ui/spinner'
 import { cn } from '@renderer/lib/utils'
+import { loadKettuCommands } from '@renderer/stores/kettu-commands'
 import { TextDialog, type TextDialogTarget } from '../attachments/text-dialog'
 import { AttachmentTray } from './attachment-tray'
 import { attachMention } from './attachments'
@@ -20,6 +22,7 @@ import {
 } from './mentions'
 import { usePromptChips } from './prompt-chips'
 import { ResizeGrip } from './resize-grip'
+import { commandSourceName } from './command-source'
 import { orderSlashMatches, placeCommand, slashAt } from './slash'
 import { useMentionList, type MentionList } from './use-mention-list'
 import { useBoxText, type PromptBoxState } from './use-prompt-box'
@@ -92,6 +95,11 @@ export function PromptBox({
     const colon = slashKey.indexOf(':')
     return { start: Number(slashKey.slice(0, colon)), query: slashKey.slice(colon + 1) }
   }, [slashKey])
+  // The user's own folder is read as the list opens, since nothing tells the host it changed.
+  const slashTyped = slash !== null
+  useEffect(() => {
+    if (slashTyped) void loadKettuCommands(hostId)
+  }, [slashTyped, hostId])
   if (slashDismissed !== null && slash?.start !== slashDismissed) setSlashDismissed(null)
   const slashMatches = slash === null ? [] : orderSlashMatches(commands, slash.query)
   const slashOpen = slash !== null && slashMatches.length > 0 && slash.start !== slashDismissed
@@ -347,7 +355,7 @@ export function PromptBox({
                   className="flex h-6.5 shrink-0 items-center px-2 text-small font-medium text-tertiary"
                 >
                   {showing === 'slash'
-                    ? agentName
+                    ? t('slash.heading')
                     : listing?.used
                       ? t('mentions.used')
                       : t('mentions.files')}
@@ -361,7 +369,7 @@ export function PromptBox({
                   'min-h-0 flex-1 scroll-fade-y overflow-y-auto overscroll-contain',
                   // The names share a column, so every description starts on one line.
                   showing === 'slash' &&
-                    'grid auto-rows-max grid-cols-[fit-content(42%)_minmax(0,1fr)] content-start',
+                    'grid auto-rows-max grid-cols-[fit-content(42%)_minmax(0,1fr)_auto] content-start',
                   rows.length === 0 && 'hidden',
                 )}
               >
@@ -380,6 +388,7 @@ export function PromptBox({
                       key={item.name}
                       id={optionId(index)}
                       command={item}
+                      agentId={agentId}
                       highlighted={index === active}
                       onHighlight={() => highlightRow(index)}
                       onChoose={() => chooseItem(item)}
@@ -410,16 +419,21 @@ export function PromptBox({
   )
 }
 
-/** A slash command's row: its name as the box draws it, then what it does in the next column. */
+/**
+ * A slash command's row: its name as the box draws it, what it does in the next column, and where
+ * it comes from at the row's end: its plugin, Yours, Kettu, or the agent's mark for the agent's own.
+ */
 function SlashItem({
   id,
   command,
+  agentId,
   highlighted,
   onHighlight,
   onChoose,
 }: {
   id: string
   command: SlashCommand
+  agentId: AgentId | null
   highlighted: boolean
   onHighlight: () => void
   onChoose: () => void
@@ -434,13 +448,21 @@ function SlashItem({
       onMouseDown={(event) => event.preventDefault()}
       onMouseMove={onHighlight}
       onClick={onChoose}
-      className="col-span-2 grid h-8 cursor-default grid-cols-subgrid items-center gap-x-5 rounded-md px-2 text-menu outline-none select-none data-highlighted:bg-selected"
+      className="col-span-3 grid h-8 cursor-default grid-cols-subgrid items-center gap-x-5 rounded-md px-2 text-menu outline-none select-none data-highlighted:bg-selected"
     >
       <span className="truncate font-medium text-primary">
         <span className="text-tertiary">/</span>
         {command.name}
       </span>
       <span className="truncate text-hint text-tertiary">{command.description}</span>
+      <SlashSource command={command} agentId={agentId} />
     </div>
   )
+}
+
+function SlashSource({ command, agentId }: { command: SlashCommand; agentId: AgentId | null }) {
+  const { t } = useTranslation('composer')
+  const name = commandSourceName(command.source, t)
+  if (name === null) return agentId ? <AgentMark agent={agentId} size={14} /> : <span />
+  return <span className="max-w-32 truncate text-small text-tertiary">{name}</span>
 }
