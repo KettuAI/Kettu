@@ -1170,89 +1170,14 @@ li[data-row-exit='dust'] > * {
 }
 .kp-tool:focus-visible,
 .kp-btn:focus-visible,
-.kp-tab__btn:focus-visible,
-.kp-tab__x:focus-visible,
 .kp-node:focus-visible {
   outline: 2px solid var(--focus-ring-color);
   outline-offset: -2px;
 }
 
-/* A tab in a pane's head: a name with a quiet mark before it, and a close button that shows on
-   hover or while chosen; another tab's floats over its end. */
-.kp-tab {
-  position: relative;
-  display: inline-flex;
-  flex: 0 1 auto;
-  align-items: center;
-  min-width: 58px;
-  max-width: 220px;
-  height: 26px;
-  border-radius: 7px;
-  font-size: 12.5px;
-  color: var(--text-tertiary);
-  white-space: nowrap;
-  user-select: none;
-  transition:
-    background-color 140ms ease,
-    color 140ms ease;
-}
-.kp-tab:hover {
-  background: color-mix(in srgb, var(--bg-hover) 75%, transparent);
-  color: var(--text-primary);
-}
-.kp-tab[data-selected] {
-  flex-shrink: 0;
-  background: var(--bg-hover);
-  color: var(--text-primary);
-}
-.kp-tab[data-dragging] {
-  background: var(--bg-selected);
-}
-.kp-tab[data-editing] {
-  background: var(--bg-surface);
-  box-shadow: inset 0 0 0 1px var(--border-strong);
-}
-.kp-tab__btn {
-  display: flex;
-  flex: 1;
-  align-items: center;
-  gap: 6px;
-  min-width: 0;
-  height: 100%;
-  padding: 0 8px;
-  border-radius: inherit;
-  text-align: left;
-  outline: none;
-}
-.kp-tab[data-selected] .kp-tab__btn {
-  padding-right: 25px;
-}
 .kp-tab__icon {
   flex: none;
   color: var(--text-disabled);
-}
-.kp-tab[data-selected] .kp-tab__icon:not(.kp-tab__icon--mark) {
-  color: var(--pane-muted);
-}
-.kp-tab__name {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.kp-tab__note {
-  color: var(--text-tertiary);
-}
-.kp-tab[data-italic] .kp-tab__name {
-  padding-right: 2px;
-  font-style: italic;
-}
-.kp-tab__code {
-  flex: none;
-  font-variant-numeric: tabular-nums;
-}
-.kp-tab__code[data-failed] {
-  color: var(--danger);
 }
 .kp-tab__dot {
   flex: none;
@@ -1260,56 +1185,6 @@ li[data-row-exit='dust'] > * {
   height: 6px;
   border-radius: 50%;
   background: var(--pane-live);
-}
-.kp-tab__dot:is([data-dot='output'], [data-dot='password']) {
-  background: var(--pane-fox);
-}
-.kp-tab__dot[data-dot='unsaved'] {
-  background: var(--text-tertiary);
-}
-.kp-tab__x {
-  position: absolute;
-  top: 5px;
-  right: 5px;
-  display: grid;
-  place-items: center;
-  width: 16px;
-  height: 16px;
-  border-radius: 4px;
-  color: var(--text-disabled);
-  opacity: 0;
-  outline: none;
-  transition: opacity 120ms ease;
-}
-.kp-tab:is(:hover, :focus-within, [data-selected]) .kp-tab__x {
-  opacity: 1;
-}
-.kp-tab__x:hover {
-  background: var(--bg-selected);
-  color: var(--text-primary);
-}
-.kp-tab:not([data-selected]):is(:hover, :focus-within) .kp-tab__name {
-  mask-image: linear-gradient(to left, transparent 14px, var(--on-fill) 26px);
-}
-.kp-tab:not([data-selected]):is(:hover, :focus-within) .kp-tab__dot {
-  opacity: 0;
-}
-.kp-tab__rename {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  padding: 0 8px 0 28px;
-}
-.kp-tab__rename input {
-  flex: 1;
-  min-width: 0;
-  height: 100%;
-  border: 0;
-  outline: 0;
-  background: none;
-  font: inherit;
-  color: var(--text-primary);
 }
 
 /* ---------- the side panel's row of tabs ---------- */
@@ -1410,6 +1285,15 @@ li[data-row-exit='dust'] > * {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+/* A folder after the name tells two files of one name apart. */
+.kp-stab__note {
+  color: var(--text-tertiary);
+}
+/* The preview tab, which the next single click in a list replaces. */
+.kp-stab[data-preview] .kp-stab__name {
+  padding-right: 2px;
+  font-style: italic;
 }
 .kp-stab__code {
   flex: none;
@@ -2683,11 +2567,7 @@ li[data-row-exit='dust'] > * {
   background: color-mix(in srgb, var(--danger) 12%, transparent);
   color: var(--danger);
 }
-.kp-files-handle {
-  width: 8px;
-  background: transparent;
-}
-/* The open files lie on the panel's sheet, out to its edges. */
+/* An open file or diff lies on the panel's sheet, out to its edges. */
 .kp-doc {
   position: relative;
   display: flex;
@@ -2696,35 +2576,10 @@ li[data-row-exit='dust'] > * {
   min-width: 0;
   min-height: 0;
   overflow: hidden;
-  border-left: var(--hairline) solid var(--border-subtle);
   background: var(--bg-surface);
 }
-.kp-doc__tabs {
-  display: flex;
-  flex: none;
-  align-items: center;
-  gap: 2px;
-  height: 36px;
-  padding: 0 4px;
-  overflow-x: auto;
-  scrollbar-width: none;
-  border-bottom: var(--hairline) solid var(--border-subtle);
-}
-.kp-doc__tabs::-webkit-scrollbar {
-  display: none;
-}
-.kp-doc__tabs .kp-tool {
-  width: 26px;
-  height: 26px;
-}
-.kp-doc__bar {
-  display: flex;
-  flex: none;
-  align-items: center;
-  gap: 8px;
-  height: 34px;
-  padding: 0 4px 0 12px;
-  border-bottom: var(--hairline) solid var(--border-subtle);
+.kp-tabpane > .kp-doc {
+  flex: 1;
 }
 .kp-doc__path {
   display: flex;
@@ -2732,7 +2587,7 @@ li[data-row-exit='dust'] > * {
   gap: 5px;
   min-width: 0;
   height: 24px;
-  margin-left: -6px;
+  margin-left: -2px;
   padding: 0 6px;
   border-radius: 6px;
   color: var(--text-tertiary);
@@ -2765,13 +2620,6 @@ li[data-row-exit='dust'] > * {
   font-family: var(--font-mono);
   font-size: 11px;
   color: var(--text-tertiary);
-}
-.kp-doc__tools {
-  display: flex;
-  flex: none;
-  align-items: center;
-  gap: 2px;
-  margin-left: auto;
 }
 .kp-doc__hunks {
   display: flex;

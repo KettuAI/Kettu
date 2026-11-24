@@ -18,9 +18,11 @@ import {
   ArrowShrink01Icon,
   Cancel01Icon,
   CancelCircleIcon,
+  GitCompareIcon,
   Layout2ColumnIcon,
   MessageAdd01Icon,
   PencilEdit02Icon,
+  PinIcon,
   PlusSignIcon,
   ShapesIcon,
   SidebarRightIcon,
@@ -62,6 +64,10 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui
 import { KIND_ICON } from '@renderer/features/artifacts/kinds'
 import { artifactKind } from '@renderer/features/artifacts/model'
 import { mayLeave } from '@renderer/features/artifacts/unsaved'
+import { AgentMark } from '@renderer/components/agents/agent-mark'
+import { FileTypeIcon } from '@renderer/features/files/file-type-icon'
+import { folderOf, nameOf } from '@renderer/features/files/paths'
+import { UnsavedPrompt } from '@renderer/features/files/unsaved-prompt'
 import { useBoardActivity, useBoardNews } from '@renderer/features/board/use-board-activity'
 import { addressText } from '@renderer/features/browser/address'
 import { SiteMark } from '@renderer/features/browser/site-mark'
@@ -82,6 +88,7 @@ import {
   selectDevice,
   useDevicesStore,
 } from '@renderer/stores/devices'
+import { asksBeforeClose, closeFileDoc, notePanel, useFilesStore } from '@renderer/stores/files'
 import { useTerminalAllowed } from '@renderer/stores/hosts'
 import { useSessionsStore } from '@renderer/stores/sessions'
 import { useSideChatNews } from '@renderer/stores/side-chat'
@@ -106,12 +113,19 @@ import {
   type TerminalState,
 } from '@renderer/stores/terminals'
 import {
+  closeDoc,
   closeSidePanel,
+  docKey,
+  isDocKind,
+  keepDoc,
+  noteSelectedTab,
   panelSession,
   removeSideTab,
+  selectDoc,
   toggleSidePane,
   toggleTerminal,
   useViewStore,
+  type DocTab,
 } from '@renderer/stores/view'
 import { usePhoneWindow } from './narrow'
 import { SurfaceList, SurfaceMenuItems } from './surface-list'
@@ -143,6 +157,12 @@ interface SurfaceItem {
   kind: TabKind
   id: string
   name: string
+  /** What tells two tabs of one name apart: the folder of a file. */
+  note: string
+  /** The preview tab, in italics, which the next single click in a list replaces. */
+  preview: boolean
+  /** What a file, diff or artifact tab shows. */
+  doc: DocTab | null
   /** The tooltip: the name, then what the tab is doing or who uses it. */
   title: string
   selected: boolean
@@ -222,6 +242,94 @@ const TONE_OF = {
   error: 'danger',
 } as const
 
+const NOT_A_DOC = { note: '', preview: false, doc: null } as const
+const NO_DOCS: DocTab[] = []
+
+/** The panel's file, diff and artifact tabs. */
+function useDocItems(panel: string, projectPath: string, hostId: string | null): SurfaceItem[] {
+  const { t } = useTranslation(['shell', 'files'])
+  const docs = useViewStore((s) => s.sideDocs[panel] ?? NO_DOCS)
+  const shown = useViewStore((s) => (isDocKind(s.sidePane[panel]) ? s.sideDoc[panel] : undefined))
+  const files = useFilesStore((s) => s.open[projectPath])
+  const artifacts = useArtifactsStore((s) => s.list)
+  const sessionId = panelSession(panel)
+  const sessionAgent = useSessionsStore((s) => (sessionId ? s.byId[sessionId]?.agentId : null))
+
+  return useMemo(() => {
+    const agent = sessionAgent ? agentName(sessionAgent, hostId) : ''
+    // Two tabs of one kind and one name tell themselves apart by their folder.
+    const fileOf = (tab: DocTab) => (tab.kind === 'diff' ? tab.path : tab.id)
+    const names = new Map<string, number>()
+    for (const tab of docs) {
+      if (tab.kind === 'artifact') continue
+      const name = `${tab.kind}:${nameOf(fileOf(tab))}`
+      names.set(name, (names.get(name) ?? 0) + 1)
+    }
+    return docs.map((tab): SurfaceItem => {
+      const key = docKey(tab)
+      const item = {
+        key,
+        kind: tab.kind,
+        id: tab.id,
+        preview: tab.preview,
+        doc: tab,
+        selected: shown === key,
+        control: null,
+        code: null,
+        needs: 0,
+        dim: false,
+        terminal: null,
+        agent,
+        shared: false,
+      }
+      if (tab.kind === 'artifact') {
+        const artifact = artifacts?.find((other) => other.id === tab.id)
+        const kind = artifact ? artifactKind(artifact) : null
+        const name = artifact?.title || t('shell:surfaces.list.artifact')
+        return {
+          ...item,
+          name,
+          note: '',
+          title: name,
+          icon: <PaneIcon icon={kind ? KIND_ICON[kind] : ShapesIcon} size={14} />,
+          dot: null,
+        }
+      }
+      const path = fileOf(tab)
+      const name = nameOf(path)
+      const note = names.get(`${tab.kind}:${name}`)! > 1 ? nameOf(folderOf(path)) : ''
+      if (tab.kind === 'diff') {
+        return {
+          ...item,
+          name,
+          note,
+          title: [
+            tab.oldPath ? `${tab.oldPath} \u2192 ${path}` : path,
+            tab.ref ? tab.ref.slice(0, 7) : t('shell:surfaces.uncommitted'),
+          ].join(' \u00b7 '),
+          icon: <PaneIcon icon={GitCompareIcon} size={14} />,
+          dot: null,
+        }
+      }
+      // A file of the agent's own folder carries the agent's mark, and says whose it is.
+      const owner = tab.agent ? agentName(tab.agent.agentId, hostId) : null
+      const dirty = !!files?.some((file) => file.path === tab.id && file.dirty)
+      return {
+        ...item,
+        name,
+        note,
+        title: owner ? `${path}\n${t('files:tabs.agentFile', { agent: owner })}` : path,
+        icon: tab.agent ? (
+          <AgentMark agent={tab.agent.agentId} hostId={hostId} size={14} dot={null} />
+        ) : (
+          <FileTypeIcon path={path} className="size-3.5 shrink-0" />
+        ),
+        dot: dirty ? { tone: 'neutral', label: t('files:preview.unsaved') } : null,
+      }
+    })
+  }, [t, docs, shown, files, artifacts, sessionAgent, hostId])
+}
+
 /** The tabs of the kinds a session has one of, in the order they opened. */
 function useSingleItems(panel: string, hostId: string | null): SurfaceItem[] {
   const { t } = useTranslation(['shell', 'board', 'browser'])
@@ -229,10 +337,6 @@ function useSingleItems(panel: string, hostId: string | null): SurfaceItem[] {
   const sessionId = panelSession(panel)
   const shown = useViewStore((s) => s.sidePane[panel])
   const tabs = useViewStore((s) => s.sideTabs[panel])
-  const artifactId = useViewStore((s) => s.sideArtifact[panel])
-  const artifact = useArtifactsStore((s) =>
-    artifactId ? (s.list?.find((other) => other.id === artifactId) ?? null) : null,
-  )
   const activity = useBoardActivity(sessionId ?? '')
   const boardNews = useBoardNews(sessionId)
   const chatNews = useSideChatNews(sessionId)
@@ -243,11 +347,7 @@ function useSingleItems(panel: string, hostId: string | null): SurfaceItem[] {
     const agent = sessionAgent ? agentName(sessionAgent, hostId) : ''
     return (tabs ?? []).map((kind): SurfaceItem => {
       const selected = shown === kind
-      const kindOfArtifact = artifact ? artifactKind(artifact) : null
-      const name =
-        kind === 'artifact'
-          ? artifact?.title || t('shell:surfaces.list.artifact')
-          : t(`shell:surfaces.list.${kind}`)
+      const name = t(`shell:surfaces.list.${kind}`)
       const dot: SurfaceItem['dot'] =
         kind === 'board' && boardNews === 'news' && activity.needs === 0
           ? { tone: 'fox', label: t('shell:surfaces.news') }
@@ -262,6 +362,7 @@ function useSingleItems(panel: string, hostId: string | null): SurfaceItem[] {
         kind,
         id: '',
         name,
+        ...NOT_A_DOC,
         title: [
           name,
           control ? tb(CONTROL_NOTE[control], { agent }) : dot?.label,
@@ -271,18 +372,7 @@ function useSingleItems(panel: string, hostId: string | null): SurfaceItem[] {
           .join(' \u00b7 '),
         selected,
         control,
-        icon: (
-          <PaneIcon
-            icon={
-              kind === 'artifact'
-                ? kindOfArtifact
-                  ? KIND_ICON[kindOfArtifact]
-                  : ShapesIcon
-                : SURFACE_ICON[kind]
-            }
-            size={14}
-          />
-        ),
+        icon: <PaneIcon icon={SURFACE_ICON[kind]} size={14} />,
         dot,
         code: null,
         needs,
@@ -292,19 +382,7 @@ function useSingleItems(panel: string, hostId: string | null): SurfaceItem[] {
         shared: false,
       }
     })
-  }, [
-    t,
-    tb,
-    tabs,
-    shown,
-    artifact,
-    activity.needs,
-    boardNews,
-    chatNews,
-    computer,
-    sessionAgent,
-    hostId,
-  ])
+  }, [t, tb, tabs, shown, activity.needs, boardNews, chatNews, computer, sessionAgent, hostId])
 }
 
 /** The panel's tabs in the row's order, with what each shows and who uses it. */
@@ -334,6 +412,7 @@ function useSurfaceItems(panel: string, projectPath: string, kinds: SurfaceKinds
   const askingTabs = useThreadsStore(() => askedTabs(sessionId))
   const order = useViewStore((s) => s.sideOrder[panel])
   const singles = useSingleItems(panel, hostId)
+  const docs = useDocItems(panel, projectPath, hostId)
 
   const items = useMemo(() => {
     const agent = (id: AgentId | null | undefined) => (id ? agentName(id, hostId) : '')
@@ -372,6 +451,7 @@ function useSurfaceItems(panel: string, projectPath: string, kinds: SurfaceKinds
         kind: 'terminal',
         id: terminal.id,
         name,
+        ...NOT_A_DOC,
         title: [
           terminal.name ? automatic : name,
           control ? note(control, owner ?? agent(sessionAgent)) : (owner ?? shared),
@@ -407,6 +487,7 @@ function useSurfaceItems(panel: string, projectPath: string, kinds: SurfaceKinds
         kind: 'browser',
         id: tab.id,
         name,
+        ...NOT_A_DOC,
         title: [
           name,
           control
@@ -453,6 +534,7 @@ function useSurfaceItems(panel: string, projectPath: string, kinds: SurfaceKinds
           kind: 'devices',
           id: device.id,
           name: device.name,
+          ...NOT_A_DOC,
           title: [device.name, control ? note(control, agent(sessionAgent)) : dot?.label]
             .filter(Boolean)
             .join(' · '),
@@ -469,7 +551,7 @@ function useSurfaceItems(panel: string, projectPath: string, kinds: SurfaceKinds
         })
       }
     }
-    list.push(...singles)
+    list.push(...singles, ...docs)
     const byKey = new Map(list.map((item) => [item.key, item]))
     return arrangeSurfaceKeys(
       order,
@@ -497,6 +579,7 @@ function useSurfaceItems(panel: string, projectPath: string, kinds: SurfaceKinds
     order,
     askingTabs,
     singles,
+    docs,
   ])
 
   // The row remembers where each tab is, so the next one opens after them all.
@@ -504,6 +587,12 @@ function useSurfaceItems(panel: string, projectPath: string, kinds: SurfaceKinds
   useEffect(() => {
     recordSurfaceOrder(panel, keys ? keys.split('\n') : [])
   }, [panel, keys])
+
+  // A tab opened from a list in the panel goes right after the selected one.
+  const selected = items.find((item) => item.selected)?.key ?? null
+  useEffect(() => {
+    noteSelectedTab(panel, selected)
+  }, [panel, selected])
 
   return items
 }
@@ -516,8 +605,9 @@ const CONTROL_NOTE = {
 } as const
 
 /** Shows a tab: its kind in the panel, and the tab within a kind of several. */
-function selectSurface(panel: string, item: Pick<SurfaceItem, 'kind' | 'id'>): void {
+function selectSurface(panel: string, item: Pick<SurfaceItem, 'kind' | 'id' | 'key'>): void {
   const sessionId = panelSession(panel)
+  if (isDocKind(item.kind)) return selectDoc(panel, item.key)
   toggleSidePane(panel, item.kind, true)
   if (item.kind === 'terminal') showTerminal(panel, item.id)
   else if (item.kind === 'browser') {
@@ -613,7 +703,7 @@ export function SurfaceTabs({
   const signature = items
     .map(
       (item) =>
-        `${item.key}|${item.name}|${item.selected}|${item.dot?.tone}|${item.code}|${item.needs}`,
+        `${item.key}|${item.name}|${item.note}|${item.selected}|${item.dot?.tone}|${item.code}|${item.needs}`,
     )
     .join('\n')
   const { stripRef, tight } = useRowFit(`${signature}|${starting}`)
@@ -625,6 +715,9 @@ export function SurfaceTabs({
   // phone the panel always covers the area and the corner always holds the sidebar's toggle.
   const phone = usePhoneWindow()
   const cornered = (useViewStore((s) => s.sidebarCollapsed) || phone) && maximized && !hasBand
+
+  // Files are read and kept by project; the row says which project its panel's tabs are of.
+  useEffect(() => notePanel(panel, projectPath), [panel, projectPath])
 
   // The pages an earlier run left open come back once their row shows.
   useEffect(() => {
@@ -655,9 +748,11 @@ export function SurfaceTabs({
         else void window.kettu.browser.close(sessionId)
       } else if (item.kind === 'devices') {
         if (sessionId) void closeDevice(sessionId, item.id)
-      } else removeSideTab(panel, item.kind)
+      } else if (item.doc?.kind === 'artifact') closeDoc(panel, item.key)
+      else if (item.doc) closeFileDoc(panel, projectPath, item.doc)
+      else if (!isDocKind(item.kind)) removeSideTab(panel, item.kind)
     },
-    [panel, sessionId],
+    [panel, projectPath, sessionId],
   )
 
   // The selected tab hands the panel to its neighbour, of any kind; the last one to the list.
@@ -676,20 +771,23 @@ export function SurfaceTabs({
     [items, panel, browserTabs, drop],
   )
 
-  // A shell still running asks first, as does an artifact with comments not sent yet.
+  // A shell still running asks first, as do a file with unsaved edits and an artifact with
+  // comments not sent yet.
   const requestClose = useCallback(
     (item: SurfaceItem) => {
       if (endsRun(item)) setClosing((waiting) => [...waiting, item])
-      else if (item.kind !== 'artifact' || mayLeave(sideArtifactOf(panel))) close(item)
+      else if (item.kind === 'file' && asksBeforeClose(panel, projectPath, item.id)) return
+      else if (item.kind !== 'artifact' || mayLeave(item.id)) close(item)
     },
-    [close, panel],
+    [close, panel, projectPath],
   )
 
   // Close others and Close to the right: `keep` takes the panel when the selected tab goes.
   const closeMany = useCallback(
     (targets: SurfaceItem[], keep: SurfaceItem) => {
-      const going = targets.filter(
-        (item) => item.kind !== 'artifact' || mayLeave(sideArtifactOf(panel)),
+      // Files with unsaved edits stay; each is closed on its own, which asks about it.
+      const going = targets.filter((item) =>
+        item.kind === 'artifact' ? mayLeave(item.id) : !(item.kind === 'file' && item.dot),
       )
       if (going.some((item) => item.selected)) selectSurface(panel, keep)
       let pagesLeft = browserTabs ?? 0
@@ -736,6 +834,8 @@ export function SurfaceTabs({
     if (!isSortable(source)) return
     const key = String(source.id)
     if (source.index !== source.initialIndex) {
+      // Dragging the preview tab keeps it.
+      keepDoc(panel, key)
       moveSurfaceTab(
         panel,
         items.map((item) => item.key),
@@ -826,6 +926,13 @@ export function SurfaceTabs({
           <PaneIcon icon={SidebarRightIcon} size={16} />
         </PanelButton>
       </div>
+      <UnsavedPrompt
+        panel={panel}
+        onClose={(path) => {
+          const item = items.find((other) => other.kind === 'file' && other.id === path)
+          if (item) close(item)
+        }}
+      />
       <EndTerminal
         container={sheetRef}
         closing={asked}
@@ -839,10 +946,6 @@ export function SurfaceTabs({
       />
     </div>
   )
-}
-
-function sideArtifactOf(panel: string): string {
-  return useViewStore.getState().sideArtifact[panel] ?? ''
 }
 
 /**
@@ -928,6 +1031,7 @@ function SurfaceTab({
         data-dragging={isDragging || undefined}
         data-editing={editing || undefined}
         data-dim={item.dim || undefined}
+        data-preview={item.preview || undefined}
       >
         {/* Stays mounted while renaming, hidden under the input, so the tab keeps its width. */}
         <button
@@ -937,7 +1041,7 @@ function SurfaceTab({
           aria-selected={item.selected}
           title={item.title}
           onClick={onSelect}
-          onDoubleClick={() => terminal && setEditing(true)}
+          onDoubleClick={() => (terminal ? setEditing(true) : keepDoc(panel, item.key))}
           onAuxClick={(event) => event.button === 1 && onClose()}
           className="kp-stab__btn"
           style={editing ? { visibility: 'hidden' } : undefined}
@@ -948,7 +1052,10 @@ function SurfaceTab({
               <span aria-hidden className="kp-stab__badge" data-tone={item.dot?.tone ?? 'fox'} />
             )}
           </span>
-          <span className="kp-stab__name">{item.name}</span>
+          <span className="kp-stab__name">
+            {item.name}
+            {item.note && <span className="kp-stab__note"> {item.note}</span>}
+          </span>
           {item.code !== null && (
             <span className="kp-stab__code" data-failed={item.code !== 0 || undefined}>
               {item.code}
@@ -1038,7 +1145,13 @@ function SurfaceTab({
             {t('shell:surfaces.stopSharing', { agent: item.agent })}
           </ContextMenuItem>
         )}
-        {(terminal || mention || item.shared) && <ContextMenuSeparator />}
+        {item.preview && (
+          <ContextMenuItem onClick={() => keepDoc(panel, item.key)}>
+            <PaneIcon icon={PinIcon} size={16} />
+            {t('shell:surfaces.keep')}
+          </ContextMenuItem>
+        )}
+        {(terminal || mention || item.shared || item.preview) && <ContextMenuSeparator />}
         <ContextMenuItem onClick={onClose}>
           <PaneIcon icon={Cancel01Icon} size={16} />
           {item.kind === 'devices' ? closeLabel : t('common:actions.close')}

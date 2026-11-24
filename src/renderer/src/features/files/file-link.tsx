@@ -104,7 +104,7 @@ export function FileLink({ file }: { file: FileRef & { projectPath: string } }) 
       line={file.line}
       projectPath={file.projectPath}
       hostFile={hostFilePath(file.projectPath, file.path)}
-      onOpen={() => openFile(file.projectPath, file.path, file.line)}
+      onOpen={() => openFile(file.projectPath, file.path, file.line, { preview: true })}
     />
   )
 }
@@ -119,6 +119,7 @@ export function AgentFileLink({ file }: { file: AgentFileRef }) {
       hostFile={file.path}
       onOpen={() =>
         openFile(file.projectPath, file.path, file.line, {
+          preview: true,
           agent: { sessionId: file.sessionId, agentId: file.agentId },
         })
       }

@@ -58,6 +58,8 @@ import { useSessionsStore } from '@renderer/stores/sessions'
 import {
   artifactPageShown,
   closeArtifact,
+  keepDoc,
+  openArtifact,
   MAIN_ARTIFACT_PANEL,
   openSessionWithArtifact,
   useViewStore,
@@ -277,6 +279,11 @@ export default function ArtifactViewer(place: ViewerPlace) {
     : offline && state.mode === 'edit'
       ? 'comment'
       : state.mode
+  // Commenting on it or editing it keeps its tab, which a preview would give up to the next click.
+  const besidePanel = panel?.panel ?? null
+  useEffect(() => {
+    if (besidePanel && mode !== 'view') keepDoc(besidePanel, `artifact:${id}`)
+  }, [besidePanel, mode, id])
   // A canvas document: the latest is edited live on the host, an earlier one only shown.
   const docShown = shown?.doc ?? null
   const legacyCanvas = !!shown?.canvas && !docShown
@@ -1382,6 +1389,7 @@ export default function ArtifactViewer(place: ViewerPlace) {
           : null
       }
       onPresent={showing && !states.gone && (shown?.canvas || (isDeck && deck)) ? present : null}
+      onOpenMain={panel ? () => openArtifact(id) : null}
       share={
         showing && shown && shares && !states.gone && !states.inTrash
           ? { id, title, shown: shown.version, head: head ?? shown.version }

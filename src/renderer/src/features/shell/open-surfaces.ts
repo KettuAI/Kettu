@@ -4,7 +4,14 @@ import { useBrowserStore } from '@renderer/stores/browser'
 import { devicesOf, selectDevice, useDevicesStore } from '@renderer/stores/devices'
 import { isSurfaceKind, kindOfKey, type SurfaceKind } from '@renderer/stores/surface-tabs'
 import { showTerminal, terminalsOf, useTerminalsStore } from '@renderer/stores/terminals'
-import { panelSession, toggleSidePane, useViewStore, type SidePane } from '@renderer/stores/view'
+import {
+  docKey,
+  isDocKind,
+  panelSession,
+  selectDoc,
+  toggleSidePane,
+  useViewStore,
+} from '@renderer/stores/view'
 
 /**
  * Opens a closed side panel on the tab it showed last when the row still has it, else on any tab
@@ -27,11 +34,23 @@ export function reopenSidePanel(panel: string, projectPath: string): boolean {
       devicesOf(useDevicesStore.getState().devices, sessionId).length > 0,
   }
   const tabs = view.sideTabs[panel] ?? []
-  const held = (pane: SidePane | undefined): pane is SidePane =>
-    !!pane && (isSurfaceKind(pane) ? has[pane] : tabs.some((tab) => tab === pane))
+  const docs = (view.sideDocs[panel] ?? []).map(docKey)
+  // Whether the row still has the tab; a kind of one has an empty id.
+  const held = (key: string): boolean => {
+    const kind = kindOfKey(key)
+    if (isDocKind(kind)) return docs.includes(key)
+    return isSurfaceKind(kind) ? has[kind] : tabs.some((tab) => tab === kind)
+  }
   const last = view.sideLast[panel]
-  const pane = held(last) ? last : (order.find(held) ?? tabs[0] ?? 'surfaces')
-  toggleSidePane(panel, pane, true)
+  const lastKey = last && (isDocKind(last) ? view.sideDoc[panel] : `${last}:`)
+  const key =
+    lastKey && kindOfKey(lastKey) === last && held(lastKey)
+      ? lastKey
+      : ((view.sideOrder[panel] ?? []).find(held) ?? (tabs[0] ? `${tabs[0]}:` : docs[0]))
+  const pane = key ? kindOfKey(key) : 'surfaces'
+  // A file, diff or artifact tab is shown by its key, since its kind has several.
+  if (key && isDocKind(pane)) selectDoc(panel, key)
+  else toggleSidePane(panel, pane, true)
   return pane === 'surfaces'
 }
 

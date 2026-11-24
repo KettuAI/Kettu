@@ -1,6 +1,5 @@
 import type { ComponentProps, ReactNode } from 'react'
 import { HugeiconsIcon, type IconSvgElement } from '@hugeicons/react'
-import { Cancel01Icon } from '@hugeicons/core-free-icons'
 import { Kbd } from '@renderer/components/ui/kbd'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
 import { cn } from '@renderer/lib/utils'
@@ -98,24 +97,6 @@ export function PaneContext({ tools, children }: { tools?: ReactNode; children?:
       <div className="kp-ctx__main">{children}</div>
       {tools && <div className="kp-ctx__tools">{tools}</div>}
     </div>
-  )
-}
-
-/** A tab's close button: on the chosen tab at its end, on another over its end on hover. */
-export function PaneTabClose({ label, onClick }: { label: string; onClick: () => void }) {
-  return (
-    <button
-      type="button"
-      aria-label={label}
-      title={label}
-      onClick={(event) => {
-        event.stopPropagation()
-        onClick()
-      }}
-      className="kp-tab__x"
-    >
-      <PaneIcon icon={Cancel01Icon} size={11} />
-    </button>
   )
 }
 

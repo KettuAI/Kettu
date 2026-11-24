@@ -13,15 +13,23 @@ import { Button } from '@renderer/components/ui/button'
 import { answerPending, useFilesStore } from '@renderer/stores/files'
 import { nameOf } from './paths'
 
-/** "Save changes?" before a tab with unsaved edits closes. */
-export function UnsavedPrompt({ projectPath }: { projectPath: string }) {
+/**
+ * "Save changes?" before a file tab of the panel with unsaved edits closes; `onClose` closes the
+ * tab once the answer lets it.
+ */
+export function UnsavedPrompt({
+  panel,
+  onClose,
+}: {
+  panel: string
+  onClose: (path: string) => void
+}) {
   const { t } = useTranslation(['files', 'common'])
-  const path = useFilesStore((s) => s.pending[projectPath]?.path ?? null)
+  const path = useFilesStore((s) => (s.pending?.panel === panel ? s.pending.path : null))
+  const answer = (choice: 'cancel' | 'discard' | 'save'): void =>
+    void answerPending(choice).then((closing) => closing && onClose(closing.path))
   return (
-    <AlertDialog
-      open={path !== null}
-      onOpenChange={(open) => !open && void answerPending(projectPath, 'cancel')}
-    >
+    <AlertDialog open={path !== null} onOpenChange={(open) => !open && answer('cancel')}>
       <AlertDialogContent className="sm:max-w-[380px]">
         <AlertDialogHeader>
           <AlertDialogTitle>{t('unsaved.title', { name: nameOf(path ?? '') })}</AlertDialogTitle>
@@ -33,14 +41,12 @@ export function UnsavedPrompt({ projectPath }: { projectPath: string }) {
             variant="outline"
             size="dialog"
             className="sm:mr-auto"
-            onClick={() => void answerPending(projectPath, 'discard')}
+            onClick={() => answer('discard')}
           >
             {t('unsaved.dontSave')}
           </Button>
           <AlertDialogCancel>{t('common:actions.cancel')}</AlertDialogCancel>
-          <AlertDialogAction onClick={() => void answerPending(projectPath, 'save')}>
-            {t('unsaved.save')}
-          </AlertDialogAction>
+          <AlertDialogAction onClick={() => answer('save')}>{t('unsaved.save')}</AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>

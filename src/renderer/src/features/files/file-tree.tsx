@@ -81,7 +81,8 @@ import {
 import { VirtualRows, type RowKey } from './virtual-rows'
 
 // A single click in a list opens the preview tab, which the next single click replaces.
-const PREVIEW = { preview: true }
+const PREVIEW = { preview: true, fromPanel: true }
+const KEPT = { fromPanel: true }
 // Where the row of a new file or folder's name stands in the list.
 const DRAFT = '\0new'
 
@@ -624,7 +625,9 @@ export function FileTree({
                     }
                     change={row.folder ? undefined : changes.get(row.path)}
                     onClick={(event) => onRowClick(row, event)}
-                    onDoubleClick={row.folder ? undefined : () => openFile(projectPath, row.path)}
+                    onDoubleClick={
+                      row.folder ? undefined : () => openFile(projectPath, row.path, null, KEPT)
+                    }
                     onFocus={() => onRowFocus(row)}
                   />
                 )

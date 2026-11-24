@@ -178,7 +178,9 @@ export function usePromptChips({
       return
     }
     if (chip.path && chip.kind === 'file' && projectPath) {
-      openFile(projectPath, chip.path, chip.lines ? Number(chip.lines.split('–')[0]) : null)
+      openFile(projectPath, chip.path, chip.lines ? Number(chip.lines.split('–')[0]) : null, {
+        preview: true,
+      })
     }
   }
 

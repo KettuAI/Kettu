@@ -82,12 +82,13 @@ export function LineBar({ insertions, deletions }: { insertions: number; deletio
   )
 }
 
-/** A changed file: its tile, name, folder and line counts; it opens its diff in the Files pane. */
+/** A changed file: its tile, name, folder and line counts; it opens its diff in a tab. */
 export function ChangeRow({
   status,
   file,
   commit,
   nested = false,
+  fromPanel = false,
   onOpened,
 }: {
   status: GitStatus
@@ -95,6 +96,8 @@ export function ChangeRow({
   /** The commit it changed in, or null for the working tree. */
   commit: string | null
   nested?: boolean
+  /** A row of the Git pane, whose diff opens right after the pane's tab. */
+  fromPanel?: boolean
   onOpened: () => void
 }) {
   const { t } = useTranslation('git')
@@ -113,9 +116,10 @@ export function ChangeRow({
       aria-label={t('timeline.openDiff', { name })}
       onKeyDown={nested ? kidKeys : undefined}
       onClick={() => {
-        openChangeDiff(status, file, commit)
+        openChangeDiff(status, file, commit, { preview: true, fromPanel })
         onOpened()
       }}
+      onDoubleClick={() => openChangeDiff(status, file, commit, { fromPanel })}
     >
       <ChangeBadge status={file.status} />
       <span className="min-w-0 shrink truncate text-ui text-primary">{name}</span>

@@ -146,6 +146,8 @@
       }
     },
     "reference": "Reference in conversation",
+    "keep": "Keep",
+    "uncommitted": "Uncommitted changes",
     "stopSharing": "Stop {{agent}} using it",
     "shared": "{{agent}} may use it",
     "news": "New activity",

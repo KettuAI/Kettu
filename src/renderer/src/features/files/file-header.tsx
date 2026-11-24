@@ -4,33 +4,6 @@ import { useTranslation } from 'react-i18next'
 import { SegmentedControl } from '@renderer/components/affect/segmented-control'
 import { PaneIcon } from '@renderer/features/shell/panel-button'
 
-/** The Diff and File toggle of a changed file's bar. */
-export function DiffFileToggle({
-  value,
-  onChange,
-  disabled,
-}: {
-  value: 'diff' | 'file'
-  onChange: (value: 'diff' | 'file') => void
-  disabled?: boolean
-}) {
-  const { t } = useTranslation('files')
-  return (
-    <SegmentedControl
-      aria-label={t('diff.view')}
-      variant="tray"
-      size="md"
-      value={value}
-      disabled={disabled}
-      onChange={onChange}
-      options={[
-        { value: 'diff', label: t('diff.diff') },
-        { value: 'file', label: t('diff.file') },
-      ]}
-    />
-  )
-}
-
 /** Between a Markdown or SVG file drawn as it shows and its text in the editor. */
 export function PreviewEditToggle({
   value,

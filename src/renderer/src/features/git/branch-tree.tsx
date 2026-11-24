@@ -474,6 +474,7 @@ export function CommitRow({
                 file={file}
                 commit={commit.oid}
                 nested
+                fromPanel={pane}
                 onOpened={onOpened}
               />
             ))

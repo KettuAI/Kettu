@@ -1,10 +1,18 @@
-import { toggleSidePane, useViewStore, type SidePane, type SingleTab } from './view'
+import {
+  isDocKind,
+  selectDoc,
+  toggleSidePane,
+  useViewStore,
+  type DocKind,
+  type SidePane,
+  type SingleTab,
+} from './view'
 
 /** The kinds a session has several tabs of: terminals, browser pages and devices. */
 export type SurfaceKind = 'terminal' | 'browser' | 'devices'
 
-/** A tab's kind: one of the three, or a kind a session has one of. */
-export type TabKind = SurfaceKind | SingleTab
+/** A tab's kind: one of the three, a file, diff or artifact, or a kind a session has one of. */
+export type TabKind = SurfaceKind | DocKind | SingleTab
 
 export function isSurfaceKind(pane: SidePane | null | undefined): pane is SurfaceKind {
   return pane === 'terminal' || pane === 'browser' || pane === 'devices'
@@ -98,8 +106,9 @@ export function foldSurface(panel: string, kind: SurfaceKind): void {
   const order = view.sideOrder[panel] ?? []
   const last = order.findLastIndex((key) => kindOfKey(key) === kind)
   const others = order
-    .map((key, index) => ({ kind: kindOfKey(key), index }))
+    .map((key, index) => ({ key, kind: kindOfKey(key), index }))
     .filter((other) => other.kind !== kind)
   const next = others.find((other) => other.index > last) ?? others.at(-1)
-  toggleSidePane(panel, next?.kind ?? 'surfaces', true)
+  if (next && isDocKind(next.kind)) selectDoc(panel, next.key)
+  else toggleSidePane(panel, next?.kind ?? 'surfaces', true)
 }

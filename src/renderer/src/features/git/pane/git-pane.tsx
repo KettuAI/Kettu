@@ -102,7 +102,7 @@ export default function GitPane({ panel, projectPath }: { panel: string; project
             )}
             <SyncStrip status={status} pr={pr} gh={gh} files={files} onHandOff={handOff} />
             <TabsContent value="changes" className={PAGE}>
-              <ChangesPage status={status} changes={changes} textarea={textarea} />
+              <ChangesPage panel={panel} status={status} changes={changes} textarea={textarea} />
             </TabsContent>
             <TabsContent value="commits" className={PAGE}>
               <CommitsPage status={status} />

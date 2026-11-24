@@ -30,7 +30,7 @@ import { createTerminal } from '@renderer/stores/terminals'
 import { useThreadsStore } from '@renderer/stores/threads'
 import {
   panelSession,
-  toggleArtifactPane,
+  openArtifactTab,
   toggleSidePane,
   toggleTerminal,
   useViewStore,
@@ -209,9 +209,9 @@ export function useArtifactChoices(panel: string): ArtifactChoice[] {
   })
 }
 
-/** Shows one of the session's artifacts in the panel's artifact tab. */
+/** Shows one of the session's artifacts in the panel's preview tab. */
 export function startArtifact(panel: string, id: string): void {
-  toggleArtifactPane(panel, id, true)
+  openArtifactTab(panel, id, { preview: true })
 }
 
 /** Opens the row: a new terminal or page, the devices tab's list, or the kind's one tab. */

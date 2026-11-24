@@ -81,7 +81,11 @@ export const ChangesCard = memo(function ChangesCard({
     const tracked = root === null ? null : within(path, root)
     if (file === null || tracked === null) return null
     return () =>
-      openDiff(projectPath, { path: tracked, oldPath: null, ref: null, projectFile: file })
+      openDiff(
+        projectPath,
+        { path: tracked, oldPath: null, ref: null, projectFile: file },
+        { preview: true },
+      )
   }
   const first = ordered.map((change) => review(change.path)).find((open) => open !== null)
   const committable =
