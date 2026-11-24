@@ -328,6 +328,17 @@ const ENTRIES = {
     access: 'change',
     ...flag('general', 'continueAfterLimit', (file) => file.general.continueAfterLimit),
   },
+  'general.prompt-suggestions': {
+    section: 'general',
+    row: 'prompt-suggestions',
+    group: 'general.groups.sessions',
+    name: 'general.promptSuggestions.name',
+    description: 'general.promptSuggestions.description',
+    keywords: 'general.promptSuggestions.keywords',
+    part: 'host',
+    access: 'change',
+    ...flag('general', 'promptSuggestions', (file) => file.general.promptSuggestions),
+  },
   'general.agent-passwords': {
     section: 'general',
     row: 'agent-passwords',

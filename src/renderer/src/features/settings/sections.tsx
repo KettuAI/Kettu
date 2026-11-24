@@ -204,6 +204,7 @@ export function GeneralSwitch({
     | 'confirmQuitWhileRunning'
     | 'sessionTitles'
     | 'continueAfterLimit'
+    | 'promptSuggestions'
     | 'agentPasswords'
     | 'background'
   label: string

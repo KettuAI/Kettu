@@ -53,6 +53,7 @@ export interface SettingsFile {
     openAtLogin: boolean // start at login, so routines keep their schedule
     background: boolean // keep running with the tray icon after the last window closes
     sessionTitles: boolean // a small model titles a session its agent leaves untitled
+    promptSuggestions: boolean // the agent guesses the next message after a turn, filled with Tab
     continueAfterLimit: boolean // a session carries on when the window that stopped it resets
     agentPasswords: boolean // agents type passwords and codes the user gave them or the project holds
     lightModel: LightModel // replaced whole
@@ -282,6 +283,7 @@ export const DEFAULT_SETTINGS: SettingsFile = {
     openAtLogin: false,
     background: false,
     sessionTitles: true,
+    promptSuggestions: true,
     continueAfterLimit: true,
     agentPasswords: false,
     lightModel: { mode: 'small' },
@@ -446,6 +448,7 @@ export interface HostSettings {
   workflow: SettingsFile['workflow']
   usage: { fromComputer: boolean }
   sessionTitles: boolean // write a title for a session its agent leaves untitled
+  promptSuggestions: boolean // ask the agent for a guess at the next message after each turn
   continueAfterLimit: boolean // carry a session on when the window that stopped it resets
   agentPasswords: boolean // agents may type passwords and codes, at a terminal's password prompt too
   lightModel: LightModel // which model Kettu's own requests ask

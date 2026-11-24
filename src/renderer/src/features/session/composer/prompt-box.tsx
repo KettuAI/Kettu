@@ -44,6 +44,7 @@ export function PromptBox({
   commands,
   commandsNote = null,
   placeholder,
+  suggestion = null,
   label,
   size,
   top,
@@ -58,6 +59,8 @@ export function PromptBox({
   /** Said in the slash list while it has no commands, which then shows only this line. */
   commandsNote?: SlashNote | null
   placeholder: string
+  /** A guess at the next message, offered in place of the placeholder; Tab fills it in. */
+  suggestion?: string | null
   label: string
   /** The text's least height, its padding and its line height, as CSS lengths. */
   size: { minHeight: string; padding: string; lineHeight?: string }
@@ -299,6 +302,7 @@ export function PromptBox({
             initialText={source.text}
             label={label}
             placeholder={placeholder}
+            suggestion={suggestion}
             disabled={disabled}
             chipContext={chips.chipContext}
             size={size}

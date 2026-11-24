@@ -252,6 +252,14 @@ export function useGeneralSection(): SectionDef {
         ),
       },
       {
+        id: 'prompt-suggestions',
+        setting: 'general.prompt-suggestions',
+        group: sessions,
+        render: () => (
+          <GeneralSwitch field="promptSuggestions" label={t('general.promptSuggestions.name')} />
+        ),
+      },
+      {
         id: 'agent-passwords',
         setting: 'general.agent-passwords',
         group: sessions,

@@ -93,6 +93,11 @@ export interface SessionView {
   speed?: OutputSpeed
   /** Ephemeral: the main thread's latest request, for an agent whose stream counts its tokens. */
   lastRequest?: LastRequest
+  /**
+   * Ephemeral: the agent's guess at the user's next message after a turn, which the empty
+   * composer offers; null once the next turn starts.
+   */
+  suggestion?: string | null
   /** Questions asked beside the session, never part of its conversation. Absent for subagents. */
   sideChat?: SideChatView
   /** Ephemeral: a program outside Kettu, such as a terminal, has the agent's session open. */
