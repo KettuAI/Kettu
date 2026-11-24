@@ -97,6 +97,7 @@ import { bundleToken } from './marketplace/bundles'
 import { TASK_ID } from './workflow/model'
 import { isCompletablePath } from './path-completion'
 import { isAbsolutePath } from './paths'
+import { PLUGIN_ID, PLUGIN_TOKEN, type PluginSource } from '@shared/plugins'
 import { MAX_WORKTREE_COPY_PATHS } from './storage'
 import { checkIncludeEntry } from './worktrees/copy'
 import { branchFromTemplate, checkWorktreeBranch } from './worktrees/names'
@@ -1132,6 +1133,33 @@ function skillSource(value: unknown, platform: Platform): SkillSource {
   throw invalidParams('source.kind must be catalog, github, local or kettu')
 }
 
+/** Where a plugin comes from: a folder on the host, a github.com URL or a listing. */
+function pluginSource(value: unknown, platform: Platform): PluginSource {
+  const o = fields(value)
+  if (o.kind === 'local') return { kind: 'local', path: absolutePath(o, 'path', platform) }
+  if (o.kind === 'github') {
+    const url = string(o, 'url', URL_CHARS).trim()
+    if (!url.startsWith('https://github.com/') || /\s/.test(url)) {
+      throw invalidParams('url must be a https://github.com/ address')
+    }
+    return { kind: 'github', url }
+  }
+  if (o.kind === 'kettu') return { kind: 'kettu', id: listingId(o) }
+  throw invalidParams('source.kind must be local, github or kettu')
+}
+
+function installedPlugin(params: unknown): { pluginId: string } {
+  const id = string(fields(params), 'pluginId', ID_CHARS)
+  if (!PLUGIN_ID.test(id)) throw invalidParams('pluginId is not a plugin')
+  return { pluginId: id }
+}
+
+function pluginToken(params: unknown): { token: string } {
+  const token = string(fields(params), 'token', ID_CHARS)
+  if (!PLUGIN_TOKEN.test(token)) throw invalidParams('token must name an inspected plugin')
+  return { token }
+}
+
 function listingVersion(o: Fields): string {
   const version = string(o, 'version', 64)
   if (!VERSION.test(version)) throw invalidParams('version is not a version such as 1.2.0')
@@ -1535,9 +1563,10 @@ export function createValidators(platform: Platform): Validators {
         kind !== 'skill' &&
         kind !== 'workflow' &&
         kind !== 'plugin' &&
-        kind !== 'mcp-server'
+        kind !== 'mcp-server' &&
+        kind !== 'agent-plugin'
       ) {
-        throw invalidParams('kind must be skill, workflow, plugin or mcp-server')
+        throw invalidParams('kind must be skill, workflow, plugin, mcp-server or agent-plugin')
       }
       const cursor = optionalString(o, 'cursor', 256)
       if (cursor !== undefined && !DIRECTORY_CURSOR.test(cursor)) {
@@ -2000,6 +2029,30 @@ export function createValidators(platform: Platform): Validators {
       }
     },
     'routines.markSeen': (params) => ({ routineId: routineId(fields(params)) }),
+    'plugins.list': none,
+    'plugins.inspect': (params) => ({ source: pluginSource(fields(params).source, platform) }),
+    'plugins.install': pluginToken,
+    'plugins.discard': pluginToken,
+    'plugins.uninstall': installedPlugin,
+    'plugins.setEnabled': (params) => ({
+      ...installedPlugin(params),
+      enabled: flag(fields(params), 'enabled'),
+    }),
+    'plugins.reload': installedPlugin,
+    'plugins.checkUpdates': (params) =>
+      params === undefined || params === null || fields(params).pluginId === undefined
+        ? {}
+        : installedPlugin(params),
+    'plugins.applyUpdate': installedPlugin,
+    'plugins.declineUpdate': installedPlugin,
+    'plugins.rollBack': installedPlugin,
+    'plugins.resources': (params) => {
+      const { kind } = fields(params)
+      if (kind !== 'commands' && kind !== 'roles' && kind !== 'themes' && kind !== 'templates') {
+        throw invalidParams('kind must be commands, roles, themes or templates')
+      }
+      return { kind }
+    },
     'workflows.list': none,
     'workflows.read': (params) => ({ workflowId: workflowId(fields(params)) }),
     'workflows.add': workflowAddSource,

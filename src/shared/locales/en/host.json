@@ -1328,6 +1328,50 @@
     "noWorkflow": "The listing has no workflow.yaml in UTF-8 text, so nothing was installed.",
     "notListing": "Not a listing of the Kettu Marketplace"
   },
+  "plugins": {
+    "invalid": "This plugin can’t be installed: {{reason}}",
+    "noManifest": "it has no plugin.json at its top.",
+    "notJson": "its plugin.json isn’t a JSON object Kettu can read.",
+    "schema": "its plugin.json targets a version of the plugin format Kettu doesn’t read ({{schema}}).",
+    "field": "its plugin.json has no valid {{field}}.",
+    "format": "it’s written for version {{version}} of Kettu’s plugin content, and this Kettu reads version {{reads}}. Update Kettu to install it.",
+    "kettuVersion": "it needs Kettu {{range}}, and this is Kettu {{version}}.",
+    "api": "its script asks for version {{version}} of the plugin API, which this Kettu doesn’t have.",
+    "permission": "it asks for a permission Kettu doesn’t know, {{permission}}.",
+    "noScript": "its script, {{path}}, isn’t in the package.",
+    "unsafePath": "it names a path outside the package, {{path}}.",
+    "link": "{{path}} is a link, and a plugin may hold none.",
+    "tooLarge": "it holds more than {{files}} files or {{mb}} MB.",
+    "noPlugin": "There’s no plugin.json in {{url}}",
+    "noPlan": "That check of the plugin is no longer kept. Check the plugin again.",
+    "notFound": "That plugin isn’t installed.",
+    "notDevelopment": "Only a plugin added from a folder can be reloaded.",
+    "noUpdate": "No update is waiting for this plugin.",
+    "noPrevious": "There’s no earlier version of this plugin to go back to.",
+    "updateChanged": "The update asks for more than it did when it was shown. Look at what it adds again.",
+    "fromPlugin": "This comes with the plugin {{plugin}} and is removed with it.",
+    "warn": {
+      "unknownField": "plugin.json has a field the plugin format doesn’t define, {{field}}. It’s ignored.",
+      "extensions": "plugin.json’s extensions isn’t an object. It’s ignored.",
+      "kettuField": "The sh.kettu entry has a field this Kettu doesn’t know, {{field}}. It’s ignored.",
+      "item": "{{path}} was left out: {{reason}}",
+      "server": "The MCP server {{name}} was left out: {{reason}}",
+      "cwd": "The MCP server {{name}} asks to start in {{cwd}}. Agents start it in the session’s folder instead.",
+      "hooks": "This plugin’s hooks don’t run in Kettu."
+    },
+    "reason": {
+      "entry": "it doesn’t fit the plugin format",
+      "schema": "it targets another version of the plugin format than plugin.json",
+      "name": "its name isn’t one Kettu takes: letters, digits, dots, hyphens and underscores",
+      "duplicate": "another item is named {{name}}",
+      "noFile": "it has no {{file}}",
+      "type": "it must be one of {{types}}",
+      "tooLarge": "it’s too large",
+      "command": "its command must be one program’s name, or a path in the package starting with ./",
+      "url": "its URL must be an https address, or http on this computer",
+      "unknownFolder": "Kettu doesn’t know this folder"
+    }
+  },
   "marketBundle": {
     "invalid": "This MCP bundle can’t be installed: {{reason}}",
     "notZip": "it isn’t a zip archive.",
@@ -1494,7 +1538,8 @@
     "noMcp": "no MCP server \"{{name}}\" is installed in Kettu",
     "noSkill": "no Skill \"{{name}}\" is installed in Kettu",
     "unreadable": "could not be read: {{reason}}",
-    "fileGone": "the file is gone"
+    "fileGone": "the file is gone",
+    "pluginOff": "its plugin, {{plugin}}, is turned off"
   },
   "apiKey": {
     "oneWord": "The API key must be one word without spaces",

@@ -455,6 +455,7 @@ const KIND_NAMES = {
   workflow: 'workflow',
   plugin: 'plugin',
   'mcp-server': 'MCP server',
+  'agent-plugin': 'plugin',
 } as const
 
 /** A skill and a workflow have no version of their own: Kettu numbers them. */

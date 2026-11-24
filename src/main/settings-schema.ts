@@ -46,6 +46,7 @@ import {
   type McpSpec,
   type McpValue,
 } from '@shared/marketplace'
+import { PLUGIN_NAME, pluginItem } from '@shared/plugins'
 import { addressKey, isPort, MAX_OWN_ADDRESSES, parseDirectAddress } from '@shared/remote/address'
 import type { DirectAddress } from '@shared/remote/protocol'
 import { DEVICE_NAME_CHARS, isDeviceName } from '@shared/remote/device'
@@ -609,15 +610,25 @@ function parseMarketServer(raw: unknown, path: string, strict: boolean): MarketS
   const extra = extraKey(raw, allowed, path, strict)
   if (extra) return extra
   const { id, name, title, source, version, agents, on } = raw
-  const sourceProblem = oneOf('registry', 'manual', 'kettu')(source, `${path}.source`)
+  const sourceProblem = oneOf('registry', 'manual', 'kettu', 'plugin')(source, `${path}.source`)
   if (sourceProblem) return sourceProblem
-  const idPattern = source === 'manual' ? MANUAL_ID : source === 'kettu' ? KETTU_ID : REGISTRY_NAME
-  if (typeof id !== 'string' || id.length > MAX_MARKET_ID || !idPattern.test(id)) {
-    return source === 'manual'
-      ? `"${path}.id" must be manual: and a UUID`
-      : source === 'kettu'
-        ? `"${path}.id" must be kettu: and a listing id`
-        : `"${path}.id" must be a registry name of at most ${MAX_MARKET_ID} characters`
+  if (typeof id !== 'string' || id.length > MAX_MARKET_ID) {
+    return `"${path}.id" must be at most ${MAX_MARKET_ID} characters`
+  }
+  if (source === 'plugin') {
+    if (pluginItem(id) === null) {
+      return `"${path}.id" must be plugin:, a plugin's id and a server's name`
+    }
+  } else {
+    const idPattern =
+      source === 'manual' ? MANUAL_ID : source === 'kettu' ? KETTU_ID : REGISTRY_NAME
+    if (!idPattern.test(id)) {
+      return source === 'manual'
+        ? `"${path}.id" must be manual: and a UUID`
+        : source === 'kettu'
+          ? `"${path}.id" must be kettu: and a listing id`
+          : `"${path}.id" must be a registry name of at most ${MAX_MARKET_ID} characters`
+    }
   }
   if (typeof name !== 'string' || !MARKET_NAME.test(name) || name === 'kettu') {
     return `"${path}.name" must be lowercase letters, digits, - and _, and not "kettu"`
@@ -675,6 +686,7 @@ const SKILL_IDS = {
   github: `${GITHUB_SKILL_PREFIX} and owner/repo, with a folder in it or not`,
   local: 'local: and a UUID',
   kettu: 'kettu: and a listing id',
+  plugin: "plugin:, a plugin's id and a skill's name",
 } as const
 
 /** A folder's name in a skill's id: no `.` or `..`, which would leave the repository. */
@@ -686,6 +698,7 @@ function isSkillId(id: string, source: MarketSkill['source']): boolean {
   if (id.length > MAX_SKILL_ID || hasControl(id)) return false
   if (source === 'local') return LOCAL_SKILL_ID.test(id)
   if (source === 'kettu') return KETTU_ID.test(id)
+  if (source === 'plugin') return pluginItem(id) !== null
   if (source === 'catalog') return catalogSkillId(id) !== null
   if (!id.startsWith(GITHUB_SKILL_PREFIX)) return false
   const [owner = '', repo = '', ...folder] = id.slice(GITHUB_SKILL_PREFIX.length).split('/')
@@ -710,7 +723,13 @@ function parseMarketSkill(raw: unknown, path: string, strict: boolean): MarketSk
   const extra = extraKey(raw, allowed, path, strict)
   if (extra) return extra
   const { id, name, description, source, origin, version, on } = raw
-  const sourceProblem = oneOf('catalog', 'github', 'local', 'kettu')(source, `${path}.source`)
+  const sourceProblem = oneOf(
+    'catalog',
+    'github',
+    'local',
+    'kettu',
+    'plugin',
+  )(source, `${path}.source`)
   if (sourceProblem) return sourceProblem
   const from = source as MarketSkill['source']
   if (typeof id !== 'string' || !isSkillId(id, from))
@@ -735,6 +754,10 @@ function parseMarketSkill(raw: unknown, path: string, strict: boolean): MarketSk
   } else if (from === 'kettu') {
     if (typeof origin !== 'string' || !KETTU_ORIGIN.test(origin)) {
       return `"${path}.origin" must be @<publisher>/<slug>`
+    }
+  } else if (from === 'plugin') {
+    if (typeof origin !== 'string' || !PLUGIN_NAME.test(origin)) {
+      return `"${path}.origin" must be a plugin's name`
     }
   } else if (!isHttpsUrl(origin)) {
     return `"${path}.origin" must be an https URL of at most ${MAX_URL_LENGTH} characters`

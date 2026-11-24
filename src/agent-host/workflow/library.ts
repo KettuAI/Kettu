@@ -7,6 +7,7 @@ import { mkdir, readdir, readFile, rm, stat } from 'node:fs/promises'
 import path from 'node:path'
 import { isAgentId } from '@shared/agents'
 import { HANDLE, LISTING_ID, VERSION } from '@shared/market-publish'
+import { PLUGIN_ID, PLUGIN_ITEM_NAME } from '@shared/plugins'
 import {
   isStepPick,
   WORKFLOW_FILE_BYTES,
@@ -90,10 +91,31 @@ function originOf(value: unknown): WorkflowOrigin | null | undefined {
       official: value.official === true,
     }
   }
+  if (
+    value.kind === 'plugin' &&
+    typeof value.pluginId === 'string' &&
+    PLUGIN_ID.test(value.pluginId) &&
+    typeof value.name === 'string' &&
+    PLUGIN_ITEM_NAME.test(value.name) &&
+    typeof value.plugin === 'string'
+  ) {
+    const { pluginId, name, plugin } = value
+    return { kind: 'plugin', pluginId, name, plugin }
+  }
   return undefined
 }
 
-const SOURCES: ReadonlySet<unknown> = new Set(['github', 'file', 'agent', 'user', 'community'])
+const SOURCES: ReadonlySet<unknown> = new Set([
+  'github',
+  'file',
+  'agent',
+  'user',
+  'community',
+  'plugin',
+])
+
+/** Where a workflow a plugin brought came from. */
+export type PluginOrigin = Extract<WorkflowOrigin, { kind: 'plugin' }>
 
 /** Where a workflow from the Kettu Marketplace came from. */
 export type CommunityOrigin = Extract<WorkflowOrigin, { kind: 'community' }>
@@ -110,6 +132,7 @@ export function parseWorkflowsFile(data: Record<string, unknown>): WorkflowsFile
       origin === undefined ||
       // Only a listing's install is the Kettu Marketplace's, and it always names its listing.
       (raw.source === 'community') !== (origin?.kind === 'community') ||
+      (raw.source === 'plugin') !== (origin?.kind === 'plugin') ||
       typeof raw.addedAt !== 'number' ||
       !isNullableString(raw.approved)
     ) {
@@ -176,6 +199,8 @@ export interface WorkflowLibraryDeps {
   fetch?: typeof fetch
   now?: () => number
   changed?(): void
+  /** Whether a plugin is on; a workflow of one that is off cannot start a task. */
+  pluginOn?(pluginId: string): boolean
 }
 
 /** A workflow a task can lock: what it is and the hash of the file it came from. */
@@ -329,6 +354,10 @@ export class WorkflowLibrary {
 
   async remove(workflowId: string): Promise<void> {
     if (!ID.test(workflowId)) throw notFound(t('workflow.notFound'))
+    const origin = this.data.entries[workflowId]?.origin
+    if (origin?.kind === 'plugin') {
+      throw new HostError('restricted', t('plugins.fromPlugin', { plugin: origin.plugin }))
+    }
     await rm(this.fileOf(workflowId), { force: true })
     delete this.data.entries[workflowId]
     delete this.data.pins[workflowId]
@@ -401,6 +430,50 @@ export class WorkflowLibrary {
     this.save()
     this.deps.changed?.()
     return { entry: (await this.read(id)).entry, updated: true }
+  }
+
+  /**
+   * Writes a plugin's workflow: in place of the one it has by that name, which stays approved only
+   * if the text is the same, or as a new workflow, unapproved. Resolves to its id.
+   */
+  async installPlugin(text: string, origin: PluginOrigin): Promise<string> {
+    if (Buffer.byteLength(text, 'utf8') > WORKFLOW_FILE_BYTES)
+      throw invalidParams(t('workflow.tooLarge'))
+    const id = Object.entries(this.data.entries).find(
+      ([, record]) =>
+        record.origin?.kind === 'plugin' &&
+        record.origin.pluginId === origin.pluginId &&
+        record.origin.name === origin.name,
+    )?.[0]
+    if (id === undefined) return (await this.write(text, 'plugin', origin)).id
+    await mkdir(this.deps.dir, { recursive: true })
+    await writeFileAtomic(this.fileOf(id), text)
+    this.data.entries[id]!.origin = { ...origin }
+    this.save()
+    this.deps.changed?.()
+    return id
+  }
+
+  /** Removes a plugin's workflows, but for those it names in `keep`. */
+  async removePlugin(pluginId: string, keep: readonly string[] = []): Promise<void> {
+    let removed = false
+    for (const [id, record] of Object.entries(this.data.entries)) {
+      const { origin } = record
+      if (origin?.kind !== 'plugin' || origin.pluginId !== pluginId) continue
+      if (keep.includes(origin.name)) continue
+      await rm(this.fileOf(id), { force: true })
+      delete this.data.entries[id]
+      delete this.data.pins[id]
+      removed = true
+    }
+    if (!removed) return
+    this.save()
+    this.deps.changed?.()
+  }
+
+  /** A plugin was turned on or off, which changes whether its workflows can be used. */
+  pluginChanged(): void {
+    this.deps.changed?.()
   }
 
   /**
@@ -558,6 +631,10 @@ export class WorkflowLibrary {
       problems.push(fileProblem('', 'workflowFile.fileGone'))
     }
     if (read.workflow) problems.push(...toolProblems(read.workflow, this.deps.knownTools()))
+    const from = record?.origin
+    if (from?.kind === 'plugin' && this.deps.pluginOn?.(from.pluginId) === false) {
+      problems.push(fileProblem('', 'workflowFile.pluginOff', { plugin: from.plugin }))
+    }
     const approval: WorkflowEntry['approval'] =
       record?.approved == null ? 'pending' : record.approved === read.hash ? 'approved' : 'changed'
     return {

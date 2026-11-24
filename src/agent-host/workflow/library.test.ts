@@ -49,6 +49,48 @@ function library(data: WorkflowsFile = emptyWorkflowsFile()) {
   return { lib, dir, saved: () => saved }
 }
 
+describe("a plugin's workflows", () => {
+  const origin = {
+    kind: 'plugin',
+    pluginId: 'p0123456789ab',
+    name: 'quick',
+    plugin: 'Kit',
+  } as const
+
+  it('stay approved over an update only while the text is the same, and leave with the plugin', async () => {
+    const { lib, saved } = library()
+    await lib.load()
+    const id = await lib.installPlugin(TEXT, origin)
+    const added = (await lib.read(id)).entry
+    expect(added).toMatchObject({ source: 'plugin', approval: 'pending', origin })
+    await lib.approve(id, added.hash)
+    expect(await lib.installPlugin(TEXT, origin)).toBe(id)
+    expect((await lib.read(id)).entry.approval).toBe('approved')
+    await lib.installPlugin(TEXT.replace('Fix it.', 'Fix it now.'), origin)
+    expect((await lib.read(id)).entry.approval).toBe('changed')
+    await expect(lib.remove(id)).rejects.toMatchObject({ code: 'restricted' })
+    const other = await lib.installPlugin(TEXT, { ...origin, name: 'other' })
+    await lib.removePlugin(origin.pluginId, ['other'])
+    expect((await lib.list()).map((entry) => entry.id)).toEqual([other])
+    await lib.removePlugin(origin.pluginId)
+    expect(await lib.list()).toEqual([])
+    expect(saved().entries).toEqual({})
+  })
+
+  it('are read from the file only with a plugin they name', () => {
+    const record = { source: 'plugin', origin, addedAt: 1, approved: null }
+    const parsed = parseWorkflowsFile({
+      entries: {
+        good: record,
+        'no-plugin': { ...record, origin: { ...origin, pluginId: '../x' } },
+        'other-source': { ...record, source: 'file' },
+        'other-origin': { ...record, origin: { kind: 'file', name: 'a.yaml' } },
+      },
+    })
+    expect(Object.keys((parsed as WorkflowsFile).entries)).toEqual(['good'])
+  })
+})
+
 describe('the workflow library', () => {
   it('keeps an added workflow unusable until the user approves the hash they were shown', async () => {
     const { lib } = library()

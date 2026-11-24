@@ -153,6 +153,8 @@ import { McpProxy } from './marketplace/proxy'
 import type { CodexRequest } from './codex/rpc'
 import { OwnPluginsService } from './marketplace/own-plugins'
 import { MarketSkillsService, skillFor, skillsCatalogFile } from './marketplace/skills'
+import { PluginsService } from './plugins/service'
+import { pluginsFile as kettuPluginsFile } from './plugins/store'
 import { PublishDrafts } from './marketplace/publish-drafts'
 import { MarketCallError, MarketTools } from './marketplace/publish-tools'
 import {
@@ -548,6 +550,7 @@ export class AgentHost {
   /** The Kettu Marketplace's listings and the downloads of their files. */
   private readonly marketCommunity: MarketCommunityService
   private readonly marketBundles: MarketBundlesService
+  private readonly plugins: PluginsService
   /** The host's Kettu account from main, while signed in with Kettu's services on. */
   private marketAccount: MarketAccount | null = null
   /** Marketplace API calls awaiting main's answer. */
@@ -856,6 +859,38 @@ export class AgentHost {
       }),
       log,
       changed: () => this.broadcast({ type: 'workflows.changed' }),
+      pluginOn: (pluginId) => this.plugins.on(pluginId),
+    })
+    this.plugins = new PluginsService({
+      userDataPath: options.userDataPath,
+      file: kettuPluginsFile(options.userDataPath, log),
+      log,
+      appVersion: options.appVersion,
+      settings: async () => {
+        const { marketplace } = (await this.settingsCall({ kind: 'read' })).file
+        return { skills: marketplace.skills, servers: marketplace.mcp }
+      },
+      editSettings: async ({ skills, servers }) => {
+        await this.settingsCall({
+          kind: 'change',
+          patch: {
+            marketplace: {
+              ...(skills ? { skillsEdit: skills } : {}),
+              ...(servers ? { mcpEdit: servers } : {}),
+            },
+          },
+        })
+      },
+      keepSkill: (id, name, files) => this.marketSkills.keepFiles(id, name, files),
+      workflows: {
+        install: (text, origin) => this.workflowLibrary.installPlugin(text, origin),
+        remove: (pluginId, keep) => this.workflowLibrary.removePlugin(pluginId, keep),
+        changed: () => this.workflowLibrary.pluginChanged(),
+      },
+      kettu: (id) => this.marketCommunity.download(id, 'agent-plugin'),
+      listing: (id) => this.marketCommunity.listing(id),
+      count: (id, version, reason) => void this.marketCommunity.count(id, version, reason),
+      changed: () => this.hub.broadcast({ type: 'plugins.changed' }),
     })
     this.artifactService = new ArtifactService({
       workflow: {
@@ -1507,6 +1542,7 @@ export class AgentHost {
       host.routines.load(),
       host.memory.load(),
       host.workflowLibrary.load(),
+      host.plugins.load(),
       host.workflowSuggestions.load(),
     ])
     // After the sessions, whose step sessions it messages when it resumes.
@@ -1519,6 +1555,7 @@ export class AgentHost {
     host.agents.restoreUpdates(updates)
     host.routines.start()
     void host.marketSkills.sync()
+    host.plugins.start()
     host.sendFolders()
     void host.sessions.checkWorktrees()
     host.usage.start()
@@ -2954,6 +2991,7 @@ export class AgentHost {
       await this.routines.shutdown()
       this.sessions.shutdown()
       this.idleRelease.stop()
+      this.plugins.stop()
       this.usage.stop()
       this.artifacts.stop()
       this.execRunner.killAll()
@@ -2984,6 +3022,7 @@ export class AgentHost {
         this.marketCatalog.flush(),
         this.marketSkills.flush(),
         this.marketBundles.flush(),
+        this.plugins.flush(),
         this.publishDrafts.flush(),
         this.workflowSuggestions.flush(),
         this.threads?.close(),
@@ -3380,6 +3419,20 @@ export class AgentHost {
       'routines.cancelRun': ({ runId }) => routines.cancelRun(runId),
       'routines.runs': ({ routineId, before }) => routines.runsOf(routineId, before),
       'routines.markSeen': ({ routineId }) => routines.markSeen(routineId),
+      'plugins.list': async () => ({ plugins: await this.plugins.list() }),
+      'plugins.inspect': ({ source }) => this.plugins.inspect(source),
+      'plugins.install': ({ token }) => this.plugins.install(token),
+      'plugins.discard': ({ token }) => this.plugins.discard(token),
+      'plugins.uninstall': ({ pluginId }) => this.plugins.uninstall(pluginId),
+      'plugins.setEnabled': ({ pluginId, enabled }) => this.plugins.setEnabled(pluginId, enabled),
+      'plugins.reload': ({ pluginId }) => this.plugins.reload(pluginId),
+      'plugins.checkUpdates': async ({ pluginId }) => ({
+        plugins: await this.plugins.checkUpdates(pluginId),
+      }),
+      'plugins.applyUpdate': ({ pluginId }) => this.plugins.applyUpdate(pluginId),
+      'plugins.declineUpdate': ({ pluginId }) => this.plugins.declineUpdate(pluginId),
+      'plugins.rollBack': ({ pluginId }) => this.plugins.rollBack(pluginId),
+      'plugins.resources': async ({ kind }) => ({ items: await this.plugins.resources(kind) }),
       'workflows.list': () => this.workflowLibrary.list(),
       'workflows.read': ({ workflowId }) => this.workflowLibrary.read(workflowId),
       'workflows.add': (source) => this.workflowLibrary.add(source),

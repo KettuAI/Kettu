@@ -445,6 +445,15 @@ export class MarketSkillsService {
     return this.addFromFolder(source.path)
   }
 
+  /**
+   * Copies a skill a plugin brings onto the host, by the id the settings then keep it under;
+   * refused when another skill Kettu keeps has its name.
+   */
+  async keepFiles(id: string, name: string, files: SkillFiles): Promise<void> {
+    skillInfo(skillText(files), name)
+    await this.keep(id, name, files)
+  }
+
   /** The skill folders the agent gets, each holding one skill, in the settings' order. */
   roots(agentId: AgentId): string[] {
     return this.deps

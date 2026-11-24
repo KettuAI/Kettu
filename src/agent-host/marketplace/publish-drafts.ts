@@ -24,7 +24,7 @@ const MAX_DRAFTS = 100
 // An account has at most 100 listings, each with its versions.
 const MAX_ORIGINS = 200
 const MAX_ORIGIN_VERSIONS = 500
-const KINDS = new Set(['skill', 'workflow', 'plugin', 'mcp-server'])
+const KINDS = new Set(['skill', 'workflow', 'plugin', 'mcp-server', 'agent-plugin'])
 
 function isDraft(value: unknown): value is PublishDraft {
   if (typeof value !== 'object' || value === null) return false
