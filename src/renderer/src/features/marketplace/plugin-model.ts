@@ -17,11 +17,11 @@ import type { PublishAdds } from '@shared/market-publish'
 import {
   describePermission,
   pluginItem,
+  pluginText,
   type InstalledKettuPlugin,
   type PermissionRisk,
   type PluginContents,
   type PluginServer,
-  type PluginTexts,
 } from '@shared/plugins'
 
 /** The kinds of item a plugin holds, in the order its page lists them. */
@@ -131,12 +131,6 @@ export function itemCount(contents: PluginContents): number {
     contents.themes.length +
     contents.templates.length
   )
-}
-
-/** A text in the language shown, else English, else the package's own field. */
-export function pluginText(texts: PluginTexts, own: string, locale: string): string {
-  const short = locale.split('-')[0] ?? locale
-  return texts[locale] ?? texts[short] ?? texts.en ?? own
 }
 
 export function pluginTitle(contents: PluginContents, locale: string): string {
@@ -258,4 +252,11 @@ export function githubShort(url: string): string {
 export function isGithubAddress(text: string): boolean {
   const url = URL.parse(text)
   return url?.protocol === 'https:' && url.hostname === 'github.com' && url.pathname.length > 1
+}
+
+/** The key of the words that say what a plugin's script is doing. */
+export function scriptStateKey(plugin: InstalledKettuPlugin): string {
+  if (!plugin.enabled) return 'plugins.state.off'
+  if (!plugin.contents.script) return 'plugins.state.noScript'
+  return `plugins.state.${plugin.scriptState ?? 'idle'}`
 }

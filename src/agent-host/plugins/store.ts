@@ -8,13 +8,17 @@ import {
   PLUGIN_ID,
   PLUGIN_ITEM_NAME,
   PLUGIN_NAME,
+  PLUGIN_TOOL_NAME,
+  PLUGIN_SETTING_CHARS,
   isPluginHookEvent,
   isPluginPermission,
   pluginItem,
   type PluginContents,
   type PluginHeldUpdate,
   type PluginItem,
+  type PluginSettingValue,
   type PluginSource,
+  type PluginTool,
 } from '@shared/plugins'
 import { SKILL_NAME } from '@shared/marketplace'
 import { isAbsolutePath } from '../paths'
@@ -55,6 +59,8 @@ export interface PluginRecord {
   /** The revision the user declined or rolled back from, which no check installs again. */
   declined: string | null
   updateError: string | null
+  /** What the user set for the plugin's settings but a secret, by key. */
+  values: Record<string, PluginSettingValue>
 }
 
 export interface PluginsFile {
@@ -179,12 +185,33 @@ function contentsOf(value: unknown): PluginContents | null {
     settings: Array.isArray(value.settings)
       ? (value.settings.filter(isRecord) as unknown as PluginContents['settings'])
       : [],
+    tools: Array.isArray(value.tools)
+      ? value.tools.filter(
+          (item): item is PluginTool =>
+            isRecord(item) &&
+            typeof item.name === 'string' &&
+            PLUGIN_TOOL_NAME.test(item.name) &&
+            text(item.description) &&
+            isRecord(item.inputSchema),
+        )
+      : [],
     views: viewsOf(value.views),
     hooks: value.hooks === true,
     warnings: Array.isArray(value.warnings)
       ? value.warnings.filter((item): item is string => text(item)).slice(0, MAX_ITEMS)
       : [],
   }
+}
+
+function valuesOf(value: unknown): Record<string, PluginSettingValue> {
+  if (!isRecord(value)) return {}
+  return Object.fromEntries(
+    Object.entries(value).filter(
+      (entry): entry is [string, PluginSettingValue] =>
+        typeof entry[1] === 'boolean' ||
+        (typeof entry[1] === 'string' && entry[1].length <= PLUGIN_SETTING_CHARS),
+    ),
+  )
 }
 
 function ids(value: unknown, pluginId: string): string[] {
@@ -265,6 +292,7 @@ export function parsePluginsFile(data: Record<string, unknown>): PluginsFile | s
       held: heldOf(raw.held),
       declined: nullableText(raw.declined),
       updateError: nullableText(raw.updateError),
+      values: valuesOf(raw.values),
     }
   }
   return { version: 1, plugins }

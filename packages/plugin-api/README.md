@@ -13,15 +13,34 @@ A manifest asks for permissions under `extensions["sh.kettu"].permissions`, and 
 only the calls of the permissions the user agreed to for the installed version. A call without its
 permission fails with an error that names it.
 
-| Permission                          | Risk    | Calls                                                             |
-| ----------------------------------- | ------- | ----------------------------------------------------------------- |
-| none                                |         | `api.version`, `app.locale`, `app.colorMode`                      |
-| `network:<domain>`, `network:*.<d>` | normal  | `network.fetch` for that host, or any host under `<d>`            |
-| `sessions.summary`                  | normal  | `sessions.list`                                                   |
-| `sessions.content`                  | high    | `sessions.read`                                                   |
-| `sessions.start`                    | high    | `sessions.start`, `sessions.send`                                 |
-| `tools`, `requests.answer`          | various | declared now, calls follow                                        |
-| `prompt.attach`, `requests.check`   | caution | the events `session.beforeSend` and `session.permissionRequested` |
+| Permission                          | Risk    | Calls                                                                                        |
+| ----------------------------------- | ------- | -------------------------------------------------------------------------------------------- |
+| none                                |         | `api.version`, `app.locale`, `app.colorMode`, `settings.get`, `settings.secret`, `storage.*` |
+| `network:<domain>`, `network:*.<d>` | normal  | `network.fetch` for that host, or any host under `<d>`                                       |
+| `sessions.summary`                  | normal  | `sessions.list`                                                                              |
+| `sessions.content`                  | high    | `sessions.read`                                                                              |
+| `sessions.start`                    | high    | `sessions.start`, `sessions.send`                                                            |
+| `tools`                             | normal  | the functions the manifest's `tools` name, which agents call                                 |
+| `requests.answer`                   | high    | declared now, calls follow                                                                   |
+| `prompt.attach`, `requests.check`   | caution | the events `session.beforeSend` and `session.permissionRequested`                            |
+
+## Tools, settings and storage
+
+A plugin with the `tools` permission lists its tools in its manifest under `tools`: a name, a
+description and the arguments each takes (strings, numbers, integers and booleans). The script
+exports a function of the same name; Kettu lists the tool on its MCP service as `<plugin>__<tool>`
+for every agent, asks about a call as it does for any tool, and answers the agent with an error
+when the script throws, crashes or runs past its time limit. Tools go when the plugin is turned
+off or removed.
+
+The settings a manifest declares under `settings` (switches, choices, short texts and secrets) get
+a page in Settings › Plugins and are listed for agents, who may change all but the secrets. A
+script reads them with `settings.get` and `settings.secret`, and hears of a change as
+`settings.changed`. A secret is kept in the system's key store and shown only as set or not set.
+
+Each plugin also has a small storage of its own, read and written with `storage.get`,
+`storage.set`, `storage.delete` and `storage.keys`: at most 256 KB of JSON and 1,000 keys. It is
+removed with the plugin.
 
 ## Events
 

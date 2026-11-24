@@ -78,6 +78,7 @@ import {
 } from './section-defs'
 import { useComputerUseSection } from './computer-section'
 import { useMemorySection } from './memory-section'
+import { usePluginsSection } from './plugins-section'
 
 const FLASH_MS = 1200
 
@@ -230,7 +231,7 @@ function SettingsLayout({
       useGitSection(),
     ],
     [useArchivedSection(), useArtifactsSection(), useSharingSection(), useTerminalSection()],
-    [useRemoteSection(), useAdvancedSection()],
+    [useRemoteSection(), usePluginsSection(), useAdvancedSection()],
     [about],
   ]
   // The list and the page come from the same sections, so the web client lists only its own.

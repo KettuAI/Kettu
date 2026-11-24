@@ -1066,7 +1066,8 @@
       "memory": "记忆",
       "reports": "问题报告",
       "workflows": "工作流",
-      "settings": "设置"
+      "settings": "设置",
+      "plugins": "插件"
     },
     "new": "新",
     "whileSignedIn": "登录 Kettu 时提供",

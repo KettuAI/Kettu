@@ -126,6 +126,8 @@ export interface HostsOptions {
   marketCall?(call: MarketCall): Promise<MarketCallAnswer>
   /** An agent's settings tool reads or changes the daemon's settings. */
   settingsCall?(call: unknown): SettingsCallAnswer
+  /** Keeps a plugin's secret in the key store, or clears it; null once the store holds it. */
+  pluginSecret?(pluginId: unknown, key: unknown, value: unknown): Promise<string | null>
   /** The agent host's first start found the programs of these harnesses; the daemon adds their agents. */
   firstStart?(harnesses: unknown): void
   /** The host's X25519 private key, in base64, for the remote host alone. */
@@ -1056,6 +1058,17 @@ export class Hosts {
             callId: message.callId,
             answer: run ? run(message.call) : { error: 'The daemon keeps no settings for agents.' },
           })
+        }
+        break
+      case 'host:plugin-secret':
+        if (Number.isSafeInteger(message.callId)) {
+          const { callId } = message
+          const run = this.options.pluginSecret
+          void (
+            run
+              ? run(message.pluginId, message.key, message.value)
+              : Promise.resolve('The daemon keeps no secrets for plugins.')
+          ).then((error) => this.agent.post({ type: 'plugin-secret-result', callId, error }))
         }
         break
       case 'host:trash-call':

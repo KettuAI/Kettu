@@ -1358,6 +1358,9 @@
     "notDevelopment": "Only a plugin added from a folder can be reloaded.",
     "noUpdate": "No update is waiting for this plugin.",
     "noPrevious": "There’s no earlier version of this plugin to go back to.",
+    "noSetting": "This plugin has no setting {{key}} to set.",
+    "noSecret": "This plugin has no secret {{key}}.",
+    "secretNotKept": "Kettu could not keep the secret. Try again.",
     "updateChanged": "The update asks for more than it did when it was shown. Look at what it adds again.",
     "fromPlugin": "This comes with the plugin {{plugin}} and is removed with it.",
     "warn": {
@@ -1368,6 +1371,7 @@
       "eventPermission": "The event {{event}} is left out: it needs the permission {{permission}}, which the plugin doesn’t ask for.",
       "viewField": "The view {{view}} has a field this Kettu doesn’t know, {{field}}. It’s ignored.",
       "viewIcon": "The view {{view}} names an icon this Kettu doesn’t have. It’s left out.",
+      "toolsPermission": "The tools are left out: they need the permission tools, which the plugin doesn’t ask for.",
       "item": "{{path}} was left out: {{reason}}",
       "server": "The MCP server {{name}} was left out: {{reason}}",
       "cwd": "The MCP server {{name}} asks to start in {{cwd}}. Agents start it in the session’s folder instead.",

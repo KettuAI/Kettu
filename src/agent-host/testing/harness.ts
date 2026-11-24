@@ -343,6 +343,7 @@ export async function startTestHost(options: TestHostOptions = {}): Promise<Test
     ? new TestPluginHost((port) => started?.connectPluginHost(port))
     : null
   let started: AgentHost | null = null
+  const pluginSecrets: Record<string, Record<string, string>> = {}
   // The fake agent speaks ACP under every id it runs as.
   const protocols: HostOptions['protocols'] = Object.fromEntries(
     [...(options.fakeAs ?? []), ...(options.fakeThroughRouter?.agentIds ?? [])].map((id) => [
@@ -391,6 +392,17 @@ export async function startTestHost(options: TestHostOptions = {}): Promise<Test
     send: (message) => {
       sent.push(structuredClone(message))
       if (message.type === 'host:plugin-host') plugins?.want(message.run)
+      // The key store main keeps the secrets of plugins in, as it answers the host.
+      if (message.type === 'host:plugin-secret') {
+        const { callId, pluginId, key, value } = message
+        if (key === null) delete pluginSecrets[pluginId]
+        else if (value === null) delete pluginSecrets[pluginId]?.[key]
+        else (pluginSecrets[pluginId] ??= {})[key] = value
+        queueMicrotask(() => {
+          started?.setMarketKeys({}, {}, {}, structuredClone(pluginSecrets))
+          started?.pluginSecretResult(callId, null)
+        })
+      }
       // The settings a plugin install reads are the defaults.
       if (message.type === 'host:settings-call') {
         const { callId } = message

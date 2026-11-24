@@ -46,6 +46,7 @@ const SECTIONS: readonly SettingsSection[] = [
   'sharing',
   'terminal',
   'remote',
+  'plugins',
   'advanced',
   'about',
 ]

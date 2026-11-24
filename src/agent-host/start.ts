@@ -103,7 +103,9 @@ export function startAgentHost(control: ControlChannel<MainToHost, HostToMain>):
         withHost((h) => h.updateSettings(message.settings))
         break
       case 'host:market-keys':
-        withHost((h) => h.setMarketKeys(message.values, message.oauth, message.agentEnv))
+        withHost((h) =>
+          h.setMarketKeys(message.values, message.oauth, message.agentEnv, message.pluginSecrets),
+        )
         break
       case 'host:market-account':
         withHost((h) => h.setMarketAccount(message.account))
@@ -124,6 +126,14 @@ export function startAgentHost(control: ControlChannel<MainToHost, HostToMain>):
           message.answer !== null
         ) {
           withHost((h) => h.settingsResult(message.callId, message.answer))
+        }
+        break
+      case 'plugin-secret-result':
+        if (
+          Number.isSafeInteger(message.callId) &&
+          (message.error === null || typeof message.error === 'string')
+        ) {
+          withHost((h) => h.pluginSecretResult(message.callId, message.error))
         }
         break
       case 'trash-result':

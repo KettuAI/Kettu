@@ -97,7 +97,14 @@ import { bundleToken } from './marketplace/bundles'
 import { TASK_ID } from './workflow/model'
 import { isCompletablePath } from './path-completion'
 import { isAbsolutePath } from './paths'
-import { PLUGIN_ID, PLUGIN_TOKEN, type PluginSource } from '@shared/plugins'
+import {
+  PLUGIN_ID,
+  PLUGIN_SECRET_BYTES,
+  PLUGIN_SETTING_CHARS,
+  PLUGIN_SETTING_KEY,
+  PLUGIN_TOKEN,
+  type PluginSource,
+} from '@shared/plugins'
 import {
   PLUGIN_ACTION_ID,
   PLUGIN_VIEW_ID,
@@ -1207,6 +1214,12 @@ function pluginViewAction(params: unknown): HostParams<'plugins.viewAction'> {
   }
 }
 
+function pluginSettingKey(o: Fields): string {
+  const key = string(o, 'key', 64)
+  if (!PLUGIN_SETTING_KEY.test(key)) throw invalidParams('key is not a setting key')
+  return key
+}
+
 function pluginToken(params: unknown): { token: string } {
   const token = string(fields(params), 'token', ID_CHARS)
   if (!PLUGIN_TOKEN.test(token)) throw invalidParams('token must name an inspected plugin')
@@ -2102,6 +2115,29 @@ export function createValidators(platform: Platform): Validators {
       ...installedPlugin(params),
       enabled: flag(fields(params), 'enabled'),
     }),
+    'plugins.setSetting': (params) => {
+      const o = fields(params)
+      const value = o.value
+      if (typeof value !== 'boolean' && typeof value !== 'string') {
+        throw invalidParams('value must be a text or true or false')
+      }
+      if (typeof value === 'string' && value.length > PLUGIN_SETTING_CHARS) {
+        throw invalidParams(t('validate.tooLong', { key: 'value', max: PLUGIN_SETTING_CHARS }))
+      }
+      return { ...installedPlugin(params), key: pluginSettingKey(o), value }
+    },
+    'plugins.setSecret': (params) => {
+      const o = fields(params)
+      const value = o.value ?? null
+      if (value !== null && typeof value !== 'string') {
+        throw invalidParams('value must be a text, or null to clear the secret')
+      }
+      if (value !== null && Buffer.byteLength(value) > PLUGIN_SECRET_BYTES) {
+        throw invalidParams(t('validate.tooLong', { key: 'value', max: PLUGIN_SECRET_BYTES }))
+      }
+      if (value === '') throw invalidParams(t('validate.empty', { key: 'value' }))
+      return { ...installedPlugin(params), key: pluginSettingKey(o), value }
+    },
     'plugins.reload': installedPlugin,
     'plugins.checkUpdates': (params) =>
       params === undefined || params === null || fields(params).pluginId === undefined

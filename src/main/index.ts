@@ -507,6 +507,11 @@ async function start(): Promise<void> {
     marketKeys: () => marketKeys.contentsForHost(),
     onBattery: () => (process.platform === 'win32' ? powerMonitor.isOnBatteryPower() : null),
     onMarketOAuth: (serverId, state) => void marketKeys.setOAuth(serverId, state),
+    pluginSecret: (pluginId, key, value) =>
+      marketKeys.setPluginSecret(pluginId, key, value).then(
+        () => null,
+        (error: unknown) => (error as Error).message,
+      ),
     onFirstStart: (harnesses) => settings.firstStart(harnesses),
     onAttention: (message) => {
       // While the island runs, it shows what needs the user in place of a notification.

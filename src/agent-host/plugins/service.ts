@@ -13,12 +13,17 @@ import type { CommunityListing } from '@shared/market-community'
 import type { MarketListing } from '@shared/market-publish'
 import { serverName, type MarketServer, type MarketSkill } from '@shared/marketplace'
 import {
+  checkSetting,
+  effectiveSetting,
   pluginItemId,
+  toolTrigger,
   type InstalledKettuPlugin,
   type PluginContents,
   type PluginPlan,
   type PluginResource,
+  type PluginSettingValue,
   type PluginSource,
+  type PluginTool,
 } from '@shared/plugins'
 import { viewTrigger, type PluginViewDecl } from '@shared/plugin-views'
 import type { ListEdit } from '@shared/settings'
@@ -105,8 +110,25 @@ export interface PluginsDeps {
   /** Counts an install or update of a listing's version. */
   count?(id: string, version: string, reason: 'install' | 'update'): void
   changed(): void
+  /** What a plugin's script is doing in the plugin host. */
+  scriptState?(pluginId: string): 'idle' | 'active' | 'disabled'
+  /** The keys of a plugin's secrets that are set, from the key store; never their values. */
+  secretsSet?(pluginId: string): string[]
+  /** A plugin was removed, so what it kept elsewhere goes: its secrets and its storage. */
+  removed?(pluginId: string): void
+  /** A setting of a plugin was set, which its script is told of when it is loaded. */
+  settingChanged?(pluginId: string, key: string): void
   fetch?: typeof fetch
   now?: () => number
+}
+
+/** A tool of a plugin that is on, with the plugin it belongs to. */
+export interface InstalledTool extends PluginTool {
+  pluginId: string
+  /** The plugin's name, which its tools are listed under. */
+  pluginName: string
+  /** The plugin's title, for what is shown. */
+  plugin: string
 }
 
 /** A source's package as fetched: nothing of it is written or has run. */
@@ -163,7 +185,8 @@ export class PluginsService {
     return path.join(this.deps.userDataPath, 'marketplace', 'kettu-plugins')
   }
 
-  private folderOf(id: string): string {
+  /** A plugin's own folder: its packages, and what it keeps, which go when it does. */
+  folderOf(id: string): string {
     return path.join(this.root, id)
   }
 
@@ -207,6 +230,11 @@ export class PluginsService {
       .map((record) => this.installed(record))
   }
 
+  /** One installed plugin as `list` shows it. */
+  async view(id: string): Promise<InstalledKettuPlugin> {
+    return this.installed(await this.record(id))
+  }
+
   /** A plugin's title for the thread's lines; null when it is not installed. */
   titleOf(id: string): string | null {
     return this.data?.plugins[id]?.contents.title ?? null
@@ -239,6 +267,9 @@ export class PluginsService {
               activation: [
                 ...record.contents.events,
                 ...record.contents.views.map((view) => viewTrigger(view.id)),
+                ...(record.contents.permissions.includes('tools')
+                  ? record.contents.tools.map((tool) => toolTrigger(tool.name))
+                  : []),
               ],
               revision: `${record.dir}:${record.updatedAt}`,
               permissions: [...record.contents.permissions],
@@ -246,6 +277,65 @@ export class PluginsService {
           ]
         : [],
     )
+  }
+
+  /**
+   * The tools of the plugins that are on, a plugin's that has a script and the `tools` permission
+   * of the version in place, in the order the plugins were installed.
+   */
+  tools(): InstalledTool[] {
+    return Object.values(this.data?.plugins ?? {})
+      .filter(
+        (record) =>
+          record.enabled &&
+          record.contents.script !== null &&
+          record.contents.permissions.includes('tools'),
+      )
+      .sort((a, b) => a.installedAt - b.installedAt || a.id.localeCompare(b.id))
+      .flatMap((record) =>
+        record.contents.tools.map((tool) => ({
+          ...tool,
+          pluginId: record.id,
+          pluginName: record.contents.name,
+          plugin: record.contents.title,
+        })),
+      )
+  }
+
+  /** What a setting of the plugin holds now, for its script; a secret is kept elsewhere. */
+  settingValue(id: string, key: string): PluginSettingValue {
+    const record = this.data?.plugins[id]
+    const setting = record?.contents.settings.find((item) => item.key === key)
+    if (!record || !setting || setting.type === 'secret') {
+      throw new Error(`The plugin declares no setting "${key.slice(0, 100)}" besides its secrets`)
+    }
+    return effectiveSetting(setting, record.values[key])!
+  }
+
+  /** Whether the plugin declares a secret under this key. */
+  declaresSecret(id: string, key: string): boolean {
+    return (
+      this.data?.plugins[id]?.contents.settings.some(
+        (item) => item.key === key && item.type === 'secret',
+      ) ?? false
+    )
+  }
+
+  /** Sets a setting that is not a secret, to a value its declaration takes. */
+  setSetting(id: string, key: string, value: unknown): Promise<InstalledKettuPlugin> {
+    return this.queued(async () => {
+      const record = await this.record(id)
+      const setting = record.contents.settings.find((item) => item.key === key)
+      if (!setting) throw new HostError('invalid_params', t('plugins.noSetting', { key }))
+      const checked = checkSetting(setting, value)
+      if ('error' in checked) throw new HostError('invalid_params', checked.error)
+      if (effectiveSetting(setting, record.values[key]) !== checked.value) {
+        record.values[key] = checked.value
+        this.save()
+        this.deps.settingChanged?.(id, key)
+      }
+      return this.installed(record)
+    })
   }
 
   /**
@@ -328,6 +418,7 @@ export class PluginsService {
       const file = await this.load()
       delete file.plugins[id]
       this.save()
+      this.deps.removed?.(id)
     })
   }
 
@@ -528,6 +619,7 @@ export class PluginsService {
       held: null,
       declined: null,
       updateError: null,
+      values: {},
     }
     const was = before ? { dir: before.dir, contents: before.contents } : null
     try {
@@ -756,6 +848,19 @@ export class PluginsService {
         : null,
       held: record.held,
       updateError: record.updateError,
+      values: Object.fromEntries(
+        record.contents.settings.flatMap((setting) => {
+          const value = effectiveSetting(setting, record.values[setting.key])
+          return value === null ? [] : [[setting.key, value] as const]
+        }),
+      ),
+      scriptState:
+        record.enabled && record.contents.script
+          ? (this.deps.scriptState?.(record.id) ?? 'idle')
+          : null,
+      secretsSet: (this.deps.secretsSet?.(record.id) ?? []).filter((key) =>
+        record.contents.settings.some((item) => item.key === key && item.type === 'secret'),
+      ),
     }
   }
 

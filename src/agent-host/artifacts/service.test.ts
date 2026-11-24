@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import type { CallToolResult, Tool } from '@modelcontextprotocol/sdk/types.js'
 import type { MarketTools } from '../marketplace/publish-tools'
+import type { PluginTools } from '../plugin-runtime/tools'
 import { PLAN_PROMPT } from '../plan-tool'
 import { CORE_TOOLS, declared, GATEWAY_TOOL } from '../tool-gateway'
 import { ArtifactService, type AgentProcess, type ArtifactServiceDeps } from './service'
@@ -310,5 +311,78 @@ describe('an agent that drops tools past a budget of its own', () => {
       arguments: { tool: 'list_agents', arguments: {} },
     })
     expect(body.error?.message).toContain(`Unknown tool ${GATEWAY_TOOL}`)
+  })
+})
+
+describe("a plugin's tools", () => {
+  const tool: Tool = {
+    name: 'acme__lookup',
+    description: 'Looks a word up.',
+    inputSchema: { type: 'object', properties: { query: { type: 'string' } } },
+  }
+  const calls: unknown[] = []
+  const plugins = {
+    listed: () => [tool],
+    has: (name: string) => name === tool.name,
+    call: (name: string, input: unknown): CallToolResult => {
+      calls.push([name, input])
+      if ((input as { query?: string }).query === 'boom') {
+        return {
+          content: [{ type: 'text', text: 'lookup failed: the script broke' }],
+          isError: true,
+        }
+      }
+      return { content: [{ type: 'text', text: 'found' }] }
+    },
+  } as unknown as PluginTools
+
+  async function withPlugins(): Promise<ArtifactService> {
+    const deps = {
+      log: () => {},
+      plan: {},
+      sessions: {},
+      plugins,
+    } as unknown as ArtifactServiceDeps
+    const service = new ArtifactService(deps)
+    services.push(service)
+    await service.start()
+    return service
+  }
+
+  it('are listed in their own group, asked about, and never allowed without asking', async () => {
+    const service = await withPlugins()
+    expect(service.toolSummaries().find((entry) => entry.name === tool.name)).toMatchObject({
+      group: 'plugins',
+    })
+    for (const server of service.servers('s1', '/repo')) {
+      expect(server.type === 'stdio' ? [] : (server.autoAllow ?? [])).not.toContain(tool.name)
+    }
+    const { tools } = await rpc<{ tools: Tool[] }>(service, 'tools/list', {})
+    expect(tools.map((entry) => entry.name)).toContain(tool.name)
+  })
+
+  it('run as a direct call does, and an error of the script is an error result', async () => {
+    const service = await withPlugins()
+    const ok = await rpc<CallToolResult>(service, 'tools/call', {
+      name: tool.name,
+      arguments: { query: 'clock' },
+    })
+    expect(texts(ok)).toBe('found')
+    const failed = await rpc<CallToolResult>(service, 'tools/call', {
+      name: tool.name,
+      arguments: { query: 'boom' },
+    })
+    expect(failed.isError).toBe(true)
+    expect(texts(failed)).toContain('the script broke')
+  })
+
+  it('reach an agent given the short list through the gateway, which describes them first', async () => {
+    const service = await withPlugins()
+    const { result } = await answer<{ tools: Tool[] }>(service, 'tools/list', {}, true)
+    expect(result!.tools.map((entry) => entry.name)).not.toContain(tool.name)
+    const described = await viaGateway(service, { tool: tool.name })
+    expect(texts(described)).toContain(`Arguments of ${tool.name} (JSON Schema): {`)
+    const ran = await viaGateway(service, { tool: tool.name, arguments: { query: 'clock' } })
+    expect(texts(ran)).toBe('found')
   })
 })

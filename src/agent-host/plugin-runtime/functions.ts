@@ -6,10 +6,11 @@ import type { Locale } from '@shared/locale'
 import { PLUGIN_API_VERSIONS } from '@shared/plugins'
 import type { PluginApiCall } from './call'
 import { httpsTransport, networkFetch, type HttpTransport } from './network'
+import { ownCalls, type PluginOwnDeps } from './own-api'
 import { sessionCalls, type PluginSessionsDeps } from './sessions-api'
 
 /** The events delivered to the plugins that are loaded, each as its call's value changes. */
-export const PLUGIN_EVENTS = ['app.locale', 'app.colorMode'] as const
+export const PLUGIN_EVENTS = ['app.locale', 'app.colorMode', 'settings.changed'] as const
 
 export type ColorMode = 'light' | 'dark'
 
@@ -18,6 +19,7 @@ export interface PluginApiDeps {
   /** The window's color mode; null where there is no window, as under the daemon. */
   colorMode(): ColorMode | null
   sessions: PluginSessionsDeps
+  own: PluginOwnDeps
   transport?: HttpTransport
 }
 
@@ -27,6 +29,7 @@ export function createPluginApi(deps: PluginApiDeps): Readonly<Record<string, Pl
     'app.locale': { permission: null, run: () => deps.locale() },
     'app.colorMode': { permission: null, run: () => deps.colorMode() },
     'network.fetch': networkFetch(deps.transport ?? httpsTransport),
+    ...ownCalls(deps.own),
     ...sessionCalls(deps.sessions),
   })
 }
