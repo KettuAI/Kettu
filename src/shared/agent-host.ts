@@ -136,6 +136,7 @@ import type {
   SessionSnapshot,
   SessionStatus,
   SlashCommand,
+  CommandOrigin,
   StopReason,
   ThreadEntry,
   ToolKind,
@@ -997,6 +998,16 @@ export interface StartNotice {
   actual: string | boolean | null // null when the session has no such option
 }
 
+/** One of Kettu's commands that a file holds, a plugin's or the user's own. */
+export interface KettuCommand {
+  /** The command's own name, as its file names it. */
+  name: string
+  description: string
+  /** The arguments it takes, as `<file> [focus]`. */
+  inputHint?: string
+  origin: CommandOrigin
+}
+
 /**
  * What only a prepared session carries: New session shows its options and slash commands before
  * the first message.
@@ -1355,6 +1366,8 @@ export interface HostContract {
     params: { kind: 'commands' | 'roles' | 'themes' | 'templates' }
     result: { items: PluginResource[] }
   }
+  // Kettu's commands that the plugins that are on and the user's own folder hold, for the slash list.
+  'commands.list': { params: void; result: { commands: KettuCommand[] } }
   // Workflows: the user's library. See workflow; an older host also sends the ones it shipped with.
   'workflows.list': { params: void; result: WireWorkflowEntry[] }
   'workflows.read': {
@@ -2281,6 +2294,7 @@ export const HOST_METHODS = [
   'plugins.declineUpdate',
   'plugins.rollBack',
   'plugins.resources',
+  'commands.list',
   'workflows.list',
   'workflows.read',
   'workflows.add',

@@ -81,6 +81,7 @@ import { useAddMenu } from './composer/add-menu'
 import { StartStyles, TrayStyles } from './composer/affect-styles'
 import { PromptBox, type SlashNote } from './composer/prompt-box'
 import { useBlockedEnter } from './composer/use-blocked-enter'
+import { useSlashCommands } from './composer/use-slash-commands'
 import { useBoxText, usePromptBox } from './composer/use-prompt-box'
 import { AgentPicker } from './new-session/agent-picker'
 import { HostMenu } from './new-session/host-menu'
@@ -397,10 +398,12 @@ function DraftComposer({
   const task = !!workflow
   // Kettu's `/btw` asks about a conversation, and there is none yet; a task's message is its
   // requirement, never a command.
-  const commands = useMemo(
+  const agentCommands = useMemo(
     () => (task || !reported ? NO_COMMANDS : reported.filter((c) => c.name !== 'btw')),
     [task, reported],
   )
+  const slashCommands = useSlashCommands(hostId, NO_COMMANDS, agentCommands)
+  const commands = task ? NO_COMMANDS : slashCommands
   const commandsNote: SlashNote | null =
     !agentId || signIn || task ? null : !ready ? 'chooseProject' : opening ? 'loading' : null
   const add = useAddMenu({

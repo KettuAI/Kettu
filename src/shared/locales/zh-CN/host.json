@@ -1367,6 +1367,24 @@
       "unknownFolder": "Kettu 不认识这个文件夹"
     }
   },
+  "commands": {
+    "missingArguments": "/{{command}} 没有发出：命令后面还要写 {{names}} 的值。",
+    "notSent": "/{{command}} 没有发出：它需要 {{items}}。",
+    "missing": {
+      "skill": "技能 {{name}}（没有安装）",
+      "mcp": "MCP 服务器 {{name}}（没有安装）"
+    },
+    "off": {
+      "skill": "技能 {{name}}（已关闭）",
+      "mcp": "MCP 服务器 {{name}}（已关闭）"
+    },
+    "addsBusy": "/{{command}} 要给这个会话加上技能或 MCP 服务器，只能在会话空闲时加。等它做完当前的工作再试。",
+    "added": {
+      "title": "为 /{{command}} 加上了",
+      "skill": "技能 {{name}}",
+      "mcp": "MCP 服务器 {{name}}"
+    }
+  },
   "marketBundle": {
     "invalid": "这个 MCP 包装不了：{{reason}}",
     "notZip": "它不是 zip 压缩包。",

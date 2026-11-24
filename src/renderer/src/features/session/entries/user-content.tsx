@@ -58,6 +58,9 @@ export function UserContentView({
   entryId?: string
 }) {
   const text = textOf(content)
+  // A command of Kettu's is no name the session's agent lists, but its text starts with it.
+  const ran = content.some((c) => c.type === 'text' && c.command)
+  const command = ran ? (/^\/(\S+)/.exec(text)?.[1] ?? null) : null
   // A terminal, tab or device shows as the chip its mention in the text is.
   const refs = content.flatMap((c) =>
     c.type === 'ref' && !isSurfaceMention(MENTIONED[c.ref.kind] ?? '') ? [c.ref] : [],
@@ -67,7 +70,7 @@ export function UserContentView({
       {text && (
         <div className="flex flex-col gap-1">
           <Clamp maxHeight={COLLAPSED_HEIGHT} buttonClassName="-mx-1.5 -mb-0.5">
-            <ChipText text={text} sessionId={sessionId} entryId={entryId} />
+            <ChipText text={text} command={command} sessionId={sessionId} entryId={entryId} />
           </Clamp>
         </div>
       )}
@@ -235,10 +238,13 @@ function openSent(
  */
 function ChipText({
   text,
+  command,
   sessionId,
   entryId,
 }: {
   text: string
+  /** The name of a command of Kettu's the text starts with. */
+  command: string | null
   sessionId?: string
   entryId?: string
 }) {
@@ -251,8 +257,11 @@ function ChipText({
     sessionId ? s.replicas[sessionId]?.state?.session.commands : undefined,
   )
   const context = useMemo(
-    () => ({ commands: commands?.map((c) => c.name) ?? [], resolve }),
-    [commands, resolve],
+    () => ({
+      commands: [...(commands?.map((c) => c.name) ?? []), ...(command === null ? [] : [command])],
+      resolve,
+    }),
+    [commands, command, resolve],
   )
   const links = useLinkOpener(sessionId)
   const opener = (chip: Chip): ((from: HTMLElement) => void) | null => {

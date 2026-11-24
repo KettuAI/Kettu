@@ -293,7 +293,8 @@ export type PromptBlock =
 
 export function promptBlocks(content: readonly UserContent[]): PromptBlock[] {
   return content.map((item): PromptBlock => {
-    if (item.type === 'text') return { type: 'text', text: item.text }
+    // A command of Kettu's goes as the message it expands to.
+    if (item.type === 'text') return { type: 'text', text: item.command?.sent ?? item.text }
     const ref = item.ref
     switch (ref.kind) {
       case 'image':

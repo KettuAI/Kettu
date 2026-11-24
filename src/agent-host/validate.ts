@@ -2053,6 +2053,7 @@ export function createValidators(platform: Platform): Validators {
       }
       return { kind }
     },
+    'commands.list': none,
     'workflows.list': none,
     'workflows.read': (params) => ({ workflowId: workflowId(fields(params)) }),
     'workflows.add': workflowAddSource,

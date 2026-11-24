@@ -66,6 +66,7 @@ import { nextChoice, nextMode } from './modes'
 import { HeldStrip } from './held-strip'
 import { OutOfCreditStrip } from './out-of-credit-strip'
 import { useAddMenu } from './add-menu'
+import { builtinCommands } from './builtin-commands'
 import { PromptBox } from './prompt-box'
 import { CACHE_NOTICE_MIN_TOKENS, CacheNotice } from './cache-notice'
 import { QueueButton, SendButton, StopButton } from './send-button'
@@ -77,6 +78,7 @@ import { CacheButton, ContextButton } from './usage'
 import { useOutOfCredit } from './use-out-of-credit'
 import type { Select } from './use-pick'
 import { useBlockedEnter } from './use-blocked-enter'
+import { useSlashCommands } from './use-slash-commands'
 import { useBoxText, usePromptBox } from './use-prompt-box'
 import { useSessionFolder } from '@renderer/lib/session-folder'
 import { firstWaiting, pressWaitingCard } from '../waiting-card'
@@ -246,16 +248,8 @@ export function Composer({
   const steerKey = sendKey === 'enter' ? 'Mod+Enter' : 'Mod+Shift+Enter'
   // `/btw` is Kettu's own: what follows it is asked in the side chat, beside the turn, never queued.
   const sideOn = session.sideChat !== undefined
-  const commands = useMemo(
-    () =>
-      sideOn
-        ? [
-            { name: 'btw', description: t('attachments.btw') },
-            ...session.commands.filter((command) => command.name !== 'btw'),
-          ]
-        : session.commands,
-    [sideOn, session.commands, t],
-  )
+  const builtin = useMemo(() => builtinCommands(sideOn, t), [sideOn, t])
+  const commands = useSlashCommands(hostId, builtin, session.commands)
   const askBeside = (): boolean => {
     if (!sideOn) return false
     const question = sideQuestionOf(box.editor.current?.text() ?? box.source.text)

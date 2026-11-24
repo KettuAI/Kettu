@@ -153,6 +153,7 @@ import { McpProxy } from './marketplace/proxy'
 import type { CodexRequest } from './codex/rpc'
 import { OwnPluginsService } from './marketplace/own-plugins'
 import { MarketSkillsService, skillFor, skillsCatalogFile } from './marketplace/skills'
+import { CommandsService } from './commands/service'
 import { PluginsService } from './plugins/service'
 import { pluginsFile as kettuPluginsFile } from './plugins/store'
 import { PublishDrafts } from './marketplace/publish-drafts'
@@ -551,6 +552,8 @@ export class AgentHost {
   private readonly marketCommunity: MarketCommunityService
   private readonly marketBundles: MarketBundlesService
   private readonly plugins: PluginsService
+  /** Kettu's own slash commands: the plugins' and the user's own. */
+  private readonly commands: CommandsService
   /** The host's Kettu account from main, while signed in with Kettu's services on. */
   private marketAccount: MarketAccount | null = null
   /** Marketplace API calls awaiting main's answer. */
@@ -892,6 +895,15 @@ export class AgentHost {
       count: (id, version, reason) => void this.marketCommunity.count(id, version, reason),
       changed: () => this.hub.broadcast({ type: 'plugins.changed' }),
     })
+    this.commands = new CommandsService({
+      userDataPath: options.userDataPath,
+      plugins: () => this.plugins.resources('commands'),
+      kept: () => ({
+        skills: this.settings.marketplace.skills,
+        mcp: this.settings.marketplace.mcp,
+      }),
+      log,
+    })
     this.artifactService = new ArtifactService({
       workflow: {
         library: this.workflowLibrary,
@@ -975,7 +987,8 @@ export class AgentHost {
           if (!agentId) return null
           const task = this.sessions.sessionTask(sessionId)
           const step = task ? (this.tasks.toolsOf(task)?.skills ?? []) : []
-          return this.marketSkills.sessionSkills(agentId, step)
+          const added = this.sessions.sessionCommandTools(sessionId)?.skills ?? []
+          return this.marketSkills.sessionSkills(agentId, [...step, ...added])
         },
       },
       proxy: this.mcpProxy,
@@ -1150,7 +1163,10 @@ export class AgentHost {
               platform,
               taken,
               node: options.nodeRuntime,
-              also: record.task ? (this.tasks.toolsOf(record.task)?.mcp ?? []) : [],
+              also: [
+                ...(record.task ? (this.tasks.toolsOf(record.task)?.mcp ?? []) : []),
+                ...(record.commandTools?.mcp ?? []),
+              ],
               oauth: {
                 access: (server) => this.marketConnections.access(server),
                 bearer: () =>
@@ -1188,11 +1204,28 @@ export class AgentHost {
         },
       },
       skills: (record, kettu) =>
-        this.marketSkills.sessionOptions(
-          record.agentId,
-          kettu,
-          record.task ? (this.tasks.toolsOf(record.task)?.skills ?? []) : [],
-        ),
+        this.marketSkills.sessionOptions(record.agentId, kettu, [
+          ...(record.task ? (this.tasks.toolsOf(record.task)?.skills ?? []) : []),
+          ...(record.commandTools?.skills ?? []),
+        ]),
+      commands: {
+        expand: (text, own) => this.commands.expand(text, own),
+        extra: (agentId, needs) => {
+          const { skills, mcp } = this.settings.marketplace
+          const kept = <T extends { id: string; name: string }>(list: readonly T[], name: string) =>
+            list.find((item) => item.name === name || item.id === name)
+          return {
+            skills: needs.skills.filter((name) => {
+              const skill = kept(skills, name)
+              return !!skill && !skillFor(skill, agentId)
+            }),
+            mcp: needs.mcp.filter((name) => {
+              const server = kept(mcp, name)
+              return !!server && !serverFor(server, agentId)
+            }),
+          }
+        },
+      },
       memory: this.memory,
       usage: this.usage,
       cacheTtl:
@@ -3433,6 +3466,7 @@ export class AgentHost {
       'plugins.declineUpdate': ({ pluginId }) => this.plugins.declineUpdate(pluginId),
       'plugins.rollBack': ({ pluginId }) => this.plugins.rollBack(pluginId),
       'plugins.resources': async ({ kind }) => ({ items: await this.plugins.resources(kind) }),
+      'commands.list': async () => ({ commands: await this.commands.list() }),
       'workflows.list': () => this.workflowLibrary.list(),
       'workflows.read': ({ workflowId }) => this.workflowLibrary.read(workflowId),
       'workflows.add': (source) => this.workflowLibrary.add(source),

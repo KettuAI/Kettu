@@ -267,8 +267,11 @@
     "putBackFailed": "Could not put back: {{error}}"
   },
   "slash": {
+    "heading": "Commands",
     "loading": "Listing commands…",
-    "chooseProject": "Choose a project to list its commands"
+    "chooseProject": "Choose a project to list its commands",
+    "yours": "Yours",
+    "kettu": "Kettu"
   },
   "mentions": {
     "used": "Used in this session",

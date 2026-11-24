@@ -471,7 +471,11 @@
   },
   "userEntry": {
     "device": "从 {{device}} 发送",
-    "kettu": "Kettu"
+    "kettu": "Kettu",
+    "commandFrom": "来自 {{source}}",
+    "commandFromYours": "来自你的命令",
+    "showSent": "查看发出的内容",
+    "hideSent": "收起发出的内容"
   },
   "sessionReport": {
     "agent": "该会话",
