@@ -1110,7 +1110,7 @@ function Empty({ tab, query }: { tab: MarketplaceTab; query: string }) {
     : tab === 'skills'
       ? [t('empty.skillsTitle'), t('empty.skills')]
       : tab === 'plugins'
-        ? [t('empty.pluginsTitle'), t('empty.plugins')]
+        ? [t('empty.pluginsTitle'), t(isWeb ? 'empty.pluginsWeb' : 'empty.plugins')]
         : [t('catalog.emptyTitle'), t('catalog.emptyText')]
   return (
     <div className="ui-as-rise ui-as-int-empty">

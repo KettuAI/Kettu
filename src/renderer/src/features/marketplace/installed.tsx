@@ -24,6 +24,7 @@ import { BrandIcon } from '@renderer/components/brand'
 import { Pill, SettingSwitch } from '@renderer/features/settings/controls'
 import { PlaceAction } from '@renderer/features/settings/places'
 import { currentLocale } from '@renderer/lib/i18n'
+import { isWeb } from '@renderer/lib/platform'
 import { useHostScope, type HostScope } from '@renderer/stores/host-scope'
 import { openMarketplace } from '@renderer/stores/view'
 import { setServerOn, setSkillOn } from './actions'
@@ -395,6 +396,7 @@ function KeptRow({ server, listing }: { server: MarketServer; listing: Listing }
       subject={serverSubject({ ...listing, spec: server.spec })}
       meta={<Facts facts={[listing.publisher, ...state]} />}
       line={listing.description ?? specRuns(server.spec)}
+      oneLine={!listing.description}
       onOpen={() => openMarketplace({ item: keptItemKey('mcp', server.id), tab: 'installed' })}
       end={
         isPluginItem(server.id) ? (
@@ -474,7 +476,9 @@ function PluginsSection({
       ) : loading ? (
         <SkeletonRows rows={1} />
       ) : list.length === 0 ? (
-        <p className="k-mkt-section-note">{t('installed.noPlugins')}</p>
+        <p className="k-mkt-section-note">
+          {t(isWeb ? 'installed.noPluginsWeb' : 'installed.noPlugins')}
+        </p>
       ) : (
         <div className="ui-as-int-grid k-plug-grid">
           {list.map((plugin) => (

@@ -196,7 +196,8 @@
     "notCreated": "{{path}} · not created yet",
     "workflows": "Workflows",
     "kettuPlugins": "Plugins",
-    "noPlugins": "Kettu has no plugins yet. Install one from Plugins, or add one from GitHub or a folder with Add."
+    "noPlugins": "Kettu has no plugins yet. Install one from Plugins, or add one from GitHub or a folder with Add.",
+    "noPluginsWeb": "Kettu has no plugins yet. Install one from Plugins, or add one from GitHub with Add."
   },
   "kettu": {
     "note": "Artifacts, sessions and the browser reach every agent through Kettu’s own server.",
@@ -332,7 +333,8 @@
     "skillsTitle": "No skills to show",
     "skills": "The skills catalog is empty. Add a skill from GitHub or a folder with Add.",
     "pluginsTitle": "No plugins to show",
-    "plugins": "A Kettu plugin works on every agent you run. Add one from GitHub or a folder with Add."
+    "plugins": "A Kettu plugin works on every agent you run. Add one from GitHub or a folder with Add.",
+    "pluginsWeb": "A Kettu plugin works on every agent you run. Add one from GitHub with Add."
   },
   "plugin": {
     "installs_one": "{{value}} install",

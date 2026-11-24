@@ -195,7 +195,8 @@
     "notCreated": "{{path}} · 尚未创建",
     "workflows": "工作流",
     "kettuPlugins": "插件",
-    "noPlugins": "Kettu 还没有插件。可以从“插件”安装，或用“添加”从 GitHub 或文件夹加入。"
+    "noPlugins": "Kettu 还没有插件。可以从“插件”安装，或用“添加”从 GitHub 或文件夹加入。",
+    "noPluginsWeb": "Kettu 还没有插件。可以从“插件”安装，或用“添加”从 GitHub 加入。"
   },
   "kettu": {
     "note": "产物、会话和浏览器都通过 Kettu 自带的服务器提供给每个智能体。",
@@ -331,7 +332,8 @@
     "skillsTitle": "没有可显示的技能",
     "skills": "技能目录是空的。可以用“添加”从 GitHub 或文件夹加入技能。",
     "pluginsTitle": "没有可显示的插件",
-    "plugins": "Kettu 插件在你用的每个智能体上都能用。可以用“添加”从 GitHub 或文件夹加入插件。"
+    "plugins": "Kettu 插件在你用的每个智能体上都能用。可以用“添加”从 GitHub 或文件夹加入插件。",
+    "pluginsWeb": "Kettu 插件在你用的每个智能体上都能用。可以用“添加”从 GitHub 加入插件。"
   },
   "plugin": {
     "installs_one": "{{value}} 次安装",
