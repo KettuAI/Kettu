@@ -81,6 +81,10 @@ export class PluginManager {
     this.active(pluginId).event(name, payload)
   }
 
+  hook(pluginId: string, name: string, payload: unknown): Promise<unknown[]> {
+    return this.active(pluginId).hook(name, payload)
+  }
+
   /** Unloads the plugin; it stays known, with its crashes. */
   deactivate(pluginId: string): void {
     const entry = this.entries.get(pluginId)

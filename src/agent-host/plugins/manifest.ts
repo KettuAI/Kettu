@@ -8,7 +8,9 @@ import {
   PLUGIN_API_VERSIONS,
   PLUGIN_FORMAT,
   PLUGIN_NAME,
+  PLUGIN_HOOK_EVENTS,
   PLUGIN_NAMESPACE,
+  isPluginHookEvent,
   isPluginPermission,
   type PluginSetting,
   type PluginTexts,
@@ -44,6 +46,7 @@ const KETTU_FIELDS = new Set([
   'script',
   'api',
   'permissions',
+  'events',
 ])
 const MAX_TEXT = 2_000
 const MAX_LIST = 64
@@ -63,6 +66,8 @@ export interface KettuEntry {
   script: string | null
   api: number | null
   permissions: string[]
+  /** The Kettu events that wake the script; each is one `PLUGIN_HOOK_EVENTS` names. */
+  events: string[]
 }
 
 export interface PluginManifest {
@@ -224,6 +229,25 @@ function kettuEntry(raw: Record<string, unknown>, appVersion: string, warnings: 
       if (!permissions.includes(permission)) permissions.push(permission)
     }
   }
+  const events: string[] = []
+  if (raw.events !== undefined) {
+    if (!Array.isArray(raw.events) || raw.events.length > MAX_LIST) {
+      throw badField(`${where}.events`)
+    }
+    for (const event of raw.events as unknown[]) {
+      if (typeof event !== 'string') throw badField(`${where}.events`)
+      // A later Kettu may know more events; this one passes over them.
+      if (!isPluginHookEvent(event)) {
+        warnings.push(t('plugins.warn.event', { event: event.slice(0, 100) }))
+      } else if (!permissions.includes(PLUGIN_HOOK_EVENTS[event])) {
+        warnings.push(
+          t('plugins.warn.eventPermission', { event, permission: PLUGIN_HOOK_EVENTS[event] }),
+        )
+      } else if (!events.includes(event)) {
+        events.push(event)
+      }
+    }
+  }
   let views: Record<string, unknown>[] = []
   if (raw.views !== undefined) {
     if (!Array.isArray(raw.views) || raw.views.length > MAX_LIST || !raw.views.every(isRecord)) {
@@ -240,6 +264,7 @@ function kettuEntry(raw: Record<string, unknown>, appVersion: string, warnings: 
     script,
     api,
     permissions,
+    events,
   }
   return entry
 }

@@ -288,6 +288,7 @@ export function readPackage(files: readonly PackageFile[], appVersion: string): 
     templates: folder('templates'),
     script: kettu?.script && kettu.api !== null ? { entry: kettu.script, api: kettu.api } : null,
     permissions: kettu?.permissions ?? [],
+    events: kettu?.events ?? [],
     settings: kettu?.settings ?? [],
     views: kettu?.views ?? [],
     hooks,

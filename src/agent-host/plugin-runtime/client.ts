@@ -177,6 +177,30 @@ export class PluginHostClient {
     await this.request({ type: 'event', pluginId, name, payload })
   }
 
+  /**
+   * Asks the listeners of an active plugin for an event, which is what each returned. The wait is
+   * bounded by the hook deadline, past which it rejects with `timeout`.
+   */
+  async hook(pluginId: string, name: string, payload: unknown): Promise<unknown[]> {
+    const answers = await this.request({ type: 'hook', pluginId, name, payload })
+    return Array.isArray(answers) ? answers : []
+  }
+
+  /**
+   * The plugins an event may be sent to: those whose manifests name it and that hold the
+   * permission it needs, but for one that crashed too often.
+   */
+  subscribers(event: string, permission: string): { id: string; permissions: readonly string[] }[] {
+    const out: { id: string; permissions: readonly string[] }[] = []
+    for (const [id, plugin] of this.plugins) {
+      const permissions = this.grants.get(id) ?? []
+      if (!plugin.activation.includes(event) || !permissions.includes(permission)) continue
+      if (this.statuses.get(id)?.state === 'disabled') continue
+      out.push({ id, permissions })
+    }
+    return out
+  }
+
   /** Lets a plugin that crashed too often be woken again. */
   async enable(pluginId: string): Promise<void> {
     if (this.statuses.get(pluginId)?.state !== 'disabled') return

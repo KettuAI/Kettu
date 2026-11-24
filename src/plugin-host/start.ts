@@ -100,6 +100,11 @@ function servePort(
             return invalid('The event is not valid')
           }
           return manager.event(message.pluginId, message.name, message.payload)
+        case 'hook':
+          if (!isPluginId(message.pluginId) || typeof message.name !== 'string') {
+            return invalid('The hook is not valid')
+          }
+          return manager.hook(message.pluginId, message.name, message.payload)
         case 'deactivate':
           if (!isPluginId(message.pluginId)) return invalid('The plugin is not valid')
           return manager.deactivate(message.pluginId)

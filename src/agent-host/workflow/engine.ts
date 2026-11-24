@@ -110,7 +110,24 @@ export interface TaskDocuments {
   openComments(artifactId: string): Promise<string[]>
 }
 
+/** A step of a task as its start and its end are told: no note, report or text of the task. */
+export interface TaskStepEvent {
+  taskId: string
+  title: string
+  workflowName: string
+  projectPath: string
+  stepId: string
+  stepName: string
+  /** The round of the step, from 1. */
+  round: number
+  agentId: AgentId | null
+  /** The outcome the step ended with; null for a step that started or was sent back. */
+  outcome: string | null
+}
+
 export interface TaskEvents {
+  /** A step started working, or ended: its outcome was followed or the person sent it back. */
+  step?(event: 'started' | 'ended', info: TaskStepEvent): void
   changed(view: TaskView): void
   removed(taskId: string): void
   /** The task starts to need the user, or it ended or was cancelled. */
@@ -684,6 +701,7 @@ export class TaskEngine implements TaskSessionHooks {
         }
         round.state = 'working'
         this.save(task)
+        this.stepEvent(task, round, 'started')
       })
     } catch (error) {
       await this.locked(() => {
@@ -693,6 +711,21 @@ export class TaskEngine implements TaskSessionHooks {
         this.pump()
       })
     }
+  }
+
+  private stepEvent(task: TaskRecord, round: RoundRecord, event: 'started' | 'ended'): void {
+    const step = stepOf(task.workflow, round.stepId)
+    this.deps.events.step?.(event, {
+      taskId: task.id,
+      title: task.title,
+      workflowName: task.workflowName,
+      projectPath: task.projectPath,
+      stepId: round.stepId,
+      stepName: step?.name ?? round.stepId,
+      round: round.n,
+      agentId: round.by?.agentId ?? null,
+      outcome: event === 'ended' ? round.outcome : null,
+    })
   }
 
   /** Makes a parallel branch's worktree when its first step starts; true when it is new. */
@@ -1126,6 +1159,7 @@ export class TaskEngine implements TaskSessionHooks {
     const step = stepOf(task.workflow, round.stepId)!
     const outcome = outcomeOf(step, round.outcome ?? '')!
     round.state = 'done'
+    this.stepEvent(task, round, 'ended')
     round.endedAt ??= this.now()
     round.stuck = null
     const key = arrowKey(step.id, outcome.name)
@@ -1329,6 +1363,7 @@ export class TaskEngine implements TaskSessionHooks {
       const key = arrowKey(round.stepId, null)
       task.arrows[key] = (task.arrows[key] ?? 0) + 1
       round.state = 'done'
+      this.stepEvent(task, round, 'ended')
       for (const [stepId, held] of Object.entries(task.ahead)) {
         if (held.roundId === round.id) delete task.ahead[stepId]
       }

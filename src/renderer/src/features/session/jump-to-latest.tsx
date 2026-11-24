@@ -34,6 +34,7 @@ const AFTER_END = new Set([
   'market_publish',
   'settings_change',
   'task_delivery',
+  'plugin_denial',
   'session_started',
 ])
 

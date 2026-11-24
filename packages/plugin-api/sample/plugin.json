@@ -2,13 +2,19 @@
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "session-digest",
   "version": "1.0.0",
-  "description": "Counts the sessions that work and can post the count to a webhook.",
+  "description": "Counts the sessions that work, posts the count to a webhook, tells the agent the count and refuses a recursive delete.",
   "extensions": {
     "sh.kettu": {
       "format": 1,
       "script": "./sh.kettu/main.js",
       "api": 1,
-      "permissions": ["sessions.summary", "network:hooks.example.com"]
+      "permissions": [
+        "sessions.summary",
+        "prompt.attach",
+        "requests.check",
+        "network:hooks.example.com"
+      ],
+      "events": ["session.beforeSend", "session.permissionRequested"]
     }
   }
 }

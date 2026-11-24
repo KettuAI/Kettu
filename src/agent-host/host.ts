@@ -183,6 +183,7 @@ import type { SkillsListResponse } from './codex/protocol'
 import { completePath } from './path-completion'
 import { pathKey } from './paths'
 import { PluginHostClient } from './plugin-runtime/client'
+import { PluginHooks } from './plugin-runtime/hooks'
 import { InstalledScripts } from './plugin-runtime/installed'
 import { createPluginApi, type ColorMode, type PLUGIN_EVENTS } from './plugin-runtime/functions'
 import { PreparedRecords, preparedFile, settingsTargets } from './prepared'
@@ -612,6 +613,12 @@ export class AgentHost {
   private readonly pluginScripts = new InstalledScripts(this.pluginHost, (pluginId, error) =>
     writeLog('warn', 'plugins', `Could not unload ${pluginId}: ${(error as Error).message}`),
   )
+  /** Kettu's own events as the plugins that name them hear of them. */
+  private readonly pluginHooks = new PluginHooks({
+    client: this.pluginHost,
+    title: (pluginId) => this.plugins.titleOf(pluginId),
+    log: (level, message) => writeLog(level, 'plugins', message),
+  })
   private lastProcesses = '[]'
   private sentFolders: string | null = null
   private stopping: Promise<void> | null = null
@@ -1265,6 +1272,7 @@ export class AgentHost {
           ...(record.commandTools?.skills ?? []),
         ]),
       roles: { resolve: (ref) => this.roles.resolve(ref) },
+      plugins: this.pluginHooks,
       commands: {
         expand: (text, own) => this.commands.expand(text, own),
         extra: (agentId, needs) => {
@@ -1387,6 +1395,11 @@ export class AgentHost {
         },
         attention: (sessionId, kind, title, body, request) => {
           if (kind === 'error') this.sessionFailed(sessionId)
+          if (kind !== 'turn-ended' && this.pluginHooks.wants('session.needsUser')) {
+            this.pluginHooks.emit('session.needsUser', this.sessions.summary(sessionId), {
+              reason: kind,
+            })
+          }
           options.send({
             type: 'host:attention',
             sessionId,
@@ -1506,6 +1519,22 @@ export class AgentHost {
         changed: (task) => this.broadcast({ type: 'task.changed', task }),
         removed: (taskId) => this.broadcast({ type: 'task.removed', taskId }),
         attention: (task, kind) => this.taskAttention(task, kind),
+        step: (event, info) =>
+          this.pluginHooks.emit(event === 'started' ? 'task.stepStarted' : 'task.stepEnded', null, {
+            task: {
+              id: info.taskId,
+              title: info.title,
+              workflow: info.workflowName,
+              project: info.projectPath,
+            },
+            step: {
+              id: info.stepId,
+              name: info.stepName,
+              round: info.round,
+              agent: info.agentId,
+              outcome: info.outcome,
+            },
+          }),
         ended: (view, written) => void this.taskEnded(view, written),
       },
       workingLimit: () => this.settings.workflow.maxWorkingSteps,

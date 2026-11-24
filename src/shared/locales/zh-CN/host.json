@@ -1349,6 +1349,8 @@
       "unknownField": "plugin.json 里有插件格式没有定义的字段 {{field}}，已忽略。",
       "extensions": "plugin.json 的 extensions 不是对象，已忽略。",
       "kettuField": "sh.kettu 这一项里有这个 Kettu 不认识的字段 {{field}}，已忽略。",
+      "event": "sh.kettu 这一项里有这个 Kettu 不认识的事件 {{event}}，已忽略。",
+      "eventPermission": "没有带上事件 {{event}}：它需要权限 {{permission}}，而插件没有申请。",
       "item": "没有带上 {{path}}：{{reason}}",
       "server": "没有带上 MCP 服务器 {{name}}：{{reason}}",
       "cwd": "MCP 服务器 {{name}} 要在 {{cwd}} 里启动，智能体会在会话的文件夹里启动它。",

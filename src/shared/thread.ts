@@ -395,6 +395,8 @@ export type ThreadEntry =
        * Codex's turn id, which an edit from this message cuts the agent's session at.
        */
       agentRef?: string
+      /** What plugins attached to the message before it went to the agent; the text stays as written. */
+      attached?: PluginAttached[]
     }
   | {
       kind: 'agent'
@@ -456,6 +458,29 @@ export type ThreadEntry =
   | MarketPublishEntry // Kettu's own record of a publish to the Kettu Marketplace, and its outcome
   | SettingsChangeEntry // Kettu's own record of an agent's change to Kettu's settings, and its answer
   | TaskDeliveryEntry // Kettu's own record of a task this session started ending, and what it delivered
+  | PluginDenialEntry // Kettu's own record of a plugin denying a permission request
+
+/** What one plugin attached to a message before it was sent. */
+export interface PluginAttached {
+  pluginId: string
+  /** The plugin's title. */
+  plugin: string
+  items: { title?: string; text: string }[]
+}
+
+/**
+ * A plugin denied a permission request, which the agent was told. `request` is the command, or the
+ * tool's title for any other request; `after`: the agent's entry before it, for a replay.
+ */
+export interface PluginDenialEntry {
+  kind: 'plugin_denial'
+  id: string
+  pluginId: string
+  plugin: string
+  request: string
+  reason: string
+  after: string | null
+}
 
 /**
  * Where another agent took the session over: from here on its turns are that agent's. `turns` of
@@ -1567,7 +1592,8 @@ export function isThreadEntry(value: unknown): value is ThreadEntry {
     case 'user':
       return (
         isListOf(value.content, isUserContent) &&
-        (value.agentRef === undefined || typeof value.agentRef === 'string')
+        (value.agentRef === undefined || typeof value.agentRef === 'string') &&
+        (value.attached === undefined || isListOf(value.attached, isPluginAttached))
       )
     case 'session_message':
       return isListOf(value.content, isUserContent)
@@ -1762,6 +1788,14 @@ export function isThreadEntry(value: unknown): value is ThreadEntry {
           value.outcome === 'timeout') &&
         (value.after === null || typeof value.after === 'string')
       )
+    case 'plugin_denial':
+      return (
+        typeof value.pluginId === 'string' &&
+        typeof value.plugin === 'string' &&
+        typeof value.request === 'string' &&
+        typeof value.reason === 'string' &&
+        (value.after === null || typeof value.after === 'string')
+      )
     case 'task_delivery':
       return (
         typeof value.taskId === 'string' &&
@@ -1777,6 +1811,21 @@ export function isThreadEntry(value: unknown): value is ThreadEntry {
     default:
       return false
   }
+}
+
+function isPluginAttached(value: unknown): value is PluginAttached {
+  return (
+    isRecord(value) &&
+    typeof value.pluginId === 'string' &&
+    typeof value.plugin === 'string' &&
+    isListOf(
+      value.items,
+      (item): item is PluginAttached['items'][number] =>
+        isRecord(item) &&
+        typeof item.text === 'string' &&
+        (item.title === undefined || typeof item.title === 'string'),
+    )
+  )
 }
 
 function isTaskDeliverable(value: unknown): value is TaskDeliverable {

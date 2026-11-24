@@ -103,10 +103,136 @@ export interface KettuCalls {
   }
 }
 
-/** Every event by name, with the value its listeners get. */
+export type StopReason = 'end_turn' | 'max_tokens' | 'max_turn_requests' | 'refusal' | 'cancelled'
+
+export type ToolKind =
+  | 'read'
+  | 'edit'
+  | 'delete'
+  | 'move'
+  | 'search'
+  | 'execute'
+  | 'think'
+  | 'fetch'
+  | 'switch_mode'
+  | 'other'
+
+export interface PullRequestInfo {
+  url: string
+  owner: string
+  repo: string
+  number: number
+  /** Null until Kettu has read it. */
+  state: 'open' | 'draft' | 'merged' | 'closed' | null
+  /** An open one has a failing check. */
+  failing: boolean
+}
+
+/** What a step of a workflow task tells; none of the task's text, notes or reports. */
+export interface TaskStepInfo {
+  task: { id: string; title: string; workflow: string; project: string }
+  step: {
+    id: string
+    name: string
+    /** Counted from 1: a step sent back runs again as the next round. */
+    round: number
+    agent: string | null
+    /** The outcome the step ended with; null while it works. */
+    outcome: string | null
+  }
+}
+
+/**
+ * Every event by name, with the value its listeners get. Kettu's own events are sent only to a
+ * plugin whose manifest names them under `events` and that has the permission noted here, and only
+ * for sessions the user works in: not a routine's run, a workflow step's session or a subagent's.
+ * Events are in the order they happened, and no listener is waited for unless it is a hook.
+ */
 export interface KettuEvents {
   'app.locale': { locale: 'en' | 'zh-CN' }
   'app.colorMode': { colorMode: 'light' | 'dark' }
+  /** Needs `sessions.summary`: a session came into the sidebar. */
+  'session.started': { session: SessionInfo }
+  /**
+   * A hook, needs `prompt.attach`: a message the user wrote is about to go to the agent, after any
+   * command of Kettu's was expanded. Not sent for a command of the agent's own. A listener that
+   * returns `attach` adds that to the message; what the user wrote is never changed, and the
+   * thread shows each plugin's attachments under the message. A listener that is not done within
+   * 500 ms, counting the plugin's loading, is skipped and Kettu does not wait for it. A message
+   * sent into a turn that is running is not offered.
+   */
+  'session.beforeSend': {
+    sessionId: string
+    /** Only with `sessions.summary`. */
+    session?: SessionInfo
+    /** The message, cut at 100,000 characters; only with `sessions.content`. */
+    text?: string
+  }
+  /**
+   * A hook, needs `requests.check`: the agent asks to use a tool, before the user is asked. A
+   * listener may return `deny`, which answers the request with a refusal and says why in the
+   * thread; it can do nothing else, so any other return, an error or a late answer leaves the
+   * request to the user. It is never sent in Full access, where the agent does not ask, and not
+   * for a question, a plan or an MCP server's request, which authorize nothing. Same deadline as
+   * `session.beforeSend`.
+   */
+  'session.permissionRequested': {
+    sessionId: string
+    /** Only with `sessions.summary`. */
+    session?: SessionInfo
+    request: {
+      /** The tool's title as the thread shows it. */
+      tool: string
+      kind: ToolKind
+      /** The command, for a request to run one. */
+      command: string | null
+      paths: string[]
+    }
+  }
+  /** Needs `sessions.summary`: a tool call completed or failed. `title` needs `sessions.content`. */
+  'session.toolFinished': {
+    session: SessionInfo
+    kind: ToolKind
+    status: 'completed' | 'failed'
+    title?: string
+  }
+  /** Needs `sessions.summary`: a turn ended; `error` when it failed. */
+  'session.turnEnded': {
+    session: SessionInfo
+    outcome: StopReason | 'error'
+    durationMs: number
+  }
+  /** Needs `sessions.summary`: something waits for the user, a request or an error. */
+  'session.needsUser': { session: SessionInfo; reason: 'permission' | 'error' }
+  /**
+   * Needs `sessions.summary`: a pull request of the session was opened in it, or its state or checks
+   * changed since the plugin was told. `previous` is null for one just opened.
+   */
+  'session.pullRequestChanged': {
+    session: SessionInfo
+    pullRequest: PullRequestInfo
+    previous: { state: PullRequestInfo['state']; failing: boolean } | null
+  }
+  /** Needs `sessions.summary`: a step of a workflow task started working. */
+  'task.stepStarted': TaskStepInfo
+  /** Needs `sessions.summary`: a step ended, with its outcome followed or sent back by the user. */
+  'task.stepEnded': TaskStepInfo
+}
+
+export interface Attachment {
+  /** What the agent reads, at most 16,000 characters. */
+  text: string
+  /** Shown in the thread beside the plugin's name. */
+  title?: string
+}
+
+/**
+ * What a listener of a hook may return, or resolve to. Up to 5 attachments and 32,000 characters of
+ * them are taken from one plugin; any other event ignores what its listeners return.
+ */
+export interface KettuHookResults {
+  'session.beforeSend': { attach?: Attachment[] } | void
+  'session.permissionRequested': { deny: string } | void
 }
 
 export interface Kettu {
@@ -115,7 +241,14 @@ export interface Kettu {
     ...args: KettuCalls[N]['args']
   ): Promise<KettuCalls[N]['result']>
   /** Returns a function that removes the listener. */
-  on<N extends keyof KettuEvents>(name: N, listener: (payload: KettuEvents[N]) => void): () => void
+  on<N extends keyof KettuEvents>(
+    name: N,
+    listener: (
+      payload: KettuEvents[N],
+    ) => N extends keyof KettuHookResults
+      ? KettuHookResults[N] | Promise<KettuHookResults[N]>
+      : void,
+  ): () => void
 }
 
 declare global {

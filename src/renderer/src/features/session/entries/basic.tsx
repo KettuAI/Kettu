@@ -45,6 +45,7 @@ import { CutTurnEnd } from './cut-turn'
 import { FailedTurnActions, LimitContinueLine } from './failed-turn'
 import { OutOfCreditEnd } from './out-of-credit'
 import { splitLinks } from './text-links'
+import { AttachedNote } from './attached-note'
 import { UserActions } from './message-actions'
 import { ReplyRunChip } from './reply-run-chip'
 import { SentCommandNote } from './sent-command'
@@ -112,6 +113,9 @@ export const UserEntry = memo(function UserEntry({
           </div>
         ))}
       {command && !entry.from && !entry.kettu && <SentCommandNote command={command} />}
+      {entry.attached?.map((attached) => (
+        <AttachedNote key={attached.pluginId} attached={attached} />
+      ))}
       {/* A message from a paired device names it; the host's own windows send unmarked ones. */}
       {entry.device && (
         <span className="ks-user__note">

@@ -7,7 +7,7 @@ import {
   type AgentToPluginHost,
   type PluginHostToAgent,
 } from '@shared/plugin-host'
-import { PLUGIN_PERMISSIONS } from '@shared/plugins'
+import { PLUGIN_HOOK_EVENTS, PLUGIN_PERMISSIONS } from '@shared/plugins'
 import type { PortChannel } from '@shared/port-channel'
 import { loadEngine, type Engine } from '../../plugin-host/engine'
 import { readPackage, readPackageFolder } from '../plugins/package'
@@ -427,7 +427,13 @@ describe('the sample plugin and the published types', () => {
 
   it('is a package Kettu installs, asking for what its script uses', async () => {
     const pkg = readPackage(await readPackageFolder(path.join(folder, 'sample')), '0.0.0')
-    expect(pkg.contents.permissions).toEqual(['sessions.summary', 'network:hooks.example.com'])
+    expect(pkg.contents.permissions).toEqual([
+      'sessions.summary',
+      'prompt.attach',
+      'requests.check',
+      'network:hooks.example.com',
+    ])
+    expect(pkg.contents.events).toEqual(['session.beforeSend', 'session.permissionRequested'])
     expect(pkg.manifest.kettu).toMatchObject({ api: 1, script: 'sh.kettu/main.js' })
   })
 
@@ -457,13 +463,41 @@ describe('the sample plugin and the published types', () => {
     expect(transport).toHaveBeenCalledTimes(1)
   })
 
+  it('attaches its digest to a message and denies a recursive delete, through the hooks', async () => {
+    const source = await readFile(path.join(folder, 'sample/sh.kettu/main.js'), 'utf8')
+    const { deps, sessions } = apiDeps()
+    sessions.list.mockReturnValue([
+      { id: 'a', status: 'running', origin: 'user', archivedAt: null },
+    ] as never)
+    const { client, add } = setup(createPluginApi(deps))
+    add(
+      'sample',
+      source,
+      ['session.beforeSend', 'session.permissionRequested'],
+      ['sessions.summary'],
+    )
+    await client.activate('sample', 'session.beforeSend')
+    expect(await client.hook('sample', 'session.beforeSend', { sessionId: 'a' })).toEqual([
+      { attach: [{ title: 'Working sessions', text: '{"running":1}' }] },
+    ])
+    const request = (command: string) => ({ sessionId: 'a', request: { command } })
+    expect(
+      await client.hook('sample', 'session.permissionRequested', request('rm -rf build')),
+    ).toEqual([{ deny: 'A recursive delete is not allowed here.' }])
+    expect(await client.hook('sample', 'session.permissionRequested', request('ls'))).toEqual([
+      null,
+    ])
+  })
+
   it('lists the calls and events the host answers, no more and no fewer', async () => {
     const types = await readFile(path.join(folder, 'index.d.ts'), 'utf8')
     const names = (block: string): string[] => {
       const body = types.split(`export interface ${block} {`)[1]!.split('\n}\n')[0]!
-      return [...body.matchAll(/^ {2}'([A-Za-z.]+)': \{/gm)].map((match) => match[1]!)
+      return [...body.matchAll(/^ {2}'([A-Za-z.]+)': /gm)].map((match) => match[1]!)
     }
     expect(names('KettuCalls').sort()).toEqual(Object.keys(createPluginApi(apiDeps().deps)).sort())
-    expect(names('KettuEvents').sort()).toEqual([...PLUGIN_EVENTS].sort())
+    expect(names('KettuEvents').sort()).toEqual(
+      [...PLUGIN_EVENTS, ...Object.keys(PLUGIN_HOOK_EVENTS)].sort(),
+    )
   })
 })

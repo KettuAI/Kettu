@@ -94,6 +94,34 @@ describe('the sh.kettu entry', () => {
     expect(parsed.kettu?.settings).toHaveLength(2)
   })
 
+  it('reads the events that wake the script, only those whose permission it asks for', () => {
+    const parsed = read(
+      kettu({
+        permissions: ['sessions.summary', 'requests.check'],
+        events: [
+          'session.turnEnded',
+          'session.turnEnded',
+          'session.permissionRequested',
+          'session.beforeSend',
+          'session.fromTheFuture',
+        ],
+      }),
+    )
+    expect(parsed.kettu?.events).toEqual(['session.turnEnded', 'session.permissionRequested'])
+    expect(parsed.warnings).toHaveLength(2)
+    expect(parsed.warnings[0]).toContain('prompt.attach')
+    expect(parsed.warnings[1]).toContain('session.fromTheFuture')
+  })
+
+  it('refuses events that are not a list of names', () => {
+    expect(() => read(kettu({ events: 'session.turnEnded' }))).toThrowError(
+      expect.objectContaining({ code: 'invalid_params' }),
+    )
+    expect(() => read(kettu({ events: [1] }))).toThrowError(
+      expect.objectContaining({ code: 'invalid_params' }),
+    )
+  })
+
   it('passes over a field a later version of the format added', () => {
     const parsed = read(kettu({ bots: [] }))
     expect(parsed.kettu).not.toBeNull()
