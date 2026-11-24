@@ -59,7 +59,7 @@ import { InstalledWorkflows } from './workflows'
 import { pluginSubject, serverSubject, skillSubject } from './tile-art'
 import { PlainTile } from './tiles'
 import { isPluginItem, pluginDescription, pluginTitle } from './plugin-model'
-import { useInstalledPlugins, usePluginPublisher } from './plugin-hooks'
+import { useInstalledPlugins, usePluginItemOff, usePluginPublisher } from './plugin-hooks'
 import { FromPlugin, PluginInstalledRow } from './plugin-ui'
 
 /** Rows a group of the agents' own skills shows before "and N more". */
@@ -380,6 +380,7 @@ function KeptRow({ server, listing }: { server: MarketServer; listing: Listing }
   const { t } = useTranslation('marketplace')
   const scope = useHostScope()
   const oauth = oauthFlow(server.spec) !== null
+  const pluginOff = usePluginItemOff(server.id)
   const connection = useConnection(server.id)
   const connectionText = useConnectionText()
   const agents = server.agents === 'all' ? null : server.agents
@@ -399,16 +400,18 @@ function KeptRow({ server, listing }: { server: MarketServer; listing: Listing }
       oneLine={!listing.description}
       onOpen={() => openMarketplace({ item: keptItemKey('mcp', server.id), tab: 'installed' })}
       end={
-        isPluginItem(server.id) ? (
-          <FromPlugin itemId={server.id} />
-        ) : oauth ? (
+        oauth ? (
           <ConnectionControls server={server} compact />
         ) : (
-          <SettingSwitch
-            label={t('listing.switch', { name: server.title })}
-            checked={server.on}
-            onChange={(on) => void setServerOn(scope, server.id, on)}
-          />
+          <>
+            {isPluginItem(server.id) && <FromPlugin itemId={server.id} />}
+            <SettingSwitch
+              label={t('listing.switch', { name: server.title })}
+              checked={server.on}
+              disabled={pluginOff}
+              onChange={(on) => void setServerOn(scope, server.id, on)}
+            />
+          </>
         )
       }
     />
@@ -521,6 +524,7 @@ function KeptSkillRow({ skill }: { skill: MarketSkill }) {
   const { t } = useTranslation('marketplace')
   const scope = useHostScope()
   const standing = useCommunityLine(skill.id, skill.version)
+  const pluginOff = usePluginItemOff(skill.id)
   const state = [
     standing,
     skill.on ? null : t('installed.off'),
@@ -534,15 +538,15 @@ function KeptSkillRow({ skill }: { skill: MarketSkill }) {
       line={skill.description || null}
       onOpen={() => openMarketplace({ item: keptItemKey('skill', skill.id), tab: 'installed' })}
       end={
-        isPluginItem(skill.id) ? (
-          <FromPlugin itemId={skill.id} />
-        ) : (
+        <>
+          {isPluginItem(skill.id) && <FromPlugin itemId={skill.id} />}
           <SettingSwitch
             label={t('listing.switch', { name: skill.name })}
             checked={skill.on}
+            disabled={pluginOff}
             onChange={(on) => void setSkillOn(scope, skill.id, on)}
           />
-        )
+        </>
       }
     />
   )

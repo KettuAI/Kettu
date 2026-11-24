@@ -291,6 +291,7 @@
     "repeatedServer": "“{{name}}” repeats another server’s name",
     "repeatedSkill": "“{{name}}” repeats another skill’s name",
     "pluginItem": "“{{name}}” came with a plugin and leaves only with it. Remove the plugin instead.",
+    "pluginItemAdded": "“{{name}}” can only be added by a plugin",
     "agentName": "An agent’s name must be 1 to {{max}} characters"
   },
   "signIns": {

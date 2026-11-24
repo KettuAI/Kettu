@@ -39,12 +39,15 @@ import { isAbsolutePath } from '../agent-host/paths'
 import type { AgentFolders } from './agent-folders'
 import { isExecutableFile } from './executable'
 import { t } from './i18n'
+import { createLogger } from './log'
 import { MarketKeysError } from './market-keys'
 import type { SettingsStore } from './settings'
 import { SettingsError } from './settings-schema'
 import { parseOwnRelayInput } from './own-relay'
 import type { OwnRelayCheck, OwnRelayInput } from '@shared/remote/own-relay'
 import { checkThemeText, type ThemeReadResult, type ThemeSelect } from './themes'
+
+const log = createLogger('host-admin')
 
 // Windows extended-length paths go up to 32,767 characters.
 const PATH_CHARS = 32_767
@@ -286,6 +289,13 @@ export class HostAdmin {
 
   themesChanged(themes: HostThemes): void {
     this.deps.send({ type: 'themes.changed', themes }, null)
+  }
+
+  /** Reads the themes again, as when plugins bring or take away their own. */
+  refreshThemes(): void {
+    void this.deps.themes.refresh().catch((error: unknown) => {
+      log.error('Could not read the themes plugins bring', error)
+    })
   }
 
   /** What needs the user, which the devices notify about as the host's own window does. */

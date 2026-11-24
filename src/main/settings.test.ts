@@ -458,6 +458,46 @@ describe('removing what a plugin brought', () => {
     const next = mergeSettings(base, off)
     expect(next.marketplace.skills).toEqual([{ ...skill, on: false }])
   })
+
+  it('lets anyone choose its agents, in an edit and in a whole list', () => {
+    const edit = validateSettingsPatch({
+      marketplace: { skillsEdit: { put: [{ ...skill, agents: ['codex'] }] } },
+    })
+    expect(mergeSettings(base, edit).marketplace.skills[0]).toEqual({
+      ...skill,
+      agents: ['codex'],
+    })
+    const whole = validateSettingsPatch({
+      marketplace: { skills: [{ ...skill, on: false, agents: ['codex'] }, other] },
+    })
+    expect(mergeSettings(base, whole).marketplace.skills[0]).toEqual({
+      ...skill,
+      on: false,
+      agents: ['codex'],
+    })
+  })
+
+  it('takes nothing else of it from anyone but the plugin service', () => {
+    const edit = validateSettingsPatch({
+      marketplace: {
+        skillsEdit: { put: [{ ...skill, description: 'Other.', version: '9.9.9', on: false }] },
+      },
+    })
+    expect(mergeSettings(base, edit).marketplace.skills[0]).toEqual({ ...skill, on: false })
+    expect(mergeSettings(base, edit, { plugins: true }).marketplace.skills[0]).toMatchObject({
+      description: 'Other.',
+      version: '9.9.9',
+    })
+  })
+
+  it('refuses to add one, but for the plugin service', () => {
+    const added = { ...skill, id: 'plugin:p0123456789ab:audit', name: 'audit' }
+    const add = validateSettingsPatch({ marketplace: { skillsEdit: { put: [added] } } })
+    expect(() => mergeSettings(base, add)).toThrow(/audit/)
+    expect(
+      mergeSettings(base, add, { plugins: true }).marketplace.skills.map((i) => i.id),
+    ).toContain(added.id)
+  })
 })
 
 describe('items from the Kettu Marketplace in a patch', () => {

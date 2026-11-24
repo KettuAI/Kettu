@@ -115,15 +115,18 @@
   flex: none;
   color: var(--muted);
 }
-.k-plug-item-ctl {
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-  min-width: 0;
-}
-.k-plug-item-ctl__note {
-  font-size: 12px;
+/* The same link for an item, quiet beside the item's own controls */
+.k-plug-from[data-quiet] {
+  padding: 0 8px;
+  background: transparent;
   color: var(--muted);
+  transition:
+    background-color 140ms ease,
+    color 140ms ease;
+}
+.k-plug-from[data-quiet]:not(:disabled):hover {
+  background: var(--hover);
+  color: var(--text);
 }
 
 /* The install and update cards */

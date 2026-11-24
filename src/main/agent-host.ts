@@ -108,6 +108,8 @@ export interface AgentHostDeps {
   pluginSecret?: (pluginId: unknown, key: unknown, value: unknown) => Promise<string | null>
   /** The host's first start found the programs of these harnesses; main adds their agents. */
   onFirstStart?(harnesses: unknown): void
+  /** The themes plugins bring changed, so main reads them again. */
+  onPluginThemes?(): void
   onAttention(message: Extract<HostToMain, { type: 'host:attention' }>): void
   /** What waits for the user by session, and a session seen, for the devices' notifications. */
   onWaiting?(sessions: Record<string, string[]>): void
@@ -791,6 +793,10 @@ export class AgentHost {
       }
       case 'host:plugin-host': {
         this.deps.pluginHost?.(message.run === true)
+        break
+      }
+      case 'host:plugin-themes': {
+        this.deps.onPluginThemes?.()
         break
       }
       case 'host:device-call': {

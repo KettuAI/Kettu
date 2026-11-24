@@ -121,6 +121,11 @@ export function usePluginOfItem(id: string): { plugin: InstalledKettuPlugin | nu
   return { plugin: plugins?.find((plugin) => plugin.id === item.pluginId) ?? null }
 }
 
+/** Whether an item came with a plugin that is off, which keeps the item off until it is on. */
+export function usePluginItemOff(id: string): boolean {
+  return usePluginOfItem(id)?.plugin?.enabled === false
+}
+
 /** A plugin's name as shown, by its id: its title when it is installed here, else `fallback`. */
 export function usePluginName(pluginId: string, fallback: string): string {
   const plugins = useInstalledPlugins()

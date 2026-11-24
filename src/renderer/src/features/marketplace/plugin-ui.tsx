@@ -597,6 +597,8 @@ export function FromPlugin({
     <button
       type="button"
       className="k-plug-from"
+      data-quiet=""
+      title={t('plugin.from.note')}
       disabled={!plugin}
       onClick={() => plugin && openPlugin(plugin.id, tab)}
     >
@@ -629,20 +631,6 @@ export function FromPluginOrigin({ origin }: { origin: { pluginId: string; plugi
       <Icon icon={PuzzleIcon} size={12} />
       {t('plugin.from.name', { plugin: name })}
     </button>
-  )
-}
-
-/**
- * What an item a plugin brought shows in place of its own controls: where it came from, and that
- * it leaves only with the plugin, since the host refuses to remove it alone.
- */
-export function PluginItemControls({ itemId }: { itemId: string }) {
-  const { t } = useTranslation('marketplace')
-  return (
-    <span className="k-plug-item-ctl">
-      <span className="k-plug-item-ctl__note">{t('plugin.from.note')}</span>
-      <FromPlugin itemId={itemId} />
-    </span>
   )
 }
 
