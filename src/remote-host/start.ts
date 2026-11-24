@@ -66,6 +66,8 @@ const RELAY_INFO_TIMEOUT_MS = 15_000
 
 /** How long each read of the account's hosts on a relay may take. */
 const RELAY_HOSTS_TIMEOUT_MS = 8_000
+/** How long a move waits for the devices on the old relay to have what was sent them. */
+const RELAY_MOVE_FLUSH_MS = 2_000
 
 async function fetchRelayInfo(url: string, pin?: string): Promise<unknown> {
   const response = await relayRequest(url, {
@@ -166,6 +168,11 @@ export function startRemoteHost(
   const relayActive = (): boolean => ownRelay !== null || relayEnabled
   /** What the relay in use gets: the own relay's access key, else the account's token. */
   const relayCredentialNow = (): string | null => ownRelay?.key ?? relayCredential()
+  /** Which relay the settings ask for: the owner's, the Kettu relay or none. */
+  const relayTarget = (): string => JSON.stringify(ownRelay ?? (relayEnabled ? 'kettu' : null))
+  // What the running relay was made for, and the moves to another, one after another.
+  let relayFor = ''
+  let relayMoves: Promise<void> = Promise.resolve()
   /** The own relay as main sent it, null for none or one that is not valid. */
   const ownOf = (value: unknown): OwnRelayInit | null => {
     const { url, pin, key } = (value ?? {}) as Record<string, unknown>
@@ -380,6 +387,7 @@ export function startRemoteHost(
       sshPort === undefined ? null : await LoopbackListener.start(server, sshPort, log)
     server.startSweeping()
     relay.set(relayActive(), relayCredentialNow())
+    relayFor = relayTarget()
     const report = (): void => {
       ready = true
       changed()
@@ -412,6 +420,36 @@ export function startRemoteHost(
     if (own) return { id: relayId, urls: [own.url], ...(own.pin ? { pin: own.pin } : {}) }
     if (enabled && relayUrl && relayCredential()) return { id: relayId, urls: [relayUrl] }
     return null
+  }
+
+  /**
+   * Brings the relay in line with the settings. On a move the devices online hear the new relay,
+   * and the host leaves the one they use only once they have it, or after a short wait.
+   */
+  function applyRelay(current: Serving): Promise<void> {
+    relayMoves = relayMoves
+      .then(async () => {
+        let target = relayTarget()
+        if (target !== relayFor) {
+          for (;;) {
+            const enabled = ownRelay === null && relayEnabled
+            await within(
+              current.server.relayMoved(nextRelay(current, ownRelay, enabled)),
+              RELAY_MOVE_FLUSH_MS,
+            )
+            // Moved again meanwhile: the devices hear the latest before the host leaves.
+            if (relayTarget() === target) break
+            target = relayTarget()
+          }
+          current.relay.stop()
+        }
+        current.relay.set(relayActive(), relayCredentialNow())
+        relayFor = target
+        applyDiscovery(current)
+        current.server.options.changed()
+      })
+      .catch((error: unknown) => log('error', `Cannot move the relay: ${(error as Error).message}`))
+    return relayMoves
   }
 
   /** What the owner's relay says of itself: its version, and whether it serves the web client. */
@@ -659,24 +697,11 @@ export function startRemoteHost(
         break
       case 'remote-host:relay': {
         const own = message.own === undefined ? ownRelay : ownOf(message.own)
-        const enabled = own === null && message.enabled === true
-        const moved =
-          JSON.stringify(own) !== JSON.stringify(ownRelay) ||
-          (own === null && enabled !== relayEnabled)
-        withServing((current) => {
-          // The devices online now hear the new relay before the host leaves the one they use.
-          if (moved) current.server.relayMoved(nextRelay(current, own, enabled))
-        })
-        relayEnabled = enabled
+        relayEnabled = own === null && message.enabled === true
         ownRelay = own
         ownInfo = null
         regions?.update()
-        withServing((current) => {
-          if (moved) current.relay.stop()
-          current.relay.set(relayActive(), relayCredentialNow())
-          applyDiscovery(current)
-          current.server.options.changed()
-        })
+        withServing(applyRelay)
         break
       }
       case 'remote-host:discoverable':
@@ -993,4 +1018,13 @@ export function startRemoteHost(
         .then((current) => (current ? current.server.accept(transport) : transport.close()))
     },
   }
+}
+
+/** Settles with `promise`, or after `ms` when it takes longer. */
+function within(promise: Promise<unknown>, ms: number): Promise<void> {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const timeout = new Promise<void>((resolve) => {
+    timer = setTimeout(resolve, ms)
+  })
+  return Promise.race([promise.then(() => {}), timeout]).finally(() => clearTimeout(timer))
 }

@@ -126,13 +126,14 @@ async function setup(deviceToken: string | null) {
   return {
     relays,
     server,
+    relayHost,
     client,
     hosts,
     host,
     connection,
     moveTo: (next: HostRelay) => {
       relay = next
-      server.relayMoved(next)
+      return server.relayMoved(next)
     },
   }
 }
@@ -160,6 +161,17 @@ describe('a device of a host on its owner’s relay', () => {
     await expect.poll(() => t.connection().state, { timeout: 15_000 }).toBe('online')
     const next = { id: t.host.relay!.id, urls: ['https://other.example.com'] }
     t.moveTo(next)
+    await expect.poll(() => t.hosts.list()[0]?.relay).toEqual(next)
+  })
+
+  it('hears the move before the host leaves the relay', { timeout: 30_000 }, async () => {
+    const t = await setup(null)
+    t.client.start()
+    await expect.poll(() => t.connection().state, { timeout: 15_000 }).toBe('online')
+    const next = { id: t.host.relay!.id, urls: ['https://other.example.com'] }
+    await t.moveTo(next)
+    // The host leaves the old relay as soon as the move has gone out.
+    t.relayHost.stop()
     await expect.poll(() => t.hosts.list()[0]?.relay).toEqual(next)
   })
 })
