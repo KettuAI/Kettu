@@ -648,6 +648,7 @@ export class PiConnection implements AgentConnection {
       const servers = piServers(session.options.mcpServers ?? [])
       if (servers.length > 0) extra[SERVERS_VARIABLE] = JSON.stringify(servers)
     }
+    for (const root of session.options.skillRoots ?? []) args.push('--skill', root)
     if (session.hidden && start.kind !== 'fork') args.push('--no-session')
     else if (start.kind === 'fork') args.push('--fork', start.file)
     else if (start.kind === 'resume') {

@@ -17,6 +17,7 @@ import { ControlNoteEntry } from './control-note-entry'
 import { DeviceAccessEntry } from './device-access-entry'
 import { SurfaceAccessEntry } from './surface-access-entry'
 import { MarketPublishEntry } from './market-publish-entry'
+import { PluginDenialEntry } from './plugin-denial-entry'
 import { SettingsChangeEntry } from './settings-change-entry'
 import { MemoryEntry } from './memory-entry'
 import { ComputerAppEntry } from './computer-app-entry'
@@ -104,6 +105,8 @@ export const Entry = memo(function Entry({
       return <ControlNoteEntry {...props} />
     case 'task_delivery':
       return <TaskDeliveryEntry {...props} />
+    case 'plugin_denial':
+      return <PluginDenialEntry {...props} />
     default:
       return null
   }

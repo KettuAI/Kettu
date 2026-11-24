@@ -1,0 +1,8 @@
+{
+  "name": "kettu-plugin-api",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Types for the scripts of Kettu plugins, API version 1",
+  "types": "index.d.ts",
+  "license": "MIT"
+}

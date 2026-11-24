@@ -141,6 +141,13 @@ export class ForkedHost<ToChild, FromChild extends { type: string }> {
     return true
   }
 
+  /** Kills a process that stopped answering; it restarts as after a crash. */
+  kill(): void {
+    if (this.status !== 'ready' || !this.child) return
+    this.config.log.error('It stopped answering; killing it')
+    this.child.kill('SIGKILL')
+  }
+
   /**
    * Asks the process to exit and waits for it, killing it if it does not, then removes its socket.
    * Nothing restarts afterwards.

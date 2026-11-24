@@ -1,23 +1,22 @@
 // Marketplace › Installed, in the directory's rows: Kettu's own server, the MCP servers and skills
-// Kettu keeps, its own skills among them, the plugins each agent has, then what the agents keep
-// themselves, which Kettu only shows, and the plugin marketplaces they read.
+// Kettu keeps, its own skills among them, then what the agents keep themselves, which Kettu only
+// shows: their skills, their plugins and their MCP configuration.
 
 import { useEffect, useState, type CSSProperties, type ReactNode } from 'react'
-import { Delete02Icon, RefreshIcon, Store01Icon } from '@hugeicons/core-free-icons'
+import { RefreshIcon } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
 import type { McpStatus } from '@shared/agent-host'
 import {
   displayTitle,
   specRuns,
+  type AgentOwnPlugin,
   type AgentOwnSkill,
   type BuiltinSkill,
-  type InstalledPlugin,
   type MarketServer,
   type MarketSkill,
-  type PluginMarketplace,
 } from '@shared/marketplace'
 import type { AgentId } from '@shared/thread'
-import { KETTU_PLUGINS, kettuId } from '@shared/market-community'
+import type { InstalledKettuPlugin } from '@shared/plugins'
 import { EmptyState, Icon, Popover } from '@renderer/components/affect/app-shell'
 import { Button } from '@renderer/components/affect/button'
 import { AgentMark } from '@renderer/components/agents/agent-mark'
@@ -25,15 +24,13 @@ import { BrandIcon } from '@renderer/components/brand'
 import { Pill, SettingSwitch } from '@renderer/features/settings/controls'
 import { PlaceAction } from '@renderer/features/settings/places'
 import { currentLocale } from '@renderer/lib/i18n'
+import { isWeb } from '@renderer/lib/platform'
 import { useHostScope, type HostScope } from '@renderer/stores/host-scope'
-import { busyKey } from '@renderer/stores/marketplace'
 import { openMarketplace } from '@renderer/stores/view'
-import { removeMarketplace, setPluginEnabled, setServerOn, setSkillOn } from './actions'
+import { setServerOn, setSkillOn } from './actions'
 import { ConnectionControls } from './connect'
-import { ConfirmDialog } from './dialogs'
 import {
   useAgentName,
-  useBusy,
   useCommunityLine,
   useConnection,
   useConnectionText,
@@ -41,11 +38,9 @@ import {
 } from './hooks'
 import {
   catalogEntry,
-  catalogPlugin,
   fromCatalog,
   fromKept,
   homeShort,
-  itemKey,
   keptItemKey,
   matchesQuery,
   matchesText,
@@ -63,6 +58,9 @@ import { useWorkflows } from './workflow-actions'
 import { InstalledWorkflows } from './workflows'
 import { pluginSubject, serverSubject, skillSubject } from './tile-art'
 import { PlainTile } from './tiles'
+import { isPluginItem, pluginDescription, pluginTitle } from './plugin-model'
+import { useInstalledPlugins, usePluginItemOff, usePluginPublisher } from './plugin-hooks'
+import { FromPlugin, PluginInstalledRow } from './plugin-ui'
 
 /** Rows a group of the agents' own skills shows before "and N more". */
 const GROUP_ROWS = 6
@@ -75,14 +73,13 @@ export function InstalledView({ query }: { query: string }) {
   useEffect(() => {
     void load()
   }, [load])
-  usePluginsRead()
+  useOwnPluginsRead()
   useSkillsRead()
   const servers = useKeptServers(query)
   const skills = useKeptSkills(query)
   const builtIn = useBuiltinSkills(query)
-  const plugins = useInstalledPlugins(query)
   const own = useOwn(query)
-  const markets = useMarketplaces(query)
+  const plugins = useKeptPlugins(query)
   const workflows = useWorkflows().entries.filter((entry) =>
     workflowMatches(entry, query, currentLocale()),
   )
@@ -90,9 +87,9 @@ export function InstalledView({ query }: { query: string }) {
   const nothing =
     searching &&
     !matchesText(['Kettu'], query) &&
-    servers.length + builtIn.length + skills.length + workflows.length + (plugins?.length ?? 0) ===
+    plugins.list.length + servers.length + builtIn.length + skills.length + workflows.length ===
       0 &&
-    own.folders.length + own.places.length + markets.length === 0
+    own.folders.length + own.plugins.length + own.places.length === 0
   if (nothing) {
     return (
       <section className="ui-as-int-section">
@@ -103,7 +100,8 @@ export function InstalledView({ query }: { query: string }) {
   return (
     <>
       {(!searching || matchesText(['Kettu'], query)) && <KettuSection />}
-      <Section title={t('installed.kept')} count={servers.length} index={1} hide={searching}>
+      <PluginsSection plugins={plugins} searching={searching} />
+      <Section title={t('installed.kept')} count={servers.length} index={2} hide={searching}>
         {servers.length === 0 ? (
           <p className="k-mkt-section-note">{t('installed.noServers')}</p>
         ) : (
@@ -117,7 +115,7 @@ export function InstalledView({ query }: { query: string }) {
       <Section
         title={t('installed.skills')}
         count={builtIn.length + skills.length}
-        index={2}
+        index={3}
         hide={searching}
       >
         {builtIn.length + skills.length === 0 ? (
@@ -133,10 +131,8 @@ export function InstalledView({ query }: { query: string }) {
           </div>
         )}
       </Section>
-      <InstalledWorkflows query={query} index={3} />
-      <PluginsSection plugins={plugins} searching={searching} />
+      <InstalledWorkflows query={query} index={4} />
       <OwnSection own={own} searching={searching} />
-      <MarketplacesSection markets={markets} />
     </>
   )
 }
@@ -384,6 +380,7 @@ function KeptRow({ server, listing }: { server: MarketServer; listing: Listing }
   const { t } = useTranslation('marketplace')
   const scope = useHostScope()
   const oauth = oauthFlow(server.spec) !== null
+  const pluginOff = usePluginItemOff(server.id)
   const connection = useConnection(server.id)
   const connectionText = useConnectionText()
   const agents = server.agents === 'all' ? null : server.agents
@@ -400,19 +397,99 @@ function KeptRow({ server, listing }: { server: MarketServer; listing: Listing }
       subject={serverSubject({ ...listing, spec: server.spec })}
       meta={<Facts facts={[listing.publisher, ...state]} />}
       line={listing.description ?? specRuns(server.spec)}
+      oneLine={!listing.description}
       onOpen={() => openMarketplace({ item: keptItemKey('mcp', server.id), tab: 'installed' })}
       end={
         oauth ? (
           <ConnectionControls server={server} compact />
         ) : (
-          <SettingSwitch
-            label={t('listing.switch', { name: server.title })}
-            checked={server.on}
-            onChange={(on) => void setServerOn(scope, server.id, on)}
-          />
+          <>
+            {isPluginItem(server.id) && <FromPlugin itemId={server.id} />}
+            <SettingSwitch
+              label={t('listing.switch', { name: server.title })}
+              checked={server.on}
+              disabled={pluginOff}
+              onChange={(on) => void setServerOn(scope, server.id, on)}
+            />
+          </>
         )
       }
     />
+  )
+}
+
+/** The Kettu plugins installed here, matching the search; null while the host has not answered. */
+function useKeptPlugins(query: string): {
+  list: InstalledKettuPlugin[]
+  loading: boolean
+  failure: string | null
+} {
+  const { useMarketplaceStore } = useHostScope()
+  const plugins = useInstalledPlugins()
+  const failure = useMarketplaceStore((s) => s.pluginsError)
+  const locale = currentLocale()
+  const publisher = usePluginPublisher()
+  const list = (plugins ?? []).filter((plugin) =>
+    matchesText(
+      [
+        pluginTitle(plugin.contents, locale),
+        plugin.contents.name,
+        pluginDescription(plugin.contents, locale),
+        publisher(plugin),
+      ],
+      query,
+    ),
+  )
+  return { list, loading: plugins === null && !failure, failure: plugins === null ? failure : null }
+}
+
+/** Kettu's own plugins, after Kettu's server: each with its switch, and an update that asks for more. */
+function PluginsSection({
+  plugins,
+  searching,
+}: {
+  plugins: ReturnType<typeof useKeptPlugins>
+  searching: boolean
+}) {
+  const { t } = useTranslation(['marketplace', 'common'])
+  const { useMarketplaceStore } = useHostScope()
+  const { list, loading, failure } = plugins
+  return (
+    <Section
+      title={t('installed.kettuPlugins')}
+      count={loading ? null : list.length}
+      index={1}
+      hide={searching}
+    >
+      {failure ? (
+        <QuietNote
+          action={
+            <Button
+              size="md"
+              variant="ghost"
+              icon={<Icon icon={RefreshIcon} size={14} />}
+              onClick={() => void useMarketplaceStore.getState().loadPlugins()}
+            >
+              {t('common:actions.retry')}
+            </Button>
+          }
+        >
+          {t('notes.plugins', { error: failure })}
+        </QuietNote>
+      ) : loading ? (
+        <SkeletonRows rows={1} />
+      ) : list.length === 0 ? (
+        <p className="k-mkt-section-note">
+          {t(isWeb ? 'installed.noPluginsWeb' : 'installed.noPlugins')}
+        </p>
+      ) : (
+        <div className="ui-as-int-grid k-plug-grid">
+          {list.map((plugin) => (
+            <PluginInstalledRow key={plugin.id} plugin={plugin} />
+          ))}
+        </div>
+      )}
+    </Section>
   )
 }
 
@@ -447,6 +524,7 @@ function KeptSkillRow({ skill }: { skill: MarketSkill }) {
   const { t } = useTranslation('marketplace')
   const scope = useHostScope()
   const standing = useCommunityLine(skill.id, skill.version)
+  const pluginOff = usePluginItemOff(skill.id)
   const state = [
     standing,
     skill.on ? null : t('installed.off'),
@@ -460,22 +538,26 @@ function KeptSkillRow({ skill }: { skill: MarketSkill }) {
       line={skill.description || null}
       onOpen={() => openMarketplace({ item: keptItemKey('skill', skill.id), tab: 'installed' })}
       end={
-        <SettingSwitch
-          label={t('listing.switch', { name: skill.name })}
-          checked={skill.on}
-          onChange={(on) => void setSkillOn(scope, skill.id, on)}
-        />
+        <>
+          {isPluginItem(skill.id) && <FromPlugin itemId={skill.id} />}
+          <SettingSwitch
+            label={t('listing.switch', { name: skill.name })}
+            checked={skill.on}
+            disabled={pluginOff}
+            onChange={(on) => void setSkillOn(scope, skill.id, on)}
+          />
+        </>
       }
     />
   )
 }
 
-/** Read the first time the tab needs them; the host lists plugins slowly. */
-function usePluginsRead(): void {
+/** Read each time the tab shows, as a plugin may have been installed in the agent since. */
+function useOwnPluginsRead(): void {
   const { useMarketplaceStore } = useHostScope()
   useEffect(() => {
     const store = useMarketplaceStore.getState()
-    if (!store.plugins && !store.pluginsLoading) void store.loadPlugins(false, true)
+    if (!store.ownPluginsLoading) void store.loadOwnPlugins(store.ownPlugins !== null)
   }, [useMarketplaceStore])
 }
 
@@ -485,134 +567,6 @@ function useSkillsRead(): void {
     const store = useMarketplaceStore.getState()
     if (!store.skills && !store.skillsLoading) void store.loadSkills(false, true)
   }, [useMarketplaceStore])
-}
-
-/** The listing a plugin of the Kettu Marketplace's local marketplace was installed from. */
-function communityRecord(scope: HostScope, plugin: InstalledPlugin) {
-  return (
-    scope.useMarketplaceStore
-      .getState()
-      .communityInstalled?.plugins.find(
-        (p) => p.harness === plugin.harness && `${p.name}@${KETTU_PLUGINS}` === plugin.id,
-      ) ?? null
-  )
-}
-
-const pluginTitle = (scope: HostScope, plugin: InstalledPlugin): string =>
-  catalogPlugin(scope, plugin.harness, plugin.id)?.title ?? displayTitle(pluginName(plugin.id))
-
-/** The plugins every agent has, matching the search; null until the host has listed them. */
-function useInstalledPlugins(query: string): InstalledPlugin[] | null {
-  const scope = useHostScope()
-  const agentName = useAgentName()
-  const plugins = scope.useMarketplaceStore((s) => s.plugins)
-  if (!plugins) return null
-  return plugins.installed.filter((p) =>
-    matchesText([pluginTitle(scope, p), p.id, agentName(p.agentId)], query),
-  )
-}
-
-function PluginsSection({
-  plugins,
-  searching,
-}: {
-  plugins: InstalledPlugin[] | null
-  searching: boolean
-}) {
-  const { t } = useTranslation(['marketplace', 'common'])
-  const { useMarketplaceStore } = useHostScope()
-  const agentName = useAgentName()
-  const failure = useMarketplaceStore((s) => s.pluginsError)
-  const errors = useMarketplaceStore((s) => s.plugins?.errors ?? null)
-  if (searching && !plugins?.length) return null
-  return (
-    <Section title={t('installed.plugins')} count={plugins?.length ?? null} index={3}>
-      {failure && !plugins && (
-        <QuietNote
-          action={
-            <Button
-              size="md"
-              variant="ghost"
-              icon={<Icon icon={RefreshIcon} size={14} />}
-              onClick={() => void useMarketplaceStore.getState().loadPlugins(true)}
-            >
-              {t('common:actions.retry')}
-            </Button>
-          }
-        >
-          {t('notes.plugins', { error: failure })}
-        </QuietNote>
-      )}
-      {errors?.map((error) => (
-        <QuietNote key={error.agentId}>
-          {t('notes.agentPlugins', { agent: agentName(error.agentId), error: error.message })}
-        </QuietNote>
-      ))}
-      {!plugins ? (
-        !failure && <SkeletonRows rows={2} />
-      ) : plugins.length === 0 ? (
-        <p className="k-mkt-section-note">{t('installed.noPlugins')}</p>
-      ) : (
-        <div className="ui-as-int-grid">
-          {plugins.map((plugin) => (
-            <PluginRow
-              key={`${plugin.agentId}|${plugin.id}|${plugin.scope}|${plugin.projectPath ?? ''}`}
-              plugin={plugin}
-            />
-          ))}
-        </div>
-      )}
-    </Section>
-  )
-}
-
-function PluginRow({ plugin }: { plugin: InstalledPlugin }) {
-  const { t } = useTranslation('marketplace')
-  const scope = useHostScope()
-  const agentName = useAgentName()
-  const entry = catalogPlugin(scope, plugin.harness, plugin.id)
-  const title = pluginTitle(scope, plugin)
-  const busy = useBusy(busyKey('plugin', `${plugin.agentId}|${plugin.id}|${plugin.scope}`))
-  // Read again whenever the host says what came from the Kettu Marketplace.
-  scope.useMarketplaceStore((s) => s.communityInstalled)
-  const record = communityRecord(scope, plugin)
-  const standing = useCommunityLine(
-    record ? kettuId(record.listingId) : '',
-    record?.version ?? null,
-  )
-  const state = [
-    standing,
-    agentName(plugin.agentId),
-    plugin.scope === 'user' ? null : scopeLine(plugin, t),
-    plugin.version,
-    plugin.enabled ? null : t('installed.off'),
-  ]
-  return (
-    <ItemRow
-      title={title}
-      subject={pluginSubject({ ...plugin, category: entry?.category, marks: !record })}
-      meta={<Facts facts={state} />}
-      line={entry?.description || null}
-      onOpen={() =>
-        openMarketplace({
-          item: itemKey(
-            record
-              ? { kind: 'community', id: record.listingId }
-              : { kind: 'plugin', harness: plugin.harness, id: plugin.id },
-          ),
-          tab: 'installed',
-        })
-      }
-      end={
-        <SettingSwitch
-          label={t('plugin.switch', { name: title, agent: agentName(plugin.agentId) })}
-          checked={plugin.enabled}
-          disabled={busy}
-          onChange={(on) => void setPluginEnabled(scope, plugin, title, on)}
-        />
-      }
-    />
-  )
 }
 
 /** One skill folder an agent reads, with the skills in it, each once. */
@@ -656,6 +610,7 @@ function skillFolders(own: AgentOwnSkill[]): SkillFolder[] {
 
 interface Own {
   folders: SkillFolder[]
+  plugins: AgentOwnPlugin[]
   places: McpStatus['places']
   loading: boolean
   failure: string | null
@@ -678,24 +633,37 @@ function useOwn(query: string): Own {
       ),
     }))
     .filter((group) => group.skills.length > 0)
+  const plugins = (useMarketplaceStore((s) => s.ownPlugins)?.plugins ?? []).filter((plugin) =>
+    matchesText([displayTitle(pluginName(plugin.id)), plugin.id, agentName(plugin.agentId)], query),
+  )
   const places = (status?.places ?? []).filter((place) =>
     matchesText([agentName(place.agentId), place.path], query),
   )
-  return { folders, places, loading: !skills || !status, failure: skills ? null : failure }
+  return {
+    folders,
+    plugins,
+    places,
+    loading: !skills || !status,
+    failure: skills ? null : failure,
+  }
 }
 
-/** What each agent keeps itself, read only: its skills by folder, then its MCP configuration. */
+/** What each agent keeps itself, read only: its skills by folder, its plugins, then its MCP configuration. */
 function OwnSection({ own, searching }: { own: Own; searching: boolean }) {
   const { t } = useTranslation(['marketplace', 'common'])
   const { useMarketplaceStore } = useHostScope()
-  const count = own.folders.reduce((n, group) => n + group.skills.length, 0)
+  const agentName = useAgentName()
+  const pluginErrors = useMarketplaceStore((s) => s.ownPlugins?.errors ?? null)
+  const count = own.folders.reduce((n, group) => n + group.skills.length, 0) + own.plugins.length
   if (searching && count + own.places.length === 0) return null
-  if (!own.loading && count + own.places.length === 0 && !own.failure) return null
+  if (!own.loading && count + own.places.length === 0 && !own.failure && !pluginErrors?.length) {
+    return null
+  }
   return (
     <Section
       title={t('installed.own')}
       count={own.loading ? null : count}
-      index={4}
+      index={5}
       note={t('installed.ownNote')}
     >
       {own.failure && (
@@ -718,6 +686,25 @@ function OwnSection({ own, searching }: { own: Own; searching: boolean }) {
       {own.folders.map((group) => (
         <FolderGroup key={group.folder} group={group} searching={searching} />
       ))}
+      {!searching &&
+        pluginErrors?.map((error) => (
+          <QuietNote key={error.agentId}>
+            {t('notes.agentPlugins', { agent: agentName(error.agentId), error: error.message })}
+          </QuietNote>
+        ))}
+      {own.plugins.length > 0 && (
+        <div className="k-mkt-group">
+          <h3 className="k-mkt-group__head">{t('installed.plugins')}</h3>
+          <div className="ui-as-int-grid">
+            {own.plugins.map((plugin) => (
+              <OwnPluginRow
+                key={`${plugin.agentId}|${plugin.id}|${plugin.scope}|${plugin.projectPath ?? ''}`}
+                plugin={plugin}
+              />
+            ))}
+          </div>
+        </div>
+      )}
       {own.places.length > 0 && (
         <div className="k-mkt-group">
           <h3 className="k-mkt-group__head">{t('installed.mcpConfig')}</h3>
@@ -791,6 +778,28 @@ function OwnSkillRow({ skill, fresh }: { skill: OwnSkill; fresh: boolean }) {
   )
 }
 
+/** A plugin in an agent's own configuration: whose it is, where, its version and whether it is off. */
+function OwnPluginRow({ plugin }: { plugin: AgentOwnPlugin }) {
+  const { t } = useTranslation('marketplace')
+  const agentName = useAgentName()
+  const facts = [
+    agentName(plugin.agentId),
+    plugin.scope === 'user' ? null : scopeLine(plugin, t),
+    plugin.version,
+    plugin.enabled ? null : t('installed.off'),
+  ]
+  return (
+    <ItemRow
+      title={displayTitle(pluginName(plugin.id))}
+      subject={pluginSubject(plugin)}
+      quiet
+      meta={<Facts facts={facts} />}
+      line={plugin.id}
+      oneLine
+    />
+  )
+}
+
 /** Where one agent keeps its own MCP servers: the file, or that it is not created yet. */
 function PlaceRow({ place }: { place: McpStatus['places'][number] }) {
   const { t } = useTranslation(['marketplace', 'settings'])
@@ -826,79 +835,5 @@ function PlaceRow({ place }: { place: McpStatus['places'][number] }) {
       oneLine
       end={place.exists ? <PlaceAction path={place.path} icon /> : undefined}
     />
-  )
-}
-
-/** The plugin marketplaces the agents read, matching the search. */
-function useMarketplaces(query: string): PluginMarketplace[] {
-  const { useMarketplaceStore } = useHostScope()
-  const agentName = useAgentName()
-  const markets = useMarketplaceStore((s) => s.plugins?.marketplaces ?? null)
-  return (markets ?? []).filter((market) =>
-    matchesText([market.name, market.source, agentName(market.agentId)], query),
-  )
-}
-
-function MarketplacesSection({ markets }: { markets: PluginMarketplace[] }) {
-  const { t } = useTranslation('marketplace')
-  if (markets.length === 0) return null
-  return (
-    <Section
-      title={t('installed.marketplaces')}
-      count={markets.length}
-      index={5}
-      note={t('installed.marketplacesNote')}
-    >
-      <div className="ui-as-int-grid">
-        {markets.map((market) => (
-          <MarketplaceRow key={`${market.agentId}|${market.name}`} market={market} />
-        ))}
-      </div>
-    </Section>
-  )
-}
-
-function MarketplaceRow({ market }: { market: PluginMarketplace }) {
-  const { t } = useTranslation('marketplace')
-  const scope = useHostScope()
-  const agentName = useAgentName()
-  const [confirming, setConfirming] = useState(false)
-  return (
-    <>
-      <ItemRow
-        title={market.name}
-        icon={
-          <PlainTile>
-            <Icon icon={Store01Icon} />
-          </PlainTile>
-        }
-        line={[agentName(market.agentId), homeShort(market.source)].join(' · ')}
-        lineTitle={market.source}
-        oneLine
-        end={
-          market.official ? (
-            <small className="k-mkt-quiet">{t('installed.marketplaceKept')}</small>
-          ) : (
-            <button
-              type="button"
-              className="k-mkt-icon-btn"
-              aria-label={t('installed.removeMarketplace', { name: market.name })}
-              title={t('installed.removeMarketplace', { name: market.name })}
-              onClick={() => setConfirming(true)}
-            >
-              <Icon icon={Delete02Icon} size={15} />
-            </button>
-          )
-        }
-      />
-      <ConfirmDialog
-        open={confirming}
-        onOpenChange={setConfirming}
-        title={t('dialogs.removeMarketplace.title', { name: market.name })}
-        body={t('dialogs.removeMarketplace.body', { agent: agentName(market.agentId) })}
-        confirm={t('dialogs.removeMarketplace.confirm')}
-        action={() => removeMarketplace(scope, market)}
-      />
-    </>
   )
 }

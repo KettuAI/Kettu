@@ -48,6 +48,7 @@ import {
   type SettingsSection,
 } from '../main/settings-schema'
 import { ControlError, type DeviceSummary, type HostName, type HostStatus } from './control'
+import { PluginHost } from './plugin-host'
 import { ForkedHost, type HostTimings } from './forked-host'
 import { daemonUserAgent } from './update'
 
@@ -127,8 +128,12 @@ export interface HostsOptions {
   marketCall?(call: MarketCall): Promise<MarketCallAnswer>
   /** An agent's settings tool reads or changes the daemon's settings. */
   settingsCall?(call: unknown): SettingsCallAnswer
+  /** Keeps a plugin's secret in the key store, or clears it; null once the store holds it. */
+  pluginSecret?(pluginId: unknown, key: unknown, value: unknown): Promise<string | null>
   /** The agent host's first start found the programs of these harnesses; the daemon adds their agents. */
   firstStart?(harnesses: unknown): void
+  /** The themes plugins bring changed, so the daemon reads them again. */
+  pluginThemes?(): void
   /** The host's X25519 private key, in base64, for the remote host alone. */
   privateKey: string
   /** Replaces the host's identity with a new key, as resetting remote access does; its private key. */
@@ -166,6 +171,7 @@ export class Hosts {
   private readonly terminal: ForkedHost<MainToTerminalHost, TerminalHostToMain>
   private readonly deviceHost: ForkedHost<MainToDeviceHost, DeviceHostToMain>
   private readonly remote: ForkedHost<MainToRemoteHost, RemoteHostToMain>
+  private readonly pluginHost: PluginHost
   private projects: string[] = []
   private authCommands: string[] = []
   private agentProcesses: ProcessId[] = []
@@ -321,6 +327,15 @@ export class Hosts {
           }
         }
       },
+    })
+    // Plugins' scripts: started when the agent host wakes the first one.
+    this.pluginHost = new PluginHost({
+      modulePath: bundle('plugin-host.cjs'),
+      wasmPath: bundle('quickjs.wasm'),
+      env: options.env,
+      inspector: (url) => options.inspector?.('plugin-host', url),
+      timings: options.timings,
+      ready: (socketPath) => this.agent.post({ type: 'host:plugin-port', socketPath }),
     })
     // Devices reach it through its direct connections, as in the desktop app, not a socket.
     this.remote = new ForkedHost<MainToRemoteHost, RemoteHostToMain>({
@@ -938,6 +953,7 @@ export class Hosts {
       this.remote.stop().then(() => this.agent.stop()),
       this.terminal.stop(),
       this.deviceHost.stop(),
+      this.pluginHost.stop(),
     ])
   }
 
@@ -1024,6 +1040,12 @@ export class Hosts {
           })
         }
         break
+      case 'host:plugin-host':
+        this.pluginHost.setWanted(message.run === true)
+        break
+      case 'host:plugin-themes':
+        this.options.pluginThemes?.()
+        break
       case 'host:device-call':
         if (Number.isSafeInteger(message.callId) && typeof message.call === 'object') {
           void this.deviceCall(message.callId, message.call)
@@ -1061,6 +1083,17 @@ export class Hosts {
             callId: message.callId,
             answer: run ? run(message.call) : { error: 'The daemon keeps no settings for agents.' },
           })
+        }
+        break
+      case 'host:plugin-secret':
+        if (Number.isSafeInteger(message.callId)) {
+          const { callId } = message
+          const run = this.options.pluginSecret
+          void (
+            run
+              ? run(message.pluginId, message.key, message.value)
+              : Promise.resolve('The daemon keeps no secrets for plugins.')
+          ).then((error) => this.agent.post({ type: 'plugin-secret-result', callId, error }))
         }
         break
       case 'host:trash-call':
@@ -1125,6 +1158,8 @@ export class Hosts {
   }
 
   private agentExited(clean: boolean): void {
+    // The plugins it woke are gone with it; its next process asks again.
+    this.pluginHost.setWanted(false)
     // No turn of the agent host runs now, so none uses a device or a terminal.
     this.deviceHost.post({ type: 'device-host:turn-ended', sessionId: null })
     this.terminal.post({ type: 'terminal-host:turn-ended', sessionId: null })

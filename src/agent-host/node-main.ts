@@ -5,7 +5,8 @@ import { startHostInspector } from '@shared/log/debug-inspector'
 import { startHostLog } from '@shared/log/process-log'
 import type { HostToMain, MainToHost } from '@shared/host-control'
 import { identifyPort } from '@shared/remote/device'
-import { listenPorts } from '@shared/socket-port'
+import type { AgentToPluginHost } from '@shared/plugin-host'
+import { connectPort, listenPorts } from '@shared/socket-port'
 import { startAgentHost } from './start'
 
 startHostLog('agent-host')
@@ -29,6 +30,14 @@ const host = startAgentHost({
   onMessage: (listener) => {
     process.on('message', (data) => {
       const message = data as MainToHost
+      if (message.type === 'host:plugin-port') {
+        if (typeof message.socketPath !== 'string') return
+        connectPort<AgentToPluginHost>(message.socketPath).then(
+          (port) => host.connectPluginHost(port),
+          (error: unknown) => console.error('Cannot connect to the plugin host:', error),
+        )
+        return
+      }
       if (message.type === 'host:init' && !listening) {
         const socketPath = message.socketPath
         if (!socketPath) fail(new Error('host:init names no socket'))

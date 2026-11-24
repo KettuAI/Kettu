@@ -1,0 +1,35 @@
+{
+  "refresh": "Refresh",
+  "back": "Back",
+  "retry": "Try again",
+  "more": "More actions",
+  "moreFor": "More actions for {{title}}",
+  "empty": "Nothing here yet",
+  "truncated": "Showing the first {{count}}",
+  "newerKettu": "This view needs a newer Kettu to show.",
+  "confirm": {
+    "default": "Do you want to go on with this?",
+    "title": "{{label}}?"
+  },
+  "error": {
+    "not_found": "This view isn’t available",
+    "disabled": "The plugin was turned off after it crashed too often",
+    "crashed": "The plugin was stopped for using too much time or memory. Try again starts it again.",
+    "timeout": "The plugin took too long to answer",
+    "unavailable": "Plugins aren’t running right now",
+    "failed": "The plugin couldn’t show this view",
+    "invalid": "The plugin sent something Kettu can’t show",
+    "request_failed": "Couldn’t load this view"
+  },
+  "actionNoPanel": "“{{label}}” has a pane to show, but no session on the same computer is open. Open one and run it again.",
+  "actionError": {
+    "not_found": "{{label}} isn’t available anymore",
+    "disabled": "{{label}} didn’t run: the plugin was turned off after it crashed too often",
+    "crashed": "{{label}} didn’t finish: the plugin was stopped for using too much time or memory",
+    "timeout": "{{label}} didn’t finish: the plugin took too long to answer",
+    "unavailable": "{{label}} didn’t run: plugins aren’t running right now",
+    "failed": "{{label}} didn’t work",
+    "invalid": "{{label}} got an answer Kettu can’t use",
+    "request_failed": "{{label}} didn’t run"
+  }
+}

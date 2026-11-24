@@ -39,6 +39,7 @@ import type { RoutineTimings } from '../routines/manager'
 import type { RoutineClock } from '../routines/scheduler'
 import type { LogReader } from '../usage/model'
 import type { FakeAppServer } from './fake-app-server'
+import { TestPluginHost } from './plugin-host'
 import { tempFolder } from './temp'
 import { inThreadWorker } from './thread-worker'
 import { inUsageWorker } from './usage-worker'
@@ -312,12 +313,16 @@ export interface TestHostOptions {
   installedVersions?: Partial<Record<AgentId, string>>
   /** The thread worker, the service in the test's own thread unless given. */
   threadWorker?: HostOptions['threadWorker']
+  /** Runs the plugin host in the test's own process, for the host to load plugins' scripts in. */
+  pluginHost?: boolean
 }
 
 export interface TestHost {
   host: AgentHost
   launcher: InProcessLauncher | AgentLauncher
   sent: HostToMain[]
+  /** What the plugins' scripts logged, when the plugin host runs. */
+  pluginLogs: string[]
   dir: string
   project: string
   /** A window's port, or a paired device's when `device` names it. */
@@ -334,6 +339,11 @@ export async function startTestHost(options: TestHostOptions = {}): Promise<Test
   const base = options.launcher ?? inProcessLauncher(module, options.agentEnv)
   const launcher = options.fakeAppServer ? appServerLauncher(base, options.fakeAppServer) : base
   const sent: HostToMain[] = []
+  const plugins = options.pluginHost
+    ? new TestPluginHost((port) => started?.connectPluginHost(port))
+    : null
+  let started: AgentHost | null = null
+  const pluginSecrets: Record<string, Record<string, string>> = {}
   // The fake agent speaks ACP under every id it runs as.
   const protocols: HostOptions['protocols'] = Object.fromEntries(
     [...(options.fakeAs ?? []), ...(options.fakeThroughRouter?.agentIds ?? [])].map((id) => [
@@ -379,7 +389,30 @@ export async function startTestHost(options: TestHostOptions = {}): Promise<Test
       downloadService: false,
     },
     baseEnv: { ...process.env, ...options.agentEnv },
-    send: (message) => sent.push(structuredClone(message)),
+    send: (message) => {
+      sent.push(structuredClone(message))
+      if (message.type === 'host:plugin-host') plugins?.want(message.run)
+      // The key store main keeps the secrets of plugins in, as it answers the host.
+      if (message.type === 'host:plugin-secret') {
+        const { callId, pluginId, key, value } = message
+        if (key === null) delete pluginSecrets[pluginId]
+        else if (value === null) delete pluginSecrets[pluginId]?.[key]
+        else (pluginSecrets[pluginId] ??= {})[key] = value
+        queueMicrotask(() => {
+          started?.setMarketKeys({}, {}, {}, structuredClone(pluginSecrets))
+          started?.pluginSecretResult(callId, null)
+        })
+      }
+      // The settings a plugin install reads are the defaults.
+      if (message.type === 'host:settings-call') {
+        const { callId } = message
+        queueMicrotask(() =>
+          started?.settingsResult(callId, {
+            result: { file: DEFAULT_SETTINGS, desktop: false, facts: {} },
+          }),
+        )
+      }
+    },
     git: options.git ?? null,
     launcher,
     resolveEnv:
@@ -454,11 +487,13 @@ export async function startTestHost(options: TestHostOptions = {}): Promise<Test
     ...(options.cacheTtl ? { cacheTtl: options.cacheTtl } : {}),
     homeDir: dir,
   })
+  started = host
   let stopped = false
   return {
     host,
     launcher,
     sent,
+    pluginLogs: plugins?.logs ?? [],
     dir,
     project: await realpath(project),
     connect: (device) => {
@@ -470,6 +505,7 @@ export async function startTestHost(options: TestHostOptions = {}): Promise<Test
       if (stopped) return
       stopped = true
       await host.shutdown()
+      plugins?.stop()
       if (!options.userDataPath) {
         await rm(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
       }

@@ -302,6 +302,13 @@ export interface ProjectsFile {
 /** How many opened pull requests a session keeps; the oldest go first. */
 export const MAX_SESSION_PULL_REQUESTS = 20
 
+/** A role a session started as; `name` is the role's own name, `title` what the user sees. */
+export interface SessionRole {
+  name: string
+  title: string
+  instructions: string
+}
+
 export interface SessionRecord {
   id: string
   agentId: AgentId
@@ -327,7 +334,7 @@ export interface SessionRecord {
   archivedAt?: number // when the user archived it; off the sidebar while set
   /** Archived alone: the sub-sessions it left in the list, which restoring it puts back under it. */
   leftSubSessions?: string[]
-  startedBy?: string // the session whose agent started it through start_session
+  startedBy?: string // the session whose agent started it through start_session, or `plugin:<id>`
   configDir?: string // the configuration folder picked for its agent when it was created
   pullRequests?: string[] // the pull requests it opened, oldest first, by their github.com URL
   /** The agents that had the session before its current one took over, oldest first. */
@@ -370,6 +377,16 @@ export interface SessionRecord {
   rewound?: RewoundRecord
   /** The latest takeover's carry and the prompt it went with, for an edit from that prompt. */
   carried?: { entryId: string; carry: PendingCarry }
+  /**
+   * The skills and MCP servers commands of Kettu's named that its agent is not handed anyway, by
+   * the names the Marketplace keeps them under: every attach of the session gets them.
+   */
+  commandTools?: { skills: string[]; mcp: string[] }
+  /**
+   * The role the session started as: its instructions go to every agent that runs it, the way
+   * Kettu's guide does, so they are kept whole, whatever becomes of the role's file.
+   */
+  role?: SessionRole
   /** The prompt Kettu's guide and memory last went ahead of, by its entry id. */
   memorySentAt?: string
   /** Its agent said the conversation cannot be cut, as for an older Codex thread. */
@@ -747,6 +764,22 @@ function withFrom(item: QueuedPrompt): QueuedPrompt {
     : rest
 }
 
+function roleOf(value: unknown): { role?: SessionRole } {
+  if (!isRecord(value)) return {}
+  const { name, title, instructions } = value
+  if (!isString(name) || !isString(title) || !isString(instructions)) return {}
+  return name !== '' && instructions.trim() !== '' ? { role: { name, title, instructions } } : {}
+}
+
+function commandToolsOf(value: unknown): { commandTools?: SessionRecord['commandTools'] } {
+  if (!isRecord(value)) return {}
+  const names = (list: unknown): string[] =>
+    Array.isArray(list) ? list.filter((name): name is string => isString(name) && name !== '') : []
+  const skills = names(value.skills)
+  const mcp = names(value.mcp)
+  return skills.length + mcp.length > 0 ? { commandTools: { skills, mcp } } : {}
+}
+
 function cacheOf(value: unknown): { cache?: PromptCache } {
   if (!isRecord(value) || !isTime(value.lastRequestAt) || !isNullable(isTime)(value.ttl)) return {}
   return { cache: { lastRequestAt: value.lastRequestAt, ttl: value.ttl } }
@@ -1075,6 +1108,8 @@ export function parseSessionsFile(data: Record<string, unknown>): SessionsFile |
       ...lastTurnOf(item.lastTurn),
       ...rewoundOf(item.rewound),
       ...carriedOf(item.carried),
+      ...commandToolsOf(item.commandTools),
+      ...roleOf(item.role),
       ...(isString(item.memorySentAt) && item.memorySentAt !== ''
         ? { memorySentAt: item.memorySentAt }
         : {}),

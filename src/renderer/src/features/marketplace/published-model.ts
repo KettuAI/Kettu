@@ -36,7 +36,7 @@ export const VISIBILITY_ICON: Record<ListingVisibility, IconSvgElement> = {
 }
 
 export function kindOf(kind: PublishKind): ItemKind {
-  return kind === 'mcp-server' ? 'mcp' : kind
+  return kind === 'mcp-server' ? 'mcp' : kind === 'agent-plugin' ? 'plugin' : kind
 }
 
 /** A listing's tile, as the Community section draws it; a draft of a new one goes by its slug. */
@@ -52,6 +52,11 @@ export function listingSubject(listing: {
     slug: listing.slug,
     ...(listing.harness ? { harness: listing.harness } : {}),
   })
+}
+
+/** A Claude Code or Codex plugin the account published, which takes no new versions. */
+export function isClosed(listing: Pick<MineListing, 'kind' | 'installable'>): boolean {
+  return listing.kind === 'plugin' || listing.installable === false
 }
 
 export function listingName(listing: Pick<MineListing, 'handle' | 'slug'>): string {
@@ -124,7 +129,8 @@ function utcDay(at: number): number {
 
 /**
  * Each day of the last 30 that a version was published on, by its place in `days` (oldest first,
- * today last), the highest version of a day winning.
+ * today last), the highest version of a day winning. A version held or not approved was not
+ * published.
  */
 export function releaseDays(
   listing: Pick<MineListing, 'versions'>,
@@ -134,6 +140,7 @@ export function releaseDays(
   const today = utcDay(now)
   const marks = new Map<number, string>()
   for (const version of [...listing.versions].reverse()) {
+    if (version.status !== 'live' && version.status !== 'withdrawn') continue
     const at = Date.parse(version.publishedAt)
     if (Number.isNaN(at)) continue
     const index = length - 1 - (today - utcDay(at))

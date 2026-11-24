@@ -26,23 +26,18 @@ import type { ArtifactContentFile, BackgroundWork } from './host-control'
 import type { HostLoad, HostLoadWatch } from './host-load'
 import type { IdleReleaseState } from './idle-release'
 import type {
+  AgentOwnPlugins,
   CatalogServer,
   ConnectStart,
-  InstalledPlugin,
   MarketCatalog,
   MarketConnection,
   MarketConnections,
   MarketKeyState,
-  MarketPlugins,
   MarketSearch,
   MarketSkill,
   MarketSkillRepository,
   MarketSkills,
   McpOAuth,
-  PluginDetails,
-  PluginLogo,
-  PluginMarketplace,
-  PluginScope,
   SkillSource,
 } from './marketplace'
 import type {
@@ -55,8 +50,11 @@ import type {
   MineListing,
   PublishDraft,
   PublishKind,
+  PublishResult,
   PublishVisibility,
 } from './market-publish'
+import type { PluginNoticeKind } from './plugin-channels'
+import type { ConvertFrom, PluginConverted } from './plugin-convert'
 import type {
   BundlePlan,
   CommunityDirectory,
@@ -64,6 +62,14 @@ import type {
   CommunityListing,
   CommunityWorkflow,
 } from './market-community'
+import type { PluginLinkResult, PluginMentionResult, PluginRefSource } from './plugin-refs'
+import type {
+  PluginViewActionInput,
+  PluginViewActionResult,
+  PluginViewParams,
+  PluginViewResult,
+} from './plugin-views'
+import type { InstalledKettuPlugin, PluginPlan, PluginResource, PluginSource } from './plugins'
 import type { MediaAuthorization, MediaOpenResult } from './media'
 import type { ModelRequestRaw, ModelRequestsOverview, ModelRequestsPage } from './model-requests'
 import type {
@@ -141,6 +147,7 @@ import type {
   SessionSnapshot,
   SessionStatus,
   SlashCommand,
+  CommandOrigin,
   StopReason,
   ThreadEntry,
   ToolKind,
@@ -584,6 +591,8 @@ export interface AgentStatus {
   // Whether a start gets Kettu's MCP server, and whether the running process got it (null
   // while none runs).
   kettuServer: { runs: boolean; active: boolean | null }
+  // Whether a session of the agent gets the skills turned on for it; absent on older hosts.
+  skills?: boolean
   capabilities: {
     loadSession: boolean
     listSessions: boolean
@@ -740,6 +749,7 @@ export type McpToolGroup =
   | 'reports'
   | 'workflows'
   | 'settings'
+  | 'plugins'
 
 export interface McpToolSummary {
   name: string
@@ -757,6 +767,8 @@ export interface McpToolSummary {
 export interface PublishPlan {
   ask: MarketPublishAsk | null
   problems: MarketProblem[]
+  /** The folder is a plugin of this harness, which converts into a Kettu plugin. */
+  convertible?: ConvertFrom
 }
 
 /** For Marketplace › Installed: Kettu's own server, and where each agent keeps its own servers. */
@@ -1000,6 +1012,35 @@ export interface StartNotice {
   actual: string | boolean | null // null when the session has no such option
 }
 
+/** One of Kettu's commands that a file holds, a plugin's or the user's own. */
+export interface KettuCommand {
+  /** The command's own name, as its file names it. */
+  name: string
+  description: string
+  /** The arguments it takes, as `<file> [focus]`. */
+  inputHint?: string
+  origin: CommandOrigin
+}
+
+/** What a role suggests for the session it starts; each is a hint the person starting it may change. */
+export interface RoleSuggests {
+  /** An agent's id, or a harness's id for the first agent of that harness. */
+  agent?: string
+  /** A model's id or name as the agent lists it. */
+  model?: string
+  effort?: string
+}
+
+/** One of Kettu's roles that a file holds, a plugin's or the user's own. */
+export interface KettuRole {
+  /** What names it where a session starts as it: its own name, qualified when two share it. */
+  ref: string
+  title: string
+  description: string
+  suggests: RoleSuggests
+  origin: CommandOrigin
+}
+
 /**
  * What only a prepared session carries: New session shows its options and slash commands before
  * the first message.
@@ -1189,35 +1230,8 @@ export interface HostContract {
   // Clears a server's tokens and keeps the server; every agent loses it at once.
   'market.disconnect': { params: { serverId: string }; result: void }
   'market.connections': { params: void; result: MarketConnections }
-  // Plugins from Claude Code's and Codex's own marketplaces, and the ones each agent has installed;
-  // adds Claude's official marketplace to an agent that has none, as Claude Code does on first start.
-  'market.plugins': { params: { refresh?: boolean; cached?: boolean }; result: MarketPlugins }
-  'market.pluginDetails': { params: { agentId: AgentId; pluginId: string }; result: PluginDetails }
-  'market.pluginLogo': { params: { pluginId: string }; result: PluginLogo }
-  // Installs, removes or switches a plugin through the agent's own harness, in its configuration.
-  'market.installPlugin': {
-    params: { agentId: AgentId; pluginId: string; scope: PluginScope; projectPath?: string }
-    result: InstalledPlugin
-  }
-  'market.uninstallPlugin': {
-    params: { agentId: AgentId; pluginId: string; scope: PluginScope; projectPath?: string }
-    result: void
-  }
-  'market.setPluginEnabled': {
-    params: {
-      agentId: AgentId
-      pluginId: string
-      enabled: boolean
-      scope: PluginScope
-      projectPath?: string
-    }
-    result: void
-  }
-  'market.addMarketplace': {
-    params: { agentId: AgentId; source: string }
-    result: PluginMarketplace
-  }
-  'market.removeMarketplace': { params: { agentId: AgentId; name: string }; result: void }
+  // The plugins each Claude Code and Codex agent has of its own, which Kettu only lists.
+  'market.ownPlugins': { params: { refresh?: boolean }; result: AgentOwnPlugins }
   // The skills catalog and each agent's own skills.
   'market.skills': { params: { refresh?: boolean; cached?: boolean }; result: MarketSkills }
   // One repository of the skills catalog, `<owner>/<repo>`, read as market.skills reads each.
@@ -1263,14 +1277,8 @@ export interface HostContract {
   // A workflow listing's flow for its page, before it is added: only the current version's
   // `workflow.yaml` is read, checked and parsed; nothing is kept on the host or run.
   'market.communityWorkflow': { params: { id: string }; result: CommunityWorkflow }
-  // The plugins installed from the Kettu Marketplace, and where every installed item stands.
+  // Where every item installed from the Kettu Marketplace stands with its listing.
   'market.communityInstalled': { params: { refresh?: boolean }; result: CommunityInstalled }
-  // Downloads a plugin listing's current version, checks every file, and installs or updates it
-  // in the agent through its harness. Skills come through market.addSkill.
-  'market.installCommunityPlugin': {
-    params: { id: string; agentId: AgentId; scope: PluginScope; projectPath?: string }
-    result: InstalledPlugin
-  }
   // Downloads a workflow listing's current version, checks every file and the workflow, and writes
   // it into the workflow library unapproved, in place of the version it has of the listing.
   'market.addCommunityWorkflow': { params: { id: string }; result: WireWorkflowEntry }
@@ -1296,6 +1304,10 @@ export interface HostContract {
   // From a folder: the check and what to confirm, then the publish once the user confirmed it, as
   // a session's card does; a draft's own notes, visibility and session go with it.
   'market.checkFolder': { params: { path: string; draftId?: string }; result: PublishPlan }
+  // A Claude Code or Codex plugin's folder, or one of the account's own listings of such a plugin,
+  // written as a Kettu plugin into a new folder; the original is not changed.
+  'market.convertFolder': { params: { path: string }; result: PluginConverted }
+  'market.convertListing': { params: { id: string }; result: PluginConverted }
   'market.publishFolder': {
     params: {
       path: string
@@ -1304,7 +1316,8 @@ export interface HostContract {
       notes?: string
       handle?: string
     }
-    result: MineListing
+    // `held` is the version the service holds for review, which it lists only after it.
+    result: PublishResult
   }
   'projects.list': { params: void; result: Project[] }
   'projects.add': { params: { path: string }; result: Project }
@@ -1340,6 +1353,8 @@ export interface HostContract {
       preparedId?: string
       // A new worktree, cut from `base`, to work in; `branch` is the user's name for its branch.
       worktree?: { base: string; branch?: string }
+      // A role to start as, by its `ref`: its instructions go to the agent with the session.
+      role?: string
     }
     result: SessionSummary
   }
@@ -1358,6 +1373,90 @@ export interface HostContract {
   }
   // The routine's page is shown: its ended runs count as seen.
   'routines.markSeen': { params: { routineId: string }; result: void }
+  // Kettu's plugins: packages in the Agent Plugins format, installed on the host. See plugins.
+  'plugins.list': { params: void; result: { plugins: InstalledKettuPlugin[] } }
+  // Reads a package from its source and says what it holds and would run. Nothing is installed
+  // and nothing of it runs; the answer's token names the package for plugins.install.
+  'plugins.inspect': { params: { source: PluginSource }; result: PluginPlan }
+  // Installs the package an inspection showed, once the user confirmed it: its skills and MCP
+  // servers go into settings.marketplace marked with the plugin, its workflows into the library.
+  'plugins.install': { params: { token: string }; result: InstalledKettuPlugin }
+  'plugins.discard': { params: { token: string }; result: void }
+  // Removes the plugin with every item it brought.
+  'plugins.uninstall': { params: { pluginId: string }; result: void }
+  'plugins.setEnabled': {
+    params: { pluginId: string; enabled: boolean }
+    result: InstalledKettuPlugin
+  }
+  // Sets a setting the plugin declares, other than a secret, to a value its declaration takes.
+  'plugins.setSetting': {
+    params: { pluginId: string; key: string; value: string | boolean }
+    result: InstalledKettuPlugin
+  }
+  // Sets a secret the plugin declares, or with null clears it. The host keeps it in the system's
+  // key store and never gives it back: the plugin's `secretsSet` only says it is set.
+  'plugins.setSecret': {
+    params: { pluginId: string; key: string; value: string | null }
+    result: InstalledKettuPlugin
+  }
+  // Picks which kinds of notice go to one of the plugin's declared channels, in place of what it
+  // had; none turns the channel off.
+  'plugins.setChannelKinds': {
+    params: { pluginId: string; channel: string; kinds: PluginNoticeKind[] }
+    result: InstalledKettuPlugin
+  }
+  // Copies a development plugin's folder again, in place of the copy installed.
+  'plugins.reload': { params: { pluginId: string }; result: InstalledKettuPlugin }
+  // Looks for newer versions, of one plugin or all: a newer one is installed and the one before
+  // kept, but one that adds a script or asks for more permissions waits as the plugin's `held`.
+  'plugins.checkUpdates': {
+    params: { pluginId?: string }
+    result: { plugins: InstalledKettuPlugin[] }
+  }
+  // The user's answer to an update that waits: install it, or stay on the version in place.
+  'plugins.applyUpdate': { params: { pluginId: string }; result: InstalledKettuPlugin }
+  'plugins.declineUpdate': { params: { pluginId: string }; result: InstalledKettuPlugin }
+  // Goes back to the version before the last update.
+  'plugins.rollBack': { params: { pluginId: string }; result: InstalledKettuPlugin }
+  // A view of a plugin that is on, as its script gives it now. A script that fails, hangs or
+  // answers badly gives `ok: false` with why, never an error, so one view alone shows it.
+  'plugins.viewData': {
+    params: { pluginId: string; viewId: string; params?: PluginViewParams }
+    result: PluginViewResult
+  }
+  // Tells a view's script that one of its actions ran, with a form's values, and says what it answered.
+  'plugins.viewAction': {
+    params: { pluginId: string; viewId: string; params?: PluginViewParams } & PluginViewActionInput
+    result: PluginViewActionResult
+  }
+  // Runs an action a plugin declares for Search. Its answer may open a pane of the plugin; like a
+  // view's, a failure is `ok: false` with why, never an error.
+  'plugins.actionRun': {
+    params: { pluginId: string; actionId: string }
+    result: PluginViewActionResult
+  }
+  // What the plugins that are on declare for the composer's `@` menu and for links in replies.
+  'plugins.refs': { params: void; result: { plugins: PluginRefSource[] } }
+  // The items a plugin's mention source offers for what was typed after the `@`. A script that
+  // fails, hangs or answers badly gives `ok: false` with why, never an error.
+  'plugins.mentionSearch': {
+    params: { pluginId: string; source: string; query: string }
+    result: PluginMentionResult
+  }
+  // The card a plugin gives for a link in a reply, when it names the address.
+  'plugins.linkCard': {
+    params: { pluginId: string; link: string; url: string }
+    result: PluginLinkResult
+  }
+  // The commands, roles, themes or templates of the plugins that are on, with each one's file.
+  'plugins.resources': {
+    params: { kind: 'commands' | 'roles' | 'themes' | 'templates' }
+    result: { items: PluginResource[] }
+  }
+  // Kettu's commands that the plugins that are on and the user's own folder hold, for the slash list.
+  'commands.list': { params: void; result: { commands: KettuCommand[] } }
+  // Kettu's roles that the plugins that are on and the user's own folder hold, for New session.
+  'roles.list': { params: void; result: { roles: KettuRole[] } }
   // Workflows: the user's library. See workflow; an older host also sends the ones it shipped with.
   'workflows.list': { params: void; result: WireWorkflowEntry[] }
   'workflows.read': {
@@ -2101,6 +2200,22 @@ export type DeviceResult<M extends HostMethod> = HostContract[M] extends { devic
   ? R
   : HostResult<M>
 
+/**
+ * The methods that managed Claude Code's and Codex's plugins, which Kettu no longer does. A host
+ * answers them with an error that says so.
+ */
+export const REMOVED_PLUGIN_METHODS = [
+  'market.plugins',
+  'market.pluginDetails',
+  'market.pluginLogo',
+  'market.installPlugin',
+  'market.uninstallPlugin',
+  'market.setPluginEnabled',
+  'market.addMarketplace',
+  'market.removeMarketplace',
+  'market.installCommunityPlugin',
+] as const
+
 export const HOST_METHODS = [
   'agents.list',
   'agents.check',
@@ -2151,14 +2266,7 @@ export const HOST_METHODS = [
   'market.cancelConnect',
   'market.disconnect',
   'market.connections',
-  'market.plugins',
-  'market.pluginDetails',
-  'market.pluginLogo',
-  'market.installPlugin',
-  'market.uninstallPlugin',
-  'market.setPluginEnabled',
-  'market.addMarketplace',
-  'market.removeMarketplace',
+  'market.ownPlugins',
   'market.skills',
   'market.skillRepository',
   'market.addSkill',
@@ -2171,7 +2279,6 @@ export const HOST_METHODS = [
   'market.communityListing',
   'market.communityWorkflow',
   'market.communityInstalled',
-  'market.installCommunityPlugin',
   'market.addCommunityWorkflow',
   'market.reportCommunity',
   'market.bundlePrepare',
@@ -2185,6 +2292,8 @@ export const HOST_METHODS = [
   'market.deleteListing',
   'market.versionFiles',
   'market.checkFolder',
+  'market.convertFolder',
+  'market.convertListing',
   'market.publishFolder',
   'projects.list',
   'projects.add',
@@ -2270,6 +2379,29 @@ export const HOST_METHODS = [
   'routines.cancelRun',
   'routines.runs',
   'routines.markSeen',
+  'plugins.list',
+  'plugins.inspect',
+  'plugins.install',
+  'plugins.discard',
+  'plugins.uninstall',
+  'plugins.setEnabled',
+  'plugins.setSetting',
+  'plugins.setSecret',
+  'plugins.setChannelKinds',
+  'plugins.reload',
+  'plugins.checkUpdates',
+  'plugins.applyUpdate',
+  'plugins.declineUpdate',
+  'plugins.rollBack',
+  'plugins.viewData',
+  'plugins.viewAction',
+  'plugins.actionRun',
+  'plugins.refs',
+  'plugins.mentionSearch',
+  'plugins.linkCard',
+  'plugins.resources',
+  'commands.list',
+  'roles.list',
   'workflows.list',
   'workflows.read',
   'workflows.add',
@@ -2441,6 +2573,7 @@ export type HostEvent =
   | { type: 'market.publishedChanged' }
   // To the windows showing a session: its agent's open_settings, Settings at a row.
   | { type: 'settings.open'; section: SettingsSection; item: string | null; row: string }
+  | { type: 'plugins.changed' } // an installed plugin changed; a page showing them reads again
   | { type: 'memory.changed' } // Kettu's memory or its switch changed; a page showing it reads again
   // A server's sign-in changed; `loginId` and `error` close a Connect the window started.
   | {

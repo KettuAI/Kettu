@@ -36,12 +36,14 @@ import { bytes } from '@renderer/lib/format'
 import { host } from '@renderer/lib/host'
 import { cn } from '@renderer/lib/utils'
 import { WorkflowChart } from '@renderer/features/tasks/workflow-chart'
-import { tileArt } from '../../marketplace/tile-art'
+import { permissionRows } from '../../marketplace/plugin-model'
+import { kettuPluginSubject, tileArt } from '../../marketplace/tile-art'
 import { Clamp } from '../clamp'
 import { Diff } from '../markdown'
 import { useEntry, useEntryAnimation } from '../use-thread'
 import { useAnswering } from './use-answering'
 
+const MAX_LIST_HEIGHT = 140
 const EVERY_AGENT = ['claude-code', 'codex', 'opencode', 'pi'] as const
 // The agents that do a workflow's steps.
 const STEP_AGENTS = ['claude-code', 'codex'] as const
@@ -65,7 +67,9 @@ function PublishTile({ item }: { item: Ask['item'] }) {
               id: item.slug,
               category: null,
             }
-          : { kind: 'mcp', id: item.slug, brand: null },
+          : item.kind === 'agent-plugin'
+            ? kettuPluginSubject({ name: item.slug })
+            : { kind: 'mcp', id: item.slug, brand: null },
   )
   const glyph = art.type === 'glyph' ? art : null
   return (
@@ -173,11 +177,14 @@ function Facts({ entry, visibility }: { entry: Ask; visibility: ReactNode }) {
   const { t } = useTranslation('session')
   const [filesOpen, setFilesOpen] = useState(false)
   const publish = entry.action === 'publish'
-  // The chart above draws a workflow's steps.
-  const adds = entry.workflow ? entry.adds.filter((group) => group.label !== 'steps') : entry.adds
+  // The chart above draws a workflow's steps, and a plugin's script has a row of its own.
+  const adds = entry.adds.filter(
+    (group) => !(entry.workflow && group.label === 'steps') && group.label !== 'script',
+  )
   return (
     <dl className="ks-pub-dl">
       {visibility}
+      {publish && entry.converted && <Converted converted={entry.converted} />}
       {publish && entry.fromTask && <FromTask from={entry.fromTask} />}
       {adds.length > 0 && (
         <div>
@@ -194,6 +201,21 @@ function Facts({ entry, visibility }: { entry: Ask; visibility: ReactNode }) {
                 </span>
               </span>
             ))}
+          </dd>
+        </div>
+      )}
+      {publish && entry.plugin && <PluginScript plugin={entry.plugin} />}
+      {publish && entry.plugin && entry.plugin.notes.length > 0 && (
+        <div>
+          <dt>{t('marketPublish.pluginLeftOut')}</dt>
+          <dd>
+            <LeftOutList>
+              {entry.plugin.notes.map((note) => (
+                <li key={note}>
+                  <span>{note}</span>
+                </li>
+              ))}
+            </LeftOutList>
           </dd>
         </div>
       )}
@@ -279,7 +301,7 @@ function Facts({ entry, visibility }: { entry: Ask; visibility: ReactNode }) {
             {entry.manifest && <Check>{entry.manifest}</Check>}
             <Check>{t('marketPublish.noSecrets')}</Check>
             <Check>
-              {entry.runs.length === 0
+              {entry.runs.length === 0 && !entry.plugin?.script
                 ? t('marketPublish.runsNothing')
                 : t('marketPublish.withinLimits')}
             </Check>
@@ -287,6 +309,122 @@ function Facts({ entry, visibility }: { entry: Ask; visibility: ReactNode }) {
         </div>
       )}
     </dl>
+  )
+}
+
+/** A list that is cut at a height, with a button that shows the rest. */
+function LeftOutList({ children }: { children: ReactNode }) {
+  const { t } = useTranslation('session')
+  return (
+    <Clamp maxHeight={MAX_LIST_HEIGHT} more={t('marketPublish.showAll')}>
+      <ul className="ks-pub-left" data-selectable="">
+        {children}
+      </ul>
+    </Clamp>
+  )
+}
+
+/** A Kettu plugin's script and what it may do, with the high permissions marked as an install does. */
+function PluginScript({ plugin }: { plugin: NonNullable<Ask['plugin']> }) {
+  const { t } = useTranslation('session')
+  const { t: market } = useTranslation('marketplace')
+  if (!plugin.script) return null
+  const rows = permissionRows(plugin.permissions)
+  return (
+    <div>
+      <dt>{t('marketPublish.script.label')}</dt>
+      <dd className="ks-pub-adds">
+        <span className="ks-pub-mono">{plugin.script.entry}</span>
+        {rows.length === 0 && (
+          <span className="ks-pub-faint">{t('marketPublish.script.noPermissions')}</span>
+        )}
+        {rows.map((row) => (
+          <span key={row.permission} className="ks-pub-perm" data-risk={row.risk}>
+            <b>
+              {market(row.nameKey as 'plugin.permission.tools.name')}
+              {row.domain && <span className="ks-pub-mono">{row.domain}</span>}
+              {row.risk === 'high' && (
+                <span className="ks-pub-high">{market('plugin.risk.high')}</span>
+              )}
+            </b>
+            <small>
+              {market(row.descriptionKey as 'plugin.permission.tools.description', {
+                domain: row.domain ?? undefined,
+              })}
+            </small>
+          </span>
+        ))}
+        <small className="ks-pub-faint">{t('marketPublish.script.onlyKettu')}</small>
+      </dd>
+    </div>
+  )
+}
+
+/**
+ * What a conversion made of a Claude Code or Codex plugin: what came over, what did not and why,
+ * and what changed on the way, for the user to review before it is published.
+ */
+function Converted({ converted }: { converted: NonNullable<Ask['converted']> }) {
+  const { t } = useTranslation('session')
+  const changed = converted.notes.filter((note) => note.name !== '')
+  return (
+    <div>
+      <dt>{t('marketPublish.converted.label')}</dt>
+      <dd className="ks-pub-from">
+        <span data-selectable="">
+          {t('marketPublish.converted.from', {
+            harness: t(`marketPublish.harness.${converted.from}`),
+          })}
+        </span>
+        {converted.carried.length > 0 && (
+          <span className="ks-pub-uploads">
+            <span className="ks-pub-faint">{t('marketPublish.converted.carried')}</span>
+            <span>
+              {converted.carried
+                .map((group) =>
+                  t(`marketPublish.converted.count.${group.label}`, {
+                    count: group.items.length,
+                    defaultValue: `${group.items.length} ${group.label}`,
+                  }),
+                )
+                .join(', ')}
+            </span>
+          </span>
+        )}
+        {converted.leftOut.length === 0 ? (
+          <span className="ks-pub-faint">{t('marketPublish.converted.nothingLeftOut')}</span>
+        ) : (
+          <>
+            <span className="ks-pub-faint">
+              {t('marketPublish.converted.leftOut', { count: converted.leftOut.length })}
+            </span>
+            <LeftOutList>
+              {converted.leftOut.map((item, index) => (
+                <li key={`${item.kind}:${item.name}:${index}`}>
+                  <span className="ks-pub-mono">
+                    {t(`marketPublish.converted.kind.${item.kind}`)} {item.name}
+                  </span>
+                  <span className="ks-pub-faint">{item.text ?? item.message}</span>
+                </li>
+              ))}
+            </LeftOutList>
+          </>
+        )}
+        {changed.length > 0 && (
+          <>
+            <span className="ks-pub-faint">{t('marketPublish.converted.changed')}</span>
+            <LeftOutList>
+              {changed.map((item, index) => (
+                <li key={`${item.name}:${index}`}>
+                  <span className="ks-pub-mono">{item.name}</span>
+                  <span className="ks-pub-faint">{item.text ?? item.message}</span>
+                </li>
+              ))}
+            </LeftOutList>
+          </>
+        )}
+      </dd>
+    </div>
   )
 }
 
@@ -567,18 +705,22 @@ function PublishSettled({ entry }: { entry: Entry }) {
   const name = entry.item.name
   const unlist = entry.action === 'unlist'
   const busy = outcome.kind === 'publishing' || outcome.kind === 'unlisting'
-  const done = outcome.kind === 'published' || outcome.kind === 'unlisted'
+  const held = outcome.kind === 'published' && outcome.held === true
+  const done = (outcome.kind === 'published' && !held) || outcome.kind === 'unlisted'
   const failed = outcome.kind === 'failed'
   const glyph = done
     ? CheckmarkCircle02Icon
     : failed
       ? Alert02Icon
-      : outcome.kind === 'later'
+      : held || outcome.kind === 'later'
         ? Clock01Icon
         : Cancel01Icon
   const title =
     outcome.kind === 'published'
-      ? t('marketPublish.outcome.published', { name, version: outcome.version })
+      ? t(held ? 'marketPublish.outcome.held' : 'marketPublish.outcome.published', {
+          name,
+          version: outcome.version,
+        })
       : outcome.kind === 'unlisted'
         ? t('marketPublish.outcome.unlisted', { name })
         : outcome.kind === 'publishing'
@@ -592,7 +734,14 @@ function PublishSettled({ entry }: { entry: Entry }) {
               : t(`marketPublish.outcome.${outcome.kind}`, { name })
   const meta =
     outcome.kind === 'published'
-      ? `@${outcome.handle}/${entry.item.slug} · ${t(`marketPublish.visibility.${entry.visibility}`)}`
+      ? held
+        ? [
+            t('marketPublish.heldMeta'),
+            entry.previous ? t('marketPublish.heldStays', { previous: entry.previous }) : null,
+          ]
+            .filter(Boolean)
+            .join(' · ')
+        : `@${outcome.handle}/${entry.item.slug} · ${t(`marketPublish.visibility.${entry.visibility}`)}`
       : !busy && !done && !failed && !unlist
         ? t('marketPublish.keptDraft')
         : null

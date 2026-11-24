@@ -160,7 +160,9 @@
       "handleTaken": "这个发布者名已经有人用了。",
       "noPublisher": "发布之前先设置发布者名。",
       "tooManyListings": "一个账号能发布的条目有上限，这个账号已经到了。",
-      "conflict": "这个条目刚好被同时发布了，请再试一次。"
+      "conflict": "这个条目刚好被同时发布了，请再试一次。",
+      "scriptNotAllowed": "带脚本的插件暂时只有 Kettu 自己的发布者能发布。",
+      "kindClosed": "Harness 插件不再接收新版本，请转换成 Kettu 插件再发布。"
     }
   },
   "agentHost": {
@@ -282,6 +284,8 @@
     "tooManySkills": "Kettu 最多保存 {{max}} 个 Skill",
     "repeatedServer": "已经有一个叫“{{name}}”的服务器",
     "repeatedSkill": "已经有一个叫“{{name}}”的 Skill",
+    "pluginItem": "“{{name}}”是随插件装上的，只能随插件一起移除。请移除这个插件。",
+    "pluginItemAdded": "“{{name}}”只能由插件添加",
     "agentName": "智能体的名字要在 1 到 {{max}} 个字符之间"
   },
   "signIns": {

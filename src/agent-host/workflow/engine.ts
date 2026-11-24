@@ -52,6 +52,7 @@ import {
   historyOf,
   type PickFacts,
   type PickInput,
+  type RoleHint,
   type WorkflowAgent,
 } from './picks'
 import { againPrompt, notePrompt, reminderPrompt, resumePrompt, stepPrompt } from './prompts'
@@ -71,6 +72,8 @@ export interface TaskStepStart {
   prompt: string
   title: string
   task: SessionTaskRef
+  /** The step's role, by its reference; its session is given the role's instructions. */
+  role?: string
 }
 
 export interface TaskSessions {
@@ -107,7 +110,24 @@ export interface TaskDocuments {
   openComments(artifactId: string): Promise<string[]>
 }
 
+/** A step of a task as its start and its end are told: no note, report or text of the task. */
+export interface TaskStepEvent {
+  taskId: string
+  title: string
+  workflowName: string
+  projectPath: string
+  stepId: string
+  stepName: string
+  /** The round of the step, from 1. */
+  round: number
+  agentId: AgentId | null
+  /** The outcome the step ended with; null for a step that started or was sent back. */
+  outcome: string | null
+}
+
 export interface TaskEvents {
+  /** A step started working, or ended: its outcome was followed or the person sent it back. */
+  step?(event: 'started' | 'ended', info: TaskStepEvent): void
   changed(view: TaskView): void
   removed(taskId: string): void
   /** The task starts to need the user, or it ended or was cancelled. */
@@ -141,6 +161,8 @@ export interface TaskEngineDeps {
   optionsOf(pick: StepPick): Record<string, string | boolean>
   /** The pick the tray's option values stand for. */
   pickOf(agentId: AgentId, options: Record<string, string | boolean>): StepPick
+  /** What a role, by its reference, suggests; null when no role has it. */
+  roleHint?(ref: string): Promise<RoleHint | null>
   events: TaskEvents
   /** Step sessions working at once across every task, as the user set it. */
   workingLimit?(): number
@@ -665,6 +687,7 @@ export class TaskEngine implements TaskSessionHooks {
           prompt: stepPrompt(task, round, where),
           title: `${task.title} · ${step.name}`,
           task: { taskId, stepId: round.stepId, roundId },
+          ...(step.role === undefined ? {} : { role: step.role }),
         })
         sessionId = summary.id
         round.sessionId = summary.id
@@ -678,6 +701,7 @@ export class TaskEngine implements TaskSessionHooks {
         }
         round.state = 'working'
         this.save(task)
+        this.stepEvent(task, round, 'started')
       })
     } catch (error) {
       await this.locked(() => {
@@ -687,6 +711,21 @@ export class TaskEngine implements TaskSessionHooks {
         this.pump()
       })
     }
+  }
+
+  private stepEvent(task: TaskRecord, round: RoundRecord, event: 'started' | 'ended'): void {
+    const step = stepOf(task.workflow, round.stepId)
+    this.deps.events.step?.(event, {
+      taskId: task.id,
+      title: task.title,
+      workflowName: task.workflowName,
+      projectPath: task.projectPath,
+      stepId: round.stepId,
+      stepName: step?.name ?? round.stepId,
+      round: round.n,
+      agentId: round.by?.agentId ?? null,
+      outcome: event === 'ended' ? round.outcome : null,
+    })
   }
 
   /** Makes a parallel branch's worktree when its first step starts; true when it is new. */
@@ -984,7 +1023,7 @@ export class TaskEngine implements TaskSessionHooks {
           accepted: true,
           checks,
           next: { kind: 'pick', steps: needed },
-          facts: this.factsFor(task, needed),
+          facts: await this.factsFor(task, needed),
         }
       }
       const next = await this.afterReport(task, round)
@@ -1120,6 +1159,7 @@ export class TaskEngine implements TaskSessionHooks {
     const step = stepOf(task.workflow, round.stepId)!
     const outcome = outcomeOf(step, round.outcome ?? '')!
     round.state = 'done'
+    this.stepEvent(task, round, 'ended')
     round.endedAt ??= this.now()
     round.stuck = null
     const key = arrowKey(step.id, outcome.name)
@@ -1323,6 +1363,7 @@ export class TaskEngine implements TaskSessionHooks {
       const key = arrowKey(round.stepId, null)
       task.arrows[key] = (task.arrows[key] ?? 0) + 1
       round.state = 'done'
+      this.stepEvent(task, round, 'ended')
       for (const [stepId, held] of Object.entries(task.ahead)) {
         if (held.roundId === round.id) delete task.ahead[stepId]
       }
@@ -1548,14 +1589,20 @@ export class TaskEngine implements TaskSessionHooks {
 
   // Helpers.
 
-  private factsFor(task: TaskRecord, stepIds: string[]): PickFacts {
+  private async factsFor(task: TaskRecord, stepIds: string[]): Promise<PickFacts> {
     const steps = stepIds.map((id) => stepOf(task.workflow, id)!).filter(Boolean)
+    const roles = new Map<string, RoleHint>()
+    for (const ref of new Set(steps.flatMap((step) => (step.role ? [step.role] : [])))) {
+      const hint = await this.deps.roleHint?.(ref)
+      if (hint) roles.set(ref, hint)
+    }
     return factsFor(
       task,
       steps,
       this.deps.agents(),
       (agent) => this.deps.library.autoPick(agent.id, agent.apiKey).allowed,
       (stepId) => historyOf(this.tasks.values(), task.workflowId, stepId),
+      roles,
     )
   }
 

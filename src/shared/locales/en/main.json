@@ -166,7 +166,9 @@
       "handleTaken": "Another publisher has this handle.",
       "noPublisher": "Set a publisher handle before publishing.",
       "tooManyListings": "An account has a limit on its listings, and this one has reached it.",
-      "conflict": "This listing was published at the same time. Try again."
+      "conflict": "This listing was published at the same time. Try again.",
+      "scriptNotAllowed": "A plugin with a script can only be published by Kettu’s own publisher for now.",
+      "kindClosed": "Claude Code and Codex plugins take no new versions. Convert it to a Kettu plugin instead."
     }
   },
   "agentHost": {
@@ -288,6 +290,8 @@
     "tooManySkills": "Kettu keeps at most {{max}} skills",
     "repeatedServer": "“{{name}}” repeats another server’s name",
     "repeatedSkill": "“{{name}}” repeats another skill’s name",
+    "pluginItem": "“{{name}}” came with a plugin and leaves only with it. Remove the plugin instead.",
+    "pluginItemAdded": "“{{name}}” can only be added by a plugin",
     "agentName": "An agent’s name must be 1 to {{max}} characters"
   },
   "signIns": {

@@ -501,6 +501,45 @@ describe('the host files', () => {
     ).toEqual({ version: 1, sessions: [{ ...session, outside: { effort: 'high' } }] })
   })
 
+  it('keeps the skills and servers commands added to a session, and drops what does not read', () => {
+    const added = { ...session, commandTools: { skills: ['code-review'], mcp: ['github'] } }
+    expect(parseSessionsFile({ sessions: [added] })).toEqual({ version: 1, sessions: [added] })
+    expect(
+      parseSessionsFile({
+        sessions: [{ ...session, commandTools: { skills: ['a', '', 3], mcp: 'github' } }],
+      }),
+    ).toEqual({
+      version: 1,
+      sessions: [{ ...session, commandTools: { skills: ['a'], mcp: [] } }],
+    })
+    for (const commandTools of [null, 'x', { skills: [], mcp: [] }]) {
+      expect(parseSessionsFile({ sessions: [{ ...session, commandTools }] })).toEqual({
+        version: 1,
+        sessions: [session],
+      })
+    }
+  })
+
+  it('keeps the role a session started as, whole, and drops what does not read', () => {
+    const role = { name: 'reviewer', title: 'Reviewer', instructions: 'Review it.' }
+    expect(parseSessionsFile({ sessions: [{ ...session, role }] })).toEqual({
+      version: 1,
+      sessions: [{ ...session, role }],
+    })
+    for (const bad of [
+      null,
+      'x',
+      { ...role, name: '' },
+      { ...role, instructions: '  ' },
+      { ...role, title: 3 },
+    ]) {
+      expect(parseSessionsFile({ sessions: [{ ...session, role: bad }] })).toEqual({
+        version: 1,
+        sessions: [session],
+      })
+    }
+  })
+
   it('keeps the last outside message its thread holds, and drops what does not read', () => {
     const taken = { ...session, outsideTail: 'uuid-1' }
     expect(parseSessionsFile({ sessions: [taken] })).toEqual({ version: 1, sessions: [taken] })

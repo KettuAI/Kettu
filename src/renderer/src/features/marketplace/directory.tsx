@@ -1,5 +1,5 @@
-// The Marketplace's directory: its tabs, search and Add over sections of plugins, skills, MCP
-// servers and workflows. Each source fills its sections as it answers; the rest show at once.
+// The Marketplace's directory: its tabs, search and Add over sections of skills, MCP servers and
+// workflows. Each source fills its sections as it answers; the rest show at once.
 
 import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from 'react'
 import {
@@ -10,16 +10,13 @@ import {
   GithubIcon,
   PlugSocketIcon,
   RefreshIcon,
-  Store01Icon,
 } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
 import type { TFunction } from 'i18next'
 import type {
-  CatalogPlugin,
   CatalogServer,
   CatalogSkill,
   MarketCatalog,
-  MarketPlugins,
   MarketSkills,
   SkillRepository,
   SkillTrust,
@@ -39,6 +36,7 @@ import { Button } from '@renderer/components/affect/button'
 import { mediumAgo } from '@renderer/lib/format'
 import { currentLocale } from '@renderer/lib/i18n'
 import { isMac, isWeb } from '@renderer/lib/platform'
+import { readJson, writeJson } from '@renderer/lib/storage'
 import { useHostScope } from '@renderer/stores/host-scope'
 import { useAccountStore } from '@renderer/stores/account'
 import {
@@ -53,25 +51,21 @@ import { openMarketplace, setMarketplaceTab, type MarketplaceTab } from '@render
 import { useHostName, useNamesHosts, useWindowHost } from '@renderer/stores/window-host'
 import { installSkill } from './actions'
 import { CommunityRow, CommunitySignedOut } from './community'
-import { AddMarketplaceDialog, AddServerDialog, AddSkillDialog } from './dialogs'
-import { useAgentName } from './hooks'
+import { AddServerDialog, AddSkillDialog } from './dialogs'
+import { usePluginInstall } from './plugin-hooks'
+import { AddPluginGithubDialog } from './plugin-install'
 import { MarketAway } from './parts'
 import { InstalledView } from './installed'
 import { PublishedView, PublishMenu } from './published'
 import { usePublishedStore, useShowsPublished } from './published-hooks'
 import {
-  byInstalls,
-  categoryTitle,
   catalogServers,
-  fromAnthropic,
   fromCatalog,
   itemKey,
   matchesQuery,
-  pluginMatches,
   skillFromAnthropic,
   skillMatches,
 } from './model'
-import { PluginRow } from './plugins'
 import {
   AddButton,
   ItemRow,
@@ -88,7 +82,6 @@ import { addWorkflowFromFile, retryWorkflows, useWorkflows } from './workflow-ac
 import { AddWorkflowDialog, WorkflowRow, WorkflowSections } from './workflows'
 import {
   communitySubject,
-  pluginSubject,
   serverSubject,
   skillSubject,
   workflowSubject,
@@ -106,8 +99,10 @@ const MORE_STEP = 60
 /** How long the search field rests before the lists are filtered and the registry asked. */
 const SEARCH_DELAY_MS = 300
 
-/** How many featured plugins and official skills the All tab's Featured section mixes in. */
-const FEATURED_PLUGINS = 6
+/** How many of Kettu's own plugins the Plugins tab's Featured section shows as cards. */
+const FEATURED_PLUGINS = 3
+
+/** How many official skills the All tab's Featured section mixes in. */
 const FEATURED_SKILLS = 3
 /** The official skills most people reach for, in the order Featured shows them. */
 const FEATURED_SKILL_NAMES = ['pdf', 'docx', 'xlsx', 'pptx', 'skill-creator', 'webapp-testing']
@@ -118,7 +113,6 @@ const featuredRank = (name: string): number => {
 
 type Entry =
   | { kind: 'mcp'; key: string; title: string; subject: TileSubject; server: CatalogServer }
-  | { kind: 'plugin'; key: string; title: string; subject: TileSubject; plugin: CatalogPlugin }
   | { kind: 'skill'; key: string; title: string; subject: TileSubject; skill: CatalogSkill }
   | {
       kind: 'workflow'
@@ -160,13 +154,6 @@ const mcpEntry = (server: CatalogServer): Entry => ({
   subject: serverSubject(server),
   server,
 })
-const pluginEntry = (plugin: CatalogPlugin): Entry => ({
-  kind: 'plugin',
-  key: itemKey({ kind: 'plugin', harness: plugin.harness, id: plugin.id }),
-  title: plugin.title,
-  subject: pluginSubject(plugin),
-  plugin,
-})
 const skillEntry = (skill: CatalogSkill): Entry => ({
   kind: 'skill',
   key: itemKey({ kind: 'skill', id: skill.id }),
@@ -203,8 +190,6 @@ function interleave<T>(...lists: T[][]): T[] {
 interface Sources {
   catalog: MarketCatalog | null
   catalogPending: boolean
-  plugins: MarketPlugins | null
-  pluginsPending: boolean
   skills: MarketSkills | null
   skillsPending: boolean
   workflows: WireWorkflowEntry[]
@@ -218,7 +203,7 @@ interface Sources {
 /** The Community kind a tab lists; null for all of them. */
 const tabKind = (tab: MarketplaceTab): PublishKind | null =>
   tab === 'plugins'
-    ? 'plugin'
+    ? 'agent-plugin'
     : tab === 'skills'
       ? 'skill'
       : tab === 'mcp'
@@ -226,6 +211,54 @@ const tabKind = (tab: MarketplaceTab): PublishKind | null =>
         : tab === 'workflow'
           ? 'workflow'
           : null
+
+/**
+ * The Plugins tab without a query: Kettu's own plugins as cards under Featured, the account's own
+ * Only me items, then the Community's by installs. A service that lists no plugins yet shows no
+ * section, and the tab its empty state.
+ */
+function pluginSections(src: Sources, t: TFunction<'marketplace'>): Section[] {
+  const scope = communityScope('plugins', '')
+  const pages = src.communityPages[communityScopeKey(scope)]
+  if (!pages || (pages.at === 0 && pages.loading)) {
+    return [{ id: 'plugins-pending', title: t('sections.plugins'), entries: [], pending: 3 }]
+  }
+  if (!pages.signedIn) {
+    return [
+      {
+        id: 'community',
+        title: t('sections.community'),
+        entries: [],
+        pending: 0,
+        note: <CommunitySignedOut />,
+      },
+    ]
+  }
+  const featured = pages.items.filter((item) => item.official).slice(0, FEATURED_PLUGINS)
+  const shown = new Set(featured.map((item) => item.id))
+  return [
+    {
+      id: 'featured',
+      title: t('sections.featured'),
+      entries: featured.map(communityEntry),
+      pending: 0,
+      cards: true,
+    },
+    {
+      id: 'yours',
+      title: t('sections.yours'),
+      entries: pages.yours.map(communityEntry),
+      pending: 0,
+    },
+    {
+      id: 'community',
+      title: t('sections.community'),
+      entries: pages.items.filter((item) => !shown.has(item.id)).map(communityEntry),
+      pending: 0,
+      more: moreOf(src, scope, pages),
+    },
+  ]
+}
 
 /** The part of the Kettu Marketplace's directory a tab shows for a query, or without one. */
 function communityScope(tab: MarketplaceTab, query: string): CommunityScope {
@@ -238,8 +271,6 @@ function useSources(): Sources {
   const { useMarketplaceStore } = useHostScope()
   const catalog = useMarketplaceStore((s) => s.catalog)
   const catalogPending = useMarketplaceStore((s) => !s.catalog && !s.catalogError)
-  const plugins = useMarketplaceStore((s) => s.plugins)
-  const pluginsPending = useMarketplaceStore((s) => !s.plugins && !s.pluginsError)
   const skills = useMarketplaceStore((s) => s.skills)
   const skillsPending = useMarketplaceStore((s) => !s.skills && !s.skillsError)
   const search = useMarketplaceStore((s) => s.search)
@@ -250,8 +281,6 @@ function useSources(): Sources {
     () => ({
       catalog,
       catalogPending,
-      plugins,
-      pluginsPending,
       skills,
       skillsPending,
       workflows,
@@ -266,8 +295,6 @@ function useSources(): Sources {
     [
       catalog,
       catalogPending,
-      plugins,
-      pluginsPending,
       skills,
       skillsPending,
       workflows,
@@ -422,24 +449,19 @@ function sectionTitle(id: string, t: TFunction<'marketplace'>): string {
   }
 }
 
-/** All without a query: Featured, From Anthropic, For Codex and workflow, then the MCP categories. */
+/** All without a query: Featured, From Anthropic and workflow, then the MCP categories. */
 function allSections(src: Sources, t: TFunction<'marketplace'>): Section[] {
-  const plugins = [...(src.plugins?.catalog ?? [])].sort(byInstalls)
   const skills = src.skills?.catalog ?? []
   const featuredMcp = src.catalog?.sections.find((s) => s.id === 'featured')?.items ?? []
   const featured = interleave(
     featuredMcp.map(mcpEntry),
-    plugins
-      .filter((p) => p.featured)
-      .slice(0, FEATURED_PLUGINS)
-      .map(pluginEntry),
     skills
       .filter((s) => s.official)
       .sort((a, b) => featuredRank(a.name) - featuredRank(b.name))
       .slice(0, FEATURED_SKILLS)
       .map(skillEntry),
   )
-  const pendingRows = (src.pluginsPending ? 2 : 0) + (src.skillsPending ? 1 : 0)
+  const pendingRows = src.skillsPending ? 1 : 0
   return [
     {
       id: 'featured',
@@ -451,17 +473,8 @@ function allSections(src: Sources, t: TFunction<'marketplace'>): Section[] {
     {
       id: 'anthropic',
       title: t('sections.anthropic'),
-      entries: [
-        ...plugins.filter(fromAnthropic).map(pluginEntry),
-        ...skills.filter(skillFromAnthropic).map(skillEntry),
-      ],
+      entries: skills.filter(skillFromAnthropic).map(skillEntry),
       pending: pendingRows,
-    },
-    {
-      id: 'codex',
-      title: t('sections.codex'),
-      entries: plugins.filter((p) => p.harness === 'codex').map(pluginEntry),
-      pending: src.pluginsPending ? 4 : 0,
     },
     {
       id: 'workflows',
@@ -471,43 +484,6 @@ function allSections(src: Sources, t: TFunction<'marketplace'>): Section[] {
     },
     ...mcpSections(src, t, 'featured'),
     ...communitySections(src, t, null),
-  ]
-}
-
-/** Plugins without a query: the featured, then each category, the largest first. */
-function pluginSections(src: Sources, t: TFunction<'marketplace'>): Section[] {
-  if (!src.plugins) {
-    return src.pluginsPending
-      ? [
-          { id: 'plugins-pending-1', title: null, entries: [], pending: 6 },
-          { id: 'plugins-pending-2', title: null, entries: [], pending: 4 },
-        ]
-      : communitySections(src, t, 'plugin')
-  }
-  const plugins = [...src.plugins.catalog].sort(byInstalls)
-  const groups = new Map<string, CatalogPlugin[]>()
-  for (const plugin of plugins) {
-    const category = plugin.category?.trim().toLocaleLowerCase() ?? ''
-    groups.set(category, [...(groups.get(category) ?? []), plugin])
-  }
-  const categories = [...groups]
-    .sort(([a, x], [b, y]) => (a === '' ? 1 : b === '' ? -1 : y.length - x.length))
-    .map(([category, list]) => ({
-      id: `category-${category}`,
-      title: category ? categoryTitle(category) : t('sections.otherPlugins'),
-      entries: list.map(pluginEntry),
-      pending: 0,
-    }))
-  return [
-    {
-      id: 'featured-plugins',
-      title: t('sections.featured'),
-      entries: plugins.filter((p) => p.featured).map(pluginEntry),
-      pending: 0,
-      cards: true,
-    },
-    ...categories,
-    ...communitySections(src, t, 'plugin'),
   ]
 }
 
@@ -579,17 +555,6 @@ function foundSections(
   registry: string | null,
 ): Section[] {
   const sections: Section[] = []
-  if (tab === 'all' || tab === 'plugins') {
-    sections.push({
-      id: 'found-plugins',
-      title: t('sections.plugins'),
-      entries: (src.plugins?.catalog ?? [])
-        .filter((p) => pluginMatches(p, query))
-        .sort(byInstalls)
-        .map(pluginEntry),
-      pending: src.pluginsPending ? 2 : 0,
-    })
-  }
   if (tab === 'all' || tab === 'skills') {
     sections.push({
       id: 'found-skills',
@@ -648,7 +613,8 @@ export function Directory({ tab }: { tab: MarketplaceTab }) {
   const scope = useHostScope()
   const { useMarketplaceStore } = scope
   const query = useMarketplaceStore((s) => s.query)
-  const [dialog, setDialog] = useState<'mcp' | 'marketplace' | 'skill' | 'workflow' | null>(null)
+  const [dialog, setDialog] = useState<'mcp' | 'skill' | 'workflow' | 'plugin' | null>(null)
+  const pluginInstall = usePluginInstall()
   const namesHosts = useNamesHosts()
   const windowHost = useWindowHost()
   const hostName = useHostName()
@@ -720,6 +686,15 @@ export function Directory({ tab }: { tab: MarketplaceTab }) {
     const path = await scope.api.dialogs.openProject()
     if (path) void installSkill(scope, { kind: 'local', path }, 'all', `local:${path}`)
   }
+  const addPluginFolder = async () => {
+    const path = await scope.api.dialogs.openProject()
+    if (path) {
+      void pluginInstall.start(
+        { kind: 'local', path },
+        { onInstalled: () => setMarketplaceTab('installed') },
+      )
+    }
+  }
 
   return (
     <div className="ui-as-integrations k-mkt">
@@ -758,10 +733,26 @@ export function Directory({ tab }: { tab: MarketplaceTab }) {
                 items={[
                   { label: t('add.heading'), heading: true },
                   {
-                    label: t('add.marketplace'),
-                    description: t('add.marketplaceLine'),
-                    icon: Store01Icon,
-                    onSelect: () => setDialog('marketplace'),
+                    label: t('add.pluginGithub'),
+                    description: t('add.pluginGithubLine'),
+                    icon: GithubIcon,
+                    onSelect: () => setDialog('plugin'),
+                  },
+                  ...(isWeb
+                    ? []
+                    : [
+                        {
+                          label: t('add.pluginFolder'),
+                          description: t('add.pluginFolderLine'),
+                          icon: Folder01Icon,
+                          onSelect: () => void addPluginFolder(),
+                        },
+                      ]),
+                  {
+                    label: t('add.mcp'),
+                    description: t('add.mcpLine'),
+                    icon: PlugSocketIcon,
+                    onSelect: () => setDialog('mcp'),
                   },
                   {
                     label: t('add.skillGithub'),
@@ -779,12 +770,6 @@ export function Directory({ tab }: { tab: MarketplaceTab }) {
                           onSelect: () => void addFolder(),
                         },
                       ]),
-                  {
-                    label: t('add.mcp'),
-                    description: t('add.mcpLine'),
-                    icon: PlugSocketIcon,
-                    onSelect: () => setDialog('mcp'),
-                  },
                   {
                     label: t('add.workflowGithub'),
                     description: t('add.workflowGithubLine'),
@@ -813,6 +798,7 @@ export function Directory({ tab }: { tab: MarketplaceTab }) {
             )}
           </div>
         </div>
+        <HarnessPluginsNote />
         {published ? (
           <div key="published">
             <PublishedView query={filter} />
@@ -835,10 +821,6 @@ export function Directory({ tab }: { tab: MarketplaceTab }) {
           onOpenChange={(open) => setDialog(open ? 'mcp' : null)}
           onAdded={() => setMarketplaceTab('installed')}
         />
-        <AddMarketplaceDialog
-          open={dialog === 'marketplace'}
-          onOpenChange={(open) => setDialog(open ? 'marketplace' : null)}
-        />
         <AddSkillDialog
           open={dialog === 'skill'}
           onOpenChange={(open) => setDialog(open ? 'skill' : null)}
@@ -847,7 +829,43 @@ export function Directory({ tab }: { tab: MarketplaceTab }) {
           open={dialog === 'workflow'}
           onOpenChange={(open) => setDialog(open ? 'workflow' : null)}
         />
+        <AddPluginGithubDialog
+          open={dialog === 'plugin'}
+          onOpenChange={(open) => setDialog(open ? 'plugin' : null)}
+          install={pluginInstall}
+        />
+        {pluginInstall.dialogs}
       </MarketAway>
+    </div>
+  )
+}
+
+// Kept on this device in localStorage once the note was closed or the page left.
+const PLUGINS_NOTE_KEY = 'market-harness-plugins-note'
+
+/**
+ * Said once, the first time the Marketplace shows: Claude Code's and Codex's plugins are now
+ * managed in those tools.
+ */
+function HarnessPluginsNote() {
+  const { t } = useTranslation('marketplace')
+  const [shown, setShown] = useState(() => !readJson<boolean>(PLUGINS_NOTE_KEY, false))
+  useEffect(() => {
+    if (!shown) return
+    return () => void writeJson(PLUGINS_NOTE_KEY, true)
+  }, [shown])
+  if (!shown) return null
+  return (
+    <div className="k-mkt-notes">
+      <QuietNote
+        action={
+          <Button size="md" variant="ghost" onClick={() => setShown(false)}>
+            {t('notes.harnessPluginsDismiss')}
+          </Button>
+        }
+      >
+        {t('notes.harnessPlugins')}
+      </QuietNote>
     </div>
   )
 }
@@ -868,10 +886,10 @@ function Sections({
       ? foundSections(src, t, tab, query, registry)
       : tab === 'all'
         ? allSections(src, t)
-        : tab === 'plugins'
-          ? pluginSections(src, t)
-          : tab === 'skills'
-            ? skillSections(src, t)
+        : tab === 'skills'
+          ? skillSections(src, t)
+          : tab === 'plugins'
+            ? pluginSections(src, t)
             : [...mcpSections(src, t, null), ...communitySections(src, t, 'mcp-server')]
     return built.filter(
       (section) => section.entries.length > 0 || section.pending > 0 || section.note,
@@ -985,9 +1003,6 @@ function EntryRow({
   if (entry.kind === 'community') {
     return <CommunityRow item={entry.item} tab={tab} fresh={fresh} card={card} />
   }
-  if (entry.kind === 'plugin') {
-    return <PluginRow plugin={entry.plugin} tab={tab} fresh={fresh} card={card} />
-  }
   if (entry.kind === 'skill') {
     return <SkillRow skill={entry.skill} tab={tab} fresh={fresh} card={card} />
   }
@@ -1028,33 +1043,14 @@ function Notes({
   const { t } = useTranslation('marketplace')
   const src = useSources()
   const { useMarketplaceStore } = useHostScope()
-  const agentName = useAgentName()
   const catalogError = useMarketplaceStore((s) => s.catalogError)
-  const pluginsError = useMarketplaceStore((s) => s.pluginsError)
   const skillsError = useMarketplaceStore((s) => s.skillsError)
   const store = useMarketplaceStore.getState
   const scope = useHostScope()
   const workflows = useWorkflows()
   const notes: ReactNode[] = []
-  const plugins = tab === 'all' || tab === 'plugins'
   const skills = tab === 'all' || tab === 'skills'
   const mcp = tab === 'all' || tab === 'mcp'
-  if (plugins && pluginsError && !src.plugins) {
-    notes.push(
-      <QuietNote key="plugins" action={<Retry onRetry={() => store().loadPlugins(true)} />}>
-        {t('notes.plugins', { error: pluginsError })}
-      </QuietNote>,
-    )
-  }
-  if (plugins) {
-    for (const error of src.plugins?.errors ?? []) {
-      notes.push(
-        <QuietNote key={`plugins-${error.agentId}`}>
-          {t('notes.agentPlugins', { agent: agentName(error.agentId), error: error.message })}
-        </QuietNote>,
-      )
-    }
-  }
   // A host that lists its repositories says which failed in their own sections.
   if (skills && ((skillsError && !src.skills) || (src.skills?.error && !src.skills.repositories))) {
     notes.push(
@@ -1111,10 +1107,10 @@ function Empty({ tab, query }: { tab: MarketplaceTab; query: string }) {
   const { t } = useTranslation('marketplace')
   const [title, text] = query
     ? [t('search.noneTitle'), t('search.none', { query })]
-    : tab === 'plugins'
-      ? [t('empty.pluginsTitle'), t('empty.plugins')]
-      : tab === 'skills'
-        ? [t('empty.skillsTitle'), t('empty.skills')]
+    : tab === 'skills'
+      ? [t('empty.skillsTitle'), t('empty.skills')]
+      : tab === 'plugins'
+        ? [t('empty.pluginsTitle'), t(isWeb ? 'empty.pluginsWeb' : 'empty.plugins')]
         : [t('catalog.emptyTitle'), t('catalog.emptyText')]
   return (
     <div className="ui-as-rise ui-as-int-empty">

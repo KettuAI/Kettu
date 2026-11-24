@@ -4,6 +4,7 @@
 
 import type session from '@shared/locales/en/session.json'
 import { KETTU_SERVER, mcpCallsOf, type McpCall } from '@shared/mcp-call'
+import { isPluginToolName } from '@shared/plugins'
 import type { ToolEntry } from '@shared/thread'
 import { relativePath } from '@renderer/lib/format'
 import { i18n } from '@renderer/lib/i18n'
@@ -110,6 +111,7 @@ const TARGETS = {
   update_memory: ['title', 'id'],
   forget_memory: ['id'],
   marketplace_check: [{ path: 'path' }],
+  marketplace_convert: [{ path: 'path' }],
   marketplace_publish: [{ path: 'path' }],
   marketplace_mine: [],
   marketplace_unlist: ['listing'],
@@ -129,6 +131,8 @@ const known = (tool: string): tool is KettuTool => Object.hasOwn(TARGETS, tool)
 export interface CallNames {
   session(id: string): string | null
   terminal(id: string): string | null
+  /** The title of the plugin that gives a tool, by the tool's name on Kettu's MCP service. */
+  plugin(tool: string): string | null
 }
 
 type Args = Record<string, unknown>
@@ -179,12 +183,24 @@ function targetOf(
   return 'session' in target ? names.session(id) : names.terminal(id)
 }
 
+/**
+ * A plugin's tool, which Kettu lists as `<plugin>__<tool>`: the plugin by its title where the
+ * window knows it, else by the short name in the tool's own name, and the tool by its own name.
+ */
+function pluginTool(tool: string, names: CallNames | undefined): [string, string] | null {
+  if (!isPluginToolName(tool)) return null
+  const split = tool.indexOf('__')
+  return [names?.plugin(tool) ?? tool.slice(0, split), tool.slice(split + 2)]
+}
+
 /** A call's name: Kettu's tool by what it does, another server's as `server: tool`. */
-function nameOf(call: McpCall): string {
+function nameOf(call: McpCall, names: CallNames | undefined): string {
   if (call.server !== KETTU_SERVER) {
     return i18n.t('session:tool.mcp', { server: call.server, tool: call.tool })
   }
-  return known(call.tool) ? i18n.t(`session:kettuTool.${call.tool}`) : call.tool
+  if (known(call.tool)) return i18n.t(`session:kettuTool.${call.tool}`)
+  const plugin = pluginTool(call.tool, names)
+  return plugin ? i18n.t('session:tool.mcp', { server: plugin[0], tool: plugin[1] }) : call.tool
 }
 
 /**
@@ -201,16 +217,23 @@ export function mcpLabel(
   const [call] = calls
   if (calls.length > 1 || call!.server !== KETTU_SERVER) {
     // A script that calls several tools is named by them all.
-    const text = calls.map(nameOf).join(i18n.t('session:summary.nameSeparator'))
+    const text = calls
+      .map((one) => nameOf(one, names))
+      .join(i18n.t('session:summary.nameSeparator'))
     return { verb: null, target: text, kind: 'title' }
   }
   const tool = call!.tool
-  if (!known(tool)) return { verb: tool, target: null, kind: 'tool' }
+  if (!known(tool)) {
+    const plugin = pluginTool(tool, names)
+    return plugin
+      ? { verb: plugin[0], target: plugin[1], kind: 'tool' }
+      : { verb: tool, target: null, kind: 'tool' }
+  }
   const args = argsOf(entry, call!)
   let target: string | null = null
   for (const spec of TARGETS[tool] as readonly Target[]) {
     target = targetOf(spec, args, projectPath, names)
     if (target) break
   }
-  return { verb: nameOf(call!), target, kind: 'tool' }
+  return { verb: nameOf(call!, names), target, kind: 'tool' }
 }

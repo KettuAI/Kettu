@@ -113,16 +113,19 @@ export function ThemeTiles() {
       key={id}
       id={id}
       theme={theme}
-      source={item?.catalog ? 'catalog' : item ? 'file' : 'builtIn'}
+      source={item?.plugin ? 'plugin' : item?.catalog ? 'catalog' : item ? 'file' : 'builtIn'}
+      from={item?.plugin?.title}
       onExport={() => exportTheme(theme)}
-      {...(item && {
-        onReveal: () => run(() => window.kettu.themes.reveal(item.id)),
-        onRemove: (from: HTMLElement | null) => {
-          asker.current = from
-          setRemoving(item)
-          setRemoveOpen(true)
-        },
-      })}
+      // A plugin's theme is not a file of ours: it leaves with its plugin.
+      {...(item &&
+        !item.plugin && {
+          onReveal: () => run(() => window.kettu.themes.reveal(item.id)),
+          onRemove: (from: HTMLElement | null) => {
+            asker.current = from
+            setRemoving(item)
+            setRemoveOpen(true)
+          },
+        })}
     />
   )
 
@@ -199,6 +202,7 @@ function ThemeTile({
   id,
   theme,
   source,
+  from,
   onExport,
   onReveal,
   onRemove,
@@ -206,7 +210,9 @@ function ThemeTile({
   id: string
   theme: Theme | null
   /** Where it came from, which the tile names. */
-  source: 'builtIn' | 'file' | 'catalog'
+  source: 'builtIn' | 'file' | 'catalog' | 'plugin'
+  /** The plugin's title, for a theme a plugin brought. */
+  from?: string
   /** Without it, and without the others, the tile has no menu. */
   onExport?: () => void
   onReveal?: () => void
@@ -244,7 +250,7 @@ function ThemeTile({
           <b>{name}</b>
           {issues.length > 0 && <ContrastWarning issues={issues} />}
         </span>
-        <small>{t(`appearance.theme.${source}`)}</small>
+        <small>{t(`appearance.theme.${source}`, { plugin: from })}</small>
       </Toggle>
       {items.length > 0 && (
         <Dropdown

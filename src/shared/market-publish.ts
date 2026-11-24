@@ -3,7 +3,8 @@
 // the drafts a host keeps of what was not published.
 
 /** What a listing is: a skill, a workflow, a plugin of one harness, or an MCP server. */
-export type PublishKind = 'skill' | 'workflow' | 'plugin' | 'mcp-server'
+// `plugin` is a harness's own plugin; `agent-plugin` a Kettu plugin, in the Agent Plugins format.
+export type PublishKind = 'skill' | 'workflow' | 'plugin' | 'mcp-server' | 'agent-plugin'
 export type PublishHarness = 'claude-code' | 'codex'
 /** `unlisted`: taken out by its publisher; people who have it keep it and its updates. */
 export type ListingVisibility = 'public' | 'private' | 'unlisted'
@@ -35,7 +36,9 @@ export interface MarketPublisher {
 /**
  * One group of what an install adds, by a key the clients translate: `skills`, `commands`,
  * `agents`, `hooks` or `servers`; a workflow's are `steps`, `waits` and the `servers` and `skills`
- * its steps name.
+ * its steps name; a plugin's are `skills`, `servers`, `commands`, `roles`, `workflows`, `themes`
+ * and `templates`, each with the names of what it holds, and `script`, the permissions of a
+ * script it runs, present only when it runs one.
  */
 export interface PublishAdds {
   label: string
@@ -72,15 +75,26 @@ export interface VersionCheck {
   note?: string
 }
 
+/**
+ * A version's state: `held` is stored but listed only after a review, `refused` was not approved,
+ * and `unknown` is any state this app does not know, treated as not live.
+ */
+export type VersionStatus = 'live' | 'withdrawn' | 'held' | 'refused' | 'unknown'
+
 export interface MineVersion {
   version: string
   notes: string
-  status: 'live' | 'withdrawn'
+  status: VersionStatus
   bytes: number
   files: number
   checks: VersionCheck[]
   agent?: string
   session?: string
+  /** For a Kettu plugin: whether the version runs a script, and the permissions it declares. */
+  script?: boolean
+  permissions?: string[]
+  /** Why a `refused` version was not approved, and when. */
+  refusal?: { reason: string; at: string }
   publishedAt: string
 }
 
@@ -92,6 +106,8 @@ export interface MineListing {
   name: string
   kind: PublishKind
   harness?: PublishHarness
+  /** False for a Claude Code or Codex plugin, which takes no new versions and cannot be installed. */
+  installable?: false
   description: string
   about?: string
   visibility: ListingVisibility
@@ -105,6 +121,26 @@ export interface MineListing {
   takenDown: { reason: string; at: string } | null
   createdAt: string
   updatedAt: string
+}
+
+/** What a publish answers: the listing, and the version held for review when it is not listed yet. */
+export type PublishResult = MineListing & { held?: string }
+
+/**
+ * The versions of a listing that wait for review or were not approved, which its publisher still
+ * has to look at: a version not approved is left out once a later one is live or held.
+ */
+export function reviewVersions(listing: Pick<MineListing, 'versions'>): MineVersion[] {
+  const { versions } = listing
+  return versions.filter((version) => {
+    if (version.status === 'held') return true
+    if (version.status !== 'refused') return false
+    return !versions.some(
+      (other) =>
+        (other.status === 'live' || other.status === 'held') &&
+        compareVersions(other.version, version.version) > 0,
+    )
+  })
 }
 
 export interface MarketMine {
@@ -121,6 +157,7 @@ export interface MarketListing {
   name: string
   kind: PublishKind
   harness?: PublishHarness
+  installable?: false
   description: string
   about?: string
   visibility: ListingVisibility
@@ -207,7 +244,7 @@ export interface MarketResults {
   publisher: MarketPublisher | null
   'set-publisher': MarketPublisher
   mine: MarketMine
-  publish: MineListing
+  publish: PublishResult
   update: MineListing
   withdraw: MineListing
   delete: null

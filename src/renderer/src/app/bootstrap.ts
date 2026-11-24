@@ -56,8 +56,16 @@ import {
   useGitStore,
 } from '@renderer/stores/git'
 import { loadGitHubStar, receiveGitHubStar } from '@renderer/stores/github-star'
-import { marketConnectionChanged, marketKeysChanged } from '@renderer/stores/marketplace'
+import {
+  marketConnectionChanged,
+  marketKeysChanged,
+  marketPluginsChanged,
+} from '@renderer/stores/marketplace'
 import { marketPublishedChanged } from '@renderer/stores/market-published'
+import { loadKettuCommands } from '@renderer/stores/kettu-commands'
+import { pluginSurfacesChanged } from '@renderer/stores/plugin-surfaces'
+import { loadKettuRoles } from '@renderer/stores/kettu-roles'
+import { loadPluginRefs } from '@renderer/stores/plugin-refs'
 import { memoryChanged } from '@renderer/stores/memory'
 import { useProjectsStore } from '@renderer/stores/projects'
 import { routinesHostClosed, routinesHostOpened, useRoutinesStore } from '@renderer/stores/routines'
@@ -186,6 +194,12 @@ function onHostEvent(event: HostEvent, hostId: string | null = null): void {
   receiveArtifactEvent(event, hostId)
   if (event.type === 'artifacts.changed') artifactsChanged(hostId)
   if (event.type === 'memory.changed') memoryChanged(hostId)
+  if (event.type === 'plugins.changed') {
+    void loadKettuCommands(hostId)
+    void loadKettuRoles(hostId)
+    pluginSurfacesChanged(hostId)
+    void loadPluginRefs(hostId)
+  }
   // The rest is each host's own: another host's goes to its Settings, if they have shown it.
   if (hostId !== null && event.type === 'usage.changed') usageChanged(hostId)
   // Only this window's own host is asked to star, as the prompts show its record.
@@ -212,6 +226,9 @@ function onHostEvent(event: HostEvent, hostId: string | null = null): void {
       break
     case 'market.connectionChanged':
       marketConnectionChanged(event)
+      break
+    case 'plugins.changed':
+      marketPluginsChanged()
       break
     case 'market.publishedChanged':
       marketPublishedChanged(null)

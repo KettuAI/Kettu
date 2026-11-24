@@ -1,7 +1,7 @@
 // Installing from the Kettu Marketplace: what the host lists of it, a listing's page, and where an
 // installed item stands with its listing. Skills and MCP servers from it are kept like any other,
-// with ids of `kettu:` and the listing's id; plugins go through a local marketplace of each harness;
-// workflows go into the workflow library, which records the listing and version.
+// with ids of `kettu:` and the listing's id; workflows go into the workflow library, which records the
+// listing and version.
 
 import type { CatalogServer } from './marketplace'
 import type { Workflow } from './workflow'
@@ -9,12 +9,10 @@ import {
   LISTING_ID,
   type ListingVisibility,
   type MarketListing,
+  type PublishAdds,
   type PublishHarness,
   type PublishKind,
 } from './market-publish'
-
-/** The name of the local marketplace each harness gets the Kettu Marketplace's plugins from. */
-export const KETTU_PLUGINS = 'kettu-marketplace'
 
 const KETTU_PREFIX = 'kettu:'
 
@@ -49,6 +47,8 @@ export interface CommunityItem {
   /** A workflow's step names in order and those that wait for the user, as its publisher's check listed them. */
   steps?: string[]
   waits?: string[]
+  /** What a plugin's version holds, as its publisher's check listed it; only for a plugin. */
+  adds?: PublishAdds[]
 }
 
 export interface CommunityDirectory {
@@ -92,23 +92,10 @@ export type CommunityStanding =
   | { state: 'taken-down' | 'gone' }
   | { state: 'unknown'; error: string }
 
-/** A plugin installed from the Kettu Marketplace, by the listing it came from. */
-export interface CommunityPlugin {
-  listingId: string
-  harness: PublishHarness
-  /** Its name in the harness's local marketplace, so its id there is `<name>@kettu-marketplace`. */
-  name: string
-  version: string
-  handle: string
-  slug: string
-}
-
 export interface CommunityInstalled {
-  plugins: CommunityPlugin[]
-  /**
-   * By listing id, for every skill, workflow, MCP server and plugin installed from the Kettu
-   * Marketplace.
-   */
+  /** Always empty: clients from before Kettu stopped installing harness plugins require the field. */
+  plugins: never[]
+  /** By listing id, for every skill, workflow and MCP server installed from the Kettu Marketplace. */
   standings: Record<string, CommunityStanding>
 }
 

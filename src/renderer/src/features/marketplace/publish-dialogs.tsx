@@ -105,11 +105,14 @@ function PublishFolderForm({ choice, onDone }: { choice: FolderChoice; onDone: (
   const [handle, setHandle] = useState('')
   const [handleInvalid, setHandleInvalid] = useState(false)
   const [busy, setBusy] = useState(false)
+  const [converting, setConverting] = useState(false)
   const [failure, setFailure] = useState<{ message: string; problems: MarketProblem[] } | null>(
     null,
   )
+  // A harness plugin's conversion is a folder of its own, which the rest of the dialog follows.
+  const [target, setTarget] = useState(choice.path)
   const draft = store.getState().published?.drafts.find((d) => d.id === choice.draftId) ?? null
-  const folder = homeShort(choice.path)
+  const folder = homeShort(target)
 
   // Each check answers only while it is the latest; Check again starts another.
   const [attempt, setAttempt] = useState(0)
@@ -117,7 +120,7 @@ function PublishFolderForm({ choice, onDone }: { choice: FolderChoice; onDone: (
     let live = true
     scope
       .request('market.checkFolder', {
-        path: choice.path,
+        path: target,
         ...(choice.draftId ? { draftId: choice.draftId } : {}),
       })
       .then(
@@ -136,13 +139,28 @@ function PublishFolderForm({ choice, onDone }: { choice: FolderChoice; onDone: (
     return () => {
       live = false
     }
-  }, [scope, choice, attempt])
+  }, [scope, choice.draftId, target, attempt])
 
   const checkAgain = () => {
     setChecking(true)
     setCheckError(null)
     setFailure(null)
     setAttempt((n) => n + 1)
+  }
+
+  const convert = async () => {
+    setConverting(true)
+    setFailure(null)
+    try {
+      const converted = await scope.request('market.convertFolder', { path: target })
+      setPlan(null)
+      setChecking(true)
+      setTarget(converted.path)
+    } catch (error) {
+      setFailure({ message: errorMessage(error), problems: [] })
+    } finally {
+      setConverting(false)
+    }
   }
 
   const ask = plan?.ask ?? null
@@ -161,20 +179,24 @@ function PublishFolderForm({ choice, onDone }: { choice: FolderChoice; onDone: (
     setBusy(true)
     setFailure(null)
     try {
-      await scope.request('market.publishFolder', {
-        path: choice.path,
+      const result = await scope.request('market.publishFolder', {
+        path: target,
         ...(choice.draftId ? { draftId: choice.draftId } : {}),
         ...(fresh ? { visibility } : {}),
         ...(newVersion ? { notes } : {}),
         ...(ask.publisher ? { handle: handle.trim() } : {}),
       })
-      toast(
-        t('published.toast.published', { name: ask.item.name, version: ask.version }),
-        undefined,
-        {
-          tone: 'success',
-        },
-      )
+      if (result.held !== undefined) {
+        toast(t('published.toast.held', { name: ask.item.name, version: result.held }))
+      } else {
+        toast(
+          t('published.toast.published', { name: ask.item.name, version: ask.version }),
+          undefined,
+          {
+            tone: 'success',
+          },
+        )
+      }
       void store.getState().load()
       onDone()
     } catch (error) {
@@ -198,7 +220,7 @@ function PublishFolderForm({ choice, onDone }: { choice: FolderChoice; onDone: (
   return (
     <form onSubmit={(event) => void submit(event)}>
       <SettingsDialogHeader title={title}>{description}</SettingsDialogHeader>
-      <SettingsDialogBody>
+      <SettingsDialogBody className="k-pub-body">
         {checking && !plan ? (
           <p className="k-pub-checking" role="status">
             <Spinner className="size-4" />
@@ -208,6 +230,24 @@ function PublishFolderForm({ choice, onDone }: { choice: FolderChoice; onDone: (
           <p role="alert" className="k-mkt-error" data-selectable="">
             {checkError}
           </p>
+        ) : ask === null && plan?.convertible ? (
+          <div className="k-pub-nothing">
+            <b>
+              {t('published.dialogs.folder.convertTitle', {
+                harness: t(`session:marketPublish.harness.${plan.convertible}`),
+              })}
+            </b>
+            <span>{t('published.dialogs.folder.convertText')}</span>
+            <span className="k-mkt-mono">{folder}</span>
+            <SetButton
+              size="md"
+              variant="secondary"
+              loading={converting}
+              onClick={() => void convert()}
+            >
+              {t('published.dialogs.folder.convert')}
+            </SetButton>
+          </div>
         ) : ask === null ? (
           <div className="k-pub-nothing">
             <b>{t('published.dialogs.folder.nothing')}</b>

@@ -170,6 +170,22 @@ ${STEPS}`),
     ])
   })
 
+  it('reads a step’s role, and refuses one on a person’s step or that is no name', () => {
+    const withRole = (line: string) =>
+      workflow(STEPS.replace('prompt: Build it.', `prompt: Build it.\n    ${line}`))
+    const read = parseWorkflow(withRole('role: reviewer'))
+    expect(read.problems).toEqual([])
+    expect(read.workflow!.steps[0]!.role).toBe('reviewer')
+    expect(read.workflow!.steps[1]!.role).toBeUndefined()
+    expect(parseWorkflow(withRole('role: kit:reviewer')).workflow!.steps[0]!.role).toBe(
+      'kit:reviewer',
+    )
+    expect(problemsOf(withRole('role: "bad name"'))).toEqual(['steps[0].role: must be a name'])
+    expect(problemsOf(withRole('by: you\n    hand_in: outcome\n    role: reviewer'))).toContain(
+      "steps[0].role: a person's step has no agent to give a role to",
+    )
+  })
+
   it('reads steps, arrows back, reviews and defaults', () => {
     const read = parseWorkflow(workflow(STEPS))
     expect(read.problems).toEqual([])

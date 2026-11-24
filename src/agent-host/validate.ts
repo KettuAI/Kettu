@@ -27,12 +27,7 @@ import {
   type MemoryDraft,
   type MemoryScope,
 } from '@shared/memory'
-import {
-  catalogSkillId,
-  skillRepositoryId,
-  type PluginScope,
-  type SkillSource,
-} from '@shared/marketplace'
+import { catalogSkillId, skillRepositoryId, type SkillSource } from '@shared/marketplace'
 import {
   DIRECTORY_CURSOR,
   HANDLE,
@@ -102,6 +97,33 @@ import { bundleToken } from './marketplace/bundles'
 import { TASK_ID } from './workflow/model'
 import { isCompletablePath } from './path-completion'
 import { isAbsolutePath } from './paths'
+import {
+  PLUGIN_ID,
+  PLUGIN_SECRET_BYTES,
+  PLUGIN_SETTING_CHARS,
+  PLUGIN_SETTING_KEY,
+  PLUGIN_TOKEN,
+  type PluginSource,
+} from '@shared/plugins'
+import {
+  PLUGIN_CHANNEL_ID,
+  PLUGIN_NOTICE_KINDS,
+  isPluginNoticeKind,
+  type PluginNoticeKind,
+} from '@shared/plugin-channels'
+import {
+  PLUGIN_ACTION_ID,
+  PLUGIN_VIEW_ID,
+  PLUGIN_VIEW_LIMITS,
+  type PluginFormValues,
+  type PluginViewParams,
+} from '@shared/plugin-views'
+import { PLUGIN_REF_ID, PLUGIN_REF_LIMITS } from '@shared/plugin-refs'
+import {
+  parseFormValues,
+  parseParams as parseViewParams,
+  ViewDataError,
+} from './plugin-runtime/view-data'
 import { MAX_WORKTREE_COPY_PATHS } from './storage'
 import { checkIncludeEntry } from './worktrees/copy'
 import { branchFromTemplate, checkWorktreeBranch } from './worktrees/names'
@@ -958,6 +980,21 @@ function contentRef(value: unknown, at: string): { ref: ContentRef; bytes: numbe
       const name = string(o, 'name', TERMINAL_NAME_CHARS)
       return { ref: { kind: 'device', deviceId, name }, bytes: deviceId.length + name.length }
     }
+    case 'plugin': {
+      const pluginId = string(o, 'pluginId', ID_CHARS)
+      const source = string(o, 'source', ID_CHARS)
+      if (!PLUGIN_ID.test(pluginId) || !PLUGIN_REF_ID.test(source)) {
+        throw invalidParams(`${at}: pluginId and source must name a mention source`)
+      }
+      const item = string(o, 'item', PLUGIN_REF_LIMITS.itemId)
+      const word = string(o, 'word', PLUGIN_REF_LIMITS.itemWord)
+      if (/\s/.test(word)) throw invalidParams(`${at}: word must not hold white space`)
+      const name = string(o, 'name', PLUGIN_REF_LIMITS.itemTitle)
+      return {
+        ref: { kind: 'plugin', pluginId, source, item, word, name },
+        bytes: item.length + word.length + name.length,
+      }
+    }
     case 'attachment': {
       // Only the id counts: the host takes everything else from its own record.
       const id = string(fields(o.attachment), 'id', ID_CHARS)
@@ -965,7 +1002,7 @@ function contentRef(value: unknown, at: string): { ref: ContentRef; bytes: numbe
     }
     default:
       throw invalidParams(
-        `${at}: a prompt can carry images, links, terminals, tabs, devices and attachments only`,
+        `${at}: a prompt can carry images, links, terminals, tabs, devices, plugin items and attachments only`,
       )
   }
 }
@@ -1015,6 +1052,7 @@ export function promptContent(value: unknown): UserContent[] {
   const out: UserContent[] = []
   let bytes = 0
   let attachments = 0
+  let mentions = 0
   let substance = false
   value.forEach((item: unknown, index) => {
     const at = `content[${index}]`
@@ -1029,6 +1067,9 @@ export function promptContent(value: unknown): UserContent[] {
       bytes += size
       if (ref.kind === 'attachment' && ++attachments > ATTACHMENT_LIMIT) {
         throw invalidParams(t('validate.promptAttachments', { max: ATTACHMENT_LIMIT }))
+      }
+      if (ref.kind === 'plugin' && ++mentions > PLUGIN_REF_LIMITS.perMessage) {
+        throw invalidParams(t('validate.promptMentions', { max: PLUGIN_REF_LIMITS.perMessage }))
       }
       substance = true
       out.push({ type: 'ref', ref })
@@ -1056,9 +1097,6 @@ function marketRead(params: unknown): { refresh?: boolean; cached?: boolean } {
 
 // What a report to the Kettu Marketplace says at most, as the service takes it.
 const REPORT_CHARS = 2_000
-
-// A plugin's or marketplace's name; never one that could pass for a command line flag.
-const PLUGIN_PART = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/
 
 /** A server Kettu keeps: a registry name, `manual:` and a UUID, or `kettu:` and a listing id. */
 function marketServerId(o: Fields): string {
@@ -1113,37 +1151,6 @@ function probeHeaders(raw: unknown): { name: string; value: string }[] {
   })
 }
 
-/** `<name>@<marketplace>`, as Claude Code and Codex name a plugin. */
-function pluginId(o: Fields): string {
-  const id = string(o, 'pluginId', ID_CHARS)
-  const at = id.lastIndexOf('@')
-  if (at <= 0 || !PLUGIN_PART.test(id.slice(0, at)) || !PLUGIN_PART.test(id.slice(at + 1))) {
-    throw invalidParams('pluginId must be <name>@<marketplace>')
-  }
-  return id
-}
-
-/** Where a plugin is installed: for the user, or a project's folder for the others. */
-function pluginPlace(o: Fields, platform: Platform): { scope: PluginScope; projectPath?: string } {
-  const scope = o.scope as PluginScope
-  if (scope !== 'user' && scope !== 'project' && scope !== 'local') {
-    throw invalidParams('scope must be user, project or local')
-  }
-  if (scope === 'user') {
-    if (o.projectPath !== undefined) throw invalidParams('A user scope takes no projectPath')
-    return { scope }
-  }
-  return { scope, projectPath: absolutePath(o, 'projectPath', platform) }
-}
-
-/** A plugin and where it is installed. */
-function pluginChange(
-  o: Fields,
-  platform: Platform,
-): { agentId: AgentId; pluginId: string; scope: PluginScope; projectPath?: string } {
-  return { agentId: agentId(o), pluginId: pluginId(o), ...pluginPlace(o, platform) }
-}
-
 /** A listing of the Kettu Marketplace, by its opaque id. */
 function listingId(o: Fields): string {
   const id = string(o, 'id', ID_CHARS)
@@ -1169,6 +1176,110 @@ function skillSource(value: unknown, platform: Platform): SkillSource {
   if (o.kind === 'local') return { kind: 'local', path: absolutePath(o, 'path', platform) }
   if (o.kind === 'kettu') return { kind: 'kettu', id: listingId(o) }
   throw invalidParams('source.kind must be catalog, github, local or kettu')
+}
+
+/** Where a plugin comes from: a folder on the host, a github.com URL or a listing. */
+function pluginSource(value: unknown, platform: Platform): PluginSource {
+  const o = fields(value)
+  if (o.kind === 'local') return { kind: 'local', path: absolutePath(o, 'path', platform) }
+  if (o.kind === 'github') {
+    const url = string(o, 'url', URL_CHARS).trim()
+    if (!url.startsWith('https://github.com/') || /\s/.test(url)) {
+      throw invalidParams('url must be a https://github.com/ address')
+    }
+    return { kind: 'github', url }
+  }
+  if (o.kind === 'kettu') return { kind: 'kettu', id: listingId(o) }
+  throw invalidParams('source.kind must be local, github or kettu')
+}
+
+function installedPlugin(params: unknown): { pluginId: string } {
+  const id = string(fields(params), 'pluginId', ID_CHARS)
+  if (!PLUGIN_ID.test(id)) throw invalidParams('pluginId is not a plugin')
+  return { pluginId: id }
+}
+
+/** The plugin and view a request names, and the parameters the view is opened with. */
+function pluginView(params: unknown): { pluginId: string; viewId: string } {
+  const o = fields(params)
+  const { pluginId } = installedPlugin(params)
+  const viewId = string(o, 'viewId', 64)
+  if (!PLUGIN_VIEW_ID.test(viewId)) throw invalidParams('viewId is not a view')
+  return { pluginId, viewId }
+}
+
+function pluginActionRun(params: unknown): HostParams<'plugins.actionRun'> {
+  const o = fields(params)
+  const { pluginId } = installedPlugin(params)
+  const actionId = string(o, 'actionId', 64)
+  if (!PLUGIN_ACTION_ID.test(actionId)) throw invalidParams('actionId is not an id')
+  return { pluginId, actionId }
+}
+
+function viewParams(params: unknown): PluginViewParams {
+  try {
+    return parseViewParams(fields(params).params, 'params')
+  } catch (error) {
+    if (error instanceof ViewDataError) throw invalidParams(error.message)
+    throw error
+  }
+}
+
+function refId(o: Fields, key: string): string {
+  const value = string(o, key, 64)
+  if (!PLUGIN_REF_ID.test(value)) throw invalidParams(`${key} is not an id`)
+  return value
+}
+
+function pluginViewAction(params: unknown): HostParams<'plugins.viewAction'> {
+  const o = fields(params)
+  const action = string(o, 'action', 64)
+  if (!PLUGIN_ACTION_ID.test(action)) throw invalidParams('action is not an id')
+  const row = optionalString(o, 'row', PLUGIN_VIEW_LIMITS.rowId)
+  let values: PluginFormValues | undefined
+  if (o.values !== undefined) {
+    try {
+      values = parseFormValues(o.values, 'values')
+    } catch (error) {
+      if (error instanceof ViewDataError) throw invalidParams(error.message)
+      throw error
+    }
+  }
+  return {
+    ...pluginView(params),
+    params: viewParams(params),
+    action,
+    ...(row === undefined ? {} : { row }),
+    ...(values === undefined ? {} : { values }),
+  }
+}
+
+function pluginSettingKey(o: Fields): string {
+  const key = string(o, 'key', 64)
+  if (!PLUGIN_SETTING_KEY.test(key)) throw invalidParams('key is not a setting key')
+  return key
+}
+
+function pluginChannelKinds(params: unknown): HostParams<'plugins.setChannelKinds'> {
+  const o = fields(params)
+  const channel = string(o, 'channel', 64)
+  if (!PLUGIN_CHANNEL_ID.test(channel)) throw invalidParams('channel is not a channel id')
+  const { kinds } = o
+  if (!Array.isArray(kinds) || kinds.length > PLUGIN_NOTICE_KINDS.length) {
+    throw invalidParams('kinds must be a list of notice kinds')
+  }
+  for (const kind of kinds as unknown[]) {
+    if (!isPluginNoticeKind(kind)) {
+      throw invalidParams(`kinds takes only ${PLUGIN_NOTICE_KINDS.join(', ')}`)
+    }
+  }
+  return { ...installedPlugin(params), channel, kinds: kinds as PluginNoticeKind[] }
+}
+
+function pluginToken(params: unknown): { token: string } {
+  const token = string(fields(params), 'token', ID_CHARS)
+  if (!PLUGIN_TOKEN.test(token)) throw invalidParams('token must name an inspected plugin')
+  return { token }
 }
 
 function listingVersion(o: Fields): string {
@@ -1504,31 +1615,12 @@ export function createValidators(platform: Platform): Validators {
     },
     'market.disconnect': (params) => ({ serverId: marketServerId(fields(params)) }),
     'market.connections': none,
-    'market.plugins': marketRead,
-    'market.pluginDetails': (params) => {
-      const o = fields(params)
-      return { agentId: agentId(o), pluginId: pluginId(o) }
-    },
-    'market.pluginLogo': (params) => ({ pluginId: pluginId(fields(params)) }),
-    'market.installPlugin': (params) => pluginChange(fields(params), platform),
-    'market.uninstallPlugin': (params) => pluginChange(fields(params), platform),
-    'market.setPluginEnabled': (params) => {
-      const o = fields(params)
-      return { ...pluginChange(o, platform), enabled: flag(o, 'enabled') }
-    },
-    'market.addMarketplace': (params) => {
-      const o = fields(params)
-      const source = string(o, 'source', URL_CHARS).trim()
-      if (source === '' || source.startsWith('-') || /\p{Cc}/u.test(source)) {
-        throw invalidParams('source must be owner/repo, a Git URL or a path, on one line')
-      }
-      return { agentId: agentId(o), source }
-    },
-    'market.removeMarketplace': (params) => {
-      const o = fields(params)
-      const name = string(o, 'name', ID_CHARS)
-      if (!PLUGIN_PART.test(name)) throw invalidParams('name is not a marketplace name')
-      return { agentId: agentId(o), name }
+    'market.ownPlugins': (params) => {
+      const refresh = optionalFlag(
+        params === undefined || params === null ? {} : fields(params),
+        'refresh',
+      )
+      return refresh === undefined ? {} : { refresh }
     },
     'market.skills': marketRead,
     'market.skillRepository': (params) => {
@@ -1593,9 +1685,10 @@ export function createValidators(platform: Platform): Validators {
         kind !== 'skill' &&
         kind !== 'workflow' &&
         kind !== 'plugin' &&
-        kind !== 'mcp-server'
+        kind !== 'mcp-server' &&
+        kind !== 'agent-plugin'
       ) {
-        throw invalidParams('kind must be skill, workflow, plugin or mcp-server')
+        throw invalidParams('kind must be skill, workflow, plugin, mcp-server or agent-plugin')
       }
       const cursor = optionalString(o, 'cursor', 256)
       if (cursor !== undefined && !DIRECTORY_CURSOR.test(cursor)) {
@@ -1617,10 +1710,6 @@ export function createValidators(platform: Platform): Validators {
         'refresh',
       )
       return refresh === undefined ? {} : { refresh }
-    },
-    'market.installCommunityPlugin': (params) => {
-      const o = fields(params)
-      return { id: listingId(o), agentId: agentId(o), ...pluginPlace(o, platform) }
     },
     'market.addCommunityWorkflow': (params) => ({ id: listingId(fields(params)) }),
     'market.reportCommunity': (params) => {
@@ -1686,6 +1775,8 @@ export function createValidators(platform: Platform): Validators {
         ...(draftId !== undefined ? { draftId } : {}),
       }
     },
+    'market.convertFolder': (params) => ({ path: absolutePath(fields(params), 'path', platform) }),
+    'market.convertListing': (params) => ({ id: listingId(fields(params)) }),
     'market.publishFolder': (params) => {
       const o = fields(params)
       const draftId = optionalString(o, 'draftId', ID_CHARS)
@@ -1761,6 +1852,7 @@ export function createValidators(platform: Platform): Validators {
       const o = fields(params)
       const parentId = optionalString(o, 'parentId', ID_CHARS)
       const preparedId = optionalString(o, 'preparedId', ID_CHARS)
+      const role = optionalString(o, 'role', ID_CHARS)
       const options = o.options === undefined ? undefined : configValues(o.options)
       return {
         agentId: agentId(o),
@@ -1770,6 +1862,7 @@ export function createValidators(platform: Platform): Validators {
         ...(options !== undefined ? { options } : {}),
         ...(o.prompt !== undefined ? { prompt: promptContent(o.prompt) } : {}),
         ...(preparedId !== undefined ? { preparedId } : {}),
+        ...(role !== undefined ? { role } : {}),
         ...(o.worktree !== undefined ? { worktree: worktreeRequest(o.worktree) } : {}),
       }
     },
@@ -2064,6 +2157,76 @@ export function createValidators(platform: Platform): Validators {
       }
     },
     'routines.markSeen': (params) => ({ routineId: routineId(fields(params)) }),
+    'plugins.list': none,
+    'plugins.inspect': (params) => ({ source: pluginSource(fields(params).source, platform) }),
+    'plugins.install': pluginToken,
+    'plugins.discard': pluginToken,
+    'plugins.uninstall': installedPlugin,
+    'plugins.setEnabled': (params) => ({
+      ...installedPlugin(params),
+      enabled: flag(fields(params), 'enabled'),
+    }),
+    'plugins.setSetting': (params) => {
+      const o = fields(params)
+      const value = o.value
+      if (typeof value !== 'boolean' && typeof value !== 'string') {
+        throw invalidParams('value must be a text or true or false')
+      }
+      if (typeof value === 'string' && value.length > PLUGIN_SETTING_CHARS) {
+        throw invalidParams(t('validate.tooLong', { key: 'value', max: PLUGIN_SETTING_CHARS }))
+      }
+      return { ...installedPlugin(params), key: pluginSettingKey(o), value }
+    },
+    'plugins.setSecret': (params) => {
+      const o = fields(params)
+      const value = o.value ?? null
+      if (value !== null && typeof value !== 'string') {
+        throw invalidParams('value must be a text, or null to clear the secret')
+      }
+      if (value !== null && Buffer.byteLength(value) > PLUGIN_SECRET_BYTES) {
+        throw invalidParams(t('validate.tooLong', { key: 'value', max: PLUGIN_SECRET_BYTES }))
+      }
+      if (value === '') throw invalidParams(t('validate.empty', { key: 'value' }))
+      return { ...installedPlugin(params), key: pluginSettingKey(o), value }
+    },
+    'plugins.setChannelKinds': pluginChannelKinds,
+    'plugins.reload': installedPlugin,
+    'plugins.checkUpdates': (params) =>
+      params === undefined || params === null || fields(params).pluginId === undefined
+        ? {}
+        : installedPlugin(params),
+    'plugins.applyUpdate': installedPlugin,
+    'plugins.declineUpdate': installedPlugin,
+    'plugins.rollBack': installedPlugin,
+    'plugins.viewData': (params) => ({ ...pluginView(params), params: viewParams(params) }),
+    'plugins.viewAction': pluginViewAction,
+    'plugins.actionRun': pluginActionRun,
+    'plugins.refs': none,
+    'plugins.mentionSearch': (params) => {
+      const o = fields(params)
+      const query = o.query
+      if (typeof query !== 'string' || query.length > PLUGIN_REF_LIMITS.query) {
+        throw invalidParams(`query must be text of at most ${PLUGIN_REF_LIMITS.query} characters`)
+      }
+      return { ...installedPlugin(params), source: refId(o, 'source'), query }
+    },
+    'plugins.linkCard': (params) => {
+      const o = fields(params)
+      return {
+        ...installedPlugin(params),
+        link: refId(o, 'link'),
+        url: string(o, 'url', URL_CHARS),
+      }
+    },
+    'plugins.resources': (params) => {
+      const { kind } = fields(params)
+      if (kind !== 'commands' && kind !== 'roles' && kind !== 'themes' && kind !== 'templates') {
+        throw invalidParams('kind must be commands, roles, themes or templates')
+      }
+      return { kind }
+    },
+    'commands.list': none,
+    'roles.list': none,
     'workflows.list': none,
     'workflows.read': (params) => ({ workflowId: workflowId(fields(params)) }),
     'workflows.add': workflowAddSource,

@@ -168,7 +168,7 @@ export function mcpServers(servers: readonly McpServer[]): ClineMcpServer[] {
   })
 }
 
-/** What goes into the session's own instructions: each server's paragraph, then Kettu's memory. */
+/** What goes into the session's own instructions: each server's paragraph, Kettu's memory, the role. */
 function instructions(options: SessionOptions): string | null {
   if (options.promptAhead) return null
   const parts = [
@@ -176,6 +176,7 @@ function instructions(options: SessionOptions): string | null {
       server.type === 'stdio' ? [] : (server.prompt ?? []),
     ),
     ...(options.memory ? [options.memory.text] : []),
+    ...(options.role ? [options.role] : []),
   ]
   return parts.length > 0 ? parts.join('\n\n') : null
 }

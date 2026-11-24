@@ -1,0 +1,416 @@
+/* Plugin views: what a plugin's script gives, drawn with Kettu's own parts. The view lays out by
+   the width it is given, a pane or a sheet, so it holds in a narrow column and a wide one. */
+
+.kpv {
+  container-type: inline-size;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  height: 100%;
+  min-height: 0;
+  color: var(--text-primary);
+}
+
+/* The context bar: what the view shows, Back and Refresh */
+.kpv-bar {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 8px 0 14px;
+  border-bottom: var(--hairline) solid var(--border-subtle);
+  font-size: 12.5px;
+  color: var(--text-tertiary);
+}
+.kpv-bar[data-back] {
+  padding-left: 6px;
+}
+.kpv-scope {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+}
+.kpv-scope > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.kpv-scope > span + span::before {
+  margin: 0 8px;
+  content: '·';
+}
+.kpv-refresh[data-busy] svg {
+  animation: kpv-turn 0.9s linear infinite;
+}
+@keyframes kpv-turn {
+  to {
+    rotate: 360deg;
+  }
+}
+
+.kpv-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+}
+
+/* The foot: the view's buttons */
+.kpv-foot {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 12px 14px 16px;
+}
+.kpv-note {
+  margin: 0;
+  padding: 10px 14px 0;
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+
+/* Loading */
+.kpv-skel {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding: 16px 14px;
+}
+.kpv-skel > div {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* A state that is not the view: it failed, or it has nothing to show */
+.kpv-state {
+  min-height: 100%;
+  padding: 32px 20px;
+  border: 0;
+}
+
+/* A list: a row is a line with a hairline under it, which is the first action when it is clicked */
+.kpv-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.kpv-row {
+  position: relative;
+  display: flex;
+  align-items: stretch;
+  border-bottom: var(--hairline) solid var(--border-subtle);
+}
+.kpv-row:has(button.kpv-row__main:hover),
+.kpv-row:focus-within {
+  background: var(--bg-hover);
+}
+.kpv-row__main {
+  display: flex;
+  flex: 1;
+  gap: 10px;
+  align-items: flex-start;
+  min-width: 0;
+  padding: 10px 14px;
+  background: none;
+  border: 0;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+}
+button.kpv-row__main {
+  cursor: pointer;
+}
+button.kpv-row__main:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+.kpv-icon {
+  flex: none;
+  margin-top: 2px;
+  color: var(--text-secondary);
+}
+.kpv-row__text {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+.kpv-row__title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  font-size: 13.5px;
+  font-weight: 500;
+  line-height: 20px;
+}
+.kpv-row__title > span:first-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.kpv-row__sub {
+  overflow: hidden;
+  font-size: 12.5px;
+  line-height: 18px;
+  color: var(--text-tertiary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.kpv-row__sub[data-mono] {
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+/* A subtitle with line breaks keeps them, up to three lines; one without stays a single line. */
+.kpv-row__sub[data-lines] {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}
+.kpv-row__end {
+  flex: none;
+  align-self: center;
+  font-size: 13px;
+  color: var(--text-tertiary);
+  font-variant-numeric: tabular-nums;
+}
+.kpv-row__more {
+  flex: none;
+  align-self: center;
+  margin-right: 8px;
+}
+
+/* A detail: a heading, its facts and a Markdown body */
+.kpv-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 16px 14px 8px;
+}
+.kpv-detail__head {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+}
+.kpv-detail__head .kpv-icon {
+  margin-top: 4px;
+}
+.kpv-detail__text {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+.kpv-detail__title {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 8px;
+  align-items: center;
+  font-family: var(--font-heading);
+  font-size: 17px;
+  font-weight: 500;
+  line-height: 24px;
+  overflow-wrap: anywhere;
+}
+.kpv-detail__sub {
+  font-size: 13px;
+  color: var(--text-tertiary);
+  overflow-wrap: anywhere;
+  white-space: pre-line;
+}
+.kpv-facts {
+  display: grid;
+  grid-template-columns: minmax(80px, 32%) minmax(0, 1fr);
+  gap: 8px 16px;
+  margin: 0;
+  font-size: 13px;
+  line-height: 18px;
+}
+.kpv-facts dt {
+  color: var(--text-tertiary);
+}
+.kpv-facts dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+  white-space: pre-line;
+}
+.kpv-facts dd[data-mono] {
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+.kpv-prose {
+  font-size: 14px;
+  line-height: 1.65;
+  overflow-wrap: anywhere;
+}
+
+/* A form: rows on a card, as the settings draw them */
+.kpv-form {
+  display: flex;
+  flex-direction: column;
+  padding: 14px;
+}
+.kpv-card {
+  overflow: hidden;
+  border-radius: var(--radius-card);
+  background: var(--card);
+  box-shadow: var(--shadow-card);
+}
+.kpv-field {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 11px 14px;
+}
+.kpv-field + .kpv-field {
+  border-top: var(--hairline) solid var(--border-subtle);
+}
+.kpv-field[data-block] {
+  flex-direction: column;
+  gap: 8px;
+  align-items: stretch;
+}
+.kpv-field__label {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+.kpv-field__label b {
+  font-size: 13.5px;
+  font-weight: 500;
+  line-height: 20px;
+}
+.kpv-field__label small {
+  font-size: 12.5px;
+  line-height: 17px;
+  color: var(--text-tertiary);
+}
+.kpv-field__control {
+  flex: none;
+  min-width: 0;
+}
+.kpv-field__control[data-choice] {
+  width: 200px;
+}
+.kpv-form .kpv-foot {
+  padding: 14px 0 0;
+}
+@container (max-width: 420px) {
+  .kpv-field:not([data-switch]) {
+    flex-direction: column;
+    gap: 8px;
+    align-items: stretch;
+  }
+  .kpv-field__control[data-choice] {
+    width: 100%;
+  }
+  .kpv-facts {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 2px 0;
+  }
+  .kpv-facts dd {
+    margin-bottom: 8px;
+  }
+}
+
+/* Actions: a button to a line, with what it does under it */
+.kpv-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px;
+}
+.kpv-actions__text {
+  margin: 0;
+  font-size: 13px;
+  line-height: 18px;
+  color: var(--text-secondary);
+  white-space: pre-line;
+}
+.kpv-arow {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  width: 100%;
+  padding: 10px 12px;
+  border: 0;
+  border-radius: var(--radius-card);
+  background: var(--card);
+  box-shadow: var(--shadow-card);
+  color: var(--text-primary);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.kpv-arow:hover:not(:disabled) {
+  background: var(--bg-hover);
+}
+.kpv-arow:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+.kpv-arow[data-primary] {
+  background: var(--control-on-tint);
+  color: var(--control-on);
+}
+.kpv-arow[data-danger] {
+  color: var(--danger);
+}
+.kpv-arow__text {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+.kpv-arow__text b {
+  font-size: 13.5px;
+  font-weight: 500;
+  line-height: 20px;
+}
+.kpv-arow__text small {
+  font-size: 12.5px;
+  line-height: 17px;
+  color: var(--text-tertiary);
+}
+.kpv-arow[data-primary] .kpv-icon {
+  color: inherit;
+}
+.kpv-arow[data-danger] .kpv-icon {
+  color: inherit;
+}
+
+/* A plugin's tile in a tab, a row of the side panel's list and a group of Search */
+.kpv-tile {
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  overflow: hidden;
+  border-radius: 28%;
+  color: var(--tile-ink);
+}
+.kpv-tile[data-filled] {
+  box-shadow: inset 0 0 0 0.5px var(--border-subtle);
+}
+.kpv-tile__logo {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+/* A pane of the side panel: the view fills what is left under the row of tabs */
+.kp-tabpane > .kpv {
+  flex: 1;
+  height: auto;
+}

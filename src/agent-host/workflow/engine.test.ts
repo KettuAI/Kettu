@@ -14,7 +14,7 @@ import { TaskEngine, type TaskEngineDeps, type TaskStepStart } from './engine'
 import type { MergeResult, TaskGit } from './git'
 import { emptyWorkflowsFile, WorkflowLibrary } from './library'
 import { taskRecordOf, type TaskRecord } from './model'
-import type { WorkflowAgent } from './picks'
+import type { RoleHint, WorkflowAgent } from './picks'
 import { deliveryOf } from './views'
 
 const dirs: string[] = []
@@ -97,6 +97,25 @@ steps:
     tools:
       mcp: [docs]
       skills: [review-kit]
+    outcomes:
+      - name: Done
+        end: done
+`
+
+/** A step whose session is given a role of Kettu's. */
+const ROLES = `format: 1
+name: Roles
+steps:
+  - id: build
+    name: Build
+    prompt: Build it.
+    outcomes:
+      - name: Done
+        to: check
+  - id: check
+    name: Check
+    prompt: Check it.
+    role: reviewer
     outcomes:
       - name: Done
         end: done
@@ -207,6 +226,8 @@ async function harness(
     files?: string[]
     /** The pull requests of each session. */
     pullRequests?: Record<string, string[]>
+    /** What each role suggests, by its reference. */
+    roles?: Record<string, RoleHint>
   } = {},
 ) {
   const dir = mkdtempSync(path.join(os.tmpdir(), 'kettu-tasks-'))
@@ -328,6 +349,7 @@ async function harness(
       ended: (view, written) => events.ended.push({ view, written }),
     },
     ...(options.workingLimit ? { workingLimit: options.workingLimit } : {}),
+    roleHint: async (ref) => options.roles?.[ref] ?? null,
     exists: async (file) => files.has(file),
     pullRequests: (ids) => ids.flatMap((id) => options.pullRequests?.[id] ?? []),
     log: () => {},
@@ -841,6 +863,30 @@ describe('the task engine', () => {
       mcp: ['docs'],
       skills: ['review-kit'],
     })
+  })
+
+  it('hands a step its role, and gives whoever picks for it the role’s suggestions as a hint only', async () => {
+    const h = await harness({
+      workflows: { roles: ROLES },
+      roles: { reviewer: { name: 'Reviewer', suggests: { agent: 'codex', model: 'gpt-5' } } },
+    })
+    const task = await h.start('roles')
+    expect(h.created).toHaveLength(1)
+    expect(h.created[0]!.role).toBeUndefined()
+    const report = await h.engine.report(h.sessionOf(task.id, 'build'), done)
+    expect(report.facts?.steps).toEqual([
+      expect.objectContaining({
+        id: 'check',
+        role: { name: 'Reviewer', suggests: { agent: 'codex', model: 'gpt-5' } },
+      }),
+    ])
+    // The pick is the agent's own: the suggestion pins nothing.
+    const picked = await h.engine.pick(h.sessionOf(task.id, 'build'), [
+      { step: 'check', agent: 'claude-code', model: 'opus', effort: null, reason: 'cheap' },
+    ])
+    expect(picked.accepted).toBe(true)
+    await h.settle()
+    expect(h.created[1]).toMatchObject({ agentId: 'claude-code', role: 'reviewer' })
   })
 
   it('never stops a step for a turn that answered the user', async () => {

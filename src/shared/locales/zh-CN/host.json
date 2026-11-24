@@ -132,7 +132,8 @@
       },
       "permission": {
         "gone": "这个授权请求已不再等待回答",
-        "answered": "这个授权请求已经回答过了"
+        "answered": "这个授权请求已经回答过了",
+        "notRelayable": "这个授权请求只能在 Kettu 里回答"
       }
     }
   },
@@ -1249,7 +1250,9 @@
       "no_publisher": "先定一个发布者名。",
       "not_found": "它已经不在 Kettu 市场里了。",
       "check_failed": "没有通过 Kettu 市场的检查。",
-      "conflict": "同时有别的改动，再试一次。"
+      "conflict": "同时有别的改动，再试一次。",
+      "script_not_allowed": "带脚本的插件暂时只有 Kettu 自己的发布者能发布。",
+      "kind_closed": "Harness 插件不再接收新版本，请转换成 Kettu 插件再发布。"
     },
     "check": {
       "link": "这是一个链接，请换成文件本身，或者删掉它。",
@@ -1296,10 +1299,10 @@
       "pathIsLink": "这个路径是链接，请改为提供它指向的文件夹。",
       "folderOrBundle": "请发布一个文件夹，或一个 MCP 包（.mcpb）文件。",
       "bundleTooLarge": "这个包超过了 {{mb}} MB，这是一个版本的上限。",
-      "bothPlugins": "这个文件夹同时是 Claude Code 插件和 Codex 插件，请把它们分别放进各自的文件夹再发布。",
+      "harnessPlugin": "这是 {{harness}} 的插件，Kettu 市场收的是 Kettu 插件，请先把它转换成 Kettu 插件。原来的文件夹不会被改动。",
       "manyBundles": "文件夹里有不止一个 MCP 包，只留一个。",
       "fileTooLarge": "它超过了 {{mb}} MB，这是一个版本的上限。",
-      "unknownFolder": "Kettu 认不出这个文件夹是什么。技能要有 SKILL.md，工作流要有 workflow.yaml，插件要有 .claude-plugin/plugin.json 或 .codex-plugin/plugin.json，MCP 服务器要有 server.json。",
+      "unknownFolder": "Kettu 认不出这个文件夹是什么。技能要有 SKILL.md，工作流要有 workflow.yaml，MCP 服务器要有 server.json，插件要有 plugin.json。",
       "manifestTooLarge": "它太大了，不像是清单文件。",
       "aboutTooLong": "描述超过了 {{count}} 个字符。",
       "manifestName": "最上层的文件不能叫 manifest，请改名。",
@@ -1307,7 +1310,13 @@
       "takenDown": "{{listing}} 已被 Kettu 下架：{{reason}}",
       "versionInManifest": "版本号是 {{version}}，以清单里写的为准；要改请改清单，不要另外指定 {{wanted}}。",
       "versionTakenNumbered": "{{listing}} 的 {{version}} 版已经发布过了，请换更高的版本号。",
-      "versionTaken": "{{listing}} 的 {{version}} 版已经发布过了，请在 {{manifest}} 里调高版本号。"
+      "versionTaken": "{{listing}} 的 {{version}} 版已经发布过了，请在 {{manifest}} 里调高版本号。",
+      "pluginSkill": "{{folder}} 里的技能读不出来，安装时会被略过。它的 SKILL.md 的 front matter 里要有 name 和 description，也不能和包里别的技能重名。",
+      "pluginServer": "MCP 服务器 {{name}} 读不出来，安装时会被略过。请写明 type（stdio、streamable-http 或 sse）：stdio 要给一个程序或包里的文件，远程的要给 https 地址。",
+      "scriptNotAllowed": "带脚本的插件暂时只有 Kettu 自己的发布者能发布。",
+      "pluginRead": "这个包按现在的样子装不了：{{reason}}",
+      "pluginTitle": "显示名称超过了 {{count}} 个字符。",
+      "closedPlugin": "{{listing}} 是你发布过的 Harness 插件，不再接收新版本。请给这个插件换个名字，作为新条目发布。"
     }
   },
   "marketCommunity": {
@@ -1320,11 +1329,142 @@
     "badPath": "Kettu 市场给了一个 Kettu 不会写入的文件 {{path}}，所以什么都没装。",
     "tooLarge": "这个版本超过了一个版本的大小上限，所以什么都没装。",
     "otherKind": "这一项是另一种东西。",
-    "otherHarness": "这个插件是给另一种智能体的。",
-    "noManifest": "这个插件没有带名字的 {{file}}，装不了。",
-    "nameTaken": "已经装了 Kettu 市场里另一个叫 {{name}} 的插件（{{other}}）。先卸载它。",
     "noWorkflow": "这一项没有 UTF-8 文本的 workflow.yaml，所以什么都没装。",
     "notListing": "这不是 Kettu 市场里的条目"
+  },
+  "plugins": {
+    "invalid": "这个插件装不了：{{reason}}",
+    "noManifest": "它的顶层没有 plugin.json。",
+    "notJson": "它的 plugin.json 不是 Kettu 能读的 JSON 对象。",
+    "schema": "它的 plugin.json 用的插件格式版本 Kettu 读不了（{{schema}}）。",
+    "field": "它的 plugin.json 里 {{field}} 不合规。",
+    "format": "它是按 Kettu 插件内容的第 {{version}} 版写的，这个 Kettu 只读第 {{reads}} 版。更新 Kettu 后再装。",
+    "kettuVersion": "它需要 Kettu {{range}}，现在是 Kettu {{version}}。",
+    "api": "它的脚本要插件 API 的第 {{version}} 版，这个 Kettu 没有。",
+    "permission": "它要一项 Kettu 不认识的权限：{{permission}}。",
+    "noScript": "它的脚本 {{path}} 不在包里。",
+    "viewKind": "它的视图 {{id}} 是 {{kind}}，这个 Kettu 画不了。它能画：{{kinds}}。",
+    "viewsNeedScript": "它的视图 {{view}} 没有脚本给它数据，包里需要一个脚本。",
+    "actionsNeedScript": "它的操作 {{action}} 没有脚本来执行，包里需要一个脚本。",
+    "linkHost": "它的链接格式 {{pattern}} 在 {{host}} 上，而插件没有这个域名的联网权限。",
+    "channelsNeedScript": "它的渠道 {{channel}} 没有脚本来接收通知，包里需要一个脚本。",
+    "unsafePath": "它写了一个包外面的路径：{{path}}。",
+    "link": "{{path}} 是一个链接，插件里不能有链接。",
+    "tooLarge": "它超过了 {{files}} 个文件或 {{mb}} MB。",
+    "noPlugin": "{{url}} 里没有 plugin.json",
+    "noPlan": "这次检查的结果已经不在了，请重新检查这个插件。",
+    "notFound": "没有安装这个插件。",
+    "notDevelopment": "只有从文件夹添加的插件能重新加载。",
+    "noUpdate": "这个插件没有等着的更新。",
+    "noPrevious": "这个插件没有可以退回的上一个版本。",
+    "noSetting": "这个插件没有可设置的 {{key}}。",
+    "channelTitle": {
+      "permission": "有请求等你回复",
+      "turnEnded": "一轮对话结束了",
+      "error": "有会话出错了",
+      "routines": "有定时任务需要看一下",
+      "planLimits": "套餐限额有变化"
+    },
+    "noChannel": "这个插件没有渠道 {{channel}}。",
+    "noSecret": "这个插件没有密钥 {{key}}。",
+    "secretNotKept": "Kettu 没能保存这个密钥，请再试一次。",
+    "updateChanged": "这个更新要的比上次显示的更多了，请重新看一下它多要了什么。",
+    "fromPlugin": "它是插件 {{plugin}} 带来的，跟着插件一起移除。",
+    "warn": {
+      "unknownField": "plugin.json 里有插件格式没有定义的字段 {{field}}，已忽略。",
+      "extensions": "plugin.json 的 extensions 不是对象，已忽略。",
+      "kettuField": "sh.kettu 这一项里有这个 Kettu 不认识的字段 {{field}}，已忽略。",
+      "event": "sh.kettu 这一项里有这个 Kettu 不认识的事件 {{event}}，已忽略。",
+      "eventPermission": "没有带上事件 {{event}}：它需要权限 {{permission}}，而插件没有申请。",
+      "viewField": "视图 {{view}} 有一个这个 Kettu 不认识的字段：{{field}}。已忽略。",
+      "viewIcon": "视图 {{view}} 用了一个这个 Kettu 没有的图标。已略去。",
+      "toolsPermission": "没有带上工具：它们需要权限 tools，而插件没有申请。",
+      "actionField": "操作 {{action}} 有一个这个 Kettu 不认识的字段：{{field}}。已忽略。",
+      "actionIcon": "操作 {{action}} 用了一个这个 Kettu 没有的图标。已略去。",
+      "mentionsPermission": "没有带上 @ 引用来源：它们需要权限 prompt.attach，而插件没有申请。",
+      "refField": "{{id}} 有一个这个 Kettu 不认识的字段 {{field}}。已忽略。",
+      "refIcon": "{{id}} 用了一个这个 Kettu 没有的图标。已略去。",
+      "channelField": "渠道 {{channel}} 有一个这个 Kettu 不认识的字段：{{field}}。已忽略。",
+      "item": "没有带上 {{path}}：{{reason}}",
+      "server": "没有带上 MCP 服务器 {{name}}：{{reason}}",
+      "cwd": "MCP 服务器 {{name}} 要在 {{cwd}} 里启动，智能体会在会话的文件夹里启动它。",
+      "hooks": "这个插件的 hooks 在 Kettu 里不运行。"
+    },
+    "reason": {
+      "entry": "它不符合插件格式",
+      "schema": "它用的插件格式版本和 plugin.json 不一样",
+      "name": "它的名字 Kettu 不接受：只能用字母、数字、点、连字符和下划线",
+      "duplicate": "另一项也叫 {{name}}",
+      "noFile": "它没有 {{file}}",
+      "type": "它只能是 {{types}} 之一",
+      "tooLarge": "它太大了",
+      "command": "它的命令只能是一个程序的名字，或包里以 ./ 开头的路径",
+      "url": "它的网址只能是 https 地址，或这台电脑上的 http 地址",
+      "unknownFolder": "Kettu 不认识这个文件夹"
+    },
+    "convert": {
+      "refused": "这个插件转换不了：{{reason}}",
+      "badManifest": "{{path}} 不是 Kettu 能读的 JSON 对象。",
+      "noName": "它没有 Kettu 能用的名字。",
+      "unreadable": "转换出来的包读不出来：{{reason}}",
+      "noFolder": "{{path}} 旁边找不到没被占用的文件夹名。",
+      "notHarness": "{{path}} 里没有 Claude Code 或 Codex 的插件。",
+      "note": {
+        "renamed": "名字 {{from}} 改成了 {{to}}，Kettu 插件的名字只能用小写字母、数字、连字符和点。",
+        "noVersion": "它没有写版本号，Kettu 插件从 1.0.0 开始。",
+        "badVersion": "它的版本号 {{version}} 不是 1.2.3 这样的写法，Kettu 插件从 1.0.0 开始。",
+        "skillName": "它的 front matter 里没有 name，已按文件夹名补上 {{name}}，条目需要它。",
+        "serverFields": "没有带上 {{fields}}，Kettu 插件的 MCP 服务器里没有它们的位置。",
+        "serverEnv": "它引用了环境变量 {{vars}}。Kettu 不会代为填入，会按原样交给服务器。",
+        "commandFields": "没有带上 {{fields}}，Kettu 命令里没有它们的位置。",
+        "commandShell": "它的 !`命令` 行在 Claude Code 里会运行 shell 命令，在 Kettu 里只会当作文字交给智能体。",
+        "pluginRoot": "它用 {{variable}} 指插件的文件夹，Kettu 只在 MCP 服务器里替换它。",
+        "roleAgent": "它建议用 Claude Code，因为它写的模型是 Claude Code 的。",
+        "roleFields": "没有带上 {{fields}}，Kettu 角色里没有它们的位置。",
+        "bin": "bin 文件夹带过来了，但 Kettu 不会把它加到智能体的 PATH 里。"
+      },
+      "left": {
+        "hookCommand": "Kettu 不会在智能体的事件上运行插件的 shell 命令。",
+        "hookBeforeTool": "Kettu 不会在工具调用之前拦住它（只有部分智能体拦得住），也不运行插件的 shell 命令。",
+        "hookModel": "Kettu 不运行需要问模型或智能体的 hook。",
+        "hookWeb": "Kettu 不运行要访问网址的 hook。",
+        "hookOther": "Kettu 不运行这种 hook。",
+        "hookMore": "另外还有 {{count}} 个 hook，原因相同。",
+        "hookScript": "只有 hook 用到这个文件，而 Kettu 不运行 hook。",
+        "lsp": "Kettu 不为智能体运行语言服务器。",
+        "outputStyles": "Kettu 没有输出样式。",
+        "apps": "应用是 Codex 的，Kettu 没有对应的东西。",
+        "settings": "Kettu 不应用插件自带的默认设置。",
+        "serverEntry": "它不是 MCP 服务器的配置。",
+        "serverType": "它的类型不是 Kettu 能运行的 stdio、http 或 sse。",
+        "serverNone": "它既没有命令，也没有网址。",
+        "nameTaken": "另一项也叫 {{name}}。",
+        "nameTakenFile": "这个名字是 Kettu 插件自己的文件占着的。"
+      }
+    }
+  },
+  "commands": {
+    "missingArguments": "/{{command}} 没有发出：命令后面还要写 {{names}} 的值。",
+    "notSent": "/{{command}} 没有发出：它需要 {{items}}。",
+    "missing": {
+      "skill": "技能 {{name}}（没有安装）",
+      "mcp": "MCP 服务器 {{name}}（没有安装）"
+    },
+    "off": {
+      "skill": "技能 {{name}}（已关闭）",
+      "mcp": "MCP 服务器 {{name}}（已关闭）"
+    },
+    "addsBusy": "/{{command}} 要给这个会话加上技能或 MCP 服务器，只能在会话空闲时加。等它做完当前的工作再试。",
+    "added": {
+      "title": "为 /{{command}} 加上了",
+      "skill": "技能 {{name}}",
+      "mcp": "MCP 服务器 {{name}}"
+    }
+  },
+  "roles": {
+    "unknown": "没有叫 {{role}} 的角色。",
+    "notStarted": "角色 {{role}} 没有启用：它需要 {{items}}。",
+    "started": "以角色 {{role}} 开始"
   },
   "marketBundle": {
     "invalid": "这个 MCP 包装不了：{{reason}}",
@@ -1384,18 +1524,9 @@
     }
   },
   "marketPlugins": {
-    "notListedInstalled": "{{agent}} 的已安装列表里没有 {{id}}",
-    "marketplaceNotListed": "{{agent}} 的列表里没有它刚添加的市场",
-    "noSuchPlugin": "{{agent}} 没有提供插件 {{id}}",
-    "noPlugins": "只有 Claude Code 和 Codex 有插件",
-    "codexUserOnly": "Codex 的插件只能装给当前用户",
-    "scopeNeedsProject": "项目范围和本地范围必须指定项目，其他范围不能指定",
-    "marketplaceListNotJson": "Claude Code 的市场列表不是 JSON",
-    "marketplaceListNotList": "Claude Code 的市场列表不是列表",
+    "removed": "Kettu 不再管理 Claude Code 和 Codex 的插件，请在 Claude Code 或 Codex 里管理。",
     "pluginListNotJson": "Claude Code 的插件列表不是 JSON",
     "pluginListNotObject": "Claude Code 的插件列表格式不对",
-    "claudeNoResult": "Claude Code 没有给出结果",
-    "claudeOutcome": "Claude Code 返回了 {{outcome}}",
     "claudeFailed": "claude 运行失败"
   },
   "report": {
@@ -1472,6 +1603,7 @@
     "personNoAgent": "由人完成的步骤不用选智能体",
     "personNoReview": "由人完成的步骤不审核别的步骤",
     "personNoTools": "由人完成的步骤没有会话可以交付工具",
+    "personNoRole": "由人完成的步骤没有智能体可以指定角色",
     "twoOutcomes": "交出结果的步骤至少要有两个结果",
     "outcomesMapping": "必须把步骤 id 映射到各自的结果",
     "outcomeNames": "必须把结果名映射到名称",
@@ -1501,7 +1633,8 @@
     "noMcp": "Kettu 里没有安装 MCP 服务器“{{name}}”",
     "noSkill": "Kettu 里没有安装技能“{{name}}”",
     "unreadable": "无法读取：{{reason}}",
-    "fileGone": "文件已经不在了"
+    "fileGone": "文件已经不在了",
+    "pluginOff": "它的插件 {{plugin}} 关着"
   },
   "apiKey": {
     "oneWord": "API key 必须是不含空格的一整段文字",
@@ -1646,6 +1779,7 @@
     "commentBody": "评论需要 1 到 {{max}} 个字符，不能只有空白",
     "promptItems": "消息里的内容超过了 {{max}} 项",
     "promptAttachments": "一条消息最多带 {{max}} 个附件",
+    "promptMentions": "一条消息最多带 {{max}} 个插件提供的条目",
     "promptTooLarge": "消息超过了 10 MB",
     "promptEmpty": "消息是空的",
     "textTooLarge": "文本超过了 1 MiB",

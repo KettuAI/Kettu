@@ -9,6 +9,7 @@ import { setLogLevel, setVerboseRecords, writeLog } from '@shared/log/process-lo
 import { ARTIFACT_ID } from '@shared/artifacts'
 import type { AttachmentGrant } from '@shared/attachments'
 import type { HostToMain, MainToHost } from '@shared/host-control'
+import type { AgentToPluginHost } from '@shared/plugin-host'
 import type { ControlChannel, PortChannel } from '@shared/port-channel'
 import type { FromPort } from '@shared/port-rpc'
 import type { PortDevice } from '@shared/remote/device'
@@ -23,6 +24,8 @@ export interface StartedAgentHost {
    * started, and closed if it never was.
    */
   connect(port: PortChannel<FromPort<HostEvent>>, device: PortDevice | null): void
+  /** The plugin host's port, once that process is ready. */
+  connectPluginHost(port: PortChannel<AgentToPluginHost>): void
 }
 
 function isGrant(value: unknown): value is AttachmentGrant {
@@ -100,7 +103,9 @@ export function startAgentHost(control: ControlChannel<MainToHost, HostToMain>):
         withHost((h) => h.updateSettings(message.settings))
         break
       case 'host:market-keys':
-        withHost((h) => h.setMarketKeys(message.values, message.oauth, message.agentEnv))
+        withHost((h) =>
+          h.setMarketKeys(message.values, message.oauth, message.agentEnv, message.pluginSecrets),
+        )
         break
       case 'host:market-account':
         withHost((h) => h.setMarketAccount(message.account))
@@ -121,6 +126,14 @@ export function startAgentHost(control: ControlChannel<MainToHost, HostToMain>):
           message.answer !== null
         ) {
           withHost((h) => h.settingsResult(message.callId, message.answer))
+        }
+        break
+      case 'plugin-secret-result':
+        if (
+          Number.isSafeInteger(message.callId) &&
+          (message.error === null || typeof message.error === 'string')
+        ) {
+          withHost((h) => h.pluginSecretResult(message.callId, message.error))
         }
         break
       case 'trash-result':
@@ -231,6 +244,11 @@ export function startAgentHost(control: ControlChannel<MainToHost, HostToMain>):
       case 'host:power':
         withHost((h) => h.power(message.state))
         break
+      case 'host:color-mode':
+        if (message.mode === 'light' || message.mode === 'dark') {
+          withHost((h) => h.setColorMode(message.mode))
+        }
+        break
       case 'host:battery':
         if (typeof message.onBattery === 'boolean') {
           const { onBattery } = message
@@ -284,6 +302,9 @@ export function startAgentHost(control: ControlChannel<MainToHost, HostToMain>):
   return {
     connect: (port, device) => {
       if (!withHost((h) => h.connect(port, device))) port.close()
+    },
+    connectPluginHost: (port) => {
+      if (!withHost((h) => h.connectPluginHost(port))) port.close()
     },
   }
 }

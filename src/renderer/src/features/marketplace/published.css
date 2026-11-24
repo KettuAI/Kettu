@@ -72,6 +72,9 @@
 .k-pub-dot[data-tone='danger'] {
   background: var(--danger);
 }
+.k-pub-dot[data-tone='attention'] {
+  background: var(--warning);
+}
 .k-pub-vis {
   display: inline-flex;
   align-items: center;
@@ -622,6 +625,11 @@
   color: var(--ink);
   overflow-wrap: anywhere;
 }
+.k-pub-vrow p.k-pub-vrow__note {
+  font-size: 12.5px;
+  line-height: 18px;
+  color: var(--muted);
+}
 .k-pub-vrow p.k-pub-vrow__error {
   font-size: 12.5px;
   line-height: 18px;
@@ -790,6 +798,11 @@
 /* Dialogs: a folder's check and confirmation, the publisher name and a version's files */
 .k-pub-dialog.kettu-sd {
   max-width: min(600px, calc(100% - 64px));
+}
+/* The dialog's buttons stay in view; a long card scrolls under its header. */
+.k-pub-body {
+  max-height: max(240px, calc(100vh - 372px));
+  overflow-y: auto;
 }
 .k-pub-checking {
   display: flex;

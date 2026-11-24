@@ -891,6 +891,12 @@ li[data-row-exit='dust'] > * {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* A group named for a plugin leads with its tile. */
+.kettu-search .ui-cmc__label:has(.kpv-tile) {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
 /* The name keeps its room; the line after it gives way first. */
 .kettu-search .ui-cmc__name {
   flex-shrink: 0;

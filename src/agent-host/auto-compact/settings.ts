@@ -11,7 +11,7 @@ import {
   type ListedModel,
 } from '../claude/user-settings'
 import { t } from '../i18n'
-import type { CodexRequest } from '../marketplace/codex-plugins'
+import type { CodexRequest } from '../codex/rpc'
 import { versionAtLeast } from '../versions'
 import {
   FILE_TARGETS,

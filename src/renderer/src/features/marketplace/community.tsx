@@ -15,18 +15,15 @@ import {
   PlugSocketIcon,
   RefreshIcon,
   SparklesIcon,
-  Tick02Icon,
   ViewIcon,
 } from '@hugeicons/core-free-icons'
 import type { IconSvgElement } from '@hugeicons/react'
 import { useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
 import {
-  KETTU_PLUGINS,
   kettuId,
   type BundleRef,
   type CommunityItem,
-  type CommunityPlugin,
   type CommunityWorkflow,
 } from '@shared/market-community'
 import type { MarketListing, PublishAdds, PublishKind } from '@shared/market-publish'
@@ -35,14 +32,12 @@ import type { AgentId } from '@shared/thread'
 import { Icon, Popover } from '@renderer/components/affect/app-shell'
 import { Button } from '@renderer/components/affect/button'
 import { AgentMark } from '@renderer/components/agents/agent-mark'
-import { Skeleton } from '@renderer/components/ui/skeleton'
 import { toast } from '@renderer/components/ui/toast'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
 import { backTo } from '@renderer/app/history'
-import { Segmented, SettingSelect } from '@renderer/features/settings/controls'
-import { basename, count, mediumAgo } from '@renderer/lib/format'
+import { count, mediumAgo } from '@renderer/lib/format'
 import { errorMessage } from '@renderer/lib/host'
-import { i18n } from '@renderer/lib/i18n'
+import { currentLocale, i18n } from '@renderer/lib/i18n'
 import { isWeb } from '@renderer/lib/platform'
 import { signIn, useAccountStore } from '@renderer/stores/account'
 import { AGENT_NAMES } from '@renderer/stores/agents'
@@ -50,25 +45,14 @@ import { useHostScope, type HostScope } from '@renderer/stores/host-scope'
 import { busyKey, communityScopeKey } from '@renderer/stores/marketplace'
 import { openMarketplace, openSettings, type MarketplaceTab } from '@renderer/stores/view'
 import {
-  installCommunityPlugin,
   installServer,
   installSkill,
-  updateCommunityPlugin,
   updateCommunityServer,
   updateCommunitySkill,
   type AgentChoice,
 } from './actions'
 import { ConnectButton, ConnectionControls } from './connect'
-import {
-  useBusy,
-  useChoosableAgents,
-  useHarnessAgents,
-  useHostProjects,
-  useInstallsLabel,
-  useKept,
-  useKeptSkill,
-  usePluginInstalls,
-} from './hooks'
+import { useBusy, useChoosableAgents, useInstallsLabel, useKept, useKeptSkill } from './hooks'
 import { BundleInstallButton, BundleNote, BundleUpdateButton } from './bundle-install'
 import { AgentPicker } from './install'
 import { InstallButton, KeptControls, Runs } from './listing'
@@ -77,7 +61,6 @@ import { ListingFrame, ListingSkeleton } from './parts'
 import { usePublishedStore } from './published-hooks'
 import { publishedItem } from './published-keys'
 import { ReportDialog } from './report-dialog'
-import { InstallRow } from './plugins'
 import {
   AddControl,
   ItemRow,
@@ -90,6 +73,17 @@ import {
   type ItemKind,
 } from './rows'
 import { KeptSkillControls } from './skills'
+import {
+  PluginFacts,
+  PluginListingAction,
+  PluginControls,
+  PluginListingBody,
+  PluginRowAction,
+  PluginSideExtra,
+  PluginTags,
+} from './plugin-ui'
+import { usePluginOfListing } from './plugin-hooks'
+import { addsTags, pluginTitle } from './plugin-model'
 import { communitySubject } from './tile-art'
 import { ItemTile } from './tiles'
 import { addCommunityWorkflow, useListingWorkflow } from './workflow-actions'
@@ -103,6 +97,7 @@ const KIND = {
   workflow: 'workflow',
   plugin: 'plugin',
   'mcp-server': 'mcp',
+  'agent-plugin': 'plugin',
 } as const satisfies Record<PublishKind, ItemKind>
 
 // The agents that do a workflow's steps.
@@ -122,20 +117,27 @@ export function CommunityRow({
   const installs = useInstallsLabel()(item.installs)
   const open = () => openMarketplace({ item: itemKey({ kind: 'community', id: item.id }), tab })
   const steps = item.kind === 'workflow' ? (item.steps ?? []) : []
+  const tags = item.kind === 'agent-plugin' ? addsTags(item.adds) : []
   return (
     <ItemRow
       title={item.name}
       subject={communitySubject(item)}
       meta={
         <>
-          <KindTag kind={KIND[item.kind]} harness={item.harness} />
+          <KindTag kind={KIND[item.kind]} />
           <Publisher name={item.handle} kettu={item.official} />
           {steps.length > 0 && <StepsCount count={steps.length} />}
           {installs && <span>{installs}</span>}
         </>
       }
       line={item.description || null}
-      extra={steps.length > 0 ? <StepsLine names={steps} waits={item.waits ?? []} /> : undefined}
+      extra={
+        steps.length > 0 ? (
+          <StepsLine names={steps} waits={item.waits ?? []} />
+        ) : tags.length > 0 ? (
+          <PluginTags tags={tags} limit={card ? 3 : undefined} />
+        ) : undefined
+      }
       fresh={fresh}
       card={card}
       onOpen={open}
@@ -144,21 +146,8 @@ export function CommunityRow({
   )
 }
 
-/** The plugin installed from a listing, and every agent's install of it. */
-function useCommunityPlugin(listingId: string, harness: CommunityItem['harness']) {
-  const { useMarketplaceStore } = useHostScope()
-  const record = useMarketplaceStore(
-    (s) => s.communityInstalled?.plugins.find((p) => p.listingId === listingId) ?? null,
-  )
-  const installs = usePluginInstalls(
-    harness ?? 'claude-code',
-    record ? `${record.name}@${KETTU_PLUGINS}` : '',
-  )
-  return { record, installs: record ? installs : [] }
-}
-
 /**
- * A row's action: Add for a skill or a workflow, Install for a plugin or a server, the check once
+ * A row's action: Add for a skill or a workflow, Install for a server, the check once
  * installed.
  */
 function CommunityAction({
@@ -172,7 +161,7 @@ function CommunityAction({
 }) {
   if (item.kind === 'skill') return <SkillAction item={item} onOpen={onOpen} />
   if (item.kind === 'workflow') return <WorkflowAction item={item} tab={tab} onOpen={onOpen} />
-  if (item.kind === 'plugin') return <PluginAction item={item} onOpen={onOpen} />
+  if (item.kind === 'agent-plugin') return <PluginRowAction item={item} onOpen={onOpen} />
   return <ServerAction item={item} onOpen={onOpen} />
 }
 
@@ -245,142 +234,6 @@ function WorkflowAction({
       onOpen={onOpen}
       onAdd={() => void addCommunityWorkflow(scope, item, { tab })}
     />
-  )
-}
-
-function PluginAction({ item, onOpen }: { item: CommunityItem; onOpen: () => void }) {
-  const { t } = useTranslation('marketplace')
-  const { installs } = useCommunityPlugin(item.id, item.harness)
-  const busy = useBusy(busyKey('community', item.id))
-  return (
-    <AddControl
-      name={item.name}
-      label={t('row.install')}
-      state={busy ? 'busy' : installs.length > 0 ? 'on' : 'off'}
-      onOpen={onOpen}
-      form={(close) => <PluginForm item={item} onDone={close} />}
-    />
-  )
-}
-
-/**
- * Install: one agent of the plugin's harness, and for Claude Code every project or one. Its hooks
- * are called out from what the listing says it adds, which is read before Install can be pressed.
- */
-function PluginForm({
-  item,
-  onDone,
-}: {
-  item: Pick<CommunityItem, 'id' | 'name' | 'harness'>
-  onDone: () => void
-}) {
-  const { t } = useTranslation('marketplace')
-  const scope = useHostScope()
-  const harness = item.harness ?? 'claude-code'
-  const agents = useHarnessAgents(harness)
-  const { installs } = useCommunityPlugin(item.id, harness)
-  const projects = useHostProjects()
-  const free = agents.filter((a) => !installs.some((p) => p.agentId === a.id))
-  const [agentId, setAgentId] = useState<AgentId | null>(free[0]?.id ?? agents[0]?.id ?? null)
-  const [pluginScope, setPluginScope] = useState<'user' | 'project'>('user')
-  const [project, setProject] = useState<string>(projects[0]?.path ?? '')
-  const page = useCommunityListing(item.id)
-  const listed = page.listing?.state === 'listed' ? page.listing.listing : null
-  const checked = listed !== null || page.error !== null || page.listing !== null
-  const ready = agentId !== null && checked && (pluginScope === 'user' || project !== '')
-  const submit = (event: FormEvent) => {
-    event.preventDefault()
-    if (!ready) return
-    onDone()
-    void installCommunityPlugin(
-      scope,
-      { id: item.id, name: item.name, harness },
-      agentId,
-      pluginScope,
-      pluginScope === 'project' ? project : null,
-    )
-  }
-  return (
-    <form className="k-mkt-install" onSubmit={submit}>
-      <b>{t('install.title', { name: item.name })}</b>
-      <span>{t('community.pluginNote', { harness: AGENT_NAMES[harness] })}</span>
-      <div className="k-mkt-install__field">
-        <small>{t('plugin.agent')}</small>
-        {agents.length === 0 ? (
-          <p className="k-mkt-install__empty">
-            {t('plugin.noAgents', { harness: AGENT_NAMES[harness] })}
-          </p>
-        ) : (
-          <div className="k-mkt-agents" role="radiogroup" aria-label={t('plugin.agent')}>
-            {agents.map((agent) => (
-              <button
-                key={agent.id}
-                type="button"
-                role="radio"
-                aria-checked={agent.id === agentId}
-                className="k-mkt-agents__agent"
-                onClick={() => setAgentId(agent.id)}
-              >
-                <AgentMark agent={agent.id} size={13} />
-                <span className="k-mkt-agents__name">{agent.name}</span>
-                {installs.some((p) => p.agentId === agent.id) && (
-                  <span className="k-mkt-agents__note">{t('listing.installed')}</span>
-                )}
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
-      {harness === 'claude-code' && (
-        <div className="k-mkt-install__field">
-          <small>{t('plugin.scope')}</small>
-          <Segmented
-            label={t('plugin.scope')}
-            value={pluginScope}
-            options={[
-              { value: 'user', label: t('plugin.scopeUser') },
-              { value: 'project', label: t('plugin.scopeProject'), disabled: !projects.length },
-            ]}
-            onChange={setPluginScope}
-          />
-          {pluginScope === 'project' && (
-            <SettingSelect
-              label={t('plugin.project')}
-              value={project}
-              options={projects.map((p) => ({ value: p.path, label: p.name || basename(p.path) }))}
-              onChange={setProject}
-            />
-          )}
-        </div>
-      )}
-      {!checked ? (
-        <Skeleton className="k-mkt-skeleton__line" />
-      ) : listed ? (
-        hasHooks(listed.adds) && <HooksWarning />
-      ) : (
-        <em className="k-mkt-warn">
-          <Icon icon={Alert02Icon} size={13} />
-          {t('plugin.hooksUnchecked', { error: page.error ?? t('community.gone') })}
-        </em>
-      )}
-      <Button size="sm" type="submit" disabled={!ready}>
-        {t('install.submit')}
-      </Button>
-    </form>
-  )
-}
-
-function hasHooks(adds: PublishAdds[] | undefined): boolean {
-  return (adds ?? []).some((group) => group.label === 'hooks' && group.items.length > 0)
-}
-
-function HooksWarning() {
-  const { t } = useTranslation('marketplace')
-  return (
-    <em className="k-mkt-warn">
-      <Icon icon={Alert02Icon} size={13} />
-      {t('plugin.hooksWarning')}
-    </em>
   )
 }
 
@@ -674,10 +527,12 @@ function Unlisted({ id, takenDown, back }: { id: string; takenDown: boolean; bac
   const key = kettuId(id)
   const skill = useSettingsStore((s) => s.settings.marketplace.skills.find((x) => x.id === key))
   const server = useSettingsStore((s) => s.settings.marketplace.mcp.find((x) => x.id === key))
-  const plugin = useHostScope().useMarketplaceStore(
-    (s) => s.communityInstalled?.plugins.find((p) => p.listingId === id) ?? null,
-  )
-  const name = skill ? displayTitle(skill.name) : (server?.title ?? plugin?.name ?? null)
+  const plugin = usePluginOfListing(id)
+  const name = skill
+    ? displayTitle(skill.name)
+    : plugin
+      ? pluginTitle(plugin.contents, currentLocale())
+      : (server?.title ?? null)
   return (
     <>
       <ListingProblem
@@ -690,8 +545,9 @@ function Unlisted({ id, takenDown, back }: { id: string; takenDown: boolean; bac
               : t('community.gone')
         }
       />
-      {(skill || server) && (
+      {(skill || server || plugin) && (
         <div className="k-mkt-head__act k-mkt-unlisted">
+          {plugin && <PluginControls plugin={plugin} onRemoved={back} />}
           {skill && <KeptSkillControls skill={skill} onRemoved={back} />}
           {server &&
             (oauthFlow(server.spec) ? (
@@ -701,7 +557,6 @@ function Unlisted({ id, takenDown, back }: { id: string; takenDown: boolean; bac
             ))}
         </div>
       )}
-      {plugin && <PluginInstalls record={plugin} title={plugin.name} />}
     </>
   )
 }
@@ -733,7 +588,7 @@ function Listed({
         <span className="k-mkt-head__title">
           <span className="k-mkt-head__name">
             <h1>{listing.name}</h1>
-            <KindTag kind={KIND[listing.kind]} harness={listing.harness} />
+            <KindTag kind={KIND[listing.kind]} />
           </span>
           <span className="k-mkt-head__pub">
             {listing.mine && !preview
@@ -755,14 +610,23 @@ function Listed({
         </span>
       </header>
 
-      <Facts listing={listing} />
+      {listing.kind === 'agent-plugin' ? (
+        <PluginFacts
+          version={listing.version}
+          updated={Date.parse(listing.updatedAt)}
+          script={addsTags(listing.adds).some((tag) => tag.kind === 'script')}
+        />
+      ) : (
+        <Facts listing={listing} />
+      )}
 
       <div className="k-mkt-body">
         <div className="k-mkt-body__main">
           {listing.about && <p className="k-mkt-about k-mkt-about--text">{listing.about}</p>}
-          {listing.kind === 'plugin' && !preview && <PluginInstallsOf listing={listing} />}
           {listing.kind === 'workflow' ? (
             <WorkflowFlow listing={listing} />
+          ) : listing.kind === 'agent-plugin' ? (
+            <PluginListingBody listing={listing} preview={preview} />
           ) : (
             <Adds adds={listing.adds} kind={listing.kind} installed={installed} />
           )}
@@ -789,17 +653,16 @@ function Listed({
               {listing.visibility === 'private' ? t('community.onlyMe') : count(listing.installs)}
             </dd>
             <dt>{t('community.side.kind')}</dt>
-            <dd>
-              {listing.harness
-                ? t('community.pluginFor', { harness: AGENT_NAMES[listing.harness] })
-                : t(`community.kinds.${KIND[listing.kind]}`)}
-            </dd>
+            <dd>{t(`community.kinds.${KIND[listing.kind]}`)}</dd>
             <dt>{t('community.side.name')}</dt>
             <dd className="k-mkt-mono" data-selectable="">
               @{listing.handle}/{listing.slug}
             </dd>
             <dt>{t('listing.side.listedIn')}</dt>
             <dd>{t('community.source')}</dd>
+            {listing.kind === 'agent-plugin' && !preview && (
+              <PluginSideExtra listingId={listing.id} />
+            )}
           </dl>
           {/* No one reports their own listing; the preview draws it where others see it, off. */}
           {(preview || !listing.mine) && (
@@ -822,8 +685,7 @@ function Listed({
 }
 
 /**
- * Whether this host has the listing: its skill or server kept, its plugin in an agent, or its
- * workflow in the library.
+ * Whether this host has the listing: its skill or server kept, or its workflow in the library.
  */
 function useInstalledHere(listing: MarketListing): boolean {
   const { useSettingsStore } = useHostScope()
@@ -833,9 +695,9 @@ function useInstalledHere(listing: MarketListing): boolean {
       s.settings.marketplace.skills.some((x) => x.id === id) ||
       s.settings.marketplace.mcp.some((x) => x.id === id),
   )
-  const { installs } = useCommunityPlugin(listing.id, listing.harness)
   const workflow = useListingWorkflow(listing.id)
-  return kept || installs.length > 0 || workflow !== null
+  const plugin = usePluginOfListing(listing.id)
+  return kept || workflow !== null || plugin !== null
 }
 
 /** Others of the same publisher, else of the same kind, from the directory. */
@@ -873,30 +735,19 @@ function Facts({ listing }: { listing: MarketListing }) {
   const agents = useChoosableAgents()
   const updated = Date.parse(listing.updatedAt)
   const steps = listing.kind === 'workflow'
-  const marks: AgentId[] = listing.harness
-    ? [listing.harness]
-    : steps
-      ? [...STEP_AGENTS]
-      : agents.slice(0, 6).map((agent) => agent.id)
+  const marks: AgentId[] = steps ? [...STEP_AGENTS] : agents.slice(0, 6).map((agent) => agent.id)
   return (
     <div className="k-mkt-facts">
       <span>
         <small>{steps ? t('workflow.facts.runBy') : t('listing.facts.worksWith')}</small>
         <b className="k-mkt-facts__agents">
           {marks.map((agent) => (
-            <AgentMark
-              key={agent}
-              agent={agent}
-              size={15}
-              dot={listing.harness || steps ? null : undefined}
-            />
+            <AgentMark key={agent} agent={agent} size={15} dot={steps ? null : undefined} />
           ))}
           <span className="k-mkt-facts__text">
-            {listing.harness
-              ? AGENT_NAMES[listing.harness]
-              : steps
-                ? t('more.two', { first: AGENT_NAMES['claude-code'], second: AGENT_NAMES.codex })
-                : t('listing.everyAgent')}
+            {steps
+              ? t('more.two', { first: AGENT_NAMES['claude-code'], second: AGENT_NAMES.codex })
+              : t('listing.everyAgent')}
           </span>
         </b>
       </span>
@@ -1157,7 +1008,6 @@ function Actions({
   const id = kettuId(listing.id)
   const skill = useSettingsStore((s) => s.settings.marketplace.skills.find((x) => x.id === id))
   const kept = useSettingsStore((s) => s.settings.marketplace.mcp.find((x) => x.id === id))
-  const { record, installs } = useCommunityPlugin(listing.id, listing.harness)
   const busy = useBusy(busyKey('community', listing.id))
   const skillBusy = useBusy(busyKey('skill', id))
   const [open, setOpen] = useState(false)
@@ -1166,6 +1016,8 @@ function Actions({
     current: listing.version,
     versions: listing.versions,
   }
+
+  if (listing.kind === 'agent-plugin') return <PluginListingAction listing={listing} back={back} />
 
   if (listing.kind === 'skill') {
     const update = skill ? updateFor(standing, skill.version) : null
@@ -1210,55 +1062,6 @@ function Actions({
       >
         {busy ? t('install.installing') : t('row.add')}
       </Button>
-    )
-  }
-
-  if (listing.kind === 'plugin') {
-    const update = record ? updateFor(standing, record.version) : null
-    return (
-      <>
-        {installs.length > 0 && !update && (
-          <span className="k-mkt-head__on">
-            <Icon icon={Tick02Icon} size={14} />
-            {t('listing.installed')}
-          </span>
-        )}
-        {update && installs.length > 0 && (
-          <UpdateButton
-            version={update}
-            busy={busy}
-            onClick={() =>
-              void updateCommunityPlugin(
-                scope,
-                { id: listing.id, name: listing.name, harness: listing.harness ?? 'claude-code' },
-                installs,
-              )
-            }
-          />
-        )}
-        <span className="ui-as-anchor">
-          <Button
-            variant={installs.length > 0 ? 'secondary' : 'primary'}
-            loading={busy}
-            aria-expanded={open}
-            onClick={() => !busy && setOpen((o) => !o)}
-          >
-            {busy
-              ? t('install.installing')
-              : installs.length > 0
-                ? t('plugin.installAnother')
-                : t('install.submit')}
-          </Button>
-          <Popover
-            open={open}
-            onClose={() => setOpen(false)}
-            align="end"
-            className="ui-as-menu k-mkt-install-pop"
-          >
-            <PluginForm item={listing} onDone={() => setOpen(false)} />
-          </Popover>
-        </span>
-      </>
     )
   }
 
@@ -1312,31 +1115,5 @@ function UpdateButton({
     <Button loading={busy} onClick={() => !busy && onClick()}>
       {busy ? t('community.updating') : t('community.update', { version })}
     </Button>
-  )
-}
-
-function PluginInstallsOf({ listing }: { listing: MarketListing }) {
-  const { record } = useCommunityPlugin(listing.id, listing.harness)
-  return record ? <PluginInstalls record={record} title={listing.name} /> : null
-}
-
-/** Each agent that has the plugin: where, its switch and Uninstall. */
-function PluginInstalls({ record, title }: { record: CommunityPlugin; title: string }) {
-  const { t } = useTranslation('marketplace')
-  const installs = usePluginInstalls(record.harness, `${record.name}@${KETTU_PLUGINS}`)
-  if (installs.length === 0) return null
-  return (
-    <section>
-      <h3>{t('plugin.installedIn')}</h3>
-      <div className="ui-sg-card k-mkt-card">
-        {installs.map((plugin) => (
-          <InstallRow
-            key={`${plugin.agentId}|${plugin.scope}|${plugin.projectPath ?? ''}`}
-            plugin={plugin}
-            title={title}
-          />
-        ))}
-      </div>
-    </section>
   )
 }

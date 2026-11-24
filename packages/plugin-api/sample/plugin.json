@@ -1,0 +1,75 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "session-digest",
+  "version": "1.0.0",
+  "description": "Counts the sessions that work, posts the count to a webhook, tells the agent the count, refuses a recursive delete and shows the count in views.",
+  "extensions": {
+    "sh.kettu": {
+      "format": 1,
+      "script": "./sh.kettu/main.js",
+      "api": 1,
+      "permissions": [
+        "sessions.summary",
+        "prompt.attach",
+        "requests.check",
+        "network:hooks.example.com"
+      ],
+      "events": ["session.beforeSend", "session.permissionRequested"],
+      "mentions": [
+        {
+          "id": "states",
+          "title": { "en": "Session states", "zh-CN": "会话状态" },
+          "icon": "list"
+        }
+      ],
+      "links": [
+        {
+          "id": "state",
+          "patterns": ["https://hooks.example.com/digest/{state}"],
+          "icon": "list"
+        }
+      ],
+      "views": [
+        {
+          "id": "states",
+          "kind": "list",
+          "title": "Working sessions",
+          "icon": "list",
+          "pane": true
+        },
+        {
+          "id": "state",
+          "kind": "detail",
+          "title": "One state"
+        },
+        {
+          "id": "label",
+          "kind": "form",
+          "title": "Label"
+        },
+        {
+          "id": "post",
+          "kind": "actions",
+          "title": "Post",
+          "pane": true
+        }
+      ],
+      "actions": [
+        {
+          "id": "show-states",
+          "title": {
+            "en": "Show working sessions",
+            "zh-CN": "查看进行中的会话"
+          },
+          "description": "Opens the list of sessions by state in the side panel",
+          "icon": "list"
+        },
+        {
+          "id": "post-now",
+          "title": "Post the digest now",
+          "icon": "play"
+        }
+      ]
+    }
+  }
+}

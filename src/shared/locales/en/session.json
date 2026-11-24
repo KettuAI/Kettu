@@ -165,6 +165,7 @@
     "update_memory": "Update memory",
     "forget_memory": "Forget memory",
     "marketplace_check": "Check before publishing",
+    "marketplace_convert": "Convert to a Kettu plugin",
     "marketplace_publish": "Publish to Marketplace",
     "marketplace_mine": "List published",
     "marketplace_unlist": "Unlist from Marketplace",
@@ -204,7 +205,11 @@
       "allowedByRoutine": "Allowed by the routine",
       "cancelled": "Cancelled",
       "withdrawn": "No longer needed",
-      "onDevice": "{{answer}} · {{device}}"
+      "onDevice": "{{answer}} · {{device}}",
+      "relayedAllow": "You allowed once, relayed by {{plugin}}",
+      "relayedAllowFrom": "You allowed once, from {{from}}, relayed by {{plugin}}",
+      "relayedDeny": "You denied it, relayed by {{plugin}}",
+      "relayedDenyFrom": "You denied it, from {{from}}, relayed by {{plugin}}"
     },
     "answeredOn": "Already answered on {{device}}.",
     "answeredInWindow": "Already answered in another window.",
@@ -482,7 +487,29 @@
   },
   "userEntry": {
     "device": "Sent from {{device}}",
-    "kettu": "Kettu"
+    "kettu": "Kettu",
+    "commandFrom": "From {{source}}",
+    "commandFromYours": "From Yours",
+    "showSent": "Show what was sent",
+    "hideSent": "Hide what was sent",
+    "attached": "Added by {{plugin}}",
+    "attachedItems": "Added by {{plugin}}: {{items}}",
+    "showAttached": "Show what was added",
+    "hideAttached": "Hide what was added",
+    "attachedFailed": "Couldn’t add {{items}}: {{why}}",
+    "attachedWhy": {
+      "not_found": "it is no longer offered",
+      "disabled": "the plugin was turned off after it crashed too often",
+      "crashed": "the plugin was stopped for using too much time or memory",
+      "timeout": "the plugin took too long to answer",
+      "unavailable": "plugins weren’t running",
+      "failed": "the plugin couldn’t give it",
+      "invalid": "the plugin sent something Kettu can’t use",
+      "too_large": "the message already holds as much as plugins may add"
+    }
+  },
+  "pluginDenial": {
+    "text": "<b>{{plugin}}</b> denied <b>{{request}}</b>: {{reason}}"
   },
   "sessionReport": {
     "agent": "The session",
@@ -749,6 +776,18 @@
       "opens": "Opens",
       "open": "Open"
     },
+    "role": {
+      "group": "Roles",
+      "agents": "Agents",
+      "yours": "Yours",
+      "anyAgent": "Any agent",
+      "agentMissing": "{{agent}} is not on this computer",
+      "notice": {
+        "agent": "The role {{role}} suggests {{wanted}}, which this computer does not have, so it starts with {{actual}}.",
+        "model": "The role {{role}} suggests {{wanted}}, which {{agent}} does not offer, so it starts with {{actual}}.",
+        "effort": "The role {{role}} suggests the effort {{wanted}}, which {{agent}} does not offer here, so it starts with {{actual}}."
+      }
+    },
     "picker": {
       "search": "Search agents",
       "noMatch": "No matching agents",
@@ -980,7 +1019,8 @@
     "alwaysSiteSession": "Always open {{site}} links in the session browser",
     "alwaysHost": "Always open this site in {{browser}}",
     "alwaysHostSession": "Always open this site in the session browser",
-    "openFailed": "Couldn’t open the link: {{error}}"
+    "openFailed": "Couldn’t open the link: {{error}}",
+    "pluginFailed": "{{plugin}} couldn’t show this link: {{message}}"
   },
   "alert": {
     "note": "Note",
@@ -1488,6 +1528,7 @@
       "skill": "Skill",
       "plugin": "Plugin",
       "mcp-server": "MCP server",
+      "agent-plugin": "Plugin",
       "workflow": "Workflow"
     },
     "visibility": {
@@ -1513,7 +1554,11 @@
       "commands": "Commands",
       "agents": "Agents",
       "hooks": "Hooks",
-      "servers": "MCP server"
+      "servers": "MCP server",
+      "roles": "Roles",
+      "workflows": "Workflows",
+      "themes": "Themes",
+      "templates": "Templates"
     },
     "workflowGroup": {
       "steps": "Steps",
@@ -1561,6 +1606,8 @@
     "unlist": "Unlist",
     "notNow": "Not now",
     "keptDraft": "Kept as a draft",
+    "heldMeta": "Not listed until it’s been reviewed",
+    "heldStays": "{{previous}} stays listed",
     "showProblems_one": "Show {{count}} problem",
     "showProblems_other": "Show {{count}} problems",
     "hideProblems": "Hide problems",
@@ -1568,6 +1615,7 @@
       "publishing": "Publishing {{name}}…",
       "unlisting": "Unlisting {{name}}…",
       "published": "Published {{name}} {{version}}",
+      "held": "{{name}} {{version}} is waiting for review",
       "unlisted": "Unlisted {{name}}",
       "failed": "Couldn’t publish {{name}}",
       "unlistFailed": "Couldn’t unlist {{name}}",
@@ -1582,6 +1630,46 @@
       "changed": "Steps or arrows differ from what the task ran",
       "compare": "Compare with the version “{{title}}” used",
       "hide": "Hide the comparison"
+    },
+    "showAll": "Show all",
+    "pluginLeftOut": "Left out",
+    "script": {
+      "label": "Script",
+      "noPermissions": "Asks for no permissions.",
+      "onlyKettu": "Only Kettu’s own publisher may publish a plugin with a script for now."
+    },
+    "converted": {
+      "label": "Converted",
+      "from": "Made from a {{harness}} plugin. The folder it came from is unchanged.",
+      "carried": "Came over",
+      "count": {
+        "skills_one": "{{count}} skill",
+        "skills_other": "{{count}} skills",
+        "servers_one": "{{count}} MCP server",
+        "servers_other": "{{count}} MCP servers",
+        "commands_one": "{{count}} command",
+        "commands_other": "{{count}} commands",
+        "roles_one": "{{count}} role",
+        "roles_other": "{{count}} roles",
+        "workflows_one": "{{count}} Workflow",
+        "workflows_other": "{{count}} Workflows",
+        "themes_one": "{{count}} theme",
+        "themes_other": "{{count}} themes",
+        "templates_one": "{{count}} template",
+        "templates_other": "{{count}} templates"
+      },
+      "nothingLeftOut": "Nothing was left out.",
+      "leftOut_one": "{{count}} part was left out:",
+      "leftOut_other": "{{count}} parts were left out:",
+      "changed": "Changed on the way:",
+      "kind": {
+        "hook": "Hook",
+        "command": "Command",
+        "agent": "Agent",
+        "server": "MCP server",
+        "skill": "Skill",
+        "file": "File"
+      }
     }
   },
   "sideChat": {

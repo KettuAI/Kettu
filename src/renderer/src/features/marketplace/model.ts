@@ -1,4 +1,4 @@
-// What the Marketplace shows of a server, plugin or skill, wherever it is known from: the
+// What the Marketplace shows of a server or skill, wherever it is known from: the
 // catalogs, a search, or what Kettu and the agents keep; and the names, lists and command lines
 // its pages build.
 
@@ -6,21 +6,17 @@ import {
   displayTitle,
   MARKET_NAME,
   specInputs,
-  type CatalogPlugin,
   type CatalogServer,
   type CatalogSkill,
-  type InstalledPlugin,
+  type AgentOwnPlugin,
   type MarketCatalog,
   type MarketServer,
   type MarketSkill,
   type McpSpec,
-  type PluginHarness,
 } from '@shared/marketplace'
 import type { TFunction } from 'i18next'
 import { listingIdOf, type CommunityItem, type CommunityStanding } from '@shared/market-community'
 import { compareVersions } from '@shared/market-publish'
-import { harnessOf } from '@shared/agents'
-import type { AgentId, HarnessId } from '@shared/thread'
 import { basename } from '@renderer/lib/format'
 import { currentLocale } from '@renderer/lib/i18n'
 import type { HostScope } from '@renderer/stores/host-scope'
@@ -28,6 +24,7 @@ import { workflowsKey, useWorkflowsStore } from '@renderer/stores/workflows'
 import { workflowName } from './workflow-model'
 import { publishedStore } from '@renderer/stores/market-published'
 import { publishedTitle } from './published-keys'
+import { pluginTitle } from './plugin-model'
 
 /** A server as its listing shows it; what only the catalog knows is null for one added by hand. */
 export interface Listing {
@@ -129,22 +126,22 @@ export function findListing(scope: HostScope, id: string, kept: MarketServer[]):
 }
 
 /**
- * What a listing shows: an MCP server, a harness's plugin, a skill or a workflow, by its id, or a
- * listing of the Kettu Marketplace, by the listing's.
+ * What a listing shows: an MCP server, a skill or a workflow, by its id, or a listing of the Kettu
+ * Marketplace, by the listing's.
  */
 export type ItemRef =
+  | { kind: 'plugin'; id: string }
   | { kind: 'mcp'; id: string }
-  | { kind: 'plugin'; harness: PluginHarness; id: string }
   | { kind: 'skill'; id: string }
   | { kind: 'workflow'; id: string }
   | { kind: 'community'; id: string }
 
 /**
- * The `item` of a listing's view: `mcp:<id>`, `plugin:<harness>/<id>`, `skill:<id>`,
- * `workflow:<id>` or `community:<listing>`.
+ * The `item` of a listing's view: `plugin:<id>` for an installed Kettu plugin, `mcp:<id>`,
+ * `skill:<id>`, `workflow:<id>` or `community:<listing>`.
  */
 export function itemKey(ref: ItemRef): string {
-  return ref.kind === 'plugin' ? `plugin:${ref.harness}/${ref.id}` : `${ref.kind}:${ref.id}`
+  return `${ref.kind}:${ref.id}`
 }
 
 export function parseItem(key: string): ItemRef | null {
@@ -152,14 +149,16 @@ export function parseItem(key: string): ItemRef | null {
   const kind = key.slice(0, colon)
   const rest = key.slice(colon + 1)
   if (colon < 0 || !rest) return null
-  if (kind === 'mcp' || kind === 'skill' || kind === 'workflow' || kind === 'community') {
+  if (
+    kind === 'plugin' ||
+    kind === 'mcp' ||
+    kind === 'skill' ||
+    kind === 'workflow' ||
+    kind === 'community'
+  ) {
     return { kind, id: rest }
   }
-  if (kind !== 'plugin') return null
-  const slash = rest.indexOf('/')
-  const harness = rest.slice(0, slash)
-  if (slash < 0 || (harness !== 'claude-code' && harness !== 'codex')) return null
-  return { kind, harness, id: rest.slice(slash + 1) }
+  return null
 }
 
 /** A listing's name for the history, where the stores know it. */
@@ -168,6 +167,10 @@ export function listingTitle(scope: HostScope, key: string): string | null {
   if (own !== undefined) return own
   const ref = parseItem(key)
   if (!ref) return null
+  if (ref.kind === 'plugin') {
+    const plugin = scope.useMarketplaceStore.getState().plugins?.find((p) => p.id === ref.id)
+    return plugin ? pluginTitle(plugin.contents, currentLocale()) : null
+  }
   if (ref.kind === 'workflow') {
     const entry = useWorkflowsStore
       .getState()
@@ -177,7 +180,6 @@ export function listingTitle(scope: HostScope, key: string): string | null {
   const { mcp, skills } = scope.useSettingsStore.getState().settings.marketplace
   if (ref.kind === 'community') return communityItem(scope, ref.id)?.name ?? null
   if (ref.kind === 'mcp') return findListing(scope, ref.id, mcp)?.title ?? null
-  if (ref.kind === 'plugin') return catalogPlugin(scope, ref.harness, ref.id)?.title ?? null
   const name = catalogSkill(scope, ref.id)?.name ?? skills.find((s) => s.id === ref.id)?.name
   return name ? displayTitle(name) : null
 }
@@ -220,25 +222,6 @@ export function updateFor(
     : null
 }
 
-/** A plugin of the harnesses' marketplaces, as the host last listed them. */
-export function catalogPlugin(
-  scope: HostScope,
-  harness: PluginHarness,
-  id: string,
-): CatalogPlugin | null {
-  const plugins = scope.useMarketplaceStore.getState().plugins
-  return plugins?.catalog.find((p) => p.harness === harness && p.id === id) ?? null
-}
-
-/** The agents' installs of a plugin. */
-export function pluginInstalls(
-  installed: InstalledPlugin[] | undefined,
-  harness: PluginHarness,
-  id: string,
-): InstalledPlugin[] {
-  return (installed ?? []).filter((p) => p.harness === harness && p.id === id)
-}
-
 export function catalogSkill(scope: HostScope, id: string): CatalogSkill | null {
   return scope.useMarketplaceStore.getState().skills?.catalog.find((s) => s.id === id) ?? null
 }
@@ -256,40 +239,10 @@ export function matchesText(parts: (string | null | undefined)[], query: string)
   return parts.filter(Boolean).join(' ').toLocaleLowerCase().includes(needle)
 }
 
-export function pluginMatches(plugin: CatalogPlugin, query: string): boolean {
-  return matchesText(
-    [plugin.title, plugin.name, plugin.publisher, plugin.description, plugin.category],
-    query,
-  )
-}
-
 export function skillMatches(skill: CatalogSkill | MarketSkill, query: string): boolean {
   return matchesText(
     [skill.name, 'publisher' in skill ? skill.publisher : null, skill.description],
     query,
-  )
-}
-
-/** A plugin category's title: the marketplace's own word, capitalized. */
-export function categoryTitle(category: string): string {
-  const words = category.replace(/[-_]+/g, ' ').trim()
-  return words.charAt(0).toLocaleUpperCase() + words.slice(1)
-}
-
-/** Most installed first; plugins without a count after, their marketplace's picks first, then by title. */
-export function byInstalls(a: CatalogPlugin, b: CatalogPlugin): number {
-  // Codex counts no installs, so its own picks lead there.
-  return (
-    (b.installs ?? -1) - (a.installs ?? -1) ||
-    Number(b.featured) - Number(a.featured) ||
-    a.title.localeCompare(b.title)
-  )
-}
-
-/** Whether a plugin comes from Anthropic itself, in Claude Code's official marketplace. */
-export function fromAnthropic(plugin: CatalogPlugin): boolean {
-  return (
-    plugin.harness === 'claude-code' && plugin.official && /anthropic/i.test(plugin.publisher ?? '')
   )
 }
 
@@ -377,16 +330,8 @@ export function relatedServers(id: string, catalog: MarketCatalog | null, limit 
   return { byPublisher: false, items: items.slice(0, limit) }
 }
 
-// Kettu hands Pi no skills folder yet.
-const NO_SKILLS: readonly HarnessId[] = ['pi']
-
-/** Whether Kettu can hand an agent the skills it keeps. */
-export function takesSkills(agentId: AgentId): boolean {
-  return !NO_SKILLS.includes(harnessOf(agentId))
-}
-
 /** Where a plugin is installed: every project, or the one project. */
-export function scopeLine(plugin: InstalledPlugin, t: TFunction<'marketplace'>): string {
+export function scopeLine(plugin: AgentOwnPlugin, t: TFunction<'marketplace'>): string {
   return plugin.scope === 'user'
     ? t('plugin.scopeUser')
     : t(plugin.scope === 'local' ? 'plugin.scopeLocalIn' : 'plugin.scopeProjectIn', {

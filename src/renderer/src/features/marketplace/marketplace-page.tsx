@@ -1,4 +1,4 @@
-// The Marketplace on affectUI's Integrations screen: plugins, skills and MCP servers in sections
+// The Marketplace on affectUI's Integrations screen: skills, MCP servers and workflows in sections
 // of two columns, a bar that stays at the top with the tabs, search and Add, and a listing for
 // each. It works on the window's host: the chosen one, or this computer while every host shows.
 
@@ -13,6 +13,7 @@ import { useWindowHostAway, useWindowScope } from '@renderer/stores/window-host'
 import { Directory } from './directory'
 import { ListingPage } from './listing'
 import './marketplace.css'
+import './plugins.css'
 
 /** How many places of the directory keep their scroll; the most recently scrolled win. */
 const REMEMBERED = 50
@@ -49,9 +50,7 @@ export default function MarketplacePage({
     void store.loadConnections()
   }, [useMarketplaceStore, away])
   // What shows may be the host's old copy while a newer one is read behind it.
-  const reading = useMarketplaceStore(
-    (s) => s.catalogLoading || s.pluginsLoading || s.skillsLoading,
-  )
+  const reading = useMarketplaceStore((s) => s.catalogLoading || s.skillsLoading)
 
   const directoryKey = (): string =>
     `${scope.hostId ?? ''}|${tab}|${useMarketplaceStore.getState().query}`

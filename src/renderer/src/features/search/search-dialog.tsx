@@ -5,6 +5,7 @@ import {
   Clock01Icon,
   DashboardSquare02Icon,
   File01Icon,
+  FlashIcon,
   FolderOpenIcon,
   Globe02Icon,
   KanbanIcon,
@@ -30,6 +31,9 @@ import {
   type CommandGroup,
 } from '@renderer/components/affect/command-menu'
 import { AgentMark } from '@renderer/components/agents/agent-mark'
+import { VIEW_ICONS } from '@renderer/features/plugin-views/icons'
+import { PluginTile } from '@renderer/features/plugin-views/plugin-tile'
+import { runPluginAction } from '@renderer/features/plugin-views/run-action'
 import { Button } from '@renderer/components/ui/button'
 import { Dialog } from '@renderer/components/ui/dialog'
 import { Skeleton } from '@renderer/components/ui/skeleton'
@@ -61,6 +65,7 @@ import {
   type ResultGroup,
   type SearchAction,
   type SearchEntry,
+  type SearchKind,
   type SearchScope,
 } from './search-model'
 import { useConversationHits } from './use-conversation-hits'
@@ -152,6 +157,14 @@ function openEntry(entry: SearchEntry): void {
     case 'action':
       runAction(entry.action)
       break
+    case 'pluginAction':
+      void runPluginAction({
+        hostId: entry.hostId,
+        pluginId: entry.pluginId,
+        actionId: entry.actionId,
+        label: entry.title,
+      })
+      break
   }
 }
 
@@ -166,17 +179,23 @@ const SCOPE_OF_KIND: Partial<Record<ResultGroup['key'], Exclude<SearchScope, 'al
 
 // A row that switches to its group's scope, "Show all 12".
 const SHOW_ALL = 'scope:'
+// A row that lists the rest of a plugin's actions in place, "Show all 12".
+const EXPAND = 'expand:'
 
 function SearchPalette() {
   const { t } = useTranslation(['sidebar', 'common'])
   const found = useSearchEntries()
   const [query, setQuery] = useState('')
   const [scope, setScope] = useState<SearchScope>('all')
+  const [expanded, setExpanded] = useState<ReadonlySet<string>>(new Set())
   const conversations = useConversationHits(query)
   const others = useOtherHosts()
   const said = useConversationEntries(conversations.hits)
   const entries = useMemo(() => [...found, ...said], [found, said])
-  const results = useMemo(() => runSearch(entries, query, scope), [entries, query, scope])
+  const results = useMemo(
+    () => runSearch(entries, query, scope, expanded),
+    [entries, query, scope, expanded],
+  )
   const byKey = useMemo(() => new Map(entries.map((entry) => [entry.key, entry])), [entries])
   const trimmed = query.trim()
   const { words } = results
@@ -200,23 +219,33 @@ function SearchPalette() {
 
   const groups: CommandGroup[] = results.groups.map((group) => {
     const scopeOf = SCOPE_OF_KIND[group.key]
-    const label =
-      scope === 'all'
-        ? t(`search.group.${group.key}`)
+    const label = group.plugin
+      ? group.plugin.title
+      : scope === 'all'
+        ? t(`search.group.${group.key as Exclude<SearchKind, 'pluginAction'> | 'recent'}`)
         : trimmed
           ? t('search.results', { count: group.total })
           : t(`search.latest.${scope}`)
+    const rest = group.total > group.items.length
+    const showAll = (id: string): Command[] => [
+      {
+        id,
+        label: t('search.showAll', { count: group.total }),
+        icon: <Icon icon={ArrowRight01Icon} size={16} />,
+      },
+    ]
     const more: Command[] =
-      scope === 'all' && scopeOf && group.total > group.items.length
-        ? [
-            {
-              id: `${SHOW_ALL}${scopeOf}`,
-              label: t('search.showAll', { count: group.total }),
-              icon: <Icon icon={ArrowRight01Icon} size={16} />,
-            },
-          ]
-        : []
-    return { id: group.key, label, commands: [...group.items.map(commandOf), ...more] }
+      scope !== 'all' || !rest
+        ? []
+        : group.plugin
+          ? showAll(`${EXPAND}${group.key}`)
+          : scopeOf
+            ? showAll(`${SHOW_ALL}${scopeOf}`)
+            : []
+    const logo = group.plugin && (
+      <PluginTile name={group.plugin.name} icon={group.plugin.icon} size={14} />
+    )
+    return { id: group.key, label, logo, commands: [...group.items.map(commandOf), ...more] }
   })
 
   const scopes = SCOPES.map((id) => ({
@@ -341,6 +370,9 @@ function SearchPalette() {
       onClose={() => showSearch(false)}
       onRun={(id) => {
         if (id.startsWith(SHOW_ALL)) return setScope(id.slice(SHOW_ALL.length) as SearchScope)
+        if (id.startsWith(EXPAND)) {
+          return setExpanded((open) => new Set(open).add(id.slice(EXPAND.length)))
+        }
         const entry = byKey.get(id)
         if (!entry) return
         showSearch(false)
@@ -404,6 +436,11 @@ function commandOf(entry: SearchEntry): Command {
         ...base,
         icon: <Icon icon={ACTION_ICON[entry.action]} size={16} />,
         keys: entry.shortcut ? keyCaps(entry.shortcut) : undefined,
+      }
+    case 'pluginAction':
+      return {
+        ...base,
+        icon: <Icon icon={entry.icon ? VIEW_ICONS[entry.icon] : FlashIcon} size={16} />,
       }
   }
 }

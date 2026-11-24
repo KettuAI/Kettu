@@ -1,0 +1,35 @@
+{
+  "refresh": "刷新",
+  "back": "返回",
+  "retry": "重试",
+  "more": "更多操作",
+  "moreFor": "更多操作：{{title}}",
+  "empty": "这里还没有内容",
+  "truncated": "只显示前 {{count}} 项",
+  "newerKettu": "这个视图需要更新的 Kettu 才能显示。",
+  "confirm": {
+    "default": "要继续吗？",
+    "title": "{{label}}？"
+  },
+  "error": {
+    "not_found": "这个视图不可用",
+    "disabled": "插件多次崩溃，已被停用",
+    "crashed": "插件用时或内存超出限制，已被停止。重试会重新启动它。",
+    "timeout": "插件响应太慢",
+    "unavailable": "插件现在没有运行",
+    "failed": "插件没能显示这个视图",
+    "invalid": "插件给的内容 Kettu 显示不了",
+    "request_failed": "没能加载这个视图"
+  },
+  "actionNoPanel": "“{{label}}”要显示一个面板，但没有打开同一台电脑上的会话。打开一个会话后再运行一次。",
+  "actionError": {
+    "not_found": "“{{label}}”已经不可用",
+    "disabled": "“{{label}}”没有执行：插件多次崩溃，已被停用",
+    "crashed": "“{{label}}”没有完成：插件用时或内存超出限制，已被停止",
+    "timeout": "“{{label}}”没有完成：插件响应太慢",
+    "unavailable": "“{{label}}”没有执行：插件现在没有运行",
+    "failed": "“{{label}}”没有成功",
+    "invalid": "“{{label}}”得到的回答 Kettu 用不了",
+    "request_failed": "“{{label}}”没有执行"
+  }
+}

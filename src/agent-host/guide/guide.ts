@@ -7,6 +7,7 @@ import type { CallToolResult, Tool } from '@modelcontextprotocol/sdk/types.js'
 import { PLAN_TOOL } from '../plan-tool'
 import { REPORT_TOOL } from '../report-tool'
 import { SERVICE_NAME } from '../service-name'
+import { LIST_SKILLS } from '../marketplace/skill-tools'
 import { GATEWAY_TOOL } from '../tool-gateway'
 import {
   GUIDE_TOPICS,
@@ -111,7 +112,8 @@ export function guideText(topic: GuideTopic, flags: GuideFlags): string | null {
 
 /**
  * The paragraph that tells an agent where Kettu's tools are and when to load which part, the same
- * for every session: for an agent that takes skills, by their names; else by the guide's topics.
+ * for every session: for an agent that loads skills, by their names; else by the guide's topics,
+ * with the tool that lists the skills the user installed.
  * An agent given the short list with the gateway is told how to reach the rest.
  */
 export function guidePrompt(flags: GuideFlags, skills: boolean, gateway = false): string {
@@ -152,7 +154,7 @@ export function guidePrompt(flags: GuideFlags, skills: boolean, gateway = false)
     : ''
   return skills
     ? `${intro} kettu-* skills say when and how to use them. Load the matching skill before you ${list}.${reach} ${check} ${diagrams}`
-    : `${intro} ${GUIDE_TOOL} tool says when and how to use them. Read the matching topic with it before you ${list}.${reach} ${check} ${diagrams}`
+    : `${intro} ${GUIDE_TOOL} tool says when and how to use them. Read the matching topic with it before you ${list}. ${LIST_SKILLS} lists the skills the user installed for you.${reach} ${check} ${diagrams}`
 }
 
 /**
@@ -209,8 +211,8 @@ export function serviceInstructions(flags: GuideFlags): string {
       : []),
     ...(flags.market
       ? [
-          "Marketplace: the marketplace_* tools publish the user's own skills, workflows, " +
-            'plugins and MCP servers to the Kettu Marketplace, only when the user asks; each ' +
+          "Marketplace: the marketplace_* tools publish the user's own skills, workflows " +
+            'and MCP servers to the Kettu Marketplace, only when the user asks; each ' +
             "publish waits for the user's answer in a card. Topic marketplace.",
         ]
       : []),

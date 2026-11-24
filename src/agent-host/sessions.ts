@@ -3,6 +3,7 @@
 
 import type { DeviceAccessAnswer, DeviceAccessDecision } from '@shared/device-agent'
 import type { PublishVisibility } from '@shared/market-publish'
+import type { PermissionRelay } from '@shared/plugin-channels'
 import { createHash, randomUUID } from 'node:crypto'
 import { mkdir, realpath, stat } from 'node:fs/promises'
 import path from 'node:path'
@@ -63,6 +64,8 @@ import type {
   BusySession,
 } from '@shared/host-control'
 import type { Platform } from '@shared/platform'
+import { pluginStarter, type PluginHookEvent } from '@shared/plugins'
+import type { PluginMentionRef } from '@shared/plugin-refs'
 import type { PortDevice } from '@shared/remote/device'
 import type { PermissionScope } from '@shared/routines'
 import type { HostSettings } from '@shared/settings'
@@ -93,6 +96,7 @@ import {
   type OlderPage,
   type Patch,
   type PatchBatch,
+  type PluginAttached,
   type PendingElicitation,
   type PendingQuestion,
   type PermissionOption,
@@ -108,7 +112,9 @@ import {
   type SessionView,
   type StopReason,
   type Attachment,
+  type CommandRun,
   type ContentRef,
+  type SlashCommand,
   type BrowserOriginEntry,
   type ControlAskEntry,
   type ControlNoteEntry,
@@ -212,7 +218,11 @@ import { holdsNothing, mayBeEmpty } from './empty-sessions'
 import type { McpTransports } from './marketplace/servers'
 import { questionsResult } from './question-answers'
 import { HostError, invalidParams, notFound } from './errors'
-import { t } from './i18n'
+import { listOf, t } from './i18n'
+import type { CommandNeeds } from './commands/format'
+import type { CommandExpansion } from './commands/service'
+import { roleBlock } from './roles/format'
+import type { FoundRole } from './roles/service'
 import { logText } from './localized-error'
 import {
   GITHUB_PULL_REQUEST_URL,
@@ -258,6 +268,14 @@ import {
 } from './started-mode'
 import type { RoutineSessionHooksRef, RoutineSessionStart } from './routines/hooks'
 import type { TaskSessionHooksRef, TaskStepStart } from './workflow/engine'
+import {
+  attachmentText,
+  denialAnswer,
+  requestFacts,
+  type PluginAttachment,
+  type PluginDenial,
+  type RequestFacts,
+} from './plugin-runtime/hooks'
 import { scopeAnswer } from './routines/scope'
 import { CONTEXT_REPORT, runReport } from './reports'
 import type { ScratchFolders } from './scratch'
@@ -280,6 +298,7 @@ import {
   type PendingCarry,
   type ReturnedFile,
   type SessionRecord,
+  type SessionRole,
   type SessionsFile,
   type WorktreeRecord,
 } from './storage'
@@ -401,13 +420,17 @@ export interface SessionEvents {
   returned(sessionId: string | null, portIds?: readonly string[]): void
   /** Who shows the session in front changed, or a port began to watch it: `showing` are their ports. */
   viewers(sessionId: string, showing: readonly string[], to: readonly string[]): void
-  /** `request`: what waits, for a permission, with the answers a notification may give itself. */
+  /**
+   * `request`: what waits, for a permission, with the answers a notification may give itself.
+   * `facts`: what that request asks for, which a plugin that may answer it is told.
+   */
   attention(
     sessionId: string,
     kind: 'permission' | 'turn-ended' | 'error',
     title: string,
     body: string,
     request?: AttentionRequest,
+    facts?: RequestFacts,
   ): void
   badge(count: number): void
   /** What waits for the user now, by session, each change of it. */
@@ -442,6 +465,48 @@ export interface SessionMcp {
    * ahead of its prompt rather than in instructions of its own.
    */
   guide(agentId: AgentId): string
+}
+
+/** Kettu's own slash commands, as sessions use them. */
+export interface SessionCommands {
+  /**
+   * The message a text starting with one of the commands expands to; null when it starts with
+   * none, or with a name the agent has itself. Throws when the command cannot go.
+   */
+  expand(text: string, agentOwn: ReadonlySet<string>): Promise<CommandExpansion | null>
+  /** What of `needs` the agent is not handed anyway, which its session must be given. */
+  extra(agentId: AgentId, needs: CommandNeeds): CommandNeeds
+}
+
+/** Kettu's own events as plugins hear of them, and the two hooks that may act. */
+export interface SessionPlugins {
+  /** Whether a plugin would be sent the event, so nothing is worked out when none would. */
+  wants(event: PluginHookEvent): boolean
+  /** Tells the plugins that hold the event's permission; nothing waits for them. */
+  emit(
+    event: PluginHookEvent,
+    session: SessionSummary,
+    payload?: Record<string, unknown>,
+    content?: Record<string, unknown>,
+  ): void
+  /** What plugins attach to a message about to be sent, within a deadline Kettu never exceeds. */
+  attachments(session: SessionSummary, text: string): Promise<PluginAttachment[]>
+  /** What the items the user mentioned add to the message, or why one could not be added. */
+  mentions(
+    session: SessionSummary,
+    mentioned: readonly PluginMentionRef[],
+  ): Promise<PluginAttachment[]>
+  /** The plugin that denies a permission request, when one does within the deadline. */
+  check(session: SessionSummary, facts: RequestFacts): Promise<PluginDenial | null>
+}
+
+/** Kettu's own roles, as sessions start as them. */
+export interface SessionRoles {
+  /**
+   * The role a reference names. Throws when none does, or when a skill or MCP server it names is
+   * not installed or is turned off.
+   */
+  resolve(ref: string): Promise<FoundRole>
 }
 
 /** Kettu's memory as sessions hand it to their agents and write what their agents propose. */
@@ -541,6 +606,12 @@ export interface SessionManagerDeps {
     record: SessionRecord,
     kettu: boolean,
   ) => Promise<Pick<SessionOptions, 'skillRoots' | 'localPlugins'>>
+  /** Kettu's own slash commands; without it a text goes as typed. */
+  commands?: SessionCommands
+  /** Kettu's own roles; without it no session starts as one. */
+  roles?: SessionRoles
+  /** Plugins' hooks on Kettu's own events; without it none are told. */
+  plugins?: SessionPlugins
   /** Kettu's memory; without it no session is handed any. */
   memory?: SessionMemoryDeps
   /** The prepared sessions not yet adopted or removed, kept for the host after a crash. */
@@ -1143,6 +1214,8 @@ const CONNECTED: ReadonlySet<SessionStatus> = new Set([
   'awaiting_permission',
 ])
 
+type FinishedTool = ToolEntry & { status: 'completed' | 'failed' }
+
 /** A row's pull requests: the ones it opened, newest first, then its branch's if not among them. */
 function sessionPullRequests(
   record: SessionRecord,
@@ -1270,6 +1343,8 @@ export class SessionManager {
   /** Each window's prepared sessions, by port. */
   private readonly preparedSlots = new Map<string, PreparedSlot>()
   private emptyRemoval: Promise<void> | null = null
+  /** Each session's pull requests as plugins were last told of them, by url: state and checks. */
+  private readonly pullRequestsTold = new Map<string, Map<string, string>>()
 
   constructor(private readonly deps: SessionManagerDeps) {
     this.timings = { ...SESSION_TIMINGS, ...deps.timings }
@@ -3788,7 +3863,7 @@ export class SessionManager {
    * while the session reaches Kettu's server, the MCP servers, the artifacts service to an agent
    * that takes MCP over HTTP while Kettu's server is on for it, then the Marketplace's servers
    * meant for its agent, and Kettu's memory while it is on. An agent that adds to its system
-   * prompt when a session starts gets the guide and memory as one text.
+   * prompt when a session starts gets the guide, memory and role as one text.
    */
   private async attachOptions(
     sessionId: string,
@@ -3801,10 +3876,12 @@ export class SessionManager {
     const reached = own.length > 0
     const skills = (await this.deps.skills?.(record, reached)) ?? {}
     const memory = await this.memoryFor(sessionId, record, reached)
+    const role = record.role ? roleBlock(record.role.title, record.role.instructions) : null
     const append = runtime?.connection.systemPromptAppend
       ? kettuAhead(
           reached ? (this.deps.mcp?.guide(record.agentId) ?? null) : null,
           memory?.text ?? null,
+          role,
         )
       : null
     return {
@@ -3814,6 +3891,7 @@ export class SessionManager {
       ...(projectHooks ? { projectHooks } : {}),
       ...(memory ? { memory } : {}),
       ...(record.instructionsAhead ? { promptAhead: true } : {}),
+      ...(role ? { role } : {}),
       ...(append ? { systemPromptAppend: append } : {}),
       ...(this.deps.settings().promptSuggestions ? { suggestions: true } : {}),
     }
@@ -4119,8 +4197,26 @@ export class SessionManager {
     live.saved = true
     this.records.set(live.id, live.record)
     this.persist(live)
-    if (added) this.writeIndexNow()
+    if (added) {
+      this.writeIndexNow()
+      this.tellPlugins(live, 'session.started')
+    }
     this.scheduleCheckpoint(live)
+  }
+
+  /**
+   * Tells the plugins of an event in a session the user works in, which no routine, workflow step
+   * or subagent is. `content` reaches only a plugin that may read the conversation.
+   */
+  private tellPlugins(
+    live: Live,
+    event: PluginHookEvent,
+    payload?: Record<string, unknown>,
+    content?: Record<string, unknown>,
+  ): void {
+    const plugins = this.deps.plugins
+    if (!plugins?.wants(event) || live.replaying || live.record.origin !== 'user') return
+    plugins.emit(event, this.summary(live.id), payload, content)
   }
 
   /** For a session new to the index, which a host that dies within the debounce would lose. */
@@ -4132,7 +4228,16 @@ export class SessionManager {
 
   private applyOutput(live: Live, output: MapperOutput): void {
     if (live.closing) return
+    const finished = this.deps.plugins ? this.finishedTools(live, output.patches) : []
     if (output.patches.length > 0) this.emit(live, output.patches)
+    for (const tool of finished) {
+      this.tellPlugins(
+        live,
+        'session.toolFinished',
+        { kind: tool.toolKind, status: tool.status },
+        { title: tool.title },
+      )
+    }
     // A compacted context lost what went ahead of a prompt, so the next prompt sends it again.
     if (
       !live.replaying &&
@@ -4159,6 +4264,33 @@ export class SessionManager {
       this.refreshContext(live, this.timings.contextDebounceMs)
     }
     this.touch(live.id)
+  }
+
+  /** The tool calls these patches finish, as the thread stands before they are applied. */
+  private finishedTools(live: Live, patches: readonly Patch[]): FinishedTool[] {
+    const done = (tool: ToolEntry): boolean =>
+      tool.status === 'completed' || tool.status === 'failed'
+    // The entries these patches add or change, as the later ones in the batch find them.
+    const current = new Map<string, ToolEntry>()
+    const find = (id: string): ToolEntry | undefined => {
+      const known = live.thread.byId[id]
+      return current.get(id) ?? (known?.kind === 'tool' ? known : undefined)
+    }
+    const out: FinishedTool[] = []
+    for (const patch of patches) {
+      if (patch.op === 'entry.add' && patch.entry.kind === 'tool') {
+        const before = find(patch.entry.id)
+        current.set(patch.entry.id, patch.entry)
+        if (done(patch.entry) && !(before && done(before))) out.push(patch.entry as FinishedTool)
+      } else if (patch.op === 'entry.update') {
+        const before = find(patch.id)
+        if (!before) continue
+        const next = { ...before, ...patch.changes } as ToolEntry
+        current.set(patch.id, next)
+        if (done(next) && !done(before)) out.push(next as FinishedTool)
+      }
+    }
+    return out
   }
 
   private applyEffect(live: Live, effect: MapperEffect): void {
@@ -4677,6 +4809,8 @@ export class SessionManager {
       title?: string
       /** A new worktree to work in, cut from `base`; a sub-session takes its parent's instead. */
       worktree?: { base: string; branch?: string }
+      /** A role to start as, by its reference. */
+      role?: string
     },
     portId?: string,
   ): Promise<SessionSummary> {
@@ -4684,10 +4818,28 @@ export class SessionManager {
     if (!agents.has(params.agentId))
       throw invalidParams(t('agent.unknown', { agent: params.agentId }))
     agents.assertEnabled(params.agentId)
-    // Before a prepared session is taken over, so a refused prompt leaves it prepared.
-    const prompt = params.prompt && this.hydrate(params.prompt)
-    // A prepared session's agent already works in the project's folder, so a worktree starts anew.
-    if (params.preparedId !== undefined && params.worktree === undefined) {
+    // Before a prepared session is taken over, so a refused prompt leaves it prepared. What
+    // another session's agent sends is no command of the user's.
+    let prompt = params.prompt && this.hydrate(params.prompt)
+    let commandTools: CommandNeeds | null = null
+    let commandRun: CommandRun | null = null
+    if (prompt && params.from === undefined && params.startedBy === undefined) {
+      const own = this.live.get(params.preparedId ?? '')?.thread.session.commands ?? []
+      const found = await this.commandContent(params.agentId, null, own, prompt)
+      prompt = found.content
+      commandTools = found.fresh
+      commandRun = found.run
+    }
+    const role = params.role === undefined ? null : await this.resolveRole(params.role)
+    const roleTools = role ? this.deps.commands?.extra(params.agentId, role.needs) : undefined
+    // A prepared session's agent already works in the project's folder, so a worktree starts anew,
+    // and it is attached already, so a command that names more tools or a role starts anew too.
+    if (
+      params.preparedId !== undefined &&
+      params.worktree === undefined &&
+      !commandTools &&
+      !role
+    ) {
       const adopted = await this.adopt({
         agentId: params.agentId,
         preparedId: params.preparedId,
@@ -4745,6 +4897,9 @@ export class SessionManager {
       branch: null,
     }
     if (params.startedBy !== undefined) record.startedBy = params.startedBy
+    const kept = joinNeeds(commandTools, roleTools)
+    if (kept) record.commandTools = kept
+    if (role) record.role = sessionRole(role)
     const options = params.options ?? {}
     const live = this.makeLive(record, false, 'starting')
     live.unread = false
@@ -4760,7 +4915,9 @@ export class SessionManager {
         ...(params.device ? { device: params.device } : {}),
         ...(portId === undefined ? {} : { portId }),
       }
+      if (commandTools && commandRun) this.noteCommandTools(live, commandRun.name, commandTools)
     }
+    if (role) this.noteRole(live, role.title, roleTools)
     this.touch(live.id)
     if (newWorktree && worktree) this.prepareWorktree(projectPath, worktree)
     try {
@@ -4830,6 +4987,8 @@ export class SessionManager {
       throw invalidParams(t('agent.unknown', { agent: params.agentId }))
     agents.assertEnabled(params.agentId)
     const projectPath = await projects.resolveDirectory(params.projectPath)
+    const role = params.role === undefined ? null : await this.resolveRole(params.role)
+    const roleTools = role ? this.deps.commands?.extra(params.agentId, role.needs) : undefined
     const now = this.now()
     const worktree = params.worktree ? { ...params.worktree } : undefined
     if (worktree) delete worktree.pending
@@ -4850,6 +5009,9 @@ export class SessionManager {
       description: null,
       branch: null,
     }
+    const kept = joinNeeds(null, roleTools)
+    if (kept) record.commandTools = kept
+    if (role) record.role = sessionRole(role)
     const live = this.makeLive(record, false, 'starting')
     live.unread = false
     live.used = true
@@ -4858,6 +5020,7 @@ export class SessionManager {
     // The step's prompt is Kettu's, written from the workflow, not the user's.
     const entryId = this.addPrompt(live, content, now, undefined, undefined, undefined, true)
     live.first = { content, entryId, kettu: true }
+    if (role) this.noteRole(live, role.title, roleTools)
     this.touch(live.id)
     this.deps.task?.current?.sessionCreated(live.id, params.task)
     if (worktree && params.prepare) this.prepareWorktree(projectPath, worktree)
@@ -7210,12 +7373,124 @@ export class SessionManager {
     }
     this.refuseIfCannotSend(sessionId)
     this.reportsSent.delete(sessionId)
-    const hydrated = this.hydrate(content)
-    const live = await this.revive(sessionId)
+    const revived = await this.revive(sessionId)
+    const { live, content: hydrated } = await this.withCommand(revived, this.hydrate(content))
     if (!canSend(live.thread.session.status) || this.waitsForWorktree(live)) {
       throw busyError(live.thread.session.status)
     }
     this.sendPrompt(live, hydrated, undefined, portId, device)
+  }
+
+  /**
+   * A text that starts with one of Kettu's commands, as the message it expands to, with what it
+   * names that the agent is not handed anyway in `fresh`; any other content as it is. Throws when
+   * the command cannot go. `own` is what the agent calls its own commands, whose names it takes
+   * as typed; `record` holds what an earlier command added, so it is not added twice.
+   */
+  private async commandContent(
+    agentId: AgentId,
+    record: Pick<SessionRecord, 'commandTools'> | null,
+    own: readonly SlashCommand[],
+    content: UserContent[],
+  ): Promise<{ content: UserContent[]; fresh: CommandNeeds | null; run: CommandRun | null }> {
+    const first = content[0]
+    const commands = this.deps.commands
+    if (!commands || first?.type !== 'text' || !first.text.startsWith('/')) {
+      return { content, fresh: null, run: null }
+    }
+    const found = await commands.expand(first.text, new Set(own.map((command) => command.name)))
+    if (!found) return { content, fresh: null, run: null }
+    const extra = commands.extra(agentId, found.needs)
+    const kept = record?.commandTools
+    const fresh = {
+      skills: extra.skills.filter((name) => !kept?.skills.includes(name)),
+      mcp: extra.mcp.filter((name) => !kept?.mcp.includes(name)),
+    }
+    return {
+      content: [{ ...first, command: found.run }, ...content.slice(1)],
+      fresh: fresh.skills.length + fresh.mcp.length > 0 ? fresh : null,
+      run: found.run,
+    }
+  }
+
+  /**
+   * `content` with its leading command expanded, and the session given the skills and MCP servers
+   * the command names: an attached one lets its agent go and attaches it again, which only an idle
+   * session can.
+   */
+  private async withCommand(
+    live: Live,
+    content: UserContent[],
+  ): Promise<{ live: Live; content: UserContent[] }> {
+    const found = await this.commandContent(
+      live.record.agentId,
+      live.record,
+      live.thread.session.commands,
+      content,
+    )
+    if (!found.fresh || !found.run) return { live, content: found.content }
+    const attached = !!live.connection
+    if (attached && (this.holdReason(live) !== null || !live.saved)) {
+      throw new HostError('busy', t('commands.addsBusy', { command: found.run.name }))
+    }
+    const kept = live.record.commandTools
+    live.record.commandTools = {
+      skills: [...(kept?.skills ?? []), ...found.fresh.skills],
+      mcp: [...(kept?.mcp ?? []), ...found.fresh.mcp],
+    }
+    this.saveRecord(live.id)
+    const target = attached ? await this.attachAgain(live, 'a command added tools') : live
+    this.noteCommandTools(target, found.run.name, found.fresh)
+    return { live: target, content: found.content }
+  }
+
+  /** The thread says which skills and MCP servers a command added to the session. */
+  private noteCommandTools(live: Live, command: string, added: CommandNeeds): void {
+    const items = [
+      ...added.skills.map((name) => t('commands.added.skill', { name })),
+      ...added.mcp.map((name) => t('commands.added.mcp', { name })),
+    ]
+    this.emit(live, [
+      {
+        op: 'entry.add',
+        entry: {
+          kind: 'notice',
+          id: this.nextId(live),
+          severity: 'info',
+          title: t('commands.added.title', { command }),
+          description: listOf(items),
+          after: agentEntryBefore(live.thread),
+        },
+      },
+    ])
+  }
+
+  /** The role a reference names, or why the session cannot start as it. */
+  private resolveRole(ref: string): Promise<FoundRole> {
+    const roles = this.deps.roles
+    if (!roles) throw invalidParams(t('roles.unknown', { role: ref }))
+    return roles.resolve(ref)
+  }
+
+  /** The thread says which role the session started as and what the role added to it. */
+  private noteRole(live: Live, title: string, added: CommandNeeds | undefined): void {
+    const items = [
+      ...(added?.skills ?? []).map((name) => t('commands.added.skill', { name })),
+      ...(added?.mcp ?? []).map((name) => t('commands.added.mcp', { name })),
+    ]
+    this.emit(live, [
+      {
+        op: 'entry.add',
+        entry: {
+          kind: 'notice',
+          id: this.nextId(live),
+          severity: 'info',
+          title: t('roles.started', { role: title }),
+          ...(items.length > 0 ? { description: listOf(items) } : {}),
+          after: agentEntryBefore(live.thread),
+        },
+      },
+    ])
   }
 
   /** Sends a prompt; `kettu` when Kettu sends it itself, as a step's reminder. */
@@ -7508,9 +7783,10 @@ export class SessionManager {
 
   /**
    * What goes ahead of the prompt, before anything carried, for an agent that takes no
-   * instructions of the session's own: Kettu's guide while the session reaches Kettu's server, and
-   * Kettu's memory while it is on. With the first prompt its own session gets, and again after its
-   * context was compacted; the thread shows the message as the user wrote it.
+   * instructions of the session's own: Kettu's guide while the session reaches Kettu's server,
+   * Kettu's memory while it is on, and the instructions of the role it started as. With the first
+   * prompt its own session gets, and again after its context was compacted; the thread shows the
+   * message as the user wrote it.
    */
   private async aheadText(live: Live, connection: AgentConnection): Promise<string | null> {
     const { record } = live
@@ -7528,7 +7804,8 @@ export class SessionManager {
           .join('\n\n')
       : (this.deps.mcp?.guide(record.agentId) ?? '')
     const memory = (await this.memoryFor(live.id, record, tools))?.text ?? null
-    return kettuAhead(tools && this.deps.mcp && text ? text : null, memory)
+    const role = record.role ? roleBlock(record.role.title, record.role.instructions) : null
+    return kettuAhead(tools && this.deps.mcp && text ? text : null, memory, role)
   }
 
   /** The agent that had the session before any takeover. */
@@ -7823,8 +8100,8 @@ export class SessionManager {
     }
     this.refuseIfCannotSend(sessionId)
     this.reportsSent.delete(sessionId)
-    const content = this.hydrate(input)
-    const live = await this.revive(sessionId)
+    const revived = await this.revive(sessionId)
+    const { live, content } = await this.withCommand(revived, this.hydrate(input))
     const { status, queue, queuePaused } = live.thread.session
     if (canSend(status) && (queue.length === 0 || queuePaused) && !this.waitsForWorktree(live)) {
       // At once: another prompt waiting on the same revive must see this turn running.
@@ -8548,6 +8825,9 @@ export class SessionManager {
         this.persist(live)
         wire = [{ type: 'text', text: `${ahead}\n\n` }, ...carried]
       }
+      const attached = await this.pluginAttachments(live, turn, resolved.wire)
+      if (turn.ended) return
+      if (attached.length > 0) wire = [...wire, ...attached]
       const entryId = turn.entryId
       const sent = (ref: string): void => {
         if (!entryId || live.thread.byId[entryId]?.kind !== 'user') return
@@ -8570,6 +8850,74 @@ export class SessionManager {
       if (turn.ended) return
       this.failTurn(live, turn, error)
     }
+  }
+
+  /**
+   * What plugins attach to the message of a turn, as blocks after what the user wrote, which is
+   * left as it is; the message shows what each plugin attached. Only a message the user wrote is
+   * offered, and not one that is a command of the agent's own.
+   */
+  private async pluginAttachments(
+    live: Live,
+    turn: Turn,
+    wire: readonly PromptBlock[],
+  ): Promise<PromptBlock[]> {
+    const plugins = this.deps.plugins
+    const entry = turn.entryId ? live.thread.byId[turn.entryId] : undefined
+    if (
+      !plugins ||
+      live.record.origin !== 'user' ||
+      entry?.kind !== 'user' ||
+      entry.approval ||
+      entry.kettu ||
+      entry.from
+    ) {
+      return []
+    }
+    const mentioned = entry.content.flatMap((item) =>
+      item.type === 'ref' && item.ref.kind === 'plugin' ? [item.ref] : [],
+    )
+    // A command of the agent's own is not offered to the hooks, but what the user mentioned goes.
+    const hooked = plugins.wants('session.beforeSend') && !opensWithCommand(wire)
+    if (!hooked && mentioned.length === 0) return []
+    const text = wire.flatMap((block) => (block.type === 'text' ? [block.text] : [])).join('\n\n')
+    const summary = this.summary(live.id)
+    const [chosen, hooks] = await Promise.all([
+      mentioned.length > 0 ? plugins.mentions(summary, mentioned) : [],
+      hooked ? plugins.attachments(summary, text) : [],
+    ])
+    const given = [...chosen, ...hooks]
+    if (given.length === 0 || turn.ended) return []
+    // What the message already holds counts toward the prompt's limit; what does not fit is left out.
+    let bytes = wire.reduce((sum, block) => sum + blockBytes(block), 0)
+    const blocks: PromptBlock[] = []
+    const kept: PluginAttachment[] = []
+    for (const item of given) {
+      const block: PromptBlock = { type: 'text', text: attachmentText(item) }
+      bytes += blockBytes(block)
+      if (bytes > PROMPT_BYTES) break
+      blocks.push(block)
+      kept.push(item)
+    }
+    if (kept.length === 0) return []
+    const byPlugin = new Map<string, PluginAttached>()
+    for (const item of kept) {
+      const group = byPlugin.get(item.pluginId) ?? {
+        pluginId: item.pluginId,
+        plugin: item.plugin,
+        items: [],
+      }
+      group.items.push({
+        ...(item.title === undefined ? {} : { title: item.title }),
+        text: item.text,
+        ...(item.failed === undefined ? {} : { failed: item.failed }),
+      })
+      byPlugin.set(item.pluginId, group)
+    }
+    this.emit(live, [
+      { op: 'entry.update', id: entry.id, changes: { attached: [...byPlugin.values()] } },
+    ])
+    return blocks
   }
 
   /**
@@ -8607,7 +8955,16 @@ export class SessionManager {
 
   /** Settles the turn; returns its `turn_end` entry's id when there is a stop reason. */
   private finishTurn(live: Live, turn: Turn, stopReason: StopReason | null): string | null {
+    const first = !turn.ended
     turn.ended = true
+    // After the caller sets the session's status, which the plugins read with the summary.
+    if (first && this.deps.plugins?.wants('session.turnEnded')) {
+      const durationMs = Math.max(0, this.now() - turn.startedAt)
+      queueMicrotask(() => {
+        // A turn that ended in an error has no stop reason.
+        this.tellPlugins(live, 'session.turnEnded', { outcome: stopReason ?? 'error', durationMs })
+      })
+    }
     for (const ended of turn.ends.splice(0)) ended()
     if (turn.fallback) clearTimeout(turn.fallback)
     turn.fallback = null
@@ -10194,6 +10551,72 @@ export class SessionManager {
     this.applyOutput(live, request.output)
     // The user already stopped this turn or closed the session: the request is moot.
     if (live.closing || live.turn?.cancelRequested) return Promise.resolve('cancelled')
+    return this.pluginCheck(live, request, signal) ?? this.askPermission(live, request, signal)
+  }
+
+  /**
+   * Lets the plugins that hold `requests.check` look at a request to use a tool before anything
+   * else answers or shows it; one of them may deny it and none can allow it. Null when no plugin
+   * would look, so the request goes on at once. A question, a plan or a request of an MCP server
+   * asks for no authorization, so it is not checked.
+   */
+  private pluginCheck(
+    live: Live,
+    request: PermissionRequest,
+    signal: AbortSignal,
+  ): Promise<PermissionAnswer> | null {
+    const plugins = this.deps.plugins
+    const deny = request.options.find((option) => option.kind === 'reject_once')
+    if (
+      !plugins?.wants('session.permissionRequested') ||
+      live.record.origin !== 'user' ||
+      request.questions ||
+      request.plan !== undefined ||
+      request.elicitation ||
+      !deny
+    ) {
+      return null
+    }
+    const entry = live.thread.byId[request.toolEntryId]
+    const tool = entry?.kind === 'tool' ? entry : undefined
+    const facts = requestFacts(tool)
+    return plugins.check(this.summary(live.id), facts).then((denial) => {
+      if (signal.aborted) throw signal.reason
+      if (live.closing || live.turn?.cancelRequested) return 'cancelled'
+      if (!denial) return this.askPermission(live, request, signal)
+      this.emit(live, [
+        {
+          op: 'entry.update',
+          id: request.toolEntryId,
+          changes: {
+            permission: null,
+            permissionResult: { optionId: deny.id, kind: 'reject_once' },
+          },
+        },
+        {
+          op: 'entry.add',
+          entry: {
+            kind: 'plugin_denial',
+            id: this.nextId(live),
+            pluginId: denial.pluginId,
+            plugin: denial.plugin,
+            request: facts.command ?? facts.tool,
+            reason: denial.reason,
+            after: agentEntryBefore(live.thread),
+          },
+        },
+      ])
+      this.touch(live.id)
+      // The agent hears who denied it and why, where its option takes a note.
+      return denialAnswer(deny, denial)
+    })
+  }
+
+  private askPermission(
+    live: Live,
+    request: PermissionRequest,
+    signal: AbortSignal,
+  ): Promise<PermissionAnswer> {
     // A run answers inside its scope while its first turn works; anything else waits for the user.
     if (live.routineScope && live.record.origin === 'routine' && !live.routineTurnEnded) {
       const optionId = this.routineAnswer(live, live.routineScope, request)
@@ -10319,6 +10742,7 @@ export class SessionManager {
             ...(allow ? { allow: { optionId: allow.id, name: allow.name } } : {}),
             ...(allow && deny ? { deny: { optionId: deny.id, name: deny.name } } : {}),
           },
+          requestFacts(tool),
         )
       }
     })
@@ -10434,6 +10858,7 @@ export class SessionManager {
     answer:
       { optionId: string; note?: string } | { answers: QuestionAnswer[] } | { values: FormValues },
     device?: FromDevice,
+    relayed?: PermissionRelay,
   ): void {
     this.recordOf(sessionId)
     const live = this.live.get(sessionId)
@@ -10486,6 +10911,7 @@ export class SessionManager {
         ...(named ? { name: option.name } : {}),
         ...(note ? { note } : {}),
         ...(device ? { device } : {}),
+        ...(relayed ? { relayed: { plugin: relayed.plugin, from: relayed.from } } : {}),
       }
       given = note ? { optionId, note } : { optionId }
     }
@@ -10497,6 +10923,29 @@ export class SessionManager {
     pending.answer(given)
     if (pending.outsideTurn) this.afterAnswer(live)
     this.touch(live.id)
+  }
+
+  /**
+   * Answers a request on the user's behalf from a plugin's channel, by the path of their click but
+   * only with allow once or deny of a plain permission request: never a question, a plan, a form
+   * or anything that lasts.
+   */
+  relayPermission(
+    sessionId: string,
+    requestId: string,
+    optionId: string,
+    relay: PermissionRelay,
+  ): void {
+    this.recordOf(sessionId)
+    const pending = this.live.get(sessionId)?.permissions.get(requestId)
+    if (pending) {
+      const option = pending.options.find((o) => o.id === optionId)
+      const plain = !pending.questions && !pending.plan && !pending.elicitation
+      if (!plain || (option?.kind !== 'allow_once' && option?.kind !== 'reject_once')) {
+        throw new HostError('restricted', t('session.waiting.permission.notRelayable'))
+      }
+    }
+    this.respond(sessionId, requestId, { optionId }, undefined, relay)
   }
 
   /**
@@ -10636,8 +11085,8 @@ export class SessionManager {
   }
 
   /** Lets the session's agent go and attaches it again, which then lists what it offers now. */
-  private async attachAgain(live: Live): Promise<Live> {
-    this.release(live, 'models listed again')
+  private async attachAgain(live: Live, why = 'models listed again'): Promise<Live> {
+    this.release(live, why)
     await this.releasing.get(live.id)
     const again = await this.revive(live.id)
     await this.attachClosed(again)
@@ -10910,6 +11359,16 @@ export class SessionManager {
     return (this.live.get(sessionId)?.record ?? this.records.get(sessionId))?.agentId ?? null
   }
 
+  /** The workflow task whose step the session does; null for any other session. */
+  sessionTask(sessionId: string): SessionRecord['task'] | null {
+    return (this.live.get(sessionId)?.record ?? this.records.get(sessionId))?.task ?? null
+  }
+
+  /** The skills and MCP servers commands added to the session; null when none did. */
+  sessionCommandTools(sessionId: string): SessionRecord['commandTools'] | null {
+    return (this.live.get(sessionId)?.record ?? this.records.get(sessionId))?.commandTools ?? null
+  }
+
   /** The folder the session works in, its worktree or its project; null for one Kettu does not hold. */
   workFolder(sessionId: string): string | null {
     const record = this.live.get(sessionId)?.record ?? this.records.get(sessionId)
@@ -11092,6 +11551,8 @@ export class SessionManager {
       mode?: string
       options: Record<string, string | boolean>
       report: boolean
+      /** A role to start as, by its reference. */
+      role?: string
     },
   ): Promise<string> {
     const caller = this.recordOf(callerId)
@@ -11111,6 +11572,7 @@ export class SessionManager {
       startedBy: callerId,
       startedMode: { starter: this.starterRank(callerId), wanted: params.mode ?? null },
       from,
+      ...(params.role === undefined ? {} : { role: params.role }),
       ...(params.title === undefined ? {} : { title: params.title }),
     })
     const live = this.live.get(callerId)
@@ -11122,13 +11584,47 @@ export class SessionManager {
   }
 
   /**
+   * Starts a top-level session for a plugin in `projectPath`, or in a scratch folder of its own
+   * when that is null. As for a session an agent starts, its mode is held to Auto at most and
+   * never full access, and it is marked as started by the plugin.
+   */
+  async startFromPlugin(
+    pluginId: string,
+    params: {
+      prompt: string
+      projectPath: string | null
+      agentId: AgentId
+      mode?: string
+      title?: string
+    },
+  ): Promise<string> {
+    const summary = await this.create({
+      agentId: params.agentId,
+      projectPath: params.projectPath,
+      prompt: [{ type: 'text', text: params.prompt }],
+      startedBy: pluginStarter(pluginId),
+      startedMode: { starter: null, wanted: params.mode ?? null },
+      ...(params.title === undefined ? {} : { title: params.title }),
+    })
+    return summary.id
+  }
+
+  /** Prompts a session the plugin started, as an agent's message to one it started goes. */
+  async sendFromPlugin(pluginId: string, sessionId: string, text: string): Promise<ToolDelivery> {
+    if (this.recordOf(sessionId).startedBy !== pluginStarter(pluginId)) {
+      throw new HostError('restricted', 'The plugin can message only the sessions it started')
+    }
+    return this.sendFromTool(sessionId, text, undefined, false)
+  }
+
+  /**
    * Prompts a session the caller started, or queues the prompt while that session works.
    * Unlike a message from the user, this brings an archived session back.
    */
   async sendFromTool(
     sessionId: string,
     text: string,
-    from: FromSession,
+    from: FromSession | undefined,
     now: boolean,
   ): Promise<ToolDelivery> {
     const content: UserContent[] = [{ type: 'text', text }]
@@ -11141,7 +11637,7 @@ export class SessionManager {
     }
     const working = status === 'running' || status === 'awaiting_permission'
     if (!canSend(status) && !working) throw busyError(status)
-    const item = { id: randomUUID(), content, at: this.now(), from }
+    const item = { id: randomUUID(), content, at: this.now(), ...(from ? { from } : {}) }
     this.update(live, { queue: [...queue, item] })
     this.persist(live)
     this.touch(live.id)
@@ -11852,6 +12348,7 @@ export class SessionManager {
     this.watchers.delete(sessionId)
     this.seqs.delete(sessionId)
     this.idleReleased.delete(sessionId)
+    this.pullRequestsTold.delete(sessionId)
     if (record?.origin === 'routine') this.deps.routine?.current?.sessionGone(sessionId)
     if (record?.origin === 'task') this.deps.task?.current?.sessionGone(sessionId)
     if (known) this.deps.events.removed(sessionId, portIds)
@@ -12223,12 +12720,57 @@ export class SessionManager {
       live.record.pullRequests = [...known, ...added].slice(-MAX_SESSION_PULL_REQUESTS)
       this.persist(live)
       this.touch(live.id)
+      this.tellPullRequests(live.id, added)
+    }
+  }
+
+  /**
+   * Tells the plugins of a pull request of the session that was opened in it, or whose state or
+   * checks changed since they were last told. One read for the first time is only noted: it is
+   * not a change.
+   */
+  private tellPullRequests(sessionId: string, opened: readonly string[] = []): void {
+    const live = this.live.get(sessionId)
+    const record = live?.record ?? this.records.get(sessionId)
+    if (
+      !record ||
+      record.origin !== 'user' ||
+      !this.deps.plugins?.wants('session.pullRequestChanged')
+    ) {
+      return
+    }
+    const told = this.pullRequestsTold.get(sessionId) ?? new Map<string, string>()
+    this.pullRequestsTold.set(sessionId, told)
+    const summary = this.summary(sessionId)
+    for (const pr of summary.prs ?? []) {
+      const now = `${pr.state ?? ''} ${pr.failing}`
+      const before = told.get(pr.url)
+      told.set(pr.url, now)
+      if (before === now || (before === undefined && !opened.includes(pr.url))) continue
+      const [state = '', failing = 'false'] = before?.split(' ') ?? []
+      this.deps.plugins.emit('session.pullRequestChanged', summary, {
+        pullRequest: {
+          url: pr.url,
+          owner: pr.owner,
+          repo: pr.repo,
+          number: pr.number,
+          state: pr.state,
+          failing: pr.failing,
+        },
+        previous:
+          before === undefined
+            ? null
+            : { state: state === '' ? null : state, failing: failing === 'true' },
+      })
     }
   }
 
   /** Pull requests changed for a project's branches: its rows may show a new badge. */
   pullRequestsChanged(projectPath: string): void {
-    for (const summary of this.list(projectPath)) this.touch(summary.id)
+    for (const summary of this.list(projectPath)) {
+      this.touch(summary.id)
+      this.tellPullRequests(summary.id)
+    }
   }
 
   /** A pull request was read for the first time or changed: the rows that show it refresh. */
@@ -12241,7 +12783,10 @@ export class SessionManager {
         record.branch && git
           ? git.branchPullRequests(record.projectPath).get(record.branch)?.url === url
           : false
-      if (ofBranch || record.pullRequests?.includes(url)) this.touch(id)
+      if (ofBranch || record.pullRequests?.includes(url)) {
+        this.touch(id)
+        this.tellPullRequests(id)
+      }
     }
   }
 
@@ -12369,9 +12914,24 @@ const UNUSABLE_STATES: ReadonlySet<AgentStatus['state']> = new Set([
   'node-outdated',
 ])
 
-/** Kettu's guide, marked as such, then its memory; null when there is neither. */
-function kettuAhead(guide: string | null, memory: string | null): string | null {
-  const parts = [guide ? `<kettu-guide>\n${guide}\n</kettu-guide>` : null, memory].filter(
+/** What a command and a role each added, as one list; null when neither added any. */
+function joinNeeds(a: CommandNeeds | null | undefined, b: CommandNeeds | null | undefined) {
+  const skills = [...new Set([...(a?.skills ?? []), ...(b?.skills ?? [])])]
+  const mcp = [...new Set([...(a?.mcp ?? []), ...(b?.mcp ?? [])])]
+  return skills.length + mcp.length > 0 ? { skills, mcp } : null
+}
+
+function sessionRole(role: FoundRole): SessionRole {
+  return { name: role.ref, title: role.title, instructions: role.instructions }
+}
+
+/** Kettu's guide, marked as such, then its memory and a role's block; null when there is none. */
+function kettuAhead(
+  guide: string | null,
+  memory: string | null,
+  role: string | null = null,
+): string | null {
+  const parts = [guide ? `<kettu-guide>\n${guide}\n</kettu-guide>` : null, memory, role].filter(
     (part): part is string => part !== null,
   )
   return parts.length > 0 ? parts.join('\n\n') : null

@@ -108,9 +108,10 @@ import { answerSettingsCall } from './settings-call'
 import { effectiveDirect, hostSettings, reachesHost, terminalSettings } from './settings-schema'
 import { hasPendingFrame, isRevoked, watchSubframes } from './subframes'
 import { DeviceHost } from './device-host'
+import { PluginHost } from './plugin-host'
 import { TerminalHost } from './terminal-host'
 import { ThemeCatalog } from './theme-catalog'
-import { readThemeFolder, readThemeSources, ThemeStore } from './themes'
+import { readPluginThemes, readThemeFolder, readThemeSources, ThemeStore } from './themes'
 import { KettuTray } from './tray'
 import { openTrayTarget, TrayPanel } from './tray-panel'
 import { Updater } from './updater'
@@ -125,6 +126,7 @@ import {
 } from './app-log'
 import { redactLogText } from '@shared/log/process-log'
 import { writeReport } from '@shared/log/report-bundle'
+import { PLUGIN_THEMES_FILE } from '@shared/plugin-themes'
 import {
   applyTheme,
   applyWindowTheme,
@@ -176,6 +178,7 @@ async function start(): Promise<void> {
   const userDataPath = app.getPath('userData')
   const themesDir = join(userDataPath, 'themes')
   const themeSourcesFile = join(userDataPath, 'theme-sources.json')
+  const pluginThemesFile = join(userDataPath, PLUGIN_THEMES_FILE)
   // Read while Electron starts, so the first window already has the right theme and bounds.
   const loading = Promise.all([
     SettingsStore.load(userDataPath),
@@ -183,6 +186,7 @@ async function start(): Promise<void> {
     AppStateStore.load(userDataPath),
     readThemeFolder(themesDir),
     readThemeSources(themeSourcesFile),
+    readPluginThemes(pluginThemesFile),
   ])
   let ready = false
   app.on('second-instance', (_event, _argv, _cwd, data) => {
@@ -209,7 +213,7 @@ async function start(): Promise<void> {
     (contents) => isRevoked(contents) || hasPendingFrame(contents),
     () => !!computerHold?.window,
   )
-  const [settings, windowState, appState, themeFolder, themeSources] = await loading
+  const [settings, windowState, appState, themeFolder, themeSources, pluginThemes] = await loading
   syncLoginItem(settings.get().general.openAtLogin)
   const start = startMode(
     process.platform,
@@ -266,19 +270,26 @@ async function start(): Promise<void> {
   // The overlays follow the themes as the window does; they are made after them.
   const browserViewsRef: { current: BrowserViews | null } = { current: null }
   const computerOverlayRef: { current: ComputerOverlay | null } = { current: null }
-  const themes = new ThemeStore(themeFolder, themeSources, settings.get().appearance.colorTheme, {
-    dir: themesDir,
-    sourcesFile: themeSourcesFile,
-    catalog,
-    select: (id) => settings.update({ appearance: { colorTheme: id } }),
-    changed: (state, chosen) => {
-      applyWindowTheme(chosen)
-      broadcast('themes:changed', state)
-      browserViewsRef.current?.lookChanged()
-      computerOverlayRef.current?.settingsChanged()
-      hostAdmin?.themesChanged(themes.hostThemes())
+  const themes = new ThemeStore(
+    themeFolder,
+    themeSources,
+    pluginThemes,
+    settings.get().appearance.colorTheme,
+    {
+      dir: themesDir,
+      sourcesFile: themeSourcesFile,
+      pluginFile: pluginThemesFile,
+      catalog,
+      select: (id) => settings.update({ appearance: { colorTheme: id } }),
+      changed: (state, chosen) => {
+        applyWindowTheme(chosen)
+        broadcast('themes:changed', state)
+        browserViewsRef.current?.lookChanged()
+        computerOverlayRef.current?.settingsChanged()
+        hostAdmin?.themesChanged(themes.hostThemes())
+      },
     },
-  })
+  )
   applyWindowTheme(themes.chosenTheme())
   watchTheme()
   configureWindows({ state: windowState, systemLocale })
@@ -409,6 +420,9 @@ async function start(): Promise<void> {
     allowDevices: () => true,
     onHandedBack: (sessionId, ms) => hostRef.current?.deviceHandedBack(sessionId, ms),
   })
+  const pluginHost = new PluginHost({
+    handPort: (port) => hostRef.current?.pluginPort(port) ?? false,
+  })
   // Set once the sharing service exists; the host reports ready only after that, at each start.
   let reconcileSharing: (() => void) | null = null
   let sharingArtifactsChanged: (() => void) | null = null
@@ -446,6 +460,7 @@ async function start(): Promise<void> {
   const islandLog = createLogger('island')
   // Every host signed in to an account says its plan limit notices; this computer says each once.
   const repeatedNotices = new RepeatedNotices()
+  const colorMode = (): 'light' | 'dark' => (nativeTheme.shouldUseDarkColors ? 'dark' : 'light')
   // The notch island: macOS only, started once the first window shows.
   const island = new IslandBridge({
     enabled: () => process.platform === 'darwin' && settings.get().notifications.island,
@@ -454,7 +469,7 @@ async function start(): Promise<void> {
         ? settings.get().notifications.updates
         : settings.get().notifications[ATTENTION_SETTING[kind]],
     windowFocused: () => BrowserWindow.getFocusedWindow() !== null,
-    colorMode: () => (nativeTheme.shouldUseDarkColors ? 'dark' : 'light'),
+    colorMode,
     version: app.getVersion(),
     locale: () => currentLocale(),
     strings: () => islandHelperStrings(),
@@ -500,13 +515,24 @@ async function start(): Promise<void> {
     log: islandLog,
   })
   nativeTheme.on('updated', () => island.appearanceChanged())
+  nativeTheme.on('updated', () => agentHost.pushColorMode(colorMode()))
   app.on('will-quit', () => island.quit())
   const agentHost = new AgentHost({
     settings: () => hostSettings(settings.get(), systemLocale),
+    colorMode,
     marketKeys: () => marketKeys.contentsForHost(),
     onBattery: () => (process.platform === 'win32' ? powerMonitor.isOnBatteryPower() : null),
     onMarketOAuth: (serverId, state) => void marketKeys.setOAuth(serverId, state),
+    pluginSecret: (pluginId, key, value) =>
+      marketKeys.setPluginSecret(pluginId, key, value).then(
+        () => null,
+        (error: unknown) => (error as Error).message,
+      ),
     onFirstStart: (harnesses) => settings.firstStart(harnesses),
+    onPluginThemes: () =>
+      void themes.refresh().catch((error: unknown) => {
+        log.error('Could not read the themes plugins bring', error)
+      }),
     onAttention: (message) => {
       // While the island runs, it shows what needs the user in place of a notification.
       if (!repeatedNotices.repeated(message)) {
@@ -597,6 +623,7 @@ async function start(): Promise<void> {
           account.withAccessToken(run, (error) => error instanceof MarketUnauthorized),
         signedOut: (error) => error instanceof NotSignedIn,
       }),
+    pluginHost: (run) => pluginHost.setWanted(run),
     device: (call) =>
       deviceHost.call(call).then((answer) => {
         const opened =
@@ -1008,6 +1035,7 @@ async function start(): Promise<void> {
         remoteHost.stop().then(() => agentHost.stop()),
         terminalHost.stop(),
         deviceHost.stop(),
+        pluginHost.stop(),
       ])
       hostSessions.close()
       await Promise.all([

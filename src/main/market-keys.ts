@@ -7,6 +7,7 @@
 
 import { rm } from 'node:fs/promises'
 import { join } from 'node:path'
+import { PLUGIN_ID } from '@shared/plugins'
 import {
   specInputs,
   type MarketKeyState,
@@ -27,6 +28,8 @@ export interface MarketKeysPush {
   values: MarketKeyValues
   oauth: Record<string, string>
   agentEnv: Record<string, Record<string, string>>
+  /** The secrets the plugins declare, by plugin id then key; only that plugin's script reads one. */
+  pluginSecrets: Record<string, Record<string, string>>
 }
 
 // Version 1 held only the input values.
@@ -37,6 +40,8 @@ export const MAX_KEY_BYTES = 8192
 const MAX_SERVER_ID = 200
 const MAX_INPUT_NAME = 128
 const MAX_INPUTS = 64
+/** The most plugins that may keep secrets. */
+const MAX_SECRET_PLUGINS = 1000
 const MAX_SEALED_CHARS = 64 * 1024 * 1024
 /** The most a server's OAuth sign-in may hold, in UTF-8 bytes. */
 export const MAX_OAUTH_BYTES = 64 * 1024
@@ -65,6 +70,7 @@ interface Contents {
   keys: Keys
   oauth: Map<string, string>
   agentEnv: Map<string, Map<string, string>>
+  pluginSecrets: Keys
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -115,10 +121,10 @@ function inputsOf(spec: McpSpec): Map<string, boolean> {
   return new Map(specInputs(spec).map((input) => [input.name, spec.type === 'http']))
 }
 
-function parseValues(raw: unknown): Keys | null {
+function parseValues(raw: unknown, limit = MAX_MARKET_SERVERS): Keys | null {
   if (!isRecord(raw)) return null
   const entries = Object.entries(raw)
-  if (entries.length > MAX_MARKET_SERVERS) return null
+  if (entries.length > limit) return null
   const keys: Keys = new Map()
   for (const [id, inputs] of entries) {
     if (id.length === 0 || id.length > MAX_SERVER_ID || !isRecord(inputs)) return null
@@ -165,20 +171,24 @@ function parseOAuth(raw: unknown): Map<string, string> | null {
 function parseContents(raw: unknown, version: 1 | 2 | 3): Contents | null {
   if (version === 1) {
     const keys = parseValues(raw)
-    return keys && { keys, oauth: new Map(), agentEnv: new Map() }
+    return keys && { keys, oauth: new Map(), agentEnv: new Map(), pluginSecrets: new Map() }
   }
   if (!isRecord(raw)) return null
   const keys = parseValues(raw.values)
   const oauth = parseOAuth(raw.oauth)
   const agentEnv = version === 3 ? parseValues(raw.agentEnv) : new Map()
-  return keys && oauth && agentEnv && { keys, oauth, agentEnv }
+  // Added within version 3: a file without it holds none.
+  const pluginSecrets =
+    raw.pluginSecrets === undefined ? new Map() : parseValues(raw.pluginSecrets, MAX_SECRET_PLUGINS)
+  return keys && oauth && agentEnv && pluginSecrets && { keys, oauth, agentEnv, pluginSecrets }
 }
 
-function contentsObject({ keys, oauth, agentEnv }: Contents): MarketKeysPush {
+function contentsObject({ keys, oauth, agentEnv, pluginSecrets }: Contents): MarketKeysPush {
   return {
     values: toObject(keys),
     oauth: Object.fromEntries(oauth),
     agentEnv: toObject(agentEnv),
+    pluginSecrets: toObject(pluginSecrets),
   }
 }
 
@@ -197,8 +207,11 @@ function toObject(keys: Keys): MarketKeyValues {
  * The contents without the keys of servers and inputs the settings no longer have, nor the sign-in
  * of a server that is gone or no longer signs in with OAuth.
  */
-function pruned({ keys, oauth, agentEnv }: Contents, servers: readonly MarketServer[]): Contents {
-  const next: Contents = { keys: new Map(), oauth: new Map(), agentEnv }
+function pruned(
+  { keys, oauth, agentEnv, pluginSecrets }: Contents,
+  servers: readonly MarketServer[],
+): Contents {
+  const next: Contents = { keys: new Map(), oauth: new Map(), agentEnv, pluginSecrets }
   for (const server of servers) {
     const inputs = keys.get(server.id)
     if (inputs) {
@@ -269,7 +282,12 @@ export class MarketKeys {
   static async load(options: MarketKeysOptions): Promise<MarketKeys> {
     const { file, cipher, log } = options
     const read = await readJsonFile(file)
-    let contents: Contents = { keys: new Map(), oauth: new Map(), agentEnv: new Map() }
+    let contents: Contents = {
+      keys: new Map(),
+      oauth: new Map(),
+      agentEnv: new Map(),
+      pluginSecrets: new Map(),
+    }
     let readOnly: ReadOnly | null = null
     let resave = false
     const quarantine = async (reason: string): Promise<void> => {
@@ -383,6 +401,45 @@ export class MarketKeys {
     })
   }
 
+  /**
+   * Keeps or, with a null value, clears a secret a plugin declares; with a null key, clears every
+   * secret of the plugin, as when it is removed. Settles once the file holds the change. Which keys
+   * a plugin declares is the agent host's to check, since the store knows no plugins.
+   */
+  async setPluginSecret(pluginId: unknown, key: unknown, value: unknown): Promise<void> {
+    if (typeof pluginId !== 'string' || !PLUGIN_ID.test(pluginId)) throw invalid('Not a plugin')
+    if (
+      key !== null &&
+      (typeof key !== 'string' || key.length === 0 || key.length > MAX_INPUT_NAME)
+    ) {
+      throw invalid('Not a secret of a plugin')
+    }
+    if (value !== null && typeof value !== 'string') throw invalid('A secret is a text')
+    await this.run(async () => {
+      if (this.readOnly) throw new MarketKeysError('unavailable', readOnlyText(this.readOnly))
+      const secrets = new Map(this.contents.pluginSecrets.get(pluginId))
+      if (key === null) secrets.clear()
+      else if (value === null) secrets.delete(key)
+      else {
+        const problem = valueProblem(value, false)
+        if (problem) throw invalid(valueProblemText(problem, key))
+        if (!secrets.has(key) && secrets.size >= MAX_INPUTS) {
+          throw invalid(`A plugin may keep at most ${MAX_INPUTS} secrets`)
+        }
+        secrets.set(key, value)
+      }
+      const pluginSecrets = new Map(this.contents.pluginSecrets)
+      if (secrets.size > 0) {
+        if (!pluginSecrets.has(pluginId) && pluginSecrets.size >= MAX_SECRET_PLUGINS) {
+          throw invalid('Too many plugins keep secrets')
+        }
+        pluginSecrets.set(pluginId, secrets)
+      } else pluginSecrets.delete(pluginId)
+      // A clearing is used at once, as a removal is; a secret only once it is written.
+      await this.commit({ ...this.contents, pluginSecrets }, value !== null && key !== null)
+    })
+  }
+
   /** Everything the agent host is sent: the values, and every OAuth sign-in. */
   contentsForHost(): MarketKeysPush {
     return contentsObject(this.contents)
@@ -414,7 +471,7 @@ export class MarketKeys {
       const keys: Keys = new Map(this.contents.keys)
       if (inputs.size > 0) keys.set(server.id, inputs)
       else keys.delete(server.id)
-      const next = { keys, oauth: this.contents.oauth, agentEnv: this.contents.agentEnv }
+      const next = { ...this.contents, keys }
       await this.commit(pruned(next, this.options.servers()), true)
       return this.state()
     })
@@ -445,7 +502,7 @@ export class MarketKeys {
       const oauth = new Map(this.contents.oauth)
       if (state === null) oauth.delete(serverId)
       else oauth.set(serverId, state)
-      const next = { keys: this.contents.keys, oauth, agentEnv: this.contents.agentEnv }
+      const next = { ...this.contents, oauth }
       if (sameContents(next, this.contents)) {
         this.options.changed(this.contentsForHost())
         return true
@@ -489,7 +546,12 @@ export class MarketKeys {
 
   private async save(contents: Contents): Promise<void> {
     const { file, cipher, plainTextAllowed } = this.options
-    if (contents.keys.size === 0 && contents.oauth.size === 0 && contents.agentEnv.size === 0) {
+    if (
+      contents.keys.size === 0 &&
+      contents.oauth.size === 0 &&
+      contents.agentEnv.size === 0 &&
+      contents.pluginSecrets.size === 0
+    ) {
       await rm(file, { force: true })
       return
     }

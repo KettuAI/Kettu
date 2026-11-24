@@ -1,6 +1,5 @@
-// What a Marketplace item's tile shows, in order: a bundled brand mark; a plugin's own logo, which
-// the host reads from the package on its computer; the icon of the site a remote MCP server
-// connects to; a glyph and color Kettu gives the items it knows; a plugin's category glyph on its
+// What a Marketplace item's tile shows, in order: a bundled brand mark; the icon of the site a
+// remote MCP server connects to; a glyph and color Kettu gives the items it knows; a plugin's category glyph on its
 // harness's color; else its kind's glyph and color.
 
 import {
@@ -43,7 +42,7 @@ import {
 import type { IconSvgElement } from '@hugeicons/react'
 import type { McpSpec, PluginHarness } from '@shared/marketplace'
 import type { WireWorkflowEntry } from '@shared/workflow'
-import { KETTU_PLUGINS, kettuId, type CommunityItem } from '@shared/market-community'
+import { kettuId, type CommunityItem } from '@shared/market-community'
 import { brandMark, type Mark } from './brand-marks'
 import { pluginName } from './model'
 
@@ -66,6 +65,15 @@ export type TileSubject =
     }
   | { kind: 'skill'; name: string }
   | { kind: 'workflow'; id: string; source: WireWorkflowEntry['source'] }
+  | {
+      // A Kettu plugin: the icon its package carries, else a glyph on a color its name picks.
+      kind: 'kettu-plugin'
+      name: string
+      /** False for a plugin anyone may publish, whose name earns it no maker's mark. */
+      marks: boolean
+      /** The package's own icon, as a data URL. */
+      icon: string | null
+    }
 
 export type TileSize = 'small' | 'row' | 'big'
 
@@ -95,6 +103,17 @@ export const pluginSubject = (plugin: {
 
 export const skillSubject = (name: string): TileSubject => ({ kind: 'skill', name })
 
+export const kettuPluginSubject = (plugin: {
+  name: string
+  official?: boolean
+  icon?: string | null
+}): TileSubject => ({
+  kind: 'kettu-plugin',
+  name: plugin.name,
+  marks: plugin.official === true,
+  icon: plugin.icon ?? null,
+})
+
 export const workflowSubject = (workflow: {
   id: string
   source: WireWorkflowEntry['source']
@@ -106,14 +125,16 @@ export const workflowSubject = (workflow: {
 
 /** A listing's tile: its kind's glyph, never a maker's mark, since anyone may take a name. */
 export function communitySubject(
-  item: Pick<CommunityItem, 'id' | 'kind' | 'harness' | 'slug'>,
+  item: Pick<CommunityItem, 'id' | 'kind' | 'harness' | 'slug'> & { official?: boolean },
 ): TileSubject {
+  const official = item.official === true
   if (item.kind === 'skill') return skillSubject(item.slug)
   if (item.kind === 'workflow') return workflowSubject({ id: item.slug, source: 'community' })
+  if (item.kind === 'agent-plugin') return kettuPluginSubject({ name: item.slug, official })
   if (item.kind === 'plugin') {
     return pluginSubject({
       harness: item.harness ?? 'claude-code',
-      id: `${item.slug}@${KETTU_PLUGINS}`,
+      id: item.slug,
       marks: false,
     })
   }
@@ -197,6 +218,7 @@ const WORKFLOW_COLOR: Record<WireWorkflowEntry['source'], string> = {
   agent: 'var(--tile-cyan)',
   user: 'var(--tile-violet)',
   community: 'var(--tile-teal)',
+  plugin: 'var(--tile-teal)',
 }
 
 const HARNESS_COLOR: Record<PluginHarness, string> = {
@@ -211,7 +233,30 @@ function categoryGlyph(category: string | null): IconSvgElement {
   return CATEGORIES.find(([pattern]) => pattern.test(words))?.[1] ?? PuzzleIcon
 }
 
+// The colors a Kettu plugin's tile picks from by its name, the draft's mix of warm and cool.
+const KETTU_PLUGIN_COLORS = [
+  'var(--tile-violet)',
+  'var(--tile-sky)',
+  'var(--tile-teal)',
+  'var(--tile-emerald)',
+  'var(--tile-pink)',
+  'var(--tile-cyan)',
+  'var(--tile-amber)',
+  'var(--tile-slate)',
+]
+
+function nameColor(name: string): string {
+  let hash = 0
+  for (const char of name) hash = (hash * 31 + char.charCodeAt(0)) >>> 0
+  return KETTU_PLUGIN_COLORS[hash % KETTU_PLUGIN_COLORS.length]!
+}
+
 export function tileArt(subject: TileSubject): Art {
+  if (subject.kind === 'kettu-plugin') {
+    const mark = subject.marks ? brandMark(subject.name) : null
+    if (mark) return { type: 'mark', mark }
+    return { type: 'glyph', icon: PuzzleIcon, color: nameColor(subject.name) }
+  }
   if (subject.kind === 'mcp') {
     const mark = brandMark(subject.brand)
     if (mark) return { type: 'mark', mark }

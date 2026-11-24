@@ -40,6 +40,7 @@ import {
   createMarketplaceStore,
   marketConnectionChanged,
   marketKeysChanged,
+  marketPluginsChanged,
   useMarketplaceStore,
   type MarketplaceStoreHook,
 } from './marketplace'
@@ -183,6 +184,9 @@ export function hostScopeEvent(hostId: string, event: HostEvent | HostAdminEvent
       break
     case 'market.publishedChanged':
       marketPublishedChanged(other.scope.hostId)
+      break
+    case 'plugins.changed':
+      marketPluginsChanged(other.scope.useMarketplaceStore)
       break
   }
 }

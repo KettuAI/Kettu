@@ -34,7 +34,8 @@ export type Command = {
 
 export type CommandScope = { id: string; label: string; count?: number };
 
-export type CommandGroup = { id: string; label: string; commands: Command[] };
+/** `logo` leads the group's name, such as the tile of the plugin whose actions it lists. */
+export type CommandGroup = { id: string; label: string; logo?: ReactNode; commands: Command[] };
 
 export type CommandMenuProps = {
   groups?: CommandGroup[];
@@ -432,6 +433,7 @@ export function CommandMenu({
         key: `g${gi}`,
         id: g.id,
         label: String(g.label ?? ""),
+        logo: g.logo,
         commands: (Array.isArray(g.commands) ? g.commands : []).filter(Boolean).map((c, ci) => {
           const label = String(c.label ?? "");
           const hint = c.hint == null || c.hint === "" ? undefined : String(c.hint);
@@ -454,7 +456,7 @@ export function CommandMenu({
       }))
       .filter((g) => g.commands.length);
     // With text typed, the first row always offers to ask the assistant about it
-    if (needle && ask) result.unshift({ key: "ask", id: "ask-about", label: "Assistant", commands: [{ key: "ask", n: 0, id: "ask-about", label: `Ask assistant about “${q}”`, logo: <SparkTile /> }] });
+    if (needle && ask) result.unshift({ key: "ask", id: "ask-about", label: "Assistant", logo: undefined, commands: [{ key: "ask", n: 0, id: "ask-about", label: `Ask assistant about “${q}”`, logo: <SparkTile /> }] });
     return result;
   }, [all, q, filter, ask]);
   const order = useMemo(() => shown.flatMap((g) => g.commands), [shown]);
@@ -659,6 +661,7 @@ export function CommandMenu({
             <div key={group.key} role="group" aria-label={group.label} className="ui-cmc__group">
               {group.key !== "ask" && group.label && (
                 <span className="ui-cmc__label" dir="auto">
+                  {group.logo}
                   {group.label}
                 </span>
               )}

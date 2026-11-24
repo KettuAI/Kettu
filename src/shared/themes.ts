@@ -238,6 +238,8 @@ export interface InstalledTheme {
   ignored: string[]
   /** The catalog version it was installed at; none for a theme installed from a file. */
   catalog?: string
+  /** The plugin that brings it, which it leaves with; none for a theme installed from a file. */
+  plugin?: { id: string; title: string }
 }
 
 export type ThemeLoadFailure =

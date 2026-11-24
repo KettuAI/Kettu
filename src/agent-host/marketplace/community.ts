@@ -1,36 +1,22 @@
 // The Kettu Marketplace as the host installs from it: its public listings and the account's own
 // Only me ones, read through main or the daemon; a version's files, downloaded for install or preview and
-// each checked against the SHA-256 the service gave before anything is written; the plugins, kept
-// in a local marketplace of each harness that the harness installs them from; and the workflows,
-// written into the workflow library to wait for the user's approval.
+// each checked against the SHA-256 the service gave before anything is written; and the workflows,
+// written into the workflow library to wait for the user's approval. Plugin listings are left out:
+// Kettu no longer installs the harnesses' plugins.
 
 import { createHash, randomUUID } from 'node:crypto'
-import {
-  cp,
-  lstat,
-  mkdir,
-  readdir,
-  readFile,
-  realpath,
-  rename,
-  rm,
-  symlink,
-  writeFile,
-} from 'node:fs/promises'
+import { mkdir, rename, rm, writeFile } from 'node:fs/promises'
 import path from 'node:path'
-import {
-  KETTU_PLUGINS,
-  type BundleRef,
-  type CommunityDirectory,
-  type CommunityInstalled,
-  type CommunityItem,
-  type CommunityListing,
-  type CommunityPlugin,
-  type CommunityStanding,
-  type CommunityWorkflow,
+import type {
+  BundleRef,
+  CommunityDirectory,
+  CommunityInstalled,
+  CommunityItem,
+  CommunityListing,
+  CommunityStanding,
+  CommunityWorkflow,
 } from '@shared/market-community'
 import {
-  HANDLE,
   LISTING_ID,
   PUBLISH_LIMITS,
   VERSION,
@@ -39,12 +25,10 @@ import {
   type MarketListing,
   type MarketResults,
   type MineListing,
-  type PublishHarness,
   type PublishKind,
   type VersionFile,
 } from '@shared/market-publish'
-import type { CatalogServer, InstalledPlugin, PluginScope } from '@shared/marketplace'
-import { harnessOf, type AgentId } from '@shared/thread'
+import type { CatalogServer } from '@shared/marketplace'
 import {
   WORKFLOW_FILE_BYTES,
   type Workflow,
@@ -53,7 +37,7 @@ import {
 } from '@shared/workflow'
 import { HostError } from '../errors'
 import { t } from '../i18n'
-import { JsonFile, type LogFn } from '../storage'
+import type { LogFn } from '../storage'
 import { parseWorkflow, problemText } from '../workflow/format'
 import type { CommunityOrigin } from '../workflow/library'
 import { WORKFLOW_FILE, utf8 } from './publish-check'
@@ -66,14 +50,7 @@ const DIRECTORIES = 30
 const MAX_PATH = 512
 const PARALLEL = 4
 const SHA256 = /^[0-9a-f]{64}$/
-// A plugin's name as the harnesses take it in a marketplace, and so its folder's name.
-const PLUGIN_NAME = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/
 const PARTIAL = '.partial-'
-
-const MANIFESTS: Record<PublishHarness, string> = {
-  'claude-code': '.claude-plugin/plugin.json',
-  codex: '.codex-plugin/plugin.json',
-}
 
 type WorkflowSummary = Pick<Workflow, 'name' | 'description' | 'when' | 'locales'> & {
   steps: Pick<WorkflowStep, 'id' | 'name' | 'by' | 'youReview'>[]
@@ -175,125 +152,8 @@ export async function writeFolder(dir: string, files: readonly DownloadedFile[])
   }
 }
 
-async function exists(file: string): Promise<boolean> {
-  return (await lstat(file).catch(() => null)) !== null
-}
-
-/** Renames a folder, or copies it and removes the old one when it is on another volume. */
-async function moveFolder(from: string, to: string): Promise<void> {
-  try {
-    await rename(from, to)
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== 'EXDEV') throw error
-    await cp(from, to, { recursive: true })
-    await rm(from, { recursive: true, force: true })
-  }
-}
-
-/** Moves each plugin folder of one local marketplace into another that lacks it. */
-async function movePlugins(from: string, to: string): Promise<void> {
-  const names = await readdir(path.join(from, 'plugins')).catch(() => [])
-  await mkdir(path.join(to, 'plugins'), { recursive: true })
-  for (const name of names) {
-    if (!PLUGIN_NAME.test(name)) continue
-    const target = path.join(to, 'plugins', name)
-    if (!(await exists(target))) await moveFolder(path.join(from, 'plugins', name), target)
-  }
-}
-
-/**
- * The entries of a local marketplace's file that another Kettu data folder wrote, whose plugin
- * folders are still there; none when the file cannot be read.
- */
-async function otherEntries(
-  local: LocalMarketplace,
-  ours: ReadonlySet<string>,
-): Promise<{ name: string }[]> {
-  let listed: unknown
-  try {
-    listed = (JSON.parse(await readFile(local.file, 'utf8')) as { plugins?: unknown }).plugins
-  } catch {
-    return []
-  }
-  const kept: { name: string }[] = []
-  for (const entry of Array.isArray(listed) ? listed : []) {
-    const name = (entry as { name?: unknown } | null)?.name
-    if (typeof name !== 'string' || !PLUGIN_NAME.test(name) || ours.has(name.toLowerCase())) {
-      continue
-    }
-    if (await exists(path.join(local.dir, 'plugins', name))) kept.push(entry as { name: string })
-  }
-  return kept
-}
-
-/** The plugins installed from the Kettu Marketplace, by listing id. */
-export interface CommunityRecords {
-  version: 1
-  plugins: Record<string, CommunityPlugin>
-}
-
-export function parseCommunityFile(data: Record<string, unknown>): CommunityRecords | string {
-  const { plugins } = data
-  if (typeof plugins !== 'object' || plugins === null || Array.isArray(plugins)) {
-    return 'plugins is not an object'
-  }
-  const kept: Record<string, CommunityPlugin> = {}
-  for (const [id, value] of Object.entries(plugins)) {
-    const o = (value ?? {}) as Record<string, unknown>
-    if (
-      LISTING_ID.test(id) &&
-      o.listingId === id &&
-      (o.harness === 'claude-code' || o.harness === 'codex') &&
-      typeof o.name === 'string' &&
-      PLUGIN_NAME.test(o.name) &&
-      typeof o.version === 'string' &&
-      VERSION.test(o.version) &&
-      typeof o.handle === 'string' &&
-      HANDLE.test(o.handle) &&
-      typeof o.slug === 'string' &&
-      HANDLE.test(o.slug)
-    ) {
-      kept[id] = {
-        listingId: id,
-        harness: o.harness,
-        name: o.name,
-        version: o.version,
-        handle: o.handle,
-        slug: o.slug,
-      }
-    }
-  }
-  return { version: 1, plugins: kept }
-}
-
-export function communityFile(userDataPath: string, log: LogFn): JsonFile<CommunityRecords> {
-  return new JsonFile<CommunityRecords>({
-    file: path.join(userDataPath, 'state', 'market-community.json'),
-    version: 1,
-    migrations: {},
-    parse: parseCommunityFile,
-    empty: () => ({ version: 1, plugins: {} }),
-    log,
-  })
-}
-
-/** A harness's local marketplace of the Kettu Marketplace's plugins. */
-export interface LocalMarketplace {
-  /** Its folder, which the harness adds as a marketplace. */
-  dir: string
-  /** Its marketplace file, which Codex installs from. */
-  file: string
-}
-
 export interface CommunityDeps {
   userDataPath: string
-  /**
-   * `<home>/.kettu/plugins`, where each harness's local marketplace lives: the harness reads the
-   * plugins it installed from there, so it must outlive the app's data. Every Kettu data folder on
-   * the computer shares it.
-   */
-  pluginsRoot: string
-  file: JsonFile<CommunityRecords>
   log: LogFn
   /** The host's Kettu account, while it is signed in with Kettu's services on. */
   account(): MarketAccount | null
@@ -303,16 +163,6 @@ export interface CommunityDeps {
   ): Promise<MarketResults[K]>
   /** The listings of the skills and MCP servers the settings keep from the Kettu Marketplace. */
   kept(): string[]
-  /** Installs, or updates, a plugin of a local marketplace through the agent's harness. */
-  installPlugin(
-    agentId: AgentId,
-    local: LocalMarketplace,
-    name: string,
-    scope: PluginScope,
-    projectPath: string | null,
-  ): Promise<InstalledPlugin>
-  /** Whether any agent of the harness still has the plugin, as its harness lists them now. */
-  pluginInstalled(harness: PublishHarness, pluginId: string): Promise<boolean>
   /**
    * Writes a workflow listing's file into the workflow library, unapproved, or refuses it; `updated`
    * when it replaced the version the library had.
@@ -347,6 +197,7 @@ function itemOf(listing: MarketListing): CommunityItem {
     installs: listing.visibility === 'private' ? null : listing.installs,
     updatedAt: listing.updatedAt,
     ...(listing.kind === 'workflow' ? flowOf(listing) : {}),
+    ...(listing.kind === 'agent-plugin' && listing.adds ? { adds: listing.adds } : {}),
   }
 }
 
@@ -434,10 +285,6 @@ export class MarketCommunityService {
     { version: string; summary: Promise<WorkflowSummary | null> }
   >()
   private readonly standings = new Map<string, { at: number; standing: CommunityStanding }>()
-  private kept: CommunityRecords | null = null
-  private loading: Promise<CommunityRecords> | null = null
-  /** One plugin install at a time, since they share each harness's marketplace file. */
-  private installing: Promise<unknown> = Promise.resolve()
   private readonly now: () => number
 
   constructor(private readonly deps: CommunityDeps) {
@@ -480,7 +327,9 @@ export class MarketCommunityService {
     }
     const items =
       page.status === 'fulfilled'
-        ? page.value.items.filter((listing) => listing.visibility === 'public').map(itemOf)
+        ? page.value.items
+            .filter((listing) => listing.visibility === 'public' && listing.kind !== 'plugin')
+            .map(itemOf)
         : []
     const yours =
       mine.status === 'fulfilled' && mine.value
@@ -488,6 +337,7 @@ export class MarketCommunityService {
             .filter(
               (listing) =>
                 listing.visibility === 'private' &&
+                listing.kind !== 'plugin' &&
                 listing.current !== null &&
                 listing.takenDown === null,
             )
@@ -729,24 +579,6 @@ export class MarketCommunityService {
   }
 
   /**
-   * Installs a plugin listing into one agent through its harness, or updates it to the current
-   * version: its files go to the harness's local marketplace, which the agent gets first.
-   */
-  installPlugin(
-    id: string,
-    agentId: AgentId,
-    scope: PluginScope,
-    projectPath: string | null,
-  ): Promise<InstalledPlugin> {
-    const run = this.installing.then(
-      () => this.installPluginNow(id, agentId, scope, projectPath),
-      () => this.installPluginNow(id, agentId, scope, projectPath),
-    )
-    this.installing = run.catch(() => undefined)
-    return run
-  }
-
-  /**
    * Adds a workflow listing's current version to the workflow library, or updates the one it has:
    * every file is checked before its `workflow.yaml` is read, and the library refuses one that does
    * not read. It waits there for the user's approval.
@@ -759,19 +591,16 @@ export class MarketCommunityService {
     return this.addWorkflowVersion(listing, text)
   }
 
-  /** The plugins installed from the Kettu Marketplace and where each installed item stands. */
+  /** Where each item installed from the Kettu Marketplace stands with its listing. */
   async installed(refresh = false): Promise<CommunityInstalled> {
-    const file = await this.load()
-    const plugins = Object.values(file.plugins)
-    const ids = [...new Set([...this.deps.kept(), ...plugins.map((p) => p.listingId)])]
     const standings: Record<string, CommunityStanding> = {}
-    if (!this.deps.account()) return { plugins, standings }
+    if (!this.deps.account()) return { plugins: [], standings }
     await Promise.all(
-      ids.map(async (id) => {
+      [...new Set(this.deps.kept())].map(async (id) => {
         standings[id] = await this.standing(id, refresh)
       }),
     )
-    return { plugins, standings }
+    return { plugins: [], standings }
   }
 
   /** Counts an install or update of a version once; a failure is only logged. */
@@ -791,167 +620,6 @@ export class MarketCommunityService {
   async report(id: string, message: string): Promise<void> {
     if (!this.deps.account()) throw new HostError('auth_required', t('marketCommunity.signedOut'))
     await this.api(() => this.deps.call({ kind: 'report', id, message }))
-  }
-
-  flush(): Promise<void> {
-    return this.deps.file.flush()
-  }
-
-  /**
-   * Moves the local marketplaces this data folder kept before into the plugins folder, once, and
-   * leaves a link at each old place for the registrations that still name it. Resolves to the
-   * harnesses whose marketplace moved, whose agents the caller points at the new place.
-   */
-  moveLegacy(): Promise<PublishHarness[]> {
-    const run = this.installing.then(() => this.moveLegacyNow())
-    this.installing = run.catch(() => undefined)
-    return run
-  }
-
-  private async moveLegacyNow(): Promise<PublishHarness[]> {
-    const moved: PublishHarness[] = []
-    for (const harness of Object.keys(MANIFESTS) as PublishHarness[]) {
-      const legacy = path.join(this.deps.userDataPath, 'marketplace', 'kettu-plugins', harness)
-      // Not there, or already the link a move left.
-      if (!(await lstat(legacy).catch(() => null))?.isDirectory()) continue
-      const local = this.local(harness)
-      try {
-        if (await exists(local.dir)) {
-          await movePlugins(legacy, local.dir)
-          await this.writeMarketplace(harness, Object.values((await this.load()).plugins), null)
-          await rm(legacy, { recursive: true, force: true })
-        } else {
-          await mkdir(path.dirname(local.dir), { recursive: true })
-          await moveFolder(legacy, local.dir)
-        }
-        await symlink(local.dir, legacy, 'junction')
-        moved.push(harness)
-      } catch (error) {
-        this.deps.log(
-          'warn',
-          `Could not move ${legacy} to ${local.dir}: ${(error as Error).message}`,
-        )
-      }
-    }
-    return moved
-  }
-
-  /** A harness's local marketplace, in the plugins folder. */
-  local(harness: PublishHarness): LocalMarketplace {
-    const dir = path.join(this.deps.pluginsRoot, harness)
-    const file =
-      harness === 'claude-code'
-        ? path.join(dir, '.claude-plugin', 'marketplace.json')
-        : path.join(dir, '.agents', 'plugins', 'marketplace.json')
-    return { dir, file }
-  }
-
-  private async installPluginNow(
-    id: string,
-    agentId: AgentId,
-    scope: PluginScope,
-    projectPath: string | null,
-  ): Promise<InstalledPlugin> {
-    const harness = harnessOf(agentId)
-    if (harness !== 'claude-code' && harness !== 'codex') {
-      throw refuse(t('marketPlugins.noPlugins'))
-    }
-    const { listing, files } = await this.download(id, 'plugin')
-    if (listing.harness !== harness) throw refuse(t('marketCommunity.otherHarness'))
-    const name = pluginName(files, MANIFESTS[harness])
-    const kept = await this.load()
-    const before = kept.plugins[listing.id]
-    const other = Object.values(kept.plugins).find(
-      (plugin) =>
-        plugin.listingId !== listing.id &&
-        plugin.harness === harness &&
-        plugin.name.toLowerCase() === name.toLowerCase(),
-    )
-    if (other) {
-      if (await this.deps.pluginInstalled(harness, `${other.name}@${KETTU_PLUGINS}`)) {
-        throw new HostError(
-          'conflict',
-          t('marketCommunity.nameTaken', { name, other: `@${other.handle}/${other.slug}` }),
-        )
-      }
-      delete kept.plugins[other.listingId]
-    }
-    const local = this.local(harness)
-    // A plugin that was another name before keeps its old folder for the agents that have it.
-    await writeFolder(path.join(local.dir, 'plugins', name), files)
-    const record: CommunityPlugin = {
-      listingId: listing.id,
-      harness,
-      name,
-      version: listing.version,
-      handle: listing.handle,
-      slug: listing.slug,
-    }
-    kept.plugins[listing.id] = record
-    await this.writeMarketplace(harness, Object.values(kept.plugins), listing)
-    const installed = await this.deps.installPlugin(
-      agentId,
-      await this.resolvedLocal(harness),
-      name,
-      scope,
-      projectPath,
-    )
-    this.deps.file.save(kept)
-    void this.count(listing.id, listing.version, before ? 'update' : 'install')
-    return installed
-  }
-
-  /** The local marketplace's folder and file as the harnesses are given them. */
-  async resolvedLocal(harness: PublishHarness): Promise<LocalMarketplace> {
-    const local = this.local(harness)
-    return { dir: await realpath(local.dir), file: await realpath(local.file) }
-  }
-
-  /**
-   * The harness's marketplace file, listing every plugin installed from the Kettu Marketplace:
-   * this data folder's, and those another one listed whose folders are still there.
-   */
-  private async writeMarketplace(
-    harness: PublishHarness,
-    plugins: readonly CommunityPlugin[],
-    latest: MarketListing | null,
-  ): Promise<void> {
-    const local = this.local(harness)
-    const ours = plugins
-      .filter((plugin) => plugin.harness === harness)
-      .map((plugin) => {
-        const description = plugin.listingId === latest?.id ? latest.description : undefined
-        const source = `./plugins/${plugin.name}`
-        return harness === 'claude-code'
-          ? {
-              name: plugin.name,
-              source,
-              version: plugin.version,
-              author: { name: plugin.handle },
-              ...(description ? { description } : {}),
-            }
-          : {
-              name: plugin.name,
-              source: { source: 'local', path: source },
-              policy: { installation: 'AVAILABLE', authentication: 'ON_INSTALL' },
-            }
-      })
-    const names = new Set(ours.map((entry) => entry.name.toLowerCase()))
-    const entries = [...ours, ...(await otherEntries(local, names))].sort((a, b) =>
-      a.name.localeCompare(b.name),
-    )
-    const manifest =
-      harness === 'claude-code'
-        ? { name: KETTU_PLUGINS, owner: { name: 'Kettu Marketplace' }, plugins: entries }
-        : {
-            name: KETTU_PLUGINS,
-            interface: { displayName: 'Kettu Marketplace' },
-            plugins: entries,
-          }
-    await mkdir(path.dirname(local.file), { recursive: true })
-    const partial = `${local.file}${PARTIAL}${randomUUID()}`
-    await writeFile(partial, `${JSON.stringify(manifest, null, 2)}\n`)
-    await rename(partial, local.file)
   }
 
   private async standing(id: string, refresh: boolean): Promise<CommunityStanding> {
@@ -1002,8 +670,10 @@ export class MarketCommunityService {
       }
       throw this.failure(error)
     }
-    // Another account's Only me listing never shows, whatever answered.
-    if (listing.id !== id || !offered(listing)) return { state: 'gone' }
+    // Another account's Only me listing never shows, whatever answered; nor does a plugin's.
+    if (listing.id !== id || !offered(listing) || listing.kind === 'plugin') {
+      return { state: 'gone' }
+    }
     return { state: 'listed', listing }
   }
 
@@ -1025,35 +695,4 @@ export class MarketCommunityService {
     if (code === 'withdrawn') return new HostError('conflict', t('marketCommunity.withdrawn'))
     return new HostError('unavailable', t('marketCommunity.failed', { reason: message }))
   }
-
-  private load(): Promise<CommunityRecords> {
-    if (this.kept) return Promise.resolve(this.kept)
-    this.loading ??= this.deps.file.load().then(
-      (file) => (this.kept = file),
-      (error: unknown) => {
-        this.deps.log(
-          'warn',
-          `Could not read the Kettu Marketplace's plugins: ${(error as Error).message}`,
-        )
-        return (this.kept = { version: 1, plugins: {} })
-      },
-    )
-    return this.loading
-  }
-}
-
-/** A plugin's name from its manifest, which its folder and marketplace entry take. */
-function pluginName(files: readonly DownloadedFile[], manifest: string): string {
-  const file = files.find((item) => item.path === manifest)
-  if (!file) throw refuse(t('marketCommunity.noManifest', { file: manifest }))
-  let name: unknown
-  try {
-    name = (JSON.parse(file.data.toString('utf8')) as { name?: unknown }).name
-  } catch {
-    throw refuse(t('marketCommunity.noManifest', { file: manifest }))
-  }
-  if (typeof name !== 'string' || !PLUGIN_NAME.test(name)) {
-    throw refuse(t('marketCommunity.noManifest', { file: manifest }))
-  }
-  return name
 }

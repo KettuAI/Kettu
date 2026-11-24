@@ -267,8 +267,11 @@
     "putBackFailed": "Could not put back: {{error}}"
   },
   "slash": {
+    "heading": "Commands",
     "loading": "Listing commands…",
-    "chooseProject": "Choose a project to list its commands"
+    "chooseProject": "Choose a project to list its commands",
+    "yours": "Yours",
+    "kettu": "Kettu"
   },
   "mentions": {
     "used": "Used in this session",
@@ -280,7 +283,20 @@
     "folder": "Folder",
     "keysMove": "↑↓ to move",
     "keysInsert": "↵ to insert",
-    "keysFolder": "Tab opens a folder"
+    "keysFolder": "Tab opens a folder",
+    "pluginSearching": "Searching…",
+    "pluginLimit_one": "A message can mention {{count}} item from plugins at most",
+    "pluginLimit_other": "A message can mention {{count}} items from plugins at most",
+    "pluginError": {
+      "not_found": "This source isn’t available",
+      "disabled": "The plugin was turned off after it crashed too often",
+      "crashed": "The plugin was stopped for using too much time or memory",
+      "timeout": "The plugin took too long to answer",
+      "unavailable": "Plugins aren’t running right now",
+      "failed": "The plugin couldn’t search",
+      "invalid": "The plugin sent something Kettu can’t use",
+      "request_failed": "Couldn’t search"
+    }
   },
   "chips": {
     "pastedLink": "Pasted as a link",

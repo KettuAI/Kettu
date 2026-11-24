@@ -258,8 +258,11 @@
     "putBackFailed": "没能放回原处：{{error}}"
   },
   "slash": {
+    "heading": "命令",
     "loading": "正在列出命令…",
-    "chooseProject": "选择一个项目后才能列出命令"
+    "chooseProject": "选择一个项目后才能列出命令",
+    "yours": "你的",
+    "kettu": "Kettu"
   },
   "mentions": {
     "used": "本会话用过",
@@ -270,7 +273,19 @@
     "folder": "文件夹",
     "keysMove": "↑↓ 移动",
     "keysInsert": "↵ 插入",
-    "keysFolder": "Tab 打开文件夹"
+    "keysFolder": "Tab 打开文件夹",
+    "pluginSearching": "正在搜索…",
+    "pluginLimit_other": "一条消息最多提及 {{count}} 个插件提供的项目",
+    "pluginError": {
+      "not_found": "这个来源已不可用",
+      "disabled": "插件因多次崩溃已被关闭",
+      "crashed": "插件因占用时间或内存过多被停止",
+      "timeout": "插件响应超时",
+      "unavailable": "插件当前没有运行",
+      "failed": "插件无法完成搜索",
+      "invalid": "插件返回了 Kettu 无法使用的内容",
+      "request_failed": "没能完成搜索"
+    }
   },
   "chips": {
     "pastedLink": "已粘贴为链接",

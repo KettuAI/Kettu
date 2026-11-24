@@ -186,4 +186,4 @@ Chinese speakers can also join the WeChat group:
 
 ## License
 
-[AGPL-3.0](./LICENSE).
+[AGPL-3.0](./LICENSE). The plugin API's types and sample in [`packages/plugin-api`](./packages/plugin-api) are under the [MIT license](./packages/plugin-api/LICENSE), so plugins can copy them.

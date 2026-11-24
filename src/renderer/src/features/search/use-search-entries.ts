@@ -1,8 +1,9 @@
-import { useMemo } from 'react'
+import { useEffect, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
 import type { ConversationHit, SessionSummary } from '@shared/agent-host'
 import { artifactKind, recency } from '@renderer/features/artifacts/model'
+import { languageText, surfaceTitle } from '@renderer/features/plugin-views/plugin-text'
 import { scheduleWords } from '@renderer/features/routines/model'
 import { projectNameHints } from '@renderer/features/session/project-names'
 import { shortcutList, type ShortcutAction } from '@renderer/features/shell/shortcuts'
@@ -15,7 +16,8 @@ import { useWindowArtifacts } from '@renderer/features/artifacts/window-artifact
 import { useShownRoutines } from '@renderer/features/routines/window-routines'
 import { artifactHost, routineHost } from '@renderer/lib/host'
 import { useArtifactsStore } from '@renderer/stores/artifacts'
-import { useOtherHosts } from '@renderer/stores/hosts'
+import { isAway, useOtherHosts } from '@renderer/stores/hosts'
+import { loadPluginSurfaces, usePluginSurfacesStore } from '@renderer/stores/plugin-surfaces'
 import { useProjectsStore } from '@renderer/stores/projects'
 import {
   hostOfSession,
@@ -46,6 +48,7 @@ const SECTIONS: readonly SettingsSection[] = [
   'sharing',
   'terminal',
   'remote',
+  'plugins',
   'advanced',
   'about',
 ]
@@ -78,10 +81,19 @@ export function useSearchEntries(): SearchEntry[] {
   const routines = useRoutineEntries()
   const projects = useProjectEntries()
   const actions = useActionEntries()
+  const pluginActions = usePluginActionEntries()
   const sections = useSectionEntries()
   return useMemo(
-    () => [...sessions, ...artifacts, ...routines, ...projects, ...actions, ...sections],
-    [sessions, artifacts, routines, projects, actions, sections],
+    () => [
+      ...sessions,
+      ...artifacts,
+      ...routines,
+      ...projects,
+      ...actions,
+      ...pluginActions,
+      ...sections,
+    ],
+    [sessions, artifacts, routines, projects, actions, pluginActions, sections],
   )
 }
 
@@ -329,6 +341,65 @@ function useActionEntries(): SearchEntry[] {
       }
     })
   }, [t, starred])
+}
+
+/**
+ * The actions the plugins that are on declare, on each host the window shows that is reachable.
+ * The hosts are read when Search opens, and a plugin changing is told by the host.
+ */
+function usePluginActionEntries(): SearchEntry[] {
+  const { t, i18n: language } = useTranslation('sidebar')
+  const others = useOtherHosts()
+  const only = useOnlyHost()
+  const hostName = useHostName()
+  const namesHosts = useNamesHosts()
+  const byHost = usePluginSurfacesStore((s) => s.byHost)
+  const hostIds = useMemo<(string | null)[]>(
+    () =>
+      only === undefined
+        ? [null, ...others.filter((host) => !isAway(host.connection)).map((host) => host.id)]
+        : [only],
+    [only, others],
+  )
+  useEffect(() => {
+    for (const hostId of hostIds) {
+      if (!byHost[hostId ?? '']) void loadPluginSurfaces(hostId)
+    }
+  }, [hostIds, byHost])
+
+  return useMemo(
+    () =>
+      hostIds.flatMap((hostId) =>
+        (byHost[hostId ?? '']?.plugins ?? []).flatMap((plugin) => {
+          const pluginTitle = surfaceTitle(plugin, language.language)
+          const group =
+            namesHosts && only === undefined
+              ? `${pluginTitle} \u00b7 ${hostName(hostId)}`
+              : pluginTitle
+          return plugin.actions.map((action): SearchEntry => {
+            const title = languageText(action.title, language.language) || action.id
+            const description = action.description
+              ? languageText(action.description, language.language)
+              : null
+            return {
+              kind: 'pluginAction',
+              key: `pluginAction:${hostId ?? ''}/${plugin.pluginId}/${action.id}`,
+              title,
+              meta: description,
+              trailing: t('search.pluginAction'),
+              haystack: haystackOf(title, description, pluginTitle),
+              at: 0,
+              hostId,
+              pluginId: plugin.pluginId,
+              actionId: action.id,
+              icon: action.icon ?? null,
+              plugin: { name: plugin.name, title: group, icon: plugin.icon },
+            }
+          })
+        }),
+      ),
+    [hostIds, byHost, language.language, namesHosts, only, hostName, t],
+  )
 }
 
 function useSectionEntries(): SearchEntry[] {

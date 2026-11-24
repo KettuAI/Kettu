@@ -27,17 +27,19 @@ import { useHostScope } from '@renderer/stores/host-scope'
 import { ListingDialogs, PublishFolderDialog, type ListingDialog } from './publish-dialogs'
 import {
   listingMenu,
+  useConvertListing,
   useNewVersionItems,
   usePublishedStore,
   useRelist,
   type FolderChoice,
 } from './published-hooks'
-import { MoreMenu, SessionLink, StatePill, Visibility } from './published'
+import { MoreMenu, ReviewPill, SessionLink, StatePill, Visibility } from './published'
 import {
   chartScale,
   dayAt,
   folderShown,
   harnessName,
+  isClosed,
   isHarness,
   kindOf,
   knownSession,
@@ -82,10 +84,14 @@ export function PublishedListingPage({ id, back }: { id: string; back: () => voi
 }
 
 function stateOf(listing: MineListing): {
-  tone?: 'success' | 'danger'
-  key: 'public' | 'private' | 'unlisted' | 'takenDown'
+  tone?: 'success' | 'danger' | 'attention'
+  key: 'public' | 'private' | 'unlisted' | 'takenDown' | 'held'
 } {
   if (listing.takenDown) return { tone: 'danger', key: 'takenDown' }
+  // Nothing of it is listed while its only version waits for review.
+  if (listing.current === null && listing.versions.some((v) => v.status === 'held')) {
+    return { tone: 'attention', key: 'held' }
+  }
   if (listing.visibility === 'public') return { tone: 'success', key: 'public' }
   return { key: listing.visibility }
 }
@@ -106,6 +112,8 @@ function Listing({
   const [folder, setFolder] = useState<FolderChoice | null>(null)
   const relist = useRelist()
   const versionItems = useNewVersionItems(listing, published, setFolder)
+  const { convert, converting } = useConvertListing(setFolder)
+  const closed = isClosed(listing)
   const state = stateOf(listing)
   const current = listing.versions.find((v) => v.version === listing.current) ?? null
   const origin = published.origins[listing.id]
@@ -136,7 +144,17 @@ function Listing({
         </span>
         <span className="k-mkt-head__act">
           <StatePill tone={state.tone}>{t(`published.state.${state.key}`)}</StatePill>
-          {!listing.takenDown && (
+          {!listing.takenDown && closed && (
+            <Button
+              size="md"
+              variant="secondary"
+              loading={converting}
+              onClick={() => convert(listing)}
+            >
+              {t('published.menu.convert')}
+            </Button>
+          )}
+          {!listing.takenDown && !closed && (
             <Dropdown
               align="end"
               className="k-mkt-add"
@@ -162,6 +180,13 @@ function Listing({
         <div className="k-pub-alert k-pub-taken" role="status">
           <Icon icon={Alert02Icon} size={15} />
           <span>{t('published.listing.takenDown', { reason: listing.takenDown.reason })}</span>
+        </div>
+      )}
+
+      {closed && !listing.takenDown && (
+        <div className="k-pub-alert" role="status">
+          <Icon icon={Alert02Icon} size={15} />
+          <span>{t('published.listing.closed')}</span>
         </div>
       )}
 
@@ -306,6 +331,8 @@ function VersionRow({
   const { t } = useTranslation('marketplace')
   const isCurrent = version.version === listing.current
   const live = version.status === 'live'
+  const held = version.status === 'held'
+  const refused = version.status === 'refused'
   const at = Date.parse(version.publishedAt)
   const agent = harnessName(version.agent)
   const items: MenuItem[] = [
@@ -341,16 +368,25 @@ function VersionRow({
     <SessionLink sessionId={sessionId} title={version.session} />
   ) : null
   return (
-    <div className="k-pub-vrow" data-withdrawn={live ? undefined : ''}>
+    <div className="k-pub-vrow" data-withdrawn={live || held || refused ? undefined : ''}>
       <span className="k-mkt-mono k-pub-vrow__v">{version.version}</span>
       <span className="k-pub-vrow__body">
         <span className="k-pub-vrow__top">
           {isCurrent && <StatePill tone="success">{t('published.listing.current')}</StatePill>}
-          {!live && <StatePill>{t('published.listing.withdrawn')}</StatePill>}
+          {(held || refused) && <ReviewPill held={held} />}
+          {version.status === 'withdrawn' && (
+            <StatePill>{t('published.listing.withdrawn')}</StatePill>
+          )}
           {!Number.isNaN(at) && (
             <small title={new Date(at).toLocaleString()}>{mediumAgo(at)}</small>
           )}
         </span>
+        {held && <p className="k-pub-vrow__note">{t('published.review.heldNote')}</p>}
+        {refused && version.refusal && (
+          <p className="k-pub-vrow__error" data-selectable="">
+            {version.refusal.reason}
+          </p>
+        )}
         <p data-selectable="">
           {version.notes || <span className="k-pub-faint">{t('published.listing.noNotes')}</span>}
         </p>

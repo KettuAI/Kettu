@@ -155,6 +155,7 @@
     "update_memory": "更新记忆",
     "forget_memory": "忘掉记忆",
     "marketplace_check": "发布前检查",
+    "marketplace_convert": "转换成 Kettu 插件",
     "marketplace_publish": "发布到市场",
     "marketplace_mine": "列出已发布的",
     "marketplace_unlist": "从市场下架",
@@ -194,7 +195,11 @@
       "allowedByRoutine": "由定时任务允许",
       "cancelled": "已取消",
       "withdrawn": "已不再需要",
-      "onDevice": "{{answer}} · {{device}}"
+      "onDevice": "{{answer}} · {{device}}",
+      "relayedAllow": "你已允许一次，由 {{plugin}} 转达",
+      "relayedAllowFrom": "你已允许一次（来自 {{from}}），由 {{plugin}} 转达",
+      "relayedDeny": "你已拒绝，由 {{plugin}} 转达",
+      "relayedDenyFrom": "你已拒绝（来自 {{from}}），由 {{plugin}} 转达"
     },
     "answeredOn": "已在 {{device}} 上回答过。",
     "answeredInWindow": "已在另一个窗口中回答过。",
@@ -471,7 +476,29 @@
   },
   "userEntry": {
     "device": "从 {{device}} 发送",
-    "kettu": "Kettu"
+    "kettu": "Kettu",
+    "commandFrom": "来自 {{source}}",
+    "commandFromYours": "来自你的命令",
+    "showSent": "查看发出的内容",
+    "hideSent": "收起发出的内容",
+    "attached": "{{plugin}} 添加了内容",
+    "attachedItems": "{{plugin}} 添加了：{{items}}",
+    "showAttached": "查看添加的内容",
+    "hideAttached": "收起添加的内容",
+    "attachedFailed": "无法添加 {{items}}：{{why}}",
+    "attachedWhy": {
+      "not_found": "它已不再提供",
+      "disabled": "插件因多次崩溃已被关闭",
+      "crashed": "插件因占用时间或内存过多被停止",
+      "timeout": "插件响应超时",
+      "unavailable": "插件当时没有运行",
+      "failed": "插件没能给出内容",
+      "invalid": "插件返回了 Kettu 无法使用的内容",
+      "too_large": "这条消息里插件添加的内容已经达到上限"
+    }
+  },
+  "pluginDenial": {
+    "text": "<b>{{plugin}}</b> 拒绝了 <b>{{request}}</b>：{{reason}}"
   },
   "sessionReport": {
     "agent": "该会话",
@@ -725,6 +752,18 @@
       "opens": "将打开",
       "open": "打开"
     },
+    "role": {
+      "group": "角色",
+      "agents": "智能体",
+      "yours": "你的",
+      "anyAgent": "任意智能体",
+      "agentMissing": "这台电脑上没有 {{agent}}",
+      "notice": {
+        "agent": "角色 {{role}} 建议用 {{wanted}}，这台电脑上没有，所以用 {{actual}} 开始。",
+        "model": "角色 {{role}} 建议用 {{wanted}}，{{agent}} 没有这个模型，所以用 {{actual}} 开始。",
+        "effort": "角色 {{role}} 建议的推理强度 {{wanted}}，{{agent}} 这里没有，所以用 {{actual}} 开始。"
+      }
+    },
     "picker": {
       "search": "搜索智能体",
       "noMatch": "没有匹配的智能体",
@@ -947,7 +986,8 @@
     "alwaysSiteSession": "始终在会话浏览器中打开 {{site}} 的链接",
     "alwaysHost": "始终在 {{browser}} 中打开这个站点",
     "alwaysHostSession": "始终在会话浏览器中打开这个站点",
-    "openFailed": "无法打开链接：{{error}}"
+    "openFailed": "无法打开链接：{{error}}",
+    "pluginFailed": "{{plugin}} 没能显示这个链接：{{message}}"
   },
   "alert": {
     "note": "说明",
@@ -1433,6 +1473,7 @@
       "skill": "Skill",
       "plugin": "插件",
       "mcp-server": "MCP 服务器",
+      "agent-plugin": "插件",
       "workflow": "工作流"
     },
     "visibility": {
@@ -1458,7 +1499,11 @@
       "commands": "命令",
       "agents": "智能体",
       "hooks": "Hook",
-      "servers": "MCP 服务器"
+      "servers": "MCP 服务器",
+      "roles": "角色",
+      "workflows": "工作流",
+      "themes": "主题",
+      "templates": "模板"
     },
     "workflowGroup": {
       "steps": "步骤",
@@ -1504,12 +1549,15 @@
     "unlist": "下架",
     "notNow": "以后再说",
     "keptDraft": "已留成草稿",
+    "heldMeta": "审核通过后才会上架",
+    "heldStays": "{{previous}} 照常在架",
     "showProblems_other": "显示 {{count}} 个问题",
     "hideProblems": "收起问题",
     "outcome": {
       "publishing": "正在发布 {{name}}…",
       "unlisting": "正在下架 {{name}}…",
       "published": "已发布 {{name}} {{version}}",
+      "held": "{{name}} {{version}} 等待审核",
       "unlisted": "已下架 {{name}}",
       "failed": "没能发布 {{name}}",
       "unlistFailed": "没能下架 {{name}}",
@@ -1524,6 +1572,38 @@
       "changed": "步骤或流向与需求跑的不同",
       "compare": "和需求“{{title}}”用的版本对比",
       "hide": "收起对比"
+    },
+    "showAll": "显示全部",
+    "pluginLeftOut": "不会带上",
+    "script": {
+      "label": "脚本",
+      "noPermissions": "不要任何权限。",
+      "onlyKettu": "带脚本的插件暂时只有 Kettu 自己的发布者能发布。"
+    },
+    "converted": {
+      "label": "转换",
+      "from": "由 {{harness}} 的插件转换而来，原来的文件夹没有改动。",
+      "carried": "带过来的",
+      "count": {
+        "skills_other": "{{count}} 个技能",
+        "servers_other": "{{count}} 个 MCP 服务器",
+        "commands_other": "{{count}} 个命令",
+        "roles_other": "{{count}} 个角色",
+        "workflows_other": "{{count}} 个工作流",
+        "themes_other": "{{count}} 个主题",
+        "templates_other": "{{count}} 个模板"
+      },
+      "nothingLeftOut": "没有落下的。",
+      "leftOut_other": "落下了 {{count}} 项：",
+      "changed": "转换时改动的：",
+      "kind": {
+        "hook": "Hook",
+        "command": "命令",
+        "agent": "智能体",
+        "server": "MCP 服务器",
+        "skill": "Skill",
+        "file": "文件"
+      }
     }
   },
   "sideChat": {

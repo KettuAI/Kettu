@@ -292,8 +292,11 @@ export type PromptBlock =
   | { type: 'resource'; resource: { uri: string; mimeType: string; text: string } }
 
 export function promptBlocks(content: readonly UserContent[]): PromptBlock[] {
-  return content.map((item): PromptBlock => {
-    if (item.type === 'text') return { type: 'text', text: item.text }
+  // What a mentioned item adds is read as the message is sent, and goes as blocks of its own.
+  const own = content.filter((item) => item.type !== 'ref' || item.ref.kind !== 'plugin')
+  return own.map((item): PromptBlock => {
+    // A command of Kettu's goes as the message it expands to.
+    if (item.type === 'text') return { type: 'text', text: item.command?.sent ?? item.text }
     const ref = item.ref
     switch (ref.kind) {
       case 'image':
@@ -316,6 +319,9 @@ export function promptBlocks(content: readonly UserContent[]): PromptBlock[] {
       case 'audio':
       case 'video':
         return { type: 'text', text: ref.mimeType }
+      // Left out above; never reached.
+      case 'plugin':
+        return { type: 'text', text: ref.name }
       default:
         return { type: 'text', text: ref.label }
     }
@@ -381,6 +387,11 @@ export interface SessionOptions {
    * prompts, as for a session whose agent recorded its instructions outside Kettu.
    */
   promptAhead?: boolean
+  /**
+   * The instructions of the role the session started as, in the block Kettu's guide stands in:
+   * handed over the way the guide and memory are, and ahead of its prompts in the cases they are.
+   */
+  role?: string
   /**
    * Kettu's guide and memory worded for an agent with `systemPromptAppend`, which adds them to the
    * system prompt of a session it starts; the agent keeps them with the session, so only

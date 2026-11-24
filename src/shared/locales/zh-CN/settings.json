@@ -13,6 +13,7 @@
     "artifacts": "产物",
     "sharing": "分享",
     "remote": "远程访问",
+    "plugins": "插件",
     "browser": "浏览器",
     "harnesses": "Harness",
     "memory": "记忆",
@@ -176,6 +177,7 @@
       "builtIn": "内置",
       "file": "文件",
       "catalog": "主题库",
+      "plugin": "来自 {{plugin}}",
       "more": "“{{name}}”的更多操作",
       "export": "导出为文件…",
       "exported": "已将 {{file}} 保存到 {{folder}}",
@@ -1252,6 +1254,7 @@
     "sharing": "把产物发布为链接，发布到 Kettu 或你自己的 Cloudflare 账号；发布到 Kettu 的可以选择谁能打开。",
     "remote": "在 iPhone、iPad 或另一台电脑上的 Kettu 里使用这台电脑的会话。",
     "remote_web": "在 iPhone、iPad 或另一台电脑上的 Kettu 里使用 {{host}} 的会话。",
+    "plugins": "你装的插件的设置，以及每个插件的脚本能做什么。装和卸载插件在市场里。",
     "browser": "登录状态、智能体给出的链接在哪里打开，以及它们可以使用的网站。",
     "browserWeb": "智能体回复中的链接会在新标签页中打开。",
     "harnesses": "智能体跑在上面的程序：Claude Code、Codex 等。Kettu 先用你电脑上装好的，没有时再替你装一份。",
@@ -2390,5 +2393,60 @@
     "noMonospaceMatch": "没有匹配的等宽字体。",
     "loading": "正在读取已安装的字体…",
     "unavailable": "这个浏览器列不出字体，输入字体名即可使用。"
+  },
+  "plugins": {
+    "back": "插件",
+    "loading": "正在读取插件…",
+    "readFailed": "读不了插件：{{error}}",
+    "retry": "重试",
+    "empty": {
+      "title": "还没有装插件",
+      "hint": "在市场里装的插件会出现在这里，连同它们的设置。"
+    },
+    "notInstalled": "这个插件没有装。",
+    "row": {
+      "open": "打开 {{name}}",
+      "settings_other": "{{count}} 项设置",
+      "noSettings": "没有设置"
+    },
+    "state": {
+      "off": "已关闭",
+      "noScript": "没有脚本",
+      "idle": "脚本待命",
+      "active": "脚本运行中",
+      "disabled": "脚本崩溃太多次，已停用"
+    },
+    "settings": {
+      "heading": "设置",
+      "none": "这个插件没有设置。"
+    },
+    "secret": {
+      "set": "已设置",
+      "notSet": "未设置",
+      "setAction": "设置…",
+      "change": "更改…",
+      "clear": "清除",
+      "save": "保存",
+      "cancel": "取消",
+      "placeholder": "粘贴密钥",
+      "note": "存在这台电脑上。只有这个插件的脚本读得到，智能体读不到。"
+    },
+    "channels": {
+      "hint": "打开的几类通知会发到这里。不选的话什么都不会发。"
+    },
+    "script": {
+      "heading": "它的脚本能做什么",
+      "none": "这个插件不运行脚本。",
+      "nothing": "它的脚本除了自己的设置和存储，什么都不要。",
+      "high": "高风险"
+    },
+    "manage": {
+      "heading": "管理",
+      "enabled": "启用",
+      "uninstallName": "卸载",
+      "uninstallHint": "连同它的设置、密钥和存储的数据一起删除。",
+      "uninstall": "卸载…"
+    },
+    "changeFailed": "改不了 {{name}}：{{error}}"
   }
 }

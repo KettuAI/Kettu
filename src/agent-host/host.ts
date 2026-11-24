@@ -23,6 +23,11 @@ import type {
 } from '@shared/agent-host'
 import { OWNER } from '@shared/artifact-comments'
 import { flushLog, logFolder, redactLogText, writeLog } from '@shared/log/process-log'
+import { channelTrigger, PLUGIN_CHANNEL_EVENT } from '@shared/plugin-channels'
+import { PLUGIN_THEMES_FILE } from '@shared/plugin-themes'
+import type { AgentToPluginHost } from '@shared/plugin-host'
+import { pluginText, type InstalledKettuPlugin } from '@shared/plugins'
+import { toolId, type CatalogPlugin } from '@shared/settings-catalog'
 import { writeReport } from '@shared/log/report-bundle'
 import { parseReportRequest } from '@shared/report'
 import { harnessOf, takesStartMode, type HarnessId } from '@shared/agents'
@@ -80,7 +85,7 @@ import {
   type MarketCallAnswer,
   type MarketResults,
 } from '@shared/market-publish'
-import { HARNESSES_FOLDER, KETTU_HOME_FOLDER, PLUGINS_FOLDER } from '@shared/storage'
+import { HARNESSES_FOLDER, KETTU_HOME_FOLDER } from '@shared/storage'
 import type {
   AgentId,
   DigestedThreadEntry,
@@ -94,6 +99,7 @@ import { listedModels } from './claude/user-settings'
 import { STOP_TIMINGS } from './agent-process'
 import { AgentTrees } from './agent-trees'
 import { readImport } from './artifacts/import'
+import { PluginTemplates } from './artifacts/plugin-templates'
 import { ArtifactConsents } from './artifacts/runtime/consent'
 import type { DeclaredArtifact } from './artifacts/runtime/calls'
 import { ArtifactData } from './artifacts/runtime/data'
@@ -145,15 +151,21 @@ import { MemoryError, type MemoryErrorCode } from './memory/errors'
 import { MemoryService } from './memory/service'
 import { catalogFile, MarketCatalogService } from './marketplace/catalog'
 import { bundlesFile, MarketBundlesService } from './marketplace/bundles'
-import { communityFile, MarketCommunityService } from './marketplace/community'
+import { MarketCommunityService } from './marketplace/community'
 import { MarketConnectionsService } from './marketplace/connections'
 import { logText } from './localized-error'
 import { parseSignIns } from './marketplace/oauth'
 import { McpProxy } from './marketplace/proxy'
-import type { CodexRequest } from './marketplace/codex-plugins'
-import { MarketPluginsService, pluginsFile } from './marketplace/plugins'
+import type { CodexRequest } from './codex/rpc'
+import { OwnPluginsService } from './marketplace/own-plugins'
 import { MarketSkillsService, skillFor, skillsCatalogFile } from './marketplace/skills'
+import { CommandsService } from './commands/service'
+import { RolesService } from './roles/service'
+import { PluginsService } from './plugins/service'
+import { PluginThemeIndex } from './plugins/theme-index'
+import { pluginsFile as kettuPluginsFile } from './plugins/store'
 import { PublishDrafts } from './marketplace/publish-drafts'
+import { PluginConverter } from './marketplace/plugin-conversions'
 import { MarketCallError, MarketTools } from './marketplace/publish-tools'
 import {
   SETTINGS_WAIT_MS,
@@ -177,6 +189,15 @@ import { GitRetains } from './git/retains'
 import type { SkillsListResponse } from './codex/protocol'
 import { completePath } from './path-completion'
 import { pathKey } from './paths'
+import { PluginChannels } from './plugin-runtime/channels'
+import { PluginHostClient } from './plugin-runtime/client'
+import { PluginHooks, type RequestFacts } from './plugin-runtime/hooks'
+import { InstalledScripts } from './plugin-runtime/installed'
+import { PluginRefs } from './plugin-runtime/refs'
+import { PluginViews } from './plugin-runtime/views'
+import { createPluginApi, type ColorMode, type PLUGIN_EVENTS } from './plugin-runtime/functions'
+import { PluginStorage } from './plugin-runtime/storage'
+import { PluginTools } from './plugin-runtime/tools'
 import { PreparedRecords, preparedFile, settingsTargets } from './prepared'
 import { processControl, type ProcessControl } from './process-tree'
 import { ProjectHooksAnswers } from './project-hooks'
@@ -540,6 +561,11 @@ export class AgentHost {
   /** The values of the Marketplace servers' inputs from main, held only in memory. */
   private marketKeys: MarketKeys = new Map()
   private agentEnvKeys: Record<string, Record<string, string>> = {}
+  /** The secrets the plugins declare, by plugin then key, as main's key store holds them. */
+  private pluginSecrets: Record<string, Record<string, string>> = {}
+  /** Plugin secret changes awaiting main's answer: null once the store holds it, else why not. */
+  private readonly pluginSecretCalls = new Map<number, (error: string | null) => void>()
+  private nextPluginSecretCall = 1
   /** The Marketplace's catalog of MCP servers, from the registry. */
   private readonly marketCatalog: MarketCatalogService
   /** The sign-ins of the Marketplace's OAuth servers. */
@@ -548,13 +574,18 @@ export class AgentHost {
   private readonly mcpProxy: McpProxy
   /** The sign-ins sent to main that no push has carried back yet, by server id. */
   private readonly unkept = new Map<string, { state: string | null; pushes: number }>()
-  /** Claude Code's and Codex's plugins, through each agent's harness. */
-  private readonly marketPlugins: MarketPluginsService
+  /** The plugins Claude Code and Codex agents have of their own, which Kettu only lists. */
+  private readonly ownPlugins: OwnPluginsService
   /** The skills catalog, the skills Kettu keeps, and what each agent gets of them. */
   private readonly marketSkills: MarketSkillsService
-  /** The Kettu Marketplace's listings, the downloads of their files and its plugins. */
+  /** The Kettu Marketplace's listings and the downloads of their files. */
   private readonly marketCommunity: MarketCommunityService
   private readonly marketBundles: MarketBundlesService
+  private readonly plugins: PluginsService
+  /** Kettu's own slash commands: the plugins' and the user's own. */
+  private readonly commands: CommandsService
+  /** Kettu's own roles: the plugins' and the user's own. */
+  private readonly roles: RolesService
   /** The host's Kettu account from main, while signed in with Kettu's services on. */
   private marketAccount: MarketAccount | null = null
   /** Marketplace API calls awaiting main's answer. */
@@ -572,6 +603,103 @@ export class AgentHost {
   private readonly publishDrafts: PublishDrafts
   /** The Marketplace tools of Kettu's MCP service. */
   private readonly marketTools: MarketTools
+  private readonly pluginConverter: PluginConverter
+  /** What each plugin's script keeps for itself, in its own folder. */
+  private readonly pluginStorage = new PluginStorage(
+    (pluginId) => this.plugins.folderOf(pluginId),
+    (level, message) => writeLog(level, 'plugins', message),
+  )
+  /** The themes the plugins that are on bring, listed where main or the daemon reads them. */
+  private readonly pluginThemes: PluginThemeIndex
+  /** The plugin host, which runs the scripts of the installed plugins that are on. */
+  private readonly pluginHost = new PluginHostClient({
+    want: (run) => this.options.send({ type: 'host:plugin-host', run }),
+    functions: createPluginApi({
+      locale: () => this.settings.locale,
+      colorMode: () => this.colorMode,
+      sessions: {
+        list: () => this.sessions.list(),
+        turns: (sessionId) => this.sessions.historyTurns(sessionId),
+        info: (sessionId) => this.sessions.sessionInfo(sessionId),
+        summary: (sessionId) => this.sessions.summary(sessionId),
+        startedBy: (starter) => this.sessions.startedBy(starter),
+        agents: () => this.agents.statuses(),
+        defaultAgent: () => this.settings.defaultAgent,
+        project: (path) => {
+          try {
+            return this.projects.match(path).path
+          } catch {
+            throw new Error(`${path.slice(0, 200)} is not a project of the user's`)
+          }
+        },
+        start: (pluginId, params) => this.sessions.startFromPlugin(pluginId, params),
+        send: (pluginId, sessionId, text) =>
+          this.sessions.sendFromPlugin(pluginId, sessionId, text),
+        now: () => Date.now(),
+      },
+      own: {
+        setting: (pluginId, key) => this.plugins.settingValue(pluginId, key),
+        secret: (pluginId, key) => this.pluginSecret(pluginId, key),
+        storage: this.pluginStorage,
+      },
+      channels: {
+        answer: (pluginId, request, decision, from) =>
+          this.pluginChannels.answer(pluginId, request, decision, from),
+      },
+    }),
+    onStatus: () => this.hub.broadcast({ type: 'plugins.changed' }),
+    log: (level, message) => writeLog(level, 'plugins', message),
+  })
+  /** The tools of the plugins that are on, which Kettu's MCP service lists. */
+  private readonly pluginTools = new PluginTools({
+    installed: () => this.plugins.tools(),
+    client: this.pluginHost,
+    log: (level, message) => writeLog(level, 'plugins', message),
+  })
+  /** What a plugin's mention sources and links ask of its script, and what it answers. */
+  private readonly pluginRefs = new PluginRefs({
+    client: this.pluginHost,
+    source: (pluginId) => this.plugins.refSources().find((s) => s.pluginId === pluginId) ?? null,
+    locale: () => this.settings.locale,
+    log: (level, message) => writeLog(level, 'plugins', message),
+  })
+  /** The window's color mode, from main; null under the daemon, which has no window. */
+  private colorMode: ColorMode | null = null
+  private readonly pluginScripts = new InstalledScripts(this.pluginHost, (pluginId, error) =>
+    writeLog('warn', 'plugins', `Could not unload ${pluginId}: ${(error as Error).message}`),
+  )
+  /** Kettu's own events as the plugins that name them hear of them. */
+  private readonly pluginHooks = new PluginHooks({
+    client: this.pluginHost,
+    refs: this.pluginRefs,
+    title: (pluginId) => this.plugins.titleOf(pluginId),
+    log: (level, message) => writeLog(level, 'plugins', message),
+  })
+  /** Kettu's notices as the channels of plugins hear of them, and the answers relayed from there. */
+  private readonly pluginChannels = new PluginChannels({
+    routes: () => this.plugins.channelRoutes(),
+    deliver: (pluginId, channel, notice) =>
+      this.pluginHooks.tell(pluginId, channelTrigger(channel), PLUGIN_CHANNEL_EVENT, notice),
+    relay: (sessionId, requestId, optionId, relay) =>
+      this.sessions.relayPermission(sessionId, requestId, optionId, relay),
+    title: (pluginId) => this.plugins.titleOf(pluginId),
+    plain: (kind) =>
+      ({
+        permission: t('plugins.channelTitle.permission'),
+        turnEnded: t('plugins.channelTitle.turnEnded'),
+        error: t('plugins.channelTitle.error'),
+        routines: t('plugins.channelTitle.routines'),
+        planLimits: t('plugins.channelTitle.planLimits'),
+      })[kind],
+  })
+  /** What a plugin's views are asked of its script, and what it answers. */
+  private readonly pluginViews = new PluginViews({
+    client: this.pluginHost,
+    views: (pluginId) => this.plugins.views(pluginId),
+    actions: (pluginId) => this.plugins.actions(pluginId),
+    locale: () => this.settings.locale,
+    log: (level, message) => writeLog(level, 'plugins', message),
+  })
   private lastProcesses = '[]'
   private sentFolders: string | null = null
   private stopping: Promise<void> | null = null
@@ -622,6 +750,11 @@ export class AgentHost {
     })
     this.deviceAccess = new DeviceAccessStore(options.userDataPath, log)
     this.publishDrafts = new PublishDrafts(options.userDataPath, log)
+    this.pluginConverter = new PluginConverter({
+      call: (call) => this.marketCall(call),
+      appVersion: options.appVersion,
+      folder: path.join(options.userDataPath, 'plugin-conversions'),
+    })
     this.marketTools = new MarketTools({
       account: () => this.marketAccount,
       call: (call) => this.marketCall(call),
@@ -651,12 +784,17 @@ export class AgentHost {
           throw error
         }
       },
+      converter: this.pluginConverter,
+      appVersion: options.appVersion,
       home: options.homeDir ?? os.homedir(),
     })
     this.settingsTools = new SettingsTools({
       platform,
       read: () => this.settingsCall({ kind: 'read' }),
       apply: (patch) => this.settingsCall({ kind: 'change', patch }),
+      setPluginSetting: async (pluginId, key, value) => {
+        await this.plugins.setSetting(pluginId, key, value)
+      },
       local: () => this.settingsLocal(),
       fullAccess: (sessionId) => this.sessions.settingsFullAccess(sessionId),
       ask: (sessionId, ask) => this.sessions.settingsAsked(sessionId, ask, SETTINGS_WAIT_MS),
@@ -704,9 +842,7 @@ export class AgentHost {
       refused: (serverId, used) => this.marketConnections.refused(serverId, used),
     })
     const home = options.homeDir ?? os.homedir()
-    this.marketPlugins = new MarketPluginsService({
-      file: pluginsFile(options.userDataPath, log),
-      log,
+    this.ownPlugins = new OwnPluginsService({
       platform,
       agents: () => this.installedAgents(['claude-code', 'codex']),
       program: (agentId) => this.agents.harnessProgram(agentId),
@@ -714,8 +850,6 @@ export class AgentHost {
     })
     this.marketCommunity = new MarketCommunityService({
       userDataPath: options.userDataPath,
-      pluginsRoot: path.join(home, KETTU_HOME_FOLDER, PLUGINS_FOLDER),
-      file: communityFile(options.userDataPath, log),
       log,
       account: () => this.marketAccount,
       call: (call) => this.marketCall(call),
@@ -725,10 +859,6 @@ export class AgentHost {
         ),
         ...this.workflowLibrary.listingIds(),
       ],
-      installPlugin: (agentId, local, name, scope, projectPath) =>
-        this.marketPlugins.installLocal(agentId, local, name, scope, projectPath),
-      pluginInstalled: (harness, pluginId) =>
-        this.marketPlugins.installedAnywhere(harness, pluginId),
       installWorkflow: (text, origin) => this.workflowLibrary.installListing(text, origin),
     })
     this.marketBundles = new MarketBundlesService({
@@ -871,6 +1001,72 @@ export class AgentHost {
       }),
       log,
       changed: () => this.broadcast({ type: 'workflows.changed' }),
+      pluginOn: (pluginId) => this.plugins.on(pluginId),
+    })
+    this.pluginThemes = new PluginThemeIndex({
+      file: path.join(options.userDataPath, PLUGIN_THEMES_FILE),
+      resources: () => this.plugins.resources('themes'),
+      changed: () => options.send({ type: 'host:plugin-themes' }),
+      log: (level, message) => writeLog(level, 'plugins', message),
+    })
+    this.plugins = new PluginsService({
+      userDataPath: options.userDataPath,
+      file: kettuPluginsFile(options.userDataPath, log),
+      log,
+      appVersion: options.appVersion,
+      settings: async () => {
+        const { marketplace } = (await this.settingsCall({ kind: 'read' })).file
+        return { skills: marketplace.skills, servers: marketplace.mcp }
+      },
+      editSettings: async ({ skills, servers }) => {
+        await this.settingsCall({
+          kind: 'change',
+          plugins: true,
+          patch: {
+            marketplace: {
+              ...(skills ? { skillsEdit: skills } : {}),
+              ...(servers ? { mcpEdit: servers } : {}),
+            },
+          },
+        })
+      },
+      keepSkill: (id, name, files) => this.marketSkills.keepFiles(id, name, files),
+      workflows: {
+        install: (text, origin) => this.workflowLibrary.installPlugin(text, origin),
+        remove: (pluginId, keep) => this.workflowLibrary.removePlugin(pluginId, keep),
+        changed: () => this.workflowLibrary.pluginChanged(),
+      },
+      kettu: (id) => this.marketCommunity.download(id, 'agent-plugin'),
+      listing: (id) => this.marketCommunity.listing(id),
+      count: (id, version, reason) => void this.marketCommunity.count(id, version, reason),
+      scriptState: (pluginId) =>
+        this.pluginHost.status().find((plugin) => plugin.id === pluginId)?.state ?? 'idle',
+      secretsSet: (pluginId) => Object.keys(this.pluginSecrets[pluginId] ?? {}),
+      removed: (pluginId) => this.pluginRemoved(pluginId),
+      settingChanged: (pluginId, key) => this.pluginSettingEvent(pluginId, key, false),
+      changed: () => {
+        this.pluginScripts.sync(this.plugins.scripts())
+        this.hub.broadcast({ type: 'plugins.changed' })
+        void this.pluginThemes.sync()
+      },
+    })
+    this.roles = new RolesService({
+      userDataPath: options.userDataPath,
+      plugins: () => this.plugins.resources('roles'),
+      kept: () => ({
+        skills: this.settings.marketplace.skills,
+        mcp: this.settings.marketplace.mcp,
+      }),
+      log,
+    })
+    this.commands = new CommandsService({
+      userDataPath: options.userDataPath,
+      plugins: () => this.plugins.resources('commands'),
+      kept: () => ({
+        skills: this.settings.marketplace.skills,
+        mcp: this.settings.marketplace.mcp,
+      }),
+      log,
     })
     this.artifactService = new ArtifactService({
       workflow: {
@@ -889,6 +1085,7 @@ export class AgentHost {
       data: this.artifactData,
       store: this.artifacts,
       types: this.artifactTypes,
+      templates: new PluginTemplates({ resources: () => this.plugins.resources('templates'), log }),
       sessionTitle: (sessionId) => this.sessions.title(sessionId),
       runningTurn: (sessionId) => this.sessions.runningTurn(sessionId),
       sessionOf: (process, id) => this.sessions.sessionOf(process, id),
@@ -949,6 +1146,17 @@ export class AgentHost {
       ...(this.computer ? { computer: this.computer } : {}),
       market: this.marketTools,
       settings: this.settingsTools,
+      plugins: this.pluginTools,
+      skills: {
+        of: (sessionId) => {
+          const agentId = this.sessions.sessionAgent(sessionId)
+          if (!agentId) return null
+          const task = this.sessions.sessionTask(sessionId)
+          const step = task ? (this.tasks.toolsOf(task)?.skills ?? []) : []
+          const added = this.sessions.sessionCommandTools(sessionId)?.skills ?? []
+          return this.marketSkills.sessionSkills(agentId, [...step, ...added])
+        },
+      },
       proxy: this.mcpProxy,
       sessions: {
         info: (sessionId) => this.sessions.sessionInfo(sessionId),
@@ -972,6 +1180,8 @@ export class AgentHost {
         agentName: (sessionId) => this.sessions.agentName(sessionId),
         agentLabel: (agentId) => this.agents.name(agentId),
         agents: () => this.agents.statuses(),
+        roles: () => this.roles.list(),
+        role: (ref) => this.roles.get(ref),
         history: (sessionId) => this.sessions.historyTurns(sessionId),
         mode: (sessionId) => this.sessions.toolMode(sessionId),
         starterRank: (sessionId) => this.sessions.starterRank(sessionId),
@@ -1141,7 +1351,10 @@ export class AgentHost {
               platform,
               taken,
               node: options.nodeRuntime,
-              also: record.task ? (this.tasks.toolsOf(record.task)?.mcp ?? []) : [],
+              also: [
+                ...(record.task ? (this.tasks.toolsOf(record.task)?.mcp ?? []) : []),
+                ...(record.commandTools?.mcp ?? []),
+              ],
               oauth: {
                 access: (server) => this.marketConnections.access(server),
                 bearer: () =>
@@ -1161,7 +1374,7 @@ export class AgentHost {
         },
         guide: (agentId) =>
           this.artifactService.guidePrompt(
-            this.marketSkills.takesSkills(agentId),
+            this.marketSkills.loadsSkills(agentId),
             this.agents.toolGateway(agentId),
           ),
         turnEnded: (sessionId) => {
@@ -1179,11 +1392,30 @@ export class AgentHost {
         },
       },
       skills: (record, kettu) =>
-        this.marketSkills.sessionOptions(
-          record.agentId,
-          kettu,
-          record.task ? (this.tasks.toolsOf(record.task)?.skills ?? []) : [],
-        ),
+        this.marketSkills.sessionOptions(record.agentId, kettu, [
+          ...(record.task ? (this.tasks.toolsOf(record.task)?.skills ?? []) : []),
+          ...(record.commandTools?.skills ?? []),
+        ]),
+      roles: { resolve: (ref) => this.roles.resolve(ref) },
+      plugins: this.pluginHooks,
+      commands: {
+        expand: (text, own) => this.commands.expand(text, own),
+        extra: (agentId, needs) => {
+          const { skills, mcp } = this.settings.marketplace
+          const kept = <T extends { id: string; name: string }>(list: readonly T[], name: string) =>
+            list.find((item) => item.name === name || item.id === name)
+          return {
+            skills: needs.skills.filter((name) => {
+              const skill = kept(skills, name)
+              return !!skill && !skillFor(skill, agentId)
+            }),
+            mcp: needs.mcp.filter((name) => {
+              const server = kept(mcp, name)
+              return !!server && !serverFor(server, agentId)
+            }),
+          }
+        },
+      },
       memory: this.memory,
       usage: this.usage,
       cacheTtl:
@@ -1286,20 +1518,28 @@ export class AgentHost {
             this.hub.send([portId], { type: 'session.viewers', sessionId, viewers })
           }
         },
-        attention: (sessionId, kind, title, body, request) => {
+        attention: (sessionId, kind, title, body, request, facts) => {
           if (kind === 'error') this.sessionFailed(sessionId)
-          options.send({
-            type: 'host:attention',
-            sessionId,
-            kind,
-            title,
-            body,
-            ...(request?.allow
-              ? { allowOnce: { requestId: request.id, optionId: request.allow.optionId } }
-              : {}),
-            ...(request ? { request } : {}),
-            front: this.front(sessionId),
-          })
+          if (kind !== 'turn-ended' && this.pluginHooks.wants('session.needsUser')) {
+            this.pluginHooks.emit('session.needsUser', this.sessions.summary(sessionId), {
+              reason: kind,
+            })
+          }
+          this.attend(
+            {
+              type: 'host:attention',
+              sessionId,
+              kind,
+              title,
+              body,
+              ...(request?.allow
+                ? { allowOnce: { requestId: request.id, optionId: request.allow.optionId } }
+                : {}),
+              ...(request ? { request } : {}),
+              front: this.front(sessionId),
+            },
+            facts,
+          )
         },
         badge: (count) => options.send({ type: 'host:badge', count }),
         waiting: (sessions) => options.send({ type: 'host:waiting', sessions }),
@@ -1337,7 +1577,7 @@ export class AgentHost {
         run: (run) => this.broadcast({ type: 'routine.run', run }),
         working: (working) => options.send({ type: 'host:routines-working', working }),
         attention: (kind, sessionId, title, body) =>
-          options.send({
+          this.attend({
             type: 'host:attention',
             sessionId,
             kind,
@@ -1346,7 +1586,7 @@ export class AgentHost {
             front: this.front(sessionId),
           }),
         paused: (agentId, title, body) =>
-          options.send({ type: 'host:attention', kind: 'routine-paused', agentId, title, body }),
+          this.attend({ type: 'host:attention', kind: 'routine-paused', agentId, title, body }),
       },
     })
     routineHooks.current = this.routines.hooks
@@ -1397,12 +1637,32 @@ export class AgentHost {
           catalog: this.catalog,
           marketplace: this.settings.marketplace,
         }),
+      roleHint: async (ref) => {
+        const role = await this.roles.get(ref)
+        return role ? { name: role.title, suggests: role.suggests } : null
+      },
       optionsOf: (pick) => optionsOfPick(this.agentOptions.get(pick.agentId), pick),
       pickOf: (agentId, values) => pickOfOptions(this.agentOptions.get(agentId), agentId, values),
       events: {
         changed: (task) => this.broadcast({ type: 'task.changed', task }),
         removed: (taskId) => this.broadcast({ type: 'task.removed', taskId }),
         attention: (task, kind) => this.taskAttention(task, kind),
+        step: (event, info) =>
+          this.pluginHooks.emit(event === 'started' ? 'task.stepStarted' : 'task.stepEnded', null, {
+            task: {
+              id: info.taskId,
+              title: info.title,
+              workflow: info.workflowName,
+              project: info.projectPath,
+            },
+            step: {
+              id: info.stepId,
+              name: info.stepName,
+              round: info.round,
+              agent: info.agentId,
+              outcome: info.outcome,
+            },
+          }),
         ended: (view, written) => void this.taskEnded(view, written),
       },
       workingLimit: () => this.settings.workflow.maxWorkingSteps,
@@ -1534,6 +1794,7 @@ export class AgentHost {
       host.routines.load(),
       host.memory.load(),
       host.workflowLibrary.load(),
+      host.plugins.load(),
       host.workflowSuggestions.load(),
     ])
     // After the sessions, whose step sessions it messages when it resumes.
@@ -1544,9 +1805,11 @@ export class AgentHost {
     host.agents.restoreRegistry(listing)
     host.agents.restoreManifest(manifest)
     host.agents.restoreUpdates(updates)
-    void host.moveLocalMarketplaces()
     host.routines.start()
     void host.marketSkills.sync()
+    host.plugins.start()
+    host.pluginScripts.sync(host.plugins.scripts())
+    void host.pluginThemes.sync()
     host.sendFolders()
     void host.sessions.checkWorktrees()
     host.usage.start()
@@ -1674,7 +1937,7 @@ export class AgentHost {
       kind === 'needs-you'
         ? t('tasks.needsYouBody', { step: step?.name ?? '', workflow: task.workflowName })
         : t('tasks.endedBody', { workflow: task.workflowName, steps: task.steps.length })
-    this.options.send({
+    this.attend({
       type: 'host:attention',
       kind: kind === 'needs-you' ? 'task-needs-you' : 'task-ended',
       taskId: task.id,
@@ -1698,6 +1961,23 @@ export class AgentHost {
     this.lastFailed.set(this.sessions.summary(sessionId).agentId, { sessionId, at: Date.now() })
   }
 
+  /** Tells main, which shows the notice and pushes it to devices, then the plugin channels. */
+  private attend(
+    message: Extract<HostToMain, { type: 'host:attention' }>,
+    facts?: RequestFacts,
+  ): void {
+    this.options.send(message)
+    try {
+      this.pluginChannels.notice(message, facts)
+    } catch (error) {
+      writeLog(
+        'warn',
+        'plugins',
+        `A notice could not go to the channels: ${(error as Error).message}`,
+      )
+    }
+  }
+
   private sendLimitNotice(notice: LimitNotice): void {
     const now = Date.now()
     let sessionId: string | undefined
@@ -1717,7 +1997,7 @@ export class AgentHost {
     const summary =
       sessionId && this.sessions.has(sessionId) ? this.sessions.summary(sessionId) : null
     const { title, body } = limitNoticeText(notice, summary?.title ?? null, now)
-    this.options.send({
+    this.attend({
       type: 'host:attention',
       kind: 'plan-limit',
       agentId: notice.agentId,
@@ -1827,8 +2107,10 @@ export class AgentHost {
   async updateSettings(next: HostSettings): Promise<void> {
     const previous = this.settings
     this.settings = next
-    if (setLocale(next.locale))
+    if (setLocale(next.locale)) {
       this.broadcast({ type: 'environment.changed', info: this.env.info() })
+      this.pluginEvent('app.locale', { locale: next.locale })
+    }
     if (JSON.stringify(previous.proxy) !== JSON.stringify(next.proxy)) {
       this.env.setProxy(next.proxy)
       this.git?.setEnvironment(this.env.agentEnv() as NodeJS.ProcessEnv)
@@ -2119,6 +2401,37 @@ export class AgentHost {
     } catch {
       // As above.
     }
+    const plugins: CatalogPlugin[] = []
+    for (const plugin of await this.plugins.list()) {
+      const { contents } = plugin
+      if (contents.settings.length === 0) continue
+      plugins.push({
+        id: plugin.id,
+        title: pluginText(contents.titles, contents.title, this.settings.locale),
+        settings: contents.settings.map((setting) => ({
+          key: setting.key,
+          type: setting.type,
+          title: setting.title,
+          ...(setting.description ? { description: setting.description } : {}),
+          ...(setting.options ? { options: setting.options } : {}),
+        })),
+      })
+      for (const setting of contents.settings) {
+        const row = `${plugin.id}:${setting.key}`
+        // A secret only as whether it is set.
+        if (setting.type === 'secret') {
+          facts[toolId('plugins.secret', row)] = (plugin.secretsSet ?? []).includes(setting.key)
+        } else {
+          const id =
+            setting.type === 'boolean'
+              ? 'plugins.switch'
+              : setting.type === 'select'
+                ? 'plugins.choice'
+                : 'plugins.text'
+          facts[toolId(id, row)] = plugin.values?.[setting.key] ?? null
+        }
+      }
+    }
     return {
       agents: statuses.map((status) => ({
         id: status.id,
@@ -2127,6 +2440,7 @@ export class AgentHost {
       })),
       harnesses: [...harnesses].map(([id, name]) => ({ id, name })),
       modes,
+      plugins,
       facts,
     }
   }
@@ -2178,7 +2492,12 @@ export class AgentHost {
    * `host:market-keys`: every value of the Marketplace servers' inputs, replacing those before.
    * They stay in memory and go only into what agents are handed; a malformed message is dropped.
    */
-  setMarketKeys(values: unknown, oauth?: unknown, agentEnv?: unknown): void {
+  setMarketKeys(
+    values: unknown,
+    oauth?: unknown,
+    agentEnv?: unknown,
+    pluginSecrets?: unknown,
+  ): void {
     const keys = parseMarketKeys(values)
     const signIns = oauth === undefined ? undefined : parseSignIns(oauth)
     if (!keys || signIns === null) {
@@ -2225,6 +2544,16 @@ export class AgentHost {
     this.marketChanged(this.settings.marketplace.mcp, previous)
     if (signIns) this.signInsPushed(signIns)
     this.hub.broadcast({ type: 'market.keysChanged' })
+    const secrets = parseMarketKeys(pluginSecrets ?? {})
+    if (secrets) {
+      const held = Object.fromEntries(
+        [...secrets].map(([id, inputs]) => [id, Object.fromEntries(inputs)]),
+      )
+      if (JSON.stringify(held) !== JSON.stringify(this.pluginSecrets)) {
+        this.pluginSecrets = held
+        this.hub.broadcast({ type: 'plugins.changed' })
+      }
+    }
   }
 
   /**
@@ -2337,27 +2666,6 @@ export class AgentHost {
     }
   }
 
-  /**
-   * Moves the Kettu Marketplace's local marketplaces out of the app's data, once, then points the
-   * agents that registered them at the new place.
-   */
-  private async moveLocalMarketplaces(): Promise<void> {
-    for (const harness of await this.marketCommunity.moveLegacy()) {
-      try {
-        await this.marketPlugins.pointLocal(
-          harness,
-          await this.marketCommunity.resolvedLocal(harness),
-        )
-      } catch (error) {
-        writeLog(
-          'warn',
-          'host',
-          `Could not point the agents at the moved ${harness} marketplace: ${(error as Error).message}`,
-        )
-      }
-    }
-  }
-
   /** The agents of these harnesses that are turned on and whose program is installed. */
   private async installedAgents(
     harnesses: readonly HarnessId[],
@@ -2396,6 +2704,101 @@ export class AgentHost {
       const entry = this.agentOptions.get(agentId)
       if (entry) this.hub.broadcast({ type: 'agent.options', options: this.withStartMode(entry) })
     }
+  }
+
+  /** `host:color-mode`: the window's color mode, from main at start and whenever it changes. */
+  setColorMode(mode: ColorMode): void {
+    if (this.colorMode === mode) return
+    this.colorMode = mode
+    this.pluginEvent('app.colorMode', { colorMode: mode })
+  }
+
+  /** Tells every plugin whose script is loaded; one that is not loaded reads the value when it is. */
+  private pluginEvent(name: (typeof PLUGIN_EVENTS)[number], payload: unknown): void {
+    for (const plugin of this.pluginHost.status()) {
+      if (plugin.state !== 'active') continue
+      this.pluginHost.deliverEvent(plugin.id, name, payload).catch((error: unknown) => {
+        writeLog(
+          'warn',
+          'plugins',
+          `Could not tell ${plugin.id} of ${name}: ${(error as Error).message}`,
+        )
+      })
+    }
+  }
+
+  /** A secret a plugin's script reads; null while it is not set. */
+  private pluginSecret(pluginId: string, key: string): string | null {
+    if (!this.plugins.declaresSecret(pluginId, key)) {
+      throw new Error(t('plugins.noSecret', { key: key.slice(0, 100) }))
+    }
+    return this.pluginSecrets[pluginId]?.[key] ?? null
+  }
+
+  /** Sets or, with null, clears a secret of a plugin in the key store, which main or the daemon keeps. */
+  async setPluginSecret(
+    pluginId: string,
+    key: string,
+    value: string | null,
+  ): Promise<InstalledKettuPlugin> {
+    if (!this.plugins.declaresSecret(pluginId, key)) {
+      throw new HostError('invalid_params', t('plugins.noSecret', { key }))
+    }
+    await this.askPluginSecret(pluginId, key, value)
+    this.pluginSettingEvent(pluginId, key, true)
+    return this.plugins.view(pluginId)
+  }
+
+  /** A removed plugin takes what it kept: its secrets and its storage. */
+  private pluginRemoved(pluginId: string): void {
+    this.pluginStorage.forget(pluginId)
+    this.pluginChannels.forget(pluginId)
+    if (this.pluginSecrets[pluginId] === undefined) return
+    this.askPluginSecret(pluginId, null, null).catch((error: unknown) =>
+      writeLog(
+        'warn',
+        'plugins',
+        `Could not clear the secrets of ${pluginId}: ${(error as Error).message}`,
+      ),
+    )
+  }
+
+  private async askPluginSecret(
+    pluginId: string,
+    key: string | null,
+    value: string | null,
+  ): Promise<void> {
+    const callId = this.nextPluginSecretCall++
+    const error = await new Promise<string | null>((resolve) => {
+      this.pluginSecretCalls.set(callId, resolve)
+      this.options.send({ type: 'host:plugin-secret', callId, pluginId, key, value })
+    })
+    if (error !== null) throw new HostError('unavailable', `${t('plugins.secretNotKept')} ${error}`)
+  }
+
+  /** `plugin-secret-result`: main's or the daemon's answer to a secret's change. */
+  pluginSecretResult(callId: number, error: string | null): void {
+    const resolve = this.pluginSecretCalls.get(callId)
+    if (!resolve) return
+    this.pluginSecretCalls.delete(callId)
+    resolve(error)
+  }
+
+  /** Tells a plugin whose script is loaded that one of its settings changed; a secret only by key. */
+  private pluginSettingEvent(pluginId: string, key: string, secret: boolean): void {
+    if (this.pluginHost.status().find((plugin) => plugin.id === pluginId)?.state !== 'active') {
+      return
+    }
+    const value = secret ? null : this.plugins.settingValue(pluginId, key)
+    this.pluginHost
+      .deliverEvent(pluginId, 'settings.changed', { key, secret, value })
+      .catch((error: unknown) =>
+        writeLog(
+          'warn',
+          'plugins',
+          `Could not tell ${pluginId} of ${key}: ${(error as Error).message}`,
+        ),
+      )
   }
 
   /** The computer slept or woke, so the routines' timer starts over from the wall clock. */
@@ -2957,6 +3360,11 @@ export class AgentHost {
     this.sessions.controlHandedBack(sessionId, 'terminal', durationMs)
   }
 
+  /** `host:plugin-port`: the plugin host is ready and this is its port. */
+  connectPluginHost(port: PortChannel<AgentToPluginHost>): void {
+    this.pluginHost.attach(port)
+  }
+
   /** `device-result`: the device host's answer to a call this host forwarded. */
   deviceResult(callId: number, answer: DeviceCallAnswer): void {
     const resolve = this.deviceCalls.get(callId)
@@ -3001,6 +3409,9 @@ export class AgentHost {
     this.marketCalls.clear()
     for (const resolve of this.trashCalls.values()) resolve('Kettu stopped before it answered.')
     this.trashCalls.clear()
+    for (const resolve of this.pluginSecretCalls.values())
+      resolve('Kettu stopped before it answered.')
+    this.pluginSecretCalls.clear()
   }
 
   /** Stops every agent with the documented sequence, flushes the state files, then reports. */
@@ -3009,6 +3420,8 @@ export class AgentHost {
       await this.routines.shutdown()
       this.sessions.shutdown()
       this.idleRelease.stop()
+      this.plugins.stop()
+      this.pluginHost.stop()
       this.load.stop()
       this.usage.stop()
       this.artifacts.stop()
@@ -3038,10 +3451,9 @@ export class AgentHost {
         this.preparedRecords.flush(),
         this.attachments.flush(),
         this.marketCatalog.flush(),
-        this.marketPlugins.flush(),
         this.marketSkills.flush(),
-        this.marketCommunity.flush(),
         this.marketBundles.flush(),
+        this.plugins.flush(),
         this.publishDrafts.flush(),
         this.workflowSuggestions.flush(),
         this.threads?.close(),
@@ -3241,21 +3653,7 @@ export class AgentHost {
       'market.cancelConnect': ({ loginId }) => this.marketConnections.cancel(loginId),
       'market.disconnect': ({ serverId }) => this.marketConnections.disconnect(serverId),
       'market.connections': () => this.marketConnections.view(),
-      'market.plugins': ({ refresh, cached }) =>
-        this.marketPlugins.plugins(refresh === true, cached === true),
-      'market.pluginDetails': ({ agentId, pluginId }) =>
-        this.marketPlugins.details(agentId, pluginId),
-      'market.pluginLogo': ({ pluginId }) => this.marketPlugins.logo(pluginId),
-      'market.installPlugin': ({ agentId, pluginId, scope, projectPath }) =>
-        this.marketPlugins.install(agentId, pluginId, scope, projectPath ?? null),
-      'market.uninstallPlugin': ({ agentId, pluginId, scope, projectPath }) =>
-        this.marketPlugins.uninstall(agentId, pluginId, scope, projectPath ?? null),
-      'market.setPluginEnabled': ({ agentId, pluginId, enabled, scope, projectPath }) =>
-        this.marketPlugins.setEnabled(agentId, pluginId, enabled, scope, projectPath ?? null),
-      'market.addMarketplace': ({ agentId, source }) =>
-        this.marketPlugins.addMarketplace(agentId, source),
-      'market.removeMarketplace': ({ agentId, name }) =>
-        this.marketPlugins.removeMarketplace(agentId, name),
+      'market.ownPlugins': ({ refresh }) => this.ownPlugins.plugins(refresh === true),
       'market.skills': ({ refresh, cached }) =>
         this.marketSkills.skills(refresh === true, cached === true),
       'market.skillRepository': ({ id, refresh }) =>
@@ -3294,6 +3692,8 @@ export class AgentHost {
         await this.publishDrafts.ready
         return this.marketTools.checkFolder(folder, draftId ?? null)
       },
+      'market.convertFolder': ({ path: folder }) => this.pluginConverter.folder(folder),
+      'market.convertListing': ({ id }) => this.pluginConverter.listing(id),
       'market.publishFolder': async ({ path: folder, draftId, visibility, notes, handle }) => {
         await this.publishDrafts.ready
         // A first publish sets the publisher name before anything is uploaded, as the card does.
@@ -3310,8 +3710,6 @@ export class AgentHost {
       'market.communityWorkflow': ({ id }) => this.marketCommunity.workflow(id),
       'market.communityInstalled': ({ refresh }) =>
         this.marketCommunity.installed(refresh === true),
-      'market.installCommunityPlugin': ({ id, agentId, scope, projectPath }) =>
-        this.marketCommunity.installPlugin(id, agentId, scope, projectPath ?? null),
       'market.addCommunityWorkflow': ({ id }) => this.marketCommunity.installWorkflow(id),
       'market.reportCommunity': ({ id, message }) => this.marketCommunity.report(id, message),
       'market.bundlePrepare': ({ id }) => this.marketBundles.prepare(id),
@@ -3456,6 +3854,36 @@ export class AgentHost {
       'routines.cancelRun': ({ runId }) => routines.cancelRun(runId),
       'routines.runs': ({ routineId, before }) => routines.runsOf(routineId, before),
       'routines.markSeen': ({ routineId }) => routines.markSeen(routineId),
+      'plugins.list': async () => ({ plugins: await this.plugins.list() }),
+      'plugins.inspect': ({ source }) => this.plugins.inspect(source),
+      'plugins.install': ({ token }) => this.plugins.install(token),
+      'plugins.discard': ({ token }) => this.plugins.discard(token),
+      'plugins.uninstall': ({ pluginId }) => this.plugins.uninstall(pluginId),
+      'plugins.setEnabled': ({ pluginId, enabled }) => this.plugins.setEnabled(pluginId, enabled),
+      'plugins.setSetting': ({ pluginId, key, value }) =>
+        this.plugins.setSetting(pluginId, key, value),
+      'plugins.setSecret': ({ pluginId, key, value }) => this.setPluginSecret(pluginId, key, value),
+      'plugins.setChannelKinds': ({ pluginId, channel, kinds }) =>
+        this.plugins.setChannelKinds(pluginId, channel, kinds),
+      'plugins.reload': ({ pluginId }) => this.plugins.reload(pluginId),
+      'plugins.checkUpdates': async ({ pluginId }) => ({
+        plugins: await this.plugins.checkUpdates(pluginId),
+      }),
+      'plugins.applyUpdate': ({ pluginId }) => this.plugins.applyUpdate(pluginId),
+      'plugins.declineUpdate': ({ pluginId }) => this.plugins.declineUpdate(pluginId),
+      'plugins.rollBack': ({ pluginId }) => this.plugins.rollBack(pluginId),
+      'plugins.viewData': ({ pluginId, viewId, params }) =>
+        this.pluginViews.data(pluginId, viewId, params ?? {}),
+      'plugins.viewAction': ({ pluginId, viewId, params, ...input }) =>
+        this.pluginViews.act(pluginId, viewId, params ?? {}, input),
+      'plugins.actionRun': ({ pluginId, actionId }) => this.pluginViews.run(pluginId, actionId),
+      'plugins.refs': () => ({ plugins: this.plugins.refSources() }),
+      'plugins.mentionSearch': ({ pluginId, source, query }) =>
+        this.pluginRefs.search(pluginId, source, query),
+      'plugins.linkCard': ({ pluginId, link, url }) => this.pluginRefs.card(pluginId, link, url),
+      'plugins.resources': async ({ kind }) => ({ items: await this.plugins.resources(kind) }),
+      'commands.list': async () => ({ commands: await this.commands.list() }),
+      'roles.list': async () => ({ roles: await this.roles.list() }),
       'workflows.list': () => this.workflowLibrary.list(),
       'workflows.read': ({ workflowId }) => this.workflowLibrary.read(workflowId),
       'workflows.add': (source) => this.workflowLibrary.add(source),

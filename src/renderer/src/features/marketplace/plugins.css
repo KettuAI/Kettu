@@ -1,0 +1,283 @@
+/* Kettu plugins in the Marketplace: tags, the install and update cards, and the marks of what a
+   plugin brought. */
+
+/* The tags under a plugin's line: what the package holds, and an amber one for a script */
+.k-plug-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 6px;
+  margin-top: 6px;
+}
+.k-plug-tag {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 4px;
+  height: 18px;
+  padding: 0 6px;
+  border-radius: 6px;
+  background: var(--chip);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.k-plug-tag[data-kind='script'] {
+  background: var(--tone-amber-fill);
+  box-shadow: inset 0 0 0 0.5px var(--tone-amber-edge);
+  color: var(--tone-amber);
+}
+
+/* A plugin's row holds a facts line, tags and its actions, so each takes the full width */
+.k-mkt-scroll .k-plug-grid {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+/* An update that asks for more, after a plugin's name */
+.k-plug-asks {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 4px;
+  height: 18px;
+  padding: 0 6px;
+  border-radius: 6px;
+  background: var(--tone-amber-fill);
+  box-shadow: inset 0 0 0 0.5px var(--tone-amber-edge);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1;
+  color: var(--tone-amber);
+  white-space: nowrap;
+}
+
+/* The same line across a plugin's page, with its button */
+.k-plug-banner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 20px;
+  padding: 10px 10px 10px 14px;
+  border-radius: 12px;
+  background: var(--tone-amber-fill);
+  box-shadow: inset 0 0 0 0.5px var(--tone-amber-edge);
+  color: var(--tone-amber);
+}
+.k-plug-banner > svg {
+  flex: none;
+}
+.k-plug-banner > span {
+  display: grid;
+  flex: 1;
+  gap: 2px;
+  min-width: 0;
+}
+.k-plug-banner b {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--ink);
+}
+.k-plug-banner small {
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--muted);
+}
+
+/* What an item came with, in the place of its own controls */
+.k-plug-from {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 5px;
+  height: 28px;
+  max-width: 220px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--chip);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text);
+  white-space: nowrap;
+  cursor: default;
+  transition: background-color 140ms ease;
+}
+.k-plug-from:not(:disabled):hover {
+  background: var(--hover);
+}
+.k-plug-from:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.k-plug-from > svg {
+  flex: none;
+  color: var(--muted);
+}
+/* The same link for an item, quiet beside the item's own controls */
+.k-plug-from[data-quiet] {
+  padding: 0 8px;
+  background: transparent;
+  color: var(--muted);
+  transition:
+    background-color 140ms ease,
+    color 140ms ease;
+}
+.k-plug-from[data-quiet]:not(:disabled):hover {
+  background: var(--hover);
+  color: var(--text);
+}
+
+/* The install and update cards */
+.k-plug-dtitle {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+.k-plug-dtitle > span:last-child {
+  display: grid;
+  min-width: 0;
+}
+.k-plug-dtitle small {
+  overflow: hidden;
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 16px;
+  letter-spacing: 0;
+  color: var(--muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.k-plug-body {
+  gap: 16px;
+  /* The card's buttons stay in view; a long list scrolls under its header. */
+  max-height: max(240px, calc(100vh - 372px));
+  padding-bottom: 14px;
+  overflow-y: auto;
+}
+.k-plug-group {
+  display: grid;
+  gap: 8px;
+}
+.k-plug-group > h3 {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--faint);
+}
+.k-plug-line b {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+}
+.k-plug-line[data-risk='high'] {
+  background: var(--danger-tint);
+}
+.k-mkt-list > .k-plug-line:first-child {
+  border-top-left-radius: 12px;
+  border-top-right-radius: 12px;
+}
+.k-mkt-list > .k-plug-line:last-child {
+  border-bottom-left-radius: 12px;
+  border-bottom-right-radius: 12px;
+}
+.k-plug-line[data-risk='high'] > svg,
+.k-plug-line[data-risk='high'] b {
+  color: var(--danger);
+}
+.k-plug-high {
+  display: inline-flex;
+  align-items: center;
+  height: 17px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--danger-tint);
+  box-shadow: inset 0 0 0 0.5px var(--danger-border);
+  font-size: 10.5px;
+  font-weight: 500;
+  line-height: 1;
+  color: var(--danger);
+}
+.k-plug-domain {
+  font-family: var(--code-face);
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--muted);
+}
+.k-plug-kind {
+  display: inline-flex;
+  align-items: center;
+  height: 17px;
+  padding: 0 6px;
+  border-radius: 6px;
+  background: var(--chip);
+  font-size: 10.5px;
+  font-weight: 500;
+  line-height: 1;
+  color: var(--muted);
+}
+.k-plug-note,
+.k-plug-quiet,
+.k-plug-problem {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 18px;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+.k-plug-note > svg,
+.k-plug-quiet > svg,
+.k-plug-problem > svg {
+  flex: none;
+  margin-top: 2px;
+}
+.k-plug-note {
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--subtle);
+}
+.k-plug-problem {
+  color: var(--danger);
+}
+.k-plug-fold {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  padding: 2px 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--faint);
+  cursor: default;
+}
+.k-plug-fold:hover {
+  color: var(--muted);
+}
+.k-plug-fold:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+.k-plug-fold__count {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-weight: 400;
+}
+
+.k-plug-devnote {
+  margin-top: 14px;
+}

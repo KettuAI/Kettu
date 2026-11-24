@@ -52,8 +52,10 @@ import {
   type Listing,
 } from './model'
 import { ExternalLink, ListingFrame, ListingSkeleton, Missing } from './parts'
-import { PluginListing } from './plugins'
 import { BuiltinServerPage } from './builtin'
+import { FromPlugin, PluginPage } from './plugin-ui'
+import { usePluginItemOff } from './plugin-hooks'
+import { isPluginItem } from './plugin-model'
 import { PublishedListingPage } from './published-listing'
 import { KETTU_ITEM, previewIdOf, publishedIdOf } from './published-keys'
 import { AddButton, ItemRow, KindTag, OfficialBadge, Publisher } from './rows'
@@ -74,7 +76,7 @@ function leave(tab: MarketplaceTab): void {
   backTo({ kind: 'marketplace', ...(tab !== 'all' ? { tab } : {}) }, () => openMarketplace({ tab }))
 }
 
-/** A listing by its view's `item`: an MCP server's, a plugin's, a skill's or a workflow's. */
+/** A listing by its view's `item`: a plugin's, an MCP server's, a skill's or a workflow's. */
 export function ListingPage({ item, tab }: { item: string; tab: MarketplaceTab }) {
   const ref = parseItem(item)
   const back = () => leave(tab)
@@ -83,9 +85,7 @@ export function ListingPage({ item, tab }: { item: string; tab: MarketplaceTab }
   if (publishedId) return <PublishedListingPage id={publishedId} back={back} />
   const previewId = previewIdOf(item)
   if (previewId) return <CommunityPreviewPage id={previewId} tab={tab} />
-  if (ref?.kind === 'plugin') {
-    return <PluginListing harness={ref.harness} id={ref.id} tab={tab} back={back} />
-  }
+  if (ref?.kind === 'plugin') return <PluginPage id={ref.id} tab={tab} back={back} />
   if (ref?.kind === 'skill') return <SkillListing id={ref.id} tab={tab} back={back} />
   if (ref?.kind === 'workflow') return <WorkflowListing id={ref.id} tab={tab} back={back} />
   if (ref?.kind === 'community') return <CommunityPage id={ref.id} tab={tab} back={back} />
@@ -268,6 +268,8 @@ export function KeptControls({
   const scope = useHostScope()
   const [dialog, setDialog] = useState<'keys' | 'agents' | 'uninstall' | null>(null)
   const inputs = specInputs(server.spec)
+  const fromPlugin = isPluginItem(server.id)
+  const pluginOff = usePluginItemOff(server.id)
   const close = (open: boolean) => {
     if (!open) setDialog(null)
   }
@@ -277,9 +279,11 @@ export function KeptControls({
         <Icon icon={Tick02Icon} size={14} />
         {t('listing.installed')}
       </span>
+      {fromPlugin && <FromPlugin itemId={server.id} />}
       <SettingSwitch
         label={t('listing.switch', { name: server.title })}
         checked={server.on}
+        disabled={pluginOff}
         onChange={(on) => void setServerOn(scope, server.id, on)}
       />
       <Dropdown
@@ -299,13 +303,18 @@ export function KeptControls({
             icon: UserMultiple02Icon,
             onSelect: () => setDialog('agents'),
           },
-          {
-            label: t('listing.uninstall'),
-            icon: Delete02Icon,
-            danger: true,
-            divider: true,
-            onSelect: () => setDialog('uninstall'),
-          },
+          // What came with a plugin leaves with it, so there is nothing to uninstall alone.
+          ...(fromPlugin
+            ? []
+            : [
+                {
+                  label: t('listing.uninstall'),
+                  icon: Delete02Icon,
+                  danger: true,
+                  divider: true,
+                  onSelect: () => setDialog('uninstall'),
+                },
+              ]),
         ]}
         trigger={({ open, toggle }) => (
           <button
@@ -359,7 +368,13 @@ function Facts({ listing, server }: { listing: Listing; server: MarketServer | n
       </span>
       <span>
         <small>{t('listing.facts.source')}</small>
-        <b>{listing.source === 'manual' ? t('listing.manual') : t('listing.registry')}</b>
+        <b>
+          {listing.source === 'manual'
+            ? t('listing.manual')
+            : listing.source === 'plugin'
+              ? t('plugin.from.source')
+              : t('listing.registry')}
+        </b>
       </span>
       {listing.version && (
         <span>
@@ -477,7 +492,8 @@ function Side({ listing }: { listing: Listing }) {
       <dl>
         <dt>{t('listing.side.publisher')}</dt>
         <dd>
-          {publisherOf(listing) ?? t('listing.registry')}
+          {publisherOf(listing) ??
+            (listing.source === 'plugin' ? t('plugin.from.source') : t('listing.registry'))}
           {listing.official && <OfficialBadge />}
         </dd>
         {listing.source === 'registry' && (
@@ -505,7 +521,13 @@ function Side({ listing }: { listing: Listing }) {
           </>
         )}
         <dt>{t('listing.side.listedIn')}</dt>
-        <dd>{listing.source === 'manual' ? t('listing.manual') : t('listing.registry')}</dd>
+        <dd>
+          {listing.source === 'manual'
+            ? t('listing.manual')
+            : listing.source === 'plugin'
+              ? t('plugin.from.source')
+              : t('listing.registry')}
+        </dd>
       </dl>
     </aside>
   )

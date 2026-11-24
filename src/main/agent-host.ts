@@ -96,14 +96,20 @@ export interface AgentHostDeps {
   onMarketOAuth?(serverId: unknown, state: unknown): void
   /** The Kettu account the Marketplace tools publish with, which follows init at each start. */
   marketAccount(): MarketAccount | null
+  /** The window's color mode, which follows init at each start. */
+  colorMode(): 'light' | 'dark'
   /** On Windows, whether the computer runs on battery, which follows init at each start. */
   onBattery?(): boolean | null
   /** Makes a Marketplace API call of the host's with the account's access token. */
   market?: (call: MarketCall) => Promise<MarketCallAnswer>
   /** An agent's settings tool reads or changes the settings. */
   settingsCall?: (call: unknown) => SettingsCallAnswer
+  /** Keeps a plugin's secret in the key store, or clears it; null once the store holds it. */
+  pluginSecret?: (pluginId: unknown, key: unknown, value: unknown) => Promise<string | null>
   /** The host's first start found the programs of these harnesses; main adds their agents. */
   onFirstStart?(harnesses: unknown): void
+  /** The themes plugins bring changed, so main reads them again. */
+  onPluginThemes?(): void
   onAttention(message: Extract<HostToMain, { type: 'host:attention' }>): void
   /** What waits for the user by session, and a session seen, for the devices' notifications. */
   onWaiting?(sessions: Record<string, string[]>): void
@@ -134,6 +140,8 @@ export interface AgentHostDeps {
   browser?: (request: BrowserCallRequest) => Promise<BrowserCallAnswer>
   /** An agent's device tool call, run by the device host. Set after construction, like `browser`. */
   device?: (call: DeviceCall) => Promise<DeviceCallAnswer>
+  /** Starts the plugin host when a plugin's script needs it, and stops it when none does. */
+  pluginHost?: (run: boolean) => void
   /** Runs an agent's terminal call on the terminal host. */
   terminal?: (call: TerminalCall) => Promise<TerminalCallAnswer>
   /** A window's or device's answer to the new origin a page of main's asked for. */
@@ -399,6 +407,7 @@ export class AgentHost {
         return [
           { type: 'host:market-keys', ...deps.marketKeys() },
           { type: 'host:market-account', account: deps.marketAccount() },
+          { type: 'host:color-mode', mode: deps.colorMode() },
           ...(onBattery === null ? [] : [{ type: 'host:battery' as const, onBattery }]),
         ]
       },
@@ -469,6 +478,11 @@ export class AgentHost {
   /** The Marketplace's key store, whole; a host started later gets it too. */
   pushMarketKeys(contents: MarketKeysPush): void {
     this.host.post({ type: 'host:market-keys', ...contents })
+  }
+
+  /** The window's color mode, after the system's or the user's choice changed it. */
+  pushColorMode(mode: 'light' | 'dark'): void {
+    this.host.post({ type: 'host:color-mode', mode })
   }
 
   /** The Kettu account the Marketplace tools publish with, after a sign-in or a switch changed it. */
@@ -674,6 +688,11 @@ export class AgentHost {
     })
   }
 
+  /** Hands the host its port to the plugin host; false while the host is not running. */
+  pluginPort(port: MessagePortMain): boolean {
+    return this.host.post({ type: 'host:plugin-port' }, [port])
+  }
+
   /** `host:terminal-handed-back`: the user handed a terminal back; the thread says for how long. */
   terminalHandedBack(sessionId: string, durationMs: number): void {
     this.host.post({
@@ -772,6 +791,14 @@ export class AgentHost {
         this.browserCall(message)
         break
       }
+      case 'host:plugin-host': {
+        this.deps.pluginHost?.(message.run === true)
+        break
+      }
+      case 'host:plugin-themes': {
+        this.deps.onPluginThemes?.()
+        break
+      }
       case 'host:device-call': {
         const { callId, call } = message
         if (!Number.isSafeInteger(callId) || typeof call !== 'object' || call === null) break
@@ -791,6 +818,17 @@ export class AgentHost {
         void trashAll(paths).then((error) =>
           this.host.post({ type: 'trash-result', callId, error }),
         )
+        break
+      }
+      case 'host:plugin-secret': {
+        const { callId } = message
+        if (!Number.isSafeInteger(callId)) break
+        const run = this.deps.pluginSecret
+        void (
+          run
+            ? run(message.pluginId, message.key, message.value)
+            : Promise.resolve('This build keeps no secrets for plugins.')
+        ).then((error) => this.host.post({ type: 'plugin-secret-result', callId, error }))
         break
       }
       case 'host:settings-call': {
@@ -1051,6 +1089,8 @@ export class AgentHost {
   }
 
   private exited(clean: boolean): void {
+    // The plugins it woke are gone with it; its next process asks again.
+    this.deps.pluginHost?.(false)
     for (const resolve of this.busyRequests.values()) resolve([])
     this.busyRequests.clear()
     this.grants.failAll()

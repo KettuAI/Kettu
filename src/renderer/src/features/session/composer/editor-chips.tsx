@@ -133,7 +133,8 @@ function sameChip(a: Chip, b: Chip): boolean {
     a.thumb === b.thumb &&
     !!a.missing === !!b.missing &&
     a.attachmentKey === b.attachmentKey &&
-    a.path === b.path
+    a.path === b.path &&
+    a.name === b.name
   )
 }
 

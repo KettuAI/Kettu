@@ -58,7 +58,7 @@
     "results_other": "{{count}} 个结果",
     "noMatch": "没有结果匹配“{{query}}”",
     "noConversation": "没有对话提到“{{query}}”",
-    "searchedAll": "搜了会话、对话、产物、定时任务、项目和设置。",
+    "searchedAll": "搜了会话、对话、产物、定时任务、项目、设置和操作。",
     "searchedScope": "只搜了{{scope}}，按 Tab 搜更多。",
     "none": {
       "all": "这里还没有内容。",
@@ -91,7 +91,8 @@
     "matches_other": "{{count}} 条消息",
     "indexing": "正在为对话建立索引（{{percent}}%），已建好的部分可以搜。",
     "hostsSlow": "还在等：{{hosts}}",
-    "announce_other": "找到 {{count}} 个会话"
+    "announce_other": "找到 {{count}} 个会话",
+    "pluginAction": "操作"
   },
   "project": {
     "missing": "未找到",

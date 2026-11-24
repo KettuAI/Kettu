@@ -72,6 +72,8 @@ export interface WorkflowStep {
   /** The steps it reviews, whose agent and model it must not share. */
   reviewOf: string[]
   tools: StepTools
+  /** A role, by its reference, whose instructions the step's session is given. */
+  role?: string
 }
 
 /** A workflow's text, step names and outcome names in another language. */
@@ -104,7 +106,7 @@ export interface WorkflowProblem {
 // The library.
 
 /** How a workflow came into the user's library. */
-export type WorkflowSource = 'github' | 'file' | 'agent' | 'user' | 'community'
+export type WorkflowSource = 'github' | 'file' | 'agent' | 'user' | 'community' | 'plugin'
 
 export type WorkflowOrigin =
   | { kind: 'github'; url: string } // the file's page or raw URL as given
@@ -120,6 +122,8 @@ export type WorkflowOrigin =
       slug: string
       official: boolean
     }
+  // A plugin's workflow, by its name in the package; removed with the plugin.
+  | { kind: 'plugin'; pluginId: string; name: string; plugin: string }
 
 /**
  * Whether a workflow may start tasks: only while its content is the one the user approved.

@@ -14,11 +14,13 @@ import {
   Tick02Icon,
 } from '@hugeicons/core-free-icons'
 import { Trans, useTranslation } from 'react-i18next'
-import type {
-  MarketAccount,
-  MarketPublished,
-  MineListing,
-  PublishDraft,
+import {
+  reviewVersions,
+  type MarketAccount,
+  type MarketPublished,
+  type MineListing,
+  type MineVersion,
+  type PublishDraft,
 } from '@shared/market-publish'
 import { Dropdown, Icon, type MenuItem } from '@renderer/components/affect/app-shell'
 import { Button } from '@renderer/components/affect/button'
@@ -37,7 +39,9 @@ import type { PublishedStoreHook } from '@renderer/stores/market-published'
 import { openMarketplace } from '@renderer/stores/view'
 import { PublishFolderDialog, ListingDialogs, type ListingDialog } from './publish-dialogs'
 import {
+  convertItem,
   listingMenu,
+  useConvertListing,
   useNewVersionItems,
   usePickFolder,
   usePublishedStore,
@@ -48,6 +52,7 @@ import {
   askAgent,
   folderShown,
   harnessName,
+  isClosed,
   isHarness,
   KETTU_ITEM,
   kindOf,
@@ -134,13 +139,18 @@ export function PublishedView({ query }: { query: string }) {
   const shownDrafts = drafts.filter((d) =>
     matches([d.manifest.name, d.manifest.slug, d.manifest.description], query),
   )
+  const shownReviews = shownListings.flatMap((listing) =>
+    reviewVersions(listing).map((version) => ({ listing, version })),
+  )
   return (
     <>
       {(published.error ?? error) && (
         <ReadFailed error={published.error ?? error!} store={store} quiet />
       )}
       {published.mine && <PublisherCard published={published} />}
-      {shownDrafts.length > 0 && <NeedsYou drafts={shownDrafts} listings={listings} />}
+      {(shownDrafts.length > 0 || shownReviews.length > 0) && (
+        <NeedsYou drafts={shownDrafts} reviews={shownReviews} listings={listings} />
+      )}
       {published.mine && (
         <MineTable
           listings={shownListings}
@@ -293,13 +303,32 @@ export function SessionLink({
   )
 }
 
-/** Drafts put off or left unanswered, and versions the service refused. */
-function NeedsYou({ drafts, listings }: { drafts: PublishDraft[]; listings: MineListing[] }) {
+interface Review {
+  listing: MineListing
+  version: MineVersion
+}
+
+/**
+ * Drafts put off or left unanswered, versions the service refused, and versions held for review
+ * or not approved.
+ */
+function NeedsYou({
+  drafts,
+  reviews,
+  listings,
+}: {
+  drafts: PublishDraft[]
+  reviews: Review[]
+  listings: MineListing[]
+}) {
   const { t } = useTranslation('marketplace')
   return (
     <section className="ui-as-int-section ui-as-rise">
       <h2 className="ui-as-int-section__title">{t('published.needs.title')}</h2>
       <div className="k-mkt-list k-pub-needs">
+        {reviews.map(({ listing, version }) => (
+          <ReviewRow key={`${listing.id}@${version.version}`} listing={listing} version={version} />
+        ))}
         {drafts.map((draft) => (
           // By folder, as a refused publish keeps a new draft of it and its open dialog stays.
           <NeedRow
@@ -310,6 +339,57 @@ function NeedsYou({ drafts, listings }: { drafts: PublishDraft[]; listings: Mine
         ))}
       </div>
     </section>
+  )
+}
+
+/** A version that waits for review or was not approved, which its page tells more of. */
+function ReviewRow({ listing, version }: Review) {
+  const { t } = useTranslation('marketplace')
+  const held = version.status === 'held'
+  const stays = listing.current ? t('published.needs.stays', { version: listing.current }) : null
+  const line = held
+    ? t('published.review.heldLine', { version: version.version })
+    : version.refusal?.reason
+      ? t('published.review.refusedLine', {
+          version: version.version,
+          reason: version.refusal.reason,
+        })
+      : t('published.review.refusedBare', { version: version.version })
+  return (
+    <div className="k-pub-need">
+      <ItemTile subject={listingSubject(listing)} />
+      <span className="k-pub-need__text">
+        <span className="k-pub-need__name">
+          <b>{`${listing.name} ${version.version}`}</b>
+          <KindTag kind={kindOf(listing.kind)} harness={listing.harness} />
+          <ReviewPill held={held} />
+        </span>
+        <small data-selectable="">{line}</small>
+        {stays && <small>{stays}</small>}
+      </span>
+      <span className="k-pub-need__act">
+        <Button
+          size="md"
+          variant="secondary"
+          onClick={() => openMarketplace({ item: publishedItem(listing.id), tab: 'published' })}
+        >
+          {t('published.review.open')}
+        </Button>
+      </span>
+    </div>
+  )
+}
+
+/** Waiting for review, or not approved. */
+export function ReviewPill({ held }: { held: boolean }) {
+  const { t } = useTranslation('marketplace')
+  return held ? (
+    <StatePill tone="attention">{t('published.review.waiting')}</StatePill>
+  ) : (
+    <StatePill tone="danger">
+      <Icon icon={Alert02Icon} size={12} />
+      {t('published.review.refused')}
+    </StatePill>
   )
 }
 
@@ -508,14 +588,23 @@ function MineRow({
   const [folder, setFolder] = useState<FolderChoice | null>(null)
   const relist = useRelist()
   const versionItems = useNewVersionItems(listing, published, setFolder)
+  const { convert, converting } = useConvertListing(setFolder)
   const open = () => openMarketplace({ item: publishedItem(listing.id), tab: 'published' })
   const updated = Date.parse(listing.updatedAt)
+  const review = reviewVersions(listing)[0] ?? null
+  const reviewTitle = review
+    ? t(review.status === 'held' ? 'published.table.waiting' : 'published.table.refused', {
+        version: review.version,
+      })
+    : ''
   const [details, ...rest] = listingMenu(listing, t, setDialog, () => relist(listing))
   // New version's two ways sit under a heading, as a submenu would open past the window's edge.
   const items: MenuItem[] = [
     ...(listing.takenDown
       ? []
-      : [{ label: t('published.menu.newVersionHeading'), heading: true }, ...versionItems]),
+      : isClosed(listing)
+        ? [convertItem(t, () => convert(listing), converting)]
+        : [{ label: t('published.menu.newVersionHeading'), heading: true }, ...versionItems]),
     { ...details!, divider: !listing.takenDown },
     ...rest,
   ]
@@ -554,13 +643,22 @@ function MineRow({
         </span>
         <span role="cell" className="k-mkt-mono k-pub-ver">
           {listing.current ?? '–'}
-          {refused && (
+          {refused ? (
             <i
               className="k-pub-dot"
               data-tone="danger"
               title={t('published.table.needsFix', { version: refused.manifest.version })}
               aria-label={t('published.table.needsFix', { version: refused.manifest.version })}
             />
+          ) : (
+            review && (
+              <i
+                className="k-pub-dot"
+                data-tone={review.status === 'held' ? 'attention' : 'danger'}
+                title={reviewTitle}
+                aria-label={reviewTitle}
+              />
+            )
           )}
         </span>
         <span role="cell" className="k-pub-num">

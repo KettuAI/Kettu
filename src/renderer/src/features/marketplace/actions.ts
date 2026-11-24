@@ -1,24 +1,18 @@
 // What the Marketplace changes: the servers and skills Kettu keeps, in the host settings'
-// `marketplace`, each change an edit the host applies to its own list; the servers' keys, which go
-// to main apart from the settings; and the plugins and marketplaces the harnesses keep, through
-// the agent host. Each works on the host of the scope it is given.
+// `marketplace`, each change an edit the host applies to its own list; and the servers' keys, which
+// go to main apart from the settings. Each works on the host of the scope it is given.
 
 import {
   serverName,
-  type CatalogPlugin,
   type CatalogServer,
-  type InstalledPlugin,
   type MarketConnection,
   type MarketServer,
   type MarketSkill,
   type McpSpec,
-  type PluginMarketplace,
-  type PluginScope,
   type SkillSource,
 } from '@shared/marketplace'
 import type { AgentId } from '@shared/thread'
 import { listingIdOf } from '@shared/market-community'
-import type { PublishHarness } from '@shared/market-publish'
 import { applyListEdit, type ListEdit } from '@shared/settings'
 import { toast } from '@renderer/components/ui/toast'
 import { errorMessage } from '@renderer/lib/host'
@@ -28,7 +22,6 @@ import {
   busyKey,
   setBusy,
   setConnectFlow,
-  updatePlugins,
   waitForLogin,
   type ConnectFlow,
 } from '@renderer/stores/marketplace'
@@ -265,149 +258,6 @@ export async function uninstallServer(scope: HostScope, id: string): Promise<voi
 /** The agents a server goes to, for a check against one agent. */
 export function goesTo(agents: AgentChoice, agentId: AgentId): boolean {
   return agents === 'all' || agents.includes(agentId)
-}
-
-/** Installs a plugin into one agent's configuration through its harness. True once installed. */
-export async function installPlugin(
-  scope: HostScope,
-  plugin: CatalogPlugin,
-  agentId: AgentId,
-  pluginScope: PluginScope,
-  projectPath: string | null,
-): Promise<boolean> {
-  const busy = busyKey('plugin', `${plugin.harness}/${plugin.id}`)
-  const market = scope.useMarketplaceStore
-  if (market.getState().busy.includes(busy)) return false
-  setBusy(market, busy, true)
-  try {
-    const installed = await scope.request('market.installPlugin', {
-      agentId,
-      pluginId: plugin.id,
-      scope: pluginScope,
-      ...(projectPath ? { projectPath } : {}),
-    })
-    updatePlugins(scope.useMarketplaceStore, (p) => ({
-      ...p,
-      installed: [...p.installed.filter((x) => !samePlace(x, installed)), installed],
-    }))
-    toast(
-      t('toast.pluginReady', { name: plugin.title, agent: agentName(agentId, scope.hostId) }),
-      undefined,
-      {
-        tone: 'success',
-      },
-    )
-    return true
-  } catch (e) {
-    warnRetry(
-      t('toast.installFailed', { name: plugin.title, error: errorMessage(e) }),
-      () => void installPlugin(scope, plugin, agentId, pluginScope, projectPath),
-    )
-    return false
-  } finally {
-    setBusy(scope.useMarketplaceStore, busy, false)
-  }
-}
-
-/** The same install: one plugin in one agent's configuration, at one scope and project. */
-function samePlace(a: InstalledPlugin, b: InstalledPlugin): boolean {
-  return (
-    a.id === b.id &&
-    a.agentId === b.agentId &&
-    a.scope === b.scope &&
-    (a.projectPath ?? null) === (b.projectPath ?? null)
-  )
-}
-
-function placeOf(plugin: InstalledPlugin) {
-  return {
-    agentId: plugin.agentId,
-    pluginId: plugin.id,
-    scope: plugin.scope,
-    ...(plugin.projectPath ? { projectPath: plugin.projectPath } : {}),
-  }
-}
-
-/** Turns an installed plugin on or off in its agent's configuration; a failure shows as a toast. */
-export async function setPluginEnabled(
-  scope: HostScope,
-  plugin: InstalledPlugin,
-  title: string,
-  enabled: boolean,
-): Promise<void> {
-  const busy = busyKey('plugin', `${plugin.agentId}|${plugin.id}|${plugin.scope}`)
-  setBusy(scope.useMarketplaceStore, busy, true)
-  try {
-    await scope.request('market.setPluginEnabled', { ...placeOf(plugin), enabled })
-    updatePlugins(scope.useMarketplaceStore, (p) => ({
-      ...p,
-      installed: p.installed.map((x) => (samePlace(x, plugin) ? { ...x, enabled } : x)),
-    }))
-  } catch (e) {
-    warn(t('toast.changeFailed', { name: title, error: errorMessage(e) }))
-  } finally {
-    setBusy(scope.useMarketplaceStore, busy, false)
-  }
-}
-
-/** Uninstalls a plugin from its agent's configuration. Throws when it could not. */
-export async function uninstallPlugin(
-  scope: HostScope,
-  plugin: InstalledPlugin,
-  title: string,
-): Promise<void> {
-  await scope.request('market.uninstallPlugin', placeOf(plugin))
-  updatePlugins(scope.useMarketplaceStore, (p) => ({
-    ...p,
-    installed: p.installed.filter((x) => !samePlace(x, plugin)),
-  }))
-  toast(
-    t('toast.uninstalledFrom', { name: title, agent: agentName(plugin.agentId, scope.hostId) }),
-    undefined,
-    {
-      tone: 'success',
-    },
-  )
-}
-
-/** Adds a plugin marketplace to an agent; its plugins come with the next read. Throws. */
-export async function addMarketplace(
-  scope: HostScope,
-  agentId: AgentId,
-  source: string,
-): Promise<void> {
-  const added = await scope.request('market.addMarketplace', { agentId, source })
-  updatePlugins(scope.useMarketplaceStore, (p) => ({
-    ...p,
-    marketplaces: [
-      ...p.marketplaces.filter((m) => !(m.agentId === agentId && m.name === added.name)),
-      added,
-    ],
-  }))
-  toast(
-    t('toast.marketplaceAdded', { name: added.name, agent: agentName(agentId, scope.hostId) }),
-    undefined,
-    {
-      tone: 'success',
-    },
-  )
-  void scope.useMarketplaceStore.getState().loadPlugins(true)
-}
-
-/** Removes a plugin marketplace from its agent. Throws when it could not. */
-export async function removeMarketplace(
-  scope: HostScope,
-  market: PluginMarketplace,
-): Promise<void> {
-  await scope.request('market.removeMarketplace', { agentId: market.agentId, name: market.name })
-  updatePlugins(scope.useMarketplaceStore, (p) => ({
-    ...p,
-    marketplaces: p.marketplaces.filter(
-      (m) => !(m.agentId === market.agentId && m.name === market.name),
-    ),
-  }))
-  toast(t('toast.marketplaceRemoved', { name: market.name }), undefined, { tone: 'success' })
-  void scope.useMarketplaceStore.getState().loadPlugins(true)
 }
 
 /**
@@ -665,75 +515,6 @@ export async function disconnectServer(scope: HostScope, server: MarketServer): 
 /** Reads again where what came from the Kettu Marketplace stands, after it changed. */
 function communityChanged(scope: HostScope): void {
   void scope.useMarketplaceStore.getState().loadCommunityInstalled(true)
-}
-
-/**
- * Installs, or updates, a plugin of the Kettu Marketplace in one agent: the host downloads and
- * checks its files, then the agent's harness installs it. True once installed.
- */
-export async function installCommunityPlugin(
-  scope: HostScope,
-  listing: { id: string; name: string; harness: PublishHarness },
-  agentId: AgentId,
-  pluginScope: PluginScope,
-  projectPath: string | null,
-  update = false,
-): Promise<boolean> {
-  const busy = busyKey('community', listing.id)
-  const market = scope.useMarketplaceStore
-  if (market.getState().busy.includes(busy)) return false
-  setBusy(market, busy, true)
-  try {
-    const installed = await scope.request('market.installCommunityPlugin', {
-      id: listing.id,
-      agentId,
-      scope: pluginScope,
-      ...(projectPath ? { projectPath } : {}),
-    })
-    updatePlugins(market, (p) => ({
-      ...p,
-      installed: [...p.installed.filter((x) => !samePlace(x, installed)), installed],
-    }))
-    communityChanged(scope)
-    toast(
-      update
-        ? t('toast.updated', { name: listing.name, version: installed.version ?? '' })
-        : t('toast.pluginReady', { name: listing.name, agent: agentName(agentId, scope.hostId) }),
-      undefined,
-      { tone: 'success' },
-    )
-    return true
-  } catch (e) {
-    warnRetry(
-      t(update ? 'toast.updateFailed' : 'toast.installFailed', {
-        name: listing.name,
-        error: errorMessage(e),
-      }),
-      () => void installCommunityPlugin(scope, listing, agentId, pluginScope, projectPath, update),
-    )
-    return false
-  } finally {
-    setBusy(market, busy, false)
-  }
-}
-
-/** Updates a plugin of the Kettu Marketplace in every agent and place that has it. */
-export async function updateCommunityPlugin(
-  scope: HostScope,
-  listing: { id: string; name: string; harness: PublishHarness },
-  installs: InstalledPlugin[],
-): Promise<void> {
-  for (const plugin of installs) {
-    const done = await installCommunityPlugin(
-      scope,
-      listing,
-      plugin.agentId,
-      plugin.scope,
-      plugin.projectPath,
-      true,
-    )
-    if (!done) return
-  }
 }
 
 /** Updates a skill from the Kettu Marketplace to its listing's version, keeping its choices. */

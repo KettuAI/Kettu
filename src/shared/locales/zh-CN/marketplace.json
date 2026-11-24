@@ -10,12 +10,12 @@
     "search": "搜索市场",
     "tabs": {
       "all": "全部",
-      "mcp": "MCP 服务器",
+      "mcp": "MCP",
       "installed": "已安装",
-      "plugins": "插件",
       "skills": "技能",
       "workflow": "工作流",
-      "published": "已发布"
+      "published": "已发布",
+      "plugins": "插件"
     },
     "searchPublished": "搜索你发布的"
   },
@@ -24,8 +24,6 @@
     "heading": "自己添加",
     "mcp": "MCP 服务器…",
     "mcpLine": "要运行的命令，或一个 URL",
-    "marketplace": "插件市场…",
-    "marketplaceLine": "GitHub 仓库或 Git URL",
     "skillGithub": "来自 GitHub 的技能…",
     "skillGithubLine": "一个仓库，或仓库中的一个文件夹",
     "skillFolder": "来自文件夹的技能…",
@@ -33,7 +31,11 @@
     "workflowGithub": "来自 GitHub 的工作流…",
     "workflowGithubLine": "GitHub 仓库中的一个文件",
     "workflowFile": "来自文件的工作流…",
-    "workflowFileLine": "这台电脑上的一个 .yaml 文件"
+    "workflowFileLine": "这台电脑上的一个 .yaml 文件",
+    "pluginGithub": "来自 GitHub 的插件…",
+    "pluginGithubLine": "一个仓库，或仓库中的一个文件夹",
+    "pluginFolder": "来自文件夹的插件…",
+    "pluginFolderLine": "含有 plugin.json 的文件夹，用来开发插件"
   },
   "sections": {
     "featured": "精选",
@@ -44,10 +46,7 @@
     "other": "更多服务器",
     "results": "来自 MCP Registry",
     "anthropic": "来自 Anthropic",
-    "codex": "适用于 Codex",
-    "otherPlugins": "其他插件",
     "from": "来自 {{publisher}}",
-    "plugins": "插件",
     "skills": "技能",
     "mcp": "MCP 服务器",
     "workflow": "工作流",
@@ -59,7 +58,8 @@
       "official": "官方",
       "verified": "认证发布者",
       "community": "社区"
-    }
+    },
+    "plugins": "插件"
   },
   "row": {
     "install": "安装",
@@ -101,7 +101,7 @@
     "valueHint": "保存在这台电脑上。",
     "submit": "安装",
     "installing": "正在安装",
-    "noSkills": "暂不支持 Skills"
+    "noSkills": "Kettu 的工具已关闭"
   },
   "toast": {
     "ready": "{{name}} 已可供所有智能体使用",
@@ -112,10 +112,6 @@
     "changeFailed": "无法修改 {{name}}：{{error}}",
     "uninstalled": "已卸载 {{name}}",
     "keysSaved": "已保存 {{name}} 的密钥",
-    "pluginReady": "{{name}} 已安装到 {{agent}}",
-    "uninstalledFrom": "已从 {{agent}} 卸载 {{name}}",
-    "marketplaceAdded": "已将 {{name}} 添加到 {{agent}}",
-    "marketplaceRemoved": "已移除 {{name}}",
     "skillFailed": "无法添加技能：{{error}}",
     "connected": "已连接 {{name}}，所选的智能体都可以使用它",
     "disconnected": "已断开与 {{name}} 的连接",
@@ -188,21 +184,19 @@
     "forAgents_one": "用于 {{count}} 个智能体",
     "forAgents_other": "用于 {{count}} 个智能体",
     "plugins": "插件",
-    "noPlugins": "还没有智能体安装插件。可以在“插件”中安装。",
-    "marketplaces": "插件市场",
-    "marketplacesNote": "每个智能体从这里查找插件。各自工具自带的插件市场会保留。",
-    "marketplaceKept": "内置",
-    "removeMarketplace": "移除 {{name}}",
     "skills": "技能",
     "noSkills": "Kettu 还没有保存任何技能。可以在“技能”中安装。",
     "noServers": "Kettu 还没有保存任何 MCP 服务器。可以在“MCP 服务器”中安装。",
     "noWorkflows": "Kettu 还没有任何工作流。可以在“工作流”中添加。",
     "own": "智能体自己的",
-    "ownNote": "每个智能体自己保存的技能和 MCP 服务器。Kettu 只显示它们，要修改请在智能体中进行。",
+    "ownNote": "每个智能体自己保存的技能、插件和 MCP 服务器。Kettu 只显示它们，要修改请在智能体中进行。",
     "mcpConfig": "MCP 配置",
     "offIn": "在 {{agents}} 中已关闭",
     "notCreated": "{{path}} · 尚未创建",
-    "workflows": "工作流"
+    "workflows": "工作流",
+    "kettuPlugins": "插件",
+    "noPlugins": "Kettu 还没有插件。可以从“插件”安装，或用“添加”从 GitHub 或文件夹加入。",
+    "noPluginsWeb": "Kettu 还没有插件。可以从“插件”安装，或用“添加”从 GitHub 加入。"
   },
   "kettu": {
     "note": "产物、会话和浏览器都通过 Kettu 自带的服务器提供给每个智能体。",
@@ -295,29 +289,10 @@
       "failed": "无法添加服务器：{{error}}"
     },
     "failed": "操作失败：{{error}}",
-    "uninstallPlugin": {
-      "title": "卸载 {{name}}？",
-      "body": "{{agent}} 会把它从自己的配置中移除，之后的会话不再带上它。"
-    },
     "removeSkill": {
       "title": "移除 {{name}}？",
       "body": "智能体的新会话将不再带上它，它的文件也会从这台电脑上删除。",
       "confirm": "移除"
-    },
-    "removeMarketplace": {
-      "title": "移除 {{name}}？",
-      "body": "{{agent}} 将不再列出其中的插件；已从这里安装的插件可能无法继续使用。",
-      "confirm": "移除"
-    },
-    "marketplace": {
-      "title": "添加插件市场",
-      "description": "插件市场为 Claude Code 或 Codex 列出插件。你选择的智能体会把它保存在自己的配置中。",
-      "agent": "智能体",
-      "noAgents": "请先添加一个 Claude Code 或 Codex 智能体。",
-      "source": "来源",
-      "sourceHint": "GitHub 仓库（owner/repo），或 Git URL。",
-      "sourcePlaceholder": "owner/repo",
-      "submit": "添加"
     },
     "skill": {
       "title": "从 GitHub 添加技能",
@@ -341,7 +316,6 @@
     "workflow": "工作流"
   },
   "notes": {
-    "plugins": "无法列出插件：{{error}}",
     "agentPlugins": "无法读取 {{agent}} 的插件：{{error}}",
     "skills": "无法读取技能目录，内容可能不是最新的：{{error}}",
     "catalog": "无法连接 MCP Registry：{{error}}",
@@ -349,55 +323,210 @@
     "community": "没能读到 Kettu 市场：{{error}}",
     "communityMore": "没能读到 Kettu 市场后面的内容：{{error}}",
     "skillRepository": "无法读取 {{repository}}：{{error}}",
-    "skillRepositoryStale": "无法重新读取 {{repository}}，下面的可能不是最新的：{{error}}"
+    "skillRepositoryStale": "无法重新读取 {{repository}}，下面的可能不是最新的：{{error}}",
+    "harnessPlugins": "Claude Code 和 Codex 的插件现在由 Claude Code 和 Codex 自己管理，已安装的插件在那里照常可用。Kettu 插件在每个智能体上都能用。",
+    "harnessPluginsDismiss": "知道了",
+    "plugins": "无法读取插件：{{error}}"
   },
   "empty": {
-    "pluginsTitle": "没有可显示的插件",
-    "plugins": "Claude Code 和 Codex 还没有列出任何插件。可以用“添加”加入一个插件市场。",
     "skillsTitle": "没有可显示的技能",
-    "skills": "技能目录是空的。可以用“添加”从 GitHub 或文件夹加入技能。"
+    "skills": "技能目录是空的。可以用“添加”从 GitHub 或文件夹加入技能。",
+    "pluginsTitle": "没有可显示的插件",
+    "plugins": "Kettu 插件在你用的每个智能体上都能用。可以用“添加”从 GitHub 或文件夹加入插件。",
+    "pluginsWeb": "Kettu 插件在你用的每个智能体上都能用。可以用“添加”从 GitHub 加入插件。"
   },
   "plugin": {
     "installs_one": "{{value}} 次安装",
     "installs_other": "{{value}} 次安装",
-    "installNote": "由 {{harness}} 安装到这个智能体自己的配置中，它的终端也能用上。",
-    "agent": "智能体",
-    "noAgents": "请先添加一个 {{harness}} 智能体。",
-    "scope": "范围",
     "scopeUser": "所有项目",
-    "scopeProject": "单个项目",
-    "project": "项目",
     "scopeProjectIn": "在 {{project}} 中",
     "scopeLocalIn": "在 {{project}} 中，仅自己可用",
     "hooksWarning": "包含 hook：它们会在这台电脑上自行运行命令，不受智能体沙盒限制。",
-    "hooksUnchecked": "无法检查它是否包含 hook：{{error}}",
     "facts": {
       "installs": "安装次数",
-      "category": "类别"
+      "script": "运行脚本",
+      "scriptYes": "是",
+      "scriptNo": "否"
     },
-    "side": {
-      "marketplace": "插件市场",
-      "id": "插件",
-      "homepage": "主页"
-    },
-    "installAnother": "为其他智能体安装",
-    "installedIn": "已安装于",
-    "switch": "在 {{agent}} 中启用 {{name}}",
-    "uninstall": "卸载",
-    "uninstallFrom": "从 {{agent}} 卸载 {{name}}",
     "adds": "包含",
     "willAdd": "将会加入",
-    "detailsFailed": "无法读取它包含的内容：{{error}}",
-    "parts": {
-      "skills": "技能",
-      "commands": "命令",
-      "agents": "子智能体",
-      "hooks": "Hook",
-      "mcpServers": "MCP 服务器",
-      "lspServers": "LSP 服务器",
-      "context": "上下文"
+    "permission": {
+      "sessionsSummary": {
+        "name": "查看会话",
+        "description": "查看每个会话的标题、项目、智能体、状态和正在做什么，不含对话内容。"
+      },
+      "tools": {
+        "name": "给智能体工具",
+        "description": "往 Kettu 的工具服务里加工具。智能体调用前会像用其他工具一样先问你。"
+      },
+      "promptAttach": {
+        "name": "给消息附内容",
+        "description": "在消息发出前附上文字，附了什么在消息上看得到。"
+      },
+      "requestsCheck": {
+        "name": "预检授权请求",
+        "description": "先看一遍智能体的授权请求，可以拒绝或交给你，不能批准。"
+      },
+      "sessionsContent": {
+        "name": "读取对话",
+        "description": "读取你的会话里说过的所有内容。"
+      },
+      "requestsAnswer": {
+        "name": "转达回答",
+        "description": "收到智能体要运行的命令，并转达你在别处（比如聊天应用里）对它们的回答，只能允许一次或拒绝，不能总是允许。"
+      },
+      "sessionsStart": {
+        "name": "开会话、发消息",
+        "description": "开会话并给它们发消息，智能体最多在 Auto 模式下工作。"
+      },
+      "network": {
+        "name": "网络",
+        "description": "通过 https 连接 {{domain}}。"
+      },
+      "networkSubdomains": {
+        "name": "网络",
+        "description": "通过 https 连接任何匹配 {{domain}} 的域名。"
+      }
     },
-    "tokensEachTurn": "每个会话约占用 {{value}} 个 token"
+    "install": {
+      "title": "安装 {{name}}",
+      "replaceTitle": "替换 {{name}}",
+      "fromFolder": "这台电脑上的文件夹",
+      "dev": "开发中",
+      "failed": "无法安装：{{error}}"
+    },
+    "holds": {
+      "heading": "会添加什么",
+      "skills_other": "{{count}} 个技能",
+      "commands_other": "{{count}} 个命令",
+      "roles_other": "{{count}} 个角色",
+      "workflows_other": "{{count}} 个工作流",
+      "themes_other": "{{count}} 个主题",
+      "templates_other": "{{count}} 个模板",
+      "workflowNote": "每个工作流都要你批准后才能开始需求",
+      "settings": "它自己的设置",
+      "views_other": "{{count}} 个视图",
+      "channels_other": "{{count}} 个通知渠道",
+      "channelsNote": "只收到你选的通知，默认一个都不发",
+      "viewsNote": "由 Kettu 绘制，插件只提供数据",
+      "tools_other": "{{count}} 个给智能体的工具",
+      "toolsNote": "智能体调用前会像用其他工具一样先问你",
+      "mentions_other": "{{count}} 个 @ 来源",
+      "mentionsNote": "在输入框里输入 @ 时搜索",
+      "links_other": "{{count}} 种链接",
+      "linksNote": "在回复里画成引用",
+      "actions_other": "{{count}} 个搜索操作",
+      "actionsNote": "列在搜索里",
+      "connects": "连接到哪里",
+      "server": "MCP 服务器 {{name}}",
+      "connectsTo": "连接到 {{host}}",
+      "runs": "运行 {{command}}"
+    },
+    "script": {
+      "heading": "它的脚本可以做什么",
+      "noPermissions": "除了它自己的设置和存储，不要求任何权限",
+      "runs": "在这台电脑上运行脚本",
+      "runsNote": "在它自己的隔离沙盒里，只能用到下面的权限允许的东西。",
+      "listedNote": "安装前会列出它要的权限，要求更多权限的更新会等你决定。",
+      "none": "不运行代码",
+      "noneNote": "它只添加自己的内容，自己不会运行任何东西。"
+    },
+    "risk": {
+      "high": "高"
+    },
+    "note": {
+      "script": "脚本不能读取你的文件、运行命令，也不能访问列出之外的网站。要求更多权限的更新会等你决定。",
+      "noScript": "它添加上面的内容，不运行任何代码。",
+      "hooksTitle": "钩子",
+      "hooks": "它的钩子是为其他工具写的，Kettu 不会运行。",
+      "warnings": "已略过：{{list}}"
+    },
+    "update": {
+      "title": "把 {{name}} 更新到 {{version}}",
+      "titleNoVersion": "更新 {{name}}",
+      "line": "从 {{version}} 更新，并要求更多权限",
+      "lineNoVersion": "它要求的权限比现在这个版本多",
+      "newIn": "{{version}} 新增",
+      "newInNoVersion": "这次更新新增",
+      "nowScript": "现在会运行脚本",
+      "unchanged": "没有变化的权限",
+      "unchangedCount_other": "{{count}} 项权限",
+      "stay": "留在当前版本",
+      "apply": "更新"
+    },
+    "add": {
+      "githubTitle": "添加来自 GitHub 的插件",
+      "githubDescription": "Kettu 会先读取插件，在安装任何东西之前告诉你它添加什么、能做什么。",
+      "url": "地址",
+      "urlHint": "github.com 上的仓库，或仓库中的一个文件夹。",
+      "urlInvalid": "请输入 github.com 上的地址。",
+      "urlPlaceholder": "https://github.com/owner/repo",
+      "githubSubmit": "继续"
+    },
+    "toast": {
+      "inspectFailed": "无法读取插件：{{error}}",
+      "installed": "已安装 {{name}}",
+      "reloaded": "已重新载入 {{name}}",
+      "reloadFailed": "无法重新载入 {{name}}：{{error}}",
+      "updateCheckFailed": "无法检查 {{name}} 的更新：{{error}}",
+      "updateHeld": "{{name}} 有一个要求更多权限的更新，查看后才会更新。",
+      "updated": "{{name}} 已更新到 {{version}}",
+      "upToDate": "{{name}} 已是最新版本",
+      "rollBackFailed": "无法回退 {{name}}：{{error}}",
+      "rolledBack": "{{name}} 已回退到 {{version}}"
+    },
+    "tags": {
+      "skill_other": "{{count}} 个技能",
+      "server_other": "{{count}} 个 MCP 服务器",
+      "command_other": "{{count}} 个命令",
+      "role_other": "{{count}} 个角色",
+      "workflow_other": "{{count}} 个工作流",
+      "theme_other": "{{count}} 个主题",
+      "template_other": "{{count}} 个模板",
+      "script": "脚本"
+    },
+    "item": {
+      "heading": "这个插件里有",
+      "skill": "技能",
+      "server": "MCP 服务器",
+      "command": "命令",
+      "role": "角色",
+      "workflow": "工作流",
+      "theme": "主题",
+      "template": "模板"
+    },
+    "row": {
+      "asksForMore": "{{version}} 要求更多权限",
+      "asksForMoreNoVersion": "有一个更新要求更多权限",
+      "asksNote": "它需要已安装版本没有的权限，更新之前什么都不会变。",
+      "viewUpdate": "查看更新",
+      "items_other": "{{count}} 项内容",
+      "devNote": "从 {{path}} 添加。改动在重新载入后生效。",
+      "updateError": "无法检查更新：{{error}}"
+    },
+    "menu": {
+      "reload": "重新载入",
+      "reloadName": "重新载入 {{name}}",
+      "checkUpdates": "检查更新",
+      "rollBack": "回退",
+      "rollBackTo": "回退到 {{version}}"
+    },
+    "remove": {
+      "title": "卸载 {{name}}？",
+      "body": "它带来的内容会一起移除：技能、MCP 服务器、命令、角色和工作流。",
+      "confirm": "卸载"
+    },
+    "from": {
+      "name": "来自 {{plugin}}",
+      "unknown": "某个插件",
+      "note": "它只能随它的插件一起移除。",
+      "source": "Kettu 插件"
+    },
+    "side": {
+      "license": "许可证",
+      "format": "格式",
+      "formatValue": "Agent Plugins，Kettu {{version}}"
+    }
   },
   "skill": {
     "installNote": "由 Kettu 保存在这台电脑上，在会话开始时交给这些智能体。",
@@ -640,7 +769,6 @@
   },
   "community": {
     "skillNote": "Kettu 从 Kettu 市场下载它、逐个核对文件，存在这台电脑上，开会话时交给这些智能体。",
-    "pluginNote": "Kettu 从 Kettu 市场下载它、逐个核对文件，再由 {{harness}} 把它装进这个智能体的配置。",
     "signedOut": "登录 Kettu 后能看到社区发布的。",
     "servicesOff": "打开 Kettu 的服务后能看到社区发布的。",
     "signIn": "登录",
@@ -668,7 +796,6 @@
     "source": "Kettu 市场",
     "onlyMe": "只有我",
     "cannotRun": "Kettu 运行不了这个 MCP 服务器：它没有指向 Kettu 能运行的包或 https 远程地址。",
-    "pluginFor": "{{harness}} 的插件",
     "kinds": {
       "mcp": "MCP 服务器",
       "plugin": "插件",
@@ -731,6 +858,15 @@
       "withdraw": "撤回 {{version}}",
       "checkAgain": "重新检查"
     },
+    "review": {
+      "waiting": "等待审核",
+      "refused": "未通过",
+      "heldLine": "{{version}} 审核通过后才会上架。",
+      "refusedLine": "{{version}} 没有通过审核：{{reason}}",
+      "refusedBare": "{{version}} 没有通过审核。",
+      "heldNote": "审核通过后才会上架。",
+      "open": "打开"
+    },
     "table": {
       "title": "已发布",
       "label": "你发布的",
@@ -743,6 +879,8 @@
       "week": "近 7 天 +{{count}}",
       "noNew": "近 7 天没有新安装",
       "needsFix": "{{version}} 需要修改",
+      "waiting": "{{version}} 等待审核",
+      "refused": "{{version}} 未通过",
       "more": "{{name}} 的更多操作",
       "noMatch": "你发布的里没有和“{{query}}”匹配的。"
     },
@@ -756,7 +894,8 @@
       "public": "已上架",
       "private": "只有我",
       "unlisted": "已下架",
-      "takenDown": "已被下架"
+      "takenDown": "已被下架",
+      "held": "等待审核"
     },
     "menu": {
       "newVersion": "新版本…",
@@ -769,7 +908,10 @@
       "unlist": "下架…",
       "unlistLine": "装了的人照常能用",
       "listAgain": "重新上架",
-      "delete": "删除…"
+      "delete": "删除…",
+      "convert": "转换成 Kettu 插件",
+      "convertLine": "用它的文件做出一个 Kettu 插件，检查后再发布",
+      "viewAsOthersClosed": "Claude Code 和 Codex 的插件不再上架"
     },
     "foot": "智能体用 Kettu 内置 MCP 服务器的市场工具发布，每次都等你在会话里确认。",
     "seeTools": "看这些工具",
@@ -788,6 +930,7 @@
     "readFailed": "读不到你发布的内容：{{error}}",
     "toast": {
       "published": "已发布 {{name}} {{version}}",
+      "held": "{{name}} {{version}} 等待审核",
       "unlisted": "已下架 {{name}}",
       "listed": "{{name}} 已重新上架",
       "deleted": "已删除 {{name}}",
@@ -803,7 +946,10 @@
         "nothingText": "Kettu 能发布带 SKILL.md、.claude-plugin 或 .codex-plugin 文件夹、或 server.json 的文件夹。",
         "problems": "先改好这些，再重新检查：",
         "checkAgain": "重新检查",
-        "failed": "没能发布：{{error}}"
+        "failed": "没能发布：{{error}}",
+        "convertTitle": "这是 {{harness}} 的插件",
+        "convertText": "Kettu 市场收的是 Kettu 插件。Kettu 可以在它旁边的新文件夹里做出一个，这个文件夹不会改动。发布之前，你先看过带过来了什么。",
+        "convert": "转换成 Kettu 插件"
       },
       "profile": {
         "title": "编辑发布者资料",
@@ -890,7 +1036,8 @@
       "takenDown": "Kettu 已把它下架：{{reason}} 它不在市场里了，也不能再发新版本；你仍能修改它、撤回版本或删除它。",
       "missingTitle": "这不是你发布的",
       "missingText": "它可能已被删除。",
-      "backToPublished": "回到已发布"
+      "backToPublished": "回到已发布",
+      "closed": "这个 Claude Code 或 Codex 的插件不再接收新版本，也不能再安装。转换成 Kettu 插件就能接着发布；这一项本身保持原样。"
     },
     "checks": {
       "paths": {
@@ -942,7 +1089,8 @@
       "memory": "记忆",
       "reports": "问题报告",
       "workflows": "工作流",
-      "settings": "设置"
+      "settings": "设置",
+      "plugins": "插件"
     },
     "new": "新",
     "whileSignedIn": "登录 Kettu 时提供",
@@ -950,6 +1098,7 @@
     "more": "+ 其他 {{count}} 个",
     "marketTools": {
       "marketplace_check": "读一个文件夹，认出它是什么，跑一遍发布时的检查。不上传。",
+      "marketplace_convert": "把 Claude Code 或 Codex 的插件转换成 Kettu 插件，写到它旁边的新文件夹里，原来的不会改动。",
       "marketplace_publish": "把一个文件夹发布成新的一项，或者你已有一项的新版本。",
       "marketplace_mine": "列出你发布的：版本、谁能看到、安装数和问题。",
       "marketplace_unlist": "把你的一项从市场下架，装了的人照常能用。"

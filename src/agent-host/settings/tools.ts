@@ -14,6 +14,7 @@ import {
   changeable,
   coerce,
   keywordKeys,
+  literalWords,
   lockedNow,
   mergePatches,
   optionsOf,
@@ -22,6 +23,7 @@ import {
   platformKey,
   present,
   presentRows,
+  rowTarget,
   sameValue,
   toolId,
   type CatalogContext,
@@ -158,6 +160,7 @@ export interface LocalFacts {
   agents: CatalogContext['agents']
   harnesses: CatalogContext['harnesses']
   modes: CatalogContext['modes']
+  plugins: CatalogContext['plugins']
   facts: SettingFacts
 }
 
@@ -167,6 +170,8 @@ export interface SettingsToolsDeps {
   read(): Promise<SettingsSnapshot>
   /** Applies a patch with the Settings page's checks; throws the owner's reason when refused. */
   apply(patch: SettingsPatch): Promise<SettingsSnapshot>
+  /** Sets a setting a plugin declares, kept in the plugin's own record; throws why it cannot. */
+  setPluginSetting(pluginId: string, key: string, value: SettingScalar): Promise<void>
   local(): Promise<LocalFacts>
   /** The session's mode is Full access now, and it is a session of the user's own. */
   fullAccess(sessionId: string): boolean
@@ -295,17 +300,46 @@ export class SettingsTools {
     const snapshot = await this.deps.read()
     const local = await this.deps.local()
     const ctx = this.context(snapshot, local)
+    const facts = { ...snapshot.facts, ...local.facts }
     const patches: SettingsPatch[] = []
+    const plugins: { row: Row; to: SettingScalar }[] = []
     for (const item of items) {
       const row = this.rowOf(item.id, ctx)
-      if (!row || !row.entry.patch) throw new Refusal(`${item.name} can no longer be undone here.`)
-      const now = row.entry.get?.(snapshot.file, row.item) ?? null
+      if (!row || !(row.entry.patch || row.entry.store === 'plugin')) {
+        throw new Refusal(`${item.name} can no longer be undone here.`)
+      }
+      const now = this.valueOf(row, snapshot, facts) ?? null
       if (!sameValue(now, item.to.value)) {
         throw new StaleUndo(`${item.place} › ${item.name} changed again since.`)
       }
-      patches.push(row.entry.patch(item.from.value, snapshot.file, row.item))
+      if (row.entry.store === 'plugin') plugins.push({ row, to: item.from.value })
+      else patches.push(row.entry.patch!(item.from.value, snapshot.file, row.item))
     }
-    await this.deps.apply(mergePatches(patches))
+    await this.applyAll(patches, plugins)
+  }
+
+  /** Applies what the rows are to hold, to the settings file and to the plugins' own records. */
+  private applyItems(
+    items: { row: Row; to: SettingScalar }[],
+    snapshot: SettingsSnapshot,
+  ): Promise<void> {
+    const plugins = items.filter(({ row }) => row.entry.store === 'plugin')
+    const patches = items
+      .filter(({ row }) => row.entry.store !== 'plugin')
+      .map(({ row, to }) => row.entry.patch!(to, snapshot.file, row.item))
+    return this.applyAll(patches, plugins)
+  }
+
+  /** Applies the file's patches, then each plugin's own settings. */
+  private async applyAll(
+    patches: SettingsPatch[],
+    plugins: { row: Row; to: SettingScalar }[],
+  ): Promise<void> {
+    if (patches.length > 0) await this.deps.apply(mergePatches(patches))
+    for (const { row, to } of plugins) {
+      const at = row.item!.indexOf(':')
+      await this.deps.setPluginSetting(row.item!.slice(0, at), row.item!.slice(at + 1), to)
+    }
   }
 
   /** The catalog's context on this host, from the owner's snapshot and what the host knows. */
@@ -317,6 +351,7 @@ export class SettingsTools {
       agents: local.agents,
       harnesses: local.harnesses,
       modes: local.modes,
+      plugins: local.plugins,
     }
   }
 
@@ -373,12 +408,9 @@ export class SettingsTools {
     const { entry } = row
     const parts: string[] = []
     for (const words of [this.deps.words, this.deps.english]) {
-      parts.push(words(platformKey(entry.name, ctx.platform)))
-      if (entry.description) {
-        parts.push(
-          words(platformKey(entry.description, ctx.platform), entry.params?.(ctx.platform)),
-        )
-      }
+      parts.push(this.nameOf(row, ctx, words))
+      const description = this.descriptionOf(row, ctx, words)
+      if (description) parts.push(description)
       for (const key of keywordKeys(entry)) parts.push(words(key))
       parts.push(words(sectionTitle(entry.section)))
       if (entry.group) parts.push(words(entry.group))
@@ -390,11 +422,32 @@ export class SettingsTools {
 
   private itemName(row: Row, ctx: CatalogContext): string | null {
     if (row.item === null) return null
+    if (row.entry.item === 'plugin') {
+      const id = row.item.slice(0, row.item.indexOf(':'))
+      return ctx.plugins.find((plugin) => plugin.id === id)?.title ?? id
+    }
     return (
       (row.entry.item === 'agent'
         ? ctx.agents.find((agent) => agent.id === row.item)?.name
         : ctx.harnesses.find((harness) => harness.id === row.item)?.name) ?? row.item
     )
+  }
+
+  /** A row's name: the plugin's own words for its settings, else the catalog's. */
+  private nameOf(row: Row, ctx: CatalogContext, words: Words): string {
+    return (
+      literalWords(row.entry, ctx, row.item)?.name ??
+      words(platformKey(row.entry.name, ctx.platform))
+    )
+  }
+
+  private descriptionOf(row: Row, ctx: CatalogContext, words: Words): string | undefined {
+    const literal = literalWords(row.entry, ctx, row.item)
+    if (literal) return literal.description
+    const { entry } = row
+    return entry.description
+      ? words(platformKey(entry.description, ctx.platform), entry.params?.(ctx.platform))
+      : undefined
   }
 
   /** Where a card and its line put a row: its section and the item's page, without its group. */
@@ -516,8 +569,8 @@ export class SettingsTools {
     const id = toolId(row.id, row.item)
     const t = this.deps.words
     const en = this.deps.english
-    const name = t(platformKey(entry.name, ctx.platform))
-    const english = en(platformKey(entry.name, ctx.platform))
+    const name = this.nameOf(row, ctx, t)
+    const english = this.nameOf(row, ctx, en)
     const place = this.place(row, ctx, t)
     const value = this.valueOf(row, snapshot, facts)
     const text = this.valueText(row, value, ctx, t)
@@ -536,10 +589,7 @@ export class SettingsTools {
                 { value: false, label: t('agentSettings.off') },
               ]
             : undefined
-    const description =
-      full && entry.description
-        ? t(platformKey(entry.description, ctx.platform), entry.params?.(ctx.platform))
-        : undefined
+    const description = full ? this.descriptionOf(row, ctx, t) : undefined
     // A secret's value, whatever the owner sent, goes out only as whether it is set.
     const shown = entry.kind === 'secret' ? undefined : value
     const bits = [
@@ -594,11 +644,12 @@ export class SettingsTools {
       throw new Refusal(
         `There is no setting ${o.id} on this computer. Call find_settings for the rows.`,
       )
-    const place = `${this.place(row, ctx, this.deps.words)} › ${this.deps.words(platformKey(row.entry.name, ctx.platform))}`
+    const place = `${this.place(row, ctx, this.deps.words)} › ${this.nameOf(row, ctx, this.deps.words)}`
+    const target = rowTarget(row.entry, row.item)
     const opened = this.deps.open(caller.sessionId, {
       section: row.entry.section,
-      item: row.item,
-      row: row.entry.row,
+      item: target.item,
+      row: target.row,
       desktop: row.entry.part === 'desktop',
     })
     const text = opened
@@ -631,6 +682,7 @@ export class SettingsTools {
     const snapshot = await this.deps.read()
     const local = await this.deps.local()
     const ctx = this.context(snapshot, local)
+    const facts = { ...snapshot.facts, ...local.facts }
     const seen = new Set<string>()
     const items: { row: Row; to: SettingScalar; from: SettingScalar; item: SettingChangeItem }[] =
       []
@@ -651,7 +703,7 @@ export class SettingsTools {
       }
       seen.add(id)
       const place = this.place(row, ctx, this.deps.words)
-      const name = this.deps.words(platformKey(row.entry.name, ctx.platform))
+      const name = this.nameOf(row, ctx, this.deps.words)
       if (!changeable(row.entry) || lockedNow(row.id, snapshot.file)) {
         problems.push(`${id} (${place} › ${name}): ${this.access(row, snapshot.file).how}.`)
         continue
@@ -661,7 +713,7 @@ export class SettingsTools {
         problems.push(`${id} (${place} › ${name}) ${coerced.error}.`)
         continue
       }
-      const from = row.entry.get?.(snapshot.file, row.item) ?? null
+      const from = this.valueOf(row, snapshot, facts) ?? null
       if (sameValue(from, coerced.value)) {
         unchanged.push(`${place} › ${name}`)
         continue
@@ -685,8 +737,7 @@ export class SettingsTools {
           },
           ...(warning ? { warning } : {}),
           section: row.entry.section,
-          item: row.item,
-          row: row.entry.row,
+          ...rowTarget(row.entry, row.item),
         },
       })
     }
@@ -702,11 +753,8 @@ export class SettingsTools {
     const already = unchanged.length > 0 ? ` ${unchanged.join(', ')} already had that value.` : ''
     const askAlways = items.some(({ row }) => row.entry.access === 'ask')
     if (this.deps.fullAccess(caller.sessionId) && !askAlways) {
-      const patch = mergePatches(
-        items.map(({ row, to }) => row.entry.patch!(to, snapshot.file, row.item)),
-      )
       try {
-        await this.deps.apply(patch)
+        await this.applyItems(items, snapshot)
       } catch (error) {
         throw new Refusal(`Nothing was changed: ${(error as Error).message}`)
       }
@@ -750,11 +798,7 @@ export class SettingsTools {
       return reply(text, { changed: false })
     }
     try {
-      const snapshot = await this.deps.read()
-      const patch = mergePatches(
-        items.map(({ row, to }) => row.entry.patch!(to, snapshot.file, row.item)),
-      )
-      await this.deps.apply(patch)
+      await this.applyItems(items, await this.deps.read())
     } catch (error) {
       const message = (error as Error).message
       this.deps.settle(sessionId, entryId, { kind: 'failed', message })

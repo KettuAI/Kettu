@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { HOST_METHODS } from '@shared/agent-host'
+import { HOST_METHODS, REMOVED_PLUGIN_METHODS } from '@shared/agent-host'
 import { createValidators, promptContent } from './validate'
 
 const posix = createValidators('darwin')
@@ -246,47 +246,102 @@ describe('createValidators', () => {
     rejects(() => posix['market.keys']({ serverId: 'x' }))
   })
 
-  it('checks the plugin methods: ids that cannot pass for a flag, and a project for its scopes', () => {
-    const plugin = { agentId: 'claude-code', pluginId: 'commit-commands@claude-plugins-official' }
-    expect(posix['market.plugins']({ refresh: true })).toEqual({ refresh: true })
-    expect(posix['market.pluginDetails']({ ...plugin, other: 1 })).toEqual(plugin)
-    rejects(() => posix['market.pluginDetails']({ ...plugin, pluginId: '--yes@x' }))
-    rejects(() => posix['market.pluginDetails']({ ...plugin, pluginId: 'no-marketplace' }))
-    rejects(() => posix['market.pluginDetails']({ ...plugin, pluginId: 'a@b c' }))
-    expect(posix['market.pluginLogo']({ pluginId: 'pdf@openai-primary-runtime', x: 1 })).toEqual({
-      pluginId: 'pdf@openai-primary-runtime',
+  it('validates no method that managed harness plugins, and takes only refresh to list them', () => {
+    for (const method of REMOVED_PLUGIN_METHODS) expect(posix).not.toHaveProperty([method])
+    expect(posix['market.ownPlugins']({ refresh: true, other: 1 })).toEqual({ refresh: true })
+    expect(posix['market.ownPlugins'](undefined)).toEqual({})
+  })
+
+  it('checks where a plugin comes from, and what names an installed or inspected one', () => {
+    const inspect = (source: unknown) => posix['plugins.inspect']({ source })
+    expect(inspect({ kind: 'local', path: '/home/me/plugin' })).toEqual({
+      source: { kind: 'local', path: '/home/me/plugin' },
     })
-    rejects(() => posix['market.pluginLogo']({ pluginId: '../../.ssh/id_rsa' }))
-    expect(posix['market.installPlugin']({ ...plugin, scope: 'user' })).toEqual({
-      ...plugin,
-      scope: 'user',
+    expect(inspect({ kind: 'github', url: 'https://github.com/a/b/tree/main/x' })).toEqual({
+      source: { kind: 'github', url: 'https://github.com/a/b/tree/main/x' },
     })
-    expect(
-      posix['market.uninstallPlugin']({ ...plugin, scope: 'project', projectPath: '/repo' }),
-    ).toEqual({ ...plugin, scope: 'project', projectPath: '/repo' })
-    rejects(() => posix['market.installPlugin']({ ...plugin, scope: 'local' }))
-    rejects(() => posix['market.installPlugin']({ ...plugin, scope: 'user', projectPath: '/repo' }))
-    rejects(() =>
-      posix['market.installPlugin']({ ...plugin, scope: 'project', projectPath: 'repo' }),
-    )
-    rejects(() => posix['market.installPlugin']({ ...plugin, scope: 'global' }))
-    expect(posix['market.setPluginEnabled']({ ...plugin, scope: 'user', enabled: false })).toEqual({
-      ...plugin,
-      scope: 'user',
+    expect(inspect({ kind: 'kettu', id: 'abcdefgh23', extra: 1 })).toEqual({
+      source: { kind: 'kettu', id: 'abcdefgh23' },
+    })
+    rejects(() => inspect({ kind: 'local', path: 'relative/plugin' }))
+    rejects(() => inspect({ kind: 'github', url: 'https://example.com/a/b' }))
+    rejects(() => inspect({ kind: 'kettu', id: '../x' }))
+    rejects(() => inspect({ kind: 'catalog', id: 'a/b:c' }))
+    rejects(() => inspect('https://github.com/a/b'))
+    const token = '00000000-0000-4000-8000-000000000000'
+    expect(posix['plugins.install']({ token })).toEqual({ token })
+    rejects(() => posix['plugins.install']({ token: '../x' }))
+    rejects(() => posix['plugins.discard']({}))
+    const pluginId = 'p0123456789ab'
+    expect(posix['plugins.setEnabled']({ pluginId, enabled: false })).toEqual({
+      pluginId,
       enabled: false,
     })
-    rejects(() => posix['market.setPluginEnabled']({ ...plugin, scope: 'user' }))
-    expect(posix['market.addMarketplace']({ agentId: 'codex', source: ' owner/repo ' })).toEqual({
-      agentId: 'codex',
-      source: 'owner/repo',
+    rejects(() => posix['plugins.setEnabled']({ pluginId }))
+    for (const method of [
+      'plugins.uninstall',
+      'plugins.reload',
+      'plugins.applyUpdate',
+      'plugins.declineUpdate',
+      'plugins.rollBack',
+    ] as const) {
+      expect(posix[method]({ pluginId })).toEqual({ pluginId })
+      rejects(() => posix[method]({ pluginId: '../p0123456789ab' }))
+      rejects(() => posix[method]({}))
+    }
+    expect(posix['plugins.checkUpdates'](undefined)).toEqual({})
+    expect(posix['plugins.checkUpdates']({ pluginId })).toEqual({ pluginId })
+    rejects(() => posix['plugins.checkUpdates']({ pluginId: 'x' }))
+    expect(posix['plugins.resources']({ kind: 'roles' })).toEqual({ kind: 'roles' })
+    rejects(() => posix['plugins.resources']({ kind: 'scripts' }))
+  })
+
+  it('checks which plugin view is opened and what an action sends', () => {
+    const pluginId = 'p0123456789ab'
+    expect(posix['plugins.viewData']({ pluginId, viewId: 'issues' })).toEqual({
+      pluginId,
+      viewId: 'issues',
+      params: {},
     })
-    rejects(() => posix['market.addMarketplace']({ agentId: 'codex', source: '--scope=user' }))
-    rejects(() => posix['market.addMarketplace']({ agentId: 'codex', source: 'a\nb' }))
-    expect(posix['market.removeMarketplace']({ agentId: 'codex', name: 'team-tools' })).toEqual({
-      agentId: 'codex',
-      name: 'team-tools',
+    expect(
+      posix['plugins.viewData']({ pluginId, viewId: 'issue', params: { id: '3' } }).params,
+    ).toEqual({ id: '3' })
+    rejects(() => posix['plugins.viewData']({ pluginId, viewId: '../x' }))
+    rejects(() => posix['plugins.viewData']({ pluginId: 'x', viewId: 'issues' }))
+    rejects(() => posix['plugins.viewData']({ pluginId, viewId: 'issues', params: { id: 3 } }))
+    expect(
+      posix['plugins.viewAction']({
+        pluginId,
+        viewId: 'label',
+        action: 'save',
+        row: 'r1',
+        values: { on: true, note: 'x' },
+        junk: 1,
+      }),
+    ).toEqual({
+      pluginId,
+      viewId: 'label',
+      params: {},
+      action: 'save',
+      row: 'r1',
+      values: { on: true, note: 'x' },
     })
-    rejects(() => posix['market.removeMarketplace']({ agentId: 'codex', name: '-rf' }))
+    rejects(() => posix['plugins.viewAction']({ pluginId, viewId: 'label' }))
+    rejects(() => posix['plugins.viewAction']({ pluginId, viewId: 'label', action: 'a b' }))
+    rejects(() =>
+      posix['plugins.viewAction']({ pluginId, viewId: 'label', action: 'save', values: { a: 1 } }),
+    )
+  })
+
+  it('checks which plugin action Search runs', () => {
+    const pluginId = 'p0123456789ab'
+    expect(posix['plugins.actionRun']({ pluginId, actionId: 'create', junk: 1 })).toEqual({
+      pluginId,
+      actionId: 'create',
+    })
+    rejects(() => posix['plugins.actionRun']({ pluginId }))
+    rejects(() => posix['plugins.actionRun']({ pluginId, actionId: 'a b' }))
+    rejects(() => posix['plugins.actionRun']({ pluginId: 'x', actionId: 'create' }))
   })
 
   it('checks where a skill to add comes from', () => {
@@ -342,16 +397,6 @@ describe('createValidators', () => {
     expect(posix['market.communityListing']({ id: 'abcdefgh23' })).toEqual({ id: 'abcdefgh23' })
     rejects(() => posix['market.communityListing']({ id: 'abc/../x' }))
     expect(posix['market.communityInstalled']({ refresh: true })).toEqual({ refresh: true })
-    const plugin = { id: 'abcdefgh23', agentId: 'claude-code' }
-    expect(posix['market.installCommunityPlugin']({ ...plugin, scope: 'user' })).toEqual({
-      ...plugin,
-      scope: 'user',
-    })
-    expect(
-      posix['market.installCommunityPlugin']({ ...plugin, scope: 'project', projectPath: '/repo' }),
-    ).toEqual({ ...plugin, scope: 'project', projectPath: '/repo' })
-    rejects(() => posix['market.installCommunityPlugin']({ ...plugin, scope: 'project' }))
-    rejects(() => posix['market.installCommunityPlugin']({ ...plugin, id: 'x', scope: 'user' }))
     expect(posix['market.reportCommunity']({ id: 'abcdefgh23', message: ' Broken. ' })).toEqual({
       id: 'abcdefgh23',
       message: 'Broken.',

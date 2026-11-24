@@ -3,23 +3,8 @@
 import { useEffect, type CSSProperties, type ReactNode } from 'react'
 import { Icon } from '@renderer/components/affect/app-shell'
 import { SiteIconImage } from '@renderer/components/site-icon-image'
-import { useDark } from '@renderer/hooks/use-dark'
-import { useHostScope } from '@renderer/stores/host-scope'
 import { loadSiteIcons, requestSiteIcon, useSiteIcon } from '@renderer/stores/site-icons'
 import { tileArt, type TileSize, type TileSubject } from './tile-art'
-
-/** A Codex plugin's logo for the theme shown: undefined while it is read, null without one. */
-function usePluginLogo(pluginId: string | null): string | null | undefined {
-  const dark = useDark()
-  const { useMarketplaceStore } = useHostScope()
-  const logo = useMarketplaceStore((s) => (pluginId ? s.logos[pluginId] : undefined))
-  useEffect(() => {
-    if (pluginId) void useMarketplaceStore.getState().loadLogo(pluginId)
-  }, [pluginId, useMarketplaceStore])
-  if (!pluginId) return null
-  if (logo === undefined || logo === 'loading') return undefined
-  return (dark && logo.dark) || logo.light
-}
 
 /**
  * The icon of the site a remote server connects to, as links in replies show a site's: main loads
@@ -60,13 +45,17 @@ export function ItemTile({
   quiet?: boolean
 }) {
   const art = tileArt(subject)
-  const hasLogo =
-    !quiet && art.type === 'glyph' && subject.kind === 'plugin' && subject.marks !== false
-  const pluginLogo = usePluginLogo(hasLogo && subject.harness === 'codex' ? subject.id : null)
   const site =
     !quiet && art.type === 'glyph' && subject.kind === 'mcp' ? (subject.site ?? null) : null
-  const logo = useServerIcon(site) ?? pluginLogo
+  const logo = useServerIcon(site)
   const sized = size === 'row' ? undefined : size
+  if (subject.kind === 'kettu-plugin' && subject.icon) {
+    return (
+      <span aria-hidden className="ui-as-int-logo k-mkt-tile" data-size={sized}>
+        <SiteIconImage className="k-mkt-tile__logo" src={subject.icon} />
+      </span>
+    )
+  }
   if (art.type === 'mark') {
     const { mark } = art
     const style = {

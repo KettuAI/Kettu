@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { AgentAccount } from '@shared/agent-host'
+import type { AgentAccount, SessionSummary } from '@shared/agent-host'
 import {
   applyPatches,
   threadFromSnapshot,
@@ -38,6 +38,8 @@ import { ClaudeConnection, promptContent } from './connection'
 import { claudeSdkDriver } from './driver'
 import { ANSWER_IN_REPLY, QUESTION_UNREADABLE, QUESTIONS_SKIPPED } from './permissions'
 import type { PostModelSwitchHookInput, SdkMessage, StoredMessage } from './sdk'
+import { denialAnswer, PluginHooks, requestFacts } from '../plugin-runtime/hooks'
+import { pluginClient } from '../testing/plugin-host'
 
 const baseSession: SessionView = {
   id: 'k1',
@@ -445,6 +447,39 @@ describe('the Claude Agent SDK driver', () => {
       mcpServers: { kettu: expect.objectContaining({ url: 'http://127.0.0.1:9/mcp' }) },
       env: expect.objectContaining({ CLAUDE_CODE_DISABLE_AUTO_MEMORY: '1' }),
     })
+  })
+
+  it("adds a session's role to the system prompt after the guide and memory, on every start", async () => {
+    const { sdk, connection } = await setup()
+    const kettu = {
+      type: 'http' as const,
+      name: 'kettu',
+      url: 'http://127.0.0.1:9/mcp',
+      headers: [],
+      prompt: 'Plan first.',
+    }
+    const role = '<kettu-role name="Reviewer">\nReview it.\n</kettu-role>'
+    const options = { mcpServers: [kettu], memory: { text: 'Memory index.' }, role }
+    const append = `Plan first.\n\nMemory index.\n\n${role}`
+    const opened = await connection.newSession('/repo', options)
+    expect(sdk.last.options.systemPrompt).toEqual({ type: 'preset', preset: 'claude_code', append })
+    await connection.closeSession(opened.sessionId)
+    await connection.resumeSession(opened.sessionId, '/repo', options)
+    expect(sdk.last.options.systemPrompt).toEqual({ type: 'preset', preset: 'claude_code', append })
+    await connection.forkSession(opened.sessionId, '/repo', options)
+    expect(sdk.last.options.systemPrompt).toEqual({ type: 'preset', preset: 'claude_code', append })
+    // With nothing else of Kettu's, the role stands alone; a page's question gets none.
+    await connection.newSession('/repo', { role })
+    expect(sdk.last.options.systemPrompt).toEqual({
+      type: 'preset',
+      preset: 'claude_code',
+      append: role,
+    })
+    await connection.newSession('/repo', { hidden: 'sample', role })
+    expect(sdk.last.options.systemPrompt).toEqual({ type: 'preset', preset: 'claude_code' })
+    // A session whose guide goes ahead of its prompts has the role there too, not here.
+    await connection.resumeSession('from-terminal', '/repo', { ...options, promptAhead: true })
+    expect(sdk.last.options.systemPrompt).toEqual({ type: 'preset', preset: 'claude_code' })
   })
 
   it('keeps a server that holds a key off the command line and adds it once the query starts', async () => {
@@ -2121,6 +2156,104 @@ describe('effort at its default', () => {
     s.sdk.script = new FakeClaudeSdk().script
     await s.connection.prompt(sessionId, [{ type: 'text', text: 'Hi' }])
     expect(s.sdk.last.calls.some((call) => call.method === 'applyFlagSettings')).toBe(false)
+  })
+})
+
+describe('a plugin that checks a request', () => {
+  const summary = {
+    id: 'k1',
+    agentId: 'claude-code',
+    projectPath: '/repo',
+    title: 'Fix it',
+    status: 'running',
+    origin: 'user',
+    parentId: null,
+    createdAt: 1,
+    updatedAt: 2,
+    archivedAt: null,
+  } as SessionSummary
+
+  /** A target that lets the plugins look at a request first, as the session manager does. */
+  class Checked extends Target {
+    constructor(private readonly hooks: PluginHooks) {
+      super()
+    }
+
+    override async requestPermission(
+      request: PermissionRequest,
+      signal: AbortSignal,
+    ): Promise<PermissionAnswer> {
+      const entry = this.thread.byId[request.toolEntryId]
+      this.apply(request.output)
+      const tool = this.thread.byId[request.toolEntryId] ?? entry
+      const denial = await this.hooks.check(
+        summary,
+        requestFacts(tool?.kind === 'tool' ? tool : undefined),
+      )
+      const deny = request.options.find((option) => option.kind === 'reject_once')
+      if (denial && deny) return denialAnswer(deny, denial)
+      return new Promise((resolve, reject) => {
+        this.asked.push({ request, signal, answer: resolve })
+        signal.addEventListener('abort', () => reject(signal.reason), { once: true })
+      })
+    }
+  }
+
+  let stop: (() => void) | null = null
+  afterEach(() => stop?.())
+
+  async function checked(script: string) {
+    const s = await setup()
+    const { client, host } = pluginClient({ functions: {} })
+    stop = () => {
+      client.stop()
+      host.stop()
+    }
+    host.scripts.set('/check.js', script)
+    client.register(
+      { id: 'check', scriptPath: '/check.js', activation: ['session.permissionRequested'] },
+      ['requests.check'],
+    )
+    const target = new Checked(
+      new PluginHooks({
+        client,
+        refs: { content: () => Promise.reject(new Error('Not used')) },
+        title: () => 'Command guard',
+        log: () => {},
+      }),
+    )
+    const sessionId = (await s.connection.newSession('/repo')).sessionId
+    s.connection.register(sessionId, target)
+    const ask = (command: string) =>
+      s.sdk.last.options.canUseTool!(
+        'Bash',
+        { command },
+        { signal: new AbortController().signal, toolUseID: `toolu_${command.length}` },
+      )
+    return { s, target, ask }
+  }
+
+  it('denies a command it refuses, and the agent is told the plugin and why', async () => {
+    const { target, ask } = await checked(
+      `kettu.on('session.permissionRequested', ({ request }) => request.command.includes('rm -rf') ? { deny: 'Not in this repo' } : undefined)`,
+    )
+    const result = await ask('rm -rf build')
+    expect(result).toMatchObject({ behavior: 'deny' })
+    expect(target.asked).toHaveLength(0)
+    expect(target.entries().find((entry) => entry.kind === 'tool')).toMatchObject({
+      toolKind: 'execute',
+      title: 'rm -rf build',
+    })
+  })
+
+  it('passes a command it has no word on to the user, which can still allow it', async () => {
+    const { target, ask } = await checked(
+      `kettu.on('session.permissionRequested', ({ request }) => request.command.includes('rm -rf') ? { deny: 'No' } : { allow: true })`,
+    )
+    const result = ask('npm test')
+    await vi.waitFor(() => expect(target.asked).toHaveLength(1))
+    target.asked[0]!.answer({ optionId: 'allow-once' })
+    expect(await result).toMatchObject({ behavior: 'allow' })
   })
 })
 

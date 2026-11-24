@@ -24,7 +24,7 @@ export function answerSettingsCall(call: unknown, owner: SettingsOwner): Setting
   }
   if (call.kind === 'change') {
     try {
-      owner.settings.update(call.patch)
+      owner.settings.update(call.patch, { plugins: call.plugins === true })
     } catch (error) {
       return { error: (error as Error).message }
     }

@@ -186,4 +186,4 @@ docker exec -it kettu kettu pair
 
 ## 许可证
 
-[AGPL-3.0](./LICENSE)。
+[AGPL-3.0](./LICENSE)。插件 API 的类型和示例在 [`packages/plugin-api`](./packages/plugin-api)，用 [MIT 许可证](./packages/plugin-api/LICENSE)，插件可以直接复制。
