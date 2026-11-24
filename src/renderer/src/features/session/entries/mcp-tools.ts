@@ -110,6 +110,7 @@ const TARGETS = {
   update_memory: ['title', 'id'],
   forget_memory: ['id'],
   marketplace_check: [{ path: 'path' }],
+  marketplace_convert: [{ path: 'path' }],
   marketplace_publish: [{ path: 'path' }],
   marketplace_mine: [],
   marketplace_unlist: ['listing'],

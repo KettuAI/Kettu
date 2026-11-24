@@ -37,7 +37,9 @@ import type { PublishedStoreHook } from '@renderer/stores/market-published'
 import { openMarketplace } from '@renderer/stores/view'
 import { PublishFolderDialog, ListingDialogs, type ListingDialog } from './publish-dialogs'
 import {
+  convertItem,
   listingMenu,
+  useConvertListing,
   useNewVersionItems,
   usePickFolder,
   usePublishedStore,
@@ -48,6 +50,7 @@ import {
   askAgent,
   folderShown,
   harnessName,
+  isClosed,
   isHarness,
   KETTU_ITEM,
   kindOf,
@@ -508,6 +511,7 @@ function MineRow({
   const [folder, setFolder] = useState<FolderChoice | null>(null)
   const relist = useRelist()
   const versionItems = useNewVersionItems(listing, published, setFolder)
+  const { convert, converting } = useConvertListing(setFolder)
   const open = () => openMarketplace({ item: publishedItem(listing.id), tab: 'published' })
   const updated = Date.parse(listing.updatedAt)
   const [details, ...rest] = listingMenu(listing, t, setDialog, () => relist(listing))
@@ -515,7 +519,9 @@ function MineRow({
   const items: MenuItem[] = [
     ...(listing.takenDown
       ? []
-      : [{ label: t('published.menu.newVersionHeading'), heading: true }, ...versionItems]),
+      : isClosed(listing)
+        ? [convertItem(t, () => convert(listing), converting)]
+        : [{ label: t('published.menu.newVersionHeading'), heading: true }, ...versionItems]),
     { ...details!, divider: !listing.takenDown },
     ...rest,
   ]

@@ -31,6 +31,7 @@ import {
   type PublishVisibility,
 } from '@shared/market-publish'
 import type { Platform } from '@shared/platform'
+import type { PluginConverted } from '@shared/plugin-convert'
 import { WORKFLOW_FILE_BYTES } from '@shared/workflow'
 import type { MarketPublishAsk, MarketPublishChange, MarketPublishOutcome } from '@shared/thread'
 import type { Caller } from '../artifacts/tools'
@@ -40,20 +41,24 @@ import { pathKey } from '../paths'
 import { writeFileAtomic } from '../storage'
 import { parseWorkflow } from '../workflow/format'
 import { sameFlow } from '../workflow/graph'
-import { forAgent, problemOf, problemWith } from './localized-error'
+import { forAgent, problem, problemOf, problemWith } from './localized-error'
+import type { PluginConverter } from './plugin-conversions'
 import { checkFolder, type CheckedFile, type FolderCheck } from './publish-check'
 import type { NewDraft, PublishedVersion } from './publish-drafts'
 
 export const MARKET_CHECK = 'marketplace_check'
+export const MARKET_CONVERT = 'marketplace_convert'
 export const MARKET_PUBLISH = 'marketplace_publish'
 export const MARKET_MINE = 'marketplace_mine'
 export const MARKET_UNLIST = 'marketplace_unlist'
 /**
  * They run without the agent's own permission prompt: check and mine only read, and publish and
- * unlist wait for the user in Kettu's card, so the card is the only ask.
+ * unlist wait for the user in Kettu's card, so the card is the only ask. Convert writes a folder,
+ * so it keeps the agent's own prompt.
  */
 export const MARKET_AUTO_ALLOW = [MARKET_CHECK, MARKET_MINE, MARKET_PUBLISH, MARKET_UNLIST]
 
+const OFFICIAL_HANDLE = 'kettu-labs'
 const PATH_CHARS = 4096
 const LISTING_REF_CHARS = 80
 const TASK_ID_CHARS = 64
@@ -94,14 +99,17 @@ export const MARKET_TOOLS: Tool[] = [
     description:
       'Checks a folder before it is published to the Kettu Marketplace, uploading nothing. It ' +
       'tells what the folder is (a skill with SKILL.md, a workflow with workflow.yaml and an ' +
-      'optional README.md, an MCP server with server.json, or an MCP bundle .mcpb ' +
-      'file), its name, description and version, the files that would upload and their size, ' +
-      'what an install adds and runs (for a workflow, its steps, those that wait for the user and ' +
-      'the MCP servers and Skills they name), whether the user published it before, and every ' +
-      'problem that keeps it from being published, such as a missing field, a workflow.yaml the ' +
-      'workflow format refuses, too many files or a secret in a file. Fix the problems, then ' +
-      'check again. Pass path, or for a task’s workflow Kettu asked you to publish, workflow ' +
-      'and from_task.',
+      'optional README.md, an MCP server with server.json, an MCP bundle .mcpb file, or a ' +
+      'plugin with plugin.json), its name, description and version, the files that would ' +
+      'upload and their size, what an install adds and runs (for a workflow, its steps, those ' +
+      'that wait for the user and the MCP servers and Skills they name; for a plugin, its ' +
+      'skills, servers, commands, roles and workflows, and the permissions of its script, which ' +
+      'only Kettu’s own publisher may publish), whether the user published it before, and ' +
+      'every problem that keeps it from being published, such as a missing field, a ' +
+      'workflow.yaml the workflow format refuses, too many files or a secret in a file. A ' +
+      'Claude Code or Codex plugin is not published as it is: convert it with ' +
+      'marketplace_convert. Fix the problems, then check again. Pass path, or for a task’s ' +
+      'workflow Kettu asked you to publish, workflow and from_task.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -112,6 +120,32 @@ export const MARKET_TOOLS: Tool[] = [
       additionalProperties: false,
     },
     annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
+  },
+  {
+    name: MARKET_CONVERT,
+    title: 'Convert a Claude Code or Codex plugin to a Kettu plugin',
+    description:
+      'Turns the Claude Code or Codex plugin in a folder into a Kettu plugin and writes it to a ' +
+      'new folder next to it, leaving the original as it is. Skills are copied as they are, MCP ' +
+      'servers are written in the standard form, commands become Kettu commands and agents ' +
+      'become roles. Hooks do not come over: the result names each one left out and why, and ' +
+      'so it does anything else it could not carry. Then check the new folder with ' +
+      'marketplace_check and publish it; the user reviews what was converted in the publish ' +
+      'card. Publish it only when the user asked.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        path: {
+          type: 'string',
+          minLength: 1,
+          maxLength: PATH_CHARS,
+          description: 'The plugin’s folder, absolute or from the session’s folder.',
+        },
+      },
+      required: ['path'],
+      additionalProperties: false,
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
   },
   {
     name: MARKET_PUBLISH,
@@ -258,6 +292,10 @@ export interface MarketToolsDeps {
    * workflow and that ended done; null for any other.
    */
   taskWorkflowFolder?(taskId: string): string | null
+  /** Converts harness plugins into Kettu plugins and remembers what each conversion left out. */
+  converter: Pick<PluginConverter, 'folder' | 'conversionOf'>
+  /** The Kettu version, which a plugin's own range of versions is checked against. */
+  appVersion: string
   home: string
 }
 
@@ -450,6 +488,14 @@ function listingName(listing: Pick<MineListing, 'handle' | 'slug'>): string {
   return `@${listing.handle}/${listing.slug}`
 }
 
+/**
+ * Whether the account publishes as Kettu's own publisher, which a plugin's script needs: one of its
+ * listings is official, or its name is the one Kettu's workflows are published under.
+ */
+function officialPublisher(mine: MarketMine): boolean {
+  return mine.publisher?.handle === OFFICIAL_HANDLE || mine.listings.some((l) => l.official)
+}
+
 const KIND_NAMES = {
   skill: 'skill',
   workflow: 'workflow',
@@ -505,6 +551,8 @@ export class MarketTools {
       switch (name) {
         case MARKET_CHECK:
           return await this.check(caller, input)
+        case MARKET_CONVERT:
+          return await this.convert(caller, input)
         case MARKET_PUBLISH:
           return await this.publish(caller, input, deadline)
         case MARKET_MINE:
@@ -560,7 +608,11 @@ export class MarketTools {
       draft?.manifest.visibility ?? null,
       draft?.manifest.notes ?? null,
     )
-    return { ask, problems }
+    return {
+      ask,
+      problems,
+      ...(plan.check.convertible ? { convertible: plan.check.convertible } : {}),
+    }
   }
 
   /** Publishes a folder the user confirmed in the dialog; a refusal is kept as a draft. */
@@ -709,7 +761,7 @@ export class MarketTools {
     wanted: string | null,
     soft = false,
   ): Promise<Plan> {
-    const check = await checkFolder(target)
+    const check = await checkFolder(target, this.deps.appVersion)
     const problems = [...check.problems]
     let mine: MarketMine | null = null
     let mineError: string | null = null
@@ -726,9 +778,10 @@ export class MarketTools {
     const same = mine?.listings.find((listing) => listing.slug === check.slug) ?? null
     let listing: MineListing | null = null
     if (same && same.kind !== check.kind) {
+      const key = same.kind === 'plugin' ? 'closedPlugin' : 'otherKind'
       problems.push(
         problemWith(undefined, (say) =>
-          say('marketPublish.check.otherKind', { listing: listingName(same) }),
+          say(`marketPublish.check.${key}`, { listing: listingName(same) }),
         ),
       )
     } else if (same) {
@@ -741,6 +794,9 @@ export class MarketTools {
           ),
         )
       }
+    }
+    if (check.plugin?.script && mine && !officialPublisher(mine)) {
+      problems.push(problem(check.manifest ?? undefined, 'marketPublish.check.scriptNotAllowed'))
     }
     const taken = listing?.versions.map((v) => v.version) ?? []
     if (soft && wanted !== null && taken.includes(wanted)) wanted = null
@@ -809,6 +865,7 @@ export class MarketTools {
           `${sizeText(check.bytes)}, from ${plan.folder}.`.replace(' ,', ','),
       )
       if (check.kind === 'workflow') lines.push(...workflowLines(check.adds))
+      if (check.plugin) lines.push(...pluginLines(check.plugin))
       if (listing) {
         lines.push(
           `It would be a new version of ${listingName(listing)}, now at ${listing.current ?? 'no live version'}.`,
@@ -822,10 +879,17 @@ export class MarketTools {
     if (problems.length > 0) {
       lines.push('Problems to fix:', ...problems.map(problemLine))
     }
+    if (check.convertible) {
+      lines.push(
+        'Call marketplace_convert with this path for a Kettu plugin made from it, written to a ' +
+          'new folder next to this one, which stays as it is. Then check that folder.',
+      )
+    }
     return {
       content: [{ type: 'text', text: lines.join('\n') }],
       structuredContent: {
         ready: problems.length === 0,
+        ...(check.convertible ? { convertible: check.convertible } : {}),
         kind: check.kind,
         name: check.name,
         slug: check.slug,
@@ -837,7 +901,42 @@ export class MarketTools {
         bytes: check.bytes,
         adds: check.adds,
         runs: check.runs,
+        ...(check.plugin
+          ? {
+              script: check.plugin.script,
+              permissions: check.plugin.permissions,
+              leftOut: check.plugin.warnings,
+            }
+          : {}),
         problems: forAgent(problems),
+      },
+    }
+  }
+
+  /** Writes a Kettu plugin made from the harness plugin in a folder, next to it. */
+  private async convert(caller: Caller, input: unknown): Promise<CallToolResult> {
+    const o = fields(input, ['path'])
+    const given = text(o, 'path', PATH_CHARS, true)!
+    let converted: PluginConverted
+    try {
+      converted = await this.deps.converter.folder(path.resolve(this.where(caller), given))
+    } catch (error) {
+      if (error instanceof HostError) throw new Refusal('refused', error.message)
+      throw error
+    }
+    return {
+      content: [{ type: 'text', text: convertedLines(converted).join('\n') }],
+      structuredContent: {
+        path: converted.path,
+        name: converted.name,
+        from: converted.conversion.from,
+        carried: converted.conversion.carried,
+        leftOut: converted.conversion.leftOut.map(({ kind, name, message }) => ({
+          kind,
+          name,
+          reason: message,
+        })),
+        notes: converted.conversion.notes.map(({ name, message }) => ({ name, note: message })),
       },
     }
   }
@@ -978,6 +1077,7 @@ export class MarketTools {
     const account = this.deps.account()
     return {
       ...(check.kind === 'workflow' ? await this.workflowOf(check, from) : {}),
+      ...(check.plugin ? this.pluginOf(plan) : {}),
       action: 'publish',
       item: {
         name: check.name,
@@ -1003,6 +1103,20 @@ export class MarketTools {
         !plan.mine || plan.mine.publisher || !account
           ? null
           : { suggested: suggestHandle(account) },
+    }
+  }
+
+  /** What a Kettu plugin's card adds: its script, what an install leaves out, and a conversion. */
+  private pluginOf(plan: Plan): Pick<MarketAsk, 'plugin' | 'converted'> {
+    const contents = plan.check.plugin!
+    const converted = this.deps.converter.conversionOf(plan.target)
+    return {
+      plugin: {
+        script: contents.script,
+        permissions: contents.permissions,
+        notes: contents.warnings,
+      },
+      ...(converted ? { converted } : {}),
     }
   }
 
@@ -1464,6 +1578,52 @@ function workflowLines(adds: readonly PublishAdds[]): string[] {
   return lines
 }
 
+/** A plugin's script with its permissions, and what an install would leave out, for the agent. */
+function pluginLines(plugin: NonNullable<FolderCheck['plugin']>): string[] {
+  const lines: string[] = []
+  if (plugin.script) {
+    lines.push(
+      `Runs a script, ${plugin.script.entry}, with ${
+        plugin.permissions.length > 0
+          ? `the permissions ${plugin.permissions.join(', ')}`
+          : 'no permissions'
+      }. Only Kettu’s own publisher may publish a plugin with a script for now.`,
+    )
+  }
+  if (plugin.warnings.length > 0) {
+    lines.push('An install leaves out:', ...plugin.warnings.map((warning) => `- ${warning}`))
+  }
+  return lines
+}
+
+/** What a conversion made, carried over and left out, for the agent. */
+function convertedLines({ path: folder, name, conversion }: PluginConverted): string[] {
+  const lines = [`Converted to the Kettu plugin "${name}", written to ${folder}.`]
+  const carried = conversion.carried.map((group) => `${group.items.length} ${group.label}`)
+  lines.push(
+    carried.length > 0 ? `Carried over: ${carried.join(', ')}.` : 'Nothing was carried over.',
+  )
+  if (conversion.leftOut.length > 0) {
+    lines.push(
+      'Left out:',
+      ...conversion.leftOut.map(({ kind, name: item, message }) => `- ${kind} ${item}: ${message}`),
+    )
+  }
+  if (conversion.notes.length > 0) {
+    lines.push(
+      'Changed on the way:',
+      ...conversion.notes.map(
+        ({ name: item, message }) => `- ${item ? `${item}: ` : ''}${message}`,
+      ),
+    )
+  }
+  lines.push(
+    'The original folder was not changed. Check the new folder with marketplace_check, then ' +
+      'publish it if the user asks; the card shows them what came over and what did not.',
+  )
+  return lines
+}
+
 function comparable(file: CheckedFile, oldSize: number): boolean {
   return file.text && file.size <= COMPARE_BYTES && oldSize <= COMPARE_BYTES
 }
@@ -1490,6 +1650,8 @@ function serviceText(failure: MarketFailure): string {
 }
 
 const USER_TEXT = new Set([
+  'script_not_allowed',
+  'kind_closed',
   'signed_out',
   'unauthorized',
   'storage_full',

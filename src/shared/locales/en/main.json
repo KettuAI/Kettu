@@ -166,7 +166,9 @@
       "handleTaken": "Another publisher has this handle.",
       "noPublisher": "Set a publisher handle before publishing.",
       "tooManyListings": "An account has a limit on its listings, and this one has reached it.",
-      "conflict": "This listing was published at the same time. Try again."
+      "conflict": "This listing was published at the same time. Try again.",
+      "scriptNotAllowed": "A plugin with a script can only be published by Kettu’s own publisher for now.",
+      "kindClosed": "Claude Code and Codex plugins take no new versions. Convert it to a Kettu plugin instead."
     }
   },
   "agentHost": {

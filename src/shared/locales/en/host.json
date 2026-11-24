@@ -1254,7 +1254,9 @@
       "no_publisher": "Choose a publisher name first.",
       "not_found": "It’s no longer in the Kettu Marketplace.",
       "check_failed": "The Kettu Marketplace’s check didn’t pass.",
-      "conflict": "Something else changed it at the same time. Try again."
+      "conflict": "Something else changed it at the same time. Try again.",
+      "script_not_allowed": "A plugin with a script can only be published by Kettu’s own publisher for now.",
+      "kind_closed": "Claude Code and Codex plugins take no new versions. Convert it to a Kettu plugin instead."
     },
     "check": {
       "link": "It is a link. Replace it with the file itself, or remove it.",
@@ -1301,10 +1303,10 @@
       "pathIsLink": "The path is a link. Give the folder it points to instead.",
       "folderOrBundle": "Publish a folder, or an MCP bundle (.mcpb) file.",
       "bundleTooLarge": "The bundle is larger than {{mb}} MB, the most a version may be.",
-      "harnessPlugin": "Claude Code and Codex plugins are no longer published to the Kettu Marketplace.",
+      "harnessPlugin": "This is a {{harness}} plugin. The Kettu Marketplace takes Kettu plugins, so convert it to one first. The folder itself stays as it is.",
       "manyBundles": "The folder holds more than one MCP bundle. Keep one.",
       "fileTooLarge": "It is larger than {{mb}} MB, the most a version may be.",
-      "unknownFolder": "Kettu cannot tell what this folder is. A skill has a SKILL.md, a workflow a workflow.yaml, and an MCP server a server.json.",
+      "unknownFolder": "Kettu cannot tell what this folder is. A skill has a SKILL.md, a workflow a workflow.yaml, an MCP server a server.json and a plugin a plugin.json.",
       "manifestTooLarge": "It is too large to be a manifest.",
       "aboutTooLong": "The description is longer than {{count}} characters.",
       "manifestName": "A file at the top may not be named manifest. Rename it.",
@@ -1312,7 +1314,13 @@
       "takenDown": "{{listing}} was taken down by Kettu: {{reason}}",
       "versionInManifest": "The version is {{version}}, as the manifest says; change it there instead of passing {{wanted}}.",
       "versionTakenNumbered": "Version {{version}} of {{listing}} is published already. Pass a higher version.",
-      "versionTaken": "Version {{version}} of {{listing}} is published already. Raise the version in {{manifest}}."
+      "versionTaken": "Version {{version}} of {{listing}} is published already. Raise the version in {{manifest}}.",
+      "pluginSkill": "The skill in {{folder}} can’t be read, so installing would leave it out. Its SKILL.md needs a name and a description in its front matter, and no other skill may have the same name.",
+      "pluginServer": "The MCP server {{name}} can’t be read, so installing would leave it out. Give it an explicit type (stdio, streamable-http or sse): for stdio one program or a file of the package, for a remote one an https address.",
+      "scriptNotAllowed": "A plugin with a script can only be published by Kettu’s own publisher for now.",
+      "pluginRead": "The package can’t be installed as it is: {{reason}}",
+      "pluginTitle": "The display name is longer than {{count}} characters.",
+      "closedPlugin": "{{listing}} is a Claude Code or Codex plugin the user published, which takes no new versions. Give this plugin another name to publish it as a new listing."
     }
   },
   "marketCommunity": {
@@ -1372,6 +1380,46 @@
       "command": "its command must be one program’s name, or a path in the package starting with ./",
       "url": "its URL must be an https address, or http on this computer",
       "unknownFolder": "Kettu doesn’t know this folder"
+    },
+    "convert": {
+      "refused": "This plugin can’t be converted: {{reason}}",
+      "badManifest": "{{path}} isn’t a JSON object Kettu can read.",
+      "noName": "it has no name Kettu can use.",
+      "unreadable": "what was made doesn’t read as a Kettu plugin: {{reason}}",
+      "noFolder": "there’s no free folder name next to {{path}}.",
+      "notHarness": "{{path}} holds no Claude Code or Codex plugin.",
+      "note": {
+        "renamed": "Its name {{from}} became {{to}}, since a Kettu plugin’s name has only lowercase letters, digits, hyphens and dots.",
+        "noVersion": "It named no version, so the Kettu plugin starts at 1.0.0.",
+        "badVersion": "Its version {{version}} isn’t a number like 1.2.3, so the Kettu plugin starts at 1.0.0.",
+        "skillName": "It had no name in its front matter, so it got its folder’s name, {{name}}, which a listing needs.",
+        "serverFields": "Left out {{fields}}, which a Kettu plugin’s MCP server has no place for.",
+        "serverEnv": "It refers to {{vars}} from the environment. Kettu passes it on as written instead of filling it in.",
+        "commandFields": "Left out {{fields}}, which a Kettu command has no place for.",
+        "commandShell": "Its !`command` lines run shell commands in Claude Code. Kettu sends them to the agent as text.",
+        "pluginRoot": "It refers to the plugin’s folder as {{variable}}, which Kettu fills in only in an MCP server.",
+        "roleAgent": "It suggests Claude Code, since the model it names is one of Claude Code’s.",
+        "roleFields": "Left out {{fields}}, which a Kettu role has no place for.",
+        "bin": "The bin folder came over, but Kettu doesn’t put it on an agent’s PATH."
+      },
+      "left": {
+        "hookCommand": "Kettu doesn’t run a plugin’s shell commands on an agent’s events.",
+        "hookBeforeTool": "Kettu doesn’t stop a tool call before it runs, which only some agents allow, and it doesn’t run a plugin’s shell commands.",
+        "hookModel": "Kettu doesn’t run a hook that asks a model or an agent.",
+        "hookWeb": "Kettu doesn’t run a hook that calls a web address.",
+        "hookOther": "Kettu doesn’t run this kind of hook.",
+        "hookMore": "{{count}} more hooks, for the same reasons.",
+        "hookScript": "Only hooks used this file, and Kettu doesn’t run hooks.",
+        "lsp": "Kettu doesn’t run language servers for agents.",
+        "outputStyles": "Kettu has no output styles.",
+        "apps": "Apps belong to Codex, and Kettu has no counterpart.",
+        "settings": "Kettu doesn’t apply a plugin’s default settings.",
+        "serverEntry": "It isn’t the settings of an MCP server.",
+        "serverType": "Its type isn’t stdio, http or sse, which are the ones Kettu runs.",
+        "serverNone": "It has neither a command nor a web address.",
+        "nameTaken": "Another one is named {{name}}.",
+        "nameTakenFile": "A Kettu plugin’s own files have this name."
+      }
     }
   },
   "commands": {

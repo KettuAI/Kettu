@@ -165,6 +165,7 @@
     "update_memory": "Update memory",
     "forget_memory": "Forget memory",
     "marketplace_check": "Check before publishing",
+    "marketplace_convert": "Convert to a Kettu plugin",
     "marketplace_publish": "Publish to Marketplace",
     "marketplace_mine": "List published",
     "marketplace_unlist": "Unlist from Marketplace",
@@ -1537,7 +1538,11 @@
       "commands": "Commands",
       "agents": "Agents",
       "hooks": "Hooks",
-      "servers": "MCP server"
+      "servers": "MCP server",
+      "roles": "Roles",
+      "workflows": "Workflows",
+      "themes": "Themes",
+      "templates": "Templates"
     },
     "workflowGroup": {
       "steps": "Steps",
@@ -1606,6 +1611,30 @@
       "changed": "Steps or arrows differ from what the task ran",
       "compare": "Compare with the version “{{title}}” used",
       "hide": "Hide the comparison"
+    },
+    "showAll": "Show all",
+    "pluginLeftOut": "Left out",
+    "script": {
+      "label": "Script",
+      "noPermissions": "Asks for no permissions.",
+      "onlyKettu": "Only Kettu’s own publisher may publish a plugin with a script for now."
+    },
+    "converted": {
+      "label": "Converted",
+      "from": "Made from a {{harness}} plugin. The folder it came from is unchanged.",
+      "carried": "Came over",
+      "nothingLeftOut": "Nothing was left out.",
+      "leftOut_one": "{{count}} part was left out:",
+      "leftOut_other": "{{count}} parts were left out:",
+      "changed": "Changed on the way:",
+      "kind": {
+        "hook": "Hook",
+        "command": "Command",
+        "agent": "Agent",
+        "server": "MCP server",
+        "skill": "Skill",
+        "file": "File"
+      }
     }
   },
   "sideChat": {

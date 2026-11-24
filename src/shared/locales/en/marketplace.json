@@ -904,7 +904,10 @@
       "unlist": "Unlist…",
       "unlistLine": "People who have it keep it",
       "listAgain": "List again",
-      "delete": "Delete…"
+      "delete": "Delete…",
+      "convert": "Convert to a Kettu plugin",
+      "convertLine": "Makes a Kettu plugin from its files, to check and publish",
+      "viewAsOthersClosed": "Claude Code and Codex plugins are no longer listed"
     },
     "foot": "Agents publish with the Marketplace tools of Kettu’s built-in MCP server, and each publish waits for your OK in the session.",
     "seeTools": "See the tools",
@@ -938,7 +941,10 @@
         "nothingText": "Kettu publishes a folder with a SKILL.md, a .claude-plugin or .codex-plugin folder, or a server.json.",
         "problems": "Fix these first, then check again:",
         "checkAgain": "Check again",
-        "failed": "Couldn’t publish: {{error}}"
+        "failed": "Couldn’t publish: {{error}}",
+        "convertTitle": "This is a {{harness}} plugin",
+        "convertText": "The Kettu Marketplace takes Kettu plugins. Kettu can make one from it in a new folder next to it, and leaves this folder as it is. You review what came over before anything is published.",
+        "convert": "Convert to a Kettu plugin"
       },
       "profile": {
         "title": "Edit your publisher profile",
@@ -1025,7 +1031,8 @@
       "takenDown": "Kettu took it down: {{reason}} It’s out of the Marketplace and takes no new versions; you can still change it, withdraw a version or delete it.",
       "missingTitle": "This isn’t one of yours",
       "missingText": "It may have been deleted.",
-      "backToPublished": "Back to Published"
+      "backToPublished": "Back to Published",
+      "closed": "This Claude Code or Codex plugin takes no new versions and can’t be installed any more. Convert it to a Kettu plugin to keep publishing it; the listing stays as it is."
     },
     "checks": {
       "paths": {
@@ -1085,6 +1092,7 @@
     "more": "+ {{count}} more",
     "marketTools": {
       "marketplace_check": "Reads a folder, works out what it is and runs the checks publishing would. Uploads nothing.",
+      "marketplace_convert": "Turns a Claude Code or Codex plugin into a Kettu plugin in a new folder next to it. The original is not changed.",
       "marketplace_publish": "Publishes a folder as a new listing or a new version of one of yours.",
       "marketplace_mine": "Lists what you published: versions, who can see it, installs and problems.",
       "marketplace_unlist": "Takes one of yours out of the Marketplace; people who have it keep it."

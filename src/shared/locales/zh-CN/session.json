@@ -155,6 +155,7 @@
     "update_memory": "更新记忆",
     "forget_memory": "忘掉记忆",
     "marketplace_check": "发布前检查",
+    "marketplace_convert": "转换成 Kettu 插件",
     "marketplace_publish": "发布到市场",
     "marketplace_mine": "列出已发布的",
     "marketplace_unlist": "从市场下架",
@@ -1482,7 +1483,11 @@
       "commands": "命令",
       "agents": "智能体",
       "hooks": "Hook",
-      "servers": "MCP 服务器"
+      "servers": "MCP 服务器",
+      "roles": "角色",
+      "workflows": "工作流",
+      "themes": "主题",
+      "templates": "模板"
     },
     "workflowGroup": {
       "steps": "步骤",
@@ -1548,6 +1553,29 @@
       "changed": "步骤或流向与需求跑的不同",
       "compare": "和需求“{{title}}”用的版本对比",
       "hide": "收起对比"
+    },
+    "showAll": "显示全部",
+    "pluginLeftOut": "不会带上",
+    "script": {
+      "label": "脚本",
+      "noPermissions": "不要任何权限。",
+      "onlyKettu": "带脚本的插件暂时只有 Kettu 自己的发布者能发布。"
+    },
+    "converted": {
+      "label": "转换",
+      "from": "由 {{harness}} 的插件转换而来，原来的文件夹没有改动。",
+      "carried": "带过来的",
+      "nothingLeftOut": "没有落下的。",
+      "leftOut_other": "落下了 {{count}} 项：",
+      "changed": "转换时改动的：",
+      "kind": {
+        "hook": "Hook",
+        "command": "命令",
+        "agent": "智能体",
+        "server": "MCP 服务器",
+        "skill": "Skill",
+        "file": "文件"
+      }
     }
   },
   "sideChat": {

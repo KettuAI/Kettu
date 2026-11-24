@@ -160,7 +160,9 @@
       "handleTaken": "这个发布者名已经有人用了。",
       "noPublisher": "发布之前先设置发布者名。",
       "tooManyListings": "一个账号能发布的条目有上限，这个账号已经到了。",
-      "conflict": "这个条目刚好被同时发布了，请再试一次。"
+      "conflict": "这个条目刚好被同时发布了，请再试一次。",
+      "scriptNotAllowed": "带脚本的插件暂时只有 Kettu 自己的发布者能发布。",
+      "kindClosed": "Harness 插件不再接收新版本，请转换成 Kettu 插件再发布。"
     }
   },
   "agentHost": {

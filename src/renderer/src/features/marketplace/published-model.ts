@@ -54,6 +54,11 @@ export function listingSubject(listing: {
   })
 }
 
+/** A Claude Code or Codex plugin the account published, which takes no new versions. */
+export function isClosed(listing: Pick<MineListing, 'kind' | 'installable'>): boolean {
+  return listing.kind === 'plugin' || listing.installable === false
+}
+
 export function listingName(listing: Pick<MineListing, 'handle' | 'slug'>): string {
   return `@${listing.handle}/${listing.slug}`
 }
