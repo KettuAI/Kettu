@@ -140,19 +140,31 @@ export interface ChannelNotice {
   /** The id the manifest declares the channel by. */
   channel: string
   kind: NoticeKind
-  /** At most 200 characters. */
+  /**
+   * At most 200 characters. A notice of a session names the session, so without `sessions.content`
+   * its title is a plain one for the kind; with `requests.answer` a permission request's title is
+   * the session's. A plan limit and a paused routine always have their own.
+   */
   title: string
   /**
-   * At most 500 characters. A notice of a session says what its conversation holds, such as the
-   * command an agent asks to run, so its text comes only with `sessions.content`; a plan limit and
-   * a paused routine always have it.
+   * At most 500 characters. What a notice of a session says comes only with `sessions.content`; a
+   * plan limit and a paused routine always have it.
    */
   text?: string
   /**
-   * For a plain permission request, with `requests.answer`: what `requests.answer` names it by.
-   * A request that is a question, a plan or a command of several steps has none.
+   * For a plain permission request, with `requests.answer`: what it asks for, as
+   * `session.permissionRequested` gives it, and the `id` `requests.answer` names it by. A request
+   * that is a question, a plan or a command of several steps has none, and cannot be answered.
    */
-  request?: { id: string }
+  request?: {
+    id: string
+    /** The tool's title as the thread shows it. */
+    tool: string
+    kind: ToolKind
+    /** The command, for a request to run one. */
+    command: string | null
+    paths: string[]
+  }
 }
 
 export type ViewIcon =

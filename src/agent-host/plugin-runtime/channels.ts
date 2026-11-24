@@ -1,9 +1,10 @@
 // Kettu's notices as the channels of plugins hear of them. A notice goes where the user sent its
 // kind, after Kettu's own has gone: a plugin hears of it as an event that waits in the plugin's
 // queue and is held to the call's time limit, so a slow or stuck script never delays anything. A
-// notice's own words name the session and what it asks, so a plugin without `sessions.content`
-// hears only a plain title for the kind. A channel is told of a request that waits for the user
-// only if its plugin may relay answers, and only such a request can be answered from it.
+// notice's own words name the session and what it says, so a plugin without `sessions.content`
+// hears only a plain title for the kind. A channel whose plugin may relay answers is told what a
+// permission request asks for, with the session's title, and only a request told this way can be
+// answered from it: nobody should allow what they were not shown.
 
 import type { HostToMain } from '@shared/host-control'
 import {
@@ -17,6 +18,7 @@ import {
 } from '@shared/plugin-channels'
 import type { ChannelRoute } from '../plugins/service'
 import type { PluginApiCall } from './call'
+import type { RequestFacts } from './hooks'
 
 type Notice = Extract<HostToMain, { type: 'host:attention' }>
 
@@ -62,31 +64,44 @@ export class PluginChannels {
 
   constructor(private readonly deps: PluginChannelsDeps) {}
 
-  /** Tells the channels the notice's kind was sent to. Never waits for one. */
-  notice(message: Notice): void {
+  /**
+   * Tells the channels the notice's kind was sent to. Never waits for one. `facts` is what a
+   * permission request asks for: a plugin that may relay answers is told it, and only it can then
+   * answer that request.
+   */
+  notice(message: Notice, facts?: RequestFacts): void {
     const kind = noticeKindOf(message.kind)
     const asked =
-      message.kind === 'permission' && message.request?.allow && message.request.deny
+      facts && message.kind === 'permission' && message.request?.allow && message.request.deny
         ? {
             sessionId: message.sessionId,
             id: message.request.id,
             allow: message.request.allow.optionId,
             deny: message.request.deny.optionId,
+            facts,
           }
         : null
     for (const route of this.deps.routes()) {
       if (!route.kinds.includes(kind)) continue
+      const relays = asked !== null && route.permissions.includes(ANSWER)
       const words = route.permissions.includes(CONTENT) || tellsNothingOfConversation(message)
       const notice: PluginChannelNotice = {
         channel: route.channel,
         kind,
-        title: words
-          ? clip(message.title, PLUGIN_CHANNEL_LIMITS.noticeTitle)
-          : this.deps.plain(kind),
+        title:
+          words || relays
+            ? clip(message.title, PLUGIN_CHANNEL_LIMITS.noticeTitle)
+            : this.deps.plain(kind),
       }
       if (words) notice.text = clip(message.body, PLUGIN_CHANNEL_LIMITS.noticeText)
-      if (asked && route.permissions.includes(ANSWER)) {
-        notice.request = { id: asked.id }
+      if (asked && relays) {
+        notice.request = {
+          id: asked.id,
+          tool: asked.facts.tool,
+          kind: asked.facts.kind,
+          command: asked.facts.command,
+          paths: asked.facts.paths,
+        }
         this.remember(route.pluginId, asked.id, asked)
       }
       this.deps.deliver(route.pluginId, route.channel, notice)

@@ -191,7 +191,7 @@ import { completePath } from './path-completion'
 import { pathKey } from './paths'
 import { PluginChannels } from './plugin-runtime/channels'
 import { PluginHostClient } from './plugin-runtime/client'
-import { PluginHooks } from './plugin-runtime/hooks'
+import { PluginHooks, type RequestFacts } from './plugin-runtime/hooks'
 import { InstalledScripts } from './plugin-runtime/installed'
 import { PluginRefs } from './plugin-runtime/refs'
 import { PluginViews } from './plugin-runtime/views'
@@ -1523,25 +1523,28 @@ export class AgentHost {
             this.hub.send([portId], { type: 'session.viewers', sessionId, viewers })
           }
         },
-        attention: (sessionId, kind, title, body, request) => {
+        attention: (sessionId, kind, title, body, request, facts) => {
           if (kind === 'error') this.sessionFailed(sessionId)
           if (kind !== 'turn-ended' && this.pluginHooks.wants('session.needsUser')) {
             this.pluginHooks.emit('session.needsUser', this.sessions.summary(sessionId), {
               reason: kind,
             })
           }
-          this.attend({
-            type: 'host:attention',
-            sessionId,
-            kind,
-            title,
-            body,
-            ...(request?.allow
-              ? { allowOnce: { requestId: request.id, optionId: request.allow.optionId } }
-              : {}),
-            ...(request ? { request } : {}),
-            front: this.front(sessionId),
-          })
+          this.attend(
+            {
+              type: 'host:attention',
+              sessionId,
+              kind,
+              title,
+              body,
+              ...(request?.allow
+                ? { allowOnce: { requestId: request.id, optionId: request.allow.optionId } }
+                : {}),
+              ...(request ? { request } : {}),
+              front: this.front(sessionId),
+            },
+            facts,
+          )
         },
         badge: (count) => options.send({ type: 'host:badge', count }),
         waiting: (sessions) => options.send({ type: 'host:waiting', sessions }),
@@ -1963,10 +1966,13 @@ export class AgentHost {
   }
 
   /** Tells main, which shows the notice and pushes it to devices, then the plugin channels. */
-  private attend(message: Extract<HostToMain, { type: 'host:attention' }>): void {
+  private attend(
+    message: Extract<HostToMain, { type: 'host:attention' }>,
+    facts?: RequestFacts,
+  ): void {
     this.options.send(message)
     try {
-      this.pluginChannels.notice(message)
+      this.pluginChannels.notice(message, facts)
     } catch (error) {
       writeLog(
         'warn',

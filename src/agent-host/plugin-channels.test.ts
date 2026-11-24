@@ -114,9 +114,11 @@ it('tells a channel only the notices the user picked, and lets a relayed answer 
   const bridge = await install(
     await writePlugin(dir, 'bridge', ['requests.answer', 'sessions.content']),
   )
-  // Told of a notice but not allowed to answer one, and one that may answer but not read.
+  // One that reads the conversation but may not answer, one that may answer but not read the
+  // conversation, and one with neither.
   const watcher = await install(await writePlugin(dir, 'watcher', ['sessions.content']))
-  const blind = await install(await writePlugin(dir, 'blind', ['requests.answer']))
+  const shown = await install(await writePlugin(dir, 'shown', ['requests.answer']))
+  const bare = await install(await writePlugin(dir, 'bare', []))
   // May answer, but is sent no permission request, so it is never told of one.
   const deaf = await install(await writePlugin(dir, 'deaf', ['requests.answer']))
   const kinds = (pluginId: string, picked: string[]) =>
@@ -152,7 +154,8 @@ it('tells a channel only the notices the user picked, and lets a relayed answer 
     channelKinds: { chat: ['permission'] },
   })
   await kinds(watcher, ['permission', 'turnEnded'])
-  await kinds(blind, ['permission'])
+  await kinds(shown, ['permission'])
+  await kinds(bare, ['permission'])
   await expect(kinds(bridge, ['updates'])).rejects.toThrow()
   await expect(
     window.request('plugins.setChannelKinds', {
@@ -182,13 +185,28 @@ it('tells a channel only the notices the user picked, and lets a relayed answer 
   await vi.waitFor(() => expect(notices(watcher)).toHaveLength(1))
   expect(notices(watcher)[0]).toMatchObject({ kind: 'permission', channel: 'chat' })
   expect(notices(watcher)[0]).not.toHaveProperty('request')
-  // Without the conversation permission, a notice names its kind and nothing of the session.
-  await vi.waitFor(() => expect(notices(blind)).toHaveLength(1))
-  expect(notices(blind)[0]).toEqual({
+  // With the right to answer, what is asked and the session's title come without the
+  // conversation's text, so nobody allows what they were not shown.
+  await vi.waitFor(() => expect(notices(shown)).toHaveLength(1))
+  expect(notices(shown)[0]).toEqual({
+    channel: 'chat',
+    kind: 'permission',
+    title: window.summary(id)?.title,
+    request: {
+      id: requestId,
+      tool: 'Run pnpm test --filter login',
+      kind: 'execute',
+      command: 'pnpm test --filter login',
+      paths: [],
+    },
+  })
+  expect(notices(shown)[0]).not.toHaveProperty('text')
+  // Neither permission: the kind and nothing else.
+  await vi.waitFor(() => expect(notices(bare)).toHaveLength(1))
+  expect(notices(bare)[0]).toEqual({
     channel: 'chat',
     kind: 'permission',
     title: 'A request needs your answer',
-    request: { id: requestId },
   })
 
   // Always allow is not a thing a relay can give, and a plugin that was never told of the

@@ -420,13 +420,17 @@ export interface SessionEvents {
   returned(sessionId: string | null, portIds?: readonly string[]): void
   /** Who shows the session in front changed, or a port began to watch it: `showing` are their ports. */
   viewers(sessionId: string, showing: readonly string[], to: readonly string[]): void
-  /** `request`: what waits, for a permission, with the answers a notification may give itself. */
+  /**
+   * `request`: what waits, for a permission, with the answers a notification may give itself.
+   * `facts`: what that request asks for, which a plugin that may answer it is told.
+   */
   attention(
     sessionId: string,
     kind: 'permission' | 'turn-ended' | 'error',
     title: string,
     body: string,
     request?: AttentionRequest,
+    facts?: RequestFacts,
   ): void
   badge(count: number): void
   /** What waits for the user now, by session, each change of it. */
@@ -10760,6 +10764,7 @@ export class SessionManager {
             ...(allow ? { allow: { optionId: allow.id, name: allow.name } } : {}),
             ...(allow && deny ? { deny: { optionId: deny.id, name: deny.name } } : {}),
           },
+          requestFacts(tool),
         )
       }
     })

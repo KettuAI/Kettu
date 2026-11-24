@@ -5,6 +5,7 @@
 
 import { ATTENTION_SETTING } from './attention'
 import type { PluginTexts } from './plugins'
+import type { ToolKind } from './thread'
 
 /**
  * The kinds the user picks from, which are the switches of Settings > Notifications. Kettu's own
@@ -60,9 +61,11 @@ export interface PluginChannelDecl {
 }
 
 /**
- * What a script is told of a notice. The text is conversation content, such as a reply's summary
- * or the command an agent asks to run, so it comes only with `sessions.content`; a notice that
- * tells nothing of a conversation always has it.
+ * What a script is told of a notice. The text is conversation content, such as a reply's summary,
+ * so it comes only with `sessions.content`; a notice that tells nothing of a conversation always
+ * has it. A plugin that may relay answers is also told what a permission request asks for, in the
+ * shape of the `session.permissionRequested` hook, and the session's title, since an answer is
+ * not worth relaying without it.
  */
 export interface PluginChannelNotice {
   channel: string
@@ -70,7 +73,13 @@ export interface PluginChannelNotice {
   title: string
   text?: string
   /** For a permission request that may be answered from here: what the answer names it by. */
-  request?: { id: string }
+  request?: {
+    id: string
+    tool: string
+    kind: ToolKind
+    command: string | null
+    paths: string[]
+  }
 }
 
 /** The answers a relay may give: allow once, or deny; never always allow. */
