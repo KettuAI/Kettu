@@ -8,6 +8,7 @@ import {
   PLUGIN_ID,
   PLUGIN_ITEM_NAME,
   PLUGIN_NAME,
+  isPluginHookEvent,
   isPluginPermission,
   pluginItem,
   type PluginContents,
@@ -158,6 +159,11 @@ function contentsOf(value: unknown): PluginContents | null {
     permissions: Array.isArray(value.permissions)
       ? value.permissions.filter(
           (item): item is string => typeof item === 'string' && isPluginPermission(item),
+        )
+      : [],
+    events: Array.isArray(value.events)
+      ? value.events.filter(
+          (item): item is string => typeof item === 'string' && isPluginHookEvent(item),
         )
       : [],
     settings: Array.isArray(value.settings)

@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { AgentAccount } from '@shared/agent-host'
+import type { AgentAccount, SessionSummary } from '@shared/agent-host'
 import {
   applyPatches,
   threadFromSnapshot,
@@ -38,6 +38,8 @@ import { ClaudeConnection, promptContent } from './connection'
 import { claudeSdkDriver } from './driver'
 import { ANSWER_IN_REPLY, QUESTION_UNREADABLE, QUESTIONS_SKIPPED } from './permissions'
 import type { PostModelSwitchHookInput, SdkMessage, StoredMessage } from './sdk'
+import { denialAnswer, PluginHooks, requestFacts } from '../plugin-runtime/hooks'
+import { pluginClient } from '../testing/plugin-host'
 
 const baseSession: SessionView = {
   id: 'k1',
@@ -2154,6 +2156,99 @@ describe('effort at its default', () => {
     s.sdk.script = new FakeClaudeSdk().script
     await s.connection.prompt(sessionId, [{ type: 'text', text: 'Hi' }])
     expect(s.sdk.last.calls.some((call) => call.method === 'applyFlagSettings')).toBe(false)
+  })
+})
+
+describe('a plugin that checks a request', () => {
+  const summary = {
+    id: 'k1',
+    agentId: 'claude-code',
+    projectPath: '/repo',
+    title: 'Fix it',
+    status: 'running',
+    origin: 'user',
+    parentId: null,
+    createdAt: 1,
+    updatedAt: 2,
+    archivedAt: null,
+  } as SessionSummary
+
+  /** A target that lets the plugins look at a request first, as the session manager does. */
+  class Checked extends Target {
+    constructor(private readonly hooks: PluginHooks) {
+      super()
+    }
+
+    override async requestPermission(
+      request: PermissionRequest,
+      signal: AbortSignal,
+    ): Promise<PermissionAnswer> {
+      const entry = this.thread.byId[request.toolEntryId]
+      this.apply(request.output)
+      const tool = this.thread.byId[request.toolEntryId] ?? entry
+      const denial = await this.hooks.check(
+        summary,
+        requestFacts(tool?.kind === 'tool' ? tool : undefined),
+      )
+      const deny = request.options.find((option) => option.kind === 'reject_once')
+      if (denial && deny) return denialAnswer(deny, denial)
+      return new Promise((resolve, reject) => {
+        this.asked.push({ request, signal, answer: resolve })
+        signal.addEventListener('abort', () => reject(signal.reason), { once: true })
+      })
+    }
+  }
+
+  let stop: (() => void) | null = null
+  afterEach(() => stop?.())
+
+  async function checked(script: string) {
+    const s = await setup()
+    const { client, host } = pluginClient({ functions: {} })
+    stop = () => {
+      client.stop()
+      host.stop()
+    }
+    host.scripts.set('/check.js', script)
+    client.register(
+      { id: 'check', scriptPath: '/check.js', activation: ['session.permissionRequested'] },
+      ['requests.check'],
+    )
+    const target = new Checked(
+      new PluginHooks({ client, title: () => 'Command guard', log: () => {} }),
+    )
+    const sessionId = (await s.connection.newSession('/repo')).sessionId
+    s.connection.register(sessionId, target)
+    const ask = (command: string) =>
+      s.sdk.last.options.canUseTool!(
+        'Bash',
+        { command },
+        { signal: new AbortController().signal, toolUseID: `toolu_${command.length}` },
+      )
+    return { s, target, ask }
+  }
+
+  it('denies a command it refuses, and the agent is told the plugin and why', async () => {
+    const { target, ask } = await checked(
+      `kettu.on('session.permissionRequested', ({ request }) => request.command.includes('rm -rf') ? { deny: 'Not in this repo' } : undefined)`,
+    )
+    const result = await ask('rm -rf build')
+    expect(result).toMatchObject({ behavior: 'deny' })
+    expect(target.asked).toHaveLength(0)
+    expect(target.entries().find((entry) => entry.kind === 'tool')).toMatchObject({
+      toolKind: 'execute',
+      title: 'rm -rf build',
+    })
+  })
+
+  it('passes a command it has no word on to the user, which can still allow it', async () => {
+    const { target, ask } = await checked(
+      `kettu.on('session.permissionRequested', ({ request }) => request.command.includes('rm -rf') ? { deny: 'No' } : { allow: true })`,
+    )
+    const result = ask('npm test')
+    await vi.waitFor(() => expect(target.asked).toHaveLength(1))
+    target.asked[0]!.answer({ optionId: 'allow-once' })
+    expect(await result).toMatchObject({ behavior: 'allow' })
   })
 })
 

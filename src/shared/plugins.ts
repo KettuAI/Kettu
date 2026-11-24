@@ -76,6 +76,29 @@ export function domainCovers(domain: string, host: string): boolean {
   return host.endsWith(domain.slice(1)) && host.length > domain.length - 1
 }
 
+/**
+ * Kettu's own events a manifest may name under `events`, each with the permission a plugin needs
+ * to receive it. `session.beforeSend` and `session.permissionRequested` are hooks that may act;
+ * every other one is only told.
+ */
+export const PLUGIN_HOOK_EVENTS = {
+  'session.started': 'sessions.summary',
+  'session.beforeSend': 'prompt.attach',
+  'session.permissionRequested': 'requests.check',
+  'session.toolFinished': 'sessions.summary',
+  'session.turnEnded': 'sessions.summary',
+  'session.needsUser': 'sessions.summary',
+  'session.pullRequestChanged': 'sessions.summary',
+  'task.stepStarted': 'sessions.summary',
+  'task.stepEnded': 'sessions.summary',
+} as const satisfies Record<string, FixedPermission>
+
+export type PluginHookEvent = keyof typeof PLUGIN_HOOK_EVENTS
+
+export function isPluginHookEvent(name: string): name is PluginHookEvent {
+  return Object.hasOwn(PLUGIN_HOOK_EVENTS, name)
+}
+
 /** How much a permission lets a script do; the high ones show in red on the consent. */
 export type PermissionRisk = 'normal' | 'caution' | 'high'
 
@@ -222,8 +245,10 @@ export interface PluginContents {
   templates: PluginItem[]
   /** The script's file inside the package and the plugin API version it asks for; null without one. */
   script: { entry: string; api: number } | null
-  /** What the script asks for, as declared. Kept and shown; nothing runs yet. */
+  /** What the script asks for, as declared. */
   permissions: string[]
+  /** The events of `PLUGIN_HOOK_EVENTS` that wake the script, as declared. */
+  events: string[]
   settings: PluginSetting[]
   /** The views the package declares, as written; drawn once plugin views are. */
   views: Record<string, unknown>[]

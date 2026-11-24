@@ -475,7 +475,14 @@
     "commandFrom": "来自 {{source}}",
     "commandFromYours": "来自你的命令",
     "showSent": "查看发出的内容",
-    "hideSent": "收起发出的内容"
+    "hideSent": "收起发出的内容",
+    "attached": "{{plugin}} 添加了内容",
+    "attachedItems": "{{plugin}} 添加了：{{items}}",
+    "showAttached": "查看添加的内容",
+    "hideAttached": "收起添加的内容"
+  },
+  "pluginDenial": {
+    "text": "<b>{{plugin}}</b> 拒绝了 <b>{{request}}</b>：{{reason}}"
   },
   "sessionReport": {
     "agent": "该会话",

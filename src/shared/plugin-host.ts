@@ -3,7 +3,10 @@
 
 /** How long one entry into a plugin's script may run: a call, an event, a timer or an answer. */
 export const PLUGIN_CALL_DEADLINE_MS = 2000
-/** The same for a call on the path of a message about to be sent, which is not kept waiting. */
+/**
+ * The same for a call on a path that is not kept waiting: a message about to be sent and a
+ * permission request about to be shown.
+ */
 export const PLUGIN_BEFORE_SEND_DEADLINE_MS = 500
 /** How long a call may wait for the plugin's answer, across everything the plugin awaits. */
 export const PLUGIN_ANSWER_TIMEOUT_MS = 30_000
@@ -106,6 +109,8 @@ export type AgentToPluginHost =
       deadline: PluginDeadline
     }
   | { type: 'event'; requestId: number; pluginId: string; name: string; payload: unknown }
+  // An event whose listeners answer: what each returned or resolved to, within the hook deadline.
+  | { type: 'hook'; requestId: number; pluginId: string; name: string; payload: unknown }
   | { type: 'deactivate'; requestId: number; pluginId: string }
   | { type: 'enable'; requestId: number; pluginId: string }
   // The plugins disabled before this process started, which a restart must not enable.

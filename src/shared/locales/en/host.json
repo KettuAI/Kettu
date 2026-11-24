@@ -1354,6 +1354,8 @@
       "unknownField": "plugin.json has a field the plugin format doesn’t define, {{field}}. It’s ignored.",
       "extensions": "plugin.json’s extensions isn’t an object. It’s ignored.",
       "kettuField": "The sh.kettu entry has a field this Kettu doesn’t know, {{field}}. It’s ignored.",
+      "event": "The sh.kettu entry names an event this Kettu doesn’t know, {{event}}. It’s ignored.",
+      "eventPermission": "The event {{event}} is left out: it needs the permission {{permission}}, which the plugin doesn’t ask for.",
       "item": "{{path}} was left out: {{reason}}",
       "server": "The MCP server {{name}} was left out: {{reason}}",
       "cwd": "The MCP server {{name}} asks to start in {{cwd}}. Agents start it in the session’s folder instead.",

@@ -22,3 +22,13 @@ exports.post = async () => {
 }
 
 kettu.on('app.locale', ({ locale }) => console.log(`The interface is now in ${locale}`))
+
+// Hooks: each returns what it adds to a message or why it denies a request, within 500 ms.
+kettu.on('session.beforeSend', async () => ({
+  attach: [{ title: 'Working sessions', text: JSON.stringify(await exports.digest()) }],
+}))
+
+kettu.on('session.permissionRequested', ({ request }) => {
+  if (request.command?.includes('rm -rf'))
+    return { deny: 'A recursive delete is not allowed here.' }
+})

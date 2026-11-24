@@ -206,6 +206,11 @@ export class PluginsService {
       .map((record) => this.installed(record))
   }
 
+  /** A plugin's title for the thread's lines; null when it is not installed. */
+  titleOf(id: string): string | null {
+    return this.data?.plugins[id]?.contents.title ?? null
+  }
+
   /** Whether a plugin is installed and on; its workflows cannot start a task while it is off. */
   on(id: string): boolean {
     return this.data?.plugins[id]?.enabled === true
@@ -214,8 +219,8 @@ export class PluginsService {
   /**
    * The scripts of the plugins that are on, each with its file on the host and the permissions
    * of the version in place. An update that waits for the user is not in place, so a script
-   * never has what only that update asks for. The manifest has no list of what wakes a script
-   * yet, so none is given and nothing loads one.
+   * never has what only that update asks for. A script is woken by the events its manifest
+   * names and by nothing else.
    */
   scripts(): InstalledScript[] {
     return Object.values(this.data?.plugins ?? {}).flatMap((record) =>
@@ -224,7 +229,7 @@ export class PluginsService {
             {
               id: record.id,
               scriptPath: path.join(this.packageDir(record), record.contents.script.entry),
-              activation: [],
+              activation: [...record.contents.events],
               revision: `${record.dir}:${record.updatedAt}`,
               permissions: [...record.contents.permissions],
             },

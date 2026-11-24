@@ -158,6 +158,34 @@ const BOOTSTRAP = `(function (native) {
           failed(error)
         }
       }
+    } else if (kind === 'hook') {
+      const set = listeners.get(b)
+      const payload = JSON.parse(c)
+      const failed = (error) => native.log('error', 'A listener of "' + b + '" failed: ' + describe(error))
+      const runs = []
+      for (const listener of set ? [...set] : []) {
+        try {
+          runs.push(Promise.resolve(listener(payload)))
+        } catch (error) {
+          if (outOfMemory(error)) throw error
+          failed(error)
+        }
+      }
+      Promise.allSettled(runs).then((settled) => {
+        const answers = []
+        for (const one of settled) {
+          if (one.status === 'fulfilled') answers.push(one.value === undefined ? null : one.value)
+          else failed(one.reason)
+        }
+        let text
+        try {
+          text = json(answers)
+        } catch (error) {
+          fail(a, error)
+          return
+        }
+        native.settle(a, 1, text)
+      })
     } else if (kind === 'call') {
       const exported = module.exports
       const fn =
@@ -274,15 +302,31 @@ export class PluginEnvironment {
 
   /** Calls a function the script exported, with the answer it returns or resolves to. */
   call(name: string, args: unknown[], deadline: PluginDeadline): Promise<unknown> {
+    return this.request('call', name, args, deadline === 'before-send')
+  }
+
+  /**
+   * Asks the listeners the script registered for an event, within the hook deadline: what each
+   * returned or resolved to, in the order they were added. A listener that throws is left out.
+   */
+  hook(name: string, payload: unknown): Promise<unknown[]> {
+    return this.request('hook', name, payload ?? null, true) as Promise<unknown[]>
+  }
+
+  private request(
+    kind: 'call' | 'hook',
+    name: string,
+    value: unknown,
+    quick: boolean,
+  ): Promise<unknown> {
     if (this.disposed) return Promise.reject(failure('crashed', 'The plugin has stopped'))
     let text: string
     try {
-      text = this.encode(args)
+      text = this.encode(value)
     } catch (error) {
       return Promise.reject(error as Error)
     }
-    const hook = deadline === 'before-send'
-    const answerMs = hook ? this.limits.beforeSendMs : this.limits.answerMs
+    const answerMs = quick ? this.limits.beforeSendMs : this.limits.answerMs
     return new Promise((resolve, reject) => {
       const id = this.nextCall++
       const timer = setTimeout(() => {
@@ -291,8 +335,8 @@ export class PluginEnvironment {
         reject(failure('timeout', `The plugin did not answer within ${answerMs} ms`))
       }, answerMs)
       this.calls.set(id, { resolve, reject, timer })
-      const failed = this.dispatch(hook ? this.limits.beforeSendMs : this.limits.callMs, [
-        'call',
+      const failed = this.dispatch(quick ? this.limits.beforeSendMs : this.limits.callMs, [
+        kind,
         id,
         name,
         text,

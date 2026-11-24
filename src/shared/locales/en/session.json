@@ -486,7 +486,14 @@
     "commandFrom": "From {{source}}",
     "commandFromYours": "From Yours",
     "showSent": "Show what was sent",
-    "hideSent": "Hide what was sent"
+    "hideSent": "Hide what was sent",
+    "attached": "Added by {{plugin}}",
+    "attachedItems": "Added by {{plugin}}: {{items}}",
+    "showAttached": "Show what was added",
+    "hideAttached": "Hide what was added"
+  },
+  "pluginDenial": {
+    "text": "<b>{{plugin}}</b> denied <b>{{request}}</b>: {{reason}}"
   },
   "sessionReport": {
     "agent": "The session",

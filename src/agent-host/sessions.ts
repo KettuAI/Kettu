@@ -63,7 +63,7 @@ import type {
   BusySession,
 } from '@shared/host-control'
 import type { Platform } from '@shared/platform'
-import { pluginStarter } from '@shared/plugins'
+import { pluginStarter, type PluginHookEvent } from '@shared/plugins'
 import type { PortDevice } from '@shared/remote/device'
 import type { PermissionScope } from '@shared/routines'
 import type { HostSettings } from '@shared/settings'
@@ -94,6 +94,7 @@ import {
   type OlderPage,
   type Patch,
   type PatchBatch,
+  type PluginAttached,
   type PendingElicitation,
   type PendingQuestion,
   type PermissionOption,
@@ -265,6 +266,14 @@ import {
 } from './started-mode'
 import type { RoutineSessionHooksRef, RoutineSessionStart } from './routines/hooks'
 import type { TaskSessionHooksRef, TaskStepStart } from './workflow/engine'
+import {
+  attachmentText,
+  denialAnswer,
+  requestFacts,
+  type PluginAttachment,
+  type PluginDenial,
+  type RequestFacts,
+} from './plugin-runtime/hooks'
 import { scopeAnswer } from './routines/scope'
 import { CONTEXT_REPORT, runReport } from './reports'
 import type { ScratchFolders } from './scratch'
@@ -463,6 +472,23 @@ export interface SessionCommands {
   extra(agentId: AgentId, needs: CommandNeeds): CommandNeeds
 }
 
+/** Kettu's own events as plugins hear of them, and the two hooks that may act. */
+export interface SessionPlugins {
+  /** Whether a plugin would be sent the event, so nothing is worked out when none would. */
+  wants(event: PluginHookEvent): boolean
+  /** Tells the plugins that hold the event's permission; nothing waits for them. */
+  emit(
+    event: PluginHookEvent,
+    session: SessionSummary,
+    payload?: Record<string, unknown>,
+    content?: Record<string, unknown>,
+  ): void
+  /** What plugins attach to a message about to be sent, within a deadline Kettu never exceeds. */
+  attachments(session: SessionSummary, text: string): Promise<PluginAttachment[]>
+  /** The plugin that denies a permission request, when one does within the deadline. */
+  check(session: SessionSummary, facts: RequestFacts): Promise<PluginDenial | null>
+}
+
 /** Kettu's own roles, as sessions start as them. */
 export interface SessionRoles {
   /**
@@ -573,6 +599,8 @@ export interface SessionManagerDeps {
   commands?: SessionCommands
   /** Kettu's own roles; without it no session starts as one. */
   roles?: SessionRoles
+  /** Plugins' hooks on Kettu's own events; without it none are told. */
+  plugins?: SessionPlugins
   /** Kettu's memory; without it no session is handed any. */
   memory?: SessionMemoryDeps
   /** The prepared sessions not yet adopted or removed, kept for the host after a crash. */
@@ -1175,6 +1203,8 @@ const CONNECTED: ReadonlySet<SessionStatus> = new Set([
   'awaiting_permission',
 ])
 
+type FinishedTool = ToolEntry & { status: 'completed' | 'failed' }
+
 /** A row's pull requests: the ones it opened, newest first, then its branch's if not among them. */
 function sessionPullRequests(
   record: SessionRecord,
@@ -1302,6 +1332,8 @@ export class SessionManager {
   /** Each window's prepared sessions, by port. */
   private readonly preparedSlots = new Map<string, PreparedSlot>()
   private emptyRemoval: Promise<void> | null = null
+  /** Each session's pull requests as plugins were last told of them, by url: state and checks. */
+  private readonly pullRequestsTold = new Map<string, Map<string, string>>()
 
   constructor(private readonly deps: SessionManagerDeps) {
     this.timings = { ...SESSION_TIMINGS, ...deps.timings }
@@ -4153,8 +4185,26 @@ export class SessionManager {
     live.saved = true
     this.records.set(live.id, live.record)
     this.persist(live)
-    if (added) this.writeIndexNow()
+    if (added) {
+      this.writeIndexNow()
+      this.tellPlugins(live, 'session.started')
+    }
     this.scheduleCheckpoint(live)
+  }
+
+  /**
+   * Tells the plugins of an event in a session the user works in, which no routine, workflow step
+   * or subagent is. `content` reaches only a plugin that may read the conversation.
+   */
+  private tellPlugins(
+    live: Live,
+    event: PluginHookEvent,
+    payload?: Record<string, unknown>,
+    content?: Record<string, unknown>,
+  ): void {
+    const plugins = this.deps.plugins
+    if (!plugins?.wants(event) || live.replaying || live.record.origin !== 'user') return
+    plugins.emit(event, this.summary(live.id), payload, content)
   }
 
   /** For a session new to the index, which a host that dies within the debounce would lose. */
@@ -4166,7 +4216,16 @@ export class SessionManager {
 
   private applyOutput(live: Live, output: MapperOutput): void {
     if (live.closing) return
+    const finished = this.deps.plugins ? this.finishedTools(live, output.patches) : []
     if (output.patches.length > 0) this.emit(live, output.patches)
+    for (const tool of finished) {
+      this.tellPlugins(
+        live,
+        'session.toolFinished',
+        { kind: tool.toolKind, status: tool.status },
+        { title: tool.title },
+      )
+    }
     // A compacted context lost what went ahead of a prompt, so the next prompt sends it again.
     if (
       !live.replaying &&
@@ -4193,6 +4252,33 @@ export class SessionManager {
       this.refreshContext(live, this.timings.contextDebounceMs)
     }
     this.touch(live.id)
+  }
+
+  /** The tool calls these patches finish, as the thread stands before they are applied. */
+  private finishedTools(live: Live, patches: readonly Patch[]): FinishedTool[] {
+    const done = (tool: ToolEntry): boolean =>
+      tool.status === 'completed' || tool.status === 'failed'
+    // The entries these patches add or change, as the later ones in the batch find them.
+    const current = new Map<string, ToolEntry>()
+    const find = (id: string): ToolEntry | undefined => {
+      const known = live.thread.byId[id]
+      return current.get(id) ?? (known?.kind === 'tool' ? known : undefined)
+    }
+    const out: FinishedTool[] = []
+    for (const patch of patches) {
+      if (patch.op === 'entry.add' && patch.entry.kind === 'tool') {
+        const before = find(patch.entry.id)
+        current.set(patch.entry.id, patch.entry)
+        if (done(patch.entry) && !(before && done(before))) out.push(patch.entry as FinishedTool)
+      } else if (patch.op === 'entry.update') {
+        const before = find(patch.id)
+        if (!before) continue
+        const next = { ...before, ...patch.changes } as ToolEntry
+        current.set(patch.id, next)
+        if (done(next) && !done(before)) out.push(next as FinishedTool)
+      }
+    }
+    return out
   }
 
   private applyEffect(live: Live, effect: MapperEffect): void {
@@ -8718,6 +8804,9 @@ export class SessionManager {
         this.persist(live)
         wire = [{ type: 'text', text: `${ahead}\n\n` }, ...carried]
       }
+      const attached = await this.pluginAttachments(live, turn, resolved.wire)
+      if (turn.ended) return
+      if (attached.length > 0) wire = [...wire, ...attached]
       const entryId = turn.entryId
       const sent = (ref: string): void => {
         if (!entryId || live.thread.byId[entryId]?.kind !== 'user') return
@@ -8740,6 +8829,63 @@ export class SessionManager {
       if (turn.ended) return
       this.failTurn(live, turn, error)
     }
+  }
+
+  /**
+   * What plugins attach to the message of a turn, as blocks after what the user wrote, which is
+   * left as it is; the message shows what each plugin attached. Only a message the user wrote is
+   * offered, and not one that is a command of the agent's own.
+   */
+  private async pluginAttachments(
+    live: Live,
+    turn: Turn,
+    wire: readonly PromptBlock[],
+  ): Promise<PromptBlock[]> {
+    const plugins = this.deps.plugins
+    const entry = turn.entryId ? live.thread.byId[turn.entryId] : undefined
+    if (
+      !plugins?.wants('session.beforeSend') ||
+      live.record.origin !== 'user' ||
+      entry?.kind !== 'user' ||
+      entry.approval ||
+      entry.kettu ||
+      entry.from ||
+      opensWithCommand(wire)
+    ) {
+      return []
+    }
+    const text = wire.flatMap((block) => (block.type === 'text' ? [block.text] : [])).join('\n\n')
+    const given = await plugins.attachments(this.summary(live.id), text)
+    if (given.length === 0 || turn.ended) return []
+    // What the message already holds counts toward the prompt's limit; what does not fit is left out.
+    let bytes = wire.reduce((sum, block) => sum + blockBytes(block), 0)
+    const blocks: PromptBlock[] = []
+    const kept: PluginAttachment[] = []
+    for (const item of given) {
+      const block: PromptBlock = { type: 'text', text: attachmentText(item) }
+      bytes += blockBytes(block)
+      if (bytes > PROMPT_BYTES) break
+      blocks.push(block)
+      kept.push(item)
+    }
+    if (kept.length === 0) return []
+    const byPlugin = new Map<string, PluginAttached>()
+    for (const item of kept) {
+      const group = byPlugin.get(item.pluginId) ?? {
+        pluginId: item.pluginId,
+        plugin: item.plugin,
+        items: [],
+      }
+      group.items.push({
+        ...(item.title === undefined ? {} : { title: item.title }),
+        text: item.text,
+      })
+      byPlugin.set(item.pluginId, group)
+    }
+    this.emit(live, [
+      { op: 'entry.update', id: entry.id, changes: { attached: [...byPlugin.values()] } },
+    ])
+    return blocks
   }
 
   /**
@@ -8777,7 +8923,16 @@ export class SessionManager {
 
   /** Settles the turn; returns its `turn_end` entry's id when there is a stop reason. */
   private finishTurn(live: Live, turn: Turn, stopReason: StopReason | null): string | null {
+    const first = !turn.ended
     turn.ended = true
+    // After the caller sets the session's status, which the plugins read with the summary.
+    if (first && this.deps.plugins?.wants('session.turnEnded')) {
+      const durationMs = Math.max(0, this.now() - turn.startedAt)
+      queueMicrotask(() => {
+        // A turn that ended in an error has no stop reason.
+        this.tellPlugins(live, 'session.turnEnded', { outcome: stopReason ?? 'error', durationMs })
+      })
+    }
     for (const ended of turn.ends.splice(0)) ended()
     if (turn.fallback) clearTimeout(turn.fallback)
     turn.fallback = null
@@ -10363,6 +10518,72 @@ export class SessionManager {
     this.applyOutput(live, request.output)
     // The user already stopped this turn or closed the session: the request is moot.
     if (live.closing || live.turn?.cancelRequested) return Promise.resolve('cancelled')
+    return this.pluginCheck(live, request, signal) ?? this.askPermission(live, request, signal)
+  }
+
+  /**
+   * Lets the plugins that hold `requests.check` look at a request to use a tool before anything
+   * else answers or shows it; one of them may deny it and none can allow it. Null when no plugin
+   * would look, so the request goes on at once. A question, a plan or a request of an MCP server
+   * asks for no authorization, so it is not checked.
+   */
+  private pluginCheck(
+    live: Live,
+    request: PermissionRequest,
+    signal: AbortSignal,
+  ): Promise<PermissionAnswer> | null {
+    const plugins = this.deps.plugins
+    const deny = request.options.find((option) => option.kind === 'reject_once')
+    if (
+      !plugins?.wants('session.permissionRequested') ||
+      live.record.origin !== 'user' ||
+      request.questions ||
+      request.plan !== undefined ||
+      request.elicitation ||
+      !deny
+    ) {
+      return null
+    }
+    const entry = live.thread.byId[request.toolEntryId]
+    const tool = entry?.kind === 'tool' ? entry : undefined
+    const facts = requestFacts(tool)
+    return plugins.check(this.summary(live.id), facts).then((denial) => {
+      if (signal.aborted) throw signal.reason
+      if (live.closing || live.turn?.cancelRequested) return 'cancelled'
+      if (!denial) return this.askPermission(live, request, signal)
+      this.emit(live, [
+        {
+          op: 'entry.update',
+          id: request.toolEntryId,
+          changes: {
+            permission: null,
+            permissionResult: { optionId: deny.id, kind: 'reject_once' },
+          },
+        },
+        {
+          op: 'entry.add',
+          entry: {
+            kind: 'plugin_denial',
+            id: this.nextId(live),
+            pluginId: denial.pluginId,
+            plugin: denial.plugin,
+            request: facts.command ?? facts.tool,
+            reason: denial.reason,
+            after: agentEntryBefore(live.thread),
+          },
+        },
+      ])
+      this.touch(live.id)
+      // The agent hears who denied it and why, where its option takes a note.
+      return denialAnswer(deny, denial)
+    })
+  }
+
+  private askPermission(
+    live: Live,
+    request: PermissionRequest,
+    signal: AbortSignal,
+  ): Promise<PermissionAnswer> {
     // A run answers inside its scope while its first turn works; anything else waits for the user.
     if (live.routineScope && live.record.origin === 'routine' && !live.routineTurnEnded) {
       const optionId = this.routineAnswer(live, live.routineScope, request)
@@ -12050,6 +12271,7 @@ export class SessionManager {
     this.watchers.delete(sessionId)
     this.seqs.delete(sessionId)
     this.idleReleased.delete(sessionId)
+    this.pullRequestsTold.delete(sessionId)
     if (record?.origin === 'routine') this.deps.routine?.current?.sessionGone(sessionId)
     if (record?.origin === 'task') this.deps.task?.current?.sessionGone(sessionId)
     if (known) this.deps.events.removed(sessionId, portIds)
@@ -12421,12 +12643,57 @@ export class SessionManager {
       live.record.pullRequests = [...known, ...added].slice(-MAX_SESSION_PULL_REQUESTS)
       this.persist(live)
       this.touch(live.id)
+      this.tellPullRequests(live.id, added)
+    }
+  }
+
+  /**
+   * Tells the plugins of a pull request of the session that was opened in it, or whose state or
+   * checks changed since they were last told. One read for the first time is only noted: it is
+   * not a change.
+   */
+  private tellPullRequests(sessionId: string, opened: readonly string[] = []): void {
+    const live = this.live.get(sessionId)
+    const record = live?.record ?? this.records.get(sessionId)
+    if (
+      !record ||
+      record.origin !== 'user' ||
+      !this.deps.plugins?.wants('session.pullRequestChanged')
+    ) {
+      return
+    }
+    const told = this.pullRequestsTold.get(sessionId) ?? new Map<string, string>()
+    this.pullRequestsTold.set(sessionId, told)
+    const summary = this.summary(sessionId)
+    for (const pr of summary.prs ?? []) {
+      const now = `${pr.state ?? ''} ${pr.failing}`
+      const before = told.get(pr.url)
+      told.set(pr.url, now)
+      if (before === now || (before === undefined && !opened.includes(pr.url))) continue
+      const [state = '', failing = 'false'] = before?.split(' ') ?? []
+      this.deps.plugins.emit('session.pullRequestChanged', summary, {
+        pullRequest: {
+          url: pr.url,
+          owner: pr.owner,
+          repo: pr.repo,
+          number: pr.number,
+          state: pr.state,
+          failing: pr.failing,
+        },
+        previous:
+          before === undefined
+            ? null
+            : { state: state === '' ? null : state, failing: failing === 'true' },
+      })
     }
   }
 
   /** Pull requests changed for a project's branches: its rows may show a new badge. */
   pullRequestsChanged(projectPath: string): void {
-    for (const summary of this.list(projectPath)) this.touch(summary.id)
+    for (const summary of this.list(projectPath)) {
+      this.touch(summary.id)
+      this.tellPullRequests(summary.id)
+    }
   }
 
   /** A pull request was read for the first time or changed: the rows that show it refresh. */
@@ -12439,7 +12706,10 @@ export class SessionManager {
         record.branch && git
           ? git.branchPullRequests(record.projectPath).get(record.branch)?.url === url
           : false
-      if (ofBranch || record.pullRequests?.includes(url)) this.touch(id)
+      if (ofBranch || record.pullRequests?.includes(url)) {
+        this.touch(id)
+        this.tellPullRequests(id)
+      }
     }
   }
 
