@@ -8,6 +8,7 @@ import {
   type PluginHostToAgent,
 } from '@shared/plugin-host'
 import { PLUGIN_HOOK_EVENTS, PLUGIN_PERMISSIONS } from '@shared/plugins'
+import { PLUGIN_VIEW_EVENTS } from '@shared/plugin-views'
 import type { PortChannel } from '@shared/port-channel'
 import { loadEngine, type Engine } from '../../plugin-host/engine'
 import { readPackage, readPackageFolder } from '../plugins/package'
@@ -497,7 +498,7 @@ describe('the sample plugin and the published types', () => {
     }
     expect(names('KettuCalls').sort()).toEqual(Object.keys(createPluginApi(apiDeps().deps)).sort())
     expect(names('KettuEvents').sort()).toEqual(
-      [...PLUGIN_EVENTS, ...Object.keys(PLUGIN_HOOK_EVENTS)].sort(),
+      [...PLUGIN_EVENTS, ...PLUGIN_VIEW_EVENTS, ...Object.keys(PLUGIN_HOOK_EVENTS)].sort(),
     )
   })
 })

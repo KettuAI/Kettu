@@ -2,7 +2,7 @@
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "session-digest",
   "version": "1.0.0",
-  "description": "Counts the sessions that work, posts the count to a webhook, tells the agent the count and refuses a recursive delete.",
+  "description": "Counts the sessions that work, posts the count to a webhook, tells the agent the count, refuses a recursive delete and shows the count in views.",
   "extensions": {
     "sh.kettu": {
       "format": 1,
@@ -14,7 +14,30 @@
         "requests.check",
         "network:hooks.example.com"
       ],
-      "events": ["session.beforeSend", "session.permissionRequested"]
+      "events": ["session.beforeSend", "session.permissionRequested"],
+      "views": [
+        {
+          "id": "states",
+          "kind": "list",
+          "title": "Working sessions",
+          "icon": "list"
+        },
+        {
+          "id": "state",
+          "kind": "detail",
+          "title": "One state"
+        },
+        {
+          "id": "label",
+          "kind": "form",
+          "title": "Label"
+        },
+        {
+          "id": "post",
+          "kind": "actions",
+          "title": "Post"
+        }
+      ]
     }
   }
 }

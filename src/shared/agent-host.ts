@@ -59,6 +59,12 @@ import type {
   CommunityListing,
   CommunityWorkflow,
 } from './market-community'
+import type {
+  PluginViewActionInput,
+  PluginViewActionResult,
+  PluginViewParams,
+  PluginViewResult,
+} from './plugin-views'
 import type { InstalledKettuPlugin, PluginPlan, PluginResource, PluginSource } from './plugins'
 import type { MediaAuthorization, MediaOpenResult } from './media'
 import type { ModelRequestRaw, ModelRequestsOverview, ModelRequestsPage } from './model-requests'
@@ -1389,6 +1395,17 @@ export interface HostContract {
   'plugins.declineUpdate': { params: { pluginId: string }; result: InstalledKettuPlugin }
   // Goes back to the version before the last update.
   'plugins.rollBack': { params: { pluginId: string }; result: InstalledKettuPlugin }
+  // A view of a plugin that is on, as its script gives it now. A script that fails, hangs or
+  // answers badly gives `ok: false` with why, never an error, so one view alone shows it.
+  'plugins.viewData': {
+    params: { pluginId: string; viewId: string; params?: PluginViewParams }
+    result: PluginViewResult
+  }
+  // Tells a view's script that one of its actions ran, with a form's values, and says what it answered.
+  'plugins.viewAction': {
+    params: { pluginId: string; viewId: string; params?: PluginViewParams } & PluginViewActionInput
+    result: PluginViewActionResult
+  }
   // The commands, roles, themes or templates of the plugins that are on, with each one's file.
   'plugins.resources': {
     params: { kind: 'commands' | 'roles' | 'themes' | 'templates' }
@@ -2325,6 +2342,8 @@ export const HOST_METHODS = [
   'plugins.applyUpdate',
   'plugins.declineUpdate',
   'plugins.rollBack',
+  'plugins.viewData',
+  'plugins.viewAction',
   'plugins.resources',
   'commands.list',
   'roles.list',

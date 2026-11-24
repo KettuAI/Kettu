@@ -20,6 +20,7 @@ import {
   type PluginResource,
   type PluginSource,
 } from '@shared/plugins'
+import { viewTrigger, type PluginViewDecl } from '@shared/plugin-views'
 import type { ListEdit } from '@shared/settings'
 import { HostError, notFound } from '../errors'
 import { t } from '../i18n'
@@ -216,11 +217,17 @@ export class PluginsService {
     return this.data?.plugins[id]?.enabled === true
   }
 
+  /** The views of a plugin that is on and has a script; none otherwise. */
+  views(id: string): PluginViewDecl[] {
+    const record = this.data?.plugins[id]
+    return record?.enabled && record.contents.script ? [...record.contents.views] : []
+  }
+
   /**
    * The scripts of the plugins that are on, each with its file on the host and the permissions
    * of the version in place. An update that waits for the user is not in place, so a script
    * never has what only that update asks for. A script is woken by the events its manifest
-   * names and by nothing else.
+   * names and by the views it declares, and by nothing else.
    */
   scripts(): InstalledScript[] {
     return Object.values(this.data?.plugins ?? {}).flatMap((record) =>
@@ -229,7 +236,10 @@ export class PluginsService {
             {
               id: record.id,
               scriptPath: path.join(this.packageDir(record), record.contents.script.entry),
-              activation: [...record.contents.events],
+              activation: [
+                ...record.contents.events,
+                ...record.contents.views.map((view) => viewTrigger(view.id)),
+              ],
               revision: `${record.dir}:${record.updatedAt}`,
               permissions: [...record.contents.permissions],
             },

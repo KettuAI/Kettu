@@ -98,6 +98,18 @@ import { TASK_ID } from './workflow/model'
 import { isCompletablePath } from './path-completion'
 import { isAbsolutePath } from './paths'
 import { PLUGIN_ID, PLUGIN_TOKEN, type PluginSource } from '@shared/plugins'
+import {
+  PLUGIN_ACTION_ID,
+  PLUGIN_VIEW_ID,
+  PLUGIN_VIEW_LIMITS,
+  type PluginFormValues,
+  type PluginViewParams,
+} from '@shared/plugin-views'
+import {
+  parseFormValues,
+  parseParams as parseViewParams,
+  ViewDataError,
+} from './plugin-runtime/view-data'
 import { MAX_WORKTREE_COPY_PATHS } from './storage'
 import { checkIncludeEntry } from './worktrees/copy'
 import { branchFromTemplate, checkWorktreeBranch } from './worktrees/names'
@@ -1154,6 +1166,47 @@ function installedPlugin(params: unknown): { pluginId: string } {
   return { pluginId: id }
 }
 
+/** The plugin and view a request names, and the parameters the view is opened with. */
+function pluginView(params: unknown): { pluginId: string; viewId: string } {
+  const o = fields(params)
+  const { pluginId } = installedPlugin(params)
+  const viewId = string(o, 'viewId', 64)
+  if (!PLUGIN_VIEW_ID.test(viewId)) throw invalidParams('viewId is not a view')
+  return { pluginId, viewId }
+}
+
+function viewParams(params: unknown): PluginViewParams {
+  try {
+    return parseViewParams(fields(params).params, 'params')
+  } catch (error) {
+    if (error instanceof ViewDataError) throw invalidParams(error.message)
+    throw error
+  }
+}
+
+function pluginViewAction(params: unknown): HostParams<'plugins.viewAction'> {
+  const o = fields(params)
+  const action = string(o, 'action', 64)
+  if (!PLUGIN_ACTION_ID.test(action)) throw invalidParams('action is not an id')
+  const row = optionalString(o, 'row', PLUGIN_VIEW_LIMITS.rowId)
+  let values: PluginFormValues | undefined
+  if (o.values !== undefined) {
+    try {
+      values = parseFormValues(o.values, 'values')
+    } catch (error) {
+      if (error instanceof ViewDataError) throw invalidParams(error.message)
+      throw error
+    }
+  }
+  return {
+    ...pluginView(params),
+    params: viewParams(params),
+    action,
+    ...(row === undefined ? {} : { row }),
+    ...(values === undefined ? {} : { values }),
+  }
+}
+
 function pluginToken(params: unknown): { token: string } {
   const token = string(fields(params), 'token', ID_CHARS)
   if (!PLUGIN_TOKEN.test(token)) throw invalidParams('token must name an inspected plugin')
@@ -2050,6 +2103,8 @@ export function createValidators(platform: Platform): Validators {
     'plugins.applyUpdate': installedPlugin,
     'plugins.declineUpdate': installedPlugin,
     'plugins.rollBack': installedPlugin,
+    'plugins.viewData': (params) => ({ ...pluginView(params), params: viewParams(params) }),
+    'plugins.viewAction': pluginViewAction,
     'plugins.resources': (params) => {
       const { kind } = fields(params)
       if (kind !== 'commands' && kind !== 'roles' && kind !== 'themes' && kind !== 'templates') {

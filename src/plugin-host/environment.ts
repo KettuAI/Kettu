@@ -306,11 +306,18 @@ export class PluginEnvironment {
   }
 
   /**
-   * Asks the listeners the script registered for an event, within the hook deadline: what each
-   * returned or resolved to, in the order they were added. A listener that throws is left out.
+   * Asks the listeners the script registered for an event, within the hook deadline unless
+   * `deadline` is `call`: what each returned or resolved to, in the order they were added. A
+   * listener that throws is left out.
    */
-  hook(name: string, payload: unknown): Promise<unknown[]> {
-    return this.request('hook', name, payload ?? null, true) as Promise<unknown[]>
+  hook(
+    name: string,
+    payload: unknown,
+    deadline: PluginDeadline = 'before-send',
+  ): Promise<unknown[]> {
+    return this.request('hook', name, payload ?? null, deadline === 'before-send') as Promise<
+      unknown[]
+    >
   }
 
   private request(

@@ -104,7 +104,12 @@ function servePort(
           if (!isPluginId(message.pluginId) || typeof message.name !== 'string') {
             return invalid('The hook is not valid')
           }
-          return manager.hook(message.pluginId, message.name, message.payload)
+          return manager.hook(
+            message.pluginId,
+            message.name,
+            message.payload,
+            message.deadline === 'call' ? 'call' : 'before-send',
+          )
         case 'deactivate':
           if (!isPluginId(message.pluginId)) return invalid('The plugin is not valid')
           return manager.deactivate(message.pluginId)

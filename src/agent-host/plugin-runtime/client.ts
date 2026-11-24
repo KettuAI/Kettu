@@ -179,10 +179,16 @@ export class PluginHostClient {
 
   /**
    * Asks the listeners of an active plugin for an event, which is what each returned. The wait is
-   * bounded by the hook deadline, past which it rejects with `timeout`.
+   * bounded by the hook deadline, or by the call's when `deadline` is `call`, past which it
+   * rejects with `timeout`.
    */
-  async hook(pluginId: string, name: string, payload: unknown): Promise<unknown[]> {
-    const answers = await this.request({ type: 'hook', pluginId, name, payload })
+  async hook(
+    pluginId: string,
+    name: string,
+    payload: unknown,
+    deadline: PluginDeadline = 'before-send',
+  ): Promise<unknown[]> {
+    const answers = await this.request({ type: 'hook', pluginId, name, payload, deadline })
     return Array.isArray(answers) ? answers : []
   }
 

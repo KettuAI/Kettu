@@ -19,6 +19,7 @@ import {
 import { SKILL_NAME } from '@shared/marketplace'
 import { isAbsolutePath } from '../paths'
 import { JsonFile, type LogFn, type Migration } from '../storage'
+import { parseViews } from './manifest'
 import { safePackagePath } from './package'
 
 export const PLUGINS_VERSION = 1
@@ -109,6 +110,15 @@ function texts(value: unknown): Record<string, string> {
   >
 }
 
+/** The views a stored package declares; ones that no longer read as views are left out. */
+function viewsOf(value: unknown): PluginContents['views'] {
+  try {
+    return parseViews(value ?? undefined, 'views', [])
+  } catch {
+    return []
+  }
+}
+
 function contentsOf(value: unknown): PluginContents | null {
   if (!isRecord(value) || typeof value.name !== 'string' || !PLUGIN_NAME.test(value.name)) {
     return null
@@ -169,7 +179,7 @@ function contentsOf(value: unknown): PluginContents | null {
     settings: Array.isArray(value.settings)
       ? (value.settings.filter(isRecord) as unknown as PluginContents['settings'])
       : [],
-    views: Array.isArray(value.views) ? value.views.filter(isRecord) : [],
+    views: viewsOf(value.views),
     hooks: value.hooks === true,
     warnings: Array.isArray(value.warnings)
       ? value.warnings.filter((item): item is string => text(item)).slice(0, MAX_ITEMS)

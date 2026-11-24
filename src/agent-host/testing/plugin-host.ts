@@ -5,6 +5,7 @@ import { createRequire } from 'node:module'
 import type { AgentToPluginHost, PluginHostToAgent } from '@shared/plugin-host'
 import type { PortChannel } from '@shared/port-channel'
 import { loadEngine, type Engine } from '../../plugin-host/engine'
+import type { EnvironmentLimits } from '../../plugin-host/environment'
 import { createPluginService, type PluginService } from '../../plugin-host/start'
 import { PluginHostClient, type PluginHostClientOptions } from '../plugin-runtime/client'
 
@@ -71,6 +72,8 @@ function portPair(): [End<AgentToPluginHost>, End<PluginHostToAgent>] {
 export class TestPluginHost {
   readonly scripts = new Map<string, string>()
   readonly logs: string[] = []
+  /** The limits the plugins run under; set before one is woken. */
+  limits: Partial<EnvironmentLimits> = {}
   private service: PluginService | null = null
 
   constructor(private readonly attach: (port: PortChannel<AgentToPluginHost>) => void) {}
@@ -93,6 +96,7 @@ export class TestPluginHost {
         return source
       },
       log: (pluginId, level, text) => this.logs.push(`${pluginId} ${level} ${text}`),
+      limits: this.limits,
     })
     this.service = service
     const [agentEnd, hostEnd] = portPair()
