@@ -20,7 +20,13 @@ import { hostOfPath } from '@renderer/lib/host-paths'
 import { useNow } from '@renderer/lib/use-now'
 import { cn } from '@renderer/lib/utils'
 import { sessionTitle, useSessionsStore } from '@renderer/stores/sessions'
-import { openSession, taskPanel, toggleArtifactPane, useViewStore } from '@renderer/stores/view'
+import {
+  artifactShown,
+  openArtifactTab,
+  openSession,
+  taskPanel,
+  useViewStore,
+} from '@renderer/stores/view'
 import {
   outcomeTitle,
   pickedByText,
@@ -321,14 +327,12 @@ export function DocumentChip({
   children?: ReactNode
 }) {
   const panel = taskPanel(taskId)
-  const open = useViewStore(
-    (s) => s.sidePane[panel] === 'artifact' && s.sideArtifact[panel] === artifactId,
-  )
+  const open = useViewStore((s) => artifactShown(s, panel, artifactId))
   return (
     <button
       type="button"
       aria-pressed={open}
-      onClick={() => toggleArtifactPane(panel, artifactId)}
+      onClick={() => openArtifactTab(panel, artifactId, { preview: true })}
       className={cn(
         'flex w-fit max-w-full items-center gap-1.5 rounded-lg bg-(--thread-chip) px-2.5 py-1 text-hint text-(--thread-ink) hover:bg-(--shell-chip-hover) focus-visible:outline-[1.5px] focus-visible:outline-(--focus) aria-pressed:shadow-[inset_0_0_0_1px_var(--focus)]',
         className,

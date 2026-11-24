@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import type { ChangedFile, CommitDetails, FileDiff } from '@shared/git'
+import type { ChangedFile, CommitDetails } from '@shared/git'
 import { errorMessage, host } from '@renderer/lib/host'
 import { useGitStore } from '@renderer/stores/git'
 
@@ -33,20 +33,6 @@ function useLive<T>(projectPath: string, enabled: boolean, load: () => Promise<T
 
 export function useChanges(projectPath: string, enabled: boolean): Loaded<ChangedFile[]> {
   return useLive(projectPath, enabled, () => host('git.changes', { projectPath }), projectPath)
-}
-
-/** One changed file's two sides, read again whenever the working tree changes. */
-export function useFileDiff(
-  projectPath: string,
-  file: ChangedFile,
-  enabled: boolean,
-): Loaded<FileDiff> {
-  return useLive(
-    projectPath,
-    enabled,
-    () => host('git.fileDiff', { projectPath, path: file.path, oldPath: file.oldPath, ref: null }),
-    `${projectPath}\0${file.path}\0${file.oldPath ?? ''}`,
-  )
 }
 
 // A commit never changes, so its details are kept for the session.

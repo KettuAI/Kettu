@@ -37,7 +37,7 @@ export async function createEntry(
     return false
   }
   await loadFiles(projectPath)
-  if (kind === 'file') openFile(projectPath, path)
+  if (kind === 'file') openFile(projectPath, path, null, { fromPanel: true })
   return true
 }
 

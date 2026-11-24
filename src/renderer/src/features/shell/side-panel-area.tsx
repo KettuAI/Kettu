@@ -25,12 +25,13 @@ import {
 } from '@renderer/stores/terminals'
 import { useTerminalAllowed } from '@renderer/stores/hosts'
 import { prefersReducedMotion } from '@renderer/stores/settings'
-import { toggleTerminal, useViewStore, type SidePane } from '@renderer/stores/view'
+import { shownDoc, toggleTerminal, useViewStore, type SidePane } from '@renderer/stores/view'
 import { usePhoneWindow } from './narrow'
 import { SHEET, SHEET_PANEL } from './sheet'
 import { SurfacesPane, SurfaceTabs } from './surface-tabs'
 
 const FilesPanel = lazy(() => import('@renderer/features/files/files-panel'))
+const DocPane = lazy(() => import('@renderer/features/files/doc-pane'))
 const ArtifactViewer = lazy(() => import('@renderer/features/artifacts/artifact-viewer'))
 const DevicesPane = lazy(() => import('@renderer/features/devices/devices-pane'))
 const ComputerPane = lazy(() => import('@renderer/features/computer/computer-pane'))
@@ -112,7 +113,8 @@ export function SidePanelArea({
     if (shown === 'devices' || shown === 'computer') return undefined
     return shown === 'terminal' && !terminal ? undefined : shown
   })
-  const artifactId = useViewStore((s) => (panel ? s.sideArtifact[panel] : undefined))
+  const doc = useViewStore((s) => shownDoc(s, panel))
+  const artifactId = doc?.kind === 'artifact' ? doc.id : undefined
   // A phone has no room beside the thread: a pane always covers the whole area there.
   const phone = usePhoneWindow()
   const maximized = (useViewStore((s) => s.sidePaneMaximized) || phone) && !!pane
@@ -270,6 +272,8 @@ export function SidePanelArea({
                   <Suspense fallback={<div className="min-h-0 flex-1" />}>
                     {held === 'files' ? (
                       <FilesPanel projectPath={projectPath} panel={panel} />
+                    ) : held === 'file' || held === 'diff' ? (
+                      <DocPane projectPath={projectPath} panel={panel} />
                     ) : held === 'git' ? (
                       <GitPane panel={panel} projectPath={projectPath} />
                     ) : held === 'browser' ? (

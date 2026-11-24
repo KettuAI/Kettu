@@ -1,10 +1,5 @@
-import { useEffect, useMemo, useRef, useState, type RefObject } from 'react'
-import {
-  ArrowRight01Icon,
-  CheckmarkCircle02Icon,
-  Delete02Icon,
-  LinkSquare02Icon,
-} from '@hugeicons/core-free-icons'
+import { useEffect, useMemo, type RefObject } from 'react'
+import { CheckmarkCircle02Icon, Delete02Icon, File01Icon } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
 import type { ChangedFile, GitStatus } from '@shared/git'
 import { Button } from '@renderer/components/ui/button'
@@ -12,10 +7,7 @@ import { Checkbox } from '@renderer/components/ui/checkbox'
 import { Skeleton } from '@renderer/components/ui/skeleton'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
 import { ChangeBadge } from '@renderer/features/files/change-badge'
-import { Clamp } from '@renderer/features/session/clamp'
-import { Diff } from '@renderer/features/session/markdown'
 import { Glyph } from '@renderer/features/shell/glyph'
-import { cn } from '@renderer/lib/utils'
 import {
   openGitDialog,
   setLeftOut,
@@ -23,19 +15,29 @@ import {
   updateCommitBox,
   useGitStore,
 } from '@renderer/stores/git'
+import { diffId, openFile } from '@renderer/stores/files'
+import { useViewStore } from '@renderer/stores/view'
 import { openChangeDiff } from '../open-change-diff'
 import { ErrorRow, LineBar, LineCounts, PartHead, Count } from '../rows'
-import { type Loaded, useFileDiff } from '../use-git-data'
+import { projectRelative } from '../sync'
+import type { Loaded } from '../use-git-data'
 import { committable, leftOutExcept, tickState, toggled } from './commit-selection'
 
 const NO_PATHS: readonly string[] = []
 
-/** The working tree's changed files, ticked for the next commit; one opens its diff in place. */
+// A row's click opens the preview tab right after the Git tab; a double click, a tab that stays.
+const PREVIEW = { preview: true, fromPanel: true }
+const KEPT = { fromPanel: true }
+
+/** The working tree's changed files, ticked for the next commit; one opens its diff in a tab. */
 export function ChangesPage({
+  panel,
   status,
   changes,
   textarea,
 }: {
+  /** The side panel the pane shows in, whose row the diffs open in. */
+  panel: string
   status: GitStatus
   changes: Loaded<ChangedFile[]>
   /** The commit box's field, which an opener's wish for the box focuses. */
@@ -46,7 +48,8 @@ export function ChangesPage({
   const { data, error } = changes
   const leftOut = useGitStore((s) => s.leftOut[projectPath] ?? NO_PATHS)
   const ask = useGitStore((s) => s.commitAsk[projectPath])
-  const [open, setOpen] = useState<ReadonlySet<string>>(() => new Set())
+  // The change the panel's diff tab shows or showed last, whose row is marked.
+  const shown = useViewStore((s) => s.sideDoc[panel])
   const blocked = !!status.operation || status.changes.conflicted > 0
 
   // An opener, such as the popover's Commit…, picks the files and takes the box's focus.
@@ -90,13 +93,6 @@ export function ChangesPage({
   const state = tickState(files, leftOut)
   const insertions = clean.reduce((n, file) => n + (file.insertions ?? 0), 0)
   const deletions = clean.reduce((n, file) => n + (file.deletions ?? 0), 0)
-  const toggleOpen = (path: string): void =>
-    setOpen((now) => {
-      const next = new Set(now)
-      if (next.has(path)) next.delete(path)
-      else next.add(path)
-      return next
-    })
   const ticked = clean.filter((file) => !leftOut.includes(file.path))
 
   return (
@@ -113,9 +109,8 @@ export function ChangesPage({
               status={status}
               file={file}
               ticked={false}
-              open={false}
+              shown={shown === `diff:${diffId({ path: file.path, ref: null })}`}
               onTick={() => {}}
-              onToggle={() => openChangeDiff(status, file, null)}
               blocked={blocked}
             />
           ))}
@@ -165,9 +160,8 @@ export function ChangesPage({
               status={status}
               file={file}
               ticked={!leftOut.includes(file.path)}
-              open={open.has(file.path)}
+              shown={shown === `diff:${diffId({ path: file.path, ref: null })}`}
               onTick={(on) => setLeftOut(projectPath, toggled(leftOut, file.path, on))}
-              onToggle={() => toggleOpen(file.path)}
               blocked={blocked}
             />
           ))}
@@ -190,22 +184,21 @@ function Loading() {
   )
 }
 
-/** One changed file: its tick, name and line counts, and under them its diff while it is open. */
+/** One changed file: its tick, name and line counts; it opens its diff in a tab. */
 function FileEntry({
   status,
   file,
   ticked,
-  open,
+  shown,
   onTick,
-  onToggle,
   blocked,
 }: {
   status: GitStatus
   file: ChangedFile
   ticked: boolean
-  open: boolean
+  /** The panel's diff tab shows this file's change. */
+  shown: boolean
   onTick: (on: boolean) => void
-  onToggle: () => void
   blocked: boolean
 }) {
   const { t } = useTranslation('git')
@@ -214,79 +207,64 @@ function FileEntry({
   // The two folders nearest the file say enough; the tooltip has the whole path.
   const folder = slash < 0 ? '' : file.path.slice(0, slash).split('/').slice(-2).join('/')
   const conflicted = file.status === 'conflicted'
+  const inProject =
+    file.status === 'deleted'
+      ? null
+      : projectRelative(status.repo?.root ?? status.projectPath, status.projectPath, file.path)
   return (
     <div
-      className={cn('group/file rounded-xl transition-colors', open && 'my-1 bg-card shadow-card')}
+      aria-current={shown || undefined}
+      className="group/file flex h-8 items-center gap-2 rounded-xl px-2 transition-colors focus-within:bg-hover hover:bg-hover aria-[current]:bg-selected"
     >
-      <div
-        className={cn(
-          'flex h-8 items-center gap-2 rounded-xl px-2',
-          !open && 'hover:bg-hover focus-within:bg-hover',
-        )}
+      <Checkbox
+        checked={ticked}
+        disabled={conflicted}
+        aria-label={t('pane.changes.tick', { name })}
+        onCheckedChange={onTick}
+      />
+      <button
+        type="button"
+        title={file.oldPath ? `${file.oldPath} → ${file.path}` : file.path}
+        aria-label={t('timeline.openDiff', { name })}
+        onClick={() => openChangeDiff(status, file, null, PREVIEW)}
+        onDoubleClick={() => openChangeDiff(status, file, null, KEPT)}
+        className="flex h-full min-w-0 flex-1 items-center gap-2 rounded-md text-left outline-none focus-visible:focus-ring"
       >
-        <Checkbox
-          checked={ticked}
-          disabled={conflicted}
-          aria-label={t('pane.changes.tick', { name })}
-          onCheckedChange={onTick}
-        />
-        <button
-          type="button"
-          aria-expanded={conflicted ? undefined : open}
-          title={file.oldPath ? `${file.oldPath} → ${file.path}` : file.path}
-          onClick={onToggle}
-          className="flex h-full min-w-0 flex-1 items-center gap-2 rounded-md text-left outline-none focus-visible:focus-ring"
-        >
-          {!conflicted && (
-            <Glyph
-              icon={ArrowRight01Icon}
-              size={12}
-              className={cn(
-                'shrink-0 text-placeholder transition-transform duration-(--duration-fast) motion-reduce:transition-none',
-                open && 'rotate-90',
-              )}
-            />
-          )}
-          <ChangeBadge status={file.status} />
-          <span className="min-w-0 shrink truncate text-ui text-primary">{name}</span>
-          <span className="min-w-0 flex-1 truncate text-small text-tertiary">{folder}</span>
-        </button>
-        {conflicted ? (
-          <span className="inline-flex h-4.5 shrink-0 items-center rounded-full bg-danger/11 px-1.75 text-caption font-medium text-danger">
-            {t('popover.conflict')}
-          </span>
-        ) : (
-          <>
-            <span
-              className={cn(
-                'hidden shrink-0 items-center group-focus-within/file:flex group-hover/file:flex',
-                open && 'flex',
-              )}
-            >
+        <ChangeBadge status={file.status} />
+        <span className="min-w-0 shrink truncate text-ui text-primary">{name}</span>
+        <span className="min-w-0 flex-1 truncate text-small text-tertiary">{folder}</span>
+      </button>
+      {conflicted ? (
+        <span className="inline-flex h-4.5 shrink-0 items-center rounded-full bg-danger/11 px-1.75 text-caption font-medium text-danger">
+          {t('popover.conflict')}
+        </span>
+      ) : (
+        <>
+          <span className="hidden shrink-0 items-center group-focus-within/file:flex group-hover/file:flex">
+            {inProject !== null && (
               <RowAction
                 label={t('pane.changes.openInFiles')}
-                icon={LinkSquare02Icon}
-                onClick={() => openChangeDiff(status, file, null)}
+                icon={File01Icon}
+                onClick={() => openFile(status.projectPath, inProject, null, KEPT)}
               />
-              <RowAction
-                label={t('pane.changes.discardFile')}
-                icon={Delete02Icon}
-                disabled={blocked}
-                onClick={() =>
-                  openGitDialog(status.projectPath, { kind: 'discard', paths: [file.path] })
-                }
-              />
-            </span>
-            <LineCounts insertions={file.insertions} deletions={file.deletions} />
-            {!open && file.insertions !== null && file.deletions !== null && (
-              <span className="group-focus-within/file:hidden group-hover/file:hidden">
-                <LineBar insertions={file.insertions} deletions={file.deletions} />
-              </span>
             )}
-          </>
-        )}
-      </div>
-      {open && !conflicted && <InlineDiff status={status} file={file} />}
+            <RowAction
+              label={t('pane.changes.discardFile')}
+              icon={Delete02Icon}
+              disabled={blocked}
+              onClick={() =>
+                openGitDialog(status.projectPath, { kind: 'discard', paths: [file.path] })
+              }
+            />
+          </span>
+          <LineCounts insertions={file.insertions} deletions={file.deletions} />
+          {file.insertions !== null && file.deletions !== null && (
+            <span className="group-focus-within/file:hidden group-hover/file:hidden">
+              <LineBar insertions={file.insertions} deletions={file.deletions} />
+            </span>
+          )}
+        </>
+      )}
     </div>
   )
 }
@@ -320,43 +298,5 @@ function RowAction({
       </TooltipTrigger>
       <TooltipContent>{label}</TooltipContent>
     </Tooltip>
-  )
-}
-
-/** The file's change as the tool calls draw theirs, read again while the tree changes. */
-function InlineDiff({ status, file }: { status: GitStatus; file: ChangedFile }) {
-  const { t } = useTranslation('git')
-  const { data, error } = useFileDiff(status.projectPath, file, true)
-  const body = useRef<HTMLDivElement>(null)
-  let content
-  if (!data) {
-    content = error ? (
-      <div className="px-3 py-2">
-        <ErrorRow message={error} />
-      </div>
-    ) : (
-      <div className="flex flex-col gap-1.5 px-3 py-3" aria-busy="true">
-        <Skeleton className="h-3 w-2/3" />
-        <Skeleton className="h-3 w-1/2" />
-        <Skeleton className="h-3 w-3/4" />
-      </div>
-    )
-  } else if (data.binary) {
-    content = <p className="px-3 py-2.5 text-small text-tertiary">{t('pane.changes.binary')}</p>
-  } else if (data.tooLarge) {
-    content = <p className="px-3 py-2.5 text-small text-tertiary">{t('pane.changes.tooLarge')}</p>
-  } else if (data.oldText === data.newText) {
-    content = <p className="px-3 py-2.5 text-small text-tertiary">{t('pane.changes.same')}</p>
-  } else {
-    content = (
-      <Clamp maxHeight={420} more={t('pane.changes.showFullDiff')} buttonClassName="mx-2 my-1">
-        <Diff path={file.path} oldText={data.oldText} newText={data.newText ?? ''} />
-      </Clamp>
-    )
-  }
-  return (
-    <div ref={body} className="overflow-hidden rounded-b-xl border-t border-subtle">
-      {content}
-    </div>
   )
 }

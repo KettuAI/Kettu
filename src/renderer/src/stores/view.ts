@@ -123,12 +123,53 @@ export type SidePane =
   | 'surfaces'
   | 'computer'
   | 'requests'
+  | 'file'
+  | 'diff'
   | 'artifact'
   | 'board'
   | 'sideChat'
 
+/** The kinds opened from a list, each a tab of its own: files, their changes and artifacts. */
+export type DocKind = 'file' | 'diff' | 'artifact'
+
 /** The kinds a session has one tab of. */
-export type SingleTab = Exclude<SidePane, 'terminal' | 'browser' | 'devices' | 'surfaces'>
+export type SingleTab = Exclude<SidePane, 'terminal' | 'browser' | 'devices' | 'surfaces' | DocKind>
+
+/** What a file, diff or artifact tab shows; `id` tells it from the others of its kind. */
+export type DocTarget =
+  | {
+      kind: 'file'
+      /** The file's path: relative to the project, or absolute in the session agent's folder. */
+      id: string
+      /** For a file of that folder, the session it is read through. */
+      agent?: { sessionId: string; agentId: AgentId }
+    }
+  | {
+      kind: 'diff'
+      id: string
+      /** Relative to the repository root, as git names it. */
+      path: string
+      oldPath: string | null
+      /** The commit, or null for the working tree against HEAD. */
+      ref: string | null
+      /** The same file as the project names it, or null when it lies outside the project. */
+      projectFile: string | null
+    }
+  | { kind: 'artifact'; id: string }
+
+/** A tab of those kinds; the preview tab is the one the next single click replaces. */
+export type DocTab = DocTarget & { preview: boolean }
+
+const DOC_KINDS: readonly SidePane[] = ['file', 'diff', 'artifact']
+
+export function isDocKind(pane: SidePane | null | undefined): pane is DocKind {
+  return !!pane && DOC_KINDS.includes(pane)
+}
+
+/** A tab's key in the row: its kind, then its id within the kind. */
+export function docKey(tab: Pick<DocTab, 'kind' | 'id'>): string {
+  return `${tab.kind}:${tab.id}`
+}
 
 const SINGLE_TABS: readonly SidePane[] = [
   'files',
@@ -137,7 +178,6 @@ const SINGLE_TABS: readonly SidePane[] = [
   'sideChat',
   'requests',
   'computer',
-  'artifact',
 ]
 
 export function isSingleTab(pane: SidePane | null | undefined): pane is SingleTab {
@@ -218,8 +258,10 @@ interface ViewStore {
   sideTabs: Record<string, SingleTab[]>
   /** Per panel, the keys of its row's tabs as last shown: as they opened, then as dragged. */
   sideOrder: Record<string, string[]>
-  /** The artifact each panel's artifact tab shows. */
-  sideArtifact: Record<string, string>
+  /** Per panel, its file, diff and artifact tabs; at most one of them is the preview tab. */
+  sideDocs: Record<string, DocTab[]>
+  /** Per panel, the key of the one of those tabs it shows, or showed last. */
+  sideDoc: Record<string, string>
   /** A canvas page asked to be shown in a panel's artifact pane, until it is. Not persisted. */
   sideArtifactPage: Record<string, ArtifactPageRequest>
   sidePaneMaximized: boolean
@@ -241,6 +283,9 @@ interface Persisted {
   sideLast?: Record<string, SidePane>
   sideTabs?: Record<string, SingleTab[]>
   sideOrder?: Record<string, string[]>
+  sideDocs?: Record<string, DocTab[]>
+  sideDoc?: Record<string, string>
+  /** Earlier versions had one artifact tab per panel, which showed this artifact. */
   sideArtifact?: Record<string, string>
   /** One pane per column, the pane in focus; read back as the split a restart opens. */
   layout?: unknown
@@ -284,22 +329,44 @@ export const useViewStore = create<ViewStore>()(() => ({
   artifactsView: { arrange: savedArrange(saved.artifactsDisplay) },
 }))
 
+type SidePanels = Pick<
+  ViewStore,
+  'sidePane' | 'sideLast' | 'sideTabs' | 'sideOrder' | 'sideDocs' | 'sideDoc'
+>
+
 /**
  * The side panels as saved. A save from before every pane was a tab has no row, so the pane it
- * showed becomes its row's tab; an artifact tab without its artifact is dropped.
+ * showed becomes its row's tab; one from before a panel held several artifacts has its one
+ * artifact tab as the first of them. A pane whose tab is gone is dropped.
  */
-function savedPanels(
-  from: Partial<Persisted>,
-): Pick<ViewStore, 'sidePane' | 'sideLast' | 'sideTabs' | 'sideOrder' | 'sideArtifact'> {
-  const sideArtifact = from.sideArtifact ?? {}
-  const held = (panel: string, pane: SidePane) => pane !== 'artifact' || !!sideArtifact[panel]
+function savedPanels(from: Partial<Persisted>): SidePanels {
+  const sideDocs: Record<string, DocTab[]> = {}
+  for (const [panel, docs] of Object.entries(from.sideDocs ?? {})) {
+    if (Array.isArray(docs) && docs.length > 0) sideDocs[panel] = docs
+  }
+  const sideDoc = { ...from.sideDoc }
+  const sideOrder = { ...from.sideOrder }
+  for (const [panel, id] of Object.entries(from.sideArtifact ?? {})) {
+    if (sideDocs[panel] || !id) continue
+    const tab: DocTab = { kind: 'artifact', id, preview: false }
+    sideDocs[panel] = [tab]
+    sideDoc[panel] = docKey(tab)
+    // The one artifact tab had a key without an id.
+    const order = sideOrder[panel]
+    if (order) sideOrder[panel] = order.map((key) => (key === 'artifact:' ? docKey(tab) : key))
+  }
+  for (const panel of Object.keys(sideDoc)) {
+    if (!sideDocs[panel]?.some((tab) => docKey(tab) === sideDoc[panel])) delete sideDoc[panel]
+  }
+  const held = (panel: string, pane: SidePane) =>
+    !isDocKind(pane) || sideDoc[panel]?.startsWith(`${pane}:`)
   const panes = (given: Record<string, SidePane> | undefined) =>
     Object.fromEntries(Object.entries(given ?? {}).filter(([panel, pane]) => held(panel, pane)))
   const sidePane = panes(from.sidePanes)
   const sideLast = panes(from.sideLast)
   const sideTabs: Record<string, SingleTab[]> = {}
   for (const [panel, tabs] of Object.entries(from.sideTabs ?? {})) {
-    const kept = tabs.filter((tab) => isSingleTab(tab) && held(panel, tab))
+    const kept = tabs.filter((tab) => isSingleTab(tab))
     if (kept.length > 0) sideTabs[panel] = kept
   }
   for (const [panel, pane] of [...Object.entries(sideLast), ...Object.entries(sidePane)]) {
@@ -307,7 +374,7 @@ function savedPanels(
       sideTabs[panel] = [...(sideTabs[panel] ?? []), pane]
     }
   }
-  return { sidePane, sideLast, sideTabs, sideOrder: from.sideOrder ?? {}, sideArtifact }
+  return { sidePane, sideLast, sideTabs, sideOrder, sideDocs, sideDoc }
 }
 
 /** The arrangement saved, or the one an earlier run's grouping and sort come closest to. */
@@ -340,7 +407,8 @@ useViewStore.subscribe((state) => {
       sideLast: remembered(state.sideLast),
       sideTabs: remembered(state.sideTabs),
       sideOrder: remembered(state.sideOrder),
-      sideArtifact: remembered(state.sideArtifact),
+      sideDocs: remembered(state.sideDocs),
+      sideDoc: remembered(state.sideDoc),
       layout: saveLayout(state.layout),
       artifactsDisplay: state.artifactsView,
     }
@@ -410,9 +478,16 @@ export function shownSidePane(state: ViewStore): SidePane | undefined {
   return panel ? state.sidePane[panel] : undefined
 }
 
-export function shownSideArtifact(state: ViewStore): string | undefined {
-  const panel = shownPanel(state)
-  return panel ? state.sideArtifact[panel] : undefined
+/** The file, diff or artifact tab the panel shows; none while it shows another kind. */
+export function shownDoc(state: ViewStore, panel: string | null): DocTab | undefined {
+  if (!panel || !isDocKind(state.sidePane[panel])) return undefined
+  const key = state.sideDoc[panel]
+  return state.sideDocs[panel]?.find((tab) => docKey(tab) === key)
+}
+
+/** Whether the panel shows this artifact's tab. */
+export function artifactShown(state: ViewStore, panel: string, id: string): boolean {
+  return state.sidePane[panel] === 'artifact' && state.sideDoc[panel] === `artifact:${id}`
 }
 
 /** The sessions the layout holds, folded panes included. */
@@ -607,17 +682,14 @@ export function showCreatedSession(
 }
 
 /** New session's side panel, given to the session it created and closed for the next one. */
-function handPanel(
-  s: ViewStore,
-  from: string,
-  to: string,
-): Pick<ViewStore, 'sidePane' | 'sideLast' | 'sideTabs' | 'sideOrder' | 'sideArtifact'> {
+function handPanel(s: ViewStore, from: string, to: string): SidePanels {
   return {
     sidePane: handed(s.sidePane, from, to),
     sideLast: handed(s.sideLast, from, to),
     sideTabs: handed(s.sideTabs, from, to),
     sideOrder: handed(s.sideOrder, from, to),
-    sideArtifact: handed(s.sideArtifact, from, to),
+    sideDocs: handed(s.sideDocs, from, to),
+    sideDoc: handed(s.sideDoc, from, to),
   }
 }
 
@@ -1059,10 +1131,7 @@ export function removeSideTab(panel: string, tab: SingleTab): void {
     const kept = tabs.filter((other) => other !== tab)
     if (kept.length > 0) sideTabs[panel] = kept
     else delete sideTabs[panel]
-    if (tab !== 'artifact') return { sideTabs }
-    const sideArtifact = { ...s.sideArtifact }
-    delete sideArtifact[panel]
-    return { sideTabs, sideArtifact }
+    return { sideTabs }
   })
 }
 
@@ -1096,27 +1165,170 @@ export interface ArtifactPageRequest {
 
 let pageRequests = 0
 
+// Per panel, the key of the tab its row shows as selected, which a tab opened from a list in the
+// panel goes after. The row says, since a terminal, page or device is chosen in its own store.
+const selectedKeys = new Map<string, string>()
+
+/** The row's word on which of its tabs is selected. */
+export function noteSelectedTab(panel: string, key: string | null): void {
+  if (key) selectedKeys.set(panel, key)
+  else selectedKeys.delete(panel)
+}
+
+export interface OpenDocOptions {
+  /** In the preview tab, which the next such open replaces; an open tab stays as it is. */
+  preview?: boolean
+  /** Opened from a list in the panel, so it goes right after the selected tab instead of last. */
+  fromPanel?: boolean
+}
+
+function withDocs(
+  all: Record<string, DocTab[]>,
+  panel: string,
+  docs: DocTab[],
+): Record<string, DocTab[]> {
+  const next = { ...all }
+  delete next[panel]
+  if (docs.length > 0) next[panel] = docs
+  return next
+}
+
 /**
- * Shows the artifact in the artifact tab of a session's side panel, or closes the panel when it
- * already shows it.
+ * Shows a file, a diff or an artifact in a tab of the panel's row: its own when it has one, the
+ * preview tab's place for a preview, else a new tab. Returns the preview tab it replaced.
  */
-export function toggleArtifactPane(panel: string, id: string, open?: boolean): void {
+export function openDoc(
+  panel: string,
+  target: DocTarget,
+  { preview = false, fromPanel = false }: OpenDocOptions = {},
+): DocTab | null {
+  const key = docKey(target)
+  let replaced: DocTab | null = null
   useViewStore.setState((s) => {
-    const shown = s.sidePane[panel] === 'artifact' && s.sideArtifact[panel] === id
-    if ((open ?? !shown) === shown) return s
-    if (shown) return closedPanel(s, panel)
+    const docs = s.sideDocs[panel] ?? []
+    const order = s.sideOrder[panel] ?? []
+    const shown = {
+      sidePane: withPane(s.sidePane, panel, target.kind),
+      sideDoc: { ...s.sideDoc, [panel]: key },
+      // Changing tabs keeps a maximized panel as it is; opening it starts beside the thread.
+      sidePaneMaximized: s.sidePane[panel] ? s.sidePaneMaximized : false,
+    }
+    const open = docs.find((tab) => docKey(tab) === key)
+    if (open) {
+      if (!open.preview || preview) return shown
+      const kept = docs.map((tab) => (tab === open ? { ...tab, preview: false } : tab))
+      return { ...shown, sideDocs: withDocs(s.sideDocs, panel, kept) }
+    }
+    const added: DocTab = { ...target, preview }
+    const at = preview ? docs.findIndex((tab) => tab.preview) : -1
+    if (at >= 0) {
+      replaced = docs[at]!
+      const from = docKey(replaced)
+      return {
+        ...shown,
+        sideDocs: withDocs(s.sideDocs, panel, docs.with(at, added)),
+        sideOrder: {
+          ...s.sideOrder,
+          [panel]: order.map((other) => (other === from ? key : other)),
+        },
+      }
+    }
+    const after = fromPanel ? order.indexOf(selectedKeys.get(panel) ?? '') : -1
     return {
-      sidePane: withPane(s.sidePane, panel, 'artifact'),
-      sideTabs: withTab(s.sideTabs, panel, 'artifact'),
-      sideArtifact: { ...s.sideArtifact, [panel]: id },
+      ...shown,
+      sideDocs: withDocs(s.sideDocs, panel, [...docs, added]),
+      // A key the row does not have yet goes last by itself.
+      ...(after >= 0 && {
+        sideOrder: { ...s.sideOrder, [panel]: order.toSpliced(after + 1, 0, key) },
+      }),
+    }
+  })
+  return replaced
+}
+
+/** Shows one of the panel's file, diff or artifact tabs. */
+export function selectDoc(panel: string, key: string): void {
+  useViewStore.setState((s) => {
+    const tab = s.sideDocs[panel]?.find((other) => docKey(other) === key)
+    if (!tab || (s.sidePane[panel] === tab.kind && s.sideDoc[panel] === key)) return s
+    return {
+      sidePane: withPane(s.sidePane, panel, tab.kind),
+      sideDoc: { ...s.sideDoc, [panel]: key },
       sidePaneMaximized: s.sidePane[panel] ? s.sidePaneMaximized : false,
     }
   })
 }
 
+/** Changes the panel's file, diff and artifact tabs, such as a file's path once it moved. */
+export function changeDocs(panel: string, change: (tab: DocTab) => DocTab): void {
+  useViewStore.setState((s) => {
+    const docs = s.sideDocs[panel]
+    if (!docs) return s
+    const next = docs.map(change)
+    if (next.every((tab, index) => tab === docs[index])) return s
+    const renamed = new Map(docs.map((tab, index) => [docKey(tab), docKey(next[index]!)]))
+    const shown = s.sideDoc[panel]
+    return {
+      sideDocs: withDocs(s.sideDocs, panel, next),
+      ...(s.sideOrder[panel] && {
+        sideOrder: {
+          ...s.sideOrder,
+          [panel]: s.sideOrder[panel].map((key) => renamed.get(key) ?? key),
+        },
+      }),
+      ...(shown && { sideDoc: { ...s.sideDoc, [panel]: renamed.get(shown) ?? shown } }),
+    }
+  })
+}
+
+/** Makes the preview tab a regular one, which the next single click leaves alone. */
+export function keepDoc(panel: string, key: string): void {
+  changeDocs(panel, (tab) =>
+    tab.preview && docKey(tab) === key ? { ...tab, preview: false } : tab,
+  )
+}
+
+/**
+ * Takes a file, diff or artifact tab off the panel's row. A panel that still shows it shows the
+ * tab after it in the row, else the one before, else the side panel's list.
+ */
+export function closeDoc(panel: string, key: string): void {
+  useViewStore.setState((s) => {
+    const docs = s.sideDocs[panel]
+    const tab = docs?.find((other) => docKey(other) === key)
+    if (!docs || !tab) return s
+    const left = docs.filter((other) => other !== tab)
+    const sideDocs = withDocs(s.sideDocs, panel, left)
+    if (s.sideDoc[panel] !== key) return { sideDocs }
+    const sideDoc = { ...s.sideDoc }
+    delete sideDoc[panel]
+    if (s.sidePane[panel] !== tab.kind) {
+      const sideLast = { ...s.sideLast }
+      if (sideLast[panel] === tab.kind) delete sideLast[panel]
+      return { sideDocs, sideDoc, sideLast }
+    }
+    const order = s.sideOrder[panel] ?? []
+    const index = order.indexOf(key)
+    const next = index < 0 ? undefined : (order[index + 1] ?? order[index - 1])
+    const pane = (next?.slice(0, next.indexOf(':')) ?? 'surfaces') as SidePane
+    if (next && isDocKind(pane)) sideDoc[panel] = next
+    return { sideDocs, sideDoc, sidePane: withPane(s.sidePane, panel, pane) }
+  })
+}
+
+/** Shows the artifact in a tab of a session's side panel. */
+export function openArtifactTab(panel: string, id: string, options?: OpenDocOptions): void {
+  openDoc(panel, { kind: 'artifact', id }, options)
+}
+
 /** Shows a canvas artifact beside a session's thread with one of its pages in view. */
-export function showArtifactPage(panel: string, id: string, pageId: string): void {
-  toggleArtifactPane(panel, id, true)
+export function showArtifactPage(
+  panel: string,
+  id: string,
+  pageId: string,
+  options: OpenDocOptions = { preview: true },
+): void {
+  openArtifactTab(panel, id, options)
   useViewStore.setState((s) => ({
     sideArtifactPage: {
       ...s.sideArtifactPage,
@@ -1138,7 +1350,7 @@ export function artifactPageShown(panel: string, seq: number): void {
 /** The session, with the artifact beside its thread. */
 export function openSessionWithArtifact(sessionId: string, projectPath: string, id: string): void {
   openSession(sessionId, projectPath)
-  toggleArtifactPane(sessionId, id, true)
+  openArtifactTab(sessionId, id)
 }
 
 export function toggleTerminal(panel: string, open?: boolean): void {

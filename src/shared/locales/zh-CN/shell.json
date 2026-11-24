@@ -146,6 +146,8 @@
       }
     },
     "reference": "在对话中引用",
+    "keep": "保留",
+    "uncommitted": "未提交的更改",
     "stopSharing": "收回 {{agent}} 的使用",
     "shared": "{{agent}} 能用",
     "news": "有新动静",

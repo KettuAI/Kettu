@@ -38,7 +38,7 @@ import { runningWorkOf, workItems, type WorkItem } from '@renderer/features/side
 import { setPaneSelection, useArtifactsStore } from '@renderer/stores/artifacts'
 import { useSettingsStore } from '@renderer/stores/settings'
 import { showSending, useThreadsStore } from '@renderer/stores/threads'
-import { useViewStore } from '@renderer/stores/view'
+import { artifactShown, useViewStore } from '@renderer/stores/view'
 import { askSide, openSideChat, sideQuestionOf } from '@renderer/stores/side-chat'
 import {
   commentsOf,
@@ -183,10 +183,7 @@ export function Composer({
     s.paneSelection?.projectPath === session.projectPath ? s.paneSelection : null,
   )
   const beside = useViewStore(
-    (s) =>
-      picked !== null &&
-      s.sidePane[sessionId] === 'artifact' &&
-      s.sideArtifact[sessionId] === picked.artifactId,
+    (s) => picked !== null && artifactShown(s, sessionId, picked.artifactId),
   )
   const selection = beside ? picked : null
 
