@@ -1,8 +1,10 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import {
   ComputerIcon,
+  Cursor02Icon,
   DashboardSquare01Icon,
   LinkSquare02Icon,
+  StopIcon,
   ViewIcon,
 } from '@hugeicons/core-free-icons'
 import { AnimatePresence } from 'motion/react'
@@ -15,14 +17,13 @@ import { SurfaceLight } from '@renderer/components/control/surface-light'
 import { SurfacePill } from '@renderer/components/control/surface-pill'
 import { useControlAgent } from '@renderer/components/control/use-control-agent'
 import {
+  PaneBody,
+  PaneContext,
   PaneEmpty,
-  PaneHead,
   PaneIcon,
-  PaneSheet,
   PaneSpinner,
   PanelButton,
 } from '@renderer/features/shell/panel-button'
-import { PaneSwitch } from '@renderer/features/shell/pane-switch'
 import { useAppIcon } from '@renderer/features/session/app-icon'
 import { useSessionView } from '@renderer/features/session/use-thread'
 import { errorMessage, host } from '@renderer/lib/host'
@@ -190,15 +191,7 @@ function WindowVideo({
  * The side panel's Computer pane: the one window the session's agent uses, live, and nothing else
  * of the screen. The picture stays in this window; remote devices and the web client never get it.
  */
-export default function ComputerPane({
-  panel,
-  projectPath,
-  maximized,
-}: {
-  panel: string
-  projectPath: string
-  maximized: boolean
-}) {
+export default function ComputerPane({ panel }: { panel: string }) {
   const { t } = useTranslation('session')
   const sessionId = panelSession(panel)
   const summary = useSessionsStore((s) => (sessionId ? s.byId[sessionId] : undefined))
@@ -218,6 +211,14 @@ export default function ComputerPane({
     if (!sessionId) return
     setShowError(null)
     host(method, { sessionId }).catch((error: unknown) => setShowError(errorMessage(error)))
+  }
+
+  const stop = () => {
+    if (!sessionId) return
+    setShowError(null)
+    host('computer.stop', { sessionId }).catch((error: unknown) =>
+      setShowError(errorMessage(error)),
+    )
   }
 
   const show = () => {
@@ -298,23 +299,37 @@ export default function ComputerPane({
   }
 
   return (
-    <PaneSheet pane="computer" maximized={maximized} data-computer-panel="">
-      <PaneHead
-        panel={panel}
-        pane="computer"
-        maximized={maximized}
+    <PaneBody data-computer-panel="">
+      <PaneContext
         tools={
-          view?.window && hostId === null ? (
-            <PanelButton
-              label={app ? t('computerPane.show', { app }) : t('computerPane.showApp')}
-              onClick={show}
-            >
-              <PaneIcon icon={LinkSquare02Icon} />
-            </PanelButton>
+          view && hostId === null ? (
+            <>
+              {view.window && (
+                <PanelButton
+                  label={app ? t('computerPane.show', { app }) : t('computerPane.showApp')}
+                  onClick={show}
+                >
+                  <PaneIcon icon={LinkSquare02Icon} />
+                </PanelButton>
+              )}
+              <PanelButton
+                label={paused ? tc('actions.handBack') : tc('actions.takeOver')}
+                pressed={paused}
+                onClick={() => control(paused ? 'computer.handBack' : 'computer.takeOver')}
+              >
+                <PaneIcon icon={Cursor02Icon} />
+              </PanelButton>
+              <PanelButton
+                label={t('computerBar.stopLabel')}
+                className="kp-tool--stop"
+                onClick={stop}
+              >
+                <PaneIcon icon={StopIcon} />
+              </PanelButton>
+            </>
           ) : undefined
         }
       >
-        <PaneSwitch panel={panel} projectPath={projectPath} pane="computer" />
         {view && app ? (
           <span className="kp-cph">
             {icon ? (
@@ -332,9 +347,11 @@ export default function ComputerPane({
             )}
           </span>
         ) : (
-          <span className="kp-head__title">{t('computerPane.title')}</span>
+          <span className="kp-ctx__place">
+            <b>{t('computerPane.title')}</b>
+          </span>
         )}
-      </PaneHead>
+      </PaneContext>
       <div className="kp-body">
         {showError && (
           <p role="alert" className="kp-alert">
@@ -367,6 +384,6 @@ export default function ComputerPane({
           </p>
         )}
       </div>
-    </PaneSheet>
+    </PaneBody>
   )
 }

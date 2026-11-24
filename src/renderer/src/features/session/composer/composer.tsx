@@ -38,7 +38,7 @@ import { runningWorkOf, workItems, type WorkItem } from '@renderer/features/side
 import { setPaneSelection, useArtifactsStore } from '@renderer/stores/artifacts'
 import { useSettingsStore } from '@renderer/stores/settings'
 import { showSending, useThreadsStore } from '@renderer/stores/threads'
-import { useViewStore } from '@renderer/stores/view'
+import { artifactShown, useViewStore } from '@renderer/stores/view'
 import { askSide, openSideChat, sideQuestionOf } from '@renderer/stores/side-chat'
 import {
   commentsOf,
@@ -185,10 +185,7 @@ export function Composer({
     s.paneSelection?.projectPath === session.projectPath ? s.paneSelection : null,
   )
   const beside = useViewStore(
-    (s) =>
-      picked !== null &&
-      s.sidePane[sessionId] === 'artifact' &&
-      s.sideArtifact[sessionId] === picked.artifactId,
+    (s) => picked !== null && artifactShown(s, sessionId, picked.artifactId),
   )
   const selection = beside ? picked : null
 
@@ -537,6 +534,8 @@ export function Composer({
     else if (now.holds) blockedEnter.enter()
   }
 
+  // The idle line, which the agent's guess at the next message takes the place of.
+  const idleLine = t('prompt.placeholder.ask')
   const placeholder = starting
     ? t('prompt.placeholder.starting', { agent: agentName })
     : mustSwitch && !pending
@@ -561,7 +560,10 @@ export function Composer({
               ? t(phone ? 'prompt.placeholder.runningTouch' : 'prompt.placeholder.runningQueue')
               : taskRunning
                 ? t('prompt.placeholder.taskRunning')
-                : t('prompt.placeholder.ask')
+                : idleLine
+  // A phone has no Tab to take it with.
+  const suggestion =
+    placeholder === idleLine && idle && !phone ? (session.suggestion ?? null) : null
 
   const cache = cacheExpiry(session, agent?.account ?? null)
   const timed = cache?.expiresAt != null ? cache : null
@@ -637,6 +639,7 @@ export function Composer({
             agentName={agentName}
             commands={commands}
             placeholder={placeholder}
+            suggestion={suggestion}
             label={t('prompt.label', { agent: agentName })}
             size={{
               minHeight: 'calc(2 * var(--prose-size) + 14px)',

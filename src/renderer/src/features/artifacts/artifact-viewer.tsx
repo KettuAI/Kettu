@@ -24,7 +24,7 @@ import { AgentMark } from '@renderer/components/agents/agent-mark'
 import { toast } from '@renderer/components/ui/toast'
 import { useChanges } from '@renderer/features/session/entries/artifact-changes'
 import { usePhoneWindow } from '@renderer/features/shell/narrow'
-import { PaneSheet } from '@renderer/features/shell/panel-button'
+import { PaneBody } from '@renderer/features/shell/panel-button'
 import {
   artifactHost,
   artifactRefOf,
@@ -58,9 +58,10 @@ import { useSessionsStore } from '@renderer/stores/sessions'
 import {
   artifactPageShown,
   closeArtifact,
+  keepDoc,
+  openArtifact,
   MAIN_ARTIFACT_PANEL,
   openSessionWithArtifact,
-  toggleSidePane,
   useViewStore,
 } from '@renderer/stores/view'
 import { anchorOf } from './anchors'
@@ -278,6 +279,11 @@ export default function ArtifactViewer(place: ViewerPlace) {
     : offline && state.mode === 'edit'
       ? 'comment'
       : state.mode
+  // Commenting on it or editing it keeps its tab, which a preview would give up to the next click.
+  const besidePanel = panel?.panel ?? null
+  useEffect(() => {
+    if (besidePanel && mode !== 'view') keepDoc(besidePanel, `artifact:${id}`)
+  }, [besidePanel, mode, id])
   // A canvas document: the latest is edited live on the host, an earlier one only shown.
   const docShown = shown?.doc ?? null
   const legacyCanvas = !!shown?.canvas && !docShown
@@ -1383,6 +1389,7 @@ export default function ArtifactViewer(place: ViewerPlace) {
           : null
       }
       onPresent={showing && !states.gone && (shown?.canvas || (isDeck && deck)) ? present : null}
+      onOpenMain={panel ? () => openArtifact(id) : null}
       share={
         showing && shown && shares && !states.gone && !states.inTrash
           ? { id, title, shown: shown.version, head: head ?? shown.version }
@@ -1408,17 +1415,6 @@ export default function ArtifactViewer(place: ViewerPlace) {
                 onDeleted: place.where === 'main' ? closeArtifact : undefined,
                 onDownloadPng:
                   renders && shown && !shown.canvas ? () => downloadPng(null) : undefined,
-              },
-            }
-          : null
-      }
-      panel={
-        panel
-          ? {
-              maximized,
-              onExpand: phone ? null : () => setMaximized(!maximized),
-              onClose: () => {
-                if (mayLeave(id)) toggleSidePane(panel.panel, 'artifact', false)
               },
             }
           : null
@@ -1464,14 +1460,9 @@ export default function ArtifactViewer(place: ViewerPlace) {
   return (
     <div ref={frame} className="contents">
       {panel ? (
-        <PaneSheet
-          pane="artifact"
-          maximized={maximized}
-          aria-label={title || undefined}
-          className="avs-pane"
-        >
+        <PaneBody aria-label={title || undefined} className="avs-pane">
           {shell}
-        </PaneSheet>
+        </PaneBody>
       ) : (
         <div className="avs-main">{shell}</div>
       )}

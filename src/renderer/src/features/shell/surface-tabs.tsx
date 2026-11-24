@@ -13,11 +13,18 @@ import { DragDropProvider, type DragEndEvent } from '@dnd-kit/react'
 import { isSortable, useSortable } from '@dnd-kit/react/sortable'
 import {
   ArrowDown01Icon,
+  ArrowExpand01Icon,
+  ArrowRight01Icon,
+  ArrowShrink01Icon,
   Cancel01Icon,
-  ComputerTerminal01Icon,
+  CancelCircleIcon,
+  GitCompareIcon,
+  Layout2ColumnIcon,
   MessageAdd01Icon,
   PencilEdit02Icon,
+  PinIcon,
   PlusSignIcon,
+  ShapesIcon,
   SidebarRightIcon,
   Tick02Icon,
   UnavailableIcon,
@@ -38,6 +45,7 @@ import {
   ContextMenu,
   ContextMenuContent,
   ContextMenuItem,
+  ContextMenuSeparator,
   ContextMenuTrigger,
 } from '@renderer/components/ui/context-menu'
 import {
@@ -53,15 +61,26 @@ import {
   DropdownMenuTrigger,
 } from '@renderer/components/ui/dropdown-menu'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
+import { KIND_ICON } from '@renderer/features/artifacts/kinds'
+import { artifactKind } from '@renderer/features/artifacts/model'
+import { mayLeave } from '@renderer/features/artifacts/unsaved'
+import { AgentMark } from '@renderer/components/agents/agent-mark'
+import { FileTypeIcon } from '@renderer/features/files/file-type-icon'
+import { folderOf, nameOf } from '@renderer/features/files/paths'
+import { UnsavedPrompt } from '@renderer/features/files/unsaved-prompt'
+import { useBoardActivity, useBoardNews } from '@renderer/features/board/use-board-activity'
 import { addressText } from '@renderer/features/browser/address'
 import { SiteMark } from '@renderer/features/browser/site-mark'
 import { markOf, rowOf, statusOf, useAddable } from '@renderer/features/devices/device-marks'
 import { DeviceRow } from '@renderer/features/devices/device-row'
+import { useSessionView } from '@renderer/features/session/use-thread'
 import { runSessionMenuAccelerator } from '@renderer/features/sidebar/session-menu-model'
 import { hostOfPath } from '@renderer/lib/host-paths'
-import { isMac, isWeb } from '@renderer/lib/platform'
+import { hasBand, isMac, isWeb } from '@renderer/lib/platform'
+import { cn } from '@renderer/lib/utils'
 import { agentName } from '@renderer/stores/agents'
-import { useBrowserStore } from '@renderer/stores/browser'
+import { useArtifactsStore } from '@renderer/stores/artifacts'
+import { restorePages, useBrowserStore } from '@renderer/stores/browser'
 import {
   closeDevice,
   devicesOf,
@@ -69,16 +88,18 @@ import {
   selectDevice,
   useDevicesStore,
 } from '@renderer/stores/devices'
+import { asksBeforeClose, closeFileDoc, notePanel, useFilesStore } from '@renderer/stores/files'
 import { useTerminalAllowed } from '@renderer/stores/hosts'
 import { useSessionsStore } from '@renderer/stores/sessions'
+import { useSideChatNews } from '@renderer/stores/side-chat'
 import {
   arrangeSurfaceKeys,
   foldSurface,
+  isSurfaceKind,
   moveSurfaceTab,
   recordSurfaceOrder,
   surfaceKey,
-  useSurfaceTabsStore,
-  type SurfaceKind,
+  type TabKind,
 } from '@renderer/stores/surface-tabs'
 import {
   createTerminal,
@@ -87,16 +108,41 @@ import {
   renameTerminal,
   showTerminal,
   terminalsOf,
+  toggleSplit,
   useTerminalsStore,
   type TerminalState,
 } from '@renderer/stores/terminals'
-import { panelSession, toggleSidePane, toggleTerminal, useViewStore } from '@renderer/stores/view'
-import { openSurfaces } from './open-surfaces'
+import {
+  closeDoc,
+  closeSidePanel,
+  docKey,
+  isDocKind,
+  keepDoc,
+  noteSelectedTab,
+  panelSession,
+  removeSideTab,
+  selectDoc,
+  toggleSidePane,
+  toggleTerminal,
+  useViewStore,
+  type DocTab,
+} from '@renderer/stores/view'
+import { usePhoneWindow } from './narrow'
 import { SurfaceList, SurfaceMenuItems } from './surface-list'
-import { focusSurfaceList, startSurface, useSurfaceRows, type SurfaceRowId } from './surface-rows'
-import { PaneEmpty, PaneHead, PaneIcon, PaneSheet, PaneSpinner } from './panel-button'
+import {
+  focusSurfaceList,
+  startArtifact,
+  startSurface,
+  SURFACE_ICON,
+  useArtifactChoices,
+  useSurfaceRows,
+  type SurfaceRowId,
+} from './surface-rows'
+import { PaneBody, PaneEmpty, PaneIcon, PaneSpinner, PanelButton } from './panel-button'
+import { CornerControlsSpace } from './top-bar'
 
-// The row of tabs a session's terminals, browser pages and devices share in the side panel.
+// The row of tabs at the top of a session's side panel: every terminal, page, device and pane the
+// session has open there.
 
 /** Below this width the tabs not selected keep only their icon. */
 const MIN_TAB_PX = 72
@@ -108,9 +154,15 @@ type Tone = 'fox' | 'live' | 'info' | 'warning' | 'neutral' | 'danger'
 /** One tab of the row, whatever its kind. */
 interface SurfaceItem {
   key: string
-  kind: SurfaceKind
+  kind: TabKind
   id: string
   name: string
+  /** What tells two tabs of one name apart: the folder of a file. */
+  note: string
+  /** The preview tab, in italics, which the next single click in a list replaces. */
+  preview: boolean
+  /** What a file, diff or artifact tab shows. */
+  doc: DocTab | null
   /** The tooltip: the name, then what the tab is doing or who uses it. */
   title: string
   selected: boolean
@@ -121,6 +173,8 @@ interface SurfaceItem {
   dot: { tone: Tone; label: string } | null
   /** A terminal's exit code once its shell exited. */
   code: number | null
+  /** How many of the board's sub-agents wait for the user. */
+  needs: number
   /** A browser tab released to save memory. */
   dim: boolean
   terminal: TerminalState | null
@@ -188,6 +242,149 @@ const TONE_OF = {
   error: 'danger',
 } as const
 
+const NOT_A_DOC = { note: '', preview: false, doc: null } as const
+const NO_DOCS: DocTab[] = []
+
+/** The panel's file, diff and artifact tabs. */
+function useDocItems(panel: string, projectPath: string, hostId: string | null): SurfaceItem[] {
+  const { t } = useTranslation(['shell', 'files'])
+  const docs = useViewStore((s) => s.sideDocs[panel] ?? NO_DOCS)
+  const shown = useViewStore((s) => (isDocKind(s.sidePane[panel]) ? s.sideDoc[panel] : undefined))
+  const files = useFilesStore((s) => s.open[projectPath])
+  const artifacts = useArtifactsStore((s) => s.list)
+  const sessionId = panelSession(panel)
+  const sessionAgent = useSessionsStore((s) => (sessionId ? s.byId[sessionId]?.agentId : null))
+
+  return useMemo(() => {
+    const agent = sessionAgent ? agentName(sessionAgent, hostId) : ''
+    // Two tabs of one kind and one name tell themselves apart by their folder.
+    const fileOf = (tab: DocTab) => (tab.kind === 'diff' ? tab.path : tab.id)
+    const names = new Map<string, number>()
+    for (const tab of docs) {
+      if (tab.kind === 'artifact') continue
+      const name = `${tab.kind}:${nameOf(fileOf(tab))}`
+      names.set(name, (names.get(name) ?? 0) + 1)
+    }
+    return docs.map((tab): SurfaceItem => {
+      const key = docKey(tab)
+      const item = {
+        key,
+        kind: tab.kind,
+        id: tab.id,
+        preview: tab.preview,
+        doc: tab,
+        selected: shown === key,
+        control: null,
+        code: null,
+        needs: 0,
+        dim: false,
+        terminal: null,
+        agent,
+        shared: false,
+      }
+      if (tab.kind === 'artifact') {
+        const artifact = artifacts?.find((other) => other.id === tab.id)
+        const kind = artifact ? artifactKind(artifact) : null
+        const name = artifact?.title || t('shell:surfaces.list.artifact')
+        return {
+          ...item,
+          name,
+          note: '',
+          title: name,
+          icon: <PaneIcon icon={kind ? KIND_ICON[kind] : ShapesIcon} size={14} />,
+          dot: null,
+        }
+      }
+      const path = fileOf(tab)
+      const name = nameOf(path)
+      const note = names.get(`${tab.kind}:${name}`)! > 1 ? nameOf(folderOf(path)) : ''
+      if (tab.kind === 'diff') {
+        return {
+          ...item,
+          name,
+          note,
+          title: [
+            tab.oldPath ? `${tab.oldPath} \u2192 ${path}` : path,
+            tab.ref ? tab.ref.slice(0, 7) : t('shell:surfaces.uncommitted'),
+          ].join(' \u00b7 '),
+          icon: <PaneIcon icon={GitCompareIcon} size={14} />,
+          dot: null,
+        }
+      }
+      // A file of the agent's own folder carries the agent's mark, and says whose it is.
+      const owner = tab.agent ? agentName(tab.agent.agentId, hostId) : null
+      const dirty = !!files?.some((file) => file.path === tab.id && file.dirty)
+      return {
+        ...item,
+        name,
+        note,
+        title: owner ? `${path}\n${t('files:tabs.agentFile', { agent: owner })}` : path,
+        icon: tab.agent ? (
+          <AgentMark agent={tab.agent.agentId} hostId={hostId} size={14} dot={null} />
+        ) : (
+          <FileTypeIcon path={path} className="size-3.5 shrink-0" />
+        ),
+        dot: dirty ? { tone: 'neutral', label: t('files:preview.unsaved') } : null,
+      }
+    })
+  }, [t, docs, shown, files, artifacts, sessionAgent, hostId])
+}
+
+/** The tabs of the kinds a session has one of, in the order they opened. */
+function useSingleItems(panel: string, hostId: string | null): SurfaceItem[] {
+  const { t } = useTranslation(['shell', 'board', 'browser'])
+  const { t: tb } = useTranslation('browser')
+  const sessionId = panelSession(panel)
+  const shown = useViewStore((s) => s.sidePane[panel])
+  const tabs = useViewStore((s) => s.sideTabs[panel])
+  const activity = useBoardActivity(sessionId ?? '')
+  const boardNews = useBoardNews(sessionId)
+  const chatNews = useSideChatNews(sessionId)
+  const computer = useSessionView(sessionId ?? '')?.computer?.control
+  const sessionAgent = useSessionsStore((s) => (sessionId ? s.byId[sessionId]?.agentId : null))
+
+  return useMemo(() => {
+    const agent = sessionAgent ? agentName(sessionAgent, hostId) : ''
+    return (tabs ?? []).map((kind): SurfaceItem => {
+      const selected = shown === kind
+      const name = t(`shell:surfaces.list.${kind}`)
+      const dot: SurfaceItem['dot'] =
+        kind === 'board' && boardNews === 'news' && activity.needs === 0
+          ? { tone: 'fox', label: t('shell:surfaces.news') }
+          : kind === 'sideChat' && chatNews
+            ? { tone: 'fox', label: t('shell:headerTools.sideChatNews') }
+            : null
+      const control: SurfaceItem['control'] =
+        kind === 'computer' && computer ? (computer === 'you' ? 'you' : 'agent') : null
+      const needs = kind === 'board' && !selected ? activity.needs : 0
+      return {
+        key: surfaceKey(kind),
+        kind,
+        id: '',
+        name,
+        ...NOT_A_DOC,
+        title: [
+          name,
+          control ? tb(CONTROL_NOTE[control], { agent }) : dot?.label,
+          needs > 0 ? t('board:summary.needs', { count: needs }) : null,
+        ]
+          .filter(Boolean)
+          .join(' \u00b7 '),
+        selected,
+        control,
+        icon: <PaneIcon icon={SURFACE_ICON[kind]} size={14} />,
+        dot,
+        code: null,
+        needs,
+        dim: false,
+        terminal: null,
+        agent,
+        shared: false,
+      }
+    })
+  }, [t, tb, tabs, shown, activity.needs, boardNews, chatNews, computer, sessionAgent, hostId])
+}
+
 /** The panel's tabs in the row's order, with what each shows and who uses it. */
 function useSurfaceItems(panel: string, projectPath: string, kinds: SurfaceKinds): SurfaceItem[] {
   const { t } = useTranslation(['terminal', 'browser', 'devices', 'shell'])
@@ -213,7 +410,9 @@ function useSurfaceItems(panel: string, projectPath: string, kinds: SurfaceKinds
   const sessionAgent = useSessionsStore((s) => (sessionId ? s.byId[sessionId]?.agentId : null))
   // Read on each thread change from the end only, where a card that waits sits.
   const askingTabs = useThreadsStore(() => askedTabs(sessionId))
-  const order = useSurfaceTabsStore((s) => s.order[panel])
+  const order = useViewStore((s) => s.sideOrder[panel])
+  const singles = useSingleItems(panel, hostId)
+  const docs = useDocItems(panel, projectPath, hostId)
 
   const items = useMemo(() => {
     const agent = (id: AgentId | null | undefined) => (id ? agentName(id, hostId) : '')
@@ -252,6 +451,7 @@ function useSurfaceItems(panel: string, projectPath: string, kinds: SurfaceKinds
         kind: 'terminal',
         id: terminal.id,
         name,
+        ...NOT_A_DOC,
         title: [
           terminal.name ? automatic : name,
           control ? note(control, owner ?? agent(sessionAgent)) : (owner ?? shared),
@@ -261,9 +461,10 @@ function useSurfaceItems(panel: string, projectPath: string, kinds: SurfaceKinds
           .join(' · '),
         selected,
         control,
-        icon: <PaneIcon icon={ComputerTerminal01Icon} size={14} />,
+        icon: <PaneIcon icon={SURFACE_ICON.terminal} size={14} />,
         dot,
         code: exited ? terminal.exitCode : null,
+        needs: 0,
         dim: false,
         terminal,
         agent: agent(sessionAgent),
@@ -286,6 +487,7 @@ function useSurfaceItems(panel: string, projectPath: string, kinds: SurfaceKinds
         kind: 'browser',
         id: tab.id,
         name,
+        ...NOT_A_DOC,
         title: [
           name,
           control
@@ -302,6 +504,7 @@ function useSurfaceItems(panel: string, projectPath: string, kinds: SurfaceKinds
         icon: tab.loading ? <PaneSpinner /> : <SiteMark url={tab.url} />,
         dot: null,
         code: null,
+        needs: 0,
         dim: tab.released,
         terminal: null,
         agent: agent(sessionAgent),
@@ -331,6 +534,7 @@ function useSurfaceItems(panel: string, projectPath: string, kinds: SurfaceKinds
           kind: 'devices',
           id: device.id,
           name: device.name,
+          ...NOT_A_DOC,
           title: [device.name, control ? note(control, agent(sessionAgent)) : dot?.label]
             .filter(Boolean)
             .join(' · '),
@@ -339,6 +543,7 @@ function useSurfaceItems(panel: string, projectPath: string, kinds: SurfaceKinds
           icon: <PaneIcon icon={markOf(device)} size={14} />,
           dot,
           code: null,
+          needs: 0,
           dim: false,
           terminal: null,
           agent: agent(sessionAgent),
@@ -346,6 +551,7 @@ function useSurfaceItems(panel: string, projectPath: string, kinds: SurfaceKinds
         })
       }
     }
+    list.push(...singles, ...docs)
     const byKey = new Map(list.map((item) => [item.key, item]))
     return arrangeSurfaceKeys(
       order,
@@ -372,6 +578,8 @@ function useSurfaceItems(panel: string, projectPath: string, kinds: SurfaceKinds
     recording,
     order,
     askingTabs,
+    singles,
+    docs,
   ])
 
   // The row remembers where each tab is, so the next one opens after them all.
@@ -379,6 +587,12 @@ function useSurfaceItems(panel: string, projectPath: string, kinds: SurfaceKinds
   useEffect(() => {
     recordSurfaceOrder(panel, keys ? keys.split('\n') : [])
   }, [panel, keys])
+
+  // A tab opened from a list in the panel goes right after the selected one.
+  const selected = items.find((item) => item.selected)?.key ?? null
+  useEffect(() => {
+    noteSelectedTab(panel, selected)
+  }, [panel, selected])
 
   return items
 }
@@ -390,9 +604,10 @@ const CONTROL_NOTE = {
   asks: 'tabs.agentAsks',
 } as const
 
-/** Shows a tab: its kind's pane, and the tab within it. */
-function selectSurface(panel: string, item: Pick<SurfaceItem, 'kind' | 'id'>): void {
+/** Shows a tab: its kind in the panel, and the tab within a kind of several. */
+function selectSurface(panel: string, item: Pick<SurfaceItem, 'kind' | 'id' | 'key'>): void {
   const sessionId = panelSession(panel)
+  if (isDocKind(item.kind)) return selectDoc(panel, item.key)
   toggleSidePane(panel, item.kind, true)
   if (item.kind === 'terminal') showTerminal(panel, item.id)
   else if (item.kind === 'browser') {
@@ -456,28 +671,58 @@ function useRowFit(signature: string): {
   return { stripRef, tight }
 }
 
+/** Whether closing the tab ends something that runs, which asks first. */
+function endsRun(item: SurfaceItem): boolean {
+  const terminal = item.terminal
+  return !!terminal && !terminal.stale && terminal.busy && terminal.exitCode === null
+}
+
 /**
- * The row of tabs in the head of the panel's terminal, browser and devices panes and of its empty
- * pane: every terminal, page and device the session has open, then **+**, and when only icons fit
- * the count that lists them all.
+ * The side panel's head: the row of every tab the session has open, then **+**, and at its right
+ * end the count that lists them all while only icons fit, Maximize and the side panel's button.
+ * It is as tall as the session's top bar and continues its line.
  */
-export function SurfaceTabs({ panel, projectPath }: { panel: string; projectPath: string }) {
+export function SurfaceTabs({
+  panel,
+  projectPath,
+  maximized,
+}: {
+  panel: string
+  projectPath: string
+  maximized: boolean
+}) {
   const { t } = useTranslation(['shell', 'terminal', 'browser', 'devices', 'common'])
   const sessionId = panelSession(panel)
   const kinds = useSurfaceKinds(panel, projectPath)
   const items = useSurfaceItems(panel, projectPath, kinds)
   const browserTabs = useBrowserStore((s) => (sessionId ? s.bySession[sessionId]?.tabs.length : 0))
-  const [closing, setClosing] = useState<SurfaceItem | null>(null)
+  // Tabs whose close waits for the user's answer, the first one asked about.
+  const [closing, setClosing] = useState<SurfaceItem[]>([])
   const [starting, setStarting] = useState(false)
   const sheetRef = useRef<HTMLElement | null>(null)
   const signature = items
-    .map((item) => `${item.key}|${item.name}|${item.selected}|${item.dot?.tone}|${item.code}`)
+    .map(
+      (item) =>
+        `${item.key}|${item.name}|${item.note}|${item.selected}|${item.dot?.tone}|${item.code}|${item.needs}`,
+    )
     .join('\n')
   const { stripRef, tight } = useRowFit(`${signature}|${starting}`)
   const shown = useViewStore((s) => s.sidePane[panel])
   const pages = items.filter((item) => item.kind === 'browser').length
   const devices = items.filter((item) => item.kind === 'devices').length
   const before = useRef({ pages, devices })
+  // On macOS, maximized with the sidebar collapsed, the head is the window's top left corner; on a
+  // phone the panel always covers the area and the corner always holds the sidebar's toggle.
+  const phone = usePhoneWindow()
+  const cornered = (useViewStore((s) => s.sidebarCollapsed) || phone) && maximized && !hasBand
+
+  // Files are read and kept by project; the row says which project its panel's tabs are of.
+  useEffect(() => notePanel(panel, projectPath), [panel, projectPath])
+
+  // The pages an earlier run left open come back once their row shows.
+  useEffect(() => {
+    if (sessionId && kinds.browser) void restorePages(sessionId)
+  }, [sessionId, kinds.browser])
 
   // A page or device kind that loses its last tab some other way, such as the agent closing the
   // page or the device leaving, gives way to the row's other tabs. The terminals' store does this
@@ -489,58 +734,87 @@ export function SurfaceTabs({ panel, projectPath }: { panel: string; projectPath
     if (shown === 'devices' && was.devices > 0 && devices === 0) foldSurface(panel, 'devices')
   }, [shown, pages, devices, panel])
 
-  const close = useCallback(
-    (item: SurfaceItem) => {
-      const index = items.findIndex((other) => other.key === item.key)
-      const neighbor = item.selected ? (items[index + 1] ?? items[index - 1] ?? null) : null
-      if (item.kind === 'terminal' && item.terminal) {
+  // Ends what the tab holds, or for a kind of one only takes its tab off the row.
+  const drop = useCallback(
+    (item: SurfaceItem, pagesLeft: number) => {
+      if (item.kind === 'terminal') {
+        if (!item.terminal) return
         if (item.terminal.stale) forgetTerminal(item.id)
         else void killTerminal(item.id)
-      } else if (item.kind === 'browser' && sessionId) {
+      } else if (item.kind === 'browser') {
+        if (!sessionId) return
         // The last tab closes the page with it.
-        if ((browserTabs ?? 0) > 1) void window.kettu.browser.closeTab(sessionId, item.id)
+        if (pagesLeft > 1) void window.kettu.browser.closeTab(sessionId, item.id)
         else void window.kettu.browser.close(sessionId)
-      } else if (item.kind === 'devices' && sessionId) {
-        void closeDevice(sessionId, item.id)
-      }
-      if (neighbor) selectSurface(panel, neighbor)
-      else if (item.selected) toggleSidePane(panel, item.kind, false)
+      } else if (item.kind === 'devices') {
+        if (sessionId) void closeDevice(sessionId, item.id)
+      } else if (item.doc?.kind === 'artifact') closeDoc(panel, item.key)
+      else if (item.doc) closeFileDoc(panel, projectPath, item.doc)
+      else if (!isDocKind(item.kind)) removeSideTab(panel, item.kind)
     },
-    [items, panel, sessionId, browserTabs],
+    [panel, projectPath, sessionId],
   )
 
-  // A shell still running asks first, as its close button always did.
+  // The selected tab hands the panel to its neighbour, of any kind; the last one to the list.
+  const close = useCallback(
+    (item: SurfaceItem) => {
+      if (item.selected) {
+        const index = items.findIndex((other) => other.key === item.key)
+        const neighbor = [...items.slice(index + 1), ...items.slice(0, index).reverse()].find(
+          (other) => !other.selected,
+        )
+        if (neighbor) selectSurface(panel, neighbor)
+        else toggleSidePane(panel, 'surfaces', true)
+      }
+      drop(item, browserTabs ?? 0)
+    },
+    [items, panel, browserTabs, drop],
+  )
+
+  // A shell still running asks first, as do a file with unsaved edits and an artifact with
+  // comments not sent yet.
   const requestClose = useCallback(
     (item: SurfaceItem) => {
-      const terminal = item.terminal
-      if (terminal && !terminal.stale && terminal.busy && terminal.exitCode === null) {
-        setClosing(item)
-      } else close(item)
+      if (endsRun(item)) setClosing((waiting) => [...waiting, item])
+      else if (item.kind === 'file' && asksBeforeClose(panel, projectPath, item.id)) return
+      else if (item.kind !== 'artifact' || mayLeave(item.id)) close(item)
     },
-    [close],
+    [close, panel, projectPath],
   )
 
-  // Mod+W closes the selected tab of the pane used last: the focused side's terminal, or the page.
+  // Close others and Close to the right: `keep` takes the panel when the selected tab goes.
+  const closeMany = useCallback(
+    (targets: SurfaceItem[], keep: SurfaceItem) => {
+      // Files with unsaved edits stay; each is closed on its own, which asks about it.
+      const going = targets.filter((item) =>
+        item.kind === 'artifact' ? mayLeave(item.id) : !(item.kind === 'file' && item.dot),
+      )
+      if (going.some((item) => item.selected)) selectSurface(panel, keep)
+      let pagesLeft = browserTabs ?? 0
+      for (const item of going.filter((other) => !endsRun(other))) {
+        drop(item, pagesLeft)
+        if (item.kind === 'browser') pagesLeft -= 1
+      }
+      setClosing((waiting) => [...waiting, ...going.filter(endsRun)])
+    },
+    [panel, browserTabs, drop],
+  )
+
+  // Mod+W closes the selected tab; in a split the focused side's terminal goes.
   useEffect(
     () =>
       onAppEvent((event) => {
-        if (event.kind === 'close-terminal') {
-          // A split shows two: the focused side's goes.
-          const terminals = useTerminalsStore.getState()
-          const right = terminals.split[panel] ?? null
-          const focused = terminals.focusedSide[panel] === 'right' && right ? right : null
-          const target = items.find(
-            (item) =>
-              item.kind === 'terminal' &&
-              item.selected &&
-              (focused ? item.id === focused : item.id !== right),
-          )
-          if (target) requestClose(target)
-        } else if (event.kind === 'close-browser') {
-          const target = items.find((item) => item.kind === 'browser' && item.selected)
-          if (target) requestClose(target)
-          else toggleSidePane(panel, 'browser', false)
-        }
+        if (event.kind !== 'close-side-tab') return
+        const terminals = useTerminalsStore.getState()
+        const right = terminals.split[panel] ?? null
+        const focused = terminals.focusedSide[panel] === 'right' && right ? right : null
+        const target = items.find(
+          (item) =>
+            item.selected &&
+            (item.kind !== 'terminal' || (focused ? item.id === focused : item.id !== right)),
+        )
+        if (target) requestClose(target)
+        else toggleSidePane(panel, 'surfaces', true)
       }),
     [items, requestClose, panel],
   )
@@ -554,20 +828,14 @@ export function SurfaceTabs({ panel, projectPath }: { panel: string; projectPath
     })
   }
 
-  const newTab = () => {
-    if (!sessionId) return
-    toggleSidePane(panel, 'browser', true)
-    void window.kettu.browser
-      .newTab(sessionId)
-      .catch((error: unknown) => console.error('Could not open a tab', error))
-  }
-
   const dragEnded = (event: DragEndEvent) => {
     if (event.canceled) return
     const source = event.operation.source ?? null
     if (!isSortable(source)) return
     const key = String(source.id)
     if (source.index !== source.initialIndex) {
+      // Dragging the preview tab keeps it.
+      keepDoc(panel, key)
       moveSurfaceTab(
         panel,
         items.map((item) => item.key),
@@ -581,60 +849,102 @@ export function SurfaceTabs({ panel, projectPath }: { panel: string; projectPath
     if (item && event.nativeEvent?.type.startsWith('pointer')) selectSurface(panel, item)
   }
 
+  const asked = closing[0] ?? null
   return (
-    <>
-      <DragDropProvider sensors={tabSensors} onDragEnd={dragEnded}>
-        <div
-          ref={(element) => {
-            stripRef.current = element
-            sheetRef.current = element?.closest<HTMLElement>('.kp-pane') ?? null
-          }}
-          role="tablist"
-          aria-label={t('shell:surfaces.tabs')}
-          className="kp-stabs"
-          data-tight={tight || undefined}
-        >
-          {items.map((item, index) => (
-            <SurfaceTab
-              key={item.key}
-              panel={panel}
-              item={item}
-              index={index}
-              onSelect={() => selectSurface(panel, item)}
-              onClose={() => requestClose(item)}
-            />
-          ))}
-          {starting && (
-            <span className="kp-stab">
-              <span className="kp-stab__btn">
-                <span className="kp-stab__icon">
-                  <PaneSpinner />
+    <div className={cn('kp-head app-region-drag', cornered && 'kp-head--cornered')}>
+      {cornered && <CornerControlsSpace className="mr-1" />}
+      <div className="kp-head__main">
+        <DragDropProvider sensors={tabSensors} onDragEnd={dragEnded}>
+          <div
+            ref={(element) => {
+              stripRef.current = element
+              sheetRef.current = element?.closest<HTMLElement>('.kp-pane') ?? null
+            }}
+            role="tablist"
+            aria-label={t('shell:surfaces.tabs')}
+            className="kp-stabs"
+            data-tight={tight || undefined}
+          >
+            {items.map((item, index) => (
+              <SurfaceTab
+                key={item.key}
+                panel={panel}
+                projectPath={projectPath}
+                item={item}
+                index={index}
+                onSelect={() => selectSurface(panel, item)}
+                onClose={() => requestClose(item)}
+                onCloseOthers={
+                  items.length > 1
+                    ? () =>
+                        closeMany(
+                          items.filter((other) => other.key !== item.key),
+                          item,
+                        )
+                    : null
+                }
+                onCloseRight={
+                  index < items.length - 1 ? () => closeMany(items.slice(index + 1), item) : null
+                }
+              />
+            ))}
+            {starting && (
+              <span className="kp-stab">
+                <span className="kp-stab__btn">
+                  <span className="kp-stab__icon">
+                    <PaneSpinner />
+                  </span>
+                  <span className="kp-stab__name">{t('terminal:panel.starting')}</span>
                 </span>
-                <span className="kp-stab__name">{t('terminal:panel.starting')}</span>
               </span>
-            </span>
-          )}
-        </div>
-      </DragDropProvider>
-      <AddMenu
+            )}
+          </div>
+        </DragDropProvider>
+        <AddMenu
+          panel={panel}
+          projectPath={projectPath}
+          listShown={shown === 'surfaces'}
+          onTerminal={newTerminal}
+        />
+      </div>
+      <div className="kp-head__tools app-region-no-drag">
+        {tight && <CountMenu items={items} onSelect={(item) => selectSurface(panel, item)} />}
+        {!phone && (
+          <PanelButton
+            label={maximized ? t('common:pane.restore') : t('common:pane.maximize')}
+            onClick={() => useViewStore.setState({ sidePaneMaximized: !maximized })}
+          >
+            <PaneIcon icon={maximized ? ArrowShrink01Icon : ArrowExpand01Icon} />
+          </PanelButton>
+        )}
+        <PanelButton
+          label={t('common:pane.collapse')}
+          pressed
+          className="kp-head__toggle"
+          onClick={() => closeSidePanel(panel)}
+        >
+          <PaneIcon icon={SidebarRightIcon} size={16} />
+        </PanelButton>
+      </div>
+      <UnsavedPrompt
         panel={panel}
-        projectPath={projectPath}
-        listShown={shown === 'surfaces'}
-        onTerminal={newTerminal}
-        onTab={newTab}
-        open={items.filter((item) => item.kind === 'devices').length}
-      />
-      {tight && <CountMenu items={items} onSelect={(item) => selectSurface(panel, item)} />}
-      <EndTerminal
-        container={sheetRef}
-        closing={closing}
-        onCancel={() => setClosing(null)}
-        onConfirm={() => {
-          if (closing) close(closing)
-          setClosing(null)
+        onClose={(path) => {
+          const item = items.find((other) => other.kind === 'file' && other.id === path)
+          if (item) close(item)
         }}
       />
-    </>
+      <EndTerminal
+        container={sheetRef}
+        closing={asked}
+        onCancel={() => setClosing((waiting) => waiting.slice(1))}
+        onConfirm={() => {
+          // Its place in the row as it is now: a tab closed meanwhile leaves nothing to end.
+          const item = asked && items.find((other) => other.key === asked.key)
+          if (item) close(item)
+          setClosing((waiting) => waiting.slice(1))
+        }}
+      />
+    </div>
   )
 }
 
@@ -644,16 +954,23 @@ export function SurfaceTabs({ panel, projectPath }: { panel: string; projectPath
  */
 function SurfaceTab({
   panel,
+  projectPath,
   item,
   index,
   onSelect,
   onClose,
+  onCloseOthers,
+  onCloseRight,
 }: {
   panel: string
+  projectPath: string
   item: SurfaceItem
   index: number
   onSelect: () => void
   onClose: () => void
+  /** Null where the row has no other tab, or none after this one. */
+  onCloseOthers: (() => void) | null
+  onCloseRight: (() => void) | null
 }) {
   const { t } = useTranslation(['terminal', 'browser', 'devices', 'common', 'shell'])
   const [editing, setEditing] = useState(false)
@@ -670,6 +987,7 @@ function SurfaceTab({
     [handleRef],
   )
   const terminal = item.terminal
+  const split = useTerminalsStore((s) => (terminal ? !!s.split[panel] : false))
 
   // A full row scrolls; a tab selected out of sight, such as one an agent opens, comes into view.
   useEffect(() => {
@@ -692,6 +1010,7 @@ function SurfaceTab({
     item.kind === 'devices'
       ? t('devices:actions.disconnect', { name: item.name })
       : t('browser:actions.closeTab', { name: item.name })
+  const mention = isSurfaceKind(item.kind) ? MENTION_OF[item.kind] : null
 
   return (
     <ContextMenu
@@ -712,6 +1031,7 @@ function SurfaceTab({
         data-dragging={isDragging || undefined}
         data-editing={editing || undefined}
         data-dim={item.dim || undefined}
+        data-preview={item.preview || undefined}
       >
         {/* Stays mounted while renaming, hidden under the input, so the tab keeps its width. */}
         <button
@@ -721,21 +1041,27 @@ function SurfaceTab({
           aria-selected={item.selected}
           title={item.title}
           onClick={onSelect}
-          onDoubleClick={() => terminal && setEditing(true)}
+          onDoubleClick={() => (terminal ? setEditing(true) : keepDoc(panel, item.key))}
           onAuxClick={(event) => event.button === 1 && onClose()}
           className="kp-stab__btn"
           style={editing ? { visibility: 'hidden' } : undefined}
         >
           <span className="kp-stab__icon">
             {item.icon}
-            {item.dot && <span aria-hidden className="kp-stab__badge" data-tone={item.dot.tone} />}
+            {(item.dot || item.needs > 0) && (
+              <span aria-hidden className="kp-stab__badge" data-tone={item.dot?.tone ?? 'fox'} />
+            )}
           </span>
-          <span className="kp-stab__name">{item.name}</span>
+          <span className="kp-stab__name">
+            {item.name}
+            {item.note && <span className="kp-stab__note"> {item.note}</span>}
+          </span>
           {item.code !== null && (
             <span className="kp-stab__code" data-failed={item.code !== 0 || undefined}>
               {item.code}
             </span>
           )}
+          {item.needs > 0 && <span className="kp-stab__needs">{item.needs}</span>}
           {item.dot && (
             <span
               role="img"
@@ -768,27 +1094,41 @@ function SurfaceTab({
       </ContextMenuTrigger>
       <ContextMenuContent>
         {terminal && (
+          <>
+            <ContextMenuItem
+              onClick={() => {
+                renameAfterMenu.current = true
+              }}
+            >
+              <PaneIcon icon={PencilEdit02Icon} size={16} />
+              {t('terminal:tab.rename')}
+            </ContextMenuItem>
+            <ContextMenuItem
+              onClick={() => {
+                // Splitting sets a new terminal beside this one; unsplitting starts nothing.
+                if (!split) onSelect()
+                void toggleSplit(projectPath, panel)
+              }}
+            >
+              <PaneIcon icon={Layout2ColumnIcon} size={16} />
+              {split ? t('terminal:panel.unsplit') : t('terminal:panel.split')}
+            </ContextMenuItem>
+          </>
+        )}
+        {mention && (
           <ContextMenuItem
-            onClick={() => {
-              renameAfterMenu.current = true
-            }}
+            onClick={() =>
+              emitAppEvent({
+                kind: 'mention-into-composer',
+                draft: panelSession(panel) ?? NEW_SESSION_DRAFT,
+                mention: surfaceMention(mention, item.id),
+              })
+            }
           >
-            <PaneIcon icon={PencilEdit02Icon} size={16} />
-            {t('terminal:tab.rename')}
+            <PaneIcon icon={MessageAdd01Icon} size={16} />
+            {t('shell:surfaces.reference')}
           </ContextMenuItem>
         )}
-        <ContextMenuItem
-          onClick={() =>
-            emitAppEvent({
-              kind: 'mention-into-composer',
-              draft: panelSession(panel) ?? NEW_SESSION_DRAFT,
-              mention: surfaceMention(MENTION_OF[item.kind], item.id),
-            })
-          }
-        >
-          <PaneIcon icon={MessageAdd01Icon} size={16} />
-          {t('shell:surfaces.reference')}
-        </ContextMenuItem>
         {item.shared && (
           <ContextMenuItem
             onClick={() => {
@@ -805,9 +1145,24 @@ function SurfaceTab({
             {t('shell:surfaces.stopSharing', { agent: item.agent })}
           </ContextMenuItem>
         )}
+        {item.preview && (
+          <ContextMenuItem onClick={() => keepDoc(panel, item.key)}>
+            <PaneIcon icon={PinIcon} size={16} />
+            {t('shell:surfaces.keep')}
+          </ContextMenuItem>
+        )}
+        {(terminal || mention || item.shared || item.preview) && <ContextMenuSeparator />}
         <ContextMenuItem onClick={onClose}>
           <PaneIcon icon={Cancel01Icon} size={16} />
           {item.kind === 'devices' ? closeLabel : t('common:actions.close')}
+        </ContextMenuItem>
+        <ContextMenuItem disabled={!onCloseOthers} onClick={() => onCloseOthers?.()}>
+          <PaneIcon icon={CancelCircleIcon} size={16} />
+          {t('shell:surfaces.closeOthers')}
+        </ContextMenuItem>
+        <ContextMenuItem disabled={!onCloseRight} onClick={() => onCloseRight?.()}>
+          <PaneIcon icon={ArrowRight01Icon} size={16} />
+          {t('shell:surfaces.closeRight')}
         </ContextMenuItem>
       </ContextMenuContent>
     </ContextMenu>
@@ -857,75 +1212,90 @@ function TabNameInput({
 }
 
 /**
- * **+**: the side panel's list, with the host's devices under Mobile device as Add device listed
- * them. While the empty pane shows the list, **+** only takes the focus to it.
+ * The side panel's list as a menu's items, with the host's devices under Mobile device. **+** and
+ * the top bar's More tools both show it.
  */
-function AddMenu({
+export function SurfaceMenu({
   panel,
   projectPath,
-  open,
-  listShown,
   onTerminal,
-  onTab,
 }: {
   panel: string
   projectPath: string
-  /** How many devices the session has open. */
-  open: number
-  /** The empty pane is shown, listing the same rows. */
-  listShown: boolean
-  onTerminal: () => void
-  onTab: () => void
+  /** Starts a terminal in the list's place, where the row shows one that takes a while. */
+  onTerminal?: () => void
 }) {
-  const { t } = useTranslation(['shell', 'terminal', 'browser', 'devices'])
   const sessionId = panelSession(panel)
   const rows = useSurfaceRows(panel, projectPath)
-  const devicesOn = rows.some((row) => row.id === 'devices' && !row.off)
+  const artifacts = useArtifactChoices(panel)
+  const open = useDevicesStore((s) => devicesOf(s.devices, sessionId).length)
   const full = open >= SESSION_DEVICE_LIMIT
+  const devicesOn = rows.some((row) => row.id === 'devices' && !row.off)
+  // The menu mounts as it opens: the host's devices are read for its Mobile device submenu.
+  useEffect(() => {
+    if (devicesOn) void loadDevices()
+  }, [devicesOn])
+  return (
+    <SurfaceMenuItems
+      rows={rows}
+      artifacts={artifacts}
+      onPick={(id: SurfaceRowId) =>
+        id === 'terminal' && onTerminal ? onTerminal() : startSurface(panel, projectPath, id)
+      }
+      onArtifact={(id) => startArtifact(panel, id)}
+      devices={(row) =>
+        sessionId && (
+          <DropdownMenuSub key={row.id}>
+            <DropdownMenuSubTrigger data-accelerator={row.key ?? undefined}>
+              <PaneIcon icon={row.icon} size={16} />
+              {row.label}
+            </DropdownMenuSubTrigger>
+            <DropdownMenuSubContent className="min-w-64">
+              <DeviceItems sessionId={sessionId} open={open} full={full} panel={panel} />
+            </DropdownMenuSubContent>
+          </DropdownMenuSub>
+        )
+      }
+    />
+  )
+}
 
-  const pick = (id: SurfaceRowId) => {
-    if (id === 'terminal') onTerminal()
-    else if (id === 'browser') onTab()
-    else startSurface(panel, projectPath, id)
-  }
+/** **+**: the side panel's list. While the panel shows the list, **+** only takes the focus to it. */
+function AddMenu({
+  panel,
+  projectPath,
+  listShown,
+  onTerminal,
+}: {
+  panel: string
+  projectPath: string
+  /** The panel shows the list itself, with the same rows. */
+  listShown: boolean
+  onTerminal: () => void
+}) {
+  const { t } = useTranslation('shell')
   const trigger = (
     <button
       type="button"
-      aria-label={t('shell:surfaces.add')}
+      aria-label={t('surfaces.add')}
       className="kp-tool kp-tool--sm app-region-no-drag"
       onClick={listShown ? () => focusSurfaceList(panel) : undefined}
     />
   )
   return (
-    <DropdownMenu onOpenChange={(shown) => shown && devicesOn && void loadDevices()}>
+    <DropdownMenu>
       <Tooltip>
         <TooltipTrigger render={listShown ? trigger : <DropdownMenuTrigger render={trigger} />}>
           <PaneIcon icon={PlusSignIcon} size={14} />
         </TooltipTrigger>
-        <TooltipContent>{t('shell:surfaces.add')}</TooltipContent>
+        <TooltipContent>{t('surfaces.add')}</TooltipContent>
       </Tooltip>
       <DropdownMenuContent
         align="start"
         className="w-68"
         onKeyDown={(event) => runSessionMenuAccelerator(event, isMac)}
       >
-        <SurfaceMenuItems
-          rows={rows}
-          onPick={pick}
-          devices={(row) =>
-            sessionId && (
-              <DropdownMenuSub key={row.id}>
-                <DropdownMenuSubTrigger data-accelerator={row.key}>
-                  <PaneIcon icon={row.icon} size={16} />
-                  {row.label}
-                </DropdownMenuSubTrigger>
-                <DropdownMenuSubContent className="min-w-64">
-                  <DeviceItems sessionId={sessionId} open={open} full={full} panel={panel} />
-                </DropdownMenuSubContent>
-              </DropdownMenuSub>
-            )
-          }
-        />
+        <SurfaceMenu panel={panel} projectPath={projectPath} onTerminal={onTerminal} />
       </DropdownMenuContent>
     </DropdownMenu>
   )
@@ -972,7 +1342,7 @@ function DeviceItems({
   )
 }
 
-const KIND_ORDER: SurfaceKind[] = ['terminal', 'browser', 'devices']
+const KIND_ORDER = ['terminal', 'browser', 'devices', 'panes'] as const
 
 /** The count at the row's end while only icons fit: every tab by kind, the shown one checked. */
 function CountMenu({
@@ -1003,7 +1373,9 @@ function CountMenu({
           <DropdownMenuLabel>{t('browser:tabs.count', { count: items.length })}</DropdownMenuLabel>
         </DropdownMenuGroup>
         {KIND_ORDER.map((kind) => {
-          const own = items.filter((item) => item.kind === kind)
+          const own = items.filter((item) =>
+            kind === 'panes' ? !isSurfaceKind(item.kind) : item.kind === kind,
+          )
           if (own.length === 0) return null
           return (
             <DropdownMenuGroup key={kind}>
@@ -1028,7 +1400,7 @@ function CountMenu({
   )
 }
 
-/** "End this terminal?", asked over the pane before a running terminal's tab closes. */
+/** "End this terminal?", asked over the panel before a running terminal's tab closes. */
 function EndTerminal({
   container,
   closing,
@@ -1070,31 +1442,11 @@ function EndTerminal({
   )
 }
 
-/**
- * The row's own pane while the session has no terminal, page or device open: the row with its
- * **+**, and the side panel's list to start from. It gives way to a kind as soon as one has a tab.
- */
-export function SurfacesPane({
-  panel,
-  projectPath,
-  maximized,
-}: {
-  panel: string
-  projectPath: string
-  maximized: boolean
-}) {
+/** The side panel's list in the panel itself, while its row has no tab selected. */
+export function SurfacesPane({ panel, projectPath }: { panel: string; projectPath: string }) {
   const { t } = useTranslation(['shell'])
-  const first = useSurfaceTabsStore((s) => s.order[panel]?.[0] ?? null)
-
-  useEffect(() => {
-    if (first) openSurfaces(panel, projectPath)
-  }, [first, panel, projectPath])
-
   return (
-    <PaneSheet pane="surfaces" maximized={maximized}>
-      <PaneHead panel={panel} pane="surfaces" maximized={maximized}>
-        <SurfaceTabs panel={panel} projectPath={projectPath} />
-      </PaneHead>
+    <PaneBody>
       <div className="kp-body">
         <PaneEmpty
           icon={<PaneIcon icon={SidebarRightIcon} size={20} />}
@@ -1102,14 +1454,10 @@ export function SurfacesPane({
           text={t('shell:surfaces.empty.text')}
         >
           <div className="mt-4">
-            <SurfaceList
-              panel={panel}
-              projectPath={projectPath}
-              onPick={(id) => startSurface(panel, projectPath, id)}
-            />
+            <SurfaceList panel={panel} projectPath={projectPath} />
           </div>
         </PaneEmpty>
       </div>
-    </PaneSheet>
+    </PaneBody>
   )
 }

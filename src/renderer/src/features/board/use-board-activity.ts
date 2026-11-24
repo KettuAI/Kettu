@@ -79,7 +79,7 @@ export function useBoardNews(sessionId: string | null): 'needs' | 'news' | undef
   )
   const agents = useSessionsStore(useShallow((s) => (key ? subagentKeys(s.byId, key) : NO_KEYS)))
   const seen = useBoardStore((s) => s.seen[key])
-  const open = useViewStore((s) => !!s.boardOpen[key])
+  const open = useViewStore((s) => s.sidePane[key] === 'board')
   const keys = useMemo(() => [...tasks, ...agents], [tasks, agents])
   useEffect(() => {
     if (key === '' || !loaded || !(open || seen === undefined) || sameKeys(seen, keys)) return

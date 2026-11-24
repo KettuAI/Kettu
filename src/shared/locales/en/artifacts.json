@@ -223,6 +223,7 @@
     "history": "History",
     "versionChip": "Version {{version}}, history",
     "present": "Present",
+    "openInMain": "Open in main area",
     "previewOnly": {
       "title": "Live pages open on your computer",
       "body": "In the browser, an artifact shows its preview. Its live page opens in Kettu on the computer, or in the web client the computer serves on its own network.",
@@ -236,8 +237,6 @@
     "backToLatest": "Back to latest",
     "showPages": "Show all pages",
     "chat": "Chat",
-    "expand": "Expand",
-    "restore": "Restore",
     "modes": {
       "label": "Mode",
       "view": "View",

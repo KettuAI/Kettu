@@ -12,7 +12,14 @@ import {
   type Ref,
 } from 'react'
 import { history, insertNewline, redo, standardKeymap, undo } from '@codemirror/commands'
-import { Annotation, Compartment, EditorState, Prec, type Extension } from '@codemirror/state'
+import {
+  Annotation,
+  Compartment,
+  EditorState,
+  Facet,
+  Prec,
+  type Extension,
+} from '@codemirror/state'
 import { EditorView, keymap, placeholder as placeholderText } from '@codemirror/view'
 import { MAX_HEIGHT_SHARE, useComposerHeight } from '@renderer/stores/composer-height'
 import { chipHooks, chips, keepAsText, type ChipHooks } from './editor-chips'
@@ -47,6 +54,38 @@ export interface PopoverAria {
 
 // Changes the box makes itself, which it does not report back as typing.
 const fromBox = Annotation.define<boolean>()
+
+// The guess at the next message an empty box offers.
+const suggestionOf = Facet.define<string, string | null>({ combine: (values) => values[0] ?? null })
+
+/** What an empty box shows: the placeholder, or the suggestion with the key that takes it. */
+function emptyBox(placeholder: string, suggestion: string | null): Extension {
+  if (!suggestion) return placeholderText(placeholder)
+  const wrap = document.createElement('span')
+  wrap.className = 'cm-suggestion'
+  const text = document.createElement('span')
+  text.className = 'cm-suggestion-text'
+  text.textContent = suggestion
+  const key = document.createElement('kbd')
+  key.className =
+    'inline-flex h-5 min-w-5 flex-none items-center justify-center rounded-tile bg-card px-1.5 font-sans text-xs font-medium text-secondary shadow-outline'
+  key.textContent = 'Tab'
+  wrap.append(text, key)
+  return [suggestionOf.of(suggestion), placeholderText(wrap)]
+}
+
+/** Tab in an empty box types the suggestion it offers, so it can be edited or undone. */
+function takeSuggestion(view: EditorView): boolean {
+  const suggestion = view.state.facet(suggestionOf)
+  if (!suggestion || view.state.doc.length > 0) return false
+  view.dispatch({
+    changes: { from: 0, insert: suggestion },
+    selection: { anchor: suggestion.length },
+    scrollIntoView: true,
+    userEvent: 'input.complete',
+  })
+  return true
+}
 
 function editability(disabled: boolean): Extension {
   return [EditorView.editable.of(!disabled), EditorState.readOnly.of(disabled)]
@@ -97,6 +136,23 @@ const theme = EditorView.theme({
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap',
     color: 'var(--text-placeholder)',
+  },
+  // The key stays whole at the end of the line, its edge too; the suggestion before it is cut.
+  '.cm-placeholder:has(.cm-suggestion)': { overflow: 'visible' },
+  '.cm-suggestion': {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: 'calc(var(--spacing) * 2)',
+    maxWidth: '100%',
+    // Room for the key's ring and shadow at the right edge of the box, which clips them.
+    paddingRight: 'calc(var(--spacing) * 0.5)',
+    verticalAlign: 'top',
+  },
+  '.cm-suggestion-text': {
+    minWidth: '0',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
   },
   // The command as marks, colored text as a sent message shows it, so the caret moves through it.
   '.cm-chip-command': { color: 'var(--control-on)', fontWeight: 'var(--font-weight-medium)' },
@@ -150,6 +206,7 @@ export function ComposerEditor({
   initialText,
   label,
   placeholder,
+  suggestion = null,
   disabled,
   chipContext,
   size,
@@ -167,6 +224,8 @@ export function ComposerEditor({
   initialText: string
   label: string
   placeholder: string
+  /** A guess at the next message, shown in place of the placeholder; Tab fills it in. */
+  suggestion?: string | null
   disabled: boolean
   /** What the chips resolve against, and what they report. */
   chipContext: ChipHooks
@@ -195,7 +254,15 @@ export function ComposerEditor({
     chips: new Compartment(),
   }))
   // What the first render had, which the editor starts with.
-  const initial = useRef({ initialText, placeholder, disabled, label, popover, chipContext })
+  const initial = useRef({
+    initialText,
+    placeholder,
+    suggestion,
+    disabled,
+    label,
+    popover,
+    chipContext,
+  })
   const changed = useEffectEvent(onChange)
   const moved = useEffectEvent(onCaret)
   const keyDown = useEffectEvent(onKeyDown)
@@ -244,6 +311,7 @@ export function ComposerEditor({
             { key: 'Enter', run: insertNewline, shift: insertNewline },
             // The composer sends or steers with these; where it does not, they type nothing.
             { key: 'Mod-Enter', run: () => true, shift: () => true },
+            { key: 'Tab', run: takeSuggestion },
             { key: 'Mod-z', run: undo, preventDefault: true },
             { key: 'Mod-y', mac: 'Mod-Shift-z', run: redo, preventDefault: true },
             { linux: 'Ctrl-Shift-z', run: redo, preventDefault: true },
@@ -253,7 +321,7 @@ export function ComposerEditor({
           EditorView.lineWrapping,
           EditorView.cursorScrollMargin.of({ x: 5, y: 16 }),
           theme,
-          parts.placeholder.of(placeholderText(first.placeholder)),
+          parts.placeholder.of(emptyBox(first.placeholder, first.suggestion)),
           parts.editable.of(editability(first.disabled)),
           parts.attributes.of(attributes(first.label, first.popover)),
           chips(),
@@ -277,8 +345,10 @@ export function ComposerEditor({
   }, [parts])
 
   useEffect(() => {
-    view.current?.dispatch({ effects: parts.placeholder.reconfigure(placeholderText(placeholder)) })
-  }, [parts, placeholder])
+    view.current?.dispatch({
+      effects: parts.placeholder.reconfigure(emptyBox(placeholder, suggestion)),
+    })
+  }, [parts, placeholder, suggestion])
   useEffect(() => {
     view.current?.dispatch({ effects: parts.editable.reconfigure(editability(disabled)) })
   }, [parts, disabled])

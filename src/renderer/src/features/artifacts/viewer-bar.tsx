@@ -2,14 +2,12 @@ import { useState, type ReactNode } from 'react'
 import type { IconSvgElement } from '@hugeicons/react'
 import {
   ArrowDown01Icon,
-  ArrowExpand01Icon,
-  ArrowShrink01Icon,
   Comment01Icon,
   Message01Icon,
   MoreHorizontalIcon,
   PencilEdit02Icon,
   PlayIcon,
-  SidebarRightIcon,
+  SquareArrowExpand01Icon,
   ViewIcon,
 } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
@@ -17,14 +15,10 @@ import { Dropdown, Icon, type MenuItem } from '@renderer/components/affect/app-s
 import { SegmentedControl } from '@renderer/components/affect/segmented-control'
 import { Kbd } from '@renderer/components/ui/kbd'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
-import { CornerControlsSpace, NoDrag, TopBar } from '@renderer/features/shell/top-bar'
-import { usePhoneWindow } from '@renderer/features/shell/narrow'
+import { NoDrag, TopBar } from '@renderer/features/shell/top-bar'
 import { longAgo } from '@renderer/lib/format'
-import { hasBand } from '@renderer/lib/platform'
 import { useNow } from '@renderer/lib/use-now'
-import { cn } from '@renderer/lib/utils'
 import type { ViewerMode } from '@renderer/stores/artifact-viewer'
-import { useViewStore } from '@renderer/stores/view'
 import { KIND_ICON } from './kinds'
 import { useArtifactMenu, type MenuOptions, type MenuTarget } from './menu-entries'
 import type { ArtifactKind } from './model'
@@ -66,31 +60,25 @@ export interface BarProps {
   /** The session to talk to about it, in the main area only. */
   onChat: (() => void) | null
   onPresent: (() => void) | null
+  /** Shows it in the main area's viewer, from the side panel only. */
+  onOpenMain: (() => void) | null
   share: { id: string; title: string; shown: number; head: number } | null
   menu: { target: MenuTarget; options: MenuOptions } | null
-  /** In a session's side panel, its panel and whether it covers the main area. */
-  panel: { maximized: boolean; onExpand: (() => void) | null; onClose: () => void } | null
 }
 
 /**
- * The viewer's bar, the same in the main area and the side panel: the kind's mark, the title and
- * version, the View / Comment / Edit switch, then who is here, Chat, Present, Share and More; the
- * side panel adds Expand and Close. It drops words, then buttons, as the viewer narrows.
+ * The viewer's bar. In the main area: the kind's mark, the title and version, the View / Comment /
+ * Edit switch, then who is here, Chat, Present, Share and More. In the side panel the artifact's
+ * tab has its mark and title, closes it and its row maximizes, so the bar is the tab's context
+ * bar: the page and version, then the switch, who is here, Present, Share, Open in main area and
+ * More. It drops words, then buttons, as the viewer narrows.
  */
 export function ViewerBar(props: BarProps) {
-  const phone = usePhoneWindow()
-  const cornered = useViewStore((s) => s.sidebarCollapsed) || phone
   const row = <BarRow {...props} />
   if (props.where === 'main') {
     return <TopBar className="avs-top">{row}</TopBar>
   }
-  const headCornered = cornered && !!props.panel?.maximized && !hasBand
-  return (
-    <div className={cn('avs-head app-region-drag', headCornered && 'avs-head--cornered')}>
-      {headCornered && <CornerControlsSpace className="mr-1" />}
-      {row}
-    </div>
-  )
+  return <div className="avs-head avs-head--ctx">{row}</div>
 }
 
 function BarRow({
@@ -110,12 +98,15 @@ function BarRow({
   presenceItems,
   onChat,
   onPresent,
+  onOpenMain,
   share,
   menu,
-  panel,
 }: BarProps) {
   const { t } = useTranslation(['artifacts', 'common'])
-  const { tier, tight, labelled } = useShell()
+  const shell = useShell()
+  const { tier, labelled } = shell
+  // The context bar has no title to make room for, so its buttons stay at any width.
+  const tight = shell.tight && where === 'main'
   const now = useNow()
   const wide = tier === 'wide' && where === 'main'
   // From the wide tier the modes keep their words, which say at a glance whether edits save;
@@ -134,14 +125,18 @@ function BarRow({
       iconsOnly={tier !== 'wide' || where === 'panel'}
     />
   )
-  // Narrow, Present and who is here go into More; under 480 px, Share and Chat too.
+  // Narrow, Present and who is here go into More; under 480 px, Share and Chat too. The context
+  // bar folds only who is here.
   const folded = tight || tier === 'narrow'
+  const presentFolded = folded && where === 'main'
   const extra: MenuItem[] = folded
     ? [
         ...(tight && onChat
           ? [{ label: t('viewer.chat'), icon: Message01Icon, onSelect: onChat }]
           : []),
-        ...(onPresent ? [{ label: t('viewer.present'), icon: PlayIcon, onSelect: onPresent }] : []),
+        ...(onPresent && presentFolded
+          ? [{ label: t('viewer.present'), icon: PlayIcon, onSelect: onPresent }]
+          : []),
         ...presenceItems,
       ]
     : []
@@ -149,16 +144,20 @@ function BarRow({
   return (
     <div className="avs-bar" data-centred={centred || undefined}>
       <NoDrag className="avs-bar__lead">
-        {kind && (
+        {where === 'main' && kind && (
           <span aria-hidden className="avs-bar__mark" data-kind={kind}>
-            <Icon icon={KIND_ICON[kind]} size={where === 'panel' ? 16 : 17} />
+            <Icon icon={KIND_ICON[kind]} size={17} />
           </span>
         )}
-        <h1 className="avs-bar__title" title={title}>
-          {title}
-        </h1>
+        {where === 'main' && (
+          <h1 className="avs-bar__title" title={title}>
+            {title}
+          </h1>
+        )}
         {/* Narrow, the page is chosen in the left card, which leaves the bar to the title. */}
-        {page && tier !== 'narrow' && <PageCrumb page={page} />}
+        {page && (where === 'panel' || tier !== 'narrow') && (
+          <PageCrumb page={page} slash={where === 'main'} />
+        )}
         {version && (
           <Tooltip>
             <TooltipTrigger
@@ -173,7 +172,9 @@ function BarRow({
               }
             >
               <b>{t('viewer.version', { version: version.number })}</b>
-              {wide && version.at !== null && <span>· {longAgo(version.at, now)}</span>}
+              {(wide || where === 'panel') && version.at !== null && (
+                <span>· {longAgo(version.at, now)}</span>
+              )}
             </TooltipTrigger>
             <TooltipContent>{t('viewer.history')}</TooltipContent>
           </Tooltip>
@@ -190,7 +191,7 @@ function BarRow({
             onClick={onChat}
           />
         )}
-        {onPresent && !folded && (
+        {onPresent && !presentFolded && (
           <BarAction
             label={t('viewer.present')}
             icon={PlayIcon}
@@ -207,6 +208,13 @@ function BarRow({
             />
           </span>
         )}
+        {onOpenMain && (
+          <BarAction
+            label={t('viewer.openInMain')}
+            icon={SquareArrowExpand01Icon}
+            onClick={onOpenMain}
+          />
+        )}
         {menu && (
           <MoreMenu
             target={menu.target}
@@ -216,22 +224,6 @@ function BarRow({
             }}
             extra={extra}
           />
-        )}
-        {panel && (
-          <>
-            {panel.onExpand && (
-              <BarAction
-                label={panel.maximized ? t('viewer.restore') : t('viewer.expand')}
-                icon={panel.maximized ? ArrowShrink01Icon : ArrowExpand01Icon}
-                onClick={panel.onExpand}
-              />
-            )}
-            <BarAction
-              label={t('common:pane.collapse')}
-              icon={SidebarRightIcon}
-              onClick={panel.onClose}
-            />
-          </>
         )}
       </NoDrag>
     </div>
@@ -324,13 +316,15 @@ function BarAction({
   )
 }
 
-function PageCrumb({ page }: { page: BarPage }) {
+function PageCrumb({ page, slash }: { page: BarPage; slash: boolean }) {
   const { t } = useTranslation('artifacts')
   return (
     <>
-      <i aria-hidden className="avs-bar__slash">
-        /
-      </i>
+      {slash && (
+        <i aria-hidden className="avs-bar__slash">
+          /
+        </i>
+      )}
       <Dropdown
         align="start"
         title={t('board.canvases.menu')}

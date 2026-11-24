@@ -1,32 +1,52 @@
-import { create } from 'zustand'
-import { toggleSidePane, useViewStore, type SidePane } from './view'
+import {
+  isDocKind,
+  selectDoc,
+  toggleSidePane,
+  useViewStore,
+  type DocKind,
+  type SidePane,
+  type SingleTab,
+} from './view'
 
-/** The side panes whose items share one row of tabs: terminals, browser pages and devices. */
+/** The kinds a session has several tabs of: terminals, browser pages and devices. */
 export type SurfaceKind = 'terminal' | 'browser' | 'devices'
 
-/** Whether the pane is one of the row's kinds, or the row's own pane while it has no tab yet. */
-export function isSurfacePane(pane: SidePane | null | undefined): pane is SurfaceKind | 'surfaces' {
-  return pane === 'terminal' || pane === 'browser' || pane === 'devices' || pane === 'surfaces'
+/** A tab's kind: one of the three, a file, diff or artifact, or a kind a session has one of. */
+export type TabKind = SurfaceKind | DocKind | SingleTab
+
+export function isSurfaceKind(pane: SidePane | null | undefined): pane is SurfaceKind {
+  return pane === 'terminal' || pane === 'browser' || pane === 'devices'
 }
 
-/** A tab's place in the row: its kind and its id within that kind. */
-export function surfaceKey(kind: SurfaceKind, id: string): string {
+/** A tab's place in the row: its kind and its id within that kind, empty for a kind of one. */
+export function surfaceKey(kind: TabKind, id = ''): string {
   return `${kind}:${id}`
 }
 
-export function kindOfKey(key: string): SurfaceKind {
-  return key.slice(0, key.indexOf(':')) as SurfaceKind
+export function kindOfKey(key: string): TabKind {
+  return key.slice(0, key.indexOf(':')) as TabKind
 }
 
-interface SurfaceTabsStore {
-  /**
-   * Per panel, the row as last shown: tabs in the order they opened, then as the user dragged
-   * them. Kept for the app's run, as the terminals' own order is.
-   */
-  order: Record<string, string[]>
+// Per panel, keys of tabs that are away for now and keep their place: pages a restart reopens.
+const awaited = new Map<string, Set<string>>()
+
+/** Keeps the place of tabs that will come back under other keys, until `replaceSurfaceKey`. */
+export function awaitSurfaceKeys(panel: string, keys: readonly string[]): void {
+  if (keys.length > 0) awaited.set(panel, new Set(keys))
+  else awaited.delete(panel)
 }
 
-export const useSurfaceTabsStore = create<SurfaceTabsStore>()(() => ({ order: {} }))
+/** A tab came back under a new key: it takes the place its old key held. */
+export function replaceSurfaceKey(panel: string, from: string, to: string): void {
+  awaited.get(panel)?.delete(from)
+  if (from === to) return
+  useViewStore.setState((s) => {
+    const order = s.sideOrder[panel]
+    if (!order?.includes(from)) return s
+    const next = order.filter((key) => key !== to).map((key) => (key === from ? to : key))
+    return { sideOrder: { ...s.sideOrder, [panel]: next } }
+  })
+}
 
 /** The keys in the row's order: those the row knows where it had them, new ones after them. */
 export function arrangeSurfaceKeys(
@@ -41,12 +61,24 @@ export function arrangeSurfaceKeys(
 
 /** Keeps the row as shown, so a tab that opens later lands after every tab already there. */
 export function recordSurfaceOrder(panel: string, keys: readonly string[]): void {
-  useSurfaceTabsStore.setState((s) => {
-    const before = s.order[panel]
-    if (before?.length === keys.length && before.every((key, index) => key === keys[index])) {
+  useViewStore.setState((s) => {
+    const before = s.sideOrder[panel] ?? []
+    const away = awaited.get(panel)
+    // A tab that is away keeps its place among the ones shown.
+    const present = new Set(keys)
+    const next = away?.size
+      ? [
+          ...before.filter((key) => present.has(key) || away.has(key)),
+          ...keys.filter((key) => !before.includes(key)),
+        ]
+      : [...keys]
+    if (before.length === next.length && before.every((key, index) => key === next[index])) {
       return s
     }
-    return { order: { ...s.order, [panel]: [...keys] } }
+    const sideOrder = { ...s.sideOrder }
+    delete sideOrder[panel]
+    if (next.length > 0) sideOrder[panel] = next
+    return { sideOrder }
   })
 }
 
@@ -64,18 +96,19 @@ export function moveSurfaceTab(
 }
 
 /**
- * A kind's last tab went while its pane shows: the pane gives way to the nearest tab of another
- * kind, after where that kind's tabs were or else before, and the panel folds only once the row
+ * A kind's last tab went while the panel shows it: the panel shows the nearest tab of another
+ * kind, after where that kind's tabs were or else before, and the side panel's list once the row
  * is empty. A panel showing something else is left as it is.
  */
 export function foldSurface(panel: string, kind: SurfaceKind): void {
-  if (useViewStore.getState().sidePane[panel] !== kind) return
-  const order = useSurfaceTabsStore.getState().order[panel] ?? []
+  const view = useViewStore.getState()
+  if (view.sidePane[panel] !== kind) return
+  const order = view.sideOrder[panel] ?? []
   const last = order.findLastIndex((key) => kindOfKey(key) === kind)
   const others = order
-    .map((key, index) => ({ kind: kindOfKey(key), index }))
+    .map((key, index) => ({ key, kind: kindOfKey(key), index }))
     .filter((other) => other.kind !== kind)
   const next = others.find((other) => other.index > last) ?? others.at(-1)
-  if (next) toggleSidePane(panel, next.kind, true)
-  else toggleSidePane(panel, kind, false)
+  if (next && isDocKind(next.kind)) selectDoc(panel, next.key)
+  else toggleSidePane(panel, next?.kind ?? 'surfaces', true)
 }

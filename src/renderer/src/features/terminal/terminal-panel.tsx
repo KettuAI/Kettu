@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react'
-import { ComputerTerminal01Icon, Layout2ColumnIcon, PlusSignIcon } from '@hugeicons/core-free-icons'
+import { ComputerTerminal01Icon, PlusSignIcon } from '@hugeicons/core-free-icons'
 import { useDefaultLayout } from 'react-resizable-panels'
 import { useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
@@ -8,21 +8,13 @@ import {
   ResizablePanel,
   ResizablePanelGroup,
 } from '@renderer/components/ui/resizable'
-import {
-  PaneEmpty,
-  PaneHead,
-  PaneIcon,
-  PaneSheet,
-  PanelButton,
-} from '@renderer/features/shell/panel-button'
+import { PaneBody, PaneEmpty, PaneIcon } from '@renderer/features/shell/panel-button'
 import { SHEET_INSIDE_RADIUS } from '@renderer/features/shell/sheet'
-import { SurfaceTabs } from '@renderer/features/shell/surface-tabs'
 import { layoutStorage } from '@renderer/lib/storage'
 import {
   createTerminal,
   focusTerminalSide,
   terminalsOf,
-  toggleSplit,
   useTerminalsStore,
   type TerminalSide,
   type TerminalState,
@@ -35,18 +27,10 @@ const LEFT = 'terminal-left'
 const RIGHT = 'terminal-right'
 
 /**
- * The side panel's Terminal pane: a session's terminals, or New session's, under the row of tabs
- * they share with its browser pages and devices. They open in `projectPath`, the session's folder.
+ * What a terminal's tab shows in the side panel: the session's selected terminal, or New
+ * session's, and the one beside it while split. They open in `projectPath`, the session's folder.
  */
-export function TerminalPanel({
-  projectPath,
-  panel,
-  maximized,
-}: {
-  projectPath: string
-  panel: string
-  maximized: boolean
-}) {
+export function TerminalPanel({ projectPath, panel }: { projectPath: string; panel: string }) {
   const { t } = useTranslation(['terminal', 'common'])
   const list = useTerminalsStore(useShallow((s) => terminalsOf(s.byId, panel, s.order[panel])))
   const activeId = useTerminalsStore((s) => s.active[panel])
@@ -73,36 +57,12 @@ export function TerminalPanel({
   const newTerminal = () => void starting(() => createTerminal(projectPath, panel))
 
   return (
-    <PaneSheet pane="terminal" maximized={maximized} data-terminal-panel="">
-      <PaneHead
-        panel={panel}
-        pane="terminal"
-        maximized={maximized}
-        tools={
-          <>
-            {error && (
-              <span className="kp-head__error" title={error}>
-                {error}
-              </span>
-            )}
-            <PanelButton
-              label={split ? t('panel.unsplit') : t('panel.split')}
-              pressed={split}
-              disabled={creating || (!split && !active)}
-              // Unsplitting starts nothing.
-              onClick={() =>
-                void (split
-                  ? toggleSplit(projectPath, panel)
-                  : starting(() => toggleSplit(projectPath, panel)))
-              }
-            >
-              <PaneIcon icon={Layout2ColumnIcon} />
-            </PanelButton>
-          </>
-        }
-      >
-        <SurfaceTabs panel={panel} projectPath={projectPath} />
-      </PaneHead>
+    <PaneBody data-terminal-panel="">
+      {error && (
+        <p role="alert" className="kp-alert">
+          {error}
+        </p>
+      )}
       <div className="kp-body">
         {active ? (
           <ResizablePanelGroup
@@ -147,7 +107,7 @@ export function TerminalPanel({
           )
         )}
       </div>
-    </PaneSheet>
+    </PaneBody>
   )
 }
 

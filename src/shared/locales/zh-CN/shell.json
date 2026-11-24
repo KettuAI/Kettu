@@ -2,18 +2,10 @@
   "headerTools": {
     "board": "看板",
     "files": "文件",
-    "computer": "Computer",
-    "terminal": "终端",
-    "browser": "浏览器",
-    "devices": "移动设备",
     "closePane": "关闭窗格",
     "leaveSession": "离开会话",
-    "sideChat": "侧聊",
     "sideChatNews": "有新回答",
-    "more": "更多工具",
-    "git": "Git",
-    "requests": "请求",
-    "surfaces": "终端、浏览器和设备"
+    "more": "更多工具"
   },
   "hostBanner": {
     "restarting": "正在重启智能体后台进程，会话会自动恢复。",
@@ -115,17 +107,18 @@
     "nothingRead": "还没有从它读到过内容，等它回来后会显示在这里。"
   },
   "surfaces": {
-    "tabs": "终端、网页和设备",
-    "add": "新开终端、网页或设备",
+    "tabs": "侧边面板的标签",
+    "add": "在侧边面板里打开",
     "recording": "正在录屏",
     "kinds": {
       "terminal": "终端",
       "browser": "网页",
-      "devices": "设备"
+      "devices": "设备",
+      "panes": "面板"
     },
     "empty": {
       "title": "在侧边面板里打开",
-      "text": "终端、网页和移动设备排成一排标签，智能体打开的也在这里。"
+      "text": "会话旁边打开的东西都排在一排标签里，智能体打开的也在这里。"
     },
     "list": {
       "terminal": "终端",
@@ -133,8 +126,13 @@
       "devices": "移动设备",
       "files": "文件",
       "git": "Git",
+      "board": "看板",
+      "sideChat": "侧聊",
       "requests": "请求",
       "computer": "Computer",
+      "artifact": "产物",
+      "artifacts": "产物",
+      "open": "已打开",
       "live": "正在用",
       "off": {
         "terminal": "这台电脑已关闭",
@@ -147,9 +145,13 @@
         "computer": "智能体用电脑时"
       }
     },
-    "switch": "换窗格",
     "reference": "在对话中引用",
+    "keep": "保留",
+    "uncommitted": "未提交的更改",
     "stopSharing": "收回 {{agent}} 的使用",
-    "shared": "{{agent}} 能用"
+    "shared": "{{agent}} 能用",
+    "news": "有新动静",
+    "closeOthers": "关闭其他",
+    "closeRight": "关闭右边的"
   }
 }

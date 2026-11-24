@@ -13,8 +13,7 @@
     "openInEditor": "Open in editor",
     "close": "Close panel",
     "title": "Files",
-    "hideTree": "Hide files",
-    "showTree": "Show files"
+    "more": "More"
   },
   "browser": {
     "empty": "No files in this project.",
@@ -37,12 +36,12 @@
     "conflicted": "Conflicted"
   },
   "preview": {
-    "emptyTitle": "Open files appear here",
-    "emptyDescription": "Pick a file in the tree, or click a file path in the conversation.",
     "view": "Show the file as",
     "preview": "Preview",
     "edit": "Edit",
     "copyPath": "Copy path",
+    "showChanges": "Show changes",
+    "reference": "Reference in conversation",
     "openFailed": "Couldn't open this file",
     "missing": "This file is no longer on disk.",
     "readFailed": "Couldn't read this file again: {{message}}",
@@ -79,8 +78,6 @@
     "agentFile": "Read-only: {{agent}} keeps this file for the session. It isn't part of the project."
   },
   "tabs": {
-    "label": "Open files",
-    "close": "Close {{name}}",
     "agentFile": "{{agent}}'s file, read-only"
   },
   "link": {
@@ -127,9 +124,6 @@
     "tooLargeDescription": "One side of this change is over 1 MB.",
     "sameTitle": "No changes to show",
     "sameDescription": "Both sides of this file are the same now.",
-    "view": "View",
-    "diff": "Diff",
-    "file": "File",
     "mentionLine": "Mention line {{line}}",
     "mentionLines": "Mention lines {{start}}–{{end}}",
     "selectHint": "Click line numbers to mention them",
@@ -138,7 +132,9 @@
     "hunks_one": "{{count}} hunk",
     "hunks_other": "{{count}} hunks",
     "previous": "Previous change",
-    "next": "Next change"
+    "next": "Next change",
+    "position": "{{current}} / {{total}}",
+    "openFile": "Open file"
   },
   "changes": {
     "emptyTitle": "No uncommitted changes",

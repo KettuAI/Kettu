@@ -6,7 +6,7 @@ import { PaneIcon } from '@renderer/features/shell/panel-button'
 import { learnArtifactHost, sessionHost } from '@renderer/lib/host'
 import { useEntry } from '@renderer/features/session/use-thread'
 import { useArtifactsStore } from '@renderer/stores/artifacts'
-import { toggleArtifactPane } from '@renderer/stores/view'
+import { openArtifactTab } from '@renderer/stores/view'
 import { Ago } from './row-parts'
 
 /** An artifact the session wrote. A click shows it beside the thread, as its card there does. */
@@ -33,7 +33,8 @@ export function ArtifactRow({
       type="button"
       className="kb-art"
       aria-label={t('actions.openTitle', { title })}
-      onClick={() => toggleArtifactPane(sessionId, artifactId, true)}
+      onClick={() => openArtifactTab(sessionId, artifactId, { preview: true, fromPanel: true })}
+      onDoubleClick={() => openArtifactTab(sessionId, artifactId, { fromPanel: true })}
     >
       <span className="kb-mark" data-kind={kind ?? undefined}>
         <PaneIcon icon={kind ? KIND_ICON[kind] : ShapesIcon} size={14} />

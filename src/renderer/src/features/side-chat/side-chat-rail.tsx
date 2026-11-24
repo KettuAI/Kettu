@@ -1,6 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent } from 'react'
 import {
-  BubbleChatQuestionIcon,
   Cancel01Icon,
   Copy01Icon,
   Delete02Icon,
@@ -26,15 +25,14 @@ import { toast } from '@renderer/components/ui/toast'
 import { Markdown } from '@renderer/features/session/markdown'
 import { SendButton } from '@renderer/features/session/composer/send-button'
 import { TurnDots } from '@renderer/features/session/turn-dots'
-import { PaneIcon } from '@renderer/features/shell/panel-button'
+import { PaneBody, PaneContext, PaneIcon, PanelButton } from '@renderer/features/shell/panel-button'
 import { errorMessage, host } from '@renderer/lib/host'
 import { formatShortcut, isMod } from '@renderer/lib/platform'
-import { cn } from '@renderer/lib/utils'
 import { agentName } from '@renderer/stores/agents'
+import { hostOfSession, useSessionsStore } from '@renderer/stores/sessions'
 import { useSettingsStore } from '@renderer/stores/settings'
 import { askSide, setSideDraft, useSideChatStore } from '@renderer/stores/side-chat'
 import { useThreadsStore } from '@renderer/stores/threads'
-import { toggleSideChat } from '@renderer/stores/view'
 import './side-chat.css'
 
 const NO_DRAFT = { text: '', quote: null }
@@ -45,16 +43,22 @@ interface Props {
   sessionId: string
   agentId: AgentId
   hostId: string | null
-  /** Laid over the thread's right side, for a window too narrow for both. */
-  overlay: boolean
+}
+
+/** What the session's Side chat tab shows in the side panel. */
+export default function SideChatPane({ sessionId }: { sessionId: string }) {
+  const summary = useSessionsStore((s) => s.byId[sessionId])
+  if (!summary) return null
+  return (
+    <SideChat sessionId={sessionId} agentId={summary.agentId} hostId={hostOfSession(summary)} />
+  )
 }
 
 /**
- * The session's side chat, in the column the board uses: questions asked beside the session,
- * answered from its conversation and never part of it. It says how its agent answers and what
- * that costs, since the ways differ.
+ * The session's side chat: questions asked beside the session, answered from its conversation
+ * and never part of it. It says how its agent answers and what that costs, since the ways differ.
  */
-export default function SideChatRail({ sessionId, agentId, hostId, overlay }: Props) {
+function SideChat({ sessionId, agentId, hostId }: Props) {
   const { t } = useTranslation('session')
   const side = useThreadsStore((s) => s.replicas[sessionId]?.state?.session.sideChat ?? null)
   const draft = useSideChatStore((s) => s.drafts[sessionId] ?? NO_DRAFT)
@@ -113,10 +117,7 @@ export default function SideChatRail({ sessionId, agentId, hostId, overlay }: Pr
       .finally(() => setSending(false))
   }
 
-  const back = () => {
-    if (overlay) toggleSideChat(sessionId, false)
-    emitAppEvent({ kind: 'focus-composer' })
-  }
+  const back = () => emitAppEvent({ kind: 'focus-composer' })
 
   const onKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
     if (event.key === 'Escape') {
@@ -152,36 +153,18 @@ export default function SideChatRail({ sessionId, agentId, hostId, overlay }: Pr
       : t(`sideChat.note.${route}`)
 
   return (
-    <aside
-      className={cn('kc-rail animate-in fade-in', overlay && 'kc-rail--over')}
-      aria-label={t('sideChat.title')}
-    >
-      <div className="kc-head">
-        <PaneIcon icon={BubbleChatQuestionIcon} size={15} />
-        <span className="kc-head__title">{t('sideChat.title')}</span>
-        <span className="kc-head__note" title={note}>
-          {note}
+    <PaneBody className="kc-rail" aria-label={t('sideChat.title')}>
+      <PaneContext
+        tools={
+          <PanelButton label={t('sideChat.clear')} disabled={entries.length === 0} onClick={clear}>
+            <PaneIcon icon={Delete02Icon} />
+          </PanelButton>
+        }
+      >
+        <span className="kp-ctx__place" title={note}>
+          <span>{note}</span>
         </span>
-        <button
-          type="button"
-          className="kp-tool kc-head__tool"
-          aria-label={t('sideChat.clear')}
-          title={t('sideChat.clear')}
-          disabled={entries.length === 0}
-          onClick={clear}
-        >
-          <PaneIcon icon={Delete02Icon} size={15} />
-        </button>
-        <button
-          type="button"
-          className="kp-tool"
-          aria-label={t('sideChat.close')}
-          title={t('sideChat.close')}
-          onClick={() => toggleSideChat(sessionId, false)}
-        >
-          <PaneIcon icon={Cancel01Icon} size={15} />
-        </button>
-      </div>
+      </PaneContext>
       <div ref={scroller} className="kc-scroll">
         {needsPick ? (
           <PickAgent
@@ -269,7 +252,7 @@ export default function SideChatRail({ sessionId, agentId, hostId, overlay }: Pr
           <span>{t('sideChat.hint.close', { keys: formatShortcut('Mod+J') })}</span>
         </div>
       </div>
-    </aside>
+    </PaneBody>
   )
 }
 

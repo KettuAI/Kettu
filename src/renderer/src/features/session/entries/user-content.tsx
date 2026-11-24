@@ -284,7 +284,7 @@ function ChipText({
     if (chip.kind !== 'file' || !chip.path || !projectPath) return null
     const path = chip.path
     const line = chip.lines ? Number(chip.lines.split('–')[0]) : null
-    return () => openFile(projectPath, path, line)
+    return () => openFile(projectPath, path, line, { preview: true })
   }
 
   const renderChip = (chip: Chip, raw: string) => {

@@ -8,7 +8,16 @@ import {
   useState,
   type ReactNode,
 } from 'react'
-import { File01Icon, FileNotFoundIcon, FloppyDiskIcon } from '@hugeicons/core-free-icons'
+import {
+  CodeIcon,
+  FileNotFoundIcon,
+  FloppyDiskIcon,
+  FolderOpenIcon,
+  GitCompareIcon,
+  Link01Icon,
+  MessageAdd01Icon,
+  MoreHorizontalIcon,
+} from '@hugeicons/core-free-icons'
 import type { TFunction } from 'i18next'
 import { useTranslation } from 'react-i18next'
 import type { ChangeStatus } from '@shared/git'
@@ -20,7 +29,21 @@ import {
   type MediaGrant,
 } from '@shared/media'
 import { Skeleton } from '@renderer/components/ui/skeleton'
-import { PaneEmpty, PaneIcon, PanelButton } from '@renderer/features/shell/panel-button'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@renderer/components/ui/dropdown-menu'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
+import { emitAppEvent } from '@renderer/app/events'
+import {
+  PaneContext,
+  PaneEmpty,
+  PaneIcon,
+  PanelButton,
+} from '@renderer/features/shell/panel-button'
+import { panelSession } from '@renderer/stores/view'
 import { bytes, clock } from '@renderer/lib/format'
 import { errorMessage } from '@renderer/lib/host'
 import { hostOfPath } from '@renderer/lib/host-paths'
@@ -42,7 +65,6 @@ import type { Size } from '@renderer/features/session/media/zoom'
 import { toast } from '@renderer/components/ui/toast'
 import { agentName } from '@renderer/stores/agents'
 import {
-  closeFile,
   discardEdits,
   getBuffer,
   isSvgFile,
@@ -57,7 +79,9 @@ import {
   type OpenFile,
 } from '@renderer/stores/files'
 import { ChangeBadge } from './change-badge'
-import { DiffFileToggle, PathCopy, PreviewEditToggle } from './file-header'
+import { PathCopy, PreviewEditToggle } from './file-header'
+import { mentionPaths } from './mention-lines'
+import { copyPaths } from './operations'
 import { openInEditor } from './open-in-editor'
 import { nameOf } from './paths'
 import type { DocumentFailure } from './document-failure'
@@ -78,44 +102,43 @@ export interface Picture {
 /** The room a fitted picture leaves on each side of the pane, as it always has. */
 const PANE_FIT_MARGIN = 24
 
-/** The open file in the editor, or what stands in for it, under its bar. */
+/** A file tab's content: its context bar, then the file in the editor or what stands in for it. */
 export function FilePreview({
   projectPath,
   panel,
   file,
-  changes,
+  change,
   onShowDiff,
 }: {
   projectPath: string
   panel: string
-  file: OpenFile | null
-  changes: ReadonlyMap<string, ChangeStatus>
-  /** Shows the file's uncommitted change instead, offered while it has one. */
+  file: OpenFile
+  /** The file's uncommitted change, when it has one. */
+  change: ChangeStatus | undefined
+  /** Shows that change in a diff tab, offered while the file has one. */
   onShowDiff?: () => void
 }) {
-  const { t } = useTranslation('files')
+  const { t } = useTranslation(['files', 'composer'])
   const source = useFilesStore((s) => s.markdownSource)
   const svgSource = useFilesStore((s) => s.svgSource)
   // The picture's own zoom, shown in the bar and turned by the keys; a clip or a text has none.
   const [media, setMedia] = useState<{ path: string; picture: Picture } | null>(null)
-  const picture = file && media?.path === file.path ? media.picture : null
+  const picture = media?.path === file.path ? media.picture : null
   const onPicture = useCallback((path: string, next: Picture | null) => {
     // A picture leaving clears only its own entry, never the next picture's.
     setMedia((current) =>
       next ? { path, picture: next } : current?.path === path ? null : current,
     )
   }, [])
-  if (!file) {
-    return (
-      <PaneEmpty
-        icon={<PaneIcon icon={File01Icon} size={20} />}
-        title={t('preview.emptyTitle')}
-        text={t('preview.emptyDescription')}
-      />
-    )
-  }
-  const change = changes.get(file.path)
   const markdown = isMarkdown(file.path) && file.content?.kind === 'text'
+  const local = isLocal(projectPath)
+  const sessionId = panelSession(panel)
+  const mention = (): void => {
+    if (!sessionId) return
+    const missed = mentionPaths(sessionId, projectPath, [{ path: file.path, folder: false }])
+    if (missed === 'no-composer') toast(t('tree.noComposer'))
+    else if (missed === 'full') toast(t('composer:attachments.limit'))
+  }
   return (
     <div
       data-file-preview=""
@@ -129,46 +152,104 @@ export function FilePreview({
         void saveFile(projectPath, file.path)
       }}
     >
-      <div className="kp-doc__bar">
+      <PaneContext
+        tools={
+          <>
+            {file.dirty && (
+              <PanelButton
+                label={t('preview.save')}
+                shortcut={formatShortcut('Mod+S')}
+                onClick={() => void saveFile(projectPath, file.path)}
+              >
+                <PaneIcon icon={FloppyDiskIcon} />
+              </PanelButton>
+            )}
+            {picture?.pages && (
+              <span className="px-1.5 text-xs text-tertiary tabular">
+                {t('preview.pageOf', picture.pages)}
+              </span>
+            )}
+            {picture && <ZoomControls zoom={picture.zoom} controls={picture.controls} size="xs" />}
+            {markdown && (
+              <PreviewEditToggle
+                value={rendered(file, source) ? 'preview' : 'edit'}
+                onChange={(next) =>
+                  next === 'edit'
+                    ? useFilesStore.setState({ markdownSource: true })
+                    : showMarkdownRendered(projectPath, file.path)
+                }
+              />
+            )}
+            {isSvgFile(file.path) && file.content && (
+              <PreviewEditToggle
+                value={svgSource ? 'edit' : 'preview'}
+                onChange={(next) => showSvgSource(next === 'edit')}
+              />
+            )}
+            {onShowDiff && (
+              <PanelButton label={t('preview.showChanges')} onClick={onShowDiff}>
+                <PaneIcon icon={GitCompareIcon} />
+              </PanelButton>
+            )}
+            {sessionId && !file.agent && (
+              <PanelButton label={t('preview.reference')} onClick={mention}>
+                <PaneIcon icon={MessageAdd01Icon} />
+              </PanelButton>
+            )}
+            {local && (
+              <PanelButton
+                label={t('panel.openInEditor')}
+                onClick={() => openOutside(openInEditor, projectPath, file.path)}
+              >
+                <PaneIcon icon={CodeIcon} />
+              </PanelButton>
+            )}
+            <DropdownMenu>
+              <Tooltip>
+                <TooltipTrigger
+                  render={
+                    <DropdownMenuTrigger
+                      render={
+                        <button
+                          type="button"
+                          aria-label={t('panel.more')}
+                          className="kp-tool app-region-no-drag"
+                        />
+                      }
+                    />
+                  }
+                >
+                  <PaneIcon icon={MoreHorizontalIcon} />
+                </TooltipTrigger>
+                <TooltipContent>{t('panel.more')}</TooltipContent>
+              </Tooltip>
+              <DropdownMenuContent align="end" className="w-56">
+                <DropdownMenuItem onClick={() => copyPaths(projectPath, [file.path], false)}>
+                  <PaneIcon icon={Link01Icon} size={16} />
+                  {t('tree.copyPath')}
+                </DropdownMenuItem>
+                {!file.agent && (
+                  <DropdownMenuItem onClick={() => copyPaths(projectPath, [file.path], true)}>
+                    <PaneIcon icon={Link01Icon} size={16} />
+                    {t('tree.copyRelativePath')}
+                  </DropdownMenuItem>
+                )}
+                {local && (
+                  <DropdownMenuItem
+                    onClick={() => openOutside(window.kettu.shell.showItem, projectPath, file.path)}
+                  >
+                    <PaneIcon icon={FolderOpenIcon} size={16} />
+                    {t('preview.showIn', { name: fileManagerName() })}
+                  </DropdownMenuItem>
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </>
+        }
+      >
         <PathCopy path={file.path} />
-        {change && !onShowDiff && <ChangeBadge status={change} />}
-        <span className="kp-doc__tools">
-          {file.dirty && (
-            <PanelButton
-              label={t('preview.save')}
-              shortcut={formatShortcut('Mod+S')}
-              onClick={() => void saveFile(projectPath, file.path)}
-            >
-              <PaneIcon icon={FloppyDiskIcon} />
-            </PanelButton>
-          )}
-          {picture?.pages && (
-            <span className="px-1.5 text-xs text-tertiary tabular">
-              {t('preview.pageOf', picture.pages)}
-            </span>
-          )}
-          {picture && <ZoomControls zoom={picture.zoom} controls={picture.controls} size="xs" />}
-          {onShowDiff && (
-            <DiffFileToggle value="file" onChange={(next) => next === 'diff' && onShowDiff()} />
-          )}
-          {markdown && (
-            <PreviewEditToggle
-              value={rendered(file, source) ? 'preview' : 'edit'}
-              onChange={(next) =>
-                next === 'edit'
-                  ? useFilesStore.setState({ markdownSource: true })
-                  : showMarkdownRendered(projectPath, file.path)
-              }
-            />
-          )}
-          {isSvgFile(file.path) && file.content && (
-            <PreviewEditToggle
-              value={svgSource ? 'edit' : 'preview'}
-              onChange={(next) => showSvgSource(next === 'edit')}
-            />
-          )}
-        </span>
-      </div>
+        {change && <ChangeBadge status={change} />}
+      </PaneContext>
       <Notes projectPath={projectPath} file={file} />
       <div className="kp-doc__body">
         <Body projectPath={projectPath} panel={panel} file={file} onPicture={onPicture} />
@@ -273,7 +354,8 @@ function NextStep({
       type="button"
       className={small ? 'kp-btn kp-btn--sm' : 'kp-btn'}
       onClick={() =>
-        file.missing ? closeFile(projectPath, file.path) : readAgain(projectPath, file.path)
+        // The row closes its selected tab, which is this file's.
+        file.missing ? emitAppEvent({ kind: 'close-side-tab' }) : readAgain(projectPath, file.path)
       }
     >
       {file.missing ? t('preview.closeTab') : t('common:actions.retry')}

@@ -1,20 +1,8 @@
 import type { ComponentProps, ReactNode } from 'react'
 import { HugeiconsIcon, type IconSvgElement } from '@hugeicons/react'
-import {
-  ArrowExpand01Icon,
-  ArrowShrink01Icon,
-  Cancel01Icon,
-  SidebarRightIcon,
-} from '@hugeicons/core-free-icons'
-import { useTranslation } from 'react-i18next'
 import { Kbd } from '@renderer/components/ui/kbd'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
-import { CornerControlsSpace } from '@renderer/features/shell/top-bar'
-import { hasBand } from '@renderer/lib/platform'
 import { cn } from '@renderer/lib/utils'
-import { toggleSidePane, useViewStore, type SidePane } from '@renderer/stores/view'
-import { usePhoneWindow } from './narrow'
-import { SHEET } from './sheet'
 
 /** A hugeicons glyph at the shell's stroke. */
 export function PaneIcon({
@@ -90,97 +78,25 @@ export function PanelButton({
   )
 }
 
-/**
- * A side pane: a sheet of its own beside the main area, its head on top and its body under it.
- * Maximized, it leaves its slot and covers the whole area.
- */
-export function PaneSheet({
-  pane,
-  maximized,
-  className,
-  children,
-  ...props
-}: ComponentProps<'div'> & { pane: string; maximized: boolean }) {
+/** What a tab of the side panel shows, under the row of tabs: its context bar, then its content. */
+export function PaneBody({ className, children, ...props }: ComponentProps<'div'>) {
   return (
-    <div
-      data-pane={pane}
-      data-maximized={maximized || undefined}
-      className={cn('kp-pane', SHEET, className)}
-      {...props}
-    >
+    <div className={cn('kp-tabpane', className)} {...props}>
       {children}
     </div>
   )
 }
 
 /**
- * A pane's own head: its tabs or title on the left, then its tools, Maximize and the button that
- * folds the pane away. It is a window drag region, so everything in it opts out.
+ * The context bar under the row of tabs: where the selected tab is on the left, its own tools on
+ * the right.
  */
-export function PaneHead({
-  panel,
-  pane,
-  maximized,
-  tools,
-  onCollapse,
-  children,
-}: {
-  panel: string
-  pane: SidePane
-  maximized: boolean
-  tools?: ReactNode
-  /** What folding the pane away does besides hiding it. */
-  onCollapse?: () => void
-  children?: ReactNode
-}) {
-  const { t } = useTranslation('common')
-  // On macOS, maximized with the sidebar collapsed, the head is the window's top left corner; on a
-  // phone a pane is always maximized and the corner always holds the sidebar's toggle.
-  const phone = usePhoneWindow()
-  const cornered = (useViewStore((s) => s.sidebarCollapsed) || phone) && maximized && !hasBand
+export function PaneContext({ tools, children }: { tools?: ReactNode; children?: ReactNode }) {
   return (
-    <div className={cn('kp-head app-region-drag', cornered && 'kp-head--cornered')}>
-      {cornered && <CornerControlsSpace className="mr-1" />}
-      <div className="kp-head__main">{children}</div>
-      <div className="kp-head__tools app-region-no-drag">
-        {tools}
-        {!phone && (
-          <PanelButton
-            label={maximized ? t('pane.restore') : t('pane.maximize')}
-            onClick={() => useViewStore.setState({ sidePaneMaximized: !maximized })}
-          >
-            <PaneIcon icon={maximized ? ArrowShrink01Icon : ArrowExpand01Icon} />
-          </PanelButton>
-        )}
-        <PanelButton
-          label={t('pane.collapse')}
-          onClick={() => {
-            onCollapse?.()
-            toggleSidePane(panel, pane, false)
-          }}
-        >
-          <PaneIcon icon={SidebarRightIcon} size={16} />
-        </PanelButton>
-      </div>
+    <div className="kp-ctx">
+      <div className="kp-ctx__main">{children}</div>
+      {tools && <div className="kp-ctx__tools">{tools}</div>}
     </div>
-  )
-}
-
-/** A tab's close button: on the chosen tab at its end, on another over its end on hover. */
-export function PaneTabClose({ label, onClick }: { label: string; onClick: () => void }) {
-  return (
-    <button
-      type="button"
-      aria-label={label}
-      title={label}
-      onClick={(event) => {
-        event.stopPropagation()
-        onClick()
-      }}
-      className="kp-tab__x"
-    >
-      <PaneIcon icon={Cancel01Icon} size={11} />
-    </button>
   )
 }
 

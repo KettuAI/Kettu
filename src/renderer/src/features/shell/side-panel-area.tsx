@@ -14,7 +14,6 @@ import {
 } from '@renderer/components/ui/resizable'
 import { useToastArea } from '@renderer/components/ui/toast'
 import { TerminalPanel } from '@renderer/features/terminal/terminal-panel'
-import { isSurfacePane } from '@renderer/stores/surface-tabs'
 import { hostOfPath } from '@renderer/lib/host-paths'
 import { layoutStorage } from '@renderer/lib/storage'
 import { cn } from '@renderer/lib/utils'
@@ -26,16 +25,19 @@ import {
 } from '@renderer/stores/terminals'
 import { useTerminalAllowed } from '@renderer/stores/hosts'
 import { prefersReducedMotion } from '@renderer/stores/settings'
-import { toggleTerminal, useViewStore, type SidePane } from '@renderer/stores/view'
+import { shownDoc, toggleTerminal, useViewStore, type SidePane } from '@renderer/stores/view'
 import { usePhoneWindow } from './narrow'
 import { SHEET, SHEET_PANEL } from './sheet'
-import { SurfacesPane } from './surface-tabs'
+import { SurfacesPane, SurfaceTabs } from './surface-tabs'
 
 const FilesPanel = lazy(() => import('@renderer/features/files/files-panel'))
+const DocPane = lazy(() => import('@renderer/features/files/doc-pane'))
 const ArtifactViewer = lazy(() => import('@renderer/features/artifacts/artifact-viewer'))
 const DevicesPane = lazy(() => import('@renderer/features/devices/devices-pane'))
 const ComputerPane = lazy(() => import('@renderer/features/computer/computer-pane'))
 const RequestsPane = lazy(() => import('@renderer/features/requests/requests-pane'))
+const BoardPane = lazy(() => import('@renderer/features/board/board-pane'))
+const SideChatPane = lazy(() => import('@renderer/features/side-chat/side-chat-rail'))
 const GitPane = lazy(() => import('@renderer/features/git/pane/git-pane'))
 const BrowserPane = lazy(() =>
   import('@renderer/features/browser/browser-pane').then((module) => ({
@@ -43,24 +45,10 @@ const BrowserPane = lazy(() =>
   })),
 )
 
-// The content and every pane share one minimum width.
+// The content and the panel share one minimum width.
 const MIN_WIDTH = 360
-// Each pane is a panel of its own, so each keeps the width the user gives it. Terminals, browser
-// pages and devices share one row of tabs and so one width, under the id the terminal had when it
-// was the only pane.
-const PANE_SIZE = { defaultSize: '480px', minSize: MIN_WIDTH } as const
-const SURFACES = { id: 'side-panel', ...PANE_SIZE } as const
-const PANES = {
-  terminal: SURFACES,
-  browser: SURFACES,
-  devices: SURFACES,
-  surfaces: SURFACES,
-  files: { id: 'side-panel-files', ...PANE_SIZE },
-  git: { id: 'side-panel-git', ...PANE_SIZE },
-  artifact: { id: 'side-panel-artifact', defaultSize: '560px', minSize: MIN_WIDTH },
-  computer: { id: 'side-panel-computer', defaultSize: '540px', minSize: MIN_WIDTH },
-  requests: { id: 'side-panel-requests', defaultSize: '560px', minSize: MIN_WIDTH },
-} as const
+// The panel keeps one width whatever tab it shows.
+const PANEL = { id: 'side-panel', defaultSize: '480px', minSize: MIN_WIDTH } as const
 
 // As long as App Shell's columns take to glide.
 const GLIDE_MS = 420
@@ -101,9 +89,8 @@ function usePaneGlide(panel: string | null, pane: SidePane | undefined) {
 
 /**
  * The main area with the side panel of the pane in focus on its right: its session's, or New
- * session's in its project, holding the terminal, the files, the browser or, opened from the
- * thread, an artifact. Opening or closing it glides the content's edge as App Shell's work area
- * does. Maximized, the panel covers the whole area while the layout underneath keeps its sizes.
+ * session's in its project, with one row of tabs for everything open there. Opening or closing
+ * it glides the content's edge as App Shell's work area does. Maximized, the panel covers the whole area while the layout underneath keeps its sizes.
  * Dragging the edge past the content's minimum folds the content away and maximizes the panel.
  */
 export function SidePanelArea({
@@ -122,20 +109,12 @@ export function SidePanelArea({
   // connection, and its terminal while the host allows it.
   const pane = useViewStore((s) => {
     const shown = panel ? s.sidePane[panel] : undefined
-    if (
-      !remote ||
-      shown === 'files' ||
-      shown === 'git' ||
-      shown === 'browser' ||
-      shown === 'surfaces' ||
-      shown === 'artifact' ||
-      shown === 'requests'
-    ) {
-      return shown
-    }
-    return shown === 'terminal' && terminal ? shown : undefined
+    if (!remote) return shown
+    if (shown === 'devices' || shown === 'computer') return undefined
+    return shown === 'terminal' && !terminal ? undefined : shown
   })
-  const artifactId = useViewStore((s) => (panel ? s.sideArtifact[panel] : undefined))
+  const doc = useViewStore((s) => shownDoc(s, panel))
+  const artifactId = doc?.kind === 'artifact' ? doc.id : undefined
   // A phone has no room beside the thread: a pane always covers the whole area there.
   const phone = usePhoneWindow()
   const maximized = (useViewStore((s) => s.sidePaneMaximized) || phone) && !!pane
@@ -143,7 +122,7 @@ export function SidePanelArea({
   const { held, glide } = usePaneGlide(panel, pane)
   const layout = useDefaultLayout({
     id: 'side-panel',
-    panelIds: held ? ['content', PANES[held].id] : ['content'],
+    panelIds: held ? ['content', PANEL.id] : ['content'],
     storage: layoutStorage,
     onlySaveAfterUserInteractions: true,
   })
@@ -185,8 +164,8 @@ export function SidePanelArea({
   // Stays set for a second run of one open, so that run still starts a tab instead of closing.
   const opening = useRef(false)
 
-  // Opening the pane in a panel without terminals starts one. A pane already open, restored or
-  // reached by switching sessions, closes once the list comes back empty. A list that fails, or
+  // Opening the terminals in a panel without any starts one. One already shown, restored or
+  // reached by switching sessions, gives way once the list comes back empty. A list that fails, or
   // that finishes after the panel or pane changed, leaves the pane as it is.
   useEffect(() => {
     const now = { panel: panel ?? '', open }
@@ -202,6 +181,12 @@ export function SidePanelArea({
       stale = true
     }
   }, [projectPath, panel, open])
+
+  // Whatever the panel shows, its row lists the terminals the session still has.
+  const listed = !!pane && pane !== 'terminal' && terminal
+  useEffect(() => {
+    if (listed && panel) void loadTerminals(projectPath)
+  }, [projectPath, panel, listed])
 
   useEffect(
     () =>
@@ -267,52 +252,59 @@ export function SidePanelArea({
             )}
           />
           <ResizablePanel
-            // Switching between the row's kinds keeps the panel, so its width stays put.
-            key={isSurfacePane(held) ? 'surfaces' : held}
             panelRef={paneRef}
-            {...PANES[held]}
+            {...PANEL}
             groupResizeBehavior="preserve-pixel-size"
             className="min-w-0"
             style={SHEET_PANEL}
           >
-            {held === 'terminal' && panel ? (
-              <TerminalPanel projectPath={projectPath} panel={panel} maximized={maximized} />
-            ) : (
-              panel && (
-                <Suspense fallback={<div className={cn('h-full', SHEET)} />}>
-                  {held === 'files' ? (
-                    <FilesPanel projectPath={projectPath} panel={panel} maximized={maximized} />
-                  ) : held === 'git' ? (
-                    <GitPane panel={panel} projectPath={projectPath} maximized={maximized} />
-                  ) : held === 'browser' ? (
-                    <BrowserPane panel={panel} projectPath={projectPath} maximized={maximized} />
-                  ) : held === 'devices' ? (
-                    <DevicesPane panel={panel} projectPath={projectPath} maximized={maximized} />
-                  ) : held === 'surfaces' ? (
-                    <SurfacesPane panel={panel} projectPath={projectPath} maximized={maximized} />
-                  ) : held === 'computer' ? (
-                    <ComputerPane panel={panel} projectPath={projectPath} maximized={maximized} />
-                  ) : held === 'requests' ? (
-                    <RequestsPane
-                      key={panel}
-                      panel={panel}
-                      projectPath={projectPath}
-                      maximized={maximized}
-                    />
-                  ) : (
-                    artifactId && (
-                      <ArtifactViewer
-                        key={artifactId}
-                        where="panel"
-                        projectPath={projectPath}
-                        panel={panel}
-                        id={artifactId}
-                        maximized={maximized}
-                      />
-                    )
-                  )}
-                </Suspense>
-              )
+            {panel && (
+              <div
+                data-side-panel={panel}
+                data-pane={held}
+                data-maximized={maximized || undefined}
+                className={cn('kp-pane', SHEET)}
+              >
+                <SurfaceTabs panel={panel} projectPath={projectPath} maximized={maximized} />
+                {held === 'terminal' ? (
+                  <TerminalPanel projectPath={projectPath} panel={panel} />
+                ) : (
+                  <Suspense fallback={<div className="min-h-0 flex-1" />}>
+                    {held === 'files' ? (
+                      <FilesPanel projectPath={projectPath} panel={panel} />
+                    ) : held === 'file' || held === 'diff' ? (
+                      <DocPane projectPath={projectPath} panel={panel} />
+                    ) : held === 'git' ? (
+                      <GitPane panel={panel} projectPath={projectPath} />
+                    ) : held === 'browser' ? (
+                      <BrowserPane panel={panel} maximized={maximized} />
+                    ) : held === 'devices' ? (
+                      <DevicesPane panel={panel} />
+                    ) : held === 'surfaces' ? (
+                      <SurfacesPane panel={panel} projectPath={projectPath} />
+                    ) : held === 'computer' ? (
+                      <ComputerPane panel={panel} />
+                    ) : held === 'requests' ? (
+                      <RequestsPane key={panel} panel={panel} />
+                    ) : held === 'board' ? (
+                      <BoardPane sessionId={panel} />
+                    ) : held === 'sideChat' ? (
+                      <SideChatPane key={panel} sessionId={panel} />
+                    ) : (
+                      artifactId && (
+                        <ArtifactViewer
+                          key={artifactId}
+                          where="panel"
+                          projectPath={projectPath}
+                          panel={panel}
+                          id={artifactId}
+                          maximized={maximized}
+                        />
+                      )
+                    )}
+                  </Suspense>
+                )}
+              </div>
             )}
           </ResizablePanel>
         </>

@@ -100,7 +100,6 @@
     "openInPane": "在 Git 窗格里打开"
   },
   "pane": {
-    "title": "Git",
     "more": "更多",
     "copyBranch": "复制分支名",
     "openRepository": "在 GitHub 上打开仓库",
@@ -130,12 +129,8 @@
       "discard": "放弃…",
       "discardBlocked": "先完成正在进行的操作",
       "discardTicked": "放弃已勾选文件的更改",
-      "openInFiles": "在文件中打开",
-      "discardFile": "放弃更改",
-      "binary": "二进制文件，不能预览。",
-      "tooLarge": "文件太大，不预览。",
-      "same": "没有可显示的差异。",
-      "showFullDiff": "显示完整差异"
+      "openInFiles": "打开文件",
+      "discardFile": "放弃更改"
     },
     "box": {
       "tickFiles": "勾选要提交的文件",

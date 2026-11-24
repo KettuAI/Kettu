@@ -943,9 +943,10 @@ li[data-row-exit='dust'] > * {
   }
 }
 
-/* ---------- panes: the side panel's Terminal, Browser, Mobile devices and Files ---------- */
+/* ---------- the side panel: one row of tabs, the selected tab's context bar and content ---------- */
 
-/* A pane is a sheet of its own: its head on top, its body under it, each a column. */
+/* The panel is a sheet of its own: the row on top, what its selected tab shows under it, out to
+   the sheet's edges. */
 .kp-pane {
   position: relative;
   display: flex;
@@ -953,9 +954,17 @@ li[data-row-exit='dust'] > * {
   height: 100%;
   min-width: 0;
   min-height: 0;
-  padding: 10px 10px 10px 12px;
+  overflow: hidden;
   font-size: 13px;
   color: var(--text-secondary);
+}
+.kp-tabpane {
+  position: relative;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
 }
 /* Maximized, it leaves its slot and covers the whole area. */
 .kp-pane[data-maximized] {
@@ -1008,13 +1017,24 @@ li[data-row-exit='dust'] > * {
   translate: 16px 0;
   transition-duration: 200ms, 420ms;
 }
+/* The row: as tall as a session's top bar, whose line it continues, and padded as that bar is on
+   the right so the side panel's button sits where the bar's does. */
 .kp-head {
+  position: relative;
   display: flex;
   flex: none;
   align-items: center;
   gap: 2px;
-  /* A failure in the head wraps onto more lines, which the head grows to hold. */
-  min-height: 28px;
+  height: var(--top-bar);
+  padding: 0 12px 0 8px;
+}
+.kp-head::after {
+  content: '';
+  position: absolute;
+  inset: auto 0 0;
+  height: var(--hairline);
+  background: var(--border-subtle);
+  pointer-events: none;
 }
 .kp-head--cornered {
   padding-left: var(--corner-inset);
@@ -1023,7 +1043,7 @@ li[data-row-exit='dust'] > * {
   display: flex;
   flex: 1;
   align-items: center;
-  gap: 4px;
+  gap: 2px;
   min-width: 0;
   height: 28px;
 }
@@ -1034,45 +1054,72 @@ li[data-row-exit='dust'] > * {
   display: flex;
   flex: none;
   align-items: center;
+  gap: 2px;
   margin-left: auto;
+  padding-left: 6px;
 }
-.kp-head__tools > :last-child {
-  margin-left: 2px;
+/* The side panel's button, drawn as the top bar's is while the panel is closed. */
+.kp-head__toggle[aria-pressed='true'] {
+  background: var(--bg-selected);
 }
-.kp-head__tabs {
+
+/* The context bar under the row: where the selected tab is, then the tab's own tools. */
+.kp-ctx {
+  position: relative;
   display: flex;
+  flex: none;
+  align-items: center;
+  gap: 2px;
+  height: 32px;
+  padding: 0 6px 0 8px;
+  border-bottom: var(--hairline) solid var(--border-subtle);
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+.kp-ctx__main {
+  display: flex;
+  flex: 1;
   align-items: center;
   gap: 2px;
   min-width: 0;
-  overflow-x: auto;
-  scrollbar-width: none;
+  height: 100%;
 }
-.kp-head__tabs::-webkit-scrollbar {
-  display: none;
+.kp-ctx__tools {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 2px;
+  margin-left: auto;
 }
-.kp-head__title {
-  padding-left: 6px;
-  font-size: 13px;
+.kp-ctx .kp-tool {
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+}
+.kp-ctx__place {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  padding: 0 4px;
+  white-space: nowrap;
+}
+.kp-ctx__place > * {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.kp-ctx__place b {
+  flex: none;
   font-weight: 500;
   color: var(--text-primary);
-}
-.kp-head__error {
-  min-width: 0;
-  max-width: 40%;
-  padding: 7px 0;
-  font-size: 12px;
-  line-height: 14px;
-  color: var(--danger);
-  overflow-wrap: anywhere;
 }
 .kp-body {
   position: relative;
   display: flex;
   flex: 1;
   flex-direction: column;
-  gap: 8px;
   min-height: 0;
-  padding: 10px 0 4px;
 }
 
 .kp-tool {
@@ -1092,14 +1139,6 @@ li[data-row-exit='dust'] > * {
   width: 24px;
   height: 24px;
   border-radius: 7px;
-}
-/* A pane's glyph with the arrow that opens the side panel's list. */
-.kp-tool--switch {
-  display: inline-flex;
-  align-items: center;
-  gap: 1px;
-  width: auto;
-  padding: 0 5px 0 6px;
 }
 .kp-tool:hover {
   background: color-mix(in srgb, var(--bg-hover) 75%, transparent);
@@ -1131,89 +1170,14 @@ li[data-row-exit='dust'] > * {
 }
 .kp-tool:focus-visible,
 .kp-btn:focus-visible,
-.kp-tab__btn:focus-visible,
-.kp-tab__x:focus-visible,
 .kp-node:focus-visible {
   outline: 2px solid var(--focus-ring-color);
   outline-offset: -2px;
 }
 
-/* A tab in a pane's head: a name with a quiet mark before it, and a close button that shows on
-   hover or while chosen; another tab's floats over its end. */
-.kp-tab {
-  position: relative;
-  display: inline-flex;
-  flex: 0 1 auto;
-  align-items: center;
-  min-width: 58px;
-  max-width: 220px;
-  height: 26px;
-  border-radius: 7px;
-  font-size: 12.5px;
-  color: var(--text-tertiary);
-  white-space: nowrap;
-  user-select: none;
-  transition:
-    background-color 140ms ease,
-    color 140ms ease;
-}
-.kp-tab:hover {
-  background: color-mix(in srgb, var(--bg-hover) 75%, transparent);
-  color: var(--text-primary);
-}
-.kp-tab[data-selected] {
-  flex-shrink: 0;
-  background: var(--bg-hover);
-  color: var(--text-primary);
-}
-.kp-tab[data-dragging] {
-  background: var(--bg-selected);
-}
-.kp-tab[data-editing] {
-  background: var(--bg-surface);
-  box-shadow: inset 0 0 0 1px var(--border-strong);
-}
-.kp-tab__btn {
-  display: flex;
-  flex: 1;
-  align-items: center;
-  gap: 6px;
-  min-width: 0;
-  height: 100%;
-  padding: 0 8px;
-  border-radius: inherit;
-  text-align: left;
-  outline: none;
-}
-.kp-tab[data-selected] .kp-tab__btn {
-  padding-right: 25px;
-}
 .kp-tab__icon {
   flex: none;
   color: var(--text-disabled);
-}
-.kp-tab[data-selected] .kp-tab__icon:not(.kp-tab__icon--mark) {
-  color: var(--pane-muted);
-}
-.kp-tab__name {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.kp-tab__note {
-  color: var(--text-tertiary);
-}
-.kp-tab[data-italic] .kp-tab__name {
-  padding-right: 2px;
-  font-style: italic;
-}
-.kp-tab__code {
-  flex: none;
-  font-variant-numeric: tabular-nums;
-}
-.kp-tab__code[data-failed] {
-  color: var(--danger);
 }
 .kp-tab__dot {
   flex: none;
@@ -1222,63 +1186,13 @@ li[data-row-exit='dust'] > * {
   border-radius: 50%;
   background: var(--pane-live);
 }
-.kp-tab__dot:is([data-dot='output'], [data-dot='password']) {
-  background: var(--pane-fox);
-}
-.kp-tab__dot[data-dot='unsaved'] {
-  background: var(--text-tertiary);
-}
-.kp-tab__x {
-  position: absolute;
-  top: 5px;
-  right: 5px;
-  display: grid;
-  place-items: center;
-  width: 16px;
-  height: 16px;
-  border-radius: 4px;
-  color: var(--text-disabled);
-  opacity: 0;
-  outline: none;
-  transition: opacity 120ms ease;
-}
-.kp-tab:is(:hover, :focus-within, [data-selected]) .kp-tab__x {
-  opacity: 1;
-}
-.kp-tab__x:hover {
-  background: var(--bg-selected);
-  color: var(--text-primary);
-}
-.kp-tab:not([data-selected]):is(:hover, :focus-within) .kp-tab__name {
-  mask-image: linear-gradient(to left, transparent 14px, var(--on-fill) 26px);
-}
-.kp-tab:not([data-selected]):is(:hover, :focus-within) .kp-tab__dot {
-  opacity: 0;
-}
-.kp-tab__rename {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  padding: 0 8px 0 28px;
-}
-.kp-tab__rename input {
-  flex: 1;
-  min-width: 0;
-  height: 100%;
-  border: 0;
-  outline: 0;
-  background: none;
-  font: inherit;
-  color: var(--text-primary);
-}
 
-/* ---------- the side panel's row of tabs: terminals, pages and devices ---------- */
+/* ---------- the side panel's row of tabs ---------- */
 /* The row pads itself so the light of a tab someone uses is not cut off at its edges. */
 .kp-stabs {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 2px;
   min-width: 0;
   margin: -6px -4px;
   padding: 6px 4px;
@@ -1300,7 +1214,7 @@ li[data-row-exit='dust'] > * {
   align-items: center;
   max-width: 184px;
   height: 28px;
-  border-radius: 8px;
+  border-radius: 7px;
   font-size: 12.5px;
   color: var(--text-secondary);
   white-space: nowrap;
@@ -1344,7 +1258,7 @@ li[data-row-exit='dust'] > * {
   gap: 6px;
   min-width: 0;
   height: 100%;
-  padding: 0 9px 0 6px;
+  padding: 0 9px 0 5px;
   border-radius: inherit;
   text-align: left;
   outline: none;
@@ -1372,6 +1286,15 @@ li[data-row-exit='dust'] > * {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+/* A folder after the name tells two files of one name apart. */
+.kp-stab__note {
+  color: var(--text-tertiary);
+}
+/* The preview tab, which the next single click in a list replaces. */
+.kp-stab[data-preview] .kp-stab__name {
+  padding-right: 2px;
+  font-style: italic;
+}
 .kp-stab__code {
   flex: none;
   color: var(--text-tertiary);
@@ -1379,6 +1302,13 @@ li[data-row-exit='dust'] > * {
 }
 .kp-stab__code[data-failed] {
   color: var(--danger);
+}
+/* How many of the board's sub-agents wait for the user. */
+.kp-stab__needs {
+  flex: none;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  color: var(--attention);
 }
 .kp-stab__dot,
 .kp-stab__badge {
@@ -1797,26 +1727,7 @@ li[data-row-exit='dust'] > * {
 }
 
 /* ---------- panes: Terminal ---------- */
-/* The terminal lies on the pane's sheet with no box of its own: a hairline from edge to edge
-   under the head and the screen out to the sheet's edges. Its tabs are names in a row, the chosen
-   one on a gray pill, each with its close button. */
-.kp-pane:is([data-pane='terminal'], [data-pane='surfaces']) > .kp-head {
-  position: relative;
-  margin-bottom: 8px;
-}
-/* Out past the pane's padding, which is 10px 10px 10px 12px. */
-.kp-pane:is([data-pane='terminal'], [data-pane='surfaces']) > .kp-head::after {
-  content: '';
-  position: absolute;
-  inset: auto -10px -8px -12px;
-  height: var(--hairline);
-  background: var(--border-subtle);
-  pointer-events: none;
-}
-.kp-pane[data-pane='terminal'] > .kp-body {
-  margin: 0 -10px -10px -12px;
-  padding: 0;
-}
+/* The terminal lies on the panel's sheet with no box of its own, out to the sheet's edges. */
 .kp-tview {
   display: flex;
   flex-direction: column;
@@ -1989,6 +1900,15 @@ li[data-row-exit='dust'] > * {
   color: var(--text-disabled);
   transition: box-shadow 140ms ease;
 }
+/* In the context bar the address is a quiet field of the bar's height. */
+.kp-ctx .kp-addr {
+  height: 24px;
+  margin: 0 4px;
+  padding: 0 9px;
+  border-radius: 7px;
+  background: var(--bg-hover);
+  box-shadow: none;
+}
 .kp-addr:focus-within {
   box-shadow:
     inset 0 0 0 1px var(--border-default),
@@ -2108,9 +2028,7 @@ li[data-row-exit='dust'] > * {
   position: relative;
   flex: 1;
   min-height: 0;
-  border-radius: 10px;
   background: var(--bg-app);
-  box-shadow: 0 0 0 var(--hairline) var(--border-default);
 }
 .kp-view__still {
   position: absolute;
@@ -2362,7 +2280,7 @@ li[data-row-exit='dust'] > * {
   opacity: 0.4;
 }
 /* Over the device, so the light around it passes under them. */
-.kp-pane[data-pane='devices'] > .kp-head,
+.kp-pane[data-pane='devices'] :is(.kp-head, .kp-ctx),
 .kp-device-ask {
   position: relative;
   z-index: 1;
@@ -2429,14 +2347,11 @@ li[data-row-exit='dust'] > * {
   gap: 7px;
   min-width: 0;
   max-width: 340px;
-  height: 28px;
+  height: 24px;
   margin-left: 2px;
   padding: 0 8px;
-  border-radius: 8px;
-  background: var(--bg-surface);
-  box-shadow:
-    inset 0 0 0 var(--hairline) var(--border-default),
-    var(--elevation-control);
+  border-radius: 7px;
+  background: var(--bg-hover);
   color: var(--text-disabled);
 }
 .kp-find input {
@@ -2652,10 +2567,7 @@ li[data-row-exit='dust'] > * {
   background: color-mix(in srgb, var(--danger) 12%, transparent);
   color: var(--danger);
 }
-.kp-files-handle {
-  width: 8px;
-  background: transparent;
-}
+/* An open file or diff lies on the panel's sheet, out to its edges. */
 .kp-doc {
   position: relative;
   display: flex;
@@ -2664,45 +2576,10 @@ li[data-row-exit='dust'] > * {
   min-width: 0;
   min-height: 0;
   overflow: hidden;
-  border-radius: 10px;
   background: var(--bg-surface);
 }
-/* Drawn over the content, whose own backgrounds would cover an inset ring. */
-.kp-doc::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  z-index: 5;
-  border-radius: inherit;
-  box-shadow: inset 0 0 0 var(--hairline) var(--border-default);
-  pointer-events: none;
-}
-.kp-doc__tabs {
-  display: flex;
-  flex: none;
-  align-items: center;
-  gap: 2px;
-  height: 36px;
-  padding: 0 4px;
-  overflow-x: auto;
-  scrollbar-width: none;
-  border-bottom: var(--hairline) solid var(--border-subtle);
-}
-.kp-doc__tabs::-webkit-scrollbar {
-  display: none;
-}
-.kp-doc__tabs .kp-tool {
-  width: 26px;
-  height: 26px;
-}
-.kp-doc__bar {
-  display: flex;
-  flex: none;
-  align-items: center;
-  gap: 8px;
-  height: 34px;
-  padding: 0 4px 0 12px;
-  border-bottom: var(--hairline) solid var(--border-subtle);
+.kp-tabpane > .kp-doc {
+  flex: 1;
 }
 .kp-doc__path {
   display: flex;
@@ -2710,7 +2587,7 @@ li[data-row-exit='dust'] > * {
   gap: 5px;
   min-width: 0;
   height: 24px;
-  margin-left: -6px;
+  margin-left: -2px;
   padding: 0 6px;
   border-radius: 6px;
   color: var(--text-tertiary);
@@ -2743,13 +2620,6 @@ li[data-row-exit='dust'] > * {
   font-family: var(--font-mono);
   font-size: 11px;
   color: var(--text-tertiary);
-}
-.kp-doc__tools {
-  display: flex;
-  flex: none;
-  align-items: center;
-  gap: 2px;
-  margin-left: auto;
 }
 .kp-doc__hunks {
   display: flex;
@@ -2837,7 +2707,8 @@ li[data-row-exit='dust'] > * {
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  padding: 2px 2px 0 4px;
+  padding: 6px 8px;
+  border-top: var(--hairline) solid var(--border-subtle);
   font-size: 12px;
   color: var(--text-tertiary);
 }
@@ -7587,4 +7458,390 @@ body:has(.ui-mdpc[data-open], .ui-ccc__menu[data-open='true']) .kettu-toasts {
 }
 .ui-as-side__group + .kettu-side-hosts {
   margin-top: 10px;
+}
+
+/* A host running low (features/settings/host-load.tsx): a small tag after its name in the sidebar,
+   New session's host menu and Settings, yellow while it warns and red once it gets in the way. */
+.kettu-strain-tag {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 4px;
+  height: 18px;
+  padding: 0 6px;
+  border-radius: 6px;
+  background: var(--settings-warn-bg);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 18px;
+  white-space: nowrap;
+  color: var(--settings-warn-ink);
+}
+.kettu-strain-tag[data-level='critical'] {
+  background: color-mix(in srgb, var(--danger) 12%, transparent);
+  color: var(--danger);
+}
+.kettu-strain-tag :is(svg, .hgi) {
+  width: 11px;
+  height: 11px;
+}
+.kettu-host-head > .kettu-host-strain {
+  display: inline-flex;
+  flex: none;
+  margin-right: 6px;
+  border-radius: 6px;
+}
+.kettu-host-strain:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 1px;
+}
+.ui-as-app[data-collapsed] .kettu-host-strain {
+  display: none;
+}
+/* The tag's hover card: CPU, memory and disk as bars, then what a click opens. */
+.kettu-strain-card {
+  padding: 12px 13px;
+  font-size: 12.5px;
+}
+.kettu-strain-card__title {
+  margin-bottom: 6px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+.kettu-strain-card__line {
+  display: grid;
+  grid-template-columns: 58px 1fr auto;
+  align-items: center;
+  column-gap: 8px;
+  height: 22px;
+  color: var(--text-tertiary);
+}
+.kettu-strain-card__line > b {
+  min-width: 44px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  color: var(--text-primary);
+}
+.kettu-strain-card__line[data-tone='warn'] > b {
+  color: var(--warning);
+}
+.kettu-strain-card__line[data-tone='bad'] > b {
+  color: var(--danger);
+}
+.kettu-strain-card__bar {
+  height: 4px;
+  overflow: hidden;
+  border-radius: 2px;
+  background: var(--bg-subtle);
+}
+.kettu-strain-card__bar > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--text-tertiary);
+}
+.kettu-strain-card__line[data-tone='cpu'] .kettu-strain-card__bar > span {
+  background: var(--usage-blue);
+}
+.kettu-strain-card__line[data-tone='memory'] .kettu-strain-card__bar > span {
+  background: var(--agent-violet);
+}
+.kettu-strain-card__line[data-tone='warn'] .kettu-strain-card__bar > span {
+  background: var(--limit-warn);
+}
+.kettu-strain-card__line[data-tone='bad'] .kettu-strain-card__bar > span {
+  background: var(--limit-bad);
+}
+.kettu-strain-card__foot {
+  margin-top: 6px;
+  font-size: 11.5px;
+  color: var(--text-tertiary);
+}
+
+/* Settings › Computers: CPU and memory at a row's end, lined up as the agents' plan usage. */
+:is(.kettu-settings, .kettu-sd) .k-load-cols {
+  display: inline-flex;
+  align-items: center;
+  gap: 16px;
+}
+:is(.kettu-settings, .kettu-sd) .k-load-col.k-list-meter {
+  grid-template-columns: 30px auto;
+}
+:is(.kettu-settings, .kettu-sd) .k-load-col .k-meter__bar {
+  width: 36px;
+}
+:is(.kettu-settings, .kettu-sd) .k-load-col .k-meter__bar > .bg-limit-ok {
+  --k-level: var(--usage-blue);
+}
+:is(.kettu-settings, .kettu-sd) .k-load-col[data-kind='memory'] .k-meter__bar > .bg-limit-ok {
+  --k-level: var(--agent-violet);
+}
+:is(.kettu-settings, .kettu-sd) .k-load-col .k-meter__value {
+  min-width: 34px;
+  color: var(--strong);
+}
+/* A host's name and its tags, which go to a line of their own before the name is cut. */
+:is(.kettu-settings, .kettu-sd) .k-host-title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 8px;
+  min-width: 0;
+}
+:is(.kettu-settings, .kettu-sd) .k-host-title > .k-name {
+  max-width: 100%;
+}
+/* This computer opens nothing, so its columns keep the room of the other rows' arrow. */
+:is(.kettu-settings, .kettu-sd) .k-load-self {
+  padding-right: 22px;
+}
+
+/* A host's page: the Load group's four tiles, then what uses the computer. */
+:is(.kettu-settings, .kettu-sd) .k-load-live {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+:is(.kettu-settings, .kettu-sd) .k-load-live__dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--success);
+}
+:is(.kettu-settings, .kettu-sd) .k-load-notices > .k-notice:first-child {
+  margin-top: 24px;
+}
+:is(.kettu-settings, .kettu-sd) .k-load-notices > .k-notice + .k-notice {
+  margin-top: 8px;
+}
+:is(.kettu-settings, .kettu-sd) .k-load-tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
+  gap: 10px;
+  margin-top: 12px;
+}
+:is(.kettu-settings, .kettu-sd) .k-group > .k-load-tiles:nth-child(2) {
+  margin-top: 24px;
+}
+:is(.kettu-settings, .kettu-sd) .k-load-tile {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 112px;
+  overflow: hidden;
+  padding: 12px 15px 14px;
+  border-radius: 12px;
+  background: var(--card);
+  box-shadow: var(--card-shadow);
+}
+:is(.kettu-settings, .kettu-sd) .k-load-tile__head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+:is(.kettu-settings, .kettu-sd) .k-load-tile__end {
+  min-width: 0;
+  margin-left: auto;
+  overflow: hidden;
+  font-size: 12px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--faint);
+}
+:is(.kettu-settings, .kettu-sd) .k-load-tile__value {
+  margin-top: 4px;
+  font-size: 22px;
+  font-weight: 500;
+  line-height: 30px;
+  color: var(--ink);
+}
+:is(.kettu-settings, .kettu-sd) .k-load-tile__value > small {
+  margin-left: 4px;
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--muted);
+}
+:is(.kettu-settings, .kettu-sd) .k-load-tile__sub {
+  position: relative;
+  z-index: 1;
+  min-width: 0;
+  overflow: hidden;
+  font-size: 12px;
+  line-height: 18px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--muted);
+}
+:is(.kettu-settings, .kettu-sd) .k-load-bar {
+  display: block;
+  height: 4px;
+  margin-top: auto;
+  overflow: hidden;
+  border-radius: 2px;
+  background: var(--chip);
+}
+:is(.kettu-settings, .kettu-sd) .k-load-tile > .k-load-bar {
+  margin-top: 14px;
+}
+:is(.kettu-settings, .kettu-sd) .k-load-bar > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--k-bar, var(--muted));
+}
+:is(.kettu-settings, .kettu-sd) .k-load-bar[data-tone='cpu'] {
+  --k-bar: var(--usage-blue);
+}
+:is(.kettu-settings, .kettu-sd) .k-load-bar[data-tone='memory'] {
+  --k-bar: var(--agent-violet);
+}
+:is(.kettu-settings, .kettu-sd) .k-load-bar[data-tone='battery'] {
+  --k-bar: var(--usage-green);
+}
+:is(.kettu-settings, .kettu-sd) .k-load-bar[data-tone='warn'] {
+  --k-bar: var(--limit-warn);
+}
+:is(.kettu-settings, .kettu-sd) .k-load-bar[data-tone='bad'] {
+  --k-bar: var(--limit-bad);
+}
+:is(.kettu-settings, .kettu-sd) .k-load-spark {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 55%;
+  height: 46px;
+}
+:is(.kettu-settings, .kettu-sd) .k-load-spark > polyline {
+  fill: none;
+  stroke: var(--usage-blue);
+  stroke-width: 1.5;
+  stroke-linejoin: round;
+}
+:is(.kettu-settings, .kettu-sd) .k-load-spark > polygon {
+  fill: color-mix(in srgb, var(--usage-blue) 12%, transparent);
+}
+:is(.kettu-settings, .kettu-sd) .k-load-wait {
+  display: grid;
+  place-items: center;
+  min-height: 112px;
+  margin-top: 12px;
+}
+:is(.kettu-settings, .kettu-sd) .k-group > .k-load-wait:nth-child(2) {
+  margin-top: 24px;
+}
+:is(.kettu-settings, .kettu-sd) .k-load-use__head {
+  display: flex;
+  align-items: center;
+  min-height: 36px;
+  padding: 0 16px;
+  font-size: 12px;
+  color: var(--muted);
+}
+:is(.kettu-settings, .kettu-sd) .k-load-use__head + .k-load-use__row,
+:is(.kettu-settings, .kettu-sd) .k-load-use__row + .k-load-use__row,
+:is(.kettu-settings, .kettu-sd) .k-load-use__row + .k-load-use__head {
+  box-shadow: inset 0 0.5px 0 var(--line);
+}
+:is(.kettu-settings, .kettu-sd) .k-load-use__cols,
+:is(.kettu-settings, .kettu-sd) .k-load-use__nums {
+  display: grid;
+  flex: none;
+  grid-template-columns: 96px 72px;
+  margin-left: auto;
+  text-align: right;
+}
+:is(.kettu-settings, .kettu-sd) .k-load-use__row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 52px;
+  padding: 7px 16px;
+  font: inherit;
+  text-align: left;
+  color: inherit;
+}
+:is(.kettu-settings, .kettu-sd) button.k-load-use__row {
+  border-radius: 9px;
+  transition: background-color 140ms ease;
+}
+:is(.kettu-settings, .kettu-sd) button.k-load-use__row:hover {
+  background: var(--hover);
+}
+:is(.kettu-settings, .kettu-sd) button.k-load-use__row:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: -2px;
+}
+:is(.kettu-settings, .kettu-sd) .k-load-use__lead {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  color: var(--muted);
+}
+:is(.kettu-settings, .kettu-sd) .k-load-brand {
+  border-radius: 5px;
+}
+:is(.kettu-settings, .kettu-sd) .k-load-letter {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  background: var(--chip);
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--muted);
+}
+:is(.kettu-settings, .kettu-sd) .k-load-use__text {
+  display: grid;
+  min-width: 0;
+}
+:is(.kettu-settings, .kettu-sd) .k-load-use__text > :is(b, small) {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+:is(.kettu-settings, .kettu-sd) .k-load-use__text > b {
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 20px;
+  color: var(--strong);
+}
+:is(.kettu-settings, .kettu-sd) .k-load-use__text > b.k-load-use__quiet {
+  font-weight: 400;
+  color: var(--muted);
+}
+:is(.kettu-settings, .kettu-sd) .k-load-use__text > small {
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--muted);
+}
+:is(.kettu-settings, .kettu-sd) .k-load-use__nums {
+  align-items: center;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+:is(.kettu-settings, .kettu-sd) .k-load-use__cpu {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+:is(.kettu-settings, .kettu-sd) .k-load-use__cpu > b {
+  min-width: 34px;
+  font-weight: 500;
+  color: var(--strong);
+}
+:is(.kettu-settings, .kettu-sd) .k-load-use__cpu > .k-load-bar {
+  width: 36px;
+  margin-top: 0;
 }

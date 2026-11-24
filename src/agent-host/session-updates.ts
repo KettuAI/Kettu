@@ -100,6 +100,8 @@ export type MapperEffect =
   | { kind: 'backgroundRunning'; running: boolean; listed: boolean }
   // How many jobs the agent scheduled to wake the session later, such as cron and /loop wakeups.
   | { kind: 'scheduled'; jobs: number }
+  // The agent's guess at the user's next message, after a turn ended.
+  | { kind: 'suggestion'; text: string }
   // The commands and monitors the agent has running or has ended since, replacing the last list.
   | { kind: 'tasks'; tasks: BackgroundTaskView[] }
   // A turn the agent started between the host's own, as when such a command ended. A prompt that

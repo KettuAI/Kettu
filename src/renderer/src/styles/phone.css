@@ -143,19 +143,6 @@
   }
 }
 
-/* The board and the side chat cover the thread instead of standing beside it. */
-@media (max-width: 719px) {
-  :root :is(.kb-rail, .kc-rail) {
-    position: absolute;
-    inset: 0;
-    z-index: 20;
-    width: auto;
-    border-left: 0;
-    background: var(--bg-app);
-    box-shadow: none;
-  }
-}
-
 /* No keys to press on a phone: shortcut caps and the lines that only name keys go. */
 @media (max-width: 719px) {
   :root
