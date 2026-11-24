@@ -15,6 +15,7 @@ import {
 import { basename, duration, relativePath } from '@renderer/lib/format'
 import { errorCode, host } from '@renderer/lib/host'
 import { i18n } from '@renderer/lib/i18n'
+import { usePluginRefsStore } from '@renderer/stores/plugin-refs'
 import { sessionTitle, useSessionsStore } from '@renderer/stores/sessions'
 import { useTerminalsStore } from '@renderer/stores/terminals'
 import { nameHints } from '../project-names'
@@ -54,6 +55,13 @@ const CALL_NAMES: CallNames = {
   terminal: (id) => {
     const terminal = useTerminalsStore.getState().byId[id]
     return terminal ? (terminal.name ?? (terminal.title || terminal.shell)) : null
+  },
+  plugin: (tool) => {
+    for (const sources of Object.values(usePluginRefsStore.getState().byHost)) {
+      const source = sources.find((item) => item.tools?.includes(tool))
+      if (source) return source.title
+    }
+    return null
   },
 }
 

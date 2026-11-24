@@ -841,7 +841,15 @@ export class ArtifactService {
     if (call.arguments === undefined) return described(tool)
     try {
       const result = await this.callTool(sdk, grant, caller, tool.name, call.arguments, flags)
-      return result.isError ? withArguments(result, tool) : result
+      if (!result.isError) return result
+      // A plugin's tool that took its arguments and then failed has nothing in them to correct.
+      if (
+        isPluginToolName(tool.name) &&
+        !this.deps.plugins?.argumentsWrong(tool.name, call.arguments)
+      ) {
+        return result
+      }
+      return withArguments(result, tool)
     } catch (error) {
       const text = (error as Error).message
       return withArguments({ content: [{ type: 'text', text }], isError: true }, tool)

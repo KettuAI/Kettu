@@ -6,16 +6,22 @@ import { useId, useRef, useState, type FormEvent, type ReactNode } from 'react'
 import {
   Alert02Icon,
   ArrowDown01Icon,
+  AtIcon,
   GlobeIcon,
   InformationCircleIcon,
+  LayoutLeftIcon,
+  Link01Icon,
   LockIcon,
   Notification01Icon,
   PlugSocketIcon,
+  Search01Icon,
   Settings01Icon,
   Shield01Icon,
+  Wrench01Icon,
 } from '@hugeicons/core-free-icons'
 import type { IconSvgElement } from '@hugeicons/react'
 import { useTranslation } from 'react-i18next'
+import { parseLinkPattern } from '@shared/plugin-refs'
 import type {
   InstalledKettuPlugin,
   PluginContents,
@@ -201,12 +207,63 @@ function AddsLines({ contents }: { contents: PluginContents }) {
     )
   }
   if (contents.views.length > 0) {
+    const locale = currentLocale()
     lines.push(
       <Line
         key="views"
-        icon={Settings01Icon}
+        icon={LayoutLeftIcon}
         title={t('plugin.holds.views', { count: contents.views.length })}
-        note={t('plugin.holds.viewsNote')}
+        note={`${names(contents.views.map((view) => ({ name: languageText(view.title, locale) })))} · ${t('plugin.holds.viewsNote')}`}
+      />,
+    )
+  }
+  if (contents.tools.length > 0) {
+    lines.push(
+      <Line
+        key="tools"
+        icon={Wrench01Icon}
+        title={t('plugin.holds.tools', { count: contents.tools.length })}
+        note={`${names(contents.tools)} · ${t('plugin.holds.toolsNote')}`}
+      />,
+    )
+  }
+  if (contents.mentions.length > 0) {
+    const locale = currentLocale()
+    lines.push(
+      <Line
+        key="mentions"
+        icon={AtIcon}
+        title={t('plugin.holds.mentions', { count: contents.mentions.length })}
+        note={`${names(contents.mentions.map((source) => ({ name: languageText(source.title, locale) })))} · ${t('plugin.holds.mentionsNote')}`}
+      />,
+    )
+  }
+  if (contents.links.length > 0) {
+    const hosts = [
+      ...new Set(
+        contents.links.flatMap((link) =>
+          link.patterns.flatMap((pattern) => parseLinkPattern(pattern)?.host ?? []),
+        ),
+      ),
+    ]
+    lines.push(
+      <Line
+        key="links"
+        icon={Link01Icon}
+        title={t('plugin.holds.links', { count: contents.links.length })}
+        note={`${names(hosts.map((host) => ({ name: host })))} · ${t('plugin.holds.linksNote')}`}
+      />,
+    )
+  }
+  const actions = contents.actions ?? []
+  if (actions.length > 0) {
+    const locale = currentLocale()
+    lines.push(
+      <Line
+        key="actions"
+        icon={Search01Icon}
+        title={t('plugin.holds.actions', { count: actions.length })}
+        note={`${names(actions.map((action) => ({ name: languageText(action.title, locale) })))} · ${t('plugin.holds.actionsNote')}`}
       />,
     )
   }

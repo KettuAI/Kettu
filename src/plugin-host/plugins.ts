@@ -10,6 +10,7 @@ import {
   PluginRequestError,
   type PluginCrashReason,
   type PluginDeadline,
+  type PluginHookReply,
   type PluginScript,
   type PluginStatus,
 } from '@shared/plugin-host'
@@ -86,7 +87,7 @@ export class PluginManager {
     name: string,
     payload: unknown,
     deadline: PluginDeadline = 'before-send',
-  ): Promise<unknown[]> {
+  ): Promise<PluginHookReply> {
     return this.active(pluginId).hook(name, payload, deadline)
   }
 

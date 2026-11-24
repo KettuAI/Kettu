@@ -160,7 +160,7 @@ export interface PluginPermissionInfo {
   /** Keys in the `marketplace` texts, in English and Chinese alike. */
   nameKey: `plugin.permission.${PermissionText}.name`
   descriptionKey: `plugin.permission.${PermissionText}.description`
-  /** What the description fills in: a network permission's domain, without a leading `*.`. */
+  /** What the texts fill in: a network permission's domain as declared, a `*.` one with its `*.`. */
   params: { domain?: string }
 }
 
@@ -186,7 +186,7 @@ export function describePermission(permission: string): PluginPermissionInfo | n
     risk,
     nameKey: `plugin.permission.${text}.name`,
     descriptionKey: `plugin.permission.${text}.description`,
-    params: { domain: wildcard ? domain.slice(2) : domain },
+    params: { domain },
   }
 }
 

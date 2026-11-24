@@ -129,10 +129,12 @@ export class PluginChannels {
           'of a channel the user sends permission requests to told it of.',
       )
     }
+    const plugin = this.deps.title(pluginId) ?? pluginId
     this.deps.relay(told.sessionId, request, decision === 'allow_once' ? told.allow : told.deny, {
       pluginId,
-      plugin: this.deps.title(pluginId) ?? pluginId,
-      from,
+      plugin,
+      // Naming the plugin as the place of the answer says nothing the line does not already.
+      from: from?.toLowerCase() === plugin.toLowerCase() ? null : from,
     })
     this.told.get(pluginId)?.delete(request)
   }

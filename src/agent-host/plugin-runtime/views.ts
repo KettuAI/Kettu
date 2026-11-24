@@ -19,18 +19,18 @@ import {
   type PluginViewParams,
   type PluginViewResult,
 } from '@shared/plugin-views'
-import { PluginRequestError, type PluginDeadline } from '@shared/plugin-host'
+import { PluginRequestError, type PluginDeadline, type PluginHookReply } from '@shared/plugin-host'
 import { parseActionResult, parseViewContent, ViewDataError } from './view-data'
 
 /** The plugin host, as the views use it. */
 export interface ViewClient {
   activate(pluginId: string, trigger: string): Promise<void>
-  hook(
+  hookReply(
     pluginId: string,
     name: string,
     payload: unknown,
     deadline?: PluginDeadline,
-  ): Promise<unknown[]>
+  ): Promise<PluginHookReply>
 }
 
 export interface PluginViewsDeps {
@@ -43,16 +43,26 @@ export interface PluginViewsDeps {
   log(level: 'info' | 'warn', message: string): void
 }
 
-// A listener that throws is left out of a hook's answers, so a throw and a missing listener look
-// alike here; the plugin's own log says which.
-const NO_VIEW = 'No listener of view.data gave a view; the plugin’s log says why if one threw'
-const NO_ACTION = 'No listener of view.action answered; the plugin’s log says why if one threw'
-const NO_RUN = 'No listener of action.run answered; the plugin’s log says why if one threw'
+const NO_VIEW = 'No listener of view.data gave a view'
+const NO_ACTION = 'No listener of view.action answered'
+const NO_RUN = 'No listener of action.run answered'
 
-type Asked = { ok: true; answers: unknown[] } | { ok: false; error: PluginViewError }
+type Asked = { ok: true; reply: PluginHookReply } | { ok: false; error: PluginViewError }
 
 export function cut(text: string): string {
   return text.slice(0, PLUGIN_VIEW_LIMITS.error)
+}
+
+/**
+ * Why no listener answered: what the first one that threw said, as the script wrote it without the
+ * name a plain Error carries, else `none` for a script with no listener for the event.
+ */
+function silence(reply: PluginHookReply, none: string): PluginViewError {
+  const thrown = reply.errors[0]
+  return {
+    code: 'failed',
+    detail: cut(thrown === undefined ? none : thrown.replace(/^Error: /, '')),
+  }
 }
 
 /** What a failed request to a plugin means for the view that asked. */
@@ -99,13 +109,8 @@ export class PluginViews {
     }
     const asked = await this.ask(pluginId, viewTrigger(viewId), 'view.data', request)
     if (!asked.ok) return asked
-    const answer = asked.answers.find((item) => item !== null && item !== undefined)
-    if (answer === undefined) {
-      return {
-        ok: false,
-        error: { code: 'failed', detail: NO_VIEW },
-      }
-    }
+    const answer = asked.reply.answers.find((item) => item !== null && item !== undefined)
+    if (answer === undefined) return { ok: false, error: silence(asked.reply, NO_VIEW) }
     try {
       const check = { views: new Set(decls.map((view) => view.id)) }
       return { ok: true, view: parseViewContent(decl.kind, answer, check) }
@@ -136,16 +141,13 @@ export class PluginViews {
     }
     const asked = await this.ask(pluginId, viewTrigger(viewId), 'view.action', request)
     if (!asked.ok) return asked
-    if (asked.answers.length === 0) {
-      return {
-        ok: false,
-        error: { code: 'failed', detail: NO_ACTION },
-      }
+    if (asked.reply.answers.length === 0) {
+      return { ok: false, error: silence(asked.reply, NO_ACTION) }
     }
     try {
       const check = { views: new Set(decls.map((view) => view.id)) }
       return parseActionResult(
-        asked.answers.find((item) => item !== null && item !== undefined),
+        asked.reply.answers.find((item) => item !== null && item !== undefined),
         check,
       )
     } catch (error) {
@@ -166,13 +168,13 @@ export class PluginViews {
     const request: PluginActionRunRequest = { action: actionId, locale: this.deps.locale() }
     const asked = await this.ask(pluginId, actionTrigger(actionId), 'action.run', request)
     if (!asked.ok) return asked
-    if (asked.answers.length === 0) {
-      return { ok: false, error: { code: 'failed', detail: NO_RUN } }
+    if (asked.reply.answers.length === 0) {
+      return { ok: false, error: silence(asked.reply, NO_RUN) }
     }
     try {
       const panes = this.deps.views(pluginId).filter((view) => view.pane)
       return parseActionResult(
-        asked.answers.find((item) => item !== null && item !== undefined),
+        asked.reply.answers.find((item) => item !== null && item !== undefined),
         { views: new Set(panes.map((view) => view.id)) },
       )
     } catch (error) {
@@ -188,9 +190,17 @@ export class PluginViews {
     event: 'view.data' | 'view.action' | 'action.run',
     payload: unknown,
   ): Promise<Asked> {
+    const { client } = this.deps
     try {
-      await this.deps.client.activate(pluginId, trigger)
-      return { ok: true, answers: await this.deps.client.hook(pluginId, event, payload, 'call') }
+      await client.activate(pluginId, trigger)
+      try {
+        return { ok: true, reply: await client.hookReply(pluginId, event, payload, 'call') }
+      } catch (error) {
+        // A request that ran first stopped the script before this one reached it: start it again.
+        if (!(error instanceof PluginRequestError && error.code === 'not_active')) throw error
+        await client.activate(pluginId, trigger)
+        return { ok: true, reply: await client.hookReply(pluginId, event, payload, 'call') }
+      }
     } catch (error) {
       const out = failure(error)
       this.deps.log(

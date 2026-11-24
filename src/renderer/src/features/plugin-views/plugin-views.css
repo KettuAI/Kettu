@@ -326,6 +326,7 @@ button.kpv-row__main:disabled {
   font-size: 13px;
   line-height: 18px;
   color: var(--text-secondary);
+  white-space: pre-line;
 }
 .kpv-arow {
   display: flex;

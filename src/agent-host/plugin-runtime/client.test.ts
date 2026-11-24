@@ -17,7 +17,7 @@ import { readPackage, readPackageFolder } from '../plugins/package'
 import { createPluginService, type PluginService } from '../../plugin-host/start'
 import type { PluginApiCall } from './call'
 import { PluginHostClient } from './client'
-import { PLUGIN_EVENTS, createPluginApi, type PluginApiDeps } from './functions'
+import { PLUGIN_EVENTS, RANDOM_BYTES_MAX, createPluginApi, type PluginApiDeps } from './functions'
 import type { HttpTransport } from './network'
 import { PluginStorage } from './storage'
 import { tempFolder } from '../testing/temp'
@@ -422,6 +422,25 @@ describe('the plugin API', () => {
     })
   })
 
+  it('gives random bytes as hex without a permission, up to its cap, and refuses any other length', async () => {
+    const { client, add } = setup(createPluginApi(apiDeps().deps))
+    add('bare', RELAY)
+    await client.activate('bare', 'command:run')
+    const bytes = (length: unknown) => client.call('bare', 'call', ['random.bytes', length])
+    const first = (await bytes(16)) as { ok: string }
+    const second = (await bytes(16)) as { ok: string }
+    expect(first.ok).toMatch(/^[0-9a-f]{32}$/)
+    expect(second.ok).not.toBe(first.ok)
+    expect(((await bytes(RANDOM_BYTES_MAX)) as { ok: string }).ok).toHaveLength(
+      RANDOM_BYTES_MAX * 2,
+    )
+    for (const bad of [0, RANDOM_BYTES_MAX + 1, 1.5, -1, '8', null]) {
+      expect(await bytes(bad), String(bad)).toEqual({
+        error: expect.stringContaining('whole number of 1 to'),
+      })
+    }
+  })
+
   it('has no call that runs commands, reads files or reaches credentials, whatever is granted', async () => {
     const { deps } = apiDeps()
     const api = createPluginApi(deps)
@@ -466,6 +485,7 @@ describe('the plugin API', () => {
       'storage.set': null,
       'storage.delete': null,
       'storage.keys': null,
+      'random.bytes': null,
       'network.fetch': 'network',
       'sessions.list': 'sessions.summary',
       'sessions.read': 'sessions.content',

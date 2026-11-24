@@ -16,6 +16,7 @@ import {
   checkSetting,
   effectiveSetting,
   pluginItemId,
+  pluginToolName,
   toolTrigger,
   type InstalledKettuPlugin,
   type PluginContents,
@@ -274,17 +275,23 @@ export class PluginsService {
   }
 
   /**
-   * What the plugins that are on and have a script declare for the composer's `@` menu and for
-   * links in replies, in the order the plugins were installed. A plugin that declares neither is
-   * left out.
+   * What the plugins that are on and have a script declare for the composer's `@` menu, for links
+   * in replies and as tools, in the order the plugins were installed. A plugin that declares none
+   * of them is left out.
    */
   refSources(): PluginRefSource[] {
+    const toolsOf = (record: PluginRecord): string[] =>
+      record.contents.permissions.includes('tools')
+        ? record.contents.tools.map((tool) => pluginToolName(record.contents.name, tool.name))
+        : []
     return Object.values(this.data?.plugins ?? {})
       .filter(
         (record) =>
           record.enabled &&
           record.contents.script !== null &&
-          (record.contents.mentions.length > 0 || record.contents.links.length > 0),
+          (record.contents.mentions.length > 0 ||
+            record.contents.links.length > 0 ||
+            toolsOf(record).length > 0),
       )
       .sort((a, b) => a.installedAt - b.installedAt || a.id.localeCompare(b.id))
       .map((record) => ({
@@ -294,6 +301,7 @@ export class PluginsService {
         icon: record.contents.icon,
         mentions: record.contents.mentions,
         links: record.contents.links,
+        tools: toolsOf(record),
       }))
   }
 

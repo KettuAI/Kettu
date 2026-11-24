@@ -385,7 +385,7 @@
       },
       "networkSubdomains": {
         "name": "网络",
-        "description": "通过 https 连接 {{domain}} 的任何子域名。"
+        "description": "通过 https 连接任何匹配 {{domain}} 的域名。"
       }
     },
     "install": {
@@ -408,7 +408,15 @@
       "views_other": "{{count}} 个视图",
       "channels_other": "{{count}} 个通知渠道",
       "channelsNote": "只收到你选的通知，默认一个都不发",
-      "viewsNote": "由插件声明，Kettu 暂时不会绘制",
+      "viewsNote": "由 Kettu 绘制，插件只提供数据",
+      "tools_other": "{{count}} 个给智能体的工具",
+      "toolsNote": "智能体调用前会像用其他工具一样先问你",
+      "mentions_other": "{{count}} 个 @ 来源",
+      "mentionsNote": "在输入框里输入 @ 时搜索",
+      "links_other": "{{count}} 种链接",
+      "linksNote": "在回复里画成引用",
+      "actions_other": "{{count}} 个搜索操作",
+      "actionsNote": "列在搜索里",
       "connects": "连接到哪里",
       "server": "MCP 服务器 {{name}}",
       "connectsTo": "连接到 {{host}}",
