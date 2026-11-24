@@ -2042,7 +2042,7 @@
         "showKey": "Show key",
         "hideKey": "Hide key",
         "docs": "How to run a relay",
-        "docsUrl": "https://kettu.sh/docs/devices/own-relay",
+        "docsUrl": "https://github.com/KettuAI/relay/blob/main/docs/deploy.md",
         "cancel": "Cancel",
         "use": "Use this relay",
         "checking": "Checking…",

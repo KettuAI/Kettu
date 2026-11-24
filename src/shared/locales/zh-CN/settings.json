@@ -2020,7 +2020,7 @@
         "showKey": "显示密钥",
         "hideKey": "隐藏密钥",
         "docs": "怎么运行中继",
-        "docsUrl": "https://kettu.sh/zh-CN/docs/devices/own-relay",
+        "docsUrl": "https://github.com/KettuAI/relay/blob/main/docs/deploy.zh-CN.md",
         "cancel": "取消",
         "use": "使用这个中继",
         "checking": "正在检查…",
