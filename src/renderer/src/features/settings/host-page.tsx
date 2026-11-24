@@ -36,6 +36,7 @@ import {
 } from './host-ssh-manage'
 import { openHostSettings } from './host-sections'
 import { changeHost, platformName, routeName, routeText } from './host-text'
+import { HostLoadGroup } from './host-load'
 import { HostState } from './hosts-section'
 import { DeviceTile, HostIcon } from './remote-parts'
 import { GroupLabel, GroupNote, ItemPageHeader, Notice, RowFrame, RowGroup, RowText } from './rows'
@@ -113,6 +114,7 @@ function HostPageBody({ host, onAddAgain }: { host: HostStatus; onAddAgain: () =
 
       <div className="k-groups">
         <StoppedNotice host={host} onAddAgain={onAddAgain} />
+        <HostLoadGroup host={host} />
         <section aria-label={t('hosts.page.connection')} className="k-group">
           <GroupLabel group={{ id: 'connection', label: t('hosts.page.connection') }} />
           <RowGroup>

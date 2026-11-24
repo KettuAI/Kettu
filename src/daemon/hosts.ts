@@ -4,7 +4,7 @@
 // and so are its direct connections.
 
 import type { DeviceCall } from '@shared/device-agent'
-import type { TerminalCall } from '@shared/terminal-agent'
+import { NO_TERMINAL_PROCESSES, type TerminalHostCall } from '@shared/terminal-agent'
 import path from 'node:path'
 import type {
   AdminAnswer,
@@ -833,7 +833,12 @@ export class Hosts {
   }
 
   /** Runs an agent's terminal call on the terminal host, starting it on the first one. */
-  private async terminalCall(callId: number, call: TerminalCall): Promise<void> {
+  private async terminalCall(callId: number, call: TerminalHostCall): Promise<void> {
+    // A host that is not running has no terminals, and is not started to say so.
+    if (call.kind === 'processes' && this.terminal.state !== 'ready') {
+      this.agent.post({ type: 'terminal-result', callId, answer: NO_TERMINAL_PROCESSES })
+      return
+    }
     try {
       await this.terminal.ready()
       if (this.terminal.post({ type: 'terminal-host:call', callId, call })) return

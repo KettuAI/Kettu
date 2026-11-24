@@ -8,6 +8,8 @@ import {
   type TerminalCall,
   type TerminalCallAnswer,
   type TerminalCallErrorCode,
+  type TerminalHostAnswer,
+  type TerminalHostCall,
 } from '@shared/terminal-agent'
 import { DeviceAccessStore } from './devices/access'
 import os from 'node:os'
@@ -191,6 +193,9 @@ import { opencodeModelRequests } from './model-requests/opencode'
 import { byHarness } from './model-requests/reader'
 import { AcpMessages, acpModelRequests } from './model-requests/acp-messages'
 import { IdleRelease } from './idle-release'
+import { LoadMonitor, type OwnersRead } from './load/monitor'
+import { listProcesses, type UsageOwners } from './load/processes'
+import { SystemReader } from './load/system'
 import { PortHub, type Handlers, type RequestContext } from './rpc'
 import { Attachments, toArrayBuffer } from './attachments'
 import { RoutinesManager, type RoutineTimings } from './routines/manager'
@@ -419,6 +424,9 @@ function harnessesFolder(options: HostOptions): string {
   )
 }
 
+/** How long the load waits for the terminals' processes before it leaves the terminals out. */
+const TERMINAL_PROCESSES_MS = 2_000
+
 const REPLY_RUN_ERRORS: Record<TerminalCallErrorCode, PortErrorCode> = {
   not_found: 'not_found',
   restricted: 'restricted',
@@ -464,6 +472,11 @@ export class AgentHost {
   readonly sessions: SessionManager
   /** When idle Claude Code sessions let their agent go, by the setting and the system's memory. */
   private readonly idleRelease: IdleRelease
+  /** The computer's load, which also reads the memory for idle release. */
+  private readonly load: LoadMonitor
+  private readonly system: SystemReader
+  /** Whether the computer runs on battery, as main says on Windows; null until it has. */
+  private onBattery: boolean | null = null
   /** The saved routines and the lifecycle of their runs. */
   readonly routines: RoutinesManager
   /** The user's workflow library. */
@@ -510,7 +523,7 @@ export class AgentHost {
   /** Browser calls awaiting main's answer, by the id the call was given. */
   private readonly browserCalls = new Map<number, (answer: BrowserCallAnswer) => void>()
   private readonly deviceCalls = new Map<number, (answer: DeviceCallAnswer) => void>()
-  private readonly terminalCalls = new Map<number, (answer: TerminalCallAnswer) => void>()
+  private readonly terminalCalls = new Map<number, (answer: TerminalHostAnswer) => void>()
   private nextTerminalCall = 1
   // Sessions whose running turn used a terminal, told to the terminal host when the turn ends.
   private readonly terminalTurns = new Set<string>()
@@ -1069,6 +1082,36 @@ export class AgentHost {
         this.hub.broadcast({ type: 'idleRelease.changed', state: this.idleRelease.state() })
       },
     })
+    this.system = new SystemReader({
+      platform,
+      // The volumes that hold a project, the worktrees or Kettu's data.
+      folders: () => [
+        options.userDataPath,
+        ...this.projects.paths(),
+        ...(this.settings.git.worktreeRoot ? [this.settings.git.worktreeRoot] : []),
+      ],
+      onBattery: () => this.onBattery,
+      log: (level, message) => this.diagnostics.log(level, message),
+    })
+    this.load = new LoadMonitor({
+      platform,
+      source: {
+        cpuSample: () => this.system.cpuSample(),
+        cores: () => this.system.cores(),
+        read: (cpu) => this.system.read(cpu),
+        list: () => {
+          const at = Date.now()
+          return listProcesses(platform)?.then((rows) => ({ at, rows })) ?? null
+        },
+      },
+      active: () => this.hub.size > 0 || this.agents.processes().length > 0,
+      owners: () => this.loadOwners(),
+      isDevice: (portId) => this.hub.deviceOf(portId) !== null,
+      send: (portIds, event) => this.hub.send(portIds, event),
+      broadcast: (event) => this.hub.broadcast(event),
+      memory: (reading) => this.idleRelease.observe(reading),
+      log: (level, message) => this.diagnostics.log(level, message),
+    })
     this.sessions = new SessionManager({
       platform,
       agents: this.agents,
@@ -1458,6 +1501,7 @@ export class AgentHost {
     this.projects.onChange((projects, noProject) => {
       this.broadcast({ type: 'projects.changed', projects, noProject })
       this.sendFolders()
+      this.system.forgetMounts()
     })
     this.env.onChange((info) => {
       this.broadcast({ type: 'environment.changed', info })
@@ -1523,7 +1567,7 @@ export class AgentHost {
     void host.sessions.checkWorktrees()
     host.usage.start()
     host.artifacts.start()
-    host.idleRelease.start()
+    host.load.start()
     options.send({ type: 'host:service-port', port: host.artifactService.listeningPort })
     options.send({ type: 'host:ready' })
     void host.trees.stopLeftovers()
@@ -1770,15 +1814,79 @@ export class AgentHost {
     const json = JSON.stringify(processes)
     if (json === this.lastProcesses) return
     this.lastProcesses = json
+    // An agent runs: its memory matters to idle release, and its load to the clients.
+    if (processes.length > 0) this.load.wake()
     this.options.send({ type: 'host:agent-processes', processes })
   }
 
   /** Serves a window's port, or a paired device's when `device` names it. */
   connect(channel: PortChannel<FromPort<HostEvent>>, device: PortDevice | null = null): string {
-    return this.hub.add(channel, device)
+    const portId = this.hub.add(channel, device)
+    this.load.wake()
+    return portId
+  }
+
+  /** What runs the sessions' agents and the terminals, to tell them apart in the load. */
+  private async loadOwners(): Promise<OwnersRead> {
+    const { platform } = this.options
+    const answer = await Promise.race([
+      this.toTerminalHost({ kind: 'processes' }),
+      new Promise<null>((resolve) => setTimeout(() => resolve(null), TERMINAL_PROCESSES_MS)),
+    ])
+    const listed =
+      answer && 'result' in answer && answer.result.kind === 'processes' ? answer.result : null
+    const own = new Map<string, number[]>()
+    const taken = new Set<number>()
+    // Sessions of an agent that runs them all in its one process, by agent.
+    const sharing = new Map<AgentId, string[]>()
+    for (const session of this.sessions.attachedSessions()) {
+      const { connection } = session
+      if (!connection.processOf) {
+        sharing.set(session.agentId, [...(sharing.get(session.agentId) ?? []), session.sessionId])
+        continue
+      }
+      const pid = connection.processOf(session.acpSessionId)
+      if (pid === null) continue
+      own.set(session.sessionId, [pid])
+      taken.add(pid)
+    }
+    const agentPids = new Map<AgentId, number[]>()
+    for (const { agentId, pid } of this.agents.processes()) {
+      if (!taken.has(pid)) agentPids.set(agentId, [...(agentPids.get(agentId) ?? []), pid])
+    }
+    const agents: UsageOwners['agents'] = []
+    for (const [agentId, sessionIds] of sharing) {
+      const pids = agentPids.get(agentId) ?? []
+      if (pids.length === 0) continue
+      if (sessionIds.length === 1) own.set(sessionIds[0]!, pids)
+      else agents.push({ agentId, sessions: sessionIds.length, pids })
+    }
+    return {
+      owners: {
+        kettu: process.ppid,
+        daemon: !('electron' in process.versions),
+        sessions: [...own].map(([sessionId, pids]) => ({ sessionId, pids })),
+        agents,
+        terminals: (listed?.terminals ?? []).map((terminal) => ({
+          terminalId: terminal.id,
+          sessionId: terminal.sessionId,
+          name: terminal.name,
+          pid: terminal.pid,
+        })),
+        uid: platform === 'linux' ? (process.getuid?.() ?? null) : null,
+      },
+      shells: new Map((listed?.terminals ?? []).map((terminal) => [terminal.id, terminal.shell])),
+      devices: listed?.devices ?? false,
+    }
+  }
+
+  /** `host:battery`: whether the computer runs on battery, which main reads on Windows. */
+  battery(onBattery: boolean): void {
+    this.onBattery = onBattery
   }
 
   private portClosed(portId: string): void {
+    this.load.portClosed(portId)
     this.runtimeRequests.portClosed(portId)
     this.consents.portClosed(portId)
     this.deviceBrowser.portClosed(portId)
@@ -2903,15 +3011,20 @@ export class AgentHost {
     if (call.kind === 'run' || call.kind === 'input' || call.kind === 'stop') {
       this.terminalTurns.add(call.sessionId)
     }
+    // An agent's call is answered as one.
+    return this.toTerminalHost(call) as Promise<TerminalCallAnswer>
+  }
+
+  private toTerminalHost(call: TerminalHostCall): Promise<TerminalHostAnswer> {
     const callId = this.nextTerminalCall++
-    return new Promise<TerminalCallAnswer>((resolve) => {
+    return new Promise<TerminalHostAnswer>((resolve) => {
       this.terminalCalls.set(callId, resolve)
       this.options.send({ type: 'host:terminal-call', callId, call })
     })
   }
 
   /** `terminal-result`: the terminal host's answer to a call this host forwarded. */
-  terminalResult(callId: number, answer: TerminalCallAnswer): void {
+  terminalResult(callId: number, answer: TerminalHostAnswer): void {
     const resolve = this.terminalCalls.get(callId)
     if (!resolve) return
     this.terminalCalls.delete(callId)
@@ -2975,6 +3088,7 @@ export class AgentHost {
       await this.routines.shutdown()
       this.sessions.shutdown()
       this.idleRelease.stop()
+      this.load.stop()
       this.usage.stop()
       this.artifacts.stop()
       this.execRunner.killAll()
@@ -3356,6 +3470,9 @@ export class AgentHost {
       'sessions.cancel': ({ sessionId }) => sessions.cancel(sessionId),
       'sessions.runningWork': ({ sessionIds }) => ({ sessions: sessions.runningWork(sessionIds) }),
       'sessions.idleRelease': () => this.idleRelease.state(),
+      'host.load.watch': ({ detail }, { portId }) => this.load.watch(portId, detail),
+      'host.load.unwatch': (_, { portId }) => this.load.unwatch(portId),
+      'host.status': () => this.load.status(),
       'sessions.stopTask': ({ sessionId, taskId }) => sessions.stopTask(sessionId, taskId),
       'sessions.taskOutput': ({ sessionId, taskId }) => sessions.taskOutput(sessionId, taskId),
       'sessions.retry': ({ sessionId }, { portId }) => sessions.retry(sessionId, portId),

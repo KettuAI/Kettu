@@ -231,6 +231,12 @@ export function startAgentHost(control: ControlChannel<MainToHost, HostToMain>):
       case 'host:power':
         withHost((h) => h.power(message.state))
         break
+      case 'host:battery':
+        if (typeof message.onBattery === 'boolean') {
+          const { onBattery } = message
+          withHost((h) => h.battery(onBattery))
+        }
+        break
       case 'host:computer-control':
         if (
           typeof message.sessionId === 'string' &&

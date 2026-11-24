@@ -15,6 +15,7 @@ import { Glyph } from '@renderer/features/shell/glyph'
 import { useNow } from '@renderer/lib/use-now'
 import { cn } from '@renderer/lib/utils'
 import { useHostsStore, useOtherHost, type OtherHost } from '@renderer/stores/hosts'
+import { useStrains } from '@renderer/stores/host-load'
 import { hostOfPath } from '@renderer/lib/host-paths'
 import {
   byActivity,
@@ -129,7 +130,10 @@ export function HostHeading({
   const name = useHostLabel(hostId)
   const model = useHostsStore((s) => s.status?.self.model ?? '')
   const laptop = deviceShape({ kind: 'desktop', model }) === 'laptop'
-  const state = host ? <HostStateText host={host} /> : null
+  // A tag that the host runs low takes the place of its route, which says it is online too.
+  const strained = useStrains(hostId).length > 0
+  const state =
+    host && !(strained && host.connection.state === 'online') ? <HostStateText host={host} /> : null
   return (
     <button
       ref={handleRef}

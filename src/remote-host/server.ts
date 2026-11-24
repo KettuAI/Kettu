@@ -58,6 +58,7 @@ import {
   BACKGROUND_RESUME_MS,
   BROWSER_FEATURE,
   IMAGE_REFS_FEATURE,
+  LOAD_FEATURE,
   negotiate,
   parseHello,
   parsePromote,
@@ -1390,6 +1391,7 @@ class DeviceSession {
       host: this.server.options.host,
       features: [
         BYTES_FEATURE,
+        LOAD_FEATURE,
         ...(this.version >= PUSH_VERSION && this.server.options.notifications?.()
           ? [PUSH_FEATURE, WEB_PUSH_FEATURE]
           : []),

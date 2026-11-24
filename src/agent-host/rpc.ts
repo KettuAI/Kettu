@@ -69,6 +69,8 @@ const LIVE_METHODS: ReadonlySet<string> = new Set<HostMethod>([
   'sessions.watch',
   'sessions.unwatch',
   'sessions.show',
+  'host.load.watch',
+  'host.load.unwatch',
   'sessions.cancel',
   'permissions.respond',
   'settings.answerChange',
@@ -220,6 +222,11 @@ export class PortHub {
 
   has(portId: string): boolean {
     return this.ports.has(portId)
+  }
+
+  /** How many ports are open: windows' and devices'. */
+  get size(): number {
+    return this.ports.size
   }
 
   /** The paired device an open port serves; null for a window's and for a closed port. */
