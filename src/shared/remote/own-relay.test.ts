@@ -114,13 +114,10 @@ describe('the owner’s own relay', () => {
 
 describe('checking a relay before switching to it', () => {
   async function check(relays: FakeRelays, options: { url?: string; key?: string | null } = {}) {
-    const { key: relayKey, id } = await signer()
     return checkOwnRelay({
       url: options.url ?? RELAY,
       key: options.key === undefined ? KEY : options.key,
       pin: null,
-      id,
-      relayKey,
       fetchInfo: relays.fetchInfo,
       openSocket: relays.openSocket,
       timeoutMs: 2000,
@@ -133,6 +130,31 @@ describe('checking a relay before switching to it', () => {
     expect(await check(relays)).toEqual({ ok: true, url: RELAY, pin: null, version: '0.1.0' })
     // The check signs in and leaves at once.
     await expect.poll(() => relays.relay(RELAY).hosts.size).toBe(0)
+  })
+
+  it('leaves the host’s own connection to the relay alone', async () => {
+    const relays = new FakeRelays()
+    const server = relays.relay(RELAY)
+    server.useAccessKey(KEY)
+    const { key, id } = await signer()
+    const host = new RelayHost({
+      main: RELAY,
+      id,
+      key,
+      own: { id: 'own', url: RELAY },
+      openSocket: relays.openSocket,
+      fetchInfo: () => Promise.reject(new Error('An own relay lists no regions')),
+      accepted: () => {},
+      changed: () => {},
+      log: () => {},
+    })
+    host.start()
+    host.setToken(KEY)
+    await expect.poll(() => host.status[0]?.connection.state).toBe('connected')
+    expect((await check(relays)).ok).toBe(true)
+    expect(host.status[0]?.connection.state).toBe('connected')
+    expect(server.hosts.get(id)?.socket).toBeDefined()
+    host.stop()
   })
 
   it('says which check failed', async () => {
@@ -152,15 +174,7 @@ describe('checking a relay before switching to it', () => {
     down.relay(RELAY).mode = 'down'
     expect(await check(down)).toEqual({ ok: false, problem: 'unreachable' })
 
-    const { key: relayKey, id } = await signer()
-    const base = {
-      url: RELAY,
-      key: KEY,
-      pin: null,
-      id,
-      relayKey,
-      openSocket: relays.openSocket,
-    }
+    const base = { url: RELAY, key: KEY, pin: null, openSocket: relays.openSocket }
     expect(
       await checkOwnRelay({
         ...base,

@@ -24,14 +24,7 @@ import { matchLocale, resolveLocale } from '@shared/locale'
 import type { MarketAccount } from '@shared/market-publish'
 import { addressKey, MAX_OWN_ADDRESSES, parsePort } from '@shared/remote/address'
 import { PUSH_URL, PUSH_URL_ENV, pushUrlFrom } from '@shared/remote/push'
-import {
-  RELAY_TOKENS_FEATURE,
-  RELAY_URL,
-  RELAY_URL_ENV,
-  importRelayKey,
-  relayHostId,
-  relayUrlFrom,
-} from '@shared/remote/relay'
+import { RELAY_TOKENS_FEATURE, RELAY_URL, RELAY_URL_ENV, relayUrlFrom } from '@shared/remote/relay'
 import {
   RELAY_LINK_ENV,
   parseRelayLink,
@@ -541,7 +534,6 @@ export async function startDaemon(options: DaemonOptions): Promise<RunningDaemon
       send: (token, relay) => running.setToken(token, relay),
     })
   }
-  const seed = relayKey?.privateKey ?? null
   ownRelay = (input) =>
     useOwnRelay(input, {
       key: () => accessKey,
@@ -552,11 +544,6 @@ export async function startDaemon(options: DaemonOptions): Promise<RunningDaemon
       current: () => settings.get().remote.ownRelay,
       apply: (own) => settings.useOwnRelay(own),
       changed: () => running.relayChanged(),
-      signer: async () => {
-        if (!seed) return null
-        const key = await importRelayKey(Buffer.from(seed, 'base64'))
-        return { key, id: await relayHostId(key.publicKey) }
-      },
       check: checkRelayHere,
     })
   admin = await startDaemonAdmin({

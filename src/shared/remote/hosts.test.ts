@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   parseIdentityFile,
+  parseHostStatus,
   parseKnownHost,
   parseSshAddress,
   parseSshPort,
@@ -111,5 +112,37 @@ describe('parseKnownHost with an SSH route', () => {
     ]) {
       expect(parseKnownHost({ ...host, ssh })).toBeNull()
     }
+  })
+})
+
+describe('parseHostStatus', () => {
+  const host = {
+    id: '0123456789abcdef0123456789abcdef',
+    publicKey: 'AAAA',
+    name: 'Studio',
+    platform: 'darwin',
+    version: '0.1.20',
+    addresses: [],
+    deviceName: 'Mac',
+    addedAt: 1,
+    lastOnlineAt: null,
+    removed: false,
+  }
+  const connection = (value: unknown) => parseHostStatus({ ...host, connection: value })?.connection
+
+  it('keeps that a host is online through its owner’s relay', () => {
+    expect(connection({ state: 'online', relay: 'https://relay.example.com', own: true })).toEqual({
+      state: 'online',
+      relay: 'https://relay.example.com',
+      own: true,
+    })
+    expect(connection({ state: 'online', relay: 'https://relay.kettu.sh' })).toEqual({
+      state: 'online',
+      relay: 'https://relay.kettu.sh',
+    })
+    expect(connection({ state: 'online', relay: 'https://relay.kettu.sh', own: 'yes' })).toEqual({
+      state: 'online',
+      relay: 'https://relay.kettu.sh',
+    })
   })
 })

@@ -315,8 +315,17 @@ export function startRemoteHost(
       if (!relayKey || !relayId) return null
       const own = ownRelay
       if (own) {
-        void readOwnInfo(own, changed)
-        return new RelayHost({
+        // Read at each sign-in, since a relay that restarted may be another version or serve the
+        // web client now.
+        let signedIn = false
+        let ownHost: RelayHost | null = null
+        const ownChanged = (): void => {
+          const connected = ownHost?.status[0]?.connection.state === 'connected'
+          if (connected && !signedIn) void readOwnInfo(own, changed)
+          signedIn = connected
+          changed()
+        }
+        ownHost = new RelayHost({
           main: own.url,
           own: { id: 'own', url: own.url, ...(own.pin ? { pin: own.pin } : {}) },
           id: relayId,
@@ -328,10 +337,11 @@ export function startRemoteHost(
               (transport) => server.accept(transport, 'relay'),
               () => {},
             ),
-          changed,
+          changed: ownChanged,
           legsChanged: changed,
           log,
         })
+        return ownHost
       }
       if (!relayUrl) return null
       const host = new RelayHost({

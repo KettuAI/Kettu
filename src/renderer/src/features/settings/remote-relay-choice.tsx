@@ -17,7 +17,7 @@ import type { RelayChoice } from '@shared/settings'
 import { Icon } from '@renderer/components/affect/app-shell'
 import { RadioGroup, RadioGroupTile } from '@renderer/components/ui/radio-group'
 import { errorMessage } from '@renderer/lib/host'
-import { useHostHas } from '@renderer/lib/host-features'
+import { useHostContext, useHostHas } from '@renderer/lib/host-features'
 import { useHostScope } from '@renderer/stores/host-scope'
 import { ControlError, IconAction, Pill, SetButton, SetInput } from './controls'
 import { RelayRegions, RetryRelay } from './remote-relay'
@@ -57,12 +57,18 @@ function useOwnReport(): OwnRelayReport | null {
 /** The three cards; in Local mode the Kettu relay, a service of Kettu's, is left out. */
 export function RelayChoices() {
   const { t } = useTranslation('settings')
-  const { useSettingsStore } = useHostScope()
+  const { useSettingsStore, useRemoteStore } = useHostScope()
   const choice = useSettingsStore((s) => s.settings.remote.relay)
   const cloudOff = useCloudOffHere()
+  const onHost = useHostContext()
   const canOwn = useHostHas('ownRelay') !== false
   const [editing, setEditing] = useState<FormMode | null>(null)
   const [apply, error] = useApply()
+  // The regions show once the host signed in to them; before, the status line says why not.
+  const regions = useRemoteStore(
+    (s) =>
+      s.status?.relay?.state === 'on' && !s.status.relay.own && s.status.relay.relays.length > 0,
+  )
   // The Kettu relay is not used in Local mode, so it reads as no relay there.
   const current: RelayChoice = cloudOff && choice === 'kettu' ? 'off' : choice
   const value: RelayChoice = editing ? 'own' : current
@@ -113,6 +119,7 @@ export function RelayChoices() {
                         option === 'own' && cloudOff
                           ? 'remote.relay.choice.own.descriptionLocal'
                           : `remote.relay.choice.${option}.description`,
+                        onHost,
                       )}
                 </small>
               </span>
@@ -127,7 +134,7 @@ export function RelayChoices() {
               ) : (
                 current === 'own' && <OwnRelayInUse onEdit={setEditing} />
               ))}
-            {option === 'kettu' && current === 'kettu' && !editing && (
+            {option === 'kettu' && current === 'kettu' && !editing && regions && (
               <div className="k-relay-body">
                 <RelayRegions />
               </div>
@@ -150,13 +157,14 @@ function useRelayNote(): string {
   const choice = useSettingsStore((s) => s.settings.remote.relay)
   const own = useOwnReport()
   const cloudOff = useCloudOffHere()
+  const onHost = useHostContext()
   if (cloudOff) return t('remote.relay.note.local')
   if (choice === 'own') {
     return own?.pinned
-      ? `${t('remote.relay.note.own')} ${t('remote.relay.note.pinned')}`
-      : t('remote.relay.note.own')
+      ? `${t('remote.relay.note.own', onHost)} ${t('remote.relay.note.pinned')}`
+      : t('remote.relay.note.own', onHost)
   }
-  return t('remote.relay.note.switch')
+  return t('remote.relay.note.switch', onHost)
 }
 
 /** The own relay while it is the one in use: its address and state, and its key's end. */
@@ -290,6 +298,7 @@ function OwnRelayForm({
   const saved = useSettingsStore((s) => s.settings.remote.ownRelay)
   const current = useSettingsStore((s) => s.settings.remote.relay)
   const own = useOwnReport()
+  const onHost = useHostContext()
   const id = useId()
   const [address, setAddress] = useState(saved?.url ?? '')
   const [key, setKey] = useState('')
@@ -430,7 +439,7 @@ function OwnRelayForm({
             ? problemText(keyProblem)
             : keepsKey
               ? t('remote.relay.own.keyKept', { end: own?.keyEnd })
-              : t('remote.relay.own.keyHint')}
+              : t('remote.relay.own.keyHint', onHost)}
         </span>
       </label>
       {(checking || phase.kind === 'failed') && (

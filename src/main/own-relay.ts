@@ -10,7 +10,6 @@ import {
   type OwnRelayCheckOptions,
   type OwnRelayInput,
 } from '@shared/remote/own-relay'
-import type { RelayKey } from '@shared/remote/relay'
 import type { OwnRelaySettings } from '@shared/settings'
 
 /** The input as a renderer or a device sent it, or null when it is not one. */
@@ -34,8 +33,6 @@ export interface OwnRelayDeps {
   apply(own: OwnRelaySettings): void
   /** Tells the remote host, as when only the key changed and the settings did not. */
   changed(): void
-  /** The key the host signs in with and its id there; null when it cannot be had. */
-  signer(): Promise<{ key: RelayKey; id: string } | null>
   /** Checks the relay from this computer. */
   check(options: Omit<OwnRelayCheckOptions, 'fetchInfo' | 'openSocket'>): Promise<OwnRelayCheck>
 }
@@ -54,9 +51,7 @@ export async function useOwnRelay(
   if (pin !== null && !isRelayPin(pin)) return { ok: false, problem: 'certificate' }
   const key = input.key ?? deps.key()
   if (!isAccessKey(key)) return { ok: false, problem: 'key' }
-  const signer = await deps.signer()
-  if (!signer) return { ok: false, problem: 'unreachable' }
-  const result = await deps.check({ url: link.url, key, pin, id: signer.id, relayKey: signer.key })
+  const result = await deps.check({ url: link.url, key, pin })
   if (!result.ok) return result
   const keyChanged = key !== deps.key()
   if (keyChanged) await deps.saveKey(key)

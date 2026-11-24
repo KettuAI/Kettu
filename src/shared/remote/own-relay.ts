@@ -8,6 +8,9 @@ import {
   ACCESS_KEY_FEATURE,
   PING,
   RELAY_CLOSE,
+  importRelayKey,
+  newRelaySeed,
+  relayHostId,
   SIGN_IN_TIMEOUT_MS,
   decodeRelayBytes,
   hostSocketPath,
@@ -142,9 +145,6 @@ export interface OwnRelayCheckOptions {
   url: string
   key: string | null
   pin: string | null
-  /** The host's relay id and key, which it signs in with. */
-  id: string
-  relayKey: RelayKey
   /** Reads JSON from the relay, through the pin; rejects with a RelayReachError when it cannot. */
   fetchInfo(url: string, pin?: string): Promise<unknown>
   openSocket(url: string, pin?: string): WebSocket
@@ -154,7 +154,8 @@ export interface OwnRelayCheckOptions {
 /**
  * Checks a relay before a host uses it: an address it may use, a Kettu relay of protocol 1 that
  * takes access keys, reached with a valid certificate or the pinned one, and the key accepted by
- * a sign-in, which is closed again at once.
+ * a sign-in, which is closed again at once. The sign-in is a throwaway identity's, since one as
+ * the host would replace the host's own connection to that relay.
  */
 export async function checkOwnRelay(options: OwnRelayCheckOptions): Promise<OwnRelayCheck> {
   const { url, key } = options
@@ -183,13 +184,15 @@ export async function checkOwnRelay(options: OwnRelayCheckOptions): Promise<OwnR
 }
 
 /** Signs in once with the key and closes: `ok`, or why not. */
-function trySignIn(
+async function trySignIn(
   options: OwnRelayCheckOptions,
   key: string,
   pin: string | undefined,
 ): Promise<'ok' | 'key_refused' | 'unreachable'> {
-  const { url, id, relayKey } = options
+  const { url } = options
   const timeoutMs = options.timeoutMs ?? SIGN_IN_TIMEOUT_MS * 2
+  const relayKey: RelayKey = await importRelayKey(await newRelaySeed())
+  const id = await relayHostId(relayKey.publicKey)
   return new Promise((resolve) => {
     let socket: WebSocket
     try {

@@ -119,6 +119,8 @@ async function pair(socket: string): Promise<number> {
   const questions = terminalQuestions(process.stdin, process.stdout)
   try {
     const { status } = await client.call('direct.get', undefined)
+    const relay = await client.call('relay.get', undefined)
+    const own = relay.state === 'on' ? relay.own : undefined
     const ssh =
       status?.state === 'listening'
         ? {
@@ -130,7 +132,7 @@ async function pair(socket: string): Promise<number> {
       client,
       { write: out, live: process.stdout.isTTY === true, ask: questions.ask },
       stop.signal,
-      { ssh },
+      { ssh, ownRelayWeb: own?.web ? own.url : null },
     )
   } catch (error) {
     if (error instanceof ControlError) throw new Failure(error.message)

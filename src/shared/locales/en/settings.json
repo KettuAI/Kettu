@@ -1400,7 +1400,9 @@
       "ssh": "SSH",
       "sshAt": "SSH · {{target}}",
       "relay": "Kettu relay",
-      "relayAt": "Kettu relay · {{region}}"
+      "relayAt": "Kettu relay · {{region}}",
+      "ownRelay": "Your relay",
+      "ownRelayAt": "Your relay · {{host}}"
     },
     "failed": {
       "not_connected": "{{name}} is not connected. Try again once it is online.",
@@ -2007,7 +2009,8 @@
       "choice": {
         "kettu": {
           "name": "Kettu relay",
-          "description": "Run by Kettu. This computer and your devices sign in to one Kettu account."
+          "description": "Run by Kettu. This computer and your devices sign in to one Kettu account.",
+          "description_web": "Run by Kettu. {{host}} and your devices sign in to one Kettu account."
         },
         "own": {
           "name": "Your own relay",
@@ -2024,7 +2027,9 @@
         "switch": "Kettu checks the relay and the key before it switches. Devices online now move over at once; the others the next time they reach this computer on the same network, or when you add them again.",
         "own": "Only one relay at a time. Your Kettu account still sends this computer’s notifications to your iPhone.",
         "pinned": "The Kettu apps on computers and iPhones reach it. Browsers can’t check a pinned certificate, so they need a relay with a domain.",
-        "local": "In Local mode Kettu sends nothing to its own services. Your relay is yours, so it stays."
+        "local": "In Local mode Kettu sends nothing to its own services. Your relay is yours, so it stays.",
+        "switch_web": "Kettu checks the relay and the key before it switches. Devices online now move over at once; the others the next time they reach {{host}} on the same network, or when you add them again.",
+        "own_web": "Only one relay at a time. Your Kettu account still sends {{host}}’s notifications to your iPhone."
       },
       "own": {
         "address": "Address",
@@ -2080,7 +2085,8 @@
           "no_access_key": "This relay takes no access key. Update kettu-relay on the server.",
           "key_refused": "The relay refused this key. On the relay,",
           "key_refusedEnd": "prints the link with its current key."
-        }
+        },
+        "keyHint_web": "Kept on {{host}} only. Devices, this one included, never get it back."
       }
     },
     "discoverable": {

@@ -1307,6 +1307,9 @@ class HostLink {
   private online(via: Via, terminal: boolean): HostConnection {
     const allowed = terminal ? { terminal: true as const } : {}
     if (!('relay' in via)) return { state: 'online', address: via.address, ...allowed }
+    if (this.client.ownRelayUrl(via.relay)) {
+      return { state: 'online', relay: via.relay, own: true, ...allowed }
+    }
     const region = this.client.options.relay?.regions?.regionName?.(via.relay) ?? null
     return { state: 'online', relay: via.relay, ...(region ? { region } : {}), ...allowed }
   }
@@ -2134,10 +2137,14 @@ export class HostClient {
     return main !== undefined && isOwnRelay(relay, main)
   }
 
-  /** Whether a relay a session joined through is not under the Kettu relay's domain. */
+  /**
+   * Whether a relay a session joined through is the owner's: neither under the Kettu relay's
+   * domain nor a region its signed list names, as one reached by its IP address.
+   */
   ownRelayUrl(url: string): boolean {
-    const main = this.options.relay?.main
-    return main !== undefined && !trustedRelay(url, main)
+    const relay = this.options.relay
+    if (!relay || trustedRelay(url, relay.main)) return false
+    return !relay.regions?.regionName?.(url)
   }
 
   /** Starts a connection to each known host, and watches the network for a change. */

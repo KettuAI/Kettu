@@ -1415,7 +1415,7 @@ export function useRemoteSection(): SectionDef {
       id: 'direct',
       setting: 'remote.direct',
       description: t(
-        relayInUse(status) && !cloudOff
+        relayInUse(status) && (!cloudOff || relayChoice === 'own')
           ? 'remote.direct.descriptionFree'
           : 'remote.direct.description',
       ),

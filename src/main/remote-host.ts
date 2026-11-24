@@ -44,7 +44,6 @@ import { isPairingState, type PairingState } from '@shared/remote/pairing'
 import type { HostAdminEvent } from '@shared/remote/host-admin'
 import type { DirectAddress } from '@shared/remote/protocol'
 import type { OwnRelayCheck, OwnRelayInput } from '@shared/remote/own-relay'
-import { importRelayKey, relayHostId, type RelayKey } from '@shared/remote/relay'
 import { parseRelayStatuses } from '@shared/remote/relay-host'
 import type { DirectSettings } from '@shared/settings'
 import remoteHostPath from '../remote-host/index?modulePath'
@@ -324,21 +323,6 @@ export class RemoteHost {
     if (sent === this.relayOn) return
     if (this.host?.post({ type: 'remote-host:relay', enabled: relay.enabled, own: relay.own })) {
       this.relayOn = sent
-    }
-  }
-
-  /**
-   * The key this computer signs in to relays with and its id there, for checking a relay before
-   * it is used; null when the key cannot be had.
-   */
-  async relaySigner(): Promise<{ key: RelayKey; id: string } | null> {
-    try {
-      this.relayIdentity ??= await this.deps.relayKey()
-      const key = await importRelayKey(Buffer.from(this.relayIdentity.privateKey, 'base64'))
-      return { key, id: await relayHostId(key.publicKey) }
-    } catch (error) {
-      log.error('The relay key cannot be read', error)
-      return null
     }
   }
 

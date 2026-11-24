@@ -125,7 +125,9 @@ export function DirectSwitch({ label }: { label: string }) {
   const { useSettingsStore, useRemoteStore } = useHostScope()
   const enabled = useSettingsStore((s) => s.settings.remote.direct.enabled)
   const cloudOff = useCloudOffHere()
-  const free = useRemoteStore((s) => relayInUse(s.status)) && !cloudOff
+  const own = useSettingsStore((s) => s.settings.remote.relay === 'own')
+  // Local mode keeps the owner's own relay, so only the Kettu relay is off there.
+  const free = useRemoteStore((s) => relayInUse(s.status)) && (!cloudOff || own)
   const [apply, error] = useApply()
   if (!free) return <SettingSwitch label={label} checked disabled onChange={() => {}} />
   return (

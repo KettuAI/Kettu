@@ -862,7 +862,6 @@ async function start(): Promise<void> {
           remoteHost.relayChanged()
           remoteChanged()
         },
-        signer: () => remoteHost.relaySigner(),
         check: checkRelayHere,
       }),
     discoverable: () => settings.get().remote.discoverable,

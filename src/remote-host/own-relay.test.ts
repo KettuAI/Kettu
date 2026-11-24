@@ -146,6 +146,7 @@ describe('a device of a host on its owner’s relay', () => {
       const t = await setup(token)
       t.client.start()
       await expect.poll(() => t.connection().state, { timeout: 15_000 }).toBe('online')
+      expect(t.connection()).toMatchObject({ relay: OWN, own: true })
       expect(t.relays.relay(OWN).deviceTokens.length).toBeGreaterThan(0)
       expect(t.relays.relay(OWN).deviceTokens.every((sent) => sent === null)).toBe(true)
       // Nothing of the device went to the Kettu relay either.
