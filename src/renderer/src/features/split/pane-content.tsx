@@ -3,7 +3,7 @@ import { NewSessionView } from '@renderer/features/session/new-session'
 import { PendingSessionView } from '@renderer/features/session/pending-session'
 import { ColumnScroller, HostAway, ThreadSkeleton } from '@renderer/features/session/session-states'
 import { SessionView } from '@renderer/features/session/session-view'
-import { MoreToolsMenu } from '@renderer/features/shell/header-tools'
+import { ClosePaneButton } from '@renderer/features/shell/header-tools'
 import { NoDrag, TopBar } from '@renderer/features/shell/top-bar'
 import { hostOfPath } from '@renderer/lib/host-paths'
 import { isAway, useOtherHost } from '@renderer/stores/hosts'
@@ -51,7 +51,7 @@ function WaitingForHost({ hostId }: { hostId: string }) {
       <TopBar cornered={usePane()?.cornered}>
         <span className="flex-1" />
         <NoDrag className="kp-bar-tools">
-          <MoreToolsMenu />
+          <ClosePaneButton />
         </NoDrag>
       </TopBar>
       {host && isAway(host.connection) ? (

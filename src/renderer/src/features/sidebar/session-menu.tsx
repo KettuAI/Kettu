@@ -2,6 +2,7 @@ import { type CSSProperties, Fragment, useEffect, useRef, useState } from 'react
 import {
   Archive01Icon,
   ArrowMoveDownRightIcon,
+  Cancel01Icon,
   CodeIcon,
   ComputerIcon,
   FolderRemoveIcon,
@@ -33,6 +34,7 @@ import {
   deleteSession,
   descendantCount,
   forkSession,
+  leaveSession,
   markSessionUnread,
   pinSession,
   renameSession,
@@ -87,6 +89,7 @@ import {
   paneWithSession,
   type SplitReason,
 } from '@renderer/features/split/layout'
+import { usePane } from '@renderer/features/split/pane-context'
 import { splitSize } from '@renderer/features/split/session-drag-model'
 import {
   openInSplit,
@@ -228,7 +231,9 @@ export function SessionMenuItems({
   /** The row's sub-agents, which the menu lists as its badge does; left out where it has none. */
   subagents?: readonly SessionSummary[]
 }) {
-  const { t } = useTranslation(['sidebar', 'common'])
+  const { t } = useTranslation(['sidebar', 'common', 'shell'])
+  const pane = usePane()
+  const canLeave = place === 'more' && !!pane && !pane.split && pane.view.kind === 'session'
   // The agents of the session's host that can run one now; More options opens New session with
   // every agent.
   const hostId = hostOfSession(summary)
@@ -524,6 +529,15 @@ export function SessionMenuItems({
             {t('row.showInParent')}
           </DropdownMenuItem>
         )
+      case 'leave':
+        return (
+          <DropdownMenuItem key={name} onClick={() => leaveSession(summary)}>
+            <MenuGlyph icon={Cancel01Icon} />
+            {t('shell:headerTools.leaveSession')}
+            {/* 浏览器端由浏览器自身占用 Mod+W 快捷键。 */}
+            {!isWeb && <DropdownMenuShortcut>{formatShortcut('Mod+W')}</DropdownMenuShortcut>}
+          </DropdownMenuItem>
+        )
       case 'archive': {
         const title = t('row.archived', { title: sessionTitle(summary) })
         if (subSessions === 0) {
@@ -588,6 +602,7 @@ export function SessionMenuItems({
     worktree: hasLiveWorktree(summary),
     removeWorktree: canRemoveWorktree(summary),
     subagents: listed.length > 0,
+    leave: canLeave,
   }
   return sessionMenuGroups(summary, context).map((group, index) => (
     <DropdownMenuGroup key={group[0]}>

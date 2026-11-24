@@ -4,8 +4,7 @@
     "files": "文件",
     "closePane": "关闭窗格",
     "leaveSession": "离开会话",
-    "sideChatNews": "有新回答",
-    "more": "更多工具"
+    "sideChatNews": "有新回答"
   },
   "hostBanner": {
     "restarting": "正在重启智能体后台进程，会话会自动恢复。",
