@@ -82,6 +82,11 @@
       "description": "A session stopped by a used-up plan window carries on by itself when the window resets.",
       "keywords": "plan limit quota reset continue session"
     },
+    "promptSuggestions": {
+      "name": "Suggest the next message",
+      "description": "After a turn, the empty message box shows what you might say next; Tab fills it in. Claude Code only, from its prompt cache.",
+      "keywords": "suggestion predict next message prompt tab autocomplete composer"
+    },
     "agentPasswords": {
       "name": "Let agents type passwords",
       "description": "Agents type passwords and codes you gave them or the project holds, such as a test account’s. What they type goes through their model provider.",

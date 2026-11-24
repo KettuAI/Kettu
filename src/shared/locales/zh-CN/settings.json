@@ -81,6 +81,11 @@
       "description": "被套餐限额停下的会话，在窗口重置后自己接着做。",
       "keywords": "套餐 限额 重置 自动继续 session"
     },
+    "promptSuggestions": {
+      "name": "建议下一条消息",
+      "description": "一轮结束后，空着的输入框显示你接下来可能要说的话，按 Tab 填入。目前只有 Claude Code，借用它的提示词缓存。",
+      "keywords": "建议 预测 下一条 消息 补全 输入框 suggestion predict next prompt tab autocomplete"
+    },
     "agentPasswords": {
       "name": "允许智能体输入密码",
       "description": "智能体可以输入你给它的或项目里写着的密码和验证码，比如测试账号的。它输入的内容会经过它的模型服务商。",

@@ -392,6 +392,8 @@ export interface SessionOptions {
    * agy's flag, which would otherwise cost a restart right after `session/new`.
    */
   fullAccess?: boolean
+  /** Ask the agent for a guess at the user's next message after each turn, where it offers one. */
+  suggestions?: boolean
 }
 
 /** Kettu's memory as a session starts with it. */
