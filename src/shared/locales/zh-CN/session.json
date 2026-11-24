@@ -1565,6 +1565,15 @@
       "label": "转换",
       "from": "由 {{harness}} 的插件转换而来，原来的文件夹没有改动。",
       "carried": "带过来的",
+      "count": {
+        "skills_other": "{{count}} 个技能",
+        "servers_other": "{{count}} 个 MCP 服务器",
+        "commands_other": "{{count}} 个命令",
+        "roles_other": "{{count}} 个角色",
+        "workflows_other": "{{count}} 个工作流",
+        "themes_other": "{{count}} 个主题",
+        "templates_other": "{{count}} 个模板"
+      },
       "nothingLeftOut": "没有落下的。",
       "leftOut_other": "落下了 {{count}} 项：",
       "changed": "转换时改动的：",

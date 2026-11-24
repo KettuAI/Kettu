@@ -379,8 +379,15 @@ function Converted({ converted }: { converted: NonNullable<Ask['converted']> }) 
         {converted.carried.length > 0 && (
           <span className="ks-pub-uploads">
             <span className="ks-pub-faint">{t('marketPublish.converted.carried')}</span>
-            <span className="ks-pub-mono">
-              {converted.carried.map((group) => `${group.items.length} ${group.label}`).join(', ')}
+            <span>
+              {converted.carried
+                .map((group) =>
+                  t(`marketPublish.converted.count.${group.label}`, {
+                    count: group.items.length,
+                    defaultValue: `${group.items.length} ${group.label}`,
+                  }),
+                )
+                .join(', ')}
             </span>
           </span>
         )}
