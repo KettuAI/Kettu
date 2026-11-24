@@ -1,7 +1,14 @@
 import { describe, expect, it } from 'vitest'
 import type { PortChannel } from '@shared/port-channel'
 import type { PortDevice } from '@shared/remote/device'
-import { DEVICE_RUNNING, DEVICE_WAITING, PortHub, type Handlers, type Validators } from './rpc'
+import {
+  DEVICE_LIVE_RUNNING,
+  DEVICE_RUNNING,
+  DEVICE_WAITING,
+  PortHub,
+  type Handlers,
+  type Validators,
+} from './rpc'
 
 const DEVICE: PortDevice = { id: 'a'.repeat(32), name: 'Phone' }
 
@@ -157,5 +164,82 @@ describe("a paired device's requests", () => {
     tablet.request(1, 'usage.summary', SUMMARY)
     await settle()
     expect(calls).toHaveLength(DEVICE_RUNNING + 1)
+  })
+
+  it('run live requests while slow ones hold every place of the others', async () => {
+    const { hub: h, calls } = hub()
+    const port = new FakePort()
+    h.add(port, DEVICE)
+    for (let id = 1; id <= DEVICE_RUNNING + 2; id++) {
+      port.request(id, 'git.issue', { projectPath: '/p', number: id })
+    }
+    await settle()
+    expect(calls).toHaveLength(DEVICE_RUNNING)
+    port.request(100, 'sessions.watch', { sessionId: 's1' })
+    port.request(101, 'sessions.show', { sessionIds: ['s1'] })
+    port.request(102, 'sessions.unwatch', { sessionId: 's2' })
+    port.request(103, 'permissions.respond', { sessionId: 's1', requestId: 'r', optionId: 'o' })
+    port.request(104, 'sessions.cancel', { sessionId: 's1' })
+    await settle()
+    expect(calls.slice(DEVICE_RUNNING).map((call) => call.method)).toEqual([
+      'sessions.watch',
+      'sessions.show',
+      'sessions.unwatch',
+      'permissions.respond',
+      'sessions.cancel',
+    ])
+  })
+
+  it('keep live requests out of the places of the others', async () => {
+    const { hub: h, calls } = hub()
+    const port = new FakePort()
+    h.add(port, DEVICE)
+    for (let id = 1; id <= DEVICE_LIVE_RUNNING; id++) {
+      port.request(id, 'sessions.watch', { sessionId: `s${id}` })
+    }
+    port.request(100, 'git.issue', { projectPath: '/p', number: 1 })
+    await settle()
+    expect(calls).toHaveLength(DEVICE_LIVE_RUNNING + 1)
+    expect(calls.at(-1)!.method).toBe('git.issue')
+  })
+
+  it('run at most a bounded number of live requests at once, the rest in order', async () => {
+    const { hub: h, calls, release } = hub()
+    const port = new FakePort()
+    h.add(port, DEVICE)
+    for (let id = 1; id <= DEVICE_LIVE_RUNNING + 2; id++) {
+      port.request(id, 'sessions.watch', { sessionId: `s${id}` })
+    }
+    await settle()
+    expect(calls).toHaveLength(DEVICE_LIVE_RUNNING)
+    release()
+    await settle()
+    expect(calls).toHaveLength(DEVICE_LIVE_RUNNING + 1)
+    expect(calls.at(-1)!.params).toEqual({ sessionId: `s${DEVICE_LIVE_RUNNING + 1}` })
+    expect(port.answer(1)).toMatchObject({ type: 'response' })
+  })
+
+  it('run a live request even when the others are as many as may wait', async () => {
+    const { hub: h, calls } = hub()
+    const port = new FakePort()
+    h.add(port, DEVICE)
+    const slow = DEVICE_RUNNING + DEVICE_WAITING + 1
+    for (let id = 1; id <= slow; id++) port.request(id, 'usage.summary', { ...SUMMARY, to: id })
+    port.request(1000, 'permissions.respond', { sessionId: 's', requestId: 'r', optionId: 'o' })
+    await settle()
+    expect(port.sent.filter((message) => message.error?.code === 'busy')).toHaveLength(1)
+    expect(calls.at(-1)!.method).toBe('permissions.respond')
+    expect(port.answer(1000)).toBeUndefined()
+  })
+
+  it('refuse live requests as busy past the bound of those waiting', async () => {
+    const { hub: h } = hub()
+    const port = new FakePort()
+    h.add(port, DEVICE)
+    const total = DEVICE_LIVE_RUNNING + DEVICE_WAITING + 2
+    for (let id = 1; id <= total; id++) port.request(id, 'sessions.watch', { sessionId: `s${id}` })
+    await settle()
+    const busy = port.sent.filter((message) => message.error?.code === 'busy')
+    expect(busy.map((message) => message.id)).toEqual([total - 1, total])
   })
 })

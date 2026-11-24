@@ -48,13 +48,41 @@ export interface PortHubDeps {
 const METHODS: ReadonlySet<string> = new Set(HOST_METHODS)
 
 /**
- * Requests one paired device may have running at once; the rest wait in the order they came. Long
- * operations, which have no time limit, such as installs and git's network work, take no place.
+ * Requests one paired device may have running at once, those in `LIVE_METHODS` apart; the rest wait
+ * in the order they came. Long operations, which have no time limit, such as installs and git's
+ * network work, take no place.
  */
 export const DEVICE_RUNNING = 8
 
-/** Requests one paired device may have waiting; past it a request is refused as busy. */
+/** Requests of each group, live or other, a paired device may have waiting; past it, 'busy'. */
 export const DEVICE_WAITING = 256
+
+/** Places for the requests in `LIVE_METHODS`, apart from `DEVICE_RUNNING`'s. */
+export const DEVICE_LIVE_RUNNING = 8
+
+/**
+ * The requests that follow a session or settle what it waits for, with places of their own so a
+ * session page that opens, or an answer, never waits behind reads that take seconds. Only quick
+ * host-side calls are listed: none runs git, reaches the network or installs anything.
+ */
+const LIVE_METHODS: ReadonlySet<string> = new Set<HostMethod>([
+  'sessions.watch',
+  'sessions.unwatch',
+  'sessions.show',
+  'sessions.cancel',
+  'permissions.respond',
+  'settings.answerChange',
+  'sessions.answerReport',
+  'sessions.answerMemory',
+  'sessions.answerProjectMcp',
+  'sessions.answerProjectHooks',
+  'control.answerAsk',
+  'browser.answerOrigin',
+  'devices.answerAccess',
+  'surfaces.answerAccess',
+  'computer.answerApp',
+  'computer.declineSetup',
+])
 
 /** Reads that tell the host something of the port, which each request must reach. */
 const UNSHARED_READS = new Set(['watch', 'unwatch', 'waiting'])
@@ -66,12 +94,19 @@ type Outcome = { ok: true; result: unknown } | { ok: false; error: unknown }
 
 const PORT_CLOSED = new HostError('unavailable', 'The port closed')
 
-/** A paired device's requests: those running, those waiting, and the reads they share. */
+/** The places requests of one kind may run in, and those waiting for one, in order. */
+interface Lane {
+  limit: number
+  running: number
+  waiting: (() => void)[]
+}
+
+/** A paired device's requests: those running and waiting in each lane, and the reads they share. */
 interface DeviceLoad {
   /** The port closed: what still waits is not run. */
   closed: boolean
-  running: number
-  waiting: (() => void)[]
+  normal: Lane
+  live: Lane
   /** Reads in flight by method and params, whose answer every identical request gets. */
   shared: Map<string, Promise<Outcome>>
 }
@@ -166,7 +201,12 @@ export class PortHub {
     this.ports.set(portId, channel)
     if (device) {
       this.devices.set(portId, device)
-      this.loads.set(portId, { closed: false, running: 0, waiting: [], shared: new Map() })
+      this.loads.set(portId, {
+        closed: false,
+        normal: { limit: DEVICE_RUNNING, running: 0, waiting: [] },
+        live: { limit: DEVICE_LIVE_RUNNING, running: 0, waiting: [] },
+        shared: new Map(),
+      })
     }
     channel.onMessage((data) => void this.receive(portId, channel, data))
     channel.onClose(() => {
@@ -376,31 +416,32 @@ export class PortHub {
       return { outcome: inFlight, shared: true }
     }
     if (hostRequestLimit(method) === null) return { outcome: run(), shared: false }
-    if (load.running >= DEVICE_RUNNING && load.waiting.length >= DEVICE_WAITING) {
+    const lane = LIVE_METHODS.has(method) ? load.live : load.normal
+    if (lane.running >= lane.limit && lane.waiting.length >= DEVICE_WAITING) {
       return { outcome: Promise.resolve('busy'), shared: false }
     }
-    const outcome = this.slot(load).then(async (): Promise<Outcome> => {
+    const outcome = this.slot(lane).then(async (): Promise<Outcome> => {
       try {
         return load.closed ? { ok: false, error: PORT_CLOSED } : await run()
       } finally {
         if (key !== null) load.shared.delete(key)
-        load.running--
-        load.waiting.shift()?.()
+        lane.running--
+        lane.waiting.shift()?.()
       }
     })
     if (key !== null) load.shared.set(key, outcome)
     return { outcome, shared: false }
   }
 
-  /** Resolves once the device has a free slot, which it then holds. */
-  private slot(load: DeviceLoad): Promise<void> {
-    if (load.running < DEVICE_RUNNING) {
-      load.running++
+  /** Resolves once the lane has a free place, which the request then holds. */
+  private slot(lane: Lane): Promise<void> {
+    if (lane.running < lane.limit) {
+      lane.running++
       return Promise.resolve()
     }
     return new Promise((resolve) =>
-      load.waiting.push(() => {
-        load.running++
+      lane.waiting.push(() => {
+        lane.running++
         resolve()
       }),
     )

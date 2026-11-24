@@ -15,6 +15,7 @@ import {
   type SessionView,
   type ThreadEntry,
   type ThreadState,
+  type ToolEntry,
 } from './thread'
 
 const session: SessionView = {
@@ -240,6 +241,210 @@ describe('coalescePatches', () => {
       { op: 'entry.appendText', id: 'm:2', text: 'c' },
       { op: 'entry.appendText', id: 'm:1', text: 'd' },
     ])
+  })
+})
+
+describe('coalescePatches merging updates', () => {
+  const run: ToolEntry = {
+    kind: 'tool',
+    id: 't:1',
+    title: 'Run',
+    toolKind: 'execute',
+    status: 'in_progress',
+    content: [],
+    locations: [],
+    permission: null,
+    permissionResult: null,
+  }
+  const other: ToolEntry = { ...run, id: 't:2', title: 'Other' }
+  const withTools = (): ThreadState => state([user, agent, run, other])
+  const output = (text: string): Patch => ({
+    op: 'entry.update',
+    id: 't:1',
+    changes: { content: [{ type: 'markdown', markdown: text }] },
+  })
+  const retitle = (id: string, title: string): Patch => ({
+    op: 'entry.update',
+    id,
+    changes: { title },
+  })
+
+  function deepFreeze<T>(value: T): T {
+    if (typeof value === 'object' && value !== null && !Object.isFrozen(value)) {
+      Object.freeze(value)
+      for (const child of Object.values(value)) deepFreeze(child)
+    }
+    return value
+  }
+
+  // What the unmerged patches do, or that they throw, as the renderer's and the host's appliers do.
+  function outcome(patches: readonly Patch[]): ThreadState | 'throws' {
+    try {
+      let owned = withTools()
+      owned = { ...owned, order: [...owned.order], byId: { ...owned.byId } }
+      for (const patch of patches) owned = applyPatchInPlace(owned, patch)
+      expect(applyPatches(withTools(), patches)).toEqual(owned)
+      return owned
+    } catch (error) {
+      if (error instanceof UnknownEntryError) return 'throws'
+      throw error
+    }
+  }
+
+  it('merges repeated updates of an entry, the later field winning', () => {
+    const patches: Patch[] = [
+      output('a'),
+      retitle('t:1', 'Run it'),
+      output('ab'),
+      { op: 'entry.update', id: 't:1', changes: { status: 'completed' } },
+    ]
+    expect(coalescePatches(patches)).toEqual([
+      {
+        op: 'entry.update',
+        id: 't:1',
+        changes: {
+          content: [{ type: 'markdown', markdown: 'ab' }],
+          title: 'Run it',
+          status: 'completed',
+        },
+      },
+    ])
+    expect(outcome(coalescePatches(patches))).toEqual(outcome(patches))
+  })
+
+  it('reduces a stream of whole outputs to the last one, the rest in order', () => {
+    const patches: Patch[] = []
+    for (let i = 1; i <= 50; i++) {
+      patches.push(output('x'.repeat(i)))
+      if (i % 10 === 0) patches.push({ op: 'session.update', changes: { updatedAt: i } })
+    }
+    patches.push({ op: 'entry.appendText', id: 'm:1', text: 'lo' })
+    patches.push({ op: 'entry.update', id: 't:2', changes: { status: 'completed' } })
+    expect(coalescePatches(patches)).toEqual([
+      output('x'.repeat(50)),
+      { op: 'session.update', changes: { updatedAt: 50 } },
+      { op: 'entry.appendText', id: 'm:1', text: 'lo' },
+      { op: 'entry.update', id: 't:2', changes: { status: 'completed' } },
+    ])
+    expect(outcome(coalescePatches(patches))).toEqual(outcome(patches))
+  })
+
+  it('merges across patches of other entries and keeps their order', () => {
+    const patches: Patch[] = [
+      output('a'),
+      retitle('t:2', 'Two'),
+      { op: 'entry.appendText', id: 'm:1', text: 'lo' },
+      { op: 'session.update', changes: { updatedAt: 2 } },
+      { op: 'entry.add', entry: { ...run, id: 't:3' } },
+      output('ab'),
+      { op: 'entry.update', id: 't:2', changes: { status: 'completed' } },
+    ]
+    expect(coalescePatches(patches).map((patch) => patch.op)).toEqual([
+      'entry.update',
+      'entry.update',
+      'entry.appendText',
+      'session.update',
+      'entry.add',
+    ])
+    expect(outcome(coalescePatches(patches))).toEqual(outcome(patches))
+  })
+
+  it('merges consecutive session updates only', () => {
+    const patches: Patch[] = [
+      { op: 'session.update', changes: { updatedAt: 2, title: 'a' } },
+      { op: 'session.update', changes: { updatedAt: 3 } },
+      { op: 'entry.appendText', id: 'm:1', text: 'lo' },
+      { op: 'session.update', changes: { title: 'b' } },
+    ]
+    expect(coalescePatches(patches)).toEqual([
+      { op: 'session.update', changes: { updatedAt: 3, title: 'a' } },
+      { op: 'entry.appendText', id: 'm:1', text: 'lo' },
+      { op: 'session.update', changes: { title: 'b' } },
+    ])
+    expect(outcome(coalescePatches(patches))).toEqual(outcome(patches))
+  })
+
+  it.each<[string, Patch]>([
+    ['an add of the entry', { op: 'entry.add', entry: { ...run, title: 'Again' } }],
+    ['a reset', { op: 'thread.reset' }],
+    ['a truncate', { op: 'thread.truncate', id: 't:2' }],
+  ])('stops at %s', (_, stop) => {
+    const patches: Patch[] = [retitle('t:1', 'a'), stop, retitle('t:1', 'b')]
+    expect(coalescePatches(patches)).toEqual(patches)
+    expect(outcome(coalescePatches(patches))).toEqual(outcome(patches))
+  })
+
+  it('stops at a text append to the entry itself', () => {
+    const update = (markdown: string): Patch => ({
+      op: 'entry.update',
+      id: 'm:1',
+      changes: { markdown },
+    })
+    const patches: Patch[] = [
+      update('a'),
+      { op: 'entry.appendText', id: 'm:1', text: 'b' },
+      update('c'),
+    ]
+    expect(coalescePatches(patches)).toEqual(patches)
+    expect(outcome(coalescePatches(patches))).toEqual(outcome(patches))
+  })
+
+  it('applies like the patches it was given, whatever their order', () => {
+    let seed = 7
+    const next = (n: number): number => {
+      seed = (seed * 1103515245 + 12345) & 0x7fffffff
+      return (seed >> 8) % n
+    }
+    const tools = ['t:1', 't:2', 't:3']
+    for (let round = 0; round < 300; round++) {
+      const patches: Patch[] = []
+      for (let i = 0, count = 2 + next(12); i < count; i++) {
+        const id = tools[next(tools.length)]
+        switch (next(9)) {
+          case 0:
+            patches.push({
+              op: 'session.update',
+              changes: next(2) ? { updatedAt: i } : { title: `t${i}` },
+            })
+            break
+          case 1:
+            patches.push({ op: 'entry.add', entry: { ...run, id, title: `n${i}` } })
+            break
+          case 2:
+            patches.push({ op: 'entry.appendText', id: 'm:1', text: `${i}` })
+            break
+          case 3:
+            patches.push(next(2) ? { op: 'thread.reset' } : { op: 'thread.truncate', id })
+            break
+          case 4:
+            patches.push({ op: 'entry.update', id: 'm:1', changes: { markdown: `m${i}` } })
+            break
+          default:
+            patches.push(
+              next(2)
+                ? retitle(id, `u${i}`)
+                : { op: 'entry.update', id, changes: { status: next(2) ? 'completed' : 'failed' } },
+            )
+        }
+      }
+      expect(outcome(coalescePatches(patches)), JSON.stringify(patches)).toEqual(outcome(patches))
+    }
+  })
+
+  it('leaves its input, and the patches in it, as they were', () => {
+    const patches = deepFreeze<Patch[]>([
+      output('a'),
+      output('ab'),
+      { op: 'session.update', changes: { updatedAt: 2 } },
+      { op: 'session.update', changes: { title: 'x' } },
+      { op: 'entry.appendText', id: 'm:1', text: 'l' },
+      { op: 'entry.appendText', id: 'm:1', text: 'o' },
+    ])
+    const before = JSON.stringify(patches)
+    const merged = coalescePatches(patches)
+    expect(merged).toHaveLength(3)
+    expect(JSON.stringify(patches)).toBe(before)
+    expect(patches).toHaveLength(6)
   })
 })
 
