@@ -18,7 +18,8 @@
     "timeout": "The plugin took too long to answer",
     "unavailable": "Plugins aren’t running right now",
     "failed": "The plugin couldn’t show this view",
-    "invalid": "The plugin sent something Kettu can’t show"
+    "invalid": "The plugin sent something Kettu can’t show",
+    "request_failed": "Couldn’t load this view"
   },
   "actionNoPanel": "“{{label}}” has a pane to show, but no session on the same computer is open. Open one and run it again.",
   "actionError": {
@@ -28,6 +29,7 @@
     "timeout": "{{label}} didn’t finish: the plugin took too long to answer",
     "unavailable": "{{label}} didn’t run: plugins aren’t running right now",
     "failed": "{{label}} didn’t work",
-    "invalid": "{{label}} got an answer Kettu can’t use"
+    "invalid": "{{label}} got an answer Kettu can’t use",
+    "request_failed": "{{label}} didn’t run"
   }
 }

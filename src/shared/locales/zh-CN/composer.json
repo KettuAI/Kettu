@@ -283,7 +283,8 @@
       "timeout": "插件响应超时",
       "unavailable": "插件当前没有运行",
       "failed": "插件无法完成搜索",
-      "invalid": "插件返回了 Kettu 无法使用的内容"
+      "invalid": "插件返回了 Kettu 无法使用的内容",
+      "request_failed": "没能完成搜索"
     }
   },
   "chips": {

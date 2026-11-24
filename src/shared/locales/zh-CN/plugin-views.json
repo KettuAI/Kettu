@@ -18,7 +18,8 @@
     "timeout": "插件响应太慢",
     "unavailable": "插件现在没有运行",
     "failed": "插件没能显示这个视图",
-    "invalid": "插件给的内容 Kettu 显示不了"
+    "invalid": "插件给的内容 Kettu 显示不了",
+    "request_failed": "没能加载这个视图"
   },
   "actionNoPanel": "“{{label}}”要显示一个面板，但没有打开同一台电脑上的会话。打开一个会话后再运行一次。",
   "actionError": {
@@ -28,6 +29,7 @@
     "timeout": "“{{label}}”没有完成：插件响应太慢",
     "unavailable": "“{{label}}”没有执行：插件现在没有运行",
     "failed": "“{{label}}”没有成功",
-    "invalid": "“{{label}}”得到的回答 Kettu 用不了"
+    "invalid": "“{{label}}”得到的回答 Kettu 用不了",
+    "request_failed": "“{{label}}”没有执行"
   }
 }

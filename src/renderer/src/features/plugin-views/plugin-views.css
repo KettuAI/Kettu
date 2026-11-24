@@ -167,6 +167,14 @@ button.kpv-row__main:disabled {
   font-family: var(--font-mono);
   font-size: 12px;
 }
+/* A subtitle with line breaks keeps them, up to three lines; one without stays a single line. */
+.kpv-row__sub[data-lines] {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}
 .kpv-row__end {
   flex: none;
   align-self: center;
@@ -217,6 +225,7 @@ button.kpv-row__main:disabled {
   font-size: 13px;
   color: var(--text-tertiary);
   overflow-wrap: anywhere;
+  white-space: pre-line;
 }
 .kpv-facts {
   display: grid;
@@ -232,6 +241,7 @@ button.kpv-row__main:disabled {
 .kpv-facts dd {
   margin: 0;
   overflow-wrap: anywhere;
+  white-space: pre-line;
 }
 .kpv-facts dd[data-mono] {
   font-family: var(--font-mono);

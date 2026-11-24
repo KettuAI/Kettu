@@ -57,7 +57,7 @@ export function cut(text: string): string {
  * Why no listener answered: what the first one that threw said, as the script wrote it without the
  * name a plain Error carries, else `none` for a script with no listener for the event.
  */
-function silence(reply: PluginHookReply, none: string): PluginViewError {
+export function silence(reply: PluginHookReply, none: string): PluginViewError {
   const thrown = reply.errors[0]
   return {
     code: 'failed',

@@ -266,9 +266,17 @@ export type PluginViewContent =
  * `disabled`: the plugin crashed too often. `crashed`: its script was stopped for passing a limit.
  * `timeout`: it did not answer in time. `unavailable`: the plugin host is not running.
  * `failed`: its script threw, or has no listener. `invalid`: what it answered is not a view.
+ * `request_failed`: the window's own request to the host failed, which the host never sends.
  */
 export type PluginViewErrorCode =
-  'not_found' | 'disabled' | 'crashed' | 'timeout' | 'unavailable' | 'failed' | 'invalid'
+  | 'not_found'
+  | 'disabled'
+  | 'crashed'
+  | 'timeout'
+  | 'unavailable'
+  | 'failed'
+  | 'invalid'
+  | 'request_failed'
 
 export interface PluginViewError {
   code: PluginViewErrorCode

@@ -75,7 +75,7 @@ export function usePluginView(request: HostRequest, pluginId: string, first: Vie
           params: target.params,
         })
       } catch (error) {
-        result = { ok: false, error: { code: 'unavailable', detail: errorMessage(error) } }
+        result = { ok: false, error: { code: 'request_failed', detail: errorMessage(error) } }
       }
       if (mine !== newest.current) return
       setRefreshing(false)
@@ -124,7 +124,9 @@ export function usePluginView(request: HostRequest, pluginId: string, first: Vie
           else reload()
         }
       } catch (error) {
-        failed(errorMessage(error))
+        failed(
+          `${t('actionError.request_failed', { label: action.label })}: ${errorMessage(error)}`,
+        )
       } finally {
         setBusy(null)
       }

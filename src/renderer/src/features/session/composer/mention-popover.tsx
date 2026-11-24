@@ -90,9 +90,15 @@ export function PluginGroupHeading({ id, group }: { id: string; group: PluginMen
 export function PluginGroupNote({ group }: { group: PluginMentionGroup }) {
   const { t } = useTranslation('composer')
   if (group.error) {
+    const { code, detail } = group.error
     return (
-      <p className="px-2 pb-1.5 text-small text-danger" title={group.error.detail}>
-        {t(`mentions.pluginError.${group.error.code}`)}
+      <p className="px-2 pb-1.5 text-small text-danger" title={detail}>
+        {t(`mentions.pluginError.${code}`)}
+        {detail && (
+          <span className="mt-0.5 line-clamp-3 font-mono text-hint break-words text-tertiary">
+            {detail}
+          </span>
+        )}
       </p>
     )
   }

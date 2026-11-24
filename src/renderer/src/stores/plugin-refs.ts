@@ -107,7 +107,7 @@ function lookUp(hostId: string | null, found: LinkMatch, url: string, retry: boo
     .then(
       (result) =>
         result.ok ? { status: 'ready' as const, card: result.card } : failed(result.error),
-      (error: unknown) => failed({ code: 'unavailable', detail: errorMessage(error) }),
+      (error: unknown) => failed({ code: 'request_failed', detail: errorMessage(error) }),
     )
     .then(set)
     .finally(() => asking.delete(key))
