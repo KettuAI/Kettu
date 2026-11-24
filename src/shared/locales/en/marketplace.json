@@ -102,7 +102,7 @@
     "valueHint": "Kept on this computer.",
     "submit": "Install",
     "installing": "Installing",
-    "noSkills": "Doesn't take skills yet"
+    "noSkills": "Kettu’s tools are off"
   },
   "toast": {
     "ready": "{{name}} is ready for every agent",

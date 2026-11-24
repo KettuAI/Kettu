@@ -942,6 +942,15 @@ export class AgentHost {
       ...(this.computer ? { computer: this.computer } : {}),
       market: this.marketTools,
       settings: this.settingsTools,
+      skills: {
+        of: (sessionId) => {
+          const agentId = this.sessions.sessionAgent(sessionId)
+          if (!agentId) return null
+          const task = this.sessions.sessionTask(sessionId)
+          const step = task ? (this.tasks.toolsOf(task)?.skills ?? []) : []
+          return this.marketSkills.sessionSkills(agentId, step)
+        },
+      },
       proxy: this.mcpProxy,
       sessions: {
         info: (sessionId) => this.sessions.sessionInfo(sessionId),
@@ -1134,7 +1143,7 @@ export class AgentHost {
         },
         guide: (agentId) =>
           this.artifactService.guidePrompt(
-            this.marketSkills.takesSkills(agentId),
+            this.marketSkills.loadsSkills(agentId),
             this.agents.toolGateway(agentId),
           ),
         turnEnded: (sessionId) => {

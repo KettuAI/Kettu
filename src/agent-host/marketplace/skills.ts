@@ -44,6 +44,7 @@ import { JsonFile, type LogFn } from '../storage'
 import { kettuId } from '@shared/market-community'
 import type { MarketListing } from '@shared/market-publish'
 import { codexOwnSkills } from './codex-plugins'
+import { skillRoute, type SessionSkill } from './skill-tools'
 import { modeOf, type DownloadedFile } from './community'
 import { frontmatter } from './frontmatter'
 import { logText } from '../localized-error'
@@ -86,8 +87,6 @@ const MAX_PATH = 512
 const MAX_LICENSE = 512
 const MAX_TOOLS = 64
 const MAX_TOOL = 200
-/** The harnesses that take skill folders Kettu hands them. */
-const SKILL_HARNESSES: ReadonlySet<string> = new Set(['claude-code', 'codex', 'opencode'])
 
 /** A repository's copy as last unpacked: its skills at one commit. */
 export interface RepositoryCopy {
@@ -470,14 +469,30 @@ export class MarketSkillsService {
     return [...kettuSkillDirs(this.kettuRoot, flags)]
   }
 
-  /** Whether the agent takes the skill folders Kettu hands it. */
-  takesSkills(agentId: AgentId): boolean {
-    return SKILL_HARNESSES.has(harnessOf(agentId))
+  /** Whether the agent loads skill folders itself, Kettu's own skills among them. */
+  loadsSkills(agentId: AgentId): boolean {
+    return skillRoute(agentId) === 'folder'
   }
 
   /**
-   * What an attach of the agent's session gets: skill folders for Codex, a plugin for Claude Code;
-   * with Kettu's own skills when `kettu`, the session reaching Kettu's server, and the skills a
+   * The skills a session of the agent reads with Kettu's skill tools, those a workflow step names
+   * in `step` with them; null for an agent that loads skill folders itself.
+   */
+  sessionSkills(agentId: AgentId, step: readonly string[] = []): SessionSkill[] | null {
+    if (skillRoute(agentId) === 'folder') return null
+    const given = this.deps
+      .settings()
+      .filter((skill) => skillFor(skill, agentId) && this.present.has(skillFolder(skill.id)))
+    return [...given, ...this.stepSkills(agentId, step)].map((skill) => ({
+      name: skill.name,
+      description: skill.description,
+      dir: path.join(this.store, skillFolder(skill.id), skill.name),
+    }))
+  }
+
+  /**
+   * What an attach of the agent's session gets: skill folders for Codex and Pi, a plugin for
+   * Claude Code; with Kettu's own skills when `kettu`, the session reaching Kettu's server, and the skills a
    * workflow step names in `step`, which its session gets whatever agent does it. Waits for a
    * sync under way, so the first sessions after a start get what it writes.
    */
@@ -489,7 +504,7 @@ export class MarketSkillsService {
     await this.syncing
     const harness = harnessOf(agentId)
     const added = this.stepSkills(agentId, step)
-    if (harness === 'codex') {
+    if (harness === 'codex' || harness === 'pi') {
       return {
         skillRoots: [
           ...(kettu ? this.kettuRoots() : []),

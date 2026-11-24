@@ -141,6 +141,8 @@ describe('the paragraph in an agent’s instructions', () => {
     const text = guidePrompt(ALL, false)
     expect(skillNames(text)).toEqual([])
     expect(text).toContain('read_kettu_guide')
+    expect(text).toContain('list_skills')
+    expect(guidePrompt(ALL, true)).not.toContain('list_skills')
     for (const topic of ['artifacts', 'sessions', 'workflows', 'computer']) {
       expect(text).toContain(topic)
     }

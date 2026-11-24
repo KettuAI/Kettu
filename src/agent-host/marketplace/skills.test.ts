@@ -305,12 +305,45 @@ describe("Kettu's own skills", () => {
     expect(await readdir(path.join(localPlugins![0]!, 'skills'))).toHaveLength(handed.length)
   })
 
-  it('go to no agent that takes no skill folders', async () => {
-    const skills = withOwn(['gemini'])
+  it('go to Pi as the skill folders its process starts with', async () => {
+    const skills = withOwn(['pi', 'codex'])
     await skills.sync()
-    expect(await skills.sessionOptions('gemini', true)).toEqual({})
-    expect(skills.takesSkills('gemini')).toBe(false)
-    expect(skills.launchEnv('gemini', {})).toEqual({})
+    const pi = await skills.sessionOptions('pi', true)
+    expect(pi).toEqual(await skills.sessionOptions('codex', true))
+    expect(pi.skillRoots).toHaveLength(1)
+    expect(await skills.sessionOptions('pi', false)).toEqual({ skillRoots: [] })
+    expect(skills.loadsSkills('pi')).toBe(true)
+    expect(skills.sessionSkills('pi')).toBeNull()
+  })
+
+  it('go as no folder to an agent that loads none, which reads its skills with the tools', async () => {
+    const kept: MarketSkill[] = []
+    const skills = withOwn(['gemini', 'cline', 'deepseek', 'codex'], [], kept)
+    for (const name of ['pdf', 'docx', 'off']) {
+      const folder = path.join(root, `own-${name}`)
+      await mkdir(folder)
+      await writeFile(path.join(folder, 'SKILL.md'), skillMd(name))
+      kept.push(await skills.add({ kind: 'local', path: folder }))
+    }
+    kept[1] = { ...kept[1]!, agents: ['codex'] }
+    kept[2] = { ...kept[2]!, on: false }
+    await skills.sync()
+    for (const agent of ['gemini', 'cline', 'deepseek'] as const) {
+      expect(await skills.sessionOptions(agent, true)).toEqual({})
+      expect(skills.loadsSkills(agent)).toBe(false)
+      expect(skills.launchEnv(agent, {})).toEqual({})
+      const given = skills.sessionSkills(agent)!
+      expect(given.map((skill) => skill.name)).toEqual(['pdf'])
+      expect(await readFile(path.join(given[0]!.dir, 'SKILL.md'), 'utf8')).toContain('name: pdf')
+    }
+    // A workflow step's skill reaches its session whatever agent does it.
+    expect(skills.sessionSkills('gemini', ['docx', 'off'])!.map((s) => s.name)).toEqual([
+      'pdf',
+      'docx',
+    ])
+    for (const agent of ['claude-code', 'codex', 'opencode'] as const) {
+      expect(skills.sessionSkills(agent)).toBeNull()
+    }
   })
 
   it('leave on disk only the folder of the features that are on, after an update', async () => {
