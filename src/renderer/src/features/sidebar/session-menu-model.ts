@@ -23,6 +23,7 @@ export type SessionMenuItem =
   | 'copySessionId'
   | 'showInParent'
   | 'removeWorktree'
+  | 'leave'
   | 'archive'
   | 'delete'
 
@@ -82,6 +83,8 @@ export interface SessionMenuContext {
   removeWorktree?: boolean
   /** Its row's badge lists sub-agents, which the menu lists too. */
   subagents?: boolean
+  /** 单窗格会话顶栏菜单支持离开当前会话回到新建会话。 */
+  leave?: boolean
 }
 
 /**
@@ -102,20 +105,24 @@ export function sessionMenuGroups(
     worktree = false,
     removeWorktree = false,
     subagents = false,
+    leave = false,
   }: SessionMenuContext,
 ): SessionMenuItem[][] {
   const running = isRunning(summary)
   // Its parent archives and deletes a subagent, so its menu opens it, stops it or finds it.
   if (summary.origin === 'subagent') {
-    return [running ? ['open', 'stop'] : ['open'], summary.parentId ? ['showInParent'] : []].filter(
-      (group) => group.length > 0,
-    ) as SessionMenuItem[][]
+    return [
+      running ? ['open', 'stop'] : ['open'],
+      summary.parentId ? ['showInParent'] : [],
+      place === 'more' && leave ? ['leave'] : [],
+    ].filter((group) => group.length > 0) as SessionMenuItem[][]
   }
   const topLevel = summary.parentId === null
   const { status } = summary
   const forks: SessionMenuItem[] =
     topLevel && canFork ? (worktree ? ['fork', 'forkSame'] : ['fork']) : []
   const ending: SessionMenuItem[] = [
+    ...(place === 'more' && leave ? (['leave'] as const) : []),
     ...(removeWorktree ? (['removeWorktree'] as const) : []),
     ...(topLevel ? (['archive'] as const) : []),
     'delete',

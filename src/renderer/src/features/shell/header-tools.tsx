@@ -7,12 +7,8 @@ import type { SessionView } from '@shared/thread'
 import {
   DropdownMenu,
   DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuShortcut,
   DropdownMenuTrigger,
 } from '@renderer/components/ui/dropdown-menu'
-import { leaveSession } from '@renderer/app/actions'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
 import { summaryParts } from '@renderer/features/board/board-model'
 import { useBoardActivity, useBoardNews } from '@renderer/features/board/use-board-activity'
@@ -23,7 +19,8 @@ import {
   SessionMenuItems,
 } from '@renderer/features/sidebar/session-menu'
 import { runSessionMenuAccelerator } from '@renderer/features/sidebar/session-menu-model'
-import { formatShortcut, isMac, isWeb } from '@renderer/lib/platform'
+import { isMac } from '@renderer/lib/platform'
+import { cn } from '@renderer/lib/utils'
 import { useDevicesStore } from '@renderer/stores/devices'
 import { useBrowserStore } from '@renderer/stores/browser'
 import { sessionTitle, useSessionsStore } from '@renderer/stores/sessions'
@@ -38,16 +35,12 @@ import {
 } from '@renderer/stores/view'
 import { reopenSidePanel } from './open-surfaces'
 import { requestSurfaceListFocus, SURFACE_ICON } from './surface-rows'
-import { SurfaceMenu } from './surface-tabs'
 import { PaneIcon } from './panel-button'
 import { NoDrag } from './top-bar'
 
 /**
- * The right end of a session's top bar: the shortcuts to the Board and Files tabs, which open the
- * side panel on their tab and never fold it away, then More tools with the side panel's list, and
- * last the side panel's button while the panel is closed. Open, the panel's own row ends with
- * that button in the same place, so the bar has none. A session's More menu leads them while the
- * bar does not place it after the title itself.
+ * 会话顶栏右侧工具区：常驻看板和文件快捷按钮，分屏时显示关闭窗格按钮，
+ * 面板收起时最右为侧边面板开关（展开后该开关移至面板标签行最右以保持同坐标）。
  */
 export function HeaderTools({
   projectPath,
@@ -59,25 +52,27 @@ export function HeaderTools({
   menu,
 }: {
   projectPath: string
-  /** The session's side panel, or New session's while it creates one. */
+  /** 当前会话对应的侧边面板标识，或新建会话时的面板标识。 */
   panel: string
-  /** The session the bar belongs to; with `onRename` it adds its More menu. */
+  /** 所属会话摘要；传入 `onRename` 时额外渲染会话更多菜单。 */
   summary?: SessionSummary
   session?: SessionView
   onRename?: () => void
   onNewSubSession?: () => void
-  /** The More menu's close hands the focus on, as the title field needs after Rename. */
+  /** 关闭会话菜单后的焦点移交配置。 */
   menu?: { finalFocus: () => boolean; onOpenChangeComplete: (open: boolean) => void }
 }) {
   const sessionId = panelSession(panel)
-  // A session has a board; New session has no session yet, and a sub-agent's page shows its
-  // parent's work.
+  const pane = usePane()
+  const panelOpen = useViewStore((s) => shownPanel(s) === panel && !!s.sidePane[panel])
+  // 仅主会话拥有看板；新建会话尚未创建，子 Agent 页面展示父会话工作。
   const board = useSessionsStore((s) => {
     const origin = sessionId ? s.byId[sessionId]?.origin : undefined
     return origin !== undefined && origin !== 'subagent'
   })
   const ref = useRef<HTMLDivElement>(null)
-  const slots = useToolSlots(ref)
+  const fixedSlots = (pane?.split ? 1 : 0) + (panelOpen ? 0 : 1)
+  const slots = useToolSlots(ref, fixedSlots)
   const tools = useBarTools({ panel, sessionId, board })
   const buttons = tools.slice(0, slots)
   const hidden = tools.filter((tool) => !buttons.includes(tool))
@@ -98,40 +93,30 @@ export function HeaderTools({
           {tool.dot && <span aria-hidden className={dotClass(tool.dot)} />}
         </BarButton>
       ))}
-      <MoreToolsMenu
-        panel={panel}
-        projectPath={projectPath}
-        dot={
-          hidden.some((tool) => tool.dot === 'needs')
-            ? 'needs'
-            : hidden.some((tool) => tool.dot)
-              ? 'news'
-              : undefined
-        }
-      />
-      <SidePanelButton panel={panel} projectPath={projectPath} />
+      <ClosePaneButton />
+      <SidePanelButton panel={panel} projectPath={projectPath} hiddenTools={hidden} />
     </NoDrag>
   )
 }
 
-/** One of the bar's shortcuts: a tab of the side panel in common use. */
+/** 顶栏快捷按钮定义，对应侧边面板中的常用标签。 */
 interface Tool {
   id: 'board' | 'files'
-  /** The button's tooltip, with what runs in it where that matters. */
+  /** 悬停提示文案，必要时附带运行与待处理摘要。 */
   label: string
   icon: IconSvgElement
-  /** Its tab is the one the side panel shows. */
+  /** 对应标签当前正在侧边面板展示。 */
   open: boolean
   dot?: 'news' | 'needs'
   onSelect: () => void
 }
 
-/** A shortcut's button and the gap after it, and what the title takes. */
+/** 单个快捷按钮占位宽度及为标题保留的最小宽度。 */
 const TOOL_SLOT = 30
 const BAR_RESERVE = 150
 
-/** How many shortcuts the bar has room for beside the title, which gives way last. */
-function useToolSlots(ref: RefObject<HTMLElement | null>): number {
+/** 计算顶栏在保证标题可读的前提下最多可容纳的快捷按钮数量。 */
+function useToolSlots(ref: RefObject<HTMLElement | null>, fixedSlots: number): number {
   const [slots, setSlots] = useState(Number.POSITIVE_INFINITY)
   useLayoutEffect(() => {
     const bar = ref.current?.closest('header')
@@ -143,18 +128,17 @@ function useToolSlots(ref: RefObject<HTMLElement | null>): number {
         parseFloat(style.paddingLeft) -
         parseFloat(style.paddingRight) -
         BAR_RESERVE
-      // Two of the slots go to More tools and the side panel's button.
-      setSlots(Math.max(0, Math.floor(room / TOOL_SLOT) - 2))
+      setSlots(Math.max(0, Math.floor(room / TOOL_SLOT) - fixedSlots))
     }
     measure()
     const observer = new ResizeObserver(measure)
     observer.observe(bar)
     return () => observer.disconnect()
-  }, [ref])
+  }, [ref, fixedSlots])
   return slots
 }
 
-/** The bar's shortcuts in the order it draws them: the Board, then Files. */
+/** 顶栏快捷按钮列表：依次为看板和文件。 */
 function useBarTools({
   panel,
   sessionId,
@@ -170,7 +154,7 @@ function useBarTools({
   const shownPane = useViewStore((s) => (shownPanel(s) === panel ? s.sidePane[panel] : undefined))
   const activity = useBoardActivity(sessionId ?? '')
   const boardNews = useBoardNews(sessionId)
-  // Selects the tab, opening the panel for it; in a pane out of focus that pane takes the focus.
+  // 选中标签并打开面板；非焦点分屏点击时先聚焦该分屏。
   const select = (id: Tool['id']) => () => {
     if (context && !context.focused) focusPane(context.paneId)
     toggleSidePane(panel, id, true)
@@ -201,97 +185,36 @@ function dotClass(dot: 'news' | 'needs'): string {
   return dot === 'needs' ? 'kp-bar-dot kp-bar-dot--needs' : 'kp-bar-dot'
 }
 
-/**
- * More tools: the side panel's list, as its **+** shows it, then **Close pane** in a split or, on
- * a session's only pane, **Leave session**, which does what Mod+W does there: New session, with
- * the session kept and its turn running. Without a panel it holds only those, and has no button
- * where it would hold nothing.
- */
-export function MoreToolsMenu({
-  panel,
-  projectPath,
-  dot,
-}: {
-  panel?: string
-  projectPath?: string
-  /** A shortcut the bar has no room for has news. */
-  dot?: 'news' | 'needs'
-}) {
+/** 分屏关闭按钮：仅在多窗格分屏时显示，单窗格不显示 ×。 */
+export function ClosePaneButton() {
   const { t } = useTranslation('shell')
   const pane = usePane()
-  const view = pane?.view
-  const chatNews = useSideChatNews(panel ? panelSession(panel) : null)
-  const leave =
-    pane && !pane.split && view?.kind === 'session'
-      ? () => leaveSession(useSessionsStore.getState().byId[view.sessionId])
-      : null
-  const list = panel !== undefined && projectPath !== undefined
-  if (!list && !pane?.split && !leave) return null
-  const mark = dot ?? (chatNews ? 'news' : undefined)
+  if (!pane?.split) return null
   return (
-    <DropdownMenu>
-      <Tooltip>
-        <TooltipTrigger
-          render={
-            <DropdownMenuTrigger
-              render={
-                <button type="button" aria-label={t('headerTools.more')} className="kp-tool" />
-              }
-            />
-          }
-        >
-          <PaneIcon icon={MoreHorizontalIcon} size={16} />
-          {mark && <span aria-hidden className={dotClass(mark)} />}
-        </TooltipTrigger>
-        <TooltipContent>{t('headerTools.more')}</TooltipContent>
-      </Tooltip>
-      <DropdownMenuContent
-        align="end"
-        className="w-68"
-        onKeyDown={(event) => runSessionMenuAccelerator(event, isMac)}
-      >
-        {list && (
-          <span
-            className="contents"
-            // Picking from the list in a pane out of focus brings its panel into view.
-            onClickCapture={() => pane && !pane.focused && focusPane(pane.paneId)}
-          >
-            <SurfaceMenu panel={panel} projectPath={projectPath} />
-          </span>
-        )}
-        {list && (pane?.split || leave) && <DropdownMenuSeparator />}
-        {pane?.split ? (
-          <DropdownMenuItem onClick={() => closeSplitPane(pane.paneId, pane.focused)}>
-            <PaneIcon icon={Cancel01Icon} size={16} />
-            {t('headerTools.closePane')}
-          </DropdownMenuItem>
-        ) : (
-          leave && (
-            <DropdownMenuItem onClick={leave}>
-              <PaneIcon icon={Cancel01Icon} size={16} />
-              {t('headerTools.leaveSession')}
-              {/* A browser keeps Mod+W for its own tab. */}
-              {!isWeb && <DropdownMenuShortcut>{formatShortcut('Mod+W')}</DropdownMenuShortcut>}
-            </DropdownMenuItem>
-          )
-        )}
-      </DropdownMenuContent>
-    </DropdownMenu>
+    <BarButton
+      label={t('headerTools.closePane')}
+      onClick={() => closeSplitPane(pane.paneId, pane.focused)}
+    >
+      <PaneIcon icon={Cancel01Icon} size={16} />
+    </BarButton>
   )
 }
 
-/** A 28 px button of the bar, with its name on hover. */
+/** 顶栏 28px 图标按钮，悬停展示提示。 */
 function BarButton({
   label,
+  notices,
   pressed,
   onClick,
   children,
 }: {
   label: string
+  notices?: readonly string[]
   pressed?: boolean
   onClick: () => void
   children: ReactNode
 }) {
+  const hasNotices = !!notices && notices.length > 0
   return (
     <Tooltip>
       <TooltipTrigger
@@ -307,35 +230,71 @@ function BarButton({
       >
         {children}
       </TooltipTrigger>
-      <TooltipContent>{label}</TooltipContent>
+      <TooltipContent className={cn(hasNotices && 'flex-col items-start gap-0.5')}>
+        <span>{label}</span>
+        {notices?.map((notice) => (
+          <span key={notice} className="opacity-60">
+            {notice}
+          </span>
+        ))}
+      </TooltipContent>
     </Tooltip>
   )
 }
 
 /**
- * The side panel's button at the end of the bar, in the window's top right corner, while the
- * panel is closed: it opens the tab shown last, or the side panel's list when there is none. The
- * open panel's row ends with the same button in the same place, which folds it away.
+ * 面板收起时位于顶栏最右的侧边面板开关：打开上次标签或空面板列表，
+ * 并聚合面板内不可见的提醒（侧聊新回答、Agent 新开页/设备、窄窗格折起的看板提醒）。
  */
-function SidePanelButton({ panel, projectPath }: { panel: string; projectPath: string }) {
-  const { t } = useTranslation('common')
+function SidePanelButton({
+  panel,
+  projectPath,
+  hiddenTools = [],
+}: {
+  panel: string
+  projectPath: string
+  hiddenTools?: readonly Tool[]
+}) {
+  const { t } = useTranslation(['common', 'shell'])
   const context = usePane()
   const sessionId = panelSession(panel)
   const shown = useViewStore((s) => shownPanel(s) === panel && !!s.sidePane[panel])
-  // An agent opened a page or a device while the panel showed something else.
   const pageNews = useBrowserStore((s) => (sessionId ? !!s.unseen[sessionId] : false))
   const deviceNews = useDevicesStore((s) => (sessionId ? !!s.unseen[sessionId] : false))
+  const chatNews = useSideChatNews(sessionId)
   if (shown) return null
+  const hiddenDot = hiddenTools.some((tool) => tool.dot === 'needs')
+    ? 'needs'
+    : hiddenTools.some((tool) => tool.dot)
+      ? 'news'
+      : undefined
+  const mark: 'news' | 'needs' | undefined =
+    hiddenDot === 'needs'
+      ? 'needs'
+      : hiddenDot || chatNews || pageNews || deviceNews
+        ? 'news'
+        : undefined
+  const notices: string[] = []
+  for (const tool of hiddenTools) {
+    if (tool.dot) notices.push(tool.label)
+  }
+  if (chatNews) {
+    notices.push(
+      `${t('shell:surfaces.list.sideChat')} \u00b7 ${t('shell:headerTools.sideChatNews')}`,
+    )
+  }
+  if (pageNews || deviceNews) notices.push(t('shell:surfaces.news'))
   return (
     <BarButton
-      label={t('pane.open')}
+      label={t('common:pane.open')}
+      notices={notices}
       onClick={() => {
         if (context && !context.focused) focusPane(context.paneId)
         if (reopenSidePanel(panel, projectPath)) requestSurfaceListFocus(panel)
       }}
     >
       <PaneIcon icon={SidebarRightIcon} size={16} />
-      {(pageNews || deviceNews) && <span aria-hidden className="kp-bar-dot" />}
+      {mark && <span aria-hidden className={dotClass(mark)} />}
     </BarButton>
   )
 }

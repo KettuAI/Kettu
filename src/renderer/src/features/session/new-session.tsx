@@ -26,6 +26,7 @@ import { SendButton } from '@renderer/features/session/composer/send-button'
 import type { SelectOption } from '@renderer/features/session/composer/levels'
 import { tightestLimit } from '@shared/session-groups'
 import { useHostLabel } from '@renderer/features/sidebar/host-label'
+import { ClosePaneButton } from '@renderer/features/shell/header-tools'
 import { NoDrag, TopBar } from '@renderer/features/shell/top-bar'
 import { usePane } from '@renderer/features/split/pane-context'
 import { useCloudOff } from '@renderer/lib/cloud'
@@ -198,6 +199,9 @@ export function NewSessionView({
           </NoDrag>
         )}
         <span className="flex-1" />
+        <NoDrag className="kp-bar-tools">
+          <ClosePaneButton />
+        </NoDrag>
       </TopBar>
       <ColumnScroller className="flex flex-col pb-(--top-bar)">
         <section className="ui-as-start" data-phase="start">

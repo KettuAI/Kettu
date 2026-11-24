@@ -1240,11 +1240,8 @@ function TabNameInput({
   )
 }
 
-/**
- * The side panel's list as a menu's items, with the host's devices under Mobile device. **+** and
- * the top bar's More tools both show it.
- */
-export function SurfaceMenu({
+/** 侧边面板 + 菜单项列表，含本机移动设备子菜单。 */
+function SurfaceMenu({
   panel,
   projectPath,
   onTerminal,
