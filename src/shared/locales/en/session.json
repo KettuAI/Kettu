@@ -205,7 +205,11 @@
       "allowedByRoutine": "Allowed by the routine",
       "cancelled": "Cancelled",
       "withdrawn": "No longer needed",
-      "onDevice": "{{answer}} · {{device}}"
+      "onDevice": "{{answer}} · {{device}}",
+      "relayedAllow": "You allowed once, relayed by {{plugin}}",
+      "relayedAllowFrom": "You allowed once, from {{from}}, relayed by {{plugin}}",
+      "relayedDeny": "You denied it, relayed by {{plugin}}",
+      "relayedDenyFrom": "You denied it, from {{from}}, relayed by {{plugin}}"
     },
     "answeredOn": "Already answered on {{device}}.",
     "answeredInWindow": "Already answered in another window.",

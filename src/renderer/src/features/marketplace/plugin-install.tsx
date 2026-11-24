@@ -9,6 +9,7 @@ import {
   GlobeIcon,
   InformationCircleIcon,
   LockIcon,
+  Notification01Icon,
   PlugSocketIcon,
   Settings01Icon,
   Shield01Icon,
@@ -23,6 +24,7 @@ import type {
 } from '@shared/plugins'
 import { Icon } from '@renderer/components/affect/app-shell'
 import { Dialog, DialogClose } from '@renderer/components/ui/dialog'
+import { languageText } from '@renderer/features/plugin-views/plugin-text'
 import { SetButton } from '@renderer/features/settings/controls'
 import {
   DIALOG_MONO_FIELD,
@@ -183,6 +185,18 @@ function AddsLines({ contents }: { contents: PluginContents }) {
           .slice(0, 4)
           .map((setting) => setting.title)
           .join(', ')}
+      />,
+    )
+  }
+  const channels = contents.channels ?? []
+  if (channels.length > 0) {
+    const locale = currentLocale()
+    lines.push(
+      <Line
+        key="channels"
+        icon={Notification01Icon}
+        title={t('plugin.holds.channels', { count: channels.length })}
+        note={`${names(channels.map((channel) => ({ name: languageText(channel.title, locale) })))} · ${t('plugin.holds.channelsNote')}`}
       />,
     )
   }

@@ -374,7 +374,7 @@
       },
       "requestsAnswer": {
         "name": "Relay answers",
-        "description": "Pass on your answer to a permission request given somewhere else, such as a chat app. It can allow once or deny, never always allow."
+        "description": "Receive the commands an agent asks to run, and pass on your answer to them from somewhere else, such as a chat app. It can allow once or deny, never always allow."
       },
       "sessionsStart": {
         "name": "Start sessions and send messages",
@@ -414,6 +414,9 @@
       "settings": "Settings of its own",
       "views_one": "{{count}} view",
       "views_other": "{{count}} views",
+      "channels_one": "{{count}} notification channel",
+      "channels_other": "{{count}} notification channels",
+      "channelsNote": "Gets only the notices you pick, none by default",
       "viewsNote": "Declared by the plugin; Kettu doesn’t draw them yet",
       "connects": "Where it connects",
       "server": "MCP server {{name}}",

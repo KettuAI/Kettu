@@ -1,6 +1,7 @@
 import { useState, type KeyboardEvent } from 'react'
 import { PlugSocketIcon } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
+import { PLUGIN_NOTICE_KINDS, type PluginNoticeKind } from '@shared/plugin-channels'
 import type { InstalledKettuPlugin, PluginSetting, PluginSettingValue } from '@shared/plugins'
 import { Icon } from '@renderer/components/affect/app-shell'
 import { ConfirmDialog } from '@renderer/features/marketplace/dialogs'
@@ -20,6 +21,7 @@ import {
   scriptStateKey,
 } from '@renderer/features/marketplace/plugin-model'
 import { errorMessage } from '@renderer/lib/host'
+import { languageText } from '@renderer/features/plugin-views/plugin-text'
 import { currentLocale } from '@renderer/lib/i18n'
 import { useHostScope, type HostScope } from '@renderer/stores/host-scope'
 import { openSettingsItem } from '@renderer/stores/view'
@@ -33,7 +35,16 @@ import {
   Spin,
   DangerButton,
 } from './controls'
-import { Group, ItemLine, ItemPageHeader, ItemRow, Notice, RowFrame, RowText } from './rows'
+import {
+  Group,
+  GroupNote,
+  ItemLine,
+  ItemPageHeader,
+  ItemRow,
+  Notice,
+  RowFrame,
+  RowText,
+} from './rows'
 
 /** A plugin's icon, or the plug that stands for one without. */
 export function PluginMark({ plugin }: { plugin: InstalledKettuPlugin }) {
@@ -131,6 +142,61 @@ function SettingRow({ plugin, setting }: { plugin: InstalledKettuPlugin; setting
         </RowFrame>
       )
   }
+}
+
+/** One of the plugin's notification channels: a switch for each kind of notice it is sent. */
+function ChannelGroup({
+  plugin,
+  channel,
+}: {
+  plugin: InstalledKettuPlugin
+  channel: NonNullable<InstalledKettuPlugin['contents']['channels']>[number]
+}) {
+  const { t } = useTranslation('settings')
+  const scope = useHostScope()
+  const [error, setError] = useState<string | null>(null)
+  const locale = currentLocale()
+  const picked = plugin.channelKinds?.[channel.id] ?? []
+  const description = channel.description
+    ? languageText(channel.description, locale)
+    : t('plugins.channels.hint')
+  const pick = async (kind: PluginNoticeKind, on: boolean): Promise<void> => {
+    const kinds = on ? [...picked, kind] : picked.filter((item) => item !== kind)
+    try {
+      const next = await scope.request('plugins.setChannelKinds', {
+        pluginId: plugin.id,
+        channel: channel.id,
+        kinds,
+      })
+      scope.useMarketplaceStore.getState().putPlugin(next)
+      setError(null)
+    } catch (failed) {
+      setError(errorMessage(failed))
+    }
+  }
+  return (
+    <Group label={languageText(channel.title, locale)} note={<GroupNote>{description}</GroupNote>}>
+      {PLUGIN_NOTICE_KINDS.map((kind) => (
+        <RowFrame
+          key={kind}
+          id={`channel-${channel.id}-${kind}`}
+          text={
+            <RowText
+              name={t(`notifications.${kind}.name`)}
+              description={t(`notifications.${kind}.description`)}
+            />
+          }
+        >
+          <SettingSwitch
+            label={t(`notifications.${kind}.name`)}
+            checked={picked.includes(kind)}
+            onChange={(on) => void pick(kind, on)}
+          />
+        </RowFrame>
+      ))}
+      {error && <RowFrame text={<ControlError error={error} wrap />} />}
+    </Group>
+  )
 }
 
 /** A short text, saved when the field is left or Enter is pressed; Esc puts the old text back. */
@@ -331,6 +397,9 @@ export function PluginPage({ id }: { id: string }) {
             ))
           )}
         </Group>
+        {(plugin.contents.channels ?? []).map((channel) => (
+          <ChannelGroup key={channel.id} plugin={plugin} channel={channel} />
+        ))}
         <Group label={t('plugins.script.heading')}>
           <ScriptPermissions plugin={plugin} />
         </Group>

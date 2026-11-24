@@ -26,6 +26,7 @@ import {
   type PluginTool,
 } from '@shared/plugins'
 import { linkTrigger, mentionTrigger, type PluginRefSource } from '@shared/plugin-refs'
+import { channelTrigger, type PluginNoticeKind } from '@shared/plugin-channels'
 import {
   actionTrigger,
   viewTrigger,
@@ -126,6 +127,15 @@ export interface PluginsDeps {
   settingChanged?(pluginId: string, key: string): void
   fetch?: typeof fetch
   now?: () => number
+}
+
+/** A channel of a plugin that is on, with the notice kinds the user sends to it. */
+export interface ChannelRoute {
+  pluginId: string
+  channel: string
+  kinds: readonly PluginNoticeKind[]
+  /** The permissions of the version in place, which say what a notice tells the script. */
+  permissions: readonly string[]
 }
 
 /** A tool of a plugin that is on, with the plugin it belongs to. */
@@ -309,6 +319,7 @@ export class PluginsService {
                   ? record.contents.tools.map((tool) => toolTrigger(tool.name))
                   : []),
                 ...(record.contents.actions ?? []).map((action) => actionTrigger(action.id)),
+                ...(record.contents.channels ?? []).map((channel) => channelTrigger(channel.id)),
               ],
               revision: `${record.dir}:${record.updatedAt}`,
               permissions: [...record.contents.permissions],
@@ -339,6 +350,52 @@ export class PluginsService {
           plugin: record.contents.title,
         })),
       )
+  }
+
+  /**
+   * The channels of the plugins that are on and have a script, each with the kinds the user sends
+   * to it. A channel with none is left out, since no notice is told to it.
+   */
+  channelRoutes(): ChannelRoute[] {
+    return Object.values(this.data?.plugins ?? {}).flatMap((record) =>
+      record.enabled && record.contents.script
+        ? (record.contents.channels ?? []).flatMap((channel) => {
+            const kinds = record.channelKinds[channel.id] ?? []
+            return kinds.length === 0
+              ? []
+              : [
+                  {
+                    pluginId: record.id,
+                    channel: channel.id,
+                    kinds,
+                    permissions: record.contents.permissions,
+                  },
+                ]
+          })
+        : [],
+    )
+  }
+
+  /** Picks which kinds of notice go to one of the plugin's channels; none turns it off. */
+  setChannelKinds(
+    id: string,
+    channel: string,
+    kinds: readonly PluginNoticeKind[],
+  ): Promise<InstalledKettuPlugin> {
+    return this.queued(async () => {
+      const record = await this.record(id)
+      if (!(record.contents.channels ?? []).some((item) => item.id === channel)) {
+        throw new HostError('invalid_params', t('plugins.noChannel', { channel }))
+      }
+      const picked = [...new Set(kinds)]
+      const before = record.channelKinds[channel] ?? []
+      if (picked.length !== before.length || picked.some((kind) => !before.includes(kind))) {
+        if (picked.length === 0) delete record.channelKinds[channel]
+        else record.channelKinds[channel] = picked
+        this.save()
+      }
+      return this.installed(record)
+    })
   }
 
   /** What a setting of the plugin holds now, for its script; a secret is kept elsewhere. */
@@ -659,6 +716,7 @@ export class PluginsService {
       declined: null,
       updateError: null,
       values: {},
+      channelKinds: {},
     }
     const was = before ? { dir: before.dir, contents: before.contents } : null
     try {
@@ -786,6 +844,12 @@ export class PluginsService {
     record.kept.workflows = workflows
     record.dir = dir
     record.contents = contents
+    // A channel the new version no longer declares takes its picks with it.
+    for (const channel of Object.keys(record.channelKinds)) {
+      if (!(contents.channels ?? []).some((item) => item.id === channel)) {
+        delete record.channelKinds[channel]
+      }
+    }
     record.wasOn = record.wasOn.filter((itemId) =>
       [...record.kept.skills, ...record.kept.servers].includes(itemId),
     )
@@ -892,6 +956,9 @@ export class PluginsService {
           const value = effectiveSetting(setting, record.values[setting.key])
           return value === null ? [] : [[setting.key, value] as const]
         }),
+      ),
+      channelKinds: Object.fromEntries(
+        Object.entries(record.channelKinds).map(([channel, kinds]) => [channel, [...kinds]]),
       ),
       scriptState:
         record.enabled && record.contents.script

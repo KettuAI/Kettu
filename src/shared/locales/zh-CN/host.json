@@ -132,7 +132,8 @@
       },
       "permission": {
         "gone": "这个授权请求已不再等待回答",
-        "answered": "这个授权请求已经回答过了"
+        "answered": "这个授权请求已经回答过了",
+        "notRelayable": "这个授权请求只能在 Kettu 里回答"
       }
     }
   },
@@ -1346,6 +1347,7 @@
     "viewsNeedScript": "它的视图 {{view}} 没有脚本给它数据，包里需要一个脚本。",
     "actionsNeedScript": "它的操作 {{action}} 没有脚本来执行，包里需要一个脚本。",
     "linkHost": "它的链接格式 {{pattern}} 在 {{host}} 上，而插件没有这个域名的联网权限。",
+    "channelsNeedScript": "它的渠道 {{channel}} 没有脚本来接收通知，包里需要一个脚本。",
     "unsafePath": "它写了一个包外面的路径：{{path}}。",
     "link": "{{path}} 是一个链接，插件里不能有链接。",
     "tooLarge": "它超过了 {{files}} 个文件或 {{mb}} MB。",
@@ -1356,6 +1358,14 @@
     "noUpdate": "这个插件没有等着的更新。",
     "noPrevious": "这个插件没有可以退回的上一个版本。",
     "noSetting": "这个插件没有可设置的 {{key}}。",
+    "channelTitle": {
+      "permission": "有请求等你回复",
+      "turnEnded": "一轮对话结束了",
+      "error": "有会话出错了",
+      "routines": "有定时任务需要看一下",
+      "planLimits": "套餐限额有变化"
+    },
+    "noChannel": "这个插件没有渠道 {{channel}}。",
     "noSecret": "这个插件没有密钥 {{key}}。",
     "secretNotKept": "Kettu 没能保存这个密钥，请再试一次。",
     "updateChanged": "这个更新要的比上次显示的更多了，请重新看一下它多要了什么。",
@@ -1374,6 +1384,7 @@
       "mentionsPermission": "没有带上 @ 引用来源：它们需要权限 prompt.attach，而插件没有申请。",
       "refField": "{{id}} 有一个这个 Kettu 不认识的字段 {{field}}。已忽略。",
       "refIcon": "{{id}} 用了一个这个 Kettu 没有的图标。已略去。",
+      "channelField": "渠道 {{channel}} 有一个这个 Kettu 不认识的字段：{{field}}。已忽略。",
       "item": "没有带上 {{path}}：{{reason}}",
       "server": "没有带上 MCP 服务器 {{name}}：{{reason}}",
       "cwd": "MCP 服务器 {{name}} 要在 {{cwd}} 里启动，智能体会在会话的文件夹里启动它。",

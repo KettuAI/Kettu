@@ -60,6 +60,7 @@ import { countPages } from './pages'
 import { readSource, SourceError } from './sources'
 import { HostError } from '../errors'
 import { ArtifactError, type ArtifactStore, type FoundVersion, type SessionTurn } from './store'
+import type { PluginTemplate, PluginTemplates } from './plugin-templates'
 import { ArtifactTypes, ContentError } from './types/registry'
 import { changedPlaces, placeFields, placesOf, placesText } from './places'
 
@@ -118,6 +119,8 @@ export interface ArtifactToolsDeps {
   platform?: Platform
   /** The type packages; the built-in ones by default. */
   types?: ArtifactTypes
+  /** The templates of the plugins that are on; without it no template is listed. */
+  templates?: Pick<PluginTemplates, 'list' | 'starters'>
 }
 
 // Schemas.
@@ -261,8 +264,9 @@ const ERROR = object({ code: { type: 'string', enum: ERROR_CODES }, message: { t
 ])
 
 /** A result is the tool's value, or the code of a tool error, which its text explains. */
-function output(properties: Record<string, Schema>): Tool['outputSchema'] {
-  return { type: 'object', anyOf: [object(properties, Object.keys(properties)), ERROR] }
+function output(properties: Record<string, Schema>, optional: string[] = []): Tool['outputSchema'] {
+  const required = Object.keys(properties).filter((key) => !optional.includes(key))
+  return { type: 'object', anyOf: [object(properties, required), ERROR] }
 }
 
 const ON_ARTIFACTS = { openWorldHint: false } as const
@@ -276,6 +280,14 @@ const FORMAT: Schema = {
   type: 'integer',
   minimum: 1,
   description: "The version of the type's content format.",
+}
+const TEMPLATE: Schema = {
+  type: 'string',
+  maxLength: 200,
+  description:
+    "A plugin's template that list_artifact_types lists; its type is the template's. The " +
+    'artifact begins from its starter files, and the files you give replace the ones of the ' +
+    'same path.',
 }
 
 export const TOOLS: Tool[] = [
@@ -532,7 +544,8 @@ export const TOOLS: Tool[] = [
     title: 'List artifact types',
     description:
       'Lists the types an artifact can be made from, such as a document or a slide deck, which ' +
-      'Kettu shows with a viewer of its own and exports; read_artifact_type explains one.',
+      "Kettu shows with a viewer of its own and exports, and the templates of the user's plugins, " +
+      'each of a type and marked with its plugin; read_artifact_type explains one.',
     inputSchema: object({}),
     outputSchema: output({
       types: {
@@ -545,6 +558,8 @@ export const TOOLS: Tool[] = [
             format: FORMAT,
             entry: { type: 'string', description: 'The file holding the content.' },
             exports: { type: 'array', items: { type: 'string' } },
+            template: { type: 'string', description: 'The template id, for one of a plugin.' },
+            plugin: { type: 'string', description: 'The plugin a template comes from.' },
           },
           ['type', 'title', 'summary', 'format', 'entry', 'exports'],
         ),
@@ -557,10 +572,12 @@ export const TOOLS: Tool[] = [
     title: 'Read artifact type',
     description:
       'Returns how to write an artifact of a type: its guidance, or one of its reference pages ' +
-      'when reference names it. Read the guidance before create_artifact_from_type.',
+      'when reference names it, and with template what that template adds. Read the guidance ' +
+      'before create_artifact_from_type.',
     inputSchema: object(
       {
         type: TYPE,
+        template: TEMPLATE,
         reference: {
           type: 'string',
           maxLength: 64,
@@ -569,16 +586,22 @@ export const TOOLS: Tool[] = [
       },
       ['type'],
     ),
-    outputSchema: output({
-      type: TYPE,
-      format: FORMAT,
-      entry: { type: 'string' },
-      text: { type: 'string' },
-      references: {
-        type: 'array',
-        items: object({ name: { type: 'string' }, title: { type: 'string' } }, ['name', 'title']),
+    outputSchema: output(
+      {
+        type: TYPE,
+        format: FORMAT,
+        entry: { type: 'string' },
+        text: { type: 'string' },
+        references: {
+          type: 'array',
+          items: object({ name: { type: 'string' }, title: { type: 'string' } }, ['name', 'title']),
+        },
+        template: { type: 'string' },
+        plugin: { type: 'string' },
+        starter_files: { type: 'array', items: { type: 'string' } },
       },
-    }),
+      ['template', 'plugin', 'starter_files'],
+    ),
     annotations: { ...ON_ARTIFACTS, readOnlyHint: true },
   },
   {
@@ -586,12 +609,12 @@ export const TOOLS: Tool[] = [
     title: 'Create artifact from type',
     description:
       'Makes a new artifact of a type at version 1 from its content files, checked against the ' +
-      "type's format; a refusal says what to fix. read_artifact_type explains the files.",
-    inputSchema: object({ type: TYPE, title: TITLE, files: filesSchema(false), note: NOTE }, [
-      'type',
-      'title',
-      'files',
-    ]),
+      "type's format; a refusal says what to fix. read_artifact_type explains the files. With " +
+      "template it begins from a plugin's starter files, and files is only what you change.",
+    inputSchema: object(
+      { type: TYPE, template: TEMPLATE, title: TITLE, files: filesSchema(false), note: NOTE },
+      ['type', 'title'],
+    ),
     outputSchema: output({
       id: ID,
       version: VERSION,
@@ -807,9 +830,10 @@ function tooLarge(what: string, bytes: number, limit: number): ToolError {
   )
 }
 
-/** A file a call writes: its text, a file of the working directory, or its removal. */
+/** A file a call writes: its text, its bytes, a file of the working directory, or its removal. */
 type FileSpec =
   | { path: string; content: string }
+  | { path: string; bytes: Buffer }
   | { path: string; source: string }
   | { path: string; remove: true }
 
@@ -1029,6 +1053,18 @@ function failure(error: ToolError): CallToolResult {
   }
 }
 
+/** What a template says to the agent that reads it, before its type's own guidance. */
+function templateText(template: PluginTemplate): string {
+  const starts =
+    template.files.length > 0
+      ? `It begins from ${template.files.map((file) => file.path).join(', ')}; give files only ` +
+        'for what you change or add, each replacing the starter file of its path.'
+      : 'It has no starter files; write them as the type says.'
+  return `Template ${template.id} of the plugin ${template.plugin} makes a ${template.type}: ${template.summary} ${template.guidance} ${starts}`
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
 export class ArtifactTools {
   /** When each session's latest writes were made, for the rate limit. */
   private readonly writes = new Map<string, number[]>()
@@ -1094,11 +1130,14 @@ export class ArtifactTools {
         return this.resolveThread(caller, args(input, ['id', 'thread']))
       case 'list_artifact_types':
         args(input, [])
-        return Promise.resolve(this.listTypes())
+        return this.listTypes()
       case 'read_artifact_type':
-        return Promise.resolve(this.readType(args(input, ['type', 'reference'])))
+        return this.readType(args(input, ['type', 'template', 'reference']))
       case 'create_artifact_from_type':
-        return this.createFromType(caller, args(input, ['type', 'title', 'files', 'note']))
+        return this.createFromType(
+          caller,
+          args(input, ['type', 'template', 'title', 'files', 'note']),
+        )
       default:
         throw new Error(`Unknown tool ${name}`)
     }
@@ -1225,7 +1264,9 @@ export class ArtifactTools {
       const bytes =
         'content' in spec
           ? Buffer.from(spec.content, 'utf8')
-          : await this.source(caller, spec.path, spec.source)
+          : 'bytes' in spec
+            ? spec.bytes
+            : await this.source(caller, spec.path, spec.source)
       sizes.set(spec.path, bytes.length)
       changed.set(spec.path, bytes)
     }
@@ -1861,8 +1902,25 @@ export class ArtifactTools {
     return name
   }
 
-  private listTypes(): CallToolResult {
-    const types = this.types.list().map((type) => ({
+  /** The template `o.template` names, or null when it names none; it must be of the type given. */
+  private async templateOf(o: Args): Promise<PluginTemplate | null> {
+    if (o.template === undefined) return null
+    const id = typeof o.template === 'string' ? o.template : ''
+    const found = (await this.deps.templates?.list())?.find((template) => template.id === id)
+    if (!found || !this.types.get(found.type)) {
+      throw invalid(
+        `There is no template ${JSON.stringify(o.template).slice(0, 100)}; ` +
+          'list_artifact_types lists them.',
+      )
+    }
+    if (o.type !== undefined && o.type !== found.type) {
+      throw invalid(`The template ${found.id} makes a ${found.type}; give that as type.`)
+    }
+    return found
+  }
+
+  private async listTypes(): Promise<CallToolResult> {
+    const types: Record<string, unknown>[] = this.types.list().map((type) => ({
       type: type.name,
       title: type.title,
       summary: type.summary,
@@ -1870,15 +1928,37 @@ export class ArtifactTools {
       entry: CONTENT_ENTRIES[type.name],
       exports: [...type.exports],
     }))
+    const templates = ((await this.deps.templates?.list()) ?? []).filter((template) =>
+      this.types.get(template.type),
+    )
+    for (const template of templates) {
+      types.push({
+        type: template.type,
+        title: template.title,
+        summary: template.summary,
+        format: this.types.current(template.type),
+        entry: CONTENT_ENTRIES[template.type],
+        exports: [...this.types.exports(template.type)],
+        template: template.id,
+        plugin: template.plugin,
+      })
+    }
+    const lines = types.map((type) =>
+      type.template
+        ? `Template ${String(type.template)} of the plugin ${String(type.plugin)}, a ` +
+          `${String(type.type)}: ${String(type.summary)}`
+        : `${String(type.type)}: ${String(type.summary)}`,
+    )
     return result(
-      `${types.map((type) => `${type.type}: ${type.summary}`).join(' ')} Read one with ` +
-        'read_artifact_type before you make it.',
+      `${lines.join(' ')} Read one with read_artifact_type before you make it` +
+        `${templates.length > 0 ? ', giving template for a template' : ''}.`,
       { types },
     )
   }
 
-  private readType(o: Args): CallToolResult {
-    const name = this.typeOf(o)
+  private async readType(o: Args): Promise<CallToolResult> {
+    const template = await this.templateOf(o)
+    const name = template ? template.type : this.typeOf(o)
     const type = this.types.get(name)!
     const references = Object.entries(type.references).map(([key, page]) => ({
       name: key,
@@ -1896,6 +1976,7 @@ export class ArtifactTools {
       text = type.references[reference]!.text
     } else {
       text += ` References: ${references.map((page) => `${page.name} (${page.title})`).join(', ')}.`
+      if (template) text = `${templateText(template)} ${text}`
     }
     return result(text, {
       type: name,
@@ -1903,16 +1984,39 @@ export class ArtifactTools {
       entry: CONTENT_ENTRIES[name],
       text,
       references,
+      ...(template
+        ? {
+            template: template.id,
+            plugin: template.plugin,
+            starter_files: template.files.map((file) => file.path),
+          }
+        : {}),
     })
   }
 
   private async createFromType(caller: Caller, o: Args): Promise<CallToolResult> {
-    const name = this.typeOf(o)
+    const template = await this.templateOf(o)
+    const name = template ? template.type : this.typeOf(o)
     const input = { title: title(o), note: note(o) }
-    if (o.files === undefined) {
+    if (o.files === undefined && !template) {
       throw invalid(`Give files, ${CONTENT_ENTRIES[name]} among them.`)
     }
-    const specs = fileSpecs(o, false)
+    const given = fileSpecs(o, false)
+    let specs: FileSpec[] = given
+    if (template) {
+      let starters: { path: string; data: Buffer }[]
+      try {
+        starters = await this.deps.templates!.starters(template)
+      } catch (error) {
+        throw invalid(`The template ${template.id} could not be read: ${(error as Error).message}`)
+      }
+      specs = [
+        ...starters
+          .filter((file) => !given.some((spec) => spec.path === file.path))
+          .map((file): FileSpec => ({ path: file.path, bytes: file.data })),
+        ...given,
+      ]
+    }
     const type = { name, format: this.types.current(name) }
     return this.limited(caller, async () => {
       const draft = await this.draft(caller, null, specs, [], type)
@@ -1931,9 +2035,10 @@ export class ArtifactTools {
         await this.deps.store.get(id, { project: caller.project }),
       )
       return result(
-        `Created ${id} version ${version} from the ${name} type${filesText(draft.files)}. Kettu shows it ` +
-          'with its viewer; change it with update_artifact.' +
-          placesText(id, places, 'Its places'),
+        `Created ${id} version ${version} from the ${name} type` +
+          `${template ? ` and the template ${template.id} of the plugin ${template.plugin}` : ''}` +
+          `${filesText(draft.files)}. Kettu shows it with its viewer; change it with ` +
+          `update_artifact.${placesText(id, places, 'Its places')}`,
         { id, version, type: name, format: type.format, ...placeFields(id, places) },
       )
     })

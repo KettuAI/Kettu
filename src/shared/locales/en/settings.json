@@ -2418,6 +2418,9 @@
       "placeholder": "Paste the secret",
       "note": "Kept on this computer. Only this plugin’s script can read it; agents can’t."
     },
+    "channels": {
+      "hint": "Notices of the kinds you switch on are sent here. Nothing goes until you pick one."
+    },
     "script": {
       "heading": "What its script can do",
       "none": "This plugin runs no script.",

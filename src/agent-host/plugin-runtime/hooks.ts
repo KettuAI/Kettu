@@ -286,8 +286,16 @@ export class PluginHooks {
     return answered.filter((result) => result !== null)
   }
 
+  /**
+   * Tells one plugin an event that `trigger` wakes it for, in the order it hears the others and
+   * without waiting for it; used for what is not one of Kettu's own events, such as a channel's.
+   */
+  tell(pluginId: string, trigger: string, event: string, payload: unknown): void {
+    this.enqueue(pluginId, event, payload, trigger)
+  }
+
   /** One plugin hears its events in the order they happened. */
-  private enqueue(pluginId: string, event: PluginHookEvent, payload: unknown): void {
+  private enqueue(pluginId: string, event: string, payload: unknown, trigger = event): void {
     const queue = this.queues.get(pluginId) ?? { tail: Promise.resolve(), pending: 0 }
     this.queues.set(pluginId, queue)
     if (queue.pending >= QUEUE_LIMIT) {
@@ -297,7 +305,7 @@ export class PluginHooks {
     queue.pending++
     queue.tail = queue.tail.then(async () => {
       try {
-        await this.deps.client.activate(pluginId, event)
+        await this.deps.client.activate(pluginId, trigger)
         await this.deps.client.deliverEvent(pluginId, event, payload)
       } catch (error) {
         this.deps.log(

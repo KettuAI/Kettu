@@ -373,7 +373,7 @@
       },
       "requestsAnswer": {
         "name": "转达回答",
-        "description": "转达你在别处（比如聊天应用里）对授权请求的回答，只能允许一次或拒绝，不能总是允许。"
+        "description": "收到智能体要运行的命令，并转达你在别处（比如聊天应用里）对它们的回答，只能允许一次或拒绝，不能总是允许。"
       },
       "sessionsStart": {
         "name": "开会话、发消息",
@@ -406,6 +406,8 @@
       "workflowNote": "每个工作流都要你批准后才能开始需求",
       "settings": "它自己的设置",
       "views_other": "{{count}} 个视图",
+      "channels_other": "{{count}} 个通知渠道",
+      "channelsNote": "只收到你选的通知，默认一个都不发",
       "viewsNote": "由插件声明，Kettu 暂时不会绘制",
       "connects": "连接到哪里",
       "server": "MCP 服务器 {{name}}",

@@ -3,6 +3,7 @@
 
 import path from 'node:path'
 import { LISTING_ID } from '@shared/market-publish'
+import { isPluginNoticeKind, type PluginNoticeKind } from '@shared/plugin-channels'
 import {
   PLUGIN_FOLDERS,
   PLUGIN_ID,
@@ -23,7 +24,7 @@ import {
 import { SKILL_NAME } from '@shared/marketplace'
 import { isAbsolutePath } from '../paths'
 import { JsonFile, type LogFn, type Migration } from '../storage'
-import { parseActions, parseLinks, parseMentions, parseViews } from './manifest'
+import { parseActions, parseChannels, parseLinks, parseMentions, parseViews } from './manifest'
 import { safePackagePath } from './package'
 
 export const PLUGINS_VERSION = 1
@@ -61,6 +62,8 @@ export interface PluginRecord {
   updateError: string | null
   /** What the user set for the plugin's settings but a secret, by key. */
   values: Record<string, PluginSettingValue>
+  /** The notice kinds the user sends to each declared channel, by its id; none by default. */
+  channelKinds: Record<string, PluginNoticeKind[]>
 }
 
 export interface PluginsFile {
@@ -154,6 +157,15 @@ function refsOf(
   }
 }
 
+/** The channels a stored package declares; ones that no longer read are left out. */
+function channelsOf(value: unknown): NonNullable<PluginContents['channels']> {
+  try {
+    return parseChannels(value ?? undefined, 'channels', [])
+  } catch {
+    return []
+  }
+}
+
 function contentsOf(value: unknown): PluginContents | null {
   if (!isRecord(value) || typeof value.name !== 'string' || !PLUGIN_NAME.test(value.name)) {
     return null
@@ -228,6 +240,7 @@ function contentsOf(value: unknown): PluginContents | null {
     views: viewsOf(value.views),
     actions: actionsOf(value.actions),
     ...refsOf(value, permissions),
+    channels: channelsOf(value.channels),
     hooks: value.hooks === true,
     warnings: Array.isArray(value.warnings)
       ? value.warnings.filter((item): item is string => text(item)).slice(0, MAX_ITEMS)
@@ -244,6 +257,22 @@ function valuesOf(value: unknown): Record<string, PluginSettingValue> {
         (typeof entry[1] === 'string' && entry[1].length <= PLUGIN_SETTING_CHARS),
     ),
   )
+}
+
+/** The picks of notice kinds by channel; a channel the package no longer declares keeps none. */
+function channelKindsOf(
+  value: unknown,
+  contents: PluginContents,
+): Record<string, PluginNoticeKind[]> {
+  if (!isRecord(value)) return {}
+  const out: Record<string, PluginNoticeKind[]> = {}
+  for (const channel of contents.channels ?? []) {
+    const picked = value[channel.id]
+    if (!Array.isArray(picked)) continue
+    const kinds = [...new Set(picked.filter(isPluginNoticeKind))]
+    if (kinds.length > 0) out[channel.id] = kinds
+  }
+  return out
 }
 
 function ids(value: unknown, pluginId: string): string[] {
@@ -325,6 +354,7 @@ export function parsePluginsFile(data: Record<string, unknown>): PluginsFile | s
       declined: nullableText(raw.declined),
       updateError: nullableText(raw.updateError),
       values: valuesOf(raw.values),
+      channelKinds: channelKindsOf(raw.channelKinds, contents),
     }
   }
   return { version: 1, plugins }

@@ -25,6 +25,7 @@ import type {
 } from '@shared/agent-host'
 import { OWNER } from '@shared/artifact-comments'
 import { flushLog, logFolder, redactLogText, writeLog } from '@shared/log/process-log'
+import { channelTrigger, PLUGIN_CHANNEL_EVENT } from '@shared/plugin-channels'
 import type { AgentToPluginHost } from '@shared/plugin-host'
 import { pluginText, type InstalledKettuPlugin } from '@shared/plugins'
 import { toolId, type CatalogPlugin } from '@shared/settings-catalog'
@@ -99,6 +100,7 @@ import { listedModels } from './claude/user-settings'
 import { STOP_TIMINGS } from './agent-process'
 import { AgentTrees } from './agent-trees'
 import { readImport } from './artifacts/import'
+import { PluginTemplates } from './artifacts/plugin-templates'
 import { ArtifactConsents } from './artifacts/runtime/consent'
 import type { DeclaredArtifact } from './artifacts/runtime/calls'
 import { ArtifactData } from './artifacts/runtime/data'
@@ -187,8 +189,9 @@ import { GitRetains } from './git/retains'
 import type { SkillsListResponse } from './codex/protocol'
 import { completePath } from './path-completion'
 import { pathKey } from './paths'
+import { PluginChannels } from './plugin-runtime/channels'
 import { PluginHostClient } from './plugin-runtime/client'
-import { PluginHooks } from './plugin-runtime/hooks'
+import { PluginHooks, type RequestFacts } from './plugin-runtime/hooks'
 import { InstalledScripts } from './plugin-runtime/installed'
 import { PluginRefs } from './plugin-runtime/refs'
 import { PluginViews } from './plugin-runtime/views'
@@ -641,6 +644,10 @@ export class AgentHost {
         secret: (pluginId, key) => this.pluginSecret(pluginId, key),
         storage: this.pluginStorage,
       },
+      channels: {
+        answer: (pluginId, request, decision, from) =>
+          this.pluginChannels.answer(pluginId, request, decision, from),
+      },
     }),
     onStatus: () => this.hub.broadcast({ type: 'plugins.changed' }),
     log: (level, message) => writeLog(level, 'plugins', message),
@@ -669,6 +676,23 @@ export class AgentHost {
     refs: this.pluginRefs,
     title: (pluginId) => this.plugins.titleOf(pluginId),
     log: (level, message) => writeLog(level, 'plugins', message),
+  })
+  /** Kettu's notices as the channels of plugins hear of them, and the answers relayed from there. */
+  private readonly pluginChannels = new PluginChannels({
+    routes: () => this.plugins.channelRoutes(),
+    deliver: (pluginId, channel, notice) =>
+      this.pluginHooks.tell(pluginId, channelTrigger(channel), PLUGIN_CHANNEL_EVENT, notice),
+    relay: (sessionId, requestId, optionId, relay) =>
+      this.sessions.relayPermission(sessionId, requestId, optionId, relay),
+    title: (pluginId) => this.plugins.titleOf(pluginId),
+    plain: (kind) =>
+      ({
+        permission: t('plugins.channelTitle.permission'),
+        turnEnded: t('plugins.channelTitle.turnEnded'),
+        error: t('plugins.channelTitle.error'),
+        routines: t('plugins.channelTitle.routines'),
+        planLimits: t('plugins.channelTitle.planLimits'),
+      })[kind],
   })
   /** What a plugin's views are asked of its script, and what it answers. */
   private readonly pluginViews = new PluginViews({
@@ -1056,6 +1080,7 @@ export class AgentHost {
       data: this.artifactData,
       store: this.artifacts,
       types: this.artifactTypes,
+      templates: new PluginTemplates({ resources: () => this.plugins.resources('templates'), log }),
       sessionTitle: (sessionId) => this.sessions.title(sessionId),
       runningTurn: (sessionId) => this.sessions.runningTurn(sessionId),
       sessionOf: (process, id) => this.sessions.sessionOf(process, id),
@@ -1498,25 +1523,28 @@ export class AgentHost {
             this.hub.send([portId], { type: 'session.viewers', sessionId, viewers })
           }
         },
-        attention: (sessionId, kind, title, body, request) => {
+        attention: (sessionId, kind, title, body, request, facts) => {
           if (kind === 'error') this.sessionFailed(sessionId)
           if (kind !== 'turn-ended' && this.pluginHooks.wants('session.needsUser')) {
             this.pluginHooks.emit('session.needsUser', this.sessions.summary(sessionId), {
               reason: kind,
             })
           }
-          options.send({
-            type: 'host:attention',
-            sessionId,
-            kind,
-            title,
-            body,
-            ...(request?.allow
-              ? { allowOnce: { requestId: request.id, optionId: request.allow.optionId } }
-              : {}),
-            ...(request ? { request } : {}),
-            front: this.front(sessionId),
-          })
+          this.attend(
+            {
+              type: 'host:attention',
+              sessionId,
+              kind,
+              title,
+              body,
+              ...(request?.allow
+                ? { allowOnce: { requestId: request.id, optionId: request.allow.optionId } }
+                : {}),
+              ...(request ? { request } : {}),
+              front: this.front(sessionId),
+            },
+            facts,
+          )
         },
         badge: (count) => options.send({ type: 'host:badge', count }),
         waiting: (sessions) => options.send({ type: 'host:waiting', sessions }),
@@ -1554,7 +1582,7 @@ export class AgentHost {
         run: (run) => this.broadcast({ type: 'routine.run', run }),
         working: (working) => options.send({ type: 'host:routines-working', working }),
         attention: (kind, sessionId, title, body) =>
-          options.send({
+          this.attend({
             type: 'host:attention',
             sessionId,
             kind,
@@ -1563,7 +1591,7 @@ export class AgentHost {
             front: this.front(sessionId),
           }),
         paused: (agentId, title, body) =>
-          options.send({ type: 'host:attention', kind: 'routine-paused', agentId, title, body }),
+          this.attend({ type: 'host:attention', kind: 'routine-paused', agentId, title, body }),
       },
     })
     routineHooks.current = this.routines.hooks
@@ -1913,7 +1941,7 @@ export class AgentHost {
       kind === 'needs-you'
         ? t('tasks.needsYouBody', { step: step?.name ?? '', workflow: task.workflowName })
         : t('tasks.endedBody', { workflow: task.workflowName, steps: task.steps.length })
-    this.options.send({
+    this.attend({
       type: 'host:attention',
       kind: kind === 'needs-you' ? 'task-needs-you' : 'task-ended',
       taskId: task.id,
@@ -1937,6 +1965,23 @@ export class AgentHost {
     this.lastFailed.set(this.sessions.summary(sessionId).agentId, { sessionId, at: Date.now() })
   }
 
+  /** Tells main, which shows the notice and pushes it to devices, then the plugin channels. */
+  private attend(
+    message: Extract<HostToMain, { type: 'host:attention' }>,
+    facts?: RequestFacts,
+  ): void {
+    this.options.send(message)
+    try {
+      this.pluginChannels.notice(message, facts)
+    } catch (error) {
+      writeLog(
+        'warn',
+        'plugins',
+        `A notice could not go to the channels: ${(error as Error).message}`,
+      )
+    }
+  }
+
   private sendLimitNotice(notice: LimitNotice): void {
     const now = Date.now()
     let sessionId: string | undefined
@@ -1956,7 +2001,7 @@ export class AgentHost {
     const summary =
       sessionId && this.sessions.has(sessionId) ? this.sessions.summary(sessionId) : null
     const { title, body } = limitNoticeText(notice, summary?.title ?? null, now)
-    this.options.send({
+    this.attend({
       type: 'host:attention',
       kind: 'plan-limit',
       agentId: notice.agentId,
@@ -2769,6 +2814,7 @@ export class AgentHost {
   /** A removed plugin takes what it kept: its secrets and its storage. */
   private pluginRemoved(pluginId: string): void {
     this.pluginStorage.forget(pluginId)
+    this.pluginChannels.forget(pluginId)
     if (this.pluginSecrets[pluginId] === undefined) return
     this.askPluginSecret(pluginId, null, null).catch((error: unknown) =>
       writeLog(
@@ -3885,6 +3931,8 @@ export class AgentHost {
       'plugins.setSetting': ({ pluginId, key, value }) =>
         this.plugins.setSetting(pluginId, key, value),
       'plugins.setSecret': ({ pluginId, key, value }) => this.setPluginSecret(pluginId, key, value),
+      'plugins.setChannelKinds': ({ pluginId, channel, kinds }) =>
+        this.plugins.setChannelKinds(pluginId, channel, kinds),
       'plugins.reload': ({ pluginId }) => this.plugins.reload(pluginId),
       'plugins.checkUpdates': async ({ pluginId }) => ({
         plugins: await this.plugins.checkUpdates(pluginId),

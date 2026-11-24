@@ -297,6 +297,32 @@ describe('the sh.kettu entry', () => {
     )
   })
 
+  it('reads the notification channels, by language, and reports a field it does not know', () => {
+    const parsed = read(
+      kettu({
+        script: './m.js',
+        api: 1,
+        channels: [
+          {
+            id: 'team-chat',
+            title: { en: 'Team chat', 'zh-CN': '团队聊天' },
+            description: { en: 'Posts to the team' },
+            color: 'red',
+          },
+        ],
+      }),
+    )
+    expect(parsed.kettu?.channels).toEqual([
+      {
+        id: 'team-chat',
+        title: { en: 'Team chat', 'zh-CN': '团队聊天' },
+        description: { en: 'Posts to the team' },
+      },
+    ])
+    expect(parsed.warnings).toHaveLength(1)
+    expect(parsed.warnings[0]).toContain('color')
+  })
+
   it('refuses a package for another Kettu version, saying both', () => {
     expect(() => read(kettu({ kettu: '>=9.0.0' }))).toThrowError(/>=9\.0\.0.*0\.3\.0/)
   })
@@ -372,6 +398,23 @@ describe('the sh.kettu entry', () => {
       kettu({ script: './m.js', api: 1, actions: [{ id: 'a', title: 'x'.repeat(61) }] }),
     ],
     ['actions without a script to run them', kettu({ actions: [{ id: 'a', title: 'A' }] })],
+    ['a channel without a title', kettu({ script: './m.js', api: 1, channels: [{ id: 'a' }] })],
+    [
+      'a channel whose id is not an id',
+      kettu({ script: './m.js', api: 1, channels: [{ id: 'A b', title: 'A' }] }),
+    ],
+    [
+      'two channels with one id',
+      kettu({
+        script: './m.js',
+        api: 1,
+        channels: [1, 2].map(() => ({ id: 'a', title: { en: 'A' } })),
+      }),
+    ],
+    [
+      'channels without a script to tell them the notices',
+      kettu({ channels: [{ id: 'a', title: { en: 'A' } }] }),
+    ],
   ])('refuses %s', (_, text) => {
     expect(() => read(text)).toThrowError(expect.objectContaining({ code: 'invalid_params' }))
   })
